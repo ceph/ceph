@@ -203,8 +203,10 @@ void rados_version(int *major, int *minor, int *extra);
 int rados_create(rados_t *cluster, const char * const id);
 
 /**
+ * Extended version of rados_create.
+ *
  * Like rados_create, but 
- * 1) don't assume 'client.'+id; allow full specification of name
+ * 1) don't assume 'client\.'+id; allow full specification of name
  * 2) allow specification of cluster name
  * 3) flags for future expansion
  */
@@ -1751,8 +1753,12 @@ int rados_pg_command(rados_t cluster, const char *pgstr, const char **cmd,
 		     char **outbuf, size_t *outbuflen,
 		     char **outs, size_t *outslen);
 
-/**
- * monitor cluster log
+/*
+ * This is not a doxygen comment leadin, because doxygen breaks on
+ * a typedef with function params and returns, and I can't figure out
+ * how to fix it.
+ *
+ * Monitor cluster log
  *
  * Monitor events logged to the cluster log.  The callback get each
  * log entry both as a single formatted line and with each field in a
@@ -1765,6 +1771,7 @@ int rados_pg_command(rados_t cluster, const char *pgstr, const char **cmd,
  * @param level minimum log level (debug, info, warn|warning, err|error)
  * @param cb callback to run for each log message
  * @param arg void argument to pass to cb
+ *
  * @returns 0 on success, negative code on error
  */
 typedef void (*rados_log_callback_t)(void *arg,
