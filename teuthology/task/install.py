@@ -26,9 +26,9 @@ def _get_system_type(remote):
     )
     system_value = r.stdout.getvalue().strip()
     log.debug("System to be installed: %s" % system_value)
-    if system_value in ['Ubuntu','Debian',]:
+    if system_value in ['Ubuntu','Debian']:
         return "deb"
-    if system_value in ['CentOS','Fedora',]:
+    if system_value in ['CentOS','Fedora','RedHatEnterpriseServer']:
         return "rpm"
     return system_value
 
@@ -224,8 +224,16 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
             remote.run(args=['sudo', 'yum', 'install', pkg2add, '-y',],
                     stderr=pk_err_mess)
         except:
-            if not pk_err_mess.getvalue().strip() == "Error: Nothing to do":
-                raise
+            err_str = pk_err_mess.getvalue().strip()
+            if err_str.find("Error: ") >= 0:
+                ok_msg_loc = err_str.find("Error: Nothing to do")
+                if ok_msg_loc < 0:
+                    raise
+                # Check for other error strings (I'm being paranoid).
+                if err_str[0:ok_msg_loc].find("Error: ") > 0:
+                    raise
+                if err_str[ok_msg_loc+1:].find("Error: ") > 0:
+                    raise
 
 def purge_data(ctx):
     """
@@ -654,7 +662,7 @@ def upgrade(ctx, config):
                 for var, branch_val in kkeys.iteritems():
                     if var == 'branch' or var == 'tag' or var == 'sha1':
                         branch = branch_val
-                        _upgrade_packages(ctx, config, remote, debs[project], branch)
+                        _upgrade_packages(ctx, config, remote, debs, branch)
                         list_roles.append(remote)
     yield
 
