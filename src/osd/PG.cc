@@ -315,7 +315,7 @@ void PG::merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog
   pg_log.merge_log(t, oinfo, olog, from, info, to_remove, dirty_log, dirty_info, dirty_big_info);
   for(list<hobject_t>::iterator i = to_remove.begin();
       i != to_remove.end();
-      i++)
+      ++i)
     remove_snap_mapped_object(t, *i);
 }
 
@@ -325,7 +325,7 @@ void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
   pg_log.rewind_divergent_log(t, newhead, info, to_remove, dirty_log, dirty_info, dirty_big_info);
   for(list<hobject_t>::iterator i = to_remove.begin();
       i != to_remove.end();
-      i++)
+      ++i)
     remove_snap_mapped_object(t, *i);
 }
 
