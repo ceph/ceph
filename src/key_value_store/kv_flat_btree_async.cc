@@ -664,7 +664,7 @@ int KvFlatBtreeAsync::read_object(const string &obj, object_data * odata) {
   odata->name = obj;
   get_obj.omap_get_vals("", LONG_MAX, &odata->omap, &err);
   get_obj.getxattr("unwritable", &unw_bl, &err);
-  err = io_ctx.aio_operate(obj, obj_aioc, &get_obj, NULL);
+  io_ctx.aio_operate(obj, obj_aioc, &get_obj, NULL);
   obj_aioc->wait_for_safe();
   err = obj_aioc->get_return_value();
   if (err < 0){
@@ -683,9 +683,9 @@ int KvFlatBtreeAsync::read_object(const string &obj, rebalance_args * args) {
   bufferlist inbl;
   args->encode(inbl);
   bufferlist outbl;
+  int err;
   librados::AioCompletion * a = rados.aio_create_completion();
-  int err = io_ctx.aio_exec(obj, a, "kvs", "maybe_read_for_balance",
-      inbl, &outbl);
+  io_ctx.aio_exec(obj, a, "kvs", "maybe_read_for_balance", inbl, &outbl);
   a->wait_for_safe();
   err = a->get_return_value();
   if (err < 0) {
@@ -1371,9 +1371,13 @@ int KvFlatBtreeAsync::setup(int argc, const char** argv) {
   make_max_obj.setxattr("unwritable", to_bl("0"));
   make_max_obj.setxattr("size", to_bl("0"));
   r = io_ctx.operate(client_name, &make_max_obj);
+  if (r < 0) {
+    if (verbose) cout << client_name << ": Setting xattr failed with code "
+	<< r
+	<< std::endl;
+  }
 
   return 0;
-
 }
 
 int KvFlatBtreeAsync::set(const string &key, const bufferlist &val,
@@ -1439,6 +1443,12 @@ int KvFlatBtreeAsync::set_op(const string &key, const bufferlist &val,
 	    << idata.obj
             << std::endl;
         err = read_index(key, &idata, NULL, true);
+        if (err < 0) {
+	  if (verbose) cout << "\t" << client_name
+	      << ": getting oid failed with code "
+	      << err << std::endl;
+	  return err;
+        }
         err = split(idata);
         if (err < 0 && err != -ENOENT && err != -EBALANCE) {
           if (verbose) cerr << "\t" << client_name << ": split failed with "
@@ -1553,6 +1563,12 @@ int KvFlatBtreeAsync::remove_op(const string &key, index_data &idata,
         if (verbose) cerr << "\t" << client_name << ": running rebalance on "
             << idata.obj << std::endl;
         err = read_index(key, &idata, &next_idata, true);
+        if (err < 0) {
+	  if (verbose) cout << "\t" << client_name
+	      << ": getting oid failed with code "
+	      << err << std::endl;
+	  return err;
+        }
         err = rebalance(idata, next_idata);
         if (err < 0 && err != -ENOENT && err != -EBALANCE) {
           if (verbose) cerr << "\t" << client_name << ": rebalance returned "
@@ -2064,7 +2080,7 @@ bool KvFlatBtreeAsync::is_consistent() {
 	  librados::AioCompletion * aioc = rados.aio_create_completion();
 	  bufferlist un;
 	  oro.getxattr("unwritable", &un, &err);
-	  err = io_ctx.aio_operate(dit->obj, aioc, &oro, NULL);
+	  io_ctx.aio_operate(dit->obj, aioc, &oro, NULL);
 	  aioc->wait_for_safe();
 	  err = aioc->get_return_value();
 	  if (ceph_clock_now(g_ceph_context) - idata.ts > timeout) {

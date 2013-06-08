@@ -498,9 +498,8 @@ void MDCache::_create_system_file_finish(Mutation *mut, CDentry *dn, version_t d
   in->inode.version--;
   in->mark_dirty(in->inode.version + 1, mut->ls);
 
-  CDir *dir = 0;
   if (in->inode.is_dir()) {
-    dir = in->get_dirfrag(frag_t());
+    CDir *dir = in->get_dirfrag(frag_t());
     assert(dir);
     dir->mark_dirty(1, mut->ls);
     dir->mark_new(mut->ls);
@@ -3531,7 +3530,7 @@ void MDCache::rejoin_send_rejoins()
   if (mds->is_rejoin()) {
     for (map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> >::iterator p = cap_exports.begin();
          p != cap_exports.end();
-	 p++) {
+	 ++p) {
       assert(cap_export_targets.count(p->first));
       rejoins[cap_export_targets[p->first]]->cap_exports[p->first] = p->second;
     }
@@ -4977,7 +4976,7 @@ bool MDCache::process_imported_caps()
   } else {
     for (map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> >::iterator q = cap_exports.begin();
 	 q != cap_exports.end();
-	 q++) {
+	 ++q) {
       for (map<client_t,ceph_mds_cap_reconnect>::iterator r = q->second.begin();
 	   r != q->second.end();
 	   ++r) {
