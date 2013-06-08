@@ -402,7 +402,7 @@ class CephManager:
         """
         get number for pool (e.g., data -> 2)
         """
-        out = self.raw_cluster_cmd('--', 'osd','dump','--format=json')
+        out = self.raw_cluster_cmd('osd','dump','--format=json')
         j = json.loads('\n'.join(out.split('\n')[1:]))
         for i in j['pools']:
             if i['pool_name'] == pool:
@@ -586,7 +586,7 @@ class CephManager:
         return r
 
     def get_pg_stats(self):
-        out = self.raw_cluster_cmd('--', 'pg','dump','--format=json')
+        out = self.raw_cluster_cmd('pg','dump','--format=json')
         j = json.loads('\n'.join(out.split('\n')[1:]))
         return j['pg_stats']
 
@@ -636,12 +636,12 @@ class CephManager:
         return None
 
     def get_osd_dump(self):
-        out = self.raw_cluster_cmd('--', 'osd','dump','--format=json')
+        out = self.raw_cluster_cmd('osd','dump','--format=json')
         j = json.loads('\n'.join(out.split('\n')[1:]))
         return j['osds']
 
     def get_stuck_pgs(self, type_, threshold):
-        out = self.raw_cluster_cmd('--', 'pg','dump_stuck', type_,
+        out = self.raw_cluster_cmd('pg','dump_stuck', type_,
                                    '--format=json', '-t', str(threshold))
         return json.loads('\n'.join(out.split('\n')[1:]))
 
