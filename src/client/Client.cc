@@ -2849,7 +2849,7 @@ void Client::remove_cap(Cap *cap)
   ceph_mds_cap_item i;
   i.ino = in->ino;
   i.cap_id = cap->cap_id;
-  i.seq = cap->seq;
+  i.seq = cap->issue_seq;
   i.migrate_seq = cap->mseq;
   session->release->caps.push_back(i);
   
