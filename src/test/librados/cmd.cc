@@ -97,9 +97,21 @@ TEST(LibRadosCmd, PGCmd) {
 
   cmd[0] = (char *)"asdfasdf";
   ASSERT_EQ(-22, rados_pg_command(cluster, pgid.c_str(), (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+
+
+  // make sure the pg exists on the osd before we query it
+  rados_ioctx_t io;
+  rados_ioctx_create(cluster, pool_name.c_str(), &io);
+  for (int i=0; i<100; i++) {
+    string oid = "obj" + stringify(i);
+    ASSERT_EQ(-ENOENT, rados_stat(io, oid.c_str(), NULL, NULL));
+  }
+  rados_ioctx_destroy(io);
+
   string qstr = "{\"prefix\":\"pg\", \"cmd\":\"query\", \"pgid\":\"" +  pgid + "\"}";
   cmd[0] = (char *)qstr.c_str();
   ASSERT_EQ(0, rados_pg_command(cluster, pgid.c_str(), (const char **)cmd, 1, "", 0,  &buf, &buflen, &st, &stlen));
+
   ASSERT_LT(0u, buflen);
   rados_buffer_free(buf);
   rados_buffer_free(st);
