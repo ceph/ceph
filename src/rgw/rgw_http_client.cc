@@ -179,26 +179,26 @@ int RGWHTTPClient::init_async(const char *method, const char *url, void **handle
 }
 
 
-int RGWHTTPClient::process_request(void *handle, bool *done)
+int RGWHTTPClient::process_request(void *handle, bool wait_for_data, bool *done)
 {
   multi_req_data *req_data = (multi_req_data *)handle;
   int still_running;
   int mstatus;
 
   do {
-#if 0
-    struct timeval timeout;
+    if (wait_for_data) {
+      struct timeval timeout;
  
-    fd_set fdread;
-    fd_set fdwrite;
-    fd_set fdexcep;
-    int maxfd = -1;
+      fd_set fdread;
+      fd_set fdwrite;
+      fd_set fdexcep;
+      int maxfd = -1;
  
-    long curl_timeo = -1;
+      long curl_timeo = -1;
  
-    FD_ZERO(&fdread);
-    FD_ZERO(&fdwrite);
-    FD_ZERO(&fdexcep);
+      FD_ZERO(&fdread);
+      FD_ZERO(&fdwrite);
+      FD_ZERO(&fdexcep);
 #if 0 
     /* set a suitable timeout to play around with */ 
     timeout.tv_sec = 1;
@@ -214,21 +214,22 @@ int RGWHTTPClient::process_request(void *handle, bool *done)
     }
 #endif
  
-    /* get file descriptors from the transfers */ 
-    int ret = curl_multi_fdset(req_data->multi_handle, &fdread, &fdwrite, &fdexcep, &maxfd);
-    if (ret) {
-      dout(0) << "ERROR: curl_multi_fdset returned " << ret << dendl;
-      return -EIO;
-    }
+      /* get file descriptors from the transfers */ 
+      int ret = curl_multi_fdset(req_data->multi_handle, &fdread, &fdwrite, &fdexcep, &maxfd);
+      if (ret) {
+        dout(0) << "ERROR: curl_multi_fdset returned " << ret << dendl;
+        return -EIO;
+      }
 
 #warning FIXME: replace select with poll 
-    ret = select(maxfd+1, &fdread, &fdwrite, &fdexcep, NULL);
-    if (ret < 0) {
-      ret = -errno;
-      dout(0) << "ERROR: select returned " << ret << dendl;
-      return ret;
+      ret = select(maxfd+1, &fdread, &fdwrite, &fdexcep, NULL);
+      if (ret < 0) {
+        ret = -errno;
+        dout(0) << "ERROR: select returned " << ret << dendl;
+        return ret;
+      }
     }
-#endif
+
     mstatus = curl_multi_perform(req_data->multi_handle, &still_running);
     dout(20) << "curl_multi_perform returned: " << mstatus << dendl;
     switch (mstatus) {
@@ -258,7 +259,7 @@ int RGWHTTPClient::complete_request(void *handle)
   bool done;
   int ret;
   do {
-    ret = process_request(handle, &done);
+    ret = process_request(handle, true, &done);
   } while (!done && !ret);
   multi_req_data *req_data = (multi_req_data *)handle;
   delete req_data;
