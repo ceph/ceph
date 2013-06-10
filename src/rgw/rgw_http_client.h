@@ -32,7 +32,7 @@ public:
   int process(const char *url) { return process("GET", url); }
 
   int init_async(const char *method, const char *url, void **handle);
-  int process_request(void *handle,bool *done);
+  int process_request(void *handle, bool wait_for_data, bool *done);
   int complete_request(void *handle);
 };
 
