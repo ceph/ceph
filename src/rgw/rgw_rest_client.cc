@@ -281,10 +281,10 @@ int RGWRESTStreamRequest::add_output_data(bufferlist& bl)
   lock.Unlock();
 
   bool done;
-  return process_request(handle, &done);
+  return process_request(handle, false, &done);
 }
 
-int RGWRESTStreamRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size)
+int RGWRESTStreamRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs)
 {
   string resource = obj.bucket.name + "/" + obj.object;
   string new_url = url;
@@ -318,6 +318,19 @@ int RGWRESTStreamRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t
   }
 
   map<string, string>& m = new_env.get_map();
+  map<string, bufferlist>::iterator bliter;
+
+  /* merge send headers */
+  for (bliter = attrs.begin(); bliter != attrs.end(); ++bliter) {
+    bufferlist& bl = bliter->second;
+    const string& name = bliter->first;
+    string val(bl.c_str(), bl.length());
+    if (name.compare(0, sizeof(RGW_ATTR_META_PREFIX) - 1, RGW_ATTR_META_PREFIX) == 0) {
+      string header_name = RGW_AMZ_META_PREFIX;
+      header_name.append(name.substr(sizeof(RGW_ATTR_META_PREFIX) - 1));
+      m[header_name] = val;
+    }
+  }
   map<string, string>::iterator iter;
   for (iter = m.begin(); iter != m.end(); ++iter) {
     headers.push_back(make_pair<string, string>(iter->first, iter->second));
@@ -361,12 +374,14 @@ int RGWRESTStreamRequest::send_data(void *ptr, size_t len)
     sent += send_len;
 
     lock.Lock();
-    pending_send.pop_front();
 
+    bufferlist new_bl;
     if (bl.length() > send_len) {
       bufferptr bp(bl.c_str() + send_len, bl.length() - send_len);
-      bufferlist new_bl;
       new_bl.append(bp);
+    }
+    pending_send.pop_front(); /* need to do this after we copy data from bl */
+    if (new_bl.length()) {
       pending_send.push_front(new_bl);
     }
     iter = next_iter;
