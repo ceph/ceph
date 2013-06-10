@@ -211,8 +211,6 @@ Monitor::~Monitor()
   delete paxos;
   assert(session_map.sessions.empty());
   delete mon_caps;
-  if (con_self)
-    con_self->put();
 }
 
 
@@ -2912,7 +2910,6 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     rr->tid = ++routed_request_tid;
     rr->client_inst = req->get_source_inst();
     rr->con = req->get_connection();
-    rr->con->get();
     encode_message(req, CEPH_FEATURES_ALL, rr->request_bl);   // for my use only; use all features
     rr->session = static_cast<MonSession *>(session->get());
     routed_requests[rr->tid] = rr;
@@ -2951,7 +2948,7 @@ void Monitor::handle_forward(MForward *m)
 
     s->caps = m->client_caps;
     dout(10) << " caps are " << s->caps << dendl;
-    s->proxy_con = m->get_connection()->get();
+    s->proxy_con = m->get_connection();
     s->proxy_tid = m->tid;
 
     PaxosServiceMessage *req = m->msg;
@@ -2972,8 +2969,7 @@ void Monitor::handle_forward(MForward *m)
        or the Session. And due to the special nature of this message,
        nobody refers to the Connection via the Session. So, clear out that
        half of the ref loop.*/
-    s->con->put();
-    s->con = NULL;
+    s->con.reset(NULL);
 
     dout(10) << " mesg " << req << " from " << m->get_source_addr() << dendl;
 
@@ -3105,7 +3101,6 @@ void Monitor::resend_routed_requests()
     if (mon == rank) {
       dout(10) << " requeue for self tid " << rr->tid << " " << *req << dendl;
       req->set_connection(rr->con);
-      rr->con->get();
       retry.push_back(new C_RetryMessage(this, req));
       delete rr;
     } else {
@@ -3172,7 +3167,7 @@ void Monitor::waitlist_or_zap_client(Message *m)
    * 3) command messages. We want to accept these under all possible
    * circumstances.
    */
-  Connection *con = m->get_connection();
+  ConnectionRef con = m->get_connection();
   utime_t too_old = ceph_clock_now(g_ceph_context);
   too_old -= g_ceph_context->_conf->mon_lease;
   if (m->get_recv_stamp() > too_old &&
@@ -3195,7 +3190,7 @@ bool Monitor::_ms_dispatch(Message *m)
     return true;
   }
 
-  Connection *connection = m->get_connection();
+  ConnectionRef connection = m->get_connection();
   MonSession *s = NULL;
   MonCap caps;
   EntityName entity_name;
@@ -3219,7 +3214,7 @@ bool Monitor::_ms_dispatch(Message *m)
 	return true;
       }
       dout(10) << "do not have session, making new one" << dendl;
-      s = session_map.new_session(m->get_source_inst(), m->get_connection());
+      s = session_map.new_session(m->get_source_inst(), m->get_connection().get());
       m->get_connection()->set_priv(s->get());
       dout(10) << "ms_dispatch new session " << s << " for " << s->inst << dendl;
 
@@ -3921,7 +3916,7 @@ void Monitor::check_sub(Subscription *sub)
 {
   dout(10) << "check_sub monmap next " << sub->next << " have " << monmap->get_epoch() << dendl;
   if (sub->next <= monmap->get_epoch()) {
-    send_latest_monmap(sub->session->con);
+    send_latest_monmap(sub->session->con.get());
     if (sub->onetime)
       session_map.remove_sub(sub);
     else
@@ -3942,7 +3937,7 @@ void Monitor::send_latest_monmap(Connection *con)
 void Monitor::handle_mon_get_map(MMonGetMap *m)
 {
   dout(10) << "handle_mon_get_map" << dendl;
-  send_latest_monmap(m->get_connection());
+  send_latest_monmap(m->get_connection().get());
   m->put();
 }
 
