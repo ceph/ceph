@@ -687,12 +687,11 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
 void Objecter::C_Op_Map_Latest::finish(int r)
 {
+  if (r == -EAGAIN || r == -ECANCELED)
+    return;
+
   lgeneric_subdout(objecter->cct, objecter, 10) << "op_map_latest r=" << r << " tid=" << tid
 						<< " latest " << latest << dendl;
-  if (r == -EAGAIN) {
-    // ignore callback; we will retry in resend_mon_ops()
-    return;
-  }
 
   Mutex::Locker l(objecter->client_lock);
 
@@ -764,7 +763,7 @@ void Objecter::op_cancel_map_check(Op *op)
 
 void Objecter::C_Linger_Map_Latest::finish(int r)
 {
-  if (r == -EAGAIN) {
+  if (r == -EAGAIN || r == -ECANCELED) {
     // ignore callback; we will retry in resend_mon_ops()
     return;
   }
@@ -834,7 +833,7 @@ void Objecter::linger_cancel_map_check(LingerOp *op)
 
 void Objecter::C_Command_Map_Latest::finish(int r)
 {
-  if (r == -EAGAIN) {
+  if (r == -EAGAIN || r == -ECANCELED) {
     // ignore callback; we will retry in resend_mon_ops()
     return;
   }
