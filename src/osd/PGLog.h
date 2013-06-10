@@ -147,10 +147,6 @@ struct PGLog {
   };
 
 
-  void add_divergent_prior(eversion_t version, hobject_t obj) {
-    divergent_priors.insert(make_pair(version, obj));
-  }
-
 protected:
   //////////////////// data members ////////////////////
 
@@ -158,7 +154,42 @@ protected:
   pg_missing_t     missing;
   IndexedLog  log;
 
+  /// Log is clean on [dirty_to, dirty_from)
+  bool touched_log;
+  eversion_t dirty_to;
+  eversion_t dirty_from;
+  bool dirty_divergent_priors;
+
+  void undirty() {
+    dirty_to = eversion_t();
+    dirty_from = eversion_t::max();
+    dirty_divergent_priors = false;
+    touched_log = true;
+  }
+  bool dirty() const {
+    return !touched_log ||
+      (dirty_to != eversion_t()) ||
+      (dirty_from != eversion_t::max()) ||
+      dirty_divergent_priors;
+  }
+  void mark_dirty_to(eversion_t to) {
+    if (to > dirty_to)
+      dirty_to = to;
+  }
+  void mark_dirty_from(eversion_t from) {
+    if (from < dirty_from)
+      dirty_from = from;
+  }
+  void add_divergent_prior(eversion_t version, hobject_t obj) {
+    divergent_priors.insert(make_pair(version, obj));
+    dirty_divergent_priors = true;
+  }
+
+
 public:
+  PGLog() :
+    touched_log(false), dirty_from(eversion_t::max()),
+    dirty_divergent_priors(false) {}
 
 
   void reset_backfill();
@@ -289,12 +320,19 @@ public:
                       pg_info_t &info, list<hobject_t>& remove_snap,
                       bool &dirty_log, bool &dirty_info, bool &dirty_big_info);
 
-  void write_log(ObjectStore::Transaction& t, const hobject_t &log_oid) {
-    write_log(t, log, log_oid, divergent_priors);
-  }
+  void write_log(ObjectStore::Transaction& t, const hobject_t &log_oid);
 
   static void write_log(ObjectStore::Transaction& t, pg_log_t &log,
     const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors);
+
+  static void _write_log(
+    ObjectStore::Transaction& t, pg_log_t &log,
+    const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors,
+    eversion_t dirty_to,
+    eversion_t dirty_from,
+    bool dirty_divergent_priors,
+    bool touch_log
+    );
 
   bool read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
 		const pg_info_t &info, ostringstream &oss) {

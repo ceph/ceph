@@ -526,23 +526,71 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
   }
 }
 
+void PGLog::write_log(
+  ObjectStore::Transaction& t, const hobject_t &log_oid)
+{
+  if (dirty()) {
+    dout(10) << "write_log with: "
+	     << "dirty_to: " << dirty_to
+	     << ", dirty_from: " << dirty_from
+	     << ", dirty_divergent_priors: " << dirty_divergent_priors
+	     << dendl;
+    _write_log(t, log, log_oid, divergent_priors,
+	       dirty_to,
+	       dirty_from,
+	       dirty_divergent_priors,
+	       !touched_log);
+    undirty();
+  } else {
+    dout(10) << "log is not dirty" << dendl;
+  }
+}
+
 void PGLog::write_log(ObjectStore::Transaction& t, pg_log_t &log,
     const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors)
 {
-  //dout(10) << "write_log" << dendl;
-  t.remove(coll_t::META_COLL, log_oid);
-  t.touch(coll_t::META_COLL, log_oid);
+  _write_log(t, log, log_oid, divergent_priors, eversion_t::max(), eversion_t(),
+	     true, true);
+}
+
+void PGLog::_write_log(
+  ObjectStore::Transaction& t, pg_log_t &log,
+  const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors,
+  eversion_t dirty_to,
+  eversion_t dirty_from,
+  bool dirty_divergent_priors,
+  bool touch_log
+  )
+{
+//dout(10) << "write_log, clearing up to " << dirty_to << dendl;
+  if (touch_log)
+    t.touch(coll_t(), log_oid);
+  t.omap_rmkeyrange(
+    coll_t(), log_oid,
+    eversion_t().get_key_name(), dirty_to.get_key_name());
+  if (dirty_to != eversion_t::max()) {
+    //   dout(10) << "write_log, clearing from " << dirty_from << dendl;
+    t.omap_rmkeyrange(
+      coll_t(), log_oid,
+      dirty_from.get_key_name(), eversion_t::max().get_key_name());
+  }
+
   map<string,bufferlist> keys;
   for (list<pg_log_entry_t>::iterator p = log.log.begin();
        p != log.log.end();
        ++p) {
-    bufferlist bl(sizeof(*p) * 2);
-    p->encode_with_checksum(bl);
-    keys[p->get_key_name()].claim(bl);
+    if ((p->version < dirty_to) || (p->version >= dirty_from)) {
+      bufferlist bl(sizeof(*p) * 2);
+      p->encode_with_checksum(bl);
+      keys[p->get_key_name()].claim(bl);
+    }
   }
-  //dout(10) << "write_log " << keys.size() << " keys" << dendl;
+//dout(10) << "write_log " << keys.size() << " keys" << dendl;
 
-  ::encode(divergent_priors, keys["divergent_priors"]);
+  if (dirty_divergent_priors) {
+    //dout(10) << "write_log: writing divergent_priors" << dendl;
+    ::encode(divergent_priors, keys["divergent_priors"]);
+  }
 
   t.omap_setkeys(coll_t::META_COLL, log_oid, keys);
 }
