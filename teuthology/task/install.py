@@ -55,14 +55,13 @@ def _get_baseurlinfo_and_dist(ctx, remote, config):
             'lsb_release', '-rs'], stdout=StringIO())
     retval['relval'] = r.stdout.getvalue().strip()
     dist_name = None
-    if retval['distro'] == 'Centos':
-        distri = retval['distro']
-        distri = distri.lower()
+    if ((retval['distro'] == 'Centos') | (retval['distro'] == 'RedHatEnterpriseServer')):
+        distri = 'centos'
         dist_name = 'el'
         relval = retval['relval']
         relval = relval[0:relval.find('.')]
-        retval['distro_release'] = '%s' %(relval)
-        retval['dist_release'] = '%s%s' %(dist_name, retval['relval'])
+        retval['distro_release'] = '%s%s' %(distri, relval)
+        retval['dist_release'] = '%s%s' %(dist_name, relval)
     elif retval['distro'] == 'Fedora':
         distri = retval['distro']
         dist_name = 'fc'
