@@ -550,7 +550,8 @@ void PGLog::write_log(ObjectStore::Transaction& t, pg_log_t &log,
 }
 
 bool PGLog::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
-  const pg_info_t &info, OndiskLog &ondisklog, IndexedLog &log,
+  const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
+  IndexedLog &log,
   pg_missing_t &missing, ostringstream &oss)
 {
   dout(10) << "read_log" << dendl;
@@ -561,7 +562,7 @@ bool PGLog::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
   int r = store->stat(coll_t::META_COLL, log_oid, &st);
   assert(r == 0);
   if (st.st_size > 0) {
-    read_log_old(store, coll, log_oid, info, ondisklog, log, missing, oss);
+    read_log_old(store, coll, log_oid, info, divergent_priors, log, missing, oss);
     rewrite_log = true;
   } else {
     log.tail = info.log_tail;
@@ -651,7 +652,8 @@ bool PGLog::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
 }
 
 void PGLog::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
-  const pg_info_t &info, OndiskLog &ondisklog, IndexedLog &log,
+  const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
+  IndexedLog &log,
   pg_missing_t &missing, ostringstream &oss)
 {
   // load bounds, based on old OndiskLog encoding.
@@ -673,7 +675,7 @@ void PGLog::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
     else
       ondisklog_zero_to = 0;
     if (struct_v >= 5)
-      ::decode(ondisklog.divergent_priors, bl);
+      ::decode(divergent_priors, bl);
     DECODE_FINISH(bl);
   }
   uint64_t ondisklog_length = ondisklog_head - ondisklog_tail;
