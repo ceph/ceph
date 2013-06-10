@@ -231,8 +231,10 @@ void SimpleMessenger::reaper()
     if (p->sd >= 0)
       ::close(p->sd);
     ldout(cct,10) << "reaper reaped pipe " << p << " " << p->get_peer_addr() << dendl;
-    if (p->connection_state)
+    if (p->connection_state) {
+      p->connection_state->set_priv(NULL);
       p->connection_state->clear_pipe(p);
+    }
     p->put();
     ldout(cct,10) << "reaper deleted pipe " << p << dendl;
   }
