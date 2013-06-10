@@ -1901,8 +1901,9 @@ void PG::publish_stats_to_osd()
       info.stats.last_active = now;
     info.stats.last_unstale = now;
 
-    info.stats.log_size = pg_log.get_ondisklog().length();
-    info.stats.ondisk_log_size = pg_log.get_ondisklog().length();
+    info.stats.log_size = pg_log.get_head().version - pg_log.get_tail().version;
+    info.stats.ondisk_log_size =
+      pg_log.get_head().version - pg_log.get_tail().version;
     info.stats.log_start = pg_log.get_tail();
     info.stats.ondisk_log_start = pg_log.get_tail();
 
@@ -2314,69 +2315,8 @@ void PG::append_log(
 
 bool PG::check_log_for_corruption(ObjectStore *store)
 {
-  PGLog::OndiskLog bounds;
-  bufferlist blb;
-  store->collection_getattr(coll, "ondisklog", blb);
-  bufferlist::iterator p = blb.begin();
-  ::decode(bounds, p);
-
-  dout(10) << "check_log_for_corruption: tail " << bounds.tail << " head " << bounds.head << dendl;
-
-  stringstream ss;
-  ss << "CORRUPT pg " << info.pgid << " log: ";
-
-  bool ok = true;
-  uint64_t pos = 0;
-  if (bounds.head > 0) {
-    // read
-    struct stat st;
-    store->stat(coll_t::META_COLL, log_oid, &st);
-    bufferlist bl;
-    store->read(coll_t::META_COLL, log_oid, bounds.tail, bounds.length(), bl);
-    if (st.st_size != (int)bounds.head) {
-      ss << "mismatched bounds " << bounds.tail << ".." << bounds.head << " and file size " << st.st_size;
-      ok = false;
-    } else if (bl.length() < bounds.length()) {
-      dout(0) << " got " << bl.length() << " bytes, expected " 
-	      << bounds.tail << ".." << bounds.head << "="
-	      << bounds.length()
-	      << dendl;
-      ss << "short log, " << bl.length() << " bytes, expected " << bounds.length();
-      ok = false;
-    } else {
-      pg_log_entry_t e;
-      bufferlist::iterator p = bl.begin();
-      while (!p.end()) {
-	pos = bounds.tail + p.get_off();
-	try {
-	  ::decode(e, p);
-	}
-	catch (const buffer::error &e) {
-	  dout(0) << "corrupt entry at " << pos << dendl;
-	  ss << "corrupt entry at offset " << pos;
-	  ok = false;
-	  break;
-	}
-	catch(const std::bad_alloc &a) {
-	  dout(0) << "corrupt entry at " << pos << dendl;
-	  ss << "corrupt entry at offset " << pos;
-	  ok = false;
-	  break;
-	}
-	dout(30) << " " << pos << " " << e << dendl;
-      }
-    }
-  }
-  if (!ok) {
-    stringstream f;
-    f << "/tmp/pglog_bad_" << info.pgid;
-    string filename;
-    getline(f, filename);
-    blb.write_file(filename.c_str(), 0644);
-    ss << ", saved to " << filename;
-    osd->clog.error(ss);
-  }
-  return ok;
+  /// TODO: this method needs to work with the omap log
+  return true;
 }
 
 //! Get the name we're going to save our corrupt page log as
