@@ -467,6 +467,8 @@ public:
     version++;
   }
 
+  string get_key_name() const;
+
   void encode(bufferlist &bl) const {
     ::encode(version, bl);
     ::encode(epoch, bl);
