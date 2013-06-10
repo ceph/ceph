@@ -379,17 +379,20 @@ public:
 
   bool read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
 		const pg_info_t &info, ostringstream &oss) {
-    return read_log(store, coll, log_oid, info, ondisklog, log, missing, oss);
+    return read_log(store, coll, log_oid, info, ondisklog.divergent_priors,
+      log, missing, oss);
   }
 
   /// return true if the log should be rewritten
   static bool read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
-    const pg_info_t &info, OndiskLog &ondisklog, IndexedLog &log,
+    const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
+    IndexedLog &log,
     pg_missing_t &missing, ostringstream &oss);
 
 protected:
   static void read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
-    const pg_info_t &info, OndiskLog &ondisklog, IndexedLog &log,
+    const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
+    IndexedLog &log,
     pg_missing_t &missing, ostringstream &oss);
 };
   
