@@ -66,7 +66,6 @@ SimpleMessenger::~SimpleMessenger()
   assert(!did_bind); // either we didn't bind or we shut down the Accepter
   assert(rank_pipe.empty()); // we don't have any running Pipes.
   assert(reaper_stop && !reaper_started); // the reaper thread is stopped
-  local_connection->put();
 }
 
 void SimpleMessenger::ready()
@@ -112,7 +111,7 @@ int SimpleMessenger::_send_message(Message *m, const entity_inst_t& dest,
 
   lock.Lock();
   Pipe *pipe = _lookup_pipe(dest.addr);
-  submit_message(m, (pipe ? pipe->connection_state : NULL),
+  submit_message(m, (pipe ? pipe->connection_state.get() : NULL),
                  dest.addr, dest.name.type(), lazy);
   lock.Unlock();
   return 0;
@@ -359,12 +358,12 @@ bool SimpleMessenger::verify_authorizer(Connection *con, int peer_type,
   return ms_deliver_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid,session_key);
 }
 
-Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
+ConnectionRef SimpleMessenger::get_connection(const entity_inst_t& dest)
 {
   Mutex::Locker l(lock);
   if (my_inst.addr == dest.addr) {
     // local
-    return static_cast<Connection *>(local_connection->get());
+    return local_connection;
   }
 
   // remote
@@ -378,14 +377,14 @@ Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
     }
     Mutex::Locker l(pipe->pipe_lock);
     if (pipe->connection_state)
-      return static_cast<Connection *>(pipe->connection_state->get());
+      return pipe->connection_state;
     // we failed too quickly!  retry.  FIXME.
   }
 }
 
-Connection *SimpleMessenger::get_loopback_connection()
+ConnectionRef SimpleMessenger::get_loopback_connection()
 {
-  return static_cast<Connection*>(local_connection->get());
+  return local_connection;
 }
 
 void SimpleMessenger::submit_message(Message *m, Connection *con,

@@ -914,7 +914,6 @@ void Objecter::reopen_session(OSDSession *s)
   ldout(cct, 10) << "reopen_session osd." << s->osd << " session, addr now " << inst << dendl;
   if (s->con) {
     messenger->mark_down(s->con);
-    s->con->put();
     logger->inc(l_osdc_osd_session_close);
   }
   s->con = messenger->get_connection(inst);
@@ -927,7 +926,6 @@ void Objecter::close_session(OSDSession *s)
   ldout(cct, 10) << "close_session for osd." << s->osd << dendl;
   if (s->con) {
     messenger->mark_down(s->con);
-    s->con->put();
     logger->inc(l_osdc_osd_session_close);
   }
   s->ops.clear();
@@ -1363,8 +1361,6 @@ void Objecter::finish_op(Op *op)
   op->session_item.remove_myself();
   if (op->budgeted)
     put_op_budget(op);
-  if (op->con)
-    op->con->put();
 
   ops.erase(op->tid);
   logger->set(l_osdc_op_active, ops.size());
@@ -1388,11 +1384,10 @@ void Objecter::send_op(Op *op)
   if (op->con) {
     ldout(cct, 20) << " revoking rx buffer for " << op->tid << " on " << op->con << dendl;
     op->con->revoke_rx_buffer(op->tid);
-    op->con->put();
   }
   if (op->outbl && op->outbl->length()) {
     ldout(cct, 20) << " posting rx buffer for " << op->tid << " on " << op->session->con << dendl;
-    op->con = op->session->con->get();
+    op->con = op->session->con;
     op->con->post_rx_buffer(op->tid, *op->outbl);
   }
 
