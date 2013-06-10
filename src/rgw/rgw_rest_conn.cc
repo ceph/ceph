@@ -46,7 +46,8 @@ public:
     StreamObjData(rgw_obj& _obj) : obj(_obj) {}
 };
 
-int RGWRegionConnection::put_obj_init(const string& uid, rgw_obj& obj, uint64_t obj_size, RGWRESTStreamRequest **req)
+int RGWRegionConnection::put_obj_init(const string& uid, rgw_obj& obj, uint64_t obj_size,
+                                      map<string, bufferlist>& attrs, RGWRESTStreamRequest **req)
 {
   string url;
   int ret = get_url(url);
@@ -57,7 +58,7 @@ int RGWRegionConnection::put_obj_init(const string& uid, rgw_obj& obj, uint64_t 
   params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
   params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
   *req = new RGWRESTStreamRequest(cct, url, NULL, &params);
-  return (*req)->put_obj_init(key, obj, obj_size);
+  return (*req)->put_obj_init(key, obj, obj_size, attrs);
 }
 
 int RGWRegionConnection::complete_request(RGWRESTStreamRequest *req)

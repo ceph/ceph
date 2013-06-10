@@ -1953,7 +1953,7 @@ int RGWRados::copy_obj(void *ctx,
 
     RGWRESTStreamRequest *out_stream_req;
   
-    int ret = rest_conn->put_obj_init(user_id, dest_obj, astate->size, &out_stream_req);
+    int ret = rest_conn->put_obj_init(user_id, dest_obj, astate->size, attrset, &out_stream_req);
     if (ret < 0)
       return ret;
 
