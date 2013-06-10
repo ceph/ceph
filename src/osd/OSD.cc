@@ -1573,6 +1573,7 @@ int OSD::shutdown()
   service.shutdown();
   op_tracker.on_shutdown();
 
+  class_handler->shutdown();
   client_messenger->shutdown();
   cluster_messenger->shutdown();
   hbclient_messenger->shutdown();

@@ -82,7 +82,8 @@ public:
   
   ClassData *register_class(const char *cname);
   void unregister_class(ClassData *cls);
-  
+
+  void shutdown();
 };
 
 
