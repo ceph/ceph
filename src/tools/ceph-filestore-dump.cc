@@ -324,10 +324,10 @@ static void invalid_path(string &path)
 int get_log(ObjectStore *fs, coll_t coll, pg_t pgid, const pg_info_t &info,
    PGLog::IndexedLog &log, pg_missing_t &missing)
 { 
-  PGLog::OndiskLog ondisklog;
+  map<eversion_t, hobject_t> divergent_priors;
   try {
     ostringstream oss;
-    PGLog::read_log(fs, coll, log_oid, info, ondisklog, log, missing, oss);
+    PGLog::read_log(fs, coll, log_oid, info, divergent_priors, log, missing, oss);
     if (debug && oss.str().size())
       cerr << oss.str() << std::endl;
   }

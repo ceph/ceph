@@ -145,7 +145,12 @@ struct PGLog {
 
     ostream& print(ostream& out) const;
   };
-  
+
+
+  void add_divergent_prior(eversion_t version, hobject_t obj) {
+    divergent_priors.insert(make_pair(version, obj));
+  }
+
   /**
    * OndiskLog - some info about how we store the log on disk.
    */
@@ -231,7 +236,7 @@ struct PGLog {
 protected:
   //////////////////// data members ////////////////////
 
-  OndiskLog   ondisklog;
+  map<eversion_t, hobject_t> divergent_priors;
   pg_missing_t     missing;
   IndexedLog  log;
 
@@ -267,10 +272,6 @@ public:
     map<hobject_t, pg_missing_t::item>::iterator p = missing.missing.find(m->first);
     missing.rm(p);
   }
-
-  //////////////////// get or set ondisklog ////////////////////
-
-  const OndiskLog &get_ondisklog() const { return ondisklog; }
 
   //////////////////// get or set log ////////////////////
 
@@ -371,7 +372,7 @@ public:
                       bool &dirty_log, bool &dirty_info, bool &dirty_big_info);
 
   void write_log(ObjectStore::Transaction& t, const hobject_t &log_oid) {
-    write_log(t, log, log_oid, ondisklog.divergent_priors);
+    write_log(t, log, log_oid, divergent_priors);
   }
 
   static void write_log(ObjectStore::Transaction& t, pg_log_t &log,
@@ -379,7 +380,7 @@ public:
 
   bool read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
 		const pg_info_t &info, ostringstream &oss) {
-    return read_log(store, coll, log_oid, info, ondisklog.divergent_priors,
+    return read_log(store, coll, log_oid, info, divergent_priors,
       log, missing, oss);
   }
 
