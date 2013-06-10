@@ -3115,8 +3115,8 @@ done:
     if (!uuid.is_zero())
       pending_inc.new_uuid[i] = uuid;
     ss << i;
-    getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+    rdata.append(ss);
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, rdata, get_version()));
     return true;
 
   } else if (prefix == "osd blacklist") {
