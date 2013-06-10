@@ -8,6 +8,7 @@ import re
 import collections
 import tempfile
 import os
+import time
 
 from teuthology import lockstatus as ls
 from teuthology import misc as teuthology
@@ -65,6 +66,13 @@ def list_locks(ctx):
     return None
 
 def update_lock(ctx, name, description=None, status=None, sshpubkey=None):
+    status_info = ls.get_status(ctx, name)
+    phys_host = status_info['vpshost']
+    if phys_host:
+        keyscan_out = ''
+        while not keyscan_out:
+            time.sleep(10)
+            keyscan_out, _ = keyscan_check(ctx, [name])
     updated = {}
     if description is not None:
         updated['desc'] = description
@@ -540,7 +548,7 @@ def create_if_vm(ctx, machine_name):
         if not file_out:
             file_info = {}
             file_info['disk-size'] = lcnfg.get('disk-size', '30G')
-            file_info['ram'] = lcnfg.get('ram', '4G')
+            file_info['ram'] = lcnfg.get('ram', '1.9G')
             file_info['cpus'] = lcnfg.get('cpus', 1)
             file_info['networks'] = lcnfg.get('networks',
                     [{'source' : 'front'}])
@@ -562,7 +570,7 @@ def create_if_vm(ctx, machine_name):
                 stdout=subprocess.PIPE,stderr=subprocess.PIPE,)
         owt,err = p.communicate()
         if err:
-            log.info("Downburst command to create %s failed: %s" %
+            log.info("Downburst completed on %s: %s" %
                     (machine_name,err))
         else:
             log.info("%s created: %s" % (machine_name,owt))

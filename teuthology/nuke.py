@@ -416,7 +416,7 @@ def nuke_helper(ctx, log):
     log.debug('shortname: %s' % shortname)
     log.debug('{ctx}'.format(ctx=ctx))
     if not ctx.noipmi and 'ipmi_user' in ctx.teuthology_config:
-        console = remote.RemoteConsole(name=host,
+        console = remote.getRemoteConsole(name=host,
                                        ipmiuser=ctx.teuthology_config['ipmi_user'],
                                        ipmipass=ctx.teuthology_config['ipmi_password'],
                                        ipmidomain=ctx.teuthology_config['ipmi_domain'])

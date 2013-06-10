@@ -46,22 +46,26 @@ class Remote(object):
 import pexpect
 import re
 import logging
+import libvirt
+from teuthology import lockstatus as ls
 
 log = logging.getLogger(__name__)
 
-class RemoteConsole(object):
+def getShortName(name):
+    hn = name.split('@')[-1]
+    p = re.compile('([^.]+)\.?.*')
+    return p.match(hn).groups()[0]
+
+class PhysicalConsole():
 
     def __init__(self, name, ipmiuser, ipmipass, ipmidomain, logfile=None, timeout=20):
         self.name = name
+        self.shortname = getShortName(name)
+        self.timeout = timeout
+        self.logfile = None
         self.ipmiuser = ipmiuser
         self.ipmipass = ipmipass
         self.ipmidomain = ipmidomain
-        self.timeout = timeout
-        self.logfile = None
-
-        hn = self.name.split('@')[-1]
-        p = re.compile('([^.]+)\.?.*')
-        self.shortname = p.match(hn).groups()[0]
 
     def _exec(self, cmd):
         if not self.ipmiuser or not self.ipmipass or not self.ipmidomain:
@@ -83,6 +87,34 @@ class RemoteConsole(object):
             child.logfile = self.logfile
         return child
 
+    def _exit_session(self, child, timeout=None):
+        child.send('~.')
+        t = timeout
+        if not t:
+            t = self.timeout
+        r = child.expect(['terminated ipmitool', pexpect.TIMEOUT, pexpect.EOF], timeout=t)
+        if r != 0:
+            self._exec('sol deactivate')
+
+    def _wait_for_login(self, timeout=None, attempts=6):
+        log.debug('Waiting for login prompt on {s}'.format(s=self.shortname))
+        # wait for login prompt to indicate boot completed
+        t = timeout
+        if not t:
+            t = self.timeout
+        for i in range(0, attempts):
+            start = time.time()
+            while time.time() - start < t:
+                child = self._exec('sol activate')
+                child.send('\n')
+                log.debug('expect: {s} login'.format(s=self.shortname))
+                r = child.expect(['{s} login: '.format(s=self.shortname), pexpect.TIMEOUT, pexpect.EOF], timeout=(t - (time.time() - start)))
+                log.debug('expect before: {b}'.format(b=child.before))
+                log.debug('expect after: {a}'.format(a=child.after))
+
+                self._exit_session(child)
+                if r == 0:
+                    return
     def check_power(self, state, timeout=None):
        # check power
        total_timeout = timeout
@@ -118,36 +150,6 @@ class RemoteConsole(object):
             log.info('Failed to get ipmi console status for {s}: {e}'.format(s=self.shortname, e=e))
             return False
 
-    def _exit_session(self, child, timeout=None):
-        child.send('~.')
-        t = timeout
-        if not t:
-            t = self.timeout
-        r = child.expect(['terminated ipmitool', pexpect.TIMEOUT, pexpect.EOF], timeout=t)
-        if r != 0:
-            self._exec('sol deactivate')
-
-    def _wait_for_login(self, timeout=None, attempts=6):
-        log.debug('Waiting for login prompt on {s}'.format(s=self.shortname))
-        # wait for login prompt to indicate boot completed
-        t = timeout
-        if not t:
-            t = self.timeout
-        for i in range(0, attempts):
-            start = time.time()
-            while time.time() - start < t:
-                child = self._exec('sol activate')
-                child.send('\n')
-                log.debug('expect: {s} login'.format(s=self.shortname))
-                r = child.expect(['{s} login: '.format(s=self.shortname), pexpect.TIMEOUT, pexpect.EOF], timeout=(t - (time.time() - start)))
-                log.debug('expect before: {b}'.format(b=child.before))
-                log.debug('expect after: {a}'.format(a=child.after))
-
-                self._exit_session(child)
-                if r == 0:
-                    return
-        raise pexpect.TIMEOUT ('Timeout exceeded ({t}) for {a} attempts in _wait_for_login()'.format(t=t, a=attempts))
-
     def power_cycle(self):
         log.info('Power cycling {s}'.format(s=self.shortname))
         child = self._exec('power cycle')
@@ -166,18 +168,6 @@ class RemoteConsole(object):
         self._wait_for_login()
         log.info('Hard reset for {s} completed'.format(s=self.shortname))
 
-    def power_off(self):
-        log.info('Power off {s}'.format(s=self.shortname))
-        start = time.time()
-        while time.time() - start < self.timeout:
-            child = self._exec('power off')
-            r = child.expect(['Chassis Power Control: Down/Off', pexpect.EOF], timeout=self.timeout)
-            if r == 0:
-                break
-        if not self.check_power('off', 60):
-            log.error('Failed to power off {s}'.format(s=self.shortname))
-        log.info('Power off for {s} completed'.format(s=self.shortname))
-
     def power_on(self):
         log.info('Power on {s}'.format(s=self.shortname))
         start = time.time()
@@ -190,6 +180,18 @@ class RemoteConsole(object):
             log.error('Failed to power on {s}'.format(s=self.shortname))
         log.info('Power on for {s} completed'.format(s=self.shortname))
 
+    def power_off(self):
+        log.info('Power off {s}'.format(s=self.shortname))
+        start = time.time()
+        while time.time() - start < self.timeout:
+            child = self._exec('power off')
+            r = child.expect(['Chassis Power Control: Down/Off', pexpect.EOF], timeout=self.timeout)
+            if r == 0:
+                break
+        if not self.check_power('off', 60):
+            log.error('Failed to power off {s}'.format(s=self.shortname))
+        log.info('Power off for {s} completed'.format(s=self.shortname))
+
     def power_off_for_interval(self, interval=30):
         log.info('Power off {s} for {i} seconds'.format(s=self.shortname, i=interval))
         child = self._exec('power off')
@@ -199,7 +201,54 @@ class RemoteConsole(object):
 
         child = self._exec('power on')
         child.expect('Chassis Power Control: Up/On', timeout=self.timeout)
-
         self._wait_for_login()
-
         log.info('Power off for {i} seconds completed'.format(s=self.shortname, i=interval))
+
+class VirtualConsole():
+
+    def __init__(self, name, ipmiuser, ipmipass, ipmidomain, logfile=None, timeout=20):
+        self.shortname = getShortName(name)
+        status_info = ls.get_status('', self.shortname)
+        try:
+            phys_host = status_info['vpshost']
+        except TypeError:
+            return
+        self.connection = libvirt.open(phys_host)
+        for i in self.connection.listDomainsID():
+            d = con.lookupByID(i)
+            if d.name() == self.shortname:
+                self.vm_domain = d
+                break
+        return
+
+    def check_power(self, state, timeout=None):
+        return self.vm_domain.info[0] in [libvirt.VIR_DOMAIN_RUNNING, libvirt.VIR_DOMAIN_BLOCKED,
+                libvirt.VIR_DOMAIN_PAUSED]
+
+    def check_status(self, timeout=None):
+        return self.vm_domain.info()[0]  == libvirt.VIR_DOMAIN_RUNNING 
+
+    def power_cycle(self):
+        self.vm_domain.info().destroy() 
+        self.vm_domain.info().create() 
+
+    def hard_reset(self):
+        self.vm_domain.info().destroy() 
+
+    def power_on(self):
+        self.vm_domain.info().create() 
+
+    def power_off(self):
+        self.vm_domain.info().destroy() 
+
+    def power_off_for_interval(self, interval=30):
+        log.info('Power off {s} for {i} seconds'.format(s=self.shortname, i=interval))
+        self.vm_domain.info().destroy() 
+        time.sleep(interval)
+        self.vm_domain.info().create() 
+        log.info('Power off for {i} seconds completed'.format(s=self.shortname, i=interval))
+
+def getRemoteConsole(name, ipmiuser, ipmipass, ipmidomain, logfile=None, timeout=20):
+    if name.startswith('vpm'):
+        return VirtualConsole(name, ipmiuser, ipmipass, ipmidomain, logfile, timeout)
+    return PhysicalConsole(name, ipmiuser, ipmipass, ipmidomain, logfile, timeout)

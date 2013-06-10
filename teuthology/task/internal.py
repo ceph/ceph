@@ -106,6 +106,7 @@ def lock_machines(ctx, config):
                 while not keyscan_out:
                     time.sleep(10)
                     keyscan_out, current_locks = lock.keyscan_check(ctx, vmlist)
+                    log.info('virtual machine is stil unavailable')
                 if lock.update_keys(ctx, keyscan_out, current_locks):
                     log.info("Error in virtual machine keys")
                 newscandict = {}
@@ -172,8 +173,18 @@ def connect(ctx, config):
     from ..orchestra import connection, remote
     from ..orchestra import cluster
     remotes = []
-    for t, key in ctx.config['targets'].iteritems():
+    machs = []
+    for name in ctx.config['targets'].iterkeys():
+        machs.append(name)
+    lock.scan_for_locks(ctx, machs) 
+    for t, xkey in ctx.config['targets'].iteritems():
         log.debug('connecting to %s', t)
+        log.info('Key is :%s:', xkey) 
+        oldkeystatus = lockstatus.get_status(ctx, t)
+        key = xkey
+        if 'sshpubkey' in oldkeystatus:
+            log.info('possible key is :%s:',oldkeystatus['sshpubkey'])
+            key = oldkeystatus['sshpubkey']
         remotes.append(
             remote.Remote(name=t,
                           ssh=connection.connect(user_at_host=t,
@@ -492,16 +503,16 @@ def vm_setup(ctx, config):
     Look for virtual machines and handle their initialization
     """
     with parallel() as p:
-        editinfo = './teuthology/task/edit_sudoers.sh'
+        editinfo = os.path.join(os.path.dirname(__file__),'edit_sudoers.sh')
         for remote in ctx.cluster.remotes.iterkeys():
             mname = re.match(".*@([^\.]*)\..*", str(remote)).group(1) 
-            if mname[0:3] == 'vpm':
+            if mname.startswith('vpm'):
                 r = remote.run(args=['test', '-e', '/ceph-qa-ready',],
                         stdout=StringIO(),
                         check_status=False,)
                 if r.exitstatus != 0:
                     p1 = subprocess.Popen(['cat', editinfo], stdout=subprocess.PIPE)
-                    p2 = subprocess.Popen(['ssh','-t','-t',str(remote)],stdin=p1.stdout, stdout=subprocess.PIPE)
+                    p2 = subprocess.Popen(['ssh','-t','-t',str(remote), 'sudo', 'sh'],stdin=p1.stdout, stdout=subprocess.PIPE)
                     _,err = p2.communicate()
                     if err:
                         log.info("Edit of /etc/sudoers failed: %s",err)

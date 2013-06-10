@@ -105,7 +105,7 @@ def task(ctx, config):
                 host = t.split('@')[-1]
                 shortname = host.split('.')[0]
                 from ..orchestra import remote as oremote
-                console = oremote.RemoteConsole(
+                console = oremote.getRemoteConsole(
                     name=host,
                     ipmiuser=ctx.teuthology_config['ipmi_user'],
                     ipmipass=ctx.teuthology_config['ipmi_password'],
