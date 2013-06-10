@@ -2346,10 +2346,11 @@ int Objecter::_submit_command(CommandOp *c, tid_t *ptid)
   command_ops[tid] = c;
   num_homeless_ops++;
   int r = recalc_command_target(c);
-  if (r == RECALC_OP_TARGET_OSD_DNE) {
-    // XXX take back tid incr? 
+  if (r == RECALC_OP_TARGET_OSD_DNE)
+    return -ENOENT;
+  if (r == RECALC_OP_TARGET_OSD_DOWN)
     return -ENXIO;
-  }
+
   if (c->session)
     _send_command(c);
   else
@@ -2366,6 +2367,8 @@ int Objecter::recalc_command_target(CommandOp *c)
   if (c->target_osd >= 0) {
     if (!osdmap->exists(c->target_osd))
       return RECALC_OP_TARGET_OSD_DNE;
+    if (osdmap->is_down(c->target_osd))
+      return RECALC_OP_TARGET_OSD_DOWN;
     s = get_session(c->target_osd);
   } else {
     if (!osdmap->have_pg_pool(c->target_pg.pool()))

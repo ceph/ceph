@@ -1094,6 +1094,7 @@ public:
     RECALC_OP_TARGET_NEED_RESEND,
     RECALC_OP_TARGET_POOL_DNE,
     RECALC_OP_TARGET_OSD_DNE,
+    RECALC_OP_TARGET_OSD_DOWN,
   };
   int recalc_op_target(Op *op);
   bool recalc_linger_op_target(LingerOp *op);
