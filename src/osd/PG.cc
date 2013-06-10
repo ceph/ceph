@@ -3658,7 +3658,9 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
           while (!boundary_found) {
             vector<hobject_t> objects;
             ret = osd->store->collection_list_partial(coll, start,
-                                                      5, 5, 0,
+                                                      g_conf->osd_scrub_chunk_min,
+						      g_conf->osd_scrub_chunk_max,
+						      0,
                                                       &objects, &scrubber.end);
             assert(ret >= 0);
 
