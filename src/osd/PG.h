@@ -222,7 +222,6 @@ public:
     //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
     assert(!dirty_info);
     assert(!dirty_big_info);
-    assert(!dirty_log);
     _lock.Unlock();
   }
 
@@ -249,7 +248,7 @@ public:
   void get(const string &tag);
   void put(const string &tag);
 
-  bool dirty_info, dirty_big_info, dirty_log;
+  bool dirty_info, dirty_big_info;
 
 public:
   // pg state
@@ -1661,7 +1660,6 @@ public:
 
 private:
   void write_info(ObjectStore::Transaction& t);
-  void write_log(ObjectStore::Transaction& t);
 
 public:
   static int _write_info(ObjectStore::Transaction& t, epoch_t epoch,
