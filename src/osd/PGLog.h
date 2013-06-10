@@ -336,8 +336,8 @@ public:
     log.last_requested = 0;
   }
 
-  void proc_replica_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
-			pg_missing_t& omissing, int from);
+  void proc_replica_log(ObjectStore::Transaction& t, pg_info_t &oinfo, const pg_log_t &olog,
+			pg_missing_t& omissing, int from) const;
 
 protected:
   bool merge_old_entry(ObjectStore::Transaction& t, const pg_log_entry_t& oe,
