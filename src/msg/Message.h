@@ -161,7 +161,7 @@
 
 class Messenger;
 
-struct Connection : public RefCountedObject {
+struct Connection : private RefCountedObject {
   Mutex lock;
   Messenger *msgr;
   RefCountedObject *priv;
@@ -174,6 +174,8 @@ struct Connection : public RefCountedObject {
   int rx_buffers_version;
   map<tid_t,pair<bufferlist,int> > rx_buffers;
 
+  friend class boost::intrusive_ptr<Connection>;
+
 public:
   Connection(Messenger *m)
     : lock("Connection::lock"),
@@ -184,6 +186,9 @@ public:
       pipe(NULL),
       failed(false),
       rx_buffers_version(0) {
+    // we are managed exlusively by ConnectionRef; make it so you can
+    //   ConnectionRef foo = new Connection;
+    nref.set(0);
   }
   ~Connection() {
     //generic_dout(0) << "~Connection " << this << dendl;
@@ -193,10 +198,6 @@ public:
     }
     if (pipe)
       pipe->put();
-  }
-
-  Connection *get() {
-    return static_cast<Connection *>(RefCountedObject::get());
   }
 
   void set_priv(RefCountedObject *o) {
@@ -304,7 +305,7 @@ protected:
   /* time at which message was fully read */
   utime_t recv_complete_stamp;
 
-  Connection *connection;
+  ConnectionRef connection;
 
   // release our size in bytes back to this throttler when our payload
   // is adjusted or when we are destroyed.
@@ -352,18 +353,14 @@ public:
 protected:
   virtual ~Message() { 
     assert(nref.read() == 0);
-    if (connection)
-      connection->put();
     if (byte_throttler)
       byte_throttler->put(payload.length() + middle.length() + data.length());
     if (msg_throttler)
       msg_throttler->put();
   }
 public:
-  Connection *get_connection() { return connection; }
-  void set_connection(Connection *c) {
-    if (connection)
-      connection->put();
+  const ConnectionRef& get_connection() { return connection; }
+  void set_connection(const ConnectionRef& c) {
     connection = c;
   }
   void set_byte_throttler(Throttle *t) { byte_throttler = t; }

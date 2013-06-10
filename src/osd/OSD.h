@@ -303,8 +303,14 @@ public:
   void send_message_osd_cluster(Message *m, Connection *con) {
     cluster_messenger->send_message(m, con);
   }
+  void send_message_osd_cluster(Message *m, const ConnectionRef& con) {
+    cluster_messenger->send_message(m, con.get());
+  }
   void send_message_osd_client(Message *m, Connection *con) {
     client_messenger->send_message(m, con);
+  }
+  void send_message_osd_client(Message *m, const ConnectionRef& con) {
+    client_messenger->send_message(m, con.get());
   }
   entity_name_t get_cluster_msgr_name() {
     return cluster_messenger->get_myname();
@@ -688,7 +694,7 @@ public:
     OSDCap caps;
     int64_t auid;
     epoch_t last_sent_epoch;
-    Connection *con;
+    ConnectionRef con;
     WatchConState wstate;
 
     Session() : auid(-1), last_sent_epoch(0), con(0) {}
@@ -699,8 +705,8 @@ private:
   /// information about a heartbeat peer
   struct HeartbeatInfo {
     int peer;           ///< peer
-    Connection *con_front;   ///< peer connection (front)
-    Connection *con_back;    ///< peer connection (back)
+    ConnectionRef con_front;   ///< peer connection (front)
+    ConnectionRef con_back;    ///< peer connection (back)
     utime_t first_tx;   ///< time we sent our first ping request
     utime_t last_tx;    ///< last time we sent a ping request
     utime_t last_rx_front;  ///< last time we got a ping reply on the front side
@@ -1242,17 +1248,10 @@ protected:
     vector<string> cmd;
     tid_t tid;
     bufferlist indata;
-    Connection *con;
+    ConnectionRef con;
 
     Command(vector<string>& c, tid_t t, bufferlist& bl, Connection *co)
-      : cmd(c), tid(t), indata(bl), con(co) {
-      if (con)
-	con->get();
-    }
-    ~Command() {
-      if (con)
-	con->put();
-    }
+      : cmd(c), tid(t), indata(bl), con(co) {}
   };
   list<Command*> command_queue;
   struct CommandWQ : public ThreadPool::WorkQueue<Command> {
@@ -1284,7 +1283,7 @@ protected:
 	delete c;
 	return;
       }
-      osd->do_command(c->con, c->tid, c->cmd, c->indata);
+      osd->do_command(c->con.get(), c->tid, c->cmd, c->indata);
       osd->osd_lock.Unlock();
       delete c;
     }

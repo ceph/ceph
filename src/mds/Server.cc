@@ -306,7 +306,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       // ms_handle_remote_reset() and realize they had in fact closed.
       // do this *before* sending the message to avoid a possible
       // race.
-      mds->messenger->mark_disposable(session->connection);
+      mds->messenger->mark_disposable(session->connection.get());
 
       // reset session
       mds->send_message_client(new MClientSession(CEPH_SESSION_CLOSE), session);
@@ -901,8 +901,7 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
   }
 
   // note client connection to direct my reply
-  Connection *client_con = req->get_connection();
-  client_con->get();
+  ConnectionRef client_con = req->get_connection();
 
   // drop non-rdlocks before replying, so that we can issue leases
   mdcache->request_drop_non_rdlocks(mdr);
@@ -929,7 +928,6 @@ void Server::reply_request(MDRequest *mdr, MClientReply *reply, CInode *tracei, 
     reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
     messenger->send_message(reply, client_con);
   }
-  client_con->put();
   
   // clean up request
   mdcache->request_finish(mdr);

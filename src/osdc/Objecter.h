@@ -738,7 +738,7 @@ public:
     vector<int> acting;
     bool used_replica;
 
-    Connection *con;  // for rx buffer only
+    ConnectionRef con;  // for rx buffer only
 
     vector<OSDOp> ops;
 
@@ -1064,7 +1064,7 @@ public:
     xlist<CommandOp*> command_ops;
     int osd;
     int incarnation;
-    Connection *con;
+    ConnectionRef con;
 
     OSDSession(int o) : osd(o), incarnation(0), con(NULL) {}
   };

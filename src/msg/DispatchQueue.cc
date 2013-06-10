@@ -54,7 +54,7 @@ void DispatchQueue::enqueue(Message *m, int priority, uint64_t id)
 void DispatchQueue::local_delivery(Message *m, int priority)
 {
   Mutex::Locker l(lock);
-  m->set_connection(msgr->local_connection->get());
+  m->set_connection(msgr->local_connection.get());
   add_arrival(m);
   if (priority >= CEPH_MSG_PRIO_LOW) {
     mqueue.enqueue_strict(

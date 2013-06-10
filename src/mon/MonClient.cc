@@ -139,7 +139,6 @@ int MonClient::get_monmap_privately()
 
     if (monmap.fsid.is_zero()) {
       messenger->mark_down(cur_con);  // nope, clean that connection up
-      cur_con->put();
     }
   }
 
@@ -156,10 +155,7 @@ int MonClient::get_monmap_privately()
   hunting = true;  // reset this to true!
   cur_mon.clear();
 
-  if (cur_con) {
-    cur_con->put();
-    cur_con = NULL;
-  }
+  cur_con.reset(NULL);
 
   if (!monmap.fsid.is_zero())
     return 0;
@@ -333,10 +329,8 @@ void MonClient::shutdown()
   }
   monc_lock.Lock();
   timer.shutdown();
-  if (cur_con) {
-    cur_con->put();
-    cur_con = NULL;
-  }
+
+  cur_con.reset(NULL);
 
   monc_lock.Unlock();
 }
@@ -495,7 +489,6 @@ void MonClient::_pick_new_mon()
 
   if (cur_con) {
     messenger->mark_down(cur_con);
-    cur_con->put();
   }
   cur_con = messenger->get_connection(monmap.get_inst(cur_mon));
 	
@@ -591,7 +584,7 @@ void MonClient::tick()
     if (now > sub_renew_after)
       _renew_subs();
 
-    messenger->send_keepalive(cur_con);
+    messenger->send_keepalive(cur_con.get());
    
     if (state == MC_STATE_HAVE_SESSION) {
       send_log();

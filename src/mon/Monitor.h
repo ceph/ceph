@@ -109,7 +109,7 @@ public:
   string name;
   int rank;
   Messenger *messenger;
-  Connection *con_self;
+  ConnectionRef con_self;
   Mutex lock;
   SafeTimer timer;
   
@@ -1312,14 +1312,12 @@ public:
     uint64_t tid;
     bufferlist request_bl;
     MonSession *session;
-    Connection *con;
+    ConnectionRef con;
     entity_inst_t client_inst;
 
     ~RoutedRequest() {
       if (session)
 	session->put();
-      if (con)
-	con->put();
     }
   };
   uint64_t routed_request_tid;
