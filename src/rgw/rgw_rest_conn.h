@@ -24,7 +24,8 @@ public:
   int forward(const string& uid, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl);
 
   /* async request */
-  int put_obj_init(const string& uid, rgw_obj& obj, uint64_t obj_size, RGWRESTStreamRequest **req);
+  int put_obj_init(const string& uid, rgw_obj& obj, uint64_t obj_size,
+                   map<string, bufferlist>& attrs, RGWRESTStreamRequest **req);
   int complete_request(RGWRESTStreamRequest *req);
 };
 

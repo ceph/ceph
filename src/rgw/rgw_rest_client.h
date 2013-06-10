@@ -46,6 +46,8 @@ public:
 
   int execute(RGWAccessKey& key, const char *method, const char *resource);
   int forward_request(RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl);
+
+  map<string, string>& get_out_headers() { return out_headers; }
 };
 
 
@@ -62,7 +64,7 @@ public:
                 list<pair<string, string> > *_params) : RGWRESTSimpleRequest(_cct, _url, _headers, _params),
                 lock("RGWRESTStreamRequest"), handle(NULL), cb(NULL) {}
   ~RGWRESTStreamRequest();
-  int put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size);
+  int put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs);
   int complete();
 
   RGWGetDataCB *get_out_cb() { return cb; }
