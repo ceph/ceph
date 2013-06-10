@@ -1302,13 +1302,13 @@ void Monitor::sync_requester_abort()
   assert(sync_role == SYNC_ROLE_REQUESTER);
 
   if (sync_leader.get() != NULL) {
-    *_dout << " " << sync_leader->entity;
+    dout(10) << __func__ << " leader " << sync_leader->entity << dendl;
     sync_leader->cancel_timeout();
     sync_leader.reset();
   }
 
   if (sync_provider.get() != NULL) {
-    *_dout << " " << sync_provider->entity;
+    dout(10) << __func__ << " provider " << sync_provider->entity << dendl;
     sync_provider->cancel_timeout();
 
     MMonSync *msg = new MMonSync(MMonSync::OP_ABORT);
@@ -1316,7 +1316,6 @@ void Monitor::sync_requester_abort()
 
     sync_provider.reset();
   }
-  *_dout << " clearing potentially inconsistent store" << dendl;
 
   // Given that we are explicitely aborting the whole sync process, we should
   // play it safe and clear the store.
