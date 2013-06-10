@@ -10,7 +10,7 @@ int main(int argc, char **argv)
 {
   /*
    * you need to create a suitable osdmap first.  e.g., for 40 osds, 
-   * $ ./osdmaptool --createsimple .ceph_monmap 40 --clobber .ceph_osdmap 
+   * $ ./osdmaptool --createsimple 40 --clobber .ceph_osdmap
    */
   bufferlist bl;
   std::string error;
