@@ -152,7 +152,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   #ifdef PG_DEBUG_REFS
   _ref_id_lock("PG::_ref_id_lock"), _ref_id(0),
   #endif
-  deleting(false), dirty_info(false), dirty_big_info(false), dirty_log(false),
+  deleting(false), dirty_info(false), dirty_big_info(false),
   info(p),
   info_struct_v(0),
   coll(p), log_oid(loid), biginfo_oid(ioid),
@@ -196,7 +196,6 @@ void PG::lock(bool no_lockdep)
   // if we have unrecorded dirty state with the lock dropped, there is a bug
   assert(!dirty_info);
   assert(!dirty_big_info);
-  assert(!dirty_log);
 
   dout(30) << "lock" << dendl;
 }
@@ -312,7 +311,7 @@ void PG::remove_snap_mapped_object(
 void PG::merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from)
 {
   list<hobject_t> to_remove;
-  pg_log.merge_log(t, oinfo, olog, from, info, to_remove, dirty_log, dirty_info, dirty_big_info);
+  pg_log.merge_log(t, oinfo, olog, from, info, to_remove, dirty_info, dirty_big_info);
   for(list<hobject_t>::iterator i = to_remove.begin();
       i != to_remove.end();
       ++i)
@@ -322,7 +321,7 @@ void PG::merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog
 void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
 {
   list<hobject_t> to_remove;
-  pg_log.rewind_divergent_log(t, newhead, info, to_remove, dirty_log, dirty_info, dirty_big_info);
+  pg_log.rewind_divergent_log(t, newhead, info, to_remove, dirty_info, dirty_big_info);
   for(list<hobject_t>::iterator i = to_remove.begin();
       i != to_remove.end();
       ++i)
@@ -2242,17 +2241,11 @@ epoch_t PG::peek_map_epoch(ObjectStore *store, coll_t coll, hobject_t &infos_oid
   return cur_epoch;
 }
 
-void PG::write_log(ObjectStore::Transaction& t)
-{
-  pg_log.write_log(t, log_oid);
-}
-
 void PG::write_if_dirty(ObjectStore::Transaction& t)
 {
   if (dirty_big_info || dirty_info)
     write_info(t);
-  if (dirty_log)
-    write_log(t);
+  pg_log.write_log(t, log_oid);
 }
 
 void PG::trim_peers()
