@@ -320,6 +320,14 @@ int MonClient::init()
 
 void MonClient::shutdown()
 {
+  monc_lock.Lock();
+  while (!version_requests.empty()) {
+    version_requests.begin()->second->context->complete(-ECANCELED);
+    delete version_requests.begin()->second;
+    version_requests.erase(version_requests.begin());
+  }
+  monc_lock.Unlock();
+
   if (initialized) {
     finisher.stop();
   }
