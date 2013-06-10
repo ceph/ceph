@@ -114,7 +114,7 @@ struct object_locator_t {
   explicit object_locator_t(int64_t po, string s)
     : pool(po), key(s) {}
 
-  int get_pool() const {
+  int64_t get_pool() const {
     return pool;
   }
 
