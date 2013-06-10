@@ -154,7 +154,7 @@ void PGLog::trim(eversion_t trim_to, pg_info_t &info)
 }
 
 void PGLog::proc_replica_log(ObjectStore::Transaction& t,
-			  pg_info_t &oinfo, pg_log_t &olog, pg_missing_t& omissing, int from)
+			  pg_info_t &oinfo, const pg_log_t &olog, pg_missing_t& omissing, int from) const
 {
   dout(10) << "proc_replica_log for osd." << from << ": "
 	   << oinfo << " " << olog << " " << omissing << dendl;
@@ -196,7 +196,7 @@ void PGLog::proc_replica_log(ObjectStore::Transaction& t,
       continue;
     }
       
-    pg_log_entry_t& ne = *log.objects[oe.soid];
+    const pg_log_entry_t& ne = *(log.objects.find(oe.soid)->second);
     if (ne.version == oe.version) {
       dout(10) << " had " << oe << " new " << ne << " : match, stopping" << dendl;
       lu = pp->version;
