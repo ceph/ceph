@@ -2694,6 +2694,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
   heartbeat_lock.Lock();
   if (is_stopping()) {
     heartbeat_lock.Unlock();
+    m->put();
     return;
   }
 
