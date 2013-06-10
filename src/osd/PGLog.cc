@@ -264,7 +264,7 @@ void PGLog::proc_replica_log(ObjectStore::Transaction& t,
  *
  * return true if entry is not divergent.
  */
-bool PGLog::merge_old_entry(ObjectStore::Transaction& t, const pg_log_entry_t& oe, const pg_info_t& info, list<hobject_t>& remove_snap, bool &dirty_log)
+bool PGLog::merge_old_entry(ObjectStore::Transaction& t, const pg_log_entry_t& oe, const pg_info_t& info, list<hobject_t>& remove_snap)
 {
   if (oe.soid > info.last_backfill) {
     dout(20) << "merge_old_entry  had " << oe << " : beyond last_backfill" << dendl;
@@ -348,7 +348,7 @@ bool PGLog::merge_old_entry(ObjectStore::Transaction& t, const pg_log_entry_t& o
  */
 void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead,
                       pg_info_t &info, list<hobject_t>& remove_snap,
-                      bool &dirty_log, bool &dirty_info, bool &dirty_big_info)
+                      bool &dirty_info, bool &dirty_big_info)
 {
   dout(10) << "rewind_divergent_log truncate divergent future " << newhead << dendl;
   assert(newhead > log.tail);
@@ -379,7 +379,7 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
     info.last_complete = newhead;
 
   for (list<pg_log_entry_t>::iterator d = divergent.begin(); d != divergent.end(); ++d)
-    merge_old_entry(t, *d, info, remove_snap, dirty_log);
+    merge_old_entry(t, *d, info, remove_snap);
 
   dirty_info = true;
   dirty_big_info = true;
@@ -388,7 +388,7 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
 void PGLog::merge_log(ObjectStore::Transaction& t,
                       pg_info_t &oinfo, pg_log_t &olog, int fromosd,
                       pg_info_t &info, list<hobject_t>& remove_snap,
-                      bool &dirty_log, bool &dirty_info, bool &dirty_big_info)
+                      bool &dirty_info, bool &dirty_big_info)
 {
   dout(10) << "merge_log " << olog << " from osd." << fromosd
            << " into " << log << dendl;
@@ -443,7 +443,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
 
   // do we have divergent entries to throw out?
   if (olog.head < log.head) {
-    rewind_divergent_log(t, olog.head, info, remove_snap, dirty_log, dirty_info, dirty_big_info);
+    rewind_divergent_log(t, olog.head, info, remove_snap, dirty_info, dirty_big_info);
     changed = true;
   }
 
@@ -512,7 +512,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
     // process divergent items
     if (!divergent.empty()) {
       for (list<pg_log_entry_t>::iterator d = divergent.begin(); d != divergent.end(); ++d)
-	merge_old_entry(t, *d, info, remove_snap, dirty_log);
+	merge_old_entry(t, *d, info, remove_snap);
     }
 
     changed = true;
