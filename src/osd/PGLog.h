@@ -151,88 +151,6 @@ struct PGLog {
     divergent_priors.insert(make_pair(version, obj));
   }
 
-  /**
-   * OndiskLog - some info about how we store the log on disk.
-   */
-  class OndiskLog {
-  public:
-    // ok
-    uint64_t tail;                     // first byte of log. 
-    uint64_t head;                     // byte following end of log.
-    uint64_t zero_to;                // first non-zeroed byte of log.
-    bool has_checksums;
-
-    /**
-     * We reconstruct the missing set by comparing the recorded log against
-     * the objects in the pg collection.  Unfortunately, it's possible to
-     * have an object in the missing set which is not in the log due to
-     * a divergent operation with a prior_version pointing before the
-     * pg log tail.  To deal with this, we store alongside the log a mapping
-     * of divergent priors to be checked along with the log during read_state.
-     */
-    map<eversion_t, hobject_t> divergent_priors;
-    void add_divergent_prior(eversion_t version, hobject_t obj) {
-      divergent_priors.insert(make_pair(version, obj));
-    }
-
-    OndiskLog() : tail(0), head(0), zero_to(0),
-		  has_checksums(true) {}
-
-    uint64_t length() const { return head - tail; }
-    bool trim_to(eversion_t v, ObjectStore::Transaction& t);
-
-    void zero() {
-      tail = 0;
-      head = 0;
-      zero_to = 0;
-    }
-
-    void encode(bufferlist& bl) const {
-      ENCODE_START(5, 3, bl);
-      ::encode(tail, bl);
-      ::encode(head, bl);
-      ::encode(zero_to, bl);
-      ::encode(divergent_priors, bl);
-      ENCODE_FINISH(bl);
-    }
-    void decode(bufferlist::iterator& bl) {
-      DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
-      has_checksums = (struct_v >= 2);
-      ::decode(tail, bl);
-      ::decode(head, bl);
-      if (struct_v >= 4)
-	::decode(zero_to, bl);
-      else
-	zero_to = 0;
-      if (struct_v >= 5)
-	::decode(divergent_priors, bl);
-      DECODE_FINISH(bl);
-    }
-    void dump(Formatter *f) const {
-      f->dump_unsigned("head", head);
-      f->dump_unsigned("tail", tail);
-      f->dump_unsigned("zero_to", zero_to);
-      f->open_array_section("divergent_priors");
-      for (map<eversion_t, hobject_t>::const_iterator p = divergent_priors.begin();
-	   p != divergent_priors.end();
-	   ++p) {
-	f->open_object_section("prior");
-	f->dump_stream("version") << p->first;
-	f->dump_stream("object") << p->second;
-	f->close_section();
-      }
-      f->close_section();
-    }
-    static void generate_test_instances(list<OndiskLog*>& o) {
-      o.push_back(new OndiskLog);
-      o.push_back(new OndiskLog);
-      o.back()->tail = 2;
-      o.back()->head = 3;
-      o.back()->zero_to = 1;
-    }
-  };
-  WRITE_CLASS_ENCODER(OndiskLog)
-
 protected:
   //////////////////// data members ////////////////////
 
@@ -397,6 +315,4 @@ protected:
     pg_missing_t &missing, ostringstream &oss);
 };
   
-WRITE_CLASS_ENCODER(PGLog::OndiskLog)
-
 #endif // CEPH_PG_LOG_H
