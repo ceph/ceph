@@ -43,13 +43,12 @@ TEST_F(PGLogTest, rewind_divergent_log) {
     ObjectStore::Transaction t;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
     bool dirty_info = false;
     bool dirty_big_info = false;
 
     log.tail = eversion_t(2, 1);
     EXPECT_THROW(rewind_divergent_log(t, eversion_t(1, 1), info, remove_snap,
-				      dirty_log, dirty_info, dirty_big_info),
+				      dirty_info, dirty_big_info),
 		 FailedAssertion);
   }
 
@@ -77,7 +76,6 @@ TEST_F(PGLogTest, rewind_divergent_log) {
     ObjectStore::Transaction t;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
     bool dirty_info = false;
     bool dirty_big_info = false;
 
@@ -109,27 +107,25 @@ TEST_F(PGLogTest, rewind_divergent_log) {
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(3U, log.log.size());
-    EXPECT_EQ(0U, ondisklog.length());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_EQ(log.head, info.last_update);
     EXPECT_EQ(log.head, info.last_complete);
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_FALSE(dirty_info);
     EXPECT_FALSE(dirty_big_info);
 
     rewind_divergent_log(t, newhead, info, remove_snap,
-			 dirty_log, dirty_info, dirty_big_info);
+			 dirty_info, dirty_big_info);
 
     EXPECT_TRUE(missing.is_missing(divergent_object));
     EXPECT_EQ(1U, log.objects.count(divergent_object));
     EXPECT_EQ(2U, log.log.size());
-    EXPECT_EQ(0U, ondisklog.length());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_EQ(newhead, info.last_update);
     EXPECT_EQ(newhead, info.last_complete);
-    EXPECT_TRUE(dirty_log);
+    EXPECT_TRUE(dirty());
     EXPECT_TRUE(dirty_info);
     EXPECT_TRUE(dirty_big_info);
   }
@@ -155,7 +151,6 @@ TEST_F(PGLogTest, rewind_divergent_log) {
     ObjectStore::Transaction t;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
     bool dirty_info = false;
     bool dirty_big_info = false;
 
@@ -179,23 +174,21 @@ TEST_F(PGLogTest, rewind_divergent_log) {
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(1U, log.log.size());
-    EXPECT_EQ(0U, ondisklog.length());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_FALSE(dirty_info);
     EXPECT_FALSE(dirty_big_info);
 
     rewind_divergent_log(t, newhead, info, remove_snap,
-			 dirty_log, dirty_info, dirty_big_info);
+			 dirty_info, dirty_big_info);
 
     EXPECT_TRUE(missing.is_missing(divergent_object));
     EXPECT_EQ(0U, log.objects.count(divergent_object));
     EXPECT_TRUE(log.empty());
-    EXPECT_EQ(0U, ondisklog.length());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
-    EXPECT_TRUE(dirty_log);
+    EXPECT_TRUE(dirty());
     EXPECT_TRUE(dirty_info);
     EXPECT_TRUE(dirty_big_info);
   }
@@ -210,27 +203,24 @@ TEST_F(PGLogTest, merge_old_entry) {
     pg_log_entry_t oe;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
 
     info.last_backfill = hobject_t();
     info.last_backfill.hash = 1;
     oe.soid.hash = 2;
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
     EXPECT_TRUE(log.empty());
-    EXPECT_EQ(0U, ondisklog.length());
 
-    EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap, dirty_log));
+    EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
     EXPECT_TRUE(log.empty());
-    EXPECT_EQ(0U, ondisklog.length());
   }
 
   // a clone with no non-divergent log entry is deleted
@@ -241,31 +231,28 @@ TEST_F(PGLogTest, merge_old_entry) {
     pg_log_entry_t oe;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
 
     oe.op = pg_log_entry_t::CLONE;
 
     oe.soid.snap = CEPH_NOSNAP;
-    EXPECT_THROW(merge_old_entry(t, oe, info, remove_snap, dirty_log), FailedAssertion);
+    EXPECT_THROW(merge_old_entry(t, oe, info, remove_snap), FailedAssertion);
     oe.soid.snap = 1U;
     missing.add(oe.soid, eversion_t(), eversion_t());
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(missing.have_missing());
     EXPECT_TRUE(missing.is_missing(oe.soid));
     EXPECT_TRUE(log.empty());
-    EXPECT_EQ(0U, ondisklog.length());
 
-    EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap, dirty_log));
+    EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_EQ(oe.soid, remove_snap.front());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
     EXPECT_TRUE(log.empty());
-    EXPECT_EQ(0U, ondisklog.length());
   }
 
   // the new entry (from the logs) old entry (from the log entry
@@ -277,26 +264,23 @@ TEST_F(PGLogTest, merge_old_entry) {
     pg_log_entry_t oe;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
 
     oe.version = eversion_t(1,1);
     log.add(oe);
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(1U, log.log.size());
-    EXPECT_EQ(0U, ondisklog.length());
 
-    EXPECT_TRUE(merge_old_entry(t, oe, info, remove_snap, dirty_log));
+    EXPECT_TRUE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(1U, log.log.size());
-    EXPECT_EQ(0U, ondisklog.length());
   }
 
   // the new entry (from the logs) has a version that is higher than
@@ -308,19 +292,17 @@ TEST_F(PGLogTest, merge_old_entry) {
     ObjectStore::Transaction t;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
 
     pg_log_entry_t ne;
     ne.version = eversion_t(2,1);
     log.add(ne);
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(1U, log.log.size());
     EXPECT_EQ(ne.version, log.log.front().version);
-    EXPECT_EQ(0U, ondisklog.length());
 
     // the newer entry ( from the logs ) can be DELETE
     {
@@ -328,7 +310,7 @@ TEST_F(PGLogTest, merge_old_entry) {
       pg_log_entry_t oe;
       oe.version = eversion_t(1,1);
 
-      EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap, dirty_log));
+      EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
     }
 
     // if the newer entry is not DELETE, the object must be in missing
@@ -339,7 +321,7 @@ TEST_F(PGLogTest, merge_old_entry) {
       pg_log_entry_t oe;
       oe.version = eversion_t(1,1);
 
-      EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap, dirty_log));
+      EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
       missing.rm(ne.soid, ne.version);
     }
@@ -351,16 +333,15 @@ TEST_F(PGLogTest, merge_old_entry) {
       pg_log_entry_t oe;
       oe.version = eversion_t(1,1);
 
-      EXPECT_THROW(merge_old_entry(t, oe, info, remove_snap, dirty_log), FailedAssertion);
+      EXPECT_THROW(merge_old_entry(t, oe, info, remove_snap), FailedAssertion);
     }
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(1U, log.log.size());
     EXPECT_EQ(ne.version, log.log.front().version);
-    EXPECT_EQ(0U, ondisklog.length());
 
   }
 
@@ -374,7 +355,6 @@ TEST_F(PGLogTest, merge_old_entry) {
     pg_log_entry_t oe;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
 
     pg_log_entry_t ne;
     ne.version = eversion_t(1,1);
@@ -384,21 +364,19 @@ TEST_F(PGLogTest, merge_old_entry) {
     oe.version = eversion_t(2,1);
     oe.op = pg_log_entry_t::DELETE;
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(1U, log.log.size());
-    EXPECT_EQ(0U, ondisklog.length());
 
-    EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap, dirty_log));
+    EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(1U, log.log.size());
-    EXPECT_EQ(0U, ondisklog.length());
   }
 
   // the new entry (from the logs) has a version that is lower than
@@ -418,7 +396,6 @@ TEST_F(PGLogTest, merge_old_entry) {
       pg_log_entry_t oe;
       pg_info_t info;
       list<hobject_t> remove_snap;
-      bool dirty_log = false;
 
       pg_log_entry_t ne;
       ne.version = eversion_t(1,1);
@@ -428,17 +405,16 @@ TEST_F(PGLogTest, merge_old_entry) {
       oe.version = eversion_t(2,1);
       oe.op = oe_op;
 
-      EXPECT_FALSE(dirty_log);
+      EXPECT_FALSE(dirty());
       EXPECT_TRUE(remove_snap.empty());
       EXPECT_TRUE(t.empty());
       EXPECT_FALSE(missing.have_missing());
       EXPECT_EQ(1U, log.log.size());
-      EXPECT_EQ(0U, ondisklog.length());
 
       eversion_t old_version(0, 0);
       // if the object is not already in missing, add it
       {
-        EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap, dirty_log));
+        EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
         EXPECT_TRUE(missing.is_missing(ne.soid, ne.version));
         EXPECT_FALSE(missing.is_missing(ne.soid, old_version));
@@ -448,18 +424,17 @@ TEST_F(PGLogTest, merge_old_entry) {
         missing.revise_need(ne.soid, old_version);
         EXPECT_TRUE(missing.is_missing(ne.soid, old_version));
 
-        EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap, dirty_log));
+        EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
         EXPECT_TRUE(missing.is_missing(ne.soid, ne.version));
         EXPECT_FALSE(missing.is_missing(ne.soid, old_version));
       }
 
-      EXPECT_FALSE(dirty_log);
+      EXPECT_FALSE(dirty());
       EXPECT_TRUE(remove_snap.empty());
       EXPECT_TRUE(t.empty());
       EXPECT_TRUE(missing.is_missing(ne.soid));
       EXPECT_EQ(1U, log.log.size());
-      EXPECT_EQ(0U, ondisklog.length());
     }
   }
 
@@ -474,7 +449,6 @@ TEST_F(PGLogTest, merge_old_entry) {
     pg_log_entry_t oe;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
 
     pg_log_entry_t ne;
     ne.version = eversion_t(1,1);
@@ -485,21 +459,19 @@ TEST_F(PGLogTest, merge_old_entry) {
     oe.op = pg_log_entry_t::MODIFY;
     missing.add_next_event(oe);
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(missing.is_missing(oe.soid));
     EXPECT_EQ(1U, log.log.size());
-    EXPECT_EQ(0U, ondisklog.length());
 
-    EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap, dirty_log));
+    EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(1U, log.log.size());
-    EXPECT_EQ(0U, ondisklog.length());
   }
 
   // there is no new entry (from the logs) and
@@ -513,36 +485,32 @@ TEST_F(PGLogTest, merge_old_entry) {
     pg_log_entry_t oe;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
 
     info.log_tail = eversion_t(1,1);
     oe.op = pg_log_entry_t::MODIFY;
     oe.prior_version = eversion_t(2,1);
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
     EXPECT_TRUE(log.empty());
-    EXPECT_EQ(0U, ondisklog.length());
 
-    EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap, dirty_log));
+    EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
     EXPECT_TRUE(log.empty());
-    EXPECT_EQ(0U, ondisklog.length());
   }
 
   // there is no new entry (from the logs) and
   // the old entry (from the log entry given in argument) is not a CLONE and
   // the old entry (from the log entry given in argument) is not a DELETE and
   // the old entry prior_version is lower than the tail of the log :
-  //   add the old object to the remove_snap list and
-  //   add the old object to ondisklog divergent priors and
-  //   set dirty_log to true and
+  //   add the old object to the remove_snap list and 
+  //   add the old object to divergent priors and
   //   add or update the prior_version of the object to missing and
   //   return false
   {
@@ -552,36 +520,33 @@ TEST_F(PGLogTest, merge_old_entry) {
     pg_log_entry_t oe;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
 
     info.log_tail = eversion_t(2,1);
     oe.soid.hash = 1;
     oe.op = pg_log_entry_t::MODIFY;
     oe.prior_version = eversion_t(1,1);
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
     EXPECT_TRUE(log.empty());
-    EXPECT_EQ(0U, ondisklog.length());
 
-    EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap, dirty_log));
+    EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_TRUE(dirty_log);
+    EXPECT_TRUE(dirty());
     EXPECT_EQ(oe.soid, remove_snap.front());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(missing.is_missing(oe.soid));
     EXPECT_TRUE(log.empty());
-    EXPECT_EQ(oe.soid, ondisklog.divergent_priors[oe.prior_version]);
+    EXPECT_EQ(oe.soid, divergent_priors[oe.prior_version]);
   }
 
   // there is no new entry (from the logs) and
   // the old entry (from the log entry given in argument) is not a CLONE and
   // the old entry (from the log entry given in argument) is a DELETE and
   // the old entry prior_version is lower than the tail of the log :
-  //   add the old object to ondisklog divergent priors and
-  //   set dirty_log to true and
+  //   add the old object to divergent priors and
   //   add or update the prior_version of the object to missing and
   //   return false
   {
@@ -591,28 +556,26 @@ TEST_F(PGLogTest, merge_old_entry) {
     pg_log_entry_t oe;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
 
     info.log_tail = eversion_t(2,1);
     oe.soid.hash = 1;
     oe.op = pg_log_entry_t::DELETE;
     oe.prior_version = eversion_t(1,1);
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
     EXPECT_TRUE(log.empty());
-    EXPECT_EQ(0U, ondisklog.length());
 
-    EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap, dirty_log));
+    EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_TRUE(dirty_log);
+    EXPECT_TRUE(dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(missing.is_missing(oe.soid));
     EXPECT_TRUE(log.empty());
-    EXPECT_EQ(oe.soid, ondisklog.divergent_priors[oe.prior_version]);
+    EXPECT_EQ(oe.soid, divergent_priors[oe.prior_version]);
   }
 
   // there is no new entry (from the logs) and
@@ -628,7 +591,6 @@ TEST_F(PGLogTest, merge_old_entry) {
     pg_log_entry_t oe;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
 
     info.log_tail = eversion_t(10,1);
     oe.soid.hash = 1;
@@ -637,21 +599,19 @@ TEST_F(PGLogTest, merge_old_entry) {
 
     missing.add(oe.soid, eversion_t(1,1), eversion_t());
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(missing.is_missing(oe.soid));
     EXPECT_TRUE(log.empty());
-    EXPECT_EQ(0U, ondisklog.length());
 
-    EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap, dirty_log));
+    EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
     EXPECT_TRUE(log.empty());
-    EXPECT_EQ(0U, ondisklog.length());
   }
 
   // there is no new entry (from the logs) and
@@ -668,7 +628,6 @@ TEST_F(PGLogTest, merge_old_entry) {
     pg_log_entry_t oe;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
 
     info.log_tail = eversion_t(10,1);
     oe.soid.hash = 1;
@@ -677,21 +636,19 @@ TEST_F(PGLogTest, merge_old_entry) {
 
     missing.add(oe.soid, eversion_t(1,1), eversion_t());
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(missing.is_missing(oe.soid));
     EXPECT_TRUE(log.empty());
-    EXPECT_EQ(0U, ondisklog.length());
 
-    EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap, dirty_log));
+    EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_EQ(oe.soid, remove_snap.front());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
     EXPECT_TRUE(log.empty());
-    EXPECT_EQ(0U, ondisklog.length());
   }
 
 }
@@ -708,7 +665,6 @@ TEST_F(PGLogTest, merge_log) {
     int fromosd = -1;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
     bool dirty_info = false;
     bool dirty_big_info = false;
 
@@ -721,27 +677,25 @@ TEST_F(PGLogTest, merge_log) {
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(0U, log.log.size());
-    EXPECT_EQ(0U, ondisklog.length());
     EXPECT_EQ(stat_version, info.stats.version);
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_EQ(last_backfill, info.last_backfill);
     EXPECT_TRUE(info.purged_snaps.empty());
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_FALSE(dirty_info);
     EXPECT_FALSE(dirty_big_info);
 
     merge_log(t, oinfo, olog, fromosd, info, remove_snap,
-              dirty_log, dirty_info, dirty_big_info);
+              dirty_info, dirty_big_info);
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(0U, log.log.size());
-    EXPECT_EQ(0U, ondisklog.length());
     EXPECT_EQ(stat_version, info.stats.version);
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(info.purged_snaps.empty());
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_FALSE(dirty_info);
     EXPECT_FALSE(dirty_big_info);
   }
@@ -758,7 +712,6 @@ TEST_F(PGLogTest, merge_log) {
     int fromosd = -1;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
     bool dirty_info = false;
     bool dirty_big_info = false;
 
@@ -772,29 +725,27 @@ TEST_F(PGLogTest, merge_log) {
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(0U, log.log.size());
-    EXPECT_EQ(0U, ondisklog.length());
     EXPECT_EQ(eversion_t(), info.stats.version);
     EXPECT_EQ(stat_reported, info.stats.reported);
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(info.last_backfill.is_max());
     EXPECT_TRUE(info.purged_snaps.empty());
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_FALSE(dirty_info);
     EXPECT_FALSE(dirty_big_info);
 
     merge_log(t, oinfo, olog, fromosd, info, remove_snap,
-              dirty_log, dirty_info, dirty_big_info);
+              dirty_info, dirty_big_info);
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(0U, log.log.size());
-    EXPECT_EQ(0U, ondisklog.length());
     EXPECT_EQ(stat_version, info.stats.version);
     EXPECT_EQ(stat_reported, info.stats.reported);
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(info.purged_snaps.empty());
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_FALSE(dirty_info);
     EXPECT_FALSE(dirty_big_info);
   }
@@ -844,7 +795,6 @@ TEST_F(PGLogTest, merge_log) {
     int fromosd = -1;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
     bool dirty_info = false;
     bool dirty_big_info = false;
 
@@ -880,27 +830,25 @@ TEST_F(PGLogTest, merge_log) {
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(2U, log.log.size());
-    EXPECT_EQ(0U, ondisklog.length());
     EXPECT_EQ(stat_version, info.stats.version);
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_EQ(last_backfill, info.last_backfill);
     EXPECT_TRUE(info.purged_snaps.empty());
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_FALSE(dirty_info);
     EXPECT_FALSE(dirty_big_info);
 
     merge_log(t, oinfo, olog, fromosd, info, remove_snap,
-              dirty_log, dirty_info, dirty_big_info);
+              dirty_info, dirty_big_info);
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(3U, log.log.size());
-    EXPECT_EQ(0U, ondisklog.length());
     EXPECT_EQ(stat_version, info.stats.version);
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(info.purged_snaps.empty());
-    EXPECT_TRUE(dirty_log);
+    EXPECT_TRUE(dirty());
     EXPECT_TRUE(dirty_info);
     EXPECT_TRUE(dirty_big_info);
   }
@@ -940,7 +888,6 @@ TEST_F(PGLogTest, merge_log) {
     int fromosd = -1;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
     bool dirty_info = false;
     bool dirty_big_info = false;
 
@@ -993,17 +940,16 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(1U, log.objects.count(divergent_object));
     EXPECT_EQ(3U, log.log.size());
-    EXPECT_EQ(0U, ondisklog.length());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_EQ(log.head, info.last_update);
     EXPECT_TRUE(info.purged_snaps.empty());
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_FALSE(dirty_info);
     EXPECT_FALSE(dirty_big_info);
 
     merge_log(t, oinfo, olog, fromosd, info, remove_snap,
-              dirty_log, dirty_info, dirty_big_info);
+              dirty_info, dirty_big_info);
 
     /* When the divergent entry is a DELETE and the authoritative
        entry is a MODIFY, the object will be added to missing : it is
@@ -1013,7 +959,6 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(missing.is_missing(divergent_object));
     EXPECT_EQ(1U, log.objects.count(divergent_object));
     EXPECT_EQ(4U, log.log.size());
-    EXPECT_EQ(0U, ondisklog.length());
     /* DELETE entries from olog that are appended to the hed of the
        log are also added to remove_snap.
      */
@@ -1021,7 +966,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_EQ(log.head, info.last_update);
     EXPECT_TRUE(info.purged_snaps.contains(purged_snap));
-    EXPECT_TRUE(dirty_log);
+    EXPECT_TRUE(dirty());
     EXPECT_TRUE(dirty_info);
     EXPECT_TRUE(dirty_big_info);
   }
@@ -1056,7 +1001,6 @@ TEST_F(PGLogTest, merge_log) {
     int fromosd = -1;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
     bool dirty_info = false;
     bool dirty_big_info = false;
 
@@ -1095,27 +1039,25 @@ TEST_F(PGLogTest, merge_log) {
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(3U, log.log.size());
-    EXPECT_EQ(0U, ondisklog.length());
     EXPECT_EQ(stat_version, info.stats.version);
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_EQ(last_backfill, info.last_backfill);
     EXPECT_TRUE(info.purged_snaps.empty());
-    EXPECT_FALSE(dirty_log);
+    EXPECT_FALSE(dirty());
     EXPECT_FALSE(dirty_info);
     EXPECT_FALSE(dirty_big_info);
 
     merge_log(t, oinfo, olog, fromosd, info, remove_snap,
-              dirty_log, dirty_info, dirty_big_info);
+              dirty_info, dirty_big_info);
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(2U, log.log.size());
-    EXPECT_EQ(0U, ondisklog.length());
     EXPECT_EQ(stat_version, info.stats.version);
     EXPECT_EQ(0x9U, remove_snap.front().hash);
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(info.purged_snaps.empty());
-    EXPECT_TRUE(dirty_log);
+    EXPECT_TRUE(dirty());
     EXPECT_TRUE(dirty_info);
     EXPECT_TRUE(dirty_big_info);
   }
@@ -1130,7 +1072,6 @@ TEST_F(PGLogTest, merge_log) {
     int fromosd = -1;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
     bool dirty_info = false;
     bool dirty_big_info = false;
 
@@ -1138,7 +1079,7 @@ TEST_F(PGLogTest, merge_log) {
     olog.tail = eversion_t(1, 1);
 
     ASSERT_THROW(merge_log(t, oinfo, olog, fromosd, info, remove_snap,
-                           dirty_log, dirty_info, dirty_big_info), FailedAssertion);
+                           dirty_info, dirty_big_info), FailedAssertion);
   }
 
   /*        +--------------------------+
@@ -1171,7 +1112,6 @@ TEST_F(PGLogTest, merge_log) {
     int fromosd = -1;
     pg_info_t info;
     list<hobject_t> remove_snap;
-    bool dirty_log = false;
     bool dirty_info = false;
     bool dirty_big_info = false;
 
@@ -1200,7 +1140,7 @@ TEST_F(PGLogTest, merge_log) {
     }
 
     EXPECT_THROW(merge_log(t, oinfo, olog, fromosd, info, remove_snap,
-                           dirty_log, dirty_info, dirty_big_info), FailedAssertion);
+                           dirty_info, dirty_big_info), FailedAssertion);
   }
 }
 
