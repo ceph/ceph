@@ -259,6 +259,7 @@ public:
   void claim_log(const pg_log_t &o) {
     log.claim_log(o);
     missing.clear();
+    mark_dirty_to(eversion_t::max());
   }
 
   void split_into(
@@ -267,6 +268,8 @@ public:
       PGLog *opg_log) { 
     log.split_into(child_pgid, split_bits, &(opg_log->log));
     missing.split_into(child_pgid, split_bits, &(opg_log->missing));
+    opg_log->mark_dirty_to(eversion_t::max());
+    mark_dirty_to(eversion_t::max());
   }
 
   void recover_got(hobject_t oid, eversion_t v, pg_info_t &info) {
