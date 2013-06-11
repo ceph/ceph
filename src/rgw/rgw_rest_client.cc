@@ -33,7 +33,10 @@ int RGWRESTSimpleRequest::receive_header(void *ptr, size_t len)
           l++;
  
         if (strcmp(tok, "HTTP") == 0 || strncmp(tok, "HTTP/", 5) == 0) {
-          status = atoi(l);
+          http_status = atoi(l);
+          if (http_status == 100) /* 100-continue response */
+            continue;
+          status = rgw_http_error_to_errno(http_status);
         } else {
           /* convert header field name to upper case  */
           char *src = tok;
@@ -100,7 +103,7 @@ int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *method, const c
   if (r < 0)
     return r;
 
-  return rgw_http_error_to_errno(status);
+  return status;
 }
 
 int RGWRESTSimpleRequest::send_data(void *ptr, size_t len)
@@ -245,7 +248,7 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
     outbl->claim(response);
   }
 
-  return rgw_http_error_to_errno(status);
+  return status;
 }
 
 class RGWRESTStreamOutCB : public RGWGetDataCB {
@@ -277,6 +280,11 @@ RGWRESTStreamRequest::~RGWRESTStreamRequest()
 int RGWRESTStreamRequest::add_output_data(bufferlist& bl)
 {
   lock.Lock();
+  if (status < 0) {
+    int ret = status;
+    lock.Unlock();
+    return ret;
+  }
   pending_send.push_back(bl);
   lock.Unlock();
 
@@ -442,9 +450,9 @@ int RGWRESTStreamRequest::send_data(void *ptr, size_t len)
 
   dout(20) << "RGWRESTStreamRequest::send_data()" << dendl;
   lock.Lock();
-  if (pending_send.empty()) {
+  if (pending_send.empty() || status < 0) {
     lock.Unlock();
-    return 0;
+    return status;
   }
 
   list<bufferlist>::iterator iter = pending_send.begin();
@@ -483,5 +491,9 @@ int RGWRESTStreamRequest::send_data(void *ptr, size_t len)
 
 int RGWRESTStreamRequest::complete()
 {
-  return complete_request(handle);
+  int ret = complete_request(handle);
+  if (ret < 0)
+    return ret;
+
+  return status;
 }
