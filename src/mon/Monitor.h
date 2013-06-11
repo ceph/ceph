@@ -177,6 +177,7 @@ public:
     return sn;
   }
 
+  bool is_shutdown() const { return state == STATE_SHUTDOWN; }
   bool is_probing() const { return state == STATE_PROBING; }
   bool is_synchronizing() const { return state == STATE_SYNCHRONIZING; }
   bool is_electing() const { return state == STATE_ELECTING; }

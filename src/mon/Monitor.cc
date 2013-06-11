@@ -3190,7 +3190,7 @@ bool Monitor::_ms_dispatch(Message *m)
 {
   bool ret = true;
 
-  if (state == STATE_SHUTDOWN) {
+  if (is_shutdown()) {
     m->put();
     return true;
   }
@@ -3884,7 +3884,7 @@ bool Monitor::ms_handle_reset(Connection *con)
 {
   dout(10) << "ms_handle_reset " << con << " " << con->get_peer_addr() << dendl;
 
-  if (state == STATE_SHUTDOWN)
+  if (is_shutdown())
     return false;
 
   // ignore lossless monitor sessions
@@ -4172,7 +4172,7 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
 {
   dout(10) << "ms_get_authorizer for " << ceph_entity_type_name(service_id) << dendl;
 
-  if (state == STATE_SHUTDOWN)
+  if (is_shutdown())
     return false;
 
   // we only connect to other monitors; every else connects to us.
@@ -4236,7 +4236,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
 	   << " " << ceph_entity_type_name(peer_type)
 	   << " protocol " << protocol << dendl;
 
-  if (state == STATE_SHUTDOWN)
+  if (is_shutdown())
     return false;
 
   if (peer_type == CEPH_ENTITY_TYPE_MON &&
