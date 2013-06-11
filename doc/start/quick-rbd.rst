@@ -10,6 +10,10 @@ Execute this quick start on the admin node.
 .. note:: The Ceph Block Device is also known as :term:`RBD` or :term:`RADOS`
    Block Device.
 
+#. Install ``ceph-common``. ::
+
+	sudo apt-get install ceph-common
+
 #. Create a block device image. :: 
 
 	rbd create foo --size 4096	[-m {mon-IP}] [-k /path/to/ceph.client.admin.keyring]
