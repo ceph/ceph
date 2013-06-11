@@ -38,7 +38,8 @@
 #include <sys/types.h>
 #include <sys/un.h>
 #include <unistd.h>
-
+#include <sys/stat.h>
+#include <libgen.h>
 #include "include/compat.h"
 
 #define dout_subsys ceph_subsys_asok
@@ -179,6 +180,23 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
   address.sun_family = AF_UNIX;
   snprintf(address.sun_path, sizeof(address.sun_path),
 	   "%s", sock_path.c_str());
+  //check if admin sockets folder exists
+  char *sock_path_str = new char[sock_path.length()+1];
+  sock_path.copy(sock_path_str,sock_path.length());
+  string folder(dirname(sock_path_str));
+  struct stat buf;
+  if((stat(folder.c_str(), &buf)!=0) || (!S_ISDIR(buf.st_mode))){
+    //folder for admin sockets doesn't exists, create it
+    if((mkdir(folder.c_str(),S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)!=0) && (errno != EEXIST)) {
+      printf("shit\n");
+      ostringstream oss;
+      oss << "AdminSocket::bind_and_listen: "
+	  << "failed to create folder for admin socket at  '" << folder.c_str()
+	  << "': " << cpp_strerror(errno);
+      close(sock_fd);
+      return oss.str();
+    }
+  }
   if (bind(sock_fd, (struct sockaddr*)&address,
 	   sizeof(struct sockaddr_un)) != 0) {
     int err = errno;
