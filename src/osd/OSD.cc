@@ -3362,6 +3362,7 @@ bool OSD::ms_handle_reset(Connection *con)
   if (!session)
     return false;
   session->wstate.reset();
+  session->con.reset(NULL);  // break con <-> session ref cycle
   session->put();
   return true;
 }
