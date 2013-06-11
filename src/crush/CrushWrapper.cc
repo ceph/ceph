@@ -1027,6 +1027,13 @@ void CrushWrapper::dump(Formatter *f) const
   f->open_array_section("rules");
   dump_rules(f);
   f->close_section();
+
+  f->open_object_section("tunables");
+  f->dump_int("choose_local_tries", get_choose_local_tries());
+  f->dump_int("choose_local_fallback_tries", get_choose_local_fallback_tries());
+  f->dump_int("choose_total_tries", get_choose_total_tries());
+  f->dump_int("chooseleaf_descend_once", get_chooseleaf_descend_once());
+  f->close_section();
 }
 
 void CrushWrapper::dump_rules(Formatter *f) const

@@ -140,7 +140,7 @@ public:
     crush->choose_total_tries = n;
   }
 
-  int get_chooseleaf_descend_once() {
+  int get_chooseleaf_descend_once() const {
     return crush->chooseleaf_descend_once;
   }
   void set_chooseleaf_descend_once(int n) {
