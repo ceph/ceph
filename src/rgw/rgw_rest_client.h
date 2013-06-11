@@ -11,6 +11,7 @@ class RGWRESTSimpleRequest : public RGWHTTPClient {
 protected:
   CephContext *cct;
 
+  int http_status;
   int status;
 
   string url;
@@ -29,8 +30,9 @@ protected:
   int sign_request(RGWAccessKey& key, RGWEnv& env, req_info& info);
 public:
   RGWRESTSimpleRequest(CephContext *_cct, string& _url, list<pair<string, string> > *_headers,
-                list<pair<string, string> > *_params) : cct(_cct), status(0), url(_url), send_iter(NULL),
-                                                        max_response(0) {
+                list<pair<string, string> > *_params) : cct(_cct), http_status(0), status(0),
+                url(_url), send_iter(NULL),
+                max_response(0) {
     if (_headers)
       headers = *_headers;
 
