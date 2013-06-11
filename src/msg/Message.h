@@ -231,13 +231,15 @@ public:
     }
     return !failed;
   }
-  void clear_pipe(RefCountedObject *old_p) {
+  bool clear_pipe(RefCountedObject *old_p) {
     if (old_p == pipe) {
       Mutex::Locker l(lock);
       pipe->put();
       pipe = NULL;
       failed = true;
+      return true;
     }
+    return false;
   }
   void reset_pipe(RefCountedObject *p) {
     Mutex::Locker l(lock);
