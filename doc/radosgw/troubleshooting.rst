@@ -103,4 +103,54 @@ This tells us to look at ``osd.1``, the primary copy for this PG::
  ...
 
 The ``flag_point`` field indicates that the OSD is currently waiting
-for replicas to respond, in this case ``osd.0``.  
+for replicas to respond, in this case ``osd.0``.
+
+
+Java S3 API Troubleshooting
+===========================
+
+
+Peer Not Authenticated
+----------------------
+
+You may receive an error that looks like this:: 
+
+     [java] INFO: Unable to execute HTTP request: peer not authenticated
+
+The Java SDK for S3 requires a valid certificate from a recognized certificate
+authority, because it uses HTTPS by default. If you are just testing the Ceph
+Object Storage services, you can resolve this problem in a few ways:  
+
+#. Prepend the IP address or hostname with ``http://``. For example, change this::
+
+	conn.setEndpoint("myserver");
+
+   To:: 
+
+	conn.setEndpoint("http://myserver")
+
+#. After setting your credentials, add a client configuration and set the 
+   protocol to ``Protocol.HTTP``. :: 
+
+			AWSCredentials credentials = new BasicAWSCredentials(accessKey, secretKey);
+			
+			ClientConfiguration clientConfig = new ClientConfiguration();
+			clientConfig.setProtocol(Protocol.HTTP);
+			
+			AmazonS3 conn = new AmazonS3Client(credentials, clientConfig);
+
+
+
+405 MethodNotAllowed
+--------------------
+
+If you receive an 405 error, check to see if you have the S3 subdomain set up correctly. 
+You will need to have a wild card setting in your DNS record for subdomain functionality
+to work properly.
+
+Also, check to ensure that the default site is disabled.
+
+     [java] Exception in thread "main" Status Code: 405, AWS Service: Amazon S3, AWS Request ID: null, AWS Error Code: MethodNotAllowed, AWS Error Message: null, S3 Extended Request ID: null
+  
+  
+  
