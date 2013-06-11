@@ -108,7 +108,7 @@ def get_key(cluster, mon_id):
                 else:
                     raise
 
-def bootstrap_key(cluster, type_, caps):
+def bootstrap_key(cluster, type_):
     path = '/var/lib/ceph/bootstrap-{type}/{cluster}.keyring'.format(
         type=type_,
         cluster=cluster,
