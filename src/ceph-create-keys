@@ -65,6 +65,9 @@ def get_key(cluster, mon_id):
         path=path,
         pid=os.getpid(),
         )
+    pathdir = os.path.dirname(path)
+    if not os.path.exists(pathdir):
+        os.makedirs(pathdir)
     while True:
         try:
             with file(tmp, 'w') as f:
@@ -130,6 +133,10 @@ def bootstrap_key(cluster, type_):
         'mon',
         'allow profile bootstrap-{type}'.format(type=type_),
         ]
+
+    pathdir = os.path.dirname(path)
+    if not os.path.exists(pathdir):
+        os.makedirs(pathdir)
 
     while True:
         try:
