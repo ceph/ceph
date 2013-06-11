@@ -493,7 +493,7 @@ protected:
 
   SnapSetContext *create_snapset_context(const object_t& oid);
   SnapSetContext *get_snapset_context(const object_t& oid, const string &key,
-				      ps_t seed, bool can_create);
+				      ps_t seed, bool can_create, const string &nspace);
   void register_snapset_context(SnapSetContext *ssc) {
     if (!ssc->registered) {
       assert(snapset_contexts.count(ssc->oid) == 0);

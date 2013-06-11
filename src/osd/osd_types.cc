@@ -56,17 +56,18 @@ void osd_reqid_t::generate_test_instances(list<osd_reqid_t*>& o)
 
 void object_locator_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(4, 3, bl);
+  ENCODE_START(5, 3, bl);
   ::encode(pool, bl);
   int32_t preferred = -1;  // tell old code there is no preferred osd (-1).
   ::encode(preferred, bl);
   ::encode(key, bl);
+  ::encode(nspace, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_locator_t::decode(bufferlist::iterator& p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, p);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, p);
   if (struct_v < 2) {
     int32_t op;
     ::decode(op, p);
@@ -79,6 +80,8 @@ void object_locator_t::decode(bufferlist::iterator& p)
     ::decode(preferred, p);
   }
   ::decode(key, p);
+  if (struct_v >= 5)
+    ::decode(nspace, p);
   DECODE_FINISH(p);
 }
 
@@ -86,14 +89,16 @@ void object_locator_t::dump(Formatter *f) const
 {
   f->dump_int("pool", pool);
   f->dump_string("key", key);
+  f->dump_string("namespace", nspace);
 }
 
 void object_locator_t::generate_test_instances(list<object_locator_t*>& o)
 {
   o.push_back(new object_locator_t);
   o.push_back(new object_locator_t(123));
-  o.push_back(new object_locator_t(1234, "key"));
-  o.push_back(new object_locator_t(12, "key2"));
+  o.push_back(new object_locator_t(1, "n2"));
+  o.push_back(new object_locator_t(1234, "", "key"));
+  o.push_back(new object_locator_t(12, "n1", "key2"));
 }
 
 
@@ -1537,7 +1542,7 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
   o.back()->last_update = eversion_t(3, 4);
   o.back()->last_complete = eversion_t(5, 6);
   o.back()->log_tail = eversion_t(7, 8);
-  o.back()->last_backfill = hobject_t(object_t("objname"), "key", 123, 456, -1);
+  o.back()->last_backfill = hobject_t(object_t("objname"), "key", 123, 456, -1, "");
   list<pg_stat_t*> s;
   pg_stat_t::generate_test_instances(s);
   o.back()->stats = *s.back();
@@ -1907,7 +1912,7 @@ void pg_log_entry_t::dump(Formatter *f) const
 void pg_log_entry_t::generate_test_instances(list<pg_log_entry_t*>& o)
 {
   o.push_back(new pg_log_entry_t());
-  hobject_t oid(object_t("objname"), "key", 123, 456, 0);
+  hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   o.push_back(new pg_log_entry_t(MODIFY, oid, eversion_t(1,2), eversion_t(3,4),
 				 osd_reqid_t(entity_name_t::CLIENT(777), 8, 999), utime_t(8,9)));
 }
@@ -2110,7 +2115,7 @@ void pg_missing_t::generate_test_instances(list<pg_missing_t*>& o)
 {
   o.push_back(new pg_missing_t);
   o.push_back(new pg_missing_t);
-  o.back()->add(hobject_t(object_t("foo"), "foo", 123, 456, 0), eversion_t(5, 6), eversion_t(5, 1));
+  o.back()->add(hobject_t(object_t("foo"), "foo", 123, 456, 0, ""), eversion_t(5, 6), eversion_t(5, 1));
 }
 
 ostream& operator<<(ostream& out, const pg_missing_t::item& i) 
@@ -2602,13 +2607,13 @@ void object_info_t::decode(bufferlist::iterator& bl)
     sobject_t obj;
     ::decode(obj, bl);
     ::decode(oloc, bl);
-    soid = hobject_t(obj.oid, oloc.key, obj.snap, 0, 0);
+    soid = hobject_t(obj.oid, oloc.key, obj.snap, 0, 0 , "");
     soid.hash = legacy_object_locator_to_ps(soid.oid, oloc);
   } else if (struct_v >= 6) {
     ::decode(soid, bl);
     ::decode(oloc, bl);
     if (struct_v == 6) {
-      hobject_t hoid(soid.oid, oloc.key, soid.snap, soid.hash, 0);
+      hobject_t hoid(soid.oid, oloc.key, soid.snap, soid.hash, 0 , "");
       soid = hoid;
     }
   }
@@ -2954,9 +2959,9 @@ void ScrubMap::generate_test_instances(list<ScrubMap*>& o)
   o.back()->attrs["bar"] = buffer::copy("barval", 6);
   list<object*> obj;
   object::generate_test_instances(obj);
-  o.back()->objects[hobject_t(object_t("foo"), "fookey", 123, 456, 0)] = *obj.back();
+  o.back()->objects[hobject_t(object_t("foo"), "fookey", 123, 456, 0, "")] = *obj.back();
   obj.pop_back();
-  o.back()->objects[hobject_t(object_t("bar"), string(), 123, 456, 0)] = *obj.back();
+  o.back()->objects[hobject_t(object_t("bar"), string(), 123, 456, 0, "")] = *obj.back();
 }
 
 // -- ScrubMap::object --

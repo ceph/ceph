@@ -212,7 +212,6 @@ int librados::IoCtxImpl::selfmanaged_snap_rollback_object(const object_t& oid,
 {
   utime_t ut = ceph_clock_now(client->cct);
   int reply;
-  eversion_t ver;
 
   Mutex mylock("IoCtxImpl::snap_rollback::mylock");
   Cond cond;
@@ -225,7 +224,7 @@ int librados::IoCtxImpl::selfmanaged_snap_rollback_object(const object_t& oid,
   lock->Lock();
   objecter->mutate(oid, oloc,
 	           op, snapc, ut, 0,
-	           onack, NULL, &ver);
+	           onack, NULL, NULL);
   lock->Unlock();
 
   mylock.Lock();
@@ -370,6 +369,7 @@ int librados::IoCtxImpl::list(Objecter::ListContext *context, int max_entries)
     return 0;
 
   context->max_entries = max_entries;
+  context->nspace = oloc.nspace;
 
   lock->Lock();
   objecter->list_objects(context, new C_SafeCond(&mylock, &cond, &done, &r));

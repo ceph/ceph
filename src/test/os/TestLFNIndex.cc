@@ -101,9 +101,9 @@ TEST_F(TestHASH_INDEX_TAG, generate_and_parse_name) {
   uint64_t hash = 0xABABABAB;
   uint64_t pool = -1;
 
-  test_generate_and_parse(hobject_t(object_t(".A/B_\\C.D"), key, CEPH_NOSNAP, hash, pool),
+  test_generate_and_parse(hobject_t(object_t(".A/B_\\C.D"), key, CEPH_NOSNAP, hash, pool, ""),
 			  "\\.A\\sB_\\\\C.D_head_ABABABAB");
-  test_generate_and_parse(hobject_t(object_t("DIR_A"), key, CEPH_NOSNAP, hash, pool),
+  test_generate_and_parse(hobject_t(object_t("DIR_A"), key, CEPH_NOSNAP, hash, pool, ""),
 			  "\\dA_head_ABABABAB");
 }
 
@@ -123,11 +123,11 @@ TEST_F(TestHASH_INDEX_TAG_2, generate_and_parse_name) {
   {
     std::string name(".XA/B_\\C.D");
     name[1] = '\0';
-    hobject_t hoid(object_t(name), key, CEPH_NOSNAP, hash, pool);
+    hobject_t hoid(object_t(name), key, CEPH_NOSNAP, hash, pool, "");
 
     test_generate_and_parse(hoid, "\\.\\nA\\sB\\u\\\\C.D_KEY_head_ABABABAB");
   }
-  test_generate_and_parse(hobject_t(object_t("DIR_A"), key, CEPH_NOSNAP, hash, pool),
+  test_generate_and_parse(hobject_t(object_t("DIR_A"), key, CEPH_NOSNAP, hash, pool, ""),
 			  "\\dA_KEY_head_ABABABAB");
 }
 
@@ -147,13 +147,13 @@ TEST_F(TestHOBJECT_WITH_POOL, generate_and_parse_name) {
   {
     std::string name(".XA/B_\\C.D");
     name[1] = '\0';
-    hobject_t hoid(object_t(name), key, CEPH_NOSNAP, hash, pool);
+    hobject_t hoid(object_t(name), key, CEPH_NOSNAP, hash, pool, "");
     hoid.nspace = "NSPACE";
 
     test_generate_and_parse(hoid, "\\.\\nA\\sB\\u\\\\C.D_KEY_head_ABABABAB_NSPACE_cdcdcdcd");
   }
   {
-    hobject_t hoid(object_t("DIR_A"), key, CEPH_NOSNAP, hash, pool);
+    hobject_t hoid(object_t("DIR_A"), key, CEPH_NOSNAP, hash, pool, "");
     hoid.nspace = "NSPACE";
 
     test_generate_and_parse(hoid, "\\dA_KEY_head_ABABABAB_NSPACE_cdcdcdcd");

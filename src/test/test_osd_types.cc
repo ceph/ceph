@@ -229,7 +229,7 @@ TEST(pg_missing_t, constructor)
 
 TEST(pg_missing_t, have_missing)
 {
-  hobject_t oid(object_t("objname"), "key", 123, 456, 0);
+  hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   pg_missing_t missing;
   EXPECT_FALSE(missing.have_missing());
   missing.add(oid, eversion_t(), eversion_t());
@@ -238,7 +238,7 @@ TEST(pg_missing_t, have_missing)
 
 TEST(pg_missing_t, swap)
 {
-  hobject_t oid(object_t("objname"), "key", 123, 456, 0);
+  hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   pg_missing_t missing;
   EXPECT_FALSE(missing.have_missing());
   missing.add(oid, eversion_t(), eversion_t());
@@ -256,7 +256,7 @@ TEST(pg_missing_t, is_missing)
 {
   // pg_missing_t::is_missing(const hobject_t& oid) const
   {
-    hobject_t oid(object_t("objname"), "key", 123, 456, 0);
+    hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
     pg_missing_t missing;
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add(oid, eversion_t(), eversion_t());
@@ -265,7 +265,7 @@ TEST(pg_missing_t, is_missing)
 
   // bool pg_missing_t::is_missing(const hobject_t& oid, eversion_t v) const
   {
-    hobject_t oid(object_t("objname"), "key", 123, 456, 0);
+    hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
     pg_missing_t missing;
     eversion_t need(10,5);
     EXPECT_FALSE(missing.is_missing(oid, eversion_t()));
@@ -278,7 +278,7 @@ TEST(pg_missing_t, is_missing)
 
 TEST(pg_missing_t, have_old)
 {
-  hobject_t oid(object_t("objname"), "key", 123, 456, 0);
+  hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   pg_missing_t missing;
   EXPECT_EQ(eversion_t(), missing.have_old(oid));
   missing.add(oid, eversion_t(), eversion_t());
@@ -290,8 +290,8 @@ TEST(pg_missing_t, have_old)
 
 TEST(pg_missing_t, add_next_event)
 {
-  hobject_t oid(object_t("objname"), "key", 123, 456, 0);
-  hobject_t oid_other(object_t("other"), "key", 9123, 9456, 0);
+  hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
+  hobject_t oid_other(object_t("other"), "key", 9123, 9456, 0, "");
   eversion_t version(10,5);
   eversion_t prior_version(3,4);
   pg_log_entry_t sample_e(pg_log_entry_t::DELETE, oid, version, prior_version,
@@ -416,7 +416,7 @@ TEST(pg_missing_t, add_next_event)
 
 TEST(pg_missing_t, revise_need)
 {
-  hobject_t oid(object_t("objname"), "key", 123, 456, 0);
+  hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   pg_missing_t missing;
   // create a new entry
   EXPECT_FALSE(missing.is_missing(oid));
@@ -437,7 +437,7 @@ TEST(pg_missing_t, revise_need)
 
 TEST(pg_missing_t, revise_have)
 {
-  hobject_t oid(object_t("objname"), "key", 123, 456, 0);
+  hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   pg_missing_t missing;
   // a non existing entry means noop
   EXPECT_FALSE(missing.is_missing(oid));
@@ -457,7 +457,7 @@ TEST(pg_missing_t, revise_have)
 
 TEST(pg_missing_t, add)
 {
-  hobject_t oid(object_t("objname"), "key", 123, 456, 0);
+  hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   pg_missing_t missing;
   EXPECT_FALSE(missing.is_missing(oid));
   eversion_t have(1,1);
@@ -472,7 +472,7 @@ TEST(pg_missing_t, rm)
 {
   // void pg_missing_t::rm(const hobject_t& oid, eversion_t v)
   {
-    hobject_t oid(object_t("objname"), "key", 123, 456, 0);
+    hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
     pg_missing_t missing;
     EXPECT_FALSE(missing.is_missing(oid));
     epoch_t epoch = 10;
@@ -488,7 +488,7 @@ TEST(pg_missing_t, rm)
   }
   // void pg_missing_t::rm(const std::map<hobject_t, pg_missing_t::item>::iterator &m)
   {
-    hobject_t oid(object_t("objname"), "key", 123, 456, 0);
+    hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
     pg_missing_t missing;
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add(oid, eversion_t(), eversion_t());
@@ -503,7 +503,7 @@ TEST(pg_missing_t, got)
 {
   // void pg_missing_t::got(const hobject_t& oid, eversion_t v)
   {
-    hobject_t oid(object_t("objname"), "key", 123, 456, 0);
+    hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
     pg_missing_t missing;
     // assert if the oid does not exist
     EXPECT_THROW(missing.got(oid, eversion_t()), FailedAssertion);
@@ -520,7 +520,7 @@ TEST(pg_missing_t, got)
   }
   // void pg_missing_t::got(const std::map<hobject_t, pg_missing_t::item>::iterator &m)
   {
-    hobject_t oid(object_t("objname"), "key", 123, 456, 0);
+    hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
     pg_missing_t missing;
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add(oid, eversion_t(), eversion_t());
@@ -534,9 +534,9 @@ TEST(pg_missing_t, got)
 TEST(pg_missing_t, split_into)
 {
   uint32_t hash1 = 1;
-  hobject_t oid1(object_t("objname"), "key1", 123, hash1, 0);
+  hobject_t oid1(object_t("objname"), "key1", 123, hash1, 0, "");
   uint32_t hash2 = 2;
-  hobject_t oid2(object_t("objname"), "key2", 123, hash2, 0);
+  hobject_t oid2(object_t("objname"), "key2", 123, hash2, 0, "");
   pg_missing_t missing;
   missing.add(oid1, eversion_t(), eversion_t());
   missing.add(oid2, eversion_t(), eversion_t());  

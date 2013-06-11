@@ -657,6 +657,19 @@ int rados_ioctx_get_pool_name(rados_ioctx_t io, char *buf, unsigned maxlen);
  * any previously set key
  */
 void rados_ioctx_locator_set_key(rados_ioctx_t io, const char *key);
+
+/**
+ * Set the namespace for objects within an io context
+ *
+ * The namespace specification further refines a pool into different
+ * domains.  The mapping of objects to pgs is also based on this
+ * value.
+ *
+ * @param io the io context to change
+ * @param nspace the name to use as the namespace, or NULL use the
+ * default namespace
+ */
+void rados_ioctx_set_namespace(rados_ioctx_t io, const char *nspace);
 /** @} obj_loc */
 
 /**

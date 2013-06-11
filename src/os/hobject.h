@@ -59,15 +59,15 @@ public:
   hobject_t() : snap(0), hash(0), max(false), pool(-1) {}
 
   hobject_t(object_t oid, const string& key, snapid_t snap, uint64_t hash,
-	    int64_t pool) : 
+	    int64_t pool, string nspace) :
     oid(oid), snap(snap), hash(hash), max(false),
-    pool(pool),
+    pool(pool), nspace(nspace),
     key(oid.name == key ? string() : key) {}
 
   hobject_t(const sobject_t &soid, const string &key, uint32_t hash,
-	    int64_t pool) : 
+	    int64_t pool, string nspace) :
     oid(soid.oid), snap(soid.snap), hash(hash), max(false),
-    pool(pool),
+    pool(pool), nspace(nspace),
     key(soid.oid.name == key ? string() : key) {}
 
   /// @return min hobject_t ret s.t. ret.hash == this->hash
@@ -136,6 +136,10 @@ public:
     hobject_t temp(o);
     o = (*this);
     (*this) = temp;
+  }
+
+  string get_namespace() const {
+    return nspace;
   }
 
   void encode(bufferlist& bl) const;

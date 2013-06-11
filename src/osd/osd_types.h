@@ -106,13 +106,16 @@ namespace __gnu_cxx {
 struct object_locator_t {
   int64_t pool;
   string key;
+  string nspace;
 
   explicit object_locator_t()
     : pool(-1) {}
   explicit object_locator_t(int64_t po)
     : pool(po) {}
-  explicit object_locator_t(int64_t po, string s)
-    : pool(po), key(s) {}
+  explicit object_locator_t(int64_t po, string ns)
+    : pool(po), nspace(ns) {}
+  explicit object_locator_t(int64_t po, string ns, string s)
+    : pool(po), key(s), nspace(ns) {}
 
   int64_t get_pool() const {
     return pool;
@@ -121,6 +124,7 @@ struct object_locator_t {
   void clear() {
     pool = -1;
     key = "";
+    nspace = "";
   }
 
   void encode(bufferlist& bl) const;
@@ -131,7 +135,7 @@ struct object_locator_t {
 WRITE_CLASS_ENCODER(object_locator_t)
 
 inline bool operator==(const object_locator_t& l, const object_locator_t& r) {
-  return l.pool == r.pool && l.key == r.key;
+  return l.pool == r.pool && l.key == r.key && l.nspace == r.nspace;
 }
 inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
   return !(l == r);
@@ -140,6 +144,8 @@ inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
 inline ostream& operator<<(ostream& out, const object_locator_t& loc)
 {
   out << "@" << loc.pool;
+  if (loc.nspace.length())
+    out << ";" << loc.nspace;
   if (loc.key.length())
     out << ":" << loc.key;
   return out;
@@ -1583,7 +1589,7 @@ struct pg_ls_response_t {
   static void generate_test_instances(list<pg_ls_response_t*>& o) {
     o.push_back(new pg_ls_response_t);
     o.push_back(new pg_ls_response_t);
-    o.back()->handle = hobject_t(object_t("hi"), "key", 1, 2, -1);
+    o.back()->handle = hobject_t(object_t("hi"), "key", 1, 2, -1, "");
     o.back()->entries.push_back(make_pair(object_t("one"), string()));
     o.back()->entries.push_back(make_pair(object_t("two"), string("twokey")));
   }

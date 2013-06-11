@@ -2055,23 +2055,30 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     ds << "\n";
     rdata.append(ds);
   } else if (prefix == "osd map") {
-    string poolstr, objstr;
+    string poolstr, objstr, namespacestr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
     cmd_getval(g_ceph_context, cmdmap, "object", objstr);
+    cmd_getval(g_ceph_context, cmdmap, "nspace", namespacestr);
+
     int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
     if (pool < 0) {
       ss << "pool " << poolstr << " does not exist";
       r = -ENOENT;
       goto reply;
     }
-    object_locator_t oloc(pool);
+    object_locator_t oloc(pool, namespacestr);
     object_t oid(objstr);
     pg_t pgid = osdmap.object_locator_to_pg(oid, oloc);
     pg_t mpgid = osdmap.raw_pg_to_pg(pgid);
     vector<int> up, acting;
     osdmap.pg_to_up_acting_osds(mpgid, up, acting);
+    string fullobjname;
+    if (!namespacestr.empty())
+      fullobjname = namespacestr + string("/") + oid.name;
+    else
+      fullobjname = oid.name;
     ds << "osdmap e" << osdmap.get_epoch()
-       << " pool '" << poolstr << "' (" << pool << ") object '" << oid << "' ->"
+       << " pool '" << poolstr << "' (" << pool << ") object '" << fullobjname << "' ->"
        << " pg " << pgid << " (" << mpgid << ")"
        << " -> up " << up << " acting " << acting;
     rdata.append(ds);

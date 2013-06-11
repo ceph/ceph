@@ -668,7 +668,7 @@ TEST_F(PGLogTest, merge_log) {
     bool dirty_info = false;
     bool dirty_big_info = false;
 
-    hobject_t last_backfill(object_t("oname"), string("key"), 1, 234, 1);
+    hobject_t last_backfill(object_t("oname"), string("key"), 1, 234, 1, "");
     info.last_backfill = last_backfill;
     eversion_t stat_version(10, 1);
     info.stats.version = stat_version;
@@ -823,7 +823,7 @@ TEST_F(PGLogTest, merge_log) {
       olog.head = e.version;
     }
 
-    hobject_t last_backfill(object_t("oname"), string("key"), 1, 234, 1);
+    hobject_t last_backfill(object_t("oname"), string("key"), 1, 234, 1, "");
     info.last_backfill = last_backfill;
     eversion_t stat_version(10, 1);
     info.stats.version = stat_version;
@@ -1032,7 +1032,7 @@ TEST_F(PGLogTest, merge_log) {
       olog.head = e.version;
     }
 
-    hobject_t last_backfill(object_t("oname"), string("key"), 1, 234, 1);
+    hobject_t last_backfill(object_t("oname"), string("key"), 1, 234, 1, "");
     info.last_backfill = last_backfill;
     eversion_t stat_version(10, 1);
     info.stats.version = stat_version;

@@ -3078,13 +3078,13 @@ void OSD::check_ops_in_flight()
 }
 
 // Usage:
-//   setomapval <pool-id> <obj-name> <key> <val>
-//   rmomapkey <pool-id> <obj-name> <key>
-//   setomapheader <pool-id> <obj-name> <header>
-//   getomap <pool> <obj-name>
-//   truncobj <pool-id> <obj-name> <newlen>
-//   injectmdataerr
-//   injectdataerr
+//   setomapval <pool-id> [namespace/]<obj-name> <key> <val>
+//   rmomapkey <pool-id> [namespace/]<obj-name> <key>
+//   setomapheader <pool-id> [namespace/]<obj-name> <header>
+//   getomap <pool> [namespace/]<obj-name>
+//   truncobj <pool-id> [namespace/]<obj-name> <newlen>
+//   injectmdataerr [namespace/]<obj-name>
+//   injectdataerr [namespace/]<obj-name>
 void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
      std::string command, std::string args, ostream &ss)
 {
@@ -3116,21 +3116,29 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     if (pool < 0 && isdigit(argv[1].c_str()[0]))
       pool = atoll(argv[1].c_str());
     r = -1;
-    if (pool >= 0)
-        r = curmap->object_locator_to_pg(object_t(argv[2]),
-          object_locator_t(pool), rawpg);
+    string objname, nspace;
+    objname = string(argv[2]);
+    if (pool >= 0) {
+        std::size_t found = argv[2].find_first_of('/');
+        if (found != string::npos) {
+          nspace = argv[2].substr(0, found);
+          objname = argv[2].substr(found+1);
+        }
+        object_locator_t oloc(pool, nspace);
+        r = curmap->object_locator_to_pg(object_t(objname), oloc,  rawpg);
+    }
     if (r < 0) {
         ss << "Invalid pool " << argv[1];
         return;
     }
     pgid = curmap->raw_pg_to_pg(rawpg);
 
-    hobject_t obj(object_t(argv[2]), string(""), CEPH_NOSNAP, rawpg.ps(), pool);
+    hobject_t obj(object_t(objname), string(""), CEPH_NOSNAP, rawpg.ps(), pool, nspace);
     ObjectStore::Transaction t;
 
     if (command == "setomapval") {
       if (argc != 5) {
-        ss << "usage: setomapval <pool> <obj-name> <key> <val>";
+        ss << "usage: setomapval <pool> [namespace/]<obj-name> <key> <val>";
         return;
       }
       map<string, bufferlist> newattrs;
@@ -3147,7 +3155,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
         ss << "ok";
     } else if (command == "rmomapkey") {
       if (argc != 4) {
-        ss << "usage: rmomapkey <pool> <obj-name> <key>";
+        ss << "usage: rmomapkey <pool> [namespace/]<obj-name> <key>";
         return;
       }
       set<string> keys;
@@ -3161,7 +3169,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
         ss << "ok";
     } else if (command == "setomapheader") {
       if (argc != 4) {
-        ss << "usage: setomapheader <pool> <obj-name> <header>";
+        ss << "usage: setomapheader <pool> [namespace/]<obj-name> <header>";
         return;
       }
       bufferlist newheader;
@@ -3175,7 +3183,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
         ss << "ok";
     } else if (command == "getomap") {
       if (argc != 3) {
-        ss << "usage: getomap <pool> <obj-name>";
+        ss << "usage: getomap <pool> [namespace/]<obj-name>";
         return;
       }
       //Debug: Output entire omap
@@ -3193,7 +3201,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       }
     } else if (command == "truncobj") {
       if (argc != 4) {
-	ss << "usage: truncobj <pool> <obj-name> <val>";
+	ss << "usage: truncobj <pool> [namespace/]<obj-name> <val>";
 	return;
       }
       t.truncate(coll_t(pgid), obj, atoi(argv[3].c_str()));

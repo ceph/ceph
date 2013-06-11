@@ -1680,7 +1680,7 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
   C_List *onack = new C_List(list_context, onfinish, bl, this);
 
   object_t oid;
-  object_locator_t oloc(list_context->pool_id);
+  object_locator_t oloc(list_context->pool_id, list_context->nspace);
 
   // 
   Op *o = new Op(oid, oloc, op.ops, CEPH_OSD_FLAG_READ, onack, NULL, NULL);

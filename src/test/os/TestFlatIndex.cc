@@ -49,7 +49,7 @@ TEST(FlatIndex, collection) {
   uint64_t hash = 111;
   uint64_t pool = 222;
   const std::string object_name(10, 'A');
-  hobject_t hoid(object_t(object_name), key, CEPH_NOSNAP, hash, pool);
+  hobject_t hoid(object_t(object_name), key, CEPH_NOSNAP, hash, pool, "");
   vector<hobject_t> ls;
   ASSERT_DEATH(index.collection_list_partial(hoid, 0, 0, 0, &ls, &hoid), "0");
 }
@@ -70,7 +70,7 @@ TEST(FlatIndex, created_unlink) {
     CollectionIndex::IndexedPath indexed_path;
     index->set_ref(index);
     const std::string object_name(10, 'A');
-    hobject_t hoid(object_t(object_name), key, CEPH_NOSNAP, hash, pool);
+    hobject_t hoid(object_t(object_name), key, CEPH_NOSNAP, hash, pool, "");
     int exists;
     EXPECT_EQ(0, index->lookup(hoid, &indexed_path, &exists));
     EXPECT_EQ(0, exists);
@@ -88,7 +88,7 @@ TEST(FlatIndex, created_unlink) {
     CollectionIndex::IndexedPath indexed_path;
     index->set_ref(index);
     const std::string object_name(1024, 'A');
-    hobject_t hoid(object_t(object_name), key, CEPH_NOSNAP, hash, pool);
+    hobject_t hoid(object_t(object_name), key, CEPH_NOSNAP, hash, pool, "");
     int exists;
     EXPECT_EQ(0, index->lookup(hoid, &indexed_path, &exists));
     EXPECT_EQ(0, exists);
