@@ -564,6 +564,9 @@ int Pipe::accept()
   replaced = true;
 
   if (!existing->policy.lossy) {
+    // queue a reset on the old connection
+    msgr->dispatch_queue.queue_reset(connection_state.get());
+
     // drop my Connection, and take a ref to the existing one. do not
     // clear existing->connection_state, since read_message and
     // write_message both dereference it without pipe_lock.
