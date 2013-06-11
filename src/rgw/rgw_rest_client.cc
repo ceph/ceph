@@ -284,6 +284,76 @@ int RGWRESTStreamRequest::add_output_data(bufferlist& bl)
   return process_request(handle, false, &done);
 }
 
+static void grants_by_type_add_one_grant(map<int, string>& grants_by_type, int perm, ACLGrant& grant)
+{
+  string& s = grants_by_type[perm];
+
+  if (!s.empty())
+    s.append(", ");
+
+  string id_type_str;
+  ACLGranteeType& type = grant.get_type();
+  switch (type.get_type()) {
+    case ACL_TYPE_GROUP:
+      id_type_str = "uri";
+      break;
+    case ACL_TYPE_EMAIL_USER:
+      id_type_str = "emailAddress";
+      break;
+    default:
+      id_type_str = "id";
+  }
+  string id;
+  grant.get_id(id);
+  s.append(id_type_str + "=\"" + id + "\"");
+}
+
+struct grant_type_to_header {
+  int type;
+  const char *header;
+};
+
+struct grant_type_to_header grants_headers_def[] = {
+  { RGW_PERM_FULL_CONTROL, "x-amz-grant-full-control"},
+  { RGW_PERM_READ,         "x-amz-grant-read"},
+  { RGW_PERM_WRITE,        "x-amz-grant-write"},
+  { RGW_PERM_READ_ACP,     "x-amz-grant-read-acp"},
+  { RGW_PERM_WRITE_ACP,    "x-amz-grant-write-acp"},
+  { 0, NULL}
+};
+
+static bool grants_by_type_check_perm(map<int, string>& grants_by_type, int perm, ACLGrant& grant, int check_perm)
+{
+  if ((perm & check_perm) == perm) {
+    grants_by_type_add_one_grant(grants_by_type, check_perm, grant);
+    return true;
+  }
+  return false;
+}
+
+static void grants_by_type_add_perm(map<int, string>& grants_by_type, int perm, ACLGrant& grant)
+{
+  struct grant_type_to_header *t;
+
+  for (t = grants_headers_def; t->header; t++) {
+    if (grants_by_type_check_perm(grants_by_type, perm, grant, t->type))
+      return;
+  }
+}
+
+static void add_grants_headers(map<int, string>& grants, map<string, string>& attrs, map<string, string>& meta_map)
+{
+  struct grant_type_to_header *t;
+
+  for (t = grants_headers_def; t->header; t++) {
+    map<int, string>::iterator iter = grants.find(t->type);
+    if (iter != grants.end()) {
+      attrs[t->header] = iter->second;
+      meta_map[t->header] = iter->second;
+    }
+  }
+}
+
 int RGWRESTStreamRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs)
 {
   string resource = obj.bucket.name + "/" + obj.object;
@@ -311,12 +381,6 @@ int RGWRESTStreamRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t
   new_info.script_uri.append(resource);
   new_info.request_uri = new_info.script_uri;
 
-  int ret = sign_request(key, new_env, new_info);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
-    return ret;
-  }
-
   map<string, string>& m = new_env.get_map();
   map<string, bufferlist>::iterator bliter;
 
@@ -324,13 +388,38 @@ int RGWRESTStreamRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t
   for (bliter = attrs.begin(); bliter != attrs.end(); ++bliter) {
     bufferlist& bl = bliter->second;
     const string& name = bliter->first;
-    string val(bl.c_str(), bl.length());
+    string val = bl.c_str();
     if (name.compare(0, sizeof(RGW_ATTR_META_PREFIX) - 1, RGW_ATTR_META_PREFIX) == 0) {
       string header_name = RGW_AMZ_META_PREFIX;
       header_name.append(name.substr(sizeof(RGW_ATTR_META_PREFIX) - 1));
       m[header_name] = val;
+      new_info.x_meta_map[header_name] = val;
     }
   }
+  RGWAccessControlPolicy policy;
+  int ret = rgw_policy_from_attrset(cct, attrs, &policy);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: couldn't get policy ret=" << ret << dendl;
+    return ret;
+  }
+
+  /* update acl headers */
+  RGWAccessControlList& acl = policy.get_acl();
+  multimap<string, ACLGrant>& grant_map = acl.get_grant_map();
+  multimap<string, ACLGrant>::iterator giter;
+  map<int, string> grants_by_type;
+  for (giter = grant_map.begin(); giter != grant_map.end(); ++giter) {
+    ACLGrant& grant = giter->second;
+    ACLPermission& perm = grant.get_permission();
+    grants_by_type_add_perm(grants_by_type, perm.get_permissions(), grant);
+  }
+  add_grants_headers(grants_by_type, m, new_info.x_meta_map);
+  ret = sign_request(key, new_env, new_info);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
+    return ret;
+  }
+
   map<string, string>::iterator iter;
   for (iter = m.begin(); iter != m.end(); ++iter) {
     headers.push_back(make_pair<string, string>(iter->first, iter->second));

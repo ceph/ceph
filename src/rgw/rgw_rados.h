@@ -44,6 +44,8 @@ static inline void get_obj_bucket_and_oid_key(rgw_obj& obj, rgw_bucket& bucket, 
   prepend_bucket_marker(bucket, obj.key, key);
 }
 
+int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, RGWAccessControlPolicy *policy);
+
 struct RGWUsageBatch {
   map<utime_t, rgw_usage_log_entry> m;
 
