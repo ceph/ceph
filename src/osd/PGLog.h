@@ -237,6 +237,9 @@ protected:
 
 public:
 
+
+  void reset_backfill();
+
   void clear();
 
   //////////////////// get or set missing ////////////////////

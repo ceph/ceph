@@ -6260,6 +6260,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
     pg->dirty_big_info = true;  // maybe.
     pg->dirty_log = true;
     pg->pg_log.claim_log(msg->log);
+    pg->pg_log.reset_backfill();
   } else {
     ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
     pg->merge_log(*t, msg->info, msg->log, logevt.from);
