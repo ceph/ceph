@@ -55,7 +55,7 @@ def _get_baseurlinfo_and_dist(ctx, remote, config):
             'lsb_release', '-rs'], stdout=StringIO())
     retval['relval'] = r.stdout.getvalue().strip()
     dist_name = None
-    if ((retval['distro'] == 'Centos') | (retval['distro'] == 'RedHatEnterpriseServer')):
+    if ((retval['distro'] == 'CentOS') | (retval['distro'] == 'RedHatEnterpriseServer')):
         distri = 'centos'
         dist_name = 'el'
         relval = retval['relval']
