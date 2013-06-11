@@ -16,6 +16,7 @@ tasks:
       - wrongly marked
 - ceph-fuse:
 - workunit:
+     branch: bobtail
      clients:
         all:
            - suites/dbench.sh
@@ -24,6 +25,7 @@ tasks:
         branch: next
 - ceph.restart: [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2, osd.3, mds.a]
 - workunit:
+     branch: next
      clients:
         all:
            - kernel_untar_build.sh

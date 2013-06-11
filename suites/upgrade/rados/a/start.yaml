@@ -13,6 +13,7 @@ tasks:
      branch: bobtail
 - ceph:
 - workunit:
+     branch: bobtail
      clients:
         client.0:
            - rados/load-gen-mix.sh

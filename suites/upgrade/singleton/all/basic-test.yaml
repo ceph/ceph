@@ -25,6 +25,7 @@ tasks:
 - ceph.restart:
 - ceph-fuse: [client.0]
 - workunit:
+     branch: next
      clients:
         client.0:
            - suites/dbench.sh
