@@ -794,8 +794,6 @@ def parse_cmdargs(args=None, target=''):
                         help='input file')
     parser.add_argument('-o', '--out-file', dest='output_file',
                         help='output file')
-    parser.add_argument('-k', '--keyring', dest='keyring_file',
-                        help='keyring file')
 
     parser.add_argument('--id', '--user', dest='client_id',
                         help='client id for authentication')
