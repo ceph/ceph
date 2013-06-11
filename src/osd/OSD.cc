@@ -2955,6 +2955,7 @@ bool OSD::heartbeat_reset(Connection *con)
     heartbeat_lock.Lock();
     if (is_stopping()) {
       heartbeat_lock.Unlock();
+      s->put();
       return true;
     }
     map<int,HeartbeatInfo>::iterator p = heartbeat_peers.find(s->peer);
