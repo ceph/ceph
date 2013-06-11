@@ -494,6 +494,8 @@ namespace librbd {
     snap_lock.put_read();
     ObjectExtent extent(o, 0, off, len, 0);
     extent.oloc.pool = data_ctx.get_id();
+    // XXX: nspace is always default, io_ctx_impl field private
+    //extent.oloc.nspace = data_ctx.io_ctx_impl->oloc.nspace;
     extent.buffer_extents.push_back(make_pair(0, len));
     wr->extents.push_back(extent);
     {

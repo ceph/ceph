@@ -34,12 +34,15 @@ int main(int argc, char **argv)
   for (int i=0; i<4; i++)
     size[i] = 0;
 
-  for (int f = 0; f < 50000; f++) {  // files
+  for (int n = 0; n < 10; n++) {   // namespaces
+    char nspace[20];
+    snprintf(nspace, sizeof(nspace), "n%d", n);
+  for (int f = 0; f < 5000; f++) {  // files
     for (int b = 0; b < 4; b++) {   // blocks
       char foo[20];
       snprintf(foo, sizeof(foo), "%d.%d", f, b);
       object_t oid(foo);
-      ceph_object_layout l = osdmap.make_object_layout(oid, 0);
+      ceph_object_layout l = osdmap.make_object_layout(oid, 0, nspace);
 	//osdmap.file_to_object_layout(oid, g_default_file_layout);
       vector<int> osds;
       pg_t pgid = pg_t(l.ol_pgid);
@@ -63,6 +66,7 @@ int main(int argc, char **argv)
 	count[osds[i]]++;
       }
     }
+  }
   }
 
   uint64_t avg = 0;
