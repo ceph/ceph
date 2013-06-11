@@ -9,6 +9,10 @@ start on the Admin Host.
 Prerequisites
 =============
 
+Install ``ceph-common``. ::
+
+	sudo apt-get install ceph-common
+
 Ensure that the :term:`Ceph Storage Cluster` is running and in an ``active +
 clean``  state. Also, ensure that you have at least one :term:`Ceph Metadata
 Server` running. :: 
