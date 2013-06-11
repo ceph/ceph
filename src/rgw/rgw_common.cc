@@ -667,6 +667,55 @@ bool url_decode(string& src_str, string& dest_str)
   return true;
 }
 
+string rgw_trim_whitespace(const string& src)
+{
+  if (src.empty()) {
+    return string();
+  }
+
+  int start = 0;
+  for (; start != (int)src.size(); start++) {
+    if (!isspace(src[start]))
+      break;
+  }
+
+  int end = src.size() - 1;
+  if (end <= start) {
+    return string();
+  }
+
+  for (; end > start; end--) {
+    if (!isspace(src[end]))
+      break;
+  }
+
+  return src.substr(start, end - start + 1);
+}
+
+string rgw_trim_quotes(const string& val)
+{
+  string s = rgw_trim_whitespace(val);
+  if (s.size() < 2)
+    return s;
+
+  int start = 0;
+  int end = s.size() - 1;
+  int quotes_count = 0;
+
+  if (s[start] == '"') {
+    start++;
+    quotes_count++;
+  }
+  if (s[end] == '"') {
+    end--;
+    quotes_count++;
+  }
+  if (quotes_count == 2) {
+    return s.substr(start, end - start + 1);
+  }
+  return s;
+}
+
 static struct {
   const char *type_name;
   uint32_t perm;
