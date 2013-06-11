@@ -597,6 +597,7 @@ void Monitor::shutdown()
   }
   
   // clean up
+  paxos->shutdown();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     (*p)->shutdown();
   health_monitor->shutdown();
