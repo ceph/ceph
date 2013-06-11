@@ -1171,6 +1171,8 @@ void Pipe::fault(bool onread)
   if (state == STATE_CLOSED ||
       state == STATE_CLOSING) {
     ldout(msgr->cct,10) << "fault already closed|closing" << dendl;
+    if (connection_state->clear_pipe(this))
+      msgr->dispatch_queue.queue_reset(connection_state.get());
     return;
   }
 
@@ -1206,9 +1208,8 @@ void Pipe::fault(bool onread)
     // disconnect from Connection, and mark it failed.  future messages
     // will be dropped.
     assert(connection_state);
-    connection_state->clear_pipe(this);
-
-    msgr->dispatch_queue.queue_reset(connection_state.get());
+    if (connection_state->clear_pipe(this))
+      msgr->dispatch_queue.queue_reset(connection_state.get());
     return;
   }
 
