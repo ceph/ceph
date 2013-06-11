@@ -16,7 +16,7 @@ Use ``hdparm`` to disable write caching on the hard disk::
 
 	sudo hdparm -W 0 /dev/hda 0
 
-In production environments, we recommend running :term:`Ceph OSD Daemons` with
+In production environments, we recommend running a :term:`Ceph OSD Daemon` with
 separate drives for the operating system and the data. If you run data and an
 operating system on a single disk, we recommend creating a separate partition
 for your data.
