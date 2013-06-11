@@ -158,29 +158,6 @@ static void rgw_get_request_metadata(CephContext *cct, struct req_info& info, ma
   }
 }
 
-static int policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, RGWAccessControlPolicy *policy)
-{
-  map<string, bufferlist>::iterator aiter = attrset.find(RGW_ATTR_ACL);
-  if (aiter == attrset.end())
-    return -EIO;
-
-  bufferlist& bl = aiter->second;
-  bufferlist::iterator iter = bl.begin();
-  try {
-    policy->decode(iter);
-  } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
-    return -EIO;
-  }
-  if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
-    RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
-    ldout(cct, 15) << "Read AccessControlPolicy";
-    s3policy->to_xml(*_dout);
-    *_dout << dendl;
-  }
-  return 0;
-}
-
 /**
  * Get the AccessControlPolicy for an object off of disk.
  * policy: must point to a valid RGWACL, and will be filled upon return.
@@ -416,7 +393,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
     goto done_err;
   }
 
-  ret = policy_from_attrset(s->cct, attrs, &obj_policy);
+  ret = rgw_policy_from_attrset(s->cct, attrs, &obj_policy);
   if (ret < 0)
     goto done_err;
 

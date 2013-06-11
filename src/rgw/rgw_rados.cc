@@ -11,6 +11,7 @@
 #include "rgw_rados.h"
 #include "rgw_cache.h"
 #include "rgw_acl.h"
+#include "rgw_acl_s3.h" /* for dumping s3policy in debug log */
 #include "rgw_metadata.h"
 #include "rgw_bucket.h"
 
@@ -1269,6 +1270,29 @@ int RGWRados::decode_policy(bufferlist& bl, ACLOwner *owner)
     return -EIO;
   }
   *owner = policy.get_owner();
+  return 0;
+}
+
+int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, RGWAccessControlPolicy *policy)
+{
+  map<string, bufferlist>::iterator aiter = attrset.find(RGW_ATTR_ACL);
+  if (aiter == attrset.end())
+    return -EIO;
+
+  bufferlist& bl = aiter->second;
+  bufferlist::iterator iter = bl.begin();
+  try {
+    policy->decode(iter);
+  } catch (buffer::error& err) {
+    ldout(cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+    return -EIO;
+  }
+  if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+    RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
+    ldout(cct, 15) << "Read AccessControlPolicy";
+    s3policy->to_xml(*_dout);
+    *_dout << dendl;
+  }
   return 0;
 }
 
