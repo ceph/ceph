@@ -1242,6 +1242,11 @@ void librados::IoCtx::locator_set_key(const string& key)
   io_ctx_impl->oloc.key = key;
 }
 
+void librados::IoCtx::set_namespace(const string& nspace)
+{
+  io_ctx_impl->oloc.nspace = nspace;
+}
+
 int64_t librados::IoCtx::get_id()
 {
   return io_ctx_impl->get_id();
@@ -2169,6 +2174,15 @@ extern "C" void rados_ioctx_locator_set_key(rados_ioctx_t io, const char *key)
     ctx->oloc.key = "";
 }
 
+extern "C" void rados_ioctx_set_namespace(rados_ioctx_t io, const char *nspace)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  if (nspace)
+    ctx->oloc.nspace = nspace;
+  else
+    ctx->oloc.nspace = "";
+}
+
 extern "C" rados_t rados_ioctx_get_cluster(rados_ioctx_t io)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
@@ -2446,6 +2460,7 @@ extern "C" int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *listh
   Objecter::ListContext *h = new Objecter::ListContext;
   h->pool_id = ctx->poolid;
   h->pool_snap_seq = ctx->snap_seq;
+  h->nspace = ctx->oloc.nspace;
   *listh = (void *)new librados::ObjListCtx(ctx, h);
   return 0;
 }
