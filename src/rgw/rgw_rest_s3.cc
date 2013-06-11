@@ -484,55 +484,6 @@ void RGWPutObj_ObjStore_S3::send_response()
   end_header(s);
 }
 
-string trim_whitespace(const string& src)
-{
-  if (src.empty()) {
-    return string();
-  }
-
-  int start = 0;
-  for (; start != (int)src.size(); start++) {
-    if (!isspace(src[start]))
-      break;
-  }
-
-  int end = src.size() - 1;
-  if (end <= start) {
-    return string();
-  }
-
-  for (; end > start; end--) {
-    if (!isspace(src[end]))
-      break;
-  }
-
-  return src.substr(start, end - start + 1);
-}
-
-string trim_quotes(const string& val)
-{
-  string s = trim_whitespace(val);
-  if (s.size() < 2)
-    return s;
-
-  int start = 0;
-  int end = s.size() - 1;
-  int quotes_count = 0;
-
-  if (s[start] == '"') {
-    start++;
-    quotes_count++;
-  }
-  if (s[end] == '"') {
-    end--;
-    quotes_count++;
-  }
-  if (quotes_count == 2) {
-    return s.substr(start, end - start + 1);
-  }
-  return s;
-}
-
 /*
  * parses params in the format: 'first; param1=foo; param2=bar'
  */
@@ -540,11 +491,11 @@ static void parse_params(const string& params_str, string& first, map<string, st
 {
   int pos = params_str.find(';');
   if (pos < 0) {
-    first = trim_whitespace(params_str);
+    first = rgw_trim_whitespace(params_str);
     return;
   }
 
-  first = trim_whitespace(params_str.substr(0, pos));
+  first = rgw_trim_whitespace(params_str.substr(0, pos));
 
   pos++;
 
@@ -557,11 +508,11 @@ static void parse_params(const string& params_str, string& first, map<string, st
 
     int eqpos = param.find('=');
     if (eqpos > 0) {
-      string param_name = trim_whitespace(param.substr(0, eqpos));
-      string val = trim_quotes(param.substr(eqpos + 1));
+      string param_name = rgw_trim_whitespace(param.substr(0, eqpos));
+      string val = rgw_trim_quotes(param.substr(eqpos + 1));
       params[param_name] = val;
     } else {
-      params[trim_whitespace(param)] = "";
+      params[rgw_trim_whitespace(param)] = "";
     }
 
     pos = end + 1;
@@ -739,7 +690,7 @@ int RGWPostObj_ObjStore_S3::read_form_part_header(struct post_form_part *part,
   /*
    * iterate through fields
    */
-    string line = trim_whitespace(string(bl.c_str(), bl.length()));
+    string line = rgw_trim_whitespace(string(bl.c_str(), bl.length()));
 
     if (line.empty())
       break;
@@ -774,7 +725,7 @@ bool RGWPostObj_ObjStore_S3::part_str(const string& name, string *val)
 
   bufferlist& data = iter->second.data;
   string str = string(data.c_str(), data.length());
-  *val = trim_whitespace(str);
+  *val = rgw_trim_whitespace(str);
   return true;
 }
 
