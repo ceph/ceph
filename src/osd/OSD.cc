@@ -2642,7 +2642,7 @@ bool OSD::heartbeat_reset(Connection *con)
       if (newcon.first) {
 	p->second.con_back = newcon.first.get();
 	p->second.con_back->get();
-	p->second.con_back->set_priv(s);
+	p->second.con_back->set_priv(s->get());
 	if (newcon.second) {
 	  p->second.con_front = newcon.second.get();
 	  p->second.con_front->get();
