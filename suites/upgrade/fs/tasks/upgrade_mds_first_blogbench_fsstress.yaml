@@ -14,6 +14,7 @@ tasks:
 - ceph:
 - ceph-fuse:
 - workunit:
+     branch: bobtail
      clients:
         client.0:
            - suites/blogbench.sh
@@ -22,6 +23,7 @@ tasks:
         branch: next
 - ceph.restart: [mds.a, mon.a, mon.b, mon.c, osd.0, osd.1, osd.2, osd.3]
 - workunit:
+     branch: next
      clients:
         client.0:
            - suites/fsstress.sh

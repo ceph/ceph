@@ -13,6 +13,7 @@ tasks:
      branch: bobtail
 - ceph:
 - workunit:
+     branch: bobtail
      clients:
         client.0:
            - suites/iogen.sh
@@ -21,5 +22,6 @@ tasks:
         branch: next
 - ceph.restart: [mon.a, mon.b, mon.c, mds.a, osd.0, osd.1, osd.2, osd.3]
 - workunit:
+     branch: next
      clients:
         all: [misc/trivial_sync.sh]
