@@ -1573,6 +1573,7 @@ int OSD::shutdown()
   service.shutdown();
   op_tracker.on_shutdown();
 
+  class_handler->shutdown();
   client_messenger->shutdown();
   cluster_messenger->shutdown();
   hbclient_messenger->shutdown();
@@ -2511,11 +2512,9 @@ void OSD::_add_heartbeat_peer(int p)
     hi->peer = p;
     HeartbeatSession *s = new HeartbeatSession(p);
     hi->con_back = cons.first.get();
-    hi->con_back->get();
     hi->con_back->set_priv(s);
     if (cons.second) {
       hi->con_front = cons.second.get();
-      hi->con_front->get();
       hi->con_front->set_priv(s->get());
     }
     dout(10) << "_add_heartbeat_peer: new peer osd." << p
@@ -2537,10 +2536,8 @@ void OSD::_remove_heartbeat_peer(int n)
 	   << " " << (q->second.con_front ? q->second.con_front->get_peer_addr() : entity_addr_t())
 	   << dendl;
   hbclient_messenger->mark_down(q->second.con_back);
-  q->second.con_back->put();
   if (q->second.con_front) {
     hbclient_messenger->mark_down(q->second.con_front);
-    q->second.con_front->put();
   }
   heartbeat_peers.erase(q);
 }
@@ -2670,10 +2667,8 @@ void OSD::reset_heartbeat_peers()
   while (!heartbeat_peers.empty()) {
     HeartbeatInfo& hi = heartbeat_peers.begin()->second;
     hbclient_messenger->mark_down(hi.con_back);
-    hi.con_back->put();
     if (hi.con_front) {
       hbclient_messenger->mark_down(hi.con_front);
-      hi.con_front->put();
     }
     heartbeat_peers.erase(heartbeat_peers.begin());
   }
@@ -2694,6 +2689,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
   heartbeat_lock.Lock();
   if (is_stopping()) {
     heartbeat_lock.Unlock();
+    m->put();
     return;
   }
 
@@ -2963,22 +2959,18 @@ bool OSD::heartbeat_reset(Connection *con)
 	       << ", reopening" << dendl;
       if (con != p->second.con_back) {
 	hbclient_messenger->mark_down(p->second.con_back);
-	p->second.con_back->put();
       }
-      p->second.con_back = NULL;
+      p->second.con_back.reset(NULL);
       if (p->second.con_front && con != p->second.con_front) {
 	hbclient_messenger->mark_down(p->second.con_front);
-	p->second.con_front->put();
       }
-      p->second.con_front = NULL;
+      p->second.con_front.reset(NULL);
       pair<ConnectionRef,ConnectionRef> newcon = service.get_con_osd_hb(p->second.peer, p->second.epoch);
       if (newcon.first) {
 	p->second.con_back = newcon.first.get();
-	p->second.con_back->get();
 	p->second.con_back->set_priv(s);
 	if (newcon.second) {
 	  p->second.con_front = newcon.second.get();
-	  p->second.con_front->get();
 	  p->second.con_front->set_priv(s->get());
 	}
       } else {
@@ -3549,10 +3541,7 @@ ConnectionRef OSDService::get_con_osd_cluster(int peer, epoch_t from_epoch)
       next_osdmap->get_info(peer).up_from > from_epoch) {
     return NULL;
   }
-  ConnectionRef ret(
-    osd->cluster_messenger->get_connection(next_osdmap->get_cluster_inst(peer)));
-  ret->put(); // Ref from get_connection
-  return ret;
+  return osd->cluster_messenger->get_connection(next_osdmap->get_cluster_inst(peer));
 }
 
 pair<ConnectionRef,ConnectionRef> OSDService::get_con_osd_hb(int peer, epoch_t from_epoch)
@@ -3568,10 +3557,7 @@ pair<ConnectionRef,ConnectionRef> OSDService::get_con_osd_hb(int peer, epoch_t f
     return ret;
   }
   ret.first = osd->hbclient_messenger->get_connection(next_osdmap->get_hb_back_inst(peer));
-  ret.first->put(); // Ref from get_connection
   ret.second = osd->hbclient_messenger->get_connection(next_osdmap->get_hb_front_inst(peer));
-  if (ret.second)
-    ret.second->put(); // Ref from get_connection
   return ret;
 }
 
@@ -3755,7 +3741,7 @@ void OSD::handle_command(MMonCommand *m)
 
 void OSD::handle_command(MCommand *m)
 {
-  Connection *con = m->get_connection();
+  ConnectionRef con = m->get_connection();
   Session *session = static_cast<Session *>(con->get_priv());
   if (!session) {
     client_messenger->send_message(new MCommandReply(m, -EPERM), con);
@@ -3772,7 +3758,7 @@ void OSD::handle_command(MCommand *m)
     return;
   }
 
-  Command *c = new Command(m->cmd, m->get_tid(), m->get_data(), con);
+  Command *c = new Command(m->cmd, m->get_tid(), m->get_data(), con.get());
   command_wq.queue(c);
 
   m->put();
@@ -4215,9 +4201,8 @@ bool OSD::heartbeat_dispatch(Message *m)
 
   case CEPH_MSG_OSD_MAP:
     {
-      Connection *self = cluster_messenger->get_loopback_connection();
+      ConnectionRef self = cluster_messenger->get_loopback_connection();
       cluster_messenger->send_message(m, self);
-      self->put();
     }
     break;
 
@@ -4763,10 +4748,8 @@ void OSD::note_down_osd(int peer)
   map<int,HeartbeatInfo>::iterator p = heartbeat_peers.find(peer);
   if (p != heartbeat_peers.end()) {
     hbclient_messenger->mark_down(p->second.con_back);
-    p->second.con_back->put();
     if (p->second.con_front) {
       hbclient_messenger->mark_down(p->second.con_front);
-      p->second.con_front->put();
     }
     heartbeat_peers.erase(p);
   }
@@ -6671,7 +6654,7 @@ void OSD::handle_op(OpRequestRef op)
     return;
   }
   // share our map with sender, if they're old
-  _share_map_incoming(m->get_source(), m->get_connection(), m->get_map_epoch(),
+  _share_map_incoming(m->get_source(), m->get_connection().get(), m->get_map_epoch(),
 		      static_cast<Session *>(m->get_connection()->get_priv()));
 
   if (op->rmw_flags == 0) {
@@ -6799,7 +6782,7 @@ void OSD::handle_sub_op(OpRequestRef op)
     return;
 
   // share our map with sender, if they're old
-  _share_map_incoming(m->get_source(), m->get_connection(), m->map_epoch,
+  _share_map_incoming(m->get_source(), m->get_connection().get(), m->map_epoch,
 		      static_cast<Session*>(m->get_connection()->get_priv()));
 
   if (service.splitting(pgid)) {
@@ -6836,7 +6819,7 @@ void OSD::handle_sub_op_reply(OpRequestRef op)
   if (!require_same_or_newer_map(op, m->get_map_epoch())) return;
 
   // share our map with sender, if they're old
-  _share_map_incoming(m->get_source(), m->get_connection(), m->get_map_epoch(),
+  _share_map_incoming(m->get_source(), m->get_connection().get(), m->get_map_epoch(),
 		      static_cast<Session*>(m->get_connection()->get_priv()));
 
   PG *pg = _have_pg(pgid) ? _lookup_pg(pgid) : NULL;

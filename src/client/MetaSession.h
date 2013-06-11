@@ -19,7 +19,7 @@ class MClientCapRelease;
 
 struct MetaSession {
   int mds_num;
-  Connection *con;
+  ConnectionRef con;
   version_t seq;
   uint64_t cap_gen;
   utime_t cap_ttl, last_cap_renew_request;
