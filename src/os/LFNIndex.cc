@@ -1008,7 +1008,7 @@ bool LFNIndex::lfn_parse_object_name_poolless(const string &long_name,
   pg_t pg;
   if (coll().is_pg_prefix(pg))
     pool = (int64_t)pg.pool();
-  (*out) = hobject_t(name, key, snap, hash, pool);
+  (*out) = hobject_t(name, key, snap, hash, pool, "");
   return true;
 }
 
@@ -1095,8 +1095,7 @@ bool LFNIndex::lfn_parse_object_name(const string &long_name, hobject_t *out)
   else
     pool = strtoull(pstring.c_str(), NULL, 16);
 
-  (*out) = hobject_t(name, key, snap, hash, (int64_t)pool);
-  out->nspace = ns;
+  (*out) = hobject_t(name, key, snap, hash, (int64_t)pool, ns);
   return true;
 }
 

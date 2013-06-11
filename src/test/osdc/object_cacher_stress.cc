@@ -22,9 +22,11 @@
 
 #include "FakeWriteback.h"
 
+string nspace("");
+
 struct op_data {
   op_data(std::string oid, uint64_t offset, uint64_t len, bool read)
-    : extent(oid, 0, offset, len, 0), is_read(read)
+    : extent(oid, 0, offset, len, 0, nspace), is_read(read)
   {
     extent.oloc.pool = 0;
     extent.buffer_extents.push_back(make_pair(0, len));

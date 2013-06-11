@@ -148,6 +148,8 @@ void usage(ostream& out)
 "        specify input or output file (for certain commands)\n"
 "   --create\n"
 "        create the pool or directory that was specified\n"
+"   --namespace\n"
+"        specify the namespace to use for the object\n"
 "\n"
 "BENCH OPTIONS:\n"
 "   -t N\n"
@@ -1046,7 +1048,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   bool create_pool = false;
   const char *pool_name = NULL;
   const char *target_pool_name = NULL;
-  string oloc, target_oloc;
+  string oloc, target_oloc, nspace;
   int concurrent_ios = 16;
   int op_size = 1 << 22;
   bool cleanup = true;
@@ -1178,6 +1180,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       return -EINVAL;
     }
   }
+  i = opts.find("namespace");
+  if (i != opts.end()) {
+    nspace = i->second;
+  }
 
 
   // open rados
@@ -1230,6 +1236,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   }
   if (oloc.size()) {
     io_ctx.locator_set_key(oloc);
+  }
+  if (!nspace.empty()) {
+    io_ctx.namespace_set_key(nspace);
   }
   if (snapid != CEPH_NOSNAP) {
     string name;

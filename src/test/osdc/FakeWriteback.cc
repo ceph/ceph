@@ -60,6 +60,7 @@ FakeWriteback::~FakeWriteback()
 
 void FakeWriteback::read(const object_t& oid,
 			 const object_locator_t& oloc,
+			 const string& nspace,
 			 uint64_t off, uint64_t len, snapid_t snapid,
 			 bufferlist *pbl, uint64_t trunc_size,
 			 __u32 trunc_seq, Context *onfinish)
@@ -70,6 +71,7 @@ void FakeWriteback::read(const object_t& oid,
 
 tid_t FakeWriteback::write(const object_t& oid,
 			   const object_locator_t& oloc,
+			   const string& nspace,
 			   uint64_t off, uint64_t len,
 			   const SnapContext& snapc,
 			   const bufferlist &bl, utime_t mtime,

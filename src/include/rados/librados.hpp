@@ -654,6 +654,7 @@ namespace librados
     const std::string& get_pool_name() const;
 
     void locator_set_key(const std::string& key);
+    void namespace_set_key(const std::string& key);
 
     int64_t get_id();
 

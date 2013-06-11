@@ -146,7 +146,7 @@ void Journaler::read_head(Context *on_finish, bufferlist *bl)
 
   object_t oid = file_object_t(ino, 0);
   object_locator_t oloc(pg_pool);
-  objecter->read_full(oid, oloc, CEPH_NOSNAP, bl, 0, on_finish);
+  objecter->read_full(oid, oloc, "", CEPH_NOSNAP, bl, 0, on_finish);
 }
 
 /**
@@ -351,7 +351,7 @@ void Journaler::write_head(Context *oncommit)
   
   object_t oid = file_object_t(ino, 0);
   object_locator_t oloc(pg_pool);
-  objecter->write_full(oid, oloc, snapc, bl, ceph_clock_now(cct), 0, 
+  objecter->write_full(oid, oloc, "", snapc, bl, ceph_clock_now(cct), 0,
 		       NULL, 
 		       new C_WriteHead(this, last_written, oncommit));
 }

@@ -182,7 +182,7 @@ class Filer {
       ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
       ops[0].op.extent.truncate_seq = truncate_seq;
       ops[0].op.extent.truncate_size = extents[0].offset;
-      objecter->_modify(extents[0].oid, extents[0].oloc, ops, mtime, snapc, flags, onack, oncommit);
+      objecter->_modify(extents[0].oid, extents[0].oloc, "", ops, mtime, snapc, flags, onack, oncommit);
     } else {
       C_GatherBuilder gack(cct, onack);
       C_GatherBuilder gcom(cct, oncommit);
@@ -191,7 +191,7 @@ class Filer {
 	ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
 	ops[0].op.extent.truncate_size = p->offset;
 	ops[0].op.extent.truncate_seq = truncate_seq;
-	objecter->_modify(p->oid, p->oloc, ops, mtime, snapc, flags,
+	objecter->_modify(p->oid, p->oloc, "", ops, mtime, snapc, flags,
 			  onack ? gack.new_sub():0,
 			  oncommit ? gcom.new_sub():0);
       }
@@ -214,22 +214,22 @@ class Filer {
     Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
     if (extents.size() == 1) {
       if (extents[0].offset == 0 && extents[0].length == layout->fl_object_size)
-	objecter->remove(extents[0].oid, extents[0].oloc, 
+	objecter->remove(extents[0].oid, extents[0].oloc, "",
 			 snapc, mtime, flags, onack, oncommit);
       else
-	objecter->zero(extents[0].oid, extents[0].oloc, extents[0].offset, extents[0].length, 
+	objecter->zero(extents[0].oid, extents[0].oloc, "", extents[0].offset, extents[0].length,
 		       snapc, mtime, flags, onack, oncommit);
     } else {
       C_GatherBuilder gack(cct, onack);
       C_GatherBuilder gcom(cct, oncommit);
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
 	if (p->offset == 0 && p->length == layout->fl_object_size)
-	  objecter->remove(p->oid, p->oloc,
+	  objecter->remove(p->oid, p->oloc, "",
 			   snapc, mtime, flags,
 			   onack ? gack.new_sub():0,
 			   oncommit ? gcom.new_sub():0);
 	else
-	  objecter->zero(p->oid, p->oloc, p->offset, p->length, 
+	  objecter->zero(p->oid, p->oloc, "", p->offset, p->length,
 			 snapc, mtime, flags,
 			 onack ? gack.new_sub():0,
 			 oncommit ? gcom.new_sub():0);

@@ -11,11 +11,11 @@ class ObjecterWriteback : public WritebackHandler {
   ObjecterWriteback(Objecter *o) : m_objecter(o) {}
   virtual ~ObjecterWriteback() {}
 
-  virtual void read(const object_t& oid, const object_locator_t& oloc,
+  virtual void read(const object_t& oid, const object_locator_t& oloc, const string& nspace,
 		    uint64_t off, uint64_t len, snapid_t snapid,
 		    bufferlist *pbl, uint64_t trunc_size,  __u32 trunc_seq,
 		    Context *onfinish) {
-    m_objecter->read_trunc(oid, oloc, off, len, snapid, pbl, 0,
+    m_objecter->read_trunc(oid, oloc, nspace, off, len, snapid, pbl, 0,
 			   trunc_size, trunc_seq, onfinish);
   }
 
@@ -23,17 +23,17 @@ class ObjecterWriteback : public WritebackHandler {
     return false;
   }
 
-  virtual tid_t write(const object_t& oid, const object_locator_t& oloc,
+  virtual tid_t write(const object_t& oid, const object_locator_t& oloc, const string& nspace,
 		      uint64_t off, uint64_t len, const SnapContext& snapc,
 		      const bufferlist &bl, utime_t mtime, uint64_t trunc_size,
 		      __u32 trunc_seq, Context *oncommit) {
-    return m_objecter->write_trunc(oid, oloc, off, len, snapc, bl, mtime, 0,
+    return m_objecter->write_trunc(oid, oloc, nspace, off, len, snapc, bl, mtime, 0,
 				   trunc_size, trunc_seq, NULL, oncommit);
   }
 
-  virtual tid_t lock(const object_t& oid, const object_locator_t& oloc, int op,
+  virtual tid_t lock(const object_t& oid, const object_locator_t& oloc, const string& nspace, int op,
 		     int flags, Context *onack, Context *oncommit) {
-    return m_objecter->lock(oid, oloc, op, flags, onack, oncommit);
+    return m_objecter->lock(oid, oloc, nspace, op, flags, onack, oncommit);
   }
 
  private:

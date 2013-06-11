@@ -51,6 +51,7 @@ namespace librbd {
     std::string lock_tag;
 
     std::string name;
+    std::string nspace; // For now this is always the default empty namespace
     std::string snap_name;
     IoCtx data_ctx, md_ctx;
     WatchCtx *wctx;

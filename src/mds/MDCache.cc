@@ -5835,7 +5835,7 @@ void MDCache::purge_prealloc_ino(inodeno_t ino, Context *fin)
 
   dout(10) << "purge_prealloc_ino " << ino << " oid " << oid << dendl;
   SnapContext snapc;
-  mds->objecter->remove(oid, oloc, snapc, ceph_clock_now(g_ceph_context), 0, 0, fin);
+  mds->objecter->remove(oid, oloc, "", snapc, ceph_clock_now(g_ceph_context), 0, 0, fin);
 }  
 
 
@@ -8514,7 +8514,7 @@ void MDCache::find_ino_dir(inodeno_t ino, Context *fin)
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
   
   C_MDS_FindInoDir *c = new C_MDS_FindInoDir(this, ino, fin);
-  mds->objecter->getxattr(oid, oloc, "path", CEPH_NOSNAP, &c->bl, 0, c);
+  mds->objecter->getxattr(oid, oloc, "", "path", CEPH_NOSNAP, &c->bl, 0, c);
 }
 
 void MDCache::_find_ino_dir(inodeno_t ino, Context *fin, bufferlist& bl, int r)
@@ -9263,14 +9263,14 @@ void MDCache::eval_remote(CDentry *dn)
 void MDCache::fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin)
 {
   object_t oid = CInode::get_object_name(ino, frag_t(), "");
-  mds->objecter->getxattr(oid, object_locator_t(pool), "parent", CEPH_NOSNAP, &bl, 0, fin);
+  mds->objecter->getxattr(oid, object_locator_t(pool), "", "parent", CEPH_NOSNAP, &bl, 0, fin);
 }
 
 void MDCache::remove_backtrace(inodeno_t ino, int64_t pool, Context *fin)
 {
   SnapContext snapc;
   object_t oid = CInode::get_object_name(ino, frag_t(), "");
-  mds->objecter->removexattr(oid, object_locator_t(pool), "parent", snapc,
+  mds->objecter->removexattr(oid, object_locator_t(pool), "", "parent", snapc,
 			     ceph_clock_now(g_ceph_context), 0, NULL, fin);
 }
 
@@ -9326,7 +9326,7 @@ void MDCache::_purge_forwarding_pointers(bufferlist& bl, CDentry *dn, int r)
     object_t oid = CInode::get_object_name(backtrace.ino, frag_t(), "");
     object_locator_t oloc(*i);
 
-    mds->objecter->remove(oid, oloc, snapc, ceph_clock_now(g_ceph_context), 0,
+    mds->objecter->remove(oid, oloc, "", snapc, ceph_clock_now(g_ceph_context), 0,
                          NULL, gather_bld.new_sub());
   }
 

@@ -1583,7 +1583,7 @@ struct pg_ls_response_t {
   static void generate_test_instances(list<pg_ls_response_t*>& o) {
     o.push_back(new pg_ls_response_t);
     o.push_back(new pg_ls_response_t);
-    o.back()->handle = hobject_t(object_t("hi"), "key", 1, 2, -1);
+    o.back()->handle = hobject_t(object_t("hi"), "key", 1, 2, -1, "");
     o.back()->entries.push_back(make_pair(object_t("one"), string()));
     o.back()->entries.push_back(make_pair(object_t("two"), string("twokey")));
   }
@@ -1640,17 +1640,19 @@ class ObjectExtent {
   uint64_t    truncate_size;	// in object
 
   object_locator_t oloc;   // object locator (pool etc)
+  string      nspace;
 
   vector<pair<uint64_t,uint64_t> >  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
   
   ObjectExtent() : objectno(0), offset(0), length(0), truncate_size(0) {}
-  ObjectExtent(object_t o, uint64_t ono, uint64_t off, uint64_t l, uint64_t ts) :
-    oid(o), objectno(ono), offset(off), length(l), truncate_size(ts) { }
+  ObjectExtent(object_t o, uint64_t ono, uint64_t off, uint64_t l, uint64_t ts, string& nspace) :
+    oid(o), objectno(ono), offset(off), length(l), truncate_size(ts),
+    nspace(nspace) { }
 };
 
 inline ostream& operator<<(ostream& out, const ObjectExtent &ex)
 {
-  return out << "extent(" 
+  return out << "extent("  << ex.nspace
              << ex.oid << " (" << ex.objectno << ") in " << ex.oloc
              << " " << ex.offset << "~" << ex.length
 	     << " -> " << ex.buffer_extents

@@ -3077,6 +3077,7 @@ void OSD::check_ops_in_flight()
   return;
 }
 
+// XXX: MUST ADD NAMESPACES HERE
 // Usage:
 //   setomapval <pool-id> <obj-name> <key> <val>
 //   rmomapkey <pool-id> <obj-name> <key>
@@ -3118,14 +3119,14 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     r = -1;
     if (pool >= 0)
         r = curmap->object_locator_to_pg(object_t(argv[2]),
-          object_locator_t(pool), rawpg);
+          object_locator_t(pool), "", rawpg);
     if (r < 0) {
         ss << "Invalid pool " << argv[1];
         return;
     }
     pgid = curmap->raw_pg_to_pg(rawpg);
 
-    hobject_t obj(object_t(argv[2]), string(""), CEPH_NOSNAP, rawpg.ps(), pool);
+    hobject_t obj(object_t(argv[2]), string(""), CEPH_NOSNAP, rawpg.ps(), pool, "");
     ObjectStore::Transaction t;
 
     if (command == "setomapval") {
