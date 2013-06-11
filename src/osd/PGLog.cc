@@ -103,6 +103,13 @@ ostream& PGLog::IndexedLog::print(ostream& out) const
 
 //////////////////// PGLog ////////////////////
 
+void PGLog::reset_backfill()
+{
+  missing.clear();
+  divergent_priors.clear();
+  dirty_divergent_priors = true;
+}
+
 void PGLog::clear() {
   ondisklog.zero();
   ondisklog.has_checksums = true;
