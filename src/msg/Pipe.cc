@@ -44,6 +44,7 @@ ostream& Pipe::_pipe_prefix(std::ostream *_dout) {
 		<< " pgs=" << peer_global_seq
 		<< " cs=" << connect_seq
 		<< " l=" << policy.lossy
+		<< " c=" << connection_state
 		<< ").";
 }
 
