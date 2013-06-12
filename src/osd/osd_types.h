@@ -1987,6 +1987,31 @@ struct ObjectRecoveryProgress {
 WRITE_CLASS_ENCODER(ObjectRecoveryProgress)
 ostream& operator<<(ostream& out, const ObjectRecoveryProgress &prog);
 
+struct PushReplyOp {
+  hobject_t soid;
+};
+
+struct PullOp {
+  hobject_t soid;
+
+  ObjectRecoveryInfo recovery_info;
+  ObjectRecoveryProgress recovery_progress;
+};
+
+struct PushOp {
+  hobject_t soid;
+  eversion_t version;
+  bufferlist data;
+  interval_set<uint64_t> data_included;
+  bufferlist omap_header;
+  map<string, bufferlist> omap_entries;
+  map<string, bufferptr> attrset;
+
+  ObjectRecoveryInfo recovery_info;
+  ObjectRecoveryProgress before_progress;
+  ObjectRecoveryProgress after_progress;
+};
+
 
 /*
  * summarize pg contents for purposes of a scrub
