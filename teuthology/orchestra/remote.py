@@ -1,4 +1,5 @@
 from . import run
+from teuthology import misc
 import time
 
 class Remote(object):
@@ -249,6 +250,6 @@ class VirtualConsole():
         log.info('Power off for {i} seconds completed'.format(s=self.shortname, i=interval))
 
 def getRemoteConsole(name, ipmiuser, ipmipass, ipmidomain, logfile=None, timeout=20):
-    if name.startswith('vpm'):
+    if misc.is_vm(name):
         return VirtualConsole(name, ipmiuser, ipmipass, ipmidomain, logfile, timeout)
     return PhysicalConsole(name, ipmiuser, ipmipass, ipmidomain, logfile, timeout)
