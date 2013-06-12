@@ -1,12 +1,41 @@
 #
 # Processed in Makefile to add python #! line and version variable
 #
+#
+# vim: ts=4 sw=4 smarttab expandtab
+
+
+import os
+import sys
+
+# Make life easier on developers:
+# If in src/, and .libs and pybind exist here, assume we're running
+# from a Ceph source dir and tweak PYTHONPATH and LD_LIBRARY_PATH
+# to use local files
+
+MYPATH = os.path.abspath(__file__)
+MYDIR = os.path.dirname(MYPATH)
+DEVMODEMSG = '*** DEVELOPER MODE: setting PYTHONPATH and LD_LIBRARY_PATH'
+
+if MYDIR.endswith('src') and \
+   os.path.exists(os.path.join(MYDIR, '.libs')) and \
+   os.path.exists(os.path.join(MYDIR, 'pybind')):
+    MYLIBPATH = os.path.join(MYDIR, '.libs')
+    if 'LD_LIBRARY_PATH' in os.environ:
+        if MYLIBPATH not in os.environ['LD_LIBRARY_PATH']:
+            os.environ['LD_LIBRARY_PATH'] += ':' + MYLIBPATH
+            print >> sys.stderr, DEVMODEMSG
+            os.execvp('python', ['python'] + sys.argv)
+    else:
+        os.environ['LD_LIBRARY_PATH'] = MYLIBPATH
+        print >> sys.stderr, DEVMODEMSG
+        os.execvp('python', ['python'] + sys.argv)
+    sys.path.insert(0, os.path.join(MYDIR, 'pybind'))
 
 import argparse
 import copy
 import errno
 import json
-import os
 import rados
 # for raw_input to do readline cmd editing
 import readline
@@ -15,7 +44,6 @@ import stat
 import string
 import struct
 import subprocess
-import sys
 import types
 import uuid
 
