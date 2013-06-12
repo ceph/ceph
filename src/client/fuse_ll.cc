@@ -369,6 +369,7 @@ static void fuse_ll_flush(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info 
   fuse_reply_err(req, 0);
 }
 
+#ifdef FUSE_IOCTL_COMPAT
 static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg, struct fuse_file_info *fi,
                           unsigned flags, const void *in_buf, size_t in_bufsz, size_t out_bufsz)
 {
@@ -396,6 +397,7 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg, st
       fuse_reply_err(req, EINVAL);
   }
 }
+#endif
 
 static void fuse_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
@@ -597,7 +599,9 @@ const static struct fuse_lowlevel_ops fuse_ll_oper = {
  getlk: 0,
  setlk: 0,
  bmap: 0,
- ioctl: fuse_ll_ioctl
+#ifdef FUSE_IOCTL_COMPAT
+ ioctl: fuse_ll_ioctl,
+#endif
 };
 
 
