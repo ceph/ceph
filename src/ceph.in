@@ -1509,56 +1509,76 @@ def main():
     # of the form 'cmdNNN' followed by an array of argument descriptors)
     # as part of the validated argument JSON object
 
-    ret, outbuf, outs = json_command(target=target,
-                                     prefix='get_command_descriptions')
-    if ret == -errno.EINVAL:
-        # send command to old monitor or OSD
-        if verbose:
-            print '{0} to old {1}'.format(' '.join(childargs), target[0])
-        ret, outbuf, outs = send_command(target, childargs, inbuf)
-        # combine nonerror outbuf and outs; either may have cmd output
-        if ret == 0:
-            outbuf += outs
-            # clear outs so generic code below doesn't print it to stderr
-            outs = ''
-    elif ret:
+    targets = [target]
+
+    if target[0] == 'osd' and target[1] == '*':
+        targets = [(target[0], o) for o in osdids()]
+
+    final_ret = 0
+    for target in targets:
+        ret, outbuf, outs = json_command(target=target,
+                                         prefix='get_command_descriptions')
+        if ret == -errno.EINVAL:
+            # send command to old monitor or OSD
+            if verbose:
+                print '{0} to old {1}'.format(' '.join(childargs), target[0])
+            ret, outbuf, outs = send_command(target, childargs, inbuf)
+            # combine nonerror outbuf and outs; either may have cmd output
+            if ret == 0:
+                outbuf += outs
+                # clear outs so generic code below doesn't print it to stderr
+                outs = ''
+        elif ret:
+            if ret < 0:
+                ret = -ret
+                print >> sys.stderr, \
+                    'Problem getting command descriptions from {0}, {1}'.\
+                    format(target, errno.errorcode[ret])
+        else:
+            sigdict = parse_json_funcsigs(outbuf)
+
+            if parsed_args.completion:
+                return complete(sigdict, childargs, target)
+
+            ret, outbuf, outs = new_style_command(parsed_args, childargs, target,
+                                                  sigdict, inbuf, verbose)
+
         if ret < 0:
             ret = -ret
-        print >> sys.stderr, \
-            'Problem getting command descriptions from {0}, {1}'.\
-            format(target, errno.errorcode[ret])
-        return ret
-    else:
-        sigdict = parse_json_funcsigs(outbuf)
+            if len(targets) > 1:
+                sys.stderr.write('{0}.{1}: '.format(*target))
+            print >> sys.stderr, 'Error {0}: {1}'.format(errno.errorcode[ret], outs)
+            if len(targets) > 1:
+                final_ret = ret
+            else:
+                return ret
 
-        if parsed_args.completion:
-            return complete(sigdict, childargs, target)
+        # this assumes outs never has useful command output, only status
+        if outs:
+            print >> sys.stderr, outs
 
-        ret, outbuf, outs = new_style_command(parsed_args, childargs, target,
-                                              sigdict, inbuf, verbose)
+        if (parsed_args.output_file):
+            outf.write(outbuf)
+        else:
+            # hack: old code printed status line before many json outputs
+            # (osd dump, etc.) that consumers know to ignore.  Add blank line
+            # to satisfy consumers that skip the first line, but not annoy
+            # consumers that don't.
+            if parsed_args.output_format and \
+               parsed_args.output_format.startswith('json'):
+                sys.stdout.write('\n');
 
-    if ret < 0:
-        ret = -ret
-        print >> sys.stderr, 'Error {0}: {1}'.format(errno.errorcode[ret], outs)
-        return ret
+            # prefix output with target, if there was a wildcard used
+            if len(targets) > 1:
+                sys.stdout.write('{0}.{1}: '.format(*target))
 
-    # this assumes outs never has useful command output, only status
-    if outs:
-        print >> sys.stderr, outs
+            sys.stdout.write(outbuf)
 
     if (parsed_args.output_file):
-        outf.write(outbuf)
         outf.close()
-    else:
-        # hack: old code printed status line before many json outputs
-        # (osd dump, etc.) that consumers know to ignore.  Add blank line
-        # to satisfy consumers that skip the first line, but not annoy
-        # consumers that don't.
-        if parsed_args.output_format and \
-           parsed_args.output_format.startswith('json'):
-            sys.stdout.write('\n');
 
-        sys.stdout.write(outbuf)
+    if final_ret:
+        return ret
 
     return 0
 
