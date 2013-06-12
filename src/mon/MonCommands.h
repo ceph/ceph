@@ -107,7 +107,7 @@ COMMAND("pg dump_json " \
 	"show human-readable version of pg map in json only")
 COMMAND("pg dump_pools_json", "show pg pools info in json only")
 COMMAND("pg dump_stuck " \
-	"name=stuckops,type=CephChoices,strings=inactive|unclean|stale,req=false " \
+	"name=stuckops,type=CephChoices,strings=inactive|unclean|stale,n=N,req=false " \
 	"name=threshold,type=CephInt,req=false",
 	"show information about stuck pgs [--threshold=seconds to consider stuck]")
 COMMAND("pg map name=pgid,type=CephPgid", "show mapping of pg to osds")
