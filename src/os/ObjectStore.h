@@ -186,6 +186,11 @@ public:
     void register_on_applied_sync(Context *c) {
       on_applied_sync.push_back(c);
     }
+    void register_on_complete(Context *c) {
+      RunOnDeleteRef _complete(new RunOnDelete(c));
+      register_on_applied(new ContainerContext<RunOnDeleteRef>(_complete));
+      register_on_commit(new ContainerContext<RunOnDeleteRef>(_complete));
+    }
 
     static void collect_contexts(
       list<Transaction *> &t,

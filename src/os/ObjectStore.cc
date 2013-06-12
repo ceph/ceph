@@ -41,25 +41,6 @@ unsigned ObjectStore::apply_transactions(Sequencer *osr,
   return r;
 }
 
-template <class T>
-struct Wrapper : public Context {
-  Context *to_run;
-  T val;
-  Wrapper(Context *to_run, T val) : to_run(to_run), val(val) {}
-  void finish(int r) {
-    if (to_run)
-      to_run->complete(r);
-  }
-};
-struct RunOnDelete {
-  Context *to_run;
-  RunOnDelete(Context *to_run) : to_run(to_run) {}
-  ~RunOnDelete() {
-    if (to_run)
-      to_run->complete(0);
-  }
-};
-typedef std::tr1::shared_ptr<RunOnDelete> RunOnDeleteRef;
 int ObjectStore::queue_transactions(
   Sequencer *osr,
   list<Transaction*>& tls,
