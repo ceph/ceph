@@ -163,14 +163,14 @@ set automatically.
 
 :Description: Enable logging for RGW operations.
 :Type: Boolean
-:Default: ``true``
+:Default: ``false``
 
 
 ``rgw enable usage log``
 
 :Description: Enable the usage log.
 :Type: Boolean
-:Default: ``true``
+:Default: ``false``
 
 
 ``rgw usage log flush threshold``
