@@ -6,6 +6,7 @@
 
 #include "common/ceph_crypto_cms.h"
 #include "common/armor.h"
+#include "common/strtol.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -43,7 +44,13 @@ int RGWRESTSimpleRequest::receive_header(void *ptr, size_t len)
           char buf[len + 1];
           size_t i;
           for (i = 0; i < len && *src; ++i, ++src) {
-            buf[i] = toupper(*src);
+            switch (*src) {
+              case '-':
+                buf[i] = '_';
+                break;
+              default:
+                buf[i] = toupper(*src);
+            }
           }
           buf[i] = '\0';
           out_headers[buf] = l;
@@ -252,9 +259,9 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
 }
 
 class RGWRESTStreamOutCB : public RGWGetDataCB {
-  RGWRESTStreamRequest *req;
+  RGWRESTStreamWriteRequest *req;
 public:
-  RGWRESTStreamOutCB(RGWRESTStreamRequest *_req) : req(_req) {}
+  RGWRESTStreamOutCB(RGWRESTStreamWriteRequest *_req) : req(_req) {}
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len); /* callback for object iteration when sending data */
 };
 
@@ -272,12 +279,12 @@ int RGWRESTStreamOutCB::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
   return req->add_output_data(new_bl);
 }
 
-RGWRESTStreamRequest::~RGWRESTStreamRequest()
+RGWRESTStreamWriteRequest::~RGWRESTStreamWriteRequest()
 {
   delete cb;
 }
 
-int RGWRESTStreamRequest::add_output_data(bufferlist& bl)
+int RGWRESTStreamWriteRequest::add_output_data(bufferlist& bl)
 {
   lock.Lock();
   if (status < 0) {
@@ -362,7 +369,7 @@ static void add_grants_headers(map<int, string>& grants, map<string, string>& at
   }
 }
 
-int RGWRESTStreamRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs)
+int RGWRESTStreamWriteRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs)
 {
   string resource = obj.bucket.name + "/" + obj.object;
   string new_url = url;
@@ -444,11 +451,11 @@ int RGWRESTStreamRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t
   return 0;
 }
 
-int RGWRESTStreamRequest::send_data(void *ptr, size_t len)
+int RGWRESTStreamWriteRequest::send_data(void *ptr, size_t len)
 {
   uint64_t sent = 0;
 
-  dout(20) << "RGWRESTStreamRequest::send_data()" << dendl;
+  dout(20) << "RGWRESTStreamWriteRequest::send_data()" << dendl;
   lock.Lock();
   if (pending_send.empty() || status < 0) {
     lock.Unlock();
@@ -489,11 +496,35 @@ int RGWRESTStreamRequest::send_data(void *ptr, size_t len)
 }
 
 
-int RGWRESTStreamRequest::complete()
+void set_str_from_headers(map<string, string>& out_headers, const string& header_name, string& str)
+{
+  map<string, string>::iterator iter = out_headers.find(header_name);
+  if (iter != out_headers.end()) {
+    str = iter->second;
+  } else {
+    str.clear();
+  }
+}
+
+
+int RGWRESTStreamWriteRequest::complete(string& etag, time_t *mtime)
 {
   int ret = complete_request(handle);
   if (ret < 0)
     return ret;
+
+  set_str_from_headers(out_headers, "ETAG", etag);
+  if (mtime) {
+    string mtime_str;
+    set_str_from_headers(out_headers, "RGWX_MTIME", mtime_str);
+    string err;
+    long t = strict_strtol(mtime_str.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldout(cct, 0) << "ERROR: failed converting mtime (" << mtime_str << ") to int " << dendl;
+      return -EINVAL;
+    }
+    *mtime = (time_t)t;
+  }
 
   return status;
 }

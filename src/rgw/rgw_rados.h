@@ -679,10 +679,10 @@ public:
               RGWObjManifest *manifest, const string *ptag, list<string> *remove_objs,
               bool modify_version, RGWObjVersionTracker *objv_tracker);
 
-  virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size,
+  virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
               map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
               const bufferlist *data = NULL) {
-    return put_obj_meta_impl(ctx, obj, size, NULL, attrs, category, flags,
+    return put_obj_meta_impl(ctx, obj, size, mtime, attrs, category, flags,
                         NULL, data, NULL, NULL, NULL,
                         false, NULL);
   }
