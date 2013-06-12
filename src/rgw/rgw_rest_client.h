@@ -53,7 +53,7 @@ public:
 };
 
 
-class RGWRESTStreamRequest : public RGWRESTSimpleRequest {
+class RGWRESTStreamWriteRequest : public RGWRESTSimpleRequest {
   Mutex lock;
   list<bufferlist> pending_send;
   void *handle;
@@ -62,12 +62,12 @@ public:
   int add_output_data(bufferlist& bl);
   int send_data(void *ptr, size_t len);
 
-  RGWRESTStreamRequest(CephContext *_cct, string& _url, list<pair<string, string> > *_headers,
+  RGWRESTStreamWriteRequest(CephContext *_cct, string& _url, list<pair<string, string> > *_headers,
                 list<pair<string, string> > *_params) : RGWRESTSimpleRequest(_cct, _url, _headers, _params),
-                lock("RGWRESTStreamRequest"), handle(NULL), cb(NULL) {}
-  ~RGWRESTStreamRequest();
+                lock("RGWRESTStreamWriteRequest"), handle(NULL), cb(NULL) {}
+  ~RGWRESTStreamWriteRequest();
   int put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs);
-  int complete();
+  int complete(string& etag, time_t *mtime);
 
   RGWGetDataCB *get_out_cb() { return cb; }
 };

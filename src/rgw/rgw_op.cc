@@ -1022,9 +1022,9 @@ int RGWPutObj::verify_permission()
   return 0;
 }
 
-int RGWPutObjProcessor::complete(string& etag, map<string, bufferlist>& attrs)
+int RGWPutObjProcessor::complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs)
 {
-  int r = do_complete(etag, attrs);
+  int r = do_complete(etag, mtime, attrs);
   if (r < 0)
     return r;
 
@@ -1060,7 +1060,7 @@ protected:
   int prepare(RGWRados *store, struct req_state *s);
   int handle_data(bufferlist& bl, off_t ofs, void **phandle);
   int throttle_data(void *handle) { return 0; }
-  int do_complete(string& etag, map<string, bufferlist>& attrs);
+  int do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs);
 
 public:
   RGWPutObjProcessor_Plain() : ofs(0) {}
@@ -1086,9 +1086,9 @@ int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, void **pha
   return 0;
 }
 
-int RGWPutObjProcessor_Plain::do_complete(string& etag, map<string, bufferlist>& attrs)
+int RGWPutObjProcessor_Plain::do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs)
 {
-  int r = store->put_obj_meta(s->obj_ctx, obj, data.length(), attrs,
+  int r = store->put_obj_meta(s->obj_ctx, obj, data.length(), mtime, attrs,
                               RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
                               &data);
   return r;
@@ -1210,7 +1210,7 @@ protected:
   virtual bool immutable_head() { return false; }
 
   int prepare(RGWRados *store, struct req_state *s);
-  virtual int do_complete(string& etag, map<string, bufferlist>& attrs);
+  virtual int do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs);
 
   void prepare_next_part(off_t ofs);
   void complete_parts();
@@ -1291,7 +1291,7 @@ void RGWPutObjProcessor_Atomic::complete_parts()
     prepare_next_part(obj_len);
 }
 
-int RGWPutObjProcessor_Atomic::do_complete(string& etag, map<string, bufferlist>& attrs)
+int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs)
 {
   complete_parts();
 
@@ -1302,6 +1302,7 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, map<string, bufferlist>
   extra_params.data = &first_chunk;
   extra_params.manifest = &manifest;
   extra_params.ptag = &s->req_id; /* use req_id as operation tag */
+  extra_params.mtime = mtime;
 
   int r = store->put_obj_meta(s->obj_ctx, head_obj, obj_len, attrs,
                               RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
@@ -1317,7 +1318,7 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
 protected:
   bool immutable_head() { return true; }
   int prepare(RGWRados *store, struct req_state *s);
-  int do_complete(string& etag, map<string, bufferlist>& attrs);
+  int do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs);
 
 public:
   RGWPutObjProcessor_Multipart(uint64_t _p) : RGWPutObjProcessor_Atomic(_p) {}
@@ -1347,11 +1348,11 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, struct req_state *s)
   return 0;
 }
 
-int RGWPutObjProcessor_Multipart::do_complete(string& etag, map<string, bufferlist>& attrs)
+int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs)
 {
   complete_parts();
 
-  int r = store->put_obj_meta(s->obj_ctx, head_obj, s->obj_size, attrs, RGW_OBJ_CATEGORY_MAIN, 0);
+  int r = store->put_obj_meta(s->obj_ctx, head_obj, s->obj_size, mtime, attrs, RGW_OBJ_CATEGORY_MAIN, 0);
   if (r < 0)
     return r;
 
@@ -1514,7 +1515,7 @@ void RGWPutObj::execute()
 
   rgw_get_request_metadata(s->cct, s->info, attrs);
 
-  ret = processor->complete(etag, attrs);
+  ret = processor->complete(etag, &mtime, attrs);
 done:
   dispose_processor(processor);
   perfcounter->tinc(l_rgw_put_lat,
@@ -1630,7 +1631,7 @@ void RGWPostObj::execute()
     attrs[RGW_ATTR_CONTENT_TYPE] = ct_bl;
   }
 
-  ret = processor->complete(etag, attrs);
+  ret = processor->complete(etag, NULL, attrs);
 
 done:
   dispose_processor(processor);
@@ -2233,7 +2234,7 @@ void RGWInitMultipart::execute()
 
     obj.init_ns(s->bucket, tmp_obj_name, mp_ns);
     // the meta object will be indexed with 0 size, we c
-    ret = store->put_obj_meta(s->obj_ctx, obj, 0, attrs, RGW_OBJ_CATEGORY_MULTIMETA, PUT_OBJ_CREATE_EXCL);
+    ret = store->put_obj_meta(s->obj_ctx, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, PUT_OBJ_CREATE_EXCL);
   } while (ret == -EEXIST);
 }
 

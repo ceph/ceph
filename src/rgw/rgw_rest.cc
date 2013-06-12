@@ -302,7 +302,7 @@ void dump_redirect(struct req_state *s, const string& redirect)
   s->cio->print("Location: %s\n", redirect.c_str());
 }
 
-void dump_last_modified(struct req_state *s, time_t t)
+static void dump_time_header(struct req_state *s, const char *name, time_t t)
 {
 
   char timestr[TIME_BUF_SIZE];
@@ -314,7 +314,23 @@ void dump_last_modified(struct req_state *s, time_t t)
   if (strftime(timestr, sizeof(timestr), "%a, %d %b %Y %H:%M:%S %Z", tmp) == 0)
     return;
 
-  int r = s->cio->print("Last-Modified: %s\n", timestr);
+  int r = s->cio->print("%s: %s\n", name, timestr);
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+  }
+}
+
+void dump_last_modified(struct req_state *s, time_t t)
+{
+  dump_time_header(s, "Last-Modified", t);
+}
+
+void dump_epoch_header(struct req_state *s, const char *name, time_t t)
+{
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%lld", (long long)t);
+
+  int r = s->cio->print("%s: %s\n", name, buf);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }

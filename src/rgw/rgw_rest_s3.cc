@@ -480,6 +480,9 @@ void RGWPutObj_ObjStore_S3::send_response()
     dump_etag(s, etag.c_str());
     dump_content_length(s, 0);
   }
+  if (s->system_request && mtime) {
+    dump_epoch_header(s, "Rgwx-Mtime", mtime);
+  }
   dump_errno(s);
   end_header(s);
 }

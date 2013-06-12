@@ -274,7 +274,7 @@ protected:
   struct req_state *s;
   bool is_complete;
 
-  virtual int do_complete(string& etag, map<string, bufferlist>& attrs) = 0;
+  virtual int do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs) = 0;
 
   list<rgw_obj> objs;
 
@@ -291,7 +291,7 @@ public:
   };
   virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle) = 0;
   virtual int throttle_data(void *handle) = 0;
-  virtual int complete(string& etag, map<string, bufferlist>& attrs);
+  virtual int complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs);
 };
 
 class RGWPutObj : public RGWOp {
@@ -307,6 +307,7 @@ protected:
   bool chunked_upload;
   RGWAccessControlPolicy policy;
   const char *obj_manifest;
+  time_t mtime;
 
 public:
   RGWPutObj() {
@@ -316,6 +317,7 @@ public:
     supplied_etag = NULL;
     chunked_upload = false;
     obj_manifest = NULL;
+    mtime = 0;
   }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
