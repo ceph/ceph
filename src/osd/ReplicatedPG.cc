@@ -1183,8 +1183,6 @@ void ReplicatedPG::log_subop_stats(OpRequestRef op, int tag_inb, int tag_lat)
   if (tag_inb)
     osd->logger->inc(tag_inb, inb);
   osd->logger->tinc(tag_lat, latency);
-
-  dout(15) << "log_subop_stats " << *op->request << " inb " << inb << " latency " << latency << dendl;
 }
 
 
@@ -5658,6 +5656,16 @@ void ReplicatedPG::handle_pull_response(OpRequestRef op)
   }
 }
 
+struct C_OnPushCommit : public Context {
+  ReplicatedPG *pg;
+  OpRequestRef op;
+  C_OnPushCommit(ReplicatedPG *pg, OpRequestRef op) : pg(pg), op(op) {}
+  void finish(int) {
+    op->mark_event("committed");
+    pg->log_subop_stats(op, l_osd_push_inb, l_osd_sop_push_lat);
+  }
+};
+
 void ReplicatedPG::handle_push(OpRequestRef op)
 {
   MOSDSubOp *m = static_cast<MOSDSubOp *>(op->request);
@@ -5693,12 +5701,13 @@ void ReplicatedPG::handle_push(OpRequestRef op)
 		   m->omap_entries,
 		   t);
 
+  t->register_on_commit(new C_OnPushCommit(this, op));
   int r = osd->store->
     queue_transaction(
       osr.get(), t,
       onreadable,
       new C_OSD_CommittedPushedObject(
-	this, op,
+	this,
 	get_osdmap()->get_epoch(),
 	info.last_complete),
       onreadable_sync,
@@ -5981,7 +5990,7 @@ void ReplicatedPG::sub_op_pull(OpRequestRef op)
 
 
 void ReplicatedPG::_committed_pushed_object(
-  OpRequestRef op, epoch_t epoch, eversion_t last_complete)
+  epoch_t epoch, eversion_t last_complete)
 {
   lock();
   if (!pg_has_reset_since(epoch)) {
@@ -6004,11 +6013,6 @@ void ReplicatedPG::_committed_pushed_object(
 
   } else {
     dout(10) << "_committed_pushed_object pg has changed, not touching last_complete_ondisk" << dendl;
-  }
-
-  if (op) {
-    log_subop_stats(op, l_osd_sop_push_inb, l_osd_sop_push_lat);
-    op->mark_event("committed");
   }
 
   unlock();
