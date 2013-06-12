@@ -114,6 +114,7 @@ void PGLog::clear() {
   divergent_priors.clear();
   missing.clear();
   log.zero();
+  log_keys_debug.clear();
   undirty();
 }
 
@@ -540,7 +541,8 @@ void PGLog::write_log(
 	       dirty_to,
 	       dirty_from,
 	       dirty_divergent_priors,
-	       !touched_log);
+	       !touched_log,
+               &log_keys_debug);
     undirty();
   } else {
     dout(10) << "log is not dirty" << dendl;
@@ -551,7 +553,7 @@ void PGLog::write_log(ObjectStore::Transaction& t, pg_log_t &log,
     const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors)
 {
   _write_log(t, log, log_oid, divergent_priors, eversion_t::max(), eversion_t(),
-	     true, true);
+	     true, true, 0);
 }
 
 void PGLog::_write_log(
@@ -560,7 +562,8 @@ void PGLog::_write_log(
   eversion_t dirty_to,
   eversion_t dirty_from,
   bool dirty_divergent_priors,
-  bool touch_log
+  bool touch_log,
+  set<string> *log_keys_debug
   )
 {
 //dout(10) << "write_log, clearing up to " << dirty_to << dendl;
@@ -569,11 +572,13 @@ void PGLog::_write_log(
   t.omap_rmkeyrange(
     coll_t(), log_oid,
     eversion_t().get_key_name(), dirty_to.get_key_name());
+  clear_up_to(log_keys_debug, dirty_to.get_key_name());
   if (dirty_to != eversion_t::max()) {
     //   dout(10) << "write_log, clearing from " << dirty_from << dendl;
     t.omap_rmkeyrange(
       coll_t(), log_oid,
       dirty_from.get_key_name(), eversion_t::max().get_key_name());
+    clear_after(log_keys_debug, dirty_from.get_key_name());
   }
 
   map<string,bufferlist> keys;
@@ -584,6 +589,11 @@ void PGLog::_write_log(
       bufferlist bl(sizeof(*p) * 2);
       p->encode_with_checksum(bl);
       keys[p->get_key_name()].claim(bl);
+
+      if (log_keys_debug) {
+	assert(!log_keys_debug->count(p->get_key_name()));
+	log_keys_debug->insert(p->get_key_name());
+      }
     }
   }
 //dout(10) << "write_log " << keys.size() << " keys" << dendl;
@@ -599,7 +609,9 @@ void PGLog::_write_log(
 bool PGLog::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
   const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
   IndexedLog &log,
-  pg_missing_t &missing, ostringstream &oss)
+  pg_missing_t &missing,
+  ostringstream &oss,
+  set<string> *log_keys_debug)
 {
   dout(10) << "read_log" << dendl;
   bool rewrite_log = false;
@@ -631,6 +643,8 @@ bool PGLog::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
 	}
 	log.log.push_back(e);
 	log.head = e.version;
+	if (log_keys_debug)
+	  log_keys_debug->insert(e.get_key_name());
       }
     }
   }

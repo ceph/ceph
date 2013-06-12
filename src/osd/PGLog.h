@@ -160,12 +160,6 @@ protected:
   eversion_t dirty_from;
   bool dirty_divergent_priors;
 
-  void undirty() {
-    dirty_to = eversion_t();
-    dirty_from = eversion_t::max();
-    dirty_divergent_priors = false;
-    touched_log = true;
-  }
   bool dirty() const {
     return !touched_log ||
       (dirty_to != eversion_t()) ||
@@ -185,7 +179,38 @@ protected:
     dirty_divergent_priors = true;
   }
 
+  /// DEBUG
+  set<string> log_keys_debug;
+  static void clear_after(set<string> *log_keys_debug, const string &lb) {
+    if (!log_keys_debug)
+      return;
+    for (set<string>::iterator i = log_keys_debug->lower_bound(lb);
+	 i != log_keys_debug->end();
+	 log_keys_debug->erase(i++));
+  }
+  static void clear_up_to(set<string> *log_keys_debug, const string &ub) {
+    if (!log_keys_debug)
+      return;
+    for (set<string>::iterator i = log_keys_debug->begin();
+	 i != log_keys_debug->end() && *i < ub;
+	 log_keys_debug->erase(i++));
+  }
+  void check() {
+    assert(log.log.size() == log_keys_debug.size());
+    for (list<pg_log_entry_t>::iterator i = log.log.begin();
+	 i != log.log.end();
+	 ++i) {
+      assert(log_keys_debug.count(i->get_key_name()));
+    }
+  }
 
+  void undirty() {
+    dirty_to = eversion_t();
+    dirty_from = eversion_t::max();
+    dirty_divergent_priors = false;
+    touched_log = true;
+    check();
+  }
 public:
   PGLog() :
     touched_log(false), dirty_from(eversion_t::max()),
@@ -334,20 +359,23 @@ public:
     eversion_t dirty_to,
     eversion_t dirty_from,
     bool dirty_divergent_priors,
-    bool touch_log
+    bool touch_log,
+    set<string> *log_keys_debug
     );
 
   bool read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
 		const pg_info_t &info, ostringstream &oss) {
     return read_log(store, coll, log_oid, info, divergent_priors,
-      log, missing, oss);
+		    log, missing, oss, &log_keys_debug);
   }
 
   /// return true if the log should be rewritten
   static bool read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
     const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
     IndexedLog &log,
-    pg_missing_t &missing, ostringstream &oss);
+    pg_missing_t &missing, ostringstream &oss,
+    set<string> *log_keys_debug = 0
+    );
 
 protected:
   static void read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
