@@ -583,6 +583,44 @@ int librados::RadosClient::mon_command(const vector<string>& cmd,
   return rval;
 }
 
+int librados::RadosClient::mon_command(int rank, const vector<string>& cmd,
+					      bufferlist &inbl,
+					      bufferlist *outbl, string *outs)
+{
+  Mutex mylock("RadosClient::mon_command::mylock");
+  Cond cond;
+  bool done;
+  int rval;
+  lock.Lock();
+  monclient.start_mon_command(rank, cmd, inbl, outbl, outs,
+			       new C_SafeCond(&mylock, &cond, &done, &rval));
+  lock.Unlock();
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+  return rval;
+}
+
+int librados::RadosClient::mon_command(string name, const vector<string>& cmd,
+					      bufferlist &inbl,
+					      bufferlist *outbl, string *outs)
+{
+  Mutex mylock("RadosClient::mon_command::mylock");
+  Cond cond;
+  bool done;
+  int rval;
+  lock.Lock();
+  monclient.start_mon_command(name, cmd, inbl, outbl, outs,
+			       new C_SafeCond(&mylock, &cond, &done, &rval));
+  lock.Unlock();
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+  return rval;
+}
+
 int librados::RadosClient::osd_command(int osd, vector<string>& cmd,
 					bufferlist& inbl,
 					bufferlist *poutbl, string *prs)
