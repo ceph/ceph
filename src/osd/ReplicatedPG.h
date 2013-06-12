@@ -560,8 +560,15 @@ protected:
   void handle_push(OpRequestRef op);
   int send_push(int priority, int peer,
 		const ObjectRecoveryInfo& recovery_info,
-		ObjectRecoveryProgress progress,
+		const ObjectRecoveryProgress &progress,
 		ObjectRecoveryProgress *out_progress = 0);
+  int build_push_op(const ObjectRecoveryInfo &recovery_info,
+		    const ObjectRecoveryProgress &progress,
+		    ObjectRecoveryProgress *out_progress,
+		    PushOp *out_op);
+  int send_push_op(int priority, int peer,
+		   PushOp &pop);
+    
   int send_pull(int priority, int peer,
 		const ObjectRecoveryInfo& recovery_info,
 		ObjectRecoveryProgress progress);
