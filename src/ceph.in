@@ -365,10 +365,11 @@ class CephName(CephArgtype):
             if not t in ('osd', 'mon', 'client', 'mds'):
                 raise ArgumentValid('unknown type ' + self.t)
             if t == 'osd':
-                try:
-                    i = int(i)
-                except:
-                    raise ArgumentFormat('osd id ' + i + ' not integer')
+                if i != '*':
+                    try:
+                        i = int(i)
+                    except:
+                        raise ArgumentFormat('osd id ' + i + ' not integer')
             self.nametype = t
         self.val = s
         self.nameid = i
