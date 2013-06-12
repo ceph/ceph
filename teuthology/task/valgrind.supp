@@ -15,12 +15,12 @@
 	...
 }
 {
-	leveldb leaks a thread
+	leveldb leaks its thread(s)
 	Memcheck:Leak
 	...
 	fun:pthread_create*
 	...
-	fun:*leveldb*PosixEnv*Schedule*
+	fun:*leveldb*
 	...
 }
 {
