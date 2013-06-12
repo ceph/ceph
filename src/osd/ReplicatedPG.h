@@ -556,7 +556,9 @@ protected:
 			       bufferlist data_received,
 			       interval_set<uint64_t> *intervals_usable,
 			       bufferlist *data_usable);
-  void handle_pull_response(OpRequestRef op);
+  bool handle_pull_response(
+    int from, PushOp &op, PullOp *response,
+    ObjectStore::Transaction *t);
   void handle_push(OpRequestRef op);
   int send_push(int priority, int peer,
 		const ObjectRecoveryInfo& recovery_info,
@@ -809,12 +811,11 @@ protected:
   };
   struct C_OSD_AppliedRecoveredObject : public Context {
     ReplicatedPGRef pg;
-    ObjectStore::Transaction *t;
     ObjectContext *obc;
-    C_OSD_AppliedRecoveredObject(ReplicatedPG *p, ObjectStore::Transaction *tt, ObjectContext *o) :
-      pg(p), t(tt), obc(o) {}
+    C_OSD_AppliedRecoveredObject(ReplicatedPG *p, ObjectContext *o) :
+      pg(p), obc(o) {}
     void finish(int r) {
-      pg->_applied_recovered_object(t, obc);
+      pg->_applied_recovered_object(obc);
     }
   };
   struct C_OSD_CommittedPushedObject : public Context {
@@ -875,12 +876,12 @@ protected:
   void sub_op_modify_commit(RepModify *rm);
 
   void sub_op_modify_reply(OpRequestRef op);
-  void _applied_recovered_object(ObjectStore::Transaction *t, ObjectContext *obc);
+  void _applied_recovered_object(ObjectContext *obc);
   void _applied_recovered_object_replica(ObjectStore::Transaction *t);
   void _committed_pushed_object(epoch_t epoch, eversion_t lc);
   void recover_got(hobject_t oid, eversion_t v);
   void sub_op_push(OpRequestRef op);
-  void _failed_push(OpRequestRef op);
+  void _failed_push(int from, const hobject_t &soid);
   void sub_op_push_reply(OpRequestRef op);
   void sub_op_pull(OpRequestRef op);
 
