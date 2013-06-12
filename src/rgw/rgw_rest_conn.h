@@ -25,8 +25,8 @@ public:
 
   /* async request */
   int put_obj_init(const string& uid, rgw_obj& obj, uint64_t obj_size,
-                   map<string, bufferlist>& attrs, RGWRESTStreamRequest **req);
-  int complete_request(RGWRESTStreamRequest *req);
+                   map<string, bufferlist>& attrs, RGWRESTStreamWriteRequest **req);
+  int complete_request(RGWRESTStreamWriteRequest *req, string& etag, time_t *mtime);
 };
 
 #endif
