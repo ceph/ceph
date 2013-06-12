@@ -1069,11 +1069,12 @@ void CInode::_stored_backtrace(version_t v, Context *fin)
 {
   dout(10) << "_stored_backtrace" << dendl;
 
+  auth_unpin(this);
   if (v == inode.backtrace_version)
     clear_dirty_parent();
-  auth_unpin(this);
   if (fin)
     fin->complete(0);
+  mdcache->maybe_eval_stray(this);
 }
 
 void CInode::_mark_dirty_parent(LogSegment *ls, bool dirty_pool)
