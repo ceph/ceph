@@ -2,6 +2,59 @@
  Release Notes
 ===============
 
+v0.64
+-----
+
+Notable changes
+~~~~~~~~~~~~~~~
+
+ * osd: monitor both front and back interfaces
+ * osd: verify both front and back network are working before rejoining cluster
+ * osd: fix memory/network inefficiency during deep scrub
+ * osd: fix incorrect mark-down of osds
+ * mon: fix start fork behavior
+ * mon: fix election timeout
+ * mon: better trim/compaction behavior
+ * mon: fix units in 'ceph df' output
+ * mon, osd: misc memory leaks
+ * librbd: make default options/features for newly created images (e.g., via qemu-img) configurable
+ * mds: many fixes for mds clustering
+ * mds: fix rare hang after client restart
+ * ceph-fuse: add ioctl support
+ * ceph-fuse/libcephfs: fix for cap release/hang
+ * rgw: handle deep uri resources
+ * rgw: fix CORS bugs
+ * ceph-disk: add '[un]suppress-active DEV' command
+ * debian: rgw: stop daemon on uninstall
+ * debian: fix upstart behavior with upgrades
+
+
+v0.63
+-----
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+ * librbd: parallelize delete, rollback, flatten, copy, resize
+ * librbd: ability to read from local replicas
+ * osd: resurrect partially deleted PGs
+ * osd: prioritize recovery for degraded PGs
+ * osd: fix internal heartbeart timeouts when scrubbing very large objects
+ * osd: close narrow journal race
+ * rgw: fix usage log scanning for large, untrimmed logs
+ * rgw: fix locking issue, user operation mask,
+ * initscript: fix osd crush weight calculation when using -a
+ * initscript: fix enumeration of local daemons
+ * mon: several fixes to paxos, sync
+ * mon: new --extract-monmap to aid disaster recovery
+ * mon: fix leveldb compression, trimming
+ * add 'config get' admin socket command
+ * rados: clonedata command for cli
+ * debian: stop daemons on uninstall; fix dependencies
+ * debian wheezy: fix udev rules
+ * many many small fixes from coverity scan
+
+
 v0.62
 -----
 
