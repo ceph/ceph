@@ -1417,6 +1417,7 @@ def main():
         # an awfully simple callback
         def watch_cb(arg, line, who, stamp_sec, stamp_nsec, seq, level, msg):
             print line
+	    sys.stdout.flush()
 
         # first do a ceph status
         ret, outbuf, outs = json_command(prefix='status')
