@@ -69,10 +69,19 @@ ceph health detail --format xml-pretty
 ceph injectargs -- --debug_ms=1
 ceph injectargs -- --debug-ms=1
 expect_false ceph injectargs -- debug_ms=1
+
+ceph -w > /tmp/$$ &
+wpid="$!"
 mymsg="this is a test log message $$.$(date)"
 ceph log "$mymsg"
-logfile=$(ceph-conf --name=mon.a --lookup log_file)
-grep "$mymsg" $logfile
+sleep 3
+if ! grep "$mymsg" /tmp/$$; then
+    # in case it is very slow (mon thrashing or something)
+    sleep 30
+    grep "$mymsg" /tmp/$$
+fi
+kill $wpid
+
 ceph mds cluster_down 2>&1 | grep "marked mdsmap DOWN"
 expect_false ceph mds cluster_down
 ceph mds cluster_up 2>&1 | grep "unmarked mdsmap DOWN"
