@@ -1110,8 +1110,10 @@ def send_command(target=('mon', ''), cmd=[], inbuf='', timeout=0):
             if verbose:
                 print >> sys.stderr, '{0} to {1}'.\
                     format(cmd, target[0])
-            ret, outbuf, outs = cluster_handle.mon_command(cmd, inbuf,
-                                                           timeout)
+            if target[1] == '':
+                ret, outbuf, outs = cluster_handle.mon_command(cmd, inbuf, timeout)
+            else:
+                ret, outbuf, outs = cluster_handle.mon_command(cmd, inbuf, timeout, target[1])
 
     except Exception as e:
         raise RuntimeError('"{0}": exception {1}'.format(cmd, e))
@@ -1267,7 +1269,7 @@ def find_cmd_target(childargs):
     if len(valid_dict) == 2:
         name = CephName()
         name.valid(valid_dict['target'])
-        return 'osd', name.nameid
+        return name.nametype, name.nameid
 
     sig = parse_funcsig(['pg', {'name':'pgid','type':'CephPgid'}])
     valid_dict = validate(childargs, sig, partial=True);
@@ -1511,7 +1513,7 @@ def main():
 
     targets = [target]
 
-    if target[0] == 'osd' and target[1] == '*':
+    if target[1] == '*':
         targets = [(target[0], o) for o in osdids()]
 
     final_ret = 0
