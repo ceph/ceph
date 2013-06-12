@@ -781,7 +781,7 @@ def osdids():
     ret, outbuf, outs = json_command(prefix='osd ls')
     if ret:
         raise RuntimeError('Can\'t contact mon for osd list')
-    return [i for i in outbuf.split('\n')]
+    return [i for i in outbuf.split('\n') if i != '']
 
 def monids():
     ret, outbuf, outs = json_command(prefix='mon dump',
