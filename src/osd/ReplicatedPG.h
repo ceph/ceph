@@ -559,7 +559,9 @@ protected:
   bool handle_pull_response(
     int from, PushOp &op, PullOp *response,
     ObjectStore::Transaction *t);
-  void handle_push(OpRequestRef op);
+  void handle_push(
+    int from, PushOp &op, PushReplyOp *response,
+    ObjectStore::Transaction *t);
   int send_push(int priority, int peer,
 		const ObjectRecoveryInfo& recovery_info,
 		const ObjectRecoveryProgress &progress,
@@ -830,11 +832,11 @@ protected:
       pg->_committed_pushed_object(epoch, last_complete);
     }
   };
-  struct C_OSD_CompletedPushedObjectReplica : public Context {
+  struct C_OSD_SendMessageOnConn: public Context {
     OSDService *osd;
     Message *reply;
     ConnectionRef conn;
-    C_OSD_CompletedPushedObjectReplica (
+    C_OSD_SendMessageOnConn(
       OSDService *osd,
       Message *reply,
       ConnectionRef conn) : osd(osd), reply(reply), conn(conn) {}
@@ -861,11 +863,10 @@ protected:
   friend class C_OSD_CompletedPull;
   struct C_OSD_AppliedRecoveredObjectReplica : public Context {
     ReplicatedPGRef pg;
-    ObjectStore::Transaction *t;
-    C_OSD_AppliedRecoveredObjectReplica(ReplicatedPG *p, ObjectStore::Transaction *tt) :
-      pg(p), t(tt) {}
+    C_OSD_AppliedRecoveredObjectReplica(ReplicatedPG *p) :
+      pg(p) {}
     void finish(int r) {
-      pg->_applied_recovered_object_replica(t);
+      pg->_applied_recovered_object_replica();
     }
   };
 
@@ -877,7 +878,7 @@ protected:
 
   void sub_op_modify_reply(OpRequestRef op);
   void _applied_recovered_object(ObjectContext *obc);
-  void _applied_recovered_object_replica(ObjectStore::Transaction *t);
+  void _applied_recovered_object_replica();
   void _committed_pushed_object(epoch_t epoch, eversion_t lc);
   void recover_got(hobject_t oid, eversion_t v);
   void sub_op_push(OpRequestRef op);
