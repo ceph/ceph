@@ -1886,6 +1886,17 @@ bool RGWRados::aio_completed(void *handle)
   AioCompletion *c = (AioCompletion *)handle;
   return c->is_complete();
 }
+
+class RGWRadosPutObj : public RGWGetDataCB
+{
+  rgw_obj obj;
+public:
+  RGWRadosPutObj(rgw_obj& _o) : obj(_o) {}
+  int handle_data(bufferlist& bl, off_t ofs, off_t len) {
+    return 0;
+  }
+};
+
 /**
  * Copy an object.
  * dest_obj: the object to copy into
@@ -1952,15 +1963,11 @@ int RGWRados::copy_obj(void *ctx,
     map<string, bufferlist> src_attrs;
 
     RGWRESTStreamReadRequest *in_stream_req;
+    RGWRadosPutObj cb(dest_obj);
   
-    int ret = rest_conn->get_obj_init(user_id, src_obj, &in_stream_req);
+    int ret = rest_conn->get_obj(user_id, src_obj, &cb, &in_stream_req);
     if (ret < 0)
       return ret;
-#if 0
-    ret = get_obj_iterate(ctx, &handle, src_obj, 0, astate->size - 1, out_stream_req->get_out_cb());
-    if (ret < 0)
-      return ret;
-#endif
 
     string etag;
 
