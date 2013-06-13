@@ -1035,40 +1035,40 @@ RGWPutObjProcessor::~RGWPutObjProcessor()
   if (is_complete)
     return;
 
-  if (!s)
-    return;
-
   list<rgw_obj>::iterator iter;
   for (iter = objs.begin(); iter != objs.end(); ++iter) {
     rgw_obj& obj = *iter;
-    int r = store->delete_obj(s->obj_ctx, obj);
+    int r = store->delete_obj(obj_ctx, obj);
     if (r < 0 && r != -ENOENT) {
-      ldout(s->cct, 0) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
+      ldout(store->ctx(), 0) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
     }
   }
 }
 
 class RGWPutObjProcessor_Plain : public RGWPutObjProcessor
 {
+  rgw_bucket bucket;
+  string obj_str;
+
   bufferlist data;
   rgw_obj obj;
   off_t ofs;
 
 protected:
-  int prepare(RGWRados *store, struct req_state *s);
+  int prepare(RGWRados *store, void *obj_ctx);
   int handle_data(bufferlist& bl, off_t ofs, void **phandle);
   int throttle_data(void *handle) { return 0; }
   int do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs);
 
 public:
-  RGWPutObjProcessor_Plain() : ofs(0) {}
+  RGWPutObjProcessor_Plain(rgw_bucket& b, const string& o) : bucket(b), obj_str(o), ofs(0) {}
 };
 
-int RGWPutObjProcessor_Plain::prepare(RGWRados *store,struct req_state *s)
+int RGWPutObjProcessor_Plain::prepare(RGWRados *store, void *obj_ctx)
 {
-  RGWPutObjProcessor::prepare(store, s);
+  RGWPutObjProcessor::prepare(store, obj_ctx);
 
-  obj.init(s->bucket, s->object_str);
+  obj.init(bucket, obj_str);
 
   return 0;
 };
@@ -1086,7 +1086,7 @@ int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, void **pha
 
 int RGWPutObjProcessor_Plain::do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs)
 {
-  int r = store->put_obj_meta(s->obj_ctx, obj, data.length(), mtime, attrs,
+  int r = store->put_obj_meta(obj_ctx, obj, data.length(), mtime, attrs,
                               RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
                               &data);
   return r;
@@ -1200,6 +1200,11 @@ class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
   off_t next_part_ofs;
   int cur_part_id;
 protected:
+  rgw_bucket bucket;
+  string obj_str;
+
+  string unique_tag;
+
   string oid_prefix;
   rgw_obj head_obj;
   rgw_obj cur_obj;
@@ -1207,7 +1212,7 @@ protected:
 
   virtual bool immutable_head() { return false; }
 
-  int prepare(RGWRados *store, struct req_state *s);
+  int prepare(RGWRados *store, void *obj_ctx);
   virtual int do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs);
 
   void prepare_next_part(off_t ofs);
@@ -1215,10 +1220,13 @@ protected:
 
 public:
   ~RGWPutObjProcessor_Atomic() {}
-  RGWPutObjProcessor_Atomic(uint64_t _p) : part_size(_p),
+  RGWPutObjProcessor_Atomic(rgw_bucket& _b, const string& _o, uint64_t _p, const string& _t) : part_size(_p),
                                 cur_part_ofs(0),
                                 next_part_ofs(_p),
-                                cur_part_id(0) {}
+                                cur_part_id(0),
+                                bucket(_b),
+                                obj_str(_o),
+                                unique_tag(_t) {}
   int handle_data(bufferlist& bl, off_t ofs, void **phandle) {
     if (!ofs && !immutable_head()) {
       first_chunk.claim(bl);
@@ -1235,14 +1243,14 @@ public:
   }
 };
 
-int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, struct req_state *s)
+int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, void *obj_ctx)
 {
-  RGWPutObjProcessor::prepare(store, s);
+  RGWPutObjProcessor::prepare(store, obj_ctx);
 
-  head_obj.init(s->bucket, s->object_str);
+  head_obj.init(bucket, obj_str);
 
   char buf[33];
-  gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
+  gen_rand_alphanumeric(store->ctx(), buf, sizeof(buf) - 1);
   oid_prefix.append("_");
   oid_prefix.append(buf);
   oid_prefix.append("_");
@@ -1278,7 +1286,7 @@ void RGWPutObjProcessor_Atomic::prepare_next_part(off_t ofs) {
   snprintf(buf, sizeof(buf), "%d", cur_part_id);
   string cur_oid = oid_prefix;
   cur_oid.append(buf);
-  cur_obj.init_ns(s->bucket, cur_oid, shadow_ns);
+  cur_obj.init_ns(bucket, cur_oid, shadow_ns);
 
   add_obj(cur_obj);
 };
@@ -1293,16 +1301,16 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, map<stri
 {
   complete_parts();
 
-  store->set_atomic(s->obj_ctx, head_obj);
+  store->set_atomic(obj_ctx, head_obj);
 
   RGWRados::PutObjMetaExtraParams extra_params;
 
   extra_params.data = &first_chunk;
   extra_params.manifest = &manifest;
-  extra_params.ptag = &s->req_id; /* use req_id as operation tag */
+  extra_params.ptag = &unique_tag; /* use req_id as operation tag */
   extra_params.mtime = mtime;
 
-  int r = store->put_obj_meta(s->obj_ctx, head_obj, obj_len, attrs,
+  int r = store->put_obj_meta(obj_ctx, head_obj, obj_len, attrs,
                               RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
 			      extra_params);
   return r;
@@ -1312,21 +1320,22 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
 {
   string part_num;
   RGWMPObj mp;
+  req_state *s;
 
 protected:
   bool immutable_head() { return true; }
-  int prepare(RGWRados *store, struct req_state *s);
+  int prepare(RGWRados *store, void *obj_ctx);
   int do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs);
 
 public:
-  RGWPutObjProcessor_Multipart(uint64_t _p) : RGWPutObjProcessor_Atomic(_p) {}
+  RGWPutObjProcessor_Multipart(uint64_t _p, req_state *_s) : RGWPutObjProcessor_Atomic(s->bucket, s->object_str, _p, s->req_id), s(_s) {}
 };
 
-int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, struct req_state *s)
+int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx)
 {
-  RGWPutObjProcessor::prepare(store, s);
+  RGWPutObjProcessor::prepare(store, obj_ctx);
 
-  string oid = s->object_str;
+  string oid = obj_str;
   string upload_id;
   upload_id = s->info.args.get("uploadId");
   mp.init(oid, upload_id);
@@ -1338,7 +1347,7 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, struct req_state *s)
 
   oid = mp.get_part(part_num);
 
-  head_obj.init_ns(s->bucket, oid, mp_ns);
+  head_obj.init_ns(bucket, oid, mp_ns);
   oid_prefix = oid;
   oid_prefix.append("_");
   cur_obj = head_obj;
@@ -1350,7 +1359,7 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, map<s
 {
   complete_parts();
 
-  int r = store->put_obj_meta(s->obj_ctx, head_obj, s->obj_size, mtime, attrs, RGW_OBJ_CATEGORY_MAIN, 0);
+  int r = store->put_obj_meta(obj_ctx, head_obj, s->obj_size, mtime, attrs, RGW_OBJ_CATEGORY_MAIN, 0);
   if (r < 0)
     return r;
 
@@ -1361,14 +1370,14 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, map<s
   info.num = atoi(part_num.c_str());
   info.etag = etag;
   info.size = s->obj_size;
-  info.modified = ceph_clock_now(s->cct);
+  info.modified = ceph_clock_now(store->ctx());
   info.manifest = manifest;
   ::encode(info, bl);
 
   string multipart_meta_obj = mp.get_meta();
 
   rgw_obj meta_obj;
-  meta_obj.init_ns(s->bucket, multipart_meta_obj, mp_ns);
+  meta_obj.init_ns(bucket, multipart_meta_obj, mp_ns);
 
   r = store->omap_set(meta_obj, p, bl);
 
@@ -1385,9 +1394,9 @@ RGWPutObjProcessor *RGWPutObj::select_processor()
   uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
 
   if (!multipart) {
-    processor = new RGWPutObjProcessor_Atomic(part_size);
+    processor = new RGWPutObjProcessor_Atomic(s->bucket, s->object_str, part_size, s->req_id);
   } else {
-    processor = new RGWPutObjProcessor_Multipart(part_size);
+    processor = new RGWPutObjProcessor_Multipart(part_size, s);
   }
 
   return processor;
@@ -1532,9 +1541,9 @@ RGWPutObjProcessor *RGWPostObj::select_processor()
   uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
 
   if (s->content_length <= RGW_MAX_CHUNK_SIZE)
-    processor = new RGWPutObjProcessor_Plain();
+    processor = new RGWPutObjProcessor_Plain(s->bucket, s->object_str);
   else
-    processor = new RGWPutObjProcessor_Atomic(part_size);
+    processor = new RGWPutObjProcessor_Atomic(s->bucket, s->object_str, part_size, s->req_id);
 
   return processor;
 }

@@ -271,7 +271,7 @@ class RGWPutObjProcessor
 {
 protected:
   RGWRados *store;
-  struct req_state *s;
+  void *obj_ctx;
   bool is_complete;
 
   virtual int do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs) = 0;
@@ -282,11 +282,11 @@ protected:
     objs.push_back(obj);
   }
 public:
-  RGWPutObjProcessor() : store(NULL), s(NULL), is_complete(false) {}
+  RGWPutObjProcessor() : store(NULL), obj_ctx(NULL), is_complete(false) {}
   virtual ~RGWPutObjProcessor();
-  virtual int prepare(RGWRados *_store, struct req_state *_s) {
+  virtual int prepare(RGWRados *_store, void *_o) {
     store = _store;
-    s = _s;
+    obj_ctx = _o;
     return 0;
   };
   virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle) = 0;
