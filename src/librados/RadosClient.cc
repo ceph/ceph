@@ -201,11 +201,6 @@ int librados::RadosClient::connect()
   objecter->init_locked();
   monclient.renew_subs();
 
-  while (osdmap.get_epoch() == 0) {
-    ldout(cct, 1) << "waiting for osdmap" << dendl;
-    cond.Wait(lock);
-  }
-
   finisher.start();
 
   state = CONNECTED;
@@ -574,6 +569,44 @@ int librados::RadosClient::mon_command(const vector<string>& cmd,
   int rval;
   lock.Lock();
   monclient.start_mon_command(cmd, inbl, outbl, outs,
+			       new C_SafeCond(&mylock, &cond, &done, &rval));
+  lock.Unlock();
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+  return rval;
+}
+
+int librados::RadosClient::mon_command(int rank, const vector<string>& cmd,
+					      bufferlist &inbl,
+					      bufferlist *outbl, string *outs)
+{
+  Mutex mylock("RadosClient::mon_command::mylock");
+  Cond cond;
+  bool done;
+  int rval;
+  lock.Lock();
+  monclient.start_mon_command(rank, cmd, inbl, outbl, outs,
+			       new C_SafeCond(&mylock, &cond, &done, &rval));
+  lock.Unlock();
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+  return rval;
+}
+
+int librados::RadosClient::mon_command(string name, const vector<string>& cmd,
+					      bufferlist &inbl,
+					      bufferlist *outbl, string *outs)
+{
+  Mutex mylock("RadosClient::mon_command::mylock");
+  Cond cond;
+  bool done;
+  int rval;
+  lock.Lock();
+  monclient.start_mon_command(name, cmd, inbl, outbl, outs,
 			       new C_SafeCond(&mylock, &cond, &done, &rval));
   lock.Unlock();
   mylock.Lock();

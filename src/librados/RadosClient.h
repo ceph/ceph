@@ -108,6 +108,12 @@ public:
   void watch_notify(MWatchNotify *m);
   int mon_command(const vector<string>& cmd, bufferlist &inbl,
 	          bufferlist *outbl, string *outs);
+  int mon_command(int rank,
+		  const vector<string>& cmd, bufferlist &inbl,
+	          bufferlist *outbl, string *outs);
+  int mon_command(string name,
+		  const vector<string>& cmd, bufferlist &inbl,
+	          bufferlist *outbl, string *outs);
   int osd_command(int osd, vector<string>& cmd, bufferlist& inbl,
                   bufferlist *poutbl, string *prs);
   int pg_command(pg_t pgid, vector<string>& cmd, bufferlist& inbl,
