@@ -143,6 +143,8 @@ int MonClient::get_monmap_privately()
   }
 
   if (temp_msgr) {
+    messenger->mark_down(cur_con);
+    cur_con.reset(NULL);
     monc_lock.Unlock();
     messenger->shutdown();
     if (smessenger)
