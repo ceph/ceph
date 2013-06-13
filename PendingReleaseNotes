@@ -1,0 +1,12 @@
+
+* Huge revamp of the 'ceph' command-line interface implementation.
+
+* The 'ceph osd tell ...' and 'ceph mon tell ...' commands are no
+  longer supported.  Any callers should use::
+
+    ceph tell osd.<id or *> ...
+    ceph tell mon.<id or name or *> ...
+
+  The 'ceph mds tell ...' command is still there, but will soon also
+  transition to 'ceph tell mds.<id or name or *> ...'
+
