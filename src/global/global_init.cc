@@ -119,6 +119,15 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
   if (g_conf->log_flush_on_exit)
     g_ceph_context->_log->set_flush_on_exit();
 
+  if (g_conf->run_dir.length() &&
+      code_env == CODE_ENVIRONMENT_DAEMON) {
+    int r = ::mkdir(g_conf->run_dir.c_str(), 0755);
+    if (r < 0 && errno != EEXIST) {
+      r = -errno;
+      derr << "warning: unable to create " << g_conf->run_dir << ": " << cpp_strerror(r) << dendl;
+    }
+  }
+
   if (g_lockdep) {
     dout(1) << "lockdep is enabled" << dendl;
     lockdep_register_ceph_context(cct);
