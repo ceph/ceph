@@ -270,7 +270,6 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
   else if (prefix == "mon remove")
     return false;
 
- out:
   if (r != -1) {
     string rs;
     getline(ss, rs);
