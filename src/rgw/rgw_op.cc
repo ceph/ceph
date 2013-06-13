@@ -1152,7 +1152,7 @@ void RGWPutObj::execute()
 
   processor = select_processor();
 
-  ret = processor->prepare(store, s);
+  ret = processor->prepare(store, s->obj_ctx);
   if (ret < 0)
     goto done;
 
