@@ -3079,7 +3079,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	// osd already exists
 	err = 0;
 	ss << i;
-	getline(ss, rs);
+	rdata.append(ss);
 	goto reply;
       }
       i = pending_inc.identify_osd(uuid);
