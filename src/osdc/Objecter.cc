@@ -1013,6 +1013,17 @@ void Objecter::kick_requests(OSDSession *session)
     send_linger(lresend.begin()->second);
     lresend.erase(lresend.begin());
   }
+
+  // resend commands
+  map<uint64_t,CommandOp*> cresend;  // resend in order
+  for (xlist<CommandOp*>::iterator k = session->command_ops.begin(); !k.end(); ++k) {
+    logger->inc(l_osdc_command_resend);
+    cresend[(*k)->tid] = *k;
+  }
+  while (!cresend.empty()) {
+    _send_command(cresend.begin()->second);
+    cresend.erase(cresend.begin());
+  }
 }
 
 void Objecter::schedule_tick()
