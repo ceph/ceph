@@ -44,6 +44,7 @@ ostream& Pipe::_pipe_prefix(std::ostream *_dout) {
 		<< " pgs=" << peer_global_seq
 		<< " cs=" << connect_seq
 		<< " l=" << policy.lossy
+		<< " c=" << connection_state
 		<< ").";
 }
 
@@ -72,7 +73,7 @@ Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
     connect_seq(0), peer_global_seq(0),
     out_seq(0), in_seq(0), in_seq_acked(0) {
   if (con) {
-    connection_state = con->get();
+    connection_state = con;
     connection_state->reset_pipe(this);
   } else {
     connection_state = new Connection(msgr);
@@ -93,8 +94,6 @@ Pipe::~Pipe()
 {
   assert(out_q.empty());
   assert(sent.empty());
-  if (connection_state)
-    connection_state->put();
   delete session_security;
   delete delay_thread;
 }
@@ -390,7 +389,7 @@ int Pipe::accept()
 
     // Check the authorizer.  If not good, bail out.
 
-    if (!msgr->verify_authorizer(connection_state, peer_type, connect.authorizer_protocol, authorizer, 
+    if (!msgr->verify_authorizer(connection_state.get(), peer_type, connect.authorizer_protocol, authorizer,
 				 authorizer_reply, authorizer_valid, session_key) ||
 	!authorizer_valid) {
       ldout(msgr->cct,0) << "accept: got bad authorizer" << dendl;
@@ -566,11 +565,13 @@ int Pipe::accept()
   replaced = true;
 
   if (!existing->policy.lossy) {
+    // queue a reset on the old connection
+    msgr->dispatch_queue.queue_reset(connection_state.get());
+
     // drop my Connection, and take a ref to the existing one. do not
     // clear existing->connection_state, since read_message and
     // write_message both dereference it without pipe_lock.
-    connection_state->put();
-    connection_state = existing->connection_state->get();
+    connection_state = existing->connection_state;
 
     // make existing Connection reference us
     existing->connection_state->reset_pipe(this);
@@ -622,7 +623,7 @@ int Pipe::accept()
 					      connection_state->get_features());
 
   // notify
-  msgr->dispatch_queue.queue_accept(connection_state);
+  msgr->dispatch_queue.queue_accept(connection_state.get());
 
   // ok!
   if (msgr->dispatch_queue.stop)
@@ -1041,7 +1042,7 @@ int Pipe::connect()
 	session_security = NULL;
       }
 
-      msgr->dispatch_queue.queue_connect(connection_state);
+      msgr->dispatch_queue.queue_connect(connection_state.get());
       
       if (!reader_running) {
 	ldout(msgr->cct,20) << "connect starting reader" << dendl;
@@ -1170,6 +1171,8 @@ void Pipe::fault(bool onread)
   if (state == STATE_CLOSED ||
       state == STATE_CLOSING) {
     ldout(msgr->cct,10) << "fault already closed|closing" << dendl;
+    if (connection_state->clear_pipe(this))
+      msgr->dispatch_queue.queue_reset(connection_state.get());
     return;
   }
 
@@ -1205,9 +1208,8 @@ void Pipe::fault(bool onread)
     // disconnect from Connection, and mark it failed.  future messages
     // will be dropped.
     assert(connection_state);
-    connection_state->clear_pipe(this);
-
-    msgr->dispatch_queue.queue_reset(connection_state);
+    if (connection_state->clear_pipe(this))
+      msgr->dispatch_queue.queue_reset(connection_state.get());
     return;
   }
 
@@ -1273,7 +1275,7 @@ void Pipe::was_session_reset()
     delay_thread->discard();
   discard_out_queue();
 
-  msgr->dispatch_queue.queue_remote_reset(connection_state);
+  msgr->dispatch_queue.queue_remote_reset(connection_state.get());
 
   if (randomize_out_seq()) {
     lsubdout(msgr->cct,ms,15) << "was_session_reset(): Could not get random bytes to set seq number for session reset; set seq number to " << out_seq << dendl;
@@ -1383,7 +1385,7 @@ void Pipe::reader()
 	continue;
       }
 
-      m->set_connection(connection_state->get());
+      m->set_connection(connection_state.get());
 
       // note last received message.
       in_seq = m->get_seq();
@@ -1516,7 +1518,7 @@ void Pipe::writer()
 	}
 
 	// associate message with Connection (for benefit of encode_payload)
-	m->set_connection(connection_state->get());
+	m->set_connection(connection_state.get());
 
         ldout(msgr->cct,20) << "writer encoding " << m->get_seq() << " " << m << " " << *m << dendl;
 

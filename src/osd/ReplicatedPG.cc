@@ -3498,6 +3498,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
   ConnectionRef conn(ctx->op->request->get_connection());
   boost::intrusive_ptr<OSD::Session> session(
     (OSD::Session *)conn->get_priv());
+  session->put();  // get_priv() takes a ref, and so does the intrusive_ptr
   entity_name_t entity = ctx->reqid.name;
 
   dout(15) << "do_osd_op_effects on session " << session.get() << dendl;
