@@ -967,6 +967,14 @@ public:
     return mon->store->get(get_service_name(), key, bl);
   }
   /**
+   * Get an integer value from a given key.
+   *
+   * @param[in] key The key
+   */
+  int get_value(const string& key) {
+    return mon->store->get(get_service_name(), key);
+  }
+  /**
    * Get the contents of our mkfs entry
    *
    * @param bl A bufferlist to populate with the contents of the entry
