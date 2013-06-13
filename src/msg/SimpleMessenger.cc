@@ -83,8 +83,8 @@ void SimpleMessenger::ready()
 int SimpleMessenger::shutdown()
 {
   ldout(cct,10) << "shutdown " << get_myaddr() << dendl;
-  dispatch_queue.shutdown();
   mark_down_all();
+  dispatch_queue.shutdown();
   return 0;
 }
 
@@ -562,7 +562,10 @@ void SimpleMessenger::mark_down_all()
     p->unregister_pipe();
     p->pipe_lock.Lock();
     p->stop();
+    ConnectionRef con = p->connection_state;
     p->pipe_lock.Unlock();
+    if (con && con->clear_pipe(p))
+      dispatch_queue.queue_reset(con.get());
   }
   lock.Unlock();
 }
