@@ -37,8 +37,6 @@ import copy
 import errno
 import json
 import rados
-# for raw_input to do readline cmd editing
-import readline
 import socket
 import stat
 import string
@@ -1220,6 +1218,8 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                 return -errno.EINVAL, '', 'invalid command'
         else:
             # do the command-interpreter looping
+            # for raw_input to do readline cmd editing
+            import readline
             while True:
                 interactive_input = raw_input('ceph> ')
                 if interactive_input in ['q', 'quit', 'Q']:
