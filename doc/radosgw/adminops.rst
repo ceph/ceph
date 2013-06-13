@@ -13,6 +13,8 @@ Get Usage
 
 Request bandwidth usage information.
 
+:caps: usage=read
+
 Syntax
 ~~~~~~
 
@@ -161,6 +163,8 @@ Trim Usage
 Remove usage information. With no dates specified, removes all usage
 information.
 
+:caps: usage=write
+
 Syntax
 ~~~~~~
 
@@ -213,6 +217,8 @@ Get User Info
 
 Get user information. If no user is specified returns the list of all users along with suspension
 information.
+
+:caps: users=read
 
 
 Syntax
@@ -308,6 +314,7 @@ generated key is added to the keyring without replacing an existing key pair.
 If ``access-key`` is specified and refers to an existing key owned by the user
 then it will be modified.
 
+:caps: users=write
 
 Syntax
 ~~~~~~
@@ -501,6 +508,8 @@ Modify User
 
 Modify a user.
 
+:caps: users=write
+
 Syntax
 ~~~~~~
 
@@ -686,6 +695,8 @@ Remove User
 
 Remove an existing user.
 
+:caps: users=write
+
 Syntax
 ~~~~~~
 
@@ -732,6 +743,8 @@ request. Note that in general for a subuser to be useful, it must be
 granted permissions by specifying ``access``. As with user creation if
 ``subuser`` is specified without ``secret``, then a secret key will
 be automatically generated.
+
+:caps: users=write
 
 Syntax
 ~~~~~~
@@ -840,6 +853,8 @@ Modify Subuser
 
 Modify an existing subuser
 
+:caps: users=write
+
 Syntax
 ~~~~~~
 
@@ -943,6 +958,8 @@ Remove Subuser
 
 Remove an existing subuser
 
+:caps: users=write
+
 Syntax
 ~~~~~~
 
@@ -999,6 +1016,8 @@ then it will be modified. The response is a container listing all keys of the sa
 type as the key created. Note that when creating a swift key, specifying the option
 ``access-key`` will have no effect. Additionally, only one swift key may be held by
 each user or subuser.
+
+:caps: users=write
 
 
 Syntax
@@ -1116,6 +1135,8 @@ Remove Key
 
 Remove an existing key.
 
+:caps: users=write
+
 Syntax
 ~~~~~~
 
@@ -1174,6 +1195,8 @@ Get information about a subset of the existing buckets. If ``uid`` is specified
 without ``bucket`` then all buckets beloning to the user will be returned. If
 ``bucket`` alone is specified, information for that particular bucket will be
 retrieved.
+
+:caps: buckets=read
 
 Syntax
 ~~~~~~
@@ -1286,6 +1309,8 @@ Check Bucket Index
 Check the index of an existing bucket. NOTE: to check multipart object
 accounting with ``check-objects``, ``fix`` must be set to True.
 
+:caps: buckets=write
+
 Syntax
 ~~~~~~
 
@@ -1340,6 +1365,8 @@ Remove Bucket
 
 Delete an existing bucket.
 
+:caps: buckets=write
+
 Syntax
 ~~~~~~
 
@@ -1391,6 +1418,8 @@ Unlink Bucket
 Unlink a bucket from a specified user. Primarily useful for changing
 bucket ownership.
 
+:caps: buckets=write
+
 Syntax
 ~~~~~~
 
@@ -1435,6 +1464,8 @@ Link Bucket
 
 Link a bucket to a specified user, unlinking the bucket from
 any previous user.
+
+:caps: buckets=write
 
 Syntax
 ~~~~~~
@@ -1530,6 +1561,8 @@ Remove Object
 
 Remove an existing object. NOTE: Does not require owner to be non-suspended.
 
+:caps: buckets=write
+
 Syntax
 ~~~~~~
 
@@ -1580,6 +1613,8 @@ Get Bucket or Object Policy
 
 Read the policy of an object or bucket.
 
+:caps: buckets=read
+
 Syntax
 ~~~~~~
 
@@ -1629,6 +1664,8 @@ Add A User Capability
 =====================
 
 Add an administrative capability to a specified user.
+
+:caps: users=write
 
 Syntax
 ~~~~~~
@@ -1704,6 +1741,8 @@ Remove A User Capability
 ========================
 
 Remove an administrative capability from a specified user.
+
+:caps: users=write
 
 Syntax
 ~~~~~~
