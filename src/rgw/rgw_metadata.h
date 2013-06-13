@@ -91,12 +91,11 @@ public:
     LogListCtx() : done(false) {}
   };
 
-  void init_list_entries(int shard_id, utime_t& from_time, utime_t& end_time, void **handle);
+  void init_list_entries(int shard_id, utime_t& from_time, utime_t& end_time, string& marker, void **handle);
   void complete_list_entries(void *handle);
   int list_entries(void *handle,
                    int max_entries,
-                   list<cls_log_entry>& entries,
-                   bool *truncated);
+                   list<cls_log_entry>& entries, bool *truncated);
 
   int trim(int shard_id, utime_t& from_time, utime_t& end_time);
   int lock_exclusive(int shard_id, utime_t& duration, string& owner_id);

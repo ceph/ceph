@@ -60,6 +60,7 @@ static string region_info_oid_prefix = "region_info.";
 
 static string default_region_info_oid = "default.region";
 static string region_map_oid = "region_map";
+static string log_lock_name = "rgw_log_lock";
 
 static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 
@@ -1454,8 +1455,8 @@ int RGWRados::time_log_list(const string& oid, utime_t& start_time, utime_t& end
   int r = rados->ioctx_create(log_pool, io_ctx);
   if (r < 0)
     return r;
-
   librados::ObjectReadOperation op;
+
   cls_log_list(op, start_time, end_time, marker, max_entries, entries, &marker, truncated);
 
   bufferlist obl;
@@ -1489,8 +1490,7 @@ int RGWRados::lock_exclusive(rgw_bucket& pool, const string& oid, utime_t& durat
   if (r < 0)
     return r;
   
-  string lock_name = RGW_INDEX_LOCK_NAME;
-  rados::cls::lock::Lock l(lock_name);
+  rados::cls::lock::Lock l(log_lock_name);
   l.set_duration(duration);
   l.set_cookie(owner_id);
   
@@ -1506,8 +1506,7 @@ int RGWRados::unlock(rgw_bucket& pool, const string& oid, string& owner_id) {
   if (r < 0)
     return r;
   
-  string lock_name = RGW_INDEX_LOCK_NAME;
-  rados::cls::lock::Lock l(lock_name);
+  rados::cls::lock::Lock l(log_lock_name);
   l.set_cookie(owner_id);
   
   return l.unlock(&io_ctx, oid);
