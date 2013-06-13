@@ -260,10 +260,6 @@ COMMAND("mon stat", "summarize monitor status")
 COMMAND("mon getmap " \
 	"name=epoch,type=CephInt,range=0,req=false", \
 	"get monmap")
-COMMAND("mon tell " \
-	"name=who,type=CephString " \
-	"name=args,type=CephString,n=N", \
-	"send command to specific monitor(s)")
 COMMAND("mon add " \
 	"name=name,type=CephString " \
 	"name=addr,type=CephIPAddr", \
@@ -290,10 +286,6 @@ COMMAND("osd getcrushmap " \
 	"name=epoch,type=CephInt,range=0,req=false", \
 	"get CRUSH map")
 COMMAND("osd getmaxosd", "show largest OSD id")
-COMMAND("osd tell " \
-	"name=who,type=CephString " \
-	"name=args,type=CephString,n=N", \
-	"send command to particular osd")
 COMMAND("osd find " \
 	"name=id,type=CephInt,range=0", \
 	"find osd <id> in the CRUSH map and show its location")
