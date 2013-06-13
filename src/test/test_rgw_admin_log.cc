@@ -799,6 +799,16 @@ TEST(TestRGWAdmin, datalog_list) {
   }
 
   ss.str("");
+  ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time
+    << "&max-entries=1";
+  rest_req = ss.str();
+  g_test->send_request(string("GET"), rest_req);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+  entries.clear();
+  get_datalog_list(entries);
+  EXPECT_EQ(1U, entries.size());
+  
+  ss.str("");
   ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time 
     << "&end-time=" << end_time;
   rest_req = ss.str();
@@ -1157,6 +1167,25 @@ TEST(TestRGWAdmin, mdlog_list) {
   EXPECT_EQ(get_log_list(entries), 0);
   EXPECT_EQ(entries.size(), 14U);
 
+  ss.str("");
+  ss << "/admin/log?type=metadata&id=" << shard_id << "&start-time=" << start_time 
+    << "&max-entries=" << 1;
+  rest_req = ss.str();
+  g_test->send_request(string("GET"), rest_req);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+  entries.clear();
+  EXPECT_EQ(get_log_list(entries), 0);
+  EXPECT_EQ(entries.size(), 1U);
+
+  ss.str("");
+  ss << "/admin/log?type=metadata&id=" << shard_id << "&start-time=" << start_time 
+    << "&max-entries=" << 6;
+  rest_req = ss.str();
+  g_test->send_request(string("GET"), rest_req);
+  EXPECT_EQ(200U, g_test->get_resp_code());
+  entries.clear();
+  EXPECT_EQ(get_log_list(entries), 0);
+  EXPECT_EQ(entries.size(), 6U);
 
   ASSERT_EQ(0, caps_rm(cname, perm));
   ss.str("");
