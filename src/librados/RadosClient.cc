@@ -201,11 +201,6 @@ int librados::RadosClient::connect()
   objecter->init_locked();
   monclient.renew_subs();
 
-  while (osdmap.get_epoch() == 0) {
-    ldout(cct, 1) << "waiting for osdmap" << dendl;
-    cond.Wait(lock);
-  }
-
   finisher.start();
 
   state = CONNECTED;
