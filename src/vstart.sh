@@ -293,6 +293,7 @@ if [ "$start_mon" -eq 1 ]; then
         osd pgp bits = 5  ; (invalid, but ceph should cope!)
         osd crush chooseleaf type = 0
         osd pool default min size = 1
+        run dir = out
 EOF
 if [ "$cephx" -eq 1 ] ; then
 cat <<EOF >> $conf
