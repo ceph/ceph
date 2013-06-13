@@ -55,6 +55,7 @@
  * CephObjectname: Another plainold string
  * CephPgid: n.xxx where n is an int > 0, xxx is a hex number > 0
  * CephName: daemon name, '*' or '<type>.<id>' (id must be int for type osd)
+ * CephOsdName: osd name, '*' or '<id> or 'osd.<id>' (id must be int)
  * CephChoices: strings="foo|bar" means this param can be either
  * CephFilepath: openable file
  * CephFragment: cephfs 'fragID': val/bits, val in hex 0xnnn, bits in dec
@@ -324,24 +325,22 @@ COMMAND("osd crush add-bucket " \
 	"name=type,type=CephString", \
 	"add no-parent (probably root) crush bucket <name> of type <type>")
 COMMAND("osd crush set " \
-	"name=id,type=CephInt,range=0 " \
-	"name=name,type=CephName,req=false " \
+	"name=id,type=CephOsdName " \
 	"name=weight,type=CephFloat,range=0.0 " \
 	"name=args,type=CephString,n=N", \
-	"set crushmap entry for <id> to <weight> with location <args>")
+	"set crushmap entry for <name> to <weight> with location <args>")
 COMMAND("osd crush add " \
-	"name=id,type=CephInt,range=0 " \
-	"name=name,type=CephName,req=false " \
+	"name=id,type=CephOsdName " \
 	"name=weight,type=CephFloat,range=0.0 " \
 	"name=args,type=CephString,n=N", \
-	"add crushmap entry for <id> with <weight> and location <args>")
+	"add crushmap entry for <name> with <weight> and location <args>")
 COMMAND("osd crush create-or-move " \
-	"name=id,type=CephInt,range=0 " \
+	"name=id,type=CephOsdName " \
 	"name=weight,type=CephFloat,range=0.0 " \
 	"name=args,type=CephString,n=N", \
-	"create entry or move existing entry for <id> <weight> at/to location <args>")
+	"create entry or move existing entry for <name> <weight> at/to location <args>")
 COMMAND("osd crush move " \
-	"name=name,type=CephString " \
+	"name=id,type=CephOsdName " \
 	"name=args,type=CephString,n=N", \
 	"move existing entry for <name> to location <args>")
 COMMAND("osd crush link " \

@@ -345,8 +345,9 @@ class CephPgid(CephArgtype):
 
 class CephName(CephArgtype):
     """
-    Name, or type.id, where type is osd|mon|client|mds, and id is a base10 int,
-    or just id.
+    Name (type.id) where:
+    type is osd|mon|client|mds
+    id is a base10 int, if type == osd, or a string otherwise
 
     Also accept '*'
     """
@@ -357,7 +358,7 @@ class CephName(CephArgtype):
             self.nameid = None
             return True
         if s.find('.') == -1:
-            i = s
+            raise ArgumentFormat('CephName: no . in {0}'.format(s))
         else:
             t, i = s.split('.')
             if not t in ('osd', 'mon', 'client', 'mds'):
@@ -375,6 +376,36 @@ class CephName(CephArgtype):
     def __str__(self):
         return '<name (type.id)>'
 
+class CephOsdName(CephArgtype):
+    """
+    Like CephName, but specific to osds: allow <id> alone
+
+    osd.<id>, or <id>, or *, where id is a base10 int
+    """
+    def valid(self, s, partial=False):
+        if s == '*':
+            self.val = s
+            self.nametype = None
+            self.nameid = None
+            return True
+        if s.find('.') != -1:
+            t, i = s.split('.')
+        else:
+            t = 'osd'
+            i = s
+        if t != 'osd':
+            raise ArgumentValid('unknown type ' + self.t)
+        try:
+            i = int(i)
+        except:
+            raise ArgumentFormat('osd id ' + i + ' not integer')
+        self.nametype = t
+        self.nameid = i
+        self.val = i
+        return True
+
+    def __str__(self):
+        return '<osdname (id|osd.id)>'
 
 class CephChoices(CephArgtype):
     """
