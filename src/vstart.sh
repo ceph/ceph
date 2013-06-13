@@ -1,5 +1,9 @@
 #!/bin/sh
 
+export PYTHONPATH=./pybind
+export LD_LIBRARY_PATH=.libs
+
+
 # abort on failure
 set -e
 
@@ -150,9 +154,6 @@ if [ "$start_all" -eq 1 ]; then
 fi
 
 ARGS="-c $conf"
-
-export PYTHONPATH=./pybind
-export LD_LIBRARY_PATH=.libs
 
 run() {
     type=$1
