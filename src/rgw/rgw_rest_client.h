@@ -72,5 +72,22 @@ public:
   RGWGetDataCB *get_out_cb() { return cb; }
 };
 
+class RGWRESTStreamReadRequest : public RGWRESTSimpleRequest {
+  Mutex lock;
+  void *handle;
+  RGWGetDataCB *cb;
+public:
+  int send_data(void *ptr, size_t len);
+
+  RGWRESTStreamReadRequest(CephContext *_cct, string& _url, list<pair<string, string> > *_headers,
+                list<pair<string, string> > *_params) : RGWRESTSimpleRequest(_cct, _url, _headers, _params),
+                lock("RGWRESTStreamReadRequest"), handle(NULL), cb(NULL) {}
+  ~RGWRESTStreamReadRequest() {}
+  int get_obj_init(RGWAccessKey& key, rgw_obj& obj);
+  int complete(string& etag, time_t *mtime);
+
+  void set_in_cb(RGWGetDataCB *_cb) { cb = _cb; }
+};
+
 #endif
 
