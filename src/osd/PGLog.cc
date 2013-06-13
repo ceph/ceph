@@ -64,7 +64,7 @@ void PGLog::IndexedLog::split_into(
   index();
 }
 
-void PGLog::IndexedLog::trim(ObjectStore::Transaction& t, hobject_t& log_oid, eversion_t s)
+void PGLog::IndexedLog::trim(eversion_t s)
 {
   if (complete_to != log.end() &&
       complete_to->version <= s) {
@@ -72,17 +72,14 @@ void PGLog::IndexedLog::trim(ObjectStore::Transaction& t, hobject_t& log_oid, ev
 		    << " on " << *this << dendl;
   }
 
-  set<string> keys_to_rm;
   while (!log.empty()) {
     pg_log_entry_t &e = *log.begin();
     if (e.version > s)
       break;
     generic_dout(20) << "trim " << e << dendl;
     unindex(e);         // remove from index,
-    keys_to_rm.insert(e.get_key_name());
     log.pop_front();    // from log
   }
-  t.omap_rmkeys(coll_t::META_COLL, log_oid, keys_to_rm);
 
   // raise tail?
   if (tail < s)
@@ -133,7 +130,7 @@ void PGLog::clear_info_log(
   t->omap_rmkeys(coll_t::META_COLL, infos_oid, keys_to_remove);
 }
 
-void PGLog::trim(ObjectStore::Transaction& t, eversion_t trim_to, pg_info_t &info, hobject_t &log_oid)
+void PGLog::trim(eversion_t trim_to, pg_info_t &info)
 {
   // trim?
   if (trim_to > log.tail) {
@@ -145,8 +142,14 @@ void PGLog::trim(ObjectStore::Transaction& t, eversion_t trim_to, pg_info_t &inf
     assert(trim_to <= info.last_complete);
 
     dout(10) << "trim " << log << " to " << trim_to << dendl;
-    log.trim(t, log_oid, trim_to);
+    log.trim(trim_to);
     info.log_tail = log.tail;
+
+    if (log.log.empty()) {
+      mark_dirty_to(eversion_t::max());
+    } else {
+      mark_dirty_to(log.log.front().version);
+    }
   }
 }
 

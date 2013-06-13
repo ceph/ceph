@@ -141,7 +141,7 @@ struct PGLog {
 	caller_ops[e.reqid] = &(log.back());
     }
 
-    void trim(ObjectStore::Transaction &t, hobject_t& oid, eversion_t s);
+    void trim(eversion_t s);
 
     ostream& print(ostream& out) const;
   };
@@ -267,7 +267,10 @@ public:
 
   void unindex() { log.unindex(); }
 
-  void add(pg_log_entry_t& e) { log.add(e); }
+  void add(pg_log_entry_t& e) {
+    mark_dirty_from(e.version);
+    log.add(e);
+  }
 
   void reset_recovery_pointers() { log.reset_recovery_pointers(); }
 
@@ -277,7 +280,7 @@ public:
     const hobject_t &log_oid,
     ObjectStore::Transaction *t);
 
-  void trim(ObjectStore::Transaction& t, eversion_t trim_to, pg_info_t &info, hobject_t &log_oid);
+  void trim(eversion_t trim_to, pg_info_t &info);
 
   //////////////////// get or set log & missing ////////////////////
 

@@ -2295,7 +2295,7 @@ void PG::append_log(
   dout(10) << "append_log  adding " << keys.size() << " keys" << dendl;
   t.omap_setkeys(coll_t::META_COLL, log_oid, keys);
 
-  pg_log.trim(t, trim_to, info, log_oid);
+  pg_log.trim(trim_to, info);
 
   // update the local pg, pg log
   dirty_info = true;
