@@ -1071,6 +1071,17 @@ void Objecter::tick()
       ldout(cct, 10) << " lingering tid " << p->first << " does not have session" << dendl;
     }
   }
+  for (map<uint64_t,CommandOp*>::iterator p = command_ops.begin();
+       p != command_ops.end();
+       ++p) {
+    CommandOp *op = p->second;
+    if (op->session) {
+      ldout(cct, 10) << " pinging osd that serves command tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
+      toping.insert(op->session);
+    } else {
+      ldout(cct, 10) << " command tid " << p->first << " does not have session" << dendl;
+    }
+  }
   logger->set(l_osdc_op_laggy, laggy_ops);
   logger->set(l_osdc_osd_laggy, toping.size());
 
