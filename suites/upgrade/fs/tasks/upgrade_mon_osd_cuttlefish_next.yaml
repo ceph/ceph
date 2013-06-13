@@ -1,0 +1,31 @@
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+- - mon.b
+  - mon.c
+  - osd.2
+  - osd.3
+- - client.0
+tasks:
+- install:
+     branch: cuttlefish
+- ceph:
+    log-whitelist:
+      - wrongly marked
+- ceph-fuse:
+- workunit:
+     branch: cuttlefish
+     clients:
+        all:
+           - suites/dbench.sh
+- install.upgrade:
+     all:
+        branch: next
+- ceph.restart: [mon.a, mon.b, mon.c, osd.0, osd.1, osd.2, osd.3, mds.a]
+- workunit:
+     branch: next
+     clients:
+        all:
+           - kernel_untar_build.sh
