@@ -1869,6 +1869,9 @@ def main_suppress(args):
 def main_unsuppress(args):
     unset_suppress(args.path)
 
+def main_zap(args):
+    for dev in args.dev:
+        zap(dev)
 
 ###########################
 
@@ -2026,6 +2029,17 @@ def parse_args():
         )
     unsuppress_parser.set_defaults(
         func=main_unsuppress,
+        )
+
+    zap_parser = subparsers.add_parser('zap', help='Zap/erase/destroy a device\'s partition table (and contents)')
+    zap_parser.add_argument(
+        'dev',
+        metavar='DEV',
+        nargs='*',
+        help='path to block device',
+        )
+    zap_parser.set_defaults(
+        func=main_zap,
         )
 
     args = parser.parse_args()
