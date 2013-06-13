@@ -255,14 +255,14 @@ int CrushWrapper::get_full_location_ordered(int id, vector<pair<string, string> 
   string high_type_name = type_map[high_type];
 
   path.push_back(parent_coord);
-  parent_id = get_item_id( (parent_coord.second).c_str() );
+  parent_id = get_item_id(parent_coord.second);
 
 
   while (parent_coord.first != high_type_name) {
     parent_coord = get_immediate_parent(parent_id);
     path.push_back(parent_coord);
     if ( parent_coord.first != high_type_name ){
-      parent_id = get_item_id( (parent_coord.second).c_str() );
+      parent_id = get_item_id(parent_coord.second);
     }
   }
 
@@ -291,7 +291,7 @@ map<int, string> CrushWrapper::get_parent_hierarchy(int id)
       high_type = (*it).first;
   }
 
-  parent_id = get_item_id((parent_coord.second).c_str());
+  parent_id = get_item_id(parent_coord.second);
 
   while (type_counter < high_type) {
     type_counter++;
@@ -300,7 +300,7 @@ map<int, string> CrushWrapper::get_parent_hierarchy(int id)
     if (type_counter < high_type){
       // get the coordinate information for the next parent
       parent_coord = get_immediate_parent(parent_id);
-      parent_id = get_item_id(parent_coord.second.c_str());
+      parent_id = get_item_id(parent_coord.second);
     }
   }
 
