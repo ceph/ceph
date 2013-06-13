@@ -1226,6 +1226,7 @@ private:
   void dump_requests(Formatter& fmt) const;
   void dump_ops(Formatter& fmt) const;
   void dump_linger_ops(Formatter& fmt) const;
+  void dump_command_ops(Formatter& fmt) const;
   void dump_pool_ops(Formatter& fmt) const;
   void dump_pool_stat_ops(Formatter& fmt) const;
   void dump_statfs_ops(Formatter& fmt) const;

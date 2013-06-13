@@ -111,6 +111,10 @@ enum {
   l_osdc_statfs_send,
   l_osdc_statfs_resend,
 
+  l_osdc_command_active,
+  l_osdc_command_send,
+  l_osdc_command_resend,
+
   l_osdc_map_epoch,
   l_osdc_map_full,
   l_osdc_map_inc,
@@ -189,6 +193,10 @@ void Objecter::init_unlocked()
     pcb.add_u64(l_osdc_statfs_active, "statfs_active");
     pcb.add_u64_counter(l_osdc_statfs_send, "statfs_send");
     pcb.add_u64_counter(l_osdc_statfs_resend, "statfs_resend");
+
+    pcb.add_u64(l_osdc_command_active, "command_active");
+    pcb.add_u64_counter(l_osdc_command_send, "command_send");
+    pcb.add_u64_counter(l_osdc_command_resend, "command_resend");
 
     pcb.add_u64(l_osdc_map_epoch, "map_epoch");
     pcb.add_u64_counter(l_osdc_map_full, "map_full");
@@ -1005,6 +1013,17 @@ void Objecter::kick_requests(OSDSession *session)
     send_linger(lresend.begin()->second);
     lresend.erase(lresend.begin());
   }
+
+  // resend commands
+  map<uint64_t,CommandOp*> cresend;  // resend in order
+  for (xlist<CommandOp*>::iterator k = session->command_ops.begin(); !k.end(); ++k) {
+    logger->inc(l_osdc_command_resend);
+    cresend[(*k)->tid] = *k;
+  }
+  while (!cresend.empty()) {
+    _send_command(cresend.begin()->second);
+    cresend.erase(cresend.begin());
+  }
 }
 
 void Objecter::schedule_tick()
@@ -1050,6 +1069,17 @@ void Objecter::tick()
       toping.insert(op->session);
     } else {
       ldout(cct, 10) << " lingering tid " << p->first << " does not have session" << dendl;
+    }
+  }
+  for (map<uint64_t,CommandOp*>::iterator p = command_ops.begin();
+       p != command_ops.end();
+       ++p) {
+    CommandOp *op = p->second;
+    if (op->session) {
+      ldout(cct, 10) << " pinging osd that serves command tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
+      toping.insert(op->session);
+    } else {
+      ldout(cct, 10) << " command tid " << p->first << " does not have session" << dendl;
     }
   }
   logger->set(l_osdc_op_laggy, laggy_ops);
@@ -2159,6 +2189,7 @@ void Objecter::dump_requests(Formatter& fmt) const
   dump_pool_ops(fmt);
   dump_pool_stat_ops(fmt);
   dump_statfs_ops(fmt);
+  dump_command_ops(fmt);
   fmt.close_section(); // requests object
 }
 
@@ -2213,6 +2244,29 @@ void Objecter::dump_linger_ops(Formatter& fmt) const
     fmt.close_section(); // linger_op object
   }
   fmt.close_section(); // linger_ops array
+}
+
+void Objecter::dump_command_ops(Formatter& fmt) const
+{
+  fmt.open_array_section("command_ops");
+  for (map<uint64_t, CommandOp*>::const_iterator p = command_ops.begin();
+       p != command_ops.end();
+       ++p) {
+    CommandOp *op = p->second;
+    fmt.open_object_section("command_op");
+    fmt.dump_unsigned("command_id", op->tid);
+    fmt.dump_int("osd", op->session ? op->session->osd : -1);
+    fmt.open_array_section("command");
+    for (vector<string>::const_iterator q = op->cmd.begin(); q != op->cmd.end(); ++q)
+      fmt.dump_string("word", *q);
+    fmt.close_section();
+    if (op->target_osd >= 0)
+      fmt.dump_int("target_osd", op->target_osd);
+    else
+      fmt.dump_stream("target_pg") << op->target_pg;
+    fmt.close_section(); // command_op object
+  }
+  fmt.close_section(); // command_ops array
 }
 
 void Objecter::dump_pool_ops(Formatter& fmt) const
@@ -2353,6 +2407,8 @@ int Objecter::_submit_command(CommandOp *c, tid_t *ptid)
   if (c->map_check_error)
     _send_command_map_check(c);
   *ptid = tid;
+
+  logger->set(l_osdc_command_active, command_ops.size());
   return 0;
 }
 
@@ -2409,6 +2465,7 @@ void Objecter::_send_command(CommandOp *c)
   m->set_data(c->inbl);
   m->set_tid(c->tid);
   messenger->send_message(m, c->session->con);
+  logger->inc(l_osdc_command_send);
 }
 
 void Objecter::_finish_command(CommandOp *c, int r, string rs)
@@ -2421,4 +2478,6 @@ void Objecter::_finish_command(CommandOp *c, int r, string rs)
     c->onfinish->complete(r);
   command_ops.erase(c->tid);
   c->put();
+
+  logger->set(l_osdc_command_active, command_ops.size());
 }
