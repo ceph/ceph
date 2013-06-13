@@ -731,6 +731,7 @@ struct req_state {
    bool has_acl_header;
    const char *copy_source;
    const char *http_auth;
+   bool local_source; /* source is local */
 
    int prot_flags;
 
