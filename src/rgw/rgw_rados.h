@@ -172,6 +172,117 @@ struct RGWUploadPartInfo {
 };
 WRITE_CLASS_ENCODER(RGWUploadPartInfo)
 
+class RGWPutObjProcessor
+{
+protected:
+  RGWRados *store;
+  void *obj_ctx;
+  bool is_complete;
+
+  virtual int do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs) = 0;
+
+  list<rgw_obj> objs;
+
+  void add_obj(rgw_obj& obj) {
+    objs.push_back(obj);
+  }
+public:
+  RGWPutObjProcessor() : store(NULL), obj_ctx(NULL), is_complete(false) {}
+  virtual ~RGWPutObjProcessor();
+  virtual int prepare(RGWRados *_store, void *_o) {
+    store = _store;
+    obj_ctx = _o;
+    return 0;
+  };
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle) = 0;
+  virtual int throttle_data(void *handle) = 0;
+  virtual int complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs);
+};
+
+class RGWPutObjProcessor_Plain : public RGWPutObjProcessor
+{
+  rgw_bucket bucket;
+  string obj_str;
+
+  bufferlist data;
+  rgw_obj obj;
+  off_t ofs;
+
+protected:
+  int prepare(RGWRados *store, void *obj_ctx);
+  int handle_data(bufferlist& bl, off_t ofs, void **phandle);
+  int throttle_data(void *handle) { return 0; }
+  int do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs);
+
+public:
+  RGWPutObjProcessor_Plain(rgw_bucket& b, const string& o) : bucket(b), obj_str(o), ofs(0) {}
+};
+
+struct put_obj_aio_info {
+  void *handle;
+};
+
+class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
+{
+  list<struct put_obj_aio_info> pending;
+  size_t max_chunks;
+
+  struct put_obj_aio_info pop_pending();
+  int wait_pending_front();
+  bool pending_has_completed();
+  int drain_pending();
+
+protected:
+  uint64_t obj_len;
+
+  int handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle);
+  int throttle_data(void *handle);
+
+  RGWPutObjProcessor_Aio() : max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
+  virtual ~RGWPutObjProcessor_Aio() {
+    drain_pending();
+  }
+};
+
+class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
+{
+  bufferlist first_chunk;
+  uint64_t part_size;
+  off_t cur_part_ofs;
+  off_t next_part_ofs;
+  int cur_part_id;
+protected:
+  rgw_bucket bucket;
+  string obj_str;
+
+  string unique_tag;
+
+  string oid_prefix;
+  rgw_obj head_obj;
+  rgw_obj cur_obj;
+  RGWObjManifest manifest;
+
+  virtual bool immutable_head() { return false; }
+
+  int prepare(RGWRados *store, void *obj_ctx);
+  virtual int do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs);
+
+  void prepare_next_part(off_t ofs);
+  void complete_parts();
+
+public:
+  ~RGWPutObjProcessor_Atomic() {}
+  RGWPutObjProcessor_Atomic(rgw_bucket& _b, const string& _o, uint64_t _p, const string& _t) : part_size(_p),
+                                cur_part_ofs(0),
+                                next_part_ofs(_p),
+                                cur_part_id(0),
+                                bucket(_b),
+                                obj_str(_o),
+                                unique_tag(_t) {}
+  int handle_data(bufferlist& bl, off_t ofs, void **phandle);
+};
+
+
 struct RGWObjState {
   bool is_atomic;
   bool has_attrs;

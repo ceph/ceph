@@ -267,33 +267,6 @@ public:
   virtual const char *name() { return "delete_bucket"; }
 };
 
-class RGWPutObjProcessor
-{
-protected:
-  RGWRados *store;
-  void *obj_ctx;
-  bool is_complete;
-
-  virtual int do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs) = 0;
-
-  list<rgw_obj> objs;
-
-  void add_obj(rgw_obj& obj) {
-    objs.push_back(obj);
-  }
-public:
-  RGWPutObjProcessor() : store(NULL), obj_ctx(NULL), is_complete(false) {}
-  virtual ~RGWPutObjProcessor();
-  virtual int prepare(RGWRados *_store, void *_o) {
-    store = _store;
-    obj_ctx = _o;
-    return 0;
-  };
-  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle) = 0;
-  virtual int throttle_data(void *handle) = 0;
-  virtual int complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs);
-};
-
 class RGWPutObj : public RGWOp {
 
   friend class RGWPutObjProcessor;
