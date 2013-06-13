@@ -518,9 +518,9 @@ Rados object in state %s." % (self.state))
             raise make_ex(ret, "error opening ioctx '%s'" % ioctx_name)
         return Ioctx(ioctx_name, self.librados, ioctx)
 
-    def mon_command(self, cmd, inbuf, timeout=0):
+    def mon_command(self, cmd, inbuf, timeout=0, target=None):
         """
-        mon_command(cmd, inbuf, outbuf, outbuflen, outs, outslen)
+        mon_command[_target](cmd, inbuf, outbuf, outbuflen, outs, outslen)
         returns (int ret, string outbuf, string outs)
         """
         import sys
@@ -531,11 +531,18 @@ Rados object in state %s." % (self.state))
         outslen = c_long()
         cmdarr = (c_char_p * len(cmd))(*cmd)
 
-        ret = run_in_thread(self.librados.rados_mon_command,
-                            (self.cluster, cmdarr, len(cmd),
-                            c_char_p(inbuf), len(inbuf),
-                            outbufp, byref(outbuflen), outsp, byref(outslen)),
-                            timeout)
+        if target:
+            ret = run_in_thread(self.librados.rados_mon_command_target,
+                                (self.cluster, target, cmdarr, len(cmd),
+                                 c_char_p(inbuf), len(inbuf),
+                                 outbufp, byref(outbuflen), outsp, byref(outslen)),
+                                timeout)
+        else:
+            ret = run_in_thread(self.librados.rados_mon_command,
+                                (self.cluster, cmdarr, len(cmd),
+                                 c_char_p(inbuf), len(inbuf),
+                                 outbufp, byref(outbuflen), outsp, byref(outslen)),
+                                timeout)
 
         if ret == 0:
             # copy returned memory (ctypes makes a copy, not a reference)

@@ -264,60 +264,12 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
       if (p != mon->monmap)
 	delete p;
     }
-  } else if (prefix == "mon tell") {
-    dout(20) << "got tell: " << m->cmd << dendl;
-    string whostr;
-    cmd_getval(g_ceph_context, cmdmap, "who", whostr);
-    vector<string> argvec;
-    cmd_getval(g_ceph_context, cmdmap, "args", argvec);
-
-    if (whostr == "*") { // send to all mons and do myself
-      for (unsigned i = 0; i < mon->monmap->size(); ++i) {
-	MMonCommand *newm = new MMonCommand(m->fsid, m->version);
-	newm->cmd.insert(newm->cmd.begin(), argvec.begin(), argvec.end());
-	mon->messenger->send_message(newm, mon->monmap->get_inst(i));
-      }
-      ss << "bcast to all mons";
-      r = 0;
-    } else {
-      // find target.  Ignore error from parsing long as we probably
-      // have a string instead
-      long who = parse_pos_long(whostr.c_str(), NULL);
-      EntityName name;
-      if (who < 0) {
-
-	// not numeric; try as name or id, and see if in monmap
-	if (!name.from_str(whostr))
-	  name.set("mon", whostr);
-
-	if (mon->monmap->contains(name.get_id())) {
-	  who = mon->monmap->get_rank(name.get_id());
-	} else {
-	  ss << "bad mon name \"" << whostr << "\"";
-	  r = -ENOENT;
-	  goto out;
-	}
-      } else if (who >= (long)mon->monmap->size()) {
-	ss << "mon." << whostr << " does not exist";
-	r = -ENOENT;
-	goto out;
-      }
-
-      // send to target, or handle if it's me
-      stringstream ss;
-      MMonCommand *newm = new MMonCommand(m->fsid, m->version);
-      newm->cmd.insert(newm->cmd.begin(), argvec.begin(), argvec.end());
-      mon->messenger->send_message(newm, mon->monmap->get_inst(who));
-      ss << "fw to mon." << whostr;
-      r = 0;
-    }
   }
   else if (prefix == "mon add")
     return false;
   else if (prefix == "mon remove")
     return false;
 
- out:
   if (r != -1) {
     string rs;
     getline(ss, rs);
