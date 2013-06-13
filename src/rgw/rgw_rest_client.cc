@@ -584,13 +584,15 @@ int RGWRESTStreamReadRequest::complete(string& etag, time_t *mtime)
   if (mtime) {
     string mtime_str;
     set_str_from_headers(out_headers, "RGWX_MTIME", mtime_str);
-    string err;
-    long t = strict_strtol(mtime_str.c_str(), 10, &err);
-    if (!err.empty()) {
-      ldout(cct, 0) << "ERROR: failed converting mtime (" << mtime_str << ") to int " << dendl;
-      return -EINVAL;
+    if (!mtime_str.empty()) {
+      string err;
+      long t = strict_strtol(mtime_str.c_str(), 10, &err);
+      if (!err.empty()) {
+        ldout(cct, 0) << "ERROR: failed converting mtime (" << mtime_str << ") to int " << dendl;
+        return -EINVAL;
+      }
+      *mtime = (time_t)t;
     }
-    *mtime = (time_t)t;
   }
 
   return status;
