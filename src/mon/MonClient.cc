@@ -322,6 +322,7 @@ void MonClient::shutdown()
     delete version_requests.begin()->second;
     version_requests.erase(version_requests.begin());
   }
+
   monc_lock.Unlock();
 
   if (initialized) {
@@ -330,6 +331,7 @@ void MonClient::shutdown()
   monc_lock.Lock();
   timer.shutdown();
 
+  messenger->mark_down(cur_con);
   cur_con.reset(NULL);
 
   monc_lock.Unlock();
