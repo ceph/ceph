@@ -83,7 +83,7 @@ def task(ctx, config):
     for pg in pgs:
         out = manager.raw_cluster_cmd('pg', pg['pgid'], 'query')
 	log.debug("out string %s",out)
-        j = json.loads('\n'.join(out.split('\n')[1:]))
+        j = json.loads(out)
         log.info("pg is %s, query json is %s", pg, j)
 
         if pg['state'].count('down'):

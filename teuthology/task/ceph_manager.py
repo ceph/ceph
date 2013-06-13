@@ -571,7 +571,7 @@ class CephManager:
         while True:
             out = self.raw_cluster_cmd('--', 'pg',pgid,'list_missing',
                                        json.dumps(offset))
-            j = json.loads('\n'.join(out.split('\n')[1:]))
+            j = json.loads(out)
             if r is None:
                 r = j
             else:
@@ -643,7 +643,7 @@ class CephManager:
     def get_stuck_pgs(self, type_, threshold):
         out = self.raw_cluster_cmd('pg','dump_stuck', type_,
                                    '--format=json', '-t', str(threshold))
-        return json.loads('\n'.join(out.split('\n')[1:]))
+        return json.loads(out)
 
     def get_num_unfound_objects(self):
         status = self.raw_cluster_status()
