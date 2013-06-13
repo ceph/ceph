@@ -528,3 +528,75 @@ int RGWRESTStreamWriteRequest::complete(string& etag, time_t *mtime)
 
   return status;
 }
+
+int RGWRESTStreamReadRequest::get_obj_init(RGWAccessKey& key, rgw_obj& obj)
+{
+  string resource = obj.bucket.name + "/" + obj.object;
+  string new_url = url;
+  if (new_url[new_url.size() - 1] != '/')
+    new_url.append("/");
+
+  string date_str;
+  get_new_date_str(cct, date_str);
+
+  RGWEnv new_env;
+  req_info new_info(cct, &new_env);
+  
+  string params_str;
+  map<string, string>& args = new_info.args.get_params();
+  get_params_str(args, params_str);
+
+  new_url.append(resource + params_str);
+
+  new_env.set("HTTP_DATE", date_str.c_str());
+
+  new_info.method = "GET";
+
+  new_info.script_uri = "/";
+  new_info.script_uri.append(resource);
+  new_info.request_uri = new_info.script_uri;
+
+  int ret = sign_request(key, new_env, new_info);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
+    return ret;
+  }
+
+  map<string, string>& m = new_env.get_map();
+  map<string, string>::iterator iter;
+  for (iter = m.begin(); iter != m.end(); ++iter) {
+    headers.push_back(make_pair<string, string>(iter->first, iter->second));
+  }
+
+  // cb = new RGWRESTStreamInCB(this);
+
+
+  int r = process(new_info.method, new_url.c_str());
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int RGWRESTStreamReadRequest::complete(string& etag, time_t *mtime)
+{
+  set_str_from_headers(out_headers, "ETAG", etag);
+  if (mtime) {
+    string mtime_str;
+    set_str_from_headers(out_headers, "RGWX_MTIME", mtime_str);
+    string err;
+    long t = strict_strtol(mtime_str.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldout(cct, 0) << "ERROR: failed converting mtime (" << mtime_str << ") to int " << dendl;
+      return -EINVAL;
+    }
+    *mtime = (time_t)t;
+  }
+
+  return status;
+}
+
+int RGWRESTStreamReadRequest::send_data(void *ptr, size_t len) {
+  return 0;
+}
+

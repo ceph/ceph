@@ -148,6 +148,7 @@ req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL)
   length = NULL;
   copy_source = NULL;
   http_auth = NULL;
+  local_source = false;
 
   obj_ctx = NULL;
 }

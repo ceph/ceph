@@ -275,8 +275,6 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
 
   RGWBucketInfo bucket_info;
 
-  bool source_in_domain = false;
-
   if (s->copy_source) { /* check if copy source is within the current domain */
     const char *src = s->copy_source;
     if (*src == '/')
@@ -292,7 +290,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     ret = store->get_bucket_info(s->obj_ctx, copy_source_str, source_info, NULL);
     if (ret == 0) {
       string& region = source_info.region;
-      source_in_domain = (region.empty() && store->region.is_master) ||
+      s->local_source = (region.empty() && store->region.is_master) ||
                          (region == store->region.name);
     }
   }
@@ -322,7 +320,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
       /* we now need to make sure that the operation actually requires copy source, that is
        * it's a copy operation
        */
-      if (!source_in_domain ||
+      if (!s->local_source ||
           (s->op != OP_PUT && s->op != OP_COPY) ||
           s->object_str.empty()) {
         return -ERR_PERMANENT_REDIRECT;
@@ -1750,15 +1748,30 @@ int RGWCopyObj::verify_permission()
   if (ret < 0)
     return ret;
 
-  /* get buckets info (source and dest) */
-
   ret = store->get_bucket_info(s->obj_ctx, src_bucket_name, src_bucket_info, NULL);
   if (ret < 0)
     return ret;
 
   src_bucket = src_bucket_info.bucket;
 
-  if (src_bucket_name.compare(dest_bucket_name) == 0) {
+  /* get buckets info (source and dest) */
+  if (s->local_source) {
+    rgw_obj src_obj(src_bucket, src_object);
+    store->set_atomic(s->obj_ctx, src_obj);
+    store->set_prefetch_data(s->obj_ctx, src_obj);
+
+    /* check source object permissions */
+    ret = read_policy(store, s, src_bucket_info, &src_policy, src_bucket, src_object);
+    if (ret < 0)
+      return ret;
+
+    if (!src_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_READ))
+      return -EACCES;
+  }
+
+  RGWAccessControlPolicy dest_bucket_policy(s->cct);
+
+  if (src_bucket_name.compare(dest_bucket_name) == 0) { /* will only happen if s->local_source */
     dest_bucket_info = src_bucket_info;
   } else {
     ret = store->get_bucket_info(s->obj_ctx, dest_bucket_name, dest_bucket_info, NULL);
@@ -1768,22 +1781,8 @@ int RGWCopyObj::verify_permission()
 
   dest_bucket = dest_bucket_info.bucket;
 
-  rgw_obj src_obj(src_bucket, src_object);
-  store->set_atomic(s->obj_ctx, src_obj);
-  store->set_prefetch_data(s->obj_ctx, src_obj);
-
   rgw_obj dest_obj(dest_bucket, dest_object);
   store->set_atomic(s->obj_ctx, dest_obj);
-
-  /* check source object permissions */
-  ret = read_policy(store, s, src_bucket_info, &src_policy, src_bucket, src_object);
-  if (ret < 0)
-    return ret;
-
-  if (!src_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_READ))
-    return -EACCES;
-
-  RGWAccessControlPolicy dest_bucket_policy(s->cct);
 
   /* check dest bucket permissions */
   ret = read_policy(store, s, dest_bucket_info, &dest_bucket_policy, dest_bucket, empty_str);
@@ -1844,21 +1843,7 @@ void RGWCopyObj::execute()
   src_obj.init(src_bucket, src_object);
   dst_obj.init(dest_bucket, dest_object);
   store->set_atomic(s->obj_ctx, src_obj);
-#if 0
 
-  if ((dest_bucket_info.region.empty() && !store->region.is_master) ||
-      (dest_bucket_info.region != store->region.name)) {
-
-    map<string, bufferlist> src_attrs;
-  
-    int ret = get_obj_attrs(store, s, src_obj, src_attrs
-                         uint64_t *obj_size, RGWObjVersionTracker *objv_tracker)
-
-    int ret = store->rest_conn->put_obj(s->user.user_id, dst_obj, 
-    if (ret < 0)
-      return ret;
-  }
-#endif
   store->set_atomic(s->obj_ctx, dst_obj);
 
   ret = store->copy_obj(s->obj_ctx,
@@ -1866,6 +1851,7 @@ void RGWCopyObj::execute()
                         dst_obj,
                         src_obj,
                         dest_bucket_info,
+                        src_bucket_info,
                         &mtime,
                         mod_ptr,
                         unmod_ptr,

@@ -1899,6 +1899,7 @@ int RGWRados::copy_obj(void *ctx,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
+               RGWBucketInfo& src_bucket_info,
                time_t *mtime,
                const time_t *mod_ptr,
                const time_t *unmod_ptr,
@@ -1916,8 +1917,22 @@ int RGWRados::copy_obj(void *ctx,
   rgw_obj shadow_obj = dest_obj;
   string shadow_oid;
 
+  bool remote_src;
+  bool remote_dest;
+
   append_rand_alpha(cct, dest_obj.object, shadow_oid, 32);
   shadow_obj.init_ns(dest_obj.bucket, shadow_oid, shadow_ns);
+
+  remote_dest = ((dest_bucket_info.region.empty() && !region.is_master) ||
+      (dest_bucket_info.region != region.name));
+
+  remote_src = ((src_bucket_info.region.empty() && !region.is_master) ||
+      (src_bucket_info.region != region.name));
+
+  if (remote_src && remote_dest) {
+    ldout(cct, 0) << "ERROR: can't copy object when both src and dest buckets are remote" << dendl;
+    return -EINVAL;
+  }
 
   ldout(cct, 5) << "Copy object " << src_obj.bucket << ":" << src_obj.object << " => " << dest_obj.bucket << ":" << dest_obj.object << dendl;
 
@@ -1926,11 +1941,35 @@ int RGWRados::copy_obj(void *ctx,
   map<string, bufferlist> attrset;
   off_t ofs = 0;
   off_t end = -1;
-  ret = prepare_get_obj(ctx, src_obj, &ofs, &end, &attrset,
-                mod_ptr, unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &obj_size, NULL, &handle, err);
+  if (!remote_src) {
+    ret = prepare_get_obj(ctx, src_obj, &ofs, &end, &attrset,
+                  mod_ptr, unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &obj_size, NULL, &handle, err);
+    if (ret < 0)
+      return ret;
+  } else {
+    /* source is in a different region, copy it there */
 
-  if (ret < 0)
-    return ret;
+    map<string, bufferlist> src_attrs;
+
+    RGWRESTStreamReadRequest *in_stream_req;
+  
+    int ret = rest_conn->get_obj_init(user_id, src_obj, &in_stream_req);
+    if (ret < 0)
+      return ret;
+#if 0
+    ret = get_obj_iterate(ctx, &handle, src_obj, 0, astate->size - 1, out_stream_req->get_out_cb());
+    if (ret < 0)
+      return ret;
+#endif
+
+    string etag;
+
+    ret = rest_conn->complete_request(in_stream_req, etag, mtime);
+    if (ret < 0)
+      return ret;
+
+    return 0;
+  }
 
   if (replace_attrs) {
     if (!attrs[RGW_ATTR_ETAG].length())
@@ -1969,8 +2008,7 @@ int RGWRados::copy_obj(void *ctx,
   }
 
 
-  if ((dest_bucket_info.region.empty() && !region.is_master) ||
-      (dest_bucket_info.region != region.name)) {
+  if (remote_dest) {
     /* dest is in a different region, copy it there */
 
     map<string, bufferlist> src_attrs;
@@ -1992,9 +2030,7 @@ int RGWRados::copy_obj(void *ctx,
       return ret;
 
     return 0;
-  }
-      
-  if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
+  } else if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     return copy_obj_data(ctx, handle, end, dest_obj, src_obj, mtime, attrset, category, ptag, err);
   }
 
