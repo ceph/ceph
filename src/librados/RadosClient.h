@@ -70,6 +70,8 @@ private:
   void *log_cb_arg;
   string log_watch;
 
+  void wait_for_osdmap();
+
 public:
   Finisher finisher;
 
