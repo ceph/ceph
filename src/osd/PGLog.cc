@@ -586,20 +586,30 @@ void PGLog::_write_log(
 
   map<string,bufferlist> keys;
   for (list<pg_log_entry_t>::iterator p = log.log.begin();
-       p != log.log.end();
+       p != log.log.end() && p->version < dirty_to;
        ++p) {
-    if ((p->version < dirty_to) || (p->version >= dirty_from)) {
-      bufferlist bl(sizeof(*p) * 2);
-      p->encode_with_checksum(bl);
-      keys[p->get_key_name()].claim(bl);
+    bufferlist bl(sizeof(*p) * 2);
+    p->encode_with_checksum(bl);
+    keys[p->get_key_name()].claim(bl);
+  }
 
-      if (log_keys_debug) {
-	assert(!log_keys_debug->count(p->get_key_name()));
-	log_keys_debug->insert(p->get_key_name());
-      }
+  for (list<pg_log_entry_t>::reverse_iterator p = log.log.rbegin();
+       p != log.log.rend() && p->version >= dirty_from &&
+	 p->version >= dirty_to;
+       ++p) {
+    bufferlist bl(sizeof(*p) * 2);
+    p->encode_with_checksum(bl);
+    keys[p->get_key_name()].claim(bl);
+  }
+
+  if (log_keys_debug) {
+    for (map<string, bufferlist>::iterator i = keys.begin();
+	 i != keys.end();
+	 ++i) {
+      assert(!log_keys_debug->count(i->first));
+      log_keys_debug->insert(i->first);
     }
   }
-//dout(10) << "write_log " << keys.size() << " keys" << dendl;
 
   if (dirty_divergent_priors) {
     //dout(10) << "write_log: writing divergent_priors" << dendl;
