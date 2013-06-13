@@ -1,4 +1,4 @@
-#
+#&
 # Processed in Makefile to add python #! line and version variable
 #
 #
@@ -1453,6 +1453,14 @@ def main():
     # -- means "stop parsing args", but we don't want to see it either
     if '--' in childargs:
         childargs.remove('--')
+
+    # special deprecation warning for 'ceph <type> tell'
+    # someday 'mds' will be here too
+    if len(childargs) >= 2 and \
+        childargs[0] in ['mon', 'osd'] and \
+        childargs[1] == 'tell':
+        print >> sys.stderr, '"{0} tell" is deprecated; try "tell {0}.<id>" instead (id can be "*") '.format(childargs[0])
+        return 1
 
     try:
         cluster_handle.connect()
