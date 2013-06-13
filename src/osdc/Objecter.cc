@@ -2189,6 +2189,7 @@ void Objecter::dump_requests(Formatter& fmt) const
   dump_pool_ops(fmt);
   dump_pool_stat_ops(fmt);
   dump_statfs_ops(fmt);
+  dump_command_ops(fmt);
   fmt.close_section(); // requests object
 }
 
@@ -2243,6 +2244,29 @@ void Objecter::dump_linger_ops(Formatter& fmt) const
     fmt.close_section(); // linger_op object
   }
   fmt.close_section(); // linger_ops array
+}
+
+void Objecter::dump_command_ops(Formatter& fmt) const
+{
+  fmt.open_array_section("command_ops");
+  for (map<uint64_t, CommandOp*>::const_iterator p = command_ops.begin();
+       p != command_ops.end();
+       ++p) {
+    CommandOp *op = p->second;
+    fmt.open_object_section("command_op");
+    fmt.dump_unsigned("command_id", op->tid);
+    fmt.dump_int("osd", op->session ? op->session->osd : -1);
+    fmt.open_array_section("command");
+    for (vector<string>::const_iterator q = op->cmd.begin(); q != op->cmd.end(); ++q)
+      fmt.dump_string("word", *q);
+    fmt.close_section();
+    if (op->target_osd >= 0)
+      fmt.dump_int("target_osd", op->target_osd);
+    else
+      fmt.dump_stream("target_pg") << op->target_pg;
+    fmt.close_section(); // command_op object
+  }
+  fmt.close_section(); // command_ops array
 }
 
 void Objecter::dump_pool_ops(Formatter& fmt) const
