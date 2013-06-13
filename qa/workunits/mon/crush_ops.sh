@@ -27,10 +27,15 @@ ceph osd crush add-bucket foo root
 o1=`ceph osd create`
 o2=`ceph osd create`
 ceph osd crush add $o1 1 host=host1 root=foo
+ceph osd crush add $o1 1 host=host1 root=foo  # idemptoent
 ceph osd crush add $o2 1 host=host2 root=foo
+ceph osd crush add $o2 1 host=host2 root=foo  # idempotent
 ceph osd crush add-bucket bar root
+ceph osd crush add-bucket bar root  # idempotent
 ceph osd crush link host1 root=bar
+ceph osd crush link host1 root=bar  # idempotent
 ceph osd crush link host2 root=bar
+ceph osd crush link host2 root=bar  # idempotent
 
 ceph osd tree | grep -c osd.$o1 | grep -q 2
 ceph osd tree | grep -c host1 | grep -q 2
