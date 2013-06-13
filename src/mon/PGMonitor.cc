@@ -1604,6 +1604,6 @@ void PGMonitor::check_sub(Subscription *sub)
 {
   if (sub->type == "osd_pg_creates") {
     send_pg_creates(sub->session->inst.name.num(),
-		    sub->session->con);
+		    sub->session->con.get());
   }
 }

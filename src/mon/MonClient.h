@@ -63,7 +63,7 @@ private:
   Messenger *messenger;
 
   string cur_mon;
-  Connection *cur_con;
+  ConnectionRef cur_con;
 
   SimpleRNG rng;
 

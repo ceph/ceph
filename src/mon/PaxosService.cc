@@ -35,6 +35,11 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
 {
   dout(10) << "dispatch " << *m << " from " << m->get_orig_source_inst() << dendl;
 
+  if (mon->is_shutdown()) {
+    m->put();
+    return true;
+  }
+
   // make sure this message isn't forwarded from a previous election epoch
   if (m->rx_election_epoch &&
       m->rx_election_epoch < mon->get_epoch()) {

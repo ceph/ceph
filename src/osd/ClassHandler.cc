@@ -31,6 +31,13 @@ int ClassHandler::open_class(const string& cname, ClassData **pcls)
   return 0;
 }
 
+void ClassHandler::shutdown()
+{
+  for (map<string, ClassData>::iterator p = classes.begin(); p != classes.end(); ++p) {
+    dlclose(p->second.handle);
+  }
+}
+
 ClassHandler::ClassData *ClassHandler::_get_class(const string& cname)
 {
   ClassData *cls;
