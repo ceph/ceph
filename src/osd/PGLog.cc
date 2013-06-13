@@ -329,7 +329,6 @@ bool PGLog::merge_old_entry(ObjectStore::Transaction& t, const pg_log_entry_t& o
 	     << oe.prior_version << dendl;
     if (oe.prior_version > eversion_t()) {
       add_divergent_prior(oe.prior_version, oe.soid);
-      dirty_log = true;
       missing.revise_need(oe.soid, oe.prior_version);
     } else if (missing.is_missing(oe.soid)) {
       missing.rm(oe.soid, missing.missing[oe.soid].need);
@@ -362,6 +361,7 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
       divergent.swap(log.log);
       break;
     }
+    mark_dirty_from(p->version);
     --p;
     if (p->version == newhead) {
       ++p;
@@ -383,7 +383,6 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
 
   dirty_info = true;
   dirty_big_info = true;
-  dirty_log = true;
 }
 
 void PGLog::merge_log(ObjectStore::Transaction& t,
@@ -414,6 +413,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
   //  missing set, as that should already be consistent with our
   //  current log.
   if (olog.tail < log.tail) {
+    mark_dirty_to(log.log.begin()->version); // last clean entry
     dout(10) << "merge_log extending tail to " << olog.tail << dendl;
     list<pg_log_entry_t>::iterator from = olog.log.begin();
     list<pg_log_entry_t>::iterator to;
@@ -467,6 +467,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
 	break;
       }
     }
+    mark_dirty_from(lower_bound);
 
     // index, update missing, delete deleted
     for (list<pg_log_entry_t>::iterator p = from; p != to; ++p) {
@@ -522,7 +523,6 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
   if (changed) {
     dirty_info = true;
     dirty_big_info = true;
-    dirty_log = true;
   }
 }
 
