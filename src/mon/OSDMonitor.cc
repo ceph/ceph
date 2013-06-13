@@ -2579,7 +2579,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       _get_pending_crush(newcrush);
 
       string action;
-      if (prefix == "osd crush set") {
+      if (prefix == "osd crush set" ||
+	  newcrush.check_item_loc(g_ceph_context, id, loc, (int *)NULL)) {
 	action = "set";
 	err = newcrush.update_item(g_ceph_context, id, weight, name, loc);
       } else {
