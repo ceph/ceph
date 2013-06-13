@@ -74,16 +74,20 @@ public:
 
 class RGWRESTStreamReadRequest : public RGWRESTSimpleRequest {
   Mutex lock;
-  void *handle;
   RGWGetDataCB *cb;
+  bufferlist in_data;
+  size_t chunk_ofs;
+  size_t ofs;
 public:
   int send_data(void *ptr, size_t len);
+  int receive_data(void *ptr, size_t len);
 
-  RGWRESTStreamReadRequest(CephContext *_cct, string& _url, list<pair<string, string> > *_headers,
+  RGWRESTStreamReadRequest(CephContext *_cct, string& _url, RGWGetDataCB *_cb, list<pair<string, string> > *_headers,
                 list<pair<string, string> > *_params) : RGWRESTSimpleRequest(_cct, _url, _headers, _params),
-                lock("RGWRESTStreamReadRequest"), handle(NULL), cb(NULL) {}
+                lock("RGWRESTStreamReadRequest"), cb(_cb),
+                chunk_ofs(0), ofs(0) {}
   ~RGWRESTStreamReadRequest() {}
-  int get_obj_init(RGWAccessKey& key, rgw_obj& obj);
+  int get_obj(RGWAccessKey& key, rgw_obj& obj);
   int complete(string& etag, time_t *mtime);
 
   void set_in_cb(RGWGetDataCB *_cb) { cb = _cb; }

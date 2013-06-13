@@ -529,7 +529,7 @@ int RGWRESTStreamWriteRequest::complete(string& etag, time_t *mtime)
   return status;
 }
 
-int RGWRESTStreamReadRequest::get_obj_init(RGWAccessKey& key, rgw_obj& obj)
+int RGWRESTStreamReadRequest::get_obj(RGWAccessKey& key, rgw_obj& obj)
 {
   string resource = obj.bucket.name + "/" + obj.object;
   string new_url = url;
@@ -596,7 +596,51 @@ int RGWRESTStreamReadRequest::complete(string& etag, time_t *mtime)
   return status;
 }
 
-int RGWRESTStreamReadRequest::send_data(void *ptr, size_t len) {
+int RGWRESTStreamReadRequest::receive_data(void *ptr, size_t len)
+{
+  bufferptr bp((const char *)ptr, len);
+  bufferlist bl;
+  bl.append(bp);
+  int ret = cb->handle_data(bl, ofs, len);
+  if (ret < 0)
+    return ret;
+  ofs += len;
+  return len;
+#if 0
+  return cb->handle_data(bl
+  const char *p = (const char *)ptr;
+  size_t orig_len = len;
+  while (len > 0) {
+    size_t read_len = RGW_MAX_CHUNK_SIZE - chunk_ofs;
+    if (read_len > len)
+      read_len = len;
+
+    bufferptr bp((const char *)p, read_len);
+    in_data.append(bp);
+
+    p += read_len;
+    len -= read_len;
+    chunk_ofs += read_len;
+    if (chunk_ofs == RGW_MAX_CHUNK_SIZE) {
+      chunk_ofs = 0;
+      size_t data_len = in_data.length();
+      int r = cb->handle_data(in_data, ofs, data_len);
+      if (r < 0)
+        return r;
+
+      ofs += data_len;
+
+      in_data.clear();
+    }
+  }
+
+  return orig_len;
+#endif
+}
+
+int RGWRESTStreamReadRequest::send_data(void *ptr, size_t len)
+{
+  /* not sending any data */
   return 0;
 }
 
