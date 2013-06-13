@@ -1857,6 +1857,45 @@ extern "C" int rados_mon_command(rados_t cluster, const char **cmd,
   return ret;
 }
 
+extern "C" int rados_mon_command_target(rados_t cluster, const char *name,
+					const char **cmd,
+					size_t cmdlen,
+					const char *inbuf, size_t inbuflen,
+					char **outbuf, size_t *outbuflen,
+					char **outs, size_t *outslen)
+{
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  bufferlist inbl;
+  bufferlist outbl;
+  string outstring;
+  vector<string> cmdvec;
+
+  // is this a numeric id?
+  char *endptr;
+  errno = 0;
+  long rank = strtol(name, &endptr, 10);
+  if ((errno == ERANGE && (rank == LONG_MAX || rank == LONG_MIN)) ||
+      (errno != 0 && rank == 0) ||
+      endptr == name ||    // no digits
+      *endptr != '\0') {   // extra characters
+    rank = -1;
+  }
+
+  for (size_t i = 0; i < cmdlen; i++)
+    cmdvec.push_back(cmd[i]);
+
+  inbl.append(inbuf, inbuflen);
+  int ret;
+  if (rank >= 0)
+    ret = client->mon_command(rank, cmdvec, inbl, &outbl, &outstring);
+  else
+    ret = client->mon_command(name, cmdvec, inbl, &outbl, &outstring);
+
+  do_out_buffer(outbl, outbuf, outbuflen);
+  do_out_buffer(outstring, outs, outslen);
+  return ret;
+}
+
 extern "C" int rados_osd_command(rados_t cluster, int osdid, const char **cmd,
 				 size_t cmdlen,
 				 const char *inbuf, size_t inbuflen,
