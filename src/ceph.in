@@ -839,7 +839,8 @@ def parse_cmdargs(args=None, target=''):
     # format our own help
     parser = AP(description='Frontend for ceph CLI', add_help=False)
 
-    parser.add_argument('--completion', action='store_true')
+    parser.add_argument('--completion', action='store_true',
+                        help=argparse.SUPPRESS)
 
     parser.add_argument('-h', '--help', help='request mon help',
                         action='store_true')
@@ -878,9 +879,10 @@ def parse_cmdargs(args=None, target=''):
     parser.add_argument('--watch-error', action='store_true',
                         help='watch error events')
 
-    parser.add_argument('-v', action="store_true")
-    parser.add_argument('--verbose', action="store_true")
-    parser.add_argument('--concise', dest='verbose', action="store_false")
+    parser.add_argument('-v', action="store_true", help="display version")
+    parser.add_argument('--verbose', action="store_true", help="make verbose")
+    parser.add_argument('--concise', dest='verbose', action="store_false",
+                        help="make less verbose")
 
     parser.add_argument('-f', '--format', choices=['json', 'json-pretty',
                         'xml', 'xml-pretty', 'plain'], dest='output_format')
