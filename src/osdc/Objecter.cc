@@ -111,6 +111,10 @@ enum {
   l_osdc_statfs_send,
   l_osdc_statfs_resend,
 
+  l_osdc_command_active,
+  l_osdc_command_send,
+  l_osdc_command_resend,
+
   l_osdc_map_epoch,
   l_osdc_map_full,
   l_osdc_map_inc,
@@ -189,6 +193,10 @@ void Objecter::init_unlocked()
     pcb.add_u64(l_osdc_statfs_active, "statfs_active");
     pcb.add_u64_counter(l_osdc_statfs_send, "statfs_send");
     pcb.add_u64_counter(l_osdc_statfs_resend, "statfs_resend");
+
+    pcb.add_u64(l_osdc_command_active, "command_active");
+    pcb.add_u64_counter(l_osdc_command_send, "command_send");
+    pcb.add_u64_counter(l_osdc_command_resend, "command_resend");
 
     pcb.add_u64(l_osdc_map_epoch, "map_epoch");
     pcb.add_u64_counter(l_osdc_map_full, "map_full");
@@ -2353,6 +2361,8 @@ int Objecter::_submit_command(CommandOp *c, tid_t *ptid)
   if (c->map_check_error)
     _send_command_map_check(c);
   *ptid = tid;
+
+  logger->set(l_osdc_command_active, command_ops.size());
   return 0;
 }
 
@@ -2409,6 +2419,7 @@ void Objecter::_send_command(CommandOp *c)
   m->set_data(c->inbl);
   m->set_tid(c->tid);
   messenger->send_message(m, c->session->con);
+  logger->inc(l_osdc_command_send);
 }
 
 void Objecter::_finish_command(CommandOp *c, int r, string rs)
@@ -2421,4 +2432,6 @@ void Objecter::_finish_command(CommandOp *c, int r, string rs)
     c->onfinish->complete(r);
   command_ops.erase(c->tid);
   c->put();
+
+  logger->set(l_osdc_command_active, command_ops.size());
 }
