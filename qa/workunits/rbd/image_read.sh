@@ -262,6 +262,9 @@ function setup() {
 
 	if [ "${LOCAL_FILES}" != true -a "${SUSER}" != true ]; then
 		[ -d /sys/bus/rbd ] || sudo modprobe rbd
+		while [ ! -f /sys/bus/rbd/add ]; do
+		    sleep 1
+		done
 		# allow ubuntu user to map/unmap rbd devices
 		sudo chown ubuntu /sys/bus/rbd/add
 		sudo chown ubuntu /sys/bus/rbd/remove
