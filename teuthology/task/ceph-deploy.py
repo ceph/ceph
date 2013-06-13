@@ -175,24 +175,24 @@ def build_ceph_cluster(ctx, config):
                                 log.info('successfully created osd')
                                 no_of_osds += 1
                             else:
-                                zap_disk = './ceph-deploy zapdisk'+" "+d
+                                zap_disk = './ceph-deploy disk zap'+" "+d
                                 execute_ceph_deploy(ctx, config, zap_disk)
                                 estatus_osd = execute_ceph_deploy(ctx, config, osd_create_cmds)
                                 if estatus_osd==0:
                                     log.info('successfully created osd')
                                     no_of_osds += 1
                                 else:
-                                    log.info('failed to create osd')
+                                    raise Exception("ceph-deploy: Failed to create osds")
                     else:
-                        log.info('failed to deploy mds')
+                        raise Exception("ceph-deploy: Failed to deploy mds")
                 else:
-                    log.info('failed to create monitors')
+                    raise Exception("ceph-deploy: Failed to create monitors")
             else:
-                  log.info('failed to install ceph')
+                  raise Exception("ceph-deploy: Failed to install ceph")
         else:
-            log.info('failed to create config file and monitor keyring')
+            raise Exception("ceph-deploy: new command failed")
     else:
-        log.info('no monitor nodes in the config file')
+        raise Exception("no monitor nodes in the config file")
 
     if config.get('wait-for-healthy', True) and no_of_osds >= 2:
         is_healthy(ctx=ctx, config=None)
