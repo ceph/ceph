@@ -79,13 +79,15 @@ int RGWMetadataLog::add_entry(RGWRados *store, string& section, string& key, buf
   return store->time_log_add(oid, now, section, key, bl);
 }
 
-void RGWMetadataLog::init_list_entries(int shard_id, utime_t& from_time, utime_t& end_time, void **handle)
+void RGWMetadataLog::init_list_entries(int shard_id, utime_t& from_time, utime_t& end_time, 
+                                       string& marker, void **handle)
 {
   LogListCtx *ctx = new LogListCtx();
 
   ctx->cur_shard = shard_id;
   ctx->from_time = from_time;
-  ctx->end_time = end_time;
+  ctx->end_time  = end_time;
+  ctx->marker    = marker;
 
   get_shard_oid(ctx->cur_shard, ctx->cur_oid);
 
@@ -99,7 +101,7 @@ void RGWMetadataLog::complete_list_entries(void *handle) {
 
 int RGWMetadataLog::list_entries(void *handle,
                  int max_entries,
-                 list<cls_log_entry>& entries,
+                 list<cls_log_entry>& entries, 
                  bool *truncated) {
   LogListCtx *ctx = (LogListCtx *)handle;
 
@@ -107,8 +109,6 @@ int RGWMetadataLog::list_entries(void *handle,
     *truncated = false;
     return 0;
   }
-
-  entries.clear();
 
   int ret = store->time_log_list(ctx->cur_oid, ctx->from_time, ctx->end_time,
                                  max_entries, entries, ctx->marker, truncated);

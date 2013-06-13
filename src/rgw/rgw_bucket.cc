@@ -1159,7 +1159,7 @@ int RGWDataChangesLog::list_entries(int shard, utime_t& start_time, utime_t& end
   list<cls_log_entry> log_entries;
 
   int ret = store->time_log_list(oids[shard], start_time, end_time,
-                                 max_entries, log_entries, marker, truncated);
+                                 max_entries, log_entries, marker, truncated); 
   if (ret < 0)
     return ret;
 
@@ -1182,7 +1182,6 @@ int RGWDataChangesLog::list_entries(int shard, utime_t& start_time, utime_t& end
 int RGWDataChangesLog::list_entries(utime_t& start_time, utime_t& end_time, int max_entries,
              list<rgw_data_change>& entries, LogMarker& marker, bool *ptruncated) {
   bool truncated;
-
   entries.clear();
 
   for (; marker.shard < num_shards && (int)entries.size() < max_entries;

@@ -25,7 +25,6 @@ class RGWGC;
 
 #define RGW_OBJ_NS_MULTIPART "multipart"
 #define RGW_OBJ_NS_SHADOW    "shadow"
-#define RGW_INDEX_LOCK_NAME  "rgw_process"
 
 static inline void prepend_bucket_marker(rgw_bucket& bucket, string& orig_oid, string& oid)
 {
