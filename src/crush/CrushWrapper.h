@@ -633,7 +633,7 @@ private:
     pair<string, string> bucket_location = get_immediate_parent(item);
 
     // get the id of the parent bucket
-    int parent_id = get_item_id( (bucket_location.second).c_str() );
+    int parent_id = get_item_id(bucket_location.second);
 
     // get the parent bucket
     crush_bucket *parent_bucket = get_bucket(parent_id);
