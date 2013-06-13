@@ -2109,10 +2109,24 @@ bool RGWRados::aio_completed(void *handle)
 class RGWRadosPutObj : public RGWGetDataCB
 {
   rgw_obj obj;
+  RGWPutObjProcessor_Atomic *processor;
 public:
-  RGWRadosPutObj(rgw_obj& _o) : obj(_o) {}
+  RGWRadosPutObj(RGWPutObjProcessor_Atomic *p) : processor(p) {}
   int handle_data(bufferlist& bl, off_t ofs, off_t len) {
+    void *handle;
+    int ret = processor->handle_data(bl, ofs, &handle);
+    if (ret < 0)
+      return ret;
+
+    ret = processor->throttle_data(handle);
+    if (ret < 0)
+      return ret;
+
     return 0;
+  }
+
+  int complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs) {
+    return processor->complete(etag, mtime, attrs);
   }
 };
 
@@ -2182,7 +2196,16 @@ int RGWRados::copy_obj(void *ctx,
     map<string, bufferlist> src_attrs;
 
     RGWRESTStreamReadRequest *in_stream_req;
-    RGWRadosPutObj cb(dest_obj);
+    string tag;
+    append_rand_alpha(cct, tag, tag, 32);
+
+    RGWPutObjProcessor_Atomic processor(dest_obj.bucket, dest_obj.object,
+                                        cct->_conf->rgw_obj_stripe_size, tag);
+    ret = processor.prepare(this, ctx);
+    if (ret < 0)
+      return ret;
+
+    RGWRadosPutObj cb(&processor);
   
     int ret = rest_conn->get_obj(user_id, src_obj, &cb, &in_stream_req);
     if (ret < 0)
@@ -2191,6 +2214,10 @@ int RGWRados::copy_obj(void *ctx,
     string etag;
 
     ret = rest_conn->complete_request(in_stream_req, etag, mtime);
+    if (ret < 0)
+      return ret;
+
+    ret = cb.complete(etag, mtime, attrs);
     if (ret < 0)
       return ret;
 

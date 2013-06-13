@@ -211,10 +211,10 @@ class RGWPutObjProcessor_Plain : public RGWPutObjProcessor
 protected:
   int prepare(RGWRados *store, void *obj_ctx);
   int handle_data(bufferlist& bl, off_t ofs, void **phandle);
-  int throttle_data(void *handle) { return 0; }
   int do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs);
 
 public:
+  int throttle_data(void *handle) { return 0; }
   RGWPutObjProcessor_Plain(rgw_bucket& b, const string& o) : bucket(b), obj_str(o), ofs(0) {}
 };
 
@@ -236,6 +236,8 @@ protected:
   uint64_t obj_len;
 
   int handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle);
+
+public:
   int throttle_data(void *handle);
 
   RGWPutObjProcessor_Aio() : max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
@@ -264,7 +266,6 @@ protected:
 
   virtual bool immutable_head() { return false; }
 
-  int prepare(RGWRados *store, void *obj_ctx);
   virtual int do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs);
 
   void prepare_next_part(off_t ofs);
@@ -279,6 +280,7 @@ public:
                                 bucket(_b),
                                 obj_str(_o),
                                 unique_tag(_t) {}
+  int prepare(RGWRados *store, void *obj_ctx);
   int handle_data(bufferlist& bl, off_t ofs, void **phandle);
 };
 
