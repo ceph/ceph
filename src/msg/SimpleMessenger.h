@@ -303,8 +303,8 @@ public:
    * @param dest The entity to get a connection for.
    * @return The requested Connection, as a pointer whose reference you own.
    */
-  virtual Connection *get_connection(const entity_inst_t& dest);
-  virtual Connection *get_loopback_connection();
+  virtual ConnectionRef get_connection(const entity_inst_t& dest);
+  virtual ConnectionRef get_loopback_connection();
   /**
    * Send a "keepalive" ping to the given dest, if it has a working Connection.
    * If the Messenger doesn't already have a Connection, or if the underlying
@@ -555,7 +555,7 @@ public:
   int timeout;
 
   /// con used for sending messages to ourselves
-  Connection *local_connection;
+  ConnectionRef local_connection;
 
   /**
    * @defgroup SimpleMessenger internals

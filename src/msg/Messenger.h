@@ -408,6 +408,9 @@ public:
    * @return 0 on success, or -errno on failure.
    */
   virtual int send_message(Message *m, Connection *con) = 0;
+  int send_message(Message *m, const ConnectionRef& con) {
+    return send_message(m, con.get());
+  }
   /**
    * Lazily queue the given Message for the given entity. Unlike with
    * send_message(), lazy_send_message() will not establish a
@@ -450,11 +453,11 @@ public:
    *
    * @param dest The entity to get a connection for.
    */
-  virtual Connection *get_connection(const entity_inst_t& dest) = 0;
+  virtual ConnectionRef get_connection(const entity_inst_t& dest) = 0;
   /**
    * Get the Connection object associated with ourselves.
    */
-  virtual Connection *get_loopback_connection() = 0;
+  virtual ConnectionRef get_loopback_connection() = 0;
   /**
    * Send a "keepalive" ping to the given dest, if it has a working Connection.
    * If the Messenger doesn't already have a Connection, or if the underlying
@@ -494,6 +497,9 @@ public:
    * @param con The Connection to mark down.
    */
   virtual void mark_down(Connection *con) = 0;
+  void mark_down(const ConnectionRef& con) {
+    mark_down(con.get());
+  }
   /**
    * Unlike mark_down, this function will try and deliver
    * all messages before ending the connection, and it will use

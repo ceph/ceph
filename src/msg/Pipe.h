@@ -150,7 +150,7 @@ class DispatchQueue;
 
   protected:
     friend class SimpleMessenger;
-    Connection *connection_state;
+    ConnectionRef connection_state;
 
     utime_t backoff;         // backoff time
 

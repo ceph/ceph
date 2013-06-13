@@ -36,6 +36,4 @@ MetaSession::~MetaSession()
 {
   if (release)
     release->put();
-  if (con)
-    con->put();
 }
