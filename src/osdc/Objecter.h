@@ -955,6 +955,8 @@ public:
     int target_osd;
     pg_t target_pg;
     epoch_t map_dne_bound;
+    int map_check_error;           // error to return if map check fails
+    const char *map_check_error_str;
     Context *onfinish;
     utime_t last_submit;
 
@@ -962,6 +964,8 @@ public:
       : session_item(this), session(NULL),
 	tid(0), poutbl(NULL), prs(NULL), target_osd(-1),
 	map_dne_bound(0),
+	map_check_error(0),
+	map_check_error_str(NULL),
 	onfinish(NULL) {}
   };
 
@@ -1109,7 +1113,7 @@ public:
   void check_linger_pool_dne(LingerOp *op);
   void _send_linger_map_check(LingerOp *op);
   void linger_cancel_map_check(LingerOp *op);
-  void check_command_pool_dne(CommandOp *op);
+  void check_command_map_dne(CommandOp *op);
   void _send_command_map_check(CommandOp *op);
   void command_cancel_map_check(CommandOp *op);
 

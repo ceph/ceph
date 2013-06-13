@@ -508,10 +508,9 @@ void Objecter::scan_requests(bool skipped_map,
       command_cancel_map_check(c);
       break;
     case RECALC_OP_TARGET_POOL_DNE:
-      check_command_pool_dne(c);
-      break;
     case RECALC_OP_TARGET_OSD_DNE:
-      _finish_command(c, -ENOENT, "osd dne");
+    case RECALC_OP_TARGET_OSD_DOWN:
+      check_command_map_dne(c);
       break;
     }     
   }
@@ -854,18 +853,18 @@ void Objecter::C_Command_Map_Latest::finish(int r)
   if (c->map_dne_bound == 0)
     c->map_dne_bound = latest;
 
-  objecter->check_command_pool_dne(c);
+  objecter->check_command_map_dne(c);
 }
 
-void Objecter::check_command_pool_dne(CommandOp *c)
+void Objecter::check_command_map_dne(CommandOp *c)
 {
-  ldout(cct, 10) << "check_command_pool_dne tid " << c->tid
+  ldout(cct, 10) << "check_command_map_dne tid " << c->tid
 		 << " current " << osdmap->get_epoch()
 		 << " map_dne_bound " << c->map_dne_bound
 		 << dendl;
   if (c->map_dne_bound > 0) {
     if (osdmap->get_epoch() >= c->map_dne_bound) {
-      _finish_command(c, -ENOENT, "pool dne");
+      _finish_command(c, c->map_check_error, c->map_check_error_str);
     }
   } else {
     _send_command_map_check(c);
@@ -2345,17 +2344,13 @@ int Objecter::_submit_command(CommandOp *c, tid_t *ptid)
   c->tid = tid;
   command_ops[tid] = c;
   num_homeless_ops++;
-  int r = recalc_command_target(c);
-  if (r == RECALC_OP_TARGET_OSD_DNE)
-    return -ENOENT;
-  if (r == RECALC_OP_TARGET_OSD_DOWN)
-    return -ENXIO;
+  (void)recalc_command_target(c);
 
   if (c->session)
     _send_command(c);
   else
     maybe_request_map();
-  if (r == RECALC_OP_TARGET_POOL_DNE)
+  if (c->map_check_error)
     _send_command_map_check(c);
   *ptid = tid;
   return 0;
@@ -2364,15 +2359,25 @@ int Objecter::_submit_command(CommandOp *c, tid_t *ptid)
 int Objecter::recalc_command_target(CommandOp *c)
 {
   OSDSession *s = NULL;
+  c->map_check_error = 0;
   if (c->target_osd >= 0) {
-    if (!osdmap->exists(c->target_osd))
+    if (!osdmap->exists(c->target_osd)) {
+      c->map_check_error = -ENOENT;
+      c->map_check_error_str = "osd dne";
       return RECALC_OP_TARGET_OSD_DNE;
-    if (osdmap->is_down(c->target_osd))
+    }
+    if (osdmap->is_down(c->target_osd)) {
+      c->map_check_error = -ENXIO;
+      c->map_check_error_str = "osd down";
       return RECALC_OP_TARGET_OSD_DOWN;
+    }
     s = get_session(c->target_osd);
   } else {
-    if (!osdmap->have_pg_pool(c->target_pg.pool()))
+    if (!osdmap->have_pg_pool(c->target_pg.pool())) {
+      c->map_check_error = -ENOENT;
+      c->map_check_error_str = "pool dne";
       return RECALC_OP_TARGET_POOL_DNE;
+    }
     vector<int> acting;
     osdmap->pg_to_acting_osds(c->target_pg, acting);
     if (!acting.empty())
