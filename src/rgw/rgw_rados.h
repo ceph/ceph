@@ -64,9 +64,15 @@ struct RGWUsageIter {
 };
 
 class RGWGetDataCB {
+protected:
+  uint64_t extra_data_len;
 public:
   virtual int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) = 0;
+  RGWGetDataCB() : extra_data_len(0) {}
   virtual ~RGWGetDataCB() {}
+  virtual void set_extra_data_len(uint64_t len) {
+    extra_data_len = len;
+  }
 };
 
 class RGWAccessListFilter {
@@ -253,6 +259,9 @@ class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
   off_t cur_part_ofs;
   off_t next_part_ofs;
   int cur_part_id;
+
+  uint64_t extra_data_len;
+  bufferlist extra_data_bl;
 protected:
   rgw_bucket bucket;
   string obj_str;
@@ -277,11 +286,16 @@ public:
                                 cur_part_ofs(0),
                                 next_part_ofs(_p),
                                 cur_part_id(0),
+                                extra_data_len(0),
                                 bucket(_b),
                                 obj_str(_o),
                                 unique_tag(_t) {}
   int prepare(RGWRados *store, void *obj_ctx);
+  void set_extra_data_len(uint64_t len) {
+    extra_data_len = len;
+  }
   int handle_data(bufferlist& bl, off_t ofs, void **phandle);
+  bufferlist& get_extra_data() { return extra_data_bl; }
 };
 
 

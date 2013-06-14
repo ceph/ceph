@@ -73,6 +73,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
   string content_type_str;
   map<string, string> response_attrs;
   map<string, string>::iterator riter;
+  bufferlist metadata_bl;
 
   if (ret)
     goto done;
@@ -82,6 +83,13 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
 
   if (range_str)
     dump_range(s, start, end, s->obj_size);
+
+  if (s->system_request &&
+      s->info.args.exists(RGW_SYS_PARAM_PREFIX "prepend-metadata")) {
+    ::encode(attrs, metadata_bl);
+    s->cio->print("Rgwx-Embedded-Metadata-Len: %lld\r\n", (long long)metadata_bl.length());
+    total_len += metadata_bl.length();
+  }
 
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
@@ -143,6 +151,10 @@ done:
   if (!content_type)
     content_type = "binary/octet-stream";
   end_header(s, content_type);
+
+  if (metadata_bl.length()) {
+    s->cio->write(metadata_bl.c_str(), metadata_bl.length());
+  }
   sent_header = true;
 
 send_data:
