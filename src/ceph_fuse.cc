@@ -108,7 +108,7 @@ int main(int argc, const char **argv, const char *envp[]) {
       g_ceph_context->_log->start();
 
     // get monmap
-    Messenger *messenger;
+    Messenger *messenger = NULL;
     Client *client;
     CephFuse *cfuse;
 
