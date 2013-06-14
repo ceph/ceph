@@ -717,7 +717,7 @@ protected:
 		 interval_set<uint64_t> &data_subset,
 		 map<hobject_t, interval_set<uint64_t> >& clone_subsets,
 		 PushOp *op);
-  void send_push_op_blank(const hobject_t& soid, int peer);
+  void prep_push_op_blank(const hobject_t& soid, PushOp *op);
 
   void finish_degraded_object(const hobject_t& oid);
 
@@ -899,6 +899,7 @@ protected:
   void sub_op_push_reply(OpRequestRef op);
   bool handle_push_reply(int peer, PushReplyOp &op, PushOp *reply);
   void sub_op_pull(OpRequestRef op);
+  void handle_pull(int peer, PullOp &op, PushOp *reply);
 
   void log_subop_stats(OpRequestRef op, int tag_inb, int tag_lat);
 
