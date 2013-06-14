@@ -1,4 +1,4 @@
-#
+#&
 # Processed in Makefile to add python #! line and version variable
 #
 #
@@ -839,7 +839,8 @@ def parse_cmdargs(args=None, target=''):
     # format our own help
     parser = AP(description='Ceph administration tool', add_help=False)
 
-    parser.add_argument('--completion', action='store_true')
+    parser.add_argument('--completion', action='store_true',
+                        help=argparse.SUPPRESS)
 
     parser.add_argument('-h', '--help', help='request mon help',
                         action='store_true')
@@ -878,9 +879,10 @@ def parse_cmdargs(args=None, target=''):
     parser.add_argument('--watch-error', action='store_true',
                         help='watch error events')
 
-    parser.add_argument('-v', action="store_true")
-    parser.add_argument('--verbose', action="store_true")
-    parser.add_argument('--concise', dest='verbose', action="store_false")
+    parser.add_argument('-v', action="store_true", help="display version")
+    parser.add_argument('--verbose', action="store_true", help="make verbose")
+    parser.add_argument('--concise', dest='verbose', action="store_false",
+                        help="make less verbose")
 
     parser.add_argument('-f', '--format', choices=['json', 'json-pretty',
                         'xml', 'xml-pretty', 'plain'], dest='output_format')
@@ -1454,6 +1456,14 @@ def main():
     # -- means "stop parsing args", but we don't want to see it either
     if '--' in childargs:
         childargs.remove('--')
+
+    # special deprecation warning for 'ceph <type> tell'
+    # someday 'mds' will be here too
+    if len(childargs) >= 2 and \
+        childargs[0] in ['mon', 'osd'] and \
+        childargs[1] == 'tell':
+        print >> sys.stderr, '"{0} tell" is deprecated; try "tell {0}.<id>" instead (id can be "*") '.format(childargs[0])
+        return 1
 
     try:
         cluster_handle.connect()
