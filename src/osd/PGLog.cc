@@ -572,11 +572,13 @@ void PGLog::_write_log(
 //dout(10) << "write_log, clearing up to " << dirty_to << dendl;
   if (touch_log)
     t.touch(coll_t(), log_oid);
-  t.omap_rmkeyrange(
-    coll_t(), log_oid,
-    eversion_t().get_key_name(), dirty_to.get_key_name());
-  clear_up_to(log_keys_debug, dirty_to.get_key_name());
-  if (dirty_to != eversion_t::max()) {
+  if (dirty_to != eversion_t()) {
+    t.omap_rmkeyrange(
+      coll_t(), log_oid,
+      eversion_t().get_key_name(), dirty_to.get_key_name());
+    clear_up_to(log_keys_debug, dirty_to.get_key_name());
+  }
+  if (dirty_to != eversion_t::max() && dirty_from != eversion_t::max()) {
     //   dout(10) << "write_log, clearing from " << dirty_from << dendl;
     t.omap_rmkeyrange(
       coll_t(), log_oid,
