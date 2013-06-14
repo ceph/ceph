@@ -158,7 +158,9 @@ rgw_dencoder_src = rgw/rgw_dencoder.cc \
 
 ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc ${rgw_dencoder_src} perfglue/disabled_heap_profiler.cc
 ceph_dencoder_CXXFLAGS = ${AM_CXXFLAGS}
-ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libcls_lock_client.a libcls_rgw_client.a libosd.a libmds.a libosdc.la $(LIBOS_LDA) libmon.a
+ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libcls_lock_client.a \
+			  libcls_rgw_client.a libcls_replica_log_client.a \
+			  libosd.a libmds.a libosdc.la $(LIBOS_LDA) libmon.a
 bin_PROGRAMS += ceph-dencoder
 
 mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c include/addr_parsing.c
@@ -579,6 +581,7 @@ libcls_statelog_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-r
 
 radoslib_LTLIBRARIES += libcls_statelog.la
 
+
 if WITH_RADOSGW
 # rgw: rados gateway
 libcls_rgw_la_SOURCES = cls/rgw/cls_rgw.cc
@@ -612,6 +615,10 @@ noinst_LIBRARIES += libcls_log_client.a
 libcls_statelog_client_a_SOURCES =  \
 	cls/statelog/cls_statelog_client.cc
 noinst_LIBRARIES += libcls_statelog_client.a
+
+libcls_replica_log_client_a_SOURCES = \
+	cls/replica_log/cls_replica_log_types.cc
+noinst_LIBRARIES += libcls_replica_log_client.a
 
 libcls_rgw_client_a_SOURCES =  \
 	cls/rgw/cls_rgw_client.cc \
