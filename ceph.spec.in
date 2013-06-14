@@ -324,7 +324,7 @@ rm -rf $RPM_BUILD_ROOT
 
 %post
 /sbin/ldconfig
-#/sbin/chkconfig --add ceph
+/sbin/chkconfig --add ceph
 
 %preun
 %if %{defined suse_version}
@@ -332,7 +332,7 @@ rm -rf $RPM_BUILD_ROOT
 %endif
 if [ $1 = 0 ] ; then
     /sbin/service ceph stop >/dev/null 2>&1
-#    /sbin/chkconfig --del ceph
+    /sbin/chkconfig --del ceph
 fi
 
 %postun
