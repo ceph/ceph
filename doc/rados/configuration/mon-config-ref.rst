@@ -10,6 +10,8 @@ consistent, but you can add, remove or replace a monitor in a cluster. See
 details.
 
 
+.. index:: Ceph Monitor; Paxos
+
 Background
 ==========
 
@@ -60,7 +62,7 @@ operations. Ceph Monitors leverage the key/value store's snapshots and iterators
 In Ceph versions 0.58 and earlier, Ceph Monitors use a Paxos instance for
 each service and store the map as a file. 
 
-.. index:: cluster map
+.. index:: Ceph Monitor; cluster map
 
 Cluster Maps
 ------------
@@ -104,7 +106,8 @@ A consensus requires a majority of monitors running to establish a quorum for
 consensus about the cluster map (e.g., 1; 2 out of 3; 3 out of 5; 4 out of 6;
 etc.).
 
-.. index:: monitor map; cluster map; consistency
+
+.. index:: Ceph Monitor; consistency
 
 Consistency
 -----------
@@ -142,7 +145,7 @@ recognize a Ceph Monitor, fall out of a quorum, or develop a situation where
 `Paxos`_ isn't able to determine the current state of the system accurately.
 
 
-.. index:: bootstrapping monitors
+.. index:: Ceph Monitor; bootstrapping monitors
 
 Bootstrapping Monitors
 ----------------------
@@ -171,6 +174,7 @@ settings:
 
 For additional details on bootstrapping, see `Bootstrapping a Monitor`_.
 
+.. index:: Ceph Monitor; configuring monitors
 
 Configuring Monitors
 ====================
@@ -244,6 +248,7 @@ possible to run daemons for multiple clusters on the same hardware.
 .. note:: Do not set this value if you use a deployment tool that does
    it for you.
 
+.. index:: Ceph Monitor; initial members
 
 Initial Members
 ---------------
@@ -273,6 +278,7 @@ online.
    each other in order to establish a quorum. You can decrease the initial 
    number of monitors to establish a quorum with this setting.
 
+.. index:: Ceph Monitor; data path
 
 Data
 ----
@@ -304,7 +310,7 @@ by setting it in the ``[mon]`` section of the configuration file.
 :Default: ``/var/lib/ceph/mon/$cluster-$id``
 
 
-.. index:: capacity planning
+.. index:: Ceph Storage Cluster; capacity planning, Ceph Monitor; capacity planning
 
 Storage Capacity
 ----------------
@@ -425,7 +431,7 @@ provides reasonable default settings for monitor/OSD interaction; however,  you
 may modify them as needed. See `Monitor/OSD Interaction`_ for details.
 
 
-.. index:: monitor synchronization; leader; provider; requester
+.. index:: Ceph Monitor; leader, Ceph Monitor; provider, Ceph Monitor; requester, Ceph Monitor; synchronization
 
 Monitor Store Synchronization
 -----------------------------
@@ -668,6 +674,7 @@ will not work, because there is a single Paxos instance for all services.
 :Default: ``256 * 1024``
 
 
+.. index:: Ceph Monitor; clock
 
 Clock
 -----
