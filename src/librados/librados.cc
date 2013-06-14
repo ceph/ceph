@@ -12,6 +12,8 @@
  *
  */
 
+#include <limits.h>
+
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
