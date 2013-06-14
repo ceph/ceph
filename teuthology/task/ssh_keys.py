@@ -110,7 +110,7 @@ def push_keys_to_host(ctx, config, public_key, private_key):
         inner_username, inner_hostname = str(inner_host).split('@')
         # create a 'user@hostname' string using our fake hostname
         fake_hostname = '{user}@{host}'.format(user=ssh_keys_user,host=str(inner_hostname))
-        auth_keys_data += '\nssh-rsa {pub_key} {user_host}'.format(pub_key=public_key,user_host=fake_hostname)
+        auth_keys_data += '\nssh-rsa {pub_key} {user_host}\n'.format(pub_key=public_key,user_host=fake_hostname)
 
     # for each host in ctx, add keys for all other hosts
     for remote in ctx.cluster.remotes:
