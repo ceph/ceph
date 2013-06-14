@@ -562,6 +562,7 @@ protected:
   void handle_push(
     int from, PushOp &op, PushReplyOp *response,
     ObjectStore::Transaction *t);
+  void send_pushes(int prio, map<int, vector<PushOp> > &pushes);
   int send_push(int priority, int peer,
 		const ObjectRecoveryInfo& recovery_info,
 		const ObjectRecoveryProgress &progress,
@@ -687,8 +688,9 @@ protected:
   // Reverse mapping from osd peer to objects beging pulled from that peer
   map<int, set<hobject_t> > pull_from_peer;
 
-  int recover_object_replicas(const hobject_t& soid, eversion_t v,
-			      int priority);
+  int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
+				 int priority,
+				 map<int, vector<PushOp> > *pushes);
   void calc_head_subsets(ObjectContext *obc, SnapSet& snapset, const hobject_t& head,
 			 pg_missing_t& missing,
 			 const hobject_t &last_backfill,
@@ -698,20 +700,23 @@ protected:
 			  const hobject_t &last_backfill,
 			  interval_set<uint64_t>& data_subset,
 			  map<hobject_t, interval_set<uint64_t> >& clone_subsets);
-  void push_to_replica(
+  void prep_push_to_replica(
     ObjectContext *obc,
     const hobject_t& oid,
     int dest,
-    int priority);
-  void push_start(int priority,
-		  ObjectContext *obc,
-		  const hobject_t& oid, int dest);
-  void push_start(int priority,
-		  ObjectContext *obc,
-		  const hobject_t& soid, int peer,
-		  eversion_t version,
-		  interval_set<uint64_t> &data_subset,
-		  map<hobject_t, interval_set<uint64_t> >& clone_subsets);
+    int priority,
+    PushOp *push_op);
+  void prep_push(int priority,
+		 ObjectContext *obc,
+		 const hobject_t& oid, int dest,
+		 PushOp *op);
+  void prep_push(int priority,
+		 ObjectContext *obc,
+		 const hobject_t& soid, int peer,
+		 eversion_t version,
+		 interval_set<uint64_t> &data_subset,
+		 map<hobject_t, interval_set<uint64_t> >& clone_subsets,
+		 PushOp *op);
   void send_push_op_blank(const hobject_t& soid, int peer);
 
   void finish_degraded_object(const hobject_t& oid);
@@ -758,7 +763,9 @@ protected:
    */
   void scan_range(hobject_t begin, int min, int max, BackfillInterval *bi);
 
-  void push_backfill_object(hobject_t oid, eversion_t v, eversion_t have, int peer);
+  void prep_backfill_object_push(
+    hobject_t oid, eversion_t v, eversion_t have, int peer,
+    map<int, vector<PushOp> > *pushes);
   void send_remove_op(const hobject_t& oid, eversion_t v, int peer);
 
 
