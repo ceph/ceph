@@ -1,4 +1,4 @@
-#&
+#
 # Processed in Makefile to add python #! line and version variable
 #
 #
@@ -1544,7 +1544,7 @@ def main():
     # Repulsive hack to handle tell: lop off 'tell' and target
     # and validate the rest of the command.  'target' is already
     # determined in our callers, so it's ok to remove it here.
-    if childargs[0] == 'tell':
+    if len(childargs) and childargs[0] == 'tell':
         childargs = childargs[2:]
 
     # fetch JSON sigs from command
