@@ -485,6 +485,8 @@ OPTION(osd_recovery_op_priority, OPT_INT, 10)
 // Max time to wait between notifying mon of shutdown and shutting down
 OPTION(osd_mon_shutdown_timeout, OPT_DOUBLE, 5)
 
+OPTION(osd_max_object_size, OPT_U64, 100*1024L*1024L*1024L) // OSD's maximum object size
+
 OPTION(filestore, OPT_BOOL, false)
 
 /// filestore wb throttle limits

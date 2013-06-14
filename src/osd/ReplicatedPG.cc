@@ -1953,6 +1953,19 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
   return result;
 }
 
+static int check_offset_and_length(__le64 offset, __le64 length)
+{
+  if (length < 1)
+    return -EINVAL;
+
+  if (offset >= g_conf->osd_max_object_size ||
+      length > g_conf->osd_max_object_size ||
+      offset + length > g_conf->osd_max_object_size)
+    return -EFBIG;
+
+  return 0;
+}
+
 int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 {
   int result = 0;
@@ -2005,7 +2018,14 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     // munge ZERO -> TRUNCATE?  (don't munge to DELETE or we risk hosing attributes)
     if (op.op == CEPH_OSD_OP_ZERO &&
 	obs.exists &&
+	op.extent.offset < g_conf->osd_max_object_size &&
+	op.extent.length >= 1 &&
+	op.extent.length <= g_conf->osd_max_object_size &&
 	op.extent.offset + op.extent.length >= oi.size) {
+      if (op.extent.offset >= oi.size) {
+        // no-op
+	goto fail;
+      }
       dout(10) << " munging ZERO " << op.extent.offset << "~" << op.extent.length
 	       << " -> TRUNCATE " << op.extent.offset << " (old size is " << oi.size << ")" << dendl;
       op.op = CEPH_OSD_OP_TRUNCATE;
@@ -2517,6 +2537,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    oi.truncate_size = op.extent.truncate_size;
 	  }
 	}
+	result = check_offset_and_length(op.extent.offset, op.extent.length);
+	if (result < 0)
+	  break;
 	bufferlist nbl;
 	bp.copy(op.extent.length, nbl);
 	t.write(coll, soid, op.extent.offset, op.extent.length, nbl);
@@ -2531,6 +2554,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       
     case CEPH_OSD_OP_WRITEFULL:
       { // write full object
+	result = check_offset_and_length(op.extent.offset, op.extent.length);
+	if (result < 0)
+	  break;
 	bufferlist nbl;
 	bp.copy(op.extent.length, nbl);
 	if (obs.exists) {
@@ -2560,6 +2586,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_ZERO:
       { // zero
+	result = check_offset_and_length(op.extent.offset, op.extent.length);
+	if (result < 0)
+	  break;
 	assert(op.extent.length);
 	if (obs.exists) {
 	  t.zero(coll, soid, op.extent.offset, op.extent.length);
@@ -2615,6 +2644,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	// truncate
 	if (!obs.exists) {
 	  dout(10) << " object dne, truncate is a no-op" << dendl;
+	  break;
+	}
+
+	if (op.extent.offset > g_conf->osd_max_object_size) {
+	  result = -EFBIG;
 	  break;
 	}
 

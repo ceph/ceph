@@ -24,3 +24,9 @@ v0.65
 
     ceph osd crush add osd.123 <weight> <location ...>
     ceph osd crush add 123 <weight> <location ...>
+
+* There is now a maximum RADOS object size, configurable via 'osd max
+  object size', defaulting to 100 GB.  Note that this has no effect on
+  RBD, CephFS, or radosgw, which all stripe over objects.
+
+ 
