@@ -111,7 +111,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_EQ(log.head, info.last_update);
     EXPECT_EQ(log.head, info.last_complete);
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_FALSE(dirty_info);
     EXPECT_FALSE(dirty_big_info);
 
@@ -125,7 +125,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_EQ(newhead, info.last_update);
     EXPECT_EQ(newhead, info.last_complete);
-    EXPECT_TRUE(dirty());
+    EXPECT_TRUE(is_dirty());
     EXPECT_TRUE(dirty_info);
     EXPECT_TRUE(dirty_big_info);
   }
@@ -176,7 +176,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
     EXPECT_EQ(1U, log.log.size());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_FALSE(dirty_info);
     EXPECT_FALSE(dirty_big_info);
 
@@ -188,7 +188,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
     EXPECT_TRUE(log.empty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
-    EXPECT_TRUE(dirty());
+    EXPECT_TRUE(is_dirty());
     EXPECT_TRUE(dirty_info);
     EXPECT_TRUE(dirty_big_info);
   }
@@ -208,7 +208,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     info.last_backfill.hash = 1;
     oe.soid.hash = 2;
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
@@ -216,7 +216,7 @@ TEST_F(PGLogTest, merge_old_entry) {
 
     EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
@@ -239,7 +239,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     oe.soid.snap = 1U;
     missing.add(oe.soid, eversion_t(), eversion_t());
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(missing.have_missing());
@@ -248,7 +248,7 @@ TEST_F(PGLogTest, merge_old_entry) {
 
     EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_EQ(oe.soid, remove_snap.front());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
@@ -268,7 +268,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     oe.version = eversion_t(1,1);
     log.add(oe);
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
@@ -276,7 +276,7 @@ TEST_F(PGLogTest, merge_old_entry) {
 
     EXPECT_TRUE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
@@ -297,7 +297,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     ne.version = eversion_t(2,1);
     log.add(ne);
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
@@ -336,7 +336,7 @@ TEST_F(PGLogTest, merge_old_entry) {
       EXPECT_THROW(merge_old_entry(t, oe, info, remove_snap), FailedAssertion);
     }
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
@@ -364,7 +364,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     oe.version = eversion_t(2,1);
     oe.op = pg_log_entry_t::DELETE;
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
@@ -372,7 +372,7 @@ TEST_F(PGLogTest, merge_old_entry) {
 
     EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
@@ -405,7 +405,7 @@ TEST_F(PGLogTest, merge_old_entry) {
       oe.version = eversion_t(2,1);
       oe.op = oe_op;
 
-      EXPECT_FALSE(dirty());
+      EXPECT_FALSE(is_dirty());
       EXPECT_TRUE(remove_snap.empty());
       EXPECT_TRUE(t.empty());
       EXPECT_FALSE(missing.have_missing());
@@ -430,7 +430,7 @@ TEST_F(PGLogTest, merge_old_entry) {
         EXPECT_FALSE(missing.is_missing(ne.soid, old_version));
       }
 
-      EXPECT_FALSE(dirty());
+      EXPECT_FALSE(is_dirty());
       EXPECT_TRUE(remove_snap.empty());
       EXPECT_TRUE(t.empty());
       EXPECT_TRUE(missing.is_missing(ne.soid));
@@ -459,7 +459,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     oe.op = pg_log_entry_t::MODIFY;
     missing.add_next_event(oe);
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(missing.is_missing(oe.soid));
@@ -467,7 +467,7 @@ TEST_F(PGLogTest, merge_old_entry) {
 
     EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
@@ -490,7 +490,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     oe.op = pg_log_entry_t::MODIFY;
     oe.prior_version = eversion_t(2,1);
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
@@ -498,7 +498,7 @@ TEST_F(PGLogTest, merge_old_entry) {
 
     EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
@@ -526,7 +526,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     oe.op = pg_log_entry_t::MODIFY;
     oe.prior_version = eversion_t(1,1);
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
@@ -534,7 +534,7 @@ TEST_F(PGLogTest, merge_old_entry) {
 
     EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_TRUE(dirty());
+    EXPECT_TRUE(is_dirty());
     EXPECT_EQ(oe.soid, remove_snap.front());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(missing.is_missing(oe.soid));
@@ -562,7 +562,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     oe.op = pg_log_entry_t::DELETE;
     oe.prior_version = eversion_t(1,1);
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
@@ -570,7 +570,7 @@ TEST_F(PGLogTest, merge_old_entry) {
 
     EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_TRUE(dirty());
+    EXPECT_TRUE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(missing.is_missing(oe.soid));
@@ -599,7 +599,7 @@ TEST_F(PGLogTest, merge_old_entry) {
 
     missing.add(oe.soid, eversion_t(1,1), eversion_t());
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(missing.is_missing(oe.soid));
@@ -607,7 +607,7 @@ TEST_F(PGLogTest, merge_old_entry) {
 
     EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
@@ -636,7 +636,7 @@ TEST_F(PGLogTest, merge_old_entry) {
 
     missing.add(oe.soid, eversion_t(1,1), eversion_t());
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(missing.is_missing(oe.soid));
@@ -644,7 +644,7 @@ TEST_F(PGLogTest, merge_old_entry) {
 
     EXPECT_FALSE(merge_old_entry(t, oe, info, remove_snap));
 
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_EQ(oe.soid, remove_snap.front());
     EXPECT_TRUE(t.empty());
     EXPECT_FALSE(missing.have_missing());
@@ -682,7 +682,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_EQ(last_backfill, info.last_backfill);
     EXPECT_TRUE(info.purged_snaps.empty());
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_FALSE(dirty_info);
     EXPECT_FALSE(dirty_big_info);
 
@@ -695,7 +695,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(info.purged_snaps.empty());
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_FALSE(dirty_info);
     EXPECT_FALSE(dirty_big_info);
   }
@@ -731,7 +731,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(info.last_backfill.is_max());
     EXPECT_TRUE(info.purged_snaps.empty());
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_FALSE(dirty_info);
     EXPECT_FALSE(dirty_big_info);
 
@@ -745,7 +745,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(info.purged_snaps.empty());
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_FALSE(dirty_info);
     EXPECT_FALSE(dirty_big_info);
   }
@@ -835,7 +835,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_EQ(last_backfill, info.last_backfill);
     EXPECT_TRUE(info.purged_snaps.empty());
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_FALSE(dirty_info);
     EXPECT_FALSE(dirty_big_info);
 
@@ -848,7 +848,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(info.purged_snaps.empty());
-    EXPECT_TRUE(dirty());
+    EXPECT_TRUE(is_dirty());
     EXPECT_TRUE(dirty_info);
     EXPECT_TRUE(dirty_big_info);
   }
@@ -944,7 +944,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_EQ(log.head, info.last_update);
     EXPECT_TRUE(info.purged_snaps.empty());
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_FALSE(dirty_info);
     EXPECT_FALSE(dirty_big_info);
 
@@ -966,7 +966,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_EQ(log.head, info.last_update);
     EXPECT_TRUE(info.purged_snaps.contains(purged_snap));
-    EXPECT_TRUE(dirty());
+    EXPECT_TRUE(is_dirty());
     EXPECT_TRUE(dirty_info);
     EXPECT_TRUE(dirty_big_info);
   }
@@ -1044,7 +1044,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(t.empty());
     EXPECT_EQ(last_backfill, info.last_backfill);
     EXPECT_TRUE(info.purged_snaps.empty());
-    EXPECT_FALSE(dirty());
+    EXPECT_FALSE(is_dirty());
     EXPECT_FALSE(dirty_info);
     EXPECT_FALSE(dirty_big_info);
 
@@ -1057,7 +1057,7 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_EQ(0x9U, remove_snap.front().hash);
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(info.purged_snaps.empty());
-    EXPECT_TRUE(dirty());
+    EXPECT_TRUE(is_dirty());
     EXPECT_TRUE(dirty_info);
     EXPECT_TRUE(dirty_big_info);
   }
