@@ -11,7 +11,7 @@
 :Default: ``0``
 
 
-.. index:: xattr
+.. index:: filestore; extended attributes
 
 Extended Attributes
 ===================
@@ -52,7 +52,7 @@ xattrs`` threshold are reached.
 :Required: No
 :Default: ``2``
 
-.. index:: filestore synchronization; synchronization
+.. index:: filestore; synchronization
 
 Synchronization Intervals
 =========================
@@ -82,7 +82,7 @@ optimally--potentially resulting in more efficient synchronization.
 :Default: ``.01``
 
 
-.. index:: filestore flusher; flusher
+.. index:: filestore; flusher
 
 Flusher
 =======
@@ -124,7 +124,7 @@ performance in some cases.
 :Default: ``false``
 
 
-.. index:: filestore queue
+.. index:: filestore; queue
 
 Queue
 =====
@@ -163,6 +163,7 @@ The following settings provide limits on the size of filestore queue.
 :Default: ``100 << 20``
 
 
+.. index:: filestore; timeouts
 
 Timeouts
 ========
@@ -192,6 +193,8 @@ Timeouts
 :Default: ``180``
 
 
+.. index:: filestore; btrfs
+
 B-Tree Filesystem
 =================
 
@@ -210,6 +213,9 @@ B-Tree Filesystem
 :Type: Boolean
 :Required: No. Only used for ``btrfs``.
 :Default: ``true``
+
+
+.. index:: filestore; journal
 
 Journal
 =======
