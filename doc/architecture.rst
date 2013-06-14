@@ -69,6 +69,8 @@ forth.
    filesystem.
 
 
+.. index:: architecture; high availability, scalability
+
 Scalability and High Availability
 ---------------------------------
 
@@ -85,6 +87,8 @@ of monitors to ensure high availability. To eliminate centralization, Ceph
 uses an algorithm called CRUSH.
 
 
+.. index:: CRUSH; architecture
+
 CRUSH Introduction
 ~~~~~~~~~~~~~~~~~~
 
@@ -99,7 +103,7 @@ The following sections provide additional details on how CRUSH works. For a
 detailed discussion of CRUSH, see `CRUSH - Controlled, Scalable, Decentralized
 Placement of Replicated Data`_.
 
-.. index:: cluster map
+.. index:: architecture; cluster map
 
 Cluster Map
 ~~~~~~~~~~~
@@ -139,7 +143,7 @@ Each map maintains an iterative history of its operating state changes. Ceph
 Monitors maintain a master copy of the cluster map including the cluster
 members, state, changes, and the overall health of the Ceph Storage Cluster.
 
-.. index:: high availability
+.. index:: high availability; monitor architecture
 
 High Availability Monitors
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -160,7 +164,7 @@ current state of the cluster.
 
 For details on configuring monitors, see the `Monitor Config Reference`_.
 
-.. index:: high availability
+.. index:: architecture; high availability authentication
 
 High Availability Authentication
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -172,6 +176,7 @@ The Cephx authentication system avoids a single point of failure to ensure
 scalability and high availability.  For details on Cephx and how it differs
 from Kerberos, see `Ceph Authentication and Authorization`_.
 
+.. index:: architecture; smart daemons and scalability
 
 Smart Daemons Enable Hyperscale
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -275,7 +280,7 @@ intelligent Ceph OSD Daemon. Let's take a deeper look at how CRUSH works to
 enable modern cloud storage infrastructures to place data, rebalance the cluster
 and recover from faults dynamically.
 
-.. index:: pool
+.. index:: architecture; pools
 
 About Pools
 ~~~~~~~~~~~
@@ -307,6 +312,8 @@ number of placement groups determine how Ceph will place the data.
             |  Pool  |---------->| CRUSH Ruleset |
             +--------+  Selects  +---------------+
                  
+
+.. index: architecture; placement group mapping
 
 Mapping PGs to OSDs
 ~~~~~~~~~~~~~~~~~~~
@@ -352,7 +359,7 @@ groups, and placement groups to OSDs.
 With a copy of the cluster map and the CRUSH algorithm, the client can compute
 exactly which OSD to use when reading or writing a particular object.
 
-.. index:: PG IDs
+.. index:: architecture; calculating PG IDs
 
 Calculating PG IDs
 ~~~~~~~~~~~~~~~~~~
@@ -388,7 +395,7 @@ Hashing)` algorithm allows a client to compute where objects *should* be stored,
 and enables the client to contact the primary OSD to store or retrieve the
 objects.
 
-.. index:: PG Peering; PG Sets
+.. index:: architecture; PG Peering
 
 Peering and Sets
 ~~~~~~~~~~~~~~~~
@@ -435,7 +442,7 @@ Daemons when an OSD fails.
    removed from the *Up Set*.
 
 
-.. index:: Rebalancing
+.. index:: architecture; Rebalancing
 
 Rebalancing
 ~~~~~~~~~~~
@@ -474,7 +481,7 @@ new OSD after rebalancing is complete.
            +--------+     +--------+     +--------+
 
 
-.. index:: Data Scrubbing
+.. index:: architecture; Data Scrubbing
 
 Data Consistency
 ~~~~~~~~~~~~~~~~
@@ -490,7 +497,7 @@ disk that weren't apparent in a light scrub.
 See `Data Scrubbing`_ for details on configuring scrubbing.
 
 
-.. index:: Ceph Classes; RADOS classes
+.. index:: Extensibility, Ceph Classes
 
 Extending Ceph
 --------------
@@ -533,7 +540,7 @@ power of the OSDs to perform the work. When referring to `Hardware
 Recommendations`_ and the `Network Config Reference`_,  be cognizant of the
 foregoing concepts to understand how Ceph utilizes computing resources.
 
-.. index:: RADOS Protocol; librados
+.. index:: Ceph Protocol, librados
 
 Ceph Protocol
 =============
@@ -574,7 +581,7 @@ provides direct, parallel access to objects throughout the cluster.
 - Object Classes
 
 
-.. index:: watch; notify; watch/notify; object watch/notify
+.. index:: architecture; watch/notify
 
 Object Watch/Notify
 -------------------
@@ -629,7 +636,7 @@ synchronization/communication channel.
                  |<---------------+----------------+------------------|
                  |                     Complete
 
-.. index:: Striping
+.. index:: architecture; Striping
 
 Data Striping
 -------------
@@ -809,7 +816,7 @@ files on a storage disk.
    map and the same access controls.
 
 
-.. index:: Ceph Clients
+.. index:: architecture; Ceph Clients
 
 Ceph Clients
 ============
@@ -853,7 +860,7 @@ architecture.
             +---------------+ +---------------+ +---------------+
 
 
-.. index:: S3; Swift; Ceph Object Storage; RADOS Gateway; radosgw
+.. index:: architecture; Ceph Object Storage
 
 Ceph Object Storage
 -------------------
