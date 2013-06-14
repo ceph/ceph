@@ -1953,7 +1953,7 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
   return result;
 }
 
-static int check_offset_and_length(__le64 offset, __le64 length)
+static int check_offset_and_length(uint64_t offset, uint64_t length)
 {
   if (length < 1)
     return -EINVAL;
