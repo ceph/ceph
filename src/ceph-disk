@@ -57,6 +57,11 @@ INIT_SYSTEMS = [
     'auto',
     ]
 
+# Nuke the TERM variable to avoid confusing any subprocesses we call.
+# For example, libreadline will print weird control sequences for some
+# TERM values.
+if 'TERM' in os.environ:
+    del os.environ['TERM']
 
 LOG_NAME = __name__
 if LOG_NAME == '__main__':
