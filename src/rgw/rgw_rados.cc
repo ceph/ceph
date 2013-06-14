@@ -604,6 +604,20 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle)
 }
 
 int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle) {
+  if (extra_data_len) {
+    size_t extra_len = bl.length();
+    if (extra_len > extra_data_len)
+      extra_len = extra_data_len;
+
+    /* is there a better way to split a bl into two bufferlists? */
+    bufferlist extra;
+    bl.splice(0, extra_len, &extra);
+    extra_data_bl.append(extra);
+
+    extra_data_len -= extra_len;
+    if (bl.length() == 0)
+      return 0;
+  }
   if (!ofs && !immutable_head()) {
     first_chunk.claim(bl);
     *phandle = NULL;
@@ -2125,10 +2139,31 @@ public:
     return 0;
   }
 
+  void set_extra_data_len(uint64_t len) {
+    RGWGetDataCB::set_extra_data_len(len);
+    processor->set_extra_data_len(len);
+  }
+
   int complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs) {
     return processor->complete(etag, mtime, attrs);
   }
 };
+
+/*
+ * prepare attrset, either replace it with new attrs, or keep it (other than acls).
+ */
+static void set_copy_attrs(map<string, bufferlist>& src_attrs, map<string, bufferlist>& attrs, bool replace_attrs)
+{
+  if (replace_attrs) {
+    if (!attrs[RGW_ATTR_ETAG].length())
+      attrs[RGW_ATTR_ETAG] = src_attrs[RGW_ATTR_ETAG];
+
+    src_attrs = attrs;
+  } else {
+    /* copying attrs from source, however acls should not be copied */
+    src_attrs[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
+  }
+}
 
 /**
  * Copy an object.
@@ -2182,18 +2217,16 @@ int RGWRados::copy_obj(void *ctx,
 
   void *handle = NULL;
 
-  map<string, bufferlist> attrset;
+  map<string, bufferlist> src_attrs;
   off_t ofs = 0;
   off_t end = -1;
   if (!remote_src) {
-    ret = prepare_get_obj(ctx, src_obj, &ofs, &end, &attrset,
+    ret = prepare_get_obj(ctx, src_obj, &ofs, &end, &src_attrs,
                   mod_ptr, unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &obj_size, NULL, &handle, err);
     if (ret < 0)
       return ret;
   } else {
     /* source is in a different region, copy it there */
-
-    map<string, bufferlist> src_attrs;
 
     RGWRESTStreamReadRequest *in_stream_req;
     string tag;
@@ -2207,32 +2240,40 @@ int RGWRados::copy_obj(void *ctx,
 
     RGWRadosPutObj cb(&processor);
   
-    int ret = rest_conn->get_obj(user_id, src_obj, &cb, &in_stream_req);
+    int ret = rest_conn->get_obj(user_id, src_obj, true, &cb, &in_stream_req);
     if (ret < 0)
       return ret;
 
     string etag;
 
-    ret = rest_conn->complete_request(in_stream_req, etag, mtime);
+    map<string, string> req_headers;
+    ret = rest_conn->complete_request(in_stream_req, etag, mtime, req_headers);
     if (ret < 0)
       return ret;
 
-    ret = cb.complete(etag, mtime, attrs);
+    bufferlist& extra_data_bl = processor.get_extra_data();
+    if (extra_data_bl.length()) {
+      bufferlist::iterator iter = extra_data_bl.begin();
+      try {
+        ::decode(src_attrs, iter);
+      } catch (buffer::error& err) {
+        ldout(cct, 0) << "ERROR: failed to decode extra metadata info" << dendl;
+        return -EIO;
+      }
+
+      src_attrs.erase(RGW_ATTR_MANIFEST); // not interested in original object layout
+    }
+
+    set_copy_attrs(src_attrs, attrs, replace_attrs);
+
+    ret = cb.complete(etag, mtime, src_attrs);
     if (ret < 0)
       return ret;
 
     return 0;
   }
 
-  if (replace_attrs) {
-    if (!attrs[RGW_ATTR_ETAG].length())
-      attrs[RGW_ATTR_ETAG] = attrset[RGW_ATTR_ETAG];
-
-    attrset = attrs;
-  } else {
-    /* copying attrs from source, however acls should not be copied */
-    attrset[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
-  }
+  set_copy_attrs(src_attrs, attrs, replace_attrs);
 
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;
@@ -2268,7 +2309,7 @@ int RGWRados::copy_obj(void *ctx,
 
     RGWRESTStreamWriteRequest *out_stream_req;
   
-    int ret = rest_conn->put_obj_init(user_id, dest_obj, astate->size, attrset, &out_stream_req);
+    int ret = rest_conn->put_obj_init(user_id, dest_obj, astate->size, src_attrs, &out_stream_req);
     if (ret < 0)
       return ret;
 
@@ -2284,7 +2325,7 @@ int RGWRados::copy_obj(void *ctx,
 
     return 0;
   } else if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
-    return copy_obj_data(ctx, handle, end, dest_obj, src_obj, mtime, attrset, category, ptag, err);
+    return copy_obj_data(ctx, handle, end, dest_obj, src_obj, mtime, src_attrs, category, ptag, err);
   }
 
   map<uint64_t, RGWObjManifestPart>::iterator miter = astate->manifest.objs.begin();
@@ -2359,7 +2400,7 @@ int RGWRados::copy_obj(void *ctx,
   ep.manifest = pmanifest;
   ep.ptag = &tag;
 
-  ret = put_obj_meta(ctx, dest_obj, end + 1, attrset, category, PUT_OBJ_CREATE, ep);
+  ret = put_obj_meta(ctx, dest_obj, end + 1, src_attrs, category, PUT_OBJ_CREATE, ep);
 
   if (mtime)
     obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL, NULL, NULL);

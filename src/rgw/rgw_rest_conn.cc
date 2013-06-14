@@ -69,7 +69,7 @@ int RGWRegionConnection::complete_request(RGWRESTStreamWriteRequest *req, string
   return ret;
 }
 
-int RGWRegionConnection::get_obj(const string& uid, rgw_obj& obj, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req)
+int RGWRegionConnection::get_obj(const string& uid, rgw_obj& obj, bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req)
 {
   string url;
   int ret = get_url(url);
@@ -79,13 +79,17 @@ int RGWRegionConnection::get_obj(const string& uid, rgw_obj& obj, RGWGetDataCB *
   list<pair<string, string> > params;
   params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
   params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
+  if (prepend_metadata) {
+    params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "prepend-metadata", region));
+  }
   *req = new RGWRESTStreamReadRequest(cct, url, cb, NULL, &params);
   return (*req)->get_obj(key, obj);
 }
 
-int RGWRegionConnection::complete_request(RGWRESTStreamReadRequest *req, string& etag, time_t *mtime)
+int RGWRegionConnection::complete_request(RGWRESTStreamReadRequest *req, string& etag, time_t *mtime,
+                                          map<string, string>& attrs)
 {
-  int ret = req->complete(etag, mtime);
+  int ret = req->complete(etag, mtime, attrs);
   delete req;
 
   return ret;

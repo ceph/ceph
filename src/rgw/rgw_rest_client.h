@@ -24,6 +24,7 @@ protected:
   size_t max_response; /* we need this as we don't stream out response */
   bufferlist response;
 
+  virtual int handle_header(const string& name, const string& val) { return 0; }
   void append_param(string& dest, const string& name, const string& val);
   void get_params_str(map<string, string>& extra_args, string& dest);
 
@@ -78,6 +79,8 @@ class RGWRESTStreamReadRequest : public RGWRESTSimpleRequest {
   bufferlist in_data;
   size_t chunk_ofs;
   size_t ofs;
+protected:
+  int handle_header(const string& name, const string& val);
 public:
   int send_data(void *ptr, size_t len);
   int receive_data(void *ptr, size_t len);
@@ -88,7 +91,7 @@ public:
                 chunk_ofs(0), ofs(0) {}
   ~RGWRESTStreamReadRequest() {}
   int get_obj(RGWAccessKey& key, rgw_obj& obj);
-  int complete(string& etag, time_t *mtime);
+  int complete(string& etag, time_t *mtime, map<string, string>& attrs);
 
   void set_in_cb(RGWGetDataCB *_cb) { cb = _cb; }
 };
