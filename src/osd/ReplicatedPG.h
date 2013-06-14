@@ -897,6 +897,7 @@ protected:
   void sub_op_push(OpRequestRef op);
   void _failed_push(int from, const hobject_t &soid);
   void sub_op_push_reply(OpRequestRef op);
+  bool handle_push_reply(int peer, PushReplyOp &op, PushOp *reply);
   void sub_op_pull(OpRequestRef op);
 
   void log_subop_stats(OpRequestRef op, int tag_inb, int tag_lat);
