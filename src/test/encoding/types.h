@@ -236,6 +236,11 @@ TYPE(cls_lock_get_info_op)
 TYPE(cls_lock_get_info_reply)
 TYPE(cls_lock_list_locks_reply)
 
+#include "cls/replica_log/cls_replica_log_types.h"
+TYPE(cls_replica_log_item_marker)
+TYPE(cls_replica_log_progress_marker)
+TYPE(cls_replica_log_bound)
+
 
 // --- messages ---
 #include "messages/MAuth.h"
