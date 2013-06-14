@@ -2,6 +2,8 @@
  Kernel Module Operations
 ==========================
 
+.. index:: Ceph Block Device; kernel module
+
 .. important:: To use kernel module operations, you must have a running Ceph cluster.
 
 Load the Ceph RBD Module
