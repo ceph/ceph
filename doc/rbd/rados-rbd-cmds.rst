@@ -1,6 +1,8 @@
-==============
- RBD Commands
-==============
+=======================
+ Block Device Commands
+=======================
+
+.. index:: Ceph Block Device; image management
 
 The ``rbd`` command enables you to create, list, introspect and remove block
 device images. You can also use it to clone images, create snapshots,
@@ -8,14 +10,16 @@ rollback an image to a snapshot, view a snapshot, etc. For details on using
 the ``rbd`` command, see `RBD – Manage RADOS Block Device (RBD) Images`_ for
 details. 
 
-.. important:: To use RBD commands, you must have a running Ceph cluster.
+.. important:: To use Ceph Block Device commands, you must have access to 
+   a running Ceph cluster.
+
 
 Creating a Block Device Image
 =============================
 
-Before you can add a block device to a Ceph client, you must create an image for
-it in the OSD cluster first. To create a block device image, execute the 
-following::
+Before you can add a block device to a node, you must create an image for it in
+the :term:`Ceph Storage Cluster` first. To create a block device image, execute
+the  following::
 
 	rbd create {image-name} --size {megabytes} --pool {pool-name}
 	
@@ -31,7 +35,8 @@ pool named ``swimmingpool``, execute the following::
 Listing Block Device Images
 ===========================
 
-To list block devices in the ``rbd`` pool, execute the following:: 
+To list block devices in the ``rbd`` pool, execute the following
+(i.e., ``rbd`` is the default pool name):: 
 
 	rbd ls
 
@@ -69,10 +74,11 @@ For example::
 Resizing a Block Device Image
 =============================
 
-RBD images are thin provisioned. They don't actually use any physical storage 
-until you begin saving data to them. However, they do have a maximum capacity 
-that you set with the ``--size`` option. If you want to increase (or decrease)
-the maximum size of a RADOS block device image, execute the following:: 
+:term:`Ceph Block Device` images are thin provisioned. They don't actually use
+any physical storage  until you begin saving data to them. However, they do have
+a maximum capacity  that you set with the ``--size`` option. If you want to
+increase (or decrease) the maximum size of a Ceph Block Device image, execute
+the following:: 
 
 	rbd resize --image foo --size 2048
 
