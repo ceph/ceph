@@ -35,7 +35,7 @@ class Thrasher:
         if self.config is None:
             self.config = dict()
         # prevent monitor from auto-marking things out while thrasher runs
-        manager.raw_cluster_cmd('mon', 'tell', '*', 'injectargs',
+        manager.raw_cluster_cmd('tell', 'mon.*', 'injectargs',
                                 '--mon-osd-down-out-interval', '0')
         self.thread = gevent.spawn(self.do_thrash)
 
