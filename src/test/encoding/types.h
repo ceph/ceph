@@ -240,7 +240,11 @@ TYPE(cls_lock_list_locks_reply)
 TYPE(cls_replica_log_item_marker)
 TYPE(cls_replica_log_progress_marker)
 TYPE(cls_replica_log_bound)
-
+#include "cls/replica_log/cls_replica_log_ops.h"
+TYPE(cls_replica_log_delete_marker_op)
+TYPE(cls_replica_log_set_marker_op)
+TYPE(cls_replica_log_get_bounds_op)
+TYPE(cls_replica_log_get_bounds_ret)
 
 // --- messages ---
 #include "messages/MAuth.h"
