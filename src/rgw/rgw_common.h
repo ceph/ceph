@@ -43,6 +43,9 @@ using ceph::crypto::MD5;
 
 #define RGW_ATTR_PREFIX  "user.rgw."
 
+#define RGW_HTTP_RGWX_ATTR_PREFIX "RGWX_ATTR_"
+#define RGW_HTTP_RGWX_ATTR_PREFIX_OUT "Rgwx-Attr-"
+
 #define RGW_AMZ_META_PREFIX "x-amz-meta-"
 
 #define RGW_SYS_PARAM_PREFIX "rgwx-"

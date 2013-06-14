@@ -54,6 +54,9 @@ int RGWRESTSimpleRequest::receive_header(void *ptr, size_t len)
           }
           buf[i] = '\0';
           out_headers[buf] = l;
+          int r = handle_header(buf, l);
+          if (r < 0)
+            return r;
         }
       }
     }
@@ -506,7 +509,6 @@ void set_str_from_headers(map<string, string>& out_headers, const string& header
   }
 }
 
-
 int RGWRESTStreamWriteRequest::complete(string& etag, time_t *mtime)
 {
   int ret = complete_request(handle);
@@ -568,9 +570,6 @@ int RGWRESTStreamReadRequest::get_obj(RGWAccessKey& key, rgw_obj& obj)
     headers.push_back(make_pair<string, string>(iter->first, iter->second));
   }
 
-  // cb = new RGWRESTStreamInCB(this);
-
-
   int r = process(new_info.method, new_url.c_str());
   if (r < 0)
     return r;
@@ -578,7 +577,7 @@ int RGWRESTStreamReadRequest::get_obj(RGWAccessKey& key, rgw_obj& obj)
   return 0;
 }
 
-int RGWRESTStreamReadRequest::complete(string& etag, time_t *mtime)
+int RGWRESTStreamReadRequest::complete(string& etag, time_t *mtime, map<string, string>& attrs)
 {
   set_str_from_headers(out_headers, "ETAG", etag);
   if (mtime) {
@@ -595,7 +594,43 @@ int RGWRESTStreamReadRequest::complete(string& etag, time_t *mtime)
     }
   }
 
+  map<string, string>::iterator iter;
+  for (iter = out_headers.begin(); iter != out_headers.end(); ++iter) {
+    const string& attr_name = iter->first;
+    if (attr_name.compare(0, sizeof(RGW_HTTP_RGWX_ATTR_PREFIX) - 1, RGW_HTTP_RGWX_ATTR_PREFIX) == 0) {
+      string name = attr_name.substr(sizeof(RGW_HTTP_RGWX_ATTR_PREFIX) - 1);
+      const char *src = name.c_str();
+      char buf[name.size() + 1];
+      char *dest = buf;
+      for (; *src; ++src, ++dest) {
+        switch(*src) {
+          case '_':
+            *dest = '-';
+            break;
+          default:
+            *dest = tolower(*src);
+        }
+      }
+      *dest = '\0';
+      attrs[buf] = iter->second;
+    }
+  }
   return status;
+}
+
+int RGWRESTStreamReadRequest::handle_header(const string& name, const string& val)
+{
+  if (name == "RGWX_EMBEDDED_METADATA_LEN") {
+    string err;
+    long len = strict_strtol(val.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldout(cct, 0) << "ERROR: failed converting embedded metadata len (" << val << ") to int " << dendl;
+      return -EINVAL;
+    }
+
+    cb->set_extra_data_len(len);
+  }
+  return 0;
 }
 
 int RGWRESTStreamReadRequest::receive_data(void *ptr, size_t len)
@@ -608,36 +643,6 @@ int RGWRESTStreamReadRequest::receive_data(void *ptr, size_t len)
     return ret;
   ofs += len;
   return len;
-#if 0
-  return cb->handle_data(bl
-  const char *p = (const char *)ptr;
-  size_t orig_len = len;
-  while (len > 0) {
-    size_t read_len = RGW_MAX_CHUNK_SIZE - chunk_ofs;
-    if (read_len > len)
-      read_len = len;
-
-    bufferptr bp((const char *)p, read_len);
-    in_data.append(bp);
-
-    p += read_len;
-    len -= read_len;
-    chunk_ofs += read_len;
-    if (chunk_ofs == RGW_MAX_CHUNK_SIZE) {
-      chunk_ofs = 0;
-      size_t data_len = in_data.length();
-      int r = cb->handle_data(in_data, ofs, data_len);
-      if (r < 0)
-        return r;
-
-      ofs += data_len;
-
-      in_data.clear();
-    }
-  }
-
-  return orig_len;
-#endif
 }
 
 int RGWRESTStreamReadRequest::send_data(void *ptr, size_t len)
