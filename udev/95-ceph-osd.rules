@@ -4,6 +4,12 @@ ACTION=="add", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-062c0ceff05d", \
   RUN+="/usr/sbin/ceph-disk-activate --mount /dev/$name"
 
+# activate ceph-tagged partitions
+ACTION=="add", SUBSYSTEM=="block", \
+  ENV{DEVTYPE}=="partition", \
+  ENV{ID_PART_ENTRY_TYPE}=="45b0969e-9b03-4f30-b4c6-b4b80ceff106", \
+  RUN+="/usr/sbin/ceph-disk activate-journal /dev/$name"
+
 # Map journal if using dm-crypt
 ACTION=="add" SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
