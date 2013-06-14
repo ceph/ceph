@@ -397,6 +397,7 @@ fi
 %{_libdir}/rados-classes/libcls_refcount.so*
 %{_libdir}/ceph
 /lib/udev/rules.d/50-rbd.rules
+/lib/udev/rules.d/60-ceph-partuuid-workaround.rules
 /lib/udev/rules.d/95-ceph-osd.rules
 %dir %{_sysconfdir}/ceph/
 %config %{_sysconfdir}/bash_completion.d/ceph
