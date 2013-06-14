@@ -5902,21 +5902,33 @@ void ReplicatedPG::send_push_op_blank(const hobject_t& soid, int peer)
 void ReplicatedPG::sub_op_push_reply(OpRequestRef op)
 {
   MOSDSubOpReply *reply = static_cast<MOSDSubOpReply*>(op->request);
+  const hobject_t& soid = reply->get_poid();
   assert(reply->get_header().type == MSG_OSD_SUBOPREPLY);
   dout(10) << "sub_op_push_reply from " << reply->get_source() << " " << *reply << dendl;
+  int peer = reply->get_source().num();
 
   op->mark_started();
   
-  int peer = reply->get_source().num();
-  const hobject_t& soid = reply->get_poid();
-  
+  PushReplyOp rop;
+  rop.soid = soid;
+  PushOp pop;
+  bool more = handle_push_reply(peer, rop, &pop);
+  if (more)
+    send_push_op(pushing[soid][peer].priority, peer, pop);
+}
+
+bool ReplicatedPG::handle_push_reply(int peer, PushReplyOp &op, PushOp *reply)
+{
+  const hobject_t &soid = op.soid;
   if (pushing.count(soid) == 0) {
     dout(10) << "huh, i wasn't pushing " << soid << " to osd." << peer
 	     << ", or anybody else"
 	     << dendl;
+    return false;
   } else if (pushing[soid].count(peer) == 0) {
     dout(10) << "huh, i wasn't pushing " << soid << " to osd." << peer
 	     << dendl;
+    return false;
   } else {
     PushInfo *pi = &pushing[soid][peer];
 
@@ -5925,11 +5937,11 @@ void ReplicatedPG::sub_op_push_reply(OpRequestRef op)
 	       << pi->recovery_progress.data_recovered_to
 	       << " of " << pi->recovery_info.copy_subset << dendl;
       ObjectRecoveryProgress new_progress;
-      send_push(
-	pi->priority,
-	peer, pi->recovery_info,
-	pi->recovery_progress, &new_progress);
+      build_push_op(
+	pi->recovery_info,
+	pi->recovery_progress, &new_progress, reply);
       pi->recovery_progress = new_progress;
+      return true;
     } else {
       // done!
       if (peer == backfill_target && backfills_in_flight.count(soid))
@@ -5955,6 +5967,7 @@ void ReplicatedPG::sub_op_push_reply(OpRequestRef op)
 	dout(10) << "pushed " << soid << ", still waiting for push ack from " 
 		 << pushing[soid].size() << " others" << dendl;
       }
+      return false;
     }
   }
 }
