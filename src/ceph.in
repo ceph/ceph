@@ -1080,18 +1080,18 @@ def validate_command(parsed_args, sigdict, args):
                     pass
                 except ArgumentError as e:
                     # prefixes matched, but some other arg didn't;
-                    # this is interesting information
-                    print >> sys.stderr, '{0}: invalid command'.\
-                        format(' '.join(args))
-                    print >> sys.stderr, '{0}'.format(e)
-                    print >> sys.stderr, "did you mean {0}?\n\t{1}".\
-                        format(concise_sig(sig), helptext)
+                    # this is interesting information if verbose
+                    if verbose:
+                        print >> sys.stderr, '{0}: invalid command'.\
+                            format(' '.join(args))
+                        print >> sys.stderr, '{0}'.format(e)
+                        print >> sys.stderr, "did you mean {0}?\n\t{1}".\
+                            format(concise_sig(sig), helptext)
                     pass
 
         if not found:
-            print >> sys.stderr, 'no valid command found'
-            print >> sys.stderr, 'close matches:'
-            for cmdsig in bestcmds:
+            print >> sys.stderr, 'no valid command found; 10 closest matches:'
+            for cmdsig in bestcmds[:10]:
                 for (cmdtag, cmd) in cmdsig.iteritems():
                     print >> sys.stderr, concise_sig(cmd['sig'])
             return None
