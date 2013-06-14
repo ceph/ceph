@@ -837,7 +837,7 @@ def parse_cmdargs(args=None, target=''):
     AP = argparse.ArgumentParser
 
     # format our own help
-    parser = AP(description='Frontend for ceph CLI', add_help=False)
+    parser = AP(description='Ceph administration tool', add_help=False)
 
     parser.add_argument('--completion', action='store_true')
 
