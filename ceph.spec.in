@@ -598,6 +598,7 @@ fi
 %{_bindir}/ceph_test_objectcacher_stress
 %{_bindir}/ceph_test_rados_api_aio
 %{_bindir}/ceph_test_rados_api_cls
+%{_bindir}/ceph_test_rados_api_cmd
 %{_bindir}/ceph_test_rados_api_io
 %{_bindir}/ceph_test_rados_api_list
 %{_bindir}/ceph_test_rados_api_lock
