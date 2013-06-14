@@ -14,6 +14,8 @@ case $ID_PART_ENTRY_TYPE in
 
 45b0969e-9b03-4f30-b4c6-b4b80ceff106)
     # JOURNAL_UUID
+    # activate ceph-tagged journal partitions.
+    /usr/sbin/ceph-disk -v activate-journal /dev/${NAME}
     ;;
 
 45b0969e-9b03-4f30-b4c6-5ec00ceff106)
