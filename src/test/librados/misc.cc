@@ -365,6 +365,43 @@ TEST(LibRadosMisc, Operate2PP) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
+TEST(LibRadosMisc, BigObjectPP) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  bufferlist bl;
+  bl.append("abcdefg");
+  ASSERT_EQ((int)bl.length(), ioctx.write("foo", bl, bl.length(), 0));
+
+  {
+    ObjectWriteOperation o;
+    o.truncate(500000000000ull);
+    ASSERT_EQ(-EFBIG, ioctx.operate("foo", &o));
+  }
+  {
+    ObjectWriteOperation o;
+    o.zero(500000000000ull, 1);
+    ASSERT_EQ(-EFBIG, ioctx.operate("foo", &o));
+  }
+  {
+    ObjectWriteOperation o;
+    o.zero(1, 500000000000ull);
+    ASSERT_EQ(-EFBIG, ioctx.operate("foo", &o));
+  }
+  {
+    ObjectWriteOperation o;
+    o.zero(500000000000ull, 500000000000ull);
+    ASSERT_EQ(-EFBIG, ioctx.operate("foo", &o));
+  }
+  ASSERT_EQ(-EFBIG, ioctx.write("foo", bl, 500000000000ull, bl.length()));
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
 void set_completion_complete(rados_completion_t cb, void *arg)
 {
   bool *my_aio_complete = (bool*)arg;
