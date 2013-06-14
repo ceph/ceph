@@ -75,8 +75,6 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
   map<string, string>::iterator riter;
   bufferlist metadata_bl;
 
-  bool prepend_metadata = false;
-
   if (ret)
     goto done;
 
@@ -88,7 +86,6 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
 
   if (s->system_request &&
       s->info.args.exists(RGW_SYS_PARAM_PREFIX "prepend-metadata")) {
-    prepend_metadata = true;
     ::encode(attrs, metadata_bl);
     s->cio->print("Rgwx-Embedded-Metadata-Len: %lld\r\n", (long long)metadata_bl.length());
     total_len += metadata_bl.length();
