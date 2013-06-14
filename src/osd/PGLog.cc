@@ -534,7 +534,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
 void PGLog::write_log(
   ObjectStore::Transaction& t, const hobject_t &log_oid)
 {
-  if (dirty()) {
+  if (is_dirty()) {
     dout(10) << "write_log with: "
 	     << "dirty_to: " << dirty_to
 	     << ", dirty_from: " << dirty_from

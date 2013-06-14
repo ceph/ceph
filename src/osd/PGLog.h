@@ -160,7 +160,7 @@ protected:
   eversion_t dirty_from;
   bool dirty_divergent_priors;
 
-  bool dirty() const {
+  bool is_dirty() const {
     return !touched_log ||
       (dirty_to != eversion_t()) ||
       (dirty_from != eversion_t::max()) ||
