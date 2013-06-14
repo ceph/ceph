@@ -892,7 +892,7 @@ def parse_cmdargs(args=None, target=''):
 
     return parser, parsed_args, extras
 
-def do_help(parser, help_all = False):
+def do_help(parser, args, help_all = False):
     """
     Print basic parser help
     If the cluster is available:
@@ -900,7 +900,7 @@ def do_help(parser, help_all = False):
         if help_all, print help for daemon commands as well 
     """
 
-    def help_for_target(target):
+    def help_for_target(target, partial=None):
         ret, outbuf, outs = json_command(target=target,
                                          prefix='get_command_descriptions', 
                                          timeout=10)
@@ -909,12 +909,12 @@ def do_help(parser, help_all = False):
                 "couldn't get command descriptions for {0}: {1}".\
                 format(target, outs)
         else:
-            sys.stdout.write(format_help(parse_json_funcsigs(outbuf)))
+            sys.stdout.write(format_help(parse_json_funcsigs(outbuf), partial))
 
     parser.print_help()
     print '\n'
     if (cluster_handle):
-        help_for_target(target=('mon', ''))
+        help_for_target(target=('mon', ''), partial=' '.join(args))
 
     if help_all and cluster_handle:
         # try/except in case there are no daemons of that type
@@ -1006,7 +1006,7 @@ def wrap(s, width, indent):
 
     raise StopIteration
 
-def format_help(cmddict):
+def format_help(cmddict, partial=None):
     """
     Formats all the cmdsigs and helptexts from cmddict into a sorted-by-
     cmdsig 2-column display, with each column wrapped and indented to
@@ -1018,7 +1018,10 @@ def format_help(cmddict):
 
         if not cmd['helptext']:
             continue
-        siglines = [l for l in wrap(concise_sig(cmd['sig']), 40, 1)]
+        concise = concise_sig(cmd['sig'])
+        if partial and not concise.startswith(partial):
+            continue
+        siglines = [l for l in wrap(concise, 40, 1)]
         helplines = [l for l in wrap(cmd['helptext'], 39, 1)]
 
         # make lists the same length
@@ -1463,7 +1466,7 @@ def main():
         return 1
 
     if parsed_args.help or parsed_args.help_all:
-        return do_help(parser, parsed_args.help_all)
+        return do_help(parser, childargs, parsed_args.help_all)
 
     # implement -w/--watch_*
     # This is ugly, but Namespace() isn't quite rich enough.
