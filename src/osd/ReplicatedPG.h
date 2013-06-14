@@ -723,9 +723,15 @@ protected:
 
   // Cancels/resets pulls from peer
   void check_recovery_sources(const OSDMapRef map);
-  int pull(
+
+  void send_pulls(
+    int priority,
+    map<int, vector<PullOp> > &pulls);
+  int prepare_pull(
     const hobject_t& oid, eversion_t v,
-    int priority);
+    int priority,
+    map<int, vector<PullOp> > *pulls
+    );
 
   // low level ops
 
