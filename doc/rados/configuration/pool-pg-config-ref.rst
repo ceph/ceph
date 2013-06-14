@@ -2,6 +2,8 @@
  Pool, PG and CRUSH Config Reference
 ======================================
 
+.. index:: pools; configuration
+
 When you create pools and set the number of placement groups for the pool, Ceph
 uses default values when you don't specifically override the defaults. **We
 recommend** overridding some of the defaults. Specifically, we recommend setting
@@ -25,28 +27,32 @@ Ceph configuration file.
 
 ``mon pg create interval`` 
 
-:Description: Number of seconds between PG creation in the same OSD.
+:Description: Number of seconds between PG creation in the same 
+              Ceph OSD Daemon.
+
 :Type: Float
 :Default: ``30.0``
 
 
 ``mon pg stuck threshold`` 
 
-:Description: Number of seconds after which PGs can be considered as being stuck.
+:Description: Number of seconds after which PGs can be considered as 
+              being stuck.
+
 :Type: 32-bit Integer
 :Default: ``300``
 
 
 ``osd pg bits`` 
 
-:Description: Placement group bits per OSD.
+:Description: Placement group bits per Ceph OSD Daemon.
 :Type: 32-bit Integer
 :Default: ``6`` 
 
 
 ``osd pgp bits`` 
 
-:Description: The number of bits per OSD for PGPs.
+:Description: The number of bits per Ceph OSD Daemon for PGPs.
 :Type: 32-bit Integer
 :Default: ``6``
 
@@ -57,7 +63,7 @@ Ceph configuration file.
               ordinal rank rather than name.
 
 :Type: 32-bit Integer
-:Default: ``1``. Typically a host containing one or more OSDs.
+:Default: ``1``. Typically a host containing one or more Ceph OSD Daemons.
 
 
 ``osd min rep``
@@ -133,7 +139,7 @@ Ceph configuration file.
 ``osd max pgls``
 
 :Description: The maximum number of placement groups to list. A client 
-              requesting a large number can tie up the OSD.
+              requesting a large number can tie up the Ceph OSD Daemon.
 
 :Type: Unsigned 64-bit Integer
 :Default: ``1024``
