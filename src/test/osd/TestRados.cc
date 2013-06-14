@@ -194,10 +194,13 @@ int main(int argc, char **argv)
   };
 
   map<TestOpType, unsigned int> op_weights;
+  string pool_name = "data";
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--max-ops") == 0)
       ops = atoi(argv[++i]);
+    else if (strcmp(argv[i], "--pool") == 0)
+      pool_name = argv[++i];
     else if (strcmp(argv[i], "--max-seconds") == 0)
       max_seconds = atoi(argv[++i]);
     else if (strcmp(argv[i], "--objects") == 0)
@@ -268,7 +271,6 @@ int main(int argc, char **argv)
   }
 
   char *id = getenv("CEPH_CLIENT_ID");
-  string pool_name = "data";
   VarLenGenerator cont_gen(size, min_stride_size, max_stride_size);
   RadosTestContext context(pool_name, max_in_flight, cont_gen, id);
 
