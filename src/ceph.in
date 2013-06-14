@@ -1562,12 +1562,19 @@ def main():
 
     final_ret = 0
     for target in targets:
+        # prettify?  prefix output with target, if there was a wildcard used
+        prefix = ''
+        suffix = ''
+        if not parsed_args.output_file and len(targets) > 1:
+            prefix='{0}.{1}:'.format(*target)
+            suffix='\n'
+
         ret, outbuf, outs = json_command(target=target,
                                          prefix='get_command_descriptions')
         if ret == -errno.EINVAL:
             # send command to old monitor or OSD
             if verbose:
-                print '{0} to old {1}'.format(' '.join(childargs), target[0])
+                print prefix, '{0} to old {1}'.format(' '.join(childargs), target[0])
             ret, outbuf, outs = send_command(target, childargs, inbuf)
             # combine nonerror outbuf and outs; either may have cmd output
             if ret == 0:
@@ -1577,7 +1584,7 @@ def main():
         elif ret:
             if ret < 0:
                 ret = -ret
-                print >> sys.stderr, \
+                print >> sys.stderr, prefix, \
                     'Problem getting command descriptions from {0}, {1}'.\
                     format(target, errno.errorcode[ret])
         else:
@@ -1591,9 +1598,7 @@ def main():
 
         if ret < 0:
             ret = -ret
-            if len(targets) > 1:
-                sys.stderr.write('{0}.{1}: '.format(*target))
-            print >> sys.stderr, 'Error {0}: {1}'.format(errno.errorcode[ret], outs)
+            print >> sys.stderr, prefix, 'Error {0}: {1}'.format(errno.errorcode[ret], outs)
             if len(targets) > 1:
                 final_ret = ret
             else:
@@ -1601,7 +1606,7 @@ def main():
 
         # this assumes outs never has useful command output, only status
         if outs:
-            print >> sys.stderr, outs
+            print >> sys.stderr, prefix, outs
 
         if (parsed_args.output_file):
             outf.write(outbuf)
@@ -1614,11 +1619,13 @@ def main():
                parsed_args.output_format.startswith('json'):
                 sys.stdout.write('\n');
 
-            # prefix output with target, if there was a wildcard used
-            if len(targets) > 1:
-                sys.stdout.write('{0}.{1}: '.format(*target))
+            # if we are prettifying things, normalize newlines.  sigh.
+            if suffix != '':
+                outbuf = outbuf.rstrip()
+            if outbuf != '':
+                sys.stdout.write(prefix + outbuf + suffix)
 
-            sys.stdout.write(outbuf)
+        sys.stdout.flush()
 
     if (parsed_args.output_file):
         outf.close()
