@@ -85,6 +85,7 @@ librados::RadosClient::RadosClient(CephContext *cct_)
 int64_t librados::RadosClient::lookup_pool(const char *name)
 {
   Mutex::Locker l(lock);
+  wait_for_osdmap();
   int64_t ret = osdmap.lookup_pg_pool_name(name);
   if (ret < 0)
     return -ENOENT;
@@ -100,6 +101,7 @@ const char *librados::RadosClient::get_pool_name(int64_t pool_id)
 int librados::RadosClient::pool_get_auid(uint64_t pool_id, unsigned long long *auid)
 {
   Mutex::Locker l(lock);
+  wait_for_osdmap();
   const pg_pool_t *pg = osdmap.get_pg_pool(pool_id);
   if (!pg)
     return -ENOENT;
@@ -110,6 +112,7 @@ int librados::RadosClient::pool_get_auid(uint64_t pool_id, unsigned long long *a
 int librados::RadosClient::pool_get_name(uint64_t pool_id, std::string *s)
 {
   Mutex::Locker l(lock);
+  wait_for_osdmap();
   const char *str = osdmap.get_pool_name(pool_id);
   if (!str)
     return -ENOENT;
@@ -123,7 +126,7 @@ int librados::RadosClient::get_fsid(std::string *s)
     return -EINVAL;
   Mutex::Locker l(lock);
   ostringstream oss;
-  oss << osdmap.get_fsid();
+  oss << monclient.get_fsid();
   *s = oss.str();
   return 0;
 }
@@ -354,9 +357,21 @@ bool librados::RadosClient::_dispatch(Message *m)
   return true;
 }
 
+void librados::RadosClient::wait_for_osdmap()
+{
+  assert(lock.is_locked());
+  if (osdmap.get_epoch() == 0) {
+    ldout(cct, 10) << __func__ << " waiting" << dendl;
+    while (osdmap.get_epoch() == 0)
+      cond.Wait(lock);
+    ldout(cct, 10) << __func__ << " done waiting" << dendl;
+  }
+}
+
 int librados::RadosClient::pool_list(std::list<std::string>& v)
 {
   Mutex::Locker l(lock);
+  wait_for_osdmap();
   for (map<int64_t,pg_pool_t>::const_iterator p = osdmap.get_pools().begin();
        p != osdmap.get_pools().end();
        ++p)
@@ -453,6 +468,7 @@ int librados::RadosClient::pool_create_async(string& name, PoolAsyncCompletionIm
 int librados::RadosClient::pool_delete(const char *name)
 {
   lock.Lock();
+  wait_for_osdmap();
   int tmp_pool_id = osdmap.lookup_pg_pool_name(name);
   if (tmp_pool_id < 0) {
     lock.Unlock();
@@ -481,6 +497,7 @@ int librados::RadosClient::pool_delete(const char *name)
 int librados::RadosClient::pool_delete_async(const char *name, PoolAsyncCompletionImpl *c)
 {
   Mutex::Locker l(lock);
+  wait_for_osdmap();
   int tmp_pool_id = osdmap.lookup_pg_pool_name(name);
   if (tmp_pool_id < 0)
     return -ENOENT;
