@@ -2411,7 +2411,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
     }
 
     /* completed revocation? */
-    if (revoking && (revoking && used) == 0) {
+    if (revoking && (revoking & used) == 0) {
       ldout(cct, 10) << "completed revocation of " << ccap_string(cap->implemented & ~cap->issued) << dendl;
       goto ack;
     }
