@@ -1557,6 +1557,7 @@ void RGWCopyObj::execute()
 
   ret = store->copy_obj(s->obj_ctx,
                         s->user.user_id,
+                        &s->info,
                         dst_obj,
                         src_obj,
                         dest_bucket_info,

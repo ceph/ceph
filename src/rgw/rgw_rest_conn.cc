@@ -69,7 +69,8 @@ int RGWRegionConnection::complete_request(RGWRESTStreamWriteRequest *req, string
   return ret;
 }
 
-int RGWRegionConnection::get_obj(const string& uid, rgw_obj& obj, bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req)
+int RGWRegionConnection::get_obj(const string& uid, req_info *info /* optional */, rgw_obj& obj, bool prepend_metadata,
+                                 RGWGetDataCB *cb, RGWRESTStreamReadRequest **req)
 {
   string url;
   int ret = get_url(url);
@@ -83,7 +84,22 @@ int RGWRegionConnection::get_obj(const string& uid, rgw_obj& obj, bool prepend_m
     params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "prepend-metadata", region));
   }
   *req = new RGWRESTStreamReadRequest(cct, url, cb, NULL, &params);
-  return (*req)->get_obj(key, obj);
+  map<string, string> extra_headers;
+  if (info) {
+    map<string, string>& orig_map = info->env->get_map();
+
+    /* add original headers that start with HTTP_X_AMZ_ */
+#define SEARCH_AMZ_PREFIX "HTTP_X_AMZ_"
+    for (map<string, string>::iterator iter = orig_map.lower_bound(SEARCH_AMZ_PREFIX); iter != orig_map.end(); ++iter) {
+      const string& name = iter->first;
+      if (name == "HTTP_X_AMZ_DATE") /* dont forward date from original request */
+        continue;
+      if (name.compare(0, sizeof(SEARCH_AMZ_PREFIX) - 1, "HTTP_X_AMZ_") != 0)
+        break;
+      extra_headers[iter->first] = iter->second;
+    }
+  }
+  return (*req)->get_obj(key, extra_headers, obj);
 }
 
 int RGWRegionConnection::complete_request(RGWRESTStreamReadRequest *req, string& etag, time_t *mtime,

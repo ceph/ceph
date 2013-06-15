@@ -2175,6 +2175,7 @@ static void set_copy_attrs(map<string, bufferlist>& src_attrs, map<string, buffe
  */
 int RGWRados::copy_obj(void *ctx,
                const string& user_id,
+               req_info *info,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
@@ -2240,7 +2241,7 @@ int RGWRados::copy_obj(void *ctx,
 
     RGWRadosPutObj cb(&processor);
   
-    int ret = rest_conn->get_obj(user_id, src_obj, true, &cb, &in_stream_req);
+    int ret = rest_conn->get_obj(user_id, info, src_obj, true, &cb, &in_stream_req);
     if (ret < 0)
       return ret;
 

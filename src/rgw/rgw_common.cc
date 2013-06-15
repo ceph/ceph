@@ -178,7 +178,7 @@ struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ"),
                                    {NULL, 0} };
 
 
-int req_info::init_meta_info(bool *found_bad_meta)
+void req_info::init_meta_info(bool *found_bad_meta)
 {
   x_meta_map.clear();
 
@@ -228,8 +228,6 @@ int req_info::init_meta_info(bool *found_bad_meta)
   for (iter = x_meta_map.begin(); iter != x_meta_map.end(); ++iter) {
     dout(10) << "x>> " << iter->first << ":" << iter->second << dendl;
   }
-
-  return 0;
 }
 
 std::ostream& operator<<(std::ostream& oss, const rgw_err &err)

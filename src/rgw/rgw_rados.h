@@ -890,6 +890,7 @@ public:
    */
   virtual int copy_obj(void *ctx,
                const string& user_id,
+               req_info *info,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
