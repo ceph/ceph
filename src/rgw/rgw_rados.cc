@@ -98,7 +98,7 @@ int RGWRegion::read_default(RGWDefaultRegionInfo& default_info)
 
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
-  int ret = rgw_get_system_obj(store, NULL, pool, oid, bl, NULL);
+  int ret = rgw_get_system_obj(store, NULL, pool, oid, bl, NULL, NULL);
   if (ret < 0)
     return ret;
 
@@ -183,7 +183,7 @@ int RGWRegion::read_info(const string& region_name)
 
   string oid = region_info_oid_prefix + name;
 
-  int ret = rgw_get_system_obj(store, NULL, pool, oid, bl, NULL);
+  int ret = rgw_get_system_obj(store, NULL, pool, oid, bl, NULL, NULL);
   if (ret < 0) {
     lderr(cct) << "failed reading region info from " << pool << ":" << oid << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -289,7 +289,7 @@ int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWRegion& region)
   bufferlist bl;
 
   string oid = zone_info_oid_prefix + name;
-  int ret = rgw_get_system_obj(store, NULL, pool, oid, bl, NULL);
+  int ret = rgw_get_system_obj(store, NULL, pool, oid, bl, NULL, NULL);
   if (ret < 0)
     return ret;
 
@@ -362,7 +362,7 @@ int RGWRegionMap::read(CephContext *cct, RGWRados *store)
   rgw_bucket pool(pool_name.c_str());
 
   bufferlist bl;
-  int ret = rgw_get_system_obj(store, NULL, pool, oid, bl, NULL);
+  int ret = rgw_get_system_obj(store, NULL, pool, oid, bl, NULL, NULL);
   if (ret < 0)
     return ret;
 
@@ -1764,7 +1764,7 @@ int RGWRados::select_bucket_placement(string& bucket_name, rgw_bucket& bucket)
 
   rgw_obj obj(zone.domain_root, avail_pools);
 
-  int ret = rgw_get_system_obj(this, NULL, zone.domain_root, avail_pools, map_bl, NULL);
+  int ret = rgw_get_system_obj(this, NULL, zone.domain_root, avail_pools, map_bl, NULL, NULL);
   if (ret < 0) {
     goto read_omap;
   }
@@ -2624,7 +2624,7 @@ int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner)
   RGWBucketInfo info;
   map<string, bufferlist> attrs;
   RGWObjVersionTracker objv_tracker;
-  int r = get_bucket_info(NULL, bucket.name, info, &objv_tracker, &attrs);
+  int r = get_bucket_info(NULL, bucket.name, info, &objv_tracker, NULL, &attrs);
   if (r < 0) {
     ldout(cct, 0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " returned err=" << r << dendl;
     return r;
@@ -2658,7 +2658,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
     RGWBucketInfo info;
     RGWObjVersionTracker objv_tracker;
     map<string, bufferlist> attrs;
-    int r = get_bucket_info(NULL, bucket.name, info, &objv_tracker, &attrs);
+    int r = get_bucket_info(NULL, bucket.name, info, &objv_tracker, NULL, &attrs);
     if (r < 0) {
       ldout(cct, 0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
       ret = r;
@@ -2683,7 +2683,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
 int RGWRados::bucket_suspended(rgw_bucket& bucket, bool *suspended)
 {
   RGWBucketInfo bucket_info;
-  int ret = get_bucket_info(NULL, bucket.name, bucket_info, NULL);
+  int ret = get_bucket_info(NULL, bucket.name, bucket_info, NULL, NULL);
   if (ret < 0) {
     return ret;
   }
@@ -4257,11 +4257,12 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_
   return 0;
 }
 
-int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info, RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs)
+int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info, RGWObjVersionTracker *objv_tracker,
+                              time_t *pmtime, map<string, bufferlist> *pattrs)
 {
   bufferlist bl;
 
-  int ret = rgw_get_system_obj(this, ctx, zone.domain_root, bucket_name, bl, objv_tracker, pattrs);
+  int ret = rgw_get_system_obj(this, ctx, zone.domain_root, bucket_name, bl, objv_tracker, pmtime, pattrs);
   if (ret < 0) {
     info.bucket.name = bucket_name; /* only init this field */
     return ret;
