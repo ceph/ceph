@@ -146,7 +146,7 @@ int RGWBucket::create_bucket(string bucket_str, string& user_id, string& region_
 
   rgw_bucket& bucket = bucket_info.bucket;
 
-  ret = store->create_bucket(user_id, bucket, region_name, attrs, objv_tracker, NULL);
+  ret = store->create_bucket(user_id, bucket, region_name, attrs, objv_tracker, NULL, NULL);
   if (ret && ret != -EEXIST)
     goto done;
 
@@ -1322,7 +1322,6 @@ public:
   int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, JSONObj *obj) {
     RGWBucketCompleteInfo bci, old_bci;
     decode_json_obj(bci, obj);
-
 
     int ret = store->get_bucket_info(NULL, entry, old_bci.info, &objv_tracker, &old_bci.attrs);
     if (ret < 0 && ret != -ENOENT)
