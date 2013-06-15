@@ -1577,6 +1577,10 @@ def main():
             if verbose:
                 print prefix, '{0} to old {1}'.format(' '.join(childargs), target[0])
             compat = True
+            if parsed_args.output_format:
+                childargs.extend(['--format', parsed_args.output_format])
+            if parsed_args.threshold:
+                childargs.extend(['--threshold', parsed_args.threshold])
             ret, outbuf, outs = send_command(target, childargs, inbuf)
             # combine nonerror outbuf and outs; either may have cmd output
             if ret == 0:
