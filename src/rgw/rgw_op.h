@@ -418,6 +418,7 @@ protected:
   bool replace_attrs;
   RGWBucketInfo src_bucket_info;
   RGWBucketInfo dest_bucket_info;
+  string source_zone;
 
 
   int init_common();

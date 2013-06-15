@@ -1224,15 +1224,23 @@ int RGWCopyObj_ObjStore_S3::get_params()
   if_nomatch = s->info.env->get("HTTP_X_AMZ_COPY_IF_NONE_MATCH");
 
   const char *req_src = s->copy_source;
-  if (!req_src)
+  if (!req_src) {
+    ldout(s->cct, 0) << "copy source is NULL" << dendl;
     return -EINVAL;
+  }
 
   ret = parse_copy_location(req_src, src_bucket_name, src_object);
-  if (!ret)
-     return -EINVAL;
+  if (!ret) {
+    ldout(s->cct, 0) << "failed to parse copy location" << dendl;
+    return -EINVAL;
+  }
 
   dest_bucket_name = s->bucket.name;
   dest_object = s->object_str;
+
+  if (s->system_request) {
+    source_zone = s->info.args.get(RGW_SYS_PARAM_PREFIX "source-zone");
+  }
 
   const char *md_directive = s->info.env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
   if (md_directive) {
@@ -1240,15 +1248,20 @@ int RGWCopyObj_ObjStore_S3::get_params()
       replace_attrs = false;
     } else if (strcasecmp(md_directive, "REPLACE") == 0) {
       replace_attrs = true;
+    } else if (!source_zone.empty()) {
+      replace_attrs = false; // default for intra-region copy
     } else {
+      ldout(s->cct, 0) << "invalid metadata directive" << dendl;
       return -EINVAL;
     }
   }
 
-  if ((dest_bucket_name.compare(src_bucket_name) == 0) &&
+  if (source_zone.empty() &&
+      (dest_bucket_name.compare(src_bucket_name) == 0) &&
       (dest_object.compare(src_object) == 0) &&
       !replace_attrs) {
     /* can only copy object into itself if replacing attrs */
+    ldout(s->cct, 0) << "can't copy object into itself if not replacing attrs" << dendl;
     return -ERR_INVALID_REQUEST;
   }
   return 0;

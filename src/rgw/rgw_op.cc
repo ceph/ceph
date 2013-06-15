@@ -856,16 +856,16 @@ int RGWCreateBucket::verify_permission()
 }
 
 template<class T>
-static int forward_request(struct req_state *s, RGWRados *store, bufferlist& in_data, const char *name, T& obj)
+static int forward_request_to_master(struct req_state *s, RGWRados *store, bufferlist& in_data, const char *name, T& obj)
 {
-  if (!store->rest_conn) {
+  if (!store->rest_master_conn) {
     ldout(s->cct, 0) << "rest connection is invalid" << dendl;
     return -EINVAL;
   }
   ldout(s->cct, 0) << "sending create_bucket request to master region" << dendl;
   bufferlist response;
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
-  int ret = store->rest_conn->forward(s->user.user_id, s->info, MAX_REST_RESPONSE, &in_data, &response);
+  int ret = store->rest_master_conn->forward(s->user.user_id, s->info, MAX_REST_RESPONSE, &in_data, &response);
   if (ret < 0)
     return ret;
 
@@ -913,7 +913,7 @@ void RGWCreateBucket::execute()
   }
 
   if (!store->region.is_master) {
-    ret = forward_request(s, store, in_data, "object_ver", objv);
+    ret = forward_request_to_master(s, store, in_data, "object_ver", objv);
     if (ret < 0)
       return;
 
@@ -992,7 +992,7 @@ void RGWDeleteBucket::execute()
 
   if (!store->region.is_master) {
     bufferlist in_data;
-    ret = forward_request(s, store, in_data, "object_ver", objv_tracker.read_version);
+    ret = forward_request_to_master(s, store, in_data, "object_ver", objv_tracker.read_version);
     if (ret < 0) {
       return;
     }
@@ -1558,6 +1558,7 @@ void RGWCopyObj::execute()
   ret = store->copy_obj(s->obj_ctx,
                         s->user.user_id,
                         &s->info,
+                        source_zone,
                         dst_obj,
                         src_obj,
                         dest_bucket_info,
