@@ -1475,7 +1475,7 @@ int RGWCopyObj::verify_permission()
   src_bucket = src_bucket_info.bucket;
 
   /* get buckets info (source and dest) */
-  if (s->local_source) {
+  if (s->local_source &&  source_zone.empty()) {
     rgw_obj src_obj(src_bucket, src_object);
     store->set_atomic(s->obj_ctx, src_obj);
     store->set_prefetch_data(s->obj_ctx, src_obj);
@@ -1485,7 +1485,8 @@ int RGWCopyObj::verify_permission()
     if (ret < 0)
       return ret;
 
-    if (!src_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_READ))
+    if (!s->system_request && /* system request overrides permission checks */
+        !src_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_READ))
       return -EACCES;
   }
 
@@ -1509,7 +1510,8 @@ int RGWCopyObj::verify_permission()
   if (ret < 0)
     return ret;
 
-  if (!dest_bucket_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_WRITE))
+  if (!s->system_request && /* system request overrides permission checks */
+      !dest_bucket_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_WRITE))
     return -EACCES;
 
   ret = init_dest_policy();
