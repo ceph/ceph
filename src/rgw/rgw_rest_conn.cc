@@ -3,18 +3,18 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-RGWRegionConnection::RGWRegionConnection(CephContext *_cct, RGWRados *store, RGWRegion& upstream) : cct(_cct)
+RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store, list<string>& remote_endpoints) : cct(_cct)
 {
   list<string>::iterator iter;
   int i;
-  for (i = 0, iter = upstream.endpoints.begin(); iter != upstream.endpoints.end(); ++iter, ++i) {
+  for (i = 0, iter = remote_endpoints.begin(); iter != remote_endpoints.end(); ++iter, ++i) {
     endpoints[i] = *iter;
   }
   key = store->zone.system_key;
   region = store->region.name;
 }
 
-int RGWRegionConnection::get_url(string& endpoint)
+int RGWRESTConn::get_url(string& endpoint)
 {
   if (endpoints.empty()) {
     ldout(cct, 0) << "ERROR: endpoints not configured for upstream zone" << dendl;
@@ -27,7 +27,7 @@ int RGWRegionConnection::get_url(string& endpoint)
   return 0;
 }
 
-int RGWRegionConnection::forward(const string& uid, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl)
+int RGWRESTConn::forward(const string& uid, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl)
 {
   string url;
   int ret = get_url(url);
@@ -46,7 +46,7 @@ public:
     StreamObjData(rgw_obj& _obj) : obj(_obj) {}
 };
 
-int RGWRegionConnection::put_obj_init(const string& uid, rgw_obj& obj, uint64_t obj_size,
+int RGWRESTConn::put_obj_init(const string& uid, rgw_obj& obj, uint64_t obj_size,
                                       map<string, bufferlist>& attrs, RGWRESTStreamWriteRequest **req)
 {
   string url;
@@ -61,7 +61,7 @@ int RGWRegionConnection::put_obj_init(const string& uid, rgw_obj& obj, uint64_t 
   return (*req)->put_obj_init(key, obj, obj_size, attrs);
 }
 
-int RGWRegionConnection::complete_request(RGWRESTStreamWriteRequest *req, string& etag, time_t *mtime)
+int RGWRESTConn::complete_request(RGWRESTStreamWriteRequest *req, string& etag, time_t *mtime)
 {
   int ret = req->complete(etag, mtime);
   delete req;
@@ -69,7 +69,7 @@ int RGWRegionConnection::complete_request(RGWRESTStreamWriteRequest *req, string
   return ret;
 }
 
-int RGWRegionConnection::get_obj(const string& uid, req_info *info /* optional */, rgw_obj& obj, bool prepend_metadata,
+int RGWRESTConn::get_obj(const string& uid, req_info *info /* optional */, rgw_obj& obj, bool prepend_metadata,
                                  RGWGetDataCB *cb, RGWRESTStreamReadRequest **req)
 {
   string url;
@@ -102,7 +102,7 @@ int RGWRegionConnection::get_obj(const string& uid, req_info *info /* optional *
   return (*req)->get_obj(key, extra_headers, obj);
 }
 
-int RGWRegionConnection::complete_request(RGWRESTStreamReadRequest *req, string& etag, time_t *mtime,
+int RGWRESTConn::complete_request(RGWRESTStreamReadRequest *req, string& etag, time_t *mtime,
                                           map<string, string>& attrs)
 {
   int ret = req->complete(etag, mtime, attrs);

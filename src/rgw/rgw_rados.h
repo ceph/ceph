@@ -650,7 +650,6 @@ class RGWRados
   int complete_atomic_overwrite(RGWRadosCtx *rctx, RGWObjState *state, rgw_obj& obj);
 
   int update_placement_map();
-  int select_bucket_placement(std::string& bucket_name, rgw_bucket& bucket);
   int store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker, bool exclusive);
 
 protected:
@@ -670,7 +669,7 @@ public:
                bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
                cct(NULL), rados(NULL),
                pools_initialized(false),
-               rest_conn(NULL),
+               rest_master_conn(NULL),
                meta_mgr(NULL), data_log(NULL) {}
 
   void set_context(CephContext *_cct) {
@@ -688,7 +687,8 @@ public:
   RGWRegion region;
   RGWZoneParams zone;
   RGWRegionMap region_map;
-  RGWRegionConnection *rest_conn;
+  RGWRESTConn *rest_master_conn;
+  map<string, RGWRESTConn *> zone_conn_map;
 
   RGWMetadataManager *meta_mgr;
 
@@ -772,6 +772,8 @@ public:
    * create a bucket with name bucket and the given list of attrs
    * returns 0 on success, -ERR# otherwise.
    */
+  virtual int init_bucket_index(rgw_bucket& bucket);
+  int select_bucket_placement(std::string& bucket_name, rgw_bucket& bucket);
   virtual int create_bucket(string& owner, rgw_bucket& bucket,
                             const string& region_name,
                             map<std::string,bufferlist>& attrs,
@@ -891,6 +893,7 @@ public:
   virtual int copy_obj(void *ctx,
                const string& user_id,
                req_info *info,
+               const string& source_zone,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,

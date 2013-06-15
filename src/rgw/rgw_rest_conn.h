@@ -5,10 +5,9 @@
 
 class CephContext;
 class RGWRados;
-class RGWRegion;
 class RGWGetObjData;
 
-class RGWRegionConnection
+class RGWRESTConn
 {
   CephContext *cct;
   map<int, string> endpoints;
@@ -17,7 +16,7 @@ class RGWRegionConnection
   atomic_t counter;
 public:
 
-  RGWRegionConnection(CephContext *_cct, RGWRados *store, RGWRegion& upstream);
+  RGWRESTConn(CephContext *_cct, RGWRados *store, list<string>& endpoints);
   int get_url(string& endpoint);
 
   /* sync request */

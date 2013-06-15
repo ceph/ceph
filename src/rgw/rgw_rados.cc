@@ -751,7 +751,13 @@ void RGWRados::finalize()
     delete gc;
     gc = NULL;
   }
-  delete rest_conn;
+  delete rest_master_conn;
+
+  map<string, RGWRESTConn *>::iterator iter;
+  for (iter = zone_conn_map.begin(); iter != zone_conn_map.end(); ++iter) {
+    RGWRESTConn *conn = iter->second;
+    delete conn;
+  }
 }
 
 /** 
@@ -810,7 +816,18 @@ int RGWRados::init_complete()
       lderr(cct) << "ERROR: bad region map: inconsistent master region" << dendl;
       return -EINVAL;
     }
-    rest_conn = new RGWRegionConnection(cct, this, iter->second);
+    RGWRegion& region = iter->second;
+    rest_master_conn = new RGWRESTConn(cct, this, region.endpoints);
+  }
+
+  map<string, RGWZone>::iterator ziter;
+  for (ziter = region.zones.begin(); ziter != region.zones.end(); ++ziter) {
+    const string& name = ziter->first;
+    if (name != zone.name) {
+      RGWZone& z = ziter->second;
+      ldout(cct, 20) << "generating connection object for zone " << name << dendl;
+      zone_conn_map[name] = new RGWRESTConn(cct, this, z.endpoints);
+    }
   }
 
   ret = open_root_pool_ctx();
@@ -1633,6 +1650,27 @@ int RGWRados::create_pool(rgw_bucket& bucket)
 
   return 0;
 }
+
+int RGWRados::init_bucket_index(rgw_bucket& bucket)
+{
+  librados::IoCtx index_ctx; // context for new bucket
+
+  int r = open_bucket_index_ctx(bucket, index_ctx);
+  if (r < 0)
+    return r;
+
+  string dir_oid =  dir_oid_prefix;
+  dir_oid.append(bucket.marker);
+
+  librados::ObjectWriteOperation op;
+  op.create(true);
+  r = cls_rgw_init_index(index_ctx, op, dir_oid);
+  if (r < 0 && r != -EEXIST)
+    return r;
+
+  return 0;
+}
+
 /**
  * create a bucket with name bucket and the given list of attrs
  * returns 0 on success, -ERR# otherwise.
@@ -1650,12 +1688,6 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
     ret = select_bucket_placement(bucket.name, bucket);
     if (ret < 0)
       return ret;
-    librados::IoCtx index_ctx; // context for new bucket
-
-    int r = open_bucket_index_ctx(bucket, index_ctx);
-    if (r < 0)
-      return r;
-
     bufferlist bl;
     uint32_t nop = 0;
     ::encode(nop, bl);
@@ -1663,7 +1695,7 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
     const string& pool = zone.domain_root.name;
     const char *pool_str = pool.c_str();
     librados::IoCtx id_io_ctx;
-    r = rados->ioctx_create(pool_str, id_io_ctx);
+    int r = rados->ioctx_create(pool_str, id_io_ctx);
     if (r < 0)
       return r;
 
@@ -1677,10 +1709,8 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
     string dir_oid =  dir_oid_prefix;
     dir_oid.append(bucket.marker);
 
-    librados::ObjectWriteOperation op;
-    op.create(true);
-    r = cls_rgw_init_index(index_ctx, op, dir_oid);
-    if (r < 0 && r != -EEXIST)
+    r = init_bucket_index(bucket);
+    if (r < 0)
       return r;
 
     if (pobjv) {
@@ -1695,9 +1725,14 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
     info.region = region_name;
     ret = put_bucket_info(bucket.name, info, exclusive, &objv_tracker, &attrs);
     if (ret == -EEXIST) {
+      librados::IoCtx index_ctx; // context for new bucket
+      int r = open_bucket_index_ctx(bucket, index_ctx);
+      if (r < 0)
+        return r;
+
       index_ctx.remove(dir_oid);
       /* we need this for this objv_tracker */
-      int r = get_bucket_info(NULL, bucket.name, info, &objv_tracker, NULL);
+      r = get_bucket_info(NULL, bucket.name, info, &objv_tracker, NULL);
       if (r < 0) {
         if (r == -ENOENT) {
           continue;
@@ -2176,6 +2211,7 @@ static void set_copy_attrs(map<string, bufferlist>& src_attrs, map<string, buffe
 int RGWRados::copy_obj(void *ctx,
                const string& user_id,
                req_info *info,
+               const string& source_zone,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
@@ -2221,7 +2257,7 @@ int RGWRados::copy_obj(void *ctx,
   map<string, bufferlist> src_attrs;
   off_t ofs = 0;
   off_t end = -1;
-  if (!remote_src) {
+  if (!remote_src && source_zone.empty()) {
     ret = prepare_get_obj(ctx, src_obj, &ofs, &end, &src_attrs,
                   mod_ptr, unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &obj_size, NULL, &handle, err);
     if (ret < 0)
@@ -2240,15 +2276,27 @@ int RGWRados::copy_obj(void *ctx,
       return ret;
 
     RGWRadosPutObj cb(&processor);
+
+    RGWRESTConn *conn;
+    if (source_zone.empty()) {
+      conn = rest_master_conn;
+    } else {
+      map<string, RGWRESTConn *>::iterator iter = zone_conn_map.find(source_zone);
+      if (iter == zone_conn_map.end()) {
+        ldout(cct, 0) << "could not find zone connection to zone: " << source_zone << dendl;
+        return -ENOENT;
+      }
+      conn = iter->second;
+    }
   
-    int ret = rest_conn->get_obj(user_id, info, src_obj, true, &cb, &in_stream_req);
+    int ret = conn->get_obj(user_id, info, src_obj, true, &cb, &in_stream_req);
     if (ret < 0)
       return ret;
 
     string etag;
 
     map<string, string> req_headers;
-    ret = rest_conn->complete_request(in_stream_req, etag, mtime, req_headers);
+    ret = conn->complete_request(in_stream_req, etag, mtime, req_headers);
     if (ret < 0)
       return ret;
 
@@ -2310,7 +2358,7 @@ int RGWRados::copy_obj(void *ctx,
 
     RGWRESTStreamWriteRequest *out_stream_req;
   
-    int ret = rest_conn->put_obj_init(user_id, dest_obj, astate->size, src_attrs, &out_stream_req);
+    int ret = rest_master_conn->put_obj_init(user_id, dest_obj, astate->size, src_attrs, &out_stream_req);
     if (ret < 0)
       return ret;
 
@@ -2320,7 +2368,7 @@ int RGWRados::copy_obj(void *ctx,
 
     string etag;
 
-    ret = rest_conn->complete_request(out_stream_req, etag, mtime);
+    ret = rest_master_conn->complete_request(out_stream_req, etag, mtime);
     if (ret < 0)
       return ret;
 
