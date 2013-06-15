@@ -637,6 +637,11 @@ def get_free_partition_index(dev):
         raise Error('parted failed to output anything')
     lines = str(lines).splitlines(True)
 
+    # work around buggy libreadline(?) library in rhel/centos.
+    idiot_prefix = '\x1b\x5b\x3f\x31\x30\x33\x34\x68';
+    if lines[0].startswith(idiot_prefix):
+        lines[0] = lines[0][8:]
+
     if lines[0] not in ['CHS;\n', 'CYL;\n', 'BYT;\n']:
         raise Error('weird parted units', lines[0])
     del lines[0]
@@ -1243,6 +1248,7 @@ def auth_key(
 
 
 def move_mount(
+    dev,
     path,
     cluster,
     osd_id,
@@ -1254,13 +1260,28 @@ def move_mount(
         '{cluster}-{osd_id}'.format(cluster=cluster, osd_id=osd_id),
         )
     maybe_mkdir(osd_data)
+
+    # we really want to mount --move, but that is not supported when
+    # the parent mount is shared, as it is by default on RH, Fedora,
+    # and probably others.  Also, --bind doesn't properly manipulate
+    # /etc/mtab, which *still* isn't a symlink to /proc/mounts despite
+    # this being 2013.  Instead, mount the original device at the final
+    # location.
     subprocess.check_call(
         args=[
             '/bin/mount',
-            '--move',
+            '--',
+            dev,
+            osd_data,
+            ],
+        )
+    subprocess.check_call(
+        args=[
+            '/bin/umount',
+            '-l',   # lazy, in case someone else is peeking at the
+                    # wrong moment
             '--',
             path,
-            osd_data,
             ],
         )
 
@@ -1400,6 +1421,7 @@ def mount_activate(
             raise Error('another %s osd.%s already mounted in position (old/different cluster instance?); unmounting ours.' % (cluster, osd_id))
         else:
             move_mount(
+                dev=dev,
                 path=path,
                 cluster=cluster,
                 osd_id=osd_id,
