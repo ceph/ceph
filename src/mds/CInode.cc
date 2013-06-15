@@ -1625,6 +1625,8 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
 
   if (dir->is_frozen()) {
     dout(10) << "finish_scatter_update " << fg << " frozen, marking " << *lock << " stale " << *dir << dendl;
+  } else if (dir->get_version() == 0) {
+    dout(10) << "finish_scatter_update " << fg << " not loaded, marking " << *lock << " stale " << *dir << dendl;
   } else {
     if (dir_accounted_version != inode_version) {
       dout(10) << "finish_scatter_update " << fg << " journaling accounted scatterstat update v" << inode_version << dendl;
