@@ -340,15 +340,15 @@ void RGWProcess::handle_request(RGWRequest *req)
   req->log(s, "reading the cors attr");
   handler->read_cors_config();
  
-  if (!s->system_request) {
-    req->log(s, "verifying op permissions");
-    ret = op->verify_permission();
-    if (ret < 0) {
+  req->log(s, "verifying op permissions");
+  ret = op->verify_permission();
+  if (ret < 0) {
+    if (s->system_request) {
+      dout(2) << "overriding permissions due to system operation" << dendl;
+    } else {
       abort_early(s, ret);
       goto done;
     }
-  } else {
-    req->log(s, "skipping permissons checks for system request");
   }
 
   req->log(s, "verifying op params");

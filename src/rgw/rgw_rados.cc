@@ -2193,7 +2193,7 @@ public:
 /*
  * prepare attrset, either replace it with new attrs, or keep it (other than acls).
  */
-static void set_copy_attrs(map<string, bufferlist>& src_attrs, map<string, bufferlist>& attrs, bool replace_attrs)
+static void set_copy_attrs(map<string, bufferlist>& src_attrs, map<string, bufferlist>& attrs, bool replace_attrs, bool intra_region)
 {
   if (replace_attrs) {
     if (!attrs[RGW_ATTR_ETAG].length())
@@ -2201,8 +2201,9 @@ static void set_copy_attrs(map<string, bufferlist>& src_attrs, map<string, buffe
 
     src_attrs = attrs;
   } else {
-    /* copying attrs from source, however acls should not be copied */
-    src_attrs[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
+    /* copying attrs from source, however acls should only be copied if it's intra-region operation */
+    if (!intra_region)
+      src_attrs[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
   }
 }
 
@@ -2319,7 +2320,7 @@ int RGWRados::copy_obj(void *ctx,
       src_attrs.erase(RGW_ATTR_MANIFEST); // not interested in original object layout
     }
 
-    set_copy_attrs(src_attrs, attrs, replace_attrs);
+    set_copy_attrs(src_attrs, attrs, replace_attrs, !source_zone.empty());
 
     ret = cb.complete(etag, mtime, src_attrs);
     if (ret < 0)
@@ -2328,7 +2329,7 @@ int RGWRados::copy_obj(void *ctx,
     return 0;
   }
 
-  set_copy_attrs(src_attrs, attrs, replace_attrs);
+  set_copy_attrs(src_attrs, attrs, replace_attrs, false);
 
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;
