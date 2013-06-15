@@ -1211,6 +1211,7 @@ void CDir::finish_waiting(uint64_t mask, int result)
 
 fnode_t *CDir::project_fnode()
 {
+  assert(get_version() != 0);
   fnode_t *p = new fnode_t;
   *p = *get_projected_fnode();
   projected_fnode.push_back(p);

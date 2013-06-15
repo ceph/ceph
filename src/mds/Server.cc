@@ -4010,7 +4010,8 @@ public:
     if (newi->inode.is_dir()) { 
       CDir *dir = newi->get_dirfrag(frag_t());
       assert(dir);
-      dir->mark_dirty(1, mdr->ls);
+      dir->fnode.version--;
+      dir->mark_dirty(dir->fnode.version + 1, mdr->ls);
       dir->mark_new(mdr->ls);
     }
 
@@ -4169,7 +4170,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   // ...and that new dir is empty.
   CDir *newdir = newi->get_or_open_dirfrag(mds->mdcache, frag_t());
   newdir->mark_complete();
-  newdir->pre_dirty();
+  newdir->fnode.version = newdir->pre_dirty();
 
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
