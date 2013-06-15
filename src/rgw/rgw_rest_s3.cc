@@ -4,6 +4,7 @@
 #include "common/ceph_crypto.h"
 #include "common/Formatter.h"
 #include "common/utf8.h"
+#include "common/ceph_json.h"
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
@@ -429,6 +430,7 @@ void RGWCreateBucket_ObjStore_S3::send_response()
 
     f.open_object_section("info");
     encode_json("object_ver", objv_tracker.read_version, &f);
+    encode_json("bucket", bucket, &f);
     f.close_section();
     rgw_flush_formatter_and_reset(s, &f);
   }
