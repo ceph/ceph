@@ -147,7 +147,8 @@ void OSDMonitor::update_from_paxos()
     
     dout(7) << "update_from_paxos  applying incremental " << osdmap.epoch+1 << dendl;
     OSDMap::Incremental inc(inc_bl);
-    osdmap.apply_incremental(inc);
+    err = osdmap.apply_incremental(inc);
+    assert(err == 0);
 
     // write out the full map for all past epochs
     bufferlist full_bl;
