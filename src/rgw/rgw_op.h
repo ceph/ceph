@@ -234,6 +234,7 @@ protected:
   RGWAccessControlPolicy policy;
   string location_constraint;
   RGWObjVersionTracker objv_tracker;
+  rgw_bucket bucket;
 
   bufferlist in_data;
 

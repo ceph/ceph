@@ -855,8 +855,7 @@ int RGWCreateBucket::verify_permission()
   return 0;
 }
 
-template<class T>
-static int forward_request_to_master(struct req_state *s, RGWRados *store, bufferlist& in_data, const char *name, T& obj)
+static int forward_request_to_master(struct req_state *s, RGWRados *store, bufferlist& in_data, JSONParser *jp)
 {
   if (!store->rest_master_conn) {
     ldout(s->cct, 0) << "rest connection is invalid" << dendl;
@@ -870,13 +869,11 @@ static int forward_request_to_master(struct req_state *s, RGWRados *store, buffe
     return ret;
 
   ldout(s->cct, 20) << "response: " << response.c_str() << dendl;
-  JSONParser jp;
-  ret = jp.parse(response.c_str(), response.length());
+  ret = jp->parse(response.c_str(), response.length());
   if (ret < 0) {
     ldout(s->cct, 0) << "failed parsing response from master region" << dendl;
     return ret;
   }
-  JSONDecoder::decode_json(name, obj, &jp);
 
   return 0;
 }
@@ -912,12 +909,22 @@ void RGWCreateBucket::execute()
     }
   }
 
+  rgw_bucket master_bucket;
+  rgw_bucket *pmaster_bucket;
+
   if (!store->region.is_master) {
-    ret = forward_request_to_master(s, store, in_data, "object_ver", objv);
+    JSONParser jp;
+    ret = forward_request_to_master(s, store, in_data, &jp);
     if (ret < 0)
       return;
 
+    JSONDecoder::decode_json("object_ver", objv, &jp);
+    JSONDecoder::decode_json("bucket", master_bucket, &jp);
     ldout(s->cct, 20) << "parsed: objv.tag=" << objv.tag << " objv.ver=" << objv.ver << dendl;
+    pmaster_bucket = &master_bucket;
+    pobjv = &objv;
+  } else {
+    pmaster_bucket = NULL;
   }
 
   string region_name;
@@ -936,7 +943,7 @@ void RGWCreateBucket::execute()
   attrs[RGW_ATTR_ACL] = aclbl;
 
   s->bucket.name = s->bucket_name_str;
-  ret = store->create_bucket(s->user.user_id, s->bucket, region_name, attrs, objv_tracker, pobjv, true);
+  ret = store->create_bucket(s->user.user_id, s->bucket, region_name, attrs, objv_tracker, pobjv, pmaster_bucket, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can recover
    * from a partial create by retrying it. */
   ldout(s->cct, 20) << "rgw_create_bucket returned ret=" << ret << " bucket=" << s->bucket << dendl;
@@ -973,6 +980,8 @@ void RGWCreateBucket::execute()
 
   if (ret == -EEXIST)
     ret = -ERR_BUCKET_EXISTS;
+
+  bucket = s->bucket;
 }
 
 int RGWDeleteBucket::verify_permission()
@@ -992,10 +1001,12 @@ void RGWDeleteBucket::execute()
 
   if (!store->region.is_master) {
     bufferlist in_data;
-    ret = forward_request_to_master(s, store, in_data, "object_ver", objv_tracker.read_version);
-    if (ret < 0) {
+    JSONParser jp;
+    ret = forward_request_to_master(s, store, in_data, &jp);
+    if (ret < 0)
       return;
-    }
+
+    JSONDecoder::decode_json("object_ver", objv_tracker.read_version, &jp);
   }
 
   ret = store->delete_bucket(s->bucket, objv_tracker);

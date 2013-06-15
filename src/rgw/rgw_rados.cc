@@ -1680,6 +1680,7 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
 			    map<std::string, bufferlist>& attrs,
                             RGWObjVersionTracker& objv_tracker,
                             obj_version *pobjv,
+                            rgw_bucket *pmaster_bucket,
 			    bool exclusive)
 {
 #define MAX_CREATE_RETRIES 20 /* need to bound retries */
@@ -1699,12 +1700,17 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
     if (r < 0)
       return r;
 
-    uint64_t iid = instance_id();
-    uint64_t bid = next_bucket_id();
-    char buf[32];
-    snprintf(buf, sizeof(buf), "%s.%llu.%llu", zone.name.c_str(), (long long)iid, (long long)bid);
-    bucket.marker = buf;
-    bucket.bucket_id = bucket.marker;
+    if (!pmaster_bucket) {
+      uint64_t iid = instance_id();
+      uint64_t bid = next_bucket_id();
+      char buf[32];
+      snprintf(buf, sizeof(buf), "%s.%llu.%llu", zone.name.c_str(), (long long)iid, (long long)bid);
+      bucket.marker = buf;
+      bucket.bucket_id = bucket.marker;
+    } else {
+      bucket.marker = pmaster_bucket->marker;
+      bucket.bucket_id = pmaster_bucket->bucket_id;
+    }
 
     string dir_oid =  dir_oid_prefix;
     dir_oid.append(bucket.marker);
