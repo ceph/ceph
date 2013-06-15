@@ -609,10 +609,16 @@ bool OSDMap::is_blacklisted(const entity_addr_t& a) const
     return true;
 
   // is entire ip blacklisted?
-  entity_addr_t b = a;
-  b.set_port(0);
-  b.set_nonce(0);
-  return blacklist.count(b);
+  if (a.is_ip()) {
+    entity_addr_t b = a;
+    b.set_port(0);
+    b.set_nonce(0);
+    if (blacklist.count(b)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 void OSDMap::get_blacklist(list<pair<entity_addr_t,utime_t> > *bl) const
