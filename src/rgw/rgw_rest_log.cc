@@ -222,7 +222,7 @@ void RGWOp_BILog_List::execute() {
     return;
   }
 
-  http_ret = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL);
+  http_ret = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL, NULL);
   if (http_ret < 0) {
     dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
     return;
@@ -301,7 +301,7 @@ void RGWOp_BILog_Delete::execute() {
     http_ret = -EINVAL;
     return;
   }
-  http_ret = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL);
+  http_ret = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL, NULL);
   if (http_ret < 0) {
     dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
     return;

@@ -139,8 +139,9 @@ int RGWBucket::create_bucket(string bucket_str, string& user_id, string& region_
   policy.encode(aclbl);
 
   RGWObjVersionTracker objv_tracker;
+  time_t mtime;
 
-  ret = store->get_bucket_info(NULL, bucket_str, bucket_info, &objv_tracker);
+  ret = store->get_bucket_info(NULL, bucket_str, bucket_info, &objv_tracker, &mtime);
   if (ret < 0)
     return ret;
 
@@ -218,7 +219,8 @@ void check_bad_user_bucket_mapping(RGWRados *store, const string& user_id, bool 
 
       RGWBucketInfo bucket_info;
       RGWObjVersionTracker objv_tracker;
-      int r = store->get_bucket_info(NULL, bucket.name, bucket_info, &objv_tracker);
+      time_t mtime;
+      int r = store->get_bucket_info(NULL, bucket.name, bucket_info, &objv_tracker, &mtime);
       if (r < 0) {
         ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << dendl;
         continue;
@@ -283,7 +285,7 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
   obj.bucket = bucket;
   int max = 1000;
 
-  ret = rgw_get_system_obj(store, NULL, store->zone.domain_root, bucket.name, bl, NULL);
+  ret = rgw_get_system_obj(store, NULL, store->zone.domain_root, bucket.name, bl, NULL, NULL);
 
   bufferlist::iterator iter = bl.begin();
   try {
@@ -363,7 +365,7 @@ int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state)
 
   if (!bucket_name.empty()) {
     RGWObjVersionTracker objv_tracker;
-    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, &objv_tracker);
+    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, &objv_tracker, NULL);
     if (r < 0) {
       ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return r;
@@ -849,7 +851,8 @@ static int bucket_stats(RGWRados *store, std::string&  bucket_name, Formatter *f
   map<RGWObjCategory, RGWBucketStats> stats;
 
   RGWObjVersionTracker objv_tracker;
-  int r = store->get_bucket_info(NULL, bucket_name, bucket_info, &objv_tracker);
+  time_t mtime;
+  int r = store->get_bucket_info(NULL, bucket_name, bucket_info, &objv_tracker, &mtime);
   if (r < 0)
     return r;
 
@@ -871,6 +874,7 @@ static int bucket_stats(RGWRados *store, std::string&  bucket_name, Formatter *f
   formatter->dump_string("owner", bucket_info.owner);
   formatter->dump_int("ver", bucket_ver);
   formatter->dump_int("master_ver", master_ver);
+  formatter->dump_int("mtime", mtime);
   dump_bucket_usage(stats, formatter);
   formatter->close_section();
 
@@ -1277,8 +1281,9 @@ struct RGWBucketCompleteInfo {
 class RGWBucketMetadataObject : public RGWMetadataObject {
   RGWBucketCompleteInfo info;
 public:
-  RGWBucketMetadataObject(RGWBucketCompleteInfo& i, obj_version& v) : info(i) {
+  RGWBucketMetadataObject(RGWBucketCompleteInfo& i, obj_version& v, time_t m) : info(i) {
     objv = v;
+    mtime = m;
   }
 
   void dump(Formatter *f) const {
@@ -1290,7 +1295,7 @@ class RGWBucketMetadataHandler : public RGWMetadataHandler {
 
   int init_bucket(RGWRados *store, string& bucket_name, rgw_bucket& bucket, RGWObjVersionTracker *objv_tracker) {
     RGWBucketInfo bucket_info;
-    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, objv_tracker);
+    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, objv_tracker, NULL);
     if (r < 0) {
       cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
       return r;
@@ -1307,12 +1312,13 @@ public:
     RGWBucketCompleteInfo bci;
 
     RGWObjVersionTracker objv_tracker;
+    time_t mtime;
 
-    int ret = store->get_bucket_info(NULL, entry, bci.info, &objv_tracker, &bci.attrs);
+    int ret = store->get_bucket_info(NULL, entry, bci.info, &objv_tracker, &mtime, &bci.attrs);
     if (ret < 0)
       return ret;
 
-    RGWBucketMetadataObject *mdo = new RGWBucketMetadataObject(bci, objv_tracker.read_version);
+    RGWBucketMetadataObject *mdo = new RGWBucketMetadataObject(bci, objv_tracker.read_version, mtime);
 
     *obj = mdo;
 
@@ -1323,7 +1329,9 @@ public:
     RGWBucketCompleteInfo bci, old_bci;
     decode_json_obj(bci, obj);
 
-    int ret = store->get_bucket_info(NULL, entry, old_bci.info, &objv_tracker, &old_bci.attrs);
+    time_t orig_mtime;
+
+    int ret = store->get_bucket_info(NULL, entry, old_bci.info, &objv_tracker, &orig_mtime, &old_bci.attrs);
     if (ret < 0 && ret != -ENOENT)
       return ret;
 

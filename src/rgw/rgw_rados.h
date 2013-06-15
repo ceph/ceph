@@ -1070,7 +1070,8 @@ public:
 
   int decode_policy(bufferlist& bl, ACLOwner *owner);
   int get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_t *master_ver, map<RGWObjCategory, RGWBucketStats>& stats);
-  virtual int get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info, RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs = NULL);
+  virtual int get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info, RGWObjVersionTracker *objv_tracker,
+                              time_t *pmtime, map<string, bufferlist> *pattrs = NULL);
   virtual int put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive, RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs);
 
   int cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid);
