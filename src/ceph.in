@@ -1571,14 +1571,17 @@ def main():
 
         ret, outbuf, outs = json_command(target=target,
                                          prefix='get_command_descriptions')
+        compat = False
         if ret == -errno.EINVAL:
             # send command to old monitor or OSD
             if verbose:
                 print prefix, '{0} to old {1}'.format(' '.join(childargs), target[0])
+            compat = True
             ret, outbuf, outs = send_command(target, childargs, inbuf)
             # combine nonerror outbuf and outs; either may have cmd output
             if ret == 0:
-                outbuf += outs
+                # old tool always added a newline
+                outbuf = outs + '\n' + outbuf
                 # clear outs so generic code below doesn't print it to stderr
                 outs = ''
         elif ret:
@@ -1616,7 +1619,8 @@ def main():
             # to satisfy consumers that skip the first line, but not annoy
             # consumers that don't.
             if parsed_args.output_format and \
-               parsed_args.output_format.startswith('json'):
+               parsed_args.output_format.startswith('json') and \
+               not compat:
                 sys.stdout.write('\n');
 
             # if we are prettifying things, normalize newlines.  sigh.
