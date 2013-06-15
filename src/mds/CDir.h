@@ -170,6 +170,7 @@ public:
 
   fnode_t fnode;
   snapid_t first;
+  ceph_seq_t mseq; // migrate sequence
   map<snapid_t,old_rstat_t> dirty_old_rstat;  // [value.first,key]
 
   // my inodes with dirty rstat data
@@ -547,7 +548,8 @@ public:
   // -- import/export --
   void encode_export(bufferlist& bl);
   void finish_export(utime_t now);
-  void abort_export() { 
+  void abort_export() {
+    mseq += 2;
     put(PIN_TEMPEXPORTING);
   }
   void decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls);
