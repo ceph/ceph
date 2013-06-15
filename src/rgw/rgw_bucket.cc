@@ -1328,7 +1328,27 @@ public:
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
+    if (ret == -ENOENT || old_bci.info.bucket.bucket_id != bci.info.bucket.bucket_id) {
+      /* a new bucket, we need to select a new bucket placement for it */
+      rgw_bucket bucket;
+      ret = store->select_bucket_placement(entry, bucket);
+      if (ret < 0) {
+        ldout(store->ctx(), 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
+        return ret;
+      }
+      bci.info.bucket.data_pool = bucket.data_pool;
+      bci.info.bucket.index_pool = bucket.index_pool;
+    } else {
+      /* existing bucket, keep its placement pools */
+      bci.info.bucket.data_pool = old_bci.info.bucket.data_pool;
+      bci.info.bucket.index_pool = old_bci.info.bucket.index_pool;
+    }
+
     ret = store->put_bucket_info(entry, bci.info, false, &objv_tracker, &bci.attrs);
+    if (ret < 0)
+      return ret;
+
+    ret = store->init_bucket_index(bci.info.bucket);
     if (ret < 0)
       return ret;
 
