@@ -2651,6 +2651,15 @@ void MDCache::handle_mds_failure(int who)
     if (p->second->slave_to_mds == who) {
       if (p->second->slave_did_prepare()) {
 	dout(10) << " slave request " << *p->second << " uncommitted, will resolve shortly" << dendl;
+	if (!p->second->more()->waiting_on_slave.empty()) {
+	  assert(p->second->more()->srcdn_auth_mds == mds->get_nodeid());
+	  // will rollback, no need to wait
+	  if (p->second->slave_request) {
+	    p->second->slave_request->put();
+	    p->second->slave_request = 0;
+	  }
+	  p->second->more()->waiting_on_slave.clear();
+	}
       } else {
 	dout(10) << " slave request " << *p->second << " has no prepare, finishing up" << dendl;
 	if (p->second->slave_request)
@@ -2660,12 +2669,22 @@ void MDCache::handle_mds_failure(int who)
       }
     }
 
-    if (p->second->is_slave() &&
-	p->second->slave_did_prepare() && p->second->more()->srcdn_auth_mds == who &&
-	mds->mdsmap->is_clientreplay_or_active_or_stopping(p->second->slave_to_mds)) {
-      // rename srcdn's auth mds failed, resolve even I'm a survivor.
-      dout(10) << " slave request " << *p->second << " uncommitted, will resolve shortly" << dendl;
-      add_ambiguous_slave_update(p->first, p->second->slave_to_mds);
+    if (p->second->is_slave() && p->second->slave_did_prepare()) {
+      if (p->second->more()->waiting_on_slave.count(who)) {
+	assert(p->second->more()->srcdn_auth_mds == mds->get_nodeid());
+	dout(10) << " slave request " << *p->second << " no longer need rename notity ack from mds."
+		 << who << dendl;
+	p->second->more()->waiting_on_slave.erase(who);
+	if (p->second->more()->waiting_on_slave.empty())
+	  mds->queue_waiter(new C_MDS_RetryRequest(this, p->second));
+      }
+
+      if (p->second->more()->srcdn_auth_mds == who &&
+	  mds->mdsmap->is_clientreplay_or_active_or_stopping(p->second->slave_to_mds)) {
+	// rename srcdn's auth mds failed, resolve even I'm a survivor.
+	dout(10) << " slave request " << *p->second << " uncommitted, will resolve shortly" << dendl;
+	add_ambiguous_slave_update(p->first, p->second->slave_to_mds);
+      }
     }
     
     // failed node is slave?
