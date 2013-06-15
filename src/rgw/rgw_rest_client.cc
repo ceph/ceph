@@ -531,7 +531,7 @@ int RGWRESTStreamWriteRequest::complete(string& etag, time_t *mtime)
   return status;
 }
 
-int RGWRESTStreamReadRequest::get_obj(RGWAccessKey& key, rgw_obj& obj)
+int RGWRESTStreamReadRequest::get_obj(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj)
 {
   string resource = obj.bucket.name + "/" + obj.object;
   string new_url = url;
@@ -552,11 +552,18 @@ int RGWRESTStreamReadRequest::get_obj(RGWAccessKey& key, rgw_obj& obj)
 
   new_env.set("HTTP_DATE", date_str.c_str());
 
+  for (map<string, string>::iterator iter = extra_headers.begin();
+       iter != extra_headers.end(); ++iter) {
+    new_env.set(iter->first.c_str(), iter->second.c_str());
+  }
+
   new_info.method = "GET";
 
   new_info.script_uri = "/";
   new_info.script_uri.append(resource);
   new_info.request_uri = new_info.script_uri;
+
+  new_info.init_meta_info(NULL);
 
   int ret = sign_request(key, new_env, new_info);
   if (ret < 0) {
