@@ -1280,6 +1280,16 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
   if (m->is_reply())
     return handle_slave_request_reply(m);
 
+  // the purpose of rename notify is enforcing causal message ordering. making sure
+  // bystanders have received all messages from rename srcdn's auth MDS.
+  if (m->get_op() == MMDSSlaveRequest::OP_RENAMENOTIFY) {
+    MMDSSlaveRequest *reply = new MMDSSlaveRequest(m->get_reqid(), m->get_attempt(),
+						   MMDSSlaveRequest::OP_RENAMENOTIFYACK);
+    mds->send_message(reply, m->get_connection());
+    m->put();
+    return;
+  }
+
   CDentry *straydn = NULL;
   if (m->stray.length() > 0) {
     straydn = mdcache->add_replica_stray(m->stray, from);
@@ -1430,6 +1440,10 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
 
   case MMDSSlaveRequest::OP_RENAMEPREPACK:
     handle_slave_rename_prep_ack(mdr, m);
+    break;
+
+  case MMDSSlaveRequest::OP_RENAMENOTIFYACK:
+    handle_slave_rename_notify_ack(mdr, m);
     break;
 
   default:
@@ -6560,6 +6574,9 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
 
   // am i srcdn auth?
   if (srcdn->is_auth()) {
+    set<int> srcdnrep;
+    srcdn->list_replicas(srcdnrep);
+
     bool reply_witness = false;
     if (srcdnl->is_primary() && !srcdnl->get_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
       // freeze?
@@ -6594,12 +6611,19 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
       if (mdr->slave_request->witnesses.size() > 1) {
 	dout(10) << " set srci ambiguous auth; providing srcdn replica list" << dendl;
 	reply_witness = true;
+	for (set<int>::iterator p = srcdnrep.begin(); p != srcdnrep.end(); ++p) {
+	  if (*p == mdr->slave_to_mds ||
+	      !mds->mdsmap->is_clientreplay_or_active_or_stopping(*p))
+	    continue;
+	  MMDSSlaveRequest *notify = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
+							  MMDSSlaveRequest::OP_RENAMENOTIFY);
+	  mds->send_message_mds(notify, *p);
+	  mdr->more()->waiting_on_slave.insert(*p);
+	}
       }
     }
 
     // is witness list sufficient?
-    set<int> srcdnrep;
-    srcdn->list_replicas(srcdnrep);
     for (set<int>::iterator p = srcdnrep.begin(); p != srcdnrep.end(); ++p) {
       if (*p == mdr->slave_to_mds ||
 	  mdr->slave_request->witnesses.count(*p)) continue;
@@ -6619,6 +6643,11 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
       return;	
     }
     dout(10) << " witness list sufficient: includes all srcdn replicas" << dendl;
+    if (!mdr->more()->waiting_on_slave.empty()) {
+      dout(10) << " still waiting for rename notify acks from "
+	       << mdr->more()->waiting_on_slave << dendl;
+      return;
+    }
   } else if (srcdnl->is_primary() && srcdn->authority() != destdn->authority()) {
     // set ambiguous auth for srci on witnesses
     mdr->set_ambiguous_auth(srcdnl->get_inode());
@@ -7187,6 +7216,24 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
     dout(10) << "still waiting on slaves " << mdr->more()->waiting_on_slave << dendl;
 }
 
+void Server::handle_slave_rename_notify_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
+{
+  dout(10) << "handle_slave_rename_notify_ack " << *mdr << " from mds."
+	   << ack->get_source() << dendl;
+  assert(mdr->is_slave());
+  int from = ack->get_source().num();
+
+  if (mdr->more()->waiting_on_slave.count(from)) {
+    mdr->more()->waiting_on_slave.erase(from);
+
+    if (mdr->more()->waiting_on_slave.empty()) {
+      if (mdr->slave_request)
+	dispatch_slave_request(mdr);
+    } else 
+      dout(10) << " still waiting for rename notify acks from "
+	       << mdr->more()->waiting_on_slave << dendl;
+  }
+}
 
 
 
