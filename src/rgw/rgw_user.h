@@ -56,22 +56,26 @@ extern int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *
  * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_uid(RGWRados *store, string& user_id, RGWUserInfo& info, RGWObjVersionTracker *objv_tracker = NULL);
+extern int rgw_get_user_info_by_uid(RGWRados *store, string& user_id, RGWUserInfo& info,
+                                    RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
 /**
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info, RGWObjVersionTracker *objv_tracker = NULL);
+extern int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info,
+                                      RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
 /**
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUserInfo& info, RGWObjVersionTracker *objv_tracker = NULL);
+extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUserInfo& info,
+                                      RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
 /**
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, RGWUserInfo& info, RGWObjVersionTracker *objv_tracker = NULL);
+extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, RGWUserInfo& info,
+                                           RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
 /**
  * Given an RGWUserInfo, deletes the user and its bucket ACLs.
  */

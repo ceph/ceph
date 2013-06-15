@@ -289,6 +289,10 @@ int RGWMetadataManager::get(string& metadata_key, Formatter *f)
   f->open_object_section("metadata_info");
   encode_json("key", metadata_key, f);
   encode_json("ver", obj->get_version(), f);
+  time_t mtime = obj->get_mtime();
+  if (mtime > 0) {
+    encode_json("mtime", mtime, f);
+  }
   encode_json("data", *obj, f);
   f->close_section();
 

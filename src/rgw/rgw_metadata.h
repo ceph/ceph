@@ -27,10 +27,13 @@ enum RGWMDLogStatus {
 class RGWMetadataObject {
 protected:
   obj_version objv;
+  time_t mtime;
   
 public:
+  RGWMetadataObject() : mtime(0) {}
   virtual ~RGWMetadataObject() {}
   obj_version& get_version();
+  time_t get_mtime() { return mtime; }
 
   virtual void dump(Formatter *f) const = 0;
 };

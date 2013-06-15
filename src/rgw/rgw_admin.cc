@@ -438,7 +438,8 @@ static void dump_bucket_usage(map<RGWObjCategory, RGWBucketStats>& stats, Format
 int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
 {
   RGWBucketInfo bucket_info;
-  int r = store->get_bucket_info(NULL, bucket.name, bucket_info, NULL);
+  time_t mtime;
+  int r = store->get_bucket_info(NULL, bucket.name, bucket_info, NULL, &mtime);
   if (r < 0)
     return r;
 
@@ -457,6 +458,7 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
   formatter->dump_string("owner", bucket_info.owner);
+  formatter->dump_int("mtime", mtime);
   formatter->dump_int("ver", bucket_ver);
   formatter->dump_int("master_ver", master_ver);
   dump_bucket_usage(stats, formatter);
@@ -478,7 +480,7 @@ static int init_bucket(string& bucket_name, rgw_bucket& bucket)
 {
   if (!bucket_name.empty()) {
     RGWBucketInfo bucket_info;
-    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL);
+    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL, NULL);
     if (r < 0) {
       cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
       return r;

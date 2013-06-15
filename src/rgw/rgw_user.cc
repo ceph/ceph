@@ -151,12 +151,13 @@ int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_inf
   return ret;
 }
 
-int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucket, RGWUserInfo& info, RGWObjVersionTracker *objv_tracker)
+int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucket, RGWUserInfo& info,
+                                 RGWObjVersionTracker *objv_tracker, time_t *pmtime)
 {
   bufferlist bl;
   RGWUID uid;
 
-  int ret = rgw_get_system_obj(store, NULL, bucket, key, bl, NULL);
+  int ret = rgw_get_system_obj(store, NULL, bucket, key, bl, NULL, pmtime);
   if (ret < 0)
     return ret;
 
@@ -176,12 +177,13 @@ int rgw_get_user_info_from_index(RGWRados *store, string& key, rgw_bucket& bucke
  * Given a uid, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-int rgw_get_user_info_by_uid(RGWRados *store, string& uid, RGWUserInfo& info, RGWObjVersionTracker *objv_tracker)
+int rgw_get_user_info_by_uid(RGWRados *store, string& uid, RGWUserInfo& info,
+                             RGWObjVersionTracker *objv_tracker, time_t *pmtime)
 {
   bufferlist bl;
   RGWUID user_id;
 
-  int ret = rgw_get_system_obj(store, NULL, store->zone.user_uid_pool, uid, bl, objv_tracker);
+  int ret = rgw_get_system_obj(store, NULL, store->zone.user_uid_pool, uid, bl, objv_tracker, pmtime);
   if (ret < 0)
     return ret;
 
@@ -207,27 +209,30 @@ int rgw_get_user_info_by_uid(RGWRados *store, string& uid, RGWUserInfo& info, RG
  * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info, RGWObjVersionTracker *objv_tracker)
+int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info,
+                               RGWObjVersionTracker *objv_tracker, time_t *pmtime)
 {
-  return rgw_get_user_info_from_index(store, email, store->zone.user_email_pool, info, objv_tracker);
+  return rgw_get_user_info_from_index(store, email, store->zone.user_email_pool, info, objv_tracker, pmtime);
 }
 
 /**
  * Given an swift username, finds the user_info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUserInfo& info, RGWObjVersionTracker *objv_tracker)
+extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUserInfo& info,
+                                      RGWObjVersionTracker *objv_tracker, time_t *pmtime)
 {
-  return rgw_get_user_info_from_index(store, swift_name, store->zone.user_swift_pool, info, objv_tracker);
+  return rgw_get_user_info_from_index(store, swift_name, store->zone.user_swift_pool, info, objv_tracker, pmtime);
 }
 
 /**
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, RGWUserInfo& info, RGWObjVersionTracker *objv_tracker)
+extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, RGWUserInfo& info,
+                                           RGWObjVersionTracker *objv_tracker, time_t *pmtime)
 {
-  return rgw_get_user_info_from_index(store, access_key, store->zone.user_keys_pool, info, objv_tracker);
+  return rgw_get_user_info_from_index(store, access_key, store->zone.user_keys_pool, info, objv_tracker, pmtime);
 }
 
 int rgw_remove_key_index(RGWRados *store, RGWAccessKey& access_key)
@@ -241,7 +246,7 @@ int rgw_remove_uid_index(RGWRados *store, string& uid)
 {
   RGWObjVersionTracker objv_tracker;
   RGWUserInfo info;
-  int ret = rgw_get_user_info_by_uid(store, uid, info, &objv_tracker);
+  int ret = rgw_get_user_info_by_uid(store, uid, info, &objv_tracker, NULL);
   if (ret < 0)
     return ret;
 
