@@ -1694,6 +1694,7 @@ def main_activate_all(args):
     LOG.debug('Scanning %s', dir)
     if not os.path.exists(dir):
         return
+    err = False
     for name in os.listdir(dir):
         if name.find('.') < 0:
             continue
@@ -1713,11 +1714,17 @@ def main_activate_all(args):
                     osd_id=osd_id,
                     )
 
-            except:
-                raise
+            except Exception as e:
+                print >> sys.stderr, '{prog}: {msg}'.format(
+                    prog=args.prog,
+                    msg=e,
+                    )
+                err = True
 
             finally:
                 activate_lock.release()
+    if err:
+        raise Error('One or more partitions failed to activate')
 
 
 ###########################
