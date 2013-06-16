@@ -1,7 +1,4 @@
 tasks:
-- install:
-- ceph:
-- ceph-fuse:
 - pexec:
     clients:
       - cd $TESTDIR
