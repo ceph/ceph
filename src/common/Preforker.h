@@ -79,13 +79,13 @@ public:
   int signal_exit(int r) {
     if (forked) {
       // tell parent
-      (void)::write(fd[1], &r, sizeof(r));
+      (void)safe_write(fd[1], &r, sizeof(r));
     }
     return r;
   }
   void exit(int r) {
     signal_exit(r);
-    exit(r);
+    ::exit(r);
   }
 
   void daemonize() {
