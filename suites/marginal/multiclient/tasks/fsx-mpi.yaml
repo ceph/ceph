@@ -1,12 +1,9 @@
 tasks:
-- install:
-- ceph:
-- ceph-fuse:
 - pexec:
     clients:
       - cd $TESTDIR
       - wget http://ceph.com/qa/fsx-mpi.c
-      - mpicc fsx-mpi.c -o fsx-mpi 
+      - mpicc fsx-mpi.c -o fsx-mpi
       - rm fsx-mpi.c
       - ln -s $TESTDIR/mnt.* $TESTDIR/gmnt
 - ssh_keys:

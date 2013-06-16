@@ -1,7 +1,4 @@
 tasks:
-- install:
-- ceph:
-- kclient:
 - pexec:
     clients:
       - cd $TESTDIR
@@ -22,3 +19,4 @@ tasks:
     all:
       - rm -f $TESTDIR/gmnt/ior.testfile
       - rm -f $TESTDIR/gmnt
+      - rm -rf $TESTDIR/binary
