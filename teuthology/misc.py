@@ -175,7 +175,7 @@ def generate_caps(type_):
             ),
         client=dict(
             mon='allow rw',
-            osd='allow rwx pool data, allow rwx pool rbd, allow rwx pool newpool',
+            osd='allow rwx',
             mds='allow',
             ),
         )
