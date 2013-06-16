@@ -1566,7 +1566,7 @@ def main():
         prefix = ''
         suffix = ''
         if not parsed_args.output_file and len(targets) > 1:
-            prefix='{0}.{1}:'.format(*target)
+            prefix='{0}.{1}: '.format(*target)
             suffix='\n'
 
         ret, outbuf, outs = json_command(target=target,
@@ -1575,7 +1575,7 @@ def main():
         if ret == -errno.EINVAL:
             # send command to old monitor or OSD
             if verbose:
-                print prefix, '{0} to old {1}'.format(' '.join(childargs), target[0])
+                print prefix + '{0} to old {1}'.format(' '.join(childargs), target[0])
             compat = True
             if parsed_args.output_format:
                 childargs.extend(['--format', parsed_args.output_format])
@@ -1596,7 +1596,7 @@ def main():
 
         if ret < 0:
             ret = -ret
-            print >> sys.stderr, prefix, 'Error {0}: {1}'.format(errno.errorcode[ret], outs)
+            print >> sys.stderr, prefix + 'Error {0}: {1}'.format(errno.errorcode[ret], outs)
             if len(targets) > 1:
                 final_ret = ret
             else:
@@ -1608,7 +1608,7 @@ def main():
 	        # old cli/mon would send status string to stdout on non-error
                 print outs
             else:
-                print >> sys.stderr, prefix, outs
+                print >> sys.stderr, prefix + outs
 
         if (parsed_args.output_file):
             outf.write(outbuf)
