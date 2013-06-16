@@ -1955,9 +1955,6 @@ int ReplicatedPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
 
 static int check_offset_and_length(uint64_t offset, uint64_t length)
 {
-  if (length < 1)
-    return -EINVAL;
-
   if (offset >= g_conf->osd_max_object_size ||
       length > g_conf->osd_max_object_size ||
       offset + length > g_conf->osd_max_object_size)
