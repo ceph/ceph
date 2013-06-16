@@ -639,7 +639,6 @@ def wait_until_healthy(ctx, remote):
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'ceph',
                 'health',
-                '--concise',
                 ],
             stdout=StringIO(),
             logger=log.getChild('health'),
@@ -661,7 +660,6 @@ def wait_until_osds_up(ctx, cluster, remote):
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'ceph',
-                '--concise',
                 'osd', 'dump', '--format=json'
                 ],
             stdout=StringIO(),

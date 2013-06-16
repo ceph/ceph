@@ -60,7 +60,6 @@ def is_healthy(ctx, config):
                 run.Raw('&&'),
                 'sudo', 'ceph',
                 'health',
-                '--concise',
                 ],
             stdout=StringIO(),
             logger=log.getChild('health'),

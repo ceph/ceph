@@ -278,7 +278,6 @@ class CephManager:
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'ceph',
-                '--concise',
                 ]
         ceph_args.extend(args)
         proc = self.controller.run(
@@ -294,7 +293,6 @@ class CephManager:
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'ceph',
-                '--concise',
                 ]
         ceph_args.extend(args)
         proc = self.controller.run(
