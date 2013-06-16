@@ -1634,7 +1634,7 @@ def main():
         outf.close()
 
     if final_ret:
-        return ret
+        return final_ret
 
     return 0
 
