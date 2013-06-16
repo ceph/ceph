@@ -50,7 +50,7 @@ public:
   virtual string get_type() = 0;
 
   virtual int get(RGWRados *store, string& entry, RGWMetadataObject **obj) = 0;
-  virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, JSONObj *obj) = 0;
+  virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, time_t mtime, JSONObj *obj) = 0;
   virtual int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) = 0;
 
   virtual int list_keys_init(RGWRados *store, void **phandle) = 0;
@@ -129,7 +129,7 @@ public:
   RGWMetadataHandler *get_handler(const char *type);
 
   int put_entry(RGWMetadataHandler *handler, string& key, bufferlist& bl, bool exclusive,
-                RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs = NULL);
+                RGWObjVersionTracker *objv_tracker, time_t mtime, map<string, bufferlist> *pattrs = NULL);
   int remove_entry(RGWMetadataHandler *handler, string& key, RGWObjVersionTracker *objv_tracker);
   int set_attr(RGWMetadataHandler *handler, string& key, rgw_obj& obj, string& attr, bufferlist& bl,
                RGWObjVersionTracker *objv_tracker);

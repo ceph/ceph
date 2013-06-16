@@ -121,8 +121,9 @@ int rgw_remove_user_bucket_info(RGWRados *store, string user_id, rgw_bucket& buc
 }
 
 int rgw_bucket_store_info(RGWRados *store, string& bucket_name, bufferlist& bl, bool exclusive,
-                          map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker) {
-  return store->meta_mgr->put_entry(bucket_meta_handler, bucket_name, bl, exclusive, objv_tracker, pattrs);
+                          map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
+                          time_t mtime) {
+  return store->meta_mgr->put_entry(bucket_meta_handler, bucket_name, bl, exclusive, objv_tracker, mtime, pattrs);
 }
 
 
@@ -1331,7 +1332,7 @@ public:
     return 0;
   }
 
-  int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, JSONObj *obj) {
+  int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, time_t mtime, JSONObj *obj) {
     RGWBucketCompleteInfo bci, old_bci;
     decode_json_obj(bci, obj);
 
@@ -1357,7 +1358,7 @@ public:
       bci.info.bucket.index_pool = old_bci.info.bucket.index_pool;
     }
 
-    ret = store->put_bucket_info(entry, bci.info, false, &objv_tracker, &bci.attrs);
+    ret = store->put_bucket_info(entry, bci.info, false, &objv_tracker, mtime, &bci.attrs);
     if (ret < 0)
       return ret;
 
