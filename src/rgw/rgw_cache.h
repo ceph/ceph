@@ -199,7 +199,7 @@ public:
                    map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
                    map<std::string, bufferlist>* rmattrs, const bufferlist *data,
                    RGWObjManifest *manifest, const string *ptag, list<string> *remove_objs,
-                   bool modify_version, RGWObjVersionTracker *objv_tracker);
+                   bool modify_version, RGWObjVersionTracker *objv_tracker, time_t set_mtime);
   int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len, bool exclusive);
 
@@ -379,7 +379,7 @@ int RGWCache<T>::put_obj_meta_impl(void *ctx, rgw_obj& obj, uint64_t size, time_
                               map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
                               map<std::string, bufferlist>* rmattrs, const bufferlist *data,
                               RGWObjManifest *manifest, const string *ptag, list<string> *remove_objs,
-                              bool modify_version, RGWObjVersionTracker *objv_tracker)
+                              bool modify_version, RGWObjVersionTracker *objv_tracker, time_t set_mtime)
 {
   rgw_bucket bucket;
   string oid;
@@ -401,7 +401,7 @@ int RGWCache<T>::put_obj_meta_impl(void *ctx, rgw_obj& obj, uint64_t size, time_
     }
   }
   int ret = T::put_obj_meta_impl(ctx, obj, size, mtime, attrs, category, flags, rmattrs, data, manifest, ptag, remove_objs,
-                                 modify_version, objv_tracker);
+                                 modify_version, objv_tracker, set_mtime);
   if (cacheable) {
     string name = normal_name(bucket, oid);
     if (ret >= 0) {
