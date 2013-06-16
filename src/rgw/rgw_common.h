@@ -597,17 +597,19 @@ struct RGWBucketInfo
   string owner;
   uint32_t flags;
   string region;
+  time_t creation_time;
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(5, 4, bl);
+     ENCODE_START(6, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner, bl);
      ::encode(flags, bl);
      ::encode(region, bl);
+     ::encode(creation_time, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(5, 4, 4, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(6, 4, 4, bl);
      ::decode(bucket, bl);
      if (struct_v >= 2)
        ::decode(owner, bl);
@@ -615,6 +617,8 @@ struct RGWBucketInfo
        ::decode(flags, bl);
      if (struct_v >= 5)
        ::decode(region, bl);
+     if (struct_v >= 6)
+       ::decode(creation_time, bl);
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -622,7 +626,7 @@ struct RGWBucketInfo
 
   void decode_json(JSONObj *obj);
 
-  RGWBucketInfo() : flags(0) {}
+  RGWBucketInfo() : flags(0), creation_time(0) {}
 };
 WRITE_CLASS_ENCODER(RGWBucketInfo)
 
@@ -779,15 +783,15 @@ struct RGWBucketEnt {
   rgw_bucket bucket;
   size_t size;
   size_t size_rounded;
-  time_t mtime;
+  time_t creation_time;
   uint64_t count;
 
-  RGWBucketEnt() : size(0), size_rounded(0), mtime(0), count(0) {}
+  RGWBucketEnt() : size(0), size_rounded(0), creation_time(0), count(0) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(5, 5, bl);
     uint64_t s = size;
-    __u32 mt = mtime;
+    __u32 mt = creation_time;
     string empty_str;  // originally had the bucket name here, but we encode bucket later
     ::encode(empty_str, bl);
     ::encode(s, bl);
@@ -807,7 +811,7 @@ struct RGWBucketEnt {
     ::decode(s, bl);
     ::decode(mt, bl);
     size = s;
-    mtime = mt;
+    creation_time = mt;
     if (struct_v >= 2)
       ::decode(count, bl);
     if (struct_v >= 3)
@@ -819,13 +823,6 @@ struct RGWBucketEnt {
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<RGWBucketEnt*>& o);
-  void clear() {
-    bucket.clear();
-    size = 0;
-    size_rounded = 0;
-    mtime = 0;
-    count = 0;
-  }
 };
 WRITE_CLASS_ENCODER(RGWBucketEnt)
 

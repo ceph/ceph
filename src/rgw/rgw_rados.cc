@@ -1680,7 +1680,9 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
 			    map<std::string, bufferlist>& attrs,
                             RGWObjVersionTracker& objv_tracker,
                             obj_version *pobjv,
+                            time_t creation_time,
                             rgw_bucket *pmaster_bucket,
+                            RGWBucketInfo *pinfo,
 			    bool exclusive)
 {
 #define MAX_CREATE_RETRIES 20 /* need to bound retries */
@@ -1729,6 +1731,10 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
     info.bucket = bucket;
     info.owner = owner;
     info.region = region_name;
+    if (!creation_time)
+      time(&info.creation_time);
+    else
+      info.creation_time = creation_time;
     ret = put_bucket_info(bucket.name, info, exclusive, &objv_tracker, &attrs);
     if (ret == -EEXIST) {
       librados::IoCtx index_ctx; // context for new bucket
@@ -1747,6 +1753,8 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
         return r;
       }
     }
+    if (pinfo)
+      *pinfo = info;
     return ret;
   }
 

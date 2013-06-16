@@ -435,6 +435,7 @@ void rgw_bucket::decode_json(JSONObj *obj) {
 void RGWBucketInfo::dump(Formatter *f) const
 {
   encode_json("bucket", bucket, f);
+  encode_json("creation_time", creation_time, f);
   encode_json("owner", owner, f);
   encode_json("flags", flags, f);
   encode_json("region", region, f);
@@ -442,6 +443,7 @@ void RGWBucketInfo::dump(Formatter *f) const
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("bucket", bucket, obj);
+  JSONDecoder::decode_json("creation_time", creation_time, obj);
   JSONDecoder::decode_json("owner", owner, obj);
   JSONDecoder::decode_json("flags", flags, obj);
   JSONDecoder::decode_json("region", region, obj);
@@ -465,7 +467,7 @@ void RGWBucketEnt::dump(Formatter *f) const
   encode_json("bucket", bucket, f);
   encode_json("size", size, f);
   encode_json("size_rounded", size_rounded, f);
-  encode_json("mtime", mtime, f);
+  encode_json("mtime", creation_time, f); /* mtime / creation time discrepency needed for backward compatibility */
   encode_json("count", count, f);
 }
 

@@ -93,7 +93,7 @@ extern void rgw_bucket_init(RGWMetadataManager *mm);
 extern int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& buckets,
                                  const string& marker, uint64_t max, bool need_stats);
 
-extern int rgw_add_bucket(RGWRados *store, string user_id, rgw_bucket& bucket);
+extern int rgw_add_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t creation_time);
 extern int rgw_remove_user_bucket_info(RGWRados *store, string user_id, rgw_bucket& bucket);
 
 extern int rgw_remove_object(RGWRados *store, rgw_bucket& bucket, std::string& object);

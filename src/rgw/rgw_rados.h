@@ -779,7 +779,9 @@ public:
                             map<std::string,bufferlist>& attrs,
                             RGWObjVersionTracker& objv_tracker,
                             obj_version *pobjv,
+                            time_t creation_time,
                             rgw_bucket *master_bucket,
+                            RGWBucketInfo *pinfo,
                             bool exclusive = true);
   virtual int add_bucket_placement(std::string& new_pool);
   virtual int remove_bucket_placement(std::string& new_pool);

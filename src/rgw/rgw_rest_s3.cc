@@ -35,7 +35,7 @@ void dump_bucket(struct req_state *s, RGWBucketEnt& obj)
 {
   s->formatter->open_object_section("Bucket");
   s->formatter->dump_string("Name", obj.bucket.name);
-  dump_time(s, "CreationDate", &obj.mtime);
+  dump_time(s, "CreationDate", &obj.creation_time);
   s->formatter->close_section();
 }
 
@@ -430,7 +430,7 @@ void RGWCreateBucket_ObjStore_S3::send_response()
 
     f.open_object_section("info");
     encode_json("object_ver", objv_tracker.read_version, &f);
-    encode_json("bucket", bucket, &f);
+    encode_json("bucket_info", info, &f);
     f.close_section();
     rgw_flush_formatter_and_reset(s, &f);
   }
