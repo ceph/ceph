@@ -909,8 +909,9 @@ void RGWCreateBucket::execute()
     }
   }
 
-  rgw_bucket master_bucket;
+  RGWBucketInfo master_info;
   rgw_bucket *pmaster_bucket;
+  time_t creation_time;
 
   if (!store->region.is_master) {
     JSONParser jp;
@@ -919,12 +920,15 @@ void RGWCreateBucket::execute()
       return;
 
     JSONDecoder::decode_json("object_ver", objv, &jp);
-    JSONDecoder::decode_json("bucket", master_bucket, &jp);
+    JSONDecoder::decode_json("bucket_info", master_info, &jp);
     ldout(s->cct, 20) << "parsed: objv.tag=" << objv.tag << " objv.ver=" << objv.ver << dendl;
-    pmaster_bucket = &master_bucket;
+    ldout(s->cct, 20) << "got creation time: << " << master_info.creation_time << dendl;
+    pmaster_bucket= &master_info.bucket;
+    creation_time = master_info.creation_time;
     pobjv = &objv;
   } else {
     pmaster_bucket = NULL;
+    creation_time = 0;
   }
 
   string region_name;
@@ -943,7 +947,8 @@ void RGWCreateBucket::execute()
   attrs[RGW_ATTR_ACL] = aclbl;
 
   s->bucket.name = s->bucket_name_str;
-  ret = store->create_bucket(s->user.user_id, s->bucket, region_name, attrs, objv_tracker, pobjv, pmaster_bucket, true);
+  ret = store->create_bucket(s->user.user_id, s->bucket, region_name, attrs, objv_tracker, pobjv,
+                             creation_time, pmaster_bucket, &info, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can recover
    * from a partial create by retrying it. */
   ldout(s->cct, 20) << "rgw_create_bucket returned ret=" << ret << " bucket=" << s->bucket << dendl;
@@ -959,14 +964,6 @@ void RGWCreateBucket::execute()
      * info, verify that the reported bucket owner is the current user.
      * If all is ok then update the user's list of buckets
      */
-    RGWBucketInfo info;
-    map<string, bufferlist> attrs;
-    int r = store->get_bucket_info(NULL, s->bucket.name, info, &s->objv_tracker, NULL, &attrs);
-    if (r < 0) {
-      ldout(s->cct, 0) << "ERROR: get_bucket_info on bucket=" << s->bucket.name << " returned err=" << r << " after create_bucket returned -EEXIST" << dendl;
-      ret = r;
-      return;
-    }
     if (info.owner.compare(s->user.user_id) != 0) {
       ret = -ERR_BUCKET_EXISTS;
       return;
@@ -974,14 +971,12 @@ void RGWCreateBucket::execute()
     s->bucket = info.bucket;
   }
 
-  ret = rgw_add_bucket(store, s->user.user_id, s->bucket);
+  ret = rgw_add_bucket(store, s->user.user_id, s->bucket, info.creation_time);
   if (ret && !existed && ret != -EEXIST)   /* if it exists (or previously existed), don't remove it! */
     rgw_remove_user_bucket_info(store, s->user.user_id, s->bucket);
 
   if (ret == -EEXIST)
     ret = -ERR_BUCKET_EXISTS;
-
-  bucket = s->bucket;
 }
 
 int RGWDeleteBucket::verify_permission()
