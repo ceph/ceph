@@ -132,7 +132,7 @@ int RGWRegion::set_as_default()
 
   ::encode(default_info, bl);
 
-  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, NULL);
+  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, 0, NULL);
   if (ret < 0)
     return ret;
 
@@ -236,7 +236,7 @@ int RGWRegion::store_info(bool exclusive)
 
   bufferlist bl;
   ::encode(*this, bl);
-  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), exclusive, NULL, NULL);
+  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), exclusive, NULL, 0, NULL);
 
   return ret;
 }
@@ -315,7 +315,7 @@ int RGWZoneParams::store_info(CephContext *cct, RGWRados *store, RGWRegion& regi
 
   bufferlist bl;
   ::encode(*this, bl);
-  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, NULL);
+  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, 0, NULL);
 
   return ret;
 }
@@ -391,7 +391,7 @@ int RGWRegionMap::store(CephContext *cct, RGWRados *store)
 
   bufferlist bl;
   ::encode(*this, bl);
-  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, NULL);
+  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, 0, NULL);
 
   return ret;
 }
@@ -1735,7 +1735,7 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
       time(&info.creation_time);
     else
       info.creation_time = creation_time;
-    ret = put_bucket_info(bucket.name, info, exclusive, &objv_tracker, &attrs);
+    ret = put_bucket_info(bucket.name, info, exclusive, &objv_tracker, 0, &attrs);
     if (ret == -EEXIST) {
       librados::IoCtx index_ctx; // context for new bucket
       int r = open_bucket_index_ctx(bucket, index_ctx);
@@ -1961,7 +1961,8 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
 		  const string *ptag,
                   list<string> *remove_objs,
                   bool modify_version,
-                  RGWObjVersionTracker *objv_tracker)
+                  RGWObjVersionTracker *objv_tracker,
+                  time_t set_mtime)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -1993,6 +1994,11 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
   if (objv_tracker) {
     objv_tracker->prepare_op_for_write(&op);
   }
+
+  if (!set_mtime)
+    time(&set_mtime);
+
+  op.mtime(&set_mtime);
 
   if (data) {
     /* if we want to overwrite the data, we also want to overwrite the
@@ -2079,11 +2085,8 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
   if (r < 0)
     goto done_cancel;
 
-
   if (mtime) {
-    r = io_ctx.stat(oid, NULL, mtime);
-    if (r < 0)
-      return r;
+    *mtime = set_mtime;
   }
 
   return 0;
@@ -2640,7 +2643,7 @@ int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner)
 
   info.owner = owner.get_id();
 
-  r = put_bucket_info(bucket.name, info, false, &objv_tracker, &attrs);
+  r = put_bucket_info(bucket.name, info, false, &objv_tracker, 0, &attrs);
   if (r < 0) {
     ldout(cct, 0) << "NOTICE: put_bucket_info on bucket=" << bucket.name << " returned err=" << r << dendl;
     return r;
@@ -2678,7 +2681,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
       info.flags |= BUCKET_SUSPENDED;
     }
 
-    r = put_bucket_info(bucket.name, info, false, &objv_tracker, &attrs);
+    r = put_bucket_info(bucket.name, info, false, &objv_tracker, 0, &attrs);
     if (r < 0) {
       ldout(cct, 0) << "NOTICE: put_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
       ret = r;
@@ -4289,13 +4292,14 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
   return 0;
 }
 
-int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive, RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs)
+int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive, RGWObjVersionTracker *objv_tracker,
+                              time_t mtime, map<string, bufferlist> *pattrs)
 {
   bufferlist bl;
 
   ::encode(info, bl);
 
-  int ret = rgw_bucket_store_info(this, info.bucket.name, bl, exclusive, pattrs, objv_tracker);
+  int ret = rgw_bucket_store_info(this, info.bucket.name, bl, exclusive, pattrs, objv_tracker, mtime);
 
   return ret;
 }
