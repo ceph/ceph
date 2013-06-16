@@ -72,7 +72,7 @@ int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& bucke
   return 0;
 }
 
-int rgw_add_bucket(RGWRados *store, string user_id, rgw_bucket& bucket)
+int rgw_add_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t creation_time)
 {
   int ret;
   string& bucket_name = bucket.name;
@@ -82,7 +82,10 @@ int rgw_add_bucket(RGWRados *store, string user_id, rgw_bucket& bucket)
   RGWBucketEnt new_bucket;
   new_bucket.bucket = bucket;
   new_bucket.size = 0;
-  time(&new_bucket.mtime);
+  if (!creation_time)
+    time(&new_bucket.creation_time);
+  else
+    new_bucket.creation_time = creation_time;
   ::encode(new_bucket, bl);
 
   string buckets_obj_id;
@@ -147,7 +150,10 @@ int RGWBucket::create_bucket(string bucket_str, string& user_id, string& region_
 
   rgw_bucket& bucket = bucket_info.bucket;
 
-  ret = store->create_bucket(user_id, bucket, region_name, attrs, objv_tracker, NULL, NULL);
+  RGWBucketInfo new_info;
+
+  ret = store->create_bucket(user_id, bucket, region_name, attrs, objv_tracker,
+                             NULL, bucket_info.creation_time, NULL, &new_info);
   if (ret && ret != -EEXIST)
     goto done;
 
@@ -159,7 +165,7 @@ int RGWBucket::create_bucket(string bucket_str, string& user_id, string& region_
     goto done;
   }
 
-  ret = rgw_add_bucket(store, user_id, bucket);
+  ret = rgw_add_bucket(store, user_id, bucket, new_info.creation_time);
 
   if (ret == -EEXIST)
     ret = 0;
@@ -236,7 +242,7 @@ void check_bad_user_bucket_mapping(RGWRados *store, const string& user_id, bool 
         cout << "bucket info mismatch: expected " << actual_bucket << " got " << bucket << std::endl;
         if (fix) {
           cout << "fixing" << std::endl;
-          r = rgw_add_bucket(store, user_id, actual_bucket);
+          r = rgw_add_bucket(store, user_id, actual_bucket, bucket_info.creation_time);
           if (r < 0) {
             cerr << "failed to fix bucket: " << cpp_strerror(-r) << std::endl;
           }
@@ -443,7 +449,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     if (r < 0)
       return r;
 
-    r = rgw_add_bucket(store, user_id, bucket);
+    r = rgw_add_bucket(store, user_id, bucket, 0);
     if (r < 0)
       return r;
   } else {
@@ -1359,7 +1365,7 @@ public:
     if (ret < 0)
       return ret;
 
-    ret = rgw_add_bucket(store, bci.info.owner, bci.info.bucket);
+    ret = rgw_add_bucket(store, bci.info.owner, bci.info.bucket, bci.info.creation_time);
     if (ret < 0)
       return ret;
 
