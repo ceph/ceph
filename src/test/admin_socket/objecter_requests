@@ -13,7 +13,7 @@ def main():
     read = sys.stdin.read()
     reqs = json.loads(read)
 
-    op_types = ['linger_ops', 'ops', 'pool_ops', 'pool_stat_ops', 'statfs_ops']
+    op_types = ['linger_ops', 'ops', 'pool_ops', 'pool_stat_ops', 'statfs_ops', 'command_ops']
     assert sorted(reqs.keys()) == sorted(op_types)
 
     found_error = check_osd_ops(reqs['ops'] + reqs['linger_ops'])
