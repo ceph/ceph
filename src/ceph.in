@@ -1584,10 +1584,7 @@ def main():
             ret, outbuf, outs = send_command(target, childargs, inbuf)
         elif ret:
             if ret < 0:
-                ret = -ret
-                print >> sys.stderr, prefix, \
-                    'Problem getting command descriptions from {0}, {1}'.\
-                    format(target, errno.errorcode[ret])
+                outs = 'problem getting command descriptions from {0}.{1}'.format(*target)
         else:
             sigdict = parse_json_funcsigs(outbuf)
 
