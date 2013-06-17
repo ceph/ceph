@@ -28,8 +28,7 @@ public:
   int complete_request(RGWRESTStreamWriteRequest *req, string& etag, time_t *mtime);
 
   int get_obj(const string& uid, req_info *info /* optional */, rgw_obj& obj, bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req);
-  int complete_request(RGWRESTStreamReadRequest *req, string& etag, time_t *mtime,
-                       map<string, string>& attrs);
+  int complete_request(RGWRESTStreamReadRequest *req, string& etag, time_t *mtime, map<string, string>& attrs);
 };
 
 #endif
