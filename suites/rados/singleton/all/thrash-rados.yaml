@@ -17,7 +17,6 @@ tasks:
     op_delay: 30
     clean_interval: 120
     chance_down: .5
-- ceph-fuse:
 - workunit:
     clients:
       all:

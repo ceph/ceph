@@ -3,7 +3,6 @@ roles:
 tasks:
 - install:
 - ceph:
-- ceph-fuse:
 - workunit:
     clients:
       all:
