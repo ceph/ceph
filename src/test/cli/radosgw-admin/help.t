@@ -51,7 +51,11 @@
     metadata rm                remove metadata info
     metadata list              list metadata info
     mdlog list                 list metadata log
+    mdlog trim                 trim metadata log
     bilog list                 list bucket index log
+    bilog trim                 trim bucket index log (use start-marker, end-marker)
+    datalog list               list data log
+    datalog trim               trim data log
   options:
      --uid=<id>                user id
      --subuser=<name>          subuser name
