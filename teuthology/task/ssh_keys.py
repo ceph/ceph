@@ -35,21 +35,8 @@ def ssh_keys_user_line_test(line_to_test, username ):
     else:
         return True
 
-# deletes keys that were previously generated
-def pre_run_cleanup_keys(ctx):
-    log.info('cleaning up any left-over keys from previous tests')
-
-    for remote in ctx.cluster.remotes:
-        username, hostname = str(remote).split('@')
-        if "" == username or "" == hostname:
-            continue
-        else:
-          path = '/home/{user}/.ssh/authorized_keys'.format(user=username)
-        
-          misc.remove_lines_from_file(remote, path, ssh_keys_user_line_test, ssh_keys_user)
-
-# deletes the keys and removes ~/.ssh/authorized_keys entries we added
-def cleanup_added_key(ctx, public_key):
+# deletes the keys and removes ~/.ssh/authorized_keys2 entries we added
+def cleanup_added_key(ctx):
     log.info('cleaning up keys added for testing')
 
     for remote in ctx.cluster.remotes:
@@ -61,9 +48,7 @@ def cleanup_added_key(ctx, public_key):
 
           misc.delete_file(remote, '/home/{user}/.ssh/id_rsa'.format(user=username))
           misc.delete_file(remote, '/home/{user}/.ssh/id_rsa.pub'.format(user=username))
-          path = '/home/{user}/.ssh/authorized_keys'.format(user=username)
-
-          misc.remove_lines_from_file(remote, path, particular_ssh_key_test, public_key)
+          misc.delete_file(remote, '/home/{user}/.ssh/authorized_keys2'.format(user=username))
 
 @contextlib.contextmanager
 def tweak_ssh_config(ctx, config):   
@@ -131,11 +116,11 @@ def push_keys_to_host(ctx, config, public_key, private_key):
             pub_key_data = 'ssh-rsa {pub_key} {user_host}'.format(pub_key=public_key,user_host=str(remote))
             misc.create_file(remote, pub_key_file, pub_key_data)
 
-            # adding appropriate entries to the authorized_keys file for this host
-            auth_keys_file = '/home/{user}/.ssh/authorized_keys'.format(user=username)
+            # adding appropriate entries to the authorized_keys2 file for this host
+            auth_keys_file = '/home/{user}/.ssh/authorized_keys2'.format(user=username)
 
-            # now add the list of keys for hosts in ctx to ~/.ssh/authorized_keys 
-            misc.append_lines_to_file(remote, auth_keys_file, auth_keys_data)
+            # now add the list of keys for hosts in ctx to ~/.ssh/authorized_keys2
+            misc.create_file(remote, auth_keys_file, auth_keys_data, str(600))
 
     try: 
         yield
@@ -143,7 +128,7 @@ def push_keys_to_host(ctx, config, public_key, private_key):
     finally:
         # cleanup the keys
         log.info("Cleaning up SSH keys")
-        cleanup_added_key(ctx, public_key)
+        cleanup_added_key(ctx)
 
 
 @contextlib.contextmanager
@@ -166,9 +151,6 @@ def task(ctx, config):
     # this does not need to do cleanup and does not depend on 
     # ctx, so I'm keeping it outside of the nested calls
     public_key_string, private_key_string = generate_keys()
-
-    # cleanup old keys if they were somehow left behind
-    pre_run_cleanup_keys(ctx)
 
     with contextutil.nested(
         lambda: tweak_ssh_config(ctx, config),
