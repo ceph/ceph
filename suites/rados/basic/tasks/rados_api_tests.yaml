@@ -5,7 +5,6 @@ overrides:
 tasks:
 - install:
 - ceph:
-- ceph-fuse:
 - workunit:
     clients:
       client.0:
