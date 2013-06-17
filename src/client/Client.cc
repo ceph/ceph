@@ -5826,13 +5826,17 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
     }
     // short read?
     if (r >= 0 && r < wanted) {
-      if (pos + left <= in->size) {
-	// hole, zero and return.
-	bufferptr z(left);
+      if (pos < in->size) {
+	// zero up to known EOF
+	int some = MIN(in->size - pos, left);
+	bufferptr z(some);
 	z.zero();
 	bl->push_back(z);
-	read += left;
-	return read;
+	read += some;
+	pos += some;
+	left -= some;
+	if (left == 0)
+	  return read;
       }
 
       // reverify size
