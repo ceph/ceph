@@ -35,6 +35,10 @@
 #include "messages/MOSDPing.h"
 #include "messages/MWatchNotify.h"
 
+#include "messages/MOSDPGPush.h"
+#include "messages/MOSDPGPull.h"
+#include "messages/MOSDPGPushReply.h"
+
 #include "Watch.h"
 
 #include "mds/inode_backtrace.h" // Ugh
@@ -1331,6 +1335,103 @@ void ReplicatedPG::do_scan(OpRequestRef op)
     }
     break;
   }
+}
+
+void ReplicatedPG::_do_push(OpRequestRef op)
+{
+  MOSDPGPush *m = static_cast<MOSDPGPush *>(op->request);
+  assert(m->get_header().type == MSG_OSD_PG_PUSH);
+  int from = m->get_source().num();
+
+  vector<PushReplyOp> replies;
+  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  for (vector<PushOp>::iterator i = m->pushes.begin();
+       i != m->pushes.end();
+       ++i) {
+    replies.push_back(PushReplyOp());
+    handle_push(from, *i, &(replies.back()), t);
+  }
+
+  MOSDPGPushReply *reply = new MOSDPGPushReply;
+  reply->set_priority(m->get_priority());
+  reply->pgid = info.pgid;
+  reply->map_epoch = m->map_epoch;
+  reply->replies.swap(replies);
+  reply->compute_cost(g_ceph_context);
+
+  t->register_on_complete(new C_OSD_SendMessageOnConn(
+			    osd, reply, m->get_connection()));
+
+  osd->store->queue_transaction(osr.get(), t);
+}
+
+void ReplicatedPG::_do_pull_response(OpRequestRef op)
+{
+  MOSDPGPush *m = static_cast<MOSDPGPush *>(op->request);
+  assert(m->get_header().type == MSG_OSD_PG_PUSH);
+  int from = m->get_source().num();
+
+  vector<PullOp> replies(1);
+  ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  for (vector<PushOp>::iterator i = m->pushes.begin();
+       i != m->pushes.end();
+       ++i) {
+    bool more = handle_pull_response(from, *i, &(replies.back()), t);
+    if (more)
+      replies.push_back(PullOp());
+  }
+  replies.erase(replies.end() - 1);
+
+  if (replies.size()) {
+    MOSDPGPull *reply = new MOSDPGPull;
+    reply->set_priority(m->get_priority());
+    reply->pgid = info.pgid;
+    reply->map_epoch = m->map_epoch;
+    reply->pulls.swap(replies);
+    reply->compute_cost(g_ceph_context);
+
+    t->register_on_complete(new C_OSD_SendMessageOnConn(
+			      osd, reply, m->get_connection()));
+  }
+
+  osd->store->queue_transaction(osr.get(), t);
+}
+
+void ReplicatedPG::do_pull(OpRequestRef op)
+{
+  MOSDPGPull *m = static_cast<MOSDPGPull *>(op->request);
+  assert(m->get_header().type == MSG_OSD_PG_PULL);
+  int from = m->get_source().num();
+
+  map<int, vector<PushOp> > replies;
+  for (vector<PullOp>::iterator i = m->pulls.begin();
+       i != m->pulls.end();
+       ++i) {
+    replies[from].push_back(PushOp());
+    handle_pull(from, *i, &(replies[from].back()));
+  }
+  send_pushes(m->get_priority(), replies);
+}
+
+void ReplicatedPG::do_push_reply(OpRequestRef op)
+{
+  MOSDPGPushReply *m = static_cast<MOSDPGPushReply *>(op->request);
+  assert(m->get_header().type == MSG_OSD_PG_PUSH_REPLY);
+  int from = m->get_source().num();
+
+  vector<PushOp> replies(1);
+  for (vector<PushReplyOp>::iterator i = m->replies.begin();
+       i != m->replies.end();
+       ++i) {
+    bool more = handle_push_reply(from, *i, &(replies.back()));
+    if (more)
+      replies.push_back(PushOp());
+  }
+  replies.erase(replies.end() - 1);
+
+  map<int, vector<PushOp> > _replies;
+  _replies[from].swap(replies);
+  send_pushes(m->get_priority(), _replies);
 }
 
 void ReplicatedPG::do_backfill(OpRequestRef op)
