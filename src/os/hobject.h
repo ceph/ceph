@@ -17,7 +17,6 @@
 
 #include <string.h>
 #include "include/types.h"
-#include "include/rados.h"
 #include "include/object.h"
 #include "include/cmp.h"
 
