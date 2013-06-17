@@ -1767,9 +1767,11 @@ OSD::res_result OSD::_try_resurrect_pg(
   // find nearest ancestor
   DeletingStateRef df;
   pg_t cur(pgid);
-  while (cur.ps()) {
+  while (true) {
     df = service.deleting_pgs.lookup(pgid);
     if (df)
+      break;
+    if (!cur.ps())
       break;
     cur = cur.get_parent();
   }
