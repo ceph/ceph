@@ -92,12 +92,18 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
     JSONFormatter jf;
     jf.open_object_section("obj_metadata");
     encode_json("attrs", attrs, &jf);
+    encode_json("mtime", lastmod, &jf);
     jf.close_section();
     stringstream ss;
     jf.flush(ss);
     metadata_bl.append(ss.str());
     s->cio->print("Rgwx-Embedded-Metadata-Len: %lld\r\n", (long long)metadata_bl.length());
     total_len += metadata_bl.length();
+  }
+
+  if (s->system_request && lastmod) {
+    /* we end up dumping mtime in two different methods, a bit redundant */
+    dump_epoch_header(s, "Rgwx-Mtime", lastmod);
   }
 
   dump_content_length(s, total_len);

@@ -185,7 +185,7 @@ protected:
   void *obj_ctx;
   bool is_complete;
 
-  virtual int do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs) = 0;
+  virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs) = 0;
 
   list<rgw_obj> objs;
 
@@ -202,7 +202,7 @@ public:
   };
   virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle) = 0;
   virtual int throttle_data(void *handle) = 0;
-  virtual int complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs);
+  virtual int complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 };
 
 class RGWPutObjProcessor_Plain : public RGWPutObjProcessor
@@ -217,7 +217,7 @@ class RGWPutObjProcessor_Plain : public RGWPutObjProcessor
 protected:
   int prepare(RGWRados *store, void *obj_ctx);
   int handle_data(bufferlist& bl, off_t ofs, void **phandle);
-  int do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs);
+  int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 
 public:
   int throttle_data(void *handle) { return 0; }
@@ -275,7 +275,7 @@ protected:
 
   virtual bool immutable_head() { return false; }
 
-  virtual int do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs);
+  virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 
   void prepare_next_part(off_t ofs);
   void complete_parts();

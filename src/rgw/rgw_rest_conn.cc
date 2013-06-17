@@ -102,8 +102,7 @@ int RGWRESTConn::get_obj(const string& uid, req_info *info /* optional */, rgw_o
   return (*req)->get_obj(key, extra_headers, obj);
 }
 
-int RGWRESTConn::complete_request(RGWRESTStreamReadRequest *req, string& etag, time_t *mtime,
-                                          map<string, string>& attrs)
+int RGWRESTConn::complete_request(RGWRESTStreamReadRequest *req, string& etag, time_t *mtime, map<string, string>& attrs)
 {
   int ret = req->complete(etag, mtime, attrs);
   delete req;
