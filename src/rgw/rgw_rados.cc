@@ -204,6 +204,8 @@ int RGWRegion::create_default()
   name = "default";
   string zone_name = "default";
 
+  is_master = true;
+
   RGWZone& default_zone = zones[zone_name];
   default_zone.name = zone_name;
 
