@@ -41,6 +41,13 @@
 	...
 }
 {
+	leveldb leak in Schedule
+	Memcheck:Leak
+	...
+	fun:leveldb*PosixEnv*Schedule*
+	...
+}
+{
 	leveldb compaction crap
 	Memcheck:Leak
 	...
