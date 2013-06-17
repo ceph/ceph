@@ -562,6 +562,8 @@ void SimpleMessenger::mark_down_all()
     p->unregister_pipe();
     p->pipe_lock.Lock();
     p->stop();
+    if (p->connection_state)
+      p->connection_state->clear_pipe(p);
     p->pipe_lock.Unlock();
   }
   lock.Unlock();
