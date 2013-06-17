@@ -1031,7 +1031,7 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
 protected:
   bool immutable_head() { return true; }
   int prepare(RGWRados *store, void *obj_ctx);
-  int do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs);
+  int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 
 public:
   RGWPutObjProcessor_Multipart(uint64_t _p, req_state *_s) : RGWPutObjProcessor_Atomic(s->bucket, s->object_str, _p, s->req_id), s(_s) {}
@@ -1061,11 +1061,15 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx)
   return 0;
 }
 
-int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs)
+int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs)
 {
   complete_parts();
 
-  int r = store->put_obj_meta(obj_ctx, head_obj, s->obj_size, mtime, attrs, RGW_OBJ_CATEGORY_MAIN, 0);
+  RGWRados::PutObjMetaExtraParams params;
+  params.set_mtime = set_mtime;
+  params.mtime = mtime;
+
+  int r = store->put_obj_meta(obj_ctx, head_obj, s->obj_size, attrs, RGW_OBJ_CATEGORY_MAIN, 0, params);
   if (r < 0)
     return r;
 
@@ -1228,7 +1232,7 @@ void RGWPutObj::execute()
 
   rgw_get_request_metadata(s->cct, s->info, attrs);
 
-  ret = processor->complete(etag, &mtime, attrs);
+  ret = processor->complete(etag, &mtime, 0, attrs);
 done:
   dispose_processor(processor);
   perfcounter->tinc(l_rgw_put_lat,
@@ -1344,7 +1348,7 @@ void RGWPostObj::execute()
     attrs[RGW_ATTR_CONTENT_TYPE] = ct_bl;
   }
 
-  ret = processor->complete(etag, NULL, attrs);
+  ret = processor->complete(etag, NULL, 0, attrs);
 
 done:
   dispose_processor(processor);

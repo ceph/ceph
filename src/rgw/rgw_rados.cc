@@ -472,9 +472,9 @@ void RGWObjVersionTracker::generate_new_write_ver(CephContext *cct)
   append_rand_alpha(cct, write_version.tag, write_version.tag, TAG_LEN);
 }
 
-int RGWPutObjProcessor::complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs)
+int RGWPutObjProcessor::complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs)
 {
-  int r = do_complete(etag, mtime, attrs);
+  int r = do_complete(etag, mtime, set_mtime, attrs);
   if (r < 0)
     return r;
 
@@ -517,11 +517,16 @@ int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, void **pha
   return 0;
 }
 
-int RGWPutObjProcessor_Plain::do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs)
+int RGWPutObjProcessor_Plain::do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs)
 {
-  int r = store->put_obj_meta(obj_ctx, obj, data.length(), mtime, attrs,
+  RGWRados::PutObjMetaExtraParams params;
+  params.set_mtime = set_mtime;
+  params.mtime = mtime;
+  params.data = &data;
+
+  int r = store->put_obj_meta(obj_ctx, obj, data.length(), attrs,
                               RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
-                              &data);
+                              params);
   return r;
 }
 
@@ -686,7 +691,7 @@ void RGWPutObjProcessor_Atomic::complete_parts()
     prepare_next_part(obj_len);
 }
 
-int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs)
+int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs)
 {
   complete_parts();
 
@@ -698,6 +703,7 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, map<stri
   extra_params.manifest = &manifest;
   extra_params.ptag = &unique_tag; /* use req_id as operation tag */
   extra_params.mtime = mtime;
+  extra_params.set_mtime = set_mtime;
 
   int r = store->put_obj_meta(obj_ctx, head_obj, obj_len, attrs,
                               RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
@@ -2196,8 +2202,8 @@ public:
     processor->set_extra_data_len(len);
   }
 
-  int complete(string& etag, time_t *mtime, map<string, bufferlist>& attrs) {
-    return processor->complete(etag, mtime, attrs);
+  int complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs) {
+    return processor->complete(etag, mtime, set_mtime, attrs);
   }
 };
 
@@ -2314,7 +2320,8 @@ int RGWRados::copy_obj(void *ctx,
     string etag;
 
     map<string, string> req_headers;
-    ret = conn->complete_request(in_stream_req, etag, mtime, req_headers);
+    time_t set_mtime;
+    ret = conn->complete_request(in_stream_req, etag, &set_mtime, req_headers);
     if (ret < 0)
       return ret;
 
@@ -2333,7 +2340,7 @@ int RGWRados::copy_obj(void *ctx,
 
     set_copy_attrs(src_attrs, attrs, replace_attrs, !source_zone.empty());
 
-    ret = cb.complete(etag, mtime, src_attrs);
+    ret = cb.complete(etag, mtime, set_mtime, src_attrs);
     if (ret < 0)
       return ret;
 
