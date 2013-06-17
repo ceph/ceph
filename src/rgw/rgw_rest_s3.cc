@@ -87,7 +87,15 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
 
   if (s->system_request &&
       s->info.args.exists(RGW_SYS_PARAM_PREFIX "prepend-metadata")) {
-    ::encode(attrs, metadata_bl);
+
+    /* JSON encode object metadata */
+    JSONFormatter jf;
+    jf.open_object_section("obj_metadata");
+    encode_json("attrs", attrs, &jf);
+    jf.close_section();
+    stringstream ss;
+    jf.flush(ss);
+    metadata_bl.append(ss.str());
     s->cio->print("Rgwx-Embedded-Metadata-Len: %lld\r\n", (long long)metadata_bl.length());
     total_len += metadata_bl.length();
   }

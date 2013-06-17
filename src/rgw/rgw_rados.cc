@@ -2320,13 +2320,13 @@ int RGWRados::copy_obj(void *ctx,
 
     bufferlist& extra_data_bl = processor.get_extra_data();
     if (extra_data_bl.length()) {
-      bufferlist::iterator iter = extra_data_bl.begin();
-      try {
-        ::decode(src_attrs, iter);
-      } catch (buffer::error& err) {
-        ldout(cct, 0) << "ERROR: failed to decode extra metadata info" << dendl;
-        return -EIO;
+      JSONParser jp;
+      if (!jp.parse(extra_data_bl.c_str(), extra_data_bl.length())) {
+        ldout(cct, 0) << "failed to parse response extra data. len=" << extra_data_bl.length() << " data=" << extra_data_bl.c_str() << dendl;
+        return -EINVAL;
       }
+
+      JSONDecoder::decode_json("attrs", src_attrs, &jp);
 
       src_attrs.erase(RGW_ATTR_MANIFEST); // not interested in original object layout
     }
