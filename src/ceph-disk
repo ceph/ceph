@@ -14,6 +14,48 @@ import tempfile
 import uuid
 import lockfile
 
+"""
+Prepare:
+ - create GPT partition
+ - mark the partition with the ceph type uuid
+ - create a file system
+ - mark the fs as ready for ceph consumption
+ - entire data disk is used (one big partition)
+ - a new partition is added to the journal disk (so it can be easily shared)
+
+ - triggered by administrator or ceph-deploy, e.g.  'ceph-disk <data disk> [journal disk]
+
+Activate:
+ - mount the volume in a temp loation
+ - allocate an osd id (if needed)
+ - remount in the correct location /var/lib/ceph/osd/$cluster-$id
+ - start ceph-osd
+
+ - triggered by udev when it sees the OSD gpt partition type
+ - triggered by admin 'ceph-disk activate <path>'
+ - triggered on ceph service startup with 'ceph-disk activate-all'
+
+We rely on /dev/disk/by-partuuid to find partitions by their UUID;
+this is what the journal symlink inside the osd data volume normally
+points to.
+
+activate-all relies on /dev/disk/by-parttype-uuid/$typeuuid.$uuid to
+find all partitions.  We install special udev rules to create these
+links.
+
+udev triggers 'ceph-disk activate <dev>' or 'ceph-disk
+activate-journal <dev>' based on the partition type.
+
+On old distros (e.g., RHEL6), the blkid installed does not recognized
+GPT partition metadata and the /dev/disk/by-partuuid etc. links aren't
+present.  We have a horrible hack in the form of ceph-disk-udev that
+parses gparted output to create the symlinks above and triggers the
+'ceph-disk activate' etc commands that udev normally would do if it
+knew the GPT partition type.
+
+"""
+
+
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 
 JOURNAL_UUID =         '45b0969e-9b03-4f30-b4c6-b4b80ceff106'
