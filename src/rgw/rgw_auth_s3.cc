@@ -6,6 +6,7 @@
 
 static const char *signed_subresources[] = {
   "acl",
+  "delete",
   "lifecycle",
   "location",
   "logging",
