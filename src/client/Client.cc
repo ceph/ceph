@@ -7889,9 +7889,22 @@ void Client::ms_handle_remote_reset(Connection *con)
 	}
       }
       if (mds >= 0) {
-	if (s->state == MetaSession::STATE_CLOSING) {
+	switch (s->state) {
+	case MetaSession::STATE_CLOSING:
 	  ldout(cct, 1) << "reset from mds we were closing; we'll call that closed" << dendl;
 	  _closed_mds_session(s);
+	  break;
+
+	case MetaSession::STATE_OPENING:
+	  {
+	    ldout(cct, 1) << "reset from mds we were opening; retrying" << dendl;
+	    list<Cond*> waiters;
+	    waiters.swap(s->waiting_for_open);
+	    _closed_mds_session(s);
+	    MetaSession *news = _get_or_open_mds_session(mds);
+	    news->waiting_for_open.swap(waiters);
+	  }
+	  break;
 	}
       }
     }
