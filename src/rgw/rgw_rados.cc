@@ -735,14 +735,18 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
   }
   result.clear();
 
-  rgw_obj marker_obj;
+  rgw_obj marker_obj, prefix_obj;
   marker_obj.set_ns(ns);
   marker_obj.set_obj(marker);
   string cur_marker = marker_obj.object;
 
+  prefix_obj.set_ns(ns);
+  prefix_obj.set_obj(prefix);
+  string cur_prefix = prefix_obj.object;
+
   do {
     std::map<string, RGWObjEnt> ent_map;
-    int r = cls_bucket_list(bucket, cur_marker, prefix, max - count, ent_map,
+    int r = cls_bucket_list(bucket, cur_marker, cur_prefix, max - count, ent_map,
                             &truncated, &cur_marker);
     if (r < 0)
       return r;
