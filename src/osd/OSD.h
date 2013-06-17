@@ -1668,8 +1668,9 @@ public:
   void handle_scrub(class MOSDScrub *m);
   void handle_osd_ping(class MOSDPing *m);
   void handle_op(OpRequestRef op);
-  void handle_sub_op(OpRequestRef op);
-  void handle_sub_op_reply(OpRequestRef op);
+
+  template <typename T, int MSGTYPE>
+  void handle_replica_op(OpRequestRef op);
 
   /// check if we can throw out op from a disconnected client
   static bool op_is_discardable(class MOSDOp *m);
