@@ -20,7 +20,6 @@
 #include "common/ceph_context.h"
 #include "global/global_context.h"
 #include "common/Clock.h"
-#include "include/rados.h"
 #include "include/types.h"
 
 

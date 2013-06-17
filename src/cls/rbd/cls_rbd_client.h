@@ -6,7 +6,6 @@
 
 #include "cls/lock/cls_lock_types.h"
 #include "common/snap_types.h"
-#include "include/rados.h"
 #include "include/rados/librados.hpp"
 #include "include/types.h"
 #include "librbd/parent_types.h"

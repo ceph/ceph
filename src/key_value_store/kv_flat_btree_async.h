@@ -20,7 +20,7 @@
 
 #include "key_value_store/key_value_structure.h"
 #include "include/utime.h"
-#include "include/rados.h"
+#include "include/types.h"
 #include "include/encoding.h"
 #include "common/Mutex.h"
 #include "common/Clock.h"
