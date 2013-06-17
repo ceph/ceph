@@ -3,9 +3,8 @@
 
 #include "common/snap_types.h"
 #include "include/encoding.h"
-#include "include/rados.h"
-#include "include/rados/librados.h"
 #include "include/types.h"
+#include "include/rados/librados.h"
 #include "cls/rbd/cls_rbd.h"
 #include "cls/rbd/cls_rbd_client.h"
 
