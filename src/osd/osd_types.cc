@@ -3048,6 +3048,7 @@ ostream &PushOp::print(ostream &out) const
     << "PushOp(" << soid
     << ", version: " << version
     << ", data_included: " << data_included
+    << ", data_size: " << data.length()
     << ", omap_header_size: " << omap_header.length()
     << ", omap_entries_size: " << omap_entries.size()
     << ", attrset_size: " << attrset.size()
