@@ -102,6 +102,10 @@
 #define MSG_OSD_BACKFILL_RESERVE 99
 #define MSG_OSD_RECOVERY_RESERVE 150
 
+#define MSG_OSD_PG_PUSH        105
+#define MSG_OSD_PG_PULL        106
+#define MSG_OSD_PG_PUSH_REPLY  107
+
 // *** MDS ***
 
 #define MSG_MDS_BEACON             100  // to monitor

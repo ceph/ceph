@@ -1989,14 +1989,34 @@ ostream& operator<<(ostream& out, const ObjectRecoveryProgress &prog);
 
 struct PushReplyOp {
   hobject_t soid;
+
+  static void generate_test_instances(list<PushReplyOp*>& o);
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  ostream &print(ostream &out) const;
+  void dump(Formatter *f) const;
+
+  uint64_t cost(CephContext *cct) const;
 };
+WRITE_CLASS_ENCODER(PushReplyOp)
+ostream& operator<<(ostream& out, const PushReplyOp &op);
 
 struct PullOp {
   hobject_t soid;
 
   ObjectRecoveryInfo recovery_info;
   ObjectRecoveryProgress recovery_progress;
+
+  static void generate_test_instances(list<PullOp*>& o);
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  ostream &print(ostream &out) const;
+  void dump(Formatter *f) const;
+
+  uint64_t cost(CephContext *cct) const;
 };
+WRITE_CLASS_ENCODER(PullOp)
+ostream& operator<<(ostream& out, const PullOp &op);
 
 struct PushOp {
   hobject_t soid;
@@ -2010,7 +2030,17 @@ struct PushOp {
   ObjectRecoveryInfo recovery_info;
   ObjectRecoveryProgress before_progress;
   ObjectRecoveryProgress after_progress;
+
+  static void generate_test_instances(list<PushOp*>& o);
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  ostream &print(ostream &out) const;
+  void dump(Formatter *f) const;
+
+  uint64_t cost(CephContext *cct) const;
 };
+WRITE_CLASS_ENCODER(PushOp)
+ostream& operator<<(ostream& out, const PushOp &op);
 
 
 /*

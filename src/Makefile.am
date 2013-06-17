@@ -1949,6 +1949,9 @@ noinst_HEADERS = \
         messages/MOSDOpReply.h\
 	messages/MOSDPGBackfill.h\
         messages/MOSDPGCreate.h\
+        messages/MOSDPGPush.h\
+        messages/MOSDPGPull.h\
+        messages/MOSDPGPushReply.h\
         messages/MOSDPGInfo.h\
         messages/MOSDPGLog.h\
         messages/MOSDPGMissing.h\
