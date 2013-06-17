@@ -579,6 +579,11 @@ void SimpleMessenger::mark_down(const entity_addr_t& addr)
     p->unregister_pipe();
     p->pipe_lock.Lock();
     p->stop();
+    if (p->connection_state) {
+      // do not generate a reset event for the caller in this case,
+      // since they asked for it.
+      p->connection_state->clear_pipe(p);
+    }
     p->pipe_lock.Unlock();
   } else {
     ldout(cct,1) << "mark_down " << addr << " -- pipe dne" << dendl;
@@ -598,6 +603,11 @@ void SimpleMessenger::mark_down(Connection *con)
     p->unregister_pipe();
     p->pipe_lock.Lock();
     p->stop();
+    if (p->connection_state) {
+      // do not generate a reset event for the caller in this case,
+      // since they asked for it.
+      p->connection_state->clear_pipe(p);
+    }
     p->pipe_lock.Unlock();
     p->put();
   } else {
