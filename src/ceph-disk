@@ -14,6 +14,48 @@ import tempfile
 import uuid
 import lockfile
 
+"""
+Prepare:
+ - create GPT partition
+ - mark the partition with the ceph type uuid
+ - create a file system
+ - mark the fs as ready for ceph consumption
+ - entire data disk is used (one big partition)
+ - a new partition is added to the journal disk (so it can be easily shared)
+
+ - triggered by administrator or ceph-deploy, e.g.  'ceph-disk <data disk> [journal disk]
+
+Activate:
+ - mount the volume in a temp loation
+ - allocate an osd id (if needed)
+ - remount in the correct location /var/lib/ceph/osd/$cluster-$id
+ - start ceph-osd
+
+ - triggered by udev when it sees the OSD gpt partition type
+ - triggered by admin 'ceph-disk activate <path>'
+ - triggered on ceph service startup with 'ceph-disk activate-all'
+
+We rely on /dev/disk/by-partuuid to find partitions by their UUID;
+this is what the journal symlink inside the osd data volume normally
+points to.
+
+activate-all relies on /dev/disk/by-parttype-uuid/$typeuuid.$uuid to
+find all partitions.  We install special udev rules to create these
+links.
+
+udev triggers 'ceph-disk activate <dev>' or 'ceph-disk
+activate-journal <dev>' based on the partition type.
+
+On old distros (e.g., RHEL6), the blkid installed does not recognized
+GPT partition metadata and the /dev/disk/by-partuuid etc. links aren't
+present.  We have a horrible hack in the form of ceph-disk-udev that
+parses gparted output to create the symlinks above and triggers the
+'ceph-disk activate' etc commands that udev normally would do if it
+knew the GPT partition type.
+
+"""
+
+
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 
 JOURNAL_UUID =         '45b0969e-9b03-4f30-b4c6-b4b80ceff106'
@@ -57,6 +99,11 @@ INIT_SYSTEMS = [
     'auto',
     ]
 
+# Nuke the TERM variable to avoid confusing any subprocesses we call.
+# For example, libreadline will print weird control sequences for some
+# TERM values.
+if 'TERM' in os.environ:
+    del os.environ['TERM']
 
 LOG_NAME = __name__
 if LOG_NAME == '__main__':
@@ -1689,6 +1736,46 @@ def main_activate_journal(args):
 
 ###########################
 
+def main_activate_all(args):
+    dir = '/dev/disk/by-parttypeuuid'
+    LOG.debug('Scanning %s', dir)
+    if not os.path.exists(dir):
+        return
+    err = False
+    for name in os.listdir(dir):
+        if name.find('.') < 0:
+            continue
+        (tag, uuid) = name.split('.')
+        if tag == OSD_UUID:
+            path = os.path.join(dir, name)
+            LOG.info('Activating %s', path)
+            activate_lock.acquire()
+            try:
+                (cluster, osd_id) = mount_activate(
+                    dev=path,
+                    activate_key_template=args.activate_key_template,
+                    init=args.mark_init,
+                    )
+                start_daemon(
+                    cluster=cluster,
+                    osd_id=osd_id,
+                    )
+
+            except Exception as e:
+                print >> sys.stderr, '{prog}: {msg}'.format(
+                    prog=args.prog,
+                    msg=e,
+                    )
+                err = True
+
+            finally:
+                activate_lock.release()
+    if err:
+        raise Error('One or more partitions failed to activate')
+
+
+###########################
+
 def is_swap(dev):
     dev = os.path.realpath(dev)
     with file('/proc/swaps', 'rb') as proc_swaps:
@@ -2088,6 +2175,25 @@ def parse_args():
     activate_journal_parser.set_defaults(
         activate_key_template='/var/lib/ceph/bootstrap-osd/{cluster}.keyring',
         func=main_activate_journal,
+        )
+
+    activate_all_parser = subparsers.add_parser('activate-all', help='Activate all tagged OSD partitions')
+    activate_all_parser.add_argument(
+        '--activate-key',
+        metavar='PATH',
+        help='bootstrap-osd keyring path template (%(default)s)',
+        dest='activate_key_template',
+        )
+    activate_all_parser.add_argument(
+        '--mark-init',
+        metavar='INITSYSTEM',
+        help='init system to manage this dir',
+        default='auto',
+        choices=INIT_SYSTEMS,
+        )
+    activate_all_parser.set_defaults(
+        activate_key_template='/var/lib/ceph/bootstrap-osd/{cluster}.keyring',
+        func=main_activate_all,
         )
 
     list_parser = subparsers.add_parser('list', help='List disks, partitions, and Ceph OSDs')

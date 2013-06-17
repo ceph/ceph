@@ -325,7 +325,7 @@ rm -rf $RPM_BUILD_ROOT
 
 %post
 /sbin/ldconfig
-#/sbin/chkconfig --add ceph
+/sbin/chkconfig --add ceph
 
 %preun
 %if %{defined suse_version}
@@ -333,7 +333,7 @@ rm -rf $RPM_BUILD_ROOT
 %endif
 if [ $1 = 0 ] ; then
     /sbin/service ceph stop >/dev/null 2>&1
-#    /sbin/chkconfig --del ceph
+    /sbin/chkconfig --del ceph
 fi
 
 %postun
@@ -398,6 +398,7 @@ fi
 %{_libdir}/rados-classes/libcls_refcount.so*
 %{_libdir}/ceph
 /lib/udev/rules.d/50-rbd.rules
+/lib/udev/rules.d/60-ceph-partuuid-workaround.rules
 /lib/udev/rules.d/95-ceph-osd.rules
 %dir %{_sysconfdir}/ceph/
 %config %{_sysconfdir}/bash_completion.d/ceph
