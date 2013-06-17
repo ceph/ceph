@@ -90,6 +90,9 @@
 #include "messages/MPGStatsAck.h"
 
 #include "messages/MWatchNotify.h"
+#include "messages/MOSDPGPush.h"
+#include "messages/MOSDPGPushReply.h"
+#include "messages/MOSDPGPull.h"
 
 #include "common/perf_counters.h"
 #include "common/Timer.h"
