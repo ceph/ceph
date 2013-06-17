@@ -222,6 +222,11 @@ void SimpleMessenger::reaper()
     ldout(cct,10) << "reaper reaping pipe " << p << " " << p->get_peer_addr() << dendl;
     p->pipe_lock.Lock();
     p->discard_out_queue();
+    if (p->connection_state) {
+      // mark_down, mark_down_all, or fault() should have done this, but make sure!
+      bool cleared = p->connection_state->clear_pipe(p);
+      assert(!cleared);
+    }
     p->pipe_lock.Unlock();
     p->unregister_pipe();
     assert(pipes.count(p));
@@ -230,8 +235,6 @@ void SimpleMessenger::reaper()
     if (p->sd >= 0)
       ::close(p->sd);
     ldout(cct,10) << "reaper reaped pipe " << p << " " << p->get_peer_addr() << dendl;
-    if (p->connection_state)
-      p->connection_state->clear_pipe(p);
     p->put();
     ldout(cct,10) << "reaper deleted pipe " << p << dendl;
   }
