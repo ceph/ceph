@@ -10,6 +10,8 @@ roles:
 tasks:
 - install:
 - ceph:
+    log-whitelist:
+    - wrongly marked me down
 - workunit:
     clients:
       all:
