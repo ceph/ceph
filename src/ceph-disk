@@ -289,13 +289,20 @@ def is_held(dev):
     assert os.path.exists(dev)
     dev = os.path.realpath(dev)
     base = dev[5:]
-    disk = base
-    while disk[-1].isdigit():
-        disk = disk[:-1]
-    directory = '/sys/block/{disk}/{base}/holders'.format(disk=disk, base=base)
-    if not os.path.exists(directory):
-        return []
-    return os.listdir(directory)
+
+    # full disk?
+    directory = '/sys/block/{base}/holders'.format(base=base)
+    if os.path.exists(directory):
+        return os.listdir(directory)
+
+    # partition?
+    part = base
+    while len(base):
+        directory = '/sys/block/{base}/{part}/holders'.format(part=part, base=base)
+        if os.path.exists(directory):
+            return os.listdir(directory)
+        base = base[:-1]
+    return []
 
 
 def verify_not_in_use(dev):
