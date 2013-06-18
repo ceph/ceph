@@ -1028,6 +1028,13 @@ ceph_test_cls_statelog_SOURCES = test/cls_statelog/test_cls_statelog.cc \
 ceph_test_cls_statelog_LDADD = libglobal.la librados.la libcls_statelog_client.a ${UNITTEST_STATIC_LDADD}
 ceph_test_cls_statelog_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_cls_statelog
+ceph_test_cls_replica_log_SOURCES = \
+	test/cls_replica_log/test_cls_replica_log.cc \
+	test/librados/test.cc
+ceph_test_cls_replica_log_LDADD = libglobal.la librados.la \
+	libcls_replica_log_client.a ${UNITTEST_STATIC_LDADD}
+ceph_test_cls_replica_log_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += ceph_test_cls_replica_log
 
 ceph_test_cls_lock_SOURCES = test/cls_lock/test_cls_lock.cc test/librados/test.cc
 ceph_test_cls_lock_LDFLAGS = ${AM_LDFLAGS}
