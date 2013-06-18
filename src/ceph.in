@@ -1442,7 +1442,7 @@ def main():
         clustername = parsed_args.cluster
 
     cluster_handle = rados.Rados(name=name, clustername=clustername,
-                                 conf_defaults=conf_defaults, conffile='')
+                                 conf_defaults=conf_defaults, conffile=conffile)
 
     retargs = cluster_handle.conf_parse_argv(childargs)
     #tmp = childargs
