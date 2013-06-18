@@ -35,9 +35,9 @@ public:
   epoch_t last_osdmap_epoch;   // last osdmap epoch i applied to the pgmap
   epoch_t last_pg_scan;  // osdmap epoch
   hash_map<pg_t,pg_stat_t> pg_stat;
-  hash_map<int,osd_stat_t> osd_stat;
-  set<int> full_osds;
-  set<int> nearfull_osds;
+  hash_map<int32_t,osd_stat_t> osd_stat;
+  set<int32_t> full_osds;
+  set<int32_t> nearfull_osds;
   float full_ratio;
   float nearfull_ratio;
 
@@ -45,8 +45,8 @@ public:
   public:
     version_t version;
     map<pg_t,pg_stat_t> pg_stat_updates;
-    map<int,osd_stat_t> osd_stat_updates;
-    set<int> osd_stat_rm;
+    map<int32_t,osd_stat_t> osd_stat_updates;
+    set<int32_t> osd_stat_rm;
     epoch_t osdmap_epoch;
     epoch_t pg_scan;  // osdmap epoch
     set<pg_t> pg_remove;
