@@ -24,6 +24,8 @@ def connect(user_at_host, host_key=None, keep_alive=False,
     if _SSHClient is None:
         _SSHClient = paramiko.SSHClient
     ssh = _SSHClient()
+    if host_key is None:
+    	ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     if _create_key is None:
         _create_key = create_key
 

@@ -727,10 +727,6 @@ def reconnect(ctx, timeout, remotes=None):
             try:
                 log.info('trying to connect to %s', remote.name)
                 key = ctx.config['targets'][remote.name]
-                if is_vm(remote.name):
-                    kstat = lockstatus.get_status(ctx,remote.name)
-                    if 'sshpubkey' in kstat:
-                        key = kstat['sshpubkey']
                 from .orchestra import connection
                 remote.ssh = connection.connect(
                     user_at_host=remote.name,

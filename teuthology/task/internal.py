@@ -176,15 +176,17 @@ def connect(ctx, config):
     machs = []
     for name in ctx.config['targets'].iterkeys():
         machs.append(name)
-    lock.scan_for_locks(ctx, machs) 
-    for t, xkey in ctx.config['targets'].iteritems():
+    for t, key in ctx.config['targets'].iteritems():
         log.debug('connecting to %s', t)
-        log.info('Key is :%s:', xkey) 
-        oldkeystatus = lockstatus.get_status(ctx, t)
-        key = xkey
-        if 'sshpubkey' in oldkeystatus:
-            log.info('possible key is :%s:',oldkeystatus['sshpubkey'])
-            key = oldkeystatus['sshpubkey']
+        try:
+            if ctx.config['sshkeys'] == 'ignore':
+                key = None
+        except (AttributeError, KeyError):
+            pass
+        for machine in ctx.config['targets'].iterkeys():
+            if teuthology.is_vm(machine):
+                key = None
+                break
         remotes.append(
             remote.Remote(name=t,
                           ssh=connection.connect(user_at_host=t,
