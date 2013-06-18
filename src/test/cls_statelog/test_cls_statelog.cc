@@ -38,7 +38,9 @@ void add_log(librados::ObjectWriteOperation *op, const string& client_id, const 
   bufferlist bl;
   ::encode(state, bl);
 
-  cls_statelog_add(*op, client_id, op_id, obj, state, bl);
+  utime_t ts = ceph_clock_now(g_ceph_context);
+
+  cls_statelog_add(*op, client_id, op_id, obj, ts, state, bl);
 }
 
 void next_op_id(string& op_id, int *id)
