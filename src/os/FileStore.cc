@@ -207,23 +207,23 @@ int FileStore::lfn_open(coll_t cid,
   int flags = O_RDWR;
   if (create)
     flags |= O_CREAT;
+  Index index2;
+  if (!index) {
+    index = &index2;
+  }
+  int r = 0;
+  if (!(*index)) {
+    r = get_index(cid, index);
+  }
   Mutex::Locker l(fdcache_lock);
   *outfd = fdcache.lookup(oid);
   if (*outfd) {
     return 0;
   }
-  Index index2;
   IndexedPath path2;
   if (!path)
     path = &path2;
   int fd, exist;
-  int r = 0;
-  if (!index) {
-    index = &index2;
-  }
-  if (!(*index)) {
-    r = get_index(cid, index);
-  }
   if (r < 0) {
     derr << "error getting collection index for " << cid
 	 << ": " << cpp_strerror(-r) << dendl;
