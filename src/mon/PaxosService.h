@@ -196,7 +196,7 @@ public:
       last_committed_name("last_committed"),
       first_committed_name("first_committed"),
       last_accepted_name("last_accepted"),
-      full_version_name("full"), full_latest_name("latest"),
+      full_prefix_name("full"), full_latest_name("latest"),
       cached_first_committed(0), cached_last_committed(0)
   {
   }
@@ -466,7 +466,7 @@ public:
   const string last_committed_name;
   const string first_committed_name;
   const string last_accepted_name;
-  const string full_version_name;
+  const string full_prefix_name;
   const string full_latest_name;
   /**
    * @}
@@ -821,7 +821,7 @@ public:
    */
   void put_version_full(MonitorDBStore::Transaction *t,
 			version_t ver, bufferlist& bl) {
-    string key = mon->store->combine_strings(full_version_name, ver);
+    string key = mon->store->combine_strings(full_prefix_name, ver);
     t->put(get_service_name(), key, bl);
   }
   /**
@@ -833,7 +833,7 @@ public:
    */
   void put_version_latest_full(MonitorDBStore::Transaction *t, version_t ver) {
     string key =
-      mon->store->combine_strings(full_version_name, full_latest_name);
+      mon->store->combine_strings(full_prefix_name, full_latest_name);
     t->put(get_service_name(), key, ver);
   }
   /**
@@ -926,18 +926,6 @@ public:
    */
   int get_version(const string& prefix, version_t ver, bufferlist& bl);
   /**
-   * Get a version number from a given key, whose name is composed by
-   * @p prefix and @p name combined.
-   *
-   * @param prefix Key's prefix
-   * @param name Key's suffix
-   * @returns A version number
-   */
-  version_t get_version(const string& prefix, const string& name) {
-    string key = mon->store->combine_strings(prefix, name);
-    return mon->store->get(get_service_name(), key);
-  }
-  /**
    * Get the contents of a given full version of this service.
    *
    * @param ver A version number
@@ -945,7 +933,7 @@ public:
    * @returns 0 on success; <0 otherwise
    */
   int get_version_full(version_t ver, bufferlist& bl) {
-    string key = mon->store->combine_strings(full_version_name, ver);
+    string key = mon->store->combine_strings(full_prefix_name, ver);
     return mon->store->get(get_service_name(), key, bl);
   }
   /**
@@ -954,7 +942,8 @@ public:
    * @returns A version number
    */
   version_t get_version_latest_full() {
-    return get_version(full_version_name, full_latest_name);
+    string key = mon->store->combine_strings(full_prefix_name, full_latest_name);
+    return mon->store->get(get_service_name(), key);
   }
 
   /**

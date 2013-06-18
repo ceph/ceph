@@ -362,7 +362,7 @@ void PaxosService::trim(MonitorDBStore::Transaction *t,
 void PaxosService::encode_trim(MonitorDBStore::Transaction *t)
 {
   version_t first_committed = get_first_committed();
-  version_t latest_full = get_version("full", "latest");
+  version_t latest_full = get_version_latest_full();
   version_t trim_to = get_trim_to();
 
   dout(10) << __func__ << " " << trim_to << " (was " << first_committed << ")"
