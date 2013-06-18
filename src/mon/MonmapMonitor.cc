@@ -49,7 +49,7 @@ void MonmapMonitor::create_initial()
 
 void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
 {
-  version_t version = get_version();
+  version_t version = get_last_committed();
   if (version <= mon->monmap->get_epoch())
     return;
 
@@ -100,7 +100,7 @@ void MonmapMonitor::encode_pending(MonitorDBStore::Transaction *t)
 
 void MonmapMonitor::on_active()
 {
-  if (get_version() >= 1 && !mon->has_ever_joined) {
+  if (get_last_committed() >= 1 && !mon->has_ever_joined) {
     // make note of the fact that i was, once, part of the quorum.
     dout(10) << "noting that i was, once, part of an active quorum." << dendl;
 
@@ -155,7 +155,7 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
   map<string, cmd_vartype> cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, rdata, get_version());
+    mon->reply_command(m, -EINVAL, rs, rdata, get_last_committed());
     return true;
   }
 
@@ -166,7 +166,7 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
   if (!session ||
       (!session->is_capable("mon", MON_CAP_R) &&
        !mon->_allowed_command(session, cmdmap))) {
-    mon->reply_command(m, -EACCES, "access denied", get_version());
+    mon->reply_command(m, -EACCES, "access denied", get_last_committed());
     return true;
   }
 
@@ -234,7 +234,7 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
     string rs;
     getline(ss, rs);
 
-    mon->reply_command(m, r, rs, rdata, get_version());
+    mon->reply_command(m, r, rs, rdata, get_last_committed());
     return true;
   } else
     return false;
@@ -267,7 +267,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
   map<string, cmd_vartype> cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, get_version());
+    mon->reply_command(m, -EINVAL, rs, get_last_committed());
     return true;
   }
 
@@ -278,7 +278,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
   if (!session ||
       (!session->is_capable("mon", MON_CAP_R) &&
        !mon->_allowed_command(session, cmdmap))) {
-    mon->reply_command(m, -EACCES, "access denied", get_version());
+    mon->reply_command(m, -EACCES, "access denied", get_last_committed());
     return true;
   }
 
@@ -314,7 +314,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
     pending_map.last_changed = ceph_clock_now(g_ceph_context);
     ss << "added mon." << name << " at " << addr;
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
     return true;
 
   } else if (prefix == "mon remove") {
@@ -337,7 +337,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
     ss << "removed mon." << name << " at " << addr << ", there are now " << pending_map.size() << " monitors" ;
     getline(ss, rs);
     // send reply immediately in case we get removed
-    mon->reply_command(m, 0, rs, get_version());
+    mon->reply_command(m, 0, rs, get_last_committed());
     return true;
   }
   else
@@ -345,7 +345,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
 
 out:
   getline(ss, rs);
-  mon->reply_command(m, err, rs, get_version());
+  mon->reply_command(m, err, rs, get_last_committed());
   return false;
 }
 
