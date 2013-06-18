@@ -990,7 +990,7 @@ public:
    *
    * @param[in] key The key
    */
-  int get_value(const string& key) {
+  version_t get_value(const string& key) {
     return mon->store->get(get_service_name(), key);
   }
   /**
