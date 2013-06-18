@@ -43,8 +43,8 @@ static int write_statelog_entry(cls_method_context_t hctx, const string& index, 
 
 static void get_index_by_client(const string& client_id, const string& op_id, string& index)
 {
-  string s = statelog_index_by_client_prefix + "_";
-  s.append(client_id + "_" + op_id);
+  index = statelog_index_by_client_prefix;
+  index.append(client_id + "_" + op_id);
 }
 
 static void get_index_by_client(cls_statelog_entry& entry, string& index)
@@ -57,7 +57,7 @@ static void get_index_by_object(const string& object, const string& op_id, strin
   char buf[16];
   snprintf(buf, sizeof(buf), "%d_", (int)object.size());
 
-  index = statelog_index_by_object_prefix + "_" + buf + "_"; /* append object length to ensure uniqueness */
+  index = statelog_index_by_object_prefix + buf; /* append object length to ensure uniqueness */
   index.append(object + "_" + op_id);
 }
 
@@ -163,10 +163,12 @@ static int cls_statelog_list(cls_method_context_t hctx, bufferlist *in, bufferli
   string from_index;
   string match_prefix;
 
-  if (op.object.empty()) {
+  if (!op.client_id.empty()) {
     get_index_by_client(op.client_id, op.op_id, match_prefix);
-  } else {
+  } else if (!op.object.empty()) {
     get_index_by_object(op.object, op.op_id, match_prefix);
+  } else {
+    match_prefix = statelog_index_by_object_prefix;
   }
 
   if (op.marker.empty()) {
@@ -184,6 +186,7 @@ static int cls_statelog_list(cls_method_context_t hctx, bufferlist *in, bufferli
   if (rc < 0)
     return rc;
 
+CLS_LOG(0, "%s: %d from_index=%s match_prefix=%s", __FILE__, __LINE__, from_index.c_str(), match_prefix.c_str());
   cls_statelog_list_ret ret;
 
   list<cls_statelog_entry>& entries = ret.entries;
@@ -196,6 +199,7 @@ static int cls_statelog_list(cls_method_context_t hctx, bufferlist *in, bufferli
   for (i = 0; i < max_entries && iter != keys.end(); ++i, ++iter) {
     const string& index = iter->first;
     marker = index;
+CLS_LOG(0, "%s: %d index=%s", __FILE__, __LINE__, index.c_str());
 
     bufferlist& bl = iter->second;
     bufferlist::iterator biter = bl.begin();
