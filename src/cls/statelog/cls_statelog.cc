@@ -186,7 +186,7 @@ static int cls_statelog_list(cls_method_context_t hctx, bufferlist *in, bufferli
   if (rc < 0)
     return rc;
 
-CLS_LOG(0, "%s: %d from_index=%s match_prefix=%s", __FILE__, __LINE__, from_index.c_str(), match_prefix.c_str());
+  CLS_LOG(20, "from_index=%s match_prefix=%s", from_index.c_str(), match_prefix.c_str());
   cls_statelog_list_ret ret;
 
   list<cls_statelog_entry>& entries = ret.entries;
@@ -199,7 +199,6 @@ CLS_LOG(0, "%s: %d from_index=%s match_prefix=%s", __FILE__, __LINE__, from_inde
   for (i = 0; i < max_entries && iter != keys.end(); ++i, ++iter) {
     const string& index = iter->first;
     marker = index;
-CLS_LOG(0, "%s: %d index=%s", __FILE__, __LINE__, index.c_str());
 
     bufferlist& bl = iter->second;
     bufferlist::iterator biter = bl.begin();
