@@ -153,11 +153,17 @@ int RGWRegion::init(CephContext *_cct, RGWRados *_store, bool setup_region)
     int r = read_default(default_info);
     if (r == -ENOENT) {
       r = create_default();
+      if (r == -EEXIST) { /* we may have raced with another region creation,
+                             make sure we can read the region info and continue
+                             as usual to make sure region creation is complete */
+        ldout(cct, 0) << "create_default() returned -EEXIST, we raced with another region creation" << dendl;
+        r = read_info(name);
+      }
       if (r < 0)
-	return r;
-      r = set_as_default();
+        return r;
+      r = set_as_default(); /* set this as default even if we weren't the creators */
       if (r < 0)
-	return r;
+        return r;
       /*Re attempt to read region info from newly created default region */
       r = read_default(default_info);
       if (r < 0)
