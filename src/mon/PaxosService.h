@@ -195,7 +195,6 @@ public:
       trim_version(0),
       last_committed_name("last_committed"),
       first_committed_name("first_committed"),
-      last_accepted_name("last_accepted"),
       full_prefix_name("full"), full_latest_name("latest"),
       cached_first_committed(0), cached_last_committed(0)
   {
@@ -465,7 +464,6 @@ public:
    */
   const string last_committed_name;
   const string first_committed_name;
-  const string last_accepted_name;
   const string full_prefix_name;
   const string full_latest_name;
   /**
