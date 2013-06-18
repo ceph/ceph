@@ -620,19 +620,22 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
     extra_data_bl.append(extra);
 
     extra_data_len -= extra_len;
-    if (bl.length() == 0)
+    if (bl.length() == 0) {
       return 0;
+    }
+    ofs = extra_data_bl.length();
   }
-  if (!ofs && !immutable_head()) {
+  off_t actual_ofs = ofs - extra_data_bl.length();
+  if (!actual_ofs && !immutable_head()) {
     first_chunk.claim(bl);
     *phandle = NULL;
     obj_len = (uint64_t)first_chunk.length();
     prepare_next_part(first_chunk.length());
     return 0;
   }
-  if (ofs >= next_part_ofs)
-    prepare_next_part(ofs);
-  int r = RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle);
+  if (actual_ofs >= next_part_ofs)
+    prepare_next_part(actual_ofs);
+  int r = RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, actual_ofs - cur_part_ofs, actual_ofs, phandle);
 
   return r;
 }
