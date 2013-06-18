@@ -947,14 +947,14 @@ unittest_rgw_meta_LDFLAGS = libglobal.la
 unittest_rgw_meta_LDADD = librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} -lcryptopp -lcurl -luuid -lexpat  librados.la libcls_version_client.a \
  libcls_log_client.a libcls_refcount_client.a libcls_rgw_client.a libcls_lock_client.a
 unittest_rgw_meta_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-check_PROGRAMS += unittest_rgw_meta
+bin_DEBUGPROGRAMS += unittest_rgw_meta
 
 unittest_rgw_log_SOURCES = test/test_rgw_admin_log.cc
 unittest_rgw_log_LDFLAGS = libglobal.la 
 unittest_rgw_log_LDADD = librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} -lcryptopp -lcurl -luuid -lexpat  librados.la libcls_version_client.a \
  libcls_log_client.a libcls_refcount_client.a libcls_rgw_client.a libcls_lock_client.a
 unittest_rgw_log_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-check_PROGRAMS += unittest_rgw_log
+bin_DEBUGPROGRAMS += unittest_rgw_log
 endif
 
 ceph_test_librbd_SOURCES = test/librbd/test_librbd.cc test/librados/test.cc
