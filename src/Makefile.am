@@ -609,6 +609,10 @@ libcls_log_client_a_SOURCES =  \
 	cls/log/cls_log_client.cc
 noinst_LIBRARIES += libcls_log_client.a
 
+libcls_statelog_client_a_SOURCES =  \
+	cls/statelog/cls_statelog_client.cc
+noinst_LIBRARIES += libcls_statelog_client.a
+
 libcls_rgw_client_a_SOURCES =  \
 	cls/rgw/cls_rgw_client.cc \
 	cls/rgw/cls_rgw_types.cc \
@@ -1001,6 +1005,12 @@ ceph_test_cls_log_SOURCES = test/cls_log/test_cls_log.cc \
 ceph_test_cls_log_LDADD = libglobal.la librados.la libcls_log_client.a ${UNITTEST_STATIC_LDADD}
 ceph_test_cls_log_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_cls_log
+
+ceph_test_cls_statelog_SOURCES = test/cls_statelog/test_cls_statelog.cc \
+	test/librados/test.cc
+ceph_test_cls_statelog_LDADD = libglobal.la librados.la libcls_statelog_client.a ${UNITTEST_STATIC_LDADD}
+ceph_test_cls_statelog_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += ceph_test_cls_statelog
 
 ceph_test_cls_lock_SOURCES = test/cls_lock/test_cls_lock.cc test/librados/test.cc
 ceph_test_cls_lock_LDFLAGS = ${AM_LDFLAGS}
@@ -1652,8 +1662,8 @@ noinst_HEADERS = \
 	cls/log/cls_log_types.h\
 	cls/log/cls_log_ops.h\
 	cls/log/cls_log_client.h\
-	cls/log/cls_statelog_types.h\
-	cls/log/cls_statelog_ops.h\
+	cls/statelog/cls_statelog_types.h\
+	cls/statelog/cls_statelog_ops.h\
 	cls/rgw/cls_rgw_client.h\
 	cls/rgw/cls_rgw_ops.h\
 	cls/rgw/cls_rgw_types.h\
