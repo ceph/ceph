@@ -78,8 +78,11 @@ public:
 
   int signal_exit(int r) {
     if (forked) {
-      // tell parent
-      (void)safe_write(fd[1], &r, sizeof(r));
+      // tell parent.  this shouldn't fail, but if it does, pass the
+      // error back to the parent.
+      int ret = safe_write(fd[1], &r, sizeof(r));
+      if (ret <= 0)
+	return ret;
     }
     return r;
   }
