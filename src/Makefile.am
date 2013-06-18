@@ -626,7 +626,8 @@ noinst_LIBRARIES += libcls_statelog_client.a
 
 libcls_replica_log_client_a_SOURCES = \
 	cls/replica_log/cls_replica_log_types.cc \
-	cls/replica_log/cls_replica_log_ops.cc
+	cls/replica_log/cls_replica_log_ops.cc \
+	cls/replica_log/cls_replica_log_client.cc
 noinst_LIBRARIES += libcls_replica_log_client.a
 
 libcls_rgw_client_a_SOURCES =  \
