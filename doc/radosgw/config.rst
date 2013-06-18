@@ -369,7 +369,7 @@ Keystone uses for creating the requests to the nss db format, for example::
 	openssl x509 -in /etc/keystone/ssl/certs/ca.pem -pubkey | \
 		certutil -d /var/ceph/nss -A -n ca -t "TCu,Cu,Tuw"
 	openssl x509 -in /etc/keystone/ssl/certs/signing_cert.pem -pubkey | \
-		certutil -d /var/ceph/nss -A -n signing_cert -t "TCu,Cu,Tuw"
+		certutil -A -d /var/ceph/nss -n signing_cert -t "P,P,P"
 
 
 Enabling Subdomain S3 Calls
