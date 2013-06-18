@@ -272,7 +272,9 @@ COMMAND("mon remove " \
  * OSD commands
  */
 COMMAND("osd stat", "print summary of OSD map")
-COMMAND("osd dump", "print summary of OSD map")
+COMMAND("osd dump " \
+	"name=epoch,type=CephInt,range=0,req=false",
+	"print summary of OSD map")
 COMMAND("osd tree " \
 	"name=epoch,type=CephInt,range=0,req=false", \
 	"print OSD tree")
