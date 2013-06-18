@@ -1003,25 +1003,6 @@ public:
     return mon->store->get(mkfs_name, get_service_name(), bl);
   }
 
-  bool exists_key(const string &key) {
-    return mon->store->exists(get_service_name(), key);
-  }
-
-  bool exists_version(const version_t v) {
-    return exists_key(stringify(v));
-  }
-
-  /**
-   * Checks if a given key composed by @p prefix and @p name exists.
-   *
-   * @param prefix Key's prefix
-   * @param name Key's suffix
-   * @returns true if it exists; false otherwise.
-   */
-  bool exists_key(const string& prefix, const string& name) {
-    string key = mon->store->combine_strings(prefix, name);
-    return exists_key(key);
-  }
 
   /**
    * @}
