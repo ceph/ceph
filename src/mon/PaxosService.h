@@ -808,8 +808,7 @@ public:
    * @param ver A version number
    */
   void put_version_latest_full(MonitorDBStore::Transaction *t, version_t ver) {
-    string key =
-      mon->store->combine_strings(full_prefix_name, full_latest_name);
+    string key = mon->store->combine_strings(full_prefix_name, full_latest_name);
     t->put(get_service_name(), key, ver);
   }
   /**
@@ -819,8 +818,7 @@ public:
    * @param key The key to which we will add the value
    * @param bl A bufferlist containing the value
    */
-  void put_value(MonitorDBStore::Transaction *t,
-		 const string& key, bufferlist& bl) {
+  void put_value(MonitorDBStore::Transaction *t, const string& key, bufferlist& bl) {
     t->put(get_service_name(), key, bl);
   }
 
