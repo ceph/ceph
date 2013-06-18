@@ -788,30 +788,6 @@ public:
     t->put(get_service_name(), ver, bl);
   }
   /**
-   * Put the contents of @p bl into version @p ver (prefixed with @p prefix)
-   *
-   * @param t A transaction to which we will add this put operation
-   * @param prefix The version's prefix
-   * @param ver The version to which we will add the value
-   * @param bl A bufferlist containing the version's value
-   */
-  void put_version(MonitorDBStore::Transaction *t, 
-		   const string& prefix, version_t ver, bufferlist& bl);
-  /**
-   * Put a version number into a key composed by @p prefix and @p name
-   * combined.
-   *
-   * @param t The transaction to which we will add this put operation
-   * @param prefix The key's prefix
-   * @param name The key's suffix
-   * @param ver A version number
-   */
-  void put_version(MonitorDBStore::Transaction *t,
-		   const string& prefix, const string& name, version_t ver) {
-    string key = mon->store->combine_strings(prefix, name);
-    t->put(get_service_name(), key, ver);
-  }
-  /**
    * Put the contents of @p bl into a full version key for this service, that
    * will be created with @p ver in mind.
    *
@@ -845,20 +821,6 @@ public:
    */
   void put_value(MonitorDBStore::Transaction *t,
 		 const string& key, bufferlist& bl) {
-    t->put(get_service_name(), key, bl);
-  }
-  /**
-   * Put the contents of @p bl into a key composed of @p prefix and @p name
-   * concatenated.
-   *
-   * @param t A transaction to which we will add this put operation
-   * @param prefix The key's prefix
-   * @param name The key's suffix
-   * @param bl A bufferlist containing the value
-   */
-  void put_value(MonitorDBStore::Transaction *t,
-		 const string& prefix, const string& name, bufferlist& bl) {
-    string key = mon->store->combine_strings(prefix, name);
     t->put(get_service_name(), key, bl);
   }
 
@@ -916,15 +878,6 @@ public:
   int get_version(version_t ver, bufferlist& bl) {
     return mon->store->get(get_service_name(), ver, bl);
   }
-  /**
-   * Get the contents of a given version @p ver with a given prefix @p prefix
-   *
-   * @param prefix The intended prefix
-   * @param ver The version being obtained
-   * @param bl The bufferlist to be populated
-   * @return 0 on success; <0 otherwise
-   */
-  int get_version(const string& prefix, version_t ver, bufferlist& bl);
   /**
    * Get the contents of a given full version of this service.
    *
