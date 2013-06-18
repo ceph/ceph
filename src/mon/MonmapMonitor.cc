@@ -70,7 +70,7 @@ void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
   dout(10) << "update_from_paxos got " << version << dendl;
   mon->monmap->decode(monmap_bl);
 
-  if (exists_key("mkfs", get_service_name())) {
+  if (mon->store->exists("mkfs", get_service_name())) {
     MonitorDBStore::Transaction t;
     erase_mkfs(&t);
     mon->store->apply_transaction(t);
