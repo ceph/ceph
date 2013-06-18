@@ -7872,6 +7872,12 @@ void Client::ms_handle_remote_reset(Connection *con)
 	    news->waiting_for_open.swap(waiters);
 	  }
 	  break;
+
+	case MetaSession::STATE_OPEN:
+	case MetaSession::STATE_NEW:
+	case MetaSession::STATE_CLOSED:
+	default:
+	  break;
 	}
       }
     }
