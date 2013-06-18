@@ -965,17 +965,7 @@ public:
   version_t get_version_latest_full() {
     return get_version(full_version_name, full_latest_name);
   }
-  /**
-   * Get a value from a given key, composed by @p prefix and @p name combined.
-   *
-   * @param[in] prefix Key's prefix
-   * @param[in] name Key's suffix
-   * @param[out] bl The bufferlist to be populated with the value
-   */
-  int get_value(const string& prefix, const string& name, bufferlist& bl) {
-    string key = mon->store->combine_strings(prefix, name);
-    return mon->store->get(get_service_name(), key, bl);
-  }
+
   /**
    * Get a value from a given key.
    *
@@ -1003,25 +993,6 @@ public:
     return mon->store->get(mkfs_name, get_service_name(), bl);
   }
 
-  bool exists_key(const string &key) {
-    return mon->store->exists(get_service_name(), key);
-  }
-
-  bool exists_version(const version_t v) {
-    return exists_key(stringify(v));
-  }
-
-  /**
-   * Checks if a given key composed by @p prefix and @p name exists.
-   *
-   * @param prefix Key's prefix
-   * @param name Key's suffix
-   * @returns true if it exists; false otherwise.
-   */
-  bool exists_key(const string& prefix, const string& name) {
-    string key = mon->store->combine_strings(prefix, name);
-    return exists_key(key);
-  }
 
   /**
    * @}
