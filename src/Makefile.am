@@ -581,6 +581,14 @@ libcls_statelog_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-r
 
 radoslib_LTLIBRARIES += libcls_statelog.la
 
+# replica log class
+libcls_replica_log_la_SOURCES = cls/replica_log/cls_replica_log.cc
+libcls_replica_log_la_CFLAGS = ${AM_CFLAGS}
+libcls_replica_log_la_CXXFLAGS= ${AM_CXXFLAGS}
+libcls_replica_log_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libcls_replica_log_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
+
+radoslib_LTLIBRARIES += libcls_replica_log.la
 
 if WITH_RADOSGW
 # rgw: rados gateway
