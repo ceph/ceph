@@ -2004,8 +2004,13 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
     objv_tracker->prepare_op_for_write(&op);
   }
 
-  if (!set_mtime)
-    time(&set_mtime);
+  utime_t ut;
+  if (set_mtime) {
+    ut = utime_t(set_mtime, 0);
+  } else {
+    ut = ceph_clock_now(0);
+    set_mtime = ut.sec();
+  }
 
   op.mtime(&set_mtime);
 
@@ -2062,7 +2067,6 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
   string index_tag;
   uint64_t epoch;
   int64_t poolid;
-  utime_t ut;
 
   if (state) {
     index_tag = state->write_tag;
@@ -2088,7 +2092,6 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
     ldout(cct, 0) << "ERROR: complete_atomic_overwrite returned r=" << r << dendl;
   }
 
-  ut = ceph_clock_now(cct);
   r = complete_update_index(bucket, obj.object, index_tag, poolid, epoch, size,
                             ut, etag, content_type, &acl_bl, category, remove_objs);
   if (r < 0)
