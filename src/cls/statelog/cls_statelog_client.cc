@@ -92,10 +92,10 @@ public:
   }
 };
 
-void cls_statelog_list_by_client(librados::ObjectReadOperation& op,
-                                 const string& client_id, const string& op_id, const string& object, /* op_id may be empty, also one of client_id, object*/
-                                 string& in_marker, int max_entries, list<cls_statelog_entry>& entries,
-                                 string *out_marker, bool *truncated)
+void cls_statelog_list(librados::ObjectReadOperation& op,
+                       const string& client_id, const string& op_id, const string& object, /* op_id may be empty, also one of client_id, object*/
+                       const string& in_marker, int max_entries, list<cls_statelog_entry>& entries,
+                       string *out_marker, bool *truncated)
 {
   bufferlist inbl;
   cls_statelog_list_op call;

@@ -302,7 +302,7 @@ void __cls_init()
 {
   CLS_LOG(1, "Loaded log class!");
 
-  cls_register("log", &h_class);
+  cls_register("statelog", &h_class);
 
   /* log */
   cls_register_cxx_method(h_class, "add", CLS_METHOD_RD | CLS_METHOD_WR, cls_statelog_add, &h_statelog_add);
