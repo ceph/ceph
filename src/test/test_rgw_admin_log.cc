@@ -847,92 +847,104 @@ TEST(TestRGWAdmin, datalog_lock_unlock) {
   ASSERT_EQ(0, user_create(uid, display_name));
   ASSERT_EQ(0, caps_add(cname, perm));
 
-  rest_req = "/admin/log?type=data&lock&length=3&lock_id=ceph";
+  rest_req = "/admin/log?type=data&lock&length=3&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
   
-  rest_req = "/admin/log?type=data&lock&id=3&lock_id=ceph";
+  rest_req = "/admin/log?type=data&lock&id=3&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
   
-  rest_req = "/admin/log?type=data&lock&length=3&id=1";
+  rest_req = "/admin/log?type=data&lock&length=3&id=1&zone-id=1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+  
+  rest_req = "/admin/log?type=data&lock&length=3&id=1&locker-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
 
-  rest_req = "/admin/log?type=data&unlock&id=1";
+  rest_req = "/admin/log?type=data&unlock&id=1&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
 
-  rest_req = "/admin/log?type=data&unlock&lock_id=ceph";
+  rest_req = "/admin/log?type=data&unlock&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
   
-  rest_req = "/admin/log?type=data&lock&id=1&length=3&lock_id=ceph";
+  rest_req = "/admin/log?type=data&unlock&locker-id=ceph&id=1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+  
+  rest_req = "/admin/log?type=data&lock&id=1&length=3&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(200U, g_test->get_resp_code()); 
   
-  rest_req = "/admin/log?type=data&unlock&id=1&lock_id=ceph";
+  rest_req = "/admin/log?type=data&unlock&id=1&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(200U, g_test->get_resp_code()); 
   
-  rest_req = "/admin/log?type=data&lock&id=1&length=3&lock_id=ceph1";
+  rest_req = "/admin/log?type=data&lock&id=1&length=3&locker-id=ceph1&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(200U, g_test->get_resp_code()); 
   
-  rest_req = "/admin/log?type=data&unlock&id=1&lock_id=ceph1";
+  rest_req = "/admin/log?type=data&unlock&id=1&locker-id=ceph1&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(200U, g_test->get_resp_code()); 
   
-  rest_req = "/admin/log?type=data&lock&id=1&length=3&lock_id=ceph";
+  rest_req = "/admin/log?type=data&lock&id=1&length=3&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(200U, g_test->get_resp_code()); 
   utime_t sleep_time(3, 0);
 
-  rest_req = "/admin/log?type=data&lock&id=1&length=3&lock_id=ceph1";
+  rest_req = "/admin/log?type=data&lock&id=1&length=3&locker-id=ceph1&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(500U, g_test->get_resp_code()); 
 
-  rest_req = "/admin/log?type=data&lock&id=1&length=3&lock_id=ceph";
+  rest_req = "/admin/log?type=data&lock&id=1&length=3&locker-id=ceph1&zone-id=2";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
-  EXPECT_EQ(409U, g_test->get_resp_code()); 
+  EXPECT_EQ(500U, g_test->get_resp_code()); 
+
+  rest_req = "/admin/log?type=data&lock&id=1&length=3&locker-id=ceph&zone-id=1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
   sleep_time.sleep();
 
-  rest_req = "/admin/log?type=data&lock&id=1&length=3&lock_id=ceph1";
+  rest_req = "/admin/log?type=data&lock&id=1&length=3&locker-id=ceph1&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(200U, g_test->get_resp_code()); 
   
-  rest_req = "/admin/log?type=data&unlock&id=1&lock_id=ceph1";
+  rest_req = "/admin/log?type=data&unlock&id=1&locker-id=ceph1&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(200U, g_test->get_resp_code()); 
 
   ASSERT_EQ(0, caps_rm(cname, perm));
   perm = "read";
   ASSERT_EQ(0, caps_add(cname, perm));
-  rest_req = "/admin/log?type=data&lock&id=1&length=3&lock_id=ceph";
+  rest_req = "/admin/log?type=data&lock&id=1&length=3&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(403U, g_test->get_resp_code()); 
   
-  rest_req = "/admin/log?type=data&unlock&id=1&lock_id=ceph";
+  rest_req = "/admin/log?type=data&unlock&id=1&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(403U, g_test->get_resp_code()); 
   
   ASSERT_EQ(0, caps_rm(cname, perm));
   perm = "write";
   ASSERT_EQ(0, caps_add(cname, perm));
-  rest_req = "/admin/log?type=data&lock&id=1&length=3&lock_id=ceph";
+  rest_req = "/admin/log?type=data&lock&id=1&length=3&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(200U, g_test->get_resp_code()); 
   
-  rest_req = "/admin/log?type=data&unlock&id=1&lock_id=ceph";
+  rest_req = "/admin/log?type=data&unlock&id=1&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(200U, g_test->get_resp_code()); 
   
   ASSERT_EQ(0, caps_rm(cname, perm));
-  rest_req = "/admin/log?type=data&lock&id=1&length=3&lock_id=ceph";
+  rest_req = "/admin/log?type=data&lock&id=1&length=3&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(403U, g_test->get_resp_code()); 
   
-  rest_req = "/admin/log?type=data&unlock&id=1&lock_id=ceph";
+  rest_req = "/admin/log?type=data&unlock&id=1&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(403U, g_test->get_resp_code()); 
   
@@ -1276,92 +1288,104 @@ TEST(TestRGWAdmin, mdlog_lock_unlock) {
   ASSERT_EQ(0, user_create(uid, display_name));
   ASSERT_EQ(0, caps_add(cname, perm));
 
-  rest_req = "/admin/log?type=metadata&lock&length=3&lock_id=ceph";
+  rest_req = "/admin/log?type=metadata&lock&length=3&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
   
-  rest_req = "/admin/log?type=metadata&lock&id=3&lock_id=ceph";
+  rest_req = "/admin/log?type=metadata&lock&id=3&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
   
-  rest_req = "/admin/log?type=metadata&lock&length=3&id=1";
-  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
-  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
-
-  rest_req = "/admin/log?type=metadata&unlock&id=1";
+  rest_req = "/admin/log?type=metadata&lock&length=3&id=1&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
 
-  rest_req = "/admin/log?type=metadata&unlock&lock_id=ceph";
+  rest_req = "/admin/log?type=metadata&lock&id=3&locker-id=ceph&length=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
   
-  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&lock_id=ceph";
+  rest_req = "/admin/log?type=metadata&unlock&id=1&zone-id=1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+
+  rest_req = "/admin/log?type=metadata&unlock&locker-id=ceph&zone-id=1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+  
+  rest_req = "/admin/log?type=metadata&unlock&locker-id=ceph&id=1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
+  
+  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(200U, g_test->get_resp_code()); 
   
-  rest_req = "/admin/log?type=metadata&unlock&id=1&lock_id=ceph";
+  rest_req = "/admin/log?type=metadata&unlock&id=1&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(200U, g_test->get_resp_code()); 
   
-  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&lock_id=ceph1";
+  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&locker-id=ceph1&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(200U, g_test->get_resp_code()); 
   
-  rest_req = "/admin/log?type=metadata&unlock&id=1&lock_id=ceph1";
+  rest_req = "/admin/log?type=metadata&unlock&id=1&locker-id=ceph1&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(200U, g_test->get_resp_code()); 
   
-  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&lock_id=ceph";
+  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(200U, g_test->get_resp_code()); 
   utime_t sleep_time(3, 0);
 
-  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&lock_id=ceph1";
+  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&locker-id=ceph1&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(500U, g_test->get_resp_code()); 
 
-  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&lock_id=ceph";
+  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&locker-id=ceph&zone-id=2";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
-  EXPECT_EQ(409U, g_test->get_resp_code()); 
+  EXPECT_EQ(500U, g_test->get_resp_code()); 
+
+  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&locker-id=ceph&zone-id=1";
+  g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
+  EXPECT_EQ(200U, g_test->get_resp_code()); 
   sleep_time.sleep();
 
-  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&lock_id=ceph1";
+  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&locker-id=ceph1&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(200U, g_test->get_resp_code()); 
   
-  rest_req = "/admin/log?type=metadata&unlock&id=1&lock_id=ceph1";
+  rest_req = "/admin/log?type=metadata&unlock&id=1&locker-id=ceph1&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(200U, g_test->get_resp_code()); 
 
   ASSERT_EQ(0, caps_rm(cname, perm));
   perm = "read";
   ASSERT_EQ(0, caps_add(cname, perm));
-  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&lock_id=ceph";
+  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(403U, g_test->get_resp_code()); 
   
-  rest_req = "/admin/log?type=metadata&unlock&id=1&lock_id=ceph";
+  rest_req = "/admin/log?type=metadata&unlock&id=1&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(403U, g_test->get_resp_code()); 
   
   ASSERT_EQ(0, caps_rm(cname, perm));
   perm = "write";
   ASSERT_EQ(0, caps_add(cname, perm));
-  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&lock_id=ceph";
+  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(200U, g_test->get_resp_code()); 
   
-  rest_req = "/admin/log?type=metadata&unlock&id=1&lock_id=ceph";
+  rest_req = "/admin/log?type=metadata&unlock&id=1&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(200U, g_test->get_resp_code()); 
   
   ASSERT_EQ(0, caps_rm(cname, perm));
-  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&lock_id=ceph";
+  rest_req = "/admin/log?type=metadata&lock&id=1&length=3&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(403U, g_test->get_resp_code()); 
   
-  rest_req = "/admin/log?type=metadata&unlock&id=1&lock_id=ceph";
+  rest_req = "/admin/log?type=metadata&unlock&id=1&locker-id=ceph&zone-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(403U, g_test->get_resp_code()); 
   

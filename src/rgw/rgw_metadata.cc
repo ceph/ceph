@@ -136,18 +136,18 @@ int RGWMetadataLog::trim(int shard_id, utime_t& from_time, utime_t& end_time)
   return ret;
 }
   
-int RGWMetadataLog::lock_exclusive(int shard_id, utime_t& duration, string& owner_id) {
+int RGWMetadataLog::lock_exclusive(int shard_id, utime_t& duration, string& zone_id, string& owner_id) {
   string oid;
   get_shard_oid(shard_id, oid);
 
-  return store->lock_exclusive(store->zone.log_pool, oid, duration, owner_id);
+  return store->lock_exclusive(store->zone.log_pool, oid, duration, zone_id, owner_id);
 }
 
-int RGWMetadataLog::unlock(int shard_id, string& owner_id) {
+int RGWMetadataLog::unlock(int shard_id, string& zone_id, string& owner_id) {
   string oid;
   get_shard_oid(shard_id, oid);
 
-  return store->unlock(store->zone.log_pool, oid, owner_id);
+  return store->unlock(store->zone.log_pool, oid, zone_id, owner_id);
 }
 
 obj_version& RGWMetadataObject::get_version()
@@ -359,6 +359,7 @@ int RGWMetadataManager::remove(string& metadata_key)
 int RGWMetadataManager::lock_exclusive(string& metadata_key, utime_t duration, string& owner_id) {
   RGWMetadataHandler *handler;
   string entry;
+  string zone_id;
 
   int ret = find_handler(metadata_key, &handler, entry);
   if (ret < 0) 
@@ -369,13 +370,14 @@ int RGWMetadataManager::lock_exclusive(string& metadata_key, utime_t duration, s
 
   handler->get_pool_and_oid(store, entry, pool, oid);
 
-  return store->lock_exclusive(pool, oid, duration, owner_id);  
+  return store->lock_exclusive(pool, oid, duration, zone_id, owner_id);  
 }
 
 int RGWMetadataManager::unlock(string& metadata_key, string& owner_id) {
   librados::IoCtx io_ctx;
   RGWMetadataHandler *handler;
   string entry;
+  string zone_id;
 
   int ret = find_handler(metadata_key, &handler, entry);
   if (ret < 0) 
@@ -386,7 +388,7 @@ int RGWMetadataManager::unlock(string& metadata_key, string& owner_id) {
 
   handler->get_pool_and_oid(store, entry, pool, oid);
 
-  return store->unlock(pool, oid, owner_id);  
+  return store->unlock(pool, oid, zone_id, owner_id);  
 }
 
 struct list_keys_handle {
