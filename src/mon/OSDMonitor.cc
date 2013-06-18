@@ -89,8 +89,8 @@ void OSDMonitor::create_initial()
   OSDMap newmap;
 
   bufferlist bl;
+  mon->store->get("mkfs", "osdmap", bl);
 
-  get_mkfs(bl);
   if (bl.length()) {
     newmap.decode(bl);
     newmap.set_fsid(mon->monmap->fsid);
@@ -159,7 +159,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     dout(1) << osdmap << dendl;
 
     if (osdmap.epoch == 1) {
-      erase_mkfs(&t);
+      t.erase("mkfs", "osdmap");
     }
   }
   if (!t.empty())
