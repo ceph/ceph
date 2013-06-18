@@ -430,4 +430,11 @@ for name in $what; do
     esac
 done
 
+# activate latent osds?
+if [ "$command" = "start" ]; then
+    if [ "$*" = "" ] || echo $* | grep -q ^osd\$ ; then
+	ceph-disk activate-all
+    fi
+fi
+
 exit $EXIT_STATUS
