@@ -66,6 +66,46 @@ static void get_index_by_object(cls_statelog_entry& entry, string& index)
   get_index_by_object(entry.object, entry.op_id, index);
 }
 
+static int get_existing_entry(cls_method_context_t hctx, const string& client_id,
+                               const string& op_id, const string& object,
+                               cls_statelog_entry& entry)
+{
+  if ((object.empty() && client_id.empty()) || op_id.empty()) {
+    return -EINVAL;
+  }
+
+  string obj_index;
+  if (!object.empty()) {
+    get_index_by_object(object, op_id, obj_index);
+  } else {
+    get_index_by_client(client_id, op_id, obj_index);
+  }
+
+  bufferlist bl;
+  int rc = cls_cxx_map_get_val(hctx, obj_index, &bl);
+  if (rc < 0) {
+    CLS_LOG(0, "could not find entry %s", obj_index.c_str());
+    return rc;
+  }
+  try {
+    bufferlist::iterator iter = bl.begin();
+    ::decode(entry, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: failed to decode entry %s", obj_index.c_str());
+    return -EIO;
+  }
+
+  if ((!object.empty() && entry.object != object) ||
+      (!client_id.empty() && entry.client_id != client_id)){
+    /* ouch, we were passed inconsistent client_id / object */
+    CLS_LOG(0, "data mismatch: object=%s client_id=%s entry: object=%s client_id=%s",
+            object.c_str(), client_id.c_str(), entry.object.c_str(), entry.client_id.c_str());
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 static int cls_statelog_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   bufferlist::iterator in_iter = in->begin();
@@ -192,39 +232,24 @@ static int cls_statelog_remove(cls_method_context_t hctx, bufferlist *in, buffer
     return -EINVAL;
   }
 
-  if (op.object.empty() || op.op_id.empty()) {
-    CLS_LOG(0, "object name or op id not specified");
-    return -EINVAL;
-  }
-
-  string obj_index;
-  get_index_by_object(op.object, op.op_id, obj_index);
-
-  bufferlist bl;
-  int rc = cls_cxx_map_get_val(hctx, obj_index, &bl);
-  if (rc < 0) {
-    CLS_LOG(0, "could not find entry %s", obj_index.c_str());
-    return rc;
-  }
-
   cls_statelog_entry entry;
 
-  try {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(entry, iter);
-  } catch (buffer::error& err) {
-    CLS_LOG(0, "ERROR: failed to decode entry %s", obj_index.c_str());
-    return -EIO;
-  }
+  int rc = get_existing_entry(hctx, op.client_id, op.op_id, op.object, entry);
+  if (rc < 0)
+    return rc;
 
-  string client_index;
-  get_index_by_client(entry.client_id, entry.op_id, client_index);
+  string obj_index;
+  get_index_by_object(entry.object, entry.op_id, obj_index);
 
   rc = cls_cxx_map_remove_key(hctx, obj_index);
   if (rc < 0) {
     CLS_LOG(0, "ERROR: failed to remove key");
     return rc;
   }
+
+  string client_index;
+  get_index_by_client(entry.client_id, entry.op_id, client_index);
+
   rc = cls_cxx_map_remove_key(hctx, client_index);
   if (rc < 0) {
     CLS_LOG(0, "ERROR: failed to remove key");
@@ -263,13 +288,9 @@ static int cls_statelog_check_state(cls_method_context_t hctx, bufferlist *in, b
 
   cls_statelog_entry entry;
 
-  try {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(entry, iter);
-  } catch (buffer::error& err) {
-    CLS_LOG(0, "ERROR: failed to decode entry %s", obj_index.c_str());
-    return -EIO;
-  }
+  rc = get_existing_entry(hctx, op.client_id, op.op_id, op.object, entry);
+  if (rc < 0)
+    return rc;
 
   if (entry.state != op.state)
     return -ECANCELED;
