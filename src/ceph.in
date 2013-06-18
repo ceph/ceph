@@ -956,13 +956,13 @@ def descsort(sh1, sh2):
     return cmp(concise_sig(sh1['sig']), concise_sig(sh2['sig']))
 
 
-dontsplit = string.letters + '{[<>]}'
+DONTSPLIT = string.letters + '{[<>]}'
 
 def wrap(s, width, indent):
     """
     generator to transform s into a sequence of strings width or shorter,
     for wrapping text to a specific column width.
-    Attempt to break on anything but dontsplit characters.
+    Attempt to break on anything but DONTSPLIT characters.
     indent is amount to indent 2nd-through-nth lines.
 
     so "long string long string long string" width=11 indent=1 becomes
@@ -986,7 +986,7 @@ def wrap(s, width, indent):
 
         else:
             splitpos = width
-            while (splitpos > 0) and (s[splitpos-1] in dontsplit):
+            while (splitpos > 0) and (s[splitpos-1] in DONTSPLIT):
                 splitpos -= 1
 
             if splitpos == 0:
