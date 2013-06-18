@@ -325,6 +325,7 @@ rm -rf $RPM_BUILD_ROOT
 %post
 /sbin/ldconfig
 /sbin/chkconfig --add ceph
+mkdir -p %{_localstatedir}/run/ceph/
 
 %preun
 %if %{defined suse_version}
