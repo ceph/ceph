@@ -571,6 +571,13 @@ libcls_log_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex 
 
 radoslib_LTLIBRARIES += libcls_log.la
 
+libcls_statelog_la_SOURCES = cls/statelog/cls_statelog.cc
+libcls_statelog_la_CFLAGS = ${AM_CFLAGS}
+libcls_statelog_la_CXXFLAGS= ${AM_CXXFLAGS}
+libcls_statelog_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libcls_statelog_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
+
+radoslib_LTLIBRARIES += libcls_statelog.la
 
 if WITH_RADOSGW
 # rgw: rados gateway
@@ -1645,6 +1652,8 @@ noinst_HEADERS = \
 	cls/log/cls_log_types.h\
 	cls/log/cls_log_ops.h\
 	cls/log/cls_log_client.h\
+	cls/log/cls_statelog_types.h\
+	cls/log/cls_statelog_ops.h\
 	cls/rgw/cls_rgw_client.h\
 	cls/rgw/cls_rgw_ops.h\
 	cls/rgw/cls_rgw_types.h\
