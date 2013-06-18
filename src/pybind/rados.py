@@ -533,10 +533,10 @@ Rados object in state %s." % (self.state))
 
         if target:
             ret = run_in_thread(self.librados.rados_mon_command_target,
-                                (self.cluster, target, cmdarr, len(cmd),
-                                 c_char_p(inbuf), len(inbuf),
-                                 outbufp, byref(outbuflen), outsp, byref(outslen)),
-                                timeout)
+                                (self.cluster, c_char_p(target), cmdarr,
+                                 len(cmd), c_char_p(inbuf), len(inbuf),
+                                 outbufp, byref(outbuflen), outsp,
+                                 byref(outslen)), timeout)
         else:
             ret = run_in_thread(self.librados.rados_mon_command,
                                 (self.cluster, cmdarr, len(cmd),
