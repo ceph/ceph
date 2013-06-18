@@ -27,22 +27,23 @@ void cls_statelog_add(librados::ObjectWriteOperation& op, cls_statelog_entry& en
 }
 
 void cls_statelog_add_prepare_entry(cls_statelog_entry& entry, const string& client_id, const string& op_id,
-                 const string& object, uint32_t state, bufferlist& bl)
+                 const string& object, const utime_t& timestamp, uint32_t state, bufferlist& bl)
 {
   entry.client_id = client_id;
   entry.op_id = op_id;
   entry.object = object;
+  entry.timestamp = timestamp;
   entry.state = state;
   entry.data = bl;
 }
 
 void cls_statelog_add(librados::ObjectWriteOperation& op, const string& client_id, const string& op_id,
-                 const string& object, uint32_t state, bufferlist& bl)
+                 const string& object, const utime_t& timestamp, uint32_t state, bufferlist& bl)
 
 {
   cls_statelog_entry entry;
 
-  cls_statelog_add_prepare_entry(entry, client_id, op_id, object, state, bl);
+  cls_statelog_add_prepare_entry(entry, client_id, op_id, object, timestamp, state, bl);
   cls_statelog_add(op, entry);
 }
 

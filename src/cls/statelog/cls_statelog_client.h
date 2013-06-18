@@ -10,12 +10,12 @@
  */
 
 void cls_statelog_add_prepare_entry(cls_statelog_entry& entry, const string& client_id, const string& op_id,
-                 const string& object, uint32_t state, bufferlist& bl);
+                 const string& object, const utime_t& timestamp, uint32_t state, bufferlist& bl);
 
 void cls_statelog_add(librados::ObjectWriteOperation& op, list<cls_statelog_entry>& entry);
 void cls_statelog_add(librados::ObjectWriteOperation& op, cls_statelog_entry& entry);
 void cls_statelog_add(librados::ObjectWriteOperation& op, const string& client_id, const string& op_id,
-                 const string& object, uint32_t state, bufferlist& bl);
+                 const string& object, const utime_t& timestamp, uint32_t state, bufferlist& bl);
 
 void cls_statelog_list(librados::ObjectReadOperation& op,
                        const string& client_id, const string& op_id, const string& object, /* op_id may be empty, also one of client_id, object*/
