@@ -1665,6 +1665,13 @@ int FileStore::mount()
       ret = -1;
       goto close_current_fd;
     }
+
+    if (g_conf->osd_compact_leveldb_on_mount) {
+      derr << "Compacting store..." << dendl;
+      omap_store->compact();
+      derr << "...finished compacting store" << dendl;
+    }
+
     DBObjectMap *dbomap = new DBObjectMap(omap_store);
     ret = dbomap->init(do_update);
     if (ret < 0) {
