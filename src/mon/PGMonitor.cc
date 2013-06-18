@@ -517,18 +517,6 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
   else
     dout(10) << " got osd." << from << " " << stats->osd_stat << " (first report)" << dendl;
 
-  // apply to live map too (screw consistency)
-  /*
-    actually, no, don't.  that screws up our "latest" stash.  and can
-    lead to weird output where things appear to jump backwards in
-    time... that's just confusing.
-
-  if (pg_map.osd_stat.count(from))
-    pg_map.stat_osd_sub(pg_map.osd_stat[from]);
-  pg_map.osd_stat[from] = stats->osd_stat;
-  pg_map.stat_osd_add(stats->osd_stat);
-  */
-
   // pg stats
   MPGStatsAck *ack = new MPGStatsAck;
   ack->set_tid(stats->get_tid());
