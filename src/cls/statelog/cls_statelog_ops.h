@@ -89,46 +89,52 @@ WRITE_CLASS_ENCODER(cls_statelog_list_ret)
  * -ENODATA when done, so caller needs to repeat sending request until that.
  */
 struct cls_statelog_remove_op {
-  string object;
+  string client_id;
   string op_id;
+  string object;
 
   cls_statelog_remove_op() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(object, bl);
+    ::encode(client_id, bl);
     ::encode(op_id, bl);
+    ::encode(object, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(object, bl);
+    ::decode(client_id, bl);
     ::decode(op_id, bl);
+    ::decode(object, bl);
     DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(cls_statelog_remove_op)
 
 struct cls_statelog_check_state_op {
-  string object;
+  string client_id;
   string op_id;
+  string object;
   uint32_t state;
 
   cls_statelog_check_state_op() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(object, bl);
+    ::encode(client_id, bl);
     ::encode(op_id, bl);
+    ::encode(object, bl);
     ::encode(state, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(object, bl);
+    ::decode(client_id, bl);
     ::decode(op_id, bl);
+    ::decode(object, bl);
     ::decode(state, bl);
     DECODE_FINISH(bl);
   }
