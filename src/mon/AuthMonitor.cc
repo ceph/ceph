@@ -38,7 +38,7 @@
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
-#define dout_prefix _prefix(_dout, mon, get_version())
+#define dout_prefix _prefix(_dout, mon, get_last_committed())
 static ostream& _prefix(std::ostream *_dout, Monitor *mon, version_t v) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name()
@@ -120,7 +120,7 @@ void AuthMonitor::create_initial()
 void AuthMonitor::update_from_paxos(bool *need_bootstrap)
 {
   dout(10) << __func__ << dendl;
-  version_t version = get_version();
+  version_t version = get_last_committed();
   version_t keys_ver = mon->key_server.get_ver();
   if (version == keys_ver)
     return;
@@ -238,12 +238,12 @@ bool AuthMonitor::should_propose(double& delay)
 void AuthMonitor::create_pending()
 {
   pending_auth.clear();
-  dout(10) << "create_pending v " << (get_version() + 1) << dendl;
+  dout(10) << "create_pending v " << (get_last_committed() + 1) << dendl;
 }
 
 void AuthMonitor::encode_pending(MonitorDBStore::Transaction *t)
 {
-  dout(10) << __func__ << " v " << (get_version() + 1) << dendl;
+  dout(10) << __func__ << " v " << (get_last_committed() + 1) << dendl;
 
   bufferlist bl;
 
@@ -257,7 +257,7 @@ void AuthMonitor::encode_pending(MonitorDBStore::Transaction *t)
     t->put(get_service_name(), "format_version", format_version);
   }
 
-  version_t version = get_version() + 1;
+  version_t version = get_last_committed() + 1;
   put_version(t, version, bl);
   put_last_committed(t, version);
 }
@@ -266,7 +266,7 @@ void AuthMonitor::encode_full(MonitorDBStore::Transaction *t)
 {
   version_t version = mon->key_server.get_ver();
   dout(10) << __func__ << " auth v " << version << dendl;
-  assert(get_version() == version);
+  assert(get_last_committed() == version);
 
   bufferlist full_bl;
   Mutex::Locker l(mon->key_server.get_lock());
@@ -288,7 +288,7 @@ void AuthMonitor::encode_full(MonitorDBStore::Transaction *t)
 void AuthMonitor::update_trim()
 {
   unsigned max = g_conf->paxos_max_join_drift * 2;
-  version_t version = get_version();
+  version_t version = get_last_committed();
   if (mon->is_leader() && (version > max))
     set_trim_to(version - max);
 }
@@ -543,7 +543,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, rdata, get_version());
+    mon->reply_command(m, -EINVAL, rs, rdata, get_last_committed());
     return true;
   }
 
@@ -561,7 +561,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
   MonSession *session = m->get_session();
   if (!session ||
       (!mon->_allowed_command(session, cmdmap))) {
-    mon->reply_command(m, -EACCES, "access denied", rdata, get_version());
+    mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
 
@@ -630,7 +630,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
   rdata.append(ds);
   string rs;
   getline(ss, rs, '\0');
-  mon->reply_command(m, r, rs, rdata, get_version());
+  mon->reply_command(m, r, rs, rdata, get_last_committed());
   return true;
 }
 
@@ -665,7 +665,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, rdata, get_version());
+    mon->reply_command(m, -EINVAL, rs, rdata, get_last_committed());
     return true;
   }
 
@@ -679,7 +679,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
   MonSession *session = m->get_session();
   if (!session ||
       (!mon->_allowed_command(session, cmdmap))) {
-    mon->reply_command(m, -EACCES, "access denied", rdata, get_version());
+    mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
 
@@ -712,8 +712,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     ss << "imported keyring";
     getline(ss, rs);
     err = 0;
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
-    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
     return true;
   } else if (prefix == "auth add") {
     KeyServerData::Incremental auth_inc;
@@ -753,8 +753,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
     ss << "added key for " << auth_inc.name;
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
-    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
     return true;
   } else if ((prefix == "auth get-or-create-key" ||
 	     prefix == "auth get-or-create") &&
@@ -798,7 +798,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 	::decode(auth_inc, q);
 	if (auth_inc.op == KeyServerData::AUTH_INC_ADD &&
 	    auth_inc.name == entity) {
-	  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+	  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
 	  //paxos->wait_for_commit(new C_RetryMessage(this, m));
 	  return true;
 	}
@@ -826,8 +826,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
     rdata.append(ds);
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, rdata, get_version()));
-    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, rdata, get_last_committed()));
+    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
     return true;
   } else if (prefix == "auth caps" && !entity_name.empty()) {
     KeyServerData::Incremental auth_inc;
@@ -849,8 +849,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
     ss << "updated caps for " << auth_inc.name;
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
-    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
     return true;
   } else if (prefix == "auth del" && !entity_name.empty()) {
     KeyServerData::Incremental auth_inc;
@@ -865,15 +865,15 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
     ss << "updated";
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
-    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
     return true;
   }
 
 done:
   rdata.append(ds);
   getline(ss, rs, '\0');
-  mon->reply_command(m, err, rs, rdata, get_version());
+  mon->reply_command(m, err, rs, rdata, get_last_committed());
   return false;
 }
 

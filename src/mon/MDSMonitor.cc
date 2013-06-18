@@ -86,7 +86,7 @@ void MDSMonitor::create_initial()
 
 void MDSMonitor::update_from_paxos(bool *need_bootstrap)
 {
-  version_t version = get_version();
+  version_t version = get_last_committed();
   if (version == mdsmap.epoch)
     return;
   assert(version >= mdsmap.epoch);
@@ -127,7 +127,7 @@ void MDSMonitor::encode_pending(MonitorDBStore::Transaction *t)
   //print_map(pending_mdsmap);
 
   // apply to paxos
-  assert(get_version() + 1 == pending_mdsmap.epoch);
+  assert(get_last_committed() + 1 == pending_mdsmap.epoch);
   bufferlist mdsmap_bl;
   pending_mdsmap.encode(mdsmap_bl, mon->get_quorum_features());
 
@@ -541,7 +541,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, rdata, get_version());
+    mon->reply_command(m, -EINVAL, rs, rdata, get_last_committed());
     return true;
   }
 
@@ -552,7 +552,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
   if (!session ||
       (!session->is_capable("mds", MON_CAP_R) &&
        !mon->_allowed_command(session, cmdmap))) {
-    mon->reply_command(m, -EACCES, "access denied", rdata, get_version());
+    mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
 
@@ -638,7 +638,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	   i != mds_info.end();
 	   ++i) {
 	m->cmd = args_vec;
-	mon->send_command(i->second.get_inst(), m->cmd, get_version());
+	mon->send_command(i->second.get_inst(), m->cmd, get_last_committed());
 	r = 0;
       }
       if (r == -ENOENT) {
@@ -652,7 +652,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       if (!errno && who >= 0) {
 	if (mdsmap.is_up(who)) {
 	  m->cmd = args_vec;
-	  mon->send_command(mdsmap.get_inst(who), m->cmd, get_version());
+	  mon->send_command(mdsmap.get_inst(who), m->cmd, get_last_committed());
 	  r = 0;
 	  ss << "ok";
 	} else {
@@ -670,7 +670,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
     rdata.append(ds);
     string rs;
     getline(ss, rs);
-    mon->reply_command(m, r, rs, rdata, get_version());
+    mon->reply_command(m, r, rs, rdata, get_last_committed());
     return true;
   } else
     return false;
@@ -780,7 +780,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
   map<string, cmd_vartype> cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, rdata, get_version());
+    mon->reply_command(m, -EINVAL, rs, rdata, get_last_committed());
     return true;
   }
 
@@ -792,7 +792,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
   if (!session ||
       (!session->is_capable("mds", MON_CAP_W) &&
        !mon->_allowed_command(session, cmdmap))) {
-    mon->reply_command(m, -EACCES, "access denied", rdata, get_version());
+    mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
 
@@ -844,7 +844,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       map.epoch = pending_mdsmap.epoch;  // make sure epoch is correct
       pending_mdsmap = map;
       string rs = "set mds map";
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
       return true;
     } else {
       ss << "next mdsmap epoch " << pending_mdsmap.epoch << " != " << e;
@@ -863,7 +863,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       ss << "set mds gid " << gid << " to state " << state << " " << ceph_mds_state_name(state);
       string rs;
       getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
       return true;
     }
 
@@ -893,7 +893,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       ss << "removed mds gid " << gid;
       string rs;
       getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
       return true;
     }
   } else if (prefix == "mds rmfailed") {
@@ -904,7 +904,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
     ss << "removed failed mds." << w;
     string rs;
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
     return true;
   } else if (prefix == "mds cluster_fail") {
     r = cluster_fail(ss);
@@ -987,7 +987,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       ss << "new fs with metadata pool " << metadata << " and data pool " << data;
       string rs;
       getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
       return true;
     }
   }    
@@ -999,11 +999,11 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 
   if (r >= 0) {
     // success.. delay reply
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, r, rs, get_version()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, r, rs, get_last_committed()));
     return true;
   } else {
     // reply immediately
-    mon->reply_command(m, r, rs, rdata, get_version());
+    mon->reply_command(m, r, rs, rdata, get_last_committed());
     return false;
   }
 }

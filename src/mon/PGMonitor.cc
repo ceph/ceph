@@ -151,7 +151,7 @@ void PGMonitor::create_initial()
 
 void PGMonitor::update_from_paxos(bool *need_bootstrap)
 {
-  version_t version = get_version();
+  version_t version = get_last_committed();
   if (version == pg_map.version)
     return;
   assert(version >= pg_map.version);
@@ -278,7 +278,7 @@ void PGMonitor::encode_pending(MonitorDBStore::Transaction *t)
 {
   version_t version = pending_inc.version;
   dout(10) << __func__ << " v " << version << dendl;
-  assert(get_version() + 1 == version);
+  assert(get_last_committed() + 1 == version);
   pending_inc.stamp = ceph_clock_now(g_ceph_context);
 
   bufferlist bl;
@@ -291,7 +291,7 @@ void PGMonitor::encode_pending(MonitorDBStore::Transaction *t)
 void PGMonitor::encode_full(MonitorDBStore::Transaction *t)
 {
   dout(10) << __func__ << " pgmap v " << pg_map.version << dendl;
-  assert(get_version() == pg_map.version);
+  assert(get_last_committed() == pg_map.version);
 
   bufferlist full_bl;
   pg_map.encode(full_bl, mon->get_quorum_features());
@@ -303,7 +303,7 @@ void PGMonitor::encode_full(MonitorDBStore::Transaction *t)
 void PGMonitor::update_trim()
 {
   unsigned max = g_conf->mon_max_pgmap_epochs;
-  version_t version = get_version();
+  version_t version = get_last_committed();
   if (mon->is_leader() && (version > max))
     set_trim_to(version - max);
 }
@@ -371,7 +371,7 @@ void PGMonitor::handle_statfs(MStatfs *statfs)
   }
 
   // fill out stfs
-  reply = new MStatfsReply(mon->monmap->fsid, statfs->get_tid(), get_version());
+  reply = new MStatfsReply(mon->monmap->fsid, statfs->get_tid(), get_last_committed());
 
   // these are in KB.
   reply->h.st.kb = pg_map.osd_sum.kb;
@@ -403,7 +403,7 @@ bool PGMonitor::preprocess_getpoolstats(MGetPoolStats *m)
     goto out;
   }
   
-  reply = new MGetPoolStatsReply(m->fsid, m->get_tid(), get_version());
+  reply = new MGetPoolStatsReply(m->fsid, m->get_tid(), get_last_committed());
 
   for (list<string>::iterator p = m->pools.begin();
        p != m->pools.end();
@@ -1101,7 +1101,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, rdata, get_version());
+    mon->reply_command(m, -EINVAL, rs, rdata, get_last_committed());
     return true;
   }
 
@@ -1112,7 +1112,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
   if (!session ||
       (!session->is_capable("pg", MON_CAP_R) &&
        !mon->_allowed_command(session, cmdmap))) {
-    mon->reply_command(m, -EACCES, "access denied", rdata, get_version());
+    mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
 
@@ -1302,7 +1302,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
   string rs;
   getline(ss, rs);
   rdata.append(ds);
-  mon->reply_command(m, r, rs, rdata, get_version());
+  mon->reply_command(m, r, rs, rdata, get_last_committed());
   return true;
 }
 
@@ -1318,7 +1318,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
-    mon->reply_command(m, -EINVAL, rs, get_version());
+    mon->reply_command(m, -EINVAL, rs, get_last_committed());
     return true;
   }
 
@@ -1329,7 +1329,7 @@ bool PGMonitor::prepare_command(MMonCommand *m)
   if (!session ||
       (!session->is_capable("pg", MON_CAP_W) &&
        !mon->_allowed_command(session, cmdmap))) {
-    mon->reply_command(m, -EACCES, "access denied", get_version());
+    mon->reply_command(m, -EACCES, "access denied", get_last_committed());
     return true;
   }
 
@@ -1378,12 +1378,12 @@ bool PGMonitor::prepare_command(MMonCommand *m)
   getline(ss, rs);
   if (r < 0 && rs.length() == 0)
     rs = cpp_strerror(r);
-  mon->reply_command(m, r, rs, get_version());
+  mon->reply_command(m, r, rs, get_last_committed());
   return false;
 
  update:
   getline(ss, rs);
-  wait_for_finished_proposal(new Monitor::C_Command(mon, m, r, rs, get_version()));
+  wait_for_finished_proposal(new Monitor::C_Command(mon, m, r, rs, get_last_committed()));
   return true;
 }
 

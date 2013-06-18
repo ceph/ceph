@@ -218,7 +218,7 @@ bool PaxosService::should_stash_full()
    */
   return (!latest_full ||
 	  (latest_full <= get_trim_to()) ||
-	  (get_version() - latest_full > (unsigned)g_conf->paxos_stash_full_interval));
+	  (get_last_committed() - latest_full > (unsigned)g_conf->paxos_stash_full_interval));
 }
 
 void PaxosService::restart()
@@ -279,7 +279,7 @@ void PaxosService::_active()
       have_pending = true;
     }
 
-    if (get_version() == 0) {
+    if (get_last_committed() == 0) {
       // create initial state
       create_initial();
       propose_pending();
