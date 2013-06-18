@@ -1024,16 +1024,6 @@ public:
   }
 
   /**
-   * Checks if a given version @v exists
-   *
-   * @param prefix key's prefix
-   * @param v key's suffix
-   * @returns true if key exists; false otherwise.
-   */
-  bool exists_version(const string& prefix, const version_t v) {
-    return exists_key(prefix, stringify(v));
-  }
-  /**
    * @}
    */
   /**
