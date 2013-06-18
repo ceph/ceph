@@ -1493,7 +1493,7 @@ MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to)
     } else {
       assert(err == -ENOENT);
       assert(!bl.length());
-      get_version("full", e, bl);
+      get_version_full(e, bl);
       if (bl.length() > 0) {
       //else if (get_version("full", e, bl) > 0) {
       dout(20) << "build_incremental   full " << e << " "
@@ -1541,7 +1541,7 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
   if (first < get_first_committed()) {
     first = get_first_committed();
     bufferlist bl;
-    int err = get_version("full", first, bl);
+    int err = get_version_full(first, bl);
     assert(err == 0);
     assert(bl.length());
 
@@ -1579,7 +1579,7 @@ void OSDMonitor::send_incremental(epoch_t first, entity_inst_t& dest, bool oneti
   if (first < get_first_committed()) {
     first = get_first_committed();
     bufferlist bl;
-    int err = get_version("full", first, bl);
+    int err = get_version_full(first, bl);
     assert(err == 0);
     assert(bl.length());
 
@@ -1953,7 +1953,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     OSDMap *p = &osdmap;
     if (epoch) {
       bufferlist b;
-      int err = get_version("full", epoch, b);
+      int err = get_version_full(epoch, b);
       if (err == -ENOENT) {
 	r = -ENOENT;
 	goto reply;
