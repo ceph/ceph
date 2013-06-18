@@ -425,7 +425,7 @@ int MonmapMonitor::get_monmap(bufferlist &bl)
   version_t latest_ver = get_last_committed();
   dout(10) << __func__ << " ver " << latest_ver << dendl;
 
-  if (!exists_version(latest_ver))
+  if (!mon->store->exists(get_service_name(), stringify(latest_ver)))
     return -ENOENT;
 
   int err = get_version(latest_ver, bl);
