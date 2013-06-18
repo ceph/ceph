@@ -109,7 +109,7 @@ void PGMap::Incremental::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("osd_stat_updates");
-  for (map<int,osd_stat_t>::const_iterator p = osd_stat_updates.begin(); p != osd_stat_updates.end(); ++p) {
+  for (map<int32_t,osd_stat_t>::const_iterator p = osd_stat_updates.begin(); p != osd_stat_updates.end(); ++p) {
     f->open_object_section("osd_stat");
     f->dump_int("osd", p->first);
     p->second.dump(f);
@@ -192,15 +192,15 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     }
     stat_pg_add(update_pg, update_stat);
   }
-  for (map<int,osd_stat_t>::const_iterator p = inc.osd_stat_updates.begin();
+  for (map<int32_t,osd_stat_t>::const_iterator p = inc.osd_stat_updates.begin();
        p != inc.osd_stat_updates.end();
        ++p) {
     int osd = p->first;
     const osd_stat_t &new_stats(p->second);
     
-    hash_map<int,osd_stat_t>::iterator t = osd_stat.find(osd);
+    hash_map<int32_t,osd_stat_t>::iterator t = osd_stat.find(osd);
     if (t == osd_stat.end()) {
-      hash_map<int,osd_stat_t>::value_type v(osd, new_stats);
+      hash_map<int32_t,osd_stat_t>::value_type v(osd, new_stats);
       osd_stat.insert(v);
     } else {
       stat_osd_sub(t->second);
@@ -226,7 +226,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   for (set<int>::iterator p = inc.osd_stat_rm.begin();
        p != inc.osd_stat_rm.end();
        ++p) {
-    hash_map<int,osd_stat_t>::iterator t = osd_stat.find(*p);
+    hash_map<int32_t,osd_stat_t>::iterator t = osd_stat.find(*p);
     if (t != osd_stat.end()) {
       stat_osd_sub(t->second);
       osd_stat.erase(t);
@@ -260,7 +260,7 @@ void PGMap::redo_full_sets()
 {
   full_osds.clear();
   nearfull_osds.clear();
-  for (hash_map<int, osd_stat_t>::iterator i = osd_stat.begin();
+  for (hash_map<int32_t, osd_stat_t>::iterator i = osd_stat.begin();
        i != osd_stat.end();
        ++i) {
     register_nearfull_status(i->first, i->second);
@@ -300,7 +300,7 @@ void PGMap::calc_stats()
        ++p) {
     stat_pg_add(p->first, p->second);
   }
-  for (hash_map<int,osd_stat_t>::iterator p = osd_stat.begin();
+  for (hash_map<int32_t,osd_stat_t>::iterator p = osd_stat.begin();
        p != osd_stat.end();
        ++p)
     stat_osd_add(p->second);
@@ -487,7 +487,7 @@ void PGMap::dump_pool_stats(Formatter *f) const
 void PGMap::dump_osd_stats(Formatter *f) const
 {
   f->open_array_section("osd_stats");
-  for (hash_map<int,osd_stat_t>::const_iterator q = osd_stat.begin();
+  for (hash_map<int32_t,osd_stat_t>::const_iterator q = osd_stat.begin();
        q != osd_stat.end();
        ++q) {
     f->open_object_section("osd_stat");
@@ -558,7 +558,7 @@ void PGMap::dump(ostream& ss) const
      << "\t" << pg_sum.ondisk_log_size
      << std::endl;
   ss << "osdstat\tkbused\tkbavail\tkb\thb in\thb out" << std::endl;
-  for (hash_map<int,osd_stat_t>::const_iterator p = osd_stat.begin();
+  for (hash_map<int32_t,osd_stat_t>::const_iterator p = osd_stat.begin();
        p != osd_stat.end();
        ++p)
     ss << p->first
