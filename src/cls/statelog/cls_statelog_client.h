@@ -17,10 +17,10 @@ void cls_statelog_add(librados::ObjectWriteOperation& op, cls_statelog_entry& en
 void cls_statelog_add(librados::ObjectWriteOperation& op, const string& client_id, const string& op_id,
                  const string& object, uint32_t state, bufferlist& bl);
 
-void cls_statelog_list_by_client(librados::ObjectReadOperation& op,
-                                 const string& client_id, const string& op_id, const string& object, /* op_id may be empty, also one of client_id, object*/
-                                 string& in_marker, int max_entries, list<cls_statelog_entry>& entries,
-                                 string *out_marker, bool *truncated);
+void cls_statelog_list(librados::ObjectReadOperation& op,
+                       const string& client_id, const string& op_id, const string& object, /* op_id may be empty, also one of client_id, object*/
+                       const string& in_marker, int max_entries, list<cls_statelog_entry>& entries,
+                       string *out_marker, bool *truncated);
 
 void cls_statelog_remove_by_client(librados::ObjectWriteOperation& op, const string& client_id, const string& op_id);
 void cls_statelog_remove_by_object(librados::ObjectWriteOperation& op, const string& object, const string& op_id);
