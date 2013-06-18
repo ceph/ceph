@@ -32,7 +32,7 @@
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
-#define dout_prefix _prefix(_dout, mon, get_version())
+#define dout_prefix _prefix(_dout, mon, get_last_committed())
 static ostream& _prefix(std::ostream *_dout, Monitor *mon, version_t v) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name()
@@ -93,7 +93,7 @@ void LogMonitor::create_initial()
 void LogMonitor::update_from_paxos(bool *need_bootstrap)
 {
   dout(10) << __func__ << dendl;
-  version_t version = get_version();
+  version_t version = get_last_committed();
   dout(10) << __func__ << " version " << version
            << " summary v " << summary.version << dendl;
   if (version == summary.version)
@@ -181,12 +181,12 @@ void LogMonitor::create_pending()
 {
   pending_log.clear();
   pending_summary = summary;
-  dout(10) << "create_pending v " << (get_version() + 1) << dendl;
+  dout(10) << "create_pending v " << (get_last_committed() + 1) << dendl;
 }
 
 void LogMonitor::encode_pending(MonitorDBStore::Transaction *t)
 {
-  version_t version = get_version() + 1;
+  version_t version = get_last_committed() + 1;
   bufferlist bl;
   dout(10) << __func__ << " v" << version << dendl;
   __u8 v = 1;
@@ -202,7 +202,7 @@ void LogMonitor::encode_pending(MonitorDBStore::Transaction *t)
 void LogMonitor::encode_full(MonitorDBStore::Transaction *t)
 {
   dout(10) << __func__ << " log v " << summary.version << dendl;
-  assert(get_version() == summary.version);
+  assert(get_last_committed() == summary.version);
 
   bufferlist summary_bl;
   ::encode(summary, summary_bl);
@@ -214,7 +214,7 @@ void LogMonitor::encode_full(MonitorDBStore::Transaction *t)
 void LogMonitor::update_trim()
 {
   unsigned max = g_conf->mon_max_log_epochs;
-  version_t version = get_version();
+  version_t version = get_last_committed();
   if (mon->is_leader() && version > max)
     set_trim_to(version - max);
 }
@@ -337,7 +337,7 @@ bool LogMonitor::preprocess_command(MMonCommand *m)
   if (r != -1) {
     string rs;
     getline(ss, rs);
-    mon->reply_command(m, r, rs, rdata, get_version());
+    mon->reply_command(m, r, rs, rdata, get_last_committed());
     return true;
   } else
     return false;
@@ -354,7 +354,7 @@ bool LogMonitor::prepare_command(MMonCommand *m)
   ss << "unrecognized command";
 
   getline(ss, rs);
-  mon->reply_command(m, err, rs, get_version());
+  mon->reply_command(m, err, rs, get_last_committed());
   return false;
 }
 

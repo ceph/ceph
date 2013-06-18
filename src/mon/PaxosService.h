@@ -851,14 +851,6 @@ public:
   version_t get_last_committed() {
     return cached_last_committed;
   }
-  /**
-   * Get our current version
-   *
-   * @returns Our current version
-   */
-  version_t get_version() {
-    return get_last_committed();
-  }
 
   /**
    * @}
