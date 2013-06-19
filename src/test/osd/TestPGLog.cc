@@ -53,7 +53,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
   }
 
   /*        +----------------+
-            |  log           | 
+            |  log           |
             +--------+-------+
             |        |object |
             |version | hash  |
@@ -131,12 +131,12 @@ TEST_F(PGLogTest, rewind_divergent_log) {
   }
 
   /*        +----------------+
-            |  log           | 
+            |  log           |
             +--------+-------+
             |        |object |
             |version | hash  |
             |        |       |
-       tail > (1,1)  | NULL  | 
+       tail > (1,1)  | NULL  |
             |        |       |
             | (1,4)  | NULL  < newhead
             |        |       |
@@ -760,7 +760,7 @@ TEST_F(PGLogTest, merge_log) {
             |        |  x5   |  (1,1)  < tail
             |        |       |         |
             |        |       |         |
-       tail > (1,4)  |  x7   |         |     
+       tail > (1,4)  |  x7   |         |
             |        |       |         |
             |        |       |         |
        head > (1,5)  |  x9   |  (1,5)  < head
@@ -1088,10 +1088,10 @@ TEST_F(PGLogTest, merge_log) {
             |        |object |         |
             |version | hash  | version |
             |        |       |         |
-       tail > (1,1)  |  x5   |         |       
+       tail > (1,1)  |  x5   |         |
             |        |       |         |
             |        |       |         |
-       head > (1,2)  |  x3   |         |            
+       head > (1,2)  |  x3   |         |
             |        |       |         |
             |        |  x9   |  (2,3)  < tail
             |        |       |         |
@@ -1142,6 +1142,483 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_THROW(merge_log(t, oinfo, olog, fromosd, info, remove_snap,
                            dirty_info, dirty_big_info), FailedAssertion);
   }
+}
+
+TEST_F(PGLogTest, proc_replica_log) {
+  // empty log : no side effect
+  {
+    clear();
+
+    ObjectStore::Transaction t;
+    pg_log_t olog;
+    pg_info_t oinfo;
+    pg_missing_t omissing;
+    int from = -1;
+
+    eversion_t last_update(1, 1);
+    oinfo.last_update = last_update;
+    eversion_t last_complete(2, 1);
+    oinfo.last_complete = last_complete;
+
+    EXPECT_TRUE(t.empty());
+    EXPECT_FALSE(omissing.have_missing());
+    EXPECT_EQ(last_update, oinfo.last_update);
+    EXPECT_EQ(last_complete, oinfo.last_complete);
+
+    proc_replica_log(t, oinfo, olog, omissing, from);
+
+    EXPECT_TRUE(t.empty());
+    EXPECT_FALSE(omissing.have_missing());
+    EXPECT_EQ(last_update, oinfo.last_update);
+    EXPECT_EQ(last_update, oinfo.last_complete);
+  }
+
+  /*        +--------------------------+
+            |  log              olog   |
+            +--------+-------+---------+
+            |        |object |         |
+            |version | hash  | version |
+            |        |       |         |
+            |        |  x3   |  (1,1)  < tail
+            |        |       |         |
+            |        |       |         |
+       tail > (1,2)  |  x5   |         |
+            |        |       |         |
+            |        |       |         |
+       head > (1,3)  |  x9   |         |
+            | DELETE |       |         |
+            |        |       |         |
+            |        |  x9   |  (2,3)  < head
+            |        |       |  DELETE |
+            |        |       |         |
+            +--------+-------+---------+
+	    
+      The log entry (1,3) deletes the object x9 and the olog entry
+      (2,3) also deletes it : do nothing. The olog tail is ignored
+      because it is before the log tail.
+      
+  */
+  {
+    clear();
+
+    ObjectStore::Transaction t;
+    pg_log_t olog;
+    pg_info_t oinfo;
+    pg_missing_t omissing;
+    int from = -1;
+
+    {
+      pg_log_entry_t e;
+
+      e.version = eversion_t(1, 2);
+      e.soid.hash = 0x5;
+      log.tail = e.version;
+      log.log.push_back(e);
+      e.version = eversion_t(1, 3);
+      e.soid.hash = 0x9;
+      e.op = pg_log_entry_t::DELETE;
+      log.log.push_back(e);
+      log.head = e.version;
+      log.index();
+
+      e.version = eversion_t(1, 1);
+      e.soid.hash = 0x3;
+      olog.tail = e.version;
+      olog.log.push_back(e);
+      e.version = eversion_t(2, 3);
+      e.soid.hash = 0x9;
+      e.op = pg_log_entry_t::DELETE;
+      olog.log.push_back(e);
+      olog.head = e.version;
+
+      oinfo.last_update = olog.head;
+      oinfo.last_complete = olog.head;
+    }
+
+    EXPECT_TRUE(t.empty());
+    EXPECT_FALSE(omissing.have_missing());
+    EXPECT_EQ(olog.head, oinfo.last_update);
+    EXPECT_EQ(olog.head, oinfo.last_complete);
+
+    proc_replica_log(t, oinfo, olog, omissing, from);
+
+    EXPECT_TRUE(t.empty());
+    EXPECT_FALSE(omissing.have_missing());
+    EXPECT_EQ(olog.head, oinfo.last_update);
+    EXPECT_EQ(olog.head, oinfo.last_complete);
+  }
+
+  /*        +--------------------------+
+            |  log              olog   |
+            +--------+-------+---------+
+            |        |object |         |
+            |version | hash  | version |
+            |        |       |         |
+       tail > (1,1)  |  x5   |  (1,1)  < tail
+            |        |       |         |
+            |        |       |         |
+            | (1,2)  |  x3   |  (1,2)  |
+            |        |       |         |
+            |        |       |         |
+            | (1,3)  |  x9   |         |
+            | MODIFY |       |         |
+            |        |       |         |
+            |        |  x7   |  (1,4)  |
+            |        |       |         |
+            | (1,6)  |  x8   |  (1,5)  |
+            |        |       |         |
+            |        |  x9   |  (2,3)  < head < last_backfill
+            |        |       |  DELETE |
+            |        |       |         |
+       head > (1,7)  |  xa   |  (2,5)  |
+            |        |       |         |
+            +--------+-------+---------+
+
+      The log entry (1,3) modifies the object x9 but the olog entry
+      (2,3) deletes it : log is authoritative and the object is added
+      to missing. x7 is divergent and ignored. x8 has a more recent
+      version in the log and the olog entry is ignored. xa is past
+      last_backfill and ignored.
+
+  */
+  {
+    clear();
+
+    ObjectStore::Transaction t;
+    pg_log_t olog;
+    pg_info_t oinfo;
+    pg_missing_t omissing;
+    int from = -1;
+
+    eversion_t last_update(1, 2);
+    hobject_t divergent_object;
+
+    {
+      pg_log_entry_t e;
+
+      e.version = eversion_t(1, 1);
+      e.soid.hash = 0x5;
+      log.tail = e.version;
+      log.log.push_back(e);
+      e.version = last_update;
+      e.soid.hash = 0x3;
+      log.log.push_back(e);
+      e.version = eversion_t(1,3);
+      e.soid.hash = 0x9;
+      divergent_object = e.soid;
+      e.op = pg_log_entry_t::MODIFY;
+      log.log.push_back(e);
+      e.version = eversion_t(1, 6);
+      e.soid.hash = 0x8;
+      log.log.push_back(e);
+      e.version = eversion_t(1, 7);
+      e.soid.hash = 0xa;
+      log.log.push_back(e);
+      log.head = e.version;
+      log.index();
+
+      e.version = eversion_t(1, 1);
+      e.soid.hash = 0x5;
+      olog.tail = e.version;
+      olog.log.push_back(e);
+      e.version = last_update;
+      e.soid.hash = 0x3;
+      olog.log.push_back(e);
+      e.version = eversion_t(1, 4); // divergent entry : will be ignored
+      e.soid.hash = 0x7;
+      olog.log.push_back(e);
+      e.version = eversion_t(1, 5); // log has newer entry : it will be ignored
+      e.soid.hash = 0x8;
+      olog.log.push_back(e);
+      e.version = eversion_t(2, 3);
+      e.soid.hash = 0x9;
+      oinfo.last_backfill = e.soid;
+      e.op = pg_log_entry_t::DELETE;
+      olog.log.push_back(e);
+      e.version = eversion_t(2, 4);
+      e.soid.hash = 0xa; // > last_backfill are ignored
+      olog.log.push_back(e);
+      olog.head = e.version;
+
+      oinfo.last_update = olog.head;
+      oinfo.last_complete = olog.head;
+    }
+
+    EXPECT_TRUE(t.empty());
+    EXPECT_FALSE(omissing.have_missing());
+    EXPECT_EQ(olog.head, oinfo.last_update);
+    EXPECT_EQ(olog.head, oinfo.last_complete);
+
+    proc_replica_log(t, oinfo, olog, omissing, from);
+
+    EXPECT_TRUE(t.empty());
+    EXPECT_TRUE(omissing.have_missing());
+    EXPECT_TRUE(omissing.is_missing(divergent_object));
+    EXPECT_EQ(eversion_t(1, 3), omissing.missing[divergent_object].need);
+    EXPECT_EQ(last_update, oinfo.last_update);
+    EXPECT_EQ(last_update, oinfo.last_complete);
+  }
+
+  /*        +--------------------------+
+            |  log              olog   |
+            +--------+-------+---------+
+            |        |object |         |
+            |version | hash  | version |
+            |        |       |         |
+       tail > (1,1)  |  x5   |  (1,1)  < tail
+            |        |       |         |
+            |        |       |         |
+            | (1,2)  |  x3   |  (1,2)  |
+            |        |       |         |
+            |        |       |         |
+       head > (1,3)  |  x9   |         |
+            | DELETE |       |         |
+            |        |       |         |
+            |        |  x9   |  (2,3)  < head
+            |        |       |  DELETE |
+            |        |       |         |
+            +--------+-------+---------+
+
+      The log entry (1,3) deletes the object x9 and the olog entry
+      (2,3) also deletes it : do nothing.
+
+  */
+  {
+    clear();
+
+    ObjectStore::Transaction t;
+    pg_log_t olog;
+    pg_info_t oinfo;
+    pg_missing_t omissing;
+    int from = -1;
+
+    eversion_t last_update(1, 2);
+
+    {
+      pg_log_entry_t e;
+
+      e.version = eversion_t(1, 1);
+      e.soid.hash = 0x5;
+      log.tail = e.version;
+      log.log.push_back(e);
+      e.version = last_update;
+      e.soid.hash = 0x3;
+      log.log.push_back(e);
+      e.version = eversion_t(1,3);
+      e.soid.hash = 0x9;
+      e.op = pg_log_entry_t::DELETE;
+      log.log.push_back(e);
+      log.head = e.version;
+      log.index();
+
+      e.version = eversion_t(1, 1);
+      e.soid.hash = 0x5;
+      olog.tail = e.version;
+      olog.log.push_back(e);
+      e.version = last_update;
+      e.soid.hash = 0x3;
+      olog.log.push_back(e);
+      e.version = eversion_t(2, 3);
+      e.soid.hash = 0x9;
+      e.op = pg_log_entry_t::DELETE;
+      olog.log.push_back(e);
+      olog.head = e.version;
+
+      oinfo.last_update = olog.head;
+      oinfo.last_complete = olog.head;
+    }
+
+    EXPECT_TRUE(t.empty());
+    EXPECT_FALSE(omissing.have_missing());
+    EXPECT_EQ(olog.head, oinfo.last_update);
+    EXPECT_EQ(olog.head, oinfo.last_complete);
+
+    proc_replica_log(t, oinfo, olog, omissing, from);
+
+    EXPECT_TRUE(t.empty());
+    EXPECT_FALSE(omissing.have_missing());
+    EXPECT_EQ(last_update, oinfo.last_update);
+    EXPECT_EQ(last_update, oinfo.last_complete);
+  }
+
+  /*        +--------------------------+
+            |  log              olog   |
+            +--------+-------+---------+
+            |        |object |         |
+            |version | hash  | version |
+            |        |       |         |
+       tail > (1,1)  |  x5   |  (1,1)  < tail
+            |        |       |         |
+            |        |       |         |
+            | (1,2)  |  x3   |  (1,2)  |
+            |        |       |         |
+            |        |       |         |
+       head > (1,3)  |  x9   |         |
+            | DELETE |       |         |
+            |        |       |         |
+            |        |  x9   |  (2,3)  < head
+            |        |       |  MODIFY |
+            |        |       |         |
+            +--------+-------+---------+
+
+      The log entry (1,3) deletes the object x9 but the olog entry
+      (2,3) modifies it : remove it from omissing.
+
+  */
+  {
+    clear();
+
+    ObjectStore::Transaction t;
+    pg_log_t olog;
+    pg_info_t oinfo;
+    pg_missing_t omissing;
+    int from = -1;
+
+    eversion_t last_update(1, 2);
+    hobject_t divergent_object;
+
+    {
+      pg_log_entry_t e;
+
+      e.version = eversion_t(1, 1);
+      e.soid.hash = 0x5;
+      log.tail = e.version;
+      log.log.push_back(e);
+      e.version = last_update;
+      e.soid.hash = 0x3;
+      log.log.push_back(e);
+      e.version = eversion_t(1, 3);
+      e.soid.hash = 0x9;
+      e.op = pg_log_entry_t::DELETE;
+      log.log.push_back(e);
+      log.head = e.version;
+      log.index();
+
+      e.version = eversion_t(1, 1);
+      e.soid.hash = 0x5;
+      olog.tail = e.version;
+      olog.log.push_back(e);
+      e.version = last_update;
+      e.soid.hash = 0x3;
+      olog.log.push_back(e);
+      e.version = eversion_t(2, 3);
+      e.soid.hash = 0x9;
+      divergent_object = e.soid;
+      omissing.add(divergent_object, e.version, eversion_t());
+      e.op = pg_log_entry_t::MODIFY;
+      olog.log.push_back(e);
+      olog.head = e.version;
+
+      oinfo.last_update = olog.head;
+      oinfo.last_complete = olog.head;
+    }
+
+    EXPECT_TRUE(t.empty());
+    EXPECT_TRUE(omissing.have_missing());
+    EXPECT_TRUE(omissing.is_missing(divergent_object));
+    EXPECT_EQ(eversion_t(2, 3), omissing.missing[divergent_object].need);
+    EXPECT_EQ(olog.head, oinfo.last_update);
+    EXPECT_EQ(olog.head, oinfo.last_complete);
+
+    proc_replica_log(t, oinfo, olog, omissing, from);
+
+    EXPECT_TRUE(t.empty());
+    EXPECT_FALSE(omissing.have_missing());
+    EXPECT_EQ(last_update, oinfo.last_update);
+    EXPECT_EQ(last_update, oinfo.last_complete);
+  }
+
+  /*        +--------------------------+
+            |  log              olog   |
+            +--------+-------+---------+
+            |        |object |         |
+            |version | hash  | version |
+            |        |       |         |
+       tail > (1,1)  |  x5   |  (1,1)  < tail
+            |        |       |         |
+            |        |       |         |
+            | (1,2)  |  x3   |  (1,2)  |
+            |        |       |         |
+            |        |       |         |
+       head > (1,3)  |  x9   |         |
+            | MODIFY |       |         |
+            |        |       |         |
+            |        |  x9   |  (2,3)  < head
+            |        |       |  MODIFY |
+            |        |       |         |
+            +--------+-------+---------+
+
+      The log entry (1,3) deletes the object x9 but the olog entry
+      (2,3) modifies it : remove it from omissing.
+
+  */
+  {
+    clear();
+
+    ObjectStore::Transaction t;
+    pg_log_t olog;
+    pg_info_t oinfo;
+    pg_missing_t omissing;
+    int from = -1;
+
+    eversion_t last_update(1, 2);
+    hobject_t divergent_object;
+    eversion_t new_version(1, 3);
+    eversion_t divergent_version(2, 3);
+
+    {
+      pg_log_entry_t e;
+
+      e.version = eversion_t(1, 1);
+      e.soid.hash = 0x5;
+      log.tail = e.version;
+      log.log.push_back(e);
+      e.version = last_update;
+      e.soid.hash = 0x3;
+      log.log.push_back(e);
+      e.version = new_version;
+      e.soid.hash = 0x9;
+      e.op = pg_log_entry_t::MODIFY;
+      log.log.push_back(e);
+      log.head = e.version;
+      log.index();
+
+      e.version = eversion_t(1, 1);
+      e.soid.hash = 0x5;
+      olog.tail = e.version;
+      olog.log.push_back(e);
+      e.version = last_update;
+      e.soid.hash = 0x3;
+      olog.log.push_back(e);
+      e.version = divergent_version;
+      e.soid.hash = 0x9;
+      divergent_object = e.soid;
+      omissing.add(divergent_object, e.version, eversion_t());
+      e.op = pg_log_entry_t::MODIFY;
+      olog.log.push_back(e);
+      olog.head = e.version;
+
+      oinfo.last_update = olog.head;
+      oinfo.last_complete = olog.head;
+    }
+
+    EXPECT_TRUE(t.empty());
+    EXPECT_TRUE(omissing.have_missing());
+    EXPECT_TRUE(omissing.is_missing(divergent_object));
+    EXPECT_EQ(divergent_version, omissing.missing[divergent_object].need);
+    EXPECT_EQ(olog.head, oinfo.last_update);
+    EXPECT_EQ(olog.head, oinfo.last_complete);
+
+    proc_replica_log(t, oinfo, olog, omissing, from);
+
+    EXPECT_TRUE(t.empty());
+    EXPECT_TRUE(omissing.have_missing());
+    EXPECT_TRUE(omissing.is_missing(divergent_object));
+    EXPECT_EQ(new_version, omissing.missing[divergent_object].need);
+    EXPECT_EQ(last_update, oinfo.last_update);
+    EXPECT_EQ(last_update, oinfo.last_complete);
+  }
+
 }
 
 int main(int argc, char **argv) {
