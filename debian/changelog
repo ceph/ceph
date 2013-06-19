@@ -1,3 +1,9 @@
+ceph (0.61.4-1) precise; urgency=low
+
+  * New upstream release 
+
+ -- Gary Lowell <gary.lowell@inktank.com>  Wed, 19 Jun 2013 13:50:16 -0700
+
 ceph (0.61.3-1) precise; urgency=low
 
   * New upstream release 
