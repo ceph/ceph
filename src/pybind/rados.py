@@ -533,10 +533,10 @@ Rados object in state %s." % (self.state))
 
         if target:
             ret = run_in_thread(self.librados.rados_mon_command_target,
-                                (self.cluster, target, cmdarr, len(cmd),
-                                 c_char_p(inbuf), len(inbuf),
-                                 outbufp, byref(outbuflen), outsp, byref(outslen)),
-                                timeout)
+                                (self.cluster, c_char_p(target), cmdarr,
+                                 len(cmd), c_char_p(inbuf), len(inbuf),
+                                 outbufp, byref(outbuflen), outsp,
+                                 byref(outslen)), timeout)
         else:
             ret = run_in_thread(self.librados.rados_mon_command,
                                 (self.cluster, cmdarr, len(cmd),
@@ -544,17 +544,15 @@ Rados object in state %s." % (self.state))
                                  outbufp, byref(outbuflen), outsp, byref(outslen)),
                                 timeout)
 
-        if ret == 0:
-            # copy returned memory (ctypes makes a copy, not a reference)
-            my_outbuf = outbufp.contents[:(outbuflen.value)]
-            my_outs = outsp.contents[:(outslen.value)]
+        # copy returned memory (ctypes makes a copy, not a reference)
+        my_outbuf = outbufp.contents[:(outbuflen.value)]
+        my_outs = outsp.contents[:(outslen.value)]
 
-            # free callee's allocations
+        # free callee's allocations
+        if outbuflen.value:
             run_in_thread(self.librados.rados_buffer_free, (outbufp.contents,))
+        if outslen.value:
             run_in_thread(self.librados.rados_buffer_free, (outsp.contents,))
-        else:
-            my_outbuf = ''
-            my_outs = ''
 
         return (ret, my_outbuf, my_outs)
 
@@ -576,17 +574,15 @@ Rados object in state %s." % (self.state))
                             outbufp, byref(outbuflen), outsp, byref(outslen)),
                             timeout)
 
-        if ret == 0:
-            # copy returned memory
-            my_outbuf = outbufp.contents[:(outbuflen.value)]
-            my_outs = outsp.contents[:(outslen.value)]
+        # copy returned memory (ctypes makes a copy, not a reference)
+        my_outbuf = outbufp.contents[:(outbuflen.value)]
+        my_outs = outsp.contents[:(outslen.value)]
 
-            # free callee's allocations
+        # free callee's allocations
+        if outbuflen.value:
             run_in_thread(self.librados.rados_buffer_free, (outbufp.contents,))
+        if outslen.value:
             run_in_thread(self.librados.rados_buffer_free, (outsp.contents,))
-        else:
-            my_outbuf = ''
-            my_outs = ''
 
         return (ret, my_outbuf, my_outs)
 
@@ -608,17 +604,15 @@ Rados object in state %s." % (self.state))
                             outbufp, byref(outbuflen), outsp, byref(outslen)),
                             timeout)
 
-        if ret == 0:
-            # copy returned memory
-            my_outbuf = outbufp.contents[:(outbuflen.value)]
-            my_outs = outsp.contents[:(outslen.value)]
+        # copy returned memory (ctypes makes a copy, not a reference)
+        my_outbuf = outbufp.contents[:(outbuflen.value)]
+        my_outs = outsp.contents[:(outslen.value)]
 
-            # free callee's allocations
+        # free callee's allocations
+        if outbuflen.value:
             run_in_thread(self.librados.rados_buffer_free, (outbufp.contents,))
+        if outslen.value:
             run_in_thread(self.librados.rados_buffer_free, (outsp.contents,))
-        else:
-            my_outbuf = ''
-            my_outs = ''
 
         return (ret, my_outbuf, my_outs)
 
