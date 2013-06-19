@@ -5827,7 +5827,7 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
     }
     // short read?
     if (r >= 0 && r < wanted) {
-      if (pos + (unsigned)left <= in->size) {
+      if (pos + left <= in->size) {
 	// hole, zero and return.
 	bufferptr z(left);
 	z.zero();
