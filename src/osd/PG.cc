@@ -152,7 +152,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   #ifdef PG_DEBUG_REFS
   _ref_id_lock("PG::_ref_id_lock"), _ref_id(0),
   #endif
-  deleting(false), dirty_info(false), dirty_big_info(false), dirty_log(false),
+  deleting(false), dirty_info(false), dirty_big_info(false),
   info(p),
   info_struct_v(0),
   coll(p), log_oid(loid), biginfo_oid(ioid),
@@ -196,7 +196,6 @@ void PG::lock(bool no_lockdep)
   // if we have unrecorded dirty state with the lock dropped, there is a bug
   assert(!dirty_info);
   assert(!dirty_big_info);
-  assert(!dirty_log);
 
   dout(30) << "lock" << dendl;
 }
@@ -312,7 +311,7 @@ void PG::remove_snap_mapped_object(
 void PG::merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from)
 {
   list<hobject_t> to_remove;
-  pg_log.merge_log(t, oinfo, olog, from, info, to_remove, dirty_log, dirty_info, dirty_big_info);
+  pg_log.merge_log(t, oinfo, olog, from, info, to_remove, dirty_info, dirty_big_info);
   for(list<hobject_t>::iterator i = to_remove.begin();
       i != to_remove.end();
       ++i)
@@ -322,7 +321,7 @@ void PG::merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog
 void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
 {
   list<hobject_t> to_remove;
-  pg_log.rewind_divergent_log(t, newhead, info, to_remove, dirty_log, dirty_info, dirty_big_info);
+  pg_log.rewind_divergent_log(t, newhead, info, to_remove, dirty_info, dirty_big_info);
   for(list<hobject_t>::iterator i = to_remove.begin();
       i != to_remove.end();
       ++i)
@@ -1753,10 +1752,8 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
 
   child->dirty_info = true;
   child->dirty_big_info = true;
-  child->dirty_log = true;
   dirty_info = true;
   dirty_big_info = true;
-  dirty_log = true;
 }
 
 void PG::clear_recovery_state() 
@@ -1901,8 +1898,9 @@ void PG::publish_stats_to_osd()
       info.stats.last_active = now;
     info.stats.last_unstale = now;
 
-    info.stats.log_size = pg_log.get_ondisklog().length();
-    info.stats.ondisk_log_size = pg_log.get_ondisklog().length();
+    info.stats.log_size = pg_log.get_head().version - pg_log.get_tail().version;
+    info.stats.ondisk_log_size =
+      pg_log.get_head().version - pg_log.get_tail().version;
     info.stats.log_start = pg_log.get_tail();
     info.stats.ondisk_log_start = pg_log.get_tail();
 
@@ -2010,7 +2008,6 @@ void PG::init(int role, vector<int>& newup, vector<int>& newacting,
 
   dirty_info = true;
   dirty_big_info = true;
-  dirty_log = true;
   write_if_dirty(*t);
 }
 
@@ -2244,18 +2241,11 @@ epoch_t PG::peek_map_epoch(ObjectStore *store, coll_t coll, hobject_t &infos_oid
   return cur_epoch;
 }
 
-void PG::write_log(ObjectStore::Transaction& t)
-{
-  pg_log.write_log(t, log_oid);
-  dirty_log = false;
-}
-
 void PG::write_if_dirty(ObjectStore::Transaction& t)
 {
   if (dirty_big_info || dirty_info)
     write_info(t);
-  if (dirty_log)
-    write_log(t);
+  pg_log.write_log(t, log_oid);
 }
 
 void PG::trim_peers()
@@ -2305,7 +2295,7 @@ void PG::append_log(
   dout(10) << "append_log  adding " << keys.size() << " keys" << dendl;
   t.omap_setkeys(coll_t::META_COLL, log_oid, keys);
 
-  pg_log.trim(t, trim_to, info, log_oid);
+  pg_log.trim(trim_to, info);
 
   // update the local pg, pg log
   dirty_info = true;
@@ -2314,69 +2304,8 @@ void PG::append_log(
 
 bool PG::check_log_for_corruption(ObjectStore *store)
 {
-  PGLog::OndiskLog bounds;
-  bufferlist blb;
-  store->collection_getattr(coll, "ondisklog", blb);
-  bufferlist::iterator p = blb.begin();
-  ::decode(bounds, p);
-
-  dout(10) << "check_log_for_corruption: tail " << bounds.tail << " head " << bounds.head << dendl;
-
-  stringstream ss;
-  ss << "CORRUPT pg " << info.pgid << " log: ";
-
-  bool ok = true;
-  uint64_t pos = 0;
-  if (bounds.head > 0) {
-    // read
-    struct stat st;
-    store->stat(coll_t::META_COLL, log_oid, &st);
-    bufferlist bl;
-    store->read(coll_t::META_COLL, log_oid, bounds.tail, bounds.length(), bl);
-    if (st.st_size != (int)bounds.head) {
-      ss << "mismatched bounds " << bounds.tail << ".." << bounds.head << " and file size " << st.st_size;
-      ok = false;
-    } else if (bl.length() < bounds.length()) {
-      dout(0) << " got " << bl.length() << " bytes, expected " 
-	      << bounds.tail << ".." << bounds.head << "="
-	      << bounds.length()
-	      << dendl;
-      ss << "short log, " << bl.length() << " bytes, expected " << bounds.length();
-      ok = false;
-    } else {
-      pg_log_entry_t e;
-      bufferlist::iterator p = bl.begin();
-      while (!p.end()) {
-	pos = bounds.tail + p.get_off();
-	try {
-	  ::decode(e, p);
-	}
-	catch (const buffer::error &e) {
-	  dout(0) << "corrupt entry at " << pos << dendl;
-	  ss << "corrupt entry at offset " << pos;
-	  ok = false;
-	  break;
-	}
-	catch(const std::bad_alloc &a) {
-	  dout(0) << "corrupt entry at " << pos << dendl;
-	  ss << "corrupt entry at offset " << pos;
-	  ok = false;
-	  break;
-	}
-	dout(30) << " " << pos << " " << e << dendl;
-      }
-    }
-  }
-  if (!ok) {
-    stringstream f;
-    f << "/tmp/pglog_bad_" << info.pgid;
-    string filename;
-    getline(f, filename);
-    blb.write_file(filename.c_str(), 0644);
-    ss << ", saved to " << filename;
-    osd->clog.error(ss);
-  }
-  return ok;
+  /// TODO: this method needs to work with the omap log
+  return true;
 }
 
 //! Get the name we're going to save our corrupt page log as
@@ -6258,8 +6187,8 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
     pg->reg_next_scrub();
     pg->dirty_info = true;
     pg->dirty_big_info = true;  // maybe.
-    pg->dirty_log = true;
     pg->pg_log.claim_log(msg->log);
+    pg->pg_log.reset_backfill();
   } else {
     ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
     pg->merge_log(*t, msg->info, msg->log, logevt.from);

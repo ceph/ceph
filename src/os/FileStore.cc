@@ -2602,6 +2602,16 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	r = _omap_rmkeys(cid, oid, keys, spos);
       }
       break;
+    case Transaction::OP_OMAP_RMKEYRANGE:
+      {
+	coll_t cid(i.get_cid());
+	hobject_t oid = i.get_oid();
+	string first, last;
+	first = i.get_key();
+	last = i.get_key();
+	r = _omap_rmkeyrange(cid, oid, first, last, spos);
+      }
+      break;
     case Transaction::OP_OMAP_SETHEADER:
       {
 	coll_t cid(i.get_cid());
@@ -4656,6 +4666,23 @@ int FileStore::_omap_rmkeys(coll_t cid, const hobject_t &hoid,
   if (r < 0 && r != -ENOENT)
     return r;
   return 0;
+}
+
+int FileStore::_omap_rmkeyrange(coll_t cid, const hobject_t &hoid,
+				const string& first, const string& last,
+				const SequencerPosition &spos) {
+  dout(15) << __func__ << " " << cid << "/" << hoid << " [" << first << "," << last << "]" << dendl;
+  set<string> keys;
+  {
+    ObjectMap::ObjectMapIterator iter = get_omap_iterator(cid, hoid);
+    if (!iter)
+      return -ENOENT;
+    for (iter->lower_bound(first); iter->valid() && iter->key() < last;
+	 iter->next()) {
+      keys.insert(iter->key());
+    }
+  }
+  return _omap_rmkeys(cid, hoid, keys, spos);
 }
 
 int FileStore::_omap_setheader(coll_t cid, const hobject_t &hoid,

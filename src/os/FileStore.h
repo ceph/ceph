@@ -486,6 +486,9 @@ private:
 		    const SequencerPosition &spos);
   int _omap_rmkeys(coll_t cid, const hobject_t &hoid, const set<string> &keys,
 		   const SequencerPosition &spos);
+  int _omap_rmkeyrange(coll_t cid, const hobject_t &hoid,
+		       const string& first, const string& last,
+		       const SequencerPosition &spos);
   int _omap_setheader(coll_t cid, const hobject_t &hoid, const bufferlist &bl,
 		      const SequencerPosition &spos);
   int _split_collection(coll_t cid, uint32_t bits, uint32_t rem, coll_t dest,
