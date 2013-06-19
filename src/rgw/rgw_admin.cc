@@ -94,6 +94,11 @@ void _usage()
   cerr << "  bilog trim                 trim bucket index log (use start-marker, end-marker)\n";
   cerr << "  datalog list               list data log\n";
   cerr << "  datalog trim               trim data log\n";
+  cerr << "  opstate list               list stateful operations entries (use client_id,\n";
+  cerr << "                             op_id, object)\n";
+  cerr << "  opstate set                set state on an entry (use client_id, op_id, object)\n";
+  cerr << "  opstate renewstate         renew state on an entry (use client_id, op_id, object)\n";
+  cerr << "  opstate rmstate            remove entry (use client_id, op_id, object)\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --subuser=<name>          subuser name\n";
@@ -206,6 +211,10 @@ enum {
   OPT_BILOG_TRIM,
   OPT_DATALOG_LIST,
   OPT_DATALOG_TRIM,
+  OPT_OPSTATE_LIST,
+  OPT_OPSTATE_SET,
+  OPT_OPSTATE_RENEW,
+  OPT_OPSTATE_RM,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
@@ -234,7 +243,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "metadata") == 0 ||
       strcmp(cmd, "mdlog") == 0 ||
       strcmp(cmd, "bilog") == 0 ||
-      strcmp(cmd, "datalog") == 0) {
+      strcmp(cmd, "datalog") == 0 ||
+      strcmp(cmd, "opstate") == 0) {
     *need_more = true;
     return 0;
   }
@@ -384,6 +394,15 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_DATALOG_LIST;
     if (strcmp(cmd, "trim") == 0)
       return OPT_DATALOG_TRIM;
+  } else if (strcmp(prev_cmd, "opstate") == 0) {
+    if (strcmp(cmd, "list") == 0)
+      return OPT_OPSTATE_LIST;
+    if (strcmp(cmd, "set") == 0)
+      return OPT_OPSTATE_SET;
+    if (strcmp(cmd, "renew") == 0)
+      return OPT_OPSTATE_RENEW;
+    if (strcmp(cmd, "rm") == 0)
+      return OPT_OPSTATE_RM;
   }
 
   return -EINVAL;
@@ -648,6 +667,9 @@ int main(int argc, char **argv)
   bool system_specified = false;
   int shard_id = -1;
   bool specified_shard_id = false;
+  string client_id;
+  string op_id;
+  string state_str;
 
   std::string val;
   std::ostringstream errs;
@@ -676,6 +698,12 @@ int main(int argc, char **argv)
       pool_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--object", (char*)NULL)) {
       object = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--client-id", (char*)NULL)) {
+      client_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--op-id", (char*)NULL)) {
+      op_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--state", (char*)NULL)) {
+      state_str = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--key-type", (char*)NULL)) {
       key_type_str = val;
       if (key_type_str.compare("swift") == 0) {
@@ -1945,6 +1973,81 @@ next:
     ret = log->trim_entries(start_time, end_time);
     if (ret < 0) {
       cerr << "ERROR: trim_entries(): " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT_OPSTATE_LIST) {
+    RGWOpState oc(store);
+
+    int max = 1000;
+
+    void *handle;
+    oc.init_list_entries(client_id, op_id, object, &handle);
+    list<cls_statelog_entry> entries;
+    bool done;
+    formatter->open_array_section("entries");
+    do {
+      int ret = oc.list_entries(handle, max, entries, &done);
+      if (ret < 0) {
+        cerr << "oc.list_entries returned " << cpp_strerror(-ret) << std::endl;
+        oc.finish_list_entries(handle);
+        return -ret;
+      }
+
+      for (list<cls_statelog_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+        oc.dump_entry(*iter, formatter);
+      }
+
+      formatter->flush(cout);
+    } while (!done);
+    formatter->close_section();
+    formatter->flush(cout);
+    oc.finish_list_entries(handle);
+  }
+
+  if (opt_cmd == OPT_OPSTATE_SET || opt_cmd == OPT_OPSTATE_RENEW) {
+    RGWOpState oc(store);
+
+    RGWOpState::OpState state;
+    if (object.empty() || client_id.empty() || op_id.empty()) {
+      cerr << "ERROR: need to specify client_id, op_id, and object" << std::endl;
+      return EINVAL;
+    }
+    if (state_str.empty()) {
+      cerr << "ERROR: state was not specified" << std::endl;
+      return EINVAL;
+    }
+    int ret = oc.state_from_str(state_str, &state);
+    if (ret < 0) {
+      cerr << "ERROR: invalid state: " << state_str << std::endl;
+      return -ret;
+    }
+
+    if (opt_cmd == OPT_OPSTATE_SET) {
+      ret = oc.set_state(client_id, op_id, object, state);
+      if (ret < 0) {
+        cerr << "ERROR: failed to set state: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+    } else {
+      ret = oc.renew_state(client_id, op_id, object, state);
+      if (ret < 0) {
+        cerr << "ERROR: failed to renew state: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+    }
+  }
+  if (opt_cmd == OPT_OPSTATE_RM) {
+    RGWOpState oc(store);
+
+    if (object.empty() || client_id.empty() || op_id.empty()) {
+      cerr << "ERROR: need to specify client_id, op_id, and object" << std::endl;
+      return EINVAL;
+    }
+    ret = oc.remove_entry(client_id, op_id, object);
+    if (ret < 0) {
+      cerr << "ERROR: failed to set state: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
   }
