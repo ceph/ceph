@@ -1462,14 +1462,16 @@ void Monitor::sync_start(entity_inst_t &other)
   sync_role = SYNC_ROLE_REQUESTER;
   sync_state = SYNC_STATE_START;
 
+  // First init the store (grab the monmap and all that) and only then
+  // clear the store (except for the mon_sync prefix).  This avoids that
+  // we end up losing the monmaps from the store.
+  sync_store_init();
+
   // clear the underlying store, since we are starting a whole
   // sync process from the bare beginning.
   set<string> targets = get_sync_targets_names();
-  targets.insert("mon_sync");
   store->clear(targets);
 
-
-  sync_store_init();
 
   // assume 'other' as the leader. We will update the leader once we receive
   // a reply to the sync start.
