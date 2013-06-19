@@ -5828,7 +5828,9 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
     if (r >= 0 && r < wanted) {
       if (pos < in->size) {
 	// zero up to known EOF
-	int some = MIN(in->size - pos, left);
+	int some = in->size - pos;
+	if (some > left)
+	  some = left;
 	bufferptr z(some);
 	z.zero();
 	bl->push_back(z);
