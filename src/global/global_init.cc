@@ -120,7 +120,8 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
     g_ceph_context->_log->set_flush_on_exit();
 
   if (g_conf->run_dir.length() &&
-      code_env == CODE_ENVIRONMENT_DAEMON) {
+      code_env == CODE_ENVIRONMENT_DAEMON &&
+      !(flags & CINIT_FLAG_NO_DAEMON_ACTIONS)) {
     int r = ::mkdir(g_conf->run_dir.c_str(), 0755);
     if (r < 0 && errno != EEXIST) {
       r = -errno;
@@ -138,7 +139,7 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
   // and opening the log file immediately.
   conf->call_all_observers();
 
-  if (code_env == CODE_ENVIRONMENT_DAEMON)
+  if (code_env == CODE_ENVIRONMENT_DAEMON && !(flags & CINIT_FLAG_NO_DAEMON_ACTIONS))
     output_ceph_version();
 }
 
