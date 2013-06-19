@@ -598,10 +598,12 @@ public:
   int store_entry(const string& client_id, const string& op_id, const string& object,
                   uint32_t state, bufferlist *bl, uint32_t *check_state);
 
+  int remove_entry(const string& client_id, const string& op_id, const string& object);
+
   void init_list_entries(const string& client_id, const string& op_id, const string& object,
                          void **handle);
 
-  int list_entries(void *handle, int max_entries, list<cls_statelog_entry>& entries);
+  int list_entries(void *handle, int max_entries, list<cls_statelog_entry>& entries, bool *done);
 
   void finish_list_entries(void *handle);
 
@@ -626,24 +628,25 @@ public:
  *
  */
 
-class RGWObjZoneCopyState : public RGWStateLog {
+class RGWOpState : public RGWStateLog {
 protected:
   bool dump_entry_internal(const cls_statelog_entry& entry, Formatter *f);
 public:
 
-  enum CopyState {
-    CS_UNKNOWN     = 0,
-    CS_IN_PROGRESS = 1,
-    CS_COMPLETE    = 2,
-    CS_ERROR       = 3,
-    CS_ABORT       = 4,
-    CS_CANCELLED   = 5,
+  enum OpState {
+    OPSTATE_UNKNOWN     = 0,
+    OPSTATE_IN_PROGRESS = 1,
+    OPSTATE_COMPLETE    = 2,
+    OPSTATE_ERROR       = 3,
+    OPSTATE_ABORT       = 4,
+    OPSTATE_CANCELLED   = 5,
   };
 
-  RGWObjZoneCopyState(RGWRados *_store);
+  RGWOpState(RGWRados *_store);
 
-  int set_state(const string& client_id, const string& op_id, const string& object, CopyState state);
-  int renew_state(const string& client_id, const string& op_id, const string& object, CopyState state);
+  int state_from_str(const string& s, OpState *state);
+  int set_state(const string& client_id, const string& op_id, const string& object, OpState state);
+  int renew_state(const string& client_id, const string& op_id, const string& object, OpState state);
 };
 
 class RGWRados
