@@ -321,11 +321,11 @@ int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o)
 int FileStore::lfn_unlink(coll_t cid, const hobject_t& o,
 			  const SequencerPosition &spos)
 {
-  Mutex::Locker l(fdcache_lock);
   Index index;
   int r = get_index(cid, &index);
   if (r < 0)
     return r;
+  Mutex::Locker l(fdcache_lock);
   {
     IndexedPath path;
     int exist;
