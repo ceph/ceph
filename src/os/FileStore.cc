@@ -2912,7 +2912,7 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
 	!m_filestore_flusher ||
 	!queue_flusher(fd, offset, len)) {
       if (should_flush && m_filestore_sync_flush)
-	::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
+	::fdatasync(fd);
       lfn_close(fd);
     }
 #else
@@ -3217,8 +3217,6 @@ bool FileStore::queue_flusher(int fd, uint64_t off, uint64_t len)
   if (flusher_queue_len < m_filestore_flusher_max_fds) {
     flusher_queue.push_back(sync_epoch);
     flusher_queue.push_back(fd);
-    flusher_queue.push_back(off);
-    flusher_queue.push_back(len);
     flusher_queue_len++;
     flusher_cond.Signal();
     dout(10) << "queue_flusher ep " << sync_epoch << " fd " << fd << " " << off << "~" << len
@@ -3254,13 +3252,9 @@ void FileStore::flusher_entry()
 	q.pop_front();
 	int fd = q.front();
 	q.pop_front();
-	uint64_t off = q.front();
-	q.pop_front();
-	uint64_t len = q.front();
-	q.pop_front();
 	if (!stop && ep == sync_epoch) {
 	  dout(10) << "flusher_entry flushing+closing " << fd << " ep " << ep << dendl;
-	  ::sync_file_range(fd, off, len, SYNC_FILE_RANGE_WRITE);
+	  ::fdatasync(fd);
 	} else 
 	  dout(10) << "flusher_entry JUST closing " << fd << " (stop=" << stop << ", ep=" << ep
 		   << ", sync_epoch=" << sync_epoch << ")" << dendl;
