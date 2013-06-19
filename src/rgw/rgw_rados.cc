@@ -5318,6 +5318,52 @@ void RGWStateLog::dump_entry(const cls_statelog_entry& entry, Formatter *f)
   f->close_section();
 }
 
+RGWObjZoneCopyState::RGWObjZoneCopyState(RGWRados *_store) : RGWStateLog(_store, _store->ctx()->_conf->rgw_num_zone_copy_state_shards, string("obj_zone_copy"))
+{
+}
+
+bool RGWObjZoneCopyState::dump_entry_internal(const cls_statelog_entry& entry, Formatter *f)
+{
+  string s;
+  switch ((CopyState)entry.state) {
+    case CS_UNKNOWN:
+      s = "unknown";
+      break;
+    case CS_IN_PROGRESS:
+      s = "in-progress";
+      break;
+    case CS_COMPLETE:
+      s = "complete";
+      break;
+    case CS_ERROR:
+      s = "error";
+      break;
+    case CS_ABORT:
+      s = "abort";
+      break;
+    case CS_CANCELLED:
+      s = "cancelled";
+      break;
+    default:
+      s = "invalid";
+  }
+  f->dump_string("state", s);
+  return true;
+}
+
+int RGWObjZoneCopyState::set_state(const string& client_id, const string& op_id, const string& object, CopyState state)
+{
+  uint32_t s = (uint32_t)state;
+  return store_entry(client_id, op_id, object, s, NULL, NULL);
+}
+
+int RGWObjZoneCopyState::renew_state(const string& client_id, const string& op_id, const string& object, CopyState state)
+{
+  uint32_t s = (uint32_t)state;
+  return store_entry(client_id, op_id, object, s, NULL, &s);
+}
+
+
 uint64_t RGWRados::instance_id()
 {
   return rados->get_instance_id();

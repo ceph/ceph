@@ -586,7 +586,7 @@ class RGWStateLog {
   };
 
 protected:
-  virtual int dump_entry_internal(const cls_statelog_entry& entry, Formatter *f) {
+  virtual bool dump_entry_internal(const cls_statelog_entry& entry, Formatter *f) {
     return false;
   }
 
@@ -606,7 +606,44 @@ public:
   void finish_list_entries(void *handle);
 
   virtual void dump_entry(const cls_statelog_entry& entry, Formatter *f);
+};
 
+/*
+ * state transitions:
+ *
+ * unknown -> in-progress -> complete
+ *                        -> error
+ *
+ * user can try setting the 'abort' state, and it can only succeed if state is
+ * in-progress.
+ *
+ * state renewal cannot switch state (stays in the same state)
+ *
+ * rgw can switch from in-progress to complete
+ * rgw can switch from in-progress to error
+ *
+ * rgw can switch from abort to cancelled
+ *
+ */
+
+class RGWObjZoneCopyState : public RGWStateLog {
+protected:
+  bool dump_entry_internal(const cls_statelog_entry& entry, Formatter *f);
+public:
+
+  enum CopyState {
+    CS_UNKNOWN     = 0,
+    CS_IN_PROGRESS = 1,
+    CS_COMPLETE    = 2,
+    CS_ERROR       = 3,
+    CS_ABORT       = 4,
+    CS_CANCELLED   = 5,
+  };
+
+  RGWObjZoneCopyState(RGWRados *_store);
+
+  int set_state(const string& client_id, const string& op_id, const string& object, CopyState state);
+  int renew_state(const string& client_id, const string& op_id, const string& object, CopyState state);
 };
 
 class RGWRados
