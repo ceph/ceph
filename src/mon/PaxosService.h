@@ -197,7 +197,8 @@ public:
       first_committed_name("first_committed"),
       last_accepted_name("last_accepted"),
       mkfs_name("mkfs"),
-      full_version_name("full"), full_latest_name("latest")
+      full_version_name("full"), full_latest_name("latest"),
+      cached_first_committed(0), cached_last_committed(0)
   {
   }
 
@@ -313,6 +314,8 @@ public:
    */
   bool dispatch(PaxosServiceMessage *m);
 
+  void refresh(bool *need_bootstrap);
+
   /**
    * @defgroup PaxosService_h_override_funcs Functions that should be
    *					     overridden.
@@ -335,7 +338,7 @@ public:
    *
    * @returns 'true' on success; 'false' otherwise.
    */
-  virtual void update_from_paxos() = 0;
+  virtual void update_from_paxos(bool *need_bootstrap) = 0;
 
   /**
    * Init on startup
@@ -472,6 +475,22 @@ public:
    */
 
   /**
+   * @defgroup PaxosService_h_version_cache Variables holding cached values
+   *                                        for the most used versions (first
+   *                                        and last committed); we only have
+   *                                        to read them when the store is
+   *                                        updated, so in-between updates we
+   *                                        may very well use cached versions
+   *                                        and avoid the overhead.
+   * @{
+   */
+  version_t cached_first_committed;
+  version_t cached_last_committed;
+  /**
+   * @}
+   */
+
+  /**
    * Callback list to be used whenever we are running a proposal through
    * Paxos. These callbacks will be awaken whenever the said proposal
    * finishes.
@@ -497,35 +516,27 @@ public:
    * @returns true if in state ACTIVE; false otherwise.
    */
   bool is_active() {
-    return (!is_proposing() && !paxos->is_recovering()
-        && !paxos->is_locked());
+    return
+      !is_proposing() &&
+      (paxos->is_active() || paxos->is_updating());
   }
 
   /**
    * Check if we are readable.
    *
-   * We consider that a given version @p ver is readable if:
+   * This mirrors on the paxos check, except that we also verify that
    *
-   *  - it exists (i.e., is lower than the last committed version);
-   *  - we have at least one committed version (i.e., last committed version
-   *    is greater than zero);
-   *  - our monitor is a member of the cluster (either a peon or the leader);
-   *  - we are not proposing a new version;
-   *  - the Paxos is not recovering;
-   *  - we either belong to a quorum and have a valid lease, or we belong to
-   *    a quorum of one.
+   *  - the client hasn't seen the future relative to this PaxosService
+   *  - this service isn't proposing.
    *
    * @param ver The version we want to check if is readable
    * @returns true if it is readable; false otherwise
    */
   bool is_readable(version_t ver = 0) {
-    if ((ver > get_last_committed())
-	|| ((!mon->is_peon() && !mon->is_leader()))
-	|| (is_proposing() || paxos->is_recovering() || paxos->is_locked())
-	|| (get_last_committed() <= 0)
-	|| ((mon->get_quorum().size() != 1) && !paxos->is_lease_valid())) {
+    if (ver > get_last_committed() ||
+	is_proposing() ||
+	!paxos->is_readable(0))
       return false;
-    }
     return true;
   }
 
@@ -535,19 +546,16 @@ public:
    * We consider to be writeable iff:
    *
    *  - we are not proposing a new version;
-   *  - our monitor is the leader;
-   *  - we have a valid lease;
-   *  - Paxos is not boostrapping.
-   *  - Paxos is not recovering.
    *  - we are ready to be written to -- i.e., we have a pending value.
+   *  - paxos is writeable
    *
    * @returns true if writeable; false otherwise
    */
   bool is_writeable() {
-    return (is_active()
-        && mon->is_leader()
-        && paxos->is_lease_valid()
-        && is_write_ready());
+    return
+      !is_proposing() &&
+      is_write_ready() &&
+      paxos->is_writeable();
   }
 
   /**
@@ -598,8 +606,8 @@ public:
      * Paxos; otherwise, we may assert on Paxos::wait_for_readable() if it
      * happens to be readable at that specific point in time.
      */
-    if (is_proposing() || (ver > get_last_committed())
-	|| (get_last_committed() <= 0))
+    if (is_proposing() ||
+	ver > get_last_committed())
       wait_for_finished_proposal(c);
     else
       paxos->wait_for_readable(c);
@@ -611,12 +619,12 @@ public:
    * @param c The callback to be awaken once we become writeable.
    */
   void wait_for_writeable(Context *c) {
-    if (!is_proposing()) {
+    if (is_proposing())
+      wait_for_finished_proposal(c);
+    else if (!is_write_ready())
+      wait_for_active(c);
+    else
       paxos->wait_for_writeable(c);
-      return;
-    }
-
-    wait_for_finished_proposal(c);
   }
 
   /**
@@ -872,13 +880,19 @@ public:
    *					the back store for reading purposes
    * @{
    */
+
+  /**
+   * @defgroup PaxosService_h_version_cache Obtain cached versions for this
+   *                                        service.
+   * @{
+   */
   /**
    * Get the first committed version
    *
    * @returns Our first committed version (that is available)
    */
   version_t get_first_committed() {
-    return mon->store->get(get_service_name(), first_committed_name);
+    return cached_first_committed;
   }
   /**
    * Get the last committed version
@@ -886,7 +900,7 @@ public:
    * @returns Our last committed version
    */
   version_t get_last_committed() {
-    return mon->store->get(get_service_name(), last_committed_name);
+    return cached_last_committed;
   }
   /**
    * Get our current version
@@ -896,6 +910,11 @@ public:
   version_t get_version() {
     return get_last_committed();
   }
+
+  /**
+   * @}
+   */
+
   /**
    * Get the contents of a given version @p ver
    *

@@ -84,7 +84,7 @@ void MDSMonitor::create_initial()
 }
 
 
-void MDSMonitor::update_from_paxos()
+void MDSMonitor::update_from_paxos(bool *need_bootstrap)
 {
   version_t version = get_version();
   if (version == mdsmap.epoch)
@@ -1040,7 +1040,6 @@ void MDSMonitor::tick()
   // ...if i am an active leader
   if (!is_active()) return;
 
-  update_from_paxos();
   dout(10) << mdsmap << dendl;
   
   bool do_propose = false;
