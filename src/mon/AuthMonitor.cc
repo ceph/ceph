@@ -69,7 +69,6 @@ void AuthMonitor::tick()
 {
   if (!is_active()) return;
 
-  update_from_paxos();
   dout(10) << *this << dendl;
 
   if (!mon->is_leader()) return; 
@@ -112,7 +111,7 @@ void AuthMonitor::create_initial()
   pending_auth.push_back(inc);
 }
 
-void AuthMonitor::update_from_paxos()
+void AuthMonitor::update_from_paxos(bool *need_bootstrap)
 {
   dout(10) << __func__ << dendl;
   version_t version = get_version();
