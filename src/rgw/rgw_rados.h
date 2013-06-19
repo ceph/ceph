@@ -8,6 +8,7 @@
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/version/cls_version_types.h"
 #include "cls/log/cls_log_types.h"
+#include "cls/statelog/cls_statelog_types.h"
 #include "rgw_log.h"
 #include "rgw_metadata.h"
 #include "rgw_rest_conn.h"
@@ -563,9 +564,55 @@ WRITE_CLASS_ENCODER(RGWRegionMap);
 
 class RGWDataChangesLog;
   
+class RGWStateLog {
+  RGWRados *store;
+  int num_shards;
+  string module_name;
+
+  void oid_str(int shard, string& oid);
+  int get_shard_num(const string& object);
+  string get_oid(const string& object);
+  int open_ioctx(librados::IoCtx& ioctx);
+
+  struct list_state {
+    int cur_shard;
+    int max_shard;
+    string marker;
+    string client_id;
+    string op_id;
+    string object;
+
+    list_state() : cur_shard(0), max_shard(0) {}
+  };
+
+protected:
+  virtual int dump_entry_internal(const cls_statelog_entry& entry, Formatter *f) {
+    return false;
+  }
+
+public:
+  RGWStateLog(RGWRados *_store, int _num_shards, const string& _module_name) :
+              store(_store), num_shards(_num_shards), module_name(_module_name) {}
+  virtual ~RGWStateLog() {}
+
+  int store_entry(const string& client_id, const string& op_id, const string& object,
+                  uint32_t state, bufferlist *bl, uint32_t *check_state);
+
+  void init_list_entries(const string& client_id, const string& op_id, const string& object,
+                         void **handle);
+
+  int list_entries(void *handle, int max_entries, list<cls_statelog_entry>& entries);
+
+  void finish_list_entries(void *handle);
+
+  virtual void dump_entry(const cls_statelog_entry& entry, Formatter *f);
+
+};
+
 class RGWRados
 {
   friend class RGWGC;
+  friend class RGWStateLog;
 
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx();
@@ -1152,6 +1199,11 @@ public:
     snprintf(buf, sizeof(buf), ".%llu.%llu", (unsigned long long)instance_id(), (unsigned long long)unique_num);
     string s = zone.name + buf;
     return s;
+  }
+
+
+  void get_log_pool_name(string& name) {
+    name = zone.log_pool.name;
   }
 
  private:

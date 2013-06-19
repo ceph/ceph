@@ -20,6 +20,7 @@
 #include "cls/refcount/cls_refcount_client.h"
 #include "cls/version/cls_version_client.h"
 #include "cls/log/cls_log_client.h"
+#include "cls/statelog/cls_statelog_client.h"
 #include "cls/lock/cls_lock_client.h"
 
 #include "rgw_tools.h"
@@ -66,6 +67,8 @@ static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 
 #define RGW_DEFAULT_ZONE_ROOT_POOL ".rgw.root"
 #define RGW_DEFAULT_REGION_ROOT_POOL ".rgw.root"
+
+#define RGW_STATELOG_OBJ_PREFIX "statelog."
 
 
 #define dout_subsys ceph_subsys_rgw
@@ -5173,6 +5176,146 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
   }
 
   return ret;
+}
+
+
+void RGWStateLog::oid_str(int shard, string& oid) {
+  oid = RGW_STATELOG_OBJ_PREFIX + module_name + ".";
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%d", shard);
+  oid += buf;
+}
+
+int RGWStateLog::get_shard_num(const string& object) {
+  uint32_t val = ceph_str_hash_linux(object.c_str(), object.length());
+  return val & num_shards;
+}
+
+string RGWStateLog::get_oid(const string& object) {
+  int shard = get_shard_num(object);
+  string oid;
+  oid_str(shard, oid);
+  return oid;
+}
+
+int RGWStateLog::open_ioctx(librados::IoCtx& ioctx) {
+  string pool_name;
+  store->get_log_pool_name(pool_name);
+  int r = store->rados->ioctx_create(pool_name.c_str(), ioctx);
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: could not open rados pool" << dendl;
+    return r;
+  }
+  return 0;
+}
+
+int RGWStateLog::store_entry(const string& client_id, const string& op_id, const string& object,
+                  uint32_t state, bufferlist *bl, uint32_t *check_state)
+{
+  if (client_id.empty() ||
+      op_id.empty() ||
+      object.empty()) {
+    ldout(store->ctx(), 0) << "client_id / op_id / object is empty" << dendl;
+  }
+
+  librados::IoCtx ioctx;
+  int r = open_ioctx(ioctx);
+  if (r < 0)
+    return r;
+
+  string oid = get_oid(object);
+
+  librados::ObjectWriteOperation op;
+  if (check_state) {
+    cls_statelog_check_state(op, client_id, op_id, object, *check_state);
+  }
+  utime_t ts = ceph_clock_now(store->ctx());
+  bufferlist nobl;
+  cls_statelog_add(op, client_id, op_id, object, ts, state, (bl ? *bl : nobl));
+  r = ioctx.operate(oid, &op);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+void RGWStateLog::init_list_entries(const string& client_id, const string& op_id, const string& object,
+                                    void **handle)
+{
+  list_state *state = new list_state;
+  state->client_id = client_id;
+  state->op_id = op_id;
+  state->object = object;
+  if (object.empty()) {
+    state->cur_shard = 0;
+    state->max_shard = num_shards - 1;
+  } else {
+    state->cur_shard = state->max_shard = get_shard_num(object);
+  }
+  *handle = (void *)state;
+}
+
+int RGWStateLog::list_entries(void *handle, int max_entries,
+                              list<cls_statelog_entry>& entries)
+{
+  list_state *state = (list_state *)handle;
+
+  librados::IoCtx ioctx;
+  int r = open_ioctx(ioctx);
+  if (r < 0)
+    return r;
+
+  for (; state->cur_shard <= state->max_shard && max_entries > 0; ++state->cur_shard) {
+    string oid;
+    oid_str(state->cur_shard, oid);
+
+    librados::ObjectReadOperation op;
+    list<cls_statelog_entry> ents;
+    bool truncated;
+    cls_statelog_list(op, state->client_id, state->op_id, state->object, state->marker,
+                      max_entries, ents, &state->marker, &truncated);
+    bufferlist ibl;
+    r = ioctx.operate(oid, &op, &ibl);
+    if (r == -ENOENT) {
+      truncated = false;
+      r = 0;
+    }
+    if (r < 0) {
+      ldout(store->ctx(), 0) << "cls_statelog_list returned " << r << dendl;
+      return r;
+    }
+
+    if (!truncated) {
+      state->marker.clear();
+      state->cur_shard++;
+    }
+
+    max_entries -= ents.size();
+
+    entries.splice(entries.end(), ents);
+  }
+
+  return 0;
+}
+
+void RGWStateLog::finish_list_entries(void *handle)
+{
+  list_state *state = (list_state *)handle;
+  delete state;
+}
+
+void RGWStateLog::dump_entry(const cls_statelog_entry& entry, Formatter *f)
+{
+  f->open_object_section("statelog_entry");
+  f->dump_string("client_id", entry.client_id);
+  f->dump_string("op_id", entry.op_id);
+  f->dump_string("object", entry.object);
+  entry.timestamp.gmtime(f->dump_stream("timestamp"));
+  if (!dump_entry_internal(entry, f)) {
+    f->dump_int("state", entry.state);
+  }
+  f->close_section();
 }
 
 uint64_t RGWRados::instance_id()
