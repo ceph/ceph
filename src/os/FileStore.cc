@@ -2950,15 +2950,13 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
   // flush?
   {
     bool should_flush = (ssize_t)len >= m_filestore_flush_min;
-    bool local_flush = false;
 #ifdef HAVE_SYNC_FILE_RANGE
     bool async_done = false;
     if (!should_flush ||
 	!m_filestore_flusher ||
        !(async_done = queue_flusher(fd, offset, len, replica))) {
       if (should_flush && m_filestore_sync_flush) {
-	::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
-	local_flush = true;
+	::fdatasync(fd);
       }
     }
     //Both lfn_close() and possible posix_fadvise() done by flusher
@@ -2967,17 +2965,8 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
     // no sync_file_range; (maybe) flush inline and close.
     if (should_flush && m_filestore_sync_flush) {
       ::fdatasync(fd);
-      local_flush = true;
     }
 #endif
-    if (local_flush && replica && m_filestore_replica_fadvise) {
-      int fa_r = posix_fadvise(fd, offset, len, POSIX_FADV_DONTNEED);
-      if (fa_r) {
-	dout(0) << "posic_fadvise failed: " << cpp_strerror(fa_r) << dendl;
-      } else {
-	dout(10) << "posix_fadvise performed after local flush" << dendl;
-      }
-    }
   }
   if (fd >= 0) lfn_close(fd);
 
@@ -3279,9 +3268,6 @@ bool FileStore::queue_flusher(int fd, uint64_t off, uint64_t len, bool replica)
   if (flusher_queue_len < m_filestore_flusher_max_fds) {
     flusher_queue.push_back(sync_epoch);
     flusher_queue.push_back(fd);
-    flusher_queue.push_back(off);
-    flusher_queue.push_back(len);
-    flusher_queue.push_back(replica);
     flusher_queue_len++;
     flusher_cond.Signal();
     dout(10) << "queue_flusher ep " << sync_epoch << " fd " << fd << " " << off << "~" << len
@@ -3317,23 +3303,9 @@ void FileStore::flusher_entry()
 	q.pop_front();
 	int fd = q.front();
 	q.pop_front();
-	uint64_t off = q.front();
-	q.pop_front();
-	uint64_t len = q.front();
-	q.pop_front();
-	bool replica = q.front();
-	q.pop_front();
 	if (!stop && ep == sync_epoch) {
 	  dout(10) << "flusher_entry flushing+closing " << fd << " ep " << ep << dendl;
-	  ::sync_file_range(fd, off, len, SYNC_FILE_RANGE_WRITE);
-	  if (replica && m_filestore_replica_fadvise) {
-	    int fa_r = posix_fadvise(fd, off, len, POSIX_FADV_DONTNEED);
-	    if (fa_r) {
-	      dout(0) << "posic_fadvise failed: " << cpp_strerror(fa_r) << dendl;
-	    } else {
-	      dout(10) << "posix_fadvise performed after local flush" << dendl;
-	    }
-	  }
+	  ::fdatasync(fd);
 	} else 
 	  dout(10) << "flusher_entry JUST closing " << fd << " (stop=" << stop << ", ep=" << ep
 		   << ", sync_epoch=" << sync_epoch << ")" << dendl;
