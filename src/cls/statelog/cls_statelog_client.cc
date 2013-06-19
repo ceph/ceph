@@ -123,6 +123,6 @@ void cls_statelog_check_state(librados::ObjectOperation& op, const string& clien
 
   ::encode(call, inbl);
 
-  op.exec("statelog", "list", inbl, NULL);
+  op.exec("statelog", "check_state", inbl, NULL);
 }
 
