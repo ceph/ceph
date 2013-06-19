@@ -5188,7 +5188,7 @@ void RGWStateLog::oid_str(int shard, string& oid) {
 
 int RGWStateLog::get_shard_num(const string& object) {
   uint32_t val = ceph_str_hash_linux(object.c_str(), object.length());
-  return val & num_shards;
+  return val % num_shards;
 }
 
 string RGWStateLog::get_oid(const string& object) {
@@ -5240,6 +5240,31 @@ int RGWStateLog::store_entry(const string& client_id, const string& op_id, const
   return 0;
 }
 
+int RGWStateLog::remove_entry(const string& client_id, const string& op_id, const string& object)
+{
+  if (client_id.empty() ||
+      op_id.empty() ||
+      object.empty()) {
+    ldout(store->ctx(), 0) << "client_id / op_id / object is empty" << dendl;
+  }
+
+  librados::IoCtx ioctx;
+  int r = open_ioctx(ioctx);
+  if (r < 0)
+    return r;
+
+  string oid = get_oid(object);
+
+  librados::ObjectWriteOperation op;
+  cls_statelog_remove_by_object(op, object, op_id);
+  r = ioctx.operate(oid, &op);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
 void RGWStateLog::init_list_entries(const string& client_id, const string& op_id, const string& object,
                                     void **handle)
 {
@@ -5257,7 +5282,8 @@ void RGWStateLog::init_list_entries(const string& client_id, const string& op_id
 }
 
 int RGWStateLog::list_entries(void *handle, int max_entries,
-                              list<cls_statelog_entry>& entries)
+                              list<cls_statelog_entry>& entries,
+                              bool *done)
 {
   list_state *state = (list_state *)handle;
 
@@ -5265,6 +5291,8 @@ int RGWStateLog::list_entries(void *handle, int max_entries,
   int r = open_ioctx(ioctx);
   if (r < 0)
     return r;
+
+  entries.clear();
 
   for (; state->cur_shard <= state->max_shard && max_entries > 0; ++state->cur_shard) {
     string oid;
@@ -5288,13 +5316,17 @@ int RGWStateLog::list_entries(void *handle, int max_entries,
 
     if (!truncated) {
       state->marker.clear();
-      state->cur_shard++;
     }
 
     max_entries -= ents.size();
 
     entries.splice(entries.end(), ents);
+
+    if (truncated)
+      break;
   }
+
+  *done = (state->cur_shard > state->max_shard);
 
   return 0;
 }
@@ -5318,30 +5350,30 @@ void RGWStateLog::dump_entry(const cls_statelog_entry& entry, Formatter *f)
   f->close_section();
 }
 
-RGWObjZoneCopyState::RGWObjZoneCopyState(RGWRados *_store) : RGWStateLog(_store, _store->ctx()->_conf->rgw_num_zone_copy_state_shards, string("obj_zone_copy"))
+RGWOpState::RGWOpState(RGWRados *_store) : RGWStateLog(_store, _store->ctx()->_conf->rgw_num_zone_opstate_shards, string("obj_opstate"))
 {
 }
 
-bool RGWObjZoneCopyState::dump_entry_internal(const cls_statelog_entry& entry, Formatter *f)
+bool RGWOpState::dump_entry_internal(const cls_statelog_entry& entry, Formatter *f)
 {
   string s;
-  switch ((CopyState)entry.state) {
-    case CS_UNKNOWN:
+  switch ((OpState)entry.state) {
+    case OPSTATE_UNKNOWN:
       s = "unknown";
       break;
-    case CS_IN_PROGRESS:
+    case OPSTATE_IN_PROGRESS:
       s = "in-progress";
       break;
-    case CS_COMPLETE:
+    case OPSTATE_COMPLETE:
       s = "complete";
       break;
-    case CS_ERROR:
+    case OPSTATE_ERROR:
       s = "error";
       break;
-    case CS_ABORT:
+    case OPSTATE_ABORT:
       s = "abort";
       break;
-    case CS_CANCELLED:
+    case OPSTATE_CANCELLED:
       s = "cancelled";
       break;
     default:
@@ -5351,13 +5383,34 @@ bool RGWObjZoneCopyState::dump_entry_internal(const cls_statelog_entry& entry, F
   return true;
 }
 
-int RGWObjZoneCopyState::set_state(const string& client_id, const string& op_id, const string& object, CopyState state)
+int RGWOpState::state_from_str(const string& s, OpState *state)
+{
+  if (s == "unknown") {
+    *state = OPSTATE_UNKNOWN;
+  } else if (s == "in-progress") {
+    *state = OPSTATE_IN_PROGRESS;
+  } else if (s == "complete") {
+    *state = OPSTATE_COMPLETE;
+  } else if (s == "error") {
+    *state = OPSTATE_ERROR;
+  } else if (s == "abort") {
+    *state = OPSTATE_ABORT;
+  } else if (s == "cancelled") {
+    *state = OPSTATE_CANCELLED;
+  } else {
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int RGWOpState::set_state(const string& client_id, const string& op_id, const string& object, OpState state)
 {
   uint32_t s = (uint32_t)state;
   return store_entry(client_id, op_id, object, s, NULL, NULL);
 }
 
-int RGWObjZoneCopyState::renew_state(const string& client_id, const string& op_id, const string& object, CopyState state)
+int RGWOpState::renew_state(const string& client_id, const string& op_id, const string& object, OpState state)
 {
   uint32_t s = (uint32_t)state;
   return store_entry(client_id, op_id, object, s, NULL, &s);
