@@ -5472,7 +5472,7 @@ void ReplicatedPG::prep_push(
   pi.recovery_progress = new_progress;
 }
 
-int ReplicatedPG::send_pull(int prio, int peer,
+int ReplicatedPG::send_pull_legacy(int prio, int peer,
 			    const ObjectRecoveryInfo &recovery_info,
 			    ObjectRecoveryProgress progress)
 {
@@ -5816,10 +5816,42 @@ void ReplicatedPG::send_pushes(int prio, map<int, vector<PushOp> > &pushes)
   for (map<int, vector<PushOp> >::iterator i = pushes.begin();
        i != pushes.end();
        ++i) {
-    for (vector<PushOp>::iterator j = i->second.begin();
-	 j != i->second.end();
-	 ++j) {
-      send_push_op(prio, i->first, *j);
+    ConnectionRef con = osd->get_con_osd_cluster(
+      i->first,
+      get_osdmap()->get_epoch());
+    if (!con)
+      continue;
+    if (!(con->get_features() & CEPH_FEATURE_OSD_PACKED_RECOVERY)) {
+      for (vector<PushOp>::iterator j = i->second.begin();
+	   j != i->second.end();
+	   ++j) {
+	dout(20) << __func__ << ": sending push (legacy) " << *j
+		 << " to osd." << i->first << dendl;
+	send_push_op_legacy(prio, i->first, *j);
+      }
+    } else {
+      vector<PushOp>::iterator j = i->second.begin();
+      while (j != i->second.end()) {
+	uint64_t cost = 0;
+	uint64_t pushes = 0;
+	MOSDPGPush *msg = new MOSDPGPush();
+	msg->pgid = info.pgid;
+	msg->map_epoch = get_osdmap()->get_epoch();
+	msg->set_priority(prio);
+	for (;
+	     (j != i->second.end() &&
+	      cost < g_conf->osd_max_push_cost &&
+	      pushes < g_conf->osd_max_push_objects) ;
+	     ++j) {
+	  dout(20) << __func__ << ": sending push " << *j
+		   << " to osd." << i->first << dendl;
+	  cost += j->cost(g_ceph_context);
+	  pushes += 1;
+	  msg->pushes.push_back(*j);
+	}
+	msg->compute_cost(g_ceph_context);
+	osd->send_message_osd_cluster(msg, con);
+      }
     }
   }
 }
@@ -5829,14 +5861,33 @@ void ReplicatedPG::send_pulls(int prio, map<int, vector<PullOp> > &pulls)
   for (map<int, vector<PullOp> >::iterator i = pulls.begin();
        i != pulls.end();
        ++i) {
-    for (vector<PullOp>::iterator j = i->second.begin();
-	 j != i->second.end();
-	 ++j) {
-      send_pull(
-	prio,
-	i->first,
-	j->recovery_info,
-	j->recovery_progress);
+    ConnectionRef con = osd->get_con_osd_cluster(
+      i->first,
+      get_osdmap()->get_epoch());
+    if (!con)
+      continue;
+    if (!(con->get_features() & CEPH_FEATURE_OSD_PACKED_RECOVERY)) {
+      for (vector<PullOp>::iterator j = i->second.begin();
+	   j != i->second.end();
+	   ++j) {
+	dout(20) << __func__ << ": sending pull (legacy) " << *j
+		 << " to osd." << i->first << dendl;
+	send_pull_legacy(
+	  prio,
+	  i->first,
+	  j->recovery_info,
+	  j->recovery_progress);
+      }
+    } else {
+      dout(20) << __func__ << ": sending pulls " << i->second
+	       << " to osd." << i->first << dendl;
+      MOSDPGPull *msg = new MOSDPGPull();
+      msg->set_priority(prio);
+      msg->pgid = info.pgid;
+      msg->map_epoch = get_osdmap()->get_epoch();
+      msg->pulls.swap(i->second);
+      msg->compute_cost(g_ceph_context);
+      osd->send_message_osd_cluster(msg, con);
     }
   }
 }
@@ -5850,7 +5901,7 @@ int ReplicatedPG::send_push(int prio, int peer,
   int r = build_push_op(recovery_info, progress, out_progress, &op);
   if (r < 0)
     return r;
-  return send_push_op(prio, peer, op);
+  return send_push_op_legacy(prio, peer, op);
 }
 
 int ReplicatedPG::build_push_op(const ObjectRecoveryInfo &recovery_info,
@@ -5961,7 +6012,7 @@ int ReplicatedPG::build_push_op(const ObjectRecoveryInfo &recovery_info,
   return 0;
 }
 
-int ReplicatedPG::send_push_op(int prio, int peer, PushOp &pop)
+int ReplicatedPG::send_push_op_legacy(int prio, int peer, PushOp &pop)
 {
   tid_t tid = osd->get_tid();
   osd_reqid_t rid(osd->get_cluster_msgr_name(), 0, tid);
@@ -6008,7 +6059,7 @@ void ReplicatedPG::sub_op_push_reply(OpRequestRef op)
   PushOp pop;
   bool more = handle_push_reply(peer, rop, &pop);
   if (more)
-    send_push_op(pushing[soid][peer].priority, peer, pop);
+    send_push_op_legacy(pushing[soid][peer].priority, peer, pop);
 }
 
 bool ReplicatedPG::handle_push_reply(int peer, PushReplyOp &op, PushOp *reply)
@@ -6120,7 +6171,7 @@ void ReplicatedPG::sub_op_pull(OpRequestRef op)
 
   PushOp reply;
   handle_pull(m->get_source().num(), pop, &reply);
-  send_push_op(
+  send_push_op_legacy(
     m->get_priority(),
     m->get_source().num(),
     reply);
@@ -6312,7 +6363,7 @@ void ReplicatedPG::sub_op_push(OpRequestRef op)
     PullOp resp;
     bool more = handle_pull_response(m->get_source().num(), pop, &resp, t);
     if (more) {
-      send_pull(
+      send_pull_legacy(
 	m->get_priority(),
 	m->get_source().num(),
 	resp.recovery_info,
