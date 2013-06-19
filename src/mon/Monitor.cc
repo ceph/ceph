@@ -1329,7 +1329,6 @@ void Monitor::sync_requester_abort()
   // Given that we are explicitely aborting the whole sync process, we should
   // play it safe and clear the store.
   set<string> targets = get_sync_targets_names();
-  targets.insert("mon_sync");
   store->clear(targets);
 
   dout(1) << __func__ << " no longer a sync requester" << dendl;
@@ -1341,6 +1340,57 @@ void Monitor::sync_requester_abort()
   bootstrap();
 }
 
+void Monitor::sync_obtain_latest_monmap(bufferlist &bl)
+{
+  dout(1) << __func__ << dendl;
+
+  MonMap latest_monmap;
+
+  // Grab latest monmap from MonmapMonitor
+  bufferlist monmon_bl;
+  int err = monmon()->get_monmap(monmon_bl);
+  if (err < 0) {
+    if (err != -ENOENT) {
+      derr << __func__
+           << " something wrong happened while reading the store: "
+           << cpp_strerror(err) << dendl;
+      assert(0 == "error reading the store");
+    }
+  } else {
+    latest_monmap.decode(monmon_bl);
+  }
+
+  // Grab last backed up monmap (if any) and compare epochs
+  if (store->exists("mon_sync", "latest_monmap")) {
+    bufferlist backup_bl;
+    int err = store->get("mon_sync", "latest_monmap", backup_bl);
+    if (err < 0) {
+      assert(err != -ENOENT);
+      derr << __func__
+           << " something wrong happened while reading the store: "
+           << cpp_strerror(err) << dendl;
+      assert(0 == "error reading the store");
+    }
+    assert(backup_bl.length() > 0);
+
+    MonMap backup_monmap;
+    backup_monmap.decode(backup_bl);
+
+    if (backup_monmap.epoch > latest_monmap.epoch)
+      latest_monmap = backup_monmap;
+  }
+
+  // Check if our current monmap's epoch is greater than the one we've
+  // got so far.
+  if (monmap->epoch > latest_monmap.epoch)
+    latest_monmap = *monmap;
+
+  assert(latest_monmap.epoch > 0);
+  dout(1) << __func__ << " obtained monmap e" << latest_monmap.epoch << dendl;
+
+  latest_monmap.encode(bl, CEPH_FEATURES_ALL);
+}
+
 /**
  *
  */
@@ -1349,22 +1399,11 @@ void Monitor::sync_store_init()
   MonitorDBStore::Transaction t;
   t.put("mon_sync", "in_sync", 1);
 
-  bufferlist latest_monmap;
-  int err = monmon()->get_monmap(latest_monmap);
-  if (err < 0) {
-    if (err != -ENOENT) {
-      derr << __func__
-           << " something wrong happened while reading the store: "
-           << cpp_strerror(err) << dendl;
-      assert(0 == "error reading the store");
-      return; // this is moot
-    } else {
-      dout(10) << __func__ << " backup current monmap" << dendl;
-      monmap->encode(latest_monmap, CEPH_FEATURES_ALL);
-    }
-  }
+  bufferlist backup_monmap;
+  sync_obtain_latest_monmap(backup_monmap);
+  assert(backup_monmap.length() > 0);
 
-  t.put("mon_sync", "latest_monmap", latest_monmap);
+  t.put("mon_sync", "latest_monmap", backup_monmap);
 
   store->apply_transaction(t);
 }
@@ -1422,14 +1461,16 @@ void Monitor::sync_start(entity_inst_t &other)
   sync_role = SYNC_ROLE_REQUESTER;
   sync_state = SYNC_STATE_START;
 
+  // First init the store (grab the monmap and all that) and only then
+  // clear the store (except for the mon_sync prefix).  This avoids that
+  // we end up losing the monmaps from the store.
+  sync_store_init();
+
   // clear the underlying store, since we are starting a whole
   // sync process from the bare beginning.
   set<string> targets = get_sync_targets_names();
-  targets.insert("mon_sync");
   store->clear(targets);
 
-
-  sync_store_init();
 
   // assume 'other' as the leader. We will update the leader once we receive
   // a reply to the sync start.

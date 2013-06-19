@@ -578,7 +578,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
 	KeyRing kr;
 	kr.add(entity, eauth);
 	kr.encode_plaintext(rdata);
-	ds << "export " << eauth;
+	ss << "export " << eauth;
 	r = 0;
       } else {
 	ss << "no key for " << eauth;
