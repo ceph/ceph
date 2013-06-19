@@ -571,10 +571,10 @@ protected:
 		    const ObjectRecoveryProgress &progress,
 		    ObjectRecoveryProgress *out_progress,
 		    PushOp *out_op);
-  int send_push_op(int priority, int peer,
+  int send_push_op_legacy(int priority, int peer,
 		   PushOp &pop);
     
-  int send_pull(int priority, int peer,
+  int send_pull_legacy(int priority, int peer,
 		const ObjectRecoveryInfo& recovery_info,
 		ObjectRecoveryProgress progress);
   void submit_push_data(ObjectRecoveryInfo &recovery_info,
