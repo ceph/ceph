@@ -2957,7 +2957,7 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
 	!m_filestore_flusher ||
        !(async_done = queue_flusher(fd, offset, len, replica))) {
       if (should_flush && m_filestore_sync_flush) {
-	::sync_file_range(fd, offset, len, SYNC_FILE_RANGE_WRITE);
+	::fdatasync(fd);
 	local_flush = true;
       }
     }
@@ -3325,7 +3325,7 @@ void FileStore::flusher_entry()
 	q.pop_front();
 	if (!stop && ep == sync_epoch) {
 	  dout(10) << "flusher_entry flushing+closing " << fd << " ep " << ep << dendl;
-	  ::sync_file_range(fd, off, len, SYNC_FILE_RANGE_WRITE);
+	  ::fdatasync(fd);
 	  if (replica && m_filestore_replica_fadvise) {
 	    int fa_r = posix_fadvise(fd, off, len, POSIX_FADV_DONTNEED);
 	    if (fa_r) {
