@@ -141,101 +141,83 @@ struct PGLog {
 	caller_ops[e.reqid] = &(log.back());
     }
 
-    void trim(ObjectStore::Transaction &t, hobject_t& oid, eversion_t s);
+    void trim(eversion_t s);
 
     ostream& print(ostream& out) const;
   };
-  
-  /**
-   * OndiskLog - some info about how we store the log on disk.
-   */
-  class OndiskLog {
-  public:
-    // ok
-    uint64_t tail;                     // first byte of log. 
-    uint64_t head;                     // byte following end of log.
-    uint64_t zero_to;                // first non-zeroed byte of log.
-    bool has_checksums;
 
-    /**
-     * We reconstruct the missing set by comparing the recorded log against
-     * the objects in the pg collection.  Unfortunately, it's possible to
-     * have an object in the missing set which is not in the log due to
-     * a divergent operation with a prior_version pointing before the
-     * pg log tail.  To deal with this, we store alongside the log a mapping
-     * of divergent priors to be checked along with the log during read_state.
-     */
-    map<eversion_t, hobject_t> divergent_priors;
-    void add_divergent_prior(eversion_t version, hobject_t obj) {
-      divergent_priors.insert(make_pair(version, obj));
-    }
-
-    OndiskLog() : tail(0), head(0), zero_to(0),
-		  has_checksums(true) {}
-
-    uint64_t length() const { return head - tail; }
-    bool trim_to(eversion_t v, ObjectStore::Transaction& t);
-
-    void zero() {
-      tail = 0;
-      head = 0;
-      zero_to = 0;
-    }
-
-    void encode(bufferlist& bl) const {
-      ENCODE_START(5, 3, bl);
-      ::encode(tail, bl);
-      ::encode(head, bl);
-      ::encode(zero_to, bl);
-      ::encode(divergent_priors, bl);
-      ENCODE_FINISH(bl);
-    }
-    void decode(bufferlist::iterator& bl) {
-      DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
-      has_checksums = (struct_v >= 2);
-      ::decode(tail, bl);
-      ::decode(head, bl);
-      if (struct_v >= 4)
-	::decode(zero_to, bl);
-      else
-	zero_to = 0;
-      if (struct_v >= 5)
-	::decode(divergent_priors, bl);
-      DECODE_FINISH(bl);
-    }
-    void dump(Formatter *f) const {
-      f->dump_unsigned("head", head);
-      f->dump_unsigned("tail", tail);
-      f->dump_unsigned("zero_to", zero_to);
-      f->open_array_section("divergent_priors");
-      for (map<eversion_t, hobject_t>::const_iterator p = divergent_priors.begin();
-	   p != divergent_priors.end();
-	   ++p) {
-	f->open_object_section("prior");
-	f->dump_stream("version") << p->first;
-	f->dump_stream("object") << p->second;
-	f->close_section();
-      }
-      f->close_section();
-    }
-    static void generate_test_instances(list<OndiskLog*>& o) {
-      o.push_back(new OndiskLog);
-      o.push_back(new OndiskLog);
-      o.back()->tail = 2;
-      o.back()->head = 3;
-      o.back()->zero_to = 1;
-    }
-  };
-  WRITE_CLASS_ENCODER(OndiskLog)
 
 protected:
   //////////////////// data members ////////////////////
 
-  OndiskLog   ondisklog;
+  map<eversion_t, hobject_t> divergent_priors;
   pg_missing_t     missing;
   IndexedLog  log;
 
+  /// Log is clean on [dirty_to, dirty_from)
+  bool touched_log;
+  eversion_t dirty_to;
+  eversion_t dirty_from;
+  bool dirty_divergent_priors;
+
+  bool is_dirty() const {
+    return !touched_log ||
+      (dirty_to != eversion_t()) ||
+      (dirty_from != eversion_t::max()) ||
+      dirty_divergent_priors;
+  }
+  void mark_dirty_to(eversion_t to) {
+    if (to > dirty_to)
+      dirty_to = to;
+  }
+  void mark_dirty_from(eversion_t from) {
+    if (from < dirty_from)
+      dirty_from = from;
+  }
+  void add_divergent_prior(eversion_t version, hobject_t obj) {
+    divergent_priors.insert(make_pair(version, obj));
+    dirty_divergent_priors = true;
+  }
+
+  /// DEBUG
+  set<string> log_keys_debug;
+  static void clear_after(set<string> *log_keys_debug, const string &lb) {
+    if (!log_keys_debug)
+      return;
+    for (set<string>::iterator i = log_keys_debug->lower_bound(lb);
+	 i != log_keys_debug->end();
+	 log_keys_debug->erase(i++));
+  }
+  static void clear_up_to(set<string> *log_keys_debug, const string &ub) {
+    if (!log_keys_debug)
+      return;
+    for (set<string>::iterator i = log_keys_debug->begin();
+	 i != log_keys_debug->end() && *i < ub;
+	 log_keys_debug->erase(i++));
+  }
+  void check() {
+    assert(log.log.size() == log_keys_debug.size());
+    for (list<pg_log_entry_t>::iterator i = log.log.begin();
+	 i != log.log.end();
+	 ++i) {
+      assert(log_keys_debug.count(i->get_key_name()));
+    }
+  }
+
+  void undirty() {
+    dirty_to = eversion_t();
+    dirty_from = eversion_t::max();
+    dirty_divergent_priors = false;
+    touched_log = true;
+    check();
+  }
 public:
+  PGLog() :
+    touched_log(false), dirty_from(eversion_t::max()),
+    dirty_divergent_priors(false) {}
+
+
+  void reset_backfill();
 
   void clear();
 
@@ -265,10 +247,6 @@ public:
     missing.rm(p);
   }
 
-  //////////////////// get or set ondisklog ////////////////////
-
-  const OndiskLog &get_ondisklog() const { return ondisklog; }
-
   //////////////////// get or set log ////////////////////
 
   const IndexedLog &get_log() const { return log; }
@@ -289,7 +267,10 @@ public:
 
   void unindex() { log.unindex(); }
 
-  void add(pg_log_entry_t& e) { log.add(e); }
+  void add(pg_log_entry_t& e) {
+    mark_dirty_from(e.version);
+    log.add(e);
+  }
 
   void reset_recovery_pointers() { log.reset_recovery_pointers(); }
 
@@ -299,13 +280,14 @@ public:
     const hobject_t &log_oid,
     ObjectStore::Transaction *t);
 
-  void trim(ObjectStore::Transaction& t, eversion_t trim_to, pg_info_t &info, hobject_t &log_oid);
+  void trim(eversion_t trim_to, pg_info_t &info);
 
   //////////////////// get or set log & missing ////////////////////
 
   void claim_log(const pg_log_t &o) {
     log.claim_log(o);
     missing.clear();
+    mark_dirty_to(eversion_t::max());
   }
 
   void split_into(
@@ -314,6 +296,8 @@ public:
       PGLog *opg_log) { 
     log.split_into(child_pgid, split_bits, &(opg_log->log));
     missing.split_into(child_pgid, split_bits, &(opg_log->missing));
+    opg_log->mark_dirty_to(eversion_t::max());
+    mark_dirty_to(eversion_t::max());
   }
 
   void recover_got(hobject_t oid, eversion_t v, pg_info_t &info) {
@@ -357,39 +341,50 @@ public:
 
 protected:
   bool merge_old_entry(ObjectStore::Transaction& t, const pg_log_entry_t& oe,
-		       const pg_info_t& info, list<hobject_t>& remove_snap, bool &dirty_log);
+		       const pg_info_t& info, list<hobject_t>& remove_snap);
 public:
   void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead,
                             pg_info_t &info, list<hobject_t>& remove_snap,
-                            bool &dirty_log, bool &dirty_info, bool &dirty_big_info);
+                            bool &dirty_info, bool &dirty_big_info);
 
   void merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from,
                       pg_info_t &info, list<hobject_t>& remove_snap,
-                      bool &dirty_log, bool &dirty_info, bool &dirty_big_info);
+                      bool &dirty_info, bool &dirty_big_info);
 
-  void write_log(ObjectStore::Transaction& t, const hobject_t &log_oid) {
-    write_log(t, log, log_oid, ondisklog.divergent_priors);
-  }
+  void write_log(ObjectStore::Transaction& t, const hobject_t &log_oid);
 
   static void write_log(ObjectStore::Transaction& t, pg_log_t &log,
     const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors);
 
+  static void _write_log(
+    ObjectStore::Transaction& t, pg_log_t &log,
+    const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors,
+    eversion_t dirty_to,
+    eversion_t dirty_from,
+    bool dirty_divergent_priors,
+    bool touch_log,
+    set<string> *log_keys_debug
+    );
+
   bool read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
 		const pg_info_t &info, ostringstream &oss) {
-    return read_log(store, coll, log_oid, info, ondisklog, log, missing, oss);
+    return read_log(store, coll, log_oid, info, divergent_priors,
+		    log, missing, oss, &log_keys_debug);
   }
 
   /// return true if the log should be rewritten
   static bool read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
-    const pg_info_t &info, OndiskLog &ondisklog, IndexedLog &log,
-    pg_missing_t &missing, ostringstream &oss);
+    const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
+    IndexedLog &log,
+    pg_missing_t &missing, ostringstream &oss,
+    set<string> *log_keys_debug = 0
+    );
 
 protected:
   static void read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
-    const pg_info_t &info, OndiskLog &ondisklog, IndexedLog &log,
+    const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
+    IndexedLog &log,
     pg_missing_t &missing, ostringstream &oss);
 };
   
-WRITE_CLASS_ENCODER(PGLog::OndiskLog)
-
 #endif // CEPH_PG_LOG_H
