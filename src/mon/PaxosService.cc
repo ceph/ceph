@@ -24,11 +24,12 @@
 
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix
-#define dout_prefix _prefix(_dout, mon, paxos, service_name)
-static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, string service_name) {
+#define dout_prefix _prefix(_dout, mon, paxos, service_name, get_first_committed(), get_last_committed())
+static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, string service_name,
+			version_t fc, version_t lc) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name()
-		<< ").paxosservice(" << service_name << ") ";
+		<< ").paxosservice(" << service_name << " " << fc << ".." << lc << ") ";
 }
 
 bool PaxosService::dispatch(PaxosServiceMessage *m)
@@ -68,9 +69,6 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
     return true;
   }
 
-  // make sure service has latest from paxos.
-  update_from_paxos();
-
   // preprocess
   if (preprocess_query(m)) 
     return true;  // easy!
@@ -97,11 +95,11 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
       } else {
 	// delay a bit
 	if (!proposal_timer) {
-	  dout(10) << " setting propose timer with delay of " << delay << dendl;
 	  proposal_timer = new C_Propose(this);
+	  dout(10) << " setting proposal_timer " << proposal_timer << " with delay of " << delay << dendl;
 	  mon->timer.add_event_after(delay, proposal_timer);
 	} else { 
-	  dout(10) << " propose timer already set" << dendl;
+	  dout(10) << " proposal_timer already set" << dendl;
 	}
       }
     } else {
@@ -110,6 +108,18 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
   }     
   return true;
 }
+
+void PaxosService::refresh(bool *need_bootstrap)
+{
+  // update cached versions
+  cached_first_committed = mon->store->get(get_service_name(), first_committed_name);
+  cached_last_committed = mon->store->get(get_service_name(), last_committed_name);
+
+  dout(10) << __func__ << dendl;
+
+  update_from_paxos(need_bootstrap);
+}
+
 
 void PaxosService::scrub()
 {
@@ -158,8 +168,9 @@ void PaxosService::propose_pending()
     return;
 
   if (proposal_timer) {
+    dout(10) << " canceling proposal_timer " << proposal_timer << dendl;
     mon->timer.cancel_event(proposal_timer);
-    proposal_timer = 0;
+    proposal_timer = NULL;
   }
 
   /**
@@ -214,6 +225,7 @@ void PaxosService::restart()
 {
   dout(10) << "restart" << dendl;
   if (proposal_timer) {
+    dout(10) << " canceling proposal_timer " << proposal_timer << dendl;
     mon->timer.cancel_event(proposal_timer);
     proposal_timer = 0;
   }
@@ -228,6 +240,7 @@ void PaxosService::election_finished()
   dout(10) << "election_finished" << dendl;
 
   if (proposal_timer) {
+    dout(10) << " canceling proposal_timer " << proposal_timer << dendl;
     mon->timer.cancel_event(proposal_timer);
     proposal_timer = 0;
   }
@@ -255,9 +268,6 @@ void PaxosService::_active()
     return;
   }
   dout(10) << "_active" << dendl;
-
-  // pull latest from paxos
-  update_from_paxos();
 
   scrub();
 
@@ -300,6 +310,7 @@ void PaxosService::shutdown()
   cancel_events();
 
   if (proposal_timer) {
+    dout(10) << " canceling proposal_timer " << proposal_timer << dendl;
     mon->timer.cancel_event(proposal_timer);
     proposal_timer = 0;
   }
