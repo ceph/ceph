@@ -6,52 +6,10 @@
 	...
 }
 {
-	leveldb leaks its environment and various other things
+	ignore all leveldb leaks
 	Memcheck:Leak
-	...
-	fun:pthread_once
-	...
-	fun:*leveldb*Env*Default*
-	...
-}
-{
-	leveldb leaks its thread(s)
-	Memcheck:Leak
-	...
-	fun:pthread_create*
 	...
 	fun:*leveldb*
-	...
-}
-{
-	leveldb leaks a thread
-	Memcheck:Leak
-	...
-	fun:pthread_create*
-	...
-	fun:*leveldb*DB*Open*
-	...
-}
-{
-	leveldb leaks something else
-	Memcheck:Leak
-	...
-	fun:pthread_once
-	fun:*leveldb*InitOnce*
-	...
-}
-{
-	leveldb leak in Schedule
-	Memcheck:Leak
-	...
-	fun:leveldb*PosixEnv*Schedule*
-	...
-}
-{
-	leveldb compaction crap
-	Memcheck:Leak
-	...
-	fun:*leveldb*DBImpl*BackgroundCompaction*
 	...
 }
 {
