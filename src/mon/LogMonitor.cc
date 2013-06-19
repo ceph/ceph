@@ -70,7 +70,6 @@ void LogMonitor::tick()
 {
   if (!is_active()) return;
 
-  update_from_paxos();
   dout(10) << *this << dendl;
 
   if (!mon->is_leader()) return; 
@@ -91,7 +90,7 @@ void LogMonitor::create_initial()
   pending_log.insert(pair<utime_t,LogEntry>(e.stamp, e));
 }
 
-void LogMonitor::update_from_paxos()
+void LogMonitor::update_from_paxos(bool *need_bootstrap)
 {
   dout(10) << __func__ << dendl;
   version_t version = get_version();
@@ -106,13 +105,13 @@ void LogMonitor::update_from_paxos()
   version_t latest_full = get_version_latest_full();
   dout(10) << __func__ << " latest full " << latest_full << dendl;
   if ((latest_full > 0) && (latest_full > summary.version)) {
-      bufferlist latest_bl;
-      get_version_full(latest_full, latest_bl);
-      assert(latest_bl.length() != 0);
-      dout(7) << __func__ << " loading summary e" << latest_full << dendl;
-      bufferlist::iterator p = latest_bl.begin();
-      ::decode(summary, p);
-      dout(7) << __func__ << " loaded summary e" << summary.version << dendl;
+    bufferlist latest_bl;
+    get_version_full(latest_full, latest_bl);
+    assert(latest_bl.length() != 0);
+    dout(7) << __func__ << " loading summary e" << latest_full << dendl;
+    bufferlist::iterator p = latest_bl.begin();
+    ::decode(summary, p);
+    dout(7) << __func__ << " loaded summary e" << summary.version << dendl;
   }
 
   // walk through incrementals

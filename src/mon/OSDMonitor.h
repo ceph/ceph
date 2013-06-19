@@ -145,7 +145,7 @@ private:
 public:  
   void create_initial();
 private:
-  void update_from_paxos();
+  void update_from_paxos(bool *need_bootstrap);
   void create_pending();  // prepare a new pending
   void encode_pending(MonitorDBStore::Transaction *t);
   virtual void encode_full(MonitorDBStore::Transaction *t);

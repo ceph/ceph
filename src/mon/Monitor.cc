@@ -521,17 +521,21 @@ void Monitor::init_paxos()
   paxos->init();
 
   // update paxos
-  for (int i = 0; i < PAXOS_NUM; ++i) {
-    if (paxos->is_consistent()) {
-      paxos_service[i]->update_from_paxos();
-    }
-  }
+  if (paxos->is_consistent()) {
+    refresh_from_paxos(NULL);
 
-  // init services
-  for (int i = 0; i < PAXOS_NUM; ++i) {
-    if (paxos->is_consistent()) {
+    // init services
+    for (int i = 0; i < PAXOS_NUM; ++i) {
       paxos_service[i]->init();
     }
+  }
+}
+
+void Monitor::refresh_from_paxos(bool *need_bootstrap)
+{
+  dout(10) << __func__ << dendl;
+  for (int i = 0; i < PAXOS_NUM; ++i) {
+    paxos_service[i]->refresh(need_bootstrap);
   }
 }
 
@@ -3407,13 +3411,6 @@ bool Monitor::_ms_dispatch(Message *m)
 	}
 
 	paxos->dispatch((PaxosServiceMessage*)m);
-
-	// make sure service finds out about any state changes
-	if (paxos->is_active()) {
-	  vector<PaxosService*>::iterator service_it = paxos_service.begin();
-	  for ( ; service_it != paxos_service.end(); ++service_it)
-	    (*service_it)->update_from_paxos();
-	}
       }
       break;
 
