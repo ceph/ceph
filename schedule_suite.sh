@@ -81,6 +81,8 @@ overrides:
         debug paxos: 20
     log-whitelist:
     - slow request
+  admin_socket:
+    branch: $ceph
 EOF
 
 if [ "$flavor" = "gcov" ]; then
