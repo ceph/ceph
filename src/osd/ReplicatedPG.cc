@@ -4868,7 +4868,9 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
   } else {
     // just trim the log
     if (m->pg_trim_to != eversion_t()) {
-      pg_log.trim(rm->localt, m->pg_trim_to, info, log_oid);
+      pg_log.trim(m->pg_trim_to, info);
+      dirty_info = true;
+      write_if_dirty(rm->localt);
       rm->tls.push_back(&rm->localt);
     }
   }
