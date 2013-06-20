@@ -302,7 +302,6 @@ bool LogMonitor::prepare_log(MLog *m)
     if (!pending_summary.contains(p->key())) {
       pending_summary.add(*p);
       pending_log.insert(pair<utime_t,LogEntry>(p->stamp, *p));
-
     }
   }
   wait_for_finished_proposal(new C_Log(this, m));
@@ -351,8 +350,42 @@ bool LogMonitor::prepare_command(MMonCommand *m)
   string rs;
   int err = -EINVAL;
 
-  // nothing here yet
-  ss << "unrecognized command";
+  map<string, cmd_vartype> cmdmap;
+  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    // ss has reason for failure
+    string rs = ss.str();
+    mon->reply_command(m, -EINVAL, rs, get_version());
+    return true;
+  }
+
+  string prefix;
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+
+  MonSession *session = m->get_session();
+  if (!session ||
+      (!session->is_capable("log", MON_CAP_W) &&
+       !mon->_allowed_command(session, cmdmap))) {
+    mon->reply_command(m, -EACCES, "access denied", get_version());
+    return true;
+  }
+
+  if (prefix == "log") {
+    vector<string> logtext;
+    cmd_getval(g_ceph_context, cmdmap, "logtext", logtext);
+    ostringstream ds;
+    std::copy(logtext.begin(), logtext.end(),
+	      ostream_iterator<string>(ds, " "));
+    LogEntry le;
+    le.who = m->get_orig_source_inst();
+    le.stamp = m->get_recv_stamp();
+    le.seq = 0;
+    le.type = CLOG_INFO;
+    le.msg = ds.str();
+    pending_summary.add(le);
+    pending_log.insert(pair<utime_t,LogEntry>(le.stamp, le));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, string(), get_version()));
+    return true;
+  }
 
   getline(ss, rs);
   mon->reply_command(m, err, rs, get_version());
