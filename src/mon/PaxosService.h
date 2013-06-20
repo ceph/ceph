@@ -559,7 +559,7 @@ public:
    *
    *  - we are not proposing a new version;
    *  - we are ready to be written to -- i.e., we have a pending value.
-   *  - paxos is writeable
+   *  - paxos is (active or updating)
    *
    * @returns true if writeable; false otherwise
    */
@@ -567,7 +567,7 @@ public:
     return
       !is_proposing() &&
       is_write_ready() &&
-      paxos->is_writeable();
+      (paxos->is_active() || paxos->is_updating());
   }
 
   /**
