@@ -563,6 +563,7 @@ struct RGWRegionMap {
 WRITE_CLASS_ENCODER(RGWRegionMap);
 
 class RGWDataChangesLog;
+class RGWReplicaLogger;
   
 class RGWStateLog {
   RGWRados *store;
@@ -653,6 +654,7 @@ class RGWRados
 {
   friend class RGWGC;
   friend class RGWStateLog;
+  friend class RGWReplicaLogger;
 
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx();

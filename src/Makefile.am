@@ -401,14 +401,16 @@ librgw_a_SOURCES =  \
 	rgw/rgw_cors.cc \
 	rgw/rgw_cors_s3.cc \
         rgw/rgw_auth_s3.cc \
-	rgw/rgw_metadata.cc
+	rgw/rgw_metadata.cc \
+	rgw/rgw_replica_log.cc
 librgw_a_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librgw_a_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
 noinst_LIBRARIES += librgw.a
 
 my_radosgw_ldadd = \
-       libglobal.la librgw.a librados.la libcls_rgw_client.a libcls_log_client.a libcls_statelog_client.a \
-       libcls_lock_client.a libcls_refcount_client.a libcls_version_client.a -lcurl -lexpat \
+       libglobal.la librgw.a librados.la libcls_rgw_client.a libcls_log_client.a \
+       libcls_statelog_client.a libcls_replica_log_client.a libcls_lock_client.a \
+       libcls_refcount_client.a libcls_version_client.a -lcurl -lexpat \
        $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
 radosgw_SOURCES = \
@@ -420,6 +422,7 @@ radosgw_SOURCES = \
         rgw/rgw_rest_user.cc \
         rgw/rgw_rest_bucket.cc \
         rgw/rgw_rest_metadata.cc \
+        rgw/rgw_replica_log.cc \
         rgw/rgw_rest_log.cc \
         rgw/rgw_http_client.cc \
         rgw/rgw_swift.cc \
@@ -2125,6 +2128,7 @@ noinst_HEADERS = \
 	rgw/rgw_swift.h\
 	rgw/rgw_swift_auth.h\
 	rgw/rgw_rados.h\
+	rgw/rgw_replica_log.h \
 	rgw/rgw_resolve.h\
 	rgw/rgw_rest.h\
 	rgw/rgw_rest_swift.h\
