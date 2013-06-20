@@ -50,7 +50,6 @@ ceph auth del client.xx
 # with and without verbosity
 ceph osd dump | grep '^epoch'
 ceph --concise osd dump | grep '^epoch'
-ceph --verbose osd dump | grep '^epoch'
 
 # df
 ceph df | grep GLOBAL
@@ -65,10 +64,6 @@ ceph health
 ceph health detail
 ceph health --format json-pretty
 ceph health detail --format xml-pretty
-
-ceph injectargs -- --debug_ms=1
-ceph injectargs -- --debug-ms=1
-expect_false ceph injectargs -- debug_ms=1
 
 ceph -w > /tmp/$$ &
 wpid="$!"
@@ -87,16 +82,15 @@ expect_false ceph mds cluster_down
 ceph mds cluster_up --no-log-to-stderr 2>&1 | grep "unmarked mdsmap DOWN"
 expect_false ceph mds cluster_up
 
-# XXX is this a reasonable test?
-ceph mds compat rm_incompat 5
-expect_false ceph mds rm_compat 5
+ceph mds compat rm_incompat 4
+ceph mds compat rm_incompat 4
 
 ceph mds compat show
 expect_false ceph mds deactivate 2
 ceph mds dump
 # XXX mds fail, but how do you undo it?
 mdsmapfile=/tmp/mdsmap.$$
-current_epoch=$(ceph mds getmap -o $mdsmapfile --no-log-to-stderr 2>&1 | sed 's/.*epoch //')
+current_epoch=$(ceph mds getmap -o $mdsmapfile --no-log-to-stderr 2>&1 | grep epoch | sed 's/.*epoch //')
 [ -s $mdsmapfile ]
 ((epoch = current_epoch + 1))
 ceph mds setmap -i $mdsmapfile $epoch
@@ -116,7 +110,6 @@ ceph mds stat
 # ceph mds rmfailed
 # ceph mds set_state
 # ceph mds stop
-# ceph mds tell
 
 # no mon add/remove
 ceph mon dump
@@ -135,8 +128,10 @@ ceph osd crush tunables legacy
 ceph osd crush tunables bobtail
 
 # how do I tell when these are done?
-#ceph osd scrub 0
-#ceph osd deep-scrub 0
+ceph osd scrub 0
+ceph osd deep-scrub 0
+ceph osd repair 0
+
 ceph osd set noup
 ceph osd down 0
 ceph osd dump | grep 'osd.0 down'
@@ -170,7 +165,9 @@ ceph osd getmaxosd | grep 'max_osd = 10'
 ceph osd setmaxosd $save
 ceph osd getmaxosd | grep "max_osd = $save"
 
-#XXX ceph osd lost - this is bad, right?
+id=`ceph osd create`
+ceph osd lost $id --yes-i-really-mean-it
+ceph osd rm $id
 ceph osd ls
 ceph osd lspools | grep data
 ceph osd map data foo | grep 'pool.*data.*object.*foo.*pg.*up.*acting'
@@ -190,12 +187,11 @@ ceph osd pool rename data2 data3
 ceph osd lspools | grep data3
 ceph osd pool delete data3 data3 --yes-i-really-really-mean-it
 
-# XXX ceph osd repair
 ceph osd stat | grep up,
-# XXX ceph osd tell
 
-# XXX does this leave osds out/down?
-# ceph osd thrash 10
+for id in `ceph osd ls` ; do
+	ceph tell osd.$id version
+done
 
 
 ceph pg debug unfound_objects_exist
@@ -207,13 +203,14 @@ ceph pg dump_pools_json
 ceph pg dump_stuck inactive
 ceph pg dump_stuck unclean
 ceph pg dump_stuck stale
-# XXX can I test this?
+# can't test this...
 # ceph pg force_create_pg
 ceph pg getmap -o /tmp/map
 [ -s /tmp/map ]
 ceph pg map 0.0 | grep acting
 ceph pg repair 0.0
 ceph pg scrub 0.0
+
 ceph pg send_pg_creates
 ceph pg set_full_ratio 0.90
 ceph pg dump --format=plain | grep '^full_ratio 0.9'
@@ -227,7 +224,6 @@ ceph quorum_status
 ceph report | grep osd_stats
 ceph status
 ceph -s
-# ceph stop_cluster
 # ceph sync force
 ceph sync status | grep paxos_version
 
@@ -252,8 +248,6 @@ ceph osd pool set data size 2
 
 ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 2'
 
-for id in `ceph osd ls` ; do
-	ceph tell osd.$id version
-done
+ceph osd thrash 10
 
 echo OK
