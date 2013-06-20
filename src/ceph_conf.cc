@@ -156,7 +156,9 @@ int main(int argc, const char **argv)
 
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
+	      CINIT_FLAG_NO_DAEMON_ACTIONS);
 
   // do not common_init_finish(); do not start threads; do not do any of thing
   // wonky things the daemon whose conf we are examining would do (like initialize
