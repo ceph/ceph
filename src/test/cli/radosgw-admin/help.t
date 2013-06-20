@@ -61,6 +61,12 @@
     opstate set                set state on an entry (use client_id, op_id, object)
     opstate renewstate         renew state on an entry (use client_id, op_id, object)
     opstate rmstate            remove entry (use client_id, op_id, object)
+    replicamdlog get           get the replica metadata log
+    replicamdlog delete        delete the replica metadata log
+    replicadatalog get         get the replica data log
+    replicadatalog delete      delete the replica data log
+    replicabucketlog get       get the replica bucket log
+    replicabucketlog delete    delete the replica bucket log
   options:
      --uid=<id>                user id
      --subuser=<name>          subuser name
