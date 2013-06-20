@@ -100,12 +100,12 @@ void _usage()
   cerr << "  opstate set                set state on an entry (use client_id, op_id, object)\n";
   cerr << "  opstate renewstate         renew state on an entry (use client_id, op_id, object)\n";
   cerr << "  opstate rmstate            remove entry (use client_id, op_id, object)\n";
-  cerr << "  replicamdlog get           get the replica metadata log";
-  cerr << "  replicamdlog delete        delete the replica metadata log";
-  cerr << "  replicadatalog get         get the replica data log";
-  cerr << "  replicadatalog delete      delete the replica data log";
-  cerr << "  replicabucketlog get       get the replica bucket log";
-  cerr << "  replicabucketlog delete    delete the replica bucket log";
+  cerr << "  replicamdlog get           get the replica metadata log\n";
+  cerr << "  replicamdlog delete        delete the replica metadata log\n";
+  cerr << "  replicadatalog get         get the replica data log\n";
+  cerr << "  replicadatalog delete      delete the replica data log\n";
+  cerr << "  replicabucketlog get       get the replica bucket log\n";
+  cerr << "  replicabucketlog delete    delete the replica bucket log\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --subuser=<name>          subuser name\n";
