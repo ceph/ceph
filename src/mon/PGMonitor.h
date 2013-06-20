@@ -152,7 +152,9 @@ public:
   bool should_stash_full() {
     return false;  // never
   }
-
+  virtual void encode_full(MonitorDBStore::Transaction *t) {
+    assert(0 == "unimplemented encode_full");
+  }
 
 
   void tick();  // check state, take actions
