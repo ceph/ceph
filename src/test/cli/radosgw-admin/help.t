@@ -56,6 +56,11 @@
     bilog trim                 trim bucket index log (use start-marker, end-marker)
     datalog list               list data log
     datalog trim               trim data log
+    opstate list               list stateful operations entries (use client_id,
+                               op_id, object)
+    opstate set                set state on an entry (use client_id, op_id, object)
+    opstate renewstate         renew state on an entry (use client_id, op_id, object)
+    opstate rmstate            remove entry (use client_id, op_id, object)
   options:
      --uid=<id>                user id
      --subuser=<name>          subuser name
