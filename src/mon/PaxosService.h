@@ -85,6 +85,14 @@ class PaxosService {
   version_t trim_version;
 
 protected:
+
+  /**
+   * format of our state in leveldb, 0 for default
+   */
+  version_t format_version;
+
+
+
   /**
    * @defgroup PaxosService_h_callbacks Callback classes
    * @{
@@ -193,6 +201,7 @@ public:
       proposing(false),
       service_version(0), proposal_timer(0), have_pending(false),
       trim_version(0),
+      format_version(0),
       last_committed_name("last_committed"),
       first_committed_name("first_committed"),
       full_prefix_name("full"), full_latest_name("latest"),
@@ -427,6 +436,13 @@ public:
    * @note This function may get called twice in certain recovery cases.
    */
   virtual void on_active() { }
+
+  /**
+   * this is called when activating on the leader
+   *
+   * it should conditionally upgrade the on-disk format by proposing a transaction
+   */
+  virtual void upgrade_format() { }
 
   /**
    * Called when the Paxos system enters a Leader election.

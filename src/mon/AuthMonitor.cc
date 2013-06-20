@@ -87,8 +87,6 @@ void AuthMonitor::on_active()
 /*
   check_rotate();
 */
-
-  upgrade_format();
 }
 
 void AuthMonitor::create_initial()
@@ -200,8 +198,6 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
   if (last_allocated_id == 0)
     last_allocated_id = max_global_id;
 
-  format_version = get_value("format_version");
-
   dout(10) << "update_from_paxos() last_allocated_id=" << last_allocated_id
 	   << " max_global_id=" << max_global_id
 	   << " format_version " << format_version
@@ -252,10 +248,6 @@ void AuthMonitor::encode_pending(MonitorDBStore::Transaction *t)
   vector<Incremental>::iterator p;
   for (p = pending_auth.begin(); p != pending_auth.end(); ++p)
     p->encode(bl, mon->get_quorum_features());
-
-  if (format_version > 0) {
-    t->put(get_service_name(), "format_version", format_version);
-  }
 
   version_t version = get_last_committed() + 1;
   put_version(t, version, bl);
