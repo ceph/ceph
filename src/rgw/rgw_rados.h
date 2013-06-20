@@ -25,7 +25,6 @@ class RGWGC;
 
 #define RGW_OBJ_NS_MULTIPART "multipart"
 #define RGW_OBJ_NS_SHADOW    "shadow"
-#define RGW_INDEX_LOCK_NAME  "rgw_process"
 
 static inline void prepend_bucket_marker(rgw_bucket& bucket, string& orig_oid, string& oid)
 {
@@ -1216,8 +1215,8 @@ public:
   int time_log_list(const string& oid, utime_t& start_time, utime_t& end_time,
                     int max_entries, list<cls_log_entry>& entries, string& marker, bool *truncated);
   int time_log_trim(const string& oid, utime_t& start_time, utime_t& end_time);
-  int lock_exclusive(rgw_bucket& pool, const string& oid, utime_t& duration, string& owner_id);
-  int unlock(rgw_bucket& pool, const string& oid, string& owner_id);
+  int lock_exclusive(rgw_bucket& pool, const string& oid, utime_t& duration, string& zone_id, string& owner_id);
+  int unlock(rgw_bucket& pool, const string& oid, string& zone_id, string& owner_id);
 
   /// clean up/process any temporary objects older than given date[/time]
   int remove_temp_objects(string date, string time);
