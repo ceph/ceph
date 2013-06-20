@@ -2,6 +2,7 @@
 
 import argparse
 import errno
+import fcntl
 import logging
 import os
 import os.path
@@ -12,7 +13,6 @@ import stat
 import sys
 import tempfile
 import uuid
-import lockfile
 
 """
 Prepare:
@@ -110,8 +110,30 @@ if LOG_NAME == '__main__':
     LOG_NAME = os.path.basename(sys.argv[0])
 LOG = logging.getLogger(LOG_NAME)
 
-prepare_lock = lockfile.FileLock('/var/lib/ceph/tmp/ceph-disk.prepare.lock')
-activate_lock = lockfile.FileLock('/var/lib/ceph/tmp/ceph-disk.activate.lock')
+
+
+
+###### lock ########
+
+class filelock(object):
+    def __init__(self, fn):
+        self.fn = fn
+        self.fd = None
+
+    def acquire(self):
+        assert not self.fd
+        self.fd = file(self.fn, 'w')
+        fcntl.lockf(self.fd, fcntl.LOCK_EX)
+
+    def release(self):
+        assert self.fd
+        fcntl.lockf(self.fd, fcntl.LOCK_UN)
+        self.fd = None
+
+
+prepare_lock = filelock('/var/lib/ceph/tmp/ceph-disk.prepare.lock')
+activate_lock = filelock('/var/lib/ceph/tmp/ceph-disk.activate.lock')
+
 
 ###### exceptions ########
 
