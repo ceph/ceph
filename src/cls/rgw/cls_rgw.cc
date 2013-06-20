@@ -130,6 +130,59 @@ static int log_index_operation(cls_method_context_t hctx, string& obj, RGWModify
   return cls_cxx_map_set_val(hctx, key, &bl);
 }
 
+/*
+ * read list of objects, skips objects in the ugly namespace
+ */
+static int get_obj_vals(cls_method_context_t hctx, const string& start, const string& filter_prefix,
+                        int num_entries, map<string, bufferlist> *pkeys)
+{
+  int ret = cls_cxx_map_get_vals(hctx, start, filter_prefix, num_entries, pkeys);
+  if (ret < 0)
+    return ret;
+
+  if (pkeys->empty())
+    return 0;
+
+  map<string, bufferlist>::reverse_iterator last_element = pkeys->rbegin();
+  if ((unsigned char)last_element->first[0] < BI_PREFIX_CHAR) {
+    /* nothing to see here, move along */
+    return 0;
+  }
+
+  map<string, bufferlist>::iterator first_element = pkeys->begin();
+  if ((unsigned char)first_element->first[0] > BI_PREFIX_CHAR) {
+    return 0;
+  }
+
+  /* let's rebuild the list, only keep entries we're interested in */
+  map<string, bufferlist> old_keys;
+  old_keys.swap(*pkeys);
+
+  for (map<string, bufferlist>::iterator iter = old_keys.begin(); iter != old_keys.end(); ++iter) {
+    if ((unsigned char)iter->first[0] != BI_PREFIX_CHAR) {
+      (*pkeys)[iter->first] = iter->second;
+    }
+  }
+
+  if (num_entries == (int)pkeys->size())
+    return 0;
+
+  map<string, bufferlist> new_keys;
+  char c[] = { BI_PREFIX_CHAR + 1, 0 };
+  string new_start = c;
+
+  /* now get some more keys */
+  ret = cls_cxx_map_get_vals(hctx, new_start, filter_prefix, num_entries - pkeys->size(), &new_keys);
+  if (ret < 0)
+    return ret;
+
+  for (map<string, bufferlist>::iterator iter = new_keys.begin(); iter != new_keys.end(); ++iter) {
+    (*pkeys)[iter->first] = iter->second;
+  }
+
+  return 0;
+}
+
 int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   bufferlist::iterator iter = in->begin();
@@ -159,7 +212,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   bufferlist bl;
 
   map<string, bufferlist> keys;
-  rc = cls_cxx_map_get_vals(hctx, op.start_obj, op.filter_prefix, op.num_entries + 1, &keys);
+  rc = get_obj_vals(hctx, op.start_obj, op.filter_prefix, op.num_entries + 1, &keys);
   if (rc < 0)
     return rc;
 
@@ -222,7 +275,7 @@ static int check_index(cls_method_context_t hctx, struct rgw_bucket_dir_header *
   bool done = false;
 
   do {
-    rc = cls_cxx_map_get_vals(hctx, start_obj, filter_prefix, CHECK_CHUNK_SIZE, &keys);
+    rc = get_obj_vals(hctx, start_obj, filter_prefix, CHECK_CHUNK_SIZE, &keys);
     if (rc < 0)
       return rc;
 
