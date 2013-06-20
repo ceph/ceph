@@ -442,7 +442,7 @@ int Monitor::preinit()
 
   // we need to bootstrap authentication keys so we can form an
   // initial quorum.
-  if (authmon()->get_version() == 0) {
+  if (authmon()->get_last_committed() == 0) {
     dout(10) << "loading initial keyring to bootstrap authentication for mkfs" << dendl;
     bufferlist bl;
     store->get("mkfs", "keyring", bl);

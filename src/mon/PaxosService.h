@@ -85,6 +85,14 @@ class PaxosService {
   version_t trim_version;
 
 protected:
+
+  /**
+   * format of our state in leveldb, 0 for default
+   */
+  version_t format_version;
+
+
+
   /**
    * @defgroup PaxosService_h_callbacks Callback classes
    * @{
@@ -193,11 +201,10 @@ public:
       proposing(false),
       service_version(0), proposal_timer(0), have_pending(false),
       trim_version(0),
+      format_version(0),
       last_committed_name("last_committed"),
       first_committed_name("first_committed"),
-      last_accepted_name("last_accepted"),
-      mkfs_name("mkfs"),
-      full_version_name("full"), full_latest_name("latest"),
+      full_prefix_name("full"), full_latest_name("latest"),
       cached_first_committed(0), cached_last_committed(0)
   {
   }
@@ -431,6 +438,13 @@ public:
   virtual void on_active() { }
 
   /**
+   * this is called when activating on the leader
+   *
+   * it should conditionally upgrade the on-disk format by proposing a transaction
+   */
+  virtual void upgrade_format() { }
+
+  /**
    * Called when the Paxos system enters a Leader election.
    *
    * @remarks It's a courtesy method, in case the class implementing this
@@ -466,9 +480,7 @@ public:
    */
   const string last_committed_name;
   const string first_committed_name;
-  const string last_accepted_name;
-  const string mkfs_name;
-  const string full_version_name;
+  const string full_prefix_name;
   const string full_latest_name;
   /**
    * @}
@@ -734,6 +746,7 @@ public:
    * @param t Transaction on which the full version shall be encoded.
    */
   virtual void encode_full(MonitorDBStore::Transaction *t) = 0;
+
   /**
    * @}
    */
@@ -790,30 +803,6 @@ public:
     t->put(get_service_name(), ver, bl);
   }
   /**
-   * Put the contents of @p bl into version @p ver (prefixed with @p prefix)
-   *
-   * @param t A transaction to which we will add this put operation
-   * @param prefix The version's prefix
-   * @param ver The version to which we will add the value
-   * @param bl A bufferlist containing the version's value
-   */
-  void put_version(MonitorDBStore::Transaction *t, 
-		   const string& prefix, version_t ver, bufferlist& bl);
-  /**
-   * Put a version number into a key composed by @p prefix and @p name
-   * combined.
-   *
-   * @param t The transaction to which we will add this put operation
-   * @param prefix The key's prefix
-   * @param name The key's suffix
-   * @param ver A version number
-   */
-  void put_version(MonitorDBStore::Transaction *t,
-		   const string& prefix, const string& name, version_t ver) {
-    string key = mon->store->combine_strings(prefix, name);
-    t->put(get_service_name(), key, ver);
-  }
-  /**
    * Put the contents of @p bl into a full version key for this service, that
    * will be created with @p ver in mind.
    *
@@ -823,7 +812,7 @@ public:
    */
   void put_version_full(MonitorDBStore::Transaction *t,
 			version_t ver, bufferlist& bl) {
-    string key = mon->store->combine_strings(full_version_name, ver);
+    string key = mon->store->combine_strings(full_prefix_name, ver);
     t->put(get_service_name(), key, bl);
   }
   /**
@@ -834,8 +823,7 @@ public:
    * @param ver A version number
    */
   void put_version_latest_full(MonitorDBStore::Transaction *t, version_t ver) {
-    string key =
-      mon->store->combine_strings(full_version_name, full_latest_name);
+    string key = mon->store->combine_strings(full_prefix_name, full_latest_name);
     t->put(get_service_name(), key, ver);
   }
   /**
@@ -845,32 +833,10 @@ public:
    * @param key The key to which we will add the value
    * @param bl A bufferlist containing the value
    */
-  void put_value(MonitorDBStore::Transaction *t,
-		 const string& key, bufferlist& bl) {
+  void put_value(MonitorDBStore::Transaction *t, const string& key, bufferlist& bl) {
     t->put(get_service_name(), key, bl);
   }
-  /**
-   * Put the contents of @p bl into a key composed of @p prefix and @p name
-   * concatenated.
-   *
-   * @param t A transaction to which we will add this put operation
-   * @param prefix The key's prefix
-   * @param name The key's suffix
-   * @param bl A bufferlist containing the value
-   */
-  void put_value(MonitorDBStore::Transaction *t,
-		 const string& prefix, const string& name, bufferlist& bl) {
-    string key = mon->store->combine_strings(prefix, name);
-    t->put(get_service_name(), key, bl);
-  }
-  /**
-   * Remove our mkfs entry from the store
-   *
-   * @param t A transaction to which we will add this erase operation
-   */
-  void erase_mkfs(MonitorDBStore::Transaction *t) {
-    t->erase(mkfs_name, get_service_name());
-  }
+
   /**
    * @}
    */
@@ -902,14 +868,6 @@ public:
   version_t get_last_committed() {
     return cached_last_committed;
   }
-  /**
-   * Get our current version
-   *
-   * @returns Our current version
-   */
-  version_t get_version() {
-    return get_last_committed();
-  }
 
   /**
    * @}
@@ -926,27 +884,6 @@ public:
     return mon->store->get(get_service_name(), ver, bl);
   }
   /**
-   * Get the contents of a given version @p ver with a given prefix @p prefix
-   *
-   * @param prefix The intended prefix
-   * @param ver The version being obtained
-   * @param bl The bufferlist to be populated
-   * @return 0 on success; <0 otherwise
-   */
-  int get_version(const string& prefix, version_t ver, bufferlist& bl);
-  /**
-   * Get a version number from a given key, whose name is composed by
-   * @p prefix and @p name combined.
-   *
-   * @param prefix Key's prefix
-   * @param name Key's suffix
-   * @returns A version number
-   */
-  version_t get_version(const string& prefix, const string& name) {
-    string key = mon->store->combine_strings(prefix, name);
-    return mon->store->get(get_service_name(), key);
-  }
-  /**
    * Get the contents of a given full version of this service.
    *
    * @param ver A version number
@@ -954,7 +891,7 @@ public:
    * @returns 0 on success; <0 otherwise
    */
   int get_version_full(version_t ver, bufferlist& bl) {
-    string key = mon->store->combine_strings(full_version_name, ver);
+    string key = mon->store->combine_strings(full_prefix_name, ver);
     return mon->store->get(get_service_name(), key, bl);
   }
   /**
@@ -963,19 +900,10 @@ public:
    * @returns A version number
    */
   version_t get_version_latest_full() {
-    return get_version(full_version_name, full_latest_name);
+    string key = mon->store->combine_strings(full_prefix_name, full_latest_name);
+    return mon->store->get(get_service_name(), key);
   }
-  /**
-   * Get a value from a given key, composed by @p prefix and @p name combined.
-   *
-   * @param[in] prefix Key's prefix
-   * @param[in] name Key's suffix
-   * @param[out] bl The bufferlist to be populated with the value
-   */
-  int get_value(const string& prefix, const string& name, bufferlist& bl) {
-    string key = mon->store->combine_strings(prefix, name);
-    return mon->store->get(get_service_name(), key, bl);
-  }
+
   /**
    * Get a value from a given key.
    *
@@ -990,49 +918,10 @@ public:
    *
    * @param[in] key The key
    */
-  int get_value(const string& key) {
+  version_t get_value(const string& key) {
     return mon->store->get(get_service_name(), key);
   }
-  /**
-   * Get the contents of our mkfs entry
-   *
-   * @param bl A bufferlist to populate with the contents of the entry
-   * @return 0 on success; <0 otherwise
-   */
-  int get_mkfs(bufferlist& bl) {
-    return mon->store->get(mkfs_name, get_service_name(), bl);
-  }
 
-  bool exists_key(const string &key) {
-    return mon->store->exists(get_service_name(), key);
-  }
-
-  bool exists_version(const version_t v) {
-    return exists_key(stringify(v));
-  }
-
-  /**
-   * Checks if a given key composed by @p prefix and @p name exists.
-   *
-   * @param prefix Key's prefix
-   * @param name Key's suffix
-   * @returns true if it exists; false otherwise.
-   */
-  bool exists_key(const string& prefix, const string& name) {
-    string key = mon->store->combine_strings(prefix, name);
-    return exists_key(key);
-  }
-
-  /**
-   * Checks if a given version @v exists
-   *
-   * @param prefix key's prefix
-   * @param v key's suffix
-   * @returns true if key exists; false otherwise.
-   */
-  bool exists_version(const string& prefix, const version_t v) {
-    return exists_key(prefix, stringify(v));
-  }
   /**
    * @}
    */

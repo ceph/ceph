@@ -5,9 +5,10 @@
 
 #define dout_subsys ceph_subsys_mon
 #include "common/debug.h"
-
+#include "include/stringify.h"
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
+#include "mon/MonitorDBStore.h"
 
 // --
 
@@ -90,6 +91,62 @@ void PGMap::Incremental::decode(bufferlist::iterator &bl)
   DECODE_FINISH(bl);
 }
 
+void PGMap::Incremental::write_delta(MonitorDBStore::Transaction *t, bufferlist& incbl, uint64_t features) const
+{
+  string prefix = "pgmap_meta";
+  t->put(prefix, "version", version);
+  t->put(prefix, "last_osdmap_epoch", osdmap_epoch);
+  t->put(prefix, "last_pg_scan", pg_scan);
+  {
+    bufferlist bl;
+    ::encode(full_ratio, bl);
+    ::encode(nearfull_ratio, bl);
+    t->put(prefix, "full_ratios", bl);
+  }
+  {
+    bufferlist bl;
+    ::encode(stamp, bl);
+    t->put(prefix, "stamp", bl);
+  }
+
+  // ...
+  ::encode(stamp, incbl);
+  {
+    bufferlist dirty;
+    string prefix = "pgmap_pg";
+    for (map<pg_t,pg_stat_t>::const_iterator p = pg_stat_updates.begin();
+	 p != pg_stat_updates.end();
+	 ++p) {
+      ::encode(p->first, dirty);
+      bufferlist bl;
+      ::encode(p->second, bl, features);
+      t->put(prefix, stringify(p->first), bl);
+    }
+    for (set<pg_t>::const_iterator p = pg_remove.begin(); p != pg_remove.end(); ++p) {
+      ::encode(*p, dirty);
+      t->erase(prefix, stringify(*p));
+    }
+    ::encode(dirty, incbl);
+  }
+  {
+    bufferlist dirty;
+    string prefix = "pgmap_osd";
+    for (map<int32_t,osd_stat_t>::const_iterator p = osd_stat_updates.begin();
+	 p != osd_stat_updates.end();
+	 ++p) {
+      ::encode(p->first, dirty);
+      bufferlist bl;
+      ::encode(p->second, bl, features);
+      t->put(prefix, stringify(p->first), bl);
+    }
+    for (set<int32_t>::const_iterator p = osd_stat_rm.begin(); p != osd_stat_rm.end(); ++p) {
+      ::encode(*p, dirty);
+      t->erase(prefix, stringify(*p));
+    }
+    ::encode(dirty, incbl);
+  }
+}
+
 void PGMap::Incremental::dump(Formatter *f) const
 {
   f->dump_unsigned("version", version);
@@ -109,7 +166,7 @@ void PGMap::Incremental::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("osd_stat_updates");
-  for (map<int,osd_stat_t>::const_iterator p = osd_stat_updates.begin(); p != osd_stat_updates.end(); ++p) {
+  for (map<int32_t,osd_stat_t>::const_iterator p = osd_stat_updates.begin(); p != osd_stat_updates.end(); ++p) {
     f->open_object_section("osd_stat");
     f->dump_int("osd", p->first);
     p->second.dump(f);
@@ -176,6 +233,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   }
   if (ratios_changed)
     redo_full_sets();
+
   for (map<pg_t,pg_stat_t>::const_iterator p = inc.pg_stat_updates.begin();
        p != inc.pg_stat_updates.end();
        ++p) {
@@ -192,15 +250,15 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     }
     stat_pg_add(update_pg, update_stat);
   }
-  for (map<int,osd_stat_t>::const_iterator p = inc.osd_stat_updates.begin();
+  for (map<int32_t,osd_stat_t>::const_iterator p = inc.osd_stat_updates.begin();
        p != inc.osd_stat_updates.end();
        ++p) {
     int osd = p->first;
     const osd_stat_t &new_stats(p->second);
     
-    hash_map<int,osd_stat_t>::iterator t = osd_stat.find(osd);
+    hash_map<int32_t,osd_stat_t>::iterator t = osd_stat.find(osd);
     if (t == osd_stat.end()) {
-      hash_map<int,osd_stat_t>::value_type v(osd, new_stats);
+      hash_map<int32_t,osd_stat_t>::value_type v(osd, new_stats);
       osd_stat.insert(v);
     } else {
       stat_osd_sub(t->second);
@@ -226,7 +284,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   for (set<int>::iterator p = inc.osd_stat_rm.begin();
        p != inc.osd_stat_rm.end();
        ++p) {
-    hash_map<int,osd_stat_t>::iterator t = osd_stat.find(*p);
+    hash_map<int32_t,osd_stat_t>::iterator t = osd_stat.find(*p);
     if (t != osd_stat.end()) {
       stat_osd_sub(t->second);
       osd_stat.erase(t);
@@ -260,7 +318,7 @@ void PGMap::redo_full_sets()
 {
   full_osds.clear();
   nearfull_osds.clear();
-  for (hash_map<int, osd_stat_t>::iterator i = osd_stat.begin();
+  for (hash_map<int32_t, osd_stat_t>::iterator i = osd_stat.begin();
        i != osd_stat.end();
        ++i) {
     register_nearfull_status(i->first, i->second);
@@ -300,7 +358,7 @@ void PGMap::calc_stats()
        ++p) {
     stat_pg_add(p->first, p->second);
   }
-  for (hash_map<int,osd_stat_t>::iterator p = osd_stat.begin();
+  for (hash_map<int32_t,osd_stat_t>::iterator p = osd_stat.begin();
        p != osd_stat.end();
        ++p)
     stat_osd_add(p->second);
@@ -426,6 +484,213 @@ void PGMap::decode(bufferlist::iterator &bl)
   calc_stats();
 }
 
+void PGMap::read_meta(MonitorDBStore *store)
+{
+  string prefix = "pgmap_meta";
+
+  version = store->get(prefix, "version");
+  last_osdmap_epoch = store->get(prefix, "last_osdmap_epoch");
+  last_pg_scan = store->get(prefix, "last_pg_scan");
+  {
+    float old_full_ratio = full_ratio;
+    float old_nearfull_ratio = nearfull_ratio;
+
+    bufferlist bl;
+    store->get(prefix, "full_ratios", bl);
+    bufferlist::iterator p = bl.begin();
+    ::decode(full_ratio, p);
+    ::decode(nearfull_ratio, p);
+
+    if (full_ratio != old_full_ratio ||
+	nearfull_ratio != old_nearfull_ratio)
+      redo_full_sets();
+  }
+  {
+    bufferlist bl;
+    store->get(prefix, "stamp", bl);
+    bufferlist::iterator p = bl.begin();
+    ::decode(stamp, p);
+  }
+}
+
+void PGMap::dirty_all(Incremental& inc)
+{
+  inc.osdmap_epoch = last_osdmap_epoch;
+  inc.pg_scan = last_pg_scan;
+  inc.full_ratio = full_ratio;
+  inc.nearfull_ratio = nearfull_ratio;
+
+  for (hash_map<pg_t,pg_stat_t>::const_iterator p = pg_stat.begin(); p != pg_stat.end(); ++p) {
+    inc.pg_stat_updates[p->first] = p->second;
+  }
+  for (hash_map<int32_t, osd_stat_t>::const_iterator p = osd_stat.begin(); p != osd_stat.end(); ++p) {
+    inc.osd_stat_updates[p->first] = p->second;
+  }
+
+}
+
+
+void PGMap::read_full(MonitorDBStore *store)
+{
+  read_meta(store);
+
+  string prefix = "pgmap_pg";
+  for (KeyValueDB::Iterator i = store->get_iterator(prefix); i->valid(); i->next()) {
+    string key = i->key();
+    pg_t pgid;
+    if (!pgid.parse(key.c_str())) {
+      dout(0) << "unable to parse key " << key << dendl;
+      continue;
+    }
+    bufferlist bl = i->value();
+    bufferlist::iterator p = bl.begin();
+    ::decode(pg_stat[pgid], p);
+    dout(20) << " got " << pgid << dendl;
+  }
+
+  prefix = "pgmap_osd";
+  for (KeyValueDB::Iterator i = store->get_iterator(prefix); i->valid(); i->next()) {
+    string key = i->key();
+    int osd;
+    osd = atoi(key.c_str());
+    bufferlist bl = i->value();
+    bufferlist::iterator p = bl.begin();
+    ::decode(osd_stat[osd], p);
+    dout(20) << " got osd." << osd << dendl;
+  }
+
+  calc_stats();
+}
+
+void PGMap::apply_delta(CephContext *cct, MonitorDBStore *store, bufferlist& bl)
+{
+  version_t v = version + 1;
+
+  utime_t inc_stamp;
+  bufferlist dirty_pgs, dirty_osds;
+  {
+    bufferlist::iterator p = bl.begin();
+    ::decode(inc_stamp, p);
+    ::decode(dirty_pgs, p);
+    ::decode(dirty_osds, p);
+  }
+
+  utime_t delta_t;
+  delta_t = inc_stamp;
+  delta_t -= stamp;
+  stamp = inc_stamp;
+
+  pool_stat_t pg_sum_old = pg_sum;
+
+  // pgs
+  bufferlist::iterator p = dirty_pgs.begin();
+  while (!p.end()) {
+    pg_t pgid;
+    ::decode(pgid, p);
+    lgeneric_subdout(cct, mon, 20) << " refreshing pg " << pgid << dendl;
+    bufferlist bl;
+    int r = store->get("pgmap_pg", stringify(pgid), bl);
+    hash_map<pg_t,pg_stat_t>::iterator s = pg_stat.find(pgid);
+    if (r >= 0) {
+      bufferlist::iterator q = bl.begin();
+      if (s != pg_stat.end())
+	stat_pg_sub(pgid, s->second);
+      pg_stat_t& r = pg_stat[pgid];
+      ::decode(r, q);
+      stat_pg_add(pgid, r);
+    } else {
+      if (s != pg_stat.end()) {
+	stat_pg_sub(pgid, s->second);
+	pg_stat.erase(s);
+      }
+    }
+  }
+
+  // osds
+  p = dirty_osds.begin();
+  while (!p.end()) {
+    int32_t osd;
+    ::decode(osd, p);
+    lgeneric_subdout(cct, mon, 20) << " refreshing osd." << osd << dendl;
+    bufferlist bl;
+    int r = store->get("pgmap_osd", stringify(osd), bl);
+    hash_map<int32_t,osd_stat_t>::iterator o = osd_stat.find(osd);
+    if (r >= 0) {
+      bufferlist::iterator q = bl.begin();
+      if (o != osd_stat.end())
+	stat_osd_sub(o->second);
+      osd_stat_t& r = osd_stat[osd];
+      ::decode(r, q);
+      stat_osd_add(r);
+
+      // adjust [near]full status
+      register_nearfull_status(osd, r);
+    } else {
+      if (o != osd_stat.end()) {
+	stat_osd_sub(o->second);
+	osd_stat.erase(o);
+
+	// remove these old osds from full/nearfull set(s), too
+	nearfull_osds.erase(osd);
+	full_osds.erase(osd);
+      }
+    }
+  }
+
+  // calculate a delta, and average over the last 2 deltas.
+  pool_stat_t d = pg_sum;
+  d.stats.sub(pg_sum_old.stats);
+  pg_sum_deltas.push_back(make_pair(d, delta_t));
+  stamp_delta += delta_t;
+
+  pg_sum_delta.stats.add(d.stats);
+  if (pg_sum_deltas.size() > (std::list< pair<pool_stat_t, utime_t> >::size_type)MAX(1, cct ? cct->_conf->mon_stat_smooth_intervals : 1)) {
+    pg_sum_delta.stats.sub(pg_sum_deltas.front().first.stats);
+    stamp_delta -= pg_sum_deltas.front().second;
+    pg_sum_deltas.pop_front();
+  }
+
+  // ok, we're now on the new version
+  version = v;
+}
+
+void PGMap::write_meta(MonitorDBStore::Transaction *t, uint64_t features) const
+{
+  string prefix = "pgmap_meta";
+  t->put(prefix, "version", version);
+  t->put(prefix, "last_osdmap_epoch", last_osdmap_epoch);
+  t->put(prefix, "last_pg_scan", last_pg_scan);
+  {
+    bufferlist bl;
+    ::encode(full_ratio, bl);
+    ::encode(nearfull_ratio, bl);
+    t->put(prefix, "full_ratios", bl);
+  }
+  {
+    bufferlist bl;
+    ::encode(stamp, bl);
+    t->put(prefix, "stamp", bl);
+  }
+}
+
+void PGMap::write_full(MonitorDBStore::Transaction *t, uint64_t features) const
+{
+  write_meta(t, features);
+
+  string prefix = "pgmap_pg";
+  for (hash_map<pg_t,pg_stat_t>::const_iterator p = pg_stat.begin(); p != pg_stat.end(); ++p) {
+    bufferlist bl;
+    ::encode(p->second, bl);
+    t->put(prefix, stringify(p->first), bl);
+  }
+  prefix = "pgmap_osd";
+  for (hash_map<int32_t, osd_stat_t>::const_iterator p = osd_stat.begin(); p != osd_stat.end(); ++p) {
+    bufferlist bl;
+    ::encode(p->second, bl);
+    t->put(prefix, stringify(p->first), bl);
+  }
+}
+
 void PGMap::dump(Formatter *f) const
 {
   dump_basic(f);
@@ -487,7 +752,7 @@ void PGMap::dump_pool_stats(Formatter *f) const
 void PGMap::dump_osd_stats(Formatter *f) const
 {
   f->open_array_section("osd_stats");
-  for (hash_map<int,osd_stat_t>::const_iterator q = osd_stat.begin();
+  for (hash_map<int32_t,osd_stat_t>::const_iterator q = osd_stat.begin();
        q != osd_stat.end();
        ++q) {
     f->open_object_section("osd_stat");
@@ -558,7 +823,7 @@ void PGMap::dump(ostream& ss) const
      << "\t" << pg_sum.ondisk_log_size
      << std::endl;
   ss << "osdstat\tkbused\tkbavail\tkb\thb in\thb out" << std::endl;
-  for (hash_map<int,osd_stat_t>::const_iterator p = osd_stat.begin();
+  for (hash_map<int32_t,osd_stat_t>::const_iterator p = osd_stat.begin();
        p != osd_stat.end();
        ++p)
     ss << p->first
