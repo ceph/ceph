@@ -114,6 +114,7 @@ void PaxosService::refresh(bool *need_bootstrap)
   // update cached versions
   cached_first_committed = mon->store->get(get_service_name(), first_committed_name);
   cached_last_committed = mon->store->get(get_service_name(), last_committed_name);
+  format_version = get_value("format_version");
 
   dout(10) << __func__ << dendl;
 
@@ -194,6 +195,10 @@ void PaxosService::propose_pending()
 
   encode_pending(&t);
   have_pending = false;
+
+  if (format_version > 0) {
+    t.put(get_service_name(), "format_version", format_version);
+  }
 
   dout(30) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
@@ -297,6 +302,9 @@ void PaxosService::_active()
   // anyone waiting for the previous proposal to commit is no longer
   // on this list; it is on Paxos's.
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, 0);
+
+  if (is_active() && mon->is_leader())
+    upgrade_format();
 
   // NOTE: it's possible that this will get called twice if we commit
   // an old paxos value.  Implementations should be mindful of that.
