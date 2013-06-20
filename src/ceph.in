@@ -1489,7 +1489,7 @@ def main():
         # an awfully simple callback
         def watch_cb(arg, line, who, stamp_sec, stamp_nsec, seq, level, msg):
             print line
-	    sys.stdout.flush()
+            sys.stdout.flush()
 
         # first do a ceph status
         ret, outbuf, outs = json_command(prefix='status')
@@ -1507,13 +1507,14 @@ def main():
         # this instance keeps the watch connection alive, but is
         # otherwise unused
         logwatch = rados.MonitorLog(cluster_handle, level, watch_cb, 0)
+
         # loop forever letting watch_cb print lines
-        while True:
-            try:
+        try:
+            while True:
                 pass
-            except KeyboardInterrupt:
-                # or until ^C, at least
-                return 0
+        except KeyboardInterrupt:
+            # or until ^C, at least
+            return 0
 
     # read input file, if any
     inbuf = ''
