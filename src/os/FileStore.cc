@@ -469,10 +469,16 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   plb.add_u64_counter(l_os_j_full, "journal_full");
 
   logger = plb.create_perf_counters();
+
+  g_ceph_context->get_perfcounters_collection()->add(logger);
+  g_ceph_context->_conf->add_observer(this);
 }
 
 FileStore::~FileStore()
 {
+  g_ceph_context->_conf->remove_observer(this);
+  g_ceph_context->get_perfcounters_collection()->remove(logger);
+
   if (journal)
     journal->logger = NULL;
   delete logger;
@@ -1797,10 +1803,6 @@ int FileStore::mount()
 
   timer.init();
 
-  g_ceph_context->get_perfcounters_collection()->add(logger);
-
-  g_ceph_context->_conf->add_observer(this);
-
   // all okay.
   return 0;
 
@@ -1822,7 +1824,6 @@ int FileStore::umount()
 {
   dout(5) << "umount " << basedir << dendl;
   
-  g_ceph_context->_conf->remove_observer(this);
 
   start_sync();
 
@@ -1834,8 +1835,6 @@ int FileStore::umount()
   op_tp.stop();
 
   journal_stop();
-
-  g_ceph_context->get_perfcounters_collection()->remove(logger);
 
   op_finisher.stop();
   ondisk_finisher.stop();
