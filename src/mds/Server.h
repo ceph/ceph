@@ -242,6 +242,7 @@ public:
   // slaving
   void handle_slave_rename_prep(MDRequest *mdr);
   void handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
+  void handle_slave_rename_notify_ack(MDRequest *mdr, MMDSSlaveRequest *m);
   void _logged_slave_rename(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void _commit_slave_rename(MDRequest *mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr, bool finish_mdr=false);

@@ -790,6 +790,7 @@ protected:
   void _open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err);
   void _open_ino_parent_opened(inodeno_t ino, int ret);
   void _open_ino_traverse_dir(inodeno_t ino, open_ino_info_t& info, int err);
+  void _open_ino_fetch_dir(inodeno_t ino, MMDSOpenIno *m, CDir *dir);
   Context* _open_ino_get_waiter(inodeno_t ino, MMDSOpenIno *m);
   int open_ino_traverse_dir(inodeno_t ino, MMDSOpenIno *m,
 			    vector<inode_backpointer_t>& ancestors,
