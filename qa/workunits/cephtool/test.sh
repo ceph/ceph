@@ -82,9 +82,9 @@ if ! grep "$mymsg" /tmp/$$; then
 fi
 kill $wpid
 
-ceph mds cluster_down 2>&1 | grep "marked mdsmap DOWN"
+ceph mds cluster_down --no-log-to-stderr 2>&1 | grep "marked mdsmap DOWN"
 expect_false ceph mds cluster_down
-ceph mds cluster_up 2>&1 | grep "unmarked mdsmap DOWN"
+ceph mds cluster_up --no-log-to-stderr 2>&1 | grep "unmarked mdsmap DOWN"
 expect_false ceph mds cluster_up
 
 # XXX is this a reasonable test?
@@ -96,7 +96,7 @@ expect_false ceph mds deactivate 2
 ceph mds dump
 # XXX mds fail, but how do you undo it?
 mdsmapfile=/tmp/mdsmap.$$
-current_epoch=$(ceph mds getmap -o $mdsmapfile 2>&1 | sed 's/.*epoch //')
+current_epoch=$(ceph mds getmap -o $mdsmapfile --no-log-to-stderr 2>&1 | sed 's/.*epoch //')
 [ -s $mdsmapfile ]
 ((epoch = current_epoch + 1))
 ceph mds setmap -i $mdsmapfile $epoch
