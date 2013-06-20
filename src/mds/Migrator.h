@@ -256,7 +256,8 @@ public:
   void decode_import_inode_caps(CInode *in,
 				bufferlist::iterator &blp,
 				map<CInode*, map<client_t,Capability::Export> >& cap_imports);
-  void finish_import_inode_caps(CInode *in, int from, map<client_t,Capability::Export> &cap_map);
+  void finish_import_inode_caps(CInode *in, bool auth_cap,
+			        map<client_t,Capability::Export> &cap_map);
   int decode_import_dir(bufferlist::iterator& blp,
 			int oldauth,
 			CDir *import_root,
