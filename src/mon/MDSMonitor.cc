@@ -942,7 +942,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       r = 0;
     } else {
       ss << "compat feature " << f << " not present in " << pending_mdsmap.compat;
-      r = -ENOENT;
+      r = 0;
     }
   } else if (prefix == "mds compat rm_incompat") {
     int64_t f;
@@ -953,7 +953,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       r = 0;
     } else {
       ss << "incompat feature " << f << " not present in " << pending_mdsmap.compat;
-      r = -ENOENT;
+      r = 0;
     }
 
   } else if (prefix == "mds add_data_pool") {
