@@ -1220,6 +1220,7 @@ def ceph_conf(field, name):
     p = subprocess.Popen(
         args=[
             'ceph-conf',
+	    '--show-config-value',
             field,
             '-n',
             name,
