@@ -1309,18 +1309,18 @@ void Monitor::sync_send_chunks(SyncEntity sync)
 
 void Monitor::sync_requester_abort()
 {
-  dout(10) << __func__;
+  dout(10) << __func__ << dendl;
   assert(state == STATE_SYNCHRONIZING);
   assert(sync_role == SYNC_ROLE_REQUESTER);
 
   if (sync_leader.get() != NULL) {
-    *_dout << " " << sync_leader->entity;
+    dout(10) << __func__ << " leader " << sync_leader->entity << dendl;
     sync_leader->cancel_timeout();
     sync_leader.reset();
   }
 
   if (sync_provider.get() != NULL) {
-    *_dout << " " << sync_provider->entity;
+    dout(10) << __func__ << " provider " << sync_provider->entity << dendl;
     sync_provider->cancel_timeout();
 
     MMonSync *msg = new MMonSync(MMonSync::OP_ABORT);
@@ -1328,7 +1328,6 @@ void Monitor::sync_requester_abort()
 
     sync_provider.reset();
   }
-  *_dout << " clearing potentially inconsistent store" << dendl;
 
   // Given that we are explicitely aborting the whole sync process, we should
   // play it safe and clear the store.
@@ -2636,6 +2635,10 @@ void Monitor::handle_command(MMonCommand *m)
     authmon()->dispatch(m);
     return;
   }
+  if (module == "log") {
+    logmon()->dispatch(m);
+    return;
+  }
 
   if (module == "config-key") {
     if (!access_all) {
@@ -2651,21 +2654,6 @@ void Monitor::handle_command(MMonCommand *m)
     ds << monmap->fsid;
     rdata.append(ds);
     reply_command(m, 0, "", rdata, 0);
-    return;
-  }
-  if (prefix == "log") {
-    if (!access_r) {
-      r = -EACCES;
-      rs = "access denied";
-      goto out;
-    }
-    vector<string> logtext;
-    cmd_getval(g_ceph_context, cmdmap, "logtext", logtext);
-    std::copy(logtext.begin(), logtext.end(),
-	      ostream_iterator<string>(ds, " "));
-    clog.info(ds);
-    rs = "ok";
-    reply_command(m, 0, rs, 0);
     return;
   }
 
