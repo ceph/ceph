@@ -729,7 +729,9 @@ public:
    *
    * @param t Transaction on which the full version shall be encoded.
    */
-  virtual void encode_full(MonitorDBStore::Transaction *t) = 0;
+  virtual void encode_full(MonitorDBStore::Transaction *t) {
+    assert(0 == "unimplemented encode_full");
+  }
   /**
    * @}
    */

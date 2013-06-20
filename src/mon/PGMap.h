@@ -26,6 +26,8 @@
 #include "common/config.h"
 #include <sstream>
 
+#include "MonitorDBStore.h"
+
 namespace ceph { class Formatter; }
 
 class PGMap {
@@ -58,6 +60,9 @@ public:
     void decode(bufferlist::iterator &bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<Incremental*>& o);
+
+    void write_meta(MonitorDBStore::Transaction *t, uint64_t features=-1) const;
+    void prepare_delta(bufferlist& bl, uint64_t features=-1) const;
 
     Incremental() : version(0), osdmap_epoch(0), pg_scan(0),
         full_ratio(0), nearfull_ratio(0) {}
@@ -109,6 +114,13 @@ public:
   
   void encode(bufferlist &bl, uint64_t features=-1) const;
   void decode(bufferlist::iterator &bl);
+
+  void read_meta(MonitorDBStore *store);
+  void write_meta(MonitorDBStore::Transaction *t, uint64_t features=-1) const;
+  void read_full(MonitorDBStore *store);
+  void write_full(MonitorDBStore::Transaction *t, uint64_t features=-1) const;
+
+  void apply_delta(CephContext *cct, MonitorDBStore *store, bufferlist& bl);
 
   void dump(Formatter *f) const; 
   void dump_basic(Formatter *f) const;
