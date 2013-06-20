@@ -90,6 +90,9 @@ using ceph::crypto::SHA1;
 # ifndef BTRFS_SUPER_MAGIC
 static const __SWORD_TYPE BTRFS_SUPER_MAGIC(0x9123683E);
 # endif
+# ifndef XFS_SUPER_MAGIC
+static const __SWORD_TYPE XFS_SUPER_MAGIC(0x58465342);
+# endif
 #endif
 
 #define COMMIT_SNAP_ITEM "snap_%lld"
@@ -1061,6 +1064,17 @@ int FileStore::_detect_fs()
     return -errno;
   }
   blk_size = st.f_bsize;
+
+#if defined(__linux__)
+  if (st.f_type == XFS_SUPER_MAGIC) {
+    dout(1) << "mount detected xfs" << dendl;
+    if (m_filestore_replica_fadvise) {
+      dout(1) << " disabling 'filestore replica fadvise' due to known issues with fadvise(DONTNEED) on xfs" << dendl;
+      g_conf->set_val("filestore_replica_fadvise", "false");
+      assert(m_filestore_replica_fadvise == false);
+    }
+  }
+#endif
 
 #if defined(__linux__)
   if (st.f_type == BTRFS_SUPER_MAGIC) {

@@ -206,16 +206,11 @@ def list_partitions(disk):
     disk = os.path.realpath(disk)
     assert not is_partition(disk)
     assert disk.startswith('/dev/')
-    base = disk[5:]
+    base = disk.split('/')[-1]
     partitions = []
-    with file('/proc/partitions', 'rb') as proc_partitions:
-        for line in proc_partitions.read().split('\n')[2:]:
-            fields = re.split('\s+', line)
-            if len(fields) < 5:
-                continue
-            name = fields [4]
-            if name != base and name.startswith(base):
-                partitions.append('/dev/' + name)
+    for name in os.listdir(os.path.join('/sys/block', base)):
+        if name.startswith(base):
+            partitions.append('/dev/' + name)
     return partitions
 
 
