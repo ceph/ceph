@@ -2632,6 +2632,10 @@ void Monitor::handle_command(MMonCommand *m)
     authmon()->dispatch(m);
     return;
   }
+  if (module == "log") {
+    logmon()->dispatch(m);
+    return;
+  }
 
   if (module == "config-key") {
     if (!access_all) {
@@ -2647,21 +2651,6 @@ void Monitor::handle_command(MMonCommand *m)
     ds << monmap->fsid;
     rdata.append(ds);
     reply_command(m, 0, "", rdata, 0);
-    return;
-  }
-  if (prefix == "log") {
-    if (!access_r) {
-      r = -EACCES;
-      rs = "access denied";
-      goto out;
-    }
-    vector<string> logtext;
-    cmd_getval(g_ceph_context, cmdmap, "logtext", logtext);
-    std::copy(logtext.begin(), logtext.end(),
-	      ostream_iterator<string>(ds, " "));
-    clog.info(ds);
-    rs = "ok";
-    reply_command(m, 0, rs, 0);
     return;
   }
 
