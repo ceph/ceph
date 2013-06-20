@@ -93,6 +93,46 @@ Notable Changes
  * misc code cleanups
 
 
+v0.61.4 "Cuttlefish"
+--------------------
+
+This release resolves a possible data corruption on power-cycle when
+using XFS, a few outstanding problems with monitor sync, several
+problems with ceph-disk and ceph-deploy operation, and a problem with
+OSD memory usage during scrub.
+
+Upgrading
+~~~~~~~~~
+
+* No issues.
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* mon: fix daemon exit behavior when error is encountered on startup
+* mon: more robust sync behavior
+* osd: do not use sync_file_range(2), posix_fadvise(...DONTNEED) (can cause data corruption on power loss on XFS)
+* osd: avoid unnecessary log rewrite (improves peering speed)
+* osd: fix scrub efficiency bug (problematic on old clusters)
+* rgw: fix listing objects that start with underscore
+* rgw: fix deep URI resource, CORS bugs
+* librados python binding: fix truncate on 32-bit architectures
+* ceph-disk: fix udev rules
+* rpm: install sysvinit script on package install
+* ceph-disk: fix OSD start on machine reboot on Debian wheezy
+* ceph-disk: activate OSD when journal device appears second
+* ceph-disk: fix various bugs on RHEL/CentOS 6.3
+* ceph-disk: add 'zap' command
+* ceph-disk: add '[un]suppress-activate' command for preparing spare disks
+* upstart: start on runlevel [2345] (instead of after the first network interface starts)
+* ceph-fuse, libcephfs: handle mds session reset during session open
+* ceph-fuse, libcephfs: fix two capability revocation bugs
+* ceph-fuse: fix thread creation on startup
+* all daemons: create /var/run/ceph directory on startup if missing
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.61.3.txt>`.
+
+
 v0.61.3 "Cuttlefish"
 --------------------
 
