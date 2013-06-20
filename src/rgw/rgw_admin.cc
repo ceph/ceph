@@ -1840,7 +1840,6 @@ next:
     if (ret < 0)
       return -ret;
 
-
     int i = (specified_shard_id ? shard_id : 0);
 
     formatter->open_array_section("entries");
@@ -1850,7 +1849,7 @@ next:
       list<cls_log_entry> entries;
 
 
-      meta_log->init_list_entries(i, start_time, end_time, &handle);
+      meta_log->init_list_entries(i, start_time, end_time, marker, &handle);
 
       bool truncated;
       do {
