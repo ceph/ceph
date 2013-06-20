@@ -273,7 +273,7 @@ public:
     return Export(_wanted, issued(), pending(), client_follows, mseq+1, last_issue_stamp);
   }
   void rejoin_import() { mseq++; }
-  void merge(Export& other) {
+  void merge(Export& other, bool auth_cap) {
     // issued + pending
     int newpending = other.pending | pending();
     if (other.issued & ~newpending)
@@ -286,7 +286,8 @@ public:
 
     // wanted
     _wanted = _wanted | other.wanted;
-    mseq = other.mseq;
+    if (auth_cap)
+      mseq = other.mseq;
   }
   void merge(int otherwanted, int otherissued) {
     // issued + pending
