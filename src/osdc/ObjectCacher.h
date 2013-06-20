@@ -171,6 +171,7 @@ class ObjectCacher {
     ObjectSet *oset;
     xlist<Object*>::item set_item;
     object_locator_t oloc;
+    uint64_t truncate_size, truncate_seq;
     
     bool complete;
     bool exists;
@@ -190,10 +191,12 @@ class ObjectCacher {
     Object(const Object& other);
     const Object& operator=(const Object& other);
 
-    Object(ObjectCacher *_oc, sobject_t o, ObjectSet *os, object_locator_t& l) : 
+    Object(ObjectCacher *_oc, sobject_t o, ObjectSet *os, object_locator_t& l,
+	   uint64_t ts, uint64_t tq) :
       ref(0),
       oc(_oc),
       oid(o), oset(os), set_item(this), oloc(l),
+      truncate_size(ts), truncate_seq(tq),
       complete(false), exists(true),
       last_write_tid(0), last_commit_tid(0),
       dirty_or_tx(0) {
@@ -363,8 +366,8 @@ class ObjectCacher {
     return NULL;
   }
 
-  Object *get_object(sobject_t oid, ObjectSet *oset,
-                     object_locator_t &l);
+  Object *get_object(sobject_t oid, ObjectSet *oset, object_locator_t &l,
+		     uint64_t truncate_size, uint64_t truncate_seq);
   void close_object(Object *ob);
 
   // bh stats
@@ -626,7 +629,7 @@ public:
   int file_is_cached(ObjectSet *oset, ceph_file_layout *layout, snapid_t snapid,
 		     loff_t offset, uint64_t len) {
     vector<ObjectExtent> extents;
-    Striper::file_to_extents(cct, oset->ino, layout, offset, len, extents);
+    Striper::file_to_extents(cct, oset->ino, layout, offset, len, oset->truncate_size, extents);
     return is_cached(oset, extents, snapid);
   }
 
@@ -636,7 +639,7 @@ public:
 		int flags,
                 Context *onfinish) {
     OSDRead *rd = prepare_read(snapid, bl, flags);
-    Striper::file_to_extents(cct, oset->ino, layout, offset, len, rd->extents);
+    Striper::file_to_extents(cct, oset->ino, layout, offset, len, oset->truncate_size, rd->extents);
     return readx(rd, oset, onfinish);
   }
 
@@ -645,14 +648,14 @@ public:
                  bufferlist& bl, utime_t mtime, int flags,
 		 Mutex& wait_on_lock) {
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags);
-    Striper::file_to_extents(cct, oset->ino, layout, offset, len, wr->extents);
+    Striper::file_to_extents(cct, oset->ino, layout, offset, len, oset->truncate_size, wr->extents);
     return writex(wr, oset, wait_on_lock, NULL);
   }
 
   bool file_flush(ObjectSet *oset, ceph_file_layout *layout, const SnapContext& snapc,
                   loff_t offset, uint64_t len, Context *onfinish) {
     vector<ObjectExtent> extents;
-    Striper::file_to_extents(cct, oset->ino, layout, offset, len, extents);
+    Striper::file_to_extents(cct, oset->ino, layout, offset, len, oset->truncate_size, extents);
     return flush_set(oset, extents, onfinish);
   }
 };

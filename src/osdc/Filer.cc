@@ -102,7 +102,7 @@ void Filer::_probe(Probe *probe)
   probe->known_size.clear();
   probe->probing.clear();
   Striper::file_to_extents(cct, probe->ino, &probe->layout,
-			   probe->probing_off, probe->probing_len, probe->probing);
+			   probe->probing_off, probe->probing_len, 0, probe->probing);
   
   for (vector<ObjectExtent>::iterator p = probe->probing.begin();
        p != probe->probing.end();

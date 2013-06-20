@@ -184,7 +184,7 @@ namespace librbd {
     if (delete_off > newsize) {
       vector<ObjectExtent> extents;
       Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
-			       newsize, delete_off - newsize, extents);
+			       newsize, delete_off - newsize, 0, extents);
 
       for (vector<ObjectExtent>::iterator p = extents.begin();
 	   p != extents.end(); ++p) {
@@ -2482,7 +2482,7 @@ reprotect_and_return_err:
       // map to extents
       map<object_t,vector<ObjectExtent> > object_extents;
       Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
-			       off, read_len, object_extents, 0);
+			       off, read_len, 0, object_extents, 0);
 
       // get snap info for each object
       for (map<object_t,vector<ObjectExtent> >::iterator p = object_extents.begin();
@@ -2880,7 +2880,7 @@ reprotect_and_return_err:
 
     // map
     vector<ObjectExtent> extents;
-    Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, off, mylen, extents);
+    Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, off, mylen, 0, extents);
 
     c->get();
     c->init_time(ictx, AIO_TYPE_WRITE);
@@ -2960,7 +2960,7 @@ reprotect_and_return_err:
 
     // map
     vector<ObjectExtent> extents;
-    Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, off, len, extents);
+    Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout, off, len, 0, extents);
 
     c->get();
     c->init_time(ictx, AIO_TYPE_DISCARD);
@@ -3056,7 +3056,7 @@ reprotect_and_return_err:
 	return r;
 
       Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
-			       p->first, len, object_extents, buffer_ofs);
+			       p->first, len, 0, object_extents, buffer_ofs);
       buffer_ofs += len;
     }
 

@@ -1637,13 +1637,15 @@ class ObjectExtent {
   uint64_t    objectno;
   uint64_t    offset;    // in object
   uint64_t    length;    // in object
+  uint64_t    truncate_size;	// in object
 
   object_locator_t oloc;   // object locator (pool etc)
 
   vector<pair<uint64_t,uint64_t> >  buffer_extents;  // off -> len.  extents in buffer being mapped (may be fragmented bc of striping!)
   
-  ObjectExtent() : objectno(0), offset(0), length(0) {}
-  ObjectExtent(object_t o, uint64_t ono, uint64_t off, uint64_t l) : oid(o), objectno(ono), offset(off), length(l) { }
+  ObjectExtent() : objectno(0), offset(0), length(0), truncate_size(0) {}
+  ObjectExtent(object_t o, uint64_t ono, uint64_t off, uint64_t l, uint64_t ts) :
+    oid(o), objectno(ono), offset(off), length(l), truncate_size(ts) { }
 };
 
 inline ostream& operator<<(ostream& out, const ObjectExtent &ex)

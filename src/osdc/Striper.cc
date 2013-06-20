@@ -28,18 +28,19 @@
 
 void Striper::file_to_extents(CephContext *cct, const char *object_format,
 			    ceph_file_layout *layout,
-			    uint64_t offset, uint64_t len,
+			    uint64_t offset, uint64_t len, uint64_t trunc_size,
 			    vector<ObjectExtent>& extents,
 			    uint64_t buffer_offset)
 {
   map<object_t,vector<ObjectExtent> > object_extents;
-  file_to_extents(cct, object_format, layout, offset, len, object_extents, buffer_offset);
+  file_to_extents(cct, object_format, layout, offset, len, trunc_size,
+		  object_extents, buffer_offset);
   assimilate_extents(object_extents, extents);
 }
 
 void Striper::file_to_extents(CephContext *cct, const char *object_format,
 			      ceph_file_layout *layout,
-			      uint64_t offset, uint64_t len,
+			      uint64_t offset, uint64_t len, uint64_t trunc_size,
 			      map<object_t,vector<ObjectExtent> >& object_extents,
 			      uint64_t buffer_offset)
 {
@@ -108,6 +109,8 @@ void Striper::file_to_extents(CephContext *cct, const char *object_format,
 
       ex->offset = x_offset;
       ex->length = x_len;
+      ex->truncate_size = object_truncate_size(cct, layout, objectno, trunc_size);
+
       ldout(cct, 20) << " added new " << *ex << dendl;
     } else {
       // add to extent
@@ -174,6 +177,42 @@ void Striper::extent_to_file(CephContext *cct, ceph_file_layout *layout,
   }
 }
 
+uint64_t Striper::object_truncate_size(CephContext *cct, ceph_file_layout *layout,
+				       uint64_t objectno, uint64_t trunc_size)
+{
+  uint64_t obj_trunc_size;
+  if (trunc_size == 0 || trunc_size == (uint64_t)-1) {
+    obj_trunc_size = trunc_size;
+  } else {
+    __u32 object_size = layout->fl_object_size;
+    __u32 su = layout->fl_stripe_unit;
+    __u32 stripe_count = layout->fl_stripe_count;
+    assert(object_size >= su);
+    uint64_t stripes_per_object = object_size / su;
+
+    uint64_t objectsetno = objectno / stripe_count;
+    uint64_t trunc_objectsetno = trunc_size / object_size / stripe_count;
+    if (objectsetno > trunc_objectsetno)
+      obj_trunc_size = 0;
+    else if (objectsetno < trunc_objectsetno)
+      obj_trunc_size = object_size;
+    else {
+      uint64_t trunc_blockno = trunc_size / su;
+      uint64_t trunc_stripeno = trunc_blockno / stripe_count;
+      uint64_t trunc_stripepos = trunc_blockno % stripe_count;
+      uint64_t trunc_objectno = trunc_objectsetno * stripe_count + trunc_stripepos;
+      if (objectno < trunc_objectno)
+	obj_trunc_size = ((trunc_stripeno % stripes_per_object) + 1) * su;
+      else if (objectno > trunc_objectno)
+	obj_trunc_size = (trunc_stripeno % stripes_per_object) * su;
+      else
+	obj_trunc_size = (trunc_stripeno % stripes_per_object) * su + (trunc_size % su);
+    }
+  }
+  ldout(cct, 20) << "object_truncate_size " << objectno << " "
+		 << trunc_size << "->" << obj_trunc_size << dendl;
+  return obj_trunc_size;
+}
 
 // StripedReadResult
 
