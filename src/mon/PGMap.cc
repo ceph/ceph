@@ -91,7 +91,7 @@ void PGMap::Incremental::decode(bufferlist::iterator &bl)
   DECODE_FINISH(bl);
 }
 
-void PGMap::Incremental::write_meta(MonitorDBStore::Transaction *t, uint64_t features) const
+void PGMap::Incremental::write_delta(MonitorDBStore::Transaction *t, bufferlist& incbl, uint64_t features) const
 {
   string prefix = "pgmap_meta";
   t->put(prefix, "version", version);
@@ -108,10 +108,8 @@ void PGMap::Incremental::write_meta(MonitorDBStore::Transaction *t, uint64_t fea
     ::encode(stamp, bl);
     t->put(prefix, "stamp", bl);
   }
-}
 
-void PGMap::Incremental::prepare_delta(bufferlist& incbl, uint64_t features) const
-{
+  // ...
   ::encode(stamp, incbl);
   {
     bufferlist dirty;
@@ -514,6 +512,23 @@ void PGMap::read_meta(MonitorDBStore *store)
     ::decode(stamp, p);
   }
 }
+
+void PGMap::dirty_all(Incremental& inc)
+{
+  inc.osdmap_epoch = last_osdmap_epoch;
+  inc.pg_scan = last_pg_scan;
+  inc.full_ratio = full_ratio;
+  inc.nearfull_ratio = nearfull_ratio;
+
+  for (hash_map<pg_t,pg_stat_t>::const_iterator p = pg_stat.begin(); p != pg_stat.end(); ++p) {
+    inc.pg_stat_updates[p->first] = p->second;
+  }
+  for (hash_map<int32_t, osd_stat_t>::const_iterator p = osd_stat.begin(); p != osd_stat.end(); ++p) {
+    inc.osd_stat_updates[p->first] = p->second;
+  }
+
+}
+
 
 void PGMap::read_full(MonitorDBStore *store)
 {

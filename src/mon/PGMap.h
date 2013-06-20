@@ -61,8 +61,7 @@ public:
     void dump(Formatter *f) const;
     static void generate_test_instances(list<Incremental*>& o);
 
-    void write_meta(MonitorDBStore::Transaction *t, uint64_t features=-1) const;
-    void prepare_delta(bufferlist& bl, uint64_t features=-1) const;
+    void write_delta(MonitorDBStore::Transaction *t, bufferlist& bl, uint64_t features=-1) const;
 
     Incremental() : version(0), osdmap_epoch(0), pg_scan(0),
         full_ratio(0), nearfull_ratio(0) {}
@@ -120,6 +119,7 @@ public:
   void read_full(MonitorDBStore *store);
   void write_full(MonitorDBStore::Transaction *t, uint64_t features=-1) const;
 
+  void dirty_all(Incremental& inc);
   void apply_delta(CephContext *cct, MonitorDBStore *store, bufferlist& bl);
 
   void dump(Formatter *f) const; 
