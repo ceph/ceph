@@ -1297,7 +1297,7 @@ void Monitor::sync_send_chunks(SyncEntity sync)
 
 void Monitor::sync_requester_abort()
 {
-  dout(10) << __func__;
+  dout(10) << __func__ << dendl;
   assert(state == STATE_SYNCHRONIZING);
   assert(sync_role == SYNC_ROLE_REQUESTER);
 
