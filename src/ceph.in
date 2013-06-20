@@ -1380,7 +1380,7 @@ def main():
 
     if parsed_args.version:
         print 'ceph version {0} ({1})'.format(CEPH_GIT_NICE_VER, CEPH_GIT_VER)
-	return 0
+        return 0
 
     global verbose
     verbose = parsed_args.verbose
@@ -1606,7 +1606,7 @@ def main():
         # this assumes outs never has useful command output, only status
         if outs:
             if compat and ret == 0:
-	        # old cli/mon would send status string to stdout on non-error
+                # old cli/mon would send status string to stdout on non-error
                 print outs
             else:
                 print >> sys.stderr, prefix + outs
