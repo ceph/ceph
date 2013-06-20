@@ -879,7 +879,7 @@ def parse_cmdargs(args=None, target=''):
     parser.add_argument('--watch-error', action='store_true',
                         help='watch error events')
 
-    parser.add_argument('-v', action="store_true", help="display version")
+    parser.add_argument('--version', '-v', action="store_true", help="display version")
     parser.add_argument('--verbose', action="store_true", help="make verbose")
     parser.add_argument('--concise', dest='verbose', action="store_false",
                         help="make less verbose")
@@ -1378,7 +1378,7 @@ def main():
 
     parser, parsed_args, childargs = parse_cmdargs()
 
-    if parsed_args.v:
+    if parsed_args.version:
         print 'ceph version {0} ({1})'.format(CEPH_GIT_NICE_VER, CEPH_GIT_VER)
 	return 0
 
