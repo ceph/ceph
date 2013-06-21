@@ -259,9 +259,11 @@ class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
   off_t cur_part_ofs;
   off_t next_part_ofs;
   int cur_part_id;
+  off_t data_ofs;
 
   uint64_t extra_data_len;
   bufferlist extra_data_bl;
+  bufferlist pending_data_bl;
 protected:
   rgw_bucket bucket;
   string obj_str;
@@ -275,6 +277,7 @@ protected:
 
   virtual bool immutable_head() { return false; }
 
+  int write_data(bufferlist& bl, off_t ofs, void **phandle);
   virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 
   void prepare_next_part(off_t ofs);
@@ -286,6 +289,7 @@ public:
                                 cur_part_ofs(0),
                                 next_part_ofs(_p),
                                 cur_part_id(0),
+                                data_ofs(0),
                                 extra_data_len(0),
                                 bucket(_b),
                                 obj_str(_o),
