@@ -612,13 +612,21 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle)
   return 0;
 }
 
+int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phandle)
+{
+  if (ofs >= next_part_ofs)
+    prepare_next_part(ofs);
+
+  return RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle);
+}
+
 int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle) {
+  *phandle = NULL;
   if (extra_data_len) {
     size_t extra_len = bl.length();
     if (extra_len > extra_data_len)
       extra_len = extra_data_len;
 
-    /* is there a better way to split a bl into two bufferlists? */
     bufferlist extra;
     bl.splice(0, extra_len, &extra);
     extra_data_bl.append(extra);
@@ -629,19 +637,23 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
     }
     ofs = extra_data_bl.length();
   }
-  off_t actual_ofs = ofs - extra_data_bl.length();
-  if (!actual_ofs && !immutable_head()) {
+
+  pending_data_bl.claim_append(bl);
+  if (pending_data_bl.length() < RGW_MAX_CHUNK_SIZE)
+    return 0;
+
+  pending_data_bl.splice(0, RGW_MAX_CHUNK_SIZE, &bl);
+
+  if (!data_ofs && !immutable_head()) {
     first_chunk.claim(bl);
-    *phandle = NULL;
     obj_len = (uint64_t)first_chunk.length();
     prepare_next_part(first_chunk.length());
+    data_ofs = obj_len;
     return 0;
   }
-  if (actual_ofs >= next_part_ofs)
-    prepare_next_part(actual_ofs);
-  int r = RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, actual_ofs - cur_part_ofs, actual_ofs, phandle);
-
-  return r;
+  off_t write_ofs = data_ofs;
+  data_ofs = write_ofs + bl.length();
+  return write_data(bl, write_ofs, phandle);
 }
 
 int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, void *obj_ctx)
@@ -700,6 +712,19 @@ void RGWPutObjProcessor_Atomic::complete_parts()
 
 int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs)
 {
+  if (pending_data_bl.length()) {
+    void *handle;
+    int r = write_data(pending_data_bl, data_ofs, &handle);
+    if (r < 0) {
+      ldout(store->ctx(), 0) << "ERROR: write_data() returned " << r << dendl;
+      return r;
+    }
+    r = throttle_data(handle);
+    if (r < 0) {
+      ldout(store->ctx(), 0) << "ERROR: throttle_data() returned " << r << dendl;
+      return r;
+    }
+  }
   complete_parts();
 
   store->set_atomic(obj_ctx, head_obj);
