@@ -154,6 +154,7 @@ ostream& CDir::print_db_line_prefix(ostream& out)
 // CDir
 
 CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
+  mseq(0),
   dirty_rstat_inodes(member_offset(CInode, dirty_rstat_item)),
   item_dirty(this), item_new(this),
   pop_me(ceph_clock_now(g_ceph_context)),
@@ -1211,6 +1212,7 @@ void CDir::finish_waiting(uint64_t mask, int result)
 
 fnode_t *CDir::project_fnode()
 {
+  assert(get_version() != 0);
   fnode_t *p = new fnode_t;
   *p = *get_projected_fnode();
   projected_fnode.push_back(p);
@@ -2120,6 +2122,8 @@ void CDir::_committed(version_t v)
 void CDir::encode_export(bufferlist& bl)
 {
   assert(!is_projected());
+  ceph_seq_t seq = mseq + 1;
+  ::encode(seq, bl);
   ::encode(first, bl);
   ::encode(fnode, bl);
   ::encode(dirty_old_rstat, bl);
@@ -2149,6 +2153,7 @@ void CDir::finish_export(utime_t now)
 
 void CDir::decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls)
 {
+  ::decode(mseq, blp);
   ::decode(first, blp);
   ::decode(fnode, blp);
   ::decode(dirty_old_rstat, blp);

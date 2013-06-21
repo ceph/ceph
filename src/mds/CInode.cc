@@ -1069,11 +1069,12 @@ void CInode::_stored_backtrace(version_t v, Context *fin)
 {
   dout(10) << "_stored_backtrace" << dendl;
 
+  auth_unpin(this);
   if (v == inode.backtrace_version)
     clear_dirty_parent();
-  auth_unpin(this);
   if (fin)
     fin->complete(0);
+  mdcache->maybe_eval_stray(this);
 }
 
 void CInode::_mark_dirty_parent(LogSegment *ls, bool dirty_pool)
@@ -1221,6 +1222,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 	  dout(20) << fg << "           fragstat " << pf->fragstat << dendl;
 	  dout(20) << fg << " accounted_fragstat " << pf->accounted_fragstat << dendl;
 	  ::encode(fg, tmp);
+	  ::encode(dir->mseq, tmp);
 	  ::encode(dir->first, tmp);
 	  ::encode(pf->fragstat, tmp);
 	  ::encode(pf->accounted_fragstat, tmp);
@@ -1254,6 +1256,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 	  dout(10) << fg << " " << pf->rstat << dendl;
 	  dout(10) << fg << " " << dir->dirty_old_rstat << dendl;
 	  ::encode(fg, tmp);
+	  ::encode(dir->mseq, tmp);
 	  ::encode(dir->first, tmp);
 	  ::encode(pf->rstat, tmp);
 	  ::encode(pf->accounted_rstat, tmp);
@@ -1403,10 +1406,12 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       dout(10) << " ...got " << n << " fragstats on " << *this << dendl;
       while (n--) {
 	frag_t fg;
+	ceph_seq_t mseq;
 	snapid_t fgfirst;
 	frag_info_t fragstat;
 	frag_info_t accounted_fragstat;
 	::decode(fg, p);
+	::decode(mseq, p);
 	::decode(fgfirst, p);
 	::decode(fragstat, p);
 	::decode(accounted_fragstat, p);
@@ -1419,6 +1424,12 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	  assert(dir);                // i am auth; i had better have this dir open
 	  dout(10) << fg << " first " << dir->first << " -> " << fgfirst
 		   << " on " << *dir << dendl;
+	  if (dir->fnode.fragstat.version == get_projected_inode()->dirstat.version &&
+	      ceph_seq_cmp(mseq, dir->mseq) < 0) {
+	    dout(10) << " mseq " << mseq << " < " << dir->mseq << ", ignoring" << dendl;
+	    continue;
+	  }
+	  dir->mseq = mseq;
 	  dir->first = fgfirst;
 	  dir->fnode.fragstat = fragstat;
 	  dir->fnode.accounted_fragstat = accounted_fragstat;
@@ -1461,11 +1472,13 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       ::decode(n, p);
       while (n--) {
 	frag_t fg;
+	ceph_seq_t mseq;
 	snapid_t fgfirst;
 	nest_info_t rstat;
 	nest_info_t accounted_rstat;
 	map<snapid_t,old_rstat_t> dirty_old_rstat;
 	::decode(fg, p);
+	::decode(mseq, p);
 	::decode(fgfirst, p);
 	::decode(rstat, p);
 	::decode(accounted_rstat, p);
@@ -1480,6 +1493,12 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	  assert(dir);                // i am auth; i had better have this dir open
 	  dout(10) << fg << " first " << dir->first << " -> " << fgfirst
 		   << " on " << *dir << dendl;
+	  if (dir->fnode.rstat.version == get_projected_inode()->rstat.version &&
+	      ceph_seq_cmp(mseq, dir->mseq) < 0) {
+	    dout(10) << " mseq " << mseq << " < " << dir->mseq << ", ignoring" << dendl;
+	    continue;
+	  }
+	  dir->mseq = mseq;
 	  dir->first = fgfirst;
 	  dir->fnode.rstat = rstat;
 	  dir->fnode.accounted_rstat = accounted_rstat;
@@ -1605,6 +1624,36 @@ void CInode::start_scatter(ScatterLock *lock)
   }
 }
 
+/*
+ * set dirfrag_version to inode_version - 1. so that we can use dirfrag version
+ * to check if we have gathered scatter state for a given dirfrag.
+ */
+void CInode::start_scatter_gather(ScatterLock *lock, int auth)
+{
+  assert(is_auth());
+  inode_t *pi = get_projected_inode();
+
+  for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
+       p != dirfrags.end();
+       ++p) {
+    CDir *dir = p->second;
+
+    if (dir->is_auth())
+      continue;
+    if (auth >= 0 && dir->authority().first != auth)
+      continue;
+
+    switch (lock->get_type()) {
+      case CEPH_LOCK_IFILE:
+	dir->fnode.fragstat.version = pi->dirstat.version - 1;
+	break;
+      case CEPH_LOCK_INEST:
+	dir->fnode.rstat.version = pi->rstat.version - 1;
+	break;
+    }
+  }
+}
+
 struct C_Inode_FragUpdate : public Context {
   CInode *in;
   CDir *dir;
@@ -1624,6 +1673,8 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
 
   if (dir->is_frozen()) {
     dout(10) << "finish_scatter_update " << fg << " frozen, marking " << *lock << " stale " << *dir << dendl;
+  } else if (dir->get_version() == 0) {
+    dout(10) << "finish_scatter_update " << fg << " not loaded, marking " << *lock << " stale " << *dir << dendl;
   } else {
     if (dir_accounted_version != inode_version) {
       dout(10) << "finish_scatter_update " << fg << " journaling accounted scatterstat update v" << inode_version << dendl;
