@@ -649,6 +649,26 @@ public:
   int renew_state(const string& client_id, const string& op_id, const string& object, OpState state);
 };
 
+class RGWOpStateSingleOp
+{
+  RGWOpState os;
+  string client_id;
+  string op_id;
+  string object;
+
+  CephContext *cct;
+
+  RGWOpState::OpState cur_state;
+  utime_t last_update;
+
+public:
+  RGWOpStateSingleOp(RGWRados *store, const string& cid, const string& oid, const string& obj);
+
+  int set_state(RGWOpState::OpState state);
+  int renew_state();
+};
+
+
 class RGWRados
 {
   friend class RGWGC;
@@ -987,6 +1007,8 @@ public:
    */
   virtual int copy_obj(void *ctx,
                const string& user_id,
+               const string& client_id,
+               const string& op_id,
                req_info *info,
                const string& source_zone,
                rgw_obj& dest_obj,
