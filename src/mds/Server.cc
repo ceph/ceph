@@ -1161,9 +1161,6 @@ void Server::dispatch_client_request(MDRequest *mdr)
   
   switch (req->get_op()) {
   case CEPH_MDS_OP_LOOKUPHASH:
-    handle_client_lookup_hash(mdr);
-    break;
-
   case CEPH_MDS_OP_LOOKUPINO:
     handle_client_lookup_ino(mdr);
     break;
@@ -1279,6 +1276,16 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
   // reply?
   if (m->is_reply())
     return handle_slave_request_reply(m);
+
+  // the purpose of rename notify is enforcing causal message ordering. making sure
+  // bystanders have received all messages from rename srcdn's auth MDS.
+  if (m->get_op() == MMDSSlaveRequest::OP_RENAMENOTIFY) {
+    MMDSSlaveRequest *reply = new MMDSSlaveRequest(m->get_reqid(), m->get_attempt(),
+						   MMDSSlaveRequest::OP_RENAMENOTIFYACK);
+    mds->send_message(reply, m->get_connection());
+    m->put();
+    return;
+  }
 
   CDentry *straydn = NULL;
   if (m->stray.length() > 0) {
@@ -1430,6 +1437,10 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
 
   case MMDSSlaveRequest::OP_RENAMEPREPACK:
     handle_slave_rename_prep_ack(mdr, m);
+    break;
+
+  case MMDSSlaveRequest::OP_RENAMENOTIFYACK:
+    handle_slave_rename_notify_ack(mdr, m);
     break;
 
   default:
@@ -2204,7 +2215,7 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequest *mdr)
   }
 
   // not open and inode frozen?
-  if (!dir && diri->is_frozen_dir()) {
+  if (!dir && diri->is_frozen()) {
     dout(10) << "try_open_auth_dirfrag: dir inode is frozen, waiting " << *diri << dendl;
     assert(diri->get_parent_dir());
     diri->get_parent_dir()->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
@@ -2304,135 +2315,6 @@ void Server::handle_client_lookup_parent(MDRequest *mdr)
   reply_request(mdr, 0, in, dn);  // reply
 }
 
-struct C_MDS_LookupHash2 : public Context {
-  Server *server;
-  MDRequest *mdr;
-  C_MDS_LookupHash2(Server *s, MDRequest *r) : server(s), mdr(r) {}
-  void finish(int r) {
-    server->_lookup_hash_2(mdr, r);
-  }
-};
-
-/* This function DOES clean up the mdr before returning*/
-/*
- * filepath:  ino
- * filepath2: dirino/<hash as base-10 %d>
- *
- * This dirino+hash is optional.
- */
-void Server::handle_client_lookup_hash(MDRequest *mdr)
-{
-  MClientRequest *req = mdr->client_request;
-
-  inodeno_t ino = req->get_filepath().get_ino();
-  inodeno_t dirino = req->get_filepath2().get_ino();
-
-  CInode *in = 0;
-
-  if (ino) {
-    in = mdcache->get_inode(ino);
-    if (in && in->state_test(CInode::STATE_PURGING)) {
-      reply_request(mdr, -ESTALE);
-      return;
-    }
-    if (!in && !dirino) {
-      dout(10) << " no dirino, looking up ino " << ino << " directly" << dendl;
-      _lookup_ino(mdr);
-      return;
-    }
-  }
-  if (!in) {
-    // try the directory
-    CInode *diri = mdcache->get_inode(dirino);
-    if (!diri) {
-      mdcache->find_ino_peers(dirino,
-			      new C_MDS_LookupHash2(this, mdr), -1);
-      return;
-    }
-    if (diri->state_test(CInode::STATE_PURGING)) {
-      reply_request(mdr, -ESTALE);
-      return;
-    }
-    dout(10) << " have diri " << *diri << dendl;
-    unsigned hash = atoi(req->get_filepath2()[0].c_str());
-    frag_t fg = diri->dirfragtree[hash];
-    dout(10) << " fg is " << fg << dendl;
-    CDir *dir = diri->get_dirfrag(fg);
-    if (!dir) {
-      if (!diri->is_auth()) {
-	if (diri->is_ambiguous_auth()) {
-	  // wait
-	  dout(7) << " waiting for single auth in " << *diri << dendl;
-	  diri->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
-	  return;
-	} 
-	mdcache->request_forward(mdr, diri->authority().first);
-	return;
-      }
-      dir = diri->get_or_open_dirfrag(mdcache, fg);
-    }
-    assert(dir);
-    dout(10) << " have dir " << *dir << dendl;
-    if (!dir->is_auth()) {
-      if (dir->is_ambiguous_auth()) {
-	// wait
-	dout(7) << " waiting for single auth in " << *dir << dendl;
-	dir->add_waiter(CDir::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
-	return;
-      } 
-      mdcache->request_forward(mdr, dir->authority().first);
-      return;
-    }
-    if (!dir->is_complete()) {
-      dir->fetch(new C_MDS_RetryRequest(mdcache, mdr));
-      return;
-    }
-    reply_request(mdr, -ESTALE);
-    return;
-  }
-
-  dout(10) << "reply to lookup_hash on " << *in << dendl;
-  MClientReply *reply = new MClientReply(req, 0);
-  reply_request(mdr, reply, in, in->get_parent_dn());
-}
-
-struct C_MDS_LookupHash3 : public Context {
-  Server *server;
-  MDRequest *mdr;
-  C_MDS_LookupHash3(Server *s, MDRequest *r) : server(s), mdr(r) {}
-  void finish(int r) {
-    server->_lookup_hash_3(mdr, r);
-  }
-};
-
-void Server::_lookup_hash_2(MDRequest *mdr, int r)
-{
-  inodeno_t dirino = mdr->client_request->get_filepath2().get_ino();
-  dout(10) << "_lookup_hash_2 " << mdr << " checked peers for dirino " << dirino << " and got r=" << r << dendl;
-  if (r == 0) {
-    dispatch_client_request(mdr);
-    return;
-  }
-
-  // okay fine, try the dir object then!
-  mdcache->find_ino_dir(dirino, new C_MDS_LookupHash3(this, mdr));
-}
-
-void Server::_lookup_hash_3(MDRequest *mdr, int r)
-{
-  inodeno_t dirino = mdr->client_request->get_filepath2().get_ino();
-  dout(10) << "_lookup_hash_3 " << mdr << " checked dir object for dirino " << dirino
-	   << " and got r=" << r << dendl;
-  if (r == 0) {
-    dispatch_client_request(mdr);
-    return;
-  }
-  dout(10) << "_lookup_hash_3 " << mdr << " trying the ino itself" << dendl;
-  _lookup_ino(mdr);
-}
-
-/***************/
-
 struct C_MDS_LookupIno2 : public Context {
   Server *server;
   MDRequest *mdr;
@@ -2457,7 +2339,7 @@ void Server::handle_client_lookup_ino(MDRequest *mdr)
     return;
   }
   if (!in) {
-    _lookup_ino(mdr);
+    mdcache->open_ino(ino, (int64_t)-1, new C_MDS_LookupIno2(this, mdr), false);
     return;
   }
 
@@ -2466,44 +2348,15 @@ void Server::handle_client_lookup_ino(MDRequest *mdr)
   reply_request(mdr, reply, in, in->get_parent_dn());
 }
 
-void Server::_lookup_ino(MDRequest *mdr)
-{
-  inodeno_t ino = mdr->client_request->get_filepath().get_ino();
-  dout(10) << "_lookup_ino " << mdr << " checking peers for ino " << ino << dendl;
-  mdcache->find_ino_peers(ino,
-			  new C_MDS_LookupIno2(this, mdr), -1);
-}
-
-struct C_MDS_LookupIno3 : public Context {
-  Server *server;
-  MDRequest *mdr;
-  C_MDS_LookupIno3(Server *s, MDRequest *r) : server(s), mdr(r) {}
-  void finish(int r) {
-    server->_lookup_ino_3(mdr, r);
-  }
-};
-
 void Server::_lookup_ino_2(MDRequest *mdr, int r)
 {
   inodeno_t ino = mdr->client_request->get_filepath().get_ino();
-  dout(10) << "_lookup_ino_2 " << mdr << " checked peers for ino " << ino
-	   << " and got r=" << r << dendl;
-  if (r == 0) {
-    dispatch_client_request(mdr);
-    return;
-  }
-
-  // okay fine, maybe it's a directory though...
-  mdcache->find_ino_dir(ino, new C_MDS_LookupIno3(this, mdr));
-}
-
-void Server::_lookup_ino_3(MDRequest *mdr, int r)
-{
-  inodeno_t ino = mdr->client_request->get_filepath().get_ino();
-  dout(10) << "_lookup_ino_3 " << mdr << " checked dir obj for ino " << ino
-	   << " and got r=" << r << dendl;
-  if (r == 0) {
-    dispatch_client_request(mdr);
+  dout(10) << "_lookup_ino_2 " << mdr << " ino " << ino << " r=" << r << dendl;
+  if (r >= 0) {
+    if (r == mds->get_nodeid())
+      dispatch_client_request(mdr);
+    else
+      mdcache->request_forward(mdr, r);
     return;
   }
 
@@ -3996,7 +3849,8 @@ public:
     if (newi->inode.is_dir()) { 
       CDir *dir = newi->get_dirfrag(frag_t());
       assert(dir);
-      dir->mark_dirty(1, mdr->ls);
+      dir->fnode.version--;
+      dir->mark_dirty(dir->fnode.version + 1, mdr->ls);
       dir->mark_new(mdr->ls);
     }
 
@@ -4155,7 +4009,7 @@ void Server::handle_client_mkdir(MDRequest *mdr)
   // ...and that new dir is empty.
   CDir *newdir = newi->get_or_open_dirfrag(mds->mdcache, frag_t());
   newdir->mark_complete();
-  newdir->pre_dirty();
+  newdir->fnode.version = newdir->pre_dirty();
 
   // prepare finisher
   mdr->ls = mdlog->get_current_segment();
@@ -6560,6 +6414,9 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
 
   // am i srcdn auth?
   if (srcdn->is_auth()) {
+    set<int> srcdnrep;
+    srcdn->list_replicas(srcdnrep);
+
     bool reply_witness = false;
     if (srcdnl->is_primary() && !srcdnl->get_inode()->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
       // freeze?
@@ -6594,12 +6451,19 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
       if (mdr->slave_request->witnesses.size() > 1) {
 	dout(10) << " set srci ambiguous auth; providing srcdn replica list" << dendl;
 	reply_witness = true;
+	for (set<int>::iterator p = srcdnrep.begin(); p != srcdnrep.end(); ++p) {
+	  if (*p == mdr->slave_to_mds ||
+	      !mds->mdsmap->is_clientreplay_or_active_or_stopping(*p))
+	    continue;
+	  MMDSSlaveRequest *notify = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
+							  MMDSSlaveRequest::OP_RENAMENOTIFY);
+	  mds->send_message_mds(notify, *p);
+	  mdr->more()->waiting_on_slave.insert(*p);
+	}
       }
     }
 
     // is witness list sufficient?
-    set<int> srcdnrep;
-    srcdn->list_replicas(srcdnrep);
     for (set<int>::iterator p = srcdnrep.begin(); p != srcdnrep.end(); ++p) {
       if (*p == mdr->slave_to_mds ||
 	  mdr->slave_request->witnesses.count(*p)) continue;
@@ -6619,6 +6483,11 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
       return;	
     }
     dout(10) << " witness list sufficient: includes all srcdn replicas" << dendl;
+    if (!mdr->more()->waiting_on_slave.empty()) {
+      dout(10) << " still waiting for rename notify acks from "
+	       << mdr->more()->waiting_on_slave << dendl;
+      return;
+    }
   } else if (srcdnl->is_primary() && srcdn->authority() != destdn->authority()) {
     // set ambiguous auth for srci on witnesses
     mdr->set_ambiguous_auth(srcdnl->get_inode());
@@ -7187,6 +7056,24 @@ void Server::handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
     dout(10) << "still waiting on slaves " << mdr->more()->waiting_on_slave << dendl;
 }
 
+void Server::handle_slave_rename_notify_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
+{
+  dout(10) << "handle_slave_rename_notify_ack " << *mdr << " from mds."
+	   << ack->get_source() << dendl;
+  assert(mdr->is_slave());
+  int from = ack->get_source().num();
+
+  if (mdr->more()->waiting_on_slave.count(from)) {
+    mdr->more()->waiting_on_slave.erase(from);
+
+    if (mdr->more()->waiting_on_slave.empty()) {
+      if (mdr->slave_request)
+	dispatch_slave_request(mdr);
+    } else 
+      dout(10) << " still waiting for rename notify acks from "
+	       << mdr->more()->waiting_on_slave << dendl;
+  }
+}
 
 
 
