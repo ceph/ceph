@@ -113,6 +113,8 @@ void AuthMonitor::create_initial()
   inc.inc_type = GLOBAL_ID;
   inc.max_global_id = max_global_id;
   pending_auth.push_back(inc);
+
+  format_version = 1;
 }
 
 void AuthMonitor::update_from_paxos(bool *need_bootstrap)
