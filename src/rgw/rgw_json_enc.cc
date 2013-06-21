@@ -500,6 +500,7 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("user_swift_pool", user_swift_pool.data_pool, f);
   encode_json("user_uid_pool ", user_uid_pool.data_pool, f);
   encode_json_plain("system_key", system_key, f);
+  encode_json("placement_pools ", placement_pools, f);
 }
 
 static void decode_json(const char *field, rgw_bucket& bucket, JSONObj *obj)
@@ -510,6 +511,18 @@ static void decode_json(const char *field, rgw_bucket& bucket, JSONObj *obj)
     pool = string(".") + pool;
   }
   bucket = rgw_bucket(pool.c_str());
+}
+
+void RGWZonePlacementInfo::dump(Formatter *f) const
+{
+  encode_json("index_pool", index_pool, f);
+  encode_json("data_pool", data_pool, f);
+}
+
+void RGWZonePlacementInfo::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("index_pool", index_pool, obj);
+  JSONDecoder::decode_json("data_pool", data_pool, obj);
 }
 
 void RGWZoneParams::decode_json(JSONObj *obj)
@@ -525,6 +538,7 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   ::decode_json("user_swift_pool", user_swift_pool, obj);
   ::decode_json("user_uid_pool ", user_uid_pool, obj);
   JSONDecoder::decode_json("system_key", system_key, obj);
+  JSONDecoder::decode_json("placement_pools", placement_pools, obj);
 }
 
 void RGWZone::dump(Formatter *f) const
@@ -539,6 +553,18 @@ void RGWZone::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("endpoints", endpoints, obj);
 }
 
+void RGWRegionPlacementTarget::dump(Formatter *f) const
+{
+  encode_json("name", name, f);
+  encode_json("tags", tags, f);
+}
+
+void RGWRegionPlacementTarget::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("tags", tags, obj);
+}
+
 void RGWRegion::dump(Formatter *f) const
 {
   encode_json("name", name, f);
@@ -547,6 +573,7 @@ void RGWRegion::dump(Formatter *f) const
   encode_json("endpoints", endpoints, f);
   encode_json("master_zone", master_zone, f);
   encode_json_map("zones", zones, f); /* more friendly representation */
+  encode_json_map("placement_targets", placement_targets, f); /* more friendly representation */
 }
 
 static void decode_zones(map<string, RGWZone>& zones, JSONObj *o)
@@ -554,6 +581,13 @@ static void decode_zones(map<string, RGWZone>& zones, JSONObj *o)
   RGWZone z;
   z.decode_json(o);
   zones[z.name] = z;
+}
+
+static void decode_placement_targets(map<string, RGWRegionPlacementTarget>& targets, JSONObj *o)
+{
+  RGWRegionPlacementTarget t;
+  t.decode_json(o);
+  targets[t.name] = t;
 }
 
 
@@ -565,6 +599,7 @@ void RGWRegion::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("endpoints", endpoints, obj);
   JSONDecoder::decode_json("master_zone", master_zone, obj);
   JSONDecoder::decode_json("zones", zones, decode_zones, obj);
+  JSONDecoder::decode_json("placement_targets", placement_targets, decode_placement_targets, obj);
 }
 
 

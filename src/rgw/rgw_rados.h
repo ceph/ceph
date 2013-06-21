@@ -388,6 +388,29 @@ struct RGWListRawObjsCtx {
 
 struct RGWRegion;
 
+
+struct RGWZonePlacementInfo {
+  string index_pool;
+  string data_pool;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(3, 1, bl);
+    ::encode(index_pool, bl);
+    ::encode(data_pool, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(index_pool, bl);
+    ::decode(data_pool, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWZonePlacementInfo);
+
 struct RGWZoneParams {
   rgw_bucket domain_root;
   rgw_bucket control_pool;
@@ -405,6 +428,8 @@ struct RGWZoneParams {
 
   RGWAccessKey system_key;
 
+  map<string, RGWZonePlacementInfo> placement_pools;
+
   static string get_pool_name(CephContext *cct);
   void init_name(CephContext *cct, RGWRegion& region);
   int init(CephContext *cct, RGWRados *store, RGWRegion& region);
@@ -412,7 +437,7 @@ struct RGWZoneParams {
   int store_info(CephContext *cct, RGWRados *store, RGWRegion& region);
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     ::encode(domain_root, bl);
     ::encode(control_pool, bl);
     ::encode(gc_pool, bl);
@@ -425,11 +450,12 @@ struct RGWZoneParams {
     ::encode(user_uid_pool, bl);
     ::encode(name, bl);
     ::encode(system_key, bl);
+    ::encode(placement_pools, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-     DECODE_START(3, bl);
+     DECODE_START(4, bl);
     ::decode(domain_root, bl);
     ::decode(control_pool, bl);
     ::decode(gc_pool, bl);
@@ -444,6 +470,8 @@ struct RGWZoneParams {
       ::decode(name, bl);
     if (struct_v >= 3)
       ::decode(system_key, bl);
+    if (struct_v >= 4)
+      ::decode(placement_pools, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -492,6 +520,29 @@ struct RGWDefaultRegionInfo {
 };
 WRITE_CLASS_ENCODER(RGWDefaultRegionInfo);
 
+struct RGWRegionPlacementTarget {
+  string name;
+  list<string> tags;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(name, bl);
+    ::encode(tags, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(name, bl);
+    ::decode(tags, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWRegionPlacementTarget);
+
+
 struct RGWRegion {
   string name;
   string api_name;
@@ -500,6 +551,8 @@ struct RGWRegion {
 
   string master_zone;
   map<string, RGWZone> zones;
+
+  map<string, RGWRegionPlacementTarget> placement_targets;
 
   CephContext *cct;
   RGWRados *store;
