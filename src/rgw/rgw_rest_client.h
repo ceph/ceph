@@ -11,6 +11,7 @@ class RGWRESTSimpleRequest : public RGWHTTPClient {
 protected:
   CephContext *cct;
 
+  int http_status;
   int status;
 
   string url;
@@ -23,14 +24,16 @@ protected:
   size_t max_response; /* we need this as we don't stream out response */
   bufferlist response;
 
+  virtual int handle_header(const string& name, const string& val) { return 0; }
   void append_param(string& dest, const string& name, const string& val);
   void get_params_str(map<string, string>& extra_args, string& dest);
 
   int sign_request(RGWAccessKey& key, RGWEnv& env, req_info& info);
 public:
   RGWRESTSimpleRequest(CephContext *_cct, string& _url, list<pair<string, string> > *_headers,
-                list<pair<string, string> > *_params) : cct(_cct), status(0), url(_url), send_iter(NULL),
-                                                        max_response(0) {
+                list<pair<string, string> > *_params) : cct(_cct), http_status(0), status(0),
+                url(_url), send_iter(NULL),
+                max_response(0) {
     if (_headers)
       headers = *_headers;
 
@@ -51,7 +54,7 @@ public:
 };
 
 
-class RGWRESTStreamRequest : public RGWRESTSimpleRequest {
+class RGWRESTStreamWriteRequest : public RGWRESTSimpleRequest {
   Mutex lock;
   list<bufferlist> pending_send;
   void *handle;
@@ -60,14 +63,37 @@ public:
   int add_output_data(bufferlist& bl);
   int send_data(void *ptr, size_t len);
 
-  RGWRESTStreamRequest(CephContext *_cct, string& _url, list<pair<string, string> > *_headers,
+  RGWRESTStreamWriteRequest(CephContext *_cct, string& _url, list<pair<string, string> > *_headers,
                 list<pair<string, string> > *_params) : RGWRESTSimpleRequest(_cct, _url, _headers, _params),
-                lock("RGWRESTStreamRequest"), handle(NULL), cb(NULL) {}
-  ~RGWRESTStreamRequest();
+                lock("RGWRESTStreamWriteRequest"), handle(NULL), cb(NULL) {}
+  ~RGWRESTStreamWriteRequest();
   int put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs);
-  int complete();
+  int complete(string& etag, time_t *mtime);
 
   RGWGetDataCB *get_out_cb() { return cb; }
+};
+
+class RGWRESTStreamReadRequest : public RGWRESTSimpleRequest {
+  Mutex lock;
+  RGWGetDataCB *cb;
+  bufferlist in_data;
+  size_t chunk_ofs;
+  size_t ofs;
+protected:
+  int handle_header(const string& name, const string& val);
+public:
+  int send_data(void *ptr, size_t len);
+  int receive_data(void *ptr, size_t len);
+
+  RGWRESTStreamReadRequest(CephContext *_cct, string& _url, RGWGetDataCB *_cb, list<pair<string, string> > *_headers,
+                list<pair<string, string> > *_params) : RGWRESTSimpleRequest(_cct, _url, _headers, _params),
+                lock("RGWRESTStreamReadRequest"), cb(_cb),
+                chunk_ofs(0), ofs(0) {}
+  ~RGWRESTStreamReadRequest() {}
+  int get_obj(RGWAccessKey& key, map<string, string>& extra_headers, rgw_obj& obj);
+  int complete(string& etag, time_t *mtime, map<string, string>& attrs);
+
+  void set_in_cb(RGWGetDataCB *_cb) { cb = _cb; }
 };
 
 #endif

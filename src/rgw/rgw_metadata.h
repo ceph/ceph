@@ -27,10 +27,13 @@ enum RGWMDLogStatus {
 class RGWMetadataObject {
 protected:
   obj_version objv;
+  time_t mtime;
   
 public:
+  RGWMetadataObject() : mtime(0) {}
   virtual ~RGWMetadataObject() {}
   obj_version& get_version();
+  time_t get_mtime() { return mtime; }
 
   virtual void dump(Formatter *f) const = 0;
 };
@@ -47,7 +50,7 @@ public:
   virtual string get_type() = 0;
 
   virtual int get(RGWRados *store, string& entry, RGWMetadataObject **obj) = 0;
-  virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, JSONObj *obj) = 0;
+  virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, time_t mtime, JSONObj *obj) = 0;
   virtual int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) = 0;
 
   virtual int list_keys_init(RGWRados *store, void **phandle) = 0;
@@ -88,16 +91,15 @@ public:
     LogListCtx() : done(false) {}
   };
 
-  void init_list_entries(int shard_id, utime_t& from_time, utime_t& end_time, void **handle);
+  void init_list_entries(int shard_id, utime_t& from_time, utime_t& end_time, string& marker, void **handle);
   void complete_list_entries(void *handle);
   int list_entries(void *handle,
                    int max_entries,
-                   list<cls_log_entry>& entries,
-                   bool *truncated);
+                   list<cls_log_entry>& entries, bool *truncated);
 
   int trim(int shard_id, utime_t& from_time, utime_t& end_time);
-  int lock_exclusive(int shard_id, utime_t& duration, string& owner_id);
-  int unlock(int shard_id, string& owner_id);
+  int lock_exclusive(int shard_id, utime_t& duration, string&zone_id, string& owner_id);
+  int unlock(int shard_id, string& zone_id, string& owner_id);
 };
 
 class RGWMetadataLogData;
@@ -126,7 +128,7 @@ public:
   RGWMetadataHandler *get_handler(const char *type);
 
   int put_entry(RGWMetadataHandler *handler, string& key, bufferlist& bl, bool exclusive,
-                RGWObjVersionTracker *objv_tracker, map<string, bufferlist> *pattrs = NULL);
+                RGWObjVersionTracker *objv_tracker, time_t mtime, map<string, bufferlist> *pattrs = NULL);
   int remove_entry(RGWMetadataHandler *handler, string& key, RGWObjVersionTracker *objv_tracker);
   int set_attr(RGWMetadataHandler *handler, string& key, rgw_obj& obj, string& attr, bufferlist& bl,
                RGWObjVersionTracker *objv_tracker);

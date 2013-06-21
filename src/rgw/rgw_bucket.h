@@ -23,7 +23,8 @@ using namespace std;
 extern void rgw_get_buckets_obj(string& user_id, string& buckets_obj_id);
 
 extern int rgw_bucket_store_info(RGWRados *store, string& bucket_name, bufferlist& bl, bool exclusive,
-                                 map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker);
+                                 map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
+                                 time_t mtime);
 
 extern int rgw_bucket_delete_bucket_obj(RGWRados *store, string& bucket_name, RGWObjVersionTracker& objv_tracker);
 
@@ -93,7 +94,7 @@ extern void rgw_bucket_init(RGWMetadataManager *mm);
 extern int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& buckets,
                                  const string& marker, uint64_t max, bool need_stats);
 
-extern int rgw_add_bucket(RGWRados *store, string user_id, rgw_bucket& bucket);
+extern int rgw_add_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t creation_time);
 extern int rgw_remove_user_bucket_info(RGWRados *store, string user_id, rgw_bucket& bucket);
 
 extern int rgw_remove_object(RGWRados *store, rgw_bucket& bucket, std::string& object);
@@ -343,11 +344,11 @@ public:
                list<rgw_data_change>& entries, string& marker, bool *truncated);
   int trim_entries(int shard_id, utime_t& start_time, utime_t& end_time);
   int trim_entries(utime_t& start_time, utime_t& end_time);
-  int lock_exclusive(int shard_id, utime_t& duration, string& owner_id) {
-    return store->lock_exclusive(store->zone.log_pool, oids[shard_id], duration, owner_id);
+  int lock_exclusive(int shard_id, utime_t& duration, string& zone_id, string& owner_id) {
+    return store->lock_exclusive(store->zone.log_pool, oids[shard_id], duration, zone_id, owner_id);
   }
-  int unlock(int shard_id, string& owner_id) {
-    return store->unlock(store->zone.log_pool, oids[shard_id], owner_id);
+  int unlock(int shard_id, string& zone_id, string& owner_id) {
+    return store->unlock(store->zone.log_pool, oids[shard_id], zone_id, owner_id);
   }
   struct LogMarker {
     int shard;

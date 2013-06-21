@@ -158,29 +158,6 @@ static void rgw_get_request_metadata(CephContext *cct, struct req_info& info, ma
   }
 }
 
-static int policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, RGWAccessControlPolicy *policy)
-{
-  map<string, bufferlist>::iterator aiter = attrset.find(RGW_ATTR_ACL);
-  if (aiter == attrset.end())
-    return -EIO;
-
-  bufferlist& bl = aiter->second;
-  bufferlist::iterator iter = bl.begin();
-  try {
-    policy->decode(iter);
-  } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
-    return -EIO;
-  }
-  if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
-    RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
-    ldout(cct, 15) << "Read AccessControlPolicy";
-    s3policy->to_xml(*_dout);
-    *_dout << dendl;
-  }
-  return 0;
-}
-
 /**
  * Get the AccessControlPolicy for an object off of disk.
  * policy: must point to a valid RGWACL, and will be filled upon return.
@@ -215,7 +192,7 @@ static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx, RG
       /* object exists, but policy is broken */
       RGWBucketInfo info;
       RGWUserInfo uinfo;
-      int r = store->get_bucket_info(ctx, obj.bucket.name, info, objv_tracker);
+      int r = store->get_bucket_info(ctx, obj.bucket.name, info, objv_tracker, NULL);
       if (r < 0)
         goto done;
       r = rgw_get_user_info_by_uid(store, info.owner, uinfo);
@@ -298,8 +275,6 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
 
   RGWBucketInfo bucket_info;
 
-  bool source_in_domain = false;
-
   if (s->copy_source) { /* check if copy source is within the current domain */
     const char *src = s->copy_source;
     if (*src == '/')
@@ -312,17 +287,17 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
 
     RGWBucketInfo source_info;
 
-    ret = store->get_bucket_info(s->obj_ctx, copy_source_str, source_info, NULL);
+    ret = store->get_bucket_info(s->obj_ctx, copy_source_str, source_info, NULL, NULL);
     if (ret == 0) {
       string& region = source_info.region;
-      source_in_domain = (region.empty() && store->region.is_master) ||
+      s->local_source = (region.empty() && store->region.is_master) ||
                          (region == store->region.name);
     }
   }
     
   if (s->bucket_name_str.size()) {
     bool exists = true;
-    ret = store->get_bucket_info(s->obj_ctx, s->bucket_name_str, bucket_info, &s->objv_tracker);
+    ret = store->get_bucket_info(s->obj_ctx, s->bucket_name_str, bucket_info, &s->objv_tracker, NULL);
     if (ret < 0) {
       if (ret != -ENOENT) {
         ldout(s->cct, 0) << "NOTICE: couldn't get bucket from bucket_name (name=" << s->bucket_name_str << ")" << dendl;
@@ -345,7 +320,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
       /* we now need to make sure that the operation actually requires copy source, that is
        * it's a copy operation
        */
-      if (!source_in_domain ||
+      if (!s->local_source ||
           (s->op != OP_PUT && s->op != OP_COPY) ||
           s->object_str.empty()) {
         return -ERR_PERMANENT_REDIRECT;
@@ -416,7 +391,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
     goto done_err;
   }
 
-  ret = policy_from_attrset(s->cct, attrs, &obj_policy);
+  ret = rgw_policy_from_attrset(s->cct, attrs, &obj_policy);
   if (ret < 0)
     goto done_err;
 
@@ -540,7 +515,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
 
   if (bucket_name.compare(s->bucket.name) != 0) {
     RGWBucketInfo bucket_info;
-    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, &s->objv_tracker);
+    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, &s->objv_tracker, NULL);
     if (r < 0) {
       ldout(s->cct, 0) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return r;
@@ -880,28 +855,25 @@ int RGWCreateBucket::verify_permission()
   return 0;
 }
 
-template<class T>
-static int forward_request(struct req_state *s, RGWRados *store, bufferlist& in_data, const char *name, T& obj)
+static int forward_request_to_master(struct req_state *s, RGWRados *store, bufferlist& in_data, JSONParser *jp)
 {
-  if (!store->rest_conn) {
+  if (!store->rest_master_conn) {
     ldout(s->cct, 0) << "rest connection is invalid" << dendl;
     return -EINVAL;
   }
   ldout(s->cct, 0) << "sending create_bucket request to master region" << dendl;
   bufferlist response;
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
-  int ret = store->rest_conn->forward(s->user.user_id, s->info, MAX_REST_RESPONSE, &in_data, &response);
+  int ret = store->rest_master_conn->forward(s->user.user_id, s->info, MAX_REST_RESPONSE, &in_data, &response);
   if (ret < 0)
     return ret;
 
   ldout(s->cct, 20) << "response: " << response.c_str() << dendl;
-  JSONParser jp;
-  ret = jp.parse(response.c_str(), response.length());
+  ret = jp->parse(response.c_str(), response.length());
   if (ret < 0) {
     ldout(s->cct, 0) << "failed parsing response from master region" << dendl;
     return ret;
   }
-  JSONDecoder::decode_json(name, obj, &jp);
 
   return 0;
 }
@@ -937,12 +909,26 @@ void RGWCreateBucket::execute()
     }
   }
 
+  RGWBucketInfo master_info;
+  rgw_bucket *pmaster_bucket;
+  time_t creation_time;
+
   if (!store->region.is_master) {
-    ret = forward_request(s, store, in_data, "object_ver", objv);
+    JSONParser jp;
+    ret = forward_request_to_master(s, store, in_data, &jp);
     if (ret < 0)
       return;
 
+    JSONDecoder::decode_json("object_ver", objv, &jp);
+    JSONDecoder::decode_json("bucket_info", master_info, &jp);
     ldout(s->cct, 20) << "parsed: objv.tag=" << objv.tag << " objv.ver=" << objv.ver << dendl;
+    ldout(s->cct, 20) << "got creation time: << " << master_info.creation_time << dendl;
+    pmaster_bucket= &master_info.bucket;
+    creation_time = master_info.creation_time;
+    pobjv = &objv;
+  } else {
+    pmaster_bucket = NULL;
+    creation_time = 0;
   }
 
   string region_name;
@@ -961,7 +947,8 @@ void RGWCreateBucket::execute()
   attrs[RGW_ATTR_ACL] = aclbl;
 
   s->bucket.name = s->bucket_name_str;
-  ret = store->create_bucket(s->user.user_id, s->bucket, region_name, attrs, objv_tracker, pobjv, true);
+  ret = store->create_bucket(s->user.user_id, s->bucket, region_name, attrs, objv_tracker, pobjv,
+                             creation_time, pmaster_bucket, &info, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can recover
    * from a partial create by retrying it. */
   ldout(s->cct, 20) << "rgw_create_bucket returned ret=" << ret << " bucket=" << s->bucket << dendl;
@@ -977,14 +964,6 @@ void RGWCreateBucket::execute()
      * info, verify that the reported bucket owner is the current user.
      * If all is ok then update the user's list of buckets
      */
-    RGWBucketInfo info;
-    map<string, bufferlist> attrs;
-    int r = store->get_bucket_info(NULL, s->bucket.name, info, &s->objv_tracker, &attrs);
-    if (r < 0) {
-      ldout(s->cct, 0) << "ERROR: get_bucket_info on bucket=" << s->bucket.name << " returned err=" << r << " after create_bucket returned -EEXIST" << dendl;
-      ret = r;
-      return;
-    }
     if (info.owner.compare(s->user.user_id) != 0) {
       ret = -ERR_BUCKET_EXISTS;
       return;
@@ -992,7 +971,7 @@ void RGWCreateBucket::execute()
     s->bucket = info.bucket;
   }
 
-  ret = rgw_add_bucket(store, s->user.user_id, s->bucket);
+  ret = rgw_add_bucket(store, s->user.user_id, s->bucket, info.creation_time);
   if (ret && !existed && ret != -EEXIST)   /* if it exists (or previously existed), don't remove it! */
     rgw_remove_user_bucket_info(store, s->user.user_id, s->bucket);
 
@@ -1017,10 +996,12 @@ void RGWDeleteBucket::execute()
 
   if (!store->region.is_master) {
     bufferlist in_data;
-    ret = forward_request(s, store, in_data, "object_ver", objv_tracker.read_version);
-    if (ret < 0) {
+    JSONParser jp;
+    ret = forward_request_to_master(s, store, in_data, &jp);
+    if (ret < 0)
       return;
-    }
+
+    JSONDecoder::decode_json("object_ver", objv_tracker.read_version, &jp);
   }
 
   ret = store->delete_bucket(s->bucket, objv_tracker);
@@ -1033,10 +1014,6 @@ void RGWDeleteBucket::execute()
   }
 }
 
-struct put_obj_aio_info {
-  void *handle;
-};
-
 int RGWPutObj::verify_permission()
 {
   if (!verify_bucket_permission(s, RGW_PERM_WRITE))
@@ -1045,312 +1022,26 @@ int RGWPutObj::verify_permission()
   return 0;
 }
 
-int RGWPutObjProcessor::complete(string& etag, map<string, bufferlist>& attrs)
-{
-  int r = do_complete(etag, attrs);
-  if (r < 0)
-    return r;
-
-  is_complete = true;
-  return 0;
-}
-
-RGWPutObjProcessor::~RGWPutObjProcessor()
-{
-  if (is_complete)
-    return;
-
-  if (!s)
-    return;
-
-  list<rgw_obj>::iterator iter;
-  for (iter = objs.begin(); iter != objs.end(); ++iter) {
-    rgw_obj& obj = *iter;
-    int r = store->delete_obj(s->obj_ctx, obj);
-    if (r < 0 && r != -ENOENT) {
-      ldout(s->cct, 0) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
-    }
-  }
-}
-
-class RGWPutObjProcessor_Plain : public RGWPutObjProcessor
-{
-  bufferlist data;
-  rgw_obj obj;
-  off_t ofs;
-
-protected:
-  int prepare(RGWRados *store, struct req_state *s);
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle);
-  int throttle_data(void *handle) { return 0; }
-  int do_complete(string& etag, map<string, bufferlist>& attrs);
-
-public:
-  RGWPutObjProcessor_Plain() : ofs(0) {}
-};
-
-int RGWPutObjProcessor_Plain::prepare(RGWRados *store,struct req_state *s)
-{
-  RGWPutObjProcessor::prepare(store, s);
-
-  obj.init(s->bucket, s->object_str);
-
-  return 0;
-};
-
-int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, void **phandle)
-{
-  if (ofs != _ofs)
-    return -EINVAL;
-
-  data.append(bl);
-  ofs += bl.length();
-
-  return 0;
-}
-
-int RGWPutObjProcessor_Plain::do_complete(string& etag, map<string, bufferlist>& attrs)
-{
-  int r = store->put_obj_meta(s->obj_ctx, obj, data.length(), attrs,
-                              RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
-                              &data);
-  return r;
-}
-
-
-class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
-{
-  list<struct put_obj_aio_info> pending;
-  size_t max_chunks;
-
-  struct put_obj_aio_info pop_pending();
-  int wait_pending_front();
-  bool pending_has_completed();
-  int drain_pending();
-
-protected:
-  uint64_t obj_len;
-
-  int handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle);
-  int throttle_data(void *handle);
-
-  RGWPutObjProcessor_Aio() : max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
-  virtual ~RGWPutObjProcessor_Aio() {
-    drain_pending();
-  }
-};
-
-int RGWPutObjProcessor_Aio::handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle)
-{
-  if ((uint64_t)abs_ofs + bl.length() > obj_len)
-    obj_len = abs_ofs + bl.length();
-
-  // For the first call pass -1 as the offset to
-  // do a write_full.
-  int r = store->aio_put_obj_data(NULL, obj,
-                                     bl,
-                                     ((ofs != 0) ? ofs : -1),
-                                     false, phandle);
-
-  return r;
-}
-
-struct put_obj_aio_info RGWPutObjProcessor_Aio::pop_pending()
-{
-  struct put_obj_aio_info info;
-  info = pending.front();
-  pending.pop_front();
-  return info;
-}
-
-int RGWPutObjProcessor_Aio::wait_pending_front()
-{
-  struct put_obj_aio_info info = pop_pending();
-  int ret = store->aio_wait(info.handle);
-  return ret;
-}
-
-bool RGWPutObjProcessor_Aio::pending_has_completed()
-{
-  if (pending.empty())
-    return false;
-
-  struct put_obj_aio_info& info = pending.front();
-  return store->aio_completed(info.handle);
-}
-
-int RGWPutObjProcessor_Aio::drain_pending()
-{
-  int ret = 0;
-  while (!pending.empty()) {
-    int r = wait_pending_front();
-    if (r < 0)
-      ret = r;
-  }
-  return ret;
-}
-
-int RGWPutObjProcessor_Aio::throttle_data(void *handle)
-{
-  if (handle) {
-    struct put_obj_aio_info info;
-    info.handle = handle;
-    pending.push_back(info);
-  }
-  size_t orig_size = pending.size();
-  while (pending_has_completed()) {
-    int r = wait_pending_front();
-    if (r < 0)
-      return r;
-  }
-
-  /* resize window in case messages are draining too fast */
-  if (orig_size - pending.size() >= max_chunks) {
-    max_chunks++;
-  }
-
-  if (pending.size() > max_chunks) {
-    int r = wait_pending_front();
-    if (r < 0)
-      return r;
-  }
-  return 0;
-}
-
-class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
-{
-  bufferlist first_chunk;
-  uint64_t part_size;
-  off_t cur_part_ofs;
-  off_t next_part_ofs;
-  int cur_part_id;
-protected:
-  string oid_prefix;
-  rgw_obj head_obj;
-  rgw_obj cur_obj;
-  RGWObjManifest manifest;
-
-  virtual bool immutable_head() { return false; }
-
-  int prepare(RGWRados *store, struct req_state *s);
-  virtual int do_complete(string& etag, map<string, bufferlist>& attrs);
-
-  void prepare_next_part(off_t ofs);
-  void complete_parts();
-
-public:
-  ~RGWPutObjProcessor_Atomic() {}
-  RGWPutObjProcessor_Atomic(uint64_t _p) : part_size(_p),
-                                cur_part_ofs(0),
-                                next_part_ofs(_p),
-                                cur_part_id(0) {}
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle) {
-    if (!ofs && !immutable_head()) {
-      first_chunk.claim(bl);
-      *phandle = NULL;
-      obj_len = (uint64_t)first_chunk.length();
-      prepare_next_part(first_chunk.length());
-      return 0;
-    }
-    if (ofs >= next_part_ofs)
-      prepare_next_part(ofs);
-    int r = RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle);
-
-    return r;
-  }
-};
-
-int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, struct req_state *s)
-{
-  RGWPutObjProcessor::prepare(store, s);
-
-  head_obj.init(s->bucket, s->object_str);
-
-  char buf[33];
-  gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
-  oid_prefix.append("_");
-  oid_prefix.append(buf);
-  oid_prefix.append("_");
-
-  return 0;
-}
-
-void RGWPutObjProcessor_Atomic::prepare_next_part(off_t ofs) {
-  int num_parts = manifest.objs.size();
-  RGWObjManifestPart *part;
-
-  /* first update manifest for written data */
-  if (!num_parts) {
-    part = &manifest.objs[cur_part_ofs];
-    part->loc = head_obj;
-  } else {
-    part = &manifest.objs[cur_part_ofs];
-    part->loc = cur_obj;
-  }
-  part->loc_ofs = 0;
-  part->size = ofs - cur_part_ofs;
-
-  if ((uint64_t)ofs > manifest.obj_size)
-    manifest.obj_size = ofs;
-
-  /* now update params for next part */
-
-  cur_part_ofs = ofs;
-  next_part_ofs = cur_part_ofs + part_size;
-  char buf[16];
-
-  cur_part_id++;
-  snprintf(buf, sizeof(buf), "%d", cur_part_id);
-  string cur_oid = oid_prefix;
-  cur_oid.append(buf);
-  cur_obj.init_ns(s->bucket, cur_oid, shadow_ns);
-
-  add_obj(cur_obj);
-};
-
-void RGWPutObjProcessor_Atomic::complete_parts()
-{
-  if (obj_len > (uint64_t)cur_part_ofs)
-    prepare_next_part(obj_len);
-}
-
-int RGWPutObjProcessor_Atomic::do_complete(string& etag, map<string, bufferlist>& attrs)
-{
-  complete_parts();
-
-  store->set_atomic(s->obj_ctx, head_obj);
-
-  RGWRados::PutObjMetaExtraParams extra_params;
-
-  extra_params.data = &first_chunk;
-  extra_params.manifest = &manifest;
-  extra_params.ptag = &s->req_id; /* use req_id as operation tag */
-
-  int r = store->put_obj_meta(s->obj_ctx, head_obj, obj_len, attrs,
-                              RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
-			      extra_params);
-  return r;
-}
-
 class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
 {
   string part_num;
   RGWMPObj mp;
+  req_state *s;
 
 protected:
   bool immutable_head() { return true; }
-  int prepare(RGWRados *store, struct req_state *s);
-  int do_complete(string& etag, map<string, bufferlist>& attrs);
+  int prepare(RGWRados *store, void *obj_ctx);
+  int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 
 public:
-  RGWPutObjProcessor_Multipart(uint64_t _p) : RGWPutObjProcessor_Atomic(_p) {}
+  RGWPutObjProcessor_Multipart(uint64_t _p, req_state *_s) : RGWPutObjProcessor_Atomic(s->bucket, s->object_str, _p, s->req_id), s(_s) {}
 };
 
-int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, struct req_state *s)
+int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx)
 {
-  RGWPutObjProcessor::prepare(store, s);
+  RGWPutObjProcessor::prepare(store, obj_ctx);
 
-  string oid = s->object_str;
+  string oid = obj_str;
   string upload_id;
   upload_id = s->info.args.get("uploadId");
   mp.init(oid, upload_id);
@@ -1362,7 +1053,7 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, struct req_state *s)
 
   oid = mp.get_part(part_num);
 
-  head_obj.init_ns(s->bucket, oid, mp_ns);
+  head_obj.init_ns(bucket, oid, mp_ns);
   oid_prefix = oid;
   oid_prefix.append("_");
   cur_obj = head_obj;
@@ -1370,11 +1061,15 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, struct req_state *s)
   return 0;
 }
 
-int RGWPutObjProcessor_Multipart::do_complete(string& etag, map<string, bufferlist>& attrs)
+int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs)
 {
   complete_parts();
 
-  int r = store->put_obj_meta(s->obj_ctx, head_obj, s->obj_size, attrs, RGW_OBJ_CATEGORY_MAIN, 0);
+  RGWRados::PutObjMetaExtraParams params;
+  params.set_mtime = set_mtime;
+  params.mtime = mtime;
+
+  int r = store->put_obj_meta(obj_ctx, head_obj, s->obj_size, attrs, RGW_OBJ_CATEGORY_MAIN, 0, params);
   if (r < 0)
     return r;
 
@@ -1385,14 +1080,14 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, map<string, bufferli
   info.num = atoi(part_num.c_str());
   info.etag = etag;
   info.size = s->obj_size;
-  info.modified = ceph_clock_now(s->cct);
+  info.modified = ceph_clock_now(store->ctx());
   info.manifest = manifest;
   ::encode(info, bl);
 
   string multipart_meta_obj = mp.get_meta();
 
   rgw_obj meta_obj;
-  meta_obj.init_ns(s->bucket, multipart_meta_obj, mp_ns);
+  meta_obj.init_ns(bucket, multipart_meta_obj, mp_ns);
 
   r = store->omap_set(meta_obj, p, bl);
 
@@ -1409,9 +1104,9 @@ RGWPutObjProcessor *RGWPutObj::select_processor()
   uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
 
   if (!multipart) {
-    processor = new RGWPutObjProcessor_Atomic(part_size);
+    processor = new RGWPutObjProcessor_Atomic(s->bucket, s->object_str, part_size, s->req_id);
   } else {
-    processor = new RGWPutObjProcessor_Multipart(part_size);
+    processor = new RGWPutObjProcessor_Multipart(part_size, s);
   }
 
   return processor;
@@ -1467,7 +1162,7 @@ void RGWPutObj::execute()
 
   processor = select_processor();
 
-  ret = processor->prepare(store, s);
+  ret = processor->prepare(store, s->obj_ctx);
   if (ret < 0)
     goto done;
 
@@ -1537,7 +1232,7 @@ void RGWPutObj::execute()
 
   rgw_get_request_metadata(s->cct, s->info, attrs);
 
-  ret = processor->complete(etag, attrs);
+  ret = processor->complete(etag, &mtime, 0, attrs);
 done:
   dispose_processor(processor);
   perfcounter->tinc(l_rgw_put_lat,
@@ -1556,9 +1251,9 @@ RGWPutObjProcessor *RGWPostObj::select_processor()
   uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
 
   if (s->content_length <= RGW_MAX_CHUNK_SIZE)
-    processor = new RGWPutObjProcessor_Plain();
+    processor = new RGWPutObjProcessor_Plain(s->bucket, s->object_str);
   else
-    processor = new RGWPutObjProcessor_Atomic(part_size);
+    processor = new RGWPutObjProcessor_Atomic(s->bucket, s->object_str, part_size, s->req_id);
 
   return processor;
 }
@@ -1653,7 +1348,7 @@ void RGWPostObj::execute()
     attrs[RGW_ATTR_CONTENT_TYPE] = ct_bl;
   }
 
-  ret = processor->complete(etag, attrs);
+  ret = processor->complete(etag, NULL, 0, attrs);
 
 done:
   dispose_processor(processor);
@@ -1772,47 +1467,50 @@ int RGWCopyObj::verify_permission()
   if (ret < 0)
     return ret;
 
-  /* get buckets info (source and dest) */
-
-  ret = store->get_bucket_info(s->obj_ctx, src_bucket_name, src_bucket_info, NULL);
+  ret = store->get_bucket_info(s->obj_ctx, src_bucket_name, src_bucket_info, NULL, NULL);
   if (ret < 0)
     return ret;
 
   src_bucket = src_bucket_info.bucket;
 
-  if (src_bucket_name.compare(dest_bucket_name) == 0) {
+  /* get buckets info (source and dest) */
+  if (s->local_source &&  source_zone.empty()) {
+    rgw_obj src_obj(src_bucket, src_object);
+    store->set_atomic(s->obj_ctx, src_obj);
+    store->set_prefetch_data(s->obj_ctx, src_obj);
+
+    /* check source object permissions */
+    ret = read_policy(store, s, src_bucket_info, &src_policy, src_bucket, src_object);
+    if (ret < 0)
+      return ret;
+
+    if (!s->system_request && /* system request overrides permission checks */
+        !src_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_READ))
+      return -EACCES;
+  }
+
+  RGWAccessControlPolicy dest_bucket_policy(s->cct);
+
+  if (src_bucket_name.compare(dest_bucket_name) == 0) { /* will only happen if s->local_source */
     dest_bucket_info = src_bucket_info;
   } else {
-    ret = store->get_bucket_info(s->obj_ctx, dest_bucket_name, dest_bucket_info, NULL);
+    ret = store->get_bucket_info(s->obj_ctx, dest_bucket_name, dest_bucket_info, NULL, NULL);
     if (ret < 0)
       return ret;
   }
 
   dest_bucket = dest_bucket_info.bucket;
 
-  rgw_obj src_obj(src_bucket, src_object);
-  store->set_atomic(s->obj_ctx, src_obj);
-  store->set_prefetch_data(s->obj_ctx, src_obj);
-
   rgw_obj dest_obj(dest_bucket, dest_object);
   store->set_atomic(s->obj_ctx, dest_obj);
-
-  /* check source object permissions */
-  ret = read_policy(store, s, src_bucket_info, &src_policy, src_bucket, src_object);
-  if (ret < 0)
-    return ret;
-
-  if (!src_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_READ))
-    return -EACCES;
-
-  RGWAccessControlPolicy dest_bucket_policy(s->cct);
 
   /* check dest bucket permissions */
   ret = read_policy(store, s, dest_bucket_info, &dest_bucket_policy, dest_bucket, empty_str);
   if (ret < 0)
     return ret;
 
-  if (!dest_bucket_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_WRITE))
+  if (!s->system_request && /* system request overrides permission checks */
+      !dest_bucket_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_WRITE))
     return -EACCES;
 
   ret = init_dest_policy();
@@ -1866,28 +1564,19 @@ void RGWCopyObj::execute()
   src_obj.init(src_bucket, src_object);
   dst_obj.init(dest_bucket, dest_object);
   store->set_atomic(s->obj_ctx, src_obj);
-#if 0
 
-  if ((dest_bucket_info.region.empty() && !store->region.is_master) ||
-      (dest_bucket_info.region != store->region.name)) {
-
-    map<string, bufferlist> src_attrs;
-  
-    int ret = get_obj_attrs(store, s, src_obj, src_attrs
-                         uint64_t *obj_size, RGWObjVersionTracker *objv_tracker)
-
-    int ret = store->rest_conn->put_obj(s->user.user_id, dst_obj, 
-    if (ret < 0)
-      return ret;
-  }
-#endif
   store->set_atomic(s->obj_ctx, dst_obj);
 
   ret = store->copy_obj(s->obj_ctx,
                         s->user.user_id,
+                        client_id,
+                        op_id,
+                        &s->info,
+                        source_zone,
                         dst_obj,
                         src_obj,
                         dest_bucket_info,
+                        src_bucket_info,
                         &mtime,
                         mod_ptr,
                         unmod_ptr,
@@ -2256,7 +1945,7 @@ void RGWInitMultipart::execute()
 
     obj.init_ns(s->bucket, tmp_obj_name, mp_ns);
     // the meta object will be indexed with 0 size, we c
-    ret = store->put_obj_meta(s->obj_ctx, obj, 0, attrs, RGW_OBJ_CATEGORY_MULTIMETA, PUT_OBJ_CREATE_EXCL);
+    ret = store->put_obj_meta(s->obj_ctx, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, PUT_OBJ_CREATE_EXCL);
   } while (ret == -EEXIST);
 }
 
