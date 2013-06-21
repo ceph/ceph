@@ -12,6 +12,7 @@ tasks:
 - ceph:
     log-whitelist:
     - wrongly marked me down
+    - had wrong client addr
 - workunit:
     clients:
       all:
