@@ -2483,41 +2483,19 @@ void Server::handle_client_lookup_ino(MDRequest *mdr)
 void Server::_lookup_ino(MDRequest *mdr)
 {
   inodeno_t ino = mdr->client_request->get_filepath().get_ino();
-  dout(10) << "_lookup_ino " << mdr << " checking peers for ino " << ino << dendl;
-  mdcache->find_ino_peers(ino,
-			  new C_MDS_LookupIno2(this, mdr), -1);
+  dout(10) << "_lookup_ino " << mdr << " opening ino " << ino << dendl;
+  mdcache->open_ino(ino, (int64_t)-1, new C_MDS_LookupIno2(this, mdr), false);
 }
-
-struct C_MDS_LookupIno3 : public Context {
-  Server *server;
-  MDRequest *mdr;
-  C_MDS_LookupIno3(Server *s, MDRequest *r) : server(s), mdr(r) {}
-  void finish(int r) {
-    server->_lookup_ino_3(mdr, r);
-  }
-};
 
 void Server::_lookup_ino_2(MDRequest *mdr, int r)
 {
   inodeno_t ino = mdr->client_request->get_filepath().get_ino();
-  dout(10) << "_lookup_ino_2 " << mdr << " checked peers for ino " << ino
-	   << " and got r=" << r << dendl;
-  if (r == 0) {
-    dispatch_client_request(mdr);
-    return;
-  }
-
-  // okay fine, maybe it's a directory though...
-  mdcache->find_ino_dir(ino, new C_MDS_LookupIno3(this, mdr));
-}
-
-void Server::_lookup_ino_3(MDRequest *mdr, int r)
-{
-  inodeno_t ino = mdr->client_request->get_filepath().get_ino();
-  dout(10) << "_lookup_ino_3 " << mdr << " checked dir obj for ino " << ino
-	   << " and got r=" << r << dendl;
-  if (r == 0) {
-    dispatch_client_request(mdr);
+  dout(10) << "_lookup_ino_2 " << mdr << " ino " << ino << " r=" << r << dendl;
+  if (r >= 0) {
+    if (r == mds->get_nodeid())
+      dispatch_client_request(mdr);
+    else
+      mdcache->request_forward(mdr, r);
     return;
   }
 
