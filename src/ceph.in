@@ -37,12 +37,12 @@ import copy
 import errno
 import json
 import rados
+import signal
 import socket
 import stat
 import string
 import struct
 import subprocess
-import time
 import types
 import uuid
 
@@ -1511,9 +1511,7 @@ def main():
 
         # loop forever letting watch_cb print lines
         try:
-            while True:
-                time.sleep(5)
-                pass
+            signal.pause()
         except KeyboardInterrupt:
             # or until ^C, at least
             return 0
