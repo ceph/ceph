@@ -553,6 +553,7 @@ fi
 %{python_sitelib}/rados.py*
 %{python_sitelib}/rbd.py*
 %{python_sitelib}/cephfs.py*
+%{python_sitelib}/ceph_argparse.py*
 
 #################################################################################
 %files -n rest-bench
