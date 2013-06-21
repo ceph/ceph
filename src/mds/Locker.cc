@@ -731,8 +731,9 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
 	  lock->get_parent()->is_replicated()) {
 	dout(10) << " finished (local) gather for mix->lock, now gathering from replicas" << dendl;
 	send_lock_message(lock, LOCK_AC_LOCK);
-	lock->init_gather();
 	lock->set_state(LOCK_MIX_LOCK2);
+	lock->init_gather();
+	in->start_scatter_gather(static_cast<ScatterLock *>(lock));
 	return;
       }
 
@@ -3430,7 +3431,7 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
   assert(lock->is_stable());
 
   CInode *in = 0;
-  if (lock->get_cap_shift())
+  if (lock->get_type() != CEPH_LOCK_DN)
     in = static_cast<CInode *>(lock->get_parent());
 
   int old_state = lock->get_state();
@@ -3453,10 +3454,11 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
     if (lock->get_parent()->is_replicated() && old_state == LOCK_MIX) {
       send_lock_message(lock, LOCK_AC_SYNC);
       lock->init_gather();
+      in->start_scatter_gather(static_cast<ScatterLock *>(lock));
       gather++;
     }
     
-    if (in && in->is_head()) {
+    if (lock->get_cap_shift() && in->is_head()) {
       if (in->issued_caps_need_gather(lock)) {
 	if (need_issue)
 	  *need_issue = true;
@@ -3568,7 +3570,7 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
   assert(lock->get_state() != LOCK_LOCK);
   
   CInode *in = 0;
-  if (lock->get_cap_shift())
+  if (lock->get_type() != CEPH_LOCK_DN)
     in = static_cast<CInode *>(lock->get_parent());
 
   int old_state = lock->get_state();
@@ -3596,7 +3598,7 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
   }
   if (lock->is_rdlocked())
     gather++;
-  if (in && in->is_head()) {
+  if (lock->get_cap_shift() && in->is_head()) {
     if (in->issued_caps_need_gather(lock)) {
       if (need_issue)
 	*need_issue = true;
@@ -3629,6 +3631,8 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
       gather++;
       send_lock_message(lock, LOCK_AC_LOCK);
       lock->init_gather();
+      if (lock->get_state() == LOCK_MIX_LOCK2)
+	in->start_scatter_gather(static_cast<ScatterLock *>(lock));
     }
   }
 
@@ -4034,8 +4038,9 @@ void Locker::scatter_tempsync(ScatterLock *lock, bool *need_issue)
 
   if (lock->get_state() == LOCK_MIX_TSYN &&
       in->is_replicated()) {
-    lock->init_gather();
     send_lock_message(lock, LOCK_AC_LOCK);
+    lock->init_gather();
+    in->start_scatter_gather(static_cast<ScatterLock *>(lock));
     gather++;
   }
 
@@ -4364,6 +4369,8 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
       lock->get_state() != LOCK_XSYN_EXCL) {  // if we were lock, replicas are already lock.
     send_lock_message(lock, LOCK_AC_LOCK);
     lock->init_gather();
+    if (lock->get_state() == LOCK_MIX_EXCL)
+      in->start_scatter_gather(static_cast<ScatterLock *>(lock));
     gather++;
   }
   if (lock->is_leased()) {

@@ -140,13 +140,8 @@ public:
   // requests on existing inodes.
   void handle_client_getattr(MDRequest *mdr, bool is_lookup);
   void handle_client_lookup_parent(MDRequest *mdr);
-  void handle_client_lookup_hash(MDRequest *mdr);
-  void _lookup_hash_2(MDRequest *mdr, int r);
-  void _lookup_hash_3(MDRequest *mdr, int r);
   void handle_client_lookup_ino(MDRequest *mdr);
-  void _lookup_ino(MDRequest *mdr);
   void _lookup_ino_2(MDRequest *mdr, int r);
-  void _lookup_ino_3(MDRequest *mdr, int r);
   void handle_client_readdir(MDRequest *mdr);
   void handle_client_file_setlock(MDRequest *mdr);
   void handle_client_file_readlock(MDRequest *mdr);
@@ -242,6 +237,7 @@ public:
   // slaving
   void handle_slave_rename_prep(MDRequest *mdr);
   void handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
+  void handle_slave_rename_notify_ack(MDRequest *mdr, MMDSSlaveRequest *m);
   void _logged_slave_rename(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void _commit_slave_rename(MDRequest *mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr, bool finish_mdr=false);
