@@ -20,6 +20,7 @@
 #include "rgw_client_io.h"
 #include "common/errno.h"
 
+#define LOG_CLASS_LIST_MAX_ENTRIES (1000)
 #define dout_subsys ceph_subsys_rgw
 
 static int parse_date_str(string& in, utime_t& out) {
@@ -37,16 +38,17 @@ static int parse_date_str(string& in, utime_t& out) {
 
 void RGWOp_MDLog_List::execute() {
   string   shard = s->info.args.get("id");
-
+  string   max_entries_str = s->info.args.get("max-entries");
   string   st = s->info.args.get("start-time"),
            et = s->info.args.get("end-time"),
+           marker = s->info.args.get("marker"),
            err;
   utime_t  ut_st, 
            ut_et;
   void    *handle;
-  int      shard_id;
+  unsigned shard_id, max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
-  shard_id = strict_strtol(shard.c_str(), 10, &err);
+  shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
   if (!err.empty()) {
     dout(5) << "Error parsing shard_id " << shard << dendl;
     http_ret = -EINVAL;
@@ -63,13 +65,28 @@ void RGWOp_MDLog_List::execute() {
     return;
   }
 
+  if (!max_entries_str.empty()) {
+    max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
+    if (!err.empty()) {
+      dout(5) << "Error parsing max-entries " << max_entries_str << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+  } 
+  
   RGWMetadataLog *meta_log = store->meta_mgr->get_log();
 
-  meta_log->init_list_entries(shard_id, ut_st, ut_et, &handle);
+  meta_log->init_list_entries(shard_id, ut_st, ut_et, marker, &handle);
 
   bool truncated;
+  do {
+    http_ret = meta_log->list_entries(handle, max_entries, entries, &truncated);
+    if (http_ret < 0) 
+      break;
 
-  http_ret = meta_log->list_entries(handle, 1000, entries, &truncated);
+    if (!max_entries_str.empty()) 
+      max_entries -= entries.size();
+  } while (truncated && (max_entries > 0));
 }
 
 void RGWOp_MDLog_List::send_response() {
@@ -114,11 +131,11 @@ void RGWOp_MDLog_Delete::execute() {
            err;
   utime_t  ut_st, 
            ut_et;
-  int     shard_id;
+  unsigned shard_id;
 
   http_ret = 0;
 
-  shard_id = strict_strtol(shard.c_str(), 10, &err);
+  shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
   if (!err.empty()) {
     dout(5) << "Error parsing shard_id " << shard << dendl;
     http_ret = -EINVAL;
@@ -144,25 +161,27 @@ void RGWOp_MDLog_Delete::execute() {
 }
 
 void RGWOp_MDLog_Lock::execute() {
-  string shard_id_str, duration_str, lock_id;
-  int shard_id;
+  string shard_id_str, duration_str, locker_id, zone_id;
+  unsigned shard_id;
 
   http_ret = 0;
 
   shard_id_str = s->info.args.get("id");
   duration_str = s->info.args.get("length");
-  lock_id      = s->info.args.get("lock_id");
+  locker_id    = s->info.args.get("locker-id");
+  zone_id      = s->info.args.get("zone-id");
 
   if (shard_id_str.empty() ||
       (duration_str.empty()) ||
-      lock_id.empty()) {
+      locker_id.empty() ||
+      zone_id.empty()) {
     dout(5) << "Error invalid parameter list" << dendl;
     http_ret = -EINVAL;
     return;
   }
 
   string err;
-  shard_id = strict_strtol(shard_id_str.c_str(), 10, &err);
+  shard_id = (unsigned)strict_strtol(shard_id_str.c_str(), 10, &err);
   if (!err.empty()) {
     dout(5) << "Error parsing shard_id param " << shard_id_str << dendl;
     http_ret = -EINVAL;
@@ -170,35 +189,37 @@ void RGWOp_MDLog_Lock::execute() {
   }
 
   RGWMetadataLog *meta_log = store->meta_mgr->get_log();
-  int dur;
-  dur = strict_strtol(duration_str.c_str(), 10, &err);
+  unsigned dur;
+  dur = (unsigned)strict_strtol(duration_str.c_str(), 10, &err);
   if (!err.empty() || dur <= 0) {
     dout(5) << "invalid length param " << duration_str << dendl;
     http_ret = -EINVAL;
     return;
   }
   utime_t time(dur, 0);
-  http_ret = meta_log->lock_exclusive(shard_id, time, lock_id);
+  http_ret = meta_log->lock_exclusive(shard_id, time, zone_id, locker_id);
 }
 
 void RGWOp_MDLog_Unlock::execute() {
-  string shard_id_str, lock_id;
-  int shard_id;
+  string shard_id_str, locker_id, zone_id;
+  unsigned shard_id;
 
   http_ret = 0;
 
   shard_id_str = s->info.args.get("id");
-  lock_id      = s->info.args.get("lock_id");
+  locker_id    = s->info.args.get("locker-id");
+  zone_id      = s->info.args.get("zone-id");
 
   if (shard_id_str.empty() ||
-      lock_id.empty()) {
+      locker_id.empty() ||
+      zone_id.empty()) {
     dout(5) << "Error invalid parameter list" << dendl;
     http_ret = -EINVAL;
     return;
   }
 
   string err;
-  shard_id = strict_strtol(shard_id_str.c_str(), 10, &err);
+  shard_id = (unsigned)strict_strtol(shard_id_str.c_str(), 10, &err);
   if (!err.empty()) {
     dout(5) << "Error parsing shard_id param " << shard_id_str << dendl;
     http_ret = -EINVAL;
@@ -206,7 +227,7 @@ void RGWOp_MDLog_Unlock::execute() {
   }
 
   RGWMetadataLog *meta_log = store->meta_mgr->get_log();
-  http_ret = meta_log->unlock(shard_id, lock_id);
+  http_ret = meta_log->unlock(shard_id, zone_id, locker_id);
 }
 
 void RGWOp_BILog_List::execute() {
@@ -214,7 +235,7 @@ void RGWOp_BILog_List::execute() {
          marker = s->info.args.get("marker"),
          max_entries_str = s->info.args.get("max-entries");
   RGWBucketInfo bucket_info;
-  int max_entries;
+  unsigned max_entries;
 
   if (bucket_name.empty()) {
     dout(5) << "ERROR: bucket not specified" << dendl;
@@ -222,19 +243,19 @@ void RGWOp_BILog_List::execute() {
     return;
   }
 
-  http_ret = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL);
+  http_ret = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL, NULL);
   if (http_ret < 0) {
     dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
     return;
   }
 
   bool truncated;
-  int count = 0;
+  unsigned count = 0;
   string err;
 
-  max_entries = strict_strtol(max_entries_str.c_str(), 10, &err);
+  max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
   if (!err.empty())
-    max_entries = 1000;
+    max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
   send_response();
   do {
@@ -301,7 +322,7 @@ void RGWOp_BILog_Delete::execute() {
     http_ret = -EINVAL;
     return;
   }
-  http_ret = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL);
+  http_ret = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL, NULL);
   if (http_ret < 0) {
     dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
     return;
@@ -318,12 +339,14 @@ void RGWOp_DATALog_List::execute() {
 
   string   st = s->info.args.get("start-time"),
            et = s->info.args.get("end-time"),
+           max_entries_str = s->info.args.get("max-entries"),
+           marker = s->info.args.get("marker"),
            err;
   utime_t  ut_st, 
            ut_et;
-  int      shard_id;
+  unsigned shard_id, max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
-  shard_id = strict_strtol(shard.c_str(), 10, &err);
+  shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
   if (!err.empty()) {
     dout(5) << "Error parsing shard_id " << shard << dendl;
     http_ret = -EINVAL;
@@ -340,12 +363,25 @@ void RGWOp_DATALog_List::execute() {
     return;
   }
 
-  string marker;
+  if (!max_entries_str.empty()) {
+    max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
+    if (!err.empty()) {
+      dout(5) << "Error parsing max-entries " << max_entries_str << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+  } 
+  
   bool truncated;
-#define DATALOG_LIST_MAX_ENTRIES 1000
+  do {
+    http_ret = store->data_log->list_entries(shard_id, ut_st, ut_et, 
+                               max_entries, entries, marker, &truncated);
+    if (http_ret < 0) 
+      break;
 
-  http_ret = store->data_log->list_entries(shard_id, ut_st, ut_et, 
-                               DATALOG_LIST_MAX_ENTRIES, entries, marker, &truncated);
+    if (!max_entries_str.empty()) 
+      max_entries -= entries.size();
+  } while (truncated && (max_entries > 0));
 }
 
 void RGWOp_DATALog_List::send_response() {
@@ -385,67 +421,71 @@ void RGWOp_DATALog_GetShardsInfo::send_response() {
 }
 
 void RGWOp_DATALog_Lock::execute() {
-  string shard_id_str, duration_str, lock_id;
-  int shard_id;
+  string shard_id_str, duration_str, locker_id, zone_id;
+  unsigned shard_id;
 
   http_ret = 0;
 
   shard_id_str = s->info.args.get("id");
   duration_str = s->info.args.get("length");
-  lock_id      = s->info.args.get("lock_id");
+  locker_id    = s->info.args.get("locker-id");
+  zone_id      = s->info.args.get("zone-id");
 
   if (shard_id_str.empty() ||
       (duration_str.empty()) ||
-      lock_id.empty()) {
+      locker_id.empty() ||
+      zone_id.empty()) {
     dout(5) << "Error invalid parameter list" << dendl;
     http_ret = -EINVAL;
     return;
   }
 
   string err;
-  shard_id = strict_strtol(shard_id_str.c_str(), 10, &err);
+  shard_id = (unsigned)strict_strtol(shard_id_str.c_str(), 10, &err);
   if (!err.empty()) {
     dout(5) << "Error parsing shard_id param " << shard_id_str << dendl;
     http_ret = -EINVAL;
     return;
   }
 
-  int dur;
-  dur = strict_strtol(duration_str.c_str(), 10, &err);
+  unsigned dur;
+  dur = (unsigned)strict_strtol(duration_str.c_str(), 10, &err);
   if (!err.empty() || dur <= 0) {
     dout(5) << "invalid length param " << duration_str << dendl;
     http_ret = -EINVAL;
     return;
   }
   utime_t time(dur, 0);
-  http_ret = store->data_log->lock_exclusive(shard_id, time, lock_id);
+  http_ret = store->data_log->lock_exclusive(shard_id, time, zone_id, locker_id);
 }
 
 void RGWOp_DATALog_Unlock::execute() {
-  string shard_id_str, lock_id;
-  int shard_id;
+  string shard_id_str, locker_id, zone_id;
+  unsigned shard_id;
 
   http_ret = 0;
 
   shard_id_str = s->info.args.get("id");
-  lock_id      = s->info.args.get("lock_id");
+  locker_id    = s->info.args.get("locker-id");
+  zone_id      = s->info.args.get("zone-id");
 
   if (shard_id_str.empty() ||
-      lock_id.empty()) {
+      locker_id.empty() ||
+      zone_id.empty()) {
     dout(5) << "Error invalid parameter list" << dendl;
     http_ret = -EINVAL;
     return;
   }
 
   string err;
-  shard_id = strict_strtol(shard_id_str.c_str(), 10, &err);
+  shard_id = (unsigned)strict_strtol(shard_id_str.c_str(), 10, &err);
   if (!err.empty()) {
     dout(5) << "Error parsing shard_id param " << shard_id_str << dendl;
     http_ret = -EINVAL;
     return;
   }
 
-  http_ret = store->data_log->unlock(shard_id, lock_id);
+  http_ret = store->data_log->unlock(shard_id, zone_id, locker_id);
 }
 
 void RGWOp_DATALog_Delete::execute() {
@@ -455,11 +495,11 @@ void RGWOp_DATALog_Delete::execute() {
            err;
   utime_t  ut_st, 
            ut_et;
-  int     shard_id;
+  unsigned shard_id;
 
   http_ret = 0;
 
-  shard_id = strict_strtol(shard.c_str(), 10, &err);
+  shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
   if (!err.empty()) {
     dout(5) << "Error parsing shard_id " << shard << dendl;
     http_ret = -EINVAL;

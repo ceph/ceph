@@ -5,10 +5,9 @@
 
 class CephContext;
 class RGWRados;
-class RGWRegion;
 class RGWGetObjData;
 
-class RGWRegionConnection
+class RGWRESTConn
 {
   CephContext *cct;
   map<int, string> endpoints;
@@ -17,7 +16,7 @@ class RGWRegionConnection
   atomic_t counter;
 public:
 
-  RGWRegionConnection(CephContext *_cct, RGWRados *store, RGWRegion& upstream);
+  RGWRESTConn(CephContext *_cct, RGWRados *store, list<string>& endpoints);
   int get_url(string& endpoint);
 
   /* sync request */
@@ -25,8 +24,11 @@ public:
 
   /* async request */
   int put_obj_init(const string& uid, rgw_obj& obj, uint64_t obj_size,
-                   map<string, bufferlist>& attrs, RGWRESTStreamRequest **req);
-  int complete_request(RGWRESTStreamRequest *req);
+                   map<string, bufferlist>& attrs, RGWRESTStreamWriteRequest **req);
+  int complete_request(RGWRESTStreamWriteRequest *req, string& etag, time_t *mtime);
+
+  int get_obj(const string& uid, req_info *info /* optional */, rgw_obj& obj, bool prepend_metadata, RGWGetDataCB *cb, RGWRESTStreamReadRequest **req);
+  int complete_request(RGWRESTStreamReadRequest *req, string& etag, time_t *mtime, map<string, string>& attrs);
 };
 
 #endif

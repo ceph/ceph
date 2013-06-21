@@ -234,6 +234,7 @@ protected:
   RGWAccessControlPolicy policy;
   string location_constraint;
   RGWObjVersionTracker objv_tracker;
+  RGWBucketInfo info;
 
   bufferlist in_data;
 
@@ -267,33 +268,6 @@ public:
   virtual const char *name() { return "delete_bucket"; }
 };
 
-class RGWPutObjProcessor
-{
-protected:
-  RGWRados *store;
-  struct req_state *s;
-  bool is_complete;
-
-  virtual int do_complete(string& etag, map<string, bufferlist>& attrs) = 0;
-
-  list<rgw_obj> objs;
-
-  void add_obj(rgw_obj& obj) {
-    objs.push_back(obj);
-  }
-public:
-  RGWPutObjProcessor() : store(NULL), s(NULL), is_complete(false) {}
-  virtual ~RGWPutObjProcessor();
-  virtual int prepare(RGWRados *_store, struct req_state *_s) {
-    store = _store;
-    s = _s;
-    return 0;
-  };
-  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle) = 0;
-  virtual int throttle_data(void *handle) = 0;
-  virtual int complete(string& etag, map<string, bufferlist>& attrs);
-};
-
 class RGWPutObj : public RGWOp {
 
   friend class RGWPutObjProcessor;
@@ -307,6 +281,7 @@ protected:
   bool chunked_upload;
   RGWAccessControlPolicy policy;
   const char *obj_manifest;
+  time_t mtime;
 
 public:
   RGWPutObj() {
@@ -316,6 +291,7 @@ public:
     supplied_etag = NULL;
     chunked_upload = false;
     obj_manifest = NULL;
+    mtime = 0;
   }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
@@ -443,6 +419,9 @@ protected:
   bool replace_attrs;
   RGWBucketInfo src_bucket_info;
   RGWBucketInfo dest_bucket_info;
+  string source_zone;
+  string client_id;
+  string op_id;
 
 
   int init_common();

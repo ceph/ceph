@@ -302,7 +302,7 @@ void dump_redirect(struct req_state *s, const string& redirect)
   s->cio->print("Location: %s\n", redirect.c_str());
 }
 
-void dump_last_modified(struct req_state *s, time_t t)
+static void dump_time_header(struct req_state *s, const char *name, time_t t)
 {
 
   char timestr[TIME_BUF_SIZE];
@@ -314,7 +314,23 @@ void dump_last_modified(struct req_state *s, time_t t)
   if (strftime(timestr, sizeof(timestr), "%a, %d %b %Y %H:%M:%S %Z", tmp) == 0)
     return;
 
-  int r = s->cio->print("Last-Modified: %s\n", timestr);
+  int r = s->cio->print("%s: %s\n", name, timestr);
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+  }
+}
+
+void dump_last_modified(struct req_state *s, time_t t)
+{
+  dump_time_header(s, "Last-Modified", t);
+}
+
+void dump_epoch_header(struct req_state *s, const char *name, time_t t)
+{
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%lld", (long long)t);
+
+  int r = s->cio->print("%s: %s\n", name, buf);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -943,111 +959,6 @@ int RGWRESTOp::verify_permission()
   return check_caps(s->user.caps);
 }
 
-static void line_unfold(const char *line, string& sdest)
-{
-  char dest[strlen(line) + 1];
-  const char *p = line;
-  char *d = dest;
-
-  while (isspace(*p))
-    ++p;
-
-  bool last_space = false;
-
-  while (*p) {
-    switch (*p) {
-    case '\n':
-    case '\r':
-      *d = ' ';
-      if (!last_space)
-        ++d;
-      last_space = true;
-      break;
-    default:
-      *d = *p;
-      ++d;
-      last_space = false;
-      break;
-    }
-    ++p;
-  }
-  *d = 0;
-  sdest = dest;
-}
-
-struct str_len {
-  const char *str;
-  int len;
-};
-
-#define STR_LEN_ENTRY(s) { s, sizeof(s) - 1 }
-
-struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ"),
-                                   STR_LEN_ENTRY("HTTP_X_GOOG"),
-                                   STR_LEN_ENTRY("HTTP_X_DHO"),
-                                   STR_LEN_ENTRY("HTTP_X_RGW"),
-                                   STR_LEN_ENTRY("HTTP_X_OBJECT"),
-                                   STR_LEN_ENTRY("HTTP_X_CONTAINER"),
-                                   {NULL, 0} };
-
-static int init_meta_info(struct req_state *s)
-{
-  const char *p;
-
-  s->info.x_meta_map.clear();
-
-  const char **envp = s->cio->envp();
-
-  for (int i=0; (p = envp[i]); ++i) {
-    const char *prefix;
-    for (int prefix_num = 0; (prefix = meta_prefixes[prefix_num].str) != NULL; prefix_num++) {
-      int len = meta_prefixes[prefix_num].len;
-      if (strncmp(p, prefix, len) == 0) {
-        dout(10) << "meta>> " << p << dendl;
-        const char *name = p+len; /* skip the prefix */
-        const char *eq = strchr(name, '=');
-        if (!eq) /* shouldn't happen! */
-          continue;
-        int name_len = eq - name;
-
-        if (strncmp(name, "_META_", name_len) == 0)
-          s->has_bad_meta = true;
-
-        char name_low[meta_prefixes[0].len + name_len + 1];
-        snprintf(name_low, meta_prefixes[0].len - 5 + name_len + 1, "%s%s", meta_prefixes[0].str + 5 /* skip HTTP_ */, name); // normalize meta prefix
-        int j;
-        for (j = 0; name_low[j]; j++) {
-          if (name_low[j] != '_')
-            name_low[j] = tolower(name_low[j]);
-          else
-            name_low[j] = '-';
-        }
-        name_low[j] = 0;
-        string val;
-        line_unfold(eq + 1, val);
-
-        map<string, string>::iterator iter;
-        iter = s->info.x_meta_map.find(name_low);
-        if (iter != s->info.x_meta_map.end()) {
-          string old = iter->second;
-          int pos = old.find_last_not_of(" \t"); /* get rid of any whitespaces after the value */
-          old = old.substr(0, pos + 1);
-          old.append(",");
-          old.append(val);
-          s->info.x_meta_map[name_low] = old;
-        } else {
-          s->info.x_meta_map[name_low] = val;
-        }
-      }
-    }
-  }
-  map<string, string>::iterator iter;
-  for (iter = s->info.x_meta_map.begin(); iter != s->info.x_meta_map.end(); ++iter) {
-    dout(10) << "x>> " << iter->first << ":" << iter->second << dendl;
-  }
-
-  return 0;
-}
 
 int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_type, bool configurable)
 {
@@ -1290,7 +1201,7 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
   }
   s->op = op_from_method(info.method);
 
-  init_meta_info(s);
+  info.init_meta_info(&s->has_bad_meta);
 
   return 0;
 }

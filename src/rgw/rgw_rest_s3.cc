@@ -4,6 +4,7 @@
 #include "common/ceph_crypto.h"
 #include "common/Formatter.h"
 #include "common/utf8.h"
+#include "common/ceph_json.h"
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
@@ -34,7 +35,7 @@ void dump_bucket(struct req_state *s, RGWBucketEnt& obj)
 {
   s->formatter->open_object_section("Bucket");
   s->formatter->dump_string("Name", obj.bucket.name);
-  dump_time(s, "CreationDate", &obj.mtime);
+  dump_time(s, "CreationDate", &obj.creation_time);
   s->formatter->close_section();
 }
 
@@ -73,6 +74,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
   string content_type_str;
   map<string, string> response_attrs;
   map<string, string>::iterator riter;
+  bufferlist metadata_bl;
 
   if (ret)
     goto done;
@@ -82,6 +84,27 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
 
   if (range_str)
     dump_range(s, start, end, s->obj_size);
+
+  if (s->system_request &&
+      s->info.args.exists(RGW_SYS_PARAM_PREFIX "prepend-metadata")) {
+
+    /* JSON encode object metadata */
+    JSONFormatter jf;
+    jf.open_object_section("obj_metadata");
+    encode_json("attrs", attrs, &jf);
+    encode_json("mtime", lastmod, &jf);
+    jf.close_section();
+    stringstream ss;
+    jf.flush(ss);
+    metadata_bl.append(ss.str());
+    s->cio->print("Rgwx-Embedded-Metadata-Len: %lld\r\n", (long long)metadata_bl.length());
+    total_len += metadata_bl.length();
+  }
+
+  if (s->system_request && lastmod) {
+    /* we end up dumping mtime in two different methods, a bit redundant */
+    dump_epoch_header(s, "Rgwx-Mtime", lastmod);
+  }
 
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
@@ -143,6 +166,10 @@ done:
   if (!content_type)
     content_type = "binary/octet-stream";
   end_header(s, content_type);
+
+  if (metadata_bl.length()) {
+    s->cio->write(metadata_bl.c_str(), metadata_bl.length());
+  }
   sent_header = true;
 
 send_data:
@@ -417,6 +444,7 @@ void RGWCreateBucket_ObjStore_S3::send_response()
 
     f.open_object_section("info");
     encode_json("object_ver", objv_tracker.read_version, &f);
+    encode_json("bucket_info", info, &f);
     f.close_section();
     rgw_flush_formatter_and_reset(s, &f);
   }
@@ -480,57 +508,11 @@ void RGWPutObj_ObjStore_S3::send_response()
     dump_etag(s, etag.c_str());
     dump_content_length(s, 0);
   }
+  if (s->system_request && mtime) {
+    dump_epoch_header(s, "Rgwx-Mtime", mtime);
+  }
   dump_errno(s);
   end_header(s);
-}
-
-string trim_whitespace(const string& src)
-{
-  if (src.empty()) {
-    return string();
-  }
-
-  int start = 0;
-  for (; start != (int)src.size(); start++) {
-    if (!isspace(src[start]))
-      break;
-  }
-
-  int end = src.size() - 1;
-  if (end <= start) {
-    return string();
-  }
-
-  for (; end > start; end--) {
-    if (!isspace(src[end]))
-      break;
-  }
-
-  return src.substr(start, end - start + 1);
-}
-
-string trim_quotes(const string& val)
-{
-  string s = trim_whitespace(val);
-  if (s.size() < 2)
-    return s;
-
-  int start = 0;
-  int end = s.size() - 1;
-  int quotes_count = 0;
-
-  if (s[start] == '"') {
-    start++;
-    quotes_count++;
-  }
-  if (s[end] == '"') {
-    end--;
-    quotes_count++;
-  }
-  if (quotes_count == 2) {
-    return s.substr(start, end - start + 1);
-  }
-  return s;
 }
 
 /*
@@ -540,11 +522,11 @@ static void parse_params(const string& params_str, string& first, map<string, st
 {
   int pos = params_str.find(';');
   if (pos < 0) {
-    first = trim_whitespace(params_str);
+    first = rgw_trim_whitespace(params_str);
     return;
   }
 
-  first = trim_whitespace(params_str.substr(0, pos));
+  first = rgw_trim_whitespace(params_str.substr(0, pos));
 
   pos++;
 
@@ -557,11 +539,11 @@ static void parse_params(const string& params_str, string& first, map<string, st
 
     int eqpos = param.find('=');
     if (eqpos > 0) {
-      string param_name = trim_whitespace(param.substr(0, eqpos));
-      string val = trim_quotes(param.substr(eqpos + 1));
+      string param_name = rgw_trim_whitespace(param.substr(0, eqpos));
+      string val = rgw_trim_quotes(param.substr(eqpos + 1));
       params[param_name] = val;
     } else {
-      params[trim_whitespace(param)] = "";
+      params[rgw_trim_whitespace(param)] = "";
     }
 
     pos = end + 1;
@@ -739,7 +721,7 @@ int RGWPostObj_ObjStore_S3::read_form_part_header(struct post_form_part *part,
   /*
    * iterate through fields
    */
-    string line = trim_whitespace(string(bl.c_str(), bl.length()));
+    string line = rgw_trim_whitespace(string(bl.c_str(), bl.length()));
 
     if (line.empty())
       break;
@@ -774,7 +756,7 @@ bool RGWPostObj_ObjStore_S3::part_str(const string& name, string *val)
 
   bufferlist& data = iter->second.data;
   string str = string(data.c_str(), data.length());
-  *val = trim_whitespace(str);
+  *val = rgw_trim_whitespace(str);
   return true;
 }
 
@@ -1258,15 +1240,32 @@ int RGWCopyObj_ObjStore_S3::get_params()
   if_nomatch = s->info.env->get("HTTP_X_AMZ_COPY_IF_NONE_MATCH");
 
   const char *req_src = s->copy_source;
-  if (!req_src)
+  if (!req_src) {
+    ldout(s->cct, 0) << "copy source is NULL" << dendl;
     return -EINVAL;
+  }
 
   ret = parse_copy_location(req_src, src_bucket_name, src_object);
-  if (!ret)
-     return -EINVAL;
+  if (!ret) {
+    ldout(s->cct, 0) << "failed to parse copy location" << dendl;
+    return -EINVAL;
+  }
 
   dest_bucket_name = s->bucket.name;
   dest_object = s->object_str;
+
+  if (s->system_request) {
+    source_zone = s->info.args.get(RGW_SYS_PARAM_PREFIX "source-zone");
+    if (!source_zone.empty()) {
+      client_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "client-id");
+      op_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "op-id");
+
+      if (client_id.empty() || op_id.empty()) {
+        ldout(s->cct, 0) << RGW_SYS_PARAM_PREFIX "client-id or " RGW_SYS_PARAM_PREFIX "op-id were not provided, required for intra-region copy" << dendl;
+        return -EINVAL;
+      }
+    }
+  }
 
   const char *md_directive = s->info.env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
   if (md_directive) {
@@ -1274,15 +1273,20 @@ int RGWCopyObj_ObjStore_S3::get_params()
       replace_attrs = false;
     } else if (strcasecmp(md_directive, "REPLACE") == 0) {
       replace_attrs = true;
+    } else if (!source_zone.empty()) {
+      replace_attrs = false; // default for intra-region copy
     } else {
+      ldout(s->cct, 0) << "invalid metadata directive" << dendl;
       return -EINVAL;
     }
   }
 
-  if ((dest_bucket_name.compare(src_bucket_name) == 0) &&
+  if (source_zone.empty() &&
+      (dest_bucket_name.compare(src_bucket_name) == 0) &&
       (dest_object.compare(src_object) == 0) &&
       !replace_attrs) {
     /* can only copy object into itself if replacing attrs */
+    ldout(s->cct, 0) << "can't copy object into itself if not replacing attrs" << dendl;
     return -ERR_INVALID_REQUEST;
   }
   return 0;
