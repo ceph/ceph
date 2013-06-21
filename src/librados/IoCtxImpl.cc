@@ -501,6 +501,8 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
+  int op = o->ops[0].op.op;
+  ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid << " nspace=" << oloc.nspace << dendl;
   lock->Lock();
   objecter->mutate(oid, oloc,
 	           *o, snapc, ut, 0,
@@ -511,6 +513,8 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
+  ldout(client->cct, 10) << "Objecter returned from "
+	<< ceph_osd_op_name(op) << " r=" << r << dendl;
 
   set_sync_op_version(ver);
 
@@ -531,6 +535,8 @@ int librados::IoCtxImpl::operate_read(const object_t& oid,
 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
+  int op = o->ops[0].op.op;
+  ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid << " nspace=" << oloc.nspace << dendl;
   lock->Lock();
   objecter->read(oid, oloc,
 	           *o, snap_seq, pbl, 0,
@@ -541,6 +547,8 @@ int librados::IoCtxImpl::operate_read(const object_t& oid,
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
+  ldout(client->cct, 10) << "Objecter returned from "
+	<< ceph_osd_op_name(op) << " r=" << r << dendl;
 
   set_sync_op_version(ver);
 
