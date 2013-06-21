@@ -361,12 +361,14 @@ def move_file(remote, from_path, to_path, sudo=False):
         stdout=StringIO(),
         )
 
-def delete_file(remote, path, sudo=False):
+def delete_file(remote, path, sudo=False, force=False):
     args = []
     if sudo:
         args.append('sudo')
+    args.extend(['rm'])
+    if force:
+        args.extend(['-f'])
     args.extend([
-            'rm',
             '--',
             path,
             ])
