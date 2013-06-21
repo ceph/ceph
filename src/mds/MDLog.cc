@@ -610,9 +610,11 @@ void MDLog::standby_trim_segments()
   dout(10) << "standby_trim_segments" << dendl;
   uint64_t expire_pos = journaler->get_expire_pos();
   dout(10) << " expire_pos=" << expire_pos << dendl;
-  LogSegment *seg = NULL;
   bool removed_segment = false;
-  while ((seg = get_oldest_segment())->end <= expire_pos) {
+  while (have_any_segments()) {
+    LogSegment *seg = get_oldest_segment();
+    if (seg->end > expire_pos)
+      break;
     dout(10) << " removing segment " << seg->offset << dendl;
     seg->dirty_dirfrags.clear_list();
     seg->new_dirfrags.clear_list();
