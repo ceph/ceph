@@ -1,0 +1,6 @@
+tasks:
+- workunit:
+     branch: bobtail
+     clients:
+        all:
+           - suites/dbench.sh
