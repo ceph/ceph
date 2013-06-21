@@ -105,3 +105,10 @@ int RGWReplicaObjectLogger::create_log_objects(int shards)
   }
   return r;
 }
+
+RGWReplicaBucketLogger::RGWReplicaBucketLogger(RGWRados *_store) :
+  RGWReplicaLogger(_store)
+{
+  store->get_log_pool_name(pool);
+  prefix = "replica_log.";
+}

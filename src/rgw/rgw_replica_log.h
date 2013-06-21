@@ -90,22 +90,23 @@ public:
 };
 
 class RGWReplicaBucketLogger : private RGWReplicaLogger {
+  string pool;
+  string prefix;
 public:
-  RGWReplicaBucketLogger(RGWRados *_store) :
-    RGWReplicaLogger(_store) {}
+  RGWReplicaBucketLogger(RGWRados *_store);
   int update_bound(const rgw_bucket& bucket, const string& daemon_id,
                    const string& marker, const utime_t& time,
                    const list<pair<string, utime_t> > *entries) {
-    return RGWReplicaLogger::update_bound(bucket.name, bucket.index_pool,
+    return RGWReplicaLogger::update_bound(prefix+bucket.name, pool,
                                           daemon_id, marker, time, entries);
   }
   int delete_bound(const rgw_bucket& bucket, const string& daemon_id) {
-    return RGWReplicaLogger::delete_bound(bucket.name, bucket.index_pool,
+    return RGWReplicaLogger::delete_bound(prefix+bucket.name, pool,
                                           daemon_id);
   }
   int get_bounds(const rgw_bucket& bucket, string& marker, utime_t& oldest_time,
                  list<cls_replica_log_progress_marker>& markers) {
-    return RGWReplicaLogger::get_bounds(bucket.name, bucket.index_pool,
+    return RGWReplicaLogger::get_bounds(prefix+bucket.name, pool,
                                         marker, oldest_time, markers);
   }
 };
