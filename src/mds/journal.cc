@@ -305,10 +305,13 @@ void LogSegment::queue_backtrace_update(CInode *inode, int64_t location, int64_t
 
 void LogSegment::remove_pending_backtraces(inodeno_t ino, int64_t pool) {
   elist<BacktraceInfo*>::iterator i = update_backtraces.begin();
-  while(!i.end()) {
-    ++i;
-    if((*i)->bt.ino == ino && (*i)->location == pool) {
-      delete (*i);
+  while (!i.end()) {
+    BacktraceInfo *bi = *i;
+    if (bi->bt.ino == ino && bi->location == pool) {
+      ++i;
+      delete bi;
+    } else {
+      ++i;
     }
   }
 }
