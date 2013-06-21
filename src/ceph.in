@@ -42,6 +42,7 @@ import stat
 import string
 import struct
 import subprocess
+import time
 import types
 import uuid
 
@@ -1511,6 +1512,7 @@ def main():
         # loop forever letting watch_cb print lines
         try:
             while True:
+                time.sleep(5)
                 pass
         except KeyboardInterrupt:
             # or until ^C, at least
