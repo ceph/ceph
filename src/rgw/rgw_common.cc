@@ -148,6 +148,7 @@ req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL)
   length = NULL;
   copy_source = NULL;
   http_auth = NULL;
+  local_source = false;
 
   obj_ctx = NULL;
 }
@@ -159,6 +160,74 @@ req_state::~req_state() {
   delete object_acl;
   free((void *)object);
   free((void *)bucket_name);
+}
+
+struct str_len {
+  const char *str;
+  int len;
+};
+
+#define STR_LEN_ENTRY(s) { s, sizeof(s) - 1 }
+
+struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ"),
+                                   STR_LEN_ENTRY("HTTP_X_GOOG"),
+                                   STR_LEN_ENTRY("HTTP_X_DHO"),
+                                   STR_LEN_ENTRY("HTTP_X_RGW"),
+                                   STR_LEN_ENTRY("HTTP_X_OBJECT"),
+                                   STR_LEN_ENTRY("HTTP_X_CONTAINER"),
+                                   {NULL, 0} };
+
+
+void req_info::init_meta_info(bool *found_bad_meta)
+{
+  x_meta_map.clear();
+
+  map<string, string>& m = env->get_map();
+  map<string, string>::iterator iter;
+  for (iter = m.begin(); iter != m.end(); ++iter) {
+    const char *prefix;
+    const string& header_name = iter->first;
+    const string& val = iter->second;
+    for (int prefix_num = 0; (prefix = meta_prefixes[prefix_num].str) != NULL; prefix_num++) {
+      int len = meta_prefixes[prefix_num].len;
+      const char *p = header_name.c_str();
+      if (strncmp(p, prefix, len) == 0) {
+        dout(10) << "meta>> " << p << dendl;
+        const char *name = p+len; /* skip the prefix */
+        int name_len = header_name.size() - len;
+
+        if (found_bad_meta && strncmp(name, "_META_", name_len) == 0)
+          *found_bad_meta = true;
+
+        char name_low[meta_prefixes[0].len + name_len + 1];
+        snprintf(name_low, meta_prefixes[0].len - 5 + name_len + 1, "%s%s", meta_prefixes[0].str + 5 /* skip HTTP_ */, name); // normalize meta prefix
+        int j;
+        for (j = 0; name_low[j]; j++) {
+          if (name_low[j] != '_')
+            name_low[j] = tolower(name_low[j]);
+          else
+            name_low[j] = '-';
+        }
+        name_low[j] = 0;
+
+        map<string, string>::iterator iter;
+        iter = x_meta_map.find(name_low);
+        if (iter != x_meta_map.end()) {
+          string old = iter->second;
+          int pos = old.find_last_not_of(" \t"); /* get rid of any whitespaces after the value */
+          old = old.substr(0, pos + 1);
+          old.append(",");
+          old.append(val);
+          x_meta_map[name_low] = old;
+        } else {
+          x_meta_map[name_low] = val;
+        }
+      }
+    }
+  }
+  for (iter = x_meta_map.begin(); iter != x_meta_map.end(); ++iter) {
+    dout(10) << "x>> " << iter->first << ":" << iter->second << dendl;
+  }
 }
 
 std::ostream& operator<<(std::ostream& oss, const rgw_err &err)
@@ -665,6 +734,55 @@ bool url_decode(string& src_str, string& dest_str)
   dest_str = dest;
 
   return true;
+}
+
+string rgw_trim_whitespace(const string& src)
+{
+  if (src.empty()) {
+    return string();
+  }
+
+  int start = 0;
+  for (; start != (int)src.size(); start++) {
+    if (!isspace(src[start]))
+      break;
+  }
+
+  int end = src.size() - 1;
+  if (end <= start) {
+    return string();
+  }
+
+  for (; end > start; end--) {
+    if (!isspace(src[end]))
+      break;
+  }
+
+  return src.substr(start, end - start + 1);
+}
+
+string rgw_trim_quotes(const string& val)
+{
+  string s = rgw_trim_whitespace(val);
+  if (s.size() < 2)
+    return s;
+
+  int start = 0;
+  int end = s.size() - 1;
+  int quotes_count = 0;
+
+  if (s[start] == '"') {
+    start++;
+    quotes_count++;
+  }
+  if (s[end] == '"') {
+    end--;
+    quotes_count++;
+  }
+  if (quotes_count == 2) {
+    return s.substr(start, end - start + 1);
+  }
+  return s;
 }
 
 static struct {

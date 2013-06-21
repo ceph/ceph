@@ -26,6 +26,7 @@ using namespace std;
 #include "rgw_log.h"
 #include "rgw_formats.h"
 #include "rgw_usage.h"
+#include "rgw_replica_log.h"
 #include "auth/Crypto.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -94,6 +95,17 @@ void _usage()
   cerr << "  bilog trim                 trim bucket index log (use start-marker, end-marker)\n";
   cerr << "  datalog list               list data log\n";
   cerr << "  datalog trim               trim data log\n";
+  cerr << "  opstate list               list stateful operations entries (use client_id,\n";
+  cerr << "                             op_id, object)\n";
+  cerr << "  opstate set                set state on an entry (use client_id, op_id, object)\n";
+  cerr << "  opstate renewstate         renew state on an entry (use client_id, op_id, object)\n";
+  cerr << "  opstate rmstate            remove entry (use client_id, op_id, object)\n";
+  cerr << "  replicamdlog get           get the replica metadata log\n";
+  cerr << "  replicamdlog delete        delete the replica metadata log\n";
+  cerr << "  replicadatalog get         get the replica data log\n";
+  cerr << "  replicadatalog delete      delete the replica data log\n";
+  cerr << "  replicabucketlog get       get the replica bucket log\n";
+  cerr << "  replicabucketlog delete    delete the replica bucket log\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --subuser=<name>          subuser name\n";
@@ -206,6 +218,18 @@ enum {
   OPT_BILOG_TRIM,
   OPT_DATALOG_LIST,
   OPT_DATALOG_TRIM,
+  OPT_OPSTATE_LIST,
+  OPT_OPSTATE_SET,
+  OPT_OPSTATE_RENEW,
+  OPT_OPSTATE_RM,
+  OPT_REPLICAMDLOG_GET,
+  OPT_REPLICAMDLOG_CREATE,
+  OPT_REPLICAMDLOG_DELETE,
+  OPT_REPLICADATALOG_GET,
+  OPT_REPLICADATALOG_CREATE,
+  OPT_REPLICADATALOG_DELETE,
+  OPT_REPLICABUCKETLOG_GET,
+  OPT_REPLICABUCKETLOG_DELETE
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
@@ -234,7 +258,11 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "metadata") == 0 ||
       strcmp(cmd, "mdlog") == 0 ||
       strcmp(cmd, "bilog") == 0 ||
-      strcmp(cmd, "datalog") == 0) {
+      strcmp(cmd, "datalog") == 0 ||
+      strcmp(cmd, "opstate") == 0 ||
+      strcmp(cmd, "replicamdlog") == 0 ||
+      strcmp(cmd, "replicadatalog") == 0 ||
+      strcmp(cmd, "replicabucketlog") == 0) {
     *need_more = true;
     return 0;
   }
@@ -384,6 +412,34 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_DATALOG_LIST;
     if (strcmp(cmd, "trim") == 0)
       return OPT_DATALOG_TRIM;
+  } else if (strcmp(prev_cmd, "opstate") == 0) {
+    if (strcmp(cmd, "list") == 0)
+      return OPT_OPSTATE_LIST;
+    if (strcmp(cmd, "set") == 0)
+      return OPT_OPSTATE_SET;
+    if (strcmp(cmd, "renew") == 0)
+      return OPT_OPSTATE_RENEW;
+    if (strcmp(cmd, "rm") == 0)
+      return OPT_OPSTATE_RM;
+  } else if (strcmp(prev_cmd, "replicamdlog") == 0) {
+    if (strcmp(cmd, "get") == 0)
+      return OPT_REPLICAMDLOG_GET;
+    if (strcmp(cmd, "create") == 0)
+          return OPT_REPLICAMDLOG_CREATE;
+    if (strcmp(cmd, "delete") == 0)
+          return OPT_REPLICAMDLOG_DELETE;
+  } else if (strcmp(prev_cmd, "replicadatalog") == 0) {
+    if (strcmp(cmd, "get") == 0)
+      return OPT_REPLICADATALOG_GET;
+    if (strcmp(cmd, "create") == 0)
+          return OPT_REPLICADATALOG_CREATE;
+    if (strcmp(cmd, "delete") == 0)
+          return OPT_REPLICADATALOG_DELETE;
+  } else if (strcmp(prev_cmd, "replicabucketlog") == 0) {
+    if (strcmp(cmd, "get") == 0)
+      return OPT_REPLICABUCKETLOG_GET;
+    if (strcmp(cmd, "delete") == 0)
+      return OPT_REPLICABUCKETLOG_DELETE;
   }
 
   return -EINVAL;
@@ -438,7 +494,8 @@ static void dump_bucket_usage(map<RGWObjCategory, RGWBucketStats>& stats, Format
 int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
 {
   RGWBucketInfo bucket_info;
-  int r = store->get_bucket_info(NULL, bucket.name, bucket_info, NULL);
+  time_t mtime;
+  int r = store->get_bucket_info(NULL, bucket.name, bucket_info, NULL, &mtime);
   if (r < 0)
     return r;
 
@@ -457,6 +514,7 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
   formatter->dump_string("owner", bucket_info.owner);
+  formatter->dump_int("mtime", mtime);
   formatter->dump_int("ver", bucket_ver);
   formatter->dump_int("master_ver", master_ver);
   dump_bucket_usage(stats, formatter);
@@ -478,7 +536,7 @@ static int init_bucket(string& bucket_name, rgw_bucket& bucket)
 {
   if (!bucket_name.empty()) {
     RGWBucketInfo bucket_info;
-    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL);
+    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL, NULL);
     if (r < 0) {
       cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
       return r;
@@ -646,6 +704,11 @@ int main(int argc, char **argv)
   bool system_specified = false;
   int shard_id = -1;
   bool specified_shard_id = false;
+  string daemon_id;
+  bool specified_daemon_id = false;
+  string client_id;
+  string op_id;
+  string state_str;
 
   std::string val;
   std::ostringstream errs;
@@ -674,6 +737,12 @@ int main(int argc, char **argv)
       pool_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--object", (char*)NULL)) {
       object = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--client-id", (char*)NULL)) {
+      client_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--op-id", (char*)NULL)) {
+      op_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--state", (char*)NULL)) {
+      state_str = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--key-type", (char*)NULL)) {
       key_type_str = val;
       if (key_type_str.compare("swift") == 0) {
@@ -716,6 +785,9 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--shard-id", (char*)NULL)) {
       shard_id = atoi(val.c_str());
       specified_shard_id = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--daemon-id", (char*)NULL)) {
+      daemon_id = val;
+      specified_daemon_id = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--access", (char*)NULL)) {
       access = val;
       perm_mask = rgw_str_to_perm(access.c_str());
@@ -1768,7 +1840,6 @@ next:
     if (ret < 0)
       return -ret;
 
-
     int i = (specified_shard_id ? shard_id : 0);
 
     formatter->open_array_section("entries");
@@ -1778,7 +1849,7 @@ next:
       list<cls_log_entry> entries;
 
 
-      meta_log->init_list_entries(i, start_time, end_time, &handle);
+      meta_log->init_list_entries(i, start_time, end_time, marker, &handle);
 
       bool truncated;
       do {
@@ -1945,6 +2016,180 @@ next:
       cerr << "ERROR: trim_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
+  }
+
+  if (opt_cmd == OPT_OPSTATE_LIST) {
+    RGWOpState oc(store);
+
+    int max = 1000;
+
+    void *handle;
+    oc.init_list_entries(client_id, op_id, object, &handle);
+    list<cls_statelog_entry> entries;
+    bool done;
+    formatter->open_array_section("entries");
+    do {
+      int ret = oc.list_entries(handle, max, entries, &done);
+      if (ret < 0) {
+        cerr << "oc.list_entries returned " << cpp_strerror(-ret) << std::endl;
+        oc.finish_list_entries(handle);
+        return -ret;
+      }
+
+      for (list<cls_statelog_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+        oc.dump_entry(*iter, formatter);
+      }
+
+      formatter->flush(cout);
+    } while (!done);
+    formatter->close_section();
+    formatter->flush(cout);
+    oc.finish_list_entries(handle);
+  }
+
+  if (opt_cmd == OPT_OPSTATE_SET || opt_cmd == OPT_OPSTATE_RENEW) {
+    RGWOpState oc(store);
+
+    RGWOpState::OpState state;
+    if (object.empty() || client_id.empty() || op_id.empty()) {
+      cerr << "ERROR: need to specify client_id, op_id, and object" << std::endl;
+      return EINVAL;
+    }
+    if (state_str.empty()) {
+      cerr << "ERROR: state was not specified" << std::endl;
+      return EINVAL;
+    }
+    int ret = oc.state_from_str(state_str, &state);
+    if (ret < 0) {
+      cerr << "ERROR: invalid state: " << state_str << std::endl;
+      return -ret;
+    }
+
+    if (opt_cmd == OPT_OPSTATE_SET) {
+      ret = oc.set_state(client_id, op_id, object, state);
+      if (ret < 0) {
+        cerr << "ERROR: failed to set state: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+    } else {
+      ret = oc.renew_state(client_id, op_id, object, state);
+      if (ret < 0) {
+        cerr << "ERROR: failed to renew state: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+    }
+  }
+  if (opt_cmd == OPT_OPSTATE_RM) {
+    RGWOpState oc(store);
+
+    if (object.empty() || client_id.empty() || op_id.empty()) {
+      cerr << "ERROR: need to specify client_id, op_id, and object" << std::endl;
+      return EINVAL;
+    }
+    ret = oc.remove_entry(client_id, op_id, object);
+    if (ret < 0) {
+      cerr << "ERROR: failed to set state: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT_REPLICAMDLOG_GET) {
+    if (!specified_shard_id) {
+      cerr << "ERROR: shard-id must be specified for get operation" << std::endl;
+      return EINVAL;
+    }
+
+    RGWReplicaObjectLogger logger(store, pool_name, META_REPLICA_LOG_OBJ_PREFIX);
+    string pos_marker;
+    utime_t time_marker;
+    list<cls_replica_log_progress_marker> markers;
+    int ret = logger.get_bounds(shard_id, pos_marker, time_marker, markers);
+    if (ret < 0)
+      return -ret;
+    encode_json("markers", markers, formatter);
+  }
+
+  if (opt_cmd == OPT_REPLICAMDLOG_DELETE) {
+    if (!specified_shard_id) {
+      cerr << "ERROR: shard-id must be specified for delete operation" << std::endl;
+      return EINVAL;
+    }
+    if (!specified_daemon_id) {
+      cerr << "ERROR: daemon-id must be specified for delete operation" << std::endl;
+      return EINVAL;
+    }
+    RGWReplicaObjectLogger logger(store, pool_name, META_REPLICA_LOG_OBJ_PREFIX);
+    int ret = logger.delete_bound(shard_id, daemon_id);
+    if (ret < 0)
+      return -ret;
+  }
+
+  if (opt_cmd == OPT_REPLICADATALOG_GET) {
+    if (!specified_shard_id) {
+      cerr << "ERROR: shard-id must be specified for get operation" << std::endl;
+      return EINVAL;
+    }
+    RGWReplicaObjectLogger logger(store, pool_name, DATA_REPLICA_LOG_OBJ_PREFIX);
+    string pos_marker;
+    utime_t time_marker;
+    list<cls_replica_log_progress_marker> markers;
+    int ret = logger.get_bounds(shard_id, pos_marker, time_marker, markers);
+    if (ret < 0)
+      return -ret;
+    encode_json("markers", markers, formatter);
+  }
+
+  if (opt_cmd == OPT_REPLICADATALOG_DELETE) {
+    if (!specified_shard_id) {
+      cerr << "ERROR: shard-id must be specified for delete operation" << std::endl;
+      return EINVAL;
+    }
+    if (!specified_daemon_id) {
+      cerr << "ERROR: daemon-id must be specified for delete operation" << std::endl;
+      return EINVAL;
+    }
+    RGWReplicaObjectLogger logger(store, pool_name, DATA_REPLICA_LOG_OBJ_PREFIX);
+    int ret = logger.delete_bound(shard_id, daemon_id);
+    if (ret < 0)
+      return -ret;
+  }
+
+  if (opt_cmd == OPT_REPLICABUCKETLOG_GET) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return -EINVAL;
+    }
+    int ret = init_bucket(bucket_name, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    RGWReplicaBucketLogger logger(store);
+    string pos_marker;
+    utime_t time_marker;
+    list<cls_replica_log_progress_marker> markers;
+    ret = logger.get_bounds(bucket, pos_marker, time_marker, markers);
+    if (ret < 0)
+      return -ret;
+    encode_json("markers", markers, formatter);
+  }
+
+  if (opt_cmd == OPT_REPLICABUCKETLOG_DELETE) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return -EINVAL;
+    }
+    int ret = init_bucket(bucket_name, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    RGWReplicaBucketLogger logger(store);
+    ret = logger.delete_bound(bucket, daemon_id);
+    if (ret < 0)
+      return -ret;
   }
   return 0;
 }

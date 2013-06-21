@@ -43,6 +43,9 @@ using ceph::crypto::MD5;
 
 #define RGW_ATTR_PREFIX  "user.rgw."
 
+#define RGW_HTTP_RGWX_ATTR_PREFIX "RGWX_ATTR_"
+#define RGW_HTTP_RGWX_ATTR_PREFIX_OUT "Rgwx-Attr-"
+
 #define RGW_AMZ_META_PREFIX "x-amz-meta-"
 
 #define RGW_SYS_PARAM_PREFIX "rgwx-"
@@ -594,17 +597,19 @@ struct RGWBucketInfo
   string owner;
   uint32_t flags;
   string region;
+  time_t creation_time;
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(5, 4, bl);
+     ENCODE_START(6, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner, bl);
      ::encode(flags, bl);
      ::encode(region, bl);
+     ::encode(creation_time, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(5, 4, 4, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(6, 4, 4, bl);
      ::decode(bucket, bl);
      if (struct_v >= 2)
        ::decode(owner, bl);
@@ -612,6 +617,8 @@ struct RGWBucketInfo
        ::decode(flags, bl);
      if (struct_v >= 5)
        ::decode(region, bl);
+     if (struct_v >= 6)
+       ::decode(creation_time, bl);
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -619,7 +626,7 @@ struct RGWBucketInfo
 
   void decode_json(JSONObj *obj);
 
-  RGWBucketInfo() : flags(0) {}
+  RGWBucketInfo() : flags(0), creation_time(0) {}
 };
 WRITE_CLASS_ENCODER(RGWBucketInfo)
 
@@ -683,6 +690,7 @@ struct req_info {
 
   req_info(CephContext *cct, RGWEnv *_env);
   void rebuild_from(req_info& src);
+  void init_meta_info(bool *found_nad_meta);
 };
 
 /** Store all the state necessary to complete and respond to an HTTP request*/
@@ -731,6 +739,7 @@ struct req_state {
    bool has_acl_header;
    const char *copy_source;
    const char *http_auth;
+   bool local_source; /* source is local */
 
    int prot_flags;
 
@@ -774,15 +783,15 @@ struct RGWBucketEnt {
   rgw_bucket bucket;
   size_t size;
   size_t size_rounded;
-  time_t mtime;
+  time_t creation_time;
   uint64_t count;
 
-  RGWBucketEnt() : size(0), size_rounded(0), mtime(0), count(0) {}
+  RGWBucketEnt() : size(0), size_rounded(0), creation_time(0), count(0) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(5, 5, bl);
     uint64_t s = size;
-    __u32 mt = mtime;
+    __u32 mt = creation_time;
     string empty_str;  // originally had the bucket name here, but we encode bucket later
     ::encode(empty_str, bl);
     ::encode(s, bl);
@@ -802,7 +811,7 @@ struct RGWBucketEnt {
     ::decode(s, bl);
     ::decode(mt, bl);
     size = s;
-    mtime = mt;
+    creation_time = mt;
     if (struct_v >= 2)
       ::decode(count, bl);
     if (struct_v >= 3)
@@ -814,13 +823,6 @@ struct RGWBucketEnt {
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<RGWBucketEnt*>& o);
-  void clear() {
-    bucket.clear();
-    size = 0;
-    size_rounded = 0;
-    mtime = 0;
-    count = 0;
-  }
 };
 WRITE_CLASS_ENCODER(RGWBucketEnt)
 
@@ -1126,6 +1128,9 @@ extern int parse_time(const char *time_str, time_t *time);
 extern bool parse_rfc2616(const char *s, struct tm *t);
 extern bool parse_iso8601(const char *s, struct tm *t);
 extern int parse_date(const string& date, uint64_t *epoch, string *out_date = NULL, string *out_time = NULL);
+extern string rgw_trim_whitespace(const string& src);
+extern string rgw_trim_quotes(const string& val);
+
 
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
