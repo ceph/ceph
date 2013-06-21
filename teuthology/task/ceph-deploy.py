@@ -150,48 +150,47 @@ def build_ceph_cluster(ctx, config):
     gather_keys = './ceph-deploy gatherkeys'+" "+mon_hostname
     deploy_mds = './ceph-deploy mds create'+" "+mds_nodes
     no_of_osds = 0
-    if mon_nodes is not None:
-        estatus_new = execute_ceph_deploy(ctx, config, new_mon)
-        if estatus_new == 0:
-            estatus_install = execute_ceph_deploy(ctx, config, install_nodes)
-            if estatus_install==0:
-                estatus_mon = execute_ceph_deploy(ctx, config, mon_create_nodes)
-                if estatus_mon==0:
-                    estatus_gather = execute_ceph_deploy(ctx, config, gather_keys)
-                    if estatus_gather != 0:
-                        while (estatus_gather != 0):
-                            execute_ceph_deploy(ctx, config, mon_create_nodes)
-                            estatus_gather = execute_ceph_deploy(ctx, config, gather_keys)
-                            if estatus_gather == 0:
-                                break
-                    estatus_mds = execute_ceph_deploy(ctx, config, deploy_mds)
-                    if estatus_mds==0:
-                        node_dev_list = get_dev_for_osd(ctx, config)
-                        for d in node_dev_list:
-                            osd_create_cmds = './ceph-deploy osd create --zap-disk'+" "+d
-                            estatus_osd = execute_ceph_deploy(ctx, config, osd_create_cmds)
-                            if estatus_osd==0:
-                                log.info('successfully created osd')
-                                no_of_osds += 1
-                            else:
-                                zap_disk = './ceph-deploy disk zap'+" "+d
-                                execute_ceph_deploy(ctx, config, zap_disk)
-                                estatus_osd = execute_ceph_deploy(ctx, config, osd_create_cmds)
-                                if estatus_osd==0:
-                                    log.info('successfully created osd')
-                                    no_of_osds += 1
-                                else:
-                                    raise Exception("ceph-deploy: Failed to create osds")
-                    else:
-                        raise Exception("ceph-deploy: Failed to deploy mds")
-                else:
-                    raise Exception("ceph-deploy: Failed to create monitors")
-            else:
-                  raise Exception("ceph-deploy: Failed to install ceph")
-        else:
-            raise Exception("ceph-deploy: new command failed")
-    else:
+
+    if mon_nodes is None:
         raise Exception("no monitor nodes in the config file")
+
+    estatus_new = execute_ceph_deploy(ctx, config, new_mon)
+    if estatus_new != 0:
+        raise Exception("ceph-deploy: new command failed")
+
+    estatus_install = execute_ceph_deploy(ctx, config, install_nodes)
+    if estatus_install != 0:
+        raise Exception("ceph-deploy: Failed to install ceph")
+
+    estatus_mon = execute_ceph_deploy(ctx, config, mon_create_nodes)
+    if estatus_mon != 0:
+        raise Exception("ceph-deploy: Failed to create monitors")
+
+    estatus_gather = execute_ceph_deploy(ctx, config, gather_keys)
+    while (estatus_gather != 0):
+        execute_ceph_deploy(ctx, config, mon_create_nodes)
+        estatus_gather = execute_ceph_deploy(ctx, config, gather_keys)
+
+    estatus_mds = execute_ceph_deploy(ctx, config, deploy_mds)
+    if estatus_mds != 0:
+        raise Exception("ceph-deploy: Failed to deploy mds")
+
+    node_dev_list = get_dev_for_osd(ctx, config)
+    for d in node_dev_list:
+        osd_create_cmds = './ceph-deploy osd create --zap-disk'+" "+d
+        estatus_osd = execute_ceph_deploy(ctx, config, osd_create_cmds)
+        if estatus_osd == 0:
+            log.info('successfully created osd')
+            no_of_osds += 1
+        else:
+            zap_disk = './ceph-deploy disk zap'+" "+d
+            execute_ceph_deploy(ctx, config, zap_disk)
+            estatus_osd = execute_ceph_deploy(ctx, config, osd_create_cmds)
+            if estatus_osd == 0:
+                log.info('successfully created osd')
+                no_of_osds += 1
+            else:
+                raise Exception("ceph-deploy: Failed to create osds")
 
     if config.get('wait-for-healthy', True) and no_of_osds >= 2:
         is_healthy(ctx=ctx, config=None)
