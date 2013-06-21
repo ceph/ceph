@@ -110,5 +110,6 @@ RGWReplicaBucketLogger::RGWReplicaBucketLogger(RGWRados *_store) :
   RGWReplicaLogger(_store)
 {
   store->get_log_pool_name(pool);
-  prefix = "replica_log.";
+  prefix = _store->ctx()->_conf->rgw_replica_log_obj_prefix;
+  prefix.append(".");
 }

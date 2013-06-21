@@ -609,6 +609,7 @@ OPTION(rgw_data_log_window, OPT_INT, 30) // data log entries window (in seconds)
 OPTION(rgw_data_log_changes_size, OPT_INT, 1000) // number of in-memory entries to hold for data changes log
 OPTION(rgw_data_log_num_shards, OPT_INT, 128) // number of objects to keep data changes log on
 OPTION(rgw_data_log_obj_prefix, OPT_STR, "data_log") // 
+OPTION(rgw_replica_log_obj_prefix, OPT_STR, "replica_log") // 
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 
