@@ -1,0 +1,6 @@
+tasks:
+- workunit:
+     branch: next
+     clients:
+        client.0:
+           - suites/fsstress.sh
