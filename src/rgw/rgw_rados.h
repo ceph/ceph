@@ -524,6 +524,15 @@ struct RGWRegionPlacementTarget {
   string name;
   list<string> tags;
 
+  bool tag_exists(const string& tag) {
+    for (list<string>::iterator iter = tags.begin(); iter != tags.end(); ++iter) {
+      if (tag == *iter) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(name, bl);

@@ -411,11 +411,13 @@ struct RGWUserInfo
   uint32_t max_buckets;
   RGWUserCaps caps;
   __u8 system;
+  string default_placement;
+  list<string> placement_tags;
 
   RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS) {}
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(12, 9, bl);
+     ENCODE_START(13, 9, bl);
      ::encode(auid, bl);
      string access_key;
      string secret_key;
@@ -447,6 +449,8 @@ struct RGWUserInfo
      ::encode(max_buckets, bl);
      ::encode(caps, bl);
      ::encode(system, bl);
+     ::encode(default_placement, bl);
+     ::encode(placement_tags, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -495,6 +499,10 @@ struct RGWUserInfo
     system = 0;
     if (struct_v >= 12) {
       ::decode(system, bl);
+    }
+    if (struct_v >= 13) {
+      ::decode(default_placement, bl);
+      ::decode(placement_tags, bl); /* tags of allowed placement rules */
     }
     DECODE_FINISH(bl);
   }

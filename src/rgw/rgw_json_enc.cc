@@ -370,6 +370,8 @@ void RGWUserInfo::dump(Formatter *f) const
   if (system) { /* no need to show it for every user */
     encode_json("system", (bool)system, f);
   }
+  encode_json("default_placement", default_placement, f);
+  encode_json("placement_tags", placement_tags, f);
 }
 
 
@@ -413,6 +415,8 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   bool sys;
   JSONDecoder::decode_json("system", sys, obj);
   system = (__u8)sys;
+  JSONDecoder::decode_json("default_placement", default_placement, obj);
+  JSONDecoder::decode_json("placement_tags", placement_tags, obj);
 }
 
 void rgw_bucket::dump(Formatter *f) const
