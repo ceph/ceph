@@ -1256,6 +1256,15 @@ int RGWCopyObj_ObjStore_S3::get_params()
 
   if (s->system_request) {
     source_zone = s->info.args.get(RGW_SYS_PARAM_PREFIX "source-zone");
+    if (!source_zone.empty()) {
+      client_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "client-id");
+      op_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "op-id");
+
+      if (client_id.empty() || op_id.empty()) {
+        ldout(s->cct, 0) << RGW_SYS_PARAM_PREFIX "client-id or " RGW_SYS_PARAM_PREFIX "op-id were not provided, required for intra-region copy" << dendl;
+        return -EINVAL;
+      }
+    }
   }
 
   const char *md_directive = s->info.env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");

@@ -2194,13 +2194,25 @@ class RGWRadosPutObj : public RGWGetDataCB
 {
   rgw_obj obj;
   RGWPutObjProcessor_Atomic *processor;
+  RGWOpStateSingleOp *opstate;
 public:
-  RGWRadosPutObj(RGWPutObjProcessor_Atomic *p) : processor(p) {}
+  RGWRadosPutObj(RGWPutObjProcessor_Atomic *p, RGWOpStateSingleOp *_ops) : processor(p), opstate(_ops) {}
   int handle_data(bufferlist& bl, off_t ofs, off_t len) {
     void *handle;
     int ret = processor->handle_data(bl, ofs, &handle);
     if (ret < 0)
       return ret;
+
+    if (opstate) {
+      /* need to update opstate repository with new state. This is ratelimited, so we're not
+       * really doing it every time
+       */
+      ret = opstate->renew_state();
+      if (ret < 0) {
+        /* could not renew state! might have been marked as cancelled */
+        return ret;
+      }
+    }
 
     ret = processor->throttle_data(handle);
     if (ret < 0)
@@ -2246,6 +2258,8 @@ static void set_copy_attrs(map<string, bufferlist>& src_attrs, map<string, buffe
  */
 int RGWRados::copy_obj(void *ctx,
                const string& user_id,
+               const string& client_id,
+               const string& op_id,
                req_info *info,
                const string& source_zone,
                rgw_obj& dest_obj,
@@ -2311,8 +2325,6 @@ int RGWRados::copy_obj(void *ctx,
     if (ret < 0)
       return ret;
 
-    RGWRadosPutObj cb(&processor);
-
     RGWRESTConn *conn;
     if (source_zone.empty()) {
       conn = rest_master_conn;
@@ -2324,39 +2336,62 @@ int RGWRados::copy_obj(void *ctx,
       }
       conn = iter->second;
     }
-  
-    int ret = conn->get_obj(user_id, info, src_obj, true, &cb, &in_stream_req);
-    if (ret < 0)
+
+    string obj_name = dest_obj.bucket.name + "/" + dest_obj.object;
+
+    RGWOpStateSingleOp opstate(this, client_id, op_id, obj_name);
+
+    int ret = opstate.set_state(RGWOpState::OPSTATE_IN_PROGRESS);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: failed to set opstate ret=" << ret << dendl;
       return ret;
-
+    }
+    RGWRadosPutObj cb(&processor, &opstate);
     string etag;
-
     map<string, string> req_headers;
     time_t set_mtime;
+   
+    ret = conn->get_obj(user_id, info, src_obj, true, &cb, &in_stream_req);
+    if (ret < 0)
+      goto set_err_state;
+
     ret = conn->complete_request(in_stream_req, etag, &set_mtime, req_headers);
     if (ret < 0)
-      return ret;
+      goto set_err_state;
 
-    bufferlist& extra_data_bl = processor.get_extra_data();
-    if (extra_data_bl.length()) {
-      JSONParser jp;
-      if (!jp.parse(extra_data_bl.c_str(), extra_data_bl.length())) {
-        ldout(cct, 0) << "failed to parse response extra data. len=" << extra_data_bl.length() << " data=" << extra_data_bl.c_str() << dendl;
-        return -EINVAL;
+    { /* opening scope so that we can do goto, sorry */
+      bufferlist& extra_data_bl = processor.get_extra_data();
+      if (extra_data_bl.length()) {
+        JSONParser jp;
+        if (!jp.parse(extra_data_bl.c_str(), extra_data_bl.length())) {
+          ldout(cct, 0) << "failed to parse response extra data. len=" << extra_data_bl.length() << " data=" << extra_data_bl.c_str() << dendl;
+          goto set_err_state;
+        }
+
+        JSONDecoder::decode_json("attrs", src_attrs, &jp);
+
+        src_attrs.erase(RGW_ATTR_MANIFEST); // not interested in original object layout
       }
-
-      JSONDecoder::decode_json("attrs", src_attrs, &jp);
-
-      src_attrs.erase(RGW_ATTR_MANIFEST); // not interested in original object layout
     }
 
     set_copy_attrs(src_attrs, attrs, replace_attrs, !source_zone.empty());
 
     ret = cb.complete(etag, mtime, set_mtime, src_attrs);
     if (ret < 0)
-      return ret;
+      goto set_err_state;
+
+    ret = opstate.set_state(RGWOpState::OPSTATE_COMPLETE);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: failed to set opstate ret=" << ret << dendl;
+    }
 
     return 0;
+set_err_state:
+    int r = opstate.set_state(RGWOpState::OPSTATE_ERROR);
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed to set opstate r=" << ret << dendl;
+    }
+    return ret;
   }
 
   set_copy_attrs(src_attrs, attrs, replace_attrs, false);
@@ -2392,9 +2427,10 @@ int RGWRados::copy_obj(void *ctx,
     /* dest is in a different region, copy it there */
 
     map<string, bufferlist> src_attrs;
+    string etag;
 
     RGWRESTStreamWriteRequest *out_stream_req;
-  
+
     int ret = rest_master_conn->put_obj_init(user_id, dest_obj, astate->size, src_attrs, &out_stream_req);
     if (ret < 0)
       return ret;
@@ -2402,8 +2438,6 @@ int RGWRados::copy_obj(void *ctx,
     ret = get_obj_iterate(ctx, &handle, src_obj, 0, astate->size - 1, out_stream_req->get_out_cb());
     if (ret < 0)
       return ret;
-
-    string etag;
 
     ret = rest_master_conn->complete_request(out_stream_req, etag, mtime);
     if (ret < 0)
@@ -5417,6 +5451,32 @@ int RGWOpState::renew_state(const string& client_id, const string& op_id, const 
 {
   uint32_t s = (uint32_t)state;
   return store_entry(client_id, op_id, object, s, NULL, &s);
+}
+
+RGWOpStateSingleOp::RGWOpStateSingleOp(RGWRados *store, const string& cid, const string& oid,
+                                       const string& obj) : os(store), client_id(cid), op_id(oid), object(obj)
+{
+  cct = store->ctx();
+  cur_state = RGWOpState::OPSTATE_UNKNOWN;
+}
+
+int RGWOpStateSingleOp::set_state(RGWOpState::OpState state) {
+  last_update = ceph_clock_now(cct);
+  cur_state = state;
+  return os.set_state(client_id, op_id, object, state);
+}
+
+int RGWOpStateSingleOp::renew_state() {
+  utime_t now = ceph_clock_now(cct);
+
+  int rate_limit_sec = cct->_conf->rgw_opstate_ratelimit_sec;
+
+  if (rate_limit_sec && now - last_update < rate_limit_sec) {
+    return 0;
+  }
+
+  last_update = now;
+  return os.renew_state(client_id, op_id, object, cur_state);
 }
 
 
