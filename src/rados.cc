@@ -148,7 +148,8 @@ void usage(ostream& out)
 "        specify input or output file (for certain commands)\n"
 "   --create\n"
 "        create the pool or directory that was specified\n"
-"   --namespace\n"
+"   -N namespace\n"
+"   --namespace=namespace\n"
 "        specify the namespace to use for the object\n"
 "\n"
 "BENCH OPTIONS:\n"
@@ -2330,6 +2331,8 @@ int main(int argc, const char **argv)
       opts["lock-duration"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--lock-type", (char*)NULL)) {
       opts["lock-type"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-N", "--namespace", (char*)NULL)) {
+      opts["namespace"] = val;
     } else {
       if (val[0] == '-')
         usage_exit();
