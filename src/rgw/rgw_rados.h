@@ -524,10 +524,16 @@ struct RGWRegionPlacementTarget {
   string name;
   list<string> tags;
 
-  bool tag_exists(const string& tag) {
-    for (list<string>::iterator iter = tags.begin(); iter != tags.end(); ++iter) {
-      if (tag == *iter) {
-        return true;
+  bool user_permitted(list<string>& user_tags) {
+    if (tags.empty()) {
+      return true;
+    }
+    for (list<string>::iterator uiter = user_tags.begin(); uiter != user_tags.end(); ++uiter) { /* we don't expect many of either, so we can handle this kind of lookup */
+      string& rule = *uiter;
+      for (list<string>::iterator iter = tags.begin(); iter != tags.end(); ++iter) {
+        if (rule == *iter) {
+          return true;
+        }
       }
     }
     return false;
@@ -562,6 +568,7 @@ struct RGWRegion {
   map<string, RGWZone> zones;
 
   map<string, RGWRegionPlacementTarget> placement_targets;
+  string default_placement;
 
   CephContext *cct;
   RGWRados *store;
@@ -576,6 +583,8 @@ struct RGWRegion {
     ::encode(endpoints, bl);
     ::encode(master_zone, bl);
     ::encode(zones, bl);
+    ::encode(placement_targets, bl);
+    ::encode(default_placement, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -587,6 +596,8 @@ struct RGWRegion {
     ::decode(endpoints, bl);
     ::decode(master_zone, bl);
     ::decode(zones, bl);
+    ::decode(placement_targets, bl);
+    ::decode(default_placement, bl);
     DECODE_FINISH(bl);
   }
 
@@ -947,9 +958,14 @@ public:
    * returns 0 on success, -ERR# otherwise.
    */
   virtual int init_bucket_index(rgw_bucket& bucket);
-  int select_bucket_placement(std::string& bucket_name, rgw_bucket& bucket);
-  virtual int create_bucket(string& owner, rgw_bucket& bucket,
+  int select_bucket_placement(RGWUserInfo& user_info, const string& region_name, const std::string& rule,
+                              const std::string& bucket_name, rgw_bucket& bucket, string *pselected_rule);
+  int select_new_bucket_location(RGWUserInfo& user_info, const string& region_name, const string& rule,
+                                 const std::string& bucket_name, rgw_bucket& bucket, string *pselected_rule);
+  int set_bucket_location_by_rule(const string& location_rule, const std::string& bucket_name, rgw_bucket& bucket);
+  virtual int create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& region_name,
+                            const string& placement_rule,
                             map<std::string,bufferlist>& attrs,
                             RGWObjVersionTracker& objv_tracker,
                             obj_version *pobjv,

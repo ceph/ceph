@@ -126,7 +126,8 @@ int rgw_bucket_store_info(RGWRados *store, string& bucket_name, bufferlist& bl, 
   return store->meta_mgr->put_entry(bucket_meta_handler, bucket_name, bl, exclusive, objv_tracker, mtime, pattrs);
 }
 
-
+#warning removed RGWBucket::create_bucket(), clean this up when ready
+#if 0
 int RGWBucket::create_bucket(string bucket_str, string& user_id, string& region_name, string& display_name)
 {
   RGWAccessControlPolicy policy, old_policy;
@@ -152,8 +153,9 @@ int RGWBucket::create_bucket(string bucket_str, string& user_id, string& region_
   rgw_bucket& bucket = bucket_info.bucket;
 
   RGWBucketInfo new_info;
+  string placement_rule;
 
-  ret = store->create_bucket(user_id, bucket, region_name, attrs, objv_tracker,
+  ret = store->create_bucket(user_info, bucket, region_name, placement_rule, attrs, objv_tracker,
                              NULL, bucket_info.creation_time, NULL, &new_info);
   if (ret && ret != -EEXIST)
     goto done;
@@ -173,6 +175,7 @@ int RGWBucket::create_bucket(string bucket_str, string& user_id, string& region_
 done:
   return ret;
 }
+#endif
 
 int rgw_bucket_set_attrs(RGWRados *store, rgw_obj& obj,
                          map<string, bufferlist>& attrs,
@@ -360,10 +363,9 @@ int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state)
 
   store = storage;
 
-  RGWUserInfo info;
   RGWBucketInfo bucket_info;
 
-  user_id = op_state.get_user_id();
+  string user_id = op_state.get_user_id();
   bucket_name = op_state.get_bucket_name();
   RGWUserBuckets user_buckets;
 
@@ -382,11 +384,11 @@ int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state)
   }
 
   if (!user_id.empty()) {
-    int r = rgw_get_user_info_by_uid(store, user_id, info);
+    int r = rgw_get_user_info_by_uid(store, user_id, user_info);
     if (r < 0)
       return r;
 
-    op_state.display_name = info.display_name;
+    op_state.display_name = user_info.display_name;
   }
 
   clear_failure();
@@ -405,7 +407,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
   std::string display_name = op_state.get_user_display_name();
   rgw_bucket bucket = op_state.get_bucket();
 
-  string uid_str(user_id);
+  string uid_str(user_info.user_id);
   bufferlist aclbl;
   rgw_obj obj(bucket, no_oid);
   RGWObjVersionTracker objv_tracker;
@@ -431,9 +433,9 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
 
     // now update the user for the bucket...
     if (display_name.empty()) {
-      ldout(store->ctx(), 0) << "WARNING: user " << user_id << " has no display name set" << dendl;
+      ldout(store->ctx(), 0) << "WARNING: user " << user_info.user_id << " has no display name set" << dendl;
     }
-    policy.create_default(user_id, display_name);
+    policy.create_default(user_info.user_id, display_name);
 
     owner = policy.get_owner();
     r = store->set_bucket_owner(bucket, owner);
@@ -450,10 +452,13 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     if (r < 0)
       return r;
 
-    r = rgw_add_bucket(store, user_id, bucket, 0);
+    r = rgw_add_bucket(store, user_info.user_id, bucket, 0);
     if (r < 0)
       return r;
-  } else {
+  }
+#warning not creating bucket on bucket link, clean this up later
+#if 0
+  else {
     // the bucket seems not to exist, so we should probably create it...
     r = create_bucket(bucket_name.c_str(), uid_str, store->region.name, display_name);
     if (r < 0) {
@@ -462,6 +467,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
 
     return r;
   }
+#endif
 
   return 0;
 }
@@ -475,7 +481,7 @@ int RGWBucket::unlink(RGWBucketAdminOpState& op_state, std::string *err_msg)
     return -EINVAL;
   }
 
-  int r = rgw_remove_user_bucket_info(store, user_id, bucket);
+  int r = rgw_remove_user_bucket_info(store, user_info.user_id, bucket);
   if (r < 0) {
     set_err_msg(err_msg, "error unlinking bucket" + cpp_strerror(-r));
   }
@@ -1344,7 +1350,7 @@ public:
     if (ret == -ENOENT || old_bci.info.bucket.bucket_id != bci.info.bucket.bucket_id) {
       /* a new bucket, we need to select a new bucket placement for it */
       rgw_bucket bucket;
-      ret = store->select_bucket_placement(entry, bucket);
+      ret = store->set_bucket_location_by_rule(bci.info.placement_rule, entry, bucket);
       if (ret < 0) {
         ldout(store->ctx(), 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
         return ret;

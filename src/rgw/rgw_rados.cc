@@ -217,6 +217,11 @@ int RGWRegion::create_default()
 
   is_master = true;
 
+  RGWRegionPlacementTarget placement_target;
+  placement_target.name = "default-placement";
+  placement_targets[placement_target.name] = placement_target;
+  default_placement = "default-placement";
+
   RGWZone& default_zone = zones[zone_name];
   default_zone.name = zone_name;
 
@@ -267,6 +272,16 @@ void RGWZoneParams::init_default()
   user_email_pool = ".users.email";
   user_swift_pool = ".users.swift";
   user_uid_pool = ".users.uid";
+
+  RGWZonePlacementInfo default_placement;
+  default_placement.index_pool = ".rgw.buckets";
+  default_placement.data_pool = ".rgw.buckets";
+  placement_pools["default-placement"] = default_placement;
+
+  RGWZonePlacementInfo test_placement;
+  test_placement.index_pool = ".rgw.test.index";
+  test_placement.data_pool = ".rgw.test.data";
+  placement_pools["test"] = test_placement;
 }
 
 string RGWZoneParams::get_pool_name(CephContext *cct)
@@ -1723,8 +1738,9 @@ int RGWRados::init_bucket_index(rgw_bucket& bucket)
  * create a bucket with name bucket and the given list of attrs
  * returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
+int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& region_name,
+                            const string& placement_rule,
 			    map<std::string, bufferlist>& attrs,
                             RGWObjVersionTracker& objv_tracker,
                             obj_version *pobjv,
@@ -1734,9 +1750,10 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
 			    bool exclusive)
 {
 #define MAX_CREATE_RETRIES 20 /* need to bound retries */
+  string selected_placement_rule;
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
     int ret = 0;
-    ret = select_bucket_placement(bucket.name, bucket);
+    ret = select_bucket_placement(owner, region_name, placement_rule, bucket.name, bucket, &selected_placement_rule);
     if (ret < 0)
       return ret;
     bufferlist bl;
@@ -1777,8 +1794,9 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
 
     RGWBucketInfo info;
     info.bucket = bucket;
-    info.owner = owner;
+    info.owner = owner.user_id;
     info.region = region_name;
+    info.placement_rule = selected_placement_rule;
     if (!creation_time)
       time(&info.creation_time);
     else
@@ -1811,12 +1829,100 @@ int RGWRados::create_bucket(string& owner, rgw_bucket& bucket,
   return -ENOENT;
 }
 
-int RGWRados::select_bucket_placement(string& bucket_name, rgw_bucket& bucket)
+int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& region_name, const string& request_rule,
+                                         const string& bucket_name, rgw_bucket& bucket, string *pselected_rule)
+{
+  /* first check that rule exists within the specific region */
+  map<string, RGWRegion>::iterator riter = region_map.regions.find(region_name);
+  if (riter == region_map.regions.end()) {
+    ldout(cct, 0) << "could not find region " << region_name << " in region map" << dendl;
+    return -EINVAL;
+  }
+  /* now check that tag exists within region */
+  RGWRegion& region = riter->second;
+
+  /* find placement rule. Hierarchy: request rule > user default rule > region default rule */
+  string rule = request_rule;
+  if (rule.empty()) {
+    rule = user_info.default_placement;
+    if (rule.empty())
+      rule = region.default_placement;
+  }
+
+  if (rule.empty()) {
+    ldout(cct, 0) << "misconfiguration, should not have an empty placement rule name" << dendl;
+    return -EIO;
+  }
+
+  if (!rule.empty()) {
+    map<string, RGWRegionPlacementTarget>::iterator titer = region.placement_targets.find(rule);
+    if (titer == region.placement_targets.end()) {
+      ldout(cct, 0) << "could not find placement rule " << rule << " within region " << dendl;
+      return -EINVAL;
+    }
+
+    /* now check tag for the rule, whether user is permitted to use rule */
+    RGWRegionPlacementTarget& target_rule = titer->second;
+    if (!target_rule.user_permitted(user_info.placement_tags)) {
+      ldout(cct, 0) << "user not permitted to use placement rule" << dendl;
+      return -EPERM;
+    }
+  }
+
+  /* yay, user is permitted, now just make sure that zone has this rule configured. We're
+   * checking it for the local zone, because that's where this bucket object is going to
+   * reside.
+   */
+  map<string, RGWZonePlacementInfo>::iterator piter = zone.placement_pools.find(rule);
+  if (piter == zone.placement_pools.end()) {
+    /* couldn't find, means we cannot really place data for this bucket in this zone */
+    if ((region_name.empty() && region.is_master) ||
+        region_name == region.name) {
+      /* that's a configuration error, zone should have that rule, as we're within the requested
+       * region */
+      return -EINVAL;
+    } else {
+      /* oh, well, data is not going to be placed here, bucket object is just a placeholder */
+      return 0;
+    }
+  }
+
+  if (pselected_rule)
+    *pselected_rule = rule;
+  
+  return set_bucket_location_by_rule(rule, bucket_name, bucket);
+}
+
+int RGWRados::set_bucket_location_by_rule(const string& location_rule, const std::string& bucket_name, rgw_bucket& bucket)
+{
+  bucket.name = bucket_name;
+
+  map<string, RGWZonePlacementInfo>::iterator piter = zone.placement_pools.find(location_rule);
+  if (piter == zone.placement_pools.end()) {
+    /* silently ignore, bucket will not reside in this zone */
+    return 0;
+  }
+
+  RGWZonePlacementInfo& placement_info = piter->second;
+
+  bucket.data_pool = placement_info.data_pool;
+  bucket.index_pool = placement_info.index_pool;
+
+  return 0;
+
+}
+
+int RGWRados::select_bucket_placement(RGWUserInfo& user_info, const string& region_name, const string& placement_rule,
+                                      const string& bucket_name, rgw_bucket& bucket, string *pselected_rule)
 {
   bufferlist map_bl;
   map<string, bufferlist> m;
   string pool_name;
   bool write_map = false;
+
+  if (!zone.placement_pools.empty()) {
+    return select_new_bucket_location(user_info, region_name, placement_rule, bucket_name, bucket, pselected_rule);
+  }
 
   rgw_obj obj(zone.domain_root, avail_pools);
 
@@ -1882,7 +1988,6 @@ read_omap:
     pool_name = miter->first;
   }
   bucket.data_pool = pool_name;
-#warning FIXME
   bucket.index_pool = pool_name;
   bucket.name = bucket_name;
 

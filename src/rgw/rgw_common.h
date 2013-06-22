@@ -606,14 +606,16 @@ struct RGWBucketInfo
   uint32_t flags;
   string region;
   time_t creation_time;
+  string placement_rule;
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(6, 4, bl);
+     ENCODE_START(7, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner, bl);
      ::encode(flags, bl);
      ::encode(region, bl);
      ::encode(creation_time, bl);
+     ::encode(placement_rule, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -627,6 +629,8 @@ struct RGWBucketInfo
        ::decode(region, bl);
      if (struct_v >= 6)
        ::decode(creation_time, bl);
+     if (struct_v >= 7)
+       ::decode(placement_rule, bl);
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
