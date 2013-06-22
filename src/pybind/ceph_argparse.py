@@ -1,3 +1,17 @@
+"""
+Types and routines used by the ceph CLI as well as the RESTful
+interface.  These have to do with querying the daemons for
+command-description information, validating user command input against
+those descriptions, and submitting the command to the appropriate
+daemon.
+
+Copyright (C) 2013 Inktank Storage, Inc.
+
+This is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public
+License version 2, as published by the Free Software
+Foundation.  See file COPYING.
+"""
 import copy
 import json
 import os
