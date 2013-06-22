@@ -4,6 +4,17 @@
 #
 # vim: ts=4 sw=4 smarttab expandtab
 
+"""
+ceph.in becomes ceph, the command-line management tool for Ceph clusters.
+This is a replacement for tools/ceph.cc and tools/common.cc.
+
+Copyright (C) 2013 Inktank Storage, Inc.
+
+This is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public
+License version 2, as published by the Free Software
+Foundation.  See file COPYING.
+"""
 
 import os
 import sys
