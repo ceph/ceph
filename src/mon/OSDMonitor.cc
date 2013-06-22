@@ -978,7 +978,13 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
 		      << m->get_orig_source_inst() << "\n";
     if (failure_info.count(target_osd)) {
       failure_info_t& fi = failure_info[target_osd];
+      list<MOSDFailure*> ls;
+      fi.take_report_messages(ls);
       fi.cancel_report(reporter);
+      while (!ls.empty()) {
+	mon->no_reply(ls.front());
+	ls.pop_front();
+      }
       if (fi.reporters.empty()) {
 	dout(10) << " removing last failure_info for osd." << target_osd << dendl;
 	failure_info.erase(target_osd);
