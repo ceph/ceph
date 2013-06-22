@@ -62,17 +62,22 @@ TEST(LibRadosCmd, OSDCmd) {
   std::string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool(pool_name, &cluster));
 
+  int r;
   char *buf, *st;
   size_t buflen, stlen;
   char *cmd[2];
   cmd[1] = NULL;
 
+  // note: tolerate NXIO here in case the cluster is thrashing out underneath us.
   cmd[0] = (char *)"asdfasdf";
-  ASSERT_EQ(-22, rados_osd_command(cluster, 0, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  r = rados_osd_command(cluster, 0, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen);
+  ASSERT_TRUE(r == -22 || r == -ENXIO);
   cmd[0] = (char *)"version";
-  ASSERT_EQ(-22, rados_osd_command(cluster, 0, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  r = rados_osd_command(cluster, 0, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen);
+  ASSERT_TRUE(r == -22 || r == -ENXIO);
   cmd[0] = (char *)"{\"prefix\":\"version\"}";
-  ASSERT_EQ(0, rados_osd_command(cluster, 0, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
+  r = rados_osd_command(cluster, 0, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen);
+  ASSERT_TRUE(r == 0 || r == -ENXIO);
   ASSERT_LT(0u, buflen);
   rados_buffer_free(buf);
   rados_buffer_free(st);
