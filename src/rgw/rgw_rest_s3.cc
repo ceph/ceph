@@ -424,6 +424,12 @@ int RGWCreateBucket_ObjStore_S3::get_params()
     ldout(s->cct, 10) << "create bucket location constraint: " << location_constraint << dendl;
   }
 
+  int pos = location_constraint.find(':');
+  if (pos >= 0) {
+    placement_rule = location_constraint.substr(pos + 1);
+    location_constraint = location_constraint.substr(0, pos);
+  }
+
   return 0;
 }
 

@@ -443,6 +443,7 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("owner", owner, f);
   encode_json("flags", flags, f);
   encode_json("region", region, f);
+  encode_json("placement_rule", region, f);
 }
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
@@ -451,6 +452,7 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("owner", owner, obj);
   JSONDecoder::decode_json("flags", flags, obj);
   JSONDecoder::decode_json("region", region, obj);
+  JSONDecoder::decode_json("placement_rule", region, obj);
 }
 
 void RGWObjEnt::dump(Formatter *f) const
@@ -502,9 +504,9 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("user_keys_pool", user_keys_pool.data_pool, f);
   encode_json("user_email_pool", user_email_pool.data_pool, f);
   encode_json("user_swift_pool", user_swift_pool.data_pool, f);
-  encode_json("user_uid_pool ", user_uid_pool.data_pool, f);
+  encode_json("user_uid_pool", user_uid_pool.data_pool, f);
   encode_json_plain("system_key", system_key, f);
-  encode_json("placement_pools ", placement_pools, f);
+  encode_json("placement_pools", placement_pools, f);
 }
 
 static void decode_json(const char *field, rgw_bucket& bucket, JSONObj *obj)
@@ -578,6 +580,7 @@ void RGWRegion::dump(Formatter *f) const
   encode_json("master_zone", master_zone, f);
   encode_json_map("zones", zones, f); /* more friendly representation */
   encode_json_map("placement_targets", placement_targets, f); /* more friendly representation */
+  encode_json("default_placement", default_placement, f);
 }
 
 static void decode_zones(map<string, RGWZone>& zones, JSONObj *o)
@@ -604,6 +607,7 @@ void RGWRegion::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("master_zone", master_zone, obj);
   JSONDecoder::decode_json("zones", zones, decode_zones, obj);
   JSONDecoder::decode_json("placement_targets", placement_targets, decode_placement_targets, obj);
+  JSONDecoder::decode_json("default_placement", default_placement, obj);
 }
 
 
