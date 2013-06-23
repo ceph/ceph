@@ -158,6 +158,84 @@ static void rgw_get_request_metadata(CephContext *cct, struct req_info& info, ma
   }
 }
 
+static int decode_policy(CephContext *cct, bufferlist& bl, RGWAccessControlPolicy *policy)
+{
+  bufferlist::iterator iter = bl.begin();
+  try {
+    policy->decode(iter);
+  } catch (buffer::error& err) {
+    ldout(cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+    return -EIO;
+  }
+  if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+    RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
+    ldout(cct, 15) << "Read AccessControlPolicy";
+    s3policy->to_xml(*_dout);
+    *_dout << dendl;
+  }
+  return 0;
+}
+
+static int get_bucket_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx, RGWAccessControlPolicy *policy, rgw_obj& obj,
+                                       RGWObjVersionTracker *objv_tracker)
+{
+  int ret;
+
+  RGWBucketInfo info;
+  map<string, bufferlist> bucket_attrs;
+  int r = store->get_bucket_info(ctx, obj.bucket.name, info, objv_tracker, NULL, &bucket_attrs);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to read bucket info" << dendl;
+    return r;
+  }
+  map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_ACL);
+
+  if (aiter != bucket_attrs.end()) {
+    ret = decode_policy(cct, aiter->second, policy);
+    if (ret < 0)
+      return ret;
+  } else {
+    ldout(cct, 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
+    RGWUserInfo uinfo;
+    /* object exists, but policy is broken */
+    r = rgw_get_user_info_by_uid(store, info.owner, uinfo);
+    if (r < 0)
+      return r;
+
+    policy->create_default(info.owner, uinfo.display_name);
+  }
+  return 0;
+}
+
+static int get_obj_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx, RGWAccessControlPolicy *policy, rgw_obj& obj,
+                                    RGWObjVersionTracker *objv_tracker)
+{
+  bufferlist bl;
+  int ret = 0;
+
+  ret = store->get_attr(ctx, obj, RGW_ATTR_ACL, bl, objv_tracker);
+  if (ret >= 0) {
+    ret = decode_policy(cct, bl, policy);
+    if (ret < 0)
+      return ret;
+  } else if (ret == -ENODATA) {
+    /* object exists, but policy is broken */
+    ldout(cct, 0) << "WARNING: couldn't find acl header for object, generating default" << dendl;
+    RGWBucketInfo info;
+    RGWUserInfo uinfo;
+    ret = store->get_bucket_info(ctx, obj.bucket.name, info, objv_tracker, NULL);
+    if (ret < 0)
+      return ret;
+    ret = rgw_get_user_info_by_uid(store, info.owner, uinfo);
+    if (ret < 0)
+      return ret;
+
+    policy->create_default(info.owner, uinfo.display_name);
+  }
+  return ret;
+}
+
+
 /**
  * Get the AccessControlPolicy for an object off of disk.
  * policy: must point to a valid RGWACL, and will be filled upon return.
@@ -168,43 +246,14 @@ static void rgw_get_request_metadata(CephContext *cct, struct req_info& info, ma
 static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx, RGWAccessControlPolicy *policy, rgw_obj& obj,
                                 RGWObjVersionTracker *objv_tracker)
 {
-  bufferlist bl;
-  int ret = 0;
-
-  if (obj.bucket.name.size()) {
-    ret = store->get_attr(ctx, obj, RGW_ATTR_ACL, bl, objv_tracker);
-
-    if (ret >= 0) {
-      bufferlist::iterator iter = bl.begin();
-      try {
-        policy->decode(iter);
-      } catch (buffer::error& err) {
-        ldout(cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
-        return -EIO;
-      }
-      if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
-        RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
-        ldout(cct, 15) << "Read AccessControlPolicy";
-        s3policy->to_xml(*_dout);
-        *_dout << dendl;
-      }
-    } else if (ret == -ENODATA) {
-      /* object exists, but policy is broken */
-      RGWBucketInfo info;
-      RGWUserInfo uinfo;
-      int r = store->get_bucket_info(ctx, obj.bucket.name, info, objv_tracker, NULL);
-      if (r < 0)
-        goto done;
-      r = rgw_get_user_info_by_uid(store, info.owner, uinfo);
-      if (r < 0)
-        goto done;
-
-      policy->create_default(info.owner, uinfo.display_name);
-      ret = 0;
-    }
+  if (obj.bucket.name.empty()) {
+    return 0;
   }
-done:
-  return ret;
+
+  if (obj.object.empty()) {
+    return get_bucket_policy_from_attr(cct, store, ctx, policy, obj, objv_tracker);
+  }
+  return get_obj_policy_from_attr(cct, store, ctx, policy, obj, objv_tracker);
 }
 
 static int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs,
