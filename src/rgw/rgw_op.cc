@@ -1034,7 +1034,7 @@ protected:
   int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 
 public:
-  RGWPutObjProcessor_Multipart(uint64_t _p, req_state *_s) : RGWPutObjProcessor_Atomic(s->bucket, s->object_str, _p, s->req_id), s(_s) {}
+  RGWPutObjProcessor_Multipart(uint64_t _p, req_state *_s) : RGWPutObjProcessor_Atomic(_s->bucket, _s->object_str, _p, _s->req_id), s(_s) {}
 };
 
 int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx)
@@ -1250,10 +1250,7 @@ RGWPutObjProcessor *RGWPostObj::select_processor()
 
   uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
 
-  if (s->content_length <= RGW_MAX_CHUNK_SIZE)
-    processor = new RGWPutObjProcessor_Plain(s->bucket, s->object_str);
-  else
-    processor = new RGWPutObjProcessor_Atomic(s->bucket, s->object_str, part_size, s->req_id);
+  processor = new RGWPutObjProcessor_Atomic(s->bucket, s->object_str, part_size, s->req_id);
 
   return processor;
 }
@@ -1288,7 +1285,7 @@ void RGWPostObj::execute()
 
   processor = select_processor();
 
-  ret = processor->prepare(store, s);
+  ret = processor->prepare(store, s->obj_ctx);
   if (ret < 0)
     goto done;
 
