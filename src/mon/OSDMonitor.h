@@ -45,6 +45,10 @@ struct failure_reporter_t {
 
   failure_reporter_t() : num_reports(0), msg(NULL) {}
   failure_reporter_t(utime_t s) : num_reports(1), failed_since(s), msg(NULL) {}
+  ~failure_reporter_t() {
+    // caller should have taken this message before removing the entry.
+    assert(!msg);
+  }
 };
 
 /// information about all failure reports for one osd
