@@ -770,6 +770,10 @@ struct req_state {
    ACLOwner bucket_owner;
    ACLOwner owner;
 
+   RGWBucketInfo bucket_info;
+   map<string, bufferlist> bucket_attrs;
+   bool bucket_exists;
+
    RGWObjVersionTracker objv_tracker;
 
    bool has_bad_meta;
