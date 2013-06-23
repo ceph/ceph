@@ -607,15 +607,17 @@ struct RGWBucketInfo
   string region;
   time_t creation_time;
   string placement_rule;
+  bool has_instance_obj;
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(7, 4, bl);
+     ENCODE_START(8, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner, bl);
      ::encode(flags, bl);
      ::encode(region, bl);
      ::encode(creation_time, bl);
      ::encode(placement_rule, bl);
+     ::encode(has_instance_obj, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -631,6 +633,8 @@ struct RGWBucketInfo
        ::decode(creation_time, bl);
      if (struct_v >= 7)
        ::decode(placement_rule, bl);
+     if (struct_v >= 8)
+       ::decode(has_instance_obj, bl);
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -638,9 +642,37 @@ struct RGWBucketInfo
 
   void decode_json(JSONObj *obj);
 
-  RGWBucketInfo() : flags(0), creation_time(0) {}
+  RGWBucketInfo() : flags(0), creation_time(0), has_instance_obj(false) {}
 };
 WRITE_CLASS_ENCODER(RGWBucketInfo)
+
+struct RGWBucketEntryPoint
+{
+  rgw_bucket bucket;
+
+  bool has_bucket_info;
+  RGWBucketInfo old_bucket_info;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(8, 8, bl);
+    ::encode(bucket, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    bufferlist::iterator orig_iter = bl;
+    DECODE_START_LEGACY_COMPAT_LEN_32(8, 4, 4, bl);
+    if (struct_v < 8) {
+      /* ouch, old entry, contains the bucket info itself */
+      old_bucket_info.decode(orig_iter);
+      has_bucket_info = true;
+      return;
+    }
+    has_bucket_info = false;
+    ::decode(bucket, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(RGWBucketEntryPoint)
 
 struct RGWBucketStats
 {

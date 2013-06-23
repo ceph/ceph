@@ -177,12 +177,15 @@ done:
 }
 #endif
 
-int rgw_bucket_set_attrs(RGWRados *store, rgw_obj& obj,
+int rgw_bucket_set_attrs(RGWRados *store, rgw_bucket& bucket,
                          map<string, bufferlist>& attrs,
                          map<string, bufferlist>* rmattrs,
                          RGWObjVersionTracker *objv_tracker)
 {
-  return store->meta_mgr->set_attrs(bucket_meta_handler, obj.bucket.name,
+  string oid;
+  store->get_bucket_meta_oid(bucket, oid);
+  rgw_obj obj(store->zone.domain_root, oid);
+  return store->meta_mgr->set_attrs(bucket_meta_handler, oid,
                                     obj, attrs, rmattrs, objv_tracker);
 }
 
@@ -1363,7 +1366,8 @@ public:
       bci.info.bucket.index_pool = old_bci.info.bucket.index_pool;
     }
 
-    ret = store->put_bucket_info(entry, bci.info, false, &objv_tracker, mtime, &bci.attrs);
+#warning need to take care of different routes here
+    ret = store->put_bucket_info(entry, bci.info, false, &objv_tracker, mtime, &bci.attrs, false);
     if (ret < 0)
       return ret;
 

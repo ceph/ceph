@@ -100,7 +100,7 @@ extern int rgw_remove_user_bucket_info(RGWRados *store, string user_id, rgw_buck
 extern int rgw_remove_object(RGWRados *store, rgw_bucket& bucket, std::string& object);
 extern int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children);
 
-extern int rgw_bucket_set_attrs(RGWRados *store, rgw_obj& obj,
+extern int rgw_bucket_set_attrs(RGWRados *store, rgw_bucket& obj,
                                 map<string, bufferlist>& attrs,
                                 map<string, bufferlist>* rmattrs,
                                 RGWObjVersionTracker *objv_tracker);
