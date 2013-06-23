@@ -1805,7 +1805,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
       time(&info.creation_time);
     else
       info.creation_time = creation_time;
-    ret = put_bucket_info(bucket.name, info, exclusive, &objv_tracker, 0, &attrs);
+    ret = put_bucket_info(bucket.name, info, exclusive, &objv_tracker, 0, &attrs, true);
     if (ret == -EEXIST) {
       librados::IoCtx index_ctx; // context for new bucket
       int r = open_bucket_index_ctx(bucket, index_ctx);
@@ -1813,7 +1813,8 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
         return r;
 
       index_ctx.remove(dir_oid);
-      /* we need this for this objv_tracker */
+      /* we need to updated objv_tracker, but we don't want the old cruft there */
+      objv_tracker = RGWObjVersionTracker();
       r = get_bucket_info(NULL, bucket.name, info, &objv_tracker, NULL);
       if (r < 0) {
         if (r == -ENOENT) {
@@ -2838,7 +2839,7 @@ int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner)
 
   info.owner = owner.get_id();
 
-  r = put_bucket_info(bucket.name, info, false, &objv_tracker, 0, &attrs);
+  r = put_bucket_info(bucket.name, info, false, &objv_tracker, 0, &attrs, false);
   if (r < 0) {
     ldout(cct, 0) << "NOTICE: put_bucket_info on bucket=" << bucket.name << " returned err=" << r << dendl;
     return r;
@@ -2876,7 +2877,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
       info.flags |= BUCKET_SUSPENDED;
     }
 
-    r = put_bucket_info(bucket.name, info, false, &objv_tracker, 0, &attrs);
+    r = put_bucket_info(bucket.name, info, false, &objv_tracker, 0, &attrs, false);
     if (r < 0) {
       ldout(cct, 0) << "NOTICE: put_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
       ret = r;
@@ -4463,38 +4464,103 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_
   return 0;
 }
 
+void RGWRados::get_bucket_meta_oid(rgw_bucket& bucket, string& oid)
+{
+  oid = ".bucket.meta." + bucket.bucket_id;
+}
+
 int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info, RGWObjVersionTracker *objv_tracker,
                               time_t *pmtime, map<string, bufferlist> *pattrs)
 {
   bufferlist bl;
 
-  int ret = rgw_get_system_obj(this, ctx, zone.domain_root, bucket_name, bl, objv_tracker, pmtime, pattrs);
+  RGWObjVersionTracker ot;
+  int ret = rgw_get_system_obj(this, ctx, zone.domain_root, bucket_name, bl, &ot, pmtime, pattrs);
   if (ret < 0) {
     info.bucket.name = bucket_name; /* only init this field */
     return ret;
   }
 
+  RGWBucketEntryPoint entry_point;
   bufferlist::iterator iter = bl.begin();
+  try {
+    ::decode(entry_point, iter);
+  } catch (buffer::error& err) {
+    ldout(cct, 0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
+    return -EIO;
+  }
+
+  if (entry_point.has_bucket_info) {
+    info = entry_point.old_bucket_info;
+    ldout(cct, 20) << "rgw_get_bucket_info: old bucket info, bucket=" << info.bucket << " owner " << info.owner << dendl;
+    return 0;
+  }
+
+  ldout(cct, 20) << "rgw_get_bucket_info: bucket instance: " << entry_point.bucket << dendl;
+
+  if (pattrs)
+    pattrs->clear();
+
+  /* read bucket instance info */
+
+  string oid;
+  get_bucket_meta_oid(entry_point.bucket, oid);
+
+  ldout(cct, 20) << "reading from " << zone.domain_root << ":" << oid << dendl;
+
+  bufferlist epbl;
+
+  ret = rgw_get_system_obj(this, ctx, zone.domain_root, oid, epbl, objv_tracker, pmtime, pattrs);
+  if (ret < 0) {
+    info.bucket.name = bucket_name; /* only init this field */
+    return ret;
+  }
+
+  iter = epbl.begin();
   try {
     ::decode(info, iter);
   } catch (buffer::error& err) {
     ldout(cct, 0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
     return -EIO;
   }
-
-  ldout(cct, 20) << "rgw_get_bucket_info: bucket=" << info.bucket << " owner " << info.owner << dendl;
-
   return 0;
 }
 
 int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive, RGWObjVersionTracker *objv_tracker,
-                              time_t mtime, map<string, bufferlist> *pattrs)
+                              time_t mtime, map<string, bufferlist> *pattrs, bool create_entry_point)
 {
   bufferlist bl;
 
   ::encode(info, bl);
 
-  int ret = rgw_bucket_store_info(this, info.bucket.name, bl, exclusive, pattrs, objv_tracker, mtime);
+  bool create_head = !info.has_instance_obj || create_entry_point;
+
+  info.has_instance_obj = true;
+
+  string oid;
+  get_bucket_meta_oid(info.bucket, oid);
+  int ret = rgw_bucket_store_info(this, oid, bl, exclusive, pattrs, objv_tracker, mtime);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (!create_head)
+    return 0; /* done! */
+
+  RGWBucketEntryPoint entry_point;
+  entry_point.bucket = info.bucket;
+  bufferlist epbl;
+  ::encode(entry_point, epbl);
+  RGWObjVersionTracker ot;
+  ret = rgw_bucket_store_info(this, info.bucket.name, epbl, exclusive, pattrs, &ot, mtime);
+
+  if (exclusive && ret == -EEXIST) {
+    rgw_obj obj(zone.domain_root, oid);
+    int r = delete_obj(NULL, obj);
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: failed removing object " << obj << " when trying to clean up" << dendl;
+    }
+  }
 
   return ret;
 }
