@@ -4531,11 +4531,11 @@ int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exc
 {
   bufferlist bl;
 
-  ::encode(info, bl);
-
   bool create_head = !info.has_instance_obj || create_entry_point;
 
   info.has_instance_obj = true;
+
+  ::encode(info, bl);
 
   string oid;
   get_bucket_meta_oid(info.bucket, oid);
