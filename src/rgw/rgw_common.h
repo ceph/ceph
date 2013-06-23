@@ -414,7 +414,7 @@ struct RGWUserInfo
   string default_placement;
   list<string> placement_tags;
 
-  RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS) {}
+  RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS), system(0) {}
 
   void encode(bufferlist& bl) const {
      ENCODE_START(13, 9, bl);
