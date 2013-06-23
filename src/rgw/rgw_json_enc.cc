@@ -444,6 +444,7 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("flags", flags, f);
   encode_json("region", region, f);
   encode_json("placement_rule", region, f);
+  encode_json("has_instance_obj", has_instance_obj, f);
 }
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
@@ -453,6 +454,7 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("flags", flags, obj);
   JSONDecoder::decode_json("region", region, obj);
   JSONDecoder::decode_json("placement_rule", region, obj);
+  JSONDecoder::decode_json("has_instance_obj", has_instance_obj, obj);
 }
 
 void RGWObjEnt::dump(Formatter *f) const
