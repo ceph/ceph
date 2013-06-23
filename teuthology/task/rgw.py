@@ -110,7 +110,7 @@ def start_rgw(ctx, config):
  
         run_cmd=[
             'sudo',
-                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/adjust-ulimits'.format(tdir=testdir),
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 '{tdir}/daemon-helper'.format(tdir=testdir),
@@ -172,7 +172,7 @@ def start_apache(ctx, config):
         (remote,) = ctx.cluster.only(client).remotes.keys()
         proc = remote.run(
             args=[
-                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/adjust-ulimits'.format(tdir=testdir),
                 '{tdir}/daemon-helper'.format(tdir=testdir),
                 'kill'.format(tdir=testdir),
                 'apache2'.format(tdir=testdir),

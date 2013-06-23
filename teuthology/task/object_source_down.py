@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 def rados(testdir, remote, cmd):
     log.info("rados %s" % ' '.join(cmd))
     pre = [
-        '{tdir}/enable-coredump'.format(tdir=testdir),
+        '{tdir}/adjust-ulimits'.format(tdir=testdir),
         'ceph-coverage',
         '{tdir}/archive/coverage'.format(tdir=testdir),
         'rados',

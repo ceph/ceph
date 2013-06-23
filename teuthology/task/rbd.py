@@ -54,7 +54,7 @@ def create_image(ctx, config):
         log.info('Creating image {name} with size {size}'.format(name=name,
                                                                  size=size))
         args = [
-                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/adjust-ulimits'.format(tdir=testdir),
                 'ceph-coverage'.format(tdir=testdir),
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'rbd',
@@ -79,7 +79,7 @@ def create_image(ctx, config):
             (remote,) = ctx.cluster.only(role).remotes.keys()
             remote.run(
                 args=[
-                    '{tdir}/enable-coredump'.format(tdir=testdir),
+                    '{tdir}/adjust-ulimits'.format(tdir=testdir),
                     'ceph-coverage',
                     '{tdir}/archive/coverage'.format(tdir=testdir),
                     'rbd',
@@ -166,7 +166,7 @@ def dev_create(ctx, config):
         remote.run(
             args=[
                 'sudo',
-                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/adjust-ulimits'.format(tdir=testdir),
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'rbd',
@@ -193,7 +193,7 @@ def dev_create(ctx, config):
                 args=[
                     'LD_LIBRARY_PATH={tdir}/binary/usr/local/lib'.format(tdir=testdir),
                     'sudo',
-                    '{tdir}/enable-coredump'.format(tdir=testdir),
+                    '{tdir}/adjust-ulimits'.format(tdir=testdir),
                     'ceph-coverage',
                     '{tdir}/archive/coverage'.format(tdir=testdir),
                     'rbd',
@@ -418,7 +418,7 @@ def run_xfstests_one_client(ctx, role, properties):
         # readlink -f <path> in order to get their canonical
         # pathname (so it matches what the kernel remembers).
         args = [
-            '{tdir}/enable-coredump'.format(tdir=testdir),
+            '{tdir}/adjust-ulimits'.format(tdir=testdir),
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
             '/usr/bin/sudo',

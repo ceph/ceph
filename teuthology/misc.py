@@ -272,7 +272,7 @@ def create_simple_monmap(ctx, remote, conf):
 
     testdir = get_testdir(ctx)
     args = [
-        '{tdir}/enable-coredump'.format(tdir=testdir),
+        '{tdir}/adjust-ulimits'.format(tdir=testdir),
         'ceph-coverage',
         '{tdir}/archive/coverage'.format(tdir=testdir),
         'monmaptool',
@@ -637,7 +637,7 @@ def wait_until_healthy(ctx, remote):
     while True:
         r = remote.run(
             args=[
-                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/adjust-ulimits'.format(tdir=testdir),
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'ceph',
@@ -659,7 +659,7 @@ def wait_until_osds_up(ctx, cluster, remote):
     while True:
         r = remote.run(
             args=[
-                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/adjust-ulimits'.format(tdir=testdir),
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'ceph',
@@ -748,7 +748,7 @@ def write_secret_file(ctx, remote, role, keyring, filename):
     testdir = get_testdir(ctx)
     remote.run(
         args=[
-            '{tdir}/enable-coredump'.format(tdir=testdir),
+            '{tdir}/adjust-ulimits'.format(tdir=testdir),
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
             'ceph-authtool',

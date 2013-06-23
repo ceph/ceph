@@ -1,4 +1,5 @@
 #!/bin/sh
 set -e
 ulimit -c unlimited
+ulimit -n 4096
 exec "$@"

@@ -82,7 +82,7 @@ def task(ctx, config):
 
         run_cmd=[
             'sudo',
-            '{tdir}/enable-coredump'.format(tdir=testdir),
+            '{tdir}/adjust-ulimits'.format(tdir=testdir),
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
             '{tdir}/daemon-helper'.format(tdir=testdir),

@@ -71,7 +71,7 @@ def _socket_command(ctx, remote, socket_path, command, args):
     remote.run(
         args=[
             'sudo',
-            '{tdir}/enable-coredump'.format(tdir=testdir),
+            '{tdir}/adjust-ulimits'.format(tdir=testdir),
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
             'ceph',
