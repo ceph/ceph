@@ -176,18 +176,13 @@ static int decode_policy(CephContext *cct, bufferlist& bl, RGWAccessControlPolic
   return 0;
 }
 
-static int get_bucket_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx, RGWAccessControlPolicy *policy, rgw_obj& obj,
+static int get_bucket_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
+                                       RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs,
+                                       RGWAccessControlPolicy *policy, rgw_obj& obj,
                                        RGWObjVersionTracker *objv_tracker)
 {
   int ret;
 
-  RGWBucketInfo info;
-  map<string, bufferlist> bucket_attrs;
-  int r = store->get_bucket_info(ctx, obj.bucket.name, info, objv_tracker, NULL, &bucket_attrs);
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed to read bucket info" << dendl;
-    return r;
-  }
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_ACL);
 
   if (aiter != bucket_attrs.end()) {
@@ -198,16 +193,18 @@ static int get_bucket_policy_from_attr(CephContext *cct, RGWRados *store, void *
     ldout(cct, 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
     RGWUserInfo uinfo;
     /* object exists, but policy is broken */
-    r = rgw_get_user_info_by_uid(store, info.owner, uinfo);
+    int r = rgw_get_user_info_by_uid(store, bucket_info.owner, uinfo);
     if (r < 0)
       return r;
 
-    policy->create_default(info.owner, uinfo.display_name);
+    policy->create_default(bucket_info.owner, uinfo.display_name);
   }
   return 0;
 }
 
-static int get_obj_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx, RGWAccessControlPolicy *policy, rgw_obj& obj,
+static int get_obj_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
+                                    RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs,
+                                    RGWAccessControlPolicy *policy, rgw_obj& obj,
                                     RGWObjVersionTracker *objv_tracker)
 {
   bufferlist bl;
@@ -221,16 +218,12 @@ static int get_obj_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx
   } else if (ret == -ENODATA) {
     /* object exists, but policy is broken */
     ldout(cct, 0) << "WARNING: couldn't find acl header for object, generating default" << dendl;
-    RGWBucketInfo info;
     RGWUserInfo uinfo;
-    ret = store->get_bucket_info(ctx, obj.bucket.name, info, objv_tracker, NULL);
-    if (ret < 0)
-      return ret;
-    ret = rgw_get_user_info_by_uid(store, info.owner, uinfo);
+    ret = rgw_get_user_info_by_uid(store, bucket_info.owner, uinfo);
     if (ret < 0)
       return ret;
 
-    policy->create_default(info.owner, uinfo.display_name);
+    policy->create_default(bucket_info.owner, uinfo.display_name);
   }
   return ret;
 }
@@ -243,17 +236,20 @@ static int get_obj_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx
  * object: name of the object to get the ACL for.
  * Returns: 0 on success, -ERR# otherwise.
  */
-static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx, RGWAccessControlPolicy *policy, rgw_obj& obj,
-                                RGWObjVersionTracker *objv_tracker)
+static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
+                                RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs,
+                                RGWAccessControlPolicy *policy, rgw_obj& obj, RGWObjVersionTracker *objv_tracker)
 {
   if (obj.bucket.name.empty()) {
     return 0;
   }
 
   if (obj.object.empty()) {
-    return get_bucket_policy_from_attr(cct, store, ctx, policy, obj, objv_tracker);
+    return get_bucket_policy_from_attr(cct, store, ctx, bucket_info, bucket_attrs,
+                                       policy, obj, objv_tracker);
   }
-  return get_obj_policy_from_attr(cct, store, ctx, policy, obj, objv_tracker);
+  return get_obj_policy_from_attr(cct, store, ctx, bucket_info, bucket_attrs,
+                                  policy, obj, objv_tracker);
 }
 
 static int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs,
@@ -266,7 +262,9 @@ static int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map
   return ret;
 }
 
-static int read_policy(RGWRados *store, struct req_state *s, RGWBucketInfo& bucket_info, RGWAccessControlPolicy *policy, rgw_bucket& bucket, string& object)
+static int read_policy(RGWRados *store, struct req_state *s,
+                       RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs,
+                       RGWAccessControlPolicy *policy, rgw_bucket& bucket, string& object)
 {
   string upload_id;
   upload_id = s->info.args.get("uploadId");
@@ -285,14 +283,14 @@ static int read_policy(RGWRados *store, struct req_state *s, RGWBucketInfo& buck
   } else {
     obj.init(bucket, oid);
   }
-  int ret = get_policy_from_attr(s->cct, store, s->obj_ctx, policy, obj, &s->objv_tracker);
+  int ret = get_policy_from_attr(s->cct, store, s->obj_ctx, bucket_info, bucket_attrs, policy, obj, &s->objv_tracker);
   if (ret == -ENOENT && object.size()) {
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
     RGWAccessControlPolicy bucket_policy(s->cct);
     string no_object;
     rgw_obj no_obj(bucket, no_object);
-    ret = get_policy_from_attr(s->cct, store, s->obj_ctx, &bucket_policy, no_obj, &s->objv_tracker);
+    ret = get_policy_from_attr(s->cct, store, s->obj_ctx, bucket_info, bucket_attrs, &bucket_policy, no_obj, &s->objv_tracker);
     if (ret < 0)
       return ret;
     string& owner = bucket_policy.get_owner().get_id();
@@ -322,8 +320,6 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
 
   s->bucket_acl = new RGWAccessControlPolicy(s->cct);
 
-  RGWBucketInfo bucket_info;
-
   if (s->copy_source) { /* check if copy source is within the current domain */
     const char *src = s->copy_source;
     if (*src == '/')
@@ -345,25 +341,25 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
   }
     
   if (s->bucket_name_str.size()) {
-    bool exists = true;
-    ret = store->get_bucket_info(s->obj_ctx, s->bucket_name_str, bucket_info, &s->objv_tracker, NULL);
+    s->bucket_exists = true;
+    ret = store->get_bucket_info(s->obj_ctx, s->bucket_name_str, s->bucket_info, &s->objv_tracker, NULL, &s->bucket_attrs);
     if (ret < 0) {
       if (ret != -ENOENT) {
         ldout(s->cct, 0) << "NOTICE: couldn't get bucket from bucket_name (name=" << s->bucket_name_str << ")" << dendl;
         return ret;
       }
-      exists = false;
+      s->bucket_exists = false;
     }
-    s->bucket = bucket_info.bucket;
+    s->bucket = s->bucket_info.bucket;
 
     string no_obj;
     RGWAccessControlPolicy bucket_acl(s->cct);
-    ret = read_policy(store, s, bucket_info, s->bucket_acl, s->bucket, no_obj);
+    ret = read_policy(store, s, s->bucket_info, s->bucket_attrs, s->bucket_acl, s->bucket, no_obj);
 
     s->bucket_owner = s->bucket_acl->get_owner();
 
-    string& region = bucket_info.region;
-    if (exists && ((region.empty() && !store->region.is_master) ||
+    string& region = s->bucket_info.region;
+    if (s->bucket_exists && ((region.empty() && !store->region.is_master) ||
         (region != store->region.name))) {
       ldout(s->cct, 0) << "NOTICE: request for data in a different region (" << region << " != " << store->region.name << ")" << dendl;
       /* we now need to make sure that the operation actually requires copy source, that is
@@ -388,7 +384,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     if (prefetch_data) {
       store->set_prefetch_data(s->obj_ctx, obj);
     }
-    ret = read_policy(store, s, bucket_info, s->object_acl, s->bucket, obj_str);
+    ret = read_policy(store, s, s->bucket_info, s->bucket_attrs, s->object_acl, s->bucket, obj_str);
   }
 
   return ret;
@@ -564,7 +560,8 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
 
   if (bucket_name.compare(s->bucket.name) != 0) {
     RGWBucketInfo bucket_info;
-    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, &s->objv_tracker, NULL);
+    map<string, bufferlist> bucket_attrs;
+    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, &s->objv_tracker, NULL, &bucket_attrs);
     if (r < 0) {
       ldout(s->cct, 0) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return r;
@@ -572,7 +569,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
     bucket = bucket_info.bucket;
     string no_obj;
     bucket_policy = &_bucket_policy;
-    r = read_policy(store, s, bucket_info, bucket_policy, bucket, no_obj);
+    r = read_policy(store, s, bucket_info, bucket_attrs, bucket_policy, bucket, no_obj);
     if (r < 0) {
       ldout(s->cct, 0) << "failed to read bucket policy" << dendl;
       return r;
@@ -950,11 +947,14 @@ void RGWCreateBucket::execute()
 
   s->bucket_owner.set_id(s->user.user_id);
   s->bucket_owner.set_name(s->user.display_name);
-  r = get_policy_from_attr(s->cct, store, s->obj_ctx, &old_policy, obj, &s->objv_tracker);
-  if (r >= 0)  {
-    if (old_policy.get_owner().get_id().compare(s->user.user_id) != 0) {
-      ret = -EEXIST;
-      return;
+  if (s->bucket_exists) {
+    r = get_policy_from_attr(s->cct, store, s->obj_ctx, s->bucket_info, s->bucket_attrs,
+                             &old_policy, obj, &s->objv_tracker);
+    if (r >= 0)  {
+      if (old_policy.get_owner().get_id().compare(s->user.user_id) != 0) {
+        ret = -EEXIST;
+        return;
+      }
     }
   }
 
@@ -1513,7 +1513,9 @@ int RGWCopyObj::verify_permission()
   if (ret < 0)
     return ret;
 
-  ret = store->get_bucket_info(s->obj_ctx, src_bucket_name, src_bucket_info, NULL, NULL);
+  map<string, bufferlist> src_attrs;
+
+  ret = store->get_bucket_info(s->obj_ctx, src_bucket_name, src_bucket_info, NULL, NULL, &src_attrs);
   if (ret < 0)
     return ret;
 
@@ -1526,7 +1528,7 @@ int RGWCopyObj::verify_permission()
     store->set_prefetch_data(s->obj_ctx, src_obj);
 
     /* check source object permissions */
-    ret = read_policy(store, s, src_bucket_info, &src_policy, src_bucket, src_object);
+    ret = read_policy(store, s, src_bucket_info, src_attrs, &src_policy, src_bucket, src_object);
     if (ret < 0)
       return ret;
 
@@ -1536,11 +1538,12 @@ int RGWCopyObj::verify_permission()
   }
 
   RGWAccessControlPolicy dest_bucket_policy(s->cct);
+  map<string, bufferlist> dest_attrs;
 
   if (src_bucket_name.compare(dest_bucket_name) == 0) { /* will only happen if s->local_source */
     dest_bucket_info = src_bucket_info;
   } else {
-    ret = store->get_bucket_info(s->obj_ctx, dest_bucket_name, dest_bucket_info, NULL, NULL);
+    ret = store->get_bucket_info(s->obj_ctx, dest_bucket_name, dest_bucket_info, NULL, NULL, &dest_attrs);
     if (ret < 0)
       return ret;
   }
@@ -1551,7 +1554,7 @@ int RGWCopyObj::verify_permission()
   store->set_atomic(s->obj_ctx, dest_obj);
 
   /* check dest bucket permissions */
-  ret = read_policy(store, s, dest_bucket_info, &dest_bucket_policy, dest_bucket, empty_str);
+  ret = read_policy(store, s, dest_bucket_info, dest_attrs, &dest_bucket_policy, dest_bucket, empty_str);
   if (ret < 0)
     return ret;
 
