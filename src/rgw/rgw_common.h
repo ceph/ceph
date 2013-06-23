@@ -653,6 +653,8 @@ struct RGWBucketEntryPoint
   bool has_bucket_info;
   RGWBucketInfo old_bucket_info;
 
+  RGWBucketEntryPoint() : has_bucket_info(false) {}
+
   void encode(bufferlist& bl) const {
     ENCODE_START(8, 8, bl);
     ::encode(bucket, bl);
