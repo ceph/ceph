@@ -48,15 +48,15 @@ ostream& operator<<(ostream& out, AuthMonitor& pm)
   return out << "auth";
 }
 
-void AuthMonitor::check_rotate()
+bool AuthMonitor::check_rotate()
 {
   KeyServerData::Incremental rot_inc;
   rot_inc.op = KeyServerData::AUTH_INC_SET_ROTATING;
   if (!mon->key_server.updated_rotating(rot_inc.rotating_bl, last_rotating_ver))
-    return;
-  dout(10) << "AuthMonitor::tick() updated rotating, now calling propose_pending" << dendl;
+    return false;
+  dout(10) << __func__ << " updated rotating" << dendl;
   push_cephx_inc(rot_inc);
-  propose_pending();
+  return true;
 }
 
 /*
@@ -72,7 +72,8 @@ void AuthMonitor::tick()
 
   if (!mon->is_leader()) return; 
 
-  check_rotate();
+  if (check_rotate())
+    propose_pending();
 }
 
 void AuthMonitor::on_active()
@@ -106,6 +107,9 @@ void AuthMonitor::create_initial()
   inc.inc_type = GLOBAL_ID;
   inc.max_global_id = max_global_id;
   pending_auth.push_back(inc);
+
+  // initalize rotating keys, too
+  check_rotate();
 }
 
 void AuthMonitor::update_from_paxos()
