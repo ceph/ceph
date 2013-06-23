@@ -735,6 +735,10 @@ void RGWPutObjProcessor_Atomic::complete_parts()
 
 int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs)
 {
+  if (!data_ofs && !immutable_head()) {
+    first_chunk.claim(pending_data_bl);
+    obj_len = (uint64_t)first_chunk.length();
+  }
   if (pending_data_bl.length()) {
     void *handle;
     int r = write_data(pending_data_bl, data_ofs, &handle);
