@@ -1,6 +1,6 @@
 tasks:
 - workunit:
-     branch: bobtail
+     branch: cuttlefish
      clients:
         client.0:
            - suites/iogen.sh

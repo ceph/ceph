@@ -1,5 +1,5 @@
 tasks:
 - install:
-     branch: bobtail
+     branch: cuttlefish
 - ceph:
 - ceph-fuse:
