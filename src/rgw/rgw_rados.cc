@@ -1746,11 +1746,10 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& region_name,
                             const string& placement_rule,
 			    map<std::string, bufferlist>& attrs,
-                            RGWObjVersionTracker& objv_tracker,
+                            RGWBucketInfo& info,
                             obj_version *pobjv,
                             time_t creation_time,
                             rgw_bucket *pmaster_bucket,
-                            RGWBucketInfo *pinfo,
 			    bool exclusive)
 {
 #define MAX_CREATE_RETRIES 20 /* need to bound retries */
@@ -1790,13 +1789,14 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     if (r < 0)
       return r;
 
+    RGWObjVersionTracker& objv_tracker = info.objv_tracker;
+
     if (pobjv) {
       objv_tracker.write_version = *pobjv;
     } else {
       objv_tracker.generate_new_write_ver(cct);
     }
 
-    RGWBucketInfo info;
     info.bucket = bucket;
     info.owner = owner.user_id;
     info.region = region_name;
@@ -1805,7 +1805,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
       time(&info.creation_time);
     else
       info.creation_time = creation_time;
-    ret = put_bucket_info(bucket.name, info, exclusive, &objv_tracker, 0, &attrs, true);
+    ret = put_bucket_info(bucket.name, info, exclusive, 0, &attrs, true);
     if (ret == -EEXIST) {
       librados::IoCtx index_ctx; // context for new bucket
       int r = open_bucket_index_ctx(bucket, index_ctx);
@@ -1813,8 +1813,8 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
         return r;
 
       index_ctx.remove(dir_oid);
-      /* we need to updated objv_tracker, but we don't want the old cruft there */
-      r = get_bucket_info(NULL, bucket.name, info, NULL);
+      RGWBucketInfo actual_info;
+      r = get_bucket_info(NULL, bucket.name, actual_info, NULL);
       if (r < 0) {
         if (r == -ENOENT) {
           continue;
@@ -1823,8 +1823,6 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
         return r;
       }
     }
-    if (pinfo)
-      *pinfo = info;
     return ret;
   }
 
@@ -2837,7 +2835,7 @@ int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner)
 
   info.owner = owner.get_id();
 
-  r = put_bucket_info(bucket.name, info, false, &info.objv_tracker, 0, &attrs, false);
+  r = put_bucket_info(bucket.name, info, false, 0, &attrs, false);
   if (r < 0) {
     ldout(cct, 0) << "NOTICE: put_bucket_info on bucket=" << bucket.name << " returned err=" << r << dendl;
     return r;
@@ -2874,7 +2872,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
       info.flags |= BUCKET_SUSPENDED;
     }
 
-    r = put_bucket_info(bucket.name, info, false, &info.objv_tracker, 0, &attrs, false);
+    r = put_bucket_info(bucket.name, info, false, 0, &attrs, false);
     if (r < 0) {
       ldout(cct, 0) << "NOTICE: put_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
       ret = r;
@@ -4523,7 +4521,7 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
   return 0;
 }
 
-int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive, RGWObjVersionTracker *objv_tracker,
+int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive,
                               time_t mtime, map<string, bufferlist> *pattrs, bool create_entry_point)
 {
   bufferlist bl;
@@ -4536,7 +4534,7 @@ int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exc
 
   string oid;
   get_bucket_meta_oid(info.bucket, oid);
-  int ret = rgw_bucket_store_info(this, oid, bl, exclusive, pattrs, objv_tracker, mtime);
+  int ret = rgw_bucket_store_info(this, oid, bl, exclusive, pattrs, &info.objv_tracker, mtime);
   if (ret < 0) {
     return ret;
   }
