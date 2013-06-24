@@ -223,7 +223,9 @@ void SimpleMessenger::reaper()
     p->pipe_lock.Lock();
     p->discard_out_queue();
     if (p->connection_state) {
-      // mark_down, mark_down_all, or fault() should have done this, but make sure!
+      // mark_down, mark_down_all, or fault() should have done this,
+      // or accept() may have switch the Connection to a different
+      // Pipe... but make sure!
       bool cleared = p->connection_state->clear_pipe(p);
       assert(!cleared);
     }
