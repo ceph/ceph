@@ -438,7 +438,7 @@ void Objecter::dispatch(Message *m)
     break;
 
   case MSG_COMMAND_REPLY:
-    handle_command_reply((MCommandReply*)m);
+    handle_command_reply(static_cast<MCommandReply*>(m));
     break;
 
   default:
