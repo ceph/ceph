@@ -26,6 +26,8 @@ class RGWGC;
 #define RGW_OBJ_NS_MULTIPART "multipart"
 #define RGW_OBJ_NS_SHADOW    "shadow"
 
+#define RGW_BUCKET_INSTANCE_MD_PREFIX ".bucket.meta."
+
 static inline void prepend_bucket_marker(rgw_bucket& bucket, string& orig_oid, string& oid)
 {
   if (bucket.marker.empty() || orig_oid.empty()) {
