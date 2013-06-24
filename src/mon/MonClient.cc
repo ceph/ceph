@@ -206,7 +206,7 @@ bool MonClient::ms_dispatch(Message *m)
     handle_get_version_reply(static_cast<MMonGetVersionReply*>(m));
     break;
   case MSG_MON_COMMAND_ACK:
-    handle_mon_command_ack((MMonCommandAck*)m);
+    handle_mon_command_ack(static_cast<MMonCommandAck*>(m));
     break;
   case MSG_LOGACK:
     if (log_client) {
