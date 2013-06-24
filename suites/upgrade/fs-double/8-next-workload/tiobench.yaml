@@ -1,6 +1,0 @@
-tasks:
-- workunit:
-     branch: next
-     clients:
-        all:
-           - suites/tiobench.sh
