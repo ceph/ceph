@@ -332,7 +332,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
 
     RGWBucketInfo source_info;
 
-    ret = store->get_bucket_info(s->obj_ctx, copy_source_str, source_info, NULL, NULL);
+    ret = store->get_bucket_info(s->obj_ctx, copy_source_str, source_info, NULL);
     if (ret == 0) {
       string& region = source_info.region;
       s->local_source = (region.empty() && store->region.is_master) ||
@@ -342,7 +342,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     
   if (s->bucket_name_str.size()) {
     s->bucket_exists = true;
-    ret = store->get_bucket_info(s->obj_ctx, s->bucket_name_str, s->bucket_info, &s->objv_tracker, NULL, &s->bucket_attrs);
+    ret = store->get_bucket_info(s->obj_ctx, s->bucket_name_str, s->bucket_info, NULL, &s->bucket_attrs);
     if (ret < 0) {
       if (ret != -ENOENT) {
         ldout(s->cct, 0) << "NOTICE: couldn't get bucket from bucket_name (name=" << s->bucket_name_str << ")" << dendl;
@@ -561,7 +561,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   if (bucket_name.compare(s->bucket.name) != 0) {
     RGWBucketInfo bucket_info;
     map<string, bufferlist> bucket_attrs;
-    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, &s->objv_tracker, NULL, &bucket_attrs);
+    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL, &bucket_attrs);
     if (r < 0) {
       ldout(s->cct, 0) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return r;
@@ -1515,7 +1515,7 @@ int RGWCopyObj::verify_permission()
 
   map<string, bufferlist> src_attrs;
 
-  ret = store->get_bucket_info(s->obj_ctx, src_bucket_name, src_bucket_info, NULL, NULL, &src_attrs);
+  ret = store->get_bucket_info(s->obj_ctx, src_bucket_name, src_bucket_info, NULL, &src_attrs);
   if (ret < 0)
     return ret;
 
@@ -1543,7 +1543,7 @@ int RGWCopyObj::verify_permission()
   if (src_bucket_name.compare(dest_bucket_name) == 0) { /* will only happen if s->local_source */
     dest_bucket_info = src_bucket_info;
   } else {
-    ret = store->get_bucket_info(s->obj_ctx, dest_bucket_name, dest_bucket_info, NULL, NULL, &dest_attrs);
+    ret = store->get_bucket_info(s->obj_ctx, dest_bucket_name, dest_bucket_info, NULL, &dest_attrs);
     if (ret < 0)
       return ret;
   }
