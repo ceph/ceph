@@ -50,12 +50,11 @@ dump_cmd_to_json(JSONFormatter *f, const string& cmd)
     std::string keyval;
     std::map<std::string, std::string>desckv;
     // accumulate descriptor keywords in desckv
-    size_t pos;
 
     while (std::getline(argdesc, keyval, ',')) {
       // key=value; key by itself implies value is bool true
       // name="name" means arg dict will be titled 'name'
-      pos = keyval.find('=');
+      size_t pos = keyval.find('=');
       std::string key, val;
       if (pos != std::string::npos) {
 	key = keyval.substr(0, pos);
