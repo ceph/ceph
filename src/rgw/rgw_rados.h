@@ -1268,6 +1268,13 @@ public:
   int decode_policy(bufferlist& bl, ACLOwner *owner);
   int get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_t *master_ver, map<RGWObjCategory, RGWBucketStats>& stats);
   void get_bucket_meta_oid(rgw_bucket& bucket, string& oid);
+
+  int put_bucket_entrypoint_info(string& bucket_name, RGWBucketEntryPoint& entry_point, bool exclusive, time_t mtime);
+  int put_bucket_instance_info(string& bucket_name, RGWBucketInfo& info, bool exclusive, time_t mtime, map<string, bufferlist> *pattrs);
+  int get_bucket_entrypoint_info(void *ctx, string& bucket_name, RGWBucketEntryPoint& entry_point, RGWObjVersionTracker *objv_tracker, time_t *pmtime);
+  int get_bucket_instance_info(void *ctx, string& name, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
+  int get_bucket_instance_from_oid(void *ctx, string& oid, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
+
   virtual int get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info,
                               time_t *pmtime, map<string, bufferlist> *pattrs = NULL);
   virtual int put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive,
