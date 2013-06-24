@@ -112,9 +112,14 @@ def task(ctx, config):
     for id_ in teuthology.all_roles_of_type(ctx.cluster, 'osd'):
         manager.revive_osd(id_)
         manager.mark_in_osd(id_)
-    time.sleep(timeout)
-    manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
-    manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+    while True:
+        try:
+            manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
+            manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
+            break
+        except:
+            log.debug('osds must not be started yet, waiting...')
+            time.sleep(1)
     manager.wait_for_clean(timeout)
 
     check_stuck(
