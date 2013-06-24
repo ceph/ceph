@@ -555,7 +555,12 @@ int Pipe::accept()
   existing->unregister_pipe();
   replaced = true;
 
-  if (!existing->policy.lossy) {
+  if (existing->policy.lossy) {
+    // disconnect from the Connection
+    assert(existing->connection_state);
+    if (existing->connection_state->clear_pipe(existing))
+      msgr->dispatch_queue.queue_reset(existing->connection_state.get());
+  } else {
     // queue a reset on the old connection
     msgr->dispatch_queue.queue_reset(connection_state.get());
 
@@ -565,7 +570,7 @@ int Pipe::accept()
     connection_state = existing->connection_state;
 
     // make existing Connection reference us
-    existing->connection_state->reset_pipe(this);
+    connection_state->reset_pipe(this);
 
     // flush/queue any existing delayed messages
     if (existing->delay_thread)
