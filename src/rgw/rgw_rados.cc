@@ -1814,8 +1814,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
 
       index_ctx.remove(dir_oid);
       /* we need to updated objv_tracker, but we don't want the old cruft there */
-      objv_tracker = RGWObjVersionTracker();
-      r = get_bucket_info(NULL, bucket.name, info, &objv_tracker, NULL);
+      r = get_bucket_info(NULL, bucket.name, info, NULL);
       if (r < 0) {
         if (r == -ENOENT) {
           continue;
@@ -2830,8 +2829,7 @@ int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner)
 {
   RGWBucketInfo info;
   map<string, bufferlist> attrs;
-  RGWObjVersionTracker objv_tracker;
-  int r = get_bucket_info(NULL, bucket.name, info, &objv_tracker, NULL, &attrs);
+  int r = get_bucket_info(NULL, bucket.name, info, NULL, &attrs);
   if (r < 0) {
     ldout(cct, 0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " returned err=" << r << dendl;
     return r;
@@ -2839,7 +2837,7 @@ int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner)
 
   info.owner = owner.get_id();
 
-  r = put_bucket_info(bucket.name, info, false, &objv_tracker, 0, &attrs, false);
+  r = put_bucket_info(bucket.name, info, false, &info.objv_tracker, 0, &attrs, false);
   if (r < 0) {
     ldout(cct, 0) << "NOTICE: put_bucket_info on bucket=" << bucket.name << " returned err=" << r << dendl;
     return r;
@@ -2863,9 +2861,8 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
       ldout(cct, 20) << "disabling bucket name=" << bucket.name << dendl;
 
     RGWBucketInfo info;
-    RGWObjVersionTracker objv_tracker;
     map<string, bufferlist> attrs;
-    int r = get_bucket_info(NULL, bucket.name, info, &objv_tracker, NULL, &attrs);
+    int r = get_bucket_info(NULL, bucket.name, info, NULL, &attrs);
     if (r < 0) {
       ldout(cct, 0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
       ret = r;
@@ -2877,7 +2874,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
       info.flags |= BUCKET_SUSPENDED;
     }
 
-    r = put_bucket_info(bucket.name, info, false, &objv_tracker, 0, &attrs, false);
+    r = put_bucket_info(bucket.name, info, false, &info.objv_tracker, 0, &attrs, false);
     if (r < 0) {
       ldout(cct, 0) << "NOTICE: put_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
       ret = r;
@@ -2890,7 +2887,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
 int RGWRados::bucket_suspended(rgw_bucket& bucket, bool *suspended)
 {
   RGWBucketInfo bucket_info;
-  int ret = get_bucket_info(NULL, bucket.name, bucket_info, NULL, NULL);
+  int ret = get_bucket_info(NULL, bucket.name, bucket_info, NULL);
   if (ret < 0) {
     return ret;
   }
@@ -4469,7 +4466,7 @@ void RGWRados::get_bucket_meta_oid(rgw_bucket& bucket, string& oid)
   oid = ".bucket.meta." + bucket.bucket_id;
 }
 
-int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info, RGWObjVersionTracker *objv_tracker,
+int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info,
                               time_t *pmtime, map<string, bufferlist> *pattrs)
 {
   bufferlist bl;
@@ -4510,7 +4507,7 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
 
   bufferlist epbl;
 
-  ret = rgw_get_system_obj(this, ctx, zone.domain_root, oid, epbl, objv_tracker, pmtime, pattrs);
+  ret = rgw_get_system_obj(this, ctx, zone.domain_root, oid, epbl, &info.objv_tracker, pmtime, pattrs);
   if (ret < 0) {
     info.bucket.name = bucket_name; /* only init this field */
     return ret;

@@ -231,9 +231,8 @@ void check_bad_user_bucket_mapping(RGWRados *store, const string& user_id, bool 
       rgw_bucket& bucket = bucket_ent.bucket;
 
       RGWBucketInfo bucket_info;
-      RGWObjVersionTracker objv_tracker;
       time_t mtime;
-      int r = store->get_bucket_info(NULL, bucket.name, bucket_info, &objv_tracker, &mtime);
+      int r = store->get_bucket_info(NULL, bucket.name, bucket_info, &mtime);
       if (r < 0) {
         ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << dendl;
         continue;
@@ -376,8 +375,7 @@ int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state)
     return -EINVAL;
 
   if (!bucket_name.empty()) {
-    RGWObjVersionTracker objv_tracker;
-    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, &objv_tracker, NULL);
+    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL);
     if (r < 0) {
       ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return r;
@@ -866,9 +864,8 @@ static int bucket_stats(RGWRados *store, std::string&  bucket_name, Formatter *f
   rgw_bucket bucket;
   map<RGWObjCategory, RGWBucketStats> stats;
 
-  RGWObjVersionTracker objv_tracker;
   time_t mtime;
-  int r = store->get_bucket_info(NULL, bucket_name, bucket_info, &objv_tracker, &mtime);
+  int r = store->get_bucket_info(NULL, bucket_name, bucket_info, &mtime);
   if (r < 0)
     return r;
 
@@ -1310,7 +1307,7 @@ class RGWBucketMetadataHandler : public RGWMetadataHandler {
 
   int init_bucket(RGWRados *store, string& bucket_name, rgw_bucket& bucket, RGWObjVersionTracker *objv_tracker) {
     RGWBucketInfo bucket_info;
-    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, objv_tracker, NULL);
+    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL);
     if (r < 0) {
       cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
       return r;
@@ -1326,14 +1323,13 @@ public:
   int get(RGWRados *store, string& entry, RGWMetadataObject **obj) {
     RGWBucketCompleteInfo bci;
 
-    RGWObjVersionTracker objv_tracker;
     time_t mtime;
 
-    int ret = store->get_bucket_info(NULL, entry, bci.info, &objv_tracker, &mtime, &bci.attrs);
+    int ret = store->get_bucket_info(NULL, entry, bci.info, &mtime, &bci.attrs);
     if (ret < 0)
       return ret;
 
-    RGWBucketMetadataObject *mdo = new RGWBucketMetadataObject(bci, objv_tracker.read_version, mtime);
+    RGWBucketMetadataObject *mdo = new RGWBucketMetadataObject(bci, bci.info.objv_tracker.read_version, mtime);
 
     *obj = mdo;
 
@@ -1346,7 +1342,9 @@ public:
 
     time_t orig_mtime;
 
-    int ret = store->get_bucket_info(NULL, entry, old_bci.info, &objv_tracker, &orig_mtime, &old_bci.attrs);
+    old_bci.info.objv_tracker = objv_tracker;
+
+    int ret = store->get_bucket_info(NULL, entry, old_bci.info, &orig_mtime, &old_bci.attrs);
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
@@ -1364,12 +1362,15 @@ public:
       /* existing bucket, keep its placement pools */
       bci.info.bucket.data_pool = old_bci.info.bucket.data_pool;
       bci.info.bucket.index_pool = old_bci.info.bucket.index_pool;
+      bci.info.objv_tracker = old_bci.info.objv_tracker;
     }
 
 #warning need to take care of different routes here
-    ret = store->put_bucket_info(entry, bci.info, false, &objv_tracker, mtime, &bci.attrs, false);
+    ret = store->put_bucket_info(entry, bci.info, false, &bci.info.objv_tracker, mtime, &bci.attrs, false);
     if (ret < 0)
       return ret;
+
+    objv_tracker = bci.info.objv_tracker;
 
     ret = store->init_bucket_index(bci.info.bucket);
     if (ret < 0)

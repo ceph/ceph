@@ -595,6 +595,39 @@ inline ostream& operator<<(ostream& out, const rgw_bucket &b) {
   return out;
 }
 
+struct RGWObjVersionTracker {
+  obj_version read_version;
+  obj_version write_version;
+
+  obj_version *version_for_read() {
+    return &read_version;
+  }
+
+  obj_version *version_for_write() {
+    if (write_version.ver == 0)
+      return NULL;
+
+    return &write_version;
+  }
+
+  obj_version *version_for_check() {
+    if (read_version.ver == 0)
+      return NULL;
+
+    return &read_version;
+  }
+
+  void prepare_op_for_read(librados::ObjectReadOperation *op);
+  void prepare_op_for_write(librados::ObjectWriteOperation *op);
+
+  void apply_write() {
+    read_version = write_version;
+    write_version = obj_version();
+  }
+
+  void generate_new_write_ver(CephContext *cct);
+};
+
 enum RGWBucketFlags {
   BUCKET_SUSPENDED = 0x1,
 };
@@ -608,6 +641,7 @@ struct RGWBucketInfo
   time_t creation_time;
   string placement_rule;
   bool has_instance_obj;
+  RGWObjVersionTracker objv_tracker; /* we don't need to serialize this, for runtime tracking */
 
   void encode(bufferlist& bl) const {
      ENCODE_START(8, 4, bl);
@@ -689,39 +723,6 @@ struct req_state;
 struct RGWEnv;
 
 class RGWClientIO;
-
-struct RGWObjVersionTracker {
-  obj_version read_version;
-  obj_version write_version;
-
-  obj_version *version_for_read() {
-    return &read_version;
-  }
-
-  obj_version *version_for_write() {
-    if (write_version.ver == 0)
-      return NULL;
-
-    return &write_version;
-  }
-
-  obj_version *version_for_check() {
-    if (read_version.ver == 0)
-      return NULL;
-
-    return &read_version;
-  }
-
-  void prepare_op_for_read(librados::ObjectReadOperation *op);
-  void prepare_op_for_write(librados::ObjectWriteOperation *op);
-
-  void apply_write() {
-    read_version = write_version;
-    write_version = obj_version();
-  }
-
-  void generate_new_write_ver(CephContext *cct);
-};
 
 struct req_info {
   RGWEnv *env;

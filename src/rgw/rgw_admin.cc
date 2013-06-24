@@ -495,7 +495,7 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
 {
   RGWBucketInfo bucket_info;
   time_t mtime;
-  int r = store->get_bucket_info(NULL, bucket.name, bucket_info, NULL, &mtime);
+  int r = store->get_bucket_info(NULL, bucket.name, bucket_info, &mtime);
   if (r < 0)
     return r;
 
@@ -536,7 +536,7 @@ static int init_bucket(string& bucket_name, rgw_bucket& bucket)
 {
   if (!bucket_name.empty()) {
     RGWBucketInfo bucket_info;
-    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL, NULL);
+    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL);
     if (r < 0) {
       cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
       return r;
