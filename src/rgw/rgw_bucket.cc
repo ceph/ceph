@@ -1366,7 +1366,7 @@ public:
     }
 
 #warning need to take care of different routes here
-    ret = store->put_bucket_info(entry, bci.info, false, &bci.info.objv_tracker, mtime, &bci.attrs, false);
+    ret = store->put_bucket_info(entry, bci.info, false, mtime, &bci.attrs, false);
     if (ret < 0)
       return ret;
 
