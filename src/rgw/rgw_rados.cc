@@ -4577,7 +4577,7 @@ int RGWRados::put_bucket_instance_info(string& bucket_name, RGWBucketInfo& info,
 
   string oid;
   get_bucket_meta_oid(info.bucket, oid);
-  return rgw_bucket_store_info(this, oid, bl, exclusive, pattrs, &info.objv_tracker, mtime);
+  return rgw_bucket_instance_store_info(this, oid, bl, exclusive, pattrs, &info.objv_tracker, mtime);
 }
 
 int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive,
