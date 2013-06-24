@@ -967,11 +967,10 @@ public:
                             const string& region_name,
                             const string& placement_rule,
                             map<std::string,bufferlist>& attrs,
-                            RGWObjVersionTracker& objv_tracker,
+                            RGWBucketInfo& bucket_info,
                             obj_version *pobjv,
                             time_t creation_time,
                             rgw_bucket *master_bucket,
-                            RGWBucketInfo *pinfo,
                             bool exclusive = true);
   virtual int add_bucket_placement(std::string& new_pool);
   virtual int remove_bucket_placement(std::string& new_pool);
@@ -1271,7 +1270,7 @@ public:
   void get_bucket_meta_oid(rgw_bucket& bucket, string& oid);
   virtual int get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info,
                               time_t *pmtime, map<string, bufferlist> *pattrs = NULL);
-  virtual int put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive, RGWObjVersionTracker *objv_tracker,
+  virtual int put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive,
                               time_t mtime, map<string, bufferlist> *pattrs, bool create_entry_point);
 
   int cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid);
