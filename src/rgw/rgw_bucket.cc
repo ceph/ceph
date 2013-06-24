@@ -24,6 +24,7 @@
 using namespace std;
 
 static RGWMetadataHandler *bucket_meta_handler = NULL;
+static RGWMetadataHandler *bucket_instance_meta_handler = NULL;
 
 // define as static when RGWBucket implementation compete
 void rgw_get_buckets_obj(string& user_id, string& buckets_obj_id)
@@ -1290,10 +1291,23 @@ struct RGWBucketCompleteInfo {
   }
 };
 
-class RGWBucketMetadataObject : public RGWMetadataObject {
+class RGWBucketEntryMetadataObject : public RGWMetadataObject {
+  RGWBucketEntryPoint ep;
+public:
+  RGWBucketEntryMetadataObject(RGWBucketEntryPoint& _ep, obj_version& v, time_t m) : ep(_ep) {
+    objv = v;
+    mtime = m;
+  }
+
+  void dump(Formatter *f) const {
+    ep.dump(f);
+  }
+};
+
+class RGWBucketInstanceMetadataObject : public RGWMetadataObject {
   RGWBucketCompleteInfo info;
 public:
-  RGWBucketMetadataObject(RGWBucketCompleteInfo& i, obj_version& v, time_t m) : info(i) {
+  RGWBucketInstanceMetadataObject(RGWBucketCompleteInfo& i, obj_version& v, time_t m) : info(i) {
     objv = v;
     mtime = m;
   }
@@ -1321,15 +1335,140 @@ public:
   string get_type() { return "bucket"; }
 
   int get(RGWRados *store, string& entry, RGWMetadataObject **obj) {
+    RGWObjVersionTracker ot;
+    RGWBucketEntryPoint be;
+
+    time_t mtime;
+
+    int ret = store->get_bucket_entrypoint_info(NULL, entry, be, &ot, &mtime);
+    if (ret < 0)
+      return ret;
+
+    RGWBucketEntryMetadataObject *mdo = new RGWBucketEntryMetadataObject(be, ot.read_version, mtime);
+
+    *obj = mdo;
+
+    return 0;
+  }
+
+  int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, time_t mtime, JSONObj *obj) {
+    RGWBucketEntryPoint be, old_be;
+    decode_json_obj(be, obj);
+
+    time_t orig_mtime;
+
+    int ret = store->get_bucket_entrypoint_info(NULL, entry, be, &objv_tracker, &orig_mtime);
+    if (ret < 0 && ret != -ENOENT)
+      return ret;
+
+    ret = store->put_bucket_entrypoint_info(entry, old_be, false, mtime);
+    if (ret < 0)
+      return ret;
+
+#warning need to link bucket here
+#if 0
+    ret = rgw_add_bucket(store, bci.info.owner, bci.info.bucket, bci.info.creation_time);
+    if (ret < 0)
+      return ret;
+#endif
+
+    return 0;
+  }
+
+  struct list_keys_info {
+    RGWRados *store;
+    RGWListRawObjsCtx ctx;
+  };
+
+  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) {
+    rgw_bucket bucket;
+    int r = init_bucket(store, entry, bucket, &objv_tracker);
+    if (r < 0) {
+      cerr << "could not init bucket=" << entry << std::endl;
+      return r;
+    }
+
+    return store->delete_bucket(bucket, objv_tracker);
+  }
+
+  void get_pool_and_oid(RGWRados *store, string& key, rgw_bucket& bucket, string& oid) {
+    oid = key;
+    bucket = store->zone.domain_root;
+  }
+
+  int list_keys_init(RGWRados *store, void **phandle)
+  {
+    list_keys_info *info = new list_keys_info;
+
+    info->store = store;
+
+    *phandle = (void *)info;
+
+    return 0;
+  }
+
+  int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) {
+    list_keys_info *info = (list_keys_info *)handle;
+
+    string no_filter;
+
+    keys.clear();
+
+    RGWRados *store = info->store;
+
+    list<string> unfiltered_keys;
+
+    int ret = store->list_raw_objects(store->zone.domain_root, no_filter,
+                                      max, info->ctx, unfiltered_keys, truncated);
+    if (ret < 0)
+      return ret;
+
+    // now filter out the system entries
+    list<string>::iterator iter;
+    for (iter = unfiltered_keys.begin(); iter != unfiltered_keys.end(); ++iter) {
+      string& k = *iter;
+
+      if (k[0] != '.') {
+        keys.push_back(k);
+      }
+    }
+
+    return 0;
+  }
+
+  void list_keys_complete(void *handle) {
+    list_keys_info *info = (list_keys_info *)handle;
+    delete info;
+  }
+};
+
+class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
+
+  int init_bucket(RGWRados *store, string& bucket_name, rgw_bucket& bucket, RGWObjVersionTracker *objv_tracker) {
+    RGWBucketInfo bucket_info;
+    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL);
+    if (r < 0) {
+      cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
+      return r;
+    }
+    bucket = bucket_info.bucket;
+
+    return 0;
+  }
+
+public:
+  string get_type() { return "bucket.instance"; }
+
+  int get(RGWRados *store, string& entry, RGWMetadataObject **obj) {
     RGWBucketCompleteInfo bci;
 
     time_t mtime;
 
-    int ret = store->get_bucket_info(NULL, entry, bci.info, &mtime, &bci.attrs);
+    int ret = store->get_bucket_instance_info(NULL, entry, bci.info, &mtime, &bci.attrs);
     if (ret < 0)
       return ret;
 
-    RGWBucketMetadataObject *mdo = new RGWBucketMetadataObject(bci, bci.info.objv_tracker.read_version, mtime);
+    RGWBucketInstanceMetadataObject *mdo = new RGWBucketInstanceMetadataObject(bci, bci.info.objv_tracker.read_version, mtime);
 
     *obj = mdo;
 
@@ -1344,7 +1483,7 @@ public:
 
     old_bci.info.objv_tracker = objv_tracker;
 
-    int ret = store->get_bucket_info(NULL, entry, old_bci.info, &orig_mtime, &old_bci.attrs);
+    int ret = store->get_bucket_instance_info(NULL, entry, old_bci.info, &orig_mtime, &old_bci.attrs);
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
@@ -1365,18 +1504,13 @@ public:
       bci.info.objv_tracker = old_bci.info.objv_tracker;
     }
 
-#warning need to take care of different routes here
-    ret = store->put_bucket_info(entry, bci.info, false, mtime, &bci.attrs, false);
+    ret = store->put_bucket_instance_info(entry, bci.info, false, mtime, &bci.attrs);
     if (ret < 0)
       return ret;
 
     objv_tracker = bci.info.objv_tracker;
 
     ret = store->init_bucket_index(bci.info.bucket);
-    if (ret < 0)
-      return ret;
-
-    ret = rgw_add_bucket(store, bci.info.owner, bci.info.bucket, bci.info.creation_time);
     if (ret < 0)
       return ret;
 
@@ -1454,4 +1588,6 @@ void rgw_bucket_init(RGWMetadataManager *mm)
 {
   bucket_meta_handler = new RGWBucketMetadataHandler;
   mm->register_handler(bucket_meta_handler);
+  bucket_instance_meta_handler = new RGWBucketInstanceMetadataHandler;
+  mm->register_handler(bucket_instance_meta_handler);
 }
