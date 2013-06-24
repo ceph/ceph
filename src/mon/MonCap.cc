@@ -75,7 +75,7 @@ ostream& operator<<(ostream& out, const MonCapGrant& m)
   }
   if (m.command.length()) {
     out << " command " << maybe_quote_string(m.command);
-    if (m.command_args.size()) {
+    if (!m.command_args.empty()) {
       out << " with";
       for (map<string,StringConstraint>::const_iterator p = m.command_args.begin();
 	   p != m.command_args.end();

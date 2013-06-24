@@ -2150,7 +2150,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   } else if (prefix == "osd blacklist ls") {
     for (hash_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
 	 p != osdmap.blacklist.end();
-	 p++) {
+	 ++p) {
       stringstream ss;
       string s;
       ss << p->first << " " << p->second;

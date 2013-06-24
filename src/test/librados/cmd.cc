@@ -146,7 +146,7 @@ void log_cb(void *arg,
 	     const char *who, uint64_t stampsec, uint64_t stamp_nsec,
 	     uint64_t seq, const char *level,
 	     const char *msg) {
-  Log *l = (Log *)arg;
+  Log *l = static_cast<Log *>(arg);
   Mutex::Locker locker(l->lock);
   l->log.push_back(line);
   l->cond.Signal();

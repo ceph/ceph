@@ -3877,7 +3877,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
       goto out;
     }
     string args = argsvec.front();
-    for (vector<string>::iterator a = ++argsvec.begin(); a != argsvec.end(); a++)
+    for (vector<string>::iterator a = ++argsvec.begin(); a != argsvec.end(); ++a)
       args += " " + *a;
     osd_lock.Unlock();
     g_conf->injectargs(args, &ss);
