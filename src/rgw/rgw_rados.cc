@@ -4464,25 +4464,74 @@ void RGWRados::get_bucket_meta_oid(rgw_bucket& bucket, string& oid)
   oid = ".bucket.meta." + bucket.bucket_id;
 }
 
-int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info,
-                              time_t *pmtime, map<string, bufferlist> *pattrs)
+int RGWRados::get_bucket_instance_info(void *ctx, string& name, RGWBucketInfo& info,
+                                       time_t *pmtime, map<string, bufferlist> *pattrs)
 {
-  bufferlist bl;
+  /* entry in the format <bucket>/<bucket_id> */
+  int pos = name.find('/');
+  if (pos < 0) {
+    return -EINVAL;
+  }
+  string oid = ".bucket.meta." + name.substr(pos + 1);
 
-  RGWObjVersionTracker ot;
-  int ret = rgw_get_system_obj(this, ctx, zone.domain_root, bucket_name, bl, &ot, pmtime, pattrs);
+  return get_bucket_instance_from_oid(ctx, oid, info, pmtime, pattrs);
+}
+
+int RGWRados::get_bucket_instance_from_oid(void *ctx, string& oid, RGWBucketInfo& info,
+                                           time_t *pmtime, map<string, bufferlist> *pattrs)
+{
+  ldout(cct, 20) << "reading from " << zone.domain_root << ":" << oid << dendl;
+
+  bufferlist epbl;
+
+  int ret = rgw_get_system_obj(this, ctx, zone.domain_root, oid, epbl, &info.objv_tracker, pmtime, pattrs);
   if (ret < 0) {
-    info.bucket.name = bucket_name; /* only init this field */
     return ret;
   }
 
-  RGWBucketEntryPoint entry_point;
+  bufferlist::iterator iter = epbl.begin();
+  try {
+    ::decode(info, iter);
+  } catch (buffer::error& err) {
+    ldout(cct, 0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
+    return -EIO;
+  }
+  return 0;
+}
+
+int RGWRados::get_bucket_entrypoint_info(void *ctx, string& bucket_name,
+                                         RGWBucketEntryPoint& entry_point,
+                                         RGWObjVersionTracker *objv_tracker,
+                                         time_t *pmtime)
+{
+  bufferlist bl;
+
+  int ret = rgw_get_system_obj(this, ctx, zone.domain_root, bucket_name, bl, objv_tracker, pmtime, NULL);
+  if (ret < 0) {
+    return ret;
+  }
+
   bufferlist::iterator iter = bl.begin();
   try {
     ::decode(entry_point, iter);
   } catch (buffer::error& err) {
     ldout(cct, 0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
     return -EIO;
+  }
+  return 0;
+}
+
+int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info,
+                              time_t *pmtime, map<string, bufferlist> *pattrs)
+{
+  bufferlist bl;
+
+  RGWBucketEntryPoint entry_point;
+  time_t ep_mtime;
+  int ret = get_bucket_entrypoint_info(ctx, bucket_name, entry_point, NULL, &ep_mtime);
+  if (ret < 0) {
+    info.bucket.name = bucket_name; /* only init this field */
+    return ret;
   }
 
   if (entry_point.has_bucket_info) {
@@ -4501,24 +4550,34 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
   string oid;
   get_bucket_meta_oid(entry_point.bucket, oid);
 
-  ldout(cct, 20) << "reading from " << zone.domain_root << ":" << oid << dendl;
-
-  bufferlist epbl;
-
-  ret = rgw_get_system_obj(this, ctx, zone.domain_root, oid, epbl, &info.objv_tracker, pmtime, pattrs);
+  ret = get_bucket_instance_from_oid(ctx, oid, info, pmtime, pattrs);
   if (ret < 0) {
-    info.bucket.name = bucket_name; /* only init this field */
+    info.bucket.name = bucket_name;
     return ret;
   }
-
-  iter = epbl.begin();
-  try {
-    ::decode(info, iter);
-  } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
-    return -EIO;
-  }
   return 0;
+}
+
+int RGWRados::put_bucket_entrypoint_info(string& bucket_name, RGWBucketEntryPoint& entry_point,
+                                         bool exclusive, time_t mtime)
+{
+  bufferlist epbl;
+  ::encode(entry_point, epbl);
+  RGWObjVersionTracker ot;
+  return rgw_bucket_store_info(this, bucket_name, epbl, exclusive, NULL, &ot, mtime);
+}
+
+int RGWRados::put_bucket_instance_info(string& bucket_name, RGWBucketInfo& info, bool exclusive,
+                              time_t mtime, map<string, bufferlist> *pattrs)
+{
+  info.has_instance_obj = true;
+  bufferlist bl;
+
+  ::encode(info, bl);
+
+  string oid;
+  get_bucket_meta_oid(info.bucket, oid);
+  return rgw_bucket_store_info(this, oid, bl, exclusive, pattrs, &info.objv_tracker, mtime);
 }
 
 int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive,
@@ -4528,13 +4587,7 @@ int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exc
 
   bool create_head = !info.has_instance_obj || create_entry_point;
 
-  info.has_instance_obj = true;
-
-  ::encode(info, bl);
-
-  string oid;
-  get_bucket_meta_oid(info.bucket, oid);
-  int ret = rgw_bucket_store_info(this, oid, bl, exclusive, pattrs, &info.objv_tracker, mtime);
+  int ret = put_bucket_instance_info(bucket_name, info, exclusive, mtime, pattrs);
   if (ret < 0) {
     return ret;
   }
@@ -4544,12 +4597,10 @@ int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exc
 
   RGWBucketEntryPoint entry_point;
   entry_point.bucket = info.bucket;
-  bufferlist epbl;
-  ::encode(entry_point, epbl);
-  RGWObjVersionTracker ot;
-  ret = rgw_bucket_store_info(this, info.bucket.name, epbl, exclusive, pattrs, &ot, mtime);
-
+  ret = put_bucket_entrypoint_info(info.bucket.name, entry_point, exclusive, mtime); 
   if (exclusive && ret == -EEXIST) {
+    string oid;
+    get_bucket_meta_oid(info.bucket, oid);
     rgw_obj obj(zone.domain_root, oid);
     int r = delete_obj(NULL, obj);
     if (r < 0) {

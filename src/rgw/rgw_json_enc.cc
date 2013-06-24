@@ -436,6 +436,23 @@ void rgw_bucket::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("bucket_id", bucket_id, obj);
 }
 
+void RGWBucketEntryPoint::dump(Formatter *f) const
+{
+  encode_json("bucket", bucket, f);
+  encode_json("has_bucket_info", has_bucket_info, f);
+  if (has_bucket_info) {
+    encode_json("old_bucket_info", old_bucket_info, f);
+  }
+}
+
+void RGWBucketEntryPoint::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("bucket", bucket, obj);
+  JSONDecoder::decode_json("has_bucket_info", has_bucket_info, obj);
+  if (has_bucket_info) {
+    JSONDecoder::decode_json("old_bucket_info", old_bucket_info, obj);
+  }
+}
+
 void RGWBucketInfo::dump(Formatter *f) const
 {
   encode_json("bucket", bucket, f);

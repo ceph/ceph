@@ -707,6 +707,9 @@ struct RGWBucketEntryPoint
     ::decode(bucket, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(RGWBucketEntryPoint)
 
