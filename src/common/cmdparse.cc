@@ -47,15 +47,14 @@ dump_cmd_to_json(JSONFormatter *f, const string& cmd)
     // Snarf up all the key=val,key=val pairs, put 'em in a dict.
     // no '=val' implies '=True'.
     std::stringstream argdesc(word);
-    std::string keyval, name;
+    std::string keyval;
     std::map<std::string, std::string>desckv;
     // accumulate descriptor keywords in desckv
-    size_t pos;
 
     while (std::getline(argdesc, keyval, ',')) {
       // key=value; key by itself implies value is bool true
       // name="name" means arg dict will be titled 'name'
-      pos = keyval.find('=');
+      size_t pos = keyval.find('=');
       std::string key, val;
       if (pos != std::string::npos) {
 	key = keyval.substr(0, pos);
@@ -70,7 +69,7 @@ dump_cmd_to_json(JSONFormatter *f, const string& cmd)
     f->open_object_section(desckv["name"].c_str());
     // dump all the keys including name into the array
     for (std::map<std::string, std::string>::iterator it = desckv.begin();
-	 it != desckv.end(); it++) {
+	 it != desckv.end(); ++it) {
       f->dump_string(it->first.c_str(), it->second);
     }
     f->close_section(); // attribute object for individual desc
@@ -106,7 +105,7 @@ cmdmap_from_json(vector<string> cmd, map<string, cmd_vartype> *mapp, stringstrea
   string fullcmd;
   // First, join all cmd strings
   for (vector<string>::iterator it = cmd.begin();
-       it != cmd.end(); it++)
+       it != cmd.end(); ++it)
     fullcmd += *it;
 
   try {
@@ -119,7 +118,7 @@ cmdmap_from_json(vector<string> cmd, map<string, cmd_vartype> *mapp, stringstrea
     // make sure all contents are simple types (not arrays or objects)
     json_spirit::mObject o = v.get_obj();
     for (map<string, json_spirit::mValue>::iterator it = o.begin();
-	 it != o.end(); it++) {
+	 it != o.end(); ++it) {
 
       // ok, marshal it into our string->cmd_vartype map, or throw an
       // exception if it's not a simple datatype.  This is kind of
@@ -140,7 +139,7 @@ cmdmap_from_json(vector<string> cmd, map<string, cmd_vartype> *mapp, stringstrea
 	  vector<json_spirit::mValue> spvals = it->second.get_array();
 	  vector<string> outv;
 	  for (vector<json_spirit::mValue>::iterator sv = spvals.begin();
-	       sv != spvals.end(); sv++) {
+	       sv != spvals.end(); ++sv) {
 	    if (sv->type() != json_spirit::str_type)
 	      throw(runtime_error("Can't handle arrays of non-strings"));
 	    outv.push_back(sv->get_str());
