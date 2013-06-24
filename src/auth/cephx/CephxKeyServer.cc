@@ -160,6 +160,7 @@ bool KeyServer::_check_rotating_secrets()
   added += _rotate_secret(CEPH_ENTITY_TYPE_MDS);
 
   if (added) {
+    ldout(cct, 10) << __func__ << " added " << added << dendl;
     data.rotating_ver++;
     //data.next_rotating_time = ceph_clock_now(cct);
     //data.next_rotating_time += MIN(g_conf->auth_mon_ticket_ttl, g_conf->auth_service_ticket_ttl);
