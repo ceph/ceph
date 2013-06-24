@@ -968,8 +968,10 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
 		      << m->get_orig_source_inst() << "\n";
     failure_info_t& fi = failure_info[target_osd];
     MOSDFailure *old = fi.add_report(reporter, failed_since, m);
-    if (old)
+    if (old) {
       mon->no_reply(old);
+      old->put();
+    }
 
     return check_failure(now, target_osd, fi);
   } else {
@@ -978,7 +980,14 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
 		      << m->get_orig_source_inst() << "\n";
     if (failure_info.count(target_osd)) {
       failure_info_t& fi = failure_info[target_osd];
+      list<MOSDFailure*> ls;
+      fi.take_report_messages(ls);
       fi.cancel_report(reporter);
+      while (!ls.empty()) {
+	mon->no_reply(ls.front());
+	ls.front()->put();
+	ls.pop_front();
+      }
       if (fi.reporters.empty()) {
 	dout(10) << " removing last failure_info for osd." << target_osd << dendl;
 	failure_info.erase(target_osd);
@@ -991,6 +1000,7 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
       dout(10) << " no failure_info for osd." << target_osd << dendl;
     }
     mon->no_reply(m);
+    m->put();
   }
   
   return false;
