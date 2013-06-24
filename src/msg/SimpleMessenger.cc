@@ -222,6 +222,13 @@ void SimpleMessenger::reaper()
     ldout(cct,10) << "reaper reaping pipe " << p << " " << p->get_peer_addr() << dendl;
     p->pipe_lock.Lock();
     p->discard_out_queue();
+    if (p->connection_state) {
+      // mark_down, mark_down_all, or fault() should have done this,
+      // or accept() may have switch the Connection to a different
+      // Pipe... but make sure!
+      bool cleared = p->connection_state->clear_pipe(p);
+      assert(!cleared);
+    }
     p->pipe_lock.Unlock();
     p->unregister_pipe();
     assert(pipes.count(p));
@@ -230,8 +237,6 @@ void SimpleMessenger::reaper()
     if (p->sd >= 0)
       ::close(p->sd);
     ldout(cct,10) << "reaper reaped pipe " << p << " " << p->get_peer_addr() << dendl;
-    if (p->connection_state)
-      p->connection_state->clear_pipe(p);
     p->put();
     ldout(cct,10) << "reaper deleted pipe " << p << dendl;
   }
@@ -563,9 +568,9 @@ void SimpleMessenger::mark_down_all()
     p->pipe_lock.Lock();
     p->stop();
     ConnectionRef con = p->connection_state;
-    p->pipe_lock.Unlock();
     if (con && con->clear_pipe(p))
       dispatch_queue.queue_reset(con.get());
+    p->pipe_lock.Unlock();
   }
   lock.Unlock();
 }
@@ -579,6 +584,11 @@ void SimpleMessenger::mark_down(const entity_addr_t& addr)
     p->unregister_pipe();
     p->pipe_lock.Lock();
     p->stop();
+    if (p->connection_state) {
+      // do not generate a reset event for the caller in this case,
+      // since they asked for it.
+      p->connection_state->clear_pipe(p);
+    }
     p->pipe_lock.Unlock();
   } else {
     ldout(cct,1) << "mark_down " << addr << " -- pipe dne" << dendl;
@@ -598,6 +608,11 @@ void SimpleMessenger::mark_down(Connection *con)
     p->unregister_pipe();
     p->pipe_lock.Lock();
     p->stop();
+    if (p->connection_state) {
+      // do not generate a reset event for the caller in this case,
+      // since they asked for it.
+      p->connection_state->clear_pipe(p);
+    }
     p->pipe_lock.Unlock();
     p->put();
   } else {
