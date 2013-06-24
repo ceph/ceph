@@ -112,7 +112,7 @@ def task(ctx, config):
                         env_arg = '{var}={val}'.format(var=var, val=quoted_val)
                         args.append(run.Raw(env_arg))
                 args.extend([
-                            '{tdir}/enable-coredump'.format(tdir=testdir),
+                            '{tdir}/adjust-ulimits'.format(tdir=testdir),
                             'ceph-coverage',
                             '{tdir}/archive/coverage'.format(tdir=testdir),
                             '{srcdir}/{c}'.format(

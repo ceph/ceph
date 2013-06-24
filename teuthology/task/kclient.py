@@ -69,7 +69,7 @@ def task(ctx, config):
         remote.run(
             args=[
                 'sudo',
-                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/adjust-ulimits'.format(tdir=testdir),
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 '/sbin/mount.ceph',

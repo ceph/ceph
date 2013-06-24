@@ -132,7 +132,7 @@ def ceph_log(ctx, config):
 @contextlib.contextmanager
 def ship_utilities(ctx, config):
     assert config is None
-    FILES = ['daemon-helper', 'enable-coredump', 'chdir-coredump',
+    FILES = ['daemon-helper', 'adjust-ulimits', 'chdir-coredump',
              'valgrind.supp', 'kcon_most']
     testdir = teuthology.get_testdir(ctx)
     for filename in FILES:
@@ -380,7 +380,7 @@ def cluster(ctx, config):
     ctx.cluster.only(firstmon).run(
         args=[
             'sudo',
-            '{tdir}/enable-coredump'.format(tdir=testdir),
+            '{tdir}/adjust-ulimits'.format(tdir=testdir),
             'ceph-coverage',
             coverage_dir,
             'ceph-authtool',
@@ -391,7 +391,7 @@ def cluster(ctx, config):
     ctx.cluster.only(firstmon).run(
         args=[
             'sudo',
-            '{tdir}/enable-coredump'.format(tdir=testdir),
+            '{tdir}/adjust-ulimits'.format(tdir=testdir),
             'ceph-coverage',
             coverage_dir,
             'ceph-authtool',
@@ -419,7 +419,7 @@ def cluster(ctx, config):
     ctx.cluster.only(firstmon).run(
         args=[
             'sudo',
-            '{tdir}/enable-coredump'.format(tdir=testdir),
+            '{tdir}/adjust-ulimits'.format(tdir=testdir),
             'ceph-coverage',
             coverage_dir,
             'ceph-authtool',
@@ -463,7 +463,7 @@ def cluster(ctx, config):
     run.wait(
         mons.run(
             args=[
-                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/adjust-ulimits'.format(tdir=testdir),
                 'ceph-coverage',
                 coverage_dir,
                 'osdmaptool',
@@ -491,7 +491,7 @@ def cluster(ctx, config):
                     '-p',
                     '/var/lib/ceph/mds/ceph-{id}'.format(id=id_),
                     run.Raw('&&'),
-                    '{tdir}/enable-coredump'.format(tdir=testdir),
+                    '{tdir}/adjust-ulimits'.format(tdir=testdir),
                     'ceph-coverage',
                     coverage_dir,
                     'sudo',
@@ -595,7 +595,7 @@ def cluster(ctx, config):
             remote.run(
                 args=[
                     'MALLOC_CHECK_=3',
-                    '{tdir}/enable-coredump'.format(tdir=testdir),
+                    '{tdir}/adjust-ulimits'.format(tdir=testdir),
                     'ceph-coverage',
                     coverage_dir,
                     'sudo',
@@ -652,7 +652,7 @@ def cluster(ctx, config):
             mons.run(
                 args=[
                     'sudo',
-                    '{tdir}/enable-coredump'.format(tdir=testdir),
+                    '{tdir}/adjust-ulimits'.format(tdir=testdir),
                     'ceph-coverage',
                     coverage_dir,
                     'ceph-authtool',
@@ -679,7 +679,7 @@ def cluster(ctx, config):
                 )
             remote.run(
                 args=[
-                    '{tdir}/enable-coredump'.format(tdir=testdir),
+                    '{tdir}/adjust-ulimits'.format(tdir=testdir),
                     'ceph-coverage',
                     coverage_dir,
                     'sudo',
@@ -858,7 +858,7 @@ def run_daemon(ctx, config, type_):
                 num_active += 1
 
             run_cmd = [
-                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/adjust-ulimits'.format(tdir=testdir),
                 'ceph-coverage',
                 coverage_dir,
                 'sudo',
@@ -896,7 +896,7 @@ def run_daemon(ctx, config, type_):
         (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
 
         mon0_remote.run(args=[
-            '{tdir}/enable-coredump'.format(tdir=testdir),
+            '{tdir}/adjust-ulimits'.format(tdir=testdir),
             'ceph-coverage',
             coverage_dir,
             'ceph',

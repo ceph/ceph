@@ -276,7 +276,7 @@ class CephManager:
     def raw_cluster_cmd(self, *args):
         testdir = teuthology.get_testdir(self.ctx)
         ceph_args = [
-                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/adjust-ulimits'.format(tdir=testdir),
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'ceph',
@@ -291,7 +291,7 @@ class CephManager:
     def raw_cluster_cmd_result(self, *args):
         testdir = teuthology.get_testdir(self.ctx)
         ceph_args = [
-                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/adjust-ulimits'.format(tdir=testdir),
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'ceph',
@@ -306,7 +306,7 @@ class CephManager:
     def do_rados(self, remote, cmd):
         testdir = teuthology.get_testdir(self.ctx)
         pre = [
-            '{tdir}/enable-coredump'.format(tdir=testdir),
+            '{tdir}/adjust-ulimits'.format(tdir=testdir),
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
             'rados',
@@ -364,7 +364,7 @@ class CephManager:
         assert remote is not None
         args=[
             'sudo',
-            '{tdir}/enable-coredump'.format(tdir=testdir),
+            '{tdir}/adjust-ulimits'.format(tdir=testdir),
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
             'ceph',

@@ -45,7 +45,7 @@ def task(ctx, config):
             proc = remote.run(
                 args=[
                     "/bin/sh", "-c",
-                    " ".join(['{tdir}/enable-coredump',
+                    " ".join(['{tdir}/adjust-ulimits',
                               'ceph-coverage',
                               '{tdir}/archive/coverage',
                               'rados',
@@ -62,7 +62,7 @@ def task(ctx, config):
         proc = remote.run(
             args=[
                 "/bin/sh", "-c",
-                " ".join(['{tdir}/enable-coredump',
+                " ".join(['{tdir}/adjust-ulimits',
                           'ceph-coverage',
                           '{tdir}/archive/coverage',
                           'rados',
@@ -87,7 +87,7 @@ def task(ctx, config):
             proc = remote.run(
                 args=[
                     "/bin/sh", "-c",
-                    " ".join(['{tdir}/enable-coredump',
+                    " ".join(['{tdir}/adjust-ulimits',
                               'ceph-coverage',
                               '{tdir}/archive/coverage',
                               'rados',

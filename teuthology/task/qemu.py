@@ -162,7 +162,7 @@ def run_qemu(ctx, config):
 
         base_file = '{tdir}/qemu/base.{client}.qcow2'.format(tdir=testdir, client=client)
         args=[
-            '{tdir}/enable-coredump'.format(tdir=testdir),
+            '{tdir}/adjust-ulimits'.format(tdir=testdir),
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
             '{tdir}/daemon-helper'.format(tdir=testdir),

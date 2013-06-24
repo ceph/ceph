@@ -104,7 +104,7 @@ class RecoveryBencher:
         # create the objects
         osd_remote.run(
             args=[
-                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/adjust-ulimits'.format(tdir=testdir),
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'smalliobench'.format(tdir=testdir),
@@ -120,7 +120,7 @@ class RecoveryBencher:
         log.info('non-recovery (baseline)')
         p = osd_remote.run(
             args=[
-                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/adjust-ulimits'.format(tdir=testdir),
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'smalliobench',
@@ -142,7 +142,7 @@ class RecoveryBencher:
         log.info('recovery active')
         p = osd_remote.run(
             args=[
-                '{tdir}/enable-coredump'.format(tdir=testdir),
+                '{tdir}/adjust-ulimits'.format(tdir=testdir),
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'smalliobench',
