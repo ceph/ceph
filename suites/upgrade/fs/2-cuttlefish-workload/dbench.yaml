@@ -1,6 +1,6 @@
 tasks:
 - workunit:
-     branch: bobtail
+     branch: cuttlefish
      clients:
         all:
            - suites/dbench.sh
