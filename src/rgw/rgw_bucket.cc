@@ -127,6 +127,12 @@ int rgw_bucket_store_info(RGWRados *store, string& bucket_name, bufferlist& bl, 
   return store->meta_mgr->put_entry(bucket_meta_handler, bucket_name, bl, exclusive, objv_tracker, mtime, pattrs);
 }
 
+int rgw_bucket_instance_store_info(RGWRados *store, string& oid, bufferlist& bl, bool exclusive,
+                          map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
+                          time_t mtime) {
+  return store->meta_mgr->put_entry(bucket_instance_meta_handler, oid, bl, exclusive, objv_tracker, mtime, pattrs);
+}
+
 #warning removed RGWBucket::create_bucket(), clean this up when ready
 #if 0
 int RGWBucket::create_bucket(string bucket_str, string& user_id, string& region_name, string& display_name)
