@@ -774,6 +774,8 @@ struct req_state {
    ACLOwner bucket_owner;
    ACLOwner owner;
 
+   string bucket_instance_id;
+
    RGWBucketInfo bucket_info;
    map<string, bufferlist> bucket_attrs;
    bool bucket_exists;

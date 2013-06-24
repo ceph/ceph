@@ -318,6 +318,8 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
   string obj_str;
   RGWUserInfo bucket_owner_info;
 
+  s->bucket_instance_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "bucket-instance");
+
   s->bucket_acl = new RGWAccessControlPolicy(s->cct);
 
   if (s->copy_source) { /* check if copy source is within the current domain */
@@ -342,7 +344,11 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     
   if (s->bucket_name_str.size()) {
     s->bucket_exists = true;
-    ret = store->get_bucket_info(s->obj_ctx, s->bucket_name_str, s->bucket_info, NULL, &s->bucket_attrs);
+    if (s->bucket_instance_id.empty()) {
+      ret = store->get_bucket_info(s->obj_ctx, s->bucket_name_str, s->bucket_info, NULL, &s->bucket_attrs);
+    } else {
+      ret = store->get_bucket_instance_info(s->obj_ctx, s->bucket_instance_id, s->bucket_info, NULL, &s->bucket_attrs);
+    }
     if (ret < 0) {
       if (ret != -ENOENT) {
         ldout(s->cct, 0) << "NOTICE: couldn't get bucket from bucket_name (name=" << s->bucket_name_str << ")" << dendl;
