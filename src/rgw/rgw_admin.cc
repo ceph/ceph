@@ -97,8 +97,8 @@ void _usage()
   cerr << "  opstate list               list stateful operations entries (use client_id,\n";
   cerr << "                             op_id, object)\n";
   cerr << "  opstate set                set state on an entry (use client_id, op_id, object)\n";
-  cerr << "  opstate renewstate         renew state on an entry (use client_id, op_id, object)\n";
-  cerr << "  opstate rmstate            remove entry (use client_id, op_id, object)\n";
+  cerr << "  opstate renew              renew state on an entry (use client_id, op_id, object)\n";
+  cerr << "  opstate rm                 remove entry (use client_id, op_id, object)\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
   cerr << "   --subuser=<name>          subuser name\n";
