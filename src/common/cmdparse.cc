@@ -47,7 +47,7 @@ dump_cmd_to_json(JSONFormatter *f, const string& cmd)
     // Snarf up all the key=val,key=val pairs, put 'em in a dict.
     // no '=val' implies '=True'.
     std::stringstream argdesc(word);
-    std::string keyval, name;
+    std::string keyval;
     std::map<std::string, std::string>desckv;
     // accumulate descriptor keywords in desckv
     size_t pos;
