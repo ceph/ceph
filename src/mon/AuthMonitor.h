@@ -148,7 +148,7 @@ private:
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
 
-  void check_rotate();
+  bool check_rotate();
  public:
   AuthMonitor(Monitor *mn, Paxos *p, const string& service_name)
     : PaxosService(mn, p, service_name), last_rotating_ver(0),
