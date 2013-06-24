@@ -1571,13 +1571,14 @@ public:
     if (ret < 0)
       return ret;
 
-    // now filter out the system entries
+    int prefix_size = sizeof(RGW_BUCKET_INSTANCE_MD_PREFIX) - 1;
+    // now filter in the relevant entries
     list<string>::iterator iter;
     for (iter = unfiltered_keys.begin(); iter != unfiltered_keys.end(); ++iter) {
       string& k = *iter;
 
-      if (k[0] != '.') {
-        keys.push_back(k);
+      if (k.compare(0, prefix_size, RGW_BUCKET_INSTANCE_MD_PREFIX) == 0) {
+        keys.push_back(k.substr(prefix_size));
       }
     }
 
