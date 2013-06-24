@@ -4461,18 +4461,17 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_
 
 void RGWRados::get_bucket_meta_oid(rgw_bucket& bucket, string& oid)
 {
-  oid = ".bucket.meta." + bucket.bucket_id;
+  oid = RGW_BUCKET_INSTANCE_MD_PREFIX + bucket.name + ":" + bucket.bucket_id;
 }
 
-int RGWRados::get_bucket_instance_info(void *ctx, string& name, RGWBucketInfo& info,
+int RGWRados::get_bucket_instance_info(void *ctx, string& entry, RGWBucketInfo& info,
                                        time_t *pmtime, map<string, bufferlist> *pattrs)
 {
-  /* entry in the format <bucket>/<bucket_id> */
-  int pos = name.find('/');
+  int pos = entry.find(':');
   if (pos < 0) {
     return -EINVAL;
   }
-  string oid = ".bucket.meta." + name.substr(pos + 1);
+  string oid = RGW_BUCKET_INSTANCE_MD_PREFIX + entry;
 
   return get_bucket_instance_from_oid(ctx, oid, info, pmtime, pattrs);
 }
