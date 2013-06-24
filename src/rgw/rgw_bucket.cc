@@ -1016,7 +1016,7 @@ int RGWDataChangesLog::renew_entries()
     rgw_data_change change;
     bufferlist bl;
     change.entity_type = ENTITY_TYPE_BUCKET;
-    change.key = bucket.name;
+    change.key = bucket.name + ":" + bucket.bucket_id;
     change.timestamp = ut;
     ::encode(change, bl);
 
@@ -1137,7 +1137,7 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
     bufferlist bl;
     rgw_data_change change;
     change.entity_type = ENTITY_TYPE_BUCKET;
-    change.key = bucket.name;
+    change.key = bucket.name + ":" + bucket.bucket_id;
     change.timestamp = now;
     ::encode(change, bl);
     string section;
