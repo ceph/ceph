@@ -6493,7 +6493,7 @@ void OSD::do_recovery(PG *pg)
   recovery_wq.lock();
   int max = g_conf->osd_recovery_max_active - recovery_ops_active;
   recovery_wq.unlock();
-  if (max == 0) {
+  if (max <= 0) {
     dout(10) << "do_recovery raced and failed to start anything; requeuing " << *pg << dendl;
     recovery_wq.queue(pg);
   } else {
