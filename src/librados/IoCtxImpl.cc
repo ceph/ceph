@@ -639,7 +639,7 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
   if (!o->size())
     return 0;
 
-  Mutex mylock("IoCtxImpl::mutate::mylock");
+  Mutex mylock("IoCtxImpl::operate::mylock");
   Cond cond;
   bool done;
   int r;
@@ -669,7 +669,7 @@ int librados::IoCtxImpl::operate_read(const object_t& oid,
   if (!o->size())
     return 0;
 
-  Mutex mylock("IoCtxImpl::mutate::mylock");
+  Mutex mylock("IoCtxImpl::operate_read::mylock");
   Cond cond;
   bool done;
   int r;
@@ -964,7 +964,7 @@ int librados::IoCtxImpl::trunc(const object_t& oid, uint64_t size)
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
-  Mutex mylock("IoCtxImpl::write_full::mylock");
+  Mutex mylock("IoCtxImpl::trunc::mylock");
   Cond cond;
   bool done;
   int r;
@@ -1486,7 +1486,7 @@ int librados::IoCtxImpl::unwatch(const object_t& oid, uint64_t cookie)
 {
   bufferlist inbl, outbl;
 
-  Mutex mylock("IoCtxImpl::watch::mylock");
+  Mutex mylock("IoCtxImpl::unwatch::mylock");
   Cond cond;
   bool done;
   int r;
