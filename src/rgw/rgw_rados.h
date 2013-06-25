@@ -1234,7 +1234,7 @@ public:
   virtual int omap_get_all(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m);
   virtual int omap_set(rgw_obj& obj, std::string& key, bufferlist& bl);
   virtual int omap_set(rgw_obj& obj, map<std::string, bufferlist>& m);
-  virtual int omap_del(rgw_obj& obj, std::string& key);
+  virtual int omap_del(rgw_obj& obj, const std::string& key);
   virtual int update_containers_stats(map<string, RGWBucketEnt>& m);
   virtual int append_async(rgw_obj& obj, size_t size, bufferlist& bl);
 
