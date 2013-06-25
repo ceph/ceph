@@ -685,16 +685,18 @@ struct RGWBucketEntryPoint
   rgw_bucket bucket;
   string owner;
   time_t creation_time;
+  bool linked;
 
   bool has_bucket_info;
   RGWBucketInfo old_bucket_info;
 
-  RGWBucketEntryPoint() : creation_time(0), has_bucket_info(false) {}
+  RGWBucketEntryPoint() : creation_time(0), linked(false), has_bucket_info(false) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(8, 8, bl);
     ::encode(bucket, bl);
     ::encode(owner, bl);
+    ::encode(linked, bl);
     uint64_t ctime = (uint64_t)creation_time;
     ::encode(ctime, bl);
     ENCODE_FINISH(bl);
@@ -711,6 +713,7 @@ struct RGWBucketEntryPoint
     has_bucket_info = false;
     ::decode(bucket, bl);
     ::decode(owner, bl);
+    ::decode(linked, bl);
     uint64_t ctime;
     ::decode(ctime, bl);
     creation_time = (uint64_t)ctime;
@@ -910,32 +913,32 @@ public:
     std::string _o(o);
     init(b, _o);
   }
-  rgw_obj(rgw_bucket& b, std::string& o) {
+  rgw_obj(rgw_bucket& b, const std::string& o) {
     init(b, o);
   }
-  rgw_obj(rgw_bucket& b, std::string& o, std::string& k) {
+  rgw_obj(rgw_bucket& b, const std::string& o, const std::string& k) {
     init(b, o, k);
   }
-  rgw_obj(rgw_bucket& b, std::string& o, std::string& k, std::string& n) {
+  rgw_obj(rgw_bucket& b, const std::string& o, const std::string& k, const std::string& n) {
     init(b, o, k, n);
   }
-  void init(rgw_bucket& b, std::string& o, std::string& k, std::string& n) {
+  void init(rgw_bucket& b, const std::string& o, const std::string& k, const std::string& n) {
     bucket = b;
     set_ns(n);
     set_obj(o);
     set_key(k);
   }
-  void init(rgw_bucket& b, std::string& o, std::string& k) {
+  void init(rgw_bucket& b, const std::string& o, const std::string& k) {
     bucket = b;
     set_obj(o);
     set_key(k);
   }
-  void init(rgw_bucket& b, std::string& o) {
+  void init(rgw_bucket& b, const std::string& o) {
     bucket = b;
     set_obj(o);
     orig_key = key = o;
   }
-  void init_ns(rgw_bucket& b, std::string& o, std::string& n) {
+  void init_ns(rgw_bucket& b, const std::string& o, const std::string& n) {
     bucket = b;
     set_ns(n);
     set_obj(o);
@@ -947,7 +950,7 @@ public:
     string ns_str(n);
     return set_ns(ns_str);
   }
-  int set_ns(string& n) {
+  int set_ns(const string& n) {
     if (n[0] == '_')
       return -EINVAL;
     ns = n;
@@ -955,7 +958,7 @@ public:
     return 0;
   }
 
-  void set_key(string& k) {
+  void set_key(const string& k) {
     orig_key = k;
     key = k;
   }
@@ -965,7 +968,7 @@ public:
     key.clear();
   }
 
-  void set_obj(string& o) {
+  void set_obj(const string& o) {
     orig_obj = o;
     if (ns.empty()) {
       if (o.empty())

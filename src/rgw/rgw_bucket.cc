@@ -73,7 +73,7 @@ int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& bucke
   return 0;
 }
 
-int rgw_add_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t creation_time)
+int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t creation_time)
 {
   int ret;
   string& bucket_name = bucket.name;
@@ -81,6 +81,10 @@ int rgw_add_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t c
   bufferlist bl;
 
   RGWBucketEnt new_bucket;
+
+  RGWBucketEntryPoint ep;
+  RGWObjVersionTracker ot;
+
   new_bucket.bucket = bucket;
   new_bucket.size = 0;
   if (!creation_time)
@@ -88,6 +92,14 @@ int rgw_add_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t c
   else
     new_bucket.creation_time = creation_time;
   ::encode(new_bucket, bl);
+
+  ret = store->get_bucket_entrypoint_info(NULL, bucket_name, ep, &ot, NULL);
+  if (ret < 0 && ret != -ENOENT) {
+    ldout(store->ctx(), 0) << "ERROR: store->get_bucket_entrypoint_info() returned " << ret << dendl;
+  } else if (ret >= 0 && ep.linked && ep.owner != user_id) {
+    ldout(store->ctx(), 0) << "can't link bucket, already linked to a different user: " << ep.owner << dendl;
+    return -EINVAL;
+  }
 
   string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
@@ -97,12 +109,25 @@ int rgw_add_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t c
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: error adding bucket to directory: "
         << cpp_strerror(-ret)<< dendl;
+    goto done_err;
   }
 
+  ep.linked = true;
+  ep.owner = user_id;
+  ret = store->put_bucket_entrypoint_info(bucket_name, ep, false, ot, 0);
+  if (ret < 0)
+    goto done_err;
+
+  return 0;
+done_err:
+  int r = rgw_unlink_bucket(store, user_id, bucket.name);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed unlinking bucket on error cleanup: " << cpp_strerror(-r) << dendl;
+  }
   return ret;
 }
 
-int rgw_remove_user_bucket_info(RGWRados *store, string user_id, const string& bucket_name)
+int rgw_unlink_bucket(RGWRados *store, string user_id, const string& bucket_name)
 {
   int ret;
 
@@ -118,10 +143,29 @@ int rgw_remove_user_bucket_info(RGWRados *store, string user_id, const string& b
         << cpp_strerror(-ret)<< dendl;
   }
 
+  RGWBucketEntryPoint ep;
+  RGWObjVersionTracker ot;
+  ret = store->get_bucket_entrypoint_info(NULL, bucket_name, ep, &ot, NULL);
+  if (ret < 0)
+    return ret;
+
+  if (!ep.linked)
+    return 0;
+
+  if (ep.owner != user_id) {
+    ldout(store->ctx(), 0) << "bucket entry point user mismatch, can't unlink bucket: " << ep.owner << " != " << user_id << dendl;
+    return -EINVAL;
+  }
+
+  ep.linked = false;
+  ret = store->put_bucket_entrypoint_info(bucket_name, ep, false, ot, 0);
+  if (ret < 0)
+    return ret;
+
   return ret;
 }
 
-int rgw_bucket_store_info(RGWRados *store, string& bucket_name, bufferlist& bl, bool exclusive,
+int rgw_bucket_store_info(RGWRados *store, const string& bucket_name, bufferlist& bl, bool exclusive,
                           map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
                           time_t mtime) {
   return store->meta_mgr->put_entry(bucket_meta_handler, bucket_name, bl, exclusive, objv_tracker, mtime, pattrs);
@@ -136,57 +180,6 @@ int rgw_bucket_instance_store_info(RGWRados *store, string& entry, bufferlist& b
 int rgw_bucket_instance_remove_entry(RGWRados *store, string& entry, RGWObjVersionTracker *objv_tracker) {
   return store->meta_mgr->remove_entry(bucket_instance_meta_handler, entry, objv_tracker);
 }
-
-#warning removed RGWBucket::create_bucket(), clean this up when ready
-#if 0
-int RGWBucket::create_bucket(string bucket_str, string& user_id, string& region_name, string& display_name)
-{
-  RGWAccessControlPolicy policy, old_policy;
-  map<string, bufferlist> attrs;
-  bufferlist aclbl;
-  string no_oid;
-  rgw_obj obj;
-  RGWBucketInfo bucket_info;
-
-  int ret;
-
-  // defaule policy (private)
-  policy.create_default(user_id, display_name);
-  policy.encode(aclbl);
-
-  RGWObjVersionTracker objv_tracker;
-  time_t mtime;
-
-  ret = store->get_bucket_info(NULL, bucket_str, bucket_info, &objv_tracker, &mtime);
-  if (ret < 0)
-    return ret;
-
-  rgw_bucket& bucket = bucket_info.bucket;
-
-  RGWBucketInfo new_info;
-  string placement_rule;
-
-  ret = store->create_bucket(user_info, bucket, region_name, placement_rule, attrs, objv_tracker,
-                             NULL, bucket_info.creation_time, NULL, &new_info);
-  if (ret && ret != -EEXIST)
-    goto done;
-
-  obj.init(bucket, no_oid);
-
-  ret = store->set_attr(NULL, obj, RGW_ATTR_ACL, aclbl, &objv_tracker);
-  if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: failed to set acl on bucket" << dendl;
-    goto done;
-  }
-
-  ret = rgw_add_bucket(store, user_id, bucket, new_info.creation_time);
-
-  if (ret == -EEXIST)
-    ret = 0;
-done:
-  return ret;
-}
-#endif
 
 int rgw_bucket_set_attrs(RGWRados *store, rgw_bucket& bucket,
                          map<string, bufferlist>& attrs,
@@ -259,7 +252,7 @@ void check_bad_user_bucket_mapping(RGWRados *store, const string& user_id, bool 
         cout << "bucket info mismatch: expected " << actual_bucket << " got " << bucket << std::endl;
         if (fix) {
           cout << "fixing" << std::endl;
-          r = rgw_add_bucket(store, user_id, actual_bucket, bucket_info.creation_time);
+          r = rgw_link_bucket(store, user_id, actual_bucket, bucket_info.creation_time);
           if (r < 0) {
             cerr << "failed to fix bucket: " << cpp_strerror(-r) << std::endl;
           }
@@ -350,7 +343,7 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
     return ret;
   }
 
-  ret = rgw_remove_user_bucket_info(store, info.owner, bucket.name);
+  ret = rgw_unlink_bucket(store, info.owner, bucket.name);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: unable to remove user bucket information" << dendl;
   }
@@ -437,7 +430,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
       return -EIO;
     }
 
-    r = rgw_remove_user_bucket_info(store, owner.get_id(), bucket.name);
+    r = rgw_unlink_bucket(store, owner.get_id(), bucket.name);
     if (r < 0) {
       set_err_msg(err_msg, "could not unlink policy from user " + owner.get_id());
       return r;
@@ -464,22 +457,10 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     if (r < 0)
       return r;
 
-    r = rgw_add_bucket(store, user_info.user_id, bucket, 0);
+    r = rgw_link_bucket(store, user_info.user_id, bucket, 0);
     if (r < 0)
       return r;
   }
-#warning not creating bucket on bucket link, clean this up later
-#if 0
-  else {
-    // the bucket seems not to exist, so we should probably create it...
-    r = create_bucket(bucket_name.c_str(), uid_str, store->region.name, display_name);
-    if (r < 0) {
-      set_err_msg(err_msg, "error linking bucket to user r=" + cpp_strerror(-r));
-    }
-
-    return r;
-  }
-#endif
 
   return 0;
 }
@@ -493,7 +474,7 @@ int RGWBucket::unlink(RGWBucketAdminOpState& op_state, std::string *err_msg)
     return -EINVAL;
   }
 
-  int r = rgw_remove_user_bucket_info(store, user_info.user_id, bucket.name);
+  int r = rgw_unlink_bucket(store, user_info.user_id, bucket.name);
   if (r < 0) {
     set_err_msg(err_msg, "error unlinking bucket" + cpp_strerror(-r));
   }
@@ -1378,7 +1359,11 @@ public:
       return ret;
 
     /* link bucket */
-    ret = rgw_add_bucket(store, be.owner, be.bucket, be.creation_time);
+    if (be.linked) {
+      ret = rgw_link_bucket(store, be.owner, be.bucket, be.creation_time);
+    } else {
+      ret = rgw_unlink_bucket(store, be.owner, be.bucket.name);
+    }
 
     return 0;
   }
@@ -1395,7 +1380,7 @@ public:
     if (ret < 0)
       return ret;
 
-    ret = rgw_remove_user_bucket_info(store, be.owner, entry);
+    ret = rgw_unlink_bucket(store, be.owner, entry);
     if (ret < 0) {
       lderr(store->ctx()) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
     }
@@ -1408,7 +1393,7 @@ public:
     return 0;
   }
 
-  void get_pool_and_oid(RGWRados *store, string& key, rgw_bucket& bucket, string& oid) {
+  void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) {
     oid = key;
     bucket = store->zone.domain_root;
   }
@@ -1550,7 +1535,7 @@ public:
     return rgw_bucket_instance_remove_entry(store, entry, &info.objv_tracker);
   }
 
-  void get_pool_and_oid(RGWRados *store, string& key, rgw_bucket& bucket, string& oid) {
+  void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) {
     oid = RGW_BUCKET_INSTANCE_MD_PREFIX + key;
     bucket = store->zone.domain_root;
   }

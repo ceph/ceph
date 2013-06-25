@@ -45,7 +45,7 @@ class RGWMetadataHandler {
   friend class RGWMetadataManager;
 
 protected:
-  virtual void get_pool_and_oid(RGWRados *store, string& key, rgw_bucket& bucket, string& oid) = 0;
+  virtual void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) = 0;
 public:
   virtual ~RGWMetadataHandler() {}
   virtual string get_type() = 0;
@@ -77,7 +77,7 @@ public:
     prefix = META_LOG_OBJ_PREFIX;
   }
 
-  int add_entry(RGWRados *store, string& section, string& key, bufferlist& bl);
+  int add_entry(RGWRados *store, const string& section, const string& key, bufferlist& bl);
 
   struct LogListCtx {
     int cur_shard;
@@ -114,10 +114,10 @@ class RGWMetadataManager {
   void parse_metadata_key(const string& metadata_key, string& type, string& entry);
 
   int find_handler(const string& metadata_key, RGWMetadataHandler **handler, string& entry);
-  int pre_modify(RGWMetadataHandler *handler, string& section, string& key,
+  int pre_modify(RGWMetadataHandler *handler, string& section, const string& key,
                  RGWMetadataLogData& log_data, RGWObjVersionTracker *objv_tracker,
                  RGWMDLogStatus op_type);
-  int post_modify(string& section, string& key, RGWMetadataLogData& log_data,
+  int post_modify(const string& section, const string& key, RGWMetadataLogData& log_data,
                  RGWObjVersionTracker *objv_tracker, int ret);
 
 public:
@@ -128,7 +128,7 @@ public:
 
   RGWMetadataHandler *get_handler(const char *type);
 
-  int put_entry(RGWMetadataHandler *handler, string& key, bufferlist& bl, bool exclusive,
+  int put_entry(RGWMetadataHandler *handler, const string& key, bufferlist& bl, bool exclusive,
                 RGWObjVersionTracker *objv_tracker, time_t mtime, map<string, bufferlist> *pattrs = NULL);
   int remove_entry(RGWMetadataHandler *handler, string& key, RGWObjVersionTracker *objv_tracker);
   int set_attr(RGWMetadataHandler *handler, string& key, rgw_obj& obj, string& attr, bufferlist& bl,

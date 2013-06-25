@@ -74,7 +74,7 @@ struct RGWMetadataLogData {
 WRITE_CLASS_ENCODER(RGWMetadataLogData);
 
 
-int RGWMetadataLog::add_entry(RGWRados *store, string& section, string& key, bufferlist& bl) {
+int RGWMetadataLog::add_entry(RGWRados *store, const string& section, const string& key, bufferlist& bl) {
   string oid;
 
   store->shard_name(prefix, cct->_conf->rgw_md_log_max_shards, section, key, oid);
@@ -172,7 +172,7 @@ public:
   virtual int get(RGWRados *store, string& entry, RGWMetadataObject **obj) { return -ENOTSUP; }
   virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, time_t mtime, JSONObj *obj) { return -ENOTSUP; }
 
-  virtual void get_pool_and_oid(RGWRados *store, string& key, rgw_bucket& bucket, string& oid) {}
+  virtual void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) {}
 
   virtual int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) { return -ENOTSUP; }
 
@@ -471,7 +471,7 @@ void RGWMetadataManager::get_sections(list<string>& sections)
   }
 }
 
-int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section, string& key,
+int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section, const string& key,
                                    RGWMetadataLogData& log_data, RGWObjVersionTracker *objv_tracker,
                                    RGWMDLogStatus op_type)
 {
@@ -501,7 +501,7 @@ int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section,
   return 0;
 }
 
-int RGWMetadataManager::post_modify(string& section, string& key, RGWMetadataLogData& log_data,
+int RGWMetadataManager::post_modify(const string& section, const string& key, RGWMetadataLogData& log_data,
                                     RGWObjVersionTracker *objv_tracker, int ret)
 {
   if (ret >= 0)
@@ -522,7 +522,7 @@ int RGWMetadataManager::post_modify(string& section, string& key, RGWMetadataLog
   return 0;
 }
 
-int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, string& key, bufferlist& bl, bool exclusive,
+int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, const string& key, bufferlist& bl, bool exclusive,
                                   RGWObjVersionTracker *objv_tracker, time_t mtime, map<string, bufferlist> *pattrs)
 {
   string section;

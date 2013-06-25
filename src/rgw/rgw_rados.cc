@@ -1426,7 +1426,7 @@ next:
   return 0;
 }
 
-void RGWRados::shard_name(const string& prefix, unsigned max_shards, string& key, string& name)
+void RGWRados::shard_name(const string& prefix, unsigned max_shards, const string& key, string& name)
 {
   uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
   char buf[16];
@@ -1434,7 +1434,7 @@ void RGWRados::shard_name(const string& prefix, unsigned max_shards, string& key
   name = prefix + buf;
 }
 
-void RGWRados::shard_name(const string& prefix, unsigned max_shards, string& section, string& key, string& name)
+void RGWRados::shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name)
 {
   uint32_t val = ceph_str_hash_linux(key.c_str(), key.size());
   val ^= ceph_str_hash_linux(section.c_str(), section.size());
@@ -1448,7 +1448,7 @@ void RGWRados::time_log_prepare_entry(cls_log_entry& entry, const utime_t& ut, s
   cls_log_add_prepare_entry(entry, ut, section, key, bl);
 }
 
-int RGWRados::time_log_add(const string& oid, const utime_t& ut, string& section, string& key, bufferlist& bl)
+int RGWRados::time_log_add(const string& oid, const utime_t& ut, const string& section, const string& key, bufferlist& bl)
 {
   librados::IoCtx io_ctx;
 
@@ -1805,7 +1805,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
       time(&info.creation_time);
     else
       info.creation_time = creation_time;
-    ret = put_bucket_info(info, exclusive, 0, &attrs, true);
+    ret = put_linked_bucket_info(info, exclusive, 0, &attrs, true);
     if (ret == -EEXIST) {
       /* remove bucket meta instance */
       string entry;
@@ -4533,7 +4533,7 @@ int RGWRados::get_bucket_instance_from_oid(void *ctx, string& oid, RGWBucketInfo
   return 0;
 }
 
-int RGWRados::get_bucket_entrypoint_info(void *ctx, string& bucket_name,
+int RGWRados::get_bucket_entrypoint_info(void *ctx, const string& bucket_name,
                                          RGWBucketEntryPoint& entry_point,
                                          RGWObjVersionTracker *objv_tracker,
                                          time_t *pmtime)
@@ -4592,7 +4592,7 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
   return 0;
 }
 
-int RGWRados::put_bucket_entrypoint_info(string& bucket_name, RGWBucketEntryPoint& entry_point,
+int RGWRados::put_bucket_entrypoint_info(const string& bucket_name, RGWBucketEntryPoint& entry_point,
                                          bool exclusive, RGWObjVersionTracker& objv_tracker, time_t mtime)
 {
   bufferlist epbl;
@@ -4613,8 +4613,8 @@ int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
   return rgw_bucket_instance_store_info(this, key, bl, exclusive, pattrs, &info.objv_tracker, mtime);
 }
 
-int RGWRados::put_bucket_info(RGWBucketInfo& info, bool exclusive, time_t mtime,
-                              map<string, bufferlist> *pattrs, bool create_entry_point)
+int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, time_t mtime,
+                                     map<string, bufferlist> *pattrs, bool create_entry_point)
 {
   bufferlist bl;
 
@@ -4632,6 +4632,7 @@ int RGWRados::put_bucket_info(RGWBucketInfo& info, bool exclusive, time_t mtime,
   entry_point.bucket = info.bucket;
   entry_point.owner = info.owner;
   entry_point.creation_time = info.creation_time;
+  entry_point.linked = true;
   RGWObjVersionTracker ot;
   ot.generate_new_write_ver(cct);
   ret = put_bucket_entrypoint_info(info.bucket.name, entry_point, exclusive, ot, mtime); 
