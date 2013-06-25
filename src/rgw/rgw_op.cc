@@ -1031,7 +1031,7 @@ void RGWCreateBucket::execute()
     s->bucket = info.bucket;
   }
 
-  ret = rgw_link_bucket(store, s->user.user_id, s->bucket, info.creation_time);
+  ret = rgw_link_bucket(store, s->user.user_id, s->bucket, info.creation_time, false);
   if (ret && !existed && ret != -EEXIST)   /* if it exists (or previously existed), don't remove it! */
     rgw_unlink_bucket(store, s->user.user_id, s->bucket.name);
 
@@ -1067,7 +1067,7 @@ void RGWDeleteBucket::execute()
   ret = store->delete_bucket(s->bucket, objv_tracker);
 
   if (ret == 0) {
-    ret = rgw_unlink_bucket(store, s->user.user_id, s->bucket.name);
+    ret = rgw_unlink_bucket(store, s->user.user_id, s->bucket.name, false);
     if (ret < 0) {
       ldout(s->cct, 0) << "WARNING: failed to remove bucket: ret=" << ret << dendl;
     }
