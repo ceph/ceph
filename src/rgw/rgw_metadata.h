@@ -57,6 +57,11 @@ public:
   virtual int list_keys_init(RGWRados *store, void **phandle) = 0;
   virtual int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) = 0;
   virtual void list_keys_complete(void *handle) = 0;
+
+  /* key to use for hashing entries for log shard placement */
+  virtual void get_hash_key(const string& section, const string& key, string& hash_key) {
+    hash_key = section + ":" + key;
+  }
 };
 
 #define META_LOG_OBJ_PREFIX "meta.log."
@@ -77,7 +82,7 @@ public:
     prefix = META_LOG_OBJ_PREFIX;
   }
 
-  int add_entry(RGWRados *store, const string& section, const string& key, bufferlist& bl);
+  int add_entry(RGWRados *store, RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl);
 
   struct LogListCtx {
     int cur_shard;
@@ -117,7 +122,7 @@ class RGWMetadataManager {
   int pre_modify(RGWMetadataHandler *handler, string& section, const string& key,
                  RGWMetadataLogData& log_data, RGWObjVersionTracker *objv_tracker,
                  RGWMDLogStatus op_type);
-  int post_modify(const string& section, const string& key, RGWMetadataLogData& log_data,
+  int post_modify(RGWMetadataHandler *handler, const string& section, const string& key, RGWMetadataLogData& log_data,
                  RGWObjVersionTracker *objv_tracker, int ret);
 
 public:

@@ -1597,6 +1597,21 @@ public:
     list_keys_info *info = (list_keys_info *)handle;
     delete info;
   }
+
+  /*
+   * hash entry for mdlog placement. Use the same hash key we'd have for the bucket entry
+   * point, so that the log entries end up at the same log shard, so that we process them
+   * in order
+   */
+  virtual void get_hash_key(const string& section, const string& key, string& hash_key) {
+    string k;
+    int pos = key.find(':');
+    if (pos < 0)
+      k = key;
+    else
+      k = key.substr(0, pos);
+    hash_key = "bucket:" + k;
+  }
 };
 
 void rgw_bucket_init(RGWMetadataManager *mm)
