@@ -8,8 +8,4 @@ tasks:
 - ceph:
     log-whitelist:
     - wrongly marked me down
-    conf:
-      mon:
-        mon_osd_report_timeout: 90
-        mon_pg_stuck_threshold: 10
 - dump_stuck:
