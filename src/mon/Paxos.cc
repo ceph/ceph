@@ -326,17 +326,22 @@ void Paxos::store_state(MMonPaxos *m)
     _sanity_check_store();
   }
 
-  if (get_store()->exists(get_name(), "conversion_first")) {
-    MonitorDBStore::Transaction scrub_tx;
-    version_t cf = get_store()->get(get_name(), "conversion_first");
-    dout(10) << __func__ << " scrub paxos from " << cf
-	     << " to " << first_committed << dendl;
-    if (cf < first_committed)
-      trim_to(&scrub_tx, cf, first_committed);
-    scrub_tx.erase(get_name(), "conversion_first");
-    get_store()->apply_transaction(scrub_tx);
-  }
+  remove_legacy_versions();
+}
 
+void Paxos::remove_legacy_versions()
+{
+  if (get_store()->exists(get_name(), "conversion_first")) {
+    MonitorDBStore::Transaction t;
+    version_t v = get_store()->get(get_name(), "conversion_first");
+    dout(10) << __func__ << " removing pre-conversion paxos states from " << v
+	     << " until " << first_committed << dendl;
+    for (; v < first_committed; ++v) {
+      t.erase(get_name(), v);
+    }
+    t.erase(get_name(), "conversion_first");
+    get_store()->apply_transaction(t);
+  }
 }
 
 void Paxos::_sanity_check_store()
@@ -698,6 +703,8 @@ void Paxos::commit()
 
   // get ready for a new round.
   new_value.clear();
+
+  remove_legacy_versions();
 }
 
 
