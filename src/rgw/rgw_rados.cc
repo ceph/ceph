@@ -4419,7 +4419,7 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
 
   io_ctx.locator_set_key(key);
 
-  map<string, bufferlist> attrset;
+  map<string, bufferlist> unfiltered_attrset;
   uint64_t size = 0;
   time_t mtime = 0;
 
@@ -4427,7 +4427,7 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
   if (objv_tracker) {
     objv_tracker->prepare_op_for_read(&op);
   }
-  op.getxattrs(&attrset, NULL);
+  op.getxattrs(&unfiltered_attrset, NULL);
   op.stat(&size, &mtime, NULL);
   if (first_chunk) {
     op.read(0, RGW_MAX_CHUNK_SIZE, first_chunk, NULL);
@@ -4440,6 +4440,16 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
 
   if (r < 0)
     return r;
+
+  map<string, bufferlist> attrset;
+  map<string, bufferlist>::iterator iter;
+  string check_prefix = RGW_ATTR_PREFIX;
+  for (iter = unfiltered_attrset.lower_bound(check_prefix);
+       iter != unfiltered_attrset.end(); ++iter) {
+    if (!str_startswith(iter->first, check_prefix))
+      break;
+    attrset[iter->first] = iter->second;
+  }
 
   if (psize)
     *psize = size;
