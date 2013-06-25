@@ -22,6 +22,7 @@ enum RGWMDLogStatus {
   MDLOG_STATUS_SETATTRS,
   MDLOG_STATUS_REMOVE,
   MDLOG_STATUS_COMPLETE,
+  MDLOG_STATUS_ABORT,
 };
 
 class RGWMetadataObject {
@@ -117,7 +118,7 @@ class RGWMetadataManager {
                  RGWMetadataLogData& log_data, RGWObjVersionTracker *objv_tracker,
                  RGWMDLogStatus op_type);
   int post_modify(string& section, string& key, RGWMetadataLogData& log_data,
-                 RGWObjVersionTracker *objv_tracker);
+                 RGWObjVersionTracker *objv_tracker, int ret);
 
 public:
   RGWMetadataManager(CephContext *_cct, RGWRados *_store);

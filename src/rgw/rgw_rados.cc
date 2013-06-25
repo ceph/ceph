@@ -1807,6 +1807,14 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
       info.creation_time = creation_time;
     ret = put_bucket_info(bucket.name, info, exclusive, 0, &attrs, true);
     if (ret == -EEXIST) {
+      /* remove bucket meta instance */
+      string entry;
+      get_bucket_instance_entry(bucket, entry);
+      r = rgw_bucket_instance_remove_entry(this, entry, &info.objv_tracker);
+      if (r < 0)
+        return r;
+
+      /* remove bucket index */
       librados::IoCtx index_ctx; // context for new bucket
       int r = open_bucket_index_ctx(bucket, index_ctx);
       if (r < 0)
@@ -4460,9 +4468,16 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_
   return 0;
 }
 
+void RGWRados::get_bucket_instance_entry(rgw_bucket& bucket, string& entry)
+{
+  entry = bucket.name + ":" + bucket.bucket_id;
+}
+
 void RGWRados::get_bucket_meta_oid(rgw_bucket& bucket, string& oid)
 {
-  oid = RGW_BUCKET_INSTANCE_MD_PREFIX + bucket.name + ":" + bucket.bucket_id;
+  string entry;
+  get_bucket_instance_entry(bucket, entry);
+  oid = RGW_BUCKET_INSTANCE_MD_PREFIX + entry;
 }
 
 int RGWRados::get_bucket_instance_info(void *ctx, string& entry, RGWBucketInfo& info,
@@ -4564,6 +4579,7 @@ int RGWRados::put_bucket_entrypoint_info(string& bucket_name, RGWBucketEntryPoin
   bufferlist epbl;
   ::encode(entry_point, epbl);
   RGWObjVersionTracker ot;
+  ot.generate_new_write_ver(cct);
   return rgw_bucket_store_info(this, bucket_name, epbl, exclusive, NULL, &ot, mtime);
 }
 
@@ -4575,9 +4591,9 @@ int RGWRados::put_bucket_instance_info(string& bucket_name, RGWBucketInfo& info,
 
   ::encode(info, bl);
 
-  string oid;
-  get_bucket_meta_oid(info.bucket, oid);
-  return rgw_bucket_instance_store_info(this, oid, bl, exclusive, pattrs, &info.objv_tracker, mtime);
+  string key;
+  get_bucket_instance_entry(info.bucket, key); /* when we go through meta api, we don't use oid directly */
+  return rgw_bucket_instance_store_info(this, key, bl, exclusive, pattrs, &info.objv_tracker, mtime);
 }
 
 int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive,
@@ -4598,18 +4614,12 @@ int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exc
   RGWBucketEntryPoint entry_point;
   entry_point.bucket = info.bucket;
   entry_point.owner = info.owner;
+  entry_point.creation_time = info.creation_time;
   ret = put_bucket_entrypoint_info(info.bucket.name, entry_point, exclusive, mtime); 
-  if (exclusive && ret == -EEXIST) {
-    string oid;
-    get_bucket_meta_oid(info.bucket, oid);
-    rgw_obj obj(zone.domain_root, oid);
-    int r = delete_obj(NULL, obj);
-    if (r < 0) {
-      ldout(cct, 0) << "ERROR: failed removing object " << obj << " when trying to clean up" << dendl;
-    }
-  }
+  if (ret < 0)
+    return ret;
 
-  return ret;
+  return 0;
 }
 
 int RGWRados::omap_get_vals(rgw_obj& obj, bufferlist& header, const string& marker, uint64_t count, std::map<string, bufferlist>& m)

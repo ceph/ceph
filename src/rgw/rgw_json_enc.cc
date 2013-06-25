@@ -439,6 +439,8 @@ void rgw_bucket::decode_json(JSONObj *obj) {
 void RGWBucketEntryPoint::dump(Formatter *f) const
 {
   encode_json("bucket", bucket, f);
+  encode_json("owner", owner, f);
+  encode_json("creation_time", creation_time, f);
   encode_json("has_bucket_info", has_bucket_info, f);
   if (has_bucket_info) {
     encode_json("old_bucket_info", old_bucket_info, f);
@@ -447,6 +449,8 @@ void RGWBucketEntryPoint::dump(Formatter *f) const
 
 void RGWBucketEntryPoint::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("bucket", bucket, obj);
+  JSONDecoder::decode_json("owner", owner, obj);
+  JSONDecoder::decode_json("creation_time", creation_time, obj);
   JSONDecoder::decode_json("has_bucket_info", has_bucket_info, obj);
   if (has_bucket_info) {
     JSONDecoder::decode_json("old_bucket_info", old_bucket_info, obj);
