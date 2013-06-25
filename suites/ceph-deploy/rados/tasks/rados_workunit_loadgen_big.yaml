@@ -15,7 +15,6 @@ tasks:
 - ceph-deploy:
      branch:
         stable: cuttlefish
-- ceph-fuse: 
 - workunit:
      branch: cuttlefish
      clients:
