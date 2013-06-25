@@ -1086,6 +1086,7 @@ public:
    * @param m A message
    */
   void store_state(MMonPaxos *m);
+  void _sanity_check_store();
   /**
    * Helper function to decode a bufferlist into a transaction and append it
    * to another transaction.
