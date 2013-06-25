@@ -98,10 +98,10 @@ class RGWOp_MDLog_Post : public RGWRESTOp {
   };
   int get_post_type() {
     bool exists;
-    s->args.get("lock", &exists);
+    s->info.args.get("lock", &exists);
     if (exists) 
       return MDLOG_POST_LOCK;
-    s->args.get("unlock", &exists);
+    s->info.args.get("unlock", &exists);
     if (exists)
       return MDLOG_POST_UNLOCK;
     return MDLOG_POST_INVALID;

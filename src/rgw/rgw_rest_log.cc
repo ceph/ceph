@@ -36,10 +36,10 @@ static int parse_date_str(string& in, utime_t& out) {
 }
 
 void RGWOp_MDLog_List::execute() {
-  string   shard = s->args.get("id");
+  string   shard = s->info.args.get("id");
 
-  string   st = s->args.get("start-time"),
-           et = s->args.get("end-time"),
+  string   st = s->info.args.get("start-time"),
+           et = s->info.args.get("end-time"),
            err;
   utime_t  ut_st, 
            ut_et;
@@ -108,9 +108,9 @@ void RGWOp_MDLog_GetShardsInfo::send_response() {
 }
 
 void RGWOp_MDLog_Delete::execute() {
-  string   st = s->args.get("start-time"),
-           et = s->args.get("end-time"),
-           shard = s->args.get("id"),
+  string   st = s->info.args.get("start-time"),
+           et = s->info.args.get("end-time"),
+           shard = s->info.args.get("id"),
            err;
   utime_t  ut_st, 
            ut_et;
@@ -167,10 +167,10 @@ void RGWOp_MDLog_Post::execute() {
 
   http_ret = 0;
 
-  shard_id_str = s->args.get("id");
+  shard_id_str = s->info.args.get("id");
   if (pt == MDLOG_POST_LOCK)
-    duration_str = s->args.get("length");
-  lock_id      = s->args.get("lock_id");
+    duration_str = s->info.args.get("length");
+  lock_id      = s->info.args.get("lock_id");
 
   if (shard_id_str.empty() ||
       (pt == MDLOG_POST_LOCK && duration_str.empty()) ||
@@ -206,9 +206,9 @@ void RGWOp_MDLog_Post::execute() {
 }
 
 void RGWOp_BILog_List::execute() {
-  string bucket_name = s->args.get("bucket"),
-         marker = s->args.get("marker"),
-         max_entries_str = s->args.get("max-entries");
+  string bucket_name = s->info.args.get("bucket"),
+         marker = s->info.args.get("marker"),
+         max_entries_str = s->info.args.get("max-entries");
   RGWBucketInfo bucket_info;
   int max_entries;
 
@@ -284,9 +284,9 @@ void RGWOp_BILog_List::send_response_end() {
 }
       
 void RGWOp_BILog_Delete::execute() {
-  string bucket_name = s->args.get("bucket"),
-         start_marker = s->args.get("start-marker"),
-         end_marker = s->args.get("end-marker");
+  string bucket_name = s->info.args.get("bucket"),
+         start_marker = s->info.args.get("start-marker"),
+         end_marker = s->info.args.get("end-marker");
   RGWBucketInfo bucket_info;
 
   http_ret = 0;
@@ -311,14 +311,14 @@ void RGWOp_BILog_Delete::execute() {
 
 RGWOp *RGWHandler_Log::op_get() {
   bool exists;
-  string type = s->args.get("type", &exists);
+  string type = s->info.args.get("type", &exists);
 
   if (!exists) {
     return NULL;
   }
 
   if (type.compare("metadata") == 0) {
-    if (s->args.exists("id")) {
+    if (s->info.args.exists("id")) {
       return new RGWOp_MDLog_List;
     } else {
       return new RGWOp_MDLog_GetShardsInfo;
@@ -331,7 +331,7 @@ RGWOp *RGWHandler_Log::op_get() {
 
 RGWOp *RGWHandler_Log::op_delete() {
   bool exists;
-  string type = s->args.get("type", &exists);
+  string type = s->info.args.get("type", &exists);
 
   if (!exists) {
     return NULL;
@@ -346,7 +346,7 @@ RGWOp *RGWHandler_Log::op_delete() {
 
 RGWOp *RGWHandler_Log::op_post() {
   bool exists;
-  string type = s->args.get("type", &exists);
+  string type = s->info.args.get("type", &exists);
 
   if (!exists) {
     return NULL;
