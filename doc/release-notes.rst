@@ -2,6 +2,74 @@
  Release Notes
 ===============
 
+v0.65
+-----
+
+Upgrading
+~~~~~~~~~
+
+* Huge revamp of the 'ceph' command-line interface implementation.
+  The ``ceph-common`` client library needs to be upgrade before
+  ``ceph-mon`` is restarted in order to avoid problems using the CLI
+  (the old ``ceph`` client utility cannot talk to the new
+  ``ceph-mon``).
+
+* The CLI is now very careful about sending the 'status' one-liner
+  output to stderr and command output to stdout.  Scripts relying on
+  output should take care.
+
+* The 'ceph osd tell ...' and 'ceph mon tell ...' commands are no
+  longer supported.  Any callers should use::
+
+    ceph tell osd.<id or *> ...
+    ceph tell mon.<id or name or *> ...
+
+  The 'ceph mds tell ...' command is still there, but will soon also
+  transition to 'ceph tell mds.<id or name or *> ...'
+
+* The 'ceph osd crush add ...' command used to take one of two forms::
+
+    ceph osd crush add 123 osd.123 <weight> <location ...>
+    ceph osd crush add osd.123 <weight> <location ...>
+
+  This is because the id and crush name are redundant.  Now only the
+  simple form is supported, where the osd name/id can either be a bare
+  id (integer) or name (osd.<id>)::
+
+    ceph osd crush add osd.123 <weight> <location ...>
+    ceph osd crush add 123 <weight> <location ...>
+
+* There is now a maximum RADOS object size, configurable via 'osd max
+  object size', defaulting to 100 GB.  Note that this has no effect on
+  RBD, CephFS, or radosgw, which all stripe over objects.
+
+
+Notable changes
+~~~~~~~~~~~~~~~
+
+* mon, ceph: huge revamp of CLI and internal admin API. (Dan Mick)
+* mon: new capability syntax
+* osd: do not use fadvise(DONTNEED) on XFS (data corruption on power cycle)
+* osd: recovery and peering performance improvements
+* osd: new writeback throttling (for less bursty write performance) (Sam Just)
+* osd: ping/heartbeat on public and private interfaces
+* osd: avoid osd flapping from asymmetric network failure
+* osd: re-use partially deleted PG contents when present (Sam Just)
+* osd: break blacklisted client watches (David Zafman)
+* mon: many stability fixes (Joao Luis)
+* mon, osd: many memory leaks fixed
+* mds: misc stability fixes (Yan, Zheng, Greg Farnum)
+* mds: many backpointer improvements (Yan, Zheng)
+* mds: new robust open-by-ino support (Yan, Zheng)
+* ceph-fuse, libcephfs: fix a few caps revocation bugs
+* librados: new calls to administer the cluster
+* librbd: locking tests (Josh Durgin)
+* ceph-disk: improved handling of odd device names
+* ceph-disk: many fixes for RHEL/CentOS, Fedora, wheezy
+* many many fixes from static code analysis (Danny Al-Gaaf)
+* daemons: create /var/run/ceph as needed
+
+
 v0.64
 -----
 
