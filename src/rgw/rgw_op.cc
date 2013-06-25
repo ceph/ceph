@@ -182,7 +182,6 @@ static int get_bucket_policy_from_attr(CephContext *cct, RGWRados *store, void *
                                        RGWObjVersionTracker *objv_tracker)
 {
   int ret;
-
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_ACL);
 
   if (aiter != bucket_attrs.end()) {
@@ -950,6 +949,12 @@ void RGWCreateBucket::execute()
     ret = -EINVAL;
     return;
   }
+
+  /* we need to make sure we read bucket info, it's not read before for this specific request */
+  ret = store->get_bucket_info(s->obj_ctx, s->bucket_name_str, s->bucket_info, NULL, &s->bucket_attrs);
+  if (ret < 0 && ret != -ENOENT)
+    return;
+  s->bucket_exists = (ret != -ENOENT);
 
   s->bucket_owner.set_id(s->user.user_id);
   s->bucket_owner.set_name(s->user.display_name);
