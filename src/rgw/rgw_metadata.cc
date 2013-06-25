@@ -74,10 +74,13 @@ struct RGWMetadataLogData {
 WRITE_CLASS_ENCODER(RGWMetadataLogData);
 
 
-int RGWMetadataLog::add_entry(RGWRados *store, const string& section, const string& key, bufferlist& bl) {
+int RGWMetadataLog::add_entry(RGWRados *store, RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl) {
   string oid;
 
-  store->shard_name(prefix, cct->_conf->rgw_md_log_max_shards, section, key, oid);
+  string hash_key;
+  handler->get_hash_key(section, key, hash_key);
+
+  store->shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid);
   utime_t now = ceph_clock_now(cct);
   return store->time_log_add(oid, now, section, key, bl);
 }
@@ -494,14 +497,14 @@ int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section,
   bufferlist logbl;
   ::encode(log_data, logbl);
 
-  int ret = md_log->add_entry(store, section, key, logbl);
+  int ret = md_log->add_entry(store, handler, section, key, logbl);
   if (ret < 0)
     return ret;
 
   return 0;
 }
 
-int RGWMetadataManager::post_modify(const string& section, const string& key, RGWMetadataLogData& log_data,
+int RGWMetadataManager::post_modify(RGWMetadataHandler *handler, const string& section, const string& key, RGWMetadataLogData& log_data,
                                     RGWObjVersionTracker *objv_tracker, int ret)
 {
   if (ret >= 0)
@@ -512,7 +515,7 @@ int RGWMetadataManager::post_modify(const string& section, const string& key, RG
   bufferlist logbl;
   ::encode(log_data, logbl);
 
-  int r = md_log->add_entry(store, section, key, logbl);
+  int r = md_log->add_entry(store, handler, section, key, logbl);
   if (ret < 0)
     return ret;
 
@@ -541,7 +544,7 @@ int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, const string& key
                            objv_tracker, mtime, pattrs);
   /* cascading ret into post_modify() */
 
-  ret = post_modify(section, key, log_data, objv_tracker, ret);
+  ret = post_modify(handler, section, key, log_data, objv_tracker, ret);
   if (ret < 0)
     return ret;
 
@@ -566,7 +569,7 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler, string& key, R
   ret = store->delete_obj(NULL, obj);
   /* cascading ret into post_modify() */
 
-  ret = post_modify(section, key, log_data, objv_tracker, ret);
+  ret = post_modify(handler, section, key, log_data, objv_tracker, ret);
   if (ret < 0)
     return ret;
 
@@ -587,7 +590,7 @@ int RGWMetadataManager::set_attrs(RGWMetadataHandler *handler, string& key,
   ret = store->set_attrs(NULL, obj, attrs, rmattrs, objv_tracker);
   /* cascading ret into post_modify() */
 
-  ret = post_modify(section, key, log_data, objv_tracker, ret);
+  ret = post_modify(handler, section, key, log_data, objv_tracker, ret);
   if (ret < 0)
     return ret;
 
