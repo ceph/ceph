@@ -291,8 +291,6 @@ void Paxos::store_state(MMonPaxos *m)
   map<version_t,bufferlist>::iterator end = start;
   while (end != m->values.end() && end->first <= m->last_committed) {
     last_committed = end->first;
-    if (!first_committed)
-      first_committed = last_committed;
     ++end;
   }
 
@@ -677,6 +675,9 @@ void Paxos::commit()
 
   get_store()->apply_transaction(t);
 
+  // refresh first_committed; this txn may have trimmed.
+  first_committed = get_store()->get(get_name(), "first_committed");
+
   _sanity_check_store();
 
   // tell everyone
@@ -974,7 +975,6 @@ void Paxos::trim_to(MonitorDBStore::Transaction *t, version_t first)
     return;
   trim_to(t, first_committed, first);
   t->put(get_name(), "first_committed", first);
-  first_committed = first;
 }
 
 void Paxos::trim_to(version_t first)
