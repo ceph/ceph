@@ -33,10 +33,6 @@ def task(ctx, config):
     """
     Test the dump_stuck command.
 
-    The ceph configuration should include::
-
-        mon_osd_report_timeout = 90
-        mon_pg_stuck_threshold = 10
     """
     assert config is None, \
         'dump_stuck requires no configuration'
@@ -56,6 +52,10 @@ def task(ctx, config):
     manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
     manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
     manager.wait_for_clean(timeout)
+
+    manager.raw_cluster_cmd('tell', 'mon.0', 'injectargs', '--',
+#                            '--mon-osd-report-timeout', '90',
+                            '--mon-pg-stuck-threshold', '10')
 
     check_stuck(
         manager,
