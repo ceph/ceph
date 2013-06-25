@@ -1805,7 +1805,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
       time(&info.creation_time);
     else
       info.creation_time = creation_time;
-    ret = put_bucket_info(bucket.name, info, exclusive, 0, &attrs, true);
+    ret = put_bucket_info(info, exclusive, 0, &attrs, true);
     if (ret == -EEXIST) {
       /* remove bucket meta instance */
       string entry;
@@ -2836,7 +2836,7 @@ int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner)
 {
   RGWBucketInfo info;
   map<string, bufferlist> attrs;
-  int r = get_bucket_info(NULL, bucket.name, info, NULL, &attrs);
+  int r = get_bucket_instance_info(NULL, bucket, info, NULL, &attrs);
   if (r < 0) {
     ldout(cct, 0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " returned err=" << r << dendl;
     return r;
@@ -2844,7 +2844,7 @@ int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner)
 
   info.owner = owner.get_id();
 
-  r = put_bucket_info(bucket.name, info, false, 0, &attrs, false);
+  r = put_bucket_instance_info(info, false, 0, &attrs);
   if (r < 0) {
     ldout(cct, 0) << "NOTICE: put_bucket_info on bucket=" << bucket.name << " returned err=" << r << dendl;
     return r;
@@ -2869,7 +2869,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
 
     RGWBucketInfo info;
     map<string, bufferlist> attrs;
-    int r = get_bucket_info(NULL, bucket.name, info, NULL, &attrs);
+    int r = get_bucket_instance_info(NULL, bucket, info, NULL, &attrs);
     if (r < 0) {
       ldout(cct, 0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
       ret = r;
@@ -2881,7 +2881,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
       info.flags |= BUCKET_SUSPENDED;
     }
 
-    r = put_bucket_info(bucket.name, info, false, 0, &attrs, false);
+    r = put_bucket_instance_info(info, false, 0, &attrs);
     if (r < 0) {
       ldout(cct, 0) << "NOTICE: put_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
       ret = r;
@@ -4490,14 +4490,23 @@ void RGWRados::get_bucket_meta_oid(rgw_bucket& bucket, string& oid)
   oid = RGW_BUCKET_INSTANCE_MD_PREFIX + entry;
 }
 
-int RGWRados::get_bucket_instance_info(void *ctx, string& entry, RGWBucketInfo& info,
+int RGWRados::get_bucket_instance_info(void *ctx, const string& meta_key, RGWBucketInfo& info,
                                        time_t *pmtime, map<string, bufferlist> *pattrs)
 {
-  int pos = entry.find(':');
+  int pos = meta_key.find(':');
   if (pos < 0) {
     return -EINVAL;
   }
-  string oid = RGW_BUCKET_INSTANCE_MD_PREFIX + entry;
+  string oid = RGW_BUCKET_INSTANCE_MD_PREFIX + meta_key;
+
+  return get_bucket_instance_from_oid(ctx, oid, info, pmtime, pattrs);
+}
+
+int RGWRados::get_bucket_instance_info(void *ctx, rgw_bucket& bucket, RGWBucketInfo& info,
+                                       time_t *pmtime, map<string, bufferlist> *pattrs)
+{
+  string oid;
+  get_bucket_meta_oid(bucket, oid);
 
   return get_bucket_instance_from_oid(ctx, oid, info, pmtime, pattrs);
 }
@@ -4591,7 +4600,7 @@ int RGWRados::put_bucket_entrypoint_info(string& bucket_name, RGWBucketEntryPoin
   return rgw_bucket_store_info(this, bucket_name, epbl, exclusive, NULL, &objv_tracker, mtime);
 }
 
-int RGWRados::put_bucket_instance_info(string& bucket_name, RGWBucketInfo& info, bool exclusive,
+int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
                               time_t mtime, map<string, bufferlist> *pattrs)
 {
   info.has_instance_obj = true;
@@ -4604,14 +4613,14 @@ int RGWRados::put_bucket_instance_info(string& bucket_name, RGWBucketInfo& info,
   return rgw_bucket_instance_store_info(this, key, bl, exclusive, pattrs, &info.objv_tracker, mtime);
 }
 
-int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exclusive,
-                              time_t mtime, map<string, bufferlist> *pattrs, bool create_entry_point)
+int RGWRados::put_bucket_info(RGWBucketInfo& info, bool exclusive, time_t mtime,
+                              map<string, bufferlist> *pattrs, bool create_entry_point)
 {
   bufferlist bl;
 
   bool create_head = !info.has_instance_obj || create_entry_point;
 
-  int ret = put_bucket_instance_info(bucket_name, info, exclusive, mtime, pattrs);
+  int ret = put_bucket_instance_info(info, exclusive, mtime, pattrs);
   if (ret < 0) {
     return ret;
   }

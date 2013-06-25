@@ -1522,7 +1522,7 @@ public:
     bci.info.objv_tracker.read_version = old_bci.info.objv_tracker.read_version;
     bci.info.objv_tracker.write_version = objv_tracker.write_version;
 
-    ret = store->put_bucket_instance_info(oid, bci.info, false, mtime, &bci.attrs);
+    ret = store->put_bucket_instance_info(bci.info, false, mtime, &bci.attrs);
     if (ret < 0)
       return ret;
 
