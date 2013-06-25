@@ -91,6 +91,11 @@ void AuthMonitor::create_initial()
 {
   dout(10) << "create_initial -- creating initial map" << dendl;
 
+  // initialize rotating keys
+  last_rotating_ver = 0;
+  check_rotate();
+  assert(pending_auth.size() == 1);
+
   KeyRing keyring;
   bufferlist bl;
   int ret = mon->store->get("mkfs", "keyring", bl);
@@ -106,9 +111,6 @@ void AuthMonitor::create_initial()
   inc.inc_type = GLOBAL_ID;
   inc.max_global_id = max_global_id;
   pending_auth.push_back(inc);
-
-  // initalize rotating keys, too
-  check_rotate();
 }
 
 void AuthMonitor::update_from_paxos(bool *need_bootstrap)
