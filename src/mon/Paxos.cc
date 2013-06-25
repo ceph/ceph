@@ -327,6 +327,7 @@ void Paxos::store_state(MMonPaxos *m)
 
     get_store()->apply_transaction(t);
 
+    _sanity_check_store();
   }
 
   if (get_store()->exists(get_name(), "conversion_first")) {
@@ -341,6 +342,13 @@ void Paxos::store_state(MMonPaxos *m)
   }
 
 }
+
+void Paxos::_sanity_check_store()
+{
+  version_t lc = get_store()->get(get_name(), "last_committed");
+  assert(lc == last_committed);
+}
+
 
 // leader
 void Paxos::handle_last(MMonPaxos *last)
@@ -670,6 +678,8 @@ void Paxos::commit()
   *_dout << dendl;
 
   get_store()->apply_transaction(t);
+
+  _sanity_check_store();
 
   // tell everyone
   for (set<int>::const_iterator p = mon->get_quorum().begin();
