@@ -829,6 +829,10 @@ TEST_F(StoreTest, ColSplitTest3) {
 // support tests for qa/workunits/filestore/filestore.sh
 //
 TEST(EXT4StoreTest, _detect_fs) {
+  if (::getenv("DISK") == NULL || ::getenv("MOUNTPOINT") == NULL) {
+    cerr << "SKIP because DISK and MOUNTPOINT environment variables are not set. It is meant to run from qa/workunits/filestore/filestore.sh " << std::endl;
+    return;
+  }
   const string disk(::getenv("DISK"));
   EXPECT_LT((unsigned)0, disk.size());
   const string mnt(::getenv("MOUNTPOINT"));
