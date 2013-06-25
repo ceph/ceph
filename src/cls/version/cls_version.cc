@@ -27,13 +27,15 @@ cls_method_handle_t h_version_read;
 cls_method_handle_t h_version_check_conds;
 
 
-#define VERSION_ATTR "version"
+#define VERSION_ATTR "ceph.objclass.version"
 
 static int set_version(cls_method_context_t hctx, struct obj_version *objv)
 {
   bufferlist bl;
 
   ::encode(*objv, bl);
+
+  CLS_LOG(20, "cls_version: set_version %s:%d", objv->tag.c_str(), (int)objv->ver);
 
   int ret = cls_cxx_setxattr(hctx, VERSION_ATTR, &bl);
   if (ret < 0)
@@ -53,6 +55,8 @@ static int init_version(cls_method_context_t hctx, struct obj_version *objv)
 
   objv->ver = 1;
   objv->tag = buf;
+
+  CLS_LOG(20, "cls_version: init_version %s:%d", objv->tag.c_str(), (int)objv->ver);
 
   return set_version(hctx, objv);
 }
@@ -194,8 +198,10 @@ static int cls_version_check(cls_method_context_t hctx, bufferlist *in, bufferli
   int ret = read_version(hctx, &objv, false);
   if (ret < 0)
     return ret;
+  CLS_LOG(20, "cls_version: read_version %s:%d", objv.tag.c_str(), (int)objv.ver);
   
   if (!check_conds(op.conds, objv)) {
+    CLS_LOG(20, "cls_version: failed condition check");
     return -ECANCELED;
   }
 
