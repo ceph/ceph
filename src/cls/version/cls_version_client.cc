@@ -13,6 +13,7 @@ void cls_version_set(librados::ObjectWriteOperation& op, obj_version& objv)
   bufferlist in;
   cls_version_set_op call;
   call.objv = objv;
+cout << __FILE__ << ":" << __LINE__ << "ZZZ setting objv=" << objv.tag << ":" << objv.ver << std::endl;
   ::encode(call, in);
   op.exec("version", "set", in);
 }
