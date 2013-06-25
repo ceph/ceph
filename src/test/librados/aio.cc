@@ -157,9 +157,22 @@ TEST(LibRadosAio, SimpleWrite) {
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_aio_write(test_data.m_ioctx, "foo",
 			       my_completion, buf, sizeof(buf), 0));
-  TestAlarm alarm;
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  {
+    TestAlarm alarm;
+    sem_wait(&test_data.m_sem);
+    sem_wait(&test_data.m_sem);
+  }
+
+  rados_ioctx_set_namespace(test_data.m_ioctx, "nspace");
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion));
+  ASSERT_EQ(0, rados_aio_write(test_data.m_ioctx, "foo",
+			       my_completion, buf, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+    sem_wait(&test_data.m_sem);
+    sem_wait(&test_data.m_sem);
+  }
   rados_aio_release(my_completion);
 }
 
@@ -176,9 +189,24 @@ TEST(LibRadosAio, SimpleWritePP) {
   bl1.append(buf, sizeof(buf));
   ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo",
 			       my_completion, bl1, sizeof(buf), 0));
-  TestAlarm alarm;
-  sem_wait(&test_data.m_sem);
-  sem_wait(&test_data.m_sem);
+  {
+    TestAlarm alarm;
+    sem_wait(&test_data.m_sem);
+    sem_wait(&test_data.m_sem);
+  }
+  delete my_completion;
+
+  ASSERT_EQ("", test_data.init());
+  test_data.m_ioctx.set_namespace("nspace");
+  my_completion = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_complete, set_completion_safe);
+  ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo",
+			       my_completion, bl1, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+    sem_wait(&test_data.m_sem);
+    sem_wait(&test_data.m_sem);
+  }
   delete my_completion;
 }
 
@@ -875,6 +903,98 @@ TEST(LibRadosAio, SimpleStat) {
 }
 
 TEST(LibRadosAio, SimpleStatPP) {
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+  AioCompletion *my_completion = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_complete, set_completion_safe);
+  AioCompletion *my_completion_null = NULL;
+  ASSERT_NE(my_completion, my_completion_null);
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo", my_completion,
+					   bl1, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+    sem_wait(&test_data.m_sem);
+    sem_wait(&test_data.m_sem);
+  }
+  uint64_t psize;
+  time_t pmtime;
+  AioCompletion *my_completion2 = test_data.m_cluster.aio_create_completion(
+	  (void*)&test_data, set_completion_complete, set_completion_safe);
+  ASSERT_NE(my_completion2, my_completion_null);
+  ASSERT_EQ(0, test_data.m_ioctx.aio_stat("foo", my_completion2,
+			  		&psize, &pmtime));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion2->wait_for_complete());
+  }
+  ASSERT_EQ(sizeof(buf), psize);
+  delete my_completion;
+  delete my_completion2;
+}
+
+TEST(LibRadosAio, SimpleStatNS) {
+  AioTestData test_data;
+  rados_completion_t my_completion;
+  ASSERT_EQ("", test_data.init());
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion));
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(0, rados_aio_write(test_data.m_ioctx, "foo",
+			       my_completion, buf, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+    sem_wait(&test_data.m_sem);
+    sem_wait(&test_data.m_sem);
+  }
+  rados_ioctx_set_namespace(test_data.m_ioctx, "nspace");
+  char buf2[64];
+  memset(buf2, 0xbb, sizeof(buf2));
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion));
+  ASSERT_EQ(0, rados_aio_write(test_data.m_ioctx, "foo",
+			       my_completion, buf2, sizeof(buf2), 0));
+  {
+    TestAlarm alarm;
+    sem_wait(&test_data.m_sem);
+    sem_wait(&test_data.m_sem);
+  }
+  uint64_t psize;
+  time_t pmtime;
+  rados_completion_t my_completion2;
+  rados_ioctx_set_namespace(test_data.m_ioctx, "");
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion2));
+  ASSERT_EQ(0, rados_aio_stat(test_data.m_ioctx, "foo",
+			      my_completion2, &psize, &pmtime));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion2));
+  }
+  ASSERT_EQ(sizeof(buf), psize);
+
+  rados_ioctx_set_namespace(test_data.m_ioctx, "nspace");
+  rados_completion_t my_completion3;
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion3));
+  ASSERT_EQ(0, rados_aio_stat(test_data.m_ioctx, "foo",
+			      my_completion3, &psize, &pmtime));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion3));
+  }
+  ASSERT_EQ(sizeof(buf2), psize);
+
+  rados_aio_release(my_completion);
+  rados_aio_release(my_completion2);
+  rados_aio_release(my_completion3);
+}
+
+TEST(LibRadosAio, SimpleStatPPNS) {
   AioTestDataPP test_data;
   ASSERT_EQ("", test_data.init());
   AioCompletion *my_completion = test_data.m_cluster.aio_create_completion(
