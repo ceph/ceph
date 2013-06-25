@@ -29,6 +29,8 @@ extern int rgw_bucket_instance_store_info(RGWRados *store, string& oid, bufferli
                                  map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
                                  time_t mtime);
 
+extern int rgw_bucket_instance_remove_entry(RGWRados *store, string& entry, RGWObjVersionTracker *objv_tracker);
+
 extern int rgw_bucket_delete_bucket_obj(RGWRados *store, string& bucket_name, RGWObjVersionTracker& objv_tracker);
 
 /**
