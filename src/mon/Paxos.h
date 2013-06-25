@@ -1087,6 +1087,12 @@ public:
    */
   void store_state(MMonPaxos *m);
   void _sanity_check_store();
+
+  /**
+   * remove legacy paxos versions from before conversion
+   */
+  void remove_legacy_versions();
+
   /**
    * Helper function to decode a bufferlist into a transaction and append it
    * to another transaction.
