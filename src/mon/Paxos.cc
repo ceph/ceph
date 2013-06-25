@@ -302,11 +302,6 @@ void Paxos::store_state(MMonPaxos *m)
     dout(10) << "store_state [" << start->first << ".." 
 	     << last_committed << "]" << dendl;
     t.put(get_name(), "last_committed", last_committed);
-    // we write our first_committed version before we append the message's
-    // transaction because this transaction may be a trim; if so, it will
-    // update the first_committed value, and we must let it clobber our own
-    // in order to obtain an updated state.
-    t.put(get_name(), "first_committed", first_committed);
     // we should apply the state here -- decode every single bufferlist in the
     // map and append the transactions to 't'.
     map<version_t,bufferlist>::iterator it;
@@ -326,6 +321,9 @@ void Paxos::store_state(MMonPaxos *m)
     *_dout << dendl;
 
     get_store()->apply_transaction(t);
+
+    // refresh first_committed; this txn may have trimmed.
+    first_committed = get_store()->get(get_name(), "first_committed");
 
     _sanity_check_store();
   }
@@ -662,10 +660,6 @@ void Paxos::commit()
   last_committed++;
   last_commit_time = ceph_clock_now(g_ceph_context);
   t.put(get_name(), "last_committed", last_committed);
-  if (!first_committed) {
-    first_committed = last_committed;
-    t.put(get_name(), "first_committed", last_committed);
-  }
 
   // decode the value and apply its transaction to the store.
   // this value can now be read from last_committed.
