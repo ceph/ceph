@@ -958,54 +958,44 @@ void Paxos::lease_renew_timeout()
 /*
  * trim old states
  */
-void Paxos::trim_to(MonitorDBStore::Transaction *t,
-		    version_t from, version_t to) {
-  dout(10) << __func__ << " from " << from << " to " << to << dendl;
-  assert(from < to);
+void Paxos::trim()
+{
+  assert(should_trim());
+  version_t end = MIN(get_version() - g_conf->paxos_max_join_drift,
+			get_first_committed() + g_conf->paxos_trim_max);
 
-  for (version_t v = from; v < to; ++v) {
+  if (first_committed >= end)
+    return;
+
+  dout(10) << "trim to " << end << " (was " << first_committed << ")" << dendl;
+
+  MonitorDBStore::Transaction t;
+
+  for (version_t v = first_committed; v < end; ++v) {
     dout(10) << "trim " << v << dendl;
-    t->erase(get_name(), v);
+    t.erase(get_name(), v);
   }
+  t.put(get_name(), "first_committed", end);
   if (g_conf->mon_compact_on_trim) {
     dout(10) << " compacting trimmed range" << dendl;
-    t->compact_range(get_name(), stringify(from - 1), stringify(to));
+    t.compact_range(get_name(), stringify(first_committed - 1), stringify(end));
   }
+
+  dout(30) << __func__ << " transaction dump:\n";
+  JSONFormatter f(true);
+  t.dump(&f);
+  f.flush(*_dout);
+  *_dout << dendl;
+
+  bufferlist bl;
+  t.encode(bl);
+
+  trimming = true;
+  queue_proposal(bl, new C_Trimmed(this));
 }
 
-void Paxos::trim_to(MonitorDBStore::Transaction *t, version_t first)
+void Paxos::trim_enable()
 {
-  dout(10) << "trim_to " << first << " (was " << first_committed << ")"
-	   << dendl;
-
-  if (first_committed >= first)
-    return;
-  trim_to(t, first_committed, first);
-  t->put(get_name(), "first_committed", first);
-}
-
-void Paxos::trim_to(version_t first)
-{
-  MonitorDBStore::Transaction t;
-  
-  trim_to(&t, first);
-
-  if (!t.empty()) {
-    dout(30) << __func__ << " transaction dump:\n";
-    JSONFormatter f(true);
-    t.dump(&f);
-    f.flush(*_dout);
-    *_dout << dendl;
-
-    bufferlist bl;
-    t.encode(bl);
-
-    going_to_trim = true;
-    queue_proposal(bl, new C_Trimmed(this));
-  }
-}
-
-void Paxos::trim_enable() {
   trim_disabled_version = 0;
   // We may not be the leader when we reach this function. We sure must
   // have been the leader at some point, but we may have been demoted and
