@@ -491,6 +491,10 @@ void Paxos::begin(bufferlist& v)
   MonitorDBStore::Transaction t;
   t.put(get_name(), last_committed+1, new_value);
 
+  // initial base case; set first_committed too
+  if (last_committed == 0)
+    t.put(get_name(), "first_committed", 1);
+
   dout(30) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
   t.dump(&f);
