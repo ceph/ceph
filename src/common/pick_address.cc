@@ -48,6 +48,24 @@ static const struct sockaddr *find_ip_in_subnet_list(CephContext *cct,
   return NULL;
 }
 
+// observe this change
+struct Observer : public md_config_obs_t {
+  const char *conf_var;
+  Observer(const char *c) : conf_var(c) {}
+
+  const char** get_tracked_conf_keys() const {
+    static const char *foo[] = {
+      conf_var,
+      NULL
+    };
+    return foo;
+  }
+  void handle_conf_change(const struct md_config_t *conf,
+			  const std::set <std::string> &changed) {
+    // do nothing.
+  }
+};
+
 static void fill_in_one_address(CephContext *cct,
 				const struct ifaddrs *ifa,
 				const string networks,
@@ -75,8 +93,14 @@ static void fill_in_one_address(CephContext *cct,
     exit(1);
   }
 
+  Observer obs(conf_var);
+
+  cct->_conf->add_observer(&obs);
+
   cct->_conf->set_val_or_die(conf_var, buf);
   cct->_conf->apply_changes(NULL);
+
+  cct->_conf->remove_observer(&obs);
 }
 
 void pick_addresses(CephContext *cct, int needs)
