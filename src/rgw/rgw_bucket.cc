@@ -1367,11 +1367,13 @@ public:
 
     time_t orig_mtime;
 
-    int ret = store->get_bucket_entrypoint_info(NULL, entry, old_be, &objv_tracker, &orig_mtime);
+    RGWObjVersionTracker old_ot;
+
+    int ret = store->get_bucket_entrypoint_info(NULL, entry, old_be, &old_ot, &orig_mtime);
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
-    ret = store->put_bucket_entrypoint_info(entry, be, false, mtime);
+    ret = store->put_bucket_entrypoint_info(entry, be, false, objv_tracker, mtime);
     if (ret < 0)
       return ret;
 
@@ -1487,8 +1489,6 @@ public:
 
     time_t orig_mtime;
 
-    old_bci.info.objv_tracker = objv_tracker;
-
     int ret = store->get_bucket_instance_info(NULL, oid, old_bci.info, &orig_mtime, &old_bci.attrs);
     if (ret < 0 && ret != -ENOENT)
       return ret;
@@ -1507,8 +1507,11 @@ public:
       /* existing bucket, keep its placement pools */
       bci.info.bucket.data_pool = old_bci.info.bucket.data_pool;
       bci.info.bucket.index_pool = old_bci.info.bucket.index_pool;
-      bci.info.objv_tracker = old_bci.info.objv_tracker;
     }
+
+    /* record the read version (if any), store the new version */
+    bci.info.objv_tracker.read_version = old_bci.info.objv_tracker.read_version;
+    bci.info.objv_tracker.write_version = objv_tracker.write_version;
 
     ret = store->put_bucket_instance_info(oid, bci.info, false, mtime, &bci.attrs);
     if (ret < 0)
