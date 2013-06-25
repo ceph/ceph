@@ -1812,9 +1812,9 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
       if (r < 0)
         return r;
 
+      /* we need to reread the info and return it, caller will have a use for it */
       index_ctx.remove(dir_oid);
-      RGWBucketInfo actual_info;
-      r = get_bucket_info(NULL, bucket.name, actual_info, NULL);
+      r = get_bucket_info(NULL, bucket.name, info, NULL, NULL);
       if (r < 0) {
         if (r == -ENOENT) {
           continue;
@@ -1822,6 +1822,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
         ldout(cct, 0) << "get_bucket_info returned " << r << dendl;
         return r;
       }
+      /* ret == -ENOENT here */
     }
     return ret;
   }
@@ -4596,6 +4597,7 @@ int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exc
 
   RGWBucketEntryPoint entry_point;
   entry_point.bucket = info.bucket;
+  entry_point.owner = info.owner;
   ret = put_bucket_entrypoint_info(info.bucket.name, entry_point, exclusive, mtime); 
   if (exclusive && ret == -EEXIST) {
     string oid;

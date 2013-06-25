@@ -683,6 +683,7 @@ WRITE_CLASS_ENCODER(RGWBucketInfo)
 struct RGWBucketEntryPoint
 {
   rgw_bucket bucket;
+  string owner;
 
   bool has_bucket_info;
   RGWBucketInfo old_bucket_info;
@@ -692,6 +693,7 @@ struct RGWBucketEntryPoint
   void encode(bufferlist& bl) const {
     ENCODE_START(8, 8, bl);
     ::encode(bucket, bl);
+    ::encode(owner, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -705,6 +707,7 @@ struct RGWBucketEntryPoint
     }
     has_bucket_info = false;
     ::decode(bucket, bl);
+    ::decode(owner, bl);
     DECODE_FINISH(bl);
   }
 
