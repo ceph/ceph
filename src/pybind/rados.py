@@ -1328,12 +1328,17 @@ written." % (self.name, ret, length))
         if not isinstance(xattr_name, str):
             raise TypeError('xattr_name must be a string')
         ret_length = 4096
-        ret_buf = create_string_buffer(ret_length)
-        ret = run_in_thread(self.librados.rados_getxattr,
-                            (self.io, c_char_p(key), c_char_p(xattr_name),
-                            ret_buf, c_size_t(ret_length)))
-        if ret < 0:
-            raise make_ex(ret, "Failed to get xattr %r" % xattr_name)
+        while ret_length < 4096 * 1024 * 1024:
+            ret_buf = create_string_buffer(ret_length)
+            ret = run_in_thread(self.librados.rados_getxattr,
+                                (self.io, c_char_p(key), c_char_p(xattr_name),
+                                 ret_buf, c_size_t(ret_length)))
+            if (ret == -errno.ERANGE):
+                ret_length *= 2
+            elif ret < 0:
+                raise make_ex(ret, "Failed to get xattr %r" % xattr_name)
+            else:
+                break
         return ctypes.string_at(ret_buf, ret)
 
     def get_xattrs(self, oid):
