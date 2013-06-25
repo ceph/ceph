@@ -73,7 +73,7 @@ int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& bucke
   return 0;
 }
 
-int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t creation_time)
+int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t creation_time, bool update_entrypoint)
 {
   int ret;
   string& bucket_name = bucket.name;
@@ -93,12 +93,14 @@ int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t 
     new_bucket.creation_time = creation_time;
   ::encode(new_bucket, bl);
 
-  ret = store->get_bucket_entrypoint_info(NULL, bucket_name, ep, &ot, NULL);
-  if (ret < 0 && ret != -ENOENT) {
-    ldout(store->ctx(), 0) << "ERROR: store->get_bucket_entrypoint_info() returned " << ret << dendl;
-  } else if (ret >= 0 && ep.linked && ep.owner != user_id) {
-    ldout(store->ctx(), 0) << "can't link bucket, already linked to a different user: " << ep.owner << dendl;
-    return -EINVAL;
+  if (update_entrypoint) {
+    ret = store->get_bucket_entrypoint_info(NULL, bucket_name, ep, &ot, NULL);
+    if (ret < 0 && ret != -ENOENT) {
+      ldout(store->ctx(), 0) << "ERROR: store->get_bucket_entrypoint_info() returned " << ret << dendl;
+    } else if (ret >= 0 && ep.linked && ep.owner != user_id) {
+      ldout(store->ctx(), 0) << "can't link bucket, already linked to a different user: " << ep.owner << dendl;
+      return -EINVAL;
+    }
   }
 
   string buckets_obj_id;
@@ -111,6 +113,9 @@ int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t 
         << cpp_strerror(-ret)<< dendl;
     goto done_err;
   }
+
+  if (!update_entrypoint)
+    return false;
 
   ep.linked = true;
   ep.owner = user_id;
@@ -127,7 +132,7 @@ done_err:
   return ret;
 }
 
-int rgw_unlink_bucket(RGWRados *store, string user_id, const string& bucket_name)
+int rgw_unlink_bucket(RGWRados *store, string user_id, const string& bucket_name, bool update_entrypoint)
 {
   int ret;
 
@@ -143,9 +148,14 @@ int rgw_unlink_bucket(RGWRados *store, string user_id, const string& bucket_name
         << cpp_strerror(-ret)<< dendl;
   }
 
+  if (!update_entrypoint)
+    return false;
+
   RGWBucketEntryPoint ep;
   RGWObjVersionTracker ot;
   ret = store->get_bucket_entrypoint_info(NULL, bucket_name, ep, &ot, NULL);
+  if (ret == -ENOENT)
+    return 0;
   if (ret < 0)
     return ret;
 
@@ -1354,15 +1364,17 @@ public:
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
+    objv_tracker.read_version = old_ot.read_version; /* maintain the obj version we just read */
+
     ret = store->put_bucket_entrypoint_info(entry, be, false, objv_tracker, mtime);
     if (ret < 0)
       return ret;
 
     /* link bucket */
     if (be.linked) {
-      ret = rgw_link_bucket(store, be.owner, be.bucket, be.creation_time);
+      ret = rgw_link_bucket(store, be.owner, be.bucket, be.creation_time, false);
     } else {
-      ret = rgw_unlink_bucket(store, be.owner, be.bucket.name);
+      ret = rgw_unlink_bucket(store, be.owner, be.bucket.name, false);
     }
 
     return 0;
