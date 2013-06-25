@@ -102,7 +102,7 @@ int rgw_add_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t c
   return ret;
 }
 
-int rgw_remove_user_bucket_info(RGWRados *store, string user_id, rgw_bucket& bucket)
+int rgw_remove_user_bucket_info(RGWRados *store, string user_id, const string& bucket_name)
 {
   int ret;
 
@@ -112,7 +112,7 @@ int rgw_remove_user_bucket_info(RGWRados *store, string user_id, rgw_bucket& buc
   rgw_get_buckets_obj(user_id, buckets_obj_id);
 
   rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
-  ret = store->omap_del(obj, bucket.name);
+  ret = store->omap_del(obj, bucket_name);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: error removing bucket from directory: "
         << cpp_strerror(-ret)<< dendl;
@@ -350,7 +350,7 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
     return ret;
   }
 
-  ret = rgw_remove_user_bucket_info(store, info.owner, bucket);
+  ret = rgw_remove_user_bucket_info(store, info.owner, bucket.name);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: unable to remove user bucket information" << dendl;
   }
@@ -437,7 +437,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
       return -EIO;
     }
 
-    r = rgw_remove_user_bucket_info(store, owner.get_id(), bucket);
+    r = rgw_remove_user_bucket_info(store, owner.get_id(), bucket.name);
     if (r < 0) {
       set_err_msg(err_msg, "could not unlink policy from user " + owner.get_id());
       return r;
@@ -493,7 +493,7 @@ int RGWBucket::unlink(RGWBucketAdminOpState& op_state, std::string *err_msg)
     return -EINVAL;
   }
 
-  int r = rgw_remove_user_bucket_info(store, user_info.user_id, bucket);
+  int r = rgw_remove_user_bucket_info(store, user_info.user_id, bucket.name);
   if (r < 0) {
     set_err_msg(err_msg, "error unlinking bucket" + cpp_strerror(-r));
   }
@@ -1389,14 +1389,23 @@ public:
   };
 
   int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) {
-    rgw_bucket bucket;
-    int r = init_bucket(store, entry, bucket, &objv_tracker);
-    if (r < 0) {
-      cerr << "could not init bucket=" << entry << std::endl;
-      return r;
+    RGWBucketEntryPoint be;
+
+    int ret = store->get_bucket_entrypoint_info(NULL, entry, be, &objv_tracker, NULL);
+    if (ret < 0)
+      return ret;
+
+    ret = rgw_remove_user_bucket_info(store, be.owner, entry);
+    if (ret < 0) {
+      lderr(store->ctx()) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
     }
 
-    return store->delete_bucket(bucket, objv_tracker);
+    ret = rgw_bucket_delete_bucket_obj(store, entry, objv_tracker);
+    if (ret < 0) {
+      lderr(store->ctx()) << "could not delete bucket=" << entry << dendl;
+    }
+    /* idempotent */
+    return 0;
   }
 
   void get_pool_and_oid(RGWRados *store, string& key, rgw_bucket& bucket, string& oid) {
