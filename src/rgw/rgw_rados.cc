@@ -4701,7 +4701,7 @@ int RGWRados::omap_set(rgw_obj& obj, std::map<std::string, bufferlist>& m)
   return r;
 }
 
-int RGWRados::omap_del(rgw_obj& obj, std::string& key)
+int RGWRados::omap_del(rgw_obj& obj, const std::string& key)
 {
   rgw_bucket bucket;
   std::string oid, okey;
