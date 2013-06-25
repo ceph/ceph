@@ -28,6 +28,9 @@ struct LogStatusDump {
       case MDLOG_STATUS_COMPLETE:
         s = "complete";
         break;
+      case MDLOG_STATUS_ABORT:
+        s = "abort";
+        break;
       default:
         s = "unknown";
         break;
@@ -499,16 +502,22 @@ int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section,
 }
 
 int RGWMetadataManager::post_modify(string& section, string& key, RGWMetadataLogData& log_data,
-                                    RGWObjVersionTracker *objv_tracker)
+                                    RGWObjVersionTracker *objv_tracker, int ret)
 {
-  log_data.status = MDLOG_STATUS_COMPLETE;
+  if (ret >= 0)
+    log_data.status = MDLOG_STATUS_COMPLETE;
+  else 
+    log_data.status = MDLOG_STATUS_ABORT;
 
   bufferlist logbl;
   ::encode(log_data, logbl);
 
-  int ret = md_log->add_entry(store, section, key, logbl);
+  int r = md_log->add_entry(store, section, key, logbl);
   if (ret < 0)
     return ret;
+
+  if (r < 0)
+    return r;
 
   return 0;
 }
@@ -530,10 +539,9 @@ int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, string& key, buff
   ret = rgw_put_system_obj(store, bucket, oid,
                            bl.c_str(), bl.length(), exclusive,
                            objv_tracker, mtime, pattrs);
-  if (ret < 0)
-    return ret;
+  /* cascading ret into post_modify() */
 
-  ret = post_modify(section, key, log_data, objv_tracker);
+  ret = post_modify(section, key, log_data, objv_tracker, ret);
   if (ret < 0)
     return ret;
 
@@ -556,10 +564,9 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler, string& key, R
   rgw_obj obj(bucket, oid);
 
   ret = store->delete_obj(NULL, obj);
-  if (ret < 0)
-    return ret;
+  /* cascading ret into post_modify() */
 
-  ret = post_modify(section, key, log_data, objv_tracker);
+  ret = post_modify(section, key, log_data, objv_tracker, ret);
   if (ret < 0)
     return ret;
 
@@ -578,10 +585,9 @@ int RGWMetadataManager::set_attrs(RGWMetadataHandler *handler, string& key,
     return ret;
 
   ret = store->set_attrs(NULL, obj, attrs, rmattrs, objv_tracker);
-  if (ret < 0)
-    return ret;
+  /* cascading ret into post_modify() */
 
-  ret = post_modify(section, key, log_data, objv_tracker);
+  ret = post_modify(section, key, log_data, objv_tracker, ret);
   if (ret < 0)
     return ret;
 

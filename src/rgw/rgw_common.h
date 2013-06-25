@@ -684,16 +684,19 @@ struct RGWBucketEntryPoint
 {
   rgw_bucket bucket;
   string owner;
+  time_t creation_time;
 
   bool has_bucket_info;
   RGWBucketInfo old_bucket_info;
 
-  RGWBucketEntryPoint() : has_bucket_info(false) {}
+  RGWBucketEntryPoint() : creation_time(0), has_bucket_info(false) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(8, 8, bl);
     ::encode(bucket, bl);
     ::encode(owner, bl);
+    uint64_t ctime = (uint64_t)creation_time;
+    ::encode(ctime, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -708,6 +711,9 @@ struct RGWBucketEntryPoint
     has_bucket_info = false;
     ::decode(bucket, bl);
     ::decode(owner, bl);
+    uint64_t ctime;
+    ::decode(ctime, bl);
+    creation_time = (uint64_t)ctime;
     DECODE_FINISH(bl);
   }
 
