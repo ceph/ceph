@@ -401,7 +401,7 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("user_id", user_id, obj, true);
   JSONDecoder::decode_json("display_name", display_name, obj);
   JSONDecoder::decode_json("email", user_email, obj);
-  bool susp;
+  bool susp = false;
   JSONDecoder::decode_json("suspended", susp, obj);
   suspended = (__u8)susp;
   JSONDecoder::decode_json("max_buckets", max_buckets, obj);
@@ -412,7 +412,7 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("subusers", subusers, decode_subusers, obj);
 
   JSONDecoder::decode_json("caps", caps, obj);
-  bool sys;
+  bool sys = false;
   JSONDecoder::decode_json("system", sys, obj);
   system = (__u8)sys;
   JSONDecoder::decode_json("default_placement", default_placement, obj);
@@ -441,6 +441,7 @@ void RGWBucketEntryPoint::dump(Formatter *f) const
   encode_json("bucket", bucket, f);
   encode_json("owner", owner, f);
   encode_json("creation_time", creation_time, f);
+  encode_json("linked", linked, f);
   encode_json("has_bucket_info", has_bucket_info, f);
   if (has_bucket_info) {
     encode_json("old_bucket_info", old_bucket_info, f);
@@ -451,6 +452,7 @@ void RGWBucketEntryPoint::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("bucket", bucket, obj);
   JSONDecoder::decode_json("owner", owner, obj);
   JSONDecoder::decode_json("creation_time", creation_time, obj);
+  JSONDecoder::decode_json("linked", linked, obj);
   JSONDecoder::decode_json("has_bucket_info", has_bucket_info, obj);
   if (has_bucket_info) {
     JSONDecoder::decode_json("old_bucket_info", old_bucket_info, obj);

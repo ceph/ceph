@@ -1272,17 +1272,17 @@ public:
   void get_bucket_instance_entry(rgw_bucket& bucket, string& entry);
   void get_bucket_meta_oid(rgw_bucket& bucket, string& oid);
 
-  int put_bucket_entrypoint_info(string& bucket_name, RGWBucketEntryPoint& entry_point, bool exclusive, RGWObjVersionTracker& objv_tracker, time_t mtime);
+  int put_bucket_entrypoint_info(const string& bucket_name, RGWBucketEntryPoint& entry_point, bool exclusive, RGWObjVersionTracker& objv_tracker, time_t mtime);
   int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, time_t mtime, map<string, bufferlist> *pattrs);
-  int get_bucket_entrypoint_info(void *ctx, string& bucket_name, RGWBucketEntryPoint& entry_point, RGWObjVersionTracker *objv_tracker, time_t *pmtime);
+  int get_bucket_entrypoint_info(void *ctx, const string& bucket_name, RGWBucketEntryPoint& entry_point, RGWObjVersionTracker *objv_tracker, time_t *pmtime);
   int get_bucket_instance_info(void *ctx, const string& meta_key, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
   int get_bucket_instance_info(void *ctx, rgw_bucket& bucket, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
   int get_bucket_instance_from_oid(void *ctx, string& oid, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
 
   virtual int get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info,
                               time_t *pmtime, map<string, bufferlist> *pattrs = NULL);
-  virtual int put_bucket_info(RGWBucketInfo& info, bool exclusive, time_t mtime,
-                              map<string, bufferlist> *pattrs, bool create_entry_point);
+  virtual int put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, time_t mtime,
+                                     map<string, bufferlist> *pattrs, bool create_entry_point);
 
   int cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid);
   int cls_obj_prepare_op(rgw_bucket& bucket, RGWModifyOp op, string& tag,
@@ -1322,11 +1322,11 @@ public:
                              string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage, bool *is_truncated);
   int cls_obj_usage_log_trim(string& oid, string& user, uint64_t start_epoch, uint64_t end_epoch);
 
-  void shard_name(const string& prefix, unsigned max_shards, string& key, string& name);
-  void shard_name(const string& prefix, unsigned max_shards, string& section, string& key, string& name);
+  void shard_name(const string& prefix, unsigned max_shards, const string& key, string& name);
+  void shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name);
   void time_log_prepare_entry(cls_log_entry& entry, const utime_t& ut, string& section, string& key, bufferlist& bl);
   int time_log_add(const string& oid, list<cls_log_entry>& entries);
-  int time_log_add(const string& oid, const utime_t& ut, string& section, string& key, bufferlist& bl);
+  int time_log_add(const string& oid, const utime_t& ut, const string& section, const string& key, bufferlist& bl);
   int time_log_list(const string& oid, utime_t& start_time, utime_t& end_time,
                     int max_entries, list<cls_log_entry>& entries, string& marker, bool *truncated);
   int time_log_trim(const string& oid, utime_t& start_time, utime_t& end_time);
