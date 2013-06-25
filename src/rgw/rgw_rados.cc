@@ -4584,13 +4584,11 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
 }
 
 int RGWRados::put_bucket_entrypoint_info(string& bucket_name, RGWBucketEntryPoint& entry_point,
-                                         bool exclusive, time_t mtime)
+                                         bool exclusive, RGWObjVersionTracker& objv_tracker, time_t mtime)
 {
   bufferlist epbl;
   ::encode(entry_point, epbl);
-  RGWObjVersionTracker ot;
-  ot.generate_new_write_ver(cct);
-  return rgw_bucket_store_info(this, bucket_name, epbl, exclusive, NULL, &ot, mtime);
+  return rgw_bucket_store_info(this, bucket_name, epbl, exclusive, NULL, &objv_tracker, mtime);
 }
 
 int RGWRados::put_bucket_instance_info(string& bucket_name, RGWBucketInfo& info, bool exclusive,
@@ -4625,7 +4623,9 @@ int RGWRados::put_bucket_info(string& bucket_name, RGWBucketInfo& info, bool exc
   entry_point.bucket = info.bucket;
   entry_point.owner = info.owner;
   entry_point.creation_time = info.creation_time;
-  ret = put_bucket_entrypoint_info(info.bucket.name, entry_point, exclusive, mtime); 
+  RGWObjVersionTracker ot;
+  ot.generate_new_write_ver(cct);
+  ret = put_bucket_entrypoint_info(info.bucket.name, entry_point, exclusive, ot, mtime); 
   if (ret < 0)
     return ret;
 
