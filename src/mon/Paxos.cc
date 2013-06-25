@@ -327,9 +327,6 @@ void Paxos::store_state(MMonPaxos *m)
 
     get_store()->apply_transaction(t);
 
-    // update the first and last committed in-memory values.
-    first_committed = get_store()->get(get_name(), "first_committed");
-    last_committed = get_store()->get(get_name(), "last_committed");
   }
 
   if (get_store()->exists(get_name(), "conversion_first")) {
@@ -807,18 +804,6 @@ void Paxos::finish_proposal()
 
   dout(10) << __func__ << " state " << state
 	   << " proposals left " << proposals.size() << dendl;
-
-  /* Update the internal Paxos state.
-   *
-   * Since we moved to a single-paxos instance across all monitor services, we
-   * can no longer rely on each individual service to update paxos state.
-   * Therefore, once we conclude a proposal, we must update our internal
-   * state (say, such variables as 'first_committed'), because no one else
-   * will take care of that for us -- and we rely on these variables for
-   * several other mechanisms; trimming comes to mind.
-   */
-  first_committed = get_store()->get(get_name(), "first_committed");
-  last_committed = get_store()->get(get_name(), "last_committed");
 
   if (need_bootstrap) {
     dout(10) << " doing requested bootstrap" << dendl;
