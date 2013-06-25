@@ -712,6 +712,7 @@ void Monitor::reset()
 {
   dout(10) << "reset" << dendl;
 
+  cancel_probe_timeout();
   timecheck_finish();
 
   leader_since = utime_t();
