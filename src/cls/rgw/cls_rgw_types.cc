@@ -133,7 +133,7 @@ void rgw_bi_log_entry::dump(Formatter *f) const
   }
 
   f->dump_int("index_ver", index_ver);
-  f->dump_stream("timestamp") << timestamp;
+  timestamp.gmtime(f->dump_stream("timestamp"));
   f->open_object_section("ver");
   ver.dump(f);
   f->close_section();

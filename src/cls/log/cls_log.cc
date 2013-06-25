@@ -110,13 +110,15 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   } else {
     from_index = op.marker;
   }
-  bool use_time_boundary = (op.to_time > op.from_time);
+  bool use_time_boundary = (op.to_time >= op.from_time);
 
   if (use_time_boundary)
     get_index_time_prefix(op.to_time, to_index);
 
 #define MAX_ENTRIES 1000
   size_t max_entries = op.max_entries;
+  if (op.from_time == op.to_time) 
+    max_entries = 1;
   if (!max_entries || max_entries > MAX_ENTRIES)
     max_entries = MAX_ENTRIES;
 
