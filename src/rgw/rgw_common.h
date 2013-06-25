@@ -1105,6 +1105,11 @@ inline ostream& operator<<(ostream& out, const rgw_obj &o) {
   return out << o.bucket.name << ":" << o.object;
 }
 
+static inline bool str_startswith(const string& str, const string& prefix)
+{
+  return (str.compare(0, prefix.size(), prefix) == 0);
+}
+
 static inline void buf_to_hex(const unsigned char *buf, int len, char *str)
 {
   int i;
