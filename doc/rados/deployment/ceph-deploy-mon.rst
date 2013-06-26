@@ -34,6 +34,9 @@ the tool enforces a single monitor per host. ::
 .. note:: Ensure that you add monitors such that they may arrive at a consensus
    among a majority of monitors.
 
+.. note::  When adding a monitor on a host that was not in hosts intially defined
+   with the ``ceph-deploy new`` command, a ``public network`` statement needs
+   to be be added to the ceph.conf file.
 
 Remove a Monitor
 ================
