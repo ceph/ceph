@@ -277,11 +277,6 @@ void RGWZoneParams::init_default()
   default_placement.index_pool = ".rgw.buckets";
   default_placement.data_pool = ".rgw.buckets";
   placement_pools["default-placement"] = default_placement;
-
-  RGWZonePlacementInfo test_placement;
-  test_placement.index_pool = ".rgw.test.index";
-  test_placement.data_pool = ".rgw.test.data";
-  placement_pools["test"] = test_placement;
 }
 
 string RGWZoneParams::get_pool_name(CephContext *cct)
