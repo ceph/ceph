@@ -366,6 +366,7 @@ struct RGWUserAdminOpState {
     key_type = -1;
     perm_mask = 0;
     suspended = 0;
+    system = 0;
 
     existing_user = false;
     existing_key = false;
