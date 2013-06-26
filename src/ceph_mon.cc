@@ -289,26 +289,36 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
   global_init_chdir(g_ceph_context);
 
-  {
-    Monitor::StoreConverter converter(g_conf->mon_data);
-    int ret = converter.needs_conversion();
-    if (ret > 0) {
-      assert(!converter.convert());
-    } else if (ret < 0) {
-      derr << "found errors while attempting to convert the monitor store: "
+  MonitorDBStore *store = new MonitorDBStore(g_conf->mon_data);
+
+  Monitor::StoreConverter converter(g_conf->mon_data, store);
+  if (store->open(std::cerr) < 0) {
+    int ret = store->create_and_open(std::cerr);
+    if (ret < 0) {
+      derr << "failed to create new leveldb store" << dendl;
+      prefork.exit(1);
+    }
+
+    ret = converter.needs_conversion();
+    if (ret < 0) {
+      derr << "found errors while validating legacy unconverted monitor store: "
            << cpp_strerror(ret) << dendl;
       prefork.exit(1);
     }
-  }
-
-  MonitorDBStore *store = new MonitorDBStore(g_conf->mon_data);
-  err = store->open(std::cerr);
-  if (err < 0) {
-    cerr << argv[0] << ": error opening mon data store at '"
-         << g_conf->mon_data << "': " << cpp_strerror(err) << std::endl;
+    if (ret > 0) {
+      cout << "converting monitor store, please do not interrupt..." << std::endl;
+      int r = converter.convert();
+      if (r) {
+	derr << "failed to convert monitor store: " << cpp_strerror(r) << dendl;
+	prefork.exit(1);
+      }
+    }
+  } else if (converter.is_converting()) {
+    derr << "there is an on-going (maybe aborted?) conversion." << dendl;
+    derr << "you should check what happened" << dendl;
+    derr << "remove store.db to restart conversion" << dendl;
     prefork.exit(1);
   }
-  assert(err == 0);
 
   bufferlist magicbl;
   err = store->get(Monitor::MONITOR_NAME, "magic", magicbl);
