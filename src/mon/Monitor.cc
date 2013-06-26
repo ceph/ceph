@@ -520,14 +520,14 @@ void Monitor::init_paxos()
   dout(10) << __func__ << dendl;
   paxos->init();
 
+  // init services
+  for (int i = 0; i < PAXOS_NUM; ++i) {
+    paxos_service[i]->init();
+  }
+
   // update paxos
   if (paxos->is_consistent()) {
     refresh_from_paxos(NULL);
-
-    // init services
-    for (int i = 0; i < PAXOS_NUM; ++i) {
-      paxos_service[i]->init();
-    }
   }
 }
 
