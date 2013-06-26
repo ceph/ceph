@@ -219,7 +219,7 @@ void PGMonitor::update_from_paxos(bool *need_bootstrap)
   update_logger();
 }
 
-void PGMonitor::init()
+void PGMonitor::post_paxos_update()
 {
   if (mon->osdmon()->osdmap.get_epoch()) {
     map_pg_creates();
