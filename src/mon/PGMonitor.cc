@@ -271,7 +271,7 @@ void PGMonitor::upgrade_format()
   propose_pending();
 }
 
-void PGMonitor::init()
+void PGMonitor::post_paxos_update()
 {
   if (mon->osdmon()->osdmap.get_epoch()) {
     map_pg_creates();
