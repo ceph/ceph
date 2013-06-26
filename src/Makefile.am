@@ -166,7 +166,7 @@ cephfs_LDADD = libcommon.la
 bin_PROGRAMS += cephfs
 
 librados_config_SOURCES = librados-config.cc
-librados_config_LDADD = libglobal.la librados.la $(PTHREAD_LIBS) $(EXTRALIBS) $(CRYPTO_LIBS)
+librados_config_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_PROGRAMS += librados-config
 
 # synthetic client
@@ -224,7 +224,7 @@ ceph_psim_LDADD = $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += ceph_psim
 
 ceph_test_mutate_SOURCES = test/test_mutate.cc
-ceph_test_mutate_LDADD = libglobal.la librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+ceph_test_mutate_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += ceph_test_mutate
 
 ceph_test_rewrite_latency_SOURCES = test/test_rewrite_latency.cc
@@ -396,9 +396,9 @@ librgw_a_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
 noinst_LIBRARIES += librgw.a
 
 my_radosgw_ldadd = \
-       libglobal.la librgw.a librados.la libcls_rgw_client.a \
+       librgw.a librados.la libcls_rgw_client.a \
        libcls_lock_client.a libcls_refcount_client.a -lcurl -lexpat \
-       $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+       $(LIBGLOBAL_LDA) 
 
 radosgw_SOURCES = \
 	rgw/rgw_resolve.cc \
@@ -458,13 +458,13 @@ librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 \
 lib_LTLIBRARIES += librbd.la
 
 rados_SOURCES = rados.cc rados_import.cc rados_export.cc rados_sync.cc common/obj_bencher.cc
-rados_LDADD = libglobal.la libcls_lock_client.a librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+rados_LDADD = libcls_lock_client.a librados.la $(LIBGLOBAL_LDA)
 bin_PROGRAMS += rados
 
 if WITH_REST_BENCH
 
 rest_bench_SOURCES = tools/rest_bench.cc common/obj_bencher.cc
-rest_bench_LDADD = libglobal.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+rest_bench_LDADD = $(LIBGLOBAL_LDA)
 rest_bench_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += rest-bench
 
@@ -488,7 +488,7 @@ bin_DEBUGPROGRAMS += ceph_scratchtool ceph_scratchtoolpp ceph_radosacl
 
 rbd_SOURCES = rbd.cc common/fiemap.cc common/secret.c common/TextTable.cc common/util.cc
 rbd_CXXFLAGS = ${AM_CXXFLAGS}
-rbd_LDADD = libglobal.la librbd.la librados.la $(PTHREAD_LIBS) -lm -lkeyutils $(CRYPTO_LIBS) $(EXTRALIBS)
+rbd_LDADD = librbd.la librados.la $(LIBGLOBAL_LDA) -lkeyutils
 if LINUX
 bin_PROGRAMS += rbd
 endif
@@ -614,7 +614,7 @@ libsystest_la_SOURCES = \
 	test/system/cross_process_sem.cc \
 	test/system/systest_runnable.cc \
 	test/system/systest_settings.cc
-libsystest_la_LIBADD = libglobal.la
+libsystest_la_LIBADD = $(LIBGLOBAL_LDA)
 noinst_LTLIBRARIES += libsystest.la
 
 ceph_test_rados_list_parallel_SOURCES = \
@@ -650,7 +650,7 @@ bin_DEBUGPROGRAMS += ceph_test_rados_watch_notify
 
 ceph_bench_log_SOURCES = \
 	test/bench_log.cc
-ceph_bench_log_LDADD = libcommon.la libglobal.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+ceph_bench_log_LDADD = libcommon.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += ceph_bench_log
 
 ## unit tests
@@ -676,7 +676,7 @@ check_PROGRAMS += unittest_encoding
 
 unittest_addrs_SOURCES = test/test_addrs.cc
 unittest_addrs_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-unittest_addrs_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
+unittest_addrs_LDADD = $(LIBGLOBAL_LDA) ${UNITTEST_LDADD}
 check_PROGRAMS += unittest_addrs
 
 unittest_util_SOURCES = test/common/test_util.cc common/util.cc
@@ -686,12 +686,12 @@ check_PROGRAMS += unittest_util
 
 unittest_workqueue_SOURCES = test/test_workqueue.cc
 unittest_workqueue_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-unittest_workqueue_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
+unittest_workqueue_LDADD = $(LIBGLOBAL_LDA) ${UNITTEST_LDADD} 
 check_PROGRAMS += unittest_workqueue
 
 unittest_striper_SOURCES = test/test_striper.cc 
 unittest_striper_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-unittest_striper_LDADD = libglobal.la libosdc.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
+unittest_striper_LDADD = libosdc.la $(LIBGLOBAL_LDA) ${UNITTEST_LDADD}
 check_PROGRAMS += unittest_striper
 
 unittest_prebufferedstreambuf_SOURCES = test/test_prebufferedstreambuf.cc common/PrebufferedStreambuf.cc
@@ -701,7 +701,7 @@ check_PROGRAMS += unittest_prebufferedstreambuf
 
 unittest_str_list_SOURCES = test/test_str_list.cc
 unittest_str_list_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-unittest_str_list_LDADD = libglobal.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
+unittest_str_list_LDADD = $(LIBGLOBAL_LDA) ${UNITTEST_LDADD} 
 check_PROGRAMS += unittest_str_list
 
 unittest_log_SOURCES = log/test.cc common/PrebufferedStreambuf.cc
@@ -724,13 +724,13 @@ check_PROGRAMS += unittest_base64
 
 unittest_ceph_argparse_SOURCES = test/ceph_argparse.cc
 unittest_ceph_argparse_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
-unittest_ceph_argparse_LDADD = libglobal.la ${UNITTEST_LDADD}
+unittest_ceph_argparse_LDADD = $(LIBGLOBAL_LDA) ${UNITTEST_LDADD}
 unittest_ceph_argparse_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 check_PROGRAMS += unittest_ceph_argparse
 
 unittest_osd_types_SOURCES = test/test_osd_types.cc
 unittest_osd_types_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-unittest_osd_types_LDADD = libglobal.la libcommon.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
+unittest_osd_types_LDADD = $(LIBGLOBAL_LDA) libcommon.la ${UNITTEST_LDADD} 
 check_PROGRAMS += unittest_osd_types
 
 unittest_pglog_SOURCES = test/osd/TestPGLog.cc objclass/class_api.cc perfglue/disabled_heap_profiler.cc
@@ -914,8 +914,7 @@ check_PROGRAMS += unittest_texttable
 
 if WITH_RADOSGW
 ceph_test_cors_SOURCES = test/test_cors.cc
-ceph_test_cors_LDFLAGS = libglobal.la
-ceph_test_cors_LDADD = librados.la librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} $(CRYPTO_LIBS) -lcurl -luuid -lexpat
+ceph_test_cors_LDADD = librados.la librgw.a $(LIBGLOBAL_LDA) ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} -lcurl -luuid -lexpat
 ceph_test_cors_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_cors
 endif
