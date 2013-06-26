@@ -4285,46 +4285,39 @@ bool Monitor::StoreConverter::_check_gv_store()
 
 int Monitor::StoreConverter::needs_conversion()
 {
+  bufferlist magicbl;
   int ret = 0;
 
   dout(10) << __func__ << dendl;
   _init();
-  if (db->open(std::cerr) < 0) {
-    dout(1) << "unable to open monitor store at " << g_conf->mon_data << dendl;
-    dout(1) << "check for old monitor store format" << dendl;
-    int err = store->mount();
-    if (err < 0) {
-      if (err == -ENOENT) {
-        derr << "unable to mount monitor store: "
-             << cpp_strerror(err) << dendl;
-      } else {
-        derr << "it appears that another monitor is running: "
-             << cpp_strerror(err) << dendl;
-      }
-      ret = err;
-      goto out;
+
+  int err = store->mount();
+  if (err < 0) {
+    if (err == -ENOENT) {
+      derr << "unable to mount monitor store: "
+	   << cpp_strerror(err) << dendl;
+    } else {
+      derr << "it appears that another monitor is running: "
+	   << cpp_strerror(err) << dendl;
     }
-    assert(err == 0);
-    bufferlist magicbl;
-    if (store->exists_bl_ss("magic", 0)) {
-      if (_check_gv_store()) {
-	dout(1) << "found old GV monitor store format "
-		<< "-- should convert!" << dendl;
-	ret = 1;
-      } else {
-	dout(0) << "Existing monitor store has not been converted "
-		<< "to 0.52 (bobtail) format" << dendl;
-	assert(0 == "Existing store has not been converted to 0.52 format");
-      }
-    }
-    assert(!store->umount());
-  } else {
-    if (db->exists("mon_convert", "on_going")) {
-      ret = -EEXIST;
-      derr << "there is an on-going (maybe aborted?) conversion." << dendl;
-      derr << "you should check what happened" << dendl;
+    ret = err;
+    goto out;
+  }
+  assert(err == 0);
+
+  if (store->exists_bl_ss("magic", 0)) {
+    if (_check_gv_store()) {
+      dout(1) << "found old GV monitor store format "
+	      << "-- should convert!" << dendl;
+      ret = 1;
+    } else {
+      dout(0) << "Existing monitor store has not been converted "
+	      << "to 0.52 (bobtail) format" << dendl;
+      assert(0 == "Existing store has not been converted to 0.52 format");
     }
   }
+  assert(!store->umount());
+
 out:
   _deinit();
   return ret;
