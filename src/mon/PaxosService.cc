@@ -122,7 +122,7 @@ void PaxosService::refresh(bool *need_bootstrap)
 }
 
 
-void PaxosService::scrub()
+void PaxosService::remove_legacy_versions()
 {
   dout(10) << __func__ << dendl;
   if (!mon->store->exists(get_service_name(), "conversion_first"))
@@ -274,7 +274,7 @@ void PaxosService::_active()
   }
   dout(10) << "_active" << dendl;
 
-  scrub();
+  remove_legacy_versions();
 
   // create pending state?
   if (mon->is_leader() && is_active()) {
