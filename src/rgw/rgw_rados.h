@@ -435,7 +435,7 @@ struct RGWZoneParams {
   static string get_pool_name(CephContext *cct);
   void init_name(CephContext *cct, RGWRegion& region);
   int init(CephContext *cct, RGWRados *store, RGWRegion& region);
-  void init_default();
+  void init_default(RGWRados *store);
   int store_info(CephContext *cct, RGWRados *store, RGWRegion& region);
 
   void encode(bufferlist& bl) const {
