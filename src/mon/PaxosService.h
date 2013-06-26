@@ -341,6 +341,14 @@ public:
   virtual void update_from_paxos(bool *need_bootstrap) = 0;
 
   /**
+   * Hook called after all services have refreshed their state from paxos
+   *
+   * This is useful for doing any update work that depends on other
+   * service's having up-to-date state.
+   */
+  virtual void post_paxos_update() {}
+
+  /**
    * Init on startup
    *
    * This is called on mon startup, after all of the PaxosService instances'
