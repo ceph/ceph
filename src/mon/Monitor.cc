@@ -537,6 +537,9 @@ void Monitor::refresh_from_paxos(bool *need_bootstrap)
   for (int i = 0; i < PAXOS_NUM; ++i) {
     paxos_service[i]->refresh(need_bootstrap);
   }
+  for (int i = 0; i < PAXOS_NUM; ++i) {
+    paxos_service[i]->post_paxos_update();
+  }
 }
 
 void Monitor::register_cluster_logger()
