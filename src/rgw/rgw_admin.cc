@@ -1083,7 +1083,7 @@ int main(int argc, char **argv)
         cerr << "WARNING: failed to initialize region" << std::endl;
       }
       RGWZoneParams zone;
-      zone.init_default();
+      zone.init_default(store);
       ret = read_decode_json(infile, zone);
       if (ret < 0) {
         return 1;

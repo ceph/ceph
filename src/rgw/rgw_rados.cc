@@ -227,7 +227,8 @@ int RGWRegion::create_default()
 
   RGWZoneParams zone_params;
   zone_params.name = zone_name;
-  zone_params.init_default();
+  zone_params.init_default(store);
+
   int r = zone_params.store_info(cct, store, *this);
   if (r < 0) {
     derr << "error storing zone params: " << cpp_strerror(-r) << dendl;
@@ -259,8 +260,7 @@ int RGWRegion::store_info(bool exclusive)
 }
 
 
-
-void RGWZoneParams::init_default()
+void RGWZoneParams::init_default(RGWRados *store)
 {
   domain_root = ".rgw";
   control_pool = ".rgw.control";
@@ -273,10 +273,17 @@ void RGWZoneParams::init_default()
   user_swift_pool = ".users.swift";
   user_uid_pool = ".users.uid";
 
-  RGWZonePlacementInfo default_placement;
-  default_placement.index_pool = ".rgw.buckets";
-  default_placement.data_pool = ".rgw.buckets";
-  placement_pools["default-placement"] = default_placement;
+  /* check for old pools config */
+  rgw_obj obj(domain_root, avail_pools);
+  int r =  store->obj_stat(NULL, obj, NULL, NULL, NULL, NULL, NULL, NULL);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "couldn't find old data placement pools config, setting up new ones for the zone" << dendl;
+    /* a new system, let's set new placement info */
+    RGWZonePlacementInfo default_placement;
+    default_placement.index_pool = ".rgw.buckets.index";
+    default_placement.data_pool = ".rgw.buckets";
+    placement_pools["default-placement"] = default_placement;
+  }
 }
 
 string RGWZoneParams::get_pool_name(CephContext *cct)
@@ -865,6 +872,11 @@ int RGWRados::init_complete()
   ret = region_map.read(cct, this);
   if (ret < 0) {
     ldout(cct, 0) << "WARNING: cannot read region map" << dendl;
+    ret = region_map.update(region);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: failed to update regionmap with local region info" << dendl;
+      return -EIO;
+    }
   } else {
     string master_region = region_map.master_region;
     if (master_region.empty()) {
@@ -1091,14 +1103,9 @@ int RGWRados::open_bucket_pool_ctx(const string& bucket_name, const string& pool
   if (!pools_initialized)
     return r;
 
-  /* couldn't find bucket, might be a racing bucket creation,
-     where client haven't gotten updated map, try to read
-     the bucket object .. which will trigger update of osdmap
-     if that is the case */
-  time_t mtime;
-  r = root_pool_ctx.stat(bucket_name, NULL, &mtime);
-  if (r < 0)
-    return -ENOENT;
+  r = rados->pool_create(pool.c_str());
+  if (r < 0 && r != -EEXIST)
+    return r;
 
   r = rados->ioctx_create(pool.c_str(), io_ctx);
 
