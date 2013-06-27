@@ -428,9 +428,7 @@ int RGWRados::list_buckets_next(RGWObjEnt& obj, RGWAccessHandle *handle)
 
     obj.name = (*state)->first;
     (*state)++;
-  } while (obj.name[0] == '.');
-
-  /* FIXME: should read mtime/size vals for bucket */
+  } while (obj.name[0] == '.'); /* skip all entries starting with '.' */
 
   return 0;
 }
