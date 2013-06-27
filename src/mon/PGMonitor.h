@@ -47,6 +47,9 @@ public:
 
   bool need_check_down_pgs;
 
+  epoch_t last_map_pg_create_osd_epoch;
+
+
 private:
   PGMap::Incremental pending_inc;
 
@@ -142,7 +145,8 @@ private:
 public:
   PGMonitor(Monitor *mn, Paxos *p, const string& service_name)
     : PaxosService(mn, p, service_name),
-      need_check_down_pgs(false)
+      need_check_down_pgs(false),
+      last_map_pg_create_osd_epoch(0)
   { }
   ~PGMonitor() { }
 
