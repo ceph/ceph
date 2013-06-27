@@ -533,29 +533,29 @@ TEST(TestRGWAdmin, opstate_set_list_delete) {
   ASSERT_EQ(user_create(uid, display_name), 0);
   ASSERT_EQ(0, caps_add(cname, perm));
 
-  rest_req = "/admin/opstate?client_id=1&op_id=1&object=o";
+  rest_req = "/admin/opstate?client-id=1&op-id=1&object=o";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Missing state*/
 
-  rest_req = "/admin/opstate?client_id=1&op_id=1&state=in-progress";
+  rest_req = "/admin/opstate?client-id=1&op-id=1&state=in-progress";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Missing object*/
 
-  rest_req = "/admin/opstate?client_id=1&state=in-progress&object=o";
+  rest_req = "/admin/opstate?client-id=1&state=in-progress&object=o";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
-  EXPECT_EQ(400U, g_test->get_resp_code()); /*Missing op_id*/
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Missing op-id*/
 
-  rest_req = "/admin/opstate?state=in-progress&op_id=1&object=o";
+  rest_req = "/admin/opstate?state=in-progress&op-id=1&object=o";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
-  EXPECT_EQ(400U, g_test->get_resp_code()); /*Missing client_id*/
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Missing client-id*/
 
-  rest_req = "/admin/opstate?state=invalid&op_id=1&object=o&client_id=1";
+  rest_req = "/admin/opstate?state=invalid&op-id=1&object=o&client-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Invalid state*/
 
   state = "in-progress";
   entries.clear();
-  ss << "/admin/opstate?client_id=" << cid_1 << "&op_id=" << oid_1 
+  ss << "/admin/opstate?client-id=" << cid_1 << "&op-id=" << oid_1 
     << "&object=" << obj_1 << "&state=" << state;
   rest_req = ss.str();
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
@@ -581,7 +581,7 @@ TEST(TestRGWAdmin, opstate_set_list_delete) {
   state = "complete";
   ss.str("");
   entries.clear();
-  ss << "/admin/opstate?client_id=" << cid_1 << "&op_id=" << oid_1 
+  ss << "/admin/opstate?client-id=" << cid_1 << "&op-id=" << oid_1 
     << "&object=" << obj_1 << "&state=" << state;
   rest_req = ss.str();
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
@@ -605,7 +605,7 @@ TEST(TestRGWAdmin, opstate_set_list_delete) {
 
   ss.str("");
   entries.clear();
-  ss << "/admin/opstate?client_id=" << cid_2 << "&op_id=" << oid_2 
+  ss << "/admin/opstate?client-id=" << cid_2 << "&op-id=" << oid_2 
     << "&object=" << obj_2 << "&state=" << state;
   rest_req = ss.str();
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
@@ -642,7 +642,7 @@ TEST(TestRGWAdmin, opstate_set_list_delete) {
   
   ss.str("");
   entries.clear();
-  ss << "/admin/opstate?client_id=" << cid_2 << "&op_id=" << oid_2 << "&object=" << obj_2;
+  ss << "/admin/opstate?client-id=" << cid_2 << "&op-id=" << oid_2 << "&object=" << obj_2;
   rest_req = ss.str();
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
@@ -651,7 +651,7 @@ TEST(TestRGWAdmin, opstate_set_list_delete) {
   
   ss.str("");
   entries.clear();
-  ss << "/admin/opstate?client_id=" << cid_2;
+  ss << "/admin/opstate?client-id=" << cid_2;
   rest_req = ss.str();
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
@@ -660,7 +660,7 @@ TEST(TestRGWAdmin, opstate_set_list_delete) {
 
   ss.str("");
   entries.clear();
-  ss << "/admin/opstate?op_id=" << oid_2;
+  ss << "/admin/opstate?op-id=" << oid_2;
   rest_req = ss.str();
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
@@ -669,31 +669,31 @@ TEST(TestRGWAdmin, opstate_set_list_delete) {
 
   ss.str("");
   entries.clear();
-  ss << "/admin/opstate?op_id=" << oid_2 << "&object=" << obj_1 << "&client_id=" << cid_2 ;
+  ss << "/admin/opstate?op-id=" << oid_2 << "&object=" << obj_1 << "&client-id=" << cid_2 ;
   rest_req = ss.str();
   g_test->send_request(string("GET"), rest_req);
   EXPECT_EQ(200U, g_test->get_resp_code());
   EXPECT_EQ(get_opstate_list(entries), 0);
   EXPECT_EQ(entries.size(), 0U);
 
-  rest_req = "/admin/opstate?client_id=1&op_id=1";
+  rest_req = "/admin/opstate?client-id=1&op-id=1";
   g_test->send_request(string("DELETE"), rest_req);
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Missing object*/
 
-  rest_req = "/admin/opstate?client_id=1&object=1";
+  rest_req = "/admin/opstate?client-id=1&object=1";
   g_test->send_request(string("DELETE"), rest_req);
-  EXPECT_EQ(400U, g_test->get_resp_code()); /*Missing op_id*/
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Missing op-id*/
 
-  rest_req = "/admin/opstate?object=1&op_id=1";
+  rest_req = "/admin/opstate?object=1&op-id=1";
   g_test->send_request(string("DELETE"), rest_req);
-  EXPECT_EQ(400U, g_test->get_resp_code()); /*Missing client_id*/
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Missing client-id*/
   
-  rest_req = "/admin/opstate?object=1&op_id=1&client_id=1";
+  rest_req = "/admin/opstate?object=1&op-id=1&client-id=1";
   g_test->send_request(string("DELETE"), rest_req);
   EXPECT_EQ(404U, g_test->get_resp_code());
 
   ss.str("");
-  ss << "/admin/opstate?client_id=" << cid_1 << "&op_id=" << oid_1 
+  ss << "/admin/opstate?client-id=" << cid_1 << "&op-id=" << oid_1 
     << "&object=" << obj_1;
   rest_req = ss.str();
   g_test->send_request(string("DELETE"), rest_req);
@@ -709,7 +709,7 @@ TEST(TestRGWAdmin, opstate_set_list_delete) {
   EXPECT_EQ(entries.size(), 1U);
 
   ss.str("");
-  ss << "/admin/opstate?client_id=" << cid_2 << "&op_id=" << oid_2 
+  ss << "/admin/opstate?client-id=" << cid_2 << "&op-id=" << oid_2 
     << "&object=" << obj_2;
   rest_req = ss.str();
   g_test->send_request(string("DELETE"), rest_req);
@@ -741,29 +741,29 @@ TEST(TestRGWAdmin, opstate_renew) {
   ASSERT_EQ(user_create(uid, display_name), 0);
   ASSERT_EQ(0, caps_add(cname, perm));
 
-  rest_req = "/admin/opstate?renew&client_id=1&op_id=1&object=o";
+  rest_req = "/admin/opstate?renew&client-id=1&op-id=1&object=o";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Missing state*/
 
-  rest_req = "/admin/opstate?renew&client_id=1&op_id=1&state=in-progress";
+  rest_req = "/admin/opstate?renew&client-id=1&op-id=1&state=in-progress";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Missing object*/
 
-  rest_req = "/admin/opstate?renew&client_id=1&state=in-progress&object=o";
+  rest_req = "/admin/opstate?renew&client-id=1&state=in-progress&object=o";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
-  EXPECT_EQ(400U, g_test->get_resp_code()); /*Missing op_id*/
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Missing op-id*/
 
-  rest_req = "/admin/opstate?renew&state=in-progress&op_id=1&object=o";
+  rest_req = "/admin/opstate?renew&state=in-progress&op-id=1&object=o";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
-  EXPECT_EQ(400U, g_test->get_resp_code()); /*Missing client_id*/
+  EXPECT_EQ(400U, g_test->get_resp_code()); /*Missing client-id*/
 
-  rest_req = "/admin/opstate?&renew&state=invalid&op_id=1&object=o&client_id=1";
+  rest_req = "/admin/opstate?&renew&state=invalid&op-id=1&object=o&client-id=1";
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Invalid state*/
 
   state = "complete";
   ss.str("");
-  ss << "/admin/opstate?client_id=" << cid_1 << "&op_id=" << oid_1 
+  ss << "/admin/opstate?client-id=" << cid_1 << "&op-id=" << oid_1 
     << "&object=" << obj_1 << "&state=" << state;
   rest_req = ss.str();
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
@@ -774,28 +774,28 @@ TEST(TestRGWAdmin, opstate_renew) {
   EXPECT_EQ(200U, g_test->get_resp_code());
 
   ss.str("");
-  ss << "/admin/opstate?renew&client_id=" << cid_1 << "&op_id=1" 
+  ss << "/admin/opstate?renew&client-id=" << cid_1 << "&op-id=1" 
     << "&object=" << obj_1 << "&state=" << state;
   rest_req = ss.str();
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(404U, g_test->get_resp_code());
   
   ss.str("");
-  ss << "/admin/opstate?renew&client_id=" << cid_1 << "&op_id=" << oid_1 
+  ss << "/admin/opstate?renew&client-id=" << cid_1 << "&op-id=" << oid_1 
     << "&object=" << obj_1 << "&state=" << state;
   rest_req = ss.str();
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(200U, g_test->get_resp_code());
 
   ss.str("");
-  ss << "/admin/opstate?renew&client_id=" << cid_1 << "&op_id=" << oid_1 
+  ss << "/admin/opstate?renew&client-id=" << cid_1 << "&op-id=" << oid_1 
     << "&object=" << obj_1 << "&state=in-progress";
   rest_req = ss.str();
   g_test->send_request(string("POST"), rest_req, read_dummy_post, NULL, sizeof(int));
   EXPECT_EQ(500U, g_test->get_resp_code());
 
   ss.str("");
-  ss << "/admin/opstate?client_id=" << cid_1 << "&op_id=" << oid_1 
+  ss << "/admin/opstate?client-id=" << cid_1 << "&op-id=" << oid_1 
     << "&object=" << obj_1;
   rest_req = ss.str();
   g_test->send_request(string("DELETE"), rest_req);
