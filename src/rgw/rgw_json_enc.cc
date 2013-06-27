@@ -642,16 +642,9 @@ void RGWRegionMap::dump(Formatter *f) const
   encode_json("master_region", master_region, f);
 }
 
-static void decode_regions(map<string, RGWRegion>& regions, JSONObj *o)
-{
-  RGWRegion r;
-  r.decode_json(o);
-  regions[r.name] = r;
-}
-
-
 void RGWRegionMap::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("regions", regions, decode_regions, obj);
+  JSONDecoder::decode_json("regions", regions, obj);
+  JSONDecoder::decode_json("master_region", master_region, obj);
 }
 
