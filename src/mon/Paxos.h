@@ -529,7 +529,7 @@ private:
    * Should be true if we have proposed to trim, or are in the middle of
    * trimming; false otherwise.
    */
-  bool going_to_trim;
+  bool trimming;
   /**
    * If we have disabled trimming our state, this variable should have a
    * value greater than zero, corresponding to the version we had at the time
@@ -616,7 +616,7 @@ private:
   public:
     C_Trimmed(Paxos *p) : paxos(p) { }
     void finish(int r) {
-      paxos->going_to_trim = false;
+      paxos->trimming = false;
     }
   };
   /**
@@ -1013,7 +1013,7 @@ public:
 		   lease_timeout_event(0),
 		   accept_timeout_event(0),
 		   clock_drift_warned(0),
-		   going_to_trim(false),
+		   trimming(false),
 		   trim_disabled_version(0) { }
 
   const string get_name() const {
@@ -1086,6 +1086,13 @@ public:
    * @param m A message
    */
   void store_state(MMonPaxos *m);
+  void _sanity_check_store();
+
+  /**
+   * remove legacy paxos versions from before conversion
+   */
+  void remove_legacy_versions();
+
   /**
    * Helper function to decode a bufferlist into a transaction and append it
    * to another transaction.
@@ -1125,36 +1132,10 @@ public:
   }
 
   /**
-   * Erase old states from stable storage.
-   *
-   * @param first The version we are trimming to
-   */
-  void trim_to(version_t first);
-  /**
-   * Erase old states from stable storage.
-   *
-   * @param t A transaction
-   * @param first The version we are trimming to
-   */
-  void trim_to(MonitorDBStore::Transaction *t, version_t first);
-  /**
-   * Auxiliary function to erase states in the interval [from, to[ from stable
-   * storage.
-   *
-   * @param t A transaction
-   * @param from Bottom limit of the interval of versions to erase
-   * @param to Upper limit, not including, of the interval of versions to erase
-   */
-  void trim_to(MonitorDBStore::Transaction *t, version_t from, version_t to);
-  /**
    * Trim the Paxos state as much as we can.
    */
-  void trim() {
-    assert(should_trim());
-    version_t trim_to_version = MIN(get_version() - g_conf->paxos_max_join_drift,
-				    get_first_committed() + g_conf->paxos_trim_max);
-    trim_to(trim_to_version);
-  }
+  void trim();
+
   /**
    * Disable trimming
    *
@@ -1188,7 +1169,7 @@ public:
     int maximum_versions =
       (g_conf->paxos_max_join_drift + g_conf->paxos_trim_min);
 
-    if (going_to_trim || (available_versions <= maximum_versions))
+    if (trimming || (available_versions <= maximum_versions))
       return false;
 
     if (trim_disabled_version > 0) {
