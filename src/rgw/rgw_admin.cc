@@ -121,6 +121,11 @@ void _usage()
   cerr << "   --start-date=<date>\n";
   cerr << "   --end-date=<date>\n";
   cerr << "   --bucket-id=<bucket-id>\n";
+  cerr << "   --shard-id=<shard-id>     optional for mdlog list\n";
+  cerr << "                             required for: \n";
+  cerr << "                               mdlog trim\n";
+  cerr << "                               replica mdlog get/delete\n";
+  cerr << "                               replica datalog get/delete\n";
   cerr << "   --fix                     besides checking bucket index, will also fix it\n";
   cerr << "   --check-objects           bucket check: rebuilds bucket index according to\n";
   cerr << "                             actual objects state\n";
