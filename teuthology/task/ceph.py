@@ -110,6 +110,17 @@ def ceph_log(ctx, config):
             wait=False,
             )
         )
+    log.info('Disabling ceph logrotate...')
+    run.wait(
+        ctx.cluster.run(
+            args=[
+                'sudo',
+                'rm', '-f', '--',
+                '/etc/logrotate.d/ceph',
+                ],
+            wait=False,
+            )
+        )
     log.info('Creating extra log directories...')
     run.wait(
         ctx.cluster.run(
