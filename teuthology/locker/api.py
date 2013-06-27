@@ -1,5 +1,6 @@
 import json
 import web
+import subprocess
 
 from config import DB
 
@@ -10,6 +11,34 @@ def load_machine(name):
     if not results:
         raise web.NotFound()
     return results[0]
+
+def get_sshkey(name):
+    if '@' in name:
+        _, name = name.rsplit('@')
+    args = ['ssh-keyscan']
+    args.append(name)
+    p = subprocess.Popen(
+        args=args,
+        stdout=subprocess.PIPE,
+        )
+    out, _ = p.communicate()
+    pubkey = None
+    for key_entry in out.splitlines():
+        hostname, pubkey = key_entry.split(' ', 1)
+    if not pubkey:
+        status = 1
+    else:
+        status = 0
+    return (pubkey), status
+
+def update_sshkey(name, key, type):
+    if type == 'vps':
+        return
+    res = DB.update('machine', where='name = $name AND locked = false',
+                    vars=dict(name=name),
+                    sshpubkey=key,)
+    assert res == 1, 'Failed to update key of machine {name}'.format(name=name)
+    print 'Updated key on ', name
 
 class MachineLock:
     def GET(self, name):
@@ -39,10 +68,22 @@ class MachineLock:
         machine = load_machine(name)
         if machine.locked:
             raise web.Forbidden()
+
+        if machine.type == 'vps':
+            curkey = machine.sshpubkey
+        else:
+            curkey, getstatus = get_sshkey(name)
+            if getstatus != 0:
+                curkey = machine.sshpubkey
+        if machine.sshpubkey != curkey:
+            newkey = curkey
+        else:
+            newkey = machine.sshpubkey
         res = DB.update('machine', where='name = $name AND locked = false',
                         vars=dict(name=name),
                         locked=True,
                         description=desc,
+                        sshpubkey=newkey,
                         locked_by=user,
                         locked_since=web.db.SQLLiteral('NOW()'))
         assert res == 1, 'Failed to lock machine {name}'.format(name=name)
@@ -113,14 +154,25 @@ class Lock:
                             break
 
                     results = list(DB.select('machine', machinetype,
-                                             what='name, sshpubkey',
+                                             what='name, sshpubkey, type',
                                              where='locked = false AND up = true AND type = $machinetype',
                                              limit=num))
                     if len(results) < num:
                         raise web.HTTPError(status='503 Service Unavailable')
                     name_keys = {}
                     for row in results:
-                        name_keys[row.name] = row.sshpubkey
+                        if row.type == 'vps':
+                            curkey = row.sshpubkey
+                        else:
+                            curkey, getstatus = get_sshkey(row.name)
+                            if getstatus != 0:
+                                curkey = row.sshpubkey
+                        if row.sshpubkey != curkey:
+                            newkey = curkey
+                            update_sshkey(row.name, curkey, row.type)
+                        else:
+                            newkey = row.sshpubkey
+                        name_keys[row.name] = newkey
                     where_cond = web.db.sqlors('name = ', name_keys.keys()) \
                         + ' AND locked = false AND up = true'
                     num_locked = DB.update('machine',
