@@ -114,6 +114,7 @@ void PaxosService::refresh(bool *need_bootstrap)
   // update cached versions
   cached_first_committed = mon->store->get(get_service_name(), first_committed_name);
   cached_last_committed = mon->store->get(get_service_name(), last_committed_name);
+  format_version = get_value("format_version");
 
   dout(10) << __func__ << dendl;
 
@@ -121,7 +122,7 @@ void PaxosService::refresh(bool *need_bootstrap)
 }
 
 
-void PaxosService::scrub()
+void PaxosService::remove_legacy_versions()
 {
   dout(10) << __func__ << dendl;
   if (!mon->store->exists(get_service_name(), "conversion_first"))
@@ -195,6 +196,10 @@ void PaxosService::propose_pending()
   encode_pending(&t);
   have_pending = false;
 
+  if (format_version > 0) {
+    t.put(get_service_name(), "format_version", format_version);
+  }
+
   dout(30) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
   t.dump(&f);
@@ -218,7 +223,7 @@ bool PaxosService::should_stash_full()
    */
   return (!latest_full ||
 	  (latest_full <= get_trim_to()) ||
-	  (get_version() - latest_full > (unsigned)g_conf->paxos_stash_full_interval));
+	  (get_last_committed() - latest_full > (unsigned)g_conf->paxos_stash_full_interval));
 }
 
 void PaxosService::restart()
@@ -269,7 +274,7 @@ void PaxosService::_active()
   }
   dout(10) << "_active" << dendl;
 
-  scrub();
+  remove_legacy_versions();
 
   // create pending state?
   if (mon->is_leader() && is_active()) {
@@ -279,7 +284,7 @@ void PaxosService::_active()
       have_pending = true;
     }
 
-    if (get_version() == 0) {
+    if (get_last_committed() == 0) {
       // create initial state
       create_initial();
       propose_pending();
@@ -297,6 +302,9 @@ void PaxosService::_active()
   // anyone waiting for the previous proposal to commit is no longer
   // on this list; it is on Paxos's.
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, 0);
+
+  if (is_active() && mon->is_leader())
+    upgrade_format();
 
   // NOTE: it's possible that this will get called twice if we commit
   // an old paxos value.  Implementations should be mindful of that.
@@ -316,25 +324,6 @@ void PaxosService::shutdown()
   }
 
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
-}
-
-void PaxosService::put_version(MonitorDBStore::Transaction *t,
-			       const string& prefix, version_t ver,
-			       bufferlist& bl)
-{
-  ostringstream os;
-  os << ver;
-  string key = mon->store->combine_strings(prefix, os.str());
-  t->put(get_service_name(), key, bl);
-}
-
-int PaxosService::get_version(const string& prefix, version_t ver,
-			      bufferlist& bl)
-{
-  ostringstream os;
-  os << ver;
-  string key = mon->store->combine_strings(prefix, os.str());
-  return mon->store->get(get_service_name(), key, bl);
 }
 
 void PaxosService::trim(MonitorDBStore::Transaction *t,
@@ -362,7 +351,7 @@ void PaxosService::trim(MonitorDBStore::Transaction *t,
 void PaxosService::encode_trim(MonitorDBStore::Transaction *t)
 {
   version_t first_committed = get_first_committed();
-  version_t latest_full = get_version("full", "latest");
+  version_t latest_full = get_version_latest_full();
   version_t trim_to = get_trim_to();
 
   dout(10) << __func__ << " " << trim_to << " (was " << first_committed << ")"

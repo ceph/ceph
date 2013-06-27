@@ -54,7 +54,7 @@
 #include <errno.h>
 
 
-#define CEPH_MON_PROTOCOL     11 /* cluster internal */
+#define CEPH_MON_PROTOCOL     12 /* cluster internal */
 
 
 enum {
@@ -1447,7 +1447,7 @@ private:
 public:
   class StoreConverter {
     const string path;
-    boost::scoped_ptr<MonitorDBStore> db;
+    MonitorDBStore *db;
     boost::scoped_ptr<MonitorStore> store;
 
     set<version_t> gvs;
@@ -1457,8 +1457,8 @@ public:
     version_t highest_accepted_pn;
 
    public:
-    StoreConverter(const string &path)
-      : path(path), db(NULL), store(NULL),
+    StoreConverter(string path, MonitorDBStore *d)
+      : path(path), db(d), store(NULL),
 	highest_last_pn(0), highest_accepted_pn(0)
     { }
 
@@ -1471,20 +1471,20 @@ public:
     int needs_conversion();
     int convert();
 
+    bool is_converting() {
+      return db->exists("mon_convert", "on_going");
+    }
+
    private:
 
     bool _check_gv_store();
 
     void _init() {
-      MonitorDBStore *db_ptr = new MonitorDBStore(path);
-      db.reset(db_ptr);
-
       MonitorStore *store_ptr = new MonitorStore(path);
       store.reset(store_ptr);
     }
 
     void _deinit() {
-      db.reset(NULL);
       store.reset(NULL);
     }
 
