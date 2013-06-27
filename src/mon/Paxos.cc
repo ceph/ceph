@@ -291,8 +291,6 @@ void Paxos::store_state(MMonPaxos *m)
   map<version_t,bufferlist>::iterator end = start;
   while (end != m->values.end() && end->first <= m->last_committed) {
     last_committed = end->first;
-    if (!first_committed)
-      first_committed = last_committed;
     ++end;
   }
 
@@ -302,11 +300,6 @@ void Paxos::store_state(MMonPaxos *m)
     dout(10) << "store_state [" << start->first << ".." 
 	     << last_committed << "]" << dendl;
     t.put(get_name(), "last_committed", last_committed);
-    // we write our first_committed version before we append the message's
-    // transaction because this transaction may be a trim; if so, it will
-    // update the first_committed value, and we must let it clobber our own
-    // in order to obtain an updated state.
-    t.put(get_name(), "first_committed", first_committed);
     // we should apply the state here -- decode every single bufferlist in the
     // map and append the transactions to 't'.
     map<version_t,bufferlist>::iterator it;
@@ -327,23 +320,36 @@ void Paxos::store_state(MMonPaxos *m)
 
     get_store()->apply_transaction(t);
 
-    // update the first and last committed in-memory values.
+    // refresh first_committed; this txn may have trimmed.
     first_committed = get_store()->get(get_name(), "first_committed");
-    last_committed = get_store()->get(get_name(), "last_committed");
+
+    _sanity_check_store();
   }
 
-  if (get_store()->exists(get_name(), "conversion_first")) {
-    MonitorDBStore::Transaction scrub_tx;
-    version_t cf = get_store()->get(get_name(), "conversion_first");
-    dout(10) << __func__ << " scrub paxos from " << cf
-	     << " to " << first_committed << dendl;
-    if (cf < first_committed)
-      trim_to(&scrub_tx, cf, first_committed);
-    scrub_tx.erase(get_name(), "conversion_first");
-    get_store()->apply_transaction(scrub_tx);
-  }
-
+  remove_legacy_versions();
 }
+
+void Paxos::remove_legacy_versions()
+{
+  if (get_store()->exists(get_name(), "conversion_first")) {
+    MonitorDBStore::Transaction t;
+    version_t v = get_store()->get(get_name(), "conversion_first");
+    dout(10) << __func__ << " removing pre-conversion paxos states from " << v
+	     << " until " << first_committed << dendl;
+    for (; v < first_committed; ++v) {
+      t.erase(get_name(), v);
+    }
+    t.erase(get_name(), "conversion_first");
+    get_store()->apply_transaction(t);
+  }
+}
+
+void Paxos::_sanity_check_store()
+{
+  version_t lc = get_store()->get(get_name(), "last_committed");
+  assert(lc == last_committed);
+}
+
 
 // leader
 void Paxos::handle_last(MMonPaxos *last)
@@ -487,6 +493,10 @@ void Paxos::begin(bufferlist& v)
   // have to decode it into a transaction and apply it.
   MonitorDBStore::Transaction t;
   t.put(get_name(), last_committed+1, new_value);
+
+  // initial base case; set first_committed too
+  if (last_committed == 0)
+    t.put(get_name(), "first_committed", 1);
 
   dout(30) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
@@ -657,10 +667,6 @@ void Paxos::commit()
   last_committed++;
   last_commit_time = ceph_clock_now(g_ceph_context);
   t.put(get_name(), "last_committed", last_committed);
-  if (!first_committed) {
-    first_committed = last_committed;
-    t.put(get_name(), "first_committed", last_committed);
-  }
 
   // decode the value and apply its transaction to the store.
   // this value can now be read from last_committed.
@@ -673,6 +679,11 @@ void Paxos::commit()
   *_dout << dendl;
 
   get_store()->apply_transaction(t);
+
+  // refresh first_committed; this txn may have trimmed.
+  first_committed = get_store()->get(get_name(), "first_committed");
+
+  _sanity_check_store();
 
   // tell everyone
   for (set<int>::const_iterator p = mon->get_quorum().begin();
@@ -692,6 +703,8 @@ void Paxos::commit()
 
   // get ready for a new round.
   new_value.clear();
+
+  remove_legacy_versions();
 }
 
 
@@ -807,18 +820,6 @@ void Paxos::finish_proposal()
 
   dout(10) << __func__ << " state " << state
 	   << " proposals left " << proposals.size() << dendl;
-
-  /* Update the internal Paxos state.
-   *
-   * Since we moved to a single-paxos instance across all monitor services, we
-   * can no longer rely on each individual service to update paxos state.
-   * Therefore, once we conclude a proposal, we must update our internal
-   * state (say, such variables as 'first_committed'), because no one else
-   * will take care of that for us -- and we rely on these variables for
-   * several other mechanisms; trimming comes to mind.
-   */
-  first_committed = get_store()->get(get_name(), "first_committed");
-  last_committed = get_store()->get(get_name(), "last_committed");
 
   if (need_bootstrap) {
     dout(10) << " doing requested bootstrap" << dendl;
@@ -957,55 +958,44 @@ void Paxos::lease_renew_timeout()
 /*
  * trim old states
  */
-void Paxos::trim_to(MonitorDBStore::Transaction *t,
-		    version_t from, version_t to) {
-  dout(10) << __func__ << " from " << from << " to " << to << dendl;
-  assert(from < to);
+void Paxos::trim()
+{
+  assert(should_trim());
+  version_t end = MIN(get_version() - g_conf->paxos_max_join_drift,
+			get_first_committed() + g_conf->paxos_trim_max);
 
-  for (version_t v = from; v < to; ++v) {
+  if (first_committed >= end)
+    return;
+
+  dout(10) << "trim to " << end << " (was " << first_committed << ")" << dendl;
+
+  MonitorDBStore::Transaction t;
+
+  for (version_t v = first_committed; v < end; ++v) {
     dout(10) << "trim " << v << dendl;
-    t->erase(get_name(), v);
+    t.erase(get_name(), v);
   }
+  t.put(get_name(), "first_committed", end);
   if (g_conf->mon_compact_on_trim) {
     dout(10) << " compacting trimmed range" << dendl;
-    t->compact_range(get_name(), stringify(from - 1), stringify(to));
+    t.compact_range(get_name(), stringify(first_committed - 1), stringify(end));
   }
+
+  dout(30) << __func__ << " transaction dump:\n";
+  JSONFormatter f(true);
+  t.dump(&f);
+  f.flush(*_dout);
+  *_dout << dendl;
+
+  bufferlist bl;
+  t.encode(bl);
+
+  trimming = true;
+  queue_proposal(bl, new C_Trimmed(this));
 }
 
-void Paxos::trim_to(MonitorDBStore::Transaction *t, version_t first)
+void Paxos::trim_enable()
 {
-  dout(10) << "trim_to " << first << " (was " << first_committed << ")"
-	   << dendl;
-
-  if (first_committed >= first)
-    return;
-  trim_to(t, first_committed, first);
-  t->put(get_name(), "first_committed", first);
-  first_committed = first;
-}
-
-void Paxos::trim_to(version_t first)
-{
-  MonitorDBStore::Transaction t;
-  
-  trim_to(&t, first);
-
-  if (!t.empty()) {
-    dout(30) << __func__ << " transaction dump:\n";
-    JSONFormatter f(true);
-    t.dump(&f);
-    f.flush(*_dout);
-    *_dout << dendl;
-
-    bufferlist bl;
-    t.encode(bl);
-
-    going_to_trim = true;
-    queue_proposal(bl, new C_Trimmed(this));
-  }
-}
-
-void Paxos::trim_enable() {
   trim_disabled_version = 0;
   // We may not be the leader when we reach this function. We sure must
   // have been the leader at some point, but we may have been demoted and
