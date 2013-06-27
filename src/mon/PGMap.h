@@ -26,6 +26,8 @@
 #include "common/config.h"
 #include <sstream>
 
+#include "MonitorDBStore.h"
+
 namespace ceph { class Formatter; }
 
 class PGMap {
@@ -35,9 +37,9 @@ public:
   epoch_t last_osdmap_epoch;   // last osdmap epoch i applied to the pgmap
   epoch_t last_pg_scan;  // osdmap epoch
   hash_map<pg_t,pg_stat_t> pg_stat;
-  hash_map<int,osd_stat_t> osd_stat;
-  set<int> full_osds;
-  set<int> nearfull_osds;
+  hash_map<int32_t,osd_stat_t> osd_stat;
+  set<int32_t> full_osds;
+  set<int32_t> nearfull_osds;
   float full_ratio;
   float nearfull_ratio;
 
@@ -45,8 +47,8 @@ public:
   public:
     version_t version;
     map<pg_t,pg_stat_t> pg_stat_updates;
-    map<int,osd_stat_t> osd_stat_updates;
-    set<int> osd_stat_rm;
+    map<int32_t,osd_stat_t> osd_stat_updates;
+    set<int32_t> osd_stat_rm;
     epoch_t osdmap_epoch;
     epoch_t pg_scan;  // osdmap epoch
     set<pg_t> pg_remove;
@@ -78,6 +80,7 @@ public:
   pool_stat_t pg_sum_delta;
   utime_t stamp_delta;
 
+  void update_delta(CephContext *cct, utime_t inc_stamp, pool_stat_t& pg_sum_old);
   void clear_delta();
 
   set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
@@ -98,6 +101,44 @@ public:
       num_osd(0)
   {}
 
+  void set_full_ratios(float full, float nearfull) {
+    if (full_ratio == full && nearfull_ratio == nearfull)
+      return;
+    full_ratio = full;
+    nearfull_ratio = nearfull;
+    redo_full_sets();
+  }
+
+  version_t get_version() const {
+    return version;
+  }
+  void set_version(version_t v) {
+    version = v;
+  }
+  epoch_t get_last_osdmap_epoch() const {
+    return last_osdmap_epoch;
+  }
+  void set_last_osdmap_epoch(epoch_t e) {
+    last_osdmap_epoch = e;
+  }
+  epoch_t get_last_pg_scan() const {
+    return last_pg_scan;
+  }
+  void set_last_pg_scan(epoch_t e) {
+    last_pg_scan = e;
+  }
+  utime_t get_stamp() const {
+    return stamp;
+  }
+  void set_stamp(utime_t s) {
+    stamp = s;
+  }
+
+  void update_pg(pg_t pgid, bufferlist& bl);
+  void remove_pg(pg_t pgid);
+  void update_osd(int osd, bufferlist& bl);
+  void remove_osd(int osd);
+
   void apply_incremental(CephContext *cct, const Incremental& inc);
   void redo_full_sets();
   void register_nearfull_status(int osd, const osd_stat_t& s);
@@ -109,6 +150,8 @@ public:
   
   void encode(bufferlist &bl, uint64_t features=-1) const;
   void decode(bufferlist::iterator &bl);
+
+  void dirty_all(Incremental& inc);
 
   void dump(Formatter *f) const; 
   void dump_basic(Formatter *f) const;
