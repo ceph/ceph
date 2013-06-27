@@ -3561,7 +3561,8 @@ pair<ConnectionRef,ConnectionRef> OSDService::get_con_osd_hb(int peer, epoch_t f
     return ret;
   }
   ret.first = osd->hbclient_messenger->get_connection(next_osdmap->get_hb_back_inst(peer));
-  ret.second = osd->hbclient_messenger->get_connection(next_osdmap->get_hb_front_inst(peer));
+  if (next_osdmap->get_hb_front_addr(peer) != entity_addr_t())
+    ret.second = osd->hbclient_messenger->get_connection(next_osdmap->get_hb_front_inst(peer));
   return ret;
 }
 
@@ -4969,7 +4970,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 	       !osdmap->get_addr(whoami).probably_equals(client_messenger->get_myaddr()) ||
 	       !osdmap->get_cluster_addr(whoami).probably_equals(cluster_messenger->get_myaddr()) ||
 	       !osdmap->get_hb_back_addr(whoami).probably_equals(hb_back_server_messenger->get_myaddr()) ||
-	       !osdmap->get_hb_front_addr(whoami).probably_equals(hb_front_server_messenger->get_myaddr())) {
+	       (osdmap->get_hb_front_addr(whoami) != entity_addr_t() &&
+                !osdmap->get_hb_front_addr(whoami).probably_equals(hb_front_server_messenger->get_myaddr()))) {
       if (!osdmap->is_up(whoami)) {
 	if (service.is_preparing_to_stop()) {
 	  service.got_stop_ack();
@@ -4990,7 +4992,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 	clog.error() << "map e" << osdmap->get_epoch()
 		    << " had wrong hb back addr (" << osdmap->get_hb_back_addr(whoami)
 		     << " != my " << hb_back_server_messenger->get_myaddr() << ")";
-      else if (!osdmap->get_hb_front_addr(whoami).probably_equals(hb_front_server_messenger->get_myaddr()))
+      else if (osdmap->get_hb_front_addr(whoami) != entity_addr_t() &&
+               !osdmap->get_hb_front_addr(whoami).probably_equals(hb_front_server_messenger->get_myaddr()))
 	clog.error() << "map e" << osdmap->get_epoch()
 		    << " had wrong hb front addr (" << osdmap->get_hb_front_addr(whoami)
 		     << " != my " << hb_front_server_messenger->get_myaddr() << ")";
