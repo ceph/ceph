@@ -323,7 +323,12 @@ void PGMonitor::read_pgmap_meta()
   epoch_t last_pg_scan = mon->store->get(prefix, "last_pg_scan");
   pg_map.set_version(version);
   pg_map.set_last_osdmap_epoch(last_osdmap_epoch);
-  pg_map.set_last_pg_scan(last_pg_scan);
+
+  if (last_pg_scan != pg_map.get_last_pg_scan()) {
+    pg_map.set_last_pg_scan(last_pg_scan);
+    // clear our osdmap epoch so that map_pg_creates() will re-run
+    last_map_pg_create_osd_epoch = 0;
+  }
 
   float full_ratio, nearfull_ratio;
   {
@@ -369,8 +374,7 @@ void PGMonitor::read_pgmap_full()
   prefix = "pgmap_osd";
   for (KeyValueDB::Iterator i = mon->store->get_iterator(prefix); i->valid(); i->next()) {
     string key = i->key();
-    int osd;
-    osd = atoi(key.c_str());
+    int osd = atoi(key.c_str());
     bufferlist bl = i->value();
     pg_map.update_osd(osd, bl);
     dout(20) << " got osd." << osd << dendl;
@@ -1004,7 +1008,14 @@ bool PGMonitor::register_new_pgs()
 
 void PGMonitor::map_pg_creates()
 {
-  dout(10) << "map_pg_creates to " << pg_map.creating_pgs.size() << " pgs" << dendl;
+  OSDMap *osdmap = &mon->osdmon()->osdmap;
+  if (osdmap->get_epoch() == last_map_pg_create_osd_epoch) {
+    dout(10) << "map_pg_creates to " << pg_map.creating_pgs.size() << " pgs -- no change" << dendl;
+    return;
+  }
+
+  dout(10) << "map_pg_creates to " << pg_map.creating_pgs.size() << " pgs osdmap epoch " << osdmap->get_epoch() << dendl;
+  last_map_pg_create_osd_epoch = osdmap->get_epoch();
 
   for (set<pg_t>::iterator p = pg_map.creating_pgs.begin();
        p != pg_map.creating_pgs.end();
@@ -1015,7 +1026,7 @@ void PGMonitor::map_pg_creates()
     if (s.parent_split_bits)
       on = s.parent;
     vector<int> acting;
-    int nrep = mon->osdmon()->osdmap.pg_to_acting_osds(on, acting);
+    int nrep = osdmap->pg_to_acting_osds(on, acting);
 
     if (s.acting.size()) {
       pg_map.creating_pgs_by_osd[s.acting[0]].erase(pgid);
