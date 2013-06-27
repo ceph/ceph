@@ -1476,8 +1476,15 @@ def mount_activate(
                 parent_dev = os.stat('/var/lib/ceph/osd').st_dev
                 if dst_dev != parent_dev:
                     other = True
+                else if os.listdir('/var/lib/ceph/osd/{cluster}-{osd_id}'.format(
+                        cluster=cluster,
+                        osd_id=osd_id,
+                        )):
+                    other = True
+
         except OSError:
             pass
+
         if active:
             LOG.info('%s osd.%s already mounted in position; unmounting ours.' % (cluster, osd_id))
             unmount(path)
