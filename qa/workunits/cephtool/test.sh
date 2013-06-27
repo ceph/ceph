@@ -30,6 +30,8 @@ expect_false()
 #
 
 ceph auth add client.xx mon allow osd "allow *"
+ceph auth export client.xx >client.xx.keyring
+ceph auth add client.xx -i client.xx.keyring
 ceph auth list | grep client.xx
 ceph auth get client.xx | grep caps | grep mon
 ceph auth get client.xx | grep caps | grep osd
