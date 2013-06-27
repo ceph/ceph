@@ -605,7 +605,7 @@ struct RGWBucketInfo
      ::encode(owner, bl);
      ::encode(flags, bl);
      ::encode(region, bl);
-     ::encode((uint32_t)creation_time, bl);
+     ::encode((uint64_t)creation_time, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -618,7 +618,7 @@ struct RGWBucketInfo
      if (struct_v >= 5)
        ::decode(region, bl);
      if (struct_v >= 6)
-       ::decode((uint32_t&)creation_time, bl);
+       ::decode((uint64_t&)creation_time, bl);
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;

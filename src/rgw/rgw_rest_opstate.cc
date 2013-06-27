@@ -24,8 +24,8 @@
 #define dout_subsys ceph_subsys_rgw
 
 void RGWOp_Opstate_List::execute() {
-  string client_id = s->info.args.get("client_id"),
-         op_id = s->info.args.get("op_id"),
+  string client_id = s->info.args.get("client-id"),
+         op_id = s->info.args.get("op-id"),
          object = s->info.args.get("object"),
          max_entries_str = s->info.args.get("max-entries");
   unsigned max_entries = OPSTATE_LIST_MAX_ENTRIES;
@@ -43,9 +43,12 @@ void RGWOp_Opstate_List::execute() {
   RGWOpState oc = RGWOpState(store);
   void *handle;
   bool done;
+  list<cls_statelog_entry> entries;
 
   oc.init_list_entries(client_id, op_id, object, &handle);
 
+  http_ret = 0;
+  send_response();
   do {
     int ret = oc.list_entries(handle, max_entries, entries, &done);
 
@@ -59,31 +62,46 @@ void RGWOp_Opstate_List::execute() {
     if (!max_entries_str.empty()) 
       max_entries -= entries.size();
 
+    send_response(entries);
   } while (!done && max_entries > 0);
 
   oc.finish_list_entries(handle);
-  http_ret = 0;
+  send_response_end();
 }
 
 void RGWOp_Opstate_List::send_response() {
+  if (sent_header)
+    return;
+
   set_req_state_err(s, http_ret);
   dump_errno(s);
   end_header(s);
 
+  sent_header = true;
+
+  if (http_ret < 0)
+    return;
+
   s->formatter->open_array_section("entries");
+}
+
+void RGWOp_Opstate_List::send_response(list<cls_statelog_entry> entries) {
   RGWOpState oc(store);
   for (list<cls_statelog_entry>::iterator it = entries.begin();
        it != entries.end(); it++) {
     oc.dump_entry(*it, s->formatter);
     flusher.flush();
   }
+}
+
+void RGWOp_Opstate_List::send_response_end() {
   s->formatter->close_section();
   flusher.flush();
 }
 
 void RGWOp_Opstate_Set::execute() {
-  string client_id = s->info.args.get("client_id"),
-         op_id = s->info.args.get("op_id"),
+  string client_id = s->info.args.get("client-id"),
+         op_id = s->info.args.get("op-id"),
          object = s->info.args.get("object"),
          state_str = s->info.args.get("state");
 
@@ -113,8 +131,8 @@ void RGWOp_Opstate_Set::execute() {
 }
 
 void RGWOp_Opstate_Renew::execute() {
-  string client_id = s->info.args.get("client_id"),
-         op_id = s->info.args.get("op_id"),
+  string client_id = s->info.args.get("client-id"),
+         op_id = s->info.args.get("op-id"),
          object = s->info.args.get("object"),
          state_str = s->info.args.get("state");
 
@@ -143,8 +161,8 @@ void RGWOp_Opstate_Renew::execute() {
 }
 
 void RGWOp_Opstate_Delete::execute() {
-  string client_id = s->info.args.get("client_id"),
-         op_id = s->info.args.get("op_id"),
+  string client_id = s->info.args.get("client-id"),
+         op_id = s->info.args.get("op-id"),
          object = s->info.args.get("object");
 
   if (client_id.empty() ||

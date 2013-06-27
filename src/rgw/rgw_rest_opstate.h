@@ -15,10 +15,9 @@
 #define CEPH_RGW_REST_OPSTATE_H
 
 class RGWOp_Opstate_List : public RGWRESTOp {
-  int http_ret;
-  list<cls_statelog_entry> entries;
+  bool sent_header;
 public:
-  RGWOp_Opstate_List() : http_ret(0) {}
+  RGWOp_Opstate_List() {}
   ~RGWOp_Opstate_List() {}
 
   int check_caps(RGWUserCaps& caps) {
@@ -29,6 +28,8 @@ public:
   }
   void execute();
   virtual void send_response();
+  virtual void send_response(list<cls_statelog_entry> entries);
+  virtual void send_response_end();
   virtual const char *name() {
     return "opstate_list";
   }
