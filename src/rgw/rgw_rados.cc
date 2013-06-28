@@ -2822,14 +2822,6 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
   if (r < 0)
     return r;
 
-  ObjectWriteOperation op;
-  op.remove();
-  librados::AioCompletion *completion = rados->aio_create_completion(NULL, NULL, NULL);
-  r = index_ctx.aio_operate(oid, completion, &op);
-  completion->release();
-  if (r < 0)
-    return r;
-
   return 0;
 }
 
