@@ -1334,16 +1334,21 @@ public:
   C_MDS_StandbyReplayRestartFinish(MDS *mds_, uint64_t old_read_pos_) :
     mds(mds_), old_read_pos(old_read_pos_) {}
   void finish(int r) {
-    if (old_read_pos < mds->mdlog->get_journaler()->get_trimmed_pos()) {
-      cerr << "standby MDS fell behind active MDS journal's expire_pos, restarting" << std::endl;
-      mds->respawn(); /* we're too far back, and this is easier than
-                         trying to reset everything in the cache, etc */
-    } else {
-      mds->mdlog->standby_trim_segments();
-      mds->boot_start(3, r);
-    }
+    mds->_standby_replay_restart_finish(r, old_read_pos);
   }
 };
+
+void MDS::_standby_replay_restart_finish(int r, uint64_t old_read_pos)
+{
+  if (old_read_pos < mdlog->get_journaler()->get_trimmed_pos()) {
+    dout(0) << "standby MDS fell behind active MDS journal's expire_pos, restarting" << dendl;
+    respawn(); /* we're too far back, and this is easier than
+		  trying to reset everything in the cache, etc */
+  } else {
+    mdlog->standby_trim_segments();
+    boot_start(3, r);
+  }
+}
 
 inline void MDS::standby_replay_restart()
 {
