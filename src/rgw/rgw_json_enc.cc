@@ -223,7 +223,7 @@ void RGWAccessKey::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("secret_key", key, obj, true);
   if (!JSONDecoder::decode_json("subuser", subuser, obj)) {
     string user;
-    JSONDecoder::decode_json("user", user, obj, true);
+    JSONDecoder::decode_json("user", user, obj);
     int pos = user.find(':');
     if (pos >= 0) {
       subuser = user.substr(pos + 1);
