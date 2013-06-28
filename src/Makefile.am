@@ -426,6 +426,7 @@ radosgw_SOURCES = \
         rgw/rgw_rest_log.cc \
         rgw/rgw_rest_opstate.cc \
         rgw/rgw_rest_replica_log.cc \
+        rgw/rgw_rest_config.cc \
         rgw/rgw_http_client.cc \
         rgw/rgw_swift.cc \
 	rgw/rgw_swift_auth.cc \
@@ -2158,6 +2159,7 @@ noinst_HEADERS = \
 	rgw/rgw_rest_log.h\
 	rgw/rgw_rest_opstate.h\
 	rgw/rgw_rest_replica_log.h\
+	rgw/rgw_rest_config.h\
 	rgw/rgw_usage.h\
 	rgw/rgw_user.h\
 	rgw/rgw_bucket.h\
