@@ -1354,6 +1354,13 @@ int Client::make_request(MetaRequest *request,
   logger->tinc(l_c_lat, lat);
   logger->tinc(l_c_reply, lat);
 
+  if (request->inode())
+    put_inode(request->take_inode());
+  if (request->old_inode())
+    put_inode(request->take_old_inode());
+  if (request->other_inode())
+    put_inode(request->take_other_inode());
+
   request->put();
 
   reply->put();
