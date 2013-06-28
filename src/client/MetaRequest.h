@@ -129,9 +129,13 @@ public:
     return this;
   }
 
-  void put() {
+  /// psuedo-private put method; use Client::put_request()
+  void _put() {
     if (--ref == 0)
       delete this;
+  }
+  int get_num_ref() {
+    return ref;
   }
 
   // normal fields
