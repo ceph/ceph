@@ -1,6 +1,7 @@
 tasks:
 - rados:
     ops: 4000
+    max_seconds: 7200
     objects: 50
     op_weights:
       read: 100
