@@ -706,7 +706,7 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
     if (old_dentry)
       unlink(old_dentry, dir == old_dentry->dir);  // keep dir open if its the same dir
     dn = link(dir, dname, in, dn);
-    in->put();
+    put_inode(in);
     if (set_offset) {
       ldout(cct, 15) << " setting dn offset to " << dir->max_offset << dendl;
       dn->offset = dir->max_offset++;
@@ -1354,10 +1354,23 @@ int Client::make_request(MetaRequest *request,
   logger->tinc(l_c_lat, lat);
   logger->tinc(l_c_reply, lat);
 
-  request->put();
+  put_request(request);
 
   reply->put();
   return r;
+}
+
+void Client::put_request(MetaRequest *request)
+{
+  if (request->get_num_ref() == 1) {
+    if (request->inode())
+      put_inode(request->take_inode());
+    if (request->old_inode())
+      put_inode(request->take_old_inode());
+    if (request->other_inode())
+      put_inode(request->take_other_inode());
+  }
+  request->_put();
 }
 
 int Client::encode_inode_release(Inode *in, MetaRequest *req,
@@ -1765,7 +1778,7 @@ void Client::handle_client_reply(MClientReply *reply)
     }
     request->item.remove_myself();
     mds_requests.erase(tid);
-    request->put(); // for the dumb data structure
+    put_request(request);
   }
   if (unmounting)
     mount_cond.Signal();
@@ -2057,11 +2070,10 @@ void Client::handle_lease(MClientLease *m)
   m->put();
 }
 
-
 void Client::put_inode(Inode *in, int n)
 {
   ldout(cct, 10) << "put_inode on " << *in << dendl;
-  int left = in->put(n);
+  int left = in->_put(n);
   if (left == 0) {
     // release any caps
     remove_all_caps(in);
@@ -4424,7 +4436,7 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid, I
     if ((unsigned long)attr->st_size < mdsmap->get_max_filesize())
       req->head.args.setattr.size = attr->st_size;
     else { //too big!
-      delete req;
+      put_request(req);
       return -EFBIG;
     }
     req->inode_drop |= CEPH_CAP_AUTH_SHARED | CEPH_CAP_FILE_RD |
@@ -6967,7 +6979,7 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int ui
   return res;
 
  fail:
-  delete req;
+  put_request(req);
   return res;
 }
 
@@ -7063,7 +7075,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   return res;
 
  fail:
-  delete req;
+  put_request(req);
   return res;
 }
 
@@ -7107,7 +7119,7 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid,
   return res;
 
  fail:
-  delete req;
+  put_request(req);
   return res;
 }
 
@@ -7172,7 +7184,7 @@ int Client::_symlink(Inode *dir, const char *name, const char *target, int uid, 
 
 
  fail:
-  delete req;
+  put_request(req);
   return res;
 }
 
@@ -7244,7 +7256,7 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
   return res;
 
  fail:
-  delete req;
+  put_request(req);
   return res;
 }
 
@@ -7305,7 +7317,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
   return res;
 
  fail:
-  delete req;
+  put_request(req);
   return res;
 }
 
@@ -7388,7 +7400,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   return res;
 
  fail:
-  delete req;
+  put_request(req);
   return res;
 }
 
@@ -7445,7 +7457,7 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid, 
   return res;
 
  fail:
-  delete req;
+  put_request(req);
   return res;
 }
 
