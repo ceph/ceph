@@ -703,7 +703,7 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
     if (old_dentry)
       unlink(old_dentry, dir == old_dentry->dir);  // keep dir open if its the same dir
     dn = link(dir, dname, in, dn);
-    in->put();
+    put_inode(in);
     if (set_offset) {
       ldout(cct, 15) << " setting dn offset to " << dir->max_offset << dendl;
       dn->offset = dir->max_offset++;
@@ -2066,7 +2066,7 @@ void Client::handle_lease(MClientLease *m)
 void Client::put_inode(Inode *in, int n)
 {
   ldout(cct, 10) << "put_inode on " << *in << dendl;
-  int left = in->put(n);
+  int left = in->_put(n);
   if (left == 0) {
     // release any caps
     remove_all_caps(in);
