@@ -649,7 +649,7 @@ struct RGWBucketInfo
      ::encode(owner, bl);
      ::encode(flags, bl);
      ::encode(region, bl);
-     ::encode(creation_time, bl);
+     ::encode((uint64_t)creation_time, bl);
      ::encode(placement_rule, bl);
      ::encode(has_instance_obj, bl);
      ENCODE_FINISH(bl);
@@ -664,7 +664,7 @@ struct RGWBucketInfo
      if (struct_v >= 5)
        ::decode(region, bl);
      if (struct_v >= 6)
-       ::decode(creation_time, bl);
+       ::decode((uint64_t&)creation_time, bl);
      if (struct_v >= 7)
        ::decode(placement_rule, bl);
      if (struct_v >= 8)
