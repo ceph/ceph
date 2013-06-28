@@ -77,8 +77,7 @@ TEST(LibRadosCmd, OSDCmd) {
   ASSERT_TRUE(r == -22 || r == -ENXIO);
   cmd[0] = (char *)"{\"prefix\":\"version\"}";
   r = rados_osd_command(cluster, 0, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen);
-  ASSERT_TRUE(r == 0 || r == -ENXIO);
-  ASSERT_LT(0u, buflen);
+  ASSERT_TRUE((r == 0 && buflen > 0) || (r == -ENXIO && buflen == 0));
   rados_buffer_free(buf);
   rados_buffer_free(st);
 
