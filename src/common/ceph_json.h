@@ -139,6 +139,8 @@ void decode_json_obj(bufferlist& val, JSONObj *obj);
 template<class T>
 void decode_json_obj(list<T>& l, JSONObj *obj)
 {
+  l.clear();
+
   JSONObjIter iter = obj->find_first();
 
   for (; !iter.end(); ++iter) {
@@ -152,6 +154,8 @@ void decode_json_obj(list<T>& l, JSONObj *obj)
 template<class K, class V>
 void decode_json_obj(map<K, V>& m, JSONObj *obj)
 {
+  m.clear();
+
   JSONObjIter iter = obj->find_first();
 
   for (; !iter.end(); ++iter) {
@@ -167,6 +171,8 @@ void decode_json_obj(map<K, V>& m, JSONObj *obj)
 template<class C>
 void decode_json_obj(C& container, void (*cb)(C&, JSONObj *obj), JSONObj *obj)
 {
+  container.clear();
+
   JSONObjIter iter = obj->find_first();
 
   for (; !iter.end(); ++iter) {
@@ -184,6 +190,7 @@ bool JSONDecoder::decode_json(const char *name, T& val, JSONObj *obj, bool manda
       string s = "missing mandatory field " + string(name);
       throw err(s);
     }
+    val = T();
     return false;
   }
 
@@ -201,6 +208,8 @@ bool JSONDecoder::decode_json(const char *name, T& val, JSONObj *obj, bool manda
 template<class C>
 bool JSONDecoder::decode_json(const char *name, C& container, void (*cb)(C&, JSONObj *), JSONObj *obj, bool mandatory)
 {
+  container.clear();
+
   JSONObjIter iter = obj->find_first(name);
   if (iter.end()) {
     if (mandatory) {
