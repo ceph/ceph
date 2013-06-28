@@ -372,6 +372,7 @@ class MDS : public Dispatcher {
   void starting_done();
   void replay_done();
   void standby_replay_restart();
+  void _standby_replay_restart_finish(int r, uint64_t old_read_pos);
   class C_MDS_StandbyReplayRestart;
   class C_MDS_StandbyReplayRestartFinish;
 
