@@ -57,12 +57,9 @@ void MetaRequest::dump(Formatter *f) const
 
 MetaRequest::~MetaRequest()
 {
-  if (_inode)
-    _inode->put();
-  if (_old_inode)
-    _old_inode->put();
-  if (_other_inode)
-    _other_inode->put();
+  assert(!_inode);
+  assert(!_old_inode);
+  assert(!_other_inode);
   if (_dentry)
     _dentry->put();
   if (_old_dentry)
