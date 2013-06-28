@@ -233,20 +233,29 @@ void RGWOp_MDLog_Unlock::execute() {
 void RGWOp_BILog_List::execute() {
   string bucket_name = s->info.args.get("bucket"),
          marker = s->info.args.get("marker"),
-         max_entries_str = s->info.args.get("max-entries");
+         max_entries_str = s->info.args.get("max-entries"),
+         bucket_instance = s->info.args.get("bucket-instance");
   RGWBucketInfo bucket_info;
   unsigned max_entries;
 
-  if (bucket_name.empty()) {
-    dout(5) << "ERROR: bucket not specified" << dendl;
+  if (bucket_name.empty() && bucket_instance.empty()) {
+    dout(5) << "ERROR: neither bucket nor bucket instance specified" << dendl;
     http_ret = -EINVAL;
     return;
   }
 
-  http_ret = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL, NULL);
-  if (http_ret < 0) {
-    dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
-    return;
+  if (!bucket_instance.empty()) {
+    http_ret = store->get_bucket_instance_info(NULL, bucket_instance, bucket_info, NULL, NULL);
+    if (http_ret < 0) {
+      dout(5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
+      return;
+    }
+  } else { /* !bucket_name.empty() */
+    http_ret = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL, NULL);
+    if (http_ret < 0) {
+      dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
+      return;
+    }
   }
 
   bool truncated;
@@ -260,7 +269,7 @@ void RGWOp_BILog_List::execute() {
   send_response();
   do {
     list<rgw_bi_log_entry> entries;
-    int ret = store->list_bi_log_entries(bucket_info.bucket, 
+    int ret = store->list_bi_log_entries(bucket_info.bucket,
                                           marker, max_entries - count, 
                                           entries, &truncated);
     if (ret < 0) {
@@ -311,21 +320,31 @@ void RGWOp_BILog_List::send_response_end() {
 void RGWOp_BILog_Delete::execute() {
   string bucket_name = s->info.args.get("bucket"),
          start_marker = s->info.args.get("start-marker"),
-         end_marker = s->info.args.get("end-marker");
+         end_marker = s->info.args.get("end-marker"),
+         bucket_instance = s->info.args.get("bucket-instance");
+
   RGWBucketInfo bucket_info;
 
   http_ret = 0;
-  if (bucket_name.empty() || 
+  if ((bucket_name.empty() && bucket_instance.empty()) ||
       start_marker.empty() ||
       end_marker.empty()) {
-    dout(5) << "ERROR: bucket, start-marker, end-marker are mandatory" << dendl;
+    dout(5) << "ERROR: one of bucket and bucket instance, and also start-marker, end-marker are mandatory" << dendl;
     http_ret = -EINVAL;
     return;
   }
-  http_ret = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL, NULL);
-  if (http_ret < 0) {
-    dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
-    return;
+  if (!bucket_instance.empty()) {
+    http_ret = store->get_bucket_instance_info(NULL, bucket_instance, bucket_info, NULL, NULL);
+    if (http_ret < 0) {
+      dout(5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
+      return;
+    }
+  } else { /* !bucket_name.empty() */
+    http_ret = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL, NULL);
+    if (http_ret < 0) {
+      dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
+      return;
+    }
   }
   http_ret = store->trim_bi_log_entries(bucket_info.bucket, start_marker, end_marker);
   if (http_ret < 0) {
