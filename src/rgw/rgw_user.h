@@ -39,6 +39,11 @@ struct RGWUID
 WRITE_CLASS_ENCODER(RGWUID)
 
 /**
+ * Get the anonymous (ie, unauthenticated) user id.
+ */
+extern std::string rgw_get_anon_uid();
+
+/**
  * Get the anonymous (ie, unauthenticated) user info.
  */
 extern void rgw_get_anon_user(RGWUserInfo& info);

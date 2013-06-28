@@ -900,12 +900,8 @@ static int bucket_stats(RGWRados *store, std::string&  bucket_name, Formatter *f
 int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
-  RGWBucket bucket;
-  int ret = bucket.init(store, op_state);
-  if (ret < 0)
-    return ret;
+  int ret;
   string bucket_name = op_state.get_bucket_name();
-
   Formatter *formatter = flusher.get_formatter();
   flusher.start(0);
 
@@ -949,12 +945,13 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
   } else {
     RGWAccessHandle handle;
 
-    if (store->list_buckets_init(&handle) > 0) {
+    if (store->list_buckets_init(&handle) == 0) {
       RGWObjEnt obj;
       while (store->list_buckets_next(obj, &handle) >= 0) {
-	formatter->dump_string("bucket", obj.name);
         if (show_stats)
           bucket_stats(store, obj.name, formatter);
+        else
+          formatter->dump_string("bucket", obj.name);
       }
     }
   }
