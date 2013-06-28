@@ -17,7 +17,7 @@
 class RGWOp_Opstate_List : public RGWRESTOp {
   bool sent_header;
 public:
-  RGWOp_Opstate_List() {}
+  RGWOp_Opstate_List() : sent_header(false) {}
   ~RGWOp_Opstate_List() {}
 
   int check_caps(RGWUserCaps& caps) {
