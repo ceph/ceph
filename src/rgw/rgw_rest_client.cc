@@ -477,6 +477,7 @@ int RGWRESTStreamWriteRequest::send_data(void *ptr, size_t len)
 
     memcpy(ptr, bl.c_str(), send_len);
 
+    ptr = (char *)ptr + send_len;
     len -= send_len;
     sent += send_len;
 
