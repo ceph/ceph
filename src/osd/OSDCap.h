@@ -93,6 +93,7 @@ struct OSDCapMatch {
    * @return true if we match, false otherwise
    */
   bool is_match(const std::string& pool_name, int64_t pool_auid, const std::string& object) const;
+  bool is_match_all() const;
 };
 
 ostream& operator<<(ostream& out, const OSDCapMatch& m);
