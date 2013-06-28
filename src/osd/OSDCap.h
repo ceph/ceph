@@ -73,26 +73,32 @@ ostream& operator<<(ostream& out, const OSDCapSpec& s);
 
 
 struct OSDCapMatch {
-  // auid and pool_name are mutually exclusive
+  // auid and pool_name/nspace are mutually exclusive
   int64_t auid;
   std::string pool_name;
+  bool is_nspace;      // true if nspace is defined; false if not constrained.
+  std::string nspace;
 
   std::string object_prefix;
 
-  OSDCapMatch() : auid(CEPH_AUTH_UID_DEFAULT) {}
-  OSDCapMatch(std::string pl, std::string pre) : auid(CEPH_AUTH_UID_DEFAULT), pool_name(pl), object_prefix(pre) {}
-  OSDCapMatch(uint64_t auid, std::string pre) : auid(auid), object_prefix(pre) {}
+  OSDCapMatch() : auid(CEPH_AUTH_UID_DEFAULT), is_nspace(false) {}
+  OSDCapMatch(std::string pl, std::string pre) :
+	auid(CEPH_AUTH_UID_DEFAULT), pool_name(pl), is_nspace(false), object_prefix(pre) {}
+  OSDCapMatch(std::string pl, std::string ns, std::string pre) :
+	auid(CEPH_AUTH_UID_DEFAULT), pool_name(pl), is_nspace(true), nspace(ns), object_prefix(pre) {}
+  OSDCapMatch(uint64_t auid, std::string pre) : auid(auid), is_nspace(false), object_prefix(pre) {}
 
   /**
    * check if given request parameters match our constraints
    *
    * @param auid requesting user's auid
    * @param pool_name pool name
+   * @param nspace_name namespace name
    * @param pool_auid pool's auid
    * @param object object name
    * @return true if we match, false otherwise
    */
-  bool is_match(const std::string& pool_name, int64_t pool_auid, const std::string& object) const;
+  bool is_match(const std::string& pool_name, const std::string& nspace_name, int64_t pool_auid, const std::string& object) const;
   bool is_match_all() const;
 };
 
@@ -128,6 +134,7 @@ struct OSDCap {
    * against pool, pool auid, and object name prefix.
    *
    * @param pool_name name of the pool we are accessing
+   * @param ns name of the namespace we are accessing
    * @param pool_auid owner of the pool we are accessing
    * @param object name of the object we are accessing
    * @param op_may_read whether the operation may need to read
@@ -138,7 +145,7 @@ struct OSDCap {
    *                          write class method
    * @return true if the operation is allowed, false otherwise
    */
-  bool is_capable(const string& pool_name, int64_t pool_auid,
+  bool is_capable(const string& pool_name, const string& ns, int64_t pool_auid,
 		  const string& object, bool op_may_read, bool op_may_write,
 		  bool op_may_class_read, bool op_may_class_write) const;
 };
