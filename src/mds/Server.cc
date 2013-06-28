@@ -1167,10 +1167,11 @@ void Server::dispatch_client_request(MDRequest *mdr)
 
     // inodes ops.
   case CEPH_MDS_OP_LOOKUP:
-  case CEPH_MDS_OP_LOOKUPSNAP:
     handle_client_getattr(mdr, true);
     break;
 
+  case CEPH_MDS_OP_LOOKUPSNAP:
+    // lookupsnap does not reference a CDentry; treat it as a getattr
   case CEPH_MDS_OP_GETATTR:
     handle_client_getattr(mdr, false);
     break;
