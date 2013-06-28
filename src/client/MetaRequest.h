@@ -100,10 +100,25 @@ public:
 
   void set_inode(Inode *in);
   Inode *inode();
+  Inode *take_inode() {
+    Inode *i = _inode;
+    _inode = 0;
+    return i;
+  }
   void set_old_inode(Inode *in);
   Inode *old_inode();
+  Inode *take_old_inode() {
+    Inode *i = _old_inode;
+    _old_inode = NULL;
+    return i;
+  }
   void set_other_inode(Inode *in);
   Inode *other_inode();
+  Inode *take_other_inode() {
+    Inode *i = _other_inode;
+    _other_inode = 0;
+    return i;
+  }
   void set_dentry(Dentry *d);
   Dentry *dentry();
   void set_old_dentry(Dentry *d);
