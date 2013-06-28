@@ -84,6 +84,17 @@ bool OSDCapMatch::is_match(const string& pn, int64_t pool_auid, const string& ob
   return true;
 }
 
+bool OSDCapMatch::is_match_all() const
+{
+  if (auid >= 0)
+    return false;
+  if (pool_name.length())
+    return false;
+  if (object_prefix.length())
+    return false;
+  return true;
+}
+
 ostream& operator<<(ostream& out, const OSDCapGrant& g)
 {
   return out << "grant(" << g.match << g.spec << ")";
@@ -93,7 +104,7 @@ ostream& operator<<(ostream& out, const OSDCapGrant& g)
 bool OSDCap::allow_all() const
 {
   for (vector<OSDCapGrant>::const_iterator p = grants.begin(); p != grants.end(); ++p)
-    if (p->match.is_match(string(), CEPH_AUTH_UID_DEFAULT, string()) && p->spec.allow_all())
+    if (p->match.is_match_all() && p->spec.allow_all())
       return true;
   return false;
 }
