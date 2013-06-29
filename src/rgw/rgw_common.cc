@@ -13,6 +13,7 @@
 #include "common/Clock.h"
 #include "common/Formatter.h"
 #include "common/perf_counters.h"
+#include "common/strtol.h"
 #include "include/str_list.h"
 #include "auth/Crypto.h"
 
@@ -386,18 +387,38 @@ int parse_time(const char *time_str, time_t *time)
   return 0;
 }
 
-int parse_date(const string& date, uint64_t *epoch, string *out_date, string *out_time)
+int parse_date(const string& date, uint64_t *epoch, uint64_t *nsec, string *out_date, string *out_time)
 {
   struct tm tm;
 
   memset(&tm, 0, sizeof(tm));
+  if (nsec)
+    *nsec = 0;
 
   const char *p = strptime(date.c_str(), "%Y-%m-%d", &tm);
   if (p) {
     if (*p == ' ') {
       p++;
-      if (!strptime(p, " %H:%M:%S", &tm))
+      p = strptime(p, " %H:%M:%S", &tm);
+      if (!p)
 	return -EINVAL;
+      if (nsec && *p == '.') {
+        ++p;
+        unsigned i;
+        char buf[10]; /* 9 digit + null termination */
+        for (i = 0; (i < sizeof(buf) - 1) && isdigit(*p); ++i, ++p) {
+          buf[i] = *p;
+        }
+        for (; i < sizeof(buf) - 1; ++i) {
+          buf[i] = '0';
+        }
+        buf[i] = '\0';
+        string err;
+        *nsec = (uint64_t)strict_strtol(buf, 10, &err);
+        if (!err.empty()) {
+          return -EINVAL;
+        }
+      }
     }
   } else {
     return -EINVAL;
