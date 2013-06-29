@@ -1700,6 +1700,9 @@ noinst_HEADERS = \
 	cls/statelog/cls_statelog_types.h\
 	cls/statelog/cls_statelog_ops.h\
 	cls/statelog/cls_statelog_client.h\
+	cls/replica_log/cls_replica_log_types.h\
+	cls/replica_log/cls_replica_log_ops.h\
+	cls/replica_log/cls_replica_log_client.h\
 	cls/rgw/cls_rgw_client.h\
 	cls/rgw/cls_rgw_ops.h\
 	cls/rgw/cls_rgw_types.h\
