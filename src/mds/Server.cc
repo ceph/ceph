@@ -2437,7 +2437,7 @@ void Server::handle_client_open(MDRequest *mdr)
 	mdr->session->have_completed_request(req->get_reqid().tid, NULL))) {
     assert(cur->is_auth());
 
-    wrlocks.insert(&cur->filelock);
+    xlocks.insert(&cur->filelock);
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
 
