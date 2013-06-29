@@ -242,6 +242,9 @@ public:
     struct tm tm;
     memset(&tm, 0, sizeof(tm));
 
+    if (nsec)
+      *nsec = 0;
+
     const char *p = strptime(date.c_str(), "%Y-%m-%d", &tm);
     if (p) {
       if (*p == ' ') {
