@@ -17,9 +17,7 @@
 class RGWOp_OBJLog_GetBounds : public RGWRESTOp {
   string prefix;
   string obj_type;
-  utime_t oldest_time;
-  string lowest_bound;
-  list<cls_replica_log_progress_marker> entries;
+  RGWReplicaBounds bounds;
 
 public:
   RGWOp_OBJLog_GetBounds(const char *_prefix, const char *type) 
@@ -83,9 +81,7 @@ public:
 };
 
 class RGWOp_BILog_GetBounds : public RGWRESTOp {
-  utime_t oldest_time;
-  string lowest_bound;
-  list<cls_replica_log_progress_marker> entries;
+  RGWReplicaBounds bounds;
 public:
   RGWOp_BILog_GetBounds() {}
   ~RGWOp_BILog_GetBounds() {}
