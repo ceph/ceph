@@ -59,14 +59,10 @@
     opstate list               list stateful operations entries (use client_id,
                                op_id, object)
     opstate set                set state on an entry (use client_id, op_id, object)
-    opstate renewstate         renew state on an entry (use client_id, op_id, object)
-    opstate rmstate            remove entry (use client_id, op_id, object)
-    replicamdlog get           get the replica metadata log
-    replicamdlog delete        delete the replica metadata log
-    replicadatalog get         get the replica data log
-    replicadatalog delete      delete the replica data log
-    replicabucketlog get       get the replica bucket log
-    replicabucketlog delete    delete the replica bucket log
+    opstate renew              renew state on an entry (use client_id, op_id, object)
+    opstate rm                 remove entry (use client_id, op_id, object)
+    replicalog get             get replica metadata log entry
+    replicalog delete          delete replica metadata log entry
   options:
      --uid=<id>                user id
      --subuser=<name>          subuser name
@@ -101,6 +97,8 @@
      --show-log-sum=<flag>     enable/disable dump of log summation on log show
      --skip-zero-entries       log show only dumps entries that don't have zero value
                                in one of the numeric field
+     --replica-log-type        replica log type (metadata, data, bucket), required for
+                               replica log operations
      --categories=<list>       comma separated list of categories, used in usage show
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read"
      --yes-i-really-mean-it    required for certain operations
