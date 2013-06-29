@@ -2105,9 +2105,7 @@ next:
   }
 
   if (opt_cmd == OPT_REPLICALOG_GET) {
-    string pos_marker;
-    utime_t time_marker;
-    list<cls_replica_log_progress_marker> markers;
+    RGWReplicaBounds bounds;
     if (replica_log_type == ReplicaLog_Metadata) {
       if (!specified_shard_id) {
         cerr << "ERROR: shard-id must be specified for get operation" << std::endl;
@@ -2115,7 +2113,7 @@ next:
       }
 
       RGWReplicaObjectLogger logger(store, pool_name, META_REPLICA_LOG_OBJ_PREFIX);
-      int ret = logger.get_bounds(shard_id, pos_marker, time_marker, markers);
+      int ret = logger.get_bounds(shard_id, bounds);
       if (ret < 0)
         return -ret;
     } else if (replica_log_type == ReplicaLog_Data) {
@@ -2124,7 +2122,7 @@ next:
         return EINVAL;
       }
       RGWReplicaObjectLogger logger(store, pool_name, DATA_REPLICA_LOG_OBJ_PREFIX);
-      int ret = logger.get_bounds(shard_id, pos_marker, time_marker, markers);
+      int ret = logger.get_bounds(shard_id, bounds);
       if (ret < 0)
         return -ret;
     } else if (replica_log_type == ReplicaLog_Bucket) {
@@ -2139,13 +2137,13 @@ next:
       }
 
       RGWReplicaBucketLogger logger(store);
-      ret = logger.get_bounds(bucket, pos_marker, time_marker, markers);
+      ret = logger.get_bounds(bucket, bounds);
       if (ret < 0)
         return -ret;
     } else { // shouldn't get here
       assert(0);
     }
-    encode_json("markers", markers, formatter);
+    encode_json("bounds", bounds, formatter);
   }
 
   if (opt_cmd == OPT_REPLICALOG_DELETE) {

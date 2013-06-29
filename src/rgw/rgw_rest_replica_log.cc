@@ -37,46 +37,9 @@ static int parse_to_utime(string& in, utime_t& out) {
   return 0;
 }
 
-static int parse_input_list(const char *data, int data_len, 
-                            const char *el_name, list<pair<string, utime_t> >& out) {
-  JSONParser parser;
 
-  if (!parser.parse(data, data_len)) {
-    return -EINVAL;
-  }
-  if (!parser.is_array()) {
-    dout(5) << "Should have been an array" << dendl;
-    return -EINVAL;
-  }
-
-  vector<string> l;
-
-  l = parser.get_array_elements();
-  for (vector<string>::iterator it = l.begin();
-       it != l.end(); it++) {
-    JSONParser el_parser;
-
-    if (!el_parser.parse((*it).c_str(), (*it).length())) {
-      dout(5) << "Error parsing an array element" << dendl;
-      return -EINVAL;
-    }
-
-    string name, time;
-
-    JSONDecoder::decode_json(el_name, name, (JSONObj *)&el_parser);
-    JSONDecoder::decode_json("time", time, (JSONObj *)&el_parser);
-
-    utime_t ut;
-    if (parse_to_utime(time, ut) < 0) {
-      return -EINVAL;
-    }
-    out.push_back(make_pair(name, ut));
-  }
-
-  return 0;
-}
-
-static int get_input_list(req_state *s, const char *element_name, list<pair<string, utime_t> >& out) {
+template <class T>
+static int get_input(req_state *s, T& out) {
   int rv, data_len;
   char *data;
 
@@ -84,45 +47,18 @@ static int get_input_list(req_state *s, const char *element_name, list<pair<stri
     dout(5) << "Error - reading input data - " << rv << dendl;
     return rv;
   }
-  
-  if ((rv = parse_input_list(data, data_len, element_name, out)) < 0) {
-    dout(5) << "Error parsing input list - " << rv << dendl;
-    return rv;
+
+  JSONParser parser;
+
+  if (!parser.parse(data, data_len)) {
+    free(data);
+    return -EINVAL;
   }
 
+  decode_json_obj(out, &parser);
+  
   free(data);
   return 0;
-}
-
-static void item_encode_json(const char *name, 
-                 const char *el_name,
-                 cls_replica_log_item_marker& val,
-                 Formatter *f) {
-  f->open_object_section(name);
-  f->dump_string(el_name, val.item_name);
-  encode_json("time", val.item_timestamp, f);
-  f->close_section();
-}
-
-static void progress_encode_json(const char *name, 
-                 const char *sub_array_name,
-                 const char *sub_array_el_name,
-                 cls_replica_log_progress_marker &val, 
-                 Formatter *f) {
-  f->open_object_section(name);
-  f->dump_string("daemon_id", val.entity_id);
-  f->dump_string("marker", val.position_marker);
-  encode_json("time", val.position_time, f);
-
-  f->open_array_section(sub_array_name);
-  for (list<cls_replica_log_item_marker>::iterator it = val.items.begin();
-       it != val.items.end(); it++) {
-    cls_replica_log_item_marker& entry = (*it);
-
-    item_encode_json(sub_array_name, sub_array_el_name, entry, f);
-  }
-  f->close_section();
-  f->close_section();
 }
 
 void RGWOp_OBJLog_SetBounds::execute() {
@@ -159,13 +95,13 @@ void RGWOp_OBJLog_SetBounds::execute() {
   string pool;
   RGWReplicaObjectLogger rl(store, pool, prefix);
   bufferlist bl;
-  list<pair<string, utime_t> > entries;
+  list<RGWReplicaItemMarker> markers;
 
-  if ((http_ret = get_input_list(s, "bucket", entries)) < 0) {
+  if ((http_ret = get_input(s, markers)) < 0) {
     return;
   }
 
-  http_ret = rl.update_bound(shard, daemon_id, marker, ut, &entries);
+  http_ret = rl.update_bound(shard, daemon_id, marker, ut, &markers);
 }
 
 void RGWOp_OBJLog_GetBounds::execute() {
@@ -189,7 +125,7 @@ void RGWOp_OBJLog_GetBounds::execute() {
  
   string pool;
   RGWReplicaObjectLogger rl(store, pool, prefix);
-  http_ret = rl.get_bounds(shard, lowest_bound, oldest_time, entries);
+  http_ret = rl.get_bounds(shard, bounds);
 }
 
 void RGWOp_OBJLog_GetBounds::send_response() {
@@ -200,18 +136,7 @@ void RGWOp_OBJLog_GetBounds::send_response() {
   if (http_ret < 0)
     return;
 
-  s->formatter->open_object_section("container");
-  s->formatter->open_array_section("items");
-  for (list<cls_replica_log_progress_marker>::iterator it = entries.begin();
-       it != entries.end(); it++) {
-    cls_replica_log_progress_marker entry = (*it);
-    progress_encode_json("entry", "buckets", "bucket", entry, s->formatter);
-    flusher.flush();
-  }
-  s->formatter->close_section();
-  s->formatter->dump_string("lowest_bound", lowest_bound);
-  encode_json("oldest_time", oldest_time, s->formatter);
-  s->formatter->close_section();
+  encode_json("bounds", bounds, s->formatter);
   flusher.flush();
 }
 
@@ -283,13 +208,13 @@ void RGWOp_BILog_SetBounds::execute() {
 
   RGWReplicaBucketLogger rl(store);
   bufferlist bl;
-  list<pair<string, utime_t> > entries;
+  list<RGWReplicaItemMarker> markers;
 
-  if ((http_ret = get_input_list(s, "object", entries)) < 0) {
+  if ((http_ret = get_input(s, markers)) < 0) {
     return;
   }
 
-  http_ret = rl.update_bound(bucket, daemon_id, marker, ut, &entries);
+  http_ret = rl.update_bound(bucket, daemon_id, marker, ut, &markers);
 }
 
 void RGWOp_BILog_GetBounds::execute() {
@@ -306,7 +231,7 @@ void RGWOp_BILog_GetBounds::execute() {
     return;
 
   RGWReplicaBucketLogger rl(store);
-  http_ret = rl.get_bounds(bucket, lowest_bound, oldest_time, entries);
+  http_ret = rl.get_bounds(bucket, bounds);
 }
 
 void RGWOp_BILog_GetBounds::send_response() {
@@ -317,18 +242,7 @@ void RGWOp_BILog_GetBounds::send_response() {
   if (http_ret < 0)
     return;
 
-  s->formatter->open_object_section("container");
-  s->formatter->open_array_section("entries");
-  for (list<cls_replica_log_progress_marker>::iterator it = entries.begin();
-       it != entries.end(); it++) {
-    cls_replica_log_progress_marker entry = (*it);
-    progress_encode_json("entry", "objects", "object", entry, s->formatter);
-    flusher.flush();
-  }
-  s->formatter->close_section();
-  s->formatter->dump_string("lowest_bound", lowest_bound);
-  encode_json("oldest_time", oldest_time, s->formatter);
-  s->formatter->close_section();
+  encode_json("bounds", bounds, s->formatter);
   flusher.flush();
 }
 

@@ -444,9 +444,10 @@ void decode_json_obj(utime_t& val, JSONObj *obj)
 {
   string s = obj->get_data();
   uint64_t epoch;
-  int r = utime_t::parse_date(s, &epoch);
+  uint64_t nsec;
+  int r = utime_t::parse_date(s, &epoch, &nsec);
   if (r == 0) {
-    val.set_from_double(epoch);
+    val = utime_t(epoch, nsec);
   } else {
     throw JSONDecoder::err("failed to decode utime_t");
   }
