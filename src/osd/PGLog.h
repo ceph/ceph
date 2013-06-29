@@ -382,9 +382,10 @@ public:
 
 protected:
   static void read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
-    const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
-    IndexedLog &log,
-    pg_missing_t &missing, ostringstream &oss);
+			   const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
+			   IndexedLog &log,
+			   pg_missing_t &missing, ostringstream &oss,
+			   set<string> *log_keys_debug);
 };
   
 #endif // CEPH_PG_LOG_H
