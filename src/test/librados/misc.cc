@@ -1,11 +1,17 @@
+#include "gtest/gtest.h"
+
 #include "mds/mdstypes.h"
 #include "include/buffer.h"
 #include "include/rbd_types.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
+#include "include/stringify.h"
+#include "global/global_context.h"
+#include "global/global_init.h"
+#include "common/ceph_argparse.h"
+#include "common/common_init.h"
 #include "test/librados/test.h"
 
-#include "gtest/gtest.h"
 #include <errno.h>
 #include <map>
 #include <sstream>
@@ -512,3 +518,57 @@ TEST(LibRadosMisc, AssertExistsPP) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
+TEST(LibRadosMisc, BigAttrPP) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
+
+  char buf[64];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+
+  ASSERT_EQ(0, ioctx.create("foo", true));
+
+  bufferlist got;
+
+  bl.clear();
+  got.clear();
+  bl.append(buffer::create(g_conf->osd_max_attr_size));
+  ASSERT_EQ(0, ioctx.setxattr("foo", "one", bl));
+  ASSERT_EQ((int)bl.length(), ioctx.getxattr("foo", "one", got));
+  ASSERT_TRUE(bl.contents_equal(got));
+
+  bl.clear();
+  bl.append(buffer::create(g_conf->osd_max_attr_size+1));
+  ASSERT_EQ(-EFBIG, ioctx.setxattr("foo", "one", bl));
+
+  for (int i=0; i<1000; i++) {
+    bl.clear();
+    got.clear();
+    bl.append(buffer::create(g_conf->osd_max_attr_size));
+    char n[10];
+    snprintf(n, sizeof(n), "a%d", i);
+    ASSERT_EQ(0, ioctx.setxattr("foo", n, bl));
+    ASSERT_EQ((int)bl.length(), ioctx.getxattr("foo", n, got));
+    ASSERT_TRUE(bl.contents_equal(got));
+  }
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
+int main(int argc, char **argv)
+{
+  ::testing::InitGoogleTest(&argc, argv);
+
+  vector<const char*> args;
+  argv_to_vec(argc, (const char **)argv, args);
+
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(g_ceph_context);
+
+  return RUN_ALL_TESTS();
+}

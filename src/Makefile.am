@@ -1025,7 +1025,7 @@ bin_DEBUGPROGRAMS += ceph_test_rados_api_cls
 
 ceph_test_rados_api_misc_SOURCES = test/librados/misc.cc test/librados/test.cc
 ceph_test_rados_api_misc_LDFLAGS = ${AM_LDFLAGS}
-ceph_test_rados_api_misc_LDADD =  librados.la ${UNITTEST_STATIC_LDADD}
+ceph_test_rados_api_misc_LDADD =  librados.la $(LIBGLOBAL_LDA) ${UNITTEST_STATIC_LDADD}
 ceph_test_rados_api_misc_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_rados_api_misc
 
