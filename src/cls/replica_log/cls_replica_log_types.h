@@ -17,6 +17,8 @@
 #include "include/types.h"
 #include <errno.h>
 
+class JSONObj;
+
 struct cls_replica_log_item_marker {
   string item_name; // the name of the item we're marking
   utime_t item_timestamp; // the time stamp at which the item was outdated
@@ -40,6 +42,7 @@ struct cls_replica_log_item_marker {
   }
 
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<cls_replica_log_item_marker*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_replica_log_item_marker)
@@ -82,6 +85,7 @@ struct cls_replica_log_progress_marker {
   }
 
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<cls_replica_log_progress_marker*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_replica_log_progress_marker)
@@ -182,6 +186,7 @@ public:
   }
 
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<cls_replica_log_bound*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_replica_log_bound);
