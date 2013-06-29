@@ -25,14 +25,15 @@
 
 static int parse_date_str(string& in, utime_t& out) {
   uint64_t epoch = 0;
+  uint64_t nsec = 0;
 
   if (!in.empty()) {
-    if (parse_date(in, &epoch) < 0) {
+    if (parse_date(in, &epoch, &nsec) < 0) {
       dout(5) << "Error parsing date " << in << dendl;
       return -EINVAL;
     }
   }
-  out = utime_t(epoch, 0);
+  out = utime_t(epoch, nsec);
   return 0;
 }
 
