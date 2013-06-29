@@ -1699,6 +1699,7 @@ noinst_HEADERS = \
 	cls/log/cls_log_client.h\
 	cls/statelog/cls_statelog_types.h\
 	cls/statelog/cls_statelog_ops.h\
+	cls/statelog/cls_statelog_client.h\
 	cls/rgw/cls_rgw_client.h\
 	cls/rgw/cls_rgw_ops.h\
 	cls/rgw/cls_rgw_types.h\
