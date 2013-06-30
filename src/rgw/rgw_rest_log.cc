@@ -144,9 +144,7 @@ void RGWOp_MDLog_Delete::execute() {
     http_ret = -EINVAL;
     return;
   }
-  if ((st.empty() || et.empty()) && (start_marker.empty() || end_marker.empty())) {
-    /* need to have at least one pair, either start-time && end-time, or start-marker && end-marker
-     * */
+  if (et.empty() && end_marker.empty()) { /* bounding end */
     http_ret = -EINVAL;
     return;
   }
@@ -332,9 +330,8 @@ void RGWOp_BILog_Delete::execute() {
 
   http_ret = 0;
   if ((bucket_name.empty() && bucket_instance.empty()) ||
-      start_marker.empty() ||
       end_marker.empty()) {
-    dout(5) << "ERROR: one of bucket and bucket instance, and also start-marker, end-marker are mandatory" << dendl;
+    dout(5) << "ERROR: one of bucket and bucket instance, and also end-marker is mandatory" << dendl;
     http_ret = -EINVAL;
     return;
   }
@@ -531,9 +528,7 @@ void RGWOp_DATALog_Delete::execute() {
     http_ret = -EINVAL;
     return;
   }
-  if ((st.empty() || et.empty()) && (start_marker.empty() || end_marker.empty())) {
-    /* need to have at least one pair, either start-time && end-time, or start-marker && end-marker
-     * */
+  if (et.empty() && end_marker.empty()) { /* bounding end */
     http_ret = -EINVAL;
     return;
   }
