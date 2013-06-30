@@ -1899,7 +1899,7 @@ next:
 
     RGWMetadataLog *meta_log = store->meta_mgr->get_log();
 
-    ret = meta_log->trim(shard_id, start_time, end_time);
+    ret = meta_log->trim(shard_id, start_time, end_time, start_marker, end_marker);
     if (ret < 0) {
       cerr << "ERROR: meta_log->trim(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2015,7 +2015,7 @@ next:
       return -ret;
 
     RGWDataChangesLog *log = store->data_log;
-    ret = log->trim_entries(start_time, end_time);
+    ret = log->trim_entries(start_time, end_time, start_marker, end_marker);
     if (ret < 0) {
       cerr << "ERROR: trim_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
