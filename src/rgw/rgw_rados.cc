@@ -1522,7 +1522,8 @@ int RGWRados::time_log_list(const string& oid, utime_t& start_time, utime_t& end
   return 0;
 }
 
-int RGWRados::time_log_trim(const string& oid, utime_t& start_time, utime_t& end_time)
+int RGWRados::time_log_trim(const string& oid, const utime_t& start_time, const utime_t& end_time,
+			    const string& from_marker, const string& to_marker)
 {
   librados::IoCtx io_ctx;
 
@@ -1531,7 +1532,7 @@ int RGWRados::time_log_trim(const string& oid, utime_t& start_time, utime_t& end
   if (r < 0)
     return r;
 
-  return cls_log_trim(io_ctx, oid, start_time, end_time);
+  return cls_log_trim(io_ctx, oid, start_time, end_time, from_marker, to_marker);
 }
 
 

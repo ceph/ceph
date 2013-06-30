@@ -128,6 +128,8 @@ void RGWOp_MDLog_GetShardsInfo::send_response() {
 void RGWOp_MDLog_Delete::execute() {
   string   st = s->info.args.get("start-time"),
            et = s->info.args.get("end-time"),
+           start_marker = s->info.args.get("start-marker"),
+           end_marker = s->info.args.get("end-marker"),
            shard = s->info.args.get("id"),
            err;
   utime_t  ut_st, 
@@ -142,7 +144,9 @@ void RGWOp_MDLog_Delete::execute() {
     http_ret = -EINVAL;
     return;
   }
-  if (st.empty() || et.empty()) {
+  if ((st.empty() || et.empty()) && (start_marker.empty() || end_marker.empty())) {
+    /* need to have at least one pair, either start-time && end-time, or start-marker && end-marker
+     * */
     http_ret = -EINVAL;
     return;
   }
@@ -158,7 +162,7 @@ void RGWOp_MDLog_Delete::execute() {
   }
   RGWMetadataLog *meta_log = store->meta_mgr->get_log();
 
-  http_ret = meta_log->trim(shard_id, ut_st, ut_et);
+  http_ret = meta_log->trim(shard_id, ut_st, ut_et, start_marker, end_marker);
 }
 
 void RGWOp_MDLog_Lock::execute() {
@@ -511,6 +515,8 @@ void RGWOp_DATALog_Unlock::execute() {
 void RGWOp_DATALog_Delete::execute() {
   string   st = s->info.args.get("start-time"),
            et = s->info.args.get("end-time"),
+           start_marker = s->info.args.get("start-marker"),
+           end_marker = s->info.args.get("end-marker"),
            shard = s->info.args.get("id"),
            err;
   utime_t  ut_st, 
@@ -525,7 +531,9 @@ void RGWOp_DATALog_Delete::execute() {
     http_ret = -EINVAL;
     return;
   }
-  if (st.empty() || et.empty()) {
+  if ((st.empty() || et.empty()) && (start_marker.empty() || end_marker.empty())) {
+    /* need to have at least one pair, either start-time && end-time, or start-marker && end-marker
+     * */
     http_ret = -EINVAL;
     return;
   }
@@ -540,7 +548,7 @@ void RGWOp_DATALog_Delete::execute() {
     return;
   }
 
-  http_ret = store->data_log->trim_entries(shard_id, ut_st, ut_et);
+  http_ret = store->data_log->trim_entries(shard_id, ut_st, ut_et, start_marker, end_marker);
 }
 
 RGWOp *RGWHandler_Log::op_get() {

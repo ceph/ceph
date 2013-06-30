@@ -1213,11 +1213,12 @@ int RGWDataChangesLog::list_entries(utime_t& start_time, utime_t& end_time, int 
   return 0;
 }
 
-int RGWDataChangesLog::trim_entries(int shard_id, utime_t& start_time, utime_t& end_time)
+int RGWDataChangesLog::trim_entries(int shard_id, const utime_t& start_time, const utime_t& end_time,
+                                    const string& start_marker, const string& end_marker)
 {
   int ret;
 
-  ret = store->time_log_trim(oids[shard_id], start_time, end_time);
+  ret = store->time_log_trim(oids[shard_id], start_time, end_time, start_marker, end_marker);
 
   if (ret == -ENOENT)
     ret = 0;
@@ -1225,10 +1226,11 @@ int RGWDataChangesLog::trim_entries(int shard_id, utime_t& start_time, utime_t& 
   return ret;
 }
 
-int RGWDataChangesLog::trim_entries(utime_t& start_time, utime_t& end_time)
+int RGWDataChangesLog::trim_entries(const utime_t& start_time, const utime_t& end_time,
+                                    const string& start_marker, const string& end_marker)
 {
   for (int shard = 0; shard < num_shards; shard++) {
-    int ret = store->time_log_trim(oids[shard], start_time, end_time);
+    int ret = store->time_log_trim(oids[shard], start_time, end_time, start_marker, end_marker);
     if (ret == -ENOENT) {
       continue;
     }

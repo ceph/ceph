@@ -88,20 +88,28 @@ WRITE_CLASS_ENCODER(cls_log_list_ret)
 struct cls_log_trim_op {
   utime_t from_time;
   utime_t to_time; /* inclusive */
+  string from_marker;
+  string to_marker;
 
   cls_log_trim_op() {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(from_time, bl);
     ::encode(to_time, bl);
+    ::encode(from_marker, bl);
+    ::encode(to_marker, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(from_time, bl);
     ::decode(to_time, bl);
+    if (struct_v >= 2) {
+    ::decode(from_marker, bl);
+    ::decode(to_marker, bl);
+    }
     DECODE_FINISH(bl);
   }
 };

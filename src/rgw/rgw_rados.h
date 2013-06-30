@@ -1329,7 +1329,8 @@ public:
   int time_log_add(const string& oid, const utime_t& ut, const string& section, const string& key, bufferlist& bl);
   int time_log_list(const string& oid, utime_t& start_time, utime_t& end_time,
                     int max_entries, list<cls_log_entry>& entries, string& marker, bool *truncated);
-  int time_log_trim(const string& oid, utime_t& start_time, utime_t& end_time);
+  int time_log_trim(const string& oid, const utime_t& start_time, const utime_t& end_time,
+                    const string& from_marker, const string& to_marker);
   int lock_exclusive(rgw_bucket& pool, const string& oid, utime_t& duration, string& zone_id, string& owner_id);
   int unlock(rgw_bucket& pool, const string& oid, string& zone_id, string& owner_id);
 
