@@ -184,8 +184,16 @@ static int cls_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   string from_index;
   string to_index;
 
-  get_index_time_prefix(op.from_time, from_index);
-  get_index_time_prefix(op.to_time, to_index);
+  if (op.from_marker.empty()) {
+    get_index_time_prefix(op.from_time, from_index);
+  } else {
+    from_index = op.from_marker;
+  }
+  if (op.to_marker.empty()) {
+    get_index_time_prefix(op.to_time, to_index);
+  } else {
+    to_index = op.to_marker;
+  }
 
 #define MAX_TRIM_ENTRIES 1000
   size_t max_entries = MAX_TRIM_ENTRIES;
