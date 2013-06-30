@@ -451,6 +451,7 @@ void RGWMetadataManager::list_keys_complete(void *handle)
 void RGWMetadataManager::dump_log_entry(cls_log_entry& entry, Formatter *f)
 {
   f->open_object_section("entry");
+  f->dump_string("id", entry.id);
   f->dump_string("section", entry.section);
   f->dump_string("name", entry.name);
   entry.timestamp.gmtime(f->dump_stream("timestamp"));

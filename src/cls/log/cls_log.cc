@@ -80,6 +80,8 @@ static int cls_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
 
     CLS_LOG(0, "storing entry at %s", index.c_str());
 
+    entry.id = index;
+
     int ret = write_log_entry(hctx, index, entry);
     if (ret < 0)
       return ret;
