@@ -990,6 +990,9 @@ int RGWDataChangesLog::choose_oid(rgw_bucket& bucket) {
 
 int RGWDataChangesLog::renew_entries()
 {
+  if (!store->need_to_log_data())
+    return 0;
+
   /* we can't keep the bucket name as part of the cls_log_entry, and we need
    * it later, so we keep two lists under the map */
   map<int, pair<list<string>, list<cls_log_entry> > > m;
@@ -1074,6 +1077,9 @@ void RGWDataChangesLog::update_renewed(string& bucket_name, utime_t& expiration)
 }
 
 int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
+  if (!store->need_to_log_data())
+    return 0;
+
   lock.Lock();
 
   ChangeStatusPtr status;
