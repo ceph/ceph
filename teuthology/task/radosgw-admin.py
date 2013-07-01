@@ -582,7 +582,7 @@ def task(ctx, config):
     (err, out) = rgwadmin(ctx, client, ['user', 'rm', '--uid', user1])
     assert err
 
-    # TESTCASE 'rm-user2', 'user', 'rm', user with data', 'succeeds'
+    # TESTCASE 'rm-user2', 'user', 'rm', 'user with data', 'succeeds'
     bucket = connection.create_bucket(bucket_name)
     key = boto.s3.key.Key(bucket)
     key.set_contents_from_string('twelve')
