@@ -72,14 +72,6 @@ int RGWReplicaLogger::get_bounds(const string& oid, const string& pool,
   return cls_replica_log_get_bounds(ioctx, oid, marker, oldest_time, markers);
 }
 
-void RGWReplicaLogger::get_bound_info(
-    const cls_replica_log_progress_marker& progress,
-    string& entity, string& marker,
-    utime_t time,
-    list<pair<string, utime_t> >& entries) {
-  cls_replica_log_extract_marker(progress, entity, marker, time, entries);
-}
-
 RGWReplicaObjectLogger::
 RGWReplicaObjectLogger(RGWRados *_store,
                        const string& _pool,

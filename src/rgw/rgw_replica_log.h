@@ -42,12 +42,6 @@ protected:
   int get_bounds(const string& oid, const string& pool,
                  string& marker, utime_t& oldest_time,
                  list<cls_replica_log_progress_marker>& markers);
-
-public:
-  static void get_bound_info(const cls_replica_log_progress_marker& progress,
-                             string& entity, string& marker,
-                             utime_t time,
-                             list<pair<string, utime_t> >& entries);
 };
 
 class RGWReplicaObjectLogger : private RGWReplicaLogger {
