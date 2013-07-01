@@ -387,60 +387,6 @@ int parse_time(const char *time_str, time_t *time)
   return 0;
 }
 
-int parse_date(const string& date, uint64_t *epoch, uint64_t *nsec, string *out_date, string *out_time)
-{
-  struct tm tm;
-
-  memset(&tm, 0, sizeof(tm));
-  if (nsec)
-    *nsec = 0;
-
-  const char *p = strptime(date.c_str(), "%Y-%m-%d", &tm);
-  if (p) {
-    if (*p == ' ') {
-      p++;
-      p = strptime(p, " %H:%M:%S", &tm);
-      if (!p)
-	return -EINVAL;
-      if (nsec && *p == '.') {
-        ++p;
-        unsigned i;
-        char buf[10]; /* 9 digit + null termination */
-        for (i = 0; (i < sizeof(buf) - 1) && isdigit(*p); ++i, ++p) {
-          buf[i] = *p;
-        }
-        for (; i < sizeof(buf) - 1; ++i) {
-          buf[i] = '0';
-        }
-        buf[i] = '\0';
-        string err;
-        *nsec = (uint64_t)strict_strtol(buf, 10, &err);
-        if (!err.empty()) {
-          return -EINVAL;
-        }
-      }
-    }
-  } else {
-    return -EINVAL;
-  }
-  time_t t = timegm(&tm);
-  if (epoch)
-    *epoch = (uint64_t)t;
-
-  if (out_date) {
-    char buf[32];
-    strftime(buf, sizeof(buf), "%F", &tm);
-    *out_date = buf;
-  }
-  if (out_time) {
-    char buf[32];
-    strftime(buf, sizeof(buf), "%T", &tm);
-    *out_time = buf;
-  }
-
-  return 0;
-}
-
 /*
  * calculate the sha1 value of a given msg and key
  */

@@ -605,7 +605,7 @@ static int parse_date_str(const string& date_str, utime_t& ut)
   uint64_t nsec = 0;
 
   if (!date_str.empty()) {
-    int ret = parse_date(date_str, &epoch, &nsec);
+    int ret = utime_t::parse_date(date_str, &epoch, &nsec);
     if (ret < 0) {
       cerr << "ERROR: failed to parse date: " << date_str << std::endl;
       return -EINVAL;
@@ -1375,7 +1375,7 @@ int main(int argc, char **argv)
       return usage();
     }
     string parsed_date, parsed_time;
-    int r = parse_date(date, NULL, NULL, &parsed_date, &parsed_time);
+    int r = utime_t::parse_date(date, NULL, NULL, &parsed_date, &parsed_time);
     if (r < 0) {
       cerr << "failure parsing date: " << cpp_strerror(r) << std::endl;
       return 1;
@@ -1569,14 +1569,14 @@ next:
     int ret;
     
     if (!start_date.empty()) {
-      ret = parse_date(start_date, &start_epoch, NULL);
+      ret = utime_t::parse_date(start_date, &start_epoch, NULL);
       if (ret < 0) {
         cerr << "ERROR: failed to parse start date" << std::endl;
         return 1;
       }
     }
     if (!end_date.empty()) {
-      ret = parse_date(end_date, &end_epoch, NULL);
+      ret = utime_t::parse_date(end_date, &end_epoch, NULL);
       if (ret < 0) {
         cerr << "ERROR: failed to parse end date" << std::endl;
         return 1;
@@ -1605,7 +1605,7 @@ next:
 
 
     if (!start_date.empty()) {
-      ret = parse_date(start_date, &start_epoch, NULL);
+      ret = utime_t::parse_date(start_date, &start_epoch, NULL);
       if (ret < 0) {
         cerr << "ERROR: failed to parse start date" << std::endl;
         return 1;
@@ -1613,7 +1613,7 @@ next:
     }
 
     if (!end_date.empty()) {
-      ret = parse_date(end_date, &end_epoch, NULL);
+      ret = utime_t::parse_date(end_date, &end_epoch, NULL);
       if (ret < 0) {
         cerr << "ERROR: failed to parse end date" << std::endl;
         return 1;
