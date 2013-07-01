@@ -990,7 +990,7 @@ int KvFlatBtreeAsync::perform_ops(const string &debug_prefix,
   return err;
 }
 
-int KvFlatBtreeAsync::cleanup(const index_data &idata, const int &errno) {
+int KvFlatBtreeAsync::cleanup(const index_data &idata, const int &error) {
   if (verbose) cout << "\t\t" << client_name << ": cleaning up after "
       << idata.str()
       << std::endl;
@@ -998,7 +998,7 @@ int KvFlatBtreeAsync::cleanup(const index_data &idata, const int &errno) {
   assert(idata.prefix != "");
   map<std::string,bufferlist> new_index;
   map<std::string, pair<bufferlist, int> > assertions;
-  switch (errno) {
+  switch (error) {
   case -EFIRSTOBJ: {
     //this happens if the split or rebalance failed to mark the first object,
     //meaning only the index needs to be changed.
