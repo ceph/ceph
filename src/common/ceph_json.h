@@ -135,6 +135,8 @@ void decode_json_obj(unsigned& val, JSONObj *obj);
 void decode_json_obj(int& val, JSONObj *obj);
 void decode_json_obj(bool& val, JSONObj *obj);
 void decode_json_obj(bufferlist& val, JSONObj *obj);
+class utime_t;
+void decode_json_obj(utime_t& val, JSONObj *obj);
 
 template<class T>
 void decode_json_obj(list<T>& l, JSONObj *obj)
