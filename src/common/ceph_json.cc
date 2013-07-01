@@ -440,6 +440,18 @@ void decode_json_obj(bufferlist& val, JSONObj *obj)
   }
 }
 
+void decode_json_obj(utime_t& val, JSONObj *obj)
+{
+  string s = obj->get_data();
+  uint64_t epoch;
+  int r = utime_t::parse_date(s, &epoch);
+  if (r == 0) {
+    val.set_from_double(epoch);
+  } else {
+    throw JSONDecoder::err("failed to decode utime_t");
+  }
+}
+
 void encode_json(const char *name, const string& val, Formatter *f)
 {
   f->dump_string(name, val);
