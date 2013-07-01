@@ -1204,7 +1204,6 @@ extern int parse_key_value(string& in_str, const char *delim, string& key, strin
 extern int parse_time(const char *time_str, time_t *time);
 extern bool parse_rfc2616(const char *s, struct tm *t);
 extern bool parse_iso8601(const char *s, struct tm *t);
-extern int parse_date(const string& date, uint64_t *epoch, uint64_t *nsec, string *out_date = NULL, string *out_time = NULL);
 extern string rgw_trim_whitespace(const string& src);
 extern string rgw_trim_quotes(const string& val);
 
