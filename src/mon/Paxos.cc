@@ -489,14 +489,23 @@ void Paxos::begin(bufferlist& v)
   accepted.clear();
   accepted.insert(mon->rank);
   new_value = v;
+
+  if (last_committed == 0) {
+    MonitorDBStore::Transaction t;
+    // initial base case; set first_committed too
+    t.put(get_name(), "first_committed", 1);
+    decode_append_transaction(t, new_value);
+
+    bufferlist tx_bl;
+    t.encode(tx_bl);
+
+    new_value = tx_bl;
+  }
+
   // store the proposed value in the store. IF it is accepted, we will then
   // have to decode it into a transaction and apply it.
   MonitorDBStore::Transaction t;
   t.put(get_name(), last_committed+1, new_value);
-
-  // initial base case; set first_committed too
-  if (last_committed == 0)
-    t.put(get_name(), "first_committed", 1);
 
   dout(30) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
