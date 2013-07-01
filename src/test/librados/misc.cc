@@ -396,7 +396,11 @@ TEST(LibRadosMisc, BigObjectPP) {
     o.zero(500000000000ull, 500000000000ull);
     ASSERT_EQ(-EFBIG, ioctx.operate("foo", &o));
   }
+
+#ifdef __LP64__
+  // this test only works on 64-bit platforms
   ASSERT_EQ(-EFBIG, ioctx.write("foo", bl, 500000000000ull, bl.length()));
+#endif
 
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
