@@ -75,6 +75,9 @@ WRITE_CLASS_ENCODER(RGWMetadataLogData);
 
 
 int RGWMetadataLog::add_entry(RGWRados *store, RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl) {
+  if (!store->need_to_log_metadata())
+    return 0;
+
   string oid;
 
   string hash_key;

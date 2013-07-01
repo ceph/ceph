@@ -895,10 +895,12 @@ int RGWRados::init_complete()
   map<string, RGWZone>::iterator ziter;
   for (ziter = region.zones.begin(); ziter != region.zones.end(); ++ziter) {
     const string& name = ziter->first;
+    RGWZone& z = ziter->second;
     if (name != zone.name) {
-      RGWZone& z = ziter->second;
       ldout(cct, 20) << "generating connection object for zone " << name << dendl;
       zone_conn_map[name] = new RGWRESTConn(cct, this, z.endpoints);
+    } else {
+      zone_public_config = z;
     }
   }
 
@@ -4951,7 +4953,7 @@ int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, RGWModifyOp op, string& tag
     return r;
 
   ObjectWriteOperation o;
-  cls_rgw_bucket_prepare_op(o, op, tag, name, locator);
+  cls_rgw_bucket_prepare_op(o, op, tag, name, locator, zone_public_config.log_data);
   r = index_ctx.operate(oid, &o);
   return r;
 }
@@ -4981,7 +4983,7 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, RGWModifyOp op, string& ta
   rgw_bucket_entry_ver ver;
   ver.pool = pool;
   ver.epoch = epoch;
-  cls_rgw_bucket_complete_op(o, op, tag, ver, ent.name, dir_meta, remove_objs);
+  cls_rgw_bucket_complete_op(o, op, tag, ver, ent.name, dir_meta, remove_objs, zone_public_config.log_data);
 
   AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
   r = index_ctx.aio_operate(oid, c, &o);
