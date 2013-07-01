@@ -271,6 +271,12 @@ def task(ctx, config):
     assert len(out) == 1
     assert out[0] == bucket_name
 
+    # TESTCASE 'bucket-list-all','bucket','list','all buckets','succeeds, expected list'
+    (err, out) = rgwadmin(ctx, client, ['bucket', 'list'])
+    assert not err
+    assert len(out) >= 1
+    assert bucket_name in out;
+
     # TESTCASE 'max-bucket-limit,'bucket','create','4 buckets','5th bucket fails due to max buckets == 4'
     bucket2 = connection.create_bucket(bucket_name + '2')
     bucket3 = connection.create_bucket(bucket_name + '3')
