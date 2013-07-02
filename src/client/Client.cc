@@ -910,10 +910,14 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
       while (pd != dir->dentry_map.end() && pd->first < dname) {
 	if (pd->first < dname &&
 	    fg.contains(diri->hash_dentry_name(pd->first))) {  // do not remove items in earlier frags
-	  ldout(cct, 15) << "insert_trace  unlink '" << pd->first << "'" << dendl;
 	  Dentry *dn = pd->second;
-	  ++pd;
-	  unlink(dn, true, true);  // keep dir, dentry
+	  if (dn->inode) {
+	    ldout(cct, 15) << "insert_trace  unlink '" << pd->first << "'" << dendl;
+	    ++pd;
+	    unlink(dn, true, true);  // keep dir, dentry
+	  } else {
+	    ++pd;
+	  }
 	} else {
 	  ++pd;
 	}
