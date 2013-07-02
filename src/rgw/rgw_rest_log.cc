@@ -109,12 +109,12 @@ void RGWOp_MDLog_List::send_response() {
   flusher.flush();
 }
 
-void RGWOp_MDLog_GetShardsInfo::execute() {
+void RGWOp_MDLog_Info::execute() {
   num_objects = s->cct->_conf->rgw_md_log_max_shards;
   http_ret = 0;
 }
 
-void RGWOp_MDLog_GetShardsInfo::send_response() {
+void RGWOp_MDLog_Info::send_response() {
   set_req_state_err(s, http_ret);
   dump_errno(s);
   end_header(s);
@@ -122,6 +122,31 @@ void RGWOp_MDLog_GetShardsInfo::send_response() {
   s->formatter->open_object_section("num_objects");
   s->formatter->dump_unsigned("num_objects", num_objects);
   s->formatter->close_section();
+  flusher.flush();
+}
+
+void RGWOp_MDLog_ShardInfo::execute() {
+  string shard = s->info.args.get("id");
+  string err;
+
+  unsigned shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
+  if (!err.empty()) {
+    dout(5) << "Error parsing shard_id " << shard << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  RGWMetadataLog *meta_log = store->meta_mgr->get_log();
+
+  http_ret = meta_log->get_info(shard_id, &info);
+}
+
+void RGWOp_MDLog_ShardInfo::send_response() {
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+
+  encode_json("info", info, s->formatter);
   flusher.flush();
 }
 
@@ -425,12 +450,12 @@ void RGWOp_DATALog_List::send_response() {
 }
 
 
-void RGWOp_DATALog_GetShardsInfo::execute() {
+void RGWOp_DATALog_Info::execute() {
   num_objects = s->cct->_conf->rgw_data_log_num_shards;
   http_ret = 0;
 }
 
-void RGWOp_DATALog_GetShardsInfo::send_response() {
+void RGWOp_DATALog_Info::send_response() {
   set_req_state_err(s, http_ret);
   dump_errno(s);
   end_header(s);
@@ -438,6 +463,29 @@ void RGWOp_DATALog_GetShardsInfo::send_response() {
   s->formatter->open_object_section("num_objects");
   s->formatter->dump_unsigned("num_objects", num_objects);
   s->formatter->close_section();
+  flusher.flush();
+}
+
+void RGWOp_DATALog_ShardInfo::execute() {
+  string shard = s->info.args.get("id");
+  string err;
+
+  unsigned shard_id = (unsigned)strict_strtol(shard.c_str(), 10, &err);
+  if (!err.empty()) {
+    dout(5) << "Error parsing shard_id " << shard << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  http_ret = store->data_log->get_info(shard_id, &info);
+}
+
+void RGWOp_DATALog_ShardInfo::send_response() {
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+
+  encode_json("info", info, s->formatter);
   flusher.flush();
 }
 
@@ -558,7 +606,7 @@ RGWOp *RGWHandler_Log::op_get() {
     if (s->info.args.exists("id")) {
       return new RGWOp_MDLog_List;
     } else {
-      return new RGWOp_MDLog_GetShardsInfo;
+      return new RGWOp_MDLog_Info;
     }
   } else if (type.compare("bucket-index") == 0) {
     return new RGWOp_BILog_List;
@@ -566,7 +614,7 @@ RGWOp *RGWHandler_Log::op_get() {
     if (s->info.args.exists("id")) {
       return new RGWOp_DATALog_List;
     } else {
-      return new RGWOp_DATALog_GetShardsInfo;
+      return new RGWOp_DATALog_Info;
     }
   }
   return NULL;
