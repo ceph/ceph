@@ -165,7 +165,7 @@ void RGWFormatter_Plain::write_data(const char *fmt, ...)
 {
 #define LARGE_ENOUGH_LEN 128
   int n, size = LARGE_ENOUGH_LEN;
-  char s[size];
+  char s[size + 8];
   char *p, *np;
   bool p_on_stack;
   va_list ap;
@@ -187,9 +187,9 @@ void RGWFormatter_Plain::write_data(const char *fmt, ...)
     else           /* glibc 2.0 */
       size *= 2;  /* twice the old size */
     if (p_on_stack)
-      np = (char *)malloc(size);
+      np = (char *)malloc(size + 8);
     else
-      np = (char *)realloc(p, size);
+      np = (char *)realloc(p, size + 8);
     if (!np)
       goto done_free;
     p = np;
