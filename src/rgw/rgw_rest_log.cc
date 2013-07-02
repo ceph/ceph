@@ -604,7 +604,11 @@ RGWOp *RGWHandler_Log::op_get() {
 
   if (type.compare("metadata") == 0) {
     if (s->info.args.exists("id")) {
-      return new RGWOp_MDLog_List;
+      if (s->info.args.exists("info")) {
+        return new RGWOp_MDLog_ShardInfo;
+      } else {
+        return new RGWOp_MDLog_List;
+      }
     } else {
       return new RGWOp_MDLog_Info;
     }
@@ -612,7 +616,11 @@ RGWOp *RGWHandler_Log::op_get() {
     return new RGWOp_BILog_List;
   } else if (type.compare("data") == 0) {
     if (s->info.args.exists("id")) {
-      return new RGWOp_DATALog_List;
+      if (s->info.args.exists("info")) {
+        return new RGWOp_DATALog_ShardInfo;
+      } else {
+        return new RGWOp_DATALog_List;
+      }
     } else {
       return new RGWOp_DATALog_Info;
     }
