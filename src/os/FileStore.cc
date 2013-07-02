@@ -1000,16 +1000,39 @@ int FileStore::_test_fiemap()
 
 int FileStore::_detect_fs()
 {
+  int fd = ::open(basedir.c_str(), O_RDONLY);
+  if (fd < 0)
+    return -errno;
+
+  struct statfs st;
+  int r = ::fstatfs(fd, &st);
+  if (r < 0) {
+    TEMP_FAILURE_RETRY(::close(fd));
+    return -errno;
+  }
+
+#if defined(__linux__)
+  if (st.f_type == XFS_SUPER_MAGIC) {
+    dout(1) << "mount detected xfs" << dendl;
+    if (m_filestore_replica_fadvise) {
+      dout(1) << " disabling 'filestore replica fadvise' due to known issues with fadvise(DONTNEED) on xfs" << dendl;
+      g_conf->set_val("filestore_replica_fadvise", "false");
+      g_conf->apply_changes(NULL);
+      assert(m_filestore_replica_fadvise == false);
+    }
+  }
+#endif
+
+  // test xattrs
   char fn[PATH_MAX];
   int x = rand();
   int y = x+1;
-
   snprintf(fn, sizeof(fn), "%s/xattr_test", basedir.c_str());
-
   int tmpfd = ::open(fn, O_CREAT|O_WRONLY|O_TRUNC, 0700);
   if (tmpfd < 0) {
     int ret = -errno;
     derr << "_detect_fs unable to create " << fn << ": " << cpp_strerror(ret) << dendl;
+    TEMP_FAILURE_RETRY(::close(fd));
     return ret;
   }
 
@@ -1024,6 +1047,7 @@ int FileStore::_detect_fs()
 	   << "file system with the 'user_xattr' option." << dendl;
     ::unlink(fn);
     TEMP_FAILURE_RETRY(::close(tmpfd));
+    TEMP_FAILURE_RETRY(::close(fd));
     return -ENOTSUP;
   }
 
@@ -1036,12 +1060,12 @@ int FileStore::_detect_fs()
   ret = chain_fsetxattr(tmpfd, "user.test5", &buf, sizeof(buf));
   if (ret == -ENOSPC) {
     if (!g_conf->filestore_xattr_use_omap) {
-      derr << "limited size xattrs -- enable filestore_xattr_use_omap" << dendl;
-      ::unlink(fn);
-      TEMP_FAILURE_RETRY(::close(tmpfd));
-      return -ENOTSUP;
+      dout(0) << "limited size xattrs -- automatically enabling filestore_xattr_use_omap" << dendl;
+      g_conf->set_val("filestore_xattr_use_omap", "true");
+      g_conf->apply_changes(NULL);
+      assert(g_conf->filestore_xattr_use_omap == true);
     } else {
-      derr << "limited size xattrs -- filestore_xattr_use_omap enabled" << dendl;
+      dout(0) << "limited size xattrs -- filestore_xattr_use_omap already enabled" << dendl;
     }
   }
   chain_fremovexattr(tmpfd, "user.test");
@@ -1053,35 +1077,13 @@ int FileStore::_detect_fs()
   ::unlink(fn);
   TEMP_FAILURE_RETRY(::close(tmpfd));
 
-  int fd = ::open(basedir.c_str(), O_RDONLY);
-  if (fd < 0)
-    return -errno;
-
-  int r = _test_fiemap();
+  r = _test_fiemap();
   if (r < 0) {
     TEMP_FAILURE_RETRY(::close(fd));
     return -r;
   }
 
-  struct statfs st;
-  r = ::fstatfs(fd, &st);
-  if (r < 0) {
-    TEMP_FAILURE_RETRY(::close(fd));
-    return -errno;
-  }
   blk_size = st.f_bsize;
-
-#if defined(__linux__)
-  if (st.f_type == XFS_SUPER_MAGIC) {
-    dout(1) << "mount detected xfs" << dendl;
-    if (m_filestore_replica_fadvise) {
-      dout(1) << " disabling 'filestore replica fadvise' due to known issues with fadvise(DONTNEED) on xfs" << dendl;
-      g_conf->set_val("filestore_replica_fadvise", "false");
-      g_conf->apply_changes(NULL);
-      assert(m_filestore_replica_fadvise == false);
-    }
-  }
-#endif
 
 #if defined(__linux__)
   if (st.f_type == BTRFS_SUPER_MAGIC) {

@@ -2758,6 +2758,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       
     case CEPH_OSD_OP_SETXATTR:
       {
+	if (op.xattr.value_len > g_conf->osd_max_attr_size) {
+	  result = -EFBIG;
+	  break;
+	}
 	if (!obs.exists) {
 	  t.touch(coll, soid);
 	  ctx->delta_stats.num_objects++;
