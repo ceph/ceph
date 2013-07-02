@@ -122,3 +122,32 @@ void cls_log_list(librados::ObjectReadOperation& op, utime_t& from, utime_t& to,
   op.exec("log", "list", inbl, new LogListCtx(&entries, out_marker, truncated));
 }
 
+class LogInfoCtx : public ObjectOperationCompletion {
+  cls_log_header *header;
+public:
+  LogInfoCtx(cls_log_header *_header) : header(_header) {}
+  void handle_completion(int r, bufferlist& outbl) {
+    if (r >= 0) {
+      cls_log_info_ret ret;
+      try {
+        bufferlist::iterator iter = outbl.begin();
+        ::decode(ret, iter);
+        if (header)
+	  *header = ret.header;
+      } catch (buffer::error& err) {
+        // nothing we can do about it atm
+      }
+    }
+  }
+};
+
+void cls_log_info(librados::ObjectReadOperation& op, cls_log_header *header)
+{
+  bufferlist inbl;
+  cls_log_info_op call;
+
+  ::encode(call, inbl);
+
+  op.exec("log", "info", inbl, new LogInfoCtx(header));
+}
+

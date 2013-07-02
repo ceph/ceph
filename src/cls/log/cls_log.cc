@@ -23,6 +23,7 @@ cls_handle_t h_class;
 cls_method_handle_t h_log_add;
 cls_method_handle_t h_log_list;
 cls_method_handle_t h_log_trim;
+cls_method_handle_t h_log_info;
 
 static string log_index_prefix = "1_";
 
@@ -45,6 +46,41 @@ static void get_index_time_prefix(utime_t& ts, string& index)
   snprintf(buf, sizeof(buf), "%010ld.%06ld_", (long)ts.sec(), (long)ts.usec());
 
   index = log_index_prefix + buf;
+}
+
+static int read_header(cls_method_context_t hctx, cls_log_header& header)
+{
+  bufferlist header_bl;
+
+  int ret = cls_cxx_map_read_header(hctx, &header_bl);
+  if (ret < 0)
+    return ret;
+
+  if (header_bl.length() == 0) {
+    header = cls_log_header();
+    return 0;
+  }
+
+  bufferlist::iterator iter = header_bl.begin();
+  try {
+    ::decode(header, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: read_header(): failed to decode header");
+  }
+
+  return 0;
+}
+
+static int write_header(cls_method_context_t hctx, cls_log_header& header)
+{
+  bufferlist header_bl;
+  ::encode(header, header_bl);
+
+  int ret = cls_cxx_map_write_header(hctx, &header_bl);
+  if (ret < 0)
+    return ret;
+
+  return 0;
 }
 
 static void get_index(cls_method_context_t hctx, utime_t& ts, string& index)
@@ -70,23 +106,42 @@ static int cls_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
     return -EINVAL;
   }
 
+  cls_log_header header;
+
+  int ret = read_header(hctx, header);
+  if (ret < 0)
+    return ret;
+
   for (list<cls_log_entry>::iterator iter = op.entries.begin();
        iter != op.entries.end(); ++iter) {
     cls_log_entry& entry = *iter;
 
     string index;
 
-    get_index(hctx, entry.timestamp, index);
+    utime_t timestamp = entry.timestamp;
+    if (timestamp < header.max_time)
+      timestamp = header.max_time;
+    else if (timestamp > header.max_time)
+      header.max_time = timestamp;
+
+    get_index(hctx, timestamp, index);
 
     CLS_LOG(0, "storing entry at %s", index.c_str());
 
     entry.id = index;
 
-    int ret = write_log_entry(hctx, index, entry);
+    if (index > header.max_marker)
+      header.max_marker = index;
+
+    ret = write_log_entry(hctx, index, entry);
     if (ret < 0)
       return ret;
   }
-  
+
+  ret = write_header(hctx, header);
+  if (ret < 0)
+    return ret;
+
   return 0;
 }
 
@@ -230,6 +285,29 @@ static int cls_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   return 0;
 }
 
+static int cls_log_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist::iterator in_iter = in->begin();
+
+  cls_log_info_op op;
+  try {
+    ::decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: cls_log_add_op(): failed to decode op");
+    return -EINVAL;
+  }
+
+  cls_log_info_ret ret;
+
+  int rc = read_header(hctx, ret.header);
+  if (rc < 0)
+    return rc;
+
+  ::encode(ret, *out);
+
+  return 0;
+}
+
 void __cls_init()
 {
   CLS_LOG(1, "Loaded log class!");
@@ -240,6 +318,7 @@ void __cls_init()
   cls_register_cxx_method(h_class, "add", CLS_METHOD_RD | CLS_METHOD_WR, cls_log_add, &h_log_add);
   cls_register_cxx_method(h_class, "list", CLS_METHOD_RD, cls_log_list, &h_log_list);
   cls_register_cxx_method(h_class, "trim", CLS_METHOD_RD | CLS_METHOD_WR, cls_log_trim, &h_log_trim);
+  cls_register_cxx_method(h_class, "info", CLS_METHOD_RD, cls_log_info, &h_log_info);
 
   return;
 }

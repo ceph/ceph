@@ -41,6 +41,26 @@ struct cls_log_entry {
 };
 WRITE_CLASS_ENCODER(cls_log_entry)
 
+struct cls_log_header {
+  string max_marker;
+  utime_t max_time;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(max_marker, bl);
+    ::encode(max_time, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(max_marker, bl);
+    ::decode(max_time, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_log_header)
+
 
 #endif
 
