@@ -11,7 +11,7 @@
 ### END INIT INFO
 
 DESC="RBD Mapping"
-RBDMAPFILE="/etc/rbdmap"
+RBDMAPFILE="/etc/ceph/rbdmap"
 
 . /lib/lsb/init-functions
 
