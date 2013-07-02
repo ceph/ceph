@@ -4838,7 +4838,7 @@ int Client::fsetattr(int fd, struct stat *attr, int mask)
 int Client::stat(const char *relpath, struct stat *stbuf,
 			  frag_info_t *dirstat, int mask)
 {
-  ldout(cct, 3) << "stat enter (relpath" << relpath << " mask " << mask << ")" << dendl;
+  ldout(cct, 3) << "stat enter (relpath " << relpath << " mask " << mask << ")" << dendl;
   Mutex::Locker lock(client_lock);
   tout(cct) << "stat" << std::endl;
   tout(cct) << relpath << std::endl;
@@ -4853,14 +4853,14 @@ int Client::stat(const char *relpath, struct stat *stbuf,
     return r;
   }
   fill_stat(in, stbuf, dirstat);
-  ldout(cct, 3) << "stat exit (relpath" << relpath << " mask " << mask << ")" << dendl;
+  ldout(cct, 3) << "stat exit (relpath " << relpath << " mask " << mask << ")" << dendl;
   return r;
 }
 
 int Client::lstat(const char *relpath, struct stat *stbuf,
 			  frag_info_t *dirstat, int mask)
 {
-  ldout(cct, 3) << "lstat enter (relpath" << relpath << " mask " << mask << ")" << dendl;
+  ldout(cct, 3) << "lstat enter (relpath " << relpath << " mask " << mask << ")" << dendl;
   Mutex::Locker lock(client_lock);
   tout(cct) << "lstat" << std::endl;
   tout(cct) << relpath << std::endl;
@@ -4876,7 +4876,7 @@ int Client::lstat(const char *relpath, struct stat *stbuf,
     return r;
   }
   fill_stat(in, stbuf, dirstat);
-  ldout(cct, 3) << "lstat exit (relpath" << relpath << " mask " << mask << ")" << dendl;
+  ldout(cct, 3) << "lstat exit (relpath " << relpath << " mask " << mask << ")" << dendl;
   return r;
 }
 
