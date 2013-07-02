@@ -31,7 +31,7 @@ If you deploy Ceph with ``mkcephfs``, manually redeploy ``ceph.conf`` to the
 hosts in your cluster. For example:: 
 
 	cd /etc/ceph
-	ssh {host-name} sudo /etc/ceph/ceph.conf < ceph.conf
+	ssh {host-name} sudo tee /etc/ceph/ceph.conf < ceph.conf
 
 
 Create Data Directory
