@@ -1219,6 +1219,7 @@ EXTRA_DIST += \
 	ceph-run $(srcdir)/ceph_common.sh \
 	$(srcdir)/init-radosgw \
 	$(srcdir)/init-radosgw.sysv \
+	$(srcdir)/init-rbdmap \
 	$(srcdir)/ceph-clsinfo $(srcdir)/make_version $(srcdir)/check_version \
 	$(srcdir)/.git_version \
 	$(srcdir)/ceph-rbdnamer \
