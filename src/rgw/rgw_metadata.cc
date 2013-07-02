@@ -130,6 +130,23 @@ int RGWMetadataLog::list_entries(void *handle,
   return 0;
 }
 
+int RGWMetadataLog::get_info(int shard_id, RGWMetadataLogInfo *info)
+{
+  string oid;
+  get_shard_oid(shard_id, oid);
+
+  cls_log_header header;
+
+  int ret = store->time_log_info(oid, &header);
+  if ((ret < 0) && (ret != -ENOENT))
+    return ret;
+
+  info->marker = header.max_marker;
+  info->last_update = header.max_time;
+
+  return 0;
+}
+
 int RGWMetadataLog::trim(int shard_id, const utime_t& from_time, const utime_t& end_time,
                          const string& start_marker, const string& end_marker)
 {

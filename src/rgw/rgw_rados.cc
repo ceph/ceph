@@ -1524,6 +1524,27 @@ int RGWRados::time_log_list(const string& oid, utime_t& start_time, utime_t& end
   return 0;
 }
 
+int RGWRados::time_log_info(const string& oid, cls_log_header *header)
+{
+  librados::IoCtx io_ctx;
+
+  const char *log_pool = zone.log_pool.name.c_str();
+  int r = rados->ioctx_create(log_pool, io_ctx);
+  if (r < 0)
+    return r;
+  librados::ObjectReadOperation op;
+
+  cls_log_info(op, header);
+
+  bufferlist obl;
+
+  int ret = io_ctx.operate(oid, &op, &obl);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
 int RGWRados::time_log_trim(const string& oid, const utime_t& start_time, const utime_t& end_time,
 			    const string& from_marker, const string& to_marker)
 {

@@ -1219,10 +1219,32 @@ int RGWDataChangesLog::list_entries(utime_t& start_time, utime_t& end_time, int 
   return 0;
 }
 
+int RGWDataChangesLog::get_info(int shard_id, RGWDataChangesLogInfo *info)
+{
+  if (shard_id > num_shards)
+    return -EINVAL;
+
+  string oid = oids[shard_id];
+
+  cls_log_header header;
+
+  int ret = store->time_log_info(oid, &header);
+  if ((ret < 0) && (ret != -ENOENT))
+    return ret;
+
+  info->marker = header.max_marker;
+  info->last_update = header.max_time;
+
+  return 0;
+}
+
 int RGWDataChangesLog::trim_entries(int shard_id, const utime_t& start_time, const utime_t& end_time,
                                     const string& start_marker, const string& end_marker)
 {
   int ret;
+
+  if (shard_id > num_shards)
+    return -EINVAL;
 
   ret = store->time_log_trim(oids[shard_id], start_time, end_time, start_marker, end_marker);
 
