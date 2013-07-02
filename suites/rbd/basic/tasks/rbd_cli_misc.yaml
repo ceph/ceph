@@ -1,9 +1,0 @@
-tasks:
-- install:
-- ceph:
-- workunit:
-    clients:
-      client.0:
-        - rbd/map-snapshot-io.sh
-    env:
-      RBD_CREATE_ARGS: --new-format
