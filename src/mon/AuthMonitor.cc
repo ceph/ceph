@@ -525,14 +525,6 @@ done:
   return true;
 }
 
-void AuthMonitor::auth_usage(stringstream& ss)
-{
-  ss << "error: usage:" << std::endl;
-  ss << "              auth (add | del | get-or-create | get-or-create-key | caps) <name> <--in-file=filename>" << std::endl;
-  ss << "              auth (export | get | get-key | print-key) <name>" << std::endl;
-  ss << "              auth list" << std::endl;
-}
-
 bool AuthMonitor::preprocess_command(MMonCommand *m)
 {
   int r = -1;
@@ -622,7 +614,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
     r = 0;
     goto done;
   } else {
-    auth_usage(ss);
+    ss << "invalid command";
     r = -EINVAL;
   }
 

@@ -734,43 +734,6 @@ int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
   return 0;
 }
 
-int MDSMonitor::cluster_fail(std::ostream &ss)
-{
-  dout(10) << "cluster_fail" << dendl;
-
-  if (!pending_mdsmap.test_flag(CEPH_MDSMAP_DOWN)) {
-    ss << "mdsmap must be marked DOWN first ('mds cluster_down')";
-    return -EPERM;
-  }
-  if (pending_mdsmap.up.size() && !mon->osdmon()->is_writeable()) {
-    ss << "osdmap not writeable, can't blacklist up mds's";
-    return -EAGAIN;
-  }
-
-  // --- reset the cluster map ---
-  if (pending_mdsmap.mds_info.size()) {
-    // blacklist all old mds's
-    utime_t until = ceph_clock_now(g_ceph_context);
-    until += g_conf->mds_blacklist_interval;
-    for (map<int32_t,uint64_t>::iterator p = pending_mdsmap.up.begin();
-	 p != pending_mdsmap.up.end();
-	 ++p) {
-      MDSMap::mds_info_t& info = pending_mdsmap.mds_info[p->second];
-      dout(10) << " blacklisting gid " << p->second << " " << info.addr << dendl;
-      pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(info.addr, until);
-    }
-    request_proposal(mon->osdmon());
-  }
-  pending_mdsmap.up.clear();
-  pending_mdsmap.failed.insert(pending_mdsmap.in.begin(),
-			       pending_mdsmap.in.end());
-  pending_mdsmap.in.clear();
-  pending_mdsmap.mds_info.clear();
-
-  ss << "failed all mds cluster members";
-  return 0;
-}
-
 bool MDSMonitor::prepare_command(MMonCommand *m)
 {
   int r = -EINVAL;
@@ -906,13 +869,6 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
     getline(ss, rs);
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
     return true;
-  } else if (prefix == "mds cluster_fail") {
-    r = cluster_fail(ss);
-    if (r < 0 && r == -EAGAIN) {
-      mon->osdmon()->wait_for_writeable(new C_RetryMessage(this,m));
-      return false; // don't propose yet; wait for message to be retried
-    }
-
   } else if (prefix == "mds cluster_down") {
     if (pending_mdsmap.test_flag(CEPH_MDSMAP_DOWN)) {
       ss << "mdsmap already marked DOWN";
