@@ -288,14 +288,21 @@ def is_held(dev):
     """
     assert os.path.exists(dev)
     dev = os.path.realpath(dev)
-    base = dev[5:]
-    disk = base
-    while disk[-1].isdigit():
-        disk = disk[:-1]
-    directory = '/sys/block/{disk}/{base}/holders'.format(disk=disk, base=base)
-    if not os.path.exists(directory):
-        return []
-    return os.listdir(directory)
+    base = dev.split('/')[-1]
+
+    # full disk?
+    directory = '/sys/block/{base}/holders'.format(base=base)
+    if os.path.exists(directory):
+        return os.listdir(directory)
+
+    # partition?
+    part = base
+    while len(base):
+        directory = '/sys/block/{base}/{part}/holders'.format(part=part, base=base)
+        if os.path.exists(directory):
+            return os.listdir(directory)
+        base = base[:-1]
+    return []
 
 
 def verify_not_in_use(dev):
@@ -1996,7 +2003,7 @@ def is_suppressed(path):
     try:
         if not disk.startswith('/dev/') or not stat.S_ISBLK(os.lstat(path).st_mode):
             return False
-        base = disk[5:]
+        base = disk.split('/')[-1]
         while len(base):
             if os.path.exists(SUPPRESS_PREFIX + base):
                 return True
@@ -2010,7 +2017,7 @@ def set_suppress(path):
         raise Error('does not exist', path)
     if not stat.S_ISBLK(os.lstat(path).st_mode):
         raise Error('not a block device', path)
-    base = disk[5:]
+    base = disk.split('/')[-1]
 
     with file(SUPPRESS_PREFIX + base, 'w') as f:
         pass
@@ -2023,7 +2030,7 @@ def unset_suppress(path):
     if not stat.S_ISBLK(os.lstat(path).st_mode):
         raise Error('not a block device', path)
     assert disk.startswith('/dev/')
-    base = disk[5:]
+    base = disk.split('/')[-1]
 
     fn = SUPPRESS_PREFIX + base
     if not os.path.exists(fn):
