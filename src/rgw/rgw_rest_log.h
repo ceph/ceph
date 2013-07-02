@@ -14,6 +14,8 @@
 #ifndef CEPH_RGW_REST_LOG_H
 #define CEPH_RGW_REST_LOG_H
 
+#include "rgw_metadata.h"
+
 class RGWOp_BILog_List : public RGWRESTOp {
   int http_ret;
   bool sent_header;
@@ -70,12 +72,12 @@ public:
   }
 };
 
-class RGWOp_MDLog_GetShardsInfo : public RGWRESTOp {
+class RGWOp_MDLog_Info : public RGWRESTOp {
   unsigned num_objects;
   int http_ret;
 public:
-  RGWOp_MDLog_GetShardsInfo() : num_objects(0), http_ret(0) {}
-  ~RGWOp_MDLog_GetShardsInfo() {}
+  RGWOp_MDLog_Info() : num_objects(0), http_ret(0) {}
+  ~RGWOp_MDLog_Info() {}
 
   int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("mdlog", RGW_CAP_READ);
@@ -86,7 +88,26 @@ public:
   void execute();
   virtual void send_response();
   virtual const char *name() {
-    return "get_metadata_log_shards_info";
+    return "get_metadata_log_info";
+  }
+};
+
+class RGWOp_MDLog_ShardInfo : public RGWRESTOp {
+  RGWMetadataLogInfo info;
+public:
+  RGWOp_MDLog_ShardInfo() {}
+  ~RGWOp_MDLog_ShardInfo() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("mdlog", RGW_CAP_READ);
+  }
+  int verify_permission() {
+    return check_caps(s->user.caps);
+  }
+  void execute();
+  virtual void send_response();
+  virtual const char *name() {
+    return "get_metadata_log_shard_info";
   }
 };
 
@@ -152,12 +173,12 @@ public:
   }
 };
 
-class RGWOp_DATALog_GetShardsInfo : public RGWRESTOp {
+class RGWOp_DATALog_Info : public RGWRESTOp {
   unsigned num_objects;
   int http_ret;
 public:
-  RGWOp_DATALog_GetShardsInfo() : num_objects(0), http_ret(0) {}
-  ~RGWOp_DATALog_GetShardsInfo() {}
+  RGWOp_DATALog_Info() : num_objects(0), http_ret(0) {}
+  ~RGWOp_DATALog_Info() {}
 
   int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("datalog", RGW_CAP_READ);
@@ -168,7 +189,26 @@ public:
   void execute();
   virtual void send_response();
   virtual const char *name() {
-    return "get_data_changes_log_shards_info";
+    return "get_data_changes_log_info";
+  }
+};
+
+class RGWOp_DATALog_ShardInfo : public RGWRESTOp {
+  RGWDataChangesLogInfo info;
+public:
+  RGWOp_DATALog_ShardInfo() {}
+  ~RGWOp_DATALog_ShardInfo() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("datalog", RGW_CAP_READ);
+  }
+  int verify_permission() {
+    return check_caps(s->user.caps);
+  }
+  void execute();
+  virtual void send_response();
+  virtual const char *name() {
+    return "get_data_changes_log_shard_info";
   }
 };
 
