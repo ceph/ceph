@@ -887,7 +887,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
       readdir_start.clear();
     }
 
-    ldout(cct, 10) << "insert_trace " << numdn << " readdir items, end=" << (int)end
+    ldout(cct, 10) << __func__ << " " << numdn << " readdir items, end=" << (int)end
 		   << ", offset " << readdir_offset
 		   << ", readdir_start " << readdir_start << dendl;
 
@@ -912,7 +912,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 	    fg.contains(diri->hash_dentry_name(pd->first))) {  // do not remove items in earlier frags
 	  Dentry *dn = pd->second;
 	  if (dn->inode) {
-	    ldout(cct, 15) << "insert_trace  unlink '" << pd->first << "'" << dendl;
+	    ldout(cct, 15) << __func__ << "  unlink '" << pd->first << "'" << dendl;
 	    ++pd;
 	    unlink(dn, true, true);  // keep dir, dentry
 	  } else {
@@ -956,7 +956,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
       in->get();
       request->readdir_result.push_back(pair<string,Inode*>(dname, in));
 
-      ldout(cct, 15) << "insert_trace  " << hex << dn->offset << dec << ": '" << dname << "' -> " << in->ino << dendl;
+      ldout(cct, 15) << __func__ << "  " << hex << dn->offset << dec << ": '" << dname << "' -> " << in->ino << dendl;
     }
     request->readdir_last_name = dname;
 
@@ -964,7 +964,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     if (end) {
       while (pd != dir->dentry_map.end()) {
 	if (fg.contains(diri->hash_dentry_name(pd->first))) {
-	  ldout(cct, 15) << "insert_trace  unlink '" << pd->first << "'" << dendl;
+	  ldout(cct, 15) << __func__ << "  unlink '" << pd->first << "'" << dendl;
 	  Dentry *dn = pd->second;
 	  ++pd;
 	  unlink(dn, true, true); // keep dir, dentry
