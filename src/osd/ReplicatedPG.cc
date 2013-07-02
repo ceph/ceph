@@ -4456,7 +4456,6 @@ ObjectContext *ReplicatedPG::get_object_context(const hobject_t& soid,
     if (can_create)
       ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, true);
     obc = new ObjectContext(oi, true, ssc);
-    obc->obs.oi.decode(bv);
     obc->obs.exists = true;
 
     register_object_context(obc);
