@@ -2518,11 +2518,16 @@ void OSD::_add_heartbeat_peer(int p)
     if (cons.second) {
       hi->con_front = cons.second.get();
       hi->con_front->set_priv(s->get());
+      dout(10) << "_add_heartbeat_peer: new peer osd." << p
+	       << " " << hi->con_back->get_peer_addr()
+	       << " " << hi->con_front->get_peer_addr()
+	       << dendl;
+    } else {
+      hi->con_front.reset(NULL);
+      dout(10) << "_add_heartbeat_peer: new peer osd." << p
+	       << " " << hi->con_back->get_peer_addr()
+	       << dendl;
     }
-    dout(10) << "_add_heartbeat_peer: new peer osd." << p
-	     << " " << hi->con_back->get_peer_addr()
-	     << " " << (hi->con_front ? hi->con_front->get_peer_addr() : entity_addr_t())
-	     << dendl;
   } else {
     hi = &i->second;
   }

@@ -904,6 +904,9 @@ int OSDMap::apply_incremental(const Incremental &inc)
     if (!inc.new_hb_front_up.empty())
       osd_addrs->hb_front_addr[i->first].reset(
 	new entity_addr_t(inc.new_hb_front_up.find(i->first)->second));
+    else
+      osd_addrs->hb_front_addr[i->first].reset();
+
     osd_info[i->first].up_from = epoch;
   }
   for (map<int32_t,entity_addr_t>::const_iterator i = inc.new_up_cluster.begin();
