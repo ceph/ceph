@@ -3212,7 +3212,7 @@ void Monitor::waitlist_or_zap_client(Message *m)
     dout(5) << "waitlisting message " << *m << dendl;
     maybe_wait_for_quorum.push_back(new C_RetryMessage(this, m));
   } else {
-    dout(1) << "discarding message " << *m << " and sending client elsewhere" << dendl;
+    dout(5) << "discarding message " << *m << " and sending client elsewhere" << dendl;
     messenger->mark_down(con);
     m->put();
   }
