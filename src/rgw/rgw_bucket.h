@@ -15,6 +15,7 @@
 #include "common/Formatter.h"
 #include "common/lru_map.h"
 #include "rgw_formats.h"
+#include "rgw/rgw_user.h"
 
 
 using namespace std;
@@ -159,7 +160,7 @@ struct RGWBucketAdminOpState {
   bool will_fix_index() { return fix_index; };
   bool will_delete_children() { return delete_child_objects; };
   bool will_check_objects() { return check_objects; };
-  bool is_user_op() { return !uid.empty(); };
+  bool is_user_op() { return !uid.empty() && uid.compare(rgw_get_anon_uid()) != 0; };
   bool is_system_op() { return uid.empty(); }; 
   bool has_bucket_stored() { return bucket_stored; };
 

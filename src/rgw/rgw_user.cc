@@ -25,6 +25,13 @@ using namespace std;
 
 static RGWMetadataHandler *user_meta_handler = NULL;
 
+/**
+ * Get the anonymous (ie, unauthenticated) user id
+ */
+std::string rgw_get_anon_uid()
+{
+  return RGW_USER_ANON_ID;
+}
 
 /**
  * Get the anonymous (ie, unauthenticated) user info.
