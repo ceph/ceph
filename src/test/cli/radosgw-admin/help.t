@@ -82,6 +82,11 @@
      --start-date=<date>
      --end-date=<date>
      --bucket-id=<bucket-id>
+     --shard-id=<shard-id>     optional for mdlog list
+                               required for:
+                                 mdlog trim
+                                 replica mdlog get/delete
+                                 replica datalog get/delete
      --fix                     besides checking bucket index, will also fix it
      --check-objects           bucket check: rebuilds bucket index according to
                                actual objects state
