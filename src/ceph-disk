@@ -201,28 +201,6 @@ def maybe_mkdir(*a, **kw):
 # a device "name" is something like
 #  sdb
 #  cciss!c0d1
-def list_all_partitions():
-    """
-    Return a list of devices and partitions
-    """
-    dev_part_list = {}
-    for name in os.listdir('/dev/disk/by-path'):
-        target = os.readlink(os.path.join('/dev/disk/by-path', name))
-        dev = target.split('/')[-1]
-        #print "name %s target %s dev %s" % (name, target, dev)
-        (baser) = re.search('(.*)-part\d+$', name)
-        if baser is not None:
-            basename = baser.group(1)
-            #print 'basename %s' % basename
-            base = os.readlink(os.path.join('/dev/disk/by-path', basename)).split('/')[-1]
-            if base not in dev_part_list:
-                dev_part_list[base] = []
-            dev_part_list[base].append(dev)
-        else:
-            if dev not in dev_part_list:
-                dev_part_list[dev] = []
-    return dev_part_list
-
 def get_dev_name(path):
     """
     get device name from path.  e.g., /dev/sda -> sdas, /dev/cciss/c0d1 -> cciss!c0d1
@@ -246,18 +224,25 @@ def get_dev_relpath(name):
     """
     return name.replace('!', '/')
 
-def list_partitions(disk):
+def list_all_partitions():
     """
-    Return a list of partitions on the given device
+    Return a list of devices and partitions
     """
-    disk = os.path.realpath(disk)
-    assert not is_partition(disk)
-    assert disk.startswith('/dev/')
-    base = disk.split('/')[-1]
+    dev_part_list = {}
+    for name in os.listdir('/sys/block'):
+        if not os.path.exists(os.path.join('/sys/block', name, 'device')):
+            continue
+        dev_part_list[name] = list_partitions(name)
+    return dev_part_list
+
+def list_partitions(basename):
+    """
+    Return a list of partitions on the given device name
+    """
     partitions = []
-    for name in os.listdir(os.path.join('/sys/block', base)):
-        if name.startswith(base):
-            partitions.append('/dev/' + name)
+    for name in os.listdir(os.path.join('/sys/block', basename)):
+        if name.startswith(basename):
+            partitions.append(name)
     return partitions
 
 
@@ -345,7 +330,9 @@ def verify_not_in_use(dev):
         if holders:
             raise Error('Device is in use by a device-mapper mapping (dm-crypt?)' % dev, ','.join(holders))
     else:
-        for partition in list_partitions(dev):
+        basename = get_dev_name(os.path.realpath(dev))
+        for partname in list_partitions(basename):
+            partition = get_dev_path(partname)
             if is_mounted(partition):
                 raise Error('Device is mounted', partition)
             holders = is_held(partition)
