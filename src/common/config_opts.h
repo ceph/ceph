@@ -661,6 +661,9 @@ OPTION(rgw_swift_auth_url, OPT_STR, "")        // default URL to go and verify t
 OPTION(rgw_swift_auth_entry, OPT_STR, "auth")  // entry point for which a url is considered a swift auth url
 OPTION(rgw_keystone_url, OPT_STR, "")  // url for keystone server
 OPTION(rgw_keystone_admin_token, OPT_STR, "")  // keystone admin token (shared secret)
+OPTION(rgw_keystone_admin_user, OPT_STR, "")  // keystone admin user name
+OPTION(rgw_keystone_admin_password, OPT_STR, "")  // keystone admin user password
+OPTION(rgw_keystone_admin_tenant, OPT_STR, "")  // keystone admin user tenant
 OPTION(rgw_keystone_accepted_roles, OPT_STR, "Member, admin")  // roles required to serve requests
 OPTION(rgw_keystone_token_cache_size, OPT_INT, 10000)  // max number of entries in keystone token cache
 OPTION(rgw_keystone_revocation_interval, OPT_INT, 15 * 60)  // seconds between tokens revocation check
