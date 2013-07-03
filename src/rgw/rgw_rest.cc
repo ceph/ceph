@@ -575,13 +575,13 @@ int RESTArgs::get_time(struct req_state *s, const string& name, const utime_t& d
     return 0;
   }
 
-  uint64_t epoch, usec;
+  uint64_t epoch, nsec;
 
-  int r = parse_date(sval, &epoch, &usec);
+  int r = utime_t::parse_date(sval, &epoch, &nsec);
   if (r < 0)
     return r;
 
-  *val = utime_t(epoch, usec);
+  *val = utime_t(epoch, nsec);
 
   return 0;
 }
@@ -599,7 +599,7 @@ int RESTArgs::get_epoch(struct req_state *s, const string& name, uint64_t def_va
     return 0;
   }
 
-  int r = parse_date(date, epoch, NULL);
+  int r = utime_t::parse_date(date, epoch, NULL);
   if (r < 0)
     return r;
 

@@ -469,9 +469,11 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
     return -EINVAL;
   }
 
-  rc = log_index_operation(hctx, op.name, op.op, op.tag, entry.meta.mtime, entry.ver, info.state, header.ver);
-  if (rc < 0)
-    return rc;
+  if (op.log_op) {
+    rc = log_index_operation(hctx, op.name, op.op, op.tag, entry.meta.mtime, entry.ver, info.state, header.ver);
+    if (rc < 0)
+      return rc;
+  }
 
   // write out new key to disk
   bufferlist info_bl;
@@ -581,9 +583,11 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 
   bufferlist op_bl;
   if (cancel) {
-    rc = log_index_operation(hctx, op.name, op.op, op.tag, entry.meta.mtime, entry.ver, CLS_RGW_STATE_COMPLETE, header.ver);
-    if (rc < 0)
-      return rc;
+    if (op.log_op) {
+      rc = log_index_operation(hctx, op.name, op.op, op.tag, entry.meta.mtime, entry.ver, CLS_RGW_STATE_COMPLETE, header.ver);
+      if (rc < 0)
+        return rc;
+    }
 
     if (op.tag.size()) {
       bufferlist new_key_bl;
@@ -638,9 +642,11 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     break;
   }
 
-  rc = log_index_operation(hctx, op.name, op.op, op.tag, entry.meta.mtime, entry.ver, CLS_RGW_STATE_COMPLETE, header.ver);
-  if (rc < 0)
-    return rc;
+  if (op.log_op) {
+    rc = log_index_operation(hctx, op.name, op.op, op.tag, entry.meta.mtime, entry.ver, CLS_RGW_STATE_COMPLETE, header.ver);
+    if (rc < 0)
+      return rc;
+  }
 
   list<string>::iterator remove_iter;
   CLS_LOG(0, "rgw_bucket_complete_op(): remove_objs.size()=%d\n", (int)op.remove_objs.size());
@@ -656,10 +662,12 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     CLS_LOG(0, "rgw_bucket_complete_op(): entry.name=%s entry.meta.category=%d\n", remove_entry.name.c_str(), remove_entry.meta.category);
     unaccount_entry(header, remove_entry);
 
-    rc = log_index_operation(hctx, op.name, CLS_RGW_OP_DEL, op.tag, remove_entry.meta.mtime,
-                             remove_entry.ver, CLS_RGW_STATE_COMPLETE, header.ver);
-    if (rc < 0)
-      continue;
+    if (op.log_op) {
+      rc = log_index_operation(hctx, op.name, CLS_RGW_OP_DEL, op.tag, remove_entry.meta.mtime,
+                               remove_entry.ver, CLS_RGW_STATE_COMPLETE, header.ver);
+      if (rc < 0)
+        continue;
+    }
 
     ret = cls_cxx_map_remove_key(hctx, remove_oid_name);
     if (ret < 0) {

@@ -66,6 +66,14 @@ public:
 
 #define META_LOG_OBJ_PREFIX "meta.log."
 
+struct RGWMetadataLogInfo {
+  string marker;
+  utime_t last_update;
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+
 class RGWMetadataLog {
   CephContext *cct;
   RGWRados *store;
@@ -103,7 +111,8 @@ public:
                    int max_entries,
                    list<cls_log_entry>& entries, bool *truncated);
 
-  int trim(int shard_id, utime_t& from_time, utime_t& end_time);
+  int trim(int shard_id, const utime_t& from_time, const utime_t& end_time, const string& start_marker, const string& end_marker);
+  int get_info(int shard_id, RGWMetadataLogInfo *info);
   int lock_exclusive(int shard_id, utime_t& duration, string&zone_id, string& owner_id);
   int unlock(int shard_id, string& zone_id, string& owner_id);
 };

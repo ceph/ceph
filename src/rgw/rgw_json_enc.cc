@@ -5,6 +5,7 @@
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 #include "rgw_cache.h"
+#include "rgw_bucket.h"
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
@@ -576,12 +577,16 @@ void RGWZone::dump(Formatter *f) const
 {
   encode_json("name", name, f);
   encode_json("endpoints", endpoints, f);
+  encode_json("log_meta", log_meta, f);
+  encode_json("log_data", log_data, f);
 }
 
 void RGWZone::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("endpoints", endpoints, obj);
+  JSONDecoder::decode_json("log_meta", log_meta, obj);
+  JSONDecoder::decode_json("log_data", log_data, obj);
 }
 
 void RGWRegionPlacementTarget::dump(Formatter *f) const
@@ -646,5 +651,29 @@ void RGWRegionMap::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("regions", regions, obj);
   JSONDecoder::decode_json("master_region", master_region, obj);
+}
+
+void RGWMetadataLogInfo::dump(Formatter *f) const
+{
+  encode_json("marker", marker, f);
+  encode_json("last_update", last_update, f);
+}
+
+void RGWMetadataLogInfo::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("marker", marker, obj);
+  JSONDecoder::decode_json("last_update", last_update, obj);
+}
+
+void RGWDataChangesLogInfo::dump(Formatter *f) const
+{
+  encode_json("marker", marker, f);
+  encode_json("last_update", last_update, f);
+}
+
+void RGWDataChangesLogInfo::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("marker", marker, obj);
+  JSONDecoder::decode_json("last_update", last_update, obj);
 }
 
