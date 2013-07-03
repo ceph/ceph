@@ -2030,31 +2030,6 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   } else if (prefix == "osd getmaxosd") {
     ds << "max_osd = " << osdmap.get_max_osd() << " in epoch " << osdmap.get_epoch();
     rdata.append(ds);
-  } else if (prefix == "osd tell") {
-    string whostr;
-    cmd_getval(g_ceph_context, cmdmap, "who", whostr);
-    vector<string> argvec;
-    cmd_getval(g_ceph_context, cmdmap, "args", argvec);
-    if (whostr == "*") {
-      for (int i = 0; i < osdmap.get_max_osd(); ++i)
-	if (osdmap.is_up(i))
-	  mon->send_command(osdmap.get_inst(i), argvec, get_last_committed());
-      ss << "ok";
-    } else {
-      errno = 0;
-      int who = parse_osd_id(whostr.c_str(), &ss);
-      if (who < 0) {
-	r = -EINVAL;
-      } else {
-	if (osdmap.is_up(who)) {
-	  mon->send_command(osdmap.get_inst(who), argvec, get_last_committed());
-	  ss << "ok";
-	} else {
-	  ss << "osd." << who << " not up";
-	  r = -ENOENT;
-	}
-      }
-    }
   } else if (prefix  == "osd find") {
     int64_t osd;
     cmd_getval(g_ceph_context, cmdmap, "id", osd);
