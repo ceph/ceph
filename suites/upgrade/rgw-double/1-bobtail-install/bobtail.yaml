@@ -2,3 +2,4 @@ tasks:
 - install:
      branch: bobtail
 - ceph:
+- rgw:
