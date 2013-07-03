@@ -17,10 +17,9 @@
 #include "rgw_metadata.h"
 
 class RGWOp_BILog_List : public RGWRESTOp {
-  int http_ret;
   bool sent_header;
 public:
-  RGWOp_BILog_List() : http_ret(0), sent_header(false) {}
+  RGWOp_BILog_List() : sent_header(false) {}
   ~RGWOp_BILog_List() {}
 
   int check_caps(RGWUserCaps& caps) {
@@ -34,7 +33,28 @@ public:
   virtual void send_response_end();
   void execute();
   virtual const char *name() {
-    return "list bucket index log";
+    return "list_bucket_index_log";
+  }
+};
+
+class RGWOp_BILog_Info : public RGWRESTOp {
+  uint64_t bucket_ver;
+  uint64_t master_ver;
+  string max_marker;
+public:
+  RGWOp_BILog_Info() : bucket_ver(0), master_ver(0) {}
+  ~RGWOp_BILog_Info() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("bilog", RGW_CAP_READ);
+  }
+  int verify_permission() {
+    return check_caps(s->user.caps);
+  }
+  virtual void send_response();
+  void execute();
+  virtual const char *name() {
+    return "bucket_index_log_info";
   }
 };
 
