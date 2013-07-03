@@ -976,26 +976,26 @@ ceph_test_cors_LDADD = librados.la librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_
 ceph_test_cors_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_cors
 
-unittest_rgw_meta_SOURCES = test/test_rgw_admin_meta.cc
-unittest_rgw_meta_LDFLAGS = libglobal.la 
-unittest_rgw_meta_LDADD = librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} -lcryptopp -lcurl -luuid -lexpat  librados.la libcls_version_client.a \
+cls_test_rgw_meta_SOURCES = test/test_rgw_admin_meta.cc
+cls_test_rgw_meta_LDFLAGS = libglobal.la 
+cls_test_rgw_meta_LDADD = librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} -lcryptopp -lcurl -luuid -lexpat  librados.la libcls_version_client.a \
  libcls_log_client.a libcls_statelog_client.a libcls_refcount_client.a libcls_rgw_client.a libcls_lock_client.a
-unittest_rgw_meta_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-bin_DEBUGPROGRAMS += unittest_rgw_meta
+cls_test_rgw_meta_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += cls_test_rgw_meta
 
-unittest_rgw_log_SOURCES = test/test_rgw_admin_log.cc
-unittest_rgw_log_LDFLAGS = libglobal.la 
-unittest_rgw_log_LDADD = librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} -lcryptopp -lcurl -luuid -lexpat  librados.la libcls_version_client.a \
+cls_test_rgw_log_SOURCES = test/test_rgw_admin_log.cc
+cls_test_rgw_log_LDFLAGS = libglobal.la 
+cls_test_rgw_log_LDADD = librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} -lcryptopp -lcurl -luuid -lexpat  librados.la libcls_version_client.a \
  libcls_log_client.a libcls_statelog_client.a libcls_refcount_client.a libcls_rgw_client.a libcls_lock_client.a
-unittest_rgw_log_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-bin_DEBUGPROGRAMS += unittest_rgw_log
+cls_test_rgw_log_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += cls_test_rgw_log
 
-unittest_rgw_opstate_SOURCES = test/test_rgw_admin_opstate.cc
-unittest_rgw_opstate_LDFLAGS = libglobal.la 
-unittest_rgw_opstate_LDADD = librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} -lcryptopp -lcurl -luuid -lexpat  librados.la libcls_version_client.a \
+cls_test_rgw_opstate_SOURCES = test/test_rgw_admin_opstate.cc
+cls_test_rgw_opstate_LDFLAGS = libglobal.la 
+cls_test_rgw_opstate_LDADD = librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} -lcryptopp -lcurl -luuid -lexpat  librados.la libcls_version_client.a \
  libcls_log_client.a libcls_statelog_client.a libcls_refcount_client.a libcls_rgw_client.a libcls_lock_client.a
-unittest_rgw_opstate_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-bin_DEBUGPROGRAMS += unittest_rgw_opstate
+cls_test_rgw_opstate_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += cls_test_rgw_opstate
 endif
 
 ceph_test_librbd_SOURCES = test/librbd/test_librbd.cc test/librados/test.cc
