@@ -239,6 +239,12 @@ int main(int argc, char **argv)
     }
   }
 
+  if (op_weights.empty()) {
+    cerr << "No operations specified" << std::endl;
+    //usage();
+    exit(1);
+  }
+
   if (min_stride_size < 0)
     min_stride_size = size / 10;
   if (max_stride_size < 0)
