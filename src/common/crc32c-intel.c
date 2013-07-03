@@ -29,8 +29,6 @@ int crc32c_intel_available = 0;
 #define SCALE_F 4
 #endif
 
-static int crc32c_probed;
-
 static uint32_t crc32c_intel_le_hw_byte(uint32_t crc, unsigned char const *data,
                                         unsigned length)
 {
@@ -46,11 +44,7 @@ static uint32_t crc32c_intel_le_hw_byte(uint32_t crc, unsigned char const *data,
         return crc;
 }
 
-/*
- *  * Steps through buffer one byte at at time, calculates reflected
- *   * crc using table.
- *    */
-uint32_t crc32c_intel(uint32_t crc, unsigned char const *data, unsigned length)
+uint32_t ceph_crc32c_le_intel(uint32_t crc, unsigned char const *data, unsigned length)
 {
         unsigned int iquotient = length / SCALE_F;
         unsigned int iremainder = length % SCALE_F;
@@ -76,6 +70,7 @@ uint32_t crc32c_intel(uint32_t crc, unsigned char const *data, unsigned length)
         return crc;
 }
 
+
 static void do_cpuid(unsigned int *eax, unsigned int *ebx, unsigned int *ecx,
                      unsigned int *edx)
 {
@@ -92,20 +87,14 @@ static void do_cpuid(unsigned int *eax, unsigned int *ebx, unsigned int *ecx,
                 : "eax", "ebx", "ecx", "edx");
 }
 
-void crc32c_intel_probe(void)
+int ceph_have_crc32c_intel(void)
 {
-        if (!crc32c_probed) {
-                unsigned int eax, ebx, ecx, edx;
+	unsigned int eax, ebx, ecx, edx;
 
-                eax = 1;
+	eax = 1;
 
-                do_cpuid(&eax, &ebx, &ecx, &edx);
-                crc32c_intel_available = (ecx & (1 << 20)) != 0;
-                crc32c_probed = 1;
-        }
-}
-
-uint32_t ceph_crc32c_le(uint32_t crc, unsigned char const *data, unsigned length)
-{
-        return crc32c_intel(crc, data, length);
+	do_cpuid(&eax, &ebx, &ecx, &edx);
+	if ((ecx & (1 << 20)) != 0)
+		return 1;
+	return 0;
 }
