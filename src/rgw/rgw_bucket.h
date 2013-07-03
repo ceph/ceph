@@ -263,6 +263,14 @@ struct rgw_data_change {
 };
 WRITE_CLASS_ENCODER(rgw_data_change)
 
+struct RGWDataChangesLogInfo {
+  string marker;
+  utime_t last_update;
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+
 class RGWDataChangesLog {
   CephContext *cct;
   RGWRados *store;
@@ -345,8 +353,11 @@ public:
   int renew_entries();
   int list_entries(int shard, utime_t& start_time, utime_t& end_time, int max_entries,
                list<rgw_data_change>& entries, string& marker, bool *truncated);
-  int trim_entries(int shard_id, utime_t& start_time, utime_t& end_time);
-  int trim_entries(utime_t& start_time, utime_t& end_time);
+  int trim_entries(int shard_id, const utime_t& start_time, const utime_t& end_time,
+                   const string& start_marker, const string& end_marker);
+  int trim_entries(const utime_t& start_time, const utime_t& end_time,
+                   const string& start_marker, const string& end_marker);
+  int get_info(int shard_id, RGWDataChangesLogInfo *info);
   int lock_exclusive(int shard_id, utime_t& duration, string& zone_id, string& owner_id) {
     return store->lock_exclusive(store->zone.log_pool, oids[shard_id], duration, zone_id, owner_id);
   }

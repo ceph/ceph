@@ -605,7 +605,7 @@ static int parse_date_str(const string& date_str, utime_t& ut)
   uint64_t nsec = 0;
 
   if (!date_str.empty()) {
-    int ret = parse_date(date_str, &epoch, &nsec);
+    int ret = utime_t::parse_date(date_str, &epoch, &nsec);
     if (ret < 0) {
       cerr << "ERROR: failed to parse date: " << date_str << std::endl;
       return -EINVAL;
@@ -1375,7 +1375,7 @@ int main(int argc, char **argv)
       return usage();
     }
     string parsed_date, parsed_time;
-    int r = parse_date(date, NULL, NULL, &parsed_date, &parsed_time);
+    int r = utime_t::parse_date(date, NULL, NULL, &parsed_date, &parsed_time);
     if (r < 0) {
       cerr << "failure parsing date: " << cpp_strerror(r) << std::endl;
       return 1;
@@ -1569,14 +1569,14 @@ next:
     int ret;
     
     if (!start_date.empty()) {
-      ret = parse_date(start_date, &start_epoch, NULL);
+      ret = utime_t::parse_date(start_date, &start_epoch, NULL);
       if (ret < 0) {
         cerr << "ERROR: failed to parse start date" << std::endl;
         return 1;
       }
     }
     if (!end_date.empty()) {
-      ret = parse_date(end_date, &end_epoch, NULL);
+      ret = utime_t::parse_date(end_date, &end_epoch, NULL);
       if (ret < 0) {
         cerr << "ERROR: failed to parse end date" << std::endl;
         return 1;
@@ -1605,7 +1605,7 @@ next:
 
 
     if (!start_date.empty()) {
-      ret = parse_date(start_date, &start_epoch, NULL);
+      ret = utime_t::parse_date(start_date, &start_epoch, NULL);
       if (ret < 0) {
         cerr << "ERROR: failed to parse start date" << std::endl;
         return 1;
@@ -1613,7 +1613,7 @@ next:
     }
 
     if (!end_date.empty()) {
-      ret = parse_date(end_date, &end_epoch, NULL);
+      ret = utime_t::parse_date(end_date, &end_epoch, NULL);
       if (ret < 0) {
         cerr << "ERROR: failed to parse end date" << std::endl;
         return 1;
@@ -1899,7 +1899,7 @@ next:
 
     RGWMetadataLog *meta_log = store->meta_mgr->get_log();
 
-    ret = meta_log->trim(shard_id, start_time, end_time);
+    ret = meta_log->trim(shard_id, start_time, end_time, start_marker, end_marker);
     if (ret < 0) {
       cerr << "ERROR: meta_log->trim(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2015,7 +2015,7 @@ next:
       return -ret;
 
     RGWDataChangesLog *log = store->data_log;
-    ret = log->trim_entries(start_time, end_time);
+    ret = log->trim_entries(start_time, end_time, start_marker, end_marker);
     if (ret < 0) {
       cerr << "ERROR: trim_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2105,9 +2105,7 @@ next:
   }
 
   if (opt_cmd == OPT_REPLICALOG_GET) {
-    string pos_marker;
-    utime_t time_marker;
-    list<cls_replica_log_progress_marker> markers;
+    RGWReplicaBounds bounds;
     if (replica_log_type == ReplicaLog_Metadata) {
       if (!specified_shard_id) {
         cerr << "ERROR: shard-id must be specified for get operation" << std::endl;
@@ -2115,7 +2113,7 @@ next:
       }
 
       RGWReplicaObjectLogger logger(store, pool_name, META_REPLICA_LOG_OBJ_PREFIX);
-      int ret = logger.get_bounds(shard_id, pos_marker, time_marker, markers);
+      int ret = logger.get_bounds(shard_id, bounds);
       if (ret < 0)
         return -ret;
     } else if (replica_log_type == ReplicaLog_Data) {
@@ -2124,7 +2122,7 @@ next:
         return EINVAL;
       }
       RGWReplicaObjectLogger logger(store, pool_name, DATA_REPLICA_LOG_OBJ_PREFIX);
-      int ret = logger.get_bounds(shard_id, pos_marker, time_marker, markers);
+      int ret = logger.get_bounds(shard_id, bounds);
       if (ret < 0)
         return -ret;
     } else if (replica_log_type == ReplicaLog_Bucket) {
@@ -2139,13 +2137,13 @@ next:
       }
 
       RGWReplicaBucketLogger logger(store);
-      ret = logger.get_bounds(bucket, pos_marker, time_marker, markers);
+      ret = logger.get_bounds(bucket, bounds);
       if (ret < 0)
         return -ret;
     } else { // shouldn't get here
       assert(0);
     }
-    encode_json("markers", markers, formatter);
+    encode_json("bounds", bounds, formatter);
   }
 
   if (opt_cmd == OPT_REPLICALOG_DELETE) {

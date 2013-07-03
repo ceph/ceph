@@ -25,6 +25,18 @@ using namespace std;
 #define META_REPLICA_LOG_OBJ_PREFIX "meta.replicalog."
 #define DATA_REPLICA_LOG_OBJ_PREFIX "data.replicalog."
 
+typedef cls_replica_log_item_marker RGWReplicaItemMarker;
+typedef cls_replica_log_progress_marker RGWReplicaProgressMarker;
+
+struct RGWReplicaBounds {
+  string marker;
+  utime_t oldest_time;
+  list<RGWReplicaProgressMarker> markers;
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+
 class RGWReplicaLogger {
 protected:
   CephContext *cct;
@@ -36,18 +48,11 @@ protected:
   int update_bound(const string& oid, const string& pool,
                    const string& daemon_id, const string& marker,
                    const utime_t& time,
-                   const list<pair<string, utime_t> > *entries);
+                   const list<RGWReplicaItemMarker> *entries);
   int delete_bound(const string& oid, const string& pool,
                    const string& daemon_id);
   int get_bounds(const string& oid, const string& pool,
-                 string& marker, utime_t& oldest_time,
-                 list<cls_replica_log_progress_marker>& markers);
-
-public:
-  static void get_bound_info(const cls_replica_log_progress_marker& progress,
-                             string& entity, string& marker,
-                             utime_t time,
-                             list<pair<string, utime_t> >& entries);
+                 RGWReplicaBounds& bounds);
 };
 
 class RGWReplicaObjectLogger : private RGWReplicaLogger {
@@ -68,7 +73,7 @@ public:
   int create_log_objects(int shards);
   int update_bound(int shard, const string& daemon_id, const string& marker,
                    const utime_t& time,
-                   const list<pair<string, utime_t> > *entries) {
+                   const list<RGWReplicaItemMarker> *entries) {
     string oid;
     get_shard_oid(shard, oid);
     return RGWReplicaLogger::update_bound(oid, pool,
@@ -80,12 +85,10 @@ public:
     return RGWReplicaLogger::delete_bound(oid, pool,
                                           daemon_id);
   }
-  int get_bounds(int shard, string& marker, utime_t& oldest_time,
-                 list<cls_replica_log_progress_marker>& markers) {
+  int get_bounds(int shard, RGWReplicaBounds& bounds) {
     string oid;
     get_shard_oid(shard, oid);
-    return RGWReplicaLogger::get_bounds(oid, pool,
-                                        marker, oldest_time, markers);
+    return RGWReplicaLogger::get_bounds(oid, pool, bounds);
   }
 };
 
@@ -96,7 +99,7 @@ public:
   RGWReplicaBucketLogger(RGWRados *_store);
   int update_bound(const rgw_bucket& bucket, const string& daemon_id,
                    const string& marker, const utime_t& time,
-                   const list<pair<string, utime_t> > *entries) {
+                   const list<RGWReplicaItemMarker> *entries) {
     return RGWReplicaLogger::update_bound(prefix+bucket.name, pool,
                                           daemon_id, marker, time, entries);
   }
@@ -104,10 +107,9 @@ public:
     return RGWReplicaLogger::delete_bound(prefix+bucket.name, pool,
                                           daemon_id);
   }
-  int get_bounds(const rgw_bucket& bucket, string& marker, utime_t& oldest_time,
-                 list<cls_replica_log_progress_marker>& markers) {
+  int get_bounds(const rgw_bucket& bucket, RGWReplicaBounds& bounds) {
     return RGWReplicaLogger::get_bounds(prefix+bucket.name, pool,
-                                        marker, oldest_time, markers);
+                                        bounds);
   }
 };
 

@@ -895,10 +895,12 @@ int RGWRados::init_complete()
   map<string, RGWZone>::iterator ziter;
   for (ziter = region.zones.begin(); ziter != region.zones.end(); ++ziter) {
     const string& name = ziter->first;
+    RGWZone& z = ziter->second;
     if (name != zone.name) {
-      RGWZone& z = ziter->second;
       ldout(cct, 20) << "generating connection object for zone " << name << dendl;
       zone_conn_map[name] = new RGWRESTConn(cct, this, z.endpoints);
+    } else {
+      zone_public_config = z;
     }
   }
 
@@ -1522,7 +1524,29 @@ int RGWRados::time_log_list(const string& oid, utime_t& start_time, utime_t& end
   return 0;
 }
 
-int RGWRados::time_log_trim(const string& oid, utime_t& start_time, utime_t& end_time)
+int RGWRados::time_log_info(const string& oid, cls_log_header *header)
+{
+  librados::IoCtx io_ctx;
+
+  const char *log_pool = zone.log_pool.name.c_str();
+  int r = rados->ioctx_create(log_pool, io_ctx);
+  if (r < 0)
+    return r;
+  librados::ObjectReadOperation op;
+
+  cls_log_info(op, header);
+
+  bufferlist obl;
+
+  int ret = io_ctx.operate(oid, &op, &obl);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
+int RGWRados::time_log_trim(const string& oid, const utime_t& start_time, const utime_t& end_time,
+			    const string& from_marker, const string& to_marker)
 {
   librados::IoCtx io_ctx;
 
@@ -1531,7 +1555,7 @@ int RGWRados::time_log_trim(const string& oid, utime_t& start_time, utime_t& end
   if (r < 0)
     return r;
 
-  return cls_log_trim(io_ctx, oid, start_time, end_time);
+  return cls_log_trim(io_ctx, oid, start_time, end_time, from_marker, to_marker);
 }
 
 
@@ -4950,7 +4974,7 @@ int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, RGWModifyOp op, string& tag
     return r;
 
   ObjectWriteOperation o;
-  cls_rgw_bucket_prepare_op(o, op, tag, name, locator);
+  cls_rgw_bucket_prepare_op(o, op, tag, name, locator, zone_public_config.log_data);
   r = index_ctx.operate(oid, &o);
   return r;
 }
@@ -4980,7 +5004,7 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, RGWModifyOp op, string& ta
   rgw_bucket_entry_ver ver;
   ver.pool = pool;
   ver.epoch = epoch;
-  cls_rgw_bucket_complete_op(o, op, tag, ver, ent.name, dir_meta, remove_objs);
+  cls_rgw_bucket_complete_op(o, op, tag, ver, ent.name, dir_meta, remove_objs, zone_public_config.log_data);
 
   AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
   r = index_ctx.aio_operate(oid, c, &o);

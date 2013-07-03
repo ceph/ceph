@@ -15,8 +15,14 @@
 
 void cls_replica_log_item_marker::dump(Formatter *f) const
 {
-  f->dump_string("item name", item_name);
-  f->dump_stream("item timestamp") << item_timestamp;
+  f->dump_string("name", item_name);
+  f->dump_stream("timestamp") << item_timestamp;
+}
+
+void cls_replica_log_item_marker::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("name", item_name, obj);
+  JSONDecoder::decode_json("timestamp", item_timestamp, obj);
 }
 
 void cls_replica_log_item_marker::
@@ -32,10 +38,18 @@ generate_test_instances(std::list<cls_replica_log_item_marker*>& ls)
 
 void cls_replica_log_progress_marker::dump(Formatter *f) const
 {
-  f->dump_string("entity", entity_id);
-  f->dump_string("position_marker", position_marker);
-  position_time.gmtime(f->dump_stream("position_time"));
+  encode_json("entity", entity_id, f);
+  encode_json("position_marker", position_marker, f);
+  encode_json("position_time", position_time, f);
   encode_json("items_in_progress", items, f);
+}
+
+void cls_replica_log_progress_marker::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("entity", entity_id, obj);
+  JSONDecoder::decode_json("position_marker", position_marker, obj);
+  JSONDecoder::decode_json("position_time", position_time, obj);
+  JSONDecoder::decode_json("items_in_progress", items, obj);
 }
 
 void cls_replica_log_progress_marker::
@@ -57,11 +71,21 @@ generate_test_instances(std::list<cls_replica_log_progress_marker*>& ls)
 
 void cls_replica_log_bound::dump(Formatter *f) const
 {
-  f->dump_string("position_marker", position_marker);
-  position_time.gmtime(f->dump_stream("position_time"));
-  f->dump_string("marker_exists", marker_exists ? "yes" : "no");
+  encode_json("position_marker", position_marker, f);
+  encode_json("position_time", position_time, f);
+  encode_json("marker_exists", marker_exists, f);
   if (marker_exists) {
     encode_json("marker", marker, f); //progress marker
+  }
+}
+
+void cls_replica_log_bound::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("position_marker", position_marker, obj);
+  JSONDecoder::decode_json("position_time", position_time, obj);
+  JSONDecoder::decode_json("marker_exists", marker_exists, obj);
+  if (marker_exists) {
+    JSONDecoder::decode_json("marker", marker, obj); //progress marker
   }
 }
 

@@ -693,7 +693,7 @@ protected:
    * died (should be -ENOENT or -ETIMEDOUT)
    * @post: rolls forward if -ENOENT, otherwise rolls back.
    */
-  int cleanup(const index_data &idata, const int &errno);
+  int cleanup(const index_data &idata, const int &error);
 
   /**
    * does the ObjectWriteOperation and splits, reads the index, and/or retries
