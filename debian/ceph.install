@@ -28,3 +28,5 @@ usr/share/man/man8/crushtool.8
 usr/share/man/man8/mkcephfs.8
 usr/share/man/man8/monmaptool.8
 usr/share/man/man8/osdmaptool.8
+etc/ceph/rbdmap
+etc/init.d/rbdmap
