@@ -1246,7 +1246,8 @@ EXTRA_DIST += \
 	ceph-disk-activate \
 	ceph-disk-udev \
 	ceph-create-keys \
-	mount.fuse.ceph
+	mount.fuse.ceph \
+	rbdmap
 
 
 EXTRA_DIST += $(srcdir)/$(shell_scripts:%=%.in)
