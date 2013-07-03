@@ -209,7 +209,7 @@ struct rgw_bucket_dir_entry {
   void encode(bufferlist &bl) const {
     ENCODE_START(5, 3, bl);
     ::encode(name, bl);
-    ::encode(ver, bl);
+    ::encode(ver.epoch, bl);
     ::encode(exists, bl);
     ::encode(meta, bl);
     ::encode(pending_map, bl);
@@ -221,17 +221,17 @@ struct rgw_bucket_dir_entry {
   void decode(bufferlist::iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
     ::decode(name, bl);
-    if (struct_v >= 4) {
-      ::decode(ver, bl);
-    } else {
-      ver.pool = 0;
-      ::decode(ver.epoch, bl);
-    }
+    ::decode(ver.epoch, bl);
     ::decode(exists, bl);
     ::decode(meta, bl);
     ::decode(pending_map, bl);
     if (struct_v >= 2) {
       ::decode(locator, bl);
+    }
+    if (struct_v >= 4) {
+      ::decode(ver, bl);
+    } else {
+      ver.pool = -1;
     }
     if (struct_v >= 5) {
       ::decode_packed_val(index_ver, bl);
