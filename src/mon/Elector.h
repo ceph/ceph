@@ -113,7 +113,7 @@ class Elector {
    * If we are acked by everyone in the MonMap, we will declare
    * victory.  Also note each peer's feature set.
    */
-  map<int, unsigned> acked_me;
+  map<int, uint64_t> acked_me;
   /**
    * @}
    */
