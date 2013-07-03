@@ -484,18 +484,28 @@ WRITE_CLASS_ENCODER(RGWZoneParams);
 struct RGWZone {
   string name;
   list<string> endpoints;
+  bool log_meta;
+  bool log_data;
+
+  RGWZone() : log_meta(false), log_data(false) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(name, bl);
     ::encode(endpoints, bl);
+    ::encode(log_meta, bl);
+    ::encode(log_data, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(name, bl);
     ::decode(endpoints, bl);
+    if (struct_v >= 2) {
+      ::decode(log_meta, bl);
+      ::decode(log_data, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -872,7 +882,8 @@ public:
   }
 
   RGWRegion region;
-  RGWZoneParams zone;
+  RGWZoneParams zone; /* internal zone params, e.g., rados pools */
+  RGWZone zone_public_config; /* external zone params, e.g., entrypoints, log flags, etc. */
   RGWRegionMap region_map;
   RGWRESTConn *rest_master_conn;
   map<string, RGWRESTConn *> zone_conn_map;
@@ -1329,7 +1340,9 @@ public:
   int time_log_add(const string& oid, const utime_t& ut, const string& section, const string& key, bufferlist& bl);
   int time_log_list(const string& oid, utime_t& start_time, utime_t& end_time,
                     int max_entries, list<cls_log_entry>& entries, string& marker, bool *truncated);
-  int time_log_trim(const string& oid, utime_t& start_time, utime_t& end_time);
+  int time_log_info(const string& oid, cls_log_header *header);
+  int time_log_trim(const string& oid, const utime_t& start_time, const utime_t& end_time,
+                    const string& from_marker, const string& to_marker);
   int lock_exclusive(rgw_bucket& pool, const string& oid, utime_t& duration, string& zone_id, string& owner_id);
   int unlock(rgw_bucket& pool, const string& oid, string& zone_id, string& owner_id);
 
@@ -1360,6 +1373,14 @@ public:
 
   void get_log_pool_name(string& name) {
     name = zone.log_pool.name;
+  }
+
+  bool need_to_log_data() {
+    return zone_public_config.log_data;
+  }
+
+  bool need_to_log_metadata() {
+    return zone_public_config.log_meta;
   }
 
  private:

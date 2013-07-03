@@ -990,6 +990,9 @@ int RGWDataChangesLog::choose_oid(rgw_bucket& bucket) {
 
 int RGWDataChangesLog::renew_entries()
 {
+  if (!store->need_to_log_data())
+    return 0;
+
   /* we can't keep the bucket name as part of the cls_log_entry, and we need
    * it later, so we keep two lists under the map */
   map<int, pair<list<string>, list<cls_log_entry> > > m;
@@ -1074,6 +1077,9 @@ void RGWDataChangesLog::update_renewed(string& bucket_name, utime_t& expiration)
 }
 
 int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
+  if (!store->need_to_log_data())
+    return 0;
+
   lock.Lock();
 
   ChangeStatusPtr status;
@@ -1213,11 +1219,34 @@ int RGWDataChangesLog::list_entries(utime_t& start_time, utime_t& end_time, int 
   return 0;
 }
 
-int RGWDataChangesLog::trim_entries(int shard_id, utime_t& start_time, utime_t& end_time)
+int RGWDataChangesLog::get_info(int shard_id, RGWDataChangesLogInfo *info)
+{
+  if (shard_id > num_shards)
+    return -EINVAL;
+
+  string oid = oids[shard_id];
+
+  cls_log_header header;
+
+  int ret = store->time_log_info(oid, &header);
+  if ((ret < 0) && (ret != -ENOENT))
+    return ret;
+
+  info->marker = header.max_marker;
+  info->last_update = header.max_time;
+
+  return 0;
+}
+
+int RGWDataChangesLog::trim_entries(int shard_id, const utime_t& start_time, const utime_t& end_time,
+                                    const string& start_marker, const string& end_marker)
 {
   int ret;
 
-  ret = store->time_log_trim(oids[shard_id], start_time, end_time);
+  if (shard_id > num_shards)
+    return -EINVAL;
+
+  ret = store->time_log_trim(oids[shard_id], start_time, end_time, start_marker, end_marker);
 
   if (ret == -ENOENT)
     ret = 0;
@@ -1225,10 +1254,11 @@ int RGWDataChangesLog::trim_entries(int shard_id, utime_t& start_time, utime_t& 
   return ret;
 }
 
-int RGWDataChangesLog::trim_entries(utime_t& start_time, utime_t& end_time)
+int RGWDataChangesLog::trim_entries(const utime_t& start_time, const utime_t& end_time,
+                                    const string& start_marker, const string& end_marker)
 {
   for (int shard = 0; shard < num_shards; shard++) {
-    int ret = store->time_log_trim(oids[shard], start_time, end_time);
+    int ret = store->time_log_trim(oids[shard], start_time, end_time, start_marker, end_marker);
     if (ret == -ENOENT) {
       continue;
     }
