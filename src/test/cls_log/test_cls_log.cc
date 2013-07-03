@@ -330,8 +330,9 @@ TEST(cls_rgw, test_log_trim)
     utime_t trim_time = get_time(start_time, i, true);
 
     utime_t zero_time;
+    string start_marker, end_marker;
 
-    ASSERT_EQ(0, cls_log_trim(ioctx, oid, zero_time, trim_time));
+    ASSERT_EQ(0, cls_log_trim(ioctx, oid, zero_time, trim_time, start_marker, end_marker));
 
     string marker;
 
