@@ -1021,7 +1021,7 @@ int Pipe::connect()
       connect_seq = cseq + 1;
       assert(connect_seq == reply.connect_seq);
       backoff = utime_t();
-      connection_state->set_features((unsigned)reply.features & (unsigned)connect.features);
+      connection_state->set_features((uint64_t)reply.features & (uint64_t)connect.features);
       ldout(msgr->cct,10) << "connect success " << connect_seq << ", lossy = " << policy.lossy
 	       << ", features " << connection_state->get_features() << dendl;
       
