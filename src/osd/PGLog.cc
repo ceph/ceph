@@ -636,7 +636,7 @@ bool PGLog::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
   int r = store->stat(coll_t::META_COLL, log_oid, &st);
   assert(r == 0);
   if (st.st_size > 0) {
-    read_log_old(store, coll, log_oid, info, divergent_priors, log, missing, oss);
+    read_log_old(store, coll, log_oid, info, divergent_priors, log, missing, oss, log_keys_debug);
     rewrite_log = true;
   } else {
     log.tail = info.log_tail;
@@ -728,9 +728,10 @@ bool PGLog::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
 }
 
 void PGLog::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
-  const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
-  IndexedLog &log,
-  pg_missing_t &missing, ostringstream &oss)
+			 const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
+			 IndexedLog &log,
+			 pg_missing_t &missing, ostringstream &oss,
+			 set<string> *log_keys_debug)
 {
   // load bounds, based on old OndiskLog encoding.
   uint64_t ondisklog_tail = 0;
@@ -854,6 +855,8 @@ void PGLog::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
       e.offset = pos;
       uint64_t endpos = ondisklog_tail + p.get_off();
       log.log.push_back(e);
+      if (log_keys_debug)
+	log_keys_debug->insert(e.get_key_name());
       last = e.version;
 
       // [repair] at end of log?

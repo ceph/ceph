@@ -1131,6 +1131,13 @@ void Objecter::resend_mon_ops()
     C_Linger_Map_Latest *c = new C_Linger_Map_Latest(this, p->second->linger_id);
     monc->get_version("osdmap", &c->latest, NULL, c);
   }
+
+  for (map<uint64_t, CommandOp*>::iterator p = check_latest_map_commands.begin();
+       p != check_latest_map_commands.end();
+       ++p) {
+    C_Command_Map_Latest *c = new C_Command_Map_Latest(this, p->second->tid);
+    monc->get_version("osdmap", &c->latest, NULL, c);
+  }
 }
 
 

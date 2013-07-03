@@ -35,7 +35,6 @@ class KeyRing;
 #define MIN_GLOBAL_ID 0x1000
 
 class AuthMonitor : public PaxosService {
-  void auth_usage(stringstream& ss);
   enum IncType {
     GLOBAL_ID,
     AUTH_DATA,

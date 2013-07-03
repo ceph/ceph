@@ -99,8 +99,6 @@ class MDSMonitor : public PaxosService {
   int fail_mds(std::ostream &ss, const std::string &arg);
   void fail_mds_gid(uint64_t gid);
 
-  int cluster_fail(std::ostream &ss);
-
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
 
