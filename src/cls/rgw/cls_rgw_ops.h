@@ -84,11 +84,12 @@ struct rgw_cls_obj_complete_op
     uint8_t c = (uint8_t)op;
     ::encode(c, bl);
     ::encode(name, bl);
-    ::encode(ver, bl);
+    ::encode(ver.epoch, bl);
     ::encode(meta, bl);
     ::encode(tag, bl);
     ::encode(locator, bl);
     ::encode(remove_objs, bl);
+    ::encode(ver, bl);
     ::encode(log_op, bl);
     ENCODE_FINISH(bl);
  }
@@ -98,12 +99,7 @@ struct rgw_cls_obj_complete_op
     ::decode(c, bl);
     op = (RGWModifyOp)c;
     ::decode(name, bl);
-    if (struct_v >= 5) {
-      ::decode(ver, bl);
-    } else {
-      ver.pool = 0;
-      ::decode(ver.epoch, bl);
-    }
+    ::decode(ver.epoch, bl);
     ::decode(meta, bl);
     ::decode(tag, bl);
     if (struct_v >= 2) {
@@ -111,6 +107,11 @@ struct rgw_cls_obj_complete_op
     }
     if (struct_v >= 4) {
       ::decode(remove_objs, bl);
+    }
+    if (struct_v >= 5) {
+      ::decode(ver, bl);
+    } else {
+      ver.pool = -1;
     }
     if (struct_v >= 6) {
       ::decode(log_op, bl);
