@@ -125,9 +125,6 @@ public:
     else
       return get_filestore_key_u32();
   }
-  void set_filestore_key(uint32_t v) {
-    hash = _reverse_nibbles(v);
-  }
 
   const string& get_effective_key() const {
     if (key.length())
