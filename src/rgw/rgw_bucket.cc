@@ -304,7 +304,7 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
 
   uint64_t bucket_ver, master_ver;
 
-  ret = store->get_bucket_stats(bucket, &bucket_ver, &master_ver, stats);
+  ret = store->get_bucket_stats(bucket, &bucket_ver, &master_ver, stats, NULL);
   if (ret < 0)
     return ret;
 
@@ -874,7 +874,8 @@ static int bucket_stats(RGWRados *store, std::string&  bucket_name, Formatter *f
   bucket = bucket_info.bucket;
 
   uint64_t bucket_ver, master_ver;
-  int ret = store->get_bucket_stats(bucket, &bucket_ver, &master_ver, stats);
+  string max_marker;
+  int ret = store->get_bucket_stats(bucket, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0) {
     cerr << "error getting bucket stats ret=" << ret << std::endl;
     return ret;
@@ -890,6 +891,7 @@ static int bucket_stats(RGWRados *store, std::string&  bucket_name, Formatter *f
   formatter->dump_int("ver", bucket_ver);
   formatter->dump_int("master_ver", master_ver);
   formatter->dump_int("mtime", mtime);
+  formatter->dump_string("max_marker", max_marker);
   dump_bucket_usage(stats, formatter);
   formatter->close_section();
 

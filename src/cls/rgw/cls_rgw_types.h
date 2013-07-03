@@ -321,15 +321,17 @@ struct rgw_bucket_dir_header {
   uint64_t tag_timeout;
   uint64_t ver;
   uint64_t master_ver;
+  string max_marker;
 
   rgw_bucket_dir_header() : tag_timeout(0), ver(0), master_ver(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(4, 2, bl);
+    ENCODE_START(5, 2, bl);
     ::encode(stats, bl);
     ::encode(tag_timeout, bl);
     ::encode(ver, bl);
     ::encode(master_ver, bl);
+    ::encode(max_marker, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -345,6 +347,9 @@ struct rgw_bucket_dir_header {
       ::decode(master_ver, bl);
     } else {
       ver = 0;
+    }
+    if (struct_v >= 5) {
+      ::decode(max_marker, bl);
     }
     DECODE_FINISH(bl);
   }

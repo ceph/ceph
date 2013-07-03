@@ -4479,7 +4479,8 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
   return 0;
 }
 
-int RGWRados::get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_t *master_ver, map<RGWObjCategory, RGWBucketStats>& stats)
+int RGWRados::get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_t *master_ver, map<RGWObjCategory, RGWBucketStats>& stats,
+                               string *max_marker)
 {
   rgw_bucket_dir_header header;
   int r = cls_bucket_head(bucket, header);
@@ -4492,6 +4493,9 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_
 
   *bucket_ver = header.ver;
   *master_ver = header.master_ver;
+
+  if (max_marker)
+    *max_marker = header.max_marker;
 
   return 0;
 }
