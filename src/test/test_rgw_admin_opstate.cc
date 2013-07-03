@@ -143,7 +143,7 @@ int test_helper::extract_input(int argc, char *argv[]){
 
 void test_helper::set_response(char *r){
   string sr(r), h, v;
-  unsigned off = sr.find(": ");
+  size_t off = sr.find(": ");
   if(off != string::npos){
     h.assign(sr, 0, off);
     v.assign(sr, off + 2, sr.find("\r\n") - (off+2));
@@ -195,7 +195,7 @@ static void calc_hmac_sha1(const char *key, int key_len,
 static int get_s3_auth(string method, string creds, string date, string res, string& out){
   string aid, secret, auth_hdr;
   string tmp_res;
-  unsigned off = creds.find(":");
+  size_t off = creds.find(":");
   out = "";
   if(off != string::npos){
     aid.assign(creds, 0, off);
@@ -204,7 +204,7 @@ static int get_s3_auth(string method, string creds, string date, string res, str
     /*sprintf(auth_hdr, "%s\n\n\n%s\n%s", req_type, date, res);*/
     char hmac_sha1[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
     char b64[65]; /* 64 is really enough */
-    unsigned off = res.find("?");
+    size_t off = res.find("?");
     if(off == string::npos)
       tmp_res = res;
     else
