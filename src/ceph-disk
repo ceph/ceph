@@ -198,6 +198,9 @@ def maybe_mkdir(*a, **kw):
             raise
 
 
+# a device "name" is something like
+#  sdb
+#  cciss!c0d1
 def list_all_partitions():
     """
     Return a list of devices and partitions
@@ -220,6 +223,28 @@ def list_all_partitions():
                 dev_part_list[dev] = []
     return dev_part_list
 
+def get_dev_name(path):
+    """
+    get device name from path.  e.g., /dev/sda -> sdas, /dev/cciss/c0d1 -> cciss!c0d1
+    """
+    assert path.startswith('/dev/')
+    base = path[5:]
+    return base.replace('/', '!')
+
+# a device "path" is something like
+#  /dev/sdb
+#  /dev/cciss/c0d1
+def get_dev_path(name):
+    """
+    get a path (/dev/...) from a name (cciss!c0d1)
+    """
+    return '/dev/' + name.replace('!', '/')
+
+def get_dev_relpath(name):
+    """
+    get a relative path to /dev from a name (cciss!c0d1)
+    """
+    return name.replace('!', '/')
 
 def list_partitions(disk):
     """
