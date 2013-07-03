@@ -6495,29 +6495,35 @@ void OSD::do_recovery(PG *pg)
   // see how many we should try to start.  note that this is a bit racy.
   recovery_wq.lock();
   int max = g_conf->osd_recovery_max_active - recovery_ops_active;
+  if (max > 0) {
+    dout(10) << "do_recovery can start " << max << " (" << recovery_ops_active << "/" << g_conf->osd_recovery_max_active
+	     << " rops)" << dendl;
+    recovery_ops_active += max;  // take them now, return them if we don't use them.
+  } else {
+    dout(10) << "do_recovery can start 0 (" << recovery_ops_active << "/" << g_conf->osd_recovery_max_active
+	     << " rops)" << dendl;
+  }
   recovery_wq.unlock();
+
   if (max <= 0) {
     dout(10) << "do_recovery raced and failed to start anything; requeuing " << *pg << dendl;
     recovery_wq.queue(pg);
+    return;
   } else {
     pg->lock();
     if (pg->deleting || !(pg->is_active() && pg->is_primary())) {
       pg->unlock();
-      return;
+      goto out;
     }
     
-    dout(10) << "do_recovery starting " << max
-	     << " (" << recovery_ops_active << "/" << g_conf->osd_recovery_max_active << " rops) on "
-	     << *pg << dendl;
+    dout(10) << "do_recovery starting " << max << " " << *pg << dendl;
 #ifdef DEBUG_RECOVERY_OIDS
     dout(20) << "  active was " << recovery_oids[pg->info.pgid] << dendl;
 #endif
     
     PG::RecoveryCtx rctx = create_context();
     int started = pg->start_recovery_ops(max, &rctx);
-    dout(10) << "do_recovery started " << started
-	     << " (" << recovery_ops_active << "/" << g_conf->osd_recovery_max_active << " rops) on "
-	     << *pg << dendl;
+    dout(10) << "do_recovery started " << started << "/" << max << " on " << *pg << dendl;
 
     /*
      * if we couldn't start any recovery ops and things are still
@@ -6540,6 +6546,15 @@ void OSD::do_recovery(PG *pg)
     pg->unlock();
     dispatch_context(rctx, pg, curmap);
   }
+
+ out:
+  recovery_wq.lock();
+  if (max > 0) {
+    assert(recovery_ops_active >= max);
+    recovery_ops_active -= max;
+  }
+  recovery_wq._wake();
+  recovery_wq.unlock();
 }
 
 void OSD::start_recovery_op(PG *pg, const hobject_t& soid)
