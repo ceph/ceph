@@ -108,7 +108,8 @@ static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id,
 
 static int log_index_operation(cls_method_context_t hctx, string& obj, RGWModifyOp op,
                                string& tag, utime_t& timestamp,
-                               rgw_bucket_entry_ver& ver, RGWPendingState state, uint64_t index_ver)
+                               rgw_bucket_entry_ver& ver, RGWPendingState state, uint64_t index_ver,
+                               string& max_marker)
 {
   bufferlist bl;
 
@@ -126,6 +127,9 @@ static int log_index_operation(cls_method_context_t hctx, string& obj, RGWModify
   bi_log_index_key(hctx, key, entry.id, index_ver);
 
   ::encode(entry, bl);
+
+  if (entry.id > max_marker)
+    max_marker = entry.id;
 
   return cls_cxx_map_set_val(hctx, key, &bl);
 }
@@ -470,7 +474,8 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   }
 
   if (op.log_op) {
-    rc = log_index_operation(hctx, op.name, op.op, op.tag, entry.meta.mtime, entry.ver, info.state, header.ver);
+    rc = log_index_operation(hctx, op.name, op.op, op.tag, entry.meta.mtime,
+                             entry.ver, info.state, header.ver, header.max_marker);
     if (rc < 0)
       return rc;
   }
@@ -584,7 +589,8 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   bufferlist op_bl;
   if (cancel) {
     if (op.log_op) {
-      rc = log_index_operation(hctx, op.name, op.op, op.tag, entry.meta.mtime, entry.ver, CLS_RGW_STATE_COMPLETE, header.ver);
+      rc = log_index_operation(hctx, op.name, op.op, op.tag, entry.meta.mtime, entry.ver,
+                               CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker);
       if (rc < 0)
         return rc;
     }
@@ -643,7 +649,8 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   }
 
   if (op.log_op) {
-    rc = log_index_operation(hctx, op.name, op.op, op.tag, entry.meta.mtime, entry.ver, CLS_RGW_STATE_COMPLETE, header.ver);
+    rc = log_index_operation(hctx, op.name, op.op, op.tag, entry.meta.mtime, entry.ver,
+                             CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker);
     if (rc < 0)
       return rc;
   }
@@ -664,7 +671,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 
     if (op.log_op) {
       rc = log_index_operation(hctx, op.name, CLS_RGW_OP_DEL, op.tag, remove_entry.meta.mtime,
-                               remove_entry.ver, CLS_RGW_STATE_COMPLETE, header.ver);
+                               remove_entry.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker);
       if (rc < 0)
         continue;
     }

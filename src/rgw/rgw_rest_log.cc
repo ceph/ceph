@@ -345,6 +345,55 @@ void RGWOp_BILog_List::send_response_end() {
   flusher.flush();
 }
       
+void RGWOp_BILog_Info::execute() {
+  string bucket_name = s->info.args.get("bucket"),
+         bucket_instance = s->info.args.get("bucket-instance");
+  RGWBucketInfo bucket_info;
+
+  if (bucket_name.empty() && bucket_instance.empty()) {
+    dout(5) << "ERROR: neither bucket nor bucket instance specified" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  if (!bucket_instance.empty()) {
+    http_ret = store->get_bucket_instance_info(NULL, bucket_instance, bucket_info, NULL, NULL);
+    if (http_ret < 0) {
+      dout(5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
+      return;
+    }
+  } else { /* !bucket_name.empty() */
+    http_ret = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL, NULL);
+    if (http_ret < 0) {
+      dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
+      return;
+    }
+  }
+  map<RGWObjCategory, RGWBucketStats> stats;
+  int ret =  store->get_bucket_stats(bucket_info.bucket, &bucket_ver, &master_ver, stats, &max_marker);
+  if (ret < 0 && ret != -ENOENT) {
+    http_ret = ret;
+    return;
+  }
+}
+
+void RGWOp_BILog_Info::send_response() {
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+
+  if (http_ret < 0)
+    return;
+
+  s->formatter->open_object_section("info");
+  encode_json("bucket_ver", bucket_ver, s->formatter);
+  encode_json("master_ver", master_ver, s->formatter);
+  encode_json("max_marker", max_marker, s->formatter);
+  s->formatter->close_section();
+
+  flusher.flush();
+}
+
 void RGWOp_BILog_Delete::execute() {
   string bucket_name = s->info.args.get("bucket"),
          start_marker = s->info.args.get("start-marker"),
@@ -613,7 +662,11 @@ RGWOp *RGWHandler_Log::op_get() {
       return new RGWOp_MDLog_Info;
     }
   } else if (type.compare("bucket-index") == 0) {
-    return new RGWOp_BILog_List;
+    if (s->info.args.exists("info")) {
+      return new RGWOp_BILog_Info;
+    } else {
+      return new RGWOp_BILog_List;
+    }
   } else if (type.compare("data") == 0) {
     if (s->info.args.exists("id")) {
       if (s->info.args.exists("info")) {
