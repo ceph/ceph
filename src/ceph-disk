@@ -248,29 +248,22 @@ def list_partitions(basename):
 
 def is_partition(dev):
     """
-    Check whether a given device is a partition or a full disk.
+    Check whether a given device path is a partition or a full disk.
     """
     dev = os.path.realpath(dev)
     if not stat.S_ISBLK(os.lstat(dev).st_mode):
         raise Error('not a block device', dev)
 
-    # we can't tell just from the name of the device if it is a
-    # partition or not.  look in the by-path dir and see if the
-    # referring symlink ends in -partNNN.
-    name = dev.split('/')[-1]
-    for name in os.listdir('/dev/disk/by-path'):
-        target = os.readlink(os.path.join('/dev/disk/by-path', name))
-        cdev = target.split('/')[-1]
-        if '/dev/' + cdev != dev:
-            continue
-        (baser) = re.search('(.*)-part\d+$', name)
-        if baser is not None:
-            return True
-        else:
-            return False
+    name = get_dev_name(dev)
+    if os.path.exists(os.path.join('/sys/block', name)):
+        return False
 
-    # hrm, don't know...
-    return False
+    # make sure it is a partition of something else
+    for basename in os.listdir('/sys/block'):
+        if os.path.exists(os.path.join('/sys/block', basename, name)):
+            return True
+
+    raise Error('not a disk or partition', dev)
 
 
 def is_mounted(dev):
