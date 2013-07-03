@@ -152,9 +152,10 @@ void Elector::victory()
   leader_acked = -1;
   electing_me = false;
 
-  unsigned features = CEPH_FEATURES_ALL;
+  uint64_t features = CEPH_FEATURES_ALL;
   set<int> quorum;
-  for (map<int,unsigned>::iterator p = acked_me.begin(); p != acked_me.end(); ++p) {
+  for (map<int, uint64_t>::iterator p = acked_me.begin(); p != acked_me.end();
+       ++p) {
     quorum.insert(p->first);
     features &= p->second;
   }    
