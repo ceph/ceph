@@ -457,6 +457,9 @@ int main(int argc, const char **argv)
   register_async_signal_handler_oneshot(SIGINT, handle_osd_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_osd_signal);
 
+  // adjust out of memory scoring for the daemon
+  global_init_adj_oom();
+
   // start osd
   err = osd->init();
   if (err < 0) {

@@ -31,6 +31,8 @@
 
 #include <errno.h>
 #include <deque>
+#include <fstream>
+
 
 #define dout_subsys ceph_subsys_
 
@@ -254,5 +256,28 @@ int global_init_shutdown_stderr(CephContext *cct)
   }
   cct->_log->set_stderr_level(-1, -1);
   return 0;
+}
+
+
+/*
+ * Make life harder for Out Of Memory (OOM) killer to beat us.
+ */
+void global_init_adj_oom(void)
+{
+#if defined(__linux__)
+  std::ofstream oom_adjust("/proc/self/oom_score_adj");
+  if (oom_adjust.is_open()) {
+    oom_adjust << OOM_SCORE_ADJ;
+    oom_adjust.close();
+  } else {
+    ofstream oom_adjust_legacy("/proc/self/oom_adj");
+    if (oom_adjust_legacy.is_open()) {
+      oom_adjust_legacy << OOM_ADJ;
+      oom_adjust_legacy.close();
+    } else {
+      derr << TEXT_YELLOW << " ** WARNING: failed to adjust OOM **" << TEXT_NORMAL << dendl;
+    }
+  }
+#endif // __linux__
 }
 
