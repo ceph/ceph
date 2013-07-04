@@ -489,10 +489,16 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
     }
     if (url[url.size() - 1] != '/')
       url.append("/");
+    std::string admin_token;
+    if (get_keystone_admin_token(admin_token) < 0)
+      return -EINVAL;
+    if (get_keystone_url(url) < 0)
+      return -EINVAL;
+
     url.append("v2.0/tokens/");
     url.append(token);
 
-    validate.append_header("X-Auth-Token", g_conf->rgw_keystone_admin_token);
+    validate.append_header("X-Auth-Token", admin_token);
 
     int ret = validate.process(url.c_str());
     if (ret < 0)
