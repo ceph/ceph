@@ -1,0 +1,95 @@
+diff -rupN wireshark-1.10.0.orig/configure wireshark-1.10.0.new/configure
+--- wireshark-1.10.0.orig/configure	2013-06-05 18:27:58.000000000 +0100
++++ wireshark-1.10.0.new/configure	2013-07-01 18:24:23.711203830 +0100
+@@ -33865,7 +33865,7 @@ rm -f confcache
+ 
+ ac_config_headers="$ac_config_headers config.h"
+ 
+-ac_config_files="$ac_config_files Makefile doxygen.cfg asn1/Makefile asn1/acp133/Makefile asn1/acse/Makefile asn1/ansi_map/Makefile asn1/ansi_tcap/Makefile asn1/c1222/Makefile asn1/camel/Makefile asn1/cdt/Makefile asn1/charging_ase/Makefile asn1/cmip/Makefile asn1/cmp/Makefile asn1/crmf/Makefile asn1/cms/Makefile asn1/credssp/Makefile asn1/dap/Makefile asn1/disp/Makefile asn1/dop/Makefile asn1/dsp/Makefile asn1/ess/Makefile asn1/ftam/Makefile asn1/gnm/Makefile asn1/goose/Makefile asn1/gprscdr/Makefile asn1/gsm_map/Makefile asn1/h225/Makefile asn1/h235/Makefile asn1/h245/Makefile asn1/h248/Makefile asn1/h282/Makefile asn1/h283/Makefile asn1/h323/Makefile asn1/h450/Makefile asn1/h450-ros/Makefile asn1/h460/Makefile asn1/h501/Makefile asn1/HI2Operations/Makefile asn1/hnbap/Makefile asn1/idmp/Makefile asn1/inap/Makefile asn1/isdn-sup/Makefile asn1/kerberos/Makefile asn1/lcsap/Makefile asn1/ldap/Makefile asn1/logotypecertextn/Makefile asn1/lpp/Makefile asn1/lppa/Makefile asn1/lppe/Makefile asn1/lte-rrc/Makefile asn1/m3ap/Makefile asn1/mms/Makefile asn1/mpeg-audio/Makefile asn1/mpeg-pes/Makefile asn1/nbap/Makefile asn1/ns_cert_exts/Makefile asn1/ocsp/Makefile asn1/p1/Makefile asn1/p22/Makefile asn1/p7/Makefile asn1/p772/Makefile asn1/pcap/Makefile asn1/pkcs1/Makefile asn1/pkcs12/Makefile asn1/pkinit/Makefile asn1/pkixac/Makefile asn1/pkix1explicit/Makefile asn1/pkix1implicit/Makefile asn1/pkixproxy/Makefile asn1/pkixqualified/Makefile asn1/pkixtsp/Makefile asn1/pres/Makefile asn1/q932/Makefile asn1/q932-ros/Makefile asn1/qsig/Makefile asn1/ranap/Makefile asn1/rnsap/Makefile asn1/ros/Makefile asn1/rrc/Makefile asn1/rrlp/Makefile asn1/rtse/Makefile asn1/rua/Makefile asn1/s1ap/Makefile asn1/sabp/Makefile asn1/sbc-ap/Makefile asn1/smrse/Makefile asn1/snmp/Makefile asn1/spnego/Makefile asn1/sv/Makefile asn1/t124/Makefile asn1/t125/Makefile asn1/t38/Makefile asn1/tcap/Makefile asn1/tetra/Makefile asn1/ulp/Makefile asn1/wlancertextn/Makefile asn1/x2ap/Makefile asn1/x509af/Makefile asn1/x509ce/Makefile asn1/x509if/Makefile asn1/x509sat/Makefile asn1/x721/Makefile doc/Makefile docbook/Makefile epan/Makefile epan/crypt/Makefile epan/doxygen.cfg epan/dfilter/Makefile epan/dissectors/Makefile epan/dissectors/dcerpc/Makefile epan/dissectors/pidl/Makefile epan/ftypes/Makefile epan/wmem/Makefile epan/wslua/Makefile epan/wspython/Makefile codecs/Makefile ui/Makefile ui/doxygen.cfg ui/gtk/Makefile ui/gtk/doxygen.cfg ui/cli/Makefile ui/qt/Makefile ui/qt/doxygen.cfg help/Makefile packaging/Makefile packaging/macosx/Info.plist packaging/macosx/Makefile packaging/macosx/osx-dmg.sh packaging/nsis/Makefile packaging/rpm/Makefile packaging/rpm/SPECS/Makefile packaging/rpm/SPECS/wireshark.spec packaging/svr4/Makefile packaging/svr4/checkinstall packaging/svr4/pkginfo plugins/Makefile plugins/asn1/Makefile plugins/docsis/Makefile plugins/ethercat/Makefile plugins/gryphon/Makefile plugins/irda/Makefile plugins/m2m/Makefile plugins/mate/Makefile plugins/opcua/Makefile plugins/profinet/Makefile plugins/stats_tree/Makefile plugins/unistim/Makefile plugins/wimax/Makefile plugins/wimaxasncp/Makefile plugins/wimaxmacphy/Makefile tools/Makefile tools/lemon/Makefile wiretap/Makefile wsutil/Makefile"
++ac_config_files="$ac_config_files Makefile doxygen.cfg asn1/Makefile asn1/acp133/Makefile asn1/acse/Makefile asn1/ansi_map/Makefile asn1/ansi_tcap/Makefile asn1/c1222/Makefile asn1/camel/Makefile asn1/cdt/Makefile asn1/charging_ase/Makefile asn1/cmip/Makefile asn1/cmp/Makefile asn1/crmf/Makefile asn1/cms/Makefile asn1/credssp/Makefile asn1/dap/Makefile asn1/disp/Makefile asn1/dop/Makefile asn1/dsp/Makefile asn1/ess/Makefile asn1/ftam/Makefile asn1/gnm/Makefile asn1/goose/Makefile asn1/gprscdr/Makefile asn1/gsm_map/Makefile asn1/h225/Makefile asn1/h235/Makefile asn1/h245/Makefile asn1/h248/Makefile asn1/h282/Makefile asn1/h283/Makefile asn1/h323/Makefile asn1/h450/Makefile asn1/h450-ros/Makefile asn1/h460/Makefile asn1/h501/Makefile asn1/HI2Operations/Makefile asn1/hnbap/Makefile asn1/idmp/Makefile asn1/inap/Makefile asn1/isdn-sup/Makefile asn1/kerberos/Makefile asn1/lcsap/Makefile asn1/ldap/Makefile asn1/logotypecertextn/Makefile asn1/lpp/Makefile asn1/lppa/Makefile asn1/lppe/Makefile asn1/lte-rrc/Makefile asn1/m3ap/Makefile asn1/mms/Makefile asn1/mpeg-audio/Makefile asn1/mpeg-pes/Makefile asn1/nbap/Makefile asn1/ns_cert_exts/Makefile asn1/ocsp/Makefile asn1/p1/Makefile asn1/p22/Makefile asn1/p7/Makefile asn1/p772/Makefile asn1/pcap/Makefile asn1/pkcs1/Makefile asn1/pkcs12/Makefile asn1/pkinit/Makefile asn1/pkixac/Makefile asn1/pkix1explicit/Makefile asn1/pkix1implicit/Makefile asn1/pkixproxy/Makefile asn1/pkixqualified/Makefile asn1/pkixtsp/Makefile asn1/pres/Makefile asn1/q932/Makefile asn1/q932-ros/Makefile asn1/qsig/Makefile asn1/ranap/Makefile asn1/rnsap/Makefile asn1/ros/Makefile asn1/rrc/Makefile asn1/rrlp/Makefile asn1/rtse/Makefile asn1/rua/Makefile asn1/s1ap/Makefile asn1/sabp/Makefile asn1/sbc-ap/Makefile asn1/smrse/Makefile asn1/snmp/Makefile asn1/spnego/Makefile asn1/sv/Makefile asn1/t124/Makefile asn1/t125/Makefile asn1/t38/Makefile asn1/tcap/Makefile asn1/tetra/Makefile asn1/ulp/Makefile asn1/wlancertextn/Makefile asn1/x2ap/Makefile asn1/x509af/Makefile asn1/x509ce/Makefile asn1/x509if/Makefile asn1/x509sat/Makefile asn1/x721/Makefile doc/Makefile docbook/Makefile epan/Makefile epan/crypt/Makefile epan/doxygen.cfg epan/dfilter/Makefile epan/dissectors/Makefile epan/dissectors/dcerpc/Makefile epan/dissectors/pidl/Makefile epan/ftypes/Makefile epan/wmem/Makefile epan/wslua/Makefile epan/wspython/Makefile codecs/Makefile ui/Makefile ui/doxygen.cfg ui/gtk/Makefile ui/gtk/doxygen.cfg ui/cli/Makefile ui/qt/Makefile ui/qt/doxygen.cfg help/Makefile packaging/Makefile packaging/macosx/Info.plist packaging/macosx/Makefile packaging/macosx/osx-dmg.sh packaging/nsis/Makefile packaging/rpm/Makefile packaging/rpm/SPECS/Makefile packaging/rpm/SPECS/wireshark.spec packaging/svr4/Makefile packaging/svr4/checkinstall packaging/svr4/pkginfo plugins/Makefile plugins/asn1/Makefile plugins/ceph plugins/docsis/Makefile plugins/ethercat/Makefile plugins/gryphon/Makefile plugins/irda/Makefile plugins/m2m/Makefile plugins/mate/Makefile plugins/opcua/Makefile plugins/profinet/Makefile plugins/stats_tree/Makefile plugins/unistim/Makefile plugins/wimax/Makefile plugins/wimaxasncp/Makefile plugins/wimaxmacphy/Makefile tools/Makefile tools/lemon/Makefile wiretap/Makefile wsutil/Makefile"
+ 
+ cat >confcache <<\_ACEOF
+ # This file is a shell script that caches the results of configure
+@@ -35221,6 +35221,7 @@ do
+     "packaging/svr4/pkginfo") CONFIG_FILES="$CONFIG_FILES packaging/svr4/pkginfo" ;;
+     "plugins/Makefile") CONFIG_FILES="$CONFIG_FILES plugins/Makefile" ;;
+     "plugins/asn1/Makefile") CONFIG_FILES="$CONFIG_FILES plugins/asn1/Makefile" ;;
++    "plugins/ceph/Makefile") CONFIG_FILES="$CONFIG_FILES plugins/ceph/Makefile" ;;
+     "plugins/docsis/Makefile") CONFIG_FILES="$CONFIG_FILES plugins/docsis/Makefile" ;;
+     "plugins/ethercat/Makefile") CONFIG_FILES="$CONFIG_FILES plugins/ethercat/Makefile" ;;
+     "plugins/gryphon/Makefile") CONFIG_FILES="$CONFIG_FILES plugins/gryphon/Makefile" ;;
+diff -rupN wireshark-1.10.0.orig/configure.ac wireshark-1.10.0.new/configure.ac
+--- wireshark-1.10.0.orig/configure.ac	2013-06-05 18:27:26.000000000 +0100
++++ wireshark-1.10.0.new/configure.ac	2013-07-01 18:24:42.191203182 +0100
+@@ -2449,6 +2449,7 @@ AC_OUTPUT(
+   packaging/svr4/pkginfo
+   plugins/Makefile
+   plugins/asn1/Makefile
++  plugins/ceph/Makefile
+   plugins/docsis/Makefile
+   plugins/ethercat/Makefile
+   plugins/gryphon/Makefile
+diff -rupN wireshark-1.10.0.orig/epan/Makefile.am wireshark-1.10.0.new/epan/Makefile.am
+--- wireshark-1.10.0.orig/epan/Makefile.am	2013-06-04 00:37:27.000000000 +0100
++++ wireshark-1.10.0.new/epan/Makefile.am	2013-07-01 18:27:34.099197136 +0100
+@@ -197,6 +197,7 @@ if ENABLE_STATIC
+ -include ../plugins/Custom.make
+ plugin_src = \
+ 	../plugins/asn1/packet-asn1.c \
++	../plugins/ceph/packet-ceph.c \
+ 	../plugins/docsis/packet-bintrngreq.c \
+ 	../plugins/docsis/packet-bpkmattr.c \
+ 	../plugins/docsis/packet-bpkmreq.c \
+diff -rupN wireshark-1.10.0.orig/packaging/nsis/Makefile.nmake wireshark-1.10.0.new/packaging/nsis/Makefile.nmake
+--- wireshark-1.10.0.orig/packaging/nsis/Makefile.nmake	2013-04-23 18:42:17.000000000 +0100
++++ wireshark-1.10.0.new/packaging/nsis/Makefile.nmake	2013-07-01 18:25:49.039200833 +0100
+@@ -46,6 +46,7 @@ HELP=$(STAGING_DIR)/help/capture_filters
+ 
+ PLUGINS= \
+ 	../../plugins/asn1/asn1.dll \
++	../../plugins/asn1/ceph.dll \
+ 	../../plugins/docsis/docsis.dll \
+ 	../../plugins/ethercat/ethercat.dll \
+ 	../../plugins/gryphon/gryphon.dll \
+diff -rupN wireshark-1.10.0.orig/packaging/nsis/wireshark.nsi wireshark-1.10.0.new/packaging/nsis/wireshark.nsi
+--- wireshark-1.10.0.orig/packaging/nsis/wireshark.nsi	2013-05-07 00:45:35.000000000 +0100
++++ wireshark-1.10.0.new/packaging/nsis/wireshark.nsi	2013-07-01 18:26:27.067199497 +0100
+@@ -844,6 +844,7 @@ Section "Dissector Plugins" SecPlugins
+ ;-------------------------------------------
+ SetOutPath '$INSTDIR\plugins\${VERSION}'
+ File "${STAGING_DIR}\plugins\${VERSION}\asn1.dll"
++File "${STAGING_DIR}\plugins\${VERSION}\ceph.dll"
+ File "${STAGING_DIR}\plugins\${VERSION}\docsis.dll"
+ File "${STAGING_DIR}\plugins\${VERSION}\ethercat.dll"
+ File "${STAGING_DIR}\plugins\${VERSION}\gryphon.dll"
+diff -rupN wireshark-1.10.0.orig/plugins/Makefile.am wireshark-1.10.0.new/plugins/Makefile.am
+--- wireshark-1.10.0.orig/plugins/Makefile.am	2013-04-22 19:04:14.000000000 +0100
++++ wireshark-1.10.0.new/plugins/Makefile.am	2013-07-01 18:21:48.731209276 +0100
+@@ -25,6 +25,7 @@
+ 
+ SUBDIRS = $(_CUSTOM_SUBDIRS_) \
+ 	asn1 \
++	ceph \
+ 	docsis \
+ 	ethercat \
+ 	gryphon \
+diff -rupN wireshark-1.10.0.orig/plugins/Makefile.nmake wireshark-1.10.0.new/plugins/Makefile.nmake
+--- wireshark-1.10.0.orig/plugins/Makefile.nmake	2013-04-22 19:04:14.000000000 +0100
++++ wireshark-1.10.0.new/plugins/Makefile.nmake	2013-07-01 18:22:08.647208577 +0100
+@@ -8,6 +8,7 @@ include ..\config.nmake
+ 
+ PLUGIN_LIST = \
+ 	asn1        \
++	ceph        \
+ 	docsis      \
+ 	ethercat    \
+ 	gryphon     \
+@@ -20,7 +21,7 @@ PLUGIN_LIST = \
+ 	unistim     \
+ 	wimax       \
+ 	wimaxasncp  \
+-	wimaxmacphy
++	wimaxmacphy 
+ 
+ 
+ all:
