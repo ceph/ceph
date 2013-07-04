@@ -103,7 +103,7 @@ def lock_machines(ctx, config):
             if vmlist:
                 log.info('Waiting for virtual machines to come up')
                 keyscan_out = ''
-                while not keyscan_out:
+                while len(keyscan_out.splitlines()) != len(vmlist):
                     time.sleep(10)
                     keyscan_out, current_locks = lock.keyscan_check(ctx, vmlist)
                     log.info('virtual machine is stil unavailable')

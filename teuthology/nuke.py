@@ -413,6 +413,8 @@ def nuke_helper(ctx, log):
     (target,) = ctx.config['targets'].keys()
     host = target.split('@')[-1]
     shortname = host.split('.')[0]
+    if 'vpm' in shortname:
+        return
     log.debug('shortname: %s' % shortname)
     log.debug('{ctx}'.format(ctx=ctx))
     if not ctx.noipmi and 'ipmi_user' in ctx.teuthology_config:

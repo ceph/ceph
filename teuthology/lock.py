@@ -458,7 +458,7 @@ def keyscan_check(ctx, machines):
         stdout=subprocess.PIPE,
         )
     out, _ = p.communicate()
-    assert p.returncode == 0, 'ssh-keyscan failed'
+    #assert p.returncode == 0, 'ssh-keyscan failed'
     return (out, current_locks)
 
 def update_keys(ctx, out, current_locks):
@@ -543,22 +543,24 @@ def create_if_vm(ctx, machine_name):
         vm_type = 'ubuntu'
     createMe = decanonicalize_hostname(machine_name)
     with tempfile.NamedTemporaryFile() as tmp:
-        lcnfg = ctx.teuthology_config
-        file_out = lcnfg.get('downburst')
-        if not file_out:
-            file_info = {}
-            file_info['disk-size'] = lcnfg.get('disk-size', '30G')
-            file_info['ram'] = lcnfg.get('ram', '1.9G')
-            file_info['cpus'] = lcnfg.get('cpus', 1)
-            file_info['networks'] = lcnfg.get('networks',
-                    [{'source' : 'front'}])
-            file_info['distro'] = lcnfg.get('distro', vm_type.lower())
-            file_info['additional-disks'] = lcnfg.get(
-                    'additional-disks', 3)
-            file_info['additional-disks-size'] = lcnfg.get(
-                    'additional-disks-size', '200G')
-            file_info['arch'] = lcnfg.get('arch', 'x86_64')
-            file_out = {'downburst': file_info}
+        try:
+            lcnfg = ctx.config['downburst']
+        except KeyError:
+            lcnfg = {}
+
+        file_info = {}
+        file_info['disk-size'] = lcnfg.get('disk-size', '30G')
+        file_info['ram'] = lcnfg.get('ram', '1.9G')
+        file_info['cpus'] = lcnfg.get('cpus', 1)
+        file_info['networks'] = lcnfg.get('networks',
+                [{'source' : 'front'}])
+        file_info['distro'] = lcnfg.get('distro', vm_type.lower())
+        file_info['additional-disks'] = lcnfg.get(
+                'additional-disks', 3)
+        file_info['additional-disks-size'] = lcnfg.get(
+                'additional-disks-size', '200G')
+        file_info['arch'] = lcnfg.get('arch', 'x86_64')
+        file_out = {'downburst': file_info}
         yaml.safe_dump(file_out, tmp)
         metadata = "--meta-data=%s" % tmp.name
         dbrst = _get_downburst_exec()
