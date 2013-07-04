@@ -684,18 +684,17 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
     /* can't decode, just go to the keystone server for validation */
 
     RGWValidateKeystoneToken validate(&bl);
-
-    string url = g_conf->rgw_keystone_url;
-    if (url.empty()) {
-      ldout(cct, 0) << "ERROR: keystone url is not configured" << dendl;
+    std::string url;
+    std::string admin_token;
+    if (get_keystone_admin_token(admin_token) != 0)
       return -EINVAL;
-    }
-    if (url[url.size() - 1] != '/')
-      url.append("/");
+    if (get_keystone_url(url) != 0)
+      return -EINVAL;
+
     url.append("v2.0/tokens/");
     url.append(token);
 
-    validate.append_header("X-Auth-Token", g_conf->rgw_keystone_admin_token);
+    validate.append_header("X-Auth-Token", admin_token);
 
     int ret = validate.process(url.c_str());
     if (ret < 0)
