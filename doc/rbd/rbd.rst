@@ -1,6 +1,8 @@
-===============
- Block Devices
-===============
+===================
+ Ceph Block Device
+===================
+
+.. index:: Ceph Block Device; introduction
 
 A block is a sequence of bytes (for example, a 512-byte block of data).
 Block-based storage interfaces are the most common way to store data with
@@ -33,7 +35,8 @@ libvirt and Qemu to integrate with Ceph block devices. You can use the same clus
 to operate the `Ceph RADOS Gateway`_, the `Ceph FS filesystem`_, and Ceph block
 devices simultaneously.
 
-.. important:: To use RBD, you must have a running Ceph cluster.
+.. important:: To use Ceph Block Devices, you must have access to a running 
+   Ceph cluster.
 
 .. toctree::
 	:maxdepth: 1

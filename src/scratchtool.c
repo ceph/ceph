@@ -105,6 +105,7 @@ static int testrados(void)
 {
 	char tmp[32];
 	int i, r;
+	int ret = 1; //set 1 as error case
 	rados_t cl;
 
 	if (rados_create(&cl, NULL) < 0) {
@@ -114,7 +115,7 @@ static int testrados(void)
 
 	if (rados_conf_read_file(cl, NULL)) {
 		printf("error reading configuration file\n");
-		return 1;
+		goto out_err;
 	}
 
 	// Try to set a configuration option that doesn't exist.
@@ -122,35 +123,35 @@ static int testrados(void)
 	if (!rados_conf_set(cl, "config option that doesn't exist",
 			"some random value")) {
 		printf("error: succeeded in setting nonexistent config option\n");
-		return 1;
+		goto out_err;
 	}
 
 	if (rados_conf_get(cl, "log to stderr", tmp, sizeof(tmp))) {
 		printf("error: failed to read log_to_stderr from config\n");
-		return 1;
+		goto out_err;
 	}
 
 	// Can we change it?
 	if (rados_conf_set(cl, "log to stderr", "true")) {
 		printf("error: error setting log_to_stderr\n");
-		return 1;
+		goto out_err;
 	}
 	if (rados_conf_get(cl, "log to stderr", tmp, sizeof(tmp))) {
 		printf("error: failed to read log_to_stderr from config\n");
-		return 1;
+		goto out_err;
 	}
 	if (strcmp(tmp, "true")) {
 		printf("error: new setting for log_to_stderr failed to take effect.\n");
-		return 1;
+		goto out_err;
 	}
 
 	if (rados_connect(cl)) {
 		printf("error connecting\n");
-		return 1;
+		goto out_err;
 	}
 	if (rados_connect(cl) == 0) {
 		printf("second connect attempt didn't return an error\n");
-		return 1;
+		goto out_err;
 	}
 
 	/* create an io_ctx */
@@ -170,7 +171,7 @@ static int testrados(void)
 		if (r != buf_sz) {
 			printf("buffer size mismatch: got %d the first time, but %d "
 			"the second.\n", buf_sz, r);
-			return 1;
+			goto out_err;
 		}
 		const char *b = buf;
 		printf("begin pools.\n");
@@ -220,21 +221,21 @@ static int testrados(void)
 
 	/* attrs */
 	if (do_rados_setxattr(io_ctx, oid, "b", "2"))
-		return 1;
+		goto out_err;
 	if (do_rados_setxattr(io_ctx, oid, "a", "1"))
-		return 1;
+		goto out_err;
 	if (do_rados_setxattr(io_ctx, oid, "c", "3"))
-		return 1;
+		goto out_err;
 	if (do_rados_getxattr(io_ctx, oid, "a", "1"))
-		return 1;
+		goto out_err;
 	if (do_rados_getxattr(io_ctx, oid, "b", "2"))
-		return 1;
+		goto out_err;
 	if (do_rados_getxattr(io_ctx, oid, "c", "3"))
-		return 1;
+		goto out_err;
 	const char *exkeys[] = { "a", "b", "c", NULL };
 	const char *exvals[] = { "1", "2", "3", NULL };
 	if (do_rados_getxattrs(io_ctx, oid, exkeys, exvals))
-		return 1;
+		goto out_err;
 
 	uint64_t size;
 	time_t mtime;
@@ -299,8 +300,10 @@ static int testrados(void)
 	r = rados_pool_delete(cl, "foo");
 	printf("rados_ioctx_pool_delete = %d\n", r);
 
+	ret = 0;
+out_err:
 	rados_shutdown(cl);
-	return 0;
+	return ret;
 }
 
 int main(int argc, const char **argv)

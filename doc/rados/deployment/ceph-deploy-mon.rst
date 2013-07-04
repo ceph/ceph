@@ -8,7 +8,7 @@ add or remove one or more monitors on the command line with one command. Before
 numerous manual steps. Using ``ceph-deploy`` imposes a restriction:  **you may
 only install one monitor per host.**
 
-.. note:: We **DO NOT** recommend commingling monitors and OSDs on 
+.. note:: We do not recommend comingling monitors and OSDs on 
    the same host.
 
 For high availability, you should run a production Ceph cluster with **AT
@@ -34,6 +34,9 @@ the tool enforces a single monitor per host. ::
 .. note:: Ensure that you add monitors such that they may arrive at a consensus
    among a majority of monitors.
 
+.. note::  When adding a monitor on a host that was not in hosts intially defined
+   with the ``ceph-deploy new`` command, a ``public network`` statement needs
+   to be be added to the ceph.conf file.
 
 Remove a Monitor
 ================

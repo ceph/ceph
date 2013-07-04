@@ -142,20 +142,87 @@ typedef std::tr1::shared_ptr<ObjectStore::Sequencer> SequencerRef;
 
 class DeletingState {
   Mutex lock;
-  list<Context *> on_deletion_complete;
+  Cond cond;
+  enum {
+    QUEUED,
+    CLEARING_DIR,
+    DELETING_DIR,
+    DELETED_DIR,
+    CANCELED,
+  } status;
+  bool stop_deleting;
 public:
-  DeletingState() : lock("DeletingState::lock") {}
-  void register_on_delete(Context *completion) {
+  const pg_t pgid;
+  const PGRef old_pg_state;
+  DeletingState(const pair<pg_t, PGRef> &in) :
+    lock("DeletingState::lock"), status(QUEUED), stop_deleting(false),
+    pgid(in.first), old_pg_state(in.second) {}
+
+  /// check whether removal was canceled
+  bool check_canceled() {
     Mutex::Locker l(lock);
-    on_deletion_complete.push_front(completion);
-  }
-  ~DeletingState() {
-    for (list<Context *>::iterator i = on_deletion_complete.begin();
-	 i != on_deletion_complete.end();
-	 ++i) {
-      (*i)->complete(0);
+    assert(status == CLEARING_DIR);
+    if (stop_deleting) {
+      status = CANCELED;
+      cond.Signal();
+      return false;
     }
+    return true;
+  } ///< @return false if canceled, true if we should continue
+
+  /// transition status to clearing
+  bool start_clearing() {
+    Mutex::Locker l(lock);
+    assert(
+      status == QUEUED ||
+      status == DELETED_DIR);
+    if (stop_deleting) {
+      status = CANCELED;
+      cond.Signal();
+      return false;
+    }
+    status = CLEARING_DIR;
+    return true;
+  } ///< @return false if we should cancel deletion
+
+  /// transition status to deleting
+  bool start_deleting() {
+    Mutex::Locker l(lock);
+    assert(status == CLEARING_DIR);
+    if (stop_deleting) {
+      status = CANCELED;
+      cond.Signal();
+      return false;
+    }
+    status = DELETING_DIR;
+    return true;
+  } ///< @return false if we should cancel deletion
+
+  /// signal collection removal queued
+  void finish_deleting() {
+    Mutex::Locker l(lock);
+    assert(status == DELETING_DIR);
+    status = DELETED_DIR;
+    cond.Signal();
   }
+
+  /// try to halt the deletion
+  bool try_stop_deletion() {
+    Mutex::Locker l(lock);
+    stop_deleting = true;
+    /**
+     * If we are in DELETING_DIR or CLEARING_DIR, there are in progress
+     * operations we have to wait for before continuing on.  States
+     * DELETED_DIR, QUEUED, and CANCELED either check for stop_deleting
+     * prior to performing any operations or signify the end of the
+     * deleting process.  We don't want to wait to leave the QUEUED
+     * state, because this might block the caller behind an entire pg
+     * removal.
+     */
+    while (status == DELETING_DIR || status == CLEARING_DIR)
+      cond.Wait(lock);
+    return status != DELETED_DIR;
+  } ///< @return true if we don't need to recreate the collection
 };
 typedef std::tr1::shared_ptr<DeletingState> DeletingStateRef;
 
@@ -231,13 +298,19 @@ public:
     next_osdmap = map;
   }
   ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch);
-  ConnectionRef get_con_osd_hb(int peer, epoch_t from_epoch);
+  pair<ConnectionRef,ConnectionRef> get_con_osd_hb(int peer, epoch_t from_epoch);  // (back, front)
   void send_message_osd_cluster(int peer, Message *m, epoch_t from_epoch);
   void send_message_osd_cluster(Message *m, Connection *con) {
     cluster_messenger->send_message(m, con);
   }
+  void send_message_osd_cluster(Message *m, const ConnectionRef& con) {
+    cluster_messenger->send_message(m, con.get());
+  }
   void send_message_osd_client(Message *m, Connection *con) {
     client_messenger->send_message(m, con);
+  }
+  void send_message_osd_client(Message *m, const ConnectionRef& con) {
+    client_messenger->send_message(m, con.get());
   }
   entity_name_t get_cluster_msgr_name() {
     return cluster_messenger->get_myname();
@@ -318,6 +391,11 @@ public:
   }
 
   // -- backfill_reservation --
+  enum {
+    BACKFILL_LOW = 0,   // backfill non-degraded PGs
+    BACKFILL_HIGH = 1,	// backfill degraded PGs
+    RECOVERY = AsyncReserver<pg_t>::MAX_PRIORITY  // log based recovery
+  };
   Finisher reserver_finisher;
   AsyncReserver<pg_t> local_reserver;
   AsyncReserver<pg_t> remote_reserver;
@@ -566,7 +644,7 @@ public:
     hobject_t oid(sobject_t("infos", CEPH_NOSNAP));
     return oid;
   }
-  static void clear_temp(ObjectStore *store, coll_t tmp);
+  static void recursive_remove_collection(ObjectStore *store, coll_t tmp);
   
 
 private:
@@ -616,7 +694,7 @@ public:
     OSDCap caps;
     int64_t auid;
     epoch_t last_sent_epoch;
-    Connection *con;
+    ConnectionRef con;
     WatchConState wstate;
 
     Session() : auid(-1), last_sent_epoch(0), con(0) {}
@@ -627,11 +705,27 @@ private:
   /// information about a heartbeat peer
   struct HeartbeatInfo {
     int peer;           ///< peer
-    Connection *con;    ///< peer connection
+    ConnectionRef con_front;   ///< peer connection (front)
+    ConnectionRef con_back;    ///< peer connection (back)
     utime_t first_tx;   ///< time we sent our first ping request
     utime_t last_tx;    ///< last time we sent a ping request
-    utime_t last_rx;    ///< last time we got a ping reply
+    utime_t last_rx_front;  ///< last time we got a ping reply on the front side
+    utime_t last_rx_back;   ///< last time we got a ping reply on the back side
     epoch_t epoch;      ///< most recent epoch we wanted this peer
+
+    bool is_unhealthy(utime_t cutoff) {
+      return
+	! ((last_rx_front > cutoff ||
+	    (last_rx_front == utime_t() && (last_tx == utime_t() ||
+					    first_tx > cutoff))) &&
+	   (last_rx_back > cutoff ||
+	    (last_rx_back == utime_t() && (last_tx == utime_t() ||
+					   first_tx > cutoff))));
+    }
+    bool is_healthy(utime_t cutoff) {
+      return last_rx_front > cutoff && last_rx_back > cutoff;
+    }
+
   };
   /// state attached to outgoing heartbeat connections
   struct HeartbeatSession : public RefCountedObject {
@@ -646,9 +740,13 @@ private:
   epoch_t heartbeat_epoch;      ///< last epoch we updated our heartbeat peers
   map<int,HeartbeatInfo> heartbeat_peers;  ///< map of osd id to HeartbeatInfo
   utime_t last_mon_heartbeat;
-  Messenger *hbclient_messenger, *hbserver_messenger;
+  Messenger *hbclient_messenger;
+  Messenger *hb_front_server_messenger;
+  Messenger *hb_back_server_messenger;
+  utime_t last_heartbeat_resample;   ///< last time we chose random peers in waiting-for-healthy state
   
   void _add_heartbeat_peer(int p);
+  void _remove_heartbeat_peer(int p);
   bool heartbeat_reset(Connection *con);
   void maybe_update_heartbeat_peers();
   void reset_heartbeat_peers();
@@ -656,6 +754,11 @@ private:
   void heartbeat_check();
   void heartbeat_entry();
   void need_heartbeat_peer_update();
+
+  void heartbeat_kick() {
+    Mutex::Locker l(heartbeat_lock);
+    heartbeat_cond.Signal();
+  }
 
   struct T_Heartbeat : public Thread {
     OSD *osd;
@@ -952,10 +1055,21 @@ protected:
   PG   *_open_lock_pg(OSDMapRef createmap,
 		      pg_t pg, bool no_lockdep_check=false,
 		      bool hold_map_lock=false);
+  enum res_result {
+    RES_PARENT,    // resurrected a parent
+    RES_SELF,      // resurrected self
+    RES_NONE       // nothing relevant deleting
+  };
+  res_result _try_resurrect_pg(
+    OSDMapRef curmap, pg_t pgid, pg_t *resurrected, PGRef *old_pg_state);
   PG   *_create_lock_pg(OSDMapRef createmap,
-			pg_t pgid, bool newly_created,
-			bool hold_map_lock, int role,
-			vector<int>& up, vector<int>& acting,
+			pg_t pgid,
+			bool newly_created,
+			bool hold_map_lock,
+			bool backfill,
+			int role,
+			vector<int>& up,
+			vector<int>& acting,
 			pg_history_t history,
 			pg_interval_map_t& pi,
 			ObjectStore::Transaction& t);
@@ -965,10 +1079,12 @@ protected:
   void add_newly_split_pg(PG *pg,
 			  PG::RecoveryCtx *rctx);
 
-  PG *get_or_create_pg(const pg_info_t& info,
-                       pg_interval_map_t& pi,
-                       epoch_t epoch, int from, int& pcreated,
-                       bool primary);
+  void handle_pg_peering_evt(
+    const pg_info_t& info,
+    pg_interval_map_t& pi,
+    epoch_t epoch, int from,
+    bool primary,
+    PG::CephPeeringEvtRef evt);
   
   void load_pgs();
   void build_past_intervals_parallel();
@@ -1007,8 +1123,6 @@ protected:
   bool can_create_pg(pg_t pgid);
   void handle_pg_create(OpRequestRef op);
 
-  void do_split(PG *parent, set<pg_t>& children, ObjectStore::Transaction &t, C_Contexts *tfin);
-  void split_pg(PG *parent, map<pg_t,PG*>& children, ObjectStore::Transaction &t);
   void split_pgs(
     PG *parent,
     const set<pg_t> &childpgids, set<boost::intrusive_ptr<PG> > *out_pgs,
@@ -1035,6 +1149,9 @@ protected:
   void start_boot();
   void _maybe_boot(epoch_t oldest, epoch_t newest);
   void _send_boot();
+
+  void start_waiting_for_healthy();
+  bool _is_healthy();
   
   friend class C_OSD_GetVersion;
 
@@ -1131,17 +1248,10 @@ protected:
     vector<string> cmd;
     tid_t tid;
     bufferlist indata;
-    Connection *con;
+    ConnectionRef con;
 
     Command(vector<string>& c, tid_t t, bufferlist& bl, Connection *co)
-      : cmd(c), tid(t), indata(bl), con(co) {
-      if (con)
-	con->get();
-    }
-    ~Command() {
-      if (con)
-	con->put();
-    }
+      : cmd(c), tid(t), indata(bl), con(co) {}
   };
   list<Command*> command_queue;
   struct CommandWQ : public ThreadPool::WorkQueue<Command> {
@@ -1169,10 +1279,11 @@ protected:
     void _process(Command *c) {
       osd->osd_lock.Lock();
       if (osd->is_stopping()) {
+	osd->osd_lock.Unlock();
 	delete c;
 	return;
       }
-      osd->do_command(c->con, c->tid, c->cmd, c->indata);
+      osd->do_command(c->con.get(), c->tid, c->cmd, c->indata);
       osd->osd_lock.Unlock();
       delete c;
     }
@@ -1254,7 +1365,6 @@ protected:
 
   void start_recovery_op(PG *pg, const hobject_t& soid);
   void finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue);
-  void defer_recovery(PG *pg);
   void do_recovery(PG *pg);
   bool _recover_now();
 
@@ -1339,8 +1449,10 @@ protected:
       osd->scrub_queue.pop_front();
       return pg;
     }
-    void _process(PG *pg) {
-      pg->scrub();
+    void _process(
+      PG *pg,
+      ThreadPool::TPHandle &handle) {
+      pg->scrub(handle);
       pg->put("ScrubWQ");
     }
     void _clear() {
@@ -1424,7 +1536,9 @@ protected:
       rep_scrub_queue.pop_front();
       return msg;
     }
-    void _process(MOSDRepScrub *msg) {
+    void _process(
+      MOSDRepScrub *msg,
+      ThreadPool::TPHandle &handle) {
       osd->osd_lock.Lock();
       if (osd->is_stopping()) {
 	osd->osd_lock.Unlock();
@@ -1433,7 +1547,7 @@ protected:
       if (osd->_have_pg(msg->pgid)) {
 	PG *pg = osd->_lookup_lock_pg(msg->pgid);
 	osd->osd_lock.Unlock();
-	pg->replica_scrub(msg);
+	pg->replica_scrub(msg, handle);
 	msg->put();
 	pg->unlock();
       } else {
@@ -1451,36 +1565,36 @@ protected:
   } rep_scrub_wq;
 
   // -- removing --
-  struct RemoveWQ : public ThreadPool::WorkQueue<boost::tuple<coll_t, SequencerRef, DeletingStateRef> > {
+  struct RemoveWQ :
+    public ThreadPool::WorkQueueVal<pair<PGRef, DeletingStateRef> > {
     ObjectStore *&store;
-    list<boost::tuple<coll_t, SequencerRef, DeletingStateRef> *> remove_queue;
+    list<pair<PGRef, DeletingStateRef> > remove_queue;
     RemoveWQ(ObjectStore *&o, time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<boost::tuple<coll_t, SequencerRef, DeletingStateRef> >("OSD::RemoveWQ", ti, 0, tp),
+      : ThreadPool::WorkQueueVal<pair<PGRef, DeletingStateRef> >(
+	"OSD::RemoveWQ", ti, 0, tp),
 	store(o) {}
 
     bool _empty() {
       return remove_queue.empty();
     }
-    bool _enqueue(boost::tuple<coll_t, SequencerRef, DeletingStateRef> *item) {
+    void _enqueue(pair<PGRef, DeletingStateRef> item) {
       remove_queue.push_back(item);
-      return true;
     }
-    void _dequeue(boost::tuple<coll_t, SequencerRef, DeletingStateRef> *item) {
+    void _enqueue_front(pair<PGRef, DeletingStateRef> item) {
+      remove_queue.push_front(item);
+    }
+    bool _dequeue(pair<PGRef, DeletingStateRef> item) {
       assert(0);
     }
-    boost::tuple<coll_t, SequencerRef, DeletingStateRef> *_dequeue() {
-      if (remove_queue.empty())
-	return NULL;
-      boost::tuple<coll_t, SequencerRef, DeletingStateRef> *item = remove_queue.front();
+    pair<PGRef, DeletingStateRef> _dequeue() {
+      assert(!remove_queue.empty());
+      pair<PGRef, DeletingStateRef> item = remove_queue.front();
       remove_queue.pop_front();
       return item;
     }
-    void _process(boost::tuple<coll_t, SequencerRef, DeletingStateRef> *item);
+    void _process(pair<PGRef, DeletingStateRef>);
     void _clear() {
-      while (!remove_queue.empty()) {
-	delete remove_queue.front();
-	remove_queue.pop_front();
-      }
+      remove_queue.clear();
     }
   } remove_wq;
   uint64_t next_removal_seq;
@@ -1501,7 +1615,8 @@ protected:
  public:
   /* internal and external can point to the same messenger, they will still
    * be cleaned up properly*/
-  OSD(int id, Messenger *internal, Messenger *external, Messenger *hbmin, Messenger *hbmout,
+  OSD(int id, Messenger *internal, Messenger *external,
+      Messenger *hb_client, Messenger *hb_front_server, Messenger *hb_back_server,
       MonClient *mc, const std::string &dev, const std::string &jdev);
   ~OSD();
 

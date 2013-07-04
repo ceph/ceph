@@ -19,10 +19,9 @@
 #include "common/Mutex.h"
 #include "common/snap_types.h"
 #include "include/atomic.h"
-#include "include/rados.h"
+#include "include/types.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
-#include "include/types.h"
 #include "include/xlist.h"
 #include "osd/osd_types.h"
 #include "osdc/Objecter.h"
@@ -140,7 +139,8 @@ struct librados::IoCtxImpl {
   int operate_read(const object_t& oid, ::ObjectOperation *o, bufferlist *pbl);
   int aio_operate(const object_t& oid, ::ObjectOperation *o,
 		  AioCompletionImpl *c, const SnapContext& snap_context);
-  int aio_operate_read(const object_t& oid, ::ObjectOperation *o, AioCompletionImpl *c, bufferlist *pbl);
+  int aio_operate_read(const object_t& oid, ::ObjectOperation *o,
+		       AioCompletionImpl *c, int flags, bufferlist *pbl);
 
   struct C_aio_Ack : public Context {
     librados::AioCompletionImpl *c;
@@ -153,16 +153,6 @@ struct librados::IoCtxImpl {
     time_t *pmtime;
     utime_t mtime;
     C_aio_stat_Ack(AioCompletionImpl *_c, time_t *pm);
-    void finish(int r);
-  };
-
-  struct C_aio_sparse_read_Ack : public Context {
-    AioCompletionImpl *c;
-    bufferlist *data_bl;
-    std::map<uint64_t, uint64_t> *m;
-    C_aio_sparse_read_Ack(AioCompletionImpl *_c,
-			  bufferlist *data,
-			  std::map<uint64_t, uint64_t> *extents);
     void finish(int r);
   };
 

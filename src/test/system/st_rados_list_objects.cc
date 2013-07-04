@@ -64,13 +64,13 @@ run()
   rados_pool_create(cl, "foo");
   RETURN1_IF_NONZERO(rados_ioctx_create(cl, "foo", &io_ctx));
 
-  int ret, saw = 0;
+  int saw = 0;
   const char *obj_name;
   rados_list_ctx_t h;
   printf("%s: listing objects.\n", get_id_str());
   RETURN1_IF_NONZERO(rados_objects_list_open(io_ctx, &h));
   while (true) {
-    ret = rados_objects_list_next(h, &obj_name, NULL);
+    int ret = rados_objects_list_next(h, &obj_name, NULL);
     if (ret == -ENOENT) {
       break;
     }

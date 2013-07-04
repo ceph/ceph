@@ -51,7 +51,7 @@ SimpleMessenger::SimpleMessenger(CephContext *cct, entity_name_t name,
     dispatch_throttler(cct, string("msgr_dispatch_throttler-") + mname, cct->_conf->ms_dispatch_throttle_bytes),
     reaper_started(false), reaper_stop(false),
     timeout(0),
-    local_connection(new Connection)
+    local_connection(new Connection(this))
 {
   pthread_spin_init(&global_seq_lock, PTHREAD_PROCESS_PRIVATE);
   init_local_connection();
@@ -66,7 +66,6 @@ SimpleMessenger::~SimpleMessenger()
   assert(!did_bind); // either we didn't bind or we shut down the Accepter
   assert(rank_pipe.empty()); // we don't have any running Pipes.
   assert(reaper_stop && !reaper_started); // the reaper thread is stopped
-  local_connection->put();
 }
 
 void SimpleMessenger::ready()
@@ -84,8 +83,8 @@ void SimpleMessenger::ready()
 int SimpleMessenger::shutdown()
 {
   ldout(cct,10) << "shutdown " << get_myaddr() << dendl;
-  dispatch_queue.shutdown();
   mark_down_all();
+  dispatch_queue.shutdown();
   return 0;
 }
 
@@ -112,7 +111,7 @@ int SimpleMessenger::_send_message(Message *m, const entity_inst_t& dest,
 
   lock.Lock();
   Pipe *pipe = _lookup_pipe(dest.addr);
-  submit_message(m, (pipe ? pipe->connection_state : NULL),
+  submit_message(m, (pipe ? pipe->connection_state.get() : NULL),
                  dest.addr, dest.name.type(), lazy);
   lock.Unlock();
   return 0;
@@ -223,6 +222,13 @@ void SimpleMessenger::reaper()
     ldout(cct,10) << "reaper reaping pipe " << p << " " << p->get_peer_addr() << dendl;
     p->pipe_lock.Lock();
     p->discard_out_queue();
+    if (p->connection_state) {
+      // mark_down, mark_down_all, or fault() should have done this,
+      // or accept() may have switch the Connection to a different
+      // Pipe... but make sure!
+      bool cleared = p->connection_state->clear_pipe(p);
+      assert(!cleared);
+    }
     p->pipe_lock.Unlock();
     p->unregister_pipe();
     assert(pipes.count(p));
@@ -231,8 +237,6 @@ void SimpleMessenger::reaper()
     if (p->sd >= 0)
       ::close(p->sd);
     ldout(cct,10) << "reaper reaped pipe " << p << " " << p->get_peer_addr() << dendl;
-    if (p->connection_state)
-      p->connection_state->clear_pipe(p);
     p->put();
     ldout(cct,10) << "reaper deleted pipe " << p << dendl;
   }
@@ -262,18 +266,19 @@ int SimpleMessenger::bind(const entity_addr_t &bind_addr)
   lock.Unlock();
 
   // bind to a socket
-  int r = accepter.bind(bind_addr);
+  set<int> avoid_ports;
+  int r = accepter.bind(bind_addr, avoid_ports);
   if (r >= 0)
     did_bind = true;
   return r;
 }
 
-int SimpleMessenger::rebind(int avoid_port)
+int SimpleMessenger::rebind(const set<int>& avoid_ports)
 {
-  ldout(cct,1) << "rebind avoid " << avoid_port << dendl;
+  ldout(cct,1) << "rebind avoid " << avoid_ports << dendl;
   mark_down_all();
   assert(did_bind);
-  return accepter.rebind(avoid_port);
+  return accepter.rebind(avoid_ports);
 }
 
 int SimpleMessenger::start()
@@ -356,12 +361,12 @@ bool SimpleMessenger::verify_authorizer(Connection *con, int peer_type,
   return ms_deliver_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid,session_key);
 }
 
-Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
+ConnectionRef SimpleMessenger::get_connection(const entity_inst_t& dest)
 {
   Mutex::Locker l(lock);
   if (my_inst.addr == dest.addr) {
     // local
-    return static_cast<Connection *>(local_connection->get());
+    return local_connection;
   }
 
   // remote
@@ -375,14 +380,14 @@ Connection *SimpleMessenger::get_connection(const entity_inst_t& dest)
     }
     Mutex::Locker l(pipe->pipe_lock);
     if (pipe->connection_state)
-      return static_cast<Connection *>(pipe->connection_state->get());
+      return pipe->connection_state;
     // we failed too quickly!  retry.  FIXME.
   }
 }
 
-Connection *SimpleMessenger::get_loopback_connection()
+ConnectionRef SimpleMessenger::get_loopback_connection()
 {
-  return static_cast<Connection*>(local_connection->get());
+  return local_connection;
 }
 
 void SimpleMessenger::submit_message(Message *m, Connection *con,
@@ -562,6 +567,9 @@ void SimpleMessenger::mark_down_all()
     p->unregister_pipe();
     p->pipe_lock.Lock();
     p->stop();
+    ConnectionRef con = p->connection_state;
+    if (con && con->clear_pipe(p))
+      dispatch_queue.queue_reset(con.get());
     p->pipe_lock.Unlock();
   }
   lock.Unlock();
@@ -576,6 +584,11 @@ void SimpleMessenger::mark_down(const entity_addr_t& addr)
     p->unregister_pipe();
     p->pipe_lock.Lock();
     p->stop();
+    if (p->connection_state) {
+      // do not generate a reset event for the caller in this case,
+      // since they asked for it.
+      p->connection_state->clear_pipe(p);
+    }
     p->pipe_lock.Unlock();
   } else {
     ldout(cct,1) << "mark_down " << addr << " -- pipe dne" << dendl;
@@ -595,6 +608,11 @@ void SimpleMessenger::mark_down(Connection *con)
     p->unregister_pipe();
     p->pipe_lock.Lock();
     p->stop();
+    if (p->connection_state) {
+      // do not generate a reset event for the caller in this case,
+      // since they asked for it.
+      p->connection_state->clear_pipe(p);
+    }
     p->pipe_lock.Unlock();
     p->put();
   } else {

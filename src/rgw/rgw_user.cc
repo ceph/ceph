@@ -564,9 +564,12 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info)
 RGWAccessKeyPool::RGWAccessKeyPool(RGWUser* usr)
 {
   user = usr;
+  swift_keys = NULL;
+  access_keys = NULL;
 
   if (!user) {
     keys_allowed = false;
+    store = NULL;
     return;
   }
 
@@ -751,6 +754,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
         set_err_msg(err_msg, "existing swift key in RGW system:" + id);
         return -EEXIST;
       }
+      break;
     case KEY_TYPE_S3:
       if (rgw_get_user_info_by_access_key(store, id, duplicate_check) >= 0) {
         set_err_msg(err_msg, "existing S3 key in RGW system:" + id);
@@ -1025,13 +1029,13 @@ int RGWAccessKeyPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg
 
 RGWSubUserPool::RGWSubUserPool(RGWUser *usr)
 {
-   if (!usr)
-    subusers_allowed = false;
-
-  subusers_allowed = true;
-
-  store = usr->get_store();
+  subusers_allowed = (usr != NULL);
+  if (usr)
+    store = usr->get_store();
+  else
+    store = NULL;
   user = usr;
+  subuser_map = NULL;
 }
 
 RGWSubUserPool::~RGWSubUserPool()
@@ -1314,10 +1318,8 @@ int RGWSubUserPool::modify(RGWUserAdminOpState& op_state, std::string *err_msg, 
 RGWUserCapPool::RGWUserCapPool(RGWUser *usr)
 {
   user = usr;
-
-  if (!user) {
-    caps_allowed = false;
-  }
+  caps = NULL;
+  caps_allowed = (user != NULL);
 }
 
 RGWUserCapPool::~RGWUserCapPool()
@@ -1430,7 +1432,7 @@ int RGWUserCapPool::remove(RGWUserAdminOpState& op_state, std::string *err_msg, 
   return 0;
 }
 
-RGWUser::RGWUser() : caps(this), keys(this), subusers(this)
+RGWUser::RGWUser() : store(NULL), info_stored(false), caps(this), keys(this), subusers(this)
 {
   init_default();
 }
@@ -1677,6 +1679,9 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   user_info.suspended = op_state.get_suspension_status();
   user_info.system = op_state.system;
 
+  if (op_state.op_mask_specified)
+    user_info.op_mask = op_state.get_op_mask();
+
   // update the request
   op_state.set_user_info(user_info);
   op_state.set_populated();
@@ -1875,6 +1880,9 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   if (op_state.system_specified)
     user_info.system = op_state.system;
+
+  if (op_state.op_mask_specified)
+    user_info.op_mask = op_state.get_op_mask();
 
   if (op_state.has_suspension_op()) {
     __u8 suspended = op_state.get_suspension_status();

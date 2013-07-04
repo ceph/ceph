@@ -478,6 +478,15 @@ std::string pg_state_string(int state)
 }
 
 
+// -- eversion_t --
+string eversion_t::get_key_name() const
+{
+  char key[40];
+  snprintf(
+    key, sizeof(key), "%010u.%020llu", epoch, (long long unsigned)version);
+  return string(key);
+}
+
 
 // -- pool_snap_info_t --
 void pool_snap_info_t::dump(Formatter *f) const
@@ -1778,9 +1787,7 @@ void pg_query_t::generate_test_instances(list<pg_query_t*>& o)
 
 string pg_log_entry_t::get_key_name() const
 {
-  char key[40];
-  snprintf(key, sizeof(key), "%010u.%020llu", version.epoch, (long long unsigned)version.version);
-  return string(key);
+  return version.get_key_name();
 }
 
 void pg_log_entry_t::encode_with_checksum(bufferlist& bl) const
@@ -2478,21 +2485,25 @@ ostream& operator<<(ostream& out, const SnapSet& cs)
 
 void watch_info_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(3, 3, bl);
+  ENCODE_START(4, 3, bl);
   ::encode(cookie, bl);
   ::encode(timeout_seconds, bl);
+  ::encode(addr, bl);
   ENCODE_FINISH(bl);
 }
 
 void watch_info_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
   ::decode(cookie, bl);
   if (struct_v < 2) {
     uint64_t ver;
     ::decode(ver, bl);
   }
   ::decode(timeout_seconds, bl);
+  if (struct_v >= 4) {
+    ::decode(addr, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -2500,6 +2511,9 @@ void watch_info_t::dump(Formatter *f) const
 {
   f->dump_unsigned("cookie", cookie);
   f->dump_unsigned("timeout_seconds", timeout_seconds);
+  f->open_object_section("addr");
+  addr.dump(f);
+  f->close_section();
 }
 
 void watch_info_t::generate_test_instances(list<watch_info_t*>& o)
@@ -2508,6 +2522,15 @@ void watch_info_t::generate_test_instances(list<watch_info_t*>& o)
   o.push_back(new watch_info_t);
   o.back()->cookie = 123;
   o.back()->timeout_seconds = 99;
+  entity_addr_t ea;
+  ea.set_nonce(1);
+  ea.set_family(AF_INET);
+  ea.set_in4_quad(0, 127);
+  ea.set_in4_quad(1, 0);
+  ea.set_in4_quad(2, 1);
+  ea.set_in4_quad(3, 2);
+  ea.set_port(2);
+  o.back()->addr = ea;
 }
 
 
@@ -2842,7 +2865,6 @@ void ScrubMap::merge_incr(const ScrubMap &l)
 {
   assert(valid_through == l.incr_since);
   attrs = l.attrs;
-  logbl = l.logbl;
   valid_through = l.valid_through;
 
   for (map<hobject_t,object>::const_iterator p = l.objects.begin();
@@ -2864,7 +2886,8 @@ void ScrubMap::encode(bufferlist& bl) const
   ENCODE_START(3, 2, bl);
   ::encode(objects, bl);
   ::encode(attrs, bl);
-  ::encode(logbl, bl);
+  bufferlist old_logbl;  // not used
+  ::encode(old_logbl, bl);
   ::encode(valid_through, bl);
   ::encode(incr_since, bl);
   ENCODE_FINISH(bl);
@@ -2875,7 +2898,8 @@ void ScrubMap::decode(bufferlist::iterator& bl, int64_t pool)
   DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   ::decode(objects, bl);
   ::decode(attrs, bl);
-  ::decode(logbl, bl);
+  bufferlist old_logbl;   // not used
+  ::decode(old_logbl, bl);
   ::decode(valid_through, bl);
   ::decode(incr_since, bl);
   DECODE_FINISH(bl);

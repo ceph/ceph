@@ -31,6 +31,7 @@ class Connection;
 struct md_config_t;
 class Message;
 class MWatchNotify;
+class MLog;
 class SimpleMessenger;
 
 class librados::RadosClient : public Dispatcher
@@ -63,6 +64,13 @@ private:
   Cond cond;
   SafeTimer timer;
   int refcnt;
+
+  version_t log_last_version;
+  rados_log_callback_t log_cb;
+  void *log_cb_arg;
+  string log_watch;
+
+  void wait_for_osdmap();
 
 public:
   Finisher finisher;
@@ -100,8 +108,25 @@ public:
   void register_watcher(librados::WatchContext *wc, uint64_t *cookie);
   void unregister_watcher(uint64_t cookie);
   void watch_notify(MWatchNotify *m);
+  int mon_command(const vector<string>& cmd, bufferlist &inbl,
+	          bufferlist *outbl, string *outs);
+  int mon_command(int rank,
+		  const vector<string>& cmd, bufferlist &inbl,
+	          bufferlist *outbl, string *outs);
+  int mon_command(string name,
+		  const vector<string>& cmd, bufferlist &inbl,
+	          bufferlist *outbl, string *outs);
+  int osd_command(int osd, vector<string>& cmd, bufferlist& inbl,
+                  bufferlist *poutbl, string *prs);
+  int pg_command(pg_t pgid, vector<string>& cmd, bufferlist& inbl,
+	         bufferlist *poutbl, string *prs);
+
+  void handle_log(MLog *m);
+  int monitor_log(const string& level, rados_log_callback_t cb, void *arg);
+
   void get();
   bool put();
+  void blacklist_self(bool set);
 };
 
 #endif

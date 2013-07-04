@@ -1141,7 +1141,7 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
     __u8 tag = 'e';
     bufferlist bl;
     ::encode(tag, bl);
-    bl.write_fd(fd);
+    r = bl.write_fd(fd);
     if (r < 0)
       return r;
   }
@@ -1294,20 +1294,22 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
   bool from_stdin = !strcmp(path, "-");
   if (from_stdin) {
     fd = 0;
-    size = 1 << *order;
+    size = 1ULL << *order;
   } else {
-    fd = open(path, O_RDONLY);
-
-    if (fd < 0) {
+    if ((fd = open(path, O_RDONLY)) < 0) {
       r = -errno;
       cerr << "rbd: error opening " << path << std::endl;
-      return r;
+      goto done2;
     }
 
-    r = fstat(fd, &stat_buf);
-    if (r < 0) {
+    if ((fstat(fd, &stat_buf)) < 0) {
       r = -errno;
       cerr << "rbd: stat error " << path << std::endl;
+      goto done;
+    }
+    if (S_ISDIR(stat_buf.st_mode)) {
+      r = -EISDIR;
+      cerr << "rbd: cannot import a directory" << std::endl;
       goto done;
     }
     if (stat_buf.st_size)
@@ -1394,7 +1396,8 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
       pc.finish();
     close(fd);
   }
-
+ done2:
+  delete[] p;
   return r;
 }
 

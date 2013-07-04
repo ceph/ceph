@@ -37,6 +37,7 @@
 
 #include "common/LogClient.h"
 #include "common/SimpleRNG.h"
+#include "common/cmdparse.h"
 
 #include "auth/cephx/CephxKeyServer.h"
 #include "auth/AuthMethodList.h"
@@ -51,12 +52,9 @@
 #include <memory>
 #include <tr1/memory>
 #include <errno.h>
-#include <boost/intrusive_ptr.hpp>
-// Because intusive_ptr clobbers our assert...
-#include "include/assert.h"
 
 
-#define CEPH_MON_PROTOCOL     10 /* cluster internal */
+#define CEPH_MON_PROTOCOL     12 /* cluster internal */
 
 
 enum {
@@ -111,6 +109,7 @@ public:
   string name;
   int rank;
   Messenger *messenger;
+  ConnectionRef con_self;
   Mutex lock;
   SafeTimer timer;
   
@@ -178,6 +177,7 @@ public:
     return sn;
   }
 
+  bool is_shutdown() const { return state == STATE_SHUTDOWN; }
   bool is_probing() const { return state == STATE_PROBING; }
   bool is_synchronizing() const { return state == STATE_SYNCHRONIZING; }
   bool is_electing() const { return state == STATE_ELECTING; }
@@ -364,6 +364,7 @@ private:
     }
   };
 
+  void sync_obtain_latest_monmap(bufferlist &bl);
   void sync_store_init();
   void sync_store_cleanup();
   bool is_sync_on_going();
@@ -548,6 +549,7 @@ private:
 	version(0),
 	timeout(NULL),
 	sync_state(STATE_NONE),
+	crc(0),
 	crc_available(false),
 	attempts(0)
     { }
@@ -1248,8 +1250,8 @@ public:
   friend class PGMonitor;
   friend class LogMonitor;
 
-  boost::intrusive_ptr<QuorumService> health_monitor;
-  boost::intrusive_ptr<QuorumService> config_key_service;
+  QuorumService *health_monitor;
+  QuorumService *config_key_service;
 
   // -- sessions --
   MonSessionMap session_map;
@@ -1264,7 +1266,7 @@ public:
   void handle_get_version(MMonGetVersion *m);
   void handle_subscribe(MMonSubscribe *m);
   void handle_mon_get_map(MMonGetMap *m);
-  bool _allowed_command(MonSession *s, const vector<std::string>& cmd);
+  bool _allowed_command(MonSession *s, map<std::string, cmd_vartype>& cmd);
   void _mon_status(ostream& ss);
   void _quorum_status(ostream& ss);
   void _sync_status(ostream& ss);
@@ -1311,14 +1313,12 @@ public:
     uint64_t tid;
     bufferlist request_bl;
     MonSession *session;
-    Connection *con;
+    ConnectionRef con;
     entity_inst_t client_inst;
 
     ~RoutedRequest() {
       if (session)
 	session->put();
-      if (con)
-	con->put();
     }
   };
   uint64_t routed_request_tid;
@@ -1387,7 +1387,7 @@ public:
     return ret;
   }
   //mon_caps is used for un-connected messages from monitors
-  MonCaps * mon_caps;
+  MonCap * mon_caps;
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
   bool ms_verify_authorizer(Connection *con, int peer_type,
 			    int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
@@ -1414,6 +1414,7 @@ public:
   int preinit();
   int init();
   void init_paxos();
+  void refresh_from_paxos(bool *need_bootstrap);
   void shutdown();
   void tick();
 
@@ -1446,16 +1447,18 @@ private:
 public:
   class StoreConverter {
     const string path;
-    boost::scoped_ptr<MonitorDBStore> db;
+    MonitorDBStore *db;
     boost::scoped_ptr<MonitorStore> store;
 
     set<version_t> gvs;
+    map<version_t, set<pair<string,version_t> > > gv_map;
+
     version_t highest_last_pn;
     version_t highest_accepted_pn;
 
    public:
-    StoreConverter(const string &path)
-      : path(path), db(NULL), store(NULL),
+    StoreConverter(string path, MonitorDBStore *d)
+      : path(path), db(d), store(NULL),
 	highest_last_pn(0), highest_accepted_pn(0)
     { }
 
@@ -1468,20 +1471,20 @@ public:
     int needs_conversion();
     int convert();
 
+    bool is_converting() {
+      return db->exists("mon_convert", "on_going");
+    }
+
    private:
 
     bool _check_gv_store();
 
     void _init() {
-      MonitorDBStore *db_ptr = new MonitorDBStore(path);
-      db.reset(db_ptr);
-
       MonitorStore *store_ptr = new MonitorStore(path);
       store.reset(store_ptr);
     }
 
     void _deinit() {
-      db.reset(NULL);
       store.reset(NULL);
     }
 

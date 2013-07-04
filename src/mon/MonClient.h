@@ -29,6 +29,7 @@
 #include "messages/MMonSubscribe.h"
 
 #include "common/SimpleRNG.h"
+#include "osd/osd_types.h"
 
 #include <memory>
 
@@ -37,6 +38,8 @@ class MMonMap;
 class MMonGetVersion;
 class MMonGetVersionReply;
 class MMonSubscribeAck;
+class MMonCommandAck;
+class MCommandReply;
 class MAuthReply;
 class MAuthRotating;
 class LogClient;
@@ -60,7 +63,7 @@ private:
   Messenger *messenger;
 
   string cur_mon;
-  Connection *cur_con;
+  ConnectionRef cur_con;
 
   SimpleRNG rng;
 
@@ -126,8 +129,10 @@ private:
 
   string _pick_random_mon();
   void _finish_hunting();
-  void _reopen_session();
-  void _pick_new_mon();
+  void _reopen_session(int rank, string name);
+  void _reopen_session() {
+    _reopen_session(-1, string());
+  }
   void _send_mon_message(Message *m, bool force=false);
 
 public:
@@ -164,6 +169,9 @@ private:
 	sub_have[what].start = got + 1;
     }
   }
+  void _sub_unwant(string what) {
+    sub_have.erase(what);
+  }
 
   // auth tickets
 public:
@@ -180,6 +188,10 @@ public:
   void sub_got(string what, version_t have) {
     Mutex::Locker l(monc_lock);
     _sub_got(what, have);
+  }
+  void sub_unwant(string what) {
+    Mutex::Locker l(monc_lock);
+    _sub_unwant(what);
   }
   
   KeyRing *keyring;
@@ -255,6 +267,46 @@ public:
     if (auth)
       auth->add_want_keys(want);
   }
+
+  // admin commands
+private:
+  uint64_t last_mon_command_tid;
+  struct MonCommand {
+    string target_name;
+    int target_rank;
+    uint64_t tid;
+    vector<string> cmd;
+    bufferlist inbl;
+    bufferlist *poutbl;
+    string *prs;
+    int *prval;
+    Context *onfinish;
+
+    MonCommand(uint64_t t)
+      : target_rank(-1),
+	tid(t),
+	poutbl(NULL), prs(NULL), prval(NULL), onfinish(NULL)
+    {}
+  };
+  map<uint64_t,MonCommand*> mon_commands;
+
+  void _send_command(MonCommand *r);
+  void _resend_mon_commands();
+  void _finish_command(MonCommand *r, int ret, string rs);
+  void handle_mon_command_ack(MMonCommandAck *ack);
+
+public:
+  int start_mon_command(const vector<string>& cmd, bufferlist& inbl,
+			bufferlist *outbl, string *outs,
+			Context *onfinish);
+  int start_mon_command(int mon_rank,
+			const vector<string>& cmd, bufferlist& inbl,
+			bufferlist *outbl, string *outs,
+			Context *onfinish);
+  int start_mon_command(const string mon_name,  ///< mon name, with mon. prefix
+			const vector<string>& cmd, bufferlist& inbl,
+			bufferlist *outbl, string *outs,
+			Context *onfinish);
 
   // version requests
 public:

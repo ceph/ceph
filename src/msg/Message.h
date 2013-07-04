@@ -124,6 +124,8 @@
 #define MSG_MDS_DENTRYLINK         0x20c
 #define MSG_MDS_FINDINO            0x20d
 #define MSG_MDS_FINDINOREPLY       0x20e
+#define MSG_MDS_OPENINO            0x20f
+#define MSG_MDS_OPENINOREPLY       0x210
 
 #define MSG_MDS_LOCK               0x300
 #define MSG_MDS_INODEFILECAPS      0x301
@@ -157,9 +159,11 @@
 
 // abstract Connection, for keeping per-connection state
 
+class Messenger;
 
-struct Connection : public RefCountedObject {
+struct Connection : private RefCountedObject {
   Mutex lock;
+  Messenger *msgr;
   RefCountedObject *priv;
   int peer_type;
   entity_addr_t peer_addr;
@@ -170,15 +174,21 @@ struct Connection : public RefCountedObject {
   int rx_buffers_version;
   map<tid_t,pair<bufferlist,int> > rx_buffers;
 
+  friend class boost::intrusive_ptr<Connection>;
+
 public:
-  Connection()
+  Connection(Messenger *m)
     : lock("Connection::lock"),
+      msgr(m),
       priv(NULL),
       peer_type(-1),
       features(0),
       pipe(NULL),
       failed(false),
       rx_buffers_version(0) {
+    // we are managed exlusively by ConnectionRef; make it so you can
+    //   ConnectionRef foo = new Connection;
+    nref.set(0);
   }
   ~Connection() {
     //generic_dout(0) << "~Connection " << this << dendl;
@@ -188,10 +198,6 @@ public:
     }
     if (pipe)
       pipe->put();
-  }
-
-  Connection *get() {
-    return static_cast<Connection *>(RefCountedObject::get());
   }
 
   void set_priv(RefCountedObject *o) {
@@ -225,13 +231,15 @@ public:
     }
     return !failed;
   }
-  void clear_pipe(RefCountedObject *old_p) {
+  bool clear_pipe(RefCountedObject *old_p) {
     if (old_p == pipe) {
       Mutex::Locker l(lock);
       pipe->put();
       pipe = NULL;
       failed = true;
+      return true;
     }
+    return false;
   }
   void reset_pipe(RefCountedObject *p) {
     Mutex::Locker l(lock);
@@ -242,6 +250,10 @@ public:
   bool is_connected() {
     Mutex::Locker l(lock);
     return pipe != NULL;
+  }
+
+  Messenger *get_messenger() {
+    return msgr;
   }
 
   int get_peer_type() { return peer_type; }
@@ -295,7 +307,7 @@ protected:
   /* time at which message was fully read */
   utime_t recv_complete_stamp;
 
-  Connection *connection;
+  ConnectionRef connection;
 
   // release our size in bytes back to this throttler when our payload
   // is adjusted or when we are destroyed.
@@ -343,18 +355,14 @@ public:
 protected:
   virtual ~Message() { 
     assert(nref.read() == 0);
-    if (connection)
-      connection->put();
     if (byte_throttler)
       byte_throttler->put(payload.length() + middle.length() + data.length());
     if (msg_throttler)
       msg_throttler->put();
   }
 public:
-  Connection *get_connection() { return connection; }
-  void set_connection(Connection *c) {
-    if (connection)
-      connection->put();
+  const ConnectionRef& get_connection() { return connection; }
+  void set_connection(const ConnectionRef& c) {
     connection = c;
   }
   void set_byte_throttler(Throttle *t) { byte_throttler = t; }

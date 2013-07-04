@@ -24,7 +24,7 @@ extern "C" {
 #endif
 
 #define LIBRADOS_VER_MAJOR 0
-#define LIBRADOS_VER_MINOR 51
+#define LIBRADOS_VER_MINOR 53
 #define LIBRADOS_VER_EXTRA 0
 
 #define LIBRADOS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
@@ -32,6 +32,11 @@ extern "C" {
 #define LIBRADOS_VERSION_CODE LIBRADOS_VERSION(LIBRADOS_VER_MAJOR, LIBRADOS_VER_MINOR, LIBRADOS_VER_EXTRA)
 
 #define LIBRADOS_SUPPORTS_WATCH 1
+
+/* RADOS lock flags
+ * They are also defined in cls_lock_types.h. Keep them in sync!
+ */
+#define LIBRADOS_LOCK_FLAG_RENEW 0x1
 
 /**
  * @defgroup librados_h_xattr_comp xattr comparison operations
@@ -198,6 +203,17 @@ void rados_version(int *major, int *minor, int *extra);
 int rados_create(rados_t *cluster, const char * const id);
 
 /**
+ * Extended version of rados_create.
+ *
+ * Like rados_create, but 
+ * 1) don't assume 'client\.'+id; allow full specification of name
+ * 2) allow specification of cluster name
+ * 3) flags for future expansion
+ */
+int rados_create2(rados_t *pcluster, const char *const clustername,
+	          const char * const name, uint64_t flags);
+
+/**
  * Initialize a cluster handle from an existing configuration.
  *
  * Share configuration state with another rados_t instance.
@@ -298,6 +314,22 @@ int rados_conf_read_file(rados_t cluster, const char *path);
  */
 int rados_conf_parse_argv(rados_t cluster, int argc, const char **argv);
 
+
+/**
+ * Configure the cluster handle with command line arguments, returning
+ * any remainders.  Same rados_conf_parse_argv, except for extra
+ * remargv argument to hold returns unrecognized arguments.
+ *
+ * @pre rados_connect() has not been called on the cluster handle
+ *
+ * @param cluster cluster handle to configure
+ * @param argc number of arguments in argv
+ * @param argv arguments to parse
+ * @param remargv char* array for returned unrecognized arguments
+ * @returns 0 on success, negative error code on failure
+ */
+int rados_conf_parse_argv_remainder(rados_t cluster, int argc,
+				    const char **argv, const char **remargv);
 /**
  * Configure the cluster handle based on an environment variable
  *
@@ -928,7 +960,7 @@ int rados_append(rados_ioctx_t io, const char *oid, const char *buf, size_t len)
  *
  * The io context determines the snapshot to read from, if any was set
  * by rados_ioctx_snap_set_read().
- * 
+ *
  * @param io the context in which to perform the read
  * @param oid the name of the object to read from
  * @param buf where to store the results
@@ -1570,6 +1602,216 @@ int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t handle);
 int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf, int buf_len);
 
 /** @} Watch/Notify */
+
+/**
+ * Take an exclusive lock on an object.
+ *
+ * @param io the context to operate in
+ * @param oid the name of the object
+ * @param name the name of the lock
+ * @param cookie user-defined identifier for this instance of the lock
+ * @param desc user-defined lock description
+ * @param duration the duration of the lock. Set to NULL for infinite duration.
+ * @param flags lock flags
+ * @returns 0 on success, negative error code on failure
+ * @returns -EBUSY if the lock is already held by another (client, cookie) pair
+ * @returns -EEXIST if the lock is already held by the same (client, cookie) pair
+ */
+int rados_lock_exclusive(rados_ioctx_t io, const char * o, const char * name,
+	       const char * cookie, const char * desc, struct timeval * duration,
+	       uint8_t flags);
+
+/**
+ * Take a shared lock on an object.
+ *
+ * @param io the context to operate in
+ * @param o the name of the object
+ * @param name the name of the lock
+ * @param cookie user-defined identifier for this instance of the lock
+ * @param tag The tag of the lock
+ * @param desc user-defined lock description
+ * @param duration the duration of the lock. Set to NULL for infinite duration.
+ * @param flags lock flags
+ * @returns 0 on success, negative error code on failure
+ * @returns -EBUSY if the lock is already held by another (client, cookie) pair
+ * @returns -EEXIST if the lock is already held by the same (client, cookie) pair
+ */
+int rados_lock_shared(rados_ioctx_t io, const char * o, const char * name,
+	       const char * cookie, const char * tag, const char * desc,
+	       struct timeval * duration, uint8_t flags);
+
+/**
+ * Release a shared or exclusive lock on an object.
+ *
+ * @param io the context to operate in
+ * @param o the name of the object
+ * @param name the name of the lock
+ * @param cookie user-defined identifier for the instance of the lock
+ * @returns 0 on success, negative error code on failure
+ * @returns -ENOENT if the lock is not held by the specified (client, cookie) pair
+ */
+int rados_unlock(rados_ioctx_t io, const char *o, const char *name,
+		 const char *cookie);
+
+/**
+ * List clients that have locked the named object lock and information about
+ * the lock.
+ *
+ * The number of bytes required in each buffer is put in the
+ * corresponding size out parameter. If any of the provided buffers
+ * are too short, -ERANGE is returned after these sizes are filled in.
+ *
+ * @param io the context to operate in
+ * @param o the name of the object
+ * @param name the name of the lock
+ * @param exclusive where to store whether the lock is exclusive (1) or shared (0)
+ * @param tag where to store the tag associated with the object lock
+ * @param tag_len number of bytes in tag buffer
+ * @param clients buffer in which locker clients are stored, separated by '\0'
+ * @param clients_len number of bytes in the clients buffer
+ * @param cookies buffer in which locker cookies are stored, separated by '\0'
+ * @param cookies_len number of bytes in the cookies buffer
+ * @param addrs buffer in which locker addresses are stored, separated by '\0'
+ * @param addrs_len number of bytes in the clients buffer
+ * @returns number of lockers on success, negative error code on failure
+ * @returns -ERANGE if any of the buffers are too short
+ */
+ssize_t rados_list_lockers(rados_ioctx_t io, const char *o,
+			   const char *name, int *exclusive,
+			   char *tag, size_t *tag_len,
+			   char *clients, size_t *clients_len,
+			   char *cookies, size_t *cookies_len,
+			   char *addrs, size_t *addrs_len);
+
+/**
+ * Releases a shared or exclusive lock on an object, which was taken by the
+ * specified client.
+ *
+ * @param io the context to operate in
+ * @param o the name of the object
+ * @param name the name of the lock
+ * @param client the client currently holding the lock
+ * @param cookie user-defined identifier for the instance of the lock
+ * @returns 0 on success, negative error code on failure
+ * @returns -ENOENT if the lock is not held by the specified (client, cookie) pair
+ * @returns -EINVAL if the client cannot be parsed
+ */
+int rados_break_lock(rados_ioctx_t io, const char *o, const char *name,
+		     const char *client, const char *cookie);
+/**
+ * @defgroup librados_h_commands Mon/OSD/PG Commands
+ *
+ * These interfaces send commands relating to the monitor, OSD, or PGs.
+ *
+ * @{
+ */
+
+/**
+ * Send monitor command.
+ *
+ * @note Takes command string in carefully-formatted JSON; must match
+ * defined commands, types, etc.
+ *
+ * The result buffers are allocated on the heap; the caller is
+ * expected to release that memory with rados_buffer_free().  The
+ * buffer and length pointers can all be NULL, in which case they are
+ * not filled in.
+ *
+ * @param cluster cluster handle
+ * @param cmd an array of char *'s representing the command
+ * @param cmdlen count of valid entries in cmd
+ * @param inbuf any bulk input data (crush map, etc.)
+ * @param outbuf double pointer to output buffer
+ * @param outbuflen pointer to output buffer length
+ * @param outs double pointer to status string
+ * @param outslen pointer to status string length
+ * @returns 0 on success, negative error code on failure
+ */
+int rados_mon_command(rados_t cluster, const char **cmd, size_t cmdlen,
+		      const char *inbuf, size_t inbuflen,
+	       	      char **outbuf, size_t *outbuflen,
+		      char **outs, size_t *outslen);
+
+/**
+ * Send monitor command to a specific monitor.
+ *
+ * @note Takes command string in carefully-formatted JSON; must match
+ * defined commands, types, etc.
+ *
+ * The result buffers are allocated on the heap; the caller is
+ * expected to release that memory with rados_buffer_free().  The
+ * buffer and length pointers can all be NULL, in which case they are
+ * not filled in.
+ *
+ * @param cluster cluster handle
+ * @param name target monitor's name
+ * @param cmd an array of char *'s representing the command
+ * @param cmdlen count of valid entries in cmd
+ * @param inbuf any bulk input data (crush map, etc.)
+ * @param outbuf double pointer to output buffer
+ * @param outbuflen pointer to output buffer length
+ * @param outs double pointer to status string
+ * @param outslen pointer to status string length
+ * @returns 0 on success, negative error code on failure
+ */
+int rados_mon_command_target(rados_t cluster, const char *name,
+			     const char **cmd, size_t cmdlen,
+			     const char *inbuf, size_t inbuflen,
+			     char **outbuf, size_t *outbuflen,
+			     char **outs, size_t *outslen);
+
+/**
+ * free a rados-allocated buffer
+ *
+ * Release memory allocated by librados calls like rados_mon_command().
+ *
+ * @param buf buffer pointer
+ */
+void rados_buffer_free(char *buf);
+
+int rados_osd_command(rados_t cluster, int osdid, const char **cmd,
+		      size_t cmdlen,
+		      const char *inbuf, size_t inbuflen,
+		      char **outbuf, size_t *outbuflen,
+		      char **outs, size_t *outslen);
+
+int rados_pg_command(rados_t cluster, const char *pgstr, const char **cmd,
+		     size_t cmdlen,
+		     const char *inbuf, size_t inbuflen,
+		     char **outbuf, size_t *outbuflen,
+		     char **outs, size_t *outslen);
+
+/*
+ * This is not a doxygen comment leadin, because doxygen breaks on
+ * a typedef with function params and returns, and I can't figure out
+ * how to fix it.
+ *
+ * Monitor cluster log
+ *
+ * Monitor events logged to the cluster log.  The callback get each
+ * log entry both as a single formatted line and with each field in a
+ * separate arg.
+ *
+ * Calling with a cb argument of NULL will deregister any previously
+ * registered callback.
+ *
+ * @param cluster cluster handle
+ * @param level minimum log level (debug, info, warn|warning, err|error)
+ * @param cb callback to run for each log message
+ * @param arg void argument to pass to cb
+ *
+ * @returns 0 on success, negative code on error
+ */
+typedef void (*rados_log_callback_t)(void *arg,
+				     const char *line,
+				     const char *who, 
+				     uint64_t sec, uint64_t nsec,
+				     uint64_t seq, const char *level,
+				     const char *msg);
+
+int rados_monitor_log(rados_t cluster, const char *level, rados_log_callback_t cb, void *arg);
+
+/** @} Mon/OSD/PG commands */
 
 #ifdef __cplusplus
 }

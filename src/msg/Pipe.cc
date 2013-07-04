@@ -44,6 +44,7 @@ ostream& Pipe::_pipe_prefix(std::ostream *_dout) {
 		<< " pgs=" << peer_global_seq
 		<< " cs=" << connect_seq
 		<< " l=" << policy.lossy
+		<< " c=" << connection_state
 		<< ").";
 }
 
@@ -72,10 +73,10 @@ Pipe::Pipe(SimpleMessenger *r, int st, Connection *con)
     connect_seq(0), peer_global_seq(0),
     out_seq(0), in_seq(0), in_seq_acked(0) {
   if (con) {
-    connection_state = con->get();
+    connection_state = con;
     connection_state->reset_pipe(this);
   } else {
-    connection_state = new Connection();
+    connection_state = new Connection(msgr);
     connection_state->pipe = get();
   }
 
@@ -93,8 +94,6 @@ Pipe::~Pipe()
 {
   assert(out_q.empty());
   assert(sent.empty());
-  if (connection_state)
-    connection_state->put();
   delete session_security;
   delete delay_thread;
 }
@@ -217,86 +216,13 @@ int Pipe::accept()
   // my creater gave me sd via accept()
   assert(state == STATE_ACCEPTING);
   
-  // announce myself.
-  int rc = tcp_write(CEPH_BANNER, strlen(CEPH_BANNER));
-  if (rc < 0) {
-    ldout(msgr->cct,10) << "accept couldn't write banner" << dendl;
-    state = STATE_CLOSED;
-    state_closed.set(1);
-    return -1;
-  }
-
-  // and my addr
+  // vars
   bufferlist addrs;
-  ::encode(msgr->my_inst.addr, addrs);
-
-  port = msgr->my_inst.addr.get_port();
-
-  // and peer's socket addr (they might not know their ip)
   entity_addr_t socket_addr;
-  socklen_t len = sizeof(socket_addr.ss_addr());
-  int r = ::getpeername(sd, (sockaddr*)&socket_addr.ss_addr(), &len);
-  if (r < 0) {
-    char buf[80];
-    ldout(msgr->cct,0) << "accept failed to getpeername " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
-    state = STATE_CLOSED;
-    state_closed.set(1);
-    return -1;
-  }
-  ::encode(socket_addr, addrs);
-
-  rc = tcp_write(addrs.c_str(), addrs.length());
-  if (rc < 0) {
-    ldout(msgr->cct,10) << "accept couldn't write my+peer addr" << dendl;
-    state = STATE_CLOSED;
-    state_closed.set(1);
-    return -1;
-  }
-
-  ldout(msgr->cct,1) << "accept sd=" << sd << " " << socket_addr << dendl;
-  
-  // identify peer
+  socklen_t len;
+  int r;
   char banner[strlen(CEPH_BANNER)+1];
-  if (tcp_read(banner, strlen(CEPH_BANNER)) < 0) {
-    ldout(msgr->cct,10) << "accept couldn't read banner" << dendl;
-    state = STATE_CLOSED;
-    state_closed.set(1);
-    return -1;
-  }
-  if (memcmp(banner, CEPH_BANNER, strlen(CEPH_BANNER))) {
-    banner[strlen(CEPH_BANNER)] = 0;
-    ldout(msgr->cct,1) << "accept peer sent bad banner '" << banner << "' (should be '" << CEPH_BANNER << "')" << dendl;
-    state = STATE_CLOSED;
-    state_closed.set(1);
-    return -1;
-  }
   bufferlist addrbl;
-  {
-    bufferptr tp(sizeof(peer_addr));
-    addrbl.push_back(tp);
-  }
-  if (tcp_read(addrbl.c_str(), addrbl.length()) < 0) {
-    ldout(msgr->cct,10) << "accept couldn't read peer_addr" << dendl;
-    state = STATE_CLOSED;
-    state_closed.set(1);
-    return -1;
-  }
-  {
-    bufferlist::iterator ti = addrbl.begin();
-    ::decode(peer_addr, ti);
-  }
-
-  ldout(msgr->cct,10) << "accept peer addr is " << peer_addr << dendl;
-  if (peer_addr.is_blank_ip()) {
-    // peer apparently doesn't know what ip they have; figure it out for them.
-    int port = peer_addr.get_port();
-    peer_addr.addr = socket_addr.addr;
-    peer_addr.set_port(port);
-    ldout(msgr->cct,0) << "accept peer addr is really " << peer_addr
-	    << " (socket is " << socket_addr << ")" << dendl;
-  }
-  set_peer_addr(peer_addr);  // so that connection_state gets set up
-  
   ceph_msg_connect connect;
   ceph_msg_connect_reply reply;
   Pipe *existing = 0;
@@ -315,6 +241,70 @@ int Pipe::accept()
   // used for reading in the remote acked seq on connect
   uint64_t newly_acked_seq = 0;
 
+  // announce myself.
+  r = tcp_write(CEPH_BANNER, strlen(CEPH_BANNER));
+  if (r < 0) {
+    ldout(msgr->cct,10) << "accept couldn't write banner" << dendl;
+    goto fail_unlocked;
+  }
+
+  // and my addr
+  ::encode(msgr->my_inst.addr, addrs);
+
+  port = msgr->my_inst.addr.get_port();
+
+  // and peer's socket addr (they might not know their ip)
+  len = sizeof(socket_addr.ss_addr());
+  r = ::getpeername(sd, (sockaddr*)&socket_addr.ss_addr(), &len);
+  if (r < 0) {
+    char buf[80];
+    ldout(msgr->cct,0) << "accept failed to getpeername " << errno << " " << strerror_r(errno, buf, sizeof(buf)) << dendl;
+    goto fail_unlocked;
+  }
+  ::encode(socket_addr, addrs);
+
+  r = tcp_write(addrs.c_str(), addrs.length());
+  if (r < 0) {
+    ldout(msgr->cct,10) << "accept couldn't write my+peer addr" << dendl;
+    goto fail_unlocked;
+  }
+
+  ldout(msgr->cct,1) << "accept sd=" << sd << " " << socket_addr << dendl;
+  
+  // identify peer
+  if (tcp_read(banner, strlen(CEPH_BANNER)) < 0) {
+    ldout(msgr->cct,10) << "accept couldn't read banner" << dendl;
+    goto fail_unlocked;
+  }
+  if (memcmp(banner, CEPH_BANNER, strlen(CEPH_BANNER))) {
+    banner[strlen(CEPH_BANNER)] = 0;
+    ldout(msgr->cct,1) << "accept peer sent bad banner '" << banner << "' (should be '" << CEPH_BANNER << "')" << dendl;
+    goto fail_unlocked;
+  }
+  {
+    bufferptr tp(sizeof(peer_addr));
+    addrbl.push_back(tp);
+  }
+  if (tcp_read(addrbl.c_str(), addrbl.length()) < 0) {
+    ldout(msgr->cct,10) << "accept couldn't read peer_addr" << dendl;
+    goto fail_unlocked;
+  }
+  {
+    bufferlist::iterator ti = addrbl.begin();
+    ::decode(peer_addr, ti);
+  }
+
+  ldout(msgr->cct,10) << "accept peer addr is " << peer_addr << dendl;
+  if (peer_addr.is_blank_ip()) {
+    // peer apparently doesn't know what ip they have; figure it out for them.
+    int port = peer_addr.get_port();
+    peer_addr.addr = socket_addr.addr;
+    peer_addr.set_port(port);
+    ldout(msgr->cct,0) << "accept peer addr is really " << peer_addr
+	    << " (socket is " << socket_addr << ")" << dendl;
+  }
+  set_peer_addr(peer_addr);  // so that connection_state gets set up
+  
   while (1) {
     if (tcp_read((char*)&connect, sizeof(connect)) < 0) {
       ldout(msgr->cct,10) << "accept couldn't read connect" << dendl;
@@ -390,7 +380,7 @@ int Pipe::accept()
 
     // Check the authorizer.  If not good, bail out.
 
-    if (!msgr->verify_authorizer(connection_state, peer_type, connect.authorizer_protocol, authorizer, 
+    if (!msgr->verify_authorizer(connection_state.get(), peer_type, connect.authorizer_protocol, authorizer,
 				 authorizer_reply, authorizer_valid, session_key) ||
 	!authorizer_valid) {
       ldout(msgr->cct,0) << "accept: got bad authorizer" << dendl;
@@ -545,12 +535,12 @@ int Pipe::accept()
   reply:
     reply.features = ((uint64_t)connect.features & policy.features_supported) | policy.features_required;
     reply.authorizer_len = authorizer_reply.length();
-    rc = tcp_write((char*)&reply, sizeof(reply));
-    if (rc < 0)
+    r = tcp_write((char*)&reply, sizeof(reply));
+    if (r < 0)
       goto fail_unlocked;
     if (reply.authorizer_len) {
-      rc = tcp_write(authorizer_reply.c_str(), authorizer_reply.length());
-      if (rc < 0)
+      r = tcp_write(authorizer_reply.c_str(), authorizer_reply.length());
+      if (r < 0)
 	goto fail_unlocked;
     }
   }
@@ -565,15 +555,22 @@ int Pipe::accept()
   existing->unregister_pipe();
   replaced = true;
 
-  if (!existing->policy.lossy) {
+  if (existing->policy.lossy) {
+    // disconnect from the Connection
+    assert(existing->connection_state);
+    if (existing->connection_state->clear_pipe(existing))
+      msgr->dispatch_queue.queue_reset(existing->connection_state.get());
+  } else {
+    // queue a reset on the old connection
+    msgr->dispatch_queue.queue_reset(connection_state.get());
+
     // drop my Connection, and take a ref to the existing one. do not
     // clear existing->connection_state, since read_message and
     // write_message both dereference it without pipe_lock.
-    connection_state->put();
-    connection_state = existing->connection_state->get();
+    connection_state = existing->connection_state;
 
     // make existing Connection reference us
-    existing->connection_state->reset_pipe(this);
+    connection_state->reset_pipe(this);
 
     // flush/queue any existing delayed messages
     if (existing->delay_thread)
@@ -622,7 +619,7 @@ int Pipe::accept()
 					      connection_state->get_features());
 
   // notify
-  msgr->dispatch_queue.queue_accept(connection_state);
+  msgr->dispatch_queue.queue_accept(connection_state.get());
 
   // ok!
   if (msgr->dispatch_queue.stop)
@@ -630,20 +627,20 @@ int Pipe::accept()
   register_pipe();
   msgr->lock.Unlock();
 
-  rc = tcp_write((char*)&reply, sizeof(reply));
-  if (rc < 0) {
+  r = tcp_write((char*)&reply, sizeof(reply));
+  if (r < 0) {
     goto fail_registered;
   }
 
   if (reply.authorizer_len) {
-    rc = tcp_write(authorizer_reply.c_str(), authorizer_reply.length());
-    if (rc < 0) {
+    r = tcp_write(authorizer_reply.c_str(), authorizer_reply.length());
+    if (r < 0) {
       goto fail_registered;
     }
   }
 
   if (reply_tag == CEPH_MSGR_TAG_SEQ) {
-    if(tcp_write((char*)&existing_seq, sizeof(existing_seq)) < 0) {
+    if (tcp_write((char*)&existing_seq, sizeof(existing_seq)) < 0) {
       ldout(msgr->cct,2) << "accept write error on in_seq" << dendl;
       goto fail_registered;
     }
@@ -1041,7 +1038,7 @@ int Pipe::connect()
 	session_security = NULL;
       }
 
-      msgr->dispatch_queue.queue_connect(connection_state);
+      msgr->dispatch_queue.queue_connect(connection_state.get());
       
       if (!reader_running) {
 	ldout(msgr->cct,20) << "connect starting reader" << dendl;
@@ -1170,6 +1167,8 @@ void Pipe::fault(bool onread)
   if (state == STATE_CLOSED ||
       state == STATE_CLOSING) {
     ldout(msgr->cct,10) << "fault already closed|closing" << dendl;
+    if (connection_state->clear_pipe(this))
+      msgr->dispatch_queue.queue_reset(connection_state.get());
     return;
   }
 
@@ -1205,9 +1204,8 @@ void Pipe::fault(bool onread)
     // disconnect from Connection, and mark it failed.  future messages
     // will be dropped.
     assert(connection_state);
-    connection_state->clear_pipe(this);
-
-    msgr->dispatch_queue.queue_reset(connection_state);
+    if (connection_state->clear_pipe(this))
+      msgr->dispatch_queue.queue_reset(connection_state.get());
     return;
   }
 
@@ -1273,7 +1271,7 @@ void Pipe::was_session_reset()
     delay_thread->discard();
   discard_out_queue();
 
-  msgr->dispatch_queue.queue_remote_reset(connection_state);
+  msgr->dispatch_queue.queue_remote_reset(connection_state.get());
 
   if (randomize_out_seq()) {
     lsubdout(msgr->cct,ms,15) << "was_session_reset(): Could not get random bytes to set seq number for session reset; set seq number to " << out_seq << dendl;
@@ -1383,7 +1381,7 @@ void Pipe::reader()
 	continue;
       }
 
-      m->set_connection(connection_state->get());
+      m->set_connection(connection_state.get());
 
       // note last received message.
       in_seq = m->get_seq();
@@ -1516,7 +1514,7 @@ void Pipe::writer()
 	}
 
 	// associate message with Connection (for benefit of encode_payload)
-	m->set_connection(connection_state->get());
+	m->set_connection(connection_state.get());
 
         ldout(msgr->cct,20) << "writer encoding " << m->get_seq() << " " << m << " " << *m << dendl;
 

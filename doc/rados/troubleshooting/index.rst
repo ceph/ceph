@@ -14,5 +14,6 @@ Ceph community for help.
    log-and-debug
    troubleshooting-mon
    troubleshooting-osd
+   troubleshooting-pg
    memory-profiling
    cpu-profiling

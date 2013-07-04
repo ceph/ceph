@@ -24,7 +24,7 @@ Ceph Logs
 ---------
 
 If you haven't changed the default path, you can find Ceph log files at
-``/var/log/ceph``:: 
+``/var/log/ceph``::
 
 	ls /var/log/ceph
 
@@ -37,12 +37,12 @@ Admin Socket
 ------------
 
 Use the admin socket tool to retrieve runtime information. For details, list
-the sockets for your Ceph processes:: 
+the sockets for your Ceph processes::
 
 	ls /var/run/ceph
 
-Then, execute the following, replacing ``{socket-name}`` with an actual 
-socket name to show the list of available options:: 
+Then, execute the following, replacing ``{socket-name}`` with an actual
+socket name to show the list of available options::
 
 	ceph --admin-daemon /var/run/ceph/{socket-name} help
 
@@ -63,13 +63,13 @@ Filesystem issues may arise. To display your filesystem's free space, execute
 
 	df -h
 
-Execute ``df --help`` for additional usage. 
+Execute ``df --help`` for additional usage.
 
 
 I/O Statistics
 --------------
 
-Use `iostat`_ to identify I/O-related issues. :: 
+Use `iostat`_ to identify I/O-related issues. ::
 
 	iostat -x
 
@@ -78,7 +78,7 @@ Diagnostic Messages
 -------------------
 
 To retrieve diagnostic messages, use ``dmesg`` with ``less``, ``more``, ``grep``
-or ``tail``.  For example:: 
+or ``tail``.  For example::
 
 	dmesg | grep scsi
 
@@ -98,14 +98,14 @@ failure domain that requires maintenance work. ::
 
 	ceph osd stop osd.{num}
 
-.. note:: Placement groups within the OSDs you stop will become ``degraded`` 
-   while you are addressing issues with within the failure domain. 
+.. note:: Placement groups within the OSDs you stop will become ``degraded``
+   while you are addressing issues with within the failure domain.
 
 Once you have completed your maintenance, restart the OSDs. ::
 
 	ceph osd start osd.{num}
 
-Finally, you must unset the cluster from ``noout``. :: 
+Finally, you must unset the cluster from ``noout``. ::
 
 	ceph osd unset noout
 
@@ -124,25 +124,25 @@ An OSD Won't Start
 
 If you start your cluster and an OSD won't start, check the following:
 
-- **Configuration File:** If you were not able to get OSDs running from 
+- **Configuration File:** If you were not able to get OSDs running from
   a new installation, check your configuration file to ensure it conforms
-  (e.g., ``host`` not ``hostname``, etc.). 
+  (e.g., ``host`` not ``hostname``, etc.).
 
 - **Check Paths:** Check the paths in your configuration, and the actual
-  paths themselves for data and journals. If you separate the OSD data from 
-  the journal data and there are errors in your configuration file or in the 
-  actual mounts, you may have trouble starting OSDs. If you want to store the 
-  journal on a block device, you should partition your journal disk and assign 
+  paths themselves for data and journals. If you separate the OSD data from
+  the journal data and there are errors in your configuration file or in the
+  actual mounts, you may have trouble starting OSDs. If you want to store the
+  journal on a block device, you should partition your journal disk and assign
   one partition per OSD.
 
-- **Kernel Version:** Identify the kernel version and distribution you 
-  are using. Ceph uses some third party tools by default, which may be 
-  buggy or may conflict with certain distributions and/or kernel 
-  versions (e.g., Google perftools). Check the `OS recommendations`_ 
+- **Kernel Version:** Identify the kernel version and distribution you
+  are using. Ceph uses some third party tools by default, which may be
+  buggy or may conflict with certain distributions and/or kernel
+  versions (e.g., Google perftools). Check the `OS recommendations`_
   to ensure you have addressed any issues related to your kernel.
 
-- **Segment Fault:** If there is a segment fault, turn your logging up 
-  (if it isn't already), and try again. If it segment faults again, 
+- **Segment Fault:** If there is a segment fault, turn your logging up
+  (if it isn't already), and try again. If it segment faults again,
   contact the ceph-devel email list and provide your Ceph configuration
   file, your monitor output and the contents of your log file(s).
 
@@ -171,7 +171,7 @@ processes that are marked ``in`` and ``down``.  You can identify which
 If there is a disk
 failure or other fault preventing ``ceph-osd`` from functioning or
 restarting, an error message should be present in its log file in
-``/var/log/ceph``.  
+``/var/log/ceph``.
 
 If the daemon stopped because of a heartbeat failure, the underlying
 kernel file system may be unresponsive. Check ``dmesg`` output for disk
@@ -184,15 +184,15 @@ unexpected error), it should be reported to the `ceph-devel`_ email list.
 No Free Drive Space
 -------------------
 
-Ceph prevents you from writing to a full OSD so that you don't lose data. 
-In an operational cluster, you should receive a warning when your cluster 
-is getting near its full ratio. The ``mon osd full ratio`` defaults to 
-``0.95``, or 95% of capacity before it stops clients from writing data. 
-The ``mon osd nearfull ratio`` defaults to ``0.85``, or 85% of capacity 
+Ceph prevents you from writing to a full OSD so that you don't lose data.
+In an operational cluster, you should receive a warning when your cluster
+is getting near its full ratio. The ``mon osd full ratio`` defaults to
+``0.95``, or 95% of capacity before it stops clients from writing data.
+The ``mon osd nearfull ratio`` defaults to ``0.85``, or 85% of capacity
 when it generates a health warning.
 
-Full cluster issues usually arise when testing how Ceph handles an OSD 
-failure on a small cluster. When one node has a high percentage of the 
+Full cluster issues usually arise when testing how Ceph handles an OSD
+failure on a small cluster. When one node has a high percentage of the
 cluster's data, the cluster can easily eclipse its nearfull and full ratio
 immediately. If you are testing how Ceph reacts to OSD failures on a small
 cluster, you should leave ample free disk space and consider temporarily
@@ -217,11 +217,11 @@ the cluster to redistribute data to the newly available storage.
 If you cannot start an OSD because it is full, you may delete some data by deleting
 some placement group directories in the full OSD.
 
-.. important:: If you choose to delete a placement group directory on a full OSD, 
+.. important:: If you choose to delete a placement group directory on a full OSD,
    **DO NOT** delete the same placement group directory on another full OSD, or
    **YOU MAY LOSE DATA**. You **MUST** maintain at least one copy of your data on
    at least one OSD.
-   
+
 See `Monitor Config Reference`_ for additional details.
 
 
@@ -234,7 +234,7 @@ performance issues. For example, ensure that your network(s) is working properly
 and your OSDs are running. Check to see if OSDs are throttling recovery traffic.
 
 .. tip:: Newer versions of Ceph provide better recovery handling by preventing
-   recovering OSDs from using up system resources so that ``up`` and ``in`` 
+   recovering OSDs from using up system resources so that ``up`` and ``in``
    OSDs aren't available or are otherwise slow.
 
 
@@ -246,14 +246,14 @@ OSDs, replicate objects, recover from faults and check heartbeats. Networking
 issues can cause OSD latency and flapping OSDs. See `Flapping OSDs`_ for
 details.
 
-Ensure that Ceph processes and Ceph-dependent processes are connected and/or 
-listening. :: 
+Ensure that Ceph processes and Ceph-dependent processes are connected and/or
+listening. ::
 
 	netstat -a | grep ceph
 	netstat -l | grep ceph
 	sudo netstat -p | grep ceph
 
-Check network statistics. :: 
+Check network statistics. ::
 
 	netstat -s
 
@@ -263,7 +263,7 @@ Drive Configuration
 
 A storage drive should only support one OSD. Sequential read and sequential
 write throughput can bottleneck if other processes share the drive, including
-journals, operating systems, monitors, other OSDs and non-Ceph processes. 
+journals, operating systems, monitors, other OSDs and non-Ceph processes.
 
 Ceph acknowledges writes *after* journaling, so fast SSDs are an attractive
 option to accelerate the response time--particularly when using the ``ext4`` or
@@ -279,7 +279,7 @@ Bad Sectors / Fragmented Disk
 -----------------------------
 
 Check your disks for bad sectors and fragmentation. This can cause total throughput
-to drop substantially. 
+to drop substantially.
 
 
 Co-resident Monitors/OSDs
@@ -321,9 +321,9 @@ default path for logging (i.e., ``/var/log/ceph/$cluster-$name.log``).
 Recovery Throttling
 -------------------
 
-Depending upon your configuration, Ceph may reduce recovery rates to maintain 
-performance or it may increase recovery rates to the point that recovery 
-impacts OSD performance. Check to see if the OSD is recovering. 
+Depending upon your configuration, Ceph may reduce recovery rates to maintain
+performance or it may increase recovery rates to the point that recovery
+impacts OSD performance. Check to see if the OSD is recovering.
 
 
 Kernel Version
@@ -343,9 +343,9 @@ might not have a recent enough version of ``glibc`` to support ``syncfs(2)``.
 Filesystem Issues
 -----------------
 
-Currently, we recommend deploying clusters with XFS or ext4. The btrfs 
+Currently, we recommend deploying clusters with XFS or ext4. The btrfs
 filesystem has many attractive features, but bugs in the filesystem may
-lead to performance issues. 
+lead to performance issues.
 
 
 Insufficient RAM
@@ -356,7 +356,7 @@ operations, the OSD only uses a fraction of that amount (e.g., 100-200MB).
 Unused RAM makes it tempting to use the excess RAM for co-resident applications,
 VMs and so forth. However, when OSDs go into recovery mode, their memory
 utilization spikes. If there is no RAM available, the OSD performance will slow
-considerably. 
+considerably.
 
 
 Old Requests or Slow Requests
@@ -365,13 +365,13 @@ Old Requests or Slow Requests
 If a ``ceph-osd`` daemon is slow to respond to a request, it will generate log messages
 complaining about requests that are taking too long.  The warning threshold
 defaults to 30 seconds, and is configurable via the ``osd op complaint time``
-option.  When this happens, the cluster log will receive messages. 
+option.  When this happens, the cluster log will receive messages.
 
 Legacy versions of Ceph complain about 'old requests`::
 
 	osd.0 192.168.106.220:6800/18813 312 : [WRN] old request osd_op(client.5099.0:790 fatty_26485_object789 [write 0~4096] 2.5e54f643) v4 received at 2012-03-06 15:42:56.054801 currently waiting for sub ops
 
-New versions of Ceph complain about 'slow requests`:: 
+New versions of Ceph complain about 'slow requests`::
 
 	{date} {osd.num} [WRN] 1 slow requests, 1 included below; oldest blocked for > 30.005692 secs
 	{date} {osd.num}  [WRN] slow request 30.005692 seconds old, received at {date-time}: osd_op(client.4240.0:8 benchmark_data_ceph-1_39426_object7 [write 0~4194304] 0.69848840) v4 currently waiting for subops from [610]
@@ -450,8 +450,8 @@ current value for ``mon osd down out interval`` is).
 .. _monitoring your OSDs: ../../operations/monitoring-osd-pg
 .. _subscribe to the ceph-devel email list: mailto:majordomo@vger.kernel.org?body=subscribe+ceph-devel
 .. _unsubscribe from the ceph-devel email list: mailto:majordomo@vger.kernel.org?body=unsubscribe+ceph-devel
-.. _subscribe to the ceph-users email list: mailto:majordomo@vger.kernel.org?body=subscribe+ceph-users
-.. _unsubscribe from the ceph-users email list: mailto:majordomo@vger.kernel.org?body=unsubscribe+ceph-users
+.. _subscribe to the ceph-users email list: mailto:ceph-users-join@lists.ceph.com
+.. _unsubscribe from the ceph-users email list: mailto:ceph-users-leave@lists.ceph.com
 .. _Inktank: http://inktank.com
 .. _OS recommendations: ../../../install/os-recommendations
 .. _ceph-devel: ceph-devel@vger.kernel.org

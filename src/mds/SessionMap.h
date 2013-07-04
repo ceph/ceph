@@ -84,7 +84,7 @@ private:
 public:
   session_info_t info;                         ///< durable bits
 
-  Connection *connection;
+  ConnectionRef connection;
   xlist<Session*>::item item_session_list;
 
   list<Message*> preopen_out_queue;  ///< messages for client, queued before they connect

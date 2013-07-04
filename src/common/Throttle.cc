@@ -1,3 +1,7 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
+#include <errno.h>
 
 #include "common/Throttle.h"
 #include "common/dout.h"
@@ -204,4 +208,44 @@ int64_t Throttle::put(int64_t c)
     }
   }
   return count.read();
+}
+
+SimpleThrottle::SimpleThrottle(uint64_t max, bool ignore_enoent)
+  : m_lock("SimpleThrottle"),
+    m_max(max),
+    m_current(0),
+    m_ret(0),
+    m_ignore_enoent(ignore_enoent)
+{
+}
+
+SimpleThrottle::~SimpleThrottle()
+{
+  Mutex::Locker l(m_lock);
+  assert(m_current == 0);
+}
+
+void SimpleThrottle::start_op()
+{
+  Mutex::Locker l(m_lock);
+  while (m_max == m_current)
+    m_cond.Wait(m_lock);
+  ++m_current;
+}
+
+void SimpleThrottle::end_op(int r)
+{
+  Mutex::Locker l(m_lock);
+  --m_current;
+  if (r < 0 && !m_ret && !(r == -ENOENT && m_ignore_enoent))
+    m_ret = r;
+  m_cond.Signal();
+}
+
+int SimpleThrottle::wait_for_ret()
+{
+  Mutex::Locker l(m_lock);
+  while (m_current > 0)
+    m_cond.Wait(m_lock);
+  return m_ret;
 }

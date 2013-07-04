@@ -119,10 +119,30 @@ bool ceph_resolve_file_search(const std::string& filename_list,
 md_config_t::md_config_t()
   : cluster("ceph"),
 
-#define OPTION(name, type, def_val) name(def_val),
+#define OPTION_OPT_INT(name, def_val) name(def_val),
+#define OPTION_OPT_LONGLONG(name, def_val) name((1LL) * def_val),
+#define OPTION_OPT_STR(name, def_val) name(def_val),
+#define OPTION_OPT_DOUBLE(name, def_val) name(def_val),
+#define OPTION_OPT_FLOAT(name, def_val) name(def_val),
+#define OPTION_OPT_BOOL(name, def_val) name(def_val),
+#define OPTION_OPT_ADDR(name, def_val) name(def_val),
+#define OPTION_OPT_U32(name, def_val) name(def_val),
+#define OPTION_OPT_U64(name, def_val) name(((uint64_t)1) * def_val),
+#define OPTION_OPT_UUID(name, def_val) name(def_val),
+#define OPTION(name, type, def_val) OPTION_##type(name, def_val)
 #define SUBSYS(name, log, gather)
 #define DEFAULT_SUBSYS(log, gather)
 #include "common/config_opts.h"
+#undef OPTION_OPT_INT
+#undef OPTION_OPT_LONGLONG
+#undef OPTION_OPT_STR
+#undef OPTION_OPT_DOUBLE
+#undef OPTION_OPT_FLOAT
+#undef OPTION_OPT_BOOL
+#undef OPTION_OPT_ADDR
+#undef OPTION_OPT_U32
+#undef OPTION_OPT_U64
+#undef OPTION_OPT_UUID
 #undef OPTION
 #undef SUBSYS
 #undef DEFAULT_SUBSYS
