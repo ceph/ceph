@@ -22,22 +22,22 @@ records.
 From snap
 ---------
 
-u8: 'f'
-le32: snap name length
-snap name
+- u8: 'f'
+- le32: snap name length
+- snap name
 
 To snap
 -------
 
-u8: 't'
-le32: snap name length
-snap name
+- u8: 't'
+- le32: snap name length
+- snap name
 
 Size
 ----
 
-u8: 's'
-u64: (ending) image size
+- u8: 's'
+- u64: (ending) image size
 
 Data Records
 ~~~~~~~~~~~~
@@ -47,17 +47,17 @@ These records come in the second part of the sequence.
 Updated data
 ------------
 
-u8: 'w'
-le64: offset
-le64: length
-length bytes of actual data
+- u8: 'w'
+- le64: offset
+- le64: length
+- length bytes of actual data
 
 Zero data
 ---------
 
-u8: 'z'
-le64: offset
-le64: length
+- u8: 'z'
+- le64: offset
+- le64: length
 
 
 Final Record
@@ -66,9 +66,4 @@ Final Record
 End
 ---
 
-u8: 'e'
-
-
-
-
-
+- u8: 'e'

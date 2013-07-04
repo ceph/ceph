@@ -59,6 +59,9 @@ public:
    * the struct_v in the encode function!
    */
   struct fullbit {
+    static const int STATE_DIRTY =	 (1<<0);
+    static const int STATE_DIRTYPARENT = (1<<1);
+    static const int STATE_DIRTYPOOL   = (1<<2);
     string  dn;         // dentry
     snapid_t dnfirst, dnlast;
     version_t dnv;
@@ -67,7 +70,7 @@ public:
     map<string,bufferptr> xattrs;
     string symlink;
     bufferlist snapbl;
-    bool dirty;
+    __u8 state;
     typedef map<snapid_t, old_inode_t> old_inodes_t;
     old_inodes_t old_inodes;
 
@@ -79,7 +82,7 @@ public:
     fullbit(const string& d, snapid_t df, snapid_t dl, 
 	    version_t v, const inode_t& i, const fragtree_t &dft, 
 	    const map<string,bufferptr> &xa, const string& sym,
-	    const bufferlist &sbl, bool dr,
+	    const bufferlist &sbl, __u8 st,
 	    const old_inodes_t *oi = NULL) :
       //dn(d), dnfirst(df), dnlast(dl), dnv(v), 
       //inode(i), dirfragtree(dft), xattrs(xa), symlink(sym), snapbl(sbl), dirty(dr) 
@@ -97,7 +100,7 @@ public:
 	::encode(dft, _enc);
 	::encode(sbl, _enc);
       }
-      ::encode(dr, _enc);      
+      ::encode(st, _enc);
       ::encode(oi ? true : false, _enc);
       if (oi)
 	::encode(*oi, _enc);
@@ -114,11 +117,28 @@ public:
     static void generate_test_instances(list<EMetaBlob::fullbit*>& ls);
 
     void update_inode(MDS *mds, CInode *in);
+    bool is_dirty() const { return (state & STATE_DIRTY); }
+    bool is_dirty_parent() const { return (state & STATE_DIRTYPARENT); }
+    bool is_dirty_pool() const { return (state & STATE_DIRTYPOOL); }
 
     void print(ostream& out) const {
       out << " fullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " inode " << inode.ino
-	  << " dirty=" << dirty << std::endl;
+	  << " state=" << state << std::endl;
+    }
+    string state_string() const {
+      string state_string;
+      bool marked_already = false;
+      if (is_dirty()) {
+	state_string.append("dirty");
+	marked_already = true;
+      }
+      if (is_dirty_parent()) {
+	state_string.append(marked_already ? "+dirty_parent" : "dirty_parent");
+	if (is_dirty_pool())
+	  state_string.append("+dirty_pool");
+      }
+      return state_string;
     }
   };
   WRITE_CLASS_ENCODER(fullbit)
@@ -318,9 +338,6 @@ private:
   // idempotent op(s)
   list<pair<metareqid_t,uint64_t> > client_reqs;
 
-  int64_t old_pool;
-  bool update_bt;
-
  public:
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
@@ -414,11 +431,15 @@ private:
   }
 
   // return remote pointer to to-be-journaled inode
-  void add_primary_dentry(CDentry *dn, bool dirty, CInode *in=0) {
-    add_primary_dentry(add_dir(dn->get_dir(), false),
-		       dn, dirty, in);
+  void add_primary_dentry(CDentry *dn, CInode *in, bool dirty,
+			  bool dirty_parent=false, bool dirty_pool=false) {
+    __u8 state = 0;
+    if (dirty) state |= fullbit::STATE_DIRTY;
+    if (dirty_parent) state |= fullbit::STATE_DIRTYPARENT;
+    if (dirty_pool) state |= fullbit::STATE_DIRTYPOOL;
+    add_primary_dentry(add_dir(dn->get_dir(), false), dn, in, state);
   }
-  void add_primary_dentry(dirlump& lump, CDentry *dn, bool dirty, CInode *in=0) {
+  void add_primary_dentry(dirlump& lump, CDentry *dn, CInode *in, __u8 state) {
     if (!in) 
       in = dn->get_projected_linkage()->get_inode();
 
@@ -439,16 +460,26 @@ private:
 									 *pi, in->dirfragtree,
 									 *in->get_projected_xattrs(),
 									 in->symlink, snapbl,
-									 dirty,
+									 state,
 									 &in->old_inodes)));
   }
 
   // convenience: primary or remote?  figure it out.
   void add_dentry(CDentry *dn, bool dirty) {
     dirlump& lump = add_dir(dn->get_dir(), false);
-    add_dentry(lump, dn, dirty);
+    add_dentry(lump, dn, dirty, false, false);
   }
-  void add_dentry(dirlump& lump, CDentry *dn, bool dirty) {
+  void add_import_dentry(CDentry *dn) {
+    bool dirty_parent = false;
+    bool dirty_pool = false;
+    if (dn->get_linkage()->is_primary()) {
+      dirty_parent = dn->get_linkage()->get_inode()->is_dirty_parent();
+      dirty_pool = dn->get_linkage()->get_inode()->is_dirty_pool();
+    }
+    dirlump& lump = add_dir(dn->get_dir(), false);
+    add_dentry(lump, dn, dn->is_dirty(), dirty_parent, dirty_pool);
+  }
+  void add_dentry(dirlump& lump, CDentry *dn, bool dirty, bool dirty_parent, bool dirty_pool) {
     // primary or remote
     if (dn->get_projected_linkage()->is_remote()) {
       add_remote_dentry(dn, dirty);
@@ -458,7 +489,7 @@ private:
       return;
     }
     assert(dn->get_projected_linkage()->is_primary());
-    add_primary_dentry(dn, dirty);
+    add_primary_dentry(dn, 0, dirty, dirty_parent, dirty_pool);
   }
 
   void add_root(bool dirty, CInode *in, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
@@ -484,9 +515,9 @@ private:
     }
 
     string empty;
-    roots.push_back(std::tr1::shared_ptr<fullbit>(new fullbit(empty, in->first, in->last,
-							      0, *pi, *pdft, *px, in->symlink,
-							      snapbl, dirty,
+    roots.push_back(std::tr1::shared_ptr<fullbit>(new fullbit(empty, in->first, in->last, 0, *pi,
+							      *pdft, *px, in->symlink, snapbl,
+							      dirty ? fullbit::STATE_DIRTY : 0,
 							      &in->old_inodes)));
   }
   
@@ -522,13 +553,6 @@ private:
   static const int TO_ROOT = 1;
   
   void add_dir_context(CDir *dir, int mode = TO_AUTH_SUBTREE_ROOT);
- 
-  void add_old_pool(int64_t pool) {
-    old_pool = pool;
-  }
-  void update_backtrace() {
-    update_bt = true;
-  }
 
   void print(ostream& out) const {
     out << "[metablob";

@@ -16,15 +16,13 @@
 #include <stdlib.h>
 #include <limits.h>
 
-#include <boost/intrusive_ptr.hpp>
-#include "include/assert.h"
-
 #include "mon/Monitor.h"
 #include "mon/QuorumService.h"
 #include "mon/ConfigKeyService.h"
 #include "mon/MonitorDBStore.h"
 
 #include "common/config.h"
+#include "common/cmdparse.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -103,33 +101,33 @@ bool ConfigKeyService::service_dispatch(Message *m)
   MMonCommand *cmd = static_cast<MMonCommand*>(m);
 
   assert(!cmd->cmd.empty());
-  assert(cmd->cmd[0] == "config-key");
 
   int ret = 0;
   stringstream ss;
   bufferlist rdata;
 
-  if (cmd->cmd.size() < 2) {
+  string prefix;
+  map<string, cmd_vartype> cmdmap;
+
+  if (!cmdmap_from_json(cmd->cmd, &cmdmap, ss)) {
     ret = -EINVAL;
-    ss << "usage: config-key <get|put|list|exists|delete> [<key>]";
-    goto out;
+    return false;
   }
 
-  if (cmd->cmd[1] == "get") {
-    if (cmd->cmd.size() != 3) {
-      ret = -EINVAL;
-      ss << "usage: config-key get <key> -o <file>";
-      goto out;
-    }
-    ret = store_get(cmd->cmd[2], rdata);
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  string key;
+  cmd_getval(g_ceph_context, cmdmap, "key", key);
+
+  if (prefix == "config-key get") {
+    ret = store_get(key, rdata);
     if (ret < 0) {
       assert(!rdata.length());
-      ss << "error obtaining '" << cmd->cmd[2] << "': "
-         << cpp_strerror(ret);
+      ss << "error obtaining '" << key << "': " << cpp_strerror(ret);
       goto out;
     }
-    ss << "obtained '" << cmd->cmd[2] << "'";
-  } else if (cmd->cmd[1] == "put") {
+    ss << "obtained '" << key << "'";
+
+  } else if (prefix == "config-key put") {
     if (!mon->is_leader()) {
       mon->forward_request_leader(cmd);
       // we forward the message; so return now.
@@ -137,13 +135,10 @@ bool ConfigKeyService::service_dispatch(Message *m)
     }
 
     bufferlist data;
-    if (cmd->cmd.size() < 3 || cmd->cmd.size() > 4) {
-      ret = -EINVAL;
-      ss << "usage: store put <key> [-i <file>|<value>]";
-      goto out;
-    } else if (cmd->cmd.size() == 4) {
+    string val;
+    if (cmd_getval(g_ceph_context, cmdmap, "val", val)) {
       // they specified a value in the command instead of a file
-      data.append(cmd->cmd[3]);
+      data.append(val);
     } else if (cmd->get_data_len() > 0) {
       // they specified '-i <file>'
       data = cmd->get_data();
@@ -156,38 +151,29 @@ bool ConfigKeyService::service_dispatch(Message *m)
       goto out;
     }
     // we'll reply to the message once the proposal has been handled
-    store_put(cmd->cmd[2], data,
+    store_put(key, data,
         new Monitor::C_Command(mon, cmd, 0, "value stored", 0));
     // return for now; we'll put the message once it's done.
     return true;
-  } else if (cmd->cmd[1] == "delete") {
+
+  } else if (prefix == "config-key del") {
     if (!mon->is_leader()) {
       mon->forward_request_leader(cmd);
       return true;
     }
 
-    if (cmd->cmd.size() != 3) {
-      ret = -EINVAL;
-      ss << "usage: config-key delete <key>";
-      goto out;
-    }
-    if (!store_exists(cmd->cmd[2])) {
+    if (!store_exists(key)) {
       ret = 0;
-      ss << "no such key '" << cmd->cmd[2] << "'";
+      ss << "no such key '" << key << "'";
       goto out;
     }
-    store_delete(cmd->cmd[2],
-        new Monitor::C_Command(mon, cmd, 0, "key deleted", 0));
+    store_delete(key, new Monitor::C_Command(mon, cmd, 0, "key deleted", 0));
     // return for now; we'll put the message once it's done
     return true;
-  } else if (cmd->cmd[1] == "exists") {
-    if (cmd->cmd.size() != 3) {
-      ret = -EINVAL;
-      ss << "usage: config-key exists <key>";
-      goto out;
-    }
-    bool exists = store_exists(cmd->cmd[2]);
-    ss << "key '" << cmd->cmd[2] << "'";
+
+  } else if (prefix == "config-key exists") {
+    bool exists = store_exists(key);
+    ss << "key '" << key << "'";
     if (exists) {
       ss << " exists";
       ret = 0;
@@ -195,12 +181,8 @@ bool ConfigKeyService::service_dispatch(Message *m)
       ss << " doesn't exist";
       ret = -ENOENT;
     }
-  } else if (cmd->cmd[1] == "list") {
-    if (cmd->cmd.size() > 2) {
-      ret = -EINVAL;
-      ss << "usage: config-key list";
-      goto out;
-    }
+
+  } else if (prefix == "config-key list") {
     stringstream tmp_ss;
     store_list(tmp_ss);
     rdata.append(tmp_ss);

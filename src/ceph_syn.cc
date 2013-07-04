@@ -51,7 +51,7 @@ int main(int argc, const char **argv, char *envp[])
 
   parse_syn_options(args);   // for SyntheticClient
 
-  pick_addresses(g_ceph_context);
+  pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 
   // get monmap
   MonClient mc(g_ceph_context);

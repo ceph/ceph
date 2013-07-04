@@ -74,6 +74,8 @@ function setup() {
 	NAMES_DIR=$(mktemp -d /tmp/image_names.XXXXXX)
 	SOURCE_DATA=$(mktemp /tmp/source_data.XXXXXX)
 
+	[ -d /sys/bus/rbd ] || sudo modprobe rbd
+
 	# This assumes it's easier to read a file than generate
 	# random data.  Use busybox because it is a big executable.
 	dd if="/bin/busybox" of="{SOURCE_DATA}" bs=2048 count=66 \

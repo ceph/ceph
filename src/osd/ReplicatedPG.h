@@ -452,6 +452,10 @@ protected:
   map<hobject_t, map<client_t, tid_t> > debug_op_order;
 
   void populate_obc_watchers(ObjectContext *obc);
+  void check_blacklisted_obc_watchers(ObjectContext *);
+  void check_blacklisted_watchers();
+  void get_watchers(list<obj_watch_item_t> &pg_watchers);
+  void get_obc_watchers(ObjectContext *obc, list<obj_watch_item_t> &pg_watchers);
 public:
   void handle_watch_timeout(WatchRef watch);
 protected:
@@ -680,7 +684,7 @@ protected:
 			 const hobject_t &last_backfill,
 			 interval_set<uint64_t>& data_subset,
 			 map<hobject_t, interval_set<uint64_t> >& clone_subsets);
-  void calc_clone_subsets(SnapSet& snapset, const hobject_t& poid, pg_missing_t& missing,
+  void calc_clone_subsets(SnapSet& snapset, const hobject_t& poid, const pg_missing_t& missing,
 			  const hobject_t &last_backfill,
 			  interval_set<uint64_t>& data_subset,
 			  map<hobject_t, interval_set<uint64_t> >& clone_subsets);

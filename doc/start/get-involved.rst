@@ -16,19 +16,26 @@ These are exciting times in the Ceph community! Get involved!
 |                 | IRC channel particularly during daytime hours   |                                               |
 |                 | in the US Pacific Standard Time zone.           |                                               |
 +-----------------+-------------------------------------------------+-----------------------------------------------+
-| **Email List**  | Keep in touch with developer activity by        |                                               |
-|                 | subscribing_ to the email list at               | - Subscribe_                                  |
-|                 | ceph-devel@vger.kernel.org. You can opt out of  | - Unsubscribe_                                |
-|                 | the email list at any time by unsubscribing_.   | - Gmane_                                      |
+| **User List**   | Ask and answer user-related questions by        |                                               |
+|                 | subscribing to the email list at                | - `User Subscribe`_                           |
+|                 | ceph-users@ceph.com. You can opt out of         | - `User Unsubscribe`_                         |
+|                 | the email list at any time by unsubscribing.    | - `Gmane for Users`_                          |
 |                 | A simple email is all it takes! If you would    |                                               |
-|                 | like to view the archives, go to Gmane_.        |                                               |
+|                 | like to view the archives, go to Gmane.         |                                               |
 +-----------------+-------------------------------------------------+-----------------------------------------------+
-| **Bug Tracker** | You can help keep Ceph production worthy by     | http://tracker.newdream.net/projects/ceph     |
+| **Devel List**  | Keep in touch with developer activity by        |                                               |
+|                 | subscribing to the email list at                | - `Devel Subscribe`_                          |
+|                 | ceph-devel@vger.kernel.org. You can opt out of  | - `Devel Unsubscribe`_                        |
+|                 | the email list at any time by unsubscribing.    | - `Gmane for Developers`_                     |
+|                 | A simple email is all it takes! If you would    |                                               |
+|                 | like to view the archives, go to Gmane.         |                                               |
++-----------------+-------------------------------------------------+-----------------------------------------------+
+| **Bug Tracker** | You can help keep Ceph production worthy by     | http://tracker.ceph.com/projects/ceph         |
 |                 | filing and tracking bugs, and providing feature |                                               |
 |                 | requests using the Bug Tracker_.                |                                               |
 +-----------------+-------------------------------------------------+-----------------------------------------------+
 | **Source Code** | If you would like to participate in             |                                               |
-|                 | development, bug fixing, or if you just want    | - http://github.com:ceph/ceph                 |
+|                 | development, bug fixing, or if you just want    | - http://github.com/ceph/ceph                 |
 |                 | the very latest code for Ceph, you can get it   | - http://ceph.com/download                    |
 |                 | at http://github.com. See `Ceph Source Code`_   |                                               |
 |                 | for details on cloning from github.             |                                               |
@@ -40,12 +47,13 @@ These are exciting times in the Ceph community! Get involved!
 
 
 
-.. _Subscribe: mailto:majordomo@vger.kernel.org?body=subscribe+ceph-devel
-.. _Unsubscribe: mailto:majordomo@vger.kernel.org?body=unsubscribe+ceph-devel
-.. _subscribing: mailto:majordomo@vger.kernel.org?body=subscribe+ceph-devel
-.. _unsubscribing: mailto:majordomo@vger.kernel.org?body=unsubscribe+ceph-devel
-.. _Gmane: http://news.gmane.org/gmane.comp.file-systems.ceph.devel
-.. _Tracker: http://tracker.newdream.net/projects/ceph
+.. _Devel Subscribe: mailto:majordomo@vger.kernel.org?body=subscribe+ceph-devel
+.. _Devel Unsubscribe: mailto:majordomo@vger.kernel.org?body=unsubscribe+ceph-devel
+.. _User Subscribe: mailto:ceph-users-join@lists.ceph.com
+.. _User Unsubscribe: mailto:ceph-users-leave@lists.ceph.com
+.. _Gmane for Developers: http://news.gmane.org/gmane.comp.file-systems.ceph.devel
+.. _Gmane for Users: http://news.gmane.org/gmane.comp.file-systems.ceph.user
 .. _Blog: http://ceph.com/community/blog/
-.. _support: http://inktank.com
-.. _Ceph Source Code: ../../source/
+.. _Tracker: http://tracker.ceph.com/
+.. _Support: http://ceph.com/help/professional/
+.. _Ceph Source Code: http://github.com/ceph/ceph

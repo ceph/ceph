@@ -2,7 +2,13 @@
 ACTION=="add", SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-062c0ceff05d", \
-  RUN+="/usr/sbin/ceph-disk-activate --mount /dev/$name"
+  RUN+="/usr/sbin/ceph-disk-activate /dev/$name"
+
+# activate ceph-tagged partitions
+ACTION=="add", SUBSYSTEM=="block", \
+  ENV{DEVTYPE}=="partition", \
+  ENV{ID_PART_ENTRY_TYPE}=="45b0969e-9b03-4f30-b4c6-b4b80ceff106", \
+  RUN+="/usr/sbin/ceph-disk activate-journal /dev/$name"
 
 # Map journal if using dm-crypt
 ACTION=="add" SUBSYSTEM=="block", \
@@ -18,4 +24,4 @@ ACTION=="add" SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-5ec00ceff05d", \
   RUN+="/sbin/cryptsetup --key-file /etc/ceph/dmcrypt-keys/$env{ID_PART_ENTRY_UUID} --key-size 256 create $env{ID_PART_ENTRY_UUID} /dev/$name", \
   RUN+="/bin/bash -c 'while [ ! -e /dev/mapper/$env{ID_PART_ENTRY_UUID} ];do sleep 1; done'", \
-  RUN+="/usr/sbin/ceph-disk-activate --mount /dev/mapper/$env{ID_PART_ENTRY_UUID}"
+  RUN+="/usr/sbin/ceph-disk-activate /dev/mapper/$env{ID_PART_ENTRY_UUID}"

@@ -26,7 +26,6 @@ using namespace std;
 struct req_state;
 class RGWHandler;
 
-
 /**
  * Provide the base class for all ops.
  */
@@ -47,10 +46,13 @@ public:
   virtual int verify_params() { return 0; }
   virtual bool prefetch_data() { return false; }
   virtual int verify_permission() = 0;
+  virtual int verify_op_mask();
   virtual void execute() = 0;
   virtual void send_response() {}
   virtual void complete() { send_response(); }
   virtual const char *name() = 0;
+
+  virtual uint32_t op_mask() { return 0; }
 };
 
 class RGWGetObj : public RGWOp {
@@ -116,6 +118,7 @@ public:
   virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len) = 0;
 
   virtual const char *name() { return "get_obj"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
 #define RGW_LIST_BUCKETS_LIMIT_MAX 10000
@@ -145,6 +148,7 @@ public:
   virtual bool should_get_stats() { return false; }
 
   virtual const char *name() { return "list_buckets"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
 class RGWStatAccount : public RGWOp {
@@ -169,6 +173,7 @@ public:
 
   virtual void send_response() = 0;
   virtual const char *name() { return "stat_account"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
 class RGWListBucket : public RGWOp {
@@ -200,6 +205,7 @@ public:
   virtual int get_params() = 0;
   virtual void send_response() = 0;
   virtual const char *name() { return "list_bucket"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
 class RGWGetBucketLogging : public RGWOp {
@@ -210,6 +216,7 @@ public:
 
   virtual void send_response() = 0;
   virtual const char *name() { return "get_bucket_logging"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
 class RGWStatBucket : public RGWOp {
@@ -226,6 +233,7 @@ public:
 
   virtual void send_response() = 0;
   virtual const char *name() { return "stat_bucket"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
 class RGWCreateBucket : public RGWOp {
@@ -250,6 +258,7 @@ public:
   virtual int get_params() { return 0; }
   virtual void send_response() = 0;
   virtual const char *name() { return "create_bucket"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
 class RGWDeleteBucket : public RGWOp {
@@ -266,6 +275,7 @@ public:
 
   virtual void send_response() = 0;
   virtual const char *name() { return "delete_bucket"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
 };
 
 class RGWPutObj : public RGWOp {
@@ -309,6 +319,7 @@ public:
   virtual int get_data(bufferlist& bl) = 0;
   virtual void send_response() = 0;
   virtual const char *name() { return "put_obj"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
 class RGWPostObj : public RGWOp {
@@ -350,6 +361,7 @@ public:
   virtual int get_data(bufferlist& bl) = 0;
   virtual void send_response() = 0;
   virtual const char *name() { return "post_obj"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
 class RGWPutMetadata : public RGWOp {
@@ -377,6 +389,7 @@ public:
   virtual int get_params() = 0;
   virtual void send_response() = 0;
   virtual const char *name() { return "put_obj_metadata"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
 class RGWDeleteObj : public RGWOp {
@@ -391,6 +404,7 @@ public:
 
   virtual void send_response() = 0;
   virtual const char *name() { return "delete_obj"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
 };
 
 class RGWCopyObj : public RGWOp {
@@ -458,6 +472,7 @@ public:
   virtual int get_params() = 0;
   virtual void send_response() = 0;
   virtual const char *name() { return "copy_obj"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
 class RGWGetACLs : public RGWOp {
@@ -473,6 +488,7 @@ public:
 
   virtual void send_response() = 0;
   virtual const char *name() { return "get_acls"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
 class RGWPutACLs : public RGWOp {
@@ -498,6 +514,7 @@ public:
   virtual int get_params() = 0;
   virtual void send_response() = 0;
   virtual const char *name() { return "put_acls"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
 class RGWGetCORS : public RGWOp {
@@ -513,6 +530,7 @@ public:
 
   virtual void send_response() = 0;
   virtual const char *name() { return "get_cors"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
 class RGWPutCORS : public RGWOp {
@@ -537,6 +555,7 @@ public:
   virtual int get_params() = 0;
   virtual void send_response() = 0;
   virtual const char *name() { return "put_cors"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
 class RGWDeleteCORS : public RGWOp {
@@ -551,6 +570,7 @@ public:
 
   virtual void send_response() = 0;
   virtual const char *name() { return "delete_cors"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
 class RGWOptionsCORS : public RGWOp {
@@ -570,6 +590,7 @@ public:
   void get_response_params(string& allowed_hdrs, string& exp_hdrs, unsigned *max_age);
   virtual void send_response() = 0;
   virtual const char *name() { return "options_cors"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
 class RGWInitMultipart : public RGWOp {
@@ -593,6 +614,7 @@ public:
   virtual int get_params() = 0;
   virtual void send_response() = 0;
   virtual const char *name() { return "init_multipart"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
 class RGWCompleteMultipart : public RGWOp {
@@ -621,6 +643,7 @@ public:
   virtual int get_params() = 0;
   virtual void send_response() = 0;
   virtual const char *name() { return "complete_multipart"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
 class RGWAbortMultipart : public RGWOp {
@@ -635,6 +658,7 @@ public:
 
   virtual void send_response() = 0;
   virtual const char *name() { return "abort_multipart"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
 };
 
 class RGWListMultipart : public RGWOp {
@@ -663,6 +687,7 @@ public:
   virtual int get_params() = 0;
   virtual void send_response() = 0;
   virtual const char *name() { return "list_multipart"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
 #define MP_META_SUFFIX ".meta"
@@ -765,6 +790,7 @@ public:
   virtual int get_params() = 0;
   virtual void send_response() = 0;
   virtual const char *name() { return "list_bucket_multiparts"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
 class RGWDeleteMultiObj : public RGWOp {
@@ -797,6 +823,7 @@ public:
   virtual void send_partial_response(pair<string,int>& result) = 0;
   virtual void end_response() = 0;
   virtual const char *name() { return "multi_object_delete"; }
+  virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
 };
 
 

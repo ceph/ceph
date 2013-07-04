@@ -7,33 +7,33 @@
 Thank you for trying Ceph! Petabyte-scale data clusters are quite an
 undertaking. Before delving deeper into Ceph, we recommend setting up a two-node
 demo cluster to explore some of the functionality. This **Preflight Checklist**
-will help you prepare an admin host and a server host for use with
+will help you prepare an admin node and a server node for use with
 ``ceph-deploy``.
 
 .. ditaa:: 
            /----------------\         /----------------\
-           |   Admin Host   |<------->|   Server Host  |
+           |   Admin Node   |<------->|   Server Node  |
            | cCCC           |         | cCCC           |
            \----------------/         \----------------/
  
 
 Before you can deploy Ceph using ``ceph-deploy``, you need to ensure that you
-have a few things set up first on your admin host and on hosts running Ceph
+have a few things set up first on your admin node and on nodes running Ceph
 daemons.
  
 
 Install an Operating System
 ===========================
 
-Install a recent release of Debian or Ubuntu (e.g., 12.04, 12.10) on your
-hosts. For additional details on operating systems or to use other operating
+Install a recent release of Debian or Ubuntu (e.g., 12.04, 12.10, 13.04) on your
+nodes. For additional details on operating systems or to use other operating
 systems other than Debian or Ubuntu, see `OS Recommendations`_.
 
 
 Install an SSH Server
 =====================
 
-The ``ceph-deploy`` utility requires ``ssh``, so your server host(s) require an
+The ``ceph-deploy`` utility requires ``ssh``, so your server node(s) require an
 SSH server. ::
 
 	sudo apt-get install openssh-server
@@ -42,7 +42,7 @@ SSH server. ::
 Create a User
 =============
 
-Create a user on hosts running Ceph daemons. 
+Create a user on nodes running Ceph daemons. 
 
 .. tip:: We recommend a username that brute force attackers won't
    guess easily (e.g., something other than ``root``, ``ceph``, etc).
@@ -54,10 +54,10 @@ Create a user on hosts running Ceph daemons.
 	sudo passwd ceph
 
 
-``ceph-deploy`` installs packages onto your hosts. This means that
-the user you create requires passwordless ``sudo`` priveleges. 
+``ceph-deploy`` installs packages onto your nodes. This means that
+the user you create requires passwordless ``sudo`` privileges. 
 
-.. note:: We **DO NOT** recommmend enabling the ``root`` password 
+.. note:: We **DO NOT** recommend enabling the ``root`` password 
    for security reasons. 
 
 To provide full privileges to the user, add the following to 
@@ -70,7 +70,7 @@ To provide full privileges to the user, add the following to
 Configure SSH
 =============
 
-Configure your admin machine with password-less SSH access to each host
+Configure your admin machine with password-less SSH access to each node
 running Ceph daemons (leave the passphrase empty). ::
 
 	ssh-keygen
@@ -81,11 +81,11 @@ running Ceph daemons (leave the passphrase empty). ::
 	Your identification has been saved in /ceph-client/.ssh/id_rsa.
 	Your public key has been saved in /ceph-client/.ssh/id_rsa.pub.
 
-Copy the key to each host running Ceph daemons:: 
+Copy the key to each node running Ceph daemons:: 
 
 	ssh-copy-id ceph@ceph-server
 
-Modify your ~/.ssh/config file of your admin host so that it defaults 
+Modify your ~/.ssh/config file of your admin node so that it defaults 
 to logging in as the user you created when no username is specified. ::
 
 	Host ceph-server
@@ -93,54 +93,62 @@ to logging in as the user you created when no username is specified. ::
 		User ceph
 
 
-Install git
-===========
+Install ceph-deploy
+===================
 
-To clone the ``ceph-deploy`` repository, you will need install ``git``
-on your admin host. ::
+To install ``ceph-deploy``, execute the following:: 
 
-	sudo apt-get install git
-	
-
-Clone ceph-deploy
-=================
-
-To begin working with ``ceph-deploy``, clone its repository. :: 
-
-	git clone https://github.com/ceph/ceph-deploy.git ceph-deploy
+	wget -q -O- 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc' | sudo apt-key add -
+	echo deb http://ceph.com/debian-cuttlefish/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	sudo apt-get update
+	sudo apt-get install ceph-deploy
 
 
-Install python-virtualenv
-=========================
+Ensure Connectivity
+===================
 
-To bootstrap ``ceph-deploy`` and run it, you must install the
-``python-virtualenv`` package. :: 
+Ensure that your admin node has connectivity to the network and to your Server
+node (e.g., ensure ``iptables``, ``ufw`` or other tools that may prevent
+connections, traffic forwarding, etc. to allow what you need).
 
-	sudo apt-get install python-virtualenv
+.. tip:: The ``ceph-deploy`` tool is new and you may encounter some issues
+   without  effective error messages. 
+
+Once you have completed this pre-flight checklist, you are ready to begin using
+``ceph-deploy``.
 
 
-Bootstrap ceph-deploy
-=====================
+Hostname Resolution
+===================
 
-After you clone the repository, bootstrap ``ceph-deploy``. :: 
+Ensure that your admin node can resolve the server node's hostname. ::
 
-	cd ceph-deploy
-	./bootstrap
+	ping {server-node}
 
-Add ``ceph-deploy`` to your path so that so that you can execute it without
-remaining in ``ceph-deploy``  directory (e.g., ``/etc/environment``,
-``~/.pam_environment``). Once you have completed this pre-flight checklist, you
-are ready to begin using ``ceph-deploy``.
+If you execute ``ceph-deploy`` against the localhost, ``ceph-deploy``
+must be able to resolve its IP address. Consider adding the IP address
+to your ``/etc/hosts`` file such that it resolves to the hostname. ::
 
+	hostname
+	host -4 {hostname}
+	sudo vim /etc/hosts
+
+	{ip-address} {hostname}
+
+	ceph-deploy {command} {hostname}
+
+.. tip:: The ``ceph-deploy`` tool will not resolve to ``localhost``. Use
+   the hostname.
 
 Summary
 =======
 
-Once you have passwordless ``ssh`` connectivity, passwordless ``sudo``, and 
-a bootstrapped ``ceph-deploy``, proceed to the `Object Store Quick Start`_.
+Once you have passwordless ``ssh`` connectivity, passwordless ``sudo``,
+installed ``ceph-deploy``, and you have ensured appropriate connectivity,
+proceed to the `Storage Cluster Quick Start`_.
 
 .. tip:: The ``ceph-deploy`` utility can install Ceph packages on remote 
-   machines from the admin host!
+   machines from the admin node!
 
-.. _Object Store Quick Start: ../quick-ceph-deploy
+.. _Storage Cluster Quick Start: ../quick-ceph-deploy
 .. _OS Recommendations: ../../install/os-recommendations

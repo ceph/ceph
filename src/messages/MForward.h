@@ -20,14 +20,14 @@
 #define CEPH_MFORWARD_H
 
 #include "msg/Message.h"
-#include "mon/MonCaps.h"
+#include "mon/MonCap.h"
 #include "include/encoding.h"
 
 struct MForward : public Message {
   uint64_t tid;
   PaxosServiceMessage *msg;
   entity_inst_t client;
-  MonCaps client_caps;
+  MonCap client_caps;
   
   MForward() : Message(MSG_FORWARD), tid(0), msg(NULL) {}
   //the message needs to have caps filled in!
@@ -36,7 +36,7 @@ struct MForward : public Message {
     client = m->get_source_inst();
     client_caps = m->get_session()->caps;
   }
-  MForward(uint64_t t, PaxosServiceMessage *m, const MonCaps& caps) :
+  MForward(uint64_t t, PaxosServiceMessage *m, const MonCap& caps) :
     Message(MSG_FORWARD), tid(t), msg(m), client_caps(caps) {
     client = m->get_source_inst();
   }
@@ -64,7 +64,7 @@ public:
   const char *get_type_name() const { return "forward"; }
   void print(ostream& o) const {
     if (msg)
-      o << "forward(" << *msg << ") to leader";
+      o << "forward(" << *msg << " caps " << client_caps << ") to leader";
     else o << "forward(??? ) to leader";
   }
 };

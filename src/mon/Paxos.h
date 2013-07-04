@@ -163,24 +163,24 @@ public:
    * @defgroup Paxos_h_states States on which the leader/peon may be.
    * @{
    */
-  /**
-   * Leader/Peon is in Paxos' Recovery state
-   */
-  const static int STATE_RECOVERING = 0x01;
-  /**
-   * Leader/Peon is idle, and the Peon may or may not have a valid lease.
-   */
-  const static int STATE_ACTIVE     = 0x02;
-  /**
-   * Leader/Peon is updating to a new value.
-   */
-  const static int STATE_UPDATING   = 0x04;
-  /**
-   * Leader is about to propose a new value, but hasn't gotten to do it yet.
-   */
-  const static int STATE_PREPARING  = 0x08;
-
-  const static int STATE_LOCKED     = 0x10;
+  enum {
+    /**
+     * Leader/Peon is in Paxos' Recovery state
+     */
+    STATE_RECOVERING,
+    /**
+     * Leader/Peon is idle, and the Peon may or may not have a valid lease.
+     */
+    STATE_ACTIVE,
+    /**
+     * Leader/Peon is updating to a new value.
+     */
+    STATE_UPDATING,
+    /*
+     * Leader proposing an old value
+     */
+    STATE_UPDATING_PREVIOUS,
+  };
 
   /**
    * Obtain state name from constant value.
@@ -192,26 +192,18 @@ public:
    * @return The state's name.
    */
   static const string get_statename(int s) {
-    stringstream ss;
-    if (s & STATE_RECOVERING) {
-      ss << "recovering";
-      assert(!(s & ~(STATE_RECOVERING|STATE_LOCKED)));
-    } else if (s & STATE_ACTIVE) {
-      ss << "active";
-      assert(s == STATE_ACTIVE);
-    } else if (s & STATE_UPDATING) {
-      ss << "updating";
-      assert(!(s & ~(STATE_UPDATING|STATE_LOCKED)));
-    } else if (s & STATE_PREPARING) {
-      ss << "preparing update";
-      assert(!(s & ~(STATE_PREPARING|STATE_LOCKED)));
-    } else {
-      assert(0 == "We shouldn't have gotten here!");
+    switch (s) {
+    case STATE_RECOVERING:
+      return "recovering";
+    case STATE_ACTIVE:
+      return "active";
+    case STATE_UPDATING:
+      return "updating";
+    case STATE_UPDATING_PREVIOUS:
+      return "updating-previous";
+    default:
+      return "UNKNOWN";
     }
-
-    if (s & STATE_LOCKED)
-      ss << " (locked)";
-    return ss.str();
   }
 
 private:
@@ -241,10 +233,13 @@ public:
    *
    * @return 'true' if we are on the Updating state; 'false' otherwise.
    */
-  bool is_updating() const { return (state & STATE_UPDATING); }
+  bool is_updating() const { return state == STATE_UPDATING; }
 
-  bool is_preparing() const { return (state & STATE_PREPARING); }
-  bool is_locked() const { return (state & STATE_LOCKED); }
+  /**
+   * Check if we are updating/proposing a previous value from a
+   * previous quorum
+   */
+  bool is_updating_previous() const { return state == STATE_UPDATING_PREVIOUS; }
 
 private:
   /**
@@ -530,12 +525,11 @@ private:
    * @}
    */
 
-  bool going_to_bootstrap;
   /**
    * Should be true if we have proposed to trim, or are in the middle of
    * trimming; false otherwise.
    */
-  bool going_to_trim;
+  bool trimming;
   /**
    * If we have disabled trimming our state, this variable should have a
    * value greater than zero, corresponding to the version we had at the time
@@ -622,7 +616,7 @@ private:
   public:
     C_Trimmed(Paxos *p) : paxos(p) { }
     void finish(int r) {
-      paxos->going_to_trim = false;
+      paxos->trimming = false;
     }
   };
   /**
@@ -957,6 +951,9 @@ private:
    */
   void lease_timeout();        // on peon, if lease isn't extended
 
+  /// restart the lease timeout timer
+  void reset_lease_timeout();
+
   /**
    * Cancel all of Paxos' timeout/renew events. 
    */
@@ -992,7 +989,6 @@ private:
    * Begin proposing the Proposal at the front of the proposals queue.
    */
   void propose_queued();
-  void finish_queued_proposal();
   void finish_proposal();
 
 public:
@@ -1017,16 +1013,12 @@ public:
 		   lease_timeout_event(0),
 		   accept_timeout_event(0),
 		   clock_drift_warned(0),
-		   going_to_bootstrap(false),
-		   going_to_trim(false),
+		   trimming(false),
 		   trim_disabled_version(0) { }
 
   const string get_name() const {
     return paxos_name;
   }
-
-  bool is_bootstrapping() { return going_to_bootstrap; }
-  void prepare_bootstrap();
 
   void dispatch(PaxosServiceMessage *m);
 
@@ -1094,6 +1086,13 @@ public:
    * @param m A message
    */
   void store_state(MMonPaxos *m);
+  void _sanity_check_store();
+
+  /**
+   * remove legacy paxos versions from before conversion
+   */
+  void remove_legacy_versions();
+
   /**
    * Helper function to decode a bufferlist into a transaction and append it
    * to another transaction.
@@ -1133,35 +1132,10 @@ public:
   }
 
   /**
-   * Erase old states from stable storage.
-   *
-   * @param first The version we are trimming to
-   */
-  void trim_to(version_t first);
-  /**
-   * Erase old states from stable storage.
-   *
-   * @param t A transaction
-   * @param first The version we are trimming to
-   */
-  void trim_to(MonitorDBStore::Transaction *t, version_t first);
-  /**
-   * Auxiliary function to erase states in the interval [from, to[ from stable
-   * storage.
-   *
-   * @param t A transaction
-   * @param from Bottom limit of the interval of versions to erase
-   * @param to Upper limit, not including, of the interval of versions to erase
-   */
-  void trim_to(MonitorDBStore::Transaction *t, version_t from, version_t to);
-  /**
    * Trim the Paxos state as much as we can.
    */
-  void trim() {
-    assert(should_trim());
-    version_t trim_to_version = get_version() - g_conf->paxos_max_join_drift;
-    trim_to(trim_to_version);
-  }
+  void trim();
+
   /**
    * Disable trimming
    *
@@ -1193,9 +1167,9 @@ public:
   bool should_trim() {
     int available_versions = (get_version() - get_first_committed());
     int maximum_versions =
-      (g_conf->paxos_max_join_drift + g_conf->paxos_trim_tolerance);
+      (g_conf->paxos_max_join_drift + g_conf->paxos_trim_min);
 
-    if (going_to_trim || (available_versions <= maximum_versions))
+    if (trimming || (available_versions <= maximum_versions))
       return false;
 
     if (trim_disabled_version > 0) {

@@ -102,9 +102,9 @@ static void generate_test_addr(entity_addr_t& a, int nonce, int port)
   a.set_nonce(nonce);
   a.set_family(AF_INET);
   a.set_in4_quad(0, 127);
-  a.set_in4_quad(0, 0);
-  a.set_in4_quad(0, 1);
-  a.set_in4_quad(0, 2);
+  a.set_in4_quad(1, 0);
+  a.set_in4_quad(2, 1);
+  a.set_in4_quad(3, 2);
   a.set_port(port);
 }
 

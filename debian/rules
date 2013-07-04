@@ -30,13 +30,6 @@ ifeq ($(DEB_HOST_ARCH), armel)
   extraopts += --without-libatomic-ops
 endif
 
-ifneq ($(DEB_HOST_ARCH), i386)
-ifneq ($(DEB_HOST_ARCH), amd64)
-  # libgoogle-perftools-dev is only available on i386 and amd64
-  extraopts += --without-tcmalloc
-endif
-endif
-
 configure: configure-stamp
 configure-stamp:
 	dh_testdir
@@ -85,7 +78,10 @@ install: build
 	$(MAKE) DESTDIR=$(DESTDIR) install
 	sed -i "/dependency_libs/ s/'.*'/''/" `find . -name '*.la'`
 	install -D -m 644 udev/50-rbd.rules $(DESTDIR)/lib/udev/rules.d/50-rbd.rules
+	install -D -m 644 udev/60-ceph-partuuid-workaround.rules $(DESTDIR)/lib/udev/rules.d/60-ceph-partuuid-workaround.rules
 	install -D -m 644 udev/95-ceph-osd.rules $(DESTDIR)/lib/udev/rules.d/95-ceph-osd.rules
+	install -D -m 644 src/rbdmap $(DESTDIR)/etc/ceph/rbdmap
+	install -D -m 755 src/init-rbdmap $(DESTDIR)/etc/init.d/rbdmap
 
 # Add here commands to install the package into debian/testpack.
 # Build architecture-independent files here.

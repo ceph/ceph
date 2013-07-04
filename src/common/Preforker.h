@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
+#include <errno.h>
 #include <unistd.h>
 #include "common/safe_io.h"
 
@@ -75,18 +76,25 @@ public:
     return r;
   }
 
-  void exit(int r) {
+  int signal_exit(int r) {
     if (forked) {
-      // tell parent
-      ::write(fd[1], &r, sizeof(r));
+      // tell parent.  this shouldn't fail, but if it does, pass the
+      // error back to the parent.
+      int ret = safe_write(fd[1], &r, sizeof(r));
+      if (ret <= 0)
+	return ret;
     }
+    return r;
+  }
+  void exit(int r) {
+    signal_exit(r);
     ::exit(r);
   }
 
   void daemonize() {
     assert(forked);
     static int r = -1;
-    ::write(fd[1], &r, sizeof(r));
+    (void)::write(fd[1], &r, sizeof(r));
   }
   
 };

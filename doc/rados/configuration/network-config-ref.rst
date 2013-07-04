@@ -2,23 +2,23 @@
  Network Configuration Reference
 =================================
 
-Network configuration is critical for building a high performance Ceph cluster.
-The Ceph cluster does not perform request routing or dispatching on behalf of
-the client. Instead, Ceph clients (i.e., block device, CephFS, REST gateway)
-make requests directly to OSDs. Ceph OSDs perform data replication on behalf of
-clients, which means replication and other factors impose additional loads on
-Ceph cluster networks.
+Network configuration is critical for building a high performance  :term:`Ceph
+Storage Cluster`. The Ceph Storage Cluster does not perform  request routing or
+dispatching on behalf of the :term:`Ceph Client`. Instead, Ceph Clients make
+requests directly to Ceph OSD Daemons. Ceph OSD Daemons perform data replication
+on behalf of Ceph Clients, which means replication and other factors impose
+additional loads on Ceph Storage Cluster networks.
 
-Our 5-minute Quick Start provides a trivial `Ceph configuration file`_ that sets
-monitor IP addresses and daemon host names only. The quick start configuration
-assumes a single "public" network. Ceph functions just fine with a public
-network only, but you may see significant performance improvement with a second
-"cluster" network in a large cluster.
+Our Quick Start configurations provide a trivial `Ceph configuration file`_ that
+sets monitor IP addresses and daemon host names only. Unless you specify a
+cluster network, Ceph assumes a single "public" network. Ceph functions just
+fine with a public network only, but you may see significant performance
+improvement with a second "cluster" network in a large cluster.
 
-We recommend running a Ceph cluster with two networks: a public (front-side)
-network and a cluster (back-side) network. To support two networks, your hosts
-need to have more than one NIC. See `Hardware Recommendations -  Networks`_ for
-additional details.
+We recommend running a Ceph Storage Cluster with two networks: a public
+(front-side) network and a cluster (back-side) network. To support two networks,
+each :term:`Ceph Node` will need to have more than one NIC. See `Hardware
+Recommendations -  Networks`_ for additional details.
 
 .. ditaa::
                                +-------------+
@@ -48,22 +48,24 @@ additional details.
 
 There are several reasons to consider operating two separate networks:
 
-#. **Peformance:** OSDs handle data replication for the clients. When OSDs 
-   replicate data more than once, the network load between OSDs easily dwarfs 
-   the network load between clients and the Ceph cluster. This can introduce 
-   latency and create a performance problem. Recovery and rebalancing can 
-   also introduce significant latency on the public network. See `How Ceph 
-   Scales`_ for additional details on how Ceph replicates data. See 
-   `Monitor / OSD Interaction`_  for details on heartbeat traffic.
+#. **Performance:** Ceph OSD Daemons handle data replication for the Ceph 
+   Clients. When Ceph OSD Daemons replicate data more than once, the network 
+   load between Ceph OSD Daemons easily dwarfs the network load between Ceph 
+   Clients and the Ceph Storage Cluster. This can introduce latency and 
+   create a performance problem. Recovery and rebalancing can 
+   also introduce significant latency on the public network. See 
+   `Scalability and High Availability`_ for additional details on how Ceph 
+   replicates data. See `Monitor / OSD Interaction`_  for details on heartbeat 
+   traffic.
 
 #. **Security**: While most people are generally civil, a very tiny segment of 
    the population likes to engage in what's known as a Denial of Service (DoS) 
-   attack. When traffic between OSDs gets disrupted, placement groups may no
-   longer reflect an ``active + clean`` state, which may prevent users from 
-   reading and writing data. A great way to defeat this type of attack is to 
-   maintain a completely separate cluster network that doesn't connect directly 
-   to the internet. Also, consider using `Message Signatures`_ to defeat 
-   spoofing attacks.
+   attack. When traffic between Ceph OSD Daemons gets disrupted, placement 
+   groups may no longer reflect an ``active + clean`` state, which may prevent 
+   users from reading and writing data. A great way to defeat this type of 
+   attack is to maintain a completely separate cluster network that doesn't 
+   connect directly to the internet. Also, consider using `Message Signatures`_ 
+   to defeat spoofing attacks.
 
 
 IP Tables
@@ -71,7 +73,8 @@ IP Tables
 
 By default, daemons `bind`_ to ports within the ``6800:7100`` range. You may
 configure this range at your discretion. Before configuring your IP tables,
-check the default ``iptables`` configuration. ::
+check the default ``iptables`` configuration. ::ports within the ``6800:7100``
+range. You may configure this range at your discretion.
 
 	sudo iptables -L
 
@@ -82,17 +85,17 @@ except SSH from all network interfaces. For example::
 
 You will need to delete these rules on both your public and cluster networks
 initially, and replace them with appropriate rules when you are ready to 
-harden the ports on your cluster hosts.
+harden the ports on your Ceph Nodes.
 
 
 Monitor IP Tables
 -----------------
 
-Monitors listen on port ``6789`` by default. Additionally, monitors always
-operate on the public network. When you add the rule using the example below,
-make sure you replace ``{iface}`` with the public network interface (e.g.,
-``eth0``, ``eth1``, etc.), ``{ip-address}`` with  the IP address of the public
-network and ``{netmask}`` with the netmask for the public network. ::
+Ceph Monitors listen on port ``6789`` by default. Additionally, Ceph Monitors
+always operate on the public network. When you add the rule using the example
+below, make sure you replace ``{iface}`` with the public network interface
+(e.g., ``eth0``, ``eth1``, etc.), ``{ip-address}`` with  the IP address of the
+public network and ``{netmask}`` with the netmask for the public network. ::
 
    sudo iptables -A INPUT -i {iface} -p tcp -s {ip-address}/{netmask} --dport 6789 -j ACCEPT
 
@@ -100,12 +103,13 @@ network and ``{netmask}`` with the netmask for the public network. ::
 MDS IP Tables
 -------------
 
-Metadata servers listen on the first available port on the public network
-beginning at port 6800. Ensure that you open one port beginning at port 6800 for
-each metadata server that runs on the host. When you add the rule using the
-example below, make sure you replace ``{iface}`` with the public network
-interface (e.g., ``eth0``, ``eth1``, etc.), ``{ip-address}`` with the IP address
-of the public network and ``{netmask}`` with the netmask of the public network.
+A :term:`Ceph Metadata Server` listens on the first available port on the public
+network beginning at port 6800. Ensure that you open one port beginning at port
+6800 for each Ceph Metadata Server that runs on the Ceph Node. When you add the
+rule using the example below, make sure you replace ``{iface}`` with the public
+network interface (e.g., ``eth0``, ``eth1``, etc.), ``{ip-address}`` with the IP
+address of the public network and ``{netmask}`` with the netmask of the public
+network.
 
 For example:: 
 
@@ -115,9 +119,10 @@ For example::
 OSD IP Tables
 -------------
 
-By default, OSDs `bind`_ to the first available ports on a host beginning at
-port 6800. Ensure that you open at least three ports beginning at port 6800 for
-each OSD that runs on the host. Each OSD on a host may use up to three ports:
+By default, Ceph OSD Daemons `bind`_ to the first available ports on a Ceph Node
+beginning at port 6800. Ensure that you open at least three ports beginning at
+port 6800 for each OSD that runs on the host. Each Ceph OSD Daemon on a Ceph
+Node may use up to three ports:
 
 #. One for talking to clients and monitors.
 #. One for sending data to other OSDs.
@@ -140,24 +145,25 @@ each OSD that runs on the host. Each OSD on a host may use up to three ports:
               | cCCC          |
               \---------------/
 
-Ports are host-specific, so you don't need to open any more ports than the
-number of ports needed by Ceph daemons running on that host. You may consider
-opening a few additional ports in case a daemon fails and restarts without
-letting go of the port such that the restarted daemon binds to a new port. 
+Ports are node-specific, so you don't need to open any more ports than the
+number of ports needed by Ceph daemons running on that Ceph Node. You may
+consider opening a few additional ports in case a daemon fails and restarts
+without letting go of the port such that the restarted daemon binds to a new
+port. 
 
 If you set up separate public and cluster networks, you must add rules for both
 the public network and the cluster network, because clients will connect using
-the public network and other OSDs will connect using the cluster network. When
-you add the rule using the example below, make sure you replace ``{iface}`` with
-the network interface (e.g., ``eth0``, ``eth1``, etc.), ``{ip-address}`` with
-the IP address and ``{netmask}`` with the netmask of the public or cluster
-network. For example:: 
+the public network and other Ceph OSD Daemons will connect using the cluster
+network. When you add the rule using the example below, make sure you replace
+``{iface}`` with the network interface (e.g., ``eth0``, ``eth1``, etc.),
+``{ip-address}`` with the IP address and ``{netmask}`` with the netmask of the
+public or cluster network. For example:: 
 
 	sudo iptables -A INPUT -i {iface}  -m multiport -p tcp -s {ip-address}/{netmask} --dports 6800:6810 -j ACCEPT
 
-.. tip:: If you run metadata servers on the same host as the OSDs,
-   you can consolidate the public network configuration step. Ensure
-   that you open the number of ports required for each daemon per host.
+.. tip:: If you run Ceph Metadata Servers on the same Ceph Node as the 
+   Ceph OSD Daemons, you can consolidate the public network configuration step. 
+   Ensure that you open the number of ports required for each daemon per host.
 
 
 
@@ -457,7 +463,7 @@ Ceph disables TCP buffering by default.
 
 
 
-.. _How Ceph Scales: ../../../architecture#how-ceph-scales
+.. _Scalability and High Availability: ../../../architecture#scalability-and-high-availability
 .. _Hardware Recommendations - Networks: ../../../install/hardware-recommendations#networks
 .. _Ceph configuration file: ../../../start/quick-start/#add-a-configuration-file
 .. _hardware recommendations: ../../../install/hardware-recommendations

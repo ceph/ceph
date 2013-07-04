@@ -32,7 +32,7 @@
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
-#define dout_prefix _prefix(_dout, mon, get_version())
+#define dout_prefix _prefix(_dout, mon, get_last_committed())
 static ostream& _prefix(std::ostream *_dout, Monitor *mon, version_t v) {
   return *_dout << "mon." << mon->name << "@" << mon->rank
 		<< "(" << mon->get_state_name()
@@ -70,7 +70,6 @@ void LogMonitor::tick()
 {
   if (!is_active()) return;
 
-  update_from_paxos();
   dout(10) << *this << dendl;
 
   if (!mon->is_leader()) return; 
@@ -91,10 +90,10 @@ void LogMonitor::create_initial()
   pending_log.insert(pair<utime_t,LogEntry>(e.stamp, e));
 }
 
-void LogMonitor::update_from_paxos()
+void LogMonitor::update_from_paxos(bool *need_bootstrap)
 {
   dout(10) << __func__ << dendl;
-  version_t version = get_version();
+  version_t version = get_last_committed();
   dout(10) << __func__ << " version " << version
            << " summary v " << summary.version << dendl;
   if (version == summary.version)
@@ -106,13 +105,13 @@ void LogMonitor::update_from_paxos()
   version_t latest_full = get_version_latest_full();
   dout(10) << __func__ << " latest full " << latest_full << dendl;
   if ((latest_full > 0) && (latest_full > summary.version)) {
-      bufferlist latest_bl;
-      get_version_full(latest_full, latest_bl);
-      assert(latest_bl.length() != 0);
-      dout(7) << __func__ << " loading summary e" << latest_full << dendl;
-      bufferlist::iterator p = latest_bl.begin();
-      ::decode(summary, p);
-      dout(7) << __func__ << " loaded summary e" << summary.version << dendl;
+    bufferlist latest_bl;
+    get_version_full(latest_full, latest_bl);
+    assert(latest_bl.length() != 0);
+    dout(7) << __func__ << " loading summary e" << latest_full << dendl;
+    bufferlist::iterator p = latest_bl.begin();
+    ::decode(summary, p);
+    dout(7) << __func__ << " loaded summary e" << summary.version << dendl;
   }
 
   // walk through incrementals
@@ -182,12 +181,12 @@ void LogMonitor::create_pending()
 {
   pending_log.clear();
   pending_summary = summary;
-  dout(10) << "create_pending v " << (get_version() + 1) << dendl;
+  dout(10) << "create_pending v " << (get_last_committed() + 1) << dendl;
 }
 
 void LogMonitor::encode_pending(MonitorDBStore::Transaction *t)
 {
-  version_t version = get_version() + 1;
+  version_t version = get_last_committed() + 1;
   bufferlist bl;
   dout(10) << __func__ << " v" << version << dendl;
   __u8 v = 1;
@@ -203,7 +202,7 @@ void LogMonitor::encode_pending(MonitorDBStore::Transaction *t)
 void LogMonitor::encode_full(MonitorDBStore::Transaction *t)
 {
   dout(10) << __func__ << " log v " << summary.version << dendl;
-  assert(get_version() == summary.version);
+  assert(get_last_committed() == summary.version);
 
   bufferlist summary_bl;
   ::encode(summary, summary_bl);
@@ -215,7 +214,7 @@ void LogMonitor::encode_full(MonitorDBStore::Transaction *t)
 void LogMonitor::update_trim()
 {
   unsigned max = g_conf->mon_max_log_epochs;
-  version_t version = get_version();
+  version_t version = get_last_committed();
   if (mon->is_leader() && version > max)
     set_trim_to(version - max);
 }
@@ -260,7 +259,7 @@ bool LogMonitor::preprocess_log(MLog *m)
   MonSession *session = m->get_session();
   if (!session)
     goto done;
-  if (!session->caps.check_privileges(PAXOS_LOG, MON_CAP_X)) {
+  if (!session->is_capable("log", MON_CAP_W)) {
     dout(0) << "preprocess_log got MLog from entity with insufficient privileges "
 	    << session->caps << dendl;
     goto done;
@@ -302,7 +301,6 @@ bool LogMonitor::prepare_log(MLog *m)
     if (!pending_summary.contains(p->key())) {
       pending_summary.add(*p);
       pending_log.insert(pair<utime_t,LogEntry>(p->stamp, *p));
-
     }
   }
   wait_for_finished_proposal(new C_Log(this, m));
@@ -338,7 +336,7 @@ bool LogMonitor::preprocess_command(MMonCommand *m)
   if (r != -1) {
     string rs;
     getline(ss, rs);
-    mon->reply_command(m, r, rs, rdata, get_version());
+    mon->reply_command(m, r, rs, rdata, get_last_committed());
     return true;
   } else
     return false;
@@ -351,11 +349,45 @@ bool LogMonitor::prepare_command(MMonCommand *m)
   string rs;
   int err = -EINVAL;
 
-  // nothing here yet
-  ss << "unrecognized command";
+  map<string, cmd_vartype> cmdmap;
+  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    // ss has reason for failure
+    string rs = ss.str();
+    mon->reply_command(m, -EINVAL, rs, get_last_committed());
+    return true;
+  }
+
+  string prefix;
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+
+  MonSession *session = m->get_session();
+  if (!session ||
+      (!session->is_capable("log", MON_CAP_W) &&
+       !mon->_allowed_command(session, cmdmap))) {
+    mon->reply_command(m, -EACCES, "access denied", get_last_committed());
+    return true;
+  }
+
+  if (prefix == "log") {
+    vector<string> logtext;
+    cmd_getval(g_ceph_context, cmdmap, "logtext", logtext);
+    ostringstream ds;
+    std::copy(logtext.begin(), logtext.end(),
+	      ostream_iterator<string>(ds, " "));
+    LogEntry le;
+    le.who = m->get_orig_source_inst();
+    le.stamp = m->get_recv_stamp();
+    le.seq = 0;
+    le.type = CLOG_INFO;
+    le.msg = ds.str();
+    pending_summary.add(le);
+    pending_log.insert(pair<utime_t,LogEntry>(le.stamp, le));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, string(), get_last_committed()));
+    return true;
+  }
 
   getline(ss, rs);
-  mon->reply_command(m, err, rs, get_version());
+  mon->reply_command(m, err, rs, get_last_committed());
   return false;
 }
 

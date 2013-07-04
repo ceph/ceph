@@ -30,25 +30,25 @@ class CephContext;
      */
     static void file_to_extents(CephContext *cct, const char *object_format,
 				ceph_file_layout *layout,
-				uint64_t offset, uint64_t len,
+				uint64_t offset, uint64_t len, uint64_t trunc_size,
 				map<object_t, vector<ObjectExtent> >& extents,
 				uint64_t buffer_offset=0);
 
     static void file_to_extents(CephContext *cct, const char *object_format,
 				ceph_file_layout *layout,
-				uint64_t offset, uint64_t len,
+				uint64_t offset, uint64_t len, uint64_t trunc_size,
 				vector<ObjectExtent>& extents,
 				uint64_t buffer_offset=0);
 
     static void file_to_extents(CephContext *cct, inodeno_t ino,
 				ceph_file_layout *layout,
-				uint64_t offset, uint64_t len,
+				uint64_t offset, uint64_t len, uint64_t trunc_size,
 				vector<ObjectExtent>& extents) {
       // generate prefix/format
       char buf[32];
       snprintf(buf, sizeof(buf), "%llx.%%08llx", (long long unsigned)ino);
 
-      file_to_extents(cct, buf, layout, offset, len, extents);
+      file_to_extents(cct, buf, layout, offset, len, trunc_size, extents);
     }
 
     static void assimilate_extents(map<object_t,vector<ObjectExtent> >& object_extents,
@@ -60,6 +60,9 @@ class CephContext;
     static void extent_to_file(CephContext *cct, ceph_file_layout *layout,
 			       uint64_t objectno, uint64_t off, uint64_t len,
 			       vector<pair<uint64_t, uint64_t> >& extents);
+
+    static uint64_t object_truncate_size(CephContext *cct, ceph_file_layout *layout,
+					 uint64_t objectno, uint64_t trunc_size);
 
     /*
      * helper to assemble a striped result

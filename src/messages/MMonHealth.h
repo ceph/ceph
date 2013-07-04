@@ -26,21 +26,14 @@ struct MMonHealth : public MMonQuorumService
     OP_TELL = 1,
   };
 
-  static const uint32_t FLAG_DATA  = 0x01;
-
   int service_type;
   int service_op;
-  uint32_t flags;
 
   // service specific data
   DataStats data_stats;
 
   MMonHealth() : MMonQuorumService(MSG_MON_HEALTH, HEAD_VERSION) { }
-  MMonHealth(uint32_t type) :
-    MMonQuorumService(MSG_MON_HEALTH, HEAD_VERSION),
-    service_type(type)
-  { }
-  MMonHealth(uint32_t type, int op) :
+  MMonHealth(uint32_t type, int op = 0) :
     MMonQuorumService(MSG_MON_HEALTH, HEAD_VERSION),
     service_type(type),
     service_op(op)
@@ -61,15 +54,7 @@ public:
     o << "mon_health( service " << get_service_type()
       << " op " << get_service_op_name()
       << " e " << get_epoch() << " r " << get_round()
-      << " flags";
-    if (!flags) {
-      o << " none";
-    } else {
-      if (has_flag(FLAG_DATA)) {
-        o << " data";
-      }
-    }
-    o << " )";
+      << " )";
   }
 
   int get_service_type() const {
@@ -78,14 +63,6 @@ public:
 
   int get_service_op() {
     return service_op;
-  }
-
-  void set_flag(uint32_t f) {
-    flags |= f;
-  }
-
-  bool has_flag(uint32_t f) const {
-    return (flags & f);
   }
 
   void decode_payload() {

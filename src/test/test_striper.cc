@@ -16,11 +16,14 @@ TEST(Striper, Stripe1)
   l.fl_stripe_count = 3;
 
   vector<ObjectExtent> ex;
-  Striper::file_to_extents(g_ceph_context, 1, &l, 5006035, 46419, ex);
+  Striper::file_to_extents(g_ceph_context, 1, &l, 5006035, 46419, 5006035, ex);
 
   cout << "result " << ex << std::endl;
 
   ASSERT_EQ(3u, ex.size());
+  ASSERT_EQ(98304u, ex[0].truncate_size);
+  ASSERT_EQ(ex[1].offset, ex[1].truncate_size);
+  ASSERT_EQ(94208u, ex[2].truncate_size);
 }
 
 

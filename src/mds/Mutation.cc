@@ -30,6 +30,13 @@ void Mutation::pin(MDSCacheObject *o)
   }      
 }
 
+void Mutation::unpin(MDSCacheObject *o)
+{
+  assert(pins.count(o));
+  o->put(MDSCacheObject::PIN_REQUEST);
+  pins.erase(o);
+}
+
 void Mutation::set_stickydirs(CInode *in)
 {
   if (stickydirs.count(in) == 0) {

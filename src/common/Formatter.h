@@ -53,6 +53,7 @@ class Formatter {
   }
 };
 
+Formatter *new_formatter(const std::string &type);
 
 class JSONFormatter : public Formatter {
  public:

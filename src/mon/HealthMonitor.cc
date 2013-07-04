@@ -44,11 +44,11 @@ void HealthMonitor::init()
 {
   dout(10) << __func__ << dendl;
   assert(services.empty());
-  services[HealthService::SERVICE_HEALTH_DATA] =
-    HealthServiceRef(new DataHealthService(mon));
+  services[HealthService::SERVICE_HEALTH_DATA] = new DataHealthService(mon);
 
-  for (map<int,HealthServiceRef>::iterator it = services.begin();
-       it != services.end(); ++it) {
+  for (map<int,HealthService*>::iterator it = services.begin();
+       it != services.end();
+       ++it) {
     it->second->init();
   }
 }
@@ -71,9 +71,11 @@ void HealthMonitor::service_shutdown()
 {
   dout(0) << "HealthMonitor::service_shutdown "
           << services.size() << " services" << dendl;
-  for (map<int,HealthServiceRef>::iterator it = services.begin();
-      it != services.end(); ++it) {
+  for (map<int,HealthService*>::iterator it = services.begin();
+      it != services.end();
+       ++it) {
     it->second->shutdown();
+    delete it->second;
   }
   services.clear();
 }
@@ -87,8 +89,9 @@ health_status_t HealthMonitor::get_health(Formatter *f,
     f->open_array_section("health_services");
   }
 
-  for (map<int,HealthServiceRef>::iterator it = services.begin();
-       it != services.end(); ++it) {
+  for (map<int,HealthService*>::iterator it = services.begin();
+       it != services.end();
+       ++it) {
     health_status_t h = it->second->get_health(f, detail);
     if (overall > h)
       overall = h;

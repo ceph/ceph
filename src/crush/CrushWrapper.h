@@ -140,7 +140,7 @@ public:
     crush->choose_total_tries = n;
   }
 
-  int get_chooseleaf_descend_once() {
+  int get_chooseleaf_descend_once() const {
     return crush->chooseleaf_descend_once;
   }
   void set_chooseleaf_descend_once(int n) {
@@ -166,7 +166,7 @@ public:
     build_rmaps();
     if (type_rmap.count(name))
       return type_rmap[name];
-    return 0;
+    return -1;
   }
   const char *get_type_name(int t) const {
     std::map<int,string>::const_iterator p = type_map.find(t);
@@ -575,7 +575,8 @@ public:
     return set_rule_step(ruleno, step, CRUSH_RULE_EMIT, 0, 0);
   }
 
-  int add_simple_rule(string name, string root_name, string failure_domain_type);
+  int add_simple_rule(string name, string root_name, string failure_domain_type,
+		      ostream *err = 0);
 
   int remove_rule(int ruleno);
 
@@ -632,7 +633,7 @@ private:
     pair<string, string> bucket_location = get_immediate_parent(item);
 
     // get the id of the parent bucket
-    int parent_id = get_item_id( (bucket_location.second).c_str() );
+    int parent_id = get_item_id(bucket_location.second);
 
     // get the parent bucket
     crush_bucket *parent_bucket = get_bucket(parent_id);

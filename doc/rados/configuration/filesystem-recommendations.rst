@@ -2,29 +2,32 @@
  Hard Disk and File System Recommendations
 ===========================================
 
-Hard Disk Prep
-==============
+.. index:: hard drive preparation
 
-Ceph aims for data safety, which means that when the application receives notice
-that data was written to the disk, that data was actually written to the disk.
-For old kernels (<2.6.33), disable the write cache if the journal is on a raw
-disk. Newer kernels should work fine.
+Hard Drive Prep
+===============
+
+Ceph aims for data safety, which means that when the :term:`Ceph Client`
+receives notice that data was written to a storage drive, that data was actually
+written to the storage drive. For old kernels (<2.6.33), disable the write cache
+if the journal is on a raw drive. Newer kernels should work fine.
 
 Use ``hdparm`` to disable write caching on the hard disk::
 
 	sudo hdparm -W 0 /dev/hda 0
 
-In production environments, we recommend running OSDs with an operating system
-disk, and a separate disk(s) for data. If you run data and an operating system
-on a single disk, create a separate partition for your data before configuring
-your OSD cluster.
+In production environments, we recommend running a :term:`Ceph OSD Daemon` with
+separate drives for the operating system and the data. If you run data and an
+operating system on a single disk, we recommend creating a separate partition
+for your data.
 
+.. index:: filesystems
 
-File Systems
-============
+Filesystems
+===========
 
-Ceph OSDs rely heavily upon the stability and performance of the
-underlying file system.
+Ceph OSD Daemons rely heavily upon the stability and performance of the
+underlying filesystem.
 
 .. note:: We currently recommend ``XFS`` for production deployments.
    We recommend ``btrfs`` for testing, development, and any
@@ -35,13 +38,12 @@ underlying file system.
    comfortable installing the latest released upstream kernels and be
    able to track development activity for critical bug fixes.
 
-Ceph OSDs depend on the Extended Attributes (XATTRs) of the underlying
-file system for various forms of internal object state and metadata.
-The underlying file system must provide sufficient capacity for
-XATTRs.  ``btrfs`` does not bound the total xattr metadata stored with
-a file.  ``XFS`` has a relatively large limit (64 KB) that most
-deployments won't encounter, but the ``ext4`` is too small to be
-usable.
+Ceph OSD Daemons depend on the Extended Attributes (XATTRs) of the underlying
+file system for various forms of internal object state and metadata. The
+underlying filesystem must provide sufficient capacity for XATTRs.  ``btrfs``
+does not bound the total xattr metadata stored with a file.  ``XFS`` has a
+relatively large limit (64 KB) that most deployments won't encounter, but the
+``ext4`` is too small to be usable.
 
 You should always add the following line to the ``[osd]`` section of your
 ``ceph.conf`` file for ``ext4`` filesystems; you can optionally use
@@ -49,8 +51,9 @@ it for ``btrfs`` and ``XFS``.::
 
 	filestore xattr use omap = true
 
-FS Background Info
-==================
+
+Filesystem Background Info
+==========================
 
 The ``XFS`` and ``btrfs`` file systems provide numerous advantages in highly 
 scaled data storage environments when `compared`_ to ``ext3`` and ``ext4``.

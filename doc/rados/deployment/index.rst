@@ -4,10 +4,10 @@
 
 The ``ceph-deploy`` tool is a way to deploy Ceph relying only upon SSH access to
 the servers, ``sudo``, and some Python. It runs on your workstation, and does
-not require servers, databases, or anything any other tools. If you set up and
+not require servers, databases, or any other tools. If you set up and
 tear down Ceph clusters a lot, and want minimal extra bureaucracy,
 ``ceph-deploy`` is an ideal tool. The ``ceph-deploy`` tool is not a generic
-deployment system. It was designed exclusivly for Ceph users who want to get
+deployment system. It was designed exclusively for Ceph users who want to get
 Ceph up and running quickly with sensible initial configuration settings without
 the overhead of installing Chef, Puppet or Juju. Users who want fine-control
 over security settings, partitions or directory  locations should use a tool

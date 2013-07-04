@@ -5,7 +5,7 @@ Map and PG Message handling
 Overview
 --------
 The OSD handles routing incoming messages to PGs, creating the PG if necessary
-in come cases.
+in some cases.
 
 PG messages generally come in two varieties:
 
@@ -64,6 +64,7 @@ messages.  That is, messages from different PGs may be reordered.
 MOSDPGOps follow the following process:
 
   1. OSD::handle_op: validates permissions and crush mapping.
+     discard the request if they are not connected and the client cannot get the reply ( See OSD::op_is_discardable )
      See OSDService::handle_misdirected_op
      See OSD::op_has_sufficient_caps
      See OSD::require_same_or_newer_map
@@ -74,26 +75,37 @@ MOSDSubOps follow the following process:
   1. OSD::handle_sub_op checks that sender is an OSD
   2. OSD::enqueue_op
 
-OSD::enqueue_op calls PG::queue_op which checks can_discard_request before
-queueing the op in the op_queue and the PG in the OpWQ.  Note, a single PG
-may be in the op queue multiple times for multiple ops.
+OSD::enqueue_op calls PG::queue_op which checks waiting_for_map before calling OpWQ::queue which adds the op to the queue of the PG responsible for handling it.
 
-dequeue_op is then eventually called on the PG.  At this time, the op is popped
-off of op_queue and passed to PG::do_request, which checks that the PG map is
-new enough (must_delay_op) and then processes the request.
+OSD::dequeue_op is then eventually called, with a lock on the PG.  At
+this time, the op is passed to PG::do_request, which checks that:
 
-In summary, the possible ways that an op may wait or be discarded in are:
+  1. the PG map is new enough (PG::must_delay_op)
+  2. the client requesting the op has enough permissions (PG::op_has_sufficient_caps)
+  3. the op is not to be discarded (PG::can_discard_{request,op,subop,scan,backfill})
+  4. the PG is active (PG::flushed boolean)
+  5. the op is a CEPH_MSG_OSD_OP and the PG is in PG_STATE_ACTIVE state and not in PG_STATE_REPLAY 
 
-  1. Wait in waiting_for_osdmap due to OSD::require_same_or_newer_map from
-     OSD::handle_*.
-  2. Discarded in OSD::can_discard_op at enqueue_op.
-  3. Wait in PG::op_waiters due to PG::must_delay_request in PG::do_request.
-  4. Wait in PG::waiting_for_active in due_request due to !flushed.
-  5. Wait in PG::waiting_for_active due to !active() in do_op/do_sub_op.
-  6. Wait in PG::waiting_for_(degraded|missing) in do_op.
-  7. Wait in PG::waiting_for_active due to scrub_block_writes in do_op
+If these conditions are not met, the op is either discarded or queued for later processing. If all conditions are met, the op is processed according to its type:
 
-TODO: The above is not a complete list.
+  1. CEPH_MSG_OSD_OP is handled by PG::do_op
+  2. MSG_OSD_SUBOP is handled by PG::do_sub_op
+  3. MSG_OSD_SUBOPREPLY is handled by PG::do_sub_op_reply
+  4. MSG_OSD_PG_SCAN is handled by PG::do_scan
+  5. MSG_OSD_PG_BACKFILL is handled by PG::do_backfill
+
+CEPH_MSG_OSD_OP processing
+--------------------------
+
+ReplicatedPG::do_op handles CEPH_MSG_OSD_OP op and will queue it
+
+  1. in wait_for_all_missing if it is a CEPH_OSD_OP_PGLS for a designated snapid and some object updates are still missing
+  2. in waiting_for_active if the op may write but the scrubber is working
+  3. in waiting_for_missing_object if the op requires an object or a snapdir or a specific snap that is still missing
+  4. in waiting_for_degraded_object if the op may write an object or a snapdir that is degraded, or if another object blocks it ("blocked_by")
+  5. in waiting_for_backfill_pos if the op requires an object that will be available after the backfill is complete
+  6. in waiting_for_ack if an ack from another OSD is expected
+  7. in waiting_for_ondisk if the op is waiting for a write to complete
 
 Peering Messages
 ----------------

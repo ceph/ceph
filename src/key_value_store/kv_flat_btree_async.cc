@@ -20,7 +20,6 @@
 #include "common/ceph_context.h"
 #include "global/global_context.h"
 #include "common/Clock.h"
-#include "include/rados.h"
 #include "include/types.h"
 
 
@@ -664,16 +663,18 @@ int KvFlatBtreeAsync::read_object(const string &obj, object_data * odata) {
   odata->name = obj;
   get_obj.omap_get_vals("", LONG_MAX, &odata->omap, &err);
   get_obj.getxattr("unwritable", &unw_bl, &err);
-  err = io_ctx.aio_operate(obj, obj_aioc, &get_obj, NULL);
+  io_ctx.aio_operate(obj, obj_aioc, &get_obj, NULL);
   obj_aioc->wait_for_safe();
   err = obj_aioc->get_return_value();
   if (err < 0){
     //possibly -ENOENT, meaning someone else deleted it.
+    obj_aioc->release();
     return err;
   }
   odata->unwritable = string(unw_bl.c_str(), unw_bl.length()) == "1";
   odata->version = obj_aioc->get_version();
   odata->size = odata->omap.size();
+  obj_aioc->release();
   return 0;
 }
 
@@ -681,21 +682,23 @@ int KvFlatBtreeAsync::read_object(const string &obj, rebalance_args * args) {
   bufferlist inbl;
   args->encode(inbl);
   bufferlist outbl;
+  int err;
   librados::AioCompletion * a = rados.aio_create_completion();
-  int err = io_ctx.aio_exec(obj, a, "kvs", "maybe_read_for_balance",
-      inbl, &outbl);
+  io_ctx.aio_exec(obj, a, "kvs", "maybe_read_for_balance", inbl, &outbl);
   a->wait_for_safe();
   err = a->get_return_value();
   if (err < 0) {
     if (verbose) cout << "\t\t" << client_name
 	<< "-read_object: reading failed with "
 	<< err << std::endl;
+    a->release();
     return err;
   }
   bufferlist::iterator it = outbl.begin();
   args->decode(it);
   args->odata.name = obj;
   args->odata.version = a->get_version();
+  a->release();
   return err;
 }
 
@@ -1367,9 +1370,13 @@ int KvFlatBtreeAsync::setup(int argc, const char** argv) {
   make_max_obj.setxattr("unwritable", to_bl("0"));
   make_max_obj.setxattr("size", to_bl("0"));
   r = io_ctx.operate(client_name, &make_max_obj);
+  if (r < 0) {
+    if (verbose) cout << client_name << ": Setting xattr failed with code "
+	<< r
+	<< std::endl;
+  }
 
   return 0;
-
 }
 
 int KvFlatBtreeAsync::set(const string &key, const bufferlist &val,
@@ -1435,6 +1442,12 @@ int KvFlatBtreeAsync::set_op(const string &key, const bufferlist &val,
 	    << idata.obj
             << std::endl;
         err = read_index(key, &idata, NULL, true);
+        if (err < 0) {
+	  if (verbose) cout << "\t" << client_name
+	      << ": getting oid failed with code "
+	      << err << std::endl;
+	  return err;
+        }
         err = split(idata);
         if (err < 0 && err != -ENOENT && err != -EBALANCE) {
           if (verbose) cerr << "\t" << client_name << ": split failed with "
@@ -1549,6 +1562,12 @@ int KvFlatBtreeAsync::remove_op(const string &key, index_data &idata,
         if (verbose) cerr << "\t" << client_name << ": running rebalance on "
             << idata.obj << std::endl;
         err = read_index(key, &idata, &next_idata, true);
+        if (err < 0) {
+	  if (verbose) cout << "\t" << client_name
+	      << ": getting oid failed with code "
+	      << err << std::endl;
+	  return err;
+        }
         err = rebalance(idata, next_idata);
         if (err < 0 && err != -ENOENT && err != -EBALANCE) {
           if (verbose) cerr << "\t" << client_name << ": rebalance returned "
@@ -1815,6 +1834,7 @@ int KvFlatBtreeAsync::set_many(const map<string, bufferlist> &in_map) {
   io_ctx.aio_exec(index_name, aioc,  "kvs", "read_many", inbl, &outbl);
   aioc->wait_for_safe();
   err = aioc->get_return_value();
+  aioc->release();
   if (err < 0) {
     cerr << "getting index failed with " << err << std::endl;
     return err;
@@ -1935,6 +1955,7 @@ int KvFlatBtreeAsync::remove_all() {
     return err;
   }
   oro_aioc->wait_for_safe();
+  oro_aioc->release();
 
   librados::ObjectWriteOperation rm_index;
   librados::AioCompletion * rm_index_aioc = rados.aio_create_completion();
@@ -1944,6 +1965,7 @@ int KvFlatBtreeAsync::remove_all() {
   rm_index.omap_set(new_index);
   io_ctx.aio_operate(index_name, rm_index_aioc, &rm_index);
   err = rm_index_aioc->get_return_value();
+  rm_index_aioc->release();
   if (err < 0) {
     if (verbose) cout << "rm index aioc failed with " << err
 	<< std::endl;
@@ -2057,11 +2079,12 @@ bool KvFlatBtreeAsync::is_consistent() {
 	  librados::AioCompletion * aioc = rados.aio_create_completion();
 	  bufferlist un;
 	  oro.getxattr("unwritable", &un, &err);
-	  err = io_ctx.aio_operate(dit->obj, aioc, &oro, NULL);
+	  io_ctx.aio_operate(dit->obj, aioc, &oro, NULL);
 	  aioc->wait_for_safe();
 	  err = aioc->get_return_value();
 	  if (ceph_clock_now(g_ceph_context) - idata.ts > timeout) {
 	    if (err < 0) {
+	      aioc->release();
 	      if (err == -ENOENT) {
 		continue;
 	      } else {
@@ -2080,6 +2103,7 @@ bool KvFlatBtreeAsync::is_consistent() {
 	    }
 	  }
 	  special_names.insert(dit->obj);
+	  aioc->release();
 	}
 	for(vector<create_data >::iterator cit = idata.to_create.begin();
 	    cit != idata.to_create.end(); ++cit) {
@@ -2166,6 +2190,7 @@ string KvFlatBtreeAsync::str() {
   io_ctx.aio_operate(index_name, top_aioc, &oro, NULL);
   top_aioc->wait_for_safe();
   err = top_aioc->get_return_value();
+  top_aioc->release();
   if (err < 0 && err != -5){
     if (verbose) cout << "getting keys failed with error " << err << std::endl;
     return ret.str();
@@ -2228,6 +2253,7 @@ string KvFlatBtreeAsync::str() {
     all_sizes[indexer] = all_maps[indexer].size();
     all_versions[indexer] = aioc->get_version();
     indexer++;
+    aioc->release();
   }
 
   ret << "///////////////////OBJECT NAMES////////////////" << std::endl;

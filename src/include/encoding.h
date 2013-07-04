@@ -88,11 +88,12 @@ inline void decode(bool &v, bufferlist::iterator& p) {
 
 #define WRITE_INTTYPE_ENCODER(type, etype)				\
   inline void encode(type v, bufferlist& bl, uint64_t features=0) {	\
-    __##etype e = init_##etype(v);					\
+    ceph_##etype e;					                \
+    e = v;                                                              \
     encode_raw(e, bl);							\
   }									\
   inline void decode(type &v, bufferlist::iterator& p) {		\
-    __##etype e;							\
+    ceph_##etype e;							\
     decode_raw(e, p);							\
     v = e;								\
   }
@@ -338,7 +339,7 @@ inline void encode(const std::list<T>& ls, bufferlist& bl)
       n++;
       encode(*p, bl);
     }
-    __le32 en;
+    ceph_le32 en;
     en = n;
     bl.copy_in(pos, sizeof(en), (char*)&en);
   } else {
@@ -373,7 +374,7 @@ inline void encode(const std::list<std::tr1::shared_ptr<T> >& ls, bufferlist& bl
       n++;
       encode(**p, bl);
     }
-    __le32 en;
+    ceph_le32 en;
     en = n;
     bl.copy_in(pos, sizeof(en), (char*)&en);
   } else {
@@ -696,7 +697,8 @@ inline void decode(std::deque<T>& ls, bufferlist::iterator& p)
   __u8 struct_v = v, struct_compat = compat;		     \
   ::encode(struct_v, bl);				     \
   ::encode(struct_compat, bl);				     \
-  __le32 struct_len = 0;				     \
+  ceph_le32 struct_len;				             \
+  struct_len = 0;                                            \
   ::encode(struct_len, bl);				     \
   buffer::list::iterator struct_len_it = bl.end();	     \
   struct_len_it.advance(-4);				     \

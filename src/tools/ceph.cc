@@ -97,12 +97,16 @@ static void usage()
   cout << "  ceph osd crush add-bucket <bucketname> <type>\n";
   cout << "  ceph osd crush reweight <name> <weight>\n";
   cout << "  ceph osd crush tunables <legacy|argonaut|bobtail|optimal|default>\n";
+  cout << "  ceph osd crush rule list\n";
+  cout << "  ceph osd crush rule dump\n";
+  cout << "  ceph osd crush rule create-simple <name> <root> <failure-domain>\n";
   cout << "  ceph osd create [<uuid>]\n";
   cout << "  ceph osd rm <osd-id> [<osd-id>...]\n";
-  cout << "  ceph osd lost [--yes-i-really-mean-it]\n";
+  cout << "  ceph osd lost <osd-id> [--yes-i-really-mean-it]\n";
   cout << "  ceph osd reweight <osd-id> <weight>\n";
   cout << "  ceph osd blacklist add <address>[:source_port] [time]\n";
   cout << "  ceph osd blacklist rm <address>[:source_port]\n";
+  cout << "  ceph osd blacklist ls\n";
   cout << "  ceph osd pool mksnap <pool> <snapname>\n";
   cout << "  ceph osd pool rmsnap <pool> <snapname>\n";
   cout << "  ceph osd pool create <pool> <pg_num> [<pgp_num>]\n";
@@ -191,6 +195,7 @@ static int get_indata(const char *in_file, bufferlist &indata)
     int err = errno;
     derr << "error getting size of in_file '" << in_file << "': "
 	 << cpp_strerror(err) << dendl;
+    TEMP_FAILURE_RETRY(::close(fd));
     return 1;
   }
 
@@ -228,10 +233,11 @@ int do_admin_socket(string path, string cmd)
   if (connect(fd, (struct sockaddr *) &address, 
 	      sizeof(struct sockaddr_un)) != 0) {
     cerr << "connect to " << path << " failed with " << cpp_strerror(errno) << std::endl;
+    ::close(fd);
     return -1;
   }
   
-  char *buf;
+  char *buf = NULL;
   uint32_t len;
   r = safe_write(fd, cmd.c_str(), cmd.length() + 1);
   if (r < 0) {
@@ -246,6 +252,7 @@ int do_admin_socket(string path, string cmd)
   }
   if (r < 4) {
     cerr << "read only got " << r << " bytes of 4 expected for response length; invalid command?" << std::endl;
+    r = -1;
     goto out;
   }
   len = ntohl(len);
@@ -262,6 +269,8 @@ int do_admin_socket(string path, string cmd)
   r = 0;
 
  out:
+  if (buf)
+    delete[] buf;
   ::close(fd);
   return r;
 }

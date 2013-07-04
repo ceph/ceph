@@ -2,22 +2,25 @@
  OSD Config Reference
 ======================
 
-You can configure OSDs in the Ceph configuration file, but OSDs can use the
-default values and a very minimal configuration. A minimal OSD configuration
-sets ``osd journal size`` and ``osd host``,  and uses default values for
-nearly everything else.
+.. index:: OSD; configuration
 
-OSDs are numerically identified in incremental fashion, beginning with ``0``
-using the following convention. ::
+You can configure Ceph OSD Daemons in the Ceph configuration file, but Ceph OSD
+Daemons can use the default values and a very minimal configuration. A minimal
+Ceph OSD Daemon configuration sets ``osd journal size`` and ``osd host``,  and
+uses default values for nearly everything else.
+
+Ceph OSD Daemons are numerically identified in incremental fashion, beginning
+with ``0`` using the following convention. ::
 
 	osd.0
 	osd.1
 	osd.2
 
-In a configuration file, you may specify settings for all OSDs in the cluster
-by adding configuration settings to the ``[osd]`` section of your configuration
-file. To add settings directly to a specific OSD (e.g., ``osd host``), enter 
-it in an OSD-specific section of your configuration file. For example:
+In a configuration file, you may specify settings for all Ceph OSD Daemons in
+the cluster by adding configuration settings to the ``[osd]`` section of your
+configuration file. To add settings directly to a specific Ceph OSD Daemon
+(e.g., ``osd host``), enter  it in an OSD-specific section of your configuration
+file. For example:
 
 .. code-block:: ini
 	
@@ -31,13 +34,15 @@ it in an OSD-specific section of your configuration file. For example:
 		osd host = osd-host-b
 
 
+.. index:: OSD; config settings
+
 General Settings
 ================
 
-The following settings provide an OSD's ID, and determine paths to data and
-journals. Ceph deployment scripts typically generate the UUID automatically. We
-**DO NOT** recommend changing the default paths for data or journals, as it
-makes it more problematic to troubleshoot Ceph later. 
+The following settings provide an Ceph OSD Daemon's ID, and determine paths to
+data and journals. Ceph deployment scripts typically generate the UUID
+automatically. We **DO NOT** recommend changing the default paths for data or
+journals, as it makes it more problematic to troubleshoot Ceph later. 
 
 The journal size should be at least twice the product of the expected drive
 speed multiplied by ``filestore max sync interval``. However, the most common
@@ -47,11 +52,11 @@ that Ceph uses the entire partition for the journal.
 
 ``osd uuid``
 
-:Description: The universally unique identifier (UUID) for the OSD.
+:Description: The universally unique identifier (UUID) for the Ceph OSD Daemon.
 :Type: UUID
 :Default: The UUID.
-:Note: The ``osd uuid`` applies to a single OSD. The ``fsid`` applies to the 
-       entire cluster.
+:Note: The ``osd uuid`` applies to a single Ceph OSD Daemon. The ``fsid`` 
+       applies to the entire cluster.
 
 
 ``osd data`` 
@@ -84,22 +89,24 @@ that Ceph uses the entire partition for the journal.
 :Type: String
 :Default: ``$libdir/rados-classes``
 
+.. index:: OSD; journal settings
 
 Journal Settings
 ================
 
-By default, Ceph expects that you will store an OSDs journal with the 
-following path::
+By default, Ceph expects that you will store an Ceph OSD Daemons journal with
+the  following path::
 
 	/var/lib/ceph/osd/$cluster-$id/journal
 
 Without performance optimization, Ceph stores the journal on the same disk as
-the OSDs data. An OSD optimized for performance may use a separate disk to store
-journal data (e.g., a solid state drive delivers high performance journaling).
+the Ceph OSD Daemons data. An Ceph OSD Daemon optimized for performance may use
+a separate disk to store journal data (e.g., a solid state drive delivers high
+performance journaling).
 
-Ceph's default ``osd journal size`` is 0, so you will need to set this in your 
+Ceph's default ``osd journal size`` is 0, so you will need to set this in your
 ``ceph.conf`` file. A journal size should find the product of the ``filestore
-max sync interval`` and the expected throughput, and multiply the product by 
+max sync interval`` and the expected throughput, and multiply the product by
 two (2)::  
 	  
 	osd journal size = {2 * (expected throughput * filestore max sync interval)}
@@ -144,10 +151,10 @@ See `Journal Config Reference`_ for additional details.
 Monitor OSD Interaction
 =======================
 
-OSDs check each other's heartbeats and report to monitors periodically. Ceph can
-use default values in many cases. However, if your network  has latency issues,
-you may need to adopt longer intervals. See `Configuring Monitor/OSD
-Interaction`_ for a detailed discussion of heartbeats.
+Ceph OSD Daemons check each other's heartbeats and report to monitors
+periodically. Ceph can use default values in many cases. However, if your
+network  has latency issues, you may need to adopt longer intervals. See
+`Configuring Monitor/OSD Interaction`_ for a detailed discussion of heartbeats.
 
 
 Data Placement
@@ -155,6 +162,8 @@ Data Placement
 
 See `Pool & PG Config Reference`_ for details.
 
+
+.. index:: OSD; scrubbing
 
 Scrubbing
 =========
@@ -174,7 +183,7 @@ scrubbing operations.
 
 ``osd max scrubs`` 
 
-:Description: The maximum number of scrub operations for an OSD.
+:Description: The maximum number of scrub operations for an Ceph OSD Daemon.
 :Type: 32-bit Int
 :Default: ``1`` 
 
@@ -206,8 +215,8 @@ scrubbing operations.
 
 ``osd scrub min interval`` 
 
-:Description: The maximum interval in seconds for scrubbing the OSD when the 
-              cluster load is low.
+:Description: The maximum interval in seconds for scrubbing the Ceph OSD Daemon
+              when the Ceph Storage Cluster load is low.
 
 :Type: Float
 :Default: 5 minutes. ``300`` 
@@ -215,7 +224,7 @@ scrubbing operations.
 
 ``osd scrub max interval`` 
 
-:Description: The maximum interval in seconds for scrubbing the OSD 
+:Description: The maximum interval in seconds for scrubbing the Ceph OSD Daemon 
               irrespective of cluster load.
 
 :Type: Float
@@ -236,6 +245,8 @@ scrubbing operations.
 :Default: 512 KB. ``524288``
 
 
+.. index:: OSD; operations settings
+
 Operations
 ==========
 
@@ -249,9 +260,9 @@ recovery operations to ensure optimal performance during recovery.
 
 ``osd op threads`` 
 
-:Description: The number of threads to service OSD operations. Set to ``0`` to 
-              disable it. Increasing the number may increase the request 
-              processing rate.
+:Description: The number of threads to service Ceph OSD Daemon operations. 
+              Set to ``0`` to disable it. Increasing the number may increase 
+              the request processing rate.
 
 :Type: 32-bit Integer
 :Default: ``2`` 
@@ -279,14 +290,14 @@ recovery operations to ensure optimal performance during recovery.
 
 ``osd op thread timeout`` 
 
-:Description: The OSD operation thread timeout in seconds.
+:Description: The Ceph OSD Daemon operation thread timeout in seconds.
 :Type: 32-bit Integer
 :Default: ``30`` 
 
 
 ``osd op complaint time`` 
 
-:Description: An operation becomes complaint worthy after the specified number 
+:Description: An operation becomes complaint worthy after the specified number
               of seconds have elapsed.
 
 :Type: Float
@@ -323,17 +334,18 @@ recovery operations to ensure optimal performance during recovery.
 :Type: 32-bit Integer
 :Default: ``5``
 
+.. index:: OSD; backfilling
 
 Backfilling
 ===========
 
-When you add or remove OSDs to a cluster, the CRUSH algorithm will want to
-rebalance the cluster by moving placement groups to or from OSDs to restore the
-balance. The process of migrating placement groups and the objects they contain
-can reduce the cluster's operational performance considerably. To maintain
-operational performance, Ceph performs this migration  with 'backfilling', which
-allows Ceph to set backfill operations to a lower priority than requests to read
-or write data. 
+When you add or remove Ceph OSD Daemons to a cluster, the CRUSH algorithm will
+want to rebalance the cluster by moving placement groups to or from Ceph OSD
+Daemons to restore the balance. The process of migrating placement groups and
+the objects they contain can reduce the cluster's operational performance
+considerably. To maintain operational performance, Ceph performs this migration
+with 'backfilling', which allows Ceph to set backfill operations to a lower
+priority than requests to read or write data. 
 
 
 ``osd max backfills``
@@ -362,8 +374,9 @@ or write data.
 
 ``osd backfill full ratio``
 
-:Description: Refuse to accept backfill requests when the OSD's full ratio is 
-              above this value.
+:Description: Refuse to accept backfill requests when the Ceph OSD Daemon's 
+              full ratio is above this value.
+
 :Type: Float
 :Default: ``0.85``
 
@@ -374,7 +387,7 @@ or write data.
 :Type: Double
 :Default: ``10.0``
 
-
+.. index:: OSD; osdmap
 
 OSD Map
 =======
@@ -420,23 +433,24 @@ Ceph performs well as the OSD map grows larger.
 :Type: 32-bit Integer
 :Default: ``100``
 
-
+.. index:: OSD; recovery
 
 Recovery
 ========
 
-When the cluster starts or when an OSD crashes and restarts, the OSD begins
-peering with other OSDs before writes can occur.  See `Monitoring OSDs and PGs`_
-for details.
+When the cluster starts or when a Ceph OSD Daemon crashes and restarts, the OSD
+begins peering with other Ceph OSD Daemons before writes can occur.  See
+`Monitoring OSDs and PGs`_ for details.
 
-If an OSD crashed and comes back online, usually it will be out of sync with
-other OSDs containing more recent versions of objects in the placement groups.
-When this happens, the OSD goes into recovery mode and seeks to get the latest
-copy of the data and bring its map back up to date. Depending upon how long the
-OSD was down, the OSD's objects and placement groups may be significantly out of
-date. Also, if a failure domain went down (e.g., a rack), more than one OSD may
-come back online at the same time. This can make the recovery process time
-consuming and resource intensive.
+If a Ceph OSD Daemon crashes and comes back online, usually it will be out of
+sync with other Ceph OSD Daemons containing more recent versions of objects in
+the placement groups. When this happens, the Ceph OSD Daemon goes into recovery
+mode and seeks to get the latest copy of the data and bring its map back up to
+date. Depending upon how long the Ceph OSD Daemon was down, the OSD's objects
+and placement groups may be significantly out of date. Also, if a failure domain
+went down (e.g., a rack), more than one Ceph OSD Daemon may come back online at
+the same time. This can make the recovery process time consuming and resource
+intensive.
 
 To maintain operational performance, Ceph performs recovery with limitations on
 the number recovery requests, threads and object chunk sizes which allows Ceph

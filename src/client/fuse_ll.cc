@@ -28,6 +28,7 @@
 #include "common/safe_io.h"
 #include "include/types.h"
 #include "Client.h"
+#include "ioctl.h"
 #include "common/config.h"
 #include "include/assert.h"
 
@@ -368,6 +369,36 @@ static void fuse_ll_flush(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info 
   fuse_reply_err(req, 0);
 }
 
+#ifdef FUSE_IOCTL_COMPAT
+static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg, struct fuse_file_info *fi,
+                          unsigned flags, const void *in_buf, size_t in_bufsz, size_t out_bufsz)
+{
+  CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
+
+  if (flags & FUSE_IOCTL_COMPAT) {
+    fuse_reply_err(req, ENOSYS);
+    return;
+  }
+
+  switch(cmd) {
+    case CEPH_IOC_GET_LAYOUT: {
+      struct ceph_file_layout layout;
+      struct ceph_ioctl_layout l;
+      Fh *fh = (Fh*)fi->fh;
+      cfuse->client->ll_describe_layout(fh, &layout);
+      l.stripe_unit = layout.fl_stripe_unit;
+      l.stripe_count = layout.fl_stripe_count;
+      l.object_size = layout.fl_object_size;
+      l.data_pool = layout.fl_pg_pool;
+      fuse_reply_ioctl(req, 0, &l, sizeof(struct ceph_ioctl_layout));
+    }
+    break;
+    default:
+      fuse_reply_err(req, EINVAL);
+  }
+}
+#endif
+
 static void fuse_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
@@ -567,7 +598,10 @@ const static struct fuse_lowlevel_ops fuse_ll_oper = {
  create: fuse_ll_create,
  getlk: 0,
  setlk: 0,
- bmap: 0
+ bmap: 0,
+#ifdef FUSE_IOCTL_COMPAT
+ ioctl: fuse_ll_ioctl,
+#endif
 };
 
 

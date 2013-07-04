@@ -30,6 +30,7 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <sstream>
 using namespace std;
 using namespace __gnu_cxx;
 
@@ -43,6 +44,7 @@ class MPoolOpReply;
 
 class MGetPoolStatsReply;
 class MStatfsReply;
+class MCommandReply;
 
 class PerfCounters;
 
@@ -192,7 +194,9 @@ struct ObjectOperation {
     uint64_t *psize;
     utime_t *pmtime;
     time_t *ptime;
-    C_ObjectOperation_stat(uint64_t *ps, utime_t *pm, time_t *pt) : psize(ps), pmtime(pm), ptime(pt) {}
+    int *prval;
+    C_ObjectOperation_stat(uint64_t *ps, utime_t *pm, time_t *pt, int *prval)
+      : psize(ps), pmtime(pm), ptime(pt), prval(prval) {}
     void finish(int r) {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
@@ -207,9 +211,9 @@ struct ObjectOperation {
 	    *pmtime = mtime;
 	  if (ptime)
 	    *ptime = mtime.sec();
-	}
-	catch (buffer::error& e) {
-	  r = -EIO;
+	} catch (buffer::error& e) {
+	  if (prval)
+	    *prval = -EIO;
 	}
       }
     }
@@ -217,7 +221,8 @@ struct ObjectOperation {
   void stat(uint64_t *psize, utime_t *pmtime, int *prval) {
     add_op(CEPH_OSD_OP_STAT);
     unsigned p = ops.size() - 1;
-    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, pmtime, NULL);
+    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, pmtime, NULL,
+							   prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
     out_rval[p] = prval;
@@ -225,7 +230,8 @@ struct ObjectOperation {
   void stat(uint64_t *psize, time_t *ptime, int *prval) {
     add_op(CEPH_OSD_OP_STAT);
     unsigned p = ops.size() - 1;
-    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, NULL, ptime);
+    C_ObjectOperation_stat *h = new C_ObjectOperation_stat(psize, NULL, ptime,
+							   prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
     out_rval[p] = prval;
@@ -237,6 +243,40 @@ struct ObjectOperation {
     add_data(CEPH_OSD_OP_READ, off, len, bl);
     unsigned p = ops.size() - 1;
     out_bl[p] = pbl;
+    out_rval[p] = prval;
+  }
+
+  struct C_ObjectOperation_sparse_read : public Context {
+    bufferlist bl;
+    bufferlist *data_bl;
+    std::map<uint64_t, uint64_t> *extents;
+    int *prval;
+    C_ObjectOperation_sparse_read(bufferlist *data_bl,
+				  std::map<uint64_t, uint64_t> *extents,
+				  int *prval)
+      : data_bl(data_bl), extents(extents), prval(prval) {}
+    void finish(int r) {
+      bufferlist::iterator iter = bl.begin();
+      if (r >= 0) {
+	try {
+	  ::decode(*extents, iter);
+	  ::decode(*data_bl, iter);
+	} catch (buffer::error& e) {
+	  if (prval)
+	    *prval = -EIO;
+	}
+      }
+    }
+  };
+  void sparse_read(uint64_t off, uint64_t len, std::map<uint64_t,uint64_t> *m,
+		   bufferlist *data_bl, int *prval) {
+    bufferlist bl;
+    add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl);
+    unsigned p = ops.size() - 1;
+    C_ObjectOperation_sparse_read *h =
+      new C_ObjectOperation_sparse_read(data_bl, m, prval);
+    out_bl[p] = &h->bl;
+    out_handler[p] = h;
     out_rval[p] = prval;
   }
   void write(uint64_t off, bufferlist& bl) {
@@ -337,6 +377,9 @@ struct ObjectOperation {
             for (list<watch_item_t>::iterator i = resp.entries.begin() ;
                     i != resp.entries.end() ; ++i) {
               obj_watch_t ow;
+	      ostringstream sa;
+	      sa << i->addr;
+	      strncpy(ow.addr, sa.str().c_str(), 256);
               ow.watcher_id = i->name.num();
               ow.cookie = i->cookie;
               ow.timeout_seconds = i->timeout_seconds;
@@ -630,6 +673,10 @@ struct ObjectOperation {
     o.op.xattr.cmp_mode = mode;
   }
 
+  void rollback(uint64_t snapid) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_ROLLBACK);
+    osd_op.op.snap.snapid = snapid;
+  }
 };
 
 
@@ -703,7 +750,7 @@ public:
     vector<int> acting;
     bool used_replica;
 
-    Connection *con;  // for rx buffer only
+    ConnectionRef con;  // for rx buffer only
 
     vector<OSDOp> ops;
 
@@ -783,6 +830,14 @@ public:
     tid_t tid;
     version_t latest;
     C_Op_Map_Latest(Objecter *o, tid_t t) : objecter(o), tid(t), latest(0) {}
+    void finish(int r);
+  };
+
+  struct C_Command_Map_Latest : public Context {
+    Objecter *objecter;
+    uint64_t tid;
+    version_t latest;
+    C_Command_Map_Latest(Objecter *o, tid_t t) :  objecter(o), tid(t), latest(0) {}
     void finish(int r);
   };
 
@@ -900,6 +955,38 @@ public:
 	       auid(0), crush_rule(0), snapid(0), blp(NULL) {}
   };
 
+  // -- osd commands --
+  struct CommandOp : public RefCountedObject {
+    xlist<CommandOp*>::item session_item;
+    OSDSession *session;
+    tid_t tid;
+    vector<string> cmd;
+    bufferlist inbl;
+    bufferlist *poutbl;
+    string *prs;
+    int target_osd;
+    pg_t target_pg;
+    epoch_t map_dne_bound;
+    int map_check_error;           // error to return if map check fails
+    const char *map_check_error_str;
+    Context *onfinish;
+    utime_t last_submit;
+
+    CommandOp()
+      : session_item(this), session(NULL),
+	tid(0), poutbl(NULL), prs(NULL), target_osd(-1),
+	map_dne_bound(0),
+	map_check_error(0),
+	map_check_error_str(NULL),
+	onfinish(NULL) {}
+  };
+
+  int _submit_command(CommandOp *c, tid_t *ptid);
+  int recalc_command_target(CommandOp *c);
+  void _send_command(CommandOp *c);
+  void _finish_command(CommandOp *c, int r, string rs);
+  void handle_command_reply(MCommandReply *m);
+
 
   // -- lingering ops --
 
@@ -986,9 +1073,10 @@ public:
   struct OSDSession {
     xlist<Op*> ops;
     xlist<LingerOp*> linger_ops;
+    xlist<CommandOp*> command_ops;
     int osd;
     int incarnation;
-    Connection *con;
+    ConnectionRef con;
 
     OSDSession(int o) : osd(o), incarnation(0), con(NULL) {}
   };
@@ -1003,11 +1091,13 @@ public:
   map<tid_t,PoolStatOp*>    poolstat_ops;
   map<tid_t,StatfsOp*>      statfs_ops;
   map<tid_t,PoolOp*>        pool_ops;
+  map<tid_t,CommandOp*>     command_ops;
 
   // ops waiting for an osdmap with a new pool or confirmation that
   // the pool does not exist (may be expanded to other uses later)
   map<uint64_t, LingerOp*>  check_latest_map_lingers;
   map<tid_t, Op*>           check_latest_map_ops;
+  map<tid_t, CommandOp*>    check_latest_map_commands;
 
   map<epoch_t,list< pair<Context*, int> > > waiting_for_map;
 
@@ -1019,6 +1109,8 @@ public:
     RECALC_OP_TARGET_NO_ACTION = 0,
     RECALC_OP_TARGET_NEED_RESEND,
     RECALC_OP_TARGET_POOL_DNE,
+    RECALC_OP_TARGET_OSD_DNE,
+    RECALC_OP_TARGET_OSD_DOWN,
   };
   int recalc_op_target(Op *op);
   bool recalc_linger_op_target(LingerOp *op);
@@ -1033,6 +1125,9 @@ public:
   void check_linger_pool_dne(LingerOp *op);
   void _send_linger_map_check(LingerOp *op);
   void linger_cancel_map_check(LingerOp *op);
+  void check_command_map_dne(CommandOp *op);
+  void _send_command_map_check(CommandOp *op);
+  void command_cancel_map_check(CommandOp *op);
 
   void kick_requests(OSDSession *session);
 
@@ -1115,7 +1210,8 @@ public:
 
   void scan_requests(bool skipped_map,
 		     map<tid_t, Op*>& need_resend,
-		     list<LingerOp*>& need_resend_linger);
+		     list<LingerOp*>& need_resend_linger,
+		     map<tid_t, CommandOp*>& need_resend_command);
 
   // messages
  public:
@@ -1142,6 +1238,7 @@ private:
   void dump_requests(Formatter& fmt) const;
   void dump_ops(Formatter& fmt) const;
   void dump_linger_ops(Formatter& fmt) const;
+  void dump_command_ops(Formatter& fmt) const;
   void dump_pool_ops(Formatter& fmt) const;
   void dump_pool_stat_ops(Formatter& fmt) const;
   void dump_statfs_ops(Formatter& fmt) const;
@@ -1157,6 +1254,31 @@ private:
   void add_global_op_flags(int flag) { global_op_flags |= flag; }
   /** Clear the passed flags from the global op flag set */
   void clear_global_op_flag(int flags) { global_op_flags &= ~flags; }
+
+  // commands
+  int osd_command(int osd, vector<string>& cmd, bufferlist& inbl, tid_t *ptid,
+		    bufferlist *poutbl, string *prs, Context *onfinish) {
+    assert(osd >= 0);
+    CommandOp *c = new CommandOp;
+    c->cmd = cmd;
+    c->inbl = inbl;
+    c->poutbl = poutbl;
+    c->prs = prs;
+    c->onfinish = onfinish;
+    c->target_osd = osd;
+    return _submit_command(c, ptid);
+  }
+  int pg_command(pg_t pgid, vector<string>& cmd, bufferlist& inbl, tid_t *ptid,
+		   bufferlist *poutbl, string *prs, Context *onfinish) {
+    CommandOp *c = new CommandOp;
+    c->cmd = cmd;
+    c->inbl = inbl;
+    c->poutbl = poutbl;
+    c->prs = prs;
+    c->onfinish = onfinish;
+    c->target_pg = pgid;
+    return _submit_command(c, ptid);
+  }
 
   // mid-level helpers
   tid_t mutate(const object_t& oid, const object_locator_t& oloc, 
@@ -1287,23 +1409,6 @@ private:
     o->outbl = pbl;
     return op_submit(o);
   }
-  tid_t sparse_read(const object_t& oid, const object_locator_t& oloc,
-	     uint64_t off, uint64_t len, snapid_t snap, bufferlist *pbl, int flags,
-	     Context *onfinish,
-	     eversion_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
-    vector<OSDOp> ops;
-    int i = init_ops(ops, 1, extra_ops);
-    ops[i].op.op = CEPH_OSD_OP_SPARSE_READ;
-    ops[i].op.extent.offset = off;
-    ops[i].op.extent.length = len;
-    ops[i].op.extent.truncate_size = 0;
-    ops[i].op.extent.truncate_seq = 0;
-    Op *o = new Op(oid, oloc, ops, flags | global_op_flags | CEPH_OSD_FLAG_READ, onfinish, 0, objver);
-    o->snapid = snap;
-    o->outbl = pbl;
-    return op_submit(o);
-  }
-
   tid_t getxattr(const object_t& oid, const object_locator_t& oloc,
 	     const char *name, snapid_t snap, bufferlist *pbl, int flags,
 	     Context *onfinish,
@@ -1603,14 +1708,14 @@ public:
 		uint64_t trunc_size, __u32 trunc_seq, Context *onfinish) {
     if (extents.size() == 1) {
       read_trunc(extents[0].oid, extents[0].oloc, extents[0].offset, extents[0].length,
-	   snap, bl, flags, trunc_size, trunc_seq, onfinish);
+	   snap, bl, flags, extents[0].truncate_size, trunc_seq, onfinish);
     } else {
       C_GatherBuilder gather(cct);
       vector<bufferlist> resultbl(extents.size());
       int i=0;
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
 	read_trunc(p->oid, p->oloc, p->offset, p->length,
-	     snap, &resultbl[i++], flags, trunc_size, trunc_seq, gather.new_sub());
+	     snap, &resultbl[i++], flags, p->truncate_size, trunc_seq, gather.new_sub());
       }
       gather.set_finisher(new C_SGRead(this, extents, resultbl, bl, onfinish));
       gather.activate();
@@ -1626,7 +1731,7 @@ public:
 		Context *onack, Context *oncommit) {
     if (extents.size() == 1) {
       write_trunc(extents[0].oid, extents[0].oloc, extents[0].offset, extents[0].length,
-	    snapc, bl, mtime, flags, trunc_size, trunc_seq, onack, oncommit);
+	    snapc, bl, mtime, flags, extents[0].truncate_size, trunc_seq, onack, oncommit);
     } else {
       C_GatherBuilder gack(cct, onack);
       C_GatherBuilder gcom(cct, oncommit);
@@ -1638,7 +1743,7 @@ public:
 	  bl.copy(bit->first, bit->second, cur);
 	assert(cur.length() == p->length);
 	write_trunc(p->oid, p->oloc, p->offset, p->length, 
-	      snapc, cur, mtime, flags, trunc_size, trunc_seq,
+	      snapc, cur, mtime, flags, p->truncate_size, trunc_seq,
 	      onack ? gack.new_sub():0,
 	      oncommit ? gcom.new_sub():0);
       }
@@ -1655,6 +1760,7 @@ public:
   void ms_handle_connect(Connection *con);
   void ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con);
+  void blacklist_self(bool set);
 };
 
 #endif

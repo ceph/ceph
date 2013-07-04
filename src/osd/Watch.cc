@@ -261,13 +261,15 @@ Watch::Watch(
   ObjectContext *obc,
   uint32_t timeout,
   uint64_t cookie,
-  entity_name_t entity)
+  entity_name_t entity,
+  entity_addr_t addr)
   : cb(NULL),
     osd(osd),
     pg(pg),
     obc(obc),
     timeout(timeout),
     cookie(cookie),
+    addr(addr),
     entity(entity),
     discarded(false) {
   obc->get();
@@ -426,9 +428,9 @@ void Watch::notify_ack(uint64_t notify_id)
 
 WatchRef Watch::makeWatchRef(
   ReplicatedPG *pg, OSDService *osd,
-  ObjectContext *obc, uint32_t timeout, uint64_t cookie, entity_name_t entity)
+  ObjectContext *obc, uint32_t timeout, uint64_t cookie, entity_name_t entity, entity_addr_t addr)
 {
-  WatchRef ret(new Watch(pg, osd, obc, timeout, cookie, entity));
+  WatchRef ret(new Watch(pg, osd, obc, timeout, cookie, entity, addr));
   ret->set_self(ret);
   return ret;
 }

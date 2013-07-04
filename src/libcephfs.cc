@@ -172,6 +172,18 @@ public:
     return 0;
   }
 
+  int conf_parse_env(const char *name)
+  {
+    md_config_t *conf = cct->_conf;
+    vector<const char*> args;
+    env_to_vec(args, name);
+    int ret = conf->parse_argv(args);
+    if (ret)
+      return ret;
+    conf->apply_changes(NULL);
+    return 0;
+  }
+
   int conf_set(const char *option, const char *value)
   {
     int ret = cct->_conf->set_val(option, value);
@@ -282,6 +294,11 @@ extern "C" int ceph_conf_parse_argv(struct ceph_mount_info *cmount, int argc,
 				     const char **argv)
 {
   return cmount->conf_parse_argv(argc, argv);
+}
+
+extern "C" int ceph_conf_parse_env(struct ceph_mount_info *cmount, const char *name)
+{
+  return cmount->conf_parse_env(name);
 }
 
 extern "C" int ceph_conf_set(struct ceph_mount_info *cmount, const char *option,
@@ -705,10 +722,75 @@ extern "C" int ceph_get_file_stripe_unit(struct ceph_mount_info *cmount, int fh)
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->describe_layout(fh, &l);
+  r = cmount->get_client()->fdescribe_layout(fh, &l);
   if (r < 0)
     return r;
   return l.fl_stripe_unit;
+}
+
+extern "C" int ceph_get_path_stripe_unit(struct ceph_mount_info *cmount, const char *path)
+{
+  struct ceph_file_layout l;
+  int r;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  r = cmount->get_client()->describe_layout(path, &l);
+  if (r < 0)
+    return r;
+  return l.fl_stripe_unit;
+}
+
+extern "C" int ceph_get_file_stripe_count(struct ceph_mount_info *cmount, int fh)
+{
+  struct ceph_file_layout l;
+  int r;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  r = cmount->get_client()->fdescribe_layout(fh, &l);
+  if (r < 0)
+    return r;
+  return l.fl_stripe_count;
+}
+
+extern "C" int ceph_get_path_stripe_count(struct ceph_mount_info *cmount, const char *path)
+{
+  struct ceph_file_layout l;
+  int r;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  r = cmount->get_client()->describe_layout(path, &l);
+  if (r < 0)
+    return r;
+  return l.fl_stripe_count;
+}
+
+extern "C" int ceph_get_file_object_size(struct ceph_mount_info *cmount, int fh)
+{
+  struct ceph_file_layout l;
+  int r;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  r = cmount->get_client()->fdescribe_layout(fh, &l);
+  if (r < 0)
+    return r;
+  return l.fl_object_size;
+}
+
+extern "C" int ceph_get_path_object_size(struct ceph_mount_info *cmount, const char *path)
+{
+  struct ceph_file_layout l;
+  int r;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  r = cmount->get_client()->describe_layout(path, &l);
+  if (r < 0)
+    return r;
+  return l.fl_object_size;
 }
 
 extern "C" int ceph_get_file_pool(struct ceph_mount_info *cmount, int fh)
@@ -718,7 +800,20 @@ extern "C" int ceph_get_file_pool(struct ceph_mount_info *cmount, int fh)
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->describe_layout(fh, &l);
+  r = cmount->get_client()->fdescribe_layout(fh, &l);
+  if (r < 0)
+    return r;
+  return l.fl_pg_pool;
+}
+
+extern "C" int ceph_get_path_pool(struct ceph_mount_info *cmount, const char *path)
+{
+  struct ceph_file_layout l;
+  int r;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  r = cmount->get_client()->describe_layout(path, &l);
   if (r < 0)
     return r;
   return l.fl_pg_pool;
@@ -731,7 +826,7 @@ extern "C" int ceph_get_file_pool_name(struct ceph_mount_info *cmount, int fh, c
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->describe_layout(fh, &l);
+  r = cmount->get_client()->fdescribe_layout(fh, &l);
   if (r < 0)
     return r;
   string name = cmount->get_client()->get_pool_name(l.fl_pg_pool);
@@ -743,6 +838,80 @@ extern "C" int ceph_get_file_pool_name(struct ceph_mount_info *cmount, int fh, c
   return name.length();
 }
 
+extern "C" int ceph_get_pool_name(struct ceph_mount_info *cmount, int pool, char *buf, size_t len)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  string name = cmount->get_client()->get_pool_name(pool);
+  if (len == 0)
+    return name.length();
+  if (name.length() > len)
+    return -ERANGE;
+  strncpy(buf, name.c_str(), len);
+  return name.length();
+}
+
+extern "C" int ceph_get_path_pool_name(struct ceph_mount_info *cmount, const char *path, char *buf, size_t len)
+{
+  struct ceph_file_layout l;
+  int r;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  r = cmount->get_client()->describe_layout(path, &l);
+  if (r < 0)
+    return r;
+  string name = cmount->get_client()->get_pool_name(l.fl_pg_pool);
+  if (len == 0)
+    return name.length();
+  if (name.length() > len)
+    return -ERANGE;
+  strncpy(buf, name.c_str(), len);
+  return name.length();
+}
+
+extern "C" int ceph_get_file_layout(struct ceph_mount_info *cmount, int fh, int *stripe_unit, int *stripe_count, int *object_size, int *pg_pool)
+{
+  struct ceph_file_layout l;
+  int r;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  r = cmount->get_client()->fdescribe_layout(fh, &l);
+  if (r < 0)
+    return r;
+  if (stripe_unit)
+    *stripe_unit = l.fl_stripe_unit;
+  if (stripe_count)
+    *stripe_count = l.fl_stripe_count;
+  if (object_size)
+    *object_size = l.fl_object_size;
+  if (pg_pool)
+    *pg_pool = l.fl_pg_pool;
+  return 0;
+}
+
+extern "C" int ceph_get_path_layout(struct ceph_mount_info *cmount, const char *path, int *stripe_unit, int *stripe_count, int *object_size, int *pg_pool)
+{
+  struct ceph_file_layout l;
+  int r;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  r = cmount->get_client()->describe_layout(path, &l);
+  if (r < 0)
+    return r;
+  if (stripe_unit)
+    *stripe_unit = l.fl_stripe_unit;
+  if (stripe_count)
+    *stripe_count = l.fl_stripe_count;
+  if (object_size)
+    *object_size = l.fl_object_size;
+  if (pg_pool)
+    *pg_pool = l.fl_pg_pool;
+  return 0;
+}
+
 extern "C" int ceph_get_file_replication(struct ceph_mount_info *cmount, int fh)
 {
   struct ceph_file_layout l;
@@ -750,7 +919,21 @@ extern "C" int ceph_get_file_replication(struct ceph_mount_info *cmount, int fh)
 
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  r = cmount->get_client()->describe_layout(fh, &l);
+  r = cmount->get_client()->fdescribe_layout(fh, &l);
+  if (r < 0)
+    return r;
+  int rep = cmount->get_client()->get_pool_replication(l.fl_pg_pool);
+  return rep;
+}
+
+extern "C" int ceph_get_path_replication(struct ceph_mount_info *cmount, const char *path)
+{
+  struct ceph_file_layout l;
+  int r;
+
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  r = cmount->get_client()->describe_layout(path, &l);
   if (r < 0)
     return r;
   int rep = cmount->get_client()->get_pool_replication(l.fl_pg_pool);

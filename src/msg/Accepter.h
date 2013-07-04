@@ -35,8 +35,8 @@ public:
     
   void *entry();
   void stop();
-  int bind(const entity_addr_t &bind_addr, int avoid_port1=0, int avoid_port2=0);
-  int rebind(int avoid_port);
+  int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
+  int rebind(const set<int>& avoid_port);
   int start();
 };
 

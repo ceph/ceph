@@ -31,7 +31,7 @@ If you deploy Ceph with ``mkcephfs``, manually redeploy ``ceph.conf`` to the
 hosts in your cluster. For example:: 
 
 	cd /etc/ceph
-	ssh {host-name} sudo /etc/ceph/ceph.conf < ceph.conf
+	ssh {host-name} sudo tee /etc/ceph/ceph.conf < ceph.conf
 
 
 Create Data Directory
@@ -348,7 +348,7 @@ roles`` configurable.
 Keystone itself needs to be configured to point to RGW as an object-storage
 endpoint::
 
-	keystone service-create --name swift --type-object-store
+	keystone service-create --name swift --type-object store
 	keystone endpoint-create --service-id <id> --publicurl http://radosgw.example.com/swift/v1 \
 		--internalurl http://radosgw.example.com/swift/v1 --adminurl http://radosgw.example.com/swift/v1
 
@@ -369,7 +369,7 @@ Keystone uses for creating the requests to the nss db format, for example::
 	openssl x509 -in /etc/keystone/ssl/certs/ca.pem -pubkey | \
 		certutil -d /var/ceph/nss -A -n ca -t "TCu,Cu,Tuw"
 	openssl x509 -in /etc/keystone/ssl/certs/signing_cert.pem -pubkey | \
-		certutil -d /var/ceph/nss -A -n signing_cert -t "TCu,Cu,Tuw"
+		certutil -A -d /var/ceph/nss -n signing_cert -t "P,P,P"
 
 
 Enabling Subdomain S3 Calls

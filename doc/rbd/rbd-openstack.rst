@@ -2,12 +2,14 @@
  Block Devices and OpenStack
 =============================
 
-You may use Ceph block device images with OpenStack through ``libvirt``, which
+.. index:: Ceph Block Device; OpenStack
+
+You may use Ceph Block Device images with OpenStack through ``libvirt``, which
 configures the QEMU interface to ``librbd``. Ceph stripes block device images as
-objects across the cluster, which means that large Ceph block device images have
+objects across the cluster, which means that large Ceph Block Device images have
 better performance than a standalone server!
 
-To use Ceph block devices with OpenStack, you must install QEMU, ``libvirt``,
+To use Ceph Block Devices with OpenStack, you must install QEMU, ``libvirt``,
 and OpenStack first. We recommend using a separate physical host for your
 OpenStack installation. OpenStack recommends a minimum of 8GB of RAM and a
 quad-core processor. The following diagram depicts the OpenStack/Ceph
@@ -32,8 +34,8 @@ technology stack.
             |          OSDs          | |        Monitors        |
             +------------------------+ +------------------------+
 
-.. important:: To use Ceph block devices with OpenStack, you must have a 
-   running Ceph cluster.
+.. important:: To use Ceph Block Devices with OpenStack, you must have 
+   access to a running Ceph Storage Cluster.
 
 Two parts of OpenStack integrate with Ceph's block devices: 
 
@@ -48,12 +50,14 @@ Two parts of OpenStack integrate with Ceph's block devices:
   beginning with the Folsom release.
 
 Beginning with OpenStack Folsom and Ceph 0.52, you can use  OpenStack Glance to
-store images in a Ceph block device, and  you can use Cinder or ``nova-volume``
+store images in a Ceph Block Device, and  you can use Cinder or ``nova-volume``
 to boot a VM using a copy-on-write clone of an image.
 
 The instructions below detail the setup for Glance and Nova/Cinder, although
 they do not have to be used together. You may store images in Ceph block devices
 while running VMs using a local disk, or vice versa.
+
+.. index:: pools; OpenStack
 
 Create a Pool
 =============
@@ -171,10 +175,17 @@ Configuring Cinder/nova-volume
 
 OpenStack requires a driver to interact with Ceph block devices. You must also
 specify the pool name for the block device. On your OpenStack host,
-edit ``/etc/cinder/cinder.conf`` and add::
+edit ``/etc/cinder/cinder.conf`` and add this for Folsom or earlier
+versions of OpenStack::
 
-	volume_driver=cinder.volume.driver.RBDDriver
-	rbd_pool=volumes
+    volume_driver=cinder.volume.driver.RBDDriver
+    rbd_pool=volumes
+
+For Grizzly, use::
+
+    volume_driver=cinder.volume.drivers.rbd.RBDDriver
+    rbd_pool=volumes
+    glance_api_version=2
 
 If you're not using Cinder, replace Cinder with Nova in the previous section.
 

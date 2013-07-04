@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <signal.h>
 #include <limits.h>
+#include <cstring>
 
 #include "Monitor.h"
 #include "common/version.h"
@@ -77,6 +78,7 @@
 #include "auth/KeyRing.h"
 
 #include "common/config.h"
+#include "common/cmdparse.h"
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -119,6 +121,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   name(nm),
   rank(-1), 
   messenger(m),
+  con_self(m ? m->get_loopback_connection() : NULL),
   lock("Monitor::lock"),
   timer(cct_, lock),
   has_ever_joined(false),
@@ -150,6 +153,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   sync_provider(),
 
   timecheck_round(0),
+  timecheck_acks(0),
   timecheck_event(NULL),
 
   probe_timeout_event(NULL),
@@ -169,12 +173,12 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   paxos_service[PAXOS_LOG] = new LogMonitor(this, paxos, "logm");
   paxos_service[PAXOS_AUTH] = new AuthMonitor(this, paxos, "auth");
 
-  health_monitor = QuorumServiceRef(new HealthMonitor(this));
-  config_key_service = ConfigKeyServiceRef(new ConfigKeyService(this, paxos));
+  health_monitor = new HealthMonitor(this);
+  config_key_service = new ConfigKeyService(this, paxos);
 
-  mon_caps = new MonCaps();
-  mon_caps->set_allow_all(true);
-  mon_caps->text = "allow *";
+  mon_caps = new MonCap();
+  bool r = mon_caps->parse("allow *", NULL);
+  assert(r);
 
   exited_quorum = ceph_clock_now(g_ceph_context);
 }
@@ -202,6 +206,8 @@ Monitor::~Monitor()
 {
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     delete *p;
+  delete health_monitor;
+  delete config_key_service;
   delete paxos;
   assert(session_map.sessions.empty());
   delete mon_caps;
@@ -436,7 +442,7 @@ int Monitor::preinit()
 
   // we need to bootstrap authentication keys so we can form an
   // initial quorum.
-  if (authmon()->get_version() == 0) {
+  if (authmon()->get_last_committed() == 0) {
     dout(10) << "loading initial keyring to bootstrap authentication for mkfs" << dendl;
     bufferlist bl;
     store->get("mkfs", "keyring", bl);
@@ -471,16 +477,18 @@ int Monitor::preinit()
 
   // unlock while registering to avoid mon_lock -> admin socket lock dependency.
   lock.Unlock();
-  r = admin_socket->register_command("mon_status", admin_hook,
+  r = admin_socket->register_command("mon_status", "mon_status", admin_hook,
 				     "show current monitor status");
   assert(r == 0);
-  r = admin_socket->register_command("quorum_status", admin_hook,
-					 "show current quorum status");
+  r = admin_socket->register_command("quorum_status", "quorum_status",
+				     admin_hook, "show current quorum status");
   assert(r == 0);
-  r = admin_socket->register_command("sync_status", admin_hook,
+  r = admin_socket->register_command("sync_status", "sync_status", admin_hook,
 				     "show current synchronization status");
   assert(r == 0);
-  r = admin_socket->register_command("add_bootstrap_peer_hint", admin_hook,
+  r = admin_socket->register_command("add_bootstrap_peer_hint",
+				     "add_bootstrap_peer_hint name=addr,type=CephIPAddr",
+				     admin_hook,
 				     "add peer address as potential bootstrap peer for cluster bringup");
   assert(r == 0);
   lock.Lock();
@@ -512,18 +520,25 @@ void Monitor::init_paxos()
   dout(10) << __func__ << dendl;
   paxos->init();
 
-  // update paxos
-  for (int i = 0; i < PAXOS_NUM; ++i) {
-    if (paxos->is_consistent()) {
-      paxos_service[i]->update_from_paxos();
-    }
-  }
-
   // init services
   for (int i = 0; i < PAXOS_NUM; ++i) {
-    if (paxos->is_consistent()) {
-      paxos_service[i]->init();
-    }
+    paxos_service[i]->init();
+  }
+
+  // update paxos
+  if (paxos->is_consistent()) {
+    refresh_from_paxos(NULL);
+  }
+}
+
+void Monitor::refresh_from_paxos(bool *need_bootstrap)
+{
+  dout(10) << __func__ << dendl;
+  for (int i = 0; i < PAXOS_NUM; ++i) {
+    paxos_service[i]->refresh(need_bootstrap);
+  }
+  for (int i = 0; i < PAXOS_NUM; ++i) {
+    paxos_service[i]->post_paxos_update();
   }
 }
 
@@ -567,6 +582,7 @@ void Monitor::shutdown()
     admin_socket->unregister_command("mon_status");
     admin_socket->unregister_command("quorum_status");
     admin_socket->unregister_command("sync_status");
+    admin_socket->unregister_command("add_bootstrap_peer_hint");
     delete admin_hook;
     admin_hook = NULL;
   }
@@ -586,6 +602,7 @@ void Monitor::shutdown()
   }
   
   // clean up
+  paxos->shutdown();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     (*p)->shutdown();
   health_monitor->shutdown();
@@ -701,6 +718,7 @@ void Monitor::reset()
 {
   dout(10) << "reset" << dendl;
 
+  cancel_probe_timeout();
   timecheck_finish();
 
   leader_since = utime_t();
@@ -1295,18 +1313,18 @@ void Monitor::sync_send_chunks(SyncEntity sync)
 
 void Monitor::sync_requester_abort()
 {
-  dout(10) << __func__;
+  dout(10) << __func__ << dendl;
   assert(state == STATE_SYNCHRONIZING);
   assert(sync_role == SYNC_ROLE_REQUESTER);
 
   if (sync_leader.get() != NULL) {
-    *_dout << " " << sync_leader->entity;
+    dout(10) << __func__ << " leader " << sync_leader->entity << dendl;
     sync_leader->cancel_timeout();
     sync_leader.reset();
   }
 
   if (sync_provider.get() != NULL) {
-    *_dout << " " << sync_provider->entity;
+    dout(10) << __func__ << " provider " << sync_provider->entity << dendl;
     sync_provider->cancel_timeout();
 
     MMonSync *msg = new MMonSync(MMonSync::OP_ABORT);
@@ -1314,12 +1332,10 @@ void Monitor::sync_requester_abort()
 
     sync_provider.reset();
   }
-  *_dout << " clearing potentially inconsistent store" << dendl;
 
   // Given that we are explicitely aborting the whole sync process, we should
   // play it safe and clear the store.
   set<string> targets = get_sync_targets_names();
-  targets.insert("mon_sync");
   store->clear(targets);
 
   dout(1) << __func__ << " no longer a sync requester" << dendl;
@@ -1331,6 +1347,57 @@ void Monitor::sync_requester_abort()
   bootstrap();
 }
 
+void Monitor::sync_obtain_latest_monmap(bufferlist &bl)
+{
+  dout(1) << __func__ << dendl;
+
+  MonMap latest_monmap;
+
+  // Grab latest monmap from MonmapMonitor
+  bufferlist monmon_bl;
+  int err = monmon()->get_monmap(monmon_bl);
+  if (err < 0) {
+    if (err != -ENOENT) {
+      derr << __func__
+           << " something wrong happened while reading the store: "
+           << cpp_strerror(err) << dendl;
+      assert(0 == "error reading the store");
+    }
+  } else {
+    latest_monmap.decode(monmon_bl);
+  }
+
+  // Grab last backed up monmap (if any) and compare epochs
+  if (store->exists("mon_sync", "latest_monmap")) {
+    bufferlist backup_bl;
+    int err = store->get("mon_sync", "latest_monmap", backup_bl);
+    if (err < 0) {
+      assert(err != -ENOENT);
+      derr << __func__
+           << " something wrong happened while reading the store: "
+           << cpp_strerror(err) << dendl;
+      assert(0 == "error reading the store");
+    }
+    assert(backup_bl.length() > 0);
+
+    MonMap backup_monmap;
+    backup_monmap.decode(backup_bl);
+
+    if (backup_monmap.epoch > latest_monmap.epoch)
+      latest_monmap = backup_monmap;
+  }
+
+  // Check if our current monmap's epoch is greater than the one we've
+  // got so far.
+  if (monmap->epoch > latest_monmap.epoch)
+    latest_monmap = *monmap;
+
+  assert(latest_monmap.epoch > 0);
+  dout(1) << __func__ << " obtained monmap e" << latest_monmap.epoch << dendl;
+
+  latest_monmap.encode(bl, CEPH_FEATURES_ALL);
+}
+
 /**
  *
  */
@@ -1339,22 +1406,11 @@ void Monitor::sync_store_init()
   MonitorDBStore::Transaction t;
   t.put("mon_sync", "in_sync", 1);
 
-  bufferlist latest_monmap;
-  int err = monmon()->get_monmap(latest_monmap);
-  if (err < 0) {
-    if (err != -ENOENT) {
-      derr << __func__
-           << " something wrong happened while reading the store: "
-           << cpp_strerror(err) << dendl;
-      assert(0 == "error reading the store");
-      return; // this is moot
-    } else {
-      dout(10) << __func__ << " backup current monmap" << dendl;
-      monmap->encode(latest_monmap, get_quorum_features());
-    }
-  }
+  bufferlist backup_monmap;
+  sync_obtain_latest_monmap(backup_monmap);
+  assert(backup_monmap.length() > 0);
 
-  t.put("mon_sync", "latest_monmap", latest_monmap);
+  t.put("mon_sync", "latest_monmap", backup_monmap);
 
   store->apply_transaction(t);
 }
@@ -1412,14 +1468,16 @@ void Monitor::sync_start(entity_inst_t &other)
   sync_role = SYNC_ROLE_REQUESTER;
   sync_state = SYNC_STATE_START;
 
+  // First init the store (grab the monmap and all that) and only then
+  // clear the store (except for the mon_sync prefix).  This avoids that
+  // we end up losing the monmaps from the store.
+  sync_store_init();
+
   // clear the underlying store, since we are starting a whole
   // sync process from the bare beginning.
   set<string> targets = get_sync_targets_names();
-  targets.insert("mon_sync");
   store->clear(targets);
 
-
-  sync_store_init();
 
   // assume 'other' as the leader. We will update the leader once we receive
   // a reply to the sync start.
@@ -2130,29 +2188,30 @@ void Monitor::finish_election()
 }
 
 
-bool Monitor::_allowed_command(MonSession *s, const vector<string>& cmd)
+bool Monitor::_allowed_command(MonSession *s, map<string, cmd_vartype>& cmd)
 {
-  for (list<list<string> >::iterator p = s->caps.cmd_allow.begin();
-       p != s->caps.cmd_allow.end();
-       ++p) {
-    list<string>::iterator q;
-    unsigned i;
-    dout(0) << "cmd " << cmd << " vs " << *p << dendl;
-    for (q = p->begin(), i = 0; q != p->end() && i < cmd.size(); ++q, ++i) {
-      if (*q == "*")
-	continue;
-      if (*q == "...") {
-	i = cmd.size() - 1;
-	continue;
-      }	
-      if (*q != cmd[i])
-	break;
+  bool retval = false;
+
+  if (s->caps.is_allow_all())
+    return true;
+
+  string prefix;
+  cmd_getval(g_ceph_context, cmd, "prefix", prefix);
+
+  map<string,string> strmap;
+  for (map<string, cmd_vartype>::const_iterator p = cmd.begin();
+       p != cmd.end(); ++p) {
+    if (p->first != "prefix") {
+      strmap[p->first] = cmd_vartype_stringify(p->second);
     }
-    if (q == p->end() && i == cmd.size())
-      return true;   // match
   }
 
-  return false;
+  if (s->caps.is_capable(g_ceph_context, s->inst.name,
+			 "", prefix, strmap, false, false, false)) {
+    retval = true; 
+  }
+
+  return retval;
 }
 
 void Monitor::_sync_status(ostream& ss)
@@ -2444,6 +2503,7 @@ void Monitor::get_status(stringstream &ss, Formatter *f)
   get_health(health, NULL, f);
 
   if (f) {
+    f->dump_stream("fsid") << monmap->get_fsid();
     f->dump_stream("monmap") << *monmap;
     f->dump_stream("election_epoch") << get_epoch();
     f->dump_stream("quorum") << get_quorum();
@@ -2453,6 +2513,7 @@ void Monitor::get_status(stringstream &ss, Formatter *f)
     f->dump_stream("mdsmap") << mdsmon()->mdsmap;
     f->close_section();
   } else {
+    ss << "  cluster " << monmap->get_fsid() << "\n";
     ss << "   health " << health << "\n";
     ss << "   monmap " << *monmap << ", election epoch " << get_epoch()
       << ", quorum " << get_quorum() << " " << get_quorum_names() << "\n";
@@ -2461,6 +2522,16 @@ void Monitor::get_status(stringstream &ss, Formatter *f)
     ss << "   mdsmap " << mdsmon()->mdsmap << "\n";
   }
 }
+
+#undef COMMAND
+struct MonCommand {
+  string cmdstring;
+  string helpstring;
+} mon_commands[] = {
+#define COMMAND(parsesig, helptext) \
+  {parsesig, helptext},
+#include <mon/MonCommands.h>
+};
 
 void Monitor::handle_command(MMonCommand *m)
 {
@@ -2477,45 +2548,103 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
 
-  bool access_cmd = _allowed_command(session, m->cmd);
-  bool access_r = (session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_R) ||
-		   access_cmd);
-  bool access_all = (session->caps.get_allow_all() || access_cmd);
+  if (m->cmd.empty()) {
+    string rs = "No command supplied";
+    reply_command(m, -EINVAL, rs, 0);
+    return;
+  }
 
-  dout(0) << "handle_command " << *m << dendl;
+  string prefix;
+  vector<string> fullcmd;
+  map<string, cmd_vartype> cmdmap;
+  stringstream ss, ds;
   bufferlist rdata;
   string rs;
   int r = -EINVAL;
   rs = "unrecognized command";
-  if (m->cmd.empty())
-    goto out;
 
-  if (m->cmd[0] == "mds") {
+  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    // ss has reason for failure
+    r = -EINVAL;
+    rs = ss.str();
+    if (!m->get_source().is_mon())  // don't reply to mon->mon commands
+      reply_command(m, r, rs, 0);
+    else
+      m->put();
+    return;
+  }
+
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  if (prefix == "get_command_descriptions") {
+    int cmdnum = 0;
+    JSONFormatter *f = new JSONFormatter();
+    f->open_object_section("command_descriptions");
+    for (MonCommand *cp = mon_commands;
+	 cp < &mon_commands[ARRAY_SIZE(mon_commands)]; cp++) {
+
+      ostringstream secname;
+      secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
+      dump_cmd_and_help_to_json(f, secname.str(),
+				cp->cmdstring, cp->helpstring);
+      cmdnum++;
+    }
+    f->close_section();	// command_descriptions
+
+    bufferlist rdata;
+    f->flush(ds);
+    delete f;
+    rdata.append(ds);
+    reply_command(m, 0, "", rdata, 0);
+    return;
+  }
+
+  bool access_cmd;
+  bool access_r;
+  bool access_all;
+
+  string module;
+  string err;
+
+  dout(0) << "handle_command " << *m << dendl;
+
+  string format;
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  boost::scoped_ptr<Formatter> f(new_formatter(format));
+
+  get_str_vec(prefix, fullcmd);
+  module = fullcmd[0];
+
+  access_cmd = _allowed_command(session, cmdmap);
+  access_r = (session->is_capable("mon", MON_CAP_R) || access_cmd);
+  access_all = (session->caps.is_allow_all() || access_cmd);
+
+  if (module == "mds") {
     mdsmon()->dispatch(m);
     return;
   }
-  if (m->cmd[0] == "osd") {
+  if (module == "osd") {
     osdmon()->dispatch(m);
     return;
   }
-  if (m->cmd[0] == "pg") {
+
+  if (module == "pg") {
     pgmon()->dispatch(m);
     return;
   }
-  if (m->cmd[0] == "mon") {
+  if (module == "mon") {
     monmon()->dispatch(m);
     return;
   }
-  if (m->cmd[0] == "class") {
-    reply_command(m, -EINVAL, "class distribution is no longer handled by the monitor", 0);
-    return;
-  }
-  if (m->cmd[0] == "auth") {
+  if (module == "auth") {
     authmon()->dispatch(m);
     return;
   }
+  if (module == "log") {
+    logmon()->dispatch(m);
+    return;
+  }
 
-  if (m->cmd[0] == "config-key") {
+  if (module == "config-key") {
     if (!access_all) {
       r = -EACCES;
       rs = "access denied";
@@ -2525,174 +2654,156 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
 
-  if (m->cmd[0] == "fsid") {
-    stringstream ss;
-    ss << monmap->fsid;
-    reply_command(m, 0, ss.str(), rdata, 0);
-    return;
-  }
-  if (m->cmd[0] == "log") {
-    if (!access_r) {
-      r = -EACCES;
-      rs = "access denied";
-      goto out;
-    }
-    stringstream ss;
-    for (unsigned i=1; i<m->cmd.size(); i++) {
-      if (i > 1)
-        ss << ' ';
-      ss << m->cmd[i];
-    }
-    clog.info(ss);
-    rs = "ok";
-    reply_command(m, 0, rs, rdata, 0);
+  if (prefix == "fsid") {
+    ds << monmap->fsid;
+    rdata.append(ds);
+    reply_command(m, 0, "", rdata, 0);
     return;
   }
 
-  if (m->cmd[0] == "injectargs") {
+  if (prefix == "compact") {
     if (!access_all) {
       r = -EACCES;
       rs = "access denied";
       goto out;
     }
-    if (m->cmd.size() == 2) {
-      dout(0) << "parsing injected options '" << m->cmd[1] << "'" << dendl;
+    dout(1) << "triggering manual compaction" << dendl;
+    utime_t start = ceph_clock_now(g_ceph_context);
+    store->compact();
+    utime_t end = ceph_clock_now(g_ceph_context);
+    end -= start;
+    dout(1) << "finished manual compaction in " << end << " seconds" << dendl;
+    ostringstream oss;
+    oss << "compacted leveldb in " << end;
+    rs = oss.str();
+    r = 0;
+  }
+  else if (prefix == "injectargs") {
+    if (!access_all) {
+      r = -EACCES;
+      rs = "access denied";
+      goto out;
+    }
+    vector<string> injected_args;
+    cmd_getval(g_ceph_context, cmdmap, "injected_args", injected_args);
+    if (!injected_args.empty()) {
+      dout(0) << "parsing injected options '" << injected_args << "'" << dendl;
+      ostringstream argss;
+      std::copy(injected_args.begin(), injected_args.end(),
+		ostream_iterator<string>(argss, " "));
       ostringstream oss;
-      g_conf->injectargs(m->cmd[1], &oss);
-      derr << "injectargs:" << dendl;
-      derr << oss.str() << dendl;
-      rs = "parsed options";
-      r = 0;
+      r = g_conf->injectargs(argss.str().c_str(), &oss);
+      ss << "injectargs:"  << oss.str();
+      rs = ss.str();
+      goto out;
     } else {
       rs = "must supply options to be parsed in a single string";
       r = -EINVAL;
     }
-  } else if ((m->cmd[0] == "status") || (m->cmd[0] == "health")
-      || (m->cmd[0] == "df")) {
+  } else if (prefix == "status" ||
+	     prefix == "health" ||
+	     prefix == "df") {
     if (!access_r) {
       r = -EACCES;
       rs = "access denied";
       goto out;
     }
 
-    vector<const char *> args;
-    for (unsigned int i = 0; i < m->cmd.size(); ++i)
-      args.push_back(m->cmd[i].c_str());
+    string detail;
+    cmd_getval(g_ceph_context, cmdmap, "detail", detail);
 
-    string format = "plain";
-    JSONFormatter *jf = NULL;
-    for (vector<const char*>::iterator i = args.begin(); i != args.end();) {
-      string val;
-      if (ceph_argparse_witharg_daemon(args, i, &val,
-            "-f", "--format", (char*)NULL)) {
-        format = val;
-      } else {
-        ++i;
+    if (prefix == "status") {
+      // get_status handles f == NULL
+      get_status(ds, f.get());
+
+      if (f) {
+        f->flush(ds);
+        ds << '\n';
       }
-    }
-
-    if (format != "plain") {
-      if (format == "json") {
-        jf = new JSONFormatter(true);
-      } else {
-        r = -EINVAL;
-        stringstream err_ss;
-        err_ss << "unrecognized format '" << format
-          << "' (available: plain, json)";
-        rs = err_ss.str();
-        goto out;
-      }
-    }
-
-    stringstream ss;
-    if (string(args[0]) == "status") {
-      get_status(ss, jf);
-
-      if (jf) {
-        jf->flush(ss);
-        ss << '\n';
-      }
-    } else if (string(args[0]) == "health") {
+      rdata.append(ds);
+    } else if (prefix == "health") {
       string health_str;
-      get_health(health_str, (args.size() > 1) ? &rdata : NULL, jf);
-      if (jf) {
-        jf->flush(ss);
-        ss << '\n';
+      get_health(health_str, detail == "detail" ? &rdata : NULL, f.get());
+      if (f) {
+        f->flush(ds);
+        ds << '\n';
       } else {
-        ss << health_str;
+        ds << health_str;
       }
-    } else if (string(args[0]) == "df") {
-      if (args.size() > 1) {
-        if (string(args[1]) != "detail") {
-          r = -EINVAL;
-          rs = "usage: df [detail]";
-          goto out;
-        }
-      }
-      bool verbose = (args.size() > 1);
-      if (jf)
-        jf->open_object_section("stats");
+      bufferlist comb;
+      comb.append(ds);
+      if (detail == "detail")
+	comb.append(rdata);
+      rdata = comb;
+      r = 0;
+    } else if (prefix == "df") {
+      bool verbose = (detail == "detail");
+      if (f)
+        f->open_object_section("stats");
 
-      pgmon()->dump_fs_stats(ss, jf, verbose);
-      if (!jf)
-        ss << '\n';
-      pgmon()->dump_pool_stats(ss, jf, verbose);
+      pgmon()->dump_fs_stats(ds, f.get(), verbose);
+      if (!f)
+        ds << '\n';
+      pgmon()->dump_pool_stats(ds, f.get(), verbose);
 
-      if (jf) {
-        jf->close_section();
-        jf->flush(ss);
-        ss << '\n';
+      if (f) {
+        f->close_section();
+        f->flush(ds);
+        ds << '\n';
       }
     } else {
       assert(0 == "We should never get here!");
       return;
     }
-    rs = ss.str();
+    rdata.append(ds);
+    rs = "";
     r = 0;
-  } else if (m->cmd[0] == "report") {
+  } else if (prefix == "report") {
     if (!access_r) {
       r = -EACCES;
       rs = "access denied";
       goto out;
     }
 
-    JSONFormatter jf(true);
+    // this must be formatted, in its current form
+    if (!f)
+      f.reset(new_formatter("json-pretty"));
+    f->open_object_section("report");
+    f->dump_string("version", ceph_version_to_str());
+    f->dump_string("commit", git_version_to_str());
+    f->dump_stream("timestamp") << ceph_clock_now(NULL);
 
-    jf.open_object_section("report");
-    jf.dump_string("version", ceph_version_to_str());
-    jf.dump_string("commit", git_version_to_str());
-    jf.dump_stream("timestamp") << ceph_clock_now(NULL);
-
-    string d;
-    for (unsigned i = 1; i < m->cmd.size(); i++) {
-      if (i > 1)
-        d += " ";
-      d += m->cmd[i];
-    }
-    jf.dump_string("tag", d);
+    vector<string> tagsvec;
+    cmd_getval(g_ceph_context, cmdmap, "tags", tagsvec);
+    stringstream tags;
+    std::copy(tagsvec.begin(), tagsvec.end(),
+	      ostream_iterator<string>(tags, " "));
+    string tagstr = tags.str();
+    if (!tagstr.empty())
+      tagstr = tagstr.substr(0, tagstr.find_last_of(' '));
+    f->dump_string("tag", tagstr);
 
     string hs;
-    get_health(hs, NULL, &jf);
+    get_health(hs, NULL, f.get());
 
-    monmon()->dump_info(&jf);
-    osdmon()->dump_info(&jf);
-    mdsmon()->dump_info(&jf);
-    pgmon()->dump_info(&jf);
+    monmon()->dump_info(f.get());
+    osdmon()->dump_info(f.get());
+    mdsmon()->dump_info(f.get());
+    pgmon()->dump_info(f.get());
 
-    jf.close_section();
-    stringstream ss;
-    jf.flush(ss);
+    f->close_section();
+    f->flush(ds);
 
     bufferlist bl;
     bl.append("-------- BEGIN REPORT --------\n");
-    bl.append(ss);
+    bl.append(ds);
     ostringstream ss2;
     ss2 << "\n-------- END REPORT " << bl.crc32c(6789) << " --------\n";
     rdata.append(bl);
     rdata.append(ss2.str());
     rs = string();
     r = 0;
-  } else if (m->cmd[0] == "quorum_status") {
+  } else if (prefix == "quorum_status") {
     if (!access_r) {
       r = -EACCES;
       rs = "access denied";
@@ -2704,50 +2815,46 @@ void Monitor::handle_command(MMonCommand *m)
       waitfor_quorum.push_back(new C_RetryMessage(this, m));
       return;
     }
-    stringstream ss;
-    _quorum_status(ss);
-    rs = ss.str();
+    _quorum_status(ds);
+    rdata.append(ds);
+    rs = "";
     r = 0;
-  } else if (m->cmd[0] == "mon_status") {
+  } else if (prefix == "mon_status") {
     if (!access_r) {
       r = -EACCES;
       rs = "access denied";
       goto out;
     }
-    stringstream ss;
-    _mon_status(ss);
-    rs = ss.str();
+    _mon_status(ds);
+    rdata.append(ds);
+    rs = "";
     r = 0;
-  } else if (m->cmd[0] == "sync") {
+  } else if (prefix == "sync status") {
       if (!access_r) {
 	r = -EACCES;
 	rs = "access denied";
 	goto out;
       }
-      if (m->cmd[1] == "status") {
-	stringstream ss;
-	_sync_status(ss);
-	rs = ss.str();
-	r = 0;
-      } else if (m->cmd[1] == "force") {
-        if (m->cmd.size() < 4 || m->cmd[2] != "--yes-i-really-mean-it"
-            || m->cmd[3] != "--i-know-what-i-am-doing") {
-          r = -EINVAL;
-          rs = "are you SURE? this will mean the monitor store will be "
-               "erased.  pass '--yes-i-really-mean-it "
-               "--i-know-what-i-am-doing' if you really do.";
-          goto out;
-        }
-	stringstream ss;
-	_sync_force(ss);
-	rs = ss.str();
-	r = 0;
-      } else {
-	rs = "unknown command";
-	r = -EINVAL;
-	goto out;
-      }
-  } else if (m->cmd[0] == "heap") {
+      _sync_status(ds);
+      rdata.append(ds);
+      rs = "";
+      r = 0;
+  } else if (prefix == "sync force") {
+    string validate1, validate2;
+    cmd_getval(g_ceph_context, cmdmap, "validate1", validate1);
+    cmd_getval(g_ceph_context, cmdmap, "validate2", validate2);
+    if (validate1 != "--yes-i-really-mean-it" ||
+	validate2 != "--i-know-what-i-am-doing") {
+      r = -EINVAL;
+      rs = "are you SURE? this will mean the monitor store will be "
+	   "erased.  pass '--yes-i-really-mean-it "
+	   "--i-know-what-i-am-doing' if you really do.";
+      goto out;
+    }
+    _sync_force(ds);
+    rs = ds.str();
+    r = 0;
+  } else if (prefix == "heap") {
     if (!access_all) {
       r = -EACCES;
       rs = "access denied";
@@ -2756,37 +2863,40 @@ void Monitor::handle_command(MMonCommand *m)
     if (!ceph_using_tcmalloc())
       rs = "tcmalloc not enabled, can't use heap profiler commands\n";
     else {
-      ostringstream ss;
-      ceph_heap_profiler_handle_command(m->cmd, ss);
-      rs = ss.str();
+      string heapcmd;
+      cmd_getval(g_ceph_context, cmdmap, "heapcmd", heapcmd);
+      // XXX 1-element vector, change at callee or make vector here?
+      vector<string> heapcmd_vec;
+      get_str_vec(heapcmd, heapcmd_vec);
+      ceph_heap_profiler_handle_command(heapcmd_vec, ds);
+      rdata.append(ds);
+      rs = "";
+      r = 0;
     }
-  } else if (m->cmd[0] == "quorum") {
+  } else if (prefix == "quorum") {
     if (!access_all) {
       r = -EACCES;
       rs = "access denied";
       goto out;
     }
-    if (m->cmd.size() < 2) {
-      r = -EINVAL;
-      rs = "'quorum' requires an argument: 'exit' or 'enter'";
-      goto out;
-    }
-    if (m->cmd[1] == "exit") {
+    string quorumcmd;
+    cmd_getval(g_ceph_context, cmdmap, "quorumcmd", quorumcmd);
+    if (quorumcmd == "exit") {
       reset();
       start_election();
       elector.stop_participating();
       rs = "stopped responding to quorum, initiated new election";
       r = 0;
-    } else if (m->cmd[1] == "enter") {
+    } else if (quorumcmd == "enter") {
       elector.start_participating();
       reset();
       start_election();
       rs = "started responding to quorum, initiated new election";
       r = 0;
-    } else {
-      rs = "unknown quorum subcommand; use exit or enter";
-      r = -EINVAL;
     }
+  } else if (!access_cmd) {
+    r = -EACCES;
+    rs = "access denied";
   }
 
  out:
@@ -2805,6 +2915,7 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, version_t 
 void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version)
 {
   MMonCommandAck *reply = new MMonCommandAck(m->cmd, rc, rs, version);
+  reply->set_tid(m->get_tid());
   reply->set_data(rdata);
   send_reply(m, reply);
   m->put();
@@ -2836,7 +2947,6 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     rr->tid = ++routed_request_tid;
     rr->client_inst = req->get_source_inst();
     rr->con = req->get_connection();
-    rr->con->get();
     encode_message(req, CEPH_FEATURES_ALL, rr->request_bl);   // for my use only; use all features
     rr->session = static_cast<MonSession *>(session->get());
     routed_requests[rr->tid] = rr;
@@ -2863,18 +2973,19 @@ void Monitor::handle_forward(MForward *m)
   MonSession *session = static_cast<MonSession *>(m->get_connection()->get_priv());
   assert(session);
 
-  if (!session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+  if (!session->is_capable("mon", MON_CAP_X)) {
     dout(0) << "forward from entity with insufficient caps! " 
 	    << session->caps << dendl;
   } else {
-    Connection *c = new Connection;
+    Connection *c = new Connection(NULL);  // msgr must be null; see PaxosService::dispatch()
     MonSession *s = new MonSession(m->msg->get_source_inst(), c);
     c->set_priv(s);
     c->set_peer_addr(m->client.addr);
     c->set_peer_type(m->client.name.type());
 
     s->caps = m->client_caps;
-    s->proxy_con = m->get_connection()->get();
+    dout(10) << " caps are " << s->caps << dendl;
+    s->proxy_con = m->get_connection();
     s->proxy_tid = m->tid;
 
     PaxosServiceMessage *req = m->msg;
@@ -2895,8 +3006,7 @@ void Monitor::handle_forward(MForward *m)
        or the Session. And due to the special nature of this message,
        nobody refers to the Connection via the Session. So, clear out that
        half of the ref loop.*/
-    s->con->put();
-    s->con = NULL;
+    s->con.reset(NULL);
 
     dout(10) << " mesg " << req << " from " << m->get_source_addr() << dendl;
 
@@ -2971,7 +3081,7 @@ void Monitor::handle_route(MRoute *m)
 {
   MonSession *session = static_cast<MonSession *>(m->get_connection()->get_priv());
   //check privileges
-  if (session && !session->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+  if (session && !session->is_capable("mon", MON_CAP_X)) {
     dout(0) << "MRoute received from entity without appropriate perms! "
 	    << dendl;
     session->put();
@@ -3028,7 +3138,6 @@ void Monitor::resend_routed_requests()
     if (mon == rank) {
       dout(10) << " requeue for self tid " << rr->tid << " " << *req << dendl;
       req->set_connection(rr->con);
-      rr->con->get();
       retry.push_back(new C_RetryMessage(this, req));
       delete rr;
     } else {
@@ -3095,7 +3204,7 @@ void Monitor::waitlist_or_zap_client(Message *m)
    * 3) command messages. We want to accept these under all possible
    * circumstances.
    */
-  Connection *con = m->get_connection();
+  ConnectionRef con = m->get_connection();
   utime_t too_old = ceph_clock_now(g_ceph_context);
   too_old -= g_ceph_context->_conf->mon_lease;
   if (m->get_recv_stamp() > too_old &&
@@ -3113,14 +3222,14 @@ bool Monitor::_ms_dispatch(Message *m)
 {
   bool ret = true;
 
-  if (state == STATE_SHUTDOWN) {
+  if (is_shutdown()) {
     m->put();
     return true;
   }
 
-  Connection *connection = m->get_connection();
+  ConnectionRef connection = m->get_connection();
   MonSession *s = NULL;
-  MonCaps caps;
+  MonCap caps;
   EntityName entity_name;
   bool src_is_mon;
 
@@ -3142,7 +3251,7 @@ bool Monitor::_ms_dispatch(Message *m)
 	return true;
       }
       dout(10) << "do not have session, making new one" << dendl;
-      s = session_map.new_session(m->get_source_inst(), m->get_connection());
+      s = session_map.new_session(m->get_source_inst(), m->get_connection().get());
       m->get_connection()->set_priv(s->get());
       dout(10) << "ms_dispatch new session " << s << " for " << s->inst << dendl;
 
@@ -3156,7 +3265,7 @@ bool Monitor::_ms_dispatch(Message *m)
 	//give it monitor caps; the peer type has been authenticated
 	reuse_caps = false;
 	dout(5) << "setting monitor caps on this connection" << dendl;
-	if (!s->caps.allow_all) //but no need to repeatedly copy
+	if (!s->caps.is_allow_all()) //but no need to repeatedly copy
 	  s->caps = *mon_caps;
       }
       if (reuse_caps)
@@ -3267,7 +3376,7 @@ bool Monitor::_ms_dispatch(Message *m)
       {
 	MMonPaxos *pm = static_cast<MMonPaxos*>(m);
 	if (!src_is_mon && 
-	    !s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+	    !s->is_capable("mon", MON_CAP_X)) {
 	  //can't send these!
 	  pm->put();
 	  break;
@@ -3294,13 +3403,6 @@ bool Monitor::_ms_dispatch(Message *m)
 	}
 
 	paxos->dispatch((PaxosServiceMessage*)m);
-
-	// make sure service finds out about any state changes
-	if (paxos->is_active()) {
-	  vector<PaxosService*>::iterator service_it = paxos_service.begin();
-	  for ( ; service_it != paxos_service.end(); ++service_it)
-	    (*service_it)->update_from_paxos();
-	}
       }
       break;
 
@@ -3308,7 +3410,7 @@ bool Monitor::_ms_dispatch(Message *m)
     case MSG_MON_ELECTION:
       //check privileges here for simplicity
       if (s &&
-	  !s->caps.check_privileges(PAXOS_MONMAP, MON_CAP_X)) {
+	  !s->is_capable("mon", MON_CAP_X)) {
 	dout(0) << "MMonElection received from entity without enough caps!"
 		<< s->caps << dendl;
 	m->put();
@@ -3743,15 +3845,15 @@ void Monitor::handle_subscribe(MMonSubscribe *m)
 			       m->get_connection()->has_feature(CEPH_FEATURE_INCSUBOSDMAP));
 
     if (p->first == "mdsmap") {
-      if ((int)s->caps.check_privileges(PAXOS_MDSMAP, MON_CAP_R)) {
+      if ((int)s->is_capable("mds", MON_CAP_R)) {
         mdsmon()->check_sub(s->sub_map["mdsmap"]);
       }
     } else if (p->first == "osdmap") {
-      if ((int)s->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_R)) {
+      if ((int)s->is_capable("osd", MON_CAP_R)) {
         osdmon()->check_sub(s->sub_map["osdmap"]);
       }
     } else if (p->first == "osd_pg_creates") {
-      if ((int)s->caps.check_privileges(PAXOS_OSDMAP, MON_CAP_W)) {
+      if ((int)s->is_capable("osd", MON_CAP_W)) {
 	pgmon()->check_sub(s->sub_map["osd_pg_creates"]);
       }
     } else if (p->first == "monmap") {
@@ -3807,7 +3909,7 @@ bool Monitor::ms_handle_reset(Connection *con)
 {
   dout(10) << "ms_handle_reset " << con << " " << con->get_peer_addr() << dendl;
 
-  if (state == STATE_SHUTDOWN)
+  if (is_shutdown())
     return false;
 
   // ignore lossless monitor sessions
@@ -3844,7 +3946,7 @@ void Monitor::check_sub(Subscription *sub)
 {
   dout(10) << "check_sub monmap next " << sub->next << " have " << monmap->get_epoch() << dendl;
   if (sub->next <= monmap->get_epoch()) {
-    send_latest_monmap(sub->session->con);
+    send_latest_monmap(sub->session->con.get());
     if (sub->onetime)
       session_map.remove_sub(sub);
     else
@@ -3865,7 +3967,7 @@ void Monitor::send_latest_monmap(Connection *con)
 void Monitor::handle_mon_get_map(MMonGetMap *m)
 {
   dout(10) << "handle_mon_get_map" << dendl;
-  send_latest_monmap(m->get_connection());
+  send_latest_monmap(m->get_connection().get());
   m->put();
 }
 
@@ -4095,7 +4197,7 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
 {
   dout(10) << "ms_get_authorizer for " << ceph_entity_type_name(service_id) << dendl;
 
-  if (state == STATE_SHUTDOWN)
+  if (is_shutdown())
     return false;
 
   // we only connect to other monitors; every else connects to us.
@@ -4118,9 +4220,9 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
   if (!keyring.get_secret(name, secret) &&
       !key_server.get_secret(name, secret)) {
     dout(0) << " couldn't get secret for mon service from keyring or keyserver" << dendl;
-    stringstream ss;
-    key_server.list_secrets(ss);
-    dout(0) << ss.str() << dendl;
+    stringstream ss, ds;
+    key_server.list_secrets(ss, ds);
+    dout(0) << ss.str() << "\n" << ds.str() << dendl;
     return false;
   }
 
@@ -4159,7 +4261,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
 	   << " " << ceph_entity_type_name(peer_type)
 	   << " protocol " << protocol << dendl;
 
-  if (state == STATE_SHUTDOWN)
+  if (is_shutdown())
     return false;
 
   if (peer_type == CEPH_ENTITY_TYPE_MON &&
@@ -4242,46 +4344,39 @@ bool Monitor::StoreConverter::_check_gv_store()
 
 int Monitor::StoreConverter::needs_conversion()
 {
+  bufferlist magicbl;
   int ret = 0;
 
   dout(10) << __func__ << dendl;
   _init();
-  if (db->open(std::cerr) < 0) {
-    dout(1) << "unable to open monitor store at " << g_conf->mon_data << dendl;
-    dout(1) << "check for old monitor store format" << dendl;
-    int err = store->mount();
-    if (err < 0) {
-      if (err == -ENOENT) {
-        derr << "unable to mount monitor store: "
-             << cpp_strerror(err) << dendl;
-      } else {
-        derr << "it appears that another monitor is running: "
-             << cpp_strerror(err) << dendl;
-      }
-      ret = err;
-      goto out;
+
+  int err = store->mount();
+  if (err < 0) {
+    if (err == -ENOENT) {
+      derr << "unable to mount monitor store: "
+	   << cpp_strerror(err) << dendl;
+    } else {
+      derr << "it appears that another monitor is running: "
+	   << cpp_strerror(err) << dendl;
     }
-    assert(err == 0);
-    bufferlist magicbl;
-    if (store->exists_bl_ss("magic", 0)) {
-      if (_check_gv_store()) {
-	dout(1) << "found old GV monitor store format "
-		<< "-- should convert!" << dendl;
-	ret = 1;
-      } else {
-	dout(0) << "Existing monitor store has not been converted "
-		<< "to 0.52 (bobtail) format" << dendl;
-	assert(0 == "Existing store has not been converted to 0.52 format");
-      }
-    }
-    assert(!store->umount());
-  } else {
-    if (db->exists("mon_convert", "on_going")) {
-      ret = -EEXIST;
-      derr << "there is an on-going (maybe aborted?) conversion." << dendl;
-      derr << "you should check what happened" << dendl;
+    ret = err;
+    goto out;
+  }
+  assert(err == 0);
+
+  if (store->exists_bl_ss("magic", 0)) {
+    if (_check_gv_store()) {
+      dout(1) << "found old GV monitor store format "
+	      << "-- should convert!" << dendl;
+      ret = 1;
+    } else {
+      dout(0) << "Existing monitor store has not been converted "
+	      << "to 0.52 (bobtail) format" << dendl;
+      assert(0 == "Existing store has not been converted to 0.52 format");
     }
   }
+  assert(!store->umount());
+
 out:
   _deinit();
   return ret;
@@ -4404,23 +4499,54 @@ void Monitor::StoreConverter::_convert_machines(string machine)
       dout(20) << __func__ << " " << machine
 	       << " ver " << ver << " -> " << gv << dendl;
 
+      MonitorDBStore::Transaction paxos_tx;
+
       if (gvs.count(gv) == 0) {
-	gvs.insert(gv);
+        gvs.insert(gv);
       } else {
 	dout(0) << __func__ << " " << machine
 		<< " gv " << gv << " already exists"
 		<< dendl;
-	assert(0 == "Duplicate GV -- something is wrong!");
+
+        // Duplicates aren't supposed to happen, but an old bug introduced
+	// them and the mds state machine wasn't ever trimmed, so many users
+	// will see them.  So we'll just merge them all in one
+        // single paxos version.
+        // We know that they are either from another paxos machine or
+        // they are from the same paxos machine but their version is
+        // lower than ours -- given that we are iterating all versions
+        // from the lowest to the highest, duh!
+        // We'll just append our stuff to the existing paxos transaction
+        // as if nothing had happened.
+
+        // Just make sure we are correct. This shouldn't take long and
+        // should never be triggered!
+        set<pair<string,version_t> >& s = gv_map[gv];
+        for (set<pair<string,version_t> >::iterator it = s.begin();
+             it != s.end(); ++it) {
+          if (it->first == machine)
+            assert(it->second + 1 == ver);
+        }
+
+        bufferlist paxos_bl;
+        int r = db->get("paxos", gv, paxos_bl);
+        assert(r >= 0);
+        paxos_tx.append_from_encoded(paxos_bl);
       }
+      gv_map[gv].insert(make_pair(machine,ver));
 
       bufferlist tx_bl;
       tx.encode(tx_bl);
-      tx.put("paxos", gv, tx_bl);
+      paxos_tx.append_from_encoded(tx_bl);
+      bufferlist paxos_bl;
+      paxos_tx.encode(paxos_bl);
+      tx.put("paxos", gv, paxos_bl);
     }
     db->apply_transaction(tx);
   }
 
   version_t lc = db->get(machine, "last_committed");
+  dout(20) << __func__ << " lc " << lc << " last_committed " << last_committed << dendl;
   assert(lc == last_committed);
 
   MonitorDBStore::Transaction tx;

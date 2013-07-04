@@ -1,7 +1,9 @@
-from nose.tools import eq_ as eq, assert_raises
+from nose.tools import eq_ as eq, assert_raises, assert_greater
 from rados import (Rados, Object, ObjectExists, ObjectNotFound,
                    ANONYMOUS_AUID, ADMIN_AUID)
 import threading
+import json
+import errno
 
 class TestRados(object):
 
@@ -271,3 +273,58 @@ class TestObject(object):
         self.object.seek(0)
         eq(self.object.read(3), 'bar')
         eq(self.object.read(3), 'baz')
+
+class TestMonCommand(object):
+
+    def setUp(self):
+        self.rados = Rados(conffile='')
+        self.rados.connect()
+
+    def tearDown(self):
+        self.rados.shutdown()
+
+    def test_monmap_dump(self):
+
+        # check for success and some plain output with epoch in it
+        cmd = {"prefix":"mon dump"}
+        ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30)
+        eq(ret, 0)
+        assert_greater(len(buf), 0)
+        assert('epoch' in buf)
+
+        # JSON, and grab current epoch
+        cmd['format'] = 'json'
+        ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30)
+        eq(ret, 0)
+        assert_greater(len(buf), 0)
+        d = json.loads(buf)
+        assert('epoch' in d)
+        epoch = d['epoch']
+
+        # assume epoch + 1000 does not exist; test for ENOENT
+        cmd['epoch'] = epoch + 1000
+        ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30)
+        eq(ret, -errno.ENOENT)
+        eq(len(buf), 0)
+        del cmd['epoch']
+
+        # send to specific target by name
+        target = d['mons'][0]['name']
+        print target
+        ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30,
+                                                target=target)
+        eq(ret, 0)
+        assert_greater(len(buf), 0)
+        d = json.loads(buf)
+        assert('epoch' in d)
+
+        # and by rank
+        target = d['mons'][0]['rank']
+        print target
+        ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30,
+                                                target=target)
+        eq(ret, 0)
+        assert_greater(len(buf), 0)
+        d = json.loads(buf)
+        assert('epoch' in d)
+

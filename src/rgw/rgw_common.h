@@ -86,6 +86,12 @@ using ceph::crypto::MD5;
 
 #define RGW_SUSPENDED_USER_AUID (uint64_t)-2
 
+#define RGW_OP_TYPE_READ         0x01
+#define RGW_OP_TYPE_WRITE        0x02
+#define RGW_OP_TYPE_DELETE       0x04
+
+#define RGW_OP_TYPE_ALL          (RGW_OP_TYPE_READ | RGW_OP_TYPE_WRITE | RGW_OP_TYPE_DELETE)
+
 #define RGW_DEFAULT_MAX_BUCKETS 1000
 
 #define STATUS_CREATED           1900
@@ -409,12 +415,13 @@ struct RGWUserInfo
   map<string, RGWSubUser> subusers;
   __u8 suspended;
   uint32_t max_buckets;
+  uint32_t op_mask;
   RGWUserCaps caps;
   __u8 system;
   string default_placement;
   list<string> placement_tags;
 
-  RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS), system(0) {}
+  RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS), op_mask(RGW_OP_TYPE_ALL), system(0) {}
 
   void encode(bufferlist& bl) const {
      ENCODE_START(13, 9, bl);
@@ -448,13 +455,14 @@ struct RGWUserInfo
      ::encode(swift_keys, bl);
      ::encode(max_buckets, bl);
      ::encode(caps, bl);
+     ::encode(op_mask, bl);
      ::encode(system, bl);
      ::encode(default_placement, bl);
      ::encode(placement_tags, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(11, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(13, 9, 9, bl);
      if (struct_v >= 2) ::decode(auid, bl);
      else auid = CEPH_AUTH_UID_DEFAULT;
      string access_key;
@@ -496,11 +504,14 @@ struct RGWUserInfo
     if (struct_v >= 11) {
       ::decode(caps, bl);
     }
-    system = 0;
     if (struct_v >= 12) {
-      ::decode(system, bl);
+      ::decode(op_mask, bl);
+    } else {
+      op_mask = RGW_OP_TYPE_ALL;
     }
+    system = 0;
     if (struct_v >= 13) {
+      ::decode(system, bl);
       ::decode(default_placement, bl);
       ::decode(placement_tags, bl); /* tags of allowed placement rules */
     }
@@ -1220,5 +1231,7 @@ extern bool url_decode(string& src_str, string& dest_str);
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);
 /* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
+
+extern int rgw_parse_op_type_list(const string& str, uint32_t *perm);
 
 #endif

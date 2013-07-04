@@ -116,6 +116,7 @@ public:
 protected:
   map<dirfrag_t,int>              import_state;  // FIXME make these dirfrags
   map<dirfrag_t,int>              import_peer;
+  map<dirfrag_t,Message*>         import_pending_msg;
   map<CDir*,set<int> >            import_bystanders;
   map<CDir*,list<dirfrag_t> >     import_bound_ls;
   map<CDir*,list<ScatterLock*> >  import_updated_scatterlocks;
@@ -255,7 +256,8 @@ public:
   void decode_import_inode_caps(CInode *in,
 				bufferlist::iterator &blp,
 				map<CInode*, map<client_t,Capability::Export> >& cap_imports);
-  void finish_import_inode_caps(CInode *in, int from, map<client_t,Capability::Export> &cap_map);
+  void finish_import_inode_caps(CInode *in, bool auth_cap,
+			        map<client_t,Capability::Export> &cap_map);
   int decode_import_dir(bufferlist::iterator& blp,
 			int oldauth,
 			CDir *import_root,

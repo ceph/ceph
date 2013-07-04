@@ -23,7 +23,8 @@ OPTION(num_client, OPT_INT, 1)
 OPTION(monmap, OPT_STR, "")
 OPTION(mon_host, OPT_STR, "")
 OPTION(lockdep, OPT_BOOL, false)
-OPTION(admin_socket, OPT_STR, "/var/run/ceph/$cluster-$name.asok") // default changed by common_preinit()
+OPTION(run_dir, OPT_STR, "/var/run/ceph")       // the "/var/run/ceph" dir, created on daemon startup
+OPTION(admin_socket, OPT_STR, "$run_dir/$cluster-$name.asok") // default changed by common_preinit()
 
 OPTION(daemonize, OPT_BOOL, false) // default changed by common_preinit()
 OPTION(pid_file, OPT_STR, "") // default changed by common_preinit()
@@ -110,7 +111,7 @@ OPTION(ms_die_on_unhandled_msg, OPT_BOOL, false)
 OPTION(ms_dispatch_throttle_bytes, OPT_U64, 100 << 20)
 OPTION(ms_bind_ipv6, OPT_BOOL, false)
 OPTION(ms_bind_port_min, OPT_INT, 6800)
-OPTION(ms_bind_port_max, OPT_INT, 7100)
+OPTION(ms_bind_port_max, OPT_INT, 7300)
 OPTION(ms_rwthread_stack_bytes, OPT_U64, 1024 << 10)
 OPTION(ms_tcp_read_timeout, OPT_U64, 900)
 OPTION(ms_pq_max_tokens_per_priority, OPT_U64, 4194304)
@@ -129,6 +130,7 @@ OPTION(mon_compact_on_bootstrap, OPT_BOOL, false)  // trigger leveldb compaction
 OPTION(mon_compact_on_trim, OPT_BOOL, true)       // compact (a prefix) when we trim old states
 OPTION(mon_tick_interval, OPT_INT, 5)
 OPTION(mon_subscribe_interval, OPT_DOUBLE, 300)
+OPTION(mon_delta_reset_interval, OPT_DOUBLE, 10)   // seconds of inactivity before we reset the pg delta to 0
 OPTION(mon_osd_laggy_halflife, OPT_INT, 60*60)        // (seconds) how quickly our laggy estimations decay
 OPTION(mon_osd_laggy_weight, OPT_DOUBLE, .3)          // weight for new 'samples's in laggy estimations
 OPTION(mon_osd_adjust_heartbeat_grace, OPT_BOOL, true)    // true if we should scale based on laggy estimations
@@ -180,24 +182,33 @@ OPTION(mon_sync_debug, OPT_BOOL, false) // enable sync-specific debug
 OPTION(mon_sync_debug_leader, OPT_INT, -1) // monitor to be used as the sync leader
 OPTION(mon_sync_debug_provider, OPT_INT, -1) // monitor to be used as the sync provider
 OPTION(mon_sync_debug_provider_fallback, OPT_INT, -1) // monitor to be used as fallback if sync provider fails
+OPTION(mon_osd_min_down_reporters, OPT_INT, 1)   // number of OSDs who need to report a down OSD for it to count
+OPTION(mon_osd_min_down_reports, OPT_INT, 3)     // number of times a down OSD must be reported for it to count
+
+// dump transactions
+OPTION(mon_debug_dump_transactions, OPT_BOOL, false)
+OPTION(mon_debug_dump_location, OPT_STR, "/var/log/ceph/$cluster-$name.tdump")
+
 OPTION(mon_sync_leader_kill_at, OPT_INT, 0) // kill the sync leader at a specifc point in the work flow
 OPTION(mon_sync_provider_kill_at, OPT_INT, 0) // kill the sync provider at a specific point in the work flow
 OPTION(mon_sync_requester_kill_at, OPT_INT, 0) // kill the sync requester at a specific point in the work flow
 OPTION(mon_leveldb_write_buffer_size, OPT_U64, 32*1024*1024) // monitor's leveldb write buffer size
-OPTION(mon_leveldb_cache_size, OPT_U64, 0) // monitor's leveldb cache size
+OPTION(mon_leveldb_cache_size, OPT_U64, 512*1024*1024) // monitor's leveldb cache size
 OPTION(mon_leveldb_block_size, OPT_U64, 64*1024) // monitor's leveldb block size
 OPTION(mon_leveldb_bloom_size, OPT_INT, 0) // monitor's leveldb bloom bits per entry
 OPTION(mon_leveldb_max_open_files, OPT_INT, 0) // monitor's leveldb max open files
 OPTION(mon_leveldb_compression, OPT_BOOL, false) // monitor's leveldb uses compression
 OPTION(mon_leveldb_paranoid, OPT_BOOL, false)   // monitor's leveldb paranoid flag
+OPTION(mon_leveldb_log, OPT_STR, "")
 OPTION(paxos_stash_full_interval, OPT_INT, 25)   // how often (in commits) to stash a full copy of the PaxosService state
 OPTION(paxos_max_join_drift, OPT_INT, 10) // max paxos iterations before we must first sync the monitor stores
 OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long before proposing a map update
 OPTION(paxos_min_wait, OPT_DOUBLE, 0.05)  // min time to gather updates for after period of inactivity
-OPTION(paxos_trim_tolerance, OPT_INT, 30) // number of extra proposals tolerated before trimming
+OPTION(paxos_trim_min, OPT_INT, 250)  // number of extra proposals tolerated before trimming
+OPTION(paxos_trim_max, OPT_INT, 500) // max number of extra proposals to trim at a time
 OPTION(paxos_trim_disabled_max_versions, OPT_INT, 100) // maximum amount of versions we shall allow passing by without trimming
-OPTION(paxos_service_trim_max, OPT_INT, 500) // maximum amount of versions to trim during a single proposal (0 disables it)
 OPTION(paxos_service_trim_min, OPT_INT, 250) // minimum amount of versions to trigger a trim (0 disables it)
+OPTION(paxos_service_trim_max, OPT_INT, 500) // maximum amount of versions to trim during a single proposal (0 disables it)
 OPTION(clock_offset, OPT_DOUBLE, 0) // how much to offset the system clock in Clock.cc
 OPTION(auth_cluster_required, OPT_STR, "cephx")   // required of mon, mds, osd daemons
 OPTION(auth_service_required, OPT_STR, "cephx")   // required by daemons of clients
@@ -329,6 +340,7 @@ OPTION(mds_kill_openc_at, OPT_INT, 0)
 OPTION(mds_kill_journal_at, OPT_INT, 0)
 OPTION(mds_kill_journal_expire_at, OPT_INT, 0)
 OPTION(mds_kill_journal_replay_at, OPT_INT, 0)
+OPTION(mds_open_remote_link_mode, OPT_INT, 0)
 OPTION(mds_inject_traceless_reply_probability, OPT_DOUBLE, 0) /* percentage
 				of MDS modify replies to skip sending the
 				client a trace on [0-1]*/
@@ -339,6 +351,9 @@ OPTION(max_mds, OPT_INT, 1)
 OPTION(mds_standby_for_name, OPT_STR, "")
 OPTION(mds_standby_for_rank, OPT_INT, -1)
 OPTION(mds_standby_replay, OPT_BOOL, false)
+
+// If true, compact leveldb store on mount
+OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
 
 // If true, uses tmap as initial value for omap on old objects
 OPTION(osd_auto_upgrade_tmap, OPT_BOOL, true)
@@ -374,6 +389,8 @@ OPTION(osd_pool_default_min_size, OPT_INT, 0)  // 0 means no specific default; c
 OPTION(osd_pool_default_pg_num, OPT_INT, 8) // number of PGs for new pools. Configure in global or mon section of ceph.conf
 OPTION(osd_pool_default_pgp_num, OPT_INT, 8) // number of PGs for placement purposes. Should be equal to pg_num
 OPTION(osd_pool_default_flags, OPT_INT, 0)   // default flags for new pools
+// default flags for new pools
+OPTION(osd_pool_default_flag_hashpspool, OPT_BOOL, true)
 OPTION(osd_map_dedup, OPT_BOOL, true)
 OPTION(osd_map_cache_size, OPT_INT, 500)
 OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
@@ -397,12 +414,11 @@ OPTION(osd_age_time, OPT_INT, 0)
 OPTION(osd_heartbeat_addr, OPT_ADDR, entity_addr_t())
 OPTION(osd_heartbeat_interval, OPT_INT, 6)       // (seconds) how often we ping peers
 OPTION(osd_heartbeat_grace, OPT_INT, 20)         // (seconds) how long before we decide a peer has failed
+OPTION(osd_heartbeat_min_peers, OPT_INT, 10)     // minimum number of peers
 OPTION(osd_mon_heartbeat_interval, OPT_INT, 30)  // (seconds) how often to ping monitor if no peers
 OPTION(osd_mon_report_interval_max, OPT_INT, 120)
 OPTION(osd_mon_report_interval_min, OPT_INT, 5)  // pg stats, failures, up_thru, boot.
 OPTION(osd_mon_ack_timeout, OPT_INT, 30) // time out a mon if it doesn't ack stats
-OPTION(osd_min_down_reporters, OPT_INT, 1)   // number of OSDs who need to report a down OSD for it to count
-OPTION(osd_min_down_reports, OPT_INT, 3)     // number of times a down OSD must be reported for it to count
 OPTION(osd_default_data_pool_replay_window, OPT_INT, 45)
 OPTION(osd_preserve_trimmed_log, OPT_BOOL, false)
 OPTION(osd_auto_mark_unfound_lost, OPT_BOOL, false)
@@ -414,8 +430,11 @@ OPTION(osd_max_scrubs, OPT_INT, 1)
 OPTION(osd_scrub_load_threshold, OPT_FLOAT, 0.5)
 OPTION(osd_scrub_min_interval, OPT_FLOAT, 60*60*24)    // if load is low
 OPTION(osd_scrub_max_interval, OPT_FLOAT, 7*60*60*24)  // regardless of load
+OPTION(osd_scrub_chunk_min, OPT_INT, 5)
+OPTION(osd_scrub_chunk_max, OPT_INT, 25)
 OPTION(osd_deep_scrub_interval, OPT_FLOAT, 60*60*24*7) // once a week
 OPTION(osd_deep_scrub_stride, OPT_INT, 524288)
+OPTION(osd_scan_list_ping_tp_interval, OPT_U64, 100)
 OPTION(osd_auto_weight, OPT_BOOL, false)
 OPTION(osd_class_dir, OPT_STR, CEPH_LIBDIR "/rados-classes") // where rados plugins are stored
 OPTION(osd_check_for_log_corruption, OPT_BOOL, false)
@@ -423,6 +442,10 @@ OPTION(osd_use_stale_snap, OPT_BOOL, false)
 OPTION(osd_rollback_to_cluster_snap, OPT_STR, "")
 OPTION(osd_default_notify_timeout, OPT_U32, 30) // default notify timeout in seconds
 OPTION(osd_kill_backfill_at, OPT_INT, 0)
+
+// Bounds how infrequently a new map epoch will be persisted for a pg
+OPTION(osd_pg_epoch_persisted_max_stale, OPT_U32, 200)
+
 OPTION(osd_min_pg_log_entries, OPT_U32, 3000)  // number of entries to keep in the pg log when trimming it
 OPTION(osd_max_pg_log_entries, OPT_U32, 10000) // max entries, say when degraded, before we trim
 OPTION(osd_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy
@@ -449,6 +472,7 @@ OPTION(osd_leveldb_bloom_size, OPT_INT, 0) // OSD's leveldb bloom bits per entry
 OPTION(osd_leveldb_max_open_files, OPT_INT, 0) // OSD's leveldb max open files
 OPTION(osd_leveldb_compression, OPT_BOOL, true) // OSD's leveldb uses compression
 OPTION(osd_leveldb_paranoid, OPT_BOOL, false) // OSD's leveldb paranoid flag
+OPTION(osd_leveldb_log, OPT_STR, "")  // enable OSD leveldb log file
 
 /**
  * osd_client_op_priority and osd_recovery_op_priority adjust the relative
@@ -464,7 +488,26 @@ OPTION(osd_recovery_op_priority, OPT_INT, 10)
 // Max time to wait between notifying mon of shutdown and shutting down
 OPTION(osd_mon_shutdown_timeout, OPT_DOUBLE, 5)
 
+OPTION(osd_max_object_size, OPT_U64, 100*1024L*1024L*1024L) // OSD's maximum object size
+OPTION(osd_max_attr_size, OPT_U64, 65536)
+
 OPTION(filestore, OPT_BOOL, false)
+
+/// filestore wb throttle limits
+OPTION(filestore_wbthrottle_btrfs_bytes_start_flusher, OPT_U64, 10<<20)
+OPTION(filestore_wbthrottle_btrfs_bytes_hard_limit, OPT_U64, 100<<20)
+OPTION(filestore_wbthrottle_btrfs_ios_start_flusher, OPT_U64, 100)
+OPTION(filestore_wbthrottle_btrfs_ios_hard_limit, OPT_U64, 1000)
+OPTION(filestore_wbthrottle_btrfs_inodes_start_flusher, OPT_U64, 100)
+OPTION(filestore_wbthrottle_xfs_bytes_start_flusher, OPT_U64, 10<<20)
+OPTION(filestore_wbthrottle_xfs_bytes_hard_limit, OPT_U64, 100<<20)
+OPTION(filestore_wbthrottle_xfs_ios_start_flusher, OPT_U64, 10)
+OPTION(filestore_wbthrottle_xfs_ios_hard_limit, OPT_U64, 100)
+OPTION(filestore_wbthrottle_xfs_inodes_start_flusher, OPT_U64, 10)
+
+/// These must be less than the fd limit
+OPTION(filestore_wbthrottle_btrfs_inodes_hard_limit, OPT_U64, 256)
+OPTION(filestore_wbthrottle_xfs_inodes_hard_limit, OPT_U64, 100)
 
 // Tests index failure paths
 OPTION(filestore_index_retry_probability, OPT_DOUBLE, 0)
@@ -486,10 +529,6 @@ OPTION(filestore_btrfs_snap, OPT_BOOL, true)
 OPTION(filestore_btrfs_clone_range, OPT_BOOL, true)
 OPTION(filestore_fsync_flushes_journal_data, OPT_BOOL, false)
 OPTION(filestore_fiemap, OPT_BOOL, false)     // (try to) use fiemap
-OPTION(filestore_flusher, OPT_BOOL, true)
-OPTION(filestore_flusher_max_fds, OPT_INT, 512)
-OPTION(filestore_flush_min, OPT_INT, 65536)
-OPTION(filestore_sync_flush, OPT_BOOL, false)
 OPTION(filestore_journal_parallel, OPT_BOOL, false)
 OPTION(filestore_journal_writeahead, OPT_BOOL, false)
 OPTION(filestore_journal_trailing, OPT_BOOL, false)
@@ -506,6 +545,7 @@ OPTION(filestore_merge_threshold, OPT_INT, 10)
 OPTION(filestore_split_multiple, OPT_INT, 2)
 OPTION(filestore_update_to, OPT_INT, 1000)
 OPTION(filestore_blackhole, OPT_BOOL, false)     // drop any new transactions on the floor
+OPTION(filestore_fd_cache_size, OPT_INT, 128)    // FD lru size
 OPTION(filestore_dump_file, OPT_STR, "")         // file onto which store transaction dumps
 OPTION(filestore_kill_at, OPT_INT, 0)            // inject a failure at the n'th opportunity
 OPTION(filestore_inject_stall, OPT_INT, 0)       // artificially stall for N seconds in op queue thread
@@ -528,6 +568,7 @@ OPTION(journal_align_min_size, OPT_INT, 64 << 10)  // align data payloads >= thi
 OPTION(journal_replay_from, OPT_INT, 0)
 OPTION(journal_zero_on_create, OPT_BOOL, false)
 OPTION(journal_ignore_corruption, OPT_BOOL, false) // assume journal is not corrupt
+
 OPTION(rbd_cache, OPT_BOOL, false) // whether to enable caching (writeback unless rbd_cache_max_dirty is 0)
 OPTION(rbd_cache_writethrough_until_flush, OPT_BOOL, false) // whether to make writeback caching writethrough until flush is called, to be sure the user of librbd will send flushs so that writeback is safe
 OPTION(rbd_cache_size, OPT_LONGLONG, 32<<20)         // cache size in bytes
@@ -535,6 +576,31 @@ OPTION(rbd_cache_max_dirty, OPT_LONGLONG, 24<<20)    // dirty limit in bytes - s
 OPTION(rbd_cache_target_dirty, OPT_LONGLONG, 16<<20) // target dirty limit in bytes
 OPTION(rbd_cache_max_dirty_age, OPT_FLOAT, 1.0)      // seconds in cache before writeback starts
 OPTION(rbd_cache_block_writes_upfront, OPT_BOOL, false) // whether to block writes to the cache before the aio_write call completes (true), or block before the aio completion is called (false)
+OPTION(rbd_concurrent_management_ops, OPT_INT, 10) // how many operations can be in flight for a management operation like deleting or resizing an image
+OPTION(rbd_balance_snap_reads, OPT_BOOL, false)
+OPTION(rbd_localize_snap_reads, OPT_BOOL, false)
+
+/*
+ * The following options change the behavior for librbd's image creation methods that
+ * don't require all of the parameters. These are provided so that older programs
+ * can take advantage of newer features without being rewritten to use new versions
+ * of the image creation functions.
+ *
+ * rbd_create()/RBD::create() are affected by all of these options.
+ *
+ * rbd_create2()/RBD::create2() and rbd_clone()/RBD::clone() are affected by:
+ * - rbd_default_order
+ * - rbd_default_stripe_count
+ * - rbd_default_stripe_size
+ *
+ * rbd_create3()/RBD::create3() and rbd_clone2/RBD::clone2() are only
+ * affected by rbd_default_order.
+ */
+OPTION(rbd_default_format, OPT_INT, 1)
+OPTION(rbd_default_order, OPT_INT, 22)
+OPTION(rbd_default_stripe_count, OPT_U64, 1) // changing requires stripingv2 feature
+OPTION(rbd_default_stripe_unit, OPT_U64, 4194304) // changing to non-object size requires stripingv2 feature
+OPTION(rbd_default_features, OPT_INT, 3) // 1 for layering, 3 for layering+stripingv2. only applies to format 2 images
 
 OPTION(nss_db_path, OPT_STR, "") // path to nss db
 

@@ -7,19 +7,19 @@ Concepts
 
 *Peering Interval*
   See PG::start_peering_interval.
-  See PG::up_acting_affected.
+  See PG::acting_up_affected
   See PG::RecoveryState::Reset
 
   A peering interval is a maximal set of contiguous map epochs in which the
   up and acting sets did not change.  PG::RecoveryMachine represents a 
   transition from one interval to another as passing through
-  RecoveryState::Reset.  On PG;:RecoveryState::AdvMap PG::up_acting_affected can
+  RecoveryState::Reset.  On PG::RecoveryState::AdvMap PG::acting_up_affected can
   cause the pg to transition to Reset.
   
 
 Peering Details and Gotchas
 ---------------------------
-For an overview of peering, see Peering.
+For an overview of peering, see `Peering <../../peering>`_.
 
   * PG::flushed defaults to false and is set to false in
     PG::start_peering_interval.  Upon transitioning to PG::RecoveryState::Started

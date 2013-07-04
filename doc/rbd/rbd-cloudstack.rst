@@ -1,13 +1,13 @@
-==============================
+=============================
  Block Devices and CloudStack
-==============================
+=============================
 
-You may use Ceph block device images with CloudStack 4.0 and higher through
+You may use Ceph Block Device images with CloudStack 4.0 and higher through
 ``libvirt``, which configures the QEMU interface to ``librbd``. Ceph stripes
 block device images as objects across the cluster, which means that large Ceph
-block device images have better performance than a standalone server!
+Block Device images have better performance than a standalone server!
 
-To use Ceph block devices with CloudStack 4.0 and higher, you must install QEMU,
+To use Ceph Block Devices with CloudStack 4.0 and higher, you must install QEMU,
 ``libvirt``, and CloudStack first. We recommend using a separate physical host
 for your CloudStack installation. CloudStack recommends a minimum of 4GB of RAM
 and a dual-core processor, but more CPU and RAM will perform better. The
@@ -32,29 +32,32 @@ following diagram depicts the CloudStack/Ceph technology stack.
             |          OSDs          | |        Monitors        |
             +------------------------+ +------------------------+
 
-.. important:: To use Ceph block devices with CloudStack, you must have a 
-   running Ceph cluster.
+.. important:: To use Ceph Block Devices with CloudStack, you must have  
+   access to a running Ceph Storage Cluster.
 
 CloudStack integrates with Ceph's block devices to provide CloudStack with a
 back end for CloudStack's Primary Storage. The instructions below detail the
 setup for CloudStack Primary Storage.
 
-.. note:: We recommend installing with Ubuntu 12.04 or later so that 
+.. note:: We recommend installing with Ubuntu 13.04 or later so that 
    you can use package installation instead of having to compile 
-   QEMU from source.
+   libvirt from source.
    
 Installing and configuring QEMU for use with CloudStack doesn't require any
-special handling. Ensure that you have a running Ceph  cluster. Install QEMU and
-configure it for use with Ceph; then, install ``libvirt`` version 0.9.13 or
-higher (you may need to compile from source) and ensure it is running with Ceph.
+special handling. Ensure that you have a running Ceph Storage Cluster. Install
+QEMU and configure it for use with Ceph; then, install ``libvirt`` version
+0.9.13 or higher (you may need to compile from source) and ensure it is running
+with Ceph.
 
 #. `Install and Configure QEMU`_.
 #. `Install and Configure libvirt`_ version 0.9.13 or higher.
 #. Also see `KVM Hypervisor Host Installation`_.
 
 
-.. note:: Raring Ringtail (13.04) will have ``libvirt`` verison 0.9.13 or higher
-   by default.
+.. note:: Raring Ringtail (13.04) will have ``libvirt`` version 0.9.13 or higher
+   with RBD storage pool support enabled by default.
+
+index:: pools; CloudStack
 
 Create a Pool
 =============
@@ -94,7 +97,7 @@ Create a Disk Offering
 ======================
 
 To create a new disk offering, refer to `Create a New Disk Offering (4.0.0)`_ or
- `Create a New Disk Offering (4.0.1)`_. Create a disk offering so that it
+`Create a New Disk Offering (4.0.1)`_. Create a disk offering so that it
 matches the ``rbd`` tag. The ``StoragePoolAllocator`` will choose the  ``rbd``
 pool when searching for a suitable storage pool. If the disk offering doesn't
 match the ``rbd`` tag, the ``StoragePoolAllocator`` may select the pool you
@@ -104,8 +107,9 @@ created (e.g., ``cloudstack``).
 Limitations
 ===========
 
-- CloudStack will only bind to one monitor.
+- CloudStack will only bind to one monitor (You can however create a Round Robin DNS record over multiple monitors)
 - CloudStack does not support cloning snapshots.
+- You still need a (small) NFS based Primary Storage for the SystemVMs
 - You may need to compile ``libvirt`` to use version 0.9.13 with Ubuntu.
 
 

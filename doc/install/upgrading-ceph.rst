@@ -42,7 +42,7 @@ When upgrading from Argonaut to Bobtail, you need to be aware of several things:
 
 Ensure that you update package repository paths. For example:: 
 
-	sudo rm /etc/apt/sources.sources.list.d/ceph.list
+	sudo rm /etc/apt/sources.list.d/ceph.list
 	echo deb http://ceph.com/debian-bobtail/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 See the following sections for additional details.
@@ -112,19 +112,19 @@ OSD version strings: ::
 Argonaut to Cuttlefish
 ======================
 
-To upgrade your cluster from Argonaut to Cuttlefish, please read this section,
-and the sections on upgrading from Argonaut to Bobtail and upgrading from
-Bobtail to Cuttlefish carefully. When upgrading from Argonaut to Cuttlefish,
-**YOU MUST UPGRADE YOUR MONITORS FROM ARGONAUT TO BOBTAIL FIRST!!!**. All other
-Ceph daemons can upgrade from Argonaut to Cuttlefish without the intermediate
-upgrade to Bobtail.
+To upgrade your cluster from Argonaut to Cuttlefish, please read this
+section, and the sections on upgrading from Argonaut to Bobtail and
+upgrading from Bobtail to Cuttlefish carefully. When upgrading from
+Argonaut to Cuttlefish, **YOU MUST UPGRADE YOUR MONITORS FROM ARGONAUT
+TO BOBTAIL v0.56.5 FIRST!!!**. All other Ceph daemons can upgrade from
+Argonaut to Cuttlefish without the intermediate upgrade to Bobtail.
 
 .. important:: Ensure that the repository specified points to Bobtail, not
    Cuttlefish.
-   
+
 For example:: 
 
-	sudo rm /etc/apt/sources.sources.list.d/ceph.list
+	sudo rm /etc/apt/sources.list.d/ceph.list
 	echo deb http://ceph.com/debian-bobtail/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 We recommend upgrading all monitors to Bobtail before proceeding with the
@@ -141,13 +141,14 @@ Monitor`_ for details.
    `Ceph Authentication - Backward Compatibility`_ for additional information
    on authentication backward compatibility settings for Bobtail.
 
-Once you complete the upgrade of your monitors from Argonaut to Bobtail, you
-must upgrade the monitors from Bobtail to Cuttlefish. Ensure that you have
-a quorum before beginning this upgrade procedure. Before upgrading, remember
-to replace the reference to the Bobtail repository with a reference to the
-Cuttlefish repository. For example:: 
+Once you complete the upgrade of your monitors from Argonaut to
+Bobtail, and have restarted the monitor daemons, you must upgrade the
+monitors from Bobtail to Cuttlefish. Ensure that you have a quorum
+before beginning this upgrade procedure. Before upgrading, remember to
+replace the reference to the Bobtail repository with a reference to
+the Cuttlefish repository. For example::
 
-	sudo rm /etc/apt/sources.sources.list.d/ceph.list
+	sudo rm /etc/apt/sources.list.d/ceph.list
 	echo deb http://ceph.com/debian-cuttlefish/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 See `Upgrading a Monitor`_ for details.
@@ -171,7 +172,7 @@ See the following sections for details.
 Replace any ``apt`` reference to older repositories with a reference to the
 Cuttlefish repository. For example:: 
 
-	sudo rm /etc/apt/sources.sources.list.d/ceph.list
+	sudo rm /etc/apt/sources.list.d/ceph.list
 	echo deb http://ceph.com/debian-cuttlefish/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 
@@ -199,6 +200,19 @@ metadata server will implicitly mark the first metadata server as ``failed``.
 Multi-MDS configurations with identical names must be adjusted accordingly to
 give daemons unique names. If you run your cluster with one  metadata server,
 you can disregard this notice for now.
+
+ceph-deploy
+-----------
+
+The ceph-deploy tool is now the preferred method of provisioning new
+clusters.  For existing clusters created via mkcephfs that would like
+to transition to the new tool, there is a migration path, documented
+at `Transitioning to ceph-deploy`_.  Note that transitioning to
+ceph-deploy is not required; it is entirely acceptable to continue
+provisioning new OSDs and monitors using the previous methods.
+However, ceph-deploy streamlines these processes significantly.
+
+.. _Transitioning to ceph-deploy: ../../rados/deployment/ceph-deploy-transition
 
 
 Upgrade Procedures

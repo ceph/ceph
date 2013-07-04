@@ -131,12 +131,12 @@ public:
 
   MMonSync(uint32_t op)
     : Message(MSG_MON_SYNC, HEAD_VERSION, COMPAT_VERSION),
-      op(op), flags(0), version(0)
+      op(op), flags(0), version(0), crc(0)
   { }
 
   MMonSync(uint32_t op, bufferlist bl, uint8_t flags = 0) 
     : Message(MSG_MON_SYNC, HEAD_VERSION, COMPAT_VERSION),
-      op(op), flags(flags), version(0), chunk_bl(bl)
+      op(op), flags(flags), version(0), chunk_bl(bl), crc(0)
   { }
 
   MMonSync(MMonSync *m)

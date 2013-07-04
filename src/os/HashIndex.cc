@@ -298,9 +298,9 @@ int HashIndex::_lookup(const hobject_t &hoid,
   vector<string> path_comp;
   get_path_components(hoid, &path_comp);
   vector<string>::iterator next = path_comp.begin();
-  int r, exists;
+  int exists;
   while (1) {
-    r = path_exists(*path, &exists);
+    int r = path_exists(*path, &exists);
     if (r < 0)
       return r;
     if (!exists) {
@@ -368,21 +368,30 @@ int HashIndex::start_col_split(const vector<string> &path) {
   bufferlist bl;
   InProgressOp op_tag(InProgressOp::COL_SPLIT, path);
   op_tag.encode(bl);
-  return add_attr_path(vector<string>(), IN_PROGRESS_OP_TAG, bl); 
+  int r = add_attr_path(vector<string>(), IN_PROGRESS_OP_TAG, bl);
+  if (r < 0)
+    return r;
+  return fsync_dir(vector<string>());
 }
 
 int HashIndex::start_split(const vector<string> &path) {
   bufferlist bl;
   InProgressOp op_tag(InProgressOp::SPLIT, path);
   op_tag.encode(bl);
-  return add_attr_path(vector<string>(), IN_PROGRESS_OP_TAG, bl); 
+  int r = add_attr_path(vector<string>(), IN_PROGRESS_OP_TAG, bl);
+  if (r < 0)
+    return r;
+  return fsync_dir(vector<string>());
 }
 
 int HashIndex::start_merge(const vector<string> &path) {
   bufferlist bl;
   InProgressOp op_tag(InProgressOp::MERGE, path);
   op_tag.encode(bl);
-  return add_attr_path(vector<string>(), IN_PROGRESS_OP_TAG, bl); 
+  int r = add_attr_path(vector<string>(), IN_PROGRESS_OP_TAG, bl);
+  if (r < 0)
+    return r;
+  return fsync_dir(vector<string>());
 }
 
 int HashIndex::end_split_or_merge(const vector<string> &path) {

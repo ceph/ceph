@@ -5,9 +5,10 @@
 
 #define dout_subsys ceph_subsys_mon
 #include "common/debug.h"
-
+#include "include/stringify.h"
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
+#include "mon/MonitorDBStore.h"
 
 // --
 
@@ -109,7 +110,7 @@ void PGMap::Incremental::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("osd_stat_updates");
-  for (map<int,osd_stat_t>::const_iterator p = osd_stat_updates.begin(); p != osd_stat_updates.end(); ++p) {
+  for (map<int32_t,osd_stat_t>::const_iterator p = osd_stat_updates.begin(); p != osd_stat_updates.end(); ++p) {
     f->open_object_section("osd_stat");
     f->dump_int("osd", p->first);
     p->second.dump(f);
@@ -176,6 +177,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   }
   if (ratios_changed)
     redo_full_sets();
+
   for (map<pg_t,pg_stat_t>::const_iterator p = inc.pg_stat_updates.begin();
        p != inc.pg_stat_updates.end();
        ++p) {
@@ -192,15 +194,15 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     }
     stat_pg_add(update_pg, update_stat);
   }
-  for (map<int,osd_stat_t>::const_iterator p = inc.osd_stat_updates.begin();
+  for (map<int32_t,osd_stat_t>::const_iterator p = inc.osd_stat_updates.begin();
        p != inc.osd_stat_updates.end();
        ++p) {
     int osd = p->first;
     const osd_stat_t &new_stats(p->second);
     
-    hash_map<int,osd_stat_t>::iterator t = osd_stat.find(osd);
+    hash_map<int32_t,osd_stat_t>::iterator t = osd_stat.find(osd);
     if (t == osd_stat.end()) {
-      hash_map<int,osd_stat_t>::value_type v(osd, new_stats);
+      hash_map<int32_t,osd_stat_t>::value_type v(osd, new_stats);
       osd_stat.insert(v);
     } else {
       stat_osd_sub(t->second);
@@ -226,7 +228,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   for (set<int>::iterator p = inc.osd_stat_rm.begin();
        p != inc.osd_stat_rm.end();
        ++p) {
-    hash_map<int,osd_stat_t>::iterator t = osd_stat.find(*p);
+    hash_map<int32_t,osd_stat_t>::iterator t = osd_stat.find(*p);
     if (t != osd_stat.end()) {
       stat_osd_sub(t->second);
       osd_stat.erase(t);
@@ -260,7 +262,7 @@ void PGMap::redo_full_sets()
 {
   full_osds.clear();
   nearfull_osds.clear();
-  for (hash_map<int, osd_stat_t>::iterator i = osd_stat.begin();
+  for (hash_map<int32_t, osd_stat_t>::iterator i = osd_stat.begin();
        i != osd_stat.end();
        ++i) {
     register_nearfull_status(i->first, i->second);
@@ -300,12 +302,59 @@ void PGMap::calc_stats()
        ++p) {
     stat_pg_add(p->first, p->second);
   }
-  for (hash_map<int,osd_stat_t>::iterator p = osd_stat.begin();
+  for (hash_map<int32_t,osd_stat_t>::iterator p = osd_stat.begin();
        p != osd_stat.end();
        ++p)
     stat_osd_add(p->second);
 
   redo_full_sets();
+}
+
+void PGMap::update_pg(pg_t pgid, bufferlist& bl)
+{
+  bufferlist::iterator p = bl.begin();
+  hash_map<pg_t,pg_stat_t>::iterator s = pg_stat.find(pgid);
+  if (s != pg_stat.end())
+    stat_pg_sub(pgid, s->second);
+  pg_stat_t& r = pg_stat[pgid];
+  ::decode(r, p);
+  stat_pg_add(pgid, r);
+}
+
+void PGMap::remove_pg(pg_t pgid)
+{
+  hash_map<pg_t,pg_stat_t>::iterator s = pg_stat.find(pgid);
+  if (s != pg_stat.end()) {
+    stat_pg_sub(pgid, s->second);
+    pg_stat.erase(s);
+  }
+}
+
+void PGMap::update_osd(int osd, bufferlist& bl)
+{
+  bufferlist::iterator p = bl.begin();
+  hash_map<int32_t,osd_stat_t>::iterator o = osd_stat.find(osd);
+  if (o != osd_stat.end())
+    stat_osd_sub(o->second);
+  osd_stat_t& r = osd_stat[osd];
+  ::decode(r, p);
+  stat_osd_add(r);
+
+  // adjust [near]full status
+  register_nearfull_status(osd, r);
+}
+
+void PGMap::remove_osd(int osd)
+{
+  hash_map<int32_t,osd_stat_t>::iterator o = osd_stat.find(osd);
+  if (o != osd_stat.end()) {
+    stat_osd_sub(o->second);
+    osd_stat.erase(o);
+
+    // remove these old osds from full/nearfull set(s), too
+    nearfull_osds.erase(osd);
+    full_osds.erase(osd);
+  }
 }
 
 void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s)
@@ -426,6 +475,21 @@ void PGMap::decode(bufferlist::iterator &bl)
   calc_stats();
 }
 
+void PGMap::dirty_all(Incremental& inc)
+{
+  inc.osdmap_epoch = last_osdmap_epoch;
+  inc.pg_scan = last_pg_scan;
+  inc.full_ratio = full_ratio;
+  inc.nearfull_ratio = nearfull_ratio;
+
+  for (hash_map<pg_t,pg_stat_t>::const_iterator p = pg_stat.begin(); p != pg_stat.end(); ++p) {
+    inc.pg_stat_updates[p->first] = p->second;
+  }
+  for (hash_map<int32_t, osd_stat_t>::const_iterator p = osd_stat.begin(); p != osd_stat.end(); ++p) {
+    inc.osd_stat_updates[p->first] = p->second;
+  }
+}
+
 void PGMap::dump(Formatter *f) const
 {
   dump_basic(f);
@@ -487,7 +551,7 @@ void PGMap::dump_pool_stats(Formatter *f) const
 void PGMap::dump_osd_stats(Formatter *f) const
 {
   f->open_array_section("osd_stats");
-  for (hash_map<int,osd_stat_t>::const_iterator q = osd_stat.begin();
+  for (hash_map<int32_t,osd_stat_t>::const_iterator q = osd_stat.begin();
        q != osd_stat.end();
        ++q) {
     f->open_object_section("osd_stat");
@@ -558,7 +622,7 @@ void PGMap::dump(ostream& ss) const
      << "\t" << pg_sum.ondisk_log_size
      << std::endl;
   ss << "osdstat\tkbused\tkbavail\tkb\thb in\thb out" << std::endl;
-  for (hash_map<int,osd_stat_t>::const_iterator p = osd_stat.begin();
+  for (hash_map<int32_t,osd_stat_t>::const_iterator p = osd_stat.begin();
        p != osd_stat.end();
        ++p)
     ss << p->first
@@ -673,6 +737,34 @@ void PGMap::recovery_summary(ostream& out) const
     if (pg_sum_delta.stats.sum.num_keys_recovered)
       out << ", " << si_t(pg_sum_delta.stats.sum.num_keys_recovered / (double)stamp_delta) << " key/s";
   }
+}
+
+void PGMap::update_delta(CephContext *cct, utime_t inc_stamp, pool_stat_t& pg_sum_old)
+{
+  utime_t delta_t;
+  delta_t = inc_stamp;
+  delta_t -= stamp;
+  stamp = inc_stamp;
+
+  // calculate a delta, and average over the last 2 deltas.
+  pool_stat_t d = pg_sum;
+  d.stats.sub(pg_sum_old.stats);
+  pg_sum_deltas.push_back(make_pair(d, delta_t));
+  stamp_delta += delta_t;
+
+  pg_sum_delta.stats.add(d.stats);
+  if (pg_sum_deltas.size() > (std::list< pair<pool_stat_t, utime_t> >::size_type)MAX(1, cct ? cct->_conf->mon_stat_smooth_intervals : 1)) {
+    pg_sum_delta.stats.sub(pg_sum_deltas.front().first.stats);
+    stamp_delta -= pg_sum_deltas.front().second;
+    pg_sum_deltas.pop_front();
+  }
+}
+
+void PGMap::clear_delta()
+{
+  pg_sum_delta = pool_stat_t();
+  pg_sum_deltas.clear();
+  stamp_delta = ceph_clock_now(g_ceph_context);
 }
 
 void PGMap::print_summary(ostream& out) const

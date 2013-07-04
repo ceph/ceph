@@ -81,29 +81,6 @@ int main(int argc, const char **argv, const char *envp[]) {
     cerr << std::endl;
   }
 
-  // get monmap
-  MonClient mc(g_ceph_context);
-  int ret = mc.build_initial_monmap();
-  if (ret == -EINVAL)
-    usage();
-
-  if (ret < 0)
-    return -1;
-
-  // start up network
-  Messenger *messenger = Messenger::create(g_ceph_context,
-					   entity_name_t::CLIENT(), "client",
-					   getpid());
-  Client *client = new Client(messenger, &mc);
-
-  messenger->set_default_policy(Messenger::Policy::lossy_client(0, 0));
-  messenger->set_policy(entity_name_t::TYPE_MDS,
-			Messenger::Policy::lossless_client(0, 0));
-
-  if (filer_flags) {
-    client->set_filer_flags(filer_flags);
-  }
-
   // we need to handle the forking ourselves.
   int fd[2] = {0, 0};  // parent's, child's
   pid_t childpid = 0;
@@ -130,10 +107,35 @@ int main(int argc, const char **argv, const char *envp[]) {
     if (restart_log)
       g_ceph_context->_log->start();
 
-    CephFuse cfuse(client, fd[1]);
+    // get monmap
+    Messenger *messenger = NULL;
+    Client *client;
+    CephFuse *cfuse;
+
+    MonClient mc(g_ceph_context);
+    int r = mc.build_initial_monmap();
+    if (r == -EINVAL)
+      usage();
+    if (r < 0)
+      goto out_mc_start_failed;
+
+    // start up network
+    messenger = Messenger::create(g_ceph_context,
+				  entity_name_t::CLIENT(), "client",
+				  getpid());
+    messenger->set_default_policy(Messenger::Policy::lossy_client(0, 0));
+    messenger->set_policy(entity_name_t::TYPE_MDS,
+			  Messenger::Policy::lossless_client(0, 0));
+
+    client = new Client(messenger, &mc);
+    if (filer_flags) {
+      client->set_filer_flags(filer_flags);
+    }
+
+    cfuse = new CephFuse(client, fd[1]);
 
     cout << "ceph-fuse[" << getpid() << "]: starting ceph client" << std::endl;
-    int r = messenger->start();
+    r = messenger->start();
     if (r < 0) {
       cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << cpp_strerror(-r) << std::endl;
       goto out_messenger_start_failed;
@@ -154,20 +156,21 @@ int main(int argc, const char **argv, const char *envp[]) {
       goto out_shutdown;
     }
 
-    r = cfuse.init(newargc, newargv);
+    r = cfuse->init(newargc, newargv);
     if (r != 0) {
       cerr << "ceph-fuse[" << getpid() << "]: fuse failed to initialize" << std::endl;
       goto out_client_unmount;
     }
     cerr << "ceph-fuse[" << getpid() << "]: starting fuse" << std::endl;
-    r = cfuse.loop();
+    r = cfuse->loop();
     cerr << "ceph-fuse[" << getpid() << "]: fuse finished with error " << r << std::endl;
 
   out_client_unmount:
     client->unmount();
     //cout << "unmounted" << std::endl;
 
-    cfuse.finalize();
+    cfuse->finalize();
+    delete cfuse;
 
   out_shutdown:
     client->shutdown();
@@ -177,6 +180,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     messenger->wait();
   out_messenger_start_failed:
     delete client;
+  out_mc_start_failed:
 
     if (g_conf->daemonize) {
       //cout << "child signalling parent with " << r << std::endl;

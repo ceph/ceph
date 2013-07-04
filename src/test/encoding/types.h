@@ -29,9 +29,6 @@ TYPEWITHSTRAYDATA(OSDMap::Incremental)
 #include "crush/CrushWrapper.h"
 TYPE(CrushWrapper)
 
-#include "osd/PG.h"
-TYPE(PG::OndiskLog)
-
 #include "osd/osd_types.h"
 TYPE(osd_reqid_t)
 TYPE(object_locator_t)
@@ -85,9 +82,8 @@ TYPE(PGMap)
 #include "mon/MonMap.h"
 TYPE_FEATUREFUL(MonMap)
 
-#include "mon/MonCaps.h"
+#include "mon/MonCap.h"
 TYPE(MonCap)
-TYPE(MonCaps)
 
 #include "os/DBObjectMap.h"
 TYPE(DBObjectMap::_Header)

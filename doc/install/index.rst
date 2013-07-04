@@ -39,6 +39,7 @@ may install development release and testing packages.
 
    Installing Debian/Ubuntu Packages <debian>
    Installing RPM Packages <rpm>
+   Installing on Calxeda <calxeda>
    Upgrading Ceph <upgrading-ceph>
 
 .. raw:: html 

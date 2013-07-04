@@ -113,6 +113,7 @@ struct Mutation {
 
   // pin items in cache
   void pin(MDSCacheObject *o);
+  void unpin(MDSCacheObject *o);
   void set_stickydirs(CInode *in);
   void drop_pins();
 

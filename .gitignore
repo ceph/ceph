@@ -66,3 +66,6 @@ m4/
 # where is this from?
 web/*.html
 
+# dir from coverity tools
+cov-int/
+

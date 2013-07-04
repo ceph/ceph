@@ -21,7 +21,7 @@
 #include "auth/AuthServiceHandler.h"
 #include "osd/OSDMap.h"
 
-#include "MonCaps.h"
+#include "MonCap.h"
 
 struct MonSession;
 
@@ -38,14 +38,15 @@ struct Subscription {
 };
 
 struct MonSession : public RefCountedObject {
-  Connection *con;
+  ConnectionRef con;
   entity_inst_t inst;
   utime_t until;
   utime_t time_established;
   bool closed;
   xlist<MonSession*>::item item;
   set<uint64_t> routed_request_tids;
-  MonCaps caps;
+  MonCap caps;
+  uint64_t auid;
   uint64_t global_id;
   uint64_t notified_global_id;
 
@@ -53,25 +54,30 @@ struct MonSession : public RefCountedObject {
 
   AuthServiceHandler *auth_handler;
 
-  Connection *proxy_con;
+  ConnectionRef proxy_con;
   uint64_t proxy_tid;
 
   MonSession(const entity_inst_t& i, Connection *c) :
-    con(c->get()), inst(i), closed(false), item(this),
+    con(c), inst(i), closed(false), item(this),
+    auid(0),
     global_id(0), notified_global_id(0), auth_handler(NULL),
     proxy_con(NULL), proxy_tid(0) {
     time_established = ceph_clock_now(g_ceph_context);
   }
   ~MonSession() {
-    if (con)
-      con->put();
-    if (proxy_con)
-      proxy_con->put();
     //generic_dout(0) << "~MonSession " << this << dendl;
     // we should have been removed before we get destructed; see MonSessionMap::remove_session()
     assert(!item.is_on_list());
     assert(sub_map.empty());
     delete auth_handler;
+  }
+
+  bool is_capable(string service, int mask) {
+    map<string,string> args;
+    return caps.is_capable(g_ceph_context,
+			   inst.name,
+			   service, "", args,
+			   mask & MON_CAP_R, mask & MON_CAP_W, mask & MON_CAP_X);
   }
 };
 

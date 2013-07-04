@@ -16,12 +16,12 @@
 
 int cls_log(int level, const char *format, ...)
 {
-   int size = 256, n;
+   int size = 256;
    va_list ap;
    while (1) {
      char buf[size];
      va_start(ap, format);
-     n = vsnprintf(buf, size, format, ap);
+     int n = vsnprintf(buf, size, format, ap);
      va_end(ap);
 #define MAX_SIZE 8196
      if ((n > -1 && n < size) || size > MAX_SIZE) {

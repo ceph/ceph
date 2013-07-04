@@ -34,7 +34,7 @@ public:
   void add_clean_inode(CInode *in) {
     if (!in->is_base()) {
       metablob.add_dir_context(in->get_projected_parent_dn()->get_dir());
-      metablob.add_primary_dentry(in->get_projected_parent_dn(), false, 0);
+      metablob.add_primary_dentry(in->get_projected_parent_dn(), 0, false);
       inos.push_back(in->ino());
     }
   }

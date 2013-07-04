@@ -1,5 +1,9 @@
 #!/bin/sh
 
+export PYTHONPATH=./pybind
+export LD_LIBRARY_PATH=.libs
+
+
 # abort on failure
 set -e
 
@@ -42,6 +46,7 @@ usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
 usage=$usage"\t-l, --localhost: use localhost instead of hostname\n"
 usage=$usage"\t-i <ip>: bind to specific ip\n"
+usage=$usage"\t-r start radosgw (needs ceph compiled with --radosgw and apache2 with mod_fastcgi)\n"
 usage=$usage"\t-n, --new\n"
 usage=$usage"\t--valgrind[_{osd,mds,mon}] 'toolname args...'\n"
 usage=$usage"\t--nodaemon: use ceph-run as wrapper for mon/osd/mds\n"
@@ -182,13 +187,11 @@ if [ "$debug" -eq 0 ]; then
 else
     echo "** going verbose **"
     CMONDEBUG='
-        lockdep = 1
 	debug mon = 20
         debug paxos = 20
         debug auth = 20
         debug ms = 1'
     COSDDEBUG='
-        lockdep = 1
         debug ms = 1
         debug osd = 25
         debug monc = 20
@@ -196,7 +199,6 @@ else
         debug filestore = 20
         debug objclass = 20'
     CMDSDEBUG='
-        lockdep = 1
         debug ms = 1
         debug mds = 20
         debug auth = 20
@@ -292,6 +294,7 @@ if [ "$start_mon" -eq 1 ]; then
         osd pgp bits = 5  ; (invalid, but ceph should cope!)
         osd crush chooseleaf type = 0
         osd pool default min size = 1
+        run dir = out
 EOF
 if [ "$cephx" -eq 1 ] ; then
 cat <<EOF >> $conf
@@ -308,7 +311,7 @@ fi
 
 [client]
         keyring = $keyring_fn
-        log file = out/\$name.log
+        log file = out/\$name.\$pid.log
 
 [mds]
 $DAEMONOPTS
@@ -326,7 +329,6 @@ $DAEMONOPTS
         osd class tmp = out
         osd class dir = .libs
         osd scrub load threshold = 5.0
-        filestore xattr use omap = true
         osd debug op order = true
 $COSDDEBUG
 $extra_conf
@@ -420,12 +422,12 @@ EOF
 	    uuid=`uuidgen`
 	    echo "add osd$osd $uuid"
 	    $SUDO $CEPH_ADM osd create $uuid
-	    $SUDO $CEPH_ADM osd crush set $osd osd.$osd 1.0 host=localhost rack=localrack root=default
+	    $SUDO $CEPH_ADM osd crush set osd.$osd 1.0 host=localhost rack=localrack root=default
 	    $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --mkkey --osd-uuid $uuid
 
 	    key_fn=dev/osd$osd/keyring
 	    echo adding osd$osd key to auth repository
-	    $SUDO $CEPH_ADM -i $key_fn auth add osd.$osd osd "allow *" mon "allow rwx"
+	    $SUDO $CEPH_ADM -i $key_fn auth add osd.$osd osd "allow *" mon "allow profile osd"
 	fi
 	echo start osd$osd
 	run 'osd' $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS $COSD_ARGS
@@ -464,7 +466,7 @@ EOF
 		fi
 	    fi
 	    $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mds.$name $key_fn
-	    $SUDO $CEPH_ADM -i $key_fn auth add mds.$name mon 'allow *' osd 'allow *' mds 'allow'
+	    $SUDO $CEPH_ADM -i $key_fn auth add mds.$name mon 'allow profile mds' osd 'allow *' mds 'allow'
 	    if [ "$standby" -eq 1 ]; then
 		    $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mds.${name}s \
 			dev/mds.${name}s/keyring
@@ -562,4 +564,8 @@ EOF
 fi
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
+
+echo ""
+echo "export PYTHONPATH=./pybind"
+echo "export LD_LIBRARY_PATH=.libs"
 

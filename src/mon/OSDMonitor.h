@@ -45,6 +45,10 @@ struct failure_reporter_t {
 
   failure_reporter_t() : num_reports(0), msg(NULL) {}
   failure_reporter_t(utime_t s) : num_reports(1), failed_since(s), msg(NULL) {}
+  ~failure_reporter_t() {
+    // caller should have taken this message before removing the entry.
+    assert(!msg);
+  }
 };
 
 /// information about all failure reports for one osd
@@ -145,7 +149,7 @@ private:
 public:  
   void create_initial();
 private:
-  void update_from_paxos();
+  void update_from_paxos(bool *need_bootstrap);
   void create_pending();  // prepare a new pending
   void encode_pending(MonitorDBStore::Transaction *t);
   virtual void encode_full(MonitorDBStore::Transaction *t);
@@ -212,7 +216,6 @@ private:
   bool prepare_pool_op (MPoolOp *m);
   bool prepare_pool_op_create (MPoolOp *m);
   bool prepare_pool_op_delete(MPoolOp *m);
-  bool prepare_pool_op_auid(MPoolOp *m);
   int prepare_new_pool(string& name, uint64_t auid, int crush_rule,
                        unsigned pg_num, unsigned pgp_num);
   int prepare_new_pool(MPoolOp *m);
@@ -295,7 +298,7 @@ private:
   void tick();  // check state, take actions
 
   int parse_osd_id(const char *s, stringstream *pss);
-  void parse_loc_map(const vector<string>& args, int start, map<string,string> *ploc);
+  void parse_loc_map(const vector<string>& args, map<string,string> *ploc);
 
   void get_health(list<pair<health_status_t,string> >& summary,
 		  list<pair<health_status_t,string> > *detail) const;

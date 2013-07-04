@@ -245,7 +245,6 @@ void CryptoAES::encrypt(const bufferptr& secret, const bufferlist& in, bufferlis
 #ifdef USE_CRYPTOPP
   {
     const unsigned char *key = (const unsigned char *)secret.c_str();
-    const unsigned char *in_buf;
 
     string ciphertext;
     CryptoPP::AES::Encryption aesEncryption(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
@@ -255,8 +254,7 @@ void CryptoAES::encrypt(const bufferptr& secret, const bufferlist& in, bufferlis
 
     for (std::list<bufferptr>::const_iterator it = in.buffers().begin();
 	 it != in.buffers().end(); ++it) {
-      in_buf = (const unsigned char *)it->c_str();
-
+      const unsigned char *in_buf = (const unsigned char *)it->c_str();
       stfEncryptor.Put(in_buf, it->length());
     }
     try {

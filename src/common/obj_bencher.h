@@ -60,7 +60,7 @@ protected:
 
   int fetch_bench_metadata(const std::string& metadata_file, int* object_size, int* num_objects, int* prevPid);
 
-  int write_bench(int secondsToRun, int concurrentios);
+  int write_bench(int secondsToRun, int maxObjects, int concurrentios);
   int seq_read_bench(int secondsToRun, int concurrentios, int num_objects, int writePid);
 
   int clean_up(int num_objects, int prevPid, int concurrentios);
@@ -91,7 +91,9 @@ protected:
 public:
   ObjBencher() : show_time(false), lock("ObjBencher::lock") {}
   virtual ~ObjBencher() {}
-  int aio_bench(int operation, int secondsToRun, int concurrentios, int op_size, bool cleanup);
+  int aio_bench(
+    int operation, int secondsToRun, int maxObjectsToCreate,
+    int concurrentios, int op_size, bool cleanup);
   int clean_up(const std::string& prefix, int concurrentios);
 
   void set_show_time(bool dt) {

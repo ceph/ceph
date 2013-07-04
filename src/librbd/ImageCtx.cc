@@ -238,6 +238,18 @@ namespace librbd {
     delete perfcounter;
   }
 
+  int ImageCtx::get_read_flags(snap_t snap_id) {
+    int flags = librados::OPERATION_NOFLAG;
+    if (snap_id == LIBRADOS_SNAP_HEAD)
+      return flags;
+
+    if (cct->_conf->rbd_balance_snap_reads)
+      flags |= librados::OPERATION_BALANCE_READS;
+    else if (cct->_conf->rbd_localize_snap_reads)
+      flags |= librados::OPERATION_LOCALIZE_READS;
+    return flags;
+  }
+
   int ImageCtx::snap_set(string in_snap_name)
   {
     map<string, SnapInfo>::iterator it = snaps_by_name.find(in_snap_name);
@@ -463,7 +475,7 @@ namespace librbd {
     snap_lock.get_read();
     ObjectCacher::OSDRead *rd = object_cacher->prepare_read(snap_id, bl, 0);
     snap_lock.put_read();
-    ObjectExtent extent(o, 0 /* a lie */, off, len);
+    ObjectExtent extent(o, 0 /* a lie */, off, len, 0);
     extent.oloc.pool = data_ctx.get_id();
     extent.buffer_extents.push_back(make_pair(0, len));
     rd->extents.push_back(extent);
@@ -480,7 +492,7 @@ namespace librbd {
     ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(snapc, bl,
 							      utime_t(), 0);
     snap_lock.put_read();
-    ObjectExtent extent(o, 0, off, len);
+    ObjectExtent extent(o, 0, off, len, 0);
     extent.oloc.pool = data_ctx.get_id();
     extent.buffer_extents.push_back(make_pair(0, len));
     wr->extents.push_back(extent);

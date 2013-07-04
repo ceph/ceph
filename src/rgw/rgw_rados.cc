@@ -1162,9 +1162,7 @@ int RGWRados::list_buckets_next(RGWObjEnt& obj, RGWAccessHandle *handle)
 
     obj.name = (*state)->first;
     (*state)++;
-  } while (obj.name[0] == '.');
-
-  /* FIXME: should read mtime/size vals for bucket */
+  } while (obj.name[0] == '.'); /* skip all entries starting with '.' */
 
   return 0;
 }
@@ -1657,14 +1655,18 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
   }
   result.clear();
 
-  rgw_obj marker_obj;
+  rgw_obj marker_obj, prefix_obj;
   marker_obj.set_ns(ns);
   marker_obj.set_obj(marker);
   string cur_marker = marker_obj.object;
 
+  prefix_obj.set_ns(ns);
+  prefix_obj.set_obj(prefix);
+  string cur_prefix = prefix_obj.object;
+
   do {
     std::map<string, RGWObjEnt> ent_map;
-    int r = cls_bucket_list(bucket, cur_marker, prefix, max - count, ent_map,
+    int r = cls_bucket_list(bucket, cur_marker, cur_prefix, max - count, ent_map,
                             &truncated, &cur_marker);
     if (r < 0)
       return r;
@@ -2568,8 +2570,8 @@ set_err_state:
     }
     return ret;
   }
-
   set_copy_attrs(src_attrs, attrs, replace_attrs, false);
+  src_attrs.erase(RGW_ATTR_ID_TAG);
 
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;
@@ -3596,7 +3598,6 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
         r = -ERR_NOT_MODIFIED;
         goto done_err;
       }
-      if_nomatch = if_nomatch_str.c_str();
     }
   }
 
@@ -3912,37 +3913,38 @@ int RGWRados::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **hand
 
   state->io_ctx.locator_set_key(key);
 
+  read_len = len;
+
   if (reading_from_head) {
     /* only when reading from the head object do we need to do the atomic test */
     r = append_atomic_test(rctx, read_obj, op, &astate);
     if (r < 0)
       goto done_ret;
+
+    if (astate) {
+      if (!ofs && astate->data.length() >= len) {
+        bl = astate->data;
+        goto done;
+      }
+
+      if (ofs < astate->data.length()) {
+        unsigned copy_len = min((uint64_t)astate->data.length() - ofs, len);
+        astate->data.copy(ofs, copy_len, bl);
+        read_len -= copy_len;
+        read_ofs += copy_len;
+        if (!read_len)
+	  goto done;
+
+        merge_bl = true;
+        pbl = &read_bl;
+      }
+    }
   }
 
   if (objv_tracker) {
     objv_tracker->prepare_op_for_read(&op);
   }
 
-  read_len = len;
-
-  if (astate) {
-    if (!ofs && astate->data.length() >= len) {
-      bl = astate->data;
-      goto done;
-    }
-
-    if (ofs < astate->data.length()) {
-      unsigned copy_len = min((uint64_t)astate->data.length(), len);
-      astate->data.copy(ofs, copy_len, bl);
-      read_len -= copy_len;
-      read_ofs += copy_len;
-      if (!read_len)
-	goto done;
-
-      merge_bl = true;
-      pbl = &read_bl;
-    }
-  }
 
   ldout(cct, 20) << "rados->read obj-ofs=" << ofs << " read_ofs=" << read_ofs << " read_len=" << read_len << dendl;
   op.read(read_ofs, read_len, pbl, NULL);
@@ -3998,9 +4000,12 @@ struct get_obj_data : public RefCountedObject {
   atomic_t err_code;
   Throttle throttle;
 
-  get_obj_data(CephContext *_cct) : cct(_cct),
-    total_read(0), lock("get_obj_data"), data_lock("get_obj_data::data_lock"),
-    throttle(cct, "get_obj_data", cct->_conf->rgw_get_obj_window_size, false) {}
+  get_obj_data(CephContext *_cct)
+    : cct(_cct),
+      rados(NULL), ctx(NULL),
+      total_read(0), lock("get_obj_data"), data_lock("get_obj_data::data_lock"),
+      client_cb(NULL),
+      throttle(cct, "get_obj_data", cct->_conf->rgw_get_obj_window_size, false) {}
   virtual ~get_obj_data() { } 
   void set_cancelled(int r) {
     cancelled.set(1);

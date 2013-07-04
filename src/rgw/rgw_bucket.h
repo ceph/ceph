@@ -186,7 +186,7 @@ class RGWBucket
 private:
 
 public:
-  RGWBucket() : store(NULL), failure(false) {}
+  RGWBucket() : store(NULL), handle(NULL), failure(false) {}
   int init(RGWRados *storage, RGWBucketAdminOpState& op_state);
 
   int check_bad_index_multipart(RGWBucketAdminOpState& op_state,

@@ -609,11 +609,11 @@ int main(int argc, const char **argv)
   if (!reweight_name.empty()) {
     cout << me << " reweighting item " << reweight_name << " to " << reweight_weight << std::endl;
     int r;
-    if (!crush.name_exists(reweight_name.c_str())) {
+    if (!crush.name_exists(reweight_name)) {
       cerr << " name " << reweight_name << " dne" << std::endl;
       r = -ENOENT;
     } else {
-      int item = crush.get_item_id(reweight_name.c_str());
+      int item = crush.get_item_id(reweight_name);
       r = crush.adjust_item_weightf(g_ceph_context, item, reweight_weight);
     }
     if (r >= 0)
@@ -627,11 +627,11 @@ int main(int argc, const char **argv)
   if (!remove_name.empty()) {
     cout << me << " removing item " << remove_name << std::endl;
     int r;
-    if (!crush.name_exists(remove_name.c_str())) {
+    if (!crush.name_exists(remove_name)) {
       cerr << " name " << remove_name << " dne" << std::endl;
       r = -ENOENT;
     } else {
-      int remove_item = crush.get_item_id(remove_name.c_str());
+      int remove_item = crush.get_item_id(remove_name);
       r = crush.remove_item(g_ceph_context, remove_item, false);
     }
     if (r == 0)

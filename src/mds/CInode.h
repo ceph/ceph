@@ -151,9 +151,16 @@ public:
   static const int STATE_NEEDSRECOVER = (1<<11);
   static const int STATE_RECOVERING =   (1<<12);
   static const int STATE_PURGING =     (1<<13);
+  static const int STATE_DIRTYPARENT =  (1<<14);
   static const int STATE_DIRTYRSTAT =  (1<<15);
   static const int STATE_STRAYPINNED = (1<<16);
   static const int STATE_FROZENAUTHPIN = (1<<17);
+  static const int STATE_DIRTYPOOL =   (1<<18);
+
+  static const int MASK_STATE_EXPORTED =
+    (STATE_DIRTY|STATE_NEEDSRECOVER|STATE_DIRTYPARENT|STATE_DIRTYPOOL);
+  static const int MASK_STATE_EXPORT_KEPT =
+    (STATE_FROZEN|STATE_AMBIGUOUSAUTH|STATE_EXPORTINGCAPS);
 
   // -- waiters --
   static const uint64_t WAIT_DIR         = (1<<0);
@@ -332,7 +339,7 @@ public:
       //assert(g_conf->debug_mds < 2 || dirfragtree.is_leaf(fg)); // performance hack FIXME
       return dirfrags[fg];
     } else
-      return 0;
+      return NULL;
   }
   bool get_dirfrags_under(frag_t fg, list<CDir*>& ls);
   CDir* get_approx_dirfrag(frag_t fg);
@@ -364,7 +371,7 @@ public:
 protected:
   // file capabilities
   map<client_t, Capability*> client_caps;         // client -> caps
-  map<int, int>         mds_caps_wanted;     // [auth] mds -> caps wanted
+  map<int32_t, int32_t>      mds_caps_wanted;     // [auth] mds -> caps wanted
   int                   replica_caps_wanted; // [replica] what i've requested from auth
 
   map<int, set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
@@ -384,6 +391,7 @@ public:
   elist<CInode*>::item item_dirty;
   elist<CInode*>::item item_caps;
   elist<CInode*>::item item_open_file;
+  elist<CInode*>::item item_dirty_parent;
   elist<CInode*>::item item_dirty_dirfrag_dir;
   elist<CInode*>::item item_dirty_dirfrag_nest;
   elist<CInode*>::item item_dirty_dirfrag_dirfragtree;
@@ -424,7 +432,7 @@ private:
     parent(0),
     inode_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
-    item_dirty(this), item_caps(this), item_open_file(this),
+    item_dirty(this), item_caps(this), item_open_file(this), item_dirty_parent(this),
     item_dirty_dirfrag_dir(this), 
     item_dirty_dirfrag_nest(this), 
     item_dirty_dirfrag_dirfragtree(this), 
@@ -527,10 +535,13 @@ private:
   void fetch(Context *fin);
   void _fetched(bufferlist& bl, bufferlist& bl2, Context *fin);  
 
-  void fetch_backtrace(inode_backtrace_t *bt, Context *fin);
-  void _fetched_backtrace(bufferlist *bl, inode_backtrace_t *bt, Context *fin);
-
-  void build_backtrace(int64_t location, inode_backtrace_t* bt);
+  void build_backtrace(int64_t pool, inode_backtrace_t& bt);
+  void store_backtrace(Context *fin);
+  void _stored_backtrace(version_t v, Context *fin);
+  void _mark_dirty_parent(LogSegment *ls, bool dirty_pool=false);
+  void clear_dirty_parent();
+  bool is_dirty_parent() { return state_test(STATE_DIRTYPARENT); }
+  bool is_dirty_pool() { return state_test(STATE_DIRTYPOOL); }
 
   void encode_store(bufferlist& bl);
   void decode_store(bufferlist::iterator& bl);
@@ -640,6 +651,7 @@ public:
   void clear_scatter_dirty();  // on rejoin ack
 
   void start_scatter(ScatterLock *lock);
+  void start_scatter_gather(ScatterLock *lock, int auth=-1);
   void finish_scatter_update(ScatterLock *lock, CDir *dir,
 			     version_t inode_version, version_t dir_accounted_version);
   void finish_scatter_gather_update(int type);
@@ -704,7 +716,7 @@ public:
   bool is_any_caps() { return !client_caps.empty(); }
   bool is_any_nonstale_caps() { return count_nonstale_caps(); }
 
-  map<int,int>& get_mds_caps_wanted() { return mds_caps_wanted; }
+  map<int32_t,int32_t>& get_mds_caps_wanted() { return mds_caps_wanted; }
 
   map<client_t,Capability*>& get_client_caps() { return client_caps; }
   Capability *get_client_cap(client_t client) {

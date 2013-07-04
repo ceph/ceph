@@ -52,12 +52,13 @@ public:
    * hook.
    *
    * @param command command string
+   * @param cmddesc command syntax descriptor
    * @param hook implementaiton
    * @param help help text.  if empty, command will not be included in 'help' output.
    *
    * @return 0 for success, -EEXIST if command already registered.
    */
-  int register_command(std::string command, AdminSocketHook *hook, std::string help);
+  int register_command(std::string command, std::string cmddesc, AdminSocketHook *hook, std::string help);
 
   /**
    * unregister an admin socket command
@@ -87,14 +88,16 @@ private:
   int m_shutdown_rd_fd;
   int m_shutdown_wr_fd;
 
-  Mutex m_lock;    // protects m_hooks, m_help
-  AdminSocketHook *m_version_hook, *m_help_hook;
+  Mutex m_lock;    // protects m_hooks, m_descs, m_help
+  AdminSocketHook *m_version_hook, *m_help_hook, *m_getdescs_hook;
 
   std::map<std::string,AdminSocketHook*> m_hooks;
+  std::map<std::string,std::string> m_descs;
   std::map<std::string,std::string> m_help;
 
   friend class AdminSocketTest;
   friend class HelpHook;
+  friend class GetdescsHook;
 };
 
 #endif

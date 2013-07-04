@@ -8,7 +8,8 @@ from nose.tools import eq_ as eq, assert_raises
 from rados import Rados
 from rbd import (RBD, Image, ImageNotFound, InvalidArgument, ImageExists,
                  ImageBusy, ImageHasSnapshots, ReadOnlyImage,
-                 FunctionNotSupported, RBD_FEATURE_LAYERING)
+                 FunctionNotSupported, ArgumentOutOfRange,
+                 RBD_FEATURE_LAYERING, RBD_FEATURE_STRIPINGV2)
 
 
 rados = None
@@ -65,6 +66,93 @@ def test_version():
 def test_create():
     create_image()
     remove_image()
+
+def check_default_params(format, order=None, features=None, stripe_count=None,
+                         stripe_unit=None, exception=None):
+    global rados
+    global ioctx
+    orig_vals = {}
+    for k in ['rbd_default_format', 'rbd_default_order', 'rbd_default_features',
+              'rbd_default_stripe_count', 'rbd_default_stripe_unit']:
+        orig_vals[k] = rados.conf_get(k)
+    try:
+        rados.conf_set('rbd_default_format', str(format))
+        if order is not None:
+            rados.conf_set('rbd_default_order', str(order or 0))
+        if features is not None:
+            rados.conf_set('rbd_default_features', str(features or 0))
+        if stripe_count is not None:
+            rados.conf_set('rbd_default_stripe_count', str(stripe_count or 0))
+        if stripe_unit is not None:
+            rados.conf_set('rbd_default_stripe_unit', str(stripe_unit or 0))
+        if exception is None:
+            RBD().create(ioctx, IMG_NAME, IMG_SIZE)
+            try:
+                with Image(ioctx, IMG_NAME) as image:
+                    eq(format == 1, image.old_format())
+
+                    expected_order = order
+                    if not order:
+                        expected_order = 22
+                    actual_order = image.stat()['order']
+                    eq(expected_order, actual_order)
+
+                    expected_features = features
+                    if expected_features is None or format == 1:
+                        expected_features = 0 if format == 1 else 3
+                    eq(expected_features, image.features())
+
+                    expected_stripe_count = stripe_count
+                    if not expected_stripe_count or format == 1 or \
+                           features & RBD_FEATURE_STRIPINGV2 == 0:
+                        expected_stripe_count = 1
+                    eq(expected_stripe_count, image.stripe_count())
+
+                    expected_stripe_unit = stripe_unit
+                    if not expected_stripe_unit or format == 1 or \
+                           features & RBD_FEATURE_STRIPINGV2 == 0:
+                        expected_stripe_unit = 1 << actual_order
+                    eq(expected_stripe_unit, image.stripe_unit())
+            finally:
+                RBD().remove(ioctx, IMG_NAME)
+        else:
+            assert_raises(exception, RBD().create, ioctx, IMG_NAME, IMG_SIZE)
+    finally:
+        for k, v in orig_vals.iteritems():
+            rados.conf_set(k, v)
+
+def test_create_defaults():
+    # basic format 1 and 2
+    check_default_params(1)
+    check_default_params(2)
+    # default order still works
+    check_default_params(1, 0)
+    check_default_params(2, 0)
+    # invalid order
+    check_default_params(1, 11, exception=ArgumentOutOfRange)
+    check_default_params(2, 11, exception=ArgumentOutOfRange)
+    check_default_params(1, 65, exception=ArgumentOutOfRange)
+    check_default_params(2, 65, exception=ArgumentOutOfRange)
+    # striping and features are ignored for format 1
+    check_default_params(1, 20, 0, 1, 1)
+    check_default_params(1, 20, 3, 1, 1)
+    check_default_params(1, 20, 0, 0, 0)
+    # striping is ignored if stripingv2 is not set
+    check_default_params(2, 20, 0, 1, 1 << 20)
+    check_default_params(2, 20, RBD_FEATURE_LAYERING, 1, 1 << 20)
+    check_default_params(2, 20, 0, 0, 0)
+    # striping with stripingv2 is fine
+    check_default_params(2, 20, RBD_FEATURE_STRIPINGV2, 1, 1 << 16)
+    check_default_params(2, 20, RBD_FEATURE_STRIPINGV2, 10, 1 << 20)
+    check_default_params(2, 20, RBD_FEATURE_STRIPINGV2, 10, 1 << 16)
+    # make sure invalid combinations of stripe unit and order are still invalid
+    check_default_params(2, 20, RBD_FEATURE_STRIPINGV2, exception=InvalidArgument)
+    check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 10, 1 << 50, exception=InvalidArgument)
+    check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 10, 100, exception=InvalidArgument)
+    check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 0, 1, exception=InvalidArgument)
+    check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 1, 0, exception=InvalidArgument)
+    # 0 stripe unit and count are still ignored
+    check_default_params(2, 22, RBD_FEATURE_STRIPINGV2, 0, 0)
 
 def test_context_manager():
     with Rados(conffile='') as cluster:

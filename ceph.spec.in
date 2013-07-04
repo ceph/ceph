@@ -21,7 +21,7 @@ Requires:	librados2 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
 Requires:	python
 Requires:	python-argparse
-Requires:	python-lockfile
+Requires:	python-ceph
 Requires:       xfsprogs
 Requires:	cryptsetup
 Requires:	parted
@@ -283,9 +283,11 @@ find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
 install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
 install -D src/init-radosgw.sysv $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
-mkdir -p $RPM_BUILD_ROOT/usr/sbin
-ln -sf ../../etc/init.d/ceph %{buildroot}/usr/sbin/rcceph
-ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/usr/sbin/rcceph-radosgw
+install -D src/init-rbd $RPM_BUILD_ROOT%{_initrddir}/rbdmap
+install -D src/rbdmap $RPM_BUILD_ROOT%{_sysconfdir}/ceph/rbdmap
+mkdir -p $RPM_BUILD_ROOT%{_sbindir}
+ln -sf ../../etc/init.d/ceph %{buildroot}/%{_sbindir}/rcceph
+ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/%{_sbindir}/rcceph-radosgw
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
 install -m 0644 -D src/rgw/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/radosgw
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
@@ -293,6 +295,8 @@ chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
 
 # udev rules
 install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
+install -m 0644 -D udev/60-ceph-partuuid-workaround.rules $RPM_BUILD_ROOT/lib/udev/rules.d/60-ceph-partuuid-workaround.rules
+
 %if 0%{?centos}
 install -m 0644 -D udev/95-ceph-osd-alt.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
 %else
@@ -322,7 +326,8 @@ rm -rf $RPM_BUILD_ROOT
 
 %post
 /sbin/ldconfig
-#/sbin/chkconfig --add ceph
+/sbin/chkconfig --add ceph
+mkdir -p %{_localstatedir}/run/ceph/
 
 %preun
 %if %{defined suse_version}
@@ -330,7 +335,7 @@ rm -rf $RPM_BUILD_ROOT
 %endif
 if [ $1 = 0 ] ; then
     /sbin/service ceph stop >/dev/null 2>&1
-#    /sbin/chkconfig --del ceph
+    /sbin/chkconfig --del ceph
 fi
 
 %postun
@@ -395,12 +400,15 @@ fi
 %{_libdir}/rados-classes/libcls_refcount.so*
 %{_libdir}/ceph
 /lib/udev/rules.d/50-rbd.rules
+/lib/udev/rules.d/60-ceph-partuuid-workaround.rules
 /lib/udev/rules.d/95-ceph-osd.rules
 %dir %{_sysconfdir}/ceph/
 %config %{_sysconfdir}/bash_completion.d/ceph
 %config %{_sysconfdir}/bash_completion.d/rados
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %config %{_sysconfdir}/bash_completion.d/rbd
+%{_initrddir}/rbdmap
+%config(noreplace) %{_sysconfdir}/ceph/rbdmap
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %config(noreplace) %{_sysconfdir}/logrotate.d/radosgw
 %{_mandir}/man8/ceph-mon.8*
@@ -548,6 +556,7 @@ fi
 %{python_sitelib}/rados.py*
 %{python_sitelib}/rbd.py*
 %{python_sitelib}/cephfs.py*
+%{python_sitelib}/ceph_argparse.py*
 
 #################################################################################
 %files -n rest-bench
@@ -597,8 +606,10 @@ fi
 %{_bindir}/ceph_test_objectcacher_stress
 %{_bindir}/ceph_test_rados_api_aio
 %{_bindir}/ceph_test_rados_api_cls
+%{_bindir}/ceph_test_rados_api_cmd
 %{_bindir}/ceph_test_rados_api_io
 %{_bindir}/ceph_test_rados_api_list
+%{_bindir}/ceph_test_rados_api_lock
 %{_bindir}/ceph_test_rados_api_misc
 %{_bindir}/ceph_test_rados_api_pool
 %{_bindir}/ceph_test_rados_api_snapshots

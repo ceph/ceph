@@ -181,7 +181,10 @@ void RGW_SWIFT_Auth_Get::execute()
   user_str = user;
 
   if ((ret = rgw_get_user_info_by_swift(store, user_str, info)) < 0)
+  {
+    ret = -EACCES;
     goto done;
+  }
 
   siter = info.swift_keys.find(user_str);
   if (siter == info.swift_keys.end()) {

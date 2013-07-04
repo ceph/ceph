@@ -3,40 +3,37 @@
 ===================
 
 
-RADOS Object Store APIs
-=======================
+Ceph Storage Cluster APIs
+=========================
 
-See `RADOS Object Store APIs`_.
+See `Ceph Storage Cluster APIs`_.
 
-.. _RADOS Object Store APIs: ../rados/api/
+.. _Ceph Storage Cluster APIs: ../rados/api/
 
 
-CephFS APIs
-===========
+Ceph Filesystem APIs
+====================
 
 See `libcephfs (javadoc)`_.
 
 .. _libcephfs (javadoc): libcephfs-java
 
 
-Ceph Block Device
-=================
+Ceph Block Device APIs
+======================
 
 See `librbdpy`_. 
 
 .. _librbdpy: ../rbd/librbdpy
 
 
-Ceph RADOS Gateway S3 API
-=========================
+Ceph Object Store APIs
+======================
 
-See `S3-compatible API`_.
+- See `S3-compatible API`_.
+- See `Swift-compatible API`_.
+- See `Admin Ops API`_. 
 
 .. _S3-compatible API: ../radosgw/s3/
-
-Ceph RADOS Gateway Swift API
-============================
-
-See `Swift-compatible API`_.
-
 .. _Swift-compatible API: ../radosgw/swift/
+.. _Admin Ops API: ../radosgw/adminops
