@@ -1,0 +1,9 @@
+tasks:
+- install:
+- ceph:
+- kclient:
+- workunit:
+    clients:
+      all:
+        - misc/test_o_trunc.sh
+
