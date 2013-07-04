@@ -214,6 +214,7 @@ struct rgw_bucket_dir_entry {
     ::encode(meta, bl);
     ::encode(pending_map, bl);
     ::encode(locator, bl);
+    ::encode(ver, bl);
     ::encode_packed_val(index_ver, bl);
     ::encode(tag, bl);
     ENCODE_FINISH(bl);
