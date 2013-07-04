@@ -29,9 +29,11 @@
 # snapshot.  It then compares the data read back with what was read
 # back from the original image, verifying they match.
 #
-# You can optionally test clone functionality as well, in which case
-# a clone is made of the snapshot, and the same ranges of data are
-# again read and compared with the original.
+# Clone functionality is tested as well, in which case a clone is
+# made of the snapshot, and the same ranges of data are again read
+# and compared with the original.  In addition, a snapshot of that
+# clone is created, and a clone of *that* snapshot is put through
+# the same set of tests.  (Clone testing can be optionally skipped.)
 
 ################################################################
 
@@ -40,13 +42,15 @@
 # with "IMAGE_READ_", for e.g. use IMAGE_READ_PAGE_SIZE=65536
 # to use 65536 as the page size.
 
+DEFAULT_VERBOSE=true
+DEFAULT_TEST_CLONES=true
 DEFAULT_LOCAL_FILES=false
-DEFAULT_VERBOSE=true		# Change parseargs if you switch this to false
-DEFAULT_TEST_CLONES=false
-DEFAULT_FORMAT=1
+DEFAULT_FORMAT=2
+DEFAULT_DOUBLE_ORDER=true
+DEFAULT_HALF_ORDER=false
 DEFAULT_PAGE_SIZE=4096
 DEFAULT_OBJECT_ORDER=22
-MIN_OBJECT_ORDER=9
+MIN_OBJECT_ORDER=12	# technically 9, but the rbd CLI enforces 12
 MAX_OBJECT_ORDER=32
 
 PROGNAME=$(basename $0)
@@ -56,6 +60,8 @@ PROGNAME=$(basename $0)
 ORIGINAL=original-$$
 SNAP1=snap1-$$
 CLONE1=clone1-$$
+SNAP2=snap2-$$
+CLONE2=clone2-$$
 
 function err() {
 	if [ $# -gt 0 ]; then
@@ -83,6 +89,10 @@ function usage() {
 	echo "        test using format 2 rbd images" >&2
 	echo "    -c" >&2
 	echo "        also test rbd clone images (implies format 2)" >&2
+	echo "    -d" >&2
+	echo "        clone object order double its parent's (format 2)" >&2
+	echo "    -h" >&2
+	echo "        clone object order half of its parent's (format 2)" >&2
 	echo "    -l" >&2
 	echo "        use local files rather than rbd images" >&2
 	echo "    -v" >&2
@@ -101,17 +111,22 @@ function quiet() {
 }
 
 function boolean_toggle() {
-	[ "${VERBOSE}" = true ] && echo "$@"
-
+	[ $# -eq 1 ] || exit 99
+	test "$1" = "true" && echo false || echo true
 }
+
 function parseargs() {
 	local opts="o:p:12clv"
 	local lopts="order:,page_size:,local,clone,verbose"
 	local parsed
+	local clone_order_msg
 
 	# use values from environment if available
-	LOCAL_FILES="${IMAGE_READ_LOCAL_FILES:-${DEFAULT_LOCAL_FILES}}"
 	VERBOSE="${IMAGE_READ_VERBOSE:-${DEFAULT_VERBOSE}}"
+	TEST_CLONES="${IMAGE_READ_TEST_CLONES:-${DEFAULT_TEST_CLONES}}"
+	LOCAL_FILES="${IMAGE_READ_LOCAL_FILES:-${DEFAULT_LOCAL_FILES}}"
+	DOUBLE_ORDER="${IMAGE_READ_DOUBLE_ORDER:-${DEFAULT_DOUBLE_ORDER}}"
+	HALF_ORDER="${IMAGE_READ_HALF_ORDER:-${DEFAULT_HALF_ORDER}}"
 	FORMAT="${IMAGE_READ_FORMAT:-${DEFAULT_FORMAT}}"
 	PAGE_SIZE="${IMAGE_READ_PAGE_SIZE:-${DEFAULT_PAGE_SIZE}}"
 	OBJECT_ORDER="${IMAGE_READ_OBJECT_ORDER:-${DEFAULT_OBJECT_ORDER}}"
@@ -121,17 +136,47 @@ function parseargs() {
 	eval set -- "${parsed}"
 	while true; do
 		case "$1" in
-		-v|--verbose)	VERBOSE=false; shift;;		# default true
-		-l|--local)	LOCAL_FILES=true; shift;;
-		-1|-2)		FORMAT="${1:1}"; shift;;
-		-c|--clone)	TEST_CLONES=true; shift;;
-		-o|--order)	OBJECT_ORDER="$2"; shift 2;;
-		-p|--page_size)	PAGE_SIZE="$2"; shift 2;;
-		--)		shift ; break ;;
-		*)		err "getopt internal error"
+		-v|--verbose)
+			VERBOSE=$(boolean_toggle "${VERBOSE}");;
+		-c|--clone)
+			TEST_CLONES=$(boolean_toggle "${TEST_CLONES}");;
+		-d|--double)
+			DOUBLE_ORDER=$(boolean_toggle "${DOUBLE_ORDER}");;
+		-h|--half)
+			HALF_ORDER=$(boolean_toggle "${HALF_ORDER}");;
+		-l|--local)
+			LOCAL_FILES=$(boolean_toggle "${LOCAL_FILES}");;
+		-1|-2)
+			FORMAT="${1:1}";;
+		-p|--page_size)
+			PAGE_SIZE="$2"; shift;;
+		-o|--order)
+			OBJECT_ORDER="$2"; shift;;
+		--)
+			shift; break;;
+		*)
+			err "getopt internal error"
 		esac
+		shift
 	done
 	[ $# -gt 0 ] && usage "excess arguments ($*)"
+
+	if [ "${TEST_CLONES}" = true ]; then
+		# If we're using different object orders for clones,
+		# make sure the limits are updated accordingly.  If
+		# both "half" and "double" are specified, just
+		# ignore them both.
+		if [ "${DOUBLE_ORDER}" = true ]; then
+			if [ "${HALF_ORDER}" = true ]; then
+				DOUBLE_ORDER=false
+				HALF_ORDER=false
+			else
+				((MAX_OBJECT_ORDER -= 2))
+			fi
+		elif [ "${HALF_ORDER}" = true ]; then
+			((MIN_OBJECT_ORDER += 2))
+		fi
+	fi
 
 	[ "${OBJECT_ORDER}" -lt "${MIN_OBJECT_ORDER}" ] &&
 		usage "object order (${OBJECT_ORDER}) must be" \
@@ -139,6 +184,22 @@ function parseargs() {
 	[ "${OBJECT_ORDER}" -gt "${MAX_OBJECT_ORDER}" ] &&
 		usage "object order (${OBJECT_ORDER}) must be" \
 			"at most ${MAX_OBJECT_ORDER}"
+
+	if [ "${TEST_CLONES}" = true ]; then
+		if [ "${DOUBLE_ORDER}" = true ]; then
+			((CLONE1_ORDER = OBJECT_ORDER + 1))
+			((CLONE2_ORDER = OBJECT_ORDER + 2))
+			clone_order_msg="double"
+		elif [ "${HALF_ORDER}" = true ]; then
+			((CLONE1_ORDER = OBJECT_ORDER - 1))
+			((CLONE2_ORDER = OBJECT_ORDER - 2))
+			clone_order_msg="half of"
+		else
+			CLONE1_ORDER="${OBJECT_ORDER}"
+			CLONE2_ORDER="${OBJECT_ORDER}"
+			clone_order_msg="the same as"
+		fi
+	fi
 
 	[ "${TEST_CLONES}" != true ] || FORMAT=2
 
@@ -152,16 +213,20 @@ function parseargs() {
 		usage "object size (${OBJECT_SIZE}) must be" \
 			"at least 4 * page size (${PAGE_SIZE})"
 
-	verbose "parameters for this run:"
-	verbose "    format ${FORMAT} images will be tested"
-	verbose "    object order is ${OBJECT_ORDER}, so" \
+	echo "parameters for this run:"
+	echo "    format ${FORMAT} images will be tested"
+	echo "    object order is ${OBJECT_ORDER}, so" \
 		"objects are ${OBJECT_SIZE} bytes"
-	verbose "    page size is ${PAGE_SIZE} bytes, so" \
+	echo "    page size is ${PAGE_SIZE} bytes, so" \
 		"there are are ${OBJECT_PAGES} pages in an object"
-	verbose "    derived image size is ${IMAGE_SIZE} MB, so" \
+	echo "    derived image size is ${IMAGE_SIZE} MB, so" \
 		"there are ${IMAGE_OBJECTS} objects in an image"
-	[ "${TEST_CLONES}" = true ] &&
-		verbose "    clone functionality will be tested"
+	if [ "${TEST_CLONES}" = true ]; then
+		echo "    clone functionality will be tested"
+		echo "    object size for a clone will be ${clone_order_msg}"
+		echo "        the object size of its parent image"
+	fi
+
 	true	# Don't let the clones test spoil our return value
 }
 
@@ -196,24 +261,49 @@ function setup() {
 	mkdir -p $(out_data_dir)
 
 	if [ "${LOCAL_FILES}" != true -a "${SUSER}" != true ]; then
+		[ -d /sys/bus/rbd ] || sudo modprobe rbd
+		while [ ! -f /sys/bus/rbd/add ]; do
+		    sleep 1
+		done
 		# allow ubuntu user to map/unmap rbd devices
 		sudo chown ubuntu /sys/bus/rbd/add
 		sudo chown ubuntu /sys/bus/rbd/remove
 	fi
+	# create and fill the original image with some data
 	create_image "${ORIGINAL}"
 	map_image "${ORIGINAL}"
 	fill_original
+
+	# create a snapshot of the original
 	create_image_snap "${ORIGINAL}" "${SNAP1}"
 	map_image_snap "${ORIGINAL}" "${SNAP1}"
+
 	if [ "${TEST_CLONES}" = true ]; then
-		create_snap_clone "${ORIGINAL}" "${SNAP1}" "${CLONE1}"
+		# create a clone of the original snapshot
+		create_snap_clone "${ORIGINAL}" "${SNAP1}" \
+			"${CLONE1}" "${CLONE1_ORDER}"
 		map_image "${CLONE1}"
+
+		# create a snapshot of that clone
+		create_image_snap "${CLONE1}" "${SNAP2}"
+		map_image_snap "${CLONE1}" "${SNAP2}"
+
+		# create a clone of that clone's snapshot
+		create_snap_clone "${CLONE1}" "${SNAP2}" \
+			"${CLONE2}" "${CLONE2_ORDER}"
+		map_image "${CLONE2}"
 	fi
 }
 
 function teardown() {
 	verbose "===== cleaning up ====="
 	if [ "${TEST_CLONES}" = true ]; then
+		unmap_image "${CLONE2}"					|| true
+		destroy_snap_clone "${CLONE1}" "${SNAP2}" "${CLONE2}"	|| true
+
+		unmap_image_snap "${CLONE1}" "${SNAP2}"			|| true
+		destroy_image_snap "${CLONE1}" "${SNAP2}"		|| true
+
 		unmap_image "${CLONE1}"					|| true
 		destroy_snap_clone "${ORIGINAL}" "${SNAP1}" "${CLONE1}"	|| true
 	fi
@@ -234,11 +324,14 @@ function create_image() {
 	[ $# -eq 1 ] || exit 99
 	local image_name="$1"
 	local image_path
+	local bytes
 
 	verbose "creating image \"${image_name}\""
 	if [ "${LOCAL_FILES}" = true ]; then
 		image_path=$(image_dev_path "${image_name}")
-		touch "${image_path}"
+		bytes=$(echo "${IMAGE_SIZE} * 1024 * 1024 - 1" | bc)
+		quiet dd if=/dev/zero bs=1 count=1 seek="${bytes}" \
+			of="${image_path}"
 		return
 	fi
 
@@ -287,7 +380,7 @@ function unmap_image() {
 	fi
 	image_path=$(image_dev_path "${image_name}")
 
-	if [ -e" ${image_path}" ]; then
+	if [ -e "${image_path}" ]; then
 		[ "${SUSER}" = true ] || sudo chown root "${image_path}"
 		udevadm settle
 		rbd unmap "${image_path}"
@@ -363,10 +456,11 @@ function destroy_image_snap() {
 }
 
 function create_snap_clone() {
-	[ $# -eq 3 ] || exit 99
+	[ $# -eq 4 ] || exit 99
 	local image_name="$1"
 	local snap_name="$2"
 	local clone_name="$3"
+	local clone_order="$4"
 	local image_snap="${image_name}@${snap_name}"
 	local snap_path
 	local clone_path
@@ -382,7 +476,7 @@ function create_snap_clone() {
 	fi
 
 	rbd snap protect "${image_snap}"
-	rbd clone "${image_snap}" "${clone_name}"
+	rbd clone --order "${clone_order}" "${image_snap}" "${clone_name}"
 }
 
 function destroy_snap_clone() {
@@ -414,18 +508,12 @@ function source_data() {
 
 function fill_original() {
 	local image_path=$(image_dev_path "${ORIGINAL}")
-	local bytes=$(echo "${IMAGE_SIZE} * 1024 * 1024 - 1" | bc)
 
 	verbose "filling original image"
 	# Fill 16 objects worth of "random" data
 	source_data |
 	quiet dd bs="${PAGE_SIZE}" count=$((16 * OBJECT_PAGES)) \
 		of="${image_path}"
-	if [ "${LOCAL_FILES}" = true ]; then
-		# Extend it another 16 objects, as a hole in the image
-		quiet dd if=/dev/zero bs=1 count=1 seek=${bytes} \
-			of="${image_path}"
-	fi
 }
 
 function do_read() {
@@ -600,6 +688,8 @@ run_using "${ORIGINAL}"
 doit "${ORIGINAL}@${SNAP1}"
 if [ "${TEST_CLONES}" = true ]; then
 	doit "${CLONE1}"
+	doit "${CLONE1}@${SNAP2}"
+	doit "${CLONE2}"
 fi
 rm -rf $(out_data_dir "${ORIGINAL}")
 

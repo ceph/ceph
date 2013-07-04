@@ -1,0 +1,27 @@
+commit fea782543a844bb277ae94d3391788b76c5bee60
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Mon May 13 11:58:35 2013 -0700
+
+    v0.61.2
+
+commit 8464c06412b72673ca9d01d35e8f68451e1982b3
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Mon May 13 15:36:59 2013 +0100
+
+    mon: Monitor: tolerate GV duplicates during conversion
+    
+    Fixes: #4974
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit ba05b16ee2b6e25141f2ab88265a1cf92dcd493c)
+
+commit 703bc2fd8aec512fb2b58d5ef263e37647c1f047
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Fri May 10 20:09:34 2013 -0700
+
+    config_opts: default mon_debug_dump_transactions to 'false'
+    
+    otherwise, it chews mon log space at an alarming rate.
+    
+    Fixes: #5024
+    Signed-off-by: Dan Mick <dan.mick@inktank.com>

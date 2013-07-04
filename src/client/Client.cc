@@ -363,6 +363,7 @@ int Client::init()
 
   AdminSocket* admin_socket = cct->get_admin_socket();
   int ret = admin_socket->register_command("mds_requests",
+					   "mds_requests",
 					   &m_command_hook,
 					   "show in-progress mds requests");
   if (ret < 0) {
@@ -370,6 +371,7 @@ int Client::init()
 	       << cpp_strerror(-ret) << dendl;
   }
   ret = admin_socket->register_command("mds_sessions",
+				       "mds_sessions",
 				       &m_command_hook,
 				       "show mds session state");
   if (ret < 0) {
@@ -377,6 +379,7 @@ int Client::init()
 	       << cpp_strerror(-ret) << dendl;
   }
   ret = admin_socket->register_command("dump_cache",
+				       "dump_cache",
 				       &m_command_hook,
 				       "show in-memory metadata cache contents");
   if (ret < 0) {
@@ -703,7 +706,7 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
     if (old_dentry)
       unlink(old_dentry, dir == old_dentry->dir);  // keep dir open if its the same dir
     dn = link(dir, dname, in, dn);
-    in->put();
+    put_inode(in);
     if (set_offset) {
       ldout(cct, 15) << " setting dn offset to " << dir->max_offset << dendl;
       dn->offset = dir->max_offset++;
@@ -773,7 +776,7 @@ void Client::update_dir_dist(Inode *in, DirStat *dst)
 void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, Inode *diri) {
 
   MClientReply *reply = request->reply;
-  Connection *con = request->reply->get_connection();
+  ConnectionRef con = request->reply->get_connection();
   uint64_t features = con->get_features();
 
   assert(request->readdir_result.empty());
@@ -915,7 +918,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     return NULL;
   }
 
-  Connection *con = request->reply->get_connection();
+  ConnectionRef con = request->reply->get_connection();
   uint64_t features = con->get_features();
   ldout(cct, 10) << " features 0x" << hex << features << dec << dendl;
 
@@ -1351,10 +1354,23 @@ int Client::make_request(MetaRequest *request,
   logger->tinc(l_c_lat, lat);
   logger->tinc(l_c_reply, lat);
 
-  request->put();
+  put_request(request);
 
   reply->put();
   return r;
+}
+
+void Client::put_request(MetaRequest *request)
+{
+  if (request->get_num_ref() == 1) {
+    if (request->inode())
+      put_inode(request->take_inode());
+    if (request->old_inode())
+      put_inode(request->take_old_inode());
+    if (request->other_inode())
+      put_inode(request->take_other_inode());
+  }
+  request->_put();
 }
 
 int Client::encode_inode_release(Inode *in, MetaRequest *req,
@@ -1519,7 +1535,7 @@ void Client::handle_client_session(MClientSession *m)
   int from = m->get_source().num();
   ldout(cct, 10) << "handle_client_session " << *m << " from mds." << from << dendl;
 
-  MetaSession *session = _get_mds_session(from, m->get_connection());
+  MetaSession *session = _get_mds_session(from, m->get_connection().get());
   if (!session) {
     ldout(cct, 10) << " discarding session message from sessionless mds " << m->get_source_inst() << dendl;
     m->put();
@@ -1636,7 +1652,7 @@ MClientRequest* Client::build_client_request(MetaRequest *request)
 void Client::handle_client_request_forward(MClientRequestForward *fwd)
 {
   int mds = fwd->get_source().num();
-  MetaSession *session = _get_mds_session(mds, fwd->get_connection());
+  MetaSession *session = _get_mds_session(mds, fwd->get_connection().get());
   if (!session) {
     fwd->put();
     return;
@@ -1674,7 +1690,7 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
 void Client::handle_client_reply(MClientReply *reply)
 {
   int mds_num = reply->get_source().num();
-  MetaSession *session = _get_mds_session(mds_num, reply->get_connection());
+  MetaSession *session = _get_mds_session(mds_num, reply->get_connection().get());
   if (!session) {
     reply->put();
     return;
@@ -1762,7 +1778,7 @@ void Client::handle_client_reply(MClientReply *reply)
     }
     request->item.remove_myself();
     mds_requests.erase(tid);
-    request->put(); // for the dumb data structure
+    put_request(request);
   }
   if (unmounting)
     mount_cond.Signal();
@@ -1876,7 +1892,6 @@ void Client::handle_mds_map(MMDSMap* m)
 	mds_sessions.count(p->first)) {
       MetaSession *session = mds_sessions[p->first];
       session->inst = mdsmap->get_inst(p->first);
-      session->con->put();
       session->con = messenger->get_connection(session->inst);
       send_reconnect(session);
     }
@@ -2020,7 +2035,7 @@ void Client::handle_lease(MClientLease *m)
   assert(m->get_action() == CEPH_MDS_LEASE_REVOKE);
 
   int mds = m->get_source().num();
-  MetaSession *session = _get_mds_session(mds, m->get_connection());
+  MetaSession *session = _get_mds_session(mds, m->get_connection().get());
   if (!session) {
     m->put();
     return;
@@ -2055,11 +2070,10 @@ void Client::handle_lease(MClientLease *m)
   m->put();
 }
 
-
 void Client::put_inode(Inode *in, int n)
 {
   ldout(cct, 10) << "put_inode on " << *in << dendl;
-  int left = in->put(n);
+  int left = in->_put(n);
   if (left == 0) {
     // release any caps
     remove_all_caps(in);
@@ -2411,7 +2425,7 @@ void Client::check_caps(Inode *in, bool is_delayed)
     }
 
     /* completed revocation? */
-    if (revoking && (revoking && used) == 0) {
+    if (revoking && (revoking & used) == 0) {
       ldout(cct, 10) << "completed revocation of " << ccap_string(cap->implemented & ~cap->issued) << dendl;
       goto ack;
     }
@@ -2663,7 +2677,7 @@ void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len, bool k
   // invalidate our userspace inode cache
   if (cct->_conf->client_oc) {
     vector<ObjectExtent> ls;
-    Striper::file_to_extents(cct, in->ino, &in->layout, off, len, ls);
+    Striper::file_to_extents(cct, in->ino, &in->layout, off, len, in->truncate_size, ls);
     objectcacher->discard_set(&in->oset, ls);
   }
 
@@ -2720,18 +2734,17 @@ void Client::_flush_range(Inode *in, int64_t offset, uint64_t size)
   Cond cond;
   bool safe = false;
   Context *onflush = new C_SafeCond(&flock, &cond, &safe);
-  safe = objectcacher->file_flush(&in->oset, &in->layout, in->snaprealm->get_snap_context(),
-				  offset, size, onflush);
-  if (safe)
-    return;
-
-  // wait for flush
-  client_lock.Unlock();
-  flock.Lock();
-  while (!safe)
-    cond.Wait(flock);
-  flock.Unlock();
-  client_lock.Lock();
+  bool ret = objectcacher->file_flush(&in->oset, &in->layout, in->snaprealm->get_snap_context(),
+				      offset, size, onflush);
+  if (!ret) {
+    // wait for flush
+    client_lock.Unlock();
+    flock.Lock();
+    while (!safe)
+      cond.Wait(flock);
+    flock.Unlock();
+    client_lock.Lock();
+  }
 }
 
 void Client::flush_set_callback(ObjectCacher::ObjectSet *oset)
@@ -2849,7 +2862,7 @@ void Client::remove_cap(Cap *cap)
   ceph_mds_cap_item i;
   i.ino = in->ino;
   i.cap_id = cap->cap_id;
-  i.seq = cap->seq;
+  i.seq = cap->issue_seq;
   i.migrate_seq = cap->mseq;
   session->release->caps.push_back(i);
   
@@ -3216,7 +3229,7 @@ void Client::handle_snap(MClientSnap *m)
 {
   ldout(cct, 10) << "handle_snap " << *m << dendl;
   int mds = m->get_source().num();
-  MetaSession *session = _get_mds_session(mds, m->get_connection());
+  MetaSession *session = _get_mds_session(mds, m->get_connection().get());
   if (!session) {
     m->put();
     return;
@@ -3292,7 +3305,7 @@ void Client::handle_snap(MClientSnap *m)
 void Client::handle_caps(MClientCaps *m)
 {
   int mds = m->get_source().num();
-  MetaSession *session = _get_mds_session(mds, m->get_connection());
+  MetaSession *session = _get_mds_session(mds, m->get_connection().get());
   if (!session) {
     m->put();
     return;
@@ -4423,7 +4436,7 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid, I
     if ((unsigned long)attr->st_size < mdsmap->get_max_filesize())
       req->head.args.setattr.size = attr->st_size;
     else { //too big!
-      delete req;
+      put_request(req);
       return -EFBIG;
     }
     req->inode_drop |= CEPH_CAP_AUTH_SHARED | CEPH_CAP_FILE_RD |
@@ -5825,13 +5838,19 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
     }
     // short read?
     if (r >= 0 && r < wanted) {
-      if (pos + left <= in->size) {
-	// hole, zero and return.
-	bufferptr z(left);
+      if (pos < in->size) {
+	// zero up to known EOF
+	int some = in->size - pos;
+	if (some > left)
+	  some = left;
+	bufferptr z(some);
 	z.zero();
 	bl->push_back(z);
-	read += left;
-	return read;
+	read += some;
+	pos += some;
+	left -= some;
+	if (left == 0)
+	  return read;
       }
 
       // reverify size
@@ -6379,6 +6398,9 @@ int Client::get_caps_issued(int fd) {
   Mutex::Locker lock(client_lock);
 
   Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
+
   return f->inode->caps_issued();
 }
 
@@ -6957,7 +6979,7 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int ui
   return res;
 
  fail:
-  delete req;
+  put_request(req);
   return res;
 }
 
@@ -7053,7 +7075,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
   return res;
 
  fail:
-  delete req;
+  put_request(req);
   return res;
 }
 
@@ -7097,7 +7119,7 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid,
   return res;
 
  fail:
-  delete req;
+  put_request(req);
   return res;
 }
 
@@ -7162,7 +7184,7 @@ int Client::_symlink(Inode *dir, const char *name, const char *target, int uid, 
 
 
  fail:
-  delete req;
+  put_request(req);
   return res;
 }
 
@@ -7234,7 +7256,7 @@ int Client::_unlink(Inode *dir, const char *name, int uid, int gid)
   return res;
 
  fail:
-  delete req;
+  put_request(req);
   return res;
 }
 
@@ -7295,7 +7317,7 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
   return res;
 
  fail:
-  delete req;
+  put_request(req);
   return res;
 }
 
@@ -7378,7 +7400,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   return res;
 
  fail:
-  delete req;
+  put_request(req);
   return res;
 }
 
@@ -7435,7 +7457,7 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid, 
   return res;
 
  fail:
-  delete req;
+  put_request(req);
   return res;
 }
 
@@ -7458,6 +7480,18 @@ int Client::ll_link(vinodeno_t vino, vinodeno_t newparent, const char *newname, 
     _ll_get(in);
   }
   return r;
+}
+
+int Client::ll_describe_layout(Fh *fh, ceph_file_layout* lp)
+{
+  Mutex::Locker lock(client_lock);
+  ldout(cct, 3) << "ll_describe_layout " << fh << " " << fh->inode->ino << dendl;
+  tout(cct) << "ll_describe_layout" << std::endl;
+
+  Inode *in = fh->inode;
+  *lp = in->layout;
+
+  return 0;
 }
 
 int Client::ll_opendir(vinodeno_t vino, void **dirpp, int uid, int gid)
@@ -7652,7 +7686,23 @@ int Client::ll_release(Fh *fh)
 
 // expose file layouts
 
-int Client::describe_layout(int fd, ceph_file_layout *lp)
+int Client::describe_layout(const char *relpath, ceph_file_layout *lp)
+{
+  Mutex::Locker lock(client_lock);
+
+  filepath path(relpath);
+  Inode *in;
+  int r = path_walk(path, &in);
+  if (r < 0)
+    return r;
+
+  *lp = in->layout;
+
+  ldout(cct, 3) << "describe_layout(" << relpath << ") = 0" << dendl;
+  return 0;
+}
+
+int Client::fdescribe_layout(int fd, ceph_file_layout *lp)
 {
   Mutex::Locker lock(client_lock);
 
@@ -7663,7 +7713,7 @@ int Client::describe_layout(int fd, ceph_file_layout *lp)
 
   *lp = in->layout;
 
-  ldout(cct, 3) << "describe_layout(" << fd << ") = 0" << dendl;
+  ldout(cct, 3) << "fdescribe_layout(" << fd << ") = 0" << dendl;
   return 0;
 }
 
@@ -7702,7 +7752,7 @@ int Client::get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& o
   Inode *in = f->inode;
 
   vector<ObjectExtent> extents;
-  Striper::file_to_extents(cct, in->ino, &in->layout, off, 1, extents);
+  Striper::file_to_extents(cct, in->ino, &in->layout, off, 1, in->truncate_size, extents);
   assert(extents.size() == 1);
 
   pg_t pg = osdmap->object_locator_to_pg(extents[0].oid, extents[0].oloc);
@@ -7749,7 +7799,7 @@ int Client::get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>
 
   // which object?
   vector<ObjectExtent> extents;
-  Striper::file_to_extents(cct, in->ino, &in->layout, offset, 1, extents);
+  Striper::file_to_extents(cct, in->ino, &in->layout, offset, 1, in->truncate_size, extents);
   assert(extents.size() == 1);
 
   // now we have the object and its 'layout'
@@ -7790,7 +7840,7 @@ int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
   Inode *in = f->inode;
 
   // map to a list of extents
-  Striper::file_to_extents(cct, in->ino, &in->layout, offset, length, result);
+  Striper::file_to_extents(cct, in->ino, &in->layout, offset, length, in->truncate_size, result);
 
   ldout(cct, 3) << "enumerate_layout(" << fd << ", " << length << ", " << offset << ") = 0" << dendl;
   return 0;
@@ -7856,9 +7906,28 @@ void Client::ms_handle_remote_reset(Connection *con)
 	}
       }
       if (mds >= 0) {
-	if (s->state == MetaSession::STATE_CLOSING) {
+	switch (s->state) {
+	case MetaSession::STATE_CLOSING:
 	  ldout(cct, 1) << "reset from mds we were closing; we'll call that closed" << dendl;
 	  _closed_mds_session(s);
+	  break;
+
+	case MetaSession::STATE_OPENING:
+	  {
+	    ldout(cct, 1) << "reset from mds we were opening; retrying" << dendl;
+	    list<Cond*> waiters;
+	    waiters.swap(s->waiting_for_open);
+	    _closed_mds_session(s);
+	    MetaSession *news = _get_or_open_mds_session(mds);
+	    news->waiting_for_open.swap(waiters);
+	  }
+	  break;
+
+	case MetaSession::STATE_OPEN:
+	case MetaSession::STATE_NEW:
+	case MetaSession::STATE_CLOSED:
+	default:
+	  break;
 	}
       }
     }

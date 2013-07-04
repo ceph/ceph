@@ -33,44 +33,44 @@ fi
 
 case "$1" in
     start)
-	for name in `ceph-conf --list-sections $PREFIX`;
-	do
-	    auto_start=`ceph-conf -n $name 'auto start'`
-	    if [ "$auto_start" = "no" ] || [ "$auto_start" = "false" ] || [ "$auto_start" = "0" ]; then
-		continue
-	    fi
+        for name in `ceph-conf --list-sections $PREFIX`;
+        do
+            auto_start=`ceph-conf -n $name 'auto start'`
+            if [ "$auto_start" = "no" ] || [ "$auto_start" = "false" ] || [ "$auto_start" = "0" ]; then
+                continue
+            fi
 
             # is the socket defined?  if it's not, this instance shouldn't run as a daemon.
-	    rgw_socket=`ceph-conf -n $name 'rgw socket path'`
-	    if [ -z "$rgw_socket" ]; then
-		continue
-	    fi
+            rgw_socket=`$RADOSGW -n $name --show-config-value rgw_socket_path`
+            if [ -z "$rgw_socket" ]; then
+                continue
+            fi
 
             # mapped to this host?
-	    host=`ceph-conf -n $name host`
-	    if [ "$host" != `hostname` ]; then
-		continue
-	    fi
+            host=`ceph-conf -n $name host`
+            if [ "$host" != `hostname` ]; then
+                continue
+            fi
 
-	    user=`ceph-conf -n $name user`
-	    if [ -z "$user" ]; then
-		user="$DEFAULT_USER"
-	    fi
+            user=`ceph-conf -n $name user`
+            if [ -z "$user" ]; then
+                user="$DEFAULT_USER"
+            fi
 
-	    log_file=`ceph-conf -n $name log_file`
-	    if [ -n "$log_file" ] && [ ! -e "$log_file" ]; then
-		touch "$log_file"
-		chown $user $log_file
-	    fi
+            log_file=`$RADOSGW -n $name --show-config-value log_file`
+            if [ -n "$log_file" ] && [ ! -e "$log_file" ]; then
+                touch "$log_file"
+                chown $user $log_file
+            fi
 
             echo "Starting $name..."
-	    start-stop-daemon --start -u $user -x $RADOSGW -- -n $name
-	done
+            start-stop-daemon --start -u $user -x $RADOSGW -- -n $name
+        done
         ;;
     reload)
-	echo "Reloading $name..."
-	start-stop-daemon --stop --signal HUP -x $RADOSGW --oknodo
-	;;
+        echo "Reloading $name..."
+        start-stop-daemon --stop --signal HUP -x $RADOSGW --oknodo
+        ;;
     restart|force-reload)
         $0 stop
         $0 start
@@ -78,8 +78,16 @@ case "$1" in
     stop)
         start-stop-daemon --stop -x $RADOSGW --oknodo
         ;;
+    status)
+        if pidof $RADOSGW >/dev/null; then
+            echo "$RADOSGW is running."
+        else
+            echo "$RADOSGW is not running."
+            RETVAL=1
+        fi
+        ;;
     *)
-        echo "Usage: $0 start|stop|restart" >&2
+        echo "Usage: $0 start|stop|restart|force-reload|reload|status" >&2
         exit 3
         ;;
 esac

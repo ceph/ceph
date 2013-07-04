@@ -103,7 +103,6 @@ static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {
   unsigned snap_count = 0;
   uint64_t snap_names_len = 0;
-  int rc;
   struct rbd_obj_header_ondisk *header;
 
   CLS_LOG(20, "snapshots_list");
@@ -113,7 +112,7 @@ static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
       snap_count * sizeof(struct rbd_obj_snap_ondisk) +
       snap_names_len;
 
-    rc = cls_cxx_read(hctx, 0, len, &bl);
+    int rc = cls_cxx_read(hctx, 0, len, &bl);
     if (rc < 0)
       return rc;
 
@@ -679,7 +678,7 @@ int set_stripe_unit_count(cls_method_context_t hctx, bufferlist *in, bufferlist 
     CLS_ERR("failed to read the order off of disk: %s", strerror(r));
     return r;
   }
-  if ((1ull << order) % stripe_unit) {
+  if ((1ull << order) % stripe_unit || stripe_unit > (1ull << order)) {
     CLS_ERR("stripe unit %llu is not a factor of the object size %llu",
             (unsigned long long)stripe_unit, 1ull << order);
     return -EINVAL;

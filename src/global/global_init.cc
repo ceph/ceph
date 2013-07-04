@@ -119,6 +119,16 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
   if (g_conf->log_flush_on_exit)
     g_ceph_context->_log->set_flush_on_exit();
 
+  if (g_conf->run_dir.length() &&
+      code_env == CODE_ENVIRONMENT_DAEMON &&
+      !(flags & CINIT_FLAG_NO_DAEMON_ACTIONS)) {
+    int r = ::mkdir(g_conf->run_dir.c_str(), 0755);
+    if (r < 0 && errno != EEXIST) {
+      r = -errno;
+      derr << "warning: unable to create " << g_conf->run_dir << ": " << cpp_strerror(r) << dendl;
+    }
+  }
+
   if (g_lockdep) {
     dout(1) << "lockdep is enabled" << dendl;
     lockdep_register_ceph_context(cct);
@@ -129,7 +139,7 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
   // and opening the log file immediately.
   conf->call_all_observers();
 
-  if (code_env == CODE_ENVIRONMENT_DAEMON)
+  if (code_env == CODE_ENVIRONMENT_DAEMON && !(flags & CINIT_FLAG_NO_DAEMON_ACTIONS))
     output_ceph_version();
 }
 
@@ -175,8 +185,6 @@ void global_init_daemonize(CephContext *cct, int flags)
 
 void global_init_postfork(CephContext *cct, int flags)
 {
-  int ret;
-
   // restart log thread
   g_ceph_context->_log->start();
 
@@ -208,7 +216,7 @@ void global_init_postfork(CephContext *cct, int flags)
     exit(1);
   }
   if (!(flags & CINIT_FLAG_NO_CLOSE_STDERR)) {
-    ret = global_init_shutdown_stderr(cct);
+    int ret = global_init_shutdown_stderr(cct);
     if (ret) {
       derr << "global_init_daemonize: global_init_shutdown_stderr failed with "
 	   << "error code " << ret << dendl;

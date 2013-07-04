@@ -2,6 +2,7 @@
 
 import argparse
 import errno
+import fcntl
 import logging
 import os
 import os.path
@@ -12,7 +13,48 @@ import stat
 import sys
 import tempfile
 import uuid
-import lockfile
+
+"""
+Prepare:
+ - create GPT partition
+ - mark the partition with the ceph type uuid
+ - create a file system
+ - mark the fs as ready for ceph consumption
+ - entire data disk is used (one big partition)
+ - a new partition is added to the journal disk (so it can be easily shared)
+
+ - triggered by administrator or ceph-deploy, e.g.  'ceph-disk <data disk> [journal disk]
+
+Activate:
+ - mount the volume in a temp loation
+ - allocate an osd id (if needed)
+ - remount in the correct location /var/lib/ceph/osd/$cluster-$id
+ - start ceph-osd
+
+ - triggered by udev when it sees the OSD gpt partition type
+ - triggered by admin 'ceph-disk activate <path>'
+ - triggered on ceph service startup with 'ceph-disk activate-all'
+
+We rely on /dev/disk/by-partuuid to find partitions by their UUID;
+this is what the journal symlink inside the osd data volume normally
+points to.
+
+activate-all relies on /dev/disk/by-parttype-uuid/$typeuuid.$uuid to
+find all partitions.  We install special udev rules to create these
+links.
+
+udev triggers 'ceph-disk activate <dev>' or 'ceph-disk
+activate-journal <dev>' based on the partition type.
+
+On old distros (e.g., RHEL6), the blkid installed does not recognized
+GPT partition metadata and the /dev/disk/by-partuuid etc. links aren't
+present.  We have a horrible hack in the form of ceph-disk-udev that
+parses gparted output to create the symlinks above and triggers the
+'ceph-disk activate' etc commands that udev normally would do if it
+knew the GPT partition type.
+
+"""
+
 
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 
@@ -57,14 +99,41 @@ INIT_SYSTEMS = [
     'auto',
     ]
 
+# Nuke the TERM variable to avoid confusing any subprocesses we call.
+# For example, libreadline will print weird control sequences for some
+# TERM values.
+if 'TERM' in os.environ:
+    del os.environ['TERM']
 
 LOG_NAME = __name__
 if LOG_NAME == '__main__':
     LOG_NAME = os.path.basename(sys.argv[0])
 LOG = logging.getLogger(LOG_NAME)
 
-prepare_lock = lockfile.FileLock('/var/lib/ceph/tmp/ceph-disk.prepare.lock')
-activate_lock = lockfile.FileLock('/var/lib/ceph/tmp/ceph-disk.activate.lock')
+
+
+
+###### lock ########
+
+class filelock(object):
+    def __init__(self, fn):
+        self.fn = fn
+        self.fd = None
+
+    def acquire(self):
+        assert not self.fd
+        self.fd = file(self.fn, 'w')
+        fcntl.lockf(self.fd, fcntl.LOCK_EX)
+
+    def release(self):
+        assert self.fd
+        fcntl.lockf(self.fd, fcntl.LOCK_UN)
+        self.fd = None
+
+
+prepare_lock = filelock('/var/lib/ceph/tmp/ceph-disk.prepare.lock')
+activate_lock = filelock('/var/lib/ceph/tmp/ceph-disk.activate.lock')
+
 
 ###### exceptions ########
 
@@ -159,16 +228,11 @@ def list_partitions(disk):
     disk = os.path.realpath(disk)
     assert not is_partition(disk)
     assert disk.startswith('/dev/')
-    base = disk[5:]
+    base = disk.split('/')[-1]
     partitions = []
-    with file('/proc/partitions', 'rb') as proc_partitions:
-        for line in proc_partitions.read().split('\n')[2:]:
-            fields = re.split('\s+', line)
-            if len(fields) < 5:
-                continue
-            name = fields [4]
-            if name != base and name.startswith(base):
-                partitions.append('/dev/' + name)
+    for name in os.listdir(os.path.join('/sys/block', base)):
+        if name.startswith(base):
+            partitions.append('/dev/' + name)
     return partitions
 
 
@@ -224,14 +288,21 @@ def is_held(dev):
     """
     assert os.path.exists(dev)
     dev = os.path.realpath(dev)
-    base = dev[5:]
-    disk = base
-    while disk[-1].isdigit():
-        disk = disk[:-1]
-    directory = '/sys/block/{disk}/{base}/holders'.format(disk=disk, base=base)
-    if not os.path.exists(directory):
-        return []
-    return os.listdir(directory)
+    base = dev.split('/')[-1]
+
+    # full disk?
+    directory = '/sys/block/{base}/holders'.format(base=base)
+    if os.path.exists(directory):
+        return os.listdir(directory)
+
+    # partition?
+    part = base
+    while len(base):
+        directory = '/sys/block/{base}/{part}/holders'.format(part=part, base=base)
+        if os.path.exists(directory):
+            return os.listdir(directory)
+        base = base[:-1]
+    return []
 
 
 def verify_not_in_use(dev):
@@ -637,6 +708,11 @@ def get_free_partition_index(dev):
         raise Error('parted failed to output anything')
     lines = str(lines).splitlines(True)
 
+    # work around buggy libreadline(?) library in rhel/centos.
+    idiot_prefix = '\x1b\x5b\x3f\x31\x30\x33\x34\x68';
+    if lines[0].startswith(idiot_prefix):
+        lines[0] = lines[0][8:]
+
     if lines[0] not in ['CHS;\n', 'CYL;\n', 'BYT;\n']:
         raise Error('weird parted units', lines[0])
     del lines[0]
@@ -761,14 +837,6 @@ def prepare_journal_dev(
                 # wait for udev event queue to clear
                 'udevadm',
                 'settle',
-                '--timeout=10',
-                ],
-            )
-        subprocess.check_call(
-            args=[
-                # also make sure the kernel refreshes the new table
-                'partprobe',
-                journal,
                 ],
             )
 
@@ -789,7 +857,7 @@ def prepare_journal_dev(
                     '--name={name}'.format(name=os.path.basename(journal)),
                     ],
                 )   
-            journal_symlink='/dev/{symlink}-part{num}'.format(symlink=symlinks.split()[2], num=num)
+            journal_symlink = '/dev/{symlink}-part{num}'.format(symlink=str(symlinks).split()[2], num=num)
 
         journal_dmcrypt = None
         if journal_dm_keypath:
@@ -963,14 +1031,6 @@ def prepare_dev(
                     # wait for udev event queue to clear
                     'udevadm',
                     'settle',
-                    '--timeout=10',
-                    ],
-                )
-            subprocess.check_call(
-                args=[
-                    # also make sure the kernel refreshes the new table
-                    'partprobe',
-                    data,
                     ],
                 )
         except subprocess.CalledProcessError as e:
@@ -1037,21 +1097,6 @@ def prepare_dev(
                     data,
                     ],
                 )
-            subprocess.call(
-                args=[
-                    # wait for udev event queue to clear
-                    'udevadm',
-                    'settle',
-                    '--timeout=10',
-                    ],
-                )
-            subprocess.check_call(
-                args=[
-                    # also make sure the kernel refreshes the new table
-                    'partprobe',
-                    data,
-                    ],
-                )
         except subprocess.CalledProcessError as e:
             raise Error(e)
 
@@ -1085,7 +1130,7 @@ def main_prepare(args):
             args.cluster_uuid = get_fsid(cluster=args.cluster)
             if args.cluster_uuid is None:
                 raise Error(
-                    'must have fsid in config or pass --cluster--uuid=',
+                    'must have fsid in config or pass --cluster-uuid=',
                     )
 
         if args.fs_type is None:
@@ -1192,6 +1237,19 @@ def main_prepare(args):
             raise Error('not a dir or block device', args.data)
         prepare_lock.release()
 
+        if stat.S_ISBLK(dmode):
+            # try to make sure the kernel refreshes the table.  note
+            # that if this gets ebusy, we are probably racing with
+            # udev because it already updated it.. ignore failure here.
+            LOG.debug('Calling partprobe on prepared device %s', args.data)
+            subprocess.call(
+                args=[
+                    'partprobe',
+                    args.data,
+                    ],
+                )
+
+
     except Error as e:
         if journal_dm_keypath:
             os.unlink(journal_dm_keypath)
@@ -1261,6 +1319,7 @@ def auth_key(
 
 
 def move_mount(
+    dev,
     path,
     cluster,
     osd_id,
@@ -1272,13 +1331,28 @@ def move_mount(
         '{cluster}-{osd_id}'.format(cluster=cluster, osd_id=osd_id),
         )
     maybe_mkdir(osd_data)
+
+    # we really want to mount --move, but that is not supported when
+    # the parent mount is shared, as it is by default on RH, Fedora,
+    # and probably others.  Also, --bind doesn't properly manipulate
+    # /etc/mtab, which *still* isn't a symlink to /proc/mounts despite
+    # this being 2013.  Instead, mount the original device at the final
+    # location.
     subprocess.check_call(
         args=[
             '/bin/mount',
-            '--move',
+            '--',
+            dev,
+            osd_data,
+            ],
+        )
+    subprocess.check_call(
+        args=[
+            '/bin/umount',
+            '-l',   # lazy, in case someone else is peeking at the
+                    # wrong moment
             '--',
             path,
-            osd_data,
             ],
         )
 
@@ -1409,8 +1483,15 @@ def mount_activate(
                 parent_dev = os.stat('/var/lib/ceph/osd').st_dev
                 if dst_dev != parent_dev:
                     other = True
+                elif os.listdir('/var/lib/ceph/osd/{cluster}-{osd_id}'.format(
+                        cluster=cluster,
+                        osd_id=osd_id,
+                        )):
+                    other = True
+
         except OSError:
             pass
+
         if active:
             LOG.info('%s osd.%s already mounted in position; unmounting ours.' % (cluster, osd_id))
             unmount(path)
@@ -1418,6 +1499,7 @@ def mount_activate(
             raise Error('another %s osd.%s already mounted in position (old/different cluster instance?); unmounting ours.' % (cluster, osd_id))
         else:
             move_mount(
+                dev=dev,
                 path=path,
                 cluster=cluster,
                 osd_id=osd_id,
@@ -1592,6 +1674,10 @@ def main_activate(args):
     if not os.path.exists(args.path):
         raise Error('%s does not exist', args.path)
 
+    if is_suppressed(args.path):
+        LOG.info('suppressed activate request on %s', args.path)
+        return
+
     activate_lock.acquire()
     try:
         mode = os.stat(args.path).st_mode
@@ -1619,6 +1705,104 @@ def main_activate(args):
     except:
         activate_lock.release()
 
+
+###########################
+
+def get_journal_osd_uuid(path):
+    if not os.path.exists(path):
+        raise Error('%s does not exist', path)
+
+    mode = os.stat(path).st_mode
+    if not stat.S_ISBLK(mode):
+        raise Error('%s is not a block device', path)
+
+    try:
+        out = _check_output(
+            args=[
+                'ceph-osd',
+                '-i', '0',   # this is ignored
+                '--get-journal-uuid',
+                '--osd-journal',
+                path,
+                ],
+            close_fds=True,
+            )
+    except subprocess.CalledProcessError as e:
+        raise Error(
+            'failed to get osd uuid/fsid from journal',
+            e,
+            )
+    value = str(out).split('\n', 1)[0]
+    LOG.debug('Journal %s has OSD UUID %s', path, value)
+    return value
+
+def main_activate_journal(args):
+    if not os.path.exists(args.dev):
+        raise Error('%s does not exist', args.dev)
+
+    cluster = None
+    osd_id = None
+    osd_uuid = None
+    activate_lock.acquire()
+    try:
+        osd_uuid = get_journal_osd_uuid(args.dev)
+        path = os.path.join('/dev/disk/by-partuuid/', osd_uuid.lower())
+
+        (cluster, osd_id) = mount_activate(
+            dev=path,
+            activate_key_template=args.activate_key_template,
+            init=args.mark_init,
+            )
+
+        start_daemon(
+            cluster=cluster,
+            osd_id=osd_id,
+            )
+
+        activate_lock.release()
+
+    except:
+        activate_lock.release()
+        raise
+
+###########################
+
+def main_activate_all(args):
+    dir = '/dev/disk/by-parttypeuuid'
+    LOG.debug('Scanning %s', dir)
+    if not os.path.exists(dir):
+        return
+    err = False
+    for name in os.listdir(dir):
+        if name.find('.') < 0:
+            continue
+        (tag, uuid) = name.split('.')
+        if tag == OSD_UUID:
+            path = os.path.join(dir, name)
+            LOG.info('Activating %s', path)
+            activate_lock.acquire()
+            try:
+                (cluster, osd_id) = mount_activate(
+                    dev=path,
+                    activate_key_template=args.activate_key_template,
+                    init=args.mark_init,
+                    )
+                start_daemon(
+                    cluster=cluster,
+                    osd_id=osd_id,
+                    )
+
+            except Exception as e:
+                print >> sys.stderr, '{prog}: {msg}'.format(
+                    prog=args.prog,
+                    msg=e,
+                    )
+                err = True
+
+            finally:
+                activate_lock.release()
+    if err:
+        raise Error('One or more partitions failed to activate')
 
 
 ###########################
@@ -1801,6 +1985,75 @@ def main_list(args):
 
 
 ###########################
+#
+# Mark devices that we want to suppress activates on with a
+# file like
+#
+#  /var/lib/ceph/tmp/suppress-activate.sdb
+#
+# where the last bit is the sanitized device name (/dev/X without the
+# /dev/ prefix) and the is_suppress() check matches a prefix.  That
+# means suppressing sdb will stop activate on sdb1, sdb2, etc.
+#
+
+SUPPRESS_PREFIX = '/var/lib/ceph/tmp/suppress-activate.'
+
+def is_suppressed(path):
+    disk = os.path.realpath(path)
+    try:
+        if not disk.startswith('/dev/') or not stat.S_ISBLK(os.lstat(path).st_mode):
+            return False
+        base = disk.split('/')[-1]
+        while len(base):
+            if os.path.exists(SUPPRESS_PREFIX + base):
+                return True
+            base = base[:-1]
+    except:
+        return False
+
+def set_suppress(path):
+    disk = os.path.realpath(path)
+    if not os.path.exists(disk):
+        raise Error('does not exist', path)
+    if not stat.S_ISBLK(os.lstat(path).st_mode):
+        raise Error('not a block device', path)
+    base = disk.split('/')[-1]
+
+    with file(SUPPRESS_PREFIX + base, 'w') as f:
+        pass
+    LOG.info('set suppress flag on %s', base)
+
+def unset_suppress(path):
+    disk = os.path.realpath(path)
+    if not os.path.exists(disk):
+        raise Error('does not exist', path)
+    if not stat.S_ISBLK(os.lstat(path).st_mode):
+        raise Error('not a block device', path)
+    assert disk.startswith('/dev/')
+    base = disk.split('/')[-1]
+
+    fn = SUPPRESS_PREFIX + base
+    if not os.path.exists(fn):
+        raise Error('not marked as suppressed', path)
+
+    try:
+        os.unlink(fn)
+        LOG.info('unset suppress flag on %s', base)
+    except OSError as e:
+        raise Error('failed to unsuppress', e)
+
+
+def main_suppress(args):
+    set_suppress(args.path)
+
+def main_unsuppress(args):
+    unset_suppress(args.path)
+
+def main_zap(args):
+    for dev in args.dev:
+        zap(dev)
+
+###########################
 
 
 def parse_args():
@@ -1931,9 +2184,85 @@ def parse_args():
         func=main_activate,
         )
 
+    activate_journal_parser = subparsers.add_parser('activate-journal', help='Activate an OSD via its journal device')
+    activate_journal_parser.add_argument(
+        'dev',
+        metavar='DEV',
+        help='path to journal block device',
+        )
+    activate_journal_parser.add_argument(
+        '--activate-key',
+        metavar='PATH',
+        help='bootstrap-osd keyring path template (%(default)s)',
+        dest='activate_key_template',
+        )
+    activate_journal_parser.add_argument(
+        '--mark-init',
+        metavar='INITSYSTEM',
+        help='init system to manage this dir',
+        default='auto',
+        choices=INIT_SYSTEMS,
+        )
+    activate_journal_parser.set_defaults(
+        activate_key_template='/var/lib/ceph/bootstrap-osd/{cluster}.keyring',
+        func=main_activate_journal,
+        )
+
+    activate_all_parser = subparsers.add_parser('activate-all', help='Activate all tagged OSD partitions')
+    activate_all_parser.add_argument(
+        '--activate-key',
+        metavar='PATH',
+        help='bootstrap-osd keyring path template (%(default)s)',
+        dest='activate_key_template',
+        )
+    activate_all_parser.add_argument(
+        '--mark-init',
+        metavar='INITSYSTEM',
+        help='init system to manage this dir',
+        default='auto',
+        choices=INIT_SYSTEMS,
+        )
+    activate_all_parser.set_defaults(
+        activate_key_template='/var/lib/ceph/bootstrap-osd/{cluster}.keyring',
+        func=main_activate_all,
+        )
+
     list_parser = subparsers.add_parser('list', help='List disks, partitions, and Ceph OSDs')
     list_parser.set_defaults(
         func=main_list,
+        )
+
+    suppress_parser = subparsers.add_parser('suppress-activate', help='Suppress activate on a device (prefix)')
+    suppress_parser.add_argument(
+        'path',
+        metavar='PATH',
+        nargs='?',
+        help='path to block device or directory',
+        )
+    suppress_parser.set_defaults(
+        func=main_suppress,
+        )
+
+    unsuppress_parser = subparsers.add_parser('unsuppress-activate', help='Stop suppressing activate on a device (prefix)')
+    unsuppress_parser.add_argument(
+        'path',
+        metavar='PATH',
+        nargs='?',
+        help='path to block device or directory',
+        )
+    unsuppress_parser.set_defaults(
+        func=main_unsuppress,
+        )
+
+    zap_parser = subparsers.add_parser('zap', help='Zap/erase/destroy a device\'s partition table (and contents)')
+    zap_parser.add_argument(
+        'dev',
+        metavar='DEV',
+        nargs='*',
+        help='path to block device',
+        )
+    zap_parser.set_defaults(
+        func=main_zap,
         )
 
     args = parser.parse_args()

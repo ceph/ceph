@@ -49,7 +49,7 @@ int safe_cat(char **pstr, int *plen, int pos, const char *str2)
 char *resolve_addrs(const char *orig_str)
 {
   char *new_str;
-  char *tok, *port_str, *saveptr = NULL;
+  char *tok, *saveptr = NULL;
   int len, pos;
   char *buf = strdup(orig_str);
   const char *delim = ",; ";
@@ -76,7 +76,7 @@ char *resolve_addrs(const char *orig_str)
     lastcolon = strrchr(tok, ':');
     bracecolon = strstr(tok, "]:");
 
-    port_str = 0;
+    char *port_str = 0;
     if (firstcolon && firstcolon == lastcolon) {
       /* host:port or a.b.c.d:port */
       *firstcolon = 0;

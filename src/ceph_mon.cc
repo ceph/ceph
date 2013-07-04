@@ -116,7 +116,7 @@ int main(int argc, const char **argv)
 
   bool mkfs = false;
   bool compact = false;
-  std::string osdmapfn, inject_monmap;
+  std::string osdmapfn, inject_monmap, extract_monmap;
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -140,6 +140,8 @@ int main(int argc, const char **argv)
       osdmapfn = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--inject_monmap", (char*)NULL)) {
       inject_monmap = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--extract-monmap", (char*)NULL)) {
+      extract_monmap = val;
     } else {
       ++i;
     }
@@ -162,7 +164,7 @@ int main(int argc, const char **argv)
   // -- mkfs --
   if (mkfs) {
     // resolve public_network -> public_addr
-    pick_addresses(g_ceph_context);
+    pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 
     common_init_finish(g_ceph_context);
 
@@ -287,29 +289,39 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
   global_init_chdir(g_ceph_context);
 
-  {
-    Monitor::StoreConverter converter(g_conf->mon_data);
-    int ret = converter.needs_conversion();
-    if (ret > 0) {
-      assert(!converter.convert());
-    } else if (ret < 0) {
-      derr << "found errors while attempting to convert the monitor store: "
+  MonitorDBStore *store = new MonitorDBStore(g_conf->mon_data);
+
+  Monitor::StoreConverter converter(g_conf->mon_data, store);
+  if (store->open(std::cerr) < 0) {
+    int ret = store->create_and_open(std::cerr);
+    if (ret < 0) {
+      derr << "failed to create new leveldb store" << dendl;
+      prefork.exit(1);
+    }
+
+    ret = converter.needs_conversion();
+    if (ret < 0) {
+      derr << "found errors while validating legacy unconverted monitor store: "
            << cpp_strerror(ret) << dendl;
       prefork.exit(1);
     }
-  }
-
-  MonitorDBStore store(g_conf->mon_data);
-  err = store.open(std::cerr);
-  if (err < 0) {
-    cerr << argv[0] << ": error opening mon data store at '"
-         << g_conf->mon_data << "': " << cpp_strerror(err) << std::endl;
+    if (ret > 0) {
+      cout << "converting monitor store, please do not interrupt..." << std::endl;
+      int r = converter.convert();
+      if (r) {
+	derr << "failed to convert monitor store: " << cpp_strerror(r) << dendl;
+	prefork.exit(1);
+      }
+    }
+  } else if (converter.is_converting()) {
+    derr << "there is an on-going (maybe aborted?) conversion." << dendl;
+    derr << "you should check what happened" << dendl;
+    derr << "remove store.db to restart conversion" << dendl;
     prefork.exit(1);
   }
-  assert(err == 0);
 
   bufferlist magicbl;
-  err = store.get(Monitor::MONITOR_NAME, "magic", magicbl);
+  err = store->get(Monitor::MONITOR_NAME, "magic", magicbl);
   if (!magicbl.length()) {
     cerr << "unable to read magic from mon data.. did you run mkcephfs?" << std::endl;
     prefork.exit(1);
@@ -320,7 +332,7 @@ int main(int argc, const char **argv)
     prefork.exit(1);
   }
 
-  err = Monitor::check_features(&store);
+  err = Monitor::check_features(store);
   if (err < 0) {
     cerr << "error checking features: " << cpp_strerror(err) << std::endl;
     prefork.exit(1);
@@ -338,7 +350,7 @@ int main(int argc, const char **argv)
     }
 
     // get next version
-    version_t v = store.get("monmap", "last_committed");
+    version_t v = store->get("monmap", "last_committed");
     cout << "last committed monmap epoch is " << v << ", injected map will be " << (v+1) << std::endl;
     v++;
 
@@ -360,7 +372,7 @@ int main(int argc, const char **argv)
     t.put("monmap", v, mapbl);
     t.put("monmap", "latest", final);
     t.put("monmap", "last_committed", v);
-    store.apply_transaction(t);
+    store->apply_transaction(t);
 
     cout << "done." << std::endl;
     prefork.exit(0);
@@ -372,7 +384,7 @@ int main(int argc, const char **argv)
     // note that even if we don't find a viable monmap, we should go ahead
     // and try to build it up in the next if-else block.
     bufferlist mapbl;
-    int err = obtain_monmap(store, mapbl);
+    int err = obtain_monmap(*store, mapbl);
     if (err >= 0) {
       try {
         monmap.decode(mapbl);
@@ -380,10 +392,20 @@ int main(int argc, const char **argv)
         cerr << "can't decode monmap: " << e.what() << std::endl;
       }
     } else {
-      std::cerr << "unable to obtain a monmap: "
-                << cpp_strerror(err) << std::endl;
+      derr << "unable to obtain a monmap: " << cpp_strerror(err) << dendl;
+    }
+    if (!extract_monmap.empty()) {
+      int r = mapbl.write_file(extract_monmap.c_str());
+      if (r < 0) {
+	r = -errno;
+	derr << "error writing monmap to " << extract_monmap << ": " << cpp_strerror(r) << dendl;
+	prefork.exit(1);
+      }
+      derr << "wrote monmap to " << extract_monmap << dendl;
+      prefork.exit(0);
     }
   }
+
 
   // this is what i will bind to
   entity_addr_t ipaddr;
@@ -407,7 +429,7 @@ int main(int argc, const char **argv)
   } else {
     dout(0) << g_conf->name << " does not exist in monmap, will attempt to join an existing cluster" << dendl;
 
-    pick_addresses(g_ceph_context);
+    pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
     if (!g_conf->public_addr.is_blank_ip()) {
       ipaddr = g_conf->public_addr;
       if (ipaddr.get_port() == 0)
@@ -485,7 +507,7 @@ int main(int argc, const char **argv)
     prefork.exit(1);
 
   // start monitor
-  mon = new Monitor(g_ceph_context, g_conf->name.get_id(), &store, 
+  mon = new Monitor(g_ceph_context, g_conf->name.get_id(), store, 
 		    messenger, &monmap);
 
   err = mon->preinit();
@@ -516,10 +538,10 @@ int main(int argc, const char **argv)
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_mon_signal);
   unregister_async_signal_handler(SIGTERM, handle_mon_signal);
-
   shutdown_async_signal_handler();
 
   delete mon;
+  delete store;
   delete messenger;
   delete client_throttler;
   delete daemon_throttler;
@@ -532,6 +554,7 @@ int main(int argc, const char **argv)
     dout(0) << "ceph-mon: gmon.out should be in " << s << dendl;
   }
 
-  prefork.exit(0);
+  prefork.signal_exit(0);
+  return 0;
 }
 

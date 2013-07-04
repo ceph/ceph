@@ -431,7 +431,7 @@ class Image(object):
 
     def parent_info(self):
         ret = -errno.ERANGE
-        size = 8;
+        size = 8
         while ret == -errno.ERANGE and size < 128:
             pool = create_string_buffer(size)
             name = create_string_buffer(size)
@@ -439,7 +439,7 @@ class Image(object):
             ret = self.librbd.rbd_get_parent_info(self.image, pool, len(pool), 
                 name, len(name), snapname, len(snapname))
             if ret == -errno.ERANGE:
-                size *= 2;
+                size *= 2
 
         if (ret != 0):
             raise make_ex(ret, 'error getting parent info for image %s' % (self.name,))
@@ -734,15 +734,21 @@ written." % (self.name, ret, length))
         """
         Returns the stripe unit used for the image.
         """
-        ret = self.librbd.rbd_get_stripe_unit()
-        return ret.value
+        stripe_unit = c_uint64()
+        ret = self.librbd.rbd_get_stripe_unit(self.image, byref(stripe_unit))
+        if ret != 0:
+            raise make_ex(ret, 'error getting stripe unit for image' % (self.name))
+        return stripe_unit.value
 
     def stripe_count(self):
         """
         Returns the stripe count used for the image.
         """
-        ret = self.librbd.rbd_get_stripe_count()
-        return ret.value
+        stripe_count = c_uint64()
+        ret = self.librbd.rbd_get_stripe_count(self.image, byref(stripe_count))
+        if ret != 0:
+            raise make_ex(ret, 'error getting stripe count for image' % (self.name))
+        return stripe_count.value
 
     def flatten(self):
         """

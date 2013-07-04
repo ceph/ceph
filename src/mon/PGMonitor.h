@@ -47,19 +47,26 @@ public:
 
   bool need_check_down_pgs;
 
+  epoch_t last_map_pg_create_osd_epoch;
+
+
 private:
   PGMap::Incremental pending_inc;
 
   void create_initial();
-  void update_from_paxos();
-  void init();
+  void update_from_paxos(bool *need_bootstrap);
+  void upgrade_format();
+  void post_paxos_update();
   void handle_osd_timeouts();
   void create_pending();  // prepare a new pending
   // propose pending update to peers
   void update_trim();
-  void encode_pending(MonitorDBStore::Transaction *t);
-  virtual void encode_full(MonitorDBStore::Transaction *t);
   void update_logger();
+
+  void encode_pending(MonitorDBStore::Transaction *t);
+  void read_pgmap_meta();
+  void read_pgmap_full();
+  void apply_pgmap_delta(bufferlist& bl);
 
   bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
   bool prepare_update(PaxosServiceMessage *m);
@@ -128,16 +135,19 @@ private:
    *
    * @return 0 on success, negative error code on failure
    */
-  int dump_stuck_pg_stats(ostream& ss,
-			  bufferlist& rdata,
-			  vector<const char*>& args) const;
+  int dump_stuck_pg_stats(stringstream &ds, Formatter *f,
+			  int threshold,
+			  vector<string>& args) const;
 
   void dump_object_stat_sum(TextTable &tbl, Formatter *f,
                             object_stat_sum_t &sum, bool verbose);
 
 public:
   PGMonitor(Monitor *mn, Paxos *p, const string& service_name)
-  : PaxosService(mn, p, service_name), need_check_down_pgs(false) { }
+    : PaxosService(mn, p, service_name),
+      need_check_down_pgs(false),
+      last_map_pg_create_osd_epoch(0)
+  { }
   ~PGMonitor() { }
 
   virtual void on_restart();
@@ -146,6 +156,14 @@ public:
    * finishes and the cluster goes active. We use it here to make sure we
    * haven't lost any PGs from new pools. */
   virtual void on_active();
+
+  bool should_stash_full() {
+    return false;  // never
+  }
+  virtual void encode_full(MonitorDBStore::Transaction *t) {
+    assert(0 == "unimplemented encode_full");
+  }
+
 
   void tick();  // check state, take actions
 

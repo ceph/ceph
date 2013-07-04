@@ -91,15 +91,16 @@ namespace librbd {
     librados::AioCompletion *rados_completion =
       librados::Rados::aio_create_completion(this, rados_req_cb, NULL);
     int r;
+    librados::ObjectReadOperation op;
+    int flags = m_ictx->get_read_flags(m_snap_id);
     if (m_sparse) {
-      r = m_ioctx->aio_sparse_read(m_oid, rados_completion, &m_ext_map,
-				   &m_read_data, m_object_len, m_object_off,
-				   m_snap_id);
+      op.sparse_read(m_object_off, m_object_len, &m_ext_map, &m_read_data,
+		     NULL);
     } else {
-      r = m_ioctx->aio_read(m_oid, rados_completion, &m_read_data,
-			    m_object_len, m_object_off,
-			    m_snap_id);
+      op.read(m_object_off, m_object_len, &m_read_data, NULL);
     }
+    r = m_ioctx->aio_operate(m_oid, rados_completion, &op, m_snap_id, flags, NULL);
+
     rados_completion->release();
     return r;
   }
@@ -116,7 +117,8 @@ namespace librbd {
 			       const ::SnapContext &snapc, librados::snap_t snap_id,
 			       Context *completion,
 			       bool hide_enoent)
-    : AioRequest(ictx, oid, object_no, object_off, len, snap_id, completion, hide_enoent),
+    : AioRequest(ictx, oid, object_no, object_off, len, snap_id, completion,
+		 hide_enoent),
       m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val)
   {
     m_object_image_extents = objectx;
@@ -234,7 +236,8 @@ namespace librbd {
   }
 
   void AbstractWrite::send_copyup() {
-    m_copyup.exec("rbd", "copyup", m_read_data);
+    if (!m_read_data.is_zero())
+      m_copyup.exec("rbd", "copyup", m_read_data);
     add_copyup_ops();
 
     librados::AioCompletion *rados_completion =

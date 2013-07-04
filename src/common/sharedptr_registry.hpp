@@ -100,6 +100,12 @@ public:
     return retval;
   }
 
+  void remove(const K &key) {
+    Mutex::Locker l(lock);
+    contents.erase(key);
+    cond.Signal();
+  }
+
   template<class A>
   VPtr lookup_or_create(const K &key, const A &arg) {
     Mutex::Locker l(lock);

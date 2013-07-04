@@ -34,7 +34,7 @@ private:
   LogSummary pending_summary, summary;
 
   void create_initial();
-  void update_from_paxos();
+  void update_from_paxos(bool *need_bootstrap);
   void create_pending();  // prepare a new pending
   // propose pending update to peers
   void encode_pending(MonitorDBStore::Transaction *t);

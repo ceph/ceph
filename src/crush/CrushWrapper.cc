@@ -255,14 +255,14 @@ int CrushWrapper::get_full_location_ordered(int id, vector<pair<string, string> 
   string high_type_name = type_map[high_type];
 
   path.push_back(parent_coord);
-  parent_id = get_item_id( (parent_coord.second).c_str() );
+  parent_id = get_item_id(parent_coord.second);
 
 
   while (parent_coord.first != high_type_name) {
     parent_coord = get_immediate_parent(parent_id);
     path.push_back(parent_coord);
     if ( parent_coord.first != high_type_name ){
-      parent_id = get_item_id( (parent_coord.second).c_str() );
+      parent_id = get_item_id(parent_coord.second);
     }
   }
 
@@ -291,7 +291,7 @@ map<int, string> CrushWrapper::get_parent_hierarchy(int id)
       high_type = (*it).first;
   }
 
-  parent_id = get_item_id((parent_coord.second).c_str());
+  parent_id = get_item_id(parent_coord.second);
 
   while (type_counter < high_type) {
     type_counter++;
@@ -300,7 +300,7 @@ map<int, string> CrushWrapper::get_parent_hierarchy(int id)
     if (type_counter < high_type){
       // get the coordinate information for the next parent
       parent_coord = get_immediate_parent(parent_id);
-      parent_id = get_item_id(parent_coord.second.c_str());
+      parent_id = get_item_id(parent_coord.second);
     }
   }
 
@@ -631,18 +631,28 @@ void CrushWrapper::reweight(CephContext *cct)
   }
 }
 
-int CrushWrapper::add_simple_rule(string name, string root_name, string failure_domain_name)
+int CrushWrapper::add_simple_rule(string name, string root_name, string failure_domain_name,
+				  ostream *err)
 {
-  if (rule_exists(name))
+  if (rule_exists(name)) {
+    if (err)
+      *err << "rule " << name << " exists";
     return -EEXIST;
-  if (!name_exists(root_name))
+  }
+  if (!name_exists(root_name)) {
+    if (err)
+      *err << "root item " << root_name << " does not exist";
     return -ENOENT;
+  }
   int root = get_item_id(root_name);
   int type = 0;
   if (failure_domain_name.length()) {
     type = get_type_id(failure_domain_name);
-    if (type <= 0) // bah, returns 0 on error; but its ok, device isn't a domain really
+    if (type < 0) {
+      if (err)
+	*err << "unknown type " << failure_domain_name;
       return -EINVAL;
+    }
   }
 
   int ruleset = 0;
@@ -1016,6 +1026,13 @@ void CrushWrapper::dump(Formatter *f) const
 
   f->open_array_section("rules");
   dump_rules(f);
+  f->close_section();
+
+  f->open_object_section("tunables");
+  f->dump_int("choose_local_tries", get_choose_local_tries());
+  f->dump_int("choose_local_fallback_tries", get_choose_local_fallback_tries());
+  f->dump_int("choose_total_tries", get_choose_total_tries());
+  f->dump_int("chooseleaf_descend_once", get_chooseleaf_descend_once());
   f->close_section();
 }
 

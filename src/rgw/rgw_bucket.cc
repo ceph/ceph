@@ -309,7 +309,6 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
     return ret;
 
   obj.bucket = bucket;
-  int max = 1000;
 
   ret = rgw_get_system_obj(store, NULL, store->zone.domain_root, bucket.name, bl, NULL, NULL);
 
@@ -322,6 +321,7 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
   }
 
   if (delete_children) {
+    int max = 1000;
     ret = store->list_objects(bucket, max, prefix, delim, marker,
             objs, common_prefixes,
             false, ns, true, NULL, NULL);
@@ -903,10 +903,15 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
   RGWBucket bucket;
-  int ret = bucket.init(store, op_state);
-  if (ret < 0)
-    return ret;
+  int ret;
+
   string bucket_name = op_state.get_bucket_name();
+
+  if (!bucket_name.empty()) {
+    ret = bucket.init(store, op_state);
+    if (ret < 0)
+      return ret;
+  }
 
   Formatter *formatter = flusher.get_formatter();
   flusher.start(0);
@@ -951,7 +956,8 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
   } else {
     RGWAccessHandle handle;
 
-    if (store->list_buckets_init(&handle) > 0) {
+    formatter->open_array_section("buckets");
+    if (store->list_buckets_init(&handle) >= 0) {
       RGWObjEnt obj;
       while (store->list_buckets_next(obj, &handle) >= 0) {
 	formatter->dump_string("bucket", obj.name);
@@ -959,6 +965,8 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
           bucket_stats(store, obj.name, formatter);
       }
     }
+
+    formatter->close_section();
   }
 
   flusher.flush();

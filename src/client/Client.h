@@ -254,6 +254,8 @@ public:
 		   //MClientRequest *req, int uid, int gid,
 		   Inode **ptarget = 0, bool *pcreated = 0,
 		   int use_mds=-1, bufferlist *pdirbl=0);
+  void put_request(MetaRequest *request);
+
   int verify_reply_trace(int r, MetaRequest *request, MClientReply *reply,
 			 Inode **ptarget, bool *pcreated, int uid, int gid);
   void encode_cap_releases(MetaRequest *request, int mds);
@@ -670,7 +672,8 @@ public:
   int lazyio_synchronize(int fd, loff_t offset, size_t count);
 
   // expose file layout
-  int describe_layout(int fd, ceph_file_layout* layout);
+  int describe_layout(const char *path, ceph_file_layout* layout);
+  int fdescribe_layout(int fd, ceph_file_layout* layout);
   int get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>& address);
   int get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& osds);
   int get_osd_addr(int osd, entity_addr_t& addr);
@@ -712,6 +715,7 @@ public:
   int ll_rmdir(vinodeno_t vino, const char *name, int uid = -1, int gid = -1);
   int ll_rename(vinodeno_t parent, const char *name, vinodeno_t newparent, const char *newname, int uid = -1, int gid = -1);
   int ll_link(vinodeno_t vino, vinodeno_t newparent, const char *newname, struct stat *attr, int uid = -1, int gid = -1);
+  int ll_describe_layout(Fh *fh, ceph_file_layout* layout);
   int ll_open(vinodeno_t vino, int flags, Fh **fh, int uid = -1, int gid = -1);
   int ll_create(vinodeno_t parent, const char *name, mode_t mode, int flags, struct stat *attr, Fh **fh, int uid = -1, int gid = -1);
   int ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl);

@@ -41,12 +41,11 @@ Package: ceph
 Architecture: linux-any
 Depends: binutils,
          ceph-common,
-         cryptsetup-bin,
+         cryptsetup-bin | cryptsetup,
          gdisk,
          parted,
          python,
          python-argparse,
-         python-lockfile,
          sdparm | hdparm,
          uuid-runtime,
          xfsprogs,
@@ -101,7 +100,7 @@ Description: debugging symbols for ceph-mds
 Package: ceph-fuse
 Architecture: linux-any
 Depends: ${misc:Depends}, ${shlibs:Depends}
-Recommends: fuse-utils
+Recommends: fuse | fuse-utils
 Description: FUSE-based client for the Ceph distributed file system
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is a
@@ -130,7 +129,7 @@ Description: debugging symbols for ceph-fuse
 Package: rbd-fuse
 Architecture: linux-any
 Depends: ${misc:Depends}, ${shlibs:Depends}
-Recommends: fuse-utils
+Recommends: fuse | fuse-utils
 Description: FUSE-based rbd client for the Ceph distributed file system
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is a
@@ -152,7 +151,8 @@ Description: debugging symbols for rbd-fuse
 
 Package: ceph-common
 Architecture: linux-any
-Depends: librbd1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
+Depends: librbd1 (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends},
+         python-ceph (= ${binary:Version})
 Conflicts: ceph-client-tools
 Replaces: ceph-client-tools
 Suggests: ceph, ceph-mds
@@ -338,7 +338,7 @@ Description: Ceph distributed file system client library (development files)
 
 Package: radosgw
 Architecture: linux-any
-Depends: ceph-common, ${misc:Depends}, ${shlibs:Depends}
+Depends: ceph-common (= ${binary:Version}), ${misc:Depends}, ${shlibs:Depends}
 Description: REST gateway for RADOS distributed object store
  RADOS is a distributed object store used by the Ceph distributed
  storage system.  This package provides a REST gateway to the

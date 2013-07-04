@@ -211,9 +211,9 @@ prt(char *fmt, ...)
 	va_start(args, fmt);
 	vsnprintf(buffer, BUF_SIZE, fmt, args);
 	va_end(args);
-	fprintf(stdout, buffer);
+	fprintf(stdout, "%s", buffer);
 	if (fsxlogf)
-		fprintf(fsxlogf, buffer);
+		fprintf(fsxlogf, "%s", buffer);
 }
 
 void

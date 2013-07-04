@@ -85,7 +85,7 @@ TEST(AdminSocket, RegisterCommand) {
   ASSERT_EQ(true, asoct.shutdown());
   ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
   AdminSocketClient client(get_rand_socket_path());
-  ASSERT_EQ(0, asoct.m_asokc->register_command("test", new MyTest(), ""));
+  ASSERT_EQ(0, asoct.m_asokc->register_command("test", "test", new MyTest(), ""));
   string result;
   ASSERT_EQ("", client.do_request("test", &result));
   ASSERT_EQ("test|", result);
@@ -108,8 +108,8 @@ TEST(AdminSocket, RegisterCommandPrefixes) {
   ASSERT_EQ(true, asoct.shutdown());
   ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
   AdminSocketClient client(get_rand_socket_path());
-  ASSERT_EQ(0, asoct.m_asokc->register_command("test", new MyTest(), ""));
-  ASSERT_EQ(0, asoct.m_asokc->register_command("test command", new MyTest2(), ""));
+  ASSERT_EQ(0, asoct.m_asokc->register_command("test", "test", new MyTest(), ""));
+  ASSERT_EQ(0, asoct.m_asokc->register_command("test command", "test command", new MyTest2(), ""));
   string result;
   ASSERT_EQ("", client.do_request("test", &result));
   ASSERT_EQ("test|", result);

@@ -561,24 +561,26 @@ static int read_input(const string& infile, bufferlist& bl)
 
 #define READ_CHUNK 8196
   int r;
+  int err;
 
   do {
     char buf[READ_CHUNK];
 
     r = read(fd, buf, READ_CHUNK);
     if (r < 0) {
-      int err = -errno;
+      err = -errno;
       cerr << "error while reading input" << std::endl;
-      return err;
+      goto out;
     }
     bl.append(buf, r);
   } while (r > 0);
+  err = 0;
 
+ out:
   if (infile.size()) {
     close(fd);
   }
-
-  return 0;
+  return err;
 }
 
 template <class T>
@@ -713,6 +715,7 @@ int main(int argc, char **argv)
   string state_str;
   string replica_log_type_str;
   ReplicaLogType replica_log_type = ReplicaLog_Invalid;
+  string op_mask_str;
 
   std::string val;
   std::ostringstream errs;
@@ -747,6 +750,8 @@ int main(int argc, char **argv)
       op_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--state", (char*)NULL)) {
       state_str = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--op-mask", (char*)NULL)) {
+      op_mask_str = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--key-type", (char*)NULL)) {
       key_type_str = val;
       if (key_type_str.compare("swift") == 0) {
@@ -1167,6 +1172,17 @@ int main(int argc, char **argv)
 
   if (set_perm)
     user_op.set_perm(perm_mask);
+
+  if (!op_mask_str.empty()) {
+    uint32_t op_mask;
+    int ret = rgw_parse_op_type_list(op_mask_str, &op_mask);
+    if (ret < 0) {
+      cerr << "failed to parse op_mask: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    user_op.set_op_mask(op_mask);
+  }
 
   if (key_type != KEY_TYPE_UNDEFINED)
     user_op.set_key_type(key_type);
@@ -1724,14 +1740,13 @@ next:
   }
 
   if (opt_cmd == OPT_GC_LIST) {
-    int ret;
     int index = 0;
     bool truncated;
     formatter->open_array_section("entries");
 
     do {
       list<cls_rgw_gc_obj_info> result;
-      ret = store->list_gc_objs(&index, marker, 1000, result, &truncated);
+      int ret = store->list_gc_objs(&index, marker, 1000, result, &truncated);
       if (ret < 0) {
 	cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
 	return 1;

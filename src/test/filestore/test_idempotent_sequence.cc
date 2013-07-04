@@ -82,15 +82,19 @@ int run_diff(std::string& a_path, std::string& a_journal,
   FileStore *a = new FileStore(a_path, a_journal, "a");
   FileStore *b = new FileStore(b_path, b_journal, "b");
 
-  FileStoreDiff fsd(a, b);
   int ret = 0;
-  if (fsd.diff()) {
-    dout(0) << "diff found an difference" << dendl;
-    ret = -1;
-  } else {
-    dout(0) << "no diff" << dendl;
+  {
+    FileStoreDiff fsd(a, b);
+    if (fsd.diff()) {
+      dout(0) << "diff found an difference" << dendl;
+      ret = -1;
+    } else {
+      dout(0) << "no diff" << dendl;
+    }
   }
 
+  delete a;
+  delete b;
   return ret;
 }
 
@@ -99,8 +103,11 @@ int run_get_last_op(std::string& filestore_path, std::string& journal_path)
   FileStore *store = new FileStore(filestore_path, journal_path);
 
   int err = store->mount();
-  if (err)
+  if (err) {
+    store->umount();
+    delete store;
     return err;
+  }
 
   coll_t txn_coll("meta");
   hobject_t txn_object(sobject_t("txn", CEPH_NOSNAP));
@@ -135,6 +142,8 @@ int run_sequence_to(int val, std::string& filestore_path,
   err = ::mkdir(filestore_path.c_str(), 0755);
   if (err) {
     cerr << filestore_path << " already exists" << std::endl;
+    store->umount();
+    delete store;
     return err;
   }
   
@@ -148,7 +157,6 @@ int run_sequence_to(int val, std::string& filestore_path,
   op_sequence.init(num_colls, num_objs);
   op_sequence.generate(seed, num_txs);
   store->umount();
-
   return 0;
 }
 

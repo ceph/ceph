@@ -785,7 +785,8 @@ int main(int argc, const char **argv)
     if (ret != 0)
       cerr << "error during cleanup: " << ret << std::endl;
   } else {
-    ret = bencher.aio_bench(operation, seconds, concurrent_ios, op_size, cleanup);
+    ret = bencher.aio_bench(operation, seconds, 0,
+			    concurrent_ios, op_size, cleanup);
     if (ret != 0) {
         cerr << "error during benchmark: " << ret << std::endl;
     }

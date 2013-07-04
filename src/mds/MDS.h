@@ -35,7 +35,7 @@
 #include "SessionMap.h"
 
 
-#define CEPH_MDS_PROTOCOL    16 /* cluster internal */
+#define CEPH_MDS_PROTOCOL    19 /* cluster internal */
 
 
 enum {
@@ -346,8 +346,14 @@ class MDS : public Dispatcher {
   void send_message_client_counted(Message *m, client_t client);
   void send_message_client_counted(Message *m, Session *session);
   void send_message_client_counted(Message *m, Connection *connection);
+  void send_message_client_counted(Message *m, const ConnectionRef& con) {
+    send_message_client_counted(m, con.get());
+  }
   void send_message_client(Message *m, Session *session);
   void send_message(Message *m, Connection *c);
+  void send_message(Message *m, const ConnectionRef& c) {
+    send_message(m, c.get());
+  }
 
   // start up, shutdown
   int init(int wanted_state=MDSMap::STATE_BOOT);
@@ -366,6 +372,7 @@ class MDS : public Dispatcher {
   void starting_done();
   void replay_done();
   void standby_replay_restart();
+  void _standby_replay_restart_finish(int r, uint64_t old_read_pos);
   class C_MDS_StandbyReplayRestart;
   class C_MDS_StandbyReplayRestartFinish;
 
@@ -376,6 +383,7 @@ class MDS : public Dispatcher {
   void reconnect_start();
   void reconnect_done();
   void rejoin_joint_start();
+  void rejoin_start();
   void rejoin_done();
   void recovery_done();
   void clientreplay_start();

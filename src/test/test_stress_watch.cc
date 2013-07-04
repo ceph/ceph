@@ -56,34 +56,55 @@ struct WatcherUnwatcher : public Thread {
 };
 TEST(WatchStress, Stress1) {
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
-  Rados cluster;
+  Rados ncluster;
   std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  ASSERT_EQ("", create_one_pool_pp(pool_name, ncluster));
+  IoCtx nioctx;
+  ncluster.ioctx_create(pool_name.c_str(), nioctx);
   WatchNotifyTestCtx ctx;
 
   WatcherUnwatcher *thr = new WatcherUnwatcher(pool_name);
   thr->create();
-  ASSERT_EQ(0, ioctx.create("foo", false));
+  ASSERT_EQ(0, nioctx.create("foo", false));
 
-  for (int i = 0; i < 10000; ++i) {
+  for (unsigned i = 0; i < 75; ++i) {
     std::cerr << "Iteration " << i << std::endl;
     uint64_t handle;
+    Rados cluster;
+    IoCtx ioctx;
     WatchNotifyTestCtx ctx;
 
+    connect_cluster_pp(cluster);
+    cluster.ioctx_create(pool_name.c_str(), ioctx);
     ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
 
-    bufferlist bl2;
-    ASSERT_EQ(0, ioctx.notify("foo", 0, bl2));
+    bool do_blacklist = i % 2;
+    if (do_blacklist) {
+      cluster.test_blacklist_self(true);
+      std::cerr << "blacklisted" << std::endl;
+      sleep(1);
+    }
 
-    TestAlarm alarm;
-    sem_wait(&sem);
+    bufferlist bl2;
+    ASSERT_EQ(0, nioctx.notify("foo", 0, bl2));
+
+    if (do_blacklist) {
+      sleep(1); // Give a change to see an incorrect notify
+    } else {
+      TestAlarm alarm;
+      sem_wait(&sem);
+    }
+
+    if (do_blacklist) {
+      cluster.test_blacklist_self(false);
+    }
+
     ioctx.unwatch("foo", handle);
+    ioctx.close();
   }
   stop_flag.set(1);
   thr->join();
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+  nioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, ncluster));
   sem_destroy(&sem);
 }

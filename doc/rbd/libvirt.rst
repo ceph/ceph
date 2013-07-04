@@ -2,6 +2,8 @@
  Using ``libvirt`` with Ceph RBD
 =================================
 
+.. index:: Ceph Block Device; livirt
+
 The ``libvirt`` library creates a virtual machine abstraction layer between 
 hypervisor interfaces and the software applications that use them. With 
 ``libvirt``, developers and system administrators can focus on a common 

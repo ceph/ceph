@@ -79,11 +79,9 @@ static char *mount_resolve_src(const char *orig_str)
  */
 static char *parse_options(const char *data, int *filesys_flags)
 {
-	char * value = NULL;
 	char * next_keyword = NULL;
 	char * out = NULL;
 	int out_len = 0;
-	int skip;
 	int pos = 0;
 	char *name = NULL;
 	int name_len = 0;
@@ -96,6 +94,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 		printf("parsing options: %s\n", data);
 
 	do {
+		char * value = NULL;
 		/*  check if ends with trailing comma */
 		if(*data == 0)
 			break;
@@ -111,7 +110,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 			value++;
 		}
 
-		skip = 1;
+		int skip = 1;
 
 		if (strncmp(data, "ro", 2) == 0) {
 			*filesys_flags |= MS_RDONLY;

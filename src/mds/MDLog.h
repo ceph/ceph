@@ -177,6 +177,10 @@ public:
     return NULL;
   }
 
+  bool have_any_segments() {
+    return !segments.empty();
+  }
+
   void flush_logger();
 
   size_t get_num_events() { return num_events; }

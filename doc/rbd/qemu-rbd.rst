@@ -1,23 +1,48 @@
-==============
- QEMU and RBD
-==============
+========================
+ QEMU and Block Devices
+========================
 
-Ceph integrates with the QEMU virtual machine. For details on QEMU, see 
-`QEMU Open Source Processor Emulator`_. For QEMU documentation, see
+.. index:: Ceph Block Device; QEMU KVM
+
+The most frequent Ceph Block Device use case involves providing block device
+images to virtual machines. For example, a user may create  a "golden" image
+with an OS and any relevant software in an ideal configuration. Then, the user
+takes a snapshot of the image. Finally, the user clones the snapshot (usually
+many times). See `Snapshots`_ for details. The ability to make copy-on-write
+clones of a snapshot means that Ceph can provision block device images to
+virtual machines quickly, because the client doesn't have to download an entire
+image each time it spins up a new virtual machine.
+
+
+.. ditaa::  +---------------------------------------------------+
+            |                       QEMU                        |
+            +---------------------------------------------------+
+            |                      librbd                       |
+            +---------------------------------------------------+
+            |                     librados                      |
+            +------------------------+-+------------------------+
+            |          OSDs          | |        Monitors        |
+            +------------------------+ +------------------------+
+
+
+Ceph Block Devices can integrate with the QEMU virtual machine. For details on
+QEMU, see  `QEMU Open Source Processor Emulator`_. For QEMU documentation, see
 `QEMU Manual`_. 
 
-.. important:: To use Ceph block devices with QEMU, you must have a running Ceph cluster.
-   
-Installing QEMU on Ubuntu 12.04 Precise
-=======================================
+.. important:: To use Ceph Block Devices with QEMU, you must have access to a 
+   running Ceph cluster.
 
-QEMU packages are incorporated into the Ubuntu 12.04 precise distribution. To 
-install QEMU on precise, execute the following:: 
+
+Installing QEMU (12.04 Precise and later)
+=========================================
+
+QEMU packages are incorporated into Ubuntu 12.04 Precise Pangolin and later
+versions. To  install QEMU, execute the following:: 
 
 	sudo apt-get install qemu
 
-Installing QEMU on Earlier Versions of Ubuntu
-=============================================
+Installing QEMU (11.10 Oneric and earlier)
+==========================================
 
 For Ubuntu distributions 11.10 Oneiric and earlier, you must install 
 the 0.15 version of QEMU or later. To build QEMU from source, use the
@@ -42,6 +67,7 @@ For example::
 
 	qemu-img create -f rbd rbd:data/foo 10G
 
+
 Resizing Images with QEMU
 =========================
 
@@ -56,8 +82,8 @@ For example::
 	qemu-img resize -f rbd rbd:data/foo 10G
 
 
-Retrieving Image Information with QEMU
-======================================
+Retrieving Image Info with QEMU
+===============================
 
 You can retrieve block device image information from QEMU. You must 
 specify ``rbd``, the pool name, and the name of the image. ::
@@ -106,13 +132,15 @@ configuration (like any Ceph configuration option) as part of the
 .. _RBD caching: ../rbd-config-ref/#rbd-cache-config-settings
 
 
+.. index:: Ceph Block Device; discard trim and libvirt
+
 Enabling Discard/TRIM
 =====================
 
-Since Ceph version 0.46 and QEMU version 1.1, Ceph block devices support the
+Since Ceph version 0.46 and QEMU version 1.1, Ceph Block Devices support the
 discard operation. This means that a guest can send TRIM requests to let a Ceph
 block device reclaim unused space. This can be enabled in the guest by mounting
-ext4 or XFS with the ``discard`` option.
+``ext4`` or XFS with the ``discard`` option.
 
 For this to be available to the guest, it must be explicitly enabled
 for the block device. To do this, you must specify a
@@ -140,6 +168,8 @@ devices with ``qemu id=`` to different ``discard_granularity`` values.
 		</qemu:commandline>
 	</domain>
 
+
+.. index:: Ceph Block Device; cache options
 
 QEMU Cache Options
 ==================
@@ -169,3 +199,4 @@ QEMU command line settings override the Ceph configuration file settings.
 .. _QEMU Open Source Processor Emulator: http://wiki.qemu.org/Main_Page
 .. _QEMU Manual: http://wiki.qemu.org/Manual
 .. _RBD Cache: ../rbd-config-ref/
+.. _Snapshots: ../rbd-snapshot/

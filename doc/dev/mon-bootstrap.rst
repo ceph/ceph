@@ -37,7 +37,7 @@ Secret keys
 The ``mon.`` secret key is stored a ``keyring`` file in the ``mon data`` directory.  It can be generated
 with a command like::
 
-        ceph-authtool --create /path/to/keyring --gen-key -n mon.
+        ceph-authtool --create-keyring /path/to/keyring --gen-key -n mon.
 
 When creating a new monitor cluster, the keyring should also contain a ``client.admin`` key that can be used
 to administer the system::
