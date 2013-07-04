@@ -1033,6 +1033,22 @@ void Monitor::sync_finish(entity_inst_t &entity, bool abort)
   finish_contexts(g_ceph_context, maybe_wait_for_quorum);
 }
 
+void Monitor::_trim_enable()
+{
+  Mutex::Locker l(trim_lock);
+  // even if we are no longer the leader, we should re-enable trim if
+  // we have disabled it in the past. It doesn't mean we are going to
+  // do anything about it, but if we happen to become the leader
+  // sometime down the future, we sure want to have the trim enabled.
+  if (trim_timeouts.empty()) {
+    dout(10) << __func__ << " enabling" << dendl;
+    paxos->trim_enable();
+  } else {
+    dout(10) << __func__ << " NOT enabling" << dendl;
+  }
+  trim_enable_timer = NULL;
+}
+
 void Monitor::handle_sync_finish(MMonSync *m)
 {
   dout(10) << __func__ << " " << *m << dendl;

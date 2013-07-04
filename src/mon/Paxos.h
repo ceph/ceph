@@ -1161,10 +1161,7 @@ public:
    * This is required by the Monitor's store synchronization mechanisms
    * to guarantee a consistent store state.
    */
-  void trim_disable() {
-    if (!trim_disabled_version)
-      trim_disabled_version = get_version();
-  }
+  void trim_disable();
   /**
    * Enable trimming
    */

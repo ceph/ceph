@@ -1005,7 +1005,16 @@ void Paxos::trim_to(version_t first)
   }
 }
 
-void Paxos::trim_enable() {
+void Paxos::trim_disable()
+{
+  dout(10) << __func__ << dendl;
+  if (!trim_disabled_version)
+    trim_disabled_version = get_version();
+}
+
+void Paxos::trim_enable()
+{
+  dout(10) << __func__ << dendl;
   trim_disabled_version = 0;
   // We may not be the leader when we reach this function. We sure must
   // have been the leader at some point, but we may have been demoted and
