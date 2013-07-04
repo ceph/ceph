@@ -274,7 +274,7 @@ void Objecter::send_linger(LingerOp *info)
   vector<OSDOp> opv = info->ops; // need to pass a copy to ops
   Context *onack = (!info->registered && info->on_reg_ack) ? new C_Linger_Ack(this, info) : NULL;
   Context *oncommit = new C_Linger_Commit(this, info);
-  Op *o = new Op(info->oid, info->oloc, opv, info->flags | CEPH_OSD_FLAG_READ,
+  Op *o = new Op(info->oid, info->oloc, info->nspace, opv, info->flags | CEPH_OSD_FLAG_READ,
 		 onack, oncommit,
 		 info->pobjver);
   o->snapid = info->snap;
@@ -354,7 +354,7 @@ void Objecter::unregister_linger(uint64_t linger_id)
 }
 
 tid_t Objecter::linger_mutate(const object_t& oid, const object_locator_t& oloc,
-			      ObjectOperation& op,
+			      string& nspace, ObjectOperation& op,
 			      const SnapContext& snapc, utime_t mtime,
 			      bufferlist& inbl, int flags,
 			      Context *onack, Context *oncommit,
@@ -363,6 +363,7 @@ tid_t Objecter::linger_mutate(const object_t& oid, const object_locator_t& oloc,
   LingerOp *info = new LingerOp;
   info->oid = oid;
   info->oloc = oloc;
+  info->nspace = nspace;
   if (info->oloc.key == oid)
     info->oloc.key.clear();
   info->snapc = snapc;
@@ -386,7 +387,7 @@ tid_t Objecter::linger_mutate(const object_t& oid, const object_locator_t& oloc,
 }
 
 tid_t Objecter::linger_read(const object_t& oid, const object_locator_t& oloc,
-			    ObjectOperation& op,
+			    string &nspace, ObjectOperation& op,
 			    snapid_t snap, bufferlist& inbl, bufferlist *poutbl, int flags,
 			    Context *onfinish,
 			    eversion_t *objver)
@@ -394,6 +395,7 @@ tid_t Objecter::linger_read(const object_t& oid, const object_locator_t& oloc,
   LingerOp *info = new LingerOp;
   info->oid = oid;
   info->oloc = oloc;
+  info->nspace = nspace;
   if (info->oloc.key == oid)
     info->oloc.key.clear();
   info->snap = snap;
@@ -1291,7 +1293,7 @@ int Objecter::recalc_op_target(Op *op)
     if (!osdmap->have_pg_pool(pgid.pool()))
       return RECALC_OP_TARGET_POOL_DNE;
   } else {
-    int ret = osdmap->object_locator_to_pg(op->oid, op->oloc, pgid);
+    int ret = osdmap->object_locator_to_pg(op->oid, op->oloc, op->nspace, pgid);
     if (ret == -ENOENT)
       return RECALC_OP_TARGET_POOL_DNE;
   }
@@ -1353,7 +1355,8 @@ bool Objecter::recalc_linger_op_target(LingerOp *linger_op)
 {
   vector<int> acting;
   pg_t pgid;
-  int ret = osdmap->object_locator_to_pg(linger_op->oid, linger_op->oloc, pgid);
+  int ret = osdmap->object_locator_to_pg(linger_op->oid, linger_op->oloc,
+	linger_op->nspace, pgid);
   if (ret == -ENOENT) {
     return RECALC_OP_TARGET_POOL_DNE;
   }
@@ -1433,7 +1436,7 @@ void Objecter::send_op(Op *op)
 
   MOSDOp *m = new MOSDOp(client_inc, op->tid, 
 			 op->oid, op->oloc, op->pgid, osdmap->get_epoch(),
-			 flags);
+			 flags, op->nspace);
 
   m->set_snapid(op->snapid);
   m->set_snap_seq(op->snapc.seq);
@@ -1683,7 +1686,7 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
   object_locator_t oloc(list_context->pool_id);
 
   // 
-  Op *o = new Op(oid, oloc, op.ops, CEPH_OSD_FLAG_READ, onack, NULL, NULL);
+  Op *o = new Op(oid, oloc, list_context->nspace, op.ops, CEPH_OSD_FLAG_READ, onack, NULL, NULL);
   o->priority = op.priority;
   o->snapid = list_context->pool_snap_seq;
   o->outbl = bl;
@@ -2239,6 +2242,7 @@ void Objecter::dump_linger_ops(Formatter& fmt) const
     fmt.dump_int("osd", op->session ? op->session->osd : -1);
     fmt.dump_stream("object_id") << op->oid;
     fmt.dump_stream("object_locator") << op->oloc;
+    fmt.dump_string("namespace", op->nspace);
     fmt.dump_stream("snapid") << op->snap;
     fmt.dump_stream("registering") << op->snap;
     fmt.dump_stream("registered") << op->snap;

@@ -109,7 +109,7 @@ void Filer::_probe(Probe *probe)
        ++p) {
     ldout(cct, 10) << "_probe  probing " << p->oid << dendl;
     C_Probe *c = new C_Probe(this, probe, p->oid);
-    objecter->stat(p->oid, p->oloc, probe->snapid, &c->size, &c->mtime, 
+    objecter->stat(p->oid, p->oloc, p->nspace, probe->snapid, &c->size, &c->mtime,
 		   probe->flags | CEPH_OSD_FLAG_RWORDERED, c);
     probe->ops.insert(p->oid);
   }
@@ -249,7 +249,7 @@ int Filer::purge_range(inodeno_t ino,
   if (num_obj == 1) {
     object_t oid = file_object_t(ino, first_obj);
     object_locator_t oloc = objecter->osdmap->file_to_object_locator(*layout);
-    objecter->remove(oid, oloc, snapc, mtime, flags, NULL, oncommit);
+    objecter->remove(oid, oloc, "", snapc, mtime, flags, NULL, oncommit);
     return 0;
   }
 
@@ -295,7 +295,7 @@ void Filer::_do_purge_range(PurgeRange *pr, int fin)
   while (pr->num > 0 && max > 0) {
     object_t oid = file_object_t(pr->ino, pr->first);
     object_locator_t oloc = objecter->osdmap->file_to_object_locator(pr->layout);
-    objecter->remove(oid, oloc, pr->snapc, pr->mtime, pr->flags,
+    objecter->remove(oid, oloc, "", pr->snapc, pr->mtime, pr->flags,
 		     NULL, new C_PurgeRange(this, pr));
     pr->uncommitted++;
     pr->first++;

@@ -250,7 +250,7 @@ int main(int argc, const char **argv)
       exit(1);
     }
     object_locator_t loc(pool);
-    pg_t raw_pgid = osdmap.object_locator_to_pg(oid, loc);
+    pg_t raw_pgid = osdmap.object_locator_to_pg(oid, loc, "");
     pg_t pgid = osdmap.raw_pg_to_pg(raw_pgid);
     
     vector<int> acting;

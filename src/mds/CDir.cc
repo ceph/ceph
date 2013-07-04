@@ -1381,7 +1381,7 @@ void CDir::fetch(Context *c, const string& want_dn, bool ignore_authpinnability)
   object_locator_t oloc(cache->mds->mdsmap->get_metadata_pool());
   ObjectOperation rd;
   rd.tmap_get(&fin->bl, NULL);
-  cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0, fin);
+  cache->mds->objecter->read(oid, oloc, "", rd, CEPH_NOSNAP, NULL, 0, fin);
 }
 
 void CDir::_fetched(bufferlist &bl, const string& want_dn)
@@ -1994,14 +1994,14 @@ void CDir::_commit(version_t want)
   m.priority = CEPH_MSG_PRIO_LOW;  // set priority lower than journal!
 
   if (committed_dn == items.end())
-    cache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(g_ceph_context), 0, NULL,
+    cache->mds->objecter->mutate(oid, oloc, "", m, snapc, ceph_clock_now(g_ceph_context), 0, NULL,
                                  new C_Dir_Committed(this, get_version()));
   else { // send in a different Context
     C_GatherBuilder gather(g_ceph_context, new C_Dir_Committed(this, get_version()));
     while (committed_dn != items.end()) {
       ObjectOperation n = ObjectOperation();
       committed_dn = _commit_partial(n, snaps, max_write_size, committed_dn);
-      cache->mds->objecter->mutate(oid, oloc, n, snapc, ceph_clock_now(g_ceph_context), 0, NULL,
+      cache->mds->objecter->mutate(oid, oloc, "", n, snapc, ceph_clock_now(g_ceph_context), 0, NULL,
                                   gather.new_sub());
     }
     /*
@@ -2014,7 +2014,7 @@ void CDir::_commit(version_t want)
      * we simply send the message containing the header off last, we cannot
      * get our header into an incorrect state.
      */
-    cache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(g_ceph_context), 0, NULL,
+    cache->mds->objecter->mutate(oid, oloc, "", m, snapc, ceph_clock_now(g_ceph_context), 0, NULL,
                                 gather.new_sub());
     gather.activate();
   }

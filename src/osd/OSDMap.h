@@ -454,10 +454,11 @@ public:
 
 
   /****   mapping facilities   ****/
-  int object_locator_to_pg(const object_t& oid, const object_locator_t& loc, pg_t &pg) const;
-  pg_t object_locator_to_pg(const object_t& oid, const object_locator_t& loc) const {
+  int object_locator_to_pg(const object_t& oid, const object_locator_t& loc,
+	const string &ns, pg_t &pg) const;
+  pg_t object_locator_to_pg(const object_t& oid, const object_locator_t& loc, const string &ns) const {
     pg_t pg;
-    int ret = object_locator_to_pg(oid, loc, pg);
+    int ret = object_locator_to_pg(oid, loc, ns, pg);
     assert(ret == 0);
     return pg;
   }
@@ -466,12 +467,13 @@ public:
     return object_locator_t(layout.fl_pg_pool);
   }
 
+  // XXX: not used, mentioned in psim.cc comment
   // oid -> pg
-  ceph_object_layout file_to_object_layout(object_t oid, ceph_file_layout& layout) const {
-    return make_object_layout(oid, layout.fl_pg_pool);
+  ceph_object_layout file_to_object_layout(object_t oid, ceph_file_layout& layout, string nspace) const {
+    return make_object_layout(oid, layout.fl_pg_pool, nspace);
   }
 
-  ceph_object_layout make_object_layout(object_t oid, int pg_pool) const;
+  ceph_object_layout make_object_layout(object_t oid, int pg_pool, string nspace) const;
 
   int get_pg_num(int pg_pool) const
   {

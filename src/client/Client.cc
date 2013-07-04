@@ -7755,7 +7755,7 @@ int Client::get_file_extent_osds(int fd, loff_t off, loff_t *len, vector<int>& o
   Striper::file_to_extents(cct, in->ino, &in->layout, off, 1, in->truncate_size, extents);
   assert(extents.size() == 1);
 
-  pg_t pg = osdmap->object_locator_to_pg(extents[0].oid, extents[0].oloc);
+  pg_t pg = osdmap->object_locator_to_pg(extents[0].oid, extents[0].oloc, "");
   osdmap->pg_to_acting_osds(pg, osds);
   if (osds.empty())
     return -EINVAL;
@@ -7803,7 +7803,7 @@ int Client::get_file_stripe_address(int fd, loff_t offset, vector<entity_addr_t>
   assert(extents.size() == 1);
 
   // now we have the object and its 'layout'
-  pg_t pg = osdmap->object_locator_to_pg(extents[0].oid, extents[0].oloc);
+  pg_t pg = osdmap->object_locator_to_pg(extents[0].oid, extents[0].oloc, "");
   vector<int> osds;
   osdmap->pg_to_acting_osds(pg, osds);
   if (osds.empty())

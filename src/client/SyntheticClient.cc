@@ -1407,7 +1407,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       object_locator_t oloc(CEPH_DATA_RULE);
       uint64_t size;
       utime_t mtime;
-      client->objecter->stat(oid, oloc, CEPH_NOSNAP, &size, &mtime, 0, new C_SafeCond(&lock, &cond, &ack));
+      client->objecter->stat(oid, oloc, "", CEPH_NOSNAP, &size, &mtime, 0, new C_SafeCond(&lock, &cond, &ack));
       while (!ack) cond.Wait(lock);
       lock.Unlock();
     }
@@ -1420,7 +1420,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       object_locator_t oloc(CEPH_DATA_RULE);
       lock.Lock();
       bufferlist bl;
-      client->objecter->read(oid, oloc, off, len, CEPH_NOSNAP, &bl, 0, new C_SafeCond(&lock, &cond, &ack));
+      client->objecter->read(oid, oloc, "", off, len, CEPH_NOSNAP, &bl, 0, new C_SafeCond(&lock, &cond, &ack));
       while (!ack) cond.Wait(lock);
       lock.Unlock();
     }
@@ -1436,7 +1436,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       bufferlist bl;
       bl.push_back(bp);
       SnapContext snapc;
-      client->objecter->write(oid, oloc, off, len, snapc, bl, ceph_clock_now(g_ceph_context), 0,
+      client->objecter->write(oid, oloc, "", off, len, snapc, bl, ceph_clock_now(g_ceph_context), 0,
 			      new C_SafeCond(&lock, &cond, &ack),
 			      safeg.new_sub());
       safeg.activate();
@@ -1452,7 +1452,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       object_locator_t oloc(CEPH_DATA_RULE);
       lock.Lock();
       SnapContext snapc;
-      client->objecter->zero(oid, oloc, off, len, snapc, ceph_clock_now(g_ceph_context), 0,
+      client->objecter->zero(oid, oloc, "", off, len, snapc, ceph_clock_now(g_ceph_context), 0,
 			     new C_SafeCond(&lock, &cond, &ack),
 			     safeg.new_sub());
       safeg.activate();
@@ -1680,7 +1680,7 @@ int SyntheticClient::dump_placement(string& fn) {
   for (vector<ObjectExtent>::iterator i = extents.begin(); 
        i != extents.end(); ++i) {
     
-    int osd = client->osdmap->get_pg_primary(client->osdmap->object_locator_to_pg(i->oid, i->oloc));
+    int osd = client->osdmap->get_pg_primary(client->osdmap->object_locator_to_pg(i->oid, i->oloc, ""));
 
     // run through all the buffer extents
     for (vector<pair<uint64_t, uint64_t> >::iterator j = i->buffer_extents.begin();
@@ -1960,8 +1960,12 @@ int SyntheticClient::overload_osd_0(int n, int size, int wrsize) {
 int SyntheticClient::check_first_primary(int fh) {
   vector<ObjectExtent> extents;
   client->enumerate_layout(fh, extents, 1, 0);  
-  return client->osdmap->get_pg_primary(client->osdmap->object_locator_to_pg(extents.begin()->oid,
-									     extents.begin()->oloc));
+  return client->osdmap->get_pg_primary(
+    client->osdmap->object_locator_to_pg(
+	extents.begin()->oid,
+	extents.begin()->oloc,
+	"")
+    );
 }
 
 int SyntheticClient::rm_file(string& fn)
@@ -2229,7 +2233,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
     
     starts.push_back(ceph_clock_now(g_ceph_context));
     client->client_lock.Lock();
-    client->objecter->write(oid, oloc, 0, osize, snapc, bl, ceph_clock_now(g_ceph_context), 0,
+    client->objecter->write(oid, oloc, "", 0, osize, snapc, bl, ceph_clock_now(g_ceph_context), 0,
 			    new C_Ref(lock, cond, &unack),
 			    new C_Ref(lock, cond, &unsafe));
     client->client_lock.Unlock();
@@ -2340,7 +2344,7 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
         op.op.op = CEPH_OSD_OP_STARTSYNC;
 	m.ops.push_back(op);
       }
-      client->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(g_ceph_context), 0,
+      client->objecter->mutate(oid, oloc, "", m, snapc, ceph_clock_now(g_ceph_context), 0,
 			       NULL, new C_Ref(lock, cond, &unack));
       /*client->objecter->write(oid, layout, 0, osize, snapc, bl, 0,
 			      new C_Ref(lock, cond, &unack),
@@ -2348,7 +2352,7 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
     } else {
       dout(10) << "read from " << oid << dendl;
       bufferlist inbl;
-      client->objecter->read(oid, oloc, 0, osize, CEPH_NOSNAP, &inbl, 0,
+      client->objecter->read(oid, oloc, "", 0, osize, CEPH_NOSNAP, &inbl, 0,
 			     new C_Ref(lock, cond, &unack));
     }
     client->client_lock.Unlock();

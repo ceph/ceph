@@ -283,7 +283,7 @@ public:
     // hash
     //boost::binomial_distribution<uint32_t> bin(0xFFFFFF, 0.5);
     ++seq;
-    return hobject_t(name, string(), rand() & 2 ? CEPH_NOSNAP : rand(), rand() & 0xFF, 0);
+    return hobject_t(name, string(), rand() & 2 ? CEPH_NOSNAP : rand(), rand() & 0xFF, 0, "");
   }
 };
 
@@ -506,13 +506,16 @@ TEST_F(StoreTest, HashCollisionTest) {
   string base = "";
   for (int i = 0; i < 100; ++i) base.append("aaaaa");
   set<hobject_t> created;
+  for (int n = 0; n < 10; ++n) {
+    char nbuf[100];
+    sprintf(nbuf, "n%d", n);
   for (int i = 0; i < 1000; ++i) {
     char buf[100];
     sprintf(buf, "%d", i);
     if (!(i % 5)) {
-      cerr << "Object " << i << std::endl;
+      cerr << "Object n" << n << " "<< i << std::endl;
     }
-    hobject_t hoid(string(buf) + base, string(), CEPH_NOSNAP, 0, 0);
+    hobject_t hoid(string(buf) + base, string(), CEPH_NOSNAP, 0, 0, string(nbuf));
     {
       ObjectStore::Transaction t;
       t.touch(cid, hoid);
@@ -520,6 +523,7 @@ TEST_F(StoreTest, HashCollisionTest) {
       ASSERT_EQ(r, 0);
     }
     created.insert(hoid);
+  }
   }
   vector<hobject_t> objects;
   r = store->collection_list(cid, objects);
@@ -572,7 +576,7 @@ TEST_F(StoreTest, HashCollisionTest) {
 
 TEST_F(StoreTest, OMapTest) {
   coll_t cid("blah");
-  hobject_t hoid("tesomap", "", CEPH_NOSNAP, 0, 0);
+  hobject_t hoid("tesomap", "", CEPH_NOSNAP, 0, 0, "");
   int r;
   {
     ObjectStore::Transaction t;
@@ -668,7 +672,7 @@ TEST_F(StoreTest, OMapTest) {
 
 TEST_F(StoreTest, XattrTest) {
   coll_t cid("blah");
-  hobject_t hoid("tesomap", "", CEPH_NOSNAP, 0, 0);
+  hobject_t hoid("tesomap", "", CEPH_NOSNAP, 0, 0, "");
   bufferlist big;
   for (unsigned i = 0; i < 10000; ++i) {
     big.append('\0');
@@ -770,7 +774,7 @@ void colsplittest(
 	  "",
 	  CEPH_NOSNAP,
 	  i<<common_suffix_size,
-	  0));
+	  0, ""));
     }
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);

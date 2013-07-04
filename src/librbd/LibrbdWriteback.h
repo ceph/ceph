@@ -23,7 +23,7 @@ namespace librbd {
     virtual ~LibrbdWriteback() {}
 
     // Note that oloc, trunc_size, and trunc_seq are ignored
-    virtual void read(const object_t& oid, const object_locator_t& oloc,
+    virtual void read(const object_t& oid, const object_locator_t& oloc, const string& nspace,
 		      uint64_t off, uint64_t len, snapid_t snapid,
 		      bufferlist *pbl, uint64_t trunc_size,  __u32 trunc_seq,
 		      Context *onfinish);
@@ -32,7 +32,7 @@ namespace librbd {
     virtual bool may_copy_on_write(const object_t& oid, uint64_t read_off, uint64_t read_len, snapid_t snapid);
 
     // Note that oloc, trunc_size, and trunc_seq are ignored
-    virtual tid_t write(const object_t& oid, const object_locator_t& oloc,
+    virtual tid_t write(const object_t& oid, const object_locator_t& oloc, const string& nspace,
 			uint64_t off, uint64_t len, const SnapContext& snapc,
 			const bufferlist &bl, utime_t mtime, uint64_t trunc_size,
 			__u32 trunc_seq, Context *oncommit);

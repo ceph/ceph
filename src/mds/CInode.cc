@@ -904,7 +904,7 @@ void CInode::store(Context *fin)
   object_t oid = CInode::get_object_name(ino(), frag_t(), ".inode");
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
 
-  mdcache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(g_ceph_context), 0,
+  mdcache->mds->objecter->mutate(oid, oloc, "", m, snapc, ceph_clock_now(g_ceph_context), 0,
 				 NULL, new C_Inode_Stored(this, get_version(), fin) );
 }
 
@@ -941,11 +941,11 @@ void CInode::fetch(Context *fin)
   ObjectOperation rd;
   rd.getxattr("inode", &c->bl, NULL);
 
-  mdcache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, (bufferlist*)NULL, 0, gather.new_sub());
+  mdcache->mds->objecter->read(oid, oloc, "", rd, CEPH_NOSNAP, (bufferlist*)NULL, 0, gather.new_sub());
 
   // read from separate object too
   object_t oid2 = CInode::get_object_name(ino(), frag_t(), ".inode");
-  mdcache->mds->objecter->read(oid2, oloc, 0, 0, CEPH_NOSNAP, &c->bl2, 0, gather.new_sub());
+  mdcache->mds->objecter->read(oid2, oloc, "", 0, 0, CEPH_NOSNAP, &c->bl2, 0, gather.new_sub());
 
   gather.activate();
 }
@@ -1037,13 +1037,13 @@ void CInode::store_backtrace(Context *fin)
   Context *fin2 = new C_Inode_StoredBacktrace(this, inode.backtrace_version, fin);
 
   if (!state_test(STATE_DIRTYPOOL)) {
-    mdcache->mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
+    mdcache->mds->objecter->mutate(oid, oloc, "", op, snapc, ceph_clock_now(g_ceph_context),
 				   0, NULL, fin2);
     return;
   }
 
   C_GatherBuilder gather(g_ceph_context, fin2);
-  mdcache->mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
+  mdcache->mds->objecter->mutate(oid, oloc, "", op, snapc, ceph_clock_now(g_ceph_context),
 				 0, NULL, gather.new_sub());
 
   set<int64_t> old_pools;
@@ -1058,7 +1058,7 @@ void CInode::store_backtrace(Context *fin)
     op.setxattr("parent", bl);
 
     object_locator_t oloc(*p);
-    mdcache->mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
+    mdcache->mds->objecter->mutate(oid, oloc, "", op, snapc, ceph_clock_now(g_ceph_context),
 				   0, NULL, gather.new_sub());
     old_pools.insert(*p);
   }

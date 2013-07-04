@@ -210,16 +210,22 @@ int librados::IoCtxImpl::selfmanaged_snap_rollback_object(const object_t& oid,
 							  ::SnapContext& snapc,
 							  uint64_t snapid)
 {
+  utime_t ut = ceph_clock_now(client->cct);
   int reply;
+  eversion_t ver;
 
   Mutex mylock("IoCtxImpl::snap_rollback::mylock");
   Cond cond;
   bool done;
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &reply);
 
+  ::ObjectOperation op;
+  prepare_assert_ops(&op);
+  op.rollback(snapid);
   lock->Lock();
-  objecter->rollback_object(oid, oloc, snapc, snapid,
-			    ceph_clock_now(client->cct), onack, NULL);
+  objecter->mutate(oid, oloc, nspace,
+	           op, snapc, ut, 0,
+	           onack, NULL, &ver);
   lock->Unlock();
 
   mylock.Lock();
@@ -364,6 +370,7 @@ int librados::IoCtxImpl::list(Objecter::ListContext *context, int max_entries)
     return 0;
 
   context->max_entries = max_entries;
+  context->nspace = nspace;
 
   lock->Lock();
   objecter->list_objects(context, new C_SafeCond(&mylock, &cond, &done, &r));
@@ -379,68 +386,19 @@ int librados::IoCtxImpl::list(Objecter::ListContext *context, int max_entries)
 
 int librados::IoCtxImpl::create(const object_t& oid, bool exclusive)
 {
-  utime_t ut = ceph_clock_now(client->cct);
-
-  /* can't write to a snapshot */
-  if (snap_seq != CEPH_NOSNAP)
-    return -EROFS;
-
-  Mutex mylock("IoCtxImpl::create::mylock");
-  Cond cond;
-  bool done;
-  int r;
-  eversion_t ver;
-
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-
-  lock->Lock();
-  objecter->create(oid, oloc,
-		  snapc, ut, 0, (exclusive ? CEPH_OSD_OP_FLAG_EXCL : 0),
-		  onack, NULL, &ver);
-  lock->Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-
-  set_sync_op_version(ver);
-
-  return r;
+  ::ObjectOperation op;
+  prepare_assert_ops(&op);
+  op.create(exclusive);
+  return operate(oid, &op, NULL);
 }
 
 int librados::IoCtxImpl::create(const object_t& oid, bool exclusive,
 				const std::string& category)
 {
-  utime_t ut = ceph_clock_now(client->cct);
-
-  /* can't write to a snapshot */
-  if (snap_seq != CEPH_NOSNAP)
-    return -EROFS;
-
-  Mutex mylock("IoCtxImpl::create::mylock");
-  Cond cond;
-  bool done;
-  int r;
-  eversion_t ver;
-
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-
-  ::ObjectOperation o;
-  o.create(exclusive ? CEPH_OSD_OP_FLAG_EXCL : 0, category);
-
-  lock->Lock();
-  objecter->mutate(oid, oloc, o, snapc, ut, 0, onack, NULL, &ver);
-  lock->Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-
-  set_sync_op_version(ver);
-
-  return r;
+  ::ObjectOperation op;
+  prepare_assert_ops(&op);
+  op.create(exclusive, category);
+  return operate(oid, &op, NULL);
 }
 
 /*
@@ -473,37 +431,11 @@ int librados::IoCtxImpl::create(const object_t& oid, bool exclusive,
 int librados::IoCtxImpl::write(const object_t& oid, bufferlist& bl,
 			       size_t len, uint64_t off)
 {
-  utime_t ut = ceph_clock_now(client->cct);
-
-  /* can't write to a snapshot */
-  if (snap_seq != CEPH_NOSNAP)
-    return -EROFS;
-
-  Mutex mylock("IoCtxImpl::write::mylock");
-  Cond cond;
-  bool done;
-  int r;
-
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-  eversion_t ver;
-
-  // extra ops?
   ::ObjectOperation op;
-  ::ObjectOperation *pop = prepare_assert_ops(&op);
-
-  lock->Lock();
-  objecter->write(oid, oloc,
-		  off, len, snapc, bl, ut, 0,
-		  onack, NULL, &ver, pop);
-  lock->Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-
-  set_sync_op_version(ver);
-
+  prepare_assert_ops(&op);
+  bufferlist mybl = bl;
+  op.write(off, len, mybl);
+  int r =  operate(oid, &op, NULL);
   if (r < 0)
     return r;
 
@@ -512,36 +444,11 @@ int librados::IoCtxImpl::write(const object_t& oid, bufferlist& bl,
 
 int librados::IoCtxImpl::append(const object_t& oid, bufferlist& bl, size_t len)
 {
-  utime_t ut = ceph_clock_now(client->cct);
-
-  /* can't write to a snapshot */
-  if (snap_seq != CEPH_NOSNAP)
-    return -EROFS;
-
-  Mutex mylock("IoCtxImpl::append::mylock");
-  Cond cond;
-  bool done;
-  int r;
-
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-  eversion_t ver;
-
   ::ObjectOperation op;
-  ::ObjectOperation *pop = prepare_assert_ops(&op);
-
-  lock->Lock();
-  objecter->append(oid, oloc,
-		   len, snapc, bl, ut, 0,
-		   onack, NULL, &ver, pop);
-  lock->Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-
-  set_sync_op_version(ver);
-
+  prepare_assert_ops(&op);
+  bufferlist mybl = bl;
+  op.append(mybl, len);
+  int r = operate(oid, &op, NULL);
   if (r < 0)
     return r;
 
@@ -550,38 +457,10 @@ int librados::IoCtxImpl::append(const object_t& oid, bufferlist& bl, size_t len)
 
 int librados::IoCtxImpl::write_full(const object_t& oid, bufferlist& bl)
 {
-  utime_t ut = ceph_clock_now(client->cct);
-
-  /* can't write to a snapshot */
-  if (snap_seq != CEPH_NOSNAP)
-    return -EROFS;
-
-  Mutex mylock("IoCtxImpl::write_full::mylock");
-  Cond cond;
-  bool done;
-  int r;
-
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-
-  eversion_t ver;
-
   ::ObjectOperation op;
-  ::ObjectOperation *pop = prepare_assert_ops(&op);
-
-  lock->Lock();
-  objecter->write_full(oid, oloc,
-		       snapc, bl, ut, 0,
-		       onack, NULL, &ver, pop);
-  lock->Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-
-  set_sync_op_version(ver);
-
-  return r;
+  prepare_assert_ops(&op);
+  op.write_full(bl);
+  return operate(oid, &op, NULL);
 }
 
 int librados::IoCtxImpl::clone_range(const object_t& dst_oid,
@@ -590,36 +469,10 @@ int librados::IoCtxImpl::clone_range(const object_t& dst_oid,
 				     uint64_t src_offset,
 				     uint64_t len)
 {
-  utime_t ut = ceph_clock_now(client->cct);
-
-  /* can't write to a snapshot */
-  if (snap_seq != CEPH_NOSNAP)
-    return -EROFS;
-
-  Mutex mylock("IoCtxImpl::clone_range::mylock");
-  Cond cond;
-  bool done;
-  int r;
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-  eversion_t ver;
-
-  bufferlist outbl;
-
-  lock->Lock();
   ::ObjectOperation wr;
   prepare_assert_ops(&wr);
   wr.clone_range(src_oid, src_offset, len, dst_offset);
-  objecter->mutate(dst_oid, oloc, wr, snapc, ut, 0, onack, NULL, &ver);
-  lock->Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-
-  set_sync_op_version(ver);
-
-  return r;
+  return operate(dst_oid, &wr, NULL);
 }
 
 int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
@@ -639,7 +492,7 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
   if (!o->size())
     return 0;
 
-  Mutex mylock("IoCtxImpl::mutate::mylock");
+  Mutex mylock("IoCtxImpl::operate::mylock");
   Cond cond;
   bool done;
   int r;
@@ -647,8 +500,10 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
+  int op = o->ops[0].op.op;
+  ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid << " nspace=" << nspace << dendl;
   lock->Lock();
-  objecter->mutate(oid, oloc,
+  objecter->mutate(oid, oloc, nspace,
 	           *o, snapc, ut, 0,
 	           onack, NULL, &ver);
   lock->Unlock();
@@ -657,6 +512,8 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
+  ldout(client->cct, 10) << "Objecter returned from "
+	<< ceph_osd_op_name(op) << " r=" << r << dendl;
 
   set_sync_op_version(ver);
 
@@ -669,7 +526,7 @@ int librados::IoCtxImpl::operate_read(const object_t& oid,
   if (!o->size())
     return 0;
 
-  Mutex mylock("IoCtxImpl::mutate::mylock");
+  Mutex mylock("IoCtxImpl::operate_read::mylock");
   Cond cond;
   bool done;
   int r;
@@ -677,8 +534,10 @@ int librados::IoCtxImpl::operate_read(const object_t& oid,
 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
+  int op = o->ops[0].op.op;
+  ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid << " nspace=" << nspace << dendl;
   lock->Lock();
-  objecter->read(oid, oloc,
+  objecter->read(oid, oloc, nspace,
 	           *o, snap_seq, pbl, 0,
 	           onack, &ver);
   lock->Unlock();
@@ -687,6 +546,8 @@ int librados::IoCtxImpl::operate_read(const object_t& oid,
   while (!done)
     cond.Wait(mylock);
   mylock.Unlock();
+  ldout(client->cct, 10) << "Objecter returned from "
+	<< ceph_osd_op_name(op) << " r=" << r << dendl;
 
   set_sync_op_version(ver);
 
@@ -706,7 +567,7 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
   c->pbl = pbl;
 
   Mutex::Locker l(*lock);
-  objecter->read(oid, oloc,
+  objecter->read(oid, oloc, nspace,
 		 *o, snap_seq, pbl, flags,
 		 onack, &c->objver);
   return 0;
@@ -728,7 +589,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
   queue_aio_write(c);
 
   Mutex::Locker l(*lock);
-  objecter->mutate(oid, oloc, *o, snap_context, ut, 0, onack, oncommit,
+  objecter->mutate(oid, oloc, nspace, *o, snap_context, ut, 0, onack, oncommit,
 		   &c->objver);
 
   return 0;
@@ -749,7 +610,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
   c->pbl = pbl;
 
   Mutex::Locker l(*lock);
-  objecter->read(oid, oloc,
+  objecter->read(oid, oloc, nspace,
 		 off, len, snapid, &c->bl, 0,
 		 onack, &c->objver);
   return 0;
@@ -770,7 +631,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
   c->maxlen = len;
 
   Mutex::Locker l(*lock);
-  objecter->read(oid, oloc,
+  objecter->read(oid, oloc, nspace,
 		 off, len, snapid, &c->bl, 0,
 		 onack, &c->objver);
 
@@ -807,7 +668,7 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
   onack->m_ops.sparse_read(off, len, m, data_bl, NULL);
 
   Mutex::Locker l(*lock);
-  objecter->read(oid, oloc,
+  objecter->read(oid, oloc, nspace,
 		 onack->m_ops, snap_seq, NULL, 0,
 		 onack, &c->objver);
   return 0;
@@ -831,7 +692,7 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
   Context *onsafe = new C_aio_Safe(c);
 
   Mutex::Locker l(*lock);
-  objecter->write(oid, oloc,
+  objecter->write(oid, oloc, nspace,
 		  off, len, snapc, bl, ut, 0,
 		  onack, onsafe, &c->objver);
 
@@ -854,7 +715,7 @@ int librados::IoCtxImpl::aio_append(const object_t &oid, AioCompletionImpl *c,
   Context *onsafe = new C_aio_Safe(c);
 
   Mutex::Locker l(*lock);
-  objecter->append(oid, oloc,
+  objecter->append(oid, oloc, nspace,
 		   len, snapc, bl, ut, 0,
 		   onack, onsafe, &c->objver);
 
@@ -878,7 +739,7 @@ int librados::IoCtxImpl::aio_write_full(const object_t &oid,
   Context *onsafe = new C_aio_Safe(c);
 
   Mutex::Locker l(*lock);
-  objecter->write_full(oid, oloc,
+  objecter->write_full(oid, oloc, nspace,
 		       snapc, bl, ut, 0,
 		       onack, onsafe, &c->objver);
 
@@ -900,7 +761,7 @@ int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c)
   Context *onsafe = new C_aio_Safe(c);
 
   Mutex::Locker l(*lock);
-  objecter->remove(oid, oloc,
+  objecter->remove(oid, oloc, nspace,
 		   snapc, ut, 0,
 		   onack, onsafe, &c->objver);
 
@@ -915,7 +776,7 @@ int librados::IoCtxImpl::aio_stat(const object_t& oid, AioCompletionImpl *c,
   C_aio_stat_Ack *onack = new C_aio_stat_Ack(c, pmtime);
 
   Mutex::Locker l(*lock);
-  objecter->stat(oid, oloc,
+  objecter->stat(oid, oloc, nspace,
 		 snap_seq, psize, &onack->mtime, 0,
 		 onack, &c->objver);
 
@@ -924,172 +785,42 @@ int librados::IoCtxImpl::aio_stat(const object_t& oid, AioCompletionImpl *c,
 
 int librados::IoCtxImpl::remove(const object_t& oid)
 {
-  utime_t ut = ceph_clock_now(client->cct);
-
-  /* can't write to a snapshot */
-  if (snap_seq != CEPH_NOSNAP)
-    return -EROFS;
-
-  Mutex mylock("IoCtxImpl::remove::mylock");
-  Cond cond;
-  bool done;
-  int r;
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-  eversion_t ver;
-
   ::ObjectOperation op;
-  ::ObjectOperation *pop = prepare_assert_ops(&op);
-
-  lock->Lock();
-  objecter->remove(oid, oloc,
-		   snapc, ut, 0,
-		   onack, NULL, &ver, pop);
-  lock->Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-
-  set_sync_op_version(ver);
-
-  return r;
+  prepare_assert_ops(&op);
+  op.remove();
+  return operate(oid, &op, NULL);
 }
 
 int librados::IoCtxImpl::trunc(const object_t& oid, uint64_t size)
 {
-  utime_t ut = ceph_clock_now(client->cct);
-
-  /* can't write to a snapshot */
-  if (snap_seq != CEPH_NOSNAP)
-    return -EROFS;
-
-  Mutex mylock("IoCtxImpl::write_full::mylock");
-  Cond cond;
-  bool done;
-  int r;
-
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-  eversion_t ver;
-
   ::ObjectOperation op;
-  ::ObjectOperation *pop = prepare_assert_ops(&op);
-
-  lock->Lock();
-  objecter->trunc(oid, oloc,
-		  snapc, ut, 0,
-		  size, 0,
-		  onack, NULL, &ver, pop);
-  lock->Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-
-  set_sync_op_version(ver);
-
-  return r;
+  prepare_assert_ops(&op);
+  op.truncate(size);
+  return operate(oid, &op, NULL);
 }
 
 int librados::IoCtxImpl::tmap_update(const object_t& oid, bufferlist& cmdbl)
 {
-  utime_t ut = ceph_clock_now(client->cct);
-
-  /* can't write to a snapshot */
-  if (snap_seq != CEPH_NOSNAP)
-    return -EROFS;
-
-  Mutex mylock("IoCtxImpl::tmap_update::mylock");
-  Cond cond;
-  bool done;
-  int r;
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-  eversion_t ver;
-
-  bufferlist outbl;
-
-  lock->Lock();
   ::ObjectOperation wr;
   prepare_assert_ops(&wr);
   wr.tmap_update(cmdbl);
-  objecter->mutate(oid, oloc, wr, snapc, ut, 0, onack, NULL, &ver);
-  lock->Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-
-  set_sync_op_version(ver);
-
-  return r;
+  return operate(oid, &wr, NULL);
 }
 
 int librados::IoCtxImpl::tmap_put(const object_t& oid, bufferlist& bl)
 {
-  utime_t ut = ceph_clock_now(client->cct);
-
-  /* can't write to a snapshot */
-  if (snap_seq != CEPH_NOSNAP)
-    return -EROFS;
-
-  Mutex mylock("IoCtxImpl::tmap_put::mylock");
-  Cond cond;
-  bool done;
-  int r;
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-  eversion_t ver;
-
-  bufferlist outbl;
-
-  lock->Lock();
   ::ObjectOperation wr;
   prepare_assert_ops(&wr);
   wr.tmap_put(bl);
-  objecter->mutate(oid, oloc, wr, snapc, ut, 0, onack, NULL, &ver);
-  lock->Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-
-  set_sync_op_version(ver);
-
-  return r;
+  return operate(oid, &wr, NULL);
 }
 
 int librados::IoCtxImpl::tmap_get(const object_t& oid, bufferlist& bl)
 {
-  /* can't write to a snapshot */
-  if (snap_seq != CEPH_NOSNAP)
-    return -EROFS;
-
-  Mutex mylock("IoCtxImpl::tmap_put::mylock");
-  Cond cond;
-  bool done;
-  int r = 0;
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-  eversion_t ver;
-
-  bufferlist outbl;
-
-  lock->Lock();
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
   rd.tmap_get(&bl, NULL);
-  objecter->read(oid, oloc, rd, snap_seq, 0, 0, onack, &ver);
-  lock->Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-
-  set_sync_op_version(ver);
-
-  return r;
+  return operate_read(oid, &rd, NULL);
 }
 
 
@@ -1097,29 +828,10 @@ int librados::IoCtxImpl::exec(const object_t& oid,
 			      const char *cls, const char *method,
 			      bufferlist& inbl, bufferlist& outbl)
 {
-  Mutex mylock("IoCtxImpl::exec::mylock");
-  Cond cond;
-  bool done;
-  int r;
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-  eversion_t ver;
-
-
-  lock->Lock();
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
   rd.call(cls, method, inbl);
-  objecter->read(oid, oloc, rd, snap_seq, &outbl, 0, onack, &ver);
-  lock->Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-
-  set_sync_op_version(ver);
-
-  return r;
+  return operate_read(oid, &rd, &outbl);
 }
 
 int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
@@ -1135,7 +847,7 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
   rd.call(cls, method, inbl);
-  objecter->read(oid, oloc, rd, snap_seq, outbl, 0, onack, &c->objver);
+  objecter->read(oid, oloc, nspace, rd, snap_seq, outbl, 0, onack, &c->objver);
 
   return 0;
 }
@@ -1146,31 +858,10 @@ int librados::IoCtxImpl::read(const object_t& oid,
   if (len > (size_t) INT_MAX)
     return -EDOM;
 
-  Mutex mylock("IoCtxImpl::read::mylock");
-  Cond cond;
-  bool done;
-  int r;
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-  eversion_t ver;
-
-
-  ::ObjectOperation op;
-  ::ObjectOperation *pop = prepare_assert_ops(&op);
-
-  lock->Lock();
-  objecter->read(oid, oloc,
-		 off, len, snap_seq, &bl, 0,
-		 onack, &ver, pop);
-  lock->Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-  ldout(client->cct, 10) << "Objecter returned from read r=" << r << dendl;
-
-  set_sync_op_version(ver);
-
+  ::ObjectOperation rd;
+  prepare_assert_ops(&rd);
+  rd.read(off, len, &bl, NULL);
+  int r = operate_read(oid, &rd, &bl);
   if (r < 0)
     return r;
 
@@ -1195,7 +886,7 @@ int librados::IoCtxImpl::mapext(const object_t& oid,
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
   lock->Lock();
-  objecter->mapext(oid, oloc,
+  objecter->mapext(oid, oloc, nspace,
 		   off, len, snap_seq, &bl, 0,
 		   onack);
   lock->Unlock();
@@ -1223,12 +914,11 @@ int librados::IoCtxImpl::sparse_read(const object_t& oid,
   if (len > (size_t) INT_MAX)
     return -EDOM;
 
-  int r;
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
   rd.sparse_read(off, len, &m, &data_bl, NULL);
 
-  r = operate_read(oid, &rd, NULL);
+  int r = operate_read(oid, &rd, NULL);
   if (r < 0)
     return r;
 
@@ -1237,38 +927,20 @@ int librados::IoCtxImpl::sparse_read(const object_t& oid,
 
 int librados::IoCtxImpl::stat(const object_t& oid, uint64_t *psize, time_t *pmtime)
 {
-  Mutex mylock("IoCtxImpl::stat::mylock");
-  Cond cond;
-  bool done;
-  int r;
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
   uint64_t size;
   utime_t mtime;
-  eversion_t ver;
 
   if (!psize)
     psize = &size;
 
-  ::ObjectOperation op;
-  ::ObjectOperation *pop = prepare_assert_ops(&op);
-
-  lock->Lock();
-  objecter->stat(oid, oloc,
-		 snap_seq, psize, &mtime, 0,
-		 onack, &ver, pop);
-  lock->Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-  ldout(client->cct, 10) << "Objecter returned from stat" << dendl;
+  ::ObjectOperation rd;
+  prepare_assert_ops(&rd);
+  rd.stat(psize, &mtime, NULL);
+  int r = operate_read(oid, &rd, NULL);
 
   if (r >= 0 && pmtime) {
     *pmtime = mtime.sec();
   }
-
-  set_sync_op_version(ver);
 
   return r;
 }
@@ -1276,30 +948,10 @@ int librados::IoCtxImpl::stat(const object_t& oid, uint64_t *psize, time_t *pmti
 int librados::IoCtxImpl::getxattr(const object_t& oid,
 				    const char *name, bufferlist& bl)
 {
-  Mutex mylock("IoCtxImpl::getxattr::mylock");
-  Cond cond;
-  bool done;
-  int r;
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-  eversion_t ver;
-
-  ::ObjectOperation op;
-  ::ObjectOperation *pop = prepare_assert_ops(&op);
-
-  lock->Lock();
-  objecter->getxattr(oid, oloc,
-		     name, snap_seq, &bl, 0,
-		     onack, &ver, pop);
-  lock->Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-  ldout(client->cct, 10) << "Objecter returned from getxattr" << dendl;
-
-  set_sync_op_version(ver);
-
+  ::ObjectOperation rd;
+  prepare_assert_ops(&rd);
+  rd.getxattr(name, &bl, NULL);
+  int r = operate_read(oid, &rd, NULL);
   if (r < 0)
     return r;
 
@@ -1308,116 +960,38 @@ int librados::IoCtxImpl::getxattr(const object_t& oid,
 
 int librados::IoCtxImpl::rmxattr(const object_t& oid, const char *name)
 {
-  utime_t ut = ceph_clock_now(client->cct);
-
-  /* can't write to a snapshot */
-  if (snap_seq != CEPH_NOSNAP)
-    return -EROFS;
-
-  Mutex mylock("IoCtxImpl::rmxattr::mylock");
-  Cond cond;
-  bool done;
-  int r;
-
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-  eversion_t ver;
-
   ::ObjectOperation op;
-  ::ObjectOperation *pop = prepare_assert_ops(&op);
-
-  lock->Lock();
-  objecter->removexattr(oid, oloc, name,
-			snapc, ut, 0,
-			onack, NULL, &ver, pop);
-  lock->Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-
-  set_sync_op_version(ver);
-
-  if (r < 0)
-    return r;
-
-  return 0;
+  prepare_assert_ops(&op);
+  op.rmxattr(name);
+  return operate(oid, &op, NULL);
 }
 
 int librados::IoCtxImpl::setxattr(const object_t& oid,
 				    const char *name, bufferlist& bl)
 {
-  utime_t ut = ceph_clock_now(client->cct);
-
-  /* can't write to a snapshot */
-  if (snap_seq != CEPH_NOSNAP)
-    return -EROFS;
-
-  Mutex mylock("IoCtxImpl::setxattr::mylock");
-  Cond cond;
-  bool done;
-  int r;
-
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-  eversion_t ver;
-
   ::ObjectOperation op;
-  ::ObjectOperation *pop = prepare_assert_ops(&op);
-
-  lock->Lock();
-  objecter->setxattr(oid, oloc, name,
-		     snapc, bl, ut, 0,
-		     onack, NULL, &ver, pop);
-  lock->Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-
-  set_sync_op_version(ver);
-
-  if (r < 0)
-    return r;
-
-  return 0;
+  prepare_assert_ops(&op);
+  op.setxattr(name, bl);
+  return operate(oid, &op, NULL);
 }
 
 int librados::IoCtxImpl::getxattrs(const object_t& oid,
 				     map<std::string, bufferlist>& attrset)
 {
-  Mutex mylock("IoCtxImpl::getexattrs::mylock");
-  Cond cond;
-  bool done;
-  int r;
-  eversion_t ver;
-
-  ::ObjectOperation op;
-  ::ObjectOperation *pop = prepare_assert_ops(&op);
-
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-
-  lock->Lock();
   map<string, bufferlist> aset;
-  objecter->getxattrs(oid, oloc, snap_seq,
-		      aset,
-		      0, onack, &ver, pop);
-  lock->Unlock();
+
+  ::ObjectOperation rd;
+  prepare_assert_ops(&rd);
+  rd.getxattrs(&aset, NULL);
+  int r = operate_read(oid, &rd, NULL);
 
   attrset.clear();
-
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-
-  for (map<string,bufferlist>::iterator p = aset.begin(); p != aset.end(); ++p) {
-    ldout(client->cct, 10) << "IoCtxImpl::getxattrs: xattr=" << p->first << dendl;
-    attrset[p->first.c_str()] = p->second;
+  if (r >= 0) {
+    for (map<string,bufferlist>::iterator p = aset.begin(); p != aset.end(); ++p) {
+      ldout(client->cct, 10) << "IoCtxImpl::getxattrs: xattr=" << p->first << dendl;
+      attrset[p->first.c_str()] = p->second;
+    }
   }
-
-  set_sync_op_version(ver);
 
   return r;
 }
@@ -1445,7 +1019,7 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t ver,
   prepare_assert_ops(&wr);
   wr.watch(*cookie, ver, 1);
   bufferlist bl;
-  wc->linger_id = objecter->linger_mutate(oid, oloc, wr,
+  wc->linger_id = objecter->linger_mutate(oid, oloc, nspace, wr,
 					  snapc, ceph_clock_now(NULL), bl,
 					  0,
 					  NULL, onfinish, &objver);
@@ -1477,7 +1051,7 @@ int librados::IoCtxImpl::_notify_ack(
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
   rd.notify_ack(notify_id, ver, cookie);
-  objecter->read(oid, oloc, rd, snap_seq, (bufferlist*)NULL, 0, 0, 0);
+  objecter->read(oid, oloc, nspace, rd, snap_seq, (bufferlist*)NULL, 0, 0, 0);
 
   return 0;
 }
@@ -1486,7 +1060,7 @@ int librados::IoCtxImpl::unwatch(const object_t& oid, uint64_t cookie)
 {
   bufferlist inbl, outbl;
 
-  Mutex mylock("IoCtxImpl::watch::mylock");
+  Mutex mylock("IoCtxImpl::unwatch::mylock");
   Cond cond;
   bool done;
   int r;
@@ -1499,7 +1073,7 @@ int librados::IoCtxImpl::unwatch(const object_t& oid, uint64_t cookie)
   ::ObjectOperation wr;
   prepare_assert_ops(&wr);
   wr.watch(cookie, 0, 0);
-  objecter->mutate(oid, oloc, wr, snapc, ceph_clock_now(client->cct), 0, NULL, oncommit, &ver);
+  objecter->mutate(oid, oloc, nspace, wr, snapc, ceph_clock_now(client->cct), 0, NULL, oncommit, &ver);
   lock->Unlock();
 
   mylock.Lock();
@@ -1538,7 +1112,7 @@ int librados::IoCtxImpl::notify(const object_t& oid, uint64_t ver, bufferlist& b
   ::encode(timeout, inbl);
   ::encode(bl, inbl);
   rd.notify(cookie, ver, inbl);
-  wc->linger_id = objecter->linger_read(oid, oloc, rd, snap_seq, inbl, NULL, 0,
+  wc->linger_id = objecter->linger_read(oid, oloc, nspace, rd, snap_seq, inbl, NULL, 0,
 					onack, &objver);
   lock->Unlock();
 

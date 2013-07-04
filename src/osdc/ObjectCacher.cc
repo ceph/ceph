@@ -557,7 +557,8 @@ void ObjectCacher::perf_stop()
 ObjectCacher::Object *ObjectCacher::get_object(sobject_t oid, ObjectSet *oset,
 					       object_locator_t &l,
 					       uint64_t truncate_size,
-					       uint64_t truncate_seq)
+					       uint64_t truncate_seq,
+					       string& nspace)
 {
   assert(lock.is_locked());
   // have it?
@@ -573,7 +574,7 @@ ObjectCacher::Object *ObjectCacher::get_object(sobject_t oid, ObjectSet *oset,
   }
 
   // create it.
-  Object *o = new Object(this, oid, oset, l, truncate_size, truncate_seq);
+  Object *o = new Object(this, oid, oset, l, truncate_size, truncate_seq, nspace);
   objects[l.pool][oid] = o;
   ob_lru.lru_insert_top(o);
   return o;
@@ -607,7 +608,7 @@ void ObjectCacher::bh_read(BufferHead *bh)
   C_ReadFinish *onfinish = new C_ReadFinish(this, bh->ob,
 					    bh->start(), bh->length());
   // go
-  writeback_handler.read(bh->ob->get_oid(), bh->ob->get_oloc(),
+  writeback_handler.read(bh->ob->get_oid(), bh->ob->get_oloc(), bh->ob->get_nspace(),
 			 bh->start(), bh->length(), bh->ob->get_snap(),
 			 &onfinish->bl, bh->ob->truncate_size, bh->ob->truncate_seq,
 			 onfinish);
@@ -790,7 +791,7 @@ void ObjectCacher::bh_write(BufferHead *bh)
   C_WriteCommit *oncommit = new C_WriteCommit(this, bh->ob->oloc.pool,
                                               bh->ob->get_soid(), bh->start(), bh->length());
   // go
-  tid_t tid = writeback_handler.write(bh->ob->get_oid(), bh->ob->get_oloc(),
+  tid_t tid = writeback_handler.write(bh->ob->get_oid(), bh->ob->get_oloc(), bh->ob->get_nspace(),
 				      bh->start(), bh->length(),
 				      bh->snapc, bh->bl, bh->last_write,
 				      bh->ob->truncate_size, bh->ob->truncate_seq,
@@ -1022,7 +1023,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 
     // get Object cache
     sobject_t soid(ex_it->oid, rd->snap);
-    Object *o = get_object(soid, oset, ex_it->oloc, ex_it->truncate_size, oset->truncate_seq);
+    Object *o = get_object(soid, oset, ex_it->oloc, ex_it->truncate_size, oset->truncate_seq, ex_it->nspace);
     touch_ob(o);
 
     // does not exist and no hits?
@@ -1256,7 +1257,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Mutex& wait_on_lock,
        ++ex_it) {
     // get object cache
     sobject_t soid(ex_it->oid, CEPH_NOSNAP);
-    Object *o = get_object(soid, oset, ex_it->oloc, ex_it->truncate_size, oset->truncate_seq);
+    Object *o = get_object(soid, oset, ex_it->oloc, ex_it->truncate_size, oset->truncate_seq, ex_it->nspace);
 
     // map it all into a single bufferhead.
     BufferHead *bh = o->map_write(wr);
