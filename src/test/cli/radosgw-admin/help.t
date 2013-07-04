@@ -83,7 +83,7 @@
      --end-date=<date>
      --bucket-id=<bucket-id>
      --shard-id=<shard-id>     optional for mdlog list
-                               required for:
+                               required for: 
                                  mdlog trim
                                  replica mdlog get/delete
                                  replica datalog get/delete
