@@ -1384,7 +1384,6 @@ void Monitor::sync_obtain_latest_monmap(bufferlist &bl)
   if (monmap->epoch > latest_monmap.epoch)
     latest_monmap = *monmap;
 
-  assert(latest_monmap.epoch > 0);
   dout(1) << __func__ << " obtained monmap e" << latest_monmap.epoch << dendl;
 
   latest_monmap.encode(bl, CEPH_FEATURES_ALL);
