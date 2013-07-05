@@ -107,6 +107,8 @@ void usage()
   cerr << "        debug monitor level (e.g. 10)\n";
   cerr << "  --mkfs\n";
   cerr << "        build fresh monitor fs\n";
+  cerr << "  --force-sync\n";
+  cerr << "        force a sync from another mon by wiping local data (BE CAREFUL)\n";
   generic_server_usage();
 }
 
@@ -116,6 +118,8 @@ int main(int argc, const char **argv)
 
   bool mkfs = false;
   bool compact = false;
+  bool force_sync = false;
+  bool yes_really = false;
   std::string osdmapfn, inject_monmap, extract_monmap;
 
   vector<const char*> args;
@@ -136,6 +140,10 @@ int main(int argc, const char **argv)
       mkfs = true;
     } else if (ceph_argparse_flag(args, i, "--compact", (char*)NULL)) {
       compact = true;
+    } else if (ceph_argparse_flag(args, i, "--force-sync", (char*)NULL)) {
+      force_sync = true;
+    } else if (ceph_argparse_flag(args, i, "--yes-i-really-mean-it", (char*)NULL)) {
+      yes_really = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--osdmap", (char*)NULL)) {
       osdmapfn = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--inject_monmap", (char*)NULL)) {
@@ -149,6 +157,12 @@ int main(int argc, const char **argv)
   if (!args.empty()) {
     cerr << "too many arguments: " << args << std::endl;
     usage();
+  }
+
+  if (force_sync && !yes_really) {
+    cerr << "are you SURE you want to force a sync?  this will erase local data and may\n"
+	 << "break your mon cluster.  pass --yes-i-really-mean-it if you do." << std::endl;
+    exit(1);
   }
 
   if (g_conf->mon_data.empty()) {
@@ -406,7 +420,6 @@ int main(int argc, const char **argv)
     }
   }
 
-
   // this is what i will bind to
   entity_addr_t ipaddr;
 
@@ -509,6 +522,11 @@ int main(int argc, const char **argv)
   // start monitor
   mon = new Monitor(g_ceph_context, g_conf->name.get_id(), store, 
 		    messenger, &monmap);
+
+  if (force_sync) {
+    derr << "flagging a forced sync ..." << dendl;
+    mon->sync_force(cerr);
+  }
 
   err = mon->preinit();
   if (err < 0)

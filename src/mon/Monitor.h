@@ -308,11 +308,13 @@ private:
    */
   void sync_start(entity_inst_t &entity, bool full);
 
+public:
   /**
    * force a sync on next mon restart
    */
   void sync_force(ostream& ss);
 
+private:
   /**
    * reset the sync timeout
    *
