@@ -292,11 +292,6 @@ private:
   void sync_obtain_latest_monmap(bufferlist &bl);
 
   /**
-   * check if a sync is in progress
-   */
-  bool is_sync_on_going();
-
-  /**
    * Start the synchronization efforts.
    *
    * This function should be called whenever we find the need to synchronize
