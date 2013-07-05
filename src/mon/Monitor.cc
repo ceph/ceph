@@ -742,7 +742,7 @@ set<string> Monitor::get_sync_targets_names() {
   set<string> targets;
   targets.insert(paxos->get_name());
   for (int i = 0; i < PAXOS_NUM; ++i)
-    targets.insert(paxos_service[i]->get_service_name());
+    paxos_service[i]->get_store_prefixes(targets);
 
   return targets;
 }
