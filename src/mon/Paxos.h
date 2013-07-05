@@ -1164,9 +1164,8 @@ public:
    * @returns true if we should trim; false otherwise.
    */
   bool should_trim() {
-    int available_versions = (get_version() - get_first_committed());
-    int maximum_versions =
-      (g_conf->paxos_max_join_drift + g_conf->paxos_trim_min);
+    int available_versions = get_version() - get_first_committed();
+    int maximum_versions = g_conf->paxos_min + g_conf->paxos_trim_min;
 
     if (trimming || (available_versions <= maximum_versions))
       return false;
