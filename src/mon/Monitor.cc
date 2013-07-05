@@ -1227,14 +1227,30 @@ void Monitor::handle_sync_start_chunks(MMonSync *m)
   }
 
   SyncEntity sync = get_sync_entity(other, this);
-  sync->version = paxos->get_version();
 
   if (!m->last_key.first.empty() && !m->last_key.second.empty()) {
-    sync->last_received_key = m->last_key;
-    dout(10) << __func__ << " set last received key to ("
-	     << sync->last_received_key.first << ","
-	     << sync->last_received_key.second << ")" << dendl;
+    if (m->version == 0) {
+      // uh-oh; we can't do this safely without a proper version marker
+      // because we don't know what paxos commits they got from the
+      // previous keys (if any!), and we may miss some.
+      dout(1) << __func__ << " got mid-sync start_chunks from " << other
+	      << " without version marker; ignoring last_received_key marker" << dendl;
+      sync->version = paxos->get_version();
+    } else {
+      sync->version = m->version;
+      sync->last_received_key = m->last_key;
+      dout(10) << __func__ << " set last received key to ("
+	       << sync->last_received_key.first << ","
+	       << sync->last_received_key.second << ")" << dendl;
+    }
+  } else {
+    sync->version = paxos->get_version();
   }
+  dout(10) << __func__ << " version " << sync->version
+	   << " last received key ("
+	   << sync->last_received_key.first << ","
+	   << sync->last_received_key.second << ")"
+	   << dendl;
 
   sync->sync_init();
 
@@ -1550,8 +1566,10 @@ void Monitor::sync_start_chunks(SyncEntity provider)
 			g_conf->mon_sync_timeout);
   MMonSync *msg = new MMonSync(MMonSync::OP_START_CHUNKS);
   pair<string,string> last_key = provider->last_received_key;
-  if (!last_key.first.empty() && !last_key.second.empty())
+  if (!last_key.first.empty() && !last_key.second.empty()) {
     msg->last_key = last_key;
+    msg->version = store->get("paxos", "last_committed");
+  }
 
   assert(g_conf->mon_sync_requester_kill_at != 4);
   messenger->send_message(msg, provider->entity);

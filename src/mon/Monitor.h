@@ -604,9 +604,6 @@ private:
 
       string prefix("paxos");
       paxos_synchronizer = mon->store->get_synchronizer(prefix);
-      version = mon->paxos->get_version();
-      generic_dout(10) << __func__ << " version " << version << dendl;
-
       synchronizer = mon->store->get_synchronizer(last_received_key,
 						  sync_targets);
       sync_update();
