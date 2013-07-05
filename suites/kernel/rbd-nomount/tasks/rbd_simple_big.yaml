@@ -2,5 +2,5 @@ tasks:
 - workunit:
     clients:
       all:
-        - rbd/simple_1tb.sh
+        - rbd/simple_big.sh
 
