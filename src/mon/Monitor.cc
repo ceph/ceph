@@ -1265,8 +1265,27 @@ void Monitor::sync_send_chunks(SyncEntity sync)
   assert(sync->synchronizer->has_next_chunk());
 
   MMonSync *msg = new MMonSync(MMonSync::OP_CHUNK);
+  MonitorDBStore::Transaction tx;
 
-  sync->synchronizer->get_chunk(msg->chunk_bl);
+  // include any recent paxos commits
+  if (sync->version < paxos->get_version()) {
+    while (sync->version < paxos->get_version()) {  // FIXME: limit size?
+      sync->version++;
+      dout(10) << " including paxos version " << sync->version << dendl;
+      bufferlist bl;
+      store->get(paxos->get_name(), sync->version, bl);
+      tx.put(paxos->get_name(), sync->version, bl);
+    }
+    dout(10) << " included paxos through " << sync->version << dendl;
+    msg->version = sync->version;
+  }
+
+  // get next bunch of commits in the remaining space
+  sync->synchronizer->get_chunk_tx(tx);
+
+  if (!tx.empty())
+    tx.encode(msg->chunk_bl);
+
   msg->last_key = sync->synchronizer->get_last_key();
   dout(10) << __func__ << " last key ("
 	   << msg->last_key.first << ","
