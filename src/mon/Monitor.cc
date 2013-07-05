@@ -412,7 +412,7 @@ int Monitor::preinit()
     // We have a potentially inconsistent store state in hands. Get rid of it
     // and start fresh.
     bool clear_store = false;
-    if (is_sync_on_going()) {
+    if (store->exists("mon_sync", "in_sync")) {
       dout(1) << __func__ << " clean up potentially inconsistent store state"
 	      << dendl;
       clear_store = true;
@@ -796,11 +796,6 @@ void Monitor::sync_obtain_latest_monmap(bufferlist &bl)
   dout(1) << __func__ << " obtained monmap e" << latest_monmap.epoch << dendl;
 
   latest_monmap.encode(bl, CEPH_FEATURES_ALL);
-}
-
-bool Monitor::is_sync_on_going()
-{
-  return store->exists("mon_sync", "in_sync");
 }
 
 void Monitor::sync_reset()
