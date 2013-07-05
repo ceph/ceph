@@ -150,6 +150,13 @@ public:
   { }
   ~PGMonitor() { }
 
+  virtual void get_store_prefixes(set<string>& s) {
+    s.insert(get_service_name());
+    s.insert("pgmap_meta");
+    s.insert("pgmap_pg");
+    s.insert("pgmap_osd");
+  }
+
   virtual void on_restart();
 
   /* Courtesy function provided by PaxosService, called when an election
