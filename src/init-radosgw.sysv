@@ -35,6 +35,7 @@ fi
 
 case "$1" in
     start)
+        echo "Starting radosgw instance(s)..."
         for name in `ceph-conf --list-sections $PREFIX`;
         do
             auto_start=`ceph-conf -n $name 'auto start'`
@@ -73,7 +74,7 @@ case "$1" in
     reload)
         #start-stop-daemon --signal HUP -x $RADOSGW --oknodo
         killproc $RADOSGW -SIGHUP
-        echo "Reloading radosgw..."
+        echo "Reloading radosgw instance(s)..."
         ;;
     restart|force-reload)
         $0 stop
@@ -82,7 +83,7 @@ case "$1" in
     stop)
         #start-stop-daemon --stop -x $RADOSGW --oknodo
         killproc $RADOSGW
-        echo "Stopping radosgw..."
+        echo "Stopping radosgw instance(s)..."
         ;;
     status)
         if pidof $RADOSGW >/dev/null; then
