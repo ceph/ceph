@@ -310,15 +310,9 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
 
   obj.bucket = bucket;
 
-  ret = rgw_get_system_obj(store, NULL, store->zone.domain_root, bucket.name, bl, NULL, NULL);
-
-  bufferlist::iterator iter = bl.begin();
-  try {
-    ::decode(info, iter);
-  } catch (buffer::error& err) {
-    //cerr << "ERROR: could not decode buffer info, caught buffer::error" << std::endl;
-    return -EIO;
-  }
+  ret = store->get_bucket_info(NULL, bucket.name, info, NULL);
+  if (ret < 0)
+    return ret;
 
   if (delete_children) {
     int max = 1000;
