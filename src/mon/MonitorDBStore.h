@@ -354,49 +354,6 @@ class MonitorDBStore
     }
   };
 
-  class SinglePrefixStoreIteratorImpl : public StoreIteratorImpl {
-    KeyValueDB::Iterator iter;
-    string prefix;
-
-  public:
-    SinglePrefixStoreIteratorImpl(KeyValueDB::Iterator iter, string prefix)
-      : StoreIteratorImpl(),
-	iter(iter),
-	prefix(prefix)
-    { }
-
-    virtual ~SinglePrefixStoreIteratorImpl() { }
-
-  private:
-    virtual void get_chunk_tx(Transaction &tx) {
-      assert(done == false);
-      assert(iter->valid() == true);
-
-      while (iter->valid()) {
-	string key(iter->key());
-	bufferlist value = iter->value();
-	if (!add_chunk_entry(tx, prefix, key, value))
-	  return;
-	iter->next();
-      }
-      assert(iter->valid() == false);
-      done = true;
-    }
-
-    virtual pair<string,string> get_next_key() {
-      // this method is only used by scrub on the whole store
-      // iterator.  also, the single prefix iterator has been dropped
-      // in later code.  we leave this here only for the benefit of
-      // backporting.
-      assert(0 == "this should not get called");
-      return make_pair(string(), string());
-    }
-
-    virtual bool _is_valid() {
-      return iter->valid();
-    }
-  };
-
   Synchronizer get_synchronizer(pair<string,string> &key,
 				set<string> &prefixes) {
     KeyValueDB::WholeSpaceIterator iter;
@@ -409,18 +366,6 @@ class MonitorDBStore
 
     return std::tr1::shared_ptr<StoreIteratorImpl>(
 	new WholeStoreIteratorImpl(iter, prefixes)
-    );
-  }
-
-  Synchronizer get_synchronizer(string &prefix) {
-    assert(!prefix.empty());
-
-    KeyValueDB::Iterator iter;
-    iter = db->get_snapshot_iterator(prefix);
-    iter->seek_to_first();
-
-    return std::tr1::shared_ptr<StoreIteratorImpl>(
-	new SinglePrefixStoreIteratorImpl(iter, prefix)
     );
   }
 
