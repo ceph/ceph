@@ -202,7 +202,6 @@ OPTION(paxos_min_wait, OPT_DOUBLE, 0.05)  // min time to gather updates for afte
 OPTION(paxos_min, OPT_INT, 500)       // minimum number of paxos states to keep around
 OPTION(paxos_trim_min, OPT_INT, 250)  // number of extra proposals tolerated before trimming
 OPTION(paxos_trim_max, OPT_INT, 500) // max number of extra proposals to trim at a time
-OPTION(paxos_trim_disabled_max_versions, OPT_INT, 108000) // maximum amount of versions we shall allow passing by without trimming
 OPTION(paxos_service_trim_min, OPT_INT, 250) // minimum amount of versions to trigger a trim (0 disables it)
 OPTION(paxos_service_trim_max, OPT_INT, 500) // maximum amount of versions to trim during a single proposal (0 disables it)
 OPTION(clock_offset, OPT_DOUBLE, 0) // how much to offset the system clock in Clock.cc

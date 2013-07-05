@@ -985,17 +985,6 @@ void Paxos::trim()
   queue_proposal(bl, new C_Trimmed(this));
 }
 
-void Paxos::trim_enable()
-{
-  trim_disabled_version = 0;
-  // We may not be the leader when we reach this function. We sure must
-  // have been the leader at some point, but we may have been demoted and
-  // we really should reset 'trim_disabled_version' if that was the case.
-  // So, make sure we only trim() iff we are the leader.
-  if (mon->is_leader() && should_trim())
-    trim();
-}
-
 /*
  * return a globally unique, monotonically increasing proposal number
  */
@@ -1009,7 +998,7 @@ version_t Paxos::get_new_proposal_number(version_t gt)
   last_pn++;
   last_pn *= 100;
   last_pn += (version_t)mon->rank;
-  
+
   // write
   MonitorDBStore::Transaction t;
   t.put(get_name(), "last_pn", last_pn);
