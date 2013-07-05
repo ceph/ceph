@@ -34,15 +34,15 @@ class MonitorThrasher:
                         the monitor (default: 10)
     thrash_delay        Number of seconds to wait in-between
                         test iterations (default: 0)
-    store-thrash        Thrash monitor store before killing the monitor
+    store_thrash        Thrash monitor store before killing the monitor
                         being thrashed (default: False)
-    store-thrash-probability  Probability of thrashing a monitor's store
+    store_thrash_probability  Probability of thrashing a monitor's store
                               (default: 50)
-    thrash-many         Thrash multiple monitors instead of just one. If
+    thrash_many         Thrash multiple monitors instead of just one. If
                         'maintain-quorum' is set to False, then we will
                         thrash up to as many monitors as there are
                         available. (default: False)
-    maintain-quorum     Always maintain quorum, taking care on how many
+    maintain_quorum     Always maintain quorum, taking care on how many
                         monitors we kill during the thrashing. If we
                         happen to only have one or two monitors configured,
                         if this option is set to True, then we won't run
@@ -61,11 +61,11 @@ class MonitorThrasher:
     - mon_thrash:
         revive_delay: 20
         thrash_delay: 1
-        store-thrash: true
-        store-thrash-probability: 40
+        store_thrash: true
+        store_thrash_probability: 40
         seed: 31337
-        maintain-quorum: true
-        thrash-many: true
+        maintain_quorum: true
+        thrash_many: true
     - ceph-fuse:
     - workunit:
         clients:
@@ -97,21 +97,21 @@ class MonitorThrasher:
     self.revive_delay = float(self.config.get('revive_delay', 10.0))
     self.thrash_delay = float(self.config.get('thrash_delay', 0.0))
 
-    self.thrash_many = self.config.get('thrash-many', False)
-    self.maintain_quorum = self.config.get('maintain-quorum', True)
+    self.thrash_many = self.config.get('thrash_many', False)
+    self.maintain_quorum = self.config.get('maintain_quorum', True)
 
     assert self.max_killable() > 0, \
         'Unable to kill at least one monitor with the current config.'
 
     """ Store thrashing """
-    self.store_thrash = self.config.get('store-thrash', False)
+    self.store_thrash = self.config.get('store_thrash', False)
     self.store_thrash_probability = int(
-        self.config.get('store-thrash-probability', 50))
+        self.config.get('store_thrash_probability', 50))
     if self.store_thrash:
       assert self.store_thrash_probability > 0, \
-          'store-thrash is set, probability must be > 0'
+          'store_thrash is set, probability must be > 0'
       assert self.maintain_quorum, \
-          'store-thrash = true must imply maintain-quorum = true'
+          'store_thrash = true must imply maintain_quorum = true'
 
     self.thread = gevent.spawn(self.do_thrash)
 
