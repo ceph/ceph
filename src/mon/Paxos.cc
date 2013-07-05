@@ -70,6 +70,7 @@ void Paxos::init()
 	   << " first_committed: " << first_committed << dendl;
 
   dout(10) << "init" << dendl;
+  assert(is_consistent());
 }
 
 // ---------------------------------
