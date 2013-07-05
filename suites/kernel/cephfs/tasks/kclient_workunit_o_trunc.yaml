@@ -5,5 +5,5 @@ tasks:
 - workunit:
     clients:
       all:
-        - misc/test_o_trunc.sh
+        - fs/test_o_trunc.sh
 
