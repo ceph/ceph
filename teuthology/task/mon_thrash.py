@@ -34,9 +34,9 @@ class MonitorThrasher:
                         the monitor (default: 10)
     thrash_delay        Number of seconds to wait in-between
                         test iterations (default: 0)
-    store_thrash        Thrash monitor store before killing the monitor
+    thrash_store        Thrash monitor store before killing the monitor
                         being thrashed (default: False)
-    store_thrash_probability  Probability of thrashing a monitor's store
+    thrash_store_probability  Probability of thrashing a monitor's store
                               (default: 50)
     thrash_many         Thrash multiple monitors instead of just one. If
                         'maintain-quorum' is set to False, then we will
