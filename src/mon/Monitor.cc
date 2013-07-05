@@ -519,10 +519,7 @@ void Monitor::init_paxos()
     paxos_service[i]->init();
   }
 
-  // update paxos
-  if (paxos->is_consistent()) {
-    refresh_from_paxos(NULL);
-  }
+  refresh_from_paxos(NULL);
 }
 
 void Monitor::refresh_from_paxos(bool *need_bootstrap)
