@@ -50,6 +50,7 @@ class MonitorThrasher:
                         quorum. Setting it to false however would allow the
                         task to run with as many as just one single monitor.
                         (default: True)
+    scrub               Scrub after each iteration (default: True)
 
     Note: if 'store-thrash' is set to True, then 'maintain-quorum' must also
           be set to True.
@@ -99,6 +100,8 @@ class MonitorThrasher:
 
     self.thrash_many = self.config.get('thrash_many', False)
     self.maintain_quorum = self.config.get('maintain_quorum', True)
+
+    self.scrub = self.config.get('scrub', True)
 
     assert self.max_killable() > 0, \
         'Unable to kill at least one monitor with the current config.'
@@ -203,6 +206,10 @@ class MonitorThrasher:
         s = self.manager.get_mon_status(m)
         assert s['state'] == 'leader' or s['state'] == 'peon'
         assert len(s['quorum']) == len(mons)
+
+      if self.scrub:
+        self.log('triggering scrub')
+        self.manager.raw_cluster_cmd('scrub')
 
       if self.thrash_delay > 0.0:
         self.log('waiting for {delay} secs before continuing thrashing'.format(
