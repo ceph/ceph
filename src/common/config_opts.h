@@ -199,6 +199,7 @@ OPTION(paxos_stash_full_interval, OPT_INT, 25)   // how often (in commits) to st
 OPTION(paxos_max_join_drift, OPT_INT, 10) // max paxos iterations before we must first sync the monitor stores
 OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long before proposing a map update
 OPTION(paxos_min_wait, OPT_DOUBLE, 0.05)  // min time to gather updates for after period of inactivity
+OPTION(paxos_min, OPT_INT, 500)       // minimum number of paxos states to keep around
 OPTION(paxos_trim_min, OPT_INT, 250)  // number of extra proposals tolerated before trimming
 OPTION(paxos_trim_max, OPT_INT, 500) // max number of extra proposals to trim at a time
 OPTION(paxos_trim_disabled_max_versions, OPT_INT, 108000) // maximum amount of versions we shall allow passing by without trimming
