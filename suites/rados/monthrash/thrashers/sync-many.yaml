@@ -5,8 +5,6 @@ overrides:
         paxos min: 10
         paxos trim min: 10
 tasks:
-- install:
-- ceph:
 - mon_thrash:
     revive_delay: 90
     thrash_delay: 1
