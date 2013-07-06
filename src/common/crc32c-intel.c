@@ -5,6 +5,11 @@
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+
+
+/* this probably isn't specific enough for x86_64?  fix me someday */
+#ifdef __LP64__
+
 /*
  *  * Based on a posting to lkml by Austin Zhang <austin.zhang@intel.com>
  *   * Further based on the fio crc32c-intel.c implementation by Jens Axboe.
@@ -16,10 +21,6 @@
  *         * Intel(R) 64 and IA-32 Architectures Software Developer's Manual
  *          * Volume 2A: Instruction Set Reference, A-M
  *           */
-
-int crc32c_intel_available = 0;
-
-/* TODO: Need some kind of ifdef here for arch... */
 
 #if BITS_PER_LONG == 64
 #define REX_PRE "0x48, "
@@ -89,12 +90,24 @@ static void do_cpuid(unsigned int *eax, unsigned int *ebx, unsigned int *ecx,
 
 int ceph_have_crc32c_intel(void)
 {
-	unsigned int eax, ebx, ecx, edx;
-
-	eax = 1;
-
+	/* i know how to check this on x86_64... */
+	unsigned int eax = 1, ebx, ecx, edx;
 	do_cpuid(&eax, &ebx, &ecx, &edx);
 	if ((ecx & (1 << 20)) != 0)
 		return 1;
 	return 0;
 }
+
+#else /* __LP64__ */
+
+uint32_t ceph_crc32c_le_intel(uint32_t crc, unsigned char const *data, unsigned length)
+{
+	return 0;  /* this shouldn't get called! */
+}
+
+int ceph_have_crc32c_intel(void)
+{
+	return 0;  	/* clearly not x86_64 */
+}
+
+#endif
