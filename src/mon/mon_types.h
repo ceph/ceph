@@ -16,6 +16,7 @@
 #define CEPH_MON_TYPES_H
 
 #include "include/utime.h"
+#include "common/Formatter.h"
 
 #define PAXOS_PGMAP      0  // before osd, for pg kick to behave
 #define PAXOS_MDSMAP     1
@@ -70,5 +71,48 @@ struct DataStats {
 };
 
 WRITE_CLASS_ENCODER(DataStats);
+
+struct ScrubResult {
+  map<string,uint32_t> prefix_crc;  ///< prefix -> crc
+  map<string,uint64_t> prefix_keys; ///< prefix -> key count
+
+  int cmp(const ScrubResult& other) {
+    return prefix_crc != other.prefix_crc || prefix_keys != other.prefix_keys;
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(prefix_crc, bl);
+    ::encode(prefix_keys, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& p) {
+    DECODE_START(1, p);
+    ::decode(prefix_crc, p);
+    ::decode(prefix_keys, p);
+    DECODE_FINISH(p);
+  }
+  void dump(Formatter *f) const {
+    f->open_object_section("crc");
+    for (map<string,uint32_t>::const_iterator p = prefix_crc.begin(); p != prefix_crc.end(); ++p)
+      f->dump_unsigned(p->first.c_str(), p->second);
+    f->close_section();
+    f->open_object_section("keys");
+    for (map<string,uint64_t>::const_iterator p = prefix_keys.begin(); p != prefix_keys.end(); ++p)
+      f->dump_unsigned(p->first.c_str(), p->second);
+    f->close_section();
+  }
+  static void generate_test_instances(list<ScrubResult*>& ls) {
+    ls.push_back(new ScrubResult);
+    ls.push_back(new ScrubResult);
+    ls.back()->prefix_crc["foo"] = 123;
+    ls.back()->prefix_keys["bar"] = 456;
+  }
+};
+WRITE_CLASS_ENCODER(ScrubResult);
+
+static inline ostream& operator<<(ostream& out, const ScrubResult& r) {
+  return out << "ScrubResult(keys " << r.prefix_keys << " crc " << r.prefix_crc << ")";
+}
 
 #endif
