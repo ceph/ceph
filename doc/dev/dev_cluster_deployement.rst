@@ -76,7 +76,10 @@ Options
 Environment variables
 =====================
 
-CEPH_NUM_{OSD,MDS,MON,RGW}
+{OSD,MDS,MON,RGW}
 
 Theses environment variables will contains the number of instances of the desired ceph process you want to start.
 
+Example: ::
+
+	OSD=3 MON=3 RGW=1 vstart.sh
