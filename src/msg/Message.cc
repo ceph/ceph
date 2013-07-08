@@ -155,6 +155,10 @@ using namespace std;
 
 #include "common/config.h"
 
+#include "messages/MOSDPGPush.h"
+#include "messages/MOSDPGPushReply.h"
+#include "messages/MOSDPGPull.h"
+
 #define DEBUGLVL  10    // debug level of output
 
 #define dout_subsys ceph_subsys_ms
@@ -444,6 +448,15 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     break;
   case MSG_OSD_PG_BACKFILL:
     m = new MOSDPGBackfill;
+    break;
+  case MSG_OSD_PG_PUSH:
+    m = new MOSDPGPush;
+    break;
+  case MSG_OSD_PG_PULL:
+    m = new MOSDPGPull;
+    break;
+  case MSG_OSD_PG_PUSH_REPLY:
+    m = new MOSDPGPushReply;
     break;
    // auth
   case CEPH_MSG_AUTH:
