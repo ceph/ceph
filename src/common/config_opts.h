@@ -184,6 +184,7 @@ OPTION(mon_sync_debug_provider, OPT_INT, -1) // monitor to be used as the sync p
 OPTION(mon_sync_debug_provider_fallback, OPT_INT, -1) // monitor to be used as fallback if sync provider fails
 OPTION(mon_osd_min_down_reporters, OPT_INT, 1)   // number of OSDs who need to report a down OSD for it to count
 OPTION(mon_osd_min_down_reports, OPT_INT, 3)     // number of times a down OSD must be reported for it to count
+OPTION(mon_osd_force_trim_to, OPT_INT, 0)   // force mon to trim maps to this point, regardless of min_last_epoch_clean (dangerous, use with care)
 
 // dump transactions
 OPTION(mon_debug_dump_transactions, OPT_BOOL, false)
