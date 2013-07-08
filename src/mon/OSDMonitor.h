@@ -155,6 +155,23 @@ private:
   virtual void encode_full(MonitorDBStore::Transaction *t);
   void on_active();
 
+  /**
+   * do not let paxosservice periodically stash full osdmaps, or we will break our
+   * locally-managed full maps.  (update_from_paxos loads the latest and writes them
+   * out going forward from there, but if we just synced that may mean we skip some.)
+   */
+  virtual bool should_stash_full() {
+    return false;
+  }
+
+  /**
+   * hook into trim to include the oldest full map in the trim transaction
+   *
+   * This ensures that anyone post-sync will have enough to rebuild their
+   * full osdmaps.
+   */
+  void encode_trim_extra(MonitorDBStore::Transaction *tx, version_t first);
+
   void update_msgr_features();
 
   void share_map_with_random_osd();
