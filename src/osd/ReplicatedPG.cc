@@ -5388,7 +5388,7 @@ int ReplicatedPG::send_pull(int prio, int peer,
 }
 
 void ReplicatedPG::submit_push_data(
-  const ObjectRecoveryInfo &recovery_info,
+  ObjectRecoveryInfo &recovery_info,
   bool first,
   bool complete,
   const interval_set<uint64_t> &intervals_included,
