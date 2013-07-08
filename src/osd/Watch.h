@@ -151,7 +151,7 @@ class Watch {
 
   OSDService *osd;
   boost::intrusive_ptr<ReplicatedPG> pg;
-  ObjectContext *obc;
+  std::tr1::shared_ptr<ObjectContext> obc;
 
   std::map<uint64_t, NotifyRef> in_progress_notifies;
 
@@ -165,7 +165,7 @@ class Watch {
 
   Watch(
     ReplicatedPG *pg, OSDService *osd,
-    ObjectContext *obc, uint32_t timeout,
+    std::tr1::shared_ptr<ObjectContext> obc, uint32_t timeout,
     uint64_t cookie, entity_name_t entity,
     entity_addr_t addr);
 
@@ -187,7 +187,7 @@ public:
   string gen_dbg_prefix();
   static WatchRef makeWatchRef(
     ReplicatedPG *pg, OSDService *osd,
-    ObjectContext *obc, uint32_t timeout, uint64_t cookie, entity_name_t entity, entity_addr_t addr);
+    std::tr1::shared_ptr<ObjectContext> obc, uint32_t timeout, uint64_t cookie, entity_name_t entity, entity_addr_t addr);
   void set_self(WatchRef _self) {
     self = _self;
   }
@@ -195,8 +195,8 @@ public:
   /// Does not grant a ref count!
   boost::intrusive_ptr<ReplicatedPG> get_pg() { return pg; }
 
-  /// Grants a ref count!
-  ObjectContext *get_obc();
+  std::tr1::shared_ptr<ObjectContext> get_obc() { return obc; }
+
   uint64_t get_cookie() const { return cookie; }
   entity_name_t get_entity() const { return entity; }
   entity_addr_t get_peer_addr() const { return addr; }
