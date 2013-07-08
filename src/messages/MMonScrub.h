@@ -3,7 +3,7 @@
 /*
 * Ceph - scalable distributed file system
 *
-* Copyright (C) 2012 Inktank, Inc.
+* Copyright (C) 2013 Inktank, Inc.
 *
 * This is free software; you can redistribute it and/or
 * modify it under the terms of the GNU Lesser General Public
@@ -22,12 +22,12 @@ class MMonScrub : public Message
   static const int COMPAT_VERSION = 1;
 
 public:
-  enum {
-    OP_SCRUB = 1,         // l->p: scrub (a range of) keys
-    OP_RESULT = 2,        // p->l: result of a scrub
-  };
+  typedef enum {
+    OP_SCRUB = 1,         // leader->peon: scrub (a range of) keys
+    OP_RESULT = 2,        // peon->leader: result of a scrub
+  } op_type_t;
 
-  static const char *get_opname(int op) {
+  static const char *get_opname(op_type_t op) {
     switch (op) {
     case OP_SCRUB: return "scrub";
     case OP_RESULT: return "result";
@@ -43,7 +43,7 @@ public:
     : Message(MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION)
   { }
 
-  MMonScrub(uint32_t op, version_t v)
+  MMonScrub(op_type_t op, version_t v)
     : Message(MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       op(op), version(v)
   { }
@@ -51,7 +51,7 @@ public:
   const char *get_type_name() const { return "mon_scrub"; }
 
   void print(ostream& out) const {
-    out << "mon_scrub(" << get_opname(op);
+    out << "mon_scrub(" << get_opname((op_type_t)op);
     out << " v " << version;
     if (op == OP_RESULT)
       out << " " << result;
