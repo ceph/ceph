@@ -76,7 +76,7 @@ struct ScrubResult {
   map<string,uint32_t> prefix_crc;  ///< prefix -> crc
   map<string,uint64_t> prefix_keys; ///< prefix -> key count
 
-  int cmp(const ScrubResult& other) {
+  bool operator!=(const ScrubResult& other) {
     return prefix_crc != other.prefix_crc || prefix_keys != other.prefix_keys;
   }
 

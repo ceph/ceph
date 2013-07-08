@@ -4091,7 +4091,7 @@ void Monitor::scrub_finish()
        ++p) {
     if (p->first == rank)
       continue;
-    if (p->second.cmp(mine)) {
+    if (p->second != mine) {
       ++errors;
       clog.error() << "scrub mismatch" << "\n";
       clog.error() << " mon." << rank << " " << mine << "\n";
