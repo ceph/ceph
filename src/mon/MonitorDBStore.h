@@ -389,6 +389,11 @@ class MonitorDBStore
     }
 
     virtual pair<string,string> get_next_key() {
+      // this method is only used by scrub on the whole store
+      // iterator.  also, the single prefix iterator has been dropped
+      // in later code.  we leave this here only for the benefit of
+      // backporting.
+      assert(0 == "this should not get called");
       return make_pair(string(), string());
     }
 
