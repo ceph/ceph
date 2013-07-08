@@ -2303,7 +2303,7 @@ void PG::publish_stats_to_osd()
   pg_stats_publish_lock.Lock();
   if (is_primary()) {
     // update our stat summary
-    info.stats.reported.inc(info.history.same_primary_since);
+    info.stats.reported.inc(get_osdmap()->get_epoch());
     info.stats.version = info.last_update;
     info.stats.created = info.history.epoch_created;
     info.stats.last_scrub = info.history.last_scrub;
@@ -6665,6 +6665,14 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
       pg->state_set(PG_STATE_DEGRADED);
     pg->publish_stats_to_osd(); // degraded may have changed
   }
+
+  // if we haven't reported our PG stats in a long time, do so now.
+  if (pg->info.stats.reported.epoch + g_conf->osd_pg_stat_report_interval_max < advmap.osdmap->get_epoch()) {
+    dout(20) << "reporting stats to osd after " << (advmap.osdmap->get_epoch() - pg->info.stats.reported.epoch)
+	     << " epochs" << dendl;
+    pg->publish_stats_to_osd();
+  }
+
   return forward_event();
 }
     
