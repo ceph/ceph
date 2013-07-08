@@ -461,12 +461,6 @@ public:
     return c;
   }
 
-  void inc(epoch_t e) {
-    if (epoch < e)
-      epoch = e;
-    version++;
-  }
-
   string get_key_name() const;
 
   void encode(bufferlist &bl) const {
@@ -905,7 +899,8 @@ WRITE_CLASS_ENCODER(object_stat_collection_t)
  */
 struct pg_stat_t {
   eversion_t version;
-  eversion_t reported;
+  version_t reported_seq;  // sequence number
+  epoch_t reported_epoch;  // epoch of this report
   __u32 state;
   utime_t last_fresh;   // last reported
   utime_t last_change;  // new state != previous state
@@ -939,7 +934,9 @@ struct pg_stat_t {
   utime_t last_became_active;
 
   pg_stat_t()
-    : state(0),
+    : reported_seq(0),
+      reported_epoch(0),
+      state(0),
       created(0), last_epoch_clean(0),
       parent_split_bits(0),
       stats_invalid(false),
@@ -951,7 +948,7 @@ struct pg_stat_t {
     if (state & PG_STATE_CLEAN) {
       // we are clean as of this report, and should thus take the
       // reported epoch
-      return reported.epoch;
+      return reported_epoch;
     } else {
       return last_epoch_clean;
     }
