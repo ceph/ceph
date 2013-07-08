@@ -14,8 +14,6 @@ struct Fh {
   int       mds;        // have to talk to mds we opened with (for now)
   int       mode;       // the mode i opened the file with
 
-  bool is_lazy() { return mode & O_LAZY; }
-
   int flags;
   bool pos_locked;           // pos is currently in use
   list<Cond*> pos_waiters;   // waiters for pos
