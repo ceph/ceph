@@ -150,6 +150,8 @@ void hobject_t::decode(json_spirit::Value& v)
       hash = p.value_.get_int();
     else if (p.name_ == "max")
       max = p.value_.get_int();
+    else if (p.name_ == "pool")
+      pool = p.value_.get_int();
   }
 }
 
@@ -160,6 +162,7 @@ void hobject_t::dump(Formatter *f) const
   f->dump_int("snapid", snap);
   f->dump_int("hash", hash);
   f->dump_int("max", (int)max);
+  f->dump_int("pool", pool);
 }
 
 void hobject_t::generate_test_instances(list<hobject_t*>& o)
