@@ -3655,9 +3655,11 @@ void OSD::send_pg_stats(const utime_t &now)
       pg->pg_stats_publish_lock.Lock();
       if (pg->pg_stats_publish_valid) {
 	m->pg_stat[pg->info.pgid] = pg->pg_stats_publish;
-	dout(25) << " sending " << pg->info.pgid << " " << pg->pg_stats_publish.reported << dendl;
+	dout(25) << " sending " << pg->info.pgid << " " << pg->pg_stats_publish.reported_epoch << ":"
+		 << pg->pg_stats_publish.reported_seq << dendl;
       } else {
-	dout(25) << " NOT sending " << pg->info.pgid << " " << pg->pg_stats_publish.reported << ", not valid" << dendl;
+	dout(25) << " NOT sending " << pg->info.pgid << " " << pg->pg_stats_publish.reported_epoch << ":"
+		 << pg->pg_stats_publish.reported_seq << ", not valid" << dendl;
       }
       pg->pg_stats_publish_lock.Unlock();
     }
@@ -3697,19 +3699,22 @@ void OSD::handle_pg_stats_ack(MPGStatsAck *ack)
     ++p;
 
     if (ack->pg_stat.count(pg->info.pgid)) {
-      eversion_t acked = ack->pg_stat[pg->info.pgid];
+      pair<version_t,epoch_t> acked = ack->pg_stat[pg->info.pgid];
       pg->pg_stats_publish_lock.Lock();
-      if (acked == pg->pg_stats_publish.reported) {
-	dout(25) << " ack on " << pg->info.pgid << " " << pg->pg_stats_publish.reported << dendl;
+      if (acked.first == pg->pg_stats_publish.reported_seq &&
+	  acked.second == pg->pg_stats_publish.reported_epoch) {
+	dout(25) << " ack on " << pg->info.pgid << " " << pg->pg_stats_publish.reported_epoch
+		 << ":" << pg->pg_stats_publish.reported_seq << dendl;
 	pg->stat_queue_item.remove_myself();
 	pg->put("pg_stat_queue");
       } else {
-	dout(25) << " still pending " << pg->info.pgid << " " << pg->pg_stats_publish.reported
-		 << " > acked " << acked << dendl;
+	dout(25) << " still pending " << pg->info.pgid << " " << pg->pg_stats_publish.reported_epoch
+		 << ":" << pg->pg_stats_publish.reported_seq << " > acked " << acked << dendl;
       }
       pg->pg_stats_publish_lock.Unlock();
     } else {
-      dout(30) << " still pending " << pg->info.pgid << " " << pg->pg_stats_publish.reported << dendl;
+      dout(30) << " still pending " << pg->info.pgid << " " << pg->pg_stats_publish.reported_epoch
+	       << ":" << pg->pg_stats_publish.reported_seq << dendl;
     }
   }
   
