@@ -417,12 +417,20 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
   rgw_bucket bucket = op_state.get_bucket();
 
   string uid_str(user_info.user_id);
-  bufferlist aclbl;
   rgw_obj obj(bucket, no_oid);
   RGWObjVersionTracker objv_tracker;
 
-  int r = store->get_attr(NULL, obj, RGW_ATTR_ACL, aclbl, &objv_tracker);
-  if (r >= 0) {
+  map<string, bufferlist> attrs;
+  RGWBucketInfo bucket_info;
+
+  int r = store->get_bucket_info(NULL, bucket.name, bucket_info, NULL, &attrs);
+  if (r < 0) {
+    return r;
+  }
+
+  map<string, bufferlist>::iterator aiter = attrs.find(RGW_ATTR_ACL);
+  if (aiter != attrs.end()) {
+    bufferlist aclbl = aiter->second;
     RGWAccessControlPolicy policy;
     ACLOwner owner;
     try {
