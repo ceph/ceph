@@ -33,6 +33,7 @@
 #include "common/config.h"
 
 // monitor internal
+#define MSG_MON_SCRUB              64
 #define MSG_MON_ELECTION           65
 #define MSG_MON_PAXOS              66
 #define MSG_MON_PROBE              67
