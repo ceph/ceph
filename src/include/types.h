@@ -271,8 +271,6 @@ typedef uint64_t tid_t;         // transaction id
 typedef uint64_t version_t;
 typedef __u32 epoch_t;       // map epoch  (32bits -> 13 epochs/second for 10 years)
 
-#define O_LAZY 01000000
-
 // --------------------------------------
 // identify individual mount clients by 64bit value
 
