@@ -30,11 +30,11 @@ function clean_up {
 	sudo rm -f $TMP_FILES
 }
 
+[ -d /sys/bus/rbd ] || sudo modprobe rbd
+
 clean_up
 
 trap clean_up INT TERM EXIT
-
-[ -d /sys/bus/rbd ] || sudo modprobe rbd
 
 # allow ubuntu user to map/unmap rbd devices
 sudo chown ubuntu /sys/bus/rbd/add /sys/bus/rbd/remove
