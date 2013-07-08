@@ -162,6 +162,7 @@ COMMAND("auth del " \
  * Monitor commands (Monitor.cc)
  */
 COMMAND("compact", "cause compaction of monitor's leveldb storage")
+COMMAND("scrub", "scrub the monitor stores")
 COMMAND("fsid", "show cluster FSID/UUID")
 COMMAND("log name=logtext,type=CephString,n=N", \
 	"log supplied text to the monitor log")

@@ -1937,6 +1937,7 @@ noinst_HEADERS = \
         messages/MMonMap.h\
         messages/MMonPaxos.h\
         messages/MMonProbe.h\
+        messages/MMonScrub.h \
         messages/MMonSubscribe.h\
         messages/MMonSubscribeAck.h\
         messages/MMonSync.h \
