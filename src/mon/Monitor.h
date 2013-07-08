@@ -92,6 +92,7 @@ class AdminSocketHook;
 class MMonGetMap;
 class MMonGetVersion;
 class MMonSync;
+class MMonScrub;
 class MMonProbe;
 class MMonSubscribe;
 class MAuthRotating;
@@ -196,6 +197,24 @@ private:
   uint64_t quorum_features;  ///< intersection of quorum member feature bits
 
   set<string> outside_quorum;
+
+  /**
+   * @defgroup scrub
+   * @{
+   */
+  version_t scrub_version;            ///< paxos version we are scrubbing
+  map<int,ScrubResult> scrub_result;  ///< results so far
+
+  /**
+   * trigger a cross-mon scrub
+   *
+   * Verify all mons are storing identical content
+   */
+  int scrub();
+  void handle_scrub(MMonScrub *m);
+  void _scrub(ScrubResult *r);
+  void scrub_finish();
+  void scrub_reset();
 
   /**
    * @defgroup Synchronization
@@ -1283,9 +1302,7 @@ public:
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);
 
-  /**
-   * Handle Synchronization-related messages.
-   */
+
   void handle_probe(MMonProbe *m);
   /**
    * Handle a Probe Operation, replying with our name, quorum and known versions.

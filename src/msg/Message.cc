@@ -40,6 +40,7 @@ using namespace std;
 #include "messages/MMonJoin.h"
 #include "messages/MMonElection.h"
 #include "messages/MMonSync.h"
+#include "messages/MMonScrub.h"
 
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"
@@ -315,6 +316,9 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     break;
   case MSG_MON_SYNC:
     m = new MMonSync;
+    break;
+  case MSG_MON_SCRUB:
+    m = new MMonScrub;
     break;
 
   case MSG_LOG:
