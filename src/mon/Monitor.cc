@@ -4032,6 +4032,8 @@ void Monitor::handle_scrub(MMonScrub *m)
   switch (m->op) {
   case MMonScrub::OP_SCRUB:
     {
+      if (!is_peon())
+	break;
       if (m->version != paxos->get_version())
 	break;
       MMonScrub *reply = new MMonScrub(MMonScrub::OP_RESULT, m->version);
@@ -4042,13 +4044,12 @@ void Monitor::handle_scrub(MMonScrub *m)
     
   case MMonScrub::OP_RESULT:
     {
-      if (rank != 0)
+      if (!is_leader())
 	break;
       if (m->version != scrub_version)
 	break;
       int from = m->get_source().num();
-      if (scrub_result.count(from))
-	break;
+      assert(scrub_result.count(from) == 0);
       scrub_result[from] = m->result;
 
       if (scrub_result.size() == quorum.size())
