@@ -19,7 +19,7 @@
 
 class MPGStatsAck : public Message {
 public:
-  map<pg_t,eversion_t> pg_stat;
+  map<pg_t,pair<version_t,epoch_t> > pg_stat;
   
   MPGStatsAck() : Message(MSG_PGSTATSACK) {}
 

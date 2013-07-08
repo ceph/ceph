@@ -582,7 +582,7 @@ void PGMap::dump_pg_stats_plain(ostream& ss,
        << "\t" << pg_state_string(st.state)
        << "\t" << st.last_change
        << "\t" << st.version
-       << "\t" << st.reported
+       << "\t" << st.reported_epoch << ":" << st.reported_seq
        << "\t" << st.up
        << "\t" << st.acting
        << "\t" << st.last_scrub << "\t" << st.last_scrub_stamp
