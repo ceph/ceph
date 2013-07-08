@@ -528,6 +528,7 @@ public:
    *
    *  - the client hasn't seen the future relative to this PaxosService
    *  - this service isn't proposing.
+   *  - we have committed our initial state (last_committed > 0)
    *
    * @param ver The version we want to check if is readable
    * @returns true if it is readable; false otherwise
@@ -535,7 +536,8 @@ public:
   bool is_readable(version_t ver = 0) {
     if (ver > get_last_committed() ||
 	is_proposing() ||
-	!paxos->is_readable(0))
+	!paxos->is_readable(0) ||
+	get_last_committed() == 0)
       return false;
     return true;
   }
@@ -607,7 +609,8 @@ public:
      * happens to be readable at that specific point in time.
      */
     if (is_proposing() ||
-	ver > get_last_committed())
+	ver > get_last_committed() ||
+	get_last_committed() == 0)
       wait_for_finished_proposal(c);
     else
       paxos->wait_for_readable(c);
