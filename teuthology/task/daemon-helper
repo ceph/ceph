@@ -18,6 +18,7 @@ import fcntl
 import os
 import select
 import signal
+import struct
 import subprocess
 import sys
 
@@ -56,6 +57,9 @@ while True:
             saw_eof = True
             proc.send_signal(end_signal)
             break
+        else:
+            sig, = struct.unpack('!b', data)
+            proc.send_signal(sig)
 
     if proc.poll() is not None:
         # child exited

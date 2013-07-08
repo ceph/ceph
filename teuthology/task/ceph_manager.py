@@ -872,6 +872,9 @@ class CephManager:
 
     ## monitors
 
+    def signal_mon(self, mon, sig):
+        self.ctx.daemons.get_daemon('mon', mon).signal(sig)
+
     def kill_mon(self, mon):
         if self.config.get('powercycle'):
             (remote,) = self.ctx.cluster.only('mon.{m}'.format(m=mon)).remotes.iterkeys()

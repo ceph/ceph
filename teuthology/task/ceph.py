@@ -4,6 +4,7 @@ import argparse
 import contextlib
 import logging
 import os
+import struct
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -63,6 +64,9 @@ class DaemonState(object):
         self.proc = self.remote.run(*cmd_args, **cmd_kwargs)
         self.log.info('Started')
 
+    def signal(self, sig):
+        self.proc.stdin.write(struct.pack('!b', sig))
+        self.log.info('Sent signal %d', sig)
 
     def running(self):
         return self.proc is not None
