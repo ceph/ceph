@@ -394,6 +394,14 @@ public:
   }
 };
 
+int usage()
+{
+  cerr << "usage: radosgw [options...]" << std::endl;
+  cerr << "options:\n";
+  generic_server_usage();
+  return 0;
+}
+
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
  */
@@ -420,6 +428,13 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
 	      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+
+  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
+      usage();
+      return 0;
+    }
+  }
 
   if (g_conf->daemonize) {
     if (g_conf->rgw_socket_path.empty() and g_conf->rgw_port.empty()) {
