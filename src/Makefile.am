@@ -28,7 +28,7 @@ bin_PROGRAMS =
 bin_DEBUGPROGRAMS =
 sbin_PROGRAMS =
 # like sbin_SCRIPTS but can be used to install to e.g. /usr/sbin
-ceph_sbindir = $(prefix)$(sbindir)
+ceph_sbindir = $(sbindir)
 ceph_sbin_SCRIPTS = \
 	ceph-disk \
 	ceph-disk-prepare \
