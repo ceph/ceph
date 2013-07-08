@@ -213,7 +213,7 @@ private:
    *
    * Verify all mons are storing identical content
    */
-  void scrub();
+  int scrub();
   void handle_scrub(MMonScrub *m);
   void _scrub(ScrubResult *r);
   void scrub_finish();

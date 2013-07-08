@@ -2666,8 +2666,8 @@ void Monitor::handle_command(MMonCommand *m)
 
   if (prefix == "scrub") {
     if (is_leader()) {
-      scrub();
-      reply_command(m, 0, "", rdata, 0);
+      int r = scrub();
+      reply_command(m, r, "", rdata, 0);
     } else if (is_peon()) {
       forward_request_leader(m);
     } else {
@@ -3995,14 +3995,14 @@ void Monitor::handle_mon_get_map(MMonGetMap *m)
 // ----------------------------------------------
 // scrub
 
-void Monitor::scrub()
+int Monitor::scrub()
 {
   dout(10) << __func__ << dendl;
   assert(is_leader());
 
   if ((get_quorum_features() & CEPH_FEATURE_MON_SCRUB) == 0) {
     clog.warn() << "scrub not supported by entire quorum\n";
-    return;
+    return -EAGAIN;
   }
 
   scrub_result.clear();
@@ -4022,6 +4022,8 @@ void Monitor::scrub()
 
   if (scrub_result.size() == quorum.size())
     scrub_finish();
+
+  return 0;
 }
 
 void Monitor::handle_scrub(MMonScrub *m)
