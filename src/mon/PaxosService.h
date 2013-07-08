@@ -641,21 +641,26 @@ public:
    */
   void trim(MonitorDBStore::Transaction *t, version_t from, version_t to);
   /**
-   * Trim our log. This implies getting rid of versions on the k/v store.
-   * Services implementing us don't have to implement this function if they
-   * don't want to, but we won't implement it for them either.
+   * Trim our log
    *
-   * This function had to be inheritted from the Paxos, since the existing
-   * services made use of it. This function should be tuned for each service's
-   * needs. We have it in this interface to make sure its usage and purpose is
-   * well understood by the underlying services.
+   * Will call encode_trim_extra(), allowing services to add
+   * additional bits to the trim transaction.
    *
    * @param first The version that should become the first one in the log.
    * @param force Optional. Each service may use it as it sees fit, but the
    *		  expected behavior is that, when 'true', we will remove all
    *		  the log versions even if we don't have a full map in store.
    */
-  virtual void encode_trim(MonitorDBStore::Transaction *t);
+  void encode_trim(MonitorDBStore::Transaction *t);
+
+  /**
+   * encode service-specific extra bits into trim transaction
+   *
+   * @param tx transaction
+   * @param first new first_committed value
+   */
+  virtual void encode_trim_extra(MonitorDBStore::Transaction *tx, version_t first) {}
+
   /**
    *
    */
