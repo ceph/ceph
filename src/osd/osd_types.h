@@ -945,6 +945,16 @@ struct pg_stat_t {
       mapping_epoch(0)
   { }
 
+  epoch_t get_effective_last_epoch_clean() const {
+    if (state & PG_STATE_CLEAN) {
+      // we are clean as of this report, and should thus take the
+      // reported epoch
+      return reported.epoch;
+    } else {
+      return last_epoch_clean;
+    }
+  }
+
   void add(const pg_stat_t& o) {
     stats.add(o.stats);
     log_size += o.log_size;
