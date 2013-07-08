@@ -117,19 +117,13 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 	   << ", my e " << osdmap.epoch << dendl;
 
 
-  /* We no longer have stashed versions. Maybe we can do this by reading
-   * from a full map? Maybe we should keep the last full map version on a key
-   * as well (say, osdmap_full_version), and consider that the last_committed
-   * always contains incrementals, and maybe a full version if
-   * osdmap_full_version == last_committed
-   *
-   * This ^^^^ sounds about right. Do it. We should then change the
-   * 'get_stashed_version()' to 'get_full_version(version_t ver)', which should
-   * then be read iif
-   *	(osdmap.epoch != osd_full_version)
-   *	&& (osdmap.epoch <= osdmap_full_version)
+  /*
+   * We will possibly have a stashed latest that *we* wrote, and we will
+   * always be sure to have the oldest full map in the first..last range
+   * due to encode_trim_extra(), which includes the oldest full map in the trim
+   * transaction.  Start with whichever is newer.
    */
-  version_t latest_full = get_version_latest_full();
+  version_t latest_full = MAX(get_version_latest_full(), get_first_committed());
   if ((latest_full > 0) && (latest_full > osdmap.epoch)) {
     bufferlist latest_bl;
     get_version_full(latest_full, latest_bl);
@@ -555,6 +549,14 @@ void OSDMonitor::update_trim()
       if (get_trim_to() < floor)
 	set_trim_to(floor);
   }
+}
+
+void OSDMonitor::encode_trim_extra(MonitorDBStore::Transaction *tx, version_t first)
+{
+  dout(10) << __func__ << " including full map for e " << first << dendl;
+  bufferlist bl;
+  get_version_full(first, bl);
+  put_version_full(tx, first, bl);
 }
 
 bool OSDMonitor::service_should_trim()

@@ -374,6 +374,9 @@ void PaxosService::encode_trim(MonitorDBStore::Transaction *t)
   trim(t, first_committed, trim_to_max);
   put_first_committed(t, trim_to_max);
 
+  // let the service add any extra stuff
+  encode_trim_extra(t, trim_to_max);
+
   if (trim_to_max == trim_to)
     set_trim_to(0);
 }
