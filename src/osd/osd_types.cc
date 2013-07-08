@@ -1122,7 +1122,7 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_stream("log_start") << log_start;
   f->dump_stream("ondisk_log_start") << ondisk_log_start;
   f->dump_unsigned("created", created);
-  f->dump_unsigned("last_epoch_clean", created);
+  f->dump_unsigned("last_epoch_clean", last_epoch_clean);
   f->dump_stream("parent") << parent;
   f->dump_unsigned("parent_split_bits", parent_split_bits);
   f->dump_stream("last_scrub") << last_scrub;
