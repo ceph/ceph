@@ -20,9 +20,10 @@ enum RGWPendingState {
 };
 
 enum RGWModifyOp {
-  CLS_RGW_OP_ADD    = 0,
-  CLS_RGW_OP_DEL    = 1,
-  CLS_RGW_OP_CANCEL = 2,
+  CLS_RGW_OP_ADD     = 0,
+  CLS_RGW_OP_DEL     = 1,
+  CLS_RGW_OP_CANCEL  = 2,
+  CLS_RGW_OP_UNKNOWN = 3,
 };
 
 struct rgw_bucket_pending_info {
@@ -61,7 +62,6 @@ struct rgw_bucket_dir_entry_meta {
   string etag;
   string owner;
   string owner_display_name;
-  string tag;
   string content_type;
 
   rgw_bucket_dir_entry_meta() :
@@ -95,36 +95,148 @@ struct rgw_bucket_dir_entry_meta {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_entry_meta)
 
+template<class T>
+void encode_packed_val(T val, bufferlist& bl)
+{
+  if ((uint64_t)val < 0x80) {
+    ::encode((uint8_t)val, bl);
+  } else {
+    unsigned char c = 0x80;
+
+    if ((uint64_t)val < 0x100) {
+      c |= 1;
+      ::encode(c, bl);
+      ::encode((uint8_t)val, bl);
+    } else if ((uint64_t)val <= 0x10000) {
+      c |= 2;
+      ::encode(c, bl);
+      ::encode((uint16_t)val, bl);
+    } else if ((uint64_t)val <= 0x1000000) {
+      c |= 4;
+      ::encode(c, bl);
+      ::encode((uint32_t)val, bl);
+    } else {
+      c |= 8;
+      ::encode(c, bl);
+      ::encode((uint64_t)val, bl);
+    }
+  }
+}
+
+template<class T>
+void decode_packed_val(T& val, bufferlist::iterator& bl)
+{
+  unsigned char c;
+  ::decode(c, bl);
+  if (c < 0x80) {
+    val = c;
+    return;
+  }
+
+  c &= ~0x80;
+
+  switch (c) {
+    case 1:
+      {
+        uint8_t v;
+        ::decode(v, bl);
+        val = v;
+      }
+      break;
+    case 2:
+      {
+        uint16_t v;
+        ::decode(v, bl);
+        val = v;
+      }
+      break;
+    case 4:
+      {
+        uint32_t v;
+        ::decode(v, bl);
+        val = v;
+      }
+      break;
+    case 8:
+      {
+        uint64_t v;
+        ::decode(v, bl);
+        val = v;
+      }
+      break;
+    default:
+      throw buffer::error();
+  }
+}
+
+struct rgw_bucket_entry_ver {
+  int64_t pool;
+  uint64_t epoch;
+
+  rgw_bucket_entry_ver() : pool(-1), epoch(0) {}
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode_packed_val(pool, bl);
+    ::encode_packed_val(epoch, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode_packed_val(pool, bl);
+    ::decode_packed_val(epoch, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_bucket_entry_ver*>& o);
+};
+WRITE_CLASS_ENCODER(rgw_bucket_entry_ver)
+
+
 struct rgw_bucket_dir_entry {
   std::string name;
-  uint64_t epoch;
+  rgw_bucket_entry_ver ver;
   std::string locator;
   bool exists;
   struct rgw_bucket_dir_entry_meta meta;
   map<string, struct rgw_bucket_pending_info> pending_map;
+  uint64_t index_ver;
+  string tag;
 
   rgw_bucket_dir_entry() :
-    epoch(0), exists(false) {}
+    exists(false), index_ver(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(3, 3, bl);
+    ENCODE_START(5, 3, bl);
     ::encode(name, bl);
-    ::encode(epoch, bl);
+    ::encode(ver.epoch, bl);
     ::encode(exists, bl);
     ::encode(meta, bl);
     ::encode(pending_map, bl);
     ::encode(locator, bl);
+    ::encode(ver, bl);
+    ::encode_packed_val(index_ver, bl);
+    ::encode(tag, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
     ::decode(name, bl);
-    ::decode(epoch, bl);
+    ::decode(ver.epoch, bl);
     ::decode(exists, bl);
     ::decode(meta, bl);
     ::decode(pending_map, bl);
     if (struct_v >= 2) {
       ::decode(locator, bl);
+    }
+    if (struct_v >= 4) {
+      ::decode(ver, bl);
+    } else {
+      ver.pool = -1;
+    }
+    if (struct_v >= 5) {
+      ::decode_packed_val(index_ver, bl);
+      ::decode(tag, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -132,6 +244,52 @@ struct rgw_bucket_dir_entry {
   static void generate_test_instances(list<rgw_bucket_dir_entry*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_entry)
+
+struct rgw_bi_log_entry {
+  string id;
+  string object;
+  utime_t timestamp;
+  rgw_bucket_entry_ver ver;
+  RGWModifyOp op;
+  RGWPendingState state;
+  uint64_t index_ver;
+  string tag;
+
+  rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), index_ver(0) {}
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(id, bl);
+    ::encode(object, bl);
+    ::encode(timestamp, bl);
+    ::encode(ver, bl);
+    ::encode(tag, bl);
+    uint8_t c = (uint8_t)op;
+    ::encode(c, bl);
+    c = (uint8_t)state;
+    ::encode(c, bl);
+    encode_packed_val(index_ver, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(id, bl);
+    ::decode(object, bl);
+    ::decode(timestamp, bl);
+    ::decode(ver, bl);
+    ::decode(tag, bl);
+    uint8_t c;
+    ::decode(c, bl);
+    op = (RGWModifyOp)c;
+    ::decode(c, bl);
+    state = (RGWPendingState)c;
+    decode_packed_val(index_ver, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_bi_log_entry*>& o);
+};
+WRITE_CLASS_ENCODER(rgw_bi_log_entry)
 
 struct rgw_bucket_category_stats {
   uint64_t total_size;
@@ -162,13 +320,19 @@ WRITE_CLASS_ENCODER(rgw_bucket_category_stats)
 struct rgw_bucket_dir_header {
   map<uint8_t, rgw_bucket_category_stats> stats;
   uint64_t tag_timeout;
+  uint64_t ver;
+  uint64_t master_ver;
+  string max_marker;
 
-  rgw_bucket_dir_header() : tag_timeout(0) {}
+  rgw_bucket_dir_header() : tag_timeout(0), ver(0), master_ver(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(3, 2, bl);
+    ENCODE_START(5, 2, bl);
     ::encode(stats, bl);
     ::encode(tag_timeout, bl);
+    ::encode(ver, bl);
+    ::encode(master_ver, bl);
+    ::encode(max_marker, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -178,6 +342,15 @@ struct rgw_bucket_dir_header {
       ::decode(tag_timeout, bl);
     } else {
       tag_timeout = 0;
+    }
+    if (struct_v >= 4) {
+      ::decode(ver, bl);
+      ::decode(master_ver, bl);
+    } else {
+      ver = 0;
+    }
+    if (struct_v >= 5) {
+      ::decode(max_marker, bl);
     }
     DECODE_FINISH(bl);
   }

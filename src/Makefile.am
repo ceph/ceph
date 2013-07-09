@@ -147,11 +147,14 @@ bin_PROGRAMS += monmaptool crushtool osdmaptool
 rgw_dencoder_src = rgw/rgw_dencoder.cc \
                    rgw/rgw_acl.cc \
                    rgw/rgw_common.cc \
+                   rgw/rgw_env.cc \
                    rgw/rgw_json_enc.cc
 
 ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc ${rgw_dencoder_src} perfglue/disabled_heap_profiler.cc
 ceph_dencoder_CXXFLAGS = ${AM_CXXFLAGS}
-ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libcls_lock_client.a libcls_rgw_client.a libosd.a libmds.a libosdc.la $(LIBOS_LDA) libmon.a
+ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libcls_lock_client.a \
+			  libcls_rgw_client.a libcls_replica_log_client.a \
+			  libosd.a libmds.a libosdc.la $(LIBOS_LDA) libmon.a
 bin_PROGRAMS += ceph-dencoder
 
 mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c include/addr_parsing.c
@@ -379,6 +382,9 @@ librgw_a_SOURCES =  \
 	rgw/rgw_bucket.cc\
         rgw/rgw_tools.cc \
 	rgw/rgw_rados.cc \
+        rgw/rgw_http_client.cc \
+        rgw/rgw_rest_client.cc \
+	rgw/rgw_rest_conn.cc \
 	rgw/rgw_op.cc \
 	rgw/rgw_common.cc \
 	rgw/rgw_cache.cc \
@@ -390,15 +396,19 @@ librgw_a_SOURCES =  \
 	rgw/rgw_multi_del.cc \
 	rgw/rgw_env.cc \
 	rgw/rgw_cors.cc \
-	rgw/rgw_cors_s3.cc
+	rgw/rgw_cors_s3.cc \
+        rgw/rgw_auth_s3.cc \
+	rgw/rgw_metadata.cc \
+	rgw/rgw_replica_log.cc
 librgw_a_CFLAGS = ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 librgw_a_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
 noinst_LIBRARIES += librgw.a
 
 my_radosgw_ldadd = \
-       librgw.a librados.la libcls_rgw_client.a \
-       libcls_lock_client.a libcls_refcount_client.a -lcurl -lexpat \
-       $(LIBGLOBAL_LDA) 
+       libglobal.la librgw.a librados.la libcls_rgw_client.a libcls_log_client.a \
+       libcls_statelog_client.a libcls_replica_log_client.a libcls_lock_client.a \
+       libcls_refcount_client.a libcls_version_client.a -lcurl -lexpat \
+       $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS) $(LIBGLOBAL_LDA)
 
 radosgw_SOURCES = \
 	rgw/rgw_resolve.cc \
@@ -408,6 +418,12 @@ radosgw_SOURCES = \
         rgw/rgw_rest_usage.cc \
         rgw/rgw_rest_user.cc \
         rgw/rgw_rest_bucket.cc \
+        rgw/rgw_rest_metadata.cc \
+        rgw/rgw_replica_log.cc \
+        rgw/rgw_rest_log.cc \
+        rgw/rgw_rest_opstate.cc \
+        rgw/rgw_rest_replica_log.cc \
+        rgw/rgw_rest_config.cc \
         rgw/rgw_http_client.cc \
         rgw/rgw_swift.cc \
 	rgw/rgw_swift_auth.cc \
@@ -426,7 +442,7 @@ ceph_rgw_multiparser_CXXFLAGS = ${AM_CXXFLAGS}
 ceph_rgw_multiparser_LDADD = $(my_radosgw_ldadd)
 bin_DEBUGPROGRAMS += ceph_rgw_multiparser
 
-ceph_rgw_jsonparser_SOURCES = rgw/rgw_jsonparser.cc rgw/rgw_common.cc rgw/rgw_json_enc.cc
+ceph_rgw_jsonparser_SOURCES = rgw/rgw_jsonparser.cc rgw/rgw_common.cc rgw/rgw_env.cc rgw/rgw_json_enc.cc
 ceph_rgw_jsonparser_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 ceph_rgw_jsonparser_LDADD = $(my_radosgw_ldadd)
 bin_DEBUGPROGRAMS += ceph_rgw_jsonparser
@@ -542,6 +558,40 @@ libcls_refcount_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-r
 
 radoslib_LTLIBRARIES += libcls_refcount.la
 
+# version class
+libcls_version_la_SOURCES = cls/version/cls_version.cc
+libcls_version_la_CFLAGS = ${AM_CFLAGS}
+libcls_version_la_CXXFLAGS= ${AM_CXXFLAGS}
+libcls_version_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libcls_version_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
+
+radoslib_LTLIBRARIES += libcls_version.la
+
+# log class
+libcls_log_la_SOURCES = cls/log/cls_log.cc
+libcls_log_la_CFLAGS = ${AM_CFLAGS}
+libcls_log_la_CXXFLAGS= ${AM_CXXFLAGS}
+libcls_log_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libcls_log_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
+
+radoslib_LTLIBRARIES += libcls_log.la
+
+libcls_statelog_la_SOURCES = cls/statelog/cls_statelog.cc
+libcls_statelog_la_CFLAGS = ${AM_CFLAGS}
+libcls_statelog_la_CXXFLAGS= ${AM_CXXFLAGS}
+libcls_statelog_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libcls_statelog_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
+
+radoslib_LTLIBRARIES += libcls_statelog.la
+
+# replica log class
+libcls_replica_log_la_SOURCES = cls/replica_log/cls_replica_log.cc
+libcls_replica_log_la_CFLAGS = ${AM_CFLAGS}
+libcls_replica_log_la_CXXFLAGS= ${AM_CXXFLAGS}
+libcls_replica_log_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libcls_replica_log_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
+
+radoslib_LTLIBRARIES += libcls_replica_log.la
 
 if WITH_RADOSGW
 # rgw: rados gateway
@@ -563,6 +613,25 @@ noinst_LIBRARIES += libcls_lock_client.a
 libcls_refcount_client_a_SOURCES =  \
 	cls/refcount/cls_refcount_client.cc
 noinst_LIBRARIES += libcls_refcount_client.a
+
+libcls_version_client_a_SOURCES =  \
+	cls/version/cls_version_client.cc \
+	cls/version/cls_version_types.cc
+noinst_LIBRARIES += libcls_version_client.a
+
+libcls_log_client_a_SOURCES =  \
+	cls/log/cls_log_client.cc
+noinst_LIBRARIES += libcls_log_client.a
+
+libcls_statelog_client_a_SOURCES =  \
+	cls/statelog/cls_statelog_client.cc
+noinst_LIBRARIES += libcls_statelog_client.a
+
+libcls_replica_log_client_a_SOURCES = \
+	cls/replica_log/cls_replica_log_types.cc \
+	cls/replica_log/cls_replica_log_ops.cc \
+	cls/replica_log/cls_replica_log_client.cc
+noinst_LIBRARIES += libcls_replica_log_client.a
 
 libcls_rgw_client_a_SOURCES =  \
 	cls/rgw/cls_rgw_client.cc \
@@ -917,6 +986,27 @@ ceph_test_cors_SOURCES = test/test_cors.cc
 ceph_test_cors_LDADD = librados.la librgw.a $(LIBGLOBAL_LDA) ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} -lcurl -luuid -lexpat
 ceph_test_cors_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_cors
+
+cls_test_rgw_meta_SOURCES = test/test_rgw_admin_meta.cc
+cls_test_rgw_meta_LDFLAGS = libglobal.la 
+cls_test_rgw_meta_LDADD = librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} -lcryptopp -lcurl -luuid -lexpat  librados.la libcls_version_client.a \
+ libcls_log_client.a libcls_statelog_client.a libcls_refcount_client.a libcls_rgw_client.a libcls_lock_client.a
+cls_test_rgw_meta_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += cls_test_rgw_meta
+
+cls_test_rgw_log_SOURCES = test/test_rgw_admin_log.cc
+cls_test_rgw_log_LDFLAGS = libglobal.la 
+cls_test_rgw_log_LDADD = librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} -lcryptopp -lcurl -luuid -lexpat  librados.la libcls_version_client.a \
+ libcls_log_client.a libcls_statelog_client.a libcls_refcount_client.a libcls_rgw_client.a libcls_lock_client.a
+cls_test_rgw_log_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += cls_test_rgw_log
+
+cls_test_rgw_opstate_SOURCES = test/test_rgw_admin_opstate.cc
+cls_test_rgw_opstate_LDFLAGS = libglobal.la 
+cls_test_rgw_opstate_LDADD = librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} -lcryptopp -lcurl -luuid -lexpat  librados.la libcls_version_client.a \
+ libcls_log_client.a libcls_statelog_client.a libcls_refcount_client.a libcls_rgw_client.a libcls_lock_client.a
+cls_test_rgw_opstate_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += cls_test_rgw_opstate
 endif
 
 ceph_test_librbd_SOURCES = test/librbd/test_librbd.cc test/librados/test.cc
@@ -944,6 +1034,31 @@ ceph_test_cls_refcount_SOURCES = test/cls_refcount/test_cls_refcount.cc \
 ceph_test_cls_refcount_LDADD = librados.la libcls_refcount_client.a ${UNITTEST_STATIC_LDADD}
 ceph_test_cls_refcount_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_cls_refcount
+
+ceph_test_cls_version_SOURCES = test/cls_version/test_cls_version.cc \
+	test/librados/test.cc
+ceph_test_cls_version_LDADD = librados.la libcls_version_client.a ${UNITTEST_STATIC_LDADD}
+ceph_test_cls_version_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += ceph_test_cls_version
+
+ceph_test_cls_log_SOURCES = test/cls_log/test_cls_log.cc \
+	test/librados/test.cc
+ceph_test_cls_log_LDADD = libglobal.la librados.la libcls_log_client.a ${UNITTEST_STATIC_LDADD}
+ceph_test_cls_log_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += ceph_test_cls_log
+
+ceph_test_cls_statelog_SOURCES = test/cls_statelog/test_cls_statelog.cc \
+	test/librados/test.cc
+ceph_test_cls_statelog_LDADD = libglobal.la librados.la libcls_statelog_client.a ${UNITTEST_STATIC_LDADD}
+ceph_test_cls_statelog_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += ceph_test_cls_statelog
+ceph_test_cls_replica_log_SOURCES = \
+	test/cls_replica_log/test_cls_replica_log.cc \
+	test/librados/test.cc
+ceph_test_cls_replica_log_LDADD = libglobal.la librados.la \
+	libcls_replica_log_client.a ${UNITTEST_STATIC_LDADD}
+ceph_test_cls_replica_log_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += ceph_test_cls_replica_log
 
 ceph_test_cls_lock_SOURCES = test/cls_lock/test_cls_lock.cc test/librados/test.cc
 ceph_test_cls_lock_LDFLAGS = ${AM_LDFLAGS}
@@ -1636,6 +1751,18 @@ noinst_HEADERS = \
 	cls/rbd/cls_rbd_client.h\
 	cls/refcount/cls_refcount_ops.h\
 	cls/refcount/cls_refcount_client.h\
+	cls/version/cls_version_types.h\
+	cls/version/cls_version_ops.h\
+	cls/version/cls_version_client.h\
+	cls/log/cls_log_types.h\
+	cls/log/cls_log_ops.h\
+	cls/log/cls_log_client.h\
+	cls/statelog/cls_statelog_types.h\
+	cls/statelog/cls_statelog_ops.h\
+	cls/statelog/cls_statelog_client.h\
+	cls/replica_log/cls_replica_log_types.h\
+	cls/replica_log/cls_replica_log_ops.h\
+	cls/replica_log/cls_replica_log_client.h\
 	cls/rgw/cls_rgw_client.h\
 	cls/rgw/cls_rgw_ops.h\
 	cls/rgw/cls_rgw_types.h\
@@ -1709,6 +1836,7 @@ noinst_HEADERS = \
 	common/ceph_crypto.h\
 	common/ceph_crypto_cms.h\
 	common/ceph_json.h\
+	common/lru_map.h\
 	common/utf8.h\
 	common/mime.h\
 	common/pick_address.h\
@@ -2070,26 +2198,36 @@ noinst_HEADERS = \
 	rgw/rgw_cors_swift.h\
 	rgw/rgw_string.h\
 	rgw/rgw_formats.h\
-	rgw/rgw_html_errors.h\
+	rgw/rgw_http_errors.h\
 	rgw/rgw_log.h\
 	rgw/rgw_multi.h\
 	rgw/rgw_policy_s3.h\
 	rgw/rgw_gc.h\
+	rgw/rgw_metadata.h\
 	rgw/rgw_multi_del.h\
 	rgw/rgw_op.h\
 	rgw/rgw_http_client.h\
 	rgw/rgw_swift.h\
 	rgw/rgw_swift_auth.h\
 	rgw/rgw_rados.h\
+	rgw/rgw_replica_log.h \
 	rgw/rgw_resolve.h\
 	rgw/rgw_rest.h\
 	rgw/rgw_rest_swift.h\
 	rgw/rgw_rest_s3.h\
+	rgw/rgw_auth_s3.h\
 	rgw/rgw_rest_admin.h\
 	rgw/rgw_rest_usage.h\
 	rgw/rgw_rest_user.h\
 	rgw/rgw_rest_bucket.h\
-        rgw/rgw_tools.h\
+	rgw/rgw_rest_client.h\
+	rgw/rgw_rest_conn.h\
+	rgw/rgw_tools.h\
+	rgw/rgw_rest_metadata.h\
+	rgw/rgw_rest_log.h\
+	rgw/rgw_rest_opstate.h\
+	rgw/rgw_rest_replica_log.h\
+	rgw/rgw_rest_config.h\
 	rgw/rgw_usage.h\
 	rgw/rgw_user.h\
 	rgw/rgw_bucket.h\

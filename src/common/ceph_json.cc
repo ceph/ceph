@@ -57,7 +57,6 @@ JSONObj::~JSONObj()
 
 void JSONObj::add_child(string el, JSONObj *obj)
 {
-  cout << "add_child: " << name << " <- " << el << std::endl;
   children.insert(pair<string, JSONObj *>(el, obj));
 }
 
@@ -171,7 +170,6 @@ JSONObj *JSONObj::get_parent()
 
 bool JSONObj::is_object()
 {
-  cout << data.type() << std::endl;
   return (data.type() == obj_type);
 }
 
@@ -219,6 +217,11 @@ void JSONParser::handle_data(const char *s, int len)
 // parse a supplied JSON fragment
 bool JSONParser::parse(const char *buf_, int len)
 {
+  if (!buf_) {
+    set_failure();
+    return false;
+  }
+
   string json_string = buf_;
   // make a substring to len
   json_string = json_string.substr(0, len);
@@ -416,12 +419,38 @@ void decode_json_obj(bool& val, JSONObj *obj)
     return;
   }
   if (strcasecmp(s.c_str(), "false") == 0) {
-    val = true;
+    val = false;
     return;
   }
   int i;
   decode_json_obj(i, obj);
   val = (bool)i;
+}
+
+void decode_json_obj(bufferlist& val, JSONObj *obj)
+{
+  string s = obj->get_data();
+
+  bufferlist bl;
+  bl.append(s.c_str(), s.size());
+  try {
+    val.decode_base64(bl);
+  } catch (buffer::error& err) {
+   throw JSONDecoder::err("failed to decode base64");
+  }
+}
+
+void decode_json_obj(utime_t& val, JSONObj *obj)
+{
+  string s = obj->get_data();
+  uint64_t epoch;
+  uint64_t nsec;
+  int r = utime_t::parse_date(s, &epoch, &nsec);
+  if (r == 0) {
+    val = utime_t(epoch, nsec);
+  } else {
+    throw JSONDecoder::err("failed to decode utime_t");
+  }
 }
 
 void encode_json(const char *name, const string& val, Formatter *f)
@@ -432,6 +461,17 @@ void encode_json(const char *name, const string& val, Formatter *f)
 void encode_json(const char *name, const char *val, Formatter *f)
 {
   f->dump_string(name, val);
+}
+
+void encode_json(const char *name, bool val, Formatter *f)
+{
+  string s;
+  if (val)
+    s = "true";
+  else
+    s = "false";
+
+  f->dump_string(name, s);
 }
 
 void encode_json(const char *name, int val, Formatter *f)
@@ -446,17 +486,17 @@ void encode_json(const char *name, long val, Formatter *f)
 
 void encode_json(const char *name, unsigned val, Formatter *f)
 {
-  f->dump_int(name, val);
+  f->dump_unsigned(name, val);
 }
 
 void encode_json(const char *name, unsigned long val, Formatter *f)
 {
-  f->dump_int(name, val);
+  f->dump_unsigned(name, val);
 }
 
 void encode_json(const char *name, unsigned long long val, Formatter *f)
 {
-  f->dump_int(name, val);
+  f->dump_unsigned(name, val);
 }
 
 void encode_json(const char *name, long long val, Formatter *f)
@@ -466,11 +506,19 @@ void encode_json(const char *name, long long val, Formatter *f)
 
 void encode_json(const char *name, const utime_t& val, Formatter *f)
 {
-  f->dump_stream(name) << val;
+  val.gmtime(f->dump_stream(name));
 }
 
 void encode_json(const char *name, const bufferlist& bl, Formatter *f)
 {
-  encode_json(name, bl.length(), f);
+  /* need to copy data from bl, as it is const bufferlist */
+  bufferlist src = bl;
+
+  bufferlist b64;
+  src.encode_base64(b64);
+
+  string s(b64.c_str(), b64.length());
+
+  encode_json(name, s, f);
 }
 

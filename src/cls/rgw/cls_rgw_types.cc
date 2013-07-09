@@ -27,7 +27,6 @@ void rgw_bucket_dir_entry_meta::generate_test_instances(list<rgw_bucket_dir_entr
   m->etag = "etag";
   m->owner = "owner";
   m->owner_display_name = "display name";
-  m->tag = "tag";
   m->content_type = "content/type";
   o.push_back(m);
   o.push_back(new rgw_bucket_dir_entry_meta);
@@ -41,7 +40,6 @@ void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
   f->dump_string("etag", etag);
   f->dump_string("owner", owner);
   f->dump_string("owner_display_name", owner_display_name);
-  f->dump_string("tag", tag);
   f->dump_string("content_type", content_type);
 }
 
@@ -55,10 +53,12 @@ void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& 
     rgw_bucket_dir_entry_meta *m = *iter;
     rgw_bucket_dir_entry *e = new rgw_bucket_dir_entry;
     e->name = "name";
-    e->epoch = 1234;
+    e->ver.pool = 1;
+    e->ver.epoch = 1234;
     e->locator = "locator";
     e->exists = true;
     e->meta = *m;
+    e->tag = "tag";
 
     o.push_back(e);
 
@@ -66,16 +66,24 @@ void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& 
   }
   o.push_back(new rgw_bucket_dir_entry);
 }
+void rgw_bucket_entry_ver::dump(Formatter *f) const
+{
+  f->dump_int("pool", pool);
+  f->dump_unsigned("epoch", epoch);
+}
 
 void rgw_bucket_dir_entry::dump(Formatter *f) const
 {
   f->dump_string("name", name);
-  f->dump_unsigned("epoch", epoch);
+  f->open_object_section("ver");
+  ver.dump(f);
+  f->close_section();
   f->dump_string("locator", locator);
   f->dump_int("exists", (int)exists);
   f->open_object_section("meta");
   meta.dump(f);
   f->close_section();
+  f->dump_string("tag", tag);
 
   map<string, struct rgw_bucket_pending_info>::const_iterator iter = pending_map.begin();
   f->open_array_section("pending_map");
@@ -85,6 +93,49 @@ void rgw_bucket_dir_entry::dump(Formatter *f) const
     iter->second.dump(f);
     f->close_section();
   }
+  f->close_section();
+}
+
+void rgw_bi_log_entry::dump(Formatter *f) const
+{
+  f->dump_string("op_id", id);
+  f->dump_string("op_tag", tag);
+  switch (op) {
+    case CLS_RGW_OP_ADD:
+      f->dump_string("op", "write");
+      break;
+    case CLS_RGW_OP_DEL:
+      f->dump_string("op", "del");
+      break;
+    case CLS_RGW_OP_CANCEL:
+      f->dump_string("op", "cancel");
+      break;
+    case CLS_RGW_OP_UNKNOWN:
+      f->dump_string("op", "unknown");
+      break;
+    default:
+      f->dump_string("op", "invalid");
+      break;
+  }
+
+  f->dump_string("object", object);
+
+  switch (state) {
+    case CLS_RGW_STATE_PENDING_MODIFY:
+      f->dump_string("state", "pending");
+      break;
+    case CLS_RGW_STATE_COMPLETE:
+      f->dump_string("state", "complete");
+      break;
+    default:
+      f->dump_string("state", "invalid");
+      break;
+  }
+
+  f->dump_int("index_ver", index_ver);
+  timestamp.gmtime(f->dump_stream("timestamp"));
+  f->open_object_section("ver");
+  ver.dump(f);
   f->close_section();
 }
 
@@ -127,6 +178,8 @@ void rgw_bucket_dir_header::generate_test_instances(list<rgw_bucket_dir_header*>
 
 void rgw_bucket_dir_header::dump(Formatter *f) const
 {
+  f->dump_int("ver", ver);
+  f->dump_int("master_ver", master_ver);
   map<uint8_t, struct rgw_bucket_category_stats>::const_iterator iter = stats.begin();
   f->open_array_section("stats");
   for (; iter != stats.end(); ++iter) {

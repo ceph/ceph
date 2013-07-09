@@ -189,20 +189,20 @@ void rgw_flush_formatter(struct req_state *s, Formatter *formatter)
 
 void set_req_state_err(struct req_state *s, int err_no)
 {
-  const struct rgw_html_errors *r;
+  const struct rgw_http_errors *r;
 
   if (err_no < 0)
     err_no = -err_no;
   s->err.ret = err_no;
   if (s->prot_flags & RGW_REST_SWIFT) {
-    r = search_err(err_no, RGW_HTML_SWIFT_ERRORS, ARRAY_LEN(RGW_HTML_SWIFT_ERRORS));
+    r = search_err(err_no, RGW_HTTP_SWIFT_ERRORS, ARRAY_LEN(RGW_HTTP_SWIFT_ERRORS));
     if (r) {
       s->err.http_ret = r->http_ret;
       s->err.s3_code = r->s3_code;
       return;
     }
   }
-  r = search_err(err_no, RGW_HTML_ERRORS, ARRAY_LEN(RGW_HTML_ERRORS));
+  r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
   if (r) {
     s->err.http_ret = r->http_ret;
     s->err.s3_code = r->s3_code;
@@ -274,10 +274,10 @@ void dump_object_from_state(struct req_state *s)
 
 void dump_uri_from_state(struct req_state *s)
 {
-  if (strcmp(s->request_uri.c_str(), "/") == 0) {
+  if (strcmp(s->info.request_uri.c_str(), "/") == 0) {
 
     string location = "http://";
-    string server = s->env->get("SERVER_NAME", "<SERVER_NAME>");
+    string server = s->info.env->get("SERVER_NAME", "<SERVER_NAME>");
     location.append(server);
     location += "/";
     if (!s->bucket_name_str.empty()) {
@@ -290,7 +290,7 @@ void dump_uri_from_state(struct req_state *s)
     }
   }
   else {
-    s->cio->print("Location: \"%s\"\n", s->request_uri.c_str());
+    s->cio->print("Location: \"%s\"\n", s->info.request_uri.c_str());
   }
 }
 
@@ -302,7 +302,7 @@ void dump_redirect(struct req_state *s, const string& redirect)
   s->cio->print("Location: %s\n", redirect.c_str());
 }
 
-void dump_last_modified(struct req_state *s, time_t t)
+static void dump_time_header(struct req_state *s, const char *name, time_t t)
 {
 
   char timestr[TIME_BUF_SIZE];
@@ -314,7 +314,23 @@ void dump_last_modified(struct req_state *s, time_t t)
   if (strftime(timestr, sizeof(timestr), "%a, %d %b %Y %H:%M:%S %Z", tmp) == 0)
     return;
 
-  int r = s->cio->print("Last-Modified: %s\n", timestr);
+  int r = s->cio->print("%s: %s\n", name, timestr);
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+  }
+}
+
+void dump_last_modified(struct req_state *s, time_t t)
+{
+  dump_time_header(s, "Last-Modified", t);
+}
+
+void dump_epoch_header(struct req_state *s, const char *name, time_t t)
+{
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%lld", (long long)t);
+
+  int r = s->cio->print("%s: %s\n", name, buf);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -441,11 +457,11 @@ void dump_range(struct req_state *s, uint64_t ofs, uint64_t end, uint64_t total)
 
 int RGWGetObj_ObjStore::get_params()
 {
-  range_str = s->env->get("HTTP_RANGE");
-  if_mod = s->env->get("HTTP_IF_MODIFIED_SINCE");
-  if_unmod = s->env->get("HTTP_IF_UNMODIFIED_SINCE");
-  if_match = s->env->get("HTTP_IF_MATCH");
-  if_nomatch = s->env->get("HTTP_IF_NONE_MATCH");
+  range_str = s->info.env->get("HTTP_RANGE");
+  if_mod = s->info.env->get("HTTP_IF_MODIFIED_SINCE");
+  if_unmod = s->info.env->get("HTTP_IF_UNMODIFIED_SINCE");
+  if_match = s->info.env->get("HTTP_IF_MATCH");
+  if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
 
   return 0;
 }
@@ -453,7 +469,7 @@ int RGWGetObj_ObjStore::get_params()
 int RESTArgs::get_string(struct req_state *s, const string& name, const string& def_val, string *val, bool *existed)
 {
   bool exists;
-  *val = s->args.get(name, &exists);
+  *val = s->info.args.get(name, &exists);
 
   if (existed)
     *existed = exists;
@@ -469,7 +485,7 @@ int RESTArgs::get_string(struct req_state *s, const string& name, const string& 
 int RESTArgs::get_uint64(struct req_state *s, const string& name, uint64_t def_val, uint64_t *val, bool *existed)
 {
   bool exists;
-  string sval = s->args.get(name, &exists);
+  string sval = s->info.args.get(name, &exists);
 
   if (existed)
     *existed = exists;
@@ -489,7 +505,7 @@ int RESTArgs::get_uint64(struct req_state *s, const string& name, uint64_t def_v
 int RESTArgs::get_int64(struct req_state *s, const string& name, int64_t def_val, int64_t *val, bool *existed)
 {
   bool exists;
-  string sval = s->args.get(name, &exists);
+  string sval = s->info.args.get(name, &exists);
 
   if (existed)
     *existed = exists;
@@ -509,7 +525,7 @@ int RESTArgs::get_int64(struct req_state *s, const string& name, int64_t def_val
 int RESTArgs::get_uint32(struct req_state *s, const string& name, uint32_t def_val, uint32_t *val, bool *existed)
 {
   bool exists;
-  string sval = s->args.get(name, &exists);
+  string sval = s->info.args.get(name, &exists);
 
   if (existed)
     *existed = exists;
@@ -529,7 +545,7 @@ int RESTArgs::get_uint32(struct req_state *s, const string& name, uint32_t def_v
 int RESTArgs::get_int32(struct req_state *s, const string& name, int32_t def_val, int32_t *val, bool *existed)
 {
   bool exists;
-  string sval = s->args.get(name, &exists);
+  string sval = s->info.args.get(name, &exists);
 
   if (existed)
     *existed = exists;
@@ -549,7 +565,7 @@ int RESTArgs::get_int32(struct req_state *s, const string& name, int32_t def_val
 int RESTArgs::get_time(struct req_state *s, const string& name, const utime_t& def_val, utime_t *val, bool *existed)
 {
   bool exists;
-  string sval = s->args.get(name, &exists);
+  string sval = s->info.args.get(name, &exists);
 
   if (existed)
     *existed = exists;
@@ -559,13 +575,13 @@ int RESTArgs::get_time(struct req_state *s, const string& name, const utime_t& d
     return 0;
   }
 
-  uint64_t epoch;
+  uint64_t epoch, nsec;
 
-  int r = parse_date(sval, &epoch);
+  int r = utime_t::parse_date(sval, &epoch, &nsec);
   if (r < 0)
     return r;
 
-  *val = utime_t(epoch, 0);
+  *val = utime_t(epoch, nsec);
 
   return 0;
 }
@@ -573,7 +589,7 @@ int RESTArgs::get_time(struct req_state *s, const string& name, const utime_t& d
 int RESTArgs::get_epoch(struct req_state *s, const string& name, uint64_t def_val, uint64_t *epoch, bool *existed)
 {
   bool exists;
-  string date = s->args.get(name, &exists);
+  string date = s->info.args.get(name, &exists);
 
   if (existed)
     *existed = exists;
@@ -583,7 +599,7 @@ int RESTArgs::get_epoch(struct req_state *s, const string& name, uint64_t def_va
     return 0;
   }
 
-  int r = parse_date(date, epoch);
+  int r = utime_t::parse_date(date, epoch, NULL);
   if (r < 0)
     return r;
 
@@ -593,7 +609,7 @@ int RESTArgs::get_epoch(struct req_state *s, const string& name, uint64_t def_va
 int RESTArgs::get_bool(struct req_state *s, const string& name, bool def_val, bool *val, bool *existed)
 {
   bool exists;
-  string sval = s->args.get(name, &exists);
+  string sval = s->info.args.get(name, &exists);
 
   if (existed)
     *existed = exists;
@@ -651,7 +667,7 @@ int RGWPutObj_ObjStore::verify_params()
 
 int RGWPutObj_ObjStore::get_params()
 {
-  supplied_md5_b64 = s->env->get("HTTP_CONTENT_MD5");
+  supplied_md5_b64 = s->info.env->get("HTTP_CONTENT_MD5");
 
   return 0;
 }
@@ -684,7 +700,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
   }
 
   if (!ofs)
-    supplied_md5_b64 = s->env->get("HTTP_CONTENT_MD5");
+    supplied_md5_b64 = s->info.env->get("HTTP_CONTENT_MD5");
 
   return len;
 }
@@ -753,7 +769,7 @@ int RGWPutCORS_ObjStore::get_params()
   return ret;
 }
 
-static int read_all_chunked_input(req_state *s, char **pdata, int *plen)
+static int read_all_chunked_input(req_state *s, char **pdata, int *plen, int max_read)
 {
 #define READ_CHUNK 4096
 #define MAX_READ_CHUNK (128 * 1024)
@@ -777,6 +793,10 @@ static int read_all_chunked_input(req_state *s, char **pdata, int *plen)
       if (need_to_read < MAX_READ_CHUNK)
 	need_to_read *= 2;
 
+      if (total > max_read) {
+        free(data);
+        return -ERANGE;
+      }
       total += need_to_read;
 
       void *p = realloc(data, total + 1);
@@ -798,53 +818,72 @@ static int read_all_chunked_input(req_state *s, char **pdata, int *plen)
   return 0;
 }
 
+int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen, int max_len)
+{
+  size_t cl = 0;
+  int len = 0;
+  char *data = NULL;
+
+  if (s->length)
+    cl = atoll(s->length);
+  if (cl) {
+    if (cl > (size_t)max_len) {
+      return -ERANGE;
+    }
+    data = (char *)malloc(cl + 1);
+    if (!data) {
+       return -ENOMEM;
+    }
+    int ret = s->cio->read(data, cl, &len);
+    if (ret < 0)
+      return ret;
+    data[len] = '\0';
+  } else if (!s->length) {
+    const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
+    if (!encoding || strcmp(encoding, "chunked") != 0)
+      return -ERR_LENGTH_REQUIRED;
+
+    int ret = read_all_chunked_input(s, &data, &len, max_len);
+    if (ret < 0)
+      return ret;
+  }
+
+  *plen = len;
+  *pdata = data;
+
+  return 0;
+}
+
+
 int RGWCompleteMultipart_ObjStore::get_params()
 {
-  upload_id = s->args.get("uploadId");
+  upload_id = s->info.args.get("uploadId");
 
   if (upload_id.empty()) {
     ret = -ENOTSUP;
     return ret;
   }
-  size_t cl = 0;
 
-  if (s->length)
-    cl = atoll(s->length);
-  if (cl) {
-    data = (char *)malloc(cl + 1);
-    if (!data) {
-       ret = -ENOMEM;
-       return ret;
-    }
-    ret = s->cio->read(data, cl, &len);
-    if (ret < 0)
-      return ret;
-    data[len] = '\0';
-  } else {
-    const char *encoding = s->env->get("HTTP_TRANSFER_ENCODING");
-    if (!encoding || strcmp(encoding, "chunked") != 0)
-      return -ERR_LENGTH_REQUIRED;
+#define COMPLETE_MULTIPART_MAX_LEN (1024 * 1024) /* api defines max 10,000 parts, this should be enough */
+  ret = rgw_rest_read_all_input(s, &data, &len, COMPLETE_MULTIPART_MAX_LEN);
+  if (ret < 0)
+    return ret;
 
-    ret = read_all_chunked_input(s, &data, &len);
-    if (ret < 0)
-      return ret;
-  }
-
-  return ret;
+  return 0;
 }
 
 int RGWListMultipart_ObjStore::get_params()
 {
-  upload_id = s->args.get("uploadId");
+  upload_id = s->info.args.get("uploadId");
 
   if (upload_id.empty()) {
     ret = -ENOTSUP;
   }
-  string str = s->args.get("part-number-marker");
+  string str = s->info.args.get("part-number-marker");
   if (!str.empty())
     marker = atoi(str.c_str());
   
-  str = s->args.get("max-parts");
+  str = s->info.args.get("max-parts");
   if (!str.empty())
     max_parts = atoi(str.c_str());
 
@@ -853,16 +892,16 @@ int RGWListMultipart_ObjStore::get_params()
 
 int RGWListBucketMultiparts_ObjStore::get_params()
 {
-  delimiter = s->args.get("delimiter");
-  prefix = s->args.get("prefix");
-  string str = s->args.get("max-parts");
+  delimiter = s->info.args.get("delimiter");
+  prefix = s->info.args.get("prefix");
+  string str = s->info.args.get("max-parts");
   if (!str.empty())
     max_uploads = atoi(str.c_str());
   else
     max_uploads = default_max;
 
-  string key_marker = s->args.get("key-marker");
-  string upload_id_marker = s->args.get("upload-id-marker");
+  string key_marker = s->info.args.get("key-marker");
+  string upload_id_marker = s->info.args.get("upload-id-marker");
   if (!key_marker.empty())
     marker.init(key_marker, upload_id_marker);
 
@@ -920,117 +959,12 @@ int RGWRESTOp::verify_permission()
   return check_caps(s->user.caps);
 }
 
-static void line_unfold(const char *line, string& sdest)
-{
-  char dest[strlen(line) + 1];
-  const char *p = line;
-  char *d = dest;
-
-  while (isspace(*p))
-    ++p;
-
-  bool last_space = false;
-
-  while (*p) {
-    switch (*p) {
-    case '\n':
-    case '\r':
-      *d = ' ';
-      if (!last_space)
-        ++d;
-      last_space = true;
-      break;
-    default:
-      *d = *p;
-      ++d;
-      last_space = false;
-      break;
-    }
-    ++p;
-  }
-  *d = 0;
-  sdest = dest;
-}
-
-struct str_len {
-  const char *str;
-  int len;
-};
-
-#define STR_LEN_ENTRY(s) { s, sizeof(s) - 1 }
-
-struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ"),
-                                   STR_LEN_ENTRY("HTTP_X_GOOG"),
-                                   STR_LEN_ENTRY("HTTP_X_DHO"),
-                                   STR_LEN_ENTRY("HTTP_X_RGW"),
-                                   STR_LEN_ENTRY("HTTP_X_OBJECT"),
-                                   STR_LEN_ENTRY("HTTP_X_CONTAINER"),
-                                   {NULL, 0} };
-
-static int init_meta_info(struct req_state *s)
-{
-  const char *p;
-
-  s->x_meta_map.clear();
-
-  const char **envp = s->cio->envp();
-
-  for (int i=0; (p = envp[i]); ++i) {
-    const char *prefix;
-    for (int prefix_num = 0; (prefix = meta_prefixes[prefix_num].str) != NULL; prefix_num++) {
-      int len = meta_prefixes[prefix_num].len;
-      if (strncmp(p, prefix, len) == 0) {
-        dout(10) << "meta>> " << p << dendl;
-        const char *name = p+len; /* skip the prefix */
-        const char *eq = strchr(name, '=');
-        if (!eq) /* shouldn't happen! */
-          continue;
-        int name_len = eq - name;
-
-        if (strncmp(name, "_META_", name_len) == 0)
-          s->has_bad_meta = true;
-
-        char name_low[meta_prefixes[0].len + name_len + 1];
-        snprintf(name_low, meta_prefixes[0].len - 5 + name_len + 1, "%s%s", meta_prefixes[0].str + 5 /* skip HTTP_ */, name); // normalize meta prefix
-        int j;
-        for (j = 0; name_low[j]; j++) {
-          if (name_low[j] != '_')
-            name_low[j] = tolower(name_low[j]);
-          else
-            name_low[j] = '-';
-        }
-        name_low[j] = 0;
-        string val;
-        line_unfold(eq + 1, val);
-
-        map<string, string>::iterator iter;
-        iter = s->x_meta_map.find(name_low);
-        if (iter != s->x_meta_map.end()) {
-          string old = iter->second;
-          int pos = old.find_last_not_of(" \t"); /* get rid of any whitespaces after the value */
-          old = old.substr(0, pos + 1);
-          old.append(",");
-          old.append(val);
-          s->x_meta_map[name_low] = old;
-        } else {
-          s->x_meta_map[name_low] = val;
-        }
-      }
-    }
-  }
-  map<string, string>::iterator iter;
-  for (iter = s->x_meta_map.begin(); iter != s->x_meta_map.end(); ++iter) {
-    dout(10) << "x>> " << iter->first << ":" << iter->second << dendl;
-  }
-
-  return 0;
-}
 
 int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_type, bool configurable)
 {
   s->format = default_type;
   if (configurable) {
-    string format_str = s->args.get("format");
+    string format_str = s->info.args.get("format");
     if (format_str.compare("xml") == 0) {
       s->format = RGW_FORMAT_XML;
     } else if (format_str.compare("json") == 0) {
@@ -1131,7 +1065,7 @@ int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
   case OP_PUT:
   case OP_POST:
     /* is it a 'multi-object delete' request? */
-    if (s->request_params == "delete") {
+    if (s->info.request_params == "delete") {
       only_bucket = true;
       break;
     }
@@ -1198,8 +1132,10 @@ void RGWRESTMgr::register_default_mgr(RGWRESTMgr *mgr)
   default_mgr = mgr;
 }
 
-RGWRESTMgr *RGWRESTMgr::get_resource_mgr(struct req_state *s, const string& uri)
+RGWRESTMgr *RGWRESTMgr::get_resource_mgr(struct req_state *s, const string& uri, string *out_uri)
 {
+  *out_uri = uri;
+
   if (resources_by_size.empty())
     return this;
 
@@ -1211,7 +1147,7 @@ RGWRESTMgr *RGWRESTMgr::get_resource_mgr(struct req_state *s, const string& uri)
 	(uri.size() == iter->first ||
 	 uri[iter->first] == '/')) {
       string suffix = uri.substr(iter->first);
-      return resource_mgrs[resource]->get_resource_mgr(s, suffix);
+      return resource_mgrs[resource]->get_resource_mgr(s, suffix, out_uri);
     }
   }
 
@@ -1232,20 +1168,14 @@ RGWRESTMgr::~RGWRESTMgr()
 
 int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
 {
-  s->cio = cio;
-  s->script_uri = s->env->get("SCRIPT_URI", s->cct->_conf->rgw_script_uri.c_str());
-  s->request_uri = s->env->get("REQUEST_URI", s->cct->_conf->rgw_request_uri.c_str());
-  int pos = s->request_uri.find('?');
-  if (pos >= 0) {
-    s->request_params = s->request_uri.substr(pos + 1);
-    s->request_uri = s->request_uri.substr(0, pos);
-  }
-  s->host = s->env->get("HTTP_HOST");
-  if (g_conf->rgw_dns_name.length() && s->host) {
-    string h(s->host);
+  req_info& info = s->info;
 
-    ldout(s->cct, 10) << "host=" << s->host << " rgw_dns_name=" << g_conf->rgw_dns_name << dendl;
-    pos = h.find(g_conf->rgw_dns_name);
+  s->cio = cio;
+  if (g_conf->rgw_dns_name.length() && info.host) {
+    string h(s->info.host);
+
+    ldout(s->cct, 10) << "host=" << s->info.host << " rgw_dns_name=" << g_conf->rgw_dns_name << dendl;
+    int pos = h.find(g_conf->rgw_dns_name);
 
     if (g_conf->rgw_resolve_cname && pos < 0) {
       string cname;
@@ -1264,16 +1194,15 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
     if (pos > 0 && h[pos - 1] == '.') {
       string encoded_bucket = "/";
       encoded_bucket.append(h.substr(0, pos-1));
-      if (s->request_uri[0] != '/')
+      if (s->info.request_uri[0] != '/')
 	encoded_bucket.append("/'");
-      encoded_bucket.append(s->request_uri);
-      s->request_uri = encoded_bucket;
+      encoded_bucket.append(s->info.request_uri);
+      s->info.request_uri = encoded_bucket;
     }
   }
 
-  url_decode(s->request_uri, s->decoded_uri);
-  s->method = s->env->get("REQUEST_METHOD");
-  s->length = s->env->get("CONTENT_LENGTH");
+  url_decode(s->info.request_uri, s->decoded_uri);
+  s->length = info.env->get("CONTENT_LENGTH");
   if (s->length) {
     if (*s->length == '\0')
       s->content_length = 0;
@@ -1283,21 +1212,21 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
 
   map<string, string>::iterator giter;
   for (giter = generic_attrs_map.begin(); giter != generic_attrs_map.end(); ++giter) {
-    const char *env = s->env->get(giter->first.c_str());
+    const char *env = info.env->get(giter->first.c_str());
     if (env) {
       s->generic_attrs[giter->second] = env;
     }
   }
 
-  s->http_auth = s->env->get("HTTP_AUTHORIZATION");
+  s->http_auth = info.env->get("HTTP_AUTHORIZATION");
 
   if (g_conf->rgw_print_continue) {
-    const char *expect = s->env->get("HTTP_EXPECT");
+    const char *expect = info.env->get("HTTP_EXPECT");
     s->expect_cont = (expect && !strcasecmp(expect, "100-continue"));
   }
-  s->op = op_from_method(s->method);
+  s->op = op_from_method(info.method);
 
-  init_meta_info(s);
+  info.init_meta_info(&s->has_bad_meta);
 
   return 0;
 }
@@ -1311,7 +1240,7 @@ RGWHandler *RGWREST::get_handler(RGWRados *store, struct req_state *s, RGWClient
   if (*init_error < 0)
     return NULL;
 
-  RGWRESTMgr *m = mgr.get_resource_mgr(s, s->decoded_uri);
+  RGWRESTMgr *m = mgr.get_resource_mgr(s, s->decoded_uri, &s->effective_uri);
   if (!m) {
     *init_error = -ERR_METHOD_NOT_ALLOWED;
     return NULL;

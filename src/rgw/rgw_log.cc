@@ -13,7 +13,7 @@
 
 static void set_param_str(struct req_state *s, const char *name, string& str)
 {
-  const char *p = s->env->get(name);
+  const char *p = s->info.env->get(name);
   if (p)
     str = p;
 }
