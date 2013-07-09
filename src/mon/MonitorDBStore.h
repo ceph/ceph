@@ -251,7 +251,8 @@ class MonitorDBStore
     bool add_chunk_entry(Transaction &tx,
 			 string &prefix,
 			 string &key,
-			 bufferlist &value) {
+			 bufferlist &value,
+			 uint64_t max) {
       Transaction tmp;
       bufferlist tmp_bl;
       tmp.put(prefix, key, value);
@@ -262,7 +263,7 @@ class MonitorDBStore
 
       size_t len = tx_bl.length() + tmp_bl.length();
 
-      if (!tx.empty() && (len > g_conf->mon_sync_max_payload_size)) {
+      if (!tx.empty() && (len > max)) {
 	return false;
       }
 
@@ -293,13 +294,7 @@ class MonitorDBStore
     virtual bool has_next_chunk() {
       return !done && _is_valid();
     }
-    virtual void get_chunk_tx(Transaction &tx) = 0;
-    virtual void get_chunk(bufferlist& bl) {
-      Transaction tx;
-      get_chunk_tx(tx);
-      if (!tx.empty())
-	tx.encode(bl);
-    }
+    virtual void get_chunk_tx(Transaction &tx, uint64_t max) = 0;
     virtual pair<string,string> get_next_key() = 0;
   };
   typedef std::tr1::shared_ptr<StoreIteratorImpl> Synchronizer;
@@ -327,7 +322,7 @@ class MonitorDBStore
      *			    differ from the one passed on to the function)
      * @param last_key[out] Last key in the chunk
      */
-    virtual void get_chunk_tx(Transaction &tx) {
+    virtual void get_chunk_tx(Transaction &tx, uint64_t max) {
       assert(done == false);
       assert(iter->valid() == true);
 
@@ -336,7 +331,7 @@ class MonitorDBStore
 	string key(iter->raw_key().second);
 	if (sync_prefixes.count(prefix)) {
 	  bufferlist value = iter->value();
-	  if (!add_chunk_entry(tx, prefix, key, value))
+	  if (!add_chunk_entry(tx, prefix, key, value, max))
 	    return;
 	}
 	iter->next();
