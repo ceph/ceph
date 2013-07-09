@@ -39,7 +39,7 @@ private:
   // propose pending update to peers
   void encode_pending(MonitorDBStore::Transaction *t);
   virtual void encode_full(MonitorDBStore::Transaction *t);
-  void update_trim();
+  version_t get_trim_to();
   bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
   bool prepare_update(PaxosServiceMessage *m);
 
