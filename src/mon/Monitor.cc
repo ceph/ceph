@@ -426,11 +426,6 @@ int Monitor::preinit()
     if (clear_store) {
       set<string> sync_prefixes = get_sync_targets_names();
       store->clear(sync_prefixes);
-
-      MonitorDBStore::Transaction t;
-      t.erase("mon_sync", "in_sync");
-      t.erase("mon_sync", "force_sync");
-      store->apply_transaction(t);
     }
   }
 
