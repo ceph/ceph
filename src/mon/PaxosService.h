@@ -687,11 +687,6 @@ public:
   virtual void encode_trim_extra(MonitorDBStore::Transaction *tx, version_t first) {}
 
   /**
-   * decide whether we should trim service states
-   */
-  bool should_trim();
-
-  /**
    * Update our trim status. We do nothing here, because there is no
    * straightforward way to update the trim version, since that's service
    * specific. However, we do not force services to implement it, since there
