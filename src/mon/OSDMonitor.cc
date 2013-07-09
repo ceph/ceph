@@ -2712,10 +2712,17 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       string name;
       cmd_getval(g_ceph_context, cmdmap, "name", name);
 
-      if (!newcrush.name_exists(name)) {
+      if (!osdmap.crush->name_exists(name)) {
 	err = 0;
 	ss << "device '" << name << "' does not appear in the crush map";
 	break;
+      }
+      if (!newcrush.name_exists(name)) {
+	err = 0;
+	ss << "device '" << name << "' does not appear in the crush map";
+	getline(ss, rs);
+	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+	return true;
       }
       int id = newcrush.get_item_id(name);
       bool unlink_only = prefix == "osd crush unlink";
