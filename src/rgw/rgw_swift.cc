@@ -21,13 +21,12 @@ static list<string> roles_list;
 class RGWKeystoneTokenCache;
 
 class RGWValidateSwiftToken : public RGWHTTPClient {
-  CephContext *cct;
   struct rgw_swift_auth_info *info;
 
 protected:
-  RGWValidateSwiftToken() : cct(NULL), info(NULL) {}
+  RGWValidateSwiftToken() : RGWHTTPClient(NULL), info(NULL) {}
 public:
-  RGWValidateSwiftToken(CephContext *_cct, struct rgw_swift_auth_info *_info) : cct(_cct), info(_info) {}
+  RGWValidateSwiftToken(CephContext *_cct, struct rgw_swift_auth_info *_info) : RGWHTTPClient(_cct), info(_info) {}
 
   int read_header(void *ptr, size_t len);
 
@@ -290,7 +289,7 @@ void RGWKeystoneTokenCache::invalidate(const string& token_id)
 class RGWValidateKeystoneToken : public RGWHTTPClient {
   bufferlist *bl;
 public:
-  RGWValidateKeystoneToken(bufferlist *_bl) : bl(_bl) {}
+  RGWValidateKeystoneToken(CephContext *_cct, bufferlist *_bl) : RGWHTTPClient(_cct), bl(_bl) {}
 
   int read_data(void *ptr, size_t len) {
     bl->append((char *)ptr, len);
@@ -303,7 +302,7 @@ static RGWKeystoneTokenCache *keystone_token_cache = NULL;
 class RGWGetRevokedTokens : public RGWHTTPClient {
   bufferlist *bl;
 public:
-  RGWGetRevokedTokens(bufferlist *_bl) : bl(_bl) {}
+  RGWGetRevokedTokens(CephContext *_cct, bufferlist *_bl) : RGWHTTPClient(_cct), bl(_bl) {}
 
   int read_data(void *ptr, size_t len) {
     bl->append((char *)ptr, len);
@@ -383,7 +382,7 @@ static int decode_b64_cms(CephContext *cct, const string& signed_b64, bufferlist
 int RGWSwift::check_revoked()
 {
   bufferlist bl;
-  RGWGetRevokedTokens req(&bl);
+  RGWGetRevokedTokens req(cct, &bl);
 
   string url = g_conf->rgw_keystone_url;
   if (url.empty()) {
@@ -590,7 +589,7 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
 
     /* can't decode, just go to the keystone server for validation */
 
-    RGWValidateKeystoneToken validate(&bl);
+    RGWValidateKeystoneToken validate(cct, &bl);
 
     string url = g_conf->rgw_keystone_url;
     if (url.empty()) {

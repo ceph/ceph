@@ -670,6 +670,7 @@ OPTION(rgw_list_buckets_max_chunk, OPT_INT, 1000) // max buckets to retrieve in 
 OPTION(rgw_md_log_max_shards, OPT_INT, 64) // max shards for metadata log
 OPTION(rgw_num_zone_opstate_shards, OPT_INT, 128) // max shards for keeping inter-region copy progress info
 OPTION(rgw_opstate_ratelimit_sec, OPT_INT, 30) // min time between opstate updates on a single upload (0 for disabling ratelimit)
+OPTION(rgw_curl_wait_timeout_ms, OPT_INT, 1000) // timeout for certain curl calls
 
 OPTION(rgw_data_log_window, OPT_INT, 30) // data log entries window (in seconds)
 OPTION(rgw_data_log_changes_size, OPT_INT, 1000) // number of in-memory entries to hold for data changes log
