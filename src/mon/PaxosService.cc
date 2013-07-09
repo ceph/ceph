@@ -189,10 +189,6 @@ void PaxosService::propose_pending()
   if (should_stash_full())
     encode_full(&t);
 
-  if (should_trim()) {
-    encode_trim(&t);
-  }
-
   encode_pending(&t);
   have_pending = false;
 
@@ -324,6 +320,20 @@ void PaxosService::shutdown()
   }
 
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
+}
+
+void PaxosService::maybe_trim()
+{
+  if (is_leader() && is_active() && should_trim()) {
+    dout(10) << __func__ << " trimming" << dendl;
+
+    MonitorDBStore::Transaction t;
+    encode_trim(&t);
+    bufferlist bl;
+    t.encode(bl);
+
+    paxos->propose_new_value(bl, new C_Committed(this));
+  }
 }
 
 void PaxosService::trim(MonitorDBStore::Transaction *t,
