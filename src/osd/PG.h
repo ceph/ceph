@@ -1723,9 +1723,11 @@ public:
   // OpRequest queueing
   bool can_discard_op(OpRequestRef op);
   bool can_discard_scan(OpRequestRef op);
-  bool can_discard_subop(OpRequestRef op);
   bool can_discard_backfill(OpRequestRef op);
   bool can_discard_request(OpRequestRef op);
+
+  template<typename T, int MSGTYPE>
+  bool can_discard_replica_op(OpRequestRef op);
 
   static bool op_must_wait_for_map(OSDMapRef curmap, OpRequestRef op);
 
@@ -1778,6 +1780,9 @@ public:
   virtual void do_sub_op_reply(OpRequestRef op) = 0;
   virtual void do_scan(OpRequestRef op) = 0;
   virtual void do_backfill(OpRequestRef op) = 0;
+  virtual void do_push(OpRequestRef op) = 0;
+  virtual void do_pull(OpRequestRef op) = 0;
+  virtual void do_push_reply(OpRequestRef op) = 0;
   virtual void snap_trimmer() = 0;
 
   virtual int do_command(vector<string>& cmd, ostream& ss,
