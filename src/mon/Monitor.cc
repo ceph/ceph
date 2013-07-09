@@ -4004,6 +4004,11 @@ int Monitor::scrub()
     return -EOPNOTSUPP;
   }
 
+  if (!scrub_result.empty()) {
+    clog.info() << "scrub already in progress\n";
+    return -EBUSY;
+  }
+
   scrub_result.clear();
   scrub_version = paxos->get_version();
 
