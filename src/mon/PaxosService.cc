@@ -326,6 +326,20 @@ void PaxosService::shutdown()
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
 }
 
+bool PaxosService::should_trim()
+{
+  if (!service_should_trim())
+    return false;
+
+  if (g_conf->paxos_service_trim_min > 0) {
+    version_t trim_to = get_trim_to();
+    version_t first = get_first_committed();
+    if ((trim_to > 0) && trim_to > first)
+      return ((trim_to - first) >= (version_t)g_conf->paxos_service_trim_min);
+   }
+  return true;
+}
+
 void PaxosService::trim(MonitorDBStore::Transaction *t,
 			version_t from, version_t to)
 {
