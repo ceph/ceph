@@ -560,12 +560,6 @@ void OSDMonitor::encode_trim_extra(MonitorDBStore::Transaction *tx, version_t fi
   put_version_full(tx, first, bl);
 }
 
-bool OSDMonitor::service_should_trim()
-{
-  update_trim();
-  return (get_trim_to() > 0);
-}
-
 // -------------
 
 bool OSDMonitor::preprocess_query(PaxosServiceMessage *m)
