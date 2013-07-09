@@ -392,6 +392,18 @@ done:
   delete req;
 }
 
+#ifdef HAVE_CURL_MULTI_WAIT
+static void check_curl()
+{
+}
+#else
+static void check_curl()
+{
+  derr << "WARNING: libcurl doesn't support curl_multi_wait()" << dendl;
+  derr << "WARNING: cross zone / region transfer performance may be affected" << dendl;
+}
+#endif
+
 class C_InitTimeout : public Context {
 public:
   C_InitTimeout() {}
@@ -442,6 +454,8 @@ int main(int argc, const char **argv)
       return 0;
     }
   }
+
+  check_curl();
 
   if (g_conf->daemonize) {
     if (g_conf->rgw_socket_path.empty() and g_conf->rgw_port.empty()) {
