@@ -90,6 +90,9 @@
 #include "messages/MPGStatsAck.h"
 
 #include "messages/MWatchNotify.h"
+#include "messages/MOSDPGPush.h"
+#include "messages/MOSDPGPushReply.h"
+#include "messages/MOSDPGPull.h"
 
 #include "common/perf_counters.h"
 #include "common/Timer.h"
@@ -2519,11 +2522,16 @@ void OSD::_add_heartbeat_peer(int p)
     if (cons.second) {
       hi->con_front = cons.second.get();
       hi->con_front->set_priv(s->get());
+      dout(10) << "_add_heartbeat_peer: new peer osd." << p
+	       << " " << hi->con_back->get_peer_addr()
+	       << " " << hi->con_front->get_peer_addr()
+	       << dendl;
+    } else {
+      hi->con_front.reset(NULL);
+      dout(10) << "_add_heartbeat_peer: new peer osd." << p
+	       << " " << hi->con_back->get_peer_addr()
+	       << dendl;
     }
-    dout(10) << "_add_heartbeat_peer: new peer osd." << p
-	     << " " << hi->con_back->get_peer_addr()
-	     << " " << (hi->con_front ? hi->con_front->get_peer_addr() : entity_addr_t())
-	     << dendl;
   } else {
     hi = &i->second;
   }
@@ -4416,10 +4424,19 @@ void OSD::dispatch_op(OpRequestRef op)
 
     // for replication etc.
   case MSG_OSD_SUBOP:
-    handle_sub_op(op);
+    handle_replica_op<MOSDSubOp, MSG_OSD_SUBOP>(op);
     break;
   case MSG_OSD_SUBOPREPLY:
-    handle_sub_op_reply(op);
+    handle_replica_op<MOSDSubOpReply, MSG_OSD_SUBOPREPLY>(op);
+    break;
+  case MSG_OSD_PG_PUSH:
+    handle_replica_op<MOSDPGPush, MSG_OSD_PG_PUSH>(op);
+    break;
+  case MSG_OSD_PG_PULL:
+    handle_replica_op<MOSDPGPull, MSG_OSD_PG_PULL>(op);
+    break;
+  case MSG_OSD_PG_PUSH_REPLY:
+    handle_replica_op<MOSDPGPushReply, MSG_OSD_PG_PUSH_REPLY>(op);
     break;
   }
 }
@@ -6504,29 +6521,35 @@ void OSD::do_recovery(PG *pg)
   // see how many we should try to start.  note that this is a bit racy.
   recovery_wq.lock();
   int max = g_conf->osd_recovery_max_active - recovery_ops_active;
+  if (max > 0) {
+    dout(10) << "do_recovery can start " << max << " (" << recovery_ops_active << "/" << g_conf->osd_recovery_max_active
+	     << " rops)" << dendl;
+    recovery_ops_active += max;  // take them now, return them if we don't use them.
+  } else {
+    dout(10) << "do_recovery can start 0 (" << recovery_ops_active << "/" << g_conf->osd_recovery_max_active
+	     << " rops)" << dendl;
+  }
   recovery_wq.unlock();
+
   if (max <= 0) {
     dout(10) << "do_recovery raced and failed to start anything; requeuing " << *pg << dendl;
     recovery_wq.queue(pg);
+    return;
   } else {
     pg->lock();
     if (pg->deleting || !(pg->is_active() && pg->is_primary())) {
       pg->unlock();
-      return;
+      goto out;
     }
     
-    dout(10) << "do_recovery starting " << max
-	     << " (" << recovery_ops_active << "/" << g_conf->osd_recovery_max_active << " rops) on "
-	     << *pg << dendl;
+    dout(10) << "do_recovery starting " << max << " " << *pg << dendl;
 #ifdef DEBUG_RECOVERY_OIDS
     dout(20) << "  active was " << recovery_oids[pg->info.pgid] << dendl;
 #endif
     
     PG::RecoveryCtx rctx = create_context();
     int started = pg->start_recovery_ops(max, &rctx);
-    dout(10) << "do_recovery started " << started
-	     << " (" << recovery_ops_active << "/" << g_conf->osd_recovery_max_active << " rops) on "
-	     << *pg << dendl;
+    dout(10) << "do_recovery started " << started << "/" << max << " on " << *pg << dendl;
 
     /*
      * if we couldn't start any recovery ops and things are still
@@ -6549,6 +6572,15 @@ void OSD::do_recovery(PG *pg)
     pg->unlock();
     dispatch_context(rctx, pg, curmap);
   }
+
+ out:
+  recovery_wq.lock();
+  if (max > 0) {
+    assert(recovery_ops_active >= max);
+    recovery_ops_active -= max;
+  }
+  recovery_wq._wake();
+  recovery_wq.unlock();
 }
 
 void OSD::start_recovery_op(PG *pg, const hobject_t& soid)
@@ -6773,12 +6805,13 @@ void OSD::handle_op(OpRequestRef op)
   enqueue_op(pg, op);
 }
 
-void OSD::handle_sub_op(OpRequestRef op)
+template<typename T, int MSGTYPE>
+void OSD::handle_replica_op(OpRequestRef op)
 {
-  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->request);
-  assert(m->get_header().type == MSG_OSD_SUBOP);
+  T *m = static_cast<T *>(op->request);
+  assert(m->get_header().type == MSGTYPE);
 
-  dout(10) << "handle_sub_op " << *m << " epoch " << m->map_epoch << dendl;
+  dout(10) << __func__ << *m << " epoch " << m->map_epoch << dendl;
   if (m->map_epoch < up_epoch) {
     dout(3) << "replica op from before up" << dendl;
     return;
@@ -6790,9 +6823,6 @@ void OSD::handle_sub_op(OpRequestRef op)
   // must be a rep op.
   assert(m->get_source().is_osd());
   
-  // make sure we have the pg
-  const pg_t pgid = m->pgid;
-
   // require same or newer map
   if (!require_same_or_newer_map(op, m->map_epoch))
     return;
@@ -6801,42 +6831,12 @@ void OSD::handle_sub_op(OpRequestRef op)
   _share_map_incoming(m->get_source(), m->get_connection().get(), m->map_epoch,
 		      static_cast<Session*>(m->get_connection()->get_priv()));
 
+  // make sure we have the pg
+  const pg_t pgid = m->pgid;
   if (service.splitting(pgid)) {
     waiting_for_pg[pgid].push_back(op);
     return;
   }
-
-  PG *pg = _have_pg(pgid) ? _lookup_pg(pgid) : NULL;
-  if (!pg) {
-    return;
-  }
-  enqueue_op(pg, op);
-}
-
-void OSD::handle_sub_op_reply(OpRequestRef op)
-{
-  MOSDSubOpReply *m = static_cast<MOSDSubOpReply*>(op->request);
-  assert(m->get_header().type == MSG_OSD_SUBOPREPLY);
-  if (m->get_map_epoch() < up_epoch) {
-    dout(3) << "replica op reply from before up" << dendl;
-    return;
-  }
-
-  if (!require_osd_peer(op))
-    return;
-
-  // must be a rep op.
-  assert(m->get_source().is_osd());
-  
-  // make sure we have the pg
-  const pg_t pgid = m->get_pg();
-
-  // require same or newer map
-  if (!require_same_or_newer_map(op, m->get_map_epoch())) return;
-
-  // share our map with sender, if they're old
-  _share_map_incoming(m->get_source(), m->get_connection().get(), m->get_map_epoch(),
-		      static_cast<Session*>(m->get_connection()->get_priv()));
 
   PG *pg = _have_pg(pgid) ? _lookup_pg(pgid) : NULL;
   if (!pg) {

@@ -36,8 +36,7 @@ class C_MT_Save : public Context {
 public:
   C_MT_Save(MDSTable *i, version_t v) : ida(i), version(v) {}
   void finish(int r) {
-    assert(r >= 0);
-    ida->save_2(version);
+    ida->save_2(r, version);
   }
 };
 
@@ -72,10 +71,18 @@ void MDSTable::save(Context *onfinish, version_t v)
 			    NULL, new C_MT_Save(this, version));
 }
 
-void MDSTable::save_2(version_t v)
+void MDSTable::save_2(int r, version_t v)
 {
   dout(10) << "save_2 v " << v << dendl;
-  
+  if (r == -EBLACKLISTED) {
+    mds->suicide();
+    return;
+  }
+  if (r < 0) {
+    dout(10) << "save_2 could not write table: " << r << dendl;
+    assert(r >= 0);
+  }
+  assert(r >= 0);
   committed_version = v;
   
   list<Context*> ls;
@@ -136,20 +143,21 @@ void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)
 {
   assert(is_opening());
   state = STATE_ACTIVE;
+  if (r == -EBLACKLISTED) {
+    mds->suicide();
+    return;
+  }
+  if (r < 0) {
+    dout(10) << "load_2 could not read table: " << r << dendl;
+    assert(r >= 0);
+  }
 
-  if (r >= 0) {
-    dout(10) << "load_2 got " << bl.length() << " bytes" << dendl;
-    bufferlist::iterator p = bl.begin();
-    ::decode(version, p);
-    projected_version = committed_version = version;
-    dout(10) << "load_2 loaded v" << version << dendl;
-    decode_state(p);
-  }
-  else {
-    dout(10) << "load_2 could not read table; error: " << r << dendl;
-    assert(0); // this shouldn't happen if mkfs finished.
-    reset();   
-  }
+  dout(10) << "load_2 got " << bl.length() << " bytes" << dendl;
+  bufferlist::iterator p = bl.begin();
+  ::decode(version, p);
+  projected_version = committed_version = version;
+  dout(10) << "load_2 loaded v" << version << dendl;
+  decode_state(p);
 
   if (onfinish) {
     onfinish->finish(0);
