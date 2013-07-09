@@ -150,6 +150,10 @@ void hobject_t::decode(json_spirit::Value& v)
       hash = p.value_.get_int();
     else if (p.name_ == "max")
       max = p.value_.get_int();
+    else if (p.name_ == "pool")
+      pool = p.value_.get_int();
+    else if (p.name_ == "namespace")
+      nspace = p.value_.get_str();
   }
 }
 
@@ -160,6 +164,8 @@ void hobject_t::dump(Formatter *f) const
   f->dump_int("snapid", snap);
   f->dump_int("hash", hash);
   f->dump_int("max", (int)max);
+  f->dump_int("pool", pool);
+  f->dump_string("namespace", nspace);
 }
 
 void hobject_t::generate_test_instances(list<hobject_t*>& o)
@@ -167,9 +173,11 @@ void hobject_t::generate_test_instances(list<hobject_t*>& o)
   o.push_back(new hobject_t);
   o.push_back(new hobject_t);
   o.back()->max = true;
-  o.push_back(new hobject_t(object_t("oname"), string(), 1, 234, -1));
-  o.push_back(new hobject_t(object_t("oname2"), string("okey"), CEPH_NOSNAP, 67, 0));
-  o.push_back(new hobject_t(object_t("oname3"), string("oname3"), CEPH_SNAPDIR, 910, 1));
+  o.push_back(new hobject_t(object_t("oname"), string(), 1, 234, -1, ""));
+  o.push_back(new hobject_t(object_t("oname2"), string("okey"), CEPH_NOSNAP,
+	67, 0, "n1"));
+  o.push_back(new hobject_t(object_t("oname3"), string("oname3"),
+	CEPH_SNAPDIR, 910, 1, "n2"));
 }
 
 ostream& operator<<(ostream& out, const hobject_t& o)

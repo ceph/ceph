@@ -64,10 +64,18 @@ ostream& operator<<(ostream& out, const OSDCapMatch& m)
   if (m.pool_name.length()) {
     out << "pool " << m.pool_name << " ";
   }
+  if (m.is_nspace) {
+    out << "namespace ";
+    if (m.nspace.length() == 0)
+      out << "\"\"";
+    else
+      out << m.nspace;
+    out << " ";
+  }
   return out;
 }
 
-bool OSDCapMatch::is_match(const string& pn, int64_t pool_auid, const string& object) const
+bool OSDCapMatch::is_match(const string& pn, const string& ns, int64_t pool_auid, const string& object) const
 {
   if (auid >= 0) {
     if (auid != pool_auid)
@@ -77,10 +85,27 @@ bool OSDCapMatch::is_match(const string& pn, int64_t pool_auid, const string& ob
     if (pool_name != pn)
       return false;
   }
+  if (is_nspace) {
+    if (nspace != ns)
+      return false;
+  }
   if (object_prefix.length()) {
     if (object.find(object_prefix) != 0)
       return false;
   }
+  return true;
+}
+
+bool OSDCapMatch::is_match_all() const
+{
+  if (auid >= 0)
+    return false;
+  if (pool_name.length())
+    return false;
+  if (is_nspace)
+    return false;
+  if (object_prefix.length())
+    return false;
   return true;
 }
 
@@ -93,7 +118,7 @@ ostream& operator<<(ostream& out, const OSDCapGrant& g)
 bool OSDCap::allow_all() const
 {
   for (vector<OSDCapGrant>::const_iterator p = grants.begin(); p != grants.end(); ++p)
-    if (p->match.is_match(string(), CEPH_AUTH_UID_DEFAULT, string()) && p->spec.allow_all())
+    if (p->match.is_match_all() && p->spec.allow_all())
       return true;
   return false;
 }
@@ -104,7 +129,7 @@ void OSDCap::set_allow_all()
   grants.push_back(OSDCapGrant(OSDCapMatch(), OSDCapSpec(OSD_CAP_ANY)));
 }
 
-bool OSDCap::is_capable(const string& pool_name, int64_t pool_auid,
+bool OSDCap::is_capable(const string& pool_name, const string& ns, int64_t pool_auid,
 			const string& object, bool op_may_read,
 			bool op_may_write, bool op_may_class_read,
 			bool op_may_class_write) const
@@ -112,7 +137,7 @@ bool OSDCap::is_capable(const string& pool_name, int64_t pool_auid,
   osd_rwxa_t allow = 0;
   for (vector<OSDCapGrant>::const_iterator p = grants.begin();
        p != grants.end(); ++p) {
-    if (p->match.is_match(pool_name, pool_auid, object)) {
+    if (p->match.is_match(pool_name, ns, pool_auid, object)) {
       allow = allow | p->spec.allow;
       if ((op_may_read && !(allow & OSD_CAP_R)) ||
 	  (op_may_write && !(allow & OSD_CAP_W)) ||
@@ -150,18 +175,24 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
     quoted_string %=
       lexeme['"' >> +(char_ - '"') >> '"'] | 
       lexeme['\'' >> +(char_ - '\'') >> '\''];
+    equoted_string %=
+      lexeme['"' >> *(char_ - '"') >> '"'] |
+      lexeme['\'' >> *(char_ - '\'') >> '\''];
     unquoted_word %= +char_("a-zA-Z0-9_-");
     str %= quoted_string | unquoted_word;
+    estr %= equoted_string | unquoted_word;
 
     spaces = +lit(' ');
 
-    // match := [pool[=]<poolname> | auid <123>] [object_prefix <prefix>]
+    // match := [pool[=]<poolname> [namespace[=]<namespace>] | auid <123>] [object_prefix <prefix>]
     pool_name %= -(spaces >> lit("pool") >> (lit('=') | spaces) >> str);
+    nspace %= (spaces >> lit("namespace") >> (lit('=') | spaces) >> estr);
     auid %= (spaces >> lit("auid") >> spaces >> int_);
     object_prefix %= -(spaces >> lit("object_prefix") >> spaces >> str);
 
     match = ( (auid >> object_prefix)                 [_val = phoenix::construct<OSDCapMatch>(_1, _2)] |
-	      (pool_name >> object_prefix)            [_val = phoenix::construct<OSDCapMatch>(_1, _2)]);
+             (pool_name >> nspace >> object_prefix)   [_val = phoenix::construct<OSDCapMatch>(_1, _2, _3)] |
+             (pool_name >> object_prefix)             [_val = phoenix::construct<OSDCapMatch>(_1, _2)]);
 
     // rwxa := * | [r][w][x] [class-read] [class-write]
     rwxa =
@@ -192,12 +223,13 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
   }
   qi::rule<Iterator> spaces;
   qi::rule<Iterator, unsigned()> rwxa;
-  qi::rule<Iterator, string()> quoted_string;
+  qi::rule<Iterator, string()> quoted_string, equoted_string;
   qi::rule<Iterator, string()> unquoted_word;
-  qi::rule<Iterator, string()> str;
+  qi::rule<Iterator, string()> str, estr;
   qi::rule<Iterator, int()> auid;
   qi::rule<Iterator, OSDCapSpec()> capspec;
   qi::rule<Iterator, string()> pool_name;
+  qi::rule<Iterator, string()> nspace;
   qi::rule<Iterator, string()> object_prefix;
   qi::rule<Iterator, OSDCapMatch()> match;
   qi::rule<Iterator, OSDCapGrant()> grant;

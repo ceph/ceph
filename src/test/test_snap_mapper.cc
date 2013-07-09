@@ -462,7 +462,7 @@ public:
       random_string(1+(rand() % 16)),
       snapid_t(rand() % 1000),
       (rand() & ((~0)<<bits)) | (mask & ~((~0)<<bits)),
-      0);
+      0, random_string(rand() % 16));
   }
 
   void choose_random_snaps(int num, set<snapid_t> *snaps) {

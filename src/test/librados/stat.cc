@@ -46,6 +46,76 @@ TEST(LibRadosStat, StatPP) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
+TEST(LibRadosStat, StatNS) {
+  char buf[128];
+  rados_t cluster;
+  rados_ioctx_t ioctx;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  ASSERT_EQ((int)sizeof(buf), rados_write(ioctx, "foo2", buf, sizeof(buf), 0));
+
+  char buf2[64];
+  memset(buf2, 0xcc, sizeof(buf2));
+  rados_ioctx_set_namespace(ioctx, "nspace");
+  ASSERT_EQ((int)sizeof(buf2), rados_write(ioctx, "foo", buf2, sizeof(buf2), 0));
+
+  uint64_t size;
+  time_t mtime;
+  rados_ioctx_set_namespace(ioctx, "");
+  ASSERT_EQ(0, rados_stat(ioctx, "foo", &size, &mtime));
+  ASSERT_EQ(sizeof(buf), size);
+  ASSERT_EQ(-ENOENT, rados_stat(ioctx, "nonexistent", &size, &mtime));
+
+  rados_ioctx_set_namespace(ioctx, "nspace");
+  ASSERT_EQ(0, rados_stat(ioctx, "foo", &size, &mtime));
+  ASSERT_EQ(sizeof(buf2), size);
+  ASSERT_EQ(-ENOENT, rados_stat(ioctx, "nonexistent", &size, &mtime));
+  ASSERT_EQ(-ENOENT, rados_stat(ioctx, "foo2", &size, &mtime));
+
+  rados_ioctx_destroy(ioctx);
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
+TEST(LibRadosStat, StatPPNS) {
+  char buf[128];
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl, sizeof(buf), 0));
+  ASSERT_EQ((int)sizeof(buf), ioctx.write("foo2", bl, sizeof(buf), 0));
+
+  char buf2[64];
+  memset(buf2, 0xbb, sizeof(buf2));
+  bufferlist bl2;
+  bl2.append(buf2, sizeof(buf2));
+  ioctx.set_namespace("nspace");
+  ASSERT_EQ((int)sizeof(buf2), ioctx.write("foo", bl2, sizeof(buf2), 0));
+
+  uint64_t size;
+  time_t mtime;
+  ioctx.set_namespace("");
+  ASSERT_EQ(0, ioctx.stat("foo", &size, &mtime));
+  ASSERT_EQ(sizeof(buf), size);
+  ASSERT_EQ(-ENOENT, ioctx.stat("nonexistent", &size, &mtime));
+
+  ioctx.set_namespace("nspace");
+  ASSERT_EQ(0, ioctx.stat("foo", &size, &mtime));
+  ASSERT_EQ(sizeof(buf2), size);
+  ASSERT_EQ(-ENOENT, ioctx.stat("nonexistent", &size, &mtime));
+  ASSERT_EQ(-ENOENT, ioctx.stat("foo2", &size, &mtime));
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
 TEST(LibRadosStat, ClusterStat) {
   rados_t cluster;
   std::string pool_name = get_temp_pool_name();

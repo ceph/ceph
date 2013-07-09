@@ -977,26 +977,39 @@ int OSDMap::apply_incremental(const Incremental &inc)
   return 0;
 }
 
+static string make_hash_str(const string &inkey, const string &nspace)
+{
+  if (nspace.empty())
+    return inkey;
+  return nspace + '\037' + inkey;
+}
 
 // mapping
-int OSDMap::object_locator_to_pg(const object_t& oid, const object_locator_t& loc, pg_t &pg) const
+int OSDMap::object_locator_to_pg(
+	const object_t& oid,
+	const object_locator_t& loc,
+	pg_t &pg) const
 {
   // calculate ps (placement seed)
   const pg_pool_t *pool = get_pg_pool(loc.get_pool());
   if (!pool)
     return -ENOENT;
   ps_t ps;
-  if (loc.key.length())
-    ps = ceph_str_hash(pool->object_hash, loc.key.c_str(), loc.key.length());
+  string key;
+  if (!loc.key.empty())
+    key = make_hash_str(loc.key, loc.nspace);
   else
-    ps = ceph_str_hash(pool->object_hash, oid.name.c_str(), oid.name.length());
+    key = make_hash_str(oid.name, loc.nspace);
+
+  ps = ceph_str_hash(pool->object_hash, key.c_str(), key.length());
   pg = pg_t(ps, loc.get_pool(), -1);
   return 0;
 }
 
-ceph_object_layout OSDMap::make_object_layout(object_t oid, int pg_pool) const
+ceph_object_layout OSDMap::make_object_layout(
+  object_t oid, int pg_pool, string nspace) const
 {
-  object_locator_t loc(pg_pool);
+  object_locator_t loc(pg_pool, nspace);
 
   ceph_object_layout ol;
   pg_t pgid = object_locator_to_pg(oid, loc);

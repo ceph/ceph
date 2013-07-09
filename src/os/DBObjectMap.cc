@@ -244,7 +244,7 @@ bool DBObjectMap::parse_hobject_key_v0(const string &in, coll_t *c,
   pg_t pg;
   if (c->is_pg_prefix(pg))
     pool = (int64_t)pg.pool();
-  (*hoid) = hobject_t(name, key, snap, hash, pool);
+  (*hoid) = hobject_t(name, key, snap, hash, pool, "");
   return true;
 }
 

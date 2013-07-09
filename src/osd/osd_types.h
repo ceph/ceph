@@ -106,21 +106,27 @@ namespace __gnu_cxx {
 struct object_locator_t {
   int64_t pool;
   string key;
+  string nspace;
 
   explicit object_locator_t()
     : pool(-1) {}
   explicit object_locator_t(int64_t po)
     : pool(po) {}
-  explicit object_locator_t(int64_t po, string s)
-    : pool(po), key(s) {}
+  explicit object_locator_t(int64_t po, string ns)
+    : pool(po), nspace(ns) {}
+  explicit object_locator_t(int64_t po, string ns, string s)
+    : pool(po), key(s), nspace(ns) {}
+  explicit object_locator_t(const hobject_t& soid)
+    : pool(soid.pool), key(soid.get_key()), nspace(soid.nspace) {}
 
-  int get_pool() const {
+  int64_t get_pool() const {
     return pool;
   }
 
   void clear() {
     pool = -1;
     key = "";
+    nspace = "";
   }
 
   void encode(bufferlist& bl) const;
@@ -131,7 +137,7 @@ struct object_locator_t {
 WRITE_CLASS_ENCODER(object_locator_t)
 
 inline bool operator==(const object_locator_t& l, const object_locator_t& r) {
-  return l.pool == r.pool && l.key == r.key;
+  return l.pool == r.pool && l.key == r.key && l.nspace == r.nspace;
 }
 inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
   return !(l == r);
@@ -140,6 +146,8 @@ inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
 inline ostream& operator<<(ostream& out, const object_locator_t& loc)
 {
   out << "@" << loc.pool;
+  if (loc.nspace.length())
+    out << ";" << loc.nspace;
   if (loc.key.length())
     out << ":" << loc.key;
   return out;
@@ -1590,7 +1598,7 @@ struct pg_ls_response_t {
   static void generate_test_instances(list<pg_ls_response_t*>& o) {
     o.push_back(new pg_ls_response_t);
     o.push_back(new pg_ls_response_t);
-    o.back()->handle = hobject_t(object_t("hi"), "key", 1, 2, -1);
+    o.back()->handle = hobject_t(object_t("hi"), "key", 1, 2, -1, "");
     o.back()->entries.push_back(make_pair(object_t("one"), string()));
     o.back()->entries.push_back(make_pair(object_t("two"), string("twokey")));
   }
@@ -1788,7 +1796,6 @@ static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
 
 struct object_info_t {
   hobject_t soid;
-  object_locator_t oloc;
   string category;
 
   eversion_t version, prior_version;
@@ -1827,8 +1834,8 @@ struct object_info_t {
       truncate_seq(0), truncate_size(0), uses_tmap(false)
   {}
 
-  object_info_t(const hobject_t& s, const object_locator_t& o)
-    : soid(s), oloc(o), size(0),
+  object_info_t(const hobject_t& s)
+    : soid(s), size(0),
       lost(false), truncate_seq(0), truncate_size(0), uses_tmap(false) {}
 
   object_info_t(bufferlist& bl) {
