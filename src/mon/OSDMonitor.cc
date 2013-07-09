@@ -539,6 +539,11 @@ version_t OSDMonitor::get_trim_to()
       mon->pgmon()->pg_map.creating_pgs.empty()) {
     epoch_t floor = mon->pgmon()->pg_map.calc_min_last_epoch_clean();
     dout(10) << " min_last_epoch_clean " << floor << dendl;
+    if (g_conf->mon_osd_force_trim_to > 0 &&
+	g_conf->mon_osd_force_trim_to < (int)get_version()) {
+      floor = g_conf->mon_osd_force_trim_to;
+      dout(10) << " explicit mon_osd_force_trim_to = " << floor << dendl;
+    }
     unsigned min = g_conf->mon_min_osdmap_epochs;
     if (floor + min > get_last_committed()) {
       if (min < get_last_committed())

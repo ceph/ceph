@@ -676,7 +676,8 @@ bool PGMonitor::pg_stats_have_changed(int from, const MPGStats *stats) const
     hash_map<pg_t,pg_stat_t>::const_iterator t = pg_map.pg_stat.find(p->first);
     if (t == pg_map.pg_stat.end())
       return true;
-    if (t->second.reported != p->second.reported)
+    if (t->second.reported_epoch != p->second.reported_epoch ||
+	t->second.reported_seq != p->second.reported_seq)
       return true;
   }
 
@@ -710,7 +711,7 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
     for (map<pg_t,pg_stat_t>::const_iterator p = stats->pg_stat.begin();
 	 p != stats->pg_stat.end();
 	 ++p) {
-      ack->pg_stat[p->first] = p->second.reported;
+      ack->pg_stat[p->first] = make_pair(p->second.reported_seq, p->second.reported_epoch);
     }
     mon->send_reply(stats, ack);
     stats->put();
@@ -732,22 +733,26 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
        p != stats->pg_stat.end();
        ++p) {
     pg_t pgid = p->first;
-    ack->pg_stat[pgid] = p->second.reported;
+    ack->pg_stat[pgid] = make_pair(p->second.reported_seq, p->second.reported_epoch);
 
-    if ((pg_map.pg_stat.count(pgid) && 
-	 pg_map.pg_stat[pgid].reported > p->second.reported)) {
-      dout(15) << " had " << pgid << " from " << pg_map.pg_stat[pgid].reported << dendl;
+    if (pg_map.pg_stat.count(pgid) &&
+	(pg_map.pg_stat[pgid].reported_seq > p->second.reported_seq ||
+	 pg_map.pg_stat[pgid].reported_epoch > p->second.reported_epoch)) {
+      dout(15) << " had " << pgid << " from " << pg_map.pg_stat[pgid].reported_epoch << ":"
+	       << pg_map.pg_stat[pgid].reported_seq << dendl;
       continue;
     }
     if (pending_inc.pg_stat_updates.count(pgid) && 
-	pending_inc.pg_stat_updates[pgid].reported > p->second.reported) {
-      dout(15) << " had " << pgid << " from " << pending_inc.pg_stat_updates[pgid].reported
-	       << " (pending)" << dendl;
+	(pending_inc.pg_stat_updates[pgid].reported_seq > p->second.reported_seq ||
+	 pending_inc.pg_stat_updates[pgid].reported_epoch > p->second.reported_epoch)) {
+      dout(15) << " had " << pgid << " from " << pending_inc.pg_stat_updates[pgid].reported_epoch << ":"
+	       << pending_inc.pg_stat_updates[pgid].reported_seq << " (pending)" << dendl;
       continue;
     }
 
     if (pg_map.pg_stat.count(pgid) == 0) {
-      dout(15) << " got " << pgid << " reported at " << p->second.reported
+      dout(15) << " got " << pgid << " reported at " << p->second.reported_epoch << ":"
+	       << p->second.reported_seq
 	       << " state " << pg_state_string(p->second.state)
 	       << " but DNE in pg_map; pool was probably deleted."
 	       << dendl;
@@ -755,7 +760,7 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
     }
       
     dout(15) << " got " << pgid
-	     << " reported at " << p->second.reported
+	     << " reported at " << p->second.reported_epoch << ":" << p->second.reported_seq
 	     << " state " << pg_state_string(pg_map.pg_stat[pgid].state)
 	     << " -> " << pg_state_string(p->second.state)
 	     << dendl;

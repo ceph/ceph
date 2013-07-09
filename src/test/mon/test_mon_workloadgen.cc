@@ -577,7 +577,7 @@ class OSDStub : public TestStub
     if (s.state & PG_STATE_CLEAN)
       s.last_clean = now;
     s.last_change = now;
-    s.reported.inc(1);
+    s.reported_seq++;
 
     pgs_changes.insert(pgid);
   }
