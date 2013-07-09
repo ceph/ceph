@@ -2,6 +2,40 @@
  Release Notes
 ===============
 
+v0.66
+-----
+
+Upgrading
+~~~~~~~~~
+
+* There is now a configurable maximum rados object size, defaulting to 100 GB.  If you
+  are using librados and storing objects larger than that, you will need to adjust
+  'osd max object size', and should consider using smaller objects instead.
+
+Notable changes
+~~~~~~~~~~~~~~~
+
+* osd: pg log (re)writes are not vastly more efficient (faster peering) (Sam Just)
+* osd: fixed problem with front-side heartbeats and mixed clusters (David Zafman)
+* mon: tuning, performance improvements
+* mon: simplify PaxosService vs Paxos interaction, fix readable/writeable checks
+* rgw: fix radosgw-admin buckets list (Yehuda Sadeh)
+* mds: support robust lookup by ino number (good for NFS) (Yan, Zheng)
+* mds: fix several bugs (Yan, Zheng)
+* ceph-fuse, libcephfs: fix truncatation bug on >4MB files (Yan, Zheng)
+* ceph/librados: fix resending of commands on mon reconnect
+* librados python: fix xattrs > 4KB (Josh Durgin)
+* librados: configurable max object size (default 100 GB)
+* msgr: fix various memory leaks
+* ceph-fuse: fixed long-standing O_NOATIME vs O_LAZY bug
+* ceph-fuse, libcephfs: fix request refcounting bug (hang on shutdown)
+* ceph-fuse, libcephfs: fix read zeroing at EOF
+* ceph-conf: --show-config-value now reflects daemon defaults
+* ceph-disk: simpler, more robust locking
+* ceph-disk: avoid mounting over an existing osd in /var/lib/ceph/osd/*
+* sysvinit: handle symlinks in /var/lib/ceph/osd/*
+
+
 v0.65
 -----
 
