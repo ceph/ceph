@@ -252,6 +252,31 @@ private:
   version_t sync_start_version;  ///< last_committed at sync start
   Context *sync_timeout_event;   ///< timeout event
 
+  /**
+   * floor for sync source
+   *
+   * When we sync we forget about our old last_committed value which
+   * can be dangerous.  For example, if we have a cluster of:
+   *
+   *   mon.a: lc 100
+   *   mon.b: lc 80
+   *   mon.c: lc 100 (us)
+   *
+   * If something forces us to sync (say, corruption, or manual
+   * intervention, or bug), we forget last_committed, and might abort.
+   * If mon.a happens to be down when we come back, we will see:
+   *
+   *   mon.b: lc 80
+   *   mon.c: lc 0 (us)
+   *
+   * and sync from mon.b, at which point a+b will both have lc 80 and
+   * come online with a majority holding out of date commits.
+   *
+   * Avoid this by preserving our old last_committed value prior to
+   * sync and never going backwards.
+   */
+  version_t sync_last_committed_floor;
+
   struct C_SyncTimeout : public Context {
     Monitor *mon;
     C_SyncTimeout(Monitor *m) : mon(m) {}
