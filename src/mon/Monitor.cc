@@ -150,6 +150,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   sync_full(false),
   sync_start_version(0),
   sync_timeout_event(NULL),
+  sync_last_committed_floor(0),
 
   timecheck_round(0),
   timecheck_acks(0),
@@ -428,6 +429,9 @@ int Monitor::preinit()
       store->clear(sync_prefixes);
     }
   }
+
+  sync_last_committed_floor = store->get("mon_sync", "last_committed_floor");
+  dout(10) << "sync_last_committed_floor " << sync_last_committed_floor << dendl;
 
   init_paxos();
   health_monitor->init();
@@ -839,8 +843,13 @@ void Monitor::sync_start(entity_inst_t &other, bool full)
     sync_obtain_latest_monmap(backup_monmap);
     assert(backup_monmap.length() > 0);
 
+    sync_last_committed_floor = MAX(sync_last_committed_floor, paxos->get_version());
+    dout(10) << __func__ << " marking sync in progress, storing sync_last_commited_floor "
+	     << sync_last_committed_floor << dendl;
+
     t.put("mon_sync", "latest_monmap", backup_monmap);
     t.put("mon_sync", "in_sync", 1);
+    t.put("mon_sync", "last_committed_floor", sync_last_committed_floor);
     store->apply_transaction(t);
 
     assert(g_conf->mon_sync_requester_kill_at != 1);
@@ -900,6 +909,7 @@ void Monitor::sync_finish(version_t last_committed)
   MonitorDBStore::Transaction t;
   t.erase("mon_sync", "in_sync");
   t.erase("mon_sync", "force_sync");
+  t.erase("mon_sync", "last_committed_floor");
   store->apply_transaction(t);
 
   sync_reset();
@@ -1314,27 +1324,34 @@ void Monitor::handle_probe_reply(MMonProbe *m)
 
   entity_inst_t other = m->get_source_inst();
 
-  if (paxos->get_version() < m->paxos_first_version &&
-      m->paxos_first_version > 1) {  // no need to sync if we're 0 and they start at 1.
+  if (m->paxos_last_version < sync_last_committed_floor) {
     dout(10) << " peer paxos versions [" << m->paxos_first_version
-	     << "," << m->paxos_last_version << "]"
-	     << " vs my version " << paxos->get_version()
-	     << " (too far ahead)"
+	     << "," << m->paxos_last_version << "] < my sync_last_committed_floor "
+	     << sync_last_committed_floor << ", ignoring"
 	     << dendl;
-    cancel_probe_timeout();
-    sync_start(other, true);
-    m->put();
-    return;
-  }
-  if (paxos->get_version() + g_conf->paxos_max_join_drift < m->paxos_last_version) {
-    dout(10) << " peer paxos version " << m->paxos_last_version
-	     << " vs my version " << paxos->get_version()
-	     << " (too far ahead)"
-	     << dendl;
-    cancel_probe_timeout();
-    sync_start(other, false);
-    m->put();
-    return;
+  } else {
+    if (paxos->get_version() < m->paxos_first_version &&
+	m->paxos_first_version > 1) {  // no need to sync if we're 0 and they start at 1.
+      dout(10) << " peer paxos versions [" << m->paxos_first_version
+	       << "," << m->paxos_last_version << "]"
+	       << " vs my version " << paxos->get_version()
+	       << " (too far ahead)"
+	       << dendl;
+      cancel_probe_timeout();
+      sync_start(other, true);
+      m->put();
+      return;
+    }
+    if (paxos->get_version() + g_conf->paxos_max_join_drift < m->paxos_last_version) {
+      dout(10) << " peer paxos version " << m->paxos_last_version
+	       << " vs my version " << paxos->get_version()
+	       << " (too far ahead)"
+	       << dendl;
+      cancel_probe_timeout();
+      sync_start(other, false);
+      m->put();
+      return;
+    }
   }
 
   // is there an existing quorum?
