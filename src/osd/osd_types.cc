@@ -2863,6 +2863,223 @@ ostream &ObjectRecoveryInfo::print(ostream &out) const
 	     << ")";
 }
 
+// -- PushReplyOp --
+void PushReplyOp::generate_test_instances(list<PushReplyOp*> &o)
+{
+  o.push_back(new PushReplyOp);
+  o.push_back(new PushReplyOp);
+  o.back()->soid = hobject_t(sobject_t("asdf", 2));
+  o.push_back(new PushReplyOp);
+  o.back()->soid = hobject_t(sobject_t("asdf", CEPH_NOSNAP));
+}
+
+void PushReplyOp::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(soid, bl);
+  ENCODE_FINISH(bl);
+}
+
+void PushReplyOp::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(soid, bl);
+  DECODE_FINISH(bl);
+}
+
+void PushReplyOp::dump(Formatter *f) const
+{
+  f->dump_stream("soid") << soid;
+}
+
+ostream &PushReplyOp::print(ostream &out) const
+{
+  return out
+    << "PushReplyOp(" << soid
+    << ")";
+}
+
+ostream& operator<<(ostream& out, const PushReplyOp &op)
+{
+  return op.print(out);
+}
+
+uint64_t PushReplyOp::cost(CephContext *cct) const
+{
+
+  return cct->_conf->osd_push_per_object_cost +
+    cct->_conf->osd_recovery_max_chunk;
+}
+
+// -- PullOp --
+void PullOp::generate_test_instances(list<PullOp*> &o)
+{
+  o.push_back(new PullOp);
+  o.push_back(new PullOp);
+  o.back()->soid = hobject_t(sobject_t("asdf", 2));
+  o.back()->recovery_info.version = eversion_t(3, 10);
+  o.push_back(new PullOp);
+  o.back()->soid = hobject_t(sobject_t("asdf", CEPH_NOSNAP));
+  o.back()->recovery_info.version = eversion_t(0, 0);
+}
+
+void PullOp::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(soid, bl);
+  ::encode(recovery_info, bl);
+  ::encode(recovery_progress, bl);
+  ENCODE_FINISH(bl);
+}
+
+void PullOp::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(soid, bl);
+  ::decode(recovery_info, bl);
+  ::decode(recovery_progress, bl);
+  DECODE_FINISH(bl);
+}
+
+void PullOp::dump(Formatter *f) const
+{
+  f->dump_stream("soid") << soid;
+  {
+    f->open_object_section("recovery_info");
+    recovery_info.dump(f);
+    f->close_section();
+  }
+  {
+    f->open_object_section("recovery_progress");
+    recovery_progress.dump(f);
+    f->close_section();
+  }
+}
+
+ostream &PullOp::print(ostream &out) const
+{
+  return out
+    << "PullOp(" << soid
+    << ", recovery_info: " << recovery_info
+    << ", recovery_progress: " << recovery_progress
+    << ")";
+}
+
+ostream& operator<<(ostream& out, const PullOp &op)
+{
+  return op.print(out);
+}
+
+uint64_t PullOp::cost(CephContext *cct) const
+{
+  return cct->_conf->osd_push_per_object_cost +
+    cct->_conf->osd_recovery_max_chunk;
+}
+
+// -- PushOp --
+void PushOp::generate_test_instances(list<PushOp*> &o)
+{
+  o.push_back(new PushOp);
+  o.push_back(new PushOp);
+  o.back()->soid = hobject_t(sobject_t("asdf", 2));
+  o.back()->version = eversion_t(3, 10);
+  o.push_back(new PushOp);
+  o.back()->soid = hobject_t(sobject_t("asdf", CEPH_NOSNAP));
+  o.back()->version = eversion_t(0, 0);
+}
+
+void PushOp::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(soid, bl);
+  ::encode(version, bl);
+  ::encode(data, bl);
+  ::encode(data_included, bl);
+  ::encode(omap_header, bl);
+  ::encode(omap_entries, bl);
+  ::encode(attrset, bl);
+  ::encode(recovery_info, bl);
+  ::encode(after_progress, bl);
+  ::encode(before_progress, bl);
+  ENCODE_FINISH(bl);
+}
+
+void PushOp::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(soid, bl);
+  ::decode(version, bl);
+  ::decode(data, bl);
+  ::decode(data_included, bl);
+  ::decode(omap_header, bl);
+  ::decode(omap_entries, bl);
+  ::decode(attrset, bl);
+  ::decode(recovery_info, bl);
+  ::decode(after_progress, bl);
+  ::decode(before_progress, bl);
+  DECODE_FINISH(bl);
+}
+
+void PushOp::dump(Formatter *f) const
+{
+  f->dump_stream("soid") << soid;
+  f->dump_stream("version") << version;
+  f->dump_int("data_len", data.length());
+  f->dump_stream("data_included") << data_included;
+  f->dump_int("omap_header_len", omap_header.length());
+  f->dump_int("omap_entries_len", omap_entries.size());
+  f->dump_int("attrset_len", attrset.size());
+  {
+    f->open_object_section("recovery_info");
+    recovery_info.dump(f);
+    f->close_section();
+  }
+  {
+    f->open_object_section("after_progress");
+    after_progress.dump(f);
+    f->close_section();
+  }
+  {
+    f->open_object_section("before_progress");
+    before_progress.dump(f);
+    f->close_section();
+  }
+}
+
+ostream &PushOp::print(ostream &out) const
+{
+  return out
+    << "PushOp(" << soid
+    << ", version: " << version
+    << ", data_included: " << data_included
+    << ", data_size: " << data.length()
+    << ", omap_header_size: " << omap_header.length()
+    << ", omap_entries_size: " << omap_entries.size()
+    << ", attrset_size: " << attrset.size()
+    << ", recovery_info: " << recovery_info
+    << ", after_progress: " << after_progress
+    << ", before_progress: " << before_progress
+    << ")";
+}
+
+ostream& operator<<(ostream& out, const PushOp &op)
+{
+  return op.print(out);
+}
+
+uint64_t PushOp::cost(CephContext *cct) const
+{
+  uint64_t cost = data_included.size();
+  for (map<string, bufferlist>::const_iterator i =
+	 omap_entries.begin();
+       i != omap_entries.end();
+       ++i) {
+    cost += i->second.length();
+  }
+  cost += cct->_conf->osd_push_per_object_cost;
+  return cost;
+}
+
 // -- ScrubMap --
 
 void ScrubMap::merge_incr(const ScrubMap &l)

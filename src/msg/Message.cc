@@ -40,6 +40,7 @@ using namespace std;
 #include "messages/MMonJoin.h"
 #include "messages/MMonElection.h"
 #include "messages/MMonSync.h"
+#include "messages/MMonScrub.h"
 
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"
@@ -153,6 +154,10 @@ using namespace std;
 #include "messages/MTimeCheck.h"
 
 #include "common/config.h"
+
+#include "messages/MOSDPGPush.h"
+#include "messages/MOSDPGPushReply.h"
+#include "messages/MOSDPGPull.h"
 
 #define DEBUGLVL  10    // debug level of output
 
@@ -318,6 +323,9 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
   case MSG_MON_SYNC:
     m = new MMonSync;
     break;
+  case MSG_MON_SCRUB:
+    m = new MMonScrub;
+    break;
 
   case MSG_LOG:
     m = new MLog;
@@ -440,6 +448,15 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     break;
   case MSG_OSD_PG_BACKFILL:
     m = new MOSDPGBackfill;
+    break;
+  case MSG_OSD_PG_PUSH:
+    m = new MOSDPGPush;
+    break;
+  case MSG_OSD_PG_PULL:
+    m = new MOSDPGPull;
+    break;
+  case MSG_OSD_PG_PUSH_REPLY:
+    m = new MOSDPGPushReply;
     break;
    // auth
   case CEPH_MSG_AUTH:

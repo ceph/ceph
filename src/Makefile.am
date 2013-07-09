@@ -1937,6 +1937,7 @@ noinst_HEADERS = \
         messages/MMonMap.h\
         messages/MMonPaxos.h\
         messages/MMonProbe.h\
+        messages/MMonScrub.h \
         messages/MMonSubscribe.h\
         messages/MMonSubscribeAck.h\
         messages/MMonSync.h \
@@ -1949,6 +1950,9 @@ noinst_HEADERS = \
         messages/MOSDOpReply.h\
 	messages/MOSDPGBackfill.h\
         messages/MOSDPGCreate.h\
+        messages/MOSDPGPush.h\
+        messages/MOSDPGPull.h\
+        messages/MOSDPGPushReply.h\
         messages/MOSDPGInfo.h\
         messages/MOSDPGLog.h\
         messages/MOSDPGMissing.h\

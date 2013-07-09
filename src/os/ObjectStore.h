@@ -178,13 +178,22 @@ public:
       tolerate_collection_add_enoent = true;
     }
     void register_on_applied(Context *c) {
+      if (!c) return;
       on_applied.push_back(c);
     }
     void register_on_commit(Context *c) {
+      if (!c) return;
       on_commit.push_back(c);
     }
     void register_on_applied_sync(Context *c) {
+      if (!c) return;
       on_applied_sync.push_back(c);
+    }
+    void register_on_complete(Context *c) {
+      if (!c) return;
+      RunOnDeleteRef _complete(new RunOnDelete(c));
+      register_on_applied(new ContainerContext<RunOnDeleteRef>(_complete));
+      register_on_commit(new ContainerContext<RunOnDeleteRef>(_complete));
     }
 
     static void collect_contexts(

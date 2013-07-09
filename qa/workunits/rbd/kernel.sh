@@ -30,6 +30,8 @@ function clean_up {
 	sudo rm -f $TMP_FILES
 }
 
+[ -d /sys/bus/rbd ] || sudo modprobe rbd
+
 clean_up
 
 trap clean_up INT TERM EXIT

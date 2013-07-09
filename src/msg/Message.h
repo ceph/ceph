@@ -33,6 +33,7 @@
 #include "common/config.h"
 
 // monitor internal
+#define MSG_MON_SCRUB              64
 #define MSG_MON_ELECTION           65
 #define MSG_MON_PAXOS              66
 #define MSG_MON_PROBE              67
@@ -101,6 +102,10 @@
 
 #define MSG_OSD_BACKFILL_RESERVE 99
 #define MSG_OSD_RECOVERY_RESERVE 150
+
+#define MSG_OSD_PG_PUSH        105
+#define MSG_OSD_PG_PULL        106
+#define MSG_OSD_PG_PUSH_REPLY  107
 
 // *** MDS ***
 
