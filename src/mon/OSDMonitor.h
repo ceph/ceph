@@ -184,7 +184,6 @@ private:
   bool should_propose(double &delay);
 
   void update_trim();
-  bool service_should_trim();
 
   bool can_mark_down(int o);
   bool can_mark_up(int o);
