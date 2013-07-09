@@ -25,7 +25,7 @@ http://www.usenix.org/events/fast05/wips/slides/welch.pdf
 
 -- lazy i/o integrity
 
-  O_LAZY to open(2)
+  FIXME: currently missing call to flag an Fd/file has lazy.  used to be O_LAZY on open, but no more.
 
   * relax data coherency
   * writes may not be visible until lazyio_propagate, fsync, close
