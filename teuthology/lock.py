@@ -553,7 +553,7 @@ def create_if_vm(ctx, machine_name):
         file_info['ram'] = lcnfg.get('ram', '1.9G')
         file_info['cpus'] = lcnfg.get('cpus', 1)
         file_info['networks'] = lcnfg.get('networks',
-                [{'source' : 'front', 'mac' : status_info['mac']}]
+                [{'source' : 'front', 'mac' : status_info['mac']}])
         file_info['distro'] = lcnfg.get('distro', vm_type.lower())
         file_info['additional-disks'] = lcnfg.get(
                 'additional-disks', 3)
