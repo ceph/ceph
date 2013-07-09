@@ -77,12 +77,6 @@ class PaxosService {
    * then have_pending should be true; otherwise, false.
    */
   bool have_pending; 
-  /**
-   * The version to trim to. If zero, we assume there is no version to be
-   * trimmed; otherwise, we assume we should trim to the version held by
-   * this variable.
-   */
-  version_t trim_version;
 
 protected:
 
@@ -200,7 +194,6 @@ public:
     : mon(mn), paxos(p), service_name(name),
       proposing(false),
       service_version(0), proposal_timer(0), have_pending(false),
-      trim_version(0),
       format_version(0),
       last_committed_name("last_committed"),
       first_committed_name("first_committed"),
@@ -685,30 +678,13 @@ public:
   virtual void encode_trim_extra(MonitorDBStore::Transaction *tx, version_t first) {}
 
   /**
-   * Update our trim status. We do nothing here, because there is no
-   * straightforward way to update the trim version, since that's service
-   * specific. However, we do not force services to implement it, since there
-   * a couple of services that do not trim anything at all, and we don't want
-   * to shove this function down their throats if they are never going to use
-   * it anyway.
-   */
-  virtual void update_trim() { }
-  /**
-   * Set the trim version variable to @p ver
-   *
-   * @param ver The version to trim to.
-   */
-  void set_trim_to(version_t ver) {
-    trim_version = ver;
-  }
-  /**
    * Get the version we should trim to.
    *
    * @returns the version we should trim to; if we return zero, it should be
    *	      assumed that there's no version to trim to.
    */
-  version_t get_trim_to() {
-    return trim_version;
+  virtual version_t get_trim_to() {
+    return 0;
   }
   /**
    * @}

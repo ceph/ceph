@@ -326,12 +326,11 @@ void PaxosService::maybe_trim()
   if (!is_writeable())
     return;
 
-  update_trim();
-  if (get_trim_to() == 0)
+  version_t trim_to = get_trim_to();
+  if (trim_to == 0)
     return;
 
   if (g_conf->paxos_service_trim_min > 0) {
-    version_t trim_to = get_trim_to();
     version_t first = get_first_committed();
     if ((trim_to > 0) &&
 	trim_to > first &&
@@ -339,10 +338,10 @@ void PaxosService::maybe_trim()
       return;  // not enough to trim
   }
 
-  dout(10) << __func__ << " trimming" << dendl;
+  dout(10) << __func__ << " trimming to " << trim_to << dendl;
 
   MonitorDBStore::Transaction t;
-  encode_trim(&t, get_trim_to());
+  encode_trim(&t, trim_to);
   bufferlist bl;
   t.encode(bl);
 
@@ -374,9 +373,6 @@ void PaxosService::encode_trim(MonitorDBStore::Transaction *t, version_t trim_to
 
   // let the service add any extra stuff
   encode_trim_extra(t, trim_to_max);
-
-  if (trim_to_max == trim_to)
-    set_trim_to(0);
 }
 
 void PaxosService::trim(MonitorDBStore::Transaction *t,
