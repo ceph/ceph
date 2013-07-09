@@ -409,10 +409,11 @@ epoch_t PGMap::calc_min_last_epoch_clean() const
   if (pg_stat.empty())
     return 0;
   hash_map<pg_t,pg_stat_t>::const_iterator p = pg_stat.begin();
-  epoch_t min = p->second.last_epoch_clean;
+  epoch_t min = p->second.get_effective_last_epoch_clean();
   for (++p; p != pg_stat.end(); ++p) {
-    if (p->second.last_epoch_clean < min)
-      min = p->second.last_epoch_clean;
+    epoch_t lec = p->second.get_effective_last_epoch_clean();
+    if (lec < min)
+      min = lec;
   }
   return min;
 }
@@ -581,7 +582,7 @@ void PGMap::dump_pg_stats_plain(ostream& ss,
        << "\t" << pg_state_string(st.state)
        << "\t" << st.last_change
        << "\t" << st.version
-       << "\t" << st.reported
+       << "\t" << st.reported_epoch << ":" << st.reported_seq
        << "\t" << st.up
        << "\t" << st.acting
        << "\t" << st.last_scrub << "\t" << st.last_scrub_stamp
