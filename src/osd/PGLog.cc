@@ -441,8 +441,11 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
     changed = true;
   }
 
-  if (oinfo.stats.reported < info.stats.reported)   // make sure reported always increases
-    oinfo.stats.reported = info.stats.reported;
+  if (oinfo.stats.reported_seq < info.stats.reported_seq ||   // make sure reported always increases
+      oinfo.stats.reported_epoch < info.stats.reported_epoch) {
+    oinfo.stats.reported_seq = info.stats.reported_seq;
+    oinfo.stats.reported_epoch = info.stats.reported_epoch;
+  }
   if (info.last_backfill.is_max())
     info.stats = oinfo.stats;
 

@@ -1110,7 +1110,8 @@ void object_stat_collection_t::generate_test_instances(list<object_stat_collecti
 void pg_stat_t::dump(Formatter *f) const
 {
   f->dump_stream("version") << version;
-  f->dump_stream("reported") << reported;
+  f->dump_stream("reported_seq") << reported_seq;
+  f->dump_stream("reported_epoch") << reported_epoch;
   f->dump_string("state", pg_state_string(state));
   f->dump_stream("last_fresh") << last_fresh;
   f->dump_stream("last_change") << last_change;
@@ -1148,7 +1149,8 @@ void pg_stat_t::encode(bufferlist &bl) const
 {
   ENCODE_START(13, 8, bl);
   ::encode(version, bl);
-  ::encode(reported, bl);
+  ::encode(reported_seq, bl);
+  ::encode(reported_epoch, bl);
   ::encode(state, bl);
   ::encode(log_start, bl);
   ::encode(ondisk_log_start, bl);
@@ -1181,7 +1183,8 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(13, 8, 8, bl);
   ::decode(version, bl);
-  ::decode(reported, bl);
+  ::decode(reported_seq, bl);
+  ::decode(reported_epoch, bl);
   ::decode(state, bl);
   ::decode(log_start, bl);
   ::decode(ondisk_log_start, bl);
@@ -1267,7 +1270,8 @@ void pg_stat_t::generate_test_instances(list<pg_stat_t*>& o)
   o.push_back(new pg_stat_t(a));
 
   a.version = eversion_t(1, 3);
-  a.reported = eversion_t(1, 2);
+  a.reported_epoch = 1;
+  a.reported_seq = 2;
   a.state = 123;
   a.mapping_epoch = 998;
   a.last_fresh = utime_t(1002, 1);
