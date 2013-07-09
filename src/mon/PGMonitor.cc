@@ -508,12 +508,13 @@ void PGMonitor::encode_pending(MonitorDBStore::Transaction *t)
   put_last_committed(t, version);
 }
 
-void PGMonitor::update_trim()
+version_t PGMonitor::get_trim_to()
 {
   unsigned max = g_conf->mon_max_pgmap_epochs;
   version_t version = get_last_committed();
   if (mon->is_leader() && (version > max))
-    set_trim_to(version - max);
+    return version - max;
+  return 0;
 }
 
 bool PGMonitor::preprocess_query(PaxosServiceMessage *m)
