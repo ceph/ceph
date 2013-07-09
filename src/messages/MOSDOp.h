@@ -341,7 +341,10 @@ struct ceph_osd_request_head {
   const char *get_type_name() const { return "osd_op"; }
   void print(ostream& out) const {
     out << "osd_op(" << get_reqid();
-    out << " " << oid;
+    out << " ";
+    if (!oloc.nspace.empty())
+      out << oloc.nspace << "/";
+    out << oid;
 
 #if 0
     out << " ";

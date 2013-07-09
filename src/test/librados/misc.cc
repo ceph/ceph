@@ -405,7 +405,7 @@ TEST(LibRadosMisc, BigObjectPP) {
 
 #ifdef __LP64__
   // this test only works on 64-bit platforms
-  ASSERT_EQ(-EFBIG, ioctx.write("foo", bl, 500000000000ull, bl.length()));
+  ASSERT_EQ(-EFBIG, ioctx.write("foo", bl, bl.length(), 500000000000ull));
 #endif
 
   ioctx.close();
