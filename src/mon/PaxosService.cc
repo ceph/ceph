@@ -342,18 +342,17 @@ void PaxosService::maybe_trim()
   dout(10) << __func__ << " trimming" << dendl;
 
   MonitorDBStore::Transaction t;
-  encode_trim(&t);
+  encode_trim(&t, get_trim_to());
   bufferlist bl;
   t.encode(bl);
 
   paxos->propose_new_value(bl, new C_Committed(this));
 }
 
-void PaxosService::encode_trim(MonitorDBStore::Transaction *t)
+void PaxosService::encode_trim(MonitorDBStore::Transaction *t, version_t trim_to)
 {
   version_t first_committed = get_first_committed();
   version_t latest_full = get_version_latest_full();
-  version_t trim_to = get_trim_to();
 
   dout(10) << __func__ << " " << trim_to << " (was " << first_committed << ")"
 	   << ", latest full " << latest_full << dendl;

@@ -671,12 +671,10 @@ public:
    * Will call encode_trim_extra(), allowing services to add
    * additional bits to the trim transaction.
    *
+   * @param txn the transaction to encode to
    * @param first The version that should become the first one in the log.
-   * @param force Optional. Each service may use it as it sees fit, but the
-   *		  expected behavior is that, when 'true', we will remove all
-   *		  the log versions even if we don't have a full map in store.
    */
-  void encode_trim(MonitorDBStore::Transaction *t);
+  void encode_trim(MonitorDBStore::Transaction *t, version_t first);
 
   /**
    * encode service-specific extra bits into trim transaction
