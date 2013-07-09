@@ -327,15 +327,15 @@ void PaxosService::maybe_trim()
     return;
 
   version_t trim_to = get_trim_to();
-  if (trim_to == 0)
+  if (trim_to < get_first_committed())
     return;
 
-  if (g_conf->paxos_service_trim_min > 0) {
-    version_t first = get_first_committed();
-    if ((trim_to > 0) &&
-	trim_to > first &&
-	(trim_to - first) < (version_t)g_conf->paxos_service_trim_min)
-      return;  // not enough to trim
+  version_t to_remove = trim_to - get_first_committed();
+  if (g_conf->paxos_service_trim_min > 0 &&
+      to_remove < g_conf->paxos_service_trim_min) {
+    dout(10) << __func__ << " trim_to " << trim_to << " would only trim " << to_remove
+	     << " < paxos_service_trim_min " << g_conf->paxos_service_trim_min << dendl;
+    return;
   }
 
   dout(10) << __func__ << " trimming to " << trim_to << dendl;
