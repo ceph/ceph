@@ -122,7 +122,9 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
    * due to encode_trim_extra(), which includes the oldest full map in the trim
    * transaction.  Start with whichever is newer.
    */
-  version_t latest_full = MAX(get_version_latest_full(), get_first_committed());
+  version_t latest_full = get_version_latest_full();
+  if (latest_full == 0 && get_first_committed() > 1)
+    latest_full = get_first_committed();
   if ((latest_full > 0) && (latest_full > osdmap.epoch)) {
     bufferlist latest_bl;
     get_version_full(latest_full, latest_bl);
