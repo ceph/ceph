@@ -232,6 +232,11 @@ AM_CONDITIONAL(WITH_RADOSGW, test "$RADOSGW" = "1")
 
 AS_IF([test "$RADOSGW" = "1"], [AC_DEFINE([WITH_RADOSGW], [1], [define if radosgw enabled])])
 
+AS_IF([test "$RADOSGW" = "1"], 
+              [AC_CHECK_LIB([curl], [curl_multi_wait],
+                            AC_DEFINE([HAVE_CURL_MULTI_WAIT], [1], [Define if have curl_multi_wait()]))
+              ])
+
 # fuse?
 AC_ARG_WITH([fuse],
             [AS_HELP_STRING([--without-fuse], [disable FUSE userspace client])],
