@@ -658,16 +658,6 @@ public:
    * @param to the upper limit of the interval to be trimmed (not including)
    */
   void trim(MonitorDBStore::Transaction *t, version_t from, version_t to);
-  /**
-   * Trim our log
-   *
-   * Will call encode_trim_extra(), allowing services to add
-   * additional bits to the trim transaction.
-   *
-   * @param txn the transaction to encode to
-   * @param first The version that should become the first one in the log.
-   */
-  void encode_trim(MonitorDBStore::Transaction *t, version_t first);
 
   /**
    * encode service-specific extra bits into trim transaction
