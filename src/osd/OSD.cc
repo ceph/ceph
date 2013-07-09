@@ -1052,6 +1052,7 @@ bool OSD::asok_command(string command, string args, ostream& ss)
 
       f.open_array_section("watch");
 
+      f.dump_string("namespace", it->obj.nspace);
       f.dump_string("object", it->obj.oid.name);
 
       f.open_object_section("entity_name");
