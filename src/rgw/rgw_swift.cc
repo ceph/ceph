@@ -452,15 +452,17 @@ int	RGWSwift::get_keystone_admin_token(std::string& token)
     KeystoneToken t;
     bufferlist token_bl;
     RGWGetKeystoneAdminToken token_req(&token_bl);
-    std::ostringstream os;
-    os << "{ \"auth\":{ \"passwordCredentials\":{ \"username\":\"";
-    os << g_conf->rgw_keystone_admin_user;
-    os << "\", \"password\":\"";
-    os << g_conf->rgw_keystone_admin_password;
-    os << "\"}, \"tenantName\":\"";
-    os << g_conf->rgw_keystone_admin_tenant;
-    os << "\"}}";
-    token_req.set_post_data(os.str());
+    JSONFormatter jf;
+    jf.open_object_section("auth");
+    jf.open_object_section("passwordCredentials");
+    encode_json("username", g_conf->rgw_keystone_admin_user, &jf);
+    encode_json("password", g_conf->rgw_keystone_admin_password, &jf);
+    jf.close_section();
+    encode_json("tenantName", g_conf->rgw_keystone_admin_tenant, &jf);
+    jf.close_section();
+    std::stringstream ss;
+    jf.flush(ss);
+    token_req.set_post_data(ss.str());
     int ret = token_req.process(token_url.c_str());
     if (ret < 0)
       return ret;
