@@ -117,6 +117,18 @@ class TestIoctx(object):
             stored_xattrs[key] = value
         eq(stored_xattrs, xattrs)
 
+    def test_obj_xattrs(self):
+        xattrs = dict(a='1', b='2', c='3', d='a\0b', e='\0')
+        self.ioctx.write('abc', '')
+        obj = list(self.ioctx.list_objects())[0]
+        for key, value in xattrs.iteritems():
+            obj.set_xattr(key, value)
+            eq(obj.get_xattr(key), value)
+        stored_xattrs = {}
+        for key, value in obj.get_xattrs():
+            stored_xattrs[key] = value
+        eq(stored_xattrs, xattrs)
+
     def test_create_snap(self):
         assert_raises(ObjectNotFound, self.ioctx.remove_snap, 'foo')
         self.ioctx.create_snap('foo')
