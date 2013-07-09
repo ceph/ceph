@@ -29,6 +29,7 @@ class SharedPtrRegistry {
 public:
   typedef std::tr1::shared_ptr<V> VPtr;
   typedef std::tr1::weak_ptr<V> WeakVPtr;
+  enum in_method_t { UNDEFINED, LOOKUP, LOOKUP_OR_CREATE } in_method;
 private:
   Mutex lock;
   Cond cond;
@@ -52,7 +53,10 @@ private:
   friend class OnRemoval;
 
 public:
-  SharedPtrRegistry() : lock("SharedPtrRegistry::lock") {}
+  SharedPtrRegistry() :
+    in_method(UNDEFINED),
+    lock("SharedPtrRegistry::lock")
+  {}
 
   bool get_next(const K &key, pair<K, V> *next) {
     VPtr next_val;
@@ -70,26 +74,33 @@ public:
 
   VPtr lookup(const K &key) {
     Mutex::Locker l(lock);
+    in_method = LOOKUP;
     while (1) {
       if (contents.count(key)) {
 	VPtr retval = contents[key].lock();
-	if (retval)
+	if (retval) {
+	  in_method = UNDEFINED;
 	  return retval;
+	}
       } else {
 	break;
       }
       cond.Wait(lock);
     }
+    in_method = UNDEFINED;
     return VPtr();
   }
 
   VPtr lookup_or_create(const K &key) {
     Mutex::Locker l(lock);
+    in_method = LOOKUP_OR_CREATE;
     while (1) {
       if (contents.count(key)) {
 	VPtr retval = contents[key].lock();
-	if (retval)
+	if (retval) {
+	  in_method = UNDEFINED;
 	  return retval;
+	}
       } else {
 	break;
       }
@@ -97,6 +108,7 @@ public:
     }
     VPtr retval(new V(), OnRemoval(this, key));
     contents[key] = retval;
+    in_method = UNDEFINED;
     return retval;
   }
 
@@ -109,11 +121,14 @@ public:
   template<class A>
   VPtr lookup_or_create(const K &key, const A &arg) {
     Mutex::Locker l(lock);
+    in_method = LOOKUP_OR_CREATE;
     while (1) {
       if (contents.count(key)) {
 	VPtr retval = contents[key].lock();
-	if (retval)
+	if (retval) {
+	  in_method = UNDEFINED;
 	  return retval;
+	}
       } else {
 	break;
       }
@@ -121,8 +136,11 @@ public:
     }
     VPtr retval(new V(arg), OnRemoval(this, key));
     contents[key] = retval;
+    in_method = UNDEFINED;
     return retval;
   }
+
+  friend class SharedPtrRegistryTest;
 };
 
 #endif
