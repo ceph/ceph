@@ -692,19 +692,6 @@ public:
   bool should_trim();
 
   /**
-   * Check if we should trim.
-   *
-   * We define this function here, because we assume that as long as we know of
-   * a version to trim, we should trim. However, any implementation should feel
-   * free to define its own version of this function if deemed necessary.
-   *
-   * @returns true if we should trim; false otherwise.
-   */
-  virtual bool service_should_trim() {
-    update_trim();
-    return (get_trim_to() > 0);
-  }
-  /**
    * Update our trim status. We do nothing here, because there is no
    * straightforward way to update the trim version, since that's service
    * specific. However, we do not force services to implement it, since there
