@@ -762,6 +762,11 @@ unittest_addrs_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 unittest_addrs_LDADD = $(LIBGLOBAL_LDA) ${UNITTEST_LDADD}
 check_PROGRAMS += unittest_addrs
 
+unittest_sharedptr_registry_SOURCES = test/common/test_sharedptr_registry.cc
+unittest_sharedptr_registry_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_sharedptr_registry_LDADD = libcommon.la ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
+check_PROGRAMS += unittest_sharedptr_registry
+
 unittest_util_SOURCES = test/common/test_util.cc common/util.cc
 unittest_util_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 unittest_util_LDADD = libcommon.la $(PTHREAD_LIBS) -lm ${UNITTEST_LDADD} $(CRYPTO_LIBS) $(EXTRALIBS)
