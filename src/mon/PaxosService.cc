@@ -332,14 +332,22 @@ void PaxosService::maybe_trim()
 
   version_t to_remove = trim_to - get_first_committed();
   if (g_conf->paxos_service_trim_min > 0 &&
-      to_remove < g_conf->paxos_service_trim_min) {
+      to_remove < (version_t)g_conf->paxos_service_trim_min) {
     dout(10) << __func__ << " trim_to " << trim_to << " would only trim " << to_remove
 	     << " < paxos_service_trim_min " << g_conf->paxos_service_trim_min << dendl;
     return;
   }
 
-  dout(10) << __func__ << " trimming to " << trim_to << dendl;
+  if (g_conf->paxos_service_trim_max > 0 &&
+      to_remove > (version_t)g_conf->paxos_service_trim_max) {
+    dout(10) << __func__ << " trim_to " << trim_to << " would only trim " << to_remove
+	     << " > paxos_service_trim_max, limiting to " << g_conf->paxos_service_trim_max
+	     << dendl;
+    trim_to = get_first_committed() + g_conf->paxos_service_trim_max;
+    to_remove = trim_to - get_first_committed();
+  }
 
+  dout(10) << __func__ << " trimming to " << trim_to << ", " << to_remove << " states" << dendl;
   MonitorDBStore::Transaction t;
   encode_trim(&t, trim_to);
   bufferlist bl;
@@ -350,29 +358,12 @@ void PaxosService::maybe_trim()
 
 void PaxosService::encode_trim(MonitorDBStore::Transaction *t, version_t trim_to)
 {
-  version_t first_committed = get_first_committed();
-  version_t latest_full = get_version_latest_full();
-
-  dout(10) << __func__ << " " << trim_to << " (was " << first_committed << ")"
-	   << ", latest full " << latest_full << dendl;
-
-  if (first_committed >= trim_to)
-    return;
-
-  version_t trim_to_max = trim_to;
-  if ((g_conf->paxos_service_trim_max > 0)
-      && (trim_to - first_committed > (size_t)g_conf->paxos_service_trim_max)) {
-    trim_to_max = first_committed + g_conf->paxos_service_trim_max;
-  }
-
-  dout(10) << __func__ << " trimming versions " << first_committed
-           << " to " << trim_to_max << dendl;
-
-  trim(t, first_committed, trim_to_max);
-  put_first_committed(t, trim_to_max);
+  dout(10) << __func__ << " to " << trim_to << dendl;
+  trim(t, get_first_committed(), trim_to);
+  put_first_committed(t, trim_to);
 
   // let the service add any extra stuff
-  encode_trim_extra(t, trim_to_max);
+  encode_trim_extra(t, trim_to);
 }
 
 void PaxosService::trim(MonitorDBStore::Transaction *t,
