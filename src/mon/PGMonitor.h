@@ -60,7 +60,7 @@ private:
   void handle_osd_timeouts();
   void create_pending();  // prepare a new pending
   // propose pending update to peers
-  void update_trim();
+  version_t get_trim_to();
   void update_logger();
 
   void encode_pending(MonitorDBStore::Transaction *t);

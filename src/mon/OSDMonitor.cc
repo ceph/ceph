@@ -533,7 +533,7 @@ void OSDMonitor::share_map_with_random_osd()
   mon->messenger->send_message(m, s->inst);
 }
 
-void OSDMonitor::update_trim()
+version_t OSDMonitor::get_trim_to()
 {
   if (mon->pgmon()->is_readable() &&
       mon->pgmon()->pg_map.creating_pgs.empty()) {
@@ -547,9 +547,9 @@ void OSDMonitor::update_trim()
 	floor = 0;
     }
     if (floor > get_first_committed())
-      if (get_trim_to() < floor)
-	set_trim_to(floor);
+      return floor;
   }
+  return 0;
 }
 
 void OSDMonitor::encode_trim_extra(MonitorDBStore::Transaction *tx, version_t first)
@@ -1794,8 +1794,6 @@ void OSDMonitor::tick()
 
   if (update_pools_status())
     do_propose = true;
-
-  update_trim();
 
   if (do_propose ||
       !pending_inc.new_pg_temp.empty())  // also propose if we adjusted pg_temp
