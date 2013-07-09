@@ -4139,6 +4139,7 @@ void Monitor::tick()
   
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p) {
     (*p)->tick();
+    (*p)->maybe_trim();
   }
   
   // trim sessions

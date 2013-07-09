@@ -77,12 +77,6 @@ class PaxosService {
    * then have_pending should be true; otherwise, false.
    */
   bool have_pending; 
-  /**
-   * The version to trim to. If zero, we assume there is no version to be
-   * trimmed; otherwise, we assume we should trim to the version held by
-   * this variable.
-   */
-  version_t trim_version;
 
 protected:
 
@@ -200,7 +194,6 @@ public:
     : mon(mn), paxos(p), service_name(name),
       proposing(false),
       service_version(0), proposal_timer(0), have_pending(false),
-      trim_version(0),
       format_version(0),
       last_committed_name("last_committed"),
       first_committed_name("first_committed"),
@@ -655,6 +648,13 @@ public:
    * @{
    */
   /**
+   * trim service states if appropriate
+   *
+   * Called at same interval as tick()
+   */
+  void maybe_trim();
+
+  /**
    * Auxiliary function to trim our state from version @from to version @to,
    * not including; i.e., the interval [from, to[
    *
@@ -663,18 +663,6 @@ public:
    * @param to the upper limit of the interval to be trimmed (not including)
    */
   void trim(MonitorDBStore::Transaction *t, version_t from, version_t to);
-  /**
-   * Trim our log
-   *
-   * Will call encode_trim_extra(), allowing services to add
-   * additional bits to the trim transaction.
-   *
-   * @param first The version that should become the first one in the log.
-   * @param force Optional. Each service may use it as it sees fit, but the
-   *		  expected behavior is that, when 'true', we will remove all
-   *		  the log versions even if we don't have a full map in store.
-   */
-  void encode_trim(MonitorDBStore::Transaction *t);
 
   /**
    * encode service-specific extra bits into trim transaction
@@ -685,62 +673,17 @@ public:
   virtual void encode_trim_extra(MonitorDBStore::Transaction *tx, version_t first) {}
 
   /**
-   *
-   */
-  virtual bool should_trim() {
-    bool want_trim = service_should_trim();
-
-    if (!want_trim)
-      return false;
-
-    if (g_conf->paxos_service_trim_min > 0) {
-      version_t trim_to = get_trim_to();
-      version_t first = get_first_committed();
-
-      if ((trim_to > 0) && trim_to > first)
-        return ((trim_to - first) >= (version_t)g_conf->paxos_service_trim_min);
-    }
-    return true;
-  }
-  /**
-   * Check if we should trim.
-   *
-   * We define this function here, because we assume that as long as we know of
-   * a version to trim, we should trim. However, any implementation should feel
-   * free to define its own version of this function if deemed necessary.
-   *
-   * @returns true if we should trim; false otherwise.
-   */
-  virtual bool service_should_trim() {
-    update_trim();
-    return (get_trim_to() > 0);
-  }
-  /**
-   * Update our trim status. We do nothing here, because there is no
-   * straightforward way to update the trim version, since that's service
-   * specific. However, we do not force services to implement it, since there
-   * a couple of services that do not trim anything at all, and we don't want
-   * to shove this function down their throats if they are never going to use
-   * it anyway.
-   */
-  virtual void update_trim() { }
-  /**
-   * Set the trim version variable to @p ver
-   *
-   * @param ver The version to trim to.
-   */
-  void set_trim_to(version_t ver) {
-    trim_version = ver;
-  }
-  /**
    * Get the version we should trim to.
+   *
+   * Should be overloaded by service if it wants to trim states.
    *
    * @returns the version we should trim to; if we return zero, it should be
    *	      assumed that there's no version to trim to.
    */
-  version_t get_trim_to() {
-    return trim_version;
+  virtual version_t get_trim_to() {
+    return 0;
   }
+
   /**
    * @}
    */

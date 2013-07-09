@@ -279,12 +279,13 @@ void AuthMonitor::encode_full(MonitorDBStore::Transaction *t)
   }
 }
 
-void AuthMonitor::update_trim()
+version_t AuthMonitor::get_trim_to()
 {
   unsigned max = g_conf->paxos_max_join_drift * 2;
   version_t version = get_last_committed();
   if (mon->is_leader() && (version > max))
-    set_trim_to(version - max);
+    return version - max;
+  return 0;
 }
 
 bool AuthMonitor::preprocess_query(PaxosServiceMessage *m)
