@@ -682,23 +682,10 @@ public:
   virtual void encode_trim_extra(MonitorDBStore::Transaction *tx, version_t first) {}
 
   /**
-   *
+   * decide whether we should trim service states
    */
-  virtual bool should_trim() {
-    bool want_trim = service_should_trim();
+  bool should_trim();
 
-    if (!want_trim)
-      return false;
-
-    if (g_conf->paxos_service_trim_min > 0) {
-      version_t trim_to = get_trim_to();
-      version_t first = get_first_committed();
-
-      if ((trim_to > 0) && trim_to > first)
-        return ((trim_to - first) >= (version_t)g_conf->paxos_service_trim_min);
-    }
-    return true;
-  }
   /**
    * Check if we should trim.
    *
