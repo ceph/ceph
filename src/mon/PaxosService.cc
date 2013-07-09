@@ -349,21 +349,15 @@ void PaxosService::maybe_trim()
 
   dout(10) << __func__ << " trimming to " << trim_to << ", " << to_remove << " states" << dendl;
   MonitorDBStore::Transaction t;
-  encode_trim(&t, trim_to);
-  bufferlist bl;
-  t.encode(bl);
-
-  paxos->propose_new_value(bl, new C_Committed(this));
-}
-
-void PaxosService::encode_trim(MonitorDBStore::Transaction *t, version_t trim_to)
-{
-  dout(10) << __func__ << " to " << trim_to << dendl;
-  trim(t, get_first_committed(), trim_to);
-  put_first_committed(t, trim_to);
+  trim(&t, get_first_committed(), trim_to);
+  put_first_committed(&t, trim_to);
 
   // let the service add any extra stuff
-  encode_trim_extra(t, trim_to);
+  encode_trim_extra(&t, trim_to);
+
+  bufferlist bl;
+  t.encode(bl);
+  paxos->propose_new_value(bl, new C_Committed(this));
 }
 
 void PaxosService::trim(MonitorDBStore::Transaction *t,
