@@ -16,6 +16,8 @@ extern void rgw_flush_formatter_and_reset(struct req_state *s,
 extern void rgw_flush_formatter(struct req_state *s,
                                          ceph::Formatter *formatter);
 
+extern int rgw_rest_read_all_input(struct req_state *s, char **data, int *plen, int max_len);
+
 class RESTArgs {
 public:
   static int get_string(struct req_state *s, const string& name, const string& def_val, string *val, bool *existed = NULL);
@@ -275,7 +277,7 @@ public:
   void register_resource(string resource, RGWRESTMgr *mgr);
   void register_default_mgr(RGWRESTMgr *mgr);
 
-  virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri);
+  virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri, string *out_uri);
   virtual RGWHandler *get_handler(struct req_state *s) { return NULL; }
   virtual void put_handler(RGWHandler *handler) { delete handler; }
 };
@@ -312,6 +314,7 @@ extern void list_all_buckets_start(struct req_state *s);
 extern void dump_owner(struct req_state *s, string& id, string& name, const char *section = NULL);
 extern void dump_content_length(struct req_state *s, uint64_t len);
 extern void dump_etag(struct req_state *s, const char *etag);
+extern void dump_epoch_header(struct req_state *s, const char *name, time_t t);
 extern void dump_last_modified(struct req_state *s, time_t t);
 extern void abort_early(struct req_state *s, int err);
 extern void dump_range(struct req_state *s, uint64_t ofs, uint64_t end, uint64_t total_size);

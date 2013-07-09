@@ -92,6 +92,18 @@ bool RGWEnv::exists_prefix(const char *prefix)
   return (strncmp(iter->first.c_str(), prefix, strlen(prefix)) == 0);
 }
 
+void RGWEnv::set(const char *name, const char *val)
+{
+  env_map[name] = val;
+}
+
+void RGWEnv::remove(const char *name)
+{
+  map<string, string>::iterator iter = env_map.find(name);
+  if (iter != env_map.end())
+    env_map.erase(iter);
+}
+
 void RGWConf::init(CephContext *cct, RGWEnv *env)
 {
   enable_ops_log = cct->_conf->rgw_enable_ops_log;

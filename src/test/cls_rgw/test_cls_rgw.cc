@@ -74,17 +74,20 @@ void test_stats(librados::IoCtx& ioctx, string& oid, int category, uint64_t num_
   ASSERT_EQ(num_entries, stats.num_entries);
 }
 
-void index_prepare(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, int index_op, string& tag, string& obj, string& loc)
+void index_prepare(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op, string& tag, string& obj, string& loc)
 {
   ObjectWriteOperation *op = mgr.write_op();
-  cls_rgw_bucket_prepare_op(*op, index_op, tag, obj, loc);
+  cls_rgw_bucket_prepare_op(*op, index_op, tag, obj, loc, true);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 }
 
-void index_complete(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, int index_op, string& tag, int epoch, string& obj, rgw_bucket_dir_entry_meta& meta)
+void index_complete(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op, string& tag, int epoch, string& obj, rgw_bucket_dir_entry_meta& meta)
 {
   ObjectWriteOperation *op = mgr.write_op();
-  cls_rgw_bucket_complete_op(*op, index_op, tag, epoch, obj, meta, NULL);
+  rgw_bucket_entry_ver ver;
+  ver.pool = ioctx.get_id();
+  ver.epoch = epoch;
+  cls_rgw_bucket_complete_op(*op, index_op, tag, ver, obj, meta, NULL, true);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 }
 

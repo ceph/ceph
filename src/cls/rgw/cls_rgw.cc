@@ -27,6 +27,7 @@ cls_method_handle_t h_rgw_bucket_check_index;
 cls_method_handle_t h_rgw_bucket_rebuild_index;
 cls_method_handle_t h_rgw_bucket_prepare_op;
 cls_method_handle_t h_rgw_bucket_complete_op;
+cls_method_handle_t h_rgw_bi_log_list_op;
 cls_method_handle_t h_rgw_dir_suggest_changes;
 cls_method_handle_t h_rgw_user_usage_log_add;
 cls_method_handle_t h_rgw_user_usage_log_read;
@@ -38,9 +39,152 @@ cls_method_handle_t h_rgw_gc_remove;
 
 #define ROUND_BLOCK_SIZE 4096
 
+
+#define BI_PREFIX_CHAR 0x80
+
+#define BI_BUCKET_OBJS_INDEX 0
+#define BI_BUCKET_LOG_INDEX  1
+
+#define BI_BUCKET_LAST_INDEX  2
+
+static string bucket_index_prefixes[] = { "", /* special handling for the objs index */
+                                          "0_",
+
+                                          /* this must be the last index */
+                                          "9999_",};
+
 static uint64_t get_rounded_size(uint64_t size)
 {
   return (size + ROUND_BLOCK_SIZE - 1) & ~(ROUND_BLOCK_SIZE - 1);
+}
+
+static bool bi_is_objs_index(const string& s) {
+  return ((unsigned char)s[0] != BI_PREFIX_CHAR);
+}
+
+int bi_entry_type(const string& s)
+{
+  if (bi_is_objs_index(s)) {
+    return BI_BUCKET_OBJS_INDEX;
+  }
+
+  for (size_t i = 1;
+       i < sizeof(bucket_index_prefixes) / sizeof(bucket_index_prefixes[0]);
+       ++i) {
+    const string& t = bucket_index_prefixes[i];
+
+    if (s.compare(0, t.size(), t) == 0) {
+      return i;
+    }
+  }
+
+  return -EINVAL;
+}
+
+static void get_time_key(utime_t& ut, string *key)
+{
+  char buf[32];
+  snprintf(buf, 32, "%011llu.%09u", (unsigned long long)ut.sec(), ut.nsec());
+  *key = buf;
+}
+
+static void get_index_ver_key(cls_method_context_t hctx, uint64_t index_ver, string *key)
+{
+  char buf[48];
+  snprintf(buf, sizeof(buf), "%011llu.%llu.%d", (unsigned long long)index_ver,
+           (unsigned long long)cls_current_version(hctx),
+           cls_current_subop_num(hctx));
+  *key = buf;
+}
+
+static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id, uint64_t index_ver)
+{
+  key = BI_PREFIX_CHAR;
+  key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
+
+  get_index_ver_key(hctx, index_ver, &id);
+  key.append(id);
+}
+
+static int log_index_operation(cls_method_context_t hctx, string& obj, RGWModifyOp op,
+                               string& tag, utime_t& timestamp,
+                               rgw_bucket_entry_ver& ver, RGWPendingState state, uint64_t index_ver,
+                               string& max_marker)
+{
+  bufferlist bl;
+
+  struct rgw_bi_log_entry entry;
+
+  entry.object = obj;
+  entry.timestamp = timestamp;
+  entry.op = op;
+  entry.ver = ver;
+  entry.state = state;
+  entry.index_ver = index_ver;
+  entry.tag = tag;
+
+  string key;
+  bi_log_index_key(hctx, key, entry.id, index_ver);
+
+  ::encode(entry, bl);
+
+  if (entry.id > max_marker)
+    max_marker = entry.id;
+
+  return cls_cxx_map_set_val(hctx, key, &bl);
+}
+
+/*
+ * read list of objects, skips objects in the ugly namespace
+ */
+static int get_obj_vals(cls_method_context_t hctx, const string& start, const string& filter_prefix,
+                        int num_entries, map<string, bufferlist> *pkeys)
+{
+  int ret = cls_cxx_map_get_vals(hctx, start, filter_prefix, num_entries, pkeys);
+  if (ret < 0)
+    return ret;
+
+  if (pkeys->empty())
+    return 0;
+
+  map<string, bufferlist>::reverse_iterator last_element = pkeys->rbegin();
+  if ((unsigned char)last_element->first[0] < BI_PREFIX_CHAR) {
+    /* nothing to see here, move along */
+    return 0;
+  }
+
+  map<string, bufferlist>::iterator first_element = pkeys->begin();
+  if ((unsigned char)first_element->first[0] > BI_PREFIX_CHAR) {
+    return 0;
+  }
+
+  /* let's rebuild the list, only keep entries we're interested in */
+  map<string, bufferlist> old_keys;
+  old_keys.swap(*pkeys);
+
+  for (map<string, bufferlist>::iterator iter = old_keys.begin(); iter != old_keys.end(); ++iter) {
+    if ((unsigned char)iter->first[0] != BI_PREFIX_CHAR) {
+      (*pkeys)[iter->first] = iter->second;
+    }
+  }
+
+  if (num_entries == (int)pkeys->size())
+    return 0;
+
+  map<string, bufferlist> new_keys;
+  char c[] = { BI_PREFIX_CHAR + 1, 0 };
+  string new_start = c;
+
+  /* now get some more keys */
+  ret = cls_cxx_map_get_vals(hctx, new_start, filter_prefix, num_entries - pkeys->size(), &new_keys);
+  if (ret < 0)
+    return ret;
+
+  for (map<string, bufferlist>::iterator iter = new_keys.begin(); iter != new_keys.end(); ++iter) {
+    (*pkeys)[iter->first] = iter->second;
+  }
+
+  return 0;
 }
 
 int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -72,7 +216,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   bufferlist bl;
 
   map<string, bufferlist> keys;
-  rc = cls_cxx_map_get_vals(hctx, op.start_obj, op.filter_prefix, op.num_entries + 1, &keys);
+  rc = get_obj_vals(hctx, op.start_obj, op.filter_prefix, op.num_entries + 1, &keys);
   if (rc < 0)
     return rc;
 
@@ -80,8 +224,16 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   std::map<string, bufferlist>::iterator kiter = keys.begin();
   uint32_t i;
 
+  bool done = false;
+
   for (i = 0; i < op.num_entries && kiter != keys.end(); ++i, ++kiter) {
     struct rgw_bucket_dir_entry entry;
+
+    if (!bi_is_objs_index(kiter->first)) {
+      done = true;
+      break;
+    }
+
     bufferlist& entrybl = kiter->second;
     bufferlist::iterator eiter = entrybl.begin();
     try {
@@ -94,7 +246,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     m[kiter->first] = entry;
   }
 
-  ret.is_truncated = (kiter != keys.end());
+  ret.is_truncated = (kiter != keys.end() && !done);
 
   ::encode(ret, *out);
   return 0;
@@ -115,6 +267,7 @@ static int check_index(cls_method_context_t hctx, struct rgw_bucket_dir_header *
   }
 
   calc_header->tag_timeout = existing_header->tag_timeout;
+  calc_header->ver = existing_header->ver;
 
   bufferlist bl;
 
@@ -123,13 +276,20 @@ static int check_index(cls_method_context_t hctx, struct rgw_bucket_dir_header *
   string filter_prefix;
 
 #define CHECK_CHUNK_SIZE 1000
+  bool done = false;
+
   do {
-    rc = cls_cxx_map_get_vals(hctx, start_obj, filter_prefix, CHECK_CHUNK_SIZE, &keys);
+    rc = get_obj_vals(hctx, start_obj, filter_prefix, CHECK_CHUNK_SIZE, &keys);
     if (rc < 0)
       return rc;
 
     std::map<string, bufferlist>::iterator kiter = keys.begin();
     for (; kiter != keys.end(); ++kiter) {
+      if (!bi_is_objs_index(kiter->first)) {
+        done = true;
+        break;
+      }
+
       struct rgw_bucket_dir_entry entry;
       bufferlist::iterator eiter = kiter->second.begin();
       try {
@@ -145,7 +305,7 @@ static int check_index(cls_method_context_t hctx, struct rgw_bucket_dir_header *
 
       start_obj = kiter->first;
     }
-  } while (keys.size() == CHECK_CHUNK_SIZE);
+  } while (keys.size() == CHECK_CHUNK_SIZE && !done);
 
   return 0;
 }
@@ -163,6 +323,16 @@ int rgw_bucket_check_index(cls_method_context_t hctx, bufferlist *in, bufferlist
   return 0;
 }
 
+static int write_bucket_header(cls_method_context_t hctx, struct rgw_bucket_dir_header *header)
+{
+  header->ver++;
+
+  bufferlist header_bl;
+  ::encode(*header, header_bl);
+  return cls_cxx_map_write_header(hctx, &header_bl);
+}
+
+
 int rgw_bucket_rebuild_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   struct rgw_bucket_dir_header existing_header;
@@ -171,10 +341,7 @@ int rgw_bucket_rebuild_index(cls_method_context_t hctx, bufferlist *in, bufferli
   if (rc < 0)
     return rc;
 
-  bufferlist header_bl;
-  ::encode(calc_header, header_bl);
-  rc = cls_cxx_map_write_header(hctx, &header_bl);
-  return rc;
+  return write_bucket_header(hctx, &calc_header);
 }
 
 
@@ -201,9 +368,8 @@ int rgw_bucket_init_index(cls_method_context_t hctx, bufferlist *in, bufferlist 
   }
 
   rgw_bucket_dir dir;
-  ::encode(dir.header, header_bl);
-  rc = cls_cxx_map_write_header(hctx, &header_bl);
-  return rc;
+
+  return write_bucket_header(hctx, &dir.header);
 }
 
 int rgw_bucket_set_tag_timeout(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -233,10 +399,7 @@ int rgw_bucket_set_tag_timeout(cls_method_context_t hctx, bufferlist *in, buffer
 
   header.tag_timeout = op.tag_timeout;
 
-  header_bl.clear();
-  ::encode(header, header_bl);
-  rc = cls_cxx_map_write_header(hctx, &header_bl);
-  return rc;
+  return write_bucket_header(hctx, &header);
 }
 
 int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -284,7 +447,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 
   if (noent) { // no entry, initialize fields
     entry.name = op.name;
-    entry.epoch = 0;
+    entry.ver = rgw_bucket_entry_ver();
     entry.exists = false;
     entry.locator = op.locator;
   }
@@ -295,11 +458,36 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   info.state = CLS_RGW_STATE_PENDING_MODIFY;
   info.op = op.op;
 
+
+  bufferlist header_bl;
+  struct rgw_bucket_dir_header header;
+  rc = cls_cxx_map_read_header(hctx, &header_bl);
+  if (rc < 0)
+    return rc;
+
+  bufferlist::iterator header_iter = header_bl.begin();
+  try {
+    ::decode(header, header_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to decode header\n");
+    return -EINVAL;
+  }
+
+  if (op.log_op) {
+    rc = log_index_operation(hctx, op.name, op.op, op.tag, entry.meta.mtime,
+                             entry.ver, info.state, header.ver, header.max_marker);
+    if (rc < 0)
+      return rc;
+  }
+
   // write out new key to disk
   bufferlist info_bl;
   ::encode(entry, info_bl);
   rc = cls_cxx_map_set_val(hctx, op.name, &info_bl);
-  return rc;
+  if (rc < 0)
+    return rc;
+
+  return write_bucket_header(hctx, &header);
 }
 
 static void unaccount_entry(struct rgw_bucket_dir_header& header, struct rgw_bucket_dir_entry& entry)
@@ -326,7 +514,9 @@ static int read_index_entry(cls_method_context_t hctx, string& name, struct rgw_
     return -EIO;
   }
 
-  CLS_LOG(1, "read_index_entry(): existing entry: epoch=%llu name=%s locator=%s\n", (unsigned long long)entry->epoch, entry->name.c_str(), entry->locator.c_str());
+  CLS_LOG(1, "read_index_entry(): existing entry: ver=%ld:%llu name=%s locator=%s\n",
+          (long)entry->ver.pool, (unsigned long long)entry->ver.epoch,
+          entry->name.c_str(), entry->locator.c_str());
   return 0;
 }
 
@@ -341,7 +531,10 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to decode request\n");
     return -EINVAL;
   }
-  CLS_LOG(1, "rgw_bucket_complete_op(): request: op=%d name=%s epoch=%llu tag=%s\n", op.op, op.name.c_str(), (unsigned long long)op.epoch, op.tag.c_str());
+  CLS_LOG(1, "rgw_bucket_complete_op(): request: op=%d name=%s ver=%lu:%llu tag=%s\n",
+          op.op, op.name.c_str(),
+          (unsigned long)op.ver.pool, (unsigned long long)op.ver.epoch,
+          op.tag.c_str());
 
   bufferlist header_bl;
   struct rgw_bucket_dir_header header;
@@ -362,13 +555,15 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   rc = read_index_entry(hctx, op.name, &entry);
   if (rc == -ENOENT) {
     entry.name = op.name;
-    entry.epoch = op.epoch;
+    entry.ver = op.ver;
     entry.meta = op.meta;
     entry.locator = op.locator;
     ondisk = false;
   } else if (rc < 0) {
     return rc;
   }
+
+  entry.index_ver = header.ver;
 
   if (op.tag.size()) {
     map<string, struct rgw_bucket_pending_info>::iterator pinter = entry.pending_map.find(op.tag);
@@ -385,13 +580,21 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   if (op.tag.size() && op.op == CLS_RGW_OP_CANCEL) {
     CLS_LOG(1, "rgw_bucket_complete_op(): cancel requested\n");
     cancel = true;
-  } else if (op.epoch && op.epoch <= entry.epoch) {
+  } else if (op.ver.pool == entry.ver.pool &&
+             op.ver.epoch && op.ver.epoch <= entry.ver.epoch) {
     CLS_LOG(1, "rgw_bucket_complete_op(): skipping request, old epoch\n");
     cancel = true;
   }
 
   bufferlist op_bl;
   if (cancel) {
+    if (op.log_op) {
+      rc = log_index_operation(hctx, op.name, op.op, op.tag, entry.meta.mtime, entry.ver,
+                               CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker);
+      if (rc < 0)
+        return rc;
+    }
+
     if (op.tag.size()) {
       bufferlist new_key_bl;
       ::encode(entry, new_key_bl);
@@ -405,7 +608,8 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     unaccount_entry(header, entry);
   }
 
-  switch (op.op) {
+  entry.ver = op.ver;
+  switch ((int)op.op) {
   case CLS_RGW_OP_DEL:
     if (ondisk) {
       if (!entry.pending_map.size()) {
@@ -430,8 +634,8 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       struct rgw_bucket_category_stats& stats = header.stats[meta.category];
       entry.meta = meta;
       entry.name = op.name;
-      entry.epoch = op.epoch;
       entry.exists = true;
+      entry.tag = op.tag;
       stats.num_entries++;
       stats.total_size += meta.size;
       stats.total_size_rounded += get_rounded_size(meta.size);
@@ -442,6 +646,13 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 	return ret;
     }
     break;
+  }
+
+  if (op.log_op) {
+    rc = log_index_operation(hctx, op.name, op.op, op.tag, entry.meta.mtime, entry.ver,
+                             CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker);
+    if (rc < 0)
+      return rc;
   }
 
   list<string>::iterator remove_iter;
@@ -458,6 +669,13 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     CLS_LOG(0, "rgw_bucket_complete_op(): entry.name=%s entry.meta.category=%d\n", remove_entry.name.c_str(), remove_entry.meta.category);
     unaccount_entry(header, remove_entry);
 
+    if (op.log_op) {
+      rc = log_index_operation(hctx, op.name, CLS_RGW_OP_DEL, op.tag, remove_entry.meta.mtime,
+                               remove_entry.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker);
+      if (rc < 0)
+        continue;
+    }
+
     ret = cls_cxx_map_remove_key(hctx, remove_oid_name);
     if (ret < 0) {
       CLS_LOG(1, "rgw_bucket_complete_op(): cls_cxx_map_remove_key, failed to remove entry, name=%s read_index_entry ret=%d\n", remove_oid_name.c_str(), rc);
@@ -465,9 +683,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     }
   }
 
-  bufferlist new_header_bl;
-  ::encode(header, new_header_bl);
-  return cls_cxx_map_write_header(hctx, &new_header_bl);
+  return write_bucket_header(hctx, &header);
 }
 
 int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -560,6 +776,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
         stats.total_size += cur_change.meta.size;
         stats.total_size_rounded += get_rounded_size(cur_change.meta.size);
         header_changed = true;
+        cur_change.index_ver = header.ver;
         bufferlist cur_state_bl;
         ::encode(cur_change, cur_state_bl);
         ret = cls_cxx_map_set_val(hctx, cur_change.name, &cur_state_bl);
@@ -570,12 +787,216 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
     }
   }
 
-  bufferlist update_bl;
   if (header_changed) {
-    bufferlist new_header_bl;
-    ::encode(header, new_header_bl);
-    return cls_cxx_map_write_header(hctx, &new_header_bl);
+    return write_bucket_header(hctx, &header);
   }
+  return 0;
+}
+
+int bi_log_record_decode(bufferlist& bl, rgw_bi_log_entry& e)
+{
+  bufferlist::iterator iter = bl.begin();
+  try {
+    ::decode(e, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: failed to decode rgw_bi_log_entry");
+    return -EIO;
+  }
+  return 0;
+}
+
+static int bi_log_iterate_entries(cls_method_context_t hctx, const string& marker, const string& end_marker,
+                              string& key_iter, uint32_t max_entries, bool *truncated,
+                              int (*cb)(cls_method_context_t, const string&, rgw_bi_log_entry&, void *),
+                              void *param)
+{
+  CLS_LOG(10, "bi_log_iterate_range");
+
+  map<string, bufferlist> keys;
+  string filter_prefix, end_key;
+  bufferlist start_bl;
+  bool start_key_added;
+  uint32_t i = 0;
+  string key;
+
+  if (truncated)
+    *truncated = false;
+
+  string start_key;
+  if (key_iter.empty()) {
+    key = BI_PREFIX_CHAR;
+    key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
+    key.append(marker);
+
+    start_key = key;
+    int ret = cls_cxx_map_get_val(hctx, start_key, &start_bl);
+    if ((ret < 0) && (ret != -ENOENT)) {
+        return ret;
+    } 
+  } else {
+    start_key = key_iter;
+  }
+
+  if (end_marker.empty()) {
+    end_key = BI_PREFIX_CHAR;
+    end_key.append(bucket_index_prefixes[BI_BUCKET_LAST_INDEX]);
+  } else {
+    end_key = BI_PREFIX_CHAR;
+    end_key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
+    end_key.append(end_marker);
+  }
+
+  CLS_LOG(0, "bi_log_iterate_entries start_key=%s end_key=%s\n", start_key.c_str(), end_key.c_str());
+
+  string filter;
+
+  do {
+#define BI_NUM_KEYS 128
+    int ret = cls_cxx_map_get_vals(hctx, start_key, filter, BI_NUM_KEYS, &keys);
+    if (ret < 0)
+      return ret;
+
+    if ((start_bl.length() > 0) && (!start_key_added)) {
+      keys[start_key] = start_bl;
+      start_key_added = true;
+    }
+    map<string, bufferlist>::iterator iter = keys.begin();
+    if (iter == keys.end())
+      break;
+
+    for (; iter != keys.end(); ++iter) {
+      const string& key = iter->first;
+      rgw_bi_log_entry e;
+
+      CLS_LOG(0, "bi_log_iterate_entries key=%s bl.length=%d\n", key.c_str(), (int)iter->second.length());
+
+      if (key.compare(end_key) > 0)
+        return 0;
+
+      ret = bi_log_record_decode(iter->second, e);
+      if (ret < 0)
+        return ret;
+
+      if (max_entries && (i >= max_entries)) {
+        if (truncated)
+          *truncated = true;
+        key_iter = key;
+        return 0;
+      }
+
+      ret = cb(hctx, key, e, param);
+      if (ret < 0)
+        return ret;
+      i++;
+
+    }
+    --iter;
+    start_key = iter->first;
+  } while (true);
+  return 0;
+}
+
+static int bi_log_list_cb(cls_method_context_t hctx, const string& key, rgw_bi_log_entry& info, void *param)
+{
+  list<rgw_bi_log_entry> *l = (list<rgw_bi_log_entry> *)param;
+  l->push_back(info);
+  return 0;
+}
+
+static int bi_log_list_entries(cls_method_context_t hctx, const string& marker,
+			   uint32_t max, list<rgw_bi_log_entry>& entries, bool *truncated)
+{
+  string key_iter;
+  string end_marker;
+  int ret = bi_log_iterate_entries(hctx, marker, end_marker,
+                              key_iter, max, truncated,
+                              bi_log_list_cb, &entries);
+  return ret;
+}
+
+static int rgw_bi_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist::iterator in_iter = in->begin();
+
+  cls_rgw_bi_log_list_op op;
+  try {
+    ::decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_bi_log_list(): failed to decode entry\n");
+    return -EINVAL;
+  }
+
+  cls_rgw_bi_log_list_ret op_ret;
+  int ret = bi_log_list_entries(hctx, op.marker, op.max, op_ret.entries, &op_ret.truncated);
+  if (ret < 0)
+    return ret;
+
+  ::encode(op_ret, *out);
+
+  return 0;
+}
+
+static int bi_log_list_trim_cb(cls_method_context_t hctx, const string& key, rgw_bi_log_entry& info, void *param)
+{
+  list<rgw_bi_log_entry> *entries = (list<rgw_bi_log_entry> *)param;
+
+  entries->push_back(info);
+  return 0;
+}
+
+static int bi_log_remove_entry(cls_method_context_t hctx, rgw_bi_log_entry& entry)
+{
+  string key;
+  key = BI_PREFIX_CHAR;
+  key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
+  key.append(entry.id);
+  return cls_cxx_map_remove_key(hctx, key);
+}
+
+static int bi_log_list_trim_entries(cls_method_context_t hctx,
+                                    const string& start_marker, const string& end_marker,
+			            list<rgw_bi_log_entry>& entries, bool *truncated)
+{
+  string key_iter;
+#define MAX_TRIM_ENTRIES 1000 /* max entries to trim in a single operation */
+  int ret = bi_log_iterate_entries(hctx, start_marker, end_marker,
+                              key_iter, MAX_TRIM_ENTRIES, truncated,
+                              bi_log_list_trim_cb, &entries);
+  return ret;
+}
+
+static int rgw_bi_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist::iterator in_iter = in->begin();
+
+  cls_rgw_bi_log_trim_op op;
+  try {
+    ::decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_bi_log_list(): failed to decode entry\n");
+    return -EINVAL;
+  }
+
+  cls_rgw_bi_log_list_ret op_ret;
+  list<rgw_bi_log_entry> entries;
+#define MAX_TRIM_ENTRIES 1000 /* don't do more than that in a single operation */
+  bool truncated;
+  int ret = bi_log_list_trim_entries(hctx, op.start_marker, op.end_marker, entries, &truncated);
+  if (ret < 0)
+    return ret;
+
+  if (entries.size() == 0)
+    return -ENODATA;
+
+  list<rgw_bi_log_entry>::iterator iter;
+  for (iter = entries.begin(); iter != entries.end(); ++iter) {
+    rgw_bi_log_entry& entry = *iter;
+
+    ret = bi_log_remove_entry(hctx, entry);
+    if (ret < 0)
+      return ret;
+  }
+
   return 0;
 }
 
@@ -912,13 +1333,6 @@ static int gc_omap_remove(cls_method_context_t hctx, int type, const string& key
   return 0;
 }
 
-static void get_time_key(utime_t& ut, string *key)
-{
-  char buf[32];
-  snprintf(buf, 32, "%011llu.%09u", (unsigned long long)ut.sec(), ut.nsec());
-  *key = buf;
-}
-
 static bool key_in_index(const string& key, int index_type)
 {
   const string& prefix = gc_index_prefixes[index_type]; 
@@ -1191,6 +1605,8 @@ void __cls_init()
   cls_register_cxx_method(h_class, "bucket_rebuild_index", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_rebuild_index, &h_rgw_bucket_rebuild_index);
   cls_register_cxx_method(h_class, "bucket_prepare_op", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_prepare_op, &h_rgw_bucket_prepare_op);
   cls_register_cxx_method(h_class, "bucket_complete_op", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_complete_op, &h_rgw_bucket_complete_op);
+  cls_register_cxx_method(h_class, "bi_log_list", CLS_METHOD_RD, rgw_bi_log_list, &h_rgw_bi_log_list_op);
+  cls_register_cxx_method(h_class, "bi_log_trim", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_trim, &h_rgw_bi_log_list_op);
   cls_register_cxx_method(h_class, "dir_suggest_changes", CLS_METHOD_RD | CLS_METHOD_WR, rgw_dir_suggest_changes, &h_rgw_dir_suggest_changes);
 
   /* usage logging */
