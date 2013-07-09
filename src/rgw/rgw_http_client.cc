@@ -178,6 +178,59 @@ int RGWHTTPClient::init_async(const char *method, const char *url, void **handle
   return 0;
 }
 
+#if HAVE_CURL_MULTI_WAIT
+
+static int do_curl_wait(CephContext *cct, CURLM *handle)
+{
+  int num_fds;
+  int ret = curl_multi_wait(handle, NULL, 0, cct->_conf->rgw_curl_wait_timeout_ms, &num_fds);
+  if (ret) {
+    dout(0) << "ERROR: curl_multi_wait() returned " << ret << dendl;
+    return -EIO;
+  }
+  return 0;
+}
+
+#else
+
+static int do_curl_wait(CephContext *cct, CURLM *handle)
+{
+  fd_set fdread;
+  fd_set fdwrite;
+  fd_set fdexcep;
+  int maxfd = -1;
+ 
+  FD_ZERO(&fdread);
+  FD_ZERO(&fdwrite);
+  FD_ZERO(&fdexcep);
+
+  /* get file descriptors from the transfers */ 
+  int ret = curl_multi_fdset(handle, &fdread, &fdwrite, &fdexcep, &maxfd);
+  if (ret) {
+    dout(0) << "ERROR: curl_multi_fdset returned " << ret << dendl;
+    return -EIO;
+  }
+
+  /* forcing a strict timeout, as the returned fdsets might not reference all fds we wait on */
+  uint64_t to = cct->_conf->rgw_curl_wait_timeout_ms;
+#define RGW_CURL_TIMEOUT 1000
+  if (!to)
+    to = RGW_CURL_TIMEOUT;
+  struct timeval timeout;
+  timeout.tv_sec = to / 1000;
+  timeout.tv_usec = to % 1000;
+
+  ret = select(maxfd+1, &fdread, &fdwrite, &fdexcep, &timeout);
+  if (ret < 0) {
+    ret = -errno;
+    dout(0) << "ERROR: select returned " << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+#endif
 
 int RGWHTTPClient::process_request(void *handle, bool wait_for_data, bool *done)
 {
@@ -187,45 +240,8 @@ int RGWHTTPClient::process_request(void *handle, bool wait_for_data, bool *done)
 
   do {
     if (wait_for_data) {
-      struct timeval timeout;
- 
-      fd_set fdread;
-      fd_set fdwrite;
-      fd_set fdexcep;
-      int maxfd = -1;
- 
-      long curl_timeo = -1;
- 
-      FD_ZERO(&fdread);
-      FD_ZERO(&fdwrite);
-      FD_ZERO(&fdexcep);
-#if 0 
-    /* set a suitable timeout to play around with */ 
-    timeout.tv_sec = 1;
-    timeout.tv_usec = 0;
- 
-    curl_multi_timeout(multi_handle, &curl_timeo);
-    if(curl_timeo >= 0) {
-      timeout.tv_sec = curl_timeo / 1000;
-      if(timeout.tv_sec > 1)
-        timeout.tv_sec = 1;
-      else
-        timeout.tv_usec = (curl_timeo % 1000) * 1000;
-    }
-#endif
- 
-      /* get file descriptors from the transfers */ 
-      int ret = curl_multi_fdset(req_data->multi_handle, &fdread, &fdwrite, &fdexcep, &maxfd);
-      if (ret) {
-        dout(0) << "ERROR: curl_multi_fdset returned " << ret << dendl;
-        return -EIO;
-      }
-
-#warning FIXME: replace select with poll 
-      ret = select(maxfd+1, &fdread, &fdwrite, &fdexcep, NULL);
+      int ret = do_curl_wait(cct, req_data->multi_handle);
       if (ret < 0) {
-        ret = -errno;
-        dout(0) << "ERROR: select returned " << ret << dendl;
         return ret;
       }
     }
@@ -243,8 +259,13 @@ int RGWHTTPClient::process_request(void *handle, bool wait_for_data, bool *done)
     CURLMsg *msg;
     while ((msg = curl_multi_info_read(req_data->multi_handle, &msgs_left))) {
       if (msg->msg == CURLMSG_DONE) {
-#warning FIXME: check result
-        dout(20) << "msg->data.result=" << msg->data.result << dendl;
+        switch (msg->data.result) {
+          case CURLE_OK:
+            break;
+          default:
+            dout(20) << "ERROR: msg->data.result=" << msg->data.result << dendl;
+            return -EIO;
+        }
       }
     }
   } while (mstatus == CURLM_CALL_MULTI_PERFORM);
