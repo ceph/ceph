@@ -116,6 +116,8 @@ struct object_locator_t {
     : pool(po), nspace(ns) {}
   explicit object_locator_t(int64_t po, string ns, string s)
     : pool(po), key(s), nspace(ns) {}
+  explicit object_locator_t(const hobject_t& soid)
+    : pool(soid.pool), key(soid.get_key()), nspace(soid.nspace) {}
 
   int64_t get_pool() const {
     return pool;
@@ -1787,7 +1789,6 @@ static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
 
 struct object_info_t {
   hobject_t soid;
-  object_locator_t oloc;
   string category;
 
   eversion_t version, prior_version;
@@ -1826,8 +1827,8 @@ struct object_info_t {
       truncate_seq(0), truncate_size(0), uses_tmap(false)
   {}
 
-  object_info_t(const hobject_t& s, const object_locator_t& o)
-    : soid(s), oloc(o), size(0),
+  object_info_t(const hobject_t& s)
+    : soid(s), size(0),
       lost(false), truncate_seq(0), truncate_size(0), uses_tmap(false) {}
 
   object_info_t(bufferlist& bl) {
