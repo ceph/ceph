@@ -340,28 +340,6 @@ bool PaxosService::should_trim()
   return true;
 }
 
-void PaxosService::trim(MonitorDBStore::Transaction *t,
-			version_t from, version_t to)
-{
-  dout(10) << __func__ << " from " << from << " to " << to << dendl;
-  assert(from != to);
-
-  for (version_t v = from; v < to; ++v) {
-    dout(20) << __func__ << " " << v << dendl;
-    t->erase(get_service_name(), v);
-
-    string full_key = mon->store->combine_strings("full", v);
-    if (mon->store->exists(get_service_name(), full_key)) {
-      dout(20) << __func__ << " " << full_key << dendl;
-      t->erase(get_service_name(), full_key);
-    }
-  }
-  if (g_conf->mon_compact_on_trim) {
-    dout(20) << " compacting prefix " << get_service_name() << dendl;
-    t->compact_range(get_service_name(), stringify(from - 1), stringify(to));
-  }
-}
-
 void PaxosService::encode_trim(MonitorDBStore::Transaction *t)
 {
   version_t first_committed = get_first_committed();
@@ -391,5 +369,27 @@ void PaxosService::encode_trim(MonitorDBStore::Transaction *t)
 
   if (trim_to_max == trim_to)
     set_trim_to(0);
+}
+
+void PaxosService::trim(MonitorDBStore::Transaction *t,
+			version_t from, version_t to)
+{
+  dout(10) << __func__ << " from " << from << " to " << to << dendl;
+  assert(from != to);
+
+  for (version_t v = from; v < to; ++v) {
+    dout(20) << __func__ << " " << v << dendl;
+    t->erase(get_service_name(), v);
+
+    string full_key = mon->store->combine_strings("full", v);
+    if (mon->store->exists(get_service_name(), full_key)) {
+      dout(20) << __func__ << " " << full_key << dendl;
+      t->erase(get_service_name(), full_key);
+    }
+  }
+  if (g_conf->mon_compact_on_trim) {
+    dout(20) << " compacting prefix " << get_service_name() << dendl;
+    t->compact_range(get_service_name(), stringify(from - 1), stringify(to));
+  }
 }
 
