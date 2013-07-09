@@ -18,8 +18,10 @@
 #include <math.h>
 #include <sys/time.h>
 #include <time.h>
+#include <errno.h>
 
 #include "include/types.h"
+#include "common/strtol.h"
 
 
 // --------
@@ -169,6 +171,33 @@ public:
     return out;
   }
 
+  // output
+  ostream& asctime(ostream& out) const {
+    out.setf(std::ios::right);
+    char oldfill = out.fill();
+    out.fill('0');
+    if (sec() < ((time_t)(60*60*24*365*10))) {
+      // raw seconds.  this looks like a relative time.
+      out << (long)sec() << "." << std::setw(6) << usec();
+    } else {
+      // localtime.  this looks like an absolute time.
+      //  aim for http://en.wikipedia.org/wiki/ISO_8601
+      struct tm bdt;
+      time_t tt = sec();
+      gmtime_r(&tt, &bdt);
+
+      char buf[128];
+      asctime_r(&bdt, buf);
+      int len = strlen(buf);
+      if (buf[len - 1] == '\n')
+        buf[len - 1] = '\0';
+      out << buf;
+    }
+    out.fill(oldfill);
+    out.unsetf(std::ios::right);
+    return out;
+  }
+  
   ostream& localtime(ostream& out) const {
     out.setf(std::ios::right);
     char oldfill = out.fill();
@@ -206,6 +235,60 @@ public:
 		    "%04d-%02d-%02d %02d:%02d:%02d.%06ld",
 		    bdt.tm_year + 1900, bdt.tm_mon + 1, bdt.tm_mday,
 		    bdt.tm_hour, bdt.tm_min, bdt.tm_sec, usec());
+  }
+
+  static int parse_date(const string& date, uint64_t *epoch, uint64_t *nsec,
+                        string *out_date=NULL, string *out_time=NULL) {
+    struct tm tm;
+    memset(&tm, 0, sizeof(tm));
+
+    if (nsec)
+      *nsec = 0;
+
+    const char *p = strptime(date.c_str(), "%Y-%m-%d", &tm);
+    if (p) {
+      if (*p == ' ') {
+	p++;
+	p = strptime(p, " %H:%M:%S", &tm);
+	if (!p)
+	  return -EINVAL;
+        if (nsec && *p == '.') {
+          ++p;
+          unsigned i;
+          char buf[10]; /* 9 digit + null termination */
+          for (i = 0; (i < sizeof(buf) - 1) && isdigit(*p); ++i, ++p) {
+            buf[i] = *p;
+          }
+          for (; i < sizeof(buf) - 1; ++i) {
+            buf[i] = '0';
+          }
+          buf[i] = '\0';
+          string err;
+          *nsec = (uint64_t)strict_strtol(buf, 10, &err);
+          if (!err.empty()) {
+            return -EINVAL;
+          }
+        }
+      }
+    } else {
+      return -EINVAL;
+    }
+    time_t t = timegm(&tm);
+    if (epoch)
+      *epoch = (uint64_t)t;
+
+    if (out_date) {
+      char buf[32];
+      strftime(buf, sizeof(buf), "%F", &tm);
+      *out_date = buf;
+    }
+    if (out_time) {
+      char buf[32];
+      strftime(buf, sizeof(buf), "%T", &tm);
+      *out_time = buf;
+    }
+
+    return 0;
   }
 };
 WRITE_CLASS_ENCODER(utime_t)

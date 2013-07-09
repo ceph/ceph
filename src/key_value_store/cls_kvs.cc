@@ -6,8 +6,7 @@
  */
 
 #include "objclass/objclass.h"
-#include "/usr/include/asm-generic/errno-base.h"
-#include "/usr/include/asm-generic/errno.h"
+#include <errno.h>
 #include "key_value_store/kvs_arg_types.h"
 #include "include/types.h"
 #include <iostream>

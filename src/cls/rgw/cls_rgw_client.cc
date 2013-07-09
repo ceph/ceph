@@ -4,6 +4,8 @@
 #include "cls/rgw/cls_rgw_ops.h"
 #include "include/rados/librados.hpp"
 
+#include "common/debug.h"
+
 using namespace librados;
 
 void cls_rgw_bucket_init(ObjectWriteOperation& o)
@@ -21,22 +23,23 @@ void cls_rgw_bucket_set_tag_timeout(ObjectWriteOperation& o, uint64_t tag_timeou
   o.exec("rgw", "bucket_set_tag_timeout", in);
 }
 
-void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, uint8_t op, string& tag,
-                               string& name, string& locator)
+void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
+                               string& name, string& locator, bool log_op)
 {
   struct rgw_cls_obj_prepare_op call;
   call.op = op;
   call.tag = tag;
   call.name = name;
   call.locator = locator;
+  call.log_op = log_op;
   bufferlist in;
   ::encode(call, in);
   o.exec("rgw", "bucket_prepare_op", in);
 }
 
-void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, uint8_t op, string& tag,
-                                uint64_t epoch, string& name, rgw_bucket_dir_entry_meta& dir_meta,
-				list<string> *remove_objs)
+void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
+                                rgw_bucket_entry_ver& ver, string& name, rgw_bucket_dir_entry_meta& dir_meta,
+				list<string> *remove_objs, bool log_op)
 {
 
   bufferlist in;
@@ -44,8 +47,9 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, uint8_t op, string& tag
   call.op = op;
   call.tag = tag;
   call.name = name;
-  call.epoch = epoch;
+  call.ver = ver;
   call.meta = dir_meta;
+  call.log_op = log_op;
   if (remove_objs)
     call.remove_objs = *remove_objs;
   ::encode(call, in);
@@ -151,6 +155,56 @@ int cls_rgw_get_dir_header(IoCtx& io_ctx, string& oid, rgw_bucket_dir_header *he
     *header = ret.dir.header;
 
  return r;
+}
+
+int cls_rgw_bi_log_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max,
+                    list<rgw_bi_log_entry>& entries, bool *truncated)
+{
+  bufferlist in, out;
+  cls_rgw_bi_log_list_op call;
+  call.marker = marker;
+  call.max = max;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "bi_log_list", in, out);
+  if (r < 0)
+    return r;
+
+  cls_rgw_bi_log_list_ret ret;
+  try {
+    bufferlist::iterator iter = out.begin();
+    ::decode(ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  entries = ret.entries;
+
+  if (truncated)
+    *truncated = ret.truncated;
+
+ return r;
+}
+
+int cls_rgw_bi_log_trim(IoCtx& io_ctx, string& oid, string& start_marker, string& end_marker)
+{
+  int r;
+  do {
+    bufferlist in, out;
+    cls_rgw_bi_log_trim_op call;
+    call.start_marker = start_marker;
+    call.end_marker = end_marker;
+    ::encode(call, in);
+    r = io_ctx.exec(oid, "rgw", "bi_log_trim", in, out);
+
+    if (r == -ENODATA)
+      break;
+
+    if (r < 0)
+      return r;
+
+  } while (1);
+
+  return 0;
 }
 
 int cls_rgw_usage_log_read(IoCtx& io_ctx, string& oid, string& user,

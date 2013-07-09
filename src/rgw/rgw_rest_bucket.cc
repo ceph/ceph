@@ -228,10 +228,10 @@ void RGWOp_Object_Remove::execute()
 RGWOp *RGWHandler_Bucket::op_get()
 {
 
-  if (s->args.sub_resource_exists("policy"))
+  if (s->info.args.sub_resource_exists("policy"))
     return new RGWOp_Get_Policy;
 
-  if (s->args.sub_resource_exists("index"))
+  if (s->info.args.sub_resource_exists("index"))
     return new RGWOp_Check_Bucket_Index;
 
   return new RGWOp_Bucket_Info;
@@ -249,7 +249,7 @@ RGWOp *RGWHandler_Bucket::op_post()
 
 RGWOp *RGWHandler_Bucket::op_delete()
 {
-  if (s->args.sub_resource_exists("object"))
+  if (s->info.args.sub_resource_exists("object"))
     return new RGWOp_Object_Remove;
 
   return new RGWOp_Bucket_Remove;
