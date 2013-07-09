@@ -211,12 +211,13 @@ void LogMonitor::encode_full(MonitorDBStore::Transaction *t)
   put_version_latest_full(t, summary.version);
 }
 
-void LogMonitor::update_trim()
+version_t LogMonitor::get_trim_to()
 {
   unsigned max = g_conf->mon_max_log_epochs;
   version_t version = get_last_committed();
   if (mon->is_leader() && version > max)
-    set_trim_to(version - max);
+    return version - max;
+  return 0;
 }
 
 bool LogMonitor::preprocess_query(PaxosServiceMessage *m)

@@ -185,13 +185,8 @@ void PaxosService::propose_pending()
   MonitorDBStore::Transaction t;
   bufferlist bl;
 
-  update_trim();
   if (should_stash_full())
     encode_full(&t);
-
-  if (should_trim()) {
-    encode_trim(&t);
-  }
 
   encode_pending(&t);
   have_pending = false;
@@ -326,6 +321,45 @@ void PaxosService::shutdown()
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
 }
 
+void PaxosService::maybe_trim()
+{
+  if (!is_writeable())
+    return;
+
+  version_t trim_to = get_trim_to();
+  if (trim_to < get_first_committed())
+    return;
+
+  version_t to_remove = trim_to - get_first_committed();
+  if (g_conf->paxos_service_trim_min > 0 &&
+      to_remove < (version_t)g_conf->paxos_service_trim_min) {
+    dout(10) << __func__ << " trim_to " << trim_to << " would only trim " << to_remove
+	     << " < paxos_service_trim_min " << g_conf->paxos_service_trim_min << dendl;
+    return;
+  }
+
+  if (g_conf->paxos_service_trim_max > 0 &&
+      to_remove > (version_t)g_conf->paxos_service_trim_max) {
+    dout(10) << __func__ << " trim_to " << trim_to << " would only trim " << to_remove
+	     << " > paxos_service_trim_max, limiting to " << g_conf->paxos_service_trim_max
+	     << dendl;
+    trim_to = get_first_committed() + g_conf->paxos_service_trim_max;
+    to_remove = trim_to - get_first_committed();
+  }
+
+  dout(10) << __func__ << " trimming to " << trim_to << ", " << to_remove << " states" << dendl;
+  MonitorDBStore::Transaction t;
+  trim(&t, get_first_committed(), trim_to);
+  put_first_committed(&t, trim_to);
+
+  // let the service add any extra stuff
+  encode_trim_extra(&t, trim_to);
+
+  bufferlist bl;
+  t.encode(bl);
+  paxos->propose_new_value(bl, new C_Committed(this));
+}
+
 void PaxosService::trim(MonitorDBStore::Transaction *t,
 			version_t from, version_t to)
 {
@@ -346,36 +380,5 @@ void PaxosService::trim(MonitorDBStore::Transaction *t,
     dout(20) << " compacting prefix " << get_service_name() << dendl;
     t->compact_range(get_service_name(), stringify(from - 1), stringify(to));
   }
-}
-
-void PaxosService::encode_trim(MonitorDBStore::Transaction *t)
-{
-  version_t first_committed = get_first_committed();
-  version_t latest_full = get_version_latest_full();
-  version_t trim_to = get_trim_to();
-
-  dout(10) << __func__ << " " << trim_to << " (was " << first_committed << ")"
-	   << ", latest full " << latest_full << dendl;
-
-  if (first_committed >= trim_to)
-    return;
-
-  version_t trim_to_max = trim_to;
-  if ((g_conf->paxos_service_trim_max > 0)
-      && (trim_to - first_committed > (size_t)g_conf->paxos_service_trim_max)) {
-    trim_to_max = first_committed + g_conf->paxos_service_trim_max;
-  }
-
-  dout(10) << __func__ << " trimming versions " << first_committed
-           << " to " << trim_to_max << dendl;
-
-  trim(t, first_committed, trim_to_max);
-  put_first_committed(t, trim_to_max);
-
-  // let the service add any extra stuff
-  encode_trim_extra(t, trim_to_max);
-
-  if (trim_to_max == trim_to)
-    set_trim_to(0);
 }
 

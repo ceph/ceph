@@ -183,8 +183,7 @@ private:
   bool prepare_update(PaxosServiceMessage *m);
   bool should_propose(double &delay);
 
-  void update_trim();
-  bool service_should_trim();
+  version_t get_trim_to();
 
   bool can_mark_down(int o);
   bool can_mark_up(int o);
