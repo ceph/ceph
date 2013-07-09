@@ -559,6 +559,7 @@ ObjectCacher::Object *ObjectCacher::get_object(sobject_t oid, ObjectSet *oset,
 					       uint64_t truncate_size,
 					       uint64_t truncate_seq)
 {
+  // XXX: Add handling of nspace in object_locator_t in cache
   assert(lock.is_locked());
   // have it?
   if ((uint32_t)l.pool < objects.size()) {
