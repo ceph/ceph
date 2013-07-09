@@ -2569,6 +2569,7 @@ ps_t object_info_t::legacy_object_locator_to_ps(const object_t &oid,
 
 void object_info_t::encode(bufferlist& bl) const
 {
+  object_locator_t myoloc(soid);
   map<entity_name_t, watch_info_t> old_watchers;
   for (map<pair<uint64_t, entity_name_t>, watch_info_t>::const_iterator i =
 	 watchers.begin();
@@ -2578,7 +2579,7 @@ void object_info_t::encode(bufferlist& bl) const
   }
   ENCODE_START(11, 8, bl);
   ::encode(soid, bl);
-  ::encode(oloc, bl);
+  ::encode(myoloc, bl);	//Retained for compatibility
   ::encode(category, bl);
   ::encode(version, bl);
   ::encode(prior_version, bl);
@@ -2601,19 +2602,20 @@ void object_info_t::encode(bufferlist& bl) const
 
 void object_info_t::decode(bufferlist::iterator& bl)
 {
+  object_locator_t myoloc;
   DECODE_START_LEGACY_COMPAT_LEN(11, 8, 8, bl);
   map<entity_name_t, watch_info_t> old_watchers;
   if (struct_v >= 2 && struct_v <= 5) {
     sobject_t obj;
     ::decode(obj, bl);
-    ::decode(oloc, bl);
-    soid = hobject_t(obj.oid, oloc.key, obj.snap, 0, 0 , "");
-    soid.hash = legacy_object_locator_to_ps(soid.oid, oloc);
+    ::decode(myoloc, bl);
+    soid = hobject_t(obj.oid, myoloc.key, obj.snap, 0, 0 , "");
+    soid.hash = legacy_object_locator_to_ps(soid.oid, myoloc);
   } else if (struct_v >= 6) {
     ::decode(soid, bl);
-    ::decode(oloc, bl);
+    ::decode(myoloc, bl);
     if (struct_v == 6) {
-      hobject_t hoid(soid.oid, oloc.key, soid.snap, soid.hash, 0 , "");
+      hobject_t hoid(soid.oid, myoloc.key, soid.snap, soid.hash, 0 , "");
       soid = hoid;
     }
   }
@@ -2644,7 +2646,7 @@ void object_info_t::decode(bufferlist::iterator& bl)
   else
     uses_tmap = true;
   if (struct_v < 10)
-    soid.pool = oloc.pool;
+    soid.pool = myoloc.pool;
   if (struct_v >= 11) {
     ::decode(watchers, bl);
   } else {
@@ -2663,9 +2665,6 @@ void object_info_t::dump(Formatter *f) const
 {
   f->open_object_section("oid");
   soid.dump(f);
-  f->close_section();
-  f->open_object_section("locator");
-  oloc.dump(f);
   f->close_section();
   f->dump_string("category", category);
   f->dump_stream("version") << version;
