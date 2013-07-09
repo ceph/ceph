@@ -43,36 +43,18 @@ MonitorDBStore *Paxos::get_store()
   return mon->store;
 }
 
-
-void Paxos::apply_version(MonitorDBStore::Transaction &tx, version_t v)
+void Paxos::read_and_prepare_transactions(MonitorDBStore::Transaction *tx, version_t first, version_t last)
 {
-  bufferlist bl;
-  int err = get_store()->get(get_name(), v, bl);
-  assert(err == 0);
-  assert(bl.length());
-  decode_append_transaction(tx, bl);
-}
-
-void Paxos::reapply_all_versions()
-{
-  version_t first = get_store()->get(get_name(), "first_committed");
-  version_t last = get_store()->get(get_name(), "last_committed");
   dout(10) << __func__ << " first " << first << " last " << last << dendl;
-
-  MonitorDBStore::Transaction tx;
   for (version_t v = first; v <= last; ++v) {
     dout(30) << __func__ << " apply version " << v << dendl;
-    apply_version(tx, v);
+    bufferlist bl;
+    int err = get_store()->get(get_name(), v, bl);
+    assert(err == 0);
+    assert(bl.length());
+    decode_append_transaction(*tx, bl);
   }
   dout(15) << __func__ << " total versions " << (last-first) << dendl;
-
-  dout(30) << __func__ << " tx dump:\n";
-  JSONFormatter f(true);
-  tx.dump(&f);
-  f.flush(*_dout);
-  *_dout << dendl;
-
-  get_store()->apply_transaction(tx);
 }
 
 void Paxos::init()

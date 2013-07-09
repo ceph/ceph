@@ -17,83 +17,22 @@
 
 class MMonSync : public Message
 {
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+  static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 2;
 
 public:
   /**
   * Operation types
   */
   enum {
-    /**
-    * Start synchronization request
-    * (mon.X -> Leader)
-    */
-    OP_START		= 1,
-    /**
-     * Reply to an OP_START
-     * (Leader -> mon.X)
-     */
-    OP_START_REPLY	= 2,
-    /**
-     * Let the Leader know we are still synchronizing
-     * (mon.X -> Leader)
-     */
-    OP_HEARTBEAT	= 3,
-    /**
-     * Reply to a hearbeat
-     * (Leader -> mon.X)
-     */
-    OP_HEARTBEAT_REPLY	= 4,
-    /**
-     * Let the Leader know we finished synchronizing
-     * (mon.X -> Leader)
-     */
-    OP_FINISH		= 5,
-    /**
-     * Request a given monitor (mon.Y) to start synchronizing with us, hence
-     * sending us chunks.
-     * (mon.X -> mon.Y)
-     */
-    OP_START_CHUNKS	= 6,
-    /**
-     * Send a chunk to a given monitor (mon.X)
-     * (mon.Y -> mon.X)
-     */
-    OP_CHUNK		= 7,
-    /**
-     * Acknowledge that we received the last chunk sent
-     * (mon.X -> mon.Y)
-     */
-    OP_CHUNK_REPLY	= 8,
-    /**
-     * Reply to an OP_FINISH
-     * (Leader -> mon.X)
-     */
-    OP_FINISH_REPLY	= 9,
-    /**
-     * Let the receiver know that he should abort whatever he is in the middle
-     * of doing with the sender.
-     */
-    OP_ABORT		= 10,
+    OP_GET_COOKIE_FULL = 1,   // -> start a session (full scan)
+    OP_GET_COOKIE_RECENT = 2, // -> start a session (only recent paxos events)
+    OP_COOKIE = 3,            // <- pass the iterator cookie, or
+    OP_GET_CHUNK = 4,         // -> get some keys
+    OP_CHUNK = 5,             // <- return some keys
+    OP_LAST_CHUNK = 6,        // <- return the last set of keys
+    OP_NO_COOKIE = 8,         // <- sorry, no cookie
   };
-
-  /**
-  * Chunk is the last available
-  */
-  const static uint8_t FLAG_LAST      = 0x01;
- /**
-  * Let the other monitor it should retry again its last operation.
-  */
-  const static uint8_t FLAG_RETRY     = 0x02;
-  /**
-   * This message contains a crc
-   */
-  const static uint8_t FLAG_CRC	      = 0x04;
-  /**
-   * Do not reply to this message to the sender, but to @p reply_to.
-   */
-  const static uint8_t FLAG_REPLY_TO  = 0x08;
 
   /**
   * Obtain a string corresponding to the operation type @p op
@@ -103,119 +42,68 @@ public:
   */
   static const char *get_opname(int op) {
     switch (op) {
-    case OP_START: return "start";
-    case OP_START_REPLY: return "start_reply";
-    case OP_HEARTBEAT: return "heartbeat";
-    case OP_HEARTBEAT_REPLY: return "heartbeat_reply";
-    case OP_FINISH: return "finish";
-    case OP_FINISH_REPLY: return "finish_reply";
-    case OP_START_CHUNKS: return "start_chunks";
+    case OP_GET_COOKIE_FULL: return "get_cookie_full";
+    case OP_GET_COOKIE_RECENT: return "get_cookie_recent";
+    case OP_COOKIE: return "cookie";
+    case OP_GET_CHUNK: return "get_chunk";
     case OP_CHUNK: return "chunk";
-    case OP_CHUNK_REPLY: return "chunk_reply";
-    case OP_ABORT: return "abort";
+    case OP_LAST_CHUNK: return "last_chunk";
+    case OP_NO_COOKIE: return "no_cookie";
     default: assert("unknown op type"); return NULL;
     }
   }
 
   uint32_t op;
-  uint8_t flags;
-  version_t version;
-  bufferlist chunk_bl;
+  uint64_t cookie;
+  version_t last_committed;
   pair<string,string> last_key;
-  __u32 crc;
+  bufferlist chunk_bl;
   entity_inst_t reply_to;
 
   MMonSync()
     : Message(MSG_MON_SYNC, HEAD_VERSION, COMPAT_VERSION)
   { }
 
-  MMonSync(uint32_t op)
+  MMonSync(uint32_t op, uint64_t c = 0)
     : Message(MSG_MON_SYNC, HEAD_VERSION, COMPAT_VERSION),
-      op(op), flags(0), version(0), crc(0)
+      op(op),
+      cookie(c),
+      last_committed(0)
   { }
 
-  MMonSync(uint32_t op, bufferlist bl, uint8_t flags = 0) 
-    : Message(MSG_MON_SYNC, HEAD_VERSION, COMPAT_VERSION),
-      op(op), flags(flags), version(0), chunk_bl(bl), crc(0)
-  { }
-
-  MMonSync(MMonSync *m)
-    : Message(MSG_MON_SYNC, HEAD_VERSION, COMPAT_VERSION),
-      op(m->op), flags(m->flags), version(m->version),
-      chunk_bl(m->chunk_bl), last_key(m->last_key),
-      crc(m->crc), reply_to(m->reply_to)
-  { }
-
-  /**
-  * Obtain this message type's name */
   const char *get_type_name() const { return "mon_sync"; }
 
-  void set_reply_to(entity_inst_t other) {
-    reply_to = other;
-    flags |= FLAG_REPLY_TO;
-  }
-
-  /**
-  * Print this message in a pretty format to @p out
-  *
-  * @param out The output stream to output to
-  */
   void print(ostream& out) const {
-    out << "mon_sync( " << get_opname(op);
-
-    if (version > 0)
-      out << " v " << version;
-
-    if (flags) {
-      out << " flags( ";
-      if (flags & FLAG_LAST)
-	out << "last ";
-      if (flags & FLAG_RETRY)
-	out << "retry ";
-      if (flags & FLAG_CRC)
-	out << "crc(" << crc << ") ";
-      if (flags & FLAG_REPLY_TO)
-	out << "reply-to(" << reply_to << ") ";
-      out << ")";
-    }
-
+    out << "mon_sync(" << get_opname(op);
+    if (cookie)
+      out << " cookie " << cookie;
+    if (last_committed > 0)
+      out << " lc " << last_committed;
     if (chunk_bl.length())
       out << " bl " << chunk_bl.length() << " bytes";
-
-    if (!last_key.first.empty() || !last_key.second.empty()) {
-      out << " last_key ( " << last_key.first << ","
-	  << last_key.second << " )";
-    }
-
-    out << " )";	
+    if (!last_key.first.empty() || !last_key.second.empty())
+      out << " last_key " << last_key.first << "," << last_key.second;
+    out << ")";
   }
 
-  /**
-  * Encode this message into the Message's payload
-  */
   void encode_payload(uint64_t features) {
     ::encode(op, payload);
-    ::encode(flags, payload);
-    ::encode(version, payload);
-    ::encode(chunk_bl, payload);
+    ::encode(cookie, payload);
+    ::encode(last_committed, payload);
     ::encode(last_key.first, payload);
     ::encode(last_key.second, payload);
-    ::encode(crc, payload);
+    ::encode(chunk_bl, payload);
     ::encode(reply_to, payload);
   }
 
-  /**
-  * Decode the message's payload into this message
-  */
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(op, p);
-    ::decode(flags, p);
-    ::decode(version, p);
-    ::decode(chunk_bl, p);
+    ::decode(cookie, p);
+    ::decode(last_committed, p);
     ::decode(last_key.first, p);
     ::decode(last_key.second, p);
-    ::decode(crc, p);
+    ::decode(chunk_bl, p);
     ::decode(reply_to, p);
   }
 };
