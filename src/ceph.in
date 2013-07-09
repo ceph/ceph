@@ -695,6 +695,15 @@ def main():
             ret, outbuf, outs = new_style_command(parsed_args, childargs, target,
                                                   sigdict, inbuf, verbose)
 
+            # debug tool: send any successful command *again* to
+            # verify that it is idempotent.
+            if not ret and 'CEPH_CLI_TEST_DUP_COMMAND' in os.environ:
+                ret, outbuf, outs = new_style_command(parsed_args, childargs, target,
+                                                      sigdict, inbuf, verbose)
+                if ret < 0:
+                    ret = -ret
+                    print >> sys.stderr, prefix + 'Second attempt of previously successful command failed with {0}: {1}'.format(errno.errorcode[ret], outs)
+
         if ret < 0:
             ret = -ret
             print >> sys.stderr, prefix + 'Error {0}: {1}'.format(errno.errorcode[ret], outs)
