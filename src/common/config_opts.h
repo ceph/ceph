@@ -206,7 +206,7 @@ OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long
 OPTION(paxos_min_wait, OPT_DOUBLE, 0.05)  // min time to gather updates for after period of inactivity
 OPTION(paxos_trim_min, OPT_INT, 250)  // number of extra proposals tolerated before trimming
 OPTION(paxos_trim_max, OPT_INT, 500) // max number of extra proposals to trim at a time
-OPTION(paxos_trim_disabled_max_versions, OPT_INT, 100) // maximum amount of versions we shall allow passing by without trimming
+OPTION(paxos_trim_disabled_max_versions, OPT_INT, 108000) // maximum amount of versions we shall allow passing by without trimming
 OPTION(paxos_service_trim_min, OPT_INT, 250) // minimum amount of versions to trigger a trim (0 disables it)
 OPTION(paxos_service_trim_max, OPT_INT, 500) // maximum amount of versions to trim during a single proposal (0 disables it)
 OPTION(clock_offset, OPT_DOUBLE, 0) // how much to offset the system clock in Clock.cc
@@ -425,6 +425,9 @@ OPTION(osd_auto_mark_unfound_lost, OPT_BOOL, false)
 OPTION(osd_recovery_delay_start, OPT_FLOAT, 0)
 OPTION(osd_recovery_max_active, OPT_INT, 5)
 OPTION(osd_recovery_max_chunk, OPT_U64, 8<<20)  // max size of push chunk
+OPTION(osd_push_per_object_cost, OPT_U64, 1000)  // push cost per object
+OPTION(osd_max_push_cost, OPT_U64, 8<<20)  // max size of push message
+OPTION(osd_max_push_objects, OPT_U64, 10)  // max objects in single push op
 OPTION(osd_recovery_forget_lost_objects, OPT_BOOL, false)   // off for now
 OPTION(osd_max_scrubs, OPT_INT, 1)
 OPTION(osd_scrub_load_threshold, OPT_FLOAT, 0.5)

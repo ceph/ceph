@@ -440,6 +440,7 @@ protected:
 
   friend class C_OSD_OpCommit;
   friend class C_OSD_OpApplied;
+  friend class C_OnPushCommit;
 
   // projected object info
   map<hobject_t, ObjectContext*> object_contexts;
@@ -553,17 +554,30 @@ protected:
 			       bufferlist data_received,
 			       interval_set<uint64_t> *intervals_usable,
 			       bufferlist *data_usable);
-  void handle_pull_response(OpRequestRef op);
-  void handle_push(OpRequestRef op);
+  bool handle_pull_response(
+    int from, PushOp &op, PullOp *response,
+    ObjectStore::Transaction *t);
+  void handle_push(
+    int from, PushOp &op, PushReplyOp *response,
+    ObjectStore::Transaction *t);
+  void send_pushes(int prio, map<int, vector<PushOp> > &pushes);
   int send_push(int priority, int peer,
 		const ObjectRecoveryInfo& recovery_info,
-		ObjectRecoveryProgress progress,
+		const ObjectRecoveryProgress &progress,
 		ObjectRecoveryProgress *out_progress = 0);
-  int send_pull(int priority, int peer,
+  int build_push_op(const ObjectRecoveryInfo &recovery_info,
+		    const ObjectRecoveryProgress &progress,
+		    ObjectRecoveryProgress *out_progress,
+		    PushOp *out_op);
+  int send_push_op_legacy(int priority, int peer,
+		   PushOp &pop);
+    
+  int send_pull_legacy(int priority, int peer,
 		const ObjectRecoveryInfo& recovery_info,
 		ObjectRecoveryProgress progress);
-  void submit_push_data(const ObjectRecoveryInfo &recovery_info,
+  void submit_push_data(ObjectRecoveryInfo &recovery_info,
 			bool first,
+			bool complete,
 			const interval_set<uint64_t> &intervals_included,
 			bufferlist data_included,
 			bufferlist omap_header,
@@ -672,8 +686,9 @@ protected:
   // Reverse mapping from osd peer to objects beging pulled from that peer
   map<int, set<hobject_t> > pull_from_peer;
 
-  int recover_object_replicas(const hobject_t& soid, eversion_t v,
-			      int priority);
+  int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
+				 int priority,
+				 map<int, vector<PushOp> > *pushes);
   void calc_head_subsets(ObjectContext *obc, SnapSet& snapset, const hobject_t& head,
 			 pg_missing_t& missing,
 			 const hobject_t &last_backfill,
@@ -683,29 +698,38 @@ protected:
 			  const hobject_t &last_backfill,
 			  interval_set<uint64_t>& data_subset,
 			  map<hobject_t, interval_set<uint64_t> >& clone_subsets);
-  void push_to_replica(
+  void prep_push_to_replica(
     ObjectContext *obc,
     const hobject_t& oid,
     int dest,
-    int priority);
-  void push_start(int priority,
-		  ObjectContext *obc,
-		  const hobject_t& oid, int dest);
-  void push_start(int priority,
-		  ObjectContext *obc,
-		  const hobject_t& soid, int peer,
-		  eversion_t version,
-		  interval_set<uint64_t> &data_subset,
-		  map<hobject_t, interval_set<uint64_t> >& clone_subsets);
-  void send_push_op_blank(const hobject_t& soid, int peer);
+    int priority,
+    PushOp *push_op);
+  void prep_push(int priority,
+		 ObjectContext *obc,
+		 const hobject_t& oid, int dest,
+		 PushOp *op);
+  void prep_push(int priority,
+		 ObjectContext *obc,
+		 const hobject_t& soid, int peer,
+		 eversion_t version,
+		 interval_set<uint64_t> &data_subset,
+		 map<hobject_t, interval_set<uint64_t> >& clone_subsets,
+		 PushOp *op);
+  void prep_push_op_blank(const hobject_t& soid, PushOp *op);
 
   void finish_degraded_object(const hobject_t& oid);
 
   // Cancels/resets pulls from peer
   void check_recovery_sources(const OSDMapRef map);
-  int pull(
+
+  void send_pulls(
+    int priority,
+    map<int, vector<PullOp> > &pulls);
+  int prepare_pull(
     const hobject_t& oid, eversion_t v,
-    int priority);
+    int priority,
+    map<int, vector<PullOp> > *pulls
+    );
 
   // low level ops
 
@@ -743,7 +767,9 @@ protected:
    */
   void scan_range(hobject_t begin, int min, int max, BackfillInterval *bi);
 
-  void push_backfill_object(hobject_t oid, eversion_t v, eversion_t have, int peer);
+  void prep_backfill_object_push(
+    hobject_t oid, eversion_t v, eversion_t have, int peer,
+    map<int, vector<PushOp> > *pushes);
   void send_remove_op(const hobject_t& oid, eversion_t v, int peer);
 
 
@@ -798,32 +824,30 @@ protected:
   };
   struct C_OSD_AppliedRecoveredObject : public Context {
     ReplicatedPGRef pg;
-    ObjectStore::Transaction *t;
     ObjectContext *obc;
-    C_OSD_AppliedRecoveredObject(ReplicatedPG *p, ObjectStore::Transaction *tt, ObjectContext *o) :
-      pg(p), t(tt), obc(o) {}
+    C_OSD_AppliedRecoveredObject(ReplicatedPG *p, ObjectContext *o) :
+      pg(p), obc(o) {}
     void finish(int r) {
-      pg->_applied_recovered_object(t, obc);
+      pg->_applied_recovered_object(obc);
     }
   };
   struct C_OSD_CommittedPushedObject : public Context {
     ReplicatedPGRef pg;
-    OpRequestRef op;
     epoch_t epoch;
     eversion_t last_complete;
     C_OSD_CommittedPushedObject(
-      ReplicatedPG *p, OpRequestRef o, epoch_t epoch, eversion_t lc) :
-      pg(p), op(o), epoch(epoch), last_complete(lc) {
+      ReplicatedPG *p, epoch_t epoch, eversion_t lc) :
+      pg(p), epoch(epoch), last_complete(lc) {
     }
     void finish(int r) {
-      pg->_committed_pushed_object(op, epoch, last_complete);
+      pg->_committed_pushed_object(epoch, last_complete);
     }
   };
-  struct C_OSD_CompletedPushedObjectReplica : public Context {
+  struct C_OSD_SendMessageOnConn: public Context {
     OSDService *osd;
     Message *reply;
     ConnectionRef conn;
-    C_OSD_CompletedPushedObjectReplica (
+    C_OSD_SendMessageOnConn(
       OSDService *osd,
       Message *reply,
       ConnectionRef conn) : osd(osd), reply(reply), conn(conn) {}
@@ -850,11 +874,10 @@ protected:
   friend class C_OSD_CompletedPull;
   struct C_OSD_AppliedRecoveredObjectReplica : public Context {
     ReplicatedPGRef pg;
-    ObjectStore::Transaction *t;
-    C_OSD_AppliedRecoveredObjectReplica(ReplicatedPG *p, ObjectStore::Transaction *tt) :
-      pg(p), t(tt) {}
+    C_OSD_AppliedRecoveredObjectReplica(ReplicatedPG *p) :
+      pg(p) {}
     void finish(int r) {
-      pg->_applied_recovered_object_replica(t);
+      pg->_applied_recovered_object_replica();
     }
   };
 
@@ -865,14 +888,16 @@ protected:
   void sub_op_modify_commit(RepModify *rm);
 
   void sub_op_modify_reply(OpRequestRef op);
-  void _applied_recovered_object(ObjectStore::Transaction *t, ObjectContext *obc);
-  void _applied_recovered_object_replica(ObjectStore::Transaction *t);
-  void _committed_pushed_object(OpRequestRef op, epoch_t epoch, eversion_t lc);
+  void _applied_recovered_object(ObjectContext *obc);
+  void _applied_recovered_object_replica();
+  void _committed_pushed_object(epoch_t epoch, eversion_t lc);
   void recover_got(hobject_t oid, eversion_t v);
   void sub_op_push(OpRequestRef op);
-  void _failed_push(OpRequestRef op);
+  void _failed_push(int from, const hobject_t &soid);
   void sub_op_push_reply(OpRequestRef op);
+  bool handle_push_reply(int peer, PushReplyOp &op, PushOp *reply);
   void sub_op_pull(OpRequestRef op);
+  void handle_pull(int peer, PullOp &op, PushOp *reply);
 
   void log_subop_stats(OpRequestRef op, int tag_inb, int tag_lat);
 
@@ -908,6 +933,17 @@ public:
   void do_sub_op_reply(OpRequestRef op);
   void do_scan(OpRequestRef op);
   void do_backfill(OpRequestRef op);
+  void _do_push(OpRequestRef op);
+  void _do_pull_response(OpRequestRef op);
+  void do_push(OpRequestRef op) {
+    if (is_primary()) {
+      _do_pull_response(op);
+    } else {
+      _do_push(op);
+    }
+  }
+  void do_pull(OpRequestRef op);
+  void do_push_reply(OpRequestRef op);
   RepGather *trim_object(const hobject_t &coid);
   void snap_trimmer();
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops);

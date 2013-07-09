@@ -38,6 +38,7 @@
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
 #include "messages/MMonSync.h"
+#include "messages/MMonScrub.h"
 #include "messages/MMonProbe.h"
 #include "messages/MMonJoin.h"
 #include "messages/MMonPaxos.h"
@@ -728,6 +729,8 @@ void Monitor::reset()
   quorum.clear();
   outside_quorum.clear();
 
+  scrub_reset();
+
   paxos->restart();
 
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
@@ -1392,7 +1395,6 @@ void Monitor::sync_obtain_latest_monmap(bufferlist &bl)
   if (monmap->epoch > latest_monmap.epoch)
     latest_monmap = *monmap;
 
-  assert(latest_monmap.epoch > 0);
   dout(1) << __func__ << " obtained monmap e" << latest_monmap.epoch << dendl;
 
   latest_monmap.encode(bl, CEPH_FEATURES_ALL);
@@ -2661,6 +2663,18 @@ void Monitor::handle_command(MMonCommand *m)
     return;
   }
 
+  if (prefix == "scrub") {
+    if (is_leader()) {
+      int r = scrub();
+      reply_command(m, r, "", rdata, 0);
+    } else if (is_peon()) {
+      forward_request_leader(m);
+    } else {
+      reply_command(m, -EAGAIN, "no quorum", rdata, 0);
+    }
+    return;
+  }
+
   if (prefix == "compact") {
     if (!access_all) {
       r = -EACCES;
@@ -3212,7 +3226,7 @@ void Monitor::waitlist_or_zap_client(Message *m)
     dout(5) << "waitlisting message " << *m << dendl;
     maybe_wait_for_quorum.push_back(new C_RetryMessage(this, m));
   } else {
-    dout(1) << "discarding message " << *m << " and sending client elsewhere" << dendl;
+    dout(5) << "discarding message " << *m << " and sending client elsewhere" << dendl;
     messenger->mark_down(con);
     m->put();
   }
@@ -3318,6 +3332,10 @@ bool Monitor::_ms_dispatch(Message *m)
     // Sync (i.e., the new slurp, but on steroids)
     case MSG_MON_SYNC:
       handle_sync(static_cast<MMonSync*>(m));
+      break;
+
+    case MSG_MON_SCRUB:
+      handle_scrub(static_cast<MMonScrub*>(m));
       break;
 
       // OSDs
@@ -3973,7 +3991,127 @@ void Monitor::handle_mon_get_map(MMonGetMap *m)
 
 
 
+// ----------------------------------------------
+// scrub
 
+int Monitor::scrub()
+{
+  dout(10) << __func__ << dendl;
+  assert(is_leader());
+
+  if ((get_quorum_features() & CEPH_FEATURE_MON_SCRUB) == 0) {
+    clog.warn() << "scrub not supported by entire quorum\n";
+    return -EOPNOTSUPP;
+  }
+
+  scrub_result.clear();
+  scrub_version = paxos->get_version();
+
+  for (set<int>::iterator p = quorum.begin();
+       p != quorum.end();
+       ++p) {
+    if (*p == rank)
+      continue;
+    MMonScrub *r = new MMonScrub(MMonScrub::OP_SCRUB, scrub_version);
+    messenger->send_message(r, monmap->get_inst(*p));
+  }
+
+  // scrub my keys
+  _scrub(&scrub_result[rank]);
+
+  if (scrub_result.size() == quorum.size())
+    scrub_finish();
+
+  return 0;
+}
+
+void Monitor::handle_scrub(MMonScrub *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+  switch (m->op) {
+  case MMonScrub::OP_SCRUB:
+    {
+      if (!is_peon())
+	break;
+      if (m->version != paxos->get_version())
+	break;
+      MMonScrub *reply = new MMonScrub(MMonScrub::OP_RESULT, m->version);
+      _scrub(&reply->result);
+      messenger->send_message(reply, m->get_connection());
+    }
+    break;
+
+  case MMonScrub::OP_RESULT:
+    {
+      if (!is_leader())
+	break;
+      if (m->version != scrub_version)
+	break;
+      int from = m->get_source().num();
+      assert(scrub_result.count(from) == 0);
+      scrub_result[from] = m->result;
+
+      if (scrub_result.size() == quorum.size())
+	scrub_finish();
+    }
+    break;
+  }
+  m->put();
+}
+
+void Monitor::_scrub(ScrubResult *r)
+{
+  set<string> prefixes = get_sync_targets_names();
+  prefixes.erase("paxos");  // exclude paxos, as this one may have extra states for proposals, etc.
+
+  dout(10) << __func__ << " prefixes " << prefixes << dendl;
+
+  pair<string,string> start;
+  MonitorDBStore::Synchronizer synchronizer = store->get_synchronizer(start, prefixes);
+
+  while (synchronizer->has_next_chunk()) {
+    pair<string,string> k = synchronizer->get_next_key();
+    bufferlist bl;
+    store->get(k.first, k.second, bl);
+    dout(30) << __func__ << " " << k << " bl " << bl.length() << " bytes crc " << bl.crc32c(0) << dendl;
+    r->prefix_keys[k.first]++;
+    if (r->prefix_crc.count(k.first) == 0)
+      r->prefix_crc[k.first] = 0;
+    r->prefix_crc[k.first] = bl.crc32c(r->prefix_crc[k.first]);
+  }
+}
+
+void Monitor::scrub_finish()
+{
+  dout(10) << __func__ << dendl;
+
+  // compare
+  int errors = 0;
+  ScrubResult& mine = scrub_result[rank];
+  for (map<int,ScrubResult>::iterator p = scrub_result.begin();
+       p != scrub_result.end();
+       ++p) {
+    if (p->first == rank)
+      continue;
+    if (p->second != mine) {
+      ++errors;
+      clog.error() << "scrub mismatch" << "\n";
+      clog.error() << " mon." << rank << " " << mine << "\n";
+      clog.error() << " mon." << p->first << " " << p->second << "\n";
+    }
+  }
+  if (!errors)
+    clog.info() << "scrub ok on " << quorum << ": " << mine << "\n";
+
+  scrub_reset();
+}
+
+void Monitor::scrub_reset()
+{
+  dout(10) << __func__ << dendl;
+  scrub_version = 0;
+  scrub_result.clear();
+}
 
 
 

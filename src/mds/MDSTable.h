@@ -67,7 +67,7 @@ public:
 
   void reset();
   void save(Context *onfinish=0, version_t need=0);
-  void save_2(version_t v);
+  void save_2(int r, version_t v);
 
   void shutdown() {
     if (is_active()) save(0);
