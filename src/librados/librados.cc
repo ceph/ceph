@@ -137,6 +137,36 @@ void librados::ObjectOperation::exec(const char *cls, const char *method, buffer
   o->call(cls, method, inbl);
 }
 
+void librados::ObjectOperation::exec(const char *cls, const char *method, bufferlist& inbl, bufferlist *outbl, int *prval)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->call(cls, method, inbl, outbl, NULL, prval);
+}
+
+class ObjectOpCompletionCtx : public Context {
+  librados::ObjectOperationCompletion *completion;
+  bufferlist bl;
+public:
+  ObjectOpCompletionCtx(librados::ObjectOperationCompletion *c) : completion(c) {}
+  void finish(int r) {
+    completion->handle_completion(r, bl);
+    delete completion;
+  }
+
+  bufferlist *outbl() {
+    return &bl;
+  }
+};
+
+void librados::ObjectOperation::exec(const char *cls, const char *method, bufferlist& inbl, librados::ObjectOperationCompletion *completion)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+
+  ObjectOpCompletionCtx *ctx = new ObjectOpCompletionCtx(completion);
+
+  o->call(cls, method, inbl, ctx->outbl(), ctx, NULL);
+}
+
 void librados::ObjectReadOperation::stat(uint64_t *psize, time_t *pmtime, int *prval)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;

@@ -14,9 +14,9 @@
 
 int RGWListBuckets_ObjStore_SWIFT::get_params()
 {
-  marker = s->args.get("marker");
+  marker = s->info.args.get("marker");
   string limit_str;
-  limit_str = s->args.get("limit");
+  limit_str = s->info.args.get("limit");
   long l = strtol(limit_str.c_str(), NULL, 10);
   if (l > (long)limit_max || l < 0)
     return -ERR_PRECONDITION_FAILED;
@@ -30,7 +30,7 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
 
   if (need_stats) {
     bool stats, exists;
-    int r = s->args.get_bool("stats", &stats, &exists);
+    int r = s->info.args.get_bool("stats", &stats, &exists);
 
     if (r < 0)
       return r;
@@ -93,9 +93,9 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
 
 int RGWListBucket_ObjStore_SWIFT::get_params()
 {
-  prefix = s->args.get("prefix");
-  marker = s->args.get("marker");
-  max_keys = s->args.get("limit");
+  prefix = s->info.args.get("prefix");
+  marker = s->info.args.get("marker");
+  max_keys = s->info.args.get("limit");
   ret = parse_max_keys();
   if (ret < 0) {
     return ret;
@@ -103,11 +103,11 @@ int RGWListBucket_ObjStore_SWIFT::get_params()
   if (max > default_max)
     return -ERR_PRECONDITION_FAILED;
 
-  delimiter = s->args.get("delimiter");
+  delimiter = s->info.args.get("delimiter");
 
   string path_args;
-  if (s->args.exists("path")) { // should handle empty path
-    path_args = s->args.get("path");
+  if (s->info.args.exists("path")) { // should handle empty path
+    path_args = s->info.args.get("path");
     if (!delimiter.empty() || !prefix.empty()) {
       return -EINVAL;
     }
@@ -173,7 +173,8 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
         }
         s->formatter->dump_string("content_type", single_content_type);
       }
-      dump_time(s, "last_modified", &iter->mtime);
+      time_t mtime = iter->mtime.sec();
+      dump_time(s, "last_modified", &mtime);
       s->formatter->close_section();
     }
 
@@ -320,14 +321,14 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
     return -EINVAL;
 
   if (!s->length) {
-    const char *encoding = s->env->get("HTTP_TRANSFER_ENCODING");
+    const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
     if (!encoding || strcmp(encoding, "chunked") != 0)
       return -ERR_LENGTH_REQUIRED;
 
     chunked_upload = true;
   }
 
-  supplied_etag = s->env->get("HTTP_ETAG");
+  supplied_etag = s->info.env->get("HTTP_ETAG");
 
   if (!s->generic_attrs.count(RGW_ATTR_CONTENT_TYPE)) {
     dout(5) << "content type wasn't provided, trying to guess" << dendl;
@@ -346,7 +347,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
 
   policy.create_default(s->user.user_id, s->user.display_name);
 
-  obj_manifest = s->env->get("HTTP_X_OBJECT_MANIFEST");
+  obj_manifest = s->info.env->get("HTTP_X_OBJECT_MANIFEST");
 
   return RGWPutObj_ObjStore::get_params();
 }
@@ -370,11 +371,11 @@ int RGWPutMetadata_ObjStore_SWIFT::get_params()
   if (!s->object) {
     string read_list, write_list;
 
-    const char *read_attr = s->env->get("HTTP_X_CONTAINER_READ");
+    const char *read_attr = s->info.env->get("HTTP_X_CONTAINER_READ");
     if (read_attr) {
       read_list = read_attr;
     }
-    const char *write_attr = s->env->get("HTTP_X_CONTAINER_WRITE");
+    const char *write_attr = s->info.env->get("HTTP_X_CONTAINER_WRITE");
     if (write_attr) {
       write_list = write_attr;
     }
@@ -390,10 +391,10 @@ int RGWPutMetadata_ObjStore_SWIFT::get_params()
     }
 
     /*Check and update CORS configuration*/
-    const char *allow_origins = s->env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_ALLOW_ORIGIN");
-    const char *allow_headers = s->env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_ALLOW_HEADERS");
-    const char *expose_headers = s->env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_EXPOSE_HEADERS");
-    const char *max_age = s->env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_MAX_AGE");
+    const char *allow_origins = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_ALLOW_ORIGIN");
+    const char *allow_headers = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_ALLOW_HEADERS");
+    const char *expose_headers = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_EXPOSE_HEADERS");
+    const char *max_age = s->info.env->get("HTTP_X_CONTAINER_META_ACCESS_CONTROL_MAX_AGE");
     if (allow_origins) {
       RGWCORSConfiguration_SWIFT *swift_cors = new RGWCORSConfiguration_SWIFT;
       int r = swift_cors->create_update(allow_origins, allow_headers, expose_headers, max_age);
@@ -443,13 +444,13 @@ int RGWCopyObj_ObjStore_SWIFT::init_dest_policy()
 
 int RGWCopyObj_ObjStore_SWIFT::get_params()
 {
-  if_mod = s->env->get("HTTP_IF_MODIFIED_SINCE");
-  if_unmod = s->env->get("HTTP_IF_UNMODIFIED_SINCE");
-  if_match = s->env->get("HTTP_COPY_IF_MATCH");
-  if_nomatch = s->env->get("HTTP_COPY_IF_NONE_MATCH");
+  if_mod = s->info.env->get("HTTP_IF_MODIFIED_SINCE");
+  if_unmod = s->info.env->get("HTTP_IF_UNMODIFIED_SINCE");
+  if_match = s->info.env->get("HTTP_COPY_IF_MATCH");
+  if_nomatch = s->info.env->get("HTTP_COPY_IF_NONE_MATCH");
 
   if (s->op == OP_COPY) {
-    const char *req_dest = s->env->get("HTTP_DESTINATION");
+    const char *req_dest = s->info.env->get("HTTP_DESTINATION");
     if (!req_dest)
       return -ERR_BAD_URL;
 
@@ -771,11 +772,11 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
   if (*req_name == '?') {
     p = req_name;
   } else {
-    p = s->request_params.c_str();
+    p = s->info.request_params.c_str();
   }
 
-  s->args.set(p);
-  s->args.parse();
+  s->info.args.set(p);
+  s->info.args.parse();
 
   if (*req_name != '/')
     return 0;
@@ -819,7 +820,7 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
   string ver;
 
   next_tok(req, ver, '/');
-  s->os_auth_token = s->env->get("HTTP_X_AUTH_TOKEN");
+  s->os_auth_token = s->info.env->get("HTTP_X_AUTH_TOKEN");
   next_tok(req, first, '/');
 
   dout(10) << "ver=" << ver << " first=" << first << " req=" << req << dendl;
@@ -847,7 +848,7 @@ int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWCli
   if (ret)
     return ret;
 
-  s->copy_source = s->env->get("HTTP_X_COPY_FROM");
+  s->copy_source = s->info.env->get("HTTP_X_COPY_FROM");
 
   s->dialect = "swift";
 

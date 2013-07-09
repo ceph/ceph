@@ -2,6 +2,7 @@
 #define CEPH_RGW_BUCKET_H
 
 #include <string>
+#include <memory>
 
 #include "include/types.h"
 #include "rgw_common.h"
@@ -12,6 +13,7 @@
 #include "rgw_string.h"
 
 #include "common/Formatter.h"
+#include "common/lru_map.h"
 #include "rgw_formats.h"
 
 
@@ -20,6 +22,16 @@ using namespace std;
 // define as static when RGWBucket implementation compete
 extern void rgw_get_buckets_obj(string& user_id, string& buckets_obj_id);
 
+extern int rgw_bucket_store_info(RGWRados *store, const string& bucket_name, bufferlist& bl, bool exclusive,
+                                 map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
+                                 time_t mtime);
+extern int rgw_bucket_instance_store_info(RGWRados *store, string& oid, bufferlist& bl, bool exclusive,
+                                 map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
+                                 time_t mtime);
+
+extern int rgw_bucket_instance_remove_entry(RGWRados *store, string& entry, RGWObjVersionTracker *objv_tracker);
+
+extern int rgw_bucket_delete_bucket_obj(RGWRados *store, string& bucket_name, RGWObjVersionTracker& objv_tracker);
 
 /**
  * Store a list of the user's buckets, with associated functinos.
@@ -77,6 +89,9 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWUserBuckets)
 
+class RGWMetadataManager;
+
+extern void rgw_bucket_init(RGWMetadataManager *mm);
 /**
  * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
  * Returns: 0 on success, -ERR# on failure.
@@ -84,18 +99,16 @@ WRITE_CLASS_ENCODER(RGWUserBuckets)
 extern int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& buckets,
                                  const string& marker, uint64_t max, bool need_stats);
 
-/**
- * Store the set of buckets associated with a user.
- * This completely overwrites any previously-stored list, so be careful!
- * Returns 0 on success, -ERR# otherwise.
- */
-extern int rgw_write_buckets_attr(RGWRados *store, string user_id, RGWUserBuckets& buckets);
-
-extern int rgw_add_bucket(RGWRados *store, string user_id, rgw_bucket& bucket);
-extern int rgw_remove_user_bucket_info(RGWRados *store, string user_id, rgw_bucket& bucket);
+extern int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t creation_time, bool update_entrypoint = true);
+extern int rgw_unlink_bucket(RGWRados *store, string user_id, const string& bucket_name, bool update_entrypoint = true);
 
 extern int rgw_remove_object(RGWRados *store, rgw_bucket& bucket, std::string& object);
 extern int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children);
+
+extern int rgw_bucket_set_attrs(RGWRados *store, rgw_bucket& obj,
+                                map<string, bufferlist>& attrs,
+                                map<string, bufferlist>* rmattrs,
+                                RGWObjVersionTracker *objv_tracker);
 
 extern void check_bad_user_bucket_mapping(RGWRados *store, const string& user_id, bool fix);
 
@@ -165,7 +178,7 @@ class RGWBucket
   RGWRados *store;
   RGWAccessHandle handle;
 
-  std::string user_id;
+  RGWUserInfo user_info;
   std::string bucket_name;
 
   bool failure;
@@ -176,8 +189,6 @@ public:
   RGWBucket() : store(NULL), handle(NULL), failure(false) {}
   int init(RGWRados *storage, RGWBucketAdminOpState& op_state);
 
-  int create_bucket(string bucket_str, string& user_id, string& display_name);
-  
   int check_bad_index_multipart(RGWBucketAdminOpState& op_state,
           list<std::string>& objs_to_unlink, std::string *err_msg = NULL);
 
@@ -218,5 +229,152 @@ public:
   static int remove_object(RGWRados *store, RGWBucketAdminOpState& op_state);
   static int info(RGWRados *store, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher);
 };
+
+
+enum DataLogEntityType {
+  ENTITY_TYPE_BUCKET = 1,
+};
+
+struct rgw_data_change {
+  DataLogEntityType entity_type;
+  string key;
+  utime_t timestamp;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    uint8_t t = (uint8_t)entity_type;
+    ::encode(t, bl);
+    ::encode(key, bl);
+    ::encode(timestamp, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+     uint8_t t;
+     ::decode(t, bl);
+     entity_type = (DataLogEntityType)t;
+     ::decode(key, bl);
+     ::decode(timestamp, bl);
+     DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(rgw_data_change)
+
+struct RGWDataChangesLogInfo {
+  string marker;
+  utime_t last_update;
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+
+class RGWDataChangesLog {
+  CephContext *cct;
+  RGWRados *store;
+
+  int num_shards;
+  string *oids;
+
+  Mutex lock;
+
+  atomic_t down_flag;
+
+  struct ChangeStatus {
+    utime_t cur_expiration;
+    utime_t cur_sent;
+    bool pending;
+    RefCountedCond *cond;
+    Mutex *lock;
+
+    ChangeStatus() : pending(false), cond(NULL) {
+      lock = new Mutex("RGWDataChangesLog::ChangeStatus");
+    }
+
+    ~ChangeStatus() {
+      delete lock;
+    }
+  };
+
+  typedef std::tr1::shared_ptr<ChangeStatus> ChangeStatusPtr;
+
+  lru_map<string, ChangeStatusPtr> changes;
+
+  map<string, rgw_bucket> cur_cycle;
+
+  void _get_change(string& bucket_name, ChangeStatusPtr& status);
+  void register_renew(rgw_bucket& bucket);
+  void update_renewed(string& bucket_name, utime_t& expiration);
+
+  class ChangesRenewThread : public Thread {
+    CephContext *cct;
+    RGWDataChangesLog *log;
+    Mutex lock;
+    Cond cond;
+
+  public:
+    ChangesRenewThread(CephContext *_cct, RGWDataChangesLog *_log) : cct(_cct), log(_log), lock("ChangesRenewThread") {}
+    void *entry();
+    void stop();
+  };
+
+  ChangesRenewThread *renew_thread;
+
+public:
+
+  RGWDataChangesLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), lock("RGWDataChangesLog"),
+                                                           changes(cct->_conf->rgw_data_log_changes_size) {
+    num_shards = cct->_conf->rgw_data_log_num_shards;
+
+    oids = new string[num_shards];
+
+    string prefix = cct->_conf->rgw_data_log_obj_prefix;
+
+    if (prefix.empty()) {
+      prefix = "data_log";
+    }
+
+    for (int i = 0; i < num_shards; i++) {
+      char buf[16];
+      snprintf(buf, sizeof(buf), "%s.%d", prefix.c_str(), i);
+      oids[i] = buf;
+    }
+
+    renew_thread = new ChangesRenewThread(cct, this);
+    renew_thread->create();
+  }
+
+  ~RGWDataChangesLog();
+
+  int choose_oid(rgw_bucket& bucket);
+  int add_entry(rgw_bucket& bucket);
+  int renew_entries();
+  int list_entries(int shard, utime_t& start_time, utime_t& end_time, int max_entries,
+               list<rgw_data_change>& entries, string& marker, bool *truncated);
+  int trim_entries(int shard_id, const utime_t& start_time, const utime_t& end_time,
+                   const string& start_marker, const string& end_marker);
+  int trim_entries(const utime_t& start_time, const utime_t& end_time,
+                   const string& start_marker, const string& end_marker);
+  int get_info(int shard_id, RGWDataChangesLogInfo *info);
+  int lock_exclusive(int shard_id, utime_t& duration, string& zone_id, string& owner_id) {
+    return store->lock_exclusive(store->zone.log_pool, oids[shard_id], duration, zone_id, owner_id);
+  }
+  int unlock(int shard_id, string& zone_id, string& owner_id) {
+    return store->unlock(store->zone.log_pool, oids[shard_id], zone_id, owner_id);
+  }
+  struct LogMarker {
+    int shard;
+    string marker;
+
+    LogMarker() : shard(0) {}
+  };
+  int list_entries(utime_t& start_time, utime_t& end_time, int max_entries,
+               list<rgw_data_change>& entries, LogMarker& marker, bool *ptruncated);
+
+  bool going_down();
+};
+
 
 #endif

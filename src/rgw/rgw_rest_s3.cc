@@ -4,15 +4,15 @@
 #include "common/ceph_crypto.h"
 #include "common/Formatter.h"
 #include "common/utf8.h"
+#include "common/ceph_json.h"
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
+#include "rgw_auth_s3.h"
 #include "rgw_acl.h"
 #include "rgw_policy_s3.h"
 #include "rgw_user.h"
 #include "rgw_cors.h"
-
-#include "common/armor.h"
 
 #include "rgw_client_io.h"
 
@@ -35,14 +35,14 @@ void dump_bucket(struct req_state *s, RGWBucketEnt& obj)
 {
   s->formatter->open_object_section("Bucket");
   s->formatter->dump_string("Name", obj.bucket.name);
-  dump_time(s, "CreationDate", &obj.mtime);
+  dump_time(s, "CreationDate", &obj.creation_time);
   s->formatter->close_section();
 }
 
-void rgw_get_errno_s3(rgw_html_errors *e , int err_no)
+void rgw_get_errno_s3(rgw_http_errors *e , int err_no)
 {
-  const struct rgw_html_errors *r;
-  r = search_err(err_no, RGW_HTML_ERRORS, ARRAY_LEN(RGW_HTML_ERRORS));
+  const struct rgw_http_errors *r;
+  r = search_err(err_no, RGW_HTTP_ERRORS, ARRAY_LEN(RGW_HTTP_ERRORS));
 
   if (r) {
     e->http_ret = r->http_ret;
@@ -74,6 +74,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
   string content_type_str;
   map<string, string> response_attrs;
   map<string, string>::iterator riter;
+  bufferlist metadata_bl;
 
   if (ret)
     goto done;
@@ -83,6 +84,27 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
 
   if (range_str)
     dump_range(s, start, end, s->obj_size);
+
+  if (s->system_request &&
+      s->info.args.exists(RGW_SYS_PARAM_PREFIX "prepend-metadata")) {
+
+    /* JSON encode object metadata */
+    JSONFormatter jf;
+    jf.open_object_section("obj_metadata");
+    encode_json("attrs", attrs, &jf);
+    encode_json("mtime", lastmod, &jf);
+    jf.close_section();
+    stringstream ss;
+    jf.flush(ss);
+    metadata_bl.append(ss.str());
+    s->cio->print("Rgwx-Embedded-Metadata-Len: %lld\r\n", (long long)metadata_bl.length());
+    total_len += metadata_bl.length();
+  }
+
+  if (s->system_request && lastmod) {
+    /* we end up dumping mtime in two different methods, a bit redundant */
+    dump_epoch_header(s, "Rgwx-Mtime", lastmod);
+  }
 
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
@@ -99,7 +121,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs, off_
 
     for (struct response_attr_param *p = resp_attr_params; p->param; p++) {
       bool exists;
-      string val = s->args.get(p->param, &exists);
+      string val = s->info.args.get(p->param, &exists);
       if (exists) {
 	if (strcmp(p->param, "response-content-type") != 0) {
 	  response_attrs[p->http_attr] = val;
@@ -144,6 +166,10 @@ done:
   if (!content_type)
     content_type = "binary/octet-stream";
   end_header(s, content_type);
+
+  if (metadata_bl.length()) {
+    s->cio->write(metadata_bl.c_str(), metadata_bl.length());
+  }
   sent_header = true;
 
 send_data:
@@ -198,14 +224,14 @@ void RGWListBuckets_ObjStore_S3::send_response_end()
 
 int RGWListBucket_ObjStore_S3::get_params()
 {
-  prefix = s->args.get("prefix");
-  marker = s->args.get("marker");
-  max_keys = s->args.get("max-keys");
+  prefix = s->info.args.get("prefix");
+  marker = s->info.args.get("marker");
+  max_keys = s->info.args.get("max-keys");
   ret = parse_max_keys();
   if (ret < 0) {
     return ret;
   }
-  delimiter = s->args.get("delimiter");
+  delimiter = s->info.args.get("delimiter");
   return 0;
 }
 
@@ -237,7 +263,8 @@ void RGWListBucket_ObjStore_S3::send_response()
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       s->formatter->open_array_section("Contents");
       s->formatter->dump_string("Key", iter->name);
-      dump_time(s, "LastModified", &iter->mtime);
+      time_t mtime = iter->mtime.sec();
+      dump_time(s, "LastModified", &mtime);
       s->formatter->dump_format("ETag", "\"%s\"", iter->etag.c_str());
       s->formatter->dump_int("Size", iter->size);
       s->formatter->dump_string("StorageClass", "STANDARD");
@@ -297,11 +324,60 @@ static int create_s3_policy(struct req_state *s, RGWRados *store, RGWAccessContr
     if (!s->canned_acl.empty())
       return -ERR_INVALID_REQUEST;
 
-    return s3policy.create_from_headers(store, s->env, s->owner);
+    return s3policy.create_from_headers(store, s->info.env, s->owner);
   }
 
   return s3policy.create_canned(s->owner, s->bucket_owner, s->canned_acl);
 }
+
+class RGWLocationConstraint : public XMLObj
+{
+public:
+  RGWLocationConstraint() {}
+  ~RGWLocationConstraint() {}
+  bool xml_end(const char *el) {
+    if (!el)
+      return false;
+
+    location_constraint = get_data();
+
+    return true;
+  }
+
+  string location_constraint;
+};
+
+class RGWCreateBucketConfig : public XMLObj
+{
+public:
+  RGWCreateBucketConfig() {}
+  ~RGWCreateBucketConfig() {}
+};
+
+class RGWCreateBucketParser : public RGWXMLParser
+{
+  XMLObj *alloc_obj(const char *el) {
+    return new XMLObj;
+  }
+
+public:
+  RGWCreateBucketParser() {}
+  ~RGWCreateBucketParser() {}
+
+  bool get_location_constraint(string& region) {
+    XMLObj *config = find_first("CreateBucketConfiguration");
+    if (!config)
+      return false;
+
+    XMLObj *constraint = config->find_first("LocationConstraint");
+    if (!constraint)
+      return false;
+
+    region = constraint->get_data();
+
+    return true;
+  }
+};
 
 int RGWCreateBucket_ObjStore_S3::get_params()
 {
@@ -312,6 +388,47 @@ int RGWCreateBucket_ObjStore_S3::get_params()
     return r;
 
   policy = s3policy;
+
+  int len = 0;
+  char *data;
+#define CREATE_BUCKET_MAX_REQ_LEN (512 * 1024) /* this is way more than enough */
+  ret = rgw_rest_read_all_input(s, &data, &len, CREATE_BUCKET_MAX_REQ_LEN);
+  if ((ret < 0) && (ret != -ERR_LENGTH_REQUIRED))
+    return ret;
+
+  bufferptr in_ptr(data, len);
+  in_data.append(in_ptr);
+
+  if (len) {
+    RGWCreateBucketParser parser;
+
+    if (!parser.init()) {
+      ldout(s->cct, 0) << "ERROR: failed to initialize parser" << dendl;
+      return -EIO;
+    }
+
+    bool success = parser.parse(data, len, 1);
+    ldout(s->cct, 20) << "create bucket input data=" << data << dendl;
+    free(data);
+
+    if (!success) {
+      ldout(s->cct, 0) << "failed to parse input: " << data << dendl;
+      return -EINVAL;
+    }
+
+    if (!parser.get_location_constraint(location_constraint)) {
+      ldout(s->cct, 0) << "provided input did not specify location constraint correctly" << dendl;
+      return -EINVAL;
+    }
+
+    ldout(s->cct, 10) << "create bucket location constraint: " << location_constraint << dendl;
+  }
+
+  int pos = location_constraint.find(':');
+  if (pos >= 0) {
+    placement_rule = location_constraint.substr(pos + 1);
+    location_constraint = location_constraint.substr(0, pos);
+  }
 
   return 0;
 }
@@ -324,6 +441,19 @@ void RGWCreateBucket_ObjStore_S3::send_response()
     set_req_state_err(s, ret);
   dump_errno(s);
   end_header(s);
+
+  if (ret < 0)
+    return;
+
+  if (s->system_request) {
+    JSONFormatter f; /* use json formatter for system requests output */
+
+    f.open_object_section("info");
+    encode_json("object_ver", info.objv_tracker.read_version, &f);
+    encode_json("bucket_info", info, &f);
+    f.close_section();
+    rgw_flush_formatter_and_reset(s, &f);
+  }
 }
 
 void RGWDeleteBucket_ObjStore_S3::send_response()
@@ -335,6 +465,15 @@ void RGWDeleteBucket_ObjStore_S3::send_response()
   set_req_state_err(s, r);
   dump_errno(s);
   end_header(s);
+
+  if (s->system_request) {
+    JSONFormatter f; /* use json formatter for system requests output */
+
+    f.open_object_section("info");
+    encode_json("object_ver", objv_tracker.read_version, &f);
+    f.close_section();
+    rgw_flush_formatter_and_reset(s, &f);
+  }
 }
 
 int RGWPutObj_ObjStore_S3::get_params()
@@ -375,57 +514,11 @@ void RGWPutObj_ObjStore_S3::send_response()
     dump_etag(s, etag.c_str());
     dump_content_length(s, 0);
   }
+  if (s->system_request && mtime) {
+    dump_epoch_header(s, "Rgwx-Mtime", mtime);
+  }
   dump_errno(s);
   end_header(s);
-}
-
-string trim_whitespace(const string& src)
-{
-  if (src.empty()) {
-    return string();
-  }
-
-  int start = 0;
-  for (; start != (int)src.size(); start++) {
-    if (!isspace(src[start]))
-      break;
-  }
-
-  int end = src.size() - 1;
-  if (end <= start) {
-    return string();
-  }
-
-  for (; end > start; end--) {
-    if (!isspace(src[end]))
-      break;
-  }
-
-  return src.substr(start, end - start + 1);
-}
-
-string trim_quotes(const string& val)
-{
-  string s = trim_whitespace(val);
-  if (s.size() < 2)
-    return s;
-
-  int start = 0;
-  int end = s.size() - 1;
-  int quotes_count = 0;
-
-  if (s[start] == '"') {
-    start++;
-    quotes_count++;
-  }
-  if (s[end] == '"') {
-    end--;
-    quotes_count++;
-  }
-  if (quotes_count == 2) {
-    return s.substr(start, end - start + 1);
-  }
-  return s;
 }
 
 /*
@@ -435,11 +528,11 @@ static void parse_params(const string& params_str, string& first, map<string, st
 {
   int pos = params_str.find(';');
   if (pos < 0) {
-    first = trim_whitespace(params_str);
+    first = rgw_trim_whitespace(params_str);
     return;
   }
 
-  first = trim_whitespace(params_str.substr(0, pos));
+  first = rgw_trim_whitespace(params_str.substr(0, pos));
 
   pos++;
 
@@ -452,11 +545,11 @@ static void parse_params(const string& params_str, string& first, map<string, st
 
     int eqpos = param.find('=');
     if (eqpos > 0) {
-      string param_name = trim_whitespace(param.substr(0, eqpos));
-      string val = trim_quotes(param.substr(eqpos + 1));
+      string param_name = rgw_trim_whitespace(param.substr(0, eqpos));
+      string val = rgw_trim_quotes(param.substr(eqpos + 1));
       params[param_name] = val;
     } else {
-      params[trim_whitespace(param)] = "";
+      params[rgw_trim_whitespace(param)] = "";
     }
 
     pos = end + 1;
@@ -634,7 +727,7 @@ int RGWPostObj_ObjStore_S3::read_form_part_header(struct post_form_part *part,
   /*
    * iterate through fields
    */
-    string line = trim_whitespace(string(bl.c_str(), bl.length()));
+    string line = rgw_trim_whitespace(string(bl.c_str(), bl.length()));
 
     if (line.empty())
       break;
@@ -669,7 +762,7 @@ bool RGWPostObj_ObjStore_S3::part_str(const string& name, string *val)
 
   bufferlist& data = iter->second.data;
   string str = string(data.c_str(), data.length());
-  *val = trim_whitespace(str);
+  *val = rgw_trim_whitespace(str);
   return true;
 }
 
@@ -700,7 +793,7 @@ void RGWPostObj_ObjStore_S3::rebuild_key(string& key)
 int RGWPostObj_ObjStore_S3::get_params()
 {
   // get the part boundary
-  string req_content_type_str = s->env->get("CONTENT_TYPE", "");
+  string req_content_type_str = s->info.env->get("CONTENT_TYPE", "");
   string req_content_type;
   map<string, string> params;
 
@@ -1101,7 +1194,7 @@ done:
   if (ret == STATUS_CREATED) {
     s->formatter->open_object_section("PostResponse");
     if (g_conf->rgw_dns_name.length())
-      s->formatter->dump_format("Location", "%s/%s", s->script_uri.c_str(), s->object_str.c_str());
+      s->formatter->dump_format("Location", "%s/%s", s->info.script_uri.c_str(), s->object_str.c_str());
     s->formatter->dump_string("Bucket", s->bucket_name);
     s->formatter->dump_string("Key", s->object_str.c_str());
     s->formatter->close_section();
@@ -1147,37 +1240,59 @@ int RGWCopyObj_ObjStore_S3::init_dest_policy()
 
 int RGWCopyObj_ObjStore_S3::get_params()
 {
-  if_mod = s->env->get("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE");
-  if_unmod = s->env->get("HTTP_X_AMZ_COPY_IF_UNMODIFIED_SINCE");
-  if_match = s->env->get("HTTP_X_AMZ_COPY_IF_MATCH");
-  if_nomatch = s->env->get("HTTP_X_AMZ_COPY_IF_NONE_MATCH");
+  if_mod = s->info.env->get("HTTP_X_AMZ_COPY_IF_MODIFIED_SINCE");
+  if_unmod = s->info.env->get("HTTP_X_AMZ_COPY_IF_UNMODIFIED_SINCE");
+  if_match = s->info.env->get("HTTP_X_AMZ_COPY_IF_MATCH");
+  if_nomatch = s->info.env->get("HTTP_X_AMZ_COPY_IF_NONE_MATCH");
 
   const char *req_src = s->copy_source;
-  if (!req_src)
+  if (!req_src) {
+    ldout(s->cct, 0) << "copy source is NULL" << dendl;
     return -EINVAL;
+  }
 
   ret = parse_copy_location(req_src, src_bucket_name, src_object);
-  if (!ret)
-     return -EINVAL;
+  if (!ret) {
+    ldout(s->cct, 0) << "failed to parse copy location" << dendl;
+    return -EINVAL;
+  }
 
   dest_bucket_name = s->bucket.name;
   dest_object = s->object_str;
 
-  const char *md_directive = s->env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
+  if (s->system_request) {
+    source_zone = s->info.args.get(RGW_SYS_PARAM_PREFIX "source-zone");
+    if (!source_zone.empty()) {
+      client_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "client-id");
+      op_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "op-id");
+
+      if (client_id.empty() || op_id.empty()) {
+        ldout(s->cct, 0) << RGW_SYS_PARAM_PREFIX "client-id or " RGW_SYS_PARAM_PREFIX "op-id were not provided, required for intra-region copy" << dendl;
+        return -EINVAL;
+      }
+    }
+  }
+
+  const char *md_directive = s->info.env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
   if (md_directive) {
     if (strcasecmp(md_directive, "COPY") == 0) {
       replace_attrs = false;
     } else if (strcasecmp(md_directive, "REPLACE") == 0) {
       replace_attrs = true;
+    } else if (!source_zone.empty()) {
+      replace_attrs = false; // default for intra-region copy
     } else {
+      ldout(s->cct, 0) << "invalid metadata directive" << dendl;
       return -EINVAL;
     }
   }
 
-  if ((dest_bucket_name.compare(src_bucket_name) == 0) &&
+  if (source_zone.empty() &&
+      (dest_bucket_name.compare(src_bucket_name) == 0) &&
       (dest_object.compare(src_object) == 0) &&
       !replace_attrs) {
     /* can only copy object into itself if replacing attrs */
+    ldout(s->cct, 0) << "can't copy object into itself if not replacing attrs" << dendl;
     return -ERR_INVALID_REQUEST;
   }
   return 0;
@@ -1461,7 +1576,8 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
       dump_owner(s, s->user.user_id, s->user.display_name, "Initiator");
       dump_owner(s, s->user.user_id, s->user.display_name);
       s->formatter->dump_string("StorageClass", "STANDARD");
-      dump_time(s, "Initiated", &iter->obj.mtime);
+      time_t mtime = iter->obj.mtime.sec();
+      dump_time(s, "Initiated", &mtime);
       s->formatter->close_section();
     }
     if (common_prefixes.size() > 0) {
@@ -1510,7 +1626,7 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(pair<string,int>& resu
       s->formatter->dump_string("Key", result.first);
       s->formatter->close_section();
     } else if (result.first < 0) {
-      struct rgw_html_errors r;
+      struct rgw_http_errors r;
       int err_no;
 
       s->formatter->open_object_section("Error");
@@ -1555,13 +1671,13 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::get_obj_op(bool get_data)
 
 RGWOp *RGWHandler_ObjStore_Bucket_S3::op_get()
 {
-  if (s->args.sub_resource_exists("logging"))
+  if (s->info.args.sub_resource_exists("logging"))
     return new RGWGetBucketLogging_ObjStore_S3;
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
   } else if (is_cors_op()) {
     return new RGWGetCORS_ObjStore_S3;
-  } else if (s->args.exists("uploads")) {
+  } else if (s->info.args.exists("uploads")) {
     return new RGWListBucketMultiparts_ObjStore_S3;
   }
   return get_obj_op(true);
@@ -1571,7 +1687,7 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_head()
 {
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
-  } else if (s->args.exists("uploads")) {
+  } else if (s->info.args.exists("uploads")) {
     return new RGWListBucketMultiparts_ObjStore_S3;
   }
   return get_obj_op(false);
@@ -1579,7 +1695,7 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_head()
 
 RGWOp *RGWHandler_ObjStore_Bucket_S3::op_put()
 {
-  if (s->args.sub_resource_exists("logging"))
+  if (s->info.args.sub_resource_exists("logging"))
     return NULL;
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_S3;
@@ -1599,7 +1715,7 @@ RGWOp *RGWHandler_ObjStore_Bucket_S3::op_delete()
 
 RGWOp *RGWHandler_ObjStore_Bucket_S3::op_post()
 {
-  if ( s->request_params == "delete" ) {
+  if ( s->info.request_params == "delete" ) {
     return new RGWDeleteMultiObj_ObjStore_S3;
   }
 
@@ -1625,7 +1741,7 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_get()
 {
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
-  } else if (s->args.exists("uploadId")) {
+  } else if (s->info.args.exists("uploadId")) {
     return new RGWListMultipart_ObjStore_S3;
   }
   return get_obj_op(true);
@@ -1635,7 +1751,7 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_head()
 {
   if (is_acl_op()) {
     return new RGWGetACLs_ObjStore_S3;
-  } else if (s->args.exists("uploadId")) {
+  } else if (s->info.args.exists("uploadId")) {
     return new RGWListMultipart_ObjStore_S3;
   }
   return get_obj_op(false);
@@ -1654,7 +1770,7 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_put()
 
 RGWOp *RGWHandler_ObjStore_Obj_S3::op_delete()
 {
-  string upload_id = s->args.get("uploadId");
+  string upload_id = s->info.args.get("uploadId");
 
   if (upload_id.empty())
     return new RGWDeleteObj_ObjStore_S3;
@@ -1664,10 +1780,10 @@ RGWOp *RGWHandler_ObjStore_Obj_S3::op_delete()
 
 RGWOp *RGWHandler_ObjStore_Obj_S3::op_post()
 {
-  if (s->args.exists("uploadId"))
+  if (s->info.args.exists("uploadId"))
     return new RGWCompleteMultipart_ObjStore_S3;
 
-  if (s->args.exists("uploads"))
+  if (s->info.args.exists("uploads"))
     return new RGWInitMultipart_ObjStore_S3;
 
   return NULL;
@@ -1683,17 +1799,17 @@ int RGWHandler_ObjStore_S3::init_from_header(struct req_state *s, int default_fo
   string req;
   string first;
 
-  const char *req_name = s->decoded_uri.c_str();
+  const char *req_name = s->effective_uri.c_str();
   const char *p;
 
   if (*req_name == '?') {
     p = req_name;
   } else {
-    p = s->request_params.c_str();
+    p = s->info.request_params.c_str();
   }
 
-  s->args.set(p);
-  s->args.parse();
+  s->info.args.set(p);
+  s->info.args.parse();
 
   /* must be called after the args parsing */
   int ret = allocate_formatter(s, default_formatter, configurable_format);
@@ -1805,158 +1921,19 @@ int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClient
   if (ret)
     return ret;
 
-  const char *cacl = s->env->get("HTTP_X_AMZ_ACL");
+  const char *cacl = s->info.env->get("HTTP_X_AMZ_ACL");
   if (cacl)
     s->canned_acl = cacl;
 
-  s->has_acl_header = s->env->exists_prefix("HTTP_X_AMZ_GRANT");
+  s->has_acl_header = s->info.env->exists_prefix("HTTP_X_AMZ_GRANT");
 
-  s->copy_source = s->env->get("HTTP_X_AMZ_COPY_SOURCE");
+  s->copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
 
   s->dialect = "s3";
 
   return RGWHandler_ObjStore::init(store, s, cio);
 }
 
-// subresources that we shouldn't include in the uri to sign
-static const char *nonsigned_subresources[] = {
-  "key",
-  "subuser",
-  "caps",
-  "index",
-  "object",
-  NULL
-};
-
-/*
- * ?get the canonical amazon-style header for something?
- */
-
-static void get_canon_amz_hdr(struct req_state *s, string& dest)
-{
-  dest = "";
-  map<string, string>::iterator iter;
-  for (iter = s->x_meta_map.begin(); iter != s->x_meta_map.end(); ++iter) {
-    dest.append(iter->first);
-    dest.append(":");
-    dest.append(iter->second);
-    dest.append("\n");
-  }
-}
-
-/*
- * ?get the canonical representation of the object's location
- */
-static void get_canon_resource(struct req_state *s, string& dest)
-{
-  dest.append(s->request_uri.c_str());
-
-  map<string, string>& sub = s->args.get_sub_resources();
-  map<string, string>::iterator iter;
-  for (iter = sub.begin(); iter != sub.end(); ++iter) {
-    if (iter == sub.begin())
-      dest.append("?");
-    else
-      dest.append("&");     
-    dest.append(iter->first);
-    if (!iter->second.empty()) {
-      dest.append("=");
-      dest.append(iter->second);
-    }
-  }
-  dout(10) << "get_canon_resource(): dest=" << dest << dendl;
-}
-
-static inline bool is_base64_for_content_md5(unsigned char c) {
-  return (isalnum(c) || isspace(c) || (c == '+') || (c == '/') || (c == '='));
-}
-
-/*
- * get the header authentication  information required to
- * compute a request's signature
- */
-static bool get_auth_header(struct req_state *s, string& dest, bool qsr)
-{
-  dest = "";
-  if (s->method)
-    dest = s->method;
-  dest.append("\n");
-  
-  const char *md5 = s->env->get("HTTP_CONTENT_MD5");
-  if (md5) {
-    for (const char *p = md5; *p; p++) {
-      if (!is_base64_for_content_md5(*p)) {
-        dout(0) << "NOTICE: bad content-md5 provided (not base64), aborting request p=" << *p << " " << (int)*p << dendl;
-        return false;
-      }
-    }
-    dest.append(md5);
-  }
-  dest.append("\n");
-
-  const char *type = s->env->get("CONTENT_TYPE");
-  if (type)
-    dest.append(type);
-  dest.append("\n");
-
-  string date;
-  if (qsr) {
-    date = s->args.get("Expires");
-  } else {
-    const char *str = s->env->get("HTTP_DATE");
-    const char *req_date = str;
-    if (str) {
-      date = str;
-    } else {
-      req_date = s->env->get("HTTP_X_AMZ_DATE");
-      if (!req_date) {
-        dout(0) << "NOTICE: missing date for auth header" << dendl;
-        return false;
-      }
-    }
-
-    struct tm t;
-    if (!parse_rfc2616(req_date, &t)) {
-      dout(0) << "NOTICE: failed to parse date for auth header" << dendl;
-      return false;
-    }
-    if (t.tm_year < 70) {
-      dout(0) << "NOTICE: bad date (predates epoch): " << req_date << dendl;
-      return false;
-    }
-    s->header_time = utime_t(timegm(&t), 0);
-  }
-
-  if (date.size())
-      dest.append(date);
-  dest.append("\n");
-
-  string canon_amz_hdr;
-  get_canon_amz_hdr(s, canon_amz_hdr);
-  dest.append(canon_amz_hdr);
-
-  string canon_resource;
-  get_canon_resource(s, canon_resource);
-
-  map<string, string> sub_resources = s->args.get_sub_resources();
-  map<string, string>::iterator sres_iter;
-
-  for (const char **sres = nonsigned_subresources; *sres; ++sres) {
-    sres_iter = sub_resources.find(*sres);
-    if (sres_iter != sub_resources.end()) {
-      size_t pos = canon_resource.find(*sres) -1;
-      size_t len = strlen(*sres) + 1;
-      std::string sres_val = sres_iter->second;
-      if (!sres_val.empty())
-        len += sres_val.size();
-      canon_resource.erase(pos, len);
-    }
-  }
-
-  dest.append(canon_resource);
-
-  return true;
-}
 
 /*
  * verify that a signed request comes from the keyholder
@@ -1972,11 +1949,11 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
   time(&now);
 
   if (!s->http_auth || !(*s->http_auth)) {
-    auth_id = s->args.get("AWSAccessKeyId");
+    auth_id = s->info.args.get("AWSAccessKeyId");
     if (auth_id.size()) {
-      auth_sign = s->args.get("Signature");
+      auth_sign = s->info.args.get("Signature");
 
-      string date = s->args.get("Expires");
+      string date = s->info.args.get("Expires");
       time_t exp = atoll(date.c_str());
       if (now >= exp)
         return -EPERM;
@@ -2006,14 +1983,10 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
     return -EPERM;
   }
 
-  // populate the owner info
-  s->owner.set_id(s->user.user_id);
-  s->owner.set_name(s->user.display_name);
-
   /* now verify signature */
    
   string auth_hdr;
-  if (!get_auth_header(s, auth_hdr, qsr)) {
+  if (!rgw_create_s3_canonical_header(s->info, &s->header_time, auth_hdr, qsr)) {
     dout(10) << "failed to create auth header\n" << auth_hdr << dendl;
     return -EPERM;
   }
@@ -2033,8 +2006,6 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
     return -EPERM;
   }
   RGWAccessKey& k = iter->second;
-  const char *key = k.key.c_str();
-  int key_len = k.key.size();
 
   if (!k.subuser.empty()) {
     map<string, RGWSubUser>::iterator uiter = s->user.subusers.find(k.subuser);
@@ -2047,24 +2018,39 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
   } else
     s->perm_mask = RGW_PERM_FULL_CONTROL;
 
-  char hmac_sha1[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
-  calc_hmac_sha1(key, key_len, auth_hdr.c_str(), auth_hdr.size(), hmac_sha1);
-
-  char b64[64]; /* 64 is really enough */
-  int ret = ceph_armor(b64, b64 + 64, hmac_sha1,
-		       hmac_sha1 + CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
+  string digest;
+  int ret = rgw_get_s3_header_digest(auth_hdr, k.key, digest);
   if (ret < 0) {
-    dout(10) << "ceph_armor failed" << dendl;
     return -EPERM;
   }
-  b64[ret] = '\0';
 
-  dout(15) << "b64=" << b64 << dendl;
+  dout(15) << "calculated digest=" << digest << dendl;
   dout(15) << "auth_sign=" << auth_sign << dendl;
-  dout(15) << "compare=" << auth_sign.compare(b64) << dendl;
+  dout(15) << "compare=" << auth_sign.compare(digest) << dendl;
 
-  if (auth_sign.compare(b64) != 0)
+  if (auth_sign != digest)
     return -EPERM;
+
+  if (s->user.system) {
+    s->system_request = true;
+    dout(20) << "system request" << dendl;
+    s->info.args.set_system();
+    string effective_uid = s->info.args.get(RGW_SYS_PARAM_PREFIX "uid");
+    RGWUserInfo effective_user;
+    if (!effective_uid.empty()) {
+      ret = rgw_get_user_info_by_uid(store, effective_uid, effective_user);
+      if (ret < 0) {
+        ldout(s->cct, 0) << "User lookup failed!" << dendl;
+        return -ENOENT;
+      }
+      s->user = effective_user;
+    }
+  }
+
+  // populate the owner info
+  s->owner.set_id(s->user.user_id);
+  s->owner.set_name(s->user.display_name);
+
 
   return  0;
 }

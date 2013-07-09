@@ -131,8 +131,8 @@ void RGW_SWIFT_Auth_Get::execute()
 {
   int ret = -EPERM;
 
-  const char *key = s->env->get("HTTP_X_AUTH_KEY");
-  const char *user = s->env->get("HTTP_X_AUTH_USER");
+  const char *key = s->info.env->get("HTTP_X_AUTH_KEY");
+  const char *user = s->info.env->get("HTTP_X_AUTH_USER");
 
   string user_str;
   RGWUserInfo info;
@@ -149,17 +149,17 @@ void RGW_SWIFT_Auth_Get::execute()
 
   if (swift_url.size() == 0) {
     bool add_port = false;
-    const char *server_port = s->env->get("SERVER_PORT_SECURE");
+    const char *server_port = s->info.env->get("SERVER_PORT_SECURE");
     const char *protocol;
     if (server_port) {
       add_port = (strcmp(server_port, "443") != 0);
       protocol = "https";
     } else {
-      server_port = s->env->get("SERVER_PORT");
+      server_port = s->info.env->get("SERVER_PORT");
       add_port = (strcmp(server_port, "80") != 0);
       protocol = "http";
     }
-    const char *host = s->env->get("HTTP_HOST");
+    const char *host = s->info.env->get("HTTP_HOST");
     if (!host) {
       dout(0) << "NOTICE: server is misconfigured, missing rgw_swift_url_prefix or rgw_swift_url, HTTP_HOST is not set" << dendl;
       ret = -EINVAL;

@@ -26,9 +26,6 @@ using namespace std;
 struct req_state;
 class RGWHandler;
 
-void rgw_get_request_metadata(struct req_state *s, map<string, bufferlist>& attrs);
-int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bucket, bool prefetch_data);
-
 /**
  * Provide the base class for all ops.
  */
@@ -243,6 +240,11 @@ class RGWCreateBucket : public RGWOp {
 protected:
   int ret;
   RGWAccessControlPolicy policy;
+  string location_constraint;
+  string placement_rule;
+  RGWBucketInfo info;
+
+  bufferlist in_data;
 
 public:
   RGWCreateBucket() : ret(0) {}
@@ -263,6 +265,8 @@ class RGWDeleteBucket : public RGWOp {
 protected:
   int ret;
 
+  RGWObjVersionTracker objv_tracker;
+
 public:
   RGWDeleteBucket() : ret(0) {}
 
@@ -272,33 +276,6 @@ public:
   virtual void send_response() = 0;
   virtual const char *name() { return "delete_bucket"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
-};
-
-class RGWPutObjProcessor
-{
-protected:
-  RGWRados *store;
-  struct req_state *s;
-  bool is_complete;
-
-  virtual int do_complete(string& etag, map<string, bufferlist>& attrs) = 0;
-
-  list<rgw_obj> objs;
-
-  void add_obj(rgw_obj& obj) {
-    objs.push_back(obj);
-  }
-public:
-  RGWPutObjProcessor() : store(NULL), s(NULL), is_complete(false) {}
-  virtual ~RGWPutObjProcessor();
-  virtual int prepare(RGWRados *_store, struct req_state *_s) {
-    store = _store;
-    s = _s;
-    return 0;
-  };
-  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle) = 0;
-  virtual int throttle_data(void *handle) = 0;
-  virtual int complete(string& etag, map<string, bufferlist>& attrs);
 };
 
 class RGWPutObj : public RGWOp {
@@ -314,6 +291,7 @@ protected:
   bool chunked_upload;
   RGWAccessControlPolicy policy;
   const char *obj_manifest;
+  time_t mtime;
 
 public:
   RGWPutObj() {
@@ -323,6 +301,7 @@ public:
     supplied_etag = NULL;
     chunked_upload = false;
     obj_manifest = NULL;
+    mtime = 0;
   }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
@@ -452,6 +431,12 @@ protected:
   string dest_object;
   time_t mtime;
   bool replace_attrs;
+  RGWBucketInfo src_bucket_info;
+  RGWBucketInfo dest_bucket_info;
+  string source_zone;
+  string client_id;
+  string op_id;
+
 
   int init_common();
 
@@ -773,12 +758,6 @@ public:
 struct RGWMultipartUploadEntry {
   RGWObjEnt obj;
   RGWMPObj mp;
-
-  void clear() {
-    obj.clear();
-    string empty;
-    mp.init(empty, empty);
-  }
 };
 
 class RGWListBucketMultiparts : public RGWOp {

@@ -638,7 +638,11 @@ OPTION(rgw_op_thread_suicide_timeout, OPT_INT, 0)
 OPTION(rgw_thread_pool_size, OPT_INT, 100)
 OPTION(rgw_num_control_oids, OPT_INT, 8)
 
-OPTION(rgw_zone_root_pool, OPT_STR, ".rgw.root")
+OPTION(rgw_zone, OPT_STR, "") // zone name
+OPTION(rgw_zone_root_pool, OPT_STR, ".rgw.root")    // pool where zone specific info is stored
+OPTION(rgw_region, OPT_STR, "") // region name
+OPTION(rgw_region_root_pool, OPT_STR, ".rgw.root")  // pool where all region info is stored
+OPTION(rgw_default_region_info_oid, OPT_STR, "default.region")  // oid where default region info is stored
 OPTION(rgw_log_nonexistent_bucket, OPT_BOOL, false)
 OPTION(rgw_log_object_name, OPT_STR, "%Y-%m-%d-%H-%i-%n")      // man date to see codes (a subset are supported)
 OPTION(rgw_log_object_name_utc, OPT_BOOL, false)
@@ -668,6 +672,16 @@ OPTION(rgw_get_obj_window_size, OPT_INT, 16 << 20) // window size in bytes for s
 OPTION(rgw_get_obj_max_req_size, OPT_INT, 4 << 20) // max length of a single get obj rados op
 OPTION(rgw_relaxed_s3_bucket_names, OPT_BOOL, false) // enable relaxed bucket name rules for US region buckets
 OPTION(rgw_list_buckets_max_chunk, OPT_INT, 1000) // max buckets to retrieve in a single op when listing user buckets
+OPTION(rgw_md_log_max_shards, OPT_INT, 64) // max shards for metadata log
+OPTION(rgw_num_zone_opstate_shards, OPT_INT, 128) // max shards for keeping inter-region copy progress info
+OPTION(rgw_opstate_ratelimit_sec, OPT_INT, 30) // min time between opstate updates on a single upload (0 for disabling ratelimit)
+OPTION(rgw_curl_wait_timeout_ms, OPT_INT, 1000) // timeout for certain curl calls
+
+OPTION(rgw_data_log_window, OPT_INT, 30) // data log entries window (in seconds)
+OPTION(rgw_data_log_changes_size, OPT_INT, 1000) // number of in-memory entries to hold for data changes log
+OPTION(rgw_data_log_num_shards, OPT_INT, 128) // number of objects to keep data changes log on
+OPTION(rgw_data_log_obj_prefix, OPT_STR, "data_log") // 
+OPTION(rgw_replica_log_obj_prefix, OPT_STR, "replica_log") // 
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
 

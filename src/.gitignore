@@ -65,6 +65,7 @@ Makefile
 /tags
 /testmsgr
 /test_*
+/cls_test_*
 /unittest_*
 
 # old dir, may in use by older branches

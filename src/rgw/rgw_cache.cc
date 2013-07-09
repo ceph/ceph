@@ -86,6 +86,9 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info)
 
   if (info.flags & CACHE_FLAG_DATA)
     target.data = info.data;
+
+  if (info.flags & CACHE_FLAG_OBJV)
+    target.version = info.version;
 }
 
 void ObjectCache::remove(string& name)

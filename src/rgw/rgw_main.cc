@@ -40,6 +40,12 @@
 #include "rgw_rest_usage.h"
 #include "rgw_rest_user.h"
 #include "rgw_rest_bucket.h"
+#include "rgw_rest_metadata.h"
+#include "rgw_rest_log.h"
+#include "rgw_rest_opstate.h"
+#include "rgw_replica_log.h"
+#include "rgw_rest_replica_log.h"
+#include "rgw_rest_config.h"
 #include "rgw_swift_auth.h"
 #include "rgw_swift.h"
 #include "rgw_log.h"
@@ -109,10 +115,10 @@ struct RGWRequest
   }
 
   void log(struct req_state *s, const char *msg) {
-    if (s->method && req_str.size() == 0) {
-      req_str = s->method;
+    if (s->info.method && req_str.size() == 0) {
+      req_str = s->info.method;
       req_str.append(" ");
-      req_str.append(s->request_uri);
+      req_str.append(s->info.request_uri);
     }
     utime_t t = ceph_clock_now(g_ceph_context) - ts;
     dout(2) << "req " << id << ":" << t << ":" << s->dialect << ":" << req_str << ":" << (op ? op->name() : "") << ":" << msg << dendl;
@@ -295,6 +301,8 @@ void RGWProcess::handle_request(RGWRequest *req)
   s->obj_ctx = store->create_context(s);
   store->set_intent_cb(s->obj_ctx, call_log_intent);
 
+  s->req_id = store->unique_id(req->id);
+
   req->log(s, "initializing");
 
   RGWOp *op = NULL;
@@ -335,7 +343,7 @@ void RGWProcess::handle_request(RGWRequest *req)
 
   req->log(s, "reading the cors attr");
   handler->read_cors_config();
-  
+ 
   req->log(s, "verifying op mask");
   ret = op->verify_op_mask();
   if (ret < 0) {
@@ -346,8 +354,12 @@ void RGWProcess::handle_request(RGWRequest *req)
   req->log(s, "verifying op permissions");
   ret = op->verify_permission();
   if (ret < 0) {
-    abort_early(s, ret);
-    goto done;
+    if (s->system_request) {
+      dout(2) << "overriding permissions due to system operation" << dendl;
+    } else {
+      abort_early(s, ret);
+      goto done;
+    }
   }
 
   req->log(s, "verifying op params");
@@ -380,6 +392,18 @@ done:
   delete req;
 }
 
+#ifdef HAVE_CURL_MULTI_WAIT
+static void check_curl()
+{
+}
+#else
+static void check_curl()
+{
+  derr << "WARNING: libcurl doesn't support curl_multi_wait()" << dendl;
+  derr << "WARNING: cross zone / region transfer performance may be affected" << dendl;
+}
+#endif
+
 class C_InitTimeout : public Context {
 public:
   C_InitTimeout() {}
@@ -388,6 +412,14 @@ public:
     exit(1);
   }
 };
+
+int usage()
+{
+  cerr << "usage: radosgw [options...]" << std::endl;
+  cerr << "options:\n";
+  generic_server_usage();
+  return 0;
+}
 
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
@@ -415,6 +447,15 @@ int main(int argc, const char **argv)
   env_to_vec(args);
   global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
 	      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
+
+  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ++i) {
+    if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
+      usage();
+      return 0;
+    }
+  }
+
+  check_curl();
 
   if (g_conf->daemonize) {
     if (g_conf->rgw_socket_path.empty() and g_conf->rgw_port.empty()) {
@@ -468,6 +509,8 @@ int main(int argc, const char **argv)
   if (r) 
     return 1;
 
+  rgw_user_init(store->meta_mgr);
+  rgw_bucket_init(store->meta_mgr);
   rgw_log_usage_init(g_ceph_context, store);
 
   RGWREST rest;
@@ -499,6 +542,13 @@ int main(int argc, const char **argv)
     admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
     admin_resource->register_resource("user", new RGWRESTMgr_User);
     admin_resource->register_resource("bucket", new RGWRESTMgr_Bucket);
+  
+    /*Registering resource for /admin/metadata */
+    admin_resource->register_resource("metadata", new RGWRESTMgr_Metadata);
+    admin_resource->register_resource("log", new RGWRESTMgr_Log);
+    admin_resource->register_resource("opstate", new RGWRESTMgr_Opstate);
+    admin_resource->register_resource("replica_log", new RGWRESTMgr_ReplicaLog);
+    admin_resource->register_resource("config", new RGWRESTMgr_Config);
     rest.register_resource(g_conf->rgw_admin_entry, admin_resource);
   }
 

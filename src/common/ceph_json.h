@@ -134,10 +134,15 @@ void decode_json_obj(long& val, JSONObj *obj);
 void decode_json_obj(unsigned& val, JSONObj *obj);
 void decode_json_obj(int& val, JSONObj *obj);
 void decode_json_obj(bool& val, JSONObj *obj);
+void decode_json_obj(bufferlist& val, JSONObj *obj);
+class utime_t;
+void decode_json_obj(utime_t& val, JSONObj *obj);
 
 template<class T>
 void decode_json_obj(list<T>& l, JSONObj *obj)
 {
+  l.clear();
+
   JSONObjIter iter = obj->find_first();
 
   for (; !iter.end(); ++iter) {
@@ -148,9 +153,28 @@ void decode_json_obj(list<T>& l, JSONObj *obj)
   }
 }
 
+template<class K, class V>
+void decode_json_obj(map<K, V>& m, JSONObj *obj)
+{
+  m.clear();
+
+  JSONObjIter iter = obj->find_first();
+
+  for (; !iter.end(); ++iter) {
+    K key;
+    V val;
+    JSONObj *o = *iter;
+    JSONDecoder::decode_json("key", key, o);
+    JSONDecoder::decode_json("val", val, o);
+    m[key] = val;
+  }
+}
+
 template<class C>
 void decode_json_obj(C& container, void (*cb)(C&, JSONObj *obj), JSONObj *obj)
 {
+  container.clear();
+
   JSONObjIter iter = obj->find_first();
 
   for (; !iter.end(); ++iter) {
@@ -168,6 +192,7 @@ bool JSONDecoder::decode_json(const char *name, T& val, JSONObj *obj, bool manda
       string s = "missing mandatory field " + string(name);
       throw err(s);
     }
+    val = T();
     return false;
   }
 
@@ -185,6 +210,8 @@ bool JSONDecoder::decode_json(const char *name, T& val, JSONObj *obj, bool manda
 template<class C>
 bool JSONDecoder::decode_json(const char *name, C& container, void (*cb)(C&, JSONObj *), JSONObj *obj, bool mandatory)
 {
+  container.clear();
+
   JSONObjIter iter = obj->find_first(name);
   if (iter.end()) {
     if (mandatory) {
@@ -232,30 +259,55 @@ static void encode_json(const char *name, const T& val, Formatter *f)
   f->close_section();
 }
 
-template<class T>
-static void encode_json(const char *name, const std::list<T>& l, Formatter *f)
+class utime_t;
+
+void encode_json(const char *name, const string& val, Formatter *f);
+void encode_json(const char *name, const char *val, Formatter *f);
+void encode_json(const char *name, bool val, Formatter *f);
+void encode_json(const char *name, int val, Formatter *f);
+void encode_json(const char *name, unsigned val, Formatter *f);
+void encode_json(const char *name, long val, Formatter *f);
+void encode_json(const char *name, unsigned long val, Formatter *f);
+void encode_json(const char *name, long long val, Formatter *f);
+void encode_json(const char *name, const utime_t& val, Formatter *f);
+void encode_json(const char *name, const bufferlist& bl, Formatter *f);
+void encode_json(const char *name, long long val, Formatter *f);
+void encode_json(const char *name, long long unsigned val, Formatter *f);
+
+template<class K, class V>
+static void encode_json(const char *name, const std::map<K, V>& m, Formatter *f)
 {
   f->open_array_section(name);
-  for (typename std::list<T>::const_iterator iter = l.begin(); iter != l.end(); ++iter) {
-    f->open_object_section("obj");
-    encode_json(name, *iter, f);
+  for (typename std::map<K, V>::const_iterator i = m.begin(); i != m.end(); ++i) {
+    f->open_object_section("entry");
+    encode_json("key", i->first, f);
+    encode_json("val", i->second, f);
     f->close_section();
   }
   f->close_section();
 }
 
-class utime_t;
+template<class T>
+static void encode_json(const char *name, const std::list<T>& l, Formatter *f)
+{
+  f->open_array_section(name);
+  for (typename std::list<T>::const_iterator iter = l.begin(); iter != l.end(); ++iter) {
+    encode_json("obj", *iter, f);
+  }
+  f->close_section();
+}
 
-void encode_json(const char *name, const string& val, Formatter *f);
-void encode_json(const char *name, const char *val, Formatter *f);
-void encode_json(const char *name, int val, Formatter *f);
-void encode_json(const char *name, unsigned val, Formatter *f);
-void encode_json(const char *name, long val, Formatter *f);
-void encode_json(const char *name, unsigned long val, Formatter *f);
-void encode_json(const char *name, const utime_t& val, Formatter *f);
-void encode_json(const char *name, const bufferlist& bl, Formatter *f);
-void encode_json(const char *name, long long val, Formatter *f);
-void encode_json(const char *name, long long unsigned val, Formatter *f);
+template<class K, class V>
+void encode_json_map(const char *name, const map<K, V>& m, Formatter *f)
+{
+  f->open_array_section(name);
+  typename map<K,V>::const_iterator iter;
+  for (iter = m.begin(); iter != m.end(); ++iter) {
+    encode_json("obj", iter->second, f);
+  }
+  f->close_section(); 
+}
+
 
 template<class K, class V>
 void encode_json_map(const char *name, const char *index_name,

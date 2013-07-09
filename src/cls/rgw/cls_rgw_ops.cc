@@ -29,7 +29,8 @@ void rgw_cls_obj_complete_op::generate_test_instances(list<rgw_cls_obj_complete_
   op->op = CLS_RGW_OP_DEL;
   op->name = "name";
   op->locator = "locator";
-  op->epoch = 100;
+  op->ver.pool = 2;
+  op->ver.epoch = 100;
   op->tag = "tag";
 
   list<rgw_bucket_dir_entry_meta *> l;
@@ -47,7 +48,9 @@ void rgw_cls_obj_complete_op::dump(Formatter *f) const
   f->dump_int("op", (int)op);
   f->dump_string("name", name);
   f->dump_string("locator", locator);
-  f->dump_unsigned("epoch", epoch);
+  f->open_object_section("ver");
+  ver.dump(f);
+  f->close_section();
   f->open_object_section("meta");
   meta.dump(f);
   f->close_section();

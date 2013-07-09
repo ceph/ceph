@@ -51,50 +51,39 @@ extern bool rgw_user_is_authenticated(RGWUserInfo& info);
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
  */
-extern int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_info, bool exclusive);
+extern int rgw_store_user_info(RGWRados *store, RGWUserInfo& info, RGWUserInfo *old_info,
+                               RGWObjVersionTracker *objv_tracker, time_t mtime, bool exclusive);
 /**
  * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_uid(RGWRados *store, string& user_id, RGWUserInfo& info);
+extern int rgw_get_user_info_by_uid(RGWRados *store, string& user_id, RGWUserInfo& info,
+                                    RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
 /**
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info);
+extern int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info,
+                                      RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
 /**
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUserInfo& info);
+extern int rgw_get_user_info_by_swift(RGWRados *store, string& swift_name, RGWUserInfo& info,
+                                      RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
 /**
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, RGWUserInfo& info);
+extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, RGWUserInfo& info,
+                                           RGWObjVersionTracker *objv_tracker = NULL, time_t *pmtime = NULL);
 /**
  * Given an RGWUserInfo, deletes the user and its bucket ACLs.
  */
-extern int rgw_delete_user(RGWRados *store, RGWUserInfo& user);
+extern int rgw_delete_user(RGWRados *store, RGWUserInfo& user, RGWObjVersionTracker& objv_tracker);
 /**
  * Store a list of the user's buckets, with associated functinos.
  */
-
-/**
- * Get all the buckets owned by a user and fill up an RGWUserBuckets with them.
- * Returns: 0 on success, -ERR# on failure.
- */
-//extern int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& buckets, bool need_stats);
-
-/**
- * Store the set of buckets associated with a user.
- * This completely overwrites any previously-stored list, so be careful!
- * Returns 0 on success, -ERR# otherwise.
- */
-//extern int rgw_write_buckets_attr(RGWRados *store, string user_id, RGWUserBuckets& buckets);
-
-//extern int rgw_add_bucket(RGWRados *store, string user_id, rgw_bucket& bucket);
-//extern int rgw_remove_user_bucket_info(RGWRados *store, string user_id, rgw_bucket& bucket);
 
 /*
  * remove the different indexes
@@ -138,7 +127,9 @@ struct RGWUserAdminOpState {
   std::string display_name;
   uint32_t max_buckets;
   __u8 suspended;
+  __u8 system;
   std::string caps;
+  RGWObjVersionTracker objv;
   uint32_t op_mask;
 
   // subuser attributes
@@ -171,6 +162,7 @@ struct RGWUserAdminOpState {
   bool op_mask_specified;
   bool caps_specified;
   bool suspension_op;
+  bool system_specified;
   bool key_op;
 
   // req parameters
@@ -256,6 +248,10 @@ struct RGWUserAdminOpState {
   void set_suspension(__u8 is_suspended) {
     suspended = is_suspended;
     suspension_op = true;
+  }
+  void set_system(__u8 is_system) {
+    system = is_system;
+    system_specified = true;
   }
   void set_user_info(RGWUserInfo& user_info) {
     user_id = user_info.user_id;
@@ -378,6 +374,7 @@ struct RGWUserAdminOpState {
     key_type = -1;
     perm_mask = 0;
     suspended = 0;
+    system = 0;
     op_mask = 0;
 
     existing_user = false;
@@ -625,5 +622,9 @@ public:
   static int remove(RGWRados *store,
 		  RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 };
+
+class RGWMetadataManager;
+
+extern void rgw_user_init(RGWMetadataManager *mm);
 
 #endif

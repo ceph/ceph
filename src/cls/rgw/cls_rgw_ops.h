@@ -27,28 +27,36 @@ WRITE_CLASS_ENCODER(rgw_cls_tag_timeout_op)
 
 struct rgw_cls_obj_prepare_op
 {
-  uint8_t op;
+  RGWModifyOp op;
   string name;
   string tag;
   string locator;
+  bool log_op;
 
-  rgw_cls_obj_prepare_op() : op(0) {}
+  rgw_cls_obj_prepare_op() : op(CLS_RGW_OP_UNKNOWN), log_op(false) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(3, 3, bl);
-    ::encode(op, bl);
+    ENCODE_START(4, 3, bl);
+    uint8_t c = (uint8_t)op;
+    ::encode(c, bl);
     ::encode(name, bl);
     ::encode(tag, bl);
     ::encode(locator, bl);
+    ::encode(log_op, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
-    ::decode(op, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
+    uint8_t c;
+    ::decode(c, bl);
+    op = (RGWModifyOp)c;
     ::decode(name, bl);
     ::decode(tag, bl);
     if (struct_v >= 2) {
       ::decode(locator, bl);
+    }
+    if (struct_v >= 4) {
+      ::decode(log_op, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -59,31 +67,39 @@ WRITE_CLASS_ENCODER(rgw_cls_obj_prepare_op)
 
 struct rgw_cls_obj_complete_op
 {
-  uint8_t op;
+  RGWModifyOp op;
   string name;
   string locator;
-  uint64_t epoch;
+  rgw_bucket_entry_ver ver;
   struct rgw_bucket_dir_entry_meta meta;
   string tag;
+  bool log_op;
 
   list<string> remove_objs;
 
+  rgw_cls_obj_complete_op() : log_op(false) {}
+
   void encode(bufferlist &bl) const {
-    ENCODE_START(4, 3, bl);
-    ::encode(op, bl);
+    ENCODE_START(6, 3, bl);
+    uint8_t c = (uint8_t)op;
+    ::encode(c, bl);
     ::encode(name, bl);
-    ::encode(epoch, bl);
+    ::encode(ver.epoch, bl);
     ::encode(meta, bl);
     ::encode(tag, bl);
     ::encode(locator, bl);
     ::encode(remove_objs, bl);
+    ::encode(ver, bl);
+    ::encode(log_op, bl);
     ENCODE_FINISH(bl);
  }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
-    ::decode(op, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+    uint8_t c;
+    ::decode(c, bl);
+    op = (RGWModifyOp)c;
     ::decode(name, bl);
-    ::decode(epoch, bl);
+    ::decode(ver.epoch, bl);
     ::decode(meta, bl);
     ::decode(tag, bl);
     if (struct_v >= 2) {
@@ -91,6 +107,14 @@ struct rgw_cls_obj_complete_op
     }
     if (struct_v >= 4) {
       ::decode(remove_objs, bl);
+    }
+    if (struct_v >= 5) {
+      ::decode(ver, bl);
+    } else {
+      ver.pool = -1;
+    }
+    if (struct_v >= 6) {
+      ::decode(log_op, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -372,6 +396,72 @@ struct cls_rgw_gc_remove_op {
   }
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_remove_op)
+
+struct cls_rgw_bi_log_list_op {
+  string marker;
+  uint32_t max;
+
+  cls_rgw_bi_log_list_op() : max(0) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(marker, bl);
+    ::encode(max, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(marker, bl);
+    ::decode(max, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_bi_log_list_op)
+
+struct cls_rgw_bi_log_trim_op {
+  string start_marker;
+  string end_marker;
+
+  cls_rgw_bi_log_trim_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(start_marker, bl);
+    ::encode(end_marker, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(start_marker, bl);
+    ::decode(end_marker, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_bi_log_trim_op)
+
+struct cls_rgw_bi_log_list_ret {
+  list<rgw_bi_log_entry> entries;
+  bool truncated;
+
+  cls_rgw_bi_log_list_ret() : truncated(false) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(entries, bl);
+    ::encode(truncated, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(entries, bl);
+    ::decode(truncated, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_bi_log_list_ret)
 
 
 #endif
