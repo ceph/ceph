@@ -462,11 +462,6 @@ public:
   virtual void tick() {}
 
   /**
-   * called at same interval as tick.  consider a trim.
-   */
-  void maybe_trim();
-
-  /**
    * Get health information
    *
    * @param summary list of summary strings and associated severity
@@ -650,6 +645,13 @@ public:
    * @{
    */
   /**
+   * trim service states if appropriate
+   *
+   * Called at same interval as tick()
+   */
+  void maybe_trim();
+
+  /**
    * Auxiliary function to trim our state from version @from to version @to,
    * not including; i.e., the interval [from, to[
    *
@@ -670,12 +672,15 @@ public:
   /**
    * Get the version we should trim to.
    *
+   * Should be overloaded by service if it wants to trim states.
+   *
    * @returns the version we should trim to; if we return zero, it should be
    *	      assumed that there's no version to trim to.
    */
   virtual version_t get_trim_to() {
     return 0;
   }
+
   /**
    * @}
    */
