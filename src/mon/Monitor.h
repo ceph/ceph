@@ -54,7 +54,7 @@
 #include <errno.h>
 
 
-#define CEPH_MON_PROTOCOL     12 /* cluster internal */
+#define CEPH_MON_PROTOCOL     13 /* cluster internal */
 
 
 enum {
