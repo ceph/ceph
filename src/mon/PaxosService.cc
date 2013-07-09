@@ -337,7 +337,8 @@ void PaxosService::maybe_trim()
 
 bool PaxosService::should_trim()
 {
-  if (!service_should_trim())
+  update_trim();
+  if (get_trim_to() == 0)
     return false;
 
   if (g_conf->paxos_service_trim_min > 0) {
