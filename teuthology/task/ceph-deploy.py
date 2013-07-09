@@ -144,7 +144,6 @@ def build_ceph_cluster(ctx, config):
     install_nodes = './ceph-deploy install '+ceph_branch+" "+all_nodes
     purge_nodes = './ceph-deploy purge'+" "+all_nodes
     purgedata_nodes = './ceph-deploy purgedata'+" "+all_nodes
-    mon_create_nodes = './ceph-deploy mon create'+" "+mon_nodes
     mon_hostname = mon_nodes.split(' ')[0]
     mon_hostname = str(mon_hostname)
     gather_keys = './ceph-deploy gatherkeys'+" "+mon_hostname
@@ -162,12 +161,34 @@ def build_ceph_cluster(ctx, config):
     if estatus_install != 0:
         raise Exception("ceph-deploy: Failed to install ceph")
 
-    estatus_mon = execute_ceph_deploy(ctx, config, mon_create_nodes)
-    if estatus_mon != 0:
-        raise Exception("ceph-deploy: Failed to create monitors")
+    mon_no = None
+    mon_no = config.get('mon_initial_members')
+    if mon_no is not None:
+        i = 0
+        mon1 = []
+        while(i < mon_no):
+            mon1.append(mon_node[i])
+            i = i + 1
+        initial_mons = " ".join(mon1)
+        for k in range(mon_no, len(mon_node)):
+            mon_create_nodes = './ceph-deploy mon create'+" "+initial_mons+" "+mon_node[k]
+            estatus_mon = execute_ceph_deploy(ctx, config, mon_create_nodes)
+            if estatus_mon != 0:
+                raise Exception("ceph-deploy: Failed to create monitor")
+    else:
+        mon_create_nodes = './ceph-deploy mon create'+" "+mon_nodes
+        estatus_mon = execute_ceph_deploy(ctx, config, mon_create_nodes)
+        if estatus_mon != 0:
+            raise Exception("ceph-deploy: Failed to create monitors")
+    for d in range(1, len(mon_node)):
+        mon_destroy_nodes = './ceph-deploy mon destroy'+" "+mon_node[d]
+        estatus_mon_d = execute_ceph_deploy(ctx, config, mon_destroy_nodes)
+        if estatus_mon_d != 0:
+            raise Exception("ceph-deploy: Failed to delete monitor")
 
     estatus_gather = execute_ceph_deploy(ctx, config, gather_keys)
     while (estatus_gather != 0):
+        mon_create_nodes = './ceph-deploy mon create'+" "+mon_node[0]
         execute_ceph_deploy(ctx, config, mon_create_nodes)
         estatus_gather = execute_ceph_deploy(ctx, config, gather_keys)
 
@@ -335,6 +356,7 @@ def task(ctx, config):
         - ceph-deploy:
              branch:
                 stable: bobtail
+             mon_initial_members: 1
 
         tasks:
         - install:
@@ -354,6 +376,7 @@ def task(ctx, config):
     """
     if config is None:
         config = {}
+
     assert isinstance(config, dict), \
         "task ceph-deploy only supports a dictionary for configuration"
 
@@ -365,6 +388,7 @@ def task(ctx, config):
          lambda: download_ceph_deploy(ctx=ctx, config=config),
          lambda: build_ceph_cluster(ctx=ctx, config=dict(
                  branch=config.get('branch',{}),
+                 mon_initial_members=config.get('mon_initial_members', None),
                  )),
         ):
         yield
