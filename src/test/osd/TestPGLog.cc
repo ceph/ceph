@@ -701,7 +701,7 @@ TEST_F(PGLogTest, merge_log) {
   }
 
   // head and tail match, last_backfill is not set: info.stats is
-  // copied from oinfo.stats but info.stats.reported is guaranteed to
+  // copied from oinfo.stats but info.stats.reported_* is guaranteed to
   // never be replaced by a lower version
   {
     clear();
@@ -717,16 +717,18 @@ TEST_F(PGLogTest, merge_log) {
 
     eversion_t stat_version(10, 1);
     oinfo.stats.version = stat_version;
-    eversion_t stat_reported(10, 1);
-    info.stats.reported = stat_reported;
-    oinfo.stats.reported = eversion_t(1, 1);
+    info.stats.reported_seq = 1;
+    info.stats.reported_epoch = 10;
+    oinfo.stats.reported_seq = 1;
+    oinfo.stats.reported_epoch = 1;
     log.tail = olog.tail = eversion_t(1, 1);
     log.head = olog.head = eversion_t(2, 1);
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(0U, log.log.size());
     EXPECT_EQ(eversion_t(), info.stats.version);
-    EXPECT_EQ(stat_reported, info.stats.reported);
+    EXPECT_EQ(1ull, info.stats.reported_seq);
+    EXPECT_EQ(10u, info.stats.reported_epoch);
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(info.last_backfill.is_max());
@@ -741,7 +743,8 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(0U, log.log.size());
     EXPECT_EQ(stat_version, info.stats.version);
-    EXPECT_EQ(stat_reported, info.stats.reported);
+    EXPECT_EQ(1ull, info.stats.reported_seq);
+    EXPECT_EQ(10u, info.stats.reported_epoch);
     EXPECT_TRUE(remove_snap.empty());
     EXPECT_TRUE(t.empty());
     EXPECT_TRUE(info.purged_snaps.empty());
