@@ -469,6 +469,11 @@ public:
   virtual void tick() {}
 
   /**
+   * called at same interval as tick.  consider a trim.
+   */
+  void maybe_trim();
+
+  /**
    * Get health information
    *
    * @param summary list of summary strings and associated severity
