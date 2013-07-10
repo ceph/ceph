@@ -1403,6 +1403,17 @@ extern "C" int ceph_ll_getxattr(class ceph_mount_info *cmount,
 {
   return (cmount->get_client()->ll_getxattr(in, name, value, size, uid, gid));
 }
+extern "C" int ceph_ll_listxattr(struct ceph_mount_info *cmount,
+                              Inode *in, char *list,
+                              size_t buf_size, size_t *list_size, int uid, int gid)
+{
+  int res = cmount->get_client()->ll_listxattr(in, list, buf_size, uid, gid);
+  if (res >= 0) {
+    *list_size = (size_t)res;
+    return 0;
+  }
+  return res;
+}
 
 extern "C" int ceph_ll_setxattr(class ceph_mount_info *cmount,
 				Inode *in, const char *name,
