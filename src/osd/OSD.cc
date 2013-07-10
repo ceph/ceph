@@ -4728,7 +4728,8 @@ void OSD::send_map(MOSDMap *m, Connection *con)
 
 void OSD::send_incremental_map(epoch_t since, Connection *con)
 {
-  dout(10) << "send_incremental_map " << since << " -> " << osdmap->get_epoch()
+  epoch_t to = osdmap->get_epoch();
+  dout(10) << "send_incremental_map " << since << " -> " << to
            << " to " << con << " " << con->get_peer_addr() << dendl;
 
   if (since < superblock.oldest_map) {
@@ -4736,14 +4737,18 @@ void OSD::send_incremental_map(epoch_t since, Connection *con)
     MOSDMap *m = new MOSDMap(monc->get_fsid());
     m->oldest_map = superblock.oldest_map;
     m->newest_map = superblock.newest_map;
-    epoch_t e = osdmap->get_epoch();
-    get_map_bl(e, m->maps[e]);
+    get_map_bl(to, m->maps[to]);
     send_map(m, con);
     return;
   }
 
-  while (since < osdmap->get_epoch()) {
-    epoch_t to = osdmap->get_epoch();
+  if (to > since && to - since > g_conf->osd_map_share_max_epochs) {
+    dout(10) << "  " << (to - since) << " > max " << g_conf->osd_map_share_max_epochs
+	     << ", only sending most recent" << dendl;
+    since = to - g_conf->osd_map_share_max_epochs;
+  }
+
+  while (since < to) {
     if (to - since > (epoch_t)g_conf->osd_map_message_max)
       to = since + g_conf->osd_map_message_max;
     MOSDMap *m = build_incremental_map_msg(since, to);
