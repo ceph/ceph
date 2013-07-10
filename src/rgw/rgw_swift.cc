@@ -161,6 +161,11 @@ int KeystoneToken::parse(CephContext *cct, bufferlist& bl)
     return -EINVAL;
   }
 
+  if (!token->get_data("id", &token_id)) {
+    ldout(cct, 0) << "token response is missing id field" << dendl;
+    return -EINVAL;
+  }
+
   string expires;
 
   if (!token->get_data("expires", &expires)) {
@@ -287,6 +292,34 @@ void RGWKeystoneTokenCache::invalidate(const string& token_id)
   tokens.erase(iter);
 }
 
+class RGWGetKeystoneAdminToken : public RGWHTTPClient {
+  bufferlist *bl;
+  std::string post_data;
+  size_t post_data_index;
+public:
+  RGWGetKeystoneAdminToken(bufferlist *_bl) : bl(_bl), post_data_index(0) {}
+
+  void set_post_data(std::string _post_data) {
+    this->post_data = _post_data;
+  }
+
+  int read_data(void *ptr, size_t len) {
+    bl->append((char *)ptr, len);
+    return 0;
+  }
+
+  int send_data(void* ptr, size_t len) {
+    int length_to_copy = 0;
+    if (post_data_index < post_data.length())
+    {
+      length_to_copy = min(post_data.length() - post_data_index, len);
+      memcpy(ptr, post_data.data() + post_data_index, length_to_copy);
+      post_data_index += length_to_copy;
+    }
+    return length_to_copy;
+  }
+};
+
 class RGWValidateKeystoneToken : public RGWHTTPClient {
   bufferlist *bl;
 public:
@@ -302,12 +335,29 @@ static RGWKeystoneTokenCache *keystone_token_cache = NULL;
 
 class RGWGetRevokedTokens : public RGWHTTPClient {
   bufferlist *bl;
+  std::string post_data;
+  size_t post_data_index;
 public:
-  RGWGetRevokedTokens(bufferlist *_bl) : bl(_bl) {}
+  RGWGetRevokedTokens(bufferlist *_bl) : bl(_bl), post_data_index(0) {}
+
+  void set_post_data(std::string _post_data) {
+    this->post_data = _post_data;
+  }
 
   int read_data(void *ptr, size_t len) {
     bl->append((char *)ptr, len);
     return 0;
+  }
+
+  int send_data(void* ptr, size_t len) {
+    int length_to_copy = 0;
+    if (post_data_index < post_data.length())
+    {
+      length_to_copy = min(post_data.length() - post_data_index, len);
+      memcpy(ptr, post_data.data() + post_data_index, length_to_copy);
+      post_data_index += length_to_copy;
+    }
+    return length_to_copy;
   }
 };
 
@@ -379,23 +429,68 @@ static int decode_b64_cms(CephContext *cct, const string& signed_b64, bufferlist
   return 0;
 }
 
-
-int RGWSwift::check_revoked()
+int	RGWSwift::get_keystone_url(std::string& url)
 {
-  bufferlist bl;
-  RGWGetRevokedTokens req(&bl);
-
-  string url = g_conf->rgw_keystone_url;
+  url = g_conf->rgw_keystone_url;
   if (url.empty()) {
     ldout(cct, 0) << "ERROR: keystone url is not configured" << dendl;
     return -EINVAL;
   }
   if (url[url.size() - 1] != '/')
     url.append("/");
+  return 0;
+}
+
+int	RGWSwift::get_keystone_admin_token(std::string& token)
+{
+  std::string token_url;
+
+  if (get_keystone_url(token_url) != 0)
+    return -EINVAL;
+  if (g_conf->rgw_keystone_admin_token.empty()) {
+    token_url.append("v2.0/tokens");
+    KeystoneToken t;
+    bufferlist token_bl;
+    RGWGetKeystoneAdminToken token_req(&token_bl);
+    JSONFormatter jf;
+    jf.open_object_section("auth");
+    jf.open_object_section("passwordCredentials");
+    encode_json("username", g_conf->rgw_keystone_admin_user, &jf);
+    encode_json("password", g_conf->rgw_keystone_admin_password, &jf);
+    jf.close_section();
+    encode_json("tenantName", g_conf->rgw_keystone_admin_tenant, &jf);
+    jf.close_section();
+    std::stringstream ss;
+    jf.flush(ss);
+    token_req.set_post_data(ss.str());
+    int ret = token_req.process(token_url.c_str());
+    if (ret < 0)
+      return ret;
+    token_bl.append((char)0); // NULL terminate for debug output
+    if (t.parse(cct, token_bl) != 0)
+      return -EINVAL;
+    token = t.token_id;
+  }
+  else
+    token = g_conf->rgw_keystone_admin_token;
+  return 0; 
+}
+
+
+int RGWSwift::check_revoked()
+{
+  string url;
+  string token;
+
+  bufferlist bl;
+  RGWGetRevokedTokens req(&bl);
+
+  if (get_keystone_admin_token(token) != 0)
+    return -EINVAL;
+  if (get_keystone_url(url) != 0)
+    return -EINVAL;
   url.append("v2.0/tokens/revoked");
-
-  req.append_header("X-Auth-Token", g_conf->rgw_keystone_admin_token);
-
+    req.append_header("X-Auth-Token", token);
   int ret = req.process(url.c_str());
   if (ret < 0)
     return ret;
@@ -591,18 +686,17 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
     /* can't decode, just go to the keystone server for validation */
 
     RGWValidateKeystoneToken validate(&bl);
-
-    string url = g_conf->rgw_keystone_url;
-    if (url.empty()) {
-      ldout(cct, 0) << "ERROR: keystone url is not configured" << dendl;
+    std::string url;
+    std::string admin_token;
+    if (get_keystone_admin_token(admin_token) != 0)
       return -EINVAL;
-    }
-    if (url[url.size() - 1] != '/')
-      url.append("/");
+    if (get_keystone_url(url) != 0)
+      return -EINVAL;
+
     url.append("v2.0/tokens/");
     url.append(token);
 
-    validate.append_header("X-Auth-Token", g_conf->rgw_keystone_admin_token);
+    validate.append_header("X-Auth-Token", admin_token);
 
     int ret = validate.process(url.c_str());
     if (ret < 0)
