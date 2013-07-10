@@ -585,9 +585,16 @@ fi
 %{_bindir}/ceph_streamtest
 %{_bindir}/ceph_test_cfuse_cache_invalidate
 %{_bindir}/ceph_test_cls_lock
+%{_bindir}/ceph_test_cls_log
 %{_bindir}/ceph_test_cls_rbd
 %{_bindir}/ceph_test_cls_refcount
+%{_bindir}/ceph_test_cls_replica_log
 %{_bindir}/ceph_test_cls_rgw
+%{_bindir}/ceph_test_cls_rgw_log
+%{_bindir}/ceph_test_cls_rgw_meta
+%{_bindir}/ceph_test_cls_rgw_opstate
+%{_bindir}/ceph_test_cls_statelog
+%{_bindir}/ceph_test_cls_version
 %{_bindir}/ceph_test_cors
 %{_bindir}/ceph_test_filejournal
 %{_bindir}/ceph_test_filestore
