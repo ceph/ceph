@@ -79,11 +79,10 @@ class CephArgtype(object):
         partial means to accept partial string matches (begins-with).
         If cool, set self.val to the value that should be returned
         (a copy of the input string, or a numeric or boolean interpretation
-        thereof, for example), and return True
+        thereof, for example)
         if not, throw ArgumentError(msg-as-to-why)
         """
         self.val = s
-        return True
 
     def __repr__(self):
         """
@@ -130,7 +129,6 @@ class CephInt(CephArgtype):
             if val < self.range[0]:
                 raise ArgumentValid("{0} not in range {1}".format(val, self.range))
         self.val = val
-        return True
 
     def __str__(self):
         r = ''
@@ -166,7 +164,6 @@ class CephFloat(CephArgtype):
             if val < self.range[0]:
                 raise ArgumentValid("{0} not in range {1}".format(val, self.range))
         self.val = val
-        return True
 
     def __str__(self):
         r = ''
@@ -188,7 +185,6 @@ class CephString(CephArgtype):
             if c in s:
                 raise ArgumentFormat("bad char {0} in {1}".format(c, s))
         self.val = s
-        return True
 
     def __str__(self):
         b = ''
@@ -205,7 +201,7 @@ class CephSocketpath(CephArgtype):
         if not stat.S_ISSOCK(mode):
             raise ArgumentValid('socket path {0} is not a socket'.format(s))
         self.val = s
-        return True
+
     def __str__(self):
         return '<admin-socket-path>'
 
@@ -256,7 +252,6 @@ class CephIPAddr(CephArgtype):
         if p is not None and long(p) > 65535:
             raise ArgumentValid("{0} not a valid port number".format(p))
         self.val = s
-        return True
 
     def __str__(self):
         return '<IPaddr[:port]>'
@@ -267,10 +262,8 @@ class CephEntityAddr(CephIPAddr):
     """
     def valid(self, s, partial=False):
         ip, nonce = s.split('/')
-        if not super(self.__class__, self).valid(ip):
-            raise ArgumentValid('CephEntityAddr {0}: ip address invalid'.format(s))
+        super(self.__class__, self).valid(ip)
         self.val = s
-        return True
 
     def __str__(self):
         return '<EntityAddr>'
@@ -287,10 +280,6 @@ class CephObjectname(CephArgtype):
     Object name.  Maybe should be combined with Pool name as they're always
     present in pairs, and then could be checked for presence
     """
-    def valid(self, s, partial=False):
-        self.val = s
-        return True
-
     def __str__(self):
         return '<objectname>'
 
@@ -309,7 +298,6 @@ class CephPgid(CephArgtype):
         except:
             raise ArgumentFormat('pgnum {0} not hex integer'.format(pgnum))
         self.val = s
-        return True
 
     def __str__(self):
         return '<pgid>'
@@ -327,7 +315,7 @@ class CephName(CephArgtype):
             self.val = s
             self.nametype = None
             self.nameid = None
-            return True
+            return
         if s.find('.') == -1:
             raise ArgumentFormat('CephName: no . in {0}'.format(s))
         else:
@@ -343,7 +331,6 @@ class CephName(CephArgtype):
             self.nametype = t
         self.val = s
         self.nameid = i
-        return True
 
     def __str__(self):
         return '<name (type.id)>'
@@ -359,7 +346,7 @@ class CephOsdName(CephArgtype):
             self.val = s
             self.nametype = None
             self.nameid = None
-            return True
+            return
         if s.find('.') != -1:
             t, i = s.split('.')
         else:
@@ -374,7 +361,6 @@ class CephOsdName(CephArgtype):
         self.nametype = t
         self.nameid = i
         self.val = i
-        return True
 
     def __str__(self):
         return '<osdname (id|osd.id)>'
@@ -392,13 +378,13 @@ class CephChoices(CephArgtype):
                 # show as __str__ does: {s1|s2..}
                 raise ArgumentValid("{0} not in {1}".format(s, self))
             self.val = s
-            return True
+            return
 
         # partial
         for t in self.strings:
             if t.startswith(s):
                 self.val = s
-                return True
+                return
         raise ArgumentValid("{0} not in {1}".  format(s, self))
 
     def __str__(self):
@@ -418,7 +404,6 @@ class CephFilepath(CephArgtype):
             raise ArgumentValid('can\'t open {0}: {1}'.format(s, e))
         f.close()
         self.val = s
-        return True
 
     def __str__(self):
         return '<outfilename>'
@@ -443,7 +428,6 @@ class CephFragment(CephArgtype):
         except:
             raise ArgumentFormat('can\'t convert {0} to integer'.format(bits))
         self.val = s
-        return True
 
     def __str__(self):
         return "<CephFS fragment ID (0xvvv/bbb)>"
@@ -459,7 +443,6 @@ class CephUUID(CephArgtype):
         except Exception as e:
             raise ArgumentFormat('invalid UUID {0}: {1}'.format(s, e))
         self.val = s
-        return True
 
     def __str__(self):
         return '<uuid>'
@@ -476,11 +459,12 @@ class CephPrefix(CephArgtype):
         if partial:
             if self.prefix.startswith(s):
                 self.val = s
-                return True
+                return
         else:
             if (s == self.prefix):
                 self.val = s
-                return True
+                return
+
         raise ArgumentPrefix("no match for {0}".format(s))
 
     def __str__(self):
@@ -690,12 +674,10 @@ def validate_one(word, desc, partial=False):
     raise an exception), desc.instance.val will
     contain the validated value (in the appropriate type).
     """
-    if desc.instance.valid(word, partial):
-        desc.numseen += 1
-        if desc.N:
-            desc.n = desc.numseen + 1
-        return True
-    return False
+    desc.instance.valid(word, partial)
+    desc.numseen += 1
+    if desc.N:
+        desc.n = desc.numseen + 1
 
 def matchnum(args, signature, partial=False):
     """
@@ -715,9 +697,15 @@ def matchnum(args, signature, partial=False):
             if not words:
                 return matchcnt;
             word = words.pop(0)
+
             try:
                 validate_one(word, desc, partial)
-            except:
+                valid = True
+            except ArgumentError:
+                # matchnum doesn't care about type of error
+                valid = False
+
+            if not valid:
                 if not desc.req:
                     # this wasn't required, so word may match the next desc
                     words.insert(0, word)
@@ -731,50 +719,88 @@ def matchnum(args, signature, partial=False):
 
 def validate(args, signature, partial=False):
     """
-    validate(s, signature, partial=False)
+    validate(args, signature, partial=False)
 
-    Assumes s represents a possible command input following format of
-    signature.  Runs a validation; no exception means it's OK.  Return
-    a dict containing all arguments named by their descriptor name
-    (with duplicate args per name accumulated into a space-separated
-    value).
+    args is a list of either words or k,v pairs representing a possible
+    command input following format of signature.  Runs a validation; no
+    exception means it's OK.  Return a dict containing all arguments keyed
+    by their descriptor name, with duplicate args per name accumulated
+    into a list (or space-separated value for CephPrefix).
 
-    If partial is set, allow partial matching (with partial dict returned)
+    Mismatches of prefix are non-fatal, as this probably just means the
+    search hasn't hit the correct command.  Mismatches of non-prefix
+    arguments are treated as fatal, and an exception raised.
+
+    This matching is modified if partial is set: allow partial matching
+    (with partial dict returned); in this case, there are no exceptions
+    raised.
     """
-    words = args[:]
+
+    myargs = copy.deepcopy(args)
     mysig = copy.deepcopy(signature)
     d = dict()
     for desc in mysig:
         setattr(desc, 'numseen', 0)
         while desc.numseen < desc.n:
-            if words:
-                word = words.pop(0)
-            else:
-                if desc.req:
-                    if desc.N and desc.numseen < 1:
-                        # wanted N, didn't even get 1
-                        if partial:
-                            return d
-                        raise ArgumentNumber('saw {0} of {1}, expected at least 1'.format(desc.numseen, desc))
-                    elif not desc.N and desc.numseen < desc.n:
-                        # wanted n, got too few
-                        if partial:
-                            return d
-                        raise ArgumentNumber('saw {0} of {1}, expected {2}'.format(desc.numseen, desc, desc.n))
+            myarg = None
+            if not myargs:
                 break
+            # get either the value matching key 'desc.name' or the next arg in
+            # the non-dict list
+            if isinstance(myargs, dict):
+                myarg = myargs.pop(desc.name, None)
+                # allow 'param=param' to be expressed as 'param'
+                if myarg == '':
+                    myarg = desc.name
+                # Hack, or clever?  If value is a list, keep the first element,
+                # push rest back onto myargs for later processing.
+                # Could process list directly, but nesting here is already bad
+                if myarg and isinstance(myarg, list):
+                    myargs[desc.name] = myarg[1:]
+                    myarg = myarg[0]
+            elif myargs:
+                myarg = myargs.pop(0)
+                if myarg and isinstance(myarg, list):
+                    myargs = myarg[1:] + myargs
+                    myarg = myarg[0]
+
+            # no arg, but not required?  March on
+            if not myarg and not desc.req:
+                break
+
+            # out of arguments for a required param?
+            if not myarg and desc.req:
+                if desc.N and desc.numseen < 1:
+                    # wanted N, didn't even get 1
+                    if partial:
+                        return d
+                    raise ArgumentNumber('saw {0} of {1}, expected at least 1'.format(desc.numseen, desc))
+                elif not desc.N and desc.numseen < desc.n:
+                    # wanted n, got too few
+                    if partial:
+                        return d
+                    raise ArgumentNumber('saw {0} of {1}, expected {2}'.format(desc.numseen, desc, desc.n))
+                break
+
+            # not out of args; validate this one
             try:
-                validate_one(word, desc)
+                validate_one(myarg, desc)
+                valid = True
             except Exception as e:
-                # not valid; if not required, just push back for the next one
+                valid = False
+            if not valid:
+                # argument mismatch
+                # if not required, just push back for the next one
                 if not desc.req:
-                    words.insert(0, word)
+                    myargs.insert(0, myarg)
                     break
                 else:
                     # hm, but it was required, so quit
                     if partial:
                         return d
-                    raise e
+                    raise ArgumentFormat('{0} not valid argument {1}: {2}'.format(str(myarg), desc, e))
 
+            # valid arg acquired.  Store in dict, as a list if multivalued
             if desc.N:
                 # value should be a list
                 if desc.name in d:
@@ -782,7 +808,7 @@ def validate(args, signature, partial=False):
                 else:
                     d[desc.name] = [desc.instance.val]
             elif (desc.t == CephPrefix) and (desc.name in d):
-                # value should be a space-joined concatenation
+                # prefixes' values should be a space-joined concatenation
                 d[desc.name] += ' ' + desc.instance.val
             else:
                 # if first CephPrefix or any other type, just set it
@@ -829,12 +855,8 @@ def validate_command(parsed_args, sigdict, args, verbose=False):
                 helptext = cmd['help']
                 try:
                     valid_dict = validate(args, sig, verbose)
-                    found = sig
+                    found = cmd
                     break
-                except ArgumentPrefix:
-                    # this means a CephPrefix type didn't match; since
-                    # this is common, just eat it
-                    pass
                 except ArgumentError as e:
                     # prefixes matched, but some other arg didn't;
                     # this is interesting information if verbose
@@ -845,6 +867,8 @@ def validate_command(parsed_args, sigdict, args, verbose=False):
                         print >> sys.stderr, "did you mean {0}?\n\t{1}".\
                             format(concise_sig(sig), helptext)
                     pass
+                if found:
+                    break
 
         if not found:
             print >> sys.stderr, 'no valid command found; 10 closest matches:'
