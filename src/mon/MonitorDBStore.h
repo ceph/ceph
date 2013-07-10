@@ -298,6 +298,7 @@ class MonitorDBStore
       if (!tx.empty())
 	tx.encode(bl);
     }
+    virtual pair<string,string> get_next_key() = 0;
   };
   typedef std::tr1::shared_ptr<StoreIteratorImpl> Synchronizer;
 
@@ -342,6 +343,15 @@ class MonitorDBStore
       done = true;
     }
 
+    virtual pair<string,string> get_next_key() {
+      assert(iter->valid());
+      pair<string,string> r = iter->raw_key();
+      do {
+	iter->next();
+      } while (iter->valid() && sync_prefixes.count(iter->raw_key().first) == 0);
+      return r;
+    }
+
     virtual bool _is_valid() {
       return iter->valid();
     }
@@ -374,6 +384,15 @@ class MonitorDBStore
       }
       assert(iter->valid() == false);
       done = true;
+    }
+
+    virtual pair<string,string> get_next_key() {
+      // this method is only used by scrub on the whole store
+      // iterator.  also, the single prefix iterator has been dropped
+      // in later code.  we leave this here only for the benefit of
+      // backporting.
+      assert(0 == "this should not get called");
+      return make_pair(string(), string());
     }
 
     virtual bool _is_valid() {
