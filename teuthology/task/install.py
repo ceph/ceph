@@ -14,24 +14,6 @@ log = logging.getLogger(__name__)
 # Should the RELEASE value get extracted from somewhere?
 RELEASE = "1-0"
 
-def _get_system_type(remote):
-    """
-    Return this system type (for example, deb or rpm)
-    """
-    r = remote.run(
-        args=[
-            'sudo','lsb_release', '-is',
-        ],
-    stdout=StringIO(),
-    )
-    system_value = r.stdout.getvalue().strip()
-    log.debug("System to be installed: %s" % system_value)
-    if system_value in ['Ubuntu','Debian']:
-        return "deb"
-    if system_value in ['CentOS','Fedora','RedHatEnterpriseServer']:
-        return "rpm"
-    return system_value
-
 def _get_baseurlinfo_and_dist(ctx, remote, config):
     retval = {}
     relval = None
@@ -273,7 +255,7 @@ def install_packages(ctx, pkgs, config):
         }
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
-            system_type = _get_system_type(remote)
+            system_type = teuthology.get_system_type(remote)
             p.spawn(
                 install_pkgs[system_type],
                 ctx, remote, pkgs[system_type], config)
@@ -356,7 +338,7 @@ def remove_packages(ctx, config, pkgs):
         }
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
-            system_type = _get_system_type(remote)
+            system_type = teuthology.get_system_type(remote)
             p.spawn(remove_pkgs[system_type], ctx, config, remote, pkgs[system_type])
 
 def _remove_sources_list_deb(remote, proj):
@@ -408,7 +390,7 @@ def remove_sources(ctx, config):
     log.info("Removing {proj} sources lists".format(proj=config.get('project', 'ceph')))
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
-            system_type = _get_system_type(remote)
+            system_type = teuthology.get_system_type(remote)
             p.spawn(remove_sources_pkgs[system_type], remote, config.get('project', 'ceph'))
 
 deb_packages = {'ceph': [
