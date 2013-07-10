@@ -6896,14 +6896,14 @@ void PG::RecoveryState::WaitUpThru::exit()
 
 void PG::RecoveryState::RecoveryMachine::log_enter(const char *state_name)
 {
-  dout(20) << "enter " << state_name << dendl;
+  dout(5) << "enter " << state_name << dendl;
   pg->osd->pg_recovery_stats.log_enter(state_name);
 }
 
 void PG::RecoveryState::RecoveryMachine::log_exit(const char *state_name, utime_t enter_time)
 {
   utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
-  dout(20) << "exit " << state_name << " " << dur << " " << event_count << " " << event_time << dendl;
+  dout(5) << "exit " << state_name << " " << dur << " " << event_count << " " << event_time << dendl;
   pg->osd->pg_recovery_stats.log_exit(state_name, ceph_clock_now(g_ceph_context) - enter_time,
 				      event_count, event_time);
   event_count = 0;
