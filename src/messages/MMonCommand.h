@@ -26,9 +26,10 @@ class MMonCommand : public PaxosServiceMessage {
   vector<string> cmd;
 
   MMonCommand() : PaxosServiceMessage(MSG_MON_COMMAND, 0) {}
-  MMonCommand(const uuid_d &f, version_t v) : 
-    PaxosServiceMessage(MSG_MON_COMMAND, v),
-    fsid(f) { }
+  MMonCommand(const uuid_d &f)
+    : PaxosServiceMessage(MSG_MON_COMMAND, 0),
+      fsid(f)
+  { }
 
 private:
   ~MMonCommand() {}

@@ -638,7 +638,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 	   i != mds_info.end();
 	   ++i) {
 	m->cmd = args_vec;
-	mon->send_command(i->second.get_inst(), m->cmd, get_last_committed());
+	mon->send_command(i->second.get_inst(), m->cmd);
 	r = 0;
       }
       if (r == -ENOENT) {
@@ -652,7 +652,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       if (!errno && who >= 0) {
 	if (mdsmap.is_up(who)) {
 	  m->cmd = args_vec;
-	  mon->send_command(mdsmap.get_inst(who), m->cmd, get_last_committed());
+	  mon->send_command(mdsmap.get_inst(who), m->cmd);
 	  r = 0;
 	  ss << "ok";
 	} else {
