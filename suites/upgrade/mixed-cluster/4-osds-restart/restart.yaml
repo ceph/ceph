@@ -1,0 +1,2 @@
+tasks:
+- ceph.restart: [osd.0, osd.2]
