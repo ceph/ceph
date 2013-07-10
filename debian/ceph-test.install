@@ -18,9 +18,16 @@ usr/bin/ceph_smalliobenchrbd
 usr/bin/ceph_streamtest
 usr/bin/ceph_test_cfuse_cache_invalidate
 usr/bin/ceph_test_cls_lock
+usr/bin/ceph_test_cls_log
 usr/bin/ceph_test_cls_rbd
 usr/bin/ceph_test_cls_refcount
+usr/bin/ceph_test_cls_replica_log
 usr/bin/ceph_test_cls_rgw
+usr/bin/ceph_test_cls_rgw_log
+usr/bin/ceph_test_cls_rgw_meta
+usr/bin/ceph_test_cls_rgw_opstate
+usr/bin/ceph_test_cls_statelog
+usr/bin/ceph_test_cls_version
 usr/bin/ceph_test_cors
 usr/bin/ceph_test_crypto
 usr/bin/ceph_test_filejournal
