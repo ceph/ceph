@@ -1227,12 +1227,26 @@ int64_t ceph_ll_writev(struct ceph_mount_info *cmount, struct Fh *fh,
 		       const struct iovec *iov, int iovcnt, int64_t off);
 int ceph_ll_close(struct ceph_mount_info *cmount, struct Fh* filehandle);
 int ceph_ll_iclose(struct ceph_mount_info *cmount, struct Inode *in, int mode);
+/**
+ * Get xattr value by xattr name.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param in file handle
+ * @param name name of attribute
+ * @param value pointer to begin buffer
+ * @param size buffer size
+ * @param uid user ID
+ * @param gid group ID
+ * @returns size of returned buffer. Negative number in error case
+ */
 int ceph_ll_getxattr(struct ceph_mount_info *cmount, struct Inode *in,
 		     const char *name, void *value, size_t size, int uid,
 		     int gid);
 int ceph_ll_setxattr(struct ceph_mount_info *cmount, struct Inode *in,
 		     const char *name, const void *value, size_t size,
 		     int flags, int uid, int gid);
+int ceph_ll_listxattr(struct ceph_mount_info *cmount, struct Inode *in,
+                      char *list, size_t buf_size, size_t *list_size, int uid, int gid);
 int ceph_ll_removexattr(struct ceph_mount_info *cmount, struct Inode *in,
 			const char *name, int uid, int gid);
 int ceph_ll_create(struct ceph_mount_info *cmount, struct Inode *parent,
