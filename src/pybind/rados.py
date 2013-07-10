@@ -1583,8 +1583,8 @@ class Object(object):
 MONITOR_LEVELS = [
    "debug",
    "info",
-   "warn",
-   "err",
+   "warn", "warning",
+   "err", "error", 
    "sec",
    ]
 
