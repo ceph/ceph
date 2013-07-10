@@ -23,13 +23,13 @@
     bucket check               check bucket index
     object rm                  remove object
     object unlink              unlink object from bucket index
-    region info                show region info
+    region get                 show region info
     regions list               list all regions set on this cluster
     region set                 set region info
     region default             set default region
-    region-map show            show region-map
+    region-map get             show region-map
     region-map set             set region-map
-    zone info                  show zone cluster params
+    zone get                   show zone cluster params
     zone set                   set zone cluster params
     zone list                  list all zones set on this cluster
     pool add                   add an existing pool for data placement
