@@ -788,11 +788,19 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
       }
 
       if (prefix == "auth get-or-create-key") {
-	ds << entity_auth.key;
+        if (f) {
+          entity_auth.key.encode_formatted("auth", f.get(), rdata);
+        } else {
+          ds << entity_auth.key;
+        }
       } else {
 	KeyRing kr;
 	kr.add(entity, entity_auth.key);
-	kr.encode_plaintext(rdata);
+        if (f) {
+          kr.encode_formatted("auth", f.get(), rdata);
+        } else {
+          kr.encode_plaintext(rdata);
+        }
       }
       err = 0;
       goto done;
@@ -827,11 +835,19 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     push_cephx_inc(auth_inc);
 
     if (prefix == "auth get-or-create-key") {
-      ds << auth_inc.auth.key;
+      if (f) {
+        auth_inc.auth.key.encode_formatted("auth", f.get(), rdata);
+      } else {
+        ds << auth_inc.auth.key;
+      }
     } else {
       KeyRing kr;
       kr.add(entity, auth_inc.auth.key);
-      kr.encode_plaintext(rdata);
+      if (f) {
+        kr.encode_formatted("auth", f.get(), rdata);
+      } else {
+        kr.encode_plaintext(rdata);
+      }
     }
 
     rdata.append(ds);
