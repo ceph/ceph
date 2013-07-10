@@ -90,6 +90,26 @@ dump_cmd_and_help_to_json(JSONFormatter *jf,
       jf->close_section(); // cmd
 }
 
+void
+dump_cmddesc_to_json(JSONFormatter *jf,
+		     const string& secname,
+		     const string& cmdsig,
+		     const string& helptext,
+		     const string& module,
+		     const string& perm,
+		     const string& avail)
+{
+      jf->open_object_section(secname.c_str());
+      jf->open_array_section("sig");
+      dump_cmd_to_json(jf, cmdsig);
+      jf->close_section(); // sig array
+      jf->dump_string("help", helptext.c_str());
+      jf->dump_string("module", module.c_str());
+      jf->dump_string("perm", perm.c_str());
+      jf->dump_string("avail", avail.c_str());
+      jf->close_section(); // cmd
+}
+
 /** Parse JSON in vector cmd into a map from field to map of values
  * (use mValue/mObject)
  * 'cmd' should not disappear over lifetime of map

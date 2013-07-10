@@ -20,7 +20,16 @@
  * frontend 'ceph' (and perhaps by other frontends, such as a RESTful
  * server). The format is:
  *
- * COMMAND(signature, helpstring)
+ * COMMAND(signature, helpstring, modulename, req perms, availability)
+ * where:
+ * signature:  describes the command and its parameters (more below)
+ * helpstring: displays in CLI help, API help (nice if it refers to
+ *             parameter names from signature, 40-a few hundred chars)
+ * modulename: the monitor module or daemon this applies to:
+ *             mds, osd, pg (osd), mon, auth, log, config-key
+ * req perms:  required permission in that modulename space to execute command
+ *             this also controls what type of REST command is accepted
+ * availability: cli, rest, or both
  *
  * The commands describe themselves completely enough for the separate
  * frontend(s) to be able to accept user input and validate it against
@@ -97,347 +106,393 @@
  * pg commands PgMonitor.cc
  */
 
-COMMAND("pg stat", "show placement group status.")
-COMMAND("pg getmap", "get binary pg map to -o/stdout")
-COMMAND("pg send_pg_creates", "trigger pg creates to be issued")
+COMMAND("pg stat", "show placement group status.", "pg", "r", "cli,rest")
+COMMAND("pg getmap", "get binary pg map to -o/stdout", "pg", "r", "cli,rest")
+COMMAND("pg send_pg_creates", "trigger pg creates to be issued",\
+	"pg", "rw", "cli,rest")
 COMMAND("pg dump " \
 	"name=dumpcontents,type=CephChoices,strings=all|summary|sum|pools|osds|pgs,n=N,req=false", \
-	"show human-readable versions of pg map")
+	"show human-readable versions of pg map", "pg", "r", "cli,rest")
 COMMAND("pg dump_json " \
 	"name=dumpcontents,type=CephChoices,strings=all|summary|sum|pools|osds|pgs,n=N,req=false", \
-	"show human-readable version of pg map in json only")
-COMMAND("pg dump_pools_json", "show pg pools info in json only")
+	"show human-readable version of pg map in json only",\
+	"pg", "r", "cli,rest")
+COMMAND("pg dump_pools_json", "show pg pools info in json only",\
+	"pg", "r", "cli,rest")
 COMMAND("pg dump_stuck " \
 	"name=stuckops,type=CephChoices,strings=inactive|unclean|stale,n=N,req=false " \
 	"name=threshold,type=CephInt,req=false",
-	"show information about stuck pgs [--threshold=seconds to consider stuck]")
-COMMAND("pg map name=pgid,type=CephPgid", "show mapping of pg to osds")
-COMMAND("pg scrub name=pgid,type=CephPgid", "start scrub on <pgid>")
-COMMAND("pg deep-scrub name=pgid,type=CephPgid", "start deep-scrub on <pgid>")
-COMMAND("pg repair name=pgid,type=CephPgid", "start repair on <pgid>")
+	"show information about stuck pgs [--threshold=seconds to consider stuck]",\
+	"pg", "r", "cli,rest")
+COMMAND("pg map name=pgid,type=CephPgid", "show mapping of pg to osds", \
+	"pg", "r", "cli,rest")
+COMMAND("pg scrub name=pgid,type=CephPgid", "start scrub on <pgid>", \
+	"pg", "rw", "cli,rest")
+COMMAND("pg deep-scrub name=pgid,type=CephPgid", "start deep-scrub on <pgid>", \
+	"pg", "rw", "cli,rest")
+COMMAND("pg repair name=pgid,type=CephPgid", "start repair on <pgid>", \
+	"pg", "rw", "cli,rest")
 COMMAND("pg debug " \
 	"name=debugop,type=CephChoices,strings=unfound_objects_exist|degraded_pgs_exist", \
-	"show debug info about pgs")
+	"show debug info about pgs", "pg", "r", "cli,rest")
 COMMAND("pg force_create_pg name=pgid,type=CephPgid", \
-	"force creation of pg <pgid>")
+	"force creation of pg <pgid>", "pg", "rw", "cli,rest")
 COMMAND("pg set_full_ratio name=ratio,type=CephFloat,range=0.0|1.0", \
-	"set ratio at which pgs are considered full")
+	"set ratio at which pgs are considered full", "pg", "rw", "cli,rest")
 COMMAND("pg set_nearfull_ratio name=ratio,type=CephFloat,range=0.0|1.0", \
-	"set ratio at which pgs are considered nearly full")
+	"set ratio at which pgs are considered nearly full", \
+	"pg", "rw", "cli,rest")
 
 /*
  * auth commands AuthMonitor.cc
  */
 
 COMMAND("auth export name=entity,type=CephString,req=false", \
-       	"write keyring for requested entity, or master keyring if none given")
+       	"write keyring for requested entity, or master keyring if none given", \
+	"auth", "r", "cli,rest")
 COMMAND("auth get name=entity,type=CephString", \
-	"write keyring file with requested key")
-COMMAND("auth get-key name=entity,type=CephString", "display requested key")
-COMMAND("auth print-key name=entity,type=CephString", "display requested key")
-COMMAND("auth print_key name=entity,type=CephString", "display requested key")
-COMMAND("auth list", "list authentication state")
-COMMAND("auth import", "auth import: read keyring file from input")
+	"write keyring file with requested key", "auth", "r", "cli,rest")
+COMMAND("auth get-key name=entity,type=CephString", "display requested key", \
+	"auth", "r", "cli,rest")
+COMMAND("auth print-key name=entity,type=CephString", "display requested key", \
+	"auth", "r", "cli,rest")
+COMMAND("auth print_key name=entity,type=CephString", "display requested key", \
+	"auth", "r", "cli,rest")
+COMMAND("auth list", "list authentication state", "auth", "r", "cli,rest")
+COMMAND("auth import", "auth import: read keyring file from input", \
+	"auth", "rw", "cli,rest")
 COMMAND("auth add " \
 	"name=entity,type=CephString " \
 	"name=caps,type=CephString,n=N,req=false", \
-	"add auth info for <entity> from input file, or random key if no input given, and/or any caps specified in the command")
+	"add auth info for <entity> from input file, or random key if no input given, and/or any caps specified in the command",
+	"auth", "rw", "cli,rest")
 COMMAND("auth get-or-create-key " \
 	"name=entity,type=CephString " \
 	"name=caps,type=CephString,n=N,req=false", \
-	"get, or add, key for <name> from system/caps pairs specified in the command.  If key already exists, any given caps must match the existing caps for that key.")
+	"get, or add, key for <name> from system/caps pairs specified in the command.  If key already exists, any given caps must match the existing caps for that key.", \
+	"auth", "rw", "cli,rest")
 COMMAND("auth get-or-create " \
 	"name=entity,type=CephString " \
 	"name=caps,type=CephString,n=N,req=false", \
-	"add auth info for <entity> from input file, or random key if no input given, and/or any caps specified in the command")
+	"add auth info for <entity> from input file, or random key if no input given, and/or any caps specified in the command", \
+	"auth", "rw", "cli,rest")
 COMMAND("auth caps " \
 	"name=entity,type=CephString " \
 	"name=caps,type=CephString,n=N", \
-	"update caps for <name> from caps specified in the command")
+	"update caps for <name> from caps specified in the command", \
+	"auth", "rw", "cli,rest")
 COMMAND("auth del " \
 	"name=entity,type=CephString", \
-	"delete all caps for <name>")
+	"delete all caps for <name>", \
+	"auth", "rw", "cli,rest")
 
 /*
  * Monitor commands (Monitor.cc)
  */
-COMMAND("compact", "cause compaction of monitor's leveldb storage")
-COMMAND("scrub", "scrub the monitor stores")
-COMMAND("fsid", "show cluster FSID/UUID")
+COMMAND("compact", "cause compaction of monitor's leveldb storage", \
+	"mon", "rw", "cli,rest")
+COMMAND("scrub", "scrub the monitor stores", "mon", "rw", "cli,rest")
+COMMAND("fsid", "show cluster FSID/UUID", "mon", "r", "cli,rest")
 COMMAND("log name=logtext,type=CephString,n=N", \
-	"log supplied text to the monitor log")
+	"log supplied text to the monitor log", "mon", "rw", "cli,rest")
 COMMAND("injectargs " \
 	"name=injected_args,type=CephString,n=N", \
-	"inject config arguments into monitor")
-COMMAND("status", "show cluster status")
+	"inject config arguments into monitor", "mon", "rw", "cli,rest")
+COMMAND("status", "show cluster status", "mon", "r", "cli,rest")
 COMMAND("health name=detail,type=CephChoices,strings=detail,req=false", \
-	"show cluster health")
+	"show cluster health", "mon", "r", "cli,rest")
 COMMAND("df name=detail,type=CephChoices,strings=detail,req=false", \
-	"show cluster free space stats")
+	"show cluster free space stats", "mon", "r", "cli,rest")
 COMMAND("report name=tags,type=CephString,n=N,req=false", \
-	"report full status of cluster, optional title tag strings")
-COMMAND("quorum_status", "report status of monitor quorum")
-COMMAND("mon_status", "report status of monitors")
-COMMAND("sync status", "report status of monitors")
+	"report full status of cluster, optional title tag strings", \
+	"mon", "r", "cli,rest")
+COMMAND("quorum_status", "report status of monitor quorum", \
+	"mon", "r", "cli,rest")
+COMMAND("mon_status", "report status of monitors", "mon", "r", "cli,rest")
+COMMAND("sync status", "report status of monitors", "mon", "r", "cli,rest")
 COMMAND("sync force " \
 	"name=validate1,type=CephChoices,strings=--yes-i-really-mean-it " \
 	"name=validate2,type=CephChoices,strings=--i-know-what-i-am-doing", \
-	"force sync of and clear monitor store")
+	"force sync of and clear monitor store", "mon", "rw", "cli,rest")
 COMMAND("heap " \
 	"name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
-	"show heap usage info (available only if compiled with tcmalloc)")
+	"show heap usage info (available only if compiled with tcmalloc)", \
+	"mon", "rw", "cli,rest")
 COMMAND("quorum name=quorumcmd,type=CephChoices,strings=enter|exit,n=1", \
-	"enter or exit quorum")
+	"enter or exit quorum", "mon", "rw", "cli,rest")
 COMMAND("tell " \
 	"name=target,type=CephName " \
 	"name=args,type=CephString,n=N", \
-	"send a command to a specific daemon")
+	"send a command to a specific daemon", "mon", "rw", "cli,rest")
 
 /*
  * MDS commands (MDSMonitor.cc)
  */
 
-COMMAND("mds stat", "show MDS status")
-COMMAND("mds dump " \
+COMMAND("mds stat", "show MDS status", "mds", "r", "cli,rest")
+COMMAND("mds dump " 
 	"name=epoch,type=CephInt,req=false,range=0", \
-	"dump info, optionally from epoch")
+	"dump info, optionally from epoch", "mds", "r", "cli,rest")
 COMMAND("mds getmap " \
 	"name=epoch,type=CephInt,req=false,range=0", \
-	"get MDS map, optionally from epoch")
+	"get MDS map, optionally from epoch", "mds", "r", "cli,rest")
 COMMAND("mds tell " \
 	"name=who,type=CephString " \
 	"name=args,type=CephString,n=N", \
-	"send command to particular mds")
-COMMAND("mds compat show", "show mds compatibility settings")
-COMMAND("mds stop name=who,type=CephString", "stop mds")
-COMMAND("mds deactivate name=who,type=CephString", "stop mds")
+	"send command to particular mds", "mds", "rw", "cli,rest")
+COMMAND("mds compat show", "show mds compatibility settings", \
+	"mds", "r", "cli,rest")
+COMMAND("mds stop name=who,type=CephString", "stop mds", \
+	"mds", "rw", "cli,rest")
+COMMAND("mds deactivate name=who,type=CephString", "stop mds", \
+	"mds", "rw", "cli,rest")
 COMMAND("mds set_max_mds " \
 	"name=maxmds,type=CephInt,range=0", \
-	"set max MDS index")
+	"set max MDS index", "mds", "rw", "cli,rest")
 COMMAND("mds setmap " \
 	"name=epoch,type=CephInt,range=0", \
-	"set mds map; must supply correct epoch number")
+	"set mds map; must supply correct epoch number", "mds", "rw", "cli,rest")
 // arbitrary limit 0-20 below; worth standing on head to make it
 // relate to actual state definitions?
 // #include "include/ceph_fs.h"
 COMMAND("mds set_state " \
 	"name=gid,type=CephInt,range=0 " \
 	"name=state,type=CephInt,range=0|20", \
-	"set mds state of <gid> to <numeric-state>")
+	"set mds state of <gid> to <numeric-state>", "mds", "rw", "cli,rest")
 COMMAND("mds fail name=who,type=CephString", \
-	"force mds to status failed")
+	"force mds to status failed", "mds", "rw", "cli,rest")
 COMMAND("mds rm " \
 	"name=gid,type=CephInt,range=0 " \
 	"name=who,type=CephName", \
-	"remove nonactive mds")
-COMMAND("mds rmfailed name=who,type=CephInt,range=0", "remove failed mds")
-COMMAND("mds cluster_down", "take MDS cluster down")
-COMMAND("mds cluster_up", "bring MDS cluster up")
+	"remove nonactive mds", "mds", "rw", "cli,rest")
+COMMAND("mds rmfailed name=who,type=CephInt,range=0", "remove failed mds", \
+	"mds", "rw", "cli,rest")
+COMMAND("mds cluster_down", "take MDS cluster down", "mds", "rw", "cli,rest")
+COMMAND("mds cluster_up", "bring MDS cluster up", "mds", "rw", "cli,rest")
 COMMAND("mds compat rm_compat " \
 	"name=feature,type=CephInt,range=0", \
-	"remove compatible feature")
+	"remove compatible feature", "mds", "rw", "cli,rest")
 COMMAND("mds compat rm_incompat " \
 	"name=feature,type=CephInt,range=0", \
-	"remove incompatible feature")
+	"remove incompatible feature", "mds", "rw", "cli,rest")
 COMMAND("mds add_data_pool " \
 	"name=poolid,type=CephInt,range=0", \
-	"add data pool <poolid>")
+	"add data pool <poolid>", "mds", "rw", "cli,rest")
 COMMAND("mds remove_data_pool " \
 	"name=poolid,type=CephInt,range=0", \
-	"remove data pool <poolid>")
+	"remove data pool <poolid>", "mds", "rw", "cli,rest")
 COMMAND("mds newfs " \
 	"name=metadata,type=CephInt,range=0 " \
 	"name=data,type=CephInt,range=0 " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it", \
-	"make new filesystom using pools <metadata> and <data>")
+	"make new filesystom using pools <metadata> and <data>", \
+	"mds", "rw", "cli,rest")
 /*
  * Monmap commands
  */
 COMMAND("mon dump " \
 	"name=epoch,type=CephInt,req=false", \
-	"dump formatted monmap (optionally from epoch)")
-COMMAND("mon stat", "summarize monitor status")
+	"dump formatted monmap (optionally from epoch)", \
+	"mon", "r", "cli,rest")
+COMMAND("mon stat", "summarize monitor status", "mon", "r", "cli,rest")
 COMMAND("mon getmap " \
 	"name=epoch,type=CephInt,range=0,req=false", \
-	"get monmap")
+	"get monmap", "mon", "r", "cli,rest")
 COMMAND("mon add " \
 	"name=name,type=CephString " \
 	"name=addr,type=CephIPAddr", \
-	"add new monitor named <name> at <addr>")
+	"add new monitor named <name> at <addr>", "mon", "rw", "cli,rest")
 COMMAND("mon remove " \
 	"name=name,type=CephString", \
-	"remove monitor named <name>")
+	"remove monitor named <name>", "mon", "rw", "cli,rest")
+
 
 /*
  * OSD commands
  */
-COMMAND("osd stat", "print summary of OSD map")
+COMMAND("osd stat", "print summary of OSD map", "osd", "r", "cli,rest")
 COMMAND("osd dump " \
 	"name=epoch,type=CephInt,range=0,req=false",
-	"print summary of OSD map")
+	"print summary of OSD map", "osd", "r", "cli,rest")
 COMMAND("osd tree " \
 	"name=epoch,type=CephInt,range=0,req=false", \
-	"print OSD tree")
+	"print OSD tree", "osd", "r", "cli,rest")
 COMMAND("osd ls " \
 	"name=epoch,type=CephInt,range=0,req=false", \
-	"show all OSD ids")
+	"show all OSD ids", "osd", "r", "cli,rest")
 COMMAND("osd getmap " \
 	"name=epoch,type=CephInt,range=0,req=false", \
-	"get OSD map")
+	"get OSD map", "osd", "r", "cli,rest")
 COMMAND("osd getcrushmap " \
 	"name=epoch,type=CephInt,range=0,req=false", \
-	"get CRUSH map")
-COMMAND("osd getmaxosd", "show largest OSD id")
+	"get CRUSH map", "osd", "r", "cli,rest")
+COMMAND("osd getmaxosd", "show largest OSD id", "osd", "r", "cli,rest")
 COMMAND("osd find " \
 	"name=id,type=CephInt,range=0", \
-	"find osd <id> in the CRUSH map and show its location")
+	"find osd <id> in the CRUSH map and show its location", \
+	"osd", "r", "cli,rest")
 COMMAND("osd map " \
 	"name=pool,type=CephPoolname " \
 	"name=object,type=CephObjectname", \
-	"find pg for <object> in <pool>")
+	"find pg for <object> in <pool>", "osd", "r", "cli,rest")
 COMMAND("osd scrub " \
 	"name=who,type=CephString", \
-	"initiate scrub on osd <who>")
+	"initiate scrub on osd <who>", "osd", "rw", "cli,rest")
 COMMAND("osd deep-scrub " \
 	"name=who,type=CephString", \
-	"initiate deep scrub on osd <who>")
+	"initiate deep scrub on osd <who>", "osd", "rw", "cli,rest")
 COMMAND("osd repair " \
 	"name=who,type=CephString", \
-	"initiate repair on osd <who>")
+	"initiate repair on osd <who>", "osd", "rw", "cli,rest")
 COMMAND("osd lspools " \
 	"name=auid,type=CephInt,req=false", \
-	"list pools")
-COMMAND("osd blacklist ls", "show blacklisted clients")
-COMMAND("osd crush rule list", "list crush rules")
-COMMAND("osd crush rule ls", "list crush rules")
-COMMAND("osd crush rule dump", "dump crush rules")
-COMMAND("osd crush dump", "dump crush map")
-COMMAND("osd setcrushmap", "set crush map from input file")
-COMMAND("osd crush set", "set crush map from input file")
+	"list pools", "osd", "r", "cli,rest")
+COMMAND("osd blacklist ls", "show blacklisted clients", "osd", "r", "cli,rest")
+COMMAND("osd crush rule list", "list crush rules", "osd", "r", "cli,rest")
+COMMAND("osd crush rule ls", "list crush rules", "osd", "r", "cli,rest")
+COMMAND("osd crush rule dump", "dump crush rules", "osd", "r", "cli,rest")
+COMMAND("osd crush dump", "dump crush map", "osd", "r", "cli,rest")
+COMMAND("osd setcrushmap", "set crush map from input file", \
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush set", "set crush map from input file", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush add-bucket " \
 	"name=name,type=CephString " \
 	"name=type,type=CephString", \
-	"add no-parent (probably root) crush bucket <name> of type <type>")
+	"add no-parent (probably root) crush bucket <name> of type <type>", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush set " \
 	"name=id,type=CephOsdName " \
 	"name=weight,type=CephFloat,range=0.0 " \
 	"name=args,type=CephString,n=N", \
-	"set crushmap entry for <name> to <weight> with location <args>")
+	"set crushmap entry for <name> to <weight> with location <args>", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush add " \
 	"name=id,type=CephOsdName " \
 	"name=weight,type=CephFloat,range=0.0 " \
 	"name=args,type=CephString,n=N", \
-	"add crushmap entry for <name> with <weight> and location <args>")
+	"add crushmap entry for <name> with <weight> and location <args>", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush create-or-move " \
 	"name=id,type=CephOsdName " \
 	"name=weight,type=CephFloat,range=0.0 " \
 	"name=args,type=CephString,n=N", \
-	"create entry or move existing entry for <name> <weight> at/to location <args>")
+	"create entry or move existing entry for <name> <weight> at/to location <args>", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush move " \
 	"name=id,type=CephOsdName " \
 	"name=args,type=CephString,n=N", \
-	"move existing entry for <name> to location <args>")
+	"move existing entry for <name> to location <args>", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush link " \
 	"name=name,type=CephString " \
 	"name=args,type=CephString,n=N", \
-	"link existing entry for <name> under location <args>")
+	"link existing entry for <name> under location <args>", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush rm " \
 	"name=name,type=CephString", \
-	"remove <name> from crush map")
+	"remove <name> from crush map", "osd", "rw", "cli,rest")
 COMMAND("osd crush remove " \
 	"name=name,type=CephString", \
-	"remove <name> from crush map")
+	"remove <name> from crush map", "osd", "rw", "cli,rest")
 COMMAND("osd crush unlink " \
 	"name=name,type=CephString " \
 	"name=ancestor,type=CephString,req=false", \
-	"unlink <name> from crush map (everywhere, or just at <ancestor>")
+	"unlink <name> from crush map (everywhere, or just at <ancestor>", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush reweight " \
 	"name=name,type=CephString " \
 	"name=weight,type=CephFloat,range=0.0", \
-	"change <name>'s weight to <weight> in crush map")
+	"change <name>'s weight to <weight> in crush map", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush tunables " \
 	"name=profile,type=CephChoices,strings=legacy|argonaut|bobtail|optimal|default", \
-	"set crush tunables values to <profile>")
+	"set crush tunables values to <profile>", "osd", "rw", "cli,rest")
 COMMAND("osd crush rule create-simple " \
 	"name=name,type=CephString " \
 	"name=root,type=CephString " \
 	"name=type,type=CephString", \
-	"create crush rule <name> in <root> of type <type>")
+	"create crush rule <name> in <root> of type <type>", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush rule rm " \
 	"name=name,type=CephString", \
-	"remove crush rule <name>")
+	"remove crush rule <name>", "osd", "rw", "cli,rest")
 COMMAND("osd setmaxosd " \
 	"name=newmax,type=CephInt,range=0", \
-	"set new maximum osd value")
-COMMAND("osd pause", "pause osd")
-COMMAND("osd unpause", "unpause osd")
+	"set new maximum osd value", "osd", "rw", "cli,rest")
+COMMAND("osd pause", "pause osd", "osd", "rw", "cli,rest")
+COMMAND("osd unpause", "unpause osd", "osd", "rw", "cli,rest")
 COMMAND("osd set " \
 	"name=key,type=CephChoices,strings=pause|noup|nodown|noout|noin|nobackfile|norecover", \
-	"set <key>")
+	"set <key>", "osd", "rw", "cli,rest")
 COMMAND("osd unset " \
 	"name=key,type=CephChoices,strings=pause|noup|nodown|noout|noin|nobackfile|norecover", \
-	"unset <key>")
-COMMAND("osd cluster_snap", "take cluster snapshot (disabled)")
+	"unset <key>", "osd", "rw", "cli,rest")
+COMMAND("osd cluster_snap", "take cluster snapshot (disabled)", \
+	"osd", "r", "")
 COMMAND("osd down " \
 	"type=CephString,name=ids,n=N", \
-	"set osd(s) <id> [<id>...] down")
+	"set osd(s) <id> [<id>...] down", "osd", "rw", "cli,rest")
 COMMAND("osd out " \
 	"name=ids,type=CephString,n=N", \
-	"set osd(s) <id> [<id>...] out")
+	"set osd(s) <id> [<id>...] out", "osd", "rw", "cli,rest")
 COMMAND("osd in " \
 	"name=ids,type=CephString,n=N", \
-	"set osd(s) <id> [<id>...] in")
+	"set osd(s) <id> [<id>...] in", "osd", "rw", "cli,rest")
 COMMAND("osd rm " \
 	"name=ids,type=CephString,n=N", \
-	"remove osd(s) <id> [<id>...] in")
+	"remove osd(s) <id> [<id>...] in", "osd", "rw", "cli,rest")
 COMMAND("osd reweight " \
 	"name=id,type=CephInt,range=0 " \
 	"type=CephFloat,name=weight,range=0.0|1.0", \
-	"reweight osd to 0.0 < <weight> < 1.0")
+	"reweight osd to 0.0 < <weight> < 1.0", "osd", "rw", "cli,rest")
 COMMAND("osd lost " \
 	"name=id,type=CephInt,range=0 " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it", \
-	"mark osd as permanently lost. THIS DESTROYS DATA IF NO MORE REPLICAS EXIST, BE CAREFUL")
+	"mark osd as permanently lost. THIS DESTROYS DATA IF NO MORE REPLICAS EXIST, BE CAREFUL", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd create " \
 	"name=uuid,type=CephUUID,req=false", \
-	"create new osd (with optional UUID)")
+	"create new osd (with optional UUID)", "osd", "rw", "cli,rest")
 COMMAND("osd blacklist " \
 	"name=blacklistop,type=CephChoices,strings=add|rm " \
 	"name=addr,type=CephEntityAddr " \
 	"name=expire,type=CephFloat,range=0.0,req=false", \
-	"add (optionally until <expire> seconds from now) or remove <addr> from blacklist")
+	"add (optionally until <expire> seconds from now) or remove <addr> from blacklist", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd pool mksnap " \
 	"name=pool,type=CephPoolname " \
 	"name=snap,type=CephString", \
-	"make snapshot <snap> in <pool>")
+	"make snapshot <snap> in <pool>", "osd", "rw", "cli,rest")
 COMMAND("osd pool rmsnap " \
 	"name=pool,type=CephPoolname " \
 	"name=snap,type=CephString", \
-	"remove snapshot <snap> from <pool>")
+	"remove snapshot <snap> from <pool>", "osd", "rw", "cli,rest")
 COMMAND("osd pool create " \
 	"name=pool,type=CephPoolname " \
 	"name=pg_num,type=CephInt,range=0 " \
 	"name=pgp_num,type=CephInt,range=0,req=false", \
-	"create pool")
+	"create pool", "osd", "rw", "cli,rest")
 COMMAND("osd pool delete " \
 	"name=pool,type=CephPoolname " \
 	"name=pool2,type=CephPoolname " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-really-mean-it", \
-	"delete pool (say pool twice, add --yes-i-really-really-mean-it)")
+	"delete pool (say pool twice, add --yes-i-really-really-mean-it)", \
+	"osd", "r", "cli,rest")
 COMMAND("osd pool rename " \
 	"name=srcpool,type=CephPoolname " \
 	"name=destpool,type=CephPoolname", \
-	"rename <srcpool> to <destpool>")
+	"rename <srcpool> to <destpool>", "osd", "rw", "cli,rest")
 COMMAND("osd pool get " \
 	"name=pool,type=CephPoolname " \
 	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset", \
-	"get pool parameter <var>")
+	"get pool parameter <var>", "osd", "r", "cli,rest")
 COMMAND("osd pool set " \
 	"name=pool,type=CephPoolname " \
 	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset " \
 	"name=val,type=CephInt " \
 	"name=sure,type=CephChoices,strings=--allow-experimental-feature,req=false", \
-	"set pool parameter <var> to <val>")
+	"set pool parameter <var> to <val>", "osd", "rw", "cli,rest")
 // 'val' is a CephString because it can include a unit.  Perhaps
 // there should be a Python type for validation/conversion of strings
 // with units.
@@ -445,13 +500,14 @@ COMMAND("osd pool set-quota " \
 	"name=pool,type=CephPoolname " \
 	"name=field,type=CephChoices,strings=max_objects|max_bytes " \
 	"name=val,type=CephString",
-	"set object or byte limit on pool")
+	"set object or byte limit on pool", "osd", "rw", "cli,rest")
 COMMAND("osd reweight-by-utilization " \
 	"name=oload,type=CephInt,range=100,req=false", \
-	"reweight OSDs by utilization [overload-percentage-for-consideration, default 120]")
+	"reweight OSDs by utilization [overload-percentage-for-consideration, default 120]", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd thrash " \
 	"name=num_epochs,type=CephInt,range=0", \
-	"thrash OSDs for <num_epochs>")
+	"thrash OSDs for <num_epochs>", "osd", "rw", "cli,rest")
 
 /*
  * mon/ConfigKeyService.cc
@@ -459,15 +515,15 @@ COMMAND("osd thrash " \
 
 COMMAND("config-key get " \
 	"name=key,type=CephString", \
-	"get <key>")
+	"get <key>", "config-key", "r", "cli,rest")
 COMMAND("config-key put " \
 	"name=key,type=CephString " \
 	"name=val,type=CephString,req=false", \
-	"put <key>, value <val>")
+	"put <key>, value <val>", "config-key", "rw", "cli,rest")
 COMMAND("config-key del " \
 	"name=key,type=CephString", \
-	"delete <key>")
+	"delete <key>", "config-key", "rw", "cli,rest")
 COMMAND("config-key exists " \
 	"name=key,type=CephString", \
-	"check for <key>'s existence")
-COMMAND("config-key list ", "list keys")
+	"check for <key>'s existence", "config-key", "r", "cli,rest")
+COMMAND("config-key list ", "list keys", "config-key", "r", "cli,rest")

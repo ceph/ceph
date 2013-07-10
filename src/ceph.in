@@ -167,7 +167,8 @@ def do_help(parser, args, help_all = False):
                 "couldn't get command descriptions for {0}: {1}".\
                 format(target, outs)
         else:
-            sys.stdout.write(format_help(parse_json_funcsigs(outbuf), partial))
+            sys.stdout.write(format_help(parse_json_funcsigs(outbuf, 'cli'),
+                             partial))
 
     parser.print_help()
     print '\n'
@@ -183,21 +184,21 @@ def do_help(parser, args, help_all = False):
             help_for_target(target=('osd', osdids()[0]))
 
             print '\nOSD daemon commands:\n\n'
-            sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'osd.' + firstosd), ['get_command_descriptions']))))
+            sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'osd.' + firstosd), ['get_command_descriptions']), 'cli')))
         except:
             pass
 
         try:
             firstmon = monids()[0]
             print '\nmon.{0} daemon commands:\n\n'.format(firstmon)
-            sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'mon.' + firstmon), ['get_command_descriptions']))))
+            sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'mon.' + firstmon), ['get_command_descriptions']), 'cli')))
         except:
             pass
 
         try:
             firstmds = mdsids()[0]
             print '\nmds.{0} daemon commands:\n\n'.format(firstmds)
-            sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'mds.' + firstmds), ['get_command_descriptions']))))
+            sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'mds.' + firstmds), ['get_command_descriptions']), 'cli')))
         except:
             pass
 
@@ -274,13 +275,13 @@ def format_help(cmddict, partial=None):
     fullusage = ''
     for cmd in sorted(cmddict.itervalues(), cmp=descsort):
 
-        if not cmd['helptext']:
+        if not cmd['help']:
             continue
         concise = concise_sig(cmd['sig'])
         if partial and not concise.startswith(partial):
             continue
         siglines = [l for l in wrap(concise, 40, 1)]
-        helplines = [l for l in wrap(cmd['helptext'], 39, 1)]
+        helplines = [l for l in wrap(cmd['help'], 39, 1)]
 
         # make lists the same length
         maxlen = max(len(siglines), len(helplines))
@@ -693,7 +694,7 @@ def main():
             if ret < 0:
                 outs = 'problem getting command descriptions from {0}.{1}'.format(*target)
         else:
-            sigdict = parse_json_funcsigs(outbuf)
+            sigdict = parse_json_funcsigs(outbuf, 'cli')
 
             if parsed_args.completion:
                 return complete(sigdict, childargs, target)
