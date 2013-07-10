@@ -27,8 +27,12 @@ public:
   utime_t had_map_for;
   
   MPGStats() : PaxosServiceMessage(MSG_PGSTATS, 0) {}
-  MPGStats(const uuid_d& f, epoch_t e, utime_t had) : 
-    PaxosServiceMessage(MSG_PGSTATS, e), fsid(f), epoch(e), had_map_for(had) {}
+  MPGStats(const uuid_d& f, epoch_t e, utime_t had)
+    : PaxosServiceMessage(MSG_PGSTATS, 0),
+      fsid(f),
+      epoch(e),
+      had_map_for(had)
+  {}
 
 private:
   ~MPGStats() {};
