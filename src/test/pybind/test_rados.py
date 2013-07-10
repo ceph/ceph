@@ -1,4 +1,4 @@
-from nose.tools import eq_ as eq, assert_raises, assert_greater
+from nose.tools import eq_ as eq, assert_raises
 from rados import (Rados, Object, ObjectExists, ObjectNotFound,
                    ANONYMOUS_AUID, ADMIN_AUID)
 import threading
@@ -301,14 +301,14 @@ class TestMonCommand(object):
         cmd = {"prefix":"mon dump"}
         ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30)
         eq(ret, 0)
-        assert_greater(len(buf), 0)
+        assert len(buf) > 0
         assert('epoch' in buf)
 
         # JSON, and grab current epoch
         cmd['format'] = 'json'
         ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30)
         eq(ret, 0)
-        assert_greater(len(buf), 0)
+        assert len(buf) > 0
         d = json.loads(buf)
         assert('epoch' in d)
         epoch = d['epoch']
@@ -326,7 +326,7 @@ class TestMonCommand(object):
         ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30,
                                                 target=target)
         eq(ret, 0)
-        assert_greater(len(buf), 0)
+        assert len(buf) > 0
         d = json.loads(buf)
         assert('epoch' in d)
 
@@ -336,7 +336,7 @@ class TestMonCommand(object):
         ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30,
                                                 target=target)
         eq(ret, 0)
-        assert_greater(len(buf), 0)
+        assert len(buf) > 0
         d = json.loads(buf)
         assert('epoch' in d)
 
