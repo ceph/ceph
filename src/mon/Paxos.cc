@@ -43,36 +43,18 @@ MonitorDBStore *Paxos::get_store()
   return mon->store;
 }
 
-
-void Paxos::apply_version(MonitorDBStore::Transaction &tx, version_t v)
+void Paxos::read_and_prepare_transactions(MonitorDBStore::Transaction *tx, version_t first, version_t last)
 {
-  bufferlist bl;
-  int err = get_store()->get(get_name(), v, bl);
-  assert(err == 0);
-  assert(bl.length());
-  decode_append_transaction(tx, bl);
-}
-
-void Paxos::reapply_all_versions()
-{
-  version_t first = get_store()->get(get_name(), "first_committed");
-  version_t last = get_store()->get(get_name(), "last_committed");
   dout(10) << __func__ << " first " << first << " last " << last << dendl;
-
-  MonitorDBStore::Transaction tx;
   for (version_t v = first; v <= last; ++v) {
     dout(30) << __func__ << " apply version " << v << dendl;
-    apply_version(tx, v);
+    bufferlist bl;
+    int err = get_store()->get(get_name(), v, bl);
+    assert(err == 0);
+    assert(bl.length());
+    decode_append_transaction(*tx, bl);
   }
   dout(15) << __func__ << " total versions " << (last-first) << dendl;
-
-  dout(30) << __func__ << " tx dump:\n";
-  JSONFormatter f(true);
-  tx.dump(&f);
-  f.flush(*_dout);
-  *_dout << dendl;
-
-  get_store()->apply_transaction(tx);
 }
 
 void Paxos::init()
@@ -88,6 +70,7 @@ void Paxos::init()
 	   << " first_committed: " << first_committed << dendl;
 
   dout(10) << "init" << dendl;
+  assert(is_consistent());
 }
 
 // ---------------------------------
@@ -970,8 +953,8 @@ void Paxos::lease_renew_timeout()
 void Paxos::trim()
 {
   assert(should_trim());
-  version_t end = MIN(get_version() - g_conf->paxos_max_join_drift,
-			get_first_committed() + g_conf->paxos_trim_max);
+  version_t end = MIN(get_version() - g_conf->paxos_min,
+		      get_first_committed() + g_conf->paxos_trim_max);
 
   if (first_committed >= end)
     return;
@@ -1003,17 +986,6 @@ void Paxos::trim()
   queue_proposal(bl, new C_Trimmed(this));
 }
 
-void Paxos::trim_enable()
-{
-  trim_disabled_version = 0;
-  // We may not be the leader when we reach this function. We sure must
-  // have been the leader at some point, but we may have been demoted and
-  // we really should reset 'trim_disabled_version' if that was the case.
-  // So, make sure we only trim() iff we are the leader.
-  if (mon->is_leader() && should_trim())
-    trim();
-}
-
 /*
  * return a globally unique, monotonically increasing proposal number
  */
@@ -1027,7 +999,7 @@ version_t Paxos::get_new_proposal_number(version_t gt)
   last_pn++;
   last_pn *= 100;
   last_pn += (version_t)mon->rank;
-  
+
   // write
   MonitorDBStore::Transaction t;
   t.put(get_name(), "last_pn", last_pn);

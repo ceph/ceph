@@ -171,17 +171,13 @@ OPTION(mon_health_data_update_interval, OPT_FLOAT, 60.0)
 OPTION(mon_data_avail_crit, OPT_INT, 5)
 OPTION(mon_data_avail_warn, OPT_INT, 30)
 OPTION(mon_config_key_max_entry_size, OPT_INT, 4096) // max num bytes per config-key entry
-OPTION(mon_sync_trim_timeout, OPT_DOUBLE, 30.0)
-OPTION(mon_sync_heartbeat_timeout, OPT_DOUBLE, 30.0)
-OPTION(mon_sync_heartbeat_interval, OPT_DOUBLE, 5.0)
-OPTION(mon_sync_backoff_timeout, OPT_DOUBLE, 30.0)
-OPTION(mon_sync_timeout, OPT_DOUBLE, 30.0)
-OPTION(mon_sync_max_retries, OPT_INT, 5)
+OPTION(mon_sync_timeout, OPT_DOUBLE, 60.0)
 OPTION(mon_sync_max_payload_size, OPT_U32, 1048576) // max size for a sync chunk payload (say, 1MB)
 OPTION(mon_sync_debug, OPT_BOOL, false) // enable sync-specific debug
 OPTION(mon_sync_debug_leader, OPT_INT, -1) // monitor to be used as the sync leader
 OPTION(mon_sync_debug_provider, OPT_INT, -1) // monitor to be used as the sync provider
 OPTION(mon_sync_debug_provider_fallback, OPT_INT, -1) // monitor to be used as fallback if sync provider fails
+OPTION(mon_inject_sync_get_chunk_delay, OPT_DOUBLE, 0)  // inject N second delay on each get_chunk request
 OPTION(mon_osd_min_down_reporters, OPT_INT, 1)   // number of OSDs who need to report a down OSD for it to count
 OPTION(mon_osd_min_down_reports, OPT_INT, 3)     // number of times a down OSD must be reported for it to count
 OPTION(mon_osd_force_trim_to, OPT_INT, 0)   // force mon to trim maps to this point, regardless of min_last_epoch_clean (dangerous, use with care)
@@ -190,8 +186,7 @@ OPTION(mon_osd_force_trim_to, OPT_INT, 0)   // force mon to trim maps to this po
 OPTION(mon_debug_dump_transactions, OPT_BOOL, false)
 OPTION(mon_debug_dump_location, OPT_STR, "/var/log/ceph/$cluster-$name.tdump")
 
-OPTION(mon_sync_leader_kill_at, OPT_INT, 0) // kill the sync leader at a specifc point in the work flow
-OPTION(mon_sync_provider_kill_at, OPT_INT, 0) // kill the sync provider at a specific point in the work flow
+OPTION(mon_sync_provider_kill_at, OPT_INT, 0)  // kill the sync provider at a specific point in the work flow
 OPTION(mon_sync_requester_kill_at, OPT_INT, 0) // kill the sync requester at a specific point in the work flow
 OPTION(mon_leveldb_write_buffer_size, OPT_U64, 32*1024*1024) // monitor's leveldb write buffer size
 OPTION(mon_leveldb_cache_size, OPT_U64, 512*1024*1024) // monitor's leveldb cache size
@@ -205,9 +200,9 @@ OPTION(paxos_stash_full_interval, OPT_INT, 25)   // how often (in commits) to st
 OPTION(paxos_max_join_drift, OPT_INT, 10) // max paxos iterations before we must first sync the monitor stores
 OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long before proposing a map update
 OPTION(paxos_min_wait, OPT_DOUBLE, 0.05)  // min time to gather updates for after period of inactivity
+OPTION(paxos_min, OPT_INT, 500)       // minimum number of paxos states to keep around
 OPTION(paxos_trim_min, OPT_INT, 250)  // number of extra proposals tolerated before trimming
 OPTION(paxos_trim_max, OPT_INT, 500) // max number of extra proposals to trim at a time
-OPTION(paxos_trim_disabled_max_versions, OPT_INT, 108000) // maximum amount of versions we shall allow passing by without trimming
 OPTION(paxos_service_trim_min, OPT_INT, 250) // minimum amount of versions to trigger a trim (0 disables it)
 OPTION(paxos_service_trim_max, OPT_INT, 500) // maximum amount of versions to trim during a single proposal (0 disables it)
 OPTION(clock_offset, OPT_DOUBLE, 0) // how much to offset the system clock in Clock.cc

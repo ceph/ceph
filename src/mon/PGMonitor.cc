@@ -316,7 +316,7 @@ void PGMonitor::read_pgmap_meta()
 {
   dout(10) << __func__ << dendl;
 
-  string prefix = "pgmap_meta";
+  string prefix = pgmap_meta_prefix;
 
   version_t version = mon->store->get(prefix, "version");
   epoch_t last_osdmap_epoch = mon->store->get(prefix, "last_osdmap_epoch");
@@ -358,7 +358,7 @@ void PGMonitor::read_pgmap_full()
 {
   read_pgmap_meta();
 
-  string prefix = "pgmap_pg";
+  string prefix = pgmap_pg_prefix;
   for (KeyValueDB::Iterator i = mon->store->get_iterator(prefix); i->valid(); i->next()) {
     string key = i->key();
     pg_t pgid;
@@ -371,7 +371,7 @@ void PGMonitor::read_pgmap_full()
     dout(20) << " got " << pgid << dendl;
   }
 
-  prefix = "pgmap_osd";
+  prefix = pgmap_osd_prefix;
   for (KeyValueDB::Iterator i = mon->store->get_iterator(prefix); i->valid(); i->next()) {
     string key = i->key();
     int osd = atoi(key.c_str());
@@ -403,7 +403,7 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
     ::decode(pgid, p);
     dout(20) << " refreshing pg " << pgid << dendl;
     bufferlist bl;
-    int r = mon->store->get("pgmap_pg", stringify(pgid), bl);
+    int r = mon->store->get(pgmap_pg_prefix, stringify(pgid), bl);
     if (r >= 0) {
       pg_map.update_pg(pgid, bl);
     } else {
@@ -418,7 +418,7 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
     ::decode(osd, p);
     dout(20) << " refreshing osd." << osd << dendl;
     bufferlist bl;
-    int r = mon->store->get("pgmap_osd", stringify(osd), bl);
+    int r = mon->store->get(pgmap_osd_prefix, stringify(osd), bl);
     if (r >= 0) {
       pg_map.update_osd(osd, bl);
     } else {
@@ -442,7 +442,7 @@ void PGMonitor::encode_pending(MonitorDBStore::Transaction *t)
 
   uint64_t features = mon->get_quorum_features();
 
-  string prefix = "pgmap_meta";
+  string prefix = pgmap_meta_prefix;
 
   t->put(prefix, "version", pending_inc.version);
   {
@@ -470,7 +470,7 @@ void PGMonitor::encode_pending(MonitorDBStore::Transaction *t)
   ::encode(pending_inc.stamp, incbl);
   {
     bufferlist dirty;
-    string prefix = "pgmap_pg";
+    string prefix = pgmap_pg_prefix;
     for (map<pg_t,pg_stat_t>::const_iterator p = pending_inc.pg_stat_updates.begin();
 	 p != pending_inc.pg_stat_updates.end();
 	 ++p) {
@@ -487,7 +487,7 @@ void PGMonitor::encode_pending(MonitorDBStore::Transaction *t)
   }
   {
     bufferlist dirty;
-    string prefix = "pgmap_osd";
+    string prefix = pgmap_osd_prefix;
     for (map<int32_t,osd_stat_t>::const_iterator p = pending_inc.osd_stat_updates.begin();
 	 p != pending_inc.osd_stat_updates.end();
 	 ++p) {
