@@ -97,6 +97,7 @@ public:
   void decode(bufferlist::iterator& bl);
 
   void encode_plaintext(bufferlist& bl);
+  void encode_formatted(string label, Formatter *f, bufferlist& bl);
 };
 
 // don't use WRITE_CLASS_ENCODER macro because we don't have an encode
