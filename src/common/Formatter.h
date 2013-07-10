@@ -10,6 +10,8 @@
 #include <stdarg.h>
 #include <string>
 
+#include "include/buffer.h"
+
 namespace ceph {
 
 
@@ -25,6 +27,11 @@ class Formatter {
   virtual ~Formatter();
 
   virtual void flush(std::ostream& os) = 0;
+  void flush(bufferlist &bl) {
+    std::stringstream os;
+    flush(os);
+    bl.append(os.str());
+  }
   virtual void reset() = 0;
 
   virtual void open_array_section(const char *name) = 0;
