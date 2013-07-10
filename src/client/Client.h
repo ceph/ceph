@@ -414,6 +414,7 @@ protected:
   client_t get_nodeid() { return whoami; }
 
   inodeno_t get_root_ino();
+  Inode *get_root();
 
   int init()  WARN_UNUSED_RESULT;
   void shutdown();
