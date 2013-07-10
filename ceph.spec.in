@@ -590,6 +590,9 @@ fi
 %{_bindir}/ceph_test_cls_refcount
 %{_bindir}/ceph_test_cls_replica_log
 %{_bindir}/ceph_test_cls_rgw
+%{_bindir}/ceph_test_cls_rgw_log
+%{_bindir}/ceph_test_cls_rgw_meta
+%{_bindir}/ceph_test_cls_rgw_opstate
 %{_bindir}/ceph_test_cls_statelog
 %{_bindir}/ceph_test_cls_version
 %{_bindir}/ceph_test_cors
