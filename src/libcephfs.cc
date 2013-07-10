@@ -1154,6 +1154,15 @@ extern "C" int ceph_get_pool_replication(struct ceph_mount_info *cmount,
 }
 /* Low-level exports */
 
+extern "C" int ceph_ll_lookup_root(struct ceph_mount_info *cmount,
+                  Inode **parent)
+{
+  *parent = cmount->get_client()->get_root();
+  if (*parent)
+    return 0;
+  return EFAULT;
+}
+
 extern "C" struct Inode *ceph_ll_get_inode(class ceph_mount_info *cmount,
 					   vinodeno_t vino)
 {

@@ -259,6 +259,12 @@ inodeno_t Client::get_root_ino()
   return root->ino;
 }
 
+Inode *Client::get_root()
+{
+  root->ll_get();
+  return root;
+}
+
 
 // debug crapola
 
