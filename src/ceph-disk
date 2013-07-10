@@ -850,7 +850,13 @@ def prepare_journal_dev(
                     '--name={name}'.format(name=os.path.basename(journal)),
                     ],
                 )   
-            journal_symlink = '/dev/{symlink}-part{num}'.format(symlink=str(symlinks).split()[2], num=num)
+            journal_symlink = None
+            for udev_line in symlinks.split():
+                if 'by-path' in udev_line:
+                    journal_symlink = '/dev/{symlink}-part{num}'.format(symlink=str(udev_line), num=num)
+                    break
+            if not journal_symlink:
+               raise Error('Unable to get device by path from udev')
 
         journal_dmcrypt = None
         if journal_dm_keypath:
