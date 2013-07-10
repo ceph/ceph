@@ -4324,13 +4324,18 @@ int Client::readlink(const char *relpath, char *buf, loff_t size)
   int r = path_walk(path, &in, false);
   if (r < 0)
     return r;
-  
+
+  return _readlink(in, buf, size);
+}
+
+int Client::_readlink(Inode *in, char *buf, size_t size)
+{
   if (!in->is_symlink())
     return -EINVAL;
 
   // copy into buf (at most size bytes)
-  r = in->symlink.length();
-  if (r > size)
+  int r = in->symlink.length();
+  if (r > (int)size)
     r = size;
   memcpy(buf, in->symlink.c_str(), r);
   return r;
@@ -6991,7 +6996,7 @@ int Client::ll_removexattr(Inode *in, const char *name, int uid, int gid)
 }
 
 
-int Client::ll_readlink(Inode *in, const char **value, int uid, int gid)
+int Client::ll_readlink(Inode *in, char *buf, size_t buflen, int uid, int gid)
 {
   Mutex::Locker lock(client_lock);
 
@@ -7007,15 +7012,8 @@ int Client::ll_readlink(Inode *in, const char **value, int uid, int gid)
     ++dn;
   }
 
-  int r = 0;
-  if (in->is_symlink()) {
-    *value = in->symlink.c_str();
-  } else {
-    *value = "";
-    r = -EINVAL;
-  }
-  ldout(cct, 3) << "ll_readlink " << vino << " = " << r << " (" << *value
-		<< ")" << dendl;
+  int r = _readlink(in, buf, buflen);
+  ldout(cct, 3) << "ll_readlink " << vino << " = " << r << dendl;
   return r;
 }
 

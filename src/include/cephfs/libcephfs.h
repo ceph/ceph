@@ -1273,7 +1273,7 @@ int ceph_ll_unlink(struct ceph_mount_info *cmount, struct Inode *in,
 int ceph_ll_statfs(struct ceph_mount_info *cmount, struct Inode *in,
 		   struct statvfs *stbuf);
 int ceph_ll_readlink(struct ceph_mount_info *cmount, struct Inode *in,
-		     char **value, int uid, int gid);
+		     char *buf, size_t bufsize, int uid, int gid);
 int ceph_ll_symlink(struct ceph_mount_info *cmount, struct Inode *parent,
 		    const char *name, const char *value, struct stat *attr,
 		    struct Inode **in, int uid, int gid);

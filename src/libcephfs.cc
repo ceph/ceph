@@ -1366,11 +1366,10 @@ extern "C" int ceph_ll_statfs(struct ceph_mount_info *cmount,
 }
 
 extern "C" int ceph_ll_readlink(struct ceph_mount_info *cmount,
-				Inode *in, char **value, int uid,
+				Inode *in, char *buf, size_t bufsiz, int uid,
 				int gid)
 {
-  return (cmount->get_client()->ll_readlink(in, (const char**) value,
-					    uid, gid));
+  return (cmount->get_client()->ll_readlink(in, buf, bufsiz, uid, gid);
 }
 
 extern "C" int ceph_ll_symlink(struct ceph_mount_info *cmount,

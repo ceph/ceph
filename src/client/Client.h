@@ -550,6 +550,7 @@ private:
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int uid=-1, int gid=-1, Inode **inp = 0);
   int _setattr(Inode *in, struct stat *attr, int mask, int uid=-1, int gid=-1, Inode **inp = 0);
   int _getattr(Inode *in, int mask, int uid=-1, int gid=-1, bool force=false);
+  int _readlink(Inode *in, char *buf, size_t size);
   int _getxattr(Inode *in, const char *name, void *value, size_t len, int uid=-1, int gid=-1);
   int _listxattr(Inode *in, char *names, size_t len, int uid=-1, int gid=-1);
   int _setxattr(Inode *in, const char *name, const void *value, size_t len, int flags, int uid=-1, int gid=-1);
@@ -632,6 +633,7 @@ public:
 
   // symlinks
   int readlink(const char *path, char *buf, loff_t size);
+  
   int symlink(const char *existing, const char *newname);
 
   // inode stuff
@@ -733,7 +735,7 @@ public:
   int ll_listxattr(Inode *in, char *list, size_t size, int uid=-1, int gid=-1);
   int ll_opendir(Inode *in, dir_result_t **dirpp, int uid = -1, int gid = -1);
   int ll_releasedir(dir_result_t* dirp);
-  int ll_readlink(Inode *in, const char **value, int uid = -1, int gid = -1);
+  int ll_readlink(Inode *in, char *buf, size_t bufsize, int uid = -1, int gid = -1);
   int ll_mknod(Inode *in, const char *name, mode_t mode, dev_t rdev,
 	       struct stat *attr, Inode **out, int uid = -1, int gid = -1);
   int ll_mkdir(Inode *in, const char *name, mode_t mode, struct stat *attr,
