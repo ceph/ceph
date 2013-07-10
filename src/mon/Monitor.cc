@@ -3616,7 +3616,11 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer, boo
       !key_server.get_secret(name, secret)) {
     dout(0) << " couldn't get secret for mon service from keyring or keyserver" << dendl;
     stringstream ss, ds;
-    key_server.list_secrets(ss, ds);
+    int err = key_server.list_secrets(ds);
+    if (err < 0)
+      ss << "no installed auth entries!";
+    else
+      ss << "installed auth entries:";
     dout(0) << ss.str() << "\n" << ds.str() << dendl;
     return false;
   }
