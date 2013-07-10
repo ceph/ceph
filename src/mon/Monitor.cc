@@ -2440,10 +2440,10 @@ void Monitor::remove_all_sessions()
 }
 
 void Monitor::send_command(const entity_inst_t& inst,
-			   const vector<string>& com, version_t version)
+			   const vector<string>& com)
 {
   dout(10) << "send_command " << inst << "" << com << dendl;
-  MMonCommand *c = new MMonCommand(monmap->fsid, version);
+  MMonCommand *c = new MMonCommand(monmap->fsid);
   c->cmd = com;
   try_send_message(c, inst);
 }
