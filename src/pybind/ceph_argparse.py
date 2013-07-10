@@ -516,7 +516,7 @@ class argdesc(object):
             if k.startswith('__') or k in internals:
                 pass
             else:
-                # undo mods above
+                # undo modification from __init__
                 if k == 'n' and self.N:
                     v = 'N'
                 r += '{0}={1}, '.format(k,v)
@@ -527,7 +527,7 @@ class argdesc(object):
     def __str__(self):
         if ((self.t == CephChoices and len(self.instance.strings) == 1)
             or (self.t == CephPrefix)):
-            s = '{0}'.format(str(self.instance))
+            s = str(self.instance)
         else:
             s = '{0}({1})'.format(self.name, str(self.instance))
             if self.N:
@@ -545,7 +545,7 @@ class argdesc(object):
             chunk = '<{0}>'.format(self.name)
         else:
             chunk = str(self.instance)
-        s = '{0}'.format(chunk)
+        s = chunk
         if self.N:
             s += ' [' + chunk + '...]'
         if not self.req:
@@ -556,15 +556,7 @@ def concise_sig(sig):
     """
     Return string representation of sig useful for syntax reference in help
     """
-    first = True
-    s = ''
-    for d in sig:
-        if first:
-            first = False
-        else:
-            s += ' '
-        s += d.helpstr()
-    return s
+    return ' '.join([d.helpstr() for d in sig])
 
 def descsort(sh1, sh2):
     """
@@ -813,6 +805,8 @@ def validate(args, signature, partial=False):
             else:
                 # if first CephPrefix or any other type, just set it
                 d[desc.name] = desc.instance.val
+    if myargs and not partial:
+        raise ArgumentError("unused arguments: " + str(myargs))
     return d
 
 def validate_command(parsed_args, sigdict, args, verbose=False):
