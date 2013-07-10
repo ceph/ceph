@@ -2724,8 +2724,10 @@ void CInode::replicate_relax_locks()
 // =============================================
 
 int CInode::encode_inodestat(bufferlist& bl, Session *session,
-			      SnapRealm *dir_realm,
-			      snapid_t snapid, unsigned max_bytes)
+			     SnapRealm *dir_realm,
+			     snapid_t snapid,
+			     unsigned max_bytes,
+			     int getattr_caps)
 {
   int client = session->info.inst.name.num();
   assert(snapid);
@@ -2933,7 +2935,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   // include those xattrs?
   if (xbl.length() && cap) {
-    if (cap->pending() & CEPH_CAP_XATTR_SHARED) {
+    if ((cap->pending() | getattr_caps) & CEPH_CAP_XATTR_SHARED) {
       dout(10) << "including xattrs version " << i->xattr_version << dendl;
       cap->client_xattr_version = i->xattr_version;
     } else {

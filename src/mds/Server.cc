@@ -1034,7 +1034,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
 
   // inode
   if (in) {
-    in->encode_inodestat(bl, session, NULL, snapid);
+    in->encode_inodestat(bl, session, NULL, snapid, 0, mdr->getattr_caps);
     dout(20) << "set_trace_dist added in   " << *in << dendl;
     reply->head.is_target = 1;
   } else
@@ -2280,6 +2280,10 @@ void Server::handle_client_getattr(MDRequest *mdr, bool is_lookup)
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
+
+  // note which caps are requested, so we return at least a snapshot
+  // value for them.  (currently this only matters for xattrs)
+  mdr->getattr_caps = mask;
 
   mds->balancer->hit_inode(ceph_clock_now(g_ceph_context), ref, META_POP_IRD,
 			   mdr->client_request->get_source().num());

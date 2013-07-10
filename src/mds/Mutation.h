@@ -178,6 +178,7 @@ struct MDRequest : public Mutation {
   int snap_caps;
   bool did_early_reply;
   bool o_trunc;           ///< request is an O_TRUNC mutation
+  int getattr_caps;       ///< caps requested by getattr
 
   bufferlist reply_extra_bl;
 
@@ -250,6 +251,7 @@ struct MDRequest : public Mutation {
     client_request(0), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
     o_trunc(false),
+    getattr_caps(0),
     slave_request(0),
     internal_op(-1),
     retry(0),
@@ -264,6 +266,7 @@ struct MDRequest : public Mutation {
     client_request(req), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
     o_trunc(false),
+    getattr_caps(0),
     slave_request(0),
     internal_op(-1),
     retry(0),
@@ -278,6 +281,7 @@ struct MDRequest : public Mutation {
     client_request(0), straydn(NULL), snapid(CEPH_NOSNAP), tracei(0), tracedn(0),
     alloc_ino(0), used_prealloc_ino(0), snap_caps(0), did_early_reply(false),
     o_trunc(false),
+    getattr_caps(0),
     slave_request(0),
     internal_op(-1),
     retry(0),
