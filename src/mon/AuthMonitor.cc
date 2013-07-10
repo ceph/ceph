@@ -714,7 +714,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     try {
       ::decode(keyring, iter);
     } catch (const buffer::error &ex) {
-      ss << "error decoding keyring";
+      ss << "error decoding keyring" << " " << ex.what();
       rs = err;
       goto done;
     }
