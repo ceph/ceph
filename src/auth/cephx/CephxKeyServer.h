@@ -231,7 +231,12 @@ public:
     ::decode(data, bl);
   }
   bool contains(const EntityName& name) const;
-  void list_secrets(stringstream& ss, stringstream &ds) const;
+  int encode_secrets(Formatter *f, stringstream *ds) const;
+  void encode_formatted(string label, Formatter *f, bufferlist &bl);
+  void encode_plaintext(bufferlist &bl);
+  int list_secrets(stringstream& ds) const {
+    return encode_secrets(NULL, &ds);
+  }
   version_t get_ver() const {
     Mutex::Locker l(lock);
     return data.version;    

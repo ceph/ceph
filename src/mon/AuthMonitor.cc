@@ -624,7 +624,16 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
     }
     r = 0;
   } else if (prefix == "auth list") {
-    mon->key_server.list_secrets(ss, ds);
+    if (f) {
+      mon->key_server.encode_formatted("auth", f.get(), rdata);
+      f->flush(rdata);
+    } else {
+      mon->key_server.encode_plaintext(rdata);
+      if (rdata.length() > 0)
+        ss << "installed auth entries:" << std::endl;
+      else
+        ss << "no installed auth entries!" << std::endl;
+    }
     r = 0;
     goto done;
   } else {
