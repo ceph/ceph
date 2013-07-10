@@ -50,14 +50,19 @@ def ship_config(ctx, config):
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
     log.info('Shipping apache config and rgw.fcgi...')
-    src = os.path.join(os.path.dirname(__file__)
-                       , 'apache.conf.template').format(
-        testdir=testdir
-        )
+    src = os.path.join(os.path.dirname(__file__), 'apache.conf.template')
     for client in config.iterkeys():
         (remote,) = ctx.cluster.only(client).remotes.keys()
+        system_type = teuthology.get_system_type(remote)
+        if system_type == 'deb':
+            mod_path = '/usr/lib/apache2/modules'
+        else:
+            mod_path = '/usr/lib64/httpd/modules'
         with file(src, 'rb') as f:
-            conf = f.read().format(testdir=testdir)
+            conf = f.read().format(
+                testdir=testdir,
+                mod_path=mod_path,
+                )
             teuthology.write_file(
                 remote=remote,
                 path='{tdir}/apache/apache.conf'.format(tdir=testdir),
@@ -170,14 +175,19 @@ def start_apache(ctx, config):
     apaches = {}
     for client in config.iterkeys():
         (remote,) = ctx.cluster.only(client).remotes.keys()
+        system_type = teuthology.get_system_type(remote)
+        if system_type == 'deb':
+            apache_name = 'apache2'
+        else:
+            apache_name = '/usr/sbin/httpd'
         proc = remote.run(
             args=[
                 '{tdir}/adjust-ulimits'.format(tdir=testdir),
                 '{tdir}/daemon-helper'.format(tdir=testdir),
-                'kill'.format(tdir=testdir),
-                'apache2'.format(tdir=testdir),
-                '-X'.format(tdir=testdir),
-                '-f'.format(tdir=testdir),
+                'kill',
+                apache_name,
+                '-X',
+                '-f',
                 '{tdir}/apache/apache.conf'.format(tdir=testdir),
                 ],
             logger=log.getChild(client),
