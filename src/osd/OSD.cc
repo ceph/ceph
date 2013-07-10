@@ -5409,7 +5409,7 @@ void OSD::send_incremental_map(epoch_t since, Connection *con)
     return;
   }
 
-  if (to > since && to - since > g_conf->osd_map_share_max_epochs) {
+  if (to > since && (int64_t)(to - since) > g_conf->osd_map_share_max_epochs) {
     dout(10) << "  " << (to - since) << " > max " << g_conf->osd_map_share_max_epochs
 	     << ", only sending most recent" << dendl;
     since = to - g_conf->osd_map_share_max_epochs;
