@@ -2761,10 +2761,16 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	CrushWrapper newcrush;
 	_get_pending_crush(newcrush);
 
-	if (!newcrush.name_exists(m->cmd[3].c_str())) {
+	if (!osdmap.crush->name_exists(m->cmd[3].c_str())) {
 	  err = 0;
 	  ss << "device '" << m->cmd[3] << "' does not appear in the crush map";
 	  break;
+	}
+	if (!newcrush.name_exists(m->cmd[3].c_str())) {
+	  ss << "device '" << m->cmd[3] << "' does not appear in the crush map";
+	  getline(ss, rs);
+	  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
+	  return true;
 	}
 	int id = newcrush.get_item_id(m->cmd[3].c_str());
 	bool unlink_only = m->cmd[2] == "unlink";
