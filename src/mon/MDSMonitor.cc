@@ -547,6 +547,9 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 
   string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  string format;
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  boost::scoped_ptr<Formatter> f(new_formatter(format));
 
   MonSession *session = m->get_session();
   if (!session ||
@@ -557,11 +560,14 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
   }
 
   if (prefix == "mds stat") {
-    ds << mdsmap;
+    if (f) {
+      dump_info(f.get());
+      f->flush(ds);
+    } else {
+      ds << mdsmap;
+    }
     r = 0;
   } else if (prefix == "mds dump") {
-    string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
     string val;
     int64_t epocharg;
     epoch_t epoch;
@@ -584,7 +590,6 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
     }
     if (p) {
       stringstream ds;
-      boost::scoped_ptr<Formatter> f(new_formatter(format));
       if (f != NULL) {
 	f->open_object_section("mdsmap");
 	p->dump(f.get());
@@ -662,7 +667,14 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       } else ss << "specify mds number or *";
     }
   } else if (prefix == "mds compat show") {
-      ds << mdsmap.compat;
+      if (f) {
+	f->open_object_section("mds_compat");
+	mdsmap.compat.dump(f.get());
+	f->close_section();
+	f->flush(ds);
+      } else {
+	ds << mdsmap.compat;
+      }
       r = 0;
   }
 

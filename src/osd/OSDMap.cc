@@ -1723,16 +1723,29 @@ void OSDMap::print_tree(ostream *out, Formatter *f) const
     f->close_section();
 }
 
-void OSDMap::print_summary(ostream& out) const
+void OSDMap::print_summary(Formatter *f, ostream& out) const
 {
-  out << "e" << get_epoch() << ": "
-      << get_num_osds() << " osds: "
-      << get_num_up_osds() << " up, "
-      << get_num_in_osds() << " in";
-  if (test_flag(CEPH_OSDMAP_FULL))
-    out << " full";
-  else if (test_flag(CEPH_OSDMAP_NEARFULL))
-    out << " nearfull";
+  if (f) {
+    f->open_object_section("osdmap");
+    f->dump_int("epoch", get_epoch());
+    f->dump_int("num_osds", get_num_osds());
+    f->dump_int("num_up_osds", get_num_up_osds());
+    f->dump_stream("num_in_osds") << get_num_in_osds();
+    f->dump_string("full", test_flag(CEPH_OSDMAP_FULL) ? "true" : "false");
+    f->dump_string("nearfull", test_flag(CEPH_OSDMAP_NEARFULL) ?
+		   "true" : "false");
+    f->close_section();
+    f->flush(out);
+  } else {
+    out << "e" << get_epoch() << ": "
+	<< get_num_osds() << " osds: "
+	<< get_num_up_osds() << " up, "
+	<< get_num_in_osds() << " in";
+    if (test_flag(CEPH_OSDMAP_FULL))
+      out << " full";
+    else if (test_flag(CEPH_OSDMAP_NEARFULL))
+      out << " nearfull";
+  }
 }
 
 bool OSDMap::crush_ruleset_in_use(int ruleset) const

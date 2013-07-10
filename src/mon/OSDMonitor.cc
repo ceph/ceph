@@ -1946,7 +1946,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   boost::scoped_ptr<Formatter> f(new_formatter(format));
 
   if (prefix == "osd stat") {
-    osdmap.print_summary(ds);
+    osdmap.print_summary(f.get(), ds);
     rdata.append(ds);
   }
   else if (prefix == "osd dump" ||
@@ -2029,8 +2029,16 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     if (p != &osdmap)
       delete p;
   } else if (prefix == "osd getmaxosd") {
-    ds << "max_osd = " << osdmap.get_max_osd() << " in epoch " << osdmap.get_epoch();
-    rdata.append(ds);
+    if (f) {
+      f->open_object_section("getmaxosd");
+      f->dump_int("epoch", osdmap.get_epoch());
+      f->dump_int("max_osd", osdmap.get_max_osd());
+      f->close_section();
+      f->flush(rdata);
+    } else {
+      ds << "max_osd = " << osdmap.get_max_osd() << " in epoch " << osdmap.get_epoch();
+      rdata.append(ds);
+    }
   } else if (prefix  == "osd find") {
     int64_t osd;
     cmd_getval(g_ceph_context, cmdmap, "id", osd);
@@ -2122,24 +2130,51 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   } else if (prefix == "osd lspools") {
     int64_t auid;
     cmd_getval(g_ceph_context, cmdmap, "auid", auid, int64_t(0));
+    if (f)
+      f->open_array_section("pools");
     for (map<int64_t, pg_pool_t>::iterator p = osdmap.pools.begin();
 	 p != osdmap.pools.end();
 	 ++p) {
       if (!auid || p->second.auid == (uint64_t)auid) {
-	ds << p->first << ' ' << osdmap.pool_name[p->first] << ',';
+	if (f) {
+	  f->open_object_section("pool");
+	  f->dump_int("poolnum", p->first);
+	  f->dump_string("poolname", osdmap.pool_name[p->first]);
+	  f->close_section();
+	} else {
+	  ds << p->first << ' ' << osdmap.pool_name[p->first] << ',';
+	}
       }
+    }
+    if (f) {
+      f->close_section();
+      f->flush(ds);
     }
     rdata.append(ds);
   } else if (prefix == "osd blacklist ls") {
+    if (f)
+      f->open_array_section("blacklist");
+
     for (hash_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
 	 p != osdmap.blacklist.end();
 	 ++p) {
-      stringstream ss;
-      string s;
-      ss << p->first << " " << p->second;
-      getline(ss, s);
-      s += "\n";
-      rdata.append(s);
+      if (f) {
+	f->open_object_section("entry");
+	f->dump_stream("addr") << p->first;
+	f->dump_stream("until") << p->second;
+	f->close_section();
+      } else {
+	stringstream ss;
+	string s;
+	ss << p->first << " " << p->second;
+	getline(ss, s);
+	s += "\n";
+	rdata.append(s);
+      }
+    }
+    if (f) {
+      f->close_section();
+      f->flush(rdata);
     }
     ss << "listed " << osdmap.blacklist.size() << " entries";
   } else if (prefix == "osd crush rule list" ||
@@ -2463,6 +2498,10 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     mon->reply_command(m, -EINVAL, rs, get_last_committed());
     return true;
   }
+
+  string format;
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  boost::scoped_ptr<Formatter> f(new_formatter(format));
 
   MonSession *session = m->get_session();
   if (!session ||
@@ -3080,8 +3119,15 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       if (i >= 0) {
 	// osd already exists
 	err = 0;
-	ss << i;
-	rdata.append(ss);
+	if (f) {
+	  f->open_object_section("created_osd");
+	  f->dump_int("osdid", i);
+	  f->close_section();
+	  f->flush(rdata);
+	} else {
+	  ss << i;
+	  rdata.append(ss);
+	}
 	goto reply;
       }
       i = pending_inc.identify_osd(uuid);
@@ -3113,8 +3159,15 @@ done:
     pending_inc.new_state[i] |= CEPH_OSD_EXISTS | CEPH_OSD_NEW;
     if (!uuid.is_zero())
       pending_inc.new_uuid[i] = uuid;
-    ss << i;
-    rdata.append(ss);
+    if (f) {
+      f->open_object_section("created_osd");
+      f->dump_int("osdid", i);
+      f->close_section();
+      f->flush(rdata);
+    } else {
+      ss << i;
+      rdata.append(ss);
+    }
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, rdata, get_last_committed()));
     return true;
 
