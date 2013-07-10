@@ -634,7 +634,7 @@ public:
   void waitlist_or_zap_client(Message *m);
 
   void send_command(const entity_inst_t& inst,
-		    const vector<string>& com, version_t version);
+		    const vector<string>& com);
 
 public:
   struct C_Command : public Context {

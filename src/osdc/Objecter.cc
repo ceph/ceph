@@ -2361,7 +2361,7 @@ void Objecter::blacklist_self(bool set)
   ss << messenger->get_myaddr();
   cmd.push_back("\"addr\":\"" + ss.str() + "\"");
 
-  MMonCommand *m = new MMonCommand(monc->get_fsid(), last_seen_osdmap_version);
+  MMonCommand *m = new MMonCommand(monc->get_fsid());
   m->cmd = cmd;
 
   monc->send_mon_message(m);

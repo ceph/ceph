@@ -726,8 +726,6 @@ int MonClient::wait_auth_rotating(double timeout)
 
 void MonClient::_send_command(MonCommand *r)
 {
-  version_t last_seen_version = 0;
-
   if (r->target_rank >= 0 &&
       r->target_rank != monmap.get_rank(cur_mon)) {
     ldout(cct, 10) << "_send_command " << r->tid << " " << r->cmd
@@ -759,7 +757,7 @@ void MonClient::_send_command(MonCommand *r)
   }
 
   ldout(cct, 10) << "_send_command " << r->tid << " " << r->cmd << dendl;
-  MMonCommand *m = new MMonCommand(monmap.fsid, last_seen_version);
+  MMonCommand *m = new MMonCommand(monmap.fsid);
   m->set_tid(r->tid);
   m->cmd = r->cmd;
   m->set_data(r->inbl);
