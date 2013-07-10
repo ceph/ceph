@@ -210,6 +210,13 @@ public:
    * @returns The service's name.
    */
   string get_service_name() { return service_name; }
+
+  /**
+   * Get the store prefixes we utilize
+   */
+  virtual void get_store_prefixes(set<string>& s) {
+    s.insert(service_name);
+  }
   
   // i implement and you ignore
   /**
