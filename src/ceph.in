@@ -204,15 +204,6 @@ def do_help(parser, args, help_all = False):
 
     return 0
 
-
-def descsort(sh1, sh2):
-    """
-    sort descriptors by prefixes, defined as the concatenation of all simple
-    strings in the descriptor; this works out to just the leading strings.
-    """
-    return cmp(concise_sig(sh1['sig']), concise_sig(sh2['sig']))
-
-
 DONTSPLIT = string.letters + '{[<>]}'
 
 def wrap(s, width, indent):
