@@ -530,12 +530,6 @@ private:
    * trimming; false otherwise.
    */
   bool trimming;
-  /**
-   * If we have disabled trimming our state, this variable should have a
-   * value greater than zero, corresponding to the version we had at the time
-   * we disabled the trim.
-   */
-  version_t trim_disabled_version;
 
   /**
    * @defgroup Paxos_h_callbacks Callback classes.
@@ -1013,8 +1007,7 @@ public:
 		   lease_timeout_event(0),
 		   accept_timeout_event(0),
 		   clock_drift_warned(0),
-		   trimming(false),
-		   trim_disabled_version(0) { }
+		   trimming(false) { }
 
   const string get_name() const {
     return paxos_name;
@@ -1022,8 +1015,7 @@ public:
 
   void dispatch(PaxosServiceMessage *m);
 
-  void reapply_all_versions();
-  void apply_version(MonitorDBStore::Transaction &tx, version_t v);
+  void read_and_prepare_transactions(MonitorDBStore::Transaction *tx, version_t from, version_t last);
 
   void init();
   /**
@@ -1137,26 +1129,6 @@ public:
   void trim();
 
   /**
-   * Disable trimming
-   *
-   * This is required by the Monitor's store synchronization mechanisms
-   * to guarantee a consistent store state.
-   */
-  void trim_disable() {
-    if (!trim_disabled_version)
-      trim_disabled_version = get_version();
-  }
-  /**
-   * Enable trimming
-   */
-  void trim_enable();
-  /**
-   * Check if trimming has been disabled
-   *
-   * @returns true if trim has been disabled; false otherwise.
-   */
-  bool is_trim_disabled() { return (trim_disabled_version > 0); }
-  /**
    * Check if we should trim.
    *
    * If trimming is disabled, we must take that into consideration and only
@@ -1165,18 +1137,12 @@ public:
    * @returns true if we should trim; false otherwise.
    */
   bool should_trim() {
-    int available_versions = (get_version() - get_first_committed());
-    int maximum_versions =
-      (g_conf->paxos_max_join_drift + g_conf->paxos_trim_min);
+    int available_versions = get_version() - get_first_committed();
+    int maximum_versions = g_conf->paxos_min + g_conf->paxos_trim_min;
 
     if (trimming || (available_versions <= maximum_versions))
       return false;
 
-    if (trim_disabled_version > 0) {
-      int disabled_versions = (get_version() - trim_disabled_version);
-      if (disabled_versions < g_conf->paxos_trim_disabled_max_versions)
-	return false;
-    }
     return true;
   }
  
