@@ -1566,9 +1566,9 @@ class Object(object):
         return self.ioctx.get_xattr(self.key, xattr_name)
 
     @set_object_locator
-    def get_xattrs(self, xattr_name):
+    def get_xattrs(self):
         self.require_object_exists()
-        return self.ioctx.get_xattrs(self.key, xattr_name)
+        return self.ioctx.get_xattrs(self.key)
 
     @set_object_locator
     def set_xattr(self, xattr_name, xattr_value):
