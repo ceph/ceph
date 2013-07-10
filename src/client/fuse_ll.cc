@@ -258,13 +258,15 @@ static void fuse_ll_readlink(fuse_req_t req, fuse_ino_t ino)
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
   Inode *in = cfuse->iget(ino);
-  const char *value;
+  char buf[PATH_MAX + 1];  // leave room for a null terminator
 
-  int r = cfuse->client->ll_readlink(in, &value, ctx->uid, ctx->gid);
-  if (r == 0) 
-    fuse_reply_readlink(req, value);
-  else
+  int r = cfuse->client->ll_readlink(in, buf, sizeof(buf) - 1, ctx->uid, ctx->gid);
+  if (r >= 0) {
+    buf[r] = '\0';
+    fuse_reply_readlink(req, buf);
+  } else {
     fuse_reply_err(req, -r);
+  }
 
   cfuse->iput(in); // iput required
 }
