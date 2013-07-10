@@ -617,7 +617,11 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
       r = -ENOENT;
       goto done;
     }
-    ds << auth.key;
+    if (f) {
+      auth.key.encode_formatted("auth", f.get(), rdata);
+    } else {
+      auth.key.encode_plaintext(rdata);
+    }
     r = 0;
   } else if (prefix == "auth list") {
     mon->key_server.list_secrets(ss, ds);
