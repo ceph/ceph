@@ -1338,7 +1338,14 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
   boost::scoped_ptr<Formatter> f(new_formatter(format));
 
   if (prefix == "pg stat") {
-    ds << pg_map;
+    if (f) {
+      f->open_object_section("pg_map");
+      pg_map.dump(f.get());
+      f->close_section();
+      f->flush(ds);
+    } else {
+      ds << pg_map;
+    }
     rdata.append(ds);
     r = 0;
   } else if (prefix == "pg getmap") {
@@ -1425,9 +1432,29 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     }
     pg_t mpgid = mon->osdmon()->osdmap.raw_pg_to_pg(pgid);
     mon->osdmon()->osdmap.pg_to_up_acting_osds(pgid, up, acting);
-    ds << "osdmap e" << mon->osdmon()->osdmap.get_epoch()
-       << " pg " << pgid << " (" << mpgid << ")"
-       << " -> up " << up << " acting " << acting;
+    if (f) {
+      f->open_object_section("pg_map");
+      f->dump_stream("epoch") << mon->osdmon()->osdmap.get_epoch();
+      f->dump_stream("pgid") << pgid;
+      f->dump_stream("mpgid") << mpgid;
+
+      f->open_array_section("up");
+      for (vector<int>::iterator it = up.begin(); it != up.end(); ++it)
+	f->dump_int("up_osd", *it);
+      f->close_section();
+
+      f->open_array_section("acting");
+      for (vector<int>::iterator it = acting.begin(); it != acting.end(); ++it)
+	f->dump_int("acting_osd", *it);
+      f->close_section();
+
+      f->close_section();
+      f->flush(ds);
+    } else {
+      ds << "osdmap e" << mon->osdmon()->osdmap.get_epoch()
+	 << " pg " << pgid << " (" << mpgid << ")"
+	 << " -> up " << up << " acting " << acting;
+    }
     r = 0;
   } else if (prefix == "pg scrub" || 
 	     prefix == "pg repair" || 
