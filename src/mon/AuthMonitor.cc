@@ -558,7 +558,8 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
   EntityName entity;
   if (!entity_name.empty() && !entity.from_str(entity_name)) {
     ss << "invalid entity_auth " << entity_name;
-    r = -EINVAL;
+    mon->reply_command(m, -EINVAL, ss.str(), get_last_committed());
+    return true;
   }
 
   string format;
