@@ -64,12 +64,12 @@ void _usage()
   cerr << "  object unlink              unlink object from bucket index\n";
   cerr << "  region get                 show region info\n";
   cerr << "  regions list               list all regions set on this cluster\n";
-  cerr << "  region set                 set region info\n";
+  cerr << "  region set                 set region info (requires infile)\n";
   cerr << "  region default             set default region\n";
   cerr << "  region-map get             show region-map\n";
-  cerr << "  region-map set             set region-map\n";
+  cerr << "  region-map set             set region-map (requires infile)\n";
   cerr << "  zone get                   show zone cluster params\n";
-  cerr << "  zone set                   set zone cluster params\n";
+  cerr << "  zone set                   set zone cluster params (requires infile)\n";
   cerr << "  zone list                  list all zones set on this cluster\n";
   cerr << "  pool add                   add an existing pool for data placement\n";
   cerr << "  pool rm                    remove an existing pool from data placement set\n";
@@ -97,7 +97,7 @@ void _usage()
   cerr << "  datalog trim               trim data log\n";
   cerr << "  opstate list               list stateful operations entries (use client_id,\n";
   cerr << "                             op_id, object)\n";
-  cerr << "  opstate set                set state on an entry (use client_id, op_id, object)\n";
+  cerr << "  opstate set                set state on an entry (use client_id, op_id, object, state)\n";
   cerr << "  opstate renew              renew state on an entry (use client_id, op_id, object)\n";
   cerr << "  opstate rm                 remove entry (use client_id, op_id, object)\n";
   cerr << "  replicalog get             get replica metadata log entry\n";
@@ -141,6 +141,8 @@ void _usage()
   cerr << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
   cerr << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
   cerr << "                             in one of the numeric field\n";
+  cerr << "   --infile                  specify a file to read in when setting data\n";
+  cerr << "   --state=<state string>    specify a state for the opstate set command\n";
   cerr << "   --replica-log-type        replica log type (metadata, data, bucket), required for\n";
   cerr << "                             replica log operations\n";
   cerr << "   --categories=<list>       comma separated list of categories, used in usage show\n";

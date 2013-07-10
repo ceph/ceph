@@ -25,12 +25,12 @@
     object unlink              unlink object from bucket index
     region get                 show region info
     regions list               list all regions set on this cluster
-    region set                 set region info
+    region set                 set region info (requires infile)
     region default             set default region
     region-map get             show region-map
-    region-map set             set region-map
+    region-map set             set region-map (requires infile)
     zone get                   show zone cluster params
-    zone set                   set zone cluster params
+    zone set                   set zone cluster params (requires infile)
     zone list                  list all zones set on this cluster
     pool add                   add an existing pool for data placement
     pool rm                    remove an existing pool from data placement set
@@ -58,7 +58,7 @@
     datalog trim               trim data log
     opstate list               list stateful operations entries (use client_id,
                                op_id, object)
-    opstate set                set state on an entry (use client_id, op_id, object)
+    opstate set                set state on an entry (use client_id, op_id, object, state)
     opstate renew              renew state on an entry (use client_id, op_id, object)
     opstate rm                 remove entry (use client_id, op_id, object)
     replicalog get             get replica metadata log entry
@@ -102,6 +102,8 @@
      --show-log-sum=<flag>     enable/disable dump of log summation on log show
      --skip-zero-entries       log show only dumps entries that don't have zero value
                                in one of the numeric field
+     --infile                  specify a file to read in when setting data
+     --state=<state string>    specify a state for the opstate set command
      --replica-log-type        replica log type (metadata, data, bucket), required for
                                replica log operations
      --categories=<list>       comma separated list of categories, used in usage show
