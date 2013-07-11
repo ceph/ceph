@@ -34,6 +34,7 @@
 #include "events/ETableClient.h"
 #include "events/ETableServer.h"
 
+#include "include/stringify.h"
 
 #include "LogSegment.h"
 
@@ -2041,7 +2042,7 @@ void rename_rollback::drec::dump(Formatter *f) const
   case S_IFDIR:
     type_string = "directory"; break;
   default:
-    assert (0 == "unknown d_type!");
+    type_string = "UNKNOWN-" + stringify((int)type); break;
   }
   f->dump_string("remote dtype", type_string);
   f->dump_stream("old ctime") << old_ctime;
