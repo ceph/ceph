@@ -1,0 +1,7 @@
+- workunit:
+    branch: cuttlefish
+    clients:
+      all:
+        - cephtool
+        - mon/pool_ops.sh
+
