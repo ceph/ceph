@@ -395,7 +395,7 @@ def find_cmd_target(childargs):
     right daemon.
     Returns ('osd', osdid), ('pg', pgid), or ('mon', '')
     """
-    sig = parse_funcsig(['tell', {'name':'target','type':'CephName'}])
+    sig = parse_funcsig(['tell', {'name':'target', 'type':'CephName'}])
     try:
         valid_dict = validate(childargs, sig, partial=True)
         if len(valid_dict) == 2:
@@ -405,7 +405,7 @@ def find_cmd_target(childargs):
     except ArgumentError:
         pass
 
-    sig = parse_funcsig(['pg', {'name':'pgid','type':'CephPgid'}])
+    sig = parse_funcsig(['pg', {'name':'pgid', 'type':'CephPgid'}])
     try:
         valid_dict = validate(childargs, sig, partial=True)
         if len(valid_dict) == 2:
@@ -582,7 +582,7 @@ def main():
     # implement -w/--watch_*
     # This is ugly, but Namespace() isn't quite rich enough.
     level = ''
-    for k,v in parsed_args._get_kwargs():
+    for k, v in parsed_args._get_kwargs():
         if k.startswith('watch') and v:
             if k == 'watch':
                 level = 'info'
