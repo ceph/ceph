@@ -310,11 +310,13 @@ class CephName(CephArgtype):
 
     Also accept '*'
     """
+    def __init__(self):
+        self.nametype = None
+        self.nameid = None
+
     def valid(self, s, partial=False):
         if s == '*':
             self.val = s
-            self.nametype = None
-            self.nameid = None
             return
         if s.find('.') == -1:
             raise ArgumentFormat('CephName: no . in {0}'.format(s))
@@ -341,11 +343,13 @@ class CephOsdName(CephArgtype):
 
     osd.<id>, or <id>, or *, where id is a base10 int
     """
+    def __init__(self):
+        self.nametype = None
+        self.nameid = None
+
     def valid(self, s, partial=False):
         if s == '*':
             self.val = s
-            self.nametype = None
-            self.nameid = None
             return
         if s.find('.') != -1:
             t, i = s.split('.')
