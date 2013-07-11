@@ -366,6 +366,7 @@ fi
 %{_bindir}/cephfs
 %{_bindir}/ceph-conf
 %{_bindir}/ceph-clsinfo
+%{_bindir}/ceph-rest-api
 %{_bindir}/crushtool
 %{_bindir}/monmaptool
 %{_bindir}/osdmaptool
