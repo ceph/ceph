@@ -235,10 +235,16 @@ public:
 void Monitor::do_admin_command(string command, string args, ostream& ss)
 {
   Mutex::Locker l(lock);
+
+  map<string, cmd_vartype> cmdmap;
+  string format;
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  boost::scoped_ptr<Formatter> f(new_formatter(format));
+
   if (command == "mon_status")
-    _mon_status(ss);
+    _mon_status(f.get(), ss);
   else if (command == "quorum_status")
-    _quorum_status(ss);
+    _quorum_status(f.get(), ss);
   else if (command == "sync_force") {
     if (args != "--yes-i-really-mean-it") {
       ss << "are you SURE? this will mean the monitor store will be erased "
@@ -246,7 +252,7 @@ void Monitor::do_admin_command(string command, string args, ostream& ss)
             "'--yes-i-really-mean-it' if you really do.";
       return;
     }
-    sync_force(ss);
+    sync_force(f.get(), ss);
   } else if (command.find("add_bootstrap_peer_hint") == 0)
     _add_bootstrap_peer_hint(command, args, ss);
   else
@@ -1529,97 +1535,125 @@ bool Monitor::_allowed_command(MonSession *s, map<string, cmd_vartype>& cmd)
   return retval;
 }
 
-void Monitor::sync_force(ostream& ss)
+void Monitor::sync_force(Formatter *f, ostream& ss)
 {
+  bool free_formatter = false;
+
+  if (!f) {
+    // louzy/lazy hack: default to json if no formatter has been defined
+    f = new JSONFormatter();
+    free_formatter = true;
+  }
+
   MonitorDBStore::Transaction tx;
   tx.put("mon_sync", "force_sync", 1);
   store->apply_transaction(tx);
 
-  JSONFormatter jf(true);
-  jf.open_object_section("sync_force");
-  jf.dump_int("ret", 0);
-  jf.dump_stream("msg") << "forcing store sync the next time the monitor starts";
-  jf.close_section();
-  jf.flush(ss);
+  f->open_object_section("sync_force");
+  f->dump_int("ret", 0);
+  f->dump_stream("msg") << "forcing store sync the next time the monitor starts";
+  f->close_section(); // sync_force
+  f->flush(ss);
+  if (free_formatter)
+    delete f;
 }
 
-void Monitor::_quorum_status(ostream& ss)
+void Monitor::_quorum_status(Formatter *f, ostream& ss)
 {
-  JSONFormatter jf(true);
-  jf.open_object_section("quorum_status");
-  jf.dump_int("election_epoch", get_epoch());
-  
-  jf.open_array_section("quorum");
+  bool free_formatter = false;
+
+  if (!f) {
+    // louzy/lazy hack: default to json if no formatter has been defined
+    f = new JSONFormatter();
+    free_formatter = true;
+  }
+  f->open_object_section("quorum_status");
+  f->dump_int("election_epoch", get_epoch());
+
+  f->open_array_section("quorum");
   for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
-    jf.dump_int("mon", *p);
-  jf.close_section();
+    f->dump_int("mon", *p);
+  f->close_section(); // quorum
 
-  jf.open_object_section("monmap");
-  monmap->dump(&jf);
-  jf.close_section();
+  f->open_object_section("monmap");
+  monmap->dump(f);
+  f->close_section(); // monmap
 
-  jf.close_section();
-  jf.flush(ss);
+  f->close_section(); // quorum_status
+  f->flush(ss);
+  if (free_formatter)
+    delete f;
 }
 
-void Monitor::_mon_status(ostream& ss)
+void Monitor::_mon_status(Formatter *f, ostream& ss)
 {
-  JSONFormatter jf(true);
-  jf.open_object_section("mon_status");
-  jf.dump_string("name", name);
-  jf.dump_int("rank", rank);
-  jf.dump_string("state", get_state_name());
-  jf.dump_int("election_epoch", get_epoch());
+  bool free_formatter = false;
 
-  jf.open_array_section("quorum");
-  for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
-    jf.dump_int("mon", *p);
-  jf.close_section();
+  if (!f) {
+    // louzy/lazy hack: default to json if no formatter has been defined
+    f = new JSONFormatter();
+    free_formatter = true;
+  }
 
-  jf.open_array_section("outside_quorum");
+  f->open_object_section("mon_status");
+  f->dump_string("name", name);
+  f->dump_int("rank", rank);
+  f->dump_string("state", get_state_name());
+  f->dump_int("election_epoch", get_epoch());
+
+  f->open_array_section("quorum");
+  for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p) {
+    f->dump_int("mon", *p);
+  }
+
+  f->close_section(); // quorum
+
+  f->open_array_section("outside_quorum");
   for (set<string>::iterator p = outside_quorum.begin(); p != outside_quorum.end(); ++p)
-    jf.dump_string("mon", *p);
-  jf.close_section();
+    f->dump_string("mon", *p);
+  f->close_section(); // outside_quorum
 
-  jf.open_array_section("extra_probe_peers");
+  f->open_array_section("extra_probe_peers");
   for (set<entity_addr_t>::iterator p = extra_probe_peers.begin();
        p != extra_probe_peers.end();
        ++p)
-    jf.dump_stream("peer") << *p;
-  jf.close_section();
+    f->dump_stream("peer") << *p;
+  f->close_section(); // extra_probe_peers
 
-  jf.open_array_section("sync_provider");
+  f->open_array_section("sync_provider");
   for (map<uint64_t,SyncProvider>::const_iterator p = sync_providers.begin();
        p != sync_providers.end();
        ++p) {
-    jf.dump_unsigned("cookie", p->second.cookie);
-    jf.dump_stream("entity") << p->second.entity;
-    jf.dump_stream("timeout") << p->second.timeout;
-    jf.dump_unsigned("last_committed", p->second.last_committed);
-    jf.dump_stream("last_key") << p->second.last_key;
+    f->dump_unsigned("cookie", p->second.cookie);
+    f->dump_stream("entity") << p->second.entity;
+    f->dump_stream("timeout") << p->second.timeout;
+    f->dump_unsigned("last_committed", p->second.last_committed);
+    f->dump_stream("last_key") << p->second.last_key;
   }
-  jf.close_section();
+  f->close_section();
 
   if (is_synchronizing()) {
-    jf.open_object_section("sync");
-    jf.dump_stream("sync_provider") << sync_provider;
-    jf.dump_unsigned("sync_cookie", sync_cookie);
-    jf.dump_unsigned("sync_start_version", sync_start_version);
-    jf.close_section();
+    f->open_object_section("sync");
+    f->dump_stream("sync_provider") << sync_provider;
+    f->dump_unsigned("sync_cookie", sync_cookie);
+    f->dump_unsigned("sync_start_version", sync_start_version);
+    f->close_section();
   }
 
   if (g_conf->mon_sync_provider_kill_at > 0)
-    jf.dump_int("provider_kill_at", g_conf->mon_sync_provider_kill_at);
+    f->dump_int("provider_kill_at", g_conf->mon_sync_provider_kill_at);
   if (g_conf->mon_sync_requester_kill_at > 0)
-    jf.dump_int("requester_kill_at", g_conf->mon_sync_requester_kill_at);
+    f->dump_int("requester_kill_at", g_conf->mon_sync_requester_kill_at);
 
-  jf.open_object_section("monmap");
-  monmap->dump(&jf);
-  jf.close_section();
+  f->open_object_section("monmap");
+  monmap->dump(f);
+  f->close_section();
 
-  jf.close_section();
-  
-  jf.flush(ss);
+  f->close_section(); // mon_status
+
+  f->flush(ss);
+  if (free_formatter)
+    delete f;
 }
 
 void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
@@ -2088,7 +2122,7 @@ void Monitor::handle_command(MMonCommand *m)
       waitfor_quorum.push_back(new C_RetryMessage(this, m));
       return;
     }
-    _quorum_status(ds);
+    _quorum_status(f.get(), ds);
     rdata.append(ds);
     rs = "";
     r = 0;
@@ -2098,7 +2132,7 @@ void Monitor::handle_command(MMonCommand *m)
       rs = "access denied";
       goto out;
     }
-    _mon_status(ds);
+    _mon_status(f.get(), ds);
     rdata.append(ds);
     rs = "";
     r = 0;
@@ -2114,7 +2148,7 @@ void Monitor::handle_command(MMonCommand *m)
 	   "--i-know-what-i-am-doing' if you really do.";
       goto out;
     }
-    sync_force(ds);
+    sync_force(f.get(), ds);
     rs = ds.str();
     r = 0;
   } else if (prefix == "heap") {
