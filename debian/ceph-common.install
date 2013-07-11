@@ -11,6 +11,7 @@ usr/bin/rbd
 usr/share/man/man8/ceph-authtool.8
 usr/share/man/man8/ceph-conf.8
 usr/share/man/man8/ceph-dencoder.8
+usr/share/man/man8/ceph-rest-api.8
 usr/share/man/man8/ceph-syn.8
 usr/share/man/man8/ceph.8
 usr/share/man/man8/rados.8

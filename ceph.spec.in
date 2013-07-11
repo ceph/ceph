@@ -378,6 +378,7 @@ fi
 %{_bindir}/ceph-osd
 %{_bindir}/ceph-rbdnamer
 %{_bindir}/ceph-dencoder
+%{_bindir}/ceph-rest-api
 %{_bindir}/librados-config
 %{_bindir}/rados
 %{_bindir}/rbd
@@ -423,6 +424,7 @@ fi
 %{_mandir}/man8/ceph-run.8*
 %{_mandir}/man8/ceph-syn.8*
 %{_mandir}/man8/ceph-dencoder.8*
+%{_mandir}/man8/ceph-rest-api.8*
 %{_mandir}/man8/crushtool.8*
 %{_mandir}/man8/osdmaptool.8*
 %{_mandir}/man8/monmaptool.8*
