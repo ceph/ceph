@@ -521,7 +521,7 @@ class argdesc(object):
                     v = 'N'
                 r += '{0}={1}, '.format(k,v)
         for (k,v) in self.typeargs.iteritems():
-                r += '{0}={1}, '.format(k,v)
+            r += '{0}={1}, '.format(k,v)
         return r[:-2] + ')'
 
     def __str__(self):
