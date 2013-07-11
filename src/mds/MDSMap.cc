@@ -100,7 +100,7 @@ void MDSMap::dump(Formatter *f) const
   f->open_object_section("up");
   for (map<int32_t,uint64_t>::const_iterator p = up.begin(); p != up.end(); ++p) {
     char s[10];
-    sprintf(s, "%d", p->first);
+    sprintf(s, "mds_%d", p->first);
     f->dump_int(s, p->second);
   }
   f->close_section();
@@ -115,7 +115,7 @@ void MDSMap::dump(Formatter *f) const
   f->open_object_section("info");
   for (map<uint64_t,mds_info_t>::const_iterator p = mds_info.begin(); p != mds_info.end(); ++p) {
     char s[10];
-    sprintf(s, "%llu", (long long unsigned)p->first);
+    sprintf(s, "gid_%llu", (long long unsigned)p->first);
     f->open_object_section(s);
     p->second.dump(f);
     f->close_section();
