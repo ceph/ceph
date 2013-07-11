@@ -277,7 +277,6 @@ class MonitorDBStore
       return true;
     }
 
-    virtual void _get_chunk(Transaction &tx) = 0;
     virtual bool _is_valid() = 0;
 
   public:
@@ -292,9 +291,10 @@ class MonitorDBStore
     virtual bool has_next_chunk() {
       return !done && _is_valid();
     }
-    virtual void get_chunk(bufferlist &bl) {
+    virtual void get_chunk_tx(Transaction &tx) = 0;
+    virtual void get_chunk(bufferlist& bl) {
       Transaction tx;
-      _get_chunk(tx);
+      get_chunk_tx(tx);
       if (!tx.empty())
 	tx.encode(bl);
     }
@@ -325,7 +325,7 @@ class MonitorDBStore
      *			    differ from the one passed on to the function)
      * @param last_key[out] Last key in the chunk
      */
-    virtual void _get_chunk(Transaction &tx) {
+    virtual void get_chunk_tx(Transaction &tx) {
       assert(done == false);
       assert(iter->valid() == true);
 
@@ -371,7 +371,7 @@ class MonitorDBStore
     virtual ~SinglePrefixStoreIteratorImpl() { }
 
   private:
-    virtual void _get_chunk(Transaction &tx) {
+    virtual void get_chunk_tx(Transaction &tx) {
       assert(done == false);
       assert(iter->valid() == true);
 

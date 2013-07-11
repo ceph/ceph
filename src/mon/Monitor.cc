@@ -1036,6 +1036,22 @@ void Monitor::sync_finish(entity_inst_t &entity, bool abort)
   finish_contexts(g_ceph_context, maybe_wait_for_quorum);
 }
 
+void Monitor::_trim_enable()
+{
+  Mutex::Locker l(trim_lock);
+  // even if we are no longer the leader, we should re-enable trim if
+  // we have disabled it in the past. It doesn't mean we are going to
+  // do anything about it, but if we happen to become the leader
+  // sometime down the future, we sure want to have the trim enabled.
+  if (trim_timeouts.empty()) {
+    dout(10) << __func__ << " enabling" << dendl;
+    paxos->trim_enable();
+  } else {
+    dout(10) << __func__ << " NOT enabling" << dendl;
+  }
+  trim_enable_timer = NULL;
+}
+
 void Monitor::handle_sync_finish(MMonSync *m)
 {
   dout(10) << __func__ << " " << *m << dendl;
@@ -1214,14 +1230,30 @@ void Monitor::handle_sync_start_chunks(MMonSync *m)
   }
 
   SyncEntity sync = get_sync_entity(other, this);
-  sync->version = paxos->get_version();
 
   if (!m->last_key.first.empty() && !m->last_key.second.empty()) {
-    sync->last_received_key = m->last_key;
-    dout(10) << __func__ << " set last received key to ("
-	     << sync->last_received_key.first << ","
-	     << sync->last_received_key.second << ")" << dendl;
+    if (m->version == 0) {
+      // uh-oh; we can't do this safely without a proper version marker
+      // because we don't know what paxos commits they got from the
+      // previous keys (if any!), and we may miss some.
+      dout(1) << __func__ << " got mid-sync start_chunks from " << other
+	      << " without version marker; ignoring last_received_key marker" << dendl;
+      sync->version = paxos->get_version();
+    } else {
+      sync->version = m->version;
+      sync->last_received_key = m->last_key;
+      dout(10) << __func__ << " set last received key to ("
+	       << sync->last_received_key.first << ","
+	       << sync->last_received_key.second << ")" << dendl;
+    }
+  } else {
+    sync->version = paxos->get_version();
   }
+  dout(10) << __func__ << " version " << sync->version
+	   << " last received key ("
+	   << sync->last_received_key.first << ","
+	   << sync->last_received_key.second << ")"
+	   << dendl;
 
   sync->sync_init();
 
@@ -1268,8 +1300,27 @@ void Monitor::sync_send_chunks(SyncEntity sync)
   assert(sync->synchronizer->has_next_chunk());
 
   MMonSync *msg = new MMonSync(MMonSync::OP_CHUNK);
+  MonitorDBStore::Transaction tx;
 
-  sync->synchronizer->get_chunk(msg->chunk_bl);
+  // include any recent paxos commits
+  if (sync->version < paxos->get_version()) {
+    while (sync->version < paxos->get_version()) {  // FIXME: limit size?
+      sync->version++;
+      dout(10) << " including paxos version " << sync->version << dendl;
+      bufferlist bl;
+      store->get(paxos->get_name(), sync->version, bl);
+      tx.put(paxos->get_name(), sync->version, bl);
+    }
+    dout(10) << " included paxos through " << sync->version << dendl;
+    msg->version = sync->version;
+  }
+
+  // get next bunch of commits in the remaining space
+  sync->synchronizer->get_chunk_tx(tx);
+
+  if (!tx.empty())
+    tx.encode(msg->chunk_bl);
+
   msg->last_key = sync->synchronizer->get_last_key();
   dout(10) << __func__ << " last key ("
 	   << msg->last_key.first << ","
@@ -1517,8 +1568,10 @@ void Monitor::sync_start_chunks(SyncEntity provider)
 			g_conf->mon_sync_timeout);
   MMonSync *msg = new MMonSync(MMonSync::OP_START_CHUNKS);
   pair<string,string> last_key = provider->last_received_key;
-  if (!last_key.first.empty() && !last_key.second.empty())
+  if (!last_key.first.empty() && !last_key.second.empty()) {
     msg->last_key = last_key;
+    msg->version = store->get("paxos", "last_committed");
+  }
 
   assert(g_conf->mon_sync_requester_kill_at != 4);
   messenger->send_message(msg, provider->entity);
