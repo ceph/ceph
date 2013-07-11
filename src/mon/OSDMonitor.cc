@@ -3163,6 +3163,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     if (!cmd_getval(g_ceph_context, cmdmap, "sure", sure) || sure != "--yes-i-really-mean-it") {
       ss << "are you SURE?  this might mean real, permanent data loss.  pass "
 	    "--yes-i-really-mean-it if you really do.";
+      err = -EPERM;
+      goto reply;
     } else if (!osdmap.exists(id) || !osdmap.is_down(id)) {
       ss << "osd." << id << " is not down or doesn't exist";
     } else {
