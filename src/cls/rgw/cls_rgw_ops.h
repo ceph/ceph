@@ -77,7 +77,7 @@ struct rgw_cls_obj_complete_op
 
   list<string> remove_objs;
 
-  rgw_cls_obj_complete_op() : log_op(false) {}
+  rgw_cls_obj_complete_op() : op(CLS_RGW_OP_ADD), log_op(false) {}
 
   void encode(bufferlist &bl) const {
     ENCODE_START(6, 3, bl);
