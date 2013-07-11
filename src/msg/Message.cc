@@ -190,7 +190,15 @@ void Message::encode(uint64_t features, bool datacrc)
 #ifdef ENCODE_DUMP
     bufferlist bl;
     ::encode(get_header(), bl);
-    ::encode(get_footer(), bl);
+
+    // dump the old footer format
+    ceph_msg_footer_old old_footer;
+    old_footer.front_crc = footer.front_crc;
+    old_footer.middle_crc = footer.middle_crc;
+    old_footer.data_crc = footer.data_crc;
+    old_footer.flags = footer.flags;
+    ::encode(old_footer, bl);
+
     ::encode(get_payload(), bl);
     ::encode(get_middle(), bl);
     ::encode(get_data(), bl);
