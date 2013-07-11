@@ -70,7 +70,7 @@ struct rename_rollback {
     char remote_d_type;
     utime_t old_ctime;
     
-    drec() : remote_d_type(S_IFREG) {}
+    drec() : remote_d_type((char)S_IFREG) {}
 
     void encode(bufferlist& bl) const;
     void decode(bufferlist::iterator& bl);
