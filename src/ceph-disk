@@ -224,6 +224,29 @@ def get_dev_relpath(name):
     """
     return name.replace('!', '/')
 
+
+def get_partition_dev(dev, pnum):
+    """
+    get the device name for a partition
+
+    assume that partitions are named like the base dev, with a number, and optionally
+    some intervening characters (like 'p').  e.g.,
+
+       sda 1 -> sda1
+       cciss/c0d1 1 -> cciss!c0d1p1
+    """
+    name = get_dev_name(os.path.realpath(dev))
+    partname = None
+    for f in os.listdir(os.path.join('/sys/block', name)):
+        if f.startswith(name) and f.endswith(str(pnum)):
+            # we want the shortest name that starts with the base name and ends with the partition number
+            if not partname or len(f) < len(partname):
+                partname = f
+    if partname:
+        return get_dev_path(partname)
+    else:
+        raise Error('partition %d for %s does not appear to exist' % (pnum, dev))
+
 def list_all_partitions():
     """
     Return a list of devices and partitions
@@ -1016,7 +1039,7 @@ def prepare_dev(
         except subprocess.CalledProcessError as e:
             raise Error(e)
 
-        rawdev = '{data}1'.format(data=data)
+        rawdev = get_partition_dev(data, 1)
 
     dev = None
     if osd_dm_keypath:
