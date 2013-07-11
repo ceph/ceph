@@ -227,7 +227,6 @@ ceph report | grep osd_stats
 ceph status
 ceph -s
 # ceph sync force
-ceph sync status | grep paxos_version
 
 ceph tell osd.0 version
 expect_false ceph tell osd.9999 version 
