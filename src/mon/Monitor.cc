@@ -1951,7 +1951,14 @@ void Monitor::handle_command(MMonCommand *m)
 
   if (prefix == "fsid") {
     ds << monmap->fsid;
-    rdata.append(ds);
+    if (f) {
+      f->open_object_section("fsid");
+      f->dump_stream("fsid") << monmap->fsid;
+      f->close_section();
+      f->flush(rdata);
+    } else {
+      rdata.append(ds);
+    }
     reply_command(m, 0, "", rdata, 0);
     return;
   }
