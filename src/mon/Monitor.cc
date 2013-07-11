@@ -1030,7 +1030,8 @@ void Monitor::handle_sync_get_chunk(MMonSync *m)
   SyncProvider& sp = sync_providers[m->cookie];
   sp.reset_timeout(g_ceph_context, g_conf->mon_sync_timeout * 2);
 
-  if (sp.last_committed < paxos->get_first_committed()) {
+  if (sp.last_committed < paxos->get_first_committed() &&
+      paxos->get_first_committed() >= 1) {
     dout(10) << __func__ << " sync requester fell behind paxos, their lc " << sp.last_committed
 	     << " < our fc " << paxos->get_first_committed() << dendl;
     sync_providers.erase(m->cookie);
