@@ -525,7 +525,7 @@ int main(int argc, const char **argv)
 
   if (force_sync) {
     derr << "flagging a forced sync ..." << dendl;
-    mon->sync_force(cerr);
+    mon->sync_force(NULL, cerr);
   }
 
   err = mon->preinit();

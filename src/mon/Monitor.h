@@ -332,7 +332,7 @@ public:
   /**
    * force a sync on next mon restart
    */
-  void sync_force(ostream& ss);
+  void sync_force(Formatter *f, ostream& ss);
 
 private:
   /**
@@ -570,8 +570,8 @@ public:
   void handle_subscribe(MMonSubscribe *m);
   void handle_mon_get_map(MMonGetMap *m);
   bool _allowed_command(MonSession *s, map<std::string, cmd_vartype>& cmd);
-  void _mon_status(ostream& ss);
-  void _quorum_status(ostream& ss);
+  void _mon_status(Formatter *f, ostream& ss);
+  void _quorum_status(Formatter *f, ostream& ss);
   void _add_bootstrap_peer_hint(string cmd, string args, ostream& ss);
   void handle_command(class MMonCommand *m);
   void handle_route(MRoute *m);
