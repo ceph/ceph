@@ -370,7 +370,7 @@ class CephChoices(CephArgtype):
     Set of string literals; init with valid choices
     """
     def __init__(self, strings='', **kwargs):
-        self.strings=strings.split('|')
+        self.strings = strings.split('|')
 
     def valid(self, s, partial=False):
         if not partial:
