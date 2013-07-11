@@ -512,16 +512,16 @@ class argdesc(object):
     def __repr__(self):
         r = 'argdesc(' + str(self.t) + ', '
         internals = ['N', 'typeargs', 'instance', 't']
-        for (k,v) in self.__dict__.iteritems():
+        for (k, v) in self.__dict__.iteritems():
             if k.startswith('__') or k in internals:
                 pass
             else:
                 # undo modification from __init__
                 if k == 'n' and self.N:
                     v = 'N'
-                r += '{0}={1}, '.format(k,v)
-        for (k,v) in self.typeargs.iteritems():
-            r += '{0}={1}, '.format(k,v)
+                r += '{0}={1}, '.format(k, v)
+        for (k, v) in self.typeargs.iteritems():
+            r += '{0}={1}, '.format(k, v)
         return r[:-2] + ')'
 
     def __str__(self):
