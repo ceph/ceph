@@ -1378,6 +1378,9 @@ void Pipe::reader()
 		<< ", discarding" << dendl;
 	msgr->dispatch_throttle_release(m->get_dispatch_throttle_size());
 	m->put();
+	if (connection_state->has_feature(CEPH_FEATURE_RECONNECT_SEQ) &&
+	    msgr->cct->_conf->ms_die_on_old_message)
+	  assert(0 == "old msgs despite reconnect_seq feature");
 	continue;
       }
 
