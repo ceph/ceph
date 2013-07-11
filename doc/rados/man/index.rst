@@ -6,6 +6,7 @@
    :maxdepth: 1
 
    ../../man/8/ceph.rst
+   ../../man/8/ceph-rest-api.rst
    ../../man/8/ceph-authtool.rst
    ../../man/8/ceph-clsinfo.rst
    ../../man/8/ceph-conf.rst
