@@ -710,11 +710,12 @@ def main():
                 return ret
 
         # this assumes outs never has useful command output, only status
-        if outs:
-            if compat and ret == 0:
+        if compat:
+            if ret == 0:
                 # old cli/mon would send status string to stdout on non-error
                 print outs
-            else:
+        else:
+            if outs:
                 print >> sys.stderr, prefix + outs
 
         if (parsed_args.output_file):
