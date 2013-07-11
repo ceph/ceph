@@ -670,8 +670,8 @@ def main():
         prefix = ''
         suffix = ''
         if not parsed_args.output_file and len(targets) > 1:
-            prefix='{0}.{1}: '.format(*target)
-            suffix='\n'
+            prefix = '{0}.{1}: '.format(*target)
+            suffix = '\n'
 
         ret, outbuf, outs = json_command(cluster_handle, target=target,
                                          prefix='get_command_descriptions')
