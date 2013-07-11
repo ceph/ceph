@@ -153,7 +153,7 @@ def api_setup():
         glob.logfile = '/var/log/ceph' + glob.clientname + '.log'
 
     glob.clientname = glob.args.name or DEFAULT_CLIENTNAME
-    glob.cluster = rados.Rados(name='client.restapi', conffile=conffile)
+    glob.cluster = rados.Rados(name=glob.clientname, conffile=conffile)
     glob.cluster.connect()
 
     cfg = load_conf(conffile)
