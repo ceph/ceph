@@ -2177,6 +2177,61 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       f->flush(rdata);
     }
     ss << "listed " << osdmap.blacklist.size() << " entries";
+
+  } else if (prefix == "osd pool get") {
+    string poolstr;
+    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+    int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
+    if (pool < 0) {
+      ss << "unrecognized pool '" << poolstr << "'";
+      r = -ENOENT;
+      goto reply;
+    }
+
+    const pg_pool_t *p = osdmap.get_pg_pool(pool);
+    string var;
+    cmd_getval(g_ceph_context, cmdmap, "var", var);
+
+    if (f) {
+      f->open_object_section("pool");
+      f->dump_string("pool", poolstr);
+      f->dump_int("pool_id", pool);
+
+      if (var == "pg_num") {
+        f->dump_int("pg_num", p->get_pg_num());
+      } else if (var == "pgp_num") {
+        f->dump_int("pgp_num", p->get_pgp_num());
+      } else if (var == "size") {
+        f->dump_int("size", p->get_size());
+      } else if (var == "min_size") {
+        f->dump_int("min_size", p->get_min_size());
+      } else if (var == "crash_replay_interval") {
+        f->dump_int("crash_replay_interval", p->get_crash_replay_interval());
+      } else if (var == "crush_ruleset") {
+        f->dump_int("crush_ruleset", p->get_crush_ruleset());
+      }
+
+      f->close_section();
+      f->flush(rdata);
+    } else {
+      if (var == "pg_num") {
+        ss << "pg_num: " << p->get_pg_num();
+      } else if (var == "pgp_num") {
+        ss << "pgp_num: " << p->get_pgp_num();
+      } else if (var == "size") {
+        ss << "size: " << p->get_size();
+      } else if (var == "min_size") {
+        ss << "min_size: " << p->get_min_size();
+      } else if (var == "crash_replay_interval") {
+        ss << "crash_replay_interval: " << p->get_crash_replay_interval();
+      } else if (var == "crush_ruleset") {
+        ss << "crush_ruleset: " << p->get_crush_ruleset();
+      }
+      rdata.append(ss);
+      ss.str("");
+    }
+    r = 0;
+
   } else if (prefix == "osd crush rule list" ||
 	     prefix == "osd crush rule ls") {
     string format;
@@ -3474,42 +3529,6 @@ done:
     rs = ss.str();
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
     return true;
-
-  } else if (prefix == "osd pool get") {
-    string poolstr;
-    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
-    int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
-    if (pool < 0) {
-      ss << "unrecognized pool '" << poolstr << "'";
-      err = -ENOENT;
-      goto reply;
-    }
-
-    const pg_pool_t *p = osdmap.get_pg_pool(pool);
-    string var;
-    cmd_getval(g_ceph_context, cmdmap, "var", var);
-    if (var == "pg_num") {
-      ss << "pg_num: " << p->get_pg_num();
-    }
-    if (var == "pgp_num") {
-      ss << "pgp_num: " << p->get_pgp_num();
-    }
-    if (var == "size") {
-      ss << "size: " << p->get_size();
-    }
-    if (var == "min_size") {
-      ss << "min_size: " << p->get_min_size();
-    }
-    if (var == "crash_replay_interval") {
-      ss << "crash_replay_interval: " << p->get_crash_replay_interval();
-    }
-    if (var == "crush_ruleset") {
-      ss << "crush_ruleset: " << p->get_crush_ruleset();
-    }
-    rdata.append(ss);
-    ss.str("");
-    err = 0;
-    goto reply;
 
   } else if (prefix == "osd reweight-by-utilization") {
     int64_t oload;
