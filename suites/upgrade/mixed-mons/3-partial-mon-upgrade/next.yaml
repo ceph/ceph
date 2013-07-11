@@ -1,0 +1,4 @@
+tasks:
+- install.upgrade:
+     mon.a:
+        branch: next
