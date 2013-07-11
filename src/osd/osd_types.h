@@ -962,6 +962,10 @@ struct pg_stat_t {
     }
   }
 
+  pair<epoch_t, version_t> get_version_pair() const {
+    return make_pair(reported_epoch, reported_seq);
+  }
+
   void add(const pg_stat_t& o) {
     stats.add(o.stats);
     log_size += o.log_size;
