@@ -1,6 +1,9 @@
 import contextlib
+import json
 import logging
 import os
+
+from cStringIO import StringIO
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -126,7 +129,8 @@ def start_rgw(ctx, config):
             ]
         run_cmd_tail=[
                 'radosgw',
-                # authenticate as client.admin and use system keyring
+                # authenticate as the client this is co-located with
+                '-i', '{client}'.format(client=client),
                 '-k', '/etc/ceph/ceph.keyring',
                 '--log-file', '/var/log/ceph/rgw.log',
                 '--rgw_ops_log_socket_path', '{tdir}/rgw.opslog.sock'.format(tdir=testdir),
@@ -208,6 +212,196 @@ def start_apache(ctx, config):
 
         run.wait(apaches.itervalues())
 
+@contextlib.contextmanager
+def configure_regions_and_zones(ctx, config):
+    log.info('Configuring regions and zones...')
+    # track files to delete, just easier than reproducing host/filepaths
+    files_to_delete = {}
+
+    for client in config.iterkeys():
+        (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+
+        client_config = config.get(client)
+        if client_config is None:
+            client_config = {}
+
+        # extract the dns name from remote
+        user_name, host_name = str(remote).split('@')
+
+        log.info("rgw %s config is %s dns is %s", client, client_config, host_name)
+        
+        files_to_delete[remote] = []
+
+        if 'region_info' in client_config:
+            region_info = client_config['region_info']
+            log.info('region info for {client}: {data}'.format(client=client, data=region_info))
+         
+            # create a new, empty dict to populate
+            region_dict = {}
+            # use specifed region name or default <client name>_'region'
+            if region_info.has_key('name'):
+                region_dict['name'] = region_info['name']
+            else: 
+                region_dict['name'] = '{client}_region'.format(client=client)
+
+            # use specified api name or default to 'default'
+            if region_info.has_key('api_name'):
+                region_dict['api_name'] = region_info['api_name']
+            else: 
+                region_dict['api_name'] = 'default'
+
+            # I don't think we should make assumptions here. 
+            # Going to assume this is specified for now
+            if region_info.has_key('is_master'):
+                region_dict['is_master'] = region_info['is_master']
+            else: 
+                pass
+                #region_dict['is_master'] = 'false'
+
+            # use specified api name or default to 'default'
+            if region_info.has_key('api_name'):
+                region_dict['api_name'] = region_info['api_name']
+            else: 
+                region_dict['api_name'] = 'default'
+
+            # add in sensible defaults for the endpoints field 
+            if region_info.has_key('endpoints'):
+                region_dict['endpoints'] = region_info['endpoints']
+            else: 
+                region_dict['endpoints'] = []
+                region_dict['endpoints'].append('http:\/\/{client}:80\/'.format(client=host_name))
+
+            # use specified master zone or default to the first specified zone 
+            # (if there's more than one)
+            if region_info.has_key('master_zone'):
+                region_dict['master_zone'] = region_info['master_zone']
+            else: 
+                region_dict['master_zone'] = 'default'
+
+            region_dict['zones'] = []
+            zones = region_info['zones'].split(',')
+            for zone in zones:
+                # build up a zone 
+                name, log_meta, log_data = zone.split(':')
+                log.info('zone: {zone} meta:{meta} data:{data}'.format(zone=name, meta=log_meta, data=log_data))
+                new_zone_dict = {}
+                new_zone_dict['name'] = name
+                new_zone_dict['endpoints'] = []
+                #end_point_list = []
+                new_zone_dict['endpoints'].append('http://{client}:80/'.format(client=host_name))
+                new_zone_dict['log_meta'] = log_meta
+                new_zone_dict['log_data'] = log_data
+                region_dict['zones'].append(new_zone_dict) 
+
+            # just using defaults for now, revisit this later to allow 
+            # the configs to specify placement_targets and default_placement policies
+            region_dict['placement_targets'] = []
+            default_placement_dict = {}
+            default_placement_dict['name'] = 'default-placement'
+            default_placement_dict['tags'] = []
+            region_dict['placement_targets'].append(default_placement_dict)
+
+            region_dict['default_placement'] = 'default-placement'
+
+            log.info('constructed region info: {data}'.format(data=region_dict))
+            
+            file_name = region_dict['name'] + '.input'
+            testdir = teuthology.get_testdir(ctx)
+            region_file_path = os.path.join(testdir, file_name)
+            log.info('Shipping {file_out} to host {host}'.format(file_out=region_file_path, \
+                                                           host=host_name))
+
+            tmpFile = StringIO()
+
+            tmpFile.write('{data}'.format(data=json.dumps(region_dict, sort_keys=True, \
+                                          indent=4)))
+            tmpFile.seek(0)
+
+            #(remote,) = ctx.cluster.only(client).remotes.keys()
+            teuthology.write_file(
+              remote=remote,
+              path=region_file_path,
+              data=tmpFile,
+            )
+
+            # add this file to the dictionary of files to be deleted
+            files_to_delete[remote].append(region_file_path)
+
+        else: # if 'region_info' in client_config:
+            log.info('no region info found for client {client}'.format(client=client))
+
+        # now work on the zone info
+        if 'zone_info' in client_config:
+            zone_info = client_config['zone_info']
+            # now send the zone settings across the wire
+            system_user = zone_info['user']
+            system_access_key = zone_info['access_key']
+            system_secret_key = zone_info['secret_key']
+            zone_suffix = zone_info['zone_suffix']
+            log.info('jb:\n\tuser:{user}\n\taccess:{access}\n\tsecret:{secret} \
+                     \n\tsuffix:{suffix}'.format(user=system_user, access=system_access_key, \
+                                            secret=system_secret_key, suffix=zone_suffix))
+
+            # new dict to hold the data
+            zone_dict = {}
+            zone_dict['domain_root'] = '.rgw.root' + zone_suffix
+            zone_dict['control_pool'] = '.rgw.control' + zone_suffix
+            zone_dict['gc_pool'] = '.rgw.gc' + zone_suffix
+            zone_dict['log_pool'] = '.log' + zone_suffix
+            zone_dict['intent_log_pool'] = '.intent-log' + zone_suffix
+            zone_dict['usage_log_pool'] = '.usage' + zone_suffix
+            zone_dict['user_keys_pool'] = '.users' + zone_suffix
+            zone_dict['user_email_pool'] = '.users.email' + zone_suffix
+            zone_dict['user_swift_pool'] = '.users.swift' + zone_suffix
+
+            system_user_dict = {}
+            system_user_dict['user'] = system_user
+            system_user_dict['access_key'] = system_access_key
+            system_user_dict['secret_key'] = system_secret_key
+
+            zone_dict['system_key'] = system_user_dict
+
+            log.info('constructed zone info: {data}'.format(data=zone_dict))
+            
+            file_name = 'zone' + zone_suffix + '.input'
+            testdir = teuthology.get_testdir(ctx)
+            zone_file_path = os.path.join(testdir, file_name)
+            log.info('Shipping {file_out} to host {host}'.format(file_out=zone_file_path, \
+                                                           host=host_name))
+
+            tmpFile = StringIO()
+
+            tmpFile.write('{data}'.format(data=zone_dict))
+            tmpFile.seek(0)
+            #(remote,) = ctx.cluster.only(client).remotes.keys()
+            teuthology.write_file(
+              remote=remote,
+              path=zone_file_path,
+              data=tmpFile,
+            )
+
+            files_to_delete[remote].append(zone_file_path)
+
+        else: 
+            log.info('no zone info found for client {client}'.format(client=client))
+
+    try:
+        yield
+    finally:
+        log.info('Cleaning up regions and zones....')
+        for remote in files_to_delete.keys():
+            per_host_files_to_delete = files_to_delete[remote]
+            for to_delete in per_host_files_to_delete:
+                log.info('deleting {file_name} from host {host}'.format(file_name=to_delete, \
+                                                                    host=str(remote)))
+                ctx.cluster.only(remote).run(
+                    args=[
+                        'rm',
+                        '-f',
+                        '{file_path}'.format(file_path=to_delete),
+                    ],
+                )
+
 
 @contextlib.contextmanager
 def task(ctx, config):
@@ -261,6 +455,12 @@ def task(ctx, config):
     elif isinstance(config, list):
         config = dict((name, None) for name in config)
 
+    #overrides = ctx.config.get('overrides', {})
+    #teuthology.deep_merge(config, overrides.get('rgw', {}))
+
+    log.info('jb, config is: %s' % config)
+    log.info('jb, config2 is: %s' % dict(conf=config.get('conf', {})))
+
     for _, roles_for_host in ctx.cluster.remotes.iteritems():
         running_rgw = False
         for role in roles_for_host:
@@ -273,5 +473,6 @@ def task(ctx, config):
         lambda: ship_config(ctx=ctx, config=config),
         lambda: start_rgw(ctx=ctx, config=config),
         lambda: start_apache(ctx=ctx, config=config),
+        lambda: configure_regions_and_zones(ctx=ctx, config=config),
         ):
         yield
