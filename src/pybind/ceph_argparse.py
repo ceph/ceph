@@ -687,7 +687,7 @@ def matchnum(args, signature, partial=False):
         while desc.numseen < desc.n:
             # if there are no more arguments, return
             if not words:
-                return matchcnt;
+                return matchcnt
             word = words.pop(0)
 
             try:
