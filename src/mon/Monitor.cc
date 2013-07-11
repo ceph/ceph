@@ -1771,7 +1771,7 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
   while (!detail.empty()) {
     if (f)
       f->dump_string("item", detail.front().second);
-    if (detailbl != NULL) {
+    else if (detailbl != NULL) {
       detailbl->append(detail.front().second);
       detailbl->append('\n');
     }
