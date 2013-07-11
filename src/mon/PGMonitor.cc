@@ -736,15 +736,13 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
     ack->pg_stat[pgid] = make_pair(p->second.reported_seq, p->second.reported_epoch);
 
     if (pg_map.pg_stat.count(pgid) &&
-	(pg_map.pg_stat[pgid].reported_seq > p->second.reported_seq ||
-	 pg_map.pg_stat[pgid].reported_epoch > p->second.reported_epoch)) {
+        pg_map.pg_stat[pgid].get_version_pair() > p->second.get_version_pair()) {
       dout(15) << " had " << pgid << " from " << pg_map.pg_stat[pgid].reported_epoch << ":"
 	       << pg_map.pg_stat[pgid].reported_seq << dendl;
       continue;
     }
     if (pending_inc.pg_stat_updates.count(pgid) && 
-	(pending_inc.pg_stat_updates[pgid].reported_seq > p->second.reported_seq ||
-	 pending_inc.pg_stat_updates[pgid].reported_epoch > p->second.reported_epoch)) {
+        pending_inc.pg_stat_updates[pgid].get_version_pair() > p->second.get_version_pair()) {
       dout(15) << " had " << pgid << " from " << pending_inc.pg_stat_updates[pgid].reported_epoch << ":"
 	       << pending_inc.pg_stat_updates[pgid].reported_seq << " (pending)" << dendl;
       continue;
