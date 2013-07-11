@@ -321,7 +321,7 @@ class CephName(CephArgtype):
         else:
             t, i = s.split('.')
             if not t in ('osd', 'mon', 'client', 'mds'):
-                raise ArgumentValid('unknown type ' + self.t)
+                raise ArgumentValid('unknown type ' + t)
             if t == 'osd':
                 if i != '*':
                     try:
@@ -349,11 +349,11 @@ class CephOsdName(CephArgtype):
             return
         if s.find('.') != -1:
             t, i = s.split('.')
+            if t != 'osd':
+                raise ArgumentValid('unknown type ' + t)
         else:
             t = 'osd'
             i = s
-        if t != 'osd':
-            raise ArgumentValid('unknown type ' + self.t)
         try:
             i = int(i)
         except:
