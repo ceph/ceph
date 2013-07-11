@@ -62,14 +62,14 @@ void _usage()
   cerr << "  bucket check               check bucket index\n";
   cerr << "  object rm                  remove object\n";
   cerr << "  object unlink              unlink object from bucket index\n";
-  cerr << "  region info                show region info\n";
+  cerr << "  region get                 show region info\n";
   cerr << "  regions list               list all regions set on this cluster\n";
-  cerr << "  region set                 set region info\n";
+  cerr << "  region set                 set region info (requires infile)\n";
   cerr << "  region default             set default region\n";
-  cerr << "  region-map show            show region-map\n";            
-  cerr << "  region-map set             set region-map\n";            
-  cerr << "  zone info                  show zone cluster params\n";
-  cerr << "  zone set                   set zone cluster params\n";
+  cerr << "  region-map get             show region-map\n";
+  cerr << "  region-map set             set region-map (requires infile)\n";
+  cerr << "  zone get                   show zone cluster params\n";
+  cerr << "  zone set                   set zone cluster params (requires infile)\n";
   cerr << "  zone list                  list all zones set on this cluster\n";
   cerr << "  pool add                   add an existing pool for data placement\n";
   cerr << "  pool rm                    remove an existing pool from data placement set\n";
@@ -97,7 +97,7 @@ void _usage()
   cerr << "  datalog trim               trim data log\n";
   cerr << "  opstate list               list stateful operations entries (use client_id,\n";
   cerr << "                             op_id, object)\n";
-  cerr << "  opstate set                set state on an entry (use client_id, op_id, object)\n";
+  cerr << "  opstate set                set state on an entry (use client_id, op_id, object, state)\n";
   cerr << "  opstate renew              renew state on an entry (use client_id, op_id, object)\n";
   cerr << "  opstate rm                 remove entry (use client_id, op_id, object)\n";
   cerr << "  replicalog get             get replica metadata log entry\n";
@@ -141,6 +141,8 @@ void _usage()
   cerr << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
   cerr << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
   cerr << "                             in one of the numeric field\n";
+  cerr << "   --infile                  specify a file to read in when setting data\n";
+  cerr << "   --state=<state string>    specify a state for the opstate set command\n";
   cerr << "   --replica-log-type        replica log type (metadata, data, bucket), required for\n";
   cerr << "                             replica log operations\n";
   cerr << "   --categories=<list>       comma separated list of categories, used in usage show\n";
@@ -199,14 +201,14 @@ enum {
   OPT_OBJECT_STAT,
   OPT_GC_LIST,
   OPT_GC_PROCESS,
-  OPT_REGION_INFO,
+  OPT_REGION_GET,
   OPT_REGION_LIST,
   OPT_REGION_SET,
   OPT_REGION_DEFAULT,
-  OPT_REGIONMAP_SHOW,
+  OPT_REGIONMAP_GET,
   OPT_REGIONMAP_SET,
   OPT_REGIONMAP_UPDATE,
-  OPT_ZONE_INFO,
+  OPT_ZONE_GET,
   OPT_ZONE_SET,
   OPT_ZONE_LIST,
   OPT_CAPS_ADD,
@@ -349,8 +351,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
     if (strcmp(cmd, "stat") == 0)
       return OPT_OBJECT_STAT;
   } else if (strcmp(prev_cmd, "region") == 0) {
-    if (strcmp(cmd, "info") == 0)
-      return OPT_REGION_INFO;
+    if (strcmp(cmd, "get") == 0)
+      return OPT_REGION_GET;
     if (strcmp(cmd, "list") == 0)
       return OPT_REGION_LIST;
     if (strcmp(cmd, "set") == 0)
@@ -362,15 +364,15 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_REGION_LIST;
   } else if (strcmp(prev_cmd, "region-map") == 0 ||
              strcmp(prev_cmd, "regionmap") == 0) {
-    if (strcmp(cmd, "show") == 0)
-      return OPT_REGIONMAP_SHOW;
+    if (strcmp(cmd, "get") == 0)
+      return OPT_REGIONMAP_GET;
     if (strcmp(cmd, "set") == 0)
       return OPT_REGIONMAP_SET;
     if (strcmp(cmd, "update") == 0)
       return OPT_REGIONMAP_UPDATE;
   } else if (strcmp(prev_cmd, "zone") == 0) {
-    if (strcmp(cmd, "info") == 0)
-      return OPT_ZONE_INFO;
+    if (strcmp(cmd, "get") == 0)
+      return OPT_ZONE_GET;
     if (strcmp(cmd, "set") == 0)
       return OPT_ZONE_SET;
     if (strcmp(cmd, "list") == 0)
@@ -909,11 +911,11 @@ int main(int argc, char **argv)
 
   RGWStreamFlusher f(formatter, cout);
 
-  bool raw_storage_op = (opt_cmd == OPT_REGION_INFO || opt_cmd == OPT_REGION_LIST ||
+  bool raw_storage_op = (opt_cmd == OPT_REGION_GET || opt_cmd == OPT_REGION_LIST ||
                          opt_cmd == OPT_REGION_SET || opt_cmd == OPT_REGION_DEFAULT ||
-                         opt_cmd == OPT_REGIONMAP_SHOW || opt_cmd == OPT_REGIONMAP_SET ||
+                         opt_cmd == OPT_REGIONMAP_GET || opt_cmd == OPT_REGIONMAP_SET ||
                          opt_cmd == OPT_REGIONMAP_UPDATE ||
-                         opt_cmd == OPT_ZONE_INFO || opt_cmd == OPT_ZONE_SET ||
+                         opt_cmd == OPT_ZONE_GET || opt_cmd == OPT_ZONE_SET ||
                          opt_cmd == OPT_ZONE_LIST);
 
 
@@ -933,7 +935,7 @@ int main(int argc, char **argv)
   StoreDestructor store_destructor(store);
 
   if (raw_storage_op) {
-    if (opt_cmd == OPT_REGION_INFO) {
+    if (opt_cmd == OPT_REGION_GET) {
       RGWRegion region;
       int ret = region.init(g_ceph_context, store);
       if (ret < 0) {
@@ -1007,7 +1009,7 @@ int main(int argc, char **argv)
       }
     }
 
-    if (opt_cmd == OPT_REGIONMAP_SHOW) {
+    if (opt_cmd == OPT_REGIONMAP_GET) {
       RGWRegionMap regionmap;
       int ret = regionmap.read(g_ceph_context, store);
       if (ret < 0) {
@@ -1076,7 +1078,7 @@ int main(int argc, char **argv)
       formatter->flush(cout);
     }
 
-    if (opt_cmd == OPT_ZONE_INFO) {
+    if (opt_cmd == OPT_ZONE_GET) {
       RGWRegion region;
       int ret = region.init(g_ceph_context, store);
       if (ret < 0) {
