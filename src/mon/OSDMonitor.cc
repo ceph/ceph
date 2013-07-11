@@ -2081,16 +2081,32 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     pg_t mpgid = osdmap.raw_pg_to_pg(pgid);
     vector<int> up, acting;
     osdmap.pg_to_up_acting_osds(mpgid, up, acting);
+
     string fullobjname;
     if (!namespacestr.empty())
       fullobjname = namespacestr + string("/") + oid.name;
     else
       fullobjname = oid.name;
-    ds << "osdmap e" << osdmap.get_epoch()
-       << " pool '" << poolstr << "' (" << pool << ") object '" << fullobjname << "' ->"
-       << " pg " << pgid << " (" << mpgid << ")"
-       << " -> up " << up << " acting " << acting;
-    rdata.append(ds);
+    if (f) {
+      f->open_object_section("osd_map");
+      f->dump_int("epoch", osdmap.get_epoch());
+      f->dump_string("pool", poolstr);
+      f->dump_int("pool_id", pool);
+      f->dump_stream("objname") << fullobjname;
+      f->dump_stream("raw_pgid") << pgid;
+      f->dump_stream("pgid") << mpgid;
+      f->dump_stream("up") << up;
+      f->dump_stream("acting") << acting;
+      f->close_section(); // osd_map
+      f->flush(rdata);
+    } else {
+      ds << "osdmap e" << osdmap.get_epoch()
+        << " pool '" << poolstr << "' (" << pool << ")"
+        << " object '" << fullobjname << "' ->"
+        << " pg " << pgid << " (" << mpgid << ")"
+        << " -> up " << up << " acting " << acting;
+      rdata.append(ds);
+    }
   } else if ((prefix == "osd scrub" ||
 	      prefix == "osd deep-scrub" ||
 	      prefix == "osd repair")) {
