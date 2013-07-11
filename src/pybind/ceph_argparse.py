@@ -879,7 +879,7 @@ def validate_command(parsed_args, sigdict, args, verbose=False):
 
         return valid_dict
 
-def send_command(cluster, target=('mon', ''), cmd=[], inbuf='', timeout=0, 
+def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0, 
                  verbose=False):
     """
     Send a command to a daemon using librados's
@@ -892,6 +892,7 @@ def send_command(cluster, target=('mon', ''), cmd=[], inbuf='', timeout=0,
 
     If target is osd.N, send command to that osd (except for pgid cmds)
     """
+    cmd = cmd or []
     try:
         if target[0] == 'osd':
             osdid = target[1]
