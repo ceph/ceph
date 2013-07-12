@@ -157,16 +157,6 @@ TestFileStoreState::coll_entry_t::~coll_entry_t()
   }
 }
 
-hobject_t *TestFileStoreState::coll_entry_t::add_obj(
-  int id, hobject_t *oid)
-{
-  hobject_t *ret = NULL;
-  if (m_objects.count(id))
-    ret = m_objects[id];
-  m_objects[id] = new hobject_t(*oid);
-  return ret;
-}
-
 hobject_t *TestFileStoreState::coll_entry_t::touch_obj(int id)
 {
   map<int, hobject_t*>::iterator it = m_objects.find(id);
