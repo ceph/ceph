@@ -39,27 +39,17 @@ LOGLEVELS = {
     'debug':logging.DEBUG,
 }
 
-
 # my globals, in a named tuple for usage clarity
 
-glob = collections.namedtuple('gvars',
-    'args cluster urls sigdict baseurl clientname')
-glob.args = None
+glob = collections.namedtuple('gvars', 'cluster urls sigdict baseurl')
 glob.cluster = None
 glob.urls = {}
 glob.sigdict = {}
 glob.baseurl = ''
-glob.clientname = ''
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Ceph REST API webapp")
-    parser.add_argument('-c', '--conf', help='Ceph configuration file')
-    parser.add_argument('-n', '--name', help='Ceph client config/key name')
-
-    return parser.parse_args()
-
-def load_conf(conffile=None):
+def load_conf(clustername='ceph', conffile=None):
     import contextlib
+
 
     class _TrimIndentFile(object):
         def __init__(self, fp):
@@ -89,28 +79,25 @@ def load_conf(conffile=None):
         with contextlib.closing(f):
             return parse(f)
 
-    # XXX this should probably use cluster name
     if conffile:
+        # from CEPH_CONF
         return load(conffile)
-    elif 'CEPH_CONF' in os.environ:
-        conffile = os.environ['CEPH_CONF']
-    elif os.path.exists('/etc/ceph/ceph.conf'):
-        conffile = '/etc/ceph/ceph.conf'
-    elif os.path.exists(os.path.expanduser('~/.ceph/ceph.conf')):
-        conffile = os.path.expanduser('~/.ceph/ceph.conf')
-    elif os.path.exists('ceph.conf'):
-        conffile = 'ceph.conf'
     else:
-        return None
+        for path in [
+            '/etc/ceph/{0}.conf'.format(clustername),
+            os.path.expanduser('~/.ceph/{0}.conf'.format(clustername)),
+            '{0}.conf'.format(clustername),
+        ]:
+            if os.path.exists(path):
+                return load(path)
 
-    return load(conffile)
+    raise EnvironmentError('No conf file found for "{0}"'.format(clustername))
 
-def get_conf(cfg, key):
+def get_conf(cfg, clientname, key):
     try:
-        return cfg.get(glob.clientname, 'restapi_' + key)
+        return cfg.get(clientname, 'restapi_' + key)
     except ConfigParser.NoOptionError:
         return None
-
 
 # XXX this is done globally, and cluster connection kept open; there
 # are facilities to pass around global info to requests and to
@@ -119,26 +106,32 @@ def get_conf(cfg, key):
 def api_setup():
     """
     Initialize the running instance.  Open the cluster, get the command
-    signatures, module,, perms, and help; stuff them away in the glob.urls
+    signatures, module, perms, and help; stuff them away in the glob.urls
     dict.
     """
 
-    glob.args = parse_args()
+    conffile = os.environ.get('CEPH_CONF', '')
+    clustername = os.environ.get('CEPH_CLUSTER_NAME', 'ceph')
+    clientname = os.environ.get('CEPH_NAME', DEFAULT_CLIENTNAME)
+    try:
+        err = ''
+        cfg = load_conf(clustername, conffile)
+    except Exception as e:
+        err = "Can't load Ceph conf file: " + str(e)
+        app.logger.critical(err)
+        app.logger.critical("CEPH_CONF: %s", conffile)
+        app.logger.critical("CEPH_CLUSTER_NAME: %s", clustername)
+        raise EnvironmentError(err)
 
-    conffile = glob.args.conf or ''
-    if glob.args.name:
-        glob.clientname = glob.args.name
-        glob.logfile = '/var/log/ceph' + glob.clientname + '.log'
+    client_logfile = '/var/log/ceph' + clientname + '.log'
 
-    glob.clientname = glob.args.name or DEFAULT_CLIENTNAME
-    glob.cluster = rados.Rados(name=glob.clientname, conffile=conffile)
+    glob.cluster = rados.Rados(name=clientname, conffile=conffile)
     glob.cluster.connect()
 
-    cfg = load_conf(conffile)
-    glob.baseurl = get_conf(cfg, 'base_url') or DEFAULT_BASEURL
+    glob.baseurl = get_conf(cfg, clientname, 'base_url') or DEFAULT_BASEURL
     if glob.baseurl.endswith('/'):
         glob.baseurl
-    addr = get_conf(cfg, 'public_addr') or DEFAULT_ADDR
+    addr = get_conf(cfg, clientname, 'public_addr') or DEFAULT_ADDR
     addrport = addr.rsplit(':', 1)
     addr = addrport[0]
     if len(addrport) > 1:
@@ -147,8 +140,8 @@ def api_setup():
         port = DEFAULT_ADDR.rsplit(':', 1)
     port = int(port)
 
-    loglevel = get_conf(cfg, 'log_level') or 'warning'
-    logfile = get_conf(cfg, 'log_file') or glob.logfile
+    loglevel = get_conf(cfg, clientname, 'log_level') or DEFAULT_LOG_LEVEL
+    logfile = get_conf(cfg, clientname, 'log_file') or client_logfile
     app.logger.addHandler(logging.handlers.WatchedFileHandler(logfile))
     app.logger.setLevel(LOGLEVELS[loglevel.lower()])
     for h in app.logger.handlers:
@@ -158,15 +151,16 @@ def api_setup():
     ret, outbuf, outs = json_command(glob.cluster,
                                      prefix='get_command_descriptions')
     if ret:
-        app.logger.error('Can\'t contact cluster for command descriptions: %s',
-                         outs)
-        sys.exit(1)
+        err = "Can't contact cluster for command descriptions: {0}".format(outs)
+        app.logger.error(err)
+        raise EnvironmentError(ret, err)
 
     try:
         glob.sigdict = parse_json_funcsigs(outbuf, 'rest')
     except Exception as e:
-        app.logger.error('Can\'t parse command descriptions: %s', e)
-        sys.exit(1)
+        err = "Can't parse command descriptions: {}".format(e)
+        app.logger.error(err)
+        raise EnvironmentError(err)
 
     # glob.sigdict maps "cmdNNN" to a dict containing:
     # 'sig', an array of argdescs
@@ -416,3 +410,5 @@ def handler(catchall_path=None, fmt=None):
         contenttype = 'text/plain'
     response.headers['Content-Type'] = contenttype
     return response
+
+addr, port = api_setup()
