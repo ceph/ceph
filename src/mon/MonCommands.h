@@ -159,7 +159,7 @@ COMMAND("auth print-key name=entity,type=CephString", "display requested key", \
 COMMAND("auth print_key name=entity,type=CephString", "display requested key", \
 	"auth", "r", "cli,rest")
 COMMAND("auth list", "list authentication state", "auth", "r", "cli,rest")
-COMMAND("auth import", "auth import: read keyring file from input", \
+COMMAND("auth import", "auth import: read keyring file from -i <file>", \
 	"auth", "rw", "cli,rest")
 COMMAND("auth add " \
 	"name=entity,type=CephString " \
