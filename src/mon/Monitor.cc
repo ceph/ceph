@@ -834,20 +834,16 @@ void Monitor::sync_start(entity_inst_t &other, bool full)
   sync_full = full;
 
   if (sync_full) {
-    // mark that we are syncing
+    // stash key state, and mark that we are syncing
     MonitorDBStore::Transaction t;
-
-    bufferlist backup_monmap;
-    sync_obtain_latest_monmap(backup_monmap);
-    assert(backup_monmap.length() > 0);
+    sync_stash_critical_state(&t);
+    t.put("mon_sync", "in_sync", 1);
 
     sync_last_committed_floor = MAX(sync_last_committed_floor, paxos->get_version());
-    dout(10) << __func__ << " marking sync in progress, storing sync_last_commited_floor "
+    dout(10) << __func__ << " marking sync in progress, storing sync_last_committed_floor "
 	     << sync_last_committed_floor << dendl;
+    t->put("mon_sync", "last_committed_floor", sync_last_committed_floor);
 
-    t.put("mon_sync", "latest_monmap", backup_monmap);
-    t.put("mon_sync", "in_sync", 1);
-    t.put("mon_sync", "last_committed_floor", sync_last_committed_floor);
     store->apply_transaction(t);
 
     assert(g_conf->mon_sync_requester_kill_at != 1);
@@ -870,6 +866,15 @@ void Monitor::sync_start(entity_inst_t &other, bool full)
   if (!sync_full)
     m->last_committed = paxos->get_version();
   messenger->send_message(m, sync_provider);
+}
+
+void Monitor::sync_stash_critical_state(MonitorDBStore::Transaction *t)
+{
+  dout(10) << __func__ << dendl;
+  bufferlist backup_monmap;
+  sync_obtain_latest_monmap(backup_monmap);
+  assert(backup_monmap.length() > 0);
+  t->put("mon_sync", "latest_monmap", backup_monmap);
 }
 
 void Monitor::sync_reset_timeout()
