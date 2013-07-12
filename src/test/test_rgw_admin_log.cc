@@ -286,7 +286,7 @@ int test_helper::send_request(string method, string res,
     slist = curl_slist_append(slist, auth.c_str());
     slist = curl_slist_append(slist, http_date.c_str());
     for(list<string>::iterator it = extra_hdrs.begin();
-        it != extra_hdrs.end(); it++){
+        it != extra_hdrs.end(); ++it){
       slist = curl_slist_append(slist, (*it).c_str());
     }
     if(read_function)
@@ -323,7 +323,7 @@ int run_rgw_admin(string& cmd, string& resp) {
 
     argv[0] = (char *)"radosgw-admin";
     for (list<string>::iterator it = l.begin(); 
-         it != l.end(); it++) {
+         it != l.end(); ++it) {
       argv[loop++] = (char *)(*it).c_str();
     }
     argv[loop] = NULL;
@@ -375,7 +375,7 @@ int get_creds(string& json, string& creds) {
   decode_json_obj(info, &parser);
   creds = "";
   for(map<string, RGWAccessKey>::iterator it = info.access_keys.begin();
-      it != info.access_keys.end(); it++) {
+      it != info.access_keys.end(); ++it) {
     RGWAccessKey _k = it->second;
     /*cout << "accesskeys [ " << it->first << " ] = " << 
       "{ " << _k.id << ", " << _k.key << ", " << _k.subuser << "}" << std::endl;*/
@@ -611,7 +611,7 @@ static int get_log_list(list<cls_log_entry_json> &entries) {
   l = parser.get_array_elements();
   int loop = 0;
   for(vector<string>::iterator it = l.begin();
-      it != l.end(); it++, loop++) {
+      it != l.end(); ++it, loop++) {
     JSONParser jp;
     cls_log_entry_json entry;
 
@@ -655,7 +655,7 @@ static int get_bilog_list(list<cls_bilog_entry> &entries) {
   l = parser.get_array_elements();
   int loop = 0;
   for(vector<string>::iterator it = l.begin();
-      it != l.end(); it++, loop++) {
+      it != l.end(); ++it, loop++) {
     JSONParser jp;
     cls_bilog_entry entry;
 
@@ -691,7 +691,7 @@ static int get_datalog_list(list<rgw_data_change> &entries) {
   l = parser.get_array_elements();
   int loop = 0;
   for(vector<string>::iterator it = l.begin();
-      it != l.end(); it++, loop++) {
+      it != l.end(); ++it, loop++) {
     JSONParser jp;
     rgw_data_change entry;
 
