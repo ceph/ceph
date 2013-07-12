@@ -280,7 +280,7 @@ int test_helper::send_request(string method, string res,
     slist = curl_slist_append(slist, auth.c_str());
     slist = curl_slist_append(slist, http_date.c_str());
     for(list<string>::iterator it = extra_hdrs.begin();
-        it != extra_hdrs.end(); it++){
+        it != extra_hdrs.end(); ++it){
       slist = curl_slist_append(slist, (*it).c_str());
     }
     if(read_function)
@@ -317,7 +317,7 @@ int run_rgw_admin(string& cmd, string& resp) {
 
     argv[0] = (char *)"radosgw-admin";
     for (list<string>::iterator it = l.begin(); 
-         it != l.end(); it++) {
+         it != l.end(); ++it) {
       argv[loop++] = (char *)(*it).c_str();
     }
     argv[loop] = NULL;
@@ -369,7 +369,7 @@ int get_creds(string& json, string& creds) {
   decode_json_obj(info, &parser);
   creds = "";
   for(map<string, RGWAccessKey>::iterator it = info.access_keys.begin();
-      it != info.access_keys.end(); it++) {
+      it != info.access_keys.end(); ++it) {
     RGWAccessKey _k = it->second;
     /*cout << "accesskeys [ " << it->first << " ] = " << 
       "{ " << _k.id << ", " << _k.key << ", " << _k.subuser << "}" << std::endl;*/
@@ -484,7 +484,7 @@ int compare_user_info(RGWUserInfo& i1, RGWUserInfo& i2) {
   if (i1.access_keys.size() != i2.access_keys.size())
     return -1;
   for (map<string, RGWAccessKey>::iterator it = i1.access_keys.begin();
-       it != i1.access_keys.end(); it++) {
+       it != i1.access_keys.end(); ++it) {
     RGWAccessKey k1, k2;
     k1 = it->second;
     if (i2.access_keys.count(it->first) == 0)
@@ -496,7 +496,7 @@ int compare_user_info(RGWUserInfo& i1, RGWUserInfo& i2) {
   if (i1.swift_keys.size() != i2.swift_keys.size())
     return -1;
   for (map<string, RGWAccessKey>::iterator it = i1.swift_keys.begin();
-       it != i1.swift_keys.end(); it++) {
+       it != i1.swift_keys.end(); ++it) {
     RGWAccessKey k1, k2;
     k1 = it->second;
     if (i2.swift_keys.count(it->first) == 0)
@@ -508,7 +508,7 @@ int compare_user_info(RGWUserInfo& i1, RGWUserInfo& i2) {
   if (i1.subusers.size() != i2.subusers.size()) 
     return -1;
   for (map<string, RGWSubUser>::iterator it = i1.subusers.begin();
-       it != i1.subusers.end(); it++) {
+       it != i1.subusers.end(); ++it) {
     RGWSubUser k1, k2;
     k1 = it->second;
     if (!i2.subusers.count(it->first))

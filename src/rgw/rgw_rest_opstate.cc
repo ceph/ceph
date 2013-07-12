@@ -88,7 +88,7 @@ void RGWOp_Opstate_List::send_response() {
 void RGWOp_Opstate_List::send_response(list<cls_statelog_entry> entries) {
   RGWOpState oc(store);
   for (list<cls_statelog_entry>::iterator it = entries.begin();
-       it != entries.end(); it++) {
+       it != entries.end(); ++it) {
     oc.dump_entry(*it, s->formatter);
     flusher.flush();
   }

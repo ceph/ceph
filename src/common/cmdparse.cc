@@ -185,7 +185,7 @@ cmdmap_from_json(vector<string> cmd, map<string, cmd_vartype> *mapp, stringstrea
       }
     }
     return true;
-  } catch (runtime_error e) {
+  } catch (runtime_error &e) {
     ss << e.what();
     return false;
   }
