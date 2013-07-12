@@ -842,7 +842,7 @@ void Monitor::sync_start(entity_inst_t &other, bool full)
     sync_last_committed_floor = MAX(sync_last_committed_floor, paxos->get_version());
     dout(10) << __func__ << " marking sync in progress, storing sync_last_committed_floor "
 	     << sync_last_committed_floor << dendl;
-    t->put("mon_sync", "last_committed_floor", sync_last_committed_floor);
+    t.put("mon_sync", "last_committed_floor", sync_last_committed_floor);
 
     store->apply_transaction(t);
 
