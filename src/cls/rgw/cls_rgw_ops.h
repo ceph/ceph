@@ -22,6 +22,8 @@ struct rgw_cls_tag_timeout_op
     ::decode(tag_timeout, bl);
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<rgw_cls_tag_timeout_op*>& ls);
 };
 WRITE_CLASS_ENCODER(rgw_cls_tag_timeout_op)
 
@@ -310,6 +312,9 @@ struct cls_rgw_gc_set_entry_op {
     ::decode(info, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_rgw_gc_set_entry_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_set_entry_op)
 
@@ -331,6 +336,9 @@ struct cls_rgw_gc_defer_entry_op {
     ::decode(tag, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_rgw_gc_defer_entry_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_defer_entry_op)
 
@@ -353,6 +361,9 @@ struct cls_rgw_gc_list_op {
     ::decode(max, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_rgw_gc_list_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_list_op)
 
@@ -375,6 +386,9 @@ struct cls_rgw_gc_list_ret {
     ::decode(truncated, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_rgw_gc_list_ret*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_list_ret)
 
@@ -394,6 +408,9 @@ struct cls_rgw_gc_remove_op {
     ::decode(tags, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_rgw_gc_remove_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_remove_op)
 
@@ -416,6 +433,9 @@ struct cls_rgw_bi_log_list_op {
     ::decode(max, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_rgw_bi_log_list_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_bi_log_list_op)
 
@@ -438,6 +458,9 @@ struct cls_rgw_bi_log_trim_op {
     ::decode(end_marker, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_rgw_bi_log_trim_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_bi_log_trim_op)
 
@@ -460,6 +483,9 @@ struct cls_rgw_bi_log_list_ret {
     ::decode(truncated, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_rgw_bi_log_list_ret*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_bi_log_list_ret)
 

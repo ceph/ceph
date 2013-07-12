@@ -2,7 +2,90 @@
 #include "cls/rgw/cls_rgw_ops.h"
 
 #include "common/Formatter.h"
+#include "common/ceph_json.h"
 
+void rgw_cls_tag_timeout_op::dump(Formatter *f) const
+{
+  f->dump_int("tag_timeout", tag_timeout);
+}
+
+void rgw_cls_tag_timeout_op::generate_test_instances(list<rgw_cls_tag_timeout_op*>& ls)
+{
+  ls.push_back(new rgw_cls_tag_timeout_op);
+  ls.push_back(new rgw_cls_tag_timeout_op);
+  ls.back()->tag_timeout = 23323;
+}
+
+void cls_rgw_gc_set_entry_op::dump(Formatter *f) const
+{
+  f->dump_unsigned("expiration_secs", expiration_secs);
+  f->open_object_section("obj_info");
+  info.dump(f);
+  f->close_section();
+}
+
+void cls_rgw_gc_set_entry_op::generate_test_instances(list<cls_rgw_gc_set_entry_op*>& ls)
+{
+  ls.push_back(new cls_rgw_gc_set_entry_op);
+  ls.push_back(new cls_rgw_gc_set_entry_op);
+  ls.back()->expiration_secs = 123;
+}
+
+void cls_rgw_gc_defer_entry_op::dump(Formatter *f) const
+{
+  f->dump_unsigned("expiration_secs", expiration_secs);
+  f->dump_string("tag", tag);
+}
+
+void cls_rgw_gc_defer_entry_op::generate_test_instances(list<cls_rgw_gc_defer_entry_op*>& ls)
+{
+  ls.push_back(new cls_rgw_gc_defer_entry_op);
+  ls.push_back(new cls_rgw_gc_defer_entry_op);
+  ls.back()->expiration_secs = 123;
+  ls.back()->tag = "footag";
+}
+
+void cls_rgw_gc_list_op::dump(Formatter *f) const
+{
+  f->dump_string("marker", marker);
+  f->dump_unsigned("max", max);
+}
+
+void cls_rgw_gc_list_op::generate_test_instances(list<cls_rgw_gc_list_op*>& ls)
+{
+  ls.push_back(new cls_rgw_gc_list_op);
+  ls.push_back(new cls_rgw_gc_list_op);
+  ls.back()->marker = "mymarker";
+  ls.back()->max = 2312;
+}
+
+void cls_rgw_gc_list_ret::dump(Formatter *f) const
+{
+  encode_json("entries", entries, f);
+  f->dump_int("truncated", (int)truncated);
+}
+
+void cls_rgw_gc_list_ret::generate_test_instances(list<cls_rgw_gc_list_ret*>& ls)
+{
+  ls.push_back(new cls_rgw_gc_list_ret);
+  ls.push_back(new cls_rgw_gc_list_ret);
+  ls.back()->entries.push_back(cls_rgw_gc_obj_info());
+  ls.back()->truncated = true;
+}
+
+
+void cls_rgw_gc_remove_op::dump(Formatter *f) const
+{
+  encode_json("tags", tags, f);
+}
+
+void cls_rgw_gc_remove_op::generate_test_instances(list<cls_rgw_gc_remove_op*>& ls)
+{
+  ls.push_back(new cls_rgw_gc_remove_op);
+  ls.push_back(new cls_rgw_gc_remove_op);
+  ls.back()->tags.push_back("tag1");
+  ls.back()->tags.push_back("tag2");
+}
 
 void rgw_cls_obj_prepare_op::generate_test_instances(list<rgw_cls_obj_prepare_op*>& o)
 {
@@ -101,3 +184,44 @@ void rgw_cls_list_ret::dump(Formatter *f) const
   f->dump_int("is_truncated", (int)is_truncated);
 }
 
+void cls_rgw_bi_log_list_op::dump(Formatter *f) const
+{
+  f->dump_string("marker", marker);
+  f->dump_unsigned("max", max);
+}
+
+void cls_rgw_bi_log_list_op::generate_test_instances(list<cls_rgw_bi_log_list_op*>& ls)
+{
+  ls.push_back(new cls_rgw_bi_log_list_op);
+  ls.push_back(new cls_rgw_bi_log_list_op);
+  ls.back()->marker = "mark";
+  ls.back()->max = 123;
+}
+
+void cls_rgw_bi_log_trim_op::dump(Formatter *f) const
+{
+  f->dump_string("start_marker", start_marker);
+  f->dump_string("end_marker", end_marker);
+}
+
+void cls_rgw_bi_log_trim_op::generate_test_instances(list<cls_rgw_bi_log_trim_op*>& ls)
+{
+  ls.push_back(new cls_rgw_bi_log_trim_op);
+  ls.push_back(new cls_rgw_bi_log_trim_op);
+  ls.back()->start_marker = "foo";
+  ls.back()->end_marker = "bar";
+}
+
+void cls_rgw_bi_log_list_ret::dump(Formatter *f) const
+{
+  encode_json("entries", entries, f);
+  f->dump_unsigned("truncated", (int)truncated);
+}
+
+void cls_rgw_bi_log_list_ret::generate_test_instances(list<cls_rgw_bi_log_list_ret*>& ls)
+{
+  ls.push_back(new cls_rgw_bi_log_list_ret);
+  ls.push_back(new cls_rgw_bi_log_list_ret);
+  ls.back()->entries.push_back(rgw_bi_log_entry());
+  ls.back()->truncated = true;
+}
