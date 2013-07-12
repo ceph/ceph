@@ -8,6 +8,8 @@
 
 #include "include/types.h"
 
+class Formatter;
+
 struct cls_refcount_get_op {
   string tag;
   bool implicit_ref;
@@ -27,6 +29,8 @@ struct cls_refcount_get_op {
     ::decode(implicit_ref, bl);
     DECODE_FINISH(bl);
   }
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(list<cls_refcount_get_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_refcount_get_op)
 
@@ -50,6 +54,9 @@ struct cls_refcount_put_op {
     ::decode(implicit_ref, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(list<cls_refcount_put_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_refcount_put_op)
 
@@ -69,6 +76,9 @@ struct cls_refcount_set_op {
     ::decode(refs, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(list<cls_refcount_set_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_refcount_set_op)
 
@@ -89,6 +99,9 @@ struct cls_refcount_read_op {
     ::decode(implicit_ref, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(list<cls_refcount_read_op*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_refcount_read_op)
 
@@ -108,6 +121,9 @@ struct cls_refcount_read_ret {
     ::decode(refs, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(list<cls_refcount_read_ret*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_refcount_read_ret)
 

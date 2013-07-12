@@ -250,6 +250,14 @@ TYPE(cls_replica_log_set_marker_op)
 TYPE(cls_replica_log_get_bounds_op)
 TYPE(cls_replica_log_get_bounds_ret)
 
+#include "cls/refcount/cls_refcount_ops.h"
+TYPE(cls_refcount_get_op)
+TYPE(cls_refcount_put_op)
+TYPE(cls_refcount_read_op)
+TYPE(cls_refcount_read_ret)
+TYPE(cls_refcount_set_op)
+
+
 // --- messages ---
 #include "messages/MAuth.h"
 MESSAGE(MAuth)
