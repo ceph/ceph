@@ -79,6 +79,10 @@ TYPE(AuthMonitor::Incremental)
 TYPE(PGMap::Incremental)
 TYPE(PGMap)
 
+#include "mon/MonitorDBStore.h"
+TYPE(MonitorDBStore::Transaction)
+TYPE(MonitorDBStore::Op)
+
 #include "mon/MonMap.h"
 TYPE_FEATUREFUL(MonMap)
 
