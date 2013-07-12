@@ -1794,13 +1794,28 @@ void Monitor::get_status(stringstream &ss, Formatter *f)
 
   if (f) {
     f->dump_stream("fsid") << monmap->get_fsid();
-    f->dump_stream("monmap") << *monmap;
-    f->dump_stream("election_epoch") << get_epoch();
-    f->dump_stream("quorum") << get_quorum();
-    f->dump_stream("quorum_names") << get_quorum_names();
-    f->dump_stream("osdmap") << osdmon()->osdmap;
-    f->dump_stream("pgmap") << pgmon()->pg_map;
-    f->dump_stream("mdsmap") << mdsmon()->mdsmap;
+    f->dump_unsigned("election_epoch", get_epoch());
+    {
+      f->open_array_section("quorum");
+      for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
+	f->dump_int("rank", *p);
+      f->close_section();
+      f->open_array_section("quorum_names");
+      for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
+	f->dump_string("id", monmap->get_name(*p));
+      f->close_section();
+    }
+    f->open_object_section("monmap");
+    monmap->dump(f);
+    f->close_section();
+    f->open_object_section("osdmap");
+    osdmon()->osdmap.print_summary(f, cout);
+    f->close_section();
+    f->open_object_section("pgmap");
+    pgmon()->pg_map.print_summary(f, NULL);
+    f->close_section();
+    f->open_object_section("mdsmap");
+    mdsmon()->mdsmap.print_summary(f, NULL);
     f->close_section();
   } else {
     ss << "  cluster " << monmap->get_fsid() << "\n";
