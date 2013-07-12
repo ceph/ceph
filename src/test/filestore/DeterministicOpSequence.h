@@ -39,10 +39,9 @@ class DeterministicOpSequence : public TestFileStoreState {
     DSOP_CLONE = 2,
     DSOP_CLONE_RANGE = 3,
     DSOP_OBJ_REMOVE = 4,
-    DSOP_COLL_MOVE = 5,
-    DSOP_COLL_RENAME = 6,
-    DSOP_COLL_ADD = 7,
-    DSOP_SET_ATTRS = 8,
+    DSOP_COLL_RENAME = 5,
+    DSOP_COLL_ADD = 6,
+    DSOP_SET_ATTRS = 7,
 
     DSOP_FIRST = DSOP_TOUCH,
     DSOP_LAST = DSOP_SET_ATTRS,
@@ -56,18 +55,17 @@ class DeterministicOpSequence : public TestFileStoreState {
   ObjectStore::Sequencer m_osr;
   std::ofstream m_status;
 
-  void run_one_op(int op, rngen_t& gen);
+  bool run_one_op(int op, rngen_t& gen);
 
   void note_txn(ObjectStore::Transaction *t);
-  void do_touch(rngen_t& gen);
-  void do_remove(rngen_t& gen);
-  void do_write(rngen_t& gen);
-  void do_clone(rngen_t& gen);
-  void do_clone_range(rngen_t& gen);
-  void do_coll_move(rngen_t& gen);
-  void do_coll_rename(rngen_t& gen);
-  void do_coll_add(rngen_t& gen);
-  void do_set_attrs(rngen_t& gen);
+  bool do_touch(rngen_t& gen);
+  bool do_remove(rngen_t& gen);
+  bool do_write(rngen_t& gen);
+  bool do_clone(rngen_t& gen);
+  bool do_clone_range(rngen_t& gen);
+  bool do_coll_rename(rngen_t& gen);
+  bool do_coll_add(rngen_t& gen);
+  bool do_set_attrs(rngen_t& gen);
 
   virtual void _do_touch(coll_t coll, hobject_t& obj);
   virtual void _do_remove(coll_t coll, hobject_t& obj);
@@ -82,7 +80,6 @@ class DeterministicOpSequence : public TestFileStoreState {
   virtual void _do_write_and_clone_range(coll_t coll, hobject_t& orig_obj,
       hobject_t& new_obj, uint64_t srcoff, uint64_t srclen,
       uint64_t dstoff, bufferlist& bl);
-  virtual void _do_coll_move(coll_t new_coll, coll_t old_coll, hobject_t& obj);
   virtual void _do_coll_add(coll_t orig_coll, coll_t new_coll, hobject_t& obj);
   virtual void _do_coll_rename(coll_t orig_coll, coll_t new_coll);
 

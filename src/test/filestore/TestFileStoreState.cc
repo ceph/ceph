@@ -45,6 +45,7 @@ void TestFileStoreState::init(int colls, int objs)
 
   wait_for_ready();
 
+  int baseid = 0;
   for (int i = 0; i < colls; i++) {
     int coll_id = i;
     coll_entry_t *entry = coll_create(coll_id);
@@ -56,9 +57,12 @@ void TestFileStoreState::init(int colls, int objs)
     t->touch(META_COLL, entry->m_meta_obj);
 
     for (int i = 0; i < objs; i++) {
-      hobject_t *obj = entry->touch_obj(i);
+      hobject_t *obj = entry->touch_obj(i + baseid);
       t->touch(entry->m_coll, *obj);
+      ceph_assert(i + baseid == m_num_objects);
+      m_num_objects++;
     }
+    baseid += objs;
 
     m_store->queue_transaction(&(entry->m_osr), t,
         new C_OnFinished(this, t));
@@ -155,6 +159,13 @@ TestFileStoreState::coll_entry_t::~coll_entry_t()
     }
     m_objects.clear();
   }
+}
+
+bool TestFileStoreState::coll_entry_t::check_for_obj(int id)
+{
+  if (m_objects.count(id))
+    return true;
+  return false;
 }
 
 hobject_t *TestFileStoreState::coll_entry_t::touch_obj(int id)
@@ -267,4 +278,19 @@ TestFileStoreState::coll_entry_t::replace_obj(int id, hobject_t *obj) {
   hobject_t *old_obj = remove_obj(id);
   m_objects.insert(make_pair(id, obj));
   return old_obj;
+}
+
+int TestFileStoreState::coll_entry_t::get_random_obj_id(rngen_t& gen)
+{
+  ceph_assert(!m_objects.empty());
+
+  boost::uniform_int<> orig_obj_rng(0, m_objects.size()-1);
+  int pos = orig_obj_rng(gen);
+  map<int, hobject_t*>::iterator it = m_objects.begin();
+  for (int i = 0; it != m_objects.end(); ++it, i++) {
+    if (i == pos) {
+      return it->first;
+    }
+  }
+  ceph_assert(0 == "INTERNAL ERROR");
 }
