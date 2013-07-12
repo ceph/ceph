@@ -390,11 +390,15 @@ COMMAND("osd crush link " \
 	"link existing entry for <name> under location <args>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush rm " \
-	"name=name,type=CephString", \
-	"remove <name> from crush map", "osd", "rw", "cli,rest")
+	"name=name,type=CephString " \
+	"name=ancestor,type=CephString,req=false", \
+	"remove <name> from crush map (everywhere, or just at <ancestor>",\
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush remove " \
-	"name=name,type=CephString", \
-	"remove <name> from crush map", "osd", "rw", "cli,rest")
+	"name=name,type=CephString " \
+	"name=ancestor,type=CephString,req=false", \
+	"remove <name> from crush map (everywhere, or just at <ancestor>", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush unlink " \
 	"name=name,type=CephString " \
 	"name=ancestor,type=CephString,req=false", \
