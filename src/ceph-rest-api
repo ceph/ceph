@@ -1,6 +1,8 @@
 #!/usr/bin/python
 # vim: ts=4 sw=4 smarttab expandtab
 
+import argparse
+import inspect
 import os
 import sys
 
@@ -25,14 +27,40 @@ if MYDIR.endswith('src') and \
         os.execvp('python', ['python'] + sys.argv)
     sys.path.insert(0, os.path.join(MYDIR, 'pybind'))
 
-from ceph_rest_api import api_setup, app
 
-addr, port = api_setup()
+def parse_args():
+    parser = argparse.ArgumentParser(description="Ceph REST API webapp")
+    parser.add_argument('-c', '--conf', help='Ceph configuration file')
+    parser.add_argument('--cluster', help='Ceph cluster name')
+    parser.add_argument('-n', '--name', help='Ceph client name')
 
-if __name__ == '__main__':
-    import inspect
-    files = [os.path.split(fr[1])[-1] for fr in inspect.stack()]
-    if 'pdb.py' in files:
-        app.run(host=addr, port=port, debug=True, use_reloader=False, use_debugger=False)
-    else:
-        app.run(host=addr, port=port, debug=True)
+    return parser.parse_args()
+
+
+# main
+
+parsed_args = parse_args()
+if parsed_args.conf:
+    os.environ['CEPH_CONF'] = parsed_args.conf
+if parsed_args.cluster:
+    os.environ['CEPH_CLUSTER_NAME'] = parsed_args.cluster
+if parsed_args.name:
+    os.environ['CEPH_NAME'] = parsed_args.name
+
+# import now that env vars are available to imported module
+
+try:
+    import ceph_rest_api
+except Exception as e:
+    print >> sys.stderr, "Error importing ceph_rest_api: ", str(e)
+    sys.exit(1)
+
+# importing ceph_rest_api has set module globals 'app', 'addr', and 'port' 
+
+files = [os.path.split(fr[1])[-1] for fr in inspect.stack()]
+if 'pdb.py' in files:
+    ceph_rest_api.app.run(host=ceph_rest_api.addr, port=ceph_rest_api.port,
+                          debug=True, use_reloader=False, use_debugger=False)
+else:
+    ceph_rest_api.app.run(host=ceph_rest_api.addr, port=ceph_rest_api.port,
+                          debug=True)
