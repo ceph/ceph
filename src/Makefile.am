@@ -1694,7 +1694,8 @@ dist-hook:
 python_PYTHON = pybind/rados.py \
 		pybind/rbd.py \
 		pybind/cephfs.py \
-		pybind/ceph_argparse.py
+		pybind/ceph_argparse.py \
+		pybind/ceph_rest_api.py
 
 # headers... and everything else we want to include in a 'make dist' 
 # that autotools doesn't magically identify.
