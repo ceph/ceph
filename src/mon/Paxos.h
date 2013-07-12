@@ -983,6 +983,17 @@ private:
    * Begin proposing the Proposal at the front of the proposals queue.
    */
   void propose_queued();
+
+  /**
+   * refresh state from store
+   *
+   * Called when we have new state for the mon to consume.  If we return false,
+   * abort (we triggered a bootstrap).
+   *
+   * @returns true on success, false if we are now bootstrapping
+   */
+  bool do_refresh();
+
   void finish_proposal();
 
 public:
