@@ -62,6 +62,9 @@ TYPE(ScrubMap)
 TYPE(osd_peer_stat_t)
 TYPE(clone_info)
 TYPE(obj_list_snap_response_t)
+TYPE(PullOp)
+TYPE(PushOp)
+TYPE(PushReplyOp)
 
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)
