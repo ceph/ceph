@@ -45,7 +45,7 @@ TYPE_FEATUREFUL(pool_stat_t)
 TYPE(pg_history_t)
 TYPE(pg_info_t)
 TYPE(pg_interval_t)
-//TYPE(pg_query_t)
+TYPE_FEATUREFUL(pg_query_t)
 TYPE(pg_log_entry_t)
 TYPE(pg_log_t)
 TYPE(pg_missing_t::item)
@@ -62,6 +62,9 @@ TYPE(ScrubMap)
 TYPE(osd_peer_stat_t)
 TYPE(clone_info)
 TYPE(obj_list_snap_response_t)
+TYPE(PullOp)
+TYPE(PushOp)
+TYPE(PushReplyOp)
 
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)
@@ -78,6 +81,10 @@ TYPE(AuthMonitor::Incremental)
 #include "mon/PGMap.h"
 TYPE(PGMap::Incremental)
 TYPE(PGMap)
+
+#include "mon/MonitorDBStore.h"
+TYPE(MonitorDBStore::Transaction)
+TYPE(MonitorDBStore::Op)
 
 #include "mon/MonMap.h"
 TYPE_FEATUREFUL(MonMap)
@@ -114,6 +121,7 @@ TYPE(dirfrag_load_vec_t)
 TYPE(mds_load_t)
 TYPE(cap_reconnect_t)
 TYPE(inode_backtrace_t)
+TYPE(inode_backpointer_t)
 
 #include "mds/MDSMap.h"
 TYPE_FEATUREFUL(MDSMap)
@@ -193,12 +201,28 @@ TYPE(rgw_bucket_dir_entry)
 TYPE(rgw_bucket_category_stats)
 TYPE(rgw_bucket_dir_header)
 TYPE(rgw_bucket_dir)
+TYPE(rgw_bucket_entry_ver)
 
 #include "cls/rgw/cls_rgw_ops.h"
 TYPE(rgw_cls_obj_prepare_op)
 TYPE(rgw_cls_obj_complete_op)
 TYPE(rgw_cls_list_op)
 TYPE(rgw_cls_list_ret)
+TYPE(cls_rgw_gc_defer_entry_op)
+TYPE(cls_rgw_gc_list_op)
+TYPE(cls_rgw_gc_list_ret)
+TYPE(cls_rgw_gc_obj_info)
+TYPE(cls_rgw_gc_remove_op)
+TYPE(cls_rgw_gc_set_entry_op)
+TYPE(cls_rgw_obj)
+TYPE(cls_rgw_obj_chain)
+TYPE(rgw_cls_tag_timeout_op)
+TYPE(cls_rgw_bi_log_list_op)
+TYPE(cls_rgw_bi_log_trim_op)
+TYPE(cls_rgw_bi_log_list_ret)
+
+#include "cls/rgw/cls_rgw_client.h"
+TYPE(rgw_bi_log_entry)
 
 #include "rgw/rgw_common.h"
 TYPE(RGWAccessKey);
@@ -241,6 +265,14 @@ TYPE(cls_replica_log_delete_marker_op)
 TYPE(cls_replica_log_set_marker_op)
 TYPE(cls_replica_log_get_bounds_op)
 TYPE(cls_replica_log_get_bounds_ret)
+
+#include "cls/refcount/cls_refcount_ops.h"
+TYPE(cls_refcount_get_op)
+TYPE(cls_refcount_put_op)
+TYPE(cls_refcount_read_op)
+TYPE(cls_refcount_read_ret)
+TYPE(cls_refcount_set_op)
+
 
 // --- messages ---
 #include "messages/MAuth.h"
@@ -365,6 +397,10 @@ MESSAGE(MMonMap)
 MESSAGE(MMonPaxos)
 #include "messages/MMonProbe.h"
 MESSAGE(MMonProbe)
+#include "messages/MMonScrub.h"
+MESSAGE(MMonScrub)
+#include "messages/MMonSync.h"
+MESSAGE(MMonSync)
 #include "messages/MMonSubscribe.h"
 MESSAGE(MMonSubscribe)
 #include "messages/MMonSubscribeAck.h"
