@@ -20,6 +20,8 @@
 #include <map>
 #include <vector>
 
+typedef boost::mt11213b rngen_t;
+
 class TestFileStoreState {
 public:
   struct coll_entry_t {
@@ -38,11 +40,13 @@ public:
     ~coll_entry_t();
 
     hobject_t *touch_obj(int id);
+    bool check_for_obj(int id);
     hobject_t *get_obj(int id);
     hobject_t *remove_obj(int id);
     hobject_t *get_obj_at(int pos, int *key = NULL);
     hobject_t *remove_obj_at(int pos, int *key = NULL);
     hobject_t *replace_obj(int id, hobject_t *obj);
+    int get_random_obj_id(rngen_t& gen);
 
    private:
     hobject_t *get_obj(int id, bool remove);
@@ -59,6 +63,7 @@ public:
   vector<int> m_collections_ids;
   int m_next_coll_nr;
   int m_num_objs_per_coll;
+  int m_num_objects;
 
   int m_max_in_flight;
   atomic_t m_in_flight;
@@ -92,7 +97,7 @@ public:
 
  public:
   TestFileStoreState(FileStore *store) :
-    m_next_coll_nr(0), m_num_objs_per_coll(10),
+    m_next_coll_nr(0), m_num_objs_per_coll(10), m_num_objects(0),
     m_max_in_flight(0), m_finished_lock("Finished Lock") {
     m_in_flight.set(0);
     m_store.reset(store);
