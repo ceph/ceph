@@ -1144,7 +1144,7 @@ void Monitor::handle_sync_chunk(MMonSync *m)
   if (!sync_full) {
     dout(10) << __func__ << " applying recent paxos transactions as we go" << dendl;
     MonitorDBStore::Transaction tx;
-    paxos->read_and_prepare_transactions(&tx, paxos->get_version(), m->last_committed);
+    paxos->read_and_prepare_transactions(&tx, paxos->get_version() + 1, m->last_committed);
     tx.put(paxos->get_name(), "last_committed", m->last_committed);
 
     dout(30) << __func__ << " tx dump:\n";
