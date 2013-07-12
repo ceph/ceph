@@ -3474,14 +3474,10 @@ void Monitor::tick()
 
 int Monitor::check_fsid()
 {
-  ostringstream ss;
-  ss << monmap->get_fsid();
-  string us = ss.str();
-  bufferlist ebl;
-
   if (!store->exists(MONITOR_NAME, "cluster_uuid"))
     return -ENOENT;
 
+  bufferlist ebl;
   int r = store->get(MONITOR_NAME, "cluster_uuid", ebl);
   assert(r == 0);
 
@@ -3493,10 +3489,15 @@ int Monitor::check_fsid()
     es.resize(pos);
 
   dout(10) << "check_fsid cluster_uuid contains '" << es << "'" << dendl;
-  if (es.length() < us.length() ||
-      strncmp(us.c_str(), es.c_str(), us.length()) != 0) {
-    derr << "error: cluster_uuid file exists with value '" << es
-	 << "', != our uuid " << monmap->get_fsid() << dendl;
+  uuid_d ondisk;
+  if (!ondisk.parse(es.c_str())) {
+    derr << "error: unable to parse uuid" << dendl;
+    return -EINVAL;
+  }
+
+  if (monmap->get_fsid() != ondisk) {
+    derr << "error: cluster_uuid file exists with value " << ondisk
+	 << ", != our uuid " << monmap->get_fsid() << dendl;
     return -EEXIST;
   }
 
