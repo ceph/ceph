@@ -1735,7 +1735,6 @@ void OSDMap::print_summary(Formatter *f, ostream& out) const
     f->dump_string("nearfull", test_flag(CEPH_OSDMAP_NEARFULL) ?
 		   "true" : "false");
     f->close_section();
-    f->flush(out);
   } else {
     out << "e" << get_epoch() << ": "
 	<< get_num_osds() << " osds: "
