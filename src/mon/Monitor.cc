@@ -820,14 +820,6 @@ void Monitor::sync_reset()
   sync_start_version = 0;
 }
 
-/**
- * Start sync process
- *
- * Start pulling committed state from another monitor.
- *
- * @param other Synchronization provider to-be.
- * @param whether to do a full sync or just catch up on recent paxos
- */
 void Monitor::sync_start(entity_inst_t &other, bool full)
 {
   dout(10) << __func__ << " " << other << (full ? " full" : " recent") << dendl;
