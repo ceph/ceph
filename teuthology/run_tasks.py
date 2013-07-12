@@ -3,7 +3,7 @@ import logging
 
 log = logging.getLogger(__name__)
 
-def _run_one_task(taskname, **kwargs):
+def run_one_task(taskname, **kwargs):
     submod = taskname
     subtask = 'task'
     if '.' in taskname:
@@ -22,7 +22,7 @@ def run_tasks(tasks, ctx):
             except ValueError:
                 raise RuntimeError('Invalid task definition: %s' % taskdict)
             log.info('Running task %s...', taskname)
-            manager = _run_one_task(taskname, ctx=ctx, config=config)
+            manager = run_one_task(taskname, ctx=ctx, config=config)
             if hasattr(manager, '__enter__'):
                 manager.__enter__()
                 stack.append(manager)
