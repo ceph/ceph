@@ -5,6 +5,7 @@
 
 #include "include/types.h"
 #include "include/utime.h"
+#include "common/Formatter.h"
 
 #define CEPH_RGW_REMOVE 'r'
 #define CEPH_RGW_UPDATE 'u'
@@ -255,7 +256,7 @@ struct rgw_bi_log_entry {
   uint64_t index_ver;
   string tag;
 
-  rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), index_ver(0) {}
+  rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), state(CLS_RGW_STATE_PENDING_MODIFY), index_ver(0) {}
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
@@ -568,6 +569,19 @@ struct cls_rgw_obj {
     ::decode(key, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const {
+    f->dump_string("pool", pool);
+    f->dump_string("oid", oid);
+    f->dump_string("key", key);
+  }
+  static void generate_test_instances(list<cls_rgw_obj*>& ls) {
+    ls.push_back(new cls_rgw_obj);
+    ls.push_back(new cls_rgw_obj);
+    ls.back()->pool = "mypool";
+    ls.back()->oid = "myoid";
+    ls.back()->key = "mykey";
+  }
 };
 WRITE_CLASS_ENCODER(cls_rgw_obj)
 
@@ -595,6 +609,19 @@ struct cls_rgw_obj_chain {
     ::decode(objs, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const {
+    f->open_array_section("objs");
+    for (list<cls_rgw_obj>::const_iterator p = objs.begin(); p != objs.end(); ++p) {
+      f->open_object_section("obj");
+      p->dump(f);
+      f->close_section();
+    }
+    f->close_section();
+  }
+  static void generate_test_instances(list<cls_rgw_obj_chain*>& ls) {
+    ls.push_back(new cls_rgw_obj_chain);
+  }
 };
 WRITE_CLASS_ENCODER(cls_rgw_obj_chain)
 
@@ -605,7 +632,6 @@ struct cls_rgw_gc_obj_info
   utime_t time;
 
   cls_rgw_gc_obj_info() {}
-
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -621,6 +647,20 @@ struct cls_rgw_gc_obj_info
     ::decode(chain, bl);
     ::decode(time, bl);
     DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const {
+    f->dump_string("tag", tag);
+    f->open_object_section("chain");
+    chain.dump(f);
+    f->close_section();
+    f->dump_stream("time") << time;
+  }
+  static void generate_test_instances(list<cls_rgw_gc_obj_info*>& ls) {
+    ls.push_back(new cls_rgw_gc_obj_info);
+    ls.push_back(new cls_rgw_gc_obj_info);
+    ls.back()->tag = "footag";
+    ls.back()->time = utime_t(21, 32);
   }
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_obj_info)
