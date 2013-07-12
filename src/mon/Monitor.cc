@@ -1544,6 +1544,7 @@ void Monitor::sync_force(Formatter *f, ostream& ss)
   }
 
   MonitorDBStore::Transaction tx;
+  sync_stash_critical_state(&tx);
   tx.put("mon_sync", "force_sync", 1);
   store->apply_transaction(tx);
 
