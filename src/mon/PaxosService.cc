@@ -259,6 +259,10 @@ void PaxosService::election_finished()
 
 void PaxosService::_active()
 {
+  if (is_proposing()) {
+    dout(10) << "_acting - proposing" << dendl;
+    return;
+  }
   if (!is_active()) {
     dout(10) << "_active - not active" << dendl;
     wait_for_active(new C_Active(this));
