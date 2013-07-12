@@ -81,7 +81,7 @@ TestFileStoreState::coll_entry_t *TestFileStoreState::coll_create(int id)
   memset(meta_buf, 0, 100);
   snprintf(buf, 100, "0.%d_head", id);
   snprintf(meta_buf, 100, "pglog_0.%d_head", id);
-  return (new coll_entry_t(this, id, buf, meta_buf));
+  return (new coll_entry_t(id, buf, meta_buf));
 }
 
 TestFileStoreState::coll_entry_t*
@@ -178,7 +178,7 @@ hobject_t *TestFileStoreState::coll_entry_t::touch_obj(int id)
 
   char buf[100];
   memset(buf, 0, 100);
-  snprintf(buf, 100, "obj%d-%d", parent->m_next_object_id++, id);
+  snprintf(buf, 100, "obj%d", id);
 
   hobject_t *obj = new hobject_t(sobject_t(object_t(buf), CEPH_NOSNAP));
   m_objects.insert(make_pair(id, obj));

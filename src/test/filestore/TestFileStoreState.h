@@ -22,21 +22,18 @@
 
 class TestFileStoreState {
 public:
-  int m_next_object_id;
   struct coll_entry_t {
-    TestFileStoreState *parent;
-    int m_next_object_id;
     int m_id;
     coll_t m_coll;
     hobject_t m_meta_obj;
     ObjectStore::Sequencer m_osr;
     map<int, hobject_t*> m_objects;
+    int m_next_object_id;
 
-    coll_entry_t(TestFileStoreState *parent,
-		 int i, char *coll_buf, char *meta_obj_buf)
-    : parent(parent), m_next_object_id(0), m_id(i), m_coll(coll_buf),
+    coll_entry_t(int i, char *coll_buf, char *meta_obj_buf)
+    : m_id(i), m_coll(coll_buf),
       m_meta_obj(sobject_t(object_t(meta_obj_buf), CEPH_NOSNAP)),
-      m_osr(coll_buf) {
+      m_osr(coll_buf), m_next_object_id(0) {
     }
     ~coll_entry_t();
 
@@ -96,7 +93,6 @@ public:
 
  public:
   TestFileStoreState(FileStore *store) :
-    m_next_object_id(0),
     m_next_coll_nr(0), m_num_objs_per_coll(10),
     m_max_in_flight(0), m_finished_lock("Finished Lock") {
     m_in_flight.set(0);
