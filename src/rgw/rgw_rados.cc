@@ -2610,8 +2610,7 @@ int RGWRados::get_obj(void *ctx, void **handle, rgw_obj& obj,
   else
     len = end - ofs + 1;
 
-  if (astate->has_manifest &&
-      astate->manifest.objs.size() > 0) {
+  if (astate->has_manifest && !astate->manifest.objs.empty()) {
     /* now get the relevant object part */
     map<uint64_t, RGWObjManifestPart>::iterator iter = astate->manifest.objs.upper_bound(ofs);
     /* we're now pointing at the next part (unless the first part starts at a higher ofs),
