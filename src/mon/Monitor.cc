@@ -820,14 +820,6 @@ void Monitor::sync_reset()
   sync_start_version = 0;
 }
 
-/**
- * Start sync process
- *
- * Start pulling committed state from another monitor.
- *
- * @param other Synchronization provider to-be.
- * @param whether to do a full sync or just catch up on recent paxos
- */
 void Monitor::sync_start(entity_inst_t &other, bool full)
 {
   dout(10) << __func__ << " " << other << (full ? " full" : " recent") << dendl;
@@ -842,20 +834,16 @@ void Monitor::sync_start(entity_inst_t &other, bool full)
   sync_full = full;
 
   if (sync_full) {
-    // mark that we are syncing
+    // stash key state, and mark that we are syncing
     MonitorDBStore::Transaction t;
-
-    bufferlist backup_monmap;
-    sync_obtain_latest_monmap(backup_monmap);
-    assert(backup_monmap.length() > 0);
+    sync_stash_critical_state(&t);
+    t.put("mon_sync", "in_sync", 1);
 
     sync_last_committed_floor = MAX(sync_last_committed_floor, paxos->get_version());
-    dout(10) << __func__ << " marking sync in progress, storing sync_last_commited_floor "
+    dout(10) << __func__ << " marking sync in progress, storing sync_last_committed_floor "
 	     << sync_last_committed_floor << dendl;
+    t->put("mon_sync", "last_committed_floor", sync_last_committed_floor);
 
-    t.put("mon_sync", "latest_monmap", backup_monmap);
-    t.put("mon_sync", "in_sync", 1);
-    t.put("mon_sync", "last_committed_floor", sync_last_committed_floor);
     store->apply_transaction(t);
 
     assert(g_conf->mon_sync_requester_kill_at != 1);
@@ -878,6 +866,15 @@ void Monitor::sync_start(entity_inst_t &other, bool full)
   if (!sync_full)
     m->last_committed = paxos->get_version();
   messenger->send_message(m, sync_provider);
+}
+
+void Monitor::sync_stash_critical_state(MonitorDBStore::Transaction *t)
+{
+  dout(10) << __func__ << dendl;
+  bufferlist backup_monmap;
+  sync_obtain_latest_monmap(backup_monmap);
+  assert(backup_monmap.length() > 0);
+  t->put("mon_sync", "latest_monmap", backup_monmap);
 }
 
 void Monitor::sync_reset_timeout()
@@ -1030,7 +1027,8 @@ void Monitor::handle_sync_get_chunk(MMonSync *m)
   SyncProvider& sp = sync_providers[m->cookie];
   sp.reset_timeout(g_ceph_context, g_conf->mon_sync_timeout * 2);
 
-  if (sp.last_committed < paxos->get_first_committed()) {
+  if (sp.last_committed < paxos->get_first_committed() &&
+      paxos->get_first_committed() >= 1) {
     dout(10) << __func__ << " sync requester fell behind paxos, their lc " << sp.last_committed
 	     << " < our fc " << paxos->get_first_committed() << dendl;
     sync_providers.erase(m->cookie);
@@ -1143,7 +1141,7 @@ void Monitor::handle_sync_chunk(MMonSync *m)
   if (!sync_full) {
     dout(10) << __func__ << " applying recent paxos transactions as we go" << dendl;
     MonitorDBStore::Transaction tx;
-    paxos->read_and_prepare_transactions(&tx, paxos->get_version(), m->last_committed);
+    paxos->read_and_prepare_transactions(&tx, paxos->get_version() + 1, m->last_committed);
     tx.put(paxos->get_name(), "last_committed", m->last_committed);
 
     dout(30) << __func__ << " tx dump:\n";
@@ -1546,6 +1544,7 @@ void Monitor::sync_force(Formatter *f, ostream& ss)
   }
 
   MonitorDBStore::Transaction tx;
+  sync_stash_critical_state(&tx);
   tx.put("mon_sync", "force_sync", 1);
   store->apply_transaction(tx);
 
@@ -3475,14 +3474,10 @@ void Monitor::tick()
 
 int Monitor::check_fsid()
 {
-  ostringstream ss;
-  ss << monmap->get_fsid();
-  string us = ss.str();
-  bufferlist ebl;
-
   if (!store->exists(MONITOR_NAME, "cluster_uuid"))
     return -ENOENT;
 
+  bufferlist ebl;
   int r = store->get(MONITOR_NAME, "cluster_uuid", ebl);
   assert(r == 0);
 
@@ -3494,10 +3489,15 @@ int Monitor::check_fsid()
     es.resize(pos);
 
   dout(10) << "check_fsid cluster_uuid contains '" << es << "'" << dendl;
-  if (es.length() < us.length() ||
-      strncmp(us.c_str(), es.c_str(), us.length()) != 0) {
-    derr << "error: cluster_uuid file exists with value '" << es
-	 << "', != our uuid " << monmap->get_fsid() << dendl;
+  uuid_d ondisk;
+  if (!ondisk.parse(es.c_str())) {
+    derr << "error: unable to parse uuid" << dendl;
+    return -EINVAL;
+  }
+
+  if (monmap->get_fsid() != ondisk) {
+    derr << "error: cluster_uuid file exists with value " << ondisk
+	 << ", != our uuid " << monmap->get_fsid() << dendl;
     return -EEXIST;
   }
 
