@@ -317,14 +317,12 @@ private:
   void sync_obtain_latest_monmap(bufferlist &bl);
 
   /**
-   * Start the synchronization efforts.
+   * Start sync process
    *
-   * This function should be called whenever we find the need to synchronize
-   * our store state with the remaining cluster.
+   * Start pulling committed state from another monitor.
    *
-   *
-   * @param entity An entity instance referring to the sync provider we picked.
-   * @param whether to sycn the full store, or just pull recent paxos commits
+   * @param entity where to pull committed state from
+   * @param full whether to do a full sync or just catch up on recent paxos
    */
   void sync_start(entity_inst_t &entity, bool full);
 
@@ -335,6 +333,14 @@ public:
   void sync_force(Formatter *f, ostream& ss);
 
 private:
+  /**
+   * store critical state for safekeeping during sync
+   *
+   * We store a few things on the side that we don't want to get clobbered by sync.  This
+   * includes the latest monmap and a lower bound on last_committed.
+   */
+  void sync_stash_critical_state(MonitorDBStore::Transaction *tx);
+
   /**
    * reset the sync timeout
    *
