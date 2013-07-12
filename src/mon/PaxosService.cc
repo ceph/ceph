@@ -163,10 +163,13 @@ void PaxosService::propose_pending()
 {
   dout(10) << "propose_pending" << dendl;
   assert(have_pending);
+  assert(!proposing);
   assert(mon->is_leader());
   assert(is_active());
-  if (!is_active())
+  if (!is_active()) {
+    dout(10) << "propose_pending - not active" << dendl;
     return;
+  }
 
   if (proposal_timer) {
     dout(10) << " canceling proposal_timer " << proposal_timer << dendl;
