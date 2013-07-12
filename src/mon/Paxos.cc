@@ -427,11 +427,13 @@ void Paxos::handle_last(MMonPaxos *last)
 	dout(10) << "that's everyone.  active!" << dendl;
 	extend_lease();
 
-        finish_proposal();
+	if (do_refresh()) {
+	  finish_proposal();
 
-	finish_contexts(g_ceph_context, waiting_for_active);
-	finish_contexts(g_ceph_context, waiting_for_readable);
-	finish_contexts(g_ceph_context, waiting_for_writeable);
+	  finish_contexts(g_ceph_context, waiting_for_active);
+	  finish_contexts(g_ceph_context, waiting_for_readable);
+	  finish_contexts(g_ceph_context, waiting_for_writeable);
+	}
       }
     }
   } else {
@@ -507,11 +509,13 @@ void Paxos::begin(bufferlist& v)
   if (mon->get_quorum().size() == 1) {
     // we're alone, take it easy
     commit();
-    finish_proposal();
-    finish_contexts(g_ceph_context, waiting_for_active);
-    finish_contexts(g_ceph_context, waiting_for_commit);
-    finish_contexts(g_ceph_context, waiting_for_readable);
-    finish_contexts(g_ceph_context, waiting_for_writeable);
+    if (do_refresh()) {
+      finish_proposal();
+      finish_contexts(g_ceph_context, waiting_for_active);
+      finish_contexts(g_ceph_context, waiting_for_commit);
+      finish_contexts(g_ceph_context, waiting_for_readable);
+      finish_contexts(g_ceph_context, waiting_for_writeable);
+    }
     return;
   }
 
@@ -612,6 +616,8 @@ void Paxos::handle_accept(MMonPaxos *accept)
     // note: this may happen before the lease is reextended (below)
     dout(10) << " got majority, committing" << dendl;
     commit();
+    if (!do_refresh())
+      goto out;
   }
 
   // done?
@@ -632,6 +638,8 @@ void Paxos::handle_accept(MMonPaxos *accept)
     finish_contexts(g_ceph_context, waiting_for_readable);
     finish_contexts(g_ceph_context, waiting_for_writeable);
   }
+
+ out:
   accept->put();
 }
 
@@ -787,13 +795,25 @@ void Paxos::warn_on_future_time(utime_t t, entity_name_t from)
 
 }
 
+bool Paxos::do_refresh()
+{
+  bool need_bootstrap = false;
+
+  // make sure we have the latest state loaded up
+  mon->refresh_from_paxos(&need_bootstrap);
+
+  if (need_bootstrap) {
+    dout(10) << " doing requested bootstrap" << dendl;
+    mon->bootstrap();
+    return false;
+  }
+
+  return true;
+}
+
 void Paxos::finish_proposal()
 {
   assert(mon->is_leader());
-
-  // make sure we have the latest state loaded up
-  bool need_bootstrap = false;
-  mon->refresh_from_paxos(&need_bootstrap);
 
   // ok, now go active!
   state = STATE_ACTIVE;
@@ -818,12 +838,6 @@ void Paxos::finish_proposal()
 
   dout(10) << __func__ << " state " << state
 	   << " proposals left " << proposals.size() << dendl;
-
-  if (need_bootstrap) {
-    dout(10) << " doing requested bootstrap" << dendl;
-    mon->bootstrap();
-    return;
-  }
 
   if (should_trim()) {
     trim();
