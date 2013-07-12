@@ -1369,7 +1369,7 @@ extern "C" int ceph_ll_readlink(struct ceph_mount_info *cmount,
 				Inode *in, char *buf, size_t bufsiz, int uid,
 				int gid)
 {
-  return (cmount->get_client()->ll_readlink(in, buf, bufsiz, uid, gid);
+  return (cmount->get_client()->ll_readlink(in, buf, bufsiz, uid, gid));
 }
 
 extern "C" int ceph_ll_symlink(struct ceph_mount_info *cmount,
