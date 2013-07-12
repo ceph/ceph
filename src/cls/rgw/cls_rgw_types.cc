@@ -66,11 +66,21 @@ void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& 
   }
   o.push_back(new rgw_bucket_dir_entry);
 }
+
 void rgw_bucket_entry_ver::dump(Formatter *f) const
 {
   f->dump_int("pool", pool);
   f->dump_unsigned("epoch", epoch);
 }
+
+void rgw_bucket_entry_ver::generate_test_instances(list<rgw_bucket_entry_ver*>& ls)
+{
+  ls.push_back(new rgw_bucket_entry_ver);
+  ls.push_back(new rgw_bucket_entry_ver);
+  ls.back()->pool = 123;
+  ls.back()->epoch = 12322;
+}
+
 
 void rgw_bucket_dir_entry::dump(Formatter *f) const
 {
@@ -137,6 +147,19 @@ void rgw_bi_log_entry::dump(Formatter *f) const
   f->open_object_section("ver");
   ver.dump(f);
   f->close_section();
+}
+
+void rgw_bi_log_entry::generate_test_instances(list<rgw_bi_log_entry*>& ls)
+{
+  ls.push_back(new rgw_bi_log_entry);
+  ls.push_back(new rgw_bi_log_entry);
+  ls.back()->id = "midf";
+  ls.back()->object = "obj";
+  ls.back()->timestamp = utime_t(2, 3);
+  ls.back()->index_ver = 4323;
+  ls.back()->tag = "tagasdfds";
+  ls.back()->op = CLS_RGW_OP_DEL;
+  ls.back()->state = CLS_RGW_STATE_PENDING_MODIFY;
 }
 
 void rgw_bucket_category_stats::generate_test_instances(list<rgw_bucket_category_stats*>& o)
