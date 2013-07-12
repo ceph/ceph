@@ -1007,7 +1007,15 @@ int Pipe::connect()
           ldout(msgr->cct,2) << "connect read error on newly_acked_seq" << dendl;
           goto fail_locked;
         }
-        handle_ack(newly_acked_seq);
+	while (newly_acked_seq > out_seq) {
+	  Message *m = _get_next_outgoing();
+	  assert(m);
+	  ldout(msgr->cct,2) << " discarding previously sent " << m->get_seq()
+			     << " " << *m << dendl;
+	  assert(m->get_seq() <= newly_acked_seq);
+	  m->put();
+	  ++out_seq;
+	}
         if (tcp_write((char*)&in_seq, sizeof(in_seq)) < 0) {
           ldout(msgr->cct,2) << "connect write error on in_seq" << dendl;
           goto fail_locked;
