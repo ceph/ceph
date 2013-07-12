@@ -435,10 +435,9 @@ void DeterministicOpSequence::do_coll_add(rngen_t& gen)
   }
   dout(0) << "do_coll_add " << orig_coll->m_coll.to_str() << "/" << obj->oid.name
         << " => " << new_coll->m_coll.to_str() << "/" << obj->oid.name << dendl;
-  hobject_t *old = new_coll->add_obj(obj_key, obj);
+  new_coll->touch_obj(obj_key);
 
-  _do_coll_add(orig_coll->m_coll, new_coll->m_coll, old, *obj);
-  delete old;
+  _do_coll_add(orig_coll->m_coll, new_coll->m_coll, *obj);
 }
 
 void DeterministicOpSequence::_do_touch(coll_t coll, hobject_t& obj)
@@ -520,15 +519,12 @@ void DeterministicOpSequence::_do_coll_move(coll_t new_coll,
   m_store->apply_transaction(t);
 }
 
-void DeterministicOpSequence::_do_coll_add(
-  coll_t orig_coll, coll_t new_coll,
-  hobject_t *old,
-  hobject_t &obj)
+void DeterministicOpSequence::_do_coll_add(coll_t orig_coll, coll_t new_coll,
+					   hobject_t& obj)
 {
   ObjectStore::Transaction t;
   note_txn(&t);
-  if (old)
-    t.remove(new_coll, *old);
+  t.remove(new_coll, obj);
   t.collection_add(new_coll, orig_coll, obj);
   m_store->apply_transaction(t);
 }

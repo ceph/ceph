@@ -38,7 +38,6 @@ public:
     ~coll_entry_t();
 
     hobject_t *touch_obj(int id);
-    hobject_t *add_obj(int id, hobject_t *oid);
     hobject_t *get_obj(int id);
     hobject_t *remove_obj(int id);
     hobject_t *get_obj_at(int pos, int *key = NULL);
