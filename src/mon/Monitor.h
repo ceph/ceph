@@ -334,6 +334,14 @@ public:
 
 private:
   /**
+   * store critical state for safekeeping during sync
+   *
+   * We store a few things on the side that we don't want to get clobbered by sync.  This
+   * includes the latest monmap and a lower bound on last_committed.
+   */
+  void sync_stash_critical_state(MonitorDBStore::Transaction *tx);
+
+  /**
    * reset the sync timeout
    *
    * This is used on the client to restart if things aren't progressing
