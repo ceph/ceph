@@ -985,7 +985,7 @@ static int rgw_bi_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist
   if (ret < 0)
     return ret;
 
-  if (entries.size() == 0)
+  if (entries.empty())
     return -ENODATA;
 
   list<rgw_bi_log_entry>::iterator iter;
