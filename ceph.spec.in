@@ -564,6 +564,7 @@ fi
 %{python_sitelib}/rbd.py*
 %{python_sitelib}/cephfs.py*
 %{python_sitelib}/ceph_argparse.py*
+%{python_sitelib}/ceph_rest_api.py*
 
 #################################################################################
 %files -n rest-bench
