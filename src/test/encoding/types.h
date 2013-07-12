@@ -373,6 +373,10 @@ MESSAGE(MMonMap)
 MESSAGE(MMonPaxos)
 #include "messages/MMonProbe.h"
 MESSAGE(MMonProbe)
+#include "messages/MMonScrub.h"
+MESSAGE(MMonScrub)
+#include "messages/MMonSync.h"
+MESSAGE(MMonSync)
 #include "messages/MMonSubscribe.h"
 MESSAGE(MMonSubscribe)
 #include "messages/MMonSubscribeAck.h"
