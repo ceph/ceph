@@ -317,14 +317,12 @@ private:
   void sync_obtain_latest_monmap(bufferlist &bl);
 
   /**
-   * Start the synchronization efforts.
+   * Start sync process
    *
-   * This function should be called whenever we find the need to synchronize
-   * our store state with the remaining cluster.
+   * Start pulling committed state from another monitor.
    *
-   *
-   * @param entity An entity instance referring to the sync provider we picked.
-   * @param whether to sycn the full store, or just pull recent paxos commits
+   * @param entity where to pull committed state from
+   * @param full whether to do a full sync or just catch up on recent paxos
    */
   void sync_start(entity_inst_t &entity, bool full);
 
