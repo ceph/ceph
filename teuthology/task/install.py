@@ -190,7 +190,13 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
                 pkg=ceph_release)
         if cmp_msg != err_mess.getvalue().strip():
             raise
-    
+
+    #Fix Repo Priority
+    remote.run(
+        args=[
+            'sudo', 'sed', '-i', run.Raw('\'s/enabled=1/enabled=1\\npriority=1/g\''), '/etc/yum.repos.d/ceph.repo',
+            ])
+
     remote.run(
         args=[
             'sudo', 'yum', 'clean', 'all',
