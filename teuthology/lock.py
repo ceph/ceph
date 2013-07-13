@@ -35,11 +35,11 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
         log.error('Could not lock %d nodes, reason: unknown.', num)
     return []
 
-def lock(ctx, name, user=None):
+def lock(ctx, name, user=None, description=None):
     if user is None:
         user = teuthology.get_user()
     success, _, _ = ls.send_request('POST', ls._lock_url(ctx) + '/' + name,
-                              urllib.urlencode(dict(user=user)))
+                              urllib.urlencode(dict(user=user, desc=description)))
     if success:
         log.debug('locked %s as %s', name, user)
     else:
