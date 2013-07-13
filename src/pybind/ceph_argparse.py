@@ -790,7 +790,7 @@ def validate(args, signature, partial=False):
                     # hm, but it was required, so quit
                     if partial:
                         return d
-                    raise ArgumentFormat('{0} not valid argument {1}: {2}'.format(str(myarg), desc, e))
+                    raise e
 
             # valid arg acquired.  Store in dict, as a list if multivalued
             if desc.N:
@@ -851,16 +851,16 @@ def validate_command(parsed_args, sigdict, args, verbose=False):
                     valid_dict = validate(args, sig)
                     found = cmd
                     break
+                except ArgumentPrefix:
+                    # ignore prefix mismatches; we just haven't found
+                    # the right command yet
+                    pass
                 except ArgumentError as e:
                     # prefixes matched, but some other arg didn't;
-                    # this is interesting information if verbose
-                    if verbose:
-                        print >> sys.stderr, '{0}: invalid command'.\
-                            format(' '.join(args))
-                        print >> sys.stderr, '{0}'.format(e)
-                        print >> sys.stderr, "did you mean {0}?\n\t{1}".\
-                            format(concise_sig(sig), helptext)
-                    pass
+                    # stop now, because we have the right command but
+                    # some other input is invalid
+                    print >> sys.stderr, "Invalid command: ", str(e)
+                    return {}
                 if found:
                     break
 
