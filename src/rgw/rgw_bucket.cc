@@ -1418,7 +1418,7 @@ public:
       ret = rgw_unlink_bucket(store, be.owner, be.bucket.name, false);
     }
 
-    return 0;
+    return ret;
   }
 
   struct list_keys_info {
