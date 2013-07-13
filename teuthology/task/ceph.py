@@ -546,7 +546,7 @@ def cluster(ctx, config):
                 mkfs_options = config.get('mkfs_options')
                 mount_options = config.get('mount_options')
                 if fs == 'btrfs':
-                    package = 'btrfs-tools'
+                    #package = 'btrfs-tools'
                     if mount_options is None:
                         mount_options = ['noatime','user_subvol_rm_allowed']
                     if mkfs_options is None:
@@ -554,7 +554,7 @@ def cluster(ctx, config):
                                         '-l', '32768',
                                         '-n', '32768']
                 if fs == 'xfs':
-                    package = 'xfsprogs'
+                    #package = 'xfsprogs'
                     if mount_options is None:
                         mount_options = ['noatime']
                     if mkfs_options is None:
