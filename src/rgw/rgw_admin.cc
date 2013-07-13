@@ -234,32 +234,31 @@ enum {
 static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
 {
   *need_more = false;
-  if (strcmp(cmd, "bucket") == 0 ||
+  // NOTE: please keep the checks in alphabetical order !!!
+  if (strcmp(cmd, "bilog") == 0 ||
+      strcmp(cmd, "bucket") == 0 ||
       strcmp(cmd, "buckets") == 0 ||
-      strcmp(cmd, "user") == 0 ||
       strcmp(cmd, "caps") == 0 ||
+      strcmp(cmd, "datalog") == 0 ||
       strcmp(cmd, "gc") == 0 || 
       strcmp(cmd, "key") == 0 ||
       strcmp(cmd, "log") == 0 ||
+      strcmp(cmd, "mdlog") == 0 ||
+      strcmp(cmd, "metadata") == 0 ||
       strcmp(cmd, "object") == 0 ||
+      strcmp(cmd, "opstate") == 0 ||
       strcmp(cmd, "pool") == 0 ||
       strcmp(cmd, "pools") == 0 ||
-      strcmp(cmd, "subuser") == 0 ||
-      strcmp(cmd, "temp") == 0 ||
-      strcmp(cmd, "usage") == 0 ||
-      strcmp(cmd, "user") == 0 ||
       strcmp(cmd, "region") == 0 ||
       strcmp(cmd, "regions") == 0 ||
       strcmp(cmd, "region-map") == 0 ||
       strcmp(cmd, "regionmap") == 0 ||
-      strcmp(cmd, "zone") == 0 ||
+      strcmp(cmd, "replicalog") == 0 ||
+      strcmp(cmd, "subuser") == 0 ||
       strcmp(cmd, "temp") == 0 ||
-      strcmp(cmd, "metadata") == 0 ||
-      strcmp(cmd, "mdlog") == 0 ||
-      strcmp(cmd, "bilog") == 0 ||
-      strcmp(cmd, "datalog") == 0 ||
-      strcmp(cmd, "opstate") == 0 ||
-      strcmp(cmd, "replicalog") == 0) {
+      strcmp(cmd, "usage") == 0 ||
+      strcmp(cmd, "user") == 0 ||
+      strcmp(cmd, "zone") == 0) {
     *need_more = true;
     return 0;
   }
