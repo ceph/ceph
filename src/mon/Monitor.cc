@@ -2320,6 +2320,9 @@ void Monitor::handle_forward(MForward *m)
     m->msg = NULL;  // so ~MForward doesn't delete it
     req->set_connection(c);
 
+    // not super accurate, but better than nothing.
+    req->set_recv_stamp(m->get_recv_stamp());
+
     /*
      * note which election epoch this is; we will drop the message if
      * there is a future election since our peers will resend routed
