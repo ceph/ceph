@@ -416,7 +416,6 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
   std::string display_name = op_state.get_user_display_name();
   rgw_bucket bucket = op_state.get_bucket();
 
-  string uid_str(user_info.user_id);
   rgw_obj obj(bucket, no_oid);
   RGWObjVersionTracker objv_tracker;
 
