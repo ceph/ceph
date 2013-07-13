@@ -644,7 +644,7 @@ void Monitor::bootstrap()
   // reset
   state = STATE_PROBING;
 
-  reset();
+  _reset();
 
   // sync store
   if (g_conf->mon_compact_on_bootstrap) {
@@ -708,9 +708,12 @@ void Monitor::_add_bootstrap_peer_hint(string cmd, string args, ostream& ss)
 }
 
 // called by bootstrap(), or on leader|peon -> electing
-void Monitor::reset()
+void Monitor::_reset()
 {
-  dout(10) << "reset" << dendl;
+  dout(10) << __func__ << dendl;
+
+  assert(state == STATE_ELECTING ||
+	 state == STATE_PROBING);
 
   cancel_probe_timeout();
   timecheck_finish();
@@ -1407,14 +1410,21 @@ void Monitor::handle_probe_reply(MMonProbe *m)
   m->put();
 }
 
+void Monitor::join_election()
+{
+  dout(10) << __func__ << dendl;
+  state = STATE_ELECTING;
+  _reset();
+}
+
 void Monitor::start_election()
 {
   dout(10) << "start_election" << dendl;
+  state = STATE_ELECTING;
+  _reset();
 
   cancel_probe_timeout();
 
-  // call a new election
-  state = STATE_ELECTING;
   clog.info() << "mon." << name << " calling new monitor election\n";
   elector.call_election();
 }
@@ -1447,8 +1457,10 @@ epoch_t Monitor::get_epoch()
 
 void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features) 
 {
-  if (!is_electing())
-    reset();
+  if (!is_electing()) {
+    state = STATE_ELECTING;
+    _reset();
+  }
 
   state = STATE_LEADER;
   leader_since = ceph_clock_now(g_ceph_context);
@@ -2205,14 +2217,12 @@ void Monitor::handle_command(MMonCommand *m)
     string quorumcmd;
     cmd_getval(g_ceph_context, cmdmap, "quorumcmd", quorumcmd);
     if (quorumcmd == "exit") {
-      reset();
       start_election();
       elector.stop_participating();
       rs = "stopped responding to quorum, initiated new election";
       r = 0;
     } else if (quorumcmd == "enter") {
       elector.start_participating();
-      reset();
       start_election();
       rs = "started responding to quorum, initiated new election";
       r = 0;
