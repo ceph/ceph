@@ -848,7 +848,7 @@ def validate_command(parsed_args, sigdict, args, verbose=False):
                 sig = cmd['sig']
                 helptext = cmd['help']
                 try:
-                    valid_dict = validate(args, sig, verbose)
+                    valid_dict = validate(args, sig)
                     found = cmd
                     break
                 except ArgumentError as e:
