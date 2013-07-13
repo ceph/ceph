@@ -296,6 +296,9 @@ Lock, unlock, or query lock status of machines.
             else:
                 statuses = list_locks(ctx)
         if statuses:
+            if ctx.machine_type:
+                statuses = [status for status in statuses \
+                                if status['type'] == ctx.machine_type]
             if not machines and ctx.owner is None and not ctx.all:
                 ctx.owner = teuthology.get_user()
             if ctx.owner is not None:
