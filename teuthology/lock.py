@@ -182,7 +182,7 @@ Lock, unlock, or query lock status of machines.
         )
     parser.add_argument(
         '--machine-type',
-        default='plana',
+        default=None,
         help='Type of machine to lock',
         )
     parser.add_argument(
@@ -267,6 +267,9 @@ Lock, unlock, or query lock status of machines.
             '--all and --owner are mutually exclusive'
         assert not machines, \
             '--all and listing specific machines are incompatible'
+    if ctx.num_to_lock:
+        assert ctx.machine_type, \
+            'must specify machine type to lock'
 
     if ctx.brief:
         assert ctx.list, '--brief only applies to --list'
