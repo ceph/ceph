@@ -4,3 +4,7 @@ v0.67
 * The output of 'ceph status --format=json' or 'ceph -s --format=json'
   has changed to return status information in a more structured and
   usable format.
+
+* The 'ceph pg dump_stuck [threshold]' command used to require a
+  --threshold or -t prefix to the threshold argument, but now does
+  not.
