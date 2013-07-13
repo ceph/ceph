@@ -1457,20 +1457,15 @@ epoch_t Monitor::get_epoch()
 
 void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features) 
 {
-  if (!is_electing()) {
-    state = STATE_ELECTING;
-    _reset();
-  }
-
+  dout(10) << __func__ << " epoch " << epoch << " quorum " << active
+	   << " features " << features << dendl;
+  assert(is_electing());
   state = STATE_LEADER;
   leader_since = ceph_clock_now(g_ceph_context);
   leader = rank;
   quorum = active;
   quorum_features = features;
   outside_quorum.clear();
-  dout(10) << "win_election, epoch " << epoch << " quorum is " << quorum
-	   << " features are " << quorum_features
-	   << dendl;
 
   clog.info() << "mon." << name << "@" << rank
 		<< " won leader election with quorum " << quorum << "\n";
