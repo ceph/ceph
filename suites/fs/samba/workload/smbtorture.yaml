@@ -36,4 +36,4 @@ tasks:
       - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.bench-torture
       - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.scan-pipe_number
       - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.scan-ioctl
-      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.scan-maxfid
+#      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.scan-maxfid
