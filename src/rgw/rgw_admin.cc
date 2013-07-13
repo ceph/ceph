@@ -1766,9 +1766,7 @@ next:
 	cls_rgw_obj_chain& chain = info.chain;
 	for (liter = chain.objs.begin(); liter != chain.objs.end(); ++liter) {
 	  cls_rgw_obj& obj = *liter;
-	  formatter->dump_string("pool", obj.pool);
-	  formatter->dump_string("oid", obj.oid);
-	  formatter->dump_string("key", obj.key);
+          encode_json("obj", obj, formatter);
 	}
 	formatter->close_section(); // objs
 	formatter->close_section(); // obj_chain
