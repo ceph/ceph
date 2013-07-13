@@ -142,8 +142,6 @@ def parse_cmdargs(args=None, target=''):
 
     parser.add_argument('-f', '--format', choices=['json', 'json-pretty',
                         'xml', 'xml-pretty', 'plain'], dest='output_format')
-    # for pg dump_stuck
-    parser.add_argument('--threshold', type=int, help='number of seconds for a pg to be considered stuck for pg dump_stuck')
 
     # returns a Namespace with the parsed args, and a list of all extras
     parsed_args, extras = parser.parse_known_args(args)
@@ -683,8 +681,6 @@ def main():
             compat = True
             if parsed_args.output_format:
                 childargs.extend(['--format', parsed_args.output_format])
-            if parsed_args.threshold:
-                childargs.extend(['--threshold', parsed_args.threshold])
             ret, outbuf, outs = send_command(cluster_handle, target, childargs,
                                              inbuf)
         elif ret:

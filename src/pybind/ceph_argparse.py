@@ -874,9 +874,6 @@ def validate_command(parsed_args, sigdict, args, verbose=False):
         if parsed_args.output_format:
             valid_dict['format'] = parsed_args.output_format
 
-        if parsed_args.threshold:
-            valid_dict['threshold'] = parsed_args.threshold
-
         return valid_dict
 
 def send_command(cluster, target=('mon', ''), cmd=[], inbuf='', timeout=0, 
