@@ -166,7 +166,14 @@ def main():
             {'internal.vm_setup': None},
             ])
     if 'kernel' in ctx.config:
-        init_tasks.append({'kernel': ctx.config['kernel']})
+        try:
+            distro = ctx.config['downburst'].get('distro')
+            if distro is None:
+                distro = 'ubuntu'
+        except:
+            distro = 'ubuntu'
+        if distro == 'ubuntu':
+            init_tasks.append({'kernel': ctx.config['kernel']})
     init_tasks.extend([
             {'internal.base': None},
             {'internal.archive': None},
