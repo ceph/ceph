@@ -994,7 +994,8 @@ private:
    */
   bool do_refresh();
 
-  void finish_proposal();
+  void commit_proposal();
+  void finish_round();
 
 public:
   /**
