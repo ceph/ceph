@@ -357,6 +357,9 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         "task ceph-deploy only supports a dictionary for configuration"
 
+    overrides = ctx.config.get('overrides', {})
+    teuthology.deep_merge(config, overrides.get('ceph-deploy', {}))
+
     if config.get('branch') is not None:
         assert isinstance(config['branch'], dict), 'branch must be a dictionary'
 
