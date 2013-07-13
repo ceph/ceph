@@ -601,7 +601,6 @@ libcls_replica_log_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbol
 
 radoslib_LTLIBRARIES += libcls_replica_log.la
 
-if WITH_RADOSGW
 # rgw: rados gateway
 libcls_rgw_la_SOURCES = \
 	cls/rgw/cls_rgw.cc \
@@ -616,7 +615,6 @@ libcls_rgw_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_rgw_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
 
 radoslib_LTLIBRARIES += libcls_rgw.la
-endif
 
 libcls_lock_client_a_SOURCES =  \
 	cls/lock/cls_lock_client.cc  \
