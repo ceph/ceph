@@ -357,7 +357,7 @@ void PaxosService::maybe_trim()
 
   bufferlist bl;
   t.encode(bl);
-  paxos->propose_new_value(bl, new C_Committed(this));
+  paxos->propose_new_value(bl, NULL);
 }
 
 void PaxosService::trim(MonitorDBStore::Transaction *t,
