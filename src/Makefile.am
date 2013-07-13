@@ -603,7 +603,13 @@ radoslib_LTLIBRARIES += libcls_replica_log.la
 
 if WITH_RADOSGW
 # rgw: rados gateway
-libcls_rgw_la_SOURCES = cls/rgw/cls_rgw.cc
+libcls_rgw_la_SOURCES = \
+	cls/rgw/cls_rgw.cc \
+	cls/rgw/cls_rgw_ops.cc \
+	common/ceph_json.cc \
+	json_spirit/json_spirit_reader.cpp \
+	json_spirit/json_spirit_writer.cpp \
+	json_spirit/json_spirit_value.cpp
 libcls_rgw_la_CFLAGS = ${AM_CFLAGS}
 libcls_rgw_la_CXXFLAGS= ${AM_CXXFLAGS}
 libcls_rgw_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
