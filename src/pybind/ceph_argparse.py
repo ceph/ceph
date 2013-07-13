@@ -15,6 +15,7 @@ Foundation.  See file COPYING.
 import copy
 import json
 import os
+import re
 import socket
 import stat
 import sys
@@ -175,21 +176,31 @@ class CephFloat(CephArgtype):
 
 class CephString(CephArgtype):
     """
-    String; pretty generic.
+    String; pretty generic.  goodchars is a RE char class of valid chars
     """
-    def __init__(self, badchars=''):
-        self.badchars = badchars
+    def __init__(self, goodchars=''):
+        from string import printable
+        try:
+            re.compile(goodchars)
+        except:
+            raise ValueError('CephString(): "{0}" is not a valid RE'.\
+                format(goodchars))
+        self.goodchars = goodchars
+        self.goodset = frozenset(
+            [c for c in printable if re.match(goodchars, c)]
+        )
 
     def valid(self, s, partial=False):
-        for c in self.badchars:
-            if c in s:
-                raise ArgumentFormat("bad char {0} in {1}".format(c, s))
+        sset = set(s)
+        if self.goodset and not sset <= self.goodset:
+            raise ArgumentFormat("invalid chars {0} in {1}".\
+                format(''.join(sset - self.goodset), s))
         self.val = s
 
     def __str__(self):
         b = ''
-        if len(self.badchars):
-            b = '(without chars in {0})'.format(self.badchars)
+        if self.goodchars:
+            b += '(goodchars {0})'.format(self.goodchars)
         return '<string{0}>'.format(b)
 
 class CephSocketpath(CephArgtype):
