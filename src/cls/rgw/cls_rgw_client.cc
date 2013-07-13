@@ -187,8 +187,8 @@ int cls_rgw_bi_log_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max
 
 int cls_rgw_bi_log_trim(IoCtx& io_ctx, string& oid, string& start_marker, string& end_marker)
 {
-  int r;
   do {
+    int r;
     bufferlist in, out;
     cls_rgw_bi_log_trim_op call;
     call.start_marker = start_marker;
