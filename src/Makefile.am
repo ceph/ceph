@@ -552,7 +552,13 @@ libcls_lock_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex
 radoslib_LTLIBRARIES += libcls_lock.la
 
 # refcount class
-libcls_refcount_la_SOURCES = cls/refcount/cls_refcount.cc cls/refcount/cls_refcount_ops.cc
+libcls_refcount_la_SOURCES = \
+	cls/refcount/cls_refcount.cc \
+	cls/refcount/cls_refcount_ops.cc \
+	common/ceph_json.cc \
+	json_spirit/json_spirit_reader.cpp \
+	json_spirit/json_spirit_writer.cpp \
+	json_spirit/json_spirit_value.cpp
 libcls_refcount_la_CFLAGS = ${AM_CFLAGS}
 libcls_refcount_la_CXXFLAGS= ${AM_CXXFLAGS}
 libcls_refcount_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
