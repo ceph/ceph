@@ -853,6 +853,11 @@ void Monitor::sync_start(entity_inst_t &other, bool full)
     dout(10) << __func__ << " clearing prefixes " << targets << dendl;
     store->clear(targets);
 
+    // make sure paxos knows it has been reset.  this prevents a
+    // bootstrap and then different probe reply order from possibly
+    // deciding a partial or no sync is needed.
+    paxos->init();
+
     assert(g_conf->mon_sync_requester_kill_at != 2);
   }
 
