@@ -115,7 +115,7 @@ int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t 
   }
 
   if (!update_entrypoint)
-    return false;
+    return 0;
 
   ep.linked = true;
   ep.owner = user_id;
@@ -149,7 +149,7 @@ int rgw_unlink_bucket(RGWRados *store, string user_id, const string& bucket_name
   }
 
   if (!update_entrypoint)
-    return false;
+    return 0;
 
   RGWBucketEntryPoint ep;
   RGWObjVersionTracker ot;
