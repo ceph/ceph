@@ -1527,10 +1527,16 @@ void Pipe::writer()
 	// associate message with Connection (for benefit of encode_payload)
 	m->set_connection(connection_state.get());
 
-        ldout(msgr->cct,20) << "writer encoding " << m->get_seq() << " " << m << " " << *m << dendl;
+	uint64_t features = connection_state->get_features();
+	if (m->empty_payload())
+	  ldout(msgr->cct,20) << "writer encoding " << m->get_seq() << " features " << features
+			      << " " << m << " " << *m << dendl;
+	else
+	  ldout(msgr->cct,20) << "writer half-reencoding " << m->get_seq() << " features " << features
+			      << " " << m << " " << *m << dendl;
 
 	// encode and copy out of *m
-	m->encode(connection_state->get_features(), !msgr->cct->_conf->ms_nocrc);
+	m->encode(features, !msgr->cct->_conf->ms_nocrc);
 
 	// prepare everything
 	ceph_msg_header& header = m->get_header();
