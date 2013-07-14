@@ -1295,6 +1295,8 @@ void PGMonitor::dump_info(Formatter *f)
   f->open_object_section("pgmap");
   pg_map.dump(f);
   f->close_section();
+
+  f->dump_unsigned("pgmap_first_committed", get_first_committed());
 }
 
 bool PGMonitor::preprocess_command(MMonCommand *m)
