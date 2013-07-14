@@ -2,6 +2,46 @@
 Using Hadoop with CephFS
 ========================
 
+The Ceph file system can be used as a drop-in replacement for the Hadoop File
+System (HDFS). This page describes the installation and configuration process
+of using Ceph with Hadoop.
+
+Dependencies
+============
+
+* CephFS Java Interface
+* Hadoop CephFS Plugin
+
+.. important:: Currently requires Hadoop 1.1.X stable series
+
+Installation
+============
+
+There are three requirements for using CephFS with Hadoop. First, a running
+Ceph installation is required. The details of setting up a Ceph cluster and
+the file system are beyond the scope of this document. Please refer to the
+Ceph documentation for installing Ceph.
+
+The remaining two requirements are a Hadoop installation, and the Ceph file
+system Java packages, including the Java CephFS Hadoop plugin. The high-level
+steps are two add the dependencies to the Hadoop installation ``CLASSPATH``,
+and configure Hadoop to use the Ceph file system.
+
+CephFS Java Packages
+--------------------
+
+* CephFS Hadoop plugin (`hadoop-cephfs.jar <http://ceph.com/download/hadoop-cephfs.jar>`_)
+
+Adding these dependencies to a Hadoop installation will depend on your
+particular deployment. In general the dependencies must be present on each
+node in the system that will be part of the Hadoop cluster, and must be in the
+``CLASSPATH`` searched for by Hadoop. Typically approaches are to place the
+additional ``jar`` files into the ``hadoop/lib`` directory, or to edit the
+``HADOOP_CLASSPATH`` variable in ``hadoop-env.sh``.
+
+The native Ceph file system client must be installed on each participating
+node in the Hadoop cluster.
+
 Hadoop Configuration
 ====================
 
@@ -13,7 +53,7 @@ These options are intended to be set in the Hadoop configuration file
 |Property             |Value                     |Notes                       |
 |                     |                          |                            |
 +=====================+==========================+============================+
-|fs.default.name      |Ceph URI                  |ceph:///                    |
+|fs.default.name      |Ceph URI                  |ceph://[monaddr:port]/      |
 |                     |                          |                            |
 |                     |                          |                            |
 +---------------------+--------------------------+----------------------------+
@@ -28,6 +68,26 @@ These options are intended to be set in the Hadoop configuration file
 |                     |                          |                            |
 +---------------------+--------------------------+----------------------------+
 |ceph.root.dir        |Mount root directory      |Default value: /            |
+|                     |                          |                            |
+|                     |                          |                            |
++---------------------+--------------------------+----------------------------+
+|ceph.mon.address     |Monitor address           |host:port                   |
+|                     |                          |                            |
+|                     |                          |                            |
+|                     |                          |                            |
++---------------------+--------------------------+----------------------------+
+|ceph.auth.id         |Ceph user id              |Example: admin              |
+|                     |                          |                            |
+|                     |                          |                            |
+|                     |                          |                            |
++---------------------+--------------------------+----------------------------+
+|ceph.auth.keyfile    |Ceph key file             |                            |
+|                     |                          |                            |
+|                     |                          |                            |
+|                     |                          |                            |
++---------------------+--------------------------+----------------------------+
+|ceph.auth.keyring    |Ceph keyring file         |                            |
+|                     |                          |                            |
 |                     |                          |                            |
 |                     |                          |                            |
 +---------------------+--------------------------+----------------------------+
@@ -50,17 +110,21 @@ These options are intended to be set in the Hadoop configuration file
 Support For Per-file Custom Replication
 ---------------------------------------
 
-Hadoop users may specify a custom replication factor (e.g. 3 copies of each
-block) when creating a file. However, object replication factors are
-controlled on a per-pool basis in Ceph, and by default a Ceph file system will
-contain a pre-configured pool. In order to support per-file replication Hadoop
-can be configured to select from alternative pools when creating new files.
+The Hadoop file system interface allows users to specify a custom replication
+factor (e.g. 3 copies of each block) when creating a file. However, object
+replication factors in the Ceph file system are controlled on a per-pool
+basis, and by default a Ceph file system will contain only a single
+pre-configured pool. Thus, in order to support per-file replication with
+Hadoop over Ceph, additional storage pools with non-default replications
+factors must be created, and Hadoop must be configured to choose from these
+additional pools.
 
 Additional data pools can be specified using the ``ceph.data.pools``
 configuration option. The value of the option is a comma separated list of
 pool names. The default Ceph pool will be used automatically if this
 configuration option is omitted or the value is empty. For example, the
-following configuration setting will consider the three pools listed. ::
+following configuration setting will consider the pools ``pool1``, ``pool2``, and
+``pool5`` when selecting a target pool to store a file. ::
 
 	<property>
 	  <name>ceph.data.pools</name>
@@ -76,7 +140,7 @@ documentation`_.
 .. _RADOS Pool documentation: ../../rados/operations/pools
 
 Once a pool has been created and configured the metadata service must be told
-that the new pool may be used to store file data. A pool can be made available
+that the new pool may be used to store file data. A pool is be made available
 for storing file system data using the ``ceph mds add_data_pool`` command.
 
 First, create the pool. In this example we create the ``hadoop1`` pool with
@@ -85,8 +149,9 @@ replication factor 1. ::
     ceph osd pool create hadoop1 100
     ceph osd pool set hadoop1 size 1
 
-Next, determine the pool id. This can be done using the ``ceph osd dump``
-command. For example, we can look for the newly created ``hadoop1`` pool. ::
+Next, determine the pool id. This can be done by examining the output of the
+``ceph osd dump`` command. For example, we can look for the newly created
+``hadoop1`` pool. ::
 
     ceph osd dump | grep hadoop1
 
@@ -107,11 +172,11 @@ selecting the target pool for new files. ::
 		<value>hadoop1</value>
 	</property>
 
-Pool Selection Semantics
-~~~~~~~~~~~~~~~~~~~~~~~~
+Pool Selection Rules
+~~~~~~~~~~~~~~~~~~~~
 
-The following semantics describe the rules by which Hadoop will choose a pool
-given a desired replication factor and the set of pools specified using the
+The following rules describe how Hadoop chooses a pool given a desired
+replication factor and the set of pools specified using the
 ``ceph.data.pools`` configuration option.
 
 1. When no custom pools are specified the default Ceph data pool is used.
