@@ -219,7 +219,7 @@ void RGWOp_MDLog_Lock::execute() {
   RGWMetadataLog *meta_log = store->meta_mgr->get_log();
   unsigned dur;
   dur = (unsigned)strict_strtol(duration_str.c_str(), 10, &err);
-  if (!err.empty() || dur <= 0) {
+  if (!err.empty() || dur == 0) {
     dout(5) << "invalid length param " << duration_str << dendl;
     http_ret = -EINVAL;
     return;
@@ -568,7 +568,7 @@ void RGWOp_DATALog_Lock::execute() {
 
   unsigned dur;
   dur = (unsigned)strict_strtol(duration_str.c_str(), 10, &err);
-  if (!err.empty() || dur <= 0) {
+  if (!err.empty() || dur == 0) {
     dout(5) << "invalid length param " << duration_str << dendl;
     http_ret = -EINVAL;
     return;
