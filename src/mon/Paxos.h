@@ -1018,6 +1018,12 @@ public:
   void read_and_prepare_transactions(MonitorDBStore::Transaction *tx, version_t from, version_t last);
 
   void init();
+
+  /**
+   * dump state info to a formatter
+   */
+  void dump_info(Formatter *f);
+
   /**
    * This function runs basic consistency checks. Importantly, if
    * it is inconsistent and shouldn't be, it asserts out.

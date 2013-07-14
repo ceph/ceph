@@ -73,6 +73,16 @@ void Paxos::init()
   assert(is_consistent());
 }
 
+void Paxos::dump_info(Formatter *f)
+{
+  f->open_object_section("paxos");
+  f->dump_unsigned("first_committed", first_committed);
+  f->dump_unsigned("last_committed", last_committed);
+  f->dump_unsigned("last_pn", last_pn);
+  f->dump_unsigned("accepted_pn", accepted_pn);
+  f->close_section();
+}
+
 // ---------------------------------
 
 // PHASE 1
