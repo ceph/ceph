@@ -529,6 +529,8 @@ void MDSMonitor::dump_info(Formatter *f)
   f->open_object_section("mdsmap");
   mdsmap.dump(f);
   f->close_section();
+
+  f->dump_unsigned("mdsmap_first_committed", get_first_committed());
 }
 
 bool MDSMonitor::preprocess_command(MMonCommand *m)
