@@ -605,6 +605,7 @@ radoslib_LTLIBRARIES += libcls_replica_log.la
 libcls_rgw_la_SOURCES = \
 	cls/rgw/cls_rgw.cc \
 	cls/rgw/cls_rgw_ops.cc \
+	cls/rgw/cls_rgw_types.cc \
 	common/ceph_json.cc \
 	json_spirit/json_spirit_reader.cpp \
 	json_spirit/json_spirit_writer.cpp \
