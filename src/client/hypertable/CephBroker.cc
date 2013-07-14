@@ -78,7 +78,7 @@ CephBroker::CephBroker(PropertiesPtr& cfg)
   if (ret) {
     throw Hypertable::Exception(ret, "ceph_create failed");
   }
-  ret = ceph_conf_set(cmount, "mon_addr", mon_addr.c_str());
+  ret = ceph_conf_set(cmount, "mon_host", mon_addr.c_str());
   if (ret) {
     ceph_shutdown(cmount);
     throw Hypertable::Exception(ret, "ceph_conf_set(mon_addr) failed");
