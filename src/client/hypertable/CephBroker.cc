@@ -308,7 +308,7 @@ void CephBroker::remove(ResponseCallback *cb, const char *fname) {
   cb->response_ok();
 }
 
-void CephBroker::length(ResponseCallbackLength *cb, const char *fname) {
+void CephBroker::length(ResponseCallbackLength *cb, const char *fname, bool) {
   int r;
   struct stat statbuf;
 
@@ -326,7 +326,7 @@ void CephBroker::length(ResponseCallbackLength *cb, const char *fname) {
 }
 
 void CephBroker::pread(ResponseCallbackRead *cb, uint32_t fd, uint64_t offset,
-		       uint32_t amount) {
+		       uint32_t amount, bool) {
   OpenFileDataCephPtr fdata;
   ssize_t nread;
   StaticBuffer buf(new uint8_t [amount], amount);
