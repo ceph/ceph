@@ -78,7 +78,7 @@ CephBroker::CephBroker(PropertiesPtr& cfg)
   if (ret) {
     throw Hypertable::Exception(ret, "ceph_create failed");
   }
-  ret = ceph_conf_set(cmount, "mon_addr", mon_addr.c_str());
+  ret = ceph_conf_set(cmount, "mon_host", mon_addr.c_str());
   if (ret) {
     ceph_shutdown(cmount);
     throw Hypertable::Exception(ret, "ceph_conf_set(mon_addr) failed");
@@ -308,7 +308,7 @@ void CephBroker::remove(ResponseCallback *cb, const char *fname) {
   cb->response_ok();
 }
 
-void CephBroker::length(ResponseCallbackLength *cb, const char *fname) {
+void CephBroker::length(ResponseCallbackLength *cb, const char *fname, bool) {
   int r;
   struct stat statbuf;
 
@@ -326,7 +326,7 @@ void CephBroker::length(ResponseCallbackLength *cb, const char *fname) {
 }
 
 void CephBroker::pread(ResponseCallbackRead *cb, uint32_t fd, uint64_t offset,
-		       uint32_t amount) {
+		       uint32_t amount, bool) {
   OpenFileDataCephPtr fdata;
   ssize_t nread;
   StaticBuffer buf(new uint8_t [amount], amount);
