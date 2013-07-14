@@ -1592,7 +1592,7 @@ void OSD::write_superblock(ObjectStore::Transaction& t)
   dout(10) << "write_superblock " << superblock << dendl;
 
   //hack: at minimum it's using the baseline feature set
-  if (!superblock.compat_features.incompat.mask |
+  if ((!superblock.compat_features.incompat.mask) |
       CEPH_OSD_FEATURE_INCOMPAT_BASE.id)
     superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_BASE);
 
