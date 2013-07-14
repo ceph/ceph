@@ -181,11 +181,10 @@ static int get_bucket_policy_from_attr(CephContext *cct, RGWRados *store, void *
                                        RGWAccessControlPolicy *policy, rgw_obj& obj,
                                        RGWObjVersionTracker *objv_tracker)
 {
-  int ret;
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_ACL);
 
   if (aiter != bucket_attrs.end()) {
-    ret = decode_policy(cct, aiter->second, policy);
+    int ret = decode_policy(cct, aiter->second, policy);
     if (ret < 0)
       return ret;
   } else {
