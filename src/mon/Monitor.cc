@@ -2119,6 +2119,8 @@ void Monitor::handle_command(MMonCommand *m)
     mdsmon()->dump_info(f.get());
     pgmon()->dump_info(f.get());
 
+    paxos->dump_info(f.get());
+
     f->close_section();
     f->flush(ds);
 
