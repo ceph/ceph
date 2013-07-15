@@ -121,10 +121,12 @@ class test_helper {
 
 int test_helper::extract_input(int argc, char *argv[]){
 #define ERR_CHECK_NEXT_PARAM(o) \
-  if((loop + 1) >= argc)return -1; \
+  if((loop + 1) >= argcount)return -1; \
   else o = argv[loop+1];
 
-  for(unsigned loop = 1;loop < (unsigned)argc; loop += 2){
+  unsigned argcount = argc;
+
+  for(unsigned loop = 1; loop < argcount; loop += 2){
     if(strcmp(argv[loop], "-g") == 0){
       ERR_CHECK_NEXT_PARAM(host);
     }else if(strcmp(argv[loop],"-p") == 0){
@@ -575,7 +577,7 @@ TEST(TestRGWAdmin, opstate_set_list_delete) {
     EXPECT_TRUE((*it).client_id.compare(cid_1) == 0);
     EXPECT_TRUE((*it).op_id.compare(oid_1) == 0);
     EXPECT_TRUE((*it).object.compare(obj_1) == 0);
-    EXPECT_EQ((*it).state, RGWOpState::OPSTATE_IN_PROGRESS);
+    EXPECT_EQ((*it).state, (uint32_t)RGWOpState::OPSTATE_IN_PROGRESS);
   }
 
   state = "complete";
@@ -600,7 +602,7 @@ TEST(TestRGWAdmin, opstate_set_list_delete) {
     EXPECT_TRUE((*it).client_id.compare(cid_1) == 0);
     EXPECT_TRUE((*it).op_id.compare(oid_1) == 0);
     EXPECT_TRUE((*it).object.compare(obj_1) == 0);
-    EXPECT_EQ((*it).state, RGWOpState::OPSTATE_COMPLETE);
+    EXPECT_EQ((*it).state, (uint32_t)RGWOpState::OPSTATE_COMPLETE);
   }
 
   ss.str("");
@@ -624,13 +626,13 @@ TEST(TestRGWAdmin, opstate_set_list_delete) {
     EXPECT_TRUE((*it).client_id.compare(cid_1) == 0);
     EXPECT_TRUE((*it).op_id.compare(oid_1) == 0);
     EXPECT_TRUE((*it).object.compare(obj_1) == 0);
-    EXPECT_EQ((*it).state, RGWOpState::OPSTATE_COMPLETE);
+    EXPECT_EQ((*it).state, (uint32_t)RGWOpState::OPSTATE_COMPLETE);
 
     it++;
     EXPECT_TRUE((*it).client_id.compare(cid_2) == 0);
     EXPECT_TRUE((*it).op_id.compare(oid_2) == 0);
     EXPECT_TRUE((*it).object.compare(obj_2) == 0);
-    EXPECT_EQ((*it).state, RGWOpState::OPSTATE_COMPLETE);
+    EXPECT_EQ((*it).state, (uint32_t)RGWOpState::OPSTATE_COMPLETE);
   }
 
   entries.clear();
