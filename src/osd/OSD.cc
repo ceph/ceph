@@ -1400,6 +1400,8 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_map, "map_messages");           // osdmap messages
   osd_plb.add_u64_counter(l_osd_mape, "map_message_epochs");         // osdmap epochs
   osd_plb.add_u64_counter(l_osd_mape_dup, "map_message_epoch_dups"); // dup osdmap epochs
+  osd_plb.add_u64_counter(l_osd_waiting_for_map,
+			  "messages_delayed_for_map"); // dup osdmap epochs
 
   logger = osd_plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
@@ -4764,6 +4766,7 @@ void OSD::wait_for_new_map(OpRequestRef op)
     monc->renew_subs();
   }
   
+  logger->inc(l_osd_waiting_for_map);
   waiting_for_osdmap.push_back(op);
   op->mark_delayed("wait for new map");
 }
