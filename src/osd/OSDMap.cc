@@ -456,8 +456,15 @@ void OSDMap::Incremental::dump(Formatter *f) const
   for (map<int64_t,pg_pool_t>::const_iterator p = new_pools.begin(); p != new_pools.end(); ++p) {
     f->open_object_section("pool");
     f->dump_int("pool", p->first);
-    f->dump_string("name", new_pool_names.find(p->first)->second);
     p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("new_pool_names");
+  for (map<int64_t,string>::const_iterator p = new_pool_names.begin(); p != new_pool_names.end(); ++p) {
+    f->open_object_section("pool_name");
+    f->dump_int("pool", p->first);
+    f->dump_string("name", p->second);
     f->close_section();
   }
   f->close_section();
@@ -1735,7 +1742,6 @@ void OSDMap::print_summary(Formatter *f, ostream& out) const
     f->dump_string("nearfull", test_flag(CEPH_OSDMAP_NEARFULL) ?
 		   "true" : "false");
     f->close_section();
-    f->flush(out);
   } else {
     out << "e" << get_epoch() << ": "
 	<< get_num_osds() << " osds: "

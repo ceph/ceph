@@ -494,7 +494,7 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("owner", owner, f);
   encode_json("flags", flags, f);
   encode_json("region", region, f);
-  encode_json("placement_rule", region, f);
+  encode_json("placement_rule", placement_rule, f);
   encode_json("has_instance_obj", has_instance_obj, f);
 }
 
@@ -504,7 +504,7 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("owner", owner, obj);
   JSONDecoder::decode_json("flags", flags, obj);
   JSONDecoder::decode_json("region", region, obj);
-  JSONDecoder::decode_json("placement_rule", region, obj);
+  JSONDecoder::decode_json("placement_rule", placement_rule, obj);
   JSONDecoder::decode_json("has_instance_obj", has_instance_obj, obj);
 }
 
@@ -594,8 +594,8 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   ::decode_json("usage_log_pool", usage_log_pool, obj);
   ::decode_json("user_keys_pool", user_keys_pool, obj);
   ::decode_json("user_email_pool", user_email_pool, obj);
+  ::decode_json("user_uid_pool", user_uid_pool, obj);
   ::decode_json("user_swift_pool", user_swift_pool, obj);
-  ::decode_json("user_uid_pool ", user_uid_pool, obj);
   JSONDecoder::decode_json("system_key", system_key, obj);
   JSONDecoder::decode_json("placement_pools", placement_pools, obj);
 }

@@ -44,7 +44,7 @@ struct Dencoder {
   virtual ~Dencoder() {}
   virtual string decode(bufferlist bl) = 0;
   virtual void encode(bufferlist& out, uint64_t features) = 0;
-  virtual void dump(Formatter *f) = 0;
+  virtual void dump(ceph::Formatter *f) = 0;
   virtual void generate() = 0;
   virtual int num_generated() = 0;
   virtual string select_generated(unsigned n) = 0;
@@ -79,7 +79,7 @@ public:
 
   virtual void encode(bufferlist& out, uint64_t features) = 0;
 
-  void dump(Formatter *f) {
+  void dump(ceph::Formatter *f) {
     m_object->dump(f);
   }
 
@@ -163,7 +163,7 @@ public:
     encode_message(m_object, features, out);
   }
 
-  void dump(Formatter *f) {
+  void dump(ceph::Formatter *f) {
     m_object->dump(f);
   }
 
