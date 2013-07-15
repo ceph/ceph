@@ -159,7 +159,7 @@ COMMAND("auth print-key name=entity,type=CephString", "display requested key", \
 COMMAND("auth print_key name=entity,type=CephString", "display requested key", \
 	"auth", "r", "cli,rest")
 COMMAND("auth list", "list authentication state", "auth", "r", "cli,rest")
-COMMAND("auth import", "auth import: read keyring file from input", \
+COMMAND("auth import", "auth import: read keyring file from -i <file>", \
 	"auth", "rw", "cli,rest")
 COMMAND("auth add " \
 	"name=entity,type=CephString " \
@@ -390,11 +390,15 @@ COMMAND("osd crush link " \
 	"link existing entry for <name> under location <args>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush rm " \
-	"name=name,type=CephString", \
-	"remove <name> from crush map", "osd", "rw", "cli,rest")
+	"name=name,type=CephString " \
+	"name=ancestor,type=CephString,req=false", \
+	"remove <name> from crush map (everywhere, or just at <ancestor>",\
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush remove " \
-	"name=name,type=CephString", \
-	"remove <name> from crush map", "osd", "rw", "cli,rest")
+	"name=name,type=CephString " \
+	"name=ancestor,type=CephString,req=false", \
+	"remove <name> from crush map (everywhere, or just at <ancestor>", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush unlink " \
 	"name=name,type=CephString " \
 	"name=ancestor,type=CephString,req=false", \

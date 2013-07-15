@@ -718,6 +718,12 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
   if (prefix == "auth import") {
     bufferlist bl = m->get_data();
+    if (bl.length() == 0) {
+      ss << "auth import: no data supplied";
+      getline(ss, rs);
+      mon->reply_command(m, -EINVAL, rs, get_last_committed());
+      return true;
+    }
     bufferlist::iterator iter = bl.begin();
     KeyRing keyring;
     try {

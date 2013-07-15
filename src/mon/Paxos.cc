@@ -427,11 +427,13 @@ void Paxos::handle_last(MMonPaxos *last)
 	dout(10) << "that's everyone.  active!" << dendl;
 	extend_lease();
 
-        finish_proposal();
+	if (do_refresh()) {
+	  finish_round();
 
-	finish_contexts(g_ceph_context, waiting_for_active);
-	finish_contexts(g_ceph_context, waiting_for_readable);
-	finish_contexts(g_ceph_context, waiting_for_writeable);
+	  finish_contexts(g_ceph_context, waiting_for_active);
+	  finish_contexts(g_ceph_context, waiting_for_readable);
+	  finish_contexts(g_ceph_context, waiting_for_writeable);
+	}
       }
     }
   } else {
@@ -507,11 +509,15 @@ void Paxos::begin(bufferlist& v)
   if (mon->get_quorum().size() == 1) {
     // we're alone, take it easy
     commit();
-    finish_proposal();
-    finish_contexts(g_ceph_context, waiting_for_active);
-    finish_contexts(g_ceph_context, waiting_for_commit);
-    finish_contexts(g_ceph_context, waiting_for_readable);
-    finish_contexts(g_ceph_context, waiting_for_writeable);
+    if (do_refresh()) {
+      if (is_updating())
+	commit_proposal();
+      finish_round();
+      finish_contexts(g_ceph_context, waiting_for_active);
+      finish_contexts(g_ceph_context, waiting_for_commit);
+      finish_contexts(g_ceph_context, waiting_for_readable);
+      finish_contexts(g_ceph_context, waiting_for_writeable);
+    }
     return;
   }
 
@@ -612,6 +618,11 @@ void Paxos::handle_accept(MMonPaxos *accept)
     // note: this may happen before the lease is reextended (below)
     dout(10) << " got majority, committing" << dendl;
     commit();
+    if (!do_refresh())
+      goto out;
+    if (is_updating())
+      commit_proposal();
+    finish_contexts(g_ceph_context, waiting_for_commit);
   }
 
   // done?
@@ -624,14 +635,15 @@ void Paxos::handle_accept(MMonPaxos *accept)
     // yay!
     extend_lease();
 
-    finish_proposal();
+    finish_round();
 
     // wake people up
     finish_contexts(g_ceph_context, waiting_for_active);
-    finish_contexts(g_ceph_context, waiting_for_commit);
     finish_contexts(g_ceph_context, waiting_for_readable);
     finish_contexts(g_ceph_context, waiting_for_writeable);
   }
+
+ out:
   accept->put();
 }
 
@@ -715,7 +727,13 @@ void Paxos::handle_commit(MMonPaxos *commit)
 
   commit->put();
 
-  mon->refresh_from_paxos(NULL);
+  bool need_bootstrap = false;
+  mon->refresh_from_paxos(&need_bootstrap);
+  if (need_bootstrap) {
+    dout(10) << " doing requested bootstrap" << dendl;
+    mon->bootstrap();
+    return;
+  }
 
   finish_contexts(g_ceph_context, waiting_for_commit);
 }
@@ -781,43 +799,47 @@ void Paxos::warn_on_future_time(utime_t t, entity_name_t from)
 
 }
 
-void Paxos::finish_proposal()
+bool Paxos::do_refresh()
 {
-  assert(mon->is_leader());
+  bool need_bootstrap;
 
   // make sure we have the latest state loaded up
-  bool need_bootstrap = false;
   mon->refresh_from_paxos(&need_bootstrap);
-
-  // ok, now go active!
-  state = STATE_ACTIVE;
-
-  // finish off the last proposal
-  if (!proposals.empty()) {
-    assert(mon->is_leader());
-
-    C_Proposal *proposal = static_cast<C_Proposal*>(proposals.front());
-    if (!proposal->proposed) {
-      dout(10) << __func__ << " proposal " << proposal << ": we must have received a stay message and we're "
-	       << "trying to finish before time. "
-	       << "Instead, propose it (if we are active)!" << dendl;
-    } else {
-      dout(10) << __func__ << " proposal " << proposal << " took "
-	       << (ceph_clock_now(NULL) - proposal->proposal_time)
-	       << " to finish" << dendl;
-      proposals.pop_front();
-      proposal->complete(0);
-    }
-  }
-
-  dout(10) << __func__ << " state " << state
-	   << " proposals left " << proposals.size() << dendl;
 
   if (need_bootstrap) {
     dout(10) << " doing requested bootstrap" << dendl;
     mon->bootstrap();
-    return;
+    return false;
   }
+
+  return true;
+}
+
+void Paxos::commit_proposal()
+{
+  dout(10) << __func__ << dendl;
+  assert(mon->is_leader());
+  assert(!proposals.empty());
+  assert(is_updating());
+
+  C_Proposal *proposal = static_cast<C_Proposal*>(proposals.front());
+  assert(proposal->proposed);
+  dout(10) << __func__ << " proposal " << proposal << " took "
+	   << (ceph_clock_now(NULL) - proposal->proposal_time)
+	   << " to finish" << dendl;
+  proposals.pop_front();
+  proposal->complete(0);
+}
+
+void Paxos::finish_round()
+{
+  assert(mon->is_leader());
+
+  // ok, now go active!
+  state = STATE_ACTIVE;
+
+  dout(10) << __func__ << " state " << state
+	   << " proposals left " << proposals.size() << dendl;
 
   if (should_trim()) {
     trim();

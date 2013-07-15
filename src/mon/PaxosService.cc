@@ -163,10 +163,13 @@ void PaxosService::propose_pending()
 {
   dout(10) << "propose_pending" << dendl;
   assert(have_pending);
+  assert(!proposing);
   assert(mon->is_leader());
   assert(is_active());
-  if (!is_active())
+  if (!is_active()) {
+    dout(10) << "propose_pending - not active" << dendl;
     return;
+  }
 
   if (proposal_timer) {
     dout(10) << " canceling proposal_timer " << proposal_timer << dendl;
@@ -232,6 +235,12 @@ void PaxosService::restart()
 
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
 
+  if (have_pending) {
+    discard_pending();
+    have_pending = false;
+  }
+  proposing = false;
+
   on_restart();
 }
 
@@ -239,29 +248,18 @@ void PaxosService::election_finished()
 {
   dout(10) << "election_finished" << dendl;
 
-  if (proposal_timer) {
-    dout(10) << " canceling proposal_timer " << proposal_timer << dendl;
-    mon->timer.cancel_event(proposal_timer);
-    proposal_timer = 0;
-  }
-
-  if (have_pending) {
-    discard_pending();
-    have_pending = false;
-  }
-  proposing = false;
-
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
 
   // make sure we update our state
-  if (is_active())
-    _active();
-  else
-    wait_for_active(new C_Active(this));
+  _active();
 }
 
 void PaxosService::_active()
 {
+  if (is_proposing()) {
+    dout(10) << "_acting - proposing" << dendl;
+    return;
+  }
   if (!is_active()) {
     dout(10) << "_active - not active" << dendl;
     wait_for_active(new C_Active(this));
@@ -357,7 +355,7 @@ void PaxosService::maybe_trim()
 
   bufferlist bl;
   t.encode(bl);
-  paxos->propose_new_value(bl, new C_Committed(this));
+  paxos->propose_new_value(bl, NULL);
 }
 
 void PaxosService::trim(MonitorDBStore::Transaction *t,

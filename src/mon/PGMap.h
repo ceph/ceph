@@ -168,9 +168,8 @@ public:
 
   void dump(ostream& ss) const;
 
-  void state_summary(ostream& ss) const;
-  void recovery_summary(ostream& out) const;
-  void print_summary(ostream& out) const;
+  void recovery_summary(Formatter *f, ostream *out) const;
+  void print_summary(Formatter *f, ostream *out) const;
 
   epoch_t calc_min_last_epoch_clean() const;
 
@@ -180,7 +179,7 @@ WRITE_CLASS_ENCODER_FEATURES(PGMap::Incremental)
 WRITE_CLASS_ENCODER_FEATURES(PGMap)
 
 inline ostream& operator<<(ostream& out, const PGMap& m) {
-  m.print_summary(out);
+  m.print_summary(NULL, &out);
   return out;
 }
 
