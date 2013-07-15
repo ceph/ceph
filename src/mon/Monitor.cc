@@ -1523,6 +1523,10 @@ void Monitor::sync_start(entity_inst_t &other)
   set<string> targets = get_sync_targets_names();
   store->clear(targets);
 
+  // make sure paxos knows it has been reset.  this prevents a
+  // bootstrap and then different probe reply order from possibly
+  // deciding a partial or no sync is needed.
+  paxos->init();
 
   // assume 'other' as the leader. We will update the leader once we receive
   // a reply to the sync start.
