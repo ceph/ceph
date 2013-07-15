@@ -14,7 +14,7 @@ tmp1=`mktemp /tmp/typ-XXXXXXXXX`
 echo "numgen\ttype"
 for type in `./ceph-dencoder list_types`; do
 
-    [ -d "$archive/$ver/$type" ] || mkdir "$archive/$ver/$type"
+    [ -d "$archive/$ver/objects/$type" ] || mkdir -p "$archive/$ver/objects/$type"
 
     num=`./ceph-dencoder type $type count_tests`
     echo "$num\t$type"
@@ -23,7 +23,7 @@ for type in `./ceph-dencoder list_types`; do
 	./ceph-dencoder type $type select_test $n encode export $tmp1
 	md=`md5sum $tmp1 | awk '{print $1}'`
 	echo "\t$md"
-	[ -e "$archive/$ver/$md" ] || cp $tmp1 $archive/$ver/$type/$md
+	[ -e "$archive/$ver/objects/$type/$md" ] || cp $tmp1 $archive/$ver/objects/$type/$md
     done
 done
 

@@ -252,7 +252,7 @@ void JSONDecoder::decode_json(const char *name, T& val, T& default_val, JSONObj 
 }
 
 template<class T>
-static void encode_json(const char *name, const T& val, Formatter *f)
+static void encode_json(const char *name, const T& val, ceph::Formatter *f)
 {
   f->open_object_section(name);
   val.dump(f);
@@ -261,21 +261,21 @@ static void encode_json(const char *name, const T& val, Formatter *f)
 
 class utime_t;
 
-void encode_json(const char *name, const string& val, Formatter *f);
-void encode_json(const char *name, const char *val, Formatter *f);
-void encode_json(const char *name, bool val, Formatter *f);
-void encode_json(const char *name, int val, Formatter *f);
-void encode_json(const char *name, unsigned val, Formatter *f);
-void encode_json(const char *name, long val, Formatter *f);
-void encode_json(const char *name, unsigned long val, Formatter *f);
-void encode_json(const char *name, long long val, Formatter *f);
-void encode_json(const char *name, const utime_t& val, Formatter *f);
-void encode_json(const char *name, const bufferlist& bl, Formatter *f);
-void encode_json(const char *name, long long val, Formatter *f);
-void encode_json(const char *name, long long unsigned val, Formatter *f);
+void encode_json(const char *name, const string& val, ceph::Formatter *f);
+void encode_json(const char *name, const char *val, ceph::Formatter *f);
+void encode_json(const char *name, bool val, ceph::Formatter *f);
+void encode_json(const char *name, int val, ceph::Formatter *f);
+void encode_json(const char *name, unsigned val, ceph::Formatter *f);
+void encode_json(const char *name, long val, ceph::Formatter *f);
+void encode_json(const char *name, unsigned long val, ceph::Formatter *f);
+void encode_json(const char *name, long long val, ceph::Formatter *f);
+void encode_json(const char *name, const utime_t& val, ceph::Formatter *f);
+void encode_json(const char *name, const bufferlist& bl, ceph::Formatter *f);
+void encode_json(const char *name, long long val, ceph::Formatter *f);
+void encode_json(const char *name, long long unsigned val, ceph::Formatter *f);
 
 template<class K, class V>
-static void encode_json(const char *name, const std::map<K, V>& m, Formatter *f)
+static void encode_json(const char *name, const std::map<K, V>& m, ceph::Formatter *f)
 {
   f->open_array_section(name);
   for (typename std::map<K, V>::const_iterator i = m.begin(); i != m.end(); ++i) {
@@ -288,7 +288,7 @@ static void encode_json(const char *name, const std::map<K, V>& m, Formatter *f)
 }
 
 template<class T>
-static void encode_json(const char *name, const std::list<T>& l, Formatter *f)
+static void encode_json(const char *name, const std::list<T>& l, ceph::Formatter *f)
 {
   f->open_array_section(name);
   for (typename std::list<T>::const_iterator iter = l.begin(); iter != l.end(); ++iter) {
@@ -298,7 +298,7 @@ static void encode_json(const char *name, const std::list<T>& l, Formatter *f)
 }
 
 template<class K, class V>
-void encode_json_map(const char *name, const map<K, V>& m, Formatter *f)
+void encode_json_map(const char *name, const map<K, V>& m, ceph::Formatter *f)
 {
   f->open_array_section(name);
   typename map<K,V>::const_iterator iter;
@@ -312,8 +312,8 @@ void encode_json_map(const char *name, const map<K, V>& m, Formatter *f)
 template<class K, class V>
 void encode_json_map(const char *name, const char *index_name,
                      const char *object_name, const char *value_name,
-                     void (*cb)(const char *, const V&, Formatter *, void *), void *parent,
-                     const map<K, V>& m, Formatter *f)
+                     void (*cb)(const char *, const V&, ceph::Formatter *, void *), void *parent,
+                     const map<K, V>& m, ceph::Formatter *f)
 {
   f->open_array_section(name);
   typename map<K,V>::const_iterator iter;
@@ -346,14 +346,14 @@ void encode_json_map(const char *name, const char *index_name,
 template<class K, class V>
 void encode_json_map(const char *name, const char *index_name,
                      const char *object_name, const char *value_name,
-                     const map<K, V>& m, Formatter *f)
+                     const map<K, V>& m, ceph::Formatter *f)
 {
   encode_json_map<K, V>(name, index_name, object_name, value_name, NULL, NULL, m, f);
 }
 
 template<class K, class V>
 void encode_json_map(const char *name, const char *index_name, const char *value_name,
-                     const map<K, V>& m, Formatter *f)
+                     const map<K, V>& m, ceph::Formatter *f)
 {
   encode_json_map<K, V>(name, index_name, NULL, value_name, NULL, NULL, m, f);
 }

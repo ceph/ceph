@@ -153,7 +153,9 @@ rgw_dencoder_src = rgw/rgw_dencoder.cc \
 ceph_dencoder_SOURCES = test/encoding/ceph_dencoder.cc ${rgw_dencoder_src} perfglue/disabled_heap_profiler.cc
 ceph_dencoder_CXXFLAGS = ${AM_CXXFLAGS}
 ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libcls_lock_client.a \
-			  libcls_rgw_client.a libcls_replica_log_client.a \
+			  libcls_rgw_client.a \
+			  libcls_replica_log_client.a \
+			  libcls_refcount_client.a \
 			  libosd.a libmds.a libosdc.la $(LIBOS_LDA) libmon.a
 bin_PROGRAMS += ceph-dencoder
 
@@ -550,7 +552,13 @@ libcls_lock_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex
 radoslib_LTLIBRARIES += libcls_lock.la
 
 # refcount class
-libcls_refcount_la_SOURCES = cls/refcount/cls_refcount.cc
+libcls_refcount_la_SOURCES = \
+	cls/refcount/cls_refcount.cc \
+	cls/refcount/cls_refcount_ops.cc \
+	common/ceph_json.cc \
+	json_spirit/json_spirit_reader.cpp \
+	json_spirit/json_spirit_writer.cpp \
+	json_spirit/json_spirit_value.cpp
 libcls_refcount_la_CFLAGS = ${AM_CFLAGS}
 libcls_refcount_la_CXXFLAGS= ${AM_CXXFLAGS}
 libcls_refcount_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
@@ -593,16 +601,21 @@ libcls_replica_log_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbol
 
 radoslib_LTLIBRARIES += libcls_replica_log.la
 
-if WITH_RADOSGW
 # rgw: rados gateway
-libcls_rgw_la_SOURCES = cls/rgw/cls_rgw.cc
+libcls_rgw_la_SOURCES = \
+	cls/rgw/cls_rgw.cc \
+	cls/rgw/cls_rgw_ops.cc \
+	cls/rgw/cls_rgw_types.cc \
+	common/ceph_json.cc \
+	json_spirit/json_spirit_reader.cpp \
+	json_spirit/json_spirit_writer.cpp \
+	json_spirit/json_spirit_value.cpp
 libcls_rgw_la_CFLAGS = ${AM_CFLAGS}
 libcls_rgw_la_CXXFLAGS= ${AM_CXXFLAGS}
 libcls_rgw_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_rgw_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
 
 radoslib_LTLIBRARIES += libcls_rgw.la
-endif
 
 libcls_lock_client_a_SOURCES =  \
 	cls/lock/cls_lock_client.cc  \
@@ -611,7 +624,8 @@ libcls_lock_client_a_SOURCES =  \
 noinst_LIBRARIES += libcls_lock_client.a
 
 libcls_refcount_client_a_SOURCES =  \
-	cls/refcount/cls_refcount_client.cc
+	cls/refcount/cls_refcount_client.cc \
+	cls/refcount/cls_refcount_ops.cc
 noinst_LIBRARIES += libcls_refcount_client.a
 
 libcls_version_client_a_SOURCES =  \
@@ -1694,7 +1708,8 @@ dist-hook:
 python_PYTHON = pybind/rados.py \
 		pybind/rbd.py \
 		pybind/cephfs.py \
-		pybind/ceph_argparse.py
+		pybind/ceph_argparse.py \
+		pybind/ceph_rest_api.py
 
 # headers... and everything else we want to include in a 'make dist' 
 # that autotools doesn't magically identify.

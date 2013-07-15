@@ -1,0 +1,6 @@
+v0.67
+~~~~~
+
+* The output of 'ceph status --format=json' or 'ceph -s --format=json'
+  has changed to return status information in a more structured and
+  usable format.

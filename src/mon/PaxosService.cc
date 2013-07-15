@@ -254,14 +254,15 @@ void PaxosService::election_finished()
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
 
   // make sure we update our state
-  if (is_active())
-    _active();
-  else
-    wait_for_active(new C_Active(this));
+  _active();
 }
 
 void PaxosService::_active()
 {
+  if (is_proposing()) {
+    dout(10) << "_acting - proposing" << dendl;
+    return;
+  }
   if (!is_active()) {
     dout(10) << "_active - not active" << dendl;
     wait_for_active(new C_Active(this));
@@ -357,7 +358,7 @@ void PaxosService::maybe_trim()
 
   bufferlist bl;
   t.encode(bl);
-  paxos->propose_new_value(bl, new C_Committed(this));
+  paxos->propose_new_value(bl, NULL);
 }
 
 void PaxosService::trim(MonitorDBStore::Transaction *t,

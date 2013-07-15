@@ -529,7 +529,7 @@ public:
 
 
   void print(ostream& out);
-  void print_summary(ostream& out);
+  void print_summary(Formatter *f, ostream *out);
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<MDSMap*>& ls);
@@ -538,7 +538,7 @@ WRITE_CLASS_ENCODER_FEATURES(MDSMap::mds_info_t)
 WRITE_CLASS_ENCODER_FEATURES(MDSMap)
 
 inline ostream& operator<<(ostream& out, MDSMap& m) {
-  m.print_summary(out);
+  m.print_summary(NULL, &out);
   return out;
 }
 

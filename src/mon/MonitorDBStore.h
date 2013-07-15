@@ -69,6 +69,19 @@ class MonitorDBStore
 	::decode(endkey, decode_bl);
       DECODE_FINISH(decode_bl);
     }
+
+    void dump(Formatter *f) const {
+      f->dump_int("type", type);
+      f->dump_string("prefix", prefix);
+      f->dump_string("key", key);
+      if (endkey.length())
+	f->dump_string("endkey", endkey);
+    }
+
+    static void generate_test_instances(list<Op*>& ls) {
+      ls.push_back(new Op);
+      // we get coverage here from the Transaction instances
+    }
   };
 
   struct Transaction {
@@ -124,6 +137,17 @@ class MonitorDBStore
       DECODE_START(1, bl);
       ::decode(ops, bl);
       DECODE_FINISH(bl);
+    }
+
+    static void generate_test_instances(list<Transaction*>& ls) {
+      ls.push_back(new Transaction);
+      ls.push_back(new Transaction);
+      bufferlist bl;
+      bl.append("value");
+      ls.back()->put("prefix", "key", bl);
+      ls.back()->erase("prefix2", "key2");
+      ls.back()->compact_prefix("prefix3");
+      ls.back()->compact_range("prefix4", "from", "to");
     }
 
     void append(Transaction& other) {
