@@ -2647,7 +2647,11 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     int bucketno = newcrush.add_bucket(0, CRUSH_BUCKET_STRAW,
 				       CRUSH_HASH_DEFAULT, type, 0, NULL,
 				       NULL);
-    newcrush.set_item_name(bucketno, name);
+    err = newcrush.set_item_name(bucketno, name);
+    if (err < 0) {
+      ss << "error setting bucket name to '" << name << "'";
+      goto reply;
+    }
 
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush);
