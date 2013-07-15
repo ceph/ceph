@@ -1109,3 +1109,20 @@ void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
   o.push_back(new CrushWrapper);
   // fixme
 }
+
+
+bool CrushWrapper::is_valid_crush_name(const string& s)
+{
+  if (s.empty())
+    return false;
+  for (string::const_iterator p = s.begin(); p != s.end(); ++p) {
+    if (!(*p == '-') &&
+	!(*p == '_') &&
+	!(*p == '.') &&
+	!(*p >= '0' && *p <= '9') &&
+	!(*p >= 'A' && *p <= 'Z') &&
+	!(*p >= 'a' && *p <= 'z'))
+      return false;
+  }
+  return true;
+}
