@@ -172,7 +172,7 @@ static int get_obj_vals(cls_method_context_t hctx, const string& start, const st
     return 0;
 
   map<string, bufferlist> new_keys;
-  char c[] = { BI_PREFIX_CHAR + 1, 0 };
+  char c[] = { (char)(BI_PREFIX_CHAR + 1), 0 };
   string new_start = c;
 
   /* now get some more keys */
