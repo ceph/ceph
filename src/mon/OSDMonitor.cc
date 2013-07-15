@@ -1912,6 +1912,8 @@ void OSDMonitor::dump_info(Formatter *f)
   osdmap.dump(f);
   f->close_section();
 
+  f->dump_unsigned("osdmap_first_committed", get_first_committed());
+
   f->open_object_section("crushmap");
   osdmap.crush->dump(f);
   f->close_section();

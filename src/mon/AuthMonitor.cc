@@ -997,3 +997,13 @@ void AuthMonitor::upgrade_format()
     propose_pending();
   }
 }
+
+void AuthMonitor::dump_info(Formatter *f)
+{
+  /*** WARNING: do not include any privileged information here! ***/
+  f->open_object_section("auth");
+  f->dump_unsigned("first_committed", get_first_committed());
+  f->dump_unsigned("last_committed", get_last_committed());
+  f->dump_unsigned("num_secrets", mon->key_server.get_num_secrets());
+  f->close_section();
+}
