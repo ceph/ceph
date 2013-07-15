@@ -67,6 +67,7 @@ enum {
   l_os_commit_len,
   l_os_commit_lat,
   l_os_j_full,
+  l_os_queue_lat,
   l_os_last,
 };
 
