@@ -1611,7 +1611,7 @@ int RGWUser::check_op(RGWUserAdminOpState& op_state, std::string *err_msg)
   populated = is_populated();
 
   if (op_id.compare(RGW_USER_ANON_ID) == 0) {
-    set_err_msg(err_msg, "unable to perform operations on the anoymous user");
+    set_err_msg(err_msg, "unable to perform operations on the anonymous user");
     return -EINVAL;
   }
 
