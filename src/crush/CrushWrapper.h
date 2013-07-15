@@ -200,10 +200,13 @@ public:
       return p->second.c_str();
     return 0;
   }
-  void set_item_name(int i, const string& name) {
+  int set_item_name(int i, const string& name) {
+    if (!is_valid_crush_name(name))
+      return -EINVAL;
     name_map[i] = name;
     if (have_rmaps)
       name_rmap[name] = i;
+    return 0;
   }
 
   // rule names
