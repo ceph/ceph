@@ -247,14 +247,17 @@ class DispatchQueue;
     void stop();
 
     void _send(Message *m) {
+      assert(pipe_lock.is_locked());
       out_q[m->get_priority()].push_back(m);
       cond.Signal();
     }
     void _send_keepalive() {
+      assert(pipe_lock.is_locked());
       keepalive = true;
       cond.Signal();
     }
     Message *_get_next_outgoing() {
+      assert(pipe_lock.is_locked());
       Message *m = 0;
       while (!m && !out_q.empty()) {
         map<int, list<Message*> >::reverse_iterator p = out_q.rbegin();
