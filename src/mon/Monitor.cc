@@ -2135,16 +2135,11 @@ void Monitor::handle_command(MMonCommand *m)
     paxos->dump_info(f.get());
 
     f->close_section();
-    f->flush(ds);
+    f->flush(rdata);
 
-    bufferlist bl;
-    bl.append("-------- BEGIN REPORT --------\n");
-    bl.append(ds);
     ostringstream ss2;
-    ss2 << "\n-------- END REPORT " << bl.crc32c(6789) << " --------\n";
-    rdata.append(bl);
-    rdata.append(ss2.str());
-    rs = string();
+    ss2 << "report " << rdata.crc32c(6789);
+    rs = ss2.str();
     r = 0;
   } else if (prefix == "quorum_status") {
     if (!access_r) {
