@@ -790,6 +790,9 @@ public:
   void dump_rules(Formatter *f) const;
   void list_rules(Formatter *f) const;
   static void generate_test_instances(list<CrushWrapper*>& o);
+
+
+  static bool is_valid_crush_name(const string& s);
 };
 WRITE_CLASS_ENCODER(CrushWrapper)
 
