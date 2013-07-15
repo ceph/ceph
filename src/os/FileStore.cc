@@ -467,6 +467,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   plb.add_time_avg(l_os_commit_len, "commitcycle_interval");
   plb.add_time_avg(l_os_commit_lat, "commitcycle_latency");
   plb.add_u64_counter(l_os_j_full, "journal_full");
+  plb.add_time_avg(l_os_queue_lat, "queue_transaction_latency_avg");
 
   logger = plb.create_perf_counters();
 
@@ -1954,6 +1955,7 @@ void FileStore::op_queue_reserve_throttle(Op *o)
   logger->set(l_os_oq_max_ops, max_ops);
   logger->set(l_os_oq_max_bytes, max_bytes);
 
+  utime_t start = ceph_clock_now(g_ceph_context);
   {
     Mutex::Locker l(op_throttle_lock);
     while ((max_ops && (op_queue_len + 1) > max_ops) ||
@@ -1967,6 +1969,8 @@ void FileStore::op_queue_reserve_throttle(Op *o)
     op_queue_len++;
     op_queue_bytes += o->bytes;
   }
+  utime_t end = ceph_clock_now(g_ceph_context);
+  logger->tinc(l_os_queue_lat, end - start);
 
   logger->set(l_os_oq_ops, op_queue_len);
   logger->set(l_os_oq_bytes, op_queue_bytes);
