@@ -593,14 +593,12 @@ void Paxos::handle_accept(MMonPaxos *accept)
   if (accept->pn != accepted_pn) {
     // we accepted a higher pn, from some other leader
     dout(10) << " we accepted a higher pn " << accepted_pn << ", ignoring" << dendl;
-    accept->put();
-    return;
+    goto out;
   }
   if (last_committed > 0 &&
       accept->last_committed < last_committed-1) {
     dout(10) << " this is from an old round, ignoring" << dendl;
-    accept->put();
-    return;
+    goto out;
   }
   assert(accept->last_committed == last_committed ||   // not committed
 	 accept->last_committed == last_committed-1);  // committed
