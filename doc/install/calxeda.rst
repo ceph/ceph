@@ -28,8 +28,8 @@ Add Package
 Add the Ceph package repository to your system's list of APT sources, but
 replace ``{BRANCH}`` with the branch you'd like to use (e.g., ``master``,
 ``stable``, ``next``, ``wip-hack``). ::
- 
-	echo deb http://gitbuilder.ceph.com/ceph-deb-$(lsb_release -sc)-armv7l-basic/ref/ {BRANCH} $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+
+	echo deb http://gitbuilder.ceph.com/ceph-deb-$(lsb_release -sc)-armv7l-basic/ref/{BRANCH} $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 	sudo apt-get update
 
 
