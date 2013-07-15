@@ -118,12 +118,10 @@ class test_helper {
 
 int test_helper::extract_input(int argc, char *argv[]){
 #define ERR_CHECK_NEXT_PARAM(o) \
-  if((loop + 1) >= argcount)return -1; \
+  if(((int)loop + 1) >= argc)return -1;		\
   else o = argv[loop+1];
 
-  unsigned argcount = argc;
-
-  for(unsigned loop = 1;loop < argcount; loop += 2){
+  for(unsigned loop = 1;loop < (unsigned)argc; loop += 2){
     if(strcmp(argv[loop], "-g") == 0){
       ERR_CHECK_NEXT_PARAM(host);
     }else if(strcmp(argv[loop],"-p") == 0){
