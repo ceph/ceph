@@ -1908,11 +1908,29 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& r
     }
   }
 
-  /* yay, user is permitted, now just make sure that zone has this rule configured. We're
+  if (pselected_rule)
+    *pselected_rule = rule;
+  
+  return set_bucket_location_by_rule(rule, bucket_name, bucket);
+}
+
+int RGWRados::set_bucket_location_by_rule(const string& location_rule, const std::string& bucket_name, rgw_bucket& bucket)
+{
+  bucket.name = bucket_name;
+
+  if (location_rule.empty()) {
+    /* we can only reach here if we're trying to set a bucket location from a bucket
+     * created on a different zone, using a legacy / default pool configuration
+     */
+    return select_legacy_bucket_placement(bucket_name, bucket);
+  }
+
+  /*
+   * make sure that zone has this rule configured. We're
    * checking it for the local zone, because that's where this bucket object is going to
    * reside.
    */
-  map<string, RGWZonePlacementInfo>::iterator piter = zone.placement_pools.find(rule);
+  map<string, RGWZonePlacementInfo>::iterator piter = zone.placement_pools.find(location_rule);
   if (piter == zone.placement_pools.end()) {
     /* couldn't find, means we cannot really place data for this bucket in this zone */
     if ((region_name.empty() && region.is_master) ||
@@ -1924,22 +1942,6 @@ int RGWRados::select_new_bucket_location(RGWUserInfo& user_info, const string& r
       /* oh, well, data is not going to be placed here, bucket object is just a placeholder */
       return 0;
     }
-  }
-
-  if (pselected_rule)
-    *pselected_rule = rule;
-  
-  return set_bucket_location_by_rule(rule, bucket_name, bucket);
-}
-
-int RGWRados::set_bucket_location_by_rule(const string& location_rule, const std::string& bucket_name, rgw_bucket& bucket)
-{
-  bucket.name = bucket_name;
-
-  map<string, RGWZonePlacementInfo>::iterator piter = zone.placement_pools.find(location_rule);
-  if (piter == zone.placement_pools.end()) {
-    /* silently ignore, bucket will not reside in this zone */
-    return 0;
   }
 
   RGWZonePlacementInfo& placement_info = piter->second;
@@ -1954,14 +1956,22 @@ int RGWRados::set_bucket_location_by_rule(const string& location_rule, const std
 int RGWRados::select_bucket_placement(RGWUserInfo& user_info, const string& region_name, const string& placement_rule,
                                       const string& bucket_name, rgw_bucket& bucket, string *pselected_rule)
 {
+  if (!zone.placement_pools.empty()) {
+    return select_new_bucket_location(user_info, region_name, placement_rule, bucket_name, bucket, pselected_rule);
+  }
+
+  if (pselected_rule)
+    pselected_rule->clear();
+
+  return select_legacy_bucket_placement(bucket_name, bucket);
+}
+
+int RGWRados::select_legacy_bucket_placement(const string& bucket_name, rgw_bucket& bucket)
+{
   bufferlist map_bl;
   map<string, bufferlist> m;
   string pool_name;
   bool write_map = false;
-
-  if (!zone.placement_pools.empty()) {
-    return select_new_bucket_location(user_info, region_name, placement_rule, bucket_name, bucket, pselected_rule);
-  }
 
   rgw_obj obj(zone.domain_root, avail_pools);
 
