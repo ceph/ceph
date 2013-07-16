@@ -5718,6 +5718,7 @@ void MDCache::identify_files_to_recover(vector<CInode*>& recover_q, vector<CInod
     }
 
     if (recover) {
+      in->auth_pin(&in->filelock);
       in->filelock.set_state(LOCK_PRE_SCAN);
       recover_q.push_back(in);
       

@@ -3441,7 +3441,6 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
 
     switch (lock->get_state()) {
     case LOCK_MIX: lock->set_state(LOCK_MIX_SYNC); break;
-    case LOCK_SCAN:
     case LOCK_LOCK: lock->set_state(LOCK_LOCK_SYNC); break;
     case LOCK_XSYN: lock->set_state(LOCK_XSYN_SYNC); break;
     case LOCK_EXCL: lock->set_state(LOCK_EXCL_SYNC); break;
@@ -3518,7 +3517,6 @@ void Locker::simple_excl(SimpleLock *lock, bool *need_issue)
     in = static_cast<CInode *>(lock->get_parent());
 
   switch (lock->get_state()) {
-  case LOCK_SCAN:
   case LOCK_LOCK: lock->set_state(LOCK_LOCK_EXCL); break;
   case LOCK_SYNC: lock->set_state(LOCK_SYNC_EXCL); break;
   case LOCK_XSYN: lock->set_state(LOCK_XSYN_EXCL); break;
@@ -3577,7 +3575,6 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
   int old_state = lock->get_state();
 
   switch (lock->get_state()) {
-  case LOCK_SCAN: lock->set_state(LOCK_SCAN_LOCK); break;
   case LOCK_SYNC: lock->set_state(LOCK_SYNC_LOCK); break;
   case LOCK_XSYN:
     file_excl(static_cast<ScatterLock*>(lock), need_issue);
@@ -4163,10 +4160,6 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
   if (lock->get_parent()->is_freezing_or_frozen())
     return;
 
-  // wait for scan
-  if (lock->get_state() == LOCK_SCAN)
-    return;
-
   // excl -> *?
   if (lock->get_state() == LOCK_EXCL) {
     dout(20) << " is excl" << dendl;
@@ -4353,7 +4346,6 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
   switch (lock->get_state()) {
   case LOCK_SYNC: lock->set_state(LOCK_SYNC_EXCL); break;
   case LOCK_MIX: lock->set_state(LOCK_MIX_EXCL); break;
-  case LOCK_SCAN:
   case LOCK_LOCK: lock->set_state(LOCK_LOCK_EXCL); break;
   case LOCK_XSYN: lock->set_state(LOCK_XSYN_EXCL); break;
   default: assert(0);
@@ -4464,12 +4456,12 @@ void Locker::file_recover(ScatterLock *lock)
     issue_caps(in);
     gather++;
   }
-  if (gather) {
-    lock->get_parent()->auth_pin(lock);
-  } else {
-    lock->set_state(LOCK_SCAN);
+
+  lock->set_state(LOCK_SCAN);
+  if (gather)
+    in->state_set(CInode::STATE_NEEDSRECOVER);
+  else
     mds->mdcache->queue_file_recover(in);
-  }
 }
 
 
