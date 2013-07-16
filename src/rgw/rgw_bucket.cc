@@ -1476,8 +1476,13 @@ public:
 
     int ret = store->list_raw_objects(store->zone.domain_root, no_filter,
                                       max, info->ctx, unfiltered_keys, truncated);
-    if (ret < 0)
+    if (ret < 0 && ret != -ENOENT)
       return ret;
+    if (ret == -ENOENT) {
+      if (truncated)
+        *truncated = false;
+      return 0;
+    }
 
     // now filter out the system entries
     list<string>::iterator iter;
@@ -1618,8 +1623,13 @@ public:
 
     int ret = store->list_raw_objects(store->zone.domain_root, no_filter,
                                       max, info->ctx, unfiltered_keys, truncated);
-    if (ret < 0)
+    if (ret < 0 && ret != -ENOENT)
       return ret;
+    if (ret == -ENOENT) {
+      if (truncated)
+        *truncated = false;
+      return 0;
+    }
 
     int prefix_size = sizeof(RGW_BUCKET_INSTANCE_MD_PREFIX) - 1;
     // now filter in the relevant entries
