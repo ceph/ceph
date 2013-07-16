@@ -198,69 +198,96 @@ def maybe_mkdir(*a, **kw):
             raise
 
 
+# a device "name" is something like
+#  sdb
+#  cciss!c0d1
+def get_dev_name(path):
+    """
+    get device name from path.  e.g., /dev/sda -> sdas, /dev/cciss/c0d1 -> cciss!c0d1
+    """
+    assert path.startswith('/dev/')
+    base = path[5:]
+    return base.replace('/', '!')
+
+# a device "path" is something like
+#  /dev/sdb
+#  /dev/cciss/c0d1
+def get_dev_path(name):
+    """
+    get a path (/dev/...) from a name (cciss!c0d1)
+    """
+    return '/dev/' + name.replace('!', '/')
+
+def get_dev_relpath(name):
+    """
+    get a relative path to /dev from a name (cciss!c0d1)
+    """
+    return name.replace('!', '/')
+
+
+def get_partition_dev(dev, pnum):
+    """
+    get the device name for a partition
+
+    assume that partitions are named like the base dev, with a number, and optionally
+    some intervening characters (like 'p').  e.g.,
+
+       sda 1 -> sda1
+       cciss/c0d1 1 -> cciss!c0d1p1
+    """
+    name = get_dev_name(os.path.realpath(dev))
+    partname = None
+    for f in os.listdir(os.path.join('/sys/block', name)):
+        if f.startswith(name) and f.endswith(str(pnum)):
+            # we want the shortest name that starts with the base name and ends with the partition number
+            if not partname or len(f) < len(partname):
+                partname = f
+    if partname:
+        return get_dev_path(partname)
+    else:
+        raise Error('partition %d for %s does not appear to exist' % (pnum, dev))
+
 def list_all_partitions():
     """
     Return a list of devices and partitions
     """
     dev_part_list = {}
-    for name in os.listdir('/dev/disk/by-path'):
-        target = os.readlink(os.path.join('/dev/disk/by-path', name))
-        dev = target.split('/')[-1]
-        #print "name %s target %s dev %s" % (name, target, dev)
-        (baser) = re.search('(.*)-part\d+$', name)
-        if baser is not None:
-            basename = baser.group(1)
-            #print 'basename %s' % basename
-            base = os.readlink(os.path.join('/dev/disk/by-path', basename)).split('/')[-1]
-            if base not in dev_part_list:
-                dev_part_list[base] = []
-            dev_part_list[base].append(dev)
-        else:
-            if dev not in dev_part_list:
-                dev_part_list[dev] = []
+    for name in os.listdir('/sys/block'):
+        if not os.path.exists(os.path.join('/sys/block', name, 'device')):
+            continue
+        dev_part_list[name] = list_partitions(name)
     return dev_part_list
 
-
-def list_partitions(disk):
+def list_partitions(basename):
     """
-    Return a list of partitions on the given device
+    Return a list of partitions on the given device name
     """
-    disk = os.path.realpath(disk)
-    assert not is_partition(disk)
-    assert disk.startswith('/dev/')
-    base = disk.split('/')[-1]
     partitions = []
-    for name in os.listdir(os.path.join('/sys/block', base)):
-        if name.startswith(base):
-            partitions.append('/dev/' + name)
+    for name in os.listdir(os.path.join('/sys/block', basename)):
+        if name.startswith(basename):
+            partitions.append(name)
     return partitions
 
 
 def is_partition(dev):
     """
-    Check whether a given device is a partition or a full disk.
+    Check whether a given device path is a partition or a full disk.
     """
     dev = os.path.realpath(dev)
     if not stat.S_ISBLK(os.lstat(dev).st_mode):
         raise Error('not a block device', dev)
 
-    # we can't tell just from the name of the device if it is a
-    # partition or not.  look in the by-path dir and see if the
-    # referring symlink ends in -partNNN.
-    name = dev.split('/')[-1]
-    for name in os.listdir('/dev/disk/by-path'):
-        target = os.readlink(os.path.join('/dev/disk/by-path', name))
-        cdev = target.split('/')[-1]
-        if '/dev/' + cdev != dev:
-            continue
-        (baser) = re.search('(.*)-part\d+$', name)
-        if baser is not None:
-            return True
-        else:
-            return False
+    name = get_dev_name(dev)
+    LOG.debug('dev %s name is %s', dev, name)
+    if os.path.exists(os.path.join('/sys/block', name)):
+        return False
 
-    # hrm, don't know...
-    return False
+    # make sure it is a partition of something else
+    for basename in os.listdir('/sys/block'):
+        if os.path.exists(os.path.join('/sys/block', basename, name)):
+            return True
+
+    raise Error('not a disk or partition', dev)
 
 
 def is_mounted(dev):
@@ -288,7 +315,7 @@ def is_held(dev):
     """
     assert os.path.exists(dev)
     dev = os.path.realpath(dev)
-    base = dev.split('/')[-1]
+    base = get_dev_name(dev)
 
     # full disk?
     directory = '/sys/block/{base}/holders'.format(base=base)
@@ -320,7 +347,9 @@ def verify_not_in_use(dev):
         if holders:
             raise Error('Device is in use by a device-mapper mapping (dm-crypt?)' % dev, ','.join(holders))
     else:
-        for partition in list_partitions(dev):
+        basename = get_dev_name(os.path.realpath(dev))
+        for partname in list_partitions(basename):
+            partition = get_dev_path(partname)
             if is_mounted(partition):
                 raise Error('Device is mounted', partition)
             holders = is_held(partition)
@@ -1042,7 +1071,7 @@ def prepare_dev(
         except subprocess.CalledProcessError as e:
             raise Error(e)
 
-        rawdev = '{data}1'.format(data=data)
+        rawdev = get_partition_dev(data, 1)
 
     dev = None
     if osd_dm_keypath:
@@ -2009,7 +2038,7 @@ def is_suppressed(path):
     try:
         if not disk.startswith('/dev/') or not stat.S_ISBLK(os.lstat(path).st_mode):
             return False
-        base = disk.split('/')[-1]
+        base = get_dev_name(disk)
         while len(base):
             if os.path.exists(SUPPRESS_PREFIX + base):
                 return True
@@ -2023,7 +2052,7 @@ def set_suppress(path):
         raise Error('does not exist', path)
     if not stat.S_ISBLK(os.lstat(path).st_mode):
         raise Error('not a block device', path)
-    base = disk.split('/')[-1]
+    base = get_dev_name(disk)
 
     with file(SUPPRESS_PREFIX + base, 'w') as f:
         pass
@@ -2036,7 +2065,7 @@ def unset_suppress(path):
     if not stat.S_ISBLK(os.lstat(path).st_mode):
         raise Error('not a block device', path)
     assert disk.startswith('/dev/')
-    base = disk.split('/')[-1]
+    base = get_dev_name(disk)
 
     fn = SUPPRESS_PREFIX + base
     if not os.path.exists(fn):
