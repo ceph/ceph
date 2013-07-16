@@ -333,6 +333,9 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
   ldout(cct, 5) << "insert_item item " << item << " weight " << weight
 		<< " name " << name << " loc " << loc << dendl;
 
+  if (!is_valid_crush_name(name))
+    return -EINVAL;
+
   if (name_exists(name)) {
     if (get_item_id(name) != item) {
       ldout(cct, 10) << "device name '" << name << "' already exists as id "
@@ -473,6 +476,10 @@ int CrushWrapper::create_or_move_item(CephContext *cct, int item, float weight, 
 {
   int ret = 0;
   int old_iweight;
+
+  if (!is_valid_crush_name(name))
+    return -EINVAL;
+
   if (check_item_loc(cct, item, loc, &old_iweight)) {
     ldout(cct, 5) << "create_or_move_item " << item << " already at " << loc << dendl;
   } else {
@@ -496,6 +503,9 @@ int CrushWrapper::update_item(CephContext *cct, int item, float weight, string n
   ldout(cct, 5) << "update_item item " << item << " weight " << weight
 		<< " name " << name << " loc " << loc << dendl;
   int ret = 0;
+
+  if (!is_valid_crush_name(name))
+    return -EINVAL;
 
   // compare quantized (fixed-point integer) weights!  
   int iweight = (int)(weight * (float)0x10000);
@@ -1108,4 +1118,21 @@ void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
 {
   o.push_back(new CrushWrapper);
   // fixme
+}
+
+
+bool CrushWrapper::is_valid_crush_name(const string& s)
+{
+  if (s.empty())
+    return false;
+  for (string::const_iterator p = s.begin(); p != s.end(); ++p) {
+    if (!(*p == '-') &&
+	!(*p == '_') &&
+	!(*p == '.') &&
+	!(*p >= '0' && *p <= '9') &&
+	!(*p >= 'A' && *p <= 'Z') &&
+	!(*p >= 'a' && *p <= 'z'))
+      return false;
+  }
+  return true;
 }
