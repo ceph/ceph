@@ -341,8 +341,11 @@ int Pipe::accept()
     set_peer_type(connect.host_type);
     policy = msgr->get_policy(connect.host_type);
     ldout(msgr->cct,10) << "accept of host_type " << connect.host_type
-	     << ", policy.lossy=" << policy.lossy
-	     << dendl;
+			<< ", policy.lossy=" << policy.lossy
+			<< " policy.server=" << policy.server
+			<< " policy.standby=" << policy.standby
+			<< " policy.resetcheck=" << policy.resetcheck
+			<< dendl;
 
     memset(&reply, 0, sizeof(reply));
     reply.protocol_version = msgr->get_proto_version(peer_type, false);
@@ -1014,6 +1017,8 @@ int Pipe::connect()
           ldout(msgr->cct,2) << "connect read error on newly_acked_seq" << dendl;
           goto fail_locked;
         }
+	ldout(msgr->cct,2) << " got newly_acked_seq " << newly_acked_seq
+			   << " vs out_seq " << out_seq << dendl;
 	while (newly_acked_seq > out_seq) {
 	  Message *m = _get_next_outgoing();
 	  assert(m);
