@@ -446,6 +446,11 @@ public:
   virtual void on_active() { }
 
   /**
+   * This is called when we are shutting down
+   */
+  virtual void on_shutdown() {}
+
+  /**
    * this is called when activating on the leader
    *
    * it should conditionally upgrade the on-disk format by proposing a transaction
