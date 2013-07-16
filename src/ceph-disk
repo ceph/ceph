@@ -755,16 +755,6 @@ def zap(dev):
         raise Error(e)
 
 
-def get_udev_version():
-    version = _check_output(
-        args=[
-            'udevadm',
-            '--version',
-        ],
-    )   
-    return int(version)
-
-
 def prepare_journal_dev(
     data,
     journal,
@@ -833,30 +823,9 @@ def prepare_journal_dev(
                 ],
             )
 
-        if get_udev_version() >= 172:
-            journal_symlink = '/dev/disk/by-partuuid/{journal_uuid}'.format(
-                journal_uuid=journal_uuid,
-                )
-        else:
-            # udev prior to version 172 doesn't create by-partuuid directory
-            # use by-path symlink instead.  This is the third symlink returned
-            # by udevadm when queried.
-            LOG.debug('Using alternate persistant name for journal symlink')
-            symlinks = _check_output(
-                args=[
-                    'udevadm',
-                    'info',
-                    '--query=symlink',
-                    '--name={name}'.format(name=os.path.basename(journal)),
-                    ],
-                )   
-            journal_symlink = None
-            for udev_line in symlinks.split():
-                if 'by-path' in udev_line:
-                    journal_symlink = '/dev/{symlink}-part{num}'.format(symlink=str(udev_line), num=num)
-                    break
-            if not journal_symlink:
-               raise Error('Unable to get device by path from udev')
+        journal_symlink = '/dev/disk/by-partuuid/{journal_uuid}'.format(
+            journal_uuid=journal_uuid,
+            )
 
         journal_dmcrypt = None
         if journal_dm_keypath:
