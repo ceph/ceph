@@ -143,7 +143,7 @@ public:
   void remote_wrlock_finish(SimpleLock *lock, int target, Mutation *mut);
 
   bool xlock_start(SimpleLock *lock, MDRequest *mut);
-  void _finish_xlock(SimpleLock *lock, bool *pneed_issue);
+  void _finish_xlock(SimpleLock *lock, client_t xlocker, bool *pneed_issue);
   void xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue);
 
   void xlock_export(SimpleLock *lock, Mutation *mut);
