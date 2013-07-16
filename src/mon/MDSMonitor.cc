@@ -937,6 +937,8 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
     int64_t poolid;
     cmd_getval(g_ceph_context, cmdmap, "poolid", poolid);
     r = pending_mdsmap.remove_data_pool(poolid);
+    if (r == -ENOENT)
+      r = 0;
     if (r == 0)
       ss << "removed data pool " << poolid << " from mdsmap";
 
