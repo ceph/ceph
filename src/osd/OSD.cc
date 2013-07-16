@@ -1775,7 +1775,7 @@ OSD::res_result OSD::_try_resurrect_pg(
   DeletingStateRef df;
   pg_t cur(pgid);
   while (true) {
-    df = service.deleting_pgs.lookup(pgid);
+    df = service.deleting_pgs.lookup(cur);
     if (df)
       break;
     if (!cur.ps())
@@ -1812,7 +1812,7 @@ OSD::res_result OSD::_try_resurrect_pg(
 	       << dendl;
       *resurrected = cur;
       *old_pg_state = df->old_pg_state;
-      service.deleting_pgs.remove(pgid); // PG is no longer being removed!
+      service.deleting_pgs.remove(cur); // PG is no longer being removed!
       return RES_PARENT;
     } else {
       /* this is not a problem, failing to cancel proves that all objects
