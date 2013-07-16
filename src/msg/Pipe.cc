@@ -340,13 +340,13 @@ int Pipe::accept()
 
     memset(&reply, 0, sizeof(reply));
     reply.protocol_version = msgr->get_proto_version(peer_type, false);
+    msgr->lock.Unlock();
 
     // mismatch?
     ldout(msgr->cct,10) << "accept my proto " << reply.protocol_version
 	     << ", their proto " << connect.protocol_version << dendl;
     if (connect.protocol_version != reply.protocol_version) {
       reply.tag = CEPH_MSGR_TAG_BADPROTOVER;
-      msgr->lock.Unlock();
       goto reply;
     }
 
@@ -372,12 +372,9 @@ int Pipe::accept()
     if (feat_missing) {
       ldout(msgr->cct,1) << "peer missing required features " << std::hex << feat_missing << std::dec << dendl;
       reply.tag = CEPH_MSGR_TAG_FEATURES;
-      msgr->lock.Unlock();
       goto reply;
     }
     
-    msgr->lock.Unlock();
-
     // Check the authorizer.  If not good, bail out.
 
     if (!msgr->verify_authorizer(connection_state.get(), peer_type, connect.authorizer_protocol, authorizer,
