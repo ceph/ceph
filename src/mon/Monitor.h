@@ -788,6 +788,7 @@ public:
     bool _check_gv_store();
 
     void _init() {
+      assert(!store);
       MonitorStore *store_ptr = new MonitorStore(path);
       store.reset(store_ptr);
     }
