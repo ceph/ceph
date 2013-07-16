@@ -15,6 +15,7 @@ Foundation.  See file COPYING.
 import copy
 import json
 import os
+import re
 import socket
 import stat
 import sys
@@ -175,21 +176,31 @@ class CephFloat(CephArgtype):
 
 class CephString(CephArgtype):
     """
-    String; pretty generic.
+    String; pretty generic.  goodchars is a RE char class of valid chars
     """
-    def __init__(self, badchars=''):
-        self.badchars = badchars
+    def __init__(self, goodchars=''):
+        from string import printable
+        try:
+            re.compile(goodchars)
+        except:
+            raise ValueError('CephString(): "{0}" is not a valid RE'.\
+                format(goodchars))
+        self.goodchars = goodchars
+        self.goodset = frozenset(
+            [c for c in printable if re.match(goodchars, c)]
+        )
 
     def valid(self, s, partial=False):
-        for c in self.badchars:
-            if c in s:
-                raise ArgumentFormat("bad char {0} in {1}".format(c, s))
+        sset = set(s)
+        if self.goodset and not sset <= self.goodset:
+            raise ArgumentFormat("invalid chars {0} in {1}".\
+                format(''.join(sset - self.goodset), s))
         self.val = s
 
     def __str__(self):
         b = ''
-        if len(self.badchars):
-            b = '(without chars in {0})'.format(self.badchars)
+        if self.goodchars:
+            b += '(goodchars {0})'.format(self.goodchars)
         return '<string{0}>'.format(b)
 
 class CephSocketpath(CephArgtype):
@@ -790,7 +801,7 @@ def validate(args, signature, partial=False):
                     # hm, but it was required, so quit
                     if partial:
                         return d
-                    raise ArgumentFormat('{0} not valid argument {1}: {2}'.format(str(myarg), desc, e))
+                    raise e
 
             # valid arg acquired.  Store in dict, as a list if multivalued
             if desc.N:
@@ -848,19 +859,19 @@ def validate_command(parsed_args, sigdict, args, verbose=False):
                 sig = cmd['sig']
                 helptext = cmd['help']
                 try:
-                    valid_dict = validate(args, sig, verbose)
+                    valid_dict = validate(args, sig)
                     found = cmd
                     break
+                except ArgumentPrefix:
+                    # ignore prefix mismatches; we just haven't found
+                    # the right command yet
+                    pass
                 except ArgumentError as e:
                     # prefixes matched, but some other arg didn't;
-                    # this is interesting information if verbose
-                    if verbose:
-                        print >> sys.stderr, '{0}: invalid command'.\
-                            format(' '.join(args))
-                        print >> sys.stderr, '{0}'.format(e)
-                        print >> sys.stderr, "did you mean {0}?\n\t{1}".\
-                            format(concise_sig(sig), helptext)
-                    pass
+                    # stop now, because we have the right command but
+                    # some other input is invalid
+                    print >> sys.stderr, "Invalid command: ", str(e)
+                    return {}
                 if found:
                     break
 
