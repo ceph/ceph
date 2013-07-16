@@ -271,9 +271,10 @@ int SimpleMessenger::bind(const entity_addr_t &bind_addr)
 int SimpleMessenger::rebind(int avoid_port)
 {
   ldout(cct,1) << "rebind avoid " << avoid_port << dendl;
-  mark_down_all();
   assert(did_bind);
-  return accepter.rebind(avoid_port);
+  int r = accepter.rebind(avoid_port);
+  mark_down_all();
+  return r;
 }
 
 int SimpleMessenger::start()
