@@ -180,12 +180,7 @@ def build_ceph_cluster(ctx, config):
         estatus_mon = execute_ceph_deploy(ctx, config, mon_create_nodes)
         if estatus_mon != 0:
             raise Exception("ceph-deploy: Failed to create monitors")
-    for d in range(1, len(mon_node)):
-        mon_destroy_nodes = './ceph-deploy mon destroy'+" "+mon_node[d]
-        estatus_mon_d = execute_ceph_deploy(ctx, config, mon_destroy_nodes)
-        if estatus_mon_d != 0:
-            raise Exception("ceph-deploy: Failed to delete monitor")
-
+    
     estatus_gather = execute_ceph_deploy(ctx, config, gather_keys)
     while (estatus_gather != 0):
         mon_create_nodes = './ceph-deploy mon create'+" "+mon_node[0]
@@ -195,6 +190,12 @@ def build_ceph_cluster(ctx, config):
     estatus_mds = execute_ceph_deploy(ctx, config, deploy_mds)
     if estatus_mds != 0:
         raise Exception("ceph-deploy: Failed to deploy mds")
+
+    for d in range(1, len(mon_node)):
+        mon_destroy_nodes = './ceph-deploy mon destroy'+" "+mon_node[d]
+        estatus_mon_d = execute_ceph_deploy(ctx, config, mon_destroy_nodes)
+        if estatus_mon_d != 0:
+            raise Exception("ceph-deploy: Failed to delete monitor")
 
     node_dev_list = get_dev_for_osd(ctx, config)
     for d in node_dev_list:
