@@ -164,6 +164,11 @@ int Accepter::rebind(int avoid_port)
   int old_port = addr.get_port();
   addr.set_port(0);
 
+  // adjust the nonce; we want our entity_addr_t to be truly unique.
+  nonce += 1000000;
+  msgr->my_inst.addr.nonce = nonce;
+  ldout(msgr->cct,10) << " new nonce " << nonce << " and inst " << msgr->my_inst << dendl;
+
   ldout(msgr->cct,10) << " will try " << addr << dendl;
   int r = bind(addr, old_port, avoid_port);
   if (r == 0)
