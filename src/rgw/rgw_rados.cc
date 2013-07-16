@@ -2301,6 +2301,11 @@ done_cancel:
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: complete_update_index_cancel() returned ret=" << ret << dendl;
   }
+  /* we lost in a race, object was already overwritten, we
+   * should treat it as a success
+   */
+  if (r == -ECANCELED)
+    r = 0;
   return r;
 }
 
