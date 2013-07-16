@@ -312,6 +312,7 @@ Pipe *SimpleMessenger::add_accept_pipe(int sd)
   p->start_reader();
   p->pipe_lock.Unlock();
   pipes.insert(p);
+  accepting_pipes.insert(p);
   lock.Unlock();
   return p;
 }
