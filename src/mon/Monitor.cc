@@ -3813,7 +3813,7 @@ int Monitor::StoreConverter::needs_conversion()
   bufferlist magicbl;
   int ret = 0;
 
-  dout(10) << __func__ << dendl;
+  dout(10) << "check if store needs conversion from legacy format" << dendl;
   _init();
 
   int err = store->mount();
