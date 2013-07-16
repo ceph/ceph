@@ -194,7 +194,8 @@ public:
   virtual string get_type() { return string(); }
 
   virtual int get(RGWRados *store, string& entry, RGWMetadataObject **obj) { return -ENOTSUP; }
-  virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, time_t mtime, JSONObj *obj) { return -ENOTSUP; }
+  virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
+                  time_t mtime, JSONObj *obj, sync_type_t sync_type) { return -ENOTSUP; }
 
   virtual void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) {}
 
@@ -357,7 +358,10 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl)
     return -EINVAL;
   }
 
-  return handler->put(store, entry, objv_tracker, mtime, jo);
+  RGWMetadataHandler::sync_type_t sync_type;
+  sync_type = RGWMetadataHandler::APPLY_ALWAYS;
+
+  return handler->put(store, entry, objv_tracker, mtime, jo, sync_type);
 }
 
 int RGWMetadataManager::remove(string& metadata_key)
