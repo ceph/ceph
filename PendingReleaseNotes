@@ -8,3 +8,14 @@ v0.67
 * The 'ceph pg dump_stuck [threshold]' command used to require a
   --threshold or -t prefix to the threshold argument, but now does
   not.
+
+* Many more ceph commands now output formatted information; select
+  with '--format=<format>', where <format> can be 'json', 'json-pretty',
+  'xml', or 'xml-pretty'.
+
+* ceph-rest-api, a wrapper around ceph_rest_api.py, can be used to start
+  up a test single-threaded HTTP server that provides access to cluster
+  information and administration in very similar ways to the ceph
+  commandline tool.  ceph_rest_api.py can be used as a WSGI application
+  for deployment in a more-capable web server.  See ceph-rest-api.8
+  for more.
