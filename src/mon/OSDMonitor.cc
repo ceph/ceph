@@ -298,7 +298,7 @@ void OSDMonitor::on_active()
   check_subs();
 
   if (thrash_map) {
-    if (is_leader()) {
+    if (mon->is_leader()) {
       if (thrash())
 	propose_pending();
     } else {
