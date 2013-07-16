@@ -171,14 +171,16 @@ public:
   }
   void confirm_receipt(ceph_seq_t seq, unsigned caps) {
     if (seq == last_sent) {
-      _pending = caps;
       _revokes.clear();
       _issued = caps;
+      // don't add bits
+      _pending &= caps;
     } else {
       // can i forget any revocations?
-      while (!_revokes.empty() &&
-	     _revokes.front().seq <= seq)
+      while (!_revokes.empty() && _revokes.front().seq < seq)
 	_revokes.pop_front();
+      if (!_revokes.empty() && _revokes.front().seq == seq)
+	_revokes.begin()->before = caps;
       _calc_issued();
     }
     //check_rdcaps_list();
