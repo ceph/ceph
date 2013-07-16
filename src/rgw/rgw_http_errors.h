@@ -15,6 +15,7 @@ const static struct rgw_http_errors RGW_HTTP_ERRORS[] = {
     { STATUS_ACCEPTED, 202, "Accepted" },
     { STATUS_NO_CONTENT, 204, "NoContent" },
     { STATUS_PARTIAL_CONTENT, 206, "" },
+    { STATUS_NO_APPLY, 204, "NoContent" },
     { ERR_PERMANENT_REDIRECT, 301, "PermanentRedirect" },
     { STATUS_REDIRECT, 303, "" },
     { ERR_NOT_MODIFIED, 304, "NotModified" },
