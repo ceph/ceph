@@ -595,6 +595,7 @@ int Pipe::accept()
   // open
   connect_seq = connect.connect_seq + 1;
   peer_global_seq = connect.global_seq;
+  assert(state == STATE_ACCEPTING);
   state = STATE_OPEN;
   ldout(msgr->cct,10) << "accept success, connect_seq = " << connect_seq << ", sending READY" << dendl;
 
@@ -621,6 +622,8 @@ int Pipe::accept()
   // ok!
   if (msgr->dispatch_queue.stop)
     goto shutting_down;
+  inr removed = msgr->accepting_pipes.erase(this);
+  assert(removed == 1);
   register_pipe();
   msgr->lock.Unlock();
 
@@ -1098,6 +1101,7 @@ void Pipe::unregister_pipe()
     msgr->rank_pipe.erase(p);
   } else {
     ldout(msgr->cct,10) << "unregister_pipe - not registered" << dendl;
+    msgr->accepting_pipes.erase(this);  // somewhat overkill, but safe.
   }
 }
 
