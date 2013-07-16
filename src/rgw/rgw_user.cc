@@ -2301,7 +2301,8 @@ public:
     decode_json_obj(info, obj);
 
     RGWUserInfo old_info;
-    int ret = rgw_get_user_info_by_uid(store, entry, old_info, &objv_tracker);
+    time_t orig_mtime;
+    int ret = rgw_get_user_info_by_uid(store, entry, old_info, &objv_tracker, &orig_mtime);
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
