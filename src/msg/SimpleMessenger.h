@@ -514,6 +514,12 @@ private:
    * invalid and can be replaced by anyone holding the msgr lock
    */
   hash_map<entity_addr_t, Pipe*> rank_pipe;
+  /**
+   * list of pipes are in teh process of accepting
+   *
+   * These are not yet in the rank_pipe map.
+   */
+  set<Pipe*> accepting_pipes;
   /// a set of all the Pipes we have which are somehow active
   set<Pipe*>      pipes;
   /// a list of Pipes we want to tear down
