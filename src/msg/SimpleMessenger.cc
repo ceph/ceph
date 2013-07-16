@@ -556,6 +556,17 @@ void SimpleMessenger::mark_down_all()
 {
   ldout(cct,1) << "mark_down_all" << dendl;
   lock.Lock();
+  for (set<Pipe*>::iterator q = accepting_pipes.begin(); q != accepting_pipes.end(); ++q) {
+    Pipe *p = *q;
+    ldout(cct,5) << "mark_down_all accepting_pipe " << p << dendl;
+    p->pipe_lock.Lock();
+    p->stop();
+    if (p->connection_state)
+      p->connection_state->clear_pipe(p);
+    p->pipe_lock.Unlock();
+  }
+  accepting_pipes.clear();
+
   while (!rank_pipe.empty()) {
     hash_map<entity_addr_t,Pipe*>::iterator it = rank_pipe.begin();
     Pipe *p = it->second;
