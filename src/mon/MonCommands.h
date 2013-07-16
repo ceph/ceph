@@ -357,55 +357,55 @@ COMMAND("osd setcrushmap", "set crush map from input file", \
 COMMAND("osd crush set", "set crush map from input file", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush add-bucket " \
-	"name=name,type=CephString " \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=type,type=CephString", \
 	"add no-parent (probably root) crush bucket <name> of type <type>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush set " \
 	"name=id,type=CephOsdName " \
 	"name=weight,type=CephFloat,range=0.0 " \
-	"name=args,type=CephString,n=N", \
+	"name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=]", \
 	"set crushmap entry for <name> to <weight> with location <args>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush add " \
 	"name=id,type=CephOsdName " \
 	"name=weight,type=CephFloat,range=0.0 " \
-	"name=args,type=CephString,n=N", \
+	"name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=]", \
 	"add crushmap entry for <name> with <weight> and location <args>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush create-or-move " \
 	"name=id,type=CephOsdName " \
 	"name=weight,type=CephFloat,range=0.0 " \
-	"name=args,type=CephString,n=N", \
+	"name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=]", \
 	"create entry or move existing entry for <name> <weight> at/to location <args>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush move " \
 	"name=id,type=CephOsdName " \
-	"name=args,type=CephString,n=N", \
+	"name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=]", \
 	"move existing entry for <name> to location <args>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush link " \
 	"name=name,type=CephString " \
-	"name=args,type=CephString,n=N", \
+	"name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=]", \
 	"link existing entry for <name> under location <args>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush rm " \
-	"name=name,type=CephString " \
-	"name=ancestor,type=CephString,req=false", \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=ancestor,type=CephString,req=false,goodchars=[A-Za-z0-9-_.]", \
 	"remove <name> from crush map (everywhere, or just at <ancestor>",\
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush remove " \
-	"name=name,type=CephString " \
-	"name=ancestor,type=CephString,req=false", \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=ancestor,type=CephString,req=false,goodchars=[A-Za-z0-9-_.]", \
 	"remove <name> from crush map (everywhere, or just at <ancestor>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush unlink " \
-	"name=name,type=CephString " \
-	"name=ancestor,type=CephString,req=false", \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=ancestor,type=CephString,req=false,goodchars=[A-Za-z0-9-_.]", \
 	"unlink <name> from crush map (everywhere, or just at <ancestor>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush reweight " \
-	"name=name,type=CephString " \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=weight,type=CephFloat,range=0.0", \
 	"change <name>'s weight to <weight> in crush map", \
 	"osd", "rw", "cli,rest")
@@ -413,12 +413,13 @@ COMMAND("osd crush tunables " \
 	"name=profile,type=CephChoices,strings=legacy|argonaut|bobtail|optimal|default", \
 	"set crush tunables values to <profile>", "osd", "rw", "cli,rest")
 COMMAND("osd crush rule create-simple " \
-	"name=name,type=CephString " \
-	"name=root,type=CephString " \
-	"name=type,type=CephString", \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=root,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=type,type=CephString,goodchars=[A-Za-z0-9-_.]",
 	"create crush rule <name> in <root> of type <type>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush rule rm " \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=name,type=CephString", \
 	"remove crush rule <name>", "osd", "rw", "cli,rest")
 COMMAND("osd setmaxosd " \
