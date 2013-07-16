@@ -3851,7 +3851,6 @@ out:
 int Monitor::StoreConverter::convert()
 {
   _init();
-  assert(!db->create_and_open(std::cerr));
   assert(!store->mount());
   if (db->exists("mon_convert", "on_going")) {
     dout(0) << __func__ << " found a mon store in mid-convertion; abort!"
