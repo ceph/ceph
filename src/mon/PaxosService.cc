@@ -313,6 +313,8 @@ void PaxosService::shutdown()
   }
 
   finish_contexts(g_ceph_context, waiting_for_finished_proposal, -EAGAIN);
+
+  on_shutdown();
 }
 
 void PaxosService::maybe_trim()

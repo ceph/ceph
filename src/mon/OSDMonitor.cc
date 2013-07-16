@@ -308,6 +308,21 @@ void OSDMonitor::on_active()
   }
 }
 
+void OSDMonitor::on_shutdown()
+{
+  dout(10) << __func__ << dendl;
+  map<epoch_t, list<PaxosServiceMessage*> >::iterator p = waiting_for_map.begin();
+  while (p != waiting_for_map.end()) {
+    while (!p->second.empty()) {
+      Message *m = p->second.front();
+      dout(20) << " discarding " << m << " " << *m << dendl;
+      m->put();
+      p->second.pop_front();
+    }
+    waiting_for_map.erase(p++);
+  }
+}
+
 void OSDMonitor::update_logger()
 {
   dout(10) << "update_logger" << dendl;
