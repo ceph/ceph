@@ -1835,21 +1835,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
       info.creation_time = creation_time;
     ret = put_linked_bucket_info(info, exclusive, 0, &attrs, true);
     if (ret == -EEXIST) {
-      /* remove bucket meta instance */
-      string entry;
-      get_bucket_instance_entry(bucket, entry);
-      r = rgw_bucket_instance_remove_entry(this, entry, &info.objv_tracker);
-      if (r < 0)
-        return r;
-
-      /* remove bucket index */
-      librados::IoCtx index_ctx; // context for new bucket
-      int r = open_bucket_index_ctx(bucket, index_ctx);
-      if (r < 0)
-        return r;
-
-      /* we need to reread the info and return it, caller will have a use for it */
-      index_ctx.remove(dir_oid);
+       /* we need to reread the info and return it, caller will have a use for it */
       r = get_bucket_info(NULL, bucket.name, info, NULL, NULL);
       if (r < 0) {
         if (r == -ENOENT) {
@@ -1857,6 +1843,22 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
         }
         ldout(cct, 0) << "get_bucket_info returned " << r << dendl;
         return r;
+      }
+
+      /* only remove it if it's a different bucket instance */
+      if (info.bucket.bucket_id != bucket.bucket_id) {
+        /* remove bucket meta instance */
+        string entry;
+        get_bucket_instance_entry(bucket, entry);
+        r = rgw_bucket_instance_remove_entry(this, entry, &info.objv_tracker);
+        if (r < 0)
+          return r;
+
+        /* remove bucket index */
+        librados::IoCtx index_ctx; // context for new bucket
+        int r = open_bucket_index_ctx(bucket, index_ctx);
+        if (r < 0)
+          return r;
       }
       /* ret == -ENOENT here */
     }
