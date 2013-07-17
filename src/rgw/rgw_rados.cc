@@ -645,7 +645,8 @@ int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phan
   return RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle);
 }
 
-int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle) {
+int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle)
+{
   *phandle = NULL;
   if (extra_data_len) {
     size_t extra_len = bl.length();
@@ -660,7 +661,6 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
     if (bl.length() == 0) {
       return 0;
     }
-    ofs = extra_data_bl.length();
   }
 
   pending_data_bl.claim_append(bl);
