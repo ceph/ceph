@@ -1387,11 +1387,19 @@ int main(int argc, char **argv)
   }
 
   if (opt_cmd == OPT_BUCKET_LINK) {
-   RGWBucketAdminOp::link(store, bucket_op);
+    int r = RGWBucketAdminOp::link(store, bucket_op);
+    if (r < 0) {
+      cerr << "failure: " << cpp_strerror(-r) << std::endl;
+      return -r;
+    }
   }
 
   if (opt_cmd == OPT_BUCKET_UNLINK) {
-    RGWBucketAdminOp::unlink(store, bucket_op);
+    int r = RGWBucketAdminOp::unlink(store, bucket_op);
+    if (r < 0) {
+      cerr << "failure: " << cpp_strerror(-r) << std::endl;
+      return -r;
+    }
   }
 
   if (opt_cmd == OPT_TEMP_REMOVE) {
