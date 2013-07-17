@@ -81,6 +81,18 @@ overrides:
         debug paxos: 20
     log-whitelist:
     - slow request
+  ceph-deploy:
+    conf:
+      mon:
+        debug mon: 20
+        debug paxos: 20
+        debug ms: 20
+      client:
+        log file: /var/log/ceph/ceph-$name.$pid.log
+        debug rados: 20
+        debug ms: 1
+        debug objecter: 20
+        debug monc: 20
   admin_socket:
     branch: $ceph
 EOF
