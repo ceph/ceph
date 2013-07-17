@@ -161,7 +161,9 @@ void RGWOp_Metadata_Put::execute() {
   
   frame_metadata_key(s, metadata_key);
   
-  http_ret = store->meta_mgr->put(metadata_key, bl);
+  RGWMetadataHandler::sync_type_t sync_type = RGWMetadataHandler::APPLY_ALWAYS;
+
+  http_ret = store->meta_mgr->put(metadata_key, bl, sync_type);
   if (http_ret < 0) {
     dout(5) << "ERROR: can't put key: " << cpp_strerror(http_ret) << dendl;
     return;
