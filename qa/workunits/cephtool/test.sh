@@ -165,6 +165,10 @@ ceph osd getmaxosd | grep 'max_osd = 10'
 ceph osd setmaxosd $save
 ceph osd getmaxosd | grep "max_osd = $save"
 
+for id in `ceph osd ls` ; do
+	ceph tell osd.$id version
+done
+
 id=`ceph osd create`
 ceph osd lost $id --yes-i-really-mean-it
 ceph osd rm $id
@@ -188,11 +192,6 @@ ceph osd lspools | grep data3
 ceph osd pool delete data3 data3 --yes-i-really-really-mean-it
 
 ceph osd stat | grep up,
-
-for id in `ceph osd ls` ; do
-	ceph tell osd.$id version
-done
-
 
 ceph pg debug unfound_objects_exist
 ceph pg debug degraded_pgs_exist
