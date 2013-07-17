@@ -79,10 +79,8 @@ if ! grep "$mymsg" /tmp/$$; then
 fi
 kill $wpid
 
-ceph mds cluster_down --no-log-to-stderr 2>&1 | grep "marked mdsmap DOWN"
-expect_false ceph mds cluster_down
-ceph mds cluster_up --no-log-to-stderr 2>&1 | grep "unmarked mdsmap DOWN"
-expect_false ceph mds cluster_up
+ceph mds cluster_down
+ceph mds cluster_up
 
 ceph mds compat rm_incompat 4
 ceph mds compat rm_incompat 4
