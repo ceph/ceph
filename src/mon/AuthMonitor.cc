@@ -897,8 +897,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     KeyServerData::Incremental auth_inc;
     auth_inc.name = entity;
     if (!mon->key_server.contains(auth_inc.name)) {
-      ss << "couldn't find entry " << entity;
-      err = -ENOENT;
+      ss << "entity " << entity << " does not exist";
+      err = 0;
       goto done;
     }
     auth_inc.op = KeyServerData::AUTH_INC_DEL;
