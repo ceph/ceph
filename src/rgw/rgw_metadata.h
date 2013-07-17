@@ -50,6 +50,18 @@ public:
     APPLY_UPDATES,
     APPLY_NEWER
   };
+  static bool string_to_sync_type(const string& sync_string,
+                                  sync_type_t& type) {
+    if (sync_string.compare("update-by-version") == 0)
+      type = APPLY_UPDATES;
+    else if (sync_string.compare("update-by-timestamp") == 0)
+      type = APPLY_NEWER;
+    else if (sync_string.compare("always") == 0)
+      type = APPLY_ALWAYS;
+    else
+      return false;
+    return true;
+  }
   virtual ~RGWMetadataHandler() {}
   virtual string get_type() = 0;
 

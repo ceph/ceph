@@ -163,6 +163,17 @@ void RGWOp_Metadata_Put::execute() {
   
   RGWMetadataHandler::sync_type_t sync_type = RGWMetadataHandler::APPLY_ALWAYS;
 
+  bool mode_exists = false;
+  string mode_string = s->info.args.get("sync-type", &mode_exists);
+  if (mode_exists) {
+    bool parsed = RGWMetadataHandler::string_to_sync_type(mode_string,
+                                                          sync_type);
+    if (!parsed) {
+      http_ret = -EINVAL;
+      return;
+    }
+  }
+
   http_ret = store->meta_mgr->put(metadata_key, bl, sync_type);
   if (http_ret < 0) {
     dout(5) << "ERROR: can't put key: " << cpp_strerror(http_ret) << dendl;
