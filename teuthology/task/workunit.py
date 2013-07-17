@@ -276,6 +276,7 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None):
                     run.Raw('&&'),
                     'cd', '--', scratch_tmp,
                     run.Raw('&&'),
+                    run.Raw('CEPH_CLI_TEST_DUP_COMMAND=1'),
                     run.Raw('CEPH_REF={ref}'.format(ref=refspec)),
                     run.Raw('TESTDIR="{tdir}"'.format(tdir=testdir)),
                     run.Raw('CEPH_ID="{id}"'.format(id=id_)),
