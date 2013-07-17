@@ -5568,7 +5568,10 @@ bool OSD::require_same_or_newer_map(OpRequestRef op, epoch_t epoch)
     int from = m->get_source().num();
     if (!osdmap->have_inst(from) ||
 	osdmap->get_cluster_addr(from) != m->get_source_inst().addr) {
-      dout(10) << "from dead osd." << from << ", marking down" << dendl;
+      dout(5) << "from dead osd." << from << ", marking down, "
+	      << " msg was " << m->get_source_inst().addr
+	      << " expected " << (osdmap->have_inst(from) ? osdmap->get_cluster_addr(from) : entity_addr_t())
+	      << dendl;
       cluster_messenger->mark_down(m->get_connection());
       return false;
     }
