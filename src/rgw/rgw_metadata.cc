@@ -329,7 +329,8 @@ int RGWMetadataManager::get(string& metadata_key, Formatter *f)
   return 0;
 }
 
-int RGWMetadataManager::put(string& metadata_key, bufferlist& bl)
+int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
+                            RGWMetadataHandler::sync_type_t sync_type)
 {
   RGWMetadataHandler *handler;
   string entry;
@@ -357,9 +358,6 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl)
   if (!jo) {
     return -EINVAL;
   }
-
-  RGWMetadataHandler::sync_type_t sync_type;
-  sync_type = RGWMetadataHandler::APPLY_ALWAYS;
 
   return handler->put(store, entry, objv_tracker, mtime, jo, sync_type);
 }
