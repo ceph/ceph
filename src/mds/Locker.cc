@@ -543,13 +543,11 @@ void Locker::cancel_locking(Mutation *mut, set<CInode*> *pneed_issue)
   dout(10) << "cancel_locking " << *lock << " on " << *mut << dendl;
 
   if (lock->get_parent()->is_auth()) {
-    if (lock->get_type() != CEPH_LOCK_DN) {
-      bool need_issue = false;
-      if (lock->get_state() == LOCK_PREXLOCK)
-	_finish_xlock(lock, -1, &need_issue);
-      if (need_issue)
-	pneed_issue->insert(static_cast<CInode *>(lock->get_parent()));
-    }
+    bool need_issue = false;
+    if (lock->get_state() == LOCK_PREXLOCK)
+      _finish_xlock(lock, -1, &need_issue);
+    if (need_issue)
+      pneed_issue->insert(static_cast<CInode *>(lock->get_parent()));
   }
   mut->finish_locking(lock);
 }
