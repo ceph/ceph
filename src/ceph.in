@@ -395,9 +395,9 @@ def find_cmd_target(childargs):
     right daemon.
     Returns ('osd', osdid), ('pg', pgid), or ('mon', '')
     """
-    sig = parse_funcsig(['tell', {'name':'target','type':'CephName'}])
+    sig = parse_funcsig(['tell', {'name':'target', 'type':'CephName'}])
     try:
-        valid_dict = validate(childargs, sig, partial=True);
+        valid_dict = validate(childargs, sig, partial=True)
         if len(valid_dict) == 2:
             name = CephName()
             name.valid(valid_dict['target'])
@@ -405,9 +405,9 @@ def find_cmd_target(childargs):
     except ArgumentError:
         pass
 
-    sig = parse_funcsig(['pg', {'name':'pgid','type':'CephPgid'}])
+    sig = parse_funcsig(['pg', {'name':'pgid', 'type':'CephPgid'}])
     try:
-        valid_dict = validate(childargs, sig, partial=True);
+        valid_dict = validate(childargs, sig, partial=True)
         if len(valid_dict) == 2:
             return 'pg', valid_dict['pgid']
     except ArgumentError:
@@ -582,7 +582,7 @@ def main():
     # implement -w/--watch_*
     # This is ugly, but Namespace() isn't quite rich enough.
     level = ''
-    for k,v in parsed_args._get_kwargs():
+    for k, v in parsed_args._get_kwargs():
         if k.startswith('watch') and v:
             if k == 'watch':
                 level = 'info'
@@ -670,8 +670,8 @@ def main():
         prefix = ''
         suffix = ''
         if not parsed_args.output_file and len(targets) > 1:
-            prefix='{0}.{1}: '.format(*target)
-            suffix='\n'
+            prefix = '{0}.{1}: '.format(*target)
+            suffix = '\n'
 
         ret, outbuf, outs = json_command(cluster_handle, target=target,
                                          prefix='get_command_descriptions')
@@ -726,7 +726,7 @@ def main():
             if parsed_args.output_format and \
                parsed_args.output_format.startswith('json') and \
                not compat:
-                sys.stdout.write('\n');
+                sys.stdout.write('\n')
 
             # if we are prettifying things, normalize newlines.  sigh.
             if suffix != '':
