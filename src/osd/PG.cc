@@ -1527,8 +1527,9 @@ void PG::activate(ObjectStore::Transaction& t,
   dirty_info = true;
   dirty_big_info = true; // maybe
 
-  // clean up stray objects
-  clean_up_local(t); 
+  // verify that there are no stray objects
+  if (is_primary())
+    check_local();
 
   // find out when we commit
   tfin.push_back(new C_PG_ActivateCommitted(this, query_epoch));

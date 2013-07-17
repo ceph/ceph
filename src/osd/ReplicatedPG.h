@@ -721,7 +721,7 @@ protected:
   int prepare_transaction(OpContext *ctx);
   
   // pg on-disk content
-  void clean_up_local(ObjectStore::Transaction& t);
+  void check_local();
 
   void _clear_recovery_state();
 

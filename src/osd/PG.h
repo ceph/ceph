@@ -834,7 +834,7 @@ public:
     return missing.num_missing() - missing_loc.size();
   }
 
-  virtual void clean_up_local(ObjectStore::Transaction& t) = 0;
+  virtual void check_local() = 0;
 
   virtual int start_recovery_ops(int max, RecoveryCtx *prctx) = 0;
 
