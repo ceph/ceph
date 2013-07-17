@@ -599,9 +599,12 @@ void SimpleMessenger::mark_down(const entity_addr_t& addr)
     p->pipe_lock.Lock();
     p->stop();
     if (p->connection_state) {
-      // do not generate a reset event for the caller in this case,
-      // since they asked for it.
-      p->connection_state->clear_pipe(p);
+      // generate a reset event for the caller in this case, even
+      // though they asked for it, since this is the addr-based (and
+      // not Connection* based) interface
+      ConnectionRef con = p->connection_state;
+      if (con && con->clear_pipe(p))
+	dispatch_queue.queue_reset(con.get());
     }
     p->pipe_lock.Unlock();
   } else {
