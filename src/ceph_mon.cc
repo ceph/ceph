@@ -76,7 +76,8 @@ int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
     }
   }
 
-  if (store.exists("mon_sync", "in_sync")) {
+  if (store.exists("mon_sync", "in_sync")
+      || store.exists("mon_sync", "force_sync")) {
     dout(10) << __func__ << " detected aborted sync" << dendl;
     if (store.exists("mon_sync", "latest_monmap")) {
       int err = store.get("mon_sync", "latest_monmap", bl);
