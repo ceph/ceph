@@ -544,8 +544,13 @@ void Locker::cancel_locking(Mutation *mut, set<CInode*> *pneed_issue)
 
   if (lock->get_parent()->is_auth()) {
     bool need_issue = false;
-    if (lock->get_state() == LOCK_PREXLOCK)
+    if (lock->get_state() == LOCK_PREXLOCK) {
       _finish_xlock(lock, -1, &need_issue);
+    } else if (lock->get_state() == LOCK_LOCK_XLOCK &&
+	       lock->get_num_xlocks() == 0) {
+      lock->set_state(LOCK_XLOCKDONE);
+      eval_gather(lock, true, &need_issue);
+    }
     if (need_issue)
       pneed_issue->insert(static_cast<CInode *>(lock->get_parent()));
   }
@@ -1516,8 +1521,11 @@ void Locker::xlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
 			 SimpleLock::WAIT_WR | 
 			 SimpleLock::WAIT_RD, 0); 
   } else {
-    if (lock->get_num_xlocks() == 0)
+    if (lock->get_num_xlocks() == 0) {
+      if (lock->get_state() == LOCK_LOCK_XLOCK)
+	lock->set_state(LOCK_XLOCKDONE);
       _finish_xlock(lock, xlocker, &do_issue);
+    }
   }
   
   if (do_issue) {
