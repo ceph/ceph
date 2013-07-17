@@ -6,3 +6,4 @@ overrides:
         ms inject delay type: osd
         ms inject delay probability: .005
         ms inject delay max: 1
+        ms inject internal delays: .002
