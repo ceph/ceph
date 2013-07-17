@@ -310,18 +310,20 @@ class CephName(CephArgtype):
 
     Also accept '*'
     """
+    def __init__(self):
+        self.nametype = None
+        self.nameid = None
+
     def valid(self, s, partial=False):
         if s == '*':
             self.val = s
-            self.nametype = None
-            self.nameid = None
             return
         if s.find('.') == -1:
             raise ArgumentFormat('CephName: no . in {0}'.format(s))
         else:
             t, i = s.split('.')
             if not t in ('osd', 'mon', 'client', 'mds'):
-                raise ArgumentValid('unknown type ' + self.t)
+                raise ArgumentValid('unknown type ' + t)
             if t == 'osd':
                 if i != '*':
                     try:
@@ -341,19 +343,21 @@ class CephOsdName(CephArgtype):
 
     osd.<id>, or <id>, or *, where id is a base10 int
     """
+    def __init__(self):
+        self.nametype = None
+        self.nameid = None
+
     def valid(self, s, partial=False):
         if s == '*':
             self.val = s
-            self.nametype = None
-            self.nameid = None
             return
         if s.find('.') != -1:
             t, i = s.split('.')
+            if t != 'osd':
+                raise ArgumentValid('unknown type ' + t)
         else:
             t = 'osd'
             i = s
-        if t != 'osd':
-            raise ArgumentValid('unknown type ' + self.t)
         try:
             i = int(i)
         except:
@@ -370,7 +374,7 @@ class CephChoices(CephArgtype):
     Set of string literals; init with valid choices
     """
     def __init__(self, strings='', **kwargs):
-        self.strings=strings.split('|')
+        self.strings = strings.split('|')
 
     def valid(self, s, partial=False):
         if not partial:
@@ -512,16 +516,16 @@ class argdesc(object):
     def __repr__(self):
         r = 'argdesc(' + str(self.t) + ', '
         internals = ['N', 'typeargs', 'instance', 't']
-        for (k,v) in self.__dict__.iteritems():
+        for (k, v) in self.__dict__.iteritems():
             if k.startswith('__') or k in internals:
                 pass
             else:
                 # undo modification from __init__
                 if k == 'n' and self.N:
                     v = 'N'
-                r += '{0}={1}, '.format(k,v)
-        for (k,v) in self.typeargs.iteritems():
-                r += '{0}={1}, '.format(k,v)
+                r += '{0}={1}, '.format(k, v)
+        for (k, v) in self.typeargs.iteritems():
+            r += '{0}={1}, '.format(k, v)
         return r[:-2] + ')'
 
     def __str__(self):
@@ -687,7 +691,7 @@ def matchnum(args, signature, partial=False):
         while desc.numseen < desc.n:
             # if there are no more arguments, return
             if not words:
-                return matchcnt;
+                return matchcnt
             word = words.pop(0)
 
             try:
@@ -879,7 +883,7 @@ def validate_command(parsed_args, sigdict, args, verbose=False):
 
         return valid_dict
 
-def send_command(cluster, target=('mon', ''), cmd=[], inbuf='', timeout=0, 
+def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0, 
                  verbose=False):
     """
     Send a command to a daemon using librados's
@@ -892,6 +896,7 @@ def send_command(cluster, target=('mon', ''), cmd=[], inbuf='', timeout=0,
 
     If target is osd.N, send command to that osd (except for pgid cmds)
     """
+    cmd = cmd or []
     try:
         if target[0] == 'osd':
             osdid = target[1]
