@@ -543,8 +543,13 @@ def main():
     if parsed_args.cluster:
         clustername = parsed_args.cluster
 
-    cluster_handle = rados.Rados(name=name, clustername=clustername,
-                                 conf_defaults=conf_defaults, conffile=conffile)
+    try:
+        cluster_handle = rados.Rados(name=name, clustername=clustername,
+                                     conf_defaults=conf_defaults,
+                                     conffile=conffile)
+    except Exception as e:
+        print >> sys.stderr, "Error opening cluster: ", str(e)
+        return 1
 
     retargs = cluster_handle.conf_parse_argv(childargs)
     #tmp = childargs
@@ -570,8 +575,8 @@ def main():
         print >> sys.stderr, 'Cluster connection aborted'
         return 1
     except Exception as e:
-        print >> sys.stderr, 'Error connecting to cluster: {0}'.\
-            format(e.__class__.__name__)
+        print >> sys.stderr, 'Error connecting to cluster: {0}({1})'.\
+            format(e.__class__.__name__, str(e))
         return 1
 
     if parsed_args.help or parsed_args.help_all:

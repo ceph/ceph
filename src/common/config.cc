@@ -96,7 +96,7 @@ struct config_option config_optionsp[] = {
 
 const int NUM_CONFIG_OPTIONS = sizeof(config_optionsp) / sizeof(config_option);
 
-bool ceph_resolve_file_search(const std::string& filename_list,
+int ceph_resolve_file_search(const std::string& filename_list,
 			      std::string& result)
 {
   list<string> ls;
@@ -105,15 +105,20 @@ bool ceph_resolve_file_search(const std::string& filename_list,
   list<string>::iterator iter;
   for (iter = ls.begin(); iter != ls.end(); ++iter) {
     int fd = ::open(iter->c_str(), O_RDONLY);
-    if (fd < 0)
-      continue;
+    if (fd < 0) {
+      if (errno == ENOENT) {
+	continue;
+      } else {
+	return errno;
+      }
+    }
 
     close(fd);
     result = *iter;
-    return true;
+    return 0;
   }
 
-  return false;
+  return ENOENT;
 }
 
 md_config_t::md_config_t()
