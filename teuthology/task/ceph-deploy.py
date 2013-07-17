@@ -157,6 +157,23 @@ def build_ceph_cluster(ctx, config):
     if estatus_new != 0:
         raise Exception("ceph-deploy: new command failed")
 
+    log.info('adding config inputs...')
+    testdir = teuthology.get_testdir(ctx)
+    conf_path = '{tdir}/ceph-deploy/ceph.conf'.format(tdir=testdir)
+    first_mon = teuthology.get_first_mon(ctx, config)
+    (remote,) = ctx.cluster.only(first_mon).remotes.keys()
+
+    lines = None
+    if config.get('conf') is not None:
+        confp = config.get('conf')
+        for section, keys in confp.iteritems():
+                lines = '[{section}]\n'.format(section=section)
+                teuthology.append_lines_to_file(remote, conf_path, lines, sudo=True)
+                for key, value in keys.iteritems():
+                    log.info("[%s] %s = %s" % (section, key, value))
+                    lines = '{key} = {value}\n'.format(key=key, value=value)
+                    teuthology.append_lines_to_file(remote, conf_path, lines, sudo=True)
+
     estatus_install = execute_ceph_deploy(ctx, config, install_nodes)
     if estatus_install != 0:
         raise Exception("ceph-deploy: Failed to install ceph")
@@ -180,11 +197,11 @@ def build_ceph_cluster(ctx, config):
         estatus_mon = execute_ceph_deploy(ctx, config, mon_create_nodes)
         if estatus_mon != 0:
             raise Exception("ceph-deploy: Failed to create monitors")
-    
+
     estatus_gather = execute_ceph_deploy(ctx, config, gather_keys)
     while (estatus_gather != 0):
-        mon_create_nodes = './ceph-deploy mon create'+" "+mon_node[0]
-        execute_ceph_deploy(ctx, config, mon_create_nodes)
+        #mon_create_nodes = './ceph-deploy mon create'+" "+mon_node[0]
+        #execute_ceph_deploy(ctx, config, mon_create_nodes)
         estatus_gather = execute_ceph_deploy(ctx, config, gather_keys)
 
     estatus_mds = execute_ceph_deploy(ctx, config, deploy_mds)
@@ -366,6 +383,9 @@ def task(ctx, config):
         - ceph-deploy:
              branch:
                 dev: master
+             conf:
+                mon:
+                   debug mon = 20
 
         tasks:
         - install:
@@ -388,6 +408,7 @@ def task(ctx, config):
          lambda: ceph_fn.ship_utilities(ctx=ctx, config=None),
          lambda: download_ceph_deploy(ctx=ctx, config=config),
          lambda: build_ceph_cluster(ctx=ctx, config=dict(
+                 conf=config.get('conf', {}),
                  branch=config.get('branch',{}),
                  mon_initial_members=config.get('mon_initial_members', None),
                  )),
