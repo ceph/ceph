@@ -231,6 +231,7 @@ int Pipe::accept()
   uint64_t feat_missing;
   bool replaced = false;
   CryptoKey session_key;
+  int removed; // single-use down below
 
   // this should roughly mirror pseudocode at
   //  http://ceph.newdream.net/wiki/Messaging_protocol
@@ -639,7 +640,7 @@ int Pipe::accept()
   // ok!
   if (msgr->dispatch_queue.stop)
     goto shutting_down;
-  inr removed = msgr->accepting_pipes.erase(this);
+  removed = msgr->accepting_pipes.erase(this);
   assert(removed == 1);
   register_pipe();
   msgr->lock.Unlock();
