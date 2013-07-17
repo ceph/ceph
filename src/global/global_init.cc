@@ -93,7 +93,9 @@ void global_init(std::vector < const char * > *alt_def_args, std::vector < const
     }
   }
   else if (ret) {
-    dout_emergency("global_init: error reading config file.\n");
+    dout_emergency("global_init: error reading config file: ");
+    dout_emergency(cpp_strerror(ret));
+    dout_emergency("\n");
     _exit(1);
   }
 
