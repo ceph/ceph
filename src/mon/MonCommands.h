@@ -209,7 +209,6 @@ COMMAND("report name=tags,type=CephString,n=N,req=false", \
 COMMAND("quorum_status", "report status of monitor quorum", \
 	"mon", "r", "cli,rest")
 COMMAND("mon_status", "report status of monitors", "mon", "r", "cli,rest")
-COMMAND("sync status", "report status of monitors", "mon", "r", "cli,rest")
 COMMAND("sync force " \
 	"name=validate1,type=CephChoices,strings=--yes-i-really-mean-it " \
 	"name=validate2,type=CephChoices,strings=--i-know-what-i-am-doing", \
