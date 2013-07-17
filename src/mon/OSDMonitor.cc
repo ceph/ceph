@@ -3316,30 +3316,33 @@ done:
     if (pool < 0) {
       ss << "unrecognized pool '" << poolstr << "'";
       err = -ENOENT;
-    } else {
-      const pg_pool_t *p = osdmap.get_pg_pool(pool);
-      pg_pool_t *pp = 0;
-      if (pending_inc.new_pools.count(pool))
-	pp = &pending_inc.new_pools[pool];
-      string snapname;
-      cmd_getval(g_ceph_context, cmdmap, "snap", snapname);
-      if (p->snap_exists(snapname.c_str()) ||
-	  (pp && pp->snap_exists(snapname.c_str()))) {
-	ss << "pool " << poolstr << " snap " << snapname << " already exists";
-	err = 0;
-      } else {
-	if (!pp) {
-	  pp = &pending_inc.new_pools[pool];
-	  *pp = *p;
-	}
-	pp->add_snap(snapname.c_str(), ceph_clock_now(g_ceph_context));
-	pp->set_snap_epoch(pending_inc.epoch);
-	ss << "created pool " << poolstr << " snap " << snapname;
-	getline(ss, rs);
-	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
-	return true;
-      }
+      goto reply;
     }
+    string snapname;
+    cmd_getval(g_ceph_context, cmdmap, "snap", snapname);
+    const pg_pool_t *p = osdmap.get_pg_pool(pool);
+    if (p->snap_exists(snapname.c_str())) {
+      ss << "pool " << poolstr << " snap " << snapname << " already exists";
+      err = 0;
+      goto reply;
+    }
+    pg_pool_t *pp = 0;
+    if (pending_inc.new_pools.count(pool))
+      pp = &pending_inc.new_pools[pool];
+    if (!pp) {
+      pp = &pending_inc.new_pools[pool];
+      *pp = *p;
+    }
+    if (pp->snap_exists(snapname.c_str())) {
+      ss << "pool " << poolstr << " snap " << snapname << " already exists";
+    } else {
+      pp->add_snap(snapname.c_str(), ceph_clock_now(g_ceph_context));
+      pp->set_snap_epoch(pending_inc.epoch);
+      ss << "created pool " << poolstr << " snap " << snapname;
+    }
+    getline(ss, rs);
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    return true;
   } else if (prefix == "osd pool rmsnap") {
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
