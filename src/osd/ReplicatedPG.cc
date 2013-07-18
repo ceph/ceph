@@ -821,6 +821,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
     if (osd_op.op.op == CEPH_OSD_OP_LIST_SNAPS &&
 	m->get_snapid() != CEPH_SNAPDIR) {
       dout(10) << "LIST_SNAPS with incorrect context" << dendl;
+      put_object_context(obc);
       osd->reply_op_error(op, -EINVAL);
       return;
     }
