@@ -3813,10 +3813,13 @@ void OSD::handle_command(MCommand *m)
 struct OSDCommand {
   string cmdstring;
   string helpstring;
+  string module;
+  string perm;
+  string availability;
 } osd_commands[] = {
 
-#define COMMAND(parsesig, helptext) \
-  {parsesig, helptext},
+#define COMMAND(parsesig, helptext, module, perm, availability) \
+  {parsesig, helptext, module, perm, availability},
 
 // yes, these are really pg commands, but there's a limit to how
 // much work it's worth.  The OSD returns all of them.
@@ -3824,40 +3827,45 @@ struct OSDCommand {
 COMMAND("pg " \
 	"name=pgid,type=CephPgid " \
 	"name=cmd,type=CephChoices,strings=query", \
-	"show details of a specific pg")
+	"show details of a specific pg", "osd", "r", "cli,rest")
 COMMAND("pg " \
 	"name=pgid,type=CephPgid " \
 	"name=cmd,type=CephChoices,strings=mark_unfound_lost " \
 	"name=mulcmd,type=CephChoices,strings=revert", \
-	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available")
+	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available",
+	"osd", "rw", "cli,rest")
 COMMAND("pg " \
 	"name=pgid,type=CephPgid " \
 	"name=cmd,type=CephChoices,strings=list_missing " \
 	"name=offset,type=CephString,req=false",
-	"list missing objects on this pg, perhaps starting at an offset given in JSON")
+	"list missing objects on this pg, perhaps starting at an offset given in JSON",
+	"osd", "rw", "cli,rest")
 
-COMMAND("version", "report version of OSD")
+COMMAND("version", "report version of OSD", "osd", "r", "cli,rest")
 COMMAND("injectargs " \
 	"name=injected_args,type=CephString,n=N",
-	"inject configuration arguments into running OSD")
+	"inject configuration arguments into running OSD",
+	"osd", "rw", "cli,rest")
 COMMAND("bench " \
 	"name=count,type=CephInt,req=false " \
 	"name=size,type=CephInt,req=false ", \
 	"OSD benchmark: write <count> <size>-byte objects, " \
-	"(default 1G size 4MB). Results in log.")
-COMMAND("flush_pg_stats", "flush pg stats")
-COMMAND("debug dump_missing " \
+	"(default 1G size 4MB). Results in log.",
+	"osd", "rw", "cli,rest")
+COMMAND("flush_pg_stats", "flush pg stats", "osd", "rw", "cli,rest")
+COMMAND("debug_dump_missing " \
 	"name=filename,type=CephFilepath",
-	"dump missing objects to a named file")
+	"dump missing objects to a named file", "osd", "r", "cli,rest")
 COMMAND("debug kick_recovery_wq " \
 	"name=delay,type=CephInt,range=0",
-	"set osd_recovery_delay_start to <val>")
+	"set osd_recovery_delay_start to <val>", "osd", "rw", "cli,rest")
 COMMAND("cpu_profiler " \
 	"name=arg,type=CephChoices,strings=status|flush",
-	"run cpu profiling on daemon")
-COMMAND("dump_pg_recovery_stats", "dump pg recovery statistics")
-COMMAND("reset_pg_recovery_stats", "reset pg recovery statistics")
-
+	"run cpu profiling on daemon", "osd", "rw", "cli,rest")
+COMMAND("dump_pg_recovery_stats", "dump pg recovery statistics",
+	"osd", "r", "cli,rest")
+COMMAND("reset_pg_recovery_stats", "reset pg recovery statistics",
+	"osd", "rw", "cli,rest")
 };
 
 void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist& data)
@@ -3893,8 +3901,8 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
 
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      dump_cmd_and_help_to_json(f, secname.str(),
-				cp->cmdstring, cp->helpstring);
+      dump_cmddesc_to_json(f, secname.str(), cp->cmdstring, cp->helpstring,
+			   cp->module, cp->perm, cp->availability);
       cmdnum++;
     }
     f->close_section();	// command_descriptions
