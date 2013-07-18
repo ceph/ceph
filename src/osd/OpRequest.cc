@@ -183,6 +183,35 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
   return warning_vector.size();
 }
 
+void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
+{
+  Mutex::Locker locker(ops_in_flight_lock);
+
+  h->clear();
+
+  utime_t now = ceph_clock_now(NULL);
+  unsigned bin = 30;
+  uint32_t lb = 1 << (bin-1);  // lower bound for this bin
+  int count = 0;
+  for (xlist<OpRequest*>::iterator i = ops_in_flight.begin(); !i.end(); ++i) {
+    utime_t age = now - (*i)->received_time;
+    uint32_t ms = (long)(age * 1000.0);
+    if (ms >= lb) {
+      count++;
+      continue;
+    }
+    if (count)
+      h->set(bin, count);
+    while (lb > ms) {
+      bin--;
+      lb >>= 1;
+    }
+    count = 1;
+  }
+  if (count)
+    h->set(bin, count);
+}
+
 void OpRequest::dump(utime_t now, Formatter *f) const
 {
   Message *m = request;
