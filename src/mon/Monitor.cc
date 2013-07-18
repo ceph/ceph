@@ -4006,6 +4006,18 @@ int Monitor::scrub()
     return -EBUSY;
   }
 
+  if (!paxos->is_active()) {
+    /*
+     * There is a race between scrub and paxos wherein we commit on
+     * the leader when we get a majority of replies from quorum but we
+     * commit on the peons when the round finishes.  This makes a
+     * well-timed scrub unhappy.  The fix is non-trivial and won't be
+     * backported.  Instead, just decline to scrub during that window.
+     */
+    clog.info() << "paxos is not active; declining to scrub right now\n";
+    return -EAGAIN;
+  }
+
   scrub_result.clear();
   scrub_version = paxos->get_version();
 
