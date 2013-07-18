@@ -1437,8 +1437,8 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     if (f) {
       f->open_object_section("pg_map");
       f->dump_stream("epoch") << mon->osdmon()->osdmap.get_epoch();
-      f->dump_stream("pgid") << pgid;
-      f->dump_stream("mpgid") << mpgid;
+      f->dump_stream("raw_pgid") << pgid;
+      f->dump_stream("pgid") << mpgid;
 
       f->open_array_section("up");
       for (vector<int>::iterator it = up.begin(); it != up.end(); ++it)
