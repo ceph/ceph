@@ -388,6 +388,9 @@ public:
    * when you pass it in.
    * @param dest The entity to send the Message to.
    *
+   * DEPRECATED: please do not use this interface for any new code;
+   * use the Connection* variant.
+   *
    * @return 0 on success, or -errno on failure.
    */
   virtual int send_message(Message *m, const entity_inst_t& dest) = 0;
@@ -416,6 +419,9 @@ public:
    * @param m The Message to send. The Messenger consumes a single reference
    * when you pass it in.
    * @param dest The entity to send the Message to.
+   *
+   * DEPRECATED: please do not use this interface for any new code;
+   * use the Connection* variant.
    *
    * @return 0.
    */
@@ -482,6 +488,9 @@ public:
    * If there is no Connection to the given dest, it is a no-op.
    *
    * This generates a RESET notification to the Dispatcher.
+   *
+   * DEPRECATED: please do not use this interface for any new code;
+   * use the Connection* variant.
    *
    * @param a The address to mark down.
    */
