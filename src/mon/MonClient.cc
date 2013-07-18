@@ -516,6 +516,7 @@ void MonClient::_reopen_session(int rank, string name)
   // throw out version check requests
   while (!version_requests.empty()) {
     finisher.queue(version_requests.begin()->second->context, -EAGAIN);
+    delete version_requests.begin()->second;
     version_requests.erase(version_requests.begin());
   }
 
