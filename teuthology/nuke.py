@@ -88,6 +88,7 @@ def shutdown_daemons(ctx, log):
                 'ceph-osd',
                 'ceph-mds',
                 'ceph-fuse',
+                'ceph-disk',
                 'radosgw',
                 'ceph_test_rados',
                 'rados',
