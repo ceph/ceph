@@ -225,21 +225,20 @@ class AdminHook : public AdminSocketHook {
   Monitor *mon;
 public:
   AdminHook(Monitor *m) : mon(m) {}
-  bool call(std::string command, std::string args, bufferlist& out) {
+  bool call(std::string command, std::string args, std::string format,
+	    bufferlist& out) {
     stringstream ss;
-    mon->do_admin_command(command, args, ss);
+    mon->do_admin_command(command, args, format, ss);
     out.append(ss);
     return true;
   }
 };
 
-void Monitor::do_admin_command(string command, string args, ostream& ss)
+void Monitor::do_admin_command(string command, string args, string format,
+			       ostream& ss)
 {
   Mutex::Locker l(lock);
 
-  map<string, cmd_vartype> cmdmap;
-  string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(new_formatter(format));
 
   if (command == "mon_status")

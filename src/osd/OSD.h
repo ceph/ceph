@@ -622,7 +622,7 @@ protected:
   // asok
   friend class OSDSocketHook;
   class OSDSocketHook *asok_hook;
-  bool asok_command(string command, string args, ostream& ss);
+  bool asok_command(string command, string args, string format, ostream& ss);
 
 public:
   ClassHandler  *class_handler;

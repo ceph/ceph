@@ -76,7 +76,7 @@ public:
   void tinc(int idx, utime_t v);
   utime_t tget(int idx) const;
 
-  void write_json_to_buf(ceph::bufferlist& bl, bool schema);
+  void dump_formatted(ceph::Formatter *f, bool schema);
 
   const std::string& get_name() const;
   void set_name(std::string s) {
@@ -136,7 +136,7 @@ public:
   void add(class PerfCounters *l);
   void remove(class PerfCounters *l);
   void clear();
-  void write_json_to_buf(ceph::bufferlist& bl, bool schema);
+  void dump_formatted(ceph::Formatter *f, bufferlist &bl, bool schema);
 private:
   CephContext *m_cct;
 
