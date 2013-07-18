@@ -1070,6 +1070,19 @@ void RGWDeleteBucket::execute()
   if (!s->bucket_name)
     return;
 
+  ret = store->delete_bucket(s->bucket, objv_tracker);
+
+  if (ret == 0) {
+    ret = rgw_unlink_bucket(store, s->user.user_id, s->bucket.name, false);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "WARNING: failed to unlink bucket: ret=" << ret << dendl;
+    }
+  }
+
+  if (ret < 0) {
+    return;
+  }
+
   if (!store->region.is_master) {
     bufferlist in_data;
     JSONParser jp;
@@ -1085,14 +1098,6 @@ void RGWDeleteBucket::execute()
     JSONDecoder::decode_json("object_ver", objv_tracker.read_version, &jp);
   }
 
-  ret = store->delete_bucket(s->bucket, objv_tracker);
-
-  if (ret == 0) {
-    ret = rgw_unlink_bucket(store, s->user.user_id, s->bucket.name, false);
-    if (ret < 0) {
-      ldout(s->cct, 0) << "WARNING: failed to remove bucket: ret=" << ret << dendl;
-    }
-  }
 }
 
 int RGWPutObj::verify_permission()
