@@ -1402,6 +1402,7 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_mape_dup, "map_message_epoch_dups"); // dup osdmap epochs
   osd_plb.add_u64_counter(l_osd_waiting_for_map,
 			  "messages_delayed_for_map"); // dup osdmap epochs
+  osd_plb.add_time_avg(l_osd_peering_latency, "peering_latency");
 
   logger = osd_plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
