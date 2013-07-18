@@ -147,7 +147,7 @@ class ClockSkewCheck:
         if abs(mon_skew) > self.max_skew:
           assert mon_health == 'HEALTH_WARN', \
               'mon.{id} health is \'{health}\' but skew {s} > max {ms}'.format(
-                  id=mon_id,s=abs(mon_skew),ms=self.max_skew)
+                  id=mon_id,health=mon_health,s=abs(mon_skew),ms=self.max_skew)
 
           log_str = 'mon.{id} with skew {s} > max {ms}'.format(
             id=mon_id,s=abs(mon_skew),ms=self.max_skew)
