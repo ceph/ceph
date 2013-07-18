@@ -195,6 +195,45 @@ Notable Changes
  * misc code cleanups
 
 
+v0.61.5 "Cuttlefish"
+--------------------
+
+This release most improves stability of the monitor and fixes a few
+bugs with the ceph-disk utility (used by ceph-deploy).  We recommand
+that all v0.61.x users upgrade.
+
+Upgrading
+~~~~~~~~~
+
+* No issues
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* mon: misc sync improvements (faster, more reliable, better tuning)
+* mon: enable leveldb cache by default (big performance improvement)
+* mon: new scrub feature (primarily for diagnostic, testing purposes)
+* mon: fix occasional leveldb assertion on startup
+* mon: prevent reads until initial state is committed
+* mon: improved logic for trimming old osdmaps
+* mon: fix pick_addresses bug when expanding mon cluster
+* mon: several small paxos fixes, improvements
+* mon: fix bug osdmap trim behavior
+* osd: fix several bugs with PG stat reporting
+* osd: limit number of maps shared with peers (which could cause domino failures)
+* rgw: fix radosgw-admin buckets list (for all buckets)
+* mds: fix occasional client failure to reconnect
+* mds: fix bad list traversal after unlink
+* mds: fix underwater dentry cleanup (occasional crash after mds restart)
+* libcephfs, ceph-fuse: fix occasional hangs on umount
+* libcephfs, ceph-fuse: fix old bug with O_LAZY vs O_NOATIME confusion
+* ceph-disk: more robust journal device detection on RHEL/CentOS
+* ceph-disk: better, simpler locking
+* ceph-disk: do not inadvertantely mount over existing osd mounts
+* ceph-disk: better handling for unusual device names
+* sysvinit, upstart: handle symlinks in /var/lib/ceph/*
+
+
 v0.61.4 "Cuttlefish"
 --------------------
 
