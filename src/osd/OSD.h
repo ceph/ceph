@@ -113,6 +113,7 @@ enum {
   l_osd_mape_dup,
 
   l_osd_waiting_for_map,
+  l_osd_peering_latency,
   l_osd_last,
 };
 
