@@ -182,7 +182,7 @@ Lock, unlock, or query lock status of machines.
         )
     parser.add_argument(
         '--machine-type',
-        default='plana',
+        default=None,
         help='Type of machine to lock',
         )
     parser.add_argument(
@@ -267,6 +267,9 @@ Lock, unlock, or query lock status of machines.
             '--all and --owner are mutually exclusive'
         assert not machines, \
             '--all and listing specific machines are incompatible'
+    if ctx.num_to_lock:
+        assert ctx.machine_type, \
+            'must specify machine type to lock'
 
     if ctx.brief:
         assert ctx.list, '--brief only applies to --list'
@@ -293,6 +296,9 @@ Lock, unlock, or query lock status of machines.
             else:
                 statuses = list_locks(ctx)
         if statuses:
+            if ctx.machine_type:
+                statuses = [status for status in statuses \
+                                if status['type'] == ctx.machine_type]
             if not machines and ctx.owner is None and not ctx.all:
                 ctx.owner = teuthology.get_user()
             if ctx.owner is not None:
@@ -483,7 +489,7 @@ def scan_for_locks(ctx, machines):
 def do_summary(ctx):
     lockd = collections.defaultdict(lambda: [0,0,'unknown'])
     for l in list_locks(ctx):
-        if ctx.machine_type != 'all' and l['type'] != ctx.machine_type:
+        if ctx.machine_type and l['type'] != ctx.machine_type:
             continue
         who =  l['locked_by'] if l['locked'] == 1 else '(free)', l['type']
         lockd[who][0] += 1
