@@ -5425,6 +5425,9 @@ void PG::RecoveryState::Peering::exit()
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_clear(PG_STATE_PEERING);
   pg->clear_probe_targets();
+
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->logger->tinc(l_osd_peering_latency, dur);
 }
 
 
