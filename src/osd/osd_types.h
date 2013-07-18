@@ -888,6 +888,28 @@ struct object_stat_sum_t {
       num_keys_recovered(0)
   {}
 
+  void floor(int64_t f) {
+#define FLOOR(x) if (x < f) x = f
+    FLOOR(num_bytes);
+    FLOOR(num_objects);
+    FLOOR(num_object_clones);
+    FLOOR(num_object_copies);
+    FLOOR(num_objects_missing_on_primary);
+    FLOOR(num_objects_degraded);
+    FLOOR(num_objects_unfound);
+    FLOOR(num_rd);
+    FLOOR(num_rd_kb);
+    FLOOR(num_wr);
+    FLOOR(num_wr_kb);
+    FLOOR(num_scrub_errors);
+    FLOOR(num_shallow_scrub_errors);
+    FLOOR(num_deep_scrub_errors);
+    FLOOR(num_objects_recovered);
+    FLOOR(num_bytes_recovered);
+    FLOOR(num_keys_recovered);
+#undef FLOOR
+  }
+
   void clear() {
     memset(this, 0, sizeof(*this));
   }
@@ -938,6 +960,12 @@ struct object_stat_collection_t {
   void clear() {
     sum.clear();
     cat_sum.clear();
+  }
+
+  void floor(int64_t f) {
+    sum.floor(f);
+    for (map<string,object_stat_sum_t>::iterator p = cat_sum.begin(); p != cat_sum.end(); ++p)
+      p->second.floor(f);
   }
 
   void add(const object_stat_sum_t& o, const string& cat) {
@@ -1031,6 +1059,14 @@ struct pg_stat_t {
     return make_pair(reported_epoch, reported_seq);
   }
 
+  void floor(int64_t f) {
+    stats.floor(f);
+    if (log_size < f)
+      log_size = f;
+    if (ondisk_log_size < f)
+      ondisk_log_size = f;
+  }
+
   void add(const pg_stat_t& o) {
     stats.add(o.stats);
     log_size += o.log_size;
@@ -1059,6 +1095,14 @@ struct pool_stat_t {
 
   pool_stat_t() : log_size(0), ondisk_log_size(0)
   { }
+
+  void floor(int64_t f) {
+    stats.floor(f);
+    if (log_size < f)
+      log_size = f;
+    if (ondisk_log_size < f)
+      ondisk_log_size = f;
+  }
 
   void add(const pg_stat_t& o) {
     stats.add(o.stats);
