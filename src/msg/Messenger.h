@@ -476,22 +476,30 @@ public:
    */
   virtual int send_keepalive(Connection *con) = 0;
   /**
-   * Mark down a Connection to a remote. This will cause us to
-   * discard our outgoing queue for them, and if they try
-   * to reconnect they will discard their queue when we
-   * inform them of the session reset. If there is no
-   * Connection to the given dest, it is a no-op.
-   * It does not generate any notifications to the Dispatcher.
+   * Mark down a Connection to a remote.
+   *
+   * This will cause us to discard our outgoing queue for them, and if
+   * reset detection is enabled in the policy and the endpoint tries
+   * to reconnect they will discard their queue when we inform them of
+   * the session reset.
+   *
+   * If there is no Connection to the given dest, it is a no-op.
+   *
+   * This generates a RESET notification to the Dispatcher.
    *
    * @param a The address to mark down.
    */
   virtual void mark_down(const entity_addr_t& a) = 0;
   /**
-   * Mark down the given Connection. This will cause us to
-   * discard its outgoing queue, and if the endpoint tries
-   * to reconnect they will discard their queue when we
-   * inform them of the session reset.
+   * Mark down the given Connection.
+   *
+   * This will cause us to discard its outgoing queue, and if reset
+   * detection is enabled in the policy and the endpoint tries to
+   * reconnect they will discard their queue when we inform them of
+   * the session reset.
+   *
    * If the Connection* is NULL, this is a no-op.
+   *
    * It does not generate any notifications to the Dispatcher.
    *
    * @param con The Connection to mark down.
@@ -500,6 +508,14 @@ public:
   void mark_down(const ConnectionRef& con) {
     mark_down(con.get());
   }
+  /**
+   * Mark all the existing Connections down. This is equivalent
+   * to iterating over all Connections and calling mark_down()
+   * on each.
+   *
+   * This will generate a RESET event for each closed connections.
+   */
+  virtual void mark_down_all() = 0;
   /**
    * Unlike mark_down, this function will try and deliver
    * all messages before ending the connection, and it will use
@@ -529,12 +545,6 @@ public:
    * @param con The Connection to mark as disposable.
    */
   virtual void mark_disposable(Connection *con) = 0;
-  /**
-   * Mark all the existing Connections down. This is equivalent
-   * to iterating over all Connections and calling mark_down()
-   * on each.
-   */
-  virtual void mark_down_all() = 0;
   /**
    * @} // Connection Management
    */
