@@ -726,7 +726,8 @@ class Objecter {
     Objecter *m_objecter;
   public:
     RequestStateHook(Objecter *objecter);
-    bool call(std::string command, std::string args, bufferlist& out);
+    bool call(std::string command, std::string args, std::string format,
+	      bufferlist& out);
   };
 
   RequestStateHook *m_request_state_hook;
@@ -1236,13 +1237,13 @@ private:
    * Output in-flight requests
    */
   void dump_active();
-  void dump_requests(Formatter& fmt) const;
-  void dump_ops(Formatter& fmt) const;
-  void dump_linger_ops(Formatter& fmt) const;
-  void dump_command_ops(Formatter& fmt) const;
-  void dump_pool_ops(Formatter& fmt) const;
-  void dump_pool_stat_ops(Formatter& fmt) const;
-  void dump_statfs_ops(Formatter& fmt) const;
+  void dump_requests(Formatter *fmt) const;
+  void dump_ops(Formatter *fmt) const;
+  void dump_linger_ops(Formatter *fmt) const;
+  void dump_command_ops(Formatter *fmt) const;
+  void dump_pool_ops(Formatter *fmt) const;
+  void dump_pool_stat_ops(Formatter *fmt) const;
+  void dump_statfs_ops(Formatter *fmt) const;
 
   int get_client_incarnation() const { return client_inc; }
   void set_client_incarnation(int inc) { client_inc = inc; }
