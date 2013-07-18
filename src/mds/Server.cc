@@ -2345,7 +2345,7 @@ void Server::handle_client_lookup_ino(MDRequest *mdr)
 
   dout(10) << "reply to lookup_ino " << *in << dendl;
   MClientReply *reply = new MClientReply(req, 0);
-  reply_request(mdr, reply, in, in->get_parent_dn());
+  reply_request(mdr, reply, in, NULL);
 }
 
 void Server::_lookup_ino_2(MDRequest *mdr, int r)
