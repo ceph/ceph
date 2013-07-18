@@ -22,6 +22,7 @@
 	osd recovery max chunk = 1048576
 
         osd debug op order = true
+        osd debug verify stray on activate = true
 
 [mon]
 	debug ms = 1
