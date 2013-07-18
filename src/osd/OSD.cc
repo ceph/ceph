@@ -5574,7 +5574,9 @@ bool OSD::require_same_or_newer_map(OpRequestRef op, epoch_t epoch)
 	      << " msg was " << m->get_source_inst().addr
 	      << " expected " << (osdmap->have_inst(from) ? osdmap->get_cluster_addr(from) : entity_addr_t())
 	      << dendl;
-      cluster_messenger->mark_down(m->get_connection());
+      ConnectionRef con = m->get_connection();
+      con->set_priv(NULL);   // break ref <-> session cycle, if any
+      cluster_messenger->mark_down(con.get());
       return false;
     }
   }
