@@ -310,6 +310,25 @@ bool AdminSocket::do_accept()
 
   bool rval = false;
 
+  map<string, cmd_vartype> cmdmap;
+  string format;
+  vector<string> cmdvec;
+  stringstream errss;
+  cmdvec.push_back(cmd);
+  if (!cmdmap_from_json(cmdvec, &cmdmap, errss)) {
+    ldout(m_cct, 0) << "AdminSocket: " << errss << dendl;
+    return false;
+  }
+  cmd_getval(m_cct, cmdmap, "format", format);
+  cmd_getval(m_cct, cmdmap, "prefix", c);
+
+  // we don't do plain here
+  if (format != "json" &&
+      format != "json-pretty" &&
+      format != "xml" &&
+      format != "xml-pretty")
+    format = "json";
+
   string firstword;
   if (c.find(" ") == string::npos)
     firstword = c;
@@ -341,7 +360,7 @@ bool AdminSocket::do_accept()
     string args;
     if (match != c)
       args = c.substr(match.length() + 1);
-    bool success = p->second->call(match, args, out);
+    bool success = p->second->call(match, args, format, out);
     if (!success) {
       ldout(m_cct, 0) << "AdminSocket: request '" << match << "' args '" << args
 		      << "' to " << p->second << " failed" << dendl;
@@ -406,7 +425,8 @@ int AdminSocket::unregister_command(std::string command)
 
 class VersionHook : public AdminSocketHook {
 public:
-  virtual bool call(std::string command, std::string args, bufferlist& out) {
+  virtual bool call(std::string command, std::string args, std::string format,
+		    bufferlist& out) {
     if (command == "0") {
       out.append(CEPH_ADMIN_SOCK_VERSION);
     } else {
@@ -429,18 +449,21 @@ class HelpHook : public AdminSocketHook {
   AdminSocket *m_as;
 public:
   HelpHook(AdminSocket *as) : m_as(as) {}
-  bool call(string command, string args, bufferlist& out) {
-    JSONFormatter jf(true);
-    jf.open_object_section("help");
+  bool call(string command, string args, string format, bufferlist& out) {
+    // override format here because help should always be pretty and
+    // predictable
+    Formatter *f = new_formatter("json-pretty");
+    f->open_object_section("help");
     for (map<string,string>::iterator p = m_as->m_help.begin();
 	 p != m_as->m_help.end();
 	 ++p) {
-      jf.dump_string(p->first.c_str(), p->second);
+      f->dump_string(p->first.c_str(), p->second);
     }
-    jf.close_section();
+    f->close_section();
     ostringstream ss;
-    jf.flush(ss);
+    f->flush(ss);
     out.append(ss.str());
+    delete f;
     return true;
   }
 };
@@ -449,7 +472,7 @@ class GetdescsHook : public AdminSocketHook {
   AdminSocket *m_as;
 public:
   GetdescsHook(AdminSocket *as) : m_as(as) {}
-  bool call(string command, string args, bufferlist& out) {
+  bool call(string command, string args, string format, bufferlist& out) {
     int cmdnum = 0;
     JSONFormatter jf(false);
     jf.open_object_section("command_descriptions");

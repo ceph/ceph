@@ -76,31 +76,29 @@ void OpHistory::dump_ops(utime_t now, Formatter *f)
   f->close_section();
 }
 
-void OpTracker::dump_historic_ops(ostream &ss)
+void OpTracker::dump_historic_ops(Formatter *f, ostream &ss)
 {
-  JSONFormatter jf(true);
   Mutex::Locker locker(ops_in_flight_lock);
   utime_t now = ceph_clock_now(g_ceph_context);
-  history.dump_ops(now, &jf);
-  jf.flush(ss);
+  history.dump_ops(now, f);
+  f->flush(ss);
 }
 
-void OpTracker::dump_ops_in_flight(ostream &ss)
+void OpTracker::dump_ops_in_flight(Formatter *f, ostream &ss)
 {
-  JSONFormatter jf(true);
   Mutex::Locker locker(ops_in_flight_lock);
-  jf.open_object_section("ops_in_flight"); // overall dump
-  jf.dump_int("num_ops", ops_in_flight.size());
-  jf.open_array_section("ops"); // list of OpRequests
+  f->open_object_section("ops_in_flight"); // overall dump
+  f->dump_int("num_ops", ops_in_flight.size());
+  f->open_array_section("ops"); // list of OpRequests
   utime_t now = ceph_clock_now(g_ceph_context);
   for (xlist<OpRequest*>::iterator p = ops_in_flight.begin(); !p.end(); ++p) {
-    jf.open_object_section("op");
-    (*p)->dump(now, &jf);
-    jf.close_section(); // this OpRequest
+    f->open_object_section("op");
+    (*p)->dump(now, f);
+    f->close_section(); // this OpRequest
   }
-  jf.close_section(); // list of OpRequests
-  jf.close_section(); // overall dump
-  jf.flush(ss);
+  f->close_section(); // list of OpRequests
+  f->close_section(); // overall dump
+  f->flush(ss);
 }
 
 void OpTracker::register_inflight_op(xlist<OpRequest*>::item *i)

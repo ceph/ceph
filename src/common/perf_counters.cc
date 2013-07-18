@@ -15,6 +15,7 @@
 #include "common/perf_counters.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/Formatter.h"
 
 #include <errno.h>
 #include <inttypes.h>
@@ -72,21 +73,22 @@ void PerfCountersCollection::clear()
   }
 }
 
-void PerfCountersCollection::write_json_to_buf(bufferlist& bl, bool schema)
+void PerfCountersCollection::dump_formatted(Formatter *f, bufferlist &bl,
+					    bool schema)
 {
   Mutex::Locker lck(m_lock);
-  bl.append('{');
+  f->open_object_section("perfcounter_collection");
   perf_counters_set_t::iterator l = m_loggers.begin();
   perf_counters_set_t::iterator l_end = m_loggers.end();
   if (l != l_end) {
     while (true) {
-      (*l)->write_json_to_buf(bl, schema);
+      (*l)->dump_formatted(f, schema);
       if (++l == l_end)
 	break;
-      bl.append(',');
     }
   }
-  bl.append('}');
+  f->close_section();
+  f->flush(bl);
 }
 
 // ---------------------------
@@ -203,34 +205,54 @@ utime_t PerfCounters::tget(int idx) const
   return utime_t(data.u64 / 1000000000ull, data.u64 % 1000000000ull);
 }
 
-void PerfCounters::write_json_to_buf(bufferlist& bl, bool schema)
+void PerfCounters::dump_formatted(Formatter *f, bool schema)
 {
-  char buf[512];
   Mutex::Locker lck(m_lock);
 
-  snprintf(buf, sizeof(buf), "\"%s\":{", m_name.c_str());
-  bl.append(buf);
-
+  f->open_object_section(m_name.c_str());
   perf_counter_data_vec_t::const_iterator d = m_data.begin();
   perf_counter_data_vec_t::const_iterator d_end = m_data.end();
   if (d == d_end) {
-    bl.append('}');
+    f->close_section();
     return;
   }
   while (true) {
-    const perf_counter_data_any_d &data(*d);
-    buf[0] = '\0';
-    if (schema)
-      data.write_schema_json(buf, sizeof(buf));
-    else
-      data.write_json(buf, sizeof(buf));
+    if (schema) {
+      f->open_object_section(d->name);
+      f->dump_int("type", d->type);
+      f->close_section();
+    } else {
+      if (d->type & PERFCOUNTER_LONGRUNAVG) {
+	f->open_object_section(d->name);
+	if (d->type & PERFCOUNTER_U64) {
+	  f->dump_format("avgcount", "%"PRId64, d->avgcount);
+	  f->dump_format("sum", "%"PRId64, d->u64);
+	} else if (d->type & PERFCOUNTER_TIME) {
+	  f->dump_format("avgcount", "%"PRId64, d->avgcount);
+	  f->dump_format("sum", "%"PRId64"%09"PRId64,
+			 d->u64 / 1000000000ull,
+			 d->u64 % 1000000000ull);
+	} else {
+	  assert(0);
+	}
+	f->close_section();
+      } else {
+	if (d->type & PERFCOUNTER_U64) {
+	  f->dump_format(d->name, "%"PRId64, d->u64);
+	} else if (d->type & PERFCOUNTER_TIME) {
+	  f->dump_format(d->name, "%"PRId64"%09"PRId64,
+			 d->u64 / 1000000000ull,
+			 d->u64 % 1000000000ull);
+	} else {
+	  assert(0);
+	}
+      }
+    }
 
-    bl.append(buf);
     if (++d == d_end)
       break;
-    bl.append(',');
   }
-  bl.append('}');
+  f->close_section();
 }
 
 const std::string &PerfCounters::get_name() const
@@ -256,42 +278,6 @@ PerfCounters::perf_counter_data_any_d::perf_counter_data_any_d()
     u64(0),
     avgcount(0)
 {
-}
-
-void  PerfCounters::perf_counter_data_any_d::write_schema_json(char *buf, size_t buf_sz) const
-{
-  snprintf(buf, buf_sz, "\"%s\":{\"type\":%d}", name, type);
-}
-
-void  PerfCounters::perf_counter_data_any_d::write_json(char *buf, size_t buf_sz) const
-{
-  if (type & PERFCOUNTER_LONGRUNAVG) {
-    if (type & PERFCOUNTER_U64) {
-      snprintf(buf, buf_sz, "\"%s\":{\"avgcount\":%" PRId64 ","
-	      "\"sum\":%" PRId64 "}", 
-	      name, avgcount, u64);
-    }
-    else if (type & PERFCOUNTER_TIME) {
-      snprintf(buf, buf_sz, "\"%s\":{\"avgcount\":%" PRId64 ","
-	      "\"sum\":%llu.%09llu}",
-	       name, avgcount, u64 / 1000000000ull, u64 % 1000000000ull);
-    }
-    else {
-      assert(0);
-    }
-  }
-  else {
-    if (type & PERFCOUNTER_U64) {
-      snprintf(buf, buf_sz, "\"%s\":%" PRId64,
-	       name, u64);
-    }
-    else if (type & PERFCOUNTER_TIME) {
-      snprintf(buf, buf_sz, "\"%s\":%llu.%09llu", name, u64 / 1000000000ull, u64 % 1000000000ull);
-    }
-    else {
-      assert(0);
-    }
-  }
 }
 
 PerfCountersBuilder::PerfCountersBuilder(CephContext *cct, const std::string &name,

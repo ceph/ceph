@@ -997,44 +997,46 @@ class OSDSocketHook : public AdminSocketHook {
   OSD *osd;
 public:
   OSDSocketHook(OSD *o) : osd(o) {}
-  bool call(std::string command, std::string args, bufferlist& out) {
+  bool call(std::string command, std::string args, std::string format,
+	    bufferlist& out) {
     stringstream ss;
-    bool r = osd->asok_command(command, args, ss);
+    bool r = osd->asok_command(command, args, format, ss);
     out.append(ss);
     return r;
   }
 };
 
-bool OSD::asok_command(string command, string args, ostream& ss)
+bool OSD::asok_command(string command, string args, string format, ostream& ss)
 {
+  if (format == "")
+    format = "json-pretty";
+  Formatter *f = new_formatter(format);
   if (command == "dump_ops_in_flight") {
-    op_tracker.dump_ops_in_flight(ss);
+    op_tracker.dump_ops_in_flight(f, ss);
   } else if (command == "dump_historic_ops") {
-    op_tracker.dump_historic_ops(ss);
+    op_tracker.dump_historic_ops(f, ss);
   } else if (command == "dump_op_pq_state") {
-    JSONFormatter f(true);
-    f.open_object_section("pq");
-    op_wq.dump(&f);
-    f.close_section();
-    f.flush(ss);
+    f->open_object_section("pq");
+    op_wq.dump(f);
+    f->close_section();
+    f->flush(ss);
   } else if (command == "dump_blacklist") {
     list<pair<entity_addr_t,utime_t> > bl;
     OSDMapRef curmap = service.get_osdmap();
 
-    JSONFormatter f(true);
-    f.open_array_section("blacklist");
+    f->open_array_section("blacklist");
     curmap->get_blacklist(&bl);
     for (list<pair<entity_addr_t,utime_t> >::iterator it = bl.begin();
 	it != bl.end(); ++it) {
-      f.open_array_section("entry");
-      f.open_object_section("entity_addr_t");
-      it->first.dump(&f);
-      f.close_section(); //entity_addr_t
-      it->second.localtime(f.dump_stream("expire_time"));
-      f.close_section(); //entry
+      f->open_array_section("entry");
+      f->open_object_section("entity_addr_t");
+      it->first.dump(f);
+      f->close_section(); //entity_addr_t
+      it->second.localtime(f->dump_stream("expire_time"));
+      f->close_section(); //entry
     }
-    f.close_section(); //blacklist
-    f.flush(ss);
+    f->close_section(); //blacklist
+    f->flush(ss);
   } else if (command == "dump_watchers") {
     list<obj_watch_item_t> watchers;
     osd_lock.Lock();
@@ -1052,32 +1054,31 @@ bool OSD::asok_command(string command, string args, ostream& ss)
     }
     osd_lock.Unlock();
 
-    JSONFormatter f(true);
-    f.open_array_section("watchers");
+    f->open_array_section("watchers");
     for (list<obj_watch_item_t>::iterator it = watchers.begin();
 	it != watchers.end(); ++it) {
 
-      f.open_array_section("watch");
+      f->open_array_section("watch");
 
-      f.dump_string("namespace", it->obj.nspace);
-      f.dump_string("object", it->obj.oid.name);
+      f->dump_string("namespace", it->obj.nspace);
+      f->dump_string("object", it->obj.oid.name);
 
-      f.open_object_section("entity_name");
-      it->wi.name.dump(&f);
-      f.close_section(); //entity_name_t
+      f->open_object_section("entity_name");
+      it->wi.name.dump(f);
+      f->close_section(); //entity_name_t
 
-      f.dump_int("cookie", it->wi.cookie);
-      f.dump_int("timeout", it->wi.timeout_seconds);
+      f->dump_int("cookie", it->wi.cookie);
+      f->dump_int("timeout", it->wi.timeout_seconds);
 
-      f.open_object_section("entity_addr_t");
-      it->wi.addr.dump(&f);
-      f.close_section(); //entity_addr_t
+      f->open_object_section("entity_addr_t");
+      it->wi.addr.dump(f);
+      f->close_section(); //entity_addr_t
 
-      f.close_section(); //watch
+      f->close_section(); //watch
     }
 
-    f.close_section(); //watches
-    f.flush(ss);
+    f->close_section(); //watches
+    f->flush(ss);
   } else {
     assert(0 == "broken asok registration");
   }
@@ -1089,7 +1090,8 @@ class TestOpsSocketHook : public AdminSocketHook {
   ObjectStore *store;
 public:
   TestOpsSocketHook(OSDService *s, ObjectStore *st) : service(s), store(st) {}
-  bool call(std::string command, std::string args, bufferlist& out) {
+  bool call(std::string command, std::string args, std::string format,
+	    bufferlist& out) {
     stringstream ss;
     test_ops(service, store, command, args, ss);
     out.append(ss);

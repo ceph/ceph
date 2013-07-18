@@ -32,7 +32,9 @@ struct MorePrinting : public DetailedStatCollector::AdditionalPrinting {
   MorePrinting(CephContext *cct) : cct(cct) {}
   void operator()(std::ostream *out) {
     bufferlist bl;
-    cct->get_perfcounters_collection()->write_json_to_buf(bl, 0);
+    Formatter *f = new_formatter("json-pretty");
+    cct->get_perfcounters_collection()->dump_formatted(f, bl, 0);
+    delete f;
     bl.append('\0');
     *out << bl.c_str() << std::endl;
   }

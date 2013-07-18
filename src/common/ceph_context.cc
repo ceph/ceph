@@ -156,44 +156,46 @@ class CephContextHook : public AdminSocketHook {
 public:
   CephContextHook(CephContext *cct) : m_cct(cct) {}
 
-  bool call(std::string command, std::string args, bufferlist& out) {
-    m_cct->do_command(command, args, &out);
+  bool call(std::string command, std::string args, std::string format,
+	    bufferlist& out) {
+    m_cct->do_command(command, args, format, &out);
     return true;
   }
 };
 
-void CephContext::do_command(std::string command, std::string args, bufferlist *out)
+void CephContext::do_command(std::string command, std::string args,
+			     std::string format, bufferlist *out)
 {
+  Formatter *f = new_formatter(format);
   lgeneric_dout(this, 1) << "do_command '" << command << "' '" << args << "'" << dendl;
   if (command == "perfcounters_dump" || command == "1" ||
       command == "perf dump") {
-    _perf_counters_collection->write_json_to_buf(*out, false);
+    _perf_counters_collection->dump_formatted(f, *out, false);
   }
   else if (command == "perfcounters_schema" || command == "2" ||
     command == "perf schema") {
-    _perf_counters_collection->write_json_to_buf(*out, true);
+    _perf_counters_collection->dump_formatted(f, *out, true);
   }
   else {
-    JSONFormatter jf(true);
-    jf.open_object_section(command.c_str());
+    f->open_object_section(command.c_str());
     if (command == "config show") {
-      _conf->show_config(&jf);
+      _conf->show_config(f);
     }
     else if (command == "config set") {
       std::string var = args;
       size_t pos = var.find(' ');
       if (pos == string::npos) {
-        jf.dump_string("error", "syntax error: 'config set <var> <value>'");
+        f->dump_string("error", "syntax error: 'config set <var> <value>'");
       } else {
         std::string val = var.substr(pos+1);
         var.resize(pos);
         int r = _conf->set_val(var.c_str(), val.c_str());
         if (r < 0) {
-          jf.dump_stream("error") << "error setting '" << var << "' to '" << val << "': " << cpp_strerror(r);
+          f->dump_stream("error") << "error setting '" << var << "' to '" << val << "': " << cpp_strerror(r);
         } else {
           ostringstream ss;
           _conf->apply_changes(&ss);
-          jf.dump_string("success", ss.str());
+          f->dump_string("success", ss.str());
         }
       }
     } else if (command == "config get") {
@@ -202,9 +204,9 @@ void CephContext::do_command(std::string command, std::string args, bufferlist *
         char *tmp = buf;
         int r = _conf->get_val(args.c_str(), &tmp, sizeof(buf));
         if (r < 0) {
-            jf.dump_stream("error") << "error getting '" << args << "': " << cpp_strerror(r);
+            f->dump_stream("error") << "error getting '" << args << "': " << cpp_strerror(r);
         } else {
-            jf.dump_string(args.c_str(), buf);
+            f->dump_string(args.c_str(), buf);
         }
     } else if (command == "log flush") {
       _log->flush();
@@ -218,11 +220,10 @@ void CephContext::do_command(std::string command, std::string args, bufferlist *
     else {
       assert(0 == "registered under wrong command?");    
     }
-    ostringstream ss;
-    jf.close_section();
-    jf.flush(ss);
-    out->append(ss.str());
+    f->close_section();
+    f->flush(*out);
   }
+  delete f;
   lgeneric_dout(this, 1) << "do_command '" << command << "' '" << args << "' result is " << out->length() << " bytes" << dendl;
 };
 

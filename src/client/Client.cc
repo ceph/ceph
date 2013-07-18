@@ -102,22 +102,24 @@ Client::CommandHook::CommandHook(Client *client) :
 {
 }
 
-bool Client::CommandHook::call(std::string command, std::string args, bufferlist& out)
+bool Client::CommandHook::call(std::string command, std::string args,
+			       std::string format, bufferlist& out)
 {
   stringstream ss;
-  JSONFormatter formatter(true);
+  Formatter *f = new_formatter(format);
   m_client->client_lock.Lock();
   if (command == "mds_requests")
-    m_client->dump_mds_requests(&formatter);
+    m_client->dump_mds_requests(f);
   else if (command == "mds_sessions")
-    m_client->dump_mds_sessions(&formatter);
+    m_client->dump_mds_sessions(f);
   else if (command == "dump_cache")
-    m_client->dump_cache(&formatter);
+    m_client->dump_cache(f);
   else
     assert(0 == "bad command registered");
   m_client->client_lock.Unlock();
-  formatter.flush(ss);
+  f->flush(ss);
   out.append(ss);
+  delete f;
   return true;
 }
 
