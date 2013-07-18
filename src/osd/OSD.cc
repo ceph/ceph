@@ -2502,6 +2502,8 @@ void OSD::update_osd_stat()
 
   service.check_nearfull_warning(osd_stat);
 
+  op_tracker.get_age_ms_histogram(&osd_stat.op_queue_age_hist);
+
   dout(20) << "update_osd_stat " << osd_stat << dendl;
 }
 

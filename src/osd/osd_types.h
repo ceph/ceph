@@ -509,6 +509,65 @@ inline ostream& operator<<(ostream& out, const eversion_t e) {
 }
 
 
+/**
+ * power of 2 histogram
+ */
+struct pow2_hist_t {
+  /**
+   * histogram
+   *
+   * bin size is 2^index
+   * value is count of elements that are <= the current bin but > the previous bin.
+   */
+  vector<int32_t> h;
+
+private:
+  /// expand to at least another's size
+  void _expand_to(unsigned s) {
+    if (s > h.size())
+      h.resize(s, 0);
+  }
+  /// drop useless trailing 0's
+  void _contract() {
+    unsigned p = h.size();
+    while (p > 0 && h[p-1] == 0)
+      --p;
+    h.resize(p);
+  }
+
+public:
+  void clear() {
+    h.clear();
+  }
+  void set(int bin, int32_t v) {
+    _expand_to(bin + 1);
+    h[bin] = v;
+    _contract();
+  }
+
+  void add(const pow2_hist_t& o) {
+    _expand_to(o.h.size());
+    for (unsigned p = 0; p < o.h.size(); ++p)
+      h[p] += o.h[p];
+    _contract();
+  }
+  void sub(const pow2_hist_t& o) {
+    _expand_to(o.h.size());
+    for (unsigned p = 0; p < o.h.size(); ++p)
+      h[p] -= o.h[p];
+    _contract();
+  }
+
+  int32_t upper_bound() const {
+    return 1 << h.size();
+  }
+
+  void dump(Formatter *f) const;
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  static void generate_test_instances(std::list<pow2_hist_t*>& o);
+};
+WRITE_CLASS_ENCODER(pow2_hist_t)
 
 /** osd_stat
  * aggregate stats for an osd
@@ -517,6 +576,8 @@ struct osd_stat_t {
   int64_t kb, kb_used, kb_avail;
   vector<int> hb_in, hb_out;
   int32_t snap_trim_queue_len, num_snap_trimming;
+
+  pow2_hist_t op_queue_age_hist;
 
   osd_stat_t() : kb(0), kb_used(0), kb_avail(0),
 		 snap_trim_queue_len(0), num_snap_trimming(0) {}
@@ -527,6 +588,7 @@ struct osd_stat_t {
     kb_avail += o.kb_avail;
     snap_trim_queue_len += o.snap_trim_queue_len;
     num_snap_trimming += o.num_snap_trimming;
+    op_queue_age_hist.add(o.op_queue_age_hist);
   }
   void sub(const osd_stat_t& o) {
     kb -= o.kb;
@@ -534,6 +596,7 @@ struct osd_stat_t {
     kb_avail -= o.kb_avail;
     snap_trim_queue_len -= o.snap_trim_queue_len;
     num_snap_trimming -= o.num_snap_trimming;
+    op_queue_age_hist.sub(o.op_queue_age_hist);
   }
 
   void dump(Formatter *f) const;
@@ -562,7 +625,9 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
   return out << "osd_stat(" << kb_t(s.kb_used) << " used, "
 	     << kb_t(s.kb_avail) << " avail, "
 	     << kb_t(s.kb) << " total, "
-	     << "peers " << s.hb_in << "/" << s.hb_out << ")";
+	     << "peers " << s.hb_in << "/" << s.hb_out
+	     << " op hist " << s.op_queue_age_hist.h
+	     << ")";
 }
 
 
