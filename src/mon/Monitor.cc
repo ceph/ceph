@@ -3477,16 +3477,16 @@ void Monitor::tick()
       continue; 
 
     if (!s->until.is_zero() && s->until < now) {
-      dout(10) << " trimming session " << s->inst
+      dout(10) << " trimming session " << s->con << " " << s->inst
 	       << " (until " << s->until << " < now " << now << ")" << dendl;
-      messenger->mark_down(s->inst.addr);
+      messenger->mark_down(s->con);
       remove_session(s);
     } else if (!exited_quorum.is_zero()) {
       if (now > (exited_quorum + 2 * g_conf->mon_lease)) {
         // boot the client Session because we've taken too long getting back in
-        dout(10) << " trimming session " << s->inst
-            << " because we've been out of quorum too long" << dendl;
-        messenger->mark_down(s->inst.addr);
+        dout(10) << " trimming session " << s->con << " " << s->inst
+		 << " because we've been out of quorum too long" << dendl;
+        messenger->mark_down(s->con);
         remove_session(s);
       }
     }
