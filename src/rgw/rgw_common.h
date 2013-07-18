@@ -807,8 +807,6 @@ struct req_state {
    map<string, bufferlist> bucket_attrs;
    bool bucket_exists;
 
-   RGWObjVersionTracker objv_tracker;
-
    bool has_bad_meta;
 
    RGWUserInfo user; 
