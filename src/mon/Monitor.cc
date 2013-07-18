@@ -3242,15 +3242,18 @@ bool Monitor::ms_handle_reset(Connection *con)
 {
   dout(10) << "ms_handle_reset " << con << " " << con->get_peer_addr() << dendl;
 
-  if (is_shutdown())
-    return false;
-
   // ignore lossless monitor sessions
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
     return false;
 
   MonSession *s = static_cast<MonSession *>(con->get_priv());
   if (!s)
+    return false;
+
+  // break any con <-> session ref cycle
+  s->con->set_priv(NULL);
+
+  if (is_shutdown())
     return false;
 
   Mutex::Locker l(lock);
