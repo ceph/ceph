@@ -233,6 +233,8 @@ Notable Changes
 * ceph-disk: better handling for unusual device names
 * sysvinit, upstart: handle symlinks in /var/lib/ceph/*
 
+For more detailed information, see :download:`the complete changelog <changelog/v0.61.5.txt>`.
+
 
 v0.61.4 "Cuttlefish"
 --------------------
@@ -271,7 +273,7 @@ Notable Changes
 * ceph-fuse: fix thread creation on startup
 * all daemons: create /var/run/ceph directory on startup if missing
 
-For more detailed information, see :download:`the complete changelog <changelog/v0.61.3.txt>`.
+For more detailed information, see :download:`the complete changelog <changelog/v0.61.4.txt>`.
 
 
 v0.61.3 "Cuttlefish"
