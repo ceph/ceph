@@ -3370,8 +3370,8 @@ void OSD::ms_handle_connect(Connection *con)
 
 bool OSD::ms_handle_reset(Connection *con)
 {
-  dout(1) << "OSD::ms_handle_reset()" << dendl;
   OSD::Session *session = (OSD::Session *)con->get_priv();
+  dout(1) << "ms_handle_reset con " << con << " session " << session << dendl;
   if (!session)
     return false;
   session->wstate.reset();
