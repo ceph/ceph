@@ -820,11 +820,10 @@ def validate(args, signature, partial=False):
         raise ArgumentError("unused arguments: " + str(myargs))
     return d
 
-def validate_command(parsed_args, sigdict, args, verbose=False):
+def validate_command(sigdict, args, verbose=False):
     """
     turn args into a valid dictionary ready to be sent off as JSON,
     validated against sigdict.
-    parsed_args is the namespace back from argparse
     """
     found = []
     valid_dict = {}
@@ -881,9 +880,6 @@ def validate_command(parsed_args, sigdict, args, verbose=False):
                 for (cmdtag, cmd) in cmdsig.iteritems():
                     print >> sys.stderr, concise_sig(cmd['sig'])
             return None
-
-        if parsed_args.output_format:
-            valid_dict['format'] = parsed_args.output_format
 
         return valid_dict
 
