@@ -329,17 +329,13 @@ public:
    */
   virtual int bind(const entity_addr_t& bind_addr) = 0;
   /**
-   * This is an optional function for implementations
-   * to override. For those implementations that do
-   * implement it, this function shall perform a full
-   * restart of the Messenger component, whatever that means.
-   * Other entities who connect to this Messenger post-rebind()
-   * should perceive it as a new entity which they have not
-   * previously contacted, and it MUST bind to a different
-   * address than it did previously. If avoid_port is non-zero
-   * it must additionally avoid that port.
+   * This function performs a full restart of the Messenger component,
+   * whatever that means.  Other entities who connect to this
+   * Messenger post-rebind() should perceive it as a new entity which
+   * they have not previously contacted, and it MUST bind to a
+   * different address than it did previously.
    *
-   * @param avoid_port An additional port to avoid binding to.
+   * @param avoid_ports Additional port to avoid binding to.
    */
   virtual int rebind(const set<int>& avoid_ports) { return -EOPNOTSUPP; }
   /**
