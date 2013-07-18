@@ -887,6 +887,34 @@ def validate_command(parsed_args, sigdict, args, verbose=False):
 
         return valid_dict
 
+def find_cmd_target(childargs):
+    """
+    Using a minimal validation, figure out whether the command
+    should be sent to a monitor or an osd.  We do this before even
+    asking for the 'real' set of command signatures, so we can ask the
+    right daemon.
+    Returns ('osd', osdid), ('pg', pgid), or ('mon', '')
+    """
+    sig = parse_funcsig(['tell', {'name':'target','type':'CephName'}])
+    try:
+        valid_dict = validate(childargs, sig, partial=True);
+        if len(valid_dict) == 2:
+            name = CephName()
+            name.valid(valid_dict['target'])
+            return name.nametype, name.nameid
+    except ArgumentError:
+        pass
+
+    sig = parse_funcsig(['pg', {'name':'pgid','type':'CephPgid'}])
+    try:
+        valid_dict = validate(childargs, sig, partial=True);
+        if len(valid_dict) == 2:
+            return 'pg', valid_dict['pgid']
+    except ArgumentError:
+        pass
+
+    return 'mon', ''
+
 def send_command(cluster, target=('mon', ''), cmd=[], inbuf='', timeout=0, 
                  verbose=False):
     """
