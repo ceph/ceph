@@ -264,9 +264,9 @@ def schedule():
         help='be more verbose',
         )
     parser.add_argument(
-        '-b', '--branch',
-        default='master',
-        help='which branch of teuthology to use',
+        '-w', '--worker',
+        default='plana',
+        help='which worker to use (type of machine)',
         )
     parser.add_argument(
         '-s', '--show',
@@ -289,9 +289,7 @@ def schedule():
     import teuthology.queue
     beanstalk = teuthology.queue.connect(ctx)
 
-    tube = 'teuthology'
-    if ctx.branch != 'master':
-        tube += '-' + ctx.branch
+    tube=ctx.worker
     beanstalk.use(tube)
 
     if ctx.show:
