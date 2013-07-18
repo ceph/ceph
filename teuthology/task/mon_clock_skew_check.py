@@ -60,7 +60,14 @@ class ClockSkewCheck:
       self.config = dict()
 
     self.check_interval = float(self.config.get('interval', 30.0))
-    self.max_skew = float(self.config.get('max-skew', 0.05))
+
+    # config defined max-skew must have priority over globally defined
+    self.max_skew = float(
+        self.config.get('max-skew',
+          ctx.ceph.conf['global'].get('mon clock drift allowed', 0.05)
+          )
+        )
+
     self.expect_skew = self.config.get('expect-skew', False)
     self.never_fail = self.config.get('never-fail', False)
     self.at_least_once = self.config.get('at-least-once', True)
