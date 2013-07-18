@@ -178,8 +178,7 @@ static int decode_policy(CephContext *cct, bufferlist& bl, RGWAccessControlPolic
 
 static int get_bucket_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
                                        RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs,
-                                       RGWAccessControlPolicy *policy, rgw_obj& obj,
-                                       RGWObjVersionTracker *objv_tracker)
+                                       RGWAccessControlPolicy *policy, rgw_obj& obj)
 {
   int ret;
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_ACL);
@@ -203,13 +202,12 @@ static int get_bucket_policy_from_attr(CephContext *cct, RGWRados *store, void *
 
 static int get_obj_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
                                     RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs,
-                                    RGWAccessControlPolicy *policy, rgw_obj& obj,
-                                    RGWObjVersionTracker *objv_tracker)
+                                    RGWAccessControlPolicy *policy, rgw_obj& obj)
 {
   bufferlist bl;
   int ret = 0;
 
-  ret = store->get_attr(ctx, obj, RGW_ATTR_ACL, bl, objv_tracker);
+  ret = store->get_attr(ctx, obj, RGW_ATTR_ACL, bl, NULL);
   if (ret >= 0) {
     ret = decode_policy(cct, bl, policy);
     if (ret < 0)
@@ -237,7 +235,7 @@ static int get_obj_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx
  */
 static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
                                 RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs,
-                                RGWAccessControlPolicy *policy, rgw_obj& obj, RGWObjVersionTracker *objv_tracker)
+                                RGWAccessControlPolicy *policy, rgw_obj& obj)
 {
   if (obj.bucket.name.empty()) {
     return 0;
@@ -245,10 +243,10 @@ static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
 
   if (obj.object.empty()) {
     return get_bucket_policy_from_attr(cct, store, ctx, bucket_info, bucket_attrs,
-                                       policy, obj, objv_tracker);
+                                       policy, obj);
   }
   return get_obj_policy_from_attr(cct, store, ctx, bucket_info, bucket_attrs,
-                                  policy, obj, objv_tracker);
+                                  policy, obj);
 }
 
 static int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs,
@@ -282,14 +280,14 @@ static int read_policy(RGWRados *store, struct req_state *s,
   } else {
     obj.init(bucket, oid);
   }
-  int ret = get_policy_from_attr(s->cct, store, s->obj_ctx, bucket_info, bucket_attrs, policy, obj, &s->objv_tracker);
+  int ret = get_policy_from_attr(s->cct, store, s->obj_ctx, bucket_info, bucket_attrs, policy, obj);
   if (ret == -ENOENT && object.size()) {
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
     RGWAccessControlPolicy bucket_policy(s->cct);
     string no_object;
     rgw_obj no_obj(bucket, no_object);
-    ret = get_policy_from_attr(s->cct, store, s->obj_ctx, bucket_info, bucket_attrs, &bucket_policy, no_obj, &s->objv_tracker);
+    ret = get_policy_from_attr(s->cct, store, s->obj_ctx, bucket_info, bucket_attrs, &bucket_policy, no_obj);
     if (ret < 0)
       return ret;
     string& owner = bucket_policy.get_owner().get_id();
@@ -976,7 +974,7 @@ void RGWCreateBucket::execute()
   s->bucket_owner.set_name(s->user.display_name);
   if (s->bucket_exists) {
     r = get_policy_from_attr(s->cct, store, s->obj_ctx, s->bucket_info, s->bucket_attrs,
-                             &old_policy, obj, &s->objv_tracker);
+                             &old_policy, obj);
     if (r >= 0)  {
       if (old_policy.get_owner().get_id().compare(s->user.user_id) != 0) {
         ret = -EEXIST;
@@ -1070,7 +1068,7 @@ void RGWDeleteBucket::execute()
   if (!s->bucket_name)
     return;
 
-  ret = store->delete_bucket(s->bucket, objv_tracker);
+  ret = store->delete_bucket(s->bucket, s->bucket_info.objv_tracker);
 
   if (ret == 0) {
     ret = rgw_unlink_bucket(store, s->user.user_id, s->bucket.name, false);
@@ -1465,7 +1463,7 @@ void RGWPutMetadata::execute()
   rgw_get_request_metadata(s->cct, s->info, attrs);
 
   /* no need to track object versioning, need it for bucket's data only */
-  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->objv_tracker);
+  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->bucket_info.objv_tracker);
 
   /* check if obj exists, read orig attrs */
   ret = get_obj_attrs(store, s, obj, orig_attrs, NULL, ptracker);
@@ -1783,7 +1781,7 @@ void RGWPutACLs::execute()
     *_dout << dendl;
   }
 
-  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->objv_tracker);
+  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->bucket_info.objv_tracker);
 
   new_policy.encode(bl);
   obj.init(s->bucket, s->object_str);
@@ -1861,7 +1859,7 @@ void RGWPutCORS::execute()
     *_dout << dendl;
   }
 
-  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->objv_tracker);
+  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->bucket_info.objv_tracker);
 
   string no_obj;
   cors_config->encode(bl);
@@ -1893,7 +1891,7 @@ void RGWDeleteCORS::execute()
   map<string, bufferlist> orig_attrs, attrs, rmattrs;
   map<string, bufferlist>::iterator iter;
 
-  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->objv_tracker);
+  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->bucket_info.objv_tracker);
 
   /* check if obj exists, read orig attrs */
   ret = get_obj_attrs(store, s, obj, orig_attrs, NULL, ptracker);
