@@ -1054,8 +1054,8 @@ WRITE_CLASS_ENCODER(pg_stat_t)
  */
 struct pool_stat_t {
   object_stat_collection_t stats;
-  uint64_t log_size;
-  uint64_t ondisk_log_size;    // >= active_log_size
+  int64_t log_size;
+  int64_t ondisk_log_size;    // >= active_log_size
 
   pool_stat_t() : log_size(0), ondisk_log_size(0)
   { }
