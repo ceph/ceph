@@ -1074,8 +1074,12 @@ void RGWDeleteBucket::execute()
     bufferlist in_data;
     JSONParser jp;
     ret = forward_request_to_master(s, store, in_data, &jp);
-    if (ret < 0)
+    if (ret < 0) {
+      if (ret == -ENOENT) { /* adjust error */
+        ret = -ERR_NO_SUCH_BUCKET;
+      }
       return;
+    }
 
     JSONDecoder::decode_json("object_ver", objv_tracker.read_version, &jp);
   }
