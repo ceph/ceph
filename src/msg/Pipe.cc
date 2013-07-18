@@ -385,10 +385,15 @@ int Pipe::accept()
     
     // Check the authorizer.  If not good, bail out.
 
+    pipe_lock.Unlock();
+
     if (!msgr->verify_authorizer(connection_state.get(), peer_type, connect.authorizer_protocol, authorizer,
 				 authorizer_reply, authorizer_valid, session_key) ||
 	!authorizer_valid) {
       ldout(msgr->cct,0) << "accept: got bad authorizer" << dendl;
+      pipe_lock.Lock();
+      if (state != STATE_ACCEPTING)
+	goto shutting_down_msgr_unlocked;
       reply.tag = CEPH_MSGR_TAG_BADAUTHORIZER;
       delete session_security;
       session_security = NULL;
@@ -399,7 +404,6 @@ int Pipe::accept()
 
     ldout(msgr->cct,10) << "accept:  setting up session_security." << dendl;
 
-    pipe_lock.Unlock();
     msgr->lock.Lock();
     pipe_lock.Lock();
     if (msgr->dispatch_queue.stop)
@@ -711,8 +715,9 @@ int Pipe::accept()
   return -1;
 
  shutting_down:
-  assert(pipe_lock.is_locked());
   msgr->lock.Unlock();
+ shutting_down_msgr_unlocked:
+  assert(pipe_lock.is_locked());
 
   if (msgr->cct->_conf->ms_inject_internal_delays) {
     ldout(msgr->cct, 10) << " sleep for " << msgr->cct->_conf->ms_inject_internal_delays << dendl;
