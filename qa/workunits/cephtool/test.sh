@@ -172,6 +172,13 @@ done
 id=`ceph osd create`
 ceph osd lost $id --yes-i-really-mean-it
 ceph osd rm $id
+
+uuid=`uuidgen`
+id=`ceph osd create $uuid`
+id2=`ceph osd create $uuid`
+[ "$id" = "$id2" ]
+ceph osd rm $id
+
 ceph osd ls
 ceph osd lspools | grep data
 ceph osd map data foo | grep 'pool.*data.*object.*foo.*pg.*up.*acting'
