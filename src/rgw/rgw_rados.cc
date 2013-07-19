@@ -259,6 +259,13 @@ int RGWRegion::store_info(bool exclusive)
   return ret;
 }
 
+int RGWRegion::equals(const string& other_region)
+{
+  if (is_master && other_region.empty())
+    return true;
+
+  return (name == other_region);
+}
 
 void RGWZoneParams::init_default(RGWRados *store)
 {
@@ -429,8 +436,7 @@ int RGWRegionMap::update(RGWRegion& region)
 {
   Mutex::Locker l(lock);
 
-  if (region.is_master && !master_region.empty() &&
-      master_region.compare(region.name) != 0) {
+  if (region.is_master && !region.equals(master_region)) {
     derr << "cannot update region map, master_region conflict" << dendl;
     return -EINVAL;
   }
@@ -1938,8 +1944,7 @@ int RGWRados::set_bucket_location_by_rule(const string& location_rule, const std
   map<string, RGWZonePlacementInfo>::iterator piter = zone.placement_pools.find(location_rule);
   if (piter == zone.placement_pools.end()) {
     /* couldn't find, means we cannot really place data for this bucket in this zone */
-    if ((region_name.empty() && region.is_master) ||
-        region_name == region.name) {
+    if (region.equals(region_name)) {
       /* that's a configuration error, zone should have that rule, as we're within the requested
        * region */
       return -EINVAL;
@@ -2486,11 +2491,8 @@ int RGWRados::copy_obj(void *ctx,
   append_rand_alpha(cct, dest_obj.object, shadow_oid, 32);
   shadow_obj.init_ns(dest_obj.bucket, shadow_oid, shadow_ns);
 
-  remote_dest = ((dest_bucket_info.region.empty() && !region.is_master) ||
-      (dest_bucket_info.region != region.name));
-
-  remote_src = ((src_bucket_info.region.empty() && !region.is_master) ||
-      (src_bucket_info.region != region.name));
+  remote_dest = !region.equals(dest_bucket_info.region);
+  remote_src = !region.equals(src_bucket_info.region);
 
   if (remote_src && remote_dest) {
     ldout(cct, 0) << "ERROR: can't copy object when both src and dest buckets are remote" << dendl;
