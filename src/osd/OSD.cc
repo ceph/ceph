@@ -5840,7 +5840,7 @@ bool OSD::compat_must_dispatch_immediately(PG *pg)
       continue;
     ConnectionRef conn =
       service.get_con_osd_cluster(*i, pg->get_osdmap()->get_epoch());
-    if (conn && !(conn->features & CEPH_FEATURE_INDEP_PG_MAP)) {
+    if (conn && !conn->has_feature(CEPH_FEATURE_INDEP_PG_MAP)) {
       return true;
     }
   }
@@ -5894,7 +5894,7 @@ void OSD::do_notifies(
     if (!con)
       continue;
     _share_map_outgoing(it->first, con.get(), curmap);
-    if ((con->features & CEPH_FEATURE_INDEP_PG_MAP)) {
+    if (con->has_feature(CEPH_FEATURE_INDEP_PG_MAP)) {
       dout(7) << "do_notify osd." << it->first
 	      << " on " << it->second.size() << " PGs" << dendl;
       MOSDPGNotify *m = new MOSDPGNotify(curmap->get_epoch(),
@@ -5934,7 +5934,7 @@ void OSD::do_queries(map< int, map<pg_t,pg_query_t> >& query_map,
     if (!con)
       continue;
     _share_map_outgoing(who, con.get(), curmap);
-    if ((con->features & CEPH_FEATURE_INDEP_PG_MAP)) {
+    if (con->has_feature(CEPH_FEATURE_INDEP_PG_MAP)) {
       dout(7) << "do_queries querying osd." << who
 	      << " on " << pit->second.size() << " PGs" << dendl;
       MOSDPGQuery *m = new MOSDPGQuery(curmap->get_epoch(), pit->second);
@@ -5973,7 +5973,7 @@ void OSD::do_infos(map<int,vector<pair<pg_notify_t, pg_interval_map_t> > >& info
     if (!con)
       continue;
     _share_map_outgoing(p->first, con.get(), curmap);
-    if ((con->features & CEPH_FEATURE_INDEP_PG_MAP)) {
+    if (con->has_feature(CEPH_FEATURE_INDEP_PG_MAP)) {
       MOSDPGInfo *m = new MOSDPGInfo(curmap->get_epoch());
       m->pg_list = p->second;
       cluster_messenger->send_message(m, con.get());
