@@ -653,6 +653,7 @@ struct RGWBucketInfo
   string placement_rule;
   bool has_instance_obj;
   RGWObjVersionTracker objv_tracker; /* we don't need to serialize this, for runtime tracking */
+  obj_version ep_objv; /* entry point object version, for runtime tracking only */
 
   void encode(bufferlist& bl) const {
      ENCODE_START(8, 4, bl);
@@ -806,8 +807,6 @@ struct req_state {
    RGWBucketInfo bucket_info;
    map<string, bufferlist> bucket_attrs;
    bool bucket_exists;
-
-   RGWObjVersionTracker objv_tracker;
 
    bool has_bad_meta;
 

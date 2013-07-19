@@ -20,7 +20,7 @@ public:
   int get_url(string& endpoint);
 
   /* sync request */
-  int forward(const string& uid, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl);
+  int forward(const string& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl);
 
   /* async request */
   int put_obj_init(const string& uid, rgw_obj& obj, uint64_t obj_size,

@@ -224,6 +224,11 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
     headers.push_back(make_pair<string, string>(iter->first, iter->second));
   }
 
+  map<string, string>& meta_map = new_info.x_meta_map;
+  for (iter = meta_map.begin(); iter != meta_map.end(); ++iter) {
+    headers.push_back(make_pair<string, string>(iter->first, iter->second));
+  }
+
   string params_str;
   map<string, string>& args = new_info.args.get_params();
   get_params_str(args, params_str);
