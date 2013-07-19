@@ -207,7 +207,7 @@ static int get_obj_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx
   bufferlist bl;
   int ret = 0;
 
-  ret = store->get_attr(ctx, obj, RGW_ATTR_ACL, bl, NULL);
+  ret = store->get_attr(ctx, obj, RGW_ATTR_ACL, bl);
   if (ret >= 0) {
     ret = decode_policy(cct, bl, policy);
     if (ret < 0)
@@ -2499,7 +2499,7 @@ int RGWHandler::read_cors_config(void)
   string no_object;
   rgw_obj no_obj(s->bucket, no_object);
   if (no_obj.bucket.name.size()) {
-    ret = store->get_attr(s->obj_ctx, no_obj, RGW_ATTR_CORS, bl, NULL);
+    ret = store->get_attr(s->obj_ctx, no_obj, RGW_ATTR_CORS, bl);
     if (ret >= 0) {
       bufferlist::iterator iter = bl.begin();
       s->bucket_cors = new RGWCORSConfiguration();

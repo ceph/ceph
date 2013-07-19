@@ -718,7 +718,7 @@ int RGWBucket::get_policy(RGWBucketAdminOpState& op_state, ostream& o)
 
   bufferlist bl;
   rgw_obj obj(bucket, object_name);
-  int ret = store->get_attr(NULL, obj, RGW_ATTR_ACL, bl, NULL);
+  int ret = store->get_attr(NULL, obj, RGW_ATTR_ACL, bl);
   if (ret < 0)
     return ret;
 

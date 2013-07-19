@@ -3265,8 +3265,7 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state
  * dest: bufferlist to store the result in
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& dest,
-                       RGWObjVersionTracker *objv_tracker)
+int RGWRados::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& dest)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -3300,10 +3299,6 @@ int RGWRados::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& de
   }
 
   ObjectReadOperation op;
-
-  if (objv_tracker) {
-    objv_tracker->prepare_op_for_read(&op);
-  }
 
   int rval;
   op.getxattr(name, &dest, &rval);
@@ -3604,7 +3599,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     }
   }
   if (if_match || if_nomatch) {
-    r = get_attr(rctx, obj, RGW_ATTR_ETAG, etag, NULL);
+    r = get_attr(rctx, obj, RGW_ATTR_ETAG, etag);
     if (r < 0)
       goto done_err;
 
