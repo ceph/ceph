@@ -1351,8 +1351,8 @@ void pg_stat_t::generate_test_instances(list<pg_stat_t*>& o)
 void pool_stat_t::dump(Formatter *f) const
 {
   stats.dump(f);
-  f->dump_unsigned("log_size", log_size);
-  f->dump_unsigned("ondisk_log_size", ondisk_log_size);
+  f->dump_int("log_size", log_size);
+  f->dump_int("ondisk_log_size", ondisk_log_size);
 }
 
 void pool_stat_t::encode(bufferlist &bl, uint64_t features) const
