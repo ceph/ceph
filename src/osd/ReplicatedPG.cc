@@ -5260,6 +5260,9 @@ void ReplicatedPG::submit_push_data(
   ObjectStore::Transaction *t)
 {
   if (first) {
+    dout(10) << __func__ << ": Creating oid "
+	     << recovery_info.soid << " in the temp collection" << dendl;
+    temp_contents.insert(recovery_info.soid);
     missing.revise_have(recovery_info.soid, eversion_t());
     remove_snap_mapped_object(*t, recovery_info.soid);
     t->remove(get_temp_coll(t), recovery_info.soid);
@@ -5287,6 +5290,10 @@ void ReplicatedPG::submit_push_complete(ObjectRecoveryInfo &recovery_info,
 					ObjectStore::Transaction *t)
 {
   remove_snap_mapped_object(*t, recovery_info.soid);
+  assert(temp_contents.count(recovery_info.soid));
+  dout(10) << __func__ << ": Removing oid "
+	   << recovery_info.soid << " from the temp collection" << dendl;
+  temp_contents.erase(recovery_info.soid);
   t->collection_move(coll, get_temp_coll(t), recovery_info.soid);
   for (map<hobject_t, interval_set<uint64_t> >::const_iterator p =
 	 recovery_info.clone_subset.begin();
@@ -6315,6 +6322,15 @@ void ReplicatedPG::on_shutdown()
 void ReplicatedPG::on_flushed()
 {
   assert(object_contexts.empty());
+  if (have_temp_coll() &&
+      !osd->store->collection_empty(get_temp_coll())) {
+    vector<hobject_t> objects;
+    osd->store->collection_list(get_temp_coll(), objects);
+    derr << __func__ << ": found objects in the temp collection: "
+	 << objects << ", crashing now"
+	 << dendl;
+    assert(0 == "found garbage in the temp collection");
+  }
 }
 
 void ReplicatedPG::on_activate()
@@ -6364,6 +6380,16 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   pushing.clear();
   pulling.clear();
   pull_from_peer.clear();
+
+  // clear temp
+  for (set<hobject_t>::iterator i = temp_contents.begin();
+       i != temp_contents.end();
+       ++i) {
+    dout(10) << __func__ << ": Removing oid "
+	     << *i << " from the temp collection" << dendl;
+    t->remove(get_temp_coll(t), *i);
+  }
+  temp_contents.clear();
 
   // clear snap_trimmer state
   snap_trimmer_machine.process_event(Reset());
