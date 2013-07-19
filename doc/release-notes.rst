@@ -205,7 +205,11 @@ that all v0.61.x users upgrade.
 Upgrading
 ~~~~~~~~~
 
-* No issues
+* This release fixes a 32-bit vs 64-bit arithmetic bug with the
+  feature bits.  An unfortunate consequence of the fix is that 0.61.4
+  (or earlier) ceph-mon daemons can't form a quorum with 0.61.5 (or
+  later) monitors.  To avoid the possibility of service disruption, we
+  recommend you upgrade all monitors at once.
 
 Notable Changes
 ~~~~~~~~~~~~~~~
