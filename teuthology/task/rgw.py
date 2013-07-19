@@ -56,12 +56,15 @@ def ship_config(ctx, config):
         system_type = teuthology.get_system_type(remote)
         if system_type == 'deb':
             mod_path = '/usr/lib/apache2/modules'
+            print_continue = 'on'
         else:
             mod_path = '/usr/lib64/httpd/modules'
+            print_continue = 'off'
         with file(src, 'rb') as f:
             conf = f.read().format(
                 testdir=testdir,
                 mod_path=mod_path,
+                print_continue=print_continue,
                 )
             teuthology.write_file(
                 remote=remote,
@@ -242,6 +245,15 @@ def task(ctx, config):
             client.3:
               valgrind: [--tool=memcheck]
 
+    Note that without a modified fastcgi module e.g. with the default
+    one on CentOS, you must have rgw print continue = false in ceph.conf::
+
+        tasks:
+        - ceph:
+            conf:
+              global:
+                rgw print continue: false
+        - rgw: [client.0]
     """
     if config is None:
         config = dict(('client.{id}'.format(id=id_), None)
