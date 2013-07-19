@@ -287,13 +287,13 @@ Listing Children of a Snapshot
 
 To list the children of a snapshot, execute the following::
 
-	rbd --pool {pool-name} snap children --image {image-name} --snap {snap-name}
-	rbd snap children {pool-name}/{image-name}@{snapshot-name}
+	rbd --pool {pool-name} children --image {image-name} --snap {snap-name}
+	rbd children {pool-name}/{image-name}@{snapshot-name}
 
 For example::
 
-	rbd --pool rbd snap children --image my-image --snap my-snapshot
-	rbd snap children rbd/my-image@my-snapshot
+	rbd --pool rbd children --image my-image --snap my-snapshot
+	rbd children rbd/my-image@my-snapshot
 
 
 Flattening a Cloned Image
