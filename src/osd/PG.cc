@@ -3329,7 +3329,7 @@ void PG::scrub(ThreadPool::TPHandle &handle)
       ConnectionRef con = osd->get_con_osd_cluster(acting[i], get_osdmap()->get_epoch());
       if (!con)
 	continue;
-      if (!(con->features & CEPH_FEATURE_CHUNKY_SCRUB)) {
+      if (!con->has_feature(CEPH_FEATURE_CHUNKY_SCRUB)) {
         dout(20) << "OSD " << acting[i]
                  << " does not support chunky scrubs, falling back to classic"
                  << dendl;
@@ -5478,7 +5478,7 @@ PG::RecoveryState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_con
   ConnectionRef con = pg->osd->get_con_osd_cluster(
     pg->backfill_target, pg->get_osdmap()->get_epoch());
   if (con) {
-    if ((con->features & CEPH_FEATURE_BACKFILL_RESERVATION)) {
+    if (con->has_feature(CEPH_FEATURE_BACKFILL_RESERVATION)) {
       unsigned priority = pg->is_degraded() ? OSDService::BACKFILL_HIGH
 	  : OSDService::BACKFILL_LOW;
       pg->osd->send_message_osd_cluster(
@@ -5734,7 +5734,7 @@ PG::RecoveryState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserve
   if (acting_osd_it != context< Active >().sorted_acting_set.end()) {
     ConnectionRef con = pg->osd->get_con_osd_cluster(*acting_osd_it, pg->get_osdmap()->get_epoch());
     if (con) {
-      if ((con->features & CEPH_FEATURE_RECOVERY_RESERVATION)) {
+      if (con->has_feature(CEPH_FEATURE_RECOVERY_RESERVATION)) {
 	pg->osd->send_message_osd_cluster(
           new MRecoveryReserve(MRecoveryReserve::REQUEST,
 			       pg->info.pgid,
@@ -5782,7 +5782,7 @@ void PG::RecoveryState::Recovering::release_reservations()
       continue;
     ConnectionRef con = pg->osd->get_con_osd_cluster(*i, pg->get_osdmap()->get_epoch());
     if (con) {
-      if ((con->features & CEPH_FEATURE_RECOVERY_RESERVATION)) {
+      if (con->has_feature(CEPH_FEATURE_RECOVERY_RESERVATION)) {
 	pg->osd->send_message_osd_cluster(
           new MRecoveryReserve(MRecoveryReserve::RELEASE,
 			       pg->info.pgid,
