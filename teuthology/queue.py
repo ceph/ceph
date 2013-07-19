@@ -81,12 +81,12 @@ describe. One job is run at a time.
         log.debug('Config is: %s', job.body)
         job_config = yaml.safe_load(job.body)
         safe_archive = safepath.munge(job_config['name'])
-        teuthology_branch=job_config.get('config').get('teuthology_branch', 'master')
+        teuthology_branch = job_config.get('config', {}).get('teuthology_branch', 'master')
 
         teuth_path = os.path.join(os.getenv("HOME"), 'teuthology-' + teuthology_branch, 'virtualenv', 'bin')
         if not os.path.isdir(teuth_path):
             raise Exception('Teuthology branch ' + teuthology_branch + ' not found at ' + teuth_path)
-        if job_config.get('last_in_suite', False):
+        if job_config.get('last_in_suite'):
             log.debug('Generating coverage for %s', job_config['name'])
             args = [
                 os.path.join(teuth_path, 'teuthology-results'),
