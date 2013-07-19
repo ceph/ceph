@@ -156,4 +156,36 @@ public:
   }
 };
 
+/**
+ * Context providing a simple wait() mechanism to wait for completion
+ *
+ * The context will not be deleted as part of complete and must live
+ * until wait() returns.
+ */
+class C_SaferCond : public Context {
+  Mutex lock;    ///< Mutex to take
+  Cond cond;     ///< Cond to signal
+  bool done;     ///< true after finish() has been called
+  int rval;      ///< return value
+public:
+  C_SaferCond() : lock("C_SaferCond"), done(false), rval(0) {}
+  void finish(int r) { complete(r); }
+
+  /// We overload complete in order to not delete the context
+  void complete(int r) {
+    Mutex::Locker l(lock);
+    done = true;
+    rval = r;
+    cond.Signal();
+  }
+
+  /// Returns rval once the Context is called
+  int wait() {
+    Mutex::Locker l(lock);
+    while (!done)
+      cond.Wait(lock);
+    return rval;
+  }
+};
+
 #endif
