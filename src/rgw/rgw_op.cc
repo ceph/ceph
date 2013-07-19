@@ -920,7 +920,7 @@ int RGWCreateBucket::verify_permission()
   return 0;
 }
 
-static int forward_request_to_master(struct req_state *s, RGWRados *store, bufferlist& in_data, JSONParser *jp)
+static int forward_request_to_master(struct req_state *s, obj_version *objv, RGWRados *store, bufferlist& in_data, JSONParser *jp)
 {
   if (!store->rest_master_conn) {
     ldout(s->cct, 0) << "rest connection is invalid" << dendl;
@@ -929,7 +929,7 @@ static int forward_request_to_master(struct req_state *s, RGWRados *store, buffe
   ldout(s->cct, 0) << "sending create_bucket request to master region" << dendl;
   bufferlist response;
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
-  int ret = store->rest_master_conn->forward(s->user.user_id, s->info, MAX_REST_RESPONSE, &in_data, &response);
+  int ret = store->rest_master_conn->forward(s->user.user_id, s->info, objv, MAX_REST_RESPONSE, &in_data, &response);
   if (ret < 0)
     return ret;
 
@@ -989,10 +989,11 @@ void RGWCreateBucket::execute()
 
   if (!store->region.is_master) {
     JSONParser jp;
-    ret = forward_request_to_master(s, store, in_data, &jp);
+    ret = forward_request_to_master(s, NULL, store, in_data, &jp);
     if (ret < 0)
       return;
 
+    JSONDecoder::decode_json("entry_point_object_ver", ep_objv, &jp);
     JSONDecoder::decode_json("object_ver", objv, &jp);
     JSONDecoder::decode_json("bucket_info", master_info, &jp);
     ldout(s->cct, 20) << "parsed: objv.tag=" << objv.tag << " objv.ver=" << objv.ver << dendl;
@@ -1022,7 +1023,7 @@ void RGWCreateBucket::execute()
 
   s->bucket.name = s->bucket_name_str;
   ret = store->create_bucket(s->user, s->bucket, region_name, placement_rule, attrs, info, pobjv,
-                             creation_time, pmaster_bucket, true);
+                             &ep_objv, creation_time, pmaster_bucket, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can recover
    * from a partial create by retrying it. */
   ldout(s->cct, 20) << "rgw_create_bucket returned ret=" << ret << " bucket=" << s->bucket << dendl;
@@ -1068,7 +1069,27 @@ void RGWDeleteBucket::execute()
   if (!s->bucket_name)
     return;
 
-  ret = store->delete_bucket(s->bucket, s->bucket_info.objv_tracker);
+  RGWObjVersionTracker ot;
+  ot.read_version = s->bucket_info.ep_objv;
+
+  if (s->system_request) {
+    string tag = s->info.args.get(RGW_SYS_PARAM_PREFIX "tag");
+    string ver_str = s->info.args.get(RGW_SYS_PARAM_PREFIX "ver");
+    if (!tag.empty()) {
+      ot.read_version.tag = tag;
+      uint64_t ver;
+      string err;
+      ver = strict_strtol(ver_str.c_str(), 10, &err);
+      if (!err.empty()) {
+        ldout(s->cct, 0) << "failed to parse ver param" << dendl;
+        ret = -EINVAL;
+        return;
+      }
+      ot.read_version.ver = ver;
+    }
+  }
+
+  ret = store->delete_bucket(s->bucket, ot);
 
   if (ret == 0) {
     ret = rgw_unlink_bucket(store, s->user.user_id, s->bucket.name, false);
@@ -1084,7 +1105,7 @@ void RGWDeleteBucket::execute()
   if (!store->region.is_master) {
     bufferlist in_data;
     JSONParser jp;
-    ret = forward_request_to_master(s, store, in_data, &jp);
+    ret = forward_request_to_master(s, &ot.read_version, store, in_data, &jp);
     if (ret < 0) {
       if (ret == -ENOENT) { /* adjust error,
                                we want to return with NoSuchBucket and not NoSuchKey */
@@ -1092,8 +1113,6 @@ void RGWDeleteBucket::execute()
       }
       return;
     }
-
-    JSONDecoder::decode_json("object_ver", objv_tracker.read_version, &jp);
   }
 
 }

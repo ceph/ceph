@@ -843,7 +843,7 @@ class RGWRados
     v.push_back(info);
     return clone_objs(ctx, dst_obj, v, attrs, category, pmtime, true, false);
   }
-  int delete_obj_impl(void *ctx, rgw_obj& src_obj);
+  int delete_obj_impl(void *ctx, rgw_obj& src_obj, RGWObjVersionTracker *objv_tracker);
   int complete_atomic_overwrite(RGWRadosCtx *rctx, RGWObjState *state, rgw_obj& obj);
 
   int update_placement_map();
@@ -983,6 +983,7 @@ public:
                             map<std::string,bufferlist>& attrs,
                             RGWBucketInfo& bucket_info,
                             obj_version *pobjv,
+                            obj_version *pep_objv,
                             time_t creation_time,
                             rgw_bucket *master_bucket,
                             bool exclusive = true);
@@ -1142,7 +1143,7 @@ public:
   int bucket_suspended(rgw_bucket& bucket, bool *suspended);
 
   /** Delete an object.*/
-  virtual int delete_obj(void *ctx, rgw_obj& src_obj);
+  virtual int delete_obj(void *ctx, rgw_obj& src_obj, RGWObjVersionTracker *objv_tracker = NULL);
 
   /** Remove an object from the bucket index */
   int delete_obj_index(rgw_obj& obj);
@@ -1294,7 +1295,7 @@ public:
 
   virtual int get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info,
                               time_t *pmtime, map<string, bufferlist> *pattrs = NULL);
-  virtual int put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, time_t mtime,
+  virtual int put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, time_t mtime, obj_version *pep_objv,
                                      map<string, bufferlist> *pattrs, bool create_entry_point);
 
   int cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid);
