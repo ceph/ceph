@@ -56,6 +56,7 @@ echo "teuthology branch $teuthology_branch"
 fn="/tmp/schedule.suite.$$"
 trap "rm $fn" EXIT
 cat <<EOF > $fn
+teuthology_branch: $teuthology_branch
 kernel:
   kdb: true
   sha1: $KERNEL_SHA1
@@ -119,4 +120,4 @@ echo "name $name"
     --email $email \
     --timeout 36000 \
     --name $name \
-    --branch $teuthology_branch
+    --worker $mtype
