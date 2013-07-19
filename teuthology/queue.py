@@ -81,11 +81,15 @@ describe. One job is run at a time.
         log.debug('Config is: %s', job.body)
         job_config = yaml.safe_load(job.body)
         safe_archive = safepath.munge(job_config['name'])
+        teuthology_branch=job_config.get('config').get('teuthology_branch', 'master')
 
+        teuth_path = os.path.join(os.getenv("HOME"), 'teuthology-' + teuthology_branch, 'virtualenv', 'bin')
+        if not os.path.isdir(teuth_path):
+            raise Exception('Teuthology branch ' + teuthology_branch + ' not found at ' + teuth_path)
         if job_config.get('last_in_suite', False):
             log.debug('Generating coverage for %s', job_config['name'])
             args = [
-                os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-results'),
+                os.path.join(teuth_path, 'teuthology-results'),
                 '--timeout',
                 str(job_config.get('results_timeout', 21600)),
                 '--email',
@@ -101,12 +105,12 @@ describe. One job is run at a time.
             safepath.makedirs(ctx.archive_dir, safe_archive)
             archive_path = os.path.join(ctx.archive_dir, safe_archive, str(job.jid))
             log.info('Running job %d', job.jid)
-            run_job(job_config, archive_path)
+            run_job(job_config, archive_path, teuth_path)
         job.delete()
 
-def run_job(job_config, archive_path):
+def run_job(job_config, archive_path, teuth_path):
     arg = [
-        os.path.join(os.path.dirname(sys.argv[0]), 'teuthology'),
+        os.path.join(teuth_path, 'teuthology'),
         ]
 
     if job_config['verbose']:
