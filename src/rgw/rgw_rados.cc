@@ -1860,6 +1860,8 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
         int r = open_bucket_index_ctx(bucket, index_ctx);
         if (r < 0)
           return r;
+
+        index_ctx.remove(dir_oid);
       }
       /* ret == -ENOENT here */
     }
