@@ -185,7 +185,6 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     mon->pgmon()->check_osd_map(osdmap.epoch);
   }
 
-  send_to_waiting();
   check_subs();
 
   share_map_with_random_osd();
@@ -312,16 +311,6 @@ void OSDMonitor::on_active()
 void OSDMonitor::on_shutdown()
 {
   dout(10) << __func__ << dendl;
-  map<epoch_t, list<PaxosServiceMessage*> >::iterator p = waiting_for_map.begin();
-  while (p != waiting_for_map.end()) {
-    while (!p->second.empty()) {
-      Message *m = p->second.front();
-      dout(20) << " discarding " << m << " " << *m << dendl;
-      m->put();
-      p->second.pop_front();
-    }
-    waiting_for_map.erase(p++);
-  }
 }
 
 void OSDMonitor::update_logger()
@@ -1444,53 +1433,15 @@ bool OSDMonitor::prepare_remove_snaps(MRemoveSnaps *m)
 // ---------------
 // map helpers
 
-void OSDMonitor::send_to_waiting()
-{
-  dout(10) << "send_to_waiting " << osdmap.get_epoch() << dendl;
-
-  map<epoch_t, list<PaxosServiceMessage*> >::iterator p = waiting_for_map.begin();
-  while (p != waiting_for_map.end()) {
-    epoch_t from = p->first;
-    
-    if (from) {
-      if (from <= osdmap.get_epoch()) {
-	while (!p->second.empty()) {
-	  send_incremental(p->second.front(), from);
-	  p->second.front()->put();
-	  p->second.pop_front();
-	}
-      } else {
-	dout(10) << "send_to_waiting from " << from << dendl;
-	++p;
-	continue;
-      }
-    } else {
-      while (!p->second.empty()) {
-	send_full(p->second.front());
-	p->second.front()->put();
-	p->second.pop_front();
-      }
-    }
-
-    waiting_for_map.erase(p++);
-  }
-}
-
 void OSDMonitor::send_latest(PaxosServiceMessage *m, epoch_t start)
 {
-  if (is_readable()) {
-    dout(5) << "send_latest to " << m->get_orig_source_inst()
-	    << " start " << start << dendl;
-    if (start == 0)
-      send_full(m);
-    else
-      send_incremental(m, start);
-    m->put();
-  } else {
-    dout(5) << "send_latest to " << m->get_orig_source_inst()
-	    << " start " << start << " later" << dendl;
-    waiting_for_map[start].push_back(m);
-  }
+  dout(5) << "send_latest to " << m->get_orig_source_inst()
+	  << " start " << start << dendl;
+  if (start == 0)
+    send_full(m);
+  else
+    send_incremental(m, start);
+  m->put();
 }
 
 
