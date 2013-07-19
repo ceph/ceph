@@ -219,8 +219,10 @@ def task(ctx, config):
 
     overrides = ctx.config.get('overrides', {})
     # merge each client section, not the top level.
-    for (client, cconf) in config.iteritems():
-        teuthology.deep_merge(cconf, overrides.get('s3tests', {}))
+    for client in config.iterkeys():
+        if not config[client]:
+            config[client] = {}
+        teuthology.deep_merge(config[client], overrides.get('s3tests', {}))
 
     log.debug('config is %s', config)
 
