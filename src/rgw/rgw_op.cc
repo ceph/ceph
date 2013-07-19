@@ -334,8 +334,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     ret = store->get_bucket_info(s->obj_ctx, copy_source_str, source_info, NULL);
     if (ret == 0) {
       string& region = source_info.region;
-      s->local_source = (region.empty() && store->region.is_master) ||
-                         (region == store->region.name);
+      s->local_source = store->region.equals(region);
     }
   }
     
@@ -362,8 +361,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     s->bucket_owner = s->bucket_acl->get_owner();
 
     string& region = s->bucket_info.region;
-    if (s->bucket_exists && ((region.empty() && !store->region.is_master) ||
-        (region != store->region.name))) {
+    if (s->bucket_exists && !store->region.equals(region)) {
       ldout(s->cct, 0) << "NOTICE: request for data in a different region (" << region << " != " << store->region.name << ")" << dendl;
       /* we now need to make sure that the operation actually requires copy source, that is
        * it's a copy operation

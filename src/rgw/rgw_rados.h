@@ -619,6 +619,7 @@ struct RGWRegion {
   int read_info(const string& region_name);
   int read_default(RGWDefaultRegionInfo& default_region);
   int set_as_default();
+  int equals(const string& other_region);
 
   static string get_pool_name(CephContext *cct);
 
