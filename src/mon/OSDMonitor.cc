@@ -185,8 +185,12 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     mon->pgmon()->check_osd_map(osdmap.epoch);
   }
 
-  update_logger();
+  send_to_waiting();
+  check_subs();
+
   share_map_with_random_osd();
+  update_logger();
+
   process_failures();
 
   // make sure our feature bits reflect the latest map
@@ -293,9 +297,6 @@ bool OSDMonitor::thrash()
 void OSDMonitor::on_active()
 {
   update_logger();
-
-  send_to_waiting();
-  check_subs();
 
   if (thrash_map && thrash())
     propose_pending();
@@ -1305,7 +1306,6 @@ void OSDMonitor::_reply_map(PaxosServiceMessage *m, epoch_t e)
 {
   dout(7) << "_reply_map " << e
 	  << " from " << m->get_orig_source_inst()
-	  << " for " << m
 	  << dendl;
   send_latest(m, e);
 }
