@@ -3242,15 +3242,18 @@ bool Monitor::ms_handle_reset(Connection *con)
 {
   dout(10) << "ms_handle_reset " << con << " " << con->get_peer_addr() << dendl;
 
-  if (is_shutdown())
-    return false;
-
   // ignore lossless monitor sessions
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
     return false;
 
   MonSession *s = static_cast<MonSession *>(con->get_priv());
   if (!s)
+    return false;
+
+  // break any con <-> session ref cycle
+  s->con->set_priv(NULL);
+
+  if (is_shutdown())
     return false;
 
   Mutex::Locker l(lock);
@@ -3474,16 +3477,16 @@ void Monitor::tick()
       continue; 
 
     if (!s->until.is_zero() && s->until < now) {
-      dout(10) << " trimming session " << s->inst
+      dout(10) << " trimming session " << s->con << " " << s->inst
 	       << " (until " << s->until << " < now " << now << ")" << dendl;
-      messenger->mark_down(s->inst.addr);
+      messenger->mark_down(s->con);
       remove_session(s);
     } else if (!exited_quorum.is_zero()) {
       if (now > (exited_quorum + 2 * g_conf->mon_lease)) {
         // boot the client Session because we've taken too long getting back in
-        dout(10) << " trimming session " << s->inst
-            << " because we've been out of quorum too long" << dendl;
-        messenger->mark_down(s->inst.addr);
+        dout(10) << " trimming session " << s->con << " " << s->inst
+		 << " because we've been out of quorum too long" << dendl;
+        messenger->mark_down(s->con);
         remove_session(s);
       }
     }

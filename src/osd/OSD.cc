@@ -3371,8 +3371,8 @@ void OSD::ms_handle_connect(Connection *con)
 
 bool OSD::ms_handle_reset(Connection *con)
 {
-  dout(1) << "OSD::ms_handle_reset()" << dendl;
   OSD::Session *session = (OSD::Session *)con->get_priv();
+  dout(1) << "ms_handle_reset con " << con << " session " << session << dendl;
   if (!session)
     return false;
   session->wstate.reset();
@@ -5575,7 +5575,9 @@ bool OSD::require_same_or_newer_map(OpRequestRef op, epoch_t epoch)
 	      << " msg was " << m->get_source_inst().addr
 	      << " expected " << (osdmap->have_inst(from) ? osdmap->get_cluster_addr(from) : entity_addr_t())
 	      << dendl;
-      cluster_messenger->mark_down(m->get_connection());
+      ConnectionRef con = m->get_connection();
+      con->set_priv(NULL);   // break ref <-> session cycle, if any
+      cluster_messenger->mark_down(con.get());
       return false;
     }
   }
