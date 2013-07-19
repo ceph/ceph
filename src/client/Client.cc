@@ -1882,7 +1882,7 @@ void Client::handle_mds_map(MMDSMap* m)
     int newstate = mdsmap->get_state(p->first);
     if (!mdsmap->is_up(p->first) ||
 	mdsmap->get_inst(p->first) != p->second->inst) {
-      messenger->mark_down(p->second->inst.addr);
+      messenger->mark_down(p->second->con);
       if (mdsmap->is_up(p->first))
 	p->second->inst = mdsmap->get_inst(p->first);
     } else if (oldstate == newstate)
