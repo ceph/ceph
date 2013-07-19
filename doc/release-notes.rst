@@ -15,7 +15,7 @@ Upgrading
 Notable changes
 ~~~~~~~~~~~~~~~
 
-* osd: pg log (re)writes are not vastly more efficient (faster peering) (Sam Just)
+* osd: pg log (re)writes are now vastly more efficient (faster peering) (Sam Just)
 * osd: fixed problem with front-side heartbeats and mixed clusters (David Zafman)
 * mon: tuning, performance improvements
 * mon: simplify PaxosService vs Paxos interaction, fix readable/writeable checks
