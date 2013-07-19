@@ -728,12 +728,18 @@ void PGMap::recovery_summary(Formatter *f, ostream *out) const
     }
     first = false;
   }
-  if (pg_sum_delta.stats.sum.num_objects_recovered ||
-      pg_sum_delta.stats.sum.num_bytes_recovered ||
-      pg_sum_delta.stats.sum.num_keys_recovered) {
-    int64_t objps = pg_sum_delta.stats.sum.num_objects_recovered / (double)stamp_delta;
-    int64_t bps = pg_sum_delta.stats.sum.num_bytes_recovered / (double)stamp_delta;
-    int64_t kps = pg_sum_delta.stats.sum.num_keys_recovered / (double)stamp_delta;
+
+  // make non-negative; we can get negative values if osds send
+  // uncommitted stats and then "go backward" or if they are just
+  // buggy/wrong.
+  pool_stat_t pos_delta = pg_sum_delta;
+  pos_delta.floor(0);
+  if (pos_delta.stats.sum.num_objects_recovered ||
+      pos_delta.stats.sum.num_bytes_recovered ||
+      pos_delta.stats.sum.num_keys_recovered) {
+    int64_t objps = pos_delta.stats.sum.num_objects_recovered / (double)stamp_delta;
+    int64_t bps = pos_delta.stats.sum.num_bytes_recovered / (double)stamp_delta;
+    int64_t kps = pos_delta.stats.sum.num_keys_recovered / (double)stamp_delta;
     if (f) {
       f->dump_int("recovering_objects_per_sec", objps);
       f->dump_int("recovering_bytes_per_sec", bps);
@@ -744,7 +750,7 @@ void PGMap::recovery_summary(Formatter *f, ostream *out) const
       *out << " recovering "
 	   << si_t(objps) << " o/s, "
 	   << si_t(bps) << "B/s";
-      if (pg_sum_delta.stats.sum.num_keys_recovered)
+      if (pos_delta.stats.sum.num_keys_recovered)
 	*out << ", " << si_t(kps) << " key/s";
     }
   }
@@ -815,27 +821,32 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
 	 << kb_t(osd_sum.kb) << " avail";
   }
 
-  if (pg_sum_delta.stats.sum.num_rd ||
-      pg_sum_delta.stats.sum.num_wr) {
+  // make non-negative; we can get negative values if osds send
+  // uncommitted stats and then "go backward" or if they are just
+  // buggy/wrong.
+  pool_stat_t pos_delta = pg_sum_delta;
+  pos_delta.floor(0);
+  if (pos_delta.stats.sum.num_rd ||
+      pos_delta.stats.sum.num_wr) {
     if (!f)
       *out << "; ";
-    if (pg_sum_delta.stats.sum.num_rd) {
-      int64_t rd = (pg_sum_delta.stats.sum.num_rd_kb << 10) / (double)stamp_delta;
+    if (pos_delta.stats.sum.num_rd) {
+      int64_t rd = (pos_delta.stats.sum.num_rd_kb << 10) / (double)stamp_delta;
       if (f) {
 	f->dump_int("read_bytes_sec", rd);
       } else {
 	*out << si_t(rd) << "B/s rd, ";
       }
     }
-    if (pg_sum_delta.stats.sum.num_wr) {
-      int64_t wr = (pg_sum_delta.stats.sum.num_wr_kb << 10) / (double)stamp_delta;
+    if (pos_delta.stats.sum.num_wr) {
+      int64_t wr = (pos_delta.stats.sum.num_wr_kb << 10) / (double)stamp_delta;
       if (f) {
 	f->dump_int("write_bytes_sec", wr);
       } else {
 	*out << si_t(wr) << "B/s wr, ";
       }
     }
-    int64_t iops = (pg_sum_delta.stats.sum.num_rd + pg_sum_delta.stats.sum.num_wr) / (double)stamp_delta;
+    int64_t iops = (pos_delta.stats.sum.num_rd + pos_delta.stats.sum.num_wr) / (double)stamp_delta;
     if (f) {
       f->dump_int("op_per_sec", iops);
     } else {
