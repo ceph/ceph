@@ -7,41 +7,11 @@ from cStringIO import StringIO
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
+from teuthology.task_util.rgw import rgwadmin
 from ..orchestra import run
 import ceph_manager
 
 log = logging.getLogger(__name__)
-
-# this was lifted from radosgw-admin-rest.
-def rgwadmin(ctx, remote, cmd):
-    log.info('radosgw-admin: %s' % cmd)
-    testdir = teuthology.get_testdir(ctx)
-    pre = [
-        '{tdir}/adjust-ulimits'.format(tdir=testdir),
-        'ceph-coverage'.format(tdir=testdir),
-        '{tdir}/archive/coverage'.format(tdir=testdir),
-        'radosgw-admin'.format(tdir=testdir),
-        '--log-to-stderr',
-        '--format', 'json',
-        ]
-    pre.extend(cmd)
-    proc = remote.run(
-        args=pre,
-        check_status=False,
-        stdout=StringIO(),
-        stderr=StringIO(),
-        )
-    r = proc.exitstatus
-    out = proc.stdout.getvalue()
-    j = None
-    if not r and out != '':
-        try:
-            j = json.loads(out)
-            log.info(' json result: %s' % j)
-        except ValueError:
-            j = out
-            log.info(' raw result: %s' % j)
-    return (r, j)
 
 # this was lifted from lost_unfound.py
 def rados(ctx, remote, cmd):

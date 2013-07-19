@@ -15,6 +15,7 @@ import boto.s3.acl
 import time
 
 from teuthology import misc as teuthology
+from teuthology.task.util.rgw import rgwadmin
 
 log = logging.getLogger(__name__)
 
@@ -24,38 +25,6 @@ def successful_ops(out):
         return 0
     entry = summary[0]
     return entry['total']['successful_ops']
-
-def rgwadmin(ctx, client, cmd, stdin=StringIO()):
-    log.info('radosgw-admin: %s' % cmd)
-    testdir = teuthology.get_testdir(ctx)
-    pre = [
-        '{tdir}/adjust-ulimits'.format(tdir=testdir),
-        'ceph-coverage'.format(tdir=testdir),
-        '{tdir}/archive/coverage'.format(tdir=testdir),
-        'radosgw-admin'.format(tdir=testdir),
-        '--log-to-stderr',
-        '--format', 'json',
-        ]
-    pre.extend(cmd)
-    (remote,) = ctx.cluster.only(client).remotes.iterkeys()
-    proc = remote.run(
-        args=pre,
-        check_status=False,
-        stdout=StringIO(),
-        stderr=StringIO(),
-        stdin=stdin,
-        )
-    r = proc.exitstatus
-    out = proc.stdout.getvalue()
-    j = None
-    if not r and out != '':
-        try:
-            j = json.loads(out)
-            log.info(' json result: %s' % j)
-        except ValueError:
-            j = out
-            log.info(' raw result: %s' % j)
-    return (r, j)
 
 def task(ctx, config):
     """
