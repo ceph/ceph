@@ -1776,6 +1776,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
 			    map<std::string, bufferlist>& attrs,
                             RGWBucketInfo& info,
                             obj_version *pobjv,
+                            obj_version *pep_objv,
                             time_t creation_time,
                             rgw_bucket *pmaster_bucket,
 			    bool exclusive)
@@ -1833,7 +1834,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
       time(&info.creation_time);
     else
       info.creation_time = creation_time;
-    ret = put_linked_bucket_info(info, exclusive, 0, &attrs, true);
+    ret = put_linked_bucket_info(info, exclusive, 0, pep_objv, &attrs, true);
     if (ret == -EEXIST) {
        /* we need to reread the info and return it, caller will have a use for it */
       r = get_bucket_info(NULL, bucket.name, info, NULL, NULL);
@@ -3074,7 +3075,7 @@ int RGWRados::defer_gc(void *ctx, rgw_obj& obj)
  * obj: name of the object to delete
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj)
+int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj, RGWObjVersionTracker *objv_tracker)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -3100,6 +3101,11 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj)
   r = prepare_update_index(state, bucket, CLS_RGW_OP_DEL, obj, tag);
   if (r < 0)
     return r;
+
+  if (objv_tracker) {
+    objv_tracker->prepare_op_for_write(&op);
+  }
+
   cls_refcount_put(op, tag, true);
   r = io_ctx.operate(oid, &op);
   bool removed = (r >= 0);
@@ -3133,11 +3139,11 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj)
   return 0;
 }
 
-int RGWRados::delete_obj(void *ctx, rgw_obj& obj)
+int RGWRados::delete_obj(void *ctx, rgw_obj& obj, RGWObjVersionTracker *objv_tracker)
 {
   int r;
 
-  r = delete_obj_impl(ctx, obj);
+  r = delete_obj_impl(ctx, obj, objv_tracker);
   if (r == -ECANCELED)
     r = 0;
 
@@ -4606,7 +4612,8 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
 
   RGWBucketEntryPoint entry_point;
   time_t ep_mtime;
-  int ret = get_bucket_entrypoint_info(ctx, bucket_name, entry_point, NULL, &ep_mtime);
+  RGWObjVersionTracker ot;
+  int ret = get_bucket_entrypoint_info(ctx, bucket_name, entry_point, &ot, &ep_mtime);
   if (ret < 0) {
     info.bucket.name = bucket_name; /* only init this field */
     return ret;
@@ -4614,6 +4621,7 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
 
   if (entry_point.has_bucket_info) {
     info = entry_point.old_bucket_info;
+    info.ep_objv = ot.read_version;
     ldout(cct, 20) << "rgw_get_bucket_info: old bucket info, bucket=" << info.bucket << " owner " << info.owner << dendl;
     return 0;
   }
@@ -4629,6 +4637,7 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
   get_bucket_meta_oid(entry_point.bucket, oid);
 
   ret = get_bucket_instance_from_oid(ctx, oid, info, pmtime, pattrs);
+  info.ep_objv = ot.read_version;
   if (ret < 0) {
     info.bucket.name = bucket_name;
     return ret;
@@ -4657,7 +4666,7 @@ int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
   return rgw_bucket_instance_store_info(this, key, bl, exclusive, pattrs, &info.objv_tracker, mtime);
 }
 
-int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, time_t mtime,
+int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, time_t mtime, obj_version *pep_objv,
                                      map<string, bufferlist> *pattrs, bool create_entry_point)
 {
   bufferlist bl;
@@ -4678,7 +4687,14 @@ int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, time_t
   entry_point.creation_time = info.creation_time;
   entry_point.linked = true;
   RGWObjVersionTracker ot;
-  ot.generate_new_write_ver(cct);
+  if (pep_objv && !pep_objv->tag.empty()) {
+    ot.write_version = *pep_objv;
+  } else {
+    ot.generate_new_write_ver(cct);
+    if (pep_objv) {
+      *pep_objv = ot.write_version;
+    }
+  }
   ret = put_bucket_entrypoint_info(info.bucket.name, entry_point, exclusive, ot, mtime); 
   if (ret < 0)
     return ret;
