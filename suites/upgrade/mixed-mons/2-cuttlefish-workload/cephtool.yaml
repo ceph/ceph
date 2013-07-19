@@ -2,6 +2,6 @@
     branch: cuttlefish
     clients:
       all:
-        - cephtool
+        - cephtool/test.sh
         - mon/pool_ops.sh
 
