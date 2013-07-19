@@ -509,8 +509,11 @@ public:
     return quorum_features;
   }
 
+private:
+  void _reset();   ///< called from bootstrap, start_, or join_election
+public:
   void bootstrap();
-  void reset();
+  void join_election();
   void start_election();
   void win_standalone_election();
   void win_election(epoch_t epoch, set<int>& q,
@@ -785,6 +788,7 @@ public:
     bool _check_gv_store();
 
     void _init() {
+      assert(!store);
       MonitorStore *store_ptr = new MonitorStore(path);
       store.reset(store_ptr);
     }

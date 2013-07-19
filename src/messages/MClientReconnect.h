@@ -53,6 +53,7 @@ public:
   }
 
   void encode_payload(uint64_t features) {
+    data.clear();
     if (features & CEPH_FEATURE_MDSENC) {
       ::encode(caps, data);
     } else if (features & CEPH_FEATURE_FLOCK) {

@@ -172,7 +172,9 @@ struct Connection : private RefCountedObject {
   RefCountedObject *priv;
   int peer_type;
   entity_addr_t peer_addr;
+private:
   uint64_t features;
+public:
   RefCountedObject *pipe;
   bool failed;              /// true if we are a lossy connection that has failed.
 

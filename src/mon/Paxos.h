@@ -983,7 +983,19 @@ private:
    * Begin proposing the Proposal at the front of the proposals queue.
    */
   void propose_queued();
-  void finish_proposal();
+
+  /**
+   * refresh state from store
+   *
+   * Called when we have new state for the mon to consume.  If we return false,
+   * abort (we triggered a bootstrap).
+   *
+   * @returns true on success, false if we are now bootstrapping
+   */
+  bool do_refresh();
+
+  void commit_proposal();
+  void finish_round();
 
 public:
   /**
@@ -1018,6 +1030,12 @@ public:
   void read_and_prepare_transactions(MonitorDBStore::Transaction *tx, version_t from, version_t last);
 
   void init();
+
+  /**
+   * dump state info to a formatter
+   */
+  void dump_info(Formatter *f);
+
   /**
    * This function runs basic consistency checks. Importantly, if
    * it is inconsistent and shouldn't be, it asserts out.

@@ -126,6 +126,8 @@ void _usage()
   cerr << "                               mdlog trim\n";
   cerr << "                               replica mdlog get/delete\n";
   cerr << "                               replica datalog get/delete\n";
+  cerr << "   --rgw-region=<region>     region in which radosgw is running\n";
+  cerr << "   --rgw-zone=<zone>         zone in which radosgw is running\n";
   cerr << "   --fix                     besides checking bucket index, will also fix it\n";
   cerr << "   --check-objects           bucket check: rebuilds bucket index according to\n";
   cerr << "                             actual objects state\n";

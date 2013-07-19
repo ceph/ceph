@@ -185,12 +185,8 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     mon->pgmon()->check_osd_map(osdmap.epoch);
   }
 
-  send_to_waiting();
-  check_subs();
-
-  share_map_with_random_osd();
   update_logger();
-
+  share_map_with_random_osd();
   process_failures();
 
   // make sure our feature bits reflect the latest map
@@ -298,14 +294,38 @@ void OSDMonitor::on_active()
 {
   update_logger();
 
-  if (thrash_map && thrash())
-    propose_pending();
+  send_to_waiting();
+  check_subs();
+
+  if (thrash_map) {
+    if (mon->is_leader()) {
+      if (thrash())
+	propose_pending();
+    } else {
+      thrash_map = 0;
+    }
+  }
 
   if (mon->is_leader())
     mon->clog.info() << "osdmap " << osdmap << "\n"; 
 
   if (!mon->is_leader()) {
     kick_all_failures();
+  }
+}
+
+void OSDMonitor::on_shutdown()
+{
+  dout(10) << __func__ << dendl;
+  map<epoch_t, list<PaxosServiceMessage*> >::iterator p = waiting_for_map.begin();
+  while (p != waiting_for_map.end()) {
+    while (!p->second.empty()) {
+      Message *m = p->second.front();
+      dout(20) << " discarding " << m << " " << *m << dendl;
+      m->put();
+      p->second.pop_front();
+    }
+    waiting_for_map.erase(p++);
   }
 }
 
@@ -1291,6 +1311,7 @@ void OSDMonitor::_reply_map(PaxosServiceMessage *m, epoch_t e)
 {
   dout(7) << "_reply_map " << e
 	  << " from " << m->get_orig_source_inst()
+	  << " for " << m
 	  << dendl;
   send_latest(m, e);
 }
@@ -1911,6 +1932,8 @@ void OSDMonitor::dump_info(Formatter *f)
   f->open_object_section("osdmap");
   osdmap.dump(f);
   f->close_section();
+
+  f->dump_unsigned("osdmap_first_committed", get_first_committed());
 
   f->open_object_section("crushmap");
   osdmap.crush->dump(f);
@@ -2647,7 +2670,11 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     int bucketno = newcrush.add_bucket(0, CRUSH_BUCKET_STRAW,
 				       CRUSH_HASH_DEFAULT, type, 0, NULL,
 				       NULL);
-    newcrush.set_item_name(bucketno, name);
+    err = newcrush.set_item_name(bucketno, name);
+    if (err < 0) {
+      ss << "error setting bucket name to '" << name << "'";
+      goto reply;
+    }
 
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush);
@@ -3289,30 +3316,33 @@ done:
     if (pool < 0) {
       ss << "unrecognized pool '" << poolstr << "'";
       err = -ENOENT;
-    } else {
-      const pg_pool_t *p = osdmap.get_pg_pool(pool);
-      pg_pool_t *pp = 0;
-      if (pending_inc.new_pools.count(pool))
-	pp = &pending_inc.new_pools[pool];
-      string snapname;
-      cmd_getval(g_ceph_context, cmdmap, "snap", snapname);
-      if (p->snap_exists(snapname.c_str()) ||
-	  (pp && pp->snap_exists(snapname.c_str()))) {
-	ss << "pool " << poolstr << " snap " << snapname << " already exists";
-	err = 0;
-      } else {
-	if (!pp) {
-	  pp = &pending_inc.new_pools[pool];
-	  *pp = *p;
-	}
-	pp->add_snap(snapname.c_str(), ceph_clock_now(g_ceph_context));
-	pp->set_snap_epoch(pending_inc.epoch);
-	ss << "created pool " << poolstr << " snap " << snapname;
-	getline(ss, rs);
-	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
-	return true;
-      }
+      goto reply;
     }
+    string snapname;
+    cmd_getval(g_ceph_context, cmdmap, "snap", snapname);
+    const pg_pool_t *p = osdmap.get_pg_pool(pool);
+    if (p->snap_exists(snapname.c_str())) {
+      ss << "pool " << poolstr << " snap " << snapname << " already exists";
+      err = 0;
+      goto reply;
+    }
+    pg_pool_t *pp = 0;
+    if (pending_inc.new_pools.count(pool))
+      pp = &pending_inc.new_pools[pool];
+    if (!pp) {
+      pp = &pending_inc.new_pools[pool];
+      *pp = *p;
+    }
+    if (pp->snap_exists(snapname.c_str())) {
+      ss << "pool " << poolstr << " snap " << snapname << " already exists";
+    } else {
+      pp->add_snap(snapname.c_str(), ceph_clock_now(g_ceph_context));
+      pp->set_snap_epoch(pending_inc.epoch);
+      ss << "created pool " << poolstr << " snap " << snapname;
+    }
+    getline(ss, rs);
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    return true;
   } else if (prefix == "osd pool rmsnap") {
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
@@ -3320,32 +3350,34 @@ done:
     if (pool < 0) {
       ss << "unrecognized pool '" << poolstr << "'";
       err = -ENOENT;
-    } else {
-      const pg_pool_t *p = osdmap.get_pg_pool(pool);
-      pg_pool_t *pp = 0;
-      if (pending_inc.new_pools.count(pool))
-	pp = &pending_inc.new_pools[pool];
-      string snapname;
-      cmd_getval(g_ceph_context, cmdmap, "snap", snapname);
-      if (!p->snap_exists(snapname.c_str()) &&
-	  (!pp || !pp->snap_exists(snapname.c_str()))) {
-	ss << "pool " << poolstr << " snap " << snapname << " does not exist";
-	err = 0;
-      } else {
-	if (!pp) {
-	  pp = &pending_inc.new_pools[pool];
-	  *pp = *p;
-	}
-	snapid_t sn = pp->snap_exists(snapname.c_str());
-	pp->remove_snap(sn);
-	pp->set_snap_epoch(pending_inc.epoch);
-	ss << "removed pool " << poolstr << " snap " << snapname;
-	getline(ss, rs);
-	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
-	return true;
-      }
+      goto reply;
     }
-
+    string snapname;
+    cmd_getval(g_ceph_context, cmdmap, "snap", snapname);
+    const pg_pool_t *p = osdmap.get_pg_pool(pool);
+    if (!p->snap_exists(snapname.c_str())) {
+      ss << "pool " << poolstr << " snap " << snapname << " does not exist";
+      err = 0;
+      goto reply;
+    }
+    pg_pool_t *pp = 0;
+    if (pending_inc.new_pools.count(pool))
+      pp = &pending_inc.new_pools[pool];
+    if (!pp) {
+      pp = &pending_inc.new_pools[pool];
+      *pp = *p;
+    }
+    snapid_t sn = pp->snap_exists(snapname.c_str());
+    if (sn) {
+      pp->remove_snap(sn);
+      pp->set_snap_epoch(pending_inc.epoch);
+      ss << "removed pool " << poolstr << " snap " << snapname;
+    } else {
+      ss << "already removed pool " << poolstr << " snap " << snapname;
+    }
+    getline(ss, rs);
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    return true;
   } else if (prefix == "osd pool create") {
     int64_t  pg_num;
     int64_t pgp_num;

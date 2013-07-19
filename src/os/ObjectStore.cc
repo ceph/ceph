@@ -422,6 +422,20 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
       }
       break;
 
+    case Transaction::OP_OMAP_RMKEYRANGE:
+      {
+	coll_t cid(i.get_cid());
+	hobject_t oid = i.get_oid();
+	string first, last;
+	first = i.get_key();
+	last = i.get_key();
+	f->dump_string("op_name", "op_omap_rmkeyrange");
+	f->dump_stream("collection") << cid;
+	f->dump_stream("oid") << oid;
+	f->dump_string("first", first);
+	f->dump_string("last", last);
+      }
+
     default:
       f->dump_string("op_name", "unknown");
       f->dump_unsigned("op_code", op);

@@ -821,6 +821,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
     if (osd_op.op.op == CEPH_OSD_OP_LIST_SNAPS &&
 	m->get_snapid() != CEPH_SNAPDIR) {
       dout(10) << "LIST_SNAPS with incorrect context" << dendl;
+      put_object_context(obc);
       osd->reply_op_error(op, -EINVAL);
       return;
     }
@@ -7502,15 +7503,18 @@ void ReplicatedPG::scan_range(hobject_t begin, int min, int max, BackfillInterva
 }
 
 
-/** clean_up_local
- * remove any objects that we're storing but shouldn't.
- * as determined by log.
+/** check_local
+ * 
+ * verifies that stray objects have been deleted
  */
-void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
+void ReplicatedPG::check_local()
 {
-  dout(10) << "clean_up_local" << dendl;
+  dout(10) << __func__ << dendl;
 
   assert(info.last_update >= pg_log.get_tail());  // otherwise we need some help!
+
+  if (!g_conf->osd_debug_verify_stray_on_activate)
+    return;
 
   // just scan the log.
   set<hobject_t> did;
@@ -7522,11 +7526,17 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
     did.insert(p->soid);
 
     if (p->is_delete()) {
-      dout(10) << " deleting " << p->soid
-	       << " when " << p->version << dendl;
-      remove_snap_mapped_object(t, p->soid);
+      dout(10) << " checking " << p->soid
+	       << " at " << p->version << dendl;
+      struct stat st;
+      int r = osd->store->stat(coll, p->soid, &st);
+      if (r != -ENOENT) {
+	dout(10) << "Object " << p->soid << " exists, but should have been "
+		 << "deleted" << dendl;
+	assert(0 == "erroneously present object");
+      }
     } else {
-      // keep old(+missing) objects, just for kicks.
+      // ignore old(+missing) objects
     }
   }
 }

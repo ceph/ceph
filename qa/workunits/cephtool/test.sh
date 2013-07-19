@@ -79,10 +79,8 @@ if ! grep "$mymsg" /tmp/$$; then
 fi
 kill $wpid
 
-ceph mds cluster_down --no-log-to-stderr 2>&1 | grep "marked mdsmap DOWN"
-expect_false ceph mds cluster_down
-ceph mds cluster_up --no-log-to-stderr 2>&1 | grep "unmarked mdsmap DOWN"
-expect_false ceph mds cluster_up
+ceph mds cluster_down
+ceph mds cluster_up
 
 ceph mds compat rm_incompat 4
 ceph mds compat rm_incompat 4
@@ -167,9 +165,20 @@ ceph osd getmaxosd | grep 'max_osd = 10'
 ceph osd setmaxosd $save
 ceph osd getmaxosd | grep "max_osd = $save"
 
+for id in `ceph osd ls` ; do
+	ceph tell osd.$id version
+done
+
 id=`ceph osd create`
 ceph osd lost $id --yes-i-really-mean-it
 ceph osd rm $id
+
+uuid=`uuidgen`
+id=`ceph osd create $uuid`
+id2=`ceph osd create $uuid`
+[ "$id" = "$id2" ]
+ceph osd rm $id
+
 ceph osd ls
 ceph osd lspools | grep data
 ceph osd map data foo | grep 'pool.*data.*object.*foo.*pg.*up.*acting'
@@ -190,11 +199,6 @@ ceph osd lspools | grep data3
 ceph osd pool delete data3 data3 --yes-i-really-really-mean-it
 
 ceph osd stat | grep up,
-
-for id in `ceph osd ls` ; do
-	ceph tell osd.$id version
-done
-
 
 ceph pg debug unfound_objects_exist
 ceph pg debug degraded_pgs_exist

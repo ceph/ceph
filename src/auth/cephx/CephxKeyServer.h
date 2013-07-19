@@ -268,6 +268,9 @@ public:
     map<EntityName, EntityAuth>::const_iterator b = data.secrets_begin();
     return (b != data.secrets_end());
   }
+  int get_num_secrets() {
+    return data.secrets.size();
+  }
 
   /*void add_rotating_secret(uint32_t service_id, ExpiringCryptoKey& key) {
     Mutex::Locker l(lock);

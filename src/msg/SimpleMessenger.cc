@@ -276,9 +276,10 @@ int SimpleMessenger::bind(const entity_addr_t &bind_addr)
 int SimpleMessenger::rebind(const set<int>& avoid_ports)
 {
   ldout(cct,1) << "rebind avoid " << avoid_ports << dendl;
-  mark_down_all();
   assert(did_bind);
-  return accepter.rebind(avoid_ports);
+  int r = accepter.rebind(avoid_ports);
+  mark_down_all();
+  return r;
 }
 
 int SimpleMessenger::start()
@@ -311,6 +312,7 @@ Pipe *SimpleMessenger::add_accept_pipe(int sd)
   p->start_reader();
   p->pipe_lock.Unlock();
   pipes.insert(p);
+  accepting_pipes.insert(p);
   lock.Unlock();
   return p;
 }
@@ -559,6 +561,18 @@ void SimpleMessenger::mark_down_all()
 {
   ldout(cct,1) << "mark_down_all" << dendl;
   lock.Lock();
+  for (set<Pipe*>::iterator q = accepting_pipes.begin(); q != accepting_pipes.end(); ++q) {
+    Pipe *p = *q;
+    ldout(cct,5) << "mark_down_all accepting_pipe " << p << dendl;
+    p->pipe_lock.Lock();
+    p->stop();
+    ConnectionRef con = p->connection_state;
+    if (con && con->clear_pipe(p))
+      dispatch_queue.queue_reset(con.get());
+    p->pipe_lock.Unlock();
+  }
+  accepting_pipes.clear();
+
   while (!rank_pipe.empty()) {
     hash_map<entity_addr_t,Pipe*>::iterator it = rank_pipe.begin();
     Pipe *p = it->second;
@@ -585,9 +599,12 @@ void SimpleMessenger::mark_down(const entity_addr_t& addr)
     p->pipe_lock.Lock();
     p->stop();
     if (p->connection_state) {
-      // do not generate a reset event for the caller in this case,
-      // since they asked for it.
-      p->connection_state->clear_pipe(p);
+      // generate a reset event for the caller in this case, even
+      // though they asked for it, since this is the addr-based (and
+      // not Connection* based) interface
+      ConnectionRef con = p->connection_state;
+      if (con && con->clear_pipe(p))
+	dispatch_queue.queue_reset(con.get());
     }
     p->pipe_lock.Unlock();
   } else {

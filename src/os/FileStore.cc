@@ -99,6 +99,7 @@ static const __SWORD_TYPE XFS_SUPER_MAGIC(0x58465342);
 #define CLUSTER_SNAP_ITEM "clustersnap_%s"
 
 #define REPLAY_GUARD_XATTR "user.cephos.seq"
+#define GLOBAL_REPLAY_GUARD_XATTR "user.cephos.gseq"
 
 /*
  * long file names will have the following format:
@@ -467,6 +468,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   plb.add_time_avg(l_os_commit_len, "commitcycle_interval");
   plb.add_time_avg(l_os_commit_lat, "commitcycle_latency");
   plb.add_u64_counter(l_os_j_full, "journal_full");
+  plb.add_time_avg(l_os_queue_lat, "queue_transaction_latency_avg");
 
   logger = plb.create_perf_counters();
 
@@ -1954,6 +1956,7 @@ void FileStore::op_queue_reserve_throttle(Op *o)
   logger->set(l_os_oq_max_ops, max_ops);
   logger->set(l_os_oq_max_bytes, max_bytes);
 
+  utime_t start = ceph_clock_now(g_ceph_context);
   {
     Mutex::Locker l(op_throttle_lock);
     while ((max_ops && (op_queue_len + 1) > max_ops) ||
@@ -1967,6 +1970,8 @@ void FileStore::op_queue_reserve_throttle(Op *o)
     op_queue_len++;
     op_queue_bytes += o->bytes;
   }
+  utime_t end = ceph_clock_now(g_ceph_context);
+  logger->tinc(l_os_queue_lat, end - start);
 
   logger->set(l_os_oq_ops, op_queue_len);
   logger->set(l_os_oq_bytes, op_queue_bytes);
@@ -2178,6 +2183,78 @@ int FileStore::_do_transactions(
   return r;
 }
 
+void FileStore::_set_global_replay_guard(coll_t cid,
+					 const SequencerPosition &spos)
+{
+  if (btrfs_stable_commits)
+    return;
+
+  // sync all previous operations on this sequencer
+  sync_filesystem(basedir_fd);
+
+  char fn[PATH_MAX];
+  get_cdir(cid, fn, sizeof(fn));
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    int err = errno;
+    derr << __func__ << ": " << cid << " error " << cpp_strerror(err) << dendl;
+    assert(0 == "_set_global_replay_guard failed");
+  }
+
+  _inject_failure();
+
+  // then record that we did it
+  bufferlist v;
+  ::encode(spos, v);
+  int r = chain_fsetxattr(fd, GLOBAL_REPLAY_GUARD_XATTR, v.c_str(), v.length());
+  if (r < 0) {
+    derr << __func__ << ": fsetxattr " << GLOBAL_REPLAY_GUARD_XATTR
+	 << " got " << cpp_strerror(r) << dendl;
+    assert(0 == "fsetxattr failed");
+  }
+
+  // and make sure our xattr is durable.
+  ::fsync(fd);
+
+  _inject_failure();
+
+  TEMP_FAILURE_RETRY(::close(fd));
+  dout(10) << __func__ << ": " << spos << " done" << dendl;
+}
+
+int FileStore::_check_global_replay_guard(coll_t cid,
+					  const SequencerPosition& spos)
+{
+  if (!replaying || btrfs_stable_commits)
+    return 1;
+
+  char fn[PATH_MAX];
+  get_cdir(cid, fn, sizeof(fn));
+  int fd = ::open(fn, O_RDONLY);
+  if (fd < 0) {
+    dout(10) << __func__ << ": " << cid << " dne" << dendl;
+    return 1;  // if collection does not exist, there is no guard, and we can replay.
+  }
+
+  char buf[100];
+  int r = chain_fgetxattr(fd, GLOBAL_REPLAY_GUARD_XATTR, buf, sizeof(buf));
+  if (r < 0) {
+    dout(20) << __func__ << " no xattr" << dendl;
+    assert(!m_filestore_fail_eio || r != -EIO);
+    return 1;  // no xattr
+  }
+  bufferlist bl;
+  bl.append(buf, r);
+
+  SequencerPosition opos;
+  bufferlist::iterator p = bl.begin();
+  ::decode(opos, p);
+
+  TEMP_FAILURE_RETRY(::close(fd));
+  return spos >= opos ? 1 : -1;
+}
+
+
 void FileStore::_set_replay_guard(coll_t cid,
                                   const SequencerPosition &spos,
                                   bool in_progress=false)
@@ -2283,8 +2360,12 @@ int FileStore::_check_replay_guard(coll_t cid, hobject_t oid, const SequencerPos
   if (!replaying || btrfs_stable_commits)
     return 1;
 
+  int r = _check_global_replay_guard(cid, spos);
+  if (r < 0)
+    return r;
+
   FDRef fd;
-  int r = lfn_open(cid, oid, false, &fd);
+  r = lfn_open(cid, oid, false, &fd);
   if (r < 0) {
     dout(10) << "_check_replay_guard " << cid << " " << oid << " dne" << dendl;
     return 1;  // if file does not exist, there is no guard, and we can replay.
@@ -4220,6 +4301,9 @@ int FileStore::_collection_rename(const coll_t &cid, const coll_t &ncid,
   get_cdir(cid, old_coll, sizeof(old_coll));
   get_cdir(ncid, new_coll, sizeof(new_coll));
 
+  _set_global_replay_guard(cid, spos);
+  _set_replay_guard(cid, spos);
+
   if (_check_replay_guard(cid, spos) < 0) {
     return 0;
   }
@@ -4743,6 +4827,7 @@ int FileStore::_split_collection(coll_t cid,
     if (srccmp < 0)
       return 0;
 
+    _set_global_replay_guard(cid, spos);
     _set_replay_guard(cid, spos, true);
     _set_replay_guard(dest, spos, true);
 
