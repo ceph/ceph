@@ -731,13 +731,13 @@ void PGMap::recovery_summary(Formatter *f, ostream *out) const
   if (pg_sum_delta.stats.sum.num_objects_recovered ||
       pg_sum_delta.stats.sum.num_bytes_recovered ||
       pg_sum_delta.stats.sum.num_keys_recovered) {
-    uint64_t objps = pg_sum_delta.stats.sum.num_objects_recovered / (double)stamp_delta;
-    uint64_t bps = pg_sum_delta.stats.sum.num_bytes_recovered / (double)stamp_delta;
-    uint64_t kps = pg_sum_delta.stats.sum.num_keys_recovered / (double)stamp_delta;
+    int64_t objps = pg_sum_delta.stats.sum.num_objects_recovered / (double)stamp_delta;
+    int64_t bps = pg_sum_delta.stats.sum.num_bytes_recovered / (double)stamp_delta;
+    int64_t kps = pg_sum_delta.stats.sum.num_keys_recovered / (double)stamp_delta;
     if (f) {
-      f->dump_unsigned("recovering_objects_per_sec", objps);
-      f->dump_unsigned("recovering_bytes_per_sec", bps);
-      f->dump_unsigned("recovering_keys_per_sec", kps);
+      f->dump_int("recovering_objects_per_sec", objps);
+      f->dump_int("recovering_bytes_per_sec", bps);
+      f->dump_int("recovering_keys_per_sec", kps);
     } else {
       if (!first)
 	*out << "; ";
@@ -820,24 +820,24 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
     if (!f)
       *out << "; ";
     if (pg_sum_delta.stats.sum.num_rd) {
-      uint64_t rd = (pg_sum_delta.stats.sum.num_rd_kb << 10) / (double)stamp_delta;
+      int64_t rd = (pg_sum_delta.stats.sum.num_rd_kb << 10) / (double)stamp_delta;
       if (f) {
-	f->dump_unsigned("read_bytes_sec", rd);
+	f->dump_int("read_bytes_sec", rd);
       } else {
 	*out << si_t(rd) << "B/s rd, ";
       }
     }
     if (pg_sum_delta.stats.sum.num_wr) {
-      uint64_t wr = (pg_sum_delta.stats.sum.num_wr_kb << 10) / (double)stamp_delta;
+      int64_t wr = (pg_sum_delta.stats.sum.num_wr_kb << 10) / (double)stamp_delta;
       if (f) {
-	f->dump_unsigned("write_bytes_sec", wr);
+	f->dump_int("write_bytes_sec", wr);
       } else {
 	*out << si_t(wr) << "B/s wr, ";
       }
     }
-    uint64_t iops = (pg_sum_delta.stats.sum.num_rd + pg_sum_delta.stats.sum.num_wr) / (double)stamp_delta;
+    int64_t iops = (pg_sum_delta.stats.sum.num_rd + pg_sum_delta.stats.sum.num_wr) / (double)stamp_delta;
     if (f) {
-      f->dump_unsigned("op_per_sec", iops);
+      f->dump_int("op_per_sec", iops);
     } else {
       *out << si_t(iops) << "op/s";
     }
