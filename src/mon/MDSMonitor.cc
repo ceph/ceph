@@ -529,6 +529,8 @@ void MDSMonitor::dump_info(Formatter *f)
   f->open_object_section("mdsmap");
   mdsmap.dump(f);
   f->close_section();
+
+  f->dump_unsigned("mdsmap_first_committed", get_first_committed());
 }
 
 bool MDSMonitor::preprocess_command(MMonCommand *m)
@@ -884,23 +886,19 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
   } else if (prefix == "mds cluster_down") {
     if (pending_mdsmap.test_flag(CEPH_MDSMAP_DOWN)) {
       ss << "mdsmap already marked DOWN";
-      r = -EPERM;
     } else {
       pending_mdsmap.set_flag(CEPH_MDSMAP_DOWN);
       ss << "marked mdsmap DOWN";
-      r = 0;
     }
-
+    r = 0;
   } else if (prefix == "mds cluster_up") {
     if (pending_mdsmap.test_flag(CEPH_MDSMAP_DOWN)) {
       pending_mdsmap.clear_flag(CEPH_MDSMAP_DOWN);
       ss << "unmarked mdsmap DOWN";
-      r = 0;
     } else {
       ss << "mdsmap not marked DOWN";
-      r = -EPERM;
     }
-
+    r = 0;
   } else if (prefix == "mds compat rm_compat") {
     int64_t f;
     cmd_getval(g_ceph_context, cmdmap, "feature", f);
@@ -935,6 +933,8 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
     int64_t poolid;
     cmd_getval(g_ceph_context, cmdmap, "poolid", poolid);
     r = pending_mdsmap.remove_data_pool(poolid);
+    if (r == -ENOENT)
+      r = 0;
     if (r == 0)
       ss << "removed data pool " << poolid << " from mdsmap";
 

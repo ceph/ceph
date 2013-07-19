@@ -137,12 +137,13 @@ bool MonmapMonitor::preprocess_query(PaxosServiceMessage *m)
 
 void MonmapMonitor::dump_info(Formatter *f)
 {
+  f->dump_unsigned("monmap_first_committed", get_first_committed());
   f->open_object_section("monmap");
   mon->monmap->dump(f);
+  f->close_section();
   f->open_array_section("quorum");
   for (set<int>::iterator q = mon->get_quorum().begin(); q != mon->get_quorum().end(); ++q)
     f->dump_int("mon", *q);
-  f->close_section();
   f->close_section();
 }
 

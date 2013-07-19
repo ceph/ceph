@@ -644,7 +644,7 @@ void Monitor::bootstrap()
   // reset
   state = STATE_PROBING;
 
-  reset();
+  _reset();
 
   // sync store
   if (g_conf->mon_compact_on_bootstrap) {
@@ -708,9 +708,12 @@ void Monitor::_add_bootstrap_peer_hint(string cmd, string args, ostream& ss)
 }
 
 // called by bootstrap(), or on leader|peon -> electing
-void Monitor::reset()
+void Monitor::_reset()
 {
-  dout(10) << "reset" << dendl;
+  dout(10) << __func__ << dendl;
+
+  assert(state == STATE_ELECTING ||
+	 state == STATE_PROBING);
 
   cancel_probe_timeout();
   timecheck_finish();
@@ -1033,7 +1036,7 @@ void Monitor::handle_sync_get_chunk(MMonSync *m)
   sp.reset_timeout(g_ceph_context, g_conf->mon_sync_timeout * 2);
 
   if (sp.last_committed < paxos->get_first_committed() &&
-      paxos->get_first_committed() >= 1) {
+      paxos->get_first_committed() > 1) {
     dout(10) << __func__ << " sync requester fell behind paxos, their lc " << sp.last_committed
 	     << " < our fc " << paxos->get_first_committed() << dendl;
     sync_providers.erase(m->cookie);
@@ -1407,14 +1410,21 @@ void Monitor::handle_probe_reply(MMonProbe *m)
   m->put();
 }
 
+void Monitor::join_election()
+{
+  dout(10) << __func__ << dendl;
+  state = STATE_ELECTING;
+  _reset();
+}
+
 void Monitor::start_election()
 {
   dout(10) << "start_election" << dendl;
+  state = STATE_ELECTING;
+  _reset();
 
   cancel_probe_timeout();
 
-  // call a new election
-  state = STATE_ELECTING;
   clog.info() << "mon." << name << " calling new monitor election\n";
   elector.call_election();
 }
@@ -1447,18 +1457,15 @@ epoch_t Monitor::get_epoch()
 
 void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features) 
 {
-  if (!is_electing())
-    reset();
-
+  dout(10) << __func__ << " epoch " << epoch << " quorum " << active
+	   << " features " << features << dendl;
+  assert(is_electing());
   state = STATE_LEADER;
   leader_since = ceph_clock_now(g_ceph_context);
   leader = rank;
   quorum = active;
   quorum_features = features;
   outside_quorum.clear();
-  dout(10) << "win_election, epoch " << epoch << " quorum is " << quorum
-	   << " features are " << quorum_features
-	   << dendl;
 
   clog.info() << "mon." << name << "@" << rank
 		<< " won leader election with quorum " << quorum << "\n";
@@ -2123,18 +2130,16 @@ void Monitor::handle_command(MMonCommand *m)
     osdmon()->dump_info(f.get());
     mdsmon()->dump_info(f.get());
     pgmon()->dump_info(f.get());
+    authmon()->dump_info(f.get());
+
+    paxos->dump_info(f.get());
 
     f->close_section();
-    f->flush(ds);
+    f->flush(rdata);
 
-    bufferlist bl;
-    bl.append("-------- BEGIN REPORT --------\n");
-    bl.append(ds);
     ostringstream ss2;
-    ss2 << "\n-------- END REPORT " << bl.crc32c(6789) << " --------\n";
-    rdata.append(bl);
-    rdata.append(ss2.str());
-    rs = string();
+    ss2 << "report " << rdata.crc32c(6789);
+    rs = ss2.str();
     r = 0;
   } else if (prefix == "quorum_status") {
     if (!access_r) {
@@ -2205,14 +2210,12 @@ void Monitor::handle_command(MMonCommand *m)
     string quorumcmd;
     cmd_getval(g_ceph_context, cmdmap, "quorumcmd", quorumcmd);
     if (quorumcmd == "exit") {
-      reset();
       start_election();
       elector.stop_participating();
       rs = "stopped responding to quorum, initiated new election";
       r = 0;
     } else if (quorumcmd == "enter") {
       elector.start_participating();
-      reset();
       start_election();
       rs = "started responding to quorum, initiated new election";
       r = 0;
@@ -2314,6 +2317,9 @@ void Monitor::handle_forward(MForward *m)
     PaxosServiceMessage *req = m->msg;
     m->msg = NULL;  // so ~MForward doesn't delete it
     req->set_connection(c);
+
+    // not super accurate, but better than nothing.
+    req->set_recv_stamp(m->get_recv_stamp());
 
     /*
      * note which election epoch this is; we will drop the message if
@@ -3236,15 +3242,18 @@ bool Monitor::ms_handle_reset(Connection *con)
 {
   dout(10) << "ms_handle_reset " << con << " " << con->get_peer_addr() << dendl;
 
-  if (is_shutdown())
-    return false;
-
   // ignore lossless monitor sessions
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
     return false;
 
   MonSession *s = static_cast<MonSession *>(con->get_priv());
   if (!s)
+    return false;
+
+  // break any con <-> session ref cycle
+  s->con->set_priv(NULL);
+
+  if (is_shutdown())
     return false;
 
   Mutex::Locker l(lock);
@@ -3468,16 +3477,16 @@ void Monitor::tick()
       continue; 
 
     if (!s->until.is_zero() && s->until < now) {
-      dout(10) << " trimming session " << s->inst
+      dout(10) << " trimming session " << s->con << " " << s->inst
 	       << " (until " << s->until << " < now " << now << ")" << dendl;
-      messenger->mark_down(s->inst.addr);
+      messenger->mark_down(s->con);
       remove_session(s);
     } else if (!exited_quorum.is_zero()) {
       if (now > (exited_quorum + 2 * g_conf->mon_lease)) {
         // boot the client Session because we've taken too long getting back in
-        dout(10) << " trimming session " << s->inst
-            << " because we've been out of quorum too long" << dendl;
-        messenger->mark_down(s->inst.addr);
+        dout(10) << " trimming session " << s->con << " " << s->inst
+		 << " because we've been out of quorum too long" << dendl;
+        messenger->mark_down(s->con);
         remove_session(s);
       }
     }
@@ -3807,7 +3816,7 @@ int Monitor::StoreConverter::needs_conversion()
   bufferlist magicbl;
   int ret = 0;
 
-  dout(10) << __func__ << dendl;
+  dout(10) << "check if store needs conversion from legacy format" << dendl;
   _init();
 
   int err = store->mount();
@@ -3845,7 +3854,6 @@ out:
 int Monitor::StoreConverter::convert()
 {
   _init();
-  assert(!db->create_and_open(std::cerr));
   assert(!store->mount());
   if (db->exists("mon_convert", "on_going")) {
     dout(0) << __func__ << " found a mon store in mid-convertion; abort!"

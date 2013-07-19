@@ -973,6 +973,7 @@ public:
   virtual int init_bucket_index(rgw_bucket& bucket);
   int select_bucket_placement(RGWUserInfo& user_info, const string& region_name, const std::string& rule,
                               const std::string& bucket_name, rgw_bucket& bucket, string *pselected_rule);
+  int select_legacy_bucket_placement(const string& bucket_name, rgw_bucket& bucket);
   int select_new_bucket_location(RGWUserInfo& user_info, const string& region_name, const string& rule,
                                  const std::string& bucket_name, rgw_bucket& bucket, string *pselected_rule);
   int set_bucket_location_by_rule(const string& location_rule, const std::string& bucket_name, rgw_bucket& bucket);

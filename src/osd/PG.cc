@@ -1132,8 +1132,9 @@ void PG::activate(ObjectStore::Transaction& t,
   dirty_info = true;
   dirty_big_info = true; // maybe
 
-  // clean up stray objects
-  clean_up_local(t); 
+  // verify that there are no stray objects
+  if (is_primary())
+    check_local();
 
   // find out when we commit
   tfin.push_back(new C_PG_ActivateCommitted(this, query_epoch));
@@ -3328,7 +3329,7 @@ void PG::scrub(ThreadPool::TPHandle &handle)
       ConnectionRef con = osd->get_con_osd_cluster(acting[i], get_osdmap()->get_epoch());
       if (!con)
 	continue;
-      if (!(con->features & CEPH_FEATURE_CHUNKY_SCRUB)) {
+      if (!con->has_feature(CEPH_FEATURE_CHUNKY_SCRUB)) {
         dout(20) << "OSD " << acting[i]
                  << " does not support chunky scrubs, falling back to classic"
                  << dendl;
@@ -5162,11 +5163,6 @@ PG::RecoveryState::Started::Started(my_context ctx)
 {
   state_name = "Started";
   context< RecoveryMachine >().log_enter(state_name);
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->start_flush(
-    context< RecoveryMachine >().get_cur_transaction(),
-    context< RecoveryMachine >().get_on_applied_context_list(),
-    context< RecoveryMachine >().get_on_safe_context_list());
 }
 
 boost::statechart::result
@@ -5429,6 +5425,9 @@ void PG::RecoveryState::Peering::exit()
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_clear(PG_STATE_PEERING);
   pg->clear_probe_targets();
+
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->logger->tinc(l_osd_peering_latency, dur);
 }
 
 
@@ -5479,7 +5478,7 @@ PG::RecoveryState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_con
   ConnectionRef con = pg->osd->get_con_osd_cluster(
     pg->backfill_target, pg->get_osdmap()->get_epoch());
   if (con) {
-    if ((con->features & CEPH_FEATURE_BACKFILL_RESERVATION)) {
+    if (con->has_feature(CEPH_FEATURE_BACKFILL_RESERVATION)) {
       unsigned priority = pg->is_degraded() ? OSDService::BACKFILL_HIGH
 	  : OSDService::BACKFILL_LOW;
       pg->osd->send_message_osd_cluster(
@@ -5735,7 +5734,7 @@ PG::RecoveryState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserve
   if (acting_osd_it != context< Active >().sorted_acting_set.end()) {
     ConnectionRef con = pg->osd->get_con_osd_cluster(*acting_osd_it, pg->get_osdmap()->get_epoch());
     if (con) {
-      if ((con->features & CEPH_FEATURE_RECOVERY_RESERVATION)) {
+      if (con->has_feature(CEPH_FEATURE_RECOVERY_RESERVATION)) {
 	pg->osd->send_message_osd_cluster(
           new MRecoveryReserve(MRecoveryReserve::REQUEST,
 			       pg->info.pgid,
@@ -5783,7 +5782,7 @@ void PG::RecoveryState::Recovering::release_reservations()
       continue;
     ConnectionRef con = pg->osd->get_con_osd_cluster(*i, pg->get_osdmap()->get_epoch());
     if (con) {
-      if ((con->features & CEPH_FEATURE_RECOVERY_RESERVATION)) {
+      if (con->has_feature(CEPH_FEATURE_RECOVERY_RESERVATION)) {
 	pg->osd->send_message_osd_cluster(
           new MRecoveryReserve(MRecoveryReserve::RELEASE,
 			       pg->info.pgid,
@@ -6130,6 +6129,12 @@ PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx)
   state_name = "Started/ReplicaActive";
 
   context< RecoveryMachine >().log_enter(state_name);
+
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->start_flush(
+    context< RecoveryMachine >().get_cur_transaction(),
+    context< RecoveryMachine >().get_on_applied_context_list(),
+    context< RecoveryMachine >().get_on_safe_context_list());
 }
 
 
@@ -6218,6 +6223,11 @@ PG::RecoveryState::Stray::Stray(my_context ctx)
   assert(!pg->is_active());
   assert(!pg->is_peering());
   assert(!pg->is_primary());
+  if (!pg->is_replica()) // stray, need to flush for pulls
+    pg->start_flush(
+      context< RecoveryMachine >().get_cur_transaction(),
+      context< RecoveryMachine >().get_on_applied_context_list(),
+      context< RecoveryMachine >().get_on_safe_context_list());
 }
 
 boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
@@ -6564,6 +6574,10 @@ boost::statechart::result PG::RecoveryState::GetLog::react(const GotLog&)
 			msg->info, msg->log, msg->missing, 
 			newest_update_osd);
   }
+  pg->start_flush(
+    context< RecoveryMachine >().get_cur_transaction(),
+    context< RecoveryMachine >().get_on_applied_context_list(),
+    context< RecoveryMachine >().get_on_safe_context_list());
   return transit< GetMissing >();
 }
 

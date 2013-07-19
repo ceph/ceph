@@ -41,6 +41,28 @@
 #define CEPH_FEATURE_OSD_PACKED_RECOVERY (1ULL<<34)
 
 /*
+ * The introduction of CEPH_FEATURE_OSD_SNAPMAPPER caused the feature
+ * vector to evaluate to 64 bit ~0.  To cope, we designate 1ULL << 63
+ * to mean 33 bit ~0, and introduce a helper below to do the
+ * translation.
+ *
+ * This was introduced by commit
+ *   9ea02b84104045c2ffd7e7f4e7af512953855ecd v0.58-657-g9ea02b8
+ * and fixed by commit
+ *   4255b5c2fb54ae40c53284b3ab700fdfc7e61748 v0.65-263-g4255b5c
+ */
+#define CEPH_FEATURE_RESERVED (1ULL<<63)
+
+static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
+	if (f & CEPH_FEATURE_RESERVED) {
+		/* everything through OSD_SNAPMAPPER */
+		return 0x1ffffffffull;
+	} else {
+		return f;
+	}
+}
+
+/*
  * Features supported.  Should be everything above.
  */
 #define CEPH_FEATURES_ALL		 \

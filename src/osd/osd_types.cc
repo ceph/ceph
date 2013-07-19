@@ -102,6 +102,40 @@ void object_locator_t::generate_test_instances(list<object_locator_t*>& o)
 }
 
 
+// -- pow2_hist_t --
+void pow2_hist_t::dump(Formatter *f) const
+{
+  f->open_array_section("histogram");
+  for (vector<int>::const_iterator p = h.begin(); p != h.end(); ++p)
+    f->dump_int("count", *p);
+  f->close_section();
+  f->dump_int("upper_bound", upper_bound());
+}
+
+void pow2_hist_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(h, bl);
+  ENCODE_FINISH(bl);
+}
+
+void pow2_hist_t::decode(bufferlist::iterator& p)
+{
+  DECODE_START(1, p);
+  ::decode(h, p);
+  DECODE_FINISH(p);
+}
+
+void pow2_hist_t::generate_test_instances(list<pow2_hist_t*>& ls)
+{
+  ls.push_back(new pow2_hist_t);
+  ls.push_back(new pow2_hist_t);
+  ls.back()->h.push_back(1);
+  ls.back()->h.push_back(3);
+  ls.back()->h.push_back(0);
+  ls.back()->h.push_back(2);
+}
+
 // -- osd_stat_t --
 void osd_stat_t::dump(Formatter *f) const
 {
@@ -118,11 +152,14 @@ void osd_stat_t::dump(Formatter *f) const
   f->close_section();
   f->dump_int("snap_trim_queue_len", snap_trim_queue_len);
   f->dump_int("num_snap_trimming", num_snap_trimming);
+  f->open_object_section("op_queue_age_hist");
+  op_queue_age_hist.dump(f);
+  f->close_section();
 }
 
 void osd_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   ::encode(kb, bl);
   ::encode(kb_used, bl);
   ::encode(kb_avail, bl);
@@ -130,12 +167,13 @@ void osd_stat_t::encode(bufferlist &bl) const
   ::encode(num_snap_trimming, bl);
   ::encode(hb_in, bl);
   ::encode(hb_out, bl);
+  ::encode(op_queue_age_hist, bl);
   ENCODE_FINISH(bl);
 }
 
 void osd_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   ::decode(kb, bl);
   ::decode(kb_used, bl);
   ::decode(kb_avail, bl);
@@ -143,6 +181,8 @@ void osd_stat_t::decode(bufferlist::iterator &bl)
   ::decode(num_snap_trimming, bl);
   ::decode(hb_in, bl);
   ::decode(hb_out, bl);
+  if (struct_v >= 3)
+    ::decode(op_queue_age_hist, bl);
   DECODE_FINISH(bl);
 }
 
