@@ -449,6 +449,7 @@ void RGWCreateBucket_ObjStore_S3::send_response()
     JSONFormatter f; /* use json formatter for system requests output */
 
     f.open_object_section("info");
+    encode_json("entry_point_object_ver", ep_objv, &f);
     encode_json("object_ver", info.objv_tracker.read_version, &f);
     encode_json("bucket_info", info, &f);
     f.close_section();

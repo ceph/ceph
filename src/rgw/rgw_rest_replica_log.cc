@@ -27,13 +27,13 @@
 #define REPLICA_INPUT_MAX_LEN (512*1024)
 
 static int parse_to_utime(string& in, utime_t& out) {
-  struct tm tm;
-  
-  if (!parse_iso8601(in.c_str(), &tm)) 
-    return -EINVAL;
+  uint64_t sec = 0;
+  uint64_t nsec = 0;
+  int ret = utime_t::parse_date(in.c_str(), &sec, &nsec);
+  if (ret < 0)
+    return ret;
 
-  time_t tt = mktime(&tm);
-  out = utime_t(tt, 0);
+  out = utime_t(sec, nsec);
   return 0;
 }
 

@@ -243,6 +243,7 @@ protected:
   string location_constraint;
   string placement_rule;
   RGWBucketInfo info;
+  obj_version ep_objv;
 
   bufferlist in_data;
 

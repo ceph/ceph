@@ -27,7 +27,7 @@ int RGWRESTConn::get_url(string& endpoint)
   return 0;
 }
 
-int RGWRESTConn::forward(const string& uid, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl)
+int RGWRESTConn::forward(const string& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl)
 {
   string url;
   int ret = get_url(url);
@@ -36,6 +36,12 @@ int RGWRESTConn::forward(const string& uid, req_info& info, size_t max_response,
   list<pair<string, string> > params;
   params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "uid", uid));
   params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "region", region));
+  if (objv) {
+    params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "tag", objv->tag));
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%lld", (long long)objv->ver);
+    params.push_back(make_pair<string, string>(RGW_SYS_PARAM_PREFIX "ver", buf));
+  }
   RGWRESTSimpleRequest req(cct, url, NULL, &params);
   return req.forward_request(key, info, max_response, inbl, outbl);
 }
