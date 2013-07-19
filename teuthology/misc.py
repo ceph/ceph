@@ -867,3 +867,21 @@ def stop_daemons_of_type(ctx, type_):
             log.exception('Saw exception from %s.%s', daemon.role, daemon.id_)
     if exc_info != (None, None, None):
         raise exc_info[0], exc_info[1], exc_info[2]
+
+def get_system_type(remote):
+    """
+    Return this system type (deb or rpm)
+    """
+    r = remote.run(
+        args=[
+            'sudo','lsb_release', '-is',
+        ],
+    stdout=StringIO(),
+    )
+    system_value = r.stdout.getvalue().strip()
+    log.debug("System to be installed: %s" % system_value)
+    if system_value in ['Ubuntu','Debian']:
+        return "deb"
+    if system_value in ['CentOS','Fedora','RedHatEnterpriseServer']:
+        return "rpm"
+    return system_value

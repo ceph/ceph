@@ -1,6 +1,7 @@
-LoadModule env_module /usr/lib/apache2/modules/mod_env.so
-LoadModule rewrite_module /usr/lib/apache2/modules/mod_rewrite.so
-LoadModule fastcgi_module /usr/lib/apache2/modules/mod_fastcgi.so
+LoadModule env_module {mod_path}/mod_env.so
+LoadModule rewrite_module {mod_path}/mod_rewrite.so
+LoadModule fastcgi_module {mod_path}/mod_fastcgi.so
+LoadModule log_config_module {mod_path}/mod_log_config.so
 
 Listen 7280
 ServerName rgwtest.example.com
@@ -20,8 +21,8 @@ RewriteRule ^/([a-zA-Z0-9-_.]*)([/]?.*) /rgw.fcgi?page=$1&params=$2&%{{QUERY_STR
 # Set fastcgi environment variables.
 # Note that this is separate from Unix environment variables!
 SetEnv RGW_LOG_LEVEL 20
-SetEnv RGW_PRINT_CONTINUE yes
 SetEnv RGW_SHOULD_LOG yes
+SetEnv RGW_PRINT_CONTINUE {print_continue}
 
 <Directory {testdir}/apache/htdocs>
   Options +ExecCGI
