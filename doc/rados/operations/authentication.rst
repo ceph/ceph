@@ -196,7 +196,7 @@ capabilities necessary for the daemon to function, are shown below.
 ``radosgw``
 
 :Location: ``$rgw_data/keyring``
-:Capabilities: ``mon 'allow r' osd 'allow rwx'``
+:Capabilities: ``mon 'allow rw' osd 'allow rwx'``
 
 
 Note that the monitor keyring contains a key but no capabilities, and

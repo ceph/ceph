@@ -19,3 +19,8 @@ v0.67
   commandline tool.  ceph_rest_api.py can be used as a WSGI application
   for deployment in a more-capable web server.  See ceph-rest-api.8
   for more.
+
+* The radosgw caps were inconsistently documented to be either 'mon =
+  allow r' or 'mon = allow rw'.  The 'mon = allow rw' is required for
+  radosgw to create its own pools.  All documentation has been updated
+  accordingly.
