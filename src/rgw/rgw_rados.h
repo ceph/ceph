@@ -1157,8 +1157,7 @@ public:
    * dest: bufferlist to store the result in
    * Returns: 0 on success, -ERR# otherwise.
    */
-  virtual int get_attr(void *ctx, rgw_obj& obj, const char *name,
-                       bufferlist& dest, RGWObjVersionTracker *objv_tracker);
+  virtual int get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& dest);
 
   /**
    * Set an attr on an object.
