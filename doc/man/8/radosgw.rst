@@ -86,7 +86,7 @@ You will also have to generate a key for the radosgw to use for
 authentication with the cluster::
 
         ceph-authtool -C -n client.radosgw.gateway --gen-key /etc/ceph/keyring.radosgw.gateway
-        ceph-authtool -n client.radosgw.gateway --cap mon 'allow r' --cap osd 'allow rwx' /etc/ceph/keyring.radosgw.gateway
+        ceph-authtool -n client.radosgw.gateway --cap mon 'allow rw' --cap osd 'allow rwx' /etc/ceph/keyring.radosgw.gateway
 
 And add the key to the auth entries::
 

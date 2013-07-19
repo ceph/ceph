@@ -198,7 +198,7 @@ Installing Ceph Object Storage
 #. Create a user key. ::
 
 	ceph-authtool -C -n client.radosgw.gateway --gen-key /etc/ceph/keyring.radosgw.gateway
-	ceph-authtool -n client.radosgw.gateway --cap mon 'allow r' --cap osd 'allow rwx' /etc/ceph/keyring.radosgw.gateway
+	ceph-authtool -n client.radosgw.gateway --cap mon 'allow rw' --cap osd 'allow rwx' /etc/ceph/keyring.radosgw.gateway
 	ceph auth add client.radosgw.gateway --in-file=/etc/ceph/keyring.radosgw.gateway
 	
 	
