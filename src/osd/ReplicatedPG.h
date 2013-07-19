@@ -1001,7 +1001,7 @@ public:
   void _finish_mark_all_unfound_lost(list<ObjectContext*>& obcs);
 
   void on_role_change();
-  void on_change();
+  void on_change(ObjectStore::Transaction *t);
   void on_activate();
   void on_flushed();
   void on_removal(ObjectStore::Transaction *t);

@@ -6330,7 +6330,7 @@ void ReplicatedPG::on_activate()
   }
 }
 
-void ReplicatedPG::on_change()
+void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 {
   dout(10) << "on_change" << dendl;
 

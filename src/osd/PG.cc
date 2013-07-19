@@ -5014,7 +5014,8 @@ void PG::start_flush(ObjectStore::Transaction *t,
 /* Called before initializing peering during advance_map */
 void PG::start_peering_interval(const OSDMapRef lastmap,
 				const vector<int>& newup,
-				const vector<int>& newacting)
+				const vector<int>& newacting,
+				ObjectStore::Transaction *t)
 {
   const OSDMapRef osdmap = get_osdmap();
 
@@ -5103,7 +5104,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
 
     
   // pg->on_*
-  on_change();
+  on_change(t);
 
   assert(!deleting);
 
@@ -5978,7 +5979,8 @@ boost::statechart::result PG::RecoveryState::Reset::react(const AdvMap& advmap)
     pg->is_split(advmap.lastmap, advmap.osdmap)) {
     dout(10) << "up or acting affected, calling start_peering_interval again"
 	     << dendl;
-    pg->start_peering_interval(advmap.lastmap, advmap.newup, advmap.newacting);
+    pg->start_peering_interval(advmap.lastmap, advmap.newup, advmap.newacting,
+			       context< RecoveryMachine >().get_cur_transaction());
   }
   return discard_event();
 }
