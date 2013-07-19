@@ -310,13 +310,26 @@ void OSDMonitor::on_active()
     mon->clog.info() << "osdmap " << osdmap << "\n"; 
 
   if (!mon->is_leader()) {
-    kick_all_failures();
+    list<MOSDFailure*> ls;
+    take_all_failures(ls);
+    while (!ls.empty()) {
+      dispatch(ls.front());
+      ls.pop_front();
+    }
   }
 }
 
 void OSDMonitor::on_shutdown()
 {
   dout(10) << __func__ << dendl;
+
+  // discard failure info, waiters
+  list<MOSDFailure*> ls;
+  take_all_failures(ls);
+  while (!ls.empty()) {
+    ls.front()->put();
+    ls.pop_front();
+  }
 }
 
 void OSDMonitor::update_logger()
@@ -1039,23 +1052,16 @@ void OSDMonitor::process_failures()
   }
 }
 
-void OSDMonitor::kick_all_failures()
+void OSDMonitor::take_all_failures(list<MOSDFailure*>& ls)
 {
-  dout(10) << "kick_all_failures on " << failure_info.size() << " osds" << dendl;
-  assert(!mon->is_leader());
+  dout(10) << __func__ << " on " << failure_info.size() << " osds" << dendl;
 
-  list<MOSDFailure*> ls;
   for (map<int,failure_info_t>::iterator p = failure_info.begin();
        p != failure_info.end();
        ++p) {
     p->second.take_report_messages(ls);
   }
   failure_info.clear();
-
-  while (!ls.empty()) {
-    dispatch(ls.front());
-    ls.pop_front();
-  }
 }
 
 

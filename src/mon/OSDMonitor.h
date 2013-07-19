@@ -209,7 +209,7 @@ private:
   bool prepare_failure(class MOSDFailure *m);
   bool prepare_mark_me_down(class MOSDMarkMeDown *m);
   void process_failures();
-  void kick_all_failures();
+  void take_all_failures(list<MOSDFailure*>& ls);
 
   bool preprocess_boot(class MOSDBoot *m);
   bool prepare_boot(class MOSDBoot *m);
