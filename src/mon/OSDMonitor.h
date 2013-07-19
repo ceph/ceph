@@ -154,6 +154,7 @@ private:
   void encode_pending(MonitorDBStore::Transaction *t);
   virtual void encode_full(MonitorDBStore::Transaction *t);
   void on_active();
+  void on_shutdown();
 
   /**
    * do not let paxosservice periodically stash full osdmaps, or we will break our

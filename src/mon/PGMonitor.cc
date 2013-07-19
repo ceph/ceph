@@ -1295,6 +1295,8 @@ void PGMonitor::dump_info(Formatter *f)
   f->open_object_section("pgmap");
   pg_map.dump(f);
   f->close_section();
+
+  f->dump_unsigned("pgmap_first_committed", get_first_committed());
 }
 
 bool PGMonitor::preprocess_command(MMonCommand *m)
@@ -1435,8 +1437,8 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     if (f) {
       f->open_object_section("pg_map");
       f->dump_stream("epoch") << mon->osdmon()->osdmap.get_epoch();
-      f->dump_stream("pgid") << pgid;
-      f->dump_stream("mpgid") << mpgid;
+      f->dump_stream("raw_pgid") << pgid;
+      f->dump_stream("pgid") << mpgid;
 
       f->open_array_section("up");
       for (vector<int>::iterator it = up.begin(); it != up.end(); ++it)
@@ -1659,6 +1661,26 @@ static void note_stuck_detail(enum PGMap::StuckPG what,
   }
 }
 
+int PGMonitor::_warn_slow_request_histogram(const pow2_hist_t& h, string suffix,
+					    list<pair<health_status_t,string> >& summary,
+					    list<pair<health_status_t,string> > *detail) const
+{
+  unsigned sum = 0;
+  for (unsigned i = h.h.size() - 1; i > 0; --i) {
+    float ub = (float)(1 << i) / 1000.0;
+    if (ub < g_conf->mon_osd_max_op_age)
+      break;
+    ostringstream ss;
+    if (h.h[i]) {
+      ss << h.h[i] << " ops are blocked > " << ub << " sec" << suffix;
+      if (detail)
+	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      sum += h.h[i];
+    }
+  }
+  return sum;
+}
+
 void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 			   list<pair<health_status_t,string> > *detail) const
 {
@@ -1763,6 +1785,35 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
     }
   }
 
+  // slow requests
+  if (g_conf->mon_osd_max_op_age > 0 &&
+      pg_map.osd_sum.op_queue_age_hist.upper_bound() > g_conf->mon_osd_max_op_age) {
+    unsigned sum = _warn_slow_request_histogram(pg_map.osd_sum.op_queue_age_hist, "", summary, detail);
+    if (sum > 0) {
+      ostringstream ss;
+      ss << sum << " requests are blocked > " << g_conf->mon_osd_max_op_age << " sec";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+
+      unsigned num_slow_osds = 0;
+      if (detail) {
+	// do per-osd warnings
+	for (hash_map<int32_t,osd_stat_t>::const_iterator p = pg_map.osd_stat.begin();
+	     p != pg_map.osd_stat.end();
+	     ++p) {
+	  if (_warn_slow_request_histogram(p->second.op_queue_age_hist,
+					   string(" on osd.") + stringify(p->first),
+					   summary, detail))
+	    ++num_slow_osds;
+	}
+	ostringstream ss2;
+	ss2 << num_slow_osds << " osds have slow requests";
+	summary.push_back(make_pair(HEALTH_WARN, ss2.str()));
+	detail->push_back(make_pair(HEALTH_WARN, ss2.str()));
+      }
+    }
+  }
+
+  // recovery
   stringstream rss;
   pg_map.recovery_summary(NULL, &rss);
   if (!rss.str().empty()) {
@@ -1771,9 +1822,11 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
       detail->push_back(make_pair(HEALTH_WARN, "recovery " + rss.str()));
   }
   
+  // full/nearfull
   check_full_osd_health(summary, detail, pg_map.full_osds, "full", HEALTH_ERR);
   check_full_osd_health(summary, detail, pg_map.nearfull_osds, "near full", HEALTH_WARN);
 
+  // scrub
   if (pg_map.pg_sum.stats.sum.num_scrub_errors) {
     ostringstream ss;
     ss << pg_map.pg_sum.stats.sum.num_scrub_errors << " scrub errors";

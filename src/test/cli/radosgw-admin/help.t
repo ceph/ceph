@@ -87,6 +87,8 @@
                                  mdlog trim
                                  replica mdlog get/delete
                                  replica datalog get/delete
+     --rgw-region=<region>     region in which radosgw is running
+     --rgw-zone=<zone>         zone in which radosgw is running
      --fix                     besides checking bucket index, will also fix it
      --check-objects           bucket check: rebuilds bucket index according to
                                actual objects state

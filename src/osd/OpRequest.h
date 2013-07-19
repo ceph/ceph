@@ -64,6 +64,8 @@ public:
   void register_inflight_op(xlist<OpRequest*>::item *i);
   void unregister_inflight_op(OpRequest *i);
 
+  void get_age_ms_histogram(pow2_hist_t *h);
+
   /**
    * Look for Ops which are too old, and insert warning
    * strings for each Op that is too old.

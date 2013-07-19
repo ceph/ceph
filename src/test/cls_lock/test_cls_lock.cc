@@ -16,6 +16,7 @@
 #include <errno.h>
 
 #include "include/types.h"
+#include "common/Clock.h"
 #include "msg/msg_types.h"
 #include "include/rados/librados.hpp"
 
@@ -280,11 +281,19 @@ TEST(ClsLock, TestLockDuration) {
 
   string oid = "foo";
   Lock l("lock");
-  l.set_duration(utime_t(5, 0));
+  utime_t dur(5, 0);
+  l.set_duration(dur);
+  utime_t start = ceph_clock_now(NULL);
   ASSERT_EQ(0, l.lock_exclusive(&ioctx, oid));
-  ASSERT_EQ(-EEXIST, l.lock_exclusive(&ioctx, oid));
+  int r = l.lock_exclusive(&ioctx, oid);
+  if (r == 0) {
+    // it's possible to get success if we were just really slow...
+    ASSERT_TRUE(ceph_clock_now(NULL) > start + dur);
+  } else {
+    ASSERT_EQ(-EEXIST, r);
+  }
 
-  sleep(5);
+  sleep(dur.sec());
   ASSERT_EQ(0, l.lock_exclusive(&ioctx, oid));
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));

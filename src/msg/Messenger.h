@@ -329,17 +329,13 @@ public:
    */
   virtual int bind(const entity_addr_t& bind_addr) = 0;
   /**
-   * This is an optional function for implementations
-   * to override. For those implementations that do
-   * implement it, this function shall perform a full
-   * restart of the Messenger component, whatever that means.
-   * Other entities who connect to this Messenger post-rebind()
-   * should perceive it as a new entity which they have not
-   * previously contacted, and it MUST bind to a different
-   * address than it did previously. If avoid_port is non-zero
-   * it must additionally avoid that port.
+   * This function performs a full restart of the Messenger component,
+   * whatever that means.  Other entities who connect to this
+   * Messenger post-rebind() should perceive it as a new entity which
+   * they have not previously contacted, and it MUST bind to a
+   * different address than it did previously.
    *
-   * @param avoid_port An additional port to avoid binding to.
+   * @param avoid_ports Additional port to avoid binding to.
    */
   virtual int rebind(const set<int>& avoid_ports) { return -EOPNOTSUPP; }
   /**
@@ -392,6 +388,9 @@ public:
    * when you pass it in.
    * @param dest The entity to send the Message to.
    *
+   * DEPRECATED: please do not use this interface for any new code;
+   * use the Connection* variant.
+   *
    * @return 0 on success, or -errno on failure.
    */
   virtual int send_message(Message *m, const entity_inst_t& dest) = 0;
@@ -420,6 +419,9 @@ public:
    * @param m The Message to send. The Messenger consumes a single reference
    * when you pass it in.
    * @param dest The entity to send the Message to.
+   *
+   * DEPRECATED: please do not use this interface for any new code;
+   * use the Connection* variant.
    *
    * @return 0.
    */
@@ -476,22 +478,33 @@ public:
    */
   virtual int send_keepalive(Connection *con) = 0;
   /**
-   * Mark down a Connection to a remote. This will cause us to
-   * discard our outgoing queue for them, and if they try
-   * to reconnect they will discard their queue when we
-   * inform them of the session reset. If there is no
-   * Connection to the given dest, it is a no-op.
-   * It does not generate any notifications to the Dispatcher.
+   * Mark down a Connection to a remote.
+   *
+   * This will cause us to discard our outgoing queue for them, and if
+   * reset detection is enabled in the policy and the endpoint tries
+   * to reconnect they will discard their queue when we inform them of
+   * the session reset.
+   *
+   * If there is no Connection to the given dest, it is a no-op.
+   *
+   * This generates a RESET notification to the Dispatcher.
+   *
+   * DEPRECATED: please do not use this interface for any new code;
+   * use the Connection* variant.
    *
    * @param a The address to mark down.
    */
   virtual void mark_down(const entity_addr_t& a) = 0;
   /**
-   * Mark down the given Connection. This will cause us to
-   * discard its outgoing queue, and if the endpoint tries
-   * to reconnect they will discard their queue when we
-   * inform them of the session reset.
+   * Mark down the given Connection.
+   *
+   * This will cause us to discard its outgoing queue, and if reset
+   * detection is enabled in the policy and the endpoint tries to
+   * reconnect they will discard their queue when we inform them of
+   * the session reset.
+   *
    * If the Connection* is NULL, this is a no-op.
+   *
    * It does not generate any notifications to the Dispatcher.
    *
    * @param con The Connection to mark down.
@@ -500,6 +513,14 @@ public:
   void mark_down(const ConnectionRef& con) {
     mark_down(con.get());
   }
+  /**
+   * Mark all the existing Connections down. This is equivalent
+   * to iterating over all Connections and calling mark_down()
+   * on each.
+   *
+   * This will generate a RESET event for each closed connections.
+   */
+  virtual void mark_down_all() = 0;
   /**
    * Unlike mark_down, this function will try and deliver
    * all messages before ending the connection, and it will use
@@ -529,12 +550,6 @@ public:
    * @param con The Connection to mark as disposable.
    */
   virtual void mark_disposable(Connection *con) = 0;
-  /**
-   * Mark all the existing Connections down. This is equivalent
-   * to iterating over all Connections and calling mark_down()
-   * on each.
-   */
-  virtual void mark_down_all() = 0;
   /**
    * @} // Connection Management
    */

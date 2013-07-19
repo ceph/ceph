@@ -112,6 +112,8 @@ enum {
   l_osd_mape,
   l_osd_mape_dup,
 
+  l_osd_waiting_for_map,
+  l_osd_peering_latency,
   l_osd_last,
 };
 
@@ -901,10 +903,9 @@ private:
     list<PG*> peering_queue;
     OSD *osd;
     set<PG*> in_use;
-    const size_t batch_size;
-    PeeringWQ(OSD *o, time_t ti, ThreadPool *tp, size_t batch_size)
+    PeeringWQ(OSD *o, time_t ti, ThreadPool *tp)
       : ThreadPool::BatchWorkQueue<PG>(
-	"OSD::PeeringWQ", ti, ti*10, tp), osd(o), batch_size(batch_size) {}
+	"OSD::PeeringWQ", ti, ti*10, tp), osd(o) {}
 
     void _dequeue(PG *pg) {
       for (list<PG*>::iterator i = peering_queue.begin();
@@ -929,7 +930,8 @@ private:
     void _dequeue(list<PG*> *out) {
       set<PG*> got;
       for (list<PG*>::iterator i = peering_queue.begin();
-	   i != peering_queue.end() && out->size() < batch_size;
+	   i != peering_queue.end() &&
+	     out->size() < g_conf->osd_peering_wq_batch_size;
 	   ) {
 	if (in_use.count(*i)) {
 	  ++i;

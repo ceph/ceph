@@ -142,8 +142,6 @@ def parse_cmdargs(args=None, target=''):
 
     parser.add_argument('-f', '--format', choices=['json', 'json-pretty',
                         'xml', 'xml-pretty', 'plain'], dest='output_format')
-    # for pg dump_stuck
-    parser.add_argument('--threshold', type=int, help='number of seconds for a pg to be considered stuck for pg dump_stuck')
 
     # returns a Namespace with the parsed args, and a list of all extras
     parsed_args, extras = parser.parse_known_args(args)
@@ -683,8 +681,6 @@ def main():
             compat = True
             if parsed_args.output_format:
                 childargs.extend(['--format', parsed_args.output_format])
-            if parsed_args.threshold:
-                childargs.extend(['--threshold', parsed_args.threshold])
             ret, outbuf, outs = send_command(cluster_handle, target, childargs,
                                              inbuf)
         elif ret:
@@ -698,6 +694,15 @@ def main():
 
             ret, outbuf, outs = new_style_command(parsed_args, childargs, target,
                                                   sigdict, inbuf, verbose)
+
+            # debug tool: send any successful command *again* to
+            # verify that it is idempotent.
+            if not ret and 'CEPH_CLI_TEST_DUP_COMMAND' in os.environ:
+                ret, outbuf, outs = new_style_command(parsed_args, childargs, target,
+                                                      sigdict, inbuf, verbose)
+                if ret < 0:
+                    ret = -ret
+                    print >> sys.stderr, prefix + 'Second attempt of previously successful command failed with {0}: {1}'.format(errno.errorcode[ret], outs)
 
         if ret < 0:
             ret = -ret

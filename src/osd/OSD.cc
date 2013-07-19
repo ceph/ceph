@@ -918,7 +918,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   finished_lock("OSD::finished_lock"),
   test_ops_hook(NULL),
   op_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
-  peering_wq(this, g_conf->osd_op_thread_timeout, &op_tp, 200),
+  peering_wq(this, g_conf->osd_op_thread_timeout, &op_tp),
   map_lock("OSD::map_lock"),
   peer_map_epoch_lock("OSD::peer_map_epoch_lock"),
   debug_drop_pg_create_probability(g_conf->osd_debug_drop_pg_create_probability),
@@ -1400,6 +1400,9 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_map, "map_messages");           // osdmap messages
   osd_plb.add_u64_counter(l_osd_mape, "map_message_epochs");         // osdmap epochs
   osd_plb.add_u64_counter(l_osd_mape_dup, "map_message_epoch_dups"); // dup osdmap epochs
+  osd_plb.add_u64_counter(l_osd_waiting_for_map,
+			  "messages_delayed_for_map"); // dup osdmap epochs
+  osd_plb.add_time_avg(l_osd_peering_latency, "peering_latency");
 
   logger = osd_plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
@@ -1773,7 +1776,7 @@ OSD::res_result OSD::_try_resurrect_pg(
   DeletingStateRef df;
   pg_t cur(pgid);
   while (true) {
-    df = service.deleting_pgs.lookup(pgid);
+    df = service.deleting_pgs.lookup(cur);
     if (df)
       break;
     if (!cur.ps())
@@ -1810,7 +1813,7 @@ OSD::res_result OSD::_try_resurrect_pg(
 	       << dendl;
       *resurrected = cur;
       *old_pg_state = df->old_pg_state;
-      service.deleting_pgs.remove(pgid); // PG is no longer being removed!
+      service.deleting_pgs.remove(cur); // PG is no longer being removed!
       return RES_PARENT;
     } else {
       /* this is not a problem, failing to cancel proves that all objects
@@ -2499,6 +2502,8 @@ void OSD::update_osd_stat()
   osd_stat.hb_out.clear();
 
   service.check_nearfull_warning(osd_stat);
+
+  op_tracker.get_age_ms_histogram(&osd_stat.op_queue_age_hist);
 
   dout(20) << "update_osd_stat " << osd_stat << dendl;
 }
@@ -3366,8 +3371,8 @@ void OSD::ms_handle_connect(Connection *con)
 
 bool OSD::ms_handle_reset(Connection *con)
 {
-  dout(1) << "OSD::ms_handle_reset()" << dendl;
   OSD::Session *session = (OSD::Session *)con->get_priv();
+  dout(1) << "ms_handle_reset con " << con << " session " << session << dendl;
   if (!session)
     return false;
   session->wstate.reset();
@@ -4764,6 +4769,7 @@ void OSD::wait_for_new_map(OpRequestRef op)
     monc->renew_subs();
   }
   
+  logger->inc(l_osd_waiting_for_map);
   waiting_for_osdmap.push_back(op);
   op->mark_delayed("wait for new map");
 }
@@ -5565,8 +5571,13 @@ bool OSD::require_same_or_newer_map(OpRequestRef op, epoch_t epoch)
     int from = m->get_source().num();
     if (!osdmap->have_inst(from) ||
 	osdmap->get_cluster_addr(from) != m->get_source_inst().addr) {
-      dout(10) << "from dead osd." << from << ", marking down" << dendl;
-      cluster_messenger->mark_down(m->get_connection());
+      dout(5) << "from dead osd." << from << ", marking down, "
+	      << " msg was " << m->get_source_inst().addr
+	      << " expected " << (osdmap->have_inst(from) ? osdmap->get_cluster_addr(from) : entity_addr_t())
+	      << dendl;
+      ConnectionRef con = m->get_connection();
+      con->set_priv(NULL);   // break ref <-> session cycle, if any
+      cluster_messenger->mark_down(con.get());
       return false;
     }
   }
@@ -5829,7 +5840,7 @@ bool OSD::compat_must_dispatch_immediately(PG *pg)
       continue;
     ConnectionRef conn =
       service.get_con_osd_cluster(*i, pg->get_osdmap()->get_epoch());
-    if (conn && !(conn->features & CEPH_FEATURE_INDEP_PG_MAP)) {
+    if (conn && !conn->has_feature(CEPH_FEATURE_INDEP_PG_MAP)) {
       return true;
     }
   }
@@ -5883,7 +5894,7 @@ void OSD::do_notifies(
     if (!con)
       continue;
     _share_map_outgoing(it->first, con.get(), curmap);
-    if ((con->features & CEPH_FEATURE_INDEP_PG_MAP)) {
+    if (con->has_feature(CEPH_FEATURE_INDEP_PG_MAP)) {
       dout(7) << "do_notify osd." << it->first
 	      << " on " << it->second.size() << " PGs" << dendl;
       MOSDPGNotify *m = new MOSDPGNotify(curmap->get_epoch(),
@@ -5923,7 +5934,7 @@ void OSD::do_queries(map< int, map<pg_t,pg_query_t> >& query_map,
     if (!con)
       continue;
     _share_map_outgoing(who, con.get(), curmap);
-    if ((con->features & CEPH_FEATURE_INDEP_PG_MAP)) {
+    if (con->has_feature(CEPH_FEATURE_INDEP_PG_MAP)) {
       dout(7) << "do_queries querying osd." << who
 	      << " on " << pit->second.size() << " PGs" << dendl;
       MOSDPGQuery *m = new MOSDPGQuery(curmap->get_epoch(), pit->second);
@@ -5962,7 +5973,7 @@ void OSD::do_infos(map<int,vector<pair<pg_notify_t, pg_interval_map_t> > >& info
     if (!con)
       continue;
     _share_map_outgoing(p->first, con.get(), curmap);
-    if ((con->features & CEPH_FEATURE_INDEP_PG_MAP)) {
+    if (con->has_feature(CEPH_FEATURE_INDEP_PG_MAP)) {
       MOSDPGInfo *m = new MOSDPGInfo(curmap->get_epoch());
       m->pg_list = p->second;
       cluster_messenger->send_message(m, con.get());
