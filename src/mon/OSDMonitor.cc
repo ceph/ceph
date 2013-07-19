@@ -297,8 +297,14 @@ void OSDMonitor::on_active()
 {
   update_logger();
 
-  if (thrash_map && thrash())
-    propose_pending();
+  if (thrash_map) {
+    if (mon->is_leader()) {
+      if (thrash())
+	propose_pending();
+    } else {
+      thrash_map = 0;
+    }
+  }
 
   if (mon->is_leader())
     mon->clog.info() << "osdmap " << osdmap << "\n"; 
