@@ -318,9 +318,12 @@ int MonClient::init()
 
 void MonClient::shutdown()
 {
+  ldout(cct, 10) << __func__ << "shutdown" << dendl;
   monc_lock.Lock();
   while (!version_requests.empty()) {
     version_requests.begin()->second->context->complete(-ECANCELED);
+    ldout(cct, 20) << __func__ << " canceling and discarding version request "
+		   << version_requests.begin()->second << dendl;
     delete version_requests.begin()->second;
     version_requests.erase(version_requests.begin());
   }
@@ -872,12 +875,13 @@ int MonClient::start_mon_command(int rank,
 
 void MonClient::get_version(string map, version_t *newest, version_t *oldest, Context *onfinish)
 {
-  ldout(cct, 10) << "get_version " << map << dendl;
+  version_req_d *req = new version_req_d(onfinish, newest, oldest);
+  ldout(cct, 10) << "get_version " << map << " req " << req << dendl;
   Mutex::Locker l(monc_lock);
   MMonGetVersion *m = new MMonGetVersion();
   m->what = map;
   m->handle = ++version_req_id;
-  version_requests[m->handle] = new version_req_d(onfinish, newest, oldest);
+  version_requests[m->handle] = req;
   _send_mon_message(m);
 }
 
@@ -886,10 +890,11 @@ void MonClient::handle_get_version_reply(MMonGetVersionReply* m)
   assert(monc_lock.is_locked());
   map<tid_t, version_req_d*>::iterator iter = version_requests.find(m->handle);
   if (iter == version_requests.end()) {
-    ldout(cct, 0) << "version request with handle " << m->handle
+    ldout(cct, 0) << __func__ << " version request with handle " << m->handle
 		  << " not found" << dendl;
   } else {
     version_req_d *req = iter->second;
+    ldout(cct, 10) << __func__ << " finishing " << req << " version " << m->version << dendl;
     version_requests.erase(iter);
     if (req->newest)
       *req->newest = m->version;
