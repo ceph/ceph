@@ -163,7 +163,7 @@ public:
       : stat_state(state), ctx(context) { }
 
     void finish(int r) {
-      ctx->finish(r);
+      ctx->complete(r);
 
       stat_state->wrkldgen->m_stats_lock.Lock();
 

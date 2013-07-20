@@ -330,8 +330,7 @@ struct MDSlaveUpdate {
   ~MDSlaveUpdate() {
     item.remove_myself();
     if (waiter)
-      waiter->finish(0);
-    delete waiter;
+      waiter->complete(0);
   }
 };
 

@@ -510,8 +510,7 @@ void MDCache::_create_system_file_finish(Mutation *mut, CDentry *dn, version_t d
   mut->cleanup();
   delete mut;
 
-  fin->finish(0);
-  delete fin;
+  fin->complete(0);
 
   //if (dir && MDS_INO_IS_MDSDIR(in->ino()))
   //migrator->export_dir(dir, (int)in->ino() - MDS_INO_MDSDIR_OFFSET);
@@ -3093,8 +3092,7 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
       if (mdr->more()->slave_commit) {
 	Context *fin = mdr->more()->slave_commit;
 	mdr->more()->slave_commit = 0;
-	fin->finish(-1);
-	delete fin;
+	fin->complete(-1);
       } else {
 	if (mdr->slave_request) 
 	  mdr->aborted = true;
@@ -7675,8 +7673,7 @@ public:
     mdcache(mdc), ino(i), want_xlocked(wx), onfinish(c) {}
   void finish(int r) {
     if (mdcache->get_inode(ino)) {
-      onfinish->finish(0);
-      delete onfinish;
+      onfinish->complete(0);
     } else
       mdcache->open_remote_ino(ino, onfinish, want_xlocked);
   }
@@ -7703,8 +7700,7 @@ public:
     if (r == 0)
       mdcache->open_remote_ino_2(ino, anchortrace, want_xlocked, hadino, hadv, onfinish);
     else {
-      onfinish->finish(r);
-      delete onfinish;
+      onfinish->complete(r);
     }
   }
 };
@@ -7753,8 +7749,7 @@ void MDCache::open_remote_ino_2(inodeno_t ino, vector<Anchor>& anchortrace, bool
   if (in->ino() == ino) {
     // success
     dout(10) << "open_remote_ino_2 have " << *in << dendl;
-    onfinish->finish(0);
-    delete onfinish;
+    onfinish->complete(0);
     return;
   } 
 
@@ -7795,8 +7790,7 @@ void MDCache::open_remote_ino_2(inodeno_t ino, vector<Anchor>& anchortrace, bool
 	dout(10) << "expected ino " << anchortrace[i].ino
 		 << " in complete dir " << *dir
 		 << ", got same anchor " << anchortrace[i] << " 2x in a row" << dendl;
-	onfinish->finish(-ENOENT);
-	delete onfinish;
+	onfinish->complete(-ENOENT);
       } else {
 	// hrm.  requery anchor table.
 	dout(10) << "expected ino " << anchortrace[i].ino
@@ -8408,8 +8402,7 @@ void MDCache::_do_find_ino_peer(find_ino_peer_info_t& fip)
       dout(10) << "_do_find_ino_peer waiting for more peers to be active" << dendl;
     } else {
       dout(10) << "_do_find_ino_peer failed on " << fip.ino << dendl;
-      fip.fin->finish(-ESTALE);
-      delete fip.fin;
+      fip.fin->complete(-ESTALE);
       find_ino_peer.erase(fip.tid);
     }
   } else {
@@ -8521,8 +8514,7 @@ void MDCache::_find_ino_dir(inodeno_t ino, Context *fin, bufferlist& bl, int r)
 {
   dout(10) << "_find_ino_dir " << ino << " got " << r << " " << bl.length() << " bytes" << dendl;
   if (r < 0) {
-    fin->finish(r);
-    delete fin;
+    fin->complete(r);
     return;
   }
 
@@ -8539,8 +8531,7 @@ void MDCache::_find_ino_dir(inodeno_t ino, Context *fin, bufferlist& bl, int r)
     return;
   delete c;  // path_traverse doesn't clean it up for us for r <= 0
   
-  fin->finish(r);
-  delete fin;
+  fin->complete(r);
 }
 
 
@@ -8619,8 +8610,7 @@ void MDCache::request_finish(MDRequest *mdr)
   if (mdr->more()->slave_commit) {
     Context *fin = mdr->more()->slave_commit;
     mdr->more()->slave_commit = 0;
-    fin->finish(0);   // this must re-call request_finish.
-    delete fin;
+    fin->complete(0);   // this must re-call request_finish.
     return; 
   }
 

@@ -1470,8 +1470,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   dout(10) << "trace finished on line " << t.get_line() << dendl;
 
   // wait for safe after an object trace
-  safegref->finish(0);
-  delete safegref;
+  safegref->complete(0);
   lock.Lock();
   while (!safe) {
     dout(10) << "waiting for safe" << dendl;
