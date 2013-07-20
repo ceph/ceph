@@ -14,6 +14,7 @@
 
 #define FUSE_USE_VERSION 26
 
+#include <fuse/fuse.h>
 #include <fuse/fuse_lowlevel.h>
 #include <signal.h>
 #include <stdio.h>
@@ -520,7 +521,7 @@ static int getgroups_cb(void *handle, uid_t uid, gid_t **sgids)
     return 0;
   }
 
-  *sgids = malloc(c*sizeof(**sgids));
+  *sgids = (gid_t*)malloc(c*sizeof(**sgids));
   if (!*sgids) {
     return -ENOMEM;
   }

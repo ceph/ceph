@@ -250,7 +250,10 @@ AS_IF([test "x$with_fuse" != xno],
                          [Define if you have fuse])
                HAVE_LIBFUSE=1
 	       # look for fuse_getgroups and define FUSE_GETGROUPS if found
+           LIBS_saved="$LIBS"
+           LIBS="$LIBS -lfuse"
 	       AC_CHECK_FUNCS([fuse_getgroups])
+           LIBS="$LIBS_saved"
               ],
              [AC_MSG_FAILURE(
                    [no FUSE found (use --without-fuse to disable)])])])
