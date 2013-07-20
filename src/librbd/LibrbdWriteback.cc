@@ -32,8 +32,7 @@ namespace librbd {
   void context_cb(rados_completion_t c, void *arg)
   {
     Context *con = reinterpret_cast<Context *>(arg);
-    con->finish(rados_aio_get_return_value(c));
-    delete con;
+    con->complete(rados_aio_get_return_value(c));
   }
 
   /**

@@ -173,8 +173,7 @@ void MDLog::submit_entry(LogEvent *le, Context *c)
   if (!g_conf->mds_log) {
     // hack: log is disabled.
     if (c) {
-      c->finish(0);
-      delete c;
+      c->complete(0);
     }
     return;
   }
@@ -245,8 +244,7 @@ void MDLog::wait_for_safe(Context *c)
     journaler->wait_for_flush(c);
   } else {
     // hack: bypass.
-    c->finish(0);
-    delete c;
+    c->complete(0);
   }
 }
 
@@ -442,8 +440,7 @@ void MDLog::replay(Context *c)
   if (journaler->get_read_pos() == journaler->get_write_pos()) {
     dout(10) << "replay - journal empty, done." << dendl;
     if (c) {
-      c->finish(0);
-      delete c;
+      c->complete(0);
     }
     return;
   }

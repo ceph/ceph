@@ -51,8 +51,7 @@ void AnchorClient::handle_query_result(class MMDSTableRequest *m)
   for (list<_pending_lookup>::iterator q = ls.begin(); q != ls.end(); ++q) {
     *q->trace = trace;
     if (q->onfinish) {
-      q->onfinish->finish(0);
-      delete q->onfinish;
+      q->onfinish->complete(0);
     }
   }
 }

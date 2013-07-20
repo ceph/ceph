@@ -131,8 +131,7 @@ void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mt
     return;  // waiting for more!
 
   if (probe->err) { // we hit an error, propagate back up
-    probe->onfinish->finish(probe->err);
-    delete probe->onfinish;
+    probe->onfinish->complete(probe->err);
     delete probe;
     return;
   }
@@ -216,8 +215,7 @@ void Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mt
   }
 
   // done!  finish and clean up.
-  probe->onfinish->finish(probe->err);
-  delete probe->onfinish;
+  probe->onfinish->complete(probe->err);
   delete probe;
 }
 
@@ -285,8 +283,7 @@ void Filer::_do_purge_range(PurgeRange *pr, int fin)
 	   << " uncommitted " << pr->uncommitted << dendl;
 
   if (pr->num == 0 && pr->uncommitted == 0) {
-    pr->oncommit->finish(0);
-    delete pr->oncommit;
+    pr->oncommit->complete(0);
     delete pr;
     return;
   }

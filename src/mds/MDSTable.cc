@@ -160,7 +160,6 @@ void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)
   decode_state(p);
 
   if (onfinish) {
-    onfinish->finish(0);
-    delete onfinish;
+    onfinish->complete(0);
   }
 }

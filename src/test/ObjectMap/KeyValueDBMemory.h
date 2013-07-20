@@ -104,8 +104,7 @@ public:
       for (list<Context *>::iterator i = on_commit.begin();
 	   i != on_commit.end();
 	   on_commit.erase(i++)) {
-	(*i)->finish(0);
-	delete *i;
+	(*i)->complete(0);
       }
       return 0;
     }

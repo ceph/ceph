@@ -181,8 +181,7 @@ void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
   trimmed_pos = trimming_pos = h.trimmed_pos;
   init_headers(h);
   state = STATE_ACTIVE;
-  finish->finish(r);
-  delete finish;
+  finish->complete(r);
 }
 
 void Journaler::_finish_read_head(int r, bufferlist& bl)
@@ -261,8 +260,7 @@ void Journaler::_finish_reprobe(int r, uint64_t new_end, Context *onfinish) {
 	  << dendl;
   prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = new_end;
   state = STATE_ACTIVE;
-  onfinish->finish(r);
-  delete onfinish;
+  onfinish->complete(r);
 }
 
 void Journaler::_finish_probe_end(int r, uint64_t end)
@@ -367,8 +365,7 @@ void Journaler::_finish_write_head(int r, Header &wrote, Context *oncommit)
   ldout(cct, 10) << "_finish_write_head " << wrote << dendl;
   last_committed = wrote;
   if (oncommit) {
-    oncommit->finish(r);
-    delete oncommit;
+    oncommit->complete(r);
   }
 
   trim();  // trim?
@@ -563,8 +560,7 @@ void Journaler::wait_for_flush(Context *onsafe)
     ldout(cct, 10) << "flush nothing to flush, (prezeroing/prezero)/write/flush/safe pointers at " 
 	     << "(" << prezeroing_pos << "/" << prezero_pos << ")/" << write_pos << "/" << flush_pos << "/" << safe_pos << dendl;
     if (onsafe) {
-      onsafe->finish(0);
-      delete onsafe;
+      onsafe->complete(0);
       onsafe = 0;
     }
     return;
@@ -584,8 +580,7 @@ void Journaler::flush(Context *onsafe)
     ldout(cct, 10) << "flush nothing to flush, (prezeroing/prezero)/write/flush/safe pointers at "
 	     << "(" << prezeroing_pos << "/" << prezero_pos << ")/" << write_pos << "/" << flush_pos << "/" << safe_pos << dendl;
     if (onsafe) {
-      onsafe->finish(0);
-      delete onsafe;
+      onsafe->complete(0);
     }
   } else {
     if (1) {
@@ -731,8 +726,7 @@ void Journaler::_finish_read(int r, uint64_t offset, bufferlist& bl)
     if (on_readable) {
       Context *f = on_readable;
       on_readable = 0;
-      f->finish(r);
-      delete f;
+      f->complete(r);
     }
     return;
   }
@@ -779,8 +773,7 @@ void Journaler::_assimilate_prefetch()
     if (on_readable) {
       Context *f = on_readable;
       on_readable = 0;
-      f->finish(0);
-      delete f;
+      f->complete(0);
     }
   }
 }
@@ -1060,8 +1053,7 @@ void Journaler::handle_write_error(int r)
 {
   lderr(cct) << "handle_write_error " << cpp_strerror(r) << dendl;
   if (on_write_error) {
-    on_write_error->finish(r);
-    delete on_write_error;
+    on_write_error->complete(r);
     on_write_error = NULL;
   } else {
     assert(0 == "unhandled write error");

@@ -321,8 +321,7 @@ void Objecter::_linger_ack(LingerOp *info, int r)
 {
   ldout(cct, 10) << "_linger_ack " << info->linger_id << dendl;
   if (info->on_reg_ack) {
-    info->on_reg_ack->finish(r);
-    delete info->on_reg_ack;
+    info->on_reg_ack->complete(r);
     info->on_reg_ack = NULL;
   }
 }
@@ -331,8 +330,7 @@ void Objecter::_linger_commit(LingerOp *info, int r)
 {
   ldout(cct, 10) << "_linger_commit " << info->linger_id << dendl;
   if (info->on_reg_commit) {
-    info->on_reg_commit->finish(r);
-    delete info->on_reg_commit;
+    info->on_reg_commit->complete(r);
     info->on_reg_commit = NULL;
   }
 
@@ -676,8 +674,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
     //go through the list and call the onfinish methods
     for (list<pair<Context*, int> >::iterator i = p->second.begin();
 	 i != p->second.end(); ++i) {
-      i->first->finish(i->second);
-      delete i->first;
+      i->first->complete(i->second);
     }
     waiting_for_map.erase(p++);
   }
@@ -1622,12 +1619,10 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   // do callbacks
   if (onack) {
-    onack->finish(rc);
-    delete onack;
+    onack->complete(rc);
   }
   if (oncommit) {
-    oncommit->finish(rc);
-    delete oncommit;
+    oncommit->complete(rc);
   }
 
   m->put();
@@ -1646,8 +1641,7 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
 	   << "\nlist_context->cookie" << list_context->cookie << dendl;
 
   if (list_context->at_end) {
-    onfinish->finish(0);
-    delete onfinish;
+    onfinish->complete(0);
     return;
   }
 
@@ -1667,8 +1661,7 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
     list_context->starting_pg_num = pg_num;
   }
   if (list_context->current_pg == pg_num){ //this context got all the way through
-    onfinish->finish(0);
-    delete onfinish;
+    onfinish->complete(0);
     return;
   }
 
@@ -1722,9 +1715,8 @@ void Objecter::_list_reply(ListContext *list_context, int r, bufferlist *bl,
     ldout(cct, 20) << "got a response with objects, proceeding" << dendl;
     list_context->list.merge(response.entries);
     if (response_size >= list_context->max_entries) {
-      final_finish->finish(0);
+      final_finish->complete(0);
       delete bl;
-      delete final_finish;
       return;
     }
 
@@ -1756,8 +1748,7 @@ void Objecter::_list_reply(ListContext *list_context, int r, bufferlist *bl,
   ldout(cct, 20) << "out of pgs, returning to" << final_finish << dendl;
   list_context->at_end = true;
   delete bl;
-  final_finish->finish(0);
-  delete final_finish;
+  final_finish->complete(0);
   return;
 }
 
@@ -1799,8 +1790,7 @@ struct C_SelfmanagedSnap : public Context {
       bufferlist::iterator p = bl.begin();
       ::decode(*psnapid, p);
     }
-    fin->finish(r);
-    delete fin;
+    fin->complete(r);
   }
 };
 
@@ -1975,8 +1965,7 @@ void Objecter::handle_pool_op_reply(MPoolOpReply *m)
       wait_for_new_map(op->onfinish, m->epoch, m->replyCode);
     }
     else {
-      op->onfinish->finish(m->replyCode);
-      delete op->onfinish;
+      op->onfinish->complete(m->replyCode);
     }
     op->onfinish = NULL;
     delete op;
@@ -2033,8 +2022,7 @@ void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
     *op->pool_stats = m->pool_stats;
     if (m->version > last_seen_pgmap_version)
       last_seen_pgmap_version = m->version;
-    op->onfinish->finish(0);
-    delete op->onfinish;
+    op->onfinish->complete(0);
     poolstat_ops.erase(tid);
     delete op;
 
@@ -2085,8 +2073,7 @@ void Objecter::handle_fs_stats_reply(MStatfsReply *m)
     *(op->stats) = m->h.st;
     if (m->h.version > last_seen_pgmap_version)
       last_seen_pgmap_version = m->h.version;
-    op->onfinish->finish(0);
-    delete op->onfinish;
+    op->onfinish->complete(0);
     statfs_ops.erase(tid);
     delete op;
 
@@ -2128,8 +2115,7 @@ void Objecter::_sg_read_finish(vector<ObjectExtent>& extents, vector<bufferlist>
   ldout(cct, 7) << "_sg_read_finish " << bytes_read << " bytes" << dendl;
 
   if (onfinish) {
-    onfinish->finish(bytes_read);// > 0 ? bytes_read:m->get_result());
-    delete onfinish;
+    onfinish->complete(bytes_read);// > 0 ? bytes_read:m->get_result());
   }
 }
 
