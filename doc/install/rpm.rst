@@ -16,6 +16,27 @@ release key to your system's list of trusted keys to avoid a security warning::
     sudo rpm --import 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc'
 
 
+Install Prerequisites
+=====================
+
+Ceph may require additional additional third party libraries. 
+To add the EPEL repository, execute the following:: 
+
+   su -c 'rpm -Uvh http://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm'
+
+Some releases of Ceph require the following packages::
+
+- snappy
+- leveldb
+- gdisk
+- python-argparse
+- gperftools-libs
+
+To install these packages, execute the following::  
+
+	sudo yum install snappy leveldb gdisk python-argparse gperftools-libs
+
+
 Add Release Packages
 ====================
 
@@ -31,13 +52,9 @@ Packages are currently built for the RHEL/CentOS6 (``el6``), Fedora 17
 platforms. The repository package installs the repository details on
 your local system for use with ``yum`` or ``up2date``.
 
-Replase the``{DISTRO}`` below with the distro codename::
-
-    su -c 'rpm -Uvh http://ceph.com/rpm-cuttlefish/{DISTRO}/x86_64/ceph-release-1-0.el6.noarch.rpm'
-
 For example, for CentOS 6 or other RHEL6 derivatives (``el6``)::
 
-    su -c 'rpm -Uvh http://ceph.com/rpm-cuttlefish/el6/x86_64/ceph-release-1-0.el6.noarch.rpm'
+    su -c 'rpm -Uvh http://ceph.com/rpm-cuttlefish/el6/noarch/ceph-release-1-0.el6.noarch.rpm'
 
 You can download the RPMs directly from::
 
@@ -99,11 +116,23 @@ You can download the RPMs directly from::
      http://ceph.com/rpm-testing
 
 
+
+Installing Ceph Deploy
+======================
+
+Once you have added either release or development packages to ``yum``, you
+can install ``ceph-deploy``::
+
+sudo yum install ceph-deploy python-pushy
+
+
+
 Installing Ceph Packages
 ========================
 
 Once you have added either release or development packages to ``yum``, you
-can install Ceph::
+can install Ceph packages. You can also use ``ceph-deploy`` to install Ceph
+packages. ::
 
 	sudo yum install ceph
 
