@@ -4730,11 +4730,12 @@ bool OSDService::prepare_to_stop()
   if (state != NOT_STOPPING)
     return false;
 
-  if (get_osdmap()->is_up(whoami)) {
+  OSDMapRef osdmap = get_osdmap();
+  if (osdmap && osdmap->is_up(whoami)) {
     state = PREPARING_TO_STOP;
     monc->send_mon_message(new MOSDMarkMeDown(monc->get_fsid(),
-					      get_osdmap()->get_inst(whoami),
-					      get_osdmap()->get_epoch(),
+					      osdmap->get_inst(whoami),
+					      osdmap->get_epoch(),
 					      false
 					      ));
     utime_t now = ceph_clock_now(g_ceph_context);
