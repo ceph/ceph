@@ -45,6 +45,7 @@
 #include "messages/MOSDPGLog.h"
 #include "common/tracked_int_ptr.hpp"
 #include "common/WorkQueue.h"
+#include "include/str_list.h"
 
 #include <list>
 #include <memory>
@@ -110,6 +111,33 @@ struct PGRecoveryStats {
 	  << p->first << "\n";
 	       
     }
+  }
+
+  void dump_formatted(Formatter *f) {
+    Mutex::Locker l(lock);
+    f->open_array_section("pg_recovery_stats");
+    for (map<const char *,per_state_info>::iterator p = info.begin();
+	 p != info.end(); ++p) {
+      per_state_info& i = p->second;
+      f->open_object_section("recovery_state");
+      f->dump_int("enter", i.enter);
+      f->dump_int("exit", i.exit);
+      f->dump_int("events", i.events);
+      f->dump_stream("event_time") << i.event_time;
+      f->dump_stream("total_time") << i.total_time;
+      f->dump_stream("min_time") << i.min_time;
+      f->dump_stream("max_time") << i.max_time;
+      vector<string> states;
+      get_str_vec(p->first, "/", states);
+      f->open_array_section("nested_states");
+      for (vector<string>::iterator st = states.begin();
+	   st != states.end(); ++st) {
+	f->dump_string("state", *st);
+      }
+      f->close_section();
+      f->close_section();
+    }
+    f->close_section();
   }
 
   void log_enter(const char *s) {

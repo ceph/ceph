@@ -3879,6 +3879,8 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
 
   map<string, cmd_vartype> cmdmap;
   string prefix;
+  string format;
+  boost::scoped_ptr<Formatter> f;
 
   if (cmd.empty()) {
     ss << "no command given";
@@ -3913,8 +3915,18 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     goto out;
   }
 
+  cmd_getval(g_ceph_context, cmdmap, "format", format);
+  f.reset(new_formatter(format));
+
   if (prefix == "version") {
-    ds << pretty_version_to_str();
+    if (f) {
+      f->open_object_section("version");
+      f->dump_string("version", pretty_version_to_str());
+      f->close_section();
+      f->flush(ds);
+    } else {
+      ds << pretty_version_to_str();
+    }
     goto out;
   }
   else if (prefix == "injectargs") {
@@ -3952,7 +3964,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
 	ss << "i don't have pgid " << pgid;
 	r = -ENOENT;
       } else {
-	r = pg->do_command(cmd, ss, data, odata);
+	r = pg->do_command(cmdmap, ss, data, odata);
 	pg->unlock();
       }
     }
@@ -3991,9 +4003,18 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     store->queue_transaction(NULL, cleanupt);
 
     uint64_t rate = (double)count / (end - start);
-    ss << "bench: wrote " << prettybyte_t(count)
-       << " in blocks of " << prettybyte_t(bsize) << " in "
-       << (end-start) << " sec at " << prettybyte_t(rate) << "/sec";
+    if (f) {
+      f->open_object_section("osd_bench_results");
+      f->dump_int("bytes_written", count);
+      f->dump_int("blocksize", bsize);
+      f->dump_float("bytes_per_sec", rate);
+      f->close_section();
+      f->flush(ss);
+    } else {
+      ss << "bench: wrote " << prettybyte_t(count)
+	 << " in blocks of " << prettybyte_t(bsize) << " in "
+	 << (end-start) << " sec at " << prettybyte_t(rate) << "/sec";
+    }
   }
 
   else if (prefix == "flush_pg_stats") {
@@ -4090,8 +4111,13 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
 
   else if (prefix == "dump_pg_recovery_stats") {
     stringstream s;
-    pg_recovery_stats.dump(s);
-    ds << "dump pg recovery stats: " << s.str();
+    if (f) {
+      pg_recovery_stats.dump_formatted(f.get());
+      f->flush(ds);
+    } else {
+      pg_recovery_stats.dump(s);
+      ds << "dump pg recovery stats: " << s.str();
+    }
   }
 
   else if (prefix == "reset_pg_recovery_stats") {
