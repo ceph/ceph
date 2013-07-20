@@ -860,8 +860,7 @@ public:
 	if (pmtime)
 	  *pmtime = m;
       }
-      fin->finish(r);
-      delete fin;
+      fin->complete(r);
     }
   };
 
@@ -875,8 +874,7 @@ public:
 	bufferlist::iterator p = bl.begin();
 	::decode(attrset, p);
       }
-      fin->finish(r);
-      delete fin;
+      fin->complete(r);
     }
   };
 
@@ -916,8 +914,7 @@ public:
       if (r >= 0) {
         objecter->_list_reply(list_context, r, bl, final_finish, epoch);
       } else {
-        final_finish->finish(r);
-        delete final_finish;
+        final_finish->complete(r);
       }
     }
   };

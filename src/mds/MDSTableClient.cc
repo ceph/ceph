@@ -61,8 +61,7 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
       pending_prepare.erase(reqid);
       prepared_update[tid] = reqid;
       if (onfinish) {
-        onfinish->finish(0);
-        delete onfinish;
+        onfinish->complete(0);
       }
     }
     else if (prepared_update.count(tid)) {

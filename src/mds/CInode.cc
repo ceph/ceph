@@ -914,8 +914,7 @@ void CInode::_stored(version_t v, Context *fin)
   if (v == get_projected_version())
     mark_clean();
 
-  fin->finish(0);
-  delete fin;
+  fin->complete(0);
 }
 
 struct C_Inode_Fetched : public Context {
@@ -964,13 +963,12 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
   if (magic != CEPH_FS_ONDISK_MAGIC) {
     dout(0) << "on disk magic '" << magic << "' != my magic '" << CEPH_FS_ONDISK_MAGIC
 	    << "'" << dendl;
-    fin->finish(-EINVAL);
+    fin->complete(-EINVAL);
   } else {
     decode_store(p);
     dout(10) << "_fetched " << *this << dendl;
-    fin->finish(0);
+    fin->complete(0);
   }
-  delete fin;
 }
 
 void CInode::build_backtrace(int64_t pool, inode_backtrace_t& bt)
