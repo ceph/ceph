@@ -24,7 +24,7 @@ To add the EPEL repository, execute the following::
 
    su -c 'rpm -Uvh http://dl.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm'
 
-Some releases of Ceph require the following packages::
+Some releases of Ceph require the following packages:
 
 - snappy
 - leveldb
@@ -121,9 +121,9 @@ Installing Ceph Deploy
 ======================
 
 Once you have added either release or development packages to ``yum``, you
-can install ``ceph-deploy``::
+can install ``ceph-deploy``. ::
 
-sudo yum install ceph-deploy python-pushy
+	sudo yum install ceph-deploy python-pushy
 
 
 
