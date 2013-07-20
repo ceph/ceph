@@ -53,13 +53,11 @@ void *Finisher::finisher_thread_entry()
 	   p != ls.end();
 	   ++p) {
 	if (*p) {
-	  (*p)->finish(0);
-	  delete *p;
+	  (*p)->complete(0);
 	} else {
 	  assert(!ls_rval.empty());
 	  Context *c = ls_rval.front().first;
-	  c->finish(ls_rval.front().second);
-	  delete c;
+	  c->complete(ls_rval.front().second);
 	  ls_rval.pop_front();
 	}
 	if (logger)
