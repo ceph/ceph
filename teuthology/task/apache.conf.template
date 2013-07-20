@@ -1,7 +1,15 @@
-LoadModule env_module {mod_path}/mod_env.so
-LoadModule rewrite_module {mod_path}/mod_rewrite.so
-LoadModule fastcgi_module {mod_path}/mod_fastcgi.so
-LoadModule log_config_module {mod_path}/mod_log_config.so
+<IfModule !env_module>
+  LoadModule env_module {mod_path}/mod_env.so
+</IfModule>
+<IfModule !rewrite_module>
+  LoadModule rewrite_module {mod_path}/mod_rewrite.so
+</IfModule>
+<IfModule !fastcgi_module>
+  LoadModule fastcgi_module {mod_path}/mod_fastcgi.so
+</IfModule>
+<IfModule !log_config_module>
+  LoadModule log_config_module {mod_path}/mod_log_config.so
+</IfModule>
 
 Listen 7280
 ServerName rgwtest.example.com
