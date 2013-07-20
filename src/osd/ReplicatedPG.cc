@@ -268,23 +268,12 @@ int ReplicatedPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilt
 
 // ==========================================================
 
-int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss,
+int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
 			     bufferlist& idata, bufferlist& odata)
 {
   const pg_missing_t &missing = pg_log.get_missing();
-  map<string, cmd_vartype> cmdmap;
   string prefix;
-
-  if (cmd.empty()) {
-    ss << "no command given";
-    return -EINVAL;
-  }
-
-  stringstream ss2;
-  if (!cmdmap_from_json(cmd, &cmdmap, ss2)) {
-    ss << ss2.str();
-    return -EINVAL;
-  }
+  string format;
 
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
   if (prefix != "pg") {
@@ -292,33 +281,36 @@ int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss,
     return -EINVAL;
   }
 
+  cmd_getval(g_ceph_context, cmdmap, "format", format);
+  boost::scoped_ptr<Formatter> f(new_formatter(format));
+  // demand that we have a formatter
+  if (!f)
+    f.reset(new_formatter("json"));
+
   string command;
   cmd_getval(g_ceph_context, cmdmap, "cmd", command);
   if (command == "query") {
-    JSONFormatter jsf(true);
-    jsf.open_object_section("pg");
-    jsf.dump_string("state", pg_state_string(get_state()));
-    jsf.dump_unsigned("epoch", get_osdmap()->get_epoch());
-    jsf.open_array_section("up");
+    f->open_object_section("pg");
+    f->dump_string("state", pg_state_string(get_state()));
+    f->dump_unsigned("epoch", get_osdmap()->get_epoch());
+    f->open_array_section("up");
     for (vector<int>::iterator p = up.begin(); p != up.end(); ++p)
-      jsf.dump_unsigned("osd", *p);
-    jsf.close_section();
-    jsf.open_array_section("acting");
+      f->dump_unsigned("osd", *p);
+    f->close_section();
+    f->open_array_section("acting");
     for (vector<int>::iterator p = acting.begin(); p != acting.end(); ++p)
-      jsf.dump_unsigned("osd", *p);
-    jsf.close_section();
-    jsf.open_object_section("info");
-    info.dump(&jsf);
-    jsf.close_section();
+      f->dump_unsigned("osd", *p);
+    f->close_section();
+    f->open_object_section("info");
+    info.dump(f.get());
+    f->close_section();
 
-    jsf.open_array_section("recovery_state");
-    handle_query_state(&jsf);
-    jsf.close_section();
+    f->open_array_section("recovery_state");
+    handle_query_state(f.get());
+    f->close_section();
 
-    jsf.close_section();
-    stringstream dss;
-    jsf.flush(dss);
-    odata.append(dss);
+    f->close_section();
+    f->flush(odata);
     return 0;
   }
   else if (command == "mark_unfound_lost") {
@@ -352,7 +344,6 @@ int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss,
     return 0;
   }
   else if (command == "list_missing") {
-    JSONFormatter jf(true);
     hobject_t offset;
     string offset_json;
     if (cmd_getval(g_ceph_context, cmdmap, "offset", offset_json)) {
@@ -366,50 +357,48 @@ int ReplicatedPG::do_command(vector<string>& cmd, ostream& ss,
 	return -EINVAL;
       }
     }
-    jf.open_object_section("missing");
+    f->open_object_section("missing");
     {
-      jf.open_object_section("offset");
-      offset.dump(&jf);
-      jf.close_section();
+      f->open_object_section("offset");
+      offset.dump(f.get());
+      f->close_section();
     }
-    jf.dump_int("num_missing", missing.num_missing());
-    jf.dump_int("num_unfound", get_num_unfound());
+    f->dump_int("num_missing", missing.num_missing());
+    f->dump_int("num_unfound", get_num_unfound());
     map<hobject_t,pg_missing_t::item>::const_iterator p = missing.missing.upper_bound(offset);
     {
-      jf.open_array_section("objects");
+      f->open_array_section("objects");
       int32_t num = 0;
       bufferlist bl;
       while (p != missing.missing.end() && num < g_conf->osd_command_max_records) {
-	jf.open_object_section("object");
+	f->open_object_section("object");
 	{
-	  jf.open_object_section("oid");
-	  p->first.dump(&jf);
-	  jf.close_section();
+	  f->open_object_section("oid");
+	  p->first.dump(f.get());
+	  f->close_section();
 	}
-	p->second.dump(&jf);  // have, need keys
+	p->second.dump(f.get());  // have, need keys
 	{
-	  jf.open_array_section("locations");
+	  f->open_array_section("locations");
 	  map<hobject_t,set<int> >::iterator q = missing_loc.find(p->first);
 	  if (q != missing_loc.end())
 	    for (set<int>::iterator r = q->second.begin(); r != q->second.end(); ++r)
-	      jf.dump_int("osd", *r);
-	  jf.close_section();
+	      f->dump_int("osd", *r);
+	  f->close_section();
 	}
-	jf.close_section();
+	f->close_section();
 	++p;
 	num++;
       }
-      jf.close_section();
+      f->close_section();
     }
-    jf.dump_int("more", p != missing.missing.end());
-    jf.close_section();
-    stringstream jss;
-    jf.flush(jss);
-    odata.append(jss);
+    f->dump_int("more", p != missing.missing.end());
+    f->close_section();
+    f->flush(odata);
     return 0;
   };
 
-  ss << "unknown command " << cmd;
+  ss << "unknown pg command " << prefix;
   return -EINVAL;
 }
 
