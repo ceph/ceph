@@ -93,8 +93,10 @@ int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t 
     new_bucket.creation_time = creation_time;
   ::encode(new_bucket, bl);
 
+  map<string, bufferlist> attrs;
+
   if (update_entrypoint) {
-    ret = store->get_bucket_entrypoint_info(NULL, bucket_name, ep, &ot, NULL);
+    ret = store->get_bucket_entrypoint_info(NULL, bucket_name, ep, &ot, NULL, &attrs);
     if (ret < 0 && ret != -ENOENT) {
       ldout(store->ctx(), 0) << "ERROR: store->get_bucket_entrypoint_info() returned " << ret << dendl;
     } else if (ret >= 0 && ep.linked && ep.owner != user_id) {
@@ -119,7 +121,7 @@ int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t 
 
   ep.linked = true;
   ep.owner = user_id;
-  ret = store->put_bucket_entrypoint_info(bucket_name, ep, false, ot, 0);
+  ret = store->put_bucket_entrypoint_info(bucket_name, ep, false, ot, 0, &attrs);
   if (ret < 0)
     goto done_err;
 
@@ -153,7 +155,8 @@ int rgw_unlink_bucket(RGWRados *store, string user_id, const string& bucket_name
 
   RGWBucketEntryPoint ep;
   RGWObjVersionTracker ot;
-  ret = store->get_bucket_entrypoint_info(NULL, bucket_name, ep, &ot, NULL);
+  map<string, bufferlist> attrs;
+  ret = store->get_bucket_entrypoint_info(NULL, bucket_name, ep, &ot, NULL, &attrs);
   if (ret == -ENOENT)
     return 0;
   if (ret < 0)
@@ -168,7 +171,7 @@ int rgw_unlink_bucket(RGWRados *store, string user_id, const string& bucket_name
   }
 
   ep.linked = false;
-  ret = store->put_bucket_entrypoint_info(bucket_name, ep, false, ot, 0);
+  ret = store->put_bucket_entrypoint_info(bucket_name, ep, false, ot, 0, &attrs);
   if (ret < 0)
     return ret;
 
@@ -1381,8 +1384,9 @@ public:
     RGWBucketEntryPoint be;
 
     time_t mtime;
+    map<string, bufferlist> attrs;
 
-    int ret = store->get_bucket_entrypoint_info(NULL, entry, be, &ot, &mtime);
+    int ret = store->get_bucket_entrypoint_info(NULL, entry, be, &ot, &mtime, &attrs);
     if (ret < 0)
       return ret;
 
@@ -1398,16 +1402,17 @@ public:
     decode_json_obj(be, obj);
 
     time_t orig_mtime;
+    map<string, bufferlist> attrs;
 
     RGWObjVersionTracker old_ot;
 
-    int ret = store->get_bucket_entrypoint_info(NULL, entry, old_be, &old_ot, &orig_mtime);
+    int ret = store->get_bucket_entrypoint_info(NULL, entry, old_be, &old_ot, &orig_mtime, &attrs);
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
     objv_tracker.read_version = old_ot.read_version; /* maintain the obj version we just read */
 
-    ret = store->put_bucket_entrypoint_info(entry, be, false, objv_tracker, mtime);
+    ret = store->put_bucket_entrypoint_info(entry, be, false, objv_tracker, mtime, &attrs);
     if (ret < 0)
       return ret;
 
@@ -1429,7 +1434,7 @@ public:
   int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) {
     RGWBucketEntryPoint be;
 
-    int ret = store->get_bucket_entrypoint_info(NULL, entry, be, &objv_tracker, NULL);
+    int ret = store->get_bucket_entrypoint_info(NULL, entry, be, &objv_tracker, NULL, NULL);
     if (ret < 0)
       return ret;
 
