@@ -1464,7 +1464,7 @@ public:
   }
 
   int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) {
-    list_keys_info *info = (list_keys_info *)handle;
+    list_keys_info *info = static_cast<list_keys_info *>(handle);
 
     string no_filter;
 
@@ -1498,7 +1498,7 @@ public:
   }
 
   void list_keys_complete(void *handle) {
-    list_keys_info *info = (list_keys_info *)handle;
+    list_keys_info *info = static_cast<list_keys_info *>(handle);
     delete info;
   }
 };
@@ -1611,7 +1611,7 @@ public:
   }
 
   int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) {
-    list_keys_info *info = (list_keys_info *)handle;
+    list_keys_info *info = static_cast<list_keys_info *>(handle);
 
     string no_filter;
 
@@ -1646,7 +1646,7 @@ public:
   }
 
   void list_keys_complete(void *handle) {
-    list_keys_info *info = (list_keys_info *)handle;
+    list_keys_info *info = static_cast<list_keys_info *>(handle);
     delete info;
   }
 
