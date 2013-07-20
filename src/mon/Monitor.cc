@@ -605,13 +605,13 @@ void Monitor::shutdown()
   finish_contexts(g_ceph_context, waitfor_quorum, -ECANCELED);
   finish_contexts(g_ceph_context, maybe_wait_for_quorum, -ECANCELED);
 
-
   timer.shutdown();
+
+  remove_all_sessions();
 
   // unlock before msgr shutdown...
   lock.Unlock();
 
-  remove_all_sessions();
   messenger->shutdown();  // last thing!  ceph_mon.cc will delete mon.
 }
 
