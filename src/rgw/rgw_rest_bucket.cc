@@ -17,7 +17,7 @@ public:
 
   void execute();
 
-  virtual const char *name() { return "get_bucket_info"; }
+  virtual const string name() { return "get_bucket_info"; }
 };
 
 void RGWOp_Bucket_Info::execute()
@@ -52,7 +52,7 @@ public:
 
   void execute();
 
-  virtual const char *name() { return "get_policy"; }
+  virtual const string name() { return "get_policy"; }
 };
 
 void RGWOp_Get_Policy::execute()
@@ -82,7 +82,7 @@ public:
 
   void execute();
 
-  virtual const char *name() { return "check_bucket_index"; }
+  virtual const string name() { return "check_bucket_index"; }
 };
 
 void RGWOp_Check_Bucket_Index::execute()
@@ -116,7 +116,7 @@ public:
 
   void execute();
 
-  virtual const char *name() { return "link_bucket"; }
+  virtual const string name() { return "link_bucket"; }
 };
 
 void RGWOp_Bucket_Link::execute()
@@ -146,7 +146,7 @@ public:
 
   void execute();
 
-  virtual const char *name() { return "unlink_bucket"; }
+  virtual const string name() { return "unlink_bucket"; }
 };
 
 void RGWOp_Bucket_Unlink::execute()
@@ -176,7 +176,7 @@ public:
 
   void execute();
 
-  virtual const char *name() { return "remove_bucket"; }
+  virtual const string name() { return "remove_bucket"; }
 };
 
 void RGWOp_Bucket_Remove::execute()
@@ -206,7 +206,7 @@ public:
 
   void execute();
 
-  virtual const char *name() { return "remove_object"; }
+  virtual const string name() { return "remove_object"; }
 };
 
 void RGWOp_Object_Remove::execute()
