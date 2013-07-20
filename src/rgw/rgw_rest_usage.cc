@@ -16,7 +16,7 @@ public:
   }
   void execute();
 
-  virtual const char *name() { return "get_usage"; }
+  virtual const string name() { return "get_usage"; }
 };
 
 void RGWOp_Usage_Get::execute() {
@@ -58,7 +58,7 @@ public:
   }
   void execute();
 
-  virtual const char *name() { return "trim_usage"; }
+  virtual const string name() { return "trim_usage"; }
 };
 
 void RGWOp_Usage_Delete::execute() {
