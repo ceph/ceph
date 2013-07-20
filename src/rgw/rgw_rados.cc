@@ -2397,9 +2397,16 @@ class RGWRadosPutObj : public RGWGetDataCB
   rgw_obj obj;
   RGWPutObjProcessor_Atomic *processor;
   RGWOpStateSingleOp *opstate;
+  void (*progress_cb)(off_t, void *);
+  void *progress_data;
 public:
-  RGWRadosPutObj(RGWPutObjProcessor_Atomic *p, RGWOpStateSingleOp *_ops) : processor(p), opstate(_ops) {}
+  RGWRadosPutObj(RGWPutObjProcessor_Atomic *p, RGWOpStateSingleOp *_ops,
+                 void (*_progress_cb)(off_t, void *), void *_progress_data) : processor(p), opstate(_ops),
+                                                                       progress_cb(_progress_cb),
+                                                                       progress_data(_progress_data) {}
   int handle_data(bufferlist& bl, off_t ofs, off_t len) {
+    progress_cb(ofs, progress_data);
+
     void *handle;
     int ret = processor->handle_data(bl, ofs, &handle);
     if (ret < 0)
@@ -2477,7 +2484,9 @@ int RGWRados::copy_obj(void *ctx,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
                string *ptag,
-               struct rgw_err *err)
+               struct rgw_err *err,
+               void (*progress_cb)(off_t, void *),
+               void *progress_data)
 {
   int ret;
   uint64_t total_len, obj_size;
@@ -2545,7 +2554,7 @@ int RGWRados::copy_obj(void *ctx,
       ldout(cct, 0) << "ERROR: failed to set opstate ret=" << ret << dendl;
       return ret;
     }
-    RGWRadosPutObj cb(&processor, &opstate);
+    RGWRadosPutObj cb(&processor, &opstate, progress_cb, progress_data);
     string etag;
     map<string, string> req_headers;
     time_t set_mtime;

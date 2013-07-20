@@ -1121,7 +1121,9 @@ public:
                map<std::string, bufferlist>& attrs,
                RGWObjCategory category,
                string *ptag,
-               struct rgw_err *err);
+               struct rgw_err *err,
+               void (*progress_cb)(off_t, void *),
+               void *progress_data);
 
   int copy_obj_data(void *ctx,
 	       void *handle, off_t end,
