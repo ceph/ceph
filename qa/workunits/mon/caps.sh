@@ -26,6 +26,7 @@ expect()
 
 expect "ceph auth get-or-create client.bazar > $tmp.bazar.keyring" 0
 expect "ceph -k $tmp.bazar.keyring --user bazar mon_status" 13
+ceph auth del client.bazar
 
 c="'allow command \"auth list\", allow command mon_status'"
 expect "ceph auth get-or-create client.foo mon $c > $tmp.foo.keyring" 0
@@ -36,6 +37,7 @@ expect "ceph -k $tmp.foo.keyring --user foo auth del client.bazar" 13
 expect "ceph -k $tmp.foo.keyring --user foo osd dump" 13
 expect "ceph -k $tmp.foo.keyring --user foo pg dump" 13
 expect "ceph -k $tmp.foo.keyring --user foo quorum_status" 13
+ceph auth del client.foo
 
 c="'allow command service with prefix=list, allow command mon_status'"
 expect "ceph auth get-or-create client.bar mon $c > $tmp.bar.keyring" 0
@@ -46,5 +48,8 @@ expect "ceph -k $tmp.bar.keyring --user bar auth del client.foo" 13
 expect "ceph -k $tmp.bar.keyring --user bar osd dump" 13
 expect "ceph -k $tmp.bar.keyring --user bar pg dump" 13
 expect "ceph -k $tmp.bar.keyring --user bar quorum_status" 13
+ceph auth del client.bar
 
 rm $tmp.bazar.keyring $tmp.foo.keyring $tmp.bar.keyring
+
+echo OK
