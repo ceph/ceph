@@ -256,7 +256,10 @@ class MonitorThrasher:
 
       if self.scrub:
         self.log('triggering scrub')
-        self.manager.raw_cluster_cmd('scrub')
+        try:
+          self.manager.raw_cluster_cmd('scrub')
+        except:
+          pass
 
       if self.thrash_delay > 0.0:
         self.log('waiting for {delay} secs before continuing thrashing'.format(
