@@ -5647,7 +5647,7 @@ int RGWStateLog::list_entries(void *handle, int max_entries,
                               list<cls_statelog_entry>& entries,
                               bool *done)
 {
-  list_state *state = (list_state *)handle;
+  list_state *state = static_cast<list_state *>(handle);
 
   librados::IoCtx ioctx;
   int r = open_ioctx(ioctx);
@@ -5695,7 +5695,7 @@ int RGWStateLog::list_entries(void *handle, int max_entries,
 
 void RGWStateLog::finish_list_entries(void *handle)
 {
-  list_state *state = (list_state *)handle;
+  list_state *state = static_cast<list_state *>(handle);
   delete state;
 }
 
