@@ -2028,8 +2028,7 @@ void FileStore::_finish_op(OpSequencer *osr)
   logger->tinc(l_os_apply_lat, lat);
 
   if (o->onreadable_sync) {
-    o->onreadable_sync->finish(0);
-    delete o->onreadable_sync;
+    o->onreadable_sync->complete(0);
   }
   op_finisher.queue(o->onreadable);
   delete o;
@@ -2126,8 +2125,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   // start on_readable finisher after we queue journal item, as on_readable callback
   // is allowed to delete the Transaction
   if (onreadable_sync) {
-    onreadable_sync->finish(r);
-    delete onreadable_sync;
+    onreadable_sync->complete(r);
   }
   op_finisher.queue(onreadable, r);
 
