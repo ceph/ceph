@@ -43,6 +43,7 @@
 #include "msg/Messenger.h"
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDPGLog.h"
+#include "common/cmdparse.h"
 #include "common/tracked_int_ptr.hpp"
 #include "common/WorkQueue.h"
 #include "include/str_list.h"
@@ -109,7 +110,6 @@ struct PGRecoveryStats {
 	  << i.total_time << "\t"
 	  << i.min_time << "\t" << i.max_time << "\t"
 	  << p->first << "\n";
-	       
     }
   }
 
@@ -1814,7 +1814,7 @@ public:
   virtual void do_push_reply(OpRequestRef op) = 0;
   virtual void snap_trimmer() = 0;
 
-  virtual int do_command(vector<string>& cmd, ostream& ss,
+  virtual int do_command(cmdmap_t cmdmap, ostream& ss,
 			 bufferlist& idata, bufferlist& odata) = 0;
 
   virtual bool same_for_read_since(epoch_t e) = 0;
