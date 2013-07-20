@@ -1299,15 +1299,30 @@ int RGWCopyObj_ObjStore_S3::get_params()
   return 0;
 }
 
+void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
+{
+  if (!sent_header) {
+    if (ret)
+    set_req_state_err(s, ret);
+    dump_errno(s);
+
+    end_header(s, "binary/octet-stream");
+    if (ret == 0) {
+      s->formatter->open_object_section("CopyObjectResult");
+    }
+    sent_header = true;
+  } else {
+    s->formatter->dump_int("Progress", (uint64_t)ofs);
+  }
+  rgw_flush_formatter(s, s->formatter);
+}
+
 void RGWCopyObj_ObjStore_S3::send_response()
 {
-  if (ret)
-    set_req_state_err(s, ret);
-  dump_errno(s);
+  if (!sent_header)
+    send_partial_response(0);
 
-  end_header(s, "binary/octet-stream");
   if (ret == 0) {
-    s->formatter->open_object_section("CopyObjectResult");
     dump_time(s, "LastModified", &mtime);
     map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
     if (iter != attrs.end()) {
