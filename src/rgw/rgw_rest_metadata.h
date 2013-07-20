@@ -23,7 +23,7 @@ public:
     return caps.check_cap("metadata", RGW_CAP_READ);
   }
   void execute();
-  virtual const char *name();
+  virtual const string name();
 };
 
 class RGWOp_Metadata_Get : public RGWRESTOp {
@@ -35,7 +35,7 @@ public:
     return caps.check_cap("metadata", RGW_CAP_READ);
   }
   void execute();
-  virtual const char *name();
+  virtual const string name();
 };
 
 class RGWOp_Metadata_Put : public RGWRESTOp {
@@ -48,7 +48,7 @@ public:
     return caps.check_cap("metadata", RGW_CAP_WRITE);
   }
   void execute();
-  virtual const char *name() { return "set_metadata"; }
+  virtual const string name() { return "set_metadata"; }
 };
 
 class RGWOp_Metadata_Delete : public RGWRESTOp {
@@ -60,7 +60,7 @@ public:
     return caps.check_cap("metadata", RGW_CAP_WRITE);
   }
   void execute();
-  virtual const char *name() { return "remove_metadata"; }
+  virtual const string name() { return "remove_metadata"; }
 };
 
 class RGWOp_Metadata_Lock : public RGWRESTOp {
@@ -72,7 +72,7 @@ public:
     return caps.check_cap("metadata", RGW_CAP_WRITE);
   }
   void execute();
-  virtual const char *name() {
+  virtual const string name() {
     return "lock_metadata_object";
   }
 };
@@ -86,7 +86,7 @@ public:
     return caps.check_cap("metadata", RGW_CAP_WRITE);
   }
   void execute();
-  virtual const char *name() {
+  virtual const string name() {
     return "unlock_metadata_object";
   }
 };

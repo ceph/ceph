@@ -30,7 +30,7 @@ public:
   virtual void send_response();
   virtual void send_response(list<cls_statelog_entry> entries);
   virtual void send_response_end();
-  virtual const char *name() {
+  virtual const string name() {
     return "opstate_list";
   }
 };
@@ -44,7 +44,7 @@ public:
     return caps.check_cap("opstate", RGW_CAP_WRITE);
   }
   void execute();
-  virtual const char *name() {
+  virtual const string name() {
     return "set_opstate";
   }
 };
@@ -58,7 +58,7 @@ public:
     return caps.check_cap("opstate", RGW_CAP_WRITE);
   }
   void execute();
-  virtual const char *name() {
+  virtual const string name() {
     return "renew_opstate";
   }
 };
@@ -72,7 +72,7 @@ public:
     return caps.check_cap("opstate", RGW_CAP_WRITE);
   }
   void execute();
-  virtual const char *name() {
+  virtual const string name() {
     return "delete_opstate";
   }
 };

@@ -23,7 +23,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-const char *RGWOp_Metadata_Get::name() {
+const string RGWOp_Metadata_Get::name() {
   return "get_metadata";
 }
 
@@ -62,7 +62,7 @@ void RGWOp_Metadata_Get::execute() {
   http_ret = 0;
 }
 
-const char *RGWOp_Metadata_List::name() {
+const string RGWOp_Metadata_List::name() {
   return "list_metadata";
 }
 
