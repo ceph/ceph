@@ -475,13 +475,37 @@ int RGWCopyObj_ObjStore_SWIFT::get_params()
   return 0;
 }
 
+void RGWCopyObj_ObjStore_SWIFT::send_partial_response(off_t ofs)
+{
+  if (!sent_header) {
+    if (!ret)
+      ret = STATUS_CREATED;
+    set_req_state_err(s, ret);
+    dump_errno(s);
+    end_header(s);
+
+    if (ret == 0) {
+      s->formatter->open_array_section("progress");
+    }
+    sent_header = true;
+  } else {
+    s->formatter->dump_int("ofs", (uint64_t)ofs);
+  }
+  rgw_flush_formatter(s, s->formatter);
+}
+
 void RGWCopyObj_ObjStore_SWIFT::send_response()
 {
-  if (!ret)
-    ret = STATUS_CREATED;
-  set_req_state_err(s, ret);
-  dump_errno(s);
-  end_header(s);
+  if (!sent_header) {
+   if (!ret)
+      ret = STATUS_CREATED;
+    set_req_state_err(s, ret);
+    dump_errno(s);
+    end_header(s);
+  } else {
+    s->formatter->close_section();
+    rgw_flush_formatter(s, s->formatter);
+  }
 }
 
 int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
