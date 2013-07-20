@@ -1538,7 +1538,7 @@ bool Monitor::_allowed_command(MonSession *s, map<string, cmd_vartype>& cmd)
   }
 
   if (s->caps.is_capable(g_ceph_context, s->inst.name,
-			 "", prefix, strmap, false, false, false)) {
+			 "", prefix, strmap, false, false, true)) {
     retval = true; 
   }
 
