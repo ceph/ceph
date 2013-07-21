@@ -48,11 +48,10 @@
  * Sets extended attribute on a file.
  * Returns 0 on success, -1 on failure.
  */
-int
-ceph_os_setxattr(const char *path, const char *name,
-    const void *value, size_t size)
+int ceph_os_setxattr(const char *path, const char *name, const void *value,
+		size_t size)
 {
-	int error = -1;
+	int error;
 
 #ifdef HAVE_EXTATTR
 	error = extattr_set_file(path, EXTATTR_NAMESPACE_USER, name, value,
@@ -67,14 +66,12 @@ ceph_os_setxattr(const char *path, const char *name,
 #endif
 #endif
 
-	return (error);
+	return error;
 }
 
-int
-ceph_os_fsetxattr(int fd, const char *name, const void *value,
-    size_t size)
+int ceph_os_fsetxattr(int fd, const char *name, const void *value, size_t size)
 {
-	int error = -1;
+	int error;
 
 #ifdef HAVE_EXTATTR
 	error = extattr_set_fd(fd, EXTATTR_NAMESPACE_USER, name, value,
@@ -89,14 +86,13 @@ ceph_os_fsetxattr(int fd, const char *name, const void *value,
 #endif
 #endif
 
-	return (error);
+	return error;
 }
 
-ssize_t
-ceph_os_getxattr(const char *path, const char *name,
-void *value, size_t size)
+ssize_t ceph_os_getxattr(const char *path, const char *name, void *value,
+		size_t size)
 {
-	ssize_t error = -1;
+	ssize_t error;
 
 #ifdef HAVE_EXTATTR
 	if (value == NULL || size == 0) {
@@ -123,14 +119,12 @@ void *value, size_t size)
 #endif
 #endif
 
-	return (error);
+	return error;
 }
 
-ssize_t
-ceph_os_fgetxattr(int fd, const char *name, void *value,
-    size_t size)
+ssize_t ceph_os_fgetxattr(int fd, const char *name, void *value, size_t size)
 {
-	ssize_t error = -1;
+	ssize_t error;
 
 #ifdef HAVE_EXTATTR
 	if (value == NULL || size == 0) {
@@ -157,13 +151,12 @@ ceph_os_fgetxattr(int fd, const char *name, void *value,
 #endif
 #endif
 
-	return (error);
+	return error;
 }
 
-ssize_t
-ceph_os_listxattr(const char *path, char *list, size_t size)
+ssize_t ceph_os_listxattr(const char *path, char *list, size_t size)
 {
-	ssize_t error = -1;
+	ssize_t error;
 
 #ifdef HAVE_EXTATTR
 	/*
@@ -208,13 +201,12 @@ ceph_os_listxattr(const char *path, char *list, size_t size)
 #endif
 #endif
 
-	return (error);
+	return error;
 }
 
-ssize_t
-ceph_os_flistxattr(int fd, char *list, size_t size)
+ssize_t ceph_os_flistxattr(int fd, char *list, size_t size)
 {
-	ssize_t error = -1;
+	ssize_t error;
 
 #ifdef HAVE_EXTATTR
 	/*
@@ -259,13 +251,12 @@ ceph_os_flistxattr(int fd, char *list, size_t size)
 #endif
 #endif
 
-	return (error);
+	return error;
 }
 
-int
-ceph_os_removexattr(const char *path, const char *name)
+int ceph_os_removexattr(const char *path, const char *name)
 {
-	int error = -1;
+	int error;
 
 #ifdef HAVE_EXTATTR
 	error = extattr_delete_file(path, EXTATTR_NAMESPACE_USER, name);
@@ -277,13 +268,12 @@ ceph_os_removexattr(const char *path, const char *name)
 #endif
 #endif
 
-	return (error);
+	return error;
 }
 
-int
-ceph_os_fremovexattr(int fd, const char *name)
+int ceph_os_fremovexattr(int fd, const char *name)
 {
-	int error = -1;
+	int error;
 
 #ifdef HAVE_EXTATTR
 	error = extattr_delete_fd(fd, EXTATTR_NAMESPACE_USER, name);
@@ -295,5 +285,5 @@ ceph_os_fremovexattr(int fd, const char *name)
 #endif
 #endif
 
-	return (error);
+	return error;
 }
