@@ -541,6 +541,7 @@ AC_CHECK_HEADERS([linux/fs.h])
 AC_CHECK_HEADERS([sys/disk.h])
 AC_CHECK_HEADERS([sys/prctl.h])
 AC_CHECK_FUNCS([prctl])
+AC_CHECK_FUNCS([posix_fadvise])
 
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
