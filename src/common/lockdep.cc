@@ -20,7 +20,7 @@
 
 #include <ext/hash_map>
 
-#if defined(__FreeBSD__) && defined(__LP64__)	// On FreeBSD pthread_t is a pointer.
+#if (defined(__FreeBSD__) || defined(__APPLE__)) && defined(__LP64__) // On FreeBSD pthread_t is a pointer.
 namespace __gnu_cxx {
   template<>
     struct hash<pthread_t>
