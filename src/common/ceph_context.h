@@ -21,6 +21,7 @@
 #include "include/buffer.h"
 #include "include/atomic.h"
 #include "common/cmdparse.h"
+#include "include/Spinlock.h"
 
 class AdminSocket;
 class CephContextServiceThread;
@@ -126,7 +127,7 @@ private:
   AdminSocket *_admin_socket;
 
   /* lock which protects service thread creation, destruction, etc. */
-  pthread_spinlock_t _service_thread_lock;
+  ceph_spinlock_t _service_thread_lock;
 
   /* The collection of profiling loggers associated with this context */
   PerfCountersCollection *_perf_counters_collection;
