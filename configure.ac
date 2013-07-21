@@ -543,6 +543,7 @@ AC_CHECK_HEADERS([sys/prctl.h])
 AC_CHECK_FUNCS([prctl])
 AC_CHECK_FUNCS([posix_fadvise])
 AC_CHECK_FUNCS([sem_timedwait])
+AC_CHECK_FUNCS([pipe2])
 
 AC_CHECK_HEADERS([sys/vfs.h sys/mount.h])
 

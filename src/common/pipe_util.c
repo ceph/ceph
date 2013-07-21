@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  *
  */
+#include <acconfig.h>
 
 #include "common/pipe_util.h"
 
@@ -18,26 +19,32 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <sys/fcntl.h> /* O_CLOEXEC on OSX 10.8 */
+
 int pipe_cloexec(int pipefd[2])
 {
-#if defined(O_CLOEXEC) && !defined(__FreeBSD__)
 	int ret;
+
+#ifdef HAVE_PIPE2
+#ifdef O_CLOEXEC
 	ret = pipe2(pipefd, O_CLOEXEC);
-	if (ret) {
-		ret = -errno;
-		return ret;
-	}
-	return 0;
 #else
-	/* The old-fashioned, race-condition prone way that we have to fall back on if
-	 * O_CLOEXEC does not exist. */
-	int ret = pipe(pipefd);
-	if (ret) {
-		ret = -errno;
-		return ret;
-	}
+	ret = pipe2(pipefd, 0);
+#endif
+#else
+	ret = pipe(pipefd);
+#endif
+	if (ret)
+		return -errno;
+
+#if !defined(HAVE_PIPE2) || !defined(O_CLOEXEC)
+	/*
+	 * The old-fashioned, race-condition prone way that we have to fall
+	 * back on if O_CLOEXEC does not exist.
+	 */
 	fcntl(pipefd[0], F_SETFD, FD_CLOEXEC);
 	fcntl(pipefd[1], F_SETFD, FD_CLOEXEC);
-	return 0;
 #endif
+
+	return 0;
 }
