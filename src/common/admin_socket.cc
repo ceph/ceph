@@ -19,7 +19,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
-#include "common/pipe.h"
+#include "common/pipe_util.h"
 #include "common/safe_io.h"
 #include "common/version.h"
 #include "common/Formatter.h"

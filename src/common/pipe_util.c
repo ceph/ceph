@@ -12,7 +12,7 @@
  *
  */
 
-#include "common/pipe.h"
+#include "common/pipe_util.h"
 
 #include <errno.h>
 #include <fcntl.h>

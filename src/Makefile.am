@@ -1539,7 +1539,7 @@ libcommon_files = \
 	mds/mdstypes.cc \
 	common/blkdev.cc \
 	common/common_init.cc \
-	common/pipe.c \
+	common/pipe_util.c \
 	common/ceph_argparse.cc \
 	common/ceph_context.cc \
 	common/buffer.cc \
@@ -1824,7 +1824,7 @@ noinst_HEADERS = \
 	global/global_init.h \
 	global/global_context.h \
         common/common_init.h\
-        common/pipe.h\
+        common/pipe_util.h\
 	common/code_environment.h \
         common/signal.h\
         global/signal_handler.h\
