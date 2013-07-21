@@ -90,6 +90,8 @@ AC_CHECK_CC_FLAG([-Wtype-limits], [WARN_TYPE_LIMITS])
 AC_CHECK_CC_FLAG([-Wignored-qualifiers], [WARN_IGNORED_QUALIFIERS])
 
 AX_CXX_STATIC_CAST
+AX_C_VAR_FUNC
+AX_C_PRETTY_FUNC
 
 # Checks for libraries.
 ACX_PTHREAD

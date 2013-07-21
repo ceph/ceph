@@ -33,20 +33,34 @@ struct FailedAssertion {
 # define __CEPH_ASSERT_VOID_CAST (void)
 #endif
 
+/*
+ * For GNU, test specific version features. Otherwise (e.g. LLVM) we'll use
+ * the defaults selected below.
+ */
+#ifdef __GNUC_PREREQ
+
 /* Version 2.4 and later of GCC define a magical variable `__PRETTY_FUNCTION__'
    which contains the name of the function currently being defined.
    This is broken in G++ before version 2.6.
    C9x has a similar variable called __func__, but prefer the GCC one since
    it demangles C++ function names.  */
-# if defined __cplusplus ? __GNUC_PREREQ (2, 6) : __GNUC_PREREQ (2, 4)
-#   define __CEPH_ASSERT_FUNCTION	__PRETTY_FUNCTION__
-# else
-#  if defined __STDC_VERSION__ && __STDC_VERSION__ >= 199901L
-#   define __CEPH_ASSERT_FUNCTION	__func__
-#  else
-#   define __CEPH_ASSERT_FUNCTION	((__const char *) 0)
-#  endif
+# if defined __cplusplus ? !__GNUC_PREREQ (2, 6) : !__GNUC_PREREQ (2, 4)
+#   define __CEPH_NO_PRETTY_FUNC
 # endif
+
+#endif
+
+/*
+ * Select a function-name variable based on compiler tests, and any compiler
+ * specific overrides.
+ */
+#if defined(HAVE_PRETTY_FUNC) && !defined(__CEPH_NO_PRETTY_FUNC)
+# define __CEPH_ASSERT_FUNCTION __PRETTY_FUNCTION__
+#elif defined(HAVE_FUNC)
+# define __CEPH_ASSERT_FUNCTION __func__
+#else
+# define __CEPH_ASSERT_FUNCTION ((__const char *) 0)
+#endif
 
 extern void register_assert_context(CephContext *cct);
 extern void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *function)
