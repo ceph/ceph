@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  *
  */
+#include "acconfig.h"
 
 #include "common/pipe.h"
 
@@ -20,24 +21,40 @@
 
 int pipe_cloexec(int pipefd[2])
 {
-#if defined(O_CLOEXEC) && !defined(__FreeBSD__)
 	int ret;
+
+#if defined(HAVE_PIPE2) && defined(O_CLOEXEC)
 	ret = pipe2(pipefd, O_CLOEXEC);
-	if (ret) {
-		ret = -errno;
-		return ret;
-	}
+	if (ret == -1)
+		return -errno;
 	return 0;
 #else
-	/* The old-fashioned, race-condition prone way that we have to fall back on if
-	 * O_CLOEXEC does not exist. */
-	int ret = pipe(pipefd);
-	if (ret) {
+	ret = pipe(pipefd);
+	if (ret == -1)
+		return -errno;
+
+	/*
+	 * The old-fashioned, race-condition prone way that we have to fall
+	 * back on if O_CLOEXEC does not exist.
+	 */
+	ret = fcntl(pipefd[0], F_SETFD, FD_CLOEXEC);
+	if (ret == -1) {
 		ret = -errno;
-		return ret;
+		goto out;
 	}
-	fcntl(pipefd[0], F_SETFD, FD_CLOEXEC);
-	fcntl(pipefd[1], F_SETFD, FD_CLOEXEC);
+
+	ret = fcntl(pipefd[1], F_SETFD, FD_CLOEXEC);
+	if (ret == -1) {
+		ret = -errno;
+		goto out;
+	}
+
 	return 0;
+
+out:
+	TEMP_FAILURE_RETRY(close(pipefd[0]));
+	TEMP_FAILURE_RETRY(close(pipefd[1]));
+
+	return ret;
 #endif
 }
