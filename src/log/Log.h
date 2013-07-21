@@ -21,7 +21,6 @@ class Log : private Thread
 
   SubsystemMap *m_subs;
   
-  pthread_spinlock_t m_lock;
   pthread_mutex_t m_queue_mutex;
   pthread_mutex_t m_flush_mutex;
   pthread_cond_t m_cond_loggers;
