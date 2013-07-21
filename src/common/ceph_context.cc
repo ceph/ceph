@@ -12,6 +12,8 @@
  *
  */
 
+#include <acconfig.h>
+
 #include <time.h>
 
 #include "common/admin_socket.h"
@@ -51,10 +53,14 @@ public:
   {
     while (1) {
       if (_cct->_conf->heartbeat_interval) {
+#ifdef HAVE_SEM_TIMEDWAIT
         struct timespec timeout;
         clock_gettime(CLOCK_REALTIME, &timeout);
         timeout.tv_sec += _cct->_conf->heartbeat_interval;
         sem_timedwait(&_sem, &timeout);
+#else
+        sem_wait(&_sem);
+#endif
       } else {
         sem_wait(&_sem);
       }
