@@ -1777,6 +1777,10 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
       continue;
     }
 
+    // notify clients about deleted inode, to make sure they release caps ASAP.
+    if (in->inode.nlink == 0)
+      wanted |= CEPH_CAP_LINK_SHARED;
+
     // are there caps that the client _wants_ and can have, but aren't pending?
     // or do we need to revoke?
     if (((wanted & allowed) & ~pending) ||  // missing wanted+allowed caps
