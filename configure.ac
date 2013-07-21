@@ -537,6 +537,8 @@ AC_CHECK_MEMBER([struct stat.st_mtimespec.tv_nsec],
   [AC_DEFINE(HAVE_STAT_ST_TIMESPEC, 1,
     [Define if you have struct stat.st_mtimespec.tv_nsec])])
 
+AC_CHECK_HEADERS([linux/fs.h])
+AC_CHECK_HEADERS([sys/disk.h])
 AC_CHECK_HEADERS([sys/prctl.h])
 AC_CHECK_FUNCS([prctl])
 
