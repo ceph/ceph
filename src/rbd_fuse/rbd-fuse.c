@@ -548,13 +548,16 @@ struct rbdfuse_attr {
 	{ NULL }
 };
 
-int
-rbdfs_setxattr(const char *path, const char *name, const char *value,
-		 size_t size, int flags)
+static int
+__rbdfs_setxattr(const char *path, const char *name, const char *value,
+		 size_t size, int flags, uint32_t position)
 {
 	struct rbdfuse_attr *ap;
 	if (strcmp(path, "/") != 0)
 		return -EINVAL;
+
+	if (position)
+		return -ENOTSUP;
 
 	for (ap = attrs; ap->attrname != NULL; ap++) {
 		if (strcmp(name, ap->attrname) == 0) {
@@ -567,14 +570,34 @@ rbdfs_setxattr(const char *path, const char *name, const char *value,
 	return -EINVAL;
 }
 
+#ifdef __APPLE__
 int
-rbdfs_getxattr(const char *path, const char *name, char *value,
-		 size_t size)
+rbdfs_setxattr(const char *path, const char *name, const char *value,
+		 size_t size, int flags, uint32_t position)
+{
+	return __rbdfs_setxattr(path, name, value, size, flags, position);
+}
+#else
+int
+rbdfs_setxattr(const char *path, const char *name, const char *value,
+		 size_t size, int flags)
+{
+	return __rbdfs_setxattr(path, name, value, size, flags, 0);
+}
+#endif
+
+
+static int
+__rbdfs_getxattr(const char *path, const char *name, char *value,
+		 size_t size, uint32_t position)
 {
 	struct rbdfuse_attr *ap;
 	char buf[128];
 	// allow gets on other files; ls likes to ask for things like
 	// security.*
+
+	if (position)
+		return -ENOTSUP;
 
 	for (ap = attrs; ap->attrname != NULL; ap++) {
 		if (strcmp(name, ap->attrname) == 0) {
@@ -587,6 +610,22 @@ rbdfs_getxattr(const char *path, const char *name, char *value,
 	}
 	return 0;
 }
+
+#ifdef __APPLE__
+int
+rbdfs_getxattr(const char *path, const char *name, char *value,
+		 size_t size, uint32_t position)
+{
+	return __rbdfs_getxattr(path, name, value, size, position);
+}
+#else
+int
+rbdfs_getxattr(const char *path, const char *name, char *value,
+		 size_t size)
+{
+	return __rbdfs_getxattr(path, name, value, size, 0);
+}
+#endif
 
 int
 rbdfs_listxattr(const char *path, char *list, size_t len)
