@@ -1114,7 +1114,7 @@ public:
    * @param t The transaction to which we will append the operations
    * @param bl A bufferlist containing an encoded transaction
    */
-  void decode_append_transaction(MonitorDBStore::Transaction& t,
+  static void decode_append_transaction(MonitorDBStore::Transaction& t,
 				 bufferlist& bl) {
     MonitorDBStore::Transaction vt;
     bufferlist::iterator it = bl.begin();
