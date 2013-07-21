@@ -236,7 +236,19 @@ int DirHolder::opendir(const char *dir_name) {
   return 0;
 }
 
-static __thread int t_iod_idx = -1;
+static pthread_key_t iod_idx_key;
+static pthread_once_t iod_idx_key_once = PTHREAD_ONCE_INIT;
+
+static void free_iod_idx(void *data)
+{
+  assert(data);
+  free(data);
+}
+
+static void init_iod_idx_key(void)
+{
+  assert(pthread_key_create(&iod_idx_key, free_iod_idx) == 0);
+}
 
 static pthread_mutex_t io_ctx_distributor_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -277,15 +289,22 @@ void IoCtxDistributor::clear() {
 }
 
 IoCtx& IoCtxDistributor::get_ioctx() {
-  if (t_iod_idx == -1) {
-    t_iod_idx = m_highest_iod_idx.inc() - 1;
+
+  pthread_once(&iod_idx_key_once, init_iod_idx_key);
+
+  int *t_iod_idx = (int*)pthread_getspecific(iod_idx_key);
+  if (!t_iod_idx) {
+    t_iod_idx = (int*)malloc(sizeof(*t_iod_idx));
+    assert(t_iod_idx);
+    *t_iod_idx = m_highest_iod_idx.inc() - 1;
+    pthread_setspecific(iod_idx_key, t_iod_idx);
   }
-  if (m_io_ctxes.size() <= (unsigned int)t_iod_idx) {
+  if (m_io_ctxes.size() <= (unsigned int)*t_iod_idx) {
     cerr << ERR_PREFIX << "IoCtxDistributor: logic error on line "
 	 << __LINE__ << std::endl;
     _exit(1);
   }
-  return m_io_ctxes[t_iod_idx];
+  return m_io_ctxes[*t_iod_idx];
 }
 
 IoCtxDistributor *IoCtxDistributor::s_instance = NULL;
