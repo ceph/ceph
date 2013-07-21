@@ -1864,6 +1864,7 @@ noinst_HEADERS = \
 	include/addr_parsing.h\
 	include/assert.h\
         include/atomic.h\
+        include/spinlock.h\
         include/bitmapper.h\
         include/blobhash.h\
         include/buffer.h\

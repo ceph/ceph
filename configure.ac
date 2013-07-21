@@ -554,6 +554,22 @@ AC_CHECK_FUNCS([pipe2])
 
 AC_CHECK_HEADERS([sys/vfs.h sys/mount.h])
 
+#
+# Check for pthread spinlock.
+#
+# NOTE: virtually everythink in Makefile.am links against the pthread
+# libraries. It would be cleaner to just set LIBS and CFLAGS globally to
+# include the pthread bits.
+#
+saved_LIBS="$LIBS"
+saved_CFLAGS="$CFLAGS"
+LIBS="$LIBS $PTHREAD_LIBS"
+CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
+AC_CHECK_FUNC([pthread_spin_init],
+  [AC_DEFINE(HAVE_PTHREAD_SPINLOCK, 1, [Define if you have pthread_spin_init])])
+LIBS="$saved_LIBS"
+CFLAGS="$saved_CFLAGS"
+
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
 #AC_C_CONST
