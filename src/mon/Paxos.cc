@@ -391,17 +391,23 @@ void Paxos::handle_last(MMonPaxos *last)
 	     << num_last << " peons" << dendl;
 
     // did this person send back an accepted but uncommitted value?
-    if (last->uncommitted_pn &&
-	last->uncommitted_pn > uncommitted_pn &&
-	last->last_committed >= last_committed &&
-	last->last_committed + 1 >= uncommitted_v) {
-      uncommitted_v = last->last_committed+1;
-      uncommitted_pn = last->uncommitted_pn;
-      uncommitted_value = last->values[uncommitted_v];
-      dout(10) << "we learned an uncommitted value for " << uncommitted_v 
-	       << " pn " << uncommitted_pn
-	       << " " << uncommitted_value.length() << " bytes"
-	       << dendl;
+    if (last->uncommitted_pn) {
+      if (last->uncommitted_pn > uncommitted_pn &&
+	  last->last_committed >= last_committed &&
+	  last->last_committed + 1 >= uncommitted_v) {
+	uncommitted_v = last->last_committed+1;
+	uncommitted_pn = last->uncommitted_pn;
+	uncommitted_value = last->values[uncommitted_v];
+	dout(10) << "we learned an uncommitted value for " << uncommitted_v
+		 << " pn " << uncommitted_pn
+		 << " " << uncommitted_value.length() << " bytes"
+		 << dendl;
+      } else {
+	dout(10) << "ignoring uncommitted value for " << (last->last_committed+1)
+		 << " pn " << last->uncommitted_pn
+		 << " " << last->values[last->last_committed+1].length() << " bytes"
+		 << dendl;
+      }
     }
     
     // is that everyone?
