@@ -544,6 +544,8 @@ AC_CHECK_FUNCS([prctl])
 AC_CHECK_FUNCS([posix_fadvise])
 AC_CHECK_FUNCS([sem_timedwait])
 
+AC_CHECK_HEADERS([sys/vfs.h sys/mount.h])
+
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
 #AC_C_CONST

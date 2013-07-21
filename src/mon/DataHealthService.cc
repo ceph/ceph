@@ -11,6 +11,8 @@
  * Foundation.  See file COPYING.
  *
  */
+#include <acconfig.h>
+
 #include <memory>
 #include <tr1/memory>
 #include <errno.h>
@@ -18,7 +20,14 @@
 #include <list>
 #include <string>
 #include <sstream>
+
+#ifdef HAVE_SYS_VFS_H
 #include <sys/vfs.h>
+#endif
+
+#ifdef HAVE_SYS_MOUNT_H
+#include <sys/mount.h>
+#endif
 
 #include "messages/MMonHealth.h"
 #include "include/types.h"
