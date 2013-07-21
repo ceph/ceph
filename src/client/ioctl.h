@@ -19,12 +19,22 @@ struct ceph_ioctl_layout {
 	__s64 unused;
 };
 
+#if defined(_IOR) && defined(_IOW)
 #define CEPH_IOC_GET_LAYOUT _IOR(CEPH_IOCTL_MAGIC, 1,		\
 				   struct ceph_ioctl_layout)
 #define CEPH_IOC_SET_LAYOUT _IOW(CEPH_IOCTL_MAGIC, 2,		\
 				   struct ceph_ioctl_layout)
 #define CEPH_IOC_SET_LAYOUT_POLICY _IOW(CEPH_IOCTL_MAGIC, 5,	\
 				   struct ceph_ioctl_layout)
+#else
+/*
+ * It isn't necessary for the IOCTL flags to be identical to those used with
+ * the Linux kernel client, they must just be consistent for a particular
+ * client. Ideally we can remove this Linux-specific stuff for the user-space
+ * library.
+ */
+#define CEPH_IOC_GET_LAYOUT 1
+#endif
 
 /*
  * Extract identity, address of the OSD and object storing a given
