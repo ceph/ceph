@@ -501,6 +501,11 @@ AC_CHECK_LIB(boost_thread-mt, main, [],
     [AC_CHECK_LIB(boost_thread, main, [],
         AC_MSG_FAILURE(["Boost thread library not found."]))])
 
+# Find the right boost_program_options library.
+AC_CHECK_LIB(boost_program_options-mt, main, [],
+    [AC_CHECK_LIB(boost_program_options, main, [],
+        AC_MSG_FAILURE(["Boost program options library not found."]))])
+
 AC_LANG([C])
 
 AC_CHECK_MEMBER([struct fiemap_extent.fe_logical],
