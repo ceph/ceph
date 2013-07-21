@@ -536,6 +536,9 @@ AC_CHECK_FUNC([fallocate],
 	[])
 
 
+AC_CHECK_HEADERS([sys/prctl.h])
+AC_CHECK_FUNCS([prctl])
+
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
 #AC_C_CONST
