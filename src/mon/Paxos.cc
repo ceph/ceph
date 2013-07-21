@@ -394,8 +394,12 @@ void Paxos::handle_last(MMonPaxos *last)
     return;
   }
 
+  assert(g_conf->paxos_kill_at != 1);
+
   // store any committed values if any are specified in the message
   store_state(last);
+
+  assert(g_conf->paxos_kill_at != 2);
 
   // do they accept your pn?
   if (last->pn > accepted_pn) {
@@ -552,6 +556,8 @@ void Paxos::begin(bufferlist& v)
 
   get_store()->apply_transaction(t);
 
+  assert(g_conf->paxos_kill_at != 3);
+
   if (mon->get_quorum().size() == 1) {
     // we're alone, take it easy
     commit();
@@ -602,6 +608,8 @@ void Paxos::handle_begin(MMonPaxos *begin)
   assert(begin->pn == accepted_pn);
   assert(begin->last_committed == last_committed);
   
+  assert(g_conf->paxos_kill_at != 4);
+
   // set state.
   state = STATE_UPDATING;
   lease_expire = utime_t();  // cancel lease
@@ -625,6 +633,8 @@ void Paxos::handle_begin(MMonPaxos *begin)
   *_dout << dendl;
 
   get_store()->apply_transaction(t);
+
+  assert(g_conf->paxos_kill_at != 5);
 
   // reply
   MMonPaxos *accept = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_ACCEPT,
@@ -660,6 +670,8 @@ void Paxos::handle_accept(MMonPaxos *accept)
   accepted.insert(from);
   dout(10) << " now " << accepted << " have accepted" << dendl;
 
+  assert(g_conf->paxos_kill_at != 6);
+
   // new majority?
   if (accepted.size() == (unsigned)mon->monmap->size()/2+1) {
     // yay, commit!
@@ -682,6 +694,8 @@ void Paxos::handle_accept(MMonPaxos *accept)
 
     // yay!
     extend_lease();
+
+    assert(g_conf->paxos_kill_at != 10);
 
     finish_round();
 
@@ -713,6 +727,8 @@ void Paxos::commit()
   //   leader still got a majority and committed with out us.)
   lease_expire = utime_t();  // cancel lease
 
+  assert(g_conf->paxos_kill_at != 7);
+
   MonitorDBStore::Transaction t;
 
   // commit locally
@@ -731,6 +747,8 @@ void Paxos::commit()
   *_dout << dendl;
 
   get_store()->apply_transaction(t);
+
+  assert(g_conf->paxos_kill_at != 8);
 
   // refresh first_committed; this txn may have trimmed.
   first_committed = get_store()->get(get_name(), "first_committed");
@@ -752,6 +770,8 @@ void Paxos::commit()
 
     mon->messenger->send_message(commit, mon->monmap->get_inst(*p));
   }
+
+  assert(g_conf->paxos_kill_at != 9);
 
   // get ready for a new round.
   new_value.clear();
