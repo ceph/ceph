@@ -7,22 +7,39 @@
  * modify it under the terms of the GNU Lesser General Public
  * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
+ *
+ * OSX Support
+ * -----------
+ * The xattr access routines on OSX include a `position` argument in addition
+ * to the parameters of the standard Linux counterparts. A custom feature test
+ * can be written to detect the different versions. For now we test for
+ * __APPLE__, and default to the Linux version.
  */
 
-#if defined(__FreeBSD__)
-#include <errno.h>
-#include <stdint.h>
-#include <stdlib.h>
+#include "acconfig.h"
+
+/*
+ * The original FreeBSD port below (now guarded by HAVE_EXTATTR) was using
+ * FreeBSD specific string manipulation routines.
+ */
+#ifdef HAVE_STRINGS_H
 #include <strings.h>
+#endif
+
+#ifdef HAVE_SYS_TYPES_H
 #include <sys/types.h>
+#endif
+
+#ifdef HAVE_SYS_EXTATTR_H
 #include <sys/extattr.h>
-#elif defined(__linux__)
-#include <sys/types.h>
+#endif
+
+#ifdef HAVE_SYS_XATTR_H
 #include <sys/xattr.h>
-#elif defined(DARWIN)
-#include <sys/xattr.h>
-#else
-#error "Your system is not supported!"
+#endif
+
+#ifdef HAVE_SYS_MALLOC_H
+#include <sys/malloc.h>
 #endif
 
 #include "common/xattr.h"
@@ -37,13 +54,17 @@ ceph_os_setxattr(const char *path, const char *name,
 {
 	int error = -1;
 
-#if defined(__FreeBSD__)
+#ifdef HAVE_EXTATTR
 	error = extattr_set_file(path, EXTATTR_NAMESPACE_USER, name, value,
 	    size);
 	if (error > 0)
 		error = 0;
-#elif defined(__linux__) || defined(DARWIN)
+#else
+#ifdef __APPLE__
+	error = setxattr(path, name, value, size, 0, 0);
+#else
 	error = setxattr(path, name, value, size, 0);
+#endif
 #endif
 
 	return (error);
@@ -55,13 +76,17 @@ ceph_os_fsetxattr(int fd, const char *name, const void *value,
 {
 	int error = -1;
 
-#if defined(__FreeBSD__)
+#ifdef HAVE_EXTATTR
 	error = extattr_set_fd(fd, EXTATTR_NAMESPACE_USER, name, value,
 	    size);
 	if (error > 0)
 		error = 0;
-#elif defined(__linux__) || defined(DARWIN)
+#else
+#ifdef __APPLE__
+	error = fsetxattr(fd, name, value, size, 0, 0);
+#else
 	error = fsetxattr(fd, name, value, size, 0);
+#endif
 #endif
 
 	return (error);
@@ -73,7 +98,7 @@ void *value, size_t size)
 {
 	ssize_t error = -1;
 
-#if defined(__FreeBSD__)
+#ifdef HAVE_EXTATTR
 	if (value == NULL || size == 0) {
 		error = extattr_get_file(path, EXTATTR_NAMESPACE_USER, name, value,
 		    size);
@@ -90,10 +115,12 @@ void *value, size_t size)
 			}
 		}
 	}
-#elif defined(__linux__)
+#else
+#ifdef __APPLE__
+	error = getxattr(path, name, value, size, 0, 0);
+#else
 	error = getxattr(path, name, value, size);
-#elif defined(DARWIN)
-	error = getxattr(path, name, value, size, 0);
+#endif
 #endif
 
 	return (error);
@@ -105,7 +132,7 @@ ceph_os_fgetxattr(int fd, const char *name, void *value,
 {
 	ssize_t error = -1;
 
-#if defined(__FreeBSD__)
+#ifdef HAVE_EXTATTR
 	if (value == NULL || size == 0) {
 		error = extattr_get_fd(fd, EXTATTR_NAMESPACE_USER, name, value,
 		    size);
@@ -122,10 +149,12 @@ ceph_os_fgetxattr(int fd, const char *name, void *value,
 			}
 		}
 	}
-#elif defined(__linux__)
+#else
+#ifdef __APPLE__
+	error = fgetxattr(fd, name, value, size, 0, 0);
+#else
 	error = fgetxattr(fd, name, value, size);
-#elif defined(DARWIN)
-	error = fgetxattr(fd, name, value, size, 0);
+#endif
 #endif
 
 	return (error);
@@ -136,7 +165,7 @@ ceph_os_listxattr(const char *path, char *list, size_t size)
 {
 	ssize_t error = -1;
 
-#if defined(__FreeBSD__)
+#ifdef HAVE_EXTATTR
 	/*
 	 * XXX. The format of the list FreeBSD returns differs
 	 * from the Linux ones.  We have to perform the conversion. :-(
@@ -171,10 +200,12 @@ ceph_os_listxattr(const char *path, char *list, size_t size)
 		error = extattr_list_file(path, EXTATTR_NAMESPACE_USER,
 		    list, size);
 	}
-#elif defined(__linux__)
-	error = listxattr(path, list, size);
-#elif defined(DARWIN)
+#else
+#ifdef __APPLE__
 	error = listxattr(path, list, size, 0);
+#else
+	error = listxattr(path, list, size);
+#endif
 #endif
 
 	return (error);
@@ -185,7 +216,7 @@ ceph_os_flistxattr(int fd, char *list, size_t size)
 {
 	ssize_t error = -1;
 
-#if defined(__FreeBSD__)
+#ifdef HAVE_EXTATTR
 	/*
 	 * XXX. The format of the list FreeBSD returns differs
 	 * from the Linux ones.  We have to perform the conversion. :-(
@@ -220,10 +251,12 @@ ceph_os_flistxattr(int fd, char *list, size_t size)
 		error = extattr_list_fd(fd, EXTATTR_NAMESPACE_USER,
 		    list, size);
 	}
-#elif defined(__linux__)
-	error = flistxattr(fd, list, size);
-#elif defined(DARWIN)
+#else
+#ifdef __APPLE__
 	error = flistxattr(fd, list, size, 0);
+#else
+	error = flistxattr(fd, list, size);
+#endif
 #endif
 
 	return (error);
@@ -234,12 +267,14 @@ ceph_os_removexattr(const char *path, const char *name)
 {
 	int error = -1;
 
-#if defined(__FreeBSD__)
+#ifdef HAVE_EXTATTR
 	error = extattr_delete_file(path, EXTATTR_NAMESPACE_USER, name);
-#elif defined(__linux__)
-	error = removexattr(path, name);
-#elif defined(DARWIN)
+#else
+#ifdef __APPLE__
 	error = removexattr(path, name, 0);
+#else
+	error = removexattr(path, name);
+#endif
 #endif
 
 	return (error);
@@ -250,12 +285,14 @@ ceph_os_fremovexattr(int fd, const char *name)
 {
 	int error = -1;
 
-#if defined(__FreeBSD__)
+#ifdef HAVE_EXTATTR
 	error = extattr_delete_fd(fd, EXTATTR_NAMESPACE_USER, name);
-#elif defined(__linux__)
-	error = fremovexattr(fd, name);
-#elif defined(DARWIN)
+#else
+#ifdef __APPLE__
 	error = fremovexattr(fd, name, 0);
+#else
+	error = fremovexattr(fd, name);
+#endif
 #endif
 
 	return (error);

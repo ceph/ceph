@@ -537,9 +537,16 @@ AC_CHECK_MEMBER([struct stat.st_mtimespec.tv_nsec],
   [AC_DEFINE(HAVE_STAT_ST_TIMESPEC, 1,
     [Define if you have struct stat.st_mtimespec.tv_nsec])])
 
+AC_CHECK_FUNC([extattr_set_fd],
+  [AC_DEFINE(HAVE_EXTATTR, 1, [Define if you have extattr_set_fd])])
+
 AC_CHECK_HEADERS([linux/fs.h])
 AC_CHECK_HEADERS([sys/disk.h])
 AC_CHECK_HEADERS([sys/prctl.h])
+AC_CHECK_HEADERS([sys/extattr.h])
+AC_CHECK_HEADERS([sys/xattr.h])
+AC_CHECK_HEADERS([sys/malloc.h])
+AC_CHECK_HEADERS([strings.h])
 AC_CHECK_FUNCS([prctl])
 AC_CHECK_FUNCS([posix_fadvise])
 AC_CHECK_FUNCS([sem_timedwait])
