@@ -103,11 +103,21 @@ void Paxos::collect(version_t oldpn)
 
   // look for uncommitted value
   if (get_store()->exists(get_name(), last_committed+1)) {
+    version_t v = get_store()->get(get_name(), "pending_v");
+    version_t pn = get_store()->get(get_name(), "pending_pn");
+    if (v && pn && v == last_committed + 1) {
+      uncommitted_pn = pn;
+    } else {
+      dout(10) << "WARNING: no pending_pn on disk, using previous accepted_pn " << accepted_pn
+	       << " and crossing our fingers" << dendl;
+      uncommitted_pn = accepted_pn;
+    }
     uncommitted_v = last_committed+1;
-    uncommitted_pn = accepted_pn;
+
     get_store()->get(get_name(), last_committed+1, uncommitted_value);
     assert(uncommitted_value.length());
     dout(10) << "learned uncommitted " << (last_committed+1)
+	     << " pn " << uncommitted_pn
 	     << " (" << uncommitted_value.length() << " bytes) from myself" 
 	     << dendl;
   }
@@ -164,6 +174,8 @@ void Paxos::handle_collect(MMonPaxos *collect)
   last->last_committed = last_committed;
   last->first_committed = first_committed;
   
+  version_t previous_pn = accepted_pn;
+
   // can we accept this pn?
   if (collect->pn > accepted_pn) {
     // ok, accept it
@@ -205,7 +217,18 @@ void Paxos::handle_collect(MMonPaxos *collect)
     dout(10) << " sharing our accepted but uncommitted value for " 
 	     << last_committed+1 << " (" << bl.length() << " bytes)" << dendl;
     last->values[last_committed+1] = bl;
-    last->uncommitted_pn = accepted_pn;
+
+    version_t v = get_store()->get(get_name(), "pending_v");
+    version_t pn = get_store()->get(get_name(), "pending_pn");
+    if (v && pn && v == last_committed + 1) {
+      last->uncommitted_pn = pn;
+    } else {
+      // previously we didn't record which pn a value was accepted
+      // under!  use the pn value we just had...  :(
+      dout(10) << "WARNING: no pending_pn on disk, using previous accepted_pn " << previous_pn
+	       << " and crossing our fingers" << dendl;
+      last->uncommitted_pn = previous_pn;
+    }
   }
 
   // send reply
@@ -511,6 +534,10 @@ void Paxos::begin(bufferlist& v)
   MonitorDBStore::Transaction t;
   t.put(get_name(), last_committed+1, new_value);
 
+  // note which pn this pending value is for.
+  t.put(get_name(), "pending_v", last_committed + 1);
+  t.put(get_name(), "pending_pn", accepted_pn);
+
   dout(30) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
   t.dump(&f);
@@ -586,6 +613,10 @@ void Paxos::handle_begin(MMonPaxos *begin)
   // apply its transaction once we receive permission to commit.
   MonitorDBStore::Transaction t;
   t.put(get_name(), v, begin->values[v]);
+
+  // note which pn this pending value is for.
+  t.put(get_name(), "pending_v", v);
+  t.put(get_name(), "pending_pn", accepted_pn);
 
   dout(30) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
