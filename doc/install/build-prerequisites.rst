@@ -88,3 +88,17 @@ host. ::
 
 	zypper install boost-devel gcc-c++ libedit-devel libopenssl-devel fuse-devel
 
+Mac OSX
+=======
+
+Support for OSX is experimental. The following instructions have been tested
+on Mac OSX 10.8.4, using Homebrew to install dependencies. Other package
+managers such as `Mac Ports` may also work for satisifying depenendices, but
+have not been tested.
+
+- ``snappy``
+- ``boost``
+- ``fuse4x``
+
+- tcmalloc, gperftools, and libsnappy infection.
+

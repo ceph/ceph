@@ -52,7 +52,7 @@ check-local:
 	$(srcdir)/test/encoding/check-generated.sh
 	$(srcdir)/test/encoding/readable.sh ../ceph-object-corpus
 
-EXTRALIBS = -luuid
+EXTRALIBS =
 if FREEBSD
 EXTRALIBS += -lexecinfo
 endif
@@ -116,7 +116,7 @@ ceph_authtool_LDADD = $(LIBGLOBAL_LDA)
 ceph_filestore_dump_SOURCES = tools/ceph-filestore-dump.cc objclass/class_debug.cc \
 	       objclass/class_api.cc
 ceph_filestore_dump_SOURCES += perfglue/disabled_heap_profiler.cc
-ceph_filestore_dump_LDADD = libosd.a $(LIBOS_LDA) $(LIBGLOBAL_LDA) -lboost_program_options
+ceph_filestore_dump_LDADD = libosd.a $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 if LINUX
 ceph_filestore_dump_LDADD += -ldl
 endif
@@ -125,14 +125,14 @@ bin_PROGRAMS += ceph-conf ceph-authtool ceph_filestore_dump
 ceph_osdomap_tool_SOURCES = tools/ceph-osdomap-tool.cc \
 			  os/LevelDBStore.cc
 ceph_osdomap_tool_LDFLAGS = ${AM_LDFLAGS}
-ceph_osdomap_tool_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA) -lboost_program_options
+ceph_osdomap_tool_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 ceph_osdomap_tool_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph-osdomap-tool
 
 ceph_monstore_tool_SOURCES = tools/ceph-monstore-tool.cc \
 			  os/LevelDBStore.cc
 ceph_monstore_tool_LDFLAGS = ${AM_LDFLAGS}
-ceph_monstore_tool_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA) -lboost_program_options
+ceph_monstore_tool_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 ceph_monstore_tool_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph-monstore-tool
 
@@ -190,15 +190,16 @@ base: ceph-mon ceph-osd ceph-mds \
 # fuse targets?
 if WITH_FUSE
 ceph_fuse_SOURCES = ceph_fuse.cc client/fuse_ll.cc
-ceph_fuse_LDADD = -lfuse libclient.la $(LIBGLOBAL_LDA)
+ceph_fuse_LDADD = $(fuse_LIBS) libclient.la $(LIBGLOBAL_LDA)
 ceph_fuse_CXXFLAGS = ${AM_CXXFLAGS}
+ceph_fuse_CFLAGS = $(fuse_CFLAGS)
 bin_PROGRAMS += ceph-fuse
 
 rbd_fuse_SOURCES = rbd_fuse/rbd-fuse.c
-rbd_fuse_LDADD = -lfuse librados.la librbd.la $(LIBGLOBAL_LDA)
+rbd_fuse_LDADD = $(fuse_LIBS) librados.la librbd.la $(LIBGLOBAL_LDA)
 rbd_fuse_CXXFLAGS = ${AM_CXXFLAGS}
+rbd_fuse_CFLAGS = $(fuse_CFLAGS)
 bin_PROGRAMS += rbd-fuse
-
 endif
 
 # tcmalloc?
@@ -261,25 +262,25 @@ ceph_test_rados_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += ceph_test_rados
 
 ceph_smalliobench_SOURCES = test/bench/small_io_bench.cc test/bench/rados_backend.cc test/bench/detailed_stat_collector.cc test/bench/bencher.cc
-ceph_smalliobench_LDADD = librados.la -lboost_program_options $(LIBGLOBAL_LDA)
+ceph_smalliobench_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += ceph_smalliobench
 
 ceph_smalliobenchfs_SOURCES = test/bench/small_io_bench_fs.cc test/bench/filestore_backend.cc test/bench/detailed_stat_collector.cc test/bench/bencher.cc
-ceph_smalliobenchfs_LDADD = librados.la -lboost_program_options $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+ceph_smalliobenchfs_LDADD = librados.la $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 ceph_smalliobenchfs_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_smalliobenchfs
 
 ceph_smalliobenchdumb_SOURCES = test/bench/small_io_bench_dumb.cc test/bench/dumb_backend.cc test/bench/detailed_stat_collector.cc test/bench/bencher.cc
-ceph_smalliobenchdumb_LDADD = librados.la -lboost_program_options $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+ceph_smalliobenchdumb_LDADD = librados.la $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 ceph_smalliobenchdumb_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_smalliobenchdumb
 
 ceph_smalliobenchrbd_SOURCES = test/bench/small_io_bench_rbd.cc test/bench/rbd_backend.cc test/bench/detailed_stat_collector.cc test/bench/bencher.cc
-ceph_smalliobenchrbd_LDADD = librados.la librbd.la -lboost_program_options $(LIBGLOBAL_LDA)
+ceph_smalliobenchrbd_LDADD = librados.la librbd.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += ceph_smalliobenchrbd
 
 ceph_tpbench_SOURCES = test/bench/tp_bench.cc test/bench/detailed_stat_collector.cc
-ceph_tpbench_LDADD = librados.la -lboost_program_options $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+ceph_tpbench_LDADD = librados.la $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += ceph_tpbench
 
 ceph_omapbench_SOURCES = test/omap_bench.cc
@@ -1553,7 +1554,7 @@ libcommon_files = \
 	mds/mdstypes.cc \
 	common/blkdev.cc \
 	common/common_init.cc \
-	common/pipe.c \
+	common/pipe_util.c \
 	common/ceph_argparse.cc \
 	common/ceph_context.cc \
 	common/buffer.cc \
@@ -1839,7 +1840,7 @@ noinst_HEADERS = \
 	global/global_init.h \
 	global/global_context.h \
         common/common_init.h\
-        common/pipe.h\
+        common/pipe_util.h\
 	common/code_environment.h \
         common/signal.h\
         global/signal_handler.h\
@@ -1879,6 +1880,7 @@ noinst_HEADERS = \
 	include/addr_parsing.h\
 	include/assert.h\
         include/atomic.h\
+        include/spinlock.h\
         include/bitmapper.h\
         include/blobhash.h\
         include/buffer.h\
@@ -1933,6 +1935,7 @@ noinst_HEADERS = \
 	include/rbd/librbd.h\
 	include/rbd/librbd.hpp\
         include/util.h\
+	include/stat.h\
 	librados/snap_set_diff.h\
 	librados/AioCompletionImpl.h\
 	librados/IoCtxImpl.h\

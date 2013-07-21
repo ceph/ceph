@@ -38,6 +38,7 @@ using namespace __gnu_cxx;
 
 #include "Pipe.h"
 #include "Accepter.h"
+#include "include/spinlock.h"
 
 /*
  * This class handles transmission and reception of messages. Generally
@@ -308,7 +309,7 @@ private:
   /// counter for the global seq our connection protocol uses
   __u32 global_seq;
   /// lock to protect the global_seq
-  pthread_spinlock_t global_seq_lock;
+  ceph_spinlock_t global_seq_lock;
 
   /**
    * hash map of addresses to Pipes
@@ -388,11 +389,11 @@ public:
    * @return a global sequence ID that nobody else has seen.
    */
   __u32 get_global_seq(__u32 old=0) {
-    pthread_spin_lock(&global_seq_lock);
+    ceph_spin_lock(&global_seq_lock);
     if (old > global_seq)
       global_seq = old;
     __u32 ret = ++global_seq;
-    pthread_spin_unlock(&global_seq_lock);
+    ceph_spin_unlock(&global_seq_lock);
     return ret;
   }
   /**

@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  *
  */
+#include <acconfig.h>
 
 #include "common/code_environment.h"
 
@@ -19,7 +20,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <string>
-#if defined(__linux__)
+
+#ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
 #endif
 
@@ -45,6 +47,7 @@ std::ostream &operator<<(std::ostream &oss, enum code_environment_t e)
   return oss;
 }
 
+#ifdef __linux__
 int get_process_name(char *buf, int len)
 {
   if (len <= 16) {
@@ -53,16 +56,22 @@ int get_process_name(char *buf, int len)
      * null-terminated. */
     return -ENAMETOOLONG;
   }
-#if defined(__FreeBSD__)
-#warning XXX
-    return -ENAMETOOLONG;
-#else
+
   memset(buf, 0, len);
   int ret;
   ret = prctl(PR_GET_NAME, buf);
   return ret;
-#endif
 }
+#else
+int get_process_name(char *buf, int len)
+{
+  /*
+   * OSX:
+   *   - include/libproc.h: proc_name()
+   */
+  return -ENAMETOOLONG;
+}
+#endif
 
 std::string get_process_name_cpp()
 {

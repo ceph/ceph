@@ -12,6 +12,8 @@
  *
  */
 
+#include <acconfig.h>
+
 #include <time.h>
 
 #include "common/admin_socket.h"
@@ -30,6 +32,8 @@
 #include <iostream>
 #include <pthread.h>
 #include <semaphore.h>
+
+#include "include/spinlock.h"
 
 using ceph::HeartbeatMap;
 
@@ -51,10 +55,14 @@ public:
   {
     while (1) {
       if (_cct->_conf->heartbeat_interval) {
+#ifdef HAVE_SEM_TIMEDWAIT
         struct timespec timeout;
         clock_gettime(CLOCK_REALTIME, &timeout);
         timeout.tv_sec += _cct->_conf->heartbeat_interval;
         sem_timedwait(&_sem, &timeout);
+#else
+        sem_wait(&_sem);
+#endif
       } else {
         sem_wait(&_sem);
       }
@@ -241,7 +249,7 @@ CephContext::CephContext(uint32_t module_type_)
     _crypto_none(NULL),
     _crypto_aes(NULL)
 {
-  pthread_spin_init(&_service_thread_lock, PTHREAD_PROCESS_SHARED);
+  ceph_spin_init(&_service_thread_lock);
 
   _log = new ceph::log::Log(&_conf->subsys);
   _log->start();
@@ -311,7 +319,7 @@ CephContext::~CephContext()
   _log = NULL;
 
   delete _conf;
-  pthread_spin_destroy(&_service_thread_lock);
+  ceph_spin_destroy(&_service_thread_lock);
 
   delete _crypto_none;
   delete _crypto_aes;
@@ -319,14 +327,14 @@ CephContext::~CephContext()
 
 void CephContext::start_service_thread()
 {
-  pthread_spin_lock(&_service_thread_lock);
+  ceph_spin_lock(&_service_thread_lock);
   if (_service_thread) {
-    pthread_spin_unlock(&_service_thread_lock);
+    ceph_spin_unlock(&_service_thread_lock);
     return;
   }
   _service_thread = new CephContextServiceThread(this);
   _service_thread->create();
-  pthread_spin_unlock(&_service_thread_lock);
+  ceph_spin_unlock(&_service_thread_lock);
 
   // make logs flush on_exit()
   if (_conf->log_flush_on_exit)
@@ -344,22 +352,22 @@ void CephContext::start_service_thread()
 
 void CephContext::reopen_logs()
 {
-  pthread_spin_lock(&_service_thread_lock);
+  ceph_spin_lock(&_service_thread_lock);
   if (_service_thread)
     _service_thread->reopen_logs();
-  pthread_spin_unlock(&_service_thread_lock);
+  ceph_spin_unlock(&_service_thread_lock);
 }
 
 void CephContext::join_service_thread()
 {
-  pthread_spin_lock(&_service_thread_lock);
+  ceph_spin_lock(&_service_thread_lock);
   CephContextServiceThread *thread = _service_thread;
   if (!thread) {
-    pthread_spin_unlock(&_service_thread_lock);
+    ceph_spin_unlock(&_service_thread_lock);
     return;
   }
   _service_thread = NULL;
-  pthread_spin_unlock(&_service_thread_lock);
+  ceph_spin_unlock(&_service_thread_lock);
 
   thread->exit_thread();
   thread->join();

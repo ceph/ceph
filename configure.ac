@@ -89,9 +89,13 @@ AC_DEFUN([AC_CHECK_CC_FLAG],
 AC_CHECK_CC_FLAG([-Wtype-limits], [WARN_TYPE_LIMITS])
 AC_CHECK_CC_FLAG([-Wignored-qualifiers], [WARN_IGNORED_QUALIFIERS])
 
+AX_CXX_STATIC_CAST
+AX_C_VAR_FUNC
+AX_C_PRETTY_FUNC
+
 # Checks for libraries.
 ACX_PTHREAD
-AC_CHECK_LIB([uuid], [uuid_parse], [true], AC_MSG_FAILURE([libuuid not found]))
+AC_SEARCH_LIBS([uuid_parse], [uuid], [], AC_MSG_FAILURE([no uuid library found]))
 AC_CHECK_LIB([m], [pow], [true], AC_MSG_FAILURE([libm not found]))
 AC_CHECK_LIB([resolv], [__res_nquery], [true], AC_MSG_FAILURE([libresolv not found]))
 if test x"$linux" = x"yes"; then
@@ -237,24 +241,22 @@ AS_IF([test "$RADOSGW" = "1"],
                             AC_DEFINE([HAVE_CURL_MULTI_WAIT], [1], [Define if have curl_multi_wait()]))
               ])
 
+
 # fuse?
 AC_ARG_WITH([fuse],
             [AS_HELP_STRING([--without-fuse], [disable FUSE userspace client])],
             [],
             [with_fuse=yes])
-LIBFUSE=
-AS_IF([test "x$with_fuse" != xno],
-	    [AC_CHECK_LIB([fuse], [fuse_main],
-             [AC_SUBST([LIBFUSE], ["-lfuse"])
-               AC_DEFINE([HAVE_LIBFUSE], [1],
-                         [Define if you have fuse])
-               HAVE_LIBFUSE=1
-	       # look for fuse_getgroups and define FUSE_GETGROUPS if found
-	       AC_CHECK_FUNCS([fuse_getgroups])
-              ],
-             [AC_MSG_FAILURE(
-                   [no FUSE found (use --without-fuse to disable)])])])
-AM_CONDITIONAL(WITH_FUSE, [test "$HAVE_LIBFUSE" = "1"])
+
+AS_IF([test "x$with_fuse" != "xno"], [
+   PKG_CHECK_MODULES([fuse], [fuse >= 2.6.0], [have_libfuse=yes],
+       [AC_MSG_FAILURE([no FUSE found (use --without-fuse to disable)])])
+   saved_LIBS="$LIBS"
+   LIBS="$LIBS $fuse_LIBS"
+   AC_CHECK_FUNCS([fuse_getgroups])
+   LIBS="$saved_LIBS"
+])
+AM_CONDITIONAL(WITH_FUSE, [test "x$have_libfuse" = "xyes"])
 
 # tcmalloc?
 AC_ARG_WITH([tcmalloc],
@@ -497,6 +499,11 @@ AC_CHECK_LIB(boost_thread-mt, main, [],
     [AC_CHECK_LIB(boost_thread, main, [],
         AC_MSG_FAILURE(["Boost thread library not found."]))])
 
+# Find the right boost_program_options library.
+AC_CHECK_LIB(boost_program_options-mt, main, [],
+    [AC_CHECK_LIB(boost_program_options, main, [],
+        AC_MSG_FAILURE(["Boost program options library not found."]))])
+
 AC_LANG([C])
 
 AC_CHECK_MEMBER([struct fiemap_extent.fe_logical],
@@ -516,6 +523,52 @@ AC_CHECK_FUNC([fallocate],
 	[AC_DEFINE([CEPH_HAVE_FALLOCATE], [], [fallocate(2) is supported])],
 	[])
 
+#
+# Test for time-related `struct stat` members.
+#
+
+AC_CHECK_MEMBER([struct stat.st_mtim.tv_nsec],
+  [AC_DEFINE(HAVE_STAT_TV_NSEC, 1,
+    [Define if you have struct stat.st_mtim.tv_nsec])])
+
+AC_CHECK_MEMBER([struct stat.st_mtimespec.tv_nsec],
+  [AC_DEFINE(HAVE_STAT_ST_TIMESPEC, 1,
+    [Define if you have struct stat.st_mtimespec.tv_nsec])])
+
+AC_CHECK_FUNC([extattr_set_fd],
+  [AC_DEFINE(HAVE_EXTATTR, 1, [Define if you have extattr_set_fd])])
+
+AC_CHECK_FUNCS([posix_fallocate])
+
+AC_CHECK_HEADERS([linux/fs.h])
+AC_CHECK_HEADERS([sys/disk.h])
+AC_CHECK_HEADERS([sys/prctl.h])
+AC_CHECK_HEADERS([sys/extattr.h])
+AC_CHECK_HEADERS([sys/xattr.h])
+AC_CHECK_HEADERS([sys/malloc.h])
+AC_CHECK_HEADERS([strings.h])
+AC_CHECK_FUNCS([prctl])
+AC_CHECK_FUNCS([posix_fadvise])
+AC_CHECK_FUNCS([sem_timedwait])
+AC_CHECK_FUNCS([pipe2])
+
+AC_CHECK_HEADERS([sys/vfs.h sys/mount.h])
+
+#
+# Check for pthread spinlock.
+#
+# NOTE: virtually everythink in Makefile.am links against the pthread
+# libraries. It would be cleaner to just set LIBS and CFLAGS globally to
+# include the pthread bits.
+#
+saved_LIBS="$LIBS"
+saved_CFLAGS="$CFLAGS"
+LIBS="$LIBS $PTHREAD_LIBS"
+CFLAGS="$CFLAGS $PTHREAD_CFLAGS"
+AC_CHECK_FUNC([pthread_spin_init],
+  [AC_DEFINE(HAVE_PTHREAD_SPINLOCK, 1, [Define if you have pthread_spin_init])])
+LIBS="$saved_LIBS"
+CFLAGS="$saved_CFLAGS"
 
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL

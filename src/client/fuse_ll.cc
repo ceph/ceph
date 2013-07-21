@@ -14,6 +14,7 @@
 
 #define FUSE_USE_VERSION 26
 
+#include <fuse/fuse.h>
 #include <fuse/fuse_lowlevel.h>
 #include <signal.h>
 #include <stdio.h>
@@ -150,14 +151,34 @@ static void fuse_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
 
 // XATTRS
 
-static void fuse_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
-			     const char *value, size_t size, int flags)
+static void __fuse_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
+			     const char *value, size_t size, int flags, uint32_t position)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
+
+  if (position) {
+    fuse_reply_err(req, -ENOTSUP);
+    return;
+  }
+
   int r = cfuse->client->ll_setxattr(cfuse->fino_vino(ino), name, value, size, flags, ctx->uid, ctx->gid);
   fuse_reply_err(req, -r);
 }
+
+#ifdef __APPLE__
+static void fuse_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
+			     const char *value, size_t size, int flags, uint32_t position)
+{
+  __fuse_ll_setxattr(req, ino, name, value, size, flags, position);
+}
+#else
+static void fuse_ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
+			     const char *value, size_t size, int flags)
+{
+  __fuse_ll_setxattr(req, ino, name, value, size, flags, 0);
+}
+#endif
 
 static void fuse_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
 {
@@ -173,11 +194,17 @@ static void fuse_ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
     fuse_reply_err(req, -r);
 }
 
-static void fuse_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
-			     size_t size)
+static void __fuse_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
+			     size_t size, uint32_t position)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
   const struct fuse_ctx *ctx = fuse_req_ctx(req);
+
+  if (position) {
+    fuse_reply_err(req, -ENOTSUP);
+    return;
+  }
+
   char buf[size];
   int r = cfuse->client->ll_getxattr(cfuse->fino_vino(ino), name, buf, size, ctx->uid, ctx->gid);
   if (size == 0 && r >= 0)
@@ -187,6 +214,20 @@ static void fuse_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
   else
     fuse_reply_err(req, -r);
 }
+
+#ifdef __APPLE__
+static void fuse_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
+			     size_t size, uint32_t position)
+{
+  __fuse_ll_getxattr(req, ino, name, size, position);
+}
+#else
+static void fuse_ll_getxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
+			     size_t size)
+{
+  __fuse_ll_getxattr(req, ino, name, size, 0);
+}
+#endif
 
 static void fuse_ll_removexattr(fuse_req_t req, fuse_ino_t ino, const char *name)
 {
@@ -520,7 +561,7 @@ static int getgroups_cb(void *handle, uid_t uid, gid_t **sgids)
     return 0;
   }
 
-  *sgids = malloc(c*sizeof(**sgids));
+  *sgids = (gid_t*)malloc(c*sizeof(**sgids));
   if (!*sgids) {
     return -ENOMEM;
   }
