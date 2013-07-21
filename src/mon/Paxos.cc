@@ -392,7 +392,9 @@ void Paxos::handle_last(MMonPaxos *last)
 
     // did this person send back an accepted but uncommitted value?
     if (last->uncommitted_pn &&
-	last->uncommitted_pn > uncommitted_pn) {
+	last->uncommitted_pn > uncommitted_pn &&
+	last->last_committed >= last_committed &&
+	last->last_committed + 1 >= uncommitted_v) {
       uncommitted_v = last->last_committed+1;
       uncommitted_pn = last->uncommitted_pn;
       uncommitted_value = last->values[uncommitted_v];
