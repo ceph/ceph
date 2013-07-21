@@ -52,7 +52,7 @@ check-local:
 	$(srcdir)/test/encoding/check-generated.sh
 	$(srcdir)/test/encoding/readable.sh ../ceph-object-corpus
 
-EXTRALIBS = -luuid
+EXTRALIBS =
 if FREEBSD
 EXTRALIBS += -lexecinfo
 endif
