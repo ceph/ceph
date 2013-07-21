@@ -89,6 +89,8 @@ AC_DEFUN([AC_CHECK_CC_FLAG],
 AC_CHECK_CC_FLAG([-Wtype-limits], [WARN_TYPE_LIMITS])
 AC_CHECK_CC_FLAG([-Wignored-qualifiers], [WARN_IGNORED_QUALIFIERS])
 
+AX_CXX_STATIC_CAST
+
 # Checks for libraries.
 ACX_PTHREAD
 AC_CHECK_LIB([uuid], [uuid_parse], [true], AC_MSG_FAILURE([libuuid not found]))
