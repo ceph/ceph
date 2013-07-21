@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <inttypes.h>
+#include <limits.h>
 
 #include "include/rbd/librbd.h"
 
