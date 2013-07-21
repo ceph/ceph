@@ -17,6 +17,7 @@
 # define kmalloc(x, f) malloc(x)
 # define kfree(x) free(x)
 /*# define DEBUG_INDEP*/
+# include "include/int_types.h"
 #endif
 
 #include "crush.h"
