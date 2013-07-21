@@ -538,6 +538,8 @@ AC_CHECK_MEMBER([struct stat.st_mtimespec.tv_nsec],
 AC_CHECK_FUNC([extattr_set_fd],
   [AC_DEFINE(HAVE_EXTATTR, 1, [Define if you have extattr_set_fd])])
 
+AC_CHECK_FUNCS([posix_fallocate])
+
 AC_CHECK_HEADERS([linux/fs.h])
 AC_CHECK_HEADERS([sys/disk.h])
 AC_CHECK_HEADERS([sys/prctl.h])

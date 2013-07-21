@@ -12,6 +12,7 @@
  * 
  */
 
+#include "acconfig.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
@@ -277,6 +278,8 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
 			    bool create)
 {
   int ret;
+  bool zero_fill = false;
+  int64_t new_max_size;
   int64_t conf_journal_sz(g_conf->osd_journal_size);
   conf_journal_sz <<= 20;
 
@@ -298,34 +301,46 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
 	   << newsize << " bytes: " << cpp_strerror(err) << dendl;
       return -err;
     }
+#ifdef HAVE_POSIX_FALLOCATE
     ret = ::posix_fallocate(fd, 0, newsize);
     if (ret) {
       derr << "FileJournal::_open_file : unable to preallocation journal to "
-	   << newsize << " bytes: " << cpp_strerror(ret) << dendl;
-      return -ret;
+	   << newsize << " bytes: " << cpp_strerror(ret)
+           << " using zero-fill fallback" << dendl;
+      zero_fill = true;
     }
-    max_size = newsize;
+#else
+    derr << "FileJournal::_open_file : posix_fallocate unavailable. "
+         << "zero filling " << newsize << " bytes" << dendl;
+    zero_fill = true;
+#endif
+    new_max_size = newsize;
   }
   else {
-    max_size = oldsize;
+    new_max_size = oldsize;
   }
-  block_size = MAX(blksize, (blksize_t)CEPH_PAGE_SIZE);
 
-  if (create && g_conf->journal_zero_on_create) {
+  /*
+   * Journal zeroing is used as a fallback for posix_fallocate failure or
+   * if posix_fallocate isn't supported. A simple performance optimization
+   * here would be to only write a zero byte to the end of each block if full
+   * zeroing wasn't requested.
+   */
+  if (zero_fill || (create && g_conf->journal_zero_on_create)) {
     derr << "FileJournal::_open_file : zeroing journal" << dendl;
     uint64_t write_size = 1 << 20;
     char *buf = new char[write_size];
     memset(static_cast<void*>(buf), 0, write_size);
     uint64_t i = 0;
-    for (; (i + write_size) <= (unsigned)max_size; i += write_size) {
+    for (; (i + write_size) <= (unsigned)new_max_size; i += write_size) {
       ret = ::pwrite(fd, static_cast<void*>(buf), write_size, i);
       if (ret < 0) {
 	delete [] buf;
 	return -errno;
       }
     }
-    if (i < (unsigned)max_size) {
-      ret = ::pwrite(fd, static_cast<void*>(buf), max_size - i, i);
+    if (i < (unsigned)new_max_size) {
+      ret = ::pwrite(fd, static_cast<void*>(buf), new_max_size - i, i);
       if (ret < 0) {
 	delete [] buf;
 	return -errno;
@@ -333,7 +348,9 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
     }
     delete [] buf;
   }
-      
+
+  max_size = new_max_size;
+  block_size = MAX(blksize, (blksize_t)CEPH_PAGE_SIZE);
 
   dout(10) << "_open journal is not a block device, NOT checking disk "
            << "write cache on '" << fn << "'" << dendl;
