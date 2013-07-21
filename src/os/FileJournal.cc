@@ -299,11 +299,10 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
       return -err;
     }
     ret = ::posix_fallocate(fd, 0, newsize);
-    if (ret < 0) {
-      int err = errno;
+    if (ret) {
       derr << "FileJournal::_open_file : unable to preallocation journal to "
-	   << newsize << " bytes: " << cpp_strerror(err) << dendl;
-      return -err;
+	   << newsize << " bytes: " << cpp_strerror(ret) << dendl;
+      return -ret;
     }
     max_size = newsize;
   }
