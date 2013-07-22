@@ -484,6 +484,9 @@ void RGWCopyObj_ObjStore_SWIFT::send_partial_response(off_t ofs)
     dump_errno(s);
     end_header(s);
 
+    /* Send progress information. Note that this diverge from the original swift
+     * spec. We do this in order to keep connection alive.
+     */
     if (ret == 0) {
       s->formatter->open_array_section("progress");
     }

@@ -1312,6 +1312,9 @@ void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
     }
     sent_header = true;
   } else {
+    /* Send progress field. Note that this diverge from the original S3
+     * spec. We do this in order to keep connection alive.
+     */
     s->formatter->dump_int("Progress", (uint64_t)ofs);
   }
   rgw_flush_formatter(s, s->formatter);
