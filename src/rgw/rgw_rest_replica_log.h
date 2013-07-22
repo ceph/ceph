@@ -32,11 +32,11 @@ public:
   }
   void execute();
   virtual void send_response();
-  virtual const char *name() {
+  virtual const string name() {
     string s = "replica";
     s.append(obj_type);
     s.append("_getbounds");
-    return s.c_str();
+    return s;
   }
 };
 
@@ -52,11 +52,11 @@ public:
     return caps.check_cap(obj_type.c_str(), RGW_CAP_WRITE);
   }
   void execute();
-  virtual const char *name() {
+  virtual const string name() {
     string s = "replica";
     s.append(obj_type);
     s.append("_updatebounds");
-    return s.c_str();
+    return s;
   }
 };
 
@@ -72,11 +72,11 @@ public:
     return caps.check_cap(obj_type.c_str(), RGW_CAP_WRITE);
   }
   void execute();
-  virtual const char *name() {
+  virtual const string name() {
     string s = "replica";
     s.append(obj_type);
     s.append("_deletebound");
-    return s.c_str();
+    return s;
   }
 };
 
@@ -94,7 +94,7 @@ public:
   }
   void execute();
   virtual void send_response();
-  virtual const char *name() {
+  virtual const string name() {
     return "replicabilog_getbounds";
   }
 };
@@ -108,7 +108,7 @@ public:
     return caps.check_cap("bilog", RGW_CAP_WRITE);
   }
   void execute();
-  virtual const char *name() {
+  virtual const string name() {
     return "replicabilog_updatebounds";
   }
 };
@@ -122,7 +122,7 @@ public:
     return caps.check_cap("bilog", RGW_CAP_WRITE);
   }
   void execute();
-  virtual const char *name() {
+  virtual const string name() {
     return "replicabilog_deletebound";
   }
 };

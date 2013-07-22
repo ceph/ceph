@@ -2,11 +2,8 @@
 # vim: ts=4 sw=4 smarttab expandtab
 
 import os
-import sys
-import argparse
 import collections
 import ConfigParser
-import errno
 import json
 import logging
 import logging.handlers

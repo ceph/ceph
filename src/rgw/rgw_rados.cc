@@ -259,6 +259,13 @@ int RGWRegion::store_info(bool exclusive)
   return ret;
 }
 
+int RGWRegion::equals(const string& other_region)
+{
+  if (is_master && other_region.empty())
+    return true;
+
+  return (name == other_region);
+}
 
 void RGWZoneParams::init_default(RGWRados *store)
 {
@@ -429,8 +436,7 @@ int RGWRegionMap::update(RGWRegion& region)
 {
   Mutex::Locker l(lock);
 
-  if (region.is_master && !master_region.empty() &&
-      master_region.compare(region.name) != 0) {
+  if (region.is_master && !region.equals(master_region)) {
     derr << "cannot update region map, master_region conflict" << dendl;
     return -EINVAL;
   }
@@ -1776,6 +1782,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
 			    map<std::string, bufferlist>& attrs,
                             RGWBucketInfo& info,
                             obj_version *pobjv,
+                            obj_version *pep_objv,
                             time_t creation_time,
                             rgw_bucket *pmaster_bucket,
 			    bool exclusive)
@@ -1833,23 +1840,9 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
       time(&info.creation_time);
     else
       info.creation_time = creation_time;
-    ret = put_linked_bucket_info(info, exclusive, 0, &attrs, true);
+    ret = put_linked_bucket_info(info, exclusive, 0, pep_objv, &attrs, true);
     if (ret == -EEXIST) {
-      /* remove bucket meta instance */
-      string entry;
-      get_bucket_instance_entry(bucket, entry);
-      r = rgw_bucket_instance_remove_entry(this, entry, &info.objv_tracker);
-      if (r < 0)
-        return r;
-
-      /* remove bucket index */
-      librados::IoCtx index_ctx; // context for new bucket
-      int r = open_bucket_index_ctx(bucket, index_ctx);
-      if (r < 0)
-        return r;
-
-      /* we need to reread the info and return it, caller will have a use for it */
-      index_ctx.remove(dir_oid);
+       /* we need to reread the info and return it, caller will have a use for it */
       r = get_bucket_info(NULL, bucket.name, info, NULL, NULL);
       if (r < 0) {
         if (r == -ENOENT) {
@@ -1857,6 +1850,24 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
         }
         ldout(cct, 0) << "get_bucket_info returned " << r << dendl;
         return r;
+      }
+
+      /* only remove it if it's a different bucket instance */
+      if (info.bucket.bucket_id != bucket.bucket_id) {
+        /* remove bucket meta instance */
+        string entry;
+        get_bucket_instance_entry(bucket, entry);
+        r = rgw_bucket_instance_remove_entry(this, entry, &info.objv_tracker);
+        if (r < 0)
+          return r;
+
+        /* remove bucket index */
+        librados::IoCtx index_ctx; // context for new bucket
+        int r = open_bucket_index_ctx(bucket, index_ctx);
+        if (r < 0)
+          return r;
+
+        index_ctx.remove(dir_oid);
       }
       /* ret == -ENOENT here */
     }
@@ -1933,8 +1944,7 @@ int RGWRados::set_bucket_location_by_rule(const string& location_rule, const std
   map<string, RGWZonePlacementInfo>::iterator piter = zone.placement_pools.find(location_rule);
   if (piter == zone.placement_pools.end()) {
     /* couldn't find, means we cannot really place data for this bucket in this zone */
-    if ((region_name.empty() && region.is_master) ||
-        region_name == region.name) {
+    if (region.equals(region_name)) {
       /* that's a configuration error, zone should have that rule, as we're within the requested
        * region */
       return -EINVAL;
@@ -2481,11 +2491,8 @@ int RGWRados::copy_obj(void *ctx,
   append_rand_alpha(cct, dest_obj.object, shadow_oid, 32);
   shadow_obj.init_ns(dest_obj.bucket, shadow_oid, shadow_ns);
 
-  remote_dest = ((dest_bucket_info.region.empty() && !region.is_master) ||
-      (dest_bucket_info.region != region.name));
-
-  remote_src = ((src_bucket_info.region.empty() && !region.is_master) ||
-      (src_bucket_info.region != region.name));
+  remote_dest = !region.equals(dest_bucket_info.region);
+  remote_src = !region.equals(src_bucket_info.region);
 
   if (remote_src && remote_dest) {
     ldout(cct, 0) << "ERROR: can't copy object when both src and dest buckets are remote" << dendl;
@@ -3070,7 +3077,7 @@ int RGWRados::defer_gc(void *ctx, rgw_obj& obj)
  * obj: name of the object to delete
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj)
+int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj, RGWObjVersionTracker *objv_tracker)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -3096,6 +3103,11 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj)
   r = prepare_update_index(state, bucket, CLS_RGW_OP_DEL, obj, tag);
   if (r < 0)
     return r;
+
+  if (objv_tracker) {
+    objv_tracker->prepare_op_for_write(&op);
+  }
+
   cls_refcount_put(op, tag, true);
   r = io_ctx.operate(oid, &op);
   bool removed = (r >= 0);
@@ -3129,11 +3141,11 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj)
   return 0;
 }
 
-int RGWRados::delete_obj(void *ctx, rgw_obj& obj)
+int RGWRados::delete_obj(void *ctx, rgw_obj& obj, RGWObjVersionTracker *objv_tracker)
 {
   int r;
 
-  r = delete_obj_impl(ctx, obj);
+  r = delete_obj_impl(ctx, obj, objv_tracker);
   if (r == -ECANCELED)
     r = 0;
 
@@ -3253,8 +3265,7 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state
  * dest: bufferlist to store the result in
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& dest,
-                       RGWObjVersionTracker *objv_tracker)
+int RGWRados::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& dest)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -3288,10 +3299,6 @@ int RGWRados::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& de
   }
 
   ObjectReadOperation op;
-
-  if (objv_tracker) {
-    objv_tracker->prepare_op_for_read(&op);
-  }
 
   int rval;
   op.getxattr(name, &dest, &rval);
@@ -3592,7 +3599,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     }
   }
   if (if_match || if_nomatch) {
-    r = get_attr(rctx, obj, RGW_ATTR_ETAG, etag, NULL);
+    r = get_attr(rctx, obj, RGW_ATTR_ETAG, etag);
     if (r < 0)
       goto done_err;
 
@@ -4602,7 +4609,8 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
 
   RGWBucketEntryPoint entry_point;
   time_t ep_mtime;
-  int ret = get_bucket_entrypoint_info(ctx, bucket_name, entry_point, NULL, &ep_mtime);
+  RGWObjVersionTracker ot;
+  int ret = get_bucket_entrypoint_info(ctx, bucket_name, entry_point, &ot, &ep_mtime);
   if (ret < 0) {
     info.bucket.name = bucket_name; /* only init this field */
     return ret;
@@ -4610,6 +4618,7 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
 
   if (entry_point.has_bucket_info) {
     info = entry_point.old_bucket_info;
+    info.ep_objv = ot.read_version;
     ldout(cct, 20) << "rgw_get_bucket_info: old bucket info, bucket=" << info.bucket << " owner " << info.owner << dendl;
     return 0;
   }
@@ -4625,6 +4634,7 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
   get_bucket_meta_oid(entry_point.bucket, oid);
 
   ret = get_bucket_instance_from_oid(ctx, oid, info, pmtime, pattrs);
+  info.ep_objv = ot.read_version;
   if (ret < 0) {
     info.bucket.name = bucket_name;
     return ret;
@@ -4653,7 +4663,7 @@ int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
   return rgw_bucket_instance_store_info(this, key, bl, exclusive, pattrs, &info.objv_tracker, mtime);
 }
 
-int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, time_t mtime,
+int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, time_t mtime, obj_version *pep_objv,
                                      map<string, bufferlist> *pattrs, bool create_entry_point)
 {
   bufferlist bl;
@@ -4674,7 +4684,14 @@ int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, time_t
   entry_point.creation_time = info.creation_time;
   entry_point.linked = true;
   RGWObjVersionTracker ot;
-  ot.generate_new_write_ver(cct);
+  if (pep_objv && !pep_objv->tag.empty()) {
+    ot.write_version = *pep_objv;
+  } else {
+    ot.generate_new_write_ver(cct);
+    if (pep_objv) {
+      *pep_objv = ot.write_version;
+    }
+  }
   ret = put_bucket_entrypoint_info(info.bucket.name, entry_point, exclusive, ot, mtime); 
   if (ret < 0)
     return ret;
@@ -5647,7 +5664,7 @@ int RGWStateLog::list_entries(void *handle, int max_entries,
                               list<cls_statelog_entry>& entries,
                               bool *done)
 {
-  list_state *state = (list_state *)handle;
+  list_state *state = static_cast<list_state *>(handle);
 
   librados::IoCtx ioctx;
   int r = open_ioctx(ioctx);
@@ -5695,7 +5712,7 @@ int RGWStateLog::list_entries(void *handle, int max_entries,
 
 void RGWStateLog::finish_list_entries(void *handle)
 {
-  list_state *state = (list_state *)handle;
+  list_state *state = static_cast<list_state *>(handle);
   delete state;
 }
 

@@ -104,7 +104,7 @@ void RGWMetadataLog::init_list_entries(int shard_id, utime_t& from_time, utime_t
 }
 
 void RGWMetadataLog::complete_list_entries(void *handle) {
-  LogListCtx *ctx = (LogListCtx *)handle;
+  LogListCtx *ctx = static_cast<LogListCtx *>(handle);
   delete ctx;
 }
 
@@ -112,7 +112,7 @@ int RGWMetadataLog::list_entries(void *handle,
                  int max_entries,
                  list<cls_log_entry>& entries, 
                  bool *truncated) {
-  LogListCtx *ctx = (LogListCtx *)handle;
+  LogListCtx *ctx = static_cast<LogListCtx *>(handle);
 
   if (!max_entries) {
     *truncated = false;
@@ -210,7 +210,7 @@ public:
     return 0;
   }
   virtual int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated)  {
-    iter_data *data = (iter_data *)handle;
+    iter_data *data = static_cast<iter_data *>(handle);
     for (int i = 0; i < max && data->iter != data->sections.end(); ++i, ++(data->iter)) {
       keys.push_back(*data->iter);
     }
@@ -220,7 +220,7 @@ public:
     return 0;
   }
   virtual void list_keys_complete(void *handle) {
-    iter_data *data = (iter_data *)handle;
+    iter_data *data = static_cast<iter_data *>(handle);
 
     delete data;
   }
@@ -451,7 +451,7 @@ int RGWMetadataManager::list_keys_init(string& section, void **handle)
 
 int RGWMetadataManager::list_keys_next(void *handle, int max, list<string>& keys, bool *truncated)
 {
-  list_keys_handle *h = (list_keys_handle *)handle;
+  list_keys_handle *h = static_cast<list_keys_handle *>(handle);
 
   RGWMetadataHandler *handler = h->handler;
 
@@ -461,7 +461,7 @@ int RGWMetadataManager::list_keys_next(void *handle, int max, list<string>& keys
 
 void RGWMetadataManager::list_keys_complete(void *handle)
 {
-  list_keys_handle *h = (list_keys_handle *)handle;
+  list_keys_handle *h = static_cast<list_keys_handle *>(handle);
 
   RGWMetadataHandler *handler = h->handler;
 
@@ -588,7 +588,7 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler, string& key, R
 
   rgw_obj obj(bucket, oid);
 
-  ret = store->delete_obj(NULL, obj);
+  ret = store->delete_obj(NULL, obj, objv_tracker);
   /* cascading ret into post_modify() */
 
   ret = post_modify(handler, section, key, log_data, objv_tracker, ret);
