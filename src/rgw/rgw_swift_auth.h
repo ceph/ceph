@@ -15,7 +15,7 @@ public:
 
   int verify_permission() { return 0; }
   void execute();
-  virtual const char *name() { return "swift_auth_get"; }
+  virtual const string name() { return "swift_auth_get"; }
 };
 
 class RGWHandler_SWIFT_Auth : public RGWHandler {

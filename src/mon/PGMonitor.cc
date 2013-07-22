@@ -1794,8 +1794,8 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
       ss << sum << " requests are blocked > " << g_conf->mon_osd_max_op_age << " sec";
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
 
-      unsigned num_slow_osds = 0;
       if (detail) {
+        unsigned num_slow_osds = 0;
 	// do per-osd warnings
 	for (hash_map<int32_t,osd_stat_t>::const_iterator p = pg_map.osd_stat.begin();
 	     p != pg_map.osd_stat.end();

@@ -409,12 +409,13 @@ int RGWCreateBucket_ObjStore_S3::get_params()
 
     bool success = parser.parse(data, len, 1);
     ldout(s->cct, 20) << "create bucket input data=" << data << dendl;
-    free(data);
 
     if (!success) {
       ldout(s->cct, 0) << "failed to parse input: " << data << dendl;
+      free(data);
       return -EINVAL;
     }
+    free(data);
 
     if (!parser.get_location_constraint(location_constraint)) {
       ldout(s->cct, 0) << "provided input did not specify location constraint correctly" << dendl;
@@ -449,6 +450,7 @@ void RGWCreateBucket_ObjStore_S3::send_response()
     JSONFormatter f; /* use json formatter for system requests output */
 
     f.open_object_section("info");
+    encode_json("entry_point_object_ver", ep_objv, &f);
     encode_json("object_ver", info.objv_tracker.read_version, &f);
     encode_json("bucket_info", info, &f);
     f.close_section();

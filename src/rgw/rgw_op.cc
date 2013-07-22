@@ -178,14 +178,12 @@ static int decode_policy(CephContext *cct, bufferlist& bl, RGWAccessControlPolic
 
 static int get_bucket_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
                                        RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs,
-                                       RGWAccessControlPolicy *policy, rgw_obj& obj,
-                                       RGWObjVersionTracker *objv_tracker)
+                                       RGWAccessControlPolicy *policy, rgw_obj& obj)
 {
-  int ret;
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_ACL);
 
   if (aiter != bucket_attrs.end()) {
-    ret = decode_policy(cct, aiter->second, policy);
+    int ret = decode_policy(cct, aiter->second, policy);
     if (ret < 0)
       return ret;
   } else {
@@ -203,13 +201,12 @@ static int get_bucket_policy_from_attr(CephContext *cct, RGWRados *store, void *
 
 static int get_obj_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
                                     RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs,
-                                    RGWAccessControlPolicy *policy, rgw_obj& obj,
-                                    RGWObjVersionTracker *objv_tracker)
+                                    RGWAccessControlPolicy *policy, rgw_obj& obj)
 {
   bufferlist bl;
   int ret = 0;
 
-  ret = store->get_attr(ctx, obj, RGW_ATTR_ACL, bl, objv_tracker);
+  ret = store->get_attr(ctx, obj, RGW_ATTR_ACL, bl);
   if (ret >= 0) {
     ret = decode_policy(cct, bl, policy);
     if (ret < 0)
@@ -237,7 +234,7 @@ static int get_obj_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx
  */
 static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
                                 RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs,
-                                RGWAccessControlPolicy *policy, rgw_obj& obj, RGWObjVersionTracker *objv_tracker)
+                                RGWAccessControlPolicy *policy, rgw_obj& obj)
 {
   if (obj.bucket.name.empty()) {
     return 0;
@@ -245,10 +242,10 @@ static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
 
   if (obj.object.empty()) {
     return get_bucket_policy_from_attr(cct, store, ctx, bucket_info, bucket_attrs,
-                                       policy, obj, objv_tracker);
+                                       policy, obj);
   }
   return get_obj_policy_from_attr(cct, store, ctx, bucket_info, bucket_attrs,
-                                  policy, obj, objv_tracker);
+                                  policy, obj);
 }
 
 static int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs,
@@ -282,14 +279,14 @@ static int read_policy(RGWRados *store, struct req_state *s,
   } else {
     obj.init(bucket, oid);
   }
-  int ret = get_policy_from_attr(s->cct, store, s->obj_ctx, bucket_info, bucket_attrs, policy, obj, &s->objv_tracker);
+  int ret = get_policy_from_attr(s->cct, store, s->obj_ctx, bucket_info, bucket_attrs, policy, obj);
   if (ret == -ENOENT && object.size()) {
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
     RGWAccessControlPolicy bucket_policy(s->cct);
     string no_object;
     rgw_obj no_obj(bucket, no_object);
-    ret = get_policy_from_attr(s->cct, store, s->obj_ctx, bucket_info, bucket_attrs, &bucket_policy, no_obj, &s->objv_tracker);
+    ret = get_policy_from_attr(s->cct, store, s->obj_ctx, bucket_info, bucket_attrs, &bucket_policy, no_obj);
     if (ret < 0)
       return ret;
     string& owner = bucket_policy.get_owner().get_id();
@@ -336,8 +333,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     ret = store->get_bucket_info(s->obj_ctx, copy_source_str, source_info, NULL);
     if (ret == 0) {
       string& region = source_info.region;
-      s->local_source = (region.empty() && store->region.is_master) ||
-                         (region == store->region.name);
+      s->local_source = store->region.equals(region);
     }
   }
     
@@ -364,8 +360,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     s->bucket_owner = s->bucket_acl->get_owner();
 
     string& region = s->bucket_info.region;
-    if (s->bucket_exists && ((region.empty() && !store->region.is_master) ||
-        (region != store->region.name))) {
+    if (s->bucket_exists && !store->region.equals(region)) {
       ldout(s->cct, 0) << "NOTICE: request for data in a different region (" << region << " != " << store->region.name << ")" << dendl;
       /* we now need to make sure that the operation actually requires copy source, that is
        * it's a copy operation
@@ -922,7 +917,7 @@ int RGWCreateBucket::verify_permission()
   return 0;
 }
 
-static int forward_request_to_master(struct req_state *s, RGWRados *store, bufferlist& in_data, JSONParser *jp)
+static int forward_request_to_master(struct req_state *s, obj_version *objv, RGWRados *store, bufferlist& in_data, JSONParser *jp)
 {
   if (!store->rest_master_conn) {
     ldout(s->cct, 0) << "rest connection is invalid" << dendl;
@@ -931,7 +926,7 @@ static int forward_request_to_master(struct req_state *s, RGWRados *store, buffe
   ldout(s->cct, 0) << "sending create_bucket request to master region" << dendl;
   bufferlist response;
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
-  int ret = store->rest_master_conn->forward(s->user.user_id, s->info, MAX_REST_RESPONSE, &in_data, &response);
+  int ret = store->rest_master_conn->forward(s->user.user_id, s->info, objv, MAX_REST_RESPONSE, &in_data, &response);
   if (ret < 0)
     return ret;
 
@@ -976,7 +971,7 @@ void RGWCreateBucket::execute()
   s->bucket_owner.set_name(s->user.display_name);
   if (s->bucket_exists) {
     r = get_policy_from_attr(s->cct, store, s->obj_ctx, s->bucket_info, s->bucket_attrs,
-                             &old_policy, obj, &s->objv_tracker);
+                             &old_policy, obj);
     if (r >= 0)  {
       if (old_policy.get_owner().get_id().compare(s->user.user_id) != 0) {
         ret = -EEXIST;
@@ -991,10 +986,11 @@ void RGWCreateBucket::execute()
 
   if (!store->region.is_master) {
     JSONParser jp;
-    ret = forward_request_to_master(s, store, in_data, &jp);
+    ret = forward_request_to_master(s, NULL, store, in_data, &jp);
     if (ret < 0)
       return;
 
+    JSONDecoder::decode_json("entry_point_object_ver", ep_objv, &jp);
     JSONDecoder::decode_json("object_ver", objv, &jp);
     JSONDecoder::decode_json("bucket_info", master_info, &jp);
     ldout(s->cct, 20) << "parsed: objv.tag=" << objv.tag << " objv.ver=" << objv.ver << dendl;
@@ -1024,7 +1020,7 @@ void RGWCreateBucket::execute()
 
   s->bucket.name = s->bucket_name_str;
   ret = store->create_bucket(s->user, s->bucket, region_name, placement_rule, attrs, info, pobjv,
-                             creation_time, pmaster_bucket, true);
+                             &ep_objv, creation_time, pmaster_bucket, true);
   /* continue if EEXIST and create_bucket will fail below.  this way we can recover
    * from a partial create by retrying it. */
   ldout(s->cct, 20) << "rgw_create_bucket returned ret=" << ret << " bucket=" << s->bucket << dendl;
@@ -1070,24 +1066,52 @@ void RGWDeleteBucket::execute()
   if (!s->bucket_name)
     return;
 
-  if (!store->region.is_master) {
-    bufferlist in_data;
-    JSONParser jp;
-    ret = forward_request_to_master(s, store, in_data, &jp);
-    if (ret < 0)
-      return;
+  RGWObjVersionTracker ot;
+  ot.read_version = s->bucket_info.ep_objv;
 
-    JSONDecoder::decode_json("object_ver", objv_tracker.read_version, &jp);
+  if (s->system_request) {
+    string tag = s->info.args.get(RGW_SYS_PARAM_PREFIX "tag");
+    string ver_str = s->info.args.get(RGW_SYS_PARAM_PREFIX "ver");
+    if (!tag.empty()) {
+      ot.read_version.tag = tag;
+      uint64_t ver;
+      string err;
+      ver = strict_strtol(ver_str.c_str(), 10, &err);
+      if (!err.empty()) {
+        ldout(s->cct, 0) << "failed to parse ver param" << dendl;
+        ret = -EINVAL;
+        return;
+      }
+      ot.read_version.ver = ver;
+    }
   }
 
-  ret = store->delete_bucket(s->bucket, objv_tracker);
+  ret = store->delete_bucket(s->bucket, ot);
 
   if (ret == 0) {
     ret = rgw_unlink_bucket(store, s->user.user_id, s->bucket.name, false);
     if (ret < 0) {
-      ldout(s->cct, 0) << "WARNING: failed to remove bucket: ret=" << ret << dendl;
+      ldout(s->cct, 0) << "WARNING: failed to unlink bucket: ret=" << ret << dendl;
     }
   }
+
+  if (ret < 0) {
+    return;
+  }
+
+  if (!store->region.is_master) {
+    bufferlist in_data;
+    JSONParser jp;
+    ret = forward_request_to_master(s, &ot.read_version, store, in_data, &jp);
+    if (ret < 0) {
+      if (ret == -ENOENT) { /* adjust error,
+                               we want to return with NoSuchBucket and not NoSuchKey */
+        ret = -ERR_NO_SUCH_BUCKET;
+      }
+      return;
+    }
+  }
+
 }
 
 int RGWPutObj::verify_permission()
@@ -1455,7 +1479,7 @@ void RGWPutMetadata::execute()
   rgw_get_request_metadata(s->cct, s->info, attrs);
 
   /* no need to track object versioning, need it for bucket's data only */
-  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->objv_tracker);
+  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->bucket_info.objv_tracker);
 
   /* check if obj exists, read orig attrs */
   ret = get_obj_attrs(store, s, obj, orig_attrs, NULL, ptracker);
@@ -1773,7 +1797,7 @@ void RGWPutACLs::execute()
     *_dout << dendl;
   }
 
-  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->objv_tracker);
+  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->bucket_info.objv_tracker);
 
   new_policy.encode(bl);
   obj.init(s->bucket, s->object_str);
@@ -1851,7 +1875,7 @@ void RGWPutCORS::execute()
     *_dout << dendl;
   }
 
-  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->objv_tracker);
+  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->bucket_info.objv_tracker);
 
   string no_obj;
   cors_config->encode(bl);
@@ -1883,7 +1907,7 @@ void RGWDeleteCORS::execute()
   map<string, bufferlist> orig_attrs, attrs, rmattrs;
   map<string, bufferlist>::iterator iter;
 
-  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->objv_tracker);
+  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->bucket_info.objv_tracker);
 
   /* check if obj exists, read orig attrs */
   ret = get_obj_attrs(store, s, obj, orig_attrs, NULL, ptracker);
@@ -2474,7 +2498,7 @@ int RGWHandler::read_cors_config(void)
   string no_object;
   rgw_obj no_obj(s->bucket, no_object);
   if (no_obj.bucket.name.size()) {
-    ret = store->get_attr(s->obj_ctx, no_obj, RGW_ATTR_CORS, bl, NULL);
+    ret = store->get_attr(s->obj_ctx, no_obj, RGW_ATTR_CORS, bl);
     if (ret >= 0) {
       bufferlist::iterator iter = bl.begin();
       s->bucket_cors = new RGWCORSConfiguration();

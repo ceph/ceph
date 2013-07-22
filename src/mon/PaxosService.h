@@ -438,8 +438,9 @@ public:
   /**
    * This is called when the Paxos state goes to active.
    *
-   * @remarks It's a courtesy method, in case the class implementing this 
-   *	      service has anything it wants/needs to do at that time.
+   * On the peon, this is after each election.
+   * On the leader, this is after each election, *and* after each completed
+   * proposal.
    *
    * @note This function may get called twice in certain recovery cases.
    */

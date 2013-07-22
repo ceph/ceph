@@ -3267,21 +3267,30 @@ bool remove_dir(
       }
       t->remove(coll, *i);
       if (num >= g_conf->osd_target_transaction_size) {
-	store->apply_transaction(osr, *t);
+	C_SaferCond waiter;
+	store->queue_transaction(osr, t, &waiter);
+	bool cont = dstate->pause_clearing();
+	waiter.wait();
+	if (cont)
+	  cont = dstate->resume_clearing();
 	delete t;
-	if (!dstate->check_canceled()) {
-	  // canceled!
+	if (!cont)
 	  return false;
-	}
 	t = new ObjectStore::Transaction;
 	num = 0;
       }
     }
     olist.clear();
   }
-  store->apply_transaction(osr, *t);
+
+  C_SaferCond waiter;
+  store->queue_transaction(osr, t, &waiter);
+  bool cont = dstate->pause_clearing();
+  waiter.wait();
+  if (cont)
+    cont = dstate->resume_clearing();
   delete t;
-  return true;
+  return cont;
 }
 
 void OSD::RemoveWQ::_process(pair<PGRef, DeletingStateRef> item)

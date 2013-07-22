@@ -290,6 +290,8 @@ def admin_socket(asok_path, cmd):
         sock.sendall(' '.join(cmd) + '\0')
 
         len_str = sock.recv(4)
+        if len(len_str) < 4:
+            raise RuntimeError("no data returned from admin socket")
         l, = struct.unpack(">I", len_str)
         ret = ''
 

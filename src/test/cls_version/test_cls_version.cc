@@ -76,7 +76,7 @@ TEST(cls_rgw, test_version_inc_read)
   ASSERT_EQ(ver2.ver, ver3.ver);
   ASSERT_EQ(1, (long long)ver2.compare(&ver3));
 
-  delete op;
+  delete rop;
 }
 
 
