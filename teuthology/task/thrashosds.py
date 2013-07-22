@@ -71,6 +71,8 @@ def task(ctx, config):
     chance_inject_pause_short: (1) chance of injecting short stall
     chance_inject_pause_long: (0) chance of injecting long stall
 
+    clean_wait: (0) duration to wait before resuming thrashing once clean
+
     powercycle: (false) whether to power cycle the node instead
         of just the osd process. Note that this assumes that a single
         osd is the only important process on the node.

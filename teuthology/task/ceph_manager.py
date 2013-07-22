@@ -23,6 +23,7 @@ class Thrasher:
         self.revive_timeout = self.config.get("revive_timeout", 75)
         if self.config.get('powercycle'):
             self.revive_timeout += 120
+        self.clean_wait = self.config.get('clean_wait', 0)
 
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * num_osds
@@ -250,6 +251,7 @@ class Thrasher:
                 self.ceph_manager.wait_for_recovery(
                     timeout=self.config.get('timeout')
                     )
+                time.sleep(self.clean_wait)
             self.choose_action()()
             time.sleep(delay)
         self.all_up()
