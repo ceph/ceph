@@ -137,7 +137,6 @@ TEST(cls_rgw, test_version_inc_cond)
   /* add chains */
   string oid = "obj";
 
-
   /* create object */
 
   ASSERT_EQ(0, ioctx.create(oid, true));
@@ -161,6 +160,7 @@ TEST(cls_rgw, test_version_inc_cond)
 
 
   /* inc version again! */
+  delete op;
   op = new_op();
   cls_version_inc(*op);
   ASSERT_EQ(0, ioctx.operate(oid, op));
@@ -181,18 +181,22 @@ TEST(cls_rgw, test_version_inc_cond)
   ASSERT_EQ(0, (int)ver2.tag.compare(ver.tag));
 
   /* a bunch of conditions that should fail */
+  delete op;
   op = new_op();
   cls_version_inc(*op, cond_ver, VER_COND_EQ);
   ASSERT_EQ(-ECANCELED, ioctx.operate(oid, op));
 
+  delete op;
   op = new_op();
   cls_version_inc(*op, cond_ver, VER_COND_LT);
   ASSERT_EQ(-ECANCELED, ioctx.operate(oid, op));
 
+  delete op;
   op = new_op();
   cls_version_inc(*op, cond_ver, VER_COND_LE);
   ASSERT_EQ(-ECANCELED, ioctx.operate(oid, op));
 
+  delete op;
   op = new_op();
   cls_version_inc(*op, cond_ver, VER_COND_TAG_NE);
   ASSERT_EQ(-ECANCELED, ioctx.operate(oid, op));
@@ -202,18 +206,22 @@ TEST(cls_rgw, test_version_inc_cond)
   ASSERT_EQ(0, (int)ver2.tag.compare(ver.tag));
 
   /* a bunch of conditions that should succeed */
+  delete op;
   op = new_op();
   cls_version_inc(*op, ver2, VER_COND_EQ);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 
+  delete op;
   op = new_op();
   cls_version_inc(*op, cond_ver, VER_COND_GT);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 
+  delete op;
   op = new_op();
   cls_version_inc(*op, cond_ver, VER_COND_GE);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 
+  delete op;
   op = new_op();
   cls_version_inc(*op, cond_ver, VER_COND_TAG_EQ);
   ASSERT_EQ(0, ioctx.operate(oid, op));
@@ -276,6 +284,7 @@ TEST(cls_rgw, test_version_inc_check)
 
   obj_version ver2;
 
+  delete op;
   op = new_op();
   cls_version_inc(*op);
   ASSERT_EQ(0, ioctx.operate(oid, op));
