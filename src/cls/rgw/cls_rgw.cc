@@ -815,7 +815,7 @@ static int bi_log_iterate_entries(cls_method_context_t hctx, const string& marke
   map<string, bufferlist> keys;
   string filter_prefix, end_key;
   bufferlist start_bl;
-  bool start_key_added;
+  bool start_key_added = false;
   uint32_t i = 0;
   string key;
 
