@@ -764,6 +764,7 @@ struct req_info {
   const char *method;
   string script_uri;
   string request_uri;
+  string effective_uri;
   string request_params;
 
   req_info(CephContext *cct, RGWEnv *_env);
@@ -780,7 +781,7 @@ struct req_state {
    int format;
    ceph::Formatter *formatter;
    string decoded_uri;
-   string effective_uri;
+   string relative_uri;
    const char *length;
    uint64_t content_length;
    map<string, string> generic_attrs;
