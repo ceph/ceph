@@ -118,8 +118,6 @@ public:
   OSDMap osdmap;
 
 private:
-  map<epoch_t, list<PaxosServiceMessage*> > waiting_for_map;
-
   // [leader]
   OSDMap::Incremental pending_inc;
   map<int, failure_info_t> failure_info;
@@ -192,7 +190,6 @@ private:
   bool can_mark_in(int o);
 
   // ...
-  void send_to_waiting();     // send current map to waiters.
   MOSDMap *build_latest_full();
   MOSDMap *build_incremental(epoch_t first, epoch_t last);
   void send_full(PaxosServiceMessage *m);
@@ -212,7 +209,7 @@ private:
   bool prepare_failure(class MOSDFailure *m);
   bool prepare_mark_me_down(class MOSDMarkMeDown *m);
   void process_failures();
-  void kick_all_failures();
+  void take_all_failures(list<MOSDFailure*>& ls);
 
   bool preprocess_boot(class MOSDBoot *m);
   bool prepare_boot(class MOSDBoot *m);

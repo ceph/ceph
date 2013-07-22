@@ -1523,8 +1523,10 @@ bool Monitor::_allowed_command(MonSession *s, map<string, cmd_vartype>& cmd)
 {
   bool retval = false;
 
-  if (s->caps.is_allow_all())
+  if (s->caps.is_allow_all()) {
+    dout(10) << __func__ << " allow_all" << dendl;
     return true;
+  }
 
   string prefix;
   cmd_getval(g_ceph_context, cmd, "prefix", prefix);
@@ -1538,10 +1540,11 @@ bool Monitor::_allowed_command(MonSession *s, map<string, cmd_vartype>& cmd)
   }
 
   if (s->caps.is_capable(g_ceph_context, s->inst.name,
-			 "", prefix, strmap, false, false, false)) {
+			 "", prefix, strmap, false, false, true)) {
     retval = true; 
   }
 
+  dout(10) << __func__ << " = " << retval << dendl;
   return retval;
 }
 

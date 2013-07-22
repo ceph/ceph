@@ -551,6 +551,9 @@ protected:
   };
   map<hobject_t, PullInfo> pulling;
 
+  // Track contents of temp collection, clear on reset
+  set<hobject_t> temp_contents;
+
   ObjectRecoveryInfo recalc_subsets(const ObjectRecoveryInfo& recovery_info);
   static void trim_pushed_data(const interval_set<uint64_t> &copy_subset,
 			       const interval_set<uint64_t> &intervals_received,
@@ -1042,7 +1045,7 @@ public:
   void _finish_mark_all_unfound_lost(list<ObjectContext*>& obcs);
 
   void on_role_change();
-  void on_change();
+  void on_change(ObjectStore::Transaction *t);
   void on_activate();
   void on_flushed();
   void on_removal(ObjectStore::Transaction *t);

@@ -50,7 +50,7 @@ public:
   virtual void execute() = 0;
   virtual void send_response() {}
   virtual void complete() { send_response(); }
-  virtual const char *name() = 0;
+  virtual const string name() = 0;
 
   virtual uint32_t op_mask() { return 0; }
 };
@@ -117,7 +117,7 @@ public:
   virtual int get_params() = 0;
   virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len) = 0;
 
-  virtual const char *name() { return "get_obj"; }
+  virtual const string name() { return "get_obj"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
@@ -147,7 +147,7 @@ public:
 
   virtual bool should_get_stats() { return false; }
 
-  virtual const char *name() { return "list_buckets"; }
+  virtual const string name() { return "list_buckets"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
@@ -172,7 +172,7 @@ public:
   void execute();
 
   virtual void send_response() = 0;
-  virtual const char *name() { return "stat_account"; }
+  virtual const string name() { return "stat_account"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
@@ -204,7 +204,7 @@ public:
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
-  virtual const char *name() { return "list_bucket"; }
+  virtual const string name() { return "list_bucket"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
@@ -215,7 +215,7 @@ public:
   void execute() {}
 
   virtual void send_response() = 0;
-  virtual const char *name() { return "get_bucket_logging"; }
+  virtual const string name() { return "get_bucket_logging"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
@@ -232,7 +232,7 @@ public:
   void execute();
 
   virtual void send_response() = 0;
-  virtual const char *name() { return "stat_bucket"; }
+  virtual const string name() { return "stat_bucket"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
@@ -243,6 +243,7 @@ protected:
   string location_constraint;
   string placement_rule;
   RGWBucketInfo info;
+  obj_version ep_objv;
 
   bufferlist in_data;
 
@@ -257,7 +258,7 @@ public:
   }
   virtual int get_params() { return 0; }
   virtual void send_response() = 0;
-  virtual const char *name() { return "create_bucket"; }
+  virtual const string name() { return "create_bucket"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
@@ -274,7 +275,7 @@ public:
   void execute();
 
   virtual void send_response() = 0;
-  virtual const char *name() { return "delete_bucket"; }
+  virtual const string name() { return "delete_bucket"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
 };
 
@@ -318,7 +319,7 @@ public:
   virtual int get_params() = 0;
   virtual int get_data(bufferlist& bl) = 0;
   virtual void send_response() = 0;
-  virtual const char *name() { return "put_obj"; }
+  virtual const string name() { return "put_obj"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
@@ -360,7 +361,7 @@ public:
   virtual int get_params() = 0;
   virtual int get_data(bufferlist& bl) = 0;
   virtual void send_response() = 0;
-  virtual const char *name() { return "post_obj"; }
+  virtual const string name() { return "post_obj"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
@@ -388,7 +389,7 @@ public:
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
-  virtual const char *name() { return "put_obj_metadata"; }
+  virtual const string name() { return "put_obj_metadata"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
@@ -403,7 +404,7 @@ public:
   void execute();
 
   virtual void send_response() = 0;
-  virtual const char *name() { return "delete_obj"; }
+  virtual const string name() { return "delete_obj"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
 };
 
@@ -471,7 +472,7 @@ public:
   virtual int init_dest_policy() { return 0; }
   virtual int get_params() = 0;
   virtual void send_response() = 0;
-  virtual const char *name() { return "copy_obj"; }
+  virtual const string name() { return "copy_obj"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
@@ -487,7 +488,7 @@ public:
   void execute();
 
   virtual void send_response() = 0;
-  virtual const char *name() { return "get_acls"; }
+  virtual const string name() { return "get_acls"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
@@ -513,7 +514,7 @@ public:
   virtual int get_policy_from_state(RGWRados *store, struct req_state *s, stringstream& ss) { return 0; }
   virtual int get_params() = 0;
   virtual void send_response() = 0;
-  virtual const char *name() { return "put_acls"; }
+  virtual const string name() { return "put_acls"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
@@ -529,7 +530,7 @@ public:
   void execute();
 
   virtual void send_response() = 0;
-  virtual const char *name() { return "get_cors"; }
+  virtual const string name() { return "get_cors"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
@@ -554,7 +555,7 @@ public:
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
-  virtual const char *name() { return "put_cors"; }
+  virtual const string name() { return "put_cors"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
@@ -569,7 +570,7 @@ public:
   void execute();
 
   virtual void send_response() = 0;
-  virtual const char *name() { return "delete_cors"; }
+  virtual const string name() { return "delete_cors"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
@@ -589,7 +590,7 @@ public:
   void execute();
   void get_response_params(string& allowed_hdrs, string& exp_hdrs, unsigned *max_age);
   virtual void send_response() = 0;
-  virtual const char *name() { return "options_cors"; }
+  virtual const string name() { return "options_cors"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
@@ -613,7 +614,7 @@ public:
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
-  virtual const char *name() { return "init_multipart"; }
+  virtual const string name() { return "init_multipart"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
@@ -642,7 +643,7 @@ public:
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
-  virtual const char *name() { return "complete_multipart"; }
+  virtual const string name() { return "complete_multipart"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
@@ -657,7 +658,7 @@ public:
   void execute();
 
   virtual void send_response() = 0;
-  virtual const char *name() { return "abort_multipart"; }
+  virtual const string name() { return "abort_multipart"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
 };
 
@@ -686,7 +687,7 @@ public:
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
-  virtual const char *name() { return "list_multipart"; }
+  virtual const string name() { return "list_multipart"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
@@ -789,7 +790,7 @@ public:
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
-  virtual const char *name() { return "list_bucket_multiparts"; }
+  virtual const string name() { return "list_bucket_multiparts"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 
@@ -822,7 +823,7 @@ public:
   virtual void begin_response() = 0;
   virtual void send_partial_response(pair<string,int>& result) = 0;
   virtual void end_response() = 0;
-  virtual const char *name() { return "multi_object_delete"; }
+  virtual const string name() { return "multi_object_delete"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
 };
 

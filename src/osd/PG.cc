@@ -4511,7 +4511,8 @@ void PG::start_flush(ObjectStore::Transaction *t,
 /* Called before initializing peering during advance_map */
 void PG::start_peering_interval(const OSDMapRef lastmap,
 				const vector<int>& newup,
-				const vector<int>& newacting)
+				const vector<int>& newacting,
+				ObjectStore::Transaction *t)
 {
   const OSDMapRef osdmap = get_osdmap();
 
@@ -4600,7 +4601,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
 
     
   // pg->on_*
-  on_change();
+  on_change(t);
 
   assert(!deleting);
 
@@ -5237,7 +5238,8 @@ boost::statechart::result PG::RecoveryState::Reset::react(const AdvMap& advmap)
     pg->is_split(advmap.lastmap, advmap.osdmap)) {
     dout(10) << "up or acting affected, calling start_peering_interval again"
 	     << dendl;
-    pg->start_peering_interval(advmap.lastmap, advmap.newup, advmap.newacting);
+    pg->start_peering_interval(advmap.lastmap, advmap.newup, advmap.newacting,
+			       context< RecoveryMachine >().get_cur_transaction());
   }
   return discard_event();
 }
@@ -6894,14 +6896,14 @@ void PG::RecoveryState::WaitUpThru::exit()
 
 void PG::RecoveryState::RecoveryMachine::log_enter(const char *state_name)
 {
-  dout(20) << "enter " << state_name << dendl;
+  dout(5) << "enter " << state_name << dendl;
   pg->osd->pg_recovery_stats.log_enter(state_name);
 }
 
 void PG::RecoveryState::RecoveryMachine::log_exit(const char *state_name, utime_t enter_time)
 {
   utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
-  dout(20) << "exit " << state_name << " " << dur << " " << event_count << " " << event_time << dendl;
+  dout(5) << "exit " << state_name << " " << dur << " " << event_count << " " << event_time << dendl;
   pg->osd->pg_recovery_stats.log_exit(state_name, ceph_clock_now(g_ceph_context) - enter_time,
 				      event_count, event_time);
   event_count = 0;
