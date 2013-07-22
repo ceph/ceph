@@ -6,7 +6,7 @@ from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
-def rgwadmin(ctx, client, cmd, stdin=StringIO()):
+def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False):
     log.info('radosgw-admin: %s' % cmd)
     testdir = teuthology.get_testdir(ctx)
     pre = [
@@ -21,7 +21,7 @@ def rgwadmin(ctx, client, cmd, stdin=StringIO()):
     (remote,) = ctx.cluster.only(client).remotes.iterkeys()
     proc = remote.run(
         args=pre,
-        check_status=False,
+        check_status=check_status,
         stdout=StringIO(),
         stderr=StringIO(),
         stdin=stdin,

@@ -11,17 +11,17 @@
   LoadModule log_config_module {mod_path}/mod_log_config.so
 </IfModule>
 
-Listen 7280
-ServerName rgwtest.example.com
+Listen {port}
+ServerName {host}
 
 ServerRoot {testdir}/apache
-ErrorLog {testdir}/archive/apache/error.log
+ErrorLog {testdir}/archive/apache.{client}/error.log
 LogFormat "%h l %u %t \"%r\" %>s %b \"{{Referer}}i\" \"%{{User-agent}}i\"" combined
-CustomLog {testdir}/archive/apache/access.log combined
-PidFile {testdir}/apache/tmp/apache.pid
-DocumentRoot {testdir}/apache/htdocs
-FastCgiIPCDir {testdir}/apache/tmp/fastcgi_sock
-FastCgiExternalServer {testdir}/apache/htdocs/rgw.fcgi -socket rgw_sock
+CustomLog {testdir}/archive/apache.{client}/access.log combined
+PidFile {testdir}/apache/tmp.{client}/apache.pid
+DocumentRoot {testdir}/apache/htdocs.{client}
+FastCgiIPCDir {testdir}/apache/tmp.{client}/fastcgi_sock
+FastCgiExternalServer {testdir}/apache/htdocs.{client}/rgw.fcgi -socket rgw_sock
 RewriteEngine On
 
 RewriteRule ^/([a-zA-Z0-9-_.]*)([/]?.*) /rgw.fcgi?page=$1&params=$2&%{{QUERY_STRING}} [E=HTTP_AUTHORIZATION:%{{HTTP:Authorization}},L]
@@ -32,7 +32,7 @@ SetEnv RGW_LOG_LEVEL 20
 SetEnv RGW_SHOULD_LOG yes
 SetEnv RGW_PRINT_CONTINUE {print_continue}
 
-<Directory {testdir}/apache/htdocs>
+<Directory {testdir}/apache/htdocs.{client}>
   Options +ExecCGI
   AllowOverride All
   SetHandler fastcgi-script
