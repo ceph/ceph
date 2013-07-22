@@ -288,6 +288,8 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params()
 {
   policy.create_default(s->user.user_id, s->user.display_name);
 
+  location_constraint = store->region.api_name;
+
   return 0;
 }
 
