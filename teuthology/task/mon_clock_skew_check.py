@@ -3,6 +3,7 @@ import contextlib
 import ceph_manager
 import time
 import gevent
+from StringIO import StringIO
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
@@ -61,12 +62,17 @@ class ClockSkewCheck:
 
     self.check_interval = float(self.config.get('interval', 30.0))
 
-    # config defined max-skew must have priority over globally defined
-    self.max_skew = float(
-        self.config.get('max-skew',
-          ctx.ceph.conf['global'].get('mon clock drift allowed', 0.05)
-          )
+    first_mon = teuthology.get_first_mon(ctx, config)
+    remote = ctx.cluster.only(first_mon).remotes.keys()[0]
+    proc = remote.run(
+        args=[
+          'sudo',
+          'ceph-mon',
+          '-i', first_mon[4:],
+          '--show-config-value', 'mon_clock_drift_allowed'
+          ], stdout=StringIO(), wait=True
         )
+    self.max_skew = self.config.get('max-skew', float(proc.stdout.getvalue()))
 
     self.expect_skew = self.config.get('expect-skew', False)
     self.never_fail = self.config.get('never-fail', False)
