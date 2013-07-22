@@ -5,31 +5,14 @@ import os
 
 from cStringIO import StringIO
 
+import ceph_manager
+from ..orchestra import run
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.task_util.rgw import rgwadmin
-from ..orchestra import run
-import ceph_manager
+from teuthology.task_util.rados import rados
 
 log = logging.getLogger(__name__)
-
-# this was lifted from lost_unfound.py
-def rados(ctx, remote, cmd):
-    testdir = teuthology.get_testdir(ctx)
-    log.info("rados %s" % ' '.join(cmd))
-    pre = [
-        '{tdir}/adjust-ulimits'.format(tdir=testdir),
-        'ceph-coverage',
-        '{tdir}/archive/coverage'.format(tdir=testdir),
-        'rados',
-    ];
-    pre.extend(cmd)
-    proc = remote.run(
-        args=pre,
-        check_status=False
-        )
-
-    return proc.exitstatus
 
 @contextlib.contextmanager
 def create_dirs(ctx, config):

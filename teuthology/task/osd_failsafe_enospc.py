@@ -1,31 +1,13 @@
 from cStringIO import StringIO
 import logging
-import ceph_manager
-from teuthology import misc as teuthology
 import time
+
+import ceph_manager
 from ..orchestra import run
+from teuthology.task_util.rados import rados
+from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
-
-
-def rados(testdir, remote, cmd, wait=True):
-    log.info("rados %s" % ' '.join(cmd))
-    pre = [
-        '{tdir}/adjust-ulimits'.format(tdir=testdir),
-        'ceph-coverage',
-        '{tdir}/archive/coverage'.format(tdir=testdir),
-        'rados',
-        ];
-    pre.extend(cmd)
-    proc = remote.run(
-        args=pre,
-        check_status=False,
-        wait=wait
-        )
-    if wait:
-        return proc.exitstatus
-    else:
-        return proc
 
 def task(ctx, config):
     """
@@ -49,7 +31,6 @@ def task(ctx, config):
     first_mon = teuthology.get_first_mon(ctx, config)
     (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
 
-    testdir = teuthology.get_testdir(ctx)
     manager = ceph_manager.CephManager(
         mon,
         ctx=ctx,
@@ -129,7 +110,7 @@ def task(ctx, config):
     log.info('3. Verify write failure when exceeding full_ratio')
 
     # Write data should fail
-    ret = rados(testdir, mon, ['-p', 'foo', 'put', 'newfile1', dummyfile])
+    ret = rados(ctx, mon, ['-p', 'foo', 'put', 'newfile1', dummyfile])
     assert ret != 0, 'Expected write failure but it succeeded with exit status 0'
 
     # Put back default
@@ -140,7 +121,7 @@ def task(ctx, config):
     log.info('4. Verify write success when NOT exceeding full_ratio')
 
     # Write should succeed
-    ret = rados(testdir, mon, ['-p', 'foo', 'put', 'newfile2', dummyfile2])
+    ret = rados(ctx, mon, ['-p', 'foo', 'put', 'newfile2', dummyfile2])
     assert ret == 0, 'Expected write to succeed, but got exit status %d' % ret
 
     log.info('5. Verify warning messages again when exceeding nearfull_ratio')

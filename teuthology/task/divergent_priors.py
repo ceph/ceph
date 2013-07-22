@@ -1,30 +1,12 @@
 import logging
+import time
+
 import ceph_manager
 from teuthology import misc as teuthology
-import time
+from teuthology.task_util.rados import rados
 
 
 log = logging.getLogger(__name__)
-
-
-def rados(testdir, remote, cmd, wait=True):
-    log.info("rados %s" % ' '.join(cmd))
-    pre = [
-        '{tdir}/adjust-ulimits'.format(tdir=testdir),
-        'ceph-coverage',
-        '{tdir}/archive/coverage'.format(tdir=testdir),
-        'rados',
-        ];
-    pre.extend(cmd)
-    proc = remote.run(
-        args=pre,
-        check_status=False,
-        wait=wait
-        )
-    if wait:
-        return proc.exitstatus
-    else:
-        return proc
 
 def task(ctx, config):
     """
@@ -42,7 +24,6 @@ def task(ctx, config):
     first_mon = teuthology.get_first_mon(ctx, config)
     (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
 
-    testdir = teuthology.get_testdir(ctx)
     manager = ceph_manager.CephManager(
         mon,
         ctx=ctx,
@@ -81,7 +62,7 @@ def task(ctx, config):
     log.info('writing initial objects')
     # write 1000 objects
     for i in range(1000):
-        rados(testdir, mon, ['-p', 'foo', 'put', 'existing_%d' % i, dummyfile])
+        rados(ctx, mon, ['-p', 'foo', 'put', 'existing_%d' % i, dummyfile])
 
     manager.wait_for_clean()
 
@@ -93,7 +74,7 @@ def task(ctx, config):
     # write 1 (divergent) object
     log.info('writing divergent object existing_0')
     rados(
-        testdir, mon, ['-p', 'foo', 'put', 'existing_0', dummyfile2],
+        ctx, mon, ['-p', 'foo', 'put', 'existing_0', dummyfile2],
         wait=False)
     time.sleep(10)
     mon.run(
@@ -123,7 +104,7 @@ def task(ctx, config):
 
     # write 1 non-divergent object (ensure that old divergent one is divergent)
     log.info('writing non-divergent object existing_1')
-    rados(testdir, mon, ['-p', 'foo', 'put', 'existing_1', dummyfile2])
+    rados(ctx, mon, ['-p', 'foo', 'put', 'existing_1', dummyfile2])
 
     manager.wait_for_recovery()
 
@@ -145,7 +126,7 @@ def task(ctx, config):
     manager.mark_in_osd(divergent)
 
     log.info('wait for peering')
-    rados(testdir, mon, ['-p', 'foo', 'put', 'foo', dummyfile])
+    rados(ctx, mon, ['-p', 'foo', 'put', 'foo', dummyfile])
 
     log.info("killing divergent %d", divergent)
     manager.kill_osd(divergent)
@@ -157,7 +138,7 @@ def task(ctx, config):
         manager.set_config(i, osd_recovery_delay_start=0)
 
     log.info('reading existing_0')
-    exit_status = rados(testdir, mon,
+    exit_status = rados(ctx, mon,
                         ['-p', 'foo', 'get', 'existing_0',
                          '-o', '/tmp/existing'])
     assert exit_status is 0

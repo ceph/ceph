@@ -1,25 +1,9 @@
 import logging
 import ceph_manager
 from teuthology import misc as teuthology
-
+from teuthology.task_util.rados import rados
 
 log = logging.getLogger(__name__)
-
-
-def rados(testdir, remote, cmd):
-    log.info("rados %s" % ' '.join(cmd))
-    pre = [
-        '{tdir}/adjust-ulimits'.format(tdir=testdir),
-        'ceph-coverage',
-        '{tdir}/archive/coverage'.format(tdir=testdir),
-        'rados',
-        ];
-    pre.extend(cmd)
-    proc = remote.run(
-        args=pre,
-        check_status=False
-        )
-    return proc.exitstatus
 
 def task(ctx, config):
     """
@@ -75,14 +59,12 @@ def task(ctx, config):
             '--osd-recovery-delay-start 10000 --osd-min-pg-log-entries 100000000'
             )
 
-    testdir = teuthology.get_testdir(ctx)
-
     # kludge to make sure they get a map
-    rados(testdir, mon, ['-p', 'data', 'put', 'dummy', dummyfile])
+    rados(ctx, mon, ['-p', 'data', 'put', 'dummy', dummyfile])
 
     # create old objects
     for f in range(1, 10):
-        rados(testdir, mon, ['-p', 'data', 'put', 'existing_%d' % f, dummyfile])
+        rados(ctx, mon, ['-p', 'data', 'put', 'existing_%d' % f, dummyfile])
 
     manager.mark_out_osd(3)
     manager.wait_till_active()
