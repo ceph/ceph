@@ -17,12 +17,26 @@ def task(ctx, config):
        - tasktest:
        - tasktest:
 
+    You can also reference the job from elsewhere:
+
+    foo:
+      tasktest:
+    tasks:
+    - parallel:
+      - foo
+      - tasktest:
+
+    That is, if the entry is not a dict, we will look it up in the top-level
+    config.
+
     Sequential task and Parallel tasks can be nested.
     """
     
     log.info('starting parallel...')
     with parallel.parallel() as p:
         for entry in config:
+            if not isinstance(entry, dict):
+                entry = ctx.config.get(entry, {})
             ((taskname, confg),) = entry.iteritems()
             p.spawn(_run_spawned, ctx, confg, taskname)
 
