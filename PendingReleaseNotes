@@ -19,3 +19,9 @@ v0.67
   commandline tool.  ceph_rest_api.py can be used as a WSGI application
   for deployment in a more-capable web server.  See ceph-rest-api.8
   for more.
+
+* rgw copy object operation may return extra progress info during the
+  operation. At this point it will only happen when doing cross zone
+  copy operations. The S3 response will now return extra <Progress>
+  field under the <CopyResult> container. The Swift response will
+  now send the progress as a json array.
