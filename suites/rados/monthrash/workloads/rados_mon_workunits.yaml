@@ -9,4 +9,5 @@ tasks:
         - mon/pool_ops.sh
         - mon/crush_ops.sh
         - mon/osd.sh
+        - mon/caps.sh
 
