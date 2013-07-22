@@ -115,7 +115,7 @@ int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t 
   }
 
   if (!update_entrypoint)
-    return false;
+    return 0;
 
   ep.linked = true;
   ep.owner = user_id;
@@ -149,7 +149,7 @@ int rgw_unlink_bucket(RGWRados *store, string user_id, const string& bucket_name
   }
 
   if (!update_entrypoint)
-    return false;
+    return 0;
 
   RGWBucketEntryPoint ep;
   RGWObjVersionTracker ot;
@@ -416,7 +416,6 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
   std::string display_name = op_state.get_user_display_name();
   rgw_bucket bucket = op_state.get_bucket();
 
-  string uid_str(user_info.user_id);
   rgw_obj obj(bucket, no_oid);
   RGWObjVersionTracker objv_tracker;
 
@@ -1419,7 +1418,7 @@ public:
       ret = rgw_unlink_bucket(store, be.owner, be.bucket.name, false);
     }
 
-    return 0;
+    return ret;
   }
 
   struct list_keys_info {
