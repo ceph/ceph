@@ -856,11 +856,16 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
 
   s->bucket_name_str = first;
   s->bucket_name = strdup(s->bucket_name_str.c_str());
+
    
+  s->info.effective_uri = "/" + s->bucket_name_str;
+
   if (req.size()) {
     s->object_str = req;
     s->object = strdup(s->object_str.c_str());
+    s->info.effective_uri.append("/" + s->object_str);
   }
+
   return 0;
 }
 

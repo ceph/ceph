@@ -403,6 +403,7 @@ int RGWRESTStreamWriteRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uin
   new_info.script_uri = "/";
   new_info.script_uri.append(resource);
   new_info.request_uri = new_info.script_uri;
+  new_info.effective_uri = new_info.effective_uri;
 
   map<string, string>& m = new_env.get_map();
   map<string, bufferlist>::iterator bliter;
@@ -568,6 +569,7 @@ int RGWRESTStreamReadRequest::get_obj(RGWAccessKey& key, map<string, string>& ex
   new_info.script_uri = "/";
   new_info.script_uri.append(resource);
   new_info.request_uri = new_info.script_uri;
+  new_info.effective_uri = new_info.effective_uri;
 
   new_info.init_meta_info(NULL);
 

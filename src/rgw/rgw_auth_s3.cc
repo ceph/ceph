@@ -190,8 +190,14 @@ bool rgw_create_s3_canonical_header(req_info& info, utime_t *header_time, string
   map<string, string>& meta_map = info.x_meta_map;
   map<string, string>& sub_resources = info.args.get_sub_resources();
 
+  string request_uri;
+  if (info.effective_uri.empty())
+    request_uri = info.request_uri;
+  else
+    request_uri = info.effective_uri;
+
   rgw_create_s3_canonical_header(info.method, content_md5, content_type, date.c_str(),
-                            meta_map, info.request_uri.c_str(), sub_resources,
+                            meta_map, request_uri.c_str(), sub_resources,
                             dest);
 
   return true;
