@@ -441,7 +441,12 @@ public:
   SimpleLRU<epoch_t, bufferlist> map_bl_cache;
   SimpleLRU<epoch_t, bufferlist> map_bl_inc_cache;
 
-  OSDMapRef get_map(epoch_t e);
+  OSDMapRef try_get_map(epoch_t e);
+  OSDMapRef get_map(epoch_t e) {
+    OSDMapRef ret(try_get_map(e));
+    assert(ret);
+    return ret;
+  }
   OSDMapRef add_map(OSDMap *o) {
     Mutex::Locker l(map_cache_lock);
     return _add_map(o);
