@@ -261,15 +261,21 @@ bool MonCap::is_capable(CephContext *cct,
     if (cct)
       ldout(cct, 20) << " allow so far " << allow << ", doing grant " << *p << dendl;
 
-    if (p->is_allow_all())
+    if (p->is_allow_all()) {
+      if (cct)
+	ldout(cct, 20) << " allow all" << dendl;
       return true;
+    }
 
     // check enumerated caps
     allow = allow | p->get_allowed(cct, name, service, command, command_args);
-    if (!((op_may_read && !(allow & MON_CAP_R)) ||
-	  (op_may_write && !(allow & MON_CAP_W)) ||
-	  (op_may_exec && !(allow & MON_CAP_X))))
+    if ((!op_may_read || (allow & MON_CAP_R)) &&
+	(!op_may_write || (allow & MON_CAP_W)) &&
+	(!op_may_exec || (allow & MON_CAP_X))) {
+      if (cct)
+	ldout(cct, 20) << " match" << dendl;
       return true;
+    }
   }
   return false;
 }
