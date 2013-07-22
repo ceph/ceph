@@ -283,6 +283,8 @@ TEST(cls_rgw, test_version_inc_check)
   ASSERT_GT((long long)ver2.ver, (long long)ver.ver);
   ASSERT_EQ(0, (int)ver2.tag.compare(ver.tag));
 
+  delete op;
+
   /* a bunch of conditions that should fail */
   rop = new_rop();
   cls_version_check(*rop, ver, VER_COND_LT);
