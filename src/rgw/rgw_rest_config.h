@@ -25,7 +25,7 @@ public:
   }
   void execute();
   virtual void send_response();
-  virtual const char *name() {
+  virtual const string name() {
     return "get_region_map";
   }
 };

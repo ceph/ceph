@@ -32,7 +32,7 @@ public:
   virtual void send_response(list<rgw_bi_log_entry>& entries, string& marker);
   virtual void send_response_end();
   void execute();
-  virtual const char *name() {
+  virtual const string name() {
     return "list_bucket_index_log";
   }
 };
@@ -53,7 +53,7 @@ public:
   }
   virtual void send_response();
   void execute();
-  virtual const char *name() {
+  virtual const string name() {
     return "bucket_index_log_info";
   }
 };
@@ -67,7 +67,7 @@ public:
     return caps.check_cap("bilog", RGW_CAP_WRITE);
   }
   void execute();
-  virtual const char *name() {
+  virtual const string name() {
     return "trim_bucket_index_log";
   }
 };
@@ -87,7 +87,7 @@ public:
   }
   void execute();
   virtual void send_response();
-  virtual const char *name() {
+  virtual const string name() {
     return "list_metadata_log";
   }
 };
@@ -107,7 +107,7 @@ public:
   }
   void execute();
   virtual void send_response();
-  virtual const char *name() {
+  virtual const string name() {
     return "get_metadata_log_info";
   }
 };
@@ -126,7 +126,7 @@ public:
   }
   void execute();
   virtual void send_response();
-  virtual const char *name() {
+  virtual const string name() {
     return "get_metadata_log_shard_info";
   }
 };
@@ -140,7 +140,7 @@ public:
     return caps.check_cap("mdlog", RGW_CAP_WRITE);
   }
   void execute();
-  virtual const char *name() {
+  virtual const string name() {
     return "lock_mdlog_object";
   }
 };
@@ -154,7 +154,7 @@ public:
     return caps.check_cap("mdlog", RGW_CAP_WRITE);
   }
   void execute();
-  virtual const char *name() {
+  virtual const string name() {
     return "unlock_mdlog_object";
   }
 };
@@ -168,7 +168,7 @@ public:
     return caps.check_cap("mdlog", RGW_CAP_WRITE);
   }
   void execute();
-  virtual const char *name() {
+  virtual const string name() {
     return "trim_metadata_log";
   }
 };
@@ -188,7 +188,7 @@ public:
   }
   void execute();
   virtual void send_response();
-  virtual const char *name() {
+  virtual const string name() {
     return "list_data_changes_log";
   }
 };
@@ -208,7 +208,7 @@ public:
   }
   void execute();
   virtual void send_response();
-  virtual const char *name() {
+  virtual const string name() {
     return "get_data_changes_log_info";
   }
 };
@@ -227,7 +227,7 @@ public:
   }
   void execute();
   virtual void send_response();
-  virtual const char *name() {
+  virtual const string name() {
     return "get_data_changes_log_shard_info";
   }
 };
@@ -241,7 +241,7 @@ public:
     return caps.check_cap("datalog", RGW_CAP_WRITE);
   }
   void execute();
-  virtual const char *name() {
+  virtual const string name() {
     return "lock_datalog_object";
   }
 };
@@ -255,7 +255,7 @@ public:
     return caps.check_cap("datalog", RGW_CAP_WRITE);
   }
   void execute();
-  virtual const char *name() {
+  virtual const string name() {
     return "unlock_datalog_object";
   }
 };
@@ -269,7 +269,7 @@ public:
     return caps.check_cap("datalog", RGW_CAP_WRITE);
   }
   void execute();
-  virtual const char *name() {
+  virtual const string name() {
     return "trim_data_changes_log";
   }
 };

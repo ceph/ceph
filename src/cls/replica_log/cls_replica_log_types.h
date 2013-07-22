@@ -61,7 +61,7 @@ struct cls_replica_log_progress_marker {
                                     position_time(time) {}
   cls_replica_log_progress_marker(const string& entity, const string& marker,
                                   const utime_t& time,
-                                  const std::list<cls_replica_log_item_marker> b) :
+                                  const std::list<cls_replica_log_item_marker>& b) :
                                     entity_id(entity), position_marker(marker),
                                     position_time(time),
                                     items(b) {}
