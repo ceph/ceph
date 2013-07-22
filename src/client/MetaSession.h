@@ -35,7 +35,7 @@ struct MetaSession {
     STATE_CLOSED,
   } state;
 
-  list<Cond*> waiting_for_open;
+  list<Context*> waiting_for_open;
 
   xlist<Cap*> caps;
   xlist<Inode*> flushing_caps;
