@@ -344,6 +344,9 @@ protected:
   void wait_on_list(list<Cond*>& ls);
   void signal_cond_list(list<Cond*>& ls);
 
+  void wait_on_context_list(list<Context*>& ls);
+  void signal_context_list(list<Context*>& ls);
+
   // -- metadata cache stuff
 
   // decrease inode ref.  delete if dangling.
