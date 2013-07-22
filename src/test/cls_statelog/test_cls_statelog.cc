@@ -84,6 +84,7 @@ static void get_entries_by_client_id(librados::IoCtx& ioctx, string& oid,
   cls_statelog_list(*rop, client_id, op_id, empty_str, marker, 0, entries, &marker, &truncated);
   ASSERT_EQ(0, ioctx.operate(oid, rop, &obl));
   ASSERT_EQ(expected, (int)entries.size());
+  delete rop;
 }
 
 static void get_all_entries(librados::IoCtx& ioctx, string& oid, list<cls_statelog_entry>& entries, int expected)
