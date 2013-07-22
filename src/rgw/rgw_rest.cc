@@ -835,8 +835,10 @@ int rgw_rest_read_all_input(struct req_state *s, char **pdata, int *plen, int ma
        return -ENOMEM;
     }
     int ret = s->cio->read(data, cl, &len);
-    if (ret < 0)
+    if (ret < 0) {
+      free(data);
       return ret;
+    }
     data[len] = '\0';
   } else if (!s->length) {
     const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
