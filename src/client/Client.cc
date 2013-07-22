@@ -2607,6 +2607,24 @@ void Client::signal_cond_list(list<Cond*>& ls)
     (*it)->Signal();
 }
 
+void Client::wait_on_context_list(list<Context*>& ls)
+{
+  Cond cond;
+  bool done = false;
+  int r;
+  ls.push_back(new C_Cond(&cond, &done, &r));
+  while (!done)
+    cond.Wait(client_lock);
+}
+
+void Client::signal_context_list(list<Context*>& ls)
+{
+  while (!ls.empty()) {
+    ls.front()->complete(0);
+    ls.pop_front();
+  }
+}
+
 void Client::wake_inode_waiters(MetaSession *s)
 {
   xlist<Cap*>::iterator iter = s->caps.begin();
