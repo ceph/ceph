@@ -220,7 +220,8 @@ int FileStore::lfn_open(coll_t cid,
     r = get_index(cid, index);
   }
   Mutex::Locker l(fdcache_lock);
-  *outfd = fdcache.lookup(oid);
+  if (!replaying)
+    *outfd = fdcache.lookup(oid);
   if (*outfd) {
     return 0;
   }
@@ -258,7 +259,10 @@ int FileStore::lfn_open(coll_t cid,
       goto fail;
     }
   }
-  *outfd = fdcache.add(oid, fd);
+  if (!replaying)
+    *outfd = fdcache.add(oid, fd);
+  else
+    *outfd = FDRef(new FDCache::FD(fd));
   return 0;
 
  fail:
@@ -3060,7 +3064,8 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
     r = bl.length();
 
   // flush?
-  wbthrottle.queue_wb(fd, oid, offset, len, replica);
+  if (!replaying)
+    wbthrottle.queue_wb(fd, oid, offset, len, replica);
   lfn_close(fd);
 
  out:
