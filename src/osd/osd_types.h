@@ -1141,6 +1141,13 @@ struct pg_history_t {
   epoch_t last_epoch_clean;    // lower bound on last epoch the PG was completely clean.
   epoch_t last_epoch_split;    // as parent
   
+  /**
+   * In the event of a map discontinuity, same_*_since may reflect the first
+   * map the osd has seen in the new map sequence rather than the actual start
+   * of the interval.  This is ok since a discontinuity at epoch e means there
+   * must have been a clean interval between e and now and that we cannot be
+   * in the active set during the interval containing e.
+   */
   epoch_t same_up_since;       // same acting set since
   epoch_t same_interval_since;   // same acting AND up set since
   epoch_t same_primary_since;  // same primary at least back through this epoch.
