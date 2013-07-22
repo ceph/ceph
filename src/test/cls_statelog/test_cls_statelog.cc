@@ -203,6 +203,7 @@ TEST(cls_rgw, test_statelog_basic)
   string empty_str;
   get_entries_by_client_id(ioctx, oid, entries, e.client_id, empty_str, 4);
   get_entries_by_object(ioctx, oid, entries, e.object, empty_str, 1);
+  delete op;
   delete rop;
 }
 
