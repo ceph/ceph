@@ -295,4 +295,6 @@ TEST(cls_rgw, test_version_inc_check)
   rop = new_rop();
   cls_version_check(*rop, cond_ver, VER_COND_TAG_NE);
   ASSERT_EQ(-ECANCELED, ioctx.operate(oid, rop, &bl));
+
+  delete rop;
 }
