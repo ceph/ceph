@@ -17,7 +17,7 @@ public:
 
   void execute();
 
-  virtual const char *name() { return "get_user_info"; }
+  virtual const string name() { return "get_user_info"; }
 };
 
 void RGWOp_User_Info::execute()
@@ -44,7 +44,7 @@ public:
 
   void execute();
 
-  virtual const char *name() { return "create_user"; }
+  virtual const string name() { return "create_user"; }
 };
 
 void RGWOp_User_Create::execute()
@@ -138,7 +138,7 @@ public:
 
   void execute();
 
-  virtual const char *name() { return "modify_user"; }
+  virtual const string name() { return "modify_user"; }
 };
 
 void RGWOp_User_Modify::execute()
@@ -232,7 +232,7 @@ public:
 
   void execute();
 
-  virtual const char *name() { return "remove_user"; }
+  virtual const string name() { return "remove_user"; }
 };
 
 void RGWOp_User_Remove::execute()
@@ -265,7 +265,7 @@ public:
 
   void execute();
 
-  virtual const char *name() { return "create_subuser"; }
+  virtual const string name() { return "create_subuser"; }
 };
 
 void RGWOp_Subuser_Create::execute()
@@ -334,7 +334,7 @@ public:
 
   void execute();
 
-  virtual const char *name() { return "modify_subuser"; }
+  virtual const string name() { return "modify_subuser"; }
 };
 
 void RGWOp_Subuser_Modify::execute()
@@ -399,7 +399,7 @@ public:
 
   void execute();
 
-  virtual const char *name() { return "remove_subuser"; }
+  virtual const string name() { return "remove_subuser"; }
 };
 
 void RGWOp_Subuser_Remove::execute()
@@ -438,7 +438,7 @@ public:
 
   void execute();
 
-  virtual const char *name() { return "create_access_key"; }
+  virtual const string name() { return "create_access_key"; }
 };
 
 void RGWOp_Key_Create::execute()
@@ -500,7 +500,7 @@ public:
 
   void execute();
 
-  virtual const char *name() { return "remove_access_key"; }
+  virtual const string name() { return "remove_access_key"; }
 };
 
 void RGWOp_Key_Remove::execute()
@@ -552,7 +552,7 @@ public:
 
   void execute();
 
-  virtual const char *name() { return "add_user_caps"; }
+  virtual const string name() { return "add_user_caps"; }
 };
 
 void RGWOp_Caps_Add::execute()
@@ -586,7 +586,7 @@ public:
 
   void execute();
 
-  virtual const char *name() { return "remove_user_caps"; }
+  virtual const string name() { return "remove_user_caps"; }
 };
 
 void RGWOp_Caps_Remove::execute()
