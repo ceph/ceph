@@ -1654,6 +1654,25 @@ int RGWCopyObj::init_common()
   return 0;
 }
 
+static void copy_obj_progress_cb(off_t ofs, void *param)
+{
+  RGWCopyObj *op = static_cast<RGWCopyObj *>(param);
+  op->progress_cb(ofs);
+}
+
+void RGWCopyObj::progress_cb(off_t ofs)
+{
+  if (!s->cct->_conf->rgw_copy_obj_progress)
+    return;
+
+  if (ofs - last_ofs < s->cct->_conf->rgw_copy_obj_progress_every_bytes)
+    return;
+
+  send_partial_response(ofs);
+
+  last_ofs = ofs;
+}
+
 void RGWCopyObj::execute()
 {
   rgw_obj src_obj, dst_obj;
@@ -1685,7 +1704,9 @@ void RGWCopyObj::execute()
                         replace_attrs,
                         attrs, RGW_OBJ_CATEGORY_MAIN,
                         &s->req_id, /* use req_id as tag */
-                        &s->err);
+                        &s->err,
+                        copy_obj_progress_cb, (void *)this
+                        );
 }
 
 int RGWGetACLs::verify_permission()
