@@ -55,6 +55,7 @@ TEST(cls_rgw, test_version_inc_read)
   ASSERT_NE(0, (int)ver.tag.size());
 
   /* inc version again! */
+  delete op;
   op = new_op();
   cls_version_inc(*op);
   ASSERT_EQ(0, ioctx.operate(oid, op));
