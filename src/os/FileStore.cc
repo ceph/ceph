@@ -4352,9 +4352,6 @@ int FileStore::_collection_rename(const coll_t &cid, const coll_t &ncid,
   get_cdir(cid, old_coll, sizeof(old_coll));
   get_cdir(ncid, new_coll, sizeof(new_coll));
 
-  _set_global_replay_guard(cid, spos);
-  _set_replay_guard(cid, spos);
-
   if (_check_replay_guard(cid, spos) < 0) {
     return 0;
   }
@@ -4362,6 +4359,16 @@ int FileStore::_collection_rename(const coll_t &cid, const coll_t &ncid,
   if (_check_replay_guard(ncid, spos) < 0) {
     return _collection_remove_recursive(cid, spos);
   }
+
+  if (!collection_exists(cid)) {
+    if (replaying) {
+      // already happened
+      return 0;
+    } else {
+      return -ENOENT;
+    }
+  }
+  _set_global_replay_guard(cid, spos);
 
   int ret = 0;
   if (::rename(old_coll, new_coll)) {
