@@ -451,12 +451,6 @@ int main(int argc, const char **argv)
   messenger_hb_back_server->start();
   cluster_messenger->start();
 
-  // install signal handlers
-  init_async_signal_handler();
-  register_async_signal_handler(SIGHUP, sighup_handler);
-  register_async_signal_handler_oneshot(SIGINT, handle_osd_signal);
-  register_async_signal_handler_oneshot(SIGTERM, handle_osd_signal);
-
   // start osd
   err = osd->init();
   if (err < 0) {
@@ -464,6 +458,15 @@ int main(int argc, const char **argv)
          << TEXT_NORMAL << dendl;
     return 1;
   }
+
+  // install signal handlers
+  init_async_signal_handler();
+  register_async_signal_handler(SIGHUP, sighup_handler);
+  register_async_signal_handler_oneshot(SIGINT, handle_osd_signal);
+  register_async_signal_handler_oneshot(SIGTERM, handle_osd_signal);
+
+  if (g_conf->inject_early_sigterm)
+    kill(getpid(), SIGTERM);
 
   client_messenger->wait();
   messenger_hbclient->wait();
