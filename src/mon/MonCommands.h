@@ -482,7 +482,7 @@ COMMAND("osd pool delete " \
 	"name=pool2,type=CephPoolname " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-really-mean-it", \
 	"delete pool (say pool twice, add --yes-i-really-really-mean-it)", \
-	"osd", "r", "cli,rest")
+	"osd", "rw", "cli,rest")
 COMMAND("osd pool rename " \
 	"name=srcpool,type=CephPoolname " \
 	"name=destpool,type=CephPoolname", \
@@ -494,8 +494,7 @@ COMMAND("osd pool get " \
 COMMAND("osd pool set " \
 	"name=pool,type=CephPoolname " \
 	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset " \
-	"name=val,type=CephInt " \
-	"name=sure,type=CephChoices,strings=--allow-experimental-feature,req=false", \
+	"name=val,type=CephInt", \
 	"set pool parameter <var> to <val>", "osd", "rw", "cli,rest")
 // 'val' is a CephString because it can include a unit.  Perhaps
 // there should be a Python type for validation/conversion of strings
