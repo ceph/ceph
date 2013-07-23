@@ -559,6 +559,7 @@ void OSDMonitor::encode_trim_extra(MonitorDBStore::Transaction *tx, version_t fi
   bufferlist bl;
   get_version_full(first, bl);
   put_version_full(tx, first, bl);
+  put_version_latest_full(tx, first);
 }
 
 bool OSDMonitor::service_should_trim()
