@@ -509,6 +509,7 @@ static void fuse_ll_statfs(fuse_req_t req, fuse_ino_t ino)
     fuse_reply_err(req, -r);
 }
 
+#if 0
 static int getgroups_cb(void *handle, uid_t uid, gid_t **sgids)
 {
 #ifdef HAVE_FUSE_GETGROUPS
@@ -534,6 +535,7 @@ static int getgroups_cb(void *handle, uid_t uid, gid_t **sgids)
 #endif
   return 0;
 }
+#endif
 
 static void invalidate_cb(void *handle, vinodeno_t vino, int64_t off, int64_t len)
 {
@@ -702,7 +704,19 @@ int CephFuse::Handle::init(int argc, const char *argv[])
 
   fuse_session_add_chan(se, ch);
 
+  /*
+   * this is broken:
+   *
+   * - the cb needs the request handle to be useful; we should get the
+   *   gids in the method here in fuse_ll.c and pass the gid list in,
+   *   not use a callback.
+   * - the callback mallocs the list but it is not free()'d
+   *
+   * so disable it for now...
+
   client->ll_register_getgroups_cb(getgroups_cb, this);
+
+   */
 
   if (g_conf->fuse_use_invalidate_cb)
     client->ll_register_ino_invalidate_cb(invalidate_cb, this);
