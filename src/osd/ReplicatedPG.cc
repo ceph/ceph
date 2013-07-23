@@ -7767,6 +7767,14 @@ void ReplicatedPG::_scrub_finish()
 #undef dout_prefix
 #define dout_prefix *_dout << pg->gen_prefix() 
 
+ReplicatedPG::SnapTrimmer::~SnapTrimmer()
+{
+  while (!repops.empty()) {
+    (*repops.begin())->put();
+    repops.erase(repops.begin());
+  }
+}
+
 void ReplicatedPG::SnapTrimmer::log_enter(const char *state_name)
 {
   dout(20) << "enter " << state_name << dendl;

@@ -2397,9 +2397,16 @@ class RGWRadosPutObj : public RGWGetDataCB
   rgw_obj obj;
   RGWPutObjProcessor_Atomic *processor;
   RGWOpStateSingleOp *opstate;
+  void (*progress_cb)(off_t, void *);
+  void *progress_data;
 public:
-  RGWRadosPutObj(RGWPutObjProcessor_Atomic *p, RGWOpStateSingleOp *_ops) : processor(p), opstate(_ops) {}
+  RGWRadosPutObj(RGWPutObjProcessor_Atomic *p, RGWOpStateSingleOp *_ops,
+                 void (*_progress_cb)(off_t, void *), void *_progress_data) : processor(p), opstate(_ops),
+                                                                       progress_cb(_progress_cb),
+                                                                       progress_data(_progress_data) {}
   int handle_data(bufferlist& bl, off_t ofs, off_t len) {
+    progress_cb(ofs, progress_data);
+
     void *handle;
     int ret = processor->handle_data(bl, ofs, &handle);
     if (ret < 0)
@@ -2477,7 +2484,9 @@ int RGWRados::copy_obj(void *ctx,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
                string *ptag,
-               struct rgw_err *err)
+               struct rgw_err *err,
+               void (*progress_cb)(off_t, void *),
+               void *progress_data)
 {
   int ret;
   uint64_t total_len, obj_size;
@@ -2545,7 +2554,7 @@ int RGWRados::copy_obj(void *ctx,
       ldout(cct, 0) << "ERROR: failed to set opstate ret=" << ret << dendl;
       return ret;
     }
-    RGWRadosPutObj cb(&processor, &opstate);
+    RGWRadosPutObj cb(&processor, &opstate, progress_cb, progress_data);
     string etag;
     map<string, string> req_headers;
     time_t set_mtime;
@@ -4583,11 +4592,12 @@ int RGWRados::get_bucket_instance_from_oid(void *ctx, string& oid, RGWBucketInfo
 int RGWRados::get_bucket_entrypoint_info(void *ctx, const string& bucket_name,
                                          RGWBucketEntryPoint& entry_point,
                                          RGWObjVersionTracker *objv_tracker,
-                                         time_t *pmtime)
+                                         time_t *pmtime,
+                                         map<string, bufferlist> *pattrs)
 {
   bufferlist bl;
 
-  int ret = rgw_get_system_obj(this, ctx, zone.domain_root, bucket_name, bl, objv_tracker, pmtime, NULL);
+  int ret = rgw_get_system_obj(this, ctx, zone.domain_root, bucket_name, bl, objv_tracker, pmtime, pattrs);
   if (ret < 0) {
     return ret;
   }
@@ -4610,7 +4620,7 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
   RGWBucketEntryPoint entry_point;
   time_t ep_mtime;
   RGWObjVersionTracker ot;
-  int ret = get_bucket_entrypoint_info(ctx, bucket_name, entry_point, &ot, &ep_mtime);
+  int ret = get_bucket_entrypoint_info(ctx, bucket_name, entry_point, &ot, &ep_mtime, pattrs);
   if (ret < 0) {
     info.bucket.name = bucket_name; /* only init this field */
     return ret;
@@ -4621,6 +4631,13 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
     info.ep_objv = ot.read_version;
     ldout(cct, 20) << "rgw_get_bucket_info: old bucket info, bucket=" << info.bucket << " owner " << info.owner << dendl;
     return 0;
+  }
+
+  /* data is in the bucket instance object, we need to get attributes from there, clear everything
+   * that we got
+   */
+  if (pattrs) {
+    pattrs->clear();
   }
 
   ldout(cct, 20) << "rgw_get_bucket_info: bucket instance: " << entry_point.bucket << dendl;
@@ -4643,11 +4660,12 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
 }
 
 int RGWRados::put_bucket_entrypoint_info(const string& bucket_name, RGWBucketEntryPoint& entry_point,
-                                         bool exclusive, RGWObjVersionTracker& objv_tracker, time_t mtime)
+                                         bool exclusive, RGWObjVersionTracker& objv_tracker, time_t mtime,
+                                         map<string, bufferlist> *pattrs)
 {
   bufferlist epbl;
   ::encode(entry_point, epbl);
-  return rgw_bucket_store_info(this, bucket_name, epbl, exclusive, NULL, &objv_tracker, mtime);
+  return rgw_bucket_store_info(this, bucket_name, epbl, exclusive, pattrs, &objv_tracker, mtime);
 }
 
 int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
@@ -4692,7 +4710,7 @@ int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, time_t
       *pep_objv = ot.write_version;
     }
   }
-  ret = put_bucket_entrypoint_info(info.bucket.name, entry_point, exclusive, ot, mtime); 
+  ret = put_bucket_entrypoint_info(info.bucket.name, entry_point, exclusive, ot, mtime, NULL); 
   if (ret < 0)
     return ret;
 
