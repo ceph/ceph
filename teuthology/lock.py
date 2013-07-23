@@ -590,6 +590,12 @@ def create_if_vm(ctx, machine_name):
                     (machine_name,err))
         else:
             log.info("%s created: %s" % (machine_name,owt))
+        #If the guest already exists first destroy then re-create:
+        if 'exists' in err:
+            log.info("Guest files exist. Re-creating guest: %s" %
+                    (machine_name))
+            destroy_if_vm(ctx, machine_name)
+            create_if_vm(ctx, machine_name)
     return True
 #
 # Use downburst to destroy a virtual machine
