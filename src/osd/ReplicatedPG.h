@@ -982,6 +982,7 @@ private:
     bool need_share_pg_info;
     bool requeue;
     SnapTrimmer(ReplicatedPG *pg) : pg(pg), need_share_pg_info(false), requeue(false) {}
+    ~SnapTrimmer();
     void log_enter(const char *state_name);
     void log_exit(const char *state_name, utime_t duration);
   } snap_trimmer_machine;

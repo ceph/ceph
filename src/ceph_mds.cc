@@ -274,12 +274,6 @@ int main(int argc, const char **argv)
 
   messenger->start();
 
-  // set up signal handlers, now that we've daemonized/forked.
-  init_async_signal_handler();
-  register_async_signal_handler(SIGHUP, sighup_handler);
-  register_async_signal_handler_oneshot(SIGINT, handle_mds_signal);
-  register_async_signal_handler_oneshot(SIGTERM, handle_mds_signal);
-
   // start mds
   mds = new MDS(g_conf->name.get_id().c_str(), messenger, &mc);
 
@@ -291,16 +285,26 @@ int main(int argc, const char **argv)
     r = mds->init(shadow);
   else
     r = mds->init();
+  if (r < 0)
+    goto shutdown;
 
-  if (r >= 0) {
-    messenger->wait();
-  }
+  // set up signal handlers, now that we've daemonized/forked.
+  init_async_signal_handler();
+  register_async_signal_handler(SIGHUP, sighup_handler);
+  register_async_signal_handler_oneshot(SIGINT, handle_mds_signal);
+  register_async_signal_handler_oneshot(SIGTERM, handle_mds_signal);
+
+  if (g_conf->inject_early_sigterm)
+    kill(getpid(), SIGTERM);
+
+  messenger->wait();
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_mds_signal);
   unregister_async_signal_handler(SIGTERM, handle_mds_signal);
   shutdown_async_signal_handler();
 
+ shutdown:
   // yuck: grab the mds lock, so we can be sure that whoever in *mds
   // called shutdown finishes what they were doing.
   mds->mds_lock.Lock();
@@ -313,14 +317,15 @@ int main(int argc, const char **argv)
   if (mds->is_stopped())
     delete mds;
 
+  g_ceph_context->put();
+
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];
   snprintf(s, sizeof(s), "gmon/%d", getpid());
   if ((mkdir(s, 0755) == 0) && (chdir(s) == 0)) {
-    dout(0) << "ceph-mds: gmon.out should be in " << s << dendl;
+    cerr << "ceph-mds: gmon.out should be in " << s << std::endl;
   }
 
-  generic_dout(0) << "stopped." << dendl;
   return 0;
 }
 

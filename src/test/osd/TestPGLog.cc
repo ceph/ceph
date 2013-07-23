@@ -82,6 +82,10 @@ TEST_F(PGLogTest, rewind_divergent_log) {
     hobject_t divergent_object;
     eversion_t divergent_version;
     eversion_t newhead;
+
+    hobject_t divergent;
+    divergent.hash = 0x9;
+
     {
       pg_log_entry_t e;
 
@@ -90,16 +94,16 @@ TEST_F(PGLogTest, rewind_divergent_log) {
       log.tail = e.version;
       log.log.push_back(e);
       e.version = newhead = eversion_t(1, 4);
-      e.soid.hash = 0x9;
+      e.soid = divergent;
       e.op = pg_log_entry_t::MODIFY;
       log.log.push_back(e);
-      log.index();
       e.version = divergent_version = eversion_t(1, 5);
-      e.soid.hash = 0x9;
+      e.soid = divergent;
       divergent_object = e.soid;
       e.op = pg_log_entry_t::DELETE;
       log.log.push_back(e);
       log.head = e.version;
+      log.index();
 
       info.last_update = log.head;
       info.last_complete = log.head;
@@ -118,6 +122,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
     rewind_divergent_log(t, newhead, info, remove_snap,
 			 dirty_info, dirty_big_info);
 
+    EXPECT_TRUE(log.objects.count(divergent));
     EXPECT_TRUE(missing.is_missing(divergent_object));
     EXPECT_EQ(1U, log.objects.count(divergent_object));
     EXPECT_EQ(2U, log.log.size());

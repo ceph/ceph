@@ -103,11 +103,21 @@ void Paxos::collect(version_t oldpn)
 
   // look for uncommitted value
   if (get_store()->exists(get_name(), last_committed+1)) {
+    version_t v = get_store()->get(get_name(), "pending_v");
+    version_t pn = get_store()->get(get_name(), "pending_pn");
+    if (v && pn && v == last_committed + 1) {
+      uncommitted_pn = pn;
+    } else {
+      dout(10) << "WARNING: no pending_pn on disk, using previous accepted_pn " << accepted_pn
+	       << " and crossing our fingers" << dendl;
+      uncommitted_pn = accepted_pn;
+    }
     uncommitted_v = last_committed+1;
-    uncommitted_pn = accepted_pn;
+
     get_store()->get(get_name(), last_committed+1, uncommitted_value);
     assert(uncommitted_value.length());
     dout(10) << "learned uncommitted " << (last_committed+1)
+	     << " pn " << uncommitted_pn
 	     << " (" << uncommitted_value.length() << " bytes) from myself" 
 	     << dendl;
   }
@@ -164,6 +174,8 @@ void Paxos::handle_collect(MMonPaxos *collect)
   last->last_committed = last_committed;
   last->first_committed = first_committed;
   
+  version_t previous_pn = accepted_pn;
+
   // can we accept this pn?
   if (collect->pn > accepted_pn) {
     // ok, accept it
@@ -198,13 +210,25 @@ void Paxos::handle_collect(MMonPaxos *collect)
   // do we have an accepted but uncommitted value?
   //  (it'll be at last_committed+1)
   bufferlist bl;
-  if (get_store()->exists(get_name(), last_committed+1)) {
+  if (collect->last_committed == last_committed &&
+      get_store()->exists(get_name(), last_committed+1)) {
     get_store()->get(get_name(), last_committed+1, bl);
     assert(bl.length() > 0);
     dout(10) << " sharing our accepted but uncommitted value for " 
 	     << last_committed+1 << " (" << bl.length() << " bytes)" << dendl;
     last->values[last_committed+1] = bl;
-    last->uncommitted_pn = accepted_pn;
+
+    version_t v = get_store()->get(get_name(), "pending_v");
+    version_t pn = get_store()->get(get_name(), "pending_pn");
+    if (v && pn && v == last_committed + 1) {
+      last->uncommitted_pn = pn;
+    } else {
+      // previously we didn't record which pn a value was accepted
+      // under!  use the pn value we just had...  :(
+      dout(10) << "WARNING: no pending_pn on disk, using previous accepted_pn " << previous_pn
+	       << " and crossing our fingers" << dendl;
+      last->uncommitted_pn = previous_pn;
+    }
   }
 
   // send reply
@@ -370,8 +394,12 @@ void Paxos::handle_last(MMonPaxos *last)
     return;
   }
 
+  assert(g_conf->paxos_kill_at != 1);
+
   // store any committed values if any are specified in the message
   store_state(last);
+
+  assert(g_conf->paxos_kill_at != 2);
 
   // do they accept your pn?
   if (last->pn > accepted_pn) {
@@ -390,15 +418,23 @@ void Paxos::handle_last(MMonPaxos *last)
 	     << num_last << " peons" << dendl;
 
     // did this person send back an accepted but uncommitted value?
-    if (last->uncommitted_pn &&
-	last->uncommitted_pn > uncommitted_pn) {
-      uncommitted_v = last->last_committed+1;
-      uncommitted_pn = last->uncommitted_pn;
-      uncommitted_value = last->values[uncommitted_v];
-      dout(10) << "we learned an uncommitted value for " << uncommitted_v 
-	       << " pn " << uncommitted_pn
-	       << " " << uncommitted_value.length() << " bytes"
-	       << dendl;
+    if (last->uncommitted_pn) {
+      if (last->uncommitted_pn > uncommitted_pn &&
+	  last->last_committed >= last_committed &&
+	  last->last_committed + 1 >= uncommitted_v) {
+	uncommitted_v = last->last_committed+1;
+	uncommitted_pn = last->uncommitted_pn;
+	uncommitted_value = last->values[uncommitted_v];
+	dout(10) << "we learned an uncommitted value for " << uncommitted_v
+		 << " pn " << uncommitted_pn
+		 << " " << uncommitted_value.length() << " bytes"
+		 << dendl;
+      } else {
+	dout(10) << "ignoring uncommitted value for " << (last->last_committed+1)
+		 << " pn " << last->uncommitted_pn
+		 << " " << last->values[last->last_committed+1].length() << " bytes"
+		 << dendl;
+      }
     }
     
     // is that everyone?
@@ -502,6 +538,10 @@ void Paxos::begin(bufferlist& v)
   MonitorDBStore::Transaction t;
   t.put(get_name(), last_committed+1, new_value);
 
+  // note which pn this pending value is for.
+  t.put(get_name(), "pending_v", last_committed + 1);
+  t.put(get_name(), "pending_pn", accepted_pn);
+
   dout(30) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
   t.dump(&f);
@@ -515,6 +555,8 @@ void Paxos::begin(bufferlist& v)
   *_dout << dendl;
 
   get_store()->apply_transaction(t);
+
+  assert(g_conf->paxos_kill_at != 3);
 
   if (mon->get_quorum().size() == 1) {
     // we're alone, take it easy
@@ -566,6 +608,8 @@ void Paxos::handle_begin(MMonPaxos *begin)
   assert(begin->pn == accepted_pn);
   assert(begin->last_committed == last_committed);
   
+  assert(g_conf->paxos_kill_at != 4);
+
   // set state.
   state = STATE_UPDATING;
   lease_expire = utime_t();  // cancel lease
@@ -578,6 +622,10 @@ void Paxos::handle_begin(MMonPaxos *begin)
   MonitorDBStore::Transaction t;
   t.put(get_name(), v, begin->values[v]);
 
+  // note which pn this pending value is for.
+  t.put(get_name(), "pending_v", v);
+  t.put(get_name(), "pending_pn", accepted_pn);
+
   dout(30) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
   t.dump(&f);
@@ -585,6 +633,8 @@ void Paxos::handle_begin(MMonPaxos *begin)
   *_dout << dendl;
 
   get_store()->apply_transaction(t);
+
+  assert(g_conf->paxos_kill_at != 5);
 
   // reply
   MMonPaxos *accept = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_ACCEPT,
@@ -620,6 +670,8 @@ void Paxos::handle_accept(MMonPaxos *accept)
   accepted.insert(from);
   dout(10) << " now " << accepted << " have accepted" << dendl;
 
+  assert(g_conf->paxos_kill_at != 6);
+
   // new majority?
   if (accepted.size() == (unsigned)mon->monmap->size()/2+1) {
     // yay, commit!
@@ -642,6 +694,8 @@ void Paxos::handle_accept(MMonPaxos *accept)
 
     // yay!
     extend_lease();
+
+    assert(g_conf->paxos_kill_at != 10);
 
     finish_round();
 
@@ -673,6 +727,8 @@ void Paxos::commit()
   //   leader still got a majority and committed with out us.)
   lease_expire = utime_t();  // cancel lease
 
+  assert(g_conf->paxos_kill_at != 7);
+
   MonitorDBStore::Transaction t;
 
   // commit locally
@@ -691,6 +747,8 @@ void Paxos::commit()
   *_dout << dendl;
 
   get_store()->apply_transaction(t);
+
+  assert(g_conf->paxos_kill_at != 8);
 
   // refresh first_committed; this txn may have trimmed.
   first_committed = get_store()->get(get_name(), "first_committed");
@@ -712,6 +770,8 @@ void Paxos::commit()
 
     mon->messenger->send_message(commit, mon->monmap->get_inst(*p));
   }
+
+  assert(g_conf->paxos_kill_at != 9);
 
   // get ready for a new round.
   new_value.clear();
