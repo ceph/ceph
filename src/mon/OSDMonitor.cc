@@ -126,7 +126,8 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   if (latest_full == 0 && get_first_committed() > 1)
     latest_full = get_first_committed();
 
-  if (latest_full < get_first_committed()) {
+  if (get_first_committed() > 1 &&
+      latest_full < get_first_committed()) {
     /* a bug introduced in 7fb3804fb860dcd0340dd3f7c39eec4315f8e4b6 would lead
      * us to not update the on-disk latest_full key.  Upon trim, the actual
      * version would cease to exist but we would still point to it.  This
