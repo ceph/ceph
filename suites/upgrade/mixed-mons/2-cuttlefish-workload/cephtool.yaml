@@ -4,4 +4,3 @@
       all:
         - cephtool/test.sh
         - mon/pool_ops.sh
-
