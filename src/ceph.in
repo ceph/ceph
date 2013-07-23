@@ -118,6 +118,8 @@ def parse_cmdargs(args=None, target=''):
 
     parser.add_argument('--admin-daemon', dest='admin_socket',
                         help='submit admin-socket commands (\"help\" for help')
+    parser.add_argument('--admin-socket', dest='admin_socket_nope',
+                        help='you probably mean --admin-daemon')
 
     parser.add_argument('-s', '--status', action='store_true',
                         help='show cluster status')
@@ -488,6 +490,11 @@ def main():
 
     global verbose
     verbose = parsed_args.verbose
+
+    if parsed_args.admin_socket_nope:
+        print >> sys.stderr, '--admin-socket is used by daemons; '\
+        'you probably mean --admin-daemon/daemon'
+        return 1
 
     # pass on --id, --name, --conf
     name = 'client.admin'

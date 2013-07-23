@@ -109,7 +109,12 @@ void req_info::rebuild_from(req_info& src)
 {
   method = src.method;
   script_uri = src.script_uri;
-  request_uri = src.request_uri;
+  if (src.effective_uri.empty()) {
+    request_uri = src.request_uri;
+  } else {
+    request_uri = src.effective_uri;
+  }
+  effective_uri.clear();
   host = src.host;
 
   x_meta_map = src.x_meta_map;

@@ -1300,15 +1300,33 @@ int RGWCopyObj_ObjStore_S3::get_params()
   return 0;
 }
 
+void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
+{
+  if (!sent_header) {
+    if (ret)
+    set_req_state_err(s, ret);
+    dump_errno(s);
+
+    end_header(s, "binary/octet-stream");
+    if (ret == 0) {
+      s->formatter->open_object_section("CopyObjectResult");
+    }
+    sent_header = true;
+  } else {
+    /* Send progress field. Note that this diverge from the original S3
+     * spec. We do this in order to keep connection alive.
+     */
+    s->formatter->dump_int("Progress", (uint64_t)ofs);
+  }
+  rgw_flush_formatter(s, s->formatter);
+}
+
 void RGWCopyObj_ObjStore_S3::send_response()
 {
-  if (ret)
-    set_req_state_err(s, ret);
-  dump_errno(s);
+  if (!sent_header)
+    send_partial_response(0);
 
-  end_header(s, "binary/octet-stream");
   if (ret == 0) {
-    s->formatter->open_object_section("CopyObjectResult");
     dump_time(s, "LastModified", &mtime);
     map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
     if (iter != attrs.end()) {
@@ -1801,7 +1819,7 @@ int RGWHandler_ObjStore_S3::init_from_header(struct req_state *s, int default_fo
   string req;
   string first;
 
-  const char *req_name = s->effective_uri.c_str();
+  const char *req_name = s->relative_uri.c_str();
   const char *p;
 
   if (*req_name == '?') {
