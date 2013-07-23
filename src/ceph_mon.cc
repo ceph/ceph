@@ -542,15 +542,18 @@ int main(int argc, const char **argv)
   if (g_conf->daemonize)
     prefork.daemonize();
 
+  messenger->start();
+
+  mon->init();
+
   // set up signal handlers, now that we've daemonized/forked.
   init_async_signal_handler();
   register_async_signal_handler(SIGHUP, sighup_handler);
   register_async_signal_handler_oneshot(SIGINT, handle_mon_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_mon_signal);
 
-  messenger->start();
-
-  mon->init();
+  if (g_conf->inject_early_sigterm)
+    kill(getpid(), SIGTERM);
 
   messenger->wait();
 
