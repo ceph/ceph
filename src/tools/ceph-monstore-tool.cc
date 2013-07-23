@@ -31,6 +31,7 @@
 #include "global/global_init.h"
 #include "os/LevelDBStore.h"
 #include "mon/MonitorDBStore.h"
+#include "mon/Paxos.h"
 #include "common/Formatter.h"
 
 namespace po = boost::program_options;
@@ -246,6 +247,19 @@ int main(int argc, char **argv) {
       goto done;
     }
     bl.write_fd(fd);
+  } else if (cmd == "dump-paxos") {
+    for (version_t v = dstart; v <= dstop; ++v) {
+      bufferlist bl;
+      st.get("paxos", v, bl);
+      if (bl.length() == 0)
+	break;
+      cout << "\n--- " << v << " ---" << std::endl;
+      MonitorDBStore::Transaction tx;
+      Paxos::decode_append_transaction(tx, bl);
+      JSONFormatter f(true);
+      tx.dump(&f);
+      f.flush(cout);
+    }
   } else if (cmd == "dump-trace") {
     if (tfile.empty()) {
       std::cerr << "Need trace_file" << std::endl;
