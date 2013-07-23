@@ -2,6 +2,98 @@
  Release Notes
 ===============
 
+v0.67-rc1
+---------
+
+This is a release candidate for v0.67, code-named "Dumpling."  Any
+users who are interested in testing the upcoming release are
+encouraged to do so.
+
+The headline features for this release include:
+
+* Multi-site support for radosgw.  This includes the ability to set up
+  separate "regions" in the same or different Ceph clusters that share
+  a single S3/Swift bucket/container namespace.
+
+* RESTful API endpoint for Ceph administration.
+
+* Object namespaces in librados.
+
+Upgrading from  v0.66
+~~~~~~~~~~~~~~~~~~~~~
+
+* There is monitor internal protocol change, which means that v0.67
+  ceph-mon daemons cannot talk to v0.66 or older daemons.  We
+  recommend upgrading all monitors at once (or in relatively quick
+  succession) to minimize the possibility of downtime.
+
+* The output of 'ceph status --format=json' or 'ceph -s --format=json'
+  has changed to return status information in a more structured and
+  usable format.
+
+* The 'ceph pg dump_stuck [threshold]' command used to require a
+  --threshold or -t prefix to the threshold argument, but now does
+  not.
+
+* Many more ceph commands now output formatted information; select
+  with '--format=<format>', where <format> can be 'json', 'json-pretty',
+  'xml', or 'xml-pretty'.
+
+* ceph-rest-api, a wrapper around ceph_rest_api.py, can be used to start
+  up a test single-threaded HTTP server that provides access to cluster
+  information and administration in very similar ways to the ceph
+  commandline tool.  ceph_rest_api.py can be used as a WSGI application
+  for deployment in a more-capable web server.  See ceph-rest-api.8
+  for more.
+
+* The radosgw caps were inconsistently documented to be either 'mon =
+  allow r' or 'mon = allow rw'.  The 'mon = allow rw' is required for
+  radosgw to create its own pools.  All documentation has been updated
+  accordingly.
+
+* rgw copy object operation may return extra progress info during the
+  operation. At this point it will only happen when doing cross zone
+  copy operations. The S3 response will now return extra <Progress>
+  field under the <CopyResult> container. The Swift response will
+  now send the progress as a json array.
+
+* In v0.66 and v0.65 the HASHPSPOOL pool flag was enabled by default
+  for new pools, but has been disabled again until Linux kernel client
+  support reaches more distributions and users.
+
+Notable changes since v0.66
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* mon: sync improvements (performance and robustness)
+* mon: many bug fixes (paxos and services)
+* mon: fixed bugs in recovery and io rate reporting (negative/large values)
+* mon: collect metadata on osd performance
+* mon: generate health warnings from slow or stuck requests
+* mon: expanded --format=<json|xml|...> support for monitor commands
+* mon: scrub function for verifying data integrity
+* mon, osd: fix old osdmap trimming logic
+* mon: enable leveldb caching by default
+* mon: more efficient storage of PG metadata
+* ceph-rest-api: RESTful endpoint for administer cluster (mirrors CLI)
+* rgw: multi-region support
+* rgw: infrastructure to support georeplication of bucket and user metadata
+* rgw: infrastructure to support georeplication of bucket data
+* rgw: COPY object support between regions
+* rbd: /etc/ceph/rbdmap file for mapping rbd images on startup
+* osd: many bug fixes
+* osd: limit number of incremental osdmaps sent to peers (could cause osds to be wrongly marked down)
+* osd: more efficient small object recovery
+* osd, librados: support for object namespaces
+* osd: automatically enable xattrs on leveldb as necessary
+* mds: fix bug in LOOKUPINO (used by nfs reexport)
+* mds: fix O_TRUNC locking
+* msgr: fixed race condition in inter-osd network communication
+* msgr: fixed various memory leaks related to network sessions
+* ceph-disk: fixes for unusual device names, partition detection
+* hypertable: fixes for hypertable CephBroker bindings
+* use SSE4.2 crc32c instruction if present
+
+
 v0.66
 -----
 
