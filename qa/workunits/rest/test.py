@@ -297,10 +297,10 @@ if __name__ == '__main__':
     expect('osd/pool/rmsnap?pool=data&snap=datasnap', 'PUT', 200, '')
 
     expect('osd/pool/create?pool=data2&pg_num=10', 'PUT', 200, '')
-    r = expect('osd/lspools', 'PUT', 200, 'json', JSONHDR)
+    r = expect('osd/lspools', 'GET', 200, 'json', JSONHDR)
     assert([p for p in r.json['output'] if p['poolname'] == 'data2'])
     expect('osd/pool/rename?srcpool=data2&destpool=data3', 'PUT', 200, '')
-    r = expect('osd/lspools', 'PUT', 200, 'json', JSONHDR)
+    r = expect('osd/lspools', 'GET', 200, 'json', JSONHDR)
     assert([p for p in r.json['output'] if p['poolname'] == 'data3'])
     expect('osd/pool/delete?pool=data3', 'PUT', 400, '')
     expect('osd/pool/delete?pool=data3&pool2=data3&sure=--yes-i-really-really-mean-it', 'PUT', 200, '')
