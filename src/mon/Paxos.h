@@ -290,8 +290,9 @@ private:
    */
   version_t accepted_pn;
   /**
-   * @todo This has something to do with the last_committed version. Not sure
-   *	   about what it entails, tbh.
+   * The last_committed epoch of the leader at the time we accepted the last pn.
+   *
+   * This has NO SEMANTIC MEANING, and is there only for the debug output.
    */
   version_t accepted_pn_from;
   /**
@@ -1114,7 +1115,7 @@ public:
    * @param t The transaction to which we will append the operations
    * @param bl A bufferlist containing an encoded transaction
    */
-  void decode_append_transaction(MonitorDBStore::Transaction& t,
+  static void decode_append_transaction(MonitorDBStore::Transaction& t,
 				 bufferlist& bl) {
     MonitorDBStore::Transaction vt;
     bufferlist::iterator it = bl.begin();
