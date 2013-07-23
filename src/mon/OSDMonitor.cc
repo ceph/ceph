@@ -125,6 +125,40 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   version_t latest_full = get_version_latest_full();
   if (latest_full == 0 && get_first_committed() > 1)
     latest_full = get_first_committed();
+
+  if (latest_full < get_first_committed()) {
+    /* a bug introduced in 7fb3804fb860dcd0340dd3f7c39eec4315f8e4b6 would lead
+     * us to not update the on-disk latest_full key.  Upon trim, the actual
+     * version would cease to exist but we would still point to it.  This
+     * makes sure we get it pointing to a proper version.
+     */
+    version_t lc = get_last_committed();
+    version_t fc = get_first_committed();
+
+    dout(10) << __func__ << " looking for valid full map in interval"
+             << " [" << fc << ", " << lc << "]" << dendl;
+
+    latest_full = 0;
+    for (version_t v = lc; v >= fc; v--) {
+      string full_key = "full_" + stringify(latest_full);
+      if (mon->store->exists(get_service_name(), full_key)) {
+        dout(10) << __func__ << " found latest full map v " << v << dendl;
+        latest_full = v;
+        break;
+      }
+    }
+
+    // if we trigger this, then there's something else going with the store
+    // state, and we shouldn't want to work around it without knowing what
+    // exactly happened.
+    assert(latest_full > 0);
+    MonitorDBStore::Transaction t;
+    put_version_latest_full(&t, latest_full);
+    mon->store->apply_transaction(t);
+    dout(10) << __func__ << " updated the on-disk full map version to "
+             << latest_full << dendl;
+  }
+
   if ((latest_full > 0) && (latest_full > osdmap.epoch)) {
     bufferlist latest_bl;
     get_version_full(latest_full, latest_bl);
