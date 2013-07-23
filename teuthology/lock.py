@@ -538,9 +538,21 @@ def create_if_vm(ctx, machine_name):
     if not phys_host:
         return False
     try:
-        vm_type = ctx.vm_type
-    except AttributeError:
-        vm_type = 'ubuntu'
+        os_type = ctx.config['os_type']
+    except KeyError:
+        try:
+            os_type = ctx.os_type
+        except AttributeError:
+            os_type = 'ubuntu'
+    os_version = dict(
+        ubuntu="12.04",
+        fedora="18",
+        centos="6.4",
+        opensuse="12.2",
+        sles="11-sp2",
+        rhel="6.3",
+        debian='6.0'
+        )
     createMe = decanonicalize_hostname(machine_name)
     with tempfile.NamedTemporaryFile() as tmp:
         try:
@@ -548,13 +560,15 @@ def create_if_vm(ctx, machine_name):
         except KeyError:
             lcnfg = {}
 
+        distro = lcnfg.get('distro', os_type.lower())
         file_info = {}
         file_info['disk-size'] = lcnfg.get('disk-size', '30G')
         file_info['ram'] = lcnfg.get('ram', '1.9G')
         file_info['cpus'] = lcnfg.get('cpus', 1)
         file_info['networks'] = lcnfg.get('networks',
                 [{'source' : 'front', 'mac' : status_info['mac']}])
-        file_info['distro'] = lcnfg.get('distro', vm_type.lower())
+        file_info['distro'] = distro
+        file_info['distroversion'] = os_version[distro]
         file_info['additional-disks'] = lcnfg.get(
                 'additional-disks', 3)
         file_info['additional-disks-size'] = lcnfg.get(
