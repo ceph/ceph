@@ -1,0 +1,3 @@
+tasks:
+- ceph.restart: [mon.b]
+- ceph.wait_for_mon_quorum: [a, b]

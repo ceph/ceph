@@ -1,0 +1,6 @@
+tasks:
+- install.upgrade:
+    osd.0:
+      branch:
+        next
+- ceph.restart: [osd.0, osd.1, osd.2, mon.a]
