@@ -42,9 +42,6 @@ Log::Log(SubsystemMap *s)
 {
   int ret;
 
-  ret = pthread_spin_init(&m_lock, PTHREAD_PROCESS_SHARED);
-  assert(ret == 0);
-
   ret = pthread_mutex_init(&m_flush_mutex, NULL);
   assert(ret == 0);
 
@@ -73,7 +70,6 @@ Log::~Log()
   if (m_fd >= 0)
     TEMP_FAILURE_RETRY(::close(m_fd));
 
-  pthread_spin_destroy(&m_lock);
   pthread_mutex_destroy(&m_queue_mutex);
   pthread_mutex_destroy(&m_flush_mutex);
   pthread_cond_destroy(&m_cond_loggers);
