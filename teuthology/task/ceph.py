@@ -936,6 +936,29 @@ def healthy(ctx, config):
         remote=mon0_remote,
         )
 
+def wait_for_mon_quorum(ctx, config):
+    import json
+    import time
+
+    assert isinstance(config, list)
+    firstmon = teuthology.get_first_mon(ctx, config)
+    (remote,) = ctx.cluster.only(firstmon).remotes.keys()
+    while True:
+        r = remote.run(
+            args=[
+                'ceph',
+                'quorum_status',
+                ],
+            stdout=StringIO(),
+            logger=log.getChild('quorum_status'),
+            )
+        j = json.loads(r.stdout.getvalue())
+        q = j.get('quorum_names', [])
+        log.debug('Quorum: %s', q)
+        if sorted(q) == sorted(config):
+            break
+        time.sleep(1)
+
 
 @contextlib.contextmanager
 def restart(ctx, config):
