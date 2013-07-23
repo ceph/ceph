@@ -1242,7 +1242,7 @@ RGWHandler *RGWREST::get_handler(RGWRados *store, struct req_state *s, RGWClient
   if (*init_error < 0)
     return NULL;
 
-  RGWRESTMgr *m = mgr.get_resource_mgr(s, s->decoded_uri, &s->effective_uri);
+  RGWRESTMgr *m = mgr.get_resource_mgr(s, s->decoded_uri, &s->relative_uri);
   if (!m) {
     *init_error = -ERR_METHOD_NOT_ALLOWED;
     return NULL;

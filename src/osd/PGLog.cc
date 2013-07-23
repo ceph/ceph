@@ -375,7 +375,6 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
     }
     assert(p->version > newhead);
     dout(10) << "rewind_divergent_log future divergent " << *p << dendl;
-    log.unindex(*p);
   }
 
   log.head = newhead;
@@ -383,6 +382,7 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
   if (info.last_complete > newhead)
     info.last_complete = newhead;
 
+  log.index();
   for (list<pg_log_entry_t>::iterator d = divergent.begin(); d != divergent.end(); ++d)
     merge_old_entry(t, *d, info, remove_snap);
 
@@ -505,7 +505,6 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
 	break;
       dout(10) << "merge_log divergent " << oe << dendl;
       divergent.push_front(oe);
-      log.unindex(oe);
       log.log.pop_back();
     }
 

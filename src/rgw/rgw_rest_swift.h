@@ -100,13 +100,15 @@ public:
 };
 
 class RGWCopyObj_ObjStore_SWIFT : public RGWCopyObj_ObjStore {
+  bool sent_header;
 public:
-  RGWCopyObj_ObjStore_SWIFT() {}
+  RGWCopyObj_ObjStore_SWIFT() : sent_header(false) {}
   ~RGWCopyObj_ObjStore_SWIFT() {}
 
   int init_dest_policy();
   int get_params();
   void send_response();
+  void send_partial_response(off_t ofs);
 };
 
 class RGWGetACLs_ObjStore_SWIFT : public RGWGetACLs_ObjStore {

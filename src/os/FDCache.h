@@ -28,6 +28,7 @@
  * FD Cache
  */
 class FDCache : public md_config_obs_t {
+public:
   /**
    * FD
    *
@@ -47,8 +48,10 @@ class FDCache : public md_config_obs_t {
     }
   };
 
+private:
   SharedLRU<hobject_t, FD> registry;
   CephContext *cct;
+
 public:
   FDCache(CephContext *cct) : cct(cct) {
     assert(cct);

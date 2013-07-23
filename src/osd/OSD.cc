@@ -1728,7 +1728,7 @@ PG* OSD::_make_pg(
   PG *pg;
   hobject_t logoid = make_pg_log_oid(pgid);
   hobject_t infooid = make_pg_biginfo_oid(pgid);
-  if (osdmap->get_pg_type(pgid) == pg_pool_t::TYPE_REP)
+  if (createmap->get_pg_type(pgid) == pg_pool_t::TYPE_REP)
     pg = new ReplicatedPG(&service, createmap, pool, pgid, logoid, infooid);
   else 
     assert(0);
@@ -4739,11 +4739,12 @@ bool OSDService::prepare_to_stop()
   if (state != NOT_STOPPING)
     return false;
 
-  if (get_osdmap()->is_up(whoami)) {
+  OSDMapRef osdmap = get_osdmap();
+  if (osdmap && osdmap->is_up(whoami)) {
     state = PREPARING_TO_STOP;
     monc->send_mon_message(new MOSDMarkMeDown(monc->get_fsid(),
-					      get_osdmap()->get_inst(whoami),
-					      get_osdmap()->get_epoch(),
+					      osdmap->get_inst(whoami),
+					      osdmap->get_epoch(),
 					      false
 					      ));
     utime_t now = ceph_clock_now(g_ceph_context);

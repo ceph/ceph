@@ -1628,19 +1628,18 @@ void MDS::suicide()
   }
   timer.cancel_all_events();
   //timer.join();
+  timer.shutdown();
   
   // shut down cache
   mdcache->shutdown();
 
   if (objecter->initialized)
     objecter->shutdown_locked();
-  
-  // shut down messenger
-  messenger->shutdown();
 
   monc->shutdown();
 
-  timer.shutdown();
+  // shut down messenger
+  messenger->shutdown();
 }
 
 void MDS::respawn()

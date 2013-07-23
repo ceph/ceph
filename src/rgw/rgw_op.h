@@ -438,6 +438,8 @@ protected:
   string client_id;
   string op_id;
 
+  off_t last_ofs;
+
 
   int init_common();
 
@@ -460,6 +462,7 @@ public:
     ret = 0;
     mtime = 0;
     replace_attrs = false;
+    last_ofs = 0;
   }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
@@ -468,9 +471,11 @@ public:
   }
   int verify_permission();
   void execute();
+  void progress_cb(off_t ofs);
 
   virtual int init_dest_policy() { return 0; }
   virtual int get_params() = 0;
+  virtual void send_partial_response(off_t ofs) {}
   virtual void send_response() = 0;
   virtual const string name() { return "copy_obj"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
