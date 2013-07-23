@@ -1832,6 +1832,7 @@ void Monitor::get_status(stringstream &ss, Formatter *f)
     f->open_object_section("mdsmap");
     mdsmon()->mdsmap.print_summary(f, NULL);
     f->close_section();
+    f->close_section();
   } else {
     ss << "  cluster " << monmap->get_fsid() << "\n";
     ss << "   health " << health << "\n";
