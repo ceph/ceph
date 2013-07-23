@@ -3822,24 +3822,41 @@ struct OSDCommand {
   {parsesig, helptext, module, perm, availability},
 
 // yes, these are really pg commands, but there's a limit to how
-// much work it's worth.  The OSD returns all of them.
+// much work it's worth.  The OSD returns all of them.  Make this
+// form (pg <pgid> <cmd>) valid only for the cli. 
+// Rest uses "tell <pgid> <cmd>"
 
 COMMAND("pg " \
 	"name=pgid,type=CephPgid " \
 	"name=cmd,type=CephChoices,strings=query", \
-	"show details of a specific pg", "osd", "r", "cli,rest")
+	"show details of a specific pg", "osd", "r", "cli")
 COMMAND("pg " \
 	"name=pgid,type=CephPgid " \
 	"name=cmd,type=CephChoices,strings=mark_unfound_lost " \
 	"name=mulcmd,type=CephChoices,strings=revert", \
 	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available",
-	"osd", "rw", "cli,rest")
+	"osd", "rw", "cli")
 COMMAND("pg " \
 	"name=pgid,type=CephPgid " \
 	"name=cmd,type=CephChoices,strings=list_missing " \
 	"name=offset,type=CephString,req=false",
 	"list missing objects on this pg, perhaps starting at an offset given in JSON",
+	"osd", "r", "cli")
+
+// new form: tell <pgid> <cmd> for both cli and rest 
+
+COMMAND("query",
+	"show details of a specific pg", "osd", "r", "cli,rest")
+COMMAND("mark_unfound_lost " \
+	"name=mulcmd,type=CephChoices,strings=revert", \
+	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available",
 	"osd", "rw", "cli,rest")
+COMMAND("list_missing " \
+	"name=offset,type=CephString,req=false",
+	"list missing objects on this pg, perhaps starting at an offset given in JSON",
+	"osd", "r", "cli,rest")
+
+// tell <osd.n> commands.  Validation of osd.n must be special-cased in client
 
 COMMAND("version", "report version of OSD", "osd", "r", "cli,rest")
 COMMAND("injectargs " \

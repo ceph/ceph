@@ -263,6 +263,8 @@ class CephIPAddr(CephArgtype):
         if p is not None and long(p) > 65535:
             raise ArgumentValid("{0} not a valid port number".format(p))
         self.val = s
+        self.addr = a
+        self.port = p
 
     def __str__(self):
         return '<IPaddr[:port]>'
@@ -274,6 +276,7 @@ class CephEntityAddr(CephIPAddr):
     def valid(self, s, partial=False):
         ip, nonce = s.split('/')
         super(self.__class__, self).valid(ip)
+        self.nonce = nonce
         self.val = s
 
     def __str__(self):
