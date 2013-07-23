@@ -1589,6 +1589,14 @@ void Monitor::_quorum_status(Formatter *f, ostream& ss)
     f->dump_int("mon", *p);
   f->close_section(); // quorum
 
+  set<string> quorum_names = get_quorum_names();
+  f->open_array_section("quorum_names");
+  for (set<string>::iterator p = quorum_names.begin(); p != quorum_names.end(); ++p)
+    f->dump_string("mon", *p);
+  f->close_section(); // quorum_names
+
+  f->dump_string("quorum_leader_name", quorum.empty() ? string() : monmap->get_name(*quorum.begin()));
+
   f->open_object_section("monmap");
   monmap->dump(f);
   f->close_section(); // monmap
