@@ -526,17 +526,6 @@ void OSDMonitor::encode_pending(MonitorDBStore::Transaction *t)
   put_last_committed(t, pending_inc.epoch);
 }
 
-void OSDMonitor::encode_full(MonitorDBStore::Transaction *t)
-{
-  dout(10) << __func__ << " osdmap e " << osdmap.epoch << dendl;
-  assert(get_last_committed() == osdmap.epoch);
- 
-  bufferlist osdmap_bl;
-  osdmap.encode(osdmap_bl);
-  put_version_full(t, osdmap.epoch, osdmap_bl);
-  put_version_latest_full(t, osdmap.epoch);
-}
-
 void OSDMonitor::share_map_with_random_osd()
 {
   if (osdmap.get_num_up_osds() == 0) {
