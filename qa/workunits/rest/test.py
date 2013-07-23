@@ -188,9 +188,9 @@ if __name__ == '__main__':
     assert(r.json['output']['max_mds'] == 4)
     expect('mds/set_max_mds?maxmds=3', 'PUT', 200, '')
     r = expect('mds/stat.json', 'GET', 200, 'json')
-    assert('info' in r.json['output'])
+    assert('info' in r.json['output']['mdsmap'])
     r = expect('mds/stat.xml', 'GET', 200, 'xml')
-    assert(r.tree.find('output/mdsmap/info') is not None)
+    assert(r.tree.find('output/mds_stat/mdsmap/info') is not None)
 
     # more content tests below, just check format here
     expect('mon/dump.json', 'GET', 200, 'json')
