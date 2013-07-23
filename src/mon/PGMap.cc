@@ -788,12 +788,16 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
 {
   std::stringstream ss;
   if (f)
-    f->open_object_section("pgs_by_state");
+    f->open_array_section("pgs_by_state");
+
   for (hash_map<int,int>::const_iterator p = num_pg_by_state.begin();
        p != num_pg_by_state.end();
        ++p) {
     if (f) {
-      f->dump_unsigned(pg_state_string(p->first).c_str(), p->second);
+      f->open_object_section("pgs_by_state_element");
+      f->dump_string("state_name", pg_state_string(p->first));
+      f->dump_unsigned("count", p->second);
+      f->close_section();
     } else {
       if (p != num_pg_by_state.begin())
 	ss << ", ";
