@@ -1006,6 +1006,8 @@ def restart(ctx, config):
                daemon.restart()
    if config.get('wait-for-healthy', True):
        healthy(ctx=ctx, config=None)
+   if config.get('wait-for-osds-up', False):
+       wait_for_osds_up(ctx=ctx, config=None)
    yield
 
 @contextlib.contextmanager
