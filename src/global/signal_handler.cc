@@ -19,6 +19,7 @@
 #include "global/pidfile.h"
 #include "global/signal_handler.h"
 
+#include <poll.h>
 #include <signal.h>
 #include <sstream>
 #include <stdlib.h>
@@ -189,25 +190,23 @@ struct SignalHandler : public Thread {
   // thread entry point
   void *entry() {
     while (!stop) {
-      // create fd set
-      fd_set rfds;
-      FD_ZERO(&rfds);
-      FD_SET(pipefd[0], &rfds);
-      int max_fd = pipefd[0];
+      // build fd list
+      struct pollfd fds[33];
 
       lock.Lock();
+      int num_fds = 0;
       for (unsigned i=0; i<32; i++) {
 	if (handlers[i]) {
-	  int fd = handlers[i]->pipefd[0];
-	  FD_SET(fd, &rfds);
-	  if (fd > max_fd)
-	    max_fd = fd;
+	  fds[num_fds].fd = handlers[i]->pipefd[0];
+	  fds[num_fds].events = POLLIN | POLLOUT | POLLERR;
+	  fds[num_fds].revents = 0;
+	  ++num_fds;
 	}
       }
       lock.Unlock();
 
       // wait for data on any of those pipes
-      int r = select(max_fd + 1, &rfds, NULL, NULL, NULL);
+      int r = poll(fds, num_fds, -1);
       if (stop)
 	break;
       if (r > 0) {
