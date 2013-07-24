@@ -378,17 +378,6 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
     return json_command(cluster_handle, target=target, argdict=valid_dict,
                         inbuf=inbuf)
 
-OSD_TELL_MATCH = { \
-    'sig': ['tell', {'name':'target','type':'CephName'}], \
-    'matchnum': 2, \
-    'return_key': 'target', \
-}
-PGID_MATCH = { \
-    'sig': ['pg', {'name':'pgid','type':'CephPgid'}], \
-    'matchnum': 2, \
-    'return_key': 'pgid', \
-}
-
 def complete(sigdict, args, target):
     """
     Command completion.  Match as much of [args] as possible,
