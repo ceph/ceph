@@ -49,11 +49,18 @@ def create_dirs(ctx, config):
                                                            client=client),
                     ],
                 )
-        ctx.cluster.only(client).run(
-            'rmdir',
-            '{tdir}/apache.{client}'.format(tdir=testdir,
-                                            client=client),
-            )
+
+        for client in config.iterkeys():
+            ctx.cluster.only(client).run(
+                args=[
+                    'test', '-d', 
+                    '{tdir}/apache'.format(tdir=testdir),
+                    run.Raw('&&'), 
+                    'rmdir',
+                    '{tdir}/apache'.format(tdir=testdir),
+                    run.Raw(';'), 
+                    ],
+                )
 
 
 @contextlib.contextmanager
