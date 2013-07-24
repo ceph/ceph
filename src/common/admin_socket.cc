@@ -322,13 +322,6 @@ bool AdminSocket::do_accept()
   cmd_getval(m_cct, cmdmap, "format", format);
   cmd_getval(m_cct, cmdmap, "prefix", c);
 
-  // we don't do plain here
-  if (format != "json" &&
-      format != "json-pretty" &&
-      format != "xml" &&
-      format != "xml-pretty")
-    format = "json";
-
   string firstword;
   if (c.find(" ") == string::npos)
     firstword = c;
@@ -450,9 +443,7 @@ class HelpHook : public AdminSocketHook {
 public:
   HelpHook(AdminSocket *as) : m_as(as) {}
   bool call(string command, string args, string format, bufferlist& out) {
-    // override format here because help should always be pretty and
-    // predictable
-    Formatter *f = new_formatter("json-pretty");
+    Formatter *f = new_formatter(format);
     f->open_object_section("help");
     for (map<string,string>::iterator p = m_as->m_help.begin();
 	 p != m_as->m_help.end();

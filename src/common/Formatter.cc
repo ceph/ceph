@@ -62,15 +62,19 @@ Formatter::~Formatter()
 }
 
 Formatter *
-new_formatter(const std::string &type)
+new_formatter(const std::string type)
 {
-    if (type == "json")
+    std::string mytype = type;
+    if (mytype == "")
+      mytype = "json-pretty";
+
+    if (mytype == "json")
       return new JSONFormatter(false);
-    else if (type == "json-pretty")
+    else if (mytype == "json-pretty")
       return new JSONFormatter(true);
-    else if (type == "xml")
+    else if (mytype == "xml")
       return new XMLFormatter(false);
-    else if (type == "xml-pretty")
+    else if (mytype == "xml-pretty")
       return new XMLFormatter(true);
     else
       return (Formatter *)NULL;
