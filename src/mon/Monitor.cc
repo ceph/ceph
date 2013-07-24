@@ -143,6 +143,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   elector(this),
   leader(0),
   quorum_features(0),
+  scrub_version(0),
 
   // sync state
   sync_provider_count(0),
