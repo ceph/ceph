@@ -59,8 +59,8 @@ class OpTracker {
 
 public:
   OpTracker() : seq(0), ops_in_flight_lock("OpTracker mutex") {}
-  void dump_ops_in_flight(Formatter *f, std::ostream& ss);
-  void dump_historic_ops(Formatter *f, std::ostream& ss);
+  void dump_ops_in_flight(Formatter *f);
+  void dump_historic_ops(Formatter *f);
   void register_inflight_op(xlist<OpRequest*>::item *i);
   void unregister_inflight_op(OpRequest *i);
 

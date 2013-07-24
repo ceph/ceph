@@ -170,11 +170,11 @@ void CephContext::do_command(std::string command, std::string args,
   lgeneric_dout(this, 1) << "do_command '" << command << "' '" << args << "'" << dendl;
   if (command == "perfcounters_dump" || command == "1" ||
       command == "perf dump") {
-    _perf_counters_collection->dump_formatted(f, *out, false);
+    _perf_counters_collection->dump_formatted(f, false);
   }
   else if (command == "perfcounters_schema" || command == "2" ||
     command == "perf schema") {
-    _perf_counters_collection->dump_formatted(f, *out, true);
+    _perf_counters_collection->dump_formatted(f, true);
   }
   else {
     f->open_object_section(command.c_str());
@@ -221,8 +221,8 @@ void CephContext::do_command(std::string command, std::string args,
       assert(0 == "registered under wrong command?");    
     }
     f->close_section();
-    f->flush(*out);
   }
+  f->flush(*out);
   delete f;
   lgeneric_dout(this, 1) << "do_command '" << command << "' '" << args << "' result is " << out->length() << " bytes" << dendl;
 };

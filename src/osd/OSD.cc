@@ -1012,14 +1012,13 @@ bool OSD::asok_command(string command, string args, string format, ostream& ss)
     format = "json-pretty";
   Formatter *f = new_formatter(format);
   if (command == "dump_ops_in_flight") {
-    op_tracker.dump_ops_in_flight(f, ss);
+    op_tracker.dump_ops_in_flight(f);
   } else if (command == "dump_historic_ops") {
-    op_tracker.dump_historic_ops(f, ss);
+    op_tracker.dump_historic_ops(f);
   } else if (command == "dump_op_pq_state") {
     f->open_object_section("pq");
     op_wq.dump(f);
     f->close_section();
-    f->flush(ss);
   } else if (command == "dump_blacklist") {
     list<pair<entity_addr_t,utime_t> > bl;
     OSDMapRef curmap = service.get_osdmap();
@@ -1036,7 +1035,6 @@ bool OSD::asok_command(string command, string args, string format, ostream& ss)
       f->close_section(); //entry
     }
     f->close_section(); //blacklist
-    f->flush(ss);
   } else if (command == "dump_watchers") {
     list<obj_watch_item_t> watchers;
     osd_lock.Lock();
@@ -1078,10 +1076,11 @@ bool OSD::asok_command(string command, string args, string format, ostream& ss)
     }
 
     f->close_section(); //watches
-    f->flush(ss);
   } else {
     assert(0 == "broken asok registration");
   }
+  f->flush(ss);
+  delete f;
   return true;
 }
 
