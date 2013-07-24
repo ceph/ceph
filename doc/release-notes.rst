@@ -287,6 +287,25 @@ Notable Changes
  * misc code cleanups
 
 
+v0.61.6 "Cuttlefish"
+--------------------
+
+This release fixes a regression in v0.61.5 that could prevent monitors
+from restarting.  This affects any cluster that was upgraded from a
+previous version of Ceph (and not freshly created with v0.61.5).
+
+All users are strongly recommended to upgrade.
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* mon: record latest full osdmap
+* mon: work around previous bug in which latest full osdmap is not recorded
+* mon: avoid scrub while updating
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.61.6.txt>`.
+
+
 v0.61.5 "Cuttlefish"
 --------------------
 
