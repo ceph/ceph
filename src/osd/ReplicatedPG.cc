@@ -275,12 +275,6 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
   string prefix;
   string format;
 
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
-  if (prefix != "pg") {
-    ss << "ReplicatedPG::do_command: not pg command";
-    return -EINVAL;
-  }
-
   cmd_getval(g_ceph_context, cmdmap, "format", format);
   boost::scoped_ptr<Formatter> f(new_formatter(format));
   // demand that we have a formatter

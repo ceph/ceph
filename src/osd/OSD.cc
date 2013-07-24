@@ -3858,6 +3858,7 @@ COMMAND("list_missing " \
 
 // tell <osd.n> commands.  Validation of osd.n must be special-cased in client
 
+// tell <osd.n> commands.  Validation of osd.n must be special-cased in client
 COMMAND("version", "report version of OSD", "osd", "r", "cli,rest")
 COMMAND("injectargs " \
 	"name=injected_args,type=CephString,n=N",
@@ -3883,6 +3884,19 @@ COMMAND("dump_pg_recovery_stats", "dump pg recovery statistics",
 	"osd", "r", "cli,rest")
 COMMAND("reset_pg_recovery_stats", "reset pg recovery statistics",
 	"osd", "rw", "cli,rest")
+
+// experiment: restate pg commands as "tell <pgid>".  Validation of
+// pgid must be special-cased in client.
+COMMAND("query",
+	"show details of a specific pg", "osd", "r", "cli,rest")
+COMMAND("mark_unfound_lost revert " \
+	"name=mulcmd,type=CephChoices,strings=revert", \
+	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available",
+	"osd", "rw", "cli,rest")
+COMMAND("list_missing " \
+	"name=offset,type=CephString,req=false",
+	"list missing objects on this pg, perhaps starting at an offset given in JSON",
+	"osd", "rw", "cli,rest")
 };
 
 void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist& data)
@@ -3897,6 +3911,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
   map<string, cmd_vartype> cmdmap;
   string prefix;
   string format;
+  string pgidstr;
   boost::scoped_ptr<Formatter> f;
 
   if (cmd.empty()) {
@@ -3963,9 +3978,16 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     osd_lock.Lock();
   }
 
-  else if (prefix == "pg") {
+  // either 'pg <pgid> <command>' or
+  // 'tell <pgid>' (which comes in without any of that prefix)?
+
+  else if (prefix == "pg" ||
+	   (cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr) &&
+	     (prefix == "query" ||
+	      prefix == "mark_unfound_lost" ||
+	      prefix == "list_missing")
+	   )) {
     pg_t pgid;
-    string pgidstr;
 
     if (!cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr)) {
       ss << "no pgid specified";
@@ -3974,13 +3996,14 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
       ss << "couldn't parse pgid '" << pgidstr << "'";
       r = -EINVAL;
     } else {
-      vector<string> args;
-      cmd_getval(g_ceph_context, cmdmap, "args", args);
       PG *pg = _lookup_lock_pg(pgid);
       if (!pg) {
 	ss << "i don't have pgid " << pgid;
 	r = -ENOENT;
       } else {
+	// simulate pg <pgid> cmd= for pg->do-command
+	if (prefix != "pg")
+	  cmd_putval(g_ceph_context, cmdmap, "cmd", prefix);
 	r = pg->do_command(cmdmap, ss, data, odata);
 	pg->unlock();
       }
