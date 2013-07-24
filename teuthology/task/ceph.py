@@ -983,27 +983,35 @@ def restart(ctx, config):
       tasks:
       - ceph.restart: [osd.0, mon.1]
 
+   or::
+
+      tasks:
+      - ceph.restart:
+          daemons: [osd.0, mon.1]
+          wait-for-healthy: false
+          wait-for-osds-up: true
+
    """
    if config is None:
        config = {}
-
-   daemon = None
    if isinstance(config, list):
-       assert isinstance(config, list), \
-              "task ceph.restart only supports a list for configuration"
-       config = dict.fromkeys(config)
-       for i in config.keys():
-           type_ = i.split('.', 1)[0]
-           id_ = i.split('.', 1)[1]
-           ctx.daemons.get_daemon(type_, id_).stop()
-           ctx.daemons.get_daemon(type_, id_).restart()
-   else:
+       config = { 'daemons': config }
+   if 'daemons' not in config:
+       config['daemons'] = []
        type_daemon = ['mon', 'osd', 'mds', 'rgw']
        for d in type_daemon:
            type_ = d
            for daemon in ctx.daemons.iter_daemons_of_role(type_):
-               daemon.stop()
-               daemon.restart()
+               config['daemons'].append(type_ + '.' + daemon.id_)
+
+   assert isinstance(config['daemons'], list)
+   daemons = dict.fromkeys(config['daemons'])
+   for i in daemons.keys():
+       type_ = i.split('.', 1)[0]
+       id_ = i.split('.', 1)[1]
+       ctx.daemons.get_daemon(type_, id_).stop()
+       ctx.daemons.get_daemon(type_, id_).restart()
+
    if config.get('wait-for-healthy', True):
        healthy(ctx=ctx, config=None)
    if config.get('wait-for-osds-up', False):
