@@ -44,9 +44,9 @@ public:
     unsigned int key;
     int value;
     shared_ptr<int> ptr;
-    SharedPtrRegistryTest::in_method_t in_method;
+    enum in_method_t { LOOKUP, LOOKUP_OR_CREATE } in_method;
 
-    Thread_wait(SharedPtrRegistryTest& _registry, unsigned int _key, int _value, SharedPtrRegistryTest::in_method_t _in_method) : 
+    Thread_wait(SharedPtrRegistryTest& _registry, unsigned int _key, int _value, in_method_t _in_method) : 
       registry(_registry),
       key(_key),
       value(_value),
@@ -56,18 +56,16 @@ public:
     
     virtual void *entry() {
       switch(in_method) {
-      case SharedPtrRegistryTest::LOOKUP_OR_CREATE:
+      case LOOKUP_OR_CREATE:
 	if (value) 
 	  ptr = registry.lookup_or_create<int>(key, value);
 	else
 	  ptr = registry.lookup_or_create(key);
 	break;
-      case SharedPtrRegistryTest::LOOKUP:
+      case LOOKUP:
 	ptr = shared_ptr<int>(new int);
 	*ptr = value;
 	ptr = registry.lookup(key);
-	break;
-      case SharedPtrRegistryTest::UNDEFINED:
 	break;
       }
       return NULL;
@@ -77,7 +75,7 @@ public:
   static const useconds_t DELAY_MAX = 20 * 1000 * 1000;
   static useconds_t delay;
 
-  bool wait_for(SharedPtrRegistryTest &registry, SharedPtrRegistryTest::in_method_t method) {
+  bool wait_for(SharedPtrRegistryTest &registry, int waiting) {
     do {
       //
       // the delay variable is supposed to be initialized to zero. It would be fine
@@ -89,7 +87,7 @@ public:
 	usleep(delay);
       {
 	Mutex::Locker l(registry.get_lock());
-	if (registry.in_method == method) 
+	if (registry.waiting == waiting) 
 	  break;
       }
       if (delay > 0)
@@ -118,10 +116,10 @@ TEST_F(SharedPtrRegistry_all, wait_lookup_or_create) {
   // out of scope and the shared_ptr object is about to be removed and
   // marked as such. The weak_ptr stored in the registry will show
   // that it has expired(). However, the SharedPtrRegistry::OnRemoval
-  // object not yet been called and did not get a chance to acquire
-  // the lock. The lookup_or_create and lookup methods must detect
-  // that situation and wait until the weak_ptr is removed from the
-  // registry.
+  // object has not yet been called and did not get a chance to
+  // acquire the lock. The lookup_or_create and lookup methods must
+  // detect that situation and wait until the weak_ptr is removed from
+  // the registry.
   //
   {
     unsigned int key = 1;
@@ -131,12 +129,14 @@ TEST_F(SharedPtrRegistry_all, wait_lookup_or_create) {
     }
     EXPECT_FALSE(registry.get_contents()[key].lock());
 
-    Thread_wait t(registry, key, 0, SharedPtrRegistryTest::LOOKUP_OR_CREATE);
+    Thread_wait t(registry, key, 0, Thread_wait::LOOKUP_OR_CREATE);
     t.create();
-    ASSERT_TRUE(wait_for(registry, SharedPtrRegistryTest::LOOKUP_OR_CREATE));
+    ASSERT_TRUE(wait_for(registry, 1));
     EXPECT_FALSE(t.ptr);
+    // waiting on a key does not block lookups on other keys
+    EXPECT_TRUE(registry.lookup_or_create(key + 12345));
     registry.remove(key);
-    ASSERT_TRUE(wait_for(registry, SharedPtrRegistryTest::UNDEFINED));
+    ASSERT_TRUE(wait_for(registry, 0));
     EXPECT_TRUE(t.ptr);
     t.join();
   }
@@ -149,12 +149,20 @@ TEST_F(SharedPtrRegistry_all, wait_lookup_or_create) {
     }
     EXPECT_FALSE(registry.get_contents()[key].lock());
 
-    Thread_wait t(registry, key, value, SharedPtrRegistryTest::LOOKUP_OR_CREATE);
+    Thread_wait t(registry, key, value, Thread_wait::LOOKUP_OR_CREATE);
     t.create();
-    ASSERT_TRUE(wait_for(registry, SharedPtrRegistryTest::LOOKUP_OR_CREATE));
+    ASSERT_TRUE(wait_for(registry, 1));
     EXPECT_FALSE(t.ptr);
+    // waiting on a key does not block lookups on other keys
+    {
+      int other_value = value + 1;
+      unsigned int other_key = key + 1;
+      shared_ptr<int> ptr = registry.lookup_or_create<int>(other_key, other_value);
+      EXPECT_TRUE(ptr);
+      EXPECT_EQ(other_value, *ptr);
+    }
     registry.remove(key);
-    ASSERT_TRUE(wait_for(registry, SharedPtrRegistryTest::UNDEFINED));
+    ASSERT_TRUE(wait_for(registry, 0));
     EXPECT_TRUE(t.ptr);
     EXPECT_EQ(value, *t.ptr);
     t.join();
@@ -184,12 +192,14 @@ TEST_F(SharedPtrRegistry_all, wait_lookup) {
   }
   EXPECT_FALSE(registry.get_contents()[key].lock());
 
-  Thread_wait t(registry, key, value, SharedPtrRegistryTest::LOOKUP);
+  Thread_wait t(registry, key, value, Thread_wait::LOOKUP);
   t.create();
-  ASSERT_TRUE(wait_for(registry, SharedPtrRegistryTest::LOOKUP));
+  ASSERT_TRUE(wait_for(registry, 1));
   EXPECT_EQ(value, *t.ptr);
+  // waiting on a key does not block lookups on other keys
+  EXPECT_FALSE(registry.lookup(key + 12345));
   registry.remove(key);
-  ASSERT_TRUE(wait_for(registry, SharedPtrRegistryTest::UNDEFINED));
+  ASSERT_TRUE(wait_for(registry, 0));
   EXPECT_FALSE(t.ptr);
   t.join();
 }
