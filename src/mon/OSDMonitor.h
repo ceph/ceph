@@ -150,10 +150,14 @@ private:
   void update_from_paxos(bool *need_bootstrap);
   void create_pending();  // prepare a new pending
   void encode_pending(MonitorDBStore::Transaction *t);
-  virtual void encode_full(MonitorDBStore::Transaction *t);
   void on_active();
   void on_shutdown();
 
+  /**
+   * we haven't delegated full version stashing to paxosservice for some time
+   * now, making this function useless in current context.
+   */
+  virtual void encode_full(MonitorDBStore::Transaction *t) { }
   /**
    * do not let paxosservice periodically stash full osdmaps, or we will break our
    * locally-managed full maps.  (update_from_paxos loads the latest and writes them

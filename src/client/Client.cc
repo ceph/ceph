@@ -1303,7 +1303,7 @@ int Client::make_request(MetaRequest *request,
       // wait
       if (session->state == MetaSession::STATE_OPENING) {
 	ldout(cct, 10) << "waiting for session to mds." << mds << " to open" << dendl;
-	wait_on_list(session->waiting_for_open);
+	wait_on_context_list(session->waiting_for_open);
 	continue;
       }
 
@@ -1522,7 +1522,7 @@ void Client::_closed_mds_session(MetaSession *s)
 {
   s->state = MetaSession::STATE_CLOSED;
   messenger->mark_down(s->con);
-  signal_cond_list(s->waiting_for_open);
+  signal_context_list(s->waiting_for_open);
   mount_cond.Signal();
   remove_session_caps(s);
   kick_requests(s, true);
@@ -1549,7 +1549,7 @@ void Client::handle_client_session(MClientSession *m)
     if (!unmounting) {
       connect_mds_targets(from);
     }
-    signal_cond_list(session->waiting_for_open);
+    signal_context_list(session->waiting_for_open);
     break;
 
   case CEPH_SESSION_CLOSE:
@@ -1900,7 +1900,7 @@ void Client::handle_mds_map(MMDSMap* m)
       if (oldstate < MDSMap::STATE_ACTIVE) {
 	kick_requests(p->second, false);
 	kick_flushing_caps(p->second);
-	signal_cond_list(p->second->waiting_for_open);
+	signal_context_list(p->second->waiting_for_open);
 	kick_maxsize_requests(p->second);
 	wake_inode_waiters(p->second);
       }
@@ -2605,6 +2605,24 @@ void Client::signal_cond_list(list<Cond*>& ls)
 {
   for (list<Cond*>::iterator it = ls.begin(); it != ls.end(); ++it)
     (*it)->Signal();
+}
+
+void Client::wait_on_context_list(list<Context*>& ls)
+{
+  Cond cond;
+  bool done = false;
+  int r;
+  ls.push_back(new C_Cond(&cond, &done, &r));
+  while (!done)
+    cond.Wait(client_lock);
+}
+
+void Client::signal_context_list(list<Context*>& ls)
+{
+  while (!ls.empty()) {
+    ls.front()->complete(0);
+    ls.pop_front();
+  }
 }
 
 void Client::wake_inode_waiters(MetaSession *s)
@@ -7915,7 +7933,7 @@ void Client::ms_handle_remote_reset(Connection *con)
 	case MetaSession::STATE_OPENING:
 	  {
 	    ldout(cct, 1) << "reset from mds we were opening; retrying" << dendl;
-	    list<Cond*> waiters;
+	    list<Context*> waiters;
 	    waiters.swap(s->waiting_for_open);
 	    _closed_mds_session(s);
 	    MetaSession *news = _get_or_open_mds_session(mds);

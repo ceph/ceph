@@ -563,7 +563,9 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 
   if (prefix == "mds stat") {
     if (f) {
+      f->open_object_section("mds_stat");
       dump_info(f.get());
+      f->close_section();
       f->flush(ds);
     } else {
       ds << mdsmap;
