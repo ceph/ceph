@@ -25,3 +25,9 @@ v0.67
   copy operations. The S3 response will now return extra <Progress>
   field under the <CopyResult> container. The Swift response will
   now send the progress as a json array.
+
+* ceph-osd now requires a max fd limit of at least
+  filestore_wbthrottle_(xfs|btrfs)_inodes_hard_limit (5000 by default)
+  in order to accomodate the new write back throttle system.  upstart
+  now sets the fd limit to 32k.  sysvinit will set it to 32k by default
+  (still overrideable via max_open_files).
