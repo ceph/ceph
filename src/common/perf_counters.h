@@ -136,7 +136,7 @@ public:
   void add(class PerfCounters *l);
   void remove(class PerfCounters *l);
   void clear();
-  void dump_formatted(ceph::Formatter *f, bufferlist &bl, bool schema);
+  void dump_formatted(ceph::Formatter *f, bool schema);
 private:
   CephContext *m_cct;
 
