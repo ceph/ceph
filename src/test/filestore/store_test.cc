@@ -829,6 +829,75 @@ TEST_F(StoreTest, ColSplitTest3) {
 }
 #endif
 
+/**
+ * This test tests adding two different groups
+ * of objects, each with 1 common prefix and 1
+ * different prefix.  We then remove half
+ * in order to verify that the merging correctly
+ * stops at the common prefix subdir.  See bug
+ * #5273 */
+TEST_F(StoreTest, TwoHash) {
+  coll_t cid("asdf");
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  std::cout << "Making objects" << std::endl;
+  for (int i = 0; i < 360; ++i) {
+    ObjectStore::Transaction t;
+    hobject_t o;
+    if (i < 8) {
+      o.hash = (i << 16) | 0xA1;
+      t.touch(cid, o);
+    }
+    o.hash = (i << 16) | 0xB1;
+    t.touch(cid, o);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  std::cout << "Removing half" << std::endl;
+  for (int i = 1; i < 8; ++i) {
+    ObjectStore::Transaction t;
+    hobject_t o;
+    o.hash = (i << 16) | 0xA1;
+    t.remove(cid, o);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  std::cout << "Checking" << std::endl;
+  for (int i = 1; i < 8; ++i) {
+    ObjectStore::Transaction t;
+    hobject_t o;
+    o.hash = (i << 16) | 0xA1;
+    bool exists = store->exists(cid, o);
+    ASSERT_EQ(exists, false);
+  }
+  {
+    hobject_t o;
+    o.hash = 0xA1;
+    bool exists = store->exists(cid, o);
+    ASSERT_EQ(exists, true);
+  }
+  std::cout << "Cleanup" << std::endl;
+  for (int i = 0; i < 360; ++i) {
+    ObjectStore::Transaction t;
+    hobject_t o;
+    o.hash = (i << 16) | 0xA1;
+    t.remove(cid, o);
+    o.hash = (i << 16) | 0xB1;
+    t.remove(cid, o);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  ObjectStore::Transaction t;
+  t.remove_collection(cid);
+  r = store->apply_transaction(t);
+  ASSERT_EQ(r, 0);
+}
+
 //
 // support tests for qa/workunits/filestore/filestore.sh
 //
@@ -892,7 +961,7 @@ int main(int argc, char **argv) {
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->set_val("osd_journal_size", "400");
-  g_ceph_context->_conf->set_val("filestore_index_retry_probability", "1");
+  g_ceph_context->_conf->set_val("filestore_index_retry_probability", "0.5");
   g_ceph_context->_conf->set_val("filestore_op_thread_timeout", "1000");
   g_ceph_context->_conf->set_val("filestore_op_thread_suicide_timeout", "10000");
   g_ceph_context->_conf->apply_changes(NULL);
