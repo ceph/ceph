@@ -21,8 +21,6 @@ setup(
         'argparse >=1.2.1',
         'httplib2',
         'beanstalkc >=0.2.0',
-        'nose >=1.0.0',
-        'fudge >=1.0.3',
         'pexpect',
         ],
 
