@@ -938,8 +938,15 @@ def send_command(cluster, target=('mon', ''), cmd=[], inbuf='', timeout=0,
                 cluster.osd_command(osdid, cmd, inbuf, timeout)
 
         elif target[0] == 'pg':
-            # leave it in cmddict for the OSD to use too
             pgid = target[1]
+            # pgid will already be in the command for the pg <pgid>
+            # form, but for tell <pgid>, we need to put it in
+            if cmd:
+                cmddict = json.loads(cmd[0])
+                cmddict['pgid'] = pgid
+            else:
+                cmddict = dict(pgid=pgid)
+            cmd = [json.dumps(cmddict)]
             if verbose:
                 print >> sys.stderr, 'submit {0} for pgid {1}'.\
                     format(cmd, pgid)
