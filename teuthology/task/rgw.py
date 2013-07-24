@@ -435,18 +435,18 @@ def task(ctx, config):
               client.0:
                 rgw region: foo
                 rgw zone: foo-1
-                rgw region root pool: foo.rgw.root
-                rgw zone root pool: foo.rgw.root
+                rgw region root pool: .rgw.root.foo
+                rgw zone root pool: .rgw.root.foo
               client.1:
                 rgw region: bar
                 rgw zone: bar-master
-                rgw region root pool: bar.rgw.root
-                rgw zone root pool: bar.rgw.root
+                rgw region root pool: .rgw.root.bar
+                rgw zone root pool: .rgw.root.bar
               client.2:
                 rgw region: bar
                 rgw zone: bar-secondary
-                rgw region root pool: bar.rgw.root
-                rgw zone root pool: bar-secondary.rgw.root
+                rgw region root pool: .rgw.root.bar
+                rgw zone root pool: .rgw.root.bar-secondary 
         - rgw:
             regions:
               foo:
