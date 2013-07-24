@@ -110,3 +110,33 @@ TEST(SignalHandler, Multiple)
   unregister_async_signal_handler(SIGUSR2, testhandler);
   shutdown_async_signal_handler();
 }
+
+/*
+TEST(SignalHandler, MultipleBigFd)
+{
+  int ret;
+
+  for (int i = 0; i < 1500; i++)
+    ::open(".", O_RDONLY);
+
+  reset();
+  init_async_signal_handler();
+  register_async_signal_handler(SIGUSR1, testhandler);
+  register_async_signal_handler(SIGUSR2, testhandler);
+  ASSERT_TRUE(usr1 == false);
+  ASSERT_TRUE(usr2 == false);
+
+  ret = kill(getpid(), SIGUSR1);
+  ASSERT_EQ(ret, 0);
+  ret = kill(getpid(), SIGUSR2);
+  ASSERT_EQ(ret, 0);
+
+  sleep(1);
+  ASSERT_TRUE(usr1 == true);
+  ASSERT_TRUE(usr2 == true);
+
+  unregister_async_signal_handler(SIGUSR1, testhandler);
+  unregister_async_signal_handler(SIGUSR2, testhandler);
+  shutdown_async_signal_handler();
+}
+*/

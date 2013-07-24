@@ -322,8 +322,8 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
     string name;
     cmd_getval(g_ceph_context, cmdmap, "name", name);
     if (!pending_map.contains(name)) {
-      err = -ENOENT;
-      ss << "mon " << name << " does not exist";
+      err = 0;
+      ss << "mon " << name << " does not exist or has already been removed";
       goto out;
     }
 
