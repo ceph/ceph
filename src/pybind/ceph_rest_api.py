@@ -91,10 +91,13 @@ def load_conf(clustername='ceph', conffile=None):
     raise EnvironmentError('No conf file found for "{0}"'.format(clustername))
 
 def get_conf(cfg, clientname, key):
-    try:
-        return cfg.get(clientname, 'restapi_' + key)
-    except ConfigParser.NoOptionError:
-        return None
+    fullkey = 'restapi_' + key
+    for sectionname in clientname, 'client', 'global':
+        try:
+            return cfg.get(sectionname, fullkey)
+        except (ConfigParser.NoOptionError, ConfigParser.NoSectionError):
+            pass
+    return None
 
 # XXX this is done globally, and cluster connection kept open; there
 # are facilities to pass around global info to requests and to
