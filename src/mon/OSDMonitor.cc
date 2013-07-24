@@ -142,7 +142,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 
     latest_full = 0;
     for (version_t v = lc; v >= fc; v--) {
-      string full_key = "full_" + stringify(latest_full);
+      string full_key = "full_" + stringify(v);
       if (mon->store->exists(get_service_name(), full_key)) {
         dout(10) << __func__ << " found latest full map v " << v << dendl;
         latest_full = v;
