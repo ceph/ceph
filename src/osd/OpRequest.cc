@@ -76,15 +76,14 @@ void OpHistory::dump_ops(utime_t now, Formatter *f)
   f->close_section();
 }
 
-void OpTracker::dump_historic_ops(Formatter *f, ostream &ss)
+void OpTracker::dump_historic_ops(Formatter *f)
 {
   Mutex::Locker locker(ops_in_flight_lock);
   utime_t now = ceph_clock_now(g_ceph_context);
   history.dump_ops(now, f);
-  f->flush(ss);
 }
 
-void OpTracker::dump_ops_in_flight(Formatter *f, ostream &ss)
+void OpTracker::dump_ops_in_flight(Formatter *f)
 {
   Mutex::Locker locker(ops_in_flight_lock);
   f->open_object_section("ops_in_flight"); // overall dump
@@ -98,7 +97,6 @@ void OpTracker::dump_ops_in_flight(Formatter *f, ostream &ss)
   }
   f->close_section(); // list of OpRequests
   f->close_section(); // overall dump
-  f->flush(ss);
 }
 
 void OpTracker::register_inflight_op(xlist<OpRequest*>::item *i)

@@ -33,7 +33,8 @@ struct MorePrinting : public DetailedStatCollector::AdditionalPrinting {
   void operator()(std::ostream *out) {
     bufferlist bl;
     Formatter *f = new_formatter("json-pretty");
-    cct->get_perfcounters_collection()->dump_formatted(f, bl, 0);
+    cct->get_perfcounters_collection()->dump_formatted(f, 0);
+    f->flush(bl);
     delete f;
     bl.append('\0');
     *out << bl.c_str() << std::endl;

@@ -73,8 +73,7 @@ void PerfCountersCollection::clear()
   }
 }
 
-void PerfCountersCollection::dump_formatted(Formatter *f, bufferlist &bl,
-					    bool schema)
+void PerfCountersCollection::dump_formatted(Formatter *f, bool schema)
 {
   Mutex::Locker lck(m_lock);
   f->open_object_section("perfcounter_collection");
@@ -88,7 +87,6 @@ void PerfCountersCollection::dump_formatted(Formatter *f, bufferlist &bl,
     }
   }
   f->close_section();
-  f->flush(bl);
 }
 
 // ---------------------------
