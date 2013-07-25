@@ -403,7 +403,6 @@ int user_create(string& uid, string& display_name, bool set_creds = true) {
 
 int user_info(string& uid, string& display_name, RGWUserInfo& uinfo) {
   stringstream ss;
-  string creds;
   ss << "-c " << g_test->get_ceph_conf_path() << " user info --uid=" << uid
     << " --display-name=" << display_name;
 
@@ -424,7 +423,6 @@ int user_info(string& uid, string& display_name, RGWUserInfo& uinfo) {
 
 int user_rm(string& uid, string& display_name) {
   stringstream ss;
-  string creds;
   ss << "-c " << g_test->get_ceph_conf_path() << 
     " metadata rm --metadata-key=user:" << uid;
 
