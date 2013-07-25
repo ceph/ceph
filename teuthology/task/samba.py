@@ -199,5 +199,21 @@ def task(ctx, config):
                         'sudo', 'killall', '-9', 'smbd',
                         ],
                     )
+
+                remote.run(
+                    args=[
+                        'sudo',
+                        'lsof',
+                        backend,
+                        ],
+                    )
+                remote.run(
+                    args=[
+                        'sudo',
+                        'fuser',
+                        '-M',
+                        backend,
+                        ],
+                    )
             except:
                 pass
