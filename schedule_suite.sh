@@ -77,7 +77,7 @@ overrides:
     sha1: $CEPH_SHA1
     conf:
       mon:
-        debug ms: 20
+        debug ms: 1
         debug mon: 20
         debug paxos: 20
     log-whitelist:
@@ -85,7 +85,7 @@ overrides:
   ceph-deploy:
     conf:
       mon:
-        debug mon: 20
+        debug mon: 1
         debug paxos: 20
         debug ms: 20
       client:
