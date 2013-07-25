@@ -1573,6 +1573,7 @@ public:
     // are we actually going to perform this put, or is it too old?
     if (!check_versions(old_bci.info.objv_tracker.read_version, orig_mtime,
 			objv_tracker.write_version, mtime, sync_type)) {
+      objv_tracker.read_version = old_bci.info.objv_tracker.read_version;
       return STATUS_NO_APPLY;
     }
 

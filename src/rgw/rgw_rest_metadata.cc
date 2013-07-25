@@ -174,7 +174,7 @@ void RGWOp_Metadata_Put::execute() {
     }
   }
 
-  http_ret = store->meta_mgr->put(metadata_key, bl, sync_type);
+  http_ret = store->meta_mgr->put(metadata_key, bl, sync_type, &ondisk_version);
   if (http_ret < 0) {
     dout(5) << "ERROR: can't put key: " << cpp_strerror(http_ret) << dendl;
     return;
@@ -192,7 +192,11 @@ void RGWOp_Metadata_Put::send_response() {
     http_return_code = STATUS_NO_CONTENT;
   set_req_state_err(s, http_return_code);
   dump_errno(s);
+  stringstream ver_stream;
+  ver_stream << "ver:" << ondisk_version.ver
+	     <<",tag:" << ondisk_version.tag;
   dump_pair(s, "RGWX_UPDATE_STATUS", update_status.c_str());
+  dump_pair(s, "RGWX_UPDATE_VERSION", ver_stream.str().c_str());
   end_header(s);
 }
 
