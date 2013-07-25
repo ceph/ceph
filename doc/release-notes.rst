@@ -287,6 +287,23 @@ Notable Changes
  * misc code cleanups
 
 
+v0.61.7 "Cuttlefish"
+--------------------
+
+This release fixes another regression preventing monitors to start after
+undergoing certain upgrade sequences, as well as some corner cases with
+Paxos and support for unusual device names in ceph-disk/ceph-deploy.
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* mon: fix regression in latest full osdmap retrieval
+* mon: fix a long-standing bug in a paxos corner case
+* ceph-disk: improved support for unusual device names (e.g., /dev/cciss/c0d0)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.61.7.txt>`.
+
+
 v0.61.6 "Cuttlefish"
 --------------------
 
