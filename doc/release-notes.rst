@@ -2,7 +2,7 @@
  Release Notes
 ===============
 
-v0.67-rc1
+v0.67-rc2
 ---------
 
 This is a release candidate for v0.67, code-named "Dumpling."  Any
@@ -19,8 +19,8 @@ The headline features for this release include:
 
 * Object namespaces in librados.
 
-Upgrading from  v0.66
-~~~~~~~~~~~~~~~~~~~~~
+Upgrading from v0.66
+~~~~~~~~~~~~~~~~~~~~
 
 * There is monitor internal protocol change, which means that v0.67
   ceph-mon daemons cannot talk to v0.66 or older daemons.  We
