@@ -1960,7 +1960,7 @@ def main_list(args):
     journal_map = {}
     for base, parts in sorted(partmap.iteritems()):
         for p in parts:
-            dev = '/dev/' + p
+            dev = get_dev_path(p)
             part_uuid = get_partition_uuid(dev)
             if part_uuid:
                 uuid_map[part_uuid] = dev
@@ -1980,11 +1980,11 @@ def main_list(args):
 
     for base, parts in sorted(partmap.iteritems()):
         if parts:
-            print '/dev/%s :' % base
+            print '%s :' % get_dev_path(base)
             for p in sorted(parts):
-                list_dev('/dev/' + p, uuid_map, journal_map)
+                list_dev(get_dev_path(p), uuid_map, journal_map)
         else:
-            list_dev('/dev/' + base, uuid_map, journal_map)
+            list_dev(get_dev_path(base), uuid_map, journal_map)
 
 
 ###########################
