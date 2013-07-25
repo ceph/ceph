@@ -83,6 +83,8 @@ overrides:
     log-whitelist:
     - slow request
   ceph-deploy:
+    branch:
+      dev: $ceph
     conf:
       mon:
         debug mon: 1
