@@ -210,7 +210,7 @@ void Paxos::handle_collect(MMonPaxos *collect)
   // do we have an accepted but uncommitted value?
   //  (it'll be at last_committed+1)
   bufferlist bl;
-  if (collect->last_committed == last_committed &&
+  if (collect->last_committed <= last_committed &&
       get_store()->exists(get_name(), last_committed+1)) {
     get_store()->get(get_name(), last_committed+1, bl);
     assert(bl.length() > 0);
