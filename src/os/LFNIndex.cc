@@ -75,16 +75,19 @@ int LFNIndex::init()
 
 int LFNIndex::created(const hobject_t &hoid, const char *path)
 {
+  WRAP_RETRY(
   vector<string> path_comp;
   string short_name;
-  int r;
   r = decompose_full_path(path, &path_comp, 0, &short_name);
   if (r < 0)
-    return r;
+    goto out;
   r = lfn_created(path_comp, hoid, short_name);
   if (r < 0)
-    return r;
-  return _created(path_comp, hoid, short_name);
+    goto out;
+  r = _created(path_comp, hoid, short_name);
+  if (r < 0)
+    goto out;
+    );
 }
 
 int LFNIndex::unlink(const hobject_t &hoid)

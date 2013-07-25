@@ -447,18 +447,7 @@ int HashIndex::complete_merge(const vector<string> &path, subdir_info_s info) {
     r = move_objects(path, dst);
     if (r < 0)
       return r;
-    
-    map<string,hobject_t> objects_dst;
-    r = list_objects(dst, 0, 0, &objects_dst);
-    if (r < 0)
-      return r;
-    set<string> subdirs;
-    r = list_subdirs(dst, &subdirs);
-    if (r < 0)
-      return r;
-    dstinfo.objs = objects_dst.size();
-    dstinfo.subdirs = subdirs.size() - 1;
-    r = set_info(dst, dstinfo);
+    r = reset_attr(dst);
     if (r < 0)
       return r;
     r = remove_path(path);
@@ -576,7 +565,7 @@ int HashIndex::complete_split(const vector<string> &path, subdir_info_s info) {
   if (r < 0)
     return r;
   info.objs = objects.size();
-  r = set_info(path, info);
+  r = reset_attr(path);
   if (r < 0)
     return r;
   r = fsync_dir(path);

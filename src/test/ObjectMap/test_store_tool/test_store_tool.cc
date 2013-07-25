@@ -19,6 +19,12 @@
 
 #include "os/LevelDBStore.h"
 
+#include "common/ceph_argparse.h"
+#include "global/global_init.h"
+#include "common/errno.h"
+#include "common/safe_io.h"
+#include "common/config.h"
+
 using namespace std;
 
 class StoreTool
@@ -98,15 +104,27 @@ void usage(const char *pname)
     << std::endl;
 }
 
-int main(int argc, char *argv[])
+int main(int argc, const char *argv[])
 {
-  if (argc < 3) {
+  vector<const char*> args;
+  argv_to_vec(argc, argv, args);
+  env_to_vec(args);
+
+  global_init(
+      NULL, args,
+      CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(g_ceph_context);
+
+
+  if (args.size() < 2) {
     usage(argv[0]);
     return 1;
   }
 
-  string path(argv[1]);
-  string cmd(argv[2]);
+  string path(args[0]);
+  string cmd(args[1]);
+
+  std::cout << "path: " << path << " cmd " << cmd << std::endl;
 
   StoreTool st(path);
 
