@@ -126,6 +126,16 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   if (latest_full == 0 && get_first_committed() > 1)
     latest_full = get_first_committed();
 
+  if (latest_full > 0) {
+    // make sure we can really believe get_version_latest_full(); see
+    // 76cd7ac1c2094b34ad36bea89b2246fa90eb2f6d
+    bufferlist test;
+    get_version_full(latest_full, test);
+    if (test.length() == 0) {
+      dout(10) << __func__ << " ignoring recorded latest_full as it is missing; fallback to search" << dendl;
+      latest_full = 0;
+    }
+  }
   if (get_first_committed() > 1 &&
       latest_full < get_first_committed()) {
     /* a bug introduced in 7fb3804fb860dcd0340dd3f7c39eec4315f8e4b6 would lead
@@ -141,7 +151,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 
     latest_full = 0;
     for (version_t v = lc; v >= fc; v--) {
-      string full_key = "full_" + stringify(latest_full);
+      string full_key = "full_" + stringify(v);
       if (mon->store->exists(get_service_name(), full_key)) {
         dout(10) << __func__ << " found latest full map v " << v << dendl;
         latest_full = v;
