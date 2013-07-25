@@ -63,6 +63,11 @@ def parse_args():
         help='Type of machine to lock/run tests on.',
         )
     parser.add_argument(
+        '--os-type',
+        default='ubuntu',
+        help='Distro/OS of machine to run test on.',
+        )
+    parser.add_argument(
         '--block',
         action='store_true',
         default=False,
