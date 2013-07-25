@@ -5524,7 +5524,8 @@ OSDMapRef OSDService::get_map(epoch_t epoch)
   if (epoch > 0) {
     dout(20) << "get_map " << epoch << " - loading and decoding " << map << dendl;
     bufferlist bl;
-    assert(_get_map_bl(epoch, bl));
+    bool ok = _get_map_bl(epoch, bl);
+    assert(ok);
     map->decode(bl);
   } else {
     dout(20) << "get_map " << epoch << " - return initial " << map << dendl;
