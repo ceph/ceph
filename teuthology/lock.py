@@ -537,13 +537,8 @@ def create_if_vm(ctx, machine_name):
     phys_host = status_info['vpshost']
     if not phys_host:
         return False
-    try:
-        os_type = ctx.config['os_type']
-    except KeyError:
-        try:
-            os_type = ctx.os_type
-        except AttributeError:
-            os_type = 'ubuntu'
+    from teuthology.misc import get_distro
+    os_type = get_distro(ctx)
     os_version = dict(
         ubuntu="12.04",
         fedora="18",

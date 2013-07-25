@@ -867,3 +867,13 @@ def stop_daemons_of_type(ctx, type_):
             log.exception('Saw exception from %s.%s', daemon.role, daemon.id_)
     if exc_info != (None, None, None):
         raise exc_info[0], exc_info[1], exc_info[2]
+
+def get_distro(ctx):
+    try:
+        os_type = ctx.config.get('os_type', ctx.os_type)
+    except AttributeError:
+        os_type = 'ubuntu'
+    try:
+        return ctx.config['downburst'].get('distro', os_type)
+    except KeyError:
+        return os_type

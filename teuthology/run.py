@@ -166,12 +166,8 @@ def main():
             {'internal.vm_setup': None},
             ])
     if 'kernel' in ctx.config:
-        try:
-            distro = ctx.config['downburst'].get('distro')
-            if distro is None:
-                distro = 'ubuntu'
-        except:
-            distro = 'ubuntu'
+        from teuthology.misc import get_distro
+        distro = get_distro(ctx)
         if distro == 'ubuntu':
             init_tasks.append({'kernel': ctx.config['kernel']})
     init_tasks.extend([
