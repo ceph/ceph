@@ -194,7 +194,7 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     #Fix Repo Priority
     remote.run(
         args=[
-            'sudo', 'sed', '-i', run.Raw('\'s/enabled=1/enabled=1\\npriority=1/g\''), '/etc/yum.repos.d/ceph.repo',
+            'sudo', 'sed', '-i', run.Raw('\':a;N;$!ba;s/enabled=1\\ngpg/enabled=1\\npriority=1\\ngpg/g\''), '/etc/yum.repos.d/ceph.repo',
             ])
 
     remote.run(
