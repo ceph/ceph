@@ -2733,10 +2733,12 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   // do not issue caps if inode differs from readdir snaprealm
   SnapRealm *realm = find_snaprealm();
-  bool no_caps = (realm && dir_realm && realm != dir_realm) ||
+  bool no_caps = session->is_stale() ||
+		 (realm && dir_realm && realm != dir_realm) ||
 		 is_frozen() || state_test(CInode::STATE_EXPORTINGCAPS);
   if (no_caps)
     dout(20) << "encode_inodestat no caps"
+	     << (session->is_stale()?", session stale ":"")
 	     << ((realm && dir_realm && realm != dir_realm)?", snaprealm differs ":"")
 	     << (state_test(CInode::STATE_EXPORTINGCAPS)?", exporting caps":"")
 	     << (is_frozen()?", frozen inode":"") << dendl;
