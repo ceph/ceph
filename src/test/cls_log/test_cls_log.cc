@@ -279,7 +279,7 @@ TEST(cls_rgw, test_log_add_different_time)
   } while (truncated);
 
   ASSERT_EQ(10, i);
-
+  delete rop;
 }
 
 TEST(cls_rgw, test_log_trim)
@@ -330,4 +330,5 @@ TEST(cls_rgw, test_log_trim)
     ASSERT_EQ(9 - i, (int)entries.size());
     ASSERT_EQ(0, (int)truncated);
   }
+  delete rop;
 }
