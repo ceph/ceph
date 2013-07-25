@@ -5,6 +5,7 @@ overrides:
     conf:
       paxos service trim min: 5
       mon min osdmap epochs: 25
+    fs: xfs
 roles:
 - - mon.a
   - mds.a
