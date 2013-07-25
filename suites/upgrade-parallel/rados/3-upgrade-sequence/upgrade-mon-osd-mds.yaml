@@ -3,10 +3,16 @@ upgrade-sequence:
    - install.upgrade:
       all:
          branch: next
-   - ceph.restart: [mon.a]
+   - ceph.restart:
+       daemons: [mon.a]
+       wait-for-healthy: false
+       wait-for-osds-up: true
    - sleep:
        duration: 60
-   - ceph.restart: [mon.b]
+   - ceph.restart:
+       daemons: [mon.b]
+       wait-for-healthy: false
+       wait-for-osds-up: true
    - sleep:
        duration: 60
    - ceph.restart: [mon.c]
