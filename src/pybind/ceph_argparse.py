@@ -897,20 +897,35 @@ def find_cmd_target(childargs):
     sig = parse_funcsig(['tell', {'name':'target','type':'CephName'}])
     try:
         valid_dict = validate(childargs, sig, partial=True);
-        if len(valid_dict) == 2:
-            name = CephName()
-            name.valid(valid_dict['target'])
-            return name.nametype, name.nameid
     except ArgumentError:
         pass
+    else:
+        if len(valid_dict) == 2:
+            # revalidate to isolate type and id
+            name = CephName()
+            # if this fails, something is horribly wrong, as it just
+            # validated successfully above
+            name.valid(valid_dict['target'])
+            return name.nametype, name.nameid
+
+    sig = parse_funcsig(['tell', {'name':'pgid','type':'CephPgid'}])
+    try:
+        valid_dict = validate(childargs, sig, partial=True);
+    except ArgumentError:
+        pass
+    else:
+        if len(valid_dict) == 2:
+            # pg doesn't need revalidation; the string is fine
+            return 'pg', valid_dict['pgid']
 
     sig = parse_funcsig(['pg', {'name':'pgid','type':'CephPgid'}])
     try:
         valid_dict = validate(childargs, sig, partial=True);
-        if len(valid_dict) == 2:
-            return 'pg', valid_dict['pgid']
     except ArgumentError:
         pass
+    else:
+        if len(valid_dict) == 2:
+            return 'pg', valid_dict['pgid']
 
     return 'mon', ''
 
