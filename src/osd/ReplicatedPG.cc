@@ -5260,6 +5260,9 @@ void ReplicatedPG::submit_push_data(
   ObjectStore::Transaction *t)
 {
   if (first) {
+    dout(10) << __func__ << ": Creating oid "
+	     << recovery_info.soid << " in the temp collection" << dendl;
+    temp_contents.insert(recovery_info.soid);
     missing.revise_have(recovery_info.soid, eversion_t());
     remove_snap_mapped_object(*t, recovery_info.soid);
     t->remove(get_temp_coll(t), recovery_info.soid);
@@ -5287,6 +5290,10 @@ void ReplicatedPG::submit_push_complete(ObjectRecoveryInfo &recovery_info,
 					ObjectStore::Transaction *t)
 {
   remove_snap_mapped_object(*t, recovery_info.soid);
+  assert(temp_contents.count(recovery_info.soid));
+  dout(10) << __func__ << ": Removing oid "
+	   << recovery_info.soid << " from the temp collection" << dendl;
+  temp_contents.erase(recovery_info.soid);
   t->collection_move(coll, get_temp_coll(t), recovery_info.soid);
   for (map<hobject_t, interval_set<uint64_t> >::const_iterator p =
 	 recovery_info.clone_subset.begin();
@@ -6315,6 +6322,15 @@ void ReplicatedPG::on_shutdown()
 void ReplicatedPG::on_flushed()
 {
   assert(object_contexts.empty());
+  if (have_temp_coll() &&
+      !osd->store->collection_empty(get_temp_coll())) {
+    vector<hobject_t> objects;
+    osd->store->collection_list(get_temp_coll(), objects);
+    derr << __func__ << ": found objects in the temp collection: "
+	 << objects << ", crashing now"
+	 << dendl;
+    assert(0 == "found garbage in the temp collection");
+  }
 }
 
 void ReplicatedPG::on_activate()
@@ -6330,7 +6346,7 @@ void ReplicatedPG::on_activate()
   }
 }
 
-void ReplicatedPG::on_change()
+void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 {
   dout(10) << "on_change" << dendl;
 
@@ -6364,6 +6380,16 @@ void ReplicatedPG::on_change()
   pushing.clear();
   pulling.clear();
   pull_from_peer.clear();
+
+  // clear temp
+  for (set<hobject_t>::iterator i = temp_contents.begin();
+       i != temp_contents.end();
+       ++i) {
+    dout(10) << __func__ << ": Removing oid "
+	     << *i << " from the temp collection" << dendl;
+    t->remove(get_temp_coll(t), *i);
+  }
+  temp_contents.clear();
 
   // clear snap_trimmer state
   snap_trimmer_machine.process_event(Reset());
@@ -7095,15 +7121,18 @@ void ReplicatedPG::scan_range(hobject_t begin, int min, int max, BackfillInterva
 }
 
 
-/** clean_up_local
- * remove any objects that we're storing but shouldn't.
- * as determined by log.
+/** check_local
+ *
+ * verifies that stray objects have been deleted
  */
-void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
+void ReplicatedPG::check_local()
 {
-  dout(10) << "clean_up_local" << dendl;
+  dout(10) << __func__ << dendl;
 
   assert(info.last_update >= log.tail);  // otherwise we need some help!
+
+  if (!g_conf->osd_debug_verify_stray_on_activate)
+    return;
 
   // just scan the log.
   set<hobject_t> did;
@@ -7115,11 +7144,17 @@ void ReplicatedPG::clean_up_local(ObjectStore::Transaction& t)
     did.insert(p->soid);
 
     if (p->is_delete()) {
-      dout(10) << " deleting " << p->soid
-	       << " when " << p->version << dendl;
-      remove_snap_mapped_object(t, p->soid);
+      dout(10) << " checking " << p->soid
+	       << " at " << p->version << dendl;
+      struct stat st;
+      int r = osd->store->stat(coll, p->soid, &st);
+      if (r != -ENOENT) {
+	dout(10) << "Object " << p->soid << " exists, but should have been "
+		 << "deleted" << dendl;
+	assert(0 == "erroneously present object");
+      }
     } else {
-      // keep old(+missing) objects, just for kicks.
+      // ignore old(+missing) objects
     }
   }
 }

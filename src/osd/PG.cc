@@ -560,13 +560,14 @@ void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
     }
     assert(p->version > newhead);
     dout(10) << "rewind_divergent_log future divergent " << *p << dendl;
-    log.unindex(*p);
   }
 
   log.head = newhead;
   info.last_update = newhead;
   if (info.last_complete > newhead)
     info.last_complete = newhead;
+
+  log.index();
 
   for (list<pg_log_entry_t>::iterator d = divergent.begin(); d != divergent.end(); ++d)
     merge_old_entry(t, *d);
@@ -1527,8 +1528,9 @@ void PG::activate(ObjectStore::Transaction& t,
   dirty_info = true;
   dirty_big_info = true; // maybe
 
-  // clean up stray objects
-  clean_up_local(t); 
+  // verify that there are no stray objects
+  if (is_primary())
+    check_local();
 
   // find out when we commit
   tfin.push_back(new C_PG_ActivateCommitted(this, query_epoch));
@@ -5013,7 +5015,8 @@ void PG::start_flush(ObjectStore::Transaction *t,
 /* Called before initializing peering during advance_map */
 void PG::start_peering_interval(const OSDMapRef lastmap,
 				const vector<int>& newup,
-				const vector<int>& newacting)
+				const vector<int>& newacting,
+				ObjectStore::Transaction *t)
 {
   const OSDMapRef osdmap = get_osdmap();
 
@@ -5102,7 +5105,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
 
     
   // pg->on_*
-  on_change();
+  on_change(t);
 
   assert(!deleting);
 
@@ -5903,11 +5906,6 @@ PG::RecoveryState::Started::Started(my_context ctx)
 {
   state_name = "Started";
   context< RecoveryMachine >().log_enter(state_name);
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->start_flush(
-    context< RecoveryMachine >().get_cur_transaction(),
-    context< RecoveryMachine >().get_on_applied_context_list(),
-    context< RecoveryMachine >().get_on_safe_context_list());
 }
 
 boost::statechart::result
@@ -5982,7 +5980,8 @@ boost::statechart::result PG::RecoveryState::Reset::react(const AdvMap& advmap)
     pg->is_split(advmap.lastmap, advmap.osdmap)) {
     dout(10) << "up or acting affected, calling start_peering_interval again"
 	     << dendl;
-    pg->start_peering_interval(advmap.lastmap, advmap.newup, advmap.newacting);
+    pg->start_peering_interval(advmap.lastmap, advmap.newup, advmap.newacting,
+			       context< RecoveryMachine >().get_cur_transaction());
   }
   return discard_event();
 }
@@ -6862,6 +6861,12 @@ PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx)
   state_name = "Started/ReplicaActive";
 
   context< RecoveryMachine >().log_enter(state_name);
+
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->start_flush(
+    context< RecoveryMachine >().get_cur_transaction(),
+    context< RecoveryMachine >().get_on_applied_context_list(),
+    context< RecoveryMachine >().get_on_safe_context_list());
 }
 
 
@@ -6951,6 +6956,11 @@ PG::RecoveryState::Stray::Stray(my_context ctx)
   assert(!pg->is_active());
   assert(!pg->is_peering());
   assert(!pg->is_primary());
+  if (!pg->is_replica()) // stray, need to flush for pulls
+    pg->start_flush(
+      context< RecoveryMachine >().get_cur_transaction(),
+      context< RecoveryMachine >().get_on_applied_context_list(),
+      context< RecoveryMachine >().get_on_safe_context_list());
 }
 
 boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
@@ -7298,6 +7308,10 @@ boost::statechart::result PG::RecoveryState::GetLog::react(const GotLog&)
 			msg->info, msg->log, msg->missing, 
 			newest_update_osd);
   }
+  pg->start_flush(
+    context< RecoveryMachine >().get_cur_transaction(),
+    context< RecoveryMachine >().get_on_applied_context_list(),
+    context< RecoveryMachine >().get_on_safe_context_list());
   return transit< GetMissing >();
 }
 

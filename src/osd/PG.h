@@ -834,7 +834,7 @@ public:
     return missing.num_missing() - missing_loc.size();
   }
 
-  virtual void clean_up_local(ObjectStore::Transaction& t) = 0;
+  virtual void check_local() = 0;
 
   virtual int start_recovery_ops(int max, RecoveryCtx *prctx) = 0;
 
@@ -1927,7 +1927,8 @@ public:
 
   void start_peering_interval(const OSDMapRef lastmap,
 			      const vector<int>& newup,
-			      const vector<int>& newacting);
+			      const vector<int>& newacting,
+			      ObjectStore::Transaction *t);
   void start_flush(ObjectStore::Transaction *t,
 		   list<Context *> *on_applied,
 		   list<Context *> *on_safe);
@@ -2009,7 +2010,7 @@ public:
   virtual bool same_for_rep_modify_since(epoch_t e) = 0;
 
   virtual void on_role_change() = 0;
-  virtual void on_change() = 0;
+  virtual void on_change(ObjectStore::Transaction *t) = 0;
   virtual void on_activate() = 0;
   virtual void on_flushed() = 0;
   virtual void on_shutdown() = 0;

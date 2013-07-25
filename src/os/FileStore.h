@@ -333,6 +333,8 @@ public:
   void _set_replay_guard(coll_t cid,
                          const SequencerPosition& spos,
                          bool in_progress);
+  void _set_global_replay_guard(coll_t cid,
+				const SequencerPosition &spos);
 
   /// close a replay guard opened with in_progress=true
   void _close_replay_guard(int fd, const SequencerPosition& spos);
@@ -357,6 +359,7 @@ public:
   int _check_replay_guard(int fd, const SequencerPosition& spos);
   int _check_replay_guard(coll_t cid, const SequencerPosition& spos);
   int _check_replay_guard(coll_t cid, hobject_t oid, const SequencerPosition& pos);
+  int _check_global_replay_guard(coll_t cid, const SequencerPosition& spos);
 
   // ------------------
   // objects

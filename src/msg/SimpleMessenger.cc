@@ -223,6 +223,8 @@ void SimpleMessenger::reaper()
     ldout(cct,10) << "reaper reaping pipe " << p << " " << p->get_peer_addr() << dendl;
     p->pipe_lock.Lock();
     p->discard_out_queue();
+    if (p->connection_state)
+      p->connection_state->clear_pipe(p);
     p->pipe_lock.Unlock();
     p->unregister_pipe();
     assert(pipes.count(p));
@@ -231,8 +233,6 @@ void SimpleMessenger::reaper()
     if (p->sd >= 0)
       ::close(p->sd);
     ldout(cct,10) << "reaper reaped pipe " << p << " " << p->get_peer_addr() << dendl;
-    if (p->connection_state)
-      p->connection_state->clear_pipe(p);
     p->put();
     ldout(cct,10) << "reaper deleted pipe " << p << dendl;
   }
@@ -271,9 +271,10 @@ int SimpleMessenger::bind(const entity_addr_t &bind_addr)
 int SimpleMessenger::rebind(int avoid_port)
 {
   ldout(cct,1) << "rebind avoid " << avoid_port << dendl;
-  mark_down_all();
   assert(did_bind);
-  return accepter.rebind(avoid_port);
+  int r = accepter.rebind(avoid_port);
+  mark_down_all();
+  return r;
 }
 
 int SimpleMessenger::start()
@@ -306,6 +307,7 @@ Pipe *SimpleMessenger::add_accept_pipe(int sd)
   p->start_reader();
   p->pipe_lock.Unlock();
   pipes.insert(p);
+  accepting_pipes.insert(p);
   lock.Unlock();
   return p;
 }
@@ -554,6 +556,17 @@ void SimpleMessenger::mark_down_all()
 {
   ldout(cct,1) << "mark_down_all" << dendl;
   lock.Lock();
+  for (set<Pipe*>::iterator q = accepting_pipes.begin(); q != accepting_pipes.end(); ++q) {
+    Pipe *p = *q;
+    ldout(cct,5) << "mark_down_all accepting_pipe " << p << dendl;
+    p->pipe_lock.Lock();
+    p->stop();
+    if (p->connection_state)
+      p->connection_state->clear_pipe(p);
+    p->pipe_lock.Unlock();
+  }
+  accepting_pipes.clear();
+
   while (!rank_pipe.empty()) {
     hash_map<entity_addr_t,Pipe*>::iterator it = rank_pipe.begin();
     Pipe *p = it->second;
@@ -562,6 +575,8 @@ void SimpleMessenger::mark_down_all()
     p->unregister_pipe();
     p->pipe_lock.Lock();
     p->stop();
+    if (p->connection_state)
+      p->connection_state->clear_pipe(p);
     p->pipe_lock.Unlock();
   }
   lock.Unlock();
@@ -576,6 +591,11 @@ void SimpleMessenger::mark_down(const entity_addr_t& addr)
     p->unregister_pipe();
     p->pipe_lock.Lock();
     p->stop();
+    if (p->connection_state) {
+      // do not generate a reset event for the caller in this case,
+      // since they asked for it.
+      p->connection_state->clear_pipe(p);
+    }
     p->pipe_lock.Unlock();
   } else {
     ldout(cct,1) << "mark_down " << addr << " -- pipe dne" << dendl;
@@ -595,6 +615,11 @@ void SimpleMessenger::mark_down(Connection *con)
     p->unregister_pipe();
     p->pipe_lock.Lock();
     p->stop();
+    if (p->connection_state) {
+      // do not generate a reset event for the caller in this case,
+      // since they asked for it.
+      p->connection_state->clear_pipe(p);
+    }
     p->pipe_lock.Unlock();
     p->put();
   } else {
