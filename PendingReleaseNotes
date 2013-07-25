@@ -1,3 +1,8 @@
 v0.67
 ~~~~~
 
+* ceph-osd now requires a max fd limit of at least
+  filestore_wbthrottle_(xfs|btrfs)_inodes_hard_limit (5000 by default)
+  in order to accomodate the new write back throttle system.  upstart
+  now sets the fd limit to 32k.  sysvinit will set it to 32k by default
+  (still overrideable via max_open_files).

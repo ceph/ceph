@@ -435,6 +435,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
 	f->dump_string("first", first);
 	f->dump_string("last", last);
       }
+      break;
 
     default:
       f->dump_string("op_name", "unknown");
