@@ -10,8 +10,6 @@ tasks:
      extras: yes
 - ssh_keys:
 - ceph-deploy:
-     branch:
-        stable: cuttlefish
 - ceph-fuse:
 - workunit:
      clients:
