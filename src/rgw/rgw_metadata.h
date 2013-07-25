@@ -102,7 +102,7 @@ public:
 
     bool done;
 
-    LogListCtx() : done(false) {}
+    LogListCtx() : cur_shard(0), done(false) {}
   };
 
   void init_list_entries(int shard_id, utime_t& from_time, utime_t& end_time, string& marker, void **handle);
