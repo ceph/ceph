@@ -330,7 +330,8 @@ int RGWMetadataManager::get(string& metadata_key, Formatter *f)
 }
 
 int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
-                            RGWMetadataHandler::sync_type_t sync_type)
+                            RGWMetadataHandler::sync_type_t sync_type,
+                            obj_version *existing_version)
 {
   RGWMetadataHandler *handler;
   string entry;
@@ -359,7 +360,11 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
     return -EINVAL;
   }
 
-  return handler->put(store, entry, objv_tracker, mtime, jo, sync_type);
+  ret = handler->put(store, entry, objv_tracker, mtime, jo, sync_type);
+  if (existing_version) {
+    *existing_version = objv_tracker.read_version;
+  }
+  return ret;
 }
 
 int RGWMetadataManager::remove(string& metadata_key)

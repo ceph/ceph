@@ -196,7 +196,8 @@ public:
                 RGWObjVersionTracker *objv_tracker);
   int get(string& metadata_key, Formatter *f);
   int put(string& metadata_key, bufferlist& bl,
-          RGWMetadataHandler::sync_type_t sync_mode);
+          RGWMetadataHandler::sync_type_t sync_mode,
+          obj_version *existing_version = NULL);
   int remove(string& metadata_key);
 
   int list_keys_init(string& section, void **phandle);
