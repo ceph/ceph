@@ -505,14 +505,14 @@ int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section,
   /* if write version has not been set, and there's a read version, set it so that we can
    * log it
    */
-  if (objv_tracker && objv_tracker->read_version.ver &&
-      !objv_tracker->write_version.ver) {
-    objv_tracker->write_version = objv_tracker->read_version;
-    objv_tracker->write_version.ver++;
+  if (objv_tracker) {
+    if (objv_tracker->read_version.ver && !objv_tracker->write_version.ver) {
+      objv_tracker->write_version = objv_tracker->read_version;
+      objv_tracker->write_version.ver++;
+    }
+    log_data.read_version = objv_tracker->read_version;
+    log_data.write_version = objv_tracker->write_version;
   }
-
-  log_data.read_version = objv_tracker->read_version;
-  log_data.write_version = objv_tracker->write_version;
 
   log_data.status = op_type;
 

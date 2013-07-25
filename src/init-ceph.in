@@ -241,7 +241,7 @@ for name in $what; do
     case "$command" in
 	start)
             # Increase max_open_files, if the configuration calls for it.
-            get_conf max_open_files "8192" "max open files"
+            get_conf max_open_files "32768" "max open files"
 
             # build final command
 	    wrap=""
