@@ -4546,6 +4546,13 @@ void RGWRados::get_bucket_meta_oid(rgw_bucket& bucket, string& oid)
   oid = RGW_BUCKET_INSTANCE_MD_PREFIX + entry;
 }
 
+void RGWRados::get_bucket_instance_obj(rgw_bucket& bucket, rgw_obj& obj)
+{
+  string oid;
+  get_bucket_meta_oid(bucket, oid);
+  obj.init(zone.domain_root, oid);
+}
+
 int RGWRados::get_bucket_instance_info(void *ctx, const string& meta_key, RGWBucketInfo& info,
                                        time_t *pmtime, map<string, bufferlist> *pattrs)
 {
