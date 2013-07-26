@@ -182,7 +182,7 @@ class FilesystemTypeError(Error):
 
 def maybe_mkdir(*a, **kw):
     """
-    Creates a new directory if it doesn't exist, removes 
+    Creates a new directory if it doesn't exist, removes
     existing symlink before creating the directory.
     """
     # remove any symlink, if it is there..
@@ -495,7 +495,7 @@ def _check_output(*args, **kwargs):
 
 def get_conf(cluster, variable):
     """
-    Get the value of the given configuration variable from the 
+    Get the value of the given configuration variable from the
     cluster.
 
     :raises: Error if call to ceph-conf fails.
@@ -654,7 +654,7 @@ def mount(
     options,
     ):
     """
-    Mounts a device with given filessystem type and 
+    Mounts a device with given filessystem type and
     mount options to a tempfile path under /var/lib/ceph/tmp.
     """
     # pick best-of-breed mount options based on fs type
@@ -1307,18 +1307,37 @@ def auth_key(
     osd_id,
     keyring,
     ):
-    subprocess.check_call(
-        args=[
-            '/usr/bin/ceph',
-            '--cluster', cluster,
-            '--name', 'client.bootstrap-osd',
-            '--keyring', keyring,
-            'auth', 'add', 'osd.{osd_id}'.format(osd_id=osd_id),
-            '-i', os.path.join(path, 'keyring'),
-            'osd', 'allow *',
-            'mon', 'allow rwx',
-            ],
-        )
+    try:
+        # try dumpling+ cap scheme
+        subprocess.check_call(
+            args=[
+                '/usr/bin/ceph',
+                '--cluster', cluster,
+                '--name', 'client.bootstrap-osd',
+                '--keyring', keyring,
+                'auth', 'add', 'osd.{osd_id}'.format(osd_id=osd_id),
+                '-i', os.path.join(path, 'keyring'),
+                'osd', 'allow *',
+                'mon', 'allow profile osd',
+                ],
+            )
+    except subprocess.CalledProcessError as err:
+        if err.errno == errno.EACCES:
+            # try old cap scheme
+            subprocess.check_call(
+                args=[
+                    '/usr/bin/ceph',
+                    '--cluster', cluster,
+                    '--name', 'client.bootstrap-osd',
+                    '--keyring', keyring,
+                    'auth', 'add', 'osd.{osd_id}'.format(osd_id=osd_id),
+                    '-i', os.path.join(path, 'keyring'),
+                    'osd', 'allow *',
+                    'mon', 'allow rwx',
+                ],
+                )
+        else:
+            raise
 
 
 def move_mount(
@@ -1698,7 +1717,7 @@ def main_activate(args):
                 )
         else:
             raise Error('%s is not a directory or block device', args.path)
-    
+
         start_daemon(
             cluster=cluster,
             osd_id=osd_id,
@@ -1951,7 +1970,7 @@ def list_dev(dev, uuid_map, journal_map):
 
     print '%s%s %s' % (prefix, dev, ', '.join(desc))
 
-    
+
 
 def main_list(args):
     partmap = list_all_partitions()

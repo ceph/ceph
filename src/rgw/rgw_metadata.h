@@ -44,14 +44,30 @@ class RGWMetadataManager;
 class RGWMetadataHandler {
   friend class RGWMetadataManager;
 
-protected:
-  virtual void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) = 0;
 public:
+  enum sync_type_t {
+    APPLY_ALWAYS,
+    APPLY_UPDATES,
+    APPLY_NEWER
+  };
+  static bool string_to_sync_type(const string& sync_string,
+                                  sync_type_t& type) {
+    if (sync_string.compare("update-by-version") == 0)
+      type = APPLY_UPDATES;
+    else if (sync_string.compare("update-by-timestamp") == 0)
+      type = APPLY_NEWER;
+    else if (sync_string.compare("always") == 0)
+      type = APPLY_ALWAYS;
+    else
+      return false;
+    return true;
+  }
   virtual ~RGWMetadataHandler() {}
   virtual string get_type() = 0;
 
   virtual int get(RGWRados *store, string& entry, RGWMetadataObject **obj) = 0;
-  virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, time_t mtime, JSONObj *obj) = 0;
+  virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
+                  time_t mtime, JSONObj *obj, sync_type_t type) = 0;
   virtual int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) = 0;
 
   virtual int list_keys_init(RGWRados *store, void **phandle) = 0;
@@ -61,6 +77,33 @@ public:
   /* key to use for hashing entries for log shard placement */
   virtual void get_hash_key(const string& section, const string& key, string& hash_key) {
     hash_key = section + ":" + key;
+  }
+
+protected:
+  virtual void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) = 0;
+  /**
+   * Compare an incoming versus on-disk tag/version+mtime combo against
+   * the sync mode to see if the new one should replace the on-disk one.
+   *
+   * @return true if the update should proceed, false otherwise.
+   */
+  bool check_versions(const obj_version& ondisk, const time_t& ondisk_time,
+                      const obj_version& incoming, const time_t& incoming_time,
+                      sync_type_t sync_mode) {
+    switch (sync_mode) {
+    case APPLY_UPDATES:
+      if ((ondisk.tag != incoming.tag) ||
+	  (ondisk.ver >= incoming.ver))
+	return false;
+      break;
+    case APPLY_NEWER:
+      if (ondisk_time >= incoming_time)
+	return false;
+      break;
+    case APPLY_ALWAYS: //deliberate fall-thru -- we always apply!
+    default: break;
+    }
+    return true;
   }
 };
 
@@ -86,9 +129,7 @@ class RGWMetadataLog {
   }
 
 public:
-  RGWMetadataLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store) {
-    prefix = META_LOG_OBJ_PREFIX;
-  }
+  RGWMetadataLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), prefix(META_LOG_OBJ_PREFIX) {}
 
   int add_entry(RGWRados *store, RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl);
 
@@ -152,7 +193,9 @@ public:
                 map<string, bufferlist>* rmattrs,
                 RGWObjVersionTracker *objv_tracker);
   int get(string& metadata_key, Formatter *f);
-  int put(string& metadata_key, bufferlist& bl);
+  int put(string& metadata_key, bufferlist& bl,
+          RGWMetadataHandler::sync_type_t sync_mode,
+          obj_version *existing_version = NULL);
   int remove(string& metadata_key);
 
   int list_keys_init(string& section, void **phandle);

@@ -2295,22 +2295,29 @@ public:
     return 0;
   }
 
-  int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, time_t mtime, JSONObj *obj) {
+  int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
+          time_t mtime, JSONObj *obj, sync_type_t sync_mode) {
     RGWUserInfo info;
 
     decode_json_obj(info, obj);
 
     RGWUserInfo old_info;
-    int ret = rgw_get_user_info_by_uid(store, entry, old_info, &objv_tracker);
+    time_t orig_mtime;
+    int ret = rgw_get_user_info_by_uid(store, entry, old_info, &objv_tracker, &orig_mtime);
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
+    // are we actually going to perform this put, or is it too old?
+    if (!check_versions(objv_tracker.read_version, orig_mtime,
+			objv_tracker.write_version, mtime, sync_mode)) {
+      return STATUS_NO_APPLY;
+    }
 
     ret = rgw_store_user_info(store, info, &old_info, &objv_tracker, mtime, false);
     if (ret < 0)
       return ret;
 
-    return 0;
+    return STATUS_APPLIED;
   }
 
   struct list_keys_info {

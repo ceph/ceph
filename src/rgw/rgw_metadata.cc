@@ -194,7 +194,8 @@ public:
   virtual string get_type() { return string(); }
 
   virtual int get(RGWRados *store, string& entry, RGWMetadataObject **obj) { return -ENOTSUP; }
-  virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, time_t mtime, JSONObj *obj) { return -ENOTSUP; }
+  virtual int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
+                  time_t mtime, JSONObj *obj, sync_type_t sync_type) { return -ENOTSUP; }
 
   virtual void get_pool_and_oid(RGWRados *store, const string& key, rgw_bucket& bucket, string& oid) {}
 
@@ -242,6 +243,7 @@ RGWMetadataManager::~RGWMetadataManager()
   }
 
   handlers.clear();
+  delete md_log;
 }
 
 int RGWMetadataManager::register_handler(RGWMetadataHandler *handler)
@@ -328,7 +330,9 @@ int RGWMetadataManager::get(string& metadata_key, Formatter *f)
   return 0;
 }
 
-int RGWMetadataManager::put(string& metadata_key, bufferlist& bl)
+int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
+                            RGWMetadataHandler::sync_type_t sync_type,
+                            obj_version *existing_version)
 {
   RGWMetadataHandler *handler;
   string entry;
@@ -357,7 +361,11 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl)
     return -EINVAL;
   }
 
-  return handler->put(store, entry, objv_tracker, mtime, jo);
+  ret = handler->put(store, entry, objv_tracker, mtime, jo, sync_type);
+  if (existing_version) {
+    *existing_version = objv_tracker.read_version;
+  }
+  return ret;
 }
 
 int RGWMetadataManager::remove(string& metadata_key)

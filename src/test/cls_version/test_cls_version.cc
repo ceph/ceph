@@ -270,14 +270,17 @@ TEST(cls_rgw, test_version_inc_check)
   bufferlist bl;
   ASSERT_EQ(0, ioctx.operate(oid, rop, &bl));
 
+  delete rop;
   rop = new_rop();
   cls_version_check(*rop, cond_ver, VER_COND_GE);
   ASSERT_EQ(0, ioctx.operate(oid, rop, &bl));
 
+  delete rop;
   rop = new_rop();
   cls_version_check(*rop, cond_ver, VER_COND_LE);
   ASSERT_EQ(0, ioctx.operate(oid, rop, &bl));
 
+  delete rop;
   rop = new_rop();
   cls_version_check(*rop, cond_ver, VER_COND_TAG_EQ);
   ASSERT_EQ(0, ioctx.operate(oid, rop, &bl));
@@ -296,14 +299,17 @@ TEST(cls_rgw, test_version_inc_check)
   delete op;
 
   /* a bunch of conditions that should fail */
+  delete rop;
   rop = new_rop();
   cls_version_check(*rop, ver, VER_COND_LT);
   ASSERT_EQ(-ECANCELED, ioctx.operate(oid, rop, &bl));
 
+  delete rop;
   rop = new_rop();
   cls_version_check(*rop, cond_ver, VER_COND_LE);
   ASSERT_EQ(-ECANCELED, ioctx.operate(oid, rop, &bl));
 
+  delete rop;
   rop = new_rop();
   cls_version_check(*rop, cond_ver, VER_COND_TAG_NE);
   ASSERT_EQ(-ECANCELED, ioctx.operate(oid, rop, &bl));
