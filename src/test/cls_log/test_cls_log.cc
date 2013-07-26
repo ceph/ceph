@@ -118,14 +118,10 @@ TEST(cls_rgw, test_log_add_same_time)
   /* add chains */
   string oid = "obj";
 
-
   /* create object */
-
   ASSERT_EQ(0, ioctx.create(oid, true));
 
-
   /* generate log */
-
   utime_t start_time = ceph_clock_now(g_ceph_context);
   generate_log(ioctx, oid, 10, start_time, false);
 
@@ -206,14 +202,10 @@ TEST(cls_rgw, test_log_add_different_time)
   /* add chains */
   string oid = "obj";
 
-
   /* create object */
-
   ASSERT_EQ(0, ioctx.create(oid, true));
 
-
   /* generate log */
-
   utime_t start_time = ceph_clock_now(g_ceph_context);
   generate_log(ioctx, oid, 10, start_time, true);
 
@@ -227,7 +219,6 @@ TEST(cls_rgw, test_log_add_different_time)
   string marker;
 
   /* check list */
-
   cls_log_list(*rop, start_time, to_time, marker, 0, entries, &marker, &truncated);
 
   bufferlist obl;
@@ -258,7 +249,6 @@ TEST(cls_rgw, test_log_add_different_time)
   reset_rop(&rop);
 
   /* check list again with shifted time */
-
   utime_t next_time = get_time(start_time, 1, true);
 
   marker.clear();
@@ -289,7 +279,7 @@ TEST(cls_rgw, test_log_add_different_time)
   } while (truncated);
 
   ASSERT_EQ(10, i);
-
+  delete rop;
 }
 
 TEST(cls_rgw, test_log_trim)
@@ -305,14 +295,10 @@ TEST(cls_rgw, test_log_trim)
   /* add chains */
   string oid = "obj";
 
-
   /* create object */
-
   ASSERT_EQ(0, ioctx.create(oid, true));
 
-
   /* generate log */
-
   utime_t start_time = ceph_clock_now(g_ceph_context);
   generate_log(ioctx, oid, 10, start_time, true);
 
@@ -344,4 +330,5 @@ TEST(cls_rgw, test_log_trim)
     ASSERT_EQ(9 - i, (int)entries.size());
     ASSERT_EQ(0, (int)truncated);
   }
+  delete rop;
 }
