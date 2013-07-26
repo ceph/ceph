@@ -323,7 +323,7 @@ def make_response(fmt, output, statusmsg, errorcode):
   </status>
 </response>'''.format(response, xml.sax.saxutils.escape(statusmsg))
     else:
-        if 200 <= errorcode < 300:
+        if not 200 <= errorcode < 300:
             response = response + '\n' + statusmsg + '\n'
 
     return flask.make_response(response, errorcode)
