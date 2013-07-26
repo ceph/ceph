@@ -545,7 +545,7 @@ def create_if_vm(ctx, machine_name):
         return False
     from teuthology.misc import get_distro
     os_type = get_distro(ctx)
-    os_version = dict(
+    default_os_version = dict(
         ubuntu="12.04",
         fedora="18",
         centos="6.4",
@@ -569,7 +569,7 @@ def create_if_vm(ctx, machine_name):
         file_info['networks'] = lcnfg.get('networks',
                 [{'source' : 'front', 'mac' : status_info['mac']}])
         file_info['distro'] = distro
-        file_info['distroversion'] = os_version[distro]
+        file_info['distroversion'] = ctx.config.get('os_version', default_os_version[distro])
         file_info['additional-disks'] = lcnfg.get(
                 'additional-disks', 3)
         file_info['additional-disks-size'] = lcnfg.get(
