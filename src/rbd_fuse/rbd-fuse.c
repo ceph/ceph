@@ -94,7 +94,7 @@ enumerate_images(struct rbd_image **head)
 	actual_len = rbd_list(ioctx, ibuf, &ibuf_len);
 	if (actual_len < 0) {
 		simple_err("rbd_list: error %d\n", actual_len);
-		return;
+		goto out;
 	}
 
 	fprintf(stderr, "pool %s: ", pool_name);
@@ -107,6 +107,8 @@ enumerate_images(struct rbd_image **head)
 		*head = im;
 	}
 	fprintf(stderr, "\n");
+out:
+	free(ibuf);
 	return;
 }
 
