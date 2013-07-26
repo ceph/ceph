@@ -3,13 +3,13 @@
 
 import collections
 import ConfigParser
+import contextlib
 import errno
 import json
 import logging
 import logging.handlers
 import os
 import rados
-import socket
 import textwrap
 import xml.etree.ElementTree
 import xml.sax.saxutils
@@ -21,13 +21,13 @@ from ceph_argparse import *
 # Globals
 #
 
-APPNAME = '__main__'
 DEFAULT_BASEURL = '/api/v0.1'
 DEFAULT_ADDR = '0.0.0.0:5000'
 DEFAULT_LOG_LEVEL = 'warning'
 DEFAULT_CLIENTNAME = 'client.restapi'
 DEFAULT_LOG_FILE = '/var/log/ceph/' + DEFAULT_CLIENTNAME + '.log'
 
+APPNAME = '__main__'
 app = flask.Flask(APPNAME)
 
 LOGLEVELS = {
@@ -38,7 +38,9 @@ LOGLEVELS = {
     'debug':logging.DEBUG,
 }
 
-# my globals, in a named tuple for usage clarity
+# my globals, in a named tuple for usage clarity.  I promise
+# these are never written once initialized, and are global
+# to every thread.
 
 glob = collections.namedtuple('gvars', 'cluster urls sigdict baseurl')
 glob.cluster = None
@@ -47,8 +49,15 @@ glob.sigdict = {}
 glob.baseurl = ''
 
 def load_conf(clustername='ceph', conffile=None):
-    import contextlib
+    '''
+    Load the ceph conf file using ConfigParser.  Use the standard
+    fallback order:
 
+    1) the passed in arg (from CEPH_CONF)
+    2) /etc/ceph/{cluster}.conf
+    3) ~/.ceph/{cluster}.conf
+    4) {cluster}.conf
+    '''
 
     class _TrimIndentFile(object):
         def __init__(self, fp):
@@ -93,6 +102,10 @@ def load_conf(clustername='ceph', conffile=None):
     raise EnvironmentError('No conf file found for "{0}"'.format(clustername))
 
 def get_conf(cfg, clientname, key):
+    '''
+    Get config entry from conf file, first in [clientname], then [client],
+    then [global].
+    '''
     fullkey = 'restapi_' + key
     for sectionname in clientname, 'client', 'global':
         try:
@@ -100,8 +113,6 @@ def get_conf(cfg, clientname, key):
         except (ConfigParser.NoOptionError, ConfigParser.NoSectionError):
             pass
     return None
-
-METHOD_DICT = {'r':['GET'], 'w':['PUT', 'DELETE']}
 
 def find_up_osd():
     '''
@@ -121,16 +132,19 @@ def find_up_osd():
         raise EnvironmentError(errno.ENOENT, 'No up OSDs found')
     return int(osds[-1])
 
-# XXX this is done globally, and cluster connection kept open; there
-# are facilities to pass around global info to requests and to
-# tear down connections between requests if it becomes important
+
+METHOD_DICT = {'r':['GET'], 'w':['PUT', 'DELETE']}
 
 def api_setup():
-    """
+    '''
+    This is done globally, and cluster connection kept open for
+    the lifetime of the daemon.  librados should assure that even
+    if the cluster goes away and comes back, our connection remains.
+
     Initialize the running instance.  Open the cluster, get the command
     signatures, module, perms, and help; stuff them away in the glob.urls
-    dict.
-    """
+    dict.  Also save glob.sigdict for help() handling.
+    '''
     def get_command_descriptions(target=('mon','')):
         ret, outbuf, outs = json_command(glob.cluster, target,
                                          prefix='get_command_descriptions',
@@ -253,11 +267,11 @@ def api_setup():
 
 
 def generate_url_and_params(sig, flavor):
-    """
+    '''
     Digest command signature from cluster; generate an absolute
     (including glob.baseurl) endpoint from all the prefix words,
     and a list of non-prefix param descs
-    """
+    '''
 
     url = ''
     params = []
@@ -292,10 +306,15 @@ def generate_url_and_params(sig, flavor):
 
     return glob.baseurl + url, params
 
+
+#
+# end setup (import-time) functions, begin request-time functions
+#
+
 def concise_sig_for_uri(sig, flavor):
-    """
+    '''
     Return a generic description of how one would send a REST request for sig
-    """
+    '''
     prefix = []
     args = []
     ret = ''
@@ -312,9 +331,9 @@ def concise_sig_for_uri(sig, flavor):
     return ret
 
 def show_human_help(prefix):
-    """
+    '''
     Dump table showing commands matching prefix
-    """
+    '''
     # XXX There ought to be a better discovery mechanism than an HTML table
     s = '<html><body><table border=1><th>Possible commands:</th><th>Method</th><th>Description</th>'
 
@@ -347,23 +366,22 @@ def show_human_help(prefix):
 
 @app.before_request
 def log_request():
-    """
+    '''
     For every request, log it.  XXX Probably overkill for production
-    """
+    '''
     app.logger.info(flask.request.url + " from " + flask.request.remote_addr + " " + flask.request.user_agent.string)
     app.logger.debug("Accept: %s", flask.request.accept_mimetypes.values())
-
 
 @app.route('/')
 def root_redir():
     return flask.redirect(glob.baseurl)
 
 def make_response(fmt, output, statusmsg, errorcode):
-    """
+    '''
     If formatted output, cobble up a response object that contains the
     output and status wrapped in enclosing objects; if nonformatted, just
-    use output.  Return HTTP status errorcode in any event.
-    """
+    use output+status.  Return HTTP status errorcode in any event.
+    '''
     response = output
     if fmt:
         if 'json' in fmt:
@@ -375,6 +393,7 @@ def make_response(fmt, output, statusmsg, errorcode):
                 return flask.make_response("Error decoding JSON from " +
                                            output, 500)
         elif 'xml' in fmt:
+            # XXX
             # one is tempted to do this with xml.etree, but figuring out how
             # to 'un-XML' the XML-dumped output so it can be reassembled into
             # a piece of the tree here is beyond me right now.
@@ -401,9 +420,12 @@ def make_response(fmt, output, statusmsg, errorcode):
     return flask.make_response(response, errorcode)
 
 def handler(catchall_path=None, fmt=None, target=None):
-    """
-    Main endpoint handler; generic for every endpoint
-    """
+    '''
+    Main endpoint handler; generic for every endpoint, including catchall.
+    Handles the catchall, anything with <.fmt>, anything with embedded
+    <target>.  Partial match or ?help cause the HTML-table
+    "show_human_help" output.  
+    '''
 
     ep = catchall_path or flask.request.endpoint
     ep = ep.replace('.<fmt>', '')
@@ -424,7 +446,6 @@ def handler(catchall_path=None, fmt=None, target=None):
         elif 'application/xml' in flask.request.accept_mimetypes.values():
             fmt = 'xml'
 
-    valid = True
     prefix = ''
     pgid = None
     cmdtarget = 'mon', ''
@@ -530,4 +551,7 @@ def handler(catchall_path=None, fmt=None, target=None):
     response.headers['Content-Type'] = contenttype
     return response
 
+#
+# Last module-level (import-time) ask: set up the cluster connection
+# 
 addr, port = api_setup()
