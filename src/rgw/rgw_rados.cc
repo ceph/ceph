@@ -4548,9 +4548,13 @@ void RGWRados::get_bucket_meta_oid(rgw_bucket& bucket, string& oid)
 
 void RGWRados::get_bucket_instance_obj(rgw_bucket& bucket, rgw_obj& obj)
 {
-  string oid;
-  get_bucket_meta_oid(bucket, oid);
-  obj.init(zone.domain_root, oid);
+  if (!bucket.oid.empty()) {
+    obj.init(zone.domain_root, bucket.oid);
+  } else {
+    string oid;
+    get_bucket_meta_oid(bucket, oid);
+    obj.init(zone.domain_root, oid);
+  }
 }
 
 int RGWRados::get_bucket_instance_info(void *ctx, const string& meta_key, RGWBucketInfo& info,
@@ -4569,7 +4573,11 @@ int RGWRados::get_bucket_instance_info(void *ctx, rgw_bucket& bucket, RGWBucketI
                                        time_t *pmtime, map<string, bufferlist> *pattrs)
 {
   string oid;
-  get_bucket_meta_oid(bucket, oid);
+  if (!bucket.oid.empty()) {
+    get_bucket_meta_oid(bucket, oid);
+  } else {
+    oid = bucket.oid;
+  }
 
   return get_bucket_instance_from_oid(ctx, oid, info, pmtime, pattrs);
 }
@@ -4593,6 +4601,7 @@ int RGWRados::get_bucket_instance_from_oid(void *ctx, string& oid, RGWBucketInfo
     ldout(cct, 0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
     return -EIO;
   }
+  info.bucket.oid = oid;
   return 0;
 }
 
@@ -4635,6 +4644,7 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
 
   if (entry_point.has_bucket_info) {
     info = entry_point.old_bucket_info;
+    info.bucket.oid = bucket_name;
     info.ep_objv = ot.read_version;
     ldout(cct, 20) << "rgw_get_bucket_info: old bucket info, bucket=" << info.bucket << " owner " << info.owner << dendl;
     return 0;
