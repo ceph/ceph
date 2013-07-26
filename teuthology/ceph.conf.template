@@ -37,7 +37,6 @@
         mds debug frag = true
 
 [client]
-        rgw socket path = {testdir}/apache/tmp/fastcgi_sock/rgw_sock
         rgw cache enabled = true
 	rgw enable ops log = true
 	rgw enable usage log = true

@@ -101,7 +101,8 @@ def ship_config(ctx, config, role_endpoints):
                                                                  client=client),
             data="""#!/bin/sh
 ulimit -c unlimited
-exec radosgw -f -n {client}
+exec radosgw -f -n {client} --rgw-socket-path {tdir}/apache/tmp.{client}/fastcgi_sock/rgw_sock
+
 """.format(tdir=testdir, client=client)
             )
         remote.run(
