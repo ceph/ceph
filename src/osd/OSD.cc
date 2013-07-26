@@ -1165,6 +1165,7 @@ int OSD::init()
 
   class_handler = new ClassHandler();
   cls_initialize(class_handler);
+  class_handler->open_all_classes();
 
   // load up "current" osdmap
   assert_warn(!osdmap);
