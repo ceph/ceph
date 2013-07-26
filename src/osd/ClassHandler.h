@@ -78,6 +78,8 @@ private:
 public:
   ClassHandler() : mutex("ClassHandler") {}
   
+  int open_all_classes();
+
   int open_class(const string& cname, ClassData **pcls);
   
   ClassData *register_class(const char *cname);

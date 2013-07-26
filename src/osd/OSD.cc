@@ -291,11 +291,13 @@ void OSDService::init_splits_between(pg_t pgid,
     // Ok, a split happened, so we need to walk the osdmaps
     set<pg_t> new_pgs; // pgs to scan on each map
     new_pgs.insert(pgid);
+    OSDMapRef curmap(get_map(frommap->get_epoch()));
     for (epoch_t e = frommap->get_epoch() + 1;
 	 e <= tomap->get_epoch();
 	 ++e) {
-      OSDMapRef curmap(get_map(e-1));
-      OSDMapRef nextmap(get_map(e));
+      OSDMapRef nextmap(try_get_map(e));
+      if (!nextmap)
+	continue;
       set<pg_t> even_newer_pgs; // pgs added in this loop
       for (set<pg_t>::iterator i = new_pgs.begin(); i != new_pgs.end(); ++i) {
 	set<pg_t> split_pgs;
@@ -307,7 +309,9 @@ void OSDService::init_splits_between(pg_t pgid,
 	}
       }
       new_pgs.insert(even_newer_pgs.begin(), even_newer_pgs.end());
+      curmap = nextmap;
     }
+    assert(curmap == tomap); // we must have had both frommap and tomap
   }
 }
 
@@ -1161,6 +1165,9 @@ int OSD::init()
 
   class_handler = new ClassHandler();
   cls_initialize(class_handler);
+
+  if (g_conf->osd_open_classes_on_start)
+    class_handler->open_all_classes();
 
   // load up "current" osdmap
   assert_warn(!osdmap);
@@ -5177,7 +5184,9 @@ void OSD::advance_pg(
   for (;
        next_epoch <= osd_epoch;
        ++next_epoch) {
-    OSDMapRef nextmap = get_map(next_epoch);
+    OSDMapRef nextmap = service.try_get_map(next_epoch);
+    if (!nextmap)
+      continue;
 
     vector<int> newup, newacting;
     nextmap->pg_to_up_acting_osds(pg->info.pgid, newup, newacting);
@@ -5511,7 +5520,7 @@ OSDMapRef OSDService::_add_map(OSDMap *o)
   return l;
 }
 
-OSDMapRef OSDService::get_map(epoch_t epoch)
+OSDMapRef OSDService::try_get_map(epoch_t epoch)
 {
   Mutex::Locker l(map_cache_lock);
   OSDMapRef retval = map_cache.lookup(epoch);
@@ -5524,7 +5533,10 @@ OSDMapRef OSDService::get_map(epoch_t epoch)
   if (epoch > 0) {
     dout(20) << "get_map " << epoch << " - loading and decoding " << map << dendl;
     bufferlist bl;
-    assert(_get_map_bl(epoch, bl));
+    if (!_get_map_bl(epoch, bl)) {
+      delete map;
+      return OSDMapRef();
+    }
     map->decode(bl);
   } else {
     dout(20) << "get_map " << epoch << " - return initial " << map << dendl;

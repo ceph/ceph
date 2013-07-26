@@ -18,6 +18,11 @@
 #undef dout_prefix
 #define dout_prefix *_dout
 
+
+#define CLS_PREFIX "libcls_"
+#define CLS_SUFFIX ".so"
+
+
 int ClassHandler::open_class(const string& cname, ClassData **pcls)
 {
   Mutex::Locker lock(mutex);
@@ -31,11 +36,43 @@ int ClassHandler::open_class(const string& cname, ClassData **pcls)
   return 0;
 }
 
+int ClassHandler::open_all_classes()
+{
+  dout(10) << __func__ << dendl;
+  DIR *dir = ::opendir(g_conf->osd_class_dir.c_str());
+  if (!dir)
+    return -errno;
+
+  char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
+  struct dirent *pde;
+  int r = 0;
+  while ((r = ::readdir_r(dir, (dirent *)&buf, &pde)) == 0 && pde) {
+    if (pde->d_name[0] == '.')
+      continue;
+    if (strlen(pde->d_name) > sizeof(CLS_PREFIX) - 1 + sizeof(CLS_SUFFIX) - 1 &&
+	strncmp(pde->d_name, CLS_PREFIX, sizeof(CLS_PREFIX) - 1) == 0 &&
+	strcmp(pde->d_name + strlen(pde->d_name) - (sizeof(CLS_SUFFIX) - 1), CLS_SUFFIX) == 0) {
+      char cname[strlen(pde->d_name)];
+      strcpy(cname, pde->d_name + sizeof(CLS_PREFIX) - 1);
+      cname[strlen(cname) - (sizeof(CLS_SUFFIX) - 1)] = '\0';
+      dout(10) << __func__ << " found " << cname << dendl;
+      ClassData *cls;
+      r = open_class(cname, &cls);
+      if (r < 0)
+	goto out;
+    }
+  }
+ out:
+  closedir(dir);
+  return r;
+}
+
 void ClassHandler::shutdown()
 {
   for (map<string, ClassData>::iterator p = classes.begin(); p != classes.end(); ++p) {
     dlclose(p->second.handle);
   }
+  classes.clear();
 }
 
 ClassHandler::ClassData *ClassHandler::_get_class(const string& cname)
@@ -63,7 +100,7 @@ int ClassHandler::_load_class(ClassData *cls)
   if (cls->status == ClassData::CLASS_UNKNOWN ||
       cls->status == ClassData::CLASS_MISSING) {
     char fname[PATH_MAX];
-    snprintf(fname, sizeof(fname), "%s/libcls_%s.so",
+    snprintf(fname, sizeof(fname), "%s/" CLS_PREFIX "%s" CLS_SUFFIX,
 	     g_conf->osd_class_dir.c_str(),
 	     cls->name.c_str());
     dout(10) << "_load_class " << cls->name << " from " << fname << dendl;
