@@ -1090,7 +1090,9 @@ int OSD::init()
 
   class_handler = new ClassHandler();
   cls_initialize(class_handler);
-  class_handler->open_all_classes();
+
+  if (g_conf->osd_open_classes_on_start)
+    class_handler->open_all_classes();
 
   // load up "current" osdmap
   assert_warn(!osdmap);
