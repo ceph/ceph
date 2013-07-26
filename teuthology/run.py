@@ -63,6 +63,11 @@ def parse_args():
         help='Type of machine to lock/run tests on.',
         )
     parser.add_argument(
+        '--os-type',
+        default='ubuntu',
+        help='Distro/OS of machine to run test on.',
+        )
+    parser.add_argument(
         '--block',
         action='store_true',
         default=False,
@@ -166,7 +171,10 @@ def main():
             {'internal.vm_setup': None},
             ])
     if 'kernel' in ctx.config:
-        init_tasks.append({'kernel': ctx.config['kernel']})
+        from teuthology.misc import get_distro
+        distro = get_distro(ctx)
+        if distro == 'ubuntu':
+            init_tasks.append({'kernel': ctx.config['kernel']})
     init_tasks.extend([
             {'internal.base': None},
             {'internal.archive': None},

@@ -81,12 +81,12 @@ def execute(client, args):
         )
     return r
 
-def copy_to_log(f, logger, loglevel=logging.INFO):
+def copy_to_log(f, logger, host, loglevel=logging.INFO):
     # i can't seem to get fudge to fake an iterable, so using this old
     # api for now
     for line in f.xreadlines():
         line = line.rstrip()
-        logger.log(loglevel, line)
+        logger.log(loglevel, '[' + host + ']: ' + line)
 
 def copy_and_close(src, fdst):
     if src is not None:
@@ -95,14 +95,15 @@ def copy_and_close(src, fdst):
         shutil.copyfileobj(src, fdst)
     fdst.close()
 
-def copy_file_to(f, dst):
+def copy_file_to(f, dst, host):
     if hasattr(dst, 'log'):
         # looks like a Logger to me; not using isinstance to make life
         # easier for unit tests
         handler = copy_to_log
+        return handler(f, dst, host)
     else:
         handler = shutil.copyfileobj
-    return handler(f, dst)
+        return handler(f, dst)
 
 
 class CommandFailedError(Exception):
@@ -217,12 +218,12 @@ def run(
 
     if logger is None:
         logger = log
-
+    (host,port) = client.get_transport().getpeername()
     g_err = None
     if stderr is not PIPE:
         if stderr is None:
             stderr = logger.getChild('err')
-        g_err = gevent.spawn(copy_file_to, r.stderr, stderr)
+        g_err = gevent.spawn(copy_file_to, r.stderr, stderr, host)
         r.stderr = stderr
     else:
         assert not wait, "Using PIPE for stderr without wait=False would deadlock."
@@ -231,7 +232,7 @@ def run(
     if stdout is not PIPE:
         if stdout is None:
             stdout = logger.getChild('out')
-        g_out = gevent.spawn(copy_file_to, r.stdout, stdout)
+        g_out = gevent.spawn(copy_file_to, r.stdout, stdout, host)
         r.stdout = stdout
     else:
         assert not wait, "Using PIPE for stdout without wait=False would deadlock."

@@ -35,11 +35,11 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
         log.error('Could not lock %d nodes, reason: unknown.', num)
     return []
 
-def lock(ctx, name, user=None):
+def lock(ctx, name, user=None, description=None):
     if user is None:
         user = teuthology.get_user()
     success, _, _ = ls.send_request('POST', ls._lock_url(ctx) + '/' + name,
-                              urllib.urlencode(dict(user=user)))
+                              urllib.urlencode(dict(user=user, desc=description)))
     if success:
         log.debug('locked %s as %s', name, user)
     else:
@@ -543,10 +543,17 @@ def create_if_vm(ctx, machine_name):
     phys_host = status_info['vpshost']
     if not phys_host:
         return False
-    try:
-        vm_type = ctx.vm_type
-    except AttributeError:
-        vm_type = 'ubuntu'
+    from teuthology.misc import get_distro
+    os_type = get_distro(ctx)
+    os_version = dict(
+        ubuntu="12.04",
+        fedora="18",
+        centos="6.4",
+        opensuse="12.2",
+        sles="11-sp2",
+        rhel="6.3",
+        debian='6.0'
+        )
     createMe = decanonicalize_hostname(machine_name)
     with tempfile.NamedTemporaryFile() as tmp:
         try:
@@ -554,13 +561,15 @@ def create_if_vm(ctx, machine_name):
         except KeyError:
             lcnfg = {}
 
+        distro = lcnfg.get('distro', os_type.lower())
         file_info = {}
         file_info['disk-size'] = lcnfg.get('disk-size', '30G')
         file_info['ram'] = lcnfg.get('ram', '1.9G')
         file_info['cpus'] = lcnfg.get('cpus', 1)
         file_info['networks'] = lcnfg.get('networks',
                 [{'source' : 'front', 'mac' : status_info['mac']}])
-        file_info['distro'] = lcnfg.get('distro', vm_type.lower())
+        file_info['distro'] = distro
+        file_info['distroversion'] = os_version[distro]
         file_info['additional-disks'] = lcnfg.get(
                 'additional-disks', 3)
         file_info['additional-disks-size'] = lcnfg.get(
@@ -582,6 +591,12 @@ def create_if_vm(ctx, machine_name):
                     (machine_name,err))
         else:
             log.info("%s created: %s" % (machine_name,owt))
+        #If the guest already exists first destroy then re-create:
+        if 'exists' in err:
+            log.info("Guest files exist. Re-creating guest: %s" %
+                    (machine_name))
+            destroy_if_vm(ctx, machine_name)
+            create_if_vm(ctx, machine_name)
     return True
 #
 # Use downburst to destroy a virtual machine

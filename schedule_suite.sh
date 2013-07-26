@@ -8,14 +8,17 @@ flavor=$5
 teuthology_branch=$6
 mtype=$7
 template=$8
+distro=$9
 
 if [ -z "$email" ]; then
-    echo "usage: $0 <suite> <ceph branch> <kernel branch> <email> [flavor] [teuthology-branch] [machinetype] [template]"
+    echo "usage: $0 <suite> <ceph branch> <kernel branch> <email> [flavor] [teuthology-branch] [machinetype] [template] [distro]"
     echo "  flavor can be 'basic', 'gcov', 'notcmalloc'."
     exit 1
 fi
 
 [ -z "$flavor" ] && flavor='basic'
+
+[ -z "$distro" ] && distro='ubuntu'
 
 
 ##
@@ -62,6 +65,7 @@ kernel:
   sha1: $KERNEL_SHA1
 nuke-on-error: true
 machine_type: $mtype
+os_type: $distro
 tasks:
 - chef:
 - clock.check:
@@ -109,7 +113,7 @@ fi
 
 ##
 stamp=`date +%Y-%m-%d_%H:%M:%S`
-name=`whoami`"-$stamp-$suite-$ceph-$kernel-$flavor"
+name=`whoami`"-$stamp-$suite-$ceph-$kernel-$flavor-$mtype"
 
 echo "name $name"
 

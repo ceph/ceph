@@ -885,3 +885,13 @@ def get_system_type(remote):
     if system_value in ['CentOS','Fedora','RedHatEnterpriseServer']:
         return "rpm"
     return system_value
+
+def get_distro(ctx):
+    try:
+        os_type = ctx.config.get('os_type', ctx.os_type)
+    except AttributeError:
+        os_type = 'ubuntu'
+    try:
+        return ctx.config['downburst'].get('distro', os_type)
+    except KeyError:
+        return os_type
