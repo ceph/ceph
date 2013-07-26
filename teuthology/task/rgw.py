@@ -158,6 +158,11 @@ def start_rgw(ctx, config):
             'radosgw',
             '-n', client,
             '-k', '/etc/ceph/ceph.{client}.keyring'.format(client=client),
+            '--rgw-log-socket',
+            '{tdir}/apache/tmp.{client}/fastcgi_sock/rgw_sock'.format(
+                tdir=testdir,
+                client=client,
+                ),
             '--log-file',
             '/var/log/ceph/rgw.{client}.log'.format(client=client),
             '--rgw_ops_log_socket_path',
