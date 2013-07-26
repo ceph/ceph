@@ -242,6 +242,7 @@ RGWMetadataManager::~RGWMetadataManager()
   }
 
   handlers.clear();
+  delete md_log;
 }
 
 int RGWMetadataManager::register_handler(RGWMetadataHandler *handler)
