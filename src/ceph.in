@@ -100,8 +100,6 @@ def parse_cmdargs(args=None, target=''):
 
     parser.add_argument('-h', '--help', help='request mon help',
                         action='store_true')
-    parser.add_argument('--help-all', help='request help for all daemons',
-                        action='store_true')
 
     parser.add_argument('-c', '--conf', dest='cephconf',
                         help='ceph configuration file')
@@ -150,13 +148,15 @@ def parse_cmdargs(args=None, target=''):
 
     return parser, parsed_args, extras
 
-def do_help(parser, args, help_all = False):
+def do_help(parser, args):
     """
     Print basic parser help
-    If the cluster is available:
-        get and print monitor help; 
-        if help_all, print help for daemon commands as well 
+    If the cluster is available, get and print monitor help
     """
+
+    def help_for_sigs(sigs, partial=None):
+        sys.stdout.write(format_help(parse_json_funcsigs(sigs, 'cli'),
+                         partial=partial))
 
     def help_for_target(target, partial=None):
         ret, outbuf, outs = json_command(cluster_handle, target=target,
@@ -167,40 +167,19 @@ def do_help(parser, args, help_all = False):
                 "couldn't get command descriptions for {0}: {1}".\
                 format(target, outs)
         else:
-            sys.stdout.write(format_help(parse_json_funcsigs(outbuf, 'cli'),
-                             partial))
+            help_for_sigs(outbuf, partial)
 
+
+    def hdr(s):
+        print '\n', s, '\n', '=' * len(s)
+
+    hdr('Monitor commands:')
+    partial = ' '.join(args)
     parser.print_help()
     print '\n'
+
     if (cluster_handle):
-        help_for_target(target=('mon', ''), partial=' '.join(args))
-
-    if help_all and cluster_handle:
-        # try/except in case there are no daemons of that type
-        try:
-            firstosd = osdids()[0]
-            print '\nOSD.{0} tell commands and pg pgid commands:\n\n'.\
-                format(firstosd)
-            help_for_target(target=('osd', osdids()[0]))
-
-            print '\nOSD daemon commands:\n\n'
-            sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'osd.' + firstosd), ['get_command_descriptions']), 'cli')))
-        except:
-            pass
-
-        try:
-            firstmon = monids()[0]
-            print '\nmon.{0} daemon commands:\n\n'.format(firstmon)
-            sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'mon.' + firstmon), ['get_command_descriptions']), 'cli')))
-        except:
-            pass
-
-        try:
-            firstmds = mdsids()[0]
-            print '\nmds.{0} daemon commands:\n\n'.format(firstmds)
-            sys.stdout.write(format_help(parse_json_funcsigs(admin_socket(ceph_conf('admin_socket', 'mds.' + firstmds), ['get_command_descriptions']), 'cli')))
-        except:
-            pass
+        help_for_target(target=('mon', ''), partial=partial)
 
     return 0
 
@@ -285,26 +264,57 @@ def format_help(cmddict, partial=None):
 
     return fullusage
 
-def admin_socket(asok_path, cmd):
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+def admin_socket(asok_path, cmd, format=''):
+    """
+    Send a daemon (--admin-daemon) command 'cmd'.  asok_path is the
+    path to the admin socket; cmd is a list of strings; format may be
+    set to one of the formatted forms to get output in that form
+    (daemon commands don't support 'plain' output).
+    """
+
+    def do_sockio(path, cmd):
+        """ helper: do all the actual low-level stream I/O """
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.connect(path)
+        try:
+            sock.sendall(cmd + '\0')
+            len_str = sock.recv(4)
+            if len(len_str) < 4:
+                raise RuntimeError("no data returned from admin socket")
+            l, = struct.unpack(">I", len_str)
+            ret = ''
+
+            got = 0
+            while got < l:
+                bit = sock.recv(l - got)
+                ret += bit
+                got += len(bit)
+
+        except Exception as e:
+            raise RuntimeError('exception: ' + str(e))
+        return ret
+
     try:
-        sock.connect(asok_path)
-        sock.sendall(' '.join(cmd) + '\0')
-
-        len_str = sock.recv(4)
-        if len(len_str) < 4:
-            raise RuntimeError("no data returned from admin socket")
-        l, = struct.unpack(">I", len_str)
-        ret = ''
-
-        got = 0
-        while got < l:
-            bit = sock.recv(l - got)
-            ret += bit
-            got += len(bit)
-
+        cmd_json = do_sockio(asok_path,
+            json.dumps({"prefix":"get_command_descriptions"}))
     except Exception as e:
-        raise RuntimeError('exception: {0}'.format(e))
+        raise RuntimeError('exception getting command descriptions: ' + str(e))
+
+    if cmd == 'get_command_descriptions':
+        return cmd_json
+
+    sigdict = parse_json_funcsigs(cmd_json, 'cli')
+    valid_dict = validate_command(sigdict, cmd)
+    if not valid_dict:
+        return -errno.EINVAL
+
+    if format:
+        valid_dict['format'] = format
+
+    try:
+        ret = do_sockio(asok_path, json.dumps(valid_dict))
+    except Exception as e:
+        raise RuntimeError('exception: ' + str(e))
 
     return ret
 
@@ -344,10 +354,11 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
     if not got_command:
         if cmdargs:
             # Validate input args against list of sigs
-            valid_dict = validate_command(parsed_args, sigdict, cmdargs,
-                                          verbose)
+            valid_dict = validate_command(sigdict, cmdargs, verbose)
             if valid_dict:
                 got_command = True
+                if parsed_args.output_format:
+                    valid_dict['format'] = parsed_args.output_format
             else:
                 return -errno.EINVAL, '', 'invalid command'
         else:
@@ -360,8 +371,10 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                     return 0, '', ''
                 cmdargs = parse_cmdargs(interactive_input.split())[2]
                 target = find_cmd_target(cmdargs)
-                valid_dict = validate_command(parsed_args, sigdict, cmdargs)
+                valid_dict = validate_command(sigdict, cmdargs, verbose)
                 if valid_dict:
+                    if parsed_args.output_format:
+                        valid_dict['format'] = parsed_args.output_format
                     if verbose:
                         print >> sys.stderr, "Submitting command ", valid_dict
                     ret, outbuf, outs = json_command(cluster_handle,
@@ -470,9 +483,12 @@ def main():
         conffile = parsed_args.cephconf
     # For now, --admin-daemon is handled as usual.  Try it
     # first in case we can't connect() to the cluster
+
+    format = parsed_args.output_format
+
     if parsed_args.admin_socket:
         try:
-            print admin_socket(parsed_args.admin_socket, childargs)
+            print admin_socket(parsed_args.admin_socket, childargs, format)
         except Exception as e:
             print >> sys.stderr, 'admin_socket: {0}'.format(e)
         return 0
@@ -481,7 +497,7 @@ def main():
         if len(childargs) > 2:
             if childargs[1].find('/') >= 0:
                 try:
-                    print admin_socket(childargs[1], childargs[2:])
+                    print admin_socket(childargs[1], childargs[2:], format)
                 except Exception as e:
                     print >> sys.stderr, 'admin_socket: {0}'.format(e)
                 return 0
@@ -489,7 +505,7 @@ def main():
                 # try resolve daemon name
                 path = ceph_conf('admin_socket', childargs[1])
                 try:
-                    print admin_socket(path, childargs[2:])
+                    print admin_socket(path, childargs[2:], format)
                 except Exception as e:
                     print >> sys.stderr, 'admin_socket: {0}'.format(e)
                 return 0
@@ -544,8 +560,8 @@ def main():
             format(e.__class__.__name__)
         return 1
 
-    if parsed_args.help or parsed_args.help_all:
-        return do_help(parser, childargs, parsed_args.help_all)
+    if parsed_args.help:
+        return do_help(parser, childargs)
 
     # implement -w/--watch_*
     # This is ugly, but Namespace() isn't quite rich enough.
