@@ -40,6 +40,8 @@ public:
 
 class RGWOp_Metadata_Put : public RGWRESTOp {
   int get_data(bufferlist& bl);
+  string update_status;
+  obj_version ondisk_version;
 public:
   RGWOp_Metadata_Put() {}
   ~RGWOp_Metadata_Put() {}
@@ -48,6 +50,7 @@ public:
     return caps.check_cap("metadata", RGW_CAP_WRITE);
   }
   void execute();
+  void send_response();
   virtual const string name() { return "set_metadata"; }
 };
 

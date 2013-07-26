@@ -1397,7 +1397,8 @@ public:
     return 0;
   }
 
-  int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker, time_t mtime, JSONObj *obj) {
+  int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
+          time_t mtime, JSONObj *obj, sync_type_t sync_type) {
     RGWBucketEntryPoint be, old_be;
     decode_json_obj(be, obj);
 
@@ -1409,6 +1410,12 @@ public:
     int ret = store->get_bucket_entrypoint_info(NULL, entry, old_be, &old_ot, &orig_mtime, &attrs);
     if (ret < 0 && ret != -ENOENT)
       return ret;
+
+    // are we actually going to perform this put, or is it too old?
+    if (!check_versions(old_ot.read_version, orig_mtime,
+			objv_tracker.write_version, mtime, sync_type)) {
+      return STATUS_NO_APPLY;
+    }
 
     objv_tracker.read_version = old_ot.read_version; /* maintain the obj version we just read */
 
@@ -1540,7 +1547,8 @@ public:
     return 0;
   }
 
-  int put(RGWRados *store, string& oid, RGWObjVersionTracker& objv_tracker, time_t mtime, JSONObj *obj) {
+  int put(RGWRados *store, string& oid, RGWObjVersionTracker& objv_tracker,
+          time_t mtime, JSONObj *obj, sync_type_t sync_type) {
     RGWBucketCompleteInfo bci, old_bci;
     decode_json_obj(bci, obj);
 
@@ -1566,6 +1574,13 @@ public:
       bci.info.bucket.index_pool = old_bci.info.bucket.index_pool;
     }
 
+    // are we actually going to perform this put, or is it too old?
+    if (!check_versions(old_bci.info.objv_tracker.read_version, orig_mtime,
+			objv_tracker.write_version, mtime, sync_type)) {
+      objv_tracker.read_version = old_bci.info.objv_tracker.read_version;
+      return STATUS_NO_APPLY;
+    }
+
     /* record the read version (if any), store the new version */
     bci.info.objv_tracker.read_version = old_bci.info.objv_tracker.read_version;
     bci.info.objv_tracker.write_version = objv_tracker.write_version;
@@ -1580,7 +1595,7 @@ public:
     if (ret < 0)
       return ret;
 
-    return 0;
+    return STATUS_APPLIED;
   }
 
   struct list_keys_info {

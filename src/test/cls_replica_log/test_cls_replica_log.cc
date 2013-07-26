@@ -14,34 +14,42 @@
 #include "cls/replica_log/cls_replica_log_client.h"
 #include "cls/replica_log/cls_replica_log_types.h"
 
-#define SETUP_DATA \
-  librados::Rados rados; \
-  librados::IoCtx ioctx; \
-  string pool_name = get_temp_pool_name(); \
-  ASSERT_EQ("", create_one_pool_pp(pool_name, rados)); \
-  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx)); \
-  string oid = "obj"; \
-  ASSERT_EQ(0, ioctx.create(oid, true));
+class cls_replica_log_Test : public ::testing::Test {
+public:
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name;
+  string oid;
+  string entity;
+  string marker;
+  utime_t time;
+  list<pair<string, utime_t> > entries;
+  cls_replica_log_progress_marker progress;
 
-#define ADD_MARKER \
-  string entity = "tester_entity"; \
-  string marker = "tester_marker1"; \
-  utime_t time; \
-  time.set_from_double(10); \
-  list<pair<string, utime_t> > entries; \
-  entries.push_back(make_pair("tester_obj1", time)); \
-  time.set_from_double(20); \
-  cls_replica_log_progress_marker progress; \
-  cls_replica_log_prepare_marker(progress, entity, marker, time, &entries); \
-  librados::ObjectWriteOperation opw; \
-  cls_replica_log_update_bound(opw, progress); \
-  ASSERT_EQ(0, ioctx.operate(oid, &opw));
+  void SetUp() {
+    pool_name = get_temp_pool_name();
+    ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+    ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+    oid = "obj";
+    ASSERT_EQ(0, ioctx.create(oid, true));
+  }
 
-TEST(cls_replica_log, test_set_get_marker)
+  void add_marker() {
+    entity = "tester_entity";
+    marker = "tester_marker1";
+    time.set_from_double(10);
+    entries.push_back(make_pair("tester_obj1", time));
+    time.set_from_double(20);
+    cls_replica_log_prepare_marker(progress, entity, marker, time, &entries);
+    librados::ObjectWriteOperation opw;
+    cls_replica_log_update_bound(opw, progress);
+    ASSERT_EQ(0, ioctx.operate(oid, &opw));
+  }
+};
+
+TEST_F(cls_replica_log_Test, test_set_get_marker)
 {
-  SETUP_DATA
-
-  ADD_MARKER
+  add_marker();
 
   string reply_position_marker;
   utime_t reply_time;
@@ -66,11 +74,9 @@ TEST(cls_replica_log, test_set_get_marker)
   ASSERT_EQ("tester_obj1", response_item_list.front().first);
 }
 
-TEST(cls_replica_log, test_bad_update)
+TEST_F(cls_replica_log_Test, test_bad_update)
 {
-  SETUP_DATA
-
-  ADD_MARKER
+  add_marker();
 
   time.set_from_double(15);
   cls_replica_log_progress_marker bad_marker;
@@ -80,22 +86,18 @@ TEST(cls_replica_log, test_bad_update)
   ASSERT_EQ(-EINVAL, ioctx.operate(oid, &badw));
 }
 
-TEST(cls_replica_log, test_bad_delete)
+TEST_F(cls_replica_log_Test, test_bad_delete)
 {
-  SETUP_DATA
-
-  ADD_MARKER
+  add_marker();
 
   librados::ObjectWriteOperation badd;
   cls_replica_log_delete_bound(badd, entity);
   ASSERT_EQ(-ENOTEMPTY, ioctx.operate(oid, &badd));
 }
 
-TEST(cls_replica_log, test_good_delete)
+TEST_F(cls_replica_log_Test, test_good_delete)
 {
-  SETUP_DATA
-
-  ADD_MARKER
+  add_marker();
 
   librados::ObjectWriteOperation opc;
   progress.items.clear();
@@ -113,10 +115,8 @@ TEST(cls_replica_log, test_good_delete)
   ASSERT_EQ((unsigned)0, return_progress_list.size());
 }
 
-TEST(cls_replica_log, test_bad_get)
+TEST_F(cls_replica_log_Test, test_bad_get)
 {
-  SETUP_DATA
-
   string reply_position_marker;
   utime_t reply_time;
   list<cls_replica_log_progress_marker> return_progress_list;
@@ -125,11 +125,9 @@ TEST(cls_replica_log, test_bad_get)
                                        reply_time, return_progress_list));
 }
 
-TEST(cls_replica_log, test_double_delete)
+TEST_F(cls_replica_log_Test, test_double_delete)
 {
-  SETUP_DATA
-
-  ADD_MARKER
+  add_marker();
 
   librados::ObjectWriteOperation opc;
   progress.items.clear();
