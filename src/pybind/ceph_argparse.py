@@ -263,6 +263,8 @@ class CephIPAddr(CephArgtype):
         if p is not None and long(p) > 65535:
             raise ArgumentValid("{0} not a valid port number".format(p))
         self.val = s
+        self.addr = a
+        self.port = p
 
     def __str__(self):
         return '<IPaddr[:port]>'
@@ -274,6 +276,7 @@ class CephEntityAddr(CephIPAddr):
     def valid(self, s, partial=False):
         ip, nonce = s.split('/')
         super(self.__class__, self).valid(ip)
+        self.nonce = nonce
         self.val = s
 
     def __str__(self):
@@ -820,11 +823,10 @@ def validate(args, signature, partial=False):
         raise ArgumentError("unused arguments: " + str(myargs))
     return d
 
-def validate_command(parsed_args, sigdict, args, verbose=False):
+def validate_command(sigdict, args, verbose=False):
     """
     turn args into a valid dictionary ready to be sent off as JSON,
     validated against sigdict.
-    parsed_args is the namespace back from argparse
     """
     found = []
     valid_dict = {}
@@ -882,9 +884,6 @@ def validate_command(parsed_args, sigdict, args, verbose=False):
                     print >> sys.stderr, concise_sig(cmd['sig'])
             return None
 
-        if parsed_args.output_format:
-            valid_dict['format'] = parsed_args.output_format
-
         return valid_dict
 
 def find_cmd_target(childargs):
@@ -898,20 +897,35 @@ def find_cmd_target(childargs):
     sig = parse_funcsig(['tell', {'name':'target','type':'CephName'}])
     try:
         valid_dict = validate(childargs, sig, partial=True);
-        if len(valid_dict) == 2:
-            name = CephName()
-            name.valid(valid_dict['target'])
-            return name.nametype, name.nameid
     except ArgumentError:
         pass
+    else:
+        if len(valid_dict) == 2:
+            # revalidate to isolate type and id
+            name = CephName()
+            # if this fails, something is horribly wrong, as it just
+            # validated successfully above
+            name.valid(valid_dict['target'])
+            return name.nametype, name.nameid
+
+    sig = parse_funcsig(['tell', {'name':'pgid','type':'CephPgid'}])
+    try:
+        valid_dict = validate(childargs, sig, partial=True);
+    except ArgumentError:
+        pass
+    else:
+        if len(valid_dict) == 2:
+            # pg doesn't need revalidation; the string is fine
+            return 'pg', valid_dict['pgid']
 
     sig = parse_funcsig(['pg', {'name':'pgid','type':'CephPgid'}])
     try:
         valid_dict = validate(childargs, sig, partial=True);
-        if len(valid_dict) == 2:
-            return 'pg', valid_dict['pgid']
     except ArgumentError:
         pass
+    else:
+        if len(valid_dict) == 2:
+            return 'pg', valid_dict['pgid']
 
     return 'mon', ''
 
@@ -939,8 +953,15 @@ def send_command(cluster, target=('mon', ''), cmd=[], inbuf='', timeout=0,
                 cluster.osd_command(osdid, cmd, inbuf, timeout)
 
         elif target[0] == 'pg':
-            # leave it in cmddict for the OSD to use too
             pgid = target[1]
+            # pgid will already be in the command for the pg <pgid>
+            # form, but for tell <pgid>, we need to put it in
+            if cmd:
+                cmddict = json.loads(cmd[0])
+                cmddict['pgid'] = pgid
+            else:
+                cmddict = dict(pgid=pgid)
+            cmd = [json.dumps(cmddict)]
             if verbose:
                 print >> sys.stderr, 'submit {0} for pgid {1}'.\
                     format(cmd, pgid)
