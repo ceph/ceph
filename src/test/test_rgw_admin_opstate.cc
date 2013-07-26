@@ -160,13 +160,13 @@ void test_helper::set_response(char *r){
 }
 
 size_t write_header(void *ptr, size_t size, size_t nmemb, void *ud){
-  test_helper *h = (test_helper *)ud;
+  test_helper *h = static_cast<test_helper *>(ud);
   h->set_response((char *)ptr);
   return size*nmemb;
 }
 
 size_t write_data(void *ptr, size_t size, size_t nmemb, void *ud){
-  test_helper *h = (test_helper *)ud;
+  test_helper *h = static_cast<test_helper *>(ud);
   h->set_response_data((char *)ptr, size*nmemb);
   return size*nmemb;
 }
@@ -403,7 +403,6 @@ int user_create(string& uid, string& display_name, bool set_creds = true) {
 
 int user_info(string& uid, string& display_name, RGWUserInfo& uinfo) {
   stringstream ss;
-  string creds;
   ss << "-c " << g_test->get_ceph_conf_path() << " user info --uid=" << uid
     << " --display-name=" << display_name;
 
@@ -424,7 +423,6 @@ int user_info(string& uid, string& display_name, RGWUserInfo& uinfo) {
 
 int user_rm(string& uid, string& display_name) {
   stringstream ss;
-  string creds;
   ss << "-c " << g_test->get_ceph_conf_path() << 
     " metadata rm --metadata-key=user:" << uid;
 
