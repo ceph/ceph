@@ -13,7 +13,6 @@ tasks:
 - ssh_keys:
 - ceph-deploy:
 - workunit:
-     branch: cuttlefish
      clients:
         client.0:
            - rados/test_python.sh
