@@ -60,6 +60,7 @@ private:
   void create_initial();
   void update_from_paxos(bool *need_bootstrap);
   void upgrade_format();
+  void on_upgrade();
   void post_paxos_update();
   void handle_osd_timeouts();
   void create_pending();  // prepare a new pending

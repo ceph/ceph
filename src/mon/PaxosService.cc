@@ -114,7 +114,13 @@ void PaxosService::refresh(bool *need_bootstrap)
   // update cached versions
   cached_first_committed = mon->store->get(get_service_name(), first_committed_name);
   cached_last_committed = mon->store->get(get_service_name(), last_committed_name);
-  format_version = get_value("format_version");
+
+  version_t new_format = get_value("format_version");
+  if (new_format != format_version) {
+    dout(1) << __func__ << " upgraded, format " << format_version << " -> " << new_format << dendl;
+    on_upgrade();
+  }
+  format_version = new_format;
 
   dout(10) << __func__ << dendl;
 
