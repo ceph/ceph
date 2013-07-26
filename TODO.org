@@ -1,9 +1,0 @@
-#+FILETAGS: :newdream:teuthology:todo:
-
-* TODO osd etc killing while test is running
-* TODO MAYBE more defaults for autotest task, so you don't need to list all clients?
-- autotest:
-    default: dbench
-    client.42: [dbench, bonnie]
-- autotest: dbench
-- autotest: [dbench, bonnie]

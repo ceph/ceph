@@ -1,3 +1,0 @@
-
-all:
-	@./check-syntax.sh
