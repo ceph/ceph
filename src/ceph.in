@@ -64,6 +64,9 @@ cluster_handle = None
 
 def osdids():
     ret, outbuf, outs = json_command(cluster_handle, prefix='osd ls')
+    if ret == -errno.EINVAL:
+        # try old mon
+        ret, outbuf, outs = send_command(cluster_handle, cmd=['osd', 'ls'])
     if ret:
         raise RuntimeError('Can\'t contact mon for osd list')
     return [i for i in outbuf.split('\n') if i != '']
@@ -71,6 +74,10 @@ def osdids():
 def monids():
     ret, outbuf, outs = json_command(cluster_handle, prefix='mon dump',
                                      argdict={'format':'json'})
+    if ret == -errno.EINVAL:
+        # try old mon
+        ret, outbuf, outs = send_command(cluster_handle,
+                                         cmd=['mon', 'dump', '--format=json'])
     if ret:
         raise RuntimeError('Can\'t contact mon for mon list')
     d = json.loads(outbuf)
@@ -79,6 +86,10 @@ def monids():
 def mdsids():
     ret, outbuf, outs = json_command(cluster_handle, prefix='mds dump',
                                      argdict={'format':'json'})
+    if ret == -errno.EINVAL:
+        # try old mon
+        ret, outbuf, outs = send_command(cluster_handle,
+                                         cmd=['mds', 'dump', '--format=json'])
     if ret:
         raise RuntimeError('Can\'t contact mon for mds list')
     d = json.loads(outbuf)
