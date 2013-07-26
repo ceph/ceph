@@ -16,11 +16,6 @@ Copyright:
     Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
 License: GPL2
 
-Files: src/common/fiemap.cc
-Copyright:
-    Copyright (C) 2010 Canonical
-License: GPL2
-
 Files: src/mount/canonicalize.c
 Copyright: Copyright (C) 1993 Rick Sladkey <jrs@world.std.com>
 License: LGPL2 or later

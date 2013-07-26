@@ -60,8 +60,6 @@
 #include <sys/param.h>
 #endif
 
-#include "include/fiemap.h"
-
 #define MAX_SECRET_LEN 1000
 #define MAX_POOL_NAME_SIZE 128
 
