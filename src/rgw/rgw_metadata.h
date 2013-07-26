@@ -129,9 +129,7 @@ class RGWMetadataLog {
   }
 
 public:
-  RGWMetadataLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store) {
-    prefix = META_LOG_OBJ_PREFIX;
-  }
+  RGWMetadataLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store), prefix(META_LOG_OBJ_PREFIX) {}
 
   int add_entry(RGWRados *store, RGWMetadataHandler *handler, const string& section, const string& key, bufferlist& bl);
 
