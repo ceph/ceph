@@ -80,6 +80,9 @@ def task(ctx, config):
     chance_test_backfill_full: (0) chance to simulate full disks stopping
         backfill
 
+    chance_test_map_discontinuity: (0) chance to test map discontinuity
+    map_discontinuity_sleep_time: (40) time to wait for map trims
+
     example:
 
     tasks:

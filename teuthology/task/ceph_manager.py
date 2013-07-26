@@ -24,6 +24,7 @@ class Thrasher:
         if self.config.get('powercycle'):
             self.revive_timeout += 120
         self.clean_wait = self.config.get('clean_wait', 0)
+        self.minin = self.config.get("min_in", 2)
 
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * num_osds
@@ -45,13 +46,17 @@ class Thrasher:
                                     '--mon-osd-down-out-interval', '0')
         self.thread = gevent.spawn(self.do_thrash)
 
-    def kill_osd(self, osd=None):
+    def kill_osd(self, osd=None, mark_down=False, mark_out=False):
         if osd is None:
             osd = random.choice(self.live_osds)
         self.log("Killing osd %s, live_osds are %s" % (str(osd),str(self.live_osds)))
         self.live_osds.remove(osd)
         self.dead_osds.append(osd)
         self.ceph_manager.kill_osd(osd)
+        if mark_down:
+            self.ceph_manager.mark_down_osd(osd)
+        if mark_out:
+            self.out_osd(osd)
 
     def blackhole_kill_osd(self, osd=None):
         if osd is None:
@@ -193,13 +198,39 @@ class Thrasher:
                     'false',
                 osd_backfill_full_ratio = 0.85)
 
+    def test_map_discontinuity(self):
+        """
+        1) Allows the osds to recover
+        2) kills an osd
+        3) allows the remaining osds to recover
+        4) waits for some time
+        5) revives the osd
+        This sequence should cause the revived osd to have to handle
+        a map gap since the mons would have trimmed
+        """
+        while len(self.in_osds) < (self.minin + 1):
+            self.in_osd()
+        self.log("Waiting for recovery")
+        self.ceph_manager.wait_for_clean(
+            timeout=self.config.get('timeout')
+            )
+        self.log("Recovered, killing an osd")
+        self.kill_osd(mark_down=True, mark_out=True)
+        self.log("Waiting for clean again")
+        self.ceph_manager.wait_for_clean(
+            timeout=self.config.get('timeout')
+            )
+        self.log("Waiting for trim")
+        time.sleep(int(self.config.get("map_discontinuity_sleep_time", 40)))
+        self.revive_osd()
+
     def choose_action(self):
         chance_down = self.config.get('chance_down', 0.4)
         chance_test_min_size = self.config.get('chance_test_min_size', 0)
         chance_test_backfill_full= self.config.get('chance_test_backfill_full', 0)
         if isinstance(chance_down, int):
             chance_down = float(chance_down) / 100
-        minin = self.config.get("min_in", 2)
+        minin = self.minin
         minout = self.config.get("min_out", 0)
         minlive = self.config.get("min_live", 2)
         mindead = self.config.get("min_dead", 0)
@@ -253,9 +284,13 @@ class Thrasher:
             if random.uniform(0,1) < (float(delay) / cleanint):
                 while len(self.dead_osds) > maxdead:
                     self.revive_osd()
-                self.ceph_manager.wait_for_recovery(
-                    timeout=self.config.get('timeout')
-                    )
+                if random.uniform(0, 1) < float(
+                    self.config.get('chance_test_map_discontinuity', 0)):
+                    self.test_map_discontinuity()
+                else:
+                    self.ceph_manager.wait_for_recovery(
+                        timeout=self.config.get('timeout')
+                        )
                 time.sleep(self.clean_wait)
             self.choose_action()()
             time.sleep(delay)
