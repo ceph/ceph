@@ -130,7 +130,7 @@ def api_setup():
 
     glob.baseurl = get_conf(cfg, clientname, 'base_url') or DEFAULT_BASEURL
     if glob.baseurl.endswith('/'):
-        glob.baseurl
+        glob.baseurl = glob.baseurl[:-1]
     addr = get_conf(cfg, clientname, 'public_addr') or DEFAULT_ADDR
     addrport = addr.rsplit(':', 1)
     addr = addrport[0]
