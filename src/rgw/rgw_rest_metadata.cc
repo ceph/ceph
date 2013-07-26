@@ -161,12 +161,43 @@ void RGWOp_Metadata_Put::execute() {
   
   frame_metadata_key(s, metadata_key);
   
-  http_ret = store->meta_mgr->put(metadata_key, bl);
+  RGWMetadataHandler::sync_type_t sync_type = RGWMetadataHandler::APPLY_ALWAYS;
+
+  bool mode_exists = false;
+  string mode_string = s->info.args.get("sync-type", &mode_exists);
+  if (mode_exists) {
+    bool parsed = RGWMetadataHandler::string_to_sync_type(mode_string,
+                                                          sync_type);
+    if (!parsed) {
+      http_ret = -EINVAL;
+      return;
+    }
+  }
+
+  http_ret = store->meta_mgr->put(metadata_key, bl, sync_type, &ondisk_version);
   if (http_ret < 0) {
     dout(5) << "ERROR: can't put key: " << cpp_strerror(http_ret) << dendl;
     return;
   }
-  http_ret = 0;
+  // translate internal codes into return header
+  if (http_ret == STATUS_NO_APPLY)
+    update_status = "skipped";
+  else if (http_ret == STATUS_APPLIED)
+    update_status = "applied";
+}
+
+void RGWOp_Metadata_Put::send_response() {
+  int http_return_code = http_ret;
+  if ((http_ret == STATUS_NO_APPLY) || (http_ret == STATUS_APPLIED))
+    http_return_code = STATUS_NO_CONTENT;
+  set_req_state_err(s, http_return_code);
+  dump_errno(s);
+  stringstream ver_stream;
+  ver_stream << "ver:" << ondisk_version.ver
+	     <<",tag:" << ondisk_version.tag;
+  dump_pair(s, "RGWX_UPDATE_STATUS", update_status.c_str());
+  dump_pair(s, "RGWX_UPDATE_VERSION", ver_stream.str().c_str());
+  end_header(s);
 }
 
 void RGWOp_Metadata_Delete::execute() {
