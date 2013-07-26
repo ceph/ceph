@@ -27,7 +27,7 @@ else
 fi
 
 usage_exit() {
-    echo "usage: $0 [options] {start|stop|restart} [mon|osd|mds]..."
+    echo "usage: $0 [options] {start|stop|restart|condrestart} [mon|osd|mds]..."
     printf "\t-c ceph.conf\n"
     printf "\t--valgrind\trun via valgrind\n"
     printf "\t--hostname [hostname]\toverride hostname lookup\n"
@@ -413,6 +413,15 @@ for name in $what; do
 	    $0 $options stop $name
 	    $0 $options start $name
 	    ;;
+
+        condrestart)
+            if daemon_is_running $name ceph-$type $id $pid_file; then
+                $0 $options stop $name
+                $0 $options start $name
+            else
+                echo "$name: not running."
+            fi
+            ;;
 
 	cleanlogs)
 	    echo removing logs
