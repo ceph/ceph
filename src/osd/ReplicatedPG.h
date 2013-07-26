@@ -17,6 +17,7 @@
 #include <boost/optional.hpp>
 
 #include "include/assert.h" 
+#include "common/cmdparse.h"
 
 #include "PG.h"
 #include "OSD.h"
@@ -930,7 +931,8 @@ public:
 	       const hobject_t& ioid);
   ~ReplicatedPG() {}
 
-  int do_command(vector<string>& cmd, ostream& ss, bufferlist& idata, bufferlist& odata);
+  int do_command(cmdmap_t cmdmap, ostream& ss, bufferlist& idata,
+		 bufferlist& odata);
 
   void do_op(OpRequestRef op);
   bool pg_op_must_wait(MOSDOp *op);
