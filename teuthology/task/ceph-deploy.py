@@ -208,7 +208,7 @@ def build_ceph_cluster(ctx, config):
     if estatus_mds != 0:
         raise Exception("ceph-deploy: Failed to deploy mds")
 
-    if config.get('test-mon-destroy'):
+    if config.get('test_mon_destroy') is not None:
         for d in range(1, len(mon_node)):
             mon_destroy_nodes = './ceph-deploy mon destroy'+" "+mon_node[d]
             estatus_mon_d = execute_ceph_deploy(ctx, config, mon_destroy_nodes)
@@ -418,6 +418,7 @@ def task(ctx, config):
                  conf=config.get('conf', {}),
                  branch=config.get('branch',{}),
                  mon_initial_members=config.get('mon_initial_members', None),
+                 test_mon_destroy=config.get('test_mon_destroy', None),
                  )),
         ):
         yield
