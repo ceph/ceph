@@ -5032,7 +5032,6 @@ void PG::handle_advance_map(OSDMapRef osdmap, OSDMapRef lastmap,
 			    vector<int>& newup, vector<int>& newacting,
 			    RecoveryCtx *rctx)
 {
-  assert(osdmap->get_epoch() == (lastmap->get_epoch() + 1));
   assert(lastmap->get_epoch() == osdmap_ref->get_epoch());
   assert(lastmap == osdmap_ref);
   dout(10) << "handle_advance_map " << newup << "/" << newacting << dendl;

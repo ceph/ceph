@@ -99,6 +99,8 @@ using ceph::crypto::MD5;
 #define STATUS_NO_CONTENT        1902
 #define STATUS_PARTIAL_CONTENT   1903
 #define STATUS_REDIRECT          1904
+#define STATUS_NO_APPLY          1905
+#define STATUS_APPLIED           1906
 
 #define ERR_INVALID_BUCKET_NAME  2000
 #define ERR_INVALID_OBJECT_NAME  2001

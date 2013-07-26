@@ -130,7 +130,7 @@ def api_setup():
 
     glob.baseurl = get_conf(cfg, clientname, 'base_url') or DEFAULT_BASEURL
     if glob.baseurl.endswith('/'):
-        glob.baseurl
+        glob.baseurl = glob.baseurl[:-1]
     addr = get_conf(cfg, clientname, 'public_addr') or DEFAULT_ADDR
     addrport = addr.rsplit(':', 1)
     addr = addrport[0]
@@ -322,6 +322,9 @@ def make_response(fmt, output, statusmsg, errorcode):
     {1}
   </status>
 </response>'''.format(response, xml.sax.saxutils.escape(statusmsg))
+    else:
+        if not 200 <= errorcode < 300:
+            response = response + '\n' + statusmsg + '\n'
 
     return flask.make_response(response, errorcode)
 

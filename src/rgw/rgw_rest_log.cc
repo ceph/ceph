@@ -88,6 +88,8 @@ void RGWOp_MDLog_List::execute() {
     if (!max_entries_str.empty()) 
       max_entries -= entries.size();
   } while (truncated && (max_entries > 0));
+
+  meta_log->complete_list_entries(handle);
 }
 
 void RGWOp_MDLog_List::send_response() {

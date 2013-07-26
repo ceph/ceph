@@ -1535,11 +1535,23 @@ bool Monitor::_allowed_command(MonSession *s, map<string, cmd_vartype>& cmd)
   map<string,string> strmap;
   for (map<string, cmd_vartype>::const_iterator p = cmd.begin();
        p != cmd.end(); ++p) {
-    if (p->first != "prefix") {
-      strmap[p->first] = cmd_vartype_stringify(p->second);
+    if (p->first == "prefix")
+      continue;
+    if (p->first == "caps") {
+      vector<string> cv;
+      if (cmd_getval(g_ceph_context, cmd, "caps", cv) &&
+	  cv.size() % 2 == 0) {
+	for (unsigned i = 0; i < cv.size(); i += 2) {
+	  string k = string("caps_") + cv[i];
+	  strmap[k] = cv[i + 1];
+	}
+	continue;
+      }
     }
+    strmap[p->first] = cmd_vartype_stringify(p->second);
   }
 
+  dout(20) << __func__ << " strmap " << strmap << dendl;
   if (s->caps.is_capable(g_ceph_context, s->inst.name,
 			 "", prefix, strmap, false, false, true)) {
     retval = true; 

@@ -149,7 +149,7 @@ void MonCapGrant::expand_profile(entity_name_t name) const
     profile_grants.push_back(MonCapGrant("osd create"));
     profile_grants.push_back(MonCapGrant("osd crush set"));  // FIXME: constraint this further?
     profile_grants.push_back(MonCapGrant("auth add"));
-    profile_grants.back().command_args["name"] = StringConstraint("", "osd.");
+    profile_grants.back().command_args["entity"] = StringConstraint("", "osd.");
     profile_grants.back().command_args["caps_mon"] = StringConstraint("allow profile osd", "");
     profile_grants.back().command_args["caps_osd"] = StringConstraint("allow *", "");
   }
@@ -158,7 +158,7 @@ void MonCapGrant::expand_profile(entity_name_t name) const
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));  // read osdmap
     profile_grants.push_back(MonCapGrant("mon getmap"));
     profile_grants.push_back(MonCapGrant("auth get-or-create"));  // FIXME: this can expose other mds keys
-    profile_grants.back().command_args["name"] = StringConstraint("", "mds.");
+    profile_grants.back().command_args["entity"] = StringConstraint("", "mds.");
     profile_grants.back().command_args["caps_mon"] = StringConstraint("allow profile mds", "");
     profile_grants.back().command_args["caps_osd"] = StringConstraint("allow rwx", "");
     profile_grants.back().command_args["caps_mds"] = StringConstraint("allow", "");

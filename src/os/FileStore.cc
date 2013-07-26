@@ -2243,6 +2243,7 @@ int FileStore::_check_global_replay_guard(coll_t cid,
   if (r < 0) {
     dout(20) << __func__ << " no xattr" << dendl;
     assert(!m_filestore_fail_eio || r != -EIO);
+    TEMP_FAILURE_RETRY(::close(fd));
     return 1;  // no xattr
   }
   bufferlist bl;
