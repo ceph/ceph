@@ -248,6 +248,8 @@ ceph pg set_nearfull_ratio 0.90
 ceph pg dump --format=plain | grep '^nearfull_ratio 0.9'
 ceph pg set_nearfull_ratio 0.85
 ceph pg stat | grep 'pgs:'
+ceph pg 0.0 query
+ceph tell 0.0 query
 ceph quorum enter
 ceph quorum_status
 ceph report | grep osd_stats
