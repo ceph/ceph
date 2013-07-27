@@ -2,7 +2,6 @@
 # vim: ts=4 sw=4 smarttab expandtab
 
 import collections
-import ConfigParser
 import contextlib
 import errno
 import json
@@ -18,15 +17,18 @@ import flask
 from ceph_argparse import *
 
 #
-# Globals
+# Globals and defaults
 #
 
-DEFAULT_BASEURL = '/api/v0.1'
-DEFAULT_ADDR = '0.0.0.0:5000'
-DEFAULT_LOG_LEVEL = 'warning'
-DEFAULT_CLIENTNAME = 'client.restapi'
-DEFAULT_LOG_FILE = '/var/log/ceph/' + DEFAULT_CLIENTNAME + '.log'
+DEFAULT_ADDR = '0.0.0.0'
+DEFAULT_PORT = '5000'
+DEFAULT_ID = 'restapi'
 
+DEFAULT_BASEURL = '/api/v0.1'
+DEFAULT_LOG_LEVEL = 'warning'
+# default client name will be 'client.<DEFAULT_ID>'
+
+# 'app' must be global for decorators, etc.
 APPNAME = '__main__'
 app = flask.Flask(APPNAME)
 
@@ -38,88 +40,12 @@ LOGLEVELS = {
     'debug':logging.DEBUG,
 }
 
-# my globals, in a named tuple for usage clarity.  I promise
-# these are never written once initialized, and are global
-# to every thread.
-
-glob = collections.namedtuple('gvars', 'cluster urls sigdict baseurl')
-glob.cluster = None
-glob.urls = {}
-glob.sigdict = {}
-glob.baseurl = ''
-
-def load_conf(clustername='ceph', conffile=None):
-    '''
-    Load the ceph conf file using ConfigParser.  Use the standard
-    fallback order:
-
-    1) the passed in arg (from CEPH_CONF)
-    2) /etc/ceph/{cluster}.conf
-    3) ~/.ceph/{cluster}.conf
-    4) {cluster}.conf
-    '''
-
-    class _TrimIndentFile(object):
-        def __init__(self, fp):
-            self.fp = fp
-
-        def readline(self):
-            line = self.fp.readline()
-            return line.lstrip(' \t')
-
-
-    def _optionxform(s):
-        s = s.replace('_', ' ')
-        s = '_'.join(s.split())
-        return s
-
-
-    def parse(fp):
-        cfg = ConfigParser.RawConfigParser()
-        cfg.optionxform = _optionxform
-        ifp = _TrimIndentFile(fp)
-        cfg.readfp(ifp)
-        return cfg
-
-
-    def load(path):
-        f = file(path)
-        with contextlib.closing(f):
-            return parse(f)
-
-    if conffile:
-        # from CEPH_CONF
-        return load(conffile)
-    else:
-        for path in [
-            '/etc/ceph/{0}.conf'.format(clustername),
-            os.path.expanduser('~/.ceph/{0}.conf'.format(clustername)),
-            '{0}.conf'.format(clustername),
-        ]:
-            if os.path.exists(path):
-                return load(path)
-
-    raise EnvironmentError('No conf file found for "{0}"'.format(clustername))
-
-def get_conf(cfg, clientname, key):
-    '''
-    Get config entry from conf file, first in [clientname], then [client],
-    then [global].
-    '''
-    fullkey = 'restapi_' + key
-    for sectionname in clientname, 'client', 'global':
-        try:
-            return cfg.get(sectionname, fullkey)
-        except (ConfigParser.NoOptionError, ConfigParser.NoSectionError):
-            pass
-    return None
-
-def find_up_osd():
+def find_up_osd(app):
     '''
     Find an up OSD.  Return the last one that's up.
     Returns id as an int.
     '''
-    ret, outbuf, outs = json_command(glob.cluster, prefix="osd dump",
+    ret, outbuf, outs = json_command(app.ceph_cluster, prefix="osd dump",
                                      argdict=dict(format='json'))
     if ret:
         raise EnvironmentError(ret, 'Can\'t get osd dump output')
@@ -135,18 +61,18 @@ def find_up_osd():
 
 METHOD_DICT = {'r':['GET'], 'w':['PUT', 'DELETE']}
 
-def api_setup():
+def api_setup(app, conf, cluster, clientname, clientid, args):
     '''
     This is done globally, and cluster connection kept open for
     the lifetime of the daemon.  librados should assure that even
     if the cluster goes away and comes back, our connection remains.
 
     Initialize the running instance.  Open the cluster, get the command
-    signatures, module, perms, and help; stuff them away in the glob.urls
-    dict.  Also save glob.sigdict for help() handling.
+    signatures, module, perms, and help; stuff them away in the app.ceph_urls
+    dict.  Also save app.ceph_sigdict for help() handling.
     '''
-    def get_command_descriptions(target=('mon','')):
-        ret, outbuf, outs = json_command(glob.cluster, target,
+    def get_command_descriptions(cluster, target=('mon','')):
+        ret, outbuf, outs = json_command(cluster, target,
                                          prefix='get_command_descriptions',
                                          timeout=30)
         if ret:
@@ -162,62 +88,61 @@ def api_setup():
             raise EnvironmentError(err)
         return sigdict
 
-    conffile = os.environ.get('CEPH_CONF', '')
-    clustername = os.environ.get('CEPH_CLUSTER_NAME', 'ceph')
-    clientname = os.environ.get('CEPH_NAME', DEFAULT_CLIENTNAME)
-    try:
-        err = ''
-        cfg = load_conf(clustername, conffile)
-    except Exception as e:
-        err = "Can't load Ceph conf file: " + str(e)
-        app.logger.critical(err)
-        app.logger.critical("CEPH_CONF: %s", conffile)
-        app.logger.critical("CEPH_CLUSTER_NAME: %s", clustername)
-        raise EnvironmentError(err)
+    app.ceph_cluster = cluster or 'ceph'
+    app.ceph_urls = {}
+    app.ceph_sigdict = {}
+    app.ceph_baseurl = ''
 
-    client_logfile = '/var/log/ceph' + clientname + '.log'
+    conf = conf or ''
+    cluster = cluster or 'ceph'
+    clientid = clientid or DEFAULT_ID
+    clientname = clientname or 'client.' + clientid
 
-    glob.cluster = rados.Rados(name=clientname, conffile=conffile)
-    glob.cluster.connect()
+    app.ceph_cluster = rados.Rados(name=clientname, conffile=conf)
+    app.ceph_cluster.conf_parse_argv(args)
+    app.ceph_cluster.connect()
 
-    glob.baseurl = get_conf(cfg, clientname, 'base_url') or DEFAULT_BASEURL
-    if glob.baseurl.endswith('/'):
-        glob.baseurl = glob.baseurl[:-1]
-    addr = get_conf(cfg, clientname, 'public_addr') or DEFAULT_ADDR
-    addrport = addr.rsplit(':', 1)
-    addr = addrport[0]
-    if len(addrport) > 1:
-        port = addrport[1]
-    else:
-        port = DEFAULT_ADDR.rsplit(':', 1)
+    app.ceph_baseurl = app.ceph_cluster.conf_get('restapi_base_url') \
+         or DEFAULT_BASEURL
+    if app.ceph_baseurl.endswith('/'):
+        app.ceph_baseurl = app.ceph_baseurl[:-1]
+    addr = app.ceph_cluster.conf_get('public_addr') or DEFAULT_ADDR
+
+    # remove any nonce from the conf value
+    addr = addr.split('/')[0]
+    addr, port = addr.rsplit(':', 1)
+    addr = addr or DEFAULT_ADDR
+    port = port or DEFAULT_PORT
     port = int(port)
 
-    loglevel = get_conf(cfg, clientname, 'log_level') or DEFAULT_LOG_LEVEL
-    logfile = get_conf(cfg, clientname, 'log_file') or client_logfile
+    loglevel = app.ceph_cluster.conf_get('restapi_log_level') \
+        or DEFAULT_LOG_LEVEL
+    logfile = app.ceph_cluster.conf_get('log_file')
     app.logger.addHandler(logging.handlers.WatchedFileHandler(logfile))
     app.logger.setLevel(LOGLEVELS[loglevel.lower()])
     for h in app.logger.handlers:
         h.setFormatter(logging.Formatter(
             '%(asctime)s %(name)s %(levelname)s: %(message)s'))
 
-    glob.sigdict = get_command_descriptions()
+    app.ceph_sigdict = get_command_descriptions(app.ceph_cluster)
 
-    osdid = find_up_osd()
+    osdid = find_up_osd(app)
     if osdid:
-        osd_sigdict = get_command_descriptions(target=('osd', int(osdid)))
+        osd_sigdict = get_command_descriptions(app.ceph_cluster,
+                                               target=('osd', int(osdid)))
 
-        # shift osd_sigdict keys up to fit at the end of the mon's glob.sigdict
-        maxkey = sorted(glob.sigdict.keys())[-1]
+        # shift osd_sigdict keys up to fit at the end of the mon's app.ceph_sigdict
+        maxkey = sorted(app.ceph_sigdict.keys())[-1]
         maxkey = int(maxkey.replace('cmd', ''))
         osdkey = maxkey + 1
         for k, v in osd_sigdict.iteritems():
             newv = v
             newv['flavor'] = 'tell'
             globk = 'cmd' + str(osdkey)
-            glob.sigdict[globk] = newv
+            app.ceph_sigdict[globk] = newv
             osdkey += 1
 
-    # glob.sigdict maps "cmdNNN" to a dict containing:
+    # app.ceph_sigdict maps "cmdNNN" to a dict containing:
     # 'sig', an array of argdescs
     # 'help', the helptext
     # 'module', the Ceph module this command relates to
@@ -225,11 +150,11 @@ def api_setup():
     #    a hint as to whether this is a GET or POST/PUT operation
     # 'avail', a comma-separated list of strings of consumers that should
     #    display this command (filtered by parse_json_funcsigs() above)
-    glob.urls = {}
-    for cmdnum, cmddict in glob.sigdict.iteritems():
+    app.ceph_urls = {}
+    for cmdnum, cmddict in app.ceph_sigdict.iteritems():
         cmdsig = cmddict['sig']
         flavor = cmddict.get('flavor', 'mon')
-        url, params = generate_url_and_params(cmdsig, flavor)
+        url, params = generate_url_and_params(app, cmdsig, flavor)
         perm = cmddict['perm']
         for k in METHOD_DICT.iterkeys():
             if k in perm:
@@ -242,34 +167,34 @@ def api_setup():
                    'methods':methods,
                   }
 
-        # glob.urls contains a list of urldicts (usually only one long)
-        if url not in glob.urls:
-            glob.urls[url] = [urldict]
+        # app.ceph_urls contains a list of urldicts (usually only one long)
+        if url not in app.ceph_urls:
+            app.ceph_urls[url] = [urldict]
         else:
             # If more than one, need to make union of methods of all.
             # Method must be checked in handler
             methodset = set(methods)
-            for old_urldict in glob.urls[url]:
+            for old_urldict in app.ceph_urls[url]:
                 methodset |= set(old_urldict['methods'])
             methods = list(methodset)
-            glob.urls[url].append(urldict)
+            app.ceph_urls[url].append(urldict)
 
         # add, or re-add, rule with all methods and urldicts
         app.add_url_rule(url, url, handler, methods=methods)
         url += '.<fmt>'
         app.add_url_rule(url, url, handler, methods=methods)
 
-    app.logger.debug("urls added: %d", len(glob.urls))
+    app.logger.debug("urls added: %d", len(app.ceph_urls))
 
     app.add_url_rule('/<path:catchall_path>', '/<path:catchall_path>',
                      handler, methods=['GET', 'PUT'])
     return addr, port
 
 
-def generate_url_and_params(sig, flavor):
+def generate_url_and_params(app, sig, flavor):
     '''
     Digest command signature from cluster; generate an absolute
-    (including glob.baseurl) endpoint from all the prefix words,
+    (including app.ceph_baseurl) endpoint from all the prefix words,
     and a list of non-prefix param descs
     '''
 
@@ -304,7 +229,7 @@ def generate_url_and_params(sig, flavor):
             else:
                 params.append(desc)
 
-    return glob.baseurl + url, params
+    return app.ceph_baseurl + url, params
 
 
 #
@@ -339,7 +264,7 @@ def show_human_help(prefix):
 
     permmap = {'r':'GET', 'rw':'PUT'}
     line = ''
-    for cmdsig in sorted(glob.sigdict.itervalues(), cmp=descsort):
+    for cmdsig in sorted(app.ceph_sigdict.itervalues(), cmp=descsort):
         concise = concise_sig(cmdsig['sig'])
         flavor = cmdsig.get('flavor', 'mon')
         if flavor == 'tell':
@@ -374,7 +299,7 @@ def log_request():
 
 @app.route('/')
 def root_redir():
-    return flask.redirect(glob.baseurl)
+    return flask.redirect(app.ceph_baseurl)
 
 def make_response(fmt, output, statusmsg, errorcode):
     '''
@@ -433,11 +358,11 @@ def handler(catchall_path=None, fmt=None, target=None):
     if ep[0] != '/':
         ep = '/' + ep
 
-    # demand that endpoint begin with glob.baseurl
-    if not ep.startswith(glob.baseurl):
+    # demand that endpoint begin with app.ceph_baseurl
+    if not ep.startswith(app.ceph_baseurl):
         return make_response(fmt, '', 'Page not found', 404)
 
-    rel_ep = ep[len(glob.baseurl)+1:]
+    rel_ep = ep[len(app.ceph_baseurl)+1:]
 
     # Extensions override Accept: headers override defaults
     if not fmt:
@@ -477,7 +402,7 @@ def handler(catchall_path=None, fmt=None, target=None):
         prefix = ' '.join(rel_ep.split('/')).strip()
 
     # show "match as much as you gave me" help for unknown endpoints
-    if not ep in glob.urls:
+    if not ep in app.ceph_urls:
         helptext = show_human_help(prefix)
         if helptext:
             resp = flask.make_response(helptext, 400)
@@ -488,7 +413,7 @@ def handler(catchall_path=None, fmt=None, target=None):
 
     found = None
     exc = ''
-    for urldict in glob.urls[ep]:
+    for urldict in app.ceph_urls[ep]:
         if flask.request.method not in urldict['methods']:
             continue
         paramsig = urldict['paramsig']
@@ -537,7 +462,7 @@ def handler(catchall_path=None, fmt=None, target=None):
         cmdtarget = ('mon', '')
 
     app.logger.debug('sending command prefix %s argdict %s', prefix, argdict)
-    ret, outbuf, outs = json_command(glob.cluster, prefix=prefix,
+    ret, outbuf, outs = json_command(app.ceph_cluster, prefix=prefix,
                                      target=cmdtarget,
                                      inbuf=flask.request.data, argdict=argdict)
     if ret:
@@ -552,6 +477,11 @@ def handler(catchall_path=None, fmt=None, target=None):
     return response
 
 #
-# Last module-level (import-time) ask: set up the cluster connection
-# 
-addr, port = api_setup()
+# Main entry point from wrapper/WSGI server: call with cmdline args,
+# get back the WSGI app entry point
+#
+def generate_app(conf, cluster, clientname, clientid, args):
+    addr, port = api_setup(app, conf, cluster, clientname, clientid, args)
+    app.ceph_addr = addr
+    app.ceph_port = port
+    return app
