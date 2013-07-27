@@ -1937,7 +1937,7 @@ void Monitor::handle_command(MMonCommand *m)
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
   if (prefix == "get_command_descriptions") {
     int cmdnum = 0;
-    JSONFormatter *f = new JSONFormatter();
+    Formatter *f = new_formatter("json");
     f->open_object_section("command_descriptions");
     for (MonCommand *cp = mon_commands;
 	 cp < &mon_commands[ARRAY_SIZE(mon_commands)]; cp++) {
