@@ -15,7 +15,7 @@ import boto.s3.acl
 import time
 
 from teuthology import misc as teuthology
-from teuthology.task.util.rgw import rgwadmin
+from teuthology.task_util.rgw import rgwadmin
 
 log = logging.getLogger(__name__)
 
