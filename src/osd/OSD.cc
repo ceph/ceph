@@ -3935,7 +3935,6 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     f->close_section();	// command_descriptions
 
     f->flush(ds);
-    odata.append(ds);
     delete f;
     goto out;
   }
