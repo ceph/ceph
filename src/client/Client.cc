@@ -117,8 +117,7 @@ bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
   else
     assert(0 == "bad command registered");
   m_client->client_lock.Unlock();
-  f->flush(ss);
-  out.append(ss);
+  f->flush(out);
   delete f;
   return true;
 }
