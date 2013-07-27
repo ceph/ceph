@@ -831,6 +831,11 @@ void RGWRados::finalize()
     RGWRESTConn *conn = iter->second;
     delete conn;
   }
+
+  for (iter = region_conn_map.begin(); iter != region_conn_map.end(); ++iter) {
+    RGWRESTConn *conn = iter->second;
+    delete conn;
+  }
 }
 
 /** 
@@ -896,6 +901,12 @@ int RGWRados::init_complete()
     }
     RGWRegion& region = iter->second;
     rest_master_conn = new RGWRESTConn(cct, this, region.endpoints);
+
+    for (iter = region_map.regions.begin(); iter != region_map.regions.end(); ++iter) {
+      RGWRegion& region = iter->second;
+
+      region_conn_map[region.name] = new RGWRESTConn(cct, this, region.endpoints);
+    }
   }
 
   map<string, RGWZone>::iterator ziter;
@@ -2535,7 +2546,17 @@ int RGWRados::copy_obj(void *ctx,
 
     RGWRESTConn *conn;
     if (source_zone.empty()) {
-      conn = rest_master_conn;
+      if (dest_bucket_info.region.empty()) {
+        /* source is in the master region */
+        conn = rest_master_conn;
+      } else {
+        map<string, RGWRESTConn *>::iterator iter = region_conn_map.find(src_bucket_info.region);
+        if (iter == zone_conn_map.end()) {
+          ldout(cct, 0) << "could not find region connection to region: " << source_zone << dendl;
+          return -ENOENT;
+        }
+        conn = iter->second;
+      }
     } else {
       map<string, RGWRESTConn *>::iterator iter = zone_conn_map.find(source_zone);
       if (iter == zone_conn_map.end()) {

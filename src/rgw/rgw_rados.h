@@ -888,6 +888,7 @@ public:
   RGWRegionMap region_map;
   RGWRESTConn *rest_master_conn;
   map<string, RGWRESTConn *> zone_conn_map;
+  map<string, RGWRESTConn *> region_conn_map;
 
   RGWMetadataManager *meta_mgr;
 
