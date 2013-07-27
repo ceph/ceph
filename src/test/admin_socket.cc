@@ -64,7 +64,7 @@ TEST(AdminSocket, SendNoOp) {
   ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
   AdminSocketClient client(get_rand_socket_path());
   string version;
-  ASSERT_EQ("", client.do_request("0", &version));
+  ASSERT_EQ("", client.do_request("{\"prefix\":\"0\"}", &version));
   ASSERT_EQ(CEPH_ADMIN_SOCK_VERSION, version);
   ASSERT_EQ(true, asoct.shutdown());
 }
@@ -87,7 +87,7 @@ TEST(AdminSocket, RegisterCommand) {
   AdminSocketClient client(get_rand_socket_path());
   ASSERT_EQ(0, asoct.m_asokc->register_command("test", "test", new MyTest(), ""));
   string result;
-  ASSERT_EQ("", client.do_request("test", &result));
+  ASSERT_EQ("", client.do_request("{\"prefix\":\"test\"}", &result));
   ASSERT_EQ("test|", result);
   ASSERT_EQ(true, asoct.shutdown());
 }
@@ -111,20 +111,20 @@ TEST(AdminSocket, RegisterCommandPrefixes) {
   ASSERT_EQ(0, asoct.m_asokc->register_command("test", "test", new MyTest(), ""));
   ASSERT_EQ(0, asoct.m_asokc->register_command("test command", "test command", new MyTest2(), ""));
   string result;
-  ASSERT_EQ("", client.do_request("test", &result));
+  ASSERT_EQ("", client.do_request("{\"prefix\":\"test\"}", &result));
   ASSERT_EQ("test|", result);
-  ASSERT_EQ("", client.do_request("test command", &result));
+  ASSERT_EQ("", client.do_request("{\"prefix\":\"test command\"}", &result));
   ASSERT_EQ("test command|", result);
-  ASSERT_EQ("", client.do_request("test command post", &result));
+  ASSERT_EQ("", client.do_request("{\"prefix\":\"test command post\"}", &result));
   ASSERT_EQ("test command|post", result);
-  ASSERT_EQ("", client.do_request("test command  post", &result));
+  ASSERT_EQ("", client.do_request("{\"prefix\":\"test command  post\"}", &result));
   ASSERT_EQ("test command| post", result);
-  ASSERT_EQ("", client.do_request("test this thing", &result));
+  ASSERT_EQ("", client.do_request("{\"prefix\":\"test this thing\"}", &result));
   ASSERT_EQ("test|this thing", result);
 
-  ASSERT_EQ("", client.do_request("test  command post", &result));
+  ASSERT_EQ("", client.do_request("{\"prefix\":\"test  command post\"}", &result));
   ASSERT_EQ("test| command post", result);
-  ASSERT_EQ("", client.do_request("test  this thing", &result));
+  ASSERT_EQ("", client.do_request("{\"prefix\":\"test  this thing\"}", &result));
   ASSERT_EQ("test| this thing", result);
   ASSERT_EQ(true, asoct.shutdown());
 }
