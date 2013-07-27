@@ -36,6 +36,9 @@ public:
   virtual void dump_string(const char *name, std::string s);
   virtual std::ostream& dump_stream(const char *name);
   virtual void dump_format(const char *name, const char *fmt, ...);
+  virtual void dump_format_unquoted(const char *name, const char *fmt, ...) {
+    assert(0 == "not implemented");
+  }
   virtual int get_len() const;
   virtual void write_raw_data(const char *data);
 
