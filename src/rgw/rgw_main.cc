@@ -606,6 +606,7 @@ int main(int argc, const char **argv)
   RGWStoreManager::close_storage(store);
 
   rgw_tools_cleanup();
+  rgw_shutdown_resolver();
   curl_global_cleanup();
 
   dout(1) << "final shutdown" << dendl;
