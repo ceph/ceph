@@ -894,7 +894,7 @@ def find_cmd_target(childargs):
     right daemon.
     Returns ('osd', osdid), ('pg', pgid), or ('mon', '')
     """
-    sig = parse_funcsig(['tell', {'name':'target','type':'CephName'}])
+    sig = parse_funcsig(['tell', {'name':'target', 'type':'CephName'}])
     try:
         valid_dict = validate(childargs, sig, partial=True)
     except ArgumentError:
@@ -908,7 +908,7 @@ def find_cmd_target(childargs):
             name.valid(valid_dict['target'])
             return name.nametype, name.nameid
 
-    sig = parse_funcsig(['tell', {'name':'pgid','type':'CephPgid'}])
+    sig = parse_funcsig(['tell', {'name':'pgid', 'type':'CephPgid'}])
     try:
         valid_dict = validate(childargs, sig, partial=True)
     except ArgumentError:
@@ -918,7 +918,7 @@ def find_cmd_target(childargs):
             # pg doesn't need revalidation; the string is fine
             return 'pg', valid_dict['pgid']
 
-    sig = parse_funcsig(['pg', {'name':'pgid','type':'CephPgid'}])
+    sig = parse_funcsig(['pg', {'name':'pgid', 'type':'CephPgid'}])
     try:
         valid_dict = validate(childargs, sig, partial=True)
     except ArgumentError:
