@@ -1292,6 +1292,7 @@ RGWDataChangesLog::~RGWDataChangesLog() {
   down_flag.set(1);
   renew_thread->stop();
   renew_thread->join();
+  delete renew_thread;
   delete[] oids;
 }
 
