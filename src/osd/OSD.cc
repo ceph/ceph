@@ -1167,8 +1167,11 @@ int OSD::init()
   class_handler = new ClassHandler();
   cls_initialize(class_handler);
 
-  if (g_conf->osd_open_classes_on_start)
-    class_handler->open_all_classes();
+  if (g_conf->osd_open_classes_on_start) {
+    int r = class_handler->open_all_classes();
+    if (r)
+      dout(1) << "warning: got an error loading one or more classes: " << cpp_strerror(r) << dendl;
+  }
 
   // load up "current" osdmap
   assert_warn(!osdmap);
