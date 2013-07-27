@@ -46,30 +46,30 @@ def run_rest_api_daemon(ctx, api_clients):
 @contextlib.contextmanager
 def task(ctx, config):
     """
-    Start up rest_api.
+    Start up rest-api.
 
     To start on on all clients::
 
         tasks:
         - ceph:
-        - rest_api:
+        - rest-api:
 
     To only run on certain clients::
 
         tasks:
         - ceph:
-        - rest_api: [client.0, client.3]
+        - rest-api: [client.0, client.3]
 
     or
 
         tasks:
         - ceph:
-        - rest_api:
+        - rest-api:
             client.0:
             client.3:
 
     The general flow of things here is:
-        1. Find clients on which rest_api is supposed to run (api_clients)
+        1. Find clients on which rest-api is supposed to run (api_clients)
         2. Generate keyring values
         3. Start up ceph-rest-api daemons
     On cleanup:
