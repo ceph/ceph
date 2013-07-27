@@ -390,8 +390,7 @@ int AdminSocket::register_command(std::string command, std::string cmddesc, Admi
     ldout(m_cct, 5) << "register_command " << command << " hook " << hook << dendl;
     m_hooks[command] = hook;
     m_descs[command] = cmddesc;
-    if (help.length())
-      m_help[command] = help;
+    m_help[command] = help;
     ret = 0;
   }  
   m_lock.Unlock();
@@ -448,7 +447,8 @@ public:
     for (map<string,string>::iterator p = m_as->m_help.begin();
 	 p != m_as->m_help.end();
 	 ++p) {
-      f->dump_string(p->first.c_str(), p->second);
+      if (p->second.length())
+	f->dump_string(p->first.c_str(), p->second);
     }
     f->close_section();
     ostringstream ss;
