@@ -223,24 +223,24 @@ void PerfCounters::dump_formatted(Formatter *f, bool schema)
       if (d->type & PERFCOUNTER_LONGRUNAVG) {
 	f->open_object_section(d->name);
 	if (d->type & PERFCOUNTER_U64) {
-	  f->dump_format("avgcount", "%"PRId64, d->avgcount);
-	  f->dump_format("sum", "%"PRId64, d->u64);
+	  f->dump_unsigned("avgcount", d->avgcount);
+	  f->dump_unsigned("sum", d->u64);
 	} else if (d->type & PERFCOUNTER_TIME) {
-	  f->dump_format("avgcount", "%"PRId64, d->avgcount);
-	  f->dump_format("sum", "%"PRId64"%09"PRId64,
-			 d->u64 / 1000000000ull,
-			 d->u64 % 1000000000ull);
+	  f->dump_unsigned("avgcount", d->avgcount);
+	  f->dump_format_unquoted("sum", "%"PRId64".%09"PRId64,
+				  d->u64 / 1000000000ull,
+				  d->u64 % 1000000000ull);
 	} else {
 	  assert(0);
 	}
 	f->close_section();
       } else {
 	if (d->type & PERFCOUNTER_U64) {
-	  f->dump_format(d->name, "%"PRId64, d->u64);
+	  f->dump_unsigned(d->name, d->u64);
 	} else if (d->type & PERFCOUNTER_TIME) {
-	  f->dump_format(d->name, "%"PRId64"%09"PRId64,
-			 d->u64 / 1000000000ull,
-			 d->u64 % 1000000000ull);
+	  f->dump_format_unquoted(d->name, "%"PRId64".%09"PRId64,
+				  d->u64 / 1000000000ull,
+				  d->u64 % 1000000000ull);
 	} else {
 	  assert(0);
 	}
