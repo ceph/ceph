@@ -70,7 +70,7 @@ TEST(AdminSocket, SendNoOp) {
 }
 
 class MyTest : public AdminSocketHook {
-  bool call(std::string command, std::string args, bufferlist& result) {
+  bool call(std::string command, std::string args, std::string format, bufferlist& result) {
     result.append(command);
     result.append("|");
     result.append(args);
@@ -93,7 +93,7 @@ TEST(AdminSocket, RegisterCommand) {
 }
 
 class MyTest2 : public AdminSocketHook {
-  bool call(std::string command, std::string args, bufferlist& result) {
+  bool call(std::string command, std::string args, std::string format, bufferlist& result) {
     result.append(command);
     result.append("|");
     result.append(args);
