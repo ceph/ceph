@@ -13,6 +13,25 @@
 	...
 }
 {
+	ignore libcurl leaks
+	Memcheck:Leak
+	...
+	fun:*curl_global_init
+}
+{
+	ignore gnutls leaks
+	Memcheck:Leak
+	...
+	fun:gnutls_global_init
+}
+{
+	ignore libfcgi leak; OS_LibShutdown has no callers!
+	Memcheck:Leak
+	...
+	fun:OS_LibInit
+	fun:FCGX_Init
+}
+{
         strptime suckage
         Memcheck:Cond
         fun:__GI___strncasecmp_l
