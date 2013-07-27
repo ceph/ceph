@@ -1966,8 +1966,9 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   if (prefix == "osd stat") {
     osdmap.print_summary(f.get(), ds);
     if (f)
-      f->flush(ds);
-    rdata.append(ds);
+      f->flush(rdata);
+    else
+      rdata.append(ds);
   }
   else if (prefix == "osd dump" ||
 	   prefix == "osd tree" ||
@@ -2080,9 +2081,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       f->dump_string(p->first.c_str(), p->second);
     f->close_section();
     f->close_section();
-    f->flush(ds);
-    ds << "\n";
-    rdata.append(ds);
+    f->flush(rdata);
   } else if (prefix == "osd map") {
     string poolstr, objstr, namespacestr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);

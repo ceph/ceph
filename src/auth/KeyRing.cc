@@ -157,8 +157,7 @@ void KeyRing::encode_formatted(string label, Formatter *f, bufferlist& bl)
     f->close_section();	/* auth_entities */
   }
   f->close_section();	/* auth_dump */
-  f->flush(os);
-  bl.append(os.str());
+  f->flush(bl);
 }
 
 void KeyRing::decode_plaintext(bufferlist::iterator& bli)

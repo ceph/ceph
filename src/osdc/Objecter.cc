@@ -2348,9 +2348,8 @@ bool Objecter::RequestStateHook::call(std::string command, cmdmap_t& cmdmap,
   m_objecter->client_lock.Lock();
   m_objecter->dump_requests(f);
   m_objecter->client_lock.Unlock();
-  f->flush(ss);
+  f->flush(out);
   delete f;
-  out.append(ss);
   return true;
 }
 

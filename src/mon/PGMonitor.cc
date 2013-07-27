@@ -1358,7 +1358,6 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     } else {
       ds << pg_map;
     }
-    rdata.append(ds);
     r = 0;
   } else if (prefix == "pg getmap") {
     pg_map.encode(rdata);
