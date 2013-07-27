@@ -896,7 +896,7 @@ def find_cmd_target(childargs):
     """
     sig = parse_funcsig(['tell', {'name':'target','type':'CephName'}])
     try:
-        valid_dict = validate(childargs, sig, partial=True);
+        valid_dict = validate(childargs, sig, partial=True)
     except ArgumentError:
         pass
     else:
@@ -910,7 +910,7 @@ def find_cmd_target(childargs):
 
     sig = parse_funcsig(['tell', {'name':'pgid','type':'CephPgid'}])
     try:
-        valid_dict = validate(childargs, sig, partial=True);
+        valid_dict = validate(childargs, sig, partial=True)
     except ArgumentError:
         pass
     else:
@@ -920,7 +920,7 @@ def find_cmd_target(childargs):
 
     sig = parse_funcsig(['pg', {'name':'pgid','type':'CephPgid'}])
     try:
-        valid_dict = validate(childargs, sig, partial=True);
+        valid_dict = validate(childargs, sig, partial=True)
     except ArgumentError:
         pass
     else:
