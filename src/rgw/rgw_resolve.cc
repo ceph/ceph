@@ -170,3 +170,8 @@ void rgw_init_resolver()
 {
   rgw_resolver = new RGWResolver();
 }
+
+void rgw_shutdown_resolver()
+{
+  delete rgw_resolver;
+}
