@@ -219,7 +219,7 @@ def generate_url_and_params(app, sig, flavor):
              desc.req and \
              not str(desc.instance).startswith('--') and \
              not params:
-                url += '/' + str(desc.instance)
+            url += '/' + str(desc.instance)
         else:
             # tell/<target> is a weird case; the URL includes what
             # would everywhere else be a parameter
