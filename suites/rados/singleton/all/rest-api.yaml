@@ -1,0 +1,20 @@
+roles:
+- - mon.0
+  - mon.1
+  - mon.2
+  - mds.a
+  - osd.0
+  - osd.1
+  - osd.2
+  - client.0
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - wrongly marked me down
+    - had wrong client addr
+- rest-api: [client.0]
+- workunit:
+    clients:
+      all:
+        - rest/test.py
