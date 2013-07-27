@@ -55,7 +55,7 @@ class Thrasher:
         self.ceph_manager.kill_osd(osd)
         if mark_down:
             self.ceph_manager.mark_down_osd(osd)
-        if mark_out:
+        if mark_out and osd in self.in_osds:
             self.out_osd(osd)
 
     def blackhole_kill_osd(self, osd=None):
