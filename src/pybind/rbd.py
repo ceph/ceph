@@ -17,7 +17,7 @@ methods, a :class:`TypeError` will be raised.
 # Copyright 2011 Josh Durgin
 from ctypes import CDLL, c_char, c_char_p, c_size_t, c_void_p, c_int, \
     create_string_buffer, byref, Structure, c_uint64, c_int64, c_uint8, \
-    CFUNCTYPE, pointer
+    CFUNCTYPE
 import ctypes
 import errno
 
