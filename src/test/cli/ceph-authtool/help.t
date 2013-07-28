@@ -10,9 +10,15 @@
                                   'mount -o secret=..' argument
     -C, --create-keyring          will create a new keyring, overwriting any
                                   existing keyringfile
-    --gen-key                     will generate a new secret key for the
+    -g, --gen-key                 will generate a new secret key for the
                                   specified entityname
-    --add-key                     will add an encoded key to the keyring
+    --gen-print-key               will generate a new secret key without set it
+                                  to the keyringfile, prints the secret to stdout
+    --import-keyring              will import the content of a given keyring
+                                  into the keyringfile
+    -u, --set-uid                 sets the auid (authenticated user id) for the
+                                  specified entityname
+    -a, --add-key                 will add an encoded key to the keyring
     --cap subsystem capability    will set the capability for given subsystem
     --caps capsfile               will set all of capabilities associated with a
                                   given key, for all subsystems
