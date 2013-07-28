@@ -40,10 +40,10 @@ class Thrasher:
         # try both old and new tell syntax, in case we are testing old code
         try:
             manager.raw_cluster_cmd('--', 'tell', 'mon.*', 'injectargs',
-                                    '--mon-osd-down-out-interval', '0')
+                                    '--mon-osd-down-out-interval 0')
         except:
             manager.raw_cluster_cmd('--', 'mon', 'tell', '*', 'injectargs',
-                                    '--mon-osd-down-out-interval', '0')
+                                    '--mon-osd-down-out-interval 0')
         self.thread = gevent.spawn(self.do_thrash)
 
     def kill_osd(self, osd=None, mark_down=False, mark_out=False):
