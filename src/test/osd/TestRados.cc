@@ -2,6 +2,7 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/errno.h"
+#include "common/version.h"
 
 #include <iostream>
 #include <sstream>
@@ -13,6 +14,7 @@
 #include <unistd.h>
 
 #include "test/osd/RadosModel.h"
+
 
 using namespace std;
 
@@ -250,6 +252,7 @@ int main(int argc, char **argv)
   if (max_stride_size < 0)
     max_stride_size = size / 5;
 
+  cout << pretty_version_to_str() << std::endl;
   cout << "Configuration:" << std::endl
        << "\tNumber of operations: " << ops << std::endl
        << "\tNumber of objects: " << objects << std::endl
