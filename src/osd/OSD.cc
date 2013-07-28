@@ -4958,7 +4958,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(10) << "handle_osd_map message skips epochs " << osdmap->get_epoch() + 1
 	     << ".." << (first-1) << dendl;
     if ((m->oldest_map < first && osdmap->get_epoch() == 0) ||
-	m->oldest_map <= osdmap->get_epoch()) {
+	m->oldest_map <= osdmap->get_epoch() + 1) {
       monc->sub_want("osdmap", osdmap->get_epoch()+1, CEPH_SUBSCRIBE_ONETIME);
       monc->renew_subs();
       m->put();
