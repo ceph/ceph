@@ -642,6 +642,10 @@ int librados::RadosClient::osd_command(int osd, vector<string>& cmd,
   bool done;
   int ret;
   tid_t tid;
+
+  if (osd < 0)
+    return -EINVAL;
+
   lock.Lock();
   // XXX do anything with tid?
   int r = objecter->osd_command(osd, cmd, inbl, &tid, poutbl, prs,

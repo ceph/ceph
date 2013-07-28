@@ -33,34 +33,35 @@ def parse_args():
     parser.add_argument('-c', '--conf', help='Ceph configuration file')
     parser.add_argument('--cluster', help='Ceph cluster name')
     parser.add_argument('-n', '--name', help='Ceph client name')
+    parser.add_argument('-i', '--id', help='Ceph client id')
 
-    return parser.parse_args()
-
+    return parser.parse_known_args()
 
 # main
 
-parsed_args = parse_args()
-if parsed_args.conf:
-    os.environ['CEPH_CONF'] = parsed_args.conf
-if parsed_args.cluster:
-    os.environ['CEPH_CLUSTER_NAME'] = parsed_args.cluster
-if parsed_args.name:
-    os.environ['CEPH_NAME'] = parsed_args.name
+parsed_args, rest = parse_args()
 
 # import now that env vars are available to imported module
 
 try:
     import ceph_rest_api
-except Exception as e:
+except EnvironmentError as e:
     print >> sys.stderr, "Error importing ceph_rest_api: ", str(e)
     sys.exit(1)
 
-# importing ceph_rest_api has set module globals 'app', 'addr', and 'port' 
+# let other exceptions generate traceback
+
+app = ceph_rest_api.generate_app(
+    parsed_args.conf,
+    parsed_args.cluster,
+    parsed_args.name,
+    parsed_args.id,
+    rest,
+)
 
 files = [os.path.split(fr[1])[-1] for fr in inspect.stack()]
 if 'pdb.py' in files:
-    ceph_rest_api.app.run(host=ceph_rest_api.addr, port=ceph_rest_api.port,
-                          debug=True, use_reloader=False, use_debugger=False)
+    app.run(host=app.ceph_addr, port=app.ceph_port,
+            debug=True, use_reloader=False, use_debugger=False)
 else:
-    ceph_rest_api.app.run(host=ceph_rest_api.addr, port=ceph_rest_api.port,
-                          debug=True)
+    app.run(host=app.ceph_addr, port=app.ceph_port)

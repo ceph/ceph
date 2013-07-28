@@ -52,7 +52,7 @@ int ClassHandler::open_all_classes()
     if (strlen(pde->d_name) > sizeof(CLS_PREFIX) - 1 + sizeof(CLS_SUFFIX) - 1 &&
 	strncmp(pde->d_name, CLS_PREFIX, sizeof(CLS_PREFIX) - 1) == 0 &&
 	strcmp(pde->d_name + strlen(pde->d_name) - (sizeof(CLS_SUFFIX) - 1), CLS_SUFFIX) == 0) {
-      char cname[strlen(pde->d_name)];
+      char cname[PATH_MAX + 1];
       strcpy(cname, pde->d_name + sizeof(CLS_PREFIX) - 1);
       cname[strlen(cname) - (sizeof(CLS_SUFFIX) - 1)] = '\0';
       dout(10) << __func__ << " found " << cname << dendl;

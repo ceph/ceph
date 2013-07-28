@@ -36,7 +36,7 @@
 #endif
 
 #include "include/compat.h"
-#include "include/fiemap.h"
+#include "include/linux_fiemap.h"
 
 #include "common/xattr.h"
 #include "chain_xattr.h"

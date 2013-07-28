@@ -196,7 +196,8 @@ class Client : public Dispatcher {
     Client *m_client;
   public:
     CommandHook(Client *client);
-    bool call(std::string command, std::string args, bufferlist& out);
+    bool call(std::string command, std::string args, std::string format,
+	      bufferlist& out);
   };
   CommandHook m_command_hook;
 

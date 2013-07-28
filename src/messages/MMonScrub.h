@@ -31,7 +31,7 @@ public:
     switch (op) {
     case OP_SCRUB: return "scrub";
     case OP_RESULT: return "result";
-    default: assert("unknown op type"); return NULL;
+    default: assert(0 == "unknown op type"); return NULL;
     }
   }
 

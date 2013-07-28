@@ -62,15 +62,19 @@ Formatter::~Formatter()
 }
 
 Formatter *
-new_formatter(const std::string &type)
+new_formatter(const std::string type)
 {
-    if (type == "json")
+    std::string mytype = type;
+    if (mytype == "")
+      mytype = "json-pretty";
+
+    if (mytype == "json")
       return new JSONFormatter(false);
-    else if (type == "json-pretty")
+    else if (mytype == "json-pretty")
       return new JSONFormatter(true);
-    else if (type == "xml")
+    else if (mytype == "xml")
       return new XMLFormatter(false);
-    else if (type == "xml-pretty")
+    else if (mytype == "xml-pretty")
       return new XMLFormatter(true);
     else
       return (Formatter *)NULL;
@@ -250,6 +254,18 @@ void JSONFormatter::dump_format(const char *name, const char *fmt, ...)
   print_quoted_string(buf);
 }
 
+void JSONFormatter::dump_format_unquoted(const char *name, const char *fmt, ...)
+{
+  char buf[LARGE_SIZE];
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(buf, LARGE_SIZE, fmt, ap);
+  va_end(ap);
+
+  print_name(name);
+  m_ss << buf;
+}
+
 int JSONFormatter::get_len() const
 {
   return m_ss.str().size();
@@ -396,6 +412,21 @@ void XMLFormatter::dump_format(const char *name, const char *fmt, ...)
   std::string e(name);
   print_spaces();
   m_ss << "<" << e << ">" << escape_xml_str(buf) << "</" << e << ">";
+  if (m_pretty)
+    m_ss << "\n";
+}
+
+void XMLFormatter::dump_format_unquoted(const char *name, const char *fmt, ...)
+{
+  char buf[LARGE_SIZE];
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(buf, LARGE_SIZE, fmt, ap);
+  va_end(ap);
+
+  std::string e(name);
+  print_spaces();
+  m_ss << "<" << e << ">" << buf << "</" << e << ">";
   if (m_pretty)
     m_ss << "\n";
 }
