@@ -554,9 +554,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
   boost::scoped_ptr<Formatter> f(new_formatter(format));
 
   MonSession *session = m->get_session();
-  if (!session ||
-      (!session->is_capable("mds", MON_CAP_R) &&
-       !mon->_allowed_command(session, cmdmap))) {
+  if (!session) {
     mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
@@ -768,9 +766,7 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
   MonSession *session = m->get_session();
-  if (!session ||
-      (!session->is_capable("mds", MON_CAP_W) &&
-       !mon->_allowed_command(session, cmdmap))) {
+  if (!session) {
     mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
