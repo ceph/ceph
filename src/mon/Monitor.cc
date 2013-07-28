@@ -2019,6 +2019,7 @@ void Monitor::handle_command(MMonCommand *m)
   if (!_allowed_command(session, module, prefix, cmdmap)) {
     dout(1) << __func__ << " access denied" << dendl;
     reply_command(m, -EACCES, "access denied", 0);
+    return;
   }
 
   if (module == "mds") {

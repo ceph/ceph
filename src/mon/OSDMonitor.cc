@@ -1949,9 +1949,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   }
 
   MonSession *session = m->get_session();
-  if (!session ||
-      (!session->is_capable("osd", MON_CAP_R) &&
-       !mon->_allowed_command(session, cmdmap))) {
+  if (!session) {
     mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
@@ -2595,9 +2593,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
   boost::scoped_ptr<Formatter> f(new_formatter(format));
 
   MonSession *session = m->get_session();
-  if (!session ||
-      (!session->is_capable("osd", MON_CAP_W) &&
-       !mon->_allowed_command(session, cmdmap))) {
+  if (!session) {
     mon->reply_command(m, -EACCES, "access denied", get_last_committed());
     return true;
   }
