@@ -3,6 +3,4 @@ tasks:
     all:
       branch: next
 - ceph.restart:
-    daemons: [osd.0, osd.1, osd.2, mon.a]
-    wait-for-healthy: false
-    wait-for-osds-up: true
+    daemons: [osd.0, osd.1, osd.2]
