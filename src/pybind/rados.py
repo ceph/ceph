@@ -278,7 +278,7 @@ Rados object in state %s." % (self.state))
         ret = run_in_thread(self.librados.rados_conf_parse_argv_remainder,
                             (self.cluster, len(args), cargs, cretargs))
         if ret:
-           raise make_ex("error calling conf_parse_argv_remainder")
+            raise make_ex(ret, "error calling conf_parse_argv_remainder")
 
         # cretargs was allocated with fixed length; collapse return
         # list to eliminate any missing args

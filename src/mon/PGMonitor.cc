@@ -255,6 +255,12 @@ void PGMonitor::update_from_paxos(bool *need_bootstrap)
   update_logger();
 }
 
+void PGMonitor::on_upgrade()
+{
+  dout(1) << __func__ << " discarding in-core PGMap" << dendl;
+  pg_map = PGMap();
+}
+
 void PGMonitor::upgrade_format()
 {
   unsigned current = 1;

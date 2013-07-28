@@ -745,7 +745,8 @@ public:
   int write_fsid();
   int write_fsid(MonitorDBStore::Transaction &t);
 
-  void do_admin_command(std::string command, std::string args, ostream& ss);
+  void do_admin_command(std::string command, std::string args,
+			std::string format, ostream& ss);
 
 private:
   // don't allow copying

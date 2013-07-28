@@ -504,7 +504,7 @@ ceph_radosacl_SOURCES = radosacl.cc
 ceph_radosacl_LDADD = librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += ceph_scratchtool ceph_scratchtoolpp ceph_radosacl
 
-rbd_SOURCES = rbd.cc common/fiemap.cc common/secret.c common/TextTable.cc common/util.cc
+rbd_SOURCES = rbd.cc common/secret.c common/TextTable.cc common/util.cc
 rbd_CXXFLAGS = ${AM_CXXFLAGS}
 rbd_LDADD = librbd.la librados.la $(LIBGLOBAL_LDA) -lkeyutils
 if LINUX
@@ -1895,7 +1895,6 @@ noinst_HEADERS = \
         include/encoding.h\
         include/err.h\
         include/error.h\
-        include/fiemap.h\
         include/filepath.h\
         include/frag.h\
         include/hash.h\

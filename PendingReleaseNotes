@@ -6,3 +6,10 @@ v0.67
   in order to accomodate the new write back throttle system.  upstart
   now sets the fd limit to 32k.  sysvinit will set it to 32k by default
   (still overrideable via max_open_files).
+
+* The 'ceph pg <pgid> ...' commands (like 'ceph pg <pgid> query') are
+  deprecated in favor of 'ceph tell <pgid> ...'.  This makes the
+  distinction between 'ceph pg <command> <pgid>' and 'ceph pg <pgid>
+  <command>' less awkward by making it clearer that the 'tell'
+  commands are talking to the OSD serving the placement group, not the
+  monitor.

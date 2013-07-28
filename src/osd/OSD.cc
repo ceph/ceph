@@ -997,44 +997,44 @@ class OSDSocketHook : public AdminSocketHook {
   OSD *osd;
 public:
   OSDSocketHook(OSD *o) : osd(o) {}
-  bool call(std::string command, std::string args, bufferlist& out) {
+  bool call(std::string command, std::string args, std::string format,
+	    bufferlist& out) {
     stringstream ss;
-    bool r = osd->asok_command(command, args, ss);
+    bool r = osd->asok_command(command, args, format, ss);
     out.append(ss);
     return r;
   }
 };
 
-bool OSD::asok_command(string command, string args, ostream& ss)
+bool OSD::asok_command(string command, string args, string format, ostream& ss)
 {
+  if (format == "")
+    format = "json-pretty";
+  Formatter *f = new_formatter(format);
   if (command == "dump_ops_in_flight") {
-    op_tracker.dump_ops_in_flight(ss);
+    op_tracker.dump_ops_in_flight(f);
   } else if (command == "dump_historic_ops") {
-    op_tracker.dump_historic_ops(ss);
+    op_tracker.dump_historic_ops(f);
   } else if (command == "dump_op_pq_state") {
-    JSONFormatter f(true);
-    f.open_object_section("pq");
-    op_wq.dump(&f);
-    f.close_section();
-    f.flush(ss);
+    f->open_object_section("pq");
+    op_wq.dump(f);
+    f->close_section();
   } else if (command == "dump_blacklist") {
     list<pair<entity_addr_t,utime_t> > bl;
     OSDMapRef curmap = service.get_osdmap();
 
-    JSONFormatter f(true);
-    f.open_array_section("blacklist");
+    f->open_array_section("blacklist");
     curmap->get_blacklist(&bl);
     for (list<pair<entity_addr_t,utime_t> >::iterator it = bl.begin();
 	it != bl.end(); ++it) {
-      f.open_array_section("entry");
-      f.open_object_section("entity_addr_t");
-      it->first.dump(&f);
-      f.close_section(); //entity_addr_t
-      it->second.localtime(f.dump_stream("expire_time"));
-      f.close_section(); //entry
+      f->open_array_section("entry");
+      f->open_object_section("entity_addr_t");
+      it->first.dump(f);
+      f->close_section(); //entity_addr_t
+      it->second.localtime(f->dump_stream("expire_time"));
+      f->close_section(); //entry
     }
-    f.close_section(); //blacklist
-    f.flush(ss);
+    f->close_section(); //blacklist
   } else if (command == "dump_watchers") {
     list<obj_watch_item_t> watchers;
     osd_lock.Lock();
@@ -1052,35 +1052,35 @@ bool OSD::asok_command(string command, string args, ostream& ss)
     }
     osd_lock.Unlock();
 
-    JSONFormatter f(true);
-    f.open_array_section("watchers");
+    f->open_array_section("watchers");
     for (list<obj_watch_item_t>::iterator it = watchers.begin();
 	it != watchers.end(); ++it) {
 
-      f.open_array_section("watch");
+      f->open_array_section("watch");
 
-      f.dump_string("namespace", it->obj.nspace);
-      f.dump_string("object", it->obj.oid.name);
+      f->dump_string("namespace", it->obj.nspace);
+      f->dump_string("object", it->obj.oid.name);
 
-      f.open_object_section("entity_name");
-      it->wi.name.dump(&f);
-      f.close_section(); //entity_name_t
+      f->open_object_section("entity_name");
+      it->wi.name.dump(f);
+      f->close_section(); //entity_name_t
 
-      f.dump_int("cookie", it->wi.cookie);
-      f.dump_int("timeout", it->wi.timeout_seconds);
+      f->dump_int("cookie", it->wi.cookie);
+      f->dump_int("timeout", it->wi.timeout_seconds);
 
-      f.open_object_section("entity_addr_t");
-      it->wi.addr.dump(&f);
-      f.close_section(); //entity_addr_t
+      f->open_object_section("entity_addr_t");
+      it->wi.addr.dump(f);
+      f->close_section(); //entity_addr_t
 
-      f.close_section(); //watch
+      f->close_section(); //watch
     }
 
-    f.close_section(); //watches
-    f.flush(ss);
+    f->close_section(); //watches
   } else {
     assert(0 == "broken asok registration");
   }
+  f->flush(ss);
+  delete f;
   return true;
 }
 
@@ -1089,7 +1089,8 @@ class TestOpsSocketHook : public AdminSocketHook {
   ObjectStore *store;
 public:
   TestOpsSocketHook(OSDService *s, ObjectStore *st) : service(s), store(st) {}
-  bool call(std::string command, std::string args, bufferlist& out) {
+  bool call(std::string command, std::string args, std::string format,
+	    bufferlist& out) {
     stringstream ss;
     test_ops(service, store, command, args, ss);
     out.append(ss);
@@ -1166,8 +1167,11 @@ int OSD::init()
   class_handler = new ClassHandler();
   cls_initialize(class_handler);
 
-  if (g_conf->osd_open_classes_on_start)
-    class_handler->open_all_classes();
+  if (g_conf->osd_open_classes_on_start) {
+    int r = class_handler->open_all_classes();
+    if (r)
+      dout(1) << "warning: got an error loading one or more classes: " << cpp_strerror(r) << dendl;
+  }
 
   // load up "current" osdmap
   assert_warn(!osdmap);
@@ -3815,51 +3819,90 @@ void OSD::handle_command(MCommand *m)
 struct OSDCommand {
   string cmdstring;
   string helpstring;
+  string module;
+  string perm;
+  string availability;
 } osd_commands[] = {
 
-#define COMMAND(parsesig, helptext) \
-  {parsesig, helptext},
+#define COMMAND(parsesig, helptext, module, perm, availability) \
+  {parsesig, helptext, module, perm, availability},
 
 // yes, these are really pg commands, but there's a limit to how
-// much work it's worth.  The OSD returns all of them.
+// much work it's worth.  The OSD returns all of them.  Make this
+// form (pg <pgid> <cmd>) valid only for the cli. 
+// Rest uses "tell <pgid> <cmd>"
 
 COMMAND("pg " \
 	"name=pgid,type=CephPgid " \
 	"name=cmd,type=CephChoices,strings=query", \
-	"show details of a specific pg")
+	"show details of a specific pg", "osd", "r", "cli")
 COMMAND("pg " \
 	"name=pgid,type=CephPgid " \
 	"name=cmd,type=CephChoices,strings=mark_unfound_lost " \
 	"name=mulcmd,type=CephChoices,strings=revert", \
-	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available")
+	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available",
+	"osd", "rw", "cli")
 COMMAND("pg " \
 	"name=pgid,type=CephPgid " \
 	"name=cmd,type=CephChoices,strings=list_missing " \
 	"name=offset,type=CephString,req=false",
-	"list missing objects on this pg, perhaps starting at an offset given in JSON")
+	"list missing objects on this pg, perhaps starting at an offset given in JSON",
+	"osd", "r", "cli")
 
-COMMAND("version", "report version of OSD")
+// new form: tell <pgid> <cmd> for both cli and rest 
+
+COMMAND("query",
+	"show details of a specific pg", "osd", "r", "cli,rest")
+COMMAND("mark_unfound_lost " \
+	"name=mulcmd,type=CephChoices,strings=revert", \
+	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available",
+	"osd", "rw", "cli,rest")
+COMMAND("list_missing " \
+	"name=offset,type=CephString,req=false",
+	"list missing objects on this pg, perhaps starting at an offset given in JSON",
+	"osd", "r", "cli,rest")
+
+// tell <osd.n> commands.  Validation of osd.n must be special-cased in client
+
+// tell <osd.n> commands.  Validation of osd.n must be special-cased in client
+COMMAND("version", "report version of OSD", "osd", "r", "cli,rest")
 COMMAND("injectargs " \
 	"name=injected_args,type=CephString,n=N",
-	"inject configuration arguments into running OSD")
+	"inject configuration arguments into running OSD",
+	"osd", "rw", "cli,rest")
 COMMAND("bench " \
 	"name=count,type=CephInt,req=false " \
 	"name=size,type=CephInt,req=false ", \
 	"OSD benchmark: write <count> <size>-byte objects, " \
-	"(default 1G size 4MB). Results in log.")
-COMMAND("flush_pg_stats", "flush pg stats")
-COMMAND("debug dump_missing " \
+	"(default 1G size 4MB). Results in log.",
+	"osd", "rw", "cli,rest")
+COMMAND("flush_pg_stats", "flush pg stats", "osd", "rw", "cli,rest")
+COMMAND("debug_dump_missing " \
 	"name=filename,type=CephFilepath",
-	"dump missing objects to a named file")
+	"dump missing objects to a named file", "osd", "r", "cli,rest")
 COMMAND("debug kick_recovery_wq " \
 	"name=delay,type=CephInt,range=0",
-	"set osd_recovery_delay_start to <val>")
+	"set osd_recovery_delay_start to <val>", "osd", "rw", "cli,rest")
 COMMAND("cpu_profiler " \
 	"name=arg,type=CephChoices,strings=status|flush",
-	"run cpu profiling on daemon")
-COMMAND("dump_pg_recovery_stats", "dump pg recovery statistics")
-COMMAND("reset_pg_recovery_stats", "reset pg recovery statistics")
+	"run cpu profiling on daemon", "osd", "rw", "cli,rest")
+COMMAND("dump_pg_recovery_stats", "dump pg recovery statistics",
+	"osd", "r", "cli,rest")
+COMMAND("reset_pg_recovery_stats", "reset pg recovery statistics",
+	"osd", "rw", "cli,rest")
 
+// experiment: restate pg commands as "tell <pgid>".  Validation of
+// pgid must be special-cased in client.
+COMMAND("query",
+	"show details of a specific pg", "osd", "r", "cli,rest")
+COMMAND("mark_unfound_lost revert " \
+	"name=mulcmd,type=CephChoices,strings=revert", \
+	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available",
+	"osd", "rw", "cli,rest")
+COMMAND("list_missing " \
+	"name=offset,type=CephString,req=false",
+	"list missing objects on this pg, perhaps starting at an offset given in JSON",
+	"osd", "rw", "cli,rest")
 };
 
 void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist& data)
@@ -3873,6 +3916,9 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
 
   map<string, cmd_vartype> cmdmap;
   string prefix;
+  string format;
+  string pgidstr;
+  boost::scoped_ptr<Formatter> f;
 
   if (cmd.empty()) {
     ss << "no command given";
@@ -3895,8 +3941,8 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
 
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      dump_cmd_and_help_to_json(f, secname.str(),
-				cp->cmdstring, cp->helpstring);
+      dump_cmddesc_to_json(f, secname.str(), cp->cmdstring, cp->helpstring,
+			   cp->module, cp->perm, cp->availability);
       cmdnum++;
     }
     f->close_section();	// command_descriptions
@@ -3907,8 +3953,18 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     goto out;
   }
 
+  cmd_getval(g_ceph_context, cmdmap, "format", format);
+  f.reset(new_formatter(format));
+
   if (prefix == "version") {
-    ds << pretty_version_to_str();
+    if (f) {
+      f->open_object_section("version");
+      f->dump_string("version", pretty_version_to_str());
+      f->close_section();
+      f->flush(ds);
+    } else {
+      ds << pretty_version_to_str();
+    }
     goto out;
   }
   else if (prefix == "injectargs") {
@@ -3928,9 +3984,16 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     osd_lock.Lock();
   }
 
-  else if (prefix == "pg") {
+  // either 'pg <pgid> <command>' or
+  // 'tell <pgid>' (which comes in without any of that prefix)?
+
+  else if (prefix == "pg" ||
+	   (cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr) &&
+	     (prefix == "query" ||
+	      prefix == "mark_unfound_lost" ||
+	      prefix == "list_missing")
+	   )) {
     pg_t pgid;
-    string pgidstr;
 
     if (!cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr)) {
       ss << "no pgid specified";
@@ -3939,14 +4002,15 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
       ss << "couldn't parse pgid '" << pgidstr << "'";
       r = -EINVAL;
     } else {
-      vector<string> args;
-      cmd_getval(g_ceph_context, cmdmap, "args", args);
       PG *pg = _lookup_lock_pg(pgid);
       if (!pg) {
 	ss << "i don't have pgid " << pgid;
 	r = -ENOENT;
       } else {
-	r = pg->do_command(cmd, ss, data, odata);
+	// simulate pg <pgid> cmd= for pg->do-command
+	if (prefix != "pg")
+	  cmd_putval(g_ceph_context, cmdmap, "cmd", prefix);
+	r = pg->do_command(cmdmap, ss, data, odata);
 	pg->unlock();
       }
     }
@@ -3985,9 +4049,18 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     store->queue_transaction(NULL, cleanupt);
 
     uint64_t rate = (double)count / (end - start);
-    ss << "bench: wrote " << prettybyte_t(count)
-       << " in blocks of " << prettybyte_t(bsize) << " in "
-       << (end-start) << " sec at " << prettybyte_t(rate) << "/sec";
+    if (f) {
+      f->open_object_section("osd_bench_results");
+      f->dump_int("bytes_written", count);
+      f->dump_int("blocksize", bsize);
+      f->dump_float("bytes_per_sec", rate);
+      f->close_section();
+      f->flush(ss);
+    } else {
+      ss << "bench: wrote " << prettybyte_t(count)
+	 << " in blocks of " << prettybyte_t(bsize) << " in "
+	 << (end-start) << " sec at " << prettybyte_t(rate) << "/sec";
+    }
   }
 
   else if (prefix == "flush_pg_stats") {
@@ -4084,8 +4157,13 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
 
   else if (prefix == "dump_pg_recovery_stats") {
     stringstream s;
-    pg_recovery_stats.dump(s);
-    ds << "dump pg recovery stats: " << s.str();
+    if (f) {
+      pg_recovery_stats.dump_formatted(f.get());
+      f->flush(ds);
+    } else {
+      pg_recovery_stats.dump(s);
+      ds << "dump pg recovery stats: " << s.str();
+    }
   }
 
   else if (prefix == "reset_pg_recovery_stats") {
