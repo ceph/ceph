@@ -69,13 +69,30 @@ will create a new keyring, overwriting any existing keyringfile
 .UNINDENT
 .INDENT 0.0
 .TP
-.B \-\-gen\-key
+.B \-g, \-\-gen\-key
 will generate a new secret key for the specified entityname
 .UNINDENT
 .INDENT 0.0
 .TP
-.B \-\-add\-key
+.B \-a, \-\-add\-key
 will add an encoded key to the keyring
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-u, \-\-set\-uid
+sets the auid (authenticated user id) for the specified entityname
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-gen\-print\-key
+will generate and print a new secret key without adding it to the keyringfile
+
+NOTE: will work without a given keyringfile
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-import\-keyring
+will import the content of a given keyring into the keyringfile
 .UNINDENT
 .INDENT 0.0
 .TP
