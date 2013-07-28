@@ -100,7 +100,7 @@ Description: debugging symbols for ceph-mds
 Package: ceph-fuse
 Architecture: linux-any
 Depends: ${misc:Depends}, ${shlibs:Depends}
-Recommends: fuse | fuse-utils
+Recommends: fuse
 Description: FUSE-based client for the Ceph distributed file system
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is a
@@ -129,7 +129,7 @@ Description: debugging symbols for ceph-fuse
 Package: rbd-fuse
 Architecture: linux-any
 Depends: ${misc:Depends}, ${shlibs:Depends}
-Recommends: fuse | fuse-utils
+Recommends: fuse
 Description: FUSE-based rbd client for the Ceph distributed file system
  Ceph is a distributed network file system designed to provide
  excellent performance, reliability, and scalability.  This is a
