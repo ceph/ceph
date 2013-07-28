@@ -44,6 +44,8 @@ int StRadosNotify::run()
   RETURN1_IF_NONZERO(rados_create(&cl, NULL));
   rados_conf_parse_argv(cl, m_argc, m_argv);
   RETURN1_IF_NONZERO(rados_conf_read_file(cl, NULL));
+  rados_conf_parse_env(cl, NULL);
+
   if (m_setup_sem) {
     m_setup_sem->wait();
     m_setup_sem->post();
