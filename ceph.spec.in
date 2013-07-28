@@ -189,6 +189,7 @@ Requires:	librados2 = %{version}-%{release}
 Requires:	librbd1 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
 Requires:	python-flask
+Requires:	python-requests
 %if 0%{defined suse_version}
 %py_requires
 %endif

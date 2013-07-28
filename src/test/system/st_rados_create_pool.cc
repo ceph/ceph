@@ -72,6 +72,7 @@ run()
   std::string log_name = SysTestSettings::inst().get_log_name(get_id_str());
   if (!log_name.empty())
     rados_conf_set(cl, "log_file", log_name.c_str());
+  rados_conf_parse_env(cl, NULL);
 
   if (m_setup_sem) {
     m_setup_sem->wait();

@@ -459,6 +459,11 @@ public:
   virtual void upgrade_format() { }
 
   /**
+   * this is called when we detect the store has just upgraded underneath us
+   */
+  virtual void on_upgrade() {}
+
+  /**
    * Called when the Paxos system enters a Leader election.
    *
    * @remarks It's a courtesy method, in case the class implementing this
