@@ -546,8 +546,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
   }
 
   MonSession *session = m->get_session();
-  if (!session ||
-      (!mon->_allowed_command(session, cmdmap))) {
+  if (!session) {
     mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
@@ -696,8 +695,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
   boost::scoped_ptr<Formatter> f(new_formatter(format));
 
   MonSession *session = m->get_session();
-  if (!session ||
-      (!mon->_allowed_command(session, cmdmap))) {
+  if (!session) {
     mon->reply_command(m, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
