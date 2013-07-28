@@ -1,6 +1,6 @@
 tasks:
 - install.upgrade:
-    all:
+    osd.0:
       branch: next
 - ceph.restart:
     daemons: [osd.0, osd.1, osd.2]
