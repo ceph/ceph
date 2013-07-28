@@ -4957,9 +4957,18 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (first > osdmap->get_epoch() + 1) {
     dout(10) << "handle_osd_map message skips epochs " << osdmap->get_epoch() + 1
 	     << ".." << (first-1) << dendl;
-    if ((m->oldest_map < first && osdmap->get_epoch() == 0) ||
-	m->oldest_map <= osdmap->get_epoch() + 1) {
+    if (m->oldest_map <= osdmap->get_epoch() + 1) {
       monc->sub_want("osdmap", osdmap->get_epoch()+1, CEPH_SUBSCRIBE_ONETIME);
+      monc->renew_subs();
+      m->put();
+      return;
+    }
+    // always try to get the full range of maps--as many as we can.  this
+    //  1- is good to have
+    //  2- is at present the only way to ensure that we get a *full* map as
+    //     the first map!
+    if (m->oldest_map < first) {
+      monc->sub_want("osdmap", m->oldest_map - 1, CEPH_SUBSCRIBE_ONETIME);
       monc->renew_subs();
       m->put();
       return;
