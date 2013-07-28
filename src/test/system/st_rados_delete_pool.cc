@@ -41,6 +41,7 @@ int StRadosDeletePool::run()
   RETURN1_IF_NONZERO(rados_create(&cl, NULL));
   rados_conf_parse_argv(cl, m_argc, m_argv);
   RETURN1_IF_NONZERO(rados_conf_read_file(cl, NULL));
+  rados_conf_parse_env(cl, NULL);
   RETURN1_IF_NONZERO(rados_connect(cl));
   m_pool_setup_sem->wait();
   m_pool_setup_sem->post();
