@@ -93,7 +93,7 @@ health_status_t DataHealthService::get_health(
     }
 
     if (f) {
-      f->open_object_section(mon_name.c_str());
+      f->open_object_section("mon");
       f->dump_string("name", mon_name.c_str());
       f->dump_int("kb_total", stats.kb_total);
       f->dump_int("kb_used", stats.kb_used);
