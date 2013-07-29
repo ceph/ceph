@@ -217,7 +217,7 @@ Lock, unlock, or query lock status of machines.
         help='machines to operate on',
         )
     parser.add_argument(
-        '--vm-type',
+        '--os-type',
         default='ubuntu',
         help='virtual machine type',
         )

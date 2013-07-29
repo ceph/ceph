@@ -312,7 +312,7 @@ When a virtual machine is locked, downburst is run on that machine to
 install a new image.  This allows the user to set different virtual
 OSes to be installed on the newly created virtual machine.  Currently
 the default virtual machine is ubuntu (precise).  A different vm installation
-can be set using the ``--vm-type`` option in ``teuthology.lock``.
+can be set using the ``--os-type`` option in ``teuthology.lock``.
 
 When a virtual machine is unlocked, downburst destroys the image on the
 machine.
