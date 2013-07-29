@@ -211,6 +211,9 @@ class Thrasher:
         while len(self.in_osds) < (self.minin + 1):
             self.in_osd()
         self.log("Waiting for recovery")
+        self.ceph_manager.wait_for_all_up(
+            timeout=self.config.get('timeout')
+            )
         self.ceph_manager.wait_for_clean(
             timeout=self.config.get('timeout')
             )
@@ -798,6 +801,21 @@ class CephManager:
                 num_active_clean = cur_active_clean
             time.sleep(3)
         self.log("clean!")
+
+    def are_all_osds_up(self):
+        x = self.get_osd_dump()
+        return (len(x) == \
+                    sum([(y['up'] > 0) for y in x]))
+
+    def wait_for_all_up(self, timeout=None):
+        self.log("waiting for all up")
+        start = time.time()
+        while not self.are_all_osds_up():
+            if timeout is not None:
+                assert time.time() - start < timeout, \
+                    'timeout expired in wait_for_all_up'
+            time.sleep(3)
+        self.log("all up!")
 
     def wait_for_recovery(self, timeout=None):
         self.log("waiting for recovery to complete")
