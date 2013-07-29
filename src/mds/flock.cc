@@ -75,12 +75,14 @@ bool ceph_lock_state_t::add_lock(ceph_filelock& new_lock,
       } else {
         //yay, we can insert a shared lock
         dout(15) << "inserting shared lock" << dendl;
+        remove_waiting(new_lock);
         adjust_locks(self_overlapping_locks, new_lock, neighbor_locks);
         held_locks.insert(pair<uint64_t, ceph_filelock>(new_lock.start, new_lock));
         ret = true;
       }
     }
   } else { //no overlapping locks except our own
+    remove_waiting(new_lock);
     adjust_locks(self_overlapping_locks, new_lock, neighbor_locks);
     dout(15) << "no conflicts, inserting " << new_lock << dendl;
     held_locks.insert(pair<uint64_t, ceph_filelock>
@@ -89,7 +91,6 @@ bool ceph_lock_state_t::add_lock(ceph_filelock& new_lock,
   }
   if (ret) {
     ++client_held_lock_counts[(client_t)new_lock.client];
-    remove_waiting(new_lock);
   }
   else if (wait_on_fail && !replay)
     ++client_waiting_lock_counts[(client_t)new_lock.client];
@@ -306,7 +307,7 @@ void ceph_lock_state_t::adjust_locks(list<multimap<uint64_t, ceph_filelock>::ite
     old_lock = &(*iter)->second;
     old_lock_client = old_lock->client;
     dout(15) << "lock to coalesce: " << *old_lock << dendl;
-    /* because if it's a neibhoring lock there can't be any self-overlapping
+    /* because if it's a neighboring lock there can't be any self-overlapping
        locks that covered it */
     if (old_lock->type == new_lock.type) { //merge them
       if (0 == new_lock.length) {
