@@ -492,7 +492,7 @@ void Paxos::handle_last(MMonPaxos *last)
 
 void Paxos::collect_timeout()
 {
-  dout(5) << "collect timeout, calling fresh election" << dendl;
+  dout(1) << "collect timeout, calling fresh election" << dendl;
   collect_timeout_event = 0;
   assert(mon->is_leader());
   mon->bootstrap();
@@ -711,7 +711,7 @@ void Paxos::handle_accept(MMonPaxos *accept)
 
 void Paxos::accept_timeout()
 {
-  dout(5) << "accept timeout, calling fresh election" << dendl;
+  dout(1) << "accept timeout, calling fresh election" << dendl;
   accept_timeout_event = 0;
   assert(mon->is_leader());
   assert(is_updating() || is_updating_previous());
@@ -1004,7 +1004,7 @@ void Paxos::handle_lease_ack(MMonPaxos *ack)
 
 void Paxos::lease_ack_timeout()
 {
-  dout(5) << "lease_ack_timeout -- calling new election" << dendl;
+  dout(1) << "lease_ack_timeout -- calling new election" << dendl;
   assert(mon->is_leader());
   assert(is_active());
 
@@ -1023,7 +1023,7 @@ void Paxos::reset_lease_timeout()
 
 void Paxos::lease_timeout()
 {
-  dout(5) << "lease_timeout -- calling new election" << dendl;
+  dout(1) << "lease_timeout -- calling new election" << dendl;
   assert(mon->is_peon());
 
   lease_timeout_event = 0;
