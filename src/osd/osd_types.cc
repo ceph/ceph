@@ -1715,7 +1715,7 @@ bool pg_interval_t::check_new_interval(
 
     if (!i.acting.empty() &&
 	i.acting.size() >=
-	osdmap->get_pools().find(pool_id)->second.min_size) {
+	lastmap->get_pools().find(pool_id)->second.min_size) {
       if (out)
 	*out << "generate_past_intervals " << i
 	     << ": not rw,"
@@ -1730,6 +1730,7 @@ bool pg_interval_t::check_new_interval(
 	  *out << "generate_past_intervals " << i
 	       << " : primary up " << lastmap->get_up_from(i.acting[0])
 	       << "-" << lastmap->get_up_thru(i.acting[0])
+	       << " includes interval"
 	       << std::endl;
       } else if (last_epoch_clean >= i.first &&
 		 last_epoch_clean <= i.last) {
@@ -1758,7 +1759,7 @@ bool pg_interval_t::check_new_interval(
     } else {
       i.maybe_went_rw = false;
       if (out)
-	*out << "generate_past_intervals " << i << " : empty" << std::endl;
+	*out << "generate_past_intervals " << i << " : acting set is too small" << std::endl;
     }
     return true;
   } else {
