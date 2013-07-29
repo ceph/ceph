@@ -670,7 +670,7 @@ def mount(
         LOG.debug('Mounting %s on %s with options %s', dev, path, options)
         subprocess.check_call(
             args=[
-                'mount',
+                '/bin/mount',
                 '-o', options,
                 '--',
                 dev,
@@ -1326,8 +1326,10 @@ def move_mount(
     path,
     cluster,
     osd_id,
+    options,
     ):
     LOG.debug('Moving mount to final location...')
+
     parent = '/var/lib/ceph/osd'
     osd_data = os.path.join(
         parent,
@@ -1344,6 +1346,7 @@ def move_mount(
     subprocess.check_call(
         args=[
             '/bin/mount',
+            '-o', options,
             '--',
             dev,
             osd_data,
@@ -1506,6 +1509,7 @@ def mount_activate(
                 path=path,
                 cluster=cluster,
                 osd_id=osd_id,
+                options=mount_options,
                 )
         return (cluster, osd_id)
 
