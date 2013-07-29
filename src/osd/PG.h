@@ -245,6 +245,8 @@ protected:
 public:
   bool deleting;  // true while in removing or OSD is shutting down
 
+
+  void lock_suspend_timeout(ThreadPool::TPHandle &handle);
   void lock(bool no_lockdep = false);
   void unlock() {
     //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
