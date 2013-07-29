@@ -1763,7 +1763,7 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
       }
 
       if (f) {
-        f->open_object_section(name.c_str());
+        f->open_object_section("mon");
         f->dump_string("name", name.c_str());
         f->dump_float("skew", skew);
         f->dump_float("latency", latency);
