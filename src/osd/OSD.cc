@@ -7050,9 +7050,9 @@ PGRef OSD::OpWQ::_dequeue()
   return pg;
 }
 
-void OSD::OpWQ::_process(PGRef pg)
+void OSD::OpWQ::_process(PGRef pg, ThreadPool::TPHandle &handle)
 {
-  pg->lock();
+  pg->lock_suspend_timeout(handle);
   OpRequestRef op;
   {
     Mutex::Locker l(qlock);
