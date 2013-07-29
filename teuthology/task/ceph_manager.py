@@ -602,8 +602,7 @@ class CephManager:
                     'set',
                     pool_name,
                     prop,
-                    str(val),
-                    '--allow-experimental-feature')
+                    str(val))
                 if r != 11: # EAGAIN
                     break
                 tries += 1
