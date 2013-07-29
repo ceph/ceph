@@ -1,0 +1,220 @@
+commit 8f010aff684e820ecc837c25ac77c7a05d7191ff
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Wed Jul 24 20:44:12 2013 -0700
+
+    v0.61.7
+
+commit 24a56a9637afd8c64b71d264359c78a25d52be02
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 24 14:46:24 2013 -0700
+
+    ceph-disk: use new get_dev_path helper for list
+    
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    Tested-by: Olivier Bonvalet <ob.ceph@daevel.fr>
+    (cherry picked from commit fd1fd664d6102a2a96b27e8ca9933b54ac626ecb)
+
+commit 1f8e4b15eeb132fd7f389318009b19f8f13adbf5
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 11 12:59:56 2013 -0700
+
+    ceph-disk: use /sys/block to determine partition device names
+    
+    Not all devices are basename + number; some have intervening character(s),
+    like /dev/cciss/c0d1p2.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 2ea8fac441141d64ee0d26c5dd2b441f9782d840)
+
+commit 0a08c8226cb3e461301beade9bab2e264d1b960e
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 3 11:01:58 2013 -0700
+
+    ceph-disk: reimplement is_partition() using /sys/block
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 5b031e100b40f597752b4917cdbeebb366eb98d7)
+
+commit 056000346db09ea7274a22e57cf4b86a7ea4090e
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 3 11:01:39 2013 -0700
+
+    ceph-disk: use get_dev_name() helper throughout
+    
+    This is more robust than the broken split trick.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 3359aaedde838c98d1155611e157fd2da9e8b9f5)
+
+commit f3ee3e690c42769229a6cd9ae8dec43f2aa22ecd
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 3 10:55:36 2013 -0700
+
+    ceph-disk: refactor list_[all_]partitions
+    
+    Make these methods work in terms of device *names*, not paths, and fix up
+    the only direct list_partitions() caller to do the same.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 35d3f2d84808efda3d2ac868afe03e6959d51c03)
+
+commit be12811b4cb98ff1c2c691c67af7ad3586c436ff
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 3 10:52:29 2013 -0700
+
+    ceph-disk: add get_dev_name, path helpers
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e0401591e352ea9653e3276d66aebeb41801eeb3)
+
+commit f46dbc462f623e9ab6c00394abb4d890e5d90890
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jun 18 16:21:48 2013 -0700
+
+    ceph-disk: handle /dev/foo/bar devices throughout
+    
+    Assume the last component is the unique device name, even if it appears
+    under a subdir of /dev.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit cb97338b1186939deecb78e9d949c38c3ef59026)
+
+commit f799dac7bdf7cf0824a177131473cf59ef3c5205
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 17 20:54:15 2013 -0700
+
+    ceph-disk: make is_held() smarter about full disks
+    
+    Handle the case where the device is a full disk.  Make the partition
+    check a bit more robust (don't make assumptions about naming aside from
+    the device being a prefix of the partition).
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e082f1247fb6ddfb36c4223cbfdf500d6b45c978)
+
+commit 27f31895664fa7f10c1617d486f2a6ece0f97091
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 24 11:55:42 2013 -0700
+
+    mon/OSDMonitor: search for latest full osdmap if record version is missing
+    
+    In 97462a3213e5e15812c79afc0f54d697b6c498b1 we tried to search for a
+    recent full osdmap but were looking at the wrong key.  If full_0 was
+    present we could record that the latest full map was last_committed even
+    though it wasn't present.  This is fixed in 76cd7ac1c, but we need to
+    compensate for when get_version_latest_full() gives us a back version
+    number by repeating the search.
+    
+    Fixes: #5737
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit c2131d4047156aa2964581c9dbd93846382a07e7)
+
+commit 5b0967f03efb1be210b52f24f095f023fe1bc539
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Mon Jun 17 14:43:36 2013 +0100
+
+    test: test_store_tool: global init before using LevelDBStore
+    
+    Fixes a segfault
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a7a7d3fc8a2ba4a30ef136a32f2903d157b3e19a)
+
+commit 115468c73f121653eec2efc030d5ba998d834e43
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Wed Jul 24 12:00:28 2013 +0100
+
+    mon: OSDMonitor: fix a bug introduced on 97462a32
+    
+    Fixes: #5737
+    Backport: cuttlefish
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 76cd7ac1c2094b34ad36bea89b2246fa90eb2f6d)
+
+commit 938a639e2cb6abd22c2c588e619c1aae32c6521f
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jul 21 08:48:18 2013 -0700
+
+    mon/Paxos: fix pn for uncommitted value during collect/last phase
+    
+    During the collect/last exchange, peers share any uncommitted values
+    with the leader.  They are supposed to also share the pn under which
+    that value was accepted, but were instead using the just-accepted pn
+    value.  This effectively meant that we *always* took the uncommitted
+    value; if there were multiples, which one we accepted depended on what
+    order the LAST messages arrived, not which pn the values were generated
+    under.
+    
+    The specific failure sequence I observed:
+    
+     - collect
+      - learned uncommitted value for 262 from myself
+      - send collect with pn 901
+     - got last with pn 901 (incorrect) for 200 (old) from peer
+      - discard our own value, remember the other
+     - finish collect phase
+      - ignore old uncommitted value
+    
+    Fix this by storing a pending_v and pending_pn value whenever we accept
+    a value.  Use this to send an appropriate pn value in the LAST reply
+    so that the leader can make it's decision about which uncommitted value
+    to accept based on accurate information.  Also use it when we learn
+    the uncommitted value from ourselves.
+    
+    We could probably be more clever about storing less information here,
+    for example by omitting pending_v and clearing pending_pn at the
+    appropriate point, but that would be more fragile.  Similarly, we could
+    store a pn for *every* commit if we wanted to lay some groundwork for
+    having multiple uncommitted proposals in flight, but I don't want to
+    speculate about what is necessary or sufficient for a correct solution
+    there.
+    
+    Fixes: #5698
+    Backport: cuttlefish, bobtail
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 20baf662112dd5f560bc3a2d2114b469444c3de8)
+
+commit 18596340f020be1f21bdc9bcc752ae1da4a93a46
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jul 21 08:12:46 2013 -0700
+
+    mon/Paxos: debug ignored uncommitted values
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 19b29788966eb80ed847630090a16a3d1b810969)
+
+commit f598245f1355d7791162c03d90bdd97b013e56f3
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jul 21 08:11:22 2013 -0700
+
+    mon/Paxos: only learn uncommitted value if it is in the future
+    
+    If an older peer sends an uncommitted value, make sure we only take it
+    if it is in the future, and at least as new as any current uncommitted
+    value.
+    
+    (Prior to the previous patch, peers could send values from long-past
+    rounds.  The pn values are also bogus.)
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit b3253a453c057914753846c77499f98d3845c58e)
+
+commit 732286a28cd8a643593d490a7a84a590d372f78d
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 22 14:13:23 2013 -0700
+
+    mon/Paxos: only share uncommitted value if it is next
+    
+    We may have an uncommitted value from our perspective (it is our lc + 1)
+    when the collector has a much larger lc (because we have been out for
+    the last few rounds).  Only share an uncommitted value if it is in fact
+    the next value.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit b26b7f6e5e02ac6beb66e3e34e177e6448cf91cf)
