@@ -1332,12 +1332,16 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 
   // perhaps these would be better in the parsing, but it's weird
   if (prefix == "pg dump_json") {
+    vector<string> v;
+    v.push_back(string("all"));
     cmd_putval(g_ceph_context, cmdmap, "format", string("json"));
-    cmd_putval(g_ceph_context, cmdmap, "dumpcontents", string("all"));
+    cmd_putval(g_ceph_context, cmdmap, "dumpcontents", v);
     prefix = "pg dump";
   } else if (prefix == "pg dump_pools_json") {
+    vector<string> v;
+    v.push_back(string("pools"));
     cmd_putval(g_ceph_context, cmdmap, "format", string("json"));
-    cmd_putval(g_ceph_context, cmdmap, "dumpcontents", string("pool"));
+    cmd_putval(g_ceph_context, cmdmap, "dumpcontents", v);
     prefix = "pg dump";
   }
 
