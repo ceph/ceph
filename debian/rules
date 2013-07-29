@@ -114,15 +114,25 @@ binary-arch: build install
 	dh_installexamples -a
 	dh_install -a --sourcedir=$(DESTDIR) --list-missing
 	dh_installlogrotate -a
-	dh_installinit -a --no-start
-	# dh_installinit is only set up to handle one upstart script
-	# per package, so do this ourselves
-	install -d -m0755 debian/ceph/etc/init
-	install -m0644 src/upstart/ceph*.conf debian/ceph/etc/init
-	install -d -m0755 debian/ceph-mds/etc/init
-	mv debian/ceph/etc/init/ceph-mds* debian/ceph-mds/etc/init
-	install -d -m0755 debian/radosgw/etc/init
-	install -m0644 src/upstart/radosgw*.conf debian/radosgw/etc/init
+	#upstart job files for binary package ceph
+	dh_installinit --no-start --name=ceph-all
+	dh_installinit --no-start --name=ceph-create-keys
+	dh_installinit --no-start --name=ceph-mon-all-starter
+	dh_installinit --no-start --name=ceph-mon-all
+	dh_installinit --no-start --name=ceph-mon
+	dh_installinit --no-start --name=ceph-osd-all-starter
+	dh_installinit --no-start --name=ceph-osd-all
+	dh_installinit --no-start --name=ceph-osd
+	#upstart job files for binary package ceph-mds
+	dh_installinit --no-start --name=ceph-mds-all
+	dh_installinit --no-start --name=ceph-mds-all-starter
+	dh_installinit --no-start --name=ceph-mds
+	#upstart job files for binary package radowgw
+	dh_installinit --no-start --name=radosgw-all-starter
+	dh_installinit --no-start --name=radosgw-all
+	dh_installinit --no-start --name=radosgw
+	#all other initscripts
+	dh_installinit --no-start
 	dh_installman -a
 	dh_lintian -a
 	dh_link -a
