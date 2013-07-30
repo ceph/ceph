@@ -542,6 +542,10 @@ struct rgw_bucket {
   std::string marker;
   std::string bucket_id;
 
+  std::string oid; /*
+                    * runtime in-memory only info. If not empty, points to the bucket instance object
+                    */
+
   rgw_bucket() { }
   rgw_bucket(const char *n) : name(n) {
     assert(*n == '.'); // only rgw private buckets should be initialized without pool

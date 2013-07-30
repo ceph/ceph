@@ -831,6 +831,11 @@ void RGWRados::finalize()
     RGWRESTConn *conn = iter->second;
     delete conn;
   }
+
+  for (iter = region_conn_map.begin(); iter != region_conn_map.end(); ++iter) {
+    RGWRESTConn *conn = iter->second;
+    delete conn;
+  }
 }
 
 /** 
@@ -896,6 +901,12 @@ int RGWRados::init_complete()
     }
     RGWRegion& region = iter->second;
     rest_master_conn = new RGWRESTConn(cct, this, region.endpoints);
+
+    for (iter = region_map.regions.begin(); iter != region_map.regions.end(); ++iter) {
+      RGWRegion& region = iter->second;
+
+      region_conn_map[region.name] = new RGWRESTConn(cct, this, region.endpoints);
+    }
   }
 
   map<string, RGWZone>::iterator ziter;
@@ -2535,7 +2546,17 @@ int RGWRados::copy_obj(void *ctx,
 
     RGWRESTConn *conn;
     if (source_zone.empty()) {
-      conn = rest_master_conn;
+      if (dest_bucket_info.region.empty()) {
+        /* source is in the master region */
+        conn = rest_master_conn;
+      } else {
+        map<string, RGWRESTConn *>::iterator iter = region_conn_map.find(src_bucket_info.region);
+        if (iter == zone_conn_map.end()) {
+          ldout(cct, 0) << "could not find region connection to region: " << source_zone << dendl;
+          return -ENOENT;
+        }
+        conn = iter->second;
+      }
     } else {
       map<string, RGWRESTConn *>::iterator iter = zone_conn_map.find(source_zone);
       if (iter == zone_conn_map.end()) {
@@ -2886,7 +2907,7 @@ int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner)
 {
   RGWBucketInfo info;
   map<string, bufferlist> attrs;
-  int r = get_bucket_instance_info(NULL, bucket, info, NULL, &attrs);
+  int r = get_bucket_info(NULL, bucket.name, info, NULL, &attrs);
   if (r < 0) {
     ldout(cct, 0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " returned err=" << r << dendl;
     return r;
@@ -2919,7 +2940,7 @@ int RGWRados::set_buckets_enabled(vector<rgw_bucket>& buckets, bool enabled)
 
     RGWBucketInfo info;
     map<string, bufferlist> attrs;
-    int r = get_bucket_instance_info(NULL, bucket, info, NULL, &attrs);
+    int r = get_bucket_info(NULL, bucket.name, info, NULL, &attrs);
     if (r < 0) {
       ldout(cct, 0) << "NOTICE: get_bucket_info on bucket=" << bucket.name << " returned err=" << r << ", skipping bucket" << dendl;
       ret = r;
@@ -4546,6 +4567,17 @@ void RGWRados::get_bucket_meta_oid(rgw_bucket& bucket, string& oid)
   oid = RGW_BUCKET_INSTANCE_MD_PREFIX + entry;
 }
 
+void RGWRados::get_bucket_instance_obj(rgw_bucket& bucket, rgw_obj& obj)
+{
+  if (!bucket.oid.empty()) {
+    obj.init(zone.domain_root, bucket.oid);
+  } else {
+    string oid;
+    get_bucket_meta_oid(bucket, oid);
+    obj.init(zone.domain_root, oid);
+  }
+}
+
 int RGWRados::get_bucket_instance_info(void *ctx, const string& meta_key, RGWBucketInfo& info,
                                        time_t *pmtime, map<string, bufferlist> *pattrs)
 {
@@ -4562,7 +4594,11 @@ int RGWRados::get_bucket_instance_info(void *ctx, rgw_bucket& bucket, RGWBucketI
                                        time_t *pmtime, map<string, bufferlist> *pattrs)
 {
   string oid;
-  get_bucket_meta_oid(bucket, oid);
+  if (!bucket.oid.empty()) {
+    get_bucket_meta_oid(bucket, oid);
+  } else {
+    oid = bucket.oid;
+  }
 
   return get_bucket_instance_from_oid(ctx, oid, info, pmtime, pattrs);
 }
@@ -4586,6 +4622,7 @@ int RGWRados::get_bucket_instance_from_oid(void *ctx, string& oid, RGWBucketInfo
     ldout(cct, 0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
     return -EIO;
   }
+  info.bucket.oid = oid;
   return 0;
 }
 
@@ -4628,6 +4665,7 @@ int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& inf
 
   if (entry_point.has_bucket_info) {
     info = entry_point.old_bucket_info;
+    info.bucket.oid = bucket_name;
     info.ep_objv = ot.read_version;
     ldout(cct, 20) << "rgw_get_bucket_info: old bucket info, bucket=" << info.bucket << " owner " << info.owner << dendl;
     return 0;
