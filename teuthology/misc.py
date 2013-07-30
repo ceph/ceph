@@ -895,3 +895,5 @@ def get_distro(ctx):
         return ctx.config['downburst'].get('distro', os_type)
     except KeyError:
         return os_type
+    except AttributeError:
+        return ctx.os_type

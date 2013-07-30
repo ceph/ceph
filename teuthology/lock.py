@@ -558,10 +558,15 @@ def create_if_vm(ctx, machine_name):
     with tempfile.NamedTemporaryFile() as tmp:
         try:
             lcnfg = ctx.config['downburst']
-        except KeyError:
+        except (KeyError, AttributeError):
             lcnfg = {}
 
         distro = lcnfg.get('distro', os_type.lower())
+        try:
+            distroversion = ctx.config.get('os_version', default_os_version[distro])
+        except AttributeError:
+            distroversion = default_os_version[distro]
+
         file_info = {}
         file_info['disk-size'] = lcnfg.get('disk-size', '30G')
         file_info['ram'] = lcnfg.get('ram', '1.9G')
@@ -569,7 +574,7 @@ def create_if_vm(ctx, machine_name):
         file_info['networks'] = lcnfg.get('networks',
                 [{'source' : 'front', 'mac' : status_info['mac']}])
         file_info['distro'] = distro
-        file_info['distroversion'] = ctx.config.get('os_version', default_os_version[distro])
+        file_info['distroversion'] = distroversion
         file_info['additional-disks'] = lcnfg.get(
                 'additional-disks', 3)
         file_info['additional-disks-size'] = lcnfg.get(
