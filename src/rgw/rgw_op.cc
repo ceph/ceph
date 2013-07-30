@@ -241,8 +241,10 @@ static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
   }
 
   if (obj.object.empty()) {
+    rgw_obj instance_obj;
+    store->get_bucket_instance_obj(bucket_info.bucket, instance_obj);
     return get_bucket_policy_from_attr(cct, store, ctx, bucket_info, bucket_attrs,
-                                       policy, obj);
+                                       policy, instance_obj);
   }
   return get_obj_policy_from_attr(cct, store, ctx, bucket_info, bucket_attrs,
                                   policy, obj);
@@ -1898,9 +1900,8 @@ void RGWPutCORS::execute()
 
   RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->bucket_info.objv_tracker);
 
-  string no_obj;
   cors_config->encode(bl);
-  obj.init(s->bucket, no_obj);
+  store->get_bucket_instance_obj(s->bucket, obj);
   store->set_atomic(s->obj_ctx, obj);
   ret = store->set_attr(s->obj_ctx, obj, RGW_ATTR_CORS, bl, ptracker);
 }
@@ -1917,13 +1918,12 @@ void RGWDeleteCORS::execute()
 {
   bufferlist bl;
   rgw_obj obj;
-  string no_obj;
   if (!s->bucket_cors) {
     dout(2) << "No CORS configuration set yet for this bucket" << dendl;
     ret = -ENOENT;
     return;
   }
-  obj.init(s->bucket, no_obj);
+  store->get_bucket_instance_obj(s->bucket, obj);
   store->set_atomic(s->obj_ctx, obj);
   map<string, bufferlist> orig_attrs, attrs, rmattrs;
   map<string, bufferlist>::iterator iter;
@@ -2516,10 +2516,10 @@ int RGWHandler::read_cors_config(void)
   bufferlist bl;
  
   dout(10) << "Going to read cors from attrs" << dendl;
-  string no_object;
-  rgw_obj no_obj(s->bucket, no_object);
-  if (no_obj.bucket.name.size()) {
-    ret = store->get_attr(s->obj_ctx, no_obj, RGW_ATTR_CORS, bl);
+  rgw_obj obj;
+  store->get_bucket_instance_obj(s->bucket, obj);
+  if (obj.bucket.name.size()) {
+    ret = store->get_attr(s->obj_ctx, obj, RGW_ATTR_CORS, bl);
     if (ret >= 0) {
       bufferlist::iterator iter = bl.begin();
       s->bucket_cors = new RGWCORSConfiguration();

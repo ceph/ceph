@@ -17,6 +17,7 @@
 
 #include "include/types.h"
 #include "osd/osd_types.h"
+#include "osd/OSDMap.h"
 #include "gtest/gtest.h"
 #include "common/Thread.h"
 
@@ -115,6 +116,421 @@ TEST(hobject, prefixes5)
 
   set<string> prefixes_out(hobject_t::get_prefixes(bits, mask, pool));
   ASSERT_EQ(prefixes_out, prefixes_correct);
+}
+
+TEST(pg_interval_t, check_new_interval)
+{
+  //
+  // Create a situation where osdmaps are the same so that
+  // each test case can diverge from it using minimal code.
+  //
+  int osd_id = 1;
+  epoch_t epoch = 40;
+  std::tr1::shared_ptr<OSDMap> osdmap(new OSDMap());
+  osdmap->set_max_osd(10);
+  osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+  osdmap->set_epoch(epoch);
+  std::tr1::shared_ptr<OSDMap> lastmap(new OSDMap());
+  lastmap->set_max_osd(10);
+  lastmap->set_state(osd_id, CEPH_OSD_EXISTS);
+  lastmap->set_epoch(epoch);
+  epoch_t same_interval_since = epoch;
+  epoch_t last_epoch_clean = same_interval_since;
+  int64_t pool_id = 200;
+  int pg_num = 4;
+  __u8 min_size = 2;
+  {
+    OSDMap::Incremental inc(epoch + 1);
+    inc.new_pools[pool_id].min_size = min_size;
+    inc.new_pools[pool_id].set_pg_num(pg_num);
+    inc.new_up_thru[osd_id] = epoch + 1;
+    osdmap->apply_incremental(inc);
+    lastmap->apply_incremental(inc);
+  }
+  vector<int> new_acting;
+  new_acting.push_back(osd_id);
+  new_acting.push_back(osd_id + 1);
+  vector<int> old_acting = new_acting;
+  vector<int> new_up;
+  new_up.push_back(osd_id);
+  vector<int> old_up = new_up;
+  pg_t pgid;
+  pgid.set_pool(pool_id);
+
+  //
+  // Do nothing if there are no modifications in
+  // acting, up or pool size and that the pool is not
+  // being split
+  //
+  {
+    map<epoch_t, pg_interval_t> past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_FALSE(pg_interval_t::check_new_interval(old_acting,
+						   new_acting,
+						   old_up,
+						   new_up,
+						   same_interval_since,
+						   last_epoch_clean,
+						   osdmap,
+						   lastmap,
+						   pool_id,
+						   pgid,
+						   &past_intervals));
+    ASSERT_TRUE(past_intervals.empty());
+  }
+
+  //
+  // pool did not exist in the old osdmap
+  //
+  {
+    std::tr1::shared_ptr<OSDMap> lastmap(new OSDMap());
+    lastmap->set_max_osd(10);
+    lastmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    lastmap->set_epoch(epoch);
+
+    map<epoch_t, pg_interval_t> past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(pg_interval_t::check_new_interval(old_acting,
+						  new_acting,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  osdmap,
+						  lastmap,
+						  pool_id,
+						  pgid,
+						  &past_intervals));
+    ASSERT_EQ((unsigned int)1, past_intervals.size());
+    ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
+    ASSERT_EQ(osdmap->get_epoch() - 1, past_intervals[same_interval_since].last);
+    ASSERT_EQ(osd_id, past_intervals[same_interval_since].acting[0]);
+    ASSERT_EQ(osd_id, past_intervals[same_interval_since].up[0]);
+  }
+
+  //
+  // The acting set has changed
+  //
+  {
+    vector<int> new_acting;
+    int new_primary = osd_id + 1;
+    new_acting.push_back(new_primary);
+
+    map<epoch_t, pg_interval_t> past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(pg_interval_t::check_new_interval(old_acting,
+						  new_acting,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  osdmap,
+						  lastmap,
+						  pool_id,
+						  pgid,
+						  &past_intervals));
+    ASSERT_EQ((unsigned int)1, past_intervals.size());
+    ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
+    ASSERT_EQ(osdmap->get_epoch() - 1, past_intervals[same_interval_since].last);
+    ASSERT_EQ(osd_id, past_intervals[same_interval_since].acting[0]);
+    ASSERT_EQ(osd_id, past_intervals[same_interval_since].up[0]);
+  }
+
+  //
+  // The up set has changed
+  //
+  {
+    vector<int> new_up;
+    int new_primary = osd_id + 1;
+    new_up.push_back(new_primary);
+
+    map<epoch_t, pg_interval_t> past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(pg_interval_t::check_new_interval(old_acting,
+						  new_acting,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  osdmap,
+						  lastmap,
+						  pool_id,
+						  pgid,
+						  &past_intervals));
+    ASSERT_EQ((unsigned int)1, past_intervals.size());
+    ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
+    ASSERT_EQ(osdmap->get_epoch() - 1, past_intervals[same_interval_since].last);
+    ASSERT_EQ(osd_id, past_intervals[same_interval_since].acting[0]);
+    ASSERT_EQ(osd_id, past_intervals[same_interval_since].up[0]);
+  }
+
+  //
+  // PG is splitting
+  //
+  {
+    std::tr1::shared_ptr<OSDMap> osdmap(new OSDMap());
+    osdmap->set_max_osd(10);
+    osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    osdmap->set_epoch(epoch);
+    int new_pg_num = pg_num ^ 2;
+    OSDMap::Incremental inc(epoch + 1);
+    inc.new_pools[pool_id].min_size = min_size;
+    inc.new_pools[pool_id].set_pg_num(new_pg_num);
+    osdmap->apply_incremental(inc);
+
+    map<epoch_t, pg_interval_t> past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(pg_interval_t::check_new_interval(old_acting,
+						  new_acting,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  osdmap,
+						  lastmap,
+						  pool_id,
+						  pgid,
+						  &past_intervals));
+    ASSERT_EQ((unsigned int)1, past_intervals.size());
+    ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
+    ASSERT_EQ(osdmap->get_epoch() - 1, past_intervals[same_interval_since].last);
+    ASSERT_EQ(osd_id, past_intervals[same_interval_since].acting[0]);
+    ASSERT_EQ(osd_id, past_intervals[same_interval_since].up[0]);
+  }
+
+  //
+  // PG size has changed
+  //
+  {
+    std::tr1::shared_ptr<OSDMap> osdmap(new OSDMap());
+    osdmap->set_max_osd(10);
+    osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    osdmap->set_epoch(epoch);
+    OSDMap::Incremental inc(epoch + 1);
+    __u8 new_min_size = min_size + 1;
+    inc.new_pools[pool_id].min_size = new_min_size;
+    inc.new_pools[pool_id].set_pg_num(pg_num);
+    osdmap->apply_incremental(inc);
+
+    map<epoch_t, pg_interval_t> past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(pg_interval_t::check_new_interval(old_acting,
+						  new_acting,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  osdmap,
+						  lastmap,
+						  pool_id,
+						  pgid,
+						  &past_intervals));
+    ASSERT_EQ((unsigned int)1, past_intervals.size());
+    ASSERT_EQ(same_interval_since, past_intervals[same_interval_since].first);
+    ASSERT_EQ(osdmap->get_epoch() - 1, past_intervals[same_interval_since].last);
+    ASSERT_EQ(osd_id, past_intervals[same_interval_since].acting[0]);
+    ASSERT_EQ(osd_id, past_intervals[same_interval_since].up[0]);
+  }
+  
+  //
+  // The old acting set was empty : the previous interval could not
+  // have been rw
+  //
+  {
+    vector<int> old_acting;
+
+    map<epoch_t, pg_interval_t> past_intervals;
+
+    ostringstream out;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(pg_interval_t::check_new_interval(old_acting,
+						  new_acting,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  osdmap,
+						  lastmap,
+						  pool_id,
+						  pgid,
+						  &past_intervals,
+						  &out));
+    ASSERT_EQ((unsigned int)1, past_intervals.size());
+    ASSERT_FALSE(past_intervals[same_interval_since].maybe_went_rw);
+    ASSERT_NE(string::npos, out.str().find("acting set is too small"));
+  }
+
+  //
+  // The old acting set did not have enough osd : it could 
+  // not have been rw
+  //
+  {
+    vector<int> old_acting;
+    old_acting.push_back(osd_id); 
+
+    //
+    // see http://tracker.ceph.com/issues/5780
+    // the size of the old acting set should be compared 
+    // with the min_size of the old osdmap
+    //
+    // The new osdmap is created so that it triggers the
+    // bug.
+    //
+    std::tr1::shared_ptr<OSDMap> osdmap(new OSDMap());
+    osdmap->set_max_osd(10);
+    osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    osdmap->set_epoch(epoch);
+    OSDMap::Incremental inc(epoch + 1);
+    __u8 new_min_size = old_acting.size();
+    inc.new_pools[pool_id].min_size = new_min_size;
+    inc.new_pools[pool_id].set_pg_num(pg_num);
+    osdmap->apply_incremental(inc);
+
+    ostringstream out;
+
+    map<epoch_t, pg_interval_t> past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(pg_interval_t::check_new_interval(old_acting,
+						  new_acting,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  osdmap,
+						  lastmap,
+						  pool_id,
+						  pgid,
+						  &past_intervals,
+						  &out));
+    ASSERT_EQ((unsigned int)1, past_intervals.size());
+    ASSERT_FALSE(past_intervals[same_interval_since].maybe_went_rw);
+    ASSERT_NE(string::npos, out.str().find("acting set is too small"));
+  }
+
+  //
+  // The acting set changes. The old acting set primary was up during the
+  // previous interval and may have been rw.
+  //
+  {
+    vector<int> new_acting;
+    new_acting.push_back(osd_id + 4); 
+    new_acting.push_back(osd_id + 5); 
+    
+    ostringstream out;
+
+    map<epoch_t, pg_interval_t> past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(pg_interval_t::check_new_interval(old_acting,
+						  new_acting,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  osdmap,
+						  lastmap,
+						  pool_id,
+						  pgid,
+						  &past_intervals,
+						  &out));
+    ASSERT_EQ((unsigned int)1, past_intervals.size());
+    ASSERT_TRUE(past_intervals[same_interval_since].maybe_went_rw);
+    ASSERT_NE(string::npos, out.str().find("includes interval"));
+  }
+  //
+  // The acting set changes. The old acting set primary was not up 
+  // during the old interval but last_epoch_clean is in the
+  // old interval and it may have been rw.
+  //
+  {
+    vector<int> new_acting;
+    new_acting.push_back(osd_id + 4); 
+    new_acting.push_back(osd_id + 5); 
+
+    std::tr1::shared_ptr<OSDMap> lastmap(new OSDMap());
+    lastmap->set_max_osd(10);
+    lastmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    lastmap->set_epoch(epoch);
+    OSDMap::Incremental inc(epoch + 1);
+    inc.new_pools[pool_id].min_size = min_size;
+    inc.new_pools[pool_id].set_pg_num(pg_num);
+    inc.new_up_thru[osd_id] = epoch - 10;
+    lastmap->apply_incremental(inc);
+
+    ostringstream out;
+
+    map<epoch_t, pg_interval_t> past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(pg_interval_t::check_new_interval(old_acting,
+						  new_acting,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  osdmap,
+						  lastmap,
+						  pool_id,
+						  pgid,
+						  &past_intervals,
+						  &out));
+    ASSERT_EQ((unsigned int)1, past_intervals.size());
+    ASSERT_TRUE(past_intervals[same_interval_since].maybe_went_rw);
+    ASSERT_NE(string::npos, out.str().find("presumed to have been rw"));
+  }
+
+  //
+  // The acting set changes. The old acting set primary was not up 
+  // during the old interval and last_epoch_clean is before the
+  // old interval : the previous interval could not possibly have
+  // been rw.
+  //
+  {
+    vector<int> new_acting;
+    new_acting.push_back(osd_id + 4); 
+    new_acting.push_back(osd_id + 5); 
+
+    epoch_t last_epoch_clean = epoch - 10;
+
+    std::tr1::shared_ptr<OSDMap> lastmap(new OSDMap());
+    lastmap->set_max_osd(10);
+    lastmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    lastmap->set_epoch(epoch);
+    OSDMap::Incremental inc(epoch + 1);
+    inc.new_pools[pool_id].min_size = min_size;
+    inc.new_pools[pool_id].set_pg_num(pg_num);
+    inc.new_up_thru[osd_id] = last_epoch_clean;
+    lastmap->apply_incremental(inc);
+
+    ostringstream out;
+
+    map<epoch_t, pg_interval_t> past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(pg_interval_t::check_new_interval(old_acting,
+						  new_acting,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  osdmap,
+						  lastmap,
+						  pool_id,
+						  pgid,
+						  &past_intervals,
+						  &out));
+    ASSERT_EQ((unsigned int)1, past_intervals.size());
+    ASSERT_FALSE(past_intervals[same_interval_since].maybe_went_rw);
+    ASSERT_NE(string::npos, out.str().find("does not include interval"));
+  }
 }
 
 TEST(pg_t, split)

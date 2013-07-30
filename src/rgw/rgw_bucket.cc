@@ -202,7 +202,11 @@ int rgw_bucket_set_attrs(RGWRados *store, rgw_bucket& bucket,
   string oid;
   store->get_bucket_meta_oid(bucket, oid);
   rgw_obj obj(store->zone.domain_root, oid);
-  return store->meta_mgr->set_attrs(bucket_meta_handler, oid,
+
+  string key;
+  store->get_bucket_instance_entry(bucket, key); /* we want the bucket instance name without
+						    the oid prefix cruft */
+  return store->meta_mgr->set_attrs(bucket_instance_meta_handler, key,
                                     obj, attrs, rmattrs, objv_tracker);
 }
 
