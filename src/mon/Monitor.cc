@@ -619,7 +619,7 @@ void Monitor::bootstrap()
 {
   dout(10) << "bootstrap" << dendl;
 
-  sync_reset();
+  sync_reset_requester();
   unregister_cluster_logger();
   cancel_probe_timeout();
 
@@ -806,21 +806,25 @@ void Monitor::sync_obtain_latest_monmap(bufferlist &bl)
   latest_monmap.encode(bl, CEPH_FEATURES_ALL);
 }
 
-void Monitor::sync_reset()
+void Monitor::sync_reset_requester()
 {
+  dout(10) << __func__ << dendl;
+
   if (sync_timeout_event) {
     timer.cancel_event(sync_timeout_event);
     sync_timeout_event = NULL;
   }
 
-  // leader state
-  sync_providers.clear();
-
-  // requester state
   sync_provider = entity_inst_t();
   sync_cookie = 0;
   sync_full = false;
   sync_start_version = 0;
+}
+
+void Monitor::sync_reset_provider()
+{
+  dout(10) << __func__ << dendl;
+  sync_providers.clear();
 }
 
 void Monitor::sync_start(entity_inst_t &other, bool full)
@@ -832,7 +836,7 @@ void Monitor::sync_start(entity_inst_t &other, bool full)
   state = STATE_SYNCHRONIZING;
 
   // make sure are not a provider for anyone!
-  sync_reset();
+  sync_reset_provider();
 
   sync_full = full;
 
