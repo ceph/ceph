@@ -923,8 +923,6 @@ void Monitor::sync_finish(version_t last_committed)
   t.erase("mon_sync", "last_committed_floor");
   store->apply_transaction(t);
 
-  sync_reset();
-
   assert(g_conf->mon_sync_requester_kill_at != 9);
 
   init_paxos();
@@ -1173,7 +1171,6 @@ void Monitor::handle_sync_chunk(MMonSync *m)
 void Monitor::handle_sync_no_cookie(MMonSync *m)
 {
   dout(10) << __func__ << dendl;
-  sync_reset();
   bootstrap();
 }
 
