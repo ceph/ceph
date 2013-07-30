@@ -168,6 +168,7 @@ public:
     case STATE_ELECTING: return "electing";
     case STATE_LEADER: return "leader";
     case STATE_PEON: return "peon";
+    case STATE_SHUTDOWN: return "shutdown";
     default: return "???";
     }
   }
