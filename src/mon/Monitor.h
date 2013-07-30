@@ -168,6 +168,7 @@ public:
     case STATE_ELECTING: return "electing";
     case STATE_LEADER: return "leader";
     case STATE_PEON: return "peon";
+    case STATE_SHUTDOWN: return "shutdown";
     default: return "???";
     }
   }
@@ -301,10 +302,14 @@ private:
   set<string> get_sync_targets_names();
 
   /**
-   * Reset the monitor's sync-related data structures and state, both
-   * for the requester- and provider-side.
+   * Reset the monitor's sync-related data structures for syncing *from* a peer
    */
-  void sync_reset();
+  void sync_reset_requester();
+
+  /**
+   * Reset sync state related to allowing others to sync from us
+   */
+  void sync_reset_provider();
 
   /**
    * Caled when a sync attempt times out (requester-side)

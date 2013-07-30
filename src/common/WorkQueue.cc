@@ -49,7 +49,13 @@ ThreadPool::ThreadPool(CephContext *cct_, string nm, int n, const char *option)
   }
 }
 
-void ThreadPool::TPHandle::reset_tp_timeout() {
+void ThreadPool::TPHandle::suspend_tp_timeout()
+{
+  cct->get_heartbeat_map()->clear_timeout(hb);
+}
+
+void ThreadPool::TPHandle::reset_tp_timeout()
+{
   cct->get_heartbeat_map()->reset_timeout(
     hb, grace, suicide_grace);
 }

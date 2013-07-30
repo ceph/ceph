@@ -2436,6 +2436,7 @@ int Objecter::recalc_command_target(CommandOp *c)
       c->session = s;
       s->command_ops.push_back(&c->session_item);
     } else {
+      c->session = NULL;
       num_homeless_ops++;
     }
     return RECALC_OP_TARGET_NEED_RESEND;

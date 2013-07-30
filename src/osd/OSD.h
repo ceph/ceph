@@ -911,7 +911,7 @@ private:
     bool _empty() {
       return pqueue.empty();
     }
-    void _process(PGRef pg);
+    void _process(PGRef pg, ThreadPool::TPHandle &handle);
   } op_wq;
 
   void enqueue_op(PG *pg, OpRequestRef op);
