@@ -214,6 +214,9 @@ class Thrasher:
         self.ceph_manager.wait_for_all_up(
             timeout=self.config.get('timeout')
             )
+        # now we wait 20s for the pg status to change, if it takes longer,
+        # the test *should* fail!
+        time.sleep(20)
         self.ceph_manager.wait_for_clean(
             timeout=self.config.get('timeout')
             )
