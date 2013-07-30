@@ -209,11 +209,8 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     for cpack in rpm:
         pk_err_mess = StringIO()
         pkg2add = "{cpack}{trailer}".format(cpack=cpack,trailer=trailer)
-        try:
-            remote.run(args=['sudo', 'yum', 'install', pkg2add, '-y',],
-                    stderr=pk_err_mess)
-        except:
-            raise
+        remote.run(args=['sudo', 'yum', 'install', pkg2add, '-y',],
+                stderr=pk_err_mess)
 
 def purge_data(ctx):
     """
