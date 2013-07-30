@@ -205,7 +205,7 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     dloc = tmp_vers.rfind('-')
     t_vers1 = tmp_vers[0:dloc]
     t_vers2 = tmp_vers[dloc+1:]
-    trailer = "-{tv1}.{tv2}.{dist_release}".format(tv1=t_vers1, tv2=t_vers2, dist_release=dist_release)
+    trailer = "-{tv1}-{tv2}.{dist_release}".format(tv1=t_vers1, tv2=t_vers2, dist_release=dist_release)
     for cpack in rpm:
         pk_err_mess = StringIO()
         pkg2add = "{cpack}{trailer}".format(cpack=cpack,trailer=trailer)
