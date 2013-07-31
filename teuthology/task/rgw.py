@@ -376,7 +376,7 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints):
                          'user', 'create',
                          '--uid', zone_info['system_key']['user'],
                          '--access-key', zone_info['system_key']['access_key'],
-                         '--secret-key', zone_info['system_key']['secret_key'],
+                         '--secret', zone_info['system_key']['secret_key'],
                          '--display-name', zone_info['system_key']['user'],
                          ],
                      check_status=True,
