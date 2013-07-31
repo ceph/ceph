@@ -2335,7 +2335,7 @@ Objecter::RequestStateHook::RequestStateHook(Objecter *objecter) :
 {
 }
 
-bool Objecter::RequestStateHook::call(std::string command, std::string args,
+bool Objecter::RequestStateHook::call(std::string command, cmdmap_t& cmdmap,
 				      std::string format, bufferlist& out)
 {
   stringstream ss;

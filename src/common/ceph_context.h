@@ -20,6 +20,7 @@
 
 #include "include/buffer.h"
 #include "include/atomic.h"
+#include "common/cmdparse.h"
 
 class AdminSocket;
 class CephContextServiceThread;
@@ -97,7 +98,7 @@ public:
   /**
    * process an admin socket command
    */
-  void do_command(std::string command, std::string args, std::string foramt,
+  void do_command(std::string command, cmdmap_t& cmdmap, std::string format,
 		  bufferlist *out);
 
   /**

@@ -156,18 +156,25 @@ class CephContextHook : public AdminSocketHook {
 public:
   CephContextHook(CephContext *cct) : m_cct(cct) {}
 
-  bool call(std::string command, std::string args, std::string format,
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
 	    bufferlist& out) {
-    m_cct->do_command(command, args, format, &out);
+    m_cct->do_command(command, cmdmap, format, &out);
     return true;
   }
 };
 
-void CephContext::do_command(std::string command, std::string args,
+void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
 			     std::string format, bufferlist *out)
 {
   Formatter *f = new_formatter(format);
-  lgeneric_dout(this, 1) << "do_command '" << command << "' '" << args << "'" << dendl;
+  stringstream ss;
+  for (cmdmap_t::iterator it = cmdmap.begin(); it != cmdmap.end(); ++it) {
+    if (it->first != "prefix") {
+      ss << it->first  << ":" << cmd_vartype_stringify(it->second) << " ";
+    }
+  }
+  lgeneric_dout(this, 1) << "do_command '" << command << "' '"
+			 << ss.str() << dendl;
   if (command == "perfcounters_dump" || command == "1" ||
       command == "perf dump") {
     _perf_counters_collection->dump_formatted(f, false);
@@ -182,14 +189,17 @@ void CephContext::do_command(std::string command, std::string args,
       _conf->show_config(f);
     }
     else if (command == "config set") {
-      std::string var = args;
-      size_t pos = var.find(' ');
-      if (pos == string::npos) {
+      std::string var;
+      std::vector<std::string> val;
+
+      if (!(cmd_getval(this, cmdmap, "var", var)) ||
+          !(cmd_getval(this, cmdmap, "val", val))) {
         f->dump_string("error", "syntax error: 'config set <var> <value>'");
       } else {
-        std::string val = var.substr(pos+1);
-        var.resize(pos);
-        int r = _conf->set_val(var.c_str(), val.c_str());
+	// val may be multiple words
+	ostringstream argss;
+	std::copy(val.begin(), val.end(), ostream_iterator<string>(argss, " "));
+        int r = _conf->set_val(var.c_str(), argss.str().c_str());
         if (r < 0) {
           f->dump_stream("error") << "error setting '" << var << "' to '" << val << "': " << cpp_strerror(r);
         } else {
@@ -199,15 +209,20 @@ void CephContext::do_command(std::string command, std::string args,
         }
       }
     } else if (command == "config get") {
-        char buf[4096];
-        memset(buf, 0, sizeof(buf));
-        char *tmp = buf;
-        int r = _conf->get_val(args.c_str(), &tmp, sizeof(buf));
-        if (r < 0) {
-            f->dump_stream("error") << "error getting '" << args << "': " << cpp_strerror(r);
-        } else {
-            f->dump_string(args.c_str(), buf);
-        }
+      std::string var;
+      if (!cmd_getval(this, cmdmap, "var", var)) {
+	f->dump_string("error", "syntax error: 'config get <var>'");
+      } else {
+	char buf[4096];
+	memset(buf, 0, sizeof(buf));
+	char *tmp = buf;
+	int r = _conf->get_val(var.c_str(), &tmp, sizeof(buf));
+	if (r < 0) {
+	    f->dump_stream("error") << "error getting '" << var << "': " << cpp_strerror(r);
+	} else {
+	    f->dump_string(var.c_str(), buf);
+	}
+      }
     } else if (command == "log flush") {
       _log->flush();
     }
@@ -224,7 +239,8 @@ void CephContext::do_command(std::string command, std::string args,
   }
   f->flush(*out);
   delete f;
-  lgeneric_dout(this, 1) << "do_command '" << command << "' '" << args << "' result is " << out->length() << " bytes" << dendl;
+  lgeneric_dout(this, 1) << "do_command '" << command << "' '" << ss.str()
+		         << "result is " << out->length() << " bytes" << dendl;
 };
 
 
@@ -262,7 +278,7 @@ CephContext::CephContext(uint32_t module_type_)
   _admin_socket->register_command("2", "2", _admin_hook, "");
   _admin_socket->register_command("perf schema", "perf schema", _admin_hook, "dump perfcounters schema");
   _admin_socket->register_command("config show", "config show", _admin_hook, "dump current config settings");
-  _admin_socket->register_command("config set", "config set name=var,type=CephString name=val,type=CephString",  _admin_hook, "config set <field> <val>: set a config variable");
+  _admin_socket->register_command("config set", "config set name=var,type=CephString name=val,type=CephString,n=N",  _admin_hook, "config set <field> <val> [<val> ...]: set a config variable");
   _admin_socket->register_command("config get", "config get name=var,type=CephString", _admin_hook, "config get <field>: get the config value");
   _admin_socket->register_command("log flush", "log flush", _admin_hook, "flush log entries to log file");
   _admin_socket->register_command("log dump", "log dump", _admin_hook, "dump recent log entries to log file");
