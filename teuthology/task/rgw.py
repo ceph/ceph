@@ -250,11 +250,16 @@ def start_apache(ctx, config):
 
         run.wait(apaches.itervalues())
 
+def extract_user_info(client_config):
+    user_info = dict()
+    user_info['system_key'] = dict(
+        user=client_config['system user']['name'],
+        access_key=client_config['system user']['access key'],
+        secret_key=client_config['system user']['secret key'],
+        )
+    return user_info
+
 def extract_zone_info(ctx, client, client_config):
-    user_info = client_config['system user']
-    system_user = user_info['name']
-    system_access_key = user_info['access key']
-    system_secret_key = user_info['secret key']
 
     ceph_config = ctx.ceph.conf.get('global', {})
     ceph_config.update(ctx.ceph.conf.get('client', {}))
@@ -273,11 +278,6 @@ def extract_zone_info(ctx, client, client_config):
                 'user_swift_pool', 'user_uid_pool']:
         zone_info[key] = '.' + region + '.' + zone + '.' + key
 
-    zone_info['system_key'] = dict(
-        user=system_user,
-        access_key=system_access_key,
-        secret_key=system_secret_key,
-        )
     return region, zone, zone_info
 
 def extract_region_info(region, region_info):
@@ -305,7 +305,7 @@ def assign_ports(ctx, config):
 
 def fill_in_endpoints(region_info, role_zones, role_endpoints):
     for role, (host, port) in role_endpoints.iteritems():
-        region, zone, _ = role_zones[role]
+        region, zone, _, _ = role_zones[role]
         host, port = role_endpoints[role]
         endpoint = 'http://{host}:{port}/'.format(host=host, port=port)
         region_conf = region_info[region]
@@ -313,6 +313,29 @@ def fill_in_endpoints(region_info, role_zones, role_endpoints):
         region_conf['endpoints'].append(endpoint)
         region_conf.setdefault('zones', [])
         region_conf['zones'].append(dict(name=zone, endpoints=[endpoint]))
+
+@contextlib.contextmanager
+def configure_users(ctx, config):
+    log.info('Configuring users...')
+
+    # extract the user info and append it to the payload tuple for the given client
+    for client, c_config in config.iteritems():
+        user_info = extract_user_info(c_config)
+        log.debug('Creating user {user} on {client}'.format(
+                  user=user_info['system_key']['user'],client=client))
+        rgwadmin(ctx, client,
+                 cmd=[
+                     '-n', client,
+                     'user', 'create',
+                     '--uid', user_info['system_key']['user'],
+                     '--access-key', user_info['system_key']['access_key'],
+                     '--secret', user_info['system_key']['secret_key'],
+                     '--display-name', user_info['system_key']['user'],
+                     ],
+                 check_status=True,
+                 )
+
+    yield
 
 @contextlib.contextmanager
 def configure_regions_and_zones(ctx, config, regions, role_endpoints):
@@ -325,9 +348,17 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints):
     log.debug('config is %r', config)
     log.debug('regions are %r', regions)
     log.debug('role_endpoints = %r', role_endpoints)
+    # extract the zone info
     role_zones = dict([(client, extract_zone_info(ctx, client, c_config))
                        for client, c_config in config.iteritems()])
     log.debug('roles_zones = %r', role_zones)
+
+    # extract the user info and append it to the payload tuple for the given client
+    for client, c_config in config.iteritems():
+        user_info = extract_user_info(c_config)
+        (region, zone, zone_info) = role_zones[client]
+        role_zones[client] = (region, zone, zone_info, user_info)
+
     region_info = dict([(region, extract_region_info(region, r_config))
                         for region, r_config in regions.iteritems()])
 
@@ -346,10 +377,10 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints):
                               'region', 'default',
                               '--rgw-region', region],
                          check_status=True)
-        for role, (_, zone, info) in role_zones.iteritems():
+        for role, (_, zone, zone_info, user_info) in role_zones.iteritems():
             rgwadmin(ctx, client,
                      cmd=['-n', client, 'zone', 'set', '--rgw-zone', zone],
-                     stdin=StringIO(json.dumps(info)),
+                     stdin=StringIO(json.dumps(dict(zone_info.items() + user_info.items()))),
                      check_status=True)
 
     first_mon = teuthology.get_first_mon(ctx, config)
@@ -363,24 +394,13 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints):
 
     for client in config.iterkeys():
         rgwadmin(ctx, client, cmd=['-n', client, 'regionmap', 'update'])
-        for role, (_, zone, zone_info) in role_zones.iteritems():
+        for role, (_, zone, zone_info, user_info) in role_zones.iteritems():
             rados(ctx, mon,
                   cmd=['-p', zone_info['domain_root'],
                        'rm', 'region_info.default'])
             rados(ctx, mon,
                   cmd=['-p', zone_info['domain_root'],
                        'rm', 'zone_info.default'])
-            rgwadmin(ctx, client,
-                     cmd=[
-                         '-n', client,
-                         'user', 'create',
-                         '--uid', zone_info['system_key']['user'],
-                         '--access-key', zone_info['system_key']['access_key'],
-                         '--secret', zone_info['system_key']['secret_key'],
-                         '--display-name', zone_info['system_key']['user'],
-                         ],
-                     check_status=True,
-                     )
     yield
 
 @contextlib.contextmanager
@@ -502,6 +522,10 @@ def task(ctx, config):
             config=config,
             regions=regions,
             role_endpoints=role_endpoints,
+            ),
+        lambda: configure_users(
+            ctx=ctx,
+            config=config,
             ),
         lambda: ship_config(ctx=ctx, config=config,
                             role_endpoints=role_endpoints),
