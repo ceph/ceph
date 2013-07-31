@@ -24,8 +24,8 @@ def create_dirs(ctx, config):
                 '-p',
                 '{tdir}/apache/htdocs.{client}'.format(tdir=testdir,
                                                        client=client),
-                '{tdir}/apache/tmp.{client}'.format(tdir=testdir,
-                                                    client=client),
+                '{tdir}/apache/tmp.{client}/fastcgi_sock'.format(tdir=testdir,
+                                                                 client=client),
                 run.Raw('&&'),
                 'mkdir',
                 '{tdir}/archive/apache.{client}'.format(tdir=testdir,
@@ -101,7 +101,7 @@ def ship_config(ctx, config, role_endpoints):
                                                                  client=client),
             data="""#!/bin/sh
 ulimit -c unlimited
-exec radosgw -f -n {client} --rgw-socket-path {tdir}/apache/tmp.{client}/fastcgi_sock/rgw_sock
+exec radosgw -f -n {client} -k /etc/ceph/ceph.{client}.keyring --rgw-socket-path {tdir}/apache/tmp.{client}/fastcgi_sock/rgw_sock
 
 """.format(tdir=testdir, client=client)
             )
