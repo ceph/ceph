@@ -295,6 +295,7 @@ void Objecter::send_linger(LingerOp *info)
     // repeat send.  cancel old registeration op, if any.
     if (ops.count(info->register_tid)) {
       Op *o = ops[info->register_tid];
+      op_cancel_map_check(o);
       cancel_op(o);
     }
     info->register_tid = _op_submit(o);
