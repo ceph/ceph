@@ -26,7 +26,7 @@ import sys
 
 MYPATH = os.path.abspath(__file__)
 MYDIR = os.path.dirname(MYPATH)
-DEVMODEMSG = '*** DEVELOPER MODE: setting PYTHONPATH and LD_LIBRARY_PATH'
+DEVMODEMSG = '*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***'
 
 if MYDIR.endswith('src') and \
    os.path.exists(os.path.join(MYDIR, '.libs')) and \
@@ -35,6 +35,7 @@ if MYDIR.endswith('src') and \
     if 'LD_LIBRARY_PATH' in os.environ:
         if MYLIBPATH not in os.environ['LD_LIBRARY_PATH']:
             os.environ['LD_LIBRARY_PATH'] += ':' + MYLIBPATH
+            os.environ['PATH'] += ':' + MYDIR
             print >> sys.stderr, DEVMODEMSG
             os.execvp('python', ['python'] + sys.argv)
     else:
