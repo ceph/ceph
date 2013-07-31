@@ -45,6 +45,7 @@ using namespace __gnu_cxx;
 #include "common/Finisher.h"
 
 #include "common/compiler_extensions.h"
+#include "common/cmdparse.h"
 
 #include "osdc/ObjectCacher.h"
 
@@ -196,7 +197,7 @@ class Client : public Dispatcher {
     Client *m_client;
   public:
     CommandHook(Client *client);
-    bool call(std::string command, std::string args, std::string format,
+    bool call(std::string command, cmdmap_t &cmdmap, std::string format,
 	      bufferlist& out);
   };
   CommandHook m_command_hook;

@@ -11,7 +11,8 @@
 #include <stdexcept>
 #include "common/Formatter.h"
 #include "common/BackTrace.h"
-#include "common/ceph_context.h"
+
+class CephContext;
 
 /* this is handy; can't believe it's not standard */
 #define ARRAY_SIZE(a)	(sizeof(a) / sizeof(*a))
