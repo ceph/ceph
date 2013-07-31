@@ -586,7 +586,7 @@ public:
   bool _allowed_command(MonSession *s, map<std::string, cmd_vartype>& cmd);
   void _mon_status(Formatter *f, ostream& ss);
   void _quorum_status(Formatter *f, ostream& ss);
-  void _add_bootstrap_peer_hint(string cmd, string args, ostream& ss);
+  void _add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss);
   void handle_command(class MMonCommand *m);
   void handle_route(MRoute *m);
 
@@ -750,7 +750,7 @@ public:
   int write_fsid();
   int write_fsid(MonitorDBStore::Transaction &t);
 
-  void do_admin_command(std::string command, std::string args,
+  void do_admin_command(std::string command, cmdmap_t& cmdmap,
 			std::string format, ostream& ss);
 
 private:
