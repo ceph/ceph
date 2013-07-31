@@ -1,6 +1,7 @@
 import logging
 
 from ..orchestra import run
+from .. import misc
 
 log = logging.getLogger(__name__)
 
@@ -25,3 +26,7 @@ def task(ctx, config):
             wait=False,
             )
         )
+
+    log.info('Reconnecting after ceph-qa-chef run')
+    misc.reconnect(ctx, 10)     #Reconnect for ulimit and other ceph-qa-chef changes
+
