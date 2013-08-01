@@ -11,9 +11,6 @@ import xml.etree.ElementTree
 
 BASEURL = os.environ.get('BASEURL', 'http://localhost:5000/api/v0.1')
 
-class MyException(Exception):
-    pass
-
 def fail(r, msg):
     print >> sys.stderr, 'FAILURE: url ', r.url
     print >> sys.stderr, msg
@@ -22,6 +19,14 @@ def fail(r, msg):
     sys.exit(1)
 
 def expect(url, method, respcode, contenttype, extra_hdrs=None, data=None):
+    failmsg, r = expect_nofail(url, method, respcode, contenttype, extra_hdrs,
+                               data)
+    if failmsg:
+        fail(r, failmsg)
+    return r
+
+def expect_nofail(url, method, respcode, contenttype, extra_hdrs=None,
+                 data=None):
 
     fdict = {'get':requests.get, 'put':requests.put}
     f = fdict[method.lower()]
@@ -30,7 +35,8 @@ def expect(url, method, respcode, contenttype, extra_hdrs=None, data=None):
     print '{0}: {1} {2}'.format(url, contenttype, r.status_code)
 
     if r.status_code != respcode:
-        fail(r, 'expected {0}, got {1}'.format(respcode, r.status_code))
+        return 'expected {0}, got {1}'.format(respcode, r.status_code), r
+
     r_contenttype = r.headers['content-type']
 
     if contenttype in ['json', 'xml']:
@@ -39,7 +45,7 @@ def expect(url, method, respcode, contenttype, extra_hdrs=None, data=None):
         contenttype = 'text/' + contenttype
 
     if contenttype and r_contenttype != contenttype:
-        fail(r,  'expected {0}, got "{1}"'.format(contenttype, r_contenttype))
+        return 'expected {0}, got "{1}"'.format(contenttype, r_contenttype), r
 
     if contenttype.startswith('application'):
         if r_contenttype == 'application/json':
@@ -48,16 +54,16 @@ def expect(url, method, respcode, contenttype, extra_hdrs=None, data=None):
                 r.myjson = json.loads(r.content)
                 assert(r.myjson != None)
             except Exception as e:
-                fail(r, 'Invalid JSON returned: "{0}"'.format(str(e)))
+                return 'Invalid JSON returned: "{0}"'.format(str(e)), r
 
         if r_contenttype == 'application/xml':
             try:
                 # if it's there, squirrel it away for use in the caller
                 r.tree = xml.etree.ElementTree.fromstring(r.content)
             except Exception as e:
-                fail(r, 'Invalid XML returned: "{0}"'.format(str(e)))
+                return 'Invalid XML returned: "{0}"'.format(str(e)), r
 
-    return r
+    return '', r
 
 
 JSONHDR={'accept':'application/json'}
