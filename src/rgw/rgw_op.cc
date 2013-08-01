@@ -297,6 +297,7 @@ static int read_policy(RGWRados *store, struct req_state *s,
       ret = -EACCES;
     else
       ret = -ENOENT;
+
   } else if (ret == -ENOENT) {
       ret = -ERR_NO_SUCH_BUCKET;
   }
@@ -946,7 +947,7 @@ void RGWCreateBucket::execute()
 {
   RGWAccessControlPolicy old_policy(s->cct);
   map<string, bufferlist> attrs;
-  bufferlist aclbl, corsbl;
+  bufferlist aclbl;
   bool existed;
   int r;
   rgw_obj obj(store->zone.domain_root, s->bucket_name_str);
@@ -1834,6 +1835,37 @@ void RGWPutACLs::execute()
   }
 }
 
+static int read_bucket_cors(RGWRados *store, struct req_state *s, RGWCORSConfiguration *bucket_cors, bool *exist)
+{
+  bufferlist bl;
+
+  map<string, bufferlist>::iterator aiter = s->bucket_attrs.find(RGW_ATTR_CORS);
+  if (aiter == s->bucket_attrs.end()) {
+    ldout(s->cct, 20) << "no CORS configuration attr found" << dendl;
+    *exist = false;
+    return 0; /* no CORS configuration found */
+  }
+
+  *exist = true;
+
+  bl = aiter->second;
+
+  bufferlist::iterator iter = bl.begin();
+  try {
+    bucket_cors->decode(iter);
+  } catch (buffer::error& err) {
+    ldout(s->cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+    return -EIO;
+  }
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+    RGWCORSConfiguration_S3 *s3cors = static_cast<RGWCORSConfiguration_S3 *>(bucket_cors);
+    ldout(s->cct, 15) << "Read RGWCORSConfiguration";
+    s3cors->to_xml(*_dout);
+    *_dout << dendl;
+  }
+  return 0;
+}
+
 int RGWGetCORS::verify_permission()
 {
   if (s->user.user_id.compare(s->bucket_owner.get_id()) != 0)
@@ -1844,15 +1876,17 @@ int RGWGetCORS::verify_permission()
 
 void RGWGetCORS::execute()
 {
-  stringstream ss;
-  if (!s->bucket_cors) {
+  bool cors_exist;
+
+  ret = read_bucket_cors(store, s, &bucket_cors, &cors_exist);
+  if (ret < 0)
+    return ;
+
+  if (!cors_exist) {
     dout(2) << "No CORS configuration set yet for this bucket" << dendl;
     ret = -ENOENT;
     return;
   }
-  RGWCORSConfiguration_S3 *s3cors = static_cast<RGWCORSConfiguration_S3 *>(s->bucket_cors);
-  s3cors->to_xml(ss);
-  cors = ss.str(); 
 }
 
 int RGWPutCORS::verify_permission()
@@ -1865,45 +1899,17 @@ int RGWPutCORS::verify_permission()
 
 void RGWPutCORS::execute()
 {
-  bufferlist bl;
-
-  RGWCORSConfiguration_S3 *cors_config;
-  RGWCORSXMLParser_S3 parser(s->cct);
   rgw_obj obj;
 
-  ret = 0;
-
-  if (!parser.init()) {
-    ret = -EINVAL;
-    return;
-  }
   ret = get_params();
   if (ret < 0)
     return;
 
-  ldout(s->cct, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
-  if (!parser.parse(data, len, 1)) {
-    ret = -EINVAL;
-    return;
-  }
-  cors_config = static_cast<RGWCORSConfiguration_S3 *>(parser.find_first("CORSConfiguration"));
-  if (!cors_config) {
-    ret = -EINVAL;
-    return;
-  }
-
-  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
-    ldout(s->cct, 15) << "CORSConfiguration";
-    cors_config->to_xml(*_dout);
-    *_dout << dendl;
-  }
-
   RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->bucket_info.objv_tracker);
 
-  cors_config->encode(bl);
   store->get_bucket_instance_obj(s->bucket, obj);
   store->set_atomic(s->obj_ctx, obj);
-  ret = store->set_attr(s->obj_ctx, obj, RGW_ATTR_CORS, bl, ptracker);
+  ret = store->set_attr(s->obj_ctx, obj, RGW_ATTR_CORS, cors_bl, ptracker);
 }
 
 int RGWDeleteCORS::verify_permission()
@@ -1916,9 +1922,15 @@ int RGWDeleteCORS::verify_permission()
 
 void RGWDeleteCORS::execute()
 {
+  bool cors_exist;
+  RGWCORSConfiguration bucket_cors;
+  ret = read_bucket_cors(store, s, &bucket_cors, &cors_exist);
+  if (ret < 0)
+    return;
+
   bufferlist bl;
   rgw_obj obj;
-  if (!s->bucket_cors) {
+  if (!cors_exist) {
     dout(2) << "No CORS configuration set yet for this bucket" << dendl;
     ret = -ENOENT;
     return;
@@ -2507,41 +2519,6 @@ int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket)
       ret = -EACCES;
   }
 
-  return ret;
-}
-
-int RGWHandler::read_cors_config(void)
-{
-  int ret = 0;
-  bufferlist bl;
-
-  if (s->bucket.name.empty())
-    return 0;
-
-  dout(10) << "Going to read cors from attrs" << dendl;
-  rgw_obj obj;
-  store->get_bucket_instance_obj(s->bucket, obj);
-  ret = store->get_attr(s->obj_ctx, obj, RGW_ATTR_CORS, bl);
-  if (ret >= 0) {
-    bufferlist::iterator iter = bl.begin();
-    s->bucket_cors = new RGWCORSConfiguration();
-    try {
-      s->bucket_cors->decode(iter);
-    } catch (buffer::error& err) {
-      ldout(s->cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
-      return -EIO;
-    }
-    if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
-      RGWCORSConfiguration_S3 *s3cors = static_cast<RGWCORSConfiguration_S3 *>(s->bucket_cors);
-      ldout(s->cct, 15) << "Read RGWCORSConfiguration";
-      s3cors->to_xml(*_dout);
-      *_dout << dendl;
-    }
-  } else {
-      /*Not a serious error*/
-      dout(2) << "Warning: There is no content for CORS xattr,"
-            " cors may not be set yet" << dendl;
-  }
   return ret;
 }
 

@@ -162,8 +162,6 @@ class RGWPutCORS_ObjStore : public RGWPutCORS {
 public:
   RGWPutCORS_ObjStore() {}
   ~RGWPutCORS_ObjStore() {}
-
-  int get_params();
 };
 
 class RGWDeleteCORS_ObjStore : public RGWDeleteCORS {

@@ -184,6 +184,7 @@ public:
   RGWPutCORS_ObjStore_S3() {}
   ~RGWPutCORS_ObjStore_S3() {}
 
+  int get_params();
   void send_response();
 };
 
