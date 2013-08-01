@@ -1404,6 +1404,7 @@ void Objecter::finish_op(Op *op)
 
   ops.erase(op->tid);
   logger->set(l_osdc_op_active, ops.size());
+  assert(check_latest_map_ops.find(op->tid) == check_latest_map_ops.end());
 
   delete op;
 }
