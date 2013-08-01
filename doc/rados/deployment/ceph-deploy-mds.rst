@@ -6,8 +6,9 @@ With ``ceph-deploy``, adding and removing metadata servers is a simple task. You
 just add or remove one or more metadata servers on the command line with one
 command.
 
-.. note:: CephFS is in production using 1 metadata server per cluster. You
-   **MUST** deploy at least one metadata server to use CephFS.
+.. important:: You must deploy at least one metadata server to use CephFS.
+    There is experimental support for running multiple metadata servers.
+    Do not run multiple metadata servers in production.
 
 See `MDS Config Reference`_ for details on configuring metadata servers.
 
