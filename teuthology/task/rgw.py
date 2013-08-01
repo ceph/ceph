@@ -275,6 +275,13 @@ def extract_zone_info(ctx, client, client_config):
                 'user_swift_pool', 'user_uid_pool']:
         zone_info[key] = '.' + region + '.' + zone + '.' + key
 
+    # these keys are meant for the zones argument in the region info.
+    # We insert them into zone_info with a different format and then remove them
+    # in the fill_in_endpoints() method
+    for key in ['rgw log meta', 'rgw log data']:
+        if key in ceph_config:
+            zone_info[key] = ceph_config[key]
+
     return region, zone, zone_info
 
 def extract_region_info(region, region_info):
@@ -284,6 +291,8 @@ def extract_region_info(region, region_info):
         name=region,
         api_name=region_info.get('api name', region),
         is_master=region_info.get('is master', False),
+        log_meta=region_info.get('log meta', False),
+        log_data=region_info.get('log data', False),
         master_zone=region_info.get('master zone', region_info['zones'][0]),
         placement_targets=region_info.get('placement targets', []),
         default_placement=region_info.get('default placement', ''),
@@ -302,14 +311,33 @@ def assign_ports(ctx, config):
 
 def fill_in_endpoints(region_info, role_zones, role_endpoints):
     for role, (host, port) in role_endpoints.iteritems():
-        region, zone, _, _ = role_zones[role]
+        region, zone, zone_info, _ = role_zones[role]
         host, port = role_endpoints[role]
         endpoint = 'http://{host}:{port}/'.format(host=host, port=port)
         region_conf = region_info[region]
         region_conf.setdefault('endpoints', [])
         region_conf['endpoints'].append(endpoint)
+
+        # this is the payload for the 'zones' field in the region field
+        zone_payload = dict()
+        zone_payload['endpoints'] = [endpoint]
+        zone_payload['name'] = zone
+
+        # Pull the log meta and log data settings out of zone_info, if they exist, then pop them
+        # as they don't actually belong in the zone info
+        for key in ['rgw log meta', 'rgw log data']:
+            new_key = key.split(' ',1)[1]
+            new_key = new_key.replace(' ', '_')
+
+            if key in zone_info:
+                value = zone_info.pop(key)
+            else:
+                value = 'false'
+
+            zone_payload[new_key] = value
+
         region_conf.setdefault('zones', [])
-        region_conf['zones'].append(dict(name=zone, endpoints=[endpoint]))
+        region_conf['zones'].append(zone_payload)
 
 @contextlib.contextmanager
 def configure_users(ctx, config):
