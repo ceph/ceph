@@ -229,9 +229,9 @@ set_argv(int argc, const char **argv)
   if (m_argv_orig != NULL) {
     for (int i = 0; i < m_argc; ++i)
       free((void*)(m_argv_orig[i]));
-    delete m_argv_orig;
+    delete[] m_argv_orig;
     m_argv_orig = NULL;
-    delete m_argv;
+    delete[] m_argv;
     m_argv = NULL;
     m_argc = 0;
   }
