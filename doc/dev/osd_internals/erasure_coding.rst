@@ -104,7 +104,7 @@ Currently, we select the log with the newest last_update and the
 longest tail to be the authoritative log.  This is fine because we
 aren't generally able to roll operations on the other replicas forward
 or backwards, instead relying on our ability to re-replicate divergent
-objects.  With the write approach discussed in the prevous section,
+objects.  With the write approach discussed in the previous section,
 however, the erasure coded backend will rely on being able to roll
 back divergent operations since we may not be able to re-replicate
 divergent objects.  Thus, we must choose the *oldest* last_update from
@@ -114,12 +114,11 @@ divergent objects.
 The dificulty is that the current code assumes that as long as it has
 an info from at least 1 osd from the prior interval, it can complete
 peering.  In order to ensure that we do not end up with an
-unrecoverably divergent object, an erasure coded PG must hear from at
-least N/M of the replicas of the last interval to serve writes where N
-is the minimum number of chunks required to reconstruct.  This ensures
-that we will select a last_update old enough to roll back at least N
+unrecoverably divergent object, an M+K erasure coded PG must hear from at
+least M of the replicas of the last interval to serve writes.  This ensures
+that we will select a last_update old enough to roll back at least M
 replicas.  If a replica with an older last_update comes along later,
-we will be able to provide at least N chunks of any divergent object.
+we will be able to provide at least M chunks of any divergent object.
 
 Core Changes:
 
