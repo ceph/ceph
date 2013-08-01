@@ -320,6 +320,8 @@ def configure_users(ctx, config):
 
     # extract the user info and append it to the payload tuple for the given client
     for client, c_config in config.iteritems():
+        if not c_config:
+            continue
         user_info = extract_user_info(c_config)
         log.debug('Creating user {user} on {client}'.format(
                   user=user_info['system_key']['user'],client=client))
