@@ -295,6 +295,7 @@ void Objecter::send_linger(LingerOp *info)
     // repeat send.  cancel old registeration op, if any.
     if (ops.count(info->register_tid)) {
       Op *o = ops[info->register_tid];
+      op_cancel_map_check(o);
       cancel_op(o);
     }
     info->register_tid = _op_submit(o);
@@ -749,6 +750,7 @@ void Objecter::check_op_pool_dne(Op *op)
 
 void Objecter::_send_op_map_check(Op *op)
 {
+  assert(client_lock.is_locked());
   // ask the monitor
   if (check_latest_map_ops.count(op->tid) == 0) {
     check_latest_map_ops[op->tid] = op;
@@ -759,6 +761,7 @@ void Objecter::_send_op_map_check(Op *op)
 
 void Objecter::op_cancel_map_check(Op *op)
 {
+  assert(client_lock.is_locked());
   map<tid_t, Op*>::iterator iter =
     check_latest_map_ops.find(op->tid);
   if (iter != check_latest_map_ops.end()) {
@@ -1101,6 +1104,7 @@ void Objecter::tick()
 
 void Objecter::resend_mon_ops()
 {
+  assert(client_lock.is_locked());
   ldout(cct, 10) << "resend_mon_ops" << dendl;
 
   for (map<tid_t,PoolStatOp*>::iterator p = poolstat_ops.begin(); p!=poolstat_ops.end(); ++p) {
@@ -1400,6 +1404,7 @@ void Objecter::finish_op(Op *op)
 
   ops.erase(op->tid);
   logger->set(l_osdc_op_active, ops.size());
+  assert(check_latest_map_ops.find(op->tid) == check_latest_map_ops.end());
 
   delete op;
 }
