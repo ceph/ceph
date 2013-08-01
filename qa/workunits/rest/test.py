@@ -70,7 +70,6 @@ JSONHDR={'accept':'application/json'}
 XMLHDR={'accept':'application/xml'}
 
 if __name__ == '__main__':
-
     expect('auth/export', 'GET', 200, 'plain')
     expect('auth/export.json', 'GET', 200, 'json')
     expect('auth/export.xml', 'GET', 200, 'xml')
@@ -163,17 +162,29 @@ if __name__ == '__main__':
     # EEXIST from CLI
     expect('mds/deactivate?who=2', 'PUT', 400, '')
 
-    r = expect('mds/dump.json', 'GET', 200, 'json')
-    assert('created' in r.myjson['output'])
-    current_epoch = r.myjson['output']['epoch']
     r = expect('mds/dump.xml', 'GET', 200, 'xml')
     assert(r.tree.find('output/mdsmap/created') is not None)
 
-    r = expect('mds/getmap', 'GET', 200, '')
-    assert(len(r.content) != 0)
-    expect('mds/setmap?epoch={0}'.format(current_epoch + 1), 'PUT', 200,
-           'plain', {'Content-Type':'text/plain'},
-           data=r.content)
+    failresps = []
+    while len(failresps) < 10:
+        r = expect('mds/dump.json', 'GET', 200, 'json')
+        assert('created' in r.myjson['output'])
+        current_epoch = r.myjson['output']['epoch']
+
+        map = expect('mds/getmap', 'GET', 200, '')
+        assert(len(map.content) != 0)
+        msg, r = expect_nofail(
+            'mds/setmap?epoch={0}'.format(current_epoch + 1), 'PUT', 200,
+            'plain', {'Content-Type':'text/plain'}, data=map.content
+            )
+        if msg:
+            failresps.append(msg + r.content)
+        else:
+            break
+
+    if len(failresps) == 10:
+        fail(r, 'Could not mds setmap in 10 tries; responses:' +
+             '\n'.join(failresps))
     expect('mds/newfs?metadata=0&data=1&sure=--yes-i-really-mean-it', 'PUT',
            200, '')
     expect('osd/pool/create?pool=data2&pg_num=10', 'PUT', 200, '')
