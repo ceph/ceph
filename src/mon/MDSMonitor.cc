@@ -960,9 +960,9 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
       return true;
     }
-  }    
-  if (r == -EINVAL) 
+  } else {
     ss << "unrecognized command";
+  }
  out:
   string rs;
   getline(ss, rs);
