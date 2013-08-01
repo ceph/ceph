@@ -42,6 +42,9 @@ BuildRequires:  libcurl-devel
 BuildRequires:  libxml2-devel
 BuildRequires:  libuuid-devel
 BuildRequires:  leveldb-devel > 1.2
+%if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
+BuildRequires:  snappy-devel
+%endif
 
 #################################################################################
 # specific
@@ -235,6 +238,14 @@ License:	LGPL-2.0
 Requires:	java
 Requires:	libcephfs_jni1 = %{version}-%{release}
 BuildRequires:  java-devel
+%if 0%{?suse_version} > 1220
+Requires:       junit4
+BuildRequires:  junit4
+%else
+Requires:       junit
+BuildRequires:  junit
+%endif
+BuildRequires:  junit
 %description -n cephfs-java
 This package contains the Java libraries for the Ceph File System.
 
