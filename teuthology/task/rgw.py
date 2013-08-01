@@ -284,6 +284,13 @@ def extract_zone_info(ctx, client, client_config):
         if key in ceph_config:
             zone_info[key] = ceph_config[key]
 
+    # these keys are meant for the zones argument in the region info.
+    # We insert them into zone_info with a different format and then remove them
+    # in the fill_in_endpoints() method
+    for key in ['rgw log meta', 'rgw log data']:
+        if key in ceph_config:
+            zone_info[key] = ceph_config[key]
+
     return region, zone, zone_info
 
 def extract_region_info(region, region_info):
