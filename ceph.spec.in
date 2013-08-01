@@ -42,6 +42,8 @@ BuildRequires:  libcurl-devel
 BuildRequires:  libxml2-devel
 BuildRequires:  libuuid-devel
 BuildRequires:  leveldb-devel > 1.2
+BuildRequires:  snappy-devel
+BuildRequires:  junit
 
 #################################################################################
 # specific
