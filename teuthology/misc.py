@@ -603,7 +603,13 @@ def get_scratch_devices(remote):
                 args=['ls', run.Raw('/dev/[sv]d?')],
                 stdout=StringIO()
                 )
-        devs = r.stdout.getvalue().split('\n')
+        devs = r.stdout.getvalue().strip().split('\n')
+
+    #Remove root device (vm guests) from the disk list
+    for dev in devs:
+        if 'vda' in dev:
+            devs.remove(dev)
+            log.warn("Removing root device: %s from device list" % dev)
 
     log.debug('devs={d}'.format(d=devs))
 
