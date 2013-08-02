@@ -50,6 +50,7 @@ def run_radosgw_agent(ctx, client, config):
             '{tdir}/daemon-helper'.format(tdir=testdir), 'kill',
             '{tdir}/radosgw-agent.{client}/radosgw-agent'.format(tdir=testdir,
                                                                  client=client),
+            '-v',
             '--src-access-key', src_access,
             '--src-secret-key', src_secret,
             '--src-host', src_host,
