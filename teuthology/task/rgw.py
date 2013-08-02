@@ -267,12 +267,10 @@ def extract_zone_info(ctx, client, client_config):
                                                                   client=client)
     region = ceph_config['rgw region']
     zone = ceph_config['rgw zone']
-    zone_info = dict(
-        domain_root=ceph_config['rgw zone root pool'],
-        )
+    zone_info = {}
     for key in ['control_pool', 'gc_pool', 'log_pool', 'intent_log_pool',
                 'usage_log_pool', 'user_keys_pool', 'user_email_pool',
-                'user_swift_pool', 'user_uid_pool']:
+                'user_swift_pool', 'user_uid_pool', 'domain_root']:
         zone_info[key] = '.' + region + '.' + zone + '.' + key
 
     # these keys are meant for the zones argument in the region info.
