@@ -28,6 +28,9 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
     if success:
         machines = json.loads(content)
         log.debug('locked {machines}'.format(machines=', '.join(machines.keys())))
+        if ctx.machine_type == 'vps':
+            for machine in machines:
+                create_if_vm(ctx, machine)
         return machines
     if status == 503:
         log.error('Insufficient nodes available to lock %d nodes.', num)
@@ -366,9 +369,10 @@ Lock, unlock, or query lock status of machines.
         else:
             machines_to_update = result.keys()
             if ctx.machine_type == 'vps':
-                print "Locks successful"
-                print "Unable to display keys at this time (virtual machines are rebooting)."
-                print "Please run teuthology-lock --list-targets once these machines come up."
+                shortnames = ' '.join([name.split('@')[1].split('.')[0] for name in result.keys()])
+                print "Successfully Locked:\n%s\n" % shortnames
+                print "Unable to display keys at this time (virtual machines are booting)."
+                print "Please run teuthology-lock --list-targets %s once these machines come up." % shortnames
             else:
                 print yaml.safe_dump(dict(targets=result), default_flow_style=False)
     elif ctx.update:
