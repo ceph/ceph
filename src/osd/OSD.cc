@@ -997,16 +997,17 @@ class OSDSocketHook : public AdminSocketHook {
   OSD *osd;
 public:
   OSDSocketHook(OSD *o) : osd(o) {}
-  bool call(std::string command, std::string args, std::string format,
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
 	    bufferlist& out) {
     stringstream ss;
-    bool r = osd->asok_command(command, args, format, ss);
+    bool r = osd->asok_command(command, cmdmap, format, ss);
     out.append(ss);
     return r;
   }
 };
 
-bool OSD::asok_command(string command, string args, string format, ostream& ss)
+bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
+		       ostream& ss)
 {
   if (format == "")
     format = "json-pretty";
@@ -1089,15 +1090,15 @@ class TestOpsSocketHook : public AdminSocketHook {
   ObjectStore *store;
 public:
   TestOpsSocketHook(OSDService *s, ObjectStore *st) : service(s), store(st) {}
-  bool call(std::string command, std::string args, std::string format,
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
 	    bufferlist& out) {
     stringstream ss;
-    test_ops(service, store, command, args, ss);
+    test_ops(service, store, command, cmdmap, ss);
     out.append(ss);
     return true;
   }
   void test_ops(OSDService *service, ObjectStore *store, std::string command,
-     std::string args, ostream &ss);
+     cmdmap_t& cmdmap, ostream &ss);
 
 };
 
@@ -1249,10 +1250,12 @@ int OSD::init()
   assert(r == 0);
 
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
+  // Note: pools are CephString instead of CephPoolname because
+  // these commands traditionally support both pool names and numbers
   r = admin_socket->register_command(
    "setomapval",
    "setomapval " \
-   "name=pool,type=CephPoolname " \
+   "name=pool,type=CephString " \
    "name=objname,type=CephObjectname " \
    "name=key,type=CephString "\
    "name=val,type=CephString",
@@ -1262,7 +1265,7 @@ int OSD::init()
   r = admin_socket->register_command(
     "rmomapkey",
     "rmomapkey " \
-    "name=pool,type=CephPoolname " \
+    "name=pool,type=CephString " \
     "name=objname,type=CephObjectname " \
     "name=key,type=CephString",
     test_ops_hook,
@@ -1271,7 +1274,7 @@ int OSD::init()
   r = admin_socket->register_command(
     "setomapheader",
     "setomapheader " \
-    "name=pool,type=CephPoolname " \
+    "name=pool,type=CephString " \
     "name=objname,type=CephObjectname " \
     "name=header,type=CephString",
     test_ops_hook,
@@ -1281,7 +1284,7 @@ int OSD::init()
   r = admin_socket->register_command(
     "getomap",
     "getomap " \
-    "name=pool,type=CephPoolname " \
+    "name=pool,type=CephString " \
     "name=objname,type=CephObjectname",
     test_ops_hook,
     "output entire object map");
@@ -1290,7 +1293,7 @@ int OSD::init()
   r = admin_socket->register_command(
     "truncobj",
     "truncobj " \
-    "name=pool,type=CephPoolname " \
+    "name=pool,type=CephString " \
     "name=objname,type=CephObjectname " \
     "name=len,type=CephInt",
     test_ops_hook,
@@ -1300,7 +1303,7 @@ int OSD::init()
   r = admin_socket->register_command(
     "injectdataerr",
     "injectdataerr " \
-    "name=pool,type=CephPoolname " \
+    "name=pool,type=CephString " \
     "name=objname,type=CephObjectname",
     test_ops_hook,
     "inject data error into omap");
@@ -1309,7 +1312,7 @@ int OSD::init()
   r = admin_socket->register_command(
     "injectmdataerr",
     "injectmdataerr " \
-    "name=pool,type=CephPoolname " \
+    "name=pool,type=CephString " \
     "name=objname,type=CephObjectname",
     test_ops_hook,
     "inject metadata error");
@@ -3111,7 +3114,7 @@ void OSD::check_ops_in_flight()
 //   injectmdataerr [namespace/]<obj-name>
 //   injectdataerr [namespace/]<obj-name>
 void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
-     std::string command, std::string args, ostream &ss)
+     std::string command, cmdmap_t& cmdmap, ostream &ss)
 {
   //Test support
   //Support changing the omap on a single osd by using the Admin Socket to
@@ -3121,40 +3124,36 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       command == "truncobj" || command == "injectmdataerr" ||
       command == "injectdataerr"
     ) {
-    std::vector<std::string> argv;
     pg_t rawpg, pgid;
     int64_t pool;
     OSDMapRef curmap = service->get_osdmap();
     int r;
 
-    argv.push_back(command);
-    string_to_vec(argv, args);
-    int argc = argv.size();
+    string poolstr;
 
-    if (argc < 3) {
-      ss << "Illegal request";
+    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+    pool = curmap->const_lookup_pg_pool_name(poolstr.c_str());
+    //If we can't find it by name then maybe id specified
+    if (pool < 0 && isdigit(poolstr[0]))
+      pool = atoll(poolstr.c_str());
+    if (pool < 0) {
+      ss << "Invalid pool" << poolstr;
       return;
     }
- 
-    pool = curmap->const_lookup_pg_pool_name(argv[1].c_str());
-    //If we can't find it my name then maybe id specified
-    if (pool < 0 && isdigit(argv[1].c_str()[0]))
-      pool = atoll(argv[1].c_str());
     r = -1;
     string objname, nspace;
-    objname = string(argv[2]);
-    if (pool >= 0) {
-        std::size_t found = argv[2].find_first_of('/');
-        if (found != string::npos) {
-          nspace = argv[2].substr(0, found);
-          objname = argv[2].substr(found+1);
-        }
-        object_locator_t oloc(pool, nspace);
-        r = curmap->object_locator_to_pg(object_t(objname), oloc,  rawpg);
+    cmd_getval(g_ceph_context, cmdmap, "objname", objname);
+    std::size_t found = objname.find_first_of('/');
+    if (found != string::npos) {
+      nspace = objname.substr(0, found);
+      objname = objname.substr(found+1);
     }
+    object_locator_t oloc(pool, nspace);
+    r = curmap->object_locator_to_pg(object_t(objname), oloc,  rawpg);
+
     if (r < 0) {
-        ss << "Invalid pool " << argv[1];
-        return;
+      ss << "Invalid namespace/objname";
+      return;
     }
     pgid = curmap->raw_pg_to_pg(rawpg);
 
@@ -3162,15 +3161,13 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     ObjectStore::Transaction t;
 
     if (command == "setomapval") {
-      if (argc != 5) {
-        ss << "usage: setomapval <pool> [namespace/]<obj-name> <key> <val>";
-        return;
-      }
       map<string, bufferlist> newattrs;
       bufferlist val;
-      string key(argv[3]);
- 
-      val.append(argv[4]);
+      string key, valstr;
+      cmd_getval(g_ceph_context, cmdmap, "key", key);
+      cmd_getval(g_ceph_context, cmdmap, "val", valstr);
+
+      val.append(valstr);
       newattrs[key] = val;
       t.omap_setkeys(coll_t(pgid), obj, newattrs);
       r = store->apply_transaction(t);
@@ -3179,13 +3176,11 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       else
         ss << "ok";
     } else if (command == "rmomapkey") {
-      if (argc != 4) {
-        ss << "usage: rmomapkey <pool> [namespace/]<obj-name> <key>";
-        return;
-      }
+      string key;
       set<string> keys;
+      cmd_getval(g_ceph_context, cmdmap, "key", key);
 
-      keys.insert(string(argv[3]));
+      keys.insert(key);
       t.omap_rmkeys(coll_t(pgid), obj, keys);
       r = store->apply_transaction(t);
       if (r < 0)
@@ -3193,13 +3188,11 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       else
         ss << "ok";
     } else if (command == "setomapheader") {
-      if (argc != 4) {
-        ss << "usage: setomapheader <pool> [namespace/]<obj-name> <header>";
-        return;
-      }
       bufferlist newheader;
+      string headerstr;
 
-      newheader.append(argv[3]);
+      cmd_getval(g_ceph_context, cmdmap, "header", headerstr);
+      newheader.append(headerstr);
       t.omap_setheader(coll_t(pgid), obj, newheader);
       r = store->apply_transaction(t);
       if (r < 0)
@@ -3207,10 +3200,6 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       else
         ss << "ok";
     } else if (command == "getomap") {
-      if (argc != 3) {
-        ss << "usage: getomap <pool> [namespace/]<obj-name>";
-        return;
-      }
       //Debug: Output entire omap
       bufferlist hdrbl;
       map<string, bufferlist> keyvals;
@@ -3225,11 +3214,9 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
           ss << "error=" << r;
       }
     } else if (command == "truncobj") {
-      if (argc != 4) {
-	ss << "usage: truncobj <pool> [namespace/]<obj-name> <val>";
-	return;
-      }
-      t.truncate(coll_t(pgid), obj, atoi(argv[3].c_str()));
+      int64_t trunclen;
+      cmd_getval(g_ceph_context, cmdmap, "len", trunclen);
+      t.truncate(coll_t(pgid), obj, trunclen);
       r = store->apply_transaction(t);
       if (r < 0)
 	ss << "error=" << r;
