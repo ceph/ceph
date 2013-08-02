@@ -526,7 +526,7 @@ public:
 class RGWGetCORS : public RGWOp {
 protected:
   int ret;
-  string cors;
+  RGWCORSConfiguration bucket_cors;
 
 public:
   RGWGetCORS() : ret(0) {}
@@ -542,18 +542,13 @@ public:
 class RGWPutCORS : public RGWOp {
 protected:
   int ret;
-  size_t len;
-  char *data;
+  bufferlist cors_bl;
 
 public:
   RGWPutCORS() {
     ret = 0;
-    len = 0;
-    data = NULL;
   }
-  virtual ~RGWPutCORS() {
-    free(data);
-  }
+  virtual ~RGWPutCORS() { }
 
   int verify_permission();
   void execute();
@@ -849,7 +844,6 @@ protected:
   virtual RGWOp *op_options() { return NULL; }
 public:
   RGWHandler() : store(NULL), s(NULL) {}
-  int read_cors_config();
   virtual ~RGWHandler();
   virtual int init(RGWRados *store, struct req_state *_s, RGWClientIO *cio);
 
