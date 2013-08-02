@@ -489,11 +489,15 @@ def task(ctx, config):
                 rgw zone: foo-1
                 rgw region root pool: .rgw.root.foo
                 rgw zone root pool: .rgw.root.foo
+                rgw log meta: true
+                rgw log data: true
               client.1:
                 rgw region: bar
                 rgw zone: bar-master
                 rgw region root pool: .rgw.root.bar
                 rgw zone root pool: .rgw.root.bar
+                rgw log meta: true
+                rgw log data: true
               client.2:
                 rgw region: bar
                 rgw zone: bar-secondary
@@ -506,6 +510,8 @@ def task(ctx, config):
                 is master: true    # default: false
                 master zone: foo-1 # default: first zone
                 zones: [foo-1]
+                log meta: true
+                log data: true
                 placement targets: [target1, target2] # default: []
                 default placement: target2            # default: ''
               bar:
