@@ -358,6 +358,7 @@ def configure_users(ctx, config):
                      '--access-key', user_info['system_key']['access_key'],
                      '--secret', user_info['system_key']['secret_key'],
                      '--display-name', user_info['system_key']['user'],
+                     '--system',
                      ],
                  check_status=True,
                  )
