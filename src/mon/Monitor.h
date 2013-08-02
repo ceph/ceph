@@ -583,7 +583,6 @@ public:
   void handle_get_version(MMonGetVersion *m);
   void handle_subscribe(MMonSubscribe *m);
   void handle_mon_get_map(MMonGetMap *m);
-  bool _allowed_command(MonSession *s, map<std::string, cmd_vartype>& cmd);
   bool _allowed_command(MonSession *s, string &module, string& prefix,
                         map<string,cmd_vartype>& cmdmap);
   void _mon_status(Formatter *f, ostream& ss);
