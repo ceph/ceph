@@ -1,5 +1,4 @@
 import contextlib
-from copy import deepcopy
 import logging
 
 from ..orchestra import run
@@ -15,15 +14,8 @@ def run_radosgw_agent(ctx, client, config):
     src_client = config['src']
     dest_client = config['dest']
 
-    ceph_config = ctx.ceph.conf.get('global', {})
-    ceph_config.update(ctx.ceph.conf.get('client', {}))
-    src_ceph_config = deepcopy(ceph_config)
-    src_ceph_config.update(ctx.ceph.conf.get(src_client, {}))
-    dest_ceph_config = deepcopy(ceph_config)
-    dest_ceph_config.update(ctx.ceph.conf.get(dest_client, {}))
-
-    src_zone = src_ceph_config['rgw zone']
-    dest_zone = dest_ceph_config['rgw zone']
+    src_zone = rgw_utils.zone_for_client(ctx, src_client)
+    dest_zone = rgw_utils.zone_for_client(ctx, dest_client)
 
     log.info("source is %s", src_zone)
     log.info("dest is %s", dest_zone)

@@ -59,3 +59,9 @@ def get_zone_system_keys(ctx, client, zone):
                                  'zone', 'get', '--rgw-zone', zone])
     system_key = zone_info['system_key']
     return system_key['access_key'], system_key['secret_key']
+
+def zone_for_client(ctx, client):
+    ceph_config = ctx.ceph.conf.get('global', {})
+    ceph_config.update(ctx.ceph.conf.get('client', {}))
+    ceph_config.update(ctx.ceph.conf.get(client, {}))
+    return ceph_config.get('rgw zone')
