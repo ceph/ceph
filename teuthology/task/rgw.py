@@ -53,13 +53,10 @@ def create_dirs(ctx, config):
         for client in config.iterkeys():
             ctx.cluster.only(client).run(
                 args=[
-                    'test', '-d', 
-                    '{tdir}/apache'.format(tdir=testdir),
-                    run.Raw('&&'), 
                     'rmdir',
                     '{tdir}/apache'.format(tdir=testdir),
-                    run.Raw(';'), 
                     ],
+                check_status=False, # only need to remove once per host
                 )
 
 
