@@ -2308,7 +2308,8 @@ public:
       return ret;
 
     // are we actually going to perform this put, or is it too old?
-    if (!check_versions(objv_tracker.read_version, orig_mtime,
+    if (ret != -ENOENT &&
+        !check_versions(objv_tracker.read_version, orig_mtime,
 			objv_tracker.write_version, mtime, sync_mode)) {
       return STATUS_NO_APPLY;
     }

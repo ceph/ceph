@@ -1416,7 +1416,8 @@ public:
       return ret;
 
     // are we actually going to perform this put, or is it too old?
-    if (!check_versions(old_ot.read_version, orig_mtime,
+    if (ret != -ENOENT &&
+        !check_versions(old_ot.read_version, orig_mtime,
 			objv_tracker.write_version, mtime, sync_type)) {
       return STATUS_NO_APPLY;
     }
@@ -1559,10 +1560,12 @@ public:
     time_t orig_mtime;
 
     int ret = store->get_bucket_instance_info(NULL, oid, old_bci.info, &orig_mtime, &old_bci.attrs);
-    if (ret < 0 && ret != -ENOENT)
+    bool exists = (ret != -ENOENT);
+    if (ret < 0 && exists)
       return ret;
 
-    if (ret == -ENOENT || old_bci.info.bucket.bucket_id != bci.info.bucket.bucket_id) {
+
+    if (!exists || old_bci.info.bucket.bucket_id != bci.info.bucket.bucket_id) {
       /* a new bucket, we need to select a new bucket placement for it */
       rgw_bucket bucket;
       ret = store->set_bucket_location_by_rule(bci.info.placement_rule, oid, bucket);
@@ -1579,7 +1582,8 @@ public:
     }
 
     // are we actually going to perform this put, or is it too old?
-    if (!check_versions(old_bci.info.objv_tracker.read_version, orig_mtime,
+    if (exists &&
+        !check_versions(old_bci.info.objv_tracker.read_version, orig_mtime,
 			objv_tracker.write_version, mtime, sync_type)) {
       objv_tracker.read_version = old_bci.info.objv_tracker.read_version;
       return STATUS_NO_APPLY;
