@@ -1,6 +1,7 @@
 from cStringIO import StringIO
 import logging
 import json
+from urlparse import urlparse
 
 from teuthology import misc as teuthology
 
@@ -37,3 +38,24 @@ def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False):
             j = out
             log.info(' raw result: %s' % j)
     return (r, j)
+
+def get_zone_host_and_port(ctx, client, zone):
+    _, region_map = rgwadmin(ctx, client, check_status=True,
+                             cmd=['-n', client, 'region-map', 'get'])
+    regions = region_map['regions']
+    for region in regions:
+        for zone_info in region['val']['zones']:
+            if zone_info['name'] == zone:
+                endpoint = urlparse(zone_info['endpoints'][0])
+                host, port = endpoint.hostname, endpoint.port
+                if port is None:
+                    port = 80
+                return host, port
+    assert False, 'no endpoint for zone {zone} found'.format(zone=zone)
+
+def get_zone_system_keys(ctx, client, zone):
+    _, zone_info = rgwadmin(ctx, client, check_status=True,
+                            cmd=['-n', client,
+                                 'zone', 'get', '--rgw-zone', zone])
+    system_key = zone_info['system_key']
+    return system_key['access_key'], system_key['secret_key']

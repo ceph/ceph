@@ -1,127 +1,138 @@
 import contextlib
-import json
+from copy import deepcopy
 import logging
 
 from ..orchestra import run
 from teuthology import misc as teuthology
-from teuthology.task_util.rgw import rgwadmin
+import teuthology.task_util.rgw as rgw_utils
 
 log = logging.getLogger(__name__)
 
-def find_task_config(ctx, name):
-    for entry in ctx.config['tasks']:
-        log.info("checking entry: %s", entry)
-        if name in entry:
-            return entry[name]
-    return dict()
+def run_radosgw_agent(ctx, client, config):
+    """
+    Run a single radosgw-agent. See task() for config format.
+    """
+    src_client = config['src']
+    dest_client = config['dest']
+
+    ceph_config = ctx.ceph.conf.get('global', {})
+    ceph_config.update(ctx.ceph.conf.get('client', {}))
+    src_ceph_config = deepcopy(ceph_config)
+    src_ceph_config.update(ctx.ceph.conf.get(src_client, {}))
+    dest_ceph_config = deepcopy(ceph_config)
+    dest_ceph_config.update(ctx.ceph.conf.get(dest_client, {}))
+
+    src_zone = src_ceph_config['rgw zone']
+    dest_zone = dest_ceph_config['rgw zone']
+
+    log.info("source is %s", src_zone)
+    log.info("dest is %s", dest_zone)
+
+    testdir = teuthology.get_testdir(ctx)
+    (remote,) = ctx.cluster.only(client).remotes.keys()
+    remote.run(
+        args=[
+            'cd', testdir, run.Raw('&&'),
+            'git', 'clone', 'https://github.com/ceph/radosgw-agent.git',
+            'radosgw-agent.{client}'.format(client=client),
+            run.Raw('&&'),
+            'cd', 'radosgw-agent.{client}'.format(client=client),
+            run.Raw('&&'),
+            './bootstrap',
+            ]
+        )
+
+    src_host, src_port = rgw_utils.get_zone_host_and_port(ctx, src_client,
+                                                          src_zone)
+    dest_host, dest_port = rgw_utils.get_zone_host_and_port(ctx, dest_client,
+                                                            dest_zone)
+    src_access, src_secret = rgw_utils.get_zone_system_keys(ctx, src_client,
+                                                            src_zone)
+    dest_access, dest_secret = rgw_utils.get_zone_system_keys(ctx, dest_client,
+                                                              dest_zone)
+    port = config.get('port', 8000)
+    daemon_name = '{host}.syncdaemon'.format(host=remote.name)
+
+    return remote.run(
+        args=[
+            '{tdir}/daemon-helper'.format(tdir=testdir), 'kill',
+            '{tdir}/radosgw-agent.{client}/radosgw-agent'.format(tdir=testdir,
+                                                                 client=client),
+            '--src-access-key', src_access,
+            '--src-secret-key', src_secret,
+            '--src-host', src_host,
+            '--src-port', str(src_port),
+            '--src-zone', src_zone,
+            '--dest-access-key', dest_access,
+            '--dest-secret-key', dest_secret,
+            '--dest-host', dest_host,
+            '--dest-port', str(dest_port),
+            '--dest-zone', dest_zone,
+            '--daemon-id', daemon_name,
+            '--test-server-host', '0.0.0.0', '--test-server-port', str(port),
+            '--log-file', '{tdir}/archive/rgw_sync_agent.{client}.log'.format(
+                tdir=testdir,
+                client=client),
+            ],
+        wait=False,
+        stdin=run.PIPE,
+        logger=log.getChild(daemon_name)
+        )
+
 
 @contextlib.contextmanager
 def task(ctx, config):
     """
-    Turn on a radosgw sync agent in test mode. Specify:
-    host: to run on, or leave it blank for client.0
-    source: the source region and zone
-    target: the target region and zone
+    Run radosgw-agents in test mode.
 
-    tasks:
-    - ceph:
-    - rgw: <insert rgw region stuff here>
-    - rgw_sync_agent:
-        host: client.0
-        source: client.0
-        target: client.1
+    Configuration is clients to run the agents on, with settings for
+    source client, destination client, and port to listen on.  Binds
+    to 0.0.0.0. Port defaults to 8000. This must be run on clients
+    that have the correct zone root pools and rgw zone set in
+    ceph.conf, or the task cannot read the region information from the
+    cluster. An example::
+
+      tasks:
+      - ceph:
+          conf:
+            client.0:
+              rgw zone = foo
+              rgw zone root pool = .root.pool
+            client.1:
+              rgw zone = bar
+              rgw zone root pool = .root.pool2
+      - rgw: # region configuration omitted for brevity
+      - rgw_sync_agent:
+          client.0:
+            src: client.0
+            dest: client.1
+            # port: 8000 (default)
+          client.1:
+            src: client.1
+            dest: client.0
+            port: 8001
     """
+    assert isinstance(config, dict), 'rgw_sync_agent requires a dictionary config'
+    log.debug("config is %s", config)
 
-    assert config is not None, "rgw_sync_agent requires a config"
-    if not 'host' in config:
-        log.info("setting blank host to be client.0")
-        config['host'] = "client.0"
+    procs = [(client, run_radosgw_agent(ctx, client, c_config)) for
+             client, c_config in config.iteritems()]
 
-    log.info("config is %s", config)
-
-    ceph_conf = find_task_config(ctx, 'ceph')['conf']
-    log.info("ceph_conf is %s", ceph_conf)
-
-    source = config['source']
-    target = config['target']
-
-    log.info("source is %s", source)
-    log.info("target is %s", target)
-    source_region_name = ceph_conf[source]['rgw region']
-    target_region_name = ceph_conf[target]['rgw region']
-    
-    rgw_conf = find_task_config(ctx, 'rgw')
-    log.info("rgw_conf is %s", rgw_conf)
-    source_system_user = rgw_conf[source]['system user']['name']
-    source_access_key = rgw_conf[source]['system user']['access key']
-    source_secret_key = rgw_conf[source]['system user']['secret key']
-    target_system_user = rgw_conf[target]['system user']['name']
-    target_access_key = rgw_conf[target]['system user']['access key']
-    target_secret_key = rgw_conf[target]['system user']['secret key']
-
-    (sync_host,) = ctx.cluster.only(config['host']).remotes
-    (source_host,) = ctx.cluster.only(source).remotes
-    
-    (error, source_region_json) = rgwadmin(ctx, source,
-                                           cmd=['-n', source, 'region', 'get',
-                                                '--rgw-region', source_region_name])
-    log.info("got source_region_json %s", source_region_json)
-
-    (source_host,) = source_region_json['endpoints']
-    source_zone = source_region_json['master_zone']
-
-    (error, target_region_json) = rgwadmin(ctx, target,
-                                           cmd=['-n', target, 'region', 'get',
-                                                '--rgw-region', target_region_name])
-
-    (target_host,) = target_region_json['endpoints']
-    target_zone = target_region_json['master_zone']
-    
-    log.info("got target_region_json %s", target_region_json)
-
-
-    testdir = teuthology.get_testdir(ctx)
-
-    sync_host.run(
-        args=[
-            'cd', testdir, run.Raw('&&'),
-            'git', 'clone', 'https://github.com/ceph/radosgw-agent.git', run.Raw('&&'),
-            'cd', "radosgw-agent", run.Raw('&&'),
-            './bootstrap'
-            ]
-        )
-
-    sync_proc = sync_host.run(
-        args=[
-            '{tdir}/daemon-helper'.format(tdir=testdir), 'kill',
-            '{tdir}/radosgw-agent/radosgw-agent'.format(tdir=testdir),
-            '--src-access-key', source_access_key,
-            '--src-secret-key', source_secret_key,
-            '--src-host', source_host, '--src-zone', source_zone,
-            '--dest-access-key', target_access_key,
-            '--dest-secret-key', target_secret_key,
-            '--dest-host', target_host, '--dest-zone', target_zone,
-            '--daemon-id', '{host}.syncdaemon'.format(host=sync_host.name),
-            '--test-server-host', 'localhost', '--test-server-port', '8181',
-            '--log-file', '{tdir}/archive/rgw_sync_agent.log'.format(tdir=testdir)
-            ],
-        wait=False,
-        stdin=run.PIPE,
-        logger=log.getChild(config['host'])
-        )
-    
-    yield
-    
     try:
-        log.info("shutting down sync agent")
-        sync_proc.stdin.close()
-        log.info("waiting on sync agent")
-        sync_proc.exitstatus.get()
+        yield
     finally:
-        log.info("cleaning up sync agent directory")
-        sync_host.run(
-            args=[
-                'rm', '-r', '{tdir}/radosgw-agent'.format(tdir=testdir)
-                ]
-            )
-    
+        testdir = teuthology.get_testdir(ctx)
+        try:
+            for client, proc in procs:
+                log.info("shutting down sync agent on %s", client)
+                proc.stdin.close()
+                proc.exitstatus.get()
+        finally:
+            for client, proc in procs:
+                ctx.cluster.only(client).run(
+                    args=[
+                        'rm', '-rf',
+                        '{tdir}/radosgw-agent.{client}'.format(tdir=testdir,
+                                                               client=client)
+                        ]
+                    )
