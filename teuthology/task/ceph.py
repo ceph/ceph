@@ -233,7 +233,7 @@ def valgrind_post(ctx, config):
                     log.error('failed to split line %s', line)
                     raise
                 log.debug('file %s kind %s', file, kind)
-                if (file.find('mds') >= 0 or file.find('client') >= 0) and kind.find('Lost') > 0:
+                if (file.find('mds') >= 0) and kind.find('Lost') > 0:
                     continue
                 log.error('saw valgrind issue %s in %s', kind, file)
                 valgrind_exception = Exception('saw valgrind issues')
