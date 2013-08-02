@@ -21,6 +21,7 @@
 #include <string>
 #include <map>
 #include "include/buffer.h"
+#include "common/cmdparse.h"
 
 class AdminSocket;
 class CephContext;
@@ -29,7 +30,7 @@ class CephContext;
 
 class AdminSocketHook {
 public:
-  virtual bool call(std::string command, std::string args, std::string format,
+  virtual bool call(std::string command, cmdmap_t &cmdmap, std::string format,
 		    bufferlist& out) = 0;
   virtual ~AdminSocketHook() {};
 };

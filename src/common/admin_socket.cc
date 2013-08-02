@@ -353,7 +353,7 @@ bool AdminSocket::do_accept()
     string args;
     if (match != c)
       args = c.substr(match.length() + 1);
-    bool success = p->second->call(match, args, format, out);
+    bool success = p->second->call(match, cmdmap, format, out);
     if (!success) {
       ldout(m_cct, 0) << "AdminSocket: request '" << match << "' args '" << args
 		      << "' to " << p->second << " failed" << dendl;
@@ -417,7 +417,7 @@ int AdminSocket::unregister_command(std::string command)
 
 class VersionHook : public AdminSocketHook {
 public:
-  virtual bool call(std::string command, std::string args, std::string format,
+  virtual bool call(std::string command, cmdmap_t &cmdmap, std::string format,
 		    bufferlist& out) {
     if (command == "0") {
       out.append(CEPH_ADMIN_SOCK_VERSION);
@@ -441,7 +441,7 @@ class HelpHook : public AdminSocketHook {
   AdminSocket *m_as;
 public:
   HelpHook(AdminSocket *as) : m_as(as) {}
-  bool call(string command, string args, string format, bufferlist& out) {
+  bool call(string command, cmdmap_t &cmdmap, string format, bufferlist& out) {
     Formatter *f = new_formatter(format);
     f->open_object_section("help");
     for (map<string,string>::iterator p = m_as->m_help.begin();
@@ -463,7 +463,7 @@ class GetdescsHook : public AdminSocketHook {
   AdminSocket *m_as;
 public:
   GetdescsHook(AdminSocket *as) : m_as(as) {}
-  bool call(string command, string args, string format, bufferlist& out) {
+  bool call(string command, cmdmap_t &cmdmap, string format, bufferlist& out) {
     int cmdnum = 0;
     JSONFormatter jf(false);
     jf.open_object_section("command_descriptions");
