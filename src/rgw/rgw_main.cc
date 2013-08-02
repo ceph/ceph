@@ -65,9 +65,7 @@
 
 using namespace std;
 
-static sighandler_t sighandler_usr1;
 static sighandler_t sighandler_alrm;
-static sighandler_t sighandler_term;
 
 class RGWProcess;
 
@@ -262,14 +260,27 @@ void RGWProcess::run()
   m_tp.stop();
 }
 
-static void godown_handler(int signum)
+static void handle_sigterm(int signum)
 {
+  dout(1) << __func__ << dendl;
   FCGX_ShutdownPending();
+
+  // close the fd, so that accept can't start again.
   pprocess->close_fd();
-  signal(signum, sighandler_usr1);
-  uint64_t secs = g_ceph_context->_conf->rgw_exit_timeout_secs;
-  if (secs)
-    alarm(secs);
+
+  // send a signal to make fcgi's accept(2) wake up.  unfortunately the
+  // initial signal often isn't sufficient because we race with accept's
+  // check of the flag wet by ShutdownPending() above.
+  if (signum != SIGUSR1) {
+    kill(getpid(), SIGUSR1);
+
+    // safety net in case we get stuck doing an orderly shutdown.
+    uint64_t secs = g_ceph_context->_conf->rgw_exit_timeout_secs;
+    if (secs)
+      alarm(secs);
+    dout(1) << __func__ << " set alarm for " << secs << dendl;
+  }
+
 }
 
 static void godown_alarm(int signum)
@@ -483,16 +494,7 @@ int main(int argc, const char **argv)
   
   curl_global_init(CURL_GLOBAL_ALL);
   
-  sighandler_usr1 = signal(SIGUSR1, godown_handler);
-  sighandler_alrm = signal(SIGALRM, godown_alarm);
-  
-  init_async_signal_handler();
-  register_async_signal_handler(SIGHUP, sighup_handler);
-
   FCGX_Init();
-
-  sighandler_term = signal(SIGTERM, godown_alarm);
-  
 
   int r = 0;
   RGWRados *store = RGWStoreManager::get_storage(g_ceph_context, true);
@@ -563,7 +565,22 @@ int main(int argc, const char **argv)
 
   pprocess = new RGWProcess(g_ceph_context, store, olog, g_conf->rgw_thread_pool_size, &rest);
 
+  init_async_signal_handler();
+  register_async_signal_handler(SIGHUP, sighup_handler);
+  register_async_signal_handler(SIGTERM, handle_sigterm);
+  register_async_signal_handler(SIGINT, handle_sigterm);
+  register_async_signal_handler(SIGUSR1, handle_sigterm);
+
+  sighandler_alrm = signal(SIGALRM, godown_alarm);
+
   pprocess->run();
+  derr << "shutting down" << dendl;
+
+  unregister_async_signal_handler(SIGHUP, sighup_handler);
+  unregister_async_signal_handler(SIGTERM, handle_sigterm);
+  unregister_async_signal_handler(SIGINT, handle_sigterm);
+  unregister_async_signal_handler(SIGUSR1, handle_sigterm);
+  shutdown_async_signal_handler();
 
   delete pprocess;
 
@@ -577,15 +594,14 @@ int main(int argc, const char **argv)
 
   rgw_perf_stop(g_ceph_context);
 
-  unregister_async_signal_handler(SIGHUP, sighup_handler);
-
   RGWStoreManager::close_storage(store);
 
   rgw_tools_cleanup();
+  rgw_shutdown_resolver();
   curl_global_cleanup();
-  g_ceph_context->put();
 
-  shutdown_async_signal_handler();
+  dout(1) << "final shutdown" << dendl;
+  g_ceph_context->put();
 
   ceph::crypto::shutdown();
 
