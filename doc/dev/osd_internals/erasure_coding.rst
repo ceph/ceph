@@ -145,7 +145,7 @@ to leave holes in the requested acting set.
 
 Core Changes:
 
-- OSDMap::pg_to_*_osds needs to seperately return a primary.  For most
+- OSDMap::pg_to_*_osds needs to separately return a primary.  For most
   cases, this can continue to be acting[0].
 - MOSDPGTemp (and related OSD structures) needs to be able to specify
   a primary as well as an acting set.
