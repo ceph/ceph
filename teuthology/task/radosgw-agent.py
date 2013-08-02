@@ -102,7 +102,7 @@ def task(ctx, config):
               rgw zone = bar
               rgw zone root pool = .root.pool2
       - rgw: # region configuration omitted for brevity
-      - rgw_sync_agent:
+      - radosgw-agent:
           client.0:
             src: client.0
             dest: client.1
