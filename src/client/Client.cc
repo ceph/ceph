@@ -102,7 +102,7 @@ Client::CommandHook::CommandHook(Client *client) :
 {
 }
 
-bool Client::CommandHook::call(std::string command, std::string args,
+bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
 			       std::string format, bufferlist& out)
 {
   stringstream ss;

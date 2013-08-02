@@ -13,6 +13,7 @@
 #include "rgw_policy_s3.h"
 #include "rgw_user.h"
 #include "rgw_cors.h"
+#include "rgw_cors_s3.h"
 
 #include "rgw_client_io.h"
 
@@ -1391,8 +1392,71 @@ void RGWGetCORS_ObjStore_S3::send_response()
   end_header(s, "application/xml");
   dump_start(s);
   if (!ret) {
+    string cors;
+    RGWCORSConfiguration_S3 *s3cors = static_cast<RGWCORSConfiguration_S3 *>(&bucket_cors);
+    stringstream ss;
+
+    s3cors->to_xml(ss);
+    cors = ss.str();
     s->cio->write(cors.c_str(), cors.size());
   }
+}
+
+int RGWPutCORS_ObjStore_S3::get_params()
+{
+  int r;
+  char *data = NULL;
+  int len = 0;
+  size_t cl = 0;
+  RGWCORSXMLParser_S3 parser(s->cct);
+  RGWCORSConfiguration_S3 *cors_config;
+
+  if (s->length)
+    cl = atoll(s->length);
+  if (cl) {
+    data = (char *)malloc(cl + 1);
+    if (!data) {
+       r = -ENOMEM;
+       goto done_err;
+    }
+    int read_len;
+    r = s->cio->read(data, cl, &read_len);
+    len = read_len;
+    if (r < 0)
+      goto done_err;
+    data[len] = '\0';
+  } else {
+    len = 0;
+  }
+
+  if (!parser.init()) {
+    r = -EINVAL;
+    goto done_err;
+  }
+
+  if (!parser.parse(data, len, 1)) {
+    r = -EINVAL;
+    goto done_err;
+  }
+  cors_config = static_cast<RGWCORSConfiguration_S3 *>(parser.find_first("CORSConfiguration"));
+  if (!cors_config) {
+    r = -EINVAL;
+    goto done_err;
+  }
+
+  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+    ldout(s->cct, 15) << "CORSConfiguration";
+    cors_config->to_xml(*_dout);
+    *_dout << dendl;
+  }
+
+  cors_config->encode(cors_bl);
+
+  free(data);
+  return 0;
+done_err:
+  free(data);
+  return r;
 }
 
 void RGWPutCORS_ObjStore_S3::send_response()

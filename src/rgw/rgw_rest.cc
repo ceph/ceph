@@ -745,30 +745,6 @@ int RGWPutACLs_ObjStore::get_params()
   return ret;
 }
 
-int RGWPutCORS_ObjStore::get_params()
-{
-  size_t cl = 0;
-  if (s->length)
-    cl = atoll(s->length);
-  if (cl) {
-    data = (char *)malloc(cl + 1);
-    if (!data) {
-       ret = -ENOMEM;
-       return ret;
-    }
-    int read_len;
-    int r = s->cio->read(data, cl, &read_len);
-    len = read_len;
-    if (r < 0)
-      return r;
-    data[len] = '\0';
-  } else {
-    len = 0;
-  }
-
-  return ret;
-}
-
 static int read_all_chunked_input(req_state *s, char **pdata, int *plen, int max_read)
 {
 #define READ_CHUNK 4096

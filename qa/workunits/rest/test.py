@@ -11,9 +11,6 @@ import xml.etree.ElementTree
 
 BASEURL = os.environ.get('BASEURL', 'http://localhost:5000/api/v0.1')
 
-class MyException(Exception):
-    pass
-
 def fail(r, msg):
     print >> sys.stderr, 'FAILURE: url ', r.url
     print >> sys.stderr, msg
@@ -22,6 +19,14 @@ def fail(r, msg):
     sys.exit(1)
 
 def expect(url, method, respcode, contenttype, extra_hdrs=None, data=None):
+    failmsg, r = expect_nofail(url, method, respcode, contenttype, extra_hdrs,
+                               data)
+    if failmsg:
+        fail(r, failmsg)
+    return r
+
+def expect_nofail(url, method, respcode, contenttype, extra_hdrs=None,
+                 data=None):
 
     fdict = {'get':requests.get, 'put':requests.put}
     f = fdict[method.lower()]
@@ -30,7 +35,8 @@ def expect(url, method, respcode, contenttype, extra_hdrs=None, data=None):
     print '{0}: {1} {2}'.format(url, contenttype, r.status_code)
 
     if r.status_code != respcode:
-        fail(r, 'expected {0}, got {1}'.format(respcode, r.status_code))
+        return 'expected {0}, got {1}'.format(respcode, r.status_code), r
+
     r_contenttype = r.headers['content-type']
 
     if contenttype in ['json', 'xml']:
@@ -39,7 +45,7 @@ def expect(url, method, respcode, contenttype, extra_hdrs=None, data=None):
         contenttype = 'text/' + contenttype
 
     if contenttype and r_contenttype != contenttype:
-        fail(r,  'expected {0}, got "{1}"'.format(contenttype, r_contenttype))
+        return 'expected {0}, got "{1}"'.format(contenttype, r_contenttype), r
 
     if contenttype.startswith('application'):
         if r_contenttype == 'application/json':
@@ -48,23 +54,22 @@ def expect(url, method, respcode, contenttype, extra_hdrs=None, data=None):
                 r.myjson = json.loads(r.content)
                 assert(r.myjson != None)
             except Exception as e:
-                fail(r, 'Invalid JSON returned: "{0}"'.format(str(e)))
+                return 'Invalid JSON returned: "{0}"'.format(str(e)), r
 
         if r_contenttype == 'application/xml':
             try:
                 # if it's there, squirrel it away for use in the caller
                 r.tree = xml.etree.ElementTree.fromstring(r.content)
             except Exception as e:
-                fail(r, 'Invalid XML returned: "{0}"'.format(str(e)))
+                return 'Invalid XML returned: "{0}"'.format(str(e)), r
 
-    return r
+    return '', r
 
 
 JSONHDR={'accept':'application/json'}
 XMLHDR={'accept':'application/xml'}
 
 if __name__ == '__main__':
-
     expect('auth/export', 'GET', 200, 'plain')
     expect('auth/export.json', 'GET', 200, 'json')
     expect('auth/export.xml', 'GET', 200, 'xml')
@@ -157,17 +162,29 @@ if __name__ == '__main__':
     # EEXIST from CLI
     expect('mds/deactivate?who=2', 'PUT', 400, '')
 
-    r = expect('mds/dump.json', 'GET', 200, 'json')
-    assert('created' in r.myjson['output'])
-    current_epoch = r.myjson['output']['epoch']
     r = expect('mds/dump.xml', 'GET', 200, 'xml')
     assert(r.tree.find('output/mdsmap/created') is not None)
 
-    r = expect('mds/getmap', 'GET', 200, '')
-    assert(len(r.content) != 0)
-    expect('mds/setmap?epoch={0}'.format(current_epoch + 1), 'PUT', 200,
-           'plain', {'Content-Type':'text/plain'},
-           data=r.content)
+    failresps = []
+    while len(failresps) < 10:
+        r = expect('mds/dump.json', 'GET', 200, 'json')
+        assert('created' in r.myjson['output'])
+        current_epoch = r.myjson['output']['epoch']
+
+        map = expect('mds/getmap', 'GET', 200, '')
+        assert(len(map.content) != 0)
+        msg, r = expect_nofail(
+            'mds/setmap?epoch={0}'.format(current_epoch + 1), 'PUT', 200,
+            'plain', {'Content-Type':'text/plain'}, data=map.content
+            )
+        if msg:
+            failresps.append(msg + r.content)
+        else:
+            break
+
+    if len(failresps) == 10:
+        fail(r, 'Could not mds setmap in 10 tries; responses:' +
+             '\n'.join(failresps))
     expect('mds/newfs?metadata=0&data=1&sure=--yes-i-really-mean-it', 'PUT',
            200, '')
     expect('osd/pool/create?pool=data2&pg_num=10', 'PUT', 200, '')

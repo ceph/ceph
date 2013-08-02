@@ -225,16 +225,16 @@ class AdminHook : public AdminSocketHook {
   Monitor *mon;
 public:
   AdminHook(Monitor *m) : mon(m) {}
-  bool call(std::string command, std::string args, std::string format,
+  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
 	    bufferlist& out) {
     stringstream ss;
-    mon->do_admin_command(command, args, format, ss);
+    mon->do_admin_command(command, cmdmap, format, ss);
     out.append(ss);
     return true;
   }
 };
 
-void Monitor::do_admin_command(string command, string args, string format,
+void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
 			       ostream& ss)
 {
   Mutex::Locker l(lock);
@@ -246,7 +246,9 @@ void Monitor::do_admin_command(string command, string args, string format,
   else if (command == "quorum_status")
     _quorum_status(f.get(), ss);
   else if (command == "sync_force") {
-    if (args != "--yes-i-really-mean-it") {
+    string validate;
+    if ((!cmd_getval(g_ceph_context, cmdmap, "validate", validate)) ||
+	(validate != "--yes-i-really-mean-it")) {
       ss << "are you SURE? this will mean the monitor store will be erased "
             "the next time the monitor is restarted.  pass "
             "'--yes-i-really-mean-it' if you really do.";
@@ -254,7 +256,7 @@ void Monitor::do_admin_command(string command, string args, string format,
     }
     sync_force(f.get(), ss);
   } else if (command.find("add_bootstrap_peer_hint") == 0)
-    _add_bootstrap_peer_hint(command, args, ss);
+    _add_bootstrap_peer_hint(command, cmdmap, ss);
   else
     assert(0 == "bad AdminSocket command binding");
 }
@@ -485,10 +487,19 @@ int Monitor::preinit()
   r = admin_socket->register_command("quorum_status", "quorum_status",
 				     admin_hook, "show current quorum status");
   assert(r == 0);
-  r = admin_socket->register_command("add_bootstrap_peer_hint",
-				     "add_bootstrap_peer_hint name=addr,type=CephIPAddr",
+  r = admin_socket->register_command("sync_force",
+				     "sync_force name=validate,"
+				     "type=CephChoices,"
+			             "strings=--yes-i-really-mean-it",
 				     admin_hook,
-				     "add peer address as potential bootstrap peer for cluster bringup");
+				     "force sync of and clear monitor store");
+  assert(r == 0);
+  r = admin_socket->register_command("add_bootstrap_peer_hint",
+				     "add_bootstrap_peer_hint name=addr,"
+				     "type=CephIPAddr",
+				     admin_hook,
+				     "add peer address as potential bootstrap"
+				     " peer for cluster bringup");
   assert(r == 0);
   lock.Lock();
 
@@ -577,6 +588,7 @@ void Monitor::shutdown()
     AdminSocket* admin_socket = cct->get_admin_socket();
     admin_socket->unregister_command("mon_status");
     admin_socket->unregister_command("quorum_status");
+    admin_socket->unregister_command("sync_force");
     admin_socket->unregister_command("add_bootstrap_peer_hint");
     delete admin_hook;
     admin_hook = NULL;
@@ -684,14 +696,17 @@ void Monitor::bootstrap()
   }
 }
 
-void Monitor::_add_bootstrap_peer_hint(string cmd, string args, ostream& ss)
+void Monitor::_add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss)
 {
-  dout(10) << "_add_bootstrap_peer_hint '" << cmd << "' '" << args << "'" << dendl;
+  string addrstr;
+  cmd_getval(g_ceph_context, cmdmap, "addr", addrstr);
+  dout(10) << "_add_bootstrap_peer_hint '" << cmd << "' '"
+           << addrstr << "'" << dendl;
 
   entity_addr_t addr;
   const char *end = 0;
-  if (!addr.parse(args.c_str(), &end)) {
-    ss << "failed to parse addr '" << args << "'; syntax is 'add_bootstrap_peer_hint ip[:port]'";
+  if (!addr.parse(addrstr.c_str(), &end)) {
+    ss << "failed to parse addr '" << addrstr << "'; syntax is 'add_bootstrap_peer_hint ip[:port]'";
     return;
   }
 
