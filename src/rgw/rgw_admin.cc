@@ -2175,6 +2175,8 @@ next:
       assert(0);
     }
     encode_json("bounds", bounds, formatter);
+    formatter->flush(cout);
+    cout << std::endl;
   }
 
   if (opt_cmd == OPT_REPLICALOG_DELETE) {
