@@ -845,6 +845,7 @@ def validate(args, signature, partial=False):
                 if not desc.req:
                     # if not required, just push back; it might match
                     # the next arg
+                    print >> sys.stderr, myarg, 'not valid: ', str(e)
                     myargs.insert(0, myarg)
                     break
                 else:
