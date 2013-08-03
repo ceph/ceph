@@ -155,7 +155,7 @@ public:
 
   void dump(Formatter *f) const; 
   void dump_basic(Formatter *f) const;
-  void dump_pg_stats(Formatter *f) const;
+  void dump_pg_stats(Formatter *f, bool brief) const;
   void dump_pool_stats(Formatter *f) const;
   void dump_osd_stats(Formatter *f) const;
 

@@ -111,7 +111,7 @@ COMMAND("pg getmap", "get binary pg map to -o/stdout", "pg", "r", "cli,rest")
 COMMAND("pg send_pg_creates", "trigger pg creates to be issued",\
 	"pg", "rw", "cli,rest")
 COMMAND("pg dump " \
-	"name=dumpcontents,type=CephChoices,strings=all|summary|sum|pools|osds|pgs,n=N,req=false", \
+	"name=dumpcontents,type=CephChoices,strings=all|summary|sum|pools|osds|pgs|pgs_brief,n=N,req=false", \
 	"show human-readable versions of pg map", "pg", "r", "cli,rest")
 COMMAND("pg dump_json " \
 	"name=dumpcontents,type=CephChoices,strings=all|summary|sum|pools|osds|pgs,n=N,req=false", \
