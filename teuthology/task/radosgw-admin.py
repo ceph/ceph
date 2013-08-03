@@ -12,6 +12,8 @@ import boto.exception
 import boto.s3.connection
 import boto.s3.acl
 
+import teuthology.task_util.rgw as rgw_utils
+
 import time
 
 from teuthology import misc as teuthology
@@ -41,8 +43,11 @@ def task(ctx, config):
         config = dict.fromkeys(config)
     clients = config.keys()
 
-    # just use the first client...
-    client = clients[0];
+    client = rgw_utils.get_master_client(ctx, clients)
+
+    if not client:
+        # oh, well, just use the first client... multiregion stuff might not work correctly
+        client = clients[0];
 
     ##
     user1='foo'
@@ -215,6 +220,8 @@ def task(ctx, config):
     assert not err
     assert len(out) == 0
 
+    rgw_utils.radosgw_agent_sync_all(ctx)
+
     # connect to rgw
     (remote,) = ctx.cluster.only(client).remotes.iterkeys()
     (remote_user, remote_host) = remote.name.split('@')
@@ -367,9 +374,13 @@ def task(ctx, config):
 
     for obj in out:
         # TESTCASE 'log-show','log','show','after activity','returns expected info'
+        if obj[:4] == 'meta' or obj[:4] == 'data':
+            continue
+
         (err, log) = rgwadmin(ctx, client, ['log', 'show', '--object', obj])
         assert not err
         assert len(log) > 0
+
         assert log['bucket'].find(bucket_name) == 0
         assert log['bucket'] != bucket_name or log['bucket_id'] == bucket_id 
         assert log['bucket_owner'] == user1 or log['bucket'] == bucket_name + '5'
@@ -563,12 +574,19 @@ def task(ctx, config):
     assert err
 
     # TESTCASE 'zone-info', 'zone', 'get', 'get zone info', 'succeeds, has default placement rule'
-    (err, out) = rgwadmin(ctx, client, ['zone', 'get'])
-    assert len(out) > 0
-    assert len(out['placement_pools']) == 1
+    # 
 
-    default_rule = out['placement_pools'][0]
-    assert default_rule['key'] == 'default-placement'
+    (err, out) = rgwadmin(ctx, client, ['zone', 'get'])
+    orig_placement_pools = len(out['placement_pools'])
+
+    # removed this test, it is not correct to assume that zone has default placement, it really
+    # depends on how we set it up before
+    #
+    # assert len(out) > 0
+    # assert len(out['placement_pools']) == 1
+
+    # default_rule = out['placement_pools'][0]
+    # assert default_rule['key'] == 'default-placement'
 
     rule={'key': 'new-placement', 'val': {'data_pool': '.rgw.buckets.2', 'index_pool': '.rgw.buckets.index.2'}}
 
@@ -579,4 +597,4 @@ def task(ctx, config):
 
     (err, out) = rgwadmin(ctx, client, ['zone', 'get'])
     assert len(out) > 0
-    assert len(out['placement_pools']) == 2
+    assert len(out['placement_pools']) == orig_placement_pools + 1

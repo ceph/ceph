@@ -1,5 +1,6 @@
 import contextlib
 import logging
+import argparse
 
 from ..orchestra import run
 from teuthology import misc as teuthology
@@ -108,8 +109,14 @@ def task(ctx, config):
     assert isinstance(config, dict), 'rgw_sync_agent requires a dictionary config'
     log.debug("config is %s", config)
 
+
+    ctx.radosgw_agent = argparse.Namespace()
+    ctx.radosgw_agent.config = config
+
     procs = [(client, run_radosgw_agent(ctx, client, c_config)) for
              client, c_config in config.iteritems()]
+
+    ctx.radosgw_agent.procs = procs
 
     try:
         yield
