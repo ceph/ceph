@@ -1079,6 +1079,7 @@ struct pg_stat_t {
   }
 
   void dump(Formatter *f) const;
+  void dump_brief(Formatter *f) const;
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
   static void generate_test_instances(list<pg_stat_t*>& o);

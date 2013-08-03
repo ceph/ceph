@@ -494,7 +494,7 @@ void PGMap::dirty_all(Incremental& inc)
 void PGMap::dump(Formatter *f) const
 {
   dump_basic(f);
-  dump_pg_stats(f);
+  dump_pg_stats(f, false);
   dump_pool_stats(f);
   dump_osd_stats(f);
 }
@@ -521,7 +521,7 @@ void PGMap::dump_basic(Formatter *f) const
   f->close_section();
 }
 
-void PGMap::dump_pg_stats(Formatter *f) const
+void PGMap::dump_pg_stats(Formatter *f, bool brief) const
 {
   f->open_array_section("pg_stats");
   for (hash_map<pg_t,pg_stat_t>::const_iterator i = pg_stat.begin();
@@ -529,7 +529,10 @@ void PGMap::dump_pg_stats(Formatter *f) const
        ++i) {
     f->open_object_section("pg_stat");
     f->dump_stream("pgid") << i->first;
-    i->second.dump(f);
+    if (brief)
+      i->second.dump_brief(f);
+    else
+      i->second.dump(f);
     f->close_section();
   }
   f->close_section();
