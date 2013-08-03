@@ -70,7 +70,9 @@ def create_users(ctx, config):
     log.info('Creating rgw users...')
     testdir = teuthology.get_testdir(ctx)
     users = {'s3': 'foo'}
+    cached_client_user_names = dict()
     for client in config['clients']:
+        cached_client_user_names[client] = dict()  
         s3tests_conf = config['s3tests_conf'][client]
         s3tests_conf.setdefault('readwrite', {})
         s3tests_conf['readwrite'].setdefault('bucket', 'rwtest-' + client + '-{random}-')
@@ -84,27 +86,21 @@ def create_users(ctx, config):
         rwconf['files'].setdefault('stddev', 500)
         for section, user in users.iteritems():
             _config_user(s3tests_conf, section, '{user}.{client}'.format(user=user, client=client))
-            ctx.cluster.only(client).run(
-                args=[
-                    '{tdir}/adjust-ulimits'.format(tdir=testdir),
-                    'ceph-coverage',
-                    '{tdir}/archive/coverage'.format(tdir=testdir),
-                    'radosgw-admin',
-                    '-n', client,
-                    'user', 'create',
-                    '--uid', s3tests_conf[section]['user_id'],
-                    '--display-name', s3tests_conf[section]['display_name'],
-                    '--access-key', s3tests_conf[section]['access_key'],
-                    '--secret', s3tests_conf[section]['secret_key'],
-                    '--email', s3tests_conf[section]['email'],
-                ],
-            )
-    try:
-        yield
-    finally:
-        for client in config['clients']:
-            for user in users.itervalues():
-                uid = '{user}.{client}'.format(user=user, client=client)
+            log.debug('creating user {user} on {client}'.format(user=s3tests_conf[section]['user_id'], 
+                                                                client=client))
+
+            # stash the 'delete_user' flag along with user name for easier cleanup 
+            delete_this_user = True
+            if 'delete_user' in s3tests_conf['s3']:
+                delete_this_user = s3tests_conf['s3']['delete_user'] 
+                log.debug('delete_user set to {flag} for {client}'.format(flag=delete_this_user,client=client))
+            cached_client_user_names[client][section+user] = (s3tests_conf[section]['user_id'], delete_this_user)
+
+            # skip actual user creation if the create_user flag is set to false for this client
+            if 'create_user' in s3tests_conf['s3'] and s3tests_conf['s3']['create_user'] == False:
+                log.debug('create_user set to False, skipping user creation for {client}'.format(client=client))
+                continue
+            else:
                 ctx.cluster.only(client).run(
                     args=[
                         '{tdir}/adjust-ulimits'.format(tdir=testdir),
@@ -112,11 +108,36 @@ def create_users(ctx, config):
                         '{tdir}/archive/coverage'.format(tdir=testdir),
                         'radosgw-admin',
                         '-n', client,
-                        'user', 'rm',
-                        '--uid', uid,
-                        '--purge-data',
-                        ],
-                    )
+                        'user', 'create',
+                        '--uid', s3tests_conf[section]['user_id'],
+                        '--display-name', s3tests_conf[section]['display_name'],
+                        '--access-key', s3tests_conf[section]['access_key'],
+                        '--secret', s3tests_conf[section]['secret_key'],
+                        '--email', s3tests_conf[section]['email'],
+                    ],
+                )
+    try:
+        yield
+    finally:
+        for client in config['clients']:
+            for section, user in users.iteritems():
+                #uid = '{user}.{client}'.format(user=user, client=client)
+                real_uid, delete_this_user  = cached_client_user_names[client][section+user]
+                if delete_this_user:
+                    ctx.cluster.only(client).run(
+                        args=[
+                            '{tdir}/adjust-ulimits'.format(tdir=testdir),
+                            'ceph-coverage',
+                            '{tdir}/archive/coverage'.format(tdir=testdir),
+                            'radosgw-admin',
+                            '-n', client,
+                            'user', 'rm',
+                            '--uid', real_uid,
+                            '--purge-data',
+                            ],
+                        )
+                else:
+                    log.debug('skipping delete for user {uid} on {client}'.format(uid=real_uid,client=client))
 
 @contextlib.contextmanager
 def configure(ctx, config):
