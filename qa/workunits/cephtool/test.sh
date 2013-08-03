@@ -25,6 +25,29 @@ expect_false()
 	if "$@"; then return 1; else return 0; fi
 }
 
+TMPFILE=/tmp/test_invalid.$$
+trap "rm $TMPFILE" 0
+
+function check_response()
+{
+	retcode=$1
+	expected_retcode=$2
+	expected_stderr_string=$3
+	if [ $1 != $2 ] ; then
+		echo "return code invalid: got $1, expected $2" >&2
+		exit 1
+	fi
+
+	if ! grep "$3" $TMPFILE >/dev/null 2>&1 ; then 
+		echo "Didn't find $3 in stderr output" >&2
+		echo "Stderr: " >&2
+		cat $TMPFILE >&2
+		exit 1
+	fi
+}
+
+
+
 #
 # Assumes there are at least 3 MDSes and two OSDs
 #
@@ -254,5 +277,19 @@ ceph osd pool set data size 2
 ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 2'
 
 ceph osd thrash 10
+
+set +e
+
+# expect error about missing 'pool' argument
+ceph osd map 2>$TMPFILE; check_response $? 22 'pool'
+
+# expect error about unused argument foo
+ceph osd ls foo 2>$TMPFILE; check_response $? 22 'unused'
+
+# expect "not in range" for invalid full ratio
+ceph pg set_full_ratio 95 2>$TMPFILE; check_response $? 22 'not in range'
+
+# expect "not in range" for invalid overload percentage
+ceph osd reweight-by-utilization 80 2>$TMPFILE; check_response $? 22 'not in range'
 
 echo OK
