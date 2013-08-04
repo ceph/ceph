@@ -248,6 +248,10 @@ def start_apache(ctx, config):
         run.wait(apaches.itervalues())
 
 def extract_user_info(client_config):
+    # test if there isn't a system user or if there isn't a name for that user, return None
+    if 'system user' not in client_config or 'name' not in client_config['system user']:
+        return None
+
     user_info = dict()
     user_info['system_key'] = dict(
         user=client_config['system user']['name'],
@@ -346,20 +350,23 @@ def configure_users(ctx, config):
         if not c_config:
             continue
         user_info = extract_user_info(c_config)
-        log.debug('Creating user {user} on {client}'.format(
-                  user=user_info['system_key']['user'],client=client))
-        rgwadmin(ctx, client,
-                 cmd=[
-                     '-n', client,
-                     'user', 'create',
-                     '--uid', user_info['system_key']['user'],
-                     '--access-key', user_info['system_key']['access_key'],
-                     '--secret', user_info['system_key']['secret_key'],
-                     '--display-name', user_info['system_key']['user'],
-                     '--system',
-                     ],
-                 check_status=True,
-                 )
+
+        # if user_info was successfully parsed, use it to create a user
+        if user_info is not None:
+            log.debug('Creating user {user} on {client}'.format(
+                      user=user_info['system_key']['user'],client=client))
+            rgwadmin(ctx, client,
+                    cmd=[
+                        '-n', client,
+                        'user', 'create',
+                        '--uid', user_info['system_key']['user'],
+                        '--access-key', user_info['system_key']['access_key'],
+                        '--secret', user_info['system_key']['secret_key'],
+                        '--display-name', user_info['system_key']['user'],
+                        '--system',
+                        ],
+                    check_status=True,
+                    )
 
     yield
 
@@ -381,7 +388,11 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints):
 
     # extract the user info and append it to the payload tuple for the given client
     for client, c_config in config.iteritems():
-        user_info = extract_user_info(c_config)
+        if not c_config:
+            user_info = None
+        else:
+            user_info = extract_user_info(c_config)
+
         (region, zone, zone_info) = role_zones[client]
         role_zones[client] = (region, zone, zone_info, user_info)
 
@@ -404,9 +415,16 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints):
                               '--rgw-region', region],
                          check_status=True)
         for role, (_, zone, zone_info, user_info) in role_zones.iteritems():
+
+            # add the user_info (if it exists) to the zone_info 
+            if user_info:
+                new_dict = dict(zone_info.items() + user_info.items())
+            else:
+                new_dict = zone_info
+
             rgwadmin(ctx, client,
                      cmd=['-n', client, 'zone', 'set', '--rgw-zone', zone],
-                     stdin=StringIO(json.dumps(dict(zone_info.items() + user_info.items()))),
+                     stdin=StringIO(json.dumps(new_dict)),
                      check_status=True)
 
     first_mon = teuthology.get_first_mon(ctx, config)
