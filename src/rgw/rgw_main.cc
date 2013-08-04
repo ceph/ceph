@@ -65,7 +65,7 @@
 
 using namespace std;
 
-static sighandler_t sighandler_alrm;
+static sig_t sighandler_alrm;
 
 class RGWProcess;
 
