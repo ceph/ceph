@@ -350,20 +350,23 @@ def configure_users(ctx, config):
         if not c_config:
             continue
         user_info = extract_user_info(c_config)
-        log.debug('Creating user {user} on {client}'.format(
-                  user=user_info['system_key']['user'],client=client))
-        rgwadmin(ctx, client,
-                 cmd=[
-                     '-n', client,
-                     'user', 'create',
-                     '--uid', user_info['system_key']['user'],
-                     '--access-key', user_info['system_key']['access_key'],
-                     '--secret', user_info['system_key']['secret_key'],
-                     '--display-name', user_info['system_key']['user'],
-                     '--system',
-                     ],
-                 check_status=True,
-                 )
+
+        # if user_info was successfully parsed, use it to create a user
+        if user_info is not None:
+            log.debug('Creating user {user} on {client}'.format(
+                      user=user_info['system_key']['user'],client=client))
+            rgwadmin(ctx, client,
+                    cmd=[
+                        '-n', client,
+                        'user', 'create',
+                        '--uid', user_info['system_key']['user'],
+                        '--access-key', user_info['system_key']['access_key'],
+                        '--secret', user_info['system_key']['secret_key'],
+                        '--display-name', user_info['system_key']['user'],
+                        '--system',
+                        ],
+                    check_status=True,
+                    )
 
     yield
 
