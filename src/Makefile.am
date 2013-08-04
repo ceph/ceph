@@ -1667,7 +1667,9 @@ libos_a_SOURCES = \
 	os/FlatIndex.cc \
 	os/DBObjectMap.cc \
 	os/LevelDBStore.cc \
-	os/WBThrottle.cc
+	os/WBThrottle.cc \
+	os/BtrfsFileStoreBackend.cc \
+	os/GenericFileStoreBackend.cc
 libos_a_CXXFLAGS= ${AM_CXXFLAGS}
 noinst_LIBRARIES += libos.a
 
@@ -2170,6 +2172,8 @@ noinst_HEADERS = \
 	os/CollectionIndex.h\
         os/FileJournal.h\
         os/FileStore.h\
+        os/BtrfsFileStoreBackend.h\
+        os/GenericFileStoreBackend.h\
 	os/FlatIndex.h\
 	os/HashIndex.h\
 	os/FDCache.h\
