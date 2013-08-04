@@ -196,7 +196,12 @@ def task(ctx, config):
             try:
                 remote.run(
                     args=[
+                        'while',
                         'sudo', 'killall', '-9', 'smbd',
+                        run.Raw(';'),
+                        'do', 'sleep', '1',
+                        run.Raw(';'),
+                        'done',
                         ],
                     )
 
