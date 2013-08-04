@@ -24,4 +24,7 @@ new_ms=$(sudo ceph daemon mon.a config get debug_ms | grep debug_ms | \
 	sed -e 's/.*: //' -e 's/["\}\\]//g')
 [ "$new_ms" = "$old_ms" ]
 
+# unregistered/non-existent command
+expect_false sudo ceph daemon mon.a bogus_command_blah foo
+
 echo OK
