@@ -1210,7 +1210,7 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
 }
 
 RGWHandler *RGWREST::get_handler(RGWRados *store, struct req_state *s, RGWClientIO *cio,
-				 int *init_error)
+				 RGWRESTMgr **pmgr, int *init_error)
 {
   RGWHandler *handler;
 
@@ -1223,6 +1223,9 @@ RGWHandler *RGWREST::get_handler(RGWRados *store, struct req_state *s, RGWClient
     *init_error = -ERR_METHOD_NOT_ALLOWED;
     return NULL;
   }
+
+  if (pmgr)
+    *pmgr = m;
 
   handler = m->get_handler(s);
   if (!handler) {
