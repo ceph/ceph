@@ -32,7 +32,7 @@ def expect_nofail(url, method, respcode, contenttype, extra_hdrs=None,
     f = fdict[method.lower()]
     r = f(BASEURL + '/' + url, headers=extra_hdrs, data=data)
 
-    print '{0}: {1} {2}'.format(url, contenttype, r.status_code)
+    print '{0} {1}: {2} {3}'.format(method, url, contenttype, r.status_code)
 
     if r.status_code != respcode:
         return 'expected {0}, got {1}'.format(respcode, r.status_code), r
@@ -330,10 +330,7 @@ if __name__ == '__main__':
 
     r = expect('osd/ls', 'GET', 200, 'json', JSONHDR)
     for osdid in r.myjson['output']:
-        # XXX no tell yet
-        # expect('tell?target=osd.{0}&args=version'.format(osdid), 'PUT',
-        #         200, '')
-        print >> sys.stderr, 'would be telling osd.{0} version'.format(osdid)
+        expect('tell/osd.{0}/version'.format(osdid), 'GET', 200, '')
 
     expect('pg/debug?debugop=unfound_objects_exist', 'GET', 200, '')
     expect('pg/debug?debugop=degraded_pgs_exist', 'GET', 200, '')
@@ -378,6 +375,7 @@ if __name__ == '__main__':
     r = expect('pg/stat', 'GET', 200, 'xml', XMLHDR)
     assert(r.tree.find('output/pg_map/pg_stats_sum') is not None)
 
+    expect('tell/0.0/query', 'GET', 200, 'json', JSONHDR)
     expect('quorum?quorumcmd=enter', 'PUT', 200, 'json', JSONHDR)
     expect('quorum?quorumcmd=enter', 'PUT', 200, 'xml', XMLHDR)
     expect('quorum_status', 'GET', 200, 'json', JSONHDR)
@@ -394,15 +392,13 @@ if __name__ == '__main__':
     r = expect('status', 'GET', 200, 'xml', XMLHDR)
     assert(r.tree.find('output/status/osdmap') is not None)
 
-    # XXX tell not implemented yet
-    # r = expect('tell?target=osd.0&args=version', 'PUT', 200, '')
-    # assert('ceph version' in r.content)
-    # expect('tell?target=osd.999&args=version', 'PUT', 400, '')
-    # expect('tell?target=osd.foo&args=version', 'PUT', 400, '')
+    r = expect('tell/osd.0/version', 'GET', 200, '')
+    assert('ceph version' in r.content)
+    expect('tell/osd.999/version', 'GET', 400, '')
+    expect('tell/osd.foo/version', 'GET', 400, '')
 
-
-    # r = expect('tell?target=osd.0&args=dump_get_recovery_stats', 'PUT', '200', '')
-    # assert('Started' in r.content)
+    r = expect('tell/osd.0/dump_pg_recovery_stats', 'GET', 200, '')
+    assert('Started' in r.content)
 
     expect('osd/reweight?id=0&weight=0.9', 'PUT', 200, '')
     expect('osd/reweight?id=0&weight=-1', 'PUT', 400, '')
