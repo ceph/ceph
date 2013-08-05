@@ -235,7 +235,7 @@ Thus, each replica instead simply computes a crc32 of its own stored
 chunk and compares it with the locally stored checksum.  The replica
 then reports to the primary whether the checksums match.
 
-PGBackend interfaces:
+`PGBackend interfaces <http://tracker.ceph.com/issues/5861>`_:
 
 - scan()
 - scrub()
