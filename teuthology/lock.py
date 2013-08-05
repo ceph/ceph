@@ -281,7 +281,14 @@ Lock, unlock, or query lock status of machines.
         assert ctx.desc is None, '--desc does nothing with --list'
 
         if machines:
-            statuses = [ls.get_status(ctx, machine) for machine in machines]
+            statuses = []
+            for machine in machines:
+                status = ls.get_status(ctx, machine)
+                if status:
+                    statuses.append(status)
+                else:
+                    log.error("Lockserver doesn't know about machine: %s" %
+                              machine)
         else:
             statuses = list_locks(ctx)
         vmachines = []
@@ -445,7 +452,7 @@ to run on, or use -a to check all of them automatically.
                             machines.append(t)
         except IOError, e:
             raise argparse.ArgumentTypeError(str(e))
-    
+
     return scan_for_locks(ctx, machines)
 
 def keyscan_check(ctx, machines):
@@ -485,7 +492,7 @@ def update_keys(ctx, out, current_locks):
                 log.error('failed to update %s!', full_name)
                 ret = 1
     return ret
-    
+
 def scan_for_locks(ctx, machines):
     out, current_locks = keyscan_check(ctx, machines)
     return update_keys(ctx, out, current_locks)
