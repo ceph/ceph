@@ -2175,10 +2175,10 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
 
 void MDS::ms_handle_accept(Connection *con)
 {
+  Mutex::Locker l(mds_lock);
   Session *s = static_cast<Session *>(con->get_priv());
   dout(10) << "ms_handle_accept " << con->get_peer_addr() << " con " << con << " session " << s << dendl;
   if (s) {
-    s->put();
     if (s->connection != con) {
       dout(10) << " session connection " << s->connection << " -> " << con << dendl;
       s->connection = con;
@@ -2189,5 +2189,6 @@ void MDS::ms_handle_accept(Connection *con)
 	s->preopen_out_queue.pop_front();
       }
     }
+    s->put();
   }
 }
