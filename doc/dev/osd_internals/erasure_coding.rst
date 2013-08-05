@@ -188,12 +188,14 @@ include the chunk id in the object key.
 
 Core changes:
 
-- The filestore vhobject_t needs to also include a chunk id making it
-  more like tuple<hobject_t, version_t, chunk_id_t>.
+- The filestore `vhobject_t needs to also include a chunk id
+  <http://tracker.ceph.com/issues/5862>`_ making it more like
+  tuple<hobject_t, version_t, chunk_id_t>.
 - coll_t needs to include a chunk_id_t.
-- The OSD pg_map and similar pg mappings need to work in terms of a
-  cpg_t (essentially pair<pg_t, chunk_id_t>).  Similarly, pg->pg
-  messages need to include a chunk_id_t
+- The `OSD pg_map and similar pg mappings need to work in terms of a
+  cpg_t <http://tracker.ceph.com/issues/5863>`_ (essentially
+  pair<pg_t, chunk_id_t>).  Similarly, pg->pg messages need to include
+  a chunk_id_t
 - For client->PG messages, the OSD will need a way to know which PG
   chunk should get the message since the OSD may contain both a
   primary and non-primary chunk for the same pg
