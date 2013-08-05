@@ -631,7 +631,7 @@ below::
 		ruleset 4
 		type replicated
 		min_size 0
-		max_size 10
+		max_size 4
 		step take ssd
 		step chooseleaf firstn 0 type host
 		step emit
@@ -640,7 +640,7 @@ below::
 	rule ssd-primary {
 		ruleset 4
 		type replicated
-		min_size 0
+		min_size 5
 		max_size 10
 		step take ssd
 		step chooseleaf firstn 1 type host
