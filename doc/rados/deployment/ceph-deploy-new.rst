@@ -8,7 +8,7 @@ cluster. A new Ceph cluster has:
 - A Ceph configuration file, and
 - A monitor keyring.
 
-The Ceph configuration file consists of at least: 
+The Ceph configuration file consists of at least:
 
 - Its own filesystem ID (``fsid``)
 - The initial monitor(s) hostname(s), and
@@ -24,11 +24,11 @@ Usage
 -----
 
 To create a cluster with ``ceph-deploy``, use the ``new`` command and specify
-the host(s) that will be initial members of the monitor quorum. :: 
+the host(s) that will be initial members of the monitor quorum. ::
 
 	ceph-deploy new {host [host], ...}
-	
-For example:: 
+
+For example::
 
 	ceph-deploy new mon1.foo.com
 	ceph-deploy new mon{1,2,3}
@@ -46,21 +46,21 @@ Naming a Cluster
 
 By default, Ceph clusters have a cluster name of ``ceph``. You can specify
 a cluster name if you want to run multiple clusters on the same hardware. For
-example, if you want to optimize a cluster for use with block devies, and
+example, if you want to optimize a cluster for use with block devices, and
 another for use with the gateway, you can run two different clusters on the same
 hardware if they have a different ``fsid`` and cluster name. ::
 
 	ceph-deploy --cluster {cluster-name} new {host [host], ...}
 
-For example:: 
+For example::
 
-	ceph-deploy --cluster rbd-cluster new ceph-mon1
-	ceph-deploy --cluster rbd-cluster new ceph-mon{1,2,3}
+	ceph-deploy --cluster rbdcluster new ceph-mon1
+	ceph-deploy --cluster rbdcluster new ceph-mon{1,2,3}
 
 .. note:: If you run multiple clusters, ensure you adjust the default
    port settings and open ports for your additional cluster(s) so that
    the networks of the two different clusters don't conflict with each other.
 
-	
+
 .. _Monitor Configuration Reference: ../../configuration/mon-config-ref
 .. _Cephx Guide: ../../operations/authentication#monitor-keyrings
