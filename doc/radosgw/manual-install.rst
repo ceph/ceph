@@ -1,13 +1,13 @@
-======================================
- Install Apache, FastCGI and RADOS GW
-======================================
+=====================================
+ Install Apache, FastCGI and Gateway
+=====================================
 
 .. note:: If you deploy Ceph with Chef cookbooks, you may skip this section. 
 
 Install Packages
 ----------------
 
-To install RADOS Gateway, you must install Apache and FastCGI first. :: 
+To install Ceph Object Gateway, you must install Apache and FastCGI first. :: 
 
 	sudo apt-get update && sudo apt-get install apache2 libapache2-mod-fastcgi
 
@@ -61,7 +61,7 @@ Restart Apache so that the foregoing changes take effect. ::
 
 	sudo service apache2 restart
 	
-Then, install RADOS Gateway. For example:: 
+Then, install Ceph Object Gateway. For example:: 
 
 	sudo apt-get install radosgw
 
