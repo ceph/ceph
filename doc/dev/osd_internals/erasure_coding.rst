@@ -104,7 +104,7 @@ Currently, we select the log with the newest last_update and the
 longest tail to be the authoritative log.  This is fine because we
 aren't generally able to roll operations on the other replicas forward
 or backwards, instead relying on our ability to re-replicate divergent
-objects.  With the write approach discussed in the prevous section,
+objects.  With the write approach discussed in the previous section,
 however, the erasure coded backend will rely on being able to roll
 back divergent operations since we may not be able to re-replicate
 divergent objects.  Thus, we must choose the *oldest* last_update from
@@ -114,20 +114,20 @@ divergent objects.
 The dificulty is that the current code assumes that as long as it has
 an info from at least 1 osd from the prior interval, it can complete
 peering.  In order to ensure that we do not end up with an
-unrecoverably divergent object, an erasure coded PG must hear from at
-least N/M of the replicas of the last interval to serve writes where N
-is the minimum number of chunks required to reconstruct.  This ensures
-that we will select a last_update old enough to roll back at least N
+unrecoverably divergent object, an M+K erasure coded PG must hear from at
+least M of the replicas of the last interval to serve writes.  This ensures
+that we will select a last_update old enough to roll back at least M
 replicas.  If a replica with an older last_update comes along later,
-we will be able to provide at least N chunks of any divergent object.
+we will be able to provide at least M chunks of any divergent object.
 
 Core Changes:
 
-- PG::choose_acting(), etc. need to be generalized to use PGBackend to
-  determine the authoritative log.
-- PG::RecoveryState::GetInfo needs to use PGBackend to determine
-  whether it has enough infos to continue with authoritative log
-  selection.
+- `PG::choose_acting(), etc. need to be generalized to use PGBackend
+  <http://tracker.ceph.com/issues/5860>`_ to determine the
+  authoritative log.
+- `PG::RecoveryState::GetInfo needs to use PGBackend
+  <http://tracker.ceph.com/issues/5859>`_ to determine whether it has
+  enough infos to continue with authoritative log selection.
 
 PGBackend interfaces:
 
@@ -146,7 +146,7 @@ to leave holes in the requested acting set.
 
 Core Changes:
 
-- OSDMap::pg_to_*_osds needs to seperately return a primary.  For most
+- OSDMap::pg_to_*_osds needs to separately return a primary.  For most
   cases, this can continue to be acting[0].
 - MOSDPGTemp (and related OSD structures) needs to be able to specify
   a primary as well as an acting set.
@@ -188,12 +188,14 @@ include the chunk id in the object key.
 
 Core changes:
 
-- The filestore vhobject_t needs to also include a chunk id making it
-  more like tuple<hobject_t, version_t, chunk_id_t>.
+- The filestore `vhobject_t needs to also include a chunk id
+  <http://tracker.ceph.com/issues/5862>`_ making it more like
+  tuple<hobject_t, version_t, chunk_id_t>.
 - coll_t needs to include a chunk_id_t.
-- The OSD pg_map and similar pg mappings need to work in terms of a
-  cpg_t (essentially pair<pg_t, chunk_id_t>).  Similarly, pg->pg
-  messages need to include a chunk_id_t
+- The `OSD pg_map and similar pg mappings need to work in terms of a
+  cpg_t <http://tracker.ceph.com/issues/5863>`_ (essentially
+  pair<pg_t, chunk_id_t>).  Similarly, pg->pg messages need to include
+  a chunk_id_t
 - For client->PG messages, the OSD will need a way to know which PG
   chunk should get the message since the OSD may contain both a
   primary and non-primary chunk for the same pg
@@ -235,7 +237,7 @@ Thus, each replica instead simply computes a crc32 of its own stored
 chunk and compares it with the locally stored checksum.  The replica
 then reports to the primary whether the checksums match.
 
-PGBackend interfaces:
+`PGBackend interfaces <http://tracker.ceph.com/issues/5861>`_:
 
 - scan()
 - scrub()
@@ -252,7 +254,7 @@ Core changes:
 
 - Ensure that crush behaves as above for INDEP.
 
-Recovery
+`Recovery <http://tracker.ceph.com/issues/5857>`_
 --------
 
 The logic for recovering an object depends on the backend.  With
@@ -279,7 +281,7 @@ PGBackend interfaces:
 - recoverable()
 - recover_object()
 
-Backfill
+`Backfill <http://tracker.ceph.com/issues/5856>`_
 --------
 
 For the most part, backfill itself should behave similarly between
@@ -293,14 +295,17 @@ replicated and erasure coded pools with a few exceptions:
    temporary pg chunk for that acting set slot.
 
 For 2, we don't really need to place the backfill peer in the acting
-set for replicated PGs anyway.  For 1, PGBackend::choose_backfill()
-should determine which osds are backfilled in a particular interval.
+set for replicated PGs anyway.
+For 1, PGBackend::choose_backfill() should determine which osds are
+backfilled in a particular interval.
 
 Core changes:
 
-- Backfill should be capable of handling multiple backfill peers
-  concurrently even for replicated pgs (easier to test for now)
-- Backfill peers should not be placed in the acting set.
+- Backfill should be capable of `handling multiple backfill peers
+  concurrently <http://tracker.ceph.com/issues/5858>`_ even for
+  replicated pgs (easier to test for now)
+- `Backfill peers should not be placed in the acting set
+  <http://tracker.ceph.com/issues/5855>`_.
 
 PGBackend interfaces:
 
