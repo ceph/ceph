@@ -1,6 +1,6 @@
-===============
-RADOS Swift API
-===============
+===============================
+ Ceph Object Gateway Swift API
+===============================
 
 Ceph supports a RESTful API that is compatible with the the basic data access model of the Swift API.
 
