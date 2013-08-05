@@ -44,7 +44,7 @@ def run_radosgw_agent(ctx, client, config):
     dest_access, dest_secret = rgw_utils.get_zone_system_keys(ctx, dest_client,
                                                               dest_zone)
     port = config.get('port', 8000)
-    daemon_name = '{host}.syncdaemon'.format(host=remote.name)
+    daemon_name = '{host}.{port}.syncdaemon'.format(host=remote.name, port=port)
 
     return remote.run(
         args=[
