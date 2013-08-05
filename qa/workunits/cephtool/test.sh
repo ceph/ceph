@@ -227,6 +227,14 @@ ceph pg debug unfound_objects_exist
 ceph pg debug degraded_pgs_exist
 ceph pg deep-scrub 0.0
 ceph pg dump
+ceph pg dump pgs_brief --format=json
+ceph pg dump pgs --format=json
+ceph pg dump pools --format=json
+ceph pg dump osds --format=json
+ceph pg dump sum --format=json
+ceph pg dump all --format=json
+ceph pg dump pgs_brief osds --format=json
+ceph pg dump pools osds pgs_brief --format=json
 ceph pg dump_json
 ceph pg dump_pools_json
 ceph pg dump_stuck inactive
