@@ -1371,8 +1371,8 @@ protected:
 	osd->recovery_queue.push_front(&pg->recovery_item);
       }
     }
-    void _process(PG *pg) {
-      osd->do_recovery(pg);
+    void _process(PG *pg, ThreadPool::TPHandle &handle) {
+      osd->do_recovery(pg, handle);
       pg->put("RecoveryWQ");
     }
     void _clear() {
@@ -1386,7 +1386,7 @@ protected:
 
   void start_recovery_op(PG *pg, const hobject_t& soid);
   void finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue);
-  void do_recovery(PG *pg);
+  void do_recovery(PG *pg, ThreadPool::TPHandle &handle);
   bool _recover_now();
 
   // replay / delayed pg activation
