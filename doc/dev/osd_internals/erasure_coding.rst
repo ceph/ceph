@@ -251,7 +251,7 @@ Core changes:
 
 - Ensure that crush behaves as above for INDEP.
 
-Recovery
+`Recovery <http://tracker.ceph.com/issues/5857>`_
 --------
 
 The logic for recovering an object depends on the backend.  With
