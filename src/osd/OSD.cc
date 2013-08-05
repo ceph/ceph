@@ -6632,7 +6632,7 @@ bool OSD::_recover_now()
   return true;
 }
 
-void OSD::do_recovery(PG *pg)
+void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
 {
   // see how many we should try to start.  note that this is a bit racy.
   recovery_wq.lock();
@@ -6652,7 +6652,7 @@ void OSD::do_recovery(PG *pg)
     recovery_wq.queue(pg);
     return;
   } else {
-    pg->lock();
+    pg->lock_suspend_timeout(handle);
     if (pg->deleting || !(pg->is_active() && pg->is_primary())) {
       pg->unlock();
       goto out;
