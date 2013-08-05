@@ -278,7 +278,7 @@ PGBackend interfaces:
 - recoverable()
 - recover_object()
 
-Backfill
+`Backfill <http://tracker.ceph.com/issues/5856>`_
 --------
 
 For the most part, backfill itself should behave similarly between
@@ -292,14 +292,17 @@ replicated and erasure coded pools with a few exceptions:
    temporary pg chunk for that acting set slot.
 
 For 2, we don't really need to place the backfill peer in the acting
-set for replicated PGs anyway.  For 1, PGBackend::choose_backfill()
-should determine which osds are backfilled in a particular interval.
+set for replicated PGs anyway.
+For 1, PGBackend::choose_backfill() should determine which osds are
+backfilled in a particular interval.
 
 Core changes:
 
-- Backfill should be capable of handling multiple backfill peers
-  concurrently even for replicated pgs (easier to test for now)
-- Backfill peers should not be placed in the acting set.
+- Backfill should be capable of `handling multiple backfill peers
+  concurrently <http://tracker.ceph.com/issues/5858>`_ even for
+  replicated pgs (easier to test for now)
+- `Backfill peers should not be placed in the acting set
+  <http://tracker.ceph.com/issues/5855>`_.
 
 PGBackend interfaces:
 
