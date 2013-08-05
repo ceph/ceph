@@ -307,11 +307,15 @@ void RGWProcess::handle_request(RGWRequest *req)
 
   RGWOp *op = NULL;
   int init_error = 0;
-  RGWHandler *handler = rest->get_handler(store, s, &client_io, &init_error);
+  bool should_log = false;
+  RGWRESTMgr *mgr;
+  RGWHandler *handler = rest->get_handler(store, s, &client_io, &mgr, &init_error);
   if (init_error != 0) {
     abort_early(s, init_error);
     goto done;
   }
+
+  should_log = mgr->get_logging();
 
   req->log(s, "getting op");
   op = handler->get_op(store);
@@ -373,7 +377,9 @@ void RGWProcess::handle_request(RGWRequest *req)
   op->execute();
   op->complete();
 done:
-  rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
+  if (should_log) {
+    rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
+  }
 
   int http_ret = s->err.http_ret;
 
@@ -418,6 +424,12 @@ int usage()
   cerr << "   --rgw-zone=<zone>         zone in which radosgw runs\n";
   generic_server_usage();
   return 0;
+}
+
+static RGWRESTMgr *set_logging(RGWRESTMgr *mgr)
+{
+  mgr->set_logging(true);
+  return mgr;
 }
 
 /*
@@ -525,16 +537,16 @@ int main(int argc, const char **argv)
   }
 
   if (apis_map.count("s3") > 0)
-    rest.register_default_mgr(new RGWRESTMgr_S3);
+    rest.register_default_mgr(set_logging(new RGWRESTMgr_S3));
 
   if (apis_map.count("swift") > 0) {
     do_swift = true;
     swift_init(g_ceph_context);
-    rest.register_resource(g_conf->rgw_swift_url_prefix, new RGWRESTMgr_SWIFT);
+    rest.register_resource(g_conf->rgw_swift_url_prefix, set_logging(new RGWRESTMgr_SWIFT));
   }
 
   if (apis_map.count("swift_auth") > 0)
-    rest.register_resource(g_conf->rgw_swift_auth_entry, new RGWRESTMgr_SWIFT_Auth);
+    rest.register_resource(g_conf->rgw_swift_auth_entry, set_logging(new RGWRESTMgr_SWIFT_Auth));
 
   if (apis_map.count("admin") > 0) {
     RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
