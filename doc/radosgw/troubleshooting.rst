@@ -3,6 +3,21 @@
 =================
 
 
+The Gateway Won't Start
+=======================
+
+If you cannot start the gateway (i.e., there is no existing ``pid``), 
+check to see if there is an existing ``.asok`` file from another 
+user. If an ``.asok`` file from another user exists and there is no
+running ``pid``, remove the ``.asok`` file and try to start the
+process again.
+
+This may occur when you start the process as a ``root`` user and 
+the startup script is trying to start the process as a 
+``www-data`` or ``apache`` user and an existing ``.asok`` is 
+preventing the script from starting the daemon.
+
+
 HTTP Request Errors
 ===================
 
@@ -148,7 +163,7 @@ If you receive an 405 error, check to see if you have the S3 subdomain set up co
 You will need to have a wild card setting in your DNS record for subdomain functionality
 to work properly.
 
-Also, check to ensure that the default site is disabled.
+Also, check to ensure that the default site is disabled. ::
 
      [java] Exception in thread "main" Status Code: 405, AWS Service: Amazon S3, AWS Request ID: null, AWS Error Code: MethodNotAllowed, AWS Error Message: null, S3 Extended Request ID: null
   
