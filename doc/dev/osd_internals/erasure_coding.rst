@@ -122,11 +122,12 @@ we will be able to provide at least M chunks of any divergent object.
 
 Core Changes:
 
-- PG::choose_acting(), etc. need to be generalized to use PGBackend to
-  determine the authoritative log.
-- PG::RecoveryState::GetInfo needs to use PGBackend to determine
-  whether it has enough infos to continue with authoritative log
-  selection.
+- `PG::choose_acting(), etc. need to be generalized to use PGBackend
+  <http://tracker.ceph.com/issues/5860>`_ to determine the
+  authoritative log.
+- `PG::RecoveryState::GetInfo needs to use PGBackend
+  <http://tracker.ceph.com/issues/5859>`_ to determine whether it has
+  enough infos to continue with authoritative log selection.
 
 PGBackend interfaces:
 
