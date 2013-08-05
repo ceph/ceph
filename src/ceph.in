@@ -54,7 +54,10 @@ import string
 import struct
 import subprocess
 
-from ceph_argparse import *
+from ceph_argparse import \
+    concise_sig, descsort, parse_json_funcsigs, \
+    matchnum, validate_command, find_cmd_target, \
+    send_command, json_command
 
 # just a couple of globals
 

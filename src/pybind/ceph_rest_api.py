@@ -1,20 +1,20 @@
 #!/usr/bin/python
 # vim: ts=4 sw=4 smarttab expandtab
 
-import collections
-import contextlib
 import errno
 import json
 import logging
 import logging.handlers
-import os
 import rados
 import textwrap
 import xml.etree.ElementTree
 import xml.sax.saxutils
 
 import flask
-from ceph_argparse import *
+from ceph_argparse import \
+    ArgumentError, CephPgid, CephOsdName, CephChoices, CephPrefix, \
+    concise_sig, descsort, parse_funcsig, parse_json_funcsigs, \
+    validate, json_command
 
 #
 # Globals and defaults
