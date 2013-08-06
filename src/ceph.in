@@ -398,6 +398,12 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                     if ret:
                         sys.stderr.write('Error {0}: {1}'.format(ret, outs))
                         return ret, '', outs
+                    if outbuf:
+                        print 'Output:\n', outbuf
+                    if outs:
+                        print >> sys.stderr, 'Status:\n', outs
+                    if not outbuf and not outs:
+                        print 'Command accepted'
                 else:
                     print "invalid command"
 
