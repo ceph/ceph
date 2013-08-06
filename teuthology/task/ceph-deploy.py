@@ -17,11 +17,11 @@ def download_ceph_deploy(ctx, config):
     log.info('Downloading ceph-deploy...')
     testdir = teuthology.get_testdir(ctx)
     ceph_admin = teuthology.get_first_mon(ctx, config)
+    ceph_deploy_branch = ctx.get('ceph-deploy', {}).get('ceph-deploy-branch', 'master')
 
     ctx.cluster.only(ceph_admin).run(
         args=[
-            'git', 'clone',
-#            'http://github.com/ceph/ceph-deploy.git',
+            'git', 'clone', '-b', ceph_deploy_branch,
             'git://ceph.com/ceph-deploy.git',
             '{tdir}/ceph-deploy'.format(tdir=testdir),
             ],
