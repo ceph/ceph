@@ -407,7 +407,7 @@ librgw_a_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
 noinst_LIBRARIES += librgw.a
 
 my_radosgw_ldadd = \
-       libglobal.la librgw.a librados.la libcls_rgw_client.a libcls_log_client.a \
+       librgw.a librados.la libcls_rgw_client.a libcls_log_client.a \
        libcls_statelog_client.a libcls_replica_log_client.a libcls_lock_client.a \
        libcls_refcount_client.a libcls_version_client.a -lcurl -lexpat \
        $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS) $(LIBGLOBAL_LDA)
@@ -1007,22 +1007,19 @@ ceph_test_cors_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_cors
 
 ceph_test_cls_rgw_meta_SOURCES = test/test_rgw_admin_meta.cc
-ceph_test_cls_rgw_meta_LDFLAGS = libglobal.la 
-ceph_test_cls_rgw_meta_LDADD = librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} $(CRYPTO_LIBS) -lcurl -luuid -lexpat  librados.la libcls_version_client.a \
+ceph_test_cls_rgw_meta_LDADD = librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} $(LIBGLOBAL_LDA) $(CRYPTO_LIBS) -lcurl -luuid -lexpat  librados.la libcls_version_client.a \
  libcls_log_client.a libcls_statelog_client.a libcls_refcount_client.a libcls_rgw_client.a libcls_lock_client.a
 ceph_test_cls_rgw_meta_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_cls_rgw_meta
 
 ceph_test_cls_rgw_log_SOURCES = test/test_rgw_admin_log.cc
-ceph_test_cls_rgw_log_LDFLAGS = libglobal.la 
-ceph_test_cls_rgw_log_LDADD = librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} $(CRYPTO_LIBS) -lcurl -luuid -lexpat  librados.la libcls_version_client.a \
+ceph_test_cls_rgw_log_LDADD = librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} ${LIBGLOBAL_LDA} $(CRYPTO_LIBS) -lcurl -luuid -lexpat  librados.la libcls_version_client.a \
  libcls_log_client.a libcls_statelog_client.a libcls_refcount_client.a libcls_rgw_client.a libcls_lock_client.a
 ceph_test_cls_rgw_log_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_cls_rgw_log
 
 ceph_test_cls_rgw_opstate_SOURCES = test/test_rgw_admin_opstate.cc
-ceph_test_cls_rgw_opstate_LDFLAGS = libglobal.la 
-ceph_test_cls_rgw_opstate_LDADD = librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} $(CRYPTO_LIBS) -lcurl -luuid -lexpat  librados.la libcls_version_client.a \
+ceph_test_cls_rgw_opstate_LDADD = librgw.a ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} ${LIBGLOBAL_LDA} $(CRYPTO_LIBS) -lcurl -luuid -lexpat  librados.la libcls_version_client.a \
  libcls_log_client.a libcls_statelog_client.a libcls_refcount_client.a libcls_rgw_client.a libcls_lock_client.a
 ceph_test_cls_rgw_opstate_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_cls_rgw_opstate
@@ -1062,20 +1059,20 @@ bin_DEBUGPROGRAMS += ceph_test_cls_version
 
 ceph_test_cls_log_SOURCES = test/cls_log/test_cls_log.cc \
 	test/librados/test.cc
-ceph_test_cls_log_LDADD = libglobal.la librados.la libcls_log_client.a ${UNITTEST_STATIC_LDADD}
+ceph_test_cls_log_LDADD = librados.la libcls_log_client.a ${UNITTEST_STATIC_LDADD} ${LIBGLOBAL_LDA}
 ceph_test_cls_log_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_cls_log
 
 ceph_test_cls_statelog_SOURCES = test/cls_statelog/test_cls_statelog.cc \
 	test/librados/test.cc
-ceph_test_cls_statelog_LDADD = libglobal.la librados.la libcls_statelog_client.a ${UNITTEST_STATIC_LDADD}
+ceph_test_cls_statelog_LDADD = librados.la libcls_statelog_client.a ${UNITTEST_STATIC_LDADD} ${LIBGLOBAL_LDA}
 ceph_test_cls_statelog_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_cls_statelog
 ceph_test_cls_replica_log_SOURCES = \
 	test/cls_replica_log/test_cls_replica_log.cc \
 	test/librados/test.cc
-ceph_test_cls_replica_log_LDADD = libglobal.la librados.la \
-	libcls_replica_log_client.a ${UNITTEST_STATIC_LDADD}
+ceph_test_cls_replica_log_LDADD = librados.la \
+	libcls_replica_log_client.a ${UNITTEST_STATIC_LDADD} ${LIBGLOBAL_LDA}
 ceph_test_cls_replica_log_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_cls_replica_log
 
