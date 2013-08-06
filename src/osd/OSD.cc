@@ -6664,7 +6664,7 @@ void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
 #endif
     
     PG::RecoveryCtx rctx = create_context();
-    int started = pg->start_recovery_ops(max, &rctx);
+    int started = pg->start_recovery_ops(max, &rctx, handle);
     dout(10) << "do_recovery started " << started << "/" << max << " on " << *pg << dendl;
 
     /*
@@ -7052,7 +7052,7 @@ void OSD::OpWQ::_process(PGRef pg, ThreadPool::TPHandle &handle)
     if (!(pg_for_processing[&*pg].size()))
       pg_for_processing.erase(&*pg);
   }
-  osd->dequeue_op(pg, op);
+  osd->dequeue_op(pg, op, handle);
   pg->unlock();
 }
 
@@ -7065,7 +7065,9 @@ void OSDService::dequeue_pg(PG *pg, list<OpRequestRef> *dequeued)
 /*
  * NOTE: dequeue called in worker thread, with pg lock
  */
-void OSD::dequeue_op(PGRef pg, OpRequestRef op)
+void OSD::dequeue_op(
+  PGRef pg, OpRequestRef op,
+  ThreadPool::TPHandle &handle)
 {
   utime_t latency = ceph_clock_now(g_ceph_context) - op->request->get_recv_stamp();
   dout(10) << "dequeue_op " << op << " prio " << op->request->get_priority()
@@ -7078,7 +7080,7 @@ void OSD::dequeue_op(PGRef pg, OpRequestRef op)
 
   op->mark_reached_pg();
 
-  pg->do_request(op);
+  pg->do_request(op, handle);
 
   // finish
   dout(10) << "dequeue_op " << op << " finish" << dendl;
