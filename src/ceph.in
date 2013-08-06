@@ -394,18 +394,15 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                         print >> sys.stderr, "Submitting command ", valid_dict
                     ret, outbuf, outs = json_command(cluster_handle,
                                                      target=target,
-                                                     argdict=valid_dict)
                     if ret:
-                        sys.stderr.write('Error {0}: {1}'.format(ret, outs))
-                        return ret, '', outs
+                        print >> sys.stderr, \
+                            'Error: ' + ret + errno.errorcode[ret])
                     if outbuf:
-                        print 'Output:\n', outbuf
+                        print outbuf
                     if outs:
                         print >> sys.stderr, 'Status:\n', outs
-                    if not outbuf and not outs:
-                        print 'Command accepted'
                 else:
-                    print "invalid command"
+                    print >> sys.stderr, "Invalid command"
 
     if verbose:
         print >> sys.stderr, "Submitting command ", valid_dict
