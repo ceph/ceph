@@ -65,13 +65,13 @@ bool AuthMonitor::check_rotate()
  Tick function to update the map based on performance every N seconds
 */
 
-void AuthMonitor::tick() 
+void AuthMonitor::tick()
 {
   if (!is_active()) return;
 
   dout(10) << *this << dendl;
 
-  if (!mon->is_leader()) return; 
+  if (!mon->is_leader()) return;
 
   if (check_rotate())
     propose_pending();
@@ -156,7 +156,7 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
     // reset if we are moving to initial state.  we will normally have
     // keys in here temporarily for bootstrapping that we need to
     // clear out.
-    if (keys_ver == 0) 
+    if (keys_ver == 0)
       mon->key_server.clear_secrets();
 
     dout(20) << __func__ << " walking through version " << (keys_ver+1)
@@ -372,7 +372,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
   // set up handler?
   if (m->protocol == 0 && !s->auth_handler) {
     set<__u32> supported;
-    
+
     try {
       __u8 struct_v = 1;
       ::decode(struct_v, indata);
@@ -645,7 +645,7 @@ void AuthMonitor::import_keyring(KeyRing& keyring)
        ++p) {
     KeyServerData::Incremental auth_inc;
     auth_inc.name = p->first;
-    auth_inc.auth = p->second; 
+    auth_inc.auth = p->second;
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
     dout(10) << " importing " << auth_inc.name << dendl;
     dout(30) << "    " << auth_inc.auth << dendl;
