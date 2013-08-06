@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  *
  */
+#include "acconfig.h"
 
 #include "common/code_environment.h"
 
@@ -19,7 +20,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <string>
-#if defined(__linux__)
+
+#ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
 #endif
 
@@ -47,20 +49,17 @@ std::ostream &operator<<(std::ostream &oss, enum code_environment_t e)
 
 int get_process_name(char *buf, int len)
 {
+#if defined(HAVE_PRCTL) && defined(PR_GET_NAME) /* Since 2.6.11 */
   if (len <= 16) {
     /* The man page discourages using this prctl with a buffer shorter
      * than 16 bytes. With a 16-byte buffer, it might not be
      * null-terminated. */
     return -ENAMETOOLONG;
   }
-#if defined(__FreeBSD__)
-#warning XXX
-    return -ENAMETOOLONG;
-#else
   memset(buf, 0, len);
-  int ret;
-  ret = prctl(PR_GET_NAME, buf);
-  return ret;
+  return prctl(PR_GET_NAME, buf);
+#else
+  return -ENOSYS;
 #endif
 }
 
