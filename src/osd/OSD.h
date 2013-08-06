@@ -915,7 +915,9 @@ private:
   } op_wq;
 
   void enqueue_op(PG *pg, OpRequestRef op);
-  void dequeue_op(PGRef pg, OpRequestRef op);
+  void dequeue_op(
+    PGRef pg, OpRequestRef op,
+    ThreadPool::TPHandle &handle);
 
   // -- peering queue --
   struct PeeringWQ : public ThreadPool::BatchWorkQueue<PG> {
