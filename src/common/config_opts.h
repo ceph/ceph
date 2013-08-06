@@ -426,7 +426,8 @@ OPTION(osd_default_data_pool_replay_window, OPT_INT, 45)
 OPTION(osd_preserve_trimmed_log, OPT_BOOL, false)
 OPTION(osd_auto_mark_unfound_lost, OPT_BOOL, false)
 OPTION(osd_recovery_delay_start, OPT_FLOAT, 0)
-OPTION(osd_recovery_max_active, OPT_INT, 5)
+OPTION(osd_recovery_max_active, OPT_INT, 60)
+OPTION(osd_recovery_max_single_start, OPT_INT, 10)
 OPTION(osd_recovery_max_chunk, OPT_U64, 8<<20)  // max size of push chunk
 OPTION(osd_push_per_object_cost, OPT_U64, 1000)  // push cost per object
 OPTION(osd_max_push_cost, OPT_U64, 8<<20)  // max size of push message
