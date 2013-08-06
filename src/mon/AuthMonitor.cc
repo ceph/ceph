@@ -393,13 +393,19 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
 	  entity_name.get_type() == CEPH_ENTITY_TYPE_MDS) {
 	if (g_conf->cephx_cluster_require_signatures ||
 	    g_conf->cephx_require_signatures) {
-	  dout(1) << m->get_source_inst() << " supports cephx but not signatures and 'cephx [cluster] require signatures = true'; disallowing cephx" << dendl;
+	  dout(1) << m->get_source_inst()
+                  << " supports cephx but not signatures and"
+                  << " 'cephx [cluster] require signatures = true';"
+                  << " disallowing cephx" << dendl;
 	  supported.erase(CEPH_AUTH_CEPHX);
 	}
       } else {
 	if (g_conf->cephx_service_require_signatures ||
 	    g_conf->cephx_require_signatures) {
-	  dout(1) << m->get_source_inst() << " supports cephx but not signatures and 'cephx [service] require signatures = true'; disallowing cephx" << dendl;
+	  dout(1) << m->get_source_inst()
+                  << " supports cephx but not signatures and"
+                  << " 'cephx [service] require signatures = true';"
+                  << " disallowing cephx" << dendl;
 	  supported.erase(CEPH_AUTH_CEPHX);
 	}
       }
