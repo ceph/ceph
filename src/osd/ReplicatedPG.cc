@@ -6904,15 +6904,15 @@ int ReplicatedPG::start_recovery_ops(
   if (num_missing == num_unfound) {
     // All of the missing objects we have are unfound.
     // Recover the replicas.
-    started = recover_replicas(max);
+    started = recover_replicas(max, handle);
   }
   if (!started) {
     // We still have missing objects that we should grab from replicas.
-    started += recover_primary(max);
+    started += recover_primary(max, handle);
   }
   if (!started && num_unfound != get_num_unfound()) {
     // second chance to recovery replicas
-    started = recover_replicas(max);
+    started = recover_replicas(max, handle);
   }
 
   bool deferred_backfill = false;
@@ -6999,7 +6999,7 @@ int ReplicatedPG::start_recovery_ops(
  * do one recovery op.
  * return true if done, false if nothing left to do.
  */
-int ReplicatedPG::recover_primary(int max)
+int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
 {
   assert(is_primary());
 
@@ -7018,6 +7018,7 @@ int ReplicatedPG::recover_primary(int max)
   map<version_t, hobject_t>::const_iterator p =
     missing.rmissing.lower_bound(pg_log.get_log().last_requested);
   while (p != missing.rmissing.end()) {
+    handle.reset_tp_timeout();
     hobject_t soid;
     version_t v = p->first;
 
@@ -7210,7 +7211,7 @@ int ReplicatedPG::prep_object_replica_pushes(
   return 1;
 }
 
-int ReplicatedPG::recover_replicas(int max)
+int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
 {
   dout(10) << __func__ << "(" << max << ")" << dendl;
   int started = 0;
@@ -7232,6 +7233,7 @@ int ReplicatedPG::recover_replicas(int max)
     for (map<version_t, hobject_t>::const_iterator p = m.rmissing.begin();
 	   p != m.rmissing.end() && started < max;
 	   ++p) {
+      handle.reset_tp_timeout();
       const hobject_t soid(p->second);
 
       if (pushing.count(soid)) {
@@ -7416,6 +7418,7 @@ int ReplicatedPG::recover_backfill(
   for (map<hobject_t, eversion_t>::iterator i = to_remove.begin();
        i != to_remove.end();
        ++i) {
+    handle.reset_tp_timeout();
     send_remove_op(i->first, i->second, backfill_target);
   }
 
@@ -7423,6 +7426,7 @@ int ReplicatedPG::recover_backfill(
   for (map<hobject_t, pair<eversion_t, eversion_t> >::iterator i = to_push.begin();
        i != to_push.end();
        ++i) {
+    handle.reset_tp_timeout();
     prep_backfill_object_push(
       i->first, i->second.first, i->second.second, backfill_target, &pushes);
   }
