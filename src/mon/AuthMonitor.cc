@@ -84,9 +84,6 @@ void AuthMonitor::on_active()
   if (!mon->is_leader())
     return;
   mon->key_server.start_server();
-/*
-  check_rotate();
-*/
 }
 
 void AuthMonitor::create_initial()
@@ -204,16 +201,6 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
 	   << " max_global_id=" << max_global_id
 	   << " format_version " << format_version
 	   << dendl;
- 
-  /*
-  bufferlist bl;
-  __u8 v = 1;
-  ::encode(v, bl);
-  ::encode(max_global_id, bl);
-  Mutex::Locker l(mon->key_server.get_lock());
-  ::encode(mon->key_server, bl);
-  paxos->stash_latest(version, bl);
-  */
 }
 
 void AuthMonitor::increase_max_global_id()
@@ -491,7 +478,6 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
     }
     if (ret == -EIO) {
       wait_for_active(new C_RetryMessage(this,m));
-      //paxos->wait_for_active(new C_RetryMessage(this, m));
       goto done;
     }
     if (caps_info.caps.length()) {
@@ -735,7 +721,6 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     getline(ss, rs);
     err = 0;
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
-    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
     return true;
   } else if (prefix == "auth add" && !entity_name.empty()) {
     /* expected behavior:
@@ -858,7 +843,6 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     ss << "added key for " << auth_inc.name;
     getline(ss, rs);
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
-    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
     return true;
   } else if ((prefix == "auth get-or-create-key" ||
 	     prefix == "auth get-or-create") &&
@@ -911,7 +895,6 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 	if (auth_inc.op == KeyServerData::AUTH_INC_ADD &&
 	    auth_inc.name == entity) {
 	  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
-	  //paxos->wait_for_commit(new C_RetryMessage(this, m));
 	  return true;
 	}
       }
@@ -947,7 +930,6 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     rdata.append(ds);
     getline(ss, rs);
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, rdata, get_last_committed()));
-    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
     return true;
   } else if (prefix == "auth caps" && !entity_name.empty()) {
     KeyServerData::Incremental auth_inc;
@@ -970,7 +952,6 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     ss << "updated caps for " << auth_inc.name;
     getline(ss, rs);
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
-    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
     return true;
   } else if (prefix == "auth del" && !entity_name.empty()) {
     KeyServerData::Incremental auth_inc;
@@ -986,7 +967,6 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     ss << "updated";
     getline(ss, rs);
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
-    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
     return true;
   }
 
