@@ -763,8 +763,8 @@ protected:
     int max, RecoveryCtx *prctx,
     ThreadPool::TPHandle &handle);
 
-  int recover_primary(int max);
-  int recover_replicas(int max);
+  int recover_primary(int max, ThreadPool::TPHandle &handle);
+  int recover_replicas(int max, ThreadPool::TPHandle &handle);
   int recover_backfill(int max, ThreadPool::TPHandle &handle);
 
   /**
