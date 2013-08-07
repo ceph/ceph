@@ -155,6 +155,14 @@ ceph osd scrub 0
 ceph osd deep-scrub 0
 ceph osd repair 0
 
+for f in noup nodown noin noout noscrub nodeep-scrub nobackfill norecover
+do
+    ceph osd set $f
+    ceph osd unset $f
+done
+expect_false ceph osd set bogus
+expect_false ceph osd unset bogus
+
 ceph osd set noup
 ceph osd down 0
 ceph osd dump | grep 'osd.0 down'
