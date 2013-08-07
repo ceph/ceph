@@ -427,10 +427,10 @@ COMMAND("osd setmaxosd " \
 COMMAND("osd pause", "pause osd", "osd", "rw", "cli,rest")
 COMMAND("osd unpause", "unpause osd", "osd", "rw", "cli,rest")
 COMMAND("osd set " \
-	"name=key,type=CephChoices,strings=pause|noup|nodown|noout|noin|nobackfile|norecover", \
+	"name=key,type=CephChoices,strings=pause|noup|nodown|noout|noin|nobackfile|norecover|noscrub|nodeep-scrub", \
 	"set <key>", "osd", "rw", "cli,rest")
 COMMAND("osd unset " \
-	"name=key,type=CephChoices,strings=pause|noup|nodown|noout|noin|nobackfile|norecover", \
+	"name=key,type=CephChoices,strings=pause|noup|nodown|noout|noin|nobackfile|norecover|noscrub|nodeep-scrub", \
 	"unset <key>", "osd", "rw", "cli,rest")
 COMMAND("osd cluster_snap", "take cluster snapshot (disabled)", \
 	"osd", "r", "")
