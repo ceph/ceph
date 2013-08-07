@@ -3071,6 +3071,10 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       return prepare_set_flag(m, CEPH_OSDMAP_NOBACKFILL);
     else if (key == "norecover")
       return prepare_set_flag(m, CEPH_OSDMAP_NORECOVER);
+    else if (key == "noscrub")
+      return prepare_set_flag(m, CEPH_OSDMAP_NOSCRUB);
+    else if (key == "nodeep-scrub")
+      return prepare_set_flag(m, CEPH_OSDMAP_NODEEP_SCRUB);
 
   } else if (prefix == "osd unset") {
     string key;
@@ -3089,6 +3093,10 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       return prepare_unset_flag(m, CEPH_OSDMAP_NOBACKFILL);
     else if (key == "norecover")
       return prepare_unset_flag(m, CEPH_OSDMAP_NORECOVER);
+    else if (key == "noscrub")
+      return prepare_unset_flag(m, CEPH_OSDMAP_NOSCRUB);
+    else if (key == "nodeep-scrub")
+      return prepare_unset_flag(m, CEPH_OSDMAP_NODEEP_SCRUB);
 
   } else if (prefix == "osd cluster_snap") {
     // ** DISABLE THIS FOR NOW **
