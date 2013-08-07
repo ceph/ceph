@@ -1252,7 +1252,9 @@ void ReplicatedPG::do_sub_op_reply(OpRequestRef op)
   sub_op_modify_reply(op);
 }
 
-void ReplicatedPG::do_scan(OpRequestRef op)
+void ReplicatedPG::do_scan(
+  OpRequestRef op,
+  ThreadPool::TPHandle &handle)
 {
   MOSDPGScan *m = static_cast<MOSDPGScan*>(op->request);
   assert(m->get_header().type == MSG_OSD_PG_SCAN);
@@ -1278,7 +1280,9 @@ void ReplicatedPG::do_scan(OpRequestRef op)
 
       BackfillInterval bi;
       osr->flush();
-      scan_range(m->begin, g_conf->osd_backfill_scan_min, g_conf->osd_backfill_scan_max, &bi);
+      scan_range(
+	m->begin, g_conf->osd_backfill_scan_min,
+	g_conf->osd_backfill_scan_max, &bi, handle);
       MOSDPGScan *reply = new MOSDPGScan(MOSDPGScan::OP_SCAN_DIGEST,
 					 get_osdmap()->get_epoch(), m->query_epoch,
 					 info.pgid, bi.begin, bi.end);
@@ -6875,7 +6879,9 @@ void ReplicatedPG::check_recovery_sources(const OSDMapRef osdmap)
 }
   
 
-int ReplicatedPG::start_recovery_ops(int max, RecoveryCtx *prctx)
+int ReplicatedPG::start_recovery_ops(
+  int max, RecoveryCtx *prctx,
+  ThreadPool::TPHandle &handle)
 {
   int started = 0;
   assert(is_primary());
@@ -6898,15 +6904,15 @@ int ReplicatedPG::start_recovery_ops(int max, RecoveryCtx *prctx)
   if (num_missing == num_unfound) {
     // All of the missing objects we have are unfound.
     // Recover the replicas.
-    started = recover_replicas(max);
+    started = recover_replicas(max, handle);
   }
   if (!started) {
     // We still have missing objects that we should grab from replicas.
-    started += recover_primary(max);
+    started += recover_primary(max, handle);
   }
   if (!started && num_unfound != get_num_unfound()) {
     // second chance to recovery replicas
-    started = recover_replicas(max);
+    started = recover_replicas(max, handle);
   }
 
   bool deferred_backfill = false;
@@ -6931,7 +6937,7 @@ int ReplicatedPG::start_recovery_ops(int max, RecoveryCtx *prctx)
       }
       deferred_backfill = true;
     } else {
-      started += recover_backfill(max - started);
+      started += recover_backfill(max - started, handle);
     }
   }
 
@@ -6993,7 +6999,7 @@ int ReplicatedPG::start_recovery_ops(int max, RecoveryCtx *prctx)
  * do one recovery op.
  * return true if done, false if nothing left to do.
  */
-int ReplicatedPG::recover_primary(int max)
+int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
 {
   assert(is_primary());
 
@@ -7012,6 +7018,7 @@ int ReplicatedPG::recover_primary(int max)
   map<version_t, hobject_t>::const_iterator p =
     missing.rmissing.lower_bound(pg_log.get_log().last_requested);
   while (p != missing.rmissing.end()) {
+    handle.reset_tp_timeout();
     hobject_t soid;
     version_t v = p->first;
 
@@ -7204,7 +7211,7 @@ int ReplicatedPG::prep_object_replica_pushes(
   return 1;
 }
 
-int ReplicatedPG::recover_replicas(int max)
+int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
 {
   dout(10) << __func__ << "(" << max << ")" << dendl;
   int started = 0;
@@ -7226,6 +7233,7 @@ int ReplicatedPG::recover_replicas(int max)
     for (map<version_t, hobject_t>::const_iterator p = m.rmissing.begin();
 	   p != m.rmissing.end() && started < max;
 	   ++p) {
+      handle.reset_tp_timeout();
       const hobject_t soid(p->second);
 
       if (pushing.count(soid)) {
@@ -7275,7 +7283,9 @@ int ReplicatedPG::recover_replicas(int max)
  * peer_info[backfill_target].last_backfill = MIN(peer_backfill_info.begin,
  * backfill_info.begin, backfills_in_flight)
  */
-int ReplicatedPG::recover_backfill(int max)
+int ReplicatedPG::recover_backfill(
+  int max,
+  ThreadPool::TPHandle &handle)
 {
   dout(10) << "recover_backfill (" << max << ")" << dendl;
   assert(backfill_target >= 0);
@@ -7305,7 +7315,7 @@ int ReplicatedPG::recover_backfill(int max)
   dout(10) << " rescanning local backfill_info from " << backfill_pos << dendl;
   backfill_info.clear();
   osr->flush();
-  scan_range(backfill_pos, local_min, local_max, &backfill_info);
+  scan_range(backfill_pos, local_min, local_max, &backfill_info, handle);
 
   int ops = 0;
   map<hobject_t, pair<eversion_t, eversion_t> > to_push;
@@ -7319,7 +7329,8 @@ int ReplicatedPG::recover_backfill(int max)
     if (backfill_info.begin <= pbi.begin &&
 	!backfill_info.extends_to_end() && backfill_info.empty()) {
       osr->flush();
-      scan_range(backfill_info.end, local_min, local_max, &backfill_info);
+      scan_range(backfill_info.end, local_min, local_max, &backfill_info,
+		 handle);
       backfill_info.trim();
     }
     backfill_pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
@@ -7407,6 +7418,7 @@ int ReplicatedPG::recover_backfill(int max)
   for (map<hobject_t, eversion_t>::iterator i = to_remove.begin();
        i != to_remove.end();
        ++i) {
+    handle.reset_tp_timeout();
     send_remove_op(i->first, i->second, backfill_target);
   }
 
@@ -7414,6 +7426,7 @@ int ReplicatedPG::recover_backfill(int max)
   for (map<hobject_t, pair<eversion_t, eversion_t> >::iterator i = to_push.begin();
        i != to_push.end();
        ++i) {
+    handle.reset_tp_timeout();
     prep_backfill_object_push(
       i->first, i->second.first, i->second.second, backfill_target, &pushes);
   }
@@ -7480,7 +7493,9 @@ void ReplicatedPG::prep_backfill_object_push(
   put_object_context(obc);
 }
 
-void ReplicatedPG::scan_range(hobject_t begin, int min, int max, BackfillInterval *bi)
+void ReplicatedPG::scan_range(
+  hobject_t begin, int min, int max, BackfillInterval *bi,
+  ThreadPool::TPHandle &handle)
 {
   assert(is_locked());
   dout(10) << "scan_range from " << begin << dendl;
@@ -7496,6 +7511,7 @@ void ReplicatedPG::scan_range(hobject_t begin, int min, int max, BackfillInterva
   dout(20) << ls << dendl;
 
   for (vector<hobject_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
+    handle.reset_tp_timeout();
     ObjectContext *obc = NULL;
     if (is_primary())
       obc = _lookup_object_context(*p);
