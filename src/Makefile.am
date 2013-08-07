@@ -71,6 +71,10 @@ if WITH_LIBAIO
 LIBOS_LDA += -laio
 endif
 
+if WITH_LIBZFS
+LIBOS_LDA += libos_zfs.a -lzfs
+endif
+
 # use system leveldb
 LIBOS_LDA += -lleveldb -lsnappy
 
@@ -1669,9 +1673,16 @@ libos_a_SOURCES = \
 	os/LevelDBStore.cc \
 	os/WBThrottle.cc \
 	os/BtrfsFileStoreBackend.cc \
-	os/GenericFileStoreBackend.cc
+	os/GenericFileStoreBackend.cc \
+	os/ZFSFileStoreBackend.cc
 libos_a_CXXFLAGS= ${AM_CXXFLAGS}
 noinst_LIBRARIES += libos.a
+
+if WITH_LIBZFS
+libos_zfs_a_SOURCES = os/ZFS.cc
+libos_zfs_a_CXXFLAGS= ${AM_CXXFLAGS} ${LIBZFS_CFLAGS}
+noinst_LIBRARIES += libos_zfs.a
+endif
 
 libosd_a_SOURCES = \
 	osd/PG.cc \
@@ -2167,6 +2178,7 @@ noinst_HEADERS = \
         msg/msg_types.h\
 	objclass/objclass.h\
 	os/btrfs_ioctl.h\
+	os/ZFS.h\
 	os/chain_xattr.h\
 	os/hobject.h \
 	os/CollectionIndex.h\
@@ -2174,6 +2186,7 @@ noinst_HEADERS = \
         os/FileStore.h\
         os/BtrfsFileStoreBackend.h\
         os/GenericFileStoreBackend.h\
+        os/ZFSFileStoreBackend.h\
 	os/FlatIndex.h\
 	os/HashIndex.h\
 	os/FDCache.h\

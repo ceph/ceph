@@ -466,6 +466,17 @@ AS_IF([test "$with_libaio" = "yes"],
 	    [AC_DEFINE([HAVE_LIBAIO], [1], [Defined if you don't have atomic_ops])])
 AM_CONDITIONAL(WITH_LIBAIO, [ test "$with_libaio" = "yes" ])
 
+# use libzfs
+AC_ARG_WITH([libzfs],
+	    [AS_HELP_STRING([--with-libzfs], [build ZFS support])],
+	    ,
+	    [with_libzfs=no])
+AS_IF([test "x$with_libzfs" = xyes],
+	    [PKG_CHECK_MODULES([LIBZFS], [zfs], [], [true])])
+AS_IF([test "x$with_libzfs" = xyes],
+	    [AC_DEFINE([HAVE_LIBZFS], [1], [Defined if you have libzfs enabled])])
+AM_CONDITIONAL(WITH_LIBZFS, [ test "$with_libzfs" = "yes" ])
+
 # Checks for header files.
 AC_HEADER_DIRENT
 AC_HEADER_STDC
