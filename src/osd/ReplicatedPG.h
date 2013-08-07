@@ -759,10 +759,13 @@ protected:
   void _clear_recovery_state();
 
   void queue_for_recovery();
-  int start_recovery_ops(int max, RecoveryCtx *prctx);
-  int recover_primary(int max);
-  int recover_replicas(int max);
-  int recover_backfill(int max);
+  int start_recovery_ops(
+    int max, RecoveryCtx *prctx,
+    ThreadPool::TPHandle &handle);
+
+  int recover_primary(int max, ThreadPool::TPHandle &handle);
+  int recover_replicas(int max, ThreadPool::TPHandle &handle);
+  int recover_backfill(int max, ThreadPool::TPHandle &handle);
 
   /**
    * scan a (hash) range of objects in the current pg
@@ -772,7 +775,10 @@ protected:
    * @max return no more than this many items
    * @bi [out] resulting map of objects to eversion_t's
    */
-  void scan_range(hobject_t begin, int min, int max, BackfillInterval *bi);
+  void scan_range(
+    hobject_t begin, int min, int max, BackfillInterval *bi,
+    ThreadPool::TPHandle &handle
+    );
 
   void prep_backfill_object_push(
     hobject_t oid, eversion_t v, eversion_t have, int peer,
@@ -939,7 +945,9 @@ public:
   void do_pg_op(OpRequestRef op);
   void do_sub_op(OpRequestRef op);
   void do_sub_op_reply(OpRequestRef op);
-  void do_scan(OpRequestRef op);
+  void do_scan(
+    OpRequestRef op,
+    ThreadPool::TPHandle &handle);
   void do_backfill(OpRequestRef op);
   void _do_push(OpRequestRef op);
   void _do_pull_response(OpRequestRef op);

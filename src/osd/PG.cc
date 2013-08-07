@@ -1397,7 +1397,9 @@ void PG::queue_op(OpRequestRef op)
   osd->op_wq.queue(make_pair(PGRef(this), op));
 }
 
-void PG::do_request(OpRequestRef op)
+void PG::do_request(
+  OpRequestRef op,
+  ThreadPool::TPHandle &handle)
 {
   // do any pending flush
   do_pending_flush();
@@ -1435,7 +1437,7 @@ void PG::do_request(OpRequestRef op)
     break;
 
   case MSG_OSD_PG_SCAN:
-    do_scan(op);
+    do_scan(op, handle);
     break;
 
   case MSG_OSD_PG_BACKFILL:
