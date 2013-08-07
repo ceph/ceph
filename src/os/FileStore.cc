@@ -52,6 +52,7 @@
 #include "FileStore.h"
 #include "GenericFileStoreBackend.h"
 #include "BtrfsFileStoreBackend.h"
+#include "ZFSFileStoreBackend.h"
 #include "common/BackTrace.h"
 #include "include/types.h"
 #include "FileJournal.h"
@@ -603,6 +604,10 @@ int FileStore::mkfs()
 #if defined(__linux__)
     backend = new BtrfsFileStoreBackend(this);
 #endif
+  } else if (basefs.f_type == ZFS_SUPER_MAGIC) {
+#ifdef HAVE_LIBZFS
+    backend = new ZFSFileStoreBackend(this);
+#endif
   }
 
   ret = backend->create_current();
@@ -797,6 +802,11 @@ int FileStore::_detect_fs()
       g_conf->apply_changes(NULL);
       assert(m_filestore_replica_fadvise == false);
     }
+  }
+#endif
+#ifdef HAVE_LIBZFS
+  if (st.f_type == ZFS_SUPER_MAGIC) {
+    backend = new ZFSFileStoreBackend(this);
   }
 #endif
 
