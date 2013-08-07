@@ -24,6 +24,8 @@
         osd debug op order = true
         osd debug verify stray on activate = true
 
+	osd open classes on start = true
+
 [mon]
 	debug ms = 1
 	debug mon = 20
