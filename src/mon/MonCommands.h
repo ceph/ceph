@@ -418,8 +418,7 @@ COMMAND("osd crush rule create-simple " \
 	"create crush rule <name> in <root> of type <type>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush rule rm " \
-	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
-	"name=name,type=CephString", \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] ",	\
 	"remove crush rule <name>", "osd", "rw", "cli,rest")
 COMMAND("osd setmaxosd " \
 	"name=newmax,type=CephInt,range=0", \
