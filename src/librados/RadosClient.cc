@@ -229,7 +229,6 @@ void librados::RadosClient::shutdown()
   if (state == CONNECTED) {
     finisher.stop();
   }
-  monclient.shutdown();
   bool need_objecter = false;
   if (objecter && state == CONNECTED) {
     need_objecter = true;
@@ -238,6 +237,7 @@ void librados::RadosClient::shutdown()
   state = DISCONNECTED;
   timer.shutdown();   // will drop+retake lock
   lock.Unlock();
+  monclient.shutdown();
   if (need_objecter)
     objecter->shutdown_unlocked();
   if (messenger) {
