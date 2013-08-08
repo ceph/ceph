@@ -321,7 +321,7 @@ def admin_socket(asok_path, cmd, format=''):
     sigdict = parse_json_funcsigs(cmd_json, 'cli')
     valid_dict = validate_command(sigdict, cmd)
     if not valid_dict:
-        return -errno.EINVAL
+        raise RuntimeError('invalid command')
 
     if format:
         valid_dict['format'] = format
@@ -515,6 +515,7 @@ def main():
                     print admin_socket(childargs[1], childargs[2:], format)
                 except Exception as e:
                     print >> sys.stderr, 'admin_socket: {0}'.format(e)
+                    return errno.EINVAL
                 return 0
             else:
                 # try resolve daemon name
@@ -523,10 +524,11 @@ def main():
                     print admin_socket(path, childargs[2:], format)
                 except Exception as e:
                     print >> sys.stderr, 'admin_socket: {0}'.format(e)
+                    return errno.EINVAL
                 return 0
         else:
             print >> sys.stderr, 'Daemon requires at least 2 arguments'
-            return 1
+            return errno.EINVAL
 
     # handle any 'generic' ceph arguments that we didn't parse here
     global cluster_handle
