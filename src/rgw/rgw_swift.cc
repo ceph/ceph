@@ -28,12 +28,18 @@ protected:
 public:
   RGWValidateSwiftToken(CephContext *_cct, struct rgw_swift_auth_info *_info) : RGWHTTPClient(_cct), info(_info) {}
 
-  int read_header(void *ptr, size_t len);
+  int receive_header(void *ptr, size_t len);
+  int receive_data(void *ptr, size_t len) {
+    return 0;
+  }
+  int send_data(void *ptr, size_t len) {
+    return 0;
+  }
 
   friend class RGWKeystoneTokenCache;
 };
 
-int RGWValidateSwiftToken::read_header(void *ptr, size_t len)
+int RGWValidateSwiftToken::receive_header(void *ptr, size_t len)
 {
   char line[len + 1];
 
@@ -291,10 +297,17 @@ class RGWValidateKeystoneToken : public RGWHTTPClient {
 public:
   RGWValidateKeystoneToken(CephContext *_cct, bufferlist *_bl) : RGWHTTPClient(_cct), bl(_bl) {}
 
-  int read_data(void *ptr, size_t len) {
+  int receive_data(void *ptr, size_t len) {
     bl->append((char *)ptr, len);
     return 0;
   }
+  int receive_header(void *ptr, size_t len) {
+    return 0;
+  }
+  int send_data(void *ptr, size_t len) {
+    return 0;
+  }
+
 };
 
 static RGWKeystoneTokenCache *keystone_token_cache = NULL;
@@ -304,8 +317,14 @@ class RGWGetRevokedTokens : public RGWHTTPClient {
 public:
   RGWGetRevokedTokens(CephContext *_cct, bufferlist *_bl) : RGWHTTPClient(_cct), bl(_bl) {}
 
-  int read_data(void *ptr, size_t len) {
+  int receive_data(void *ptr, size_t len) {
     bl->append((char *)ptr, len);
+    return 0;
+  }
+  int receive_header(void *ptr, size_t len) {
+    return 0;
+  }
+  int send_data(void *ptr, size_t len) {
     return 0;
   }
 };
