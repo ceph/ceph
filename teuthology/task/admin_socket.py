@@ -78,8 +78,7 @@ def _socket_command(ctx, remote, socket_path, command, args):
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'ceph',
                 '--admin-daemon', socket_path,
-                command,
-                ] + args,
+                ] + command.split(' ') + args,
             stdout=json_fp,
             )
         if proc.exitstatus == 0:
