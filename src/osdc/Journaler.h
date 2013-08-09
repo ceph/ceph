@@ -221,7 +221,7 @@ private:
 
   void _issue_prezero();
   void _prezeroed(int r, uint64_t from, uint64_t len);
-  friend class C_Journaler_Prezero;
+  friend struct C_Journaler_Prezero;
 
   // only init_headers when following or first reading off-disk
   void init_headers(Header& h) {

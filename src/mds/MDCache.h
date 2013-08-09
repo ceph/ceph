@@ -51,23 +51,23 @@ class MDirUpdate;
 class MDentryLink;
 class MDentryUnlink;
 class MLock;
-class MMDSFindIno;
-class MMDSFindInoReply;
-class MMDSOpenIno;
-class MMDSOpenInoReply;
+struct MMDSFindIno;
+struct MMDSFindInoReply;
+struct MMDSOpenIno;
+struct MMDSOpenInoReply;
 
 class Message;
 class MClientRequest;
 class MMDSSlaveRequest;
-class MClientSnap;
+struct MClientSnap;
 
 class MMDSFragmentNotify;
 
 class ESubtreeMap;
 
-class Mutation;
-class MDRequest;
-class MDSlaveUpdate;
+struct Mutation;
+struct MDRequest;
+struct MDSlaveUpdate;
 
 
 // flags for predirty_journal_parents()
@@ -801,8 +801,8 @@ protected:
   void handle_open_ino(MMDSOpenIno *m);
   void handle_open_ino_reply(MMDSOpenInoReply *m);
   friend class C_MDC_OpenInoBacktraceFetched;
-  friend class C_MDC_OpenInoTraverseDir;
-  friend class C_MDC_OpenInoParentOpened;
+  friend struct C_MDC_OpenInoTraverseDir;
+  friend struct C_MDC_OpenInoParentOpened;
 
 public:
   void kick_open_ino_peers(int who);

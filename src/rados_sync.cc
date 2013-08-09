@@ -346,13 +346,13 @@ Xattr::~Xattr() {
   free(data);
 }
 
-bool Xattr::operator==(const struct Xattr &rhs) const {
+bool Xattr::operator==(const class Xattr &rhs) const {
   if (len != rhs.len)
     return false;
   return (memcmp(data, rhs.data, len) == 0);
 }
 
-bool Xattr::operator!=(const struct Xattr &rhs) const {
+bool Xattr::operator!=(const class Xattr &rhs) const {
   return !((*this) == rhs);
 }
 

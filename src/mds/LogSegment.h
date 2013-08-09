@@ -31,7 +31,7 @@ class CDir;
 class CInode;
 class CDentry;
 class MDS;
-class MDSlaveUpdate;
+struct MDSlaveUpdate;
 
 class LogSegment {
  public:
