@@ -21,9 +21,9 @@ public:
     headers.push_back(pair<string, string>(name, val));
   }
 
-  virtual int receive_header(void *ptr, size_t len) { return 0; }
-  virtual int receive_data(void *ptr, size_t len) { return 0; }
-  virtual int send_data(void *ptr, size_t len) { return 0; }
+  virtual int receive_header(void *ptr, size_t len) = 0;
+  virtual int receive_data(void *ptr, size_t len) = 0;
+  virtual int send_data(void *ptr, size_t len) = 0;
 
   void set_send_length(size_t len) {
     send_len = len;
