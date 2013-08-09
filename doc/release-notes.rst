@@ -2,22 +2,26 @@
  Release Notes
 ===============
 
-v0.67-rc2
----------
+v0.67 "Dumpling"
+----------------
 
-This is a release candidate for v0.67, code-named "Dumpling."  Any
-users who are interested in testing the upcoming release are
-encouraged to do so.
-
-The headline features for this release include:
+This is the fourth major release of Ceph, code-named "Dumpling."  The
+headline features for this release include:
 
 * Multi-site support for radosgw.  This includes the ability to set up
   separate "regions" in the same or different Ceph clusters that share
   a single S3/Swift bucket/container namespace.
 
-* RESTful API endpoint for Ceph administration.
+* RESTful API endpoint for Ceph cluster administration.
+  ceph-rest-api, a wrapper around ceph_rest_api.py, can be used to
+  start up a test single-threaded HTTP server that provides access to
+  cluster information and administration in very similar ways to the
+  ceph commandline tool.  ceph_rest_api.py can be used as a WSGI
+  application for deployment in a more-capable web server.  See
+  ceph-rest-api.8 for more.
 
 * Object namespaces in librados.
+
 
 Upgrading from v0.66
 ~~~~~~~~~~~~~~~~~~~~
@@ -39,27 +43,50 @@ Upgrading from v0.66
   with '--format=<format>', where <format> can be 'json', 'json-pretty',
   'xml', or 'xml-pretty'.
 
-* ceph-rest-api, a wrapper around ceph_rest_api.py, can be used to start
-  up a test single-threaded HTTP server that provides access to cluster
-  information and administration in very similar ways to the ceph
-  commandline tool.  ceph_rest_api.py can be used as a WSGI application
-  for deployment in a more-capable web server.  See ceph-rest-api.8
-  for more.
+* The 'ceph pg <pgid> ...' commands (like 'ceph pg <pgid> query') are
+  deprecated in favor of 'ceph tell <pgid> ...'.  This makes the
+  distinction between 'ceph pg <command> <pgid>' and 'ceph pg <pgid>
+  <command>' less awkward by making it clearer that the 'tell'
+  commands are talking to the OSD serving the placement group, not the
+  monitor.
+
+* The 'ceph --admin-daemon <path> <command ...>' used to accept the
+  command and arguments as either a single string or as separate
+  arguments.  It will now only accept the command spread across
+  multiple arguments.  This means that any script which does something
+  like::
+
+    ceph --admin-daemon /var/run/ceph/ceph-osd.0.asok 'config set debug_ms 1'
+
+  needs to remove the quotes.  Also, note that the above can now be
+  shortened to::
+
+    ceph daemon osd.0 config set debug_ms 1
 
 * The radosgw caps were inconsistently documented to be either 'mon =
   allow r' or 'mon = allow rw'.  The 'mon = allow rw' is required for
   radosgw to create its own pools.  All documentation has been updated
   accordingly.
 
-* rgw copy object operation may return extra progress info during the
-  operation. At this point it will only happen when doing cross zone
-  copy operations. The S3 response will now return extra <Progress>
-  field under the <CopyResult> container. The Swift response will
-  now send the progress as a json array.
+* The radosgw copy object operation may return extra progress info
+  during the operation. At this point it will only happen when doing
+  cross zone copy operations. The S3 response will now return extra
+  <Progress> field under the <CopyResult> container. The Swift
+  response will now send the progress as a json array.
 
 * In v0.66 and v0.65 the HASHPSPOOL pool flag was enabled by default
   for new pools, but has been disabled again until Linux kernel client
   support reaches more distributions and users.
+
+* ceph-osd now requires a max file descriptor limit (e.g., ``ulimit -n
+  ...``) of at least
+  filestore_wbthrottle_(xfs|btrfs)_inodes_hard_limit (5000 by default)
+  in order to accomodate the new write back throttle system.  On
+  Ubuntu, upstart now sets the fd limit to 32k.  On other platforms,
+  the sysvinit script will set it to 32k by default (still
+  overrideable via max_open_files).  If this field has been customized
+  in ceph.conf it should likely be adjusted upwards.
+
 
 Notable changes since v0.66
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -91,6 +118,120 @@ Notable changes since v0.66
 * msgr: fixed various memory leaks related to network sessions
 * ceph-disk: fixes for unusual device names, partition detection
 * hypertable: fixes for hypertable CephBroker bindings
+* use SSE4.2 crc32c instruction if present
+
+
+Notable changes since v0.61 "Cuttlefish"
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* add 'config get' admin socket command
+* ceph-conf: --show-config-value now reflects daemon defaults
+* ceph-disk: add '[un]suppress-active DEV' command
+* ceph-disk: avoid mounting over an existing osd in /var/lib/ceph/osd/*
+* ceph-disk: fixes for unusual device names, partition detection
+* ceph-disk: improved handling of odd device names
+* ceph-disk: many fixes for RHEL/CentOS, Fedora, wheezy
+* ceph-disk: simpler, more robust locking
+* ceph-fuse, libcephfs: fix a few caps revocation bugs
+* ceph-fuse, libcephfs: fix read zeroing at EOF
+* ceph-fuse, libcephfs: fix request refcounting bug (hang on shutdown)
+* ceph-fuse, libcephfs: fix truncatation bug on >4MB files (Yan, Zheng)
+* ceph-fuse, libcephfs: fix for cap release/hang
+* ceph-fuse: add ioctl support
+* ceph-fuse: fixed long-standing O_NOATIME vs O_LAZY bug
+* ceph-rest-api: RESTful endpoint for administer cluster (mirrors CLI)
+* ceph, librados: fix resending of commands on mon reconnect
+* daemons: create /var/run/ceph as needed
+* debian wheezy: fix udev rules
+* debian, specfile: packaging cleanups
+* debian: fix upstart behavior with upgrades
+* debian: rgw: stop daemon on uninstall
+* debian: stop daemons on uninstall; fix dependencies
+* hypertable: fixes for hypertable CephBroker bindings
+* librados python binding cleanups
+* librados python: fix xattrs > 4KB (Josh Durgin)
+* librados: configurable max object size (default 100 GB)
+* librados: new calls to administer the cluster
+* librbd: ability to read from local replicas
+* librbd: locking tests (Josh Durgin)
+* librbd: make default options/features for newly created images (e.g., via qemu-img) configurable
+* librbd: parallelize delete, rollback, flatten, copy, resize
+* many many fixes from static code analysis (Danny Al-Gaaf)
+* mds: fix O_TRUNC locking
+* mds: fix bug in LOOKUPINO (used by nfs reexport)
+* mds: fix rare hang after client restart
+* mds: fix several bugs (Yan, Zheng)
+* mds: many backpointer improvements (Yan, Zheng)
+* mds: many fixes for mds clustering
+* mds: misc stability fixes (Yan, Zheng, Greg Farnum)
+* mds: new robust open-by-ino support (Yan, Zheng)
+* mds: support robust lookup by ino number (good for NFS) (Yan, Zheng)
+* mon, ceph: huge revamp of CLI and internal admin API. (Dan Mick)
+* mon, osd: fix old osdmap trimming logic
+* mon, osd: many memory leaks fixed
+* mon: better trim/compaction behavior
+* mon: collect metadata on osd performance
+* mon: enable leveldb caching by default
+* mon: expanded --format=<json|xml|...> support for monitor commands
+* mon: fix election timeout
+* mon: fix leveldb compression, trimming
+* mon: fix start fork behavior
+* mon: fix units in 'ceph df' output
+* mon: fix validation of mds ids from CLI commands
+* mon: fixed bugs in recovery and io rate reporting (negative/large values)
+* mon: generate health warnings from slow or stuck requests
+* mon: many bug fixes (paxos and services, sync)
+* mon: many stability fixes (Joao Luis)
+* mon: more efficient storage of PG metadata
+* mon: new --extract-monmap to aid disaster recovery
+* mon: new capability syntax
+* mon: scrub function for verifying data integrity
+* mon: simplify PaxosService vs Paxos interaction, fix readable/writeable checks
+* mon: sync improvements (performance and robustness)
+* mon: tuning, performance improvements
+* msgr: fix various memory leaks
+* msgr: fixed race condition in inter-osd network communication
+* msgr: fixed various memory leaks related to network sessions
+* osd, librados: support for object namespaces
+* osd, mon: optionally dump leveldb transactions to a log
+* osd: automatically enable xattrs on leveldb as necessary
+* osd: avoid osd flapping from asymmetric network failure
+* osd: break blacklisted client watches (David Zafman)
+* osd: close narrow journal race
+* osd: do not use fadvise(DONTNEED) on XFS (data corruption on power cycle)
+* osd: fix for an op ordering bug
+* osd: fix handling for split after upgrade from bobtail
+* osd: fix incorrect mark-down of osds
+* osd: fix internal heartbeart timeouts when scrubbing very large objects
+* osd: fix memory/network inefficiency during deep scrub
+* osd: fixed problem with front-side heartbeats and mixed clusters (David Zafman)
+* osd: limit number of incremental osdmaps sent to peers (could cause osds to be wrongly marked down)
+* osd: many bug fixes
+* osd: monitor both front and back interfaces
+* osd: more efficient small object recovery
+* osd: new writeback throttling (for less bursty write performance) (Sam Just)
+* osd: pg log (re)writes are now vastly more efficient (faster peering) (Sam Just)
+* osd: ping/heartbeat on public and private interfaces
+* osd: prioritize recovery for degraded PGs
+* osd: re-use partially deleted PG contents when present (Sam Just)
+* osd: recovery and peering performance improvements
+* osd: resurrect partially deleted PGs
+* osd: verify both front and back network are working before rejoining cluster
+* rados: clonedata command for cli
+* radosgw-admin: create keys for new users by default
+* rbd: /etc/ceph/rbdmap file for mapping rbd images on startup
+* rgw: COPY object support between regions
+* rgw: fix CORS bugs
+* rgw: fix locking issue, user operation mask,
+* rgw: fix radosgw-admin buckets list (Yehuda Sadeh)
+* rgw: fix usage log scanning for large, untrimmed logs
+* rgw: handle deep uri resources
+* rgw: infrastructure to support georeplication of bucket and user metadata
+* rgw: infrastructure to support georeplication of bucket data
+* rgw: multi-region support
+* sysvinit: fix enumeration of local daemons
+* sysvinit: fix osd crush weight calculation when using -a
+* sysvinit: handle symlinks in /var/lib/ceph/osd/*
 * use SSE4.2 crc32c instruction if present
 
 
