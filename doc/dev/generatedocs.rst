@@ -46,7 +46,7 @@ To run Sphinx, at least the following are required:
 Execute ``apt-get install`` for each dependency that isn't installed
 on your host.::
 
-	sudo apt-get install python-dev python-pip python-virtualenv libxml2-dev libxslt-dev doxygen ditaa graphviz
+	sudo apt-get install python-dev python-pip python-virtualenv libxml2-dev libxslt-dev doxygen ditaa graphviz ant
 
 
 
