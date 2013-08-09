@@ -50,15 +50,14 @@ static const struct sockaddr *find_ip_in_subnet_list(CephContext *cct,
 
 // observe this change
 struct Observer : public md_config_obs_t {
-  const char *conf_var;
-  Observer(const char *c) : conf_var(c) {}
+  const char *keys[2];
+  Observer(const char *c) {
+    keys[0] = c;
+    keys[1] = NULL;
+  }
 
   const char** get_tracked_conf_keys() const {
-    static const char *foo[] = {
-      conf_var,
-      NULL
-    };
-    return foo;
+    return (const char **)keys;
   }
   void handle_conf_change(const struct md_config_t *conf,
 			  const std::set <std::string> &changed) {
