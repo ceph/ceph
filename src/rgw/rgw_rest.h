@@ -263,13 +263,14 @@ class RGWHandler_SWIFT_Auth;
 class RGWHandler_ObjStore_S3;
 
 class RGWRESTMgr {
+  bool should_log;
 protected:
   map<string, RGWRESTMgr *> resource_mgrs;
   multimap<size_t, string> resources_by_size;
   RGWRESTMgr *default_mgr;
 
 public:
-  RGWRESTMgr() : default_mgr(NULL) {}
+  RGWRESTMgr() : should_log(false), default_mgr(NULL) {}
   virtual ~RGWRESTMgr();
 
   void register_resource(string resource, RGWRESTMgr *mgr);
@@ -278,6 +279,9 @@ public:
   virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri, string *out_uri);
   virtual RGWHandler *get_handler(struct req_state *s) { return NULL; }
   virtual void put_handler(RGWHandler *handler) { delete handler; }
+
+  void set_logging(bool _should_log) { should_log = _should_log; }
+  bool get_logging() { return should_log; }
 };
 
 class RGWREST {
@@ -287,7 +291,7 @@ class RGWREST {
 public:
   RGWREST() {}
   RGWHandler *get_handler(RGWRados *store, struct req_state *s, RGWClientIO *cio,
-			  int *init_error);
+			  RGWRESTMgr **pmgr, int *init_error);
   void put_handler(RGWHandler *handler) {
     mgr.put_handler(handler);
   }

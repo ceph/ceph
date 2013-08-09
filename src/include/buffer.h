@@ -16,17 +16,18 @@
 #define CEPH_BUFFER_H
 
 #if defined(__linux__)
+#include <stdlib.h>
 #include <linux/types.h>
 #elif defined(__FreeBSD__)
 #include <sys/types.h>
 #include "include/inttypes.h"
+#include <stdlib.h>
 #endif
 
 #ifndef _XOPEN_SOURCE
 # define _XOPEN_SOURCE 600
 #endif
 
-#include <stdlib.h>
 #include <stdio.h>
 
 #ifdef DARWIN

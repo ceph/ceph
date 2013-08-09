@@ -111,7 +111,7 @@ COMMAND("pg getmap", "get binary pg map to -o/stdout", "pg", "r", "cli,rest")
 COMMAND("pg send_pg_creates", "trigger pg creates to be issued",\
 	"pg", "rw", "cli,rest")
 COMMAND("pg dump " \
-	"name=dumpcontents,type=CephChoices,strings=all|summary|sum|pools|osds|pgs,n=N,req=false", \
+	"name=dumpcontents,type=CephChoices,strings=all|summary|sum|pools|osds|pgs|pgs_brief,n=N,req=false", \
 	"show human-readable versions of pg map", "pg", "r", "cli,rest")
 COMMAND("pg dump_json " \
 	"name=dumpcontents,type=CephChoices,strings=all|summary|sum|pools|osds|pgs,n=N,req=false", \
@@ -418,8 +418,7 @@ COMMAND("osd crush rule create-simple " \
 	"create crush rule <name> in <root> of type <type>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush rule rm " \
-	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
-	"name=name,type=CephString", \
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] ",	\
 	"remove crush rule <name>", "osd", "rw", "cli,rest")
 COMMAND("osd setmaxosd " \
 	"name=newmax,type=CephInt,range=0", \
@@ -427,10 +426,10 @@ COMMAND("osd setmaxosd " \
 COMMAND("osd pause", "pause osd", "osd", "rw", "cli,rest")
 COMMAND("osd unpause", "unpause osd", "osd", "rw", "cli,rest")
 COMMAND("osd set " \
-	"name=key,type=CephChoices,strings=pause|noup|nodown|noout|noin|nobackfile|norecover", \
+	"name=key,type=CephChoices,strings=pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|nodeep-scrub", \
 	"set <key>", "osd", "rw", "cli,rest")
 COMMAND("osd unset " \
-	"name=key,type=CephChoices,strings=pause|noup|nodown|noout|noin|nobackfile|norecover", \
+	"name=key,type=CephChoices,strings=pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|nodeep-scrub", \
 	"unset <key>", "osd", "rw", "cli,rest")
 COMMAND("osd cluster_snap", "take cluster snapshot (disabled)", \
 	"osd", "r", "")
