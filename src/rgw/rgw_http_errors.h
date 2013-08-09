@@ -47,6 +47,7 @@ const static struct rgw_http_errors RGW_HTTP_ERRORS[] = {
     { ERR_PRECONDITION_FAILED, 412, "PreconditionFailed" },
     { ERANGE, 416, "InvalidRange" },
     { ERR_UNPROCESSABLE_ENTITY, 422, "UnprocessableEntity" },
+    { ERR_LOCKED, 423, "Locked" },
     { ERR_INTERNAL_ERROR, 500, "InternalError" },
 };
 
