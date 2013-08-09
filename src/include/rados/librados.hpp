@@ -18,12 +18,12 @@ namespace librados
 {
   using ceph::bufferlist;
 
-  class AioCompletionImpl;
+  struct AioCompletionImpl;
   class IoCtx;
-  class IoCtxImpl;
+  struct IoCtxImpl;
   class ObjectOperationImpl;
-  class ObjListCtx;
-  class PoolAsyncCompletionImpl;
+  struct ObjListCtx;
+  struct PoolAsyncCompletionImpl;
   class RadosClient;
 
   typedef void *list_ctx_t;

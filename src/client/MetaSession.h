@@ -11,10 +11,10 @@
 
 #include "messages/MClientCapRelease.h"
 
-class Cap;
+struct Cap;
 class Inode;
-class CapSnap;
-class MetaRequest;
+struct CapSnap;
+struct MetaRequest;
 class MClientCapRelease;
 
 struct MetaSession {

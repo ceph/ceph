@@ -37,7 +37,7 @@ public:
   RGWRESTMgr_SWIFT_Auth() {}
   virtual ~RGWRESTMgr_SWIFT_Auth() {}
 
-  virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri) {
+  virtual RGWRESTMgr *get_resource_mgr(struct req_state *s, const string& uri, string *out_uri) {
     return this;
   }
   virtual RGWHandler *get_handler(struct req_state *s) {
