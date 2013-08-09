@@ -691,26 +691,34 @@ def main():
                 childargs.extend(['--format', parsed_args.output_format])
             ret, outbuf, outs = send_command(cluster_handle, target, childargs,
                                              inbuf)
-        elif ret:
-            if ret < 0:
-                outs = 'problem getting command descriptions from {0}.{1}'.format(*target)
-        else:
-            sigdict = parse_json_funcsigs(outbuf, 'cli')
 
-            if parsed_args.completion:
-                return complete(sigdict, childargs, target)
+            if ret == -errno.EINVAL:
+                # did we race with a mon upgrade?  try again!
+                ret, outbuf, outs = json_command(cluster_handle, target=target,
+                                                 prefix='get_command_descriptions')
+                if ret == 0:
+                    compat = False  # yep, carry on
+        if not compat:
+            if ret:
+                if ret < 0:
+                    outs = 'problem getting command descriptions from {0}.{1}'.format(*target)
+            else:
+                sigdict = parse_json_funcsigs(outbuf, 'cli')
 
-            ret, outbuf, outs = new_style_command(parsed_args, childargs, target,
-                                                  sigdict, inbuf, verbose)
+                if parsed_args.completion:
+                    return complete(sigdict, childargs, target)
 
-            # debug tool: send any successful command *again* to
-            # verify that it is idempotent.
-            if not ret and 'CEPH_CLI_TEST_DUP_COMMAND' in os.environ:
                 ret, outbuf, outs = new_style_command(parsed_args, childargs, target,
                                                       sigdict, inbuf, verbose)
-                if ret < 0:
-                    ret = -ret
-                    print >> sys.stderr, prefix + 'Second attempt of previously successful command failed with {0}: {1}'.format(errno.errorcode[ret], outs)
+
+                # debug tool: send any successful command *again* to
+                # verify that it is idempotent.
+                if not ret and 'CEPH_CLI_TEST_DUP_COMMAND' in os.environ:
+                    ret, outbuf, outs = new_style_command(parsed_args, childargs, target,
+                                                          sigdict, inbuf, verbose)
+                    if ret < 0:
+                        ret = -ret
+                        print >> sys.stderr, prefix + 'Second attempt of previously successful command failed with {0}: {1}'.format(errno.errorcode[ret], outs)
 
         if ret < 0:
             ret = -ret
