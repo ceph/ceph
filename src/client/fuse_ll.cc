@@ -536,9 +536,9 @@ static int getgroups_cb(void *handle, uid_t uid, gid_t **sgids)
 
 static void invalidate_cb(void *handle, vinodeno_t vino, int64_t off, int64_t len)
 {
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
   CephFuse::Handle *cfuse = (CephFuse::Handle *)handle;
   fuse_ino_t fino = cfuse->make_fake_ino(vino.ino, vino.snapid);
-#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
   fuse_lowlevel_notify_inval_inode(cfuse->ch, fino, off, len);
 #endif
 }
