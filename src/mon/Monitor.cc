@@ -1937,7 +1937,7 @@ void Monitor::handle_command(MMonCommand *m)
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
   if (prefix == "get_command_descriptions") {
     int cmdnum = 0;
-    JSONFormatter *f = new JSONFormatter();
+    Formatter *f = new_formatter("json");
     f->open_object_section("command_descriptions");
     for (MonCommand *cp = mon_commands;
 	 cp < &mon_commands[ARRAY_SIZE(mon_commands)]; cp++) {
@@ -1952,9 +1952,8 @@ void Monitor::handle_command(MMonCommand *m)
     f->close_section();	// command_descriptions
 
     bufferlist rdata;
-    f->flush(ds);
+    f->flush(rdata);
     delete f;
-    rdata.append(ds);
     reply_command(m, 0, "", rdata, 0);
     return;
   }
@@ -2016,13 +2015,13 @@ void Monitor::handle_command(MMonCommand *m)
   }
 
   if (prefix == "fsid") {
-    ds << monmap->fsid;
     if (f) {
       f->open_object_section("fsid");
       f->dump_stream("fsid") << monmap->fsid;
       f->close_section();
       f->flush(rdata);
     } else {
+      ds << monmap->fsid;
       rdata.append(ds);
     }
     reply_command(m, 0, "", rdata, 0);

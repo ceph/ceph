@@ -626,7 +626,6 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
   } else if (prefix == "auth list") {
     if (f) {
       mon->key_server.encode_formatted("auth", f.get(), rdata);
-      f->flush(rdata);
     } else {
       mon->key_server.encode_plaintext(rdata);
       if (rdata.length() > 0)

@@ -156,17 +156,7 @@ private:
   static const uint8_t flag_sub_op_sent = 1 << 4;
   static const uint8_t flag_commit_sent = 1 << 5;
 
-  OpRequest(Message *req, OpTracker *tracker) :
-    request(req), xitem(this),
-    rmw_flags(0),
-    warn_interval_multiplier(1),
-    lock("OpRequest::lock"),
-    tracker(tracker),
-    hit_flag_points(0), latest_flag_point(0),
-    seq(0) {
-    received_time = request->get_recv_stamp();
-    tracker->register_inflight_op(&xitem);
-  }
+  OpRequest(Message *req, OpTracker *tracker);
 public:
   ~OpRequest() {
     assert(request);

@@ -1358,7 +1358,6 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     } else {
       ds << pg_map;
     }
-    rdata.append(ds);
     r = 0;
   } else if (prefix == "pg getmap") {
     pg_map.encode(rdata);
@@ -1404,7 +1403,10 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 	  pg_map.dump_osd_stats(f.get());
 	}
 	if (what.count("pgs")) {
-	  pg_map.dump_pg_stats(f.get());
+	  pg_map.dump_pg_stats(f.get(), false);
+	}
+	if (what.count("pgs_brief")) {
+	  pg_map.dump_pg_stats(f.get(), true);
 	}
       }
       f->flush(ds);

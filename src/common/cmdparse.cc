@@ -27,7 +27,7 @@ using namespace std;
  */
 
 void
-dump_cmd_to_json(JSONFormatter *f, const string& cmd)
+dump_cmd_to_json(Formatter *f, const string& cmd)
 {
   // put whole command signature in an already-opened container
   // elements are: "name", meaning "the typeless name that means a literal"
@@ -77,7 +77,7 @@ dump_cmd_to_json(JSONFormatter *f, const string& cmd)
 }
 
 void
-dump_cmd_and_help_to_json(JSONFormatter *jf,
+dump_cmd_and_help_to_json(Formatter *jf,
 			  const string& secname,
 			  const string& cmdsig,
 			  const string& helptext)
@@ -91,7 +91,7 @@ dump_cmd_and_help_to_json(JSONFormatter *jf,
 }
 
 void
-dump_cmddesc_to_json(JSONFormatter *jf,
+dump_cmddesc_to_json(Formatter *jf,
 		     const string& secname,
 		     const string& cmdsig,
 		     const string& helptext,

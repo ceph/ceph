@@ -645,7 +645,9 @@ public:
 
   virtual void check_local() = 0;
 
-  virtual int start_recovery_ops(int max, RecoveryCtx *prctx) = 0;
+  virtual int start_recovery_ops(
+    int max, RecoveryCtx *prctx,
+    ThreadPool::TPHandle &handle) = 0;
 
   void purge_strays();
 
@@ -1804,12 +1806,18 @@ public:
 
 
   // abstract bits
-  void do_request(OpRequestRef op);
+  void do_request(
+    OpRequestRef op,
+    ThreadPool::TPHandle &handle
+  );
 
   virtual void do_op(OpRequestRef op) = 0;
   virtual void do_sub_op(OpRequestRef op) = 0;
   virtual void do_sub_op_reply(OpRequestRef op) = 0;
-  virtual void do_scan(OpRequestRef op) = 0;
+  virtual void do_scan(
+    OpRequestRef op,
+    ThreadPool::TPHandle &handle
+  ) = 0;
   virtual void do_backfill(OpRequestRef op) = 0;
   virtual void do_push(OpRequestRef op) = 0;
   virtual void do_pull(OpRequestRef op) = 0;

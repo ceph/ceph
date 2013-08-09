@@ -25,6 +25,29 @@ expect_false()
 	if "$@"; then return 1; else return 0; fi
 }
 
+TMPFILE=/tmp/test_invalid.$$
+trap "rm $TMPFILE" 0
+
+function check_response()
+{
+	retcode=$1
+	expected_retcode=$2
+	expected_stderr_string=$3
+	if [ $1 != $2 ] ; then
+		echo "return code invalid: got $1, expected $2" >&2
+		exit 1
+	fi
+
+	if ! grep "$3" $TMPFILE >/dev/null 2>&1 ; then 
+		echo "Didn't find $3 in stderr output" >&2
+		echo "Stderr: " >&2
+		cat $TMPFILE >&2
+		exit 1
+	fi
+}
+
+
+
 #
 # Assumes there are at least 3 MDSes and two OSDs
 #
@@ -132,6 +155,14 @@ ceph osd scrub 0
 ceph osd deep-scrub 0
 ceph osd repair 0
 
+for f in noup nodown noin noout noscrub nodeep-scrub nobackfill norecover
+do
+    ceph osd set $f
+    ceph osd unset $f
+done
+expect_false ceph osd set bogus
+expect_false ceph osd unset bogus
+
 ceph osd set noup
 ceph osd down 0
 ceph osd dump | grep 'osd.0 down'
@@ -204,6 +235,14 @@ ceph pg debug unfound_objects_exist
 ceph pg debug degraded_pgs_exist
 ceph pg deep-scrub 0.0
 ceph pg dump
+ceph pg dump pgs_brief --format=json
+ceph pg dump pgs --format=json
+ceph pg dump pools --format=json
+ceph pg dump osds --format=json
+ceph pg dump sum --format=json
+ceph pg dump all --format=json
+ceph pg dump pgs_brief osds --format=json
+ceph pg dump pools osds pgs_brief --format=json
 ceph pg dump_json
 ceph pg dump_pools_json
 ceph pg dump_stuck inactive
@@ -225,6 +264,8 @@ ceph pg set_nearfull_ratio 0.90
 ceph pg dump --format=plain | grep '^nearfull_ratio 0.9'
 ceph pg set_nearfull_ratio 0.85
 ceph pg stat | grep 'pgs:'
+ceph pg 0.0 query
+ceph tell 0.0 query
 ceph quorum enter
 ceph quorum_status
 ceph report | grep osd_stats
@@ -254,5 +295,19 @@ ceph osd pool set data size 2
 ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 2'
 
 ceph osd thrash 10
+
+set +e
+
+# expect error about missing 'pool' argument
+ceph osd map 2>$TMPFILE; check_response $? 22 'pool'
+
+# expect error about unused argument foo
+ceph osd ls foo 2>$TMPFILE; check_response $? 22 'unused'
+
+# expect "not in range" for invalid full ratio
+ceph pg set_full_ratio 95 2>$TMPFILE; check_response $? 22 'not in range'
+
+# expect "not in range" for invalid overload percentage
+ceph osd reweight-by-utilization 80 2>$TMPFILE; check_response $? 22 'not in range'
 
 echo OK
