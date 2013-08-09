@@ -15,7 +15,7 @@ class Mutex;
 
 namespace librbd {
 
-  class ImageCtx;
+  struct ImageCtx;
 
   class LibrbdWriteback : public WritebackHandler {
   public:

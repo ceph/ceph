@@ -139,8 +139,8 @@ class Xattr {
 public:
   Xattr(char *data_, ssize_t len_);
   ~Xattr();
-  bool operator==(const struct Xattr &rhs) const;
-  bool operator!=(const struct Xattr &rhs) const;
+  bool operator==(const class Xattr &rhs) const;
+  bool operator!=(const class Xattr &rhs) const;
 
   char *data;
   ssize_t len;

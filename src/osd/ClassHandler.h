@@ -12,7 +12,7 @@
 class ClassHandler
 {
 public:
-  class ClassData;
+  struct ClassData;
 
   struct ClassMethod {
     struct ClassHandler::ClassData *cls;

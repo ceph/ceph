@@ -851,7 +851,7 @@ private:
   void test_ops(std::string command, std::string args, ostream& ss);
   friend class TestOpsSocketHook;
   TestOpsSocketHook *test_ops_hook;
-  friend class C_CompleteSplits;
+  friend struct C_CompleteSplits;
 
   // -- op queue --
 
@@ -1176,7 +1176,7 @@ protected:
   void start_waiting_for_healthy();
   bool _is_healthy();
   
-  friend class C_OSD_GetVersion;
+  friend struct C_OSD_GetVersion;
 
   // -- alive --
   epoch_t up_thru_wanted;
@@ -1688,7 +1688,7 @@ public:
   void handle_signal(int signum);
 
   void handle_rep_scrub(MOSDRepScrub *m);
-  void handle_scrub(class MOSDScrub *m);
+  void handle_scrub(struct MOSDScrub *m);
   void handle_osd_ping(class MOSDPing *m);
   void handle_op(OpRequestRef op);
 

@@ -45,7 +45,7 @@ class ObjectCacher {
  public:
   CephContext *cct;
   class Object;
-  class ObjectSet;
+  struct ObjectSet;
   class C_ReadFinish;
 
   typedef void (*flush_set_callback_t) (void *p, ObjectSet *oset);
@@ -165,7 +165,7 @@ class ObjectCacher {
     int ref;
     ObjectCacher *oc;
     sobject_t oid;
-    friend class ObjectSet;
+    friend struct ObjectSet;
 
   public:
     ObjectSet *oset;

@@ -38,7 +38,7 @@ inline const char *get_lock_type_name(int t) {
   }
 }
 
-class Mutation;
+struct Mutation;
 
 extern "C" {
 #include "locks.h"

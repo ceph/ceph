@@ -31,7 +31,7 @@ class DispatchQueue;
 class Pipe;
 class SimpleMessenger;
 class Message;
-class Connection;
+struct Connection;
 
 /**
  * The DispatchQueue contains all the Pipes which have Messages

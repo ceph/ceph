@@ -25,7 +25,7 @@
 #include "common/TrackedOp.h"
 #include "osd/osd_types.h"
 
-class OpRequest;
+struct OpRequest;
 typedef std::tr1::shared_ptr<OpRequest> OpRequestRef;
 class OpHistory {
   set<pair<utime_t, OpRequestRef> > arrived;

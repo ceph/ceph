@@ -24,7 +24,7 @@
 #include "common/Timer.h"
 
 class CephContext;
-class MAuthReply;
+struct MAuthReply;
 class AuthClientHandler;
 class RotatingKeyRing;
 

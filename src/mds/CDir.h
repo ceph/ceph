@@ -40,7 +40,7 @@ class MDCluster;
 class Context;
 class bloom_filter;
 
-class ObjectOperation;
+struct ObjectOperation;
 
 ostream& operator<<(ostream& out, class CDir& dir);
 class CDir : public MDSCacheObject {

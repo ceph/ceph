@@ -11,7 +11,7 @@
 
 class RGWRados;
 class JSONObj;
-class RGWObjVersionTracker;
+struct RGWObjVersionTracker;
 
 struct obj_version;
 
@@ -158,7 +158,7 @@ public:
   int unlock(int shard_id, string& zone_id, string& owner_id);
 };
 
-class RGWMetadataLogData;
+struct RGWMetadataLogData;
 
 class RGWMetadataManager {
   map<string, RGWMetadataHandler *> handlers;
