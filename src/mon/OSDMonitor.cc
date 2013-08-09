@@ -1966,8 +1966,9 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   if (prefix == "osd stat") {
     osdmap.print_summary(f.get(), ds);
     if (f)
-      f->flush(ds);
-    rdata.append(ds);
+      f->flush(rdata);
+    else
+      rdata.append(ds);
   }
   else if (prefix == "osd dump" ||
 	   prefix == "osd tree" ||
@@ -2080,9 +2081,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       f->dump_string(p->first.c_str(), p->second);
     f->close_section();
     f->close_section();
-    f->flush(ds);
-    ds << "\n";
-    rdata.append(ds);
+    f->flush(rdata);
   } else if (prefix == "osd map") {
     string poolstr, objstr, namespacestr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
@@ -3072,6 +3071,10 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       return prepare_set_flag(m, CEPH_OSDMAP_NOBACKFILL);
     else if (key == "norecover")
       return prepare_set_flag(m, CEPH_OSDMAP_NORECOVER);
+    else if (key == "noscrub")
+      return prepare_set_flag(m, CEPH_OSDMAP_NOSCRUB);
+    else if (key == "nodeep-scrub")
+      return prepare_set_flag(m, CEPH_OSDMAP_NODEEP_SCRUB);
 
   } else if (prefix == "osd unset") {
     string key;
@@ -3090,6 +3093,10 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       return prepare_unset_flag(m, CEPH_OSDMAP_NOBACKFILL);
     else if (key == "norecover")
       return prepare_unset_flag(m, CEPH_OSDMAP_NORECOVER);
+    else if (key == "noscrub")
+      return prepare_unset_flag(m, CEPH_OSDMAP_NOSCRUB);
+    else if (key == "nodeep-scrub")
+      return prepare_unset_flag(m, CEPH_OSDMAP_NODEEP_SCRUB);
 
   } else if (prefix == "osd cluster_snap") {
     // ** DISABLE THIS FOR NOW **

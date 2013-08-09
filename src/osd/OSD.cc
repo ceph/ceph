@@ -3935,7 +3935,6 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     f->close_section();	// command_descriptions
 
     f->flush(ds);
-    odata.append(ds);
     delete f;
     goto out;
   }
@@ -6633,11 +6632,12 @@ bool OSD::_recover_now()
   return true;
 }
 
-void OSD::do_recovery(PG *pg)
+void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
 {
   // see how many we should try to start.  note that this is a bit racy.
   recovery_wq.lock();
-  int max = g_conf->osd_recovery_max_active - recovery_ops_active;
+  int max = MAX(g_conf->osd_recovery_max_active - recovery_ops_active,
+		g_conf->osd_recovery_max_single_start);
   if (max > 0) {
     dout(10) << "do_recovery can start " << max << " (" << recovery_ops_active << "/" << g_conf->osd_recovery_max_active
 	     << " rops)" << dendl;
@@ -6653,7 +6653,7 @@ void OSD::do_recovery(PG *pg)
     recovery_wq.queue(pg);
     return;
   } else {
-    pg->lock();
+    pg->lock_suspend_timeout(handle);
     if (pg->deleting || !(pg->is_active() && pg->is_primary())) {
       pg->unlock();
       goto out;
@@ -6665,7 +6665,7 @@ void OSD::do_recovery(PG *pg)
 #endif
     
     PG::RecoveryCtx rctx = create_context();
-    int started = pg->start_recovery_ops(max, &rctx);
+    int started = pg->start_recovery_ops(max, &rctx, handle);
     dout(10) << "do_recovery started " << started << "/" << max << " on " << *pg << dendl;
 
     /*
@@ -7053,7 +7053,7 @@ void OSD::OpWQ::_process(PGRef pg, ThreadPool::TPHandle &handle)
     if (!(pg_for_processing[&*pg].size()))
       pg_for_processing.erase(&*pg);
   }
-  osd->dequeue_op(pg, op);
+  osd->dequeue_op(pg, op, handle);
   pg->unlock();
 }
 
@@ -7066,7 +7066,9 @@ void OSDService::dequeue_pg(PG *pg, list<OpRequestRef> *dequeued)
 /*
  * NOTE: dequeue called in worker thread, with pg lock
  */
-void OSD::dequeue_op(PGRef pg, OpRequestRef op)
+void OSD::dequeue_op(
+  PGRef pg, OpRequestRef op,
+  ThreadPool::TPHandle &handle)
 {
   utime_t latency = ceph_clock_now(g_ceph_context) - op->request->get_recv_stamp();
   dout(10) << "dequeue_op " << op << " prio " << op->request->get_priority()
@@ -7079,7 +7081,7 @@ void OSD::dequeue_op(PGRef pg, OpRequestRef op)
 
   op->mark_reached_pg();
 
-  pg->do_request(op);
+  pg->do_request(op, handle);
 
   // finish
   dout(10) << "dequeue_op " << op << " finish" << dendl;
@@ -7131,7 +7133,7 @@ void OSD::process_peering_events(
        ++i) {
     set<boost::intrusive_ptr<PG> > split_pgs;
     PG *pg = *i;
-    pg->lock();
+    pg->lock_suspend_timeout(handle);
     curmap = service.get_osdmap();
     if (pg->deleting) {
       pg->unlock();

@@ -20,6 +20,22 @@ static ostream& _prefix(std::ostream* _dout)
   return *_dout << "--OSD::tracker-- ";
 }
 
+OpRequest::OpRequest(Message *req, OpTracker *tracker) :
+  request(req), xitem(this),
+  rmw_flags(0),
+  warn_interval_multiplier(1),
+  lock("OpRequest::lock"),
+  tracker(tracker),
+  hit_flag_points(0), latest_flag_point(0),
+  seq(0) {
+  received_time = request->get_recv_stamp();
+  tracker->register_inflight_op(&xitem);
+  if (req->get_priority() < g_conf->osd_client_op_priority) {
+    // don't warn as quickly for low priority ops
+    warn_interval_multiplier = g_conf->osd_recovery_op_warn_multiple;
+  }
+}
+
 void OpHistory::on_shutdown()
 {
   arrived.clear();

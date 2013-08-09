@@ -1397,7 +1397,9 @@ void PG::queue_op(OpRequestRef op)
   osd->op_wq.queue(make_pair(PGRef(this), op));
 }
 
-void PG::do_request(OpRequestRef op)
+void PG::do_request(
+  OpRequestRef op,
+  ThreadPool::TPHandle &handle)
 {
   // do any pending flush
   do_pending_flush();
@@ -1435,7 +1437,7 @@ void PG::do_request(OpRequestRef op)
     break;
 
   case MSG_OSD_PG_SCAN:
-    do_scan(op);
+    do_scan(op, handle);
     break;
 
   case MSG_OSD_PG_BACKFILL:
@@ -4510,7 +4512,7 @@ void PG::start_flush(ObjectStore::Transaction *t,
   FlushStateRef flush_trigger(
     new FlushState(this, get_osdmap()->get_epoch()));
   t->nop();
-  flushed = false;
+  assert(!flushed);
   on_applied->push_back(new ContainerContext<FlushStateRef>(flush_trigger));
   on_safe->push_back(new ContainerContext<FlushStateRef>(flush_trigger));
 }
@@ -5217,6 +5219,7 @@ PG::RecoveryState::Reset::Reset(my_context ctx)
   state_name = "Reset";
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
+  pg->flushed = false;
   pg->set_last_peering_reset();
 }
 

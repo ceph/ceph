@@ -15,6 +15,7 @@ Foundation.  See file COPYING.
 import copy
 import json
 import os
+import pprint
 import re
 import socket
 import stat
@@ -45,6 +46,12 @@ class ArgumentValid(ArgumentError):
     Argument value is otherwise invalid (doesn't match choices, for instance)
     """
     pass
+
+class ArgumentTooFew(ArgumentError):
+    """
+    Fewer arguments than descriptors in signature; may mean to continue
+    the search, so gets a special exception type
+    """
 
 class ArgumentPrefix(ArgumentError):
     """
@@ -727,6 +734,55 @@ def matchnum(args, signature, partial=False):
             matchcnt += 1
     return matchcnt
 
+def get_next_arg(desc, args):
+    '''
+    Get either the value matching key 'desc.name' or the next arg in
+    the non-dict list.  Return None if args are exhausted.  Used in
+    validate() below.
+    '''
+    arg = None
+    if isinstance(args, dict):
+        arg = args.pop(desc.name, None)
+        # allow 'param=param' to be expressed as 'param'
+        if arg == '':
+            arg = desc.name
+        # Hack, or clever?  If value is a list, keep the first element,
+        # push rest back onto myargs for later processing.
+        # Could process list directly, but nesting here is already bad
+        if arg and isinstance(arg, list):
+            args[desc.name] = arg[1:]
+            arg = arg[0]
+    elif args:
+        arg = args.pop(0)
+        if arg and isinstance(arg, list):
+            args = arg[1:] + args
+            arg = arg[0]
+    return arg
+
+def store_arg(desc, d):
+    '''
+    Store argument described by, and held in, thanks to valid(),
+    desc into the dictionary d, keyed by desc.name.  Three cases:
+
+    1) desc.N is set: value in d is a list
+    2) prefix: multiple args are joined with ' ' into one d{} item
+    3) single prefix or other arg: store as simple value
+
+    Used in validate() below.
+    '''
+    if desc.N:
+        # value should be a list
+        if desc.name in d:
+            d[desc.name] += [desc.instance.val]
+        else:
+            d[desc.name] = [desc.instance.val]
+    elif (desc.t == CephPrefix) and (desc.name in d):
+        # prefixes' values should be a space-joined concatenation
+        d[desc.name] += ' ' + desc.instance.val
+    else:
+        # if first CephPrefix or any other type, just set it
+        d[desc.name] = desc.instance.val
+
 def validate(args, signature, partial=False):
     """
     validate(args, signature, partial=False)
@@ -748,84 +804,78 @@ def validate(args, signature, partial=False):
 
     myargs = copy.deepcopy(args)
     mysig = copy.deepcopy(signature)
+    reqsiglen = len([desc for desc in mysig if desc.req])
+    matchcnt = 0
     d = dict()
     for desc in mysig:
         setattr(desc, 'numseen', 0)
         while desc.numseen < desc.n:
-            myarg = None
-            if not myargs:
-                break
-            # get either the value matching key 'desc.name' or the next arg in
-            # the non-dict list
-            if isinstance(myargs, dict):
-                myarg = myargs.pop(desc.name, None)
-                # allow 'param=param' to be expressed as 'param'
-                if myarg == '':
-                    myarg = desc.name
-                # Hack, or clever?  If value is a list, keep the first element,
-                # push rest back onto myargs for later processing.
-                # Could process list directly, but nesting here is already bad
-                if myarg and isinstance(myarg, list):
-                    myargs[desc.name] = myarg[1:]
-                    myarg = myarg[0]
-            elif myargs:
-                myarg = myargs.pop(0)
-                if myarg and isinstance(myarg, list):
-                    myargs = myarg[1:] + myargs
-                    myarg = myarg[0]
+            myarg = get_next_arg(desc, myargs)
 
-            # no arg, but not required?  March on
+            # no arg, but not required?  Continue consuming mysig
+            # in case there are later required args
             if not myarg and not desc.req:
                 break
 
             # out of arguments for a required param?
+            # Either return (if partial validation) or raise 
             if not myarg and desc.req:
                 if desc.N and desc.numseen < 1:
                     # wanted N, didn't even get 1
                     if partial:
                         return d
-                    raise ArgumentNumber('saw {0} of {1}, expected at least 1'.format(desc.numseen, desc))
+                    raise ArgumentNumber(
+                        'saw {0} of {1}, expected at least 1'.\
+                         format(desc.numseen, desc)
+                    )
                 elif not desc.N and desc.numseen < desc.n:
                     # wanted n, got too few
                     if partial:
                         return d
-                    raise ArgumentNumber('saw {0} of {1}, expected {2}'.format(desc.numseen, desc, desc.n))
+                    raise ArgumentNumber(
+                        'saw {0} of {1}, expected {2}'.\
+                        format(desc.numseen, desc, desc.n)
+                    )
                 break
 
-            # not out of args; validate this one
+            # Have an arg; validate it
             try:
                 validate_one(myarg, desc)
                 valid = True
-            except Exception as e:
+            except ArgumentError as e:
                 valid = False
             if not valid:
                 # argument mismatch
-                # if not required, just push back for the next one
                 if not desc.req:
+                    # if not required, just push back; it might match
+                    # the next arg
+                    print >> sys.stderr, myarg, 'not valid: ', str(e)
                     myargs.insert(0, myarg)
                     break
                 else:
-                    # hm, but it was required, so quit
+                    # hm, it was required, so time to return/raise
                     if partial:
                         return d
                     raise e
 
-            # valid arg acquired.  Store in dict, as a list if multivalued
-            if desc.N:
-                # value should be a list
-                if desc.name in d:
-                    d[desc.name] += [desc.instance.val]
-                else:
-                    d[desc.name] = [desc.instance.val]
-            elif (desc.t == CephPrefix) and (desc.name in d):
-                # prefixes' values should be a space-joined concatenation
-                d[desc.name] += ' ' + desc.instance.val
-            else:
-                # if first CephPrefix or any other type, just set it
-                d[desc.name] = desc.instance.val
+            # Whew, valid arg acquired.  Store in dict
+            matchcnt += 1
+            store_arg(desc, d)
+
+    # Done with entire list of argdescs
+    if matchcnt < reqsiglen:
+        raise ArgumentTooFew("not enough arguments given")
+
     if myargs and not partial:
         raise ArgumentError("unused arguments: " + str(myargs))
+
+    # Finally, success
     return d
+
+def cmdsiglen(sig):
+    sigdict = sig.values()
+    assert len(sigdict) == 1
+    return len(sig.values()[0]['sig'])
 
 def validate_command(sigdict, args, verbose=False):
     """
@@ -856,14 +906,19 @@ def validate_command(sigdict, args, verbose=False):
                                       best_match_cnt, cmdtag, concise_sig(sig))
                 bestcmds.append({cmdtag:cmd})
 
+        # Sort bestcmds by number of args so we can try shortest first
+        # (relies on a cmdsig being key,val where val is a list of len 1)
+        bestcmds_sorted = sorted(bestcmds,
+                                 cmp=lambda x,y:cmp(cmdsiglen(x), cmdsiglen(y)))
+
         if verbose:
-            print >> sys.stderr, "bestcmds: ", bestcmds
+            print >> sys.stderr, "bestcmds_sorted: "
+            pprint.PrettyPrinter(stream=sys.stderr).pprint(bestcmds_sorted)
 
         # for everything in bestcmds, look for a true match
-        for cmdsig in bestcmds:
+        for cmdsig in bestcmds_sorted:
             for cmd in cmdsig.itervalues():
                 sig = cmd['sig']
-                helptext = cmd['help']
                 try:
                     valid_dict = validate(args, sig)
                     found = cmd
@@ -872,14 +927,22 @@ def validate_command(sigdict, args, verbose=False):
                     # ignore prefix mismatches; we just haven't found
                     # the right command yet
                     pass
+                except ArgumentTooFew:
+                    # It looked like this matched the beginning, but it
+                    # didn't have enough args supplied.  If we're out of
+                    # cmdsigs we'll fall out unfound; if we're not, maybe
+                    # the next one matches completely.  Whine, but pass.
+                    if verbose:
+                        print >> sys.stderr, 'Not enough args supplied for ', \
+                                              concise_sig(sig)
                 except ArgumentError as e:
-                    # prefixes matched, but some other arg didn't;
-                    # stop now, because we have the right command but
+                    # Solid mismatch on an arg (type, range, etc.)
+                    # Stop now, because we have the right command but
                     # some other input is invalid
                     print >> sys.stderr, "Invalid command: ", str(e)
                     return {}
-                if found:
-                    break
+            if found:
+                break
 
         if not found:
             print >> sys.stderr, 'no valid command found; 10 closest matches:'

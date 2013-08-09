@@ -1190,6 +1190,19 @@ void pg_stat_t::dump(Formatter *f) const
   f->close_section();
 }
 
+void pg_stat_t::dump_brief(Formatter *f) const
+{
+  f->dump_string("state", pg_state_string(state));
+  f->open_array_section("up");
+  for (vector<int>::const_iterator p = up.begin(); p != up.end(); ++p)
+    f->dump_int("osd", *p);
+  f->close_section();
+  f->open_array_section("acting");
+  for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
+    f->dump_int("osd", *p);
+  f->close_section();
+}
+
 void pg_stat_t::encode(bufferlist &bl) const
 {
   ENCODE_START(13, 8, bl);

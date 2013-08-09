@@ -2551,7 +2551,7 @@ int RGWRados::copy_obj(void *ctx,
         conn = rest_master_conn;
       } else {
         map<string, RGWRESTConn *>::iterator iter = region_conn_map.find(src_bucket_info.region);
-        if (iter == zone_conn_map.end()) {
+        if (iter == region_conn_map.end()) {
           ldout(cct, 0) << "could not find region connection to region: " << source_zone << dendl;
           return -ENOENT;
         }
