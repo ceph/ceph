@@ -28,12 +28,12 @@ protected:
 public:
   RGWValidateSwiftToken(CephContext *_cct, struct rgw_swift_auth_info *_info) : RGWHTTPClient(_cct), info(_info) {}
 
-  int read_header(void *ptr, size_t len);
+  int receive_header(void *ptr, size_t len);
 
   friend class RGWKeystoneTokenCache;
 };
 
-int RGWValidateSwiftToken::read_header(void *ptr, size_t len)
+int RGWValidateSwiftToken::receive_header(void *ptr, size_t len)
 {
   char line[len + 1];
 
