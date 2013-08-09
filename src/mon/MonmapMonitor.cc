@@ -164,9 +164,7 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
   MonSession *session = m->get_session();
-  if (!session ||
-      (!session->is_capable("mon", MON_CAP_R) &&
-       !mon->_allowed_command(session, cmdmap))) {
+  if (!session) {
     mon->reply_command(m, -EACCES, "access denied", get_last_committed());
     return true;
   }
@@ -276,9 +274,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
   MonSession *session = m->get_session();
-  if (!session ||
-      (!session->is_capable("mon", MON_CAP_R) &&
-       !mon->_allowed_command(session, cmdmap))) {
+  if (!session) {
     mon->reply_command(m, -EACCES, "access denied", get_last_committed());
     return true;
   }
