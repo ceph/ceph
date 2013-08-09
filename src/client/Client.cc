@@ -148,9 +148,12 @@ Client::Client(Messenger *m, MonClient *mc)
     timer(m->cct, client_lock),
     ino_invalidate_cb(NULL),
     ino_invalidate_cb_handle(NULL),
+    dentry_invalidate_cb(NULL),
+    dentry_invalidate_cb_handle(NULL),
     getgroups_cb(NULL),
     getgroups_cb_handle(NULL),
     async_ino_invalidator(m->cct),
+    async_dentry_invalidator(m->cct),
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(m->get_myname().num()),
     initialized(false), mounted(false), unmounting(false),
@@ -410,9 +413,15 @@ void Client::shutdown()
   admin_socket->unregister_command("dump_cache");
 
   if (ino_invalidate_cb) {
-    ldout(cct, 10) << "shutdown stopping invalidator finisher" << dendl;
+    ldout(cct, 10) << "shutdown stopping cache invalidator finisher" << dendl;
     async_ino_invalidator.wait_for_empty();
     async_ino_invalidator.stop();
+  }
+
+  if (dentry_invalidate_cb) {
+    ldout(cct, 10) << "shutdown stopping dentry invalidator finisher" << dendl;
+    async_dentry_invalidator.wait_for_empty();
+    async_dentry_invalidator.stop();
   }
 
   objectcacher->stop();  // outside of client_lock! this does a join.
@@ -3551,6 +3560,45 @@ void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, MClientCa
   m->put();
 }
 
+class C_Client_DentryInvalidate : public Context  {
+private:
+  Client *client;
+  vinodeno_t dirino;
+  vinodeno_t ino;
+  string name;
+public:
+  C_Client_DentryInvalidate(Client *c, Dentry *dn) :
+			    client(c), dirino(dn->dir->parent_inode->vino()),
+			    ino(dn->inode->vino()), name(dn->name) { }
+  void finish(int r) {
+    client->_async_dentry_invalidate(dirino, ino, name);
+  }
+};
+
+void Client::_async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, string& name)
+{
+  ldout(cct, 10) << "_async_dentry_invalidate '" << name << "' ino " << ino
+		 << " in dir " << dirino << dendl;
+  dentry_invalidate_cb(dentry_invalidate_cb_handle, dirino, ino, name);
+}
+
+void Client::_schedule_invalidate_dentry_callback(Dentry *dn)
+{
+  if (dentry_invalidate_cb && dn->inode->ll_ref > 0)
+    async_dentry_invalidator.queue(new C_Client_DentryInvalidate(this, dn));
+}
+
+void Client::_invalidate_inode_parents(Inode *in)
+{
+  set<Dentry*>::iterator q = in->dn_set.begin();
+  while (q != in->dn_set.end()) {
+    Dentry *dn = *q++;
+    // FIXME: we play lots of unlink/link tricks when handling MDS replies,
+    //        so in->dn_set doesn't always reflect the state of kernel's dcache.
+    _schedule_invalidate_dentry_callback(dn);
+    unlink(dn, false);
+  }
+}
 
 void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClientCaps *m)
 {
@@ -3578,8 +3626,12 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     in->uid = m->head.uid;
     in->gid = m->head.gid;
   }
+  bool deleted_inode = false;
   if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
     in->nlink = m->head.nlink;
+    if (in->nlink == 0 &&
+	(new_caps & (CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL)))
+      deleted_inode = true;
   }
   if ((issued & CEPH_CAP_XATTR_EXCL) == 0 &&
       m->xattrbl.length() &&
@@ -3632,6 +3684,10 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   // wake up waiters
   if (new_caps)
     signal_cond_list(in->waitfor_caps);
+
+  // may drop inode's last ref
+  if (deleted_inode)
+    _invalidate_inode_parents(in);
 
   m->put();
 }
@@ -6317,6 +6373,17 @@ void Client::ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handl
   ino_invalidate_cb = cb;
   ino_invalidate_cb_handle = handle;
   async_ino_invalidator.start();
+}
+
+void Client::ll_register_dentry_invalidate_cb(client_dentry_callback_t cb, void *handle)
+{
+  Mutex::Locker l(client_lock);
+  ldout(cct, 10) << "ll_register_dentry_invalidate_cb cb " << (void*)cb << " p " << (void*)handle << dendl;
+  if (cb == NULL)
+    return;
+  dentry_invalidate_cb = cb;
+  dentry_invalidate_cb_handle = handle;
+  async_dentry_invalidator.start();
 }
 
 void Client::ll_register_getgroups_cb(client_getgroups_callback_t cb, void *handle)
