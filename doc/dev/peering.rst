@@ -20,7 +20,19 @@ Concepts
    the ordered list of OSDs responsible for a particular PG for
    a particular epoch according to CRUSH.  Normally this
    is the same as the *acting set*, except when the *acting set* has been
-   explicitly overridden via pg_temp in the OSDMap.
+   explicitly overridden via *PG temp* in the OSDMap.
+
+*PG temp* 
+   a temporary placement group acting set used while backfilling the
+   primary osd. Let say acting is [0,1,2] and we are
+   active+clean. Something happens and acting is now [3,1,2]. osd 3 is
+   empty and can't serve reads although it is the primary. osd.3 will
+   see that and request a *PG temp* of [1,2,3] to the monitors using a
+   MOSDPGTemp message so that osd.1 temporarily becomes the
+   primary. It will select osd.3 as a backfill peer and continue to
+   serve reads and writes while osd.3 is backfilled. When backfilling
+   is complete, *PG temp* is discarded and the acting set changes back
+   to [3,1,2] and osd.3 becomes the primary.
 
 *current interval* or *past interval*
    a sequence of osd map epochs during which the *acting set* and *up
