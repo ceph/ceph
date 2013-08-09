@@ -291,7 +291,7 @@ class RGWValidateKeystoneToken : public RGWHTTPClient {
 public:
   RGWValidateKeystoneToken(CephContext *_cct, bufferlist *_bl) : RGWHTTPClient(_cct), bl(_bl) {}
 
-  int read_data(void *ptr, size_t len) {
+  int receive_data(void *ptr, size_t len) {
     bl->append((char *)ptr, len);
     return 0;
   }
@@ -304,7 +304,7 @@ class RGWGetRevokedTokens : public RGWHTTPClient {
 public:
   RGWGetRevokedTokens(CephContext *_cct, bufferlist *_bl) : RGWHTTPClient(_cct), bl(_bl) {}
 
-  int read_data(void *ptr, size_t len) {
+  int receive_data(void *ptr, size_t len) {
     bl->append((char *)ptr, len);
     return 0;
   }
