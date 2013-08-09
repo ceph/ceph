@@ -524,22 +524,22 @@ def task(ctx, config):
               client.0:
                 rgw region: foo
                 rgw zone: foo-1
-                rgw region root pool: .rgw.root.foo
-                rgw zone root pool: .rgw.root.foo
+                rgw region root pool: .rgw.rroot.foo
+                rgw zone root pool: .rgw.zroot.foo
                 rgw log meta: true
                 rgw log data: true
               client.1:
                 rgw region: bar
                 rgw zone: bar-master
-                rgw region root pool: .rgw.root.bar
-                rgw zone root pool: .rgw.root.bar
+                rgw region root pool: .rgw.rroot.bar
+                rgw zone root pool: .rgw.zroot.bar
                 rgw log meta: true
                 rgw log data: true
               client.2:
                 rgw region: bar
                 rgw zone: bar-secondary
-                rgw region root pool: .rgw.root.bar
-                rgw zone root pool: .rgw.root.bar-secondary 
+                rgw region root pool: .rgw.rroot.bar
+                rgw zone root pool: .rgw.zroot.bar-secondary 
         - rgw:
             regions:
               foo:
