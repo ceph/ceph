@@ -25,6 +25,10 @@ class Remote(object):
             name = self.name
         return name
 
+    @property
+    def system_type(self):
+        return misc.get_system_type(self)
+
     def __str__(self):
         return self.shortname
 
@@ -227,26 +231,26 @@ class VirtualConsole():
                 libvirt.VIR_DOMAIN_PAUSED]
 
     def check_status(self, timeout=None):
-        return self.vm_domain.info()[0]  == libvirt.VIR_DOMAIN_RUNNING 
+        return self.vm_domain.info()[0]  == libvirt.VIR_DOMAIN_RUNNING
 
     def power_cycle(self):
-        self.vm_domain.info().destroy() 
-        self.vm_domain.info().create() 
+        self.vm_domain.info().destroy()
+        self.vm_domain.info().create()
 
     def hard_reset(self):
-        self.vm_domain.info().destroy() 
+        self.vm_domain.info().destroy()
 
     def power_on(self):
-        self.vm_domain.info().create() 
+        self.vm_domain.info().create()
 
     def power_off(self):
-        self.vm_domain.info().destroy() 
+        self.vm_domain.info().destroy()
 
     def power_off_for_interval(self, interval=30):
         log.info('Power off {s} for {i} seconds'.format(s=self.shortname, i=interval))
-        self.vm_domain.info().destroy() 
+        self.vm_domain.info().destroy()
         time.sleep(interval)
-        self.vm_domain.info().create() 
+        self.vm_domain.info().create()
         log.info('Power off for {i} seconds completed'.format(s=self.shortname, i=interval))
 
 def getRemoteConsole(name, ipmiuser, ipmipass, ipmidomain, logfile=None, timeout=20):
