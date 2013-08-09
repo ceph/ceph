@@ -86,7 +86,6 @@ enum {
 
   LOCK_PRE_SCAN,
   LOCK_SCAN,
-  LOCK_SCAN_LOCK,
 
   LOCK_SNAP_SYNC,
 
