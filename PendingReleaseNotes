@@ -13,3 +13,14 @@ v0.67
   <command>' less awkward by making it clearer that the 'tell'
   commands are talking to the OSD serving the placement group, not the
   monitor.
+
+* The 'ceph --admin-daemon <path> <command ...>' used to accept the command
+  and arguments as either a single string or as separate arguments.  It will
+  now only accept the command spread across multiple arguments.  This means that
+  any script which does something like::
+
+    ceph --admin-daemon /var/run/ceph/ceph-osd.0.asok 'config set debug_ms 1'
+
+  needs to remove the quotes.  Also, note that the above can now be shortened to::
+
+    ceph daemon osd.0 config set debug_ms 1
