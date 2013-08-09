@@ -6,6 +6,7 @@
 #include "rgw_acl_s3.h"
 #include "rgw_cache.h"
 #include "rgw_bucket.h"
+#include "rgw_keystone.h"
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
@@ -704,3 +705,70 @@ void RGWDataChangesLogInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("last_update", last_update, obj);
 }
 
+void KeystoneToken::Metadata::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("is_admin", is_admin, obj);
+}
+
+void KeystoneToken::Service::Endpoint::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("adminURL", admin_url, obj);
+  JSONDecoder::decode_json("publicURL", public_url, obj);
+  JSONDecoder::decode_json("internalURL", internal_url, obj);
+  JSONDecoder::decode_json("region", region, obj);
+}
+
+void KeystoneToken::Service::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("type", type, obj, true);
+  JSONDecoder::decode_json("name", name, obj, true);
+  JSONDecoder::decode_json("endpoints", endpoints, obj);
+}
+
+void KeystoneToken::Token::Tenant::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj, true);
+  JSONDecoder::decode_json("name", name, obj, true);
+  JSONDecoder::decode_json("description", description, obj);
+  JSONDecoder::decode_json("enabled", enabled, obj);
+}
+
+void KeystoneToken::Token::decode_json(JSONObj *obj)
+{
+  string expires_iso8601;
+  struct tm t;
+
+  JSONDecoder::decode_json("id", id, obj, true);
+  JSONDecoder::decode_json("tenant", tenant, obj, true);
+  JSONDecoder::decode_json("expires", expires_iso8601, obj, true);
+
+  if (parse_iso8601(expires_iso8601.c_str(), &t)) {
+    expires = timegm(&t);
+  } else {
+    expires = 0;
+    throw JSONDecoder::err("Failed to parse ISO8601 expiration date from Keystone response.");
+  }
+}
+
+void KeystoneToken::User::Role::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("name", name, obj);
+}
+
+void KeystoneToken::User::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj, true);
+  JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("username", user_name, obj, true);
+  JSONDecoder::decode_json("roles", roles, obj);
+}
+
+void KeystoneToken::decode_json(JSONObj *access_obj)
+{
+  JSONDecoder::decode_json("metadata", metadata, access_obj);
+  JSONDecoder::decode_json("token", token, access_obj, true);
+  JSONDecoder::decode_json("user", user, access_obj, true);
+  JSONDecoder::decode_json("serviceCatalog", service_catalog, access_obj);
+}

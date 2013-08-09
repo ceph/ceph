@@ -1966,6 +1966,72 @@ int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClient
 
 
 /*
+ * Try to validate S3 auth against keystone s3token interface
+ */
+int RGW_Auth_S3_Keystone_ValidateToken::validate_s3token(const string& auth_id, const string& auth_token, const string& auth_sign) {
+  /* prepare keystone url */
+  string keystone_url = cct->_conf->rgw_keystone_url;
+  if (keystone_url[keystone_url.size() - 1] != '/')
+    keystone_url.append("/");
+  keystone_url.append("v2.0/s3tokens");
+
+  /* set required headers for keystone request */
+  append_header("X-Auth-Token", cct->_conf->rgw_keystone_admin_token);
+  append_header("Content-Type", "application/json");
+
+  /* encode token */
+  bufferlist token_buff;
+  bufferlist token_encoded;
+  token_buff.append(auth_token);
+  token_buff.encode_base64(token_encoded);
+  token_encoded.append((char)0);
+
+  /* create json credentials request body */
+  JSONFormatter credentials(false);
+  credentials.open_object_section("");
+  credentials.open_object_section("credentials");
+  credentials.dump_string("access", auth_id);
+  credentials.dump_string("token", token_encoded.c_str());
+  credentials.dump_string("signature", auth_sign);
+  credentials.close_section();
+  credentials.close_section();
+
+  std::stringstream os;
+  credentials.flush(os);
+  set_tx_buffer(os.str());
+
+  /* send request */
+  int ret = process("POST", keystone_url.c_str());
+  if (ret < 0) {
+    dout(2) << "s3 keystone: token validation ERROR: " << rx_buffer.c_str() << dendl;
+    return -EPERM;
+  }
+
+  /* now parse response */
+  if (response.parse(cct, rx_buffer) < 0) {
+    dout(2) << "s3 keystone: token parsing failed" << dendl;
+    return -EPERM;
+  }
+
+  /* check if we have a valid role */
+  bool found = false;
+  list<string>::iterator iter;
+  for (iter = roles_list.begin(); iter != roles_list.end(); ++iter) {
+    if ((found=response.user.has_role(*iter))==true)
+      break;
+  }
+
+  if (!found) {
+    ldout(cct, 5) << "s3 keystone: user does not hold a matching role; required roles: " << cct->_conf->rgw_keystone_accepted_roles << dendl;
+    return -EPERM;
+  }
+
+  /* everything seems fine, continue with this user */
+  ldout(cct, 5) << "s3 keystone: validated token: " << response.token.tenant.name << ":" << response.user.name << " expires: " << response.token.expires << dendl;
+  return 0;
+}
+
+/*
  * verify that a signed request comes from the keyholder
  * by checking the signature against our locally-computed version
  */
@@ -1977,6 +2043,13 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
 
   time_t now;
   time(&now);
+
+  /* neither keystone and rados enabled; warn and exit! */
+  if (!store->ctx()->_conf->rgw_s3_auth_use_rados
+      && !store->ctx()->_conf->rgw_s3_auth_use_keystone) {
+    dout(0) << "WARNING: no authorization backend enabled! Users will never authenticate." << dendl;
+    return -EPERM;
+  }
 
   if (!s->http_auth || !(*s->http_auth)) {
     auth_id = s->info.args.get("AWSAccessKeyId");
@@ -2007,75 +2080,113 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
     auth_sign = auth_str.substr(pos + 1);
   }
 
-  /* first get the user info */
-  if (rgw_get_user_info_by_access_key(store, auth_id, s->user) < 0) {
-    dout(5) << "error reading user info, uid=" << auth_id << " can't authenticate" << dendl;
-    return -EPERM;
+  /* try keystone auth first */
+  int keystone_result = -EINVAL;
+  if (store->ctx()->_conf->rgw_s3_auth_use_keystone
+      && !store->ctx()->_conf->rgw_keystone_url.empty()) {
+    dout(20) << "s3 keystone: trying keystone auth" << dendl;
+
+    RGW_Auth_S3_Keystone_ValidateToken keystone_validator(store->ctx());
+    string token;
+
+    if (!rgw_create_s3_canonical_header(s->info, &s->header_time, token, qsr)) {
+        dout(10) << "failed to create auth header\n" << token << dendl;
+    } else {
+      keystone_result = keystone_validator.validate_s3token(auth_id, token, auth_sign);
+      if (keystone_result == 0) {
+        s->user.user_id = keystone_validator.response.token.tenant.id;
+        s->user.display_name = keystone_validator.response.token.tenant.name; // wow.
+
+        /* try to store user if it not already exists */
+        if (rgw_get_user_info_by_uid(store, keystone_validator.response.token.tenant.id, s->user) < 0) {
+          int ret = rgw_store_user_info(store, s->user, NULL, NULL, 0, true);
+          if (ret < 0)
+            dout(10) << "NOTICE: failed to store new user's info: ret=" << ret << dendl;
+        }
+
+        s->perm_mask = RGW_PERM_FULL_CONTROL;
+      }
+    }
   }
 
-  /* now verify signature */
-   
-  string auth_hdr;
-  if (!rgw_create_s3_canonical_header(s->info, &s->header_time, auth_hdr, qsr)) {
-    dout(10) << "failed to create auth header\n" << auth_hdr << dendl;
-    return -EPERM;
-  }
-  dout(10) << "auth_hdr:\n" << auth_hdr << dendl;
+  /* keystone failed (or not enabled); check if we want to use rados backend */
+  if (!store->ctx()->_conf->rgw_s3_auth_use_rados
+      && keystone_result < 0)
+    return keystone_result;
 
-  time_t req_sec = s->header_time.sec();
-  if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
-      req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
-    dout(10) << "req_sec=" << req_sec << " now=" << now << "; now - RGW_AUTH_GRACE_MINS=" << now - RGW_AUTH_GRACE_MINS * 60 << "; now + RGW_AUTH_GRACE_MINS=" << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
-    dout(0) << "NOTICE: request time skew too big now=" << utime_t(now, 0) << " req_time=" << s->header_time << dendl;
-    return -ERR_REQUEST_TIME_SKEWED;
-  }
-
-  map<string, RGWAccessKey>::iterator iter = s->user.access_keys.find(auth_id);
-  if (iter == s->user.access_keys.end()) {
-    dout(0) << "ERROR: access key not encoded in user info" << dendl;
-    return -EPERM;
-  }
-  RGWAccessKey& k = iter->second;
-
-  if (!k.subuser.empty()) {
-    map<string, RGWSubUser>::iterator uiter = s->user.subusers.find(k.subuser);
-    if (uiter == s->user.subusers.end()) {
-      dout(0) << "NOTICE: could not find subuser: " << k.subuser << dendl;
+  /* now try rados backend, but only if keystone did not succeed */
+  if (keystone_result < 0) {
+    /* get the user info */
+    if (rgw_get_user_info_by_access_key(store, auth_id, s->user) < 0) {
+      dout(5) << "error reading user info, uid=" << auth_id << " can't authenticate" << dendl;
       return -EPERM;
     }
-    RGWSubUser& subuser = uiter->second;
-    s->perm_mask = subuser.perm_mask;
-  } else
-    s->perm_mask = RGW_PERM_FULL_CONTROL;
 
-  string digest;
-  int ret = rgw_get_s3_header_digest(auth_hdr, k.key, digest);
-  if (ret < 0) {
-    return -EPERM;
-  }
+    /* now verify signature */
 
-  dout(15) << "calculated digest=" << digest << dendl;
-  dout(15) << "auth_sign=" << auth_sign << dendl;
-  dout(15) << "compare=" << auth_sign.compare(digest) << dendl;
-
-  if (auth_sign != digest)
-    return -EPERM;
-
-  if (s->user.system) {
-    s->system_request = true;
-    dout(20) << "system request" << dendl;
-    s->info.args.set_system();
-    string effective_uid = s->info.args.get(RGW_SYS_PARAM_PREFIX "uid");
-    RGWUserInfo effective_user;
-    if (!effective_uid.empty()) {
-      ret = rgw_get_user_info_by_uid(store, effective_uid, effective_user);
-      if (ret < 0) {
-        ldout(s->cct, 0) << "User lookup failed!" << dendl;
-        return -ENOENT;
-      }
-      s->user = effective_user;
+    string auth_hdr;
+    if (!rgw_create_s3_canonical_header(s->info, &s->header_time, auth_hdr, qsr)) {
+      dout(10) << "failed to create auth header\n" << auth_hdr << dendl;
+      return -EPERM;
     }
-  }
+    dout(10) << "auth_hdr:\n" << auth_hdr << dendl;
+
+    time_t req_sec = s->header_time.sec();
+    if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
+        req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
+      dout(10) << "req_sec=" << req_sec << " now=" << now << "; now - RGW_AUTH_GRACE_MINS=" << now - RGW_AUTH_GRACE_MINS * 60 << "; now + RGW_AUTH_GRACE_MINS=" << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
+      dout(0) << "NOTICE: request time skew too big now=" << utime_t(now, 0) << " req_time=" << s->header_time << dendl;
+      return -ERR_REQUEST_TIME_SKEWED;
+    }
+
+    map<string, RGWAccessKey>::iterator iter = s->user.access_keys.find(auth_id);
+    if (iter == s->user.access_keys.end()) {
+      dout(0) << "ERROR: access key not encoded in user info" << dendl;
+      return -EPERM;
+    }
+    RGWAccessKey& k = iter->second;
+
+    if (!k.subuser.empty()) {
+      map<string, RGWSubUser>::iterator uiter = s->user.subusers.find(k.subuser);
+      if (uiter == s->user.subusers.end()) {
+        dout(0) << "NOTICE: could not find subuser: " << k.subuser << dendl;
+        return -EPERM;
+      }
+      RGWSubUser& subuser = uiter->second;
+      s->perm_mask = subuser.perm_mask;
+    } else
+      s->perm_mask = RGW_PERM_FULL_CONTROL;
+
+    string digest;
+    int ret = rgw_get_s3_header_digest(auth_hdr, k.key, digest);
+    if (ret < 0) {
+      return -EPERM;
+    }
+
+    dout(15) << "calculated digest=" << digest << dendl;
+    dout(15) << "auth_sign=" << auth_sign << dendl;
+    dout(15) << "compare=" << auth_sign.compare(digest) << dendl;
+
+    if (auth_sign != digest)
+      return -EPERM;
+
+    if (s->user.system) {
+      s->system_request = true;
+      dout(20) << "system request" << dendl;
+      s->info.args.set_system();
+      string effective_uid = s->info.args.get(RGW_SYS_PARAM_PREFIX "uid");
+      RGWUserInfo effective_user;
+      if (!effective_uid.empty()) {
+        ret = rgw_get_user_info_by_uid(store, effective_uid, effective_user);
+        if (ret < 0) {
+          ldout(s->cct, 0) << "User lookup failed!" << dendl;
+          return -ENOENT;
+        }
+        s->user = effective_user;
+      }
+    }
+
+  } /* if keystone_result < 0 */
 
   // populate the owner info
   s->owner.set_id(s->user.user_id);
