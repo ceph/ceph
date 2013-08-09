@@ -333,6 +333,13 @@ def fill_in_endpoints(region_info, role_zones, role_endpoints):
         region, zone, zone_info, _ = role_zones[role]
         host, port = role_endpoints[role]
         endpoint = 'http://{host}:{port}/'.format(host=host, port=port)
+        # check if the region specified under client actually exists 
+        # in region_info (it should, if properly configured).
+        # If not, throw a reasonable error
+        if region not in region_info:
+            raise Exception('Region: {region} was specified but no corresponding' \
+                            ' entry was round under \'regions\''.format(region=region))
+
         region_conf = region_info[region]
         region_conf.setdefault('endpoints', [])
         region_conf['endpoints'].append(endpoint)
