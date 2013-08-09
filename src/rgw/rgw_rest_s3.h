@@ -6,6 +6,7 @@
 #include "rgw_http_errors.h"
 #include "rgw_acl_s3.h"
 #include "rgw_policy_s3.h"
+#include "rgw_keystone.h"
 
 #define RGW_AUTH_GRACE_MINS 15
 
@@ -256,6 +257,57 @@ public:
   void begin_response();
   void send_partial_response(pair<string,int>& result);
   void end_response();
+};
+
+class RGW_Auth_S3_Keystone_ValidateToken : public RGWHTTPClient {
+private:
+  bufferlist rx_buffer;
+  bufferlist tx_buffer;
+  bufferlist::iterator tx_buffer_it;
+  list<string> roles_list;
+
+public:
+  KeystoneToken response;
+
+private:
+  void set_tx_buffer(const string& d) {
+    tx_buffer.clear();
+    tx_buffer.append(d);
+    tx_buffer_it = tx_buffer.begin();
+    set_send_length(tx_buffer.length());
+  }
+
+public:
+  RGW_Auth_S3_Keystone_ValidateToken(CephContext *_cct)
+      : RGWHTTPClient(_cct) {
+    get_str_list(cct->_conf->rgw_keystone_accepted_roles, roles_list);
+  }
+
+  int receive_header(void *ptr, size_t len) {
+    return 0;
+  }
+  int receive_data(void *ptr, size_t len) {
+    rx_buffer.append((char *)ptr, len);
+    return 0;
+  }
+
+  int send_data(void *ptr, size_t len) {
+    if (!tx_buffer_it.get_remaining())
+      return 0; // nothing left to send
+
+    int l = MIN(tx_buffer_it.get_remaining(), len);
+    memcpy(ptr, tx_buffer_it.get_current_ptr().c_str(), l);
+    try {
+      tx_buffer_it.advance(l);
+    } catch (buffer::end_of_buffer &e) {
+      assert(0);
+    }
+
+    return l;
+  }
+
+  int validate_s3token(const string& auth_id, const string& auth_token, const string& auth_sign);
+
 };
 
 class RGW_Auth_S3 {

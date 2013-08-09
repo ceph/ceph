@@ -6,6 +6,7 @@
 #include "common/Cond.h"
 
 class RGWRados;
+class KeystoneToken;
 
 struct rgw_swift_auth_info {
   int status;
@@ -15,25 +16,6 @@ struct rgw_swift_auth_info {
   long long ttl;
 
   rgw_swift_auth_info() : status(0), ttl(0) {}
-};
-
-class KeystoneToken {
-public:
-  string tenant_name;
-  string tenant_id;
-  string user_name;
-  time_t expiration;
-
-  map<string, bool> roles;
-
-  KeystoneToken() : expiration(0) {}
-
-  int parse(CephContext *cct, bufferlist& bl);
-
-  bool expired() {
-    uint64_t now = ceph_clock_now(NULL).sec();
-    return (now < (uint64_t)expiration);
-  }
 };
 
 class RGWSwift {
