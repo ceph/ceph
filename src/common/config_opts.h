@@ -636,6 +636,8 @@ OPTION(rgw_keystone_admin_token, OPT_STR, "")  // keystone admin token (shared s
 OPTION(rgw_keystone_accepted_roles, OPT_STR, "Member, admin")  // roles required to serve requests
 OPTION(rgw_keystone_token_cache_size, OPT_INT, 10000)  // max number of entries in keystone token cache
 OPTION(rgw_keystone_revocation_interval, OPT_INT, 15 * 60)  // seconds between tokens revocation check
+OPTION(rgw_s3_use_rados, OPT_BOOL, true)  // should we try to use the internal credentials for s3?
+OPTION(rgw_s3_use_keystone, OPT_BOOL, false)  // should we try to use keystone for s3?
 OPTION(rgw_admin_entry, OPT_STR, "admin")  // entry point for which a url is considered an admin request
 OPTION(rgw_enforce_swift_acls, OPT_BOOL, true)
 OPTION(rgw_swift_token_expiration, OPT_INT, 24 * 3600) // time in seconds for swift token expiration

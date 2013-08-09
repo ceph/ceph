@@ -73,9 +73,9 @@ static void get_canon_resource(const char *request_uri, map<string, string>& sub
   if (!append_str.empty()) {
     s.append(append_str);
   }
-  dout(10) << "get_canon_resource(): dest=" << dest << dendl;
-
   dest = s;
+
+  dout(10) << "get_canon_resource(): dest=" << dest << dendl;
 }
 
 /*
