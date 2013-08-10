@@ -432,6 +432,14 @@ epoch_t PGMap::calc_min_last_epoch_clean() const
     if (lec < min)
       min = lec;
   }
+  // also scan osd epochs
+  // don't trim past the oldest reported osd epoch
+  for (hash_map<int32_t, epoch_t>::const_iterator i = osd_epochs.begin();
+       i != osd_epochs.end();
+       ++i) {
+    if (i->second < min)
+      min = i->second;
+  }
   return min;
 }
 
