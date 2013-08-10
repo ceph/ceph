@@ -68,6 +68,19 @@ def _run_and_log_error_if_fails(remote, args):
         raise
 
 
+def _get_config_value_for_remote(ctx, remote, config, key):
+    # This function was written to figure out which branch should be used for a
+    # given remote. 'all' overrides any applicable roles.
+    if 'all' in config.keys():
+        return config['all'].get(key, None)
+    else:
+        roles = ctx.cluster.remotes[remote]
+        for role in roles:
+            if role in config and key in config[role]:
+                return config[role][key]
+    return None
+
+
 def _get_baseurlinfo_and_dist(ctx, remote, config):
     retval = {}
     relval = None
@@ -113,13 +126,17 @@ def _get_baseurlinfo_and_dist(ctx, remote, config):
 
     uri = None
     log.info('config is %s', config)
-    if config.get('tag') is not None:
-        uri = 'ref/' + config.get('tag')
-    elif config.get('branch') is not None:
-        uri = 'ref/' + config.get('branch')
-    elif config.get('sha1') is not None:
-        uri = 'sha1/' + config.get('sha1')
+    tag = _get_config_value_for_remote(ctx, remote, config, 'tag')
+    branch = _get_config_value_for_remote(ctx, remote, config, 'branch')
+    sha1 = _get_config_value_for_remote(ctx, remote, config, 'sha1')
+    if tag:
+        uri = 'ref/' + tag
+    elif branch:
+        uri = 'ref/' + branch
+    elif sha1:
+        uri = 'sha1/' + sha1
     else:
+        # FIXME: Should master be the default?
         uri = 'ref/master'
     retval['uri'] = uri
 
