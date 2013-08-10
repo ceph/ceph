@@ -1345,6 +1345,7 @@ def move_mount(
     path,
     cluster,
     osd_id,
+    fstype,
     mount_options,
     ):
     LOG.debug('Moving mount to final location...')
@@ -1354,6 +1355,10 @@ def move_mount(
         '{cluster}-{osd_id}'.format(cluster=cluster, osd_id=osd_id),
         )
     maybe_mkdir(osd_data)
+
+    # pick best-of-breed mount options based on fs type
+    if mount_options is None:
+        mount_options = MOUNT_OPTIONS.get(fstype, '')
 
     # we really want to mount --move, but that is not supported when
     # the parent mount is shared, as it is by default on RH, Fedora,
@@ -1528,6 +1533,7 @@ def mount_activate(
                 path=path,
                 cluster=cluster,
                 osd_id=osd_id,
+                fstype=fstype,
                 mount_options=mount_options,
                 )
         return (cluster, osd_id)
