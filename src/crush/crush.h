@@ -31,6 +31,8 @@
 #define CRUSH_MAX_DEVICE_WEIGHT (100u * 0x10000u)
 #define CRUSH_MAX_BUCKET_WEIGHT (65535u * 0x10000u)
 
+#define CRUSH_ITEM_UNDEF  0x7fffffff  /* undefined result */
+
 /*
  * CRUSH uses user-defined "rules" to describe how inputs should be
  * mapped to devices.  A rule consists of sequence of steps to perform
