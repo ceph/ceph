@@ -107,6 +107,7 @@ bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
 {
   stringstream ss;
   Formatter *f = new_formatter(format);
+  f->open_object_section("result");
   m_client->client_lock.Lock();
   if (command == "mds_requests")
     m_client->dump_mds_requests(f);
@@ -117,6 +118,7 @@ bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
   else
     assert(0 == "bad command registered");
   m_client->client_lock.Unlock();
+  f->close_section();
   f->flush(out);
   delete f;
   return true;
