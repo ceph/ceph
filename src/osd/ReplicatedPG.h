@@ -309,19 +309,8 @@ protected:
   ObjectContext *_lookup_object_context(const hobject_t& oid);
   ObjectContextRef create_object_context(const object_info_t& oi, SnapSetContext *ssc);
   ObjectContextRef get_object_context(const hobject_t& soid, bool can_create);
-  void register_object_context(ObjectContext *obc) {
-    if (!obc->registered) {
-      assert(object_contexts.count(obc->obs.oi.soid) == 0);
-      obc->registered = true;
-      object_contexts[obc->obs.oi.soid] = obc;
-    }
-    if (obc->ssc)
-      register_snapset_context(obc->ssc);
-  }
 
   void context_registry_on_change();
-  void put_object_context(ObjectContext *obc);
-  void put_object_contexts(map<hobject_t,ObjectContext*>& obcv);
   int find_object_context(const hobject_t& oid,
 			  ObjectContextRef *pobc,
 			  bool can_create, snapid_t *psnapid=NULL);
