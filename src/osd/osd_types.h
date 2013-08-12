@@ -2001,6 +2001,8 @@ struct ObjectState {
   object_info_t oi;
   bool exists;
 
+  ObjectState() : exists(false) {}
+
   ObjectState(const object_info_t &oi_, bool exists_)
     : oi(oi_), exists(exists_) {}
 };
@@ -2022,12 +2024,17 @@ struct SnapSetContext {
   * etc., because we don't send writes down to disk until after
   * replicas ack.
   */
+
+struct ObjectContext;
+
+typedef std::tr1::shared_ptr<ObjectContext> ObjectContextRef;
+
 struct ObjectContext {
-  int ref;
-  bool registered;
   ObjectState obs;
 
   SnapSetContext *ssc;  // may be null
+
+  Context *destructor_callback;
 
 private:
   Mutex lock;
@@ -2036,20 +2043,22 @@ public:
   int unstable_writes, readers, writers_waiting, readers_waiting;
 
   // set if writes for this object are blocked on another objects recovery
-  ObjectContext *blocked_by;      // object blocking our writes
-  set<ObjectContext*> blocking;   // objects whose writes we block
+  ObjectContextRef blocked_by;      // object blocking our writes
+  set<ObjectContextRef> blocking;   // objects whose writes we block
 
   // any entity in obs.oi.watchers MUST be in either watchers or unconnected_watchers.
   map<pair<uint64_t, entity_name_t>, WatchRef> watchers;
 
-  ObjectContext(const object_info_t &oi_, bool exists_, SnapSetContext *ssc_)
-    : ref(0), registered(false), obs(oi_, exists_), ssc(ssc_),
+  ObjectContext()
+    : ssc(NULL),
+      destructor_callback(0),
       lock("ReplicatedPG::ObjectContext::lock"),
-      unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0),
-      blocked_by(0) {}
+      unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0) {}
 
-  void get() { ++ref; }
-
+  ~ObjectContext() {
+    if (destructor_callback)
+      destructor_callback->complete(0);
+  }
   // do simple synchronous mutual exclusion, for now.  now waitqueues or anything fancy.
   void ondisk_write_lock() {
     lock.Lock();
