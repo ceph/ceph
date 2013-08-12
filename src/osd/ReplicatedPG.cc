@@ -4,6 +4,9 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ *
+ * Author: Loic Dachary <loic@dachary.org>
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -695,7 +698,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
     return;
   }
 
-  ObjectContext *obc;
+  ObjectContextRef obc;
   bool can_create = op->may_write();
   snapid_t snapid;
   int r = find_object_context(
@@ -775,7 +778,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
   }
 
   // src_oids
-  map<hobject_t,ObjectContext*> src_obc;
+  map<hobject_t,ObjectContextRef> src_obc;
   for (vector<OSDOp>::iterator p = m->ops.begin(); p != m->ops.end(); ++p) {
     OSDOp& osd_op = *p;
 
@@ -796,7 +799,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
       hobject_t src_oid(osd_op.soid, src_oloc.key, m->get_pg().ps(),
 			info.pgid.pool(), m->get_object_locator().nspace);
       if (!src_obc.count(src_oid)) {
-	ObjectContext *sobc;
+	ObjectContextRef sobc;
 	snapid_t ssnapid;
 
 	int r = find_object_context(src_oid, &sobc, false, &ssnapid);
@@ -854,7 +857,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
       hobject_t clone_oid = obc->obs.oi.soid;
       clone_oid.snap = *p;
       if (!src_obc.count(clone_oid)) {
-	ObjectContext *sobc;
+	ObjectContextRef sobc;
 	snapid_t ssnapid;
 
 	int r = find_object_context(clone_oid, &sobc, false, &ssnapid);
@@ -972,7 +975,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
     dout(10) << " taking ondisk_read_lock" << dendl;
     obc->ondisk_read_lock();
   }
-  for (map<hobject_t,ObjectContext*>::iterator p = src_obc.begin(); p != src_obc.end(); ++p) {
+  for (map<hobject_t,ObjectContextRef>::iterator p = src_obc.begin(); p != src_obc.end(); ++p) {
     dout(10) << " taking ondisk_read_lock for src " << p->first << dendl;
     p->second->ondisk_read_lock();
   }
@@ -983,7 +986,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
     dout(10) << " dropping ondisk_read_lock" << dendl;
     obc->ondisk_read_unlock();
   }
-  for (map<hobject_t,ObjectContext*>::iterator p = src_obc.begin(); p != src_obc.end(); ++p) {
+  for (map<hobject_t,ObjectContextRef>::iterator p = src_obc.begin(); p != src_obc.end(); ++p) {
     dout(10) << " dropping ondisk_read_lock for src " << p->first << dendl;
     p->second->ondisk_read_unlock();
   }
@@ -1468,7 +1471,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 {
   // load clone info
   bufferlist bl;
-  ObjectContext *obc = 0;
+  ObjectContextRef obc;
   int r = find_object_context(coid, &obc, false, NULL);
   if (r == -ENOENT || coid.snap != obc->obs.oi.soid.snap) {
     derr << __func__ << "could not find coid " << coid << dendl;
@@ -2068,7 +2071,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->user_modify = true;
     }
 
-    ObjectContext *src_obc = 0;
+    ObjectContextRef src_obc;
     if (ceph_osd_op_type_multi(op.op)) {
       MOSDOp *m = static_cast<MOSDOp *>(ctx->op->request);
       object_locator_t src_oloc;
@@ -2486,7 +2489,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	  hobject_t clone_oid = soid;
 	  clone_oid.snap = *clone_iter;
-	  ObjectContext *clone_obc = ctx->src_obc[clone_oid];
+	  ObjectContextRef clone_obc = ctx->src_obc[clone_oid];
           assert(clone_obc);
 	  for (vector<snapid_t>::reverse_iterator p = clone_obc->obs.oi.snaps.rbegin();
 	       p != clone_obc->obs.oi.snaps.rend();
@@ -2827,9 +2830,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         uint64_t cookie = op.watch.cookie;
 	bool do_watch = op.watch.flag & 1;
         entity_name_t entity = ctx->reqid.name;
-	ObjectContext *obc = ctx->obc;
+	ObjectContextRef obc = ctx->obc;
 
-	dout(10) << "watch: ctx->obc=" << (void *)obc << " cookie=" << cookie
+	dout(10) << "watch: ctx->obc=" << (void *)obc.get() << " cookie=" << cookie
 		 << " oi.version=" << oi.version.version << " ctx->at_version=" << ctx->at_version << dendl;
 	dout(10) << "watch: oi.user_version=" << oi.user_version.version << dendl;
 	dout(10) << "watch: peer_addr="
@@ -3430,7 +3433,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 
   dout(10) << "_rollback_to " << soid << " snapid " << snapid << dendl;
 
-  ObjectContext *rollback_to;
+  ObjectContextRef rollback_to;
   int ret = find_object_context(
     hobject_t(soid.oid, soid.get_key(), snapid, soid.hash, info.pgid.pool(), soid.get_namespace()),
     &rollback_to, false, &cloneid);
@@ -3981,16 +3984,16 @@ void ReplicatedPG::op_applied(RepGather *repop)
 
   if (repop->ctx->clone_obc) {
     put_object_context(repop->ctx->clone_obc);
-    repop->ctx->clone_obc = 0;
+    repop->ctx->clone_obc = ObjectContextRef();
   }
   if (repop->ctx->snapset_obc) {
-    put_object_context(repop->ctx->snapset_obc);
-    repop->ctx->snapset_obc = 0;
+    repop->ctx->snapset_obc = ObjectContextRef();
   }
 
   put_object_context(repop->obc);
   put_object_contexts(repop->src_obc);
-  repop->obc = 0;
+  repop->src_obc.clear();
+  repop->obc = ObjectContextRef();
 
   if (!repop->aborted) {
     assert(repop->waitfor_ack.count(whoami) ||
@@ -4266,7 +4269,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
   }
 }
 
-ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContext *obc,
+ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContextRef obc,
 						 tid_t rep_tid)
 {
   if (ctx->op)
@@ -4360,7 +4363,7 @@ void ReplicatedPG::get_watchers(list<obj_watch_item_t> &pg_watchers)
   }
 }
 
-void ReplicatedPG::get_obc_watchers(ObjectContext *obc, list<obj_watch_item_t> &pg_watchers)
+void ReplicatedPG::get_obc_watchers(ObjectContextRef obc, list<obj_watch_item_t> &pg_watchers)
 {
   for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator j =
 	 obc->watchers.begin();
@@ -4393,7 +4396,7 @@ void ReplicatedPG::check_blacklisted_watchers()
   }
 }
 
-void ReplicatedPG::check_blacklisted_obc_watchers(ObjectContext *obc)
+void ReplicatedPG::check_blacklisted_obc_watchers(ObjectContextRef obc)
 {
   dout(20) << "ReplicatedPG::check_blacklisted_obc_watchers for obc " << obc->obs.oi.soid << dendl;
   for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator k =
@@ -4413,7 +4416,7 @@ void ReplicatedPG::check_blacklisted_obc_watchers(ObjectContext *obc)
   }
 }
 
-void ReplicatedPG::populate_obc_watchers(ObjectContext *obc)
+void ReplicatedPG::populate_obc_watchers(ObjectContextRef obc)
 {
   assert(is_active());
   assert(!is_missing_object(obc->obs.oi.soid) ||
@@ -4449,7 +4452,7 @@ void ReplicatedPG::populate_obc_watchers(ObjectContext *obc)
 
 void ReplicatedPG::handle_watch_timeout(WatchRef watch)
 {
-  ObjectContext *obc = watch->get_obc(); // handle_watch_timeout owns this ref
+  ObjectContextRef obc = watch->get_obc(); // handle_watch_timeout owns this ref
   dout(10) << "handle_watch_timeout obc " << obc << dendl;
 
   if (is_degraded_object(obc->obs.oi.soid)) {
@@ -4526,8 +4529,8 @@ ObjectContext *ReplicatedPG::_lookup_object_context(const hobject_t& oid)
   return NULL;
 }
 
-ObjectContext *ReplicatedPG::create_object_context(const object_info_t& oi,
-								 SnapSetContext *ssc)
+ObjectContextRef ReplicatedPG::create_object_context(const object_info_t& oi,
+						     SnapSetContext *ssc)
 {
   ObjectContext *obc = new ObjectContext(oi, false, ssc);
   dout(10) << "create_object_context " << obc << " " << oi.soid << " " << obc->ref << dendl;
@@ -4537,8 +4540,8 @@ ObjectContext *ReplicatedPG::create_object_context(const object_info_t& oi,
   return obc;
 }
 
-ObjectContext *ReplicatedPG::get_object_context(const hobject_t& soid,
-							      bool can_create)
+ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
+						  bool can_create)
 {
   map<hobject_t, ObjectContext*>::iterator p = object_contexts.find(soid);
   ObjectContext *obc;
@@ -4552,7 +4555,7 @@ ObjectContext *ReplicatedPG::get_object_context(const hobject_t& soid,
     int r = osd->store->getattr(coll, soid, OI_ATTR, bv);
     if (r < 0) {
       if (!can_create)
-	return NULL;   // -ENOENT!
+	return ObjectContextRef();   // -ENOENT!
 
       // new object.
       object_info_t oi(soid);
@@ -4606,7 +4609,7 @@ void ReplicatedPG::context_registry_on_change()
 
 
 int ReplicatedPG::find_object_context(const hobject_t& oid,
-				      ObjectContext **pobc,
+				      ObjectContextRef *pobc,
 				      bool can_create,
 				      snapid_t *psnapid)
 {
@@ -4618,11 +4621,11 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
   // want the snapdir?
   if (oid.snap == CEPH_SNAPDIR) {
     // return head or snapdir, whichever exists.
-    ObjectContext *obc = get_object_context(head, can_create);
+    ObjectContextRef obc = get_object_context(head, can_create);
     if (obc && !obc->obs.exists) {
       // ignore it if the obc exists but the object doesn't
       put_object_context(obc);
-      obc = NULL;
+      obc = ObjectContextRef();
     }
     if (!obc) {
       obc = get_object_context(snapdir, can_create);
@@ -4640,7 +4643,7 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
 
   // want the head?
   if (oid.snap == CEPH_NOSNAP) {
-    ObjectContext *obc = get_object_context(head, can_create);
+    ObjectContextRef obc = get_object_context(head, can_create);
     if (!obc)
       return -ENOENT;
     dout(10) << "find_object_context " << oid << " @" << oid.snap << dendl;
@@ -4663,7 +4666,7 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
   // head?
   if (oid.snap > ssc->snapset.seq) {
     if (ssc->snapset.head_exists) {
-      ObjectContext *obc = get_object_context(head, false);
+      ObjectContextRef obc = get_object_context(head, false);
       dout(10) << "find_object_context  " << head
 	       << " want " << oid.snap << " > snapset seq " << ssc->snapset.seq
 	       << " -- HIT " << obc->obs
@@ -4708,7 +4711,7 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
     return -EAGAIN;
   }
 
-  ObjectContext *obc = get_object_context(soid, false);
+  ObjectContextRef obc = get_object_context(soid, false);
   assert(obc);
 
   // clone
@@ -5099,7 +5102,7 @@ void ReplicatedPG::sub_op_modify_reply(OpRequestRef op)
 
 // ===========================================================
 
-void ReplicatedPG::calc_head_subsets(ObjectContext *obc, SnapSet& snapset, const hobject_t& head,
+void ReplicatedPG::calc_head_subsets(ObjectContextRef obc, SnapSet& snapset, const hobject_t& head,
 				     pg_missing_t& missing,
 				     const hobject_t &last_backfill,
 				     interval_set<uint64_t>& data_subset,
@@ -5384,7 +5387,7 @@ void ReplicatedPG::send_remove_op(const hobject_t& oid, eversion_t v, int peer)
  * clones/heads and dup data ranges where possible.
  */
 void ReplicatedPG::prep_push_to_replica(
-  ObjectContext *obc, const hobject_t& soid, int peer,
+  ObjectContextRef obc, const hobject_t& soid, int peer,
   int prio,
   PushOp *pop)
 {
@@ -5438,7 +5441,7 @@ void ReplicatedPG::prep_push_to_replica(
 }
 
 void ReplicatedPG::prep_push(int prio,
-			     ObjectContext *obc,
+			     ObjectContextRef obc,
 			     const hobject_t& soid, int peer,
 			     PushOp *pop)
 {
@@ -5454,7 +5457,7 @@ void ReplicatedPG::prep_push(int prio,
 
 void ReplicatedPG::prep_push(
   int prio,
-  ObjectContext *obc,
+  ObjectContextRef obc,
   const hobject_t& soid, int peer,
   eversion_t version,
   interval_set<uint64_t> &data_subset,
@@ -5745,7 +5748,7 @@ bool ReplicatedPG::handle_pull_response(
 	hoid.get_namespace());
       assert(ssc);
     }
-    ObjectContext *obc = create_object_context(pi.recovery_info.oi, ssc);
+    ObjectContextRef obc = create_object_context(pi.recovery_info.oi, ssc);
     obc->obs.exists = true;
 
     obc->ondisk_write_lock();
@@ -6150,7 +6153,7 @@ void ReplicatedPG::finish_degraded_object(const hobject_t& oid)
 	 j != i->second->blocking.end();
 	 i->second->blocking.erase(j++)) {
       dout(10) << " no longer blocking writes for " << (*j)->obs.oi.soid << dendl;
-      (*j)->blocked_by = NULL;
+      (*j)->blocked_by = ObjectContextRef();
       put_object_context(*j);
       put_object_context(i->second);
     }
@@ -6259,7 +6262,7 @@ void ReplicatedPG::_committed_pushed_object(
   unlock();
 }
 
-void ReplicatedPG::_applied_recovered_object(ObjectContext *obc)
+void ReplicatedPG::_applied_recovered_object(ObjectContextRef obc)
 {
   lock();
   dout(10) << "_applied_recovered_object " << *obc << dendl;
@@ -6469,7 +6472,7 @@ eversion_t ReplicatedPG::pick_newest_available(const hobject_t& oid)
 
 /* Mark an object as lost
  */
-ObjectContext *ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
+ObjectContextRef ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
 							    const hobject_t &oid, eversion_t version,
 							    utime_t mtime, int what)
 {
@@ -6486,7 +6489,7 @@ ObjectContext *ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
   pg_log_entry_t e(what, oid, info.last_update, version, osd_reqid_t(), mtime);
   pg_log.add(e);
   
-  ObjectContext *obc = get_object_context(oid, true);
+  ObjectContextRef obc = get_object_context(oid, true);
 
   obc->ondisk_write_lock();
 
@@ -6503,7 +6506,7 @@ ObjectContext *ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
 
 struct C_PG_MarkUnfoundLost : public Context {
   ReplicatedPGRef pg;
-  list<ObjectContext*> obcs;
+  list<ObjectContextRef> obcs;
   C_PG_MarkUnfoundLost(ReplicatedPG *p) : pg(p) {}
   void finish(int r) {
     pg->_finish_mark_all_unfound_lost(obcs);
@@ -6536,7 +6539,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
       continue;
     }
 
-    ObjectContext *obc = NULL;
+    ObjectContextRef obc;
     eversion_t prev;
 
     switch (what) {
@@ -6612,7 +6615,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   osd->queue_for_recovery(this);
 }
 
-void ReplicatedPG::_finish_mark_all_unfound_lost(list<ObjectContext*>& obcs)
+void ReplicatedPG::_finish_mark_all_unfound_lost(list<ObjectContextRef>& obcs)
 {
   lock();
   dout(10) << "_finish_mark_all_unfound_lost " << dendl;
@@ -7086,7 +7089,7 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
       case pg_log_entry_t::LOST_REVERT:
 	{
 	  if (item.have == latest->reverting_to) {
-	    ObjectContext *obc = get_object_context(soid, true);
+	    ObjectContextRef obc = get_object_context(soid, true);
 	    
 	    if (obc->obs.oi.version == latest->version) {
 	      // I'm already reverting
@@ -7186,7 +7189,7 @@ int ReplicatedPG::prep_object_replica_pushes(
   dout(10) << __func__ << ": on " << soid << dendl;
 
   // NOTE: we know we will get a valid oloc off of disk here.
-  ObjectContext *obc = get_object_context(soid, false);
+  ObjectContextRef obc = get_object_context(soid, false);
   if (!obc) {
     pg_log.missing_add(soid, v, eversion_t());
     bool uhoh = true;
@@ -7433,7 +7436,7 @@ int ReplicatedPG::recover_backfill(
   for (set<hobject_t>::iterator i = add_to_stat.begin();
        i != add_to_stat.end();
        ++i) {
-    ObjectContext *obc = get_object_context(*i, false);
+    ObjectContextRef obc = get_object_context(*i, false);
     pg_stat_t stat;
     add_object_context_to_pg_stat(obc, &stat);
     pending_backfill_updates[*i] = stat;
@@ -7508,7 +7511,7 @@ void ReplicatedPG::prep_backfill_object_push(
 
   if (!pushing.count(oid))
     start_recovery_op(oid);
-  ObjectContext *obc = get_object_context(oid, false);
+  ObjectContextRef obc = get_object_context(oid, false);
   obc->ondisk_read_lock();
   (*pushes)[peer].push_back(PushOp());
   prep_push_to_replica(obc, oid, peer, g_conf->osd_recovery_op_priority,
@@ -7536,7 +7539,7 @@ void ReplicatedPG::scan_range(
 
   for (vector<hobject_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
     handle.reset_tp_timeout();
-    ObjectContext *obc = NULL;
+    ObjectContextRef obc;
     if (is_primary())
       obc = _lookup_object_context(*p);
     if (obc) {
