@@ -1008,8 +1008,7 @@ protected:
 TEST_F(ObjectContextTest, read_write_lock)
 {
   {
-    object_info_t oi;
-    ObjectContext obc(oi, false, NULL);
+    ObjectContext obc;
 
     //
     // write_lock
@@ -1044,8 +1043,7 @@ TEST_F(ObjectContextTest, read_write_lock)
   useconds_t delay = 0;
 
   {
-    object_info_t oi;
-    ObjectContext obc(oi, false, NULL);
+    ObjectContext obc;
 
     //
     // write_lock
@@ -1102,8 +1100,7 @@ TEST_F(ObjectContextTest, read_write_lock)
   }
 
   {
-    object_info_t oi;
-    ObjectContext obc(oi, false, NULL);
+    ObjectContext obc;
 
     //
     // read_lock
