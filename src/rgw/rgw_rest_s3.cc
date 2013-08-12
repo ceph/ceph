@@ -1509,7 +1509,7 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(pair<string,int>& resu
       s->formatter->open_object_section("Deleted");
       s->formatter->dump_string("Key", result.first);
       s->formatter->close_section();
-    } else if (result.first < 0) {
+    } else if (result.second < 0) {
       struct rgw_html_errors r;
       int err_no;
 
