@@ -151,11 +151,11 @@ def build_ceph_cluster(ctx, config):
     no_of_osds = 0
 
     if mon_nodes is None:
-        raise Exception("no monitor nodes in the config file")
+        raise RuntimeError("no monitor nodes in the config file")
 
     estatus_new = execute_ceph_deploy(ctx, config, new_mon)
     if estatus_new != 0:
-        raise Exception("ceph-deploy: new command failed")
+        raise RuntimeError("ceph-deploy: new command failed")
 
     log.info('adding config inputs...')
     testdir = teuthology.get_testdir(ctx)
@@ -176,7 +176,7 @@ def build_ceph_cluster(ctx, config):
 
     estatus_install = execute_ceph_deploy(ctx, config, install_nodes)
     if estatus_install != 0:
-        raise Exception("ceph-deploy: Failed to install ceph")
+        raise RuntimeError("ceph-deploy: Failed to install ceph")
 
     mon_no = None
     mon_no = config.get('mon_initial_members')
@@ -191,12 +191,12 @@ def build_ceph_cluster(ctx, config):
             mon_create_nodes = './ceph-deploy mon create'+" "+initial_mons+" "+mon_node[k]
             estatus_mon = execute_ceph_deploy(ctx, config, mon_create_nodes)
             if estatus_mon != 0:
-                raise Exception("ceph-deploy: Failed to create monitor")
+                raise RuntimeError("ceph-deploy: Failed to create monitor")
     else:
         mon_create_nodes = './ceph-deploy mon create'+" "+mon_nodes
         estatus_mon = execute_ceph_deploy(ctx, config, mon_create_nodes)
         if estatus_mon != 0:
-            raise Exception("ceph-deploy: Failed to create monitors")
+            raise RuntimeError("ceph-deploy: Failed to create monitors")
 
     estatus_gather = execute_ceph_deploy(ctx, config, gather_keys)
     while (estatus_gather != 0):
@@ -204,16 +204,17 @@ def build_ceph_cluster(ctx, config):
         #execute_ceph_deploy(ctx, config, mon_create_nodes)
         estatus_gather = execute_ceph_deploy(ctx, config, gather_keys)
 
-    estatus_mds = execute_ceph_deploy(ctx, config, deploy_mds)
-    if estatus_mds != 0:
-        raise Exception("ceph-deploy: Failed to deploy mds")
+    if mds_nodes:
+        estatus_mds = execute_ceph_deploy(ctx, config, deploy_mds)
+        if estatus_mds != 0:
+            raise RuntimeError("ceph-deploy: Failed to deploy mds")
 
     if config.get('test_mon_destroy') is not None:
         for d in range(1, len(mon_node)):
             mon_destroy_nodes = './ceph-deploy mon destroy'+" "+mon_node[d]
             estatus_mon_d = execute_ceph_deploy(ctx, config, mon_destroy_nodes)
             if estatus_mon_d != 0:
-                raise Exception("ceph-deploy: Failed to delete monitor")
+                raise RuntimeError("ceph-deploy: Failed to delete monitor")
 
     node_dev_list = get_dev_for_osd(ctx, config)
     for d in node_dev_list:
@@ -230,7 +231,7 @@ def build_ceph_cluster(ctx, config):
                 log.info('successfully created osd')
                 no_of_osds += 1
             else:
-                raise Exception("ceph-deploy: Failed to create osds")
+                raise RuntimeError("ceph-deploy: Failed to create osds")
 
     if config.get('wait-for-healthy', True) and no_of_osds >= 2:
         is_healthy(ctx=ctx, config=None)
@@ -297,7 +298,7 @@ def build_ceph_cluster(ctx, config):
                     perms='0644'
                 )
     else:
-        raise Exception("The cluster is NOT operational due to insufficient OSDs")
+        raise RuntimeError("The cluster is NOT operational due to insufficient OSDs")
 
     try:
         yield
