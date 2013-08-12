@@ -8,7 +8,6 @@ roles:
 - - test0
 tasks:
 - install:
-    branch: next
 - parallel_example:
   - test0
   - test1  

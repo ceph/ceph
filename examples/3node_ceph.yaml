@@ -5,7 +5,6 @@ roles:
 
 tasks:
 - install:
-    branch: next
 - ceph:
 - kclient: [client.0]
 - interactive:
