@@ -204,9 +204,10 @@ def build_ceph_cluster(ctx, config):
         #execute_ceph_deploy(ctx, config, mon_create_nodes)
         estatus_gather = execute_ceph_deploy(ctx, config, gather_keys)
 
-    estatus_mds = execute_ceph_deploy(ctx, config, deploy_mds)
-    if estatus_mds != 0:
-        raise Exception("ceph-deploy: Failed to deploy mds")
+    if mds_nodes:
+        estatus_mds = execute_ceph_deploy(ctx, config, deploy_mds)
+        if estatus_mds != 0:
+            raise Exception("ceph-deploy: Failed to deploy mds")
 
     if config.get('test_mon_destroy') is not None:
         for d in range(1, len(mon_node)):
