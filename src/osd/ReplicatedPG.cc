@@ -752,7 +752,6 @@ void ReplicatedPG::do_op(OpRequestRef op)
   
   if (!op->may_write() && !obc->obs.exists) {
     osd->reply_op_error(op, -ENOENT);
-    put_object_context(obc);
     return;
   }
 
@@ -761,7 +760,6 @@ void ReplicatedPG::do_op(OpRequestRef op)
     dout(10) << "do_op writes for " << obc->obs.oi.soid << " blocked by "
 	     << obc->blocked_by->obs.oi.soid << dendl;
     wait_for_degraded_object(obc->blocked_by->obs.oi.soid, op);
-    put_object_context(obc);
     return;
   }
 
@@ -786,7 +784,6 @@ void ReplicatedPG::do_op(OpRequestRef op)
     if (osd_op.op.op == CEPH_OSD_OP_LIST_SNAPS &&
 	m->get_snapid() != CEPH_SNAPDIR) {
       dout(10) << "LIST_SNAPS with incorrect context" << dendl;
-      put_object_context(obc);
       osd->reply_op_error(op, -EINVAL);
       return;
     }
@@ -821,10 +818,8 @@ void ReplicatedPG::do_op(OpRequestRef op)
 		   (before_backfill && sobc->obs.oi.soid > backfill_target_info->last_backfill)) {
 	    wait_for_degraded_object(sobc->obs.oi.soid, op);
 	    dout(10) << " writes for " << obc->obs.oi.soid << " now blocked by "
-		   << sobc->obs.oi.soid << dendl;
-	    obc->get();
+		     << sobc->obs.oi.soid << dendl;
 	    obc->blocked_by = sobc;
-	    sobc->get();
 	    sobc->blocking.insert(obc);
 	  } else {
 	    dout(10) << " src_oid " << src_oid << " obc " << src_obc << dendl;
@@ -841,8 +836,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
       dout(10) << "no src oid specified for multi op " << osd_op << dendl;
       osd->reply_op_error(op, -EINVAL);
     }
-    put_object_contexts(src_obc);
-    put_object_context(obc);
+    src_obc.clear();
     return;
   }
 
@@ -873,8 +867,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
 	  src_obc[clone_oid] = sobc;
 	  continue;
 	}
-	put_object_contexts(src_obc);
-	put_object_context(obc);
+	src_obc.clear();
 	return;
       } else {
 	continue;
@@ -907,8 +900,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
 	       << " < snapset seq " << obc->ssc->snapset.seq
 	       << " on " << soid << dendl;
       delete ctx;
-      put_object_context(obc);
-      put_object_contexts(src_obc);
+      src_obc.clear();
       osd->reply_op_error(op, -EOLDSNAPC);
       return;
     }
@@ -917,8 +909,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
     if (oldv != eversion_t()) {
       dout(3) << "do_op dup " << ctx->reqid << " was " << oldv << dendl;
       delete ctx;
-      put_object_context(obc);
-      put_object_contexts(src_obc);
+      src_obc.clear();
       if (already_complete(oldv)) {
 	osd->reply_op_error(op, 0, oldv);
       } else {
@@ -994,8 +985,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
   if (result == -EAGAIN) {
     // clean up after the ctx
     delete ctx;
-    put_object_context(obc);
-    put_object_contexts(src_obc);
+    src_obc.clear();
     return;
   }
 
@@ -1003,8 +993,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
   if (ctx->delta_stats.num_bytes > 0 &&
       pool.info.get_flags() & pg_pool_t::FLAG_FULL) {
     delete ctx;
-    put_object_context(obc);
-    put_object_contexts(src_obc);
+    src_obc.clear();
     osd->reply_op_error(op, -ENOSPC);
     return;
   }
@@ -1049,8 +1038,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
     osd->send_message_osd_client(reply, m->get_connection());
     delete ctx;
-    put_object_context(obc);
-    put_object_contexts(src_obc);
+    src_obc.clear();
     return;
   }
 
@@ -1061,9 +1049,6 @@ void ReplicatedPG::do_op(OpRequestRef op)
 
   append_log(ctx->log, pg_trim_to, ctx->local_t);
   
-  // continuing on to write path, make sure object context is registered
-  assert(obc->registered);
-
   // verify that we are doing this in order?
   if (g_conf->osd_debug_op_order && m->get_source().is_client()) {
     map<client_t,tid_t>& cm = debug_op_order[obc->obs.oi.soid];
@@ -1478,7 +1463,6 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
     assert(0);
   }
   assert(r == 0);
-  assert(obc->registered);
 
   object_info_t &coi = obc->obs.oi;
   set<snapid_t> old_snaps(coi.snaps.begin(), coi.snaps.end());
@@ -1620,7 +1604,6 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
     snapset.head_exists ? CEPH_NOSNAP:CEPH_SNAPDIR, coid.hash,
     info.pgid.pool(), coid.get_namespace());
   ctx->snapset_obc = get_object_context(snapoid, false);
-  assert(ctx->snapset_obc->registered);
 
   if (snapset.clones.empty() && !snapset.head_exists) {
     dout(10) << coid << " removing " << snapoid << dendl;
@@ -2850,7 +2833,6 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    t.nop();  // make sure update the object_info on disk!
 	  }
 	  ctx->watch_connects.push_back(w);
-	  assert(obc->registered);
         } else {
 	  map<pair<uint64_t, entity_name_t>, watch_info_t>::iterator oi_iter =
 	    oi.watchers.find(make_pair(cookie, entity));
@@ -3516,7 +3498,6 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       obs.oi.size = rollback_to->obs.oi.size;
       snapset.head_exists = true;
     }
-    put_object_context(rollback_to);
   }
   return ret;
 }
@@ -3574,7 +3555,6 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     if (is_primary()) {
       ctx->clone_obc = new ObjectContext(static_snap_oi, true, NULL);
       ctx->clone_obc->get();
-      register_object_context(ctx->clone_obc);
       snap_oi = &ctx->clone_obc->obs.oi;
     } else {
       snap_oi = &static_snap_oi;
@@ -3824,7 +3804,6 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
  	ctx->at_version.version++;
 
 	ctx->snapset_obc->obs.exists = false;
-	assert(ctx->snapset_obc->registered);
       }
     }
   } else if (ctx->new_snapset.clones.size()) {
@@ -3841,7 +3820,6 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     ctx->snapset_obc->obs.oi.version = ctx->at_version;
     ctx->snapset_obc->obs.oi.last_reqid = ctx->reqid;
     ctx->snapset_obc->obs.oi.mtime = ctx->mtime;
-    assert(ctx->snapset_obc->registered);
 
     bufferlist bv(sizeof(ctx->new_obs.oi));
     ::encode(ctx->snapset_obc->obs.oi, bv);
@@ -3983,15 +3961,12 @@ void ReplicatedPG::op_applied(RepGather *repop)
   int whoami = osd->get_nodeid();
 
   if (repop->ctx->clone_obc) {
-    put_object_context(repop->ctx->clone_obc);
     repop->ctx->clone_obc = ObjectContextRef();
   }
   if (repop->ctx->snapset_obc) {
     repop->ctx->snapset_obc = ObjectContextRef();
   }
 
-  put_object_context(repop->obc);
-  put_object_contexts(repop->src_obc);
   repop->src_obc.clear();
   repop->obc = ObjectContextRef();
 
@@ -4359,7 +4334,6 @@ void ReplicatedPG::get_watchers(list<obj_watch_item_t> &pg_watchers)
        ++i) {
     i->second->get();
     get_obc_watchers(i->second, pg_watchers);
-    put_object_context(i->second);
   }
 }
 
@@ -4392,7 +4366,6 @@ void ReplicatedPG::check_blacklisted_watchers()
        ++i) {
     i->second->get();
     check_blacklisted_obc_watchers(i->second);
-    put_object_context(i->second);
   }
 }
 
@@ -4462,7 +4435,6 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
     dout(10) << "handle_watch_timeout waiting for degraded on obj "
 	     << obc->obs.oi.soid
 	     << dendl;
-    put_object_context(obc); // callback got its own ref
     return;
   }
 
@@ -4473,7 +4445,6 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
     scrubber.add_callback(
       watch->get_delayed_cb() // This callback!
       );
-    put_object_context(obc);
     return;
   }
 
@@ -4534,9 +4505,7 @@ ObjectContextRef ReplicatedPG::create_object_context(const object_info_t& oi,
 {
   ObjectContext *obc = new ObjectContext(oi, false, ssc);
   dout(10) << "create_object_context " << obc << " " << oi.soid << " " << obc->ref << dendl;
-  register_object_context(obc);
   populate_obc_watchers(obc);
-  obc->ref++;
   return obc;
 }
 
@@ -4573,7 +4542,6 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
     obc = new ObjectContext(oi, true, ssc);
     obc->obs.exists = true;
 
-    register_object_context(obc);
 
     if (can_create && !obc->ssc)
       obc->ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, true, soid.get_namespace());
@@ -4581,7 +4549,6 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
     populate_obc_watchers(obc);
     dout(10) << "get_object_context " << obc << " " << soid << " 0 -> 1 read " << obc->obs.oi << dendl;
   }
-  obc->ref++;
   return obc;
 }
 
@@ -4603,7 +4570,6 @@ void ReplicatedPG::context_registry_on_change()
   for (list<ObjectContext *>::iterator i = contexts.begin();
        i != contexts.end();
        contexts.erase(i++)) {
-    put_object_context(*i);
   }
 }
 
@@ -4624,7 +4590,6 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
     ObjectContextRef obc = get_object_context(head, can_create);
     if (obc && !obc->obs.exists) {
       // ignore it if the obc exists but the object doesn't
-      put_object_context(obc);
       obc = ObjectContextRef();
     }
     if (!obc) {
@@ -4726,35 +4691,8 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
   } else {
     dout(20) << "find_object_context  " << soid << " [" << first << "," << last
 	     << "] does not contain " << oid.snap << " -- DNE" << dendl;
-    put_object_context(obc);
     return -ENOENT;
   }
-}
-
-void ReplicatedPG::put_object_context(ObjectContext *obc)
-{
-  dout(10) << "put_object_context " << obc << " " << obc->obs.oi.soid << " "
-	   << obc->ref << " -> " << (obc->ref-1) << dendl;
-
-  --obc->ref;
-  if (obc->ref == 0) {
-    if (obc->ssc)
-      put_snapset_context(obc->ssc);
-
-    if (obc->registered)
-      object_contexts.erase(obc->obs.oi.soid);
-    delete obc;
-  }
-}
-
-void ReplicatedPG::put_object_contexts(map<hobject_t,ObjectContext*>& obcv)
-{
-  if (obcv.empty())
-    return;
-  dout(10) << "put_object_contexts " << obcv << dendl;
-  for (map<hobject_t,ObjectContext*>::iterator p = obcv.begin(); p != obcv.end(); ++p)
-    put_object_context(p->second);
-  obcv.clear();
 }
 
 void ReplicatedPG::add_object_context_to_pg_stat(ObjectContext *obc, pg_stat_t *pgstat)
@@ -6154,10 +6092,7 @@ void ReplicatedPG::finish_degraded_object(const hobject_t& oid)
 	 i->second->blocking.erase(j++)) {
       dout(10) << " no longer blocking writes for " << (*j)->obs.oi.soid << dendl;
       (*j)->blocked_by = ObjectContextRef();
-      put_object_context(*j);
-      put_object_context(i->second);
     }
-    put_object_context(i->second);
   }
   if (callbacks_for_degraded_object.count(oid)) {
     list<Context*> contexts;
@@ -6266,7 +6201,6 @@ void ReplicatedPG::_applied_recovered_object(ObjectContextRef obc)
 {
   lock();
   dout(10) << "_applied_recovered_object " << *obc << dendl;
-  put_object_context(obc);
 
   assert(active_pushes >= 1);
   --active_pushes;
@@ -6624,11 +6558,7 @@ void ReplicatedPG::_finish_mark_all_unfound_lost(list<ObjectContextRef>& obcs)
     requeue_ops(waiting_for_all_missing);
   waiting_for_all_missing.clear();
 
-  while (!obcs.empty()) {
-    ObjectContext *obc = obcs.front();
-    put_object_context(obc);
-    obcs.pop_front();
-  }
+  obcs.clear();
   unlock();
 }
 
@@ -7233,7 +7163,6 @@ int ReplicatedPG::prep_object_replica_pushes(
   
   dout(10) << " ondisk_read_unlock on " << soid << dendl;
   obc->ondisk_read_unlock();
-  put_object_context(obc);
 
   return 1;
 }
@@ -7440,7 +7369,6 @@ int ReplicatedPG::recover_backfill(
     pg_stat_t stat;
     add_object_context_to_pg_stat(obc, &stat);
     pending_backfill_updates[*i] = stat;
-    put_object_context(obc);
   }
   for (map<hobject_t, eversion_t>::iterator i = to_remove.begin();
        i != to_remove.end();
@@ -7517,7 +7445,6 @@ void ReplicatedPG::prep_backfill_object_push(
   prep_push_to_replica(obc, oid, peer, g_conf->osd_recovery_op_priority,
 		       &((*pushes)[peer].back()));
   obc->ondisk_read_unlock();
-  put_object_context(obc);
 }
 
 void ReplicatedPG::scan_range(
