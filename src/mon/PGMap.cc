@@ -803,7 +803,7 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
       f->close_section();
     } else {
       ss.setf(std::ios::right);
-      ss << std::setw(9) << p->second << " " << pg_state_string(p->first) << "\n";
+      ss << "           " << std::setw(7) << p->second << " " << pg_state_string(p->first) << "\n";
       ss.unsetf(std::ios::right);
     }
   }
