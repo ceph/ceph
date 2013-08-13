@@ -87,6 +87,56 @@ Upgrading from v0.66
   overrideable via max_open_files).  If this field has been customized
   in ceph.conf it should likely be adjusted upwards.
 
+Upgrading from v0.61 "Cuttlefish"
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In addition to the above notes about upgrading from v0.66:
+
+* There has been a huge revamp of the 'ceph' command-line interface
+  implementation.  The ``ceph-common`` client library needs to be
+  upgrade before ``ceph-mon`` is restarted in order to avoid problems
+  using the CLI (the old ``ceph`` client utility cannot talk to the
+  new ``ceph-mon``).
+
+* The CLI is now very careful about sending the 'status' one-liner
+  output to stderr and command output to stdout.  Scripts relying on
+  output should take care.
+
+* The 'ceph osd tell ...' and 'ceph mon tell ...' commands are no
+  longer supported.  Any callers should use::
+
+    ceph tell osd.<id or *> ...
+    ceph tell mon.<id or name or *> ...
+
+  The 'ceph mds tell ...' command is still there, but will soon also
+  transition to 'ceph tell mds.<id or name or *> ...'
+
+* The 'ceph osd crush add ...' command used to take one of two forms::
+
+    ceph osd crush add 123 osd.123 <weight> <location ...>
+    ceph osd crush add osd.123 <weight> <location ...>
+
+  This is because the id and crush name are redundant.  Now only the
+  simple form is supported, where the osd name/id can either be a bare
+  id (integer) or name (osd.<id>)::
+
+    ceph osd crush add osd.123 <weight> <location ...>
+    ceph osd crush add 123 <weight> <location ...>
+
+* There is now a maximum RADOS object size, configurable via 'osd max
+  object size', defaulting to 100 GB.  Note that this has no effect on
+  RBD, CephFS, or radosgw, which all stripe over objects. If you are
+  using librados and storing objects larger than that, you will need
+  to adjust 'osd max object size', and should consider using smaller
+  objects instead.
+
+* The 'osd min down {reporters|reports}' config options have been
+  renamed to 'mon osd min down {reporters|reports}', and the
+  documentation has been updated to reflect that these options apply
+  to the monitors (who process failure reports) and not OSDs.  If you
+  have adjusted these settings, please update your ``ceph.conf''
+  accordingly.
+
 
 Notable changes since v0.66
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
