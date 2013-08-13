@@ -1233,8 +1233,10 @@ RGWHandler *RGWREST::get_handler(RGWRados *store, struct req_state *s, RGWClient
     return NULL;
   }
   *init_error = handler->init(store, s, cio);
-  if (*init_error < 0)
+  if (*init_error < 0) {
+    m->put_handler(handler);
     return NULL;
+  }
 
   return handler;
 }
