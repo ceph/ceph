@@ -4492,14 +4492,6 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
   eval_repop(repop);
 }
 
-ObjectContext *ReplicatedPG::_lookup_object_context(const hobject_t& oid)
-{
-  map<hobject_t, ObjectContext*>::iterator p = object_contexts.find(oid);
-  if (p != object_contexts.end())
-    return p->second;
-  return NULL;
-}
-
 ObjectContextRef ReplicatedPG::create_object_context(const object_info_t& oi,
 						     SnapSetContext *ssc)
 {
@@ -7468,7 +7460,7 @@ void ReplicatedPG::scan_range(
     handle.reset_tp_timeout();
     ObjectContextRef obc;
     if (is_primary())
-      obc = _lookup_object_context(*p);
+      obc = object_contexts.lookup(*p);
     if (obc) {
       bi->objects[*p] = obc->obs.oi.version;
       dout(20) << "  " << *p << " " << obc->obs.oi.version << dendl;
