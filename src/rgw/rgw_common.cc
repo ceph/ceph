@@ -183,8 +183,7 @@ struct str_len meta_prefixes[] = { STR_LEN_ENTRY("HTTP_X_AMZ"),
                                    STR_LEN_ENTRY("HTTP_X_CONTAINER"),
                                    {NULL, 0} };
 
-
-void req_info::init_meta_info(bool *found_bad_meta)
+void req_info::init_meta_info(bool *found_bad_meta, bool normalize_prefix)
 {
   x_meta_map.clear();
 
@@ -201,12 +200,13 @@ void req_info::init_meta_info(bool *found_bad_meta)
         dout(10) << "meta>> " << p << dendl;
         const char *name = p+len; /* skip the prefix */
         int name_len = header_name.size() - len;
+        int normalize_prefix_idx = normalize_prefix ? 0 : prefix_num;
 
         if (found_bad_meta && strncmp(name, "_META_", name_len) == 0)
           *found_bad_meta = true;
 
-        char name_low[meta_prefixes[0].len + name_len + 1];
-        snprintf(name_low, meta_prefixes[0].len - 5 + name_len + 1, "%s%s", meta_prefixes[0].str + 5 /* skip HTTP_ */, name); // normalize meta prefix
+        char name_low[meta_prefixes[normalize_prefix_idx].len + name_len + 1];
+        snprintf(name_low, meta_prefixes[normalize_prefix_idx].len - 5 + name_len + 1, "%s%s", meta_prefixes[normalize_prefix_idx].str + 5 /* skip HTTP_ */, name); // normalize meta prefix
         int j;
         for (j = 0; name_low[j]; j++) {
           if (name_low[j] != '_')

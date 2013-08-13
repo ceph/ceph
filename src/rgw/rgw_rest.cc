@@ -1204,7 +1204,7 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
   }
   s->op = op_from_method(info.method);
 
-  info.init_meta_info(&s->has_bad_meta);
+  info.init_meta_info(&s->has_bad_meta, true);
 
   return 0;
 }

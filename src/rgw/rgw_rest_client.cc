@@ -571,7 +571,7 @@ int RGWRESTStreamReadRequest::get_obj(RGWAccessKey& key, map<string, string>& ex
   new_info.request_uri = new_info.script_uri;
   new_info.effective_uri = new_info.effective_uri;
 
-  new_info.init_meta_info(NULL);
+  new_info.init_meta_info(NULL, true);
 
   int ret = sign_request(key, new_env, new_info);
   if (ret < 0) {
