@@ -82,22 +82,25 @@ void librados::IoCtxImpl::complete_aio_write(AioCompletionImpl *c)
   aio_write_list_lock.Lock();
   assert(c->io == this);
   c->aio_write_list_item.remove_myself();
-  // queue async flush waiters
-  map<tid_t, std::list<AioCompletionImpl*> >::iterator waiters =
-    aio_write_waiters.find(c->aio_write_seq);
-  if (waiters != aio_write_waiters.end()) {
-    ldout(client->cct, 20) << "found " << waiters->second.size()
-			   << " waiters" << dendl;
+
+  map<tid_t, std::list<AioCompletionImpl*> >::iterator waiters = aio_write_waiters.begin();
+  while (waiters != aio_write_waiters.end()) {
+    if (!aio_write_list.empty() &&
+	aio_write_list.front()->aio_write_seq <= waiters->first) {
+      ldout(client->cct, 20) << " next outstanding write is " << aio_write_list.front()->aio_write_seq
+			     << " <= waiter " << waiters->first
+			     << ", stopping" << dendl;
+      break;
+    }
+    ldout(client->cct, 20) << " waking waiters on seq " << waiters->first << dendl;
     for (std::list<AioCompletionImpl*>::iterator it = waiters->second.begin();
 	 it != waiters->second.end(); ++it) {
       client->finisher.queue(new C_AioCompleteAndSafe(*it));
       (*it)->put();
     }
-    aio_write_waiters.erase(waiters);
-  } else {
-    ldout(client->cct, 20) << "found no waiters for tid "
-			   << c->aio_write_seq << dendl;
+    aio_write_waiters.erase(waiters++);
   }
+
   aio_write_cond.Signal();
   aio_write_list_lock.Unlock();
   put();
@@ -109,11 +112,13 @@ void librados::IoCtxImpl::flush_aio_writes_async(AioCompletionImpl *c)
 			 << " completion " << c << dendl;
   Mutex::Locker l(aio_write_list_lock);
   tid_t seq = aio_write_seq;
-  ldout(client->cct, 20) << "flush_aio_writes_async waiting on tid "
-			 << seq << dendl;
   if (aio_write_list.empty()) {
+    ldout(client->cct, 20) << "flush_aio_writes_async no writes. (tid "
+			   << seq << ")" << dendl;
     client->finisher.queue(new C_AioCompleteAndSafe(c));
   } else {
+    ldout(client->cct, 20) << "flush_aio_writes_async " << aio_write_list.size()
+			   << " writes in flight; waiting on tid " << seq << dendl;
     c->get();
     aio_write_waiters[seq].push_back(c);
   }
