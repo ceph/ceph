@@ -751,10 +751,10 @@ void PGMap::recovery_summary(Formatter *f, ostream *out) const
       if (!first)
 	*out << "; ";
       *out << " recovering "
-	   << si_t(objps) << " o/s, "
-	   << si_t(bps) << "B/s";
+	   << pretty_si_t(objps) << "objects/s, "
+	   << pretty_si_t(bps) << "B/s";
       if (pos_delta.stats.sum.num_keys_recovered)
-	*out << ", " << si_t(kps) << " key/s";
+	*out << ", " << pretty_si_t(kps) << "keys/s";
     }
   }
 }
@@ -821,7 +821,7 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
     *out << "    pgmap v" << version << ": "
 	 << pg_stat.size() << " pgs, " << pg_pool_sum.size() << " pools, "
 	 << prettybyte_t(pg_sum.stats.sum.num_bytes) << " data, "
-	 << si_t(pg_sum.stats.sum.num_objects) << " objects\n";
+	 << pretty_si_t(pg_sum.stats.sum.num_objects) << "objects\n";
     *out << "          "
 	 << kb_t(osd_sum.kb_used) << " used, "
 	 << kb_t(osd_sum.kb_avail) << " / "
@@ -850,7 +850,7 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
       if (f) {
 	f->dump_int("read_bytes_sec", rd);
       } else {
-	*out << si_t(rd) << "B/s rd, ";
+	*out << pretty_si_t(rd) << "B/s rd, ";
       }
     }
     if (pos_delta.stats.sum.num_wr) {
@@ -858,14 +858,14 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
       if (f) {
 	f->dump_int("write_bytes_sec", wr);
       } else {
-	*out << si_t(wr) << "B/s wr, ";
+	*out << pretty_si_t(wr) << "B/s wr, ";
       }
     }
     int64_t iops = (pos_delta.stats.sum.num_rd + pos_delta.stats.sum.num_wr) / (double)stamp_delta;
     if (f) {
       f->dump_int("op_per_sec", iops);
     } else {
-      *out << si_t(iops) << "op/s";
+      *out << pretty_si_t(iops) << "op/s";
       *out << "\n";
     }
   }
@@ -903,14 +903,14 @@ void PGMap::print_oneline_summary(ostream *out) const
     *out << "; ";
     if (pos_delta.stats.sum.num_rd) {
       int64_t rd = (pos_delta.stats.sum.num_rd_kb << 10) / (double)stamp_delta;
-      *out << si_t(rd) << "B/s rd, ";
+      *out << pretty_si_t(rd) << "B/s rd, ";
     }
     if (pos_delta.stats.sum.num_wr) {
       int64_t wr = (pos_delta.stats.sum.num_wr_kb << 10) / (double)stamp_delta;
-      *out << si_t(wr) << "B/s wr, ";
+      *out << pretty_si_t(wr) << "B/s wr, ";
     }
     int64_t iops = (pos_delta.stats.sum.num_rd + pos_delta.stats.sum.num_wr) / (double)stamp_delta;
-    *out << si_t(iops) << "op/s";
+    *out << pretty_si_t(iops) << "op/s";
   }
 
   std::stringstream ssr;
