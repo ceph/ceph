@@ -257,6 +257,7 @@ void RGWProcess::run()
     req_wq.queue(req);
   }
 
+  m_tp.drain();
   m_tp.stop();
 }
 
