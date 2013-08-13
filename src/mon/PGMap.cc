@@ -711,7 +711,7 @@ void PGMap::recovery_summary(Formatter *f, ostream *out) const
       f->dump_string("degrated_ratio", b);
     } else {
       *out << pg_sum.stats.sum.num_objects_degraded 
-	   << "/" << pg_sum.stats.sum.num_object_copies << " degraded (" << b << "%)";
+	   << "/" << pg_sum.stats.sum.num_object_copies << " objects degraded (" << b << "%)";
     }
     first = false;
   }
