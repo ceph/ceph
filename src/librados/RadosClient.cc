@@ -563,16 +563,13 @@ public:
 void librados::RadosClient::watch_notify(MWatchNotify *m)
 {
   assert(lock.is_locked());
-  WatchContext *wc = NULL;
   map<uint64_t, WatchContext *>::iterator iter = watchers.find(m->cookie);
-  if (iter != watchers.end())
-    wc = iter->second;
-
-  if (!wc)
-    return;
-
-  wc->get();
-  finisher.queue(new C_WatchNotify(wc, &lock, m->opcode, m->ver, m->notify_id, m->bl));
+  if (iter != watchers.end()) {
+    WatchContext *wc = iter->second;
+    assert(wc);
+    wc->get();
+    finisher.queue(new C_WatchNotify(wc, &lock, m->opcode, m->ver, m->notify_id, m->bl));
+  }
   m->put();
 }
 
