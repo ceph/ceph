@@ -4500,12 +4500,9 @@ ObjectContextRef ReplicatedPG::create_object_context(const object_info_t& oi,
 ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
 						  bool can_create)
 {
-  map<hobject_t, ObjectContext*>::iterator p = object_contexts.find(soid);
-  ObjectContext *obc;
-  if (p != object_contexts.end()) {
-    obc = p->second;
-    dout(10) << "get_object_context " << obc << " " << soid << " " << obc->ref
-	     << " -> " << (obc->ref+1) << dendl;
+  ObjectContextRef obc = object_contexts.lookup(soid);
+  if (obc) {
+    dout(10) << "get_object_context " << obc << " " << soid << dendl;
   } else {
     // check disk
     bufferlist bv;
@@ -6076,12 +6073,11 @@ bool ReplicatedPG::handle_push_reply(int peer, PushReplyOp &op, PushOp *reply)
 void ReplicatedPG::finish_degraded_object(const hobject_t& oid)
 {
   dout(10) << "finish_degraded_object " << oid << dendl;
-  map<hobject_t, ObjectContext *>::iterator i = object_contexts.find(oid);
-  if (i != object_contexts.end()) {
-    i->second->get();
-    for (set<ObjectContext*>::iterator j = i->second->blocking.begin();
-	 j != i->second->blocking.end();
-	 i->second->blocking.erase(j++)) {
+  ObjectContextRef obc(object_contexts.lookup(oid));
+  if (obc) {
+    for (set<ObjectContextRef>::iterator j = obc->blocking.begin();
+	 j != obc->blocking.end();
+	 obc->blocking.erase(j++)) {
       dout(10) << " no longer blocking writes for " << (*j)->obs.oi.soid << dendl;
       (*j)->blocked_by = ObjectContextRef();
     }
