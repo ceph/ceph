@@ -1833,7 +1833,7 @@ void Monitor::get_status(stringstream &ss, Formatter *f)
     ss << "   health " << health << "\n";
     ss << "   monmap " << *monmap << ", election epoch " << get_epoch()
       << ", quorum " << get_quorum() << " " << get_quorum_names() << "\n";
-    ss << "   osdmap " << osdmon()->osdmap << "\n";
+    osdmon()->osdmap.print_summary(NULL, ss);
     ss << "    pgmap " << pgmon()->pg_map << "\n";
     ss << "   mdsmap " << mdsmon()->mdsmap << "\n";
   }
