@@ -4329,11 +4329,10 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
 
 void ReplicatedPG::get_watchers(list<obj_watch_item_t> &pg_watchers)
 {
-  for (map<hobject_t, ObjectContext*>::iterator i = object_contexts.begin();
-       i != object_contexts.end();
-       ++i) {
-    i->second->get();
-    get_obc_watchers(i->second, pg_watchers);
+  pair<hobject_t, ObjectContextRef> i;
+  while (object_contexts.get_next(i.first, &i)) {
+    ObjectContextRef obc(i.second);
+    get_obc_watchers(obc, pg_watchers);
   }
 }
 
@@ -4361,12 +4360,9 @@ void ReplicatedPG::get_obc_watchers(ObjectContextRef obc, list<obj_watch_item_t>
 void ReplicatedPG::check_blacklisted_watchers()
 {
   dout(20) << "ReplicatedPG::check_blacklisted_watchers for pg " << get_pgid() << dendl;
-  for (map<hobject_t, ObjectContext*>::iterator i = object_contexts.begin();
-       i != object_contexts.end();
-       ++i) {
-    i->second->get();
-    check_blacklisted_obc_watchers(i->second);
-  }
+  pair<hobject_t, ObjectContextRef> i;
+  while (object_contexts.get_next(i.first, &i))
+    check_blacklisted_obc_watchers(i.second);
 }
 
 void ReplicatedPG::check_blacklisted_obc_watchers(ObjectContextRef obc)
@@ -4546,22 +4542,17 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
 
 void ReplicatedPG::context_registry_on_change()
 {
-  list<ObjectContext *> contexts;
-  for (map<hobject_t, ObjectContext*>::iterator i = object_contexts.begin();
-       i != object_contexts.end();
-       ++i) {
-    i->second->get();
-    contexts.push_back(i->second);
-    for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator j =
-	   i->second->watchers.begin();
-	 j != i->second->watchers.end();
-	 i->second->watchers.erase(j++)) {
-      j->second->discard();
+  pair<hobject_t, ObjectContextRef> i;
+  while (object_contexts.get_next(i.first, &i)) {
+    ObjectContextRef obc(i.second);
+    if (obc) {
+      for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator j =
+	     obc->watchers.begin();
+	   j != obc->watchers.end();
+	   obc->watchers.erase(j++)) {
+	j->second->discard();
+      }
     }
-  }
-  for (list<ObjectContext *>::iterator i = contexts.begin();
-       i != contexts.end();
-       contexts.erase(i++)) {
   }
 }
 
