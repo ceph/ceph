@@ -1743,12 +1743,12 @@ void OSDMap::print_summary(Formatter *f, ostream& out) const
 		   "true" : "false");
     f->close_section();
   } else {
-    out << "   osdmap e" << get_epoch() << ": "
+    out << "     osdmap e" << get_epoch() << ": "
 	<< get_num_osds() << " osds: "
 	<< get_num_up_osds() << " up, "
 	<< get_num_in_osds() << " in\n";
     if (flags)
-      out << "          flags " << get_flag_string() << "\n";
+      out << "            flags " << get_flag_string() << "\n";
   }
 }
 

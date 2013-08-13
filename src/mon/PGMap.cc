@@ -754,7 +754,7 @@ void PGMap::recovery_rate_summary(Formatter *f, ostream *out) const
       *out << pretty_si_t(bps) << "B/s";
       if (pos_delta.stats.sum.num_keys_recovered)
 	*out << ", " << pretty_si_t(kps) << "keys/s";
-      *out << ", " << pretty_si_t(objps) << "objects/s recovering";
+      *out << ", " << pretty_si_t(objps) << "objects/s";
     }
   }
 }
@@ -803,7 +803,7 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
       f->close_section();
     } else {
       ss.setf(std::ios::right);
-      ss << "           " << std::setw(7) << p->second << " " << pg_state_string(p->first) << "\n";
+      ss << "             " << std::setw(7) << p->second << " " << pg_state_string(p->first) << "\n";
       ss.unsetf(std::ios::right);
     }
   }
@@ -818,11 +818,11 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
     f->dump_unsigned("bytes_avail", osd_sum.kb_avail * 4096ull);
     f->dump_unsigned("bytes_total", osd_sum.kb * 4096ull);
   } else {
-    *out << "    pgmap v" << version << ": "
+    *out << "      pgmap v" << version << ": "
 	 << pg_stat.size() << " pgs, " << pg_pool_sum.size() << " pools, "
 	 << prettybyte_t(pg_sum.stats.sum.num_bytes) << " data, "
 	 << pretty_si_t(pg_sum.stats.sum.num_objects) << "objects\n";
-    *out << "          "
+    *out << "            "
 	 << kb_t(osd_sum.kb_used) << " used, "
 	 << kb_t(osd_sum.kb_avail) << " / "
 	 << kb_t(osd_sum.kb) << " avail\n";
@@ -831,7 +831,7 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
   std::stringstream ssr;
   recovery_summary(f, &ssr);
   if (!f && ssr.str().length())
-    *out << "          " << ssr.str() << "\n";
+    *out << "            " << ssr.str() << "\n";
   ssr.clear();
   ssr.str("");
 
@@ -840,7 +840,7 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
 
   recovery_rate_summary(f, &ssr);
   if (!f && ssr.str().length())
-    *out << "          " << ssr.str() << "\n";
+    *out << "recovery io " << ssr.str() << "\n";
 
   // make non-negative; we can get negative values if osds send
   // uncommitted stats and then "go backward" or if they are just
@@ -850,7 +850,7 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
   if (pos_delta.stats.sum.num_rd ||
       pos_delta.stats.sum.num_wr) {
     if (!f)
-      *out << "     load ";
+      *out << "  client io ";
     if (pos_delta.stats.sum.num_rd) {
       int64_t rd = (pos_delta.stats.sum.num_rd_kb << 10) / (double)stamp_delta;
       if (f) {
@@ -927,7 +927,7 @@ void PGMap::print_oneline_summary(ostream *out) const
   ssr.str("");
   recovery_rate_summary(NULL, &ssr);
   if (ssr.str().length())
-    *out << "; " << ssr.str();
+    *out << "; " << ssr.str() " recovering";
 }
 
 void PGMap::generate_test_instances(list<PGMap*>& o)
