@@ -26,7 +26,7 @@ def download_ceph_deploy(ctx, config):
     default_cd_branch = {'ceph-deploy-branch': 'master'}
     ceph_deploy_branch = ctx.get(
         'ceph-deploy',
-        default_cd_branch).get('ceph-deploy-branch', 'master')
+        default_cd_branch).get('ceph-deploy-branch')
 
     ctx.cluster.only(ceph_admin).run(
         args=[
