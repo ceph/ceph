@@ -851,8 +851,10 @@ def task(ctx, config):
 
     project, = config.get('project', 'ceph'),
     log.debug('project %s' % project)
-    overrides = ctx.config.get('overrides', {}).get('install', {})
-    teuthology.deep_merge(config, overrides.get(project, {}))
+    overrides = ctx.config.get('overrides')
+    if overrides:
+        install_overrides = overrides.get('install', {})
+        teuthology.deep_merge(config, install_overrides.get(project, {}))
     log.debug('config %s' % config)
 
     # Flavor tells us what gitbuilder to fetch the prebuilt software
