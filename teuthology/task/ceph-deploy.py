@@ -12,16 +12,25 @@ from ..orchestra import run
 
 log = logging.getLogger(__name__)
 
+
 @contextlib.contextmanager
 def download_ceph_deploy(ctx, config):
+    """
+    Downloads ceph-deploy from the ceph.com git mirror and (by default)
+    switches to the master branch. If the `ceph-deploy-branch` is specified, it
+    will use that instead.
+    """
     log.info('Downloading ceph-deploy...')
     testdir = teuthology.get_testdir(ctx)
     ceph_admin = teuthology.get_first_mon(ctx, config)
+    default_cd_branch = {'ceph-deploy-branch': 'master'}
+    ceph_deploy_branch = ctx.get(
+        'ceph-deploy',
+        default_cd_branch).get('ceph-deploy-branch')
 
     ctx.cluster.only(ceph_admin).run(
         args=[
-            'git', 'clone',
-#            'http://github.com/ceph/ceph-deploy.git',
+            'git', 'clone', '-b', ceph_deploy_branch,
             'git://ceph.com/ceph-deploy.git',
             '{tdir}/ceph-deploy'.format(tdir=testdir),
             ],
@@ -46,6 +55,7 @@ def download_ceph_deploy(ctx, config):
                 '{tdir}/ceph-deploy'.format(tdir=testdir),
                 ],
             )
+
 
 def is_healthy(ctx, config):
     """Wait until a Ceph cluster is healthy."""
