@@ -71,14 +71,16 @@ def _run_and_log_error_if_fails(remote, args):
 def _get_config_value_for_remote(ctx, remote, config, key):
     # This function was written to figure out which branch should be used for a
     # given remote. 'all' overrides any applicable roles.
-    if 'all' in config.keys():
-        return config['all'].get(key, None)
-    else:
-        roles = ctx.cluster.remotes[remote]
+
+    roles = ctx.cluster.remotes[remote]
+    if 'all' in config:
+        return config['all'][key]
+    elif roles:
         for role in roles:
             if role in config and key in config[role]:
                 return config[role][key]
-    return None
+    if key in config:
+        return config[key]
 
 
 def _get_baseurlinfo_and_dist(ctx, remote, config):
@@ -137,6 +139,7 @@ def _get_baseurlinfo_and_dist(ctx, remote, config):
         uri = 'sha1/' + sha1
     else:
         # FIXME: Should master be the default?
+        log.debug("defaulting to master branch")
         uri = 'ref/master'
     retval['uri'] = uri
 
