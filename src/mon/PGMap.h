@@ -169,6 +169,7 @@ public:
   void dump(ostream& ss) const;
 
   void recovery_summary(Formatter *f, ostream *out) const;
+  void recovery_rate_summary(Formatter *f, ostream *out) const;
   void print_summary(Formatter *f, ostream *out) const;
   void print_oneline_summary(ostream *out) const;
 
