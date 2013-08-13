@@ -3553,8 +3553,10 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     object_info_t static_snap_oi(coid);
     object_info_t *snap_oi;
     if (is_primary()) {
-      ctx->clone_obc = new ObjectContext(static_snap_oi, true, NULL);
-      ctx->clone_obc->get();
+      ctx->clone_obc = object_contexts.lookup_or_create(static_snap_oi.soid);
+      ctx->clone_obc->destructor_callback = new C_PG_ObjectContext(this, ctx->clone_obc.get());
+      ctx->clone_obc->obs.oi = static_snap_oi;
+      ctx->clone_obc->obs.exists = true;
       snap_oi = &ctx->clone_obc->obs.oi;
     } else {
       snap_oi = &static_snap_oi;
@@ -4491,8 +4493,15 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
 ObjectContextRef ReplicatedPG::create_object_context(const object_info_t& oi,
 						     SnapSetContext *ssc)
 {
-  ObjectContext *obc = new ObjectContext(oi, false, ssc);
-  dout(10) << "create_object_context " << obc << " " << oi.soid << " " << obc->ref << dendl;
+  ObjectContextRef obc(object_contexts.lookup_or_create(oi.soid));
+  assert(obc->destructor_callback == NULL);
+  obc->destructor_callback = new C_PG_ObjectContext(this, obc.get());  
+  obc->obs.oi = oi;
+  obc->obs.exists = false;
+  obc->ssc = ssc;
+  if (ssc)
+    register_snapset_context(ssc);
+  dout(10) << "create_object_context " << (void*)obc.get() << " " << oi.soid << " " << dendl;
   populate_obc_watchers(obc);
   return obc;
 }
@@ -4521,15 +4530,15 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
 
     assert(oi.soid.pool == (int64_t)info.pgid.pool());
 
-    SnapSetContext *ssc = NULL;
-    if (can_create)
-      ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, true, soid.get_namespace());
-    obc = new ObjectContext(oi, true, ssc);
+    obc = object_contexts.lookup_or_create(oi.soid);
+    obc->destructor_callback = new C_PG_ObjectContext(this, obc.get());
+    obc->obs.oi = oi;
     obc->obs.exists = true;
 
-
-    if (can_create && !obc->ssc)
+    if (can_create) {
       obc->ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, true, soid.get_namespace());
+      register_snapset_context(obc->ssc);
+    }
 
     populate_obc_watchers(obc);
     dout(10) << "get_object_context " << obc << " " << soid << " 0 -> 1 read " << obc->obs.oi << dendl;
