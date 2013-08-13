@@ -1833,9 +1833,9 @@ void Monitor::get_status(stringstream &ss, Formatter *f)
     ss << "   health " << health << "\n";
     ss << "   monmap " << *monmap << ", election epoch " << get_epoch()
       << ", quorum " << get_quorum() << " " << get_quorum_names() << "\n";
+    ss << "   mdsmap " << mdsmon()->mdsmap << "\n";
     osdmon()->osdmap.print_summary(NULL, ss);
     pgmon()->pg_map.print_summary(NULL, &ss);
-    ss << "   mdsmap " << mdsmon()->mdsmap << "\n";
   }
 }
 
