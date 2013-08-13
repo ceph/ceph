@@ -4,12 +4,13 @@ import json
 import requests
 from urlparse import urlparse
 
+from ..orchestra.connection import split_user
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
 def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False):
-    log.info('radosgw-admin: %s' % cmd)
+    log.info('rgwadmin: %s' % cmd)
     testdir = teuthology.get_testdir(ctx)
     pre = [
         '{tdir}/adjust-ulimits'.format(tdir=testdir),
@@ -21,7 +22,7 @@ def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False):
         '-n',  client,
         ]
     pre.extend(cmd)
-    log.info('radosgw-admin: cmd=%s' % pre)
+    log.info('rgwadmin: cmd=%s' % pre)
     (remote,) = ctx.cluster.only(client).remotes.iterkeys()
     proc = remote.run(
         args=pre,
@@ -100,7 +101,6 @@ def zone_for_client(ctx, client):
 
 
 def radosgw_agent_sync(ctx, agent_host, agent_port):
-    print 'agent_host', agent_host, 'port', agent_port
     log.info('sync agent {h}:{p}'.format(h=agent_host, p=agent_port))
     return requests.post('http://{addr}:{port}/metadata/incremental'.format(addr = agent_host, port = agent_port))
 
@@ -108,17 +108,22 @@ def radosgw_agent_sync_all(ctx):
     if ctx.radosgw_agent.procs:
         for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
             dest_zone = zone_for_client(ctx, agent_client)
-            port = c_config.get('port', 8000)
-            dest_host, dest_port = get_zone_host_and_port(ctx, agent_client, dest_zone)
-            radosgw_agent_sync(ctx, dest_host, port)
+            sync_dest, sync_port = get_sync_agent(ctx, agent_client)
+            log.debug('doing a sync from {host1} to {host2}'.format(
+                host1=agent_client,host2=sync_dest))
+            radosgw_agent_sync(ctx, sync_dest, sync_port)
 
-def radosgw_agent_sync_all(ctx):
-    if ctx.radosgw_agent.procs:
-        for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
-            dest_zone = zone_for_client(ctx, agent_client)
-            port = c_config.get('port', 8000)
-            dest_host, dest_port = get_zone_host_and_port(ctx, agent_client, dest_zone)
-            radosgw_agent_sync(ctx, dest_host, port)
+def host_for_role(ctx, role):
+    for target, roles in zip(ctx.config['targets'].iterkeys(), ctx.config['roles']):
+        if role in roles:
+            _, host = split_user(target)
+            return host
 
-
-
+def get_sync_agent(ctx, source):
+    for task in ctx.config['tasks']:
+        if 'radosgw-agent' not in task:
+            continue
+        for client, conf in task['radosgw-agent'].iteritems():
+            if conf['src'] == source:
+                return host_for_role(ctx, source), conf.get('port', 8000)
+    return None, None

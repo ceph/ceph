@@ -4,9 +4,12 @@
 #   grep '^ *# TESTCASE' | sed 's/^ *# TESTCASE //'
 #
 
-from cStringIO import StringIO
-import logging
+import contextlib
 import json
+import logging
+import time
+
+from cStringIO import StringIO
 
 import boto.exception
 import boto.s3.connection
@@ -14,9 +17,8 @@ import boto.s3.acl
 
 import teuthology.task_util.rgw as rgw_utils
 
-import time
-
 from teuthology import misc as teuthology
+from teuthology import contextutil
 from teuthology.task_util.rgw import rgwadmin
 
 log = logging.getLogger(__name__)
@@ -98,6 +100,65 @@ def task(ctx, config):
             '--email', email,
             ])
     assert err
+
+    # this whole block should only be run if regions have been configured
+    if multi_region_run:
+		    rgw_utils.radosgw_agent_sync_all(ctx)
+		    # post-sync, validate that user1 exists on the sync destination host
+		    for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
+		        dest_client = c_config['dest']
+		        (err, out) = rgwadmin(ctx, dest_client, ['user', 'info', '--uid', user1])
+		        assert not err
+		        assert out['user_id'] == user1
+		        assert out['email'] == email
+		        assert out['display_name'] == display_name1
+		        assert len(out['keys']) == 1
+		        assert out['keys'][0]['access_key'] == access_key
+		        assert out['keys'][0]['secret_key'] == secret_key
+		        assert not out['suspended']
+		
+		    # compare the metadata between different regions, make sure it matches
+		    for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
+		        source_client = c_config['src']
+		        dest_client = c_config['dest']
+		        (err1, out1) = rgwadmin(ctx, source_client, ['metadata', 'get', 'user:{uid}'.format(uid=user1)])
+		        (err2, out2) = rgwadmin(ctx, dest_client, ['metadata', 'get', 'user:{uid}'.format(uid=user1)])
+		        assert not err1
+		        assert not err2
+		        assert out1 == out2
+		
+		    # suspend a user on the master, then check the status on the destination
+		    for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
+		        source_client = c_config['src']
+		        dest_client = c_config['dest']
+		        (err, out) = rgwadmin(ctx, source_client, ['user', 'suspend', '--uid', user1])
+		        rgw_utils.radosgw_agent_sync_all(ctx)
+		        (err, out) = rgwadmin(ctx, dest_client, ['user', 'info', '--uid', user1])
+		        assert not err
+		        assert out['suspended']
+		
+		    # delete a user on the master, then check that it's gone on the destination
+		    for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
+		        source_client = c_config['src']
+		        dest_client = c_config['dest']
+		        (err, out) = rgwadmin(ctx, source_client, ['user', 'rm', '--uid', user1])
+		        assert not err
+		        rgw_utils.radosgw_agent_sync_all(ctx)
+		        (err, out) = rgwadmin(ctx, dest_client, ['user', 'info', '--uid', user1])
+		        assert out is None
+		
+		        # then recreate it so later tests pass
+		        (err, out) = rgwadmin(ctx, client, [
+		            'user', 'create',
+		            '--uid', user1,
+		            '--display-name', display_name1,
+		            '--email', email,
+		            '--access-key', access_key,
+		            '--secret', secret_key,
+		            '--max-buckets', '4'
+		            ])
+		        assert not err
+    # end of 'if multi_region_run:'
 
     # TESTCASE 'info-existing','user','info','existing user','returns correct info'
     (err, out) = rgwadmin(ctx, client, ['user', 'info', '--uid', user1])
