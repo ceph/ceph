@@ -1,6 +1,7 @@
 from cStringIO import StringIO
 import logging
 import json
+import requests
 from urlparse import urlparse
 
 from teuthology import misc as teuthology
@@ -17,8 +18,10 @@ def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False):
         'radosgw-admin'.format(tdir=testdir),
         '--log-to-stderr',
         '--format', 'json',
+        '-n',  client,
         ]
     pre.extend(cmd)
+    log.info('radosgw-admin: cmd=%s' % pre)
     (remote,) = ctx.cluster.only(client).remotes.iterkeys()
     proc = remote.run(
         args=pre,
@@ -53,6 +56,35 @@ def get_zone_host_and_port(ctx, client, zone):
                 return host, port
     assert False, 'no endpoint for zone {zone} found'.format(zone=zone)
 
+def get_master_zone(ctx, client):
+    _, region_map = rgwadmin(ctx, client, check_status=True,
+                             cmd=['-n', client, 'region-map', 'get'])
+    regions = region_map['regions']
+    for region in regions:
+        is_master = (region['val']['is_master'] == "true")
+        log.info('region={r} is_master={ism}'.format(r=region, ism=is_master))
+        if not is_master:
+          continue
+        master_zone = region['val']['master_zone']
+        log.info('master_zone=%s' % master_zone)
+        for zone_info in region['val']['zones']:
+            if zone_info['name'] == master_zone:
+                return master_zone
+    log.info('couldn\'t find master zone')
+    return None
+
+def get_master_client(ctx, clients):
+    master_zone = get_master_zone(ctx, clients[0]) # can use any client for this as long as system configured correctly
+    if not master_zone:
+        return None
+
+    for client in clients:
+        zone = zone_for_client(ctx, client)
+        if zone == master_zone:
+            return client
+
+    return None
+
 def get_zone_system_keys(ctx, client, zone):
     _, zone_info = rgwadmin(ctx, client, check_status=True,
                             cmd=['-n', client,
@@ -65,3 +97,28 @@ def zone_for_client(ctx, client):
     ceph_config.update(ctx.ceph.conf.get('client', {}))
     ceph_config.update(ctx.ceph.conf.get(client, {}))
     return ceph_config.get('rgw zone')
+
+
+def radosgw_agent_sync(ctx, agent_host, agent_port):
+    print 'agent_host', agent_host, 'port', agent_port
+    log.info('sync agent {h}:{p}'.format(h=agent_host, p=agent_port))
+    return requests.post('http://{addr}:{port}/metadata/incremental'.format(addr = agent_host, port = agent_port))
+
+def radosgw_agent_sync_all(ctx):
+    if ctx.radosgw_agent.procs:
+        for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
+            dest_zone = zone_for_client(ctx, agent_client)
+            port = c_config.get('port', 8000)
+            dest_host, dest_port = get_zone_host_and_port(ctx, agent_client, dest_zone)
+            radosgw_agent_sync(ctx, dest_host, port)
+
+def radosgw_agent_sync_all(ctx):
+    if ctx.radosgw_agent.procs:
+        for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
+            dest_zone = zone_for_client(ctx, agent_client)
+            port = c_config.get('port', 8000)
+            dest_host, dest_port = get_zone_host_and_port(ctx, agent_client, dest_zone)
+            radosgw_agent_sync(ctx, dest_host, port)
+
+
+

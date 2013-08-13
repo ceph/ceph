@@ -271,11 +271,28 @@ def extract_zone_info(ctx, client, client_config):
                                                                   client=client)
     region = ceph_config['rgw region']
     zone = ceph_config['rgw zone']
-    zone_info = {}
-    for key in ['control_pool', 'gc_pool', 'log_pool', 'intent_log_pool',
-                'usage_log_pool', 'user_keys_pool', 'user_email_pool',
-                'user_swift_pool', 'user_uid_pool', 'domain_root']:
-        zone_info[key] = '.' + region + '.' + zone + '.' + key
+    zone_info = dict(
+        domain_root=ceph_config['rgw zone root pool'],
+        )
+    for key in ['rgw control pool', 'rgw gc pool', 'rgw log pool', 'rgw intent log pool',
+                'rgw usage log pool', 'rgw user keys pool', 'rgw user email pool',
+                'rgw user swift pool', 'rgw user uid pool']:
+        new_key = key.split(' ',1)[1]
+        new_key = new_key.replace(' ', '_')
+
+        if key in ceph_config:
+            value = ceph_config[key]
+            log.debug('{key} specified in ceph_config ({val})'.format(key=key, val=value))
+            zone_info[new_key] = value
+        else:
+            zone_info[new_key] = '.' + region + '.' + zone + '.' + new_key
+
+    # these keys are meant for the zones argument in the region info.
+    # We insert them into zone_info with a different format and then remove them
+    # in the fill_in_endpoints() method
+    for key in ['rgw log meta', 'rgw log data']:
+        if key in ceph_config:
+            zone_info[key] = ceph_config[key]
 
     # these keys are meant for the zones argument in the region info.
     # We insert them into zone_info with a different format and then remove them
@@ -316,6 +333,13 @@ def fill_in_endpoints(region_info, role_zones, role_endpoints):
         region, zone, zone_info, _ = role_zones[role]
         host, port = role_endpoints[role]
         endpoint = 'http://{host}:{port}/'.format(host=host, port=port)
+        # check if the region specified under client actually exists 
+        # in region_info (it should, if properly configured).
+        # If not, throw a reasonable error
+        if region not in region_info:
+            raise Exception('Region: {region} was specified but no corresponding' \
+                            ' entry was round under \'regions\''.format(region=region))
+
         region_conf = region_info[region]
         region_conf.setdefault('endpoints', [])
         region_conf['endpoints'].append(endpoint)
@@ -373,6 +397,7 @@ def configure_users(ctx, config):
 @contextlib.contextmanager
 def configure_regions_and_zones(ctx, config, regions, role_endpoints):
     if not regions:
+        log.debug('In rgw.configure_regions_and_zones() and regions is None. Bailing')
         yield
         return
 
@@ -400,7 +425,30 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints):
                         for region, r_config in regions.iteritems()])
 
     fill_in_endpoints(region_info, role_zones, role_endpoints)
+
+    # clear out the old defaults
+    first_mon = teuthology.get_first_mon(ctx, config)
+    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+    # removing these objects from .rgw.root and the per-zone root pools
+    # may or may not matter
+    rados(ctx, mon,
+          cmd=['-p', '.rgw.root', 'rm', 'region_info.default'])
+    rados(ctx, mon,
+          cmd=['-p', '.rgw.root', 'rm', 'zone_info.default'])
+
     for client in config.iterkeys():
+        for role, (_, zone, zone_info, user_info) in role_zones.iteritems():
+            rados(ctx, mon,
+                  cmd=['-p', zone_info['domain_root'],
+                       'rm', 'region_info.default'])
+            rados(ctx, mon,
+                  cmd=['-p', zone_info['domain_root'],
+                       'rm', 'zone_info.default'])
+            rgwadmin(ctx, client,
+                     cmd=['-n', client, 'zone', 'set', '--rgw-zone', zone],
+                     stdin=StringIO(json.dumps(dict(zone_info.items() + user_info.items()))),
+                     check_status=True)
+
         for region, info in region_info.iteritems():
             region_json = json.dumps(info)
             log.debug('region info is: %s', region_json)
@@ -414,37 +462,8 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints):
                               'region', 'default',
                               '--rgw-region', region],
                          check_status=True)
-        for role, (_, zone, zone_info, user_info) in role_zones.iteritems():
 
-            # add the user_info (if it exists) to the zone_info 
-            if user_info:
-                new_dict = dict(zone_info.items() + user_info.items())
-            else:
-                new_dict = zone_info
-
-            rgwadmin(ctx, client,
-                     cmd=['-n', client, 'zone', 'set', '--rgw-zone', zone],
-                     stdin=StringIO(json.dumps(new_dict)),
-                     check_status=True)
-
-    first_mon = teuthology.get_first_mon(ctx, config)
-    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
-    # removing these objects from .rgw.root and the per-zone root pools
-    # may or may not matter
-    rados(ctx, mon,
-          cmd=['-p', '.rgw.root', 'rm', 'region_info.default'])
-    rados(ctx, mon,
-          cmd=['-p', '.rgw.root', 'rm', 'zone_info.default'])
-
-    for client in config.iterkeys():
         rgwadmin(ctx, client, cmd=['-n', client, 'regionmap', 'update'])
-        for role, (_, zone, zone_info, user_info) in role_zones.iteritems():
-            rados(ctx, mon,
-                  cmd=['-p', zone_info['domain_root'],
-                       'rm', 'region_info.default'])
-            rados(ctx, mon,
-                  cmd=['-p', zone_info['domain_root'],
-                       'rm', 'zone_info.default'])
     yield
 
 @contextlib.contextmanager
@@ -505,22 +524,22 @@ def task(ctx, config):
               client.0:
                 rgw region: foo
                 rgw zone: foo-1
-                rgw region root pool: .rgw.root.foo
-                rgw zone root pool: .rgw.root.foo
+                rgw region root pool: .rgw.rroot.foo
+                rgw zone root pool: .rgw.zroot.foo
                 rgw log meta: true
                 rgw log data: true
               client.1:
                 rgw region: bar
                 rgw zone: bar-master
-                rgw region root pool: .rgw.root.bar
-                rgw zone root pool: .rgw.root.bar
+                rgw region root pool: .rgw.rroot.bar
+                rgw zone root pool: .rgw.zroot.bar
                 rgw log meta: true
                 rgw log data: true
               client.2:
                 rgw region: bar
                 rgw zone: bar-secondary
-                rgw region root pool: .rgw.root.bar
-                rgw zone root pool: .rgw.root.bar-secondary 
+                rgw region root pool: .rgw.rroot.bar
+                rgw zone root pool: .rgw.zroot.bar-secondary 
         - rgw:
             regions:
               foo:
