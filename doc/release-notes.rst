@@ -22,6 +22,25 @@ headline features for this release include:
 
 * Object namespaces in librados.
 
+Upgrade Sequencing
+~~~~~~~~~~~~~~~~~~
+
+It is possible to do a rolling upgrade from Cuttlefish to Dumpling.
+
+#. Upgrade ceph-common on all nodes that will use the cli
+
+#. Upgrade all monitors (upgrade ceph package, restart ceph-mon
+ daemons).  This can happen one daemon or host at a time.  Note that
+ because cuttlefish and dumpling monitors can't talk to each other,
+ all monitors should be upgraded in relatively short succession to
+ minimize the risk that an a untimely failure will reduce
+ availability.
+
+#. Upgrade all osds (upgrade ceph package, restart ceph-osd daemons).
+ This can happen one daemon or host at a time.
+
+#. Upgrade radosgw (upgrade radosgw package, restart radosgw daemons).
+
 
 Upgrading from v0.66
 ~~~~~~~~~~~~~~~~~~~~
