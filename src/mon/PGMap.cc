@@ -731,7 +731,10 @@ void PGMap::recovery_summary(Formatter *f, ostream *out) const
     }
     first = false;
   }
+}
 
+void PGMap::recovery_rate_summary(Formatter *f, ostream *out) const
+{
   // make non-negative; we can get negative values if osds send
   // uncommitted stats and then "go backward" or if they are just
   // buggy/wrong.
@@ -748,13 +751,10 @@ void PGMap::recovery_summary(Formatter *f, ostream *out) const
       f->dump_int("recovering_bytes_per_sec", bps);
       f->dump_int("recovering_keys_per_sec", kps);
     } else {
-      if (!first)
-	*out << "; ";
-      *out << " recovering "
-	   << pretty_si_t(objps) << "objects/s, "
-	   << pretty_si_t(bps) << "B/s";
+      *out << pretty_si_t(bps) << "B/s";
       if (pos_delta.stats.sum.num_keys_recovered)
 	*out << ", " << pretty_si_t(kps) << "keys/s";
+      *out << ", " << pretty_si_t(objps) << "objects/s recovering";
     }
   }
 }
@@ -830,11 +830,17 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
 
   std::stringstream ssr;
   recovery_summary(f, &ssr);
-  if (!f) {
-    if (ssr.str().length())
-      *out << "          " << ssr.str() << "\n";
-    *out << ss.str();
-  }
+  if (!f && ssr.str().length())
+    *out << "          " << ssr.str() << "\n";
+  ssr.clear();
+  ssr.str("");
+
+  if (!f)
+    *out << ss.str();   // pgs by state
+
+  recovery_rate_summary(f, &ssr);
+  if (!f && ssr.str().length())
+    *out << "          " << ssr.str() << "\n";
 
   // make non-negative; we can get negative values if osds send
   // uncommitted stats and then "go backward" or if they are just
@@ -844,7 +850,7 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
   if (pos_delta.stats.sum.num_rd ||
       pos_delta.stats.sum.num_wr) {
     if (!f)
-      *out << "       io ";
+      *out << "     load ";
     if (pos_delta.stats.sum.num_rd) {
       int64_t rd = (pos_delta.stats.sum.num_rd_kb << 10) / (double)stamp_delta;
       if (f) {
@@ -915,6 +921,11 @@ void PGMap::print_oneline_summary(ostream *out) const
 
   std::stringstream ssr;
   recovery_summary(NULL, &ssr);
+  if (ssr.str().length())
+    *out << "; " << ssr.str();
+  ssr.clear();
+  ssr.str("");
+  recovery_rate_summary(NULL, &ssr);
   if (ssr.str().length())
     *out << "; " << ssr.str();
 }
