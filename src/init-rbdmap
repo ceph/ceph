@@ -62,17 +62,19 @@ do_map() {
 do_unmap() {
 	log_daemon_msg "Stopping $DESC"
 	RET=0
+	# Recursive umount that depends /dev/rbd*
+	MNTDEP=$(findmnt --mtab | awk '$2 ~ /^\/dev\/rbd[0-9]*$/ {print $1}' | sort -r)
+	for MNT in $MNTDEP; do
+		umount $MNT
+	done 
 	# Unmap all rbd device
-	for DEV in /dev/rbd[0-9]*; do
-		log_progress_msg $DEV
-		# Umount before unmap
-		MNTDEP=$(findmnt --mtab --source $DEV --output TARGET | sed 1,1d | sort -r)
-		for MNT in $MNTDEP; do
-			umount $MNT || sleep 1 && umount -l $DEV
+	if [ -b /dev/rbd[0-9]* ]; then
+		for DEV in /dev/rbd[0-9]*; do
+			log_progress_msg $DEV
+			rbd unmap $DEV
+			[ $? -ne "0" ] && RET=1
 		done
-		rbd unmap $DEV
-		[ $? -ne "0" ] && RET=1
-	done
+	fi
 	log_end_msg $RET
 }
 
