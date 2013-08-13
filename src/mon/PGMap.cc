@@ -802,9 +802,9 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
       f->dump_unsigned("count", p->second);
       f->close_section();
     } else {
-      if (p != num_pg_by_state.begin())
-	ss << ", ";
-      ss << p->second << " " << pg_state_string(p->first);
+      ss.setf(std::ios::right);
+      ss << std::setw(9) << p->second << " " << pg_state_string(p->first) << "\n";
+      ss.unsetf(std::ios::right);
     }
   }
   if (f)
@@ -818,14 +818,22 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
     f->dump_unsigned("bytes_avail", osd_sum.kb_avail * 4096ull);
     f->dump_unsigned("bytes_total", osd_sum.kb * 4096ull);
   } else {
-    string states = ss.str();
-    *out << "v" << version << ": "
-	 << pg_stat.size() << " pgs: "
-	 << states << "; "
+    *out << "    pgmap v" << version << ": "
+	 << pg_stat.size() << " pgs, " << pg_pool_sum.size() << " pools, "
 	 << prettybyte_t(pg_sum.stats.sum.num_bytes) << " data, "
+	 << si_t(pg_sum.stats.sum.num_objects) << " objects\n";
+    *out << "          "
 	 << kb_t(osd_sum.kb_used) << " used, "
 	 << kb_t(osd_sum.kb_avail) << " / "
-	 << kb_t(osd_sum.kb) << " avail";
+	 << kb_t(osd_sum.kb) << " avail\n";
+  }
+
+  std::stringstream ssr;
+  recovery_summary(f, &ssr);
+  if (!f) {
+    if (ssr.str().length())
+      *out << "          " << ssr.str() << "\n";
+    *out << ss.str();
   }
 
   // make non-negative; we can get negative values if osds send
@@ -836,7 +844,7 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
   if (pos_delta.stats.sum.num_rd ||
       pos_delta.stats.sum.num_wr) {
     if (!f)
-      *out << "; ";
+      *out << "       io ";
     if (pos_delta.stats.sum.num_rd) {
       int64_t rd = (pos_delta.stats.sum.num_rd_kb << 10) / (double)stamp_delta;
       if (f) {
@@ -858,13 +866,10 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
       f->dump_int("op_per_sec", iops);
     } else {
       *out << si_t(iops) << "op/s";
+      *out << "\n";
     }
   }
 
-  std::stringstream ssr;
-  recovery_summary(f, &ssr);
-  if (!f && ssr.str().length())
-    *out << "; " << ssr.str();
 }
 
 void PGMap::print_oneline_summary(ostream *out) const
