@@ -302,6 +302,17 @@ protected:
   ObjectContextRef get_object_context(const hobject_t& soid, bool can_create);
 
   void context_registry_on_change();
+  void object_context_destructor_callback(ObjectContext *obc);
+  struct C_PG_ObjectContext : public Context {
+    ReplicatedPGRef pg;
+    ObjectContext *obc;
+    C_PG_ObjectContext(ReplicatedPG *p, ObjectContext *o) :
+      pg(p), obc(o) {}
+    void finish(int r) {
+      pg->object_context_destructor_callback(obc);
+     }
+  };
+
   int find_object_context(const hobject_t& oid,
 			  ObjectContextRef *pobc,
 			  bool can_create, snapid_t *psnapid=NULL);

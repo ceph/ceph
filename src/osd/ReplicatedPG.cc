@@ -4678,7 +4678,16 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
   }
 }
 
-void ReplicatedPG::add_object_context_to_pg_stat(ObjectContext *obc, pg_stat_t *pgstat)
+void ReplicatedPG::object_context_destructor_callback(ObjectContext *obc)
+{
+  dout(10) << "object_context_destructor_callback " << obc << " "
+	   << obc->obs.oi.soid << dendl;
+
+  if (obc->ssc)
+    put_snapset_context(obc->ssc);
+}
+
+void ReplicatedPG::add_object_context_to_pg_stat(ObjectContextRef obc, pg_stat_t *pgstat)
 {
   object_info_t& oi = obc->obs.oi;
 
