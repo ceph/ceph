@@ -36,7 +36,7 @@ def get_testdir(ctx):
 
     # check if a jobid exists in the machine status for all our targets
     # and if its the same jobid, use that as the subdir for the test
-    if not checked_jobid:
+    if not checked_jobid and ctx.config.get('check-locks') != False:
         jobids = {}
         for machine in ctx.config['targets'].iterkeys():
             status = lockstatus.get_status(ctx, machine)
