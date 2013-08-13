@@ -822,7 +822,7 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
     *out << "v" << version << ": "
 	 << pg_stat.size() << " pgs: "
 	 << states << "; "
-	 << prettybyte_t(pg_sum.stats.sum.num_bytes) << " data, " 
+	 << prettybyte_t(pg_sum.stats.sum.num_bytes) << " data, "
 	 << kb_t(osd_sum.kb_used) << " used, "
 	 << kb_t(osd_sum.kb_avail) << " / "
 	 << kb_t(osd_sum.kb) << " avail";
@@ -864,6 +864,53 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
   std::stringstream ssr;
   recovery_summary(f, &ssr);
   if (!f && ssr.str().length())
+    *out << "; " << ssr.str();
+}
+
+void PGMap::print_oneline_summary(ostream *out) const
+{
+  std::stringstream ss;
+
+  for (hash_map<int,int>::const_iterator p = num_pg_by_state.begin();
+       p != num_pg_by_state.end();
+       ++p) {
+    if (p != num_pg_by_state.begin())
+      ss << ", ";
+    ss << p->second << " " << pg_state_string(p->first);
+  }
+
+  string states = ss.str();
+  *out << "v" << version << ": "
+       << pg_stat.size() << " pgs: "
+       << states << "; "
+       << prettybyte_t(pg_sum.stats.sum.num_bytes) << " data, "
+       << kb_t(osd_sum.kb_used) << " used, "
+       << kb_t(osd_sum.kb_avail) << " / "
+       << kb_t(osd_sum.kb) << " avail";
+
+  // make non-negative; we can get negative values if osds send
+  // uncommitted stats and then "go backward" or if they are just
+  // buggy/wrong.
+  pool_stat_t pos_delta = pg_sum_delta;
+  pos_delta.floor(0);
+  if (pos_delta.stats.sum.num_rd ||
+      pos_delta.stats.sum.num_wr) {
+    *out << "; ";
+    if (pos_delta.stats.sum.num_rd) {
+      int64_t rd = (pos_delta.stats.sum.num_rd_kb << 10) / (double)stamp_delta;
+      *out << si_t(rd) << "B/s rd, ";
+    }
+    if (pos_delta.stats.sum.num_wr) {
+      int64_t wr = (pos_delta.stats.sum.num_wr_kb << 10) / (double)stamp_delta;
+      *out << si_t(wr) << "B/s wr, ";
+    }
+    int64_t iops = (pos_delta.stats.sum.num_rd + pos_delta.stats.sum.num_wr) / (double)stamp_delta;
+    *out << si_t(iops) << "op/s";
+  }
+
+  std::stringstream ssr;
+  recovery_summary(NULL, &ssr);
+  if (ssr.str().length())
     *out << "; " << ssr.str();
 }
 
