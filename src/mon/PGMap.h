@@ -170,6 +170,7 @@ public:
 
   void recovery_summary(Formatter *f, ostream *out) const;
   void print_summary(Formatter *f, ostream *out) const;
+  void print_oneline_summary(ostream *out) const;
 
   epoch_t calc_min_last_epoch_clean() const;
 
@@ -179,7 +180,7 @@ WRITE_CLASS_ENCODER_FEATURES(PGMap::Incremental)
 WRITE_CLASS_ENCODER_FEATURES(PGMap)
 
 inline ostream& operator<<(ostream& out, const PGMap& m) {
-  m.print_summary(NULL, &out);
+  m.print_oneline_summary(&out);
   return out;
 }
 
