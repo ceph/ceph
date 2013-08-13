@@ -298,15 +298,6 @@ public:
   void handle_watch_timeout(WatchRef watch);
 protected:
 
-  ObjectContext *lookup_object_context(const hobject_t& soid) {
-    if (object_contexts.count(soid)) {
-      ObjectContext *obc = object_contexts[soid];
-      obc->ref++;
-      return obc;
-    }
-    return NULL;
-  }
-  ObjectContext *_lookup_object_context(const hobject_t& oid);
   ObjectContextRef create_object_context(const object_info_t& oi, SnapSetContext *ssc);
   ObjectContextRef get_object_context(const hobject_t& soid, bool can_create);
 
