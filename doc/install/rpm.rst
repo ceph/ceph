@@ -40,12 +40,34 @@ To install these packages, execute the following::
 Add Release Packages
 ====================
 
+
+Dumpling
+--------
+
+Dumpling is the most recent stable release of Ceph.  These packages are
+recommended for anyone deploying Ceph in a production environment.
+Critical bug fixes are backported and point releases are made as necessary.
+
+Packages are currently built for the RHEL/CentOS6 (``el6``), Fedora 18 and 19
+(``f18`` and ``f19``), OpenSUSE 12.2 (``opensuse12.2``), and SLES (``sles11``)
+platforms. The repository package installs the repository details on your local
+system for use with ``yum`` or ``up2date``.
+
+For example, for CentOS 6 or other RHEL6 derivatives (``el6``)::
+
+    su -c 'rpm -Uvh http://ceph.com/rpm-dumpling/el6/noarch/ceph-release-1-0.el6.noarch.rpm'
+
+You can download the RPMs directly from::
+
+     http://ceph.com/rpm-dumpling
+
+
 Cuttlefish
 ----------
 
-Cuttlefish is the most recent stable release of Ceph.  These packages are
-recommended for anyone deploying Ceph in a production environment.
-Critical bug fixes are backported and point releases are made as necessary.
+Cuttlefish is the previous recent major release of Ceph.  These packages are
+recommended for those who have already deployed bobtail in production and are
+not yet ready to upgrade.
 
 Packages are currently built for the RHEL/CentOS6 (``el6``), Fedora 17
 (``f17``), OpenSUSE 12 (``opensuse12``), and SLES (``sles11``)
@@ -64,7 +86,7 @@ You can download the RPMs directly from::
 Bobtail
 -------
 
-Bobtail is the previous recent major release of Ceph.  These packages are
+Bobtail is the second major release of Ceph.  These packages are
 recommended for those who have already deployed bobtail in production and
 are not yet ready to upgrade.
 
