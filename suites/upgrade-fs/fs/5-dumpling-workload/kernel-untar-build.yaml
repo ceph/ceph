@@ -1,6 +1,5 @@
 tasks:
 - workunit:
-     branch: next
      clients:
         all:
            - kernel_untar_build.sh
