@@ -19,13 +19,33 @@ security warning::
 Add Release Packages
 ====================
 
-Cuttlefish
-----------
 
-Cuttlefish is the most recent major release of Ceph. These packages are
+Dumpling
+--------
+
+Dumpling is the most recent major release of Ceph. These packages are
 recommended for anyone deploying Ceph in a production environment.
 Critical bug fixes are backported and point releases are made as
 necessary.
+
+Add our package repository to your system's list of APT sources.  
+See `the dumpling Debian repository`_ for a complete list of Debian and Ubuntu releases
+supported. ::
+
+	echo deb http://ceph.com/debian-dumplilng/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+
+For the European users there is also a mirror in the Netherlands at http://eu.ceph.com/ ::
+
+	echo deb http://eu.ceph.com/debian-dumpling/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+
+
+
+Cuttlefish
+----------
+
+Cuttlefish is the previous major release of Ceph.  These packages are
+recommended for those who have already deployed bobtail in production and are
+not yet ready to upgrade.
 
 Add our package repository to your system's list of APT sources.  
 See `the cuttlefish Debian repository`_ for a complete list of Debian and Ubuntu releases
@@ -122,6 +142,7 @@ you should update APT's database and install Ceph::
 	sudo apt-get update && sudo apt-get install ceph
 
 
+.. _the dumpling Debian repository: http://ceph.com/debian-dumpling/dists
 .. _the cuttlefish Debian repository: http://ceph.com/debian-cuttlefish/dists
 .. _the bobtail Debian repository: http://ceph.com/debian-bobtail/dists
 .. _the argonaut Debian repository: http://ceph.com/debian-argonaut/dists
