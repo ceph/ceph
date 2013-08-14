@@ -2621,6 +2621,36 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     name = oss.str();
   }
 
+  // Even if there's a pending state with changes that could affect
+  // a command, considering that said state isn't yet committed, we
+  // just don't care about those changes if the command currently being
+  // handled acts as a no-op against the current committed state.
+  // In a nutshell, we assume this command  happens *before*.
+  //
+  // Let me make this clearer:
+  //
+  //   - If we have only one client, and that client issues some
+  //     operation that would conflict with this operation  but is
+  //     still on the pending state, then we would be sure that said
+  //     operation wouldn't have returned yet, so the client wouldn't
+  //     issue this operation (unless the client didn't wait for the
+  //     operation to finish, and that would be the client's own fault).
+  //
+  //   - If we have more than one client, each client will observe
+  //     whatever is the state at the moment of the commit.  So, if we
+  //     have two clients, one issuing an unlink and another issuing a
+  //     link, and if the link happens while the unlink is still on the
+  //     pending state, from the link's point-of-view this is a no-op.
+  //     If different clients are issuing conflicting operations and
+  //     they care about that, then the clients should make sure they
+  //     enforce some kind of concurrency mechanism -- from our
+  //     perspective that's what Douglas Adams would call an SEP.
+  //
+  // This should be used as a general guideline for most commands handled
+  // in this function.  Adapt as you see fit, but please bear in mind that
+  // this is the expected behavior.
+
+
   if (prefix == "osd setcrushmap" ||
       (prefix == "osd crush set" && !osdid_present)) {
     dout(10) << "prepare_command setting new crush map" << dendl;
