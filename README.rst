@@ -23,6 +23,16 @@ perform actions concurrently or in the background.
 
 Build
 =====
+``teuthology`` is not meant to be distributed as a library, therefore we depend
+on the pinned dependencies listed in ``requirements.txt``, the ``setup.py``
+will not list any and will only be there to install the package entry points
+(a.k.a teuthology's scripts).
+
+
+``bootstrap`` for Ubuntu Systems
+--------------------------------
+A ``boostrap`` script is provided for automated builds/execution of teuthology
+itself. You can run it directly **only if you are using Ubuntu**.
 
 Teuthology uses several Python packages that are not in the standard
 library. To make the dependencies easier to get right, we use a
@@ -35,9 +45,65 @@ and then run::
 
 	./bootstrap
 
-You can run Teuthology's internal unit tests with::
 
-	./virtualenv/bin/nosetests
+osx
+---
+
+.. note:: These instructions assume you are using `homebrew <http://brew.sh/>`_
+
+As always, create a ``virtualenv`` specific to ``teuthology`` and make sure it
+is activated before proceeding (location doesn't matter, we use an example
+location)::
+
+    mkdir ~/.virtualenvs
+    virtualenv ~/.virtualenvs/teuthology
+    source ~/.virtualenvs/teuthology/bin/activate
+
+Install the system dependencies::
+
+    brew install libvirt mysql libevent
+
+``libvirt`` does not link the python bindings so you need to do this step
+manually::
+
+    $ cd /Library/Python/{pyversion}/site-packages
+    $ sudo ln -s /usr/local/Cellar/libvirt/{version}/lib/python{pyversion}/site-packages/* .
+
+Make sure you are able to import ``libvirt`` without error::
+
+    python -c "import libvirt"
+
+Finally, install the teuthology package and ``requirements.txt``::
+
+    $ python setup.py develop
+    $ pip install -r requirements.txt
+
+
+Generic install
+---------------
+These instructions should help get ``teuthology`` installed properly in
+a system that is not OSX or Debian-based.
+
+Install all the system dependencies needed:
+
+* mysql client
+* libevent
+* libvirt (with the Python bindings)
+
+Install Python packaging tools:
+
+* pip
+* virtualenv
+
+In some cases, depending on the OS, you will need a python development package
+with some build helpers that are required to build packages. In Ubuntu, this is
+the ``python-dev`` package.
+
+With a dedicated ``virtualenv`` activated, install the teuthology package and
+``requirements.txt``::
+
+    $ python setup.py develop
+    $ pip install -r requirements.txt
 
 
 Test configuration

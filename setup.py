@@ -1,4 +1,3 @@
-#!/usr/bin/python
 from setuptools import setup, find_packages
 
 setup(
@@ -11,18 +10,6 @@ setup(
     description='Ceph test runner',
     license='MIT',
     keywords='ceph testing ssh cluster',
-
-    install_requires=[
-        'gevent ==0.13.6',
-        'paramiko >=1.7.7',
-        'configobj',
-        'PyYAML',
-        'bunch >=1.0.0',
-        'argparse >=1.2.1',
-        'httplib2',
-        'beanstalkc >=0.2.0',
-        'pexpect',
-        ],
 
     # to find the code associated with entry point
     # A.B:foo first cd into directory A, open file B
