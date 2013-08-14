@@ -49,7 +49,7 @@ and then run::
 osx
 ---
 
-.. note:: These instructions assume you are using ``homebrew``
+.. note:: These instructions assume you are using `homebrew <http://brew.sh/>`_
 
 As always, create a ``virtualenv`` specific to ``teuthology`` and make sure it
 is activated before proceeding (location doesn't matter, we use an example
