@@ -2,8 +2,9 @@
 
 set -e
 
-wget http://ceph.com/qa/fsx.c
-gcc fsx.c -o fsx
+git clone git://ceph.newdream.net/git/xfstests.git
+make -C xfstests
+cp xfstests/ltp/fsx .
 
 ./fsx   1MB -N 50000 -p 10000 -l 1048576
 ./fsx  10MB -N 50000 -p 10000 -l 10485760
