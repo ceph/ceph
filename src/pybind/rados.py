@@ -182,7 +182,7 @@ class Rados(object):
         raise RadosStateError("You cannot perform that operation on a \
 Rados object in state %s." % (self.state))
 
-    def __init__(self, rados_id=None, name='client.admin', clustername='ceph',
+    def __init__(self, rados_id=None, name=None, clustername=None,
                  conf_defaults=None, conffile=None, conf=None, flags=0):
         self.librados = CDLL('librados.so.2')
         self.cluster = c_void_p()
@@ -195,6 +195,10 @@ Rados object in state %s." % (self.state))
             raise Error("Rados(): can't supply both rados_id and name")
         if rados_id:
             name = 'client.' +  rados_id
+        if name is None:
+            name = 'client.admin'
+        if clustername is None:
+            clustername = 'ceph'
         ret = run_in_thread(self.librados.rados_create2,
                             (byref(self.cluster), c_char_p(clustername),
                             c_char_p(name), c_uint64(flags)))
