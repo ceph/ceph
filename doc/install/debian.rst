@@ -32,7 +32,7 @@ Add our package repository to your system's list of APT sources.
 See `the dumpling Debian repository`_ for a complete list of Debian and Ubuntu releases
 supported. ::
 
-	echo deb http://ceph.com/debian-dumplilng/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb http://ceph.com/debian-dumpling/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 For the European users there is also a mirror in the Netherlands at http://eu.ceph.com/ ::
 
