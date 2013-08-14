@@ -369,13 +369,13 @@ COMMAND("osd crush set " \
 	"name=id,type=CephOsdName " \
 	"name=weight,type=CephFloat,range=0.0 " \
 	"name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=]", \
-	"set crushmap entry for <name> to <weight> with location <args>", \
+	"update crushmap position and weight for <name> to <weight> with location <args>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush add " \
 	"name=id,type=CephOsdName " \
 	"name=weight,type=CephFloat,range=0.0 " \
 	"name=args,type=CephString,n=N,goodchars=[A-Za-z0-9-_.=]", \
-	"add crushmap entry for <name> with <weight> and location <args>", \
+	"add or update crushmap position and weight for <name> with <weight> and location <args>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush create-or-move " \
 	"name=id,type=CephOsdName " \
