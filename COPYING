@@ -10,11 +10,6 @@ Files: src/client/hadoop/ceph
 Copyright: Copyright (C) New Dream Network and contributors
 License: Apache License v2
 
-Files: src/rbd.cc
-Copyright:
-    Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
-License: GPL2
-
 Files: src/mount/canonicalize.c
 Copyright: Copyright (C) 1993 Rick Sladkey <jrs@world.std.com>
 License: LGPL2 or later
