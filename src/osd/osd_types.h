@@ -570,6 +570,34 @@ public:
 };
 WRITE_CLASS_ENCODER(pow2_hist_t)
 
+/**
+ * filestore_perf_stat_t
+ *
+ * current perf information about the osd
+ */
+struct filestore_perf_stat_t {
+  // cur_op_latency is in ms since double add/sub are not associative
+  uint32_t filestore_commit_latency;
+  uint32_t filestore_apply_latency;
+
+  filestore_perf_stat_t() :
+    filestore_commit_latency(0), filestore_apply_latency(0) {}
+
+  void add(const filestore_perf_stat_t &o) {
+    filestore_commit_latency += o.filestore_commit_latency;
+    filestore_apply_latency += o.filestore_apply_latency;
+  }
+  void sub(const filestore_perf_stat_t &o) {
+    filestore_commit_latency -= o.filestore_commit_latency;
+    filestore_apply_latency -= o.filestore_apply_latency;
+  }
+  void dump(Formatter *f) const;
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  static void generate_test_instances(std::list<filestore_perf_stat_t*>& o);
+};
+WRITE_CLASS_ENCODER(filestore_perf_stat_t)
+
 /** osd_stat
  * aggregate stats for an osd
  */
@@ -579,6 +607,8 @@ struct osd_stat_t {
   int32_t snap_trim_queue_len, num_snap_trimming;
 
   pow2_hist_t op_queue_age_hist;
+
+  filestore_perf_stat_t fs_perf_stat;
 
   osd_stat_t() : kb(0), kb_used(0), kb_avail(0),
 		 snap_trim_queue_len(0), num_snap_trimming(0) {}
@@ -590,6 +620,7 @@ struct osd_stat_t {
     snap_trim_queue_len += o.snap_trim_queue_len;
     num_snap_trimming += o.num_snap_trimming;
     op_queue_age_hist.add(o.op_queue_age_hist);
+    fs_perf_stat.add(o.fs_perf_stat);
   }
   void sub(const osd_stat_t& o) {
     kb -= o.kb;
@@ -598,6 +629,7 @@ struct osd_stat_t {
     snap_trim_queue_len -= o.snap_trim_queue_len;
     num_snap_trimming -= o.num_snap_trimming;
     op_queue_age_hist.sub(o.op_queue_age_hist);
+    fs_perf_stat.sub(o.fs_perf_stat);
   }
 
   void dump(Formatter *f) const;
