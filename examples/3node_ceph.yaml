@@ -4,6 +4,7 @@ roles:
 - [mon.2, client.0]
 
 tasks:
+- install:
 - ceph:
 - kclient: [client.0]
 - interactive:

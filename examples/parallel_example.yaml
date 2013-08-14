@@ -7,6 +7,7 @@ roles:
   - test1
 - - test0
 tasks:
+- install:
 - parallel_example:
   - test0
   - test1  

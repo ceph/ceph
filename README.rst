@@ -71,6 +71,7 @@ the nodes & use the live cluster ad hoc), might look like this::
 	  ubuntu@host08.example.com: ssh-rsa host08_ssh_key
 	  ubuntu@host09.example.com: ssh-rsa host09_ssh_key
 	tasks:
+	- install:
 	- ceph:
 	- ceph-fuse: [client.0]
 	- interactive:
@@ -78,6 +79,8 @@ the nodes & use the live cluster ad hoc), might look like this::
 The number of entries under ``roles`` and ``targets`` must match.
 
 Note the colon after every task name in the ``tasks`` section.
+
+The ``install`` task needs to precede all other tasks.
 
 You need to be able to SSH in to the listed targets without
 passphrases, and the remote user needs to have passphraseless `sudo`
@@ -179,7 +182,6 @@ displays a page of more documentation and more concrete examples.
 Some of the more important / commonly used tasks include:
 
 * ``chef``: Run the chef task.
-* ``ceph``: Bring up Ceph
 * ``install``: by default, the install task goes to gitbuilder and installs the results of the latest build. You can, however, add additional parameters to the test configuration to cause it to install any branch, SHA, archive or URL. The following are valid parameters.
 
 - ``branch``: specify a branch (bobtail, cuttlefish...)
@@ -189,6 +191,7 @@ Some of the more important / commonly used tasks include:
 - ``project``: specify a project (ceph, samba...)
 - ``sha1``: install the build with this sha1 value.
 - ``tag``: specify a tag/identifying text for this build (v47.2, v48.1...)
+* ``ceph``: Bring up Ceph
 
 * ``overrides``: override behavior. Typically, this includes sub-tasks being overridden. Sub-tasks can nest further information.  For example, overrides of install tasks are project specific, so the following section of a yaml file would cause all ceph installation to default into using the cuttlefish branch::
 

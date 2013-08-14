@@ -12,6 +12,7 @@ roles:
   - osd.1
 - - client.0
 tasks:
+- install:
 - ceph: null
 - rgw:
   - client.0
