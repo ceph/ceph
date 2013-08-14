@@ -79,6 +79,33 @@ Finally, install the teuthology package and ``requirements.txt``::
     $ pip install -r requirements.txt
 
 
+Generic install
+---------------
+These instructions should help get ``teuthology`` installed properly in
+a system that is not OSX or Debian-based.
+
+Install all the system dependencies needed:
+
+* mysql client
+* libevent
+* libvirt (with the Python bindings)
+
+Install Python packaging tools:
+
+* pip
+* virtualenv
+
+In some cases, depending on the OS, you will need a python development package
+with some build helpers that are required to build packages. In Ubuntu, this is
+the ``python-dev`` package.
+
+With a dedicated ``virtualenv`` activated, install the teuthology package and
+``requirements.txt``::
+
+    $ python setup.py develop
+    $ pip install -r requirements.txt
+
+
 Test configuration
 ==================
 
