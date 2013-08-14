@@ -5,6 +5,7 @@
 
 #define dout_subsys ceph_subsys_mon
 #include "common/debug.h"
+#include "common/TextTable.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
@@ -696,6 +697,40 @@ void PGMap::dump_stuck_plain(ostream& ss, PGMap::StuckPG type, utime_t cutoff) c
   hash_map<pg_t, pg_stat_t> stuck_pg_stats;
   get_stuck_stats(type, cutoff, stuck_pg_stats);
   dump_pg_stats_plain(ss, stuck_pg_stats);
+}
+
+void PGMap::dump_osd_perf_stats(Formatter *f) const
+{
+  f->open_array_section("osd_perf_infos");
+  for (hash_map<int32_t, osd_stat_t>::const_iterator i = osd_stat.begin();
+       i != osd_stat.end();
+       ++i) {
+    f->open_object_section("osd");
+    f->dump_int("id", i->first);
+    {
+      f->open_object_section("perf_stats");
+      i->second.fs_perf_stat.dump(f);
+      f->close_section();
+    }
+    f->close_section();
+  }
+  f->close_section();
+}
+void PGMap::print_osd_perf_stats(std::ostream *ss) const
+{
+  TextTable tab;
+  tab.define_column("osdid", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("fs_commit_latency(ms)", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("fs_apply_latency(ms)", TextTable::LEFT, TextTable::RIGHT);
+  for (hash_map<int32_t, osd_stat_t>::const_iterator i = osd_stat.begin();
+       i != osd_stat.end();
+       ++i) {
+    tab << i->first;
+    tab << i->second.fs_perf_stat.filestore_commit_latency;
+    tab << i->second.fs_perf_stat.filestore_apply_latency;
+    tab << TextTable::endrow;
+  }
+  (*ss) << tab;
 }
 
 void PGMap::recovery_summary(Formatter *f, ostream *out) const

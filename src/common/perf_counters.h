@@ -65,6 +65,24 @@ enum perfcounter_type_d
 class PerfCounters
 {
 public:
+  template <typename T>
+  struct avg_tracker {
+    pair<uint64_t, T> last;
+    pair<uint64_t, T> cur;
+    avg_tracker() : last(0, 0), cur(0, 0) {}
+    T avg() const {
+      if (cur.first == last.first)
+	return cur.first ?
+	  cur.second / cur.first :
+	  0; // no change, report avg over all time
+      return (cur.second - last.second) / (cur.first - last.first);
+    }
+    void consume_next(const pair<uint64_t, T> &next) {
+      last = cur;
+      cur = next;
+    }
+  };
+
   ~PerfCounters();
 
   void inc(int idx, uint64_t v = 1);
@@ -77,6 +95,8 @@ public:
   utime_t tget(int idx) const;
 
   void dump_formatted(ceph::Formatter *f, bool schema);
+
+  pair<uint64_t, uint64_t> get_tavg_ms(int idx) const;
 
   const std::string& get_name() const;
   void set_name(std::string s) {
