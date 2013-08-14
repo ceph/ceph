@@ -203,6 +203,22 @@ utime_t PerfCounters::tget(int idx) const
   return utime_t(data.u64 / 1000000000ull, data.u64 % 1000000000ull);
 }
 
+pair<uint64_t, uint64_t> PerfCounters::get_tavg_ms(int idx) const
+{
+  if (!m_cct->_conf->perf)
+    return make_pair(0, 0);
+
+  Mutex::Locker lck(m_lock);
+  assert(idx > m_lower_bound);
+  assert(idx < m_upper_bound);
+  const perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
+  if (!(data.type & PERFCOUNTER_TIME))
+    return make_pair(0, 0);
+  if (!(data.type & PERFCOUNTER_LONGRUNAVG))
+    return make_pair(0, 0);
+  return make_pair(data.avgcount, data.u64/1000000);
+}
+
 void PerfCounters::dump_formatted(Formatter *f, bool schema)
 {
   Mutex::Locker lck(m_lock);
