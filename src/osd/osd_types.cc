@@ -136,6 +136,36 @@ void pow2_hist_t::generate_test_instances(list<pow2_hist_t*>& ls)
   ls.back()->h.push_back(2);
 }
 
+void filestore_perf_stat_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("commit_latency_ms", filestore_commit_latency);
+  f->dump_unsigned("apply_latency_ms", filestore_apply_latency);
+}
+
+void filestore_perf_stat_t::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(filestore_commit_latency, bl);
+  ::encode(filestore_apply_latency, bl);
+  ENCODE_FINISH(bl);
+}
+
+void filestore_perf_stat_t::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(filestore_commit_latency, bl);
+  ::decode(filestore_apply_latency, bl);
+  DECODE_FINISH(bl);
+}
+
+void filestore_perf_stat_t::generate_test_instances(std::list<filestore_perf_stat_t*>& o)
+{
+  o.push_back(new filestore_perf_stat_t());
+  o.push_back(new filestore_perf_stat_t());
+  o.back()->filestore_commit_latency = 20;
+  o.back()->filestore_apply_latency = 30;
+}
+
 // -- osd_stat_t --
 void osd_stat_t::dump(Formatter *f) const
 {
@@ -155,11 +185,14 @@ void osd_stat_t::dump(Formatter *f) const
   f->open_object_section("op_queue_age_hist");
   op_queue_age_hist.dump(f);
   f->close_section();
+  f->open_object_section("fs_perf_stat");
+  fs_perf_stat.dump(f);
+  f->close_section();
 }
 
 void osd_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(3, 2, bl);
+  ENCODE_START(4, 2, bl);
   ::encode(kb, bl);
   ::encode(kb_used, bl);
   ::encode(kb_avail, bl);
@@ -168,12 +201,13 @@ void osd_stat_t::encode(bufferlist &bl) const
   ::encode(hb_in, bl);
   ::encode(hb_out, bl);
   ::encode(op_queue_age_hist, bl);
+  ::encode(fs_perf_stat, bl);
   ENCODE_FINISH(bl);
 }
 
 void osd_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
   ::decode(kb, bl);
   ::decode(kb_used, bl);
   ::decode(kb_avail, bl);
@@ -183,6 +217,8 @@ void osd_stat_t::decode(bufferlist::iterator &bl)
   ::decode(hb_out, bl);
   if (struct_v >= 3)
     ::decode(op_queue_age_hist, bl);
+  if (struct_v >= 4)
+    ::decode(fs_perf_stat, bl);
   DECODE_FINISH(bl);
 }
 
