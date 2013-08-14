@@ -317,8 +317,8 @@ def sudo_write_file(remote, path, data, perms=None):
 
 def move_file(remote, from_path, to_path, sudo=False):
 
-    # need to stat the file first, to make sure we 
-    # maintain the same permissions  
+    # need to stat the file first, to make sure we
+    # maintain the same permissions
     args = []
     if sudo:
         args.append('sudo')
@@ -397,8 +397,8 @@ def remove_lines_from_file(remote, path, line_is_valid_test, string_to_test_for)
         else:
             log.info('removing line: {bad_line}'.format(bad_line=line))
 
-    # get a temp file path on the remote host to write to, 
-    # we don't want to blow away the remote file and then have the 
+    # get a temp file path on the remote host to write to,
+    # we don't want to blow away the remote file and then have the
     # network drop out
     temp_file_path = remote_mktemp(remote)
 
@@ -407,14 +407,14 @@ def remove_lines_from_file(remote, path, line_is_valid_test, string_to_test_for)
 
     # then do a 'mv' to the actual file location
     move_file(remote, temp_file_path, path)
-            
+
 def append_lines_to_file(remote, path, lines, sudo=False):
     temp_file_path = remote_mktemp(remote)
- 
+
     data = get_file(remote, path, sudo)
 
     # add the additional data and write it back out, using a temp file
-    # in case of connectivity of loss, and then mv it to the 
+    # in case of connectivity of loss, and then mv it to the
     # actual desired location
     data += lines
     temp_file_path
@@ -778,9 +778,15 @@ def get_clients(ctx, roles):
 def get_user():
     return getpass.getuser() + '@' + socket.gethostname()
 
+
 def read_config(ctx):
-    filename = os.path.join(os.environ['HOME'], '.teuthology.yaml')
     ctx.teuthology_config = {}
+    filename = os.path.join(os.environ['HOME'], '.teuthology.yaml')
+
+    if not os.path.exists(filename):
+        log.debug("%s not found", filename)
+        return
+
     with file(filename) as f:
         g = yaml.safe_load_all(f)
         for new in g:
