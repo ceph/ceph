@@ -187,10 +187,14 @@ Rados object in state %s." % (self.state))
         self.librados = CDLL('librados.so.2')
         self.cluster = c_void_p()
         self.rados_id = rados_id
-        if rados_id and not isinstance(rados_id, str):
+        if rados_id is not None and not isinstance(rados_id, str):
             raise TypeError('rados_id must be a string or None')
         if conffile is not None and not isinstance(conffile, str):
             raise TypeError('conffile must be a string or None')
+        if name is not None and not isinstance(name, str):
+            raise TypeError('name must be a string or None')
+        if clustername is not None and not isinstance(clustername, str):
+            raise TypeError('clustername must be a string or None')
         if rados_id and name:
             raise Error("Rados(): can't supply both rados_id and name")
         if rados_id:

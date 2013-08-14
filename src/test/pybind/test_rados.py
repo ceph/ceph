@@ -11,6 +11,16 @@ def test_rados_init_error():
     assert_raises(Error, Rados, conffile='', name='invalid')
     assert_raises(Error, Rados, conffile='', name='bad.invalid')
 
+def test_rados_init_type_error():
+    assert_raises(TypeError, Rados, rados_id=u'admin')
+    assert_raises(TypeError, Rados, rados_id=u'')
+    assert_raises(TypeError, Rados, name=u'client.admin')
+    assert_raises(TypeError, Rados, name=u'')
+    assert_raises(TypeError, Rados, conffile=u'blah')
+    assert_raises(TypeError, Rados, conffile=u'')
+    assert_raises(TypeError, Rados, clusternaem=u'blah')
+    assert_raises(TypeError, Rados, clustername=u'')
+
 def test_rados_init():
     with Rados(conffile='', rados_id='admin'):
         pass
