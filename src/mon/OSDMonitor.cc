@@ -1974,7 +1974,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	   prefix == "osd tree" ||
 	   prefix == "osd ls" ||
 	   prefix == "osd getmap" ||
-	   prefix == "osd getcrushmap") {
+	   prefix == "osd getcrushmap" ||
+	   prefix == "osd perf") {
     string val;
 
     epoch_t epoch = 0;
@@ -2046,6 +2047,17 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     } else if (prefix == "osd getcrushmap") {
       p->crush->encode(rdata);
       ss << "got crush map from osdmap epoch " << p->get_epoch();
+    } else if (prefix == "osd perf") {
+      const PGMap &pgm = mon->pgmon()->pg_map;
+      if (f) {
+	f->open_object_section("osdstats");
+	pgm.dump_osd_perf_stats(f.get());
+	f->close_section();
+	f->flush(ds);
+      } else {
+	pgm.print_osd_perf_stats(&ds);
+      }
+      rdata.append(ds);
     }
     if (p != &osdmap)
       delete p;

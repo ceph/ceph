@@ -1615,7 +1615,8 @@ libmon_a_SOURCES = \
 	mon/HealthMonitor.cc \
 	mon/DataHealthService.cc \
 	mon/ConfigKeyService.cc \
-	common/util.cc
+	common/util.cc \
+	common/TextTable.cc
 libmon_a_CXXFLAGS= ${AM_CXXFLAGS}
 noinst_LIBRARIES += libmon.a
 
