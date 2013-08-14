@@ -10,16 +10,14 @@ roles:
 
 tasks:
 - install:
-     branch: bobtail
+     branch: cuttlefish
 - ceph:
 - install.upgrade:
      all:
-        branch: next
+        branch: dumpling
 - ceph.restart:
 - ceph-fuse: [client.0]
 - workunit:
-     branch: next
      clients:
         client.0:
            - suites/dbench.sh
-

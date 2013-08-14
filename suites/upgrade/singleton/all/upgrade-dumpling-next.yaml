@@ -10,13 +10,13 @@ roles:
 
 tasks:
 - install:
-     branch: bobtail
+     branch: dumpling
 - ceph:
     conf:
       mds:
         debug mds: 20
         debug ms: 1
-      client: 
+      client:
         debug ms: 1
         debug client: 20
 - install.upgrade:
