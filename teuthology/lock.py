@@ -29,8 +29,13 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
         machines = json.loads(content)
         log.debug('locked {machines}'.format(machines=', '.join(machines.keys())))
         if ctx.machine_type == 'vps':
+            ok_machs = {}
             for machine in machines:
-                create_if_vm(ctx, machine)
+                if create_if_vm(ctx, machine):
+                    ok_machs[machine] = machines[machine]
+                else:
+                    unlock(ctx, machine)
+            return ok_machs
         return machines
     if status == 503:
         log.error('Insufficient nodes available to lock %d nodes.', num)
@@ -57,7 +62,7 @@ def unlock(ctx, name, user=None):
     if success:
         log.debug('unlocked %s', name)
         if not destroy_if_vm(ctx, name):
-            log.error('downburst destroy failed for %s',name)
+            log.info('downburst destroy failed for %s',name)
     else:
         log.error('failed to unlock %s', name)
     return success
@@ -378,6 +383,11 @@ Lock, unlock, or query lock status of machines.
             if ctx.machine_type == 'vps':
                 shortnames = ' '.join([name.split('@')[1].split('.')[0] for name in result.keys()])
                 print "Successfully Locked:\n%s\n" % shortnames
+                if len(result) < ctx.num_to_lock:
+                    print "Error: Locking failed."
+                    for machn in result:
+                        unlock(ctx,machn)
+                    return 1 
                 print "Unable to display keys at this time (virtual machines are booting)."
                 print "Please run teuthology-lock --list-targets %s once these machines come up." % shortnames
             else:
@@ -596,7 +606,7 @@ def create_if_vm(ctx, machine_name):
         metadata = "--meta-data=%s" % tmp.name
         dbrst = _get_downburst_exec()
         if not dbrst:
-            log.info("Error: no downburst executable found")
+            log.error("No downburst executable found.")
             return False
         p = subprocess.Popen([dbrst, '-c', phys_host,
                 'create', metadata, createMe],
