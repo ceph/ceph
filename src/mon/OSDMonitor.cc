@@ -2819,41 +2819,51 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     } while (false);
 
   } else if (prefix == "osd crush link") {
-    do {
-      // osd crush link <name> <loc1> [<loc2> ...]
-      string name;
-      cmd_getval(g_ceph_context, cmdmap, "name", name);
-      vector<string> argvec;
-      cmd_getval(g_ceph_context, cmdmap, "args", argvec);
-      map<string,string> loc;
-      parse_loc_map(argvec, &loc);
+    // osd crush link <name> <loc1> [<loc2> ...]
+    string name;
+    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    vector<string> argvec;
+    cmd_getval(g_ceph_context, cmdmap, "args", argvec);
+    map<string,string> loc;
+    parse_loc_map(argvec, &loc);
 
-      dout(0) << "linking crush item name '" << name << "' at location " << loc << dendl;
-      CrushWrapper newcrush;
-      _get_pending_crush(newcrush);
+    if (!osdmap.crush->name_exists(name)) {
+      err = -ENOENT;
+      ss << "item " << name << " does not exist";
+      goto reply;
+    }
+    if (osdmap.crush->check_item_loc(g_ceph_context, id, loc, (int*) NULL)) {
+      ss << "no need to move item id " << id << " name '" << name
+	 << "' to location " << loc << " in crush map";
+      err = 0;
+      goto reply;
+    }
 
-      if (!newcrush.name_exists(name)) {
-	err = -ENOENT;
-	ss << "item " << name << " does not exist";
-	break;
-      }
+    dout(5) << "linking crush item name '" << name << "' at location " << loc << dendl;
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+
+    if (!newcrush.name_exists(name)) {
+      err = -ENOENT;
+      ss << "item " << name << " does not exist";
+    } else {
       int id = newcrush.get_item_id(name);
-
       if (!newcrush.check_item_loc(g_ceph_context, id, loc, (int *)NULL)) {
 	err = newcrush.link_bucket(g_ceph_context, id, loc);
 	if (err >= 0) {
-	  ss << "linked item id " << id << " name '" << name << "' to location " << loc << " in crush map";
+	  ss << "linked item id " << id << " name '" << name
+             << "' to location " << loc << " in crush map";
 	  pending_inc.crush.clear();
 	  newcrush.encode(pending_inc.crush);
-	  getline(ss, rs);
-	  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
-	  return true;
 	}
       } else {
-	ss << "no need to move item id " << id << " name '" << name << "' to location " << loc << " in crush map";
+	ss << "no need to move item id " << id << " name '" << name
+           << "' to location " << loc << " in crush map";
 	err = 0;
       }
-    } while (false);
+    }
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, err, ss.str(), get_last_committed()));
+    return true;
   } else if (prefix == "osd crush rm" ||
 	     prefix == "osd crush remove" ||
 	     prefix == "osd crush unlink") {
