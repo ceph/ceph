@@ -142,6 +142,17 @@ static CompatSet get_fs_supported_compat_set() {
 #define ALIGNED(x, by) (!((x) % (by)))
 #define ALIGN_UP(x, by) (ALIGNED((x), (by)) ? (x) : (ALIGN_DOWN((x), (by)) + (by)))
 
+void FileStore::FSPerfTracker::update_from_perfcounters(
+  PerfCounters &logger)
+{
+  os_commit_latency.consume_next(
+    logger.get_tavg_ms(
+      l_os_commit_lat));
+  os_apply_latency.consume_next(
+    logger.get_tavg_ms(
+      l_os_apply_lat));
+}
+
 
 ostream& operator<<(ostream& out, const FileStore::OpSequencer& s)
 {

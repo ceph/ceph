@@ -75,6 +75,25 @@ class FileStore : public JournalingObjectStore,
                   public md_config_obs_t
 {
 public:
+
+  struct FSPerfTracker {
+    PerfCounters::avg_tracker<uint64_t> os_commit_latency;
+    PerfCounters::avg_tracker<uint64_t> os_apply_latency;
+
+    filestore_perf_stat_t get_cur_stats() const {
+      filestore_perf_stat_t ret;
+      ret.filestore_commit_latency = os_commit_latency.avg();
+      ret.filestore_apply_latency = os_apply_latency.avg();
+      return ret;
+    }
+
+    void update_from_perfcounters(PerfCounters &logger);
+  } perf_tracker;
+  filestore_perf_stat_t get_cur_stats() {
+    perf_tracker.update_from_perfcounters(*logger);
+    return perf_tracker.get_cur_stats();
+  }
+
   static const uint32_t on_disk_version = 3;
 private:
   string internal_name;         ///< internal name, used to name the perfcounter instance

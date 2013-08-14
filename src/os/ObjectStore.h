@@ -81,6 +81,8 @@ public:
 
   Logger *logger;
 
+  virtual filestore_perf_stat_t get_cur_stats() = 0;
+
   /**
    * a sequencer orders transactions
    *
