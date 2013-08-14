@@ -1,4 +1,4 @@
 tasks:
 - install.upgrade:
      all:
-        branch: cuttlefish
+        branch: dumpling
