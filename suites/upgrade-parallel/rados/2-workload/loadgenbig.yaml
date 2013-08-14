@@ -1,6 +1,6 @@
 workload:
    workunit:
-      branch: cuttlefish
+      branch: dumpling
       clients:
          all:
            - rados/load-gen-big.sh

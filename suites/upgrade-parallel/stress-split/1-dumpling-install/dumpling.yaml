@@ -1,4 +1,4 @@
 tasks:
 - install:
-    branch: cuttlefish
+    branch: dumpling
 - ceph:

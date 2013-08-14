@@ -1,6 +1,6 @@
 workload:
    workunit:
-      branch: cuttlefish
+      branch: dumpling
       clients:
          client.0:
            - rados/load-gen-mix.sh
