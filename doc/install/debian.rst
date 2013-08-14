@@ -61,7 +61,7 @@ For the European users there is also a mirror in the Netherlands at http://eu.ce
 Bobtail
 -------
 
-Bobtail is the previous major release of Ceph. These packages are
+Bobtail is the second major release of Ceph. These packages are
 recommended for those who have already deployed bobtail in production and
 are not yet ready to upgrade.
 
@@ -79,7 +79,7 @@ Argonaut
 --------
 
 Argonaut is the first major release of Ceph.  These packages are
-recommended for those who have already deployed argonaut in production
+recommended for those who have already deployed Argonaut in production
 and are not yet ready to upgrade.
 
 Add our package repository to your system's list of APT sources.  See
