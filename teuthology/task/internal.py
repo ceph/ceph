@@ -517,7 +517,7 @@ def vm_setup(ctx, config):
     with parallel() as p:
         editinfo = os.path.join(os.path.dirname(__file__),'edit_sudoers.sh')
         for remote in ctx.cluster.remotes.iterkeys():
-            mname = re.match(".*@([^\.]*)\..*", str(remote)).group(1) 
+            mname = re.match(".*@([^\.]*)\.?.*", str(remote)).group(1)
             if teuthology.is_vm(mname):
                 r = remote.run(args=['test', '-e', '/ceph-qa-ready',],
                         stdout=StringIO(),
