@@ -962,7 +962,7 @@ void PGMap::print_oneline_summary(ostream *out) const
   ssr.str("");
   recovery_rate_summary(NULL, &ssr);
   if (ssr.str().length())
-    *out << "; " << ssr.str() " recovering";
+    *out << "; " << ssr.str() << " recovering";
 }
 
 void PGMap::generate_test_instances(list<PGMap*>& o)
