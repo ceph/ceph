@@ -613,7 +613,9 @@ void ReplicatedPG::calc_trim_to()
 ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
 			   const PGPool &_pool, pg_t p, const hobject_t& oid,
 			   const hobject_t& ioid) :
-  PG(o, curmap, _pool, p, oid, ioid), temp_created(false),
+  PG(o, curmap, _pool, p, oid, ioid),
+  snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
+  temp_created(false),
   temp_coll(coll_t::make_temp_coll(p)), snap_trimmer_machine(this)
 { 
   snap_trimmer_machine.initiate();
@@ -4794,9 +4796,10 @@ void ReplicatedPG::add_object_context_to_pg_stat(ObjectContext *obc, pg_stat_t *
 
 SnapSetContext *ReplicatedPG::create_snapset_context(const object_t& oid)
 {
+  Mutex::Locker l(snapset_contexts_lock);
   SnapSetContext *ssc = new SnapSetContext(oid);
   dout(10) << "create_snapset_context " << ssc << " " << ssc->oid << dendl;
-  register_snapset_context(ssc);
+  _register_snapset_context(ssc);
   ssc->ref++;
   return ssc;
 }
@@ -4807,6 +4810,7 @@ SnapSetContext *ReplicatedPG::get_snapset_context(const object_t& oid,
 						  bool can_create,
 						  const string& nspace)
 {
+  Mutex::Locker l(snapset_contexts_lock);
   SnapSetContext *ssc;
   map<object_t, SnapSetContext*>::iterator p = snapset_contexts.find(oid);
   if (p != snapset_contexts.end()) {
@@ -4825,7 +4829,7 @@ SnapSetContext *ReplicatedPG::get_snapset_context(const object_t& oid,
 	return NULL;
     }
     ssc = new SnapSetContext(oid);
-    register_snapset_context(ssc);
+    _register_snapset_context(ssc);
     if (r >= 0) {
       bufferlist::iterator bvp = bv.begin();
       ssc->snapset.decode(bvp);
@@ -4840,9 +4844,9 @@ SnapSetContext *ReplicatedPG::get_snapset_context(const object_t& oid,
 
 void ReplicatedPG::put_snapset_context(SnapSetContext *ssc)
 {
+  Mutex::Locker l(snapset_contexts_lock);
   dout(10) << "put_snapset_context " << ssc->oid << " "
 	   << ssc->ref << " -> " << (ssc->ref-1) << dendl;
-
   --ssc->ref;
   if (ssc->ref == 0) {
     if (ssc->registered)
