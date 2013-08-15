@@ -5182,6 +5182,13 @@ void ReplicatedPG::calc_head_subsets(ObjectContext *obc, SnapSet& snapset, const
 	     << " overlap " << prev << dendl;
   }
 
+
+  if (cloning.num_intervals() > g_conf->osd_recover_clone_overlap_limit) {
+    dout(10) << "skipping clone, too many holes" << dendl;
+    clone_subsets.clear();
+    cloning.clear();
+  }
+
   // what's left for us to push?
   data_subset.subtract(cloning);
 
@@ -5251,6 +5258,13 @@ void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const hobject_t& soid,
     dout(10) << "calc_clone_subsets " << soid << " does not have next " << c
 	     << " overlap " << next << dendl;
   }
+
+  if (cloning.num_intervals() > g_conf->osd_recover_clone_overlap_limit) {
+    dout(10) << "skipping clone, too many holes" << dendl;
+    clone_subsets.clear();
+    cloning.clear();
+  }
+
   
   // what's left for us to push?
   data_subset.subtract(cloning);
