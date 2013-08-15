@@ -29,6 +29,7 @@
 #include "common/errno.h"
 #include "common/config.h"
 #include "include/assert.h"
+#include "include/str_list.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -372,15 +373,12 @@ bool LogMonitor::prepare_command(MMonCommand *m)
   if (prefix == "log") {
     vector<string> logtext;
     cmd_getval(g_ceph_context, cmdmap, "logtext", logtext);
-    ostringstream ds;
-    std::copy(logtext.begin(), logtext.end(),
-	      ostream_iterator<string>(ds, " "));
     LogEntry le;
     le.who = m->get_orig_source_inst();
     le.stamp = m->get_recv_stamp();
     le.seq = 0;
     le.type = CLOG_INFO;
-    le.msg = ds.str();
+    le.msg = str_join(logtext, " ");
     pending_summary.add(le);
     pending_log.insert(pair<utime_t,LogEntry>(le.stamp, le));
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, string(), get_last_committed()));
