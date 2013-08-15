@@ -278,6 +278,7 @@ protected:
   // projected object info
   map<hobject_t, ObjectContext*> object_contexts;
   map<object_t, SnapSetContext*> snapset_contexts;
+  Mutex snapset_contexts_lock;
 
   // debug order that client ops are applied
   map<hobject_t, map<client_t, tid_t> > debug_op_order;
@@ -327,6 +328,11 @@ protected:
   SnapSetContext *get_snapset_context(const object_t& oid, const string &key,
 				      ps_t seed, bool can_create, const string &nspace);
   void register_snapset_context(SnapSetContext *ssc) {
+    Mutex::Locker l(snapset_contexts_lock);
+    _register_snapset_context(ssc);
+  }
+  void _register_snapset_context(SnapSetContext *ssc) {
+    assert(snapset_contexts_lock.is_locked());
     if (!ssc->registered) {
       assert(snapset_contexts.count(ssc->oid) == 0);
       ssc->registered = true;
