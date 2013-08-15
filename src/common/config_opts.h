@@ -51,6 +51,7 @@ OPTION(mon_cluster_log_to_syslog, OPT_BOOL, false)
 OPTION(mon_cluster_log_to_syslog_level, OPT_STR, "info")   // this level and above
 OPTION(mon_cluster_log_to_syslog_facility, OPT_STR, "daemon")
 OPTION(mon_cluster_log_file, OPT_STR, "/var/log/ceph/$cluster.log")
+OPTION(mon_cluster_log_file_level, OPT_STR, "info")
 
 DEFAULT_SUBSYS(0, 5)
 SUBSYS(lockdep, 0, 1)
