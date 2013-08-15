@@ -1,22 +1,22 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 
-#ifndef FILESTOREBACKENDH
-#define FILESTOREBACKENDH
+#ifndef TESTFILESTOREBACKENDH
+#define TESTFILESTOREBACKENDH
 
 #include "common/Finisher.h"
 #include "backend.h"
 #include "include/Context.h"
 #include "os/ObjectStore.h"
 
-class FileStoreBackend : public Backend {
+class TestFileStoreBackend : public Backend {
   ObjectStore *os;
   Finisher finisher;
   map<string, ObjectStore::Sequencer> osrs;
   const bool write_infos;
 
 public:
-  FileStoreBackend(ObjectStore *os, bool write_infos);
-  ~FileStoreBackend() {
+  TestFileStoreBackend(ObjectStore *os, bool write_infos);
+  ~TestFileStoreBackend() {
     finisher.stop();
   }
   void write(
