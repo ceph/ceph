@@ -29,7 +29,7 @@ def get_testdir(ctx):
     if 'test_path' in ctx.teuthology_config:
         return ctx.teuthology_config['test_path']
 
-    basedir = ctx.teuthology_config.get('base_test_dir', '/home/ubuntu/cephtest')
+    basedir = get_testdir_base(ctx)
 
     global global_jobid
     global checked_jobid
