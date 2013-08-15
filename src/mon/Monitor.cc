@@ -2054,11 +2054,8 @@ void Monitor::handle_command(MMonCommand *m)
     cmd_getval(g_ceph_context, cmdmap, "injected_args", injected_args);
     if (!injected_args.empty()) {
       dout(0) << "parsing injected options '" << injected_args << "'" << dendl;
-      ostringstream argss;
-      std::copy(injected_args.begin(), injected_args.end(),
-		ostream_iterator<string>(argss, " "));
       ostringstream oss;
-      r = g_conf->injectargs(argss.str().c_str(), &oss);
+      r = g_conf->injectargs(str_join(injected_args, " "), &oss);
       ss << "injectargs:"  << oss.str();
       rs = ss.str();
       goto out;
@@ -2130,10 +2127,7 @@ void Monitor::handle_command(MMonCommand *m)
 
     vector<string> tagsvec;
     cmd_getval(g_ceph_context, cmdmap, "tags", tagsvec);
-    stringstream tags;
-    std::copy(tagsvec.begin(), tagsvec.end(),
-	      ostream_iterator<string>(tags, " "));
-    string tagstr = tags.str();
+    string tagstr = str_join(tagsvec, " ");
     if (!tagstr.empty())
       tagstr = tagstr.substr(0, tagstr.find_last_of(' '));
     f->dump_string("tag", tagstr);
