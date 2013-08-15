@@ -67,8 +67,8 @@ def run_tests(ctx, config):
 
         assert len(out) > 100
 
-        print 'Received', out
-    
+        log.info('Received', out)
+
     yield
 
 
