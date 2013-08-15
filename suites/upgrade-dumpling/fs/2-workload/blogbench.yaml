@@ -1,0 +1,5 @@
+workload:
+   workunit:
+      clients:
+         all:
+           - suites/blogbench.sh
