@@ -227,7 +227,7 @@ Lock, unlock, or query lock status of machines.
 
     ctx = parser.parse_args()
 
-    loglevel = logging.ERROR
+    loglevel = logging.INFO
     if ctx.verbose:
         loglevel = logging.DEBUG
 
@@ -426,7 +426,7 @@ to run on, or use -a to check all of them automatically.
 
     ctx = parser.parse_args()
 
-    loglevel = logging.ERROR
+    loglevel = logging.INFO
     if ctx.verbose:
         loglevel = logging.DEBUG
 
