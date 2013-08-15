@@ -65,13 +65,13 @@ bool AuthMonitor::check_rotate()
  Tick function to update the map based on performance every N seconds
 */
 
-void AuthMonitor::tick() 
+void AuthMonitor::tick()
 {
   if (!is_active()) return;
 
   dout(10) << *this << dendl;
 
-  if (!mon->is_leader()) return; 
+  if (!mon->is_leader()) return;
 
   if (check_rotate())
     propose_pending();
@@ -84,9 +84,6 @@ void AuthMonitor::on_active()
   if (!mon->is_leader())
     return;
   mon->key_server.start_server();
-/*
-  check_rotate();
-*/
 }
 
 void AuthMonitor::create_initial()
@@ -159,7 +156,7 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
     // reset if we are moving to initial state.  we will normally have
     // keys in here temporarily for bootstrapping that we need to
     // clear out.
-    if (keys_ver == 0) 
+    if (keys_ver == 0)
       mon->key_server.clear_secrets();
 
     dout(20) << __func__ << " walking through version " << (keys_ver+1)
@@ -204,16 +201,6 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
 	   << " max_global_id=" << max_global_id
 	   << " format_version " << format_version
 	   << dendl;
- 
-  /*
-  bufferlist bl;
-  __u8 v = 1;
-  ::encode(v, bl);
-  ::encode(max_global_id, bl);
-  Mutex::Locker l(mon->key_server.get_lock());
-  ::encode(mon->key_server, bl);
-  paxos->stash_latest(version, bl);
-  */
 }
 
 void AuthMonitor::increase_max_global_id()
@@ -385,7 +372,7 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
   // set up handler?
   if (m->protocol == 0 && !s->auth_handler) {
     set<__u32> supported;
-    
+
     try {
       __u8 struct_v = 1;
       ::decode(struct_v, indata);
@@ -406,13 +393,19 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
 	  entity_name.get_type() == CEPH_ENTITY_TYPE_MDS) {
 	if (g_conf->cephx_cluster_require_signatures ||
 	    g_conf->cephx_require_signatures) {
-	  dout(1) << m->get_source_inst() << " supports cephx but not signatures and 'cephx [cluster] require signatures = true'; disallowing cephx" << dendl;
+	  dout(1) << m->get_source_inst()
+                  << " supports cephx but not signatures and"
+                  << " 'cephx [cluster] require signatures = true';"
+                  << " disallowing cephx" << dendl;
 	  supported.erase(CEPH_AUTH_CEPHX);
 	}
       } else {
 	if (g_conf->cephx_service_require_signatures ||
 	    g_conf->cephx_require_signatures) {
-	  dout(1) << m->get_source_inst() << " supports cephx but not signatures and 'cephx [service] require signatures = true'; disallowing cephx" << dendl;
+	  dout(1) << m->get_source_inst()
+                  << " supports cephx but not signatures and"
+                  << " 'cephx [service] require signatures = true';"
+                  << " disallowing cephx" << dendl;
 	  supported.erase(CEPH_AUTH_CEPHX);
 	}
       }
@@ -491,7 +484,6 @@ bool AuthMonitor::prep_auth(MAuth *m, bool paxos_writable)
     }
     if (ret == -EIO) {
       wait_for_active(new C_RetryMessage(this,m));
-      //paxos->wait_for_active(new C_RetryMessage(this, m));
       goto done;
     }
     if (caps_info.caps.length()) {
@@ -659,7 +651,7 @@ void AuthMonitor::import_keyring(KeyRing& keyring)
        ++p) {
     KeyServerData::Incremental auth_inc;
     auth_inc.name = p->first;
-    auth_inc.auth = p->second; 
+    auth_inc.auth = p->second;
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
     dout(10) << " importing " << auth_inc.name << dendl;
     dout(30) << "    " << auth_inc.auth << dendl;
@@ -735,7 +727,6 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     getline(ss, rs);
     err = 0;
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
-    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
     return true;
   } else if (prefix == "auth add" && !entity_name.empty()) {
     /* expected behavior:
@@ -858,7 +849,6 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     ss << "added key for " << auth_inc.name;
     getline(ss, rs);
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
-    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
     return true;
   } else if ((prefix == "auth get-or-create-key" ||
 	     prefix == "auth get-or-create") &&
@@ -911,7 +901,6 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 	if (auth_inc.op == KeyServerData::AUTH_INC_ADD &&
 	    auth_inc.name == entity) {
 	  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
-	  //paxos->wait_for_commit(new C_RetryMessage(this, m));
 	  return true;
 	}
       }
@@ -947,7 +936,6 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     rdata.append(ds);
     getline(ss, rs);
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, rdata, get_last_committed()));
-    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
     return true;
   } else if (prefix == "auth caps" && !entity_name.empty()) {
     KeyServerData::Incremental auth_inc;
@@ -970,7 +958,6 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     ss << "updated caps for " << auth_inc.name;
     getline(ss, rs);
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
-    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
     return true;
   } else if (prefix == "auth del" && !entity_name.empty()) {
     KeyServerData::Incremental auth_inc;
@@ -986,7 +973,6 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     ss << "updated";
     getline(ss, rs);
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
-    //paxos->wait_for_commit(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
     return true;
   }
 
