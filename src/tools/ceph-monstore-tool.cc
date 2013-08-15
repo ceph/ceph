@@ -33,6 +33,7 @@
 #include "mon/MonitorDBStore.h"
 #include "mon/Paxos.h"
 #include "common/Formatter.h"
+#include "include/stringify.h"
 
 namespace po = boost::program_options;
 using namespace std;
@@ -180,11 +181,18 @@ int main(int argc, char **argv) {
   if (vm.count("out")) {
     if ((fd = open(out_path.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666)) == -1) {
       int _err = errno;
-      std::cerr << "Couldn't open " << out_path << cpp_strerror(_err) << std::endl; 
-      return 1;
+      if (_err != EISDIR) {
+        std::cerr << "Couldn't open " << out_path << ": " << cpp_strerror(_err) << std::endl; 
+        return 1;
+      }
     }
   } else {
     fd = STDOUT_FILENO;
+  }
+
+  if (fd < 0 && cmd != "store-copy") {
+    std::cerr << "error: '" << out_path << "' is a directory!" << std::endl;
+    return 1;
   }
 
   MonitorDBStore st(store_path);
@@ -331,13 +339,79 @@ int main(int argc, char **argv) {
       t.compact_prefix(prefix);
       st.apply_transaction(t);
     }
+  } else if (cmd == "store-copy") {
+    if (!store_path.size()) {
+      std::cerr << "need mon store path to copy from" << std::endl;
+      std::cerr << desc << std::endl;
+      goto done;
+    }
+    if (!out_path.size()) {
+      std::cerr << "need mon store path to copy to (--out <mon_data_dir>)"
+                << std::endl;
+      std::cerr << desc << std::endl;
+      goto done;
+    }
+    if (fd > 0) {
+      std::cerr << "supplied out path '" << out_path << "' is not a directory"
+                << std::endl;
+      goto done;
+    }
+
+    MonitorDBStore out_store(out_path);
+    {
+      stringstream ss;
+      int r = out_store.create_and_open(ss);
+      if (r < 0) {
+        std::cerr << ss.str() << std::endl;
+        goto done;
+      }
+    }
+
+
+    KeyValueDB::WholeSpaceIterator it = st.get_iterator();
+    uint64_t total_keys = 0;
+    uint64_t total_size = 0;
+    uint64_t total_tx = 0;
+
+    do {
+      uint64_t num_keys = 0;
+
+      MonitorDBStore::Transaction tx;
+
+      while (it->valid() && num_keys < 128) {
+        pair<string,string> k = it->raw_key();
+        bufferlist v = it->value();
+        tx.put(k.first, k.second, v);
+
+        num_keys ++;
+        total_tx ++;
+        total_size += v.length();
+
+        it->next();
+      }
+
+      total_keys += num_keys;
+
+      if (!tx.empty())
+        out_store.apply_transaction(tx);
+
+      std::cout << "copied " << total_keys << " keys so far ("
+                << stringify(si_t(total_size)) << ")" << std::endl;
+
+    } while (it->valid());
+
+    std::cout << "summary: copied " << total_keys << " keys, using "
+              << total_tx << " transactions, totalling "
+              << stringify(si_t(total_size)) << std::endl;
+    std::cout << "from '" << store_path << "' to '" << out_path << "'"
+              << std::endl;
   } else {
     std::cerr << "Unrecognized command: " << cmd << std::endl;
     goto done;
   }
 
   done:
-  if (vm.count("out")) {
+  if (vm.count("out") && fd > 0) {
     ::close(fd);
   }
   return 0;
