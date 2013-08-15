@@ -1,0 +1,8 @@
+
+v0.68
+~~~~~
+
+* 'ceph osd crush set <id> <weight> <loc..>' no longer adds the osd to the
+  specified location, as that's a job for 'ceph osd crush add'.  It will
+  however continue to work just the same as long as the osd already exists
+  in the crush map.
