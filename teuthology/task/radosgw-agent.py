@@ -167,6 +167,7 @@ def task(ctx, config):
             teuthology.deep_merge(config[client], overrides.get('radosgw-agent', {}))
 
     ctx.radosgw_agent = argparse.Namespace()
+    ctx.radosgw_agent.config = config
 
     procs = run_radosgw_agent(ctx, config)
 

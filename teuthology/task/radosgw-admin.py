@@ -28,6 +28,12 @@ def successful_ops(out):
     entry = summary[0]
     return entry['total']['successful_ops']
 
+# simple test to indicate if multi-region testing should occur
+def multi_region_enabled(ctx):
+    # this is populated by the radosgw_agent task, seems reasonable to use that as an indicator that
+    # we're testing multi-region sync 
+    return 'radosgw_agent' in ctx
+
 def task(ctx, config):
     """
     Test radosgw-admin functionality against a running rgw instance.
@@ -43,11 +49,11 @@ def task(ctx, config):
         config = dict.fromkeys(config)
     clients = config.keys()
 
-    client = rgw_utils.get_master_client(ctx, clients)
+    multi_region_run = multi_region_enabled(ctx)
 
-    if not client:
-        # oh, well, just use the first client... multiregion stuff might not work correctly
-        client = clients[0];
+    client = clients[0]; # default choice, multi-region code may overwrite this
+    if multi_region_run:
+        client = rgw_utils.get_master_client(ctx, clients)
 
     ##
     user1='foo'
@@ -220,7 +226,8 @@ def task(ctx, config):
     assert not err
     assert len(out) == 0
 
-    rgw_utils.radosgw_agent_sync_all(ctx)
+    if multi_region_run:
+        rgw_utils.radosgw_agent_sync_all(ctx)
 
     # connect to rgw
     (remote,) = ctx.cluster.only(client).remotes.iterkeys()
