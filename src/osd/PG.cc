@@ -5164,6 +5164,9 @@ boost::statechart::result PG::RecoveryState::Initial::react(const MLogRec& i)
 void PG::RecoveryState::Initial::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_initial_latency, dur);
 }
 
 /*------Started-------*/
@@ -5210,6 +5213,9 @@ boost::statechart::result PG::RecoveryState::Started::react(const QueryState& q)
 void PG::RecoveryState::Started::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_started_latency, dur);
 }
 
 /*--------Reset---------*/
@@ -5282,6 +5288,9 @@ boost::statechart::result PG::RecoveryState::Reset::react(const QueryState& q)
 void PG::RecoveryState::Reset::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_reset_latency, dur);
 }
 
 /*-------Start---------*/
@@ -5304,6 +5313,9 @@ PG::RecoveryState::Start::Start(my_context ctx)
 void PG::RecoveryState::Start::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_start_latency, dur);
 }
 
 /*---------Primary--------*/
@@ -5351,6 +5363,8 @@ void PG::RecoveryState::Primary::exit()
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
   pg->want_acting.clear();
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_primary_latency, dur);
 }
 
 /*---------Peering--------*/
@@ -5438,7 +5452,7 @@ void PG::RecoveryState::Peering::exit()
   pg->clear_probe_targets();
 
   utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
-  pg->osd->logger->tinc(l_osd_peering_latency, dur);
+  pg->osd->recoverystate_perf->tinc(rs_peering_latency, dur);
 }
 
 
@@ -5475,6 +5489,8 @@ void PG::RecoveryState::Backfilling::exit()
   pg->backfill_reserved = false;
   pg->backfill_reserving = false;
   pg->state_clear(PG_STATE_BACKFILL);
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_backfilling_latency, dur);
 }
 
 /*--WaitRemoteBackfillReserved--*/
@@ -5507,6 +5523,9 @@ PG::RecoveryState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_con
 void PG::RecoveryState::WaitRemoteBackfillReserved::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_waitremotebackfillreserved_latency, dur);
 }
 
 boost::statechart::result
@@ -5549,6 +5568,9 @@ PG::RecoveryState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_conte
 void PG::RecoveryState::WaitLocalBackfillReserved::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_waitlocalbackfillreserved_latency, dur);
 }
 
 /*----NotBackfilling------*/
@@ -5562,6 +5584,9 @@ PG::RecoveryState::NotBackfilling::NotBackfilling(my_context ctx)
 void PG::RecoveryState::NotBackfilling::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_notbackfilling_latency, dur);
 }
 
 /*---RepNotRecovering----*/
@@ -5575,6 +5600,9 @@ PG::RecoveryState::RepNotRecovering::RepNotRecovering(my_context ctx)
 void PG::RecoveryState::RepNotRecovering::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_repnotrecovering_latency, dur);
 }
 
 /*---RepWaitRecoveryReserved--*/
@@ -5609,6 +5637,9 @@ PG::RecoveryState::RepWaitRecoveryReserved::react(const RemoteRecoveryReserved &
 void PG::RecoveryState::RepWaitRecoveryReserved::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_repwaitrecoveryreserved_latency, dur);
 }
 
 /*-RepWaitBackfillReserved*/
@@ -5644,6 +5675,9 @@ PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 void PG::RecoveryState::RepWaitBackfillReserved::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_repwaitbackfillreserved_latency, dur);
 }
 
 boost::statechart::result
@@ -5689,6 +5723,8 @@ void PG::RecoveryState::RepRecovering::exit()
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
   pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_RepRecovering_latency, dur);
 }
 
 /*------Activating--------*/
@@ -5702,6 +5738,9 @@ PG::RecoveryState::Activating::Activating(my_context ctx)
 void PG::RecoveryState::Activating::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_activating_latency, dur);
 }
 
 PG::RecoveryState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_context ctx)
@@ -5721,6 +5760,9 @@ PG::RecoveryState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_conte
 void PG::RecoveryState::WaitLocalRecoveryReserved::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_waitlocalrecoveryreserved_latency, dur);
 }
 
 PG::RecoveryState::WaitRemoteRecoveryReserved::WaitRemoteRecoveryReserved(my_context ctx)
@@ -5765,6 +5807,9 @@ PG::RecoveryState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserve
 void PG::RecoveryState::WaitRemoteRecoveryReserved::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_waitremoterecoveryreserved_latency, dur);
 }
 
 PG::RecoveryState::Recovering::Recovering(my_context ctx)
@@ -5825,6 +5870,9 @@ PG::RecoveryState::Recovering::react(const RequestBackfill &evt)
 void PG::RecoveryState::Recovering::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_recovering_latency, dur);
 }
 
 PG::RecoveryState::Recovered::Recovered(my_context ctx)
@@ -5856,6 +5904,9 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
 void PG::RecoveryState::Recovered::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_recovered_latency, dur);
 }
 
 PG::RecoveryState::Clean::Clean(my_context ctx)
@@ -5882,6 +5933,8 @@ void PG::RecoveryState::Clean::exit()
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_clear(PG_STATE_CLEAN);
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_clean_latency, dur);
 }
 
 /*---------Active---------*/
@@ -6131,6 +6184,8 @@ void PG::RecoveryState::Active::exit()
   pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_clear(PG_STATE_RECOVERY_WAIT);
   pg->state_clear(PG_STATE_REPLAY);
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_active_latency, dur);
 }
 
 /*------ReplicaActive-----*/
@@ -6222,6 +6277,8 @@ void PG::RecoveryState::ReplicaActive::exit()
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
   pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_replicaactive_latency, dur);
 }
 
 /*-------Stray---*/
@@ -6321,6 +6378,9 @@ boost::statechart::result PG::RecoveryState::Stray::react(const ActMap&)
 void PG::RecoveryState::Stray::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_stray_latency, dur);
 }
 
 /*--------GetInfo---------*/
@@ -6493,6 +6553,9 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const QueryState& q)
 void PG::RecoveryState::GetInfo::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_getinfo_latency, dur);
 }
 
 /*------GetLog------------*/
@@ -6605,6 +6668,9 @@ boost::statechart::result PG::RecoveryState::GetLog::react(const QueryState& q)
 void PG::RecoveryState::GetLog::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_getlog_latency, dur);
 }
 
 /*------WaitActingChange--------*/
@@ -6662,6 +6728,9 @@ boost::statechart::result PG::RecoveryState::WaitActingChange::react(const Query
 void PG::RecoveryState::WaitActingChange::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_waitactingchange_latency, dur);
 }
 
 /*------Incomplete--------*/
@@ -6697,6 +6766,8 @@ void PG::RecoveryState::Incomplete::exit()
   PG *pg = context< RecoveryMachine >().pg;
 
   pg->state_clear(PG_STATE_INCOMPLETE);
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_incomplete_latency, dur);
 }
 
 /*------GetMissing--------*/
@@ -6819,6 +6890,9 @@ boost::statechart::result PG::RecoveryState::GetMissing::react(const QueryState&
 void PG::RecoveryState::GetMissing::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_getmissing_latency, dur);
 }
 
 /*---WaitFlushedPeering---*/
@@ -6897,6 +6971,9 @@ boost::statechart::result PG::RecoveryState::WaitUpThru::react(const QueryState&
 void PG::RecoveryState::WaitUpThru::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  utime_t dur = ceph_clock_now(g_ceph_context) - enter_time;
+  pg->osd->recoverystate_perf->tinc(rs_waitupthru_latency, dur);
 }
 
 /*----RecoveryState::RecoveryMachine Methods-----*/
