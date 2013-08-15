@@ -1829,13 +1829,14 @@ void Monitor::get_status(stringstream &ss, Formatter *f)
     f->close_section();
     f->close_section();
   } else {
-    ss << "  cluster " << monmap->get_fsid() << "\n";
-    ss << "   health " << health << "\n";
-    ss << "   monmap " << *monmap << ", election epoch " << get_epoch()
+    ss << "    cluster " << monmap->get_fsid() << "\n";
+    ss << "     health " << health << "\n";
+    ss << "     monmap " << *monmap << ", election epoch " << get_epoch()
       << ", quorum " << get_quorum() << " " << get_quorum_names() << "\n";
-    ss << "   osdmap " << osdmon()->osdmap << "\n";
-    ss << "    pgmap " << pgmon()->pg_map << "\n";
-    ss << "   mdsmap " << mdsmon()->mdsmap << "\n";
+    if (mdsmon()->mdsmap.get_epoch() > 1)
+      ss << "     mdsmap " << mdsmon()->mdsmap << "\n";
+    osdmon()->osdmap.print_summary(NULL, ss);
+    pgmon()->pg_map.print_summary(NULL, &ss);
   }
 }
 

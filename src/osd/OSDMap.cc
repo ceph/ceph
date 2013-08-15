@@ -1743,15 +1743,25 @@ void OSDMap::print_summary(Formatter *f, ostream& out) const
 		   "true" : "false");
     f->close_section();
   } else {
-    out << "e" << get_epoch() << ": "
+    out << "     osdmap e" << get_epoch() << ": "
 	<< get_num_osds() << " osds: "
 	<< get_num_up_osds() << " up, "
-	<< get_num_in_osds() << " in";
-    if (test_flag(CEPH_OSDMAP_FULL))
-      out << " full";
-    else if (test_flag(CEPH_OSDMAP_NEARFULL))
-      out << " nearfull";
+	<< get_num_in_osds() << " in\n";
+    if (flags)
+      out << "            flags " << get_flag_string() << "\n";
   }
+}
+
+void OSDMap::print_oneline_summary(ostream& out) const
+{
+  out << "e" << get_epoch() << ": "
+      << get_num_osds() << " osds: "
+      << get_num_up_osds() << " up, "
+      << get_num_in_osds() << " in";
+  if (test_flag(CEPH_OSDMAP_FULL))
+    out << " full";
+  else if (test_flag(CEPH_OSDMAP_NEARFULL))
+    out << " nearfull";
 }
 
 bool OSDMap::crush_ruleset_in_use(int ruleset) const
