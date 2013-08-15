@@ -151,7 +151,7 @@ The ``install`` task needs to precede all other tasks.
 The listed targets need resolvable hostnames. If you do not have a DNS server
 running, you can add entries to ``/etc/hosts``. You also need to be able to SSH
 in to the listed targets without passphrases, and the remote user needs to have
-passphraseless `sudo` access. Note that the ssh keys at the end of the
+passwordless `sudo` access. Note that the ssh keys at the end of the
 ``targets`` entries are the public ssh keys for the hosts.  On Ubuntu, these
 are located at /etc/ssh/ssh_host_rsa_key.pub
 
