@@ -202,6 +202,7 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
             'sudo', 'apt-key', 'list', run.Raw('|'), 'grep', 'Ceph',
         ],
         stdout=StringIO(),
+        check_status=False,
     )
     if r.stdout.getvalue().find('Ceph automated package') == -1:
         # if it doesn't exist, add it
@@ -619,6 +620,7 @@ def _upgrade_deb_packages(ctx, config, remote, debs, branch):
             'sudo', 'apt-key', 'list', run.Raw('|'), 'grep', 'Ceph',
         ],
         stdout=StringIO(),
+        check_status=False,
     )
     if r.stdout.getvalue().find('Ceph automated package') == -1:
         # if it doesn't exist, add it
