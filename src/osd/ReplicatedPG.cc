@@ -1037,14 +1037,16 @@ void ReplicatedPG::do_op(OpRequestRef op)
   // possible to construct an operation that does a read, does a guard
   // check (e.g., CMPXATTR), and then a write.  Then we either succeed
   // with the write, or return a CMPXATTR and the read value.
-  if (ctx->op_t.empty() && !ctx->modify) {
+  if ((ctx->op_t.empty() && !ctx->modify) || result < 0) {
     // read.
     ctx->reply->claim_op_out_data(ctx->ops);
     ctx->reply->get_header().data_off = ctx->data_off;
   } else {
     // write.  normalize the result code.
-    if (result > 0)
+    if (result > 0) {
+      dout(20) << " zeroing write result code " << result << dendl;
       result = 0;
+    }
   }
   ctx->reply->set_result(result);
 

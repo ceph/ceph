@@ -259,7 +259,7 @@ public:
   struct OpContext {
     OpRequestRef op;
     osd_reqid_t reqid;
-    vector<OSDOp>& ops;
+    vector<OSDOp> ops;
 
     const ObjectState *obs; // Old objectstate
     const SnapSet *snapset; // Old snapset
