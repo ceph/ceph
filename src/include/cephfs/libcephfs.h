@@ -709,6 +709,24 @@ int ceph_ftruncate(class ceph_mount_info *cmount, int fd, loff_t size);
 int ceph_fsync(class ceph_mount_info *cmount, int fd, int syncdataonly);
 
 /**
+ * Preallocate or release disk space for the file for the byte range.
+ *
+ * @param cmount the ceph mount handle to use for performing the fallocate.
+ * @param fd the file descriptor of the file to fallocate.
+ * @param mode the flags determines the operation to be performed on the given range.
+ *        default operation (0) allocate and initialize to zero the file in the byte range,
+ *        and the file size will be changed if offset + length is greater than
+ *        the file size. if the FALLOC_FL_KEEP_SIZE flag is specified in the mode,
+ *        the file size will not be changed. if the FALLOC_FL_PUNCH_HOLE flag is
+ *        specified in the mode, the operation is deallocate space and zero the byte range.
+ * @param offset the byte range starting.
+ * @param length the length of the range.
+ * @return 0 on success or a negative error code on failure.
+ */
+int ceph_fallocate(struct ceph_mount_info *cmount, int fd, int mode,
+	                      loff_t offset, loff_t length);
+
+/**
  * Get the open file's statistics.
  *
  * @param cmount the ceph mount handle to use for performing the fstat.
