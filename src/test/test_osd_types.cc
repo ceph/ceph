@@ -1081,11 +1081,6 @@ TEST_F(ObjectContextTest, read_write_lock)
 
     obc.ondisk_write_unlock();
 
-    EXPECT_EQ(1, obc.readers_waiting);
-    EXPECT_EQ(0, obc.readers);
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
-
     do {
       cout << "Trying (2) with delay " << delay << "us\n";
       usleep(delay);
@@ -1143,11 +1138,6 @@ TEST_F(ObjectContextTest, read_write_lock)
     EXPECT_EQ(0, obc.unstable_writes);
 
     obc.ondisk_read_unlock();
-
-    EXPECT_EQ(0, obc.readers_waiting);
-    EXPECT_EQ(0, obc.readers);
-    EXPECT_EQ(1, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
 
     do {
       cout << "Trying (4) with delay " << delay << "us\n";
