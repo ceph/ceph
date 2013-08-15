@@ -4739,9 +4739,6 @@ void ReplicatedPG::put_object_context(ObjectContext *obc)
     if (obc->registered)
       object_contexts.erase(obc->obs.oi.soid);
     delete obc;
-
-    if (object_contexts.empty())
-      kick();
   }
 }
 
