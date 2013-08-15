@@ -129,16 +129,18 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
       le.decode(p);
       dout(7) << "update_from_paxos applying incremental log " << summary.version+1 <<  " " << le << dendl;
 
-      stringstream ss;
-      ss << le;
-      string s = ss.str();
-
       if (g_conf->mon_cluster_log_to_syslog) {
 	le.log_to_syslog(g_conf->mon_cluster_log_to_syslog_level,
 			 g_conf->mon_cluster_log_to_syslog_facility);
       }
       if (g_conf->mon_cluster_log_file.length()) {
-	blog.append(s + "\n");
+	int min = string_to_syslog_level(g_conf->mon_cluster_log_file_level);
+	int l = clog_type_to_syslog_level(le.type);
+	if (l <= min) {
+	  stringstream ss;
+	  ss << le << "\n";
+	  blog.append(ss.str());
+	}
       }
 
       summary.add(le);
