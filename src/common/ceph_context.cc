@@ -198,7 +198,10 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
       } else {
 	// val may be multiple words
 	ostringstream argss;
-	std::copy(val.begin(), val.end(), ostream_iterator<string>(argss, " "));
+	argss << *val.begin();
+	for (std::vector<std::string>::iterator i = val.begin() + 1; i != val.end(); ++i) {
+	  argss << "," << *i;
+	}
         int r = _conf->set_val(var.c_str(), argss.str().c_str());
         if (r < 0) {
           f->dump_stream("error") << "error setting '" << var << "' to '" << val << "': " << cpp_strerror(r);
