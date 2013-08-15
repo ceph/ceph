@@ -21,7 +21,7 @@
 #include "distribution.h"
 #include "global/global_init.h"
 #include "os/FileStore.h"
-#include "filestore_backend.h"
+#include "testfilestore_backend.h"
 #include "common/perf_counters.h"
 
 namespace po = boost::program_options;
@@ -217,7 +217,7 @@ int main(int argc, char **argv)
     Bencher *bencher = new Bencher(
       gen,
       col,
-      new FileStoreBackend(&fs, vm["write-infos"].as<bool>()),
+      new TestFileStoreBackend(&fs, vm["write-infos"].as<bool>()),
       vm["num-concurrent-ops"].as<unsigned>(),
       vm["duration"].as<unsigned>(),
       vm["max-ops"].as<unsigned>());

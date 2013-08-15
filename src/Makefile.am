@@ -268,7 +268,7 @@ ceph_smalliobench_SOURCES = test/bench/small_io_bench.cc test/bench/rados_backen
 ceph_smalliobench_LDADD = librados.la -lboost_program_options $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += ceph_smalliobench
 
-ceph_smalliobenchfs_SOURCES = test/bench/small_io_bench_fs.cc test/bench/filestore_backend.cc test/bench/detailed_stat_collector.cc test/bench/bencher.cc
+ceph_smalliobenchfs_SOURCES = test/bench/small_io_bench_fs.cc test/bench/testfilestore_backend.cc test/bench/detailed_stat_collector.cc test/bench/bencher.cc
 ceph_smalliobenchfs_LDADD = librados.la -lboost_program_options $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 ceph_smalliobenchfs_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_smalliobenchfs
@@ -2281,7 +2281,7 @@ noinst_HEADERS = \
         test/bench/dumb_backend.h \
         test/bench/stat_collector.h \
         test/bench/detailed_stat_collector.h \
-        test/bench/filestore_backend.h \
+        test/bench/testfilestore_backend.h \
         test/common/ObjectContents.h \
         test/encoding/types.h \
         test/filestore/DeterministicOpSequence.h \
