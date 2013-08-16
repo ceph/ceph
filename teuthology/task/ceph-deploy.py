@@ -24,7 +24,7 @@ def download_ceph_deploy(ctx, config):
     testdir = teuthology.get_testdir(ctx)
     ceph_admin = teuthology.get_first_mon(ctx, config)
     default_cd_branch = {'ceph-deploy-branch': 'master'}
-    ceph_deploy_branch = ctx.get(
+    ceph_deploy_branch = config.get(
         'ceph-deploy',
         default_cd_branch).get('ceph-deploy-branch')
 
