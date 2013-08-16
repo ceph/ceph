@@ -22,7 +22,10 @@
 #include <sys/stat.h>
 #include <sys/param.h>
 #include <fcntl.h>
+
+#if defined(__linux__)
 #include <linux/falloc.h>
+#endif
 
 #include <sys/statvfs.h>
 
@@ -7686,6 +7689,8 @@ int Client::ll_fsync(Fh *fh, bool syncdataonly)
   return _fsync(fh, syncdataonly);
 }
 
+#ifdef FALLOC_FL_PUNCH_HOLE
+
 int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 {
   if (offset < 0 || length <= 0)
@@ -7757,6 +7762,15 @@ done:
   put_cap_ref(in, CEPH_CAP_FILE_WR);
   return r;
 }
+#else
+
+int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
+{
+  return -EOPNOTSUPP;
+}
+
+#endif
+
 
 int Client::ll_fallocate(Fh *fh, int mode, loff_t offset, loff_t length)
 {
