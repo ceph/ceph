@@ -506,34 +506,35 @@ def main():
 
     format = parsed_args.output_format
 
+    sockpath = None
     if parsed_args.admin_socket:
-        try:
-            print admin_socket(parsed_args.admin_socket, childargs, format)
-        except Exception as e:
-            print >> sys.stderr, 'admin_socket: {0}'.format(e)
-        return 0
-
-    if len(childargs) > 0 and childargs[0] == "daemon":
+        sockpath = parsed_args.admin_socket
+    elif len(childargs) > 0 and childargs[0] == "daemon":
+        # Treat "daemon <path>" or "daemon <name>" like --admin_daemon <path>
         if len(childargs) > 2:
             if childargs[1].find('/') >= 0:
-                try:
-                    print admin_socket(childargs[1], childargs[2:], format)
-                except Exception as e:
-                    print >> sys.stderr, 'admin_socket: {0}'.format(e)
-                    return errno.EINVAL
-                return 0
+                sockpath = childargs[1]
             else:
                 # try resolve daemon name
-                path = ceph_conf('admin_socket', childargs[1])
                 try:
-                    print admin_socket(path, childargs[2:], format)
+                    sockpath = ceph_conf('admin_socket', childargs[1])
                 except Exception as e:
-                    print >> sys.stderr, 'admin_socket: {0}'.format(e)
+                    print >> sys.stderr, \
+                        'Can\'t get admin socket path: ' + str(e)
                     return errno.EINVAL
-                return 0
+            # for both:
+            childargs = childargs[2:]
         else:
-            print >> sys.stderr, 'Daemon requires at least 2 arguments'
+            print >> sys.stderr, 'daemon requires at least 3 arguments'
             return errno.EINVAL
+
+    if sockpath:
+        try:
+            print admin_socket(sockpath, childargs, format)
+        except Exception as e:
+            print >> sys.stderr, 'admin_socket: {0}'.format(e)
+            return errno.EINVAL
+        return 0
 
     # handle any 'generic' ceph arguments that we didn't parse here
     global cluster_handle

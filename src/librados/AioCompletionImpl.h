@@ -134,9 +134,13 @@ struct librados::AioCompletionImpl {
 
   void get() {
     lock.Lock();
-    assert(ref > 0);
-    ref++;
+    _get();
     lock.Unlock();
+  }
+  void _get() {
+    assert(lock.is_locked());
+    assert(ref > 0);
+    ++ref;
   }
   void release() {
     lock.Lock();
@@ -162,7 +166,7 @@ struct C_AioComplete : public Context {
   AioCompletionImpl *c;
 
   C_AioComplete(AioCompletionImpl *cc) : c(cc) {
-    c->ref++;
+    c->_get();
   }
 
   void finish(int r) {
@@ -181,7 +185,7 @@ struct C_AioSafe : public Context {
   AioCompletionImpl *c;
 
   C_AioSafe(AioCompletionImpl *cc) : c(cc) {
-    c->ref++;
+    c->_get();
   }
 
   void finish(int r) {
@@ -208,7 +212,7 @@ struct C_AioCompleteAndSafe : public Context {
   AioCompletionImpl *c;
 
   C_AioCompleteAndSafe(AioCompletionImpl *cc) : c(cc) {
-    c->ref++;
+    c->get();
   }
 
   void finish(int r) {
