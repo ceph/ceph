@@ -26,6 +26,7 @@
 #include "common/Formatter.h"
 #include "log/Log.h"
 #include "auth/Crypto.h"
+#include "include/str_list.h"
 
 #include <iostream>
 #include <pthread.h>
@@ -197,11 +198,10 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
         f->dump_string("error", "syntax error: 'config set <var> <value>'");
       } else {
 	// val may be multiple words
-	ostringstream argss;
-	std::copy(val.begin(), val.end(), ostream_iterator<string>(argss, " "));
-        int r = _conf->set_val(var.c_str(), argss.str().c_str());
+	string valstr = str_join(val, " ");
+        int r = _conf->set_val(var.c_str(), valstr.c_str());
         if (r < 0) {
-          f->dump_stream("error") << "error setting '" << var << "' to '" << val << "': " << cpp_strerror(r);
+          f->dump_stream("error") << "error setting '" << var << "' to '" << valstr << "': " << cpp_strerror(r);
         } else {
           ostringstream ss;
           _conf->apply_changes(&ss);

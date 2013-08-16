@@ -1,9 +1,40 @@
 from nose.tools import eq_ as eq, assert_raises
-from rados import (Rados, Object, ObjectExists, ObjectNotFound,
+from rados import (Rados, Error, Object, ObjectExists, ObjectNotFound,
                    ANONYMOUS_AUID, ADMIN_AUID)
 import threading
 import json
 import errno
+
+def test_rados_init_error():
+    assert_raises(Error, Rados, conffile='', rados_id='admin',
+                  name='client.admin')
+    assert_raises(Error, Rados, conffile='', name='invalid')
+    assert_raises(Error, Rados, conffile='', name='bad.invalid')
+
+def test_rados_init_type_error():
+    assert_raises(TypeError, Rados, rados_id=u'admin')
+    assert_raises(TypeError, Rados, rados_id=u'')
+    assert_raises(TypeError, Rados, name=u'client.admin')
+    assert_raises(TypeError, Rados, name=u'')
+    assert_raises(TypeError, Rados, conffile=u'blah')
+    assert_raises(TypeError, Rados, conffile=u'')
+    assert_raises(TypeError, Rados, clusternaem=u'blah')
+    assert_raises(TypeError, Rados, clustername=u'')
+
+def test_rados_init():
+    with Rados(conffile='', rados_id='admin'):
+        pass
+    with Rados(conffile='', name='client.admin'):
+        pass
+    with Rados(conffile='', name='client.admin'):
+        pass
+    with Rados(conffile='', name='client.admin'):
+        pass
+
+def test_ioctx_context_manager():
+    with Rados(conffile='', rados_id='admin') as conn:
+        with conn.open_ioctx('data') as ioctx:
+            pass
 
 class TestRados(object):
 
