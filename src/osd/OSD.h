@@ -113,8 +113,43 @@ enum {
   l_osd_mape_dup,
 
   l_osd_waiting_for_map,
-  l_osd_peering_latency,
+
   l_osd_last,
+};
+
+// RecoveryState perf counters
+enum {
+  rs_first = 20000,
+  rs_initial_latency,
+  rs_started_latency,
+  rs_reset_latency,
+  rs_start_latency,
+  rs_primary_latency,
+  rs_peering_latency,
+  rs_backfilling_latency,
+  rs_waitremotebackfillreserved_latency,
+  rs_waitlocalbackfillreserved_latency,
+  rs_notbackfilling_latency,
+  rs_repnotrecovering_latency,
+  rs_repwaitrecoveryreserved_latency,
+  rs_repwaitbackfillreserved_latency,
+  rs_RepRecovering_latency,
+  rs_activating_latency,
+  rs_waitlocalrecoveryreserved_latency,
+  rs_waitremoterecoveryreserved_latency,
+  rs_recovering_latency,
+  rs_recovered_latency,
+  rs_clean_latency,
+  rs_active_latency,
+  rs_replicaactive_latency,
+  rs_stray_latency,
+  rs_getinfo_latency,
+  rs_getlog_latency,
+  rs_waitactingchange_latency,
+  rs_incomplete_latency,
+  rs_getmissing_latency,
+  rs_waitupthru_latency,
+  rs_last,
 };
 
 class Messenger;
@@ -258,6 +293,7 @@ private:
   Messenger *&client_messenger;
 public:
   PerfCounters *&logger;
+  PerfCounters *&recoverystate_perf;
   MonClient   *&monc;
   ThreadPool::WorkQueueVal<pair<PGRef, OpRequestRef>, PGRef> &op_wq;
   ThreadPool::BatchWorkQueue<PG> &peering_wq;
@@ -593,6 +629,7 @@ protected:
   Messenger   *client_messenger;
   MonClient   *monc;
   PerfCounters      *logger;
+  PerfCounters      *recoverystate_perf;
   ObjectStore *store;
 
   LogClient clog;
@@ -613,6 +650,7 @@ protected:
   int dispatch_running;
 
   void create_logger();
+  void create_recoverystate_perf();
   void tick();
   void _dispatch(Message *m);
   void dispatch_op(OpRequestRef op);
