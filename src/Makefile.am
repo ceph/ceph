@@ -71,6 +71,10 @@ if WITH_LIBAIO
 LIBOS_LDA += -laio
 endif
 
+if WITH_LIBZFS
+LIBOS_LDA += libos_zfs.a -lzfs
+endif
+
 # use system leveldb
 LIBOS_LDA += -lleveldb -lsnappy
 
@@ -264,7 +268,7 @@ ceph_smalliobench_SOURCES = test/bench/small_io_bench.cc test/bench/rados_backen
 ceph_smalliobench_LDADD = librados.la -lboost_program_options $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += ceph_smalliobench
 
-ceph_smalliobenchfs_SOURCES = test/bench/small_io_bench_fs.cc test/bench/filestore_backend.cc test/bench/detailed_stat_collector.cc test/bench/bencher.cc
+ceph_smalliobenchfs_SOURCES = test/bench/small_io_bench_fs.cc test/bench/testfilestore_backend.cc test/bench/detailed_stat_collector.cc test/bench/bencher.cc
 ceph_smalliobenchfs_LDADD = librados.la -lboost_program_options $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 ceph_smalliobenchfs_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_smalliobenchfs
@@ -1681,9 +1685,18 @@ libos_a_SOURCES = \
 	os/FlatIndex.cc \
 	os/DBObjectMap.cc \
 	os/LevelDBStore.cc \
-	os/WBThrottle.cc
+	os/WBThrottle.cc \
+	os/BtrfsFileStoreBackend.cc \
+	os/GenericFileStoreBackend.cc \
+	os/ZFSFileStoreBackend.cc
 libos_a_CXXFLAGS= ${AM_CXXFLAGS}
 noinst_LIBRARIES += libos.a
+
+if WITH_LIBZFS
+libos_zfs_a_SOURCES = os/ZFS.cc
+libos_zfs_a_CXXFLAGS= ${AM_CXXFLAGS} ${LIBZFS_CFLAGS}
+noinst_LIBRARIES += libos_zfs.a
+endif
 
 libosd_a_SOURCES = \
 	osd/PG.cc \
@@ -2179,11 +2192,15 @@ noinst_HEADERS = \
         msg/msg_types.h\
 	objclass/objclass.h\
 	os/btrfs_ioctl.h\
+	os/ZFS.h\
 	os/chain_xattr.h\
 	os/hobject.h \
 	os/CollectionIndex.h\
         os/FileJournal.h\
         os/FileStore.h\
+        os/BtrfsFileStoreBackend.h\
+        os/GenericFileStoreBackend.h\
+        os/ZFSFileStoreBackend.h\
 	os/FlatIndex.h\
 	os/HashIndex.h\
 	os/FDCache.h\
@@ -2278,7 +2295,7 @@ noinst_HEADERS = \
         test/bench/dumb_backend.h \
         test/bench/stat_collector.h \
         test/bench/detailed_stat_collector.h \
-        test/bench/filestore_backend.h \
+        test/bench/testfilestore_backend.h \
         test/common/ObjectContents.h \
         test/encoding/types.h \
         test/filestore/DeterministicOpSequence.h \
