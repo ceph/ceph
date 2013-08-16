@@ -516,7 +516,8 @@ class CephManager:
                 ['config', 'set', str(k), str(v)])
 
     def raw_cluster_status(self):
-        return self.raw_cluster_cmd('-s')
+        status = self.raw_cluster_cmd('status', '--format=json-pretty')
+        return json.loads(status)
 
     def raw_osd_status(self):
         return self.raw_cluster_cmd('osd', 'dump')
@@ -548,9 +549,7 @@ class CephManager:
     def get_num_pgs(self):
         status = self.raw_cluster_status()
         self.log(status)
-        return int(re.search(
-                "\d* pgs:",
-                status).group(0).split()[0])
+        return status['pgmap']['num_pgs']
 
     def create_pool(self, pool_name, pg_num=1):
         with self.lock:
@@ -722,13 +721,7 @@ class CephManager:
     def get_num_unfound_objects(self):
         status = self.raw_cluster_status()
         self.log(status)
-        match = re.search(
-            "\d+/\d+ unfound",
-            status)
-        if match == None:
-            return 0
-        else:
-            return int(match.group(0).split('/')[0])
+        return status['pgmap'].get('unfound_objects', 0)
 
     def get_num_creating(self):
         pgs = self.get_pg_stats()
