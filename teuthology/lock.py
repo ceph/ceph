@@ -29,8 +29,14 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
         machines = json.loads(content)
         log.debug('locked {machines}'.format(machines=', '.join(machines.keys())))
         if ctx.machine_type == 'vps':
+            ok_machs = {}
             for machine in machines:
-                create_if_vm(ctx, machine)
+                if create_if_vm(ctx, machine):
+                    ok_machs[machine] = machines[machine]
+                else:
+                    log.error('Unable to create virtual machine: %s' % machine)
+                    unlock(ctx, machine)
+            return ok_machs
         return machines
     if status == 503:
         log.error('Insufficient nodes available to lock %d nodes.', num)
@@ -58,6 +64,7 @@ def unlock(ctx, name, user=None):
         log.debug('unlocked %s', name)
         if not destroy_if_vm(ctx, name):
             log.error('downburst destroy failed for %s',name)
+            log.info('%s is not locked' % name)
     else:
         log.error('failed to unlock %s', name)
     return success
@@ -368,7 +375,6 @@ Lock, unlock, or query lock status of machines.
                     return ret
             else:
                 machines_to_update.append(machine)
-                destroy_if_vm(ctx, machine)
     elif ctx.num_to_lock:
         result = lock_many(ctx, ctx.num_to_lock, ctx.machine_type, user)
         if not result:
@@ -377,9 +383,15 @@ Lock, unlock, or query lock status of machines.
             machines_to_update = result.keys()
             if ctx.machine_type == 'vps':
                 shortnames = ' '.join([name.split('@')[1].split('.')[0] for name in result.keys()])
-                print "Successfully Locked:\n%s\n" % shortnames
-                print "Unable to display keys at this time (virtual machines are booting)."
-                print "Please run teuthology-lock --list-targets %s once these machines come up." % shortnames
+                if len(result) < ctx.num_to_lock:
+                    log.error("Locking failed.")
+                    for machn in result:
+                        unlock(ctx,machn)
+                    ret = 1 
+                else:
+                    log.info("Successfully Locked:\n%s\n" % shortnames)
+                    log.info("Unable to display keys at this time (virtual machines are booting).")
+                    log.info("Please run teuthology-lock --list-targets %s once these machines come up." % shortnames)
             else:
                 print yaml.safe_dump(dict(targets=result), default_flow_style=False)
     elif ctx.update:
@@ -596,7 +608,7 @@ def create_if_vm(ctx, machine_name):
         metadata = "--meta-data=%s" % tmp.name
         dbrst = _get_downburst_exec()
         if not dbrst:
-            log.info("Error: no downburst executable found")
+            log.error("No downburst executable found.")
             return False
         p = subprocess.Popen([dbrst, '-c', phys_host,
                 'create', metadata, createMe],
@@ -628,14 +640,14 @@ def destroy_if_vm(ctx, machine_name):
     destroyMe = decanonicalize_hostname(machine_name)
     dbrst = _get_downburst_exec()
     if not dbrst:
-        log.info("Error: no downburst executable found")
+        log.error("No downburst executable found.")
         return False
     p = subprocess.Popen([dbrst, '-c', phys_host,
             'destroy', destroyMe],
             stdout=subprocess.PIPE,stderr=subprocess.PIPE,)
     owt,err = p.communicate()
     if err:
-        log.info("Error occurred while deleting %s" % destroyMe)
+        log.error(err)
         return False
     else:
         log.info("%s destroyed: %s" % (machine_name,owt))
