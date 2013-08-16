@@ -104,6 +104,7 @@ class ObjectCacher {
     Object *ob;
     bufferlist  bl;
     tid_t last_write_tid;  // version of bh (if non-zero)
+    tid_t last_read_tid;   // tid of last read op (if any)
     utime_t last_write;
     SnapContext snapc;
     int error; // holds return value for failed reads
@@ -116,6 +117,7 @@ class ObjectCacher {
       ref(0),
       ob(o),
       last_write_tid(0),
+      last_read_tid(0),
       error(0) {
       ex.start = ex.length = 0;
     }
@@ -339,6 +341,8 @@ class ObjectCacher {
 
   vector<hash_map<sobject_t, Object*> > objects; // indexed by pool_id
 
+  tid_t last_read_tid;
+
   set<BufferHead*>    dirty_bh;
   LRU   bh_lru_dirty, bh_lru_rest;
   LRU   ob_lru;
@@ -455,8 +459,9 @@ class ObjectCacher {
 	     bool external_call);
 
  public:
-  void bh_read_finish(int64_t poolid, sobject_t oid, loff_t offset,
-		      uint64_t length, bufferlist &bl, int r,
+  void bh_read_finish(int64_t poolid, sobject_t oid, tid_t tid,
+		      loff_t offset, uint64_t length,
+		      bufferlist &bl, int r,
 		      bool trust_enoent);
   void bh_write_commit(int64_t poolid, sobject_t oid, loff_t offset,
 		       uint64_t length, tid_t t, int r);
@@ -469,17 +474,20 @@ class ObjectCacher {
     uint64_t length;
     xlist<C_ReadFinish*>::item set_item;
     bool trust_enoent;
+    tid_t tid;
 
   public:
     bufferlist bl;
-    C_ReadFinish(ObjectCacher *c, Object *ob, loff_t s, uint64_t l) :
+    C_ReadFinish(ObjectCacher *c, Object *ob, tid_t t, loff_t s, uint64_t l) :
       oc(c), poolid(ob->oloc.pool), oid(ob->get_soid()), start(s), length(l),
-      set_item(this), trust_enoent(true) {
+      set_item(this), trust_enoent(true),
+      tid(t) {
       ob->reads.push_back(&set_item);
     }
 
     void finish(int r) {
-      oc->bh_read_finish(poolid, oid, start, length, bl, r, trust_enoent);
+      oc->bh_read_finish(poolid, oid, tid, start, length, bl, r, trust_enoent);
+
       // object destructor clears the list
       if (set_item.is_on_list())
 	set_item.remove_myself();
