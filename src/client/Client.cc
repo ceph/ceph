@@ -7737,6 +7737,9 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
     if (r < 0)
       goto done;
 
+    in->mtime = ceph_clock_now(cct);
+    mark_caps_dirty(in, CEPH_CAP_FILE_WR);
+
     client_lock.Unlock();
     flock.Lock();
     while (!done)
@@ -7747,6 +7750,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
     uint64_t size = offset + length;
     if (size > in->size) {
       in->size = size;
+      in->mtime = ceph_clock_now(cct);
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
 
       if ((in->size << 1) >= in->max_size &&
@@ -7754,9 +7758,6 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
         check_caps(in, false);
     }
   }
-
-  in->mtime = ceph_clock_now(cct);
-  mark_caps_dirty(in, CEPH_CAP_FILE_WR);
 
 done:
   put_cap_ref(in, CEPH_CAP_FILE_WR);
