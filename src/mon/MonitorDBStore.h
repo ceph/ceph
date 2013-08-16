@@ -523,8 +523,8 @@ class MonitorDBStore
 
     LevelDBStore *db_ptr = new LevelDBStore(g_ceph_context, full_path);
     if (!db_ptr) {
-      std::cout << __func__ << " error initializing level db back storage in "
-		<< full_path << std::endl;
+      derr << __func__ << " error initializing level db back storage in "
+		<< full_path << dendl;
       assert(0 != "MonitorDBStore: error initializing level db back storage");
     }
     db.reset(db_ptr);
