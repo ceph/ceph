@@ -114,6 +114,10 @@ void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
   assert(oc->lock.is_locked());
   ldout(oc->cct, 10) << "try_merge_bh " << *bh << dendl;
 
+  // do not merge rx buffers; last_read_tid may not match
+  if (bh->is_rx())
+    return;
+
   // to the left?
   map<loff_t,BufferHead*>::iterator p = data.find(bh->start());
   assert(p->second == bh);
