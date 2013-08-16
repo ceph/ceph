@@ -70,6 +70,15 @@ def normalize_config(ctx, config):
                     new_config[name] = role_config
     return new_config
 
+def _find_arch_and_dist(ctx):
+    """
+    Return the arch and distro value as a tuple.
+    """
+    info = ctx.config.get('machine_type', 'plana')
+    if teuthology.is_arm(info):
+        return ('armv7l', 'quantal')
+    return ('x86_64', 'precise')
+
 def validate_config(ctx, config):
     for _, roles_for_host in ctx.cluster.remotes.iteritems():
         kernel = None
@@ -82,6 +91,17 @@ def validate_config(ctx, config):
                     "everything on the same host must use the same kernel"
                 if role in config:
                     del config[role]
+
+def _vsplitter(version):
+    """kernels from Calxeda are named ...ceph-<sha1>...highbank
+    kernels that we generate named ...-g<sha1>
+    This routine finds the text in front of the sha1 that is used by
+    need_to_install() to extract information from the kernel name.
+    """
+
+    if version.endswith('highbank'):
+        return 'ceph-'
+    return '-g'
 
 def need_to_install(ctx, role, sha1):
     ret = True
@@ -97,8 +117,12 @@ def need_to_install(ctx, role, sha1):
         stdout=version_fp,
         )
     version = version_fp.getvalue().rstrip('\n')
-    if '-g' in version:
-        _, current_sha1 = version.rsplit('-g', 1)
+    splt = _vsplitter(version)
+    if splt in version:
+        _, current_sha1 = version.rsplit(splt, 1)
+        dloc = current_sha1.find('-')
+        if dloc > 0:
+            current_sha1 = current_sha1[0:dloc]
         log.debug('current kernel version is: {version} sha1 {sha1}'.format(
                 version=version,
                 sha1=current_sha1))
@@ -180,13 +204,14 @@ def download_deb(ctx, config):
         else:
             log.info('Downloading kernel {sha1} on {role}...'.format(sha1=src,
                                                                      role=role))
+            larch, ldist = _find_arch_and_dist(ctx)
             _, deb_url = teuthology.get_ceph_binary_url(
                 package='kernel',
                 sha1=src,
                 format='deb',
                 flavor='basic',
-                arch='x86_64',
-                dist='precise',
+                arch=larch,
+                dist=ldist,
                 )
 
             log.info('fetching kernel from {url}'.format(url=deb_url))
@@ -212,8 +237,21 @@ def download_deb(ctx, config):
         proc.exitstatus.get()
 
 
+def _no_grub_link(in_file, remote, kernel_ver):
+    boot1 = '/boot/%s' % in_file
+    boot2 = '%s.old' % boot1 
+    remote.run(
+        args=[
+            'if', 'test', '-e', boot1, run.Raw(';'), 'then',
+            'sudo', 'mv', boot1, boot2, run.Raw(';'), 'fi',],
+    ) 
+    remote.run(
+        args=['sudo', 'ln', '-s', '%s-%s' % (in_file, kernel_ver) , boot1, ],
+    )
+
 def install_and_reboot(ctx, config):
     procs = {}
+    kernel_title = ''
     for role, src in config.iteritems():
         log.info('Installing kernel {src} on {role}...'.format(src=src,
                                                                role=role))
@@ -254,11 +292,27 @@ def install_and_reboot(ctx, config):
         cmdout.close()
         log.info('searching for kernel {}'.format(kernel_title))
 
+        if kernel_title.endswith("-highbank"):
+            _no_grub_link('vmlinuz', role_remote, kernel_title)
+            _no_grub_link('initrd.img', role_remote, kernel_title)
+            proc = role_remote.run(
+                args=[
+                    'sudo',
+                    'shutdown',
+                    '-r',
+                    'now',
+                    ],
+                wait=False,
+            )
+            procs[role_remote.name] = proc
+            continue
+
         # look for menuentry for our kernel, and collect any
         # submenu entries for their titles.  Assume that if our
         # kernel entry appears later in the file than a submenu entry,
         # it's actually nested under that submenu.  If it gets more
         # complex this will totally break.
+        
         cmdout = StringIO()
         proc = role_remote.run(
             args=[
@@ -457,15 +511,17 @@ def task(ctx, config):
                 log.info('unable to extract sha1 from deb path, forcing install')
                 assert False
         else:
+            nsha1 = ctx.config.get('overrides',{}).get('ceph',{}).get('sha1',role_config.get('sha1'))
+            larch, ldist = _find_arch_and_dist(ctx)
             sha1, _ = teuthology.get_ceph_binary_url(
                 package='kernel',
                 branch=role_config.get('branch'),
                 tag=role_config.get('tag'),
-                sha1=role_config.get('sha1'),
+                sha1=nsha1,
                 flavor='basic',
                 format='deb',
-                dist='precise',
-                arch='x86_64',
+                dist=ldist,
+                arch=larch,
                 )
             log.debug('sha1 for {role} is {sha1}'.format(role=role, sha1=sha1))
             ctx.summary['{role}-kernel-sha1'.format(role=role)] = sha1
