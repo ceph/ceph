@@ -1037,14 +1037,16 @@ void ReplicatedPG::do_op(OpRequestRef op)
   // possible to construct an operation that does a read, does a guard
   // check (e.g., CMPXATTR), and then a write.  Then we either succeed
   // with the write, or return a CMPXATTR and the read value.
-  if (ctx->op_t.empty() && !ctx->modify) {
+  if ((ctx->op_t.empty() && !ctx->modify) || result < 0) {
     // read.
     ctx->reply->claim_op_out_data(ctx->ops);
     ctx->reply->get_header().data_off = ctx->data_off;
   } else {
     // write.  normalize the result code.
-    if (result > 0)
+    if (result > 0) {
+      dout(20) << " zeroing write result code " << result << dendl;
       result = 0;
+    }
   }
   ctx->reply->set_result(result);
 
@@ -2127,6 +2129,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       // --- READS ---
 
     case CEPH_OSD_OP_READ:
+      ++ctx->num_read;
       {
 	// read into a buffer
 	bufferlist bl;
@@ -2171,6 +2174,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     /* map extents */
     case CEPH_OSD_OP_MAPEXT:
+      ++ctx->num_read;
       {
 	// read into a buffer
 	bufferlist bl;
@@ -2186,6 +2190,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     /* map extents */
     case CEPH_OSD_OP_SPARSE_READ:
+      ++ctx->num_read;
       {
         if (op.extent.truncate_seq) {
           dout(0) << "sparse_read does not support truncation sequence " << dendl;
@@ -2297,7 +2302,21 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	bufferlist outdata;
 	dout(10) << "call method " << cname << "." << mname << dendl;
+	int prev_rd = ctx->num_read;
+	int prev_wr = ctx->num_write;
 	result = method->exec((cls_method_context_t)&ctx, indata, outdata);
+
+	if (ctx->num_read > prev_rd && !(flags & CLS_METHOD_RD)) {
+	  derr << "method " << cname << "." << mname << " tried to read object but is not marked RD" << dendl;
+	  result = -EIO;
+	  break;
+	}
+	if (ctx->num_write > prev_wr && !(flags & CLS_METHOD_WR)) {
+	  derr << "method " << cname << "." << mname << " tried to update object but is not marked WR" << dendl;
+	  result = -EIO;
+	  break;
+	}
+
 	dout(10) << "method called response length=" << outdata.length() << dendl;
 	op.extent.length = outdata.length();
 	osd_op.outdata.claim_append(outdata);
@@ -2308,6 +2327,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_STAT:
+      // note: stat does not require RD
       {
 	if (obs.exists) {
 	  ::encode(oi.size, osd_op.outdata);
@@ -2323,6 +2343,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_GETXATTR:
+      ++ctx->num_read;
       {
 	string aname;
 	bp.copy(op.xattr.name_len, aname);
@@ -2339,6 +2360,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
    case CEPH_OSD_OP_GETXATTRS:
+      ++ctx->num_read;
       {
 	map<string,bufferptr> attrset;
         result = osd->store->getattrs(coll, soid, attrset, true);
@@ -2360,6 +2382,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       
     case CEPH_OSD_OP_CMPXATTR:
     case CEPH_OSD_OP_SRC_CMPXATTR:
+      ++ctx->num_read;
       {
 	string aname;
 	bp.copy(op.xattr.name_len, aname);
@@ -2425,6 +2448,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_ASSERT_VER:
+      ++ctx->num_read;
       {
 	uint64_t ver = op.watch.ver;
 	if (!ver)
@@ -2437,6 +2461,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
 
     case CEPH_OSD_OP_LIST_WATCHERS:
+      ++ctx->num_read;
       {
         obj_list_watch_response_t resp;
 
@@ -2462,6 +2487,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
 
     case CEPH_OSD_OP_LIST_SNAPS:
+      ++ctx->num_read;
       {
         obj_list_snap_response_t resp;
 
@@ -2539,6 +2565,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
 
     case CEPH_OSD_OP_ASSERT_SRC_VERSION:
+      ++ctx->num_read;
       {
 	uint64_t ver = op.watch.ver;
 	if (!ver)
@@ -2551,6 +2578,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
 
    case CEPH_OSD_OP_NOTIFY:
+      ++ctx->num_read;
       {
 	uint32_t ver;
 	uint32_t timeout;
@@ -2575,6 +2603,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_NOTIFY_ACK:
+      ++ctx->num_read;
       {
 	try {
 	  uint64_t notify_id = 0;
@@ -2599,6 +2628,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       // -- object data --
 
     case CEPH_OSD_OP_WRITE:
+      ++ctx->num_write;
       { // write
         __u32 seq = oi.truncate_seq;
         if (seq && (seq > op.extent.truncate_seq) &&
@@ -2644,6 +2674,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
       
     case CEPH_OSD_OP_WRITEFULL:
+      ++ctx->num_write;
       { // write full object
 	result = check_offset_and_length(op.extent.offset, op.extent.length);
 	if (result < 0)
@@ -2672,10 +2703,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_ROLLBACK :
+      ++ctx->num_write;
       result = _rollback_to(ctx, op);
       break;
 
     case CEPH_OSD_OP_ZERO:
+      ++ctx->num_write;
       { // zero
 	result = check_offset_and_length(op.extent.offset, op.extent.length);
 	if (result < 0)
@@ -2693,6 +2726,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
     case CEPH_OSD_OP_CREATE:
+      ++ctx->num_write;
       {
         int flags = le32_to_cpu(op.flags);
 	if (obs.exists && (flags & CEPH_OSD_OP_FLAG_EXCL)) {
@@ -2731,6 +2765,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       // falling through
 
     case CEPH_OSD_OP_TRUNCATE:
+      ++ctx->num_write;
       {
 	// truncate
 	if (!obs.exists) {
@@ -2773,6 +2808,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
     
     case CEPH_OSD_OP_DELETE:
+      ++ctx->num_write;
       if (ctx->obc->obs.oi.watchers.size()) {
 	// Cannot delete an object with watchers
 	result = -EBUSY;
@@ -2782,6 +2818,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_CLONERANGE:
+      ++ctx->num_read;
+      ++ctx->num_write;
       {
 	if (!obs.exists) {
 	  t.touch(coll, obs.oi.soid);
@@ -2806,6 +2844,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
       
     case CEPH_OSD_OP_WATCH:
+      ++ctx->num_write;
       {
         uint64_t cookie = op.watch.cookie;
 	bool do_watch = op.watch.flag & 1;
@@ -2851,6 +2890,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       // -- object attrs --
       
     case CEPH_OSD_OP_SETXATTR:
+      ++ctx->num_write;
       {
 	if (op.xattr.value_len > g_conf->osd_max_attr_size) {
 	  result = -EFBIG;
@@ -2872,6 +2912,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_RMXATTR:
+      ++ctx->num_write;
       {
 	string aname;
 	bp.copy(op.xattr.name_len, aname);
@@ -2884,6 +2925,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
       // -- fancy writers --
     case CEPH_OSD_OP_APPEND:
+      ++ctx->num_write;
       {
 	// just do it inline; this works because we are happy to execute
 	// fancy op on replicas as well.
@@ -2906,6 +2948,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
       // -- trivial map --
     case CEPH_OSD_OP_TMAPGET:
+      ++ctx->num_read;
       {
 	vector<OSDOp> nops(1);
 	OSDOp& newop = nops[0];
@@ -2918,6 +2961,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_TMAPPUT:
+      ++ctx->num_write;
       {
 	//_dout_lock.Lock();
 	//osd_op.data.hexdump(*_dout);
@@ -2976,11 +3020,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_TMAPUP:
+      ++ctx->num_write;
       result = do_tmapup(ctx, bp, osd_op);
       break;
 
       // OMAP Read ops
     case CEPH_OSD_OP_OMAPGETKEYS:
+      ++ctx->num_read;
       {
 	string start_after;
 	uint64_t max_return;
@@ -3035,6 +3081,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
     case CEPH_OSD_OP_OMAPGETVALS:
+      ++ctx->num_read;
       {
 	string start_after;
 	uint64_t max_return;
@@ -3098,6 +3145,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
     case CEPH_OSD_OP_OMAPGETHEADER:
+      ++ctx->num_read;
       {
 	if (oi.uses_tmap && g_conf->osd_auto_upgrade_tmap) {
 	  dout(20) << "CEPH_OSD_OP_OMAPGETHEADER: "
@@ -3118,6 +3166,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
     case CEPH_OSD_OP_OMAPGETVALSBYKEYS:
+      ++ctx->num_read;
       {
 	set<string> keys_to_get;
 	try {
@@ -3157,6 +3206,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
     case CEPH_OSD_OP_OMAP_CMP:
+      ++ctx->num_read;
       {
 	if (!obs.exists) {
 	  result = -ENOENT;
@@ -3222,6 +3272,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
       // OMAP Write ops
     case CEPH_OSD_OP_OMAPSETVALS:
+      ++ctx->num_write;
       {
 	if (oi.uses_tmap && g_conf->osd_auto_upgrade_tmap) {
 	  _copy_up_tmap(ctx);
@@ -3250,6 +3301,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
     case CEPH_OSD_OP_OMAPSETHEADER:
+      ++ctx->num_write;
       {
 	if (oi.uses_tmap && g_conf->osd_auto_upgrade_tmap) {
 	  _copy_up_tmap(ctx);
@@ -3264,6 +3316,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
     case CEPH_OSD_OP_OMAPCLEAR:
+      ++ctx->num_write;
       {
 	if (!obs.exists) {
 	  result = -ENOENT;
@@ -3278,6 +3331,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
     case CEPH_OSD_OP_OMAPRMKEYS:
+      ++ctx->num_write;
       {
 	if (!obs.exists) {
 	  result = -ENOENT;

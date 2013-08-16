@@ -17,6 +17,7 @@ usr/bin/ceph_smalliobenchfs
 usr/bin/ceph_smalliobenchrbd
 usr/bin/ceph_streamtest
 usr/bin/ceph_test_cfuse_cache_invalidate
+usr/bin/ceph_test_cls_hello
 usr/bin/ceph_test_cls_lock
 usr/bin/ceph_test_cls_log
 usr/bin/ceph_test_cls_rbd

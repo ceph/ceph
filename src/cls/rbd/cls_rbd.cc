@@ -92,7 +92,6 @@ cls_method_handle_t h_dir_rename_image;
 cls_method_handle_t h_old_snapshots_list;
 cls_method_handle_t h_old_snapshot_add;
 cls_method_handle_t h_old_snapshot_remove;
-cls_method_handle_t h_assign_bid;
 
 #define RBD_MAX_KEYS_READ 64
 #define RBD_SNAP_KEY_PREFIX "snapshot_"
@@ -1980,48 +1979,6 @@ int old_snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *o
 }
 
 
-/* assign block id. This method should be called on the rbd_info object */
-int rbd_assign_bid(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  struct rbd_info info;
-  int rc;
-  bufferlist bl;
-
-  rc = cls_cxx_read(hctx, 0, sizeof(info), &bl);
-  if (rc < 0 && rc != -EEXIST)
-    return rc;
-
-  if (rc && rc < (int)sizeof(info)) {
-    CLS_ERR("bad rbd_info object, read %d bytes, expected %d", rc,
-	    (int)sizeof(info));
-    return -EIO;
-  }
-
-  uint64_t max_id;
-  if (rc) {
-    memcpy(&info, bl.c_str(), sizeof(info));
-    max_id = info.max_id + 1;
-    info.max_id = max_id;
-  } else {
-    memset(&info, 0, sizeof(info));
-    max_id = 0;
-  }
-
-  bufferlist newbl;
-  bufferptr bp(sizeof(info));
-  memcpy(bp.c_str(), &info, sizeof(info));
-  newbl.push_back(bp);
-  rc = cls_cxx_write_full(hctx, &newbl);
-  if (rc < 0) {
-    CLS_ERR("error writing rbd_info, got rc=%d", rc);
-    return rc;
-  }
-
-  ::encode(max_id, *out);
-
-  return out->length();
-}
-
 void __cls_init()
 {
   CLS_LOG(20, "Loaded rbd class!");
@@ -2131,11 +2088,6 @@ void __cls_init()
   cls_register_cxx_method(h_class, "snap_remove",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  old_snapshot_remove, &h_old_snapshot_remove);
-
-  /* assign a unique block id for rbd blocks */
-  cls_register_cxx_method(h_class, "assign_bid",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  rbd_assign_bid, &h_assign_bid);
 
   return;
 }

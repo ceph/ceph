@@ -259,7 +259,7 @@ public:
   struct OpContext {
     OpRequestRef op;
     osd_reqid_t reqid;
-    vector<OSDOp>& ops;
+    vector<OSDOp> ops;
 
     const ObjectState *obs; // Old objectstate
     const SnapSet *snapset; // Old snapset
@@ -310,6 +310,9 @@ public:
     utime_t readable_stamp;  // when applied on all replicas
     ReplicatedPG *pg;
 
+    int num_read;    ///< count read ops
+    int num_write;   ///< count update ops
+
     OpContext(const OpContext& other);
     const OpContext& operator=(const OpContext& other);
 
@@ -321,7 +324,9 @@ public:
       modify(false), user_modify(false),
       bytes_written(0), bytes_read(0),
       current_osd_subop_num(0),
-      obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg) { 
+      obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg),
+      num_read(0),
+      num_write(0) {
       if (_ssc) {
 	new_snapset = _ssc->snapset;
 	snapset = &_ssc->snapset;

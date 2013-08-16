@@ -228,12 +228,6 @@ namespace librbd {
     return 0;
   }
 
-  uint64_t rbd_assign_bid(IoCtx& io_ctx)
-  {
-    Rados rados(io_ctx);
-    return rados.get_instance_id();
-  }
-
   int read_header_bl(IoCtx& io_ctx, const string& header_oid,
 		     bufferlist& header, uint64_t *ver)
   {
@@ -872,7 +866,8 @@ reprotect_and_return_err:
       return -EDOM;
     }
 
-    uint64_t bid = rbd_assign_bid(io_ctx);
+    Rados rados(io_ctx);
+    uint64_t bid = rados.get_instance_id();
 
     // if striping is enabled, use possibly custom defaults
     if (!old_format && (features & RBD_FEATURE_STRIPINGV2) &&

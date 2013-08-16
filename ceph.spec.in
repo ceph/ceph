@@ -614,6 +614,7 @@ fi
 %{_bindir}/ceph_filestore_dump
 %{_bindir}/ceph_streamtest
 %{_bindir}/ceph_test_cfuse_cache_invalidate
+%{_bindir}/ceph_test_cls_hello
 %{_bindir}/ceph_test_cls_lock
 %{_bindir}/ceph_test_cls_log
 %{_bindir}/ceph_test_cls_rbd
