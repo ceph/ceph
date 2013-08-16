@@ -51,6 +51,21 @@ using namespace __gnu_cxx;
 # define FALLOC_FL_PUNCH_HOLE 0x2
 #endif
 
+#if defined(__linux__)
+# ifndef BTRFS_SUPER_MAGIC
+static const __SWORD_TYPE BTRFS_SUPER_MAGIC(0x9123683E);
+# endif
+# ifndef XFS_SUPER_MAGIC
+static const __SWORD_TYPE XFS_SUPER_MAGIC(0x58465342);
+# endif
+#endif
+
+#ifndef ZFS_SUPER_MAGIC
+static const __SWORD_TYPE ZFS_SUPER_MAGIC(0x2fc12fc1);
+#endif
+
+class FileStoreBackend;
+
 class FileStore : public JournalingObjectStore,
                   public md_config_obs_t
 {
@@ -83,19 +98,13 @@ private:
   std::string omap_dir;
   uuid_d fsid;
   
-  bool btrfs;                   ///< fs is btrfs
-  bool btrfs_stable_commits;    ///< we are using btrfs snapshots for a stable journal refernce
-  uint64_t blk_size;            ///< fs block size
-  bool btrfs_trans_start_end;   ///< btrfs trans start/end ioctls are supported
-  bool btrfs_clone_range;       ///< btrfs clone range ioctl is supported
-  bool btrfs_snap_create;       ///< btrfs snap create ioctl is supported
-  bool btrfs_snap_destroy;      ///< btrfs snap destroy ioctl is supported
-  bool btrfs_snap_create_v2;    ///< btrfs snap create v2 ioctl (async!) is supported
-  bool btrfs_wait_sync;         ///< btrfs wait sync ioctl is supported
-  bool ioctl_fiemap;            ///< fiemap ioctl is supported
-  int fsid_fd, op_fd;
+  size_t blk_size;            ///< fs block size
 
-  int basedir_fd, current_fd;
+  int fsid_fd, op_fd, basedir_fd, current_fd;
+
+  FileStoreBackend *generic_backend;
+  FileStoreBackend *backend;
+
   deque<uint64_t> snaps;
 
   // Indexed Collections
@@ -137,8 +146,6 @@ private:
       return 0;
     }
   } sync_thread;
-
-  void sync_fs(); // actuall sync underlying fs
 
   // -- op workqueue --
   struct Op {
@@ -294,11 +301,10 @@ public:
   int lfn_link(coll_t c, coll_t cid, const hobject_t& o) ;
   int lfn_unlink(coll_t cid, const hobject_t& o, const SequencerPosition &spos);
 
- public:
+public:
   FileStore(const std::string &base, const std::string &jdev, const char *internal_name = "filestore", bool update_to=false);
   ~FileStore();
 
-  int _test_fiemap();
   int _detect_fs();
   int _sanity_check_fs();
   
@@ -522,11 +528,7 @@ private:
   virtual const char** get_tracked_conf_keys() const;
   virtual void handle_conf_change(const struct md_config_t *conf,
 			  const std::set <std::string> &changed);
-  bool m_filestore_btrfs_clone_range;
-  bool m_filestore_btrfs_snap;
   float m_filestore_commit_timeout;
-  bool m_filestore_fiemap;
-  bool m_filestore_fsync_flushes_journal_data;
   bool m_filestore_journal_parallel;
   bool m_filestore_journal_trailing;
   bool m_filestore_journal_writeahead;
@@ -547,8 +549,54 @@ private:
   std::ofstream m_filestore_dump;
   JSONFormatter m_filestore_dump_fmt;
   atomic_t m_filestore_kill_at;
+
+  friend class FileStoreBackend;
 };
 
 ostream& operator<<(ostream& out, const FileStore::OpSequencer& s);
+
+struct fiemap;
+
+class FileStoreBackend {
+private:
+  FileStore *filestore;
+protected:
+  int get_basedir_fd() {
+    return filestore->basedir_fd;
+  }
+  int get_current_fd() {
+    return filestore->current_fd;
+  }
+  int get_op_fd() {
+    return filestore->op_fd;
+  }
+  size_t get_blksize() {
+    return filestore->blk_size;
+  }
+  const string& get_basedir_path() {
+    return filestore->basedir;
+  }
+  const string& get_current_path() {
+    return filestore->current_fn;
+  }
+  int _copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) {
+    return filestore->_do_copy_range(from, to, srcoff, len, dstoff);
+  }
+public:
+  FileStoreBackend(FileStore *fs) : filestore(fs) {}
+  virtual ~FileStoreBackend() {};
+  virtual int detect_features() = 0;
+  virtual int create_current() = 0;
+  virtual bool can_checkpoint() = 0;
+  virtual int list_checkpoints(list<string>& ls) = 0;
+  virtual int create_checkpoint(const string& name, uint64_t *cid) = 0;
+  virtual int sync_checkpoint(uint64_t id) = 0;
+  virtual int rollback_to(const string& name) = 0;
+  virtual int destroy_checkpoint(const string& name) = 0;
+  virtual int syncfs() = 0;
+  virtual bool has_fiemap() = 0;
+  virtual int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap) = 0;
+  virtual int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) = 0;
+};
 
 #endif

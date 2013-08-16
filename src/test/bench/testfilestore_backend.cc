@@ -1,6 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 
-#include "filestore_backend.h"
+#include "testfilestore_backend.h"
 #include "global/global_init.h"
 #include "os/ObjectStore.h"
 
@@ -16,14 +16,14 @@ struct C_DeleteTransWrapper : public Context {
   }
 };
 
-FileStoreBackend::FileStoreBackend(
+TestFileStoreBackend::TestFileStoreBackend(
   ObjectStore *os, bool write_infos)
   : os(os), finisher(g_ceph_context), write_infos(write_infos)
 {
   finisher.start();
 }
 
-void FileStoreBackend::write(
+void TestFileStoreBackend::write(
   const string &oid,
   uint64_t offset,
   const bufferlist &bl,
@@ -60,7 +60,7 @@ void FileStoreBackend::write(
     on_commit);
 }
 
-void FileStoreBackend::read(
+void TestFileStoreBackend::read(
   const string &oid,
   uint64_t offset,
   uint64_t length,
