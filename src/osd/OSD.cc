@@ -161,6 +161,7 @@ OSDService::OSDService(OSD *osd) :
   cluster_messenger(osd->cluster_messenger),
   client_messenger(osd->client_messenger),
   logger(osd->logger),
+  recoverystate_perf(osd->recoverystate_perf),
   monc(osd->monc),
   op_wq(osd->op_wq),
   peering_wq(osd->peering_wq),
@@ -898,6 +899,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
   client_messenger(external_messenger),
   monc(mc),
   logger(NULL),
+  recoverystate_perf(NULL),
   store(NULL),
   clog(external_messenger->cct, client_messenger, &mc->monmap, LogClient::NO_FLAGS),
   whoami(id),
@@ -953,7 +955,9 @@ OSD::~OSD()
   delete authorize_handler_cluster_registry;
   delete authorize_handler_service_registry;
   delete class_handler;
+  g_ceph_context->get_perfcounters_collection()->remove(recoverystate_perf);
   g_ceph_context->get_perfcounters_collection()->remove(logger);
+  delete recoverystate_perf;
   delete logger;
   delete store;
 }
@@ -1182,6 +1186,8 @@ int OSD::init()
   }
   osdmap = get_map(superblock.current_epoch);
   check_osdmap_features();
+
+  create_recoverystate_perf();
 
   bind_epoch = osdmap->get_epoch();
 
@@ -1416,10 +1422,49 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_mape_dup, "map_message_epoch_dups"); // dup osdmap epochs
   osd_plb.add_u64_counter(l_osd_waiting_for_map,
 			  "messages_delayed_for_map"); // dup osdmap epochs
-  osd_plb.add_time_avg(l_osd_peering_latency, "peering_latency");
 
   logger = osd_plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
+}
+
+void OSD::create_recoverystate_perf()
+{
+  dout(10) << "create_recoverystate_perf" << dendl;
+
+  PerfCountersBuilder rs_perf(g_ceph_context, "recoverystate_perf", rs_first, rs_last);
+
+  rs_perf.add_time_avg(rs_initial_latency, "initial_latency");
+  rs_perf.add_time_avg(rs_started_latency, "started_latency");
+  rs_perf.add_time_avg(rs_reset_latency, "reset_latency");
+  rs_perf.add_time_avg(rs_start_latency, "start_latency");
+  rs_perf.add_time_avg(rs_primary_latency, "primary_latency");
+  rs_perf.add_time_avg(rs_peering_latency, "peering_latency");
+  rs_perf.add_time_avg(rs_backfilling_latency, "backfilling_latency");
+  rs_perf.add_time_avg(rs_waitremotebackfillreserved_latency, "waitremotebackfillreserved_latency");
+  rs_perf.add_time_avg(rs_waitlocalbackfillreserved_latency, "waitlocalbackfillreserved_latency");
+  rs_perf.add_time_avg(rs_notbackfilling_latency, "notbackfilling_latency");
+  rs_perf.add_time_avg(rs_repnotrecovering_latency, "repnotrecovering_latency");
+  rs_perf.add_time_avg(rs_repwaitrecoveryreserved_latency, "repwaitrecoveryreserved_latency");
+  rs_perf.add_time_avg(rs_repwaitbackfillreserved_latency, "repwaitbackfillreserved_latency");
+  rs_perf.add_time_avg(rs_RepRecovering_latency, "RepRecovering_latency");
+  rs_perf.add_time_avg(rs_activating_latency, "activating_latency");
+  rs_perf.add_time_avg(rs_waitlocalrecoveryreserved_latency, "waitlocalrecoveryreserved_latency");
+  rs_perf.add_time_avg(rs_waitremoterecoveryreserved_latency, "waitremoterecoveryreserved_latency");
+  rs_perf.add_time_avg(rs_recovering_latency, "recovering_latency");
+  rs_perf.add_time_avg(rs_recovered_latency, "recovered_latency");
+  rs_perf.add_time_avg(rs_clean_latency, "clean_latency");
+  rs_perf.add_time_avg(rs_active_latency, "active_latency");
+  rs_perf.add_time_avg(rs_replicaactive_latency, "replicaactive_latency");
+  rs_perf.add_time_avg(rs_stray_latency, "stray_latency");
+  rs_perf.add_time_avg(rs_getinfo_latency, "getinfo_latency");
+  rs_perf.add_time_avg(rs_getlog_latency, "getlog_latency");
+  rs_perf.add_time_avg(rs_waitactingchange_latency, "waitactingchange_latency");
+  rs_perf.add_time_avg(rs_incomplete_latency, "incomplete_latency");
+  rs_perf.add_time_avg(rs_getmissing_latency, "getmissing_latency");
+  rs_perf.add_time_avg(rs_waitupthru_latency, "waitupthru_latency");
+
+  recoverystate_perf = rs_perf.create_perf_counters();
+  g_ceph_context->get_perfcounters_collection()->add(recoverystate_perf);
 }
 
 void OSD::suicide(int exitcode)
