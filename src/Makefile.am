@@ -531,6 +531,18 @@ endif
 
 ## rados object classes
 
+radoslibdir = $(libdir)/rados-classes
+radoslib_LTLIBRARIES =
+
+# hello world class
+libcls_hello_la_SOURCES = cls/hello/cls_hello.cc
+libcls_hello_la_CFLAGS = ${AM_CFLAGS}
+libcls_hello_la_CXXFLAGS= ${AM_CXXFLAGS}
+libcls_hello_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libcls_hello_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
+
+radoslib_LTLIBRARIES += libcls_hello.la
+
 # rbd: rados block device class
 libcls_rbd_la_SOURCES = cls/rbd/cls_rbd.cc
 libcls_rbd_la_CFLAGS = ${AM_CFLAGS}
@@ -538,9 +550,7 @@ libcls_rbd_la_CXXFLAGS= ${AM_CXXFLAGS}
 libcls_rbd_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_rbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
 
-radoslibdir = $(libdir)/rados-classes
-radoslib_LTLIBRARIES = libcls_rbd.la
-
+radoslib_LTLIBRARIES += libcls_rbd.la
 
 # lock class
 libcls_lock_la_SOURCES = cls/lock/cls_lock.cc
@@ -548,7 +558,6 @@ libcls_lock_la_CFLAGS = ${AM_CFLAGS}
 libcls_lock_la_CXXFLAGS= ${AM_CXXFLAGS}
 libcls_lock_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_lock_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
-
 radoslib_LTLIBRARIES += libcls_lock.la
 
 # refcount class
@@ -1081,6 +1090,11 @@ ceph_test_cls_lock_LDFLAGS = ${AM_LDFLAGS}
 ceph_test_cls_lock_LDADD =  libcls_lock_client.a librados.la ${UNITTEST_STATIC_LDADD}
 ceph_test_cls_lock_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_cls_lock
+
+ceph_test_cls_hello_SOURCES = test/cls_hello/test_cls_hello.cc test/librados/test.cc
+ceph_test_cls_hello_LDADD = ${UNITTEST_LDADD} ${UNITTEST_STATIC_LDADD} $(LIBGLOBAL_LDA) $(CRYPTO_LIBS) librados.la
+ceph_test_cls_hello_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+bin_DEBUGPROGRAMS += ceph_test_cls_hello
 
 if WITH_RADOSGW
 
