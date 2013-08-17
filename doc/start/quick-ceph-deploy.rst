@@ -39,7 +39,7 @@ To create your Ceph Storage Cluster, declare its initial monitors, generate a
 filesystem ID (``fsid``) and generate monitor keys by entering the following
 command on a commandline prompt:: 
 
-	ceph-deploy new {node-name}
+	ceph-deploy new {server-node-name}
 	ceph-deploy new ceph-node
 
 Check the output of ``ceph-deploy`` with ``ls`` and ``cat`` in the current
@@ -65,7 +65,7 @@ Install Ceph
 To install Ceph on your server node, open a command line on your admin
 node and type the following::
 
-	ceph-deploy install {node-name}[,{node-name}]
+	ceph-deploy install {server-node-name}[,{server-node-name}]
 	ceph-deploy install --stable cuttlefish ceph-node
 
 Without additional arguments, ``ceph-deploy`` will install the most recent
@@ -83,7 +83,7 @@ To run a Ceph cluster, you need at least one Ceph Monitor. When using
 ``ceph-deploy``, the tool enforces a single Ceph Monitor per node. Execute the
 following to create a Ceph Monitor::
 
-	ceph-deploy mon create {node-name}
+	ceph-deploy mon create {server-node-name}
 	ceph-deploy mon create ceph-node
 
 .. tip:: In production environments, we recommend running Ceph Monitors on 
