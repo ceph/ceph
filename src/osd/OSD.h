@@ -1671,8 +1671,12 @@ protected:
  public:
   /* internal and external can point to the same messenger, they will still
    * be cleaned up properly*/
-  OSD(int id, Messenger *internal, Messenger *external,
-      Messenger *hb_client, Messenger *hb_front_server, Messenger *hb_back_server,
+  OSD(int id,
+      Messenger *internal,
+      Messenger *external,
+      Messenger *hb_client,
+      Messenger *hb_front_server,
+      Messenger *hb_back_server,
       Messenger *osdc_messenger,
       MonClient *mc, const std::string &dev, const std::string &jdev);
   ~OSD();
