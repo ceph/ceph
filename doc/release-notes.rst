@@ -2,6 +2,25 @@
  Release Notes
 ===============
 
+v0.67.1 "Dumpling"
+------------------
+
+This is a minor point release for Dumpling that fixes problems with
+OpenStack and librbd hangs when caching is disabled.
+
+Notable changes
+~~~~~~~~~~~~~~~
+
+* librados, librbd: fix constructor for python bindings with certain
+  usages (in particular, that used by OpenStack)
+* librados, librbd: fix aio_flush wakeup when cache is disabled
+* librados: fix locking for aio completion refcounting
+* fixes 'ceph --admin-daemon ...' command error code on error
+* fixes 'ceph daemon ... config set ...' command for boolean config
+  options.
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.67.1.txt>`.
+
 v0.67 "Dumpling"
 ----------------
 
