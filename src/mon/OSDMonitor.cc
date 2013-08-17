@@ -3297,33 +3297,37 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     else if (m->cmd[1] == "pool" && m->cmd.size() >= 3) {
       if (m->cmd.size() >= 5 && m->cmd[2] == "mksnap") {
-	int64_t pool = osdmap.lookup_pg_pool_name(m->cmd[3].c_str());
+	string poolstr = m->cmd[3];
+	int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
 	if (pool < 0) {
-	  ss << "unrecognized pool '" << m->cmd[3] << "'";
+	  ss << "unrecognized pool '" << poolstr << "'";
 	  err = -ENOENT;
-	} else {
-	  const pg_pool_t *p = osdmap.get_pg_pool(pool);
-	  pg_pool_t *pp = 0;
-	  if (pending_inc.new_pools.count(pool))
-	    pp = &pending_inc.new_pools[pool];
-	  const string& snapname = m->cmd[4];
-	  if (p->snap_exists(snapname.c_str()) ||
-	      (pp && pp->snap_exists(snapname.c_str()))) {
-	    ss << "pool " << m->cmd[3] << " snap " << snapname << " already exists";
-	    err = 0;
-	  } else {
-	    if (!pp) {
-	      pp = &pending_inc.new_pools[pool];
-	      *pp = *p;
-	    }
-	    pp->add_snap(snapname.c_str(), ceph_clock_now(g_ceph_context));
-	    pp->set_snap_epoch(pending_inc.epoch);
-	    ss << "created pool " << m->cmd[3] << " snap " << snapname;
-	    getline(ss, rs);
-	    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_version()));
-	    return true;
-	  }
+	  goto out;
 	}
+	const string& snapname = m->cmd[4];
+	const pg_pool_t *p = osdmap.get_pg_pool(pool);
+	if (p->snap_exists(snapname.c_str())) {
+	  ss << "pool " << poolstr << " snap " << snapname << " already exists";
+	  err = 0;
+	  goto out;
+	}
+	pg_pool_t *pp = 0;
+	if (pending_inc.new_pools.count(pool))
+	  pp = &pending_inc.new_pools[pool];
+	if (!pp) {
+	  pp = &pending_inc.new_pools[pool];
+	  *pp = *p;
+	}
+	if (pp->snap_exists(snapname.c_str())) {
+	  ss << "pool " << poolstr << " snap " << snapname << " already exists";
+	} else {
+	  pp->add_snap(snapname.c_str(), ceph_clock_now(g_ceph_context));
+	  pp->set_snap_epoch(pending_inc.epoch);
+	  ss << "created pool " << poolstr << " snap " << snapname;
+	}
+	getline(ss, rs);
+	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+	return true;
       }
       else if (m->cmd.size() >= 5 && m->cmd[2] == "rmsnap") {
 	const string& poolstr = m->cmd[3].c_str();
