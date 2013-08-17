@@ -39,8 +39,8 @@ To create your Ceph Storage Cluster, declare its initial monitors, generate a
 filesystem ID (``fsid``) and generate monitor keys by entering the following
 command on a commandline prompt:: 
 
-	ceph-deploy new {node-name}
-	ceph-deploy new ceph-node
+	ceph-deploy new {mon-server-name}
+	ceph-deploy new mon-ceph-node
 
 Check the output of ``ceph-deploy`` with ``ls`` and ``cat`` in the current
 directory. You should see a Ceph configuration file, a keyring, and a log file
@@ -65,8 +65,8 @@ Install Ceph
 To install Ceph on your server node, open a command line on your admin
 node and type the following::
 
-	ceph-deploy install {node-name}[,{node-name}]
-	ceph-deploy install --stable cuttlefish ceph-node
+	ceph-deploy install {server-node-name}[,{server-node-name}]
+	ceph-deploy install mon-ceph-node
 
 Without additional arguments, ``ceph-deploy`` will install the most recent
 stable Ceph package to the server node. See `ceph-deploy install -h`_ for
@@ -83,8 +83,8 @@ To run a Ceph cluster, you need at least one Ceph Monitor. When using
 ``ceph-deploy``, the tool enforces a single Ceph Monitor per node. Execute the
 following to create a Ceph Monitor::
 
-	ceph-deploy mon create {node-name}
-	ceph-deploy mon create ceph-node
+	ceph-deploy mon create {mon-server-name}
+	ceph-deploy mon create mon-ceph-node
 
 .. tip:: In production environments, we recommend running Ceph Monitors on 
    nodes that do not run OSDs.
@@ -102,8 +102,8 @@ To deploy additional daemons and provision them with monitor authentication keys
 from your admin node, you must first gather keys from a monitor node. Execute
 the following to gather keys:: 
 
-	ceph-deploy gatherkeys {mon-node-name}
-	ceph-deploy gatherkeys ceph-node
+	ceph-deploy gatherkeys {mon-server-name}
+	ceph-deploy gatherkeys mon-ceph-node
 
 
 Once you have gathered keys, your local directory should have the following keyrings:
