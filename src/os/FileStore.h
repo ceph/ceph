@@ -280,7 +280,7 @@ private:
   void op_queue_reserve_throttle(Op *o);
   void op_queue_release_throttle(Op *o);
   void _journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk);
-  friend class C_JournaledAhead;
+  friend struct C_JournaledAhead;
 
   int open_journal();
 

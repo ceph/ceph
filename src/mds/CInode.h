@@ -47,10 +47,10 @@ class Message;
 class CInode;
 class MDCache;
 class LogSegment;
-class SnapRealm;
+struct SnapRealm;
 class Session;
 class MClientCaps;
-class ObjectOperation;
+struct ObjectOperation;
 class EMetaBlob;
 
 ostream& operator<<(ostream& out, CInode& in);

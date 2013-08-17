@@ -28,7 +28,7 @@ using __gnu_cxx::hash_map;
 #include "mdstypes.h"
 
 class CInode;
-class MDRequest;
+struct MDRequest;
 
 #include "CInode.h"
 #include "Capability.h"

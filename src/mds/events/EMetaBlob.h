@@ -27,7 +27,7 @@
 class MDS;
 class MDLog;
 class LogSegment;
-class MDSlaveUpdate;
+struct MDSlaveUpdate;
 
 /*
  * a bunch of metadata in the journal

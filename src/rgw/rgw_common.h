@@ -758,7 +758,7 @@ struct RGWBucketStats
 
 struct req_state;
 
-struct RGWEnv;
+class RGWEnv;
 
 class RGWClientIO;
 
@@ -847,7 +847,7 @@ struct req_state {
 
    req_info info;
 
-   req_state(CephContext *_cct, struct RGWEnv *e);
+   req_state(CephContext *_cct, class RGWEnv *e);
    ~req_state();
 };
 

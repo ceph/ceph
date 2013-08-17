@@ -305,8 +305,8 @@ private:
     }
   };
 
-  bool preprocess_remove_snaps(class MRemoveSnaps *m);
-  bool prepare_remove_snaps(class MRemoveSnaps *m);
+  bool preprocess_remove_snaps(struct MRemoveSnaps *m);
+  bool prepare_remove_snaps(struct MRemoveSnaps *m);
 
  public:
   OSDMonitor(Monitor *mn, Paxos *p, string service_name)

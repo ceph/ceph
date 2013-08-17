@@ -48,7 +48,7 @@ struct SnapRealm;
 struct CapabilityGroup;
 class CInode;
 class MDCache;
-class MDRequest;
+struct MDRequest;
 
 
 

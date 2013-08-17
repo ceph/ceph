@@ -737,7 +737,7 @@ public:
   // read
  public:
 
-  class OSDSession;
+  struct OSDSession;
 
   struct Op {
     OSDSession *session;

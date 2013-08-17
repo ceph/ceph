@@ -7,7 +7,7 @@
 #include "rgw_common.h"
 
 class RGWRados;
-class RGWObjVersionTracker;
+struct RGWObjVersionTracker;
 
 struct obj_version;
 

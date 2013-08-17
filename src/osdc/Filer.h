@@ -248,7 +248,7 @@ class Filer {
 		  utime_t mtime,
 		  int flags,
 		  Context *oncommit);
-  void _do_purge_range(class PurgeRange *pr, int fin);
+  void _do_purge_range(struct PurgeRange *pr, int fin);
 
   /*
    * probe 

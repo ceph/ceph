@@ -95,12 +95,12 @@ class MMonGetVersion;
 class MMonSync;
 class MMonScrub;
 class MMonProbe;
-class MMonSubscribe;
+struct MMonSubscribe;
 class MAuthRotating;
-class MRoute;
-class MForward;
-class MTimeCheck;
-class MMonHealth;
+struct MRoute;
+struct MForward;
+struct MTimeCheck;
+struct MMonHealth;
 
 #define COMPAT_SET_LOC "feature_set"
 

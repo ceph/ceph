@@ -13,10 +13,10 @@
 #include "osdc/ObjectCacher.h"
 #include "include/assert.h"
 
-class MetaSession;
+struct MetaSession;
 class Dentry;
 class Dir;
-class SnapRealm;
+struct SnapRealm;
 class Inode;
 
 struct Cap {
