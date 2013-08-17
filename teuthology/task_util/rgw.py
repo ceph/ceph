@@ -10,7 +10,7 @@ from teuthology import misc as teuthology
 log = logging.getLogger(__name__)
 
 def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False):
-    log.info('rgwadmin: %s' % cmd)
+    log.info('rgwadmin: {client} : {cmd}'.format(client=client,cmd=cmd))
     testdir = teuthology.get_testdir(ctx)
     pre = [
         '{tdir}/adjust-ulimits'.format(tdir=testdir),

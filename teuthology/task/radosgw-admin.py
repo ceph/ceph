@@ -32,7 +32,7 @@ def successful_ops(out):
 
 # simple test to indicate if multi-region testing should occur
 def multi_region_enabled(ctx):
-    # this is populated by the radosgw_agent task, seems reasonable to use that as an indicator that
+    # this is populated by the radosgw-agent task, seems reasonable to use that as an indicator that
     # we're testing multi-region sync 
     return 'radosgw_agent' in ctx
 
