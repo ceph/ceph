@@ -93,7 +93,7 @@ is_err() const
 }
 
 
-req_info::req_info(CephContext *cct, struct RGWEnv *e) : env(e) {
+req_info::req_info(CephContext *cct, class RGWEnv *e) : env(e) {
   method = env->get("REQUEST_METHOD");
   script_uri = env->get("SCRIPT_URI", cct->_conf->rgw_script_uri.c_str());
   request_uri = env->get("REQUEST_URI", cct->_conf->rgw_request_uri.c_str());
@@ -122,7 +122,7 @@ void req_info::rebuild_from(req_info& src)
 }
 
 
-req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL), op(OP_UNKNOWN),
+req_state::req_state(CephContext *_cct, class RGWEnv *e) : cct(_cct), cio(NULL), op(OP_UNKNOWN),
 							    bucket_cors(NULL), has_acl_header(false),
                                                             os_auth_token(NULL), info(_cct, e)
 {

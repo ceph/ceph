@@ -25,9 +25,9 @@
 
 #include "IoCtxImpl.h"
 
-class AuthAuthorizer;
+struct AuthAuthorizer;
 class CephContext;
-class Connection;
+struct Connection;
 struct md_config_t;
 class Message;
 class MWatchNotify;

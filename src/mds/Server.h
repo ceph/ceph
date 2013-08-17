@@ -19,8 +19,8 @@
 
 class PerfCounters;
 class LogEvent;
-class MDRequest;
-class Mutation;
+struct MDRequest;
+struct Mutation;
 class EMetaBlob;
 class EUpdate;
 class MMDSSlaveRequest;

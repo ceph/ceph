@@ -27,9 +27,9 @@ using namespace std;
 #include "mon/MonitorDBStore.h"
 
 class MMonCommand;
-class MAuth;
+struct MAuth;
 class MAuthMon;
-class MMonGlobalID;
+struct MMonGlobalID;
 class KeyRing;
 
 #define MIN_GLOBAL_ID 0x1000
