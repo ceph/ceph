@@ -12,6 +12,7 @@ Makefile
 /ceph-conf
 /ceph-coverage
 /ceph-debugpack
+/ceph-post-file
 /ceph-dencoder
 /ceph-fuse
 /ceph-mds
