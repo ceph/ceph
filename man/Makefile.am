@@ -26,4 +26,5 @@ dist_man_MANS = \
 	ceph-dencoder.8 \
 	ceph-rest-api.8 \
 	ceph-rbdnamer.8 \
+	ceph-post-file.8 \
 	rbd-fuse.8
