@@ -99,9 +99,11 @@ def run_radosgw_agent(ctx, config):
             in_args.append('0.0.0.0') 
             in_args.append('--test-server-port')
             in_args.append(str(port))
+            log.debug('Starting a sync test server on {client}'.format(client=client))
         else:
             in_args.append('--sync-scope')
             in_args.append(sync_scope)
+            log.debug('Starting a {scope} sync on {client}'.format(scope=sync_scope,client=client))
 
         return_list.append((client, remote.run(
             args=in_args,
