@@ -788,6 +788,8 @@ int FileStore::_detect_fs()
   if (r < 0)
     return -errno;
 
+  blk_size = st.f_bsize;
+
 #if defined(__linux__)
   if (st.f_type == BTRFS_SUPER_MAGIC) {
     dout(0) << "mount detected btrfs" << dendl;
