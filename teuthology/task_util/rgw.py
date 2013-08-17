@@ -108,10 +108,9 @@ def radosgw_agent_sync_all(ctx):
     if ctx.radosgw_agent.procs:
         for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
             dest_zone = zone_for_client(ctx, agent_client)
-            sync_dest, sync_port = get_sync_agent(ctx, agent_client)
-            log.debug('doing a sync from {host1} to {host2}'.format(
-                host1=agent_client,host2=sync_dest))
-            radosgw_agent_sync(ctx, sync_dest, sync_port)
+            sync_host, sync_port = get_sync_agent(ctx, agent_client)
+            log.debug('doing a sync via {host1}'.format(host1=sync_host))
+            radosgw_agent_sync(ctx, sync_host, sync_port)
 
 def host_for_role(ctx, role):
     for target, roles in zip(ctx.config['targets'].iterkeys(), ctx.config['roles']):

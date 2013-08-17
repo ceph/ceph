@@ -271,12 +271,10 @@ def extract_zone_info(ctx, client, client_config):
                                                                   client=client)
     region = ceph_config['rgw region']
     zone = ceph_config['rgw zone']
-    zone_info = dict(
-        domain_root=ceph_config['rgw zone root pool'],
-        )
+    zone_info = dict()
     for key in ['rgw control pool', 'rgw gc pool', 'rgw log pool', 'rgw intent log pool',
                 'rgw usage log pool', 'rgw user keys pool', 'rgw user email pool',
-                'rgw user swift pool', 'rgw user uid pool']:
+                'rgw user swift pool', 'rgw user uid pool', 'rgw domain root']:
         new_key = key.split(' ',1)[1]
         new_key = new_key.replace(' ', '_')
 
