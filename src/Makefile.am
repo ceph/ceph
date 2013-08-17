@@ -39,7 +39,7 @@ ceph_sbin_SCRIPTS = \
 sbin_SCRIPTS = \
 	mount.fuse.ceph
 
-bin_SCRIPTS = ceph ceph-run ceph-rest-api ceph-clsinfo ceph-debugpack ceph-rbdnamer
+bin_SCRIPTS = ceph ceph-run ceph-rest-api ceph-clsinfo ceph-debugpack ceph-rbdnamer ceph-post-file
 dist_bin_SCRIPTS =
 # C/C++ tests to build will be appended to this
 check_PROGRAMS =
@@ -188,7 +188,7 @@ base: ceph-mon ceph-osd ceph-mds \
 	ceph-syn \
 	rados radosgw librados-config \
 	ceph-conf monmaptool osdmaptool crushtool ceph-authtool \
-	init-ceph mkcephfs mon_store_converter
+	init-ceph mkcephfs mon_store_converter ceph-post-file
 
 
 # fuse targets?
@@ -1291,7 +1291,7 @@ editpaths = sed \
 	-e 's|@prefix[@]|$(prefix)|g' \
 	-e 's|@@GCOV_PREFIX_STRIP[@][@]|$(GCOV_PREFIX_STRIP)|g'
 
-shell_scripts = init-ceph mkcephfs ceph-debugpack ceph-coverage
+shell_scripts = init-ceph mkcephfs ceph-debugpack ceph-coverage ceph-post-file
 
 $(shell_scripts): Makefile
 
