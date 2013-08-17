@@ -229,7 +229,8 @@ void Objecter::init_locked()
   assert(!initialized);
 
   schedule_tick();
-  maybe_request_map();
+  if (osdmap->get_epoch() == 0)
+    maybe_request_map();
 
   initialized = true;
 }
