@@ -627,6 +627,7 @@ protected:
 
   Messenger   *cluster_messenger;
   Messenger   *client_messenger;
+  Messenger   *objecter_messenger;
   MonClient   *monc;
   PerfCounters      *logger;
   PerfCounters      *recoverystate_perf;
@@ -1672,6 +1673,7 @@ protected:
    * be cleaned up properly*/
   OSD(int id, Messenger *internal, Messenger *external,
       Messenger *hb_client, Messenger *hb_front_server, Messenger *hb_back_server,
+      Messenger *osdc_messenger,
       MonClient *mc, const std::string &dev, const std::string &jdev);
   ~OSD();
 
