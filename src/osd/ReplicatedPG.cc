@@ -50,6 +50,8 @@
 #include "include/compat.h"
 #include "common/cmdparse.h"
 
+#include "osdc/Objecter.h"
+
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
 #include "include/assert.h"  // json_spirit clobbers it
