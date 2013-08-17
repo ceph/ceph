@@ -882,6 +882,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
 	 Messenger *hb_clientm,
 	 Messenger *hb_front_serverm,
 	 Messenger *hb_back_serverm,
+	 Messenger *osdc_messenger,
 	 MonClient *mc,
 	 const std::string &dev, const std::string &jdev) :
   Dispatcher(external_messenger->cct),
@@ -897,6 +898,7 @@ OSD::OSD(int id, Messenger *internal_messenger, Messenger *external_messenger,
 								      cct->_conf->auth_service_required)),
   cluster_messenger(internal_messenger),
   client_messenger(external_messenger),
+  objecter_messenger(osdc_messenger),
   monc(mc),
   logger(NULL),
   recoverystate_perf(NULL),
@@ -1646,6 +1648,7 @@ int OSD::shutdown()
   client_messenger->shutdown();
   cluster_messenger->shutdown();
   hbclient_messenger->shutdown();
+  objecter_messenger->shutdown();
   hb_front_server_messenger->shutdown();
   hb_back_server_messenger->shutdown();
   peering_wq.clear();
