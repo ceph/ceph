@@ -384,6 +384,9 @@ fi
 %dir %{_docdir}/ceph
 %{_docdir}/ceph/sample.ceph.conf
 %{_docdir}/ceph/sample.fetch_config
+%{_datadir}/ceph/known_hosts_drop.ceph.com
+%{_datadir}/ceph/id_dsa_drop.ceph.com
+%{_datadir}/ceph/id_dsa_drop.ceph.com.pub
 %{_bindir}/ceph
 %{_bindir}/cephfs
 %{_bindir}/ceph-conf
@@ -394,6 +397,7 @@ fi
 %{_bindir}/osdmaptool
 %{_bindir}/ceph-authtool
 %{_bindir}/ceph-syn
+%{_bindir}/ceph-post-file
 %{_bindir}/ceph-run
 %{_bindir}/ceph-mon
 %{_bindir}/ceph-mds
@@ -445,6 +449,7 @@ fi
 %{_mandir}/man8/mkcephfs.8*
 %{_mandir}/man8/ceph-run.8*
 %{_mandir}/man8/ceph-syn.8*
+%{_mandir}/man8/ceph-post-file.8*
 %{_mandir}/man8/ceph-dencoder.8*
 %{_mandir}/man8/ceph-rest-api.8*
 %{_mandir}/man8/crushtool.8*

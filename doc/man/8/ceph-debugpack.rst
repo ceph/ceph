@@ -45,3 +45,4 @@ See also
 ========
 
 :doc:`ceph <ceph>`\(8)
+:doc:`ceph-post-file <ceph-post-file>`\(8)
