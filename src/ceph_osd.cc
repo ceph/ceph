@@ -331,6 +331,9 @@ int main(int argc, const char **argv)
   Messenger *messenger_hb_front_server = Messenger::create(g_ceph_context,
 						    entity_name_t::OSD(whoami), "hb_front_server",
 						    getpid());
+  Messenger *messenger_objecter = Messenger::create(g_ceph_context,
+						    entity_name_t::OSD(whoami), "hbclient",
+						    getpid());
   cluster_messenger->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   messenger_hbclient->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   messenger_hb_back_server->set_cluster_protocol(CEPH_OSD_PROTOCOL);
@@ -386,6 +389,8 @@ int main(int argc, const char **argv)
   messenger_hb_front_server->set_policy(entity_name_t::TYPE_OSD,
 					Messenger::Policy::stateless_server(0, 0));
 
+  messenger_objecter->set_default_policy(Messenger::Policy::lossy_client(0, CEPH_FEATURE_OSDREPLYMUX));
+
   r = client_messenger->bind(g_conf->public_addr);
   if (r < 0)
     exit(1);
@@ -432,6 +437,7 @@ int main(int argc, const char **argv)
 
   osd = new OSD(whoami, cluster_messenger, client_messenger,
 		messenger_hbclient, messenger_hb_front_server, messenger_hb_back_server,
+		messenger_objecter,
 		&mc,
 		g_conf->osd_data, g_conf->osd_journal);
 
@@ -450,6 +456,7 @@ int main(int argc, const char **argv)
   messenger_hb_front_server->start();
   messenger_hb_back_server->start();
   cluster_messenger->start();
+  messenger_objecter->start();
 
   // start osd
   err = osd->init();
@@ -475,6 +482,7 @@ int main(int argc, const char **argv)
   messenger_hb_front_server->wait();
   messenger_hb_back_server->wait();
   cluster_messenger->wait();
+  messenger_objecter->wait();
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
   unregister_async_signal_handler(SIGINT, handle_osd_signal);
@@ -488,6 +496,7 @@ int main(int argc, const char **argv)
   delete messenger_hb_front_server;
   delete messenger_hb_back_server;
   delete cluster_messenger;
+  delete messenger_objecter;
   client_byte_throttler.reset();
   client_msg_throttler.reset();
   g_ceph_context->put();
