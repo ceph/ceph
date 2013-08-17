@@ -1140,7 +1140,9 @@ void MDS::boot_create()
   // start with a fresh journal
   dout(10) << "boot_create creating fresh journal" << dendl;
   mdlog->create(fin.new_sub());
-  mdlog->start_new_segment(fin.new_sub());
+
+  // open new journal segment, but do not journal subtree map (yet)
+  mdlog->prepare_new_segment();
 
   if (whoami == mdsmap->get_root()) {
     dout(3) << "boot_create creating fresh hierarchy" << dendl;
@@ -1170,6 +1172,12 @@ void MDS::boot_create()
     snapserver->save(fin.new_sub());
     snapserver->handle_mds_recovery(whoami);
   }
+
+  // ok now journal it
+  mdlog->journal_segment_subtree_map();
+  mdlog->wait_for_safe(fin.new_sub());
+  mdlog->flush();
+
   fin.activate();
 }
 
@@ -1177,9 +1185,6 @@ void MDS::creating_done()
 {
   dout(1)<< "creating_done" << dendl;
   request_state(MDSMap::STATE_ACTIVE);
-
-  // start new segment
-  mdlog->start_new_segment(0);
 }
 
 

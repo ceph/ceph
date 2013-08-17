@@ -267,16 +267,19 @@ void MDLog::cap()
 
 void MDLog::start_new_segment(Context *onsync)
 {
-  dout(7) << "start_new_segment at " << journaler->get_write_pos() << dendl;
-
-  segments[journaler->get_write_pos()] = new LogSegment(journaler->get_write_pos());
-
-  ESubtreeMap *le = mds->mdcache->create_subtree_map();
-  submit_entry(le);
+  prepare_new_segment();
+  journal_segment_subtree_map();
   if (onsync) {
-    wait_for_safe(onsync);  
+    wait_for_safe(onsync);
     flush();
   }
+}
+
+void MDLog::prepare_new_segment()
+{
+  dout(7) << __func__ << " at " << journaler->get_write_pos() << dendl;
+
+  segments[journaler->get_write_pos()] = new LogSegment(journaler->get_write_pos());
 
   logger->inc(l_mdl_segadd);
   logger->set(l_mdl_seg, segments.size());
@@ -285,6 +288,12 @@ void MDLog::start_new_segment(Context *onsync)
   dout(10) << "Advancing to next stray directory on mds " << mds->get_nodeid() 
 	   << dendl;
   mds->mdcache->advance_stray();
+}
+
+void MDLog::journal_segment_subtree_map()
+{
+  dout(7) << __func__ << dendl;
+  submit_entry(mds->mdcache->create_subtree_map());
 }
 
 void MDLog::trim(int m)
