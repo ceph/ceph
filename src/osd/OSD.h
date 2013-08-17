@@ -832,7 +832,8 @@ public:
   bool heartbeat_dispatch(Message *m);
 
   struct HeartbeatDispatcher : public Dispatcher {
-  private:
+    OSD *osd;
+    HeartbeatDispatcher(OSD *o) : Dispatcher(g_ceph_context), osd(o) {}
     bool ms_dispatch(Message *m) {
       return osd->heartbeat_dispatch(m);
     };
@@ -846,14 +847,7 @@ public:
       isvalid = true;
       return true;
     }
-  public:
-    OSD *osd;
-    HeartbeatDispatcher(OSD *o) 
-      : Dispatcher(g_ceph_context), osd(o)
-    {
-    }
   } heartbeat_dispatcher;
-
 
 private:
   // -- stats --
