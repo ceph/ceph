@@ -1,3 +1,4 @@
+import argparse
 import contextlib
 import json
 import logging
@@ -581,6 +582,8 @@ def task(ctx, config):
         del config['regions']
 
     role_endpoints = assign_ports(ctx, config)
+    ctx.rgw = argparse.Namespace()
+    ctx.rgw.role_endpoints = role_endpoints
 
     with contextutil.nested(
         lambda: create_dirs(ctx=ctx, config=config),

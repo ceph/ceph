@@ -57,6 +57,10 @@ def task(ctx, config):
     if multi_region_run:
         client = rgw_utils.get_master_client(ctx, clients)
 
+    # once the client is chosen, pull the host name and  assigned port out of 
+    # the role_endpoints that were assigned by the rgw task
+    (remote_host, remote_port) = ctx.rgw.role_endpoints[client]
+
     ##
     user1='foo'
     user2='fud'
@@ -292,13 +296,11 @@ def task(ctx, config):
         rgw_utils.radosgw_agent_sync_all(ctx)
 
     # connect to rgw
-    (remote,) = ctx.cluster.only(client).remotes.iterkeys()
-    (remote_user, remote_host) = remote.name.split('@')
     connection = boto.s3.connection.S3Connection(
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
         is_secure=False,
-        port=7280,
+        port=remote_port,
         host=remote_host,
         calling_format=boto.s3.connection.OrdinaryCallingFormat(),
         )
