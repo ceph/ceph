@@ -20,16 +20,23 @@ fi
 
 [ -z "$distro" ] && distro='ubuntu'
 
-
+if [ "$kernel" = "-" ]
+then
+    kernelvalue=""
+else
+    KERNEL_SHA1=`wget http://gitbuilder.ceph.com/kernel-deb-precise-x86_64-basic/ref/$kernel/sha1 -O- 2>/dev/null`
+    [ -z "$KERNEL_SHA1" ] && echo "kernel branch $kernel dne" && exit 1
+    kernelvalue="kernel:
+  kdb: true
+  sha1: $KERNEL_SHA1"
+fi
 ##
 test ! -d ~/src/ceph-qa-suite && echo "error: expects to find ~/src/ceph-qa-suite" && exit 1
 test ! -d ~/src/teuthology/virtualenv/bin && echo "error: expects to find ~/src/teuthology/virtualenv/bin" && exit 1
 
 ## get sha1
-KERNEL_SHA1=`wget http://gitbuilder.ceph.com/kernel-deb-precise-x86_64-basic/ref/$kernel/sha1 -O- 2>/dev/null`
 CEPH_SHA1=`wget http://gitbuilder.ceph.com/ceph-deb-precise-x86_64-$flavor/ref/$ceph/sha1 -O- 2>/dev/null`
 
-[ -z "$KERNEL_SHA1" ] && echo "kernel branch $kernel dne" && exit 1
 [ -z "$CEPH_SHA1" ] && echo "ceph branch $ceph dne" && exit 1
 
 
@@ -60,9 +67,7 @@ fn="/tmp/schedule.suite.$$"
 trap "rm $fn" EXIT
 cat <<EOF > $fn
 teuthology_branch: $teuthology_branch
-kernel:
-  kdb: true
-  sha1: $KERNEL_SHA1
+$kernelvalue
 nuke-on-error: true
 machine_type: $mtype
 os_type: $distro
