@@ -511,13 +511,12 @@ def task(ctx, config):
                 log.info('unable to extract sha1 from deb path, forcing install')
                 assert False
         else:
-            nsha1 = ctx.config.get('overrides',{}).get('ceph',{}).get('sha1',role_config.get('sha1'))
             larch, ldist = _find_arch_and_dist(ctx)
             sha1, _ = teuthology.get_ceph_binary_url(
                 package='kernel',
                 branch=role_config.get('branch'),
                 tag=role_config.get('tag'),
-                sha1=nsha1,
+                sha1=role_config.get('sha1'),
                 flavor='basic',
                 format='deb',
                 dist=ldist,
