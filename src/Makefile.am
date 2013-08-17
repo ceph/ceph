@@ -1707,7 +1707,6 @@ libosd_a_SOURCES = \
 	osd/ClassHandler.cc \
 	osd/OpRequest.cc \
 	osd/SnapMapper.cc \
-	objclass/class_debug.cc \
 	objclass/class_api.cc
 libosd_a_CXXFLAGS= ${AM_CXXFLAGS}
 noinst_LIBRARIES += libosd.a
