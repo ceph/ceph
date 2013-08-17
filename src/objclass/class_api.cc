@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/config.h"
+#include "common/debug.h"
 
 #include "objclass/objclass.h"
 #include "osd/ReplicatedPG.h"
@@ -12,6 +13,8 @@
 #include "common/armor.h"
 
 static ClassHandler *ch;
+
+#define dout_subsys ceph_subsys_objclass
 
 void cls_initialize(ClassHandler *h)
 {
@@ -601,4 +604,22 @@ void cls_cxx_subop_version(cls_method_context_t hctx, string *s)
   snprintf(buf, sizeof(buf), "%lld.%d", (long long)ver, subop_num);
 
   *s = buf;
+}
+
+int cls_log(int level, const char *format, ...)
+{
+   int size = 256;
+   va_list ap;
+   while (1) {
+     char buf[size];
+     va_start(ap, format);
+     int n = vsnprintf(buf, size, format, ap);
+     va_end(ap);
+#define MAX_SIZE 8196
+     if ((n > -1 && n < size) || size > MAX_SIZE) {
+       dout(level) << buf << dendl;
+       return n;
+     }
+     size *= 2;
+   }
 }
