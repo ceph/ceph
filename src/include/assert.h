@@ -12,12 +12,12 @@
 # include "acconfig.h"
 #endif
 
-struct CephContext;
+class CephContext;
 
 #ifdef __cplusplus
 namespace ceph {
 
-class BackTrace;
+struct BackTrace;
 
 struct FailedAssertion {
   BackTrace *backtrace;

@@ -449,7 +449,7 @@ protected:
 
   friend class C_OSD_OpCommit;
   friend class C_OSD_OpApplied;
-  friend class C_OnPushCommit;
+  friend struct C_OnPushCommit;
 
   // projected object info
   map<hobject_t, ObjectContext*> object_contexts;
@@ -889,7 +889,7 @@ protected:
       pg->unlock();
     }
   };
-  friend class C_OSD_CompletedPull;
+  friend struct C_OSD_CompletedPull;
   struct C_OSD_AppliedRecoveredObjectReplica : public Context {
     ReplicatedPGRef pg;
     C_OSD_AppliedRecoveredObjectReplica(ReplicatedPG *p) :

@@ -25,7 +25,7 @@
 #include "common/config.h"
 #include "global/signal_handler.h"
 
-class MMonHealth;
+struct MMonHealth;
 
 class DataHealthService :
   public HealthService
