@@ -14,8 +14,8 @@
 
 namespace librbd {
 
-  class AioCompletion;
-  class ImageCtx;
+  struct AioCompletion;
+  struct ImageCtx;
 
   /**
    * This class represents an I/O operation to a single RBD data object.

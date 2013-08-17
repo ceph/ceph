@@ -890,7 +890,7 @@ public:
   void unreg_next_scrub();
 
   void replica_scrub(
-    class MOSDRepScrub *op,
+    struct MOSDRepScrub *op,
     ThreadPool::TPHandle &handle);
   void sub_op_scrub_map(OpRequestRef op);
   void sub_op_scrub_reserve(OpRequestRef op);

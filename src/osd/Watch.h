@@ -31,7 +31,7 @@ class OSDService;
 class ReplicatedPG;
 void intrusive_ptr_add_ref(ReplicatedPG *pg);
 void intrusive_ptr_release(ReplicatedPG *pg);
-class ObjectContext;
+struct ObjectContext;
 class MWatchNotify;
 
 class Watch;
@@ -42,7 +42,7 @@ class Notify;
 typedef std::tr1::shared_ptr<Notify> NotifyRef;
 typedef std::tr1::weak_ptr<Notify> WNotifyRef;
 
-class CancelableContext;
+struct CancelableContext;
 
 /**
  * Notify tracks the progress of a particular notify

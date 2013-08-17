@@ -27,7 +27,7 @@ class MLogAck;
 class Messenger;
 class MonMap;
 class Message;
-class Connection;
+struct Connection;
 
 class LogClientTemp
 {

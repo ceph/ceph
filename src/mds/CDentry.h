@@ -33,7 +33,7 @@ using namespace std;
 
 class CInode;
 class CDir;
-class MDRequest;
+struct MDRequest;
 
 class Message;
 class Anchor;
