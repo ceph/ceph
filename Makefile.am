@@ -12,8 +12,17 @@ EXTRA_DIST += \
 	udev/50-rbd.rules \
 	udev/60-ceph-partuuid-workaround.rules \
 	udev/95-ceph-osd.rules \
-	udev/95-ceph-osd-alt.rules
+	udev/95-ceph-osd-alt.rules \
+	share/known_hosts_drop.ceph.com \
+	share/id_dsa_drop.ceph.com \
+	share/id_dsa_drop.ceph.com.pub
 
+# why is it so hard to make autotools to this?
+install-data-local:
+	-mkdir -p $(DESTDIR)$(datadir)/ceph
+	-install -m 644 share/known_hosts_drop.ceph.com $(DESTDIR)$(datadir)/ceph/known_hosts_drop.ceph.com
+	-install -m 644 share/known_hosts_drop.ceph.com $(DESTDIR)$(datadir)/ceph/id_dsa_drop.ceph.com
+	-install -m 644 share/known_hosts_drop.ceph.com $(DESTDIR)$(datadir)/ceph/id_dsa_drop.ceph.com.pub
 
 all-local:
 if WITH_DEBUG
