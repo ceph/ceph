@@ -7,26 +7,6 @@ http://marc.info/?l=ceph-devel&m=131942130322957&w=2
 Although running on ext4, xfs, or whatever other non-btrfs you want mostly
 works, there are a few important remaining issues:
 
-ext4 limits total xattrs for 4KB
-================================
-
-This can cause problems in some cases, as Ceph uses xattrs
-extensively. Most of the time we don't hit this. We do hit the limit
-with radosgw pretty easily, though, and may also hit it in exceptional
-cases where the OSD cluster is very unhealthy.
-
-There is a large xattr patch for ext4 from the Lustre folks that has been
-floating around for (I think) years. Maybe as interest grows in running
-Ceph on ext4 this can move upstream.
-
-Previously we were being forgiving about large setxattr failures on ext3,
-but we found that was leading to corruption in certain cases (because we
-couldn't set our internal metadata), so the next release will assert/crash
-in that case (fail-stop instead of fail-maybe-eventually-corrupt).
-
-XFS does not have an xattr size limit and thus does have this problem.
-
-
 OSD journal replay of non-idempotent transactions
 =================================================
 
