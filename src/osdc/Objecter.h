@@ -1255,6 +1255,9 @@ private:
   /** Clear the passed flags from the global op flag set */
   void clear_global_op_flag(int flags) { global_op_flags &= ~flags; }
 
+  /// cancel an in-progress request
+  int op_cancel(tid_t tid);
+
   // commands
   int osd_command(int osd, vector<string>& cmd, bufferlist& inbl, tid_t *ptid,
 		    bufferlist *poutbl, string *prs, Context *onfinish) {
