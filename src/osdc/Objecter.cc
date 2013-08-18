@@ -1281,6 +1281,32 @@ tid_t Objecter::_op_submit(Op *op)
   return op->tid;
 }
 
+int Objecter::op_cancel(tid_t tid)
+{
+  assert(client_lock.is_locked());
+  assert(initialized);
+
+  map<tid_t, Op*>::iterator p = ops.find(tid);
+  if (p == ops.end()) {
+    ldout(cct, 10) << __func__ << " tid " << tid << " dne" << dendl;
+    return -ENOENT;
+  }
+
+  ldout(cct, 10) << __func__ << " tid " << tid << dendl;
+  Op *op = p->second;
+  if (op->onack) {
+    op->onack->complete(-ECANCELED);
+    op->onack = NULL;
+  }
+  if (op->oncommit) {
+    op->oncommit->complete(-ECANCELED);
+    op->oncommit = NULL;
+  }
+  op_cancel_map_check(op);
+  finish_op(op);
+  return 0;
+}
+
 bool Objecter::is_pg_changed(vector<int>& o, vector<int>& n, bool any_change)
 {
   if (o.empty() && n.empty())
