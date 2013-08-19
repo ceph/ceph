@@ -2212,6 +2212,7 @@ noinst_HEADERS = \
 	os/SequencerPosition.h\
         osd/Ager.h\
 	osd/ClassHandler.h\
+	osd/ErasureCodeInterface.h\
         osd/OSD.h\
         osd/OSDCap.h\
         osd/OSDMap.h\
