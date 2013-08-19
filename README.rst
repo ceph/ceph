@@ -304,7 +304,7 @@ Test Sandbox Directory
 ======================
 
 Teuthology currently places most test files and mount points in a sandbox
-directory, defaulting to ``/tmp/cephtest/{rundir}``.  The ``{rundir}`` is the
+directory, defaulting to ``$HOME/cephtest/{rundir}``.  The ``{rundir}`` is the
 name of the run (as given by ``--name``) or if no name is specified,
 ``user@host-timestamp`` is used.  To change the location of the sandbox
 directory, the following options can be specified in
