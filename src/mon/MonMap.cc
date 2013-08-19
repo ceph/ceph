@@ -329,8 +329,7 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
   }
 
   if (size() == 0) {
-    errout << "unable to find any monitors in conf. "
-	 << "please specify monitors via -m monaddr or -c ceph.conf" << std::endl;
+    errout << "no monitors specified to connect to." << std::endl;
     return -ENOENT;
   }
   return 0;
