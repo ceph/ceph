@@ -3051,6 +3051,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_rd++;
       }
       break;
+
     case CEPH_OSD_OP_OMAPGETVALS:
       ++ctx->num_read;
       {
@@ -3115,6 +3116,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_rd++;
       }
       break;
+
     case CEPH_OSD_OP_OMAPGETHEADER:
       ++ctx->num_read;
       {
@@ -3136,6 +3138,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_rd++;
       }
       break;
+
     case CEPH_OSD_OP_OMAPGETVALSBYKEYS:
       ++ctx->num_read;
       {
@@ -3176,6 +3179,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_rd++;
       }
       break;
+
     case CEPH_OSD_OP_OMAP_CMP:
       ++ctx->num_read;
       {
@@ -3241,6 +3245,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
       }
       break;
+
       // OMAP Write ops
     case CEPH_OSD_OP_OMAPSETVALS:
       ++ctx->num_write;
@@ -3271,6 +3276,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_wr++;
       }
       break;
+
     case CEPH_OSD_OP_OMAPSETHEADER:
       ++ctx->num_write;
       {
@@ -3286,6 +3292,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_wr++;
       }
       break;
+
     case CEPH_OSD_OP_OMAPCLEAR:
       ++ctx->num_write;
       {
@@ -3301,6 +3308,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_wr++;
       }
       break;
+
     case CEPH_OSD_OP_OMAPRMKEYS:
       ++ctx->num_write;
       {
@@ -3324,6 +3332,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_wr++;
       }
       break;
+
+
     default:
       dout(1) << "unrecognized osd op " << op.op
 	      << " " << ceph_osd_op_name(op.op)
