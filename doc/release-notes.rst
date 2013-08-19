@@ -514,6 +514,38 @@ Notable Changes
 * misc code cleanups
 
 
+
+v0.61.8 "Cuttlefish"
+--------------------
+
+This release includes a number of important issues, including rare
+race conditions in the OSD, a few monitor bugs, and fixes for RBD
+flush behavior.  We recommend that production users upgrade at their
+convenience.
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* librados: fix async aio completion wakeup
+* librados: fix aio completion locking
+* librados: fix rare deadlock during shutdown
+* osd: fix race when queueing recovery operations
+* osd: fix possible race during recovery
+* osd: optionally preload rados classes on startup (disabled by default)
+* osd: fix journal replay corner condition
+* osd: limit size of peering work queue batch (to speed up peering)
+* mon: fix paxos recovery corner case
+* mon: fix rare hang when monmap updates during an election
+* mon: make 'osd pool mksnap ...' avoid exposing uncommitted state
+* mon: make 'osd pool rmsnap ...' not racy, avoid exposing uncommitted state
+* mon: fix bug during mon cluster expansion
+* rgw: fix crash during multi delete operation
+* msgr: fix race conditions during osd network reinitialization
+* ceph-disk: apply mount options when remounting
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.61.8.txt>`.
+
+
 v0.61.7 "Cuttlefish"
 --------------------
 
