@@ -294,6 +294,19 @@ Rados object in state %s." % (self.state))
         retargs = [a for a in cretargs if a is not None]
         return retargs
 
+    def conf_parse_env(self, var='CEPH_ARGS'):
+        """
+        Parse known arguments from an environment variable, normally
+        CEPH_ARGS.
+        """
+        self.require_state("configuring", "connected")
+        if not var:
+            return
+        ret = run_in_thread(self.librados.rados_conf_parse_env,
+                            (self.cluster, c_char_p(var)))
+        if (ret != 0):
+            raise make_ex(ret, "error calling conf_parse_env")
+
     def conf_get(self, option):
         """
         Get the value of a configuration option
