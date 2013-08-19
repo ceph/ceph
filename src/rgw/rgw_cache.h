@@ -177,14 +177,13 @@ class RGWCache  : public T
     if (ret < 0)
       return ret;
 
-    ret = T::init_watch();
-    return ret;
+    return 0;
   }
 
-  void finalize() {
-    T::finalize_watch();
-    T::finalize();
+  bool need_watch_notify() {
+    return true;
   }
+
   int distribute_cache(const string& normal_name, rgw_obj& obj, ObjectCacheInfo& obj_info, int op);
   int watch_cb(int opcode, uint64_t ver, bufferlist& bl);
 public:
