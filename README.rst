@@ -313,7 +313,7 @@ directory, the following options can be specified in
 	base_test_dir: <directory>
 
 The ``base_test_dir`` option will set the base directory to use for the individual
-run directories.  If not specified, this defaults to: ``/tmp/cephtest``.
+run directories.
 
 	test_path: <directory>
 
