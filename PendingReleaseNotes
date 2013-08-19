@@ -11,3 +11,10 @@ v0.68
   offender, has been removed.  This breaks compatibility with
   pre-bobtail librbd clients by preventing them from creating new
   images.
+
+* librados now returns on commit instead of ack for synchronous calls.
+  This is a bit safer in the case where both OSDs and the client crash, and
+  is probably how it should have been acting from the beginning. Users are
+  unlikely to notice but it could result in lower performance in some
+  circumstances. Those who care should switch to using the async interfaces,
+  which let you specify safety semantics precisely.

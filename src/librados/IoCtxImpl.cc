@@ -504,14 +504,14 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
   int r;
   eversion_t ver;
 
-  Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
+  Context *oncommit = new C_SafeCond(&mylock, &cond, &done, &r);
 
   int op = o->ops[0].op.op;
   ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid << " nspace=" << oloc.nspace << dendl;
   lock->Lock();
   objecter->mutate(oid, oloc,
 	           *o, snapc, ut, 0,
-	           onack, NULL, &ver);
+	           NULL, oncommit, &ver);
   lock->Unlock();
 
   mylock.Lock();
