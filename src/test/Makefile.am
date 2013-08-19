@@ -313,6 +313,12 @@ unittest_ceph_argparse_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_ceph_argparse_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_ceph_argparse
 
+unittest_erasure_code_example_SOURCES = test/osd/TestErasureCodeExample.cc 
+noinst_HEADERS += test/osd/ErasureCodeExample.h
+unittest_erasure_code_example_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_erasure_code_example_LDADD = libosd.a libcommon.la $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_erasure_code_example
+
 unittest_osd_types_SOURCES = test/test_osd_types.cc
 unittest_osd_types_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_osd_types_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) 
