@@ -1,0 +1,13 @@
+tasks:
+- install.upgrade:
+    mon.b:
+      branch: dumpling
+- ceph.restart:
+    daemons:
+    - mon.b
+    - mon.c
+- workunit:
+    clients:
+      all:
+      - cephtool/test.sh
+      - mon/pool_ops.sh
