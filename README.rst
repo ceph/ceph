@@ -23,13 +23,13 @@ perform actions concurrently or in the background.
 
 Build
 =====
-``teuthology`` is not meant to be distributed as a library, therefore we depend
+Teuthology is not meant to be distributed as a library, therefore we depend
 on the pinned dependencies listed in ``requirements.txt``, the ``setup.py``
 will not list any and will only be there to install the package entry points
 (a.k.a teuthology's scripts).
 
 
-``bootstrap`` for Ubuntu Systems
+Bootstrap for Ubuntu Systems
 --------------------------------
 A ``boostrap`` script is provided for automated builds/execution of teuthology
 itself. You can run it directly **only if you are using Ubuntu**.
@@ -46,12 +46,12 @@ and then run::
     ./bootstrap
 
 
-osx
+MacOS X
 ---
 
 .. note:: These instructions assume you are using `homebrew <http://brew.sh/>`_
 
-As always, create a ``virtualenv`` specific to ``teuthology`` and make sure it
+As always, create a ``virtualenv`` specific to teuthology and make sure it
 is activated before proceeding (location doesn't matter, we use an example
 location)::
 
@@ -80,7 +80,7 @@ Finally, install the teuthology package and ``requirements.txt``::
 
 Generic install
 ---------------
-These instructions should help get ``teuthology`` installed properly in
+These instructions should help get teuthology installed properly in
 a system that is not OSX or Debian-based.
 
 Install all the system dependencies needed:
@@ -166,7 +166,7 @@ You can also pass the ``-v`` option, for more verbose execution. See
 Multiple config files
 ---------------------
 
-You can pass multiple files as arguments to ``teuthology``. Each one
+You can pass multiple files as arguments to teuthology. Each one
 will be read as a config file, and their contents will be merged. This
 allows you to e.g. share definitions of what a "simple 3 node cluster"
 is. The source tree comes with ``roles/3-simple.yaml``, so we could
@@ -286,7 +286,7 @@ to explore the system as is. Adding a top-level::
 
     interactive-on-error: true
 
-as a config file for ``teuthology`` will make that possible. With that
+as a config file for teuthology will make that possible. With that
 option, any *task* that fails, will have the ``interactive`` task
 called after it. This means that before any cleanup happens, you get a
 chance to inspect the system -- both through Teuthology and via extra
