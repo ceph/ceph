@@ -100,6 +100,7 @@ performance in some cases.
 :Required: No
 :Default: ``false``
 
+.. deprecated:: v.65
 
 ``filestore flusher max fds``
 
@@ -108,6 +109,8 @@ performance in some cases.
 :Required: No
 :Default: ``512``
 
+.. deprecated:: v.65
+
 ``filestore sync flush``
 
 :Description: Enables the synchronization flusher. 
@@ -115,6 +118,7 @@ performance in some cases.
 :Required: No
 :Default: ``false``
 
+.. deprecated:: v.65
 
 ``filestore fsync flushes journal data``
 
