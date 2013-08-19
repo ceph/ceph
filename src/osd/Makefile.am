@@ -17,6 +17,7 @@ noinst_LTLIBRARIES += libosd.la
 noinst_HEADERS += \
 	osd/Ager.h \
 	osd/ClassHandler.h \
+	osd/ErasureCodeInterface.h \
 	osd/OSD.h \
 	osd/OSDCap.h \
 	osd/OSDMap.h \
