@@ -170,7 +170,7 @@ you can enable/disable signatures for service messages between the client and
 Ceph, and you can enable/disable signatures for messages between Ceph daemons.
 
 
-``ceph require signatures``
+``cephx require signatures``
 
 :Description: If set to ``true``, Ceph requires signatures on all message 
               traffic between the Ceph Client and the Ceph Storage Cluster, and 
@@ -181,7 +181,7 @@ Ceph, and you can enable/disable signatures for messages between Ceph daemons.
 :Default: ``false``
 
 
-``cepxh cluster require signatures``
+``cephx cluster require signatures``
 
 :Description: If set to ``true``, Ceph requires signatures on all message
               traffic between Ceph daemons comprising the Ceph Storage Cluster. 
@@ -191,7 +191,7 @@ Ceph, and you can enable/disable signatures for messages between Ceph daemons.
 :Default: ``false``
 
 
-``cepxh service require signatures``
+``cephx service require signatures``
 
 :Description: If set to ``true``, Ceph requires signatures on all message
               traffic between Ceph Clients and the Ceph Storage Cluster.
