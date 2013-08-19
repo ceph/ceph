@@ -1254,6 +1254,7 @@ public:
   virtual int update_containers_stats(map<string, RGWBucketEnt>& m);
   virtual int append_async(rgw_obj& obj, size_t size, bufferlist& bl);
 
+  virtual bool need_watch_notify() { return false; }
   virtual int init_watch();
   virtual void finalize_watch();
   virtual int distribute(const string& key, bufferlist& bl);
