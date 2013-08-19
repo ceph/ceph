@@ -80,180 +80,6 @@ class ReplicatedPG : public PG {
 public:  
 
   /*
-    object access states:
-
-    - idle
-      - no in-progress or waiting writes.
-      - read: ok
-      - write: ok.  move to 'delayed' or 'rmw'
-      - rmw: ok.  move to 'rmw'
-	  
-    - delayed
-      - delayed write in progress.  delay write application on primary.
-      - when done, move to 'idle'
-      - read: ok
-      - write: ok
-      - rmw: no.  move to 'delayed-flushing'
-
-    - rmw
-      - rmw cycles in flight.  applied immediately at primary.
-      - when done, move to 'idle'
-      - read: same client ok.  otherwise, move to 'rmw-flushing'
-      - write: same client ok.  otherwise, start write, but also move to 'rmw-flushing'
-      - rmw: same client ok.  otherwise, move to 'rmw-flushing'
-      
-    - delayed-flushing
-      - waiting for delayed writes to flush, then move to 'rmw'
-      - read, write, rmw: wait
-
-    - rmw-flushing
-      - waiting for rmw to flush, then move to 'idle'
-      - read, write, rmw: wait
-    
-   */
-
-  struct AccessMode {
-    typedef enum {
-      IDLE,
-      DELAYED,
-      RMW,
-      DELAYED_FLUSHING,
-      RMW_FLUSHING
-    } state_t;
-    static const char *get_state_name(int s) {
-      switch (s) {
-      case IDLE: return "idle";
-      case DELAYED: return "delayed";
-      case RMW: return "rmw";
-      case DELAYED_FLUSHING: return "delayed-flushing";
-      case RMW_FLUSHING: return "rmw-flushing";
-      default: return "???";
-      }
-    }
-    state_t state;
-    int num_wr;
-    list<OpRequestRef> waiting;
-    list<Cond*> waiting_cond;
-    bool wake;
-
-    AccessMode() : state(IDLE),
-		   num_wr(0), wake(false) {}
-
-    void check_mode() {
-      assert(state != DELAYED_FLUSHING && state != RMW_FLUSHING);
-      if (num_wr == 0)
-	state = IDLE;
-    }
-
-    bool want_delayed() {
-      check_mode();
-      switch (state) {
-      case IDLE:
-	state = DELAYED;
-      case DELAYED:
-	return true;
-      case RMW:
-	state = RMW_FLUSHING;
-	return true;
-      case DELAYED_FLUSHING:
-      case RMW_FLUSHING:
-	return false;
-      default:
-	assert(0);
-      }
-    }
-    bool want_rmw() {
-      check_mode();
-      switch (state) {
-      case IDLE:
-	state = RMW;
-	return true;
-      case DELAYED:
-	state = DELAYED_FLUSHING;
-	return false;
-      case RMW:
-	state = RMW_FLUSHING;
-	return false;
-      case DELAYED_FLUSHING:
-      case RMW_FLUSHING:
-	return false;
-      default:
-	assert(0);
-      }
-    }
-
-    bool try_read(entity_inst_t& c) {
-      check_mode();
-      switch (state) {
-      case IDLE:
-      case DELAYED:
-      case RMW:
-	return true;
-      case DELAYED_FLUSHING:
-      case RMW_FLUSHING:
-	return false;
-      default:
-	assert(0);
-      }
-    }
-    bool try_write(entity_inst_t& c) {
-      check_mode();
-      switch (state) {
-      case IDLE:
-	state = RMW;  /* default to RMW; it's a better all around policy */
-      case DELAYED:
-      case RMW:
-	return true;
-      case DELAYED_FLUSHING:
-      case RMW_FLUSHING:
-	return false;
-      default:
-	assert(0);
-      }
-    }
-    bool try_rmw(entity_inst_t& c) {
-      check_mode();
-      switch (state) {
-      case IDLE:
-	state = RMW;
-	return true;
-      case DELAYED:
-	state = DELAYED_FLUSHING;
-	return false;
-      case RMW:
-	return true;
-      case DELAYED_FLUSHING:
-      case RMW_FLUSHING:
-	return false;
-      default:
-	assert(0);
-      }
-    }
-
-    bool is_delayed_mode() {
-      return state == DELAYED || state == DELAYED_FLUSHING;
-    }
-    bool is_rmw_mode() {
-      return state == RMW || state == RMW_FLUSHING;
-    }
-
-    void write_start() {
-      num_wr++;
-      assert(state == DELAYED || state == RMW);
-    }
-    void write_applied() {
-      assert(num_wr > 0);
-      --num_wr;
-      if (num_wr == 0) {
-	state = IDLE;
-	wake = true;
-      }
-    }
-    void write_commit() {
-    }
-  };
-
-  /*
    * Capture all object state associated with an in-progress read or write.
    */
   struct OpContext {
@@ -402,8 +228,6 @@ public:
 
 
 protected:
-
-  AccessMode mode;
 
   // replica ops
   // [primary|tail]
@@ -1080,15 +904,6 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
       << " wfdisk=" << repop.waitfor_disk;
   if (repop.ctx->op)
     out << " op=" << *(repop.ctx->op->request);
-  out << ")";
-  return out;
-}
-
-inline ostream& operator<<(ostream& out, ReplicatedPG::AccessMode& mode)
-{
-  out << mode.get_state_name(mode.state) << "(wr=" << mode.num_wr;
-  if (mode.wake)
-    out << " WAKE";
   out << ")";
   return out;
 }
