@@ -31,7 +31,7 @@ def get_testdir(ctx):
     if 'test_path' in ctx.teuthology_config:
         return ctx.teuthology_config['test_path']
 
-    basedir = ctx.teuthology_config.get('base_test_dir', '/home/ubuntu/cephtest')
+    basedir = get_testdir_base(ctx)
 
     global global_jobid
     global checked_jobid
@@ -89,7 +89,11 @@ def get_testdir(ctx):
 def get_testdir_base(ctx):
     if 'test_path' in ctx.teuthology_config:
         return ctx.teuthology_config['test_path']
-    return ctx.teuthology_config.get('base_test_dir', '/home/ubuntu/cephtest')
+    owner_user = ctx.owner.split('@')[0]
+    # FIXME this ideally should use os.path.expanduser() in the future, in case
+    # $HOME isn't /home/$USER - e.g. on a Mac. However, since we're executing
+    # this on the server side, it won't work properly.
+    return ctx.teuthology_config.get('base_test_dir', '/home/%s/cephtest' % owner_user)
 
 def get_ceph_binary_url(package=None,
                         branch=None, tag=None, sha1=None, dist=None,

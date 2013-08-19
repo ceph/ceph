@@ -202,6 +202,7 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
             'sudo', 'apt-key', 'list', run.Raw('|'), 'grep', 'Ceph',
         ],
         stdout=StringIO(),
+        check_status=False,
     )
     if r.stdout.getvalue().find('Ceph automated package') == -1:
         # if it doesn't exist, add it
@@ -619,6 +620,7 @@ def _upgrade_deb_packages(ctx, config, remote, debs, branch):
             'sudo', 'apt-key', 'list', run.Raw('|'), 'grep', 'Ceph',
         ],
         stdout=StringIO(),
+        check_status=False,
     )
     if r.stdout.getvalue().find('Ceph automated package') == -1:
         # if it doesn't exist, add it
@@ -669,7 +671,10 @@ def _upgrade_deb_packages(ctx, config, remote, debs, branch):
             check_status=False,
         )
         if r.exitstatus != 0:
-            time.sleep(15)
+            if config.get('wait_for_package'):
+                log.info('Package not there yet, waiting...')
+                time.sleep(15)
+                continue
             raise Exception('failed to fetch package version from %s' %
                             base_url + '/version')
         version = r.stdout.getvalue().strip()

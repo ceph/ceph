@@ -23,14 +23,14 @@ perform actions concurrently or in the background.
 
 Build
 =====
-``teuthology`` is not meant to be distributed as a library, therefore we depend
+Teuthology is not meant to be distributed as a library, therefore we depend
 on the pinned dependencies listed in ``requirements.txt``, the ``setup.py``
 will not list any and will only be there to install the package entry points
 (a.k.a teuthology's scripts).
 
 
-``bootstrap`` for Ubuntu Systems
---------------------------------
+Bootstrap for Ubuntu Systems
+----------------------------
 A ``boostrap`` script is provided for automated builds/execution of teuthology
 itself. You can run it directly **only if you are using Ubuntu**.
 
@@ -39,49 +39,48 @@ library. To make the dependencies easier to get right, we use a
 `virtualenv` to manage them. To get started, ensure you have the
 ``virtualenv`` and ``pip`` programs installed; e.g. on Debian/Ubuntu::
 
-	sudo apt-get install python-dev python-virtualenv python-pip libevent-dev
+    sudo apt-get install python-dev python-virtualenv python-pip libevent-dev
 
 and then run::
 
-	./bootstrap
+    ./bootstrap
 
 
-osx
----
+MacOS X
+-------
 
 .. note:: These instructions assume you are using `homebrew <http://brew.sh/>`_
 
-As always, create a ``virtualenv`` specific to ``teuthology`` and make sure it
+As always, create a ``virtualenv`` specific to teuthology and make sure it
 is activated before proceeding (location doesn't matter, we use an example
 location)::
 
     mkdir ~/.virtualenvs
-    virtualenv ~/.virtualenvs/teuthology
+    virtualenv --system-site-packages ~/.virtualenvs/teuthology
     source ~/.virtualenvs/teuthology/bin/activate
 
 Install the system dependencies::
 
     brew install libvirt mysql libevent
 
-``libvirt`` does not link the python bindings so you need to do this step
-manually::
-
-    $ cd /Library/Python/{pyversion}/site-packages
-    $ sudo ln -s /usr/local/Cellar/libvirt/{version}/lib/python{pyversion}/site-packages/* .
-
 Make sure you are able to import ``libvirt`` without error::
 
     python -c "import libvirt"
 
+If python can't find libvirt yet, you may need to do the following:
+
+    cd /Library/Python/{pyversion}/site-packages
+    sudo ln -s /usr/local/Cellar/libvirt/{version}/lib/python{pyversion}/site-packages/* .
+
 Finally, install the teuthology package and ``requirements.txt``::
 
-    $ python setup.py develop
-    $ pip install -r requirements.txt
+    python setup.py develop
+    pip install -r requirements.txt
 
 
 Generic install
 ---------------
-These instructions should help get ``teuthology`` installed properly in
+These instructions should help get teuthology installed properly in
 a system that is not OSX or Debian-based.
 
 Install all the system dependencies needed:
@@ -102,8 +101,8 @@ the ``python-dev`` package.
 With a dedicated ``virtualenv`` activated, install the teuthology package and
 ``requirements.txt``::
 
-    $ python setup.py develop
-    $ pip install -r requirements.txt
+    python setup.py develop
+    pip install -r requirements.txt
 
 
 Test configuration
@@ -128,19 +127,19 @@ cluster, mounts Ceph via ``ceph-fuse``, and leaves you at an interactive
 Python prompt for manual exploration (and enabling you to SSH in to
 the nodes & use the live cluster ad hoc), might look like this::
 
-	roles:
-	- [mon.0, mds.0, osd.0]
-	- [mon.1, osd.1]
-	- [mon.2, client.0]
-	targets:
-	  ubuntu@host07.example.com: ssh-rsa host07_ssh_key
-	  ubuntu@host08.example.com: ssh-rsa host08_ssh_key
-	  ubuntu@host09.example.com: ssh-rsa host09_ssh_key
-	tasks:
-	- install:
-	- ceph:
-	- ceph-fuse: [client.0]
-	- interactive:
+    roles:
+    - [mon.0, mds.0, osd.0]
+    - [mon.1, osd.1]
+    - [mon.2, client.0]
+    targets:
+        ubuntu@host07.example.com: ssh-rsa host07_ssh_key
+        ubuntu@host08.example.com: ssh-rsa host08_ssh_key
+        ubuntu@host09.example.com: ssh-rsa host09_ssh_key
+    tasks:
+    - install:
+    - ceph:
+    - ceph-fuse: [client.0]
+    - interactive:
 
 The number of entries under ``roles`` and ``targets`` must match.
 
@@ -151,14 +150,14 @@ The ``install`` task needs to precede all other tasks.
 The listed targets need resolvable hostnames. If you do not have a DNS server
 running, you can add entries to ``/etc/hosts``. You also need to be able to SSH
 in to the listed targets without passphrases, and the remote user needs to have
-passphraseless `sudo` access. Note that the ssh keys at the end of the
+passwordless `sudo` access. Note that the ssh keys at the end of the
 ``targets`` entries are the public ssh keys for the hosts.  On Ubuntu, these
 are located at /etc/ssh/ssh_host_rsa_key.pub
 
 If you'd save the above file as ``example.yaml``, you could run
 teuthology on it by saying::
 
-	./virtualenv/bin/teuthology example.yaml
+    ./virtualenv/bin/teuthology example.yaml
 
 You can also pass the ``-v`` option, for more verbose execution. See
 ``teuthology --help`` for more.
@@ -167,14 +166,14 @@ You can also pass the ``-v`` option, for more verbose execution. See
 Multiple config files
 ---------------------
 
-You can pass multiple files as arguments to ``teuthology``. Each one
+You can pass multiple files as arguments to teuthology. Each one
 will be read as a config file, and their contents will be merged. This
 allows you to e.g. share definitions of what a "simple 3 node cluster"
 is. The source tree comes with ``roles/3-simple.yaml``, so we could
 skip the ``roles`` section in the above ``example.yaml`` and then
 run::
 
-	./virtualenv/bin/teuthology roles/3-simple.yaml example.yaml
+    ./virtualenv/bin/teuthology roles/3-simple.yaml example.yaml
 
 
 Reserving target machines
@@ -183,7 +182,7 @@ Reserving target machines
 Before locking machines will work, you must create a .teuthology.yaml
 file in your home directory that sets a lock_server, i.e.::
 
-	lock_server: http://host.example.com:8080/lock
+    lock_server: http://host.example.com:8080/lock
 
 Teuthology automatically locks nodes for you if you specify the
 ``--lock`` option. Without this option, you must specify machines to
@@ -199,16 +198,16 @@ remember which tests you were running on them. This can be done when
 locking or unlocking machines, or as a separate action with the
 ``--update`` option. To lock 3 machines and set a description, run::
 
-	./virtualenv/bin/teuthology-lock --lock-many 3 --desc 'test foo'
+    ./virtualenv/bin/teuthology-lock --lock-many 3 --desc 'test foo'
 
 If machines become unusable for some reason, you can mark them down::
 
-	./virtualenv/bin/teuthology-lock --update --status down machine1 machine2
+    ./virtualenv/bin/teuthology-lock --update --status down machine1 machine2
 
 To see the status of all machines, use the ``--list`` option. This can
 be restricted to particular machines as well::
 
-	./virtualenv/bin/teuthology-lock --list machine1 machine2
+    ./virtualenv/bin/teuthology-lock --list machine1 machine2
 
 
 Tasks
@@ -263,9 +262,9 @@ Some of the more important / commonly used tasks include:
 * ``overrides``: override behavior. Typically, this includes sub-tasks being overridden. Sub-tasks can nest further information.  For example, overrides of install tasks are project specific, so the following section of a yaml file would cause all ceph installation to default into using the cuttlefish branch::
 
     overrides:
-        install:
-            ceph:
-                branch: cuttlefish
+      install:
+        ceph:
+          branch: cuttlefish
 
 * ``workunit``: workunits are a way of grouping tasks and behavior on targets.
 * ``sequential``: group the sub-tasks into a unit where the sub-tasks run sequentially as listed.
@@ -285,9 +284,9 @@ Troubleshooting
 Sometimes when a bug triggers, instead of automatic cleanup, you want
 to explore the system as is. Adding a top-level::
 
-	interactive-on-error: true
+    interactive-on-error: true
 
-as a config file for ``teuthology`` will make that possible. With that
+as a config file for teuthology will make that possible. With that
 option, any *task* that fails, will have the ``interactive`` task
 called after it. This means that before any cleanup happens, you get a
 chance to inspect the system -- both through Teuthology and via extra
@@ -304,18 +303,18 @@ Test Sandbox Directory
 ======================
 
 Teuthology currently places most test files and mount points in a sandbox
-directory, defaulting to ``/tmp/cephtest/{rundir}``.  The ``{rundir}`` is the
+directory, defaulting to ``/home/$USER/cephtest/{rundir}``.  The ``{rundir}`` is the
 name of the run (as given by ``--name``) or if no name is specified,
 ``user@host-timestamp`` is used.  To change the location of the sandbox
 directory, the following options can be specified in
 ``$HOME/.teuthology.yaml``::
 
-	base_test_dir: <directory>
+    base_test_dir: <directory>
 
 The ``base_test_dir`` option will set the base directory to use for the individual
-run directories.  If not specified, this defaults to: ``/tmp/cephtest``.
+run directories.
 
-	test_path: <directory>
+    test_path: <directory>
 
 The ``test_path`` option will set the complete path to use for the test directory.
 This allows for the old behavior, where ``/tmp/cephtest`` was used as the sandbox
@@ -346,34 +345,34 @@ The following needs to be set in ~/.libvirt/libvirt.conf in order to get the
 right virtual machine associations for the Inktank lab::
 
     uri_aliases = [
-       'mira001=qemu+ssh://ubuntu@mira001.front.sepia.ceph.com/system?no_tty',
-       'mira003=qemu+ssh://ubuntu@mira003.front.sepia.ceph.com/system?no_tty',
-       'mira004=qemu+ssh://ubuntu@mira004.front.sepia.ceph.com/system?no_tty',
-       'mira006=qemu+ssh://ubuntu@mira006.front.sepia.ceph.com/system?no_tty',
-       'mira007=qemu+ssh://ubuntu@mira007.front.sepia.ceph.com/system?no_tty',
-       'mira008=qemu+ssh://ubuntu@mira008.front.sepia.ceph.com/system?no_tty',
-       'mira009=qemu+ssh://ubuntu@mira009.front.sepia.ceph.com/system?no_tty',
-       'mira010=qemu+ssh://ubuntu@mira010.front.sepia.ceph.com/system?no_tty',
-       'mira011=qemu+ssh://ubuntu@mira011.front.sepia.ceph.com/system?no_tty',
-       'mira013=qemu+ssh://ubuntu@mira013.front.sepia.ceph.com/system?no_tty',
-       'mira014=qemu+ssh://ubuntu@mira014.front.sepia.ceph.com/system?no_tty',
-       'mira015=qemu+ssh://ubuntu@mira015.front.sepia.ceph.com/system?no_tty',
-       'mira017=qemu+ssh://ubuntu@mira017.front.sepia.ceph.com/system?no_tty',
-       'mira018=qemu+ssh://ubuntu@mira018.front.sepia.ceph.com/system?no_tty',
-       'mira020=qemu+ssh://ubuntu@mira020.front.sepia.ceph.com/system?no_tty',
-       'vercoi01=qemu+ssh://ubuntu@vercoi01.front.sepia.ceph.com/system?no_tty',
-       'vercoi02=qemu+ssh://ubuntu@vercoi02.front.sepia.ceph.com/system?no_tty',
-       'vercoi03=qemu+ssh://ubuntu@vercoi03.front.sepia.ceph.com/system?no_tty',
-       'vercoi04=qemu+ssh://ubuntu@vercoi04.front.sepia.ceph.com/system?no_tty',
-       'vercoi05=qemu+ssh://ubuntu@vercoi05.front.sepia.ceph.com/system?no_tty',
-       'vercoi06=qemu+ssh://ubuntu@vercoi06.front.sepia.ceph.com/system?no_tty',
-       'vercoi07=qemu+ssh://ubuntu@vercoi07.front.sepia.ceph.com/system?no_tty',
-       'vercoi08=qemu+ssh://ubuntu@vercoi08.front.sepia.ceph.com/system?no_tty',
-       'senta01=qemu+ssh://ubuntu@senta01.front.sepia.ceph.com/system?no_tty',
-       'senta02=qemu+ssh://ubuntu@senta02.front.sepia.ceph.com/system?no_tty',
-       'senta03=qemu+ssh://ubuntu@senta03.front.sepia.ceph.com/system?no_tty',
-       'senta04=qemu+ssh://ubuntu@senta04.front.sepia.ceph.com/system?no_tty',
-       ]
+        'mira001=qemu+ssh://ubuntu@mira001.front.sepia.ceph.com/system?no_tty',
+        'mira003=qemu+ssh://ubuntu@mira003.front.sepia.ceph.com/system?no_tty',
+        'mira004=qemu+ssh://ubuntu@mira004.front.sepia.ceph.com/system?no_tty',
+        'mira006=qemu+ssh://ubuntu@mira006.front.sepia.ceph.com/system?no_tty',
+        'mira007=qemu+ssh://ubuntu@mira007.front.sepia.ceph.com/system?no_tty',
+        'mira008=qemu+ssh://ubuntu@mira008.front.sepia.ceph.com/system?no_tty',
+        'mira009=qemu+ssh://ubuntu@mira009.front.sepia.ceph.com/system?no_tty',
+        'mira010=qemu+ssh://ubuntu@mira010.front.sepia.ceph.com/system?no_tty',
+        'mira011=qemu+ssh://ubuntu@mira011.front.sepia.ceph.com/system?no_tty',
+        'mira013=qemu+ssh://ubuntu@mira013.front.sepia.ceph.com/system?no_tty',
+        'mira014=qemu+ssh://ubuntu@mira014.front.sepia.ceph.com/system?no_tty',
+        'mira015=qemu+ssh://ubuntu@mira015.front.sepia.ceph.com/system?no_tty',
+        'mira017=qemu+ssh://ubuntu@mira017.front.sepia.ceph.com/system?no_tty',
+        'mira018=qemu+ssh://ubuntu@mira018.front.sepia.ceph.com/system?no_tty',
+        'mira020=qemu+ssh://ubuntu@mira020.front.sepia.ceph.com/system?no_tty',
+        'vercoi01=qemu+ssh://ubuntu@vercoi01.front.sepia.ceph.com/system?no_tty',
+        'vercoi02=qemu+ssh://ubuntu@vercoi02.front.sepia.ceph.com/system?no_tty',
+        'vercoi03=qemu+ssh://ubuntu@vercoi03.front.sepia.ceph.com/system?no_tty',
+        'vercoi04=qemu+ssh://ubuntu@vercoi04.front.sepia.ceph.com/system?no_tty',
+        'vercoi05=qemu+ssh://ubuntu@vercoi05.front.sepia.ceph.com/system?no_tty',
+        'vercoi06=qemu+ssh://ubuntu@vercoi06.front.sepia.ceph.com/system?no_tty',
+        'vercoi07=qemu+ssh://ubuntu@vercoi07.front.sepia.ceph.com/system?no_tty',
+        'vercoi08=qemu+ssh://ubuntu@vercoi08.front.sepia.ceph.com/system?no_tty',
+        'senta01=qemu+ssh://ubuntu@senta01.front.sepia.ceph.com/system?no_tty',
+        'senta02=qemu+ssh://ubuntu@senta02.front.sepia.ceph.com/system?no_tty',
+        'senta03=qemu+ssh://ubuntu@senta03.front.sepia.ceph.com/system?no_tty',
+        'senta04=qemu+ssh://ubuntu@senta04.front.sepia.ceph.com/system?no_tty',
+    ]
 
 DOWNBURST:
 ----------
@@ -442,7 +441,7 @@ a set of tests based off the data in the directory for the suite.
 
 To run a suite, enter::
 
-   ./schedule_suite.sh <suite> <ceph> <kernel> <email> <flavor> <teuth> <mtype> <template>
+    ./schedule_suite.sh <suite> <ceph> <kernel> <email> <flavor> <teuth> <mtype> <template>
 
 where:
 
@@ -474,15 +473,15 @@ To start these tasks:
 * start up some number of worker threads (as many as machines you are testing
 with, there are 60 running for the default queue)::
 
-      /home/virtualenv/bin/python
-      /var/lib/teuthworker/xxx/virtualenv/bin/teuthworker
-      /var/lib/teuthworker/archive --tube xxx
-      --log-dir /var/lib/teuthworker/archive/worker_logs
+    /home/virtualenv/bin/python
+    /var/lib/teuthworker/xxx/virtualenv/bin/teuthworker
+    /var/lib/teuthworker/archive --tube xxx
+    --log-dir /var/lib/teuthworker/archive/worker_logs
 
-      Note: The threads on teuthology.front.sepia.ceph.com are started via
-      ~/teuthworker/start.sh.  You can use that file as a model for your
-      own threads, or add to this file if you want your threads to be
-      more permanent.
+    Note: The threads on teuthology.front.sepia.ceph.com are started via
+    ~/teuthworker/start.sh.  You can use that file as a model for your
+    own threads, or add to this file if you want your threads to be
+    more permanent.
 
 Once the suite completes, an email message is sent to the users specified, and
 a large amount of information is left on ``teuthology.front.sepia.ceph.com`` in
