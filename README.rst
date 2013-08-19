@@ -56,27 +56,26 @@ is activated before proceeding (location doesn't matter, we use an example
 location)::
 
     mkdir ~/.virtualenvs
-    virtualenv ~/.virtualenvs/teuthology
+    virtualenv --system-site-packages ~/.virtualenvs/teuthology
     source ~/.virtualenvs/teuthology/bin/activate
 
 Install the system dependencies::
 
     brew install libvirt mysql libevent
 
-``libvirt`` does not link the python bindings so you need to do this step
-manually::
-
-    $ cd /Library/Python/{pyversion}/site-packages
-    $ sudo ln -s /usr/local/Cellar/libvirt/{version}/lib/python{pyversion}/site-packages/* .
-
 Make sure you are able to import ``libvirt`` without error::
 
     python -c "import libvirt"
 
+If python can't find libvirt yet, you may need to do the following:
+
+    cd /Library/Python/{pyversion}/site-packages
+    sudo ln -s /usr/local/Cellar/libvirt/{version}/lib/python{pyversion}/site-packages/* .
+
 Finally, install the teuthology package and ``requirements.txt``::
 
-    $ python setup.py develop
-    $ pip install -r requirements.txt
+    python setup.py develop
+    pip install -r requirements.txt
 
 
 Generic install
