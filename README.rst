@@ -30,7 +30,7 @@ will not list any and will only be there to install the package entry points
 
 
 Bootstrap for Ubuntu Systems
---------------------------------
+----------------------------
 A ``boostrap`` script is provided for automated builds/execution of teuthology
 itself. You can run it directly **only if you are using Ubuntu**.
 
@@ -47,7 +47,7 @@ and then run::
 
 
 MacOS X
----
+-------
 
 .. note:: These instructions assume you are using `homebrew <http://brew.sh/>`_
 
