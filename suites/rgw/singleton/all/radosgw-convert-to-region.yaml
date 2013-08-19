@@ -27,6 +27,7 @@ tasks:
           rgw zone: r1z1
           rgw region root pool: .rgw
           rgw zone root pool: .rgw
+          rgw domain root: .rgw
           rgw gc pool: .rgw.gc
           rgw user uid pool: .users.uid
           rgw user keys pool: .users
