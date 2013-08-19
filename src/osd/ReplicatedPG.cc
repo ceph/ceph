@@ -693,8 +693,6 @@ void ReplicatedPG::do_op(OpRequestRef op)
     return;
   }
 
-  entity_inst_t client = m->get_source_inst();
-
   ObjectContext *obc;
   bool can_create = op->may_write();
   snapid_t snapid;
@@ -747,32 +745,11 @@ void ReplicatedPG::do_op(OpRequestRef op)
   dout(25) << __func__ << ": object " << obc->obs.oi.soid
 	   << " has oi of " << obc->obs.oi << dendl;
   
-  bool ok;
-  dout(10) << "do_op mode is " << mode << dendl;
-  assert(!mode.wake);   // we should never have woken waiters here.
-  if ((op->may_read() && op->may_write()) ||
-      (m->get_flags() & CEPH_OSD_FLAG_RWORDERED))
-    ok = mode.try_rmw(client);
-  else if (op->may_write())
-    ok = mode.try_write(client);
-  else if (op->may_read())
-    ok = mode.try_read(client);
-  else
-    assert(0);
-  if (!ok) {
-    dout(10) << "do_op waiting on mode " << mode << dendl;
-    mode.waiting.push_back(op);
-    op->mark_delayed("waiting on pg mode");
-    return;
-  }
-
   if (!op->may_write() && !obc->obs.exists) {
     osd->reply_op_error(op, -ENOENT);
     put_object_context(obc);
     return;
   }
-
-  dout(10) << "do_op mode now " << mode << dendl;
 
   // are writes blocked by another object?
   if (obc->blocked_by) {
@@ -1692,7 +1669,6 @@ void ReplicatedPG::snap_trimmer()
   dout(10) << "snap_trimmer entry" << dendl;
   if (is_primary()) {
     entity_inst_t nobody;
-    assert(mode.try_write(nobody));
     if (scrubber.active) {
       dout(10) << " scrubbing, will requeue snap_trimmer after" << dendl;
       scrubber.queue_snap_trim = true;
@@ -4010,10 +3986,6 @@ void ReplicatedPG::op_applied(RepGather *repop)
     repop->ctx->snapset_obc = 0;
   }
 
-  dout(10) << "op_applied mode was " << mode << dendl;
-  mode.write_applied();
-  dout(10) << "op_applied mode now " << mode << " (finish_write)" << dendl;
-
   put_object_context(repop->obc);
   put_object_contexts(repop->src_obc);
   repop->obc = 0;
@@ -4104,10 +4076,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
     return;
 
   // apply?
-  if (!repop->applied && !repop->applying &&
-      ((mode.is_delayed_mode() &&
-	repop->waitfor_ack.size() == 1) ||  // all other replicas have acked
-       mode.is_rmw_mode()))
+  if (!repop->applied && !repop->applying)
     apply_repop(repop);
   
   if (m) {
@@ -4304,10 +4273,6 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContext *
     dout(10) << "new_repop rep_tid " << rep_tid << " (no op)" << dendl;
 
   RepGather *repop = new RepGather(ctx, obc, rep_tid, info.last_complete);
-
-  dout(10) << "new_repop mode was " << mode << dendl;
-  mode.write_start();
-  dout(10) << "new_repop mode now " << mode << " (start_write)" << dendl;
 
   repop->start = ceph_clock_now(g_ceph_context);
 
@@ -4523,9 +4488,6 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
 
   entity_inst_t nobody;
 
-  /* Currently, mode.try_write always returns true.  If this changes, we will
-   * need to delay the repop accordingly */
-  assert(mode.try_write(nobody));
   RepGather *repop = new_repop(ctx, obc, rep_tid);
 
   ObjectStore::Transaction *t = &ctx->op_t;
@@ -4768,13 +4730,6 @@ void ReplicatedPG::put_object_context(ObjectContext *obc)
 {
   dout(10) << "put_object_context " << obc << " " << obc->obs.oi.soid << " "
 	   << obc->ref << " -> " << (obc->ref-1) << dendl;
-
-  if (mode.wake) {
-    requeue_ops(mode.waiting);
-    for (list<Cond*>::iterator p = mode.waiting_cond.begin(); p != mode.waiting_cond.end(); ++p)
-      (*p)->Signal();
-    mode.wake = false;
-  }
 
   --obc->ref;
   if (obc->ref == 0) {
