@@ -88,6 +88,9 @@ def get_testdir_base(ctx):
     if 'test_path' in ctx.teuthology_config:
         return ctx.teuthology_config['test_path']
     owner_user = ctx.owner.split('@')[0]
+    # FIXME this ideally should use os.path.expanduser() in the future, in case
+    # $HOME isn't /home/$USER - e.g. on a Mac. However, since we're executing
+    # this on the server side, it won't work properly.
     return ctx.teuthology_config.get('base_test_dir', '/home/%s/cephtest' % owner_user)
 
 def get_ceph_binary_url(package=None,
