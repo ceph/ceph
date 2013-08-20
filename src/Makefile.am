@@ -1534,6 +1534,7 @@ libcommon_files = \
 	common/Finisher.cc \
 	common/environment.cc\
 	common/sctp_crc32.c\
+	common/crc32c.cc\
 	common/crc32c-intel.c\
 	common/assert.cc \
         common/run_cmd.cc \
@@ -1885,6 +1886,7 @@ noinst_HEADERS = \
 	common/utf8.h\
 	common/mime.h\
 	common/pick_address.h\
+	common/sctp_crc32.h\
 	common/secret.h\
 	common/strtol.h\
 	common/static_assert.h\
