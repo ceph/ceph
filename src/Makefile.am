@@ -1536,6 +1536,7 @@ libcommon_files = \
 	common/sctp_crc32.c\
 	common/crc32c.cc\
 	common/crc32c_intel_baseline.c\
+	common/crc32c_intel_detect.c\
 	common/assert.cc \
         common/run_cmd.cc \
 	common/WorkQueue.cc \
@@ -1883,6 +1884,7 @@ noinst_HEADERS = \
 	common/ceph_crypto_cms.h\
 	common/ceph_json.h\
 	common/crc32c_intel_baseline.h\
+	common/crc32c_intel_detect.h\
 	common/lru_map.h\
 	common/utf8.h\
 	common/mime.h\
