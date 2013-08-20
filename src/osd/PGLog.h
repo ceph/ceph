@@ -21,6 +21,7 @@
 #include "include/assert.h" 
 #include "osd_types.h"
 #include "os/ObjectStore.h"
+#include "common/ceph_context.h"
 #include <list>
 using namespace std;
 
@@ -159,6 +160,7 @@ protected:
   eversion_t dirty_to;
   eversion_t dirty_from;
   bool dirty_divergent_priors;
+  CephContext *cct;
 
   bool is_dirty() const {
     return !touched_log ||
@@ -178,6 +180,13 @@ protected:
     divergent_priors.insert(make_pair(version, obj));
     dirty_divergent_priors = true;
   }
+public:
+  void mark_log_for_rewrite() {
+    mark_dirty_to(eversion_t::max());
+    mark_dirty_from(eversion_t());
+    touched_log = false;
+  }
+protected:
 
   /// DEBUG
   set<string> log_keys_debug;
@@ -197,6 +206,10 @@ protected:
   }
   void check() {
     assert(log.log.size() == log_keys_debug.size());
+    if (cct &&
+        !(cct->_conf->osd_debug_pg_log_writeout)) {
+      return;
+    }
     for (list<pg_log_entry_t>::iterator i = log.log.begin();
 	 i != log.log.end();
 	 ++i) {
@@ -212,9 +225,9 @@ protected:
     check();
   }
 public:
-  PGLog() :
+  PGLog(CephContext *cct = 0) :
     touched_log(false), dirty_from(eversion_t::max()),
-    dirty_divergent_priors(false) {}
+    dirty_divergent_priors(false), cct(cct) {}
 
 
   void reset_backfill();
