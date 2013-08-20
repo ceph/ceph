@@ -31,12 +31,6 @@ def test_rados_init():
     with Rados(conffile='', name='client.admin'):
         pass
 
-def test_rados_parse_conf():
-    with Rados(conffile='', rados_id='admin') as rados:
-        rados.parse_env()
-        rados.parse_env('FOO_DOES_NOT_EXIST_BLAHBLAH')
-        pass
-
 def test_ioctx_context_manager():
     with Rados(conffile='', rados_id='admin') as conn:
         with conn.open_ioctx('data') as ioctx:
@@ -46,6 +40,8 @@ class TestRados(object):
 
     def setUp(self):
         self.rados = Rados(conffile='')
+        self.rados.conf_parse_env('FOO_DOES_NOT_EXIST_BLAHBLAH')
+        self.rados.conf_parse_env()
         self.rados.connect()
 
     def tearDown(self):
