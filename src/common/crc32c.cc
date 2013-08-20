@@ -5,15 +5,21 @@
 
 #include "common/sctp_crc32.h"
 #include "common/crc32c_intel_baseline.h"
+#include "common/crc32c_intel_detect.h"
+#include "common/crc32c_intel_fast.h"
 
 /*
  * choose best implementation based on the CPU architecture.
  */
 ceph_crc32c_func_t ceph_choose_crc32(void)
 {
-  /* default */
-  //return ceph_crc32c_sctp;
-  return ceph_crc32c_intel_baseline;
+  if (ceph_detect_intel_sse42()) {
+    return ceph_crc32c_intel_fast;
+  }
+
+  // default
+  return ceph_crc32c_sctp;
+  //return ceph_crc32c_intel_baseline;
 }
 
 /*

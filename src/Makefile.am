@@ -1475,9 +1475,17 @@ clean-local:
 
 # libs
 
+CCAS = ./yasm-wrapper
+AM_CCASFLAGS = -f elf64
+
+libcrc_la_SOURCES = common/crc32c_intel_fast_asm.S
+libcrc_la_LIBTOOLFLAGS = --tag=CC
+noinst_LTLIBRARIES += libcrc.la
+
 libcommon_la_SOURCES = $(libcommon_files)
 libcommon_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libcommon_la_CXXFLAGS= ${AM_CXXFLAGS}
+libcommon_la_LIBADD = libcrc.la
 libcommon_la_LDFLAGS = -lrt
 noinst_LTLIBRARIES += libcommon.la
 
@@ -1537,6 +1545,7 @@ libcommon_files = \
 	common/crc32c.cc\
 	common/crc32c_intel_baseline.c\
 	common/crc32c_intel_detect.c\
+	common/crc32c_intel_fast.c \
 	common/assert.cc \
         common/run_cmd.cc \
 	common/WorkQueue.cc \
@@ -1885,6 +1894,7 @@ noinst_HEADERS = \
 	common/ceph_json.h\
 	common/crc32c_intel_baseline.h\
 	common/crc32c_intel_detect.h\
+	common/crc32c_intel_fast.h\
 	common/lru_map.h\
 	common/utf8.h\
 	common/mime.h\
