@@ -832,6 +832,14 @@ unittest_erasure_code_example_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 unittest_erasure_code_example_LDADD = libosd.a $(LIBGLOBAL_LDA) libcommon.la ${UNITTEST_LDADD} 
 check_PROGRAMS += unittest_erasure_code_example
 
+unittest_erasure_code_plugin_SOURCES = test/osd/TestErasureCodePlugin.cc 
+unittest_erasure_code_plugin_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_erasure_code_plugin_LDADD = libosd.a $(LIBGLOBAL_LDA) libcommon.la ${UNITTEST_LDADD} 
+if LINUX
+unittest_erasure_code_plugin_LDADD += -ldl
+endif
+check_PROGRAMS += unittest_erasure_code_plugin
+
 unittest_osd_types_SOURCES = test/test_osd_types.cc
 unittest_osd_types_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 unittest_osd_types_LDADD = $(LIBGLOBAL_LDA) libcommon.la ${UNITTEST_LDADD} 
@@ -1705,6 +1713,7 @@ libosd_a_SOURCES = \
 	osd/PG.cc \
 	osd/PGLog.cc \
 	osd/ReplicatedPG.cc \
+	osd/ErasureCodePlugin.cc \
 	osd/Ager.cc \
 	osd/OSD.cc \
 	osd/OSDCap.cc \
@@ -2219,6 +2228,7 @@ noinst_HEADERS = \
 	osd/ClassHandler.h\
 	osd/ErasureCodeExample.h\
 	osd/ErasureCodeInterface.h\
+	osd/ErasureCodePlugin.h\
         osd/OSD.h\
         osd/OSDCap.h\
         osd/OSDMap.h\
