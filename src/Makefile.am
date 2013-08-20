@@ -20,7 +20,8 @@ EXTRA_DIST = \
 	libs3/mswin \
 	libs3/src \
 	libs3/test \
-	unittest_bufferlist.sh
+	unittest_bufferlist.sh \
+	yasm-wrapper
 
 CLEANFILES =
 bin_PROGRAMS =
