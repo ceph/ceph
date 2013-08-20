@@ -30,6 +30,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left, loff_t o
   // split off right
   ObjectCacher::BufferHead *right = new BufferHead(this);
   right->last_write_tid = left->last_write_tid;
+  right->last_read_tid = left->last_read_tid;
   right->set_state(left->get_state());
   right->snapc = left->snapc;
 
@@ -112,6 +113,10 @@ void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
 {
   assert(oc->lock.is_locked());
   ldout(oc->cct, 10) << "try_merge_bh " << *bh << dendl;
+
+  // do not merge rx buffers; last_read_tid may not match
+  if (bh->is_rx())
+    return;
 
   // to the left?
   map<loff_t,BufferHead*>::iterator p = data.find(bh->start());
@@ -500,6 +505,7 @@ ObjectCacher::ObjectCacher(CephContext *cct_, string name, WritebackHandler& wb,
     max_size(max_bytes), max_objects(max_objects),
     block_writes_upfront(block_writes_upfront),
     flush_set_callback(flush_callback), flush_set_callback_arg(flush_callback_arg),
+    last_read_tid(0),
     flusher_stop(false), flusher_thread(this), finisher(cct),
     stat_clean(0), stat_zero(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0),
     stat_error(0), stat_dirty_waiting(0), reads_outstanding(0)
@@ -603,25 +609,29 @@ void ObjectCacher::bh_read(BufferHead *bh)
 		<< reads_outstanding << dendl;
 
   mark_rx(bh);
+  bh->last_read_tid = ++last_read_tid;
 
   // finisher
-  C_ReadFinish *onfinish = new C_ReadFinish(this, bh->ob,
+  C_ReadFinish *onfinish = new C_ReadFinish(this, bh->ob, bh->last_read_tid,
 					    bh->start(), bh->length());
   // go
   writeback_handler.read(bh->ob->get_oid(), bh->ob->get_oloc(),
 			 bh->start(), bh->length(), bh->ob->get_snap(),
 			 &onfinish->bl, bh->ob->truncate_size, bh->ob->truncate_seq,
 			 onfinish);
+
   ++reads_outstanding;
 }
 
-void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
-				  uint64_t length, bufferlist &bl, int r,
+void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, tid_t tid,
+				  loff_t start, uint64_t length,
+				  bufferlist &bl, int r,
 				  bool trust_enoent)
 {
   assert(lock.is_locked());
   ldout(cct, 7) << "bh_read_finish " 
 		<< oid
+		<< " tid " << tid
 		<< " " << start << "~" << length
 		<< " (bl is " << bl.length() << ")"
 		<< " returned " << r
@@ -711,7 +721,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
 
       BufferHead *bh = p->second;
       ldout(cct, 20) << "checking bh " << *bh << dendl;
-      
+
       // finishers?
       for (map<loff_t, list<Context*> >::iterator it = bh->waitfor_read.begin();
            it != bh->waitfor_read.end();
@@ -720,9 +730,9 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
       bh->waitfor_read.clear();
 
       if (bh->start() > opos) {
-        ldout(cct, 1) << "weirdness: gap when applying read results, " 
-                << opos << "~" << bh->start() - opos 
-                << dendl;
+        ldout(cct, 1) << "bh_read_finish skipping gap "
+		      << opos << "~" << bh->start() - opos
+		      << dendl;
         opos = bh->start();
         continue;
       }
@@ -731,6 +741,13 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, loff_t start,
         ldout(cct, 10) << "bh_read_finish skipping non-rx " << *bh << dendl;
         opos = bh->end();
         continue;
+      }
+
+      if (bh->last_read_tid != tid) {
+	ldout(cct, 10) << "bh_read_finish bh->last_read_tid " << bh->last_read_tid
+		       << " != tid " << tid << ", skipping" << dendl;
+	opos = bh->end();
+	continue;
       }
 
       assert(opos >= bh->start());
