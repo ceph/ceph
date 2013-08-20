@@ -814,9 +814,9 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
     f->dump_unsigned("version", version);
     f->dump_unsigned("num_pgs", pg_stat.size());
     f->dump_unsigned("data_bytes", pg_sum.stats.sum.num_bytes);
-    f->dump_unsigned("bytes_used", osd_sum.kb_used * 4096ull);
-    f->dump_unsigned("bytes_avail", osd_sum.kb_avail * 4096ull);
-    f->dump_unsigned("bytes_total", osd_sum.kb * 4096ull);
+    f->dump_unsigned("bytes_used", osd_sum.kb_used * 1024ull);
+    f->dump_unsigned("bytes_avail", osd_sum.kb_avail * 1024ull);
+    f->dump_unsigned("bytes_total", osd_sum.kb * 1024ull);
   } else {
     string states = ss.str();
     *out << "v" << version << ": "
