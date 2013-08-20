@@ -52,10 +52,10 @@ public:
   bool     is_onnvram() const { return get_flags() & CEPH_OSD_FLAG_ONNVRAM; }
   
   int get_result() const { return result; }
-  eversion_t get_version() { return reassert_version; }
+  eversion_t get_replay_version() { return reassert_version; }
   
   void set_result(int r) { result = r; }
-  void set_version(eversion_t v) { reassert_version = v; }
+  void set_replay_version(eversion_t v) { reassert_version = v; }
 
   void add_flags(int f) { flags |= f; }
 
