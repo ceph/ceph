@@ -42,6 +42,7 @@ BuildRequires:  libcurl-devel
 BuildRequires:  libxml2-devel
 BuildRequires:  libuuid-devel
 BuildRequires:  leveldb-devel > 1.2
+BuildRequires:  yasm
 %if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
 BuildRequires:  snappy-devel
 %endif
