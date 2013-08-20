@@ -116,7 +116,7 @@ public:
     utime_t mtime;
     SnapContext snapc;           // writer snap context
     eversion_t at_version;       // pg's current version pointer
-    eversion_t reply_version;    // the version that we report the client (depends on the op)
+    version_t reply_user_version;    // the version that we report the client (depends on the op)
 
     int current_osd_subop_num;
 
