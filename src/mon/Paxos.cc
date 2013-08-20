@@ -375,6 +375,8 @@ void Paxos::_sanity_check_store()
 // leader
 void Paxos::handle_last(MMonPaxos *last)
 {
+  bool need_refresh = false;
+
   dout(10) << "handle_last " << *last << dendl;
 
   if (!mon->is_leader()) {
@@ -401,7 +403,7 @@ void Paxos::handle_last(MMonPaxos *last)
   assert(g_conf->paxos_kill_at != 1);
 
   // store any committed values if any are specified in the message
-  store_state(last);
+  need_refresh = store_state(last);
 
   assert(g_conf->paxos_kill_at != 2);
 
@@ -477,6 +479,7 @@ void Paxos::handle_last(MMonPaxos *last)
 	dout(10) << "that's everyone.  active!" << dendl;
 	extend_lease();
 
+	need_refresh = false;
 	if (do_refresh()) {
 	  finish_round();
 
@@ -490,6 +493,9 @@ void Paxos::handle_last(MMonPaxos *last)
     // no, this is an old message, discard
     dout(10) << "old pn, ignoring" << dendl;
   }
+
+  if (need_refresh)
+    do_refresh();
 
   last->put();
 }
