@@ -700,6 +700,14 @@ extern "C" int ceph_fsync(class ceph_mount_info *cmount, int fd, int syncdataonl
   return cmount->get_client()->fsync(fd, syncdataonly);
 }
 
+extern "C" int ceph_fallocate(class ceph_mount_info *cmount, int fd, int mode,
+	                      loff_t offset, loff_t length)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->fallocate(fd, mode, offset, length);
+}
+
 extern "C" int ceph_fstat(class ceph_mount_info *cmount, int fd, struct stat *stbuf)
 {
   if (!cmount->is_mounted())
