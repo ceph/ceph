@@ -23,7 +23,7 @@
 #include "include/object.h"
 
 /**
- * CollectionIndex provides an interface for manipulating indexed colelctions
+ * CollectionIndex provides an interface for manipulating indexed collections
  */
 class CollectionIndex {
 protected:
