@@ -1445,8 +1445,8 @@ void Objecter::send_op(Op *op)
   m->set_mtime(op->mtime);
   m->set_retry_attempt(op->attempts++);
 
-  if (op->version != eversion_t())
-    m->set_version(op->version);  // we're replaying this op!
+  if (op->replay_version != eversion_t())
+    m->set_version(op->replay_version);  // we're replaying this op!
 
   if (op->priority)
     m->set_priority(op->priority);
@@ -1592,7 +1592,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   // ack|commit -> ack
   if (op->onack) {
     ldout(cct, 15) << "handle_osd_op_reply ack" << dendl;
-    op->version = m->get_replay_version();
+    op->replay_version = m->get_replay_version();
     onack = op->onack;
     op->onack = 0;  // only do callback once
     num_unacked--;
