@@ -793,17 +793,11 @@ void Paxos::handle_commit(MMonPaxos *commit)
 
   store_state(commit);
 
-  commit->put();
-
-  bool need_bootstrap = false;
-  mon->refresh_from_paxos(&need_bootstrap);
-  if (need_bootstrap) {
-    dout(10) << " doing requested bootstrap" << dendl;
-    mon->bootstrap();
-    return;
+  if (do_refresh()) {
+    finish_contexts(g_ceph_context, waiting_for_commit);
   }
 
-  finish_contexts(g_ceph_context, waiting_for_commit);
+  commit->put();
 }
 
 void Paxos::extend_lease()
