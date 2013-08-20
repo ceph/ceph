@@ -513,12 +513,17 @@ void PGMap::dump_basic(Formatter *f) const
   pg_sum.dump(f);
   f->close_section();
 
-  f->open_object_section("pg_stats_delta");
-  pg_sum_delta.dump(f);
-  f->close_section();
-  
   f->open_object_section("osd_stats_sum");
   osd_sum.dump(f);
+  f->close_section();
+
+  dump_delta(f);
+}
+
+void PGMap::dump_delta(Formatter *f) const
+{
+  f->open_object_section("pg_stats_delta");
+  pg_sum_delta.dump(f);
   f->close_section();
 }
 
