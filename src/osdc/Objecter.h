@@ -768,7 +768,7 @@ public:
     Context *onack, *oncommit;
 
     tid_t tid;
-    eversion_t version;        // for op replay
+    eversion_t replay_version;        // for op replay
     int attempts;
 
     bool paused;
