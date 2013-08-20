@@ -9,17 +9,6 @@ An erasure coded pool only supports full writes, appends and read. It
 does not support snapshots or clone. An ErasureCodedPGBackend is derived
 from PGBackend.
 
-
-Glossary
---------
-
-* Stripe
-
-* Data chunk and parity chunk
-
-* Shard
-
-
 Reading and writing encoded chunks from and to OSDs
 ---------------------------------------------------
 An erasure coded pool stores each object as M+K chunks. It is divided
@@ -352,7 +341,7 @@ If *OSD 1* goes down while *S2D2* is still in flight, the payload is partially a
 
 The log entry *1,2* found on *OSD 3* is divergent from the new authoritative log provided by *OSD 4* : it is discarded and the file containing the *S2P1* chunk is truncated to the nearest multiple of the stripe size.
 
-Erasure code library
+`Erasure code library <http://tracker.ceph.com/issues/5878>`_
 --------------------
 
 Using `Reed-Solomon <https://en.wikipedia.org/wiki/Reed_Solomon>`_,
@@ -385,83 +374,57 @@ the encoding functions: smaller buffers will mean more calls and more
 overhead.
 
 Although Reed-Solomon is provided as a default, Ceph uses it via an
-abastract API designed to allow each pool to chose the plugin that
+abstract API designed to allow each pool to choose the plugin that
 implements it.
 ::
-  ceph osd pool set-erasure-code <pool> plugin-dir <dir>
-  ceph osd pool set-erasure-code <pool> plugin <plugin>
+  ceph osd pool create <pool> \
+     erasure-code-directory=<dir> \
+     erasure-code-plugin=<plugin>
 
 The *<plugin>* is dynamically loaded from *<dir>* (defaults to
-*/usr/lib/ceph/erasure-code-plugins* ) and expected to implement the
-*create_erasure_code_context* function
+*/usr/lib/ceph/erasure-code* ) and expected to implement the
+*void __erasure_code_init(char *plugin_name)* function 
+which is responsible for registering an object derived from
+*ErasureCodePlugin* in the registry singleton :
+::
+  registry.plugins[plugin_name] = new ErasureCodePluginExample();
 
-* erasure_coding_t \*create_erasure_code_context(g_conf)
+The *ErasureCodePlugin* derived object must provide a factory method
+from which the concrete implementation of the *ErasureCodeInterface*
+object can be generated:
+::
+  virtual int factory(ErasureCodeInterfaceRef *erasure_code,
+                      const map<std::string,std::string> &parameters) {
+    *erasure_code = ErasureCodeInterfaceRef(new ErasureCodeExample(parameters));
+    return 0;
+  }
 
-  return an object configured to encode and decode according to a
-  given algorithm and a given set of parameters as specified in
-  g_conf. Parameters must be prefixed with erasure-code to avoid name
-  collisions
-  ::
-   ceph osd pool set-erasure-code <pool> m 10
-   ceph osd pool set-erasure-code <pool> k 3
-   ceph osd pool set-erasure-code <pool> algorithm Reed-Solomon
+The *parameters* is the list of *key=value* pairs that were set when the pool
+was created. Each *key* must be prefixed with erasure-code to avoid name collisions
+::
+  ceph osd pool create <pool> \
+     erasure-code-directory=<dir>         \ # mandatory
+     erasure-code-plugin=jerasure         \ # mandatory
+     erasure-code-m=10                    \ # optional and plugin dependant
+     erasure-code-k=3                     \ # optional and plugin dependant
+     erasure-code-algorithm=Reed-Solomon  \ # optional and plugin dependant
 
 Erasure code library abstract API
 ---------------------------------
 
-The following are methods of the abstract class erasure_coding_t.
-
-* set<int> minimum_to_decode(const set<int> &want_to_read, const set<int> &available_chunks);
-
-  returns the smallest subset of *available_chunks* that needs to be retrieved in order
-  to successfully decode *want_to_read* chunks.
-
-* set<int> minimum_to_decode_with_cost(const set<int> &want_to_read, const map<int, int> &available)
-
-  returns the minimum cost set required to read the specified
-  chunks given a mapping of available chunks to costs.  The costs might
-  allow to consider the difference between reading local chunks vs
-  remote chunks.  
-
-* map<int, buffer> encode(const set<int> &want_to_encode, const buffer &in)
-
-  encode the content of *in* and return a map associating the chunk
-  number with its encoded content. The map only contains the chunks
-  contained in the *want_to_encode* set. For instance, in the simplest
-  case M=2,K=1 for a buffer containing AB, calling
-  ::
-    encode([1,2,3], 'AB')
-    => { 1 => 'A', 2 => 'B', 3 => 'Z' }
-  
-  If only the parity chunk is of interest, calling
-  ::
-    encode([3], 'AB')    
-    => { 3 => 'Z' }
-  
-
-* map<int, buffer> decode(const set<int> &want_to_read, const map<int, buffer> &chunks)
-
-  decode *chunks* to read the content of the *want_to_read* chunks and
-  return a map associating the chunk number with its decoded
-  content. For instance, in the simplest case M=2,K=1 for an
-  encoded payload of data A and B with parity Z, calling
-  ::
-    decode([1,2], { 1 => 'A', 2 => 'B', 3 => 'Z' })
-    => { 1 => 'A', 2 => 'B' }
-
-  If however, the chunk B is to be read but is missing it will be:
-  ::
-    decode([2], { 1 => 'A', 3 => 'Z' })
-    => { 2 => 'B' }
+ .. doxygenfile:: ErasureCodeInterface.h
 
 Erasure code jerasure plugin
 ----------------------------
 
 The parameters interpreted by the jerasure plugin are:
 ::
-   ceph osd pool set-erasure-code <pool> m <unsigned int> (defaults 10)
-   ceph osd pool set-erasure-code <pool> k <unsigned int> (default 3)
-   ceph osd pool set-erasure-code <pool> algorithm <string> (default Reed-Solomon)
+  ceph osd pool create <pool> \
+     erasure-code-directory=<dir>         \ # plugin directory absolute path
+     erasure-code-plugin=jerasure         \ # plugin name (only jerasure)
+     erasure-code-m=<m>                   \ # data chunks (default 10)
+     erasure-code-k=<k>                   \ # parity chunks (default 3)
+     erasure-code-algorithm=Reed-Solomon  \ # algorithm (only Reed-Solomon)
 
 
 Scrubbing
