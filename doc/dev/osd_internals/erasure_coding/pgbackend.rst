@@ -2,7 +2,7 @@
 PG Backend Proposal
 ===================
 
-See also `PGBackend.h <PGBackend>`_
+See also `PGBackend.h <../PGBackend-h>`_
 
 Motivation
 ----------
