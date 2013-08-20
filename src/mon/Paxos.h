@@ -1095,8 +1095,9 @@ public:
    * enjoy the atomicity guarantees given by our awesome k/v store.
    *
    * @param m A message
+   * @returns true if we stored something new; false otherwise
    */
-  void store_state(MMonPaxos *m);
+  bool store_state(MMonPaxos *m);
   void _sanity_check_store();
 
   /**

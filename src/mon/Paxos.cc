@@ -282,10 +282,11 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed,
  * be. All all this is done tightly wrapped in a transaction to ensure we
  * enjoy the atomicity guarantees given by our awesome k/v store.
  */
-void Paxos::store_state(MMonPaxos *m)
+bool Paxos::store_state(MMonPaxos *m)
 {
   MonitorDBStore::Transaction t;
   map<version_t,bufferlist>::iterator start = m->values.begin();
+  bool changed = false;
 
   // build map of values to store
   // we want to write the range [last_committed, m->last_committed] only.
@@ -341,9 +342,12 @@ void Paxos::store_state(MMonPaxos *m)
     first_committed = get_store()->get(get_name(), "first_committed");
 
     _sanity_check_store();
+    changed = true;
   }
 
   remove_legacy_versions();
+
+  return changed;
 }
 
 void Paxos::remove_legacy_versions()
