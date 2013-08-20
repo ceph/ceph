@@ -158,6 +158,7 @@ public:
   void dump_pg_stats(Formatter *f, bool brief) const;
   void dump_pool_stats(Formatter *f) const;
   void dump_osd_stats(Formatter *f) const;
+  void dump_delta(Formatter *f) const;
 
   void dump_pg_stats_plain(ostream& ss,
 			   const hash_map<pg_t, pg_stat_t>& pg_stats) const;
