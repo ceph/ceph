@@ -180,6 +180,13 @@ protected:
     divergent_priors.insert(make_pair(version, obj));
     dirty_divergent_priors = true;
   }
+public:
+  void mark_log_for_rewrite() {
+    mark_dirty_to(eversion_t::max());
+    mark_dirty_from(eversion_t());
+    touched_log = false;
+  }
+protected:
 
   /// DEBUG
   set<string> log_keys_debug;
