@@ -2438,7 +2438,9 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
     /* We don't want to leave the old format around in case the next log
      * write happens to be an append_log()
      */
+    pg_log.mark_log_for_rewrite();
     ObjectStore::Transaction t;
+    t.remove(coll_t(), log_oid); // remove old version
     pg_log.write_log(t, log_oid);
     int r = osd->store->apply_transaction(t);
     assert(!r);
