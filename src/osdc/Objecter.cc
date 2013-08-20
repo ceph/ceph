@@ -1515,7 +1515,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   ldout(cct, 7) << "handle_osd_op_reply " << tid
 		<< (m->is_ondisk() ? " ondisk":(m->is_onnvram() ? " onnvram":" ack"))
-		<< " v " << m->get_replay_version() << " in " << m->get_pg()
+		<< " v " << m->get_replay_version() << " uv " << m->get_user_version()
+		<< " in " << m->get_pg()
 		<< " attempt " << m->get_retry_attempt()
 		<< dendl;
   Op *op = ops[tid];
@@ -1552,7 +1553,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   }
 
   if (op->objver)
-    *op->objver = m->get_replay_version();
+    *op->objver = m->get_user_version();
   if (op->reply_epoch)
     *op->reply_epoch = m->get_map_epoch();
 
