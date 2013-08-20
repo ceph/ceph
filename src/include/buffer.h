@@ -425,7 +425,7 @@ public:
 	   it != _buffers.end(); 
 	   ++it)
 	if (it->length())
-	  crc = ceph_crc32c_le(crc, (unsigned char*)it->c_str(), it->length());
+	  crc = ceph_crc32c(crc, (unsigned char*)it->c_str(), it->length());
       return crc;
     }
 
