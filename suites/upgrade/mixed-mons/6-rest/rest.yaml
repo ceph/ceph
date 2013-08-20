@@ -2,6 +2,8 @@ tasks:
 - install.upgrade:
     mon.b:
       branch: dumpling
+    client.0:
+      branch: dumpling
 - ceph.restart:
     daemons:
     - mon.b
