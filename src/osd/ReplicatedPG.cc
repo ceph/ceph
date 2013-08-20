@@ -1027,10 +1027,13 @@ void ReplicatedPG::do_op(OpRequestRef op)
   }
   ctx->reply->set_result(result);
 
-  if (result >= 0)
+  if (result >= 0) {
     ctx->reply->set_replay_version(ctx->at_version);
-  else if (result == -ENOENT)
+    ctx->reply->set_user_version(ctx->reply_user_version);
+  } else if (result == -ENOENT) {
     ctx->reply->set_replay_version(info.last_update);
+    ctx->reply->set_user_version(info.last_update.version);
+  }
 
   // read or error?
   if (ctx->op_t.empty() || result < 0) {
@@ -3789,7 +3792,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
   // read-op?  done?
   if (ctx->op_t.empty() && !ctx->modify) {
-    ctx->reply_version = ctx->obs->oi.user_version;
+    ctx->reply_user_version = ctx->obs->oi.user_version.version;
     unstable_stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
     return result;
   }
@@ -3851,7 +3854,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     /* update the user_version for any modify ops, except for the watch op */
     ctx->new_obs.oi.user_version = ctx->at_version;
   }
-  ctx->reply_version = ctx->new_obs.oi.user_version;
+  ctx->reply_user_version = ctx->new_obs.oi.user_version.version;
   ctx->bytes_written = ctx->op_t.get_encoded_bytes();
  
   if (ctx->new_obs.exists) {
