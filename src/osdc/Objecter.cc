@@ -357,7 +357,7 @@ tid_t Objecter::linger_mutate(const object_t& oid, const object_locator_t& oloc,
 			      const SnapContext& snapc, utime_t mtime,
 			      bufferlist& inbl, int flags,
 			      Context *onack, Context *oncommit,
-			      eversion_t *objver)
+			      version_t *objver)
 {
   LingerOp *info = new LingerOp;
   info->oid = oid;
@@ -388,7 +388,7 @@ tid_t Objecter::linger_read(const object_t& oid, const object_locator_t& oloc,
 			    ObjectOperation& op,
 			    snapid_t snap, bufferlist& inbl, bufferlist *poutbl, int flags,
 			    Context *onfinish,
-			    eversion_t *objver)
+			    version_t *objver)
 {
   LingerOp *info = new LingerOp;
   info->oid = oid;
