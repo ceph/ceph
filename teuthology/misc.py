@@ -86,14 +86,23 @@ def get_testdir(ctx):
                     user=get_user()[0:2],
                     stamp=stamp)
 
+
+def get_test_user(ctx):
+    """
+    :returns: str -- the user to run tests as on remote hosts
+    """
+    return ctx.teuthology_config.get('test_user', 'ubuntu')
+
+
 def get_testdir_base(ctx):
     if 'test_path' in ctx.teuthology_config:
         return ctx.teuthology_config['test_path']
-    owner_user = ctx.owner.split('@')[0]
+    test_user = get_test_user(ctx)
     # FIXME this ideally should use os.path.expanduser() in the future, in case
     # $HOME isn't /home/$USER - e.g. on a Mac. However, since we're executing
     # this on the server side, it won't work properly.
-    return ctx.teuthology_config.get('base_test_dir', '/home/%s/cephtest' % owner_user)
+    return ctx.teuthology_config.get('base_test_dir', '/home/%s/cephtest' %
+                                     test_user)
 
 def get_ceph_binary_url(package=None,
                         branch=None, tag=None, sha1=None, dist=None,
