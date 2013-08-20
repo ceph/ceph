@@ -158,7 +158,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   deleting(false), dirty_info(false), dirty_big_info(false),
   info(p),
   info_struct_v(0),
-  coll(p), log_oid(loid), biginfo_oid(ioid),
+  coll(p), pg_log(g_ceph_context), log_oid(loid), biginfo_oid(ioid),
   recovery_item(this), scrub_item(this), scrub_finalize_item(this), snap_trim_item(this), stat_queue_item(this),
   recovery_ops_active(0),
   waiting_on_backfill(0),
@@ -2438,7 +2438,9 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
     /* We don't want to leave the old format around in case the next log
      * write happens to be an append_log()
      */
+    pg_log.mark_log_for_rewrite();
     ObjectStore::Transaction t;
+    t.remove(coll_t(), log_oid); // remove old version
     pg_log.write_log(t, log_oid);
     int r = osd->store->apply_transaction(t);
     assert(!r);
