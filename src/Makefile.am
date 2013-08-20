@@ -1318,7 +1318,6 @@ AM_COMMON_FLAGS = \
 	-D_THREAD_SAFE \
 	-D__STDC_FORMAT_MACROS \
 	-D_GNU_SOURCE \
-	-rdynamic \
 	-Wall \
 	${WARN_TYPE_LIMITS} \
 	${WARN_IGNORED_QUALIFIERS} \
@@ -1327,6 +1326,9 @@ AM_COMMON_FLAGS = \
 	-Werror=format-security \
 	-fno-strict-aliasing \
 	-fsigned-char
+if !CLANG
+    AM_COMMON_FLAGS += -rdynamic
+endif
 
 AM_CFLAGS = $(AM_COMMON_FLAGS)
 AM_CXXFLAGS = \
@@ -1334,8 +1336,11 @@ AM_CXXFLAGS = \
 	$(AM_COMMON_FLAGS) \
 	-DCEPH_LIBDIR=\"${libdir}\" \
 	-Wnon-virtual-dtor \
-	-Wno-invalid-offsetof \
-	-Wstrict-null-sentinel
+	-Wno-invalid-offsetof
+
+if !CLANG
+    AM_CXXFLAGS += -Wstrict-null-sentinel
+endif
 # note: this is position dependant, it affects the -l options that
 # come after it on the command line. when you use ${AM_LDFLAGS} in
 # later rules, take care where you place it. for more information, see
