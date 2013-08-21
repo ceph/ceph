@@ -956,6 +956,8 @@ void ReplicatedPG::do_op(OpRequestRef op)
 	     << " ov " << obc->obs.oi.version
 	     << dendl;  
   }
+  // TODO: the pg_log/info swap makes me nervous I'm missing something?
+  ctx->user_at_version = info.last_user_version;
 
   // note my stats
   utime_t now = ceph_clock_now(g_ceph_context);
@@ -1031,8 +1033,10 @@ void ReplicatedPG::do_op(OpRequestRef op)
     ctx->reply->set_replay_version(ctx->at_version);
     ctx->reply->set_user_version(ctx->new_obs.oi.user_version);
   } else if (result == -ENOENT) {
+    // TODO: we should not fill in this meaningless data, but RGW
+    // depends on it so the transition will require a compatibility break.
     ctx->reply->set_replay_version(info.last_update);
-    ctx->reply->set_user_version(info.last_update.version);
+    ctx->reply->set_user_version(ctx->user_at_version);
   }
 
   // read or error?
@@ -3856,7 +3860,9 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   // finish and log the op.
   if (ctx->user_modify) {
     /* update the user_version for any modify ops, except for the watch op */
-    ctx->new_obs.oi.user_version = ctx->at_version.version;
+    ++ctx->user_at_version;
+    assert(ctx->user_at_version > ctx->new_obs.oi.user_version);
+    ctx->new_obs.oi.user_version = ctx->user_at_version;
   }
   ctx->bytes_written = ctx->op_t.get_encoded_bytes();
  
@@ -3886,7 +3892,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   if (!ctx->new_obs.exists)
     logopcode = pg_log_entry_t::DELETE;
   ctx->log.push_back(pg_log_entry_t(logopcode, soid, ctx->at_version, old_version,
-				ctx->at_version.version, ctx->reqid, ctx->mtime));
+				ctx->user_at_version, ctx->reqid, ctx->mtime));
 
   // apply new object state.
   ctx->obc->obs = ctx->new_obs;
