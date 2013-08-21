@@ -2688,7 +2688,10 @@ void object_info_t::encode(bufferlist& bl) const
   ::encode(truncate_size, bl);
   ::encode(lost, bl);
   ::encode(old_watchers, bl);
-  ::encode(user_version, bl);
+  /* shenanigans to avoid breaking backwards compatibility in the disk format.
+   * When we can, switch this out for simply putting the version_t on disk. */
+  eversion_t user_eversion(0, user_version);
+  ::encode(user_eversion, bl);
   ::encode(uses_tmap, bl);
   ::encode(watchers, bl);
   ENCODE_FINISH(bl);
@@ -2733,7 +2736,9 @@ void object_info_t::decode(bufferlist::iterator& bl)
     lost = false;
   if (struct_v >= 4) {
     ::decode(old_watchers, bl);
-    ::decode(user_version, bl);
+    eversion_t user_eversion;
+    ::decode(user_eversion, bl);
+    user_version = user_eversion.version;
   }
   if (struct_v >= 9)
     ::decode(uses_tmap, bl);
