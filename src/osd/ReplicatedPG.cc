@@ -2432,9 +2432,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	uint64_t ver = op.watch.ver;
 	if (!ver)
 	  result = -EINVAL;
-        else if (ver < oi.user_version.version)
+        else if (ver < oi.user_version)
 	  result = -ERANGE;
-	else if (ver > oi.user_version.version)
+	else if (ver > oi.user_version)
 	  result = -EOVERFLOW;
 	break;
       }
@@ -2549,9 +2549,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	uint64_t ver = op.watch.ver;
 	if (!ver)
 	  result = -EINVAL;
-        else if (ver < src_obc->obs.oi.user_version.version)
+        else if (ver < src_obc->obs.oi.user_version)
 	  result = -ERANGE;
-	else if (ver > src_obc->obs.oi.user_version.version)
+	else if (ver > src_obc->obs.oi.user_version)
 	  result = -EOVERFLOW;
 	break;
       }
@@ -2832,7 +2832,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	dout(10) << "watch: ctx->obc=" << (void *)obc << " cookie=" << cookie
 		 << " oi.version=" << oi.version.version << " ctx->at_version=" << ctx->at_version << dendl;
-	dout(10) << "watch: oi.user_version=" << oi.user_version.version << dendl;
+	dout(10) << "watch: oi.user_version=" << oi.user_version<< dendl;
 	dout(10) << "watch: peer_addr="
 	  << ctx->op->request->get_connection()->get_peer_addr() << dendl;
 
@@ -3720,7 +3720,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
 	p->timeout,
 	p->cookie,
 	osd->get_next_id(get_osdmap()->get_epoch()),
-	ctx->obc->obs.oi.user_version.version,
+	ctx->obc->obs.oi.user_version,
 	osd));
     for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator i =
 	   ctx->obc->watchers.begin();
@@ -3792,7 +3792,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
   // read-op?  done?
   if (ctx->op_t.empty() && !ctx->modify) {
-    ctx->reply_user_version = ctx->obs->oi.user_version.version;
+    ctx->reply_user_version = ctx->obs->oi.user_version;
     unstable_stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
     return result;
   }
@@ -3852,9 +3852,9 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   // finish and log the op.
   if (ctx->user_modify) {
     /* update the user_version for any modify ops, except for the watch op */
-    ctx->new_obs.oi.user_version = ctx->at_version;
+    ctx->new_obs.oi.user_version = ctx->at_version.version;
   }
-  ctx->reply_user_version = ctx->new_obs.oi.user_version.version;
+  ctx->reply_user_version = ctx->new_obs.oi.user_version;
   ctx->bytes_written = ctx->op_t.get_encoded_bytes();
  
   if (ctx->new_obs.exists) {
