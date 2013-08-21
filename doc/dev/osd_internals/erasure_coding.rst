@@ -27,7 +27,8 @@ Glossary
 
 Example:
 ::
-                 OSD 40                       OSD 33          
+ 
+                 OSD 40                       OSD 33
        +-------------------------+ +-------------------------+
        |      shard 0 - PG 10    | |      shard 1 - PG 10    |
        |+------ object O -------+| |+------ object O -------+|
@@ -54,4 +55,4 @@ Table of content
 
    High level design document <erasure_coding/pgbackend>
    Developer notes <erasure_coding/developer_notes>
-
+   Draft PGBackend.h header <erasure_coding/PGBackend-h>
