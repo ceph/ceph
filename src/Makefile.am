@@ -1504,6 +1504,8 @@ crush_files = \
 # this list ommits the ceph_ver.c file
 libcommon_files = \
 	./ceph_ver.c \
+	arch/probe.cc \
+	arch/intel.c \
 	auth/AuthAuthorizeHandler.cc \
 	auth/AuthClientHandler.cc \
 	auth/AuthSessionHandler.cc \
@@ -1746,6 +1748,8 @@ python_PYTHON = pybind/rados.py \
 # that autotools doesn't magically identify.
 noinst_HEADERS = \
 	rados_sync.h \
+	arch/probe.h \
+	arch/intel.h \
 	auth/cephx/CephxAuthorizeHandler.h\
 	auth/cephx/CephxKeyServer.h\
 	auth/cephx/CephxProtocol.h\
