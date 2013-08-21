@@ -2304,7 +2304,10 @@ void PG::add_log_entry(pg_log_entry_t& e, bufferlist& log_bl)
   // raise last_update.
   assert(e.version > info.last_update);
   info.last_update = e.version;
-  info.last_user_version = e.user_version;
+  if (e.user_version) {
+    // some ops don't set the user_version because they aren't changing it
+    info.last_user_version = e.user_version;
+  }
 
   // log mutation
   pg_log.add(e);
