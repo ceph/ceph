@@ -586,7 +586,7 @@ public:
   }
 
   int verify_permission() {return 0;}
-  int validate_cors_request();
+  int validate_cors_request(RGWCORSConfiguration *cc);
   void execute();
   void get_response_params(string& allowed_hdrs, string& exp_hdrs, unsigned *max_age);
   virtual void send_response() = 0;
