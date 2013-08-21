@@ -627,10 +627,10 @@ void Objecter::handle_osd_map(MOSDMap *m)
   // was/is paused?
   if (was_pauserd || was_pausewr || pauserd || pausewr)
     maybe_request_map();
-  
+
   // unpause requests?
   if ((was_pauserd && !pauserd) ||
-      (was_pausewr && !pausewr))
+      (was_pausewr && !pausewr)) {
     for (map<tid_t,Op*>::iterator p = ops.begin();
 	 p != ops.end();
 	 ++p) {
@@ -640,6 +640,16 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  !((op->flags & CEPH_OSD_FLAG_WRITE) && pausewr))    // not still paused as a write
 	need_resend[op->tid] = op;
     }
+    for (map<tid_t, LingerOp*>::iterator lp = linger_ops.begin();
+	 lp != linger_ops.end();
+	 ++lp) {
+      LingerOp *op = lp->second;
+      if (!op->registered &&
+	  !pauserd &&                                      // not still paused as a read
+	  !((op->flags & CEPH_OSD_FLAG_WRITE) && pausewr)) // not still paused as a write
+	need_resend_linger.push_back(op);
+    }
+  }
 
   // resend requests
   for (map<tid_t, Op*>::iterator p = need_resend.begin(); p != need_resend.end(); ++p) {
