@@ -1482,6 +1482,16 @@ libcommon_la_CXXFLAGS= ${AM_CXXFLAGS}
 libcommon_la_LDFLAGS = -lrt
 noinst_LTLIBRARIES += libcommon.la
 
+CCAS = ${srcdir}/yasm-wrapper
+AM_CCASFLAGS = -f elf64
+
+if WITH_GOOD_YASM_ELF64
+libcrc_la_SOURCES = common/crc32c_intel_fast_asm.S
+libcrc_la_LIBTOOLFLAGS = --tag=CC
+noinst_LTLIBRARIES += libcrc.la
+libcommon_la_LIBADD = libcrc.la
+endif
+
 libglobal_la_SOURCES = \
 	global/global_context.cc \
 	global/global_init.cc \
@@ -1539,6 +1549,7 @@ libcommon_files = \
 	common/sctp_crc32.c\
 	common/crc32c.cc\
 	common/crc32c_intel_baseline.c\
+	common/crc32c_intel_fast.c\
 	common/assert.cc \
         common/run_cmd.cc \
 	common/WorkQueue.cc \
@@ -1888,6 +1899,7 @@ noinst_HEADERS = \
 	common/ceph_crypto_cms.h\
 	common/ceph_json.h\
 	common/crc32c_intel_baseline.h\
+	common/crc32c_intel_fast.h\
 	common/lru_map.h\
 	common/utf8.h\
 	common/mime.h\
