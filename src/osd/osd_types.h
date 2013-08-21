@@ -1952,7 +1952,7 @@ struct object_info_t {
   string category;
 
   eversion_t version, prior_version;
-  eversion_t user_version;
+  version_t user_version;
   osd_reqid_t last_reqid;
 
   uint64_t size;
@@ -1983,12 +1983,12 @@ struct object_info_t {
   static void generate_test_instances(list<object_info_t*>& o);
 
   explicit object_info_t()
-    : size(0), lost(false),
+    : user_version(0), size(0), lost(false),
       truncate_seq(0), truncate_size(0), uses_tmap(false)
   {}
 
   object_info_t(const hobject_t& s)
-    : soid(s), size(0),
+    : soid(s), user_version(0), size(0),
       lost(false), truncate_seq(0), truncate_size(0), uses_tmap(false) {}
 
   object_info_t(bufferlist& bl) {
