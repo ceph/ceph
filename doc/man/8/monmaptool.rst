@@ -83,7 +83,7 @@ To create a new map with three monitors (for a fresh Ceph file system)::
 
 To display the contents of the map::
 
-        monmaptool --print onmap
+        monmaptool --print monmap
 
 To replace one monitor::
 
