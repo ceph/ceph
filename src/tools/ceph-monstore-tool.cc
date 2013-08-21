@@ -179,7 +179,7 @@ int main(int argc, char **argv) {
 
   int fd;
   if (vm.count("out")) {
-    if ((fd = open(out_path.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666)) == -1) {
+    if ((fd = open(out_path.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666)) < 0) {
       int _err = errno;
       if (_err != EISDIR) {
         std::cerr << "Couldn't open " << out_path << ": " << cpp_strerror(_err) << std::endl; 
