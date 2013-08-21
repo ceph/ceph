@@ -1476,31 +1476,30 @@ clean-local:
 
 # libs
 
+CCAS = ${srcdir}/yasm-wrapper
+AM_CCASFLAGS = -f elf64
+
+# crc
+libcrc_la_SOURCES = \
+	common/sctp_crc32.c \
+	common/crc32c.cc \
+	common/crc32c_intel_baseline.c \
+	common/crc32c_intel_fast.c
+
+if WITH_GOOD_YASM_ELF64
+libcrc_la_SOURCES += common/crc32c_intel_fast_asm.S
+libcrc_la_LIBTOOLFLAGS = --tag=CC
+endif
+
+noinst_LTLIBRARIES += libcrc.la
+
+# common
 libcommon_la_SOURCES = $(libcommon_files)
 libcommon_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libcommon_la_CXXFLAGS= ${AM_CXXFLAGS}
 libcommon_la_LDFLAGS = -lrt
-noinst_LTLIBRARIES += libcommon.la
-
-CCAS = ${srcdir}/yasm-wrapper
-AM_CCASFLAGS = -f elf64
-
-if WITH_GOOD_YASM_ELF64
-libcrc_la_SOURCES = common/crc32c_intel_fast_asm.S
-libcrc_la_LIBTOOLFLAGS = --tag=CC
-noinst_LTLIBRARIES += libcrc.la
 libcommon_la_LIBADD = libcrc.la
-endif
-
-libglobal_la_SOURCES = \
-	global/global_context.cc \
-	global/global_init.cc \
-	global/pidfile.cc \
-	global/signal_handler.cc
-libglobal_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
-libglobal_la_CXXFLAGS= ${AM_CXXFLAGS}
-libglobal_la_LIBADD= libcommon.la
-noinst_LTLIBRARIES += libglobal.la
+noinst_LTLIBRARIES += libcommon.la
 
 crush_files = \
 	crush/builder.c \
@@ -1546,10 +1545,6 @@ libcommon_files = \
 	common/Timer.cc \
 	common/Finisher.cc \
 	common/environment.cc\
-	common/sctp_crc32.c\
-	common/crc32c.cc\
-	common/crc32c_intel_baseline.c\
-	common/crc32c_intel_fast.c\
 	common/assert.cc \
         common/run_cmd.cc \
 	common/WorkQueue.cc \
@@ -1624,6 +1619,16 @@ else
 libcommon_files += perfglue/disabled_stubs.cc
 endif
 
+# global
+libglobal_la_SOURCES = \
+	global/global_context.cc \
+	global/global_init.cc \
+	global/pidfile.cc \
+	global/signal_handler.cc
+libglobal_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
+libglobal_la_CXXFLAGS= ${AM_CXXFLAGS}
+libglobal_la_LIBADD= libcommon.la
+noinst_LTLIBRARIES += libglobal.la
 
 
 libmon_a_SOURCES = \
