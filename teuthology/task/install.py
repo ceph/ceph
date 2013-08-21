@@ -74,13 +74,12 @@ def _get_config_value_for_remote(ctx, remote, config, key):
 
     roles = ctx.cluster.remotes[remote]
     if 'all' in config:
-        return config['all'][key]
+        return config['all'].get(key)
     elif roles:
         for role in roles:
             if role in config and key in config[role]:
-                return config[role][key]
-    if key in config:
-        return config[key]
+                return config[role].get(key)
+    return config.get(key)
 
 
 def _get_baseurlinfo_and_dist(ctx, remote, config):
