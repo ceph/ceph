@@ -2241,8 +2241,7 @@ void Objecter::dump_linger_ops(Formatter *fmt) const
     fmt->dump_stream("object_id") << op->oid;
     fmt->dump_stream("object_locator") << op->oloc;
     fmt->dump_stream("snapid") << op->snap;
-    fmt->dump_stream("registering") << op->snap;
-    fmt->dump_stream("registered") << op->snap;
+    fmt->dump_stream("registered") << op->registered;
     fmt->close_section(); // linger_op object
   }
   fmt->close_section(); // linger_ops array
