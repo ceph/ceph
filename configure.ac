@@ -33,6 +33,8 @@ AC_CANONICAL_TARGET
 AM_INIT_AUTOMAKE
 AM_PROG_CC_C_O
 AM_PROG_LIBTOOL
+AM_PROG_AS
+
 
 # enable make V=0 (if automake >1.11)
 AM_INIT_AUTOMAKE([foreign])
@@ -67,6 +69,19 @@ AC_PROG_LIBTOOL
 
 AC_SUBST(AM_CXXFLAGS)
 AM_CXXFLAGS="${AM_CXXFLAGS}"
+
+# Check for yasm
+if yasm -f elf64 src/common/crc32c_intel_fast_asm.S -o /dev/null; then
+   echo 'we have a modern and working yasm'
+   if test `arch` = "x86_64"; then
+      echo 'we are x86_64'
+      AC_DEFINE([HAVE_GOOD_YASM_ELF64], [1], [we have a recent yasm and are x86_64])
+      with_good_yasm=yes
+   fi
+else
+   echo 'we do not have a modern/working yasm'
+fi
+AM_CONDITIONAL(WITH_GOOD_YASM_ELF64, test "$with_good_yasm" = "yes")
 
 # Checks for compiler warning types
 
