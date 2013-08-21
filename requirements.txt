@@ -12,6 +12,7 @@ httplib2
 paramiko >= 1.7.7
 pexpect
 requests == 0.14.0
+raven
 
 # Test Dependencies
 # nose >=1.0.0
