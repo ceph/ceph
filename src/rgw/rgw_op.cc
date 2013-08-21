@@ -1977,8 +1977,7 @@ void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigne
   *max_age = rule->get_max_age();
 }
 
-int RGWOptionsCORS::validate_cors_request() {
-  RGWCORSConfiguration *cc = s->bucket_cors;
+int RGWOptionsCORS::validate_cors_request(RGWCORSConfiguration *cc) {
   rule = cc->host_name_rule(origin);
   if (!rule) {
     dout(10) << "There is no corsrule present for " << origin << dendl;
@@ -2004,9 +2003,15 @@ int RGWOptionsCORS::validate_cors_request() {
 
 void RGWOptionsCORS::execute()
 {
-  if (!s->bucket_cors) {
+  RGWCORSConfiguration bucket_cors;
+  bool cors_exist;
+  ret = read_bucket_cors(store, s, &bucket_cors, &cors_exist);
+  if (ret < 0)
+    return;
+
+  if (!cors_exist) {
     dout(2) << "No CORS configuration set yet for this bucket" << dendl;
-    ret = -EACCES;
+    ret = -ENOENT;
     return;
   }
   req_meth = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
@@ -2026,7 +2031,7 @@ void RGWOptionsCORS::execute()
     return;
   }
   req_hdrs = s->info.env->get("HTTP_ACCESS_CONTROL_ALLOW_HEADERS");
-  ret = validate_cors_request();
+  ret = validate_cors_request(&bucket_cors);
   if (!rule) {
     origin = req_meth = NULL;
     return;
