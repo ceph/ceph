@@ -1553,7 +1553,7 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
 
 void pg_info_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(27, 26, bl);
+  ENCODE_START(28, 26, bl);
   ::encode(pgid, bl);
   ::encode(last_update, bl);
   ::encode(last_complete, bl);
@@ -1563,12 +1563,13 @@ void pg_info_t::encode(bufferlist &bl) const
   history.encode(bl);
   ::encode(purged_snaps, bl);
   ::encode(last_epoch_started, bl);
+  ::encode(last_user_version, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_info_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(27, 26, 26, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(28, 26, 26, bl);
   if (struct_v < 23) {
     old_pg_t opgid;
     ::decode(opgid, bl);
@@ -1598,6 +1599,10 @@ void pg_info_t::decode(bufferlist::iterator &bl)
   } else {
     ::decode(last_epoch_started, bl);
   }
+  if (struct_v >= 28)
+    ::decode(last_user_version, bl);
+  else
+    last_user_version = last_update.version;
   DECODE_FINISH(bl);
 }
 
@@ -1609,6 +1614,7 @@ void pg_info_t::dump(Formatter *f) const
   f->dump_stream("last_update") << last_update;
   f->dump_stream("last_complete") << last_complete;
   f->dump_stream("log_tail") << log_tail;
+  f->dump_int("last_user_update", last_user_version);
   f->dump_stream("last_backfill") << last_backfill;
   f->dump_stream("purged_snaps") << purged_snaps;
   f->open_object_section("history");
