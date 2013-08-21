@@ -214,6 +214,7 @@ int main(int argc, char **argv) {
   } else if (cmd == "compact") {
     st.compact();
   } else if (cmd == "getmonmap") {
+    assert(fd >= 0);
     if (!store_path.size()) {
       std::cerr << "need mon store path" << std::endl;
       std::cerr << desc << std::endl;
