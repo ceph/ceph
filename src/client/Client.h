@@ -560,6 +560,7 @@ private:
   int _flush(Fh *fh);
   int _fsync(Fh *fh, bool syncdataonly);
   int _sync_fs();
+  int _fallocate(Fh *fh, int mode, int64_t offset, int64_t length);
 
   int get_or_create(Inode *dir, const char* name,
 		    Dentry **pdn, bool expect_null=false);
@@ -658,6 +659,7 @@ public:
   int ftruncate(int fd, loff_t size);
   int fsync(int fd, bool syncdataonly);
   int fstat(int fd, struct stat *stbuf);
+  int fallocate(int fd, int mode, loff_t offset, loff_t length);
 
   // full path xattr ops
   int getxattr(const char *path, const char *name, void *value, size_t size);
@@ -727,6 +729,7 @@ public:
   int ll_write(Fh *fh, loff_t off, loff_t len, const char *data);
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);
+  int ll_fallocate(Fh *fh, int mode, loff_t offset, loff_t length);
   int ll_release(Fh *fh);
   int ll_statfs(vinodeno_t vino, struct statvfs *stbuf);
 
