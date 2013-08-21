@@ -1553,7 +1553,7 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
 
 void pg_info_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(27, 26, bl);
+  ENCODE_START(28, 26, bl);
   ::encode(pgid, bl);
   ::encode(last_update, bl);
   ::encode(last_complete, bl);
@@ -1563,12 +1563,13 @@ void pg_info_t::encode(bufferlist &bl) const
   history.encode(bl);
   ::encode(purged_snaps, bl);
   ::encode(last_epoch_started, bl);
+  ::encode(last_user_version, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_info_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(27, 26, 26, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(28, 26, 26, bl);
   if (struct_v < 23) {
     old_pg_t opgid;
     ::decode(opgid, bl);
@@ -1598,6 +1599,10 @@ void pg_info_t::decode(bufferlist::iterator &bl)
   } else {
     ::decode(last_epoch_started, bl);
   }
+  if (struct_v >= 28)
+    ::decode(last_user_version, bl);
+  else
+    last_user_version = last_update.version;
   DECODE_FINISH(bl);
 }
 
@@ -1609,6 +1614,7 @@ void pg_info_t::dump(Formatter *f) const
   f->dump_stream("last_update") << last_update;
   f->dump_stream("last_complete") << last_complete;
   f->dump_stream("log_tail") << log_tail;
+  f->dump_int("last_user_version", last_user_version);
   f->dump_stream("last_backfill") << last_backfill;
   f->dump_stream("purged_snaps") << purged_snaps;
   f->open_object_section("history");
@@ -1634,6 +1640,7 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
   o.back()->pgid = pg_t(1, 2, -1);
   o.back()->last_update = eversion_t(3, 4);
   o.back()->last_complete = eversion_t(5, 6);
+  o.back()->last_user_version = 2;
   o.back()->log_tail = eversion_t(7, 8);
   o.back()->last_backfill = hobject_t(object_t("objname"), "key", 123, 456, -1, "");
   list<pg_stat_t*> s;
@@ -1912,7 +1919,7 @@ void pg_log_entry_t::decode_with_checksum(bufferlist::iterator& p)
 
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(7, 4, bl);
+  ENCODE_START(8, 4, bl);
   ::encode(op, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
@@ -1934,12 +1941,13 @@ void pg_log_entry_t::encode(bufferlist &bl) const
   if (op == LOST_REVERT)
     ::encode(prior_version, bl);
   ::encode(snaps, bl);
+  ::encode(user_version, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_entry_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(7, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(8, 4, 4, bl);
   ::decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -1975,6 +1983,11 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
       op == CLONE) {    // for v < 7, it's only present for CLONE.
     ::decode(snaps, bl);
   }
+
+  if (struct_v >= 8)
+    ::decode(user_version, bl);
+  else
+    user_version = version.version;
 
   DECODE_FINISH(bl);
 }
