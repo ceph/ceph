@@ -1,25 +1,25 @@
 #ifndef CEPH_CRC32C_H
 #define CEPH_CRC32C_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
+#include "include/inttypes.h"
 #include <string.h>
 
-extern int ceph_have_crc32c_intel(void);
-extern uint32_t ceph_crc32c_le_generic(uint32_t crc, unsigned char const *data, unsigned length);
-extern uint32_t ceph_crc32c_le_intel(uint32_t crc, unsigned char const *data, unsigned length);
+typedef uint32_t (*ceph_crc32c_func_t)(uint32_t crc, unsigned char const *data, unsigned length);
 
-static inline uint32_t ceph_crc32c_le(uint32_t crc, unsigned char const *data, unsigned length) {
-	if (ceph_have_crc32c_intel()) //__builtin_cpu_supports("sse4.2"))
-		return ceph_crc32c_le_intel(crc, data, length);
-	else
-		return ceph_crc32c_le_generic(crc, data, length);
-}
+/*
+ * this is a static global with the chosen crc32c implementation for
+ * the given architecture.
+ */
+extern ceph_crc32c_func_t ceph_crc32c_func;
 
-#ifdef __cplusplus
+extern ceph_crc32c_func_t ceph_choose_crc32(void);
+
+/*
+ * common entry point; use this!
+ */
+static inline uint32_t ceph_crc32c(uint32_t crc, unsigned char const *data, unsigned length)
+{
+	return ceph_crc32c_func(crc, data, length);
 }
-#endif
 
 #endif
