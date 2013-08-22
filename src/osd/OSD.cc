@@ -1522,7 +1522,6 @@ int OSD::shutdown()
     dout(20) << " kicking pg " << p->first << dendl;
     p->second->lock();
     p->second->on_shutdown();
-    p->second->kick();
     p->second->unlock();
     p->second->osr->flush();
   }
