@@ -16,6 +16,7 @@ import yaml
 
 from teuthology import misc as teuthology
 from teuthology import safepath
+from teuthology import lock as lock
 
 log = logging.getLogger(__name__)
 
@@ -130,14 +131,33 @@ combination, and will override anything in the suite.
              ]
             for f in facets
             )
+
+        arch = get_arch(args.config)
         for configs in itertools.product(*facet_configs):
             description = 'collection:%s ' % (collection_name);
             description += ' '.join('{facet}:{name}'.format(
                     facet=facet, name=name)
                                  for facet, name, path in configs)
+            os_type = get_os_type(configs)
+            exclude_arch = get_exclude_arch(configs)
+            exclude_os_type = get_exclude_os_type(configs)
+            if exclude_arch:
+                if exclude_arch == arch:
+                    log.info(
+                        'Skipping due to excluded_arch: %s facets %s', exclude_arch, description
+                         )
+                    continue
+            if exclude_os_type:
+                if exclude_os_type == os_type:
+                    log.info(
+                        'Skipping due to excluded_os_type: %s facets %s', exclude_os_type, description
+                         )
+                    continue
+
             log.info(
                 'Running teuthology-schedule with facets %s', description
                 )
+
             arg = copy.deepcopy(base_arg)
             arg.extend([
                     '--description', description,
@@ -148,7 +168,6 @@ combination, and will override anything in the suite.
             subprocess.check_call(
                 args=arg,
                 )
-
     arg = copy.deepcopy(base_arg)
     arg.append('--last-in-suite')
     if args.email:
@@ -403,3 +422,44 @@ These tests passed:
                 )
     finally:
         generate_coverage(args)
+
+def get_arch(config):
+    for yamlfile in config:
+        y = yaml.safe_load(file(yamlfile))
+        machine_type = y.get('machine_type')
+        if machine_type:
+            fakectx = []
+            locks = lock.list_locks(fakectx)
+            for machine in locks:
+                if machine['type'] == machine_type:
+                    arch = machine['arch']
+                    return arch
+    return None
+
+def get_os_type(configs):
+    for config in configs:
+        yamlfile = config[2]
+        y = yaml.safe_load(file(yamlfile))
+        os_type = y.get('os_type')
+        if os_type:
+            return os_type
+    return None
+
+def get_exclude_arch(configs):
+    for config in configs:
+        yamlfile = config[2]
+        y = yaml.safe_load(file(yamlfile))
+        os_type = y.get('exclude_arch')
+        if os_type:
+            return os_type
+    return None
+
+def get_exclude_os_type(configs):
+    for config in configs:
+        yamlfile = config[2]
+        y = yaml.safe_load(file(yamlfile))
+        os_type = y.get('exclude_os_type')
+        if os_type:
+            return os_type
+    return None
+
