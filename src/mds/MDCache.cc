@@ -7940,7 +7940,7 @@ void MDCache::_open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err
   inode_backtrace_t backtrace;
   if (err == 0) {
     ::decode(backtrace, bl);
-    if (backtrace.pool != info.pool) {
+    if (backtrace.pool != info.pool && backtrace.pool != -1) {
       dout(10) << " old object in pool " << info.pool
 	       << ", retrying pool " << backtrace.pool << dendl;
       info.pool = backtrace.pool;
