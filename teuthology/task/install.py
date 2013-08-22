@@ -810,6 +810,7 @@ def upgrade(ctx, config):
                 _upgrade_deb_packages(ctx, config, remote, pkgs, branch)
             elif system_type == 'rpm':
                 _upgrade_rpm_packages(ctx, config, remote, pkgs, branch)
+    # FIXME: I highly doubt if this needs to be a separate codepath.
     else:
         list_roles = []
         for role in config.keys():
@@ -824,7 +825,10 @@ def upgrade(ctx, config):
                         system_type = teuthology.get_system_type(remote)
                         assert system_type in ('deb', 'rpm')
                         pkgs = PACKAGES[project][system_type]
-                        _upgrade_deb_packages(ctx, config, remote, pkgs, branch)
+                        if system_type == 'deb':
+                            _upgrade_deb_packages(ctx, config, remote, pkgs, branch)
+                        elif system_type == 'rpm':
+                            _upgrade_rpm_packages(ctx, config, remote, pkgs, branch)
                         list_roles.append(remote)
     yield
 
