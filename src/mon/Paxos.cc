@@ -328,6 +328,15 @@ bool Paxos::store_state(MMonPaxos *m)
       // apply.
       decode_append_transaction(t, it->second);
     }
+
+    // discard obsolete uncommitted value?
+    if (uncommitted_v && uncommitted_v <= last_committed) {
+      dout(10) << " forgetting obsolete uncommitted value " << uncommitted_v
+	       << " pn " << uncommitted_pn << dendl;
+      uncommitted_v = 0;
+      uncommitted_pn = 0;
+      uncommitted_value.clear();
+    }
   }
   if (!t.empty()) {
     dout(30) << __func__ << " transaction dump:\n";
@@ -425,7 +434,7 @@ void Paxos::handle_last(MMonPaxos *last)
 
     // did this person send back an accepted but uncommitted value?
     if (last->uncommitted_pn) {
-      if (last->uncommitted_pn > uncommitted_pn &&
+      if (last->uncommitted_pn >= uncommitted_pn &&
 	  last->last_committed >= last_committed &&
 	  last->last_committed + 1 >= uncommitted_v) {
 	uncommitted_v = last->last_committed+1;
