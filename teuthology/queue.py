@@ -12,7 +12,8 @@ from teuthology import safepath
 
 log = logging.getLogger(__name__)
 
-teuthology_git_upstream = "https://github.com/ceph/teuthology.git"
+#teuthology_git_upstream = "https://github.com/ceph/teuthology.git"
+teuthology_git_upstream = "git://ceph.com/teuthology.git"
 
 
 def connect(ctx):
