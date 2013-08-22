@@ -121,6 +121,7 @@ public:
       head.layout.ol_pgid = pgid.get_old_pg().v;
       head.flags = flags;
       head.osdmap_epoch = osdmap_epoch;
+      head.reassert_version = reassert_version;
       head.result = result;
       head.num_ops = ops.size();
       head.object_len = oid.name.length();
