@@ -34,6 +34,7 @@ class DataHealthService :
   int last_warned_percent;
 
   void handle_tell(MMonHealth *m);
+  int update_store_stats(DataStats &ours);
   int update_stats();
   void share_stats();
 
