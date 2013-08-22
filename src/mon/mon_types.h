@@ -50,6 +50,18 @@ struct DataStats {
   int latest_avail_percent;
   utime_t last_update;
 
+  void dump(Formatter *f) const {
+    assert(f != NULL);
+    f->open_object_section("data_stats");
+    f->dump_int("kb_total", kb_total);
+    f->dump_int("kb_used", kb_used);
+    f->dump_int("kb_avail", kb_avail);
+    f->dump_int("avail_percent", latest_avail_percent);
+    f->dump_stream("last_updated") << last_update;
+
+    f->close_section();
+  }
+
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(kb_total, bl);
@@ -69,7 +81,6 @@ struct DataStats {
     DECODE_FINISH(p);
   }
 };
-
 WRITE_CLASS_ENCODER(DataStats);
 
 struct ScrubResult {
