@@ -509,6 +509,10 @@ class MonitorDBStore
     db->compact_prefix(prefix);
   }
 
+  uint64_t get_estimated_size(map<string, uint64_t> &extras) {
+    return db->get_estimated_size(extras);
+  }
+
   MonitorDBStore(const string& path) :
     db(0), do_dump(false), dump_fd(-1) {
     string::const_reverse_iterator rit;
