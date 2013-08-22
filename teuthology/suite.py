@@ -133,6 +133,7 @@ combination, and will override anything in the suite.
             )
 
         arch = get_arch(args.config)
+        machine_type = get_machine_type(args.config)
         for configs in itertools.product(*facet_configs):
             description = 'collection:%s ' % (collection_name);
             description += ' '.join('{facet}:{name}'.format(
@@ -151,6 +152,14 @@ combination, and will override anything in the suite.
                 if exclude_os_type == os_type:
                     log.info(
                         'Skipping due to excluded_os_type: %s facets %s', exclude_os_type, description
+                         )
+                    continue
+            # We should not run multiple tests (changing distros) unless the machine is a VPS
+            # Re-imaging baremetal is not yet supported.
+            if machine_type != 'vps':
+                if os_type != 'ubuntu':
+                    log.info(
+                        'Skipping due to non-ubuntu on baremetal facets %s', description
                          )
                     continue
 
@@ -461,5 +470,13 @@ def get_exclude_os_type(configs):
         os_type = y.get('exclude_os_type')
         if os_type:
             return os_type
+    return None
+
+def get_machine_type(config):
+    for yamlfile in config:
+        y = yaml.safe_load(file(yamlfile))
+        machine_type = y.get('machine_type')
+        if machine_type:
+            return machine_type
     return None
 
