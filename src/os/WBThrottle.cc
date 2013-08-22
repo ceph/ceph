@@ -145,7 +145,7 @@ void *WBThrottle::entry()
   while (get_next_should_flush(&wb)) {
     clearing = wb.get<0>();
     lock.Unlock();
-    ::fsync(**wb.get<1>());
+    ::fdatasync(**wb.get<1>());
     if (wb.get<2>().nocache)
       posix_fadvise(**wb.get<1>(), 0, 0, POSIX_FADV_DONTNEED);
     lock.Lock();
