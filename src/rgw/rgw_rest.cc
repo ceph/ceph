@@ -400,9 +400,13 @@ void dump_start(struct req_state *s)
   }
 }
 
-void end_header(struct req_state *s, const char *content_type)
+void end_header(struct req_state *s, RGWOp *op, const char *content_type)
 {
   string ctype;
+
+  if (op) {
+    dump_access_control(s, op);
+  }
 
   if (!content_type || s->err.is_err()) {
     switch (s->format) {
@@ -438,7 +442,7 @@ void end_header(struct req_state *s, const char *content_type)
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-void abort_early(struct req_state *s, int err_no)
+void abort_early(struct req_state *s, RGWOp *op, int err_no)
 {
   if (!s->formatter) {
     s->formatter = new JSONFormatter;
@@ -446,7 +450,7 @@ void abort_early(struct req_state *s, int err_no)
   }
   set_req_state_err(s, err_no);
   dump_errno(s);
-  end_header(s);
+  end_header(s, op);
   rgw_flush_formatter_and_reset(s, s->formatter);
   perfcounter->inc(l_rgw_failed_req);
 }
@@ -658,7 +662,7 @@ void RGWRESTFlusher::do_start(int ret)
   set_req_state_err(s, ret); /* no going back from here */
   dump_errno(s);
   dump_start(s);
-  end_header(s);
+  end_header(s, op);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
@@ -941,7 +945,7 @@ void RGWRESTOp::send_response()
   if (!flusher.did_start()) {
     set_req_state_err(s, http_ret);
     dump_errno(s);
-    end_header(s);
+    end_header(s, this);
   }
   flusher.flush();
 }
