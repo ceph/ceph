@@ -13,12 +13,14 @@ if [ -n "$missing" ]; then
     exit 1
 fi
 
-# site packages needed because libvirt python bindings are not nicely
-# packaged
-virtualenv --system-site-packages --distribute virtualenv
+if [ -z "$NO_CLOBBER" ] || [ ! -e ./virtualenv ]; then
+    # site packages needed because libvirt python bindings are not nicely
+    # packaged
+    virtualenv --system-site-packages --distribute virtualenv
 
-# avoid pip bugs
-./virtualenv/bin/pip install --upgrade pip
+    # avoid pip bugs
+    ./virtualenv/bin/pip install --upgrade pip
+fi
 
 ./virtualenv/bin/pip install -r requirements.txt
 
