@@ -20,6 +20,7 @@ def connect(ctx):
     port = ctx.teuthology_config['queue_port']
     return beanstalkc.Connection(host=host, port=port)
 
+
 def worker():
     parser = argparse.ArgumentParser(description="""
 Grab jobs from a beanstalk queue and run the teuthology tests they
@@ -98,8 +99,9 @@ describe. One job is run at a time.
                              cwd=os.getenv("HOME"))
         else:
             log.info("Pulling %s from upstream", teuthology_branch)
-            subprocess.Popen(('git', 'checkout', teuthology_branch), cwd=teuth_path)
-            subprocess.Popen(('git', 'pull'), cwd=teuth_path)
+            subprocess.Popen(('git', 'fetch', teuthology_branch), cwd=teuth_path)
+            subprocess.Popen(('git', 'reset', '--hard', 'origin/%s' %
+                              teuthology_branch), cwd=teuth_path)
         log.info("Bootstrapping %s", teuth_path)
         subprocess.Popen(('./bootstrap'), cwd=teuth_path)
         teuth_bin_path = os.path.join(teuth_path, 'virtualenv', 'bin')
