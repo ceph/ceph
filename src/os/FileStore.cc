@@ -3066,7 +3066,8 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
     r = bl.length();
 
   // flush?
-  if (!replaying)
+  if (!replaying &&
+      g_conf->filestore_wbthrottle_enable)
     wbthrottle.queue_wb(fd, oid, offset, len, replica);
   lfn_close(fd);
 

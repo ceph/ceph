@@ -510,6 +510,7 @@ OPTION(osd_max_attr_size, OPT_U64, 65536)
 OPTION(filestore, OPT_BOOL, false)
 
 /// filestore wb throttle limits
+OPTION(filestore_wbthrottle_enable, OPT_BOOL, true)
 OPTION(filestore_wbthrottle_btrfs_bytes_start_flusher, OPT_U64, 41943040)
 OPTION(filestore_wbthrottle_btrfs_bytes_hard_limit, OPT_U64, 419430400)
 OPTION(filestore_wbthrottle_btrfs_ios_start_flusher, OPT_U64, 500)
