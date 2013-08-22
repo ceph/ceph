@@ -11,7 +11,7 @@ while [ -n "$*" ]; do
 	    new="-f $1"
 	    shift
 	    ;;
-	-g | -f* | -W* | -MD | -MP | -fPIC | -c | -D* | --param* | -O* | -I* )
+	-g* | -f* | -W* | -MD | -MP | -fPIC | -c | -D* | --param* | -O* | -I* | -m* | -pipe )
 	    shift
 	    ;;
 	-MT )
@@ -30,7 +30,9 @@ while [ -n "$*" ]; do
     esac
 done
 
-echo yasm $new
+echo $0: yasm $new
 yasm $new
 
 [ -n "$touch" ] && touch $touch
+
+true
