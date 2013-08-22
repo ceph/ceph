@@ -68,7 +68,7 @@ do_unmap() {
 		umount $MNT
 	done 
 	# Unmap all rbd device
-	if [ -b /dev/rbd[0-9]* ]; then
+	if ls /dev/rbd[0-9]* >/dev/null 2>&1; then
 		for DEV in /dev/rbd[0-9]*; do
 			log_progress_msg $DEV
 			rbd unmap $DEV
