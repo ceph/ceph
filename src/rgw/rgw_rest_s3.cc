@@ -166,6 +166,8 @@ done:
 
   if (!content_type)
     content_type = "binary/octet-stream";
+
+  dump_access_control(s, this);
   end_header(s, content_type);
 
   if (metadata_bl.length()) {
