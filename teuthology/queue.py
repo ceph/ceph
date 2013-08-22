@@ -12,6 +12,9 @@ from teuthology import safepath
 
 log = logging.getLogger(__name__)
 
+teuthology_git_upstream = "https://github.com/ceph/teuthology.git"
+
+
 def connect(ctx):
     host = ctx.teuthology_config['queue_host']
     port = ctx.teuthology_config['queue_port']
@@ -83,13 +86,31 @@ describe. One job is run at a time.
         safe_archive = safepath.munge(job_config['name'])
         teuthology_branch = job_config.get('config', {}).get('teuthology_branch', 'master')
 
-        teuth_path = os.path.join(os.getenv("HOME"), 'teuthology-' + teuthology_branch, 'virtualenv', 'bin')
+        teuth_path = os.path.join(os.getenv("HOME"),
+                                  'teuthology-' + teuthology_branch)
+        # Make sure we have the correct teuthology branch checked out and
+        # up-to-date
         if not os.path.isdir(teuth_path):
-            raise Exception('Teuthology branch ' + teuthology_branch + ' not found at ' + teuth_path)
+            log.info("Local teuthology repo not found at %s - cloning",
+                     teuth_path)
+            subprocess.Popen(('git', 'clone', '--branch', teuthology_branch,
+                              teuthology_git_upstream, teuth_path),
+                             cwd=os.getenv("HOME"))
+        else:
+            log.info("Pulling %s from upstream", teuthology_branch)
+            subprocess.Popen(('git', 'checkout', teuthology_branch), cwd=teuth_path)
+            subprocess.Popen(('git', 'pull'), cwd=teuth_path)
+        log.info("Bootstrapping %s", teuth_path)
+        subprocess.Popen(('./bootstrap'), cwd=teuth_path)
+        teuth_bin_path = os.path.join(teuth_path, 'virtualenv', 'bin')
+        if not os.path.isdir(teuth_bin_path):
+            raise RuntimeError('Teuthology branch %s not found at %s' %
+                               (teuthology_branch, teuth_bin_path))
+
         if job_config.get('last_in_suite'):
             log.debug('Generating coverage for %s', job_config['name'])
             args = [
-                os.path.join(teuth_path, 'teuthology-results'),
+                os.path.join(teuth_bin_path, 'teuthology-results'),
                 '--timeout',
                 str(job_config.get('results_timeout', 21600)),
                 '--email',
@@ -98,20 +119,21 @@ describe. One job is run at a time.
                 os.path.join(ctx.archive_dir, safe_archive),
                 '--name',
                 job_config['name'],
-                ]
+            ]
             subprocess.Popen(args=args)
         else:
             log.debug('Creating archive dir...')
             safepath.makedirs(ctx.archive_dir, safe_archive)
             archive_path = os.path.join(ctx.archive_dir, safe_archive, str(job.jid))
             log.info('Running job %d', job.jid)
-            run_job(job_config, archive_path, teuth_path)
+            run_job(job_config, archive_path, teuth_bin_path)
         job.delete()
 
-def run_job(job_config, archive_path, teuth_path):
+
+def run_job(job_config, archive_path, teuth_bin_path):
     arg = [
-        os.path.join(teuth_path, 'teuthology'),
-        ]
+        os.path.join(teuth_bin_path, 'teuthology'),
+    ]
 
     if job_config['verbose']:
         arg.append('-v')
