@@ -108,7 +108,7 @@ describe. One job is run at a time.
         # existing virtualenv.
         env = os.environ.copy()
         env['NO_CLOBBER'] = '1'
-        subprocess.Popen(('./bootstrap'), cwd=teuth_path, env)
+        subprocess.Popen(('./bootstrap'), cwd=teuth_path, env=env)
         teuth_bin_path = os.path.join(teuth_path, 'virtualenv', 'bin')
         if not os.path.isdir(teuth_bin_path):
             raise RuntimeError('Teuthology branch %s not found at %s' %
