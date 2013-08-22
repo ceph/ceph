@@ -3853,7 +3853,6 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   }
   ctx->reply_version = ctx->new_obs.oi.user_version;
   ctx->bytes_written = ctx->op_t.get_encoded_bytes();
-  ctx->new_obs.oi.version = ctx->at_version;
  
   if (ctx->new_obs.exists) {
     // on the head object
