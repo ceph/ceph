@@ -31,6 +31,7 @@ is stored as an attribute of the object. The chunk *1* contains *ABC*
 and is stored on *OSD5*, the chunk *4* contains *XYY* and is stored on
 *OSD3*.
 ::
+ 
                              +-------------------+
                         name |        NYAN       |
                              +-------------------+
@@ -82,6 +83,7 @@ could not be read because the *OSD4* is *out*. The decoding function
 is called as soon as three chunks are read : *OSD2* was the slowest
 and its chunk was not taken into account.
 ::
+ 
                              +-------------------+
                         name |        NYAN       |
                              +-------------------+
@@ -132,6 +134,7 @@ the payload into M+K chunks and send them to the OSDs in the acting
 set. It is also responsible for maintaining an authoritative version
 of the placement group logs.
 ::
+ 
      primary
    +---OSD 1---+
    |       log |
@@ -155,6 +158,7 @@ of the placement group logs.
 
 An erasure coded placement group has been created with M = 2 + K = 1 and is supported by three OSDs, two for M and one for K. The acting set of the placement group is made of *OSD 1* *OSD 2* and *OSD 3*. An object has been encoded and stored in the OSDs : the chunk D1v1 (i.e. Data chunk number 1 version 1) is on *OSD 1*, D2v1 on *OSD 2* and P1v1 (i.e. Parity chunk number 1 version 1) on *OSD 3*. The placement group logs on each OSD are in synch at epoch 1 version 1 (i.e. 1,1).
 ::
+ 
      primary
    +---OSD 1---+
    |+----+ log |
@@ -180,6 +184,7 @@ An erasure coded placement group has been created with M = 2 + K = 1 and is supp
 
 *OSD 1* is the primary and receives a WRITE FULL from a client, meaning the payload is to replace the content of the object entirely, it is not a partial write that would only overwrite part of it. The version two of the object is created to override the version one. *OSD 1* encodes the payload into three chunks : D1v2 (i.e. Data chunk number 1 version 2) will be on *OSD 1*, D2v2 on *OSD 2* and P1v2 (i.e. Parity chunk number 1 version 2) on *OSD 3*. Each chunk is sent to the target OSD, including the primary OSD which is responsible for storing chunks in addition to handling write operations and maintaining an authoritative version of the placement group logs. When an OSD receives the message instructing it to write the chunk, it also creates a new entry in the placement group logs to reflect the change. For instance, as soon as *OSD 3* stores *P1v2*, it adds the entry 1,2 ( i.e. epoch 1, version 2 ) to its logs. Because the OSDs work asynchronously, some chunks may still be in flight ( such as *D2v2* ) while others are acknowledged and on disk ( such as *P1v1* and *D1v1* ). 
 ::
+ 
      primary
    +---OSD 1---+
    |+----+ log |
@@ -208,6 +213,7 @@ An erasure coded placement group has been created with M = 2 + K = 1 and is supp
 
 If all goes well, the chunks are acknowledged on each OSD in the acting set and the *last_complete* pointer of the logs can move from *1,1* to *1,2* and the files used to store the chunks of the previous version of the object can be removed : *D1v1* on *OSD 1*, *D2v1* on *OSD 2* and *P1v1* on *OSD 3*.
 ::
+ 
                +---OSD 1---+
                |           |
                |   DOWN    |
@@ -234,6 +240,7 @@ If all goes well, the chunks are acknowledged on each OSD in the acting set and 
 
 But accidents happen. If *OSD 1* goes down while *D2v2* is still in flight, the version 2 of the object is partially written : *OSD 3* has one chunk but does not have enough to recover. It lost two chunks : *D1v2* and *D2v2* but the erasure coding parameters M = 2 + K = 1 requires that at least two chunks are available to rebuild the third. *OSD 4* becomes the new primary and finds that the *last_complete* log entry ( i.e. all objects before this entry were known to be available on all OSDs in the previous acting set ) is *1,1* and will be the head of the new authoritative log. 
 ::
+ 
                +---OSD 2---+
                |+----+ log |
                ||D2v1| 1,1 |
@@ -252,6 +259,7 @@ But accidents happen. If *OSD 1* goes down while *D2v2* is still in flight, the 
 
 The log entry *1,2* found on *OSD 3* is divergent from the new authoritative log provided by *OSD 4* : it is discarded and the file containing the *P1v2* chunk is removed.
 ::
+ 
                +---OSD 2---+
                |+----+ log |
                ||D2v1| 1,1 |
@@ -275,6 +283,7 @@ Interrupted append
 
 An object is coded in stripes as described above. In the case of a full write, and assuming the object size is not too large to encode it in memory, there is a single stripe. When appending to an existing object, the stripe size is retrieved from the attributes of the object and if the total size of the object is a multiple of the stripe size and the payload of the append message is lower or equal to the strip size, the following applies. It applies, for instance, when *rgw* writes an object with sequence of append instead of a single write.
 ::
+ 
      primary
    +---OSD 1---+
    |+-s1-+ log |
@@ -298,6 +307,7 @@ An object is coded in stripes as described above. In the case of a full write, a
 
 *OSD 1* is the primary and receives an APPEND from a client, meaning the payload is to be appended at the end of the object. *OSD 1* encodes the payload into three chunks : S2D1 (i.e. Stripe two data chunk number 1 ) will be in s1 ( shard 1 ) on *OSD 1*, S2D2 in s2 on *OSD 2* and S2P1 (i.e. Stripe two parity chunk number 1 ) in s3 on *OSD 3*. Each chunk is sent to the target OSD, including the primary OSD which is responsible for storing chunks in addition to handling write operations and maintaining an authoritative version of the placement group logs. When an OSD receives the message instructing it to write the chunk, it also creates a new entry in the placement group logs to reflect the change. For instance, as soon as *OSD 3* stores *S2P1*, it adds the entry 1,2 ( i.e. epoch 1, version 2 ) to its logs. The log entry also carries the nature of the operation: in this case 1,2 is an APPEND where 1,1 was a CREATE. Because the OSDs work asynchronously, some chunks may still be in flight ( such as *S2D2* ) while others are acknowledged and on disk ( such as *S2D1* and *S2P1* ). 
 ::
+ 
                +---OSD 1---+
                |           |
                |   DOWN    |
@@ -323,6 +333,7 @@ An object is coded in stripes as described above. In the case of a full write, a
 
 If *OSD 1* goes down while *S2D2* is still in flight, the payload is partially appended : s3 ( shard 3) in *OSD 3* has one chunk but does not have enough to recover because s1 and s2 don't have it. It lost two chunks : *S2D1* and *S2D2* but the erasure coding parameters M = 2 + K = 1 requires that at least two chunks are available to rebuild the third. *OSD 4* becomes the new primary and finds that the *last_complete* log entry ( i.e. all objects before this entry were known to be available on all OSDs in the previous acting set ) is *1,1* and will be the head of the new authoritative log. 
 ::
+ 
                +---OSD 2---+
                |+-s2-+ log |
                ||S1D2| 1,1 |
@@ -341,8 +352,10 @@ If *OSD 1* goes down while *S2D2* is still in flight, the payload is partially a
 
 The log entry *1,2* found on *OSD 3* is divergent from the new authoritative log provided by *OSD 4* : it is discarded and the file containing the *S2P1* chunk is truncated to the nearest multiple of the stripe size.
 
-`Erasure code library <http://tracker.ceph.com/issues/5878>`_
+Erasure code library
 --------------------
+
+See also `the corresponding tracker issue <http://tracker.ceph.com/issues/5878>`_
 
 Using `Reed-Solomon <https://en.wikipedia.org/wiki/Reed_Solomon>`_,
 with parameters M+K object O is encoded by dividing it into chunks O1,
@@ -377,6 +390,7 @@ Although Reed-Solomon is provided as a default, Ceph uses it via an
 abstract API designed to allow each pool to choose the plugin that
 implements it.
 ::
+ 
   ceph osd pool create <pool> \
      erasure-code-directory=<dir> \
      erasure-code-plugin=<plugin>
@@ -387,12 +401,14 @@ The *<plugin>* is dynamically loaded from *<dir>* (defaults to
 which is responsible for registering an object derived from
 *ErasureCodePlugin* in the registry singleton :
 ::
+ 
   registry.plugins[plugin_name] = new ErasureCodePluginExample();
 
 The *ErasureCodePlugin* derived object must provide a factory method
 from which the concrete implementation of the *ErasureCodeInterface*
 object can be generated:
 ::
+ 
   virtual int factory(ErasureCodeInterfaceRef *erasure_code,
                       const map<std::string,std::string> &parameters) {
     *erasure_code = ErasureCodeInterfaceRef(new ErasureCodeExample(parameters));
@@ -402,6 +418,7 @@ object can be generated:
 The *parameters* is the list of *key=value* pairs that were set when the pool
 was created. Each *key* must be prefixed with erasure-code to avoid name collisions
 ::
+ 
   ceph osd pool create <pool> \
      erasure-code-directory=<dir>         \ # mandatory
      erasure-code-plugin=jerasure         \ # mandatory
@@ -419,6 +436,7 @@ Erasure code jerasure plugin
 
 The parameters interpreted by the jerasure plugin are:
 ::
+ 
   ceph osd pool create <pool> \
      erasure-code-directory=<dir>         \ # plugin directory absolute path
      erasure-code-plugin=jerasure         \ # plugin name (only jerasure)
@@ -507,6 +525,7 @@ require to encode the first object and not all of them.
 Objects can be further divided into stripes to reduce the overhead of
 partial writes. For instance:
 ::
+ 
            +-----------------------+
            |+---------------------+|
            ||    stripe 0         ||
