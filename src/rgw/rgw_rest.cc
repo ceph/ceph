@@ -377,6 +377,20 @@ void dump_access_control(struct req_state *s, const char *origin, const char *me
   }
 }
 
+void dump_access_control(req_state *s, RGWOp *op)
+{
+  string origin;
+  string method;
+  string header;
+  string exp_header;
+  unsigned max_age = CORS_MAX_AGE_INVALID;
+
+  if (!op->generate_cors_headers(origin, method, header, exp_header, &max_age))
+    return;
+
+  dump_access_control(s, origin.c_str(), method.c_str(), header.c_str(), exp_header.c_str(), max_age);
+}
+
 void dump_start(struct req_state *s)
 {
   if (!s->content_started) {

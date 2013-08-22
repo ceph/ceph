@@ -34,8 +34,10 @@ protected:
   struct req_state *s;
   RGWHandler *dialect_handler;
   RGWRados *store;
+  RGWCORSConfiguration bucket_cors;
+  bool cors_exist;
 public:
-  RGWOp() : s(NULL), dialect_handler(NULL), store(NULL) {}
+  RGWOp() : s(NULL), dialect_handler(NULL), store(NULL), cors_exist(false) {}
   virtual ~RGWOp() {}
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *dialect_handler) {
@@ -43,6 +45,9 @@ public:
     this->s = s;
     this->dialect_handler = dialect_handler;
   }
+  int read_bucket_cors();
+  bool generate_cors_headers(string& origin, string& method, string& headers, string& exp_headers, unsigned *max_age);
+
   virtual int verify_params() { return 0; }
   virtual bool prefetch_data() { return false; }
   virtual int verify_permission() = 0;

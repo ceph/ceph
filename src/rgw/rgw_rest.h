@@ -331,6 +331,7 @@ extern void dump_pair(struct req_state *s, const char *key, const char *value);
 extern bool is_valid_url(const char *url);
 extern void dump_access_control(struct req_state *s, const char *origin, const char *meth,
                          const char *hdr, const char *exp_hdr, uint32_t max_age);
+extern void dump_access_control(req_state *s, RGWOp *op);
 
 
 #endif
