@@ -1062,7 +1062,7 @@ int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
   case OP_COPY: // op itself will read and verify the permissions
     return 0;
   case OP_OPTIONS:
-    only_bucket = false;
+    only_bucket = true;
     break;
   default:
     return -EINVAL;
