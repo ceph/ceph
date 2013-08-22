@@ -1878,7 +1878,6 @@ bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
   MonCommand *this_cmd = NULL;
   for (MonCommand *cp = mon_commands;
        cp < &mon_commands[ARRAY_SIZE(mon_commands)]; cp++) {
-    dout(0) << __func__ << " CAPSBAR >> matching against " << cp->cmdstring << dendl;
     if (cp->cmdstring.find(prefix) != string::npos) {
       this_cmd = cp;
       break;
