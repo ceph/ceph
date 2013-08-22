@@ -875,6 +875,14 @@ int RGWRados::init_complete()
 {
   int ret;
 
+  if (need_watch_notify()) {
+    ret = init_watch();
+    if (ret < 0) {
+      lderr(cct) << "ERROR: failed to initialize watch" << dendl;
+      return ret;
+    }
+  }
+
   ret = region.init(cct, this);
   if (ret < 0)
     return ret;
@@ -909,14 +917,6 @@ int RGWRados::init_complete()
       RGWRegion& region = iter->second;
 
       region_conn_map[region.name] = new RGWRESTConn(cct, this, region.endpoints);
-    }
-  }
-
-  if (need_watch_notify()) {
-    ret = init_watch();
-    if (ret < 0) {
-      lderr(cct) << "ERROR: failed to initialize watch" << dendl;
-      return ret;
     }
   }
 
