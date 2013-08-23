@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from textwrap import dedent, fill
 import time
 import yaml
@@ -130,32 +131,17 @@ combination, and will override anything in the suite.
 
     for collection, collection_name in sorted(collections):
         log.info('Collection %s in %s' % (collection_name, collection))
-        facets = [
-            f for f in sorted(os.listdir(collection))
-            if not f.startswith('.')
-            and os.path.isdir(os.path.join(collection, f))
-            ]
-        facet_configs = (
-            [(f, name, os.path.join(collection, f, name))
-             for name in sorted(os.listdir(os.path.join(collection, f)))
-             if not name.startswith('.')
-             and name.endswith('.yaml')
-             ]
-            for f in facets
-            )
+        configs = [(combine_path(collection_name, a[0]), a[1]) for a in build_matrix(collection)]
 
         arch = get_arch(args.config)
         machine_type = get_machine_type(args.config)
-        for configs in itertools.product(*facet_configs):
-            description = '%s/{' % (collection_name);
-            description += ' '.join(
-                '{facet}/{name}'.format(facet=facet, name=name)
-                for facet, name, path in configs
-                )
-            description += '}'
-            os_type = get_os_type(configs)
-            exclude_arch = get_exclude_arch(configs)
-            exclude_os_type = get_exclude_os_type(configs)
+        for description, config in configs:
+            y = yaml.load(config)
+
+            os_type = y.get('os_type')
+            exclude_arch = y.get('exclude_arch')
+            exclude_os_type = y.get('exclude_os_type')
+
             if exclude_arch:
                 if exclude_arch == arch:
                     log.info(
@@ -187,14 +173,21 @@ combination, and will override anything in the suite.
                     '--',
                     ])
             arg.extend(args.config)
-            arg.extend(path for facet, name, path in configs)
 
-            if args.dry_run:
-                log.info('would run: %s' % ' '.join(arg))
-            else:
-                subprocess.check_call(
-                    args=arg,
-                    )
+            temp = tempfile.NamedTemporaryFile()
+            try:
+                arg.append(temp.name)
+                temp.write(config)
+
+                if args.dry_run:
+                    log.info('would run: %s' % ' '.join(arg))
+                else:
+                    subprocess.check_call(
+                        args=arg,
+                        )
+            finally:
+                temp.close()
+
     arg = copy.deepcopy(base_arg)
     arg.append('--last-in-suite')
     if args.email:
@@ -204,6 +197,61 @@ combination, and will override anything in the suite.
     subprocess.check_call(
         args=arg,
         )
+
+
+def combine_path(left, right):
+    """
+    os.path.join(a, b) doesn't like it when b is None
+    """
+    if right:
+        return os.path.join(left, right)
+    return left
+
+def build_matrix(path):
+    """
+    return a list of items describe by path
+    """
+    mode = os.stat(path).st_mode
+    if stat.S_ISREG(mode):
+        #print 'reg %s' % path
+        if path.endswith('.yaml'):
+            with file(path, 'r') as f:
+                return [(None, f.read())]
+    if stat.S_ISDIR(mode):
+        files = sorted(os.listdir(path))
+        if '+' in files:
+            # concatenate items
+            #print 'concat %s' % path
+            files.remove('+')
+            out = []
+            for fn in files:
+                out.extend(build_matrix(os.path.join(path, fn)))
+            return [(
+                    '+',
+                    ['\n'.join([a[1] for a in out])]
+                    )]
+        elif '%' in files:
+            # convolve items
+            #print 'convolve %s' % path
+            files.remove('%')
+            items = []
+            for fn in files:
+                raw = build_matrix(os.path.join(path, fn))
+                items.append([(combine_path(fn, a[0]), a[1]) for a in raw])
+            out = []
+            for a in itertools.product(*items):
+                name = '{' + ' '.join([i[0] for i in a]) + '}'
+                val = '\n'.join([i[1] for i in a])
+                out.append((name, val))
+            return out
+        else:
+            # list items
+            #print 'list %s' % path
+            out = []
+            for fn in files:
+                raw = build_matrix(os.path.join(path, fn))
+                out.extend([(combine_path(fn, a[0]), a[1]) for a in raw])
+            return out
 
 def ls():
     parser = argparse.ArgumentParser(description='List teuthology job results')
