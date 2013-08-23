@@ -15,3 +15,4 @@ tasks:
      clients:
         client.0:
            - suites/blogbench.sh
+exclude_arch: armv7l
