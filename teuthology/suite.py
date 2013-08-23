@@ -55,6 +55,11 @@ combination, and will override anything in the suite.
         required=True,
         )
     parser.add_argument(
+        '--base',
+        default=None,
+        help='base directory for the collection(s)'
+        )
+    parser.add_argument(
         '--collections',
         metavar='DIR',
         nargs='+',
@@ -114,13 +119,13 @@ combination, and will override anything in the suite.
         base_arg.extend(['--owner', args.owner])
 
     for collection in args.collections:
-        if not os.path.isdir(collection):
-            print >>sys.stderr, 'Collection %s is not a directory' % collection
+        p = os.path.join(args.base, collection)
+        if not os.path.isdir(p):
+            print >>sys.stderr, 'Collection %s is not a directory' % p
             sys.exit(1)
 
     collections = [
-        (collection,
-         os.path.basename(safepath.munge(collection)))
+        (os.path.join(args.base, collection), collection)
         for collection in args.collections
         ]
 
