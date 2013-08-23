@@ -449,6 +449,8 @@ def get_os_type(configs):
     for config in configs:
         yamlfile = config[2]
         y = yaml.safe_load(file(yamlfile))
+        if not y:
+            y = {}
         os_type = y.get('os_type')
         if os_type:
             return os_type
@@ -458,23 +460,29 @@ def get_exclude_arch(configs):
     for config in configs:
         yamlfile = config[2]
         y = yaml.safe_load(file(yamlfile))
-        os_type = y.get('exclude_arch')
-        if os_type:
-            return os_type
+        if not y:
+            y = {}
+        exclude_arch = y.get('exclude_arch')
+        if exclude_arch:
+            return exclude_arch
     return None
 
 def get_exclude_os_type(configs):
     for config in configs:
         yamlfile = config[2]
         y = yaml.safe_load(file(yamlfile))
-        os_type = y.get('exclude_os_type')
-        if os_type:
-            return os_type
+        if not y:
+            y = {}
+        exclude_os_type = y.get('exclude_os_type')
+        if exclude_os_type:
+            return exclude_os_type
     return None
 
 def get_machine_type(config):
     for yamlfile in config:
         y = yaml.safe_load(file(yamlfile))
+        if not y:
+            y = {}
         machine_type = y.get('machine_type')
         if machine_type:
             return machine_type
