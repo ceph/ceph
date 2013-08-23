@@ -1423,7 +1423,6 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     cmd_getval(g_ceph_context, cmdmap, "threshold", threshold,
 	       int64_t(g_conf->mon_pg_stuck_threshold));
 
-    boost::scoped_ptr<Formatter> f(new_formatter("json"));
     r = dump_stuck_pg_stats(ds, f.get(), (int)threshold, stuckop_vec);
     ss << "ok";
     r = 0;
