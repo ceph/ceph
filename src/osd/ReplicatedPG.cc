@@ -2594,6 +2594,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_WRITE:
       ++ctx->num_write;
       { // write
+	if (op.extent.length > osd_op.indata.length()) {
+	  result = -EINVAL;
+	  break;
+	}
         __u32 seq = oi.truncate_seq;
         if (seq && (seq > op.extent.truncate_seq) &&
             (op.extent.offset + op.extent.length > oi.size)) {
@@ -2640,6 +2644,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_WRITEFULL:
       ++ctx->num_write;
       { // write full object
+	if (op.extent.length > osd_op.indata.length()) {
+	  result = -EINVAL;
+	  break;
+	}
 	result = check_offset_and_length(op.extent.offset, op.extent.length);
 	if (result < 0)
 	  break;
