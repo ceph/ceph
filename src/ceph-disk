@@ -671,6 +671,7 @@ def mount(
         subprocess.check_call(
             args=[
                 'mount',
+                '-t', fstype,
                 '-o', options,
                 '--',
                 dev,
