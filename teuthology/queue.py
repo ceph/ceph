@@ -2,6 +2,7 @@ import argparse
 import logging
 import os
 import subprocess
+import shutil
 import sys
 import tempfile
 import yaml
@@ -21,6 +22,44 @@ def connect(ctx):
     port = ctx.teuthology_config['queue_port']
     return beanstalkc.Connection(host=host, port=port)
 
+
+def fetch_teuthology_branch(path, branch='master'):
+    """
+    Make sure we have the correct teuthology branch checked out and up-to-date
+    """
+    if not os.path.isdir(path):
+        log.info("Cloning %s from upstream", branch)
+        log.info(
+            subprocess.check_output(('git', 'clone', '--branch', branch,
+                                     teuthology_git_upstream, path),
+                                    cwd=os.getenv("HOME"))
+        )
+    else:
+        log.info("Fetching %s from upstream", branch)
+        log.info(
+            subprocess.check_output(('git', 'fetch', '-p', 'origin'),
+                                    cwd=path)
+        )
+
+    # This try/except block will notice if the requested branch doesn't
+    # exist, whether it was cloned or fetched.
+    try:
+        subprocess.check_call(('git', 'reset', '--hard', 'origin/%s' % branch),
+                              cwd=path)
+    except subprocess.CalledProcessError:
+        log.error("teuthology branch not found: %s", branch)
+        shutil.rmtree(path)
+        raise
+
+    log.info("Bootstrapping %s", path)
+    # This magic makes the bootstrap script not attempt to clobber an
+    # existing virtualenv. But the branch's bootstrap needs to actually
+    # check for the NO_CLOBBER variable.
+    env = os.environ.copy()
+    env['NO_CLOBBER'] = '1'
+    log.info(
+        subprocess.check_output(('./bootstrap'), cwd=path, env=env)
+    )
 
 def worker():
     parser = argparse.ArgumentParser(description="""
@@ -86,34 +125,17 @@ describe. One job is run at a time.
         log.debug('Config is: %s', job.body)
         job_config = yaml.safe_load(job.body)
         safe_archive = safepath.munge(job_config['name'])
-        teuthology_branch = job_config.get('config', {}).get('teuthology_branch', 'master')
+        teuthology_branch = job_config.get(
+            'config', {}).get('teuthology_branch', 'master')
 
         teuth_path = os.path.join(os.getenv("HOME"),
                                   'teuthology-' + teuthology_branch)
-        # Make sure we have the correct teuthology branch checked out and
-        # up-to-date
-        if not os.path.isdir(teuth_path):
-            log.info("Local teuthology repo not found at %s - cloning",
-                     teuth_path)
-            subprocess.Popen(('git', 'clone', '--branch', teuthology_branch,
-                              teuthology_git_upstream, teuth_path),
-                             cwd=os.getenv("HOME"))
 
-            log.info("Bootstrapping %s", teuth_path)
-            # This magic makes the bootstrap script not attempt to clobber an
-            # existing virtualenv.
-            env = os.environ.copy()
-            env['NO_CLOBBER'] = '1'
-            subprocess.Popen(('./bootstrap'), cwd=teuth_path, env=env)
-        else:
-            log.info("Pulling %s from upstream", teuthology_branch)
-            subprocess.Popen(('git', 'fetch', '-p', 'origin'), cwd=teuth_path)
-            subprocess.Popen(('git', 'reset', '--hard', 'origin/%s' %
-                              teuthology_branch), cwd=teuth_path)
+        fetch_teuthology_branch(path=teuth_path, branch=teuthology_branch)
 
         teuth_bin_path = os.path.join(teuth_path, 'virtualenv', 'bin')
         if not os.path.isdir(teuth_bin_path):
-            raise RuntimeError('Teuthology branch %s not found at %s' %
+            raise RuntimeError("teuthology branch %s at %s not bootstrapped!" %
                                (teuthology_branch, teuth_bin_path))
 
         if job_config.get('last_in_suite'):
