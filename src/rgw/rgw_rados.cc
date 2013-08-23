@@ -741,7 +741,7 @@ void RGWPutObjProcessor_Atomic::complete_parts()
     prepare_next_part(obj_len);
 }
 
-int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs)
+int RGWPutObjProcessor_Atomic::complete_writing_data()
 {
   if (!data_ofs && !immutable_head()) {
     first_chunk.claim(pending_data_bl);
@@ -761,6 +761,13 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
     }
   }
   complete_parts();
+  return 0;
+}
+
+int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs) {
+  int r = complete_writing_data();
+  if (r < 0)
+    return r;
 
   store->set_atomic(obj_ctx, head_obj);
 
@@ -772,9 +779,9 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
   extra_params.mtime = mtime;
   extra_params.set_mtime = set_mtime;
 
-  int r = store->put_obj_meta(obj_ctx, head_obj, obj_len, attrs,
-                              RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
-			      extra_params);
+  r = store->put_obj_meta(obj_ctx, head_obj, obj_len, attrs,
+                          RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
+                          extra_params);
   return r;
 }
 
