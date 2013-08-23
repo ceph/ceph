@@ -51,6 +51,7 @@ const char *parse_good[] = {
   "allow service foo-foo r, allow service bar r",
   "allow service \" foo \" w, allow service bar r",
   "allow command abc with arg=foo arg2=bar, allow service foo r",
+  "allow command abc.def with arg=foo arg2=bar, allow service foo r",
   "allow command \"foo bar\" with arg=\"baz\"",
   "allow command \"foo bar\" with arg=\"baz.xx\"",
   0
