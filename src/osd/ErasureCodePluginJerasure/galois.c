@@ -563,7 +563,7 @@ void galois_w16_region_multiply(char *region,      /* Region to multiply */
 
 void galois_invert_binary_matrix(int *mat, int *inv, int rows)
 {
-  int cols, i, j, k;
+  int cols, i, j;
   int tmp;
  
   cols = rows;
@@ -618,9 +618,9 @@ int galois_inverse(int y, int w)
 
 int galois_shift_inverse(int y, int w)
 {
-  int mat[1024], mat2[32];
-  int inv[1024], inv2[32];
-  int ind, i, j, k, prod;
+  int mat2[32];
+  int inv2[32];
+  int i;
  
   for (i = 0; i < w; i++) {
     mat2[i] = y;
@@ -684,15 +684,13 @@ void galois_w32_region_multiply(char *region,      /* Region to multiply */
                                   char *r2,          /* If r2 != NULL, products go here */
                                   int add)
 {
-  unsigned int *ur1, *ur2, *cp, *ur2top;
-  unsigned long *lp2, *lptop;
+  unsigned int *ur1, *ur2;
   int i, j, a, b, accumulator, i8, j8, k;
   int acache[4];
 
   ur1 = (unsigned int *) region;
   ur2 = (r2 == NULL) ? ur1 : (unsigned int *) r2;
   nbytes /= sizeof(int);
-  ur2top = ur2 + nbytes;
 
   if (galois_split_w8[0]== NULL) {
     if (galois_create_split_w8_tables(8) < 0) {
