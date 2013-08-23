@@ -1166,7 +1166,7 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx)
 
 int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs)
 {
-  complete_parts();
+  complete_writing_data();
 
   RGWRados::PutObjMetaExtraParams params;
   params.set_mtime = set_mtime;
