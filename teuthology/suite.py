@@ -143,10 +143,12 @@ combination, and will override anything in the suite.
         arch = get_arch(args.config)
         machine_type = get_machine_type(args.config)
         for configs in itertools.product(*facet_configs):
-            description = 'collection:%s ' % (collection_name);
-            description += ' '.join('{facet}:{name}'.format(
-                    facet=facet, name=name)
-                                 for facet, name, path in configs)
+            description = '%s/{' % (collection_name);
+            description += ' '.join(
+                '{facet}/{name}'.format(facet=facet, name=name)
+                for facet, name, path in configs
+                )
+            description += '}'
             os_type = get_os_type(configs)
             exclude_arch = get_exclude_arch(configs)
             exclude_os_type = get_exclude_os_type(configs)
