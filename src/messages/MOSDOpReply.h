@@ -31,7 +31,7 @@
 
 class MOSDOpReply : public Message {
 
-  static const int HEAD_VERSION = 4;
+  static const int HEAD_VERSION = 5;
   static const int COMPAT_VERSION = 2;
 
   object_t oid;
@@ -40,6 +40,7 @@ class MOSDOpReply : public Message {
   int64_t flags;
   int32_t result;
   eversion_t reassert_version;
+  version_t user_version;
   epoch_t osdmap_epoch;
   int32_t retry_attempt;
 
@@ -53,9 +54,11 @@ public:
   
   int get_result() const { return result; }
   eversion_t get_replay_version() { return reassert_version; }
+  version_t get_user_version() { return user_version; }
   
   void set_result(int r) { result = r; }
   void set_replay_version(eversion_t v) { reassert_version = v; }
+  void set_user_version(version_t v) { user_version = v; }
 
   void add_flags(int f) { flags |= f; }
 
@@ -100,6 +103,7 @@ public:
     pgid = req->pgid;
     osdmap_epoch = e;
     reassert_version = req->reassert_version;
+    user_version = 0;
     retry_attempt = req->get_retry_attempt();
 
     // zero out ops payload_len
@@ -147,6 +151,8 @@ public:
 
       for (unsigned i = 0; i < num_ops; i++)
 	::encode(ops[i].rval, payload);
+
+      ::encode(user_version, payload);
     }
   }
   virtual void decode_payload() {
@@ -163,6 +169,7 @@ public:
       result = head.result;
       flags = head.flags;
       reassert_version = head.reassert_version;
+      user_version = reassert_version.version;
       osdmap_epoch = head.osdmap_epoch;
       retry_attempt = -1;
     } else {
@@ -190,6 +197,11 @@ public:
 
 	OSDOp::split_osd_op_vector_out_data(ops, data);
       }
+
+      if (header.version >= 5)
+	::decode(user_version, p);
+      else
+	user_version = reassert_version.version;
     }
   }
 
