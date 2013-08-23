@@ -31,12 +31,11 @@ def run_tasks(tasks, ctx):
         ctx.summary['success'] = False
         if 'failure_reason' not in ctx.summary:
             ctx.summary['failure_reason'] = str(e)
-        msg = 'Saw exception from tasks.'
+        log.exception('Saw exception from tasks.')
         sentry = get_sentry_client()
         if sentry:
             exc_id = sentry.captureException()
-            msg += " Sentry id %s" % exc_id
-        log.exception(msg)
+            log.exception(" Sentry id %s" % exc_id)
         if ctx.config.get('interactive-on-error'):
             from .task import interactive
             log.warning('Saw failure, going into interactive mode...')

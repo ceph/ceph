@@ -10,10 +10,8 @@ client = None
 def get_client():
     global client
     if client:
-        log.debug("Found client, reusing")
         return client
 
-    log.debug("Getting sentry client")
     dsn = config.sentry_dsn
     if dsn:
         client = Client(dsn=dsn)
