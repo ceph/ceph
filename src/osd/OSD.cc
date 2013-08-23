@@ -3512,7 +3512,7 @@ bool OSD::_is_healthy()
 	++up;
       ++num;
     }
-    if (up < num / 3) {
+    if ((float)up < (float)num * g_conf->osd_heartbeat_min_healthy_ratio) {
       dout(1) << "is_healthy false -- only " << up << "/" << num << " up peers (less than 1/3)" << dendl;
       return false;
     }
