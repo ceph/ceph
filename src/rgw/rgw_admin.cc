@@ -854,6 +854,9 @@ int main(int argc, char **argv)
         cerr << "ERROR: invalid replica log type" << std::endl;
         return EINVAL;
       }
+    } else if (strncmp(*i, "-", 1) == 0) {
+      cerr << "ERROR: invalid flag " << *i << std::endl;
+      return EINVAL;
     } else {
       ++i;
     }
