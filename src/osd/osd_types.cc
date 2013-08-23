@@ -1918,7 +1918,7 @@ void pg_log_entry_t::decode_with_checksum(bufferlist::iterator& p)
 
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(7, 4, bl);
+  ENCODE_START(8, 4, bl);
   ::encode(op, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
@@ -1940,12 +1940,13 @@ void pg_log_entry_t::encode(bufferlist &bl) const
   if (op == LOST_REVERT)
     ::encode(prior_version, bl);
   ::encode(snaps, bl);
+  ::encode(user_version, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_entry_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(7, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(8, 4, 4, bl);
   ::decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -1981,6 +1982,11 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
       op == CLONE) {    // for v < 7, it's only present for CLONE.
     ::decode(snaps, bl);
   }
+
+  if (struct_v >= 8)
+    ::decode(user_version, bl);
+  else
+    user_version = version.version;
 
   DECODE_FINISH(bl);
 }
