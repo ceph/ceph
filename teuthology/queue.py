@@ -107,7 +107,7 @@ describe. One job is run at a time.
             subprocess.Popen(('./bootstrap'), cwd=teuth_path, env=env)
         else:
             log.info("Pulling %s from upstream", teuthology_branch)
-            subprocess.Popen(('git', 'fetch', teuthology_branch), cwd=teuth_path)
+            subprocess.Popen(('git', 'fetch', '-p', 'origin'), cwd=teuth_path)
             subprocess.Popen(('git', 'reset', '--hard', 'origin/%s' %
                               teuthology_branch), cwd=teuth_path)
 
