@@ -39,7 +39,7 @@ class MOSDOpReply : public Message {
   vector<OSDOp> ops;
   int64_t flags;
   int32_t result;
-  eversion_t reassert_version;
+  eversion_t replay_version;
   version_t user_version;
   epoch_t osdmap_epoch;
   int32_t retry_attempt;
@@ -53,11 +53,11 @@ public:
   bool     is_onnvram() const { return get_flags() & CEPH_OSD_FLAG_ONNVRAM; }
   
   int get_result() const { return result; }
-  eversion_t get_replay_version() { return reassert_version; }
+  eversion_t get_replay_version() { return replay_version; }
   version_t get_user_version() { return user_version; }
   
   void set_result(int r) { result = r; }
-  void set_replay_version(eversion_t v) { reassert_version = v; }
+  void set_replay_version(eversion_t v) { replay_version = v; }
   void set_user_version(version_t v) { user_version = v; }
 
   void add_flags(int f) { flags |= f; }
@@ -102,7 +102,7 @@ public:
     oid = req->oid;
     pgid = req->pgid;
     osdmap_epoch = e;
-    reassert_version = req->reassert_version;
+    replay_version = req->reassert_version;
     user_version = 0;
     retry_attempt = req->get_retry_attempt();
 
@@ -125,7 +125,7 @@ public:
       head.layout.ol_pgid = pgid.get_old_pg().v;
       head.flags = flags;
       head.osdmap_epoch = osdmap_epoch;
-      head.reassert_version = reassert_version;
+      head.reassert_version = replay_version;
       head.result = result;
       head.num_ops = ops.size();
       head.object_len = oid.name.length();
@@ -139,7 +139,7 @@ public:
       ::encode(pgid, payload);
       ::encode(flags, payload);
       ::encode(result, payload);
-      ::encode(reassert_version, payload);
+      ::encode(replay_version, payload);
       ::encode(osdmap_epoch, payload);
 
       __u32 num_ops = ops.size();
@@ -168,8 +168,8 @@ public:
       pgid = pg_t(head.layout.ol_pgid);
       result = head.result;
       flags = head.flags;
-      reassert_version = head.reassert_version;
-      user_version = reassert_version.version;
+      replay_version = head.reassert_version;
+      user_version = replay_version.version;
       osdmap_epoch = head.osdmap_epoch;
       retry_attempt = -1;
     } else {
@@ -177,7 +177,7 @@ public:
       ::decode(pgid, p);
       ::decode(flags, p);
       ::decode(result, p);
-      ::decode(reassert_version, p);
+      ::decode(replay_version, p);
       ::decode(osdmap_epoch, p);
 
       __u32 num_ops = ops.size();
@@ -201,7 +201,7 @@ public:
       if (header.version >= 5)
 	::decode(user_version, p);
       else
-	user_version = reassert_version.version;
+	user_version = replay_version.version;
     }
   }
 
