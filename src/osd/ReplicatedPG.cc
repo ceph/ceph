@@ -6528,12 +6528,15 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
   pg_log.get_log().print(*_dout);
   *_dout << dendl;
 
+  info.stats.stats_invalid = true;
+
   if (missing.num_missing() == 0) {
     // advance last_complete since nothing else is missing!
     info.last_complete = info.last_update;
-    dirty_info = true;
-    write_if_dirty(*t);
   }
+
+  dirty_info = true;
+  write_if_dirty(*t);
 
   osd->store->queue_transaction(osr.get(), t, c, NULL, new C_OSD_OndiskWriteUnlockList(&c->obcs));
 	      
