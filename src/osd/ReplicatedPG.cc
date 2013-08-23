@@ -908,14 +908,15 @@ void ReplicatedPG::do_op(OpRequestRef op)
       return;
     }
 
-    eversion_t oldv = pg_log.get_log().get_request_version(ctx->reqid);
-    if (oldv != eversion_t()) {
+    const pg_log_entry_t *entry = pg_log.get_log().get_request(ctx->reqid);
+    if (entry) {
+      const eversion_t& oldv = entry->version;
       dout(3) << "do_op dup " << ctx->reqid << " was " << oldv << dendl;
       delete ctx;
       put_object_context(obc);
       put_object_contexts(src_obc);
       if (already_complete(oldv)) {
-	osd->reply_op_error(op, 0, oldv);
+	osd->reply_op_error(op, 0, oldv, entry->user_version);
       } else {
 	if (m->wants_ack()) {
 	  if (already_ack(oldv)) {
@@ -4126,7 +4127,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	for (list<OpRequestRef>::iterator i = waiting_for_ondisk[repop->v].begin();
 	     i != waiting_for_ondisk[repop->v].end();
 	     ++i) {
-	  osd->reply_op_error(*i, 0, repop->v);
+	  osd->reply_op_error(*i, 0, repop->v, 0);
 	}
 	waiting_for_ondisk.erase(repop->v);
       }

@@ -6798,10 +6798,11 @@ void OSD::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
 
 void OSDService::reply_op_error(OpRequestRef op, int err)
 {
-  reply_op_error(op, err, eversion_t());
+  reply_op_error(op, err, eversion_t(), 0);
 }
 
-void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v)
+void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v,
+                                version_t uv)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->request);
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
@@ -6811,6 +6812,7 @@ void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v)
   MOSDOpReply *reply = new MOSDOpReply(m, err, osdmap->get_epoch(), flags);
   Messenger *msgr = client_messenger;
   reply->set_replay_version(v);
+  reply->set_user_version(uv);
   if (m->get_source().is_osd())
     msgr = cluster_messenger;
   msgr->send_message(reply, m->get_connection());
