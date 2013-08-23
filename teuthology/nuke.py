@@ -467,6 +467,11 @@ def nuke_helper(ctx, log):
         need_reboot = ctx.cluster.remotes.keys()
     synch_clocks(need_reboot, log)
 
+    log.info('Making sure firmware.git is not locked...')
+    ctx.cluster.run(args=[
+            'sudo', 'rm', '-f', '/lib/firmware/updates/.git/index.lock',
+            ])
+
     log.info('Reseting syslog output locations...')
     reset_syslog_dir(ctx, log)
     log.info('Clearing filesystem of test data...')
