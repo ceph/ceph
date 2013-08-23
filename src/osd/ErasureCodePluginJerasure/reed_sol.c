@@ -78,8 +78,7 @@ int *reed_sol_r6_coding_matrix(int k, int w)
 
 int *reed_sol_vandermonde_coding_matrix(int k, int m, int w)
 {
-  int tmp;
-  int i, j, index;
+  int i, j;
   int *vdm, *dist;
 
   vdm = reed_sol_big_vandermonde_distribution_matrix(k+m, k, w);

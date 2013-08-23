@@ -169,7 +169,7 @@ int jerasure_make_decoding_bitmatrix(int k, int m, int w, int *matrix, int *eras
 int jerasure_matrix_decode(int k, int m, int w, int *matrix, int row_k_ones, int *erasures,
                           char **data_ptrs, char **coding_ptrs, int size)
 {
-  int i, j, edd, lastdrive;
+  int i, edd, lastdrive;
   int *tmpids;
   int *erased, *decoding_matrix, *dm_ids;
 
@@ -301,8 +301,7 @@ int *jerasure_matrix_to_bitmatrix(int k, int m, int w, int *matrix)
 void jerasure_matrix_encode(int k, int m, int w, int *matrix,
                           char **data_ptrs, char **coding_ptrs, int size)
 {
-  int *init;
-  int i, j;
+  int i;
   
   if (w != 8 && w != 16 && w != 32) {
     fprintf(stderr, "ERROR: jerasure_matrix_encode() and w is not 8, 16 or 32\n");
@@ -639,7 +638,7 @@ void jerasure_matrix_dotprod(int k, int w, int *matrix_row,
 int jerasure_bitmatrix_decode(int k, int m, int w, int *bitmatrix, int row_k_ones, int *erasures,
                             char **data_ptrs, char **coding_ptrs, int size, int packetsize)
 {
-  int i, j;
+  int i;
   int *erased;
   int *decoding_matrix;
   int *dm_ids;
@@ -777,7 +776,6 @@ static int set_up_ids_for_scheduled_decoding(int k, int m, int *erasures, int *r
 {
   int ddf, cdf;
   int *erased;
-  char **ptrs;
   int i, j, x;
 
   ddf = 0;
@@ -1012,9 +1010,6 @@ int jerasure_schedule_decode_cache(int k, int m, int w, int ***scache, int *eras
 
 int ***jerasure_generate_schedule_cache(int k, int m, int w, int *bitmatrix, int smart)
 {
-  int i, tdone;
-  char **ptrs;
-  int **schedule;
   int ***scache;
   int erasures[3];
   int e1, e2;
@@ -1141,7 +1136,7 @@ int jerasure_invertible_bitmatrix(int *mat, int rows)
   
 int *jerasure_matrix_multiply(int *m1, int *m2, int r1, int c1, int r2, int c2, int w)
 {
-  int *product, i, j, k, l;
+  int *product, i, j, k;
 
   product = (int *) malloc(sizeof(int)*r1*c2);
   for (i = 0; i < r1*c2; i++) product[i] = 0;
@@ -1195,7 +1190,7 @@ void jerasure_schedule_encode(int k, int m, int w, int **schedule,
                                    char **data_ptrs, char **coding_ptrs, int size, int packetsize)
 {
   char **ptr_copy;
-  int i, j, tdone;
+  int i, tdone;
 
   ptr_copy = talloc(char *, (k+m));
   for (i = 0; i < k; i++) ptr_copy[i] = data_ptrs[i];
@@ -1362,8 +1357,7 @@ int **jerasure_smart_bitmatrix_to_schedule(int k, int m, int w, int *bitmatrix)
 void jerasure_bitmatrix_encode(int k, int m, int w, int *bitmatrix,
                             char **data_ptrs, char **coding_ptrs, int size, int packetsize)
 {
-  int i, j, x, y, sptr, pstarted, index;
-  char *dptr, *pptr;
+  int i;
 
   if (packetsize%sizeof(long) != 0) {
     fprintf(stderr, "jerasure_bitmatrix_encode - packetsize(%d) %c sizeof(long) != 0\n", packetsize, '%');
