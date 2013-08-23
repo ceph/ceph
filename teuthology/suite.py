@@ -157,7 +157,7 @@ combination, and will override anything in the suite.
             # We should not run multiple tests (changing distros) unless the machine is a VPS
             # Re-imaging baremetal is not yet supported.
             if machine_type != 'vps':
-                if os_type != 'ubuntu':
+                if os_type and os_type != 'ubuntu':
                     log.info(
                         'Skipping due to non-ubuntu on baremetal facets %s', description
                          )
