@@ -104,7 +104,6 @@ public:
     oid = req->oid;
     pgid = req->pgid;
     osdmap_epoch = e;
-    replay_version = req->reassert_version;
     user_version = 0;
     retry_attempt = req->get_retry_attempt();
 

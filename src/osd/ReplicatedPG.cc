@@ -4143,8 +4143,14 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	MOSDOpReply *reply = repop->ctx->reply;
 	if (reply)
 	  repop->ctx->reply = NULL;
-	else
+	else {
 	  reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
+	  reply->set_replay_version(repop->ctx->at_version);
+	  reply->set_user_version(repop->ctx->user_at_version);
+	  eversion_t bad_replay_version(repop->ctx->at_version);
+	  bad_replay_version.version = repop->ctx->user_at_version;
+	  reply->set_bad_replay_version(bad_replay_version);
+	}
 	reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
 	dout(10) << " sending commit on " << *repop << " " << reply << dendl;
 	assert(entity_name_t::TYPE_OSD != m->get_connection()->peer_type);
@@ -4165,6 +4171,11 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	     ++i) {
 	  MOSDOp *m = (MOSDOp*)(*i)->request;
 	  MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
+	  reply->set_replay_version(repop->ctx->at_version);
+	  reply->set_user_version(repop->ctx->user_at_version);
+	  eversion_t bad_replay_version(repop->ctx->at_version);
+	  bad_replay_version.version = repop->ctx->user_at_version;
+	  reply->set_bad_replay_version(bad_replay_version);
 	  reply->add_flags(CEPH_OSD_FLAG_ACK);
 	  osd->send_message_osd_client(reply, m->get_connection());
 	}
@@ -4176,8 +4187,14 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	MOSDOpReply *reply = repop->ctx->reply;
 	if (reply)
 	  repop->ctx->reply = NULL;
-	else
+	else {
 	  reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
+	  reply->set_replay_version(repop->ctx->at_version);
+	  reply->set_user_version(repop->ctx->user_at_version);
+	  eversion_t bad_replay_version(repop->ctx->at_version);
+	  bad_replay_version.version = repop->ctx->user_at_version;
+	  reply->set_bad_replay_version(bad_replay_version);
+	}
 	reply->add_flags(CEPH_OSD_FLAG_ACK);
 	dout(10) << " sending ack on " << *repop << " " << reply << dendl;
         assert(entity_name_t::TYPE_OSD != m->get_connection()->peer_type);
