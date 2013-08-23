@@ -32,7 +32,7 @@ def run_tasks(tasks, ctx):
         if 'failure_reason' not in ctx.summary:
             ctx.summary['failure_reason'] = str(e)
         msg = 'Saw exception from tasks.'
-        sentry = get_sentry_client(ctx)
+        sentry = get_sentry_client()
         if sentry:
             exc_id = sentry.captureException()
             msg += " Sentry id %s" % exc_id
