@@ -55,12 +55,18 @@ def fetch_teuthology_branch(path, branch='master'):
                                          teuthology_git_upstream, path),
                                         cwd=os.getenv("HOME"))
                 )
-        else:
+        elif time.time() - os.stat('/etc/passwd').st_mtime > 60:
+            # only do this at most once per minute
             log.info("Fetching %s from upstream", branch)
             log.info(
                 subprocess.check_output(('git', 'fetch', '-p', 'origin'),
                                         cwd=path)
                 )
+            log.info(
+                subprocess.check_output(('touch', path))
+                )
+        else:
+            log.info("%s was just updated; assuming it is current", branch)
 
         # This try/except block will notice if the requested branch doesn't
         # exist, whether it was cloned or fetched.
