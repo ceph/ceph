@@ -1,3 +1,7 @@
+# this file is responsible for submitting tests into the queue
+# by generating combinations of facets found in
+# https://github.com/ceph/ceph-qa-suite.git
+
 import argparse
 import copy
 import errno
@@ -5,14 +9,9 @@ import itertools
 import logging
 import os
 import re
-from textwrap import dedent, fill
-
-# this file is responsible for submitting tests into the queue
-# by generating combinations of facets found in
-# https://github.com/ceph/ceph-qa-suite.git
-
 import subprocess
 import sys
+from textwrap import dedent, fill
 import time
 import yaml
 
