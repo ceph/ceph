@@ -45,6 +45,11 @@ combination, and will override anything in the suite.
         help='be more verbose',
         )
     parser.add_argument(
+        '--dry-run',
+        action='store_true', default=None,
+        help='do a dry run; do not schedule anything',
+        )
+    parser.add_argument(
         '--name',
         help='name for this suite',
         required=True,
@@ -177,9 +182,13 @@ combination, and will override anything in the suite.
                     ])
             arg.extend(args.config)
             arg.extend(path for facet, name, path in configs)
-            subprocess.check_call(
-                args=arg,
-                )
+
+            if args.dry_run:
+                log.info('would run: %s' % ' '.join(arg))
+            else:
+                subprocess.check_call(
+                    args=arg,
+                    )
     arg = copy.deepcopy(base_arg)
     arg.append('--last-in-suite')
     if args.email:
