@@ -1,4 +1,5 @@
 import argparse
+import fcntl
 import logging
 import os
 import subprocess
@@ -16,6 +17,22 @@ log = logging.getLogger(__name__)
 #teuthology_git_upstream = "https://github.com/ceph/teuthology.git"
 teuthology_git_upstream = "git://ceph.com/teuthology.git"
 
+# simple flock class
+class filelock(object):
+    def __init__(self, fn):
+        self.fn = fn
+        self.fd = None
+
+    def acquire(self):
+        assert not self.fd
+        self.fd = file(self.fn, 'w')
+        fcntl.lockf(self.fd, fcntl.LOCK_EX)
+
+    def release(self):
+        assert self.fd
+        fcntl.lockf(self.fd, fcntl.LOCK_UN)
+        self.fd = None
+
 
 def connect(ctx):
     host = ctx.teuthology_config['queue_host']
@@ -27,39 +44,46 @@ def fetch_teuthology_branch(path, branch='master'):
     """
     Make sure we have the correct teuthology branch checked out and up-to-date
     """
-    if not os.path.isdir(path):
-        log.info("Cloning %s from upstream", branch)
-        log.info(
-            subprocess.check_output(('git', 'clone', '--branch', branch,
-                                     teuthology_git_upstream, path),
-                                    cwd=os.getenv("HOME"))
-        )
-    else:
-        log.info("Fetching %s from upstream", branch)
-        log.info(
-            subprocess.check_output(('git', 'fetch', '-p', 'origin'),
-                                    cwd=path)
-        )
-
-    # This try/except block will notice if the requested branch doesn't
-    # exist, whether it was cloned or fetched.
+    # only let one worker create/update the checkout at a time
+    lock = filelock('%s.lock' % path);
+    lock.acquire()
     try:
-        subprocess.check_call(('git', 'reset', '--hard', 'origin/%s' % branch),
-                              cwd=path)
-    except subprocess.CalledProcessError:
-        log.error("teuthology branch not found: %s", branch)
-        shutil.rmtree(path)
-        raise
+        if not os.path.isdir(path):
+            log.info("Cloning %s from upstream", branch)
+            log.info(
+                subprocess.check_output(('git', 'clone', '--branch', branch,
+                                         teuthology_git_upstream, path),
+                                        cwd=os.getenv("HOME"))
+                )
+        else:
+            log.info("Fetching %s from upstream", branch)
+            log.info(
+                subprocess.check_output(('git', 'fetch', '-p', 'origin'),
+                                        cwd=path)
+                )
 
-    log.info("Bootstrapping %s", path)
-    # This magic makes the bootstrap script not attempt to clobber an
-    # existing virtualenv. But the branch's bootstrap needs to actually
-    # check for the NO_CLOBBER variable.
-    env = os.environ.copy()
-    env['NO_CLOBBER'] = '1'
-    log.info(
-        subprocess.check_output(('./bootstrap'), cwd=path, env=env)
-    )
+        # This try/except block will notice if the requested branch doesn't
+        # exist, whether it was cloned or fetched.
+        try:
+            subprocess.check_call(('git', 'reset', '--hard', 'origin/%s' % branch),
+                                  cwd=path)
+        except subprocess.CalledProcessError:
+            log.error("teuthology branch not found: %s", branch)
+            shutil.rmtree(path)
+            raise
+
+        log.info("Bootstrapping %s", path)
+        # This magic makes the bootstrap script not attempt to clobber an
+        # existing virtualenv. But the branch's bootstrap needs to actually
+        # check for the NO_CLOBBER variable.
+        env = os.environ.copy()
+        env['NO_CLOBBER'] = '1'
+        log.info(
+            subprocess.check_output(('./bootstrap'), cwd=path, env=env)
+            )
+
+    finally:
+        lock.release()
 
 def worker():
     parser = argparse.ArgumentParser(description="""
