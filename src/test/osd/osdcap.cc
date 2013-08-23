@@ -41,6 +41,7 @@ const char *parse_good[] = {
   "allow rwx pool foo; allow r pool bar",
   "allow auid 123 rwx",
   "allow pool foo rwx, allow pool bar r",
+  "allow pool foo.froo.foo rwx, allow pool bar r",
   "allow pool foo rwx ; allow pool bar r",
   "allow pool foo rwx ;allow pool bar r",
   "allow pool foo rwx; allow pool bar r",
