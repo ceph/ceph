@@ -98,17 +98,19 @@ describe. One job is run at a time.
             subprocess.Popen(('git', 'clone', '--branch', teuthology_branch,
                               teuthology_git_upstream, teuth_path),
                              cwd=os.getenv("HOME"))
+
+            log.info("Bootstrapping %s", teuth_path)
+            # This magic makes the bootstrap script not attempt to clobber an
+            # existing virtualenv.
+            env = os.environ.copy()
+            env['NO_CLOBBER'] = '1'
+            subprocess.Popen(('./bootstrap'), cwd=teuth_path, env=env)
         else:
             log.info("Pulling %s from upstream", teuthology_branch)
             subprocess.Popen(('git', 'fetch', teuthology_branch), cwd=teuth_path)
             subprocess.Popen(('git', 'reset', '--hard', 'origin/%s' %
                               teuthology_branch), cwd=teuth_path)
-        log.info("Bootstrapping %s", teuth_path)
-        # This magic makes the bootstrap script not attempt to clobber an
-        # existing virtualenv.
-        env = os.environ.copy()
-        env['NO_CLOBBER'] = '1'
-        subprocess.Popen(('./bootstrap'), cwd=teuth_path, env=env)
+
         teuth_bin_path = os.path.join(teuth_path, 'virtualenv', 'bin')
         if not os.path.isdir(teuth_bin_path):
             raise RuntimeError('Teuthology branch %s not found at %s' %
