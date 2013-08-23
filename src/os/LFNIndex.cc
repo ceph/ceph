@@ -108,7 +108,8 @@ int LFNIndex::unlink(const hobject_t &hoid)
 
 int LFNIndex::lookup(const hobject_t &hoid,
 		     IndexedPath *out_path,
-		     int *exist) {
+		     int *exist)
+{
   WRAP_RETRY(
   vector<string> path;
   string short_name;
@@ -172,7 +173,8 @@ int LFNIndex::fsync_dir(const vector<string> &path)
 int LFNIndex::link_object(const vector<string> &from,
 			  const vector<string> &to,
 			  const hobject_t &hoid,
-			  const string &from_short_name) {
+			  const string &from_short_name)
+{
   int r;
   string from_path = get_full_path(from, from_short_name);
   string to_path;
@@ -191,7 +193,8 @@ int LFNIndex::link_object(const vector<string> &from,
 
 int LFNIndex::remove_objects(const vector<string> &dir,
 			     const map<string, hobject_t> &to_remove,
-			     map<string, hobject_t> *remaining) {
+			     map<string, hobject_t> *remaining)
+{
   set<string> clean_chains;
   for (map<string, hobject_t>::const_iterator to_clean = to_remove.begin();
        to_clean != to_remove.end();
@@ -253,7 +256,8 @@ int LFNIndex::remove_objects(const vector<string> &dir,
 }
 
 int LFNIndex::move_objects(const vector<string> &from,
-			   const vector<string> &to) {
+			   const vector<string> &to)
+{
   map<string, hobject_t> to_move;
   int r;
   r = list_objects(from, 0, NULL, &to_move);
@@ -293,7 +297,8 @@ int LFNIndex::move_objects(const vector<string> &from,
 }
 
 int LFNIndex::remove_object(const vector<string> &from,
-			    const hobject_t &hoid) {
+			    const hobject_t &hoid)
+{
   string short_name;
   int r, exist;
   maybe_inject_failure();
@@ -306,7 +311,8 @@ int LFNIndex::remove_object(const vector<string> &from,
 
 int LFNIndex::get_mangled_name(const vector<string> &from,
 			       const hobject_t &hoid,
-			       string *mangled_name, int *exists) {
+			       string *mangled_name, int *exists)
+{
   return lfn_get_name(from, hoid, mangled_name, 0, exists);
 }
 
@@ -315,7 +321,8 @@ int LFNIndex::move_subdir(
   LFNIndex &dest,
   const vector<string> &path,
   string dir
-  ) {
+  )
+{
   vector<string> sub_path(path.begin(), path.end());
   sub_path.push_back(dir);
   string from_path(from.get_full_path_subdir(sub_path));
@@ -331,7 +338,8 @@ int LFNIndex::move_object(
   LFNIndex &dest,
   const vector<string> &path,
   const pair<string, hobject_t> &obj
-  ) {
+  )
+{
   string from_path(from.get_full_path(path, obj.first));
   string to_path;
   string to_name;
@@ -358,7 +366,8 @@ int LFNIndex::move_object(
 
 
 static int get_hobject_from_oinfo(const char *dir, const char *file, 
-				  hobject_t *o) {
+				  hobject_t *o)
+{
   char path[PATH_MAX];
   bufferptr bp(PATH_MAX);
   snprintf(path, sizeof(path), "%s/%s", dir, file);
@@ -375,7 +384,8 @@ static int get_hobject_from_oinfo(const char *dir, const char *file,
 
 
 int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
-			   long *handle, map<string, hobject_t> *out) {
+			   long *handle, map<string, hobject_t> *out)
+{
   string to_list_path = get_full_path_subdir(to_list);
   DIR *dir = ::opendir(to_list_path.c_str());
   char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
@@ -435,7 +445,8 @@ int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
 }
 
 int LFNIndex::list_subdirs(const vector<string> &to_list,
-				  set<string> *out) {
+				  set<string> *out)
+{
   string to_list_path = get_full_path_subdir(to_list);
   DIR *dir = ::opendir(to_list_path.c_str());
   char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
@@ -501,7 +512,8 @@ int LFNIndex::path_exists(const vector<string> &to_check, int *exists)
 
 int LFNIndex::add_attr_path(const vector<string> &path,
 			    const string &attr_name, 
-			    bufferlist &attr_value) {
+			    bufferlist &attr_value)
+{
   string full_path = get_full_path_subdir(path);
   maybe_inject_failure();
   return chain_setxattr(full_path.c_str(), mangle_attr_name(attr_name).c_str(),
@@ -511,7 +523,8 @@ int LFNIndex::add_attr_path(const vector<string> &path,
 
 int LFNIndex::get_attr_path(const vector<string> &path,
 			    const string &attr_name, 
-			    bufferlist &attr_value) {
+			    bufferlist &attr_value)
+{
   string full_path = get_full_path_subdir(path);
   size_t size = 1024; // Initial
   while (1) {
@@ -536,7 +549,8 @@ int LFNIndex::get_attr_path(const vector<string> &path,
 }
 
 int LFNIndex::remove_attr_path(const vector<string> &path,
-			       const string &attr_name) {
+			       const string &attr_name)
+{
   string full_path = get_full_path_subdir(path);
   string mangled_attr_name = mangle_attr_name(attr_name);
   maybe_inject_failure();
@@ -928,7 +942,8 @@ bool LFNIndex::lfn_parse_object_name_keyless(const string &long_name, hobject_t 
 
 static bool append_unescaped(string::const_iterator begin,
 			     string::const_iterator end, 
-			     string *out) {
+			     string *out)
+{
   for (string::const_iterator i = begin; i != end; ++i) {
     if (*i == '\\') {
       ++i;
@@ -950,7 +965,8 @@ static bool append_unescaped(string::const_iterator begin,
 }
 
 bool LFNIndex::lfn_parse_object_name_poolless(const string &long_name,
-					      hobject_t *out) {
+					      hobject_t *out)
+{
   string name;
   string key;
   uint32_t hash;
