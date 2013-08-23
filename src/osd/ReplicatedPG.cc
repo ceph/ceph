@@ -1031,11 +1031,25 @@ void ReplicatedPG::do_op(OpRequestRef op)
 
   if (result >= 0) {
     ctx->reply->set_replay_version(ctx->at_version);
-    ctx->reply->set_user_version(ctx->new_obs.oi.user_version);
+    ctx->reply->set_user_version(ctx->user_at_version);
+    /* We go through some shenanigans here for backwards compatibility
+     * with old clients, who do not look at our replay_version and
+     * user_version but instead see what we now call the
+     * bad_replay_version. On pools without caching
+     * the user_version infrastructure is a slightly-laggy copy of
+     * the regular pg version/at_version infrastructure; the difference
+     * being it is not updated on watch ops like that is -- but on updates
+     * it is set equal to at_version. This means that for non-watch write ops
+     * on classic pools, all three of replay_version, user_version, and
+     * bad_replay_version are identical. But for watch ops the replay_version
+     * has been updated, while the user_at_version has not, and the semantics
+     * we promised old clients are that the version they see is not an update.
+     * So set the bad_replay_version to be the same as the user_at_version. */
+    eversion_t bad_replay_version(ctx->at_version);
+    bad_replay_version.version = ctx->user_at_version;
+    ctx->reply->set_bad_replay_version(bad_replay_version);
   } else if (result == -ENOENT) {
-    // TODO: we should not fill in this meaningless data, but RGW
-    // depends on it so the transition will require a compatibility break.
-    ctx->reply->set_replay_version(info.last_update);
+    ctx->reply->set_bad_replay_version(info.last_update);
     ctx->reply->set_user_version(ctx->user_at_version);
   }
 
@@ -3862,6 +3876,11 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     /* update the user_version for any modify ops, except for the watch op */
     ++ctx->user_at_version;
     assert(ctx->user_at_version > ctx->new_obs.oi.user_version);
+    /* In order for new clients and old clients to interoperate properly
+     * when exchanging versions, we need to lower bound the user_version
+     * (which our new clients pay proper attention to)
+     * by the at_version (which is all the old clients can ever see). */
+    ctx->user_at_version = MAX(ctx->at_version.version, ctx->user_at_version);
     ctx->new_obs.oi.user_version = ctx->user_at_version;
   }
   ctx->bytes_written = ctx->op_t.get_encoded_bytes();
