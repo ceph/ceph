@@ -5,6 +5,7 @@ import errno
 import json
 import logging
 import logging.handlers
+import os
 import rados
 import textwrap
 import xml.etree.ElementTree
@@ -26,6 +27,7 @@ DEFAULT_ID = 'restapi'
 
 DEFAULT_BASEURL = '/api/v0.1'
 DEFAULT_LOG_LEVEL = 'warning'
+DEFAULT_LOGDIR = '/var/log/ceph'
 # default client name will be 'client.<DEFAULT_ID>'
 
 # 'app' must be global for decorators, etc.
@@ -117,7 +119,18 @@ def api_setup(app, conf, cluster, clientname, clientid, args):
 
     loglevel = app.ceph_cluster.conf_get('restapi_log_level') \
         or DEFAULT_LOG_LEVEL
+    # ceph has a default log file for daemons only; clients (like this)
+    # default to "".  Override that for this particular client.
     logfile = app.ceph_cluster.conf_get('log_file')
+    if not logfile:
+        logfile = os.path.join(
+            DEFAULT_LOGDIR,
+            '{cluster}-{clientname}.{pid}.log'.format(
+                cluster=cluster,
+                clientname=clientname,
+                pid=os.getpid()
+            )
+        )
     app.logger.addHandler(logging.handlers.WatchedFileHandler(logfile))
     app.logger.setLevel(LOGLEVELS[loglevel.lower()])
     for h in app.logger.handlers:
