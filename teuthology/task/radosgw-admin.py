@@ -31,11 +31,6 @@ def successful_ops(out):
     entry = summary[0]
     return entry['total']['successful_ops']
 
-# simple test to indicate if multi-region testing should occur
-def multi_region_enabled(ctx):
-    # this is populated by the radosgw-agent task, seems reasonable to
-    # use that as an indicator that we're testing multi-region sync
-    return 'radosgw_agent' in ctx
 
 def task(ctx, config):
     """
@@ -52,7 +47,7 @@ def task(ctx, config):
         config = dict.fromkeys(config)
     clients = config.keys()
 
-    multi_region_run = multi_region_enabled(ctx)
+    multi_region_run = rgw_utils.multi_region_enabled(ctx)
 
     client = clients[0]; # default choice, multi-region code may overwrite this
     if multi_region_run:
