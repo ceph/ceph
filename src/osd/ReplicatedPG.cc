@@ -836,7 +836,6 @@ void ReplicatedPG::do_op(OpRequestRef op)
       dout(10) << "no src oid specified for multi op " << osd_op << dendl;
       osd->reply_op_error(op, -EINVAL);
     }
-    src_obc.clear();
     return;
   }
 
@@ -867,7 +866,6 @@ void ReplicatedPG::do_op(OpRequestRef op)
 	  src_obc[clone_oid] = sobc;
 	  continue;
 	}
-	src_obc.clear();
 	return;
       } else {
 	continue;
@@ -910,7 +908,6 @@ void ReplicatedPG::do_op(OpRequestRef op)
       const eversion_t& oldv = entry->version;
       dout(3) << "do_op dup " << ctx->reqid << " was " << oldv << dendl;
       delete ctx;
-      src_obc.clear();
       if (already_complete(oldv)) {
 	osd->reply_op_error(op, 0, oldv, entry->user_version);
       } else {
@@ -988,7 +985,6 @@ void ReplicatedPG::do_op(OpRequestRef op)
   if (result == -EAGAIN) {
     // clean up after the ctx
     delete ctx;
-    src_obc.clear();
     return;
   }
 
@@ -996,7 +992,6 @@ void ReplicatedPG::do_op(OpRequestRef op)
   if (ctx->delta_stats.num_bytes > 0 &&
       pool.info.get_flags() & pg_pool_t::FLAG_FULL) {
     delete ctx;
-    src_obc.clear();
     osd->reply_op_error(op, -ENOSPC);
     return;
   }
@@ -1043,7 +1038,6 @@ void ReplicatedPG::do_op(OpRequestRef op)
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
     osd->send_message_osd_client(reply, m->get_connection());
     delete ctx;
-    src_obc.clear();
     return;
   }
 
