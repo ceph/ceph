@@ -916,7 +916,13 @@ class CephManager:
             ceph_task.make_admin_daemon_dir(self.ctx, remote)
             self.ctx.daemons.get_daemon('osd', osd).reset()
         self.ctx.daemons.get_daemon('osd', osd).restart()
-        self.wait_run_admin_socket(osd, timeout=timeout)
+        # wait for dump_ops_in_flight; this command doesn't appear
+        # until after the signal handler is installed and it is safe
+        # to stop the osd again without making valgrind leak checks
+        # unhappy.  see #5924.
+        self.wait_run_admin_socket(osd,
+                                   args=['dump_ops_in_flight'],
+                                   timeout=timeout)
 
     def mark_down_osd(self, osd):
         self.raw_cluster_cmd('osd', 'down', str(osd))
