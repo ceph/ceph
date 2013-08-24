@@ -1225,6 +1225,44 @@ int OSD::init()
   // tick
   tick_timer.add_event_after(g_conf->osd_heartbeat_interval, new C_Tick(this));
 
+  service.init();
+  service.publish_map(osdmap);
+  service.publish_superblock(superblock);
+
+  osd_lock.Unlock();
+
+  r = monc->authenticate();
+  if (r < 0) {
+    monc->shutdown();
+    store->umount();
+    osd_lock.Lock(); // locker is going to unlock this on function exit
+    if (is_stopping())
+      return 0;
+    return r;
+  }
+
+  while (monc->wait_auth_rotating(30.0) < 0) {
+    derr << "unable to obtain rotating service keys; retrying" << dendl;
+  }
+
+  osd_lock.Lock();
+  if (is_stopping())
+    return 0;
+
+  dout(10) << "ensuring pgs have consumed prior maps" << dendl;
+  consume_map();
+  peering_wq.drain();
+
+  dout(10) << "done with init, starting boot process" << dendl;
+  state = STATE_BOOTING;
+  start_boot();
+
+  return 0;
+}
+
+void OSD::final_init()
+{
+  int r;
   AdminSocket *admin_socket = cct->get_admin_socket();
   asok_hook = new OSDSocketHook(this);
   r = admin_socket->register_command("dump_ops_in_flight",
@@ -1317,40 +1355,6 @@ int OSD::init()
     test_ops_hook,
     "inject metadata error");
   assert(r == 0);
-
-  service.init();
-  service.publish_map(osdmap);
-  service.publish_superblock(superblock);
-
-  osd_lock.Unlock();
-
-  r = monc->authenticate();
-  if (r < 0) {
-    monc->shutdown();
-    store->umount();
-    osd_lock.Lock(); // locker is going to unlock this on function exit
-    if (is_stopping())
-      return 0;
-    return r;
-  }
-
-  while (monc->wait_auth_rotating(30.0) < 0) {
-    derr << "unable to obtain rotating service keys; retrying" << dendl;
-  }
-
-  osd_lock.Lock();
-  if (is_stopping())
-    return 0;
-
-  dout(10) << "ensuring pgs have consumed prior maps" << dendl;
-  consume_map();
-  peering_wq.drain();
-
-  dout(10) << "done with init, starting boot process" << dendl;
-  state = STATE_BOOTING;
-  start_boot();
-
-  return 0;
 }
 
 void OSD::create_logger()
