@@ -378,7 +378,7 @@ int LFNIndex::list_objects(const vector<string> &to_list, int max_objs,
 			   long *handle, map<string, hobject_t> *out) {
   string to_list_path = get_full_path_subdir(to_list);
   DIR *dir = ::opendir(to_list_path.c_str());
-  char buf[PATH_MAX];
+  char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
   int r;
   if (!dir) {
     return -errno;
@@ -438,7 +438,7 @@ int LFNIndex::list_subdirs(const vector<string> &to_list,
 				  set<string> *out) {
   string to_list_path = get_full_path_subdir(to_list);
   DIR *dir = ::opendir(to_list_path.c_str());
-  char buf[PATH_MAX];
+  char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
   if (!dir)
     return -errno;
 

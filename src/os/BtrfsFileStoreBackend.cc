@@ -320,8 +320,9 @@ int BtrfsFileStoreBackend::list_checkpoints(list<string>& ls)
 
   list<string> snaps;
   char path[PATH_MAX];
-  struct dirent buf, *de;
-  while (::readdir_r(dir, &buf, &de) == 0) {
+  char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
+  struct dirent *de;
+  while (::readdir_r(dir, (struct dirent *)&buf, &de) == 0) {
     if (!de)
       break;
 
