@@ -118,12 +118,6 @@ combination, and will override anything in the suite.
     if args.owner:
         base_arg.extend(['--owner', args.owner])
 
-    for collection in args.collections:
-        p = os.path.join(args.base, collection)
-        if not os.path.isdir(p):
-            print >>sys.stderr, 'Collection %s is not a directory' % p
-            sys.exit(1)
-
     collections = [
         (os.path.join(args.base, collection), collection)
         for collection in args.collections
