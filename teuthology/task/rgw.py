@@ -584,6 +584,8 @@ def task(ctx, config):
     role_endpoints = assign_ports(ctx, config)
     ctx.rgw = argparse.Namespace()
     ctx.rgw.role_endpoints = role_endpoints
+    # stash the region info for later, since it was deleted from the config structure
+    ctx.rgw.regions = regions
 
     with contextutil.nested(
         lambda: create_dirs(ctx=ctx, config=config),
