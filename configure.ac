@@ -61,6 +61,8 @@ if test "$CXX" = no || test "$CXX:$GXX" = "g++:"; then
   AC_MSG_ERROR([no C++ compiler found])
 fi
 
+AM_CONDITIONAL(CLANG, test x"$CXX" = x"clang++")
+
 #AC_PROG_CC
 AC_PROG_MAKE_SET
 AC_PROG_LIBTOOL
