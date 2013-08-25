@@ -8,6 +8,10 @@ tasks:
     daemons:
     - mon.b
     - mon.c
+    - osd.0
+    - osd.1
+    - osd.2
+    - osd.3
 - workunit:
     clients:
       all:
