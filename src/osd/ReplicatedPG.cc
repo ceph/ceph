@@ -877,42 +877,40 @@ void ReplicatedPG::do_op(OpRequestRef op)
 
   op->mark_started();
 
-  const hobject_t& soid = obc->obs.oi.soid;
   OpContext *ctx = new OpContext(op, m->get_reqid(), m->ops,
 				 &obc->obs, obc->ssc, 
 				 this);
   ctx->obc = obc;
   ctx->src_obc = src_obc;
 
-  if (op->may_write()) {
-    // snap
-    if (pool.info.is_pool_snaps_mode()) {
-      // use pool's snapc
-      ctx->snapc = pool.snapc;
-    } else {
-      // client specified snapc
-      ctx->snapc.seq = m->get_snap_seq();
-      ctx->snapc.snaps = m->get_snaps();
-    }
-    if ((m->get_flags() & CEPH_OSD_FLAG_ORDERSNAP) &&
-	ctx->snapc.seq < obc->ssc->snapset.seq) {
-      dout(10) << " ORDERSNAP flag set and snapc seq " << ctx->snapc.seq
-	       << " < snapset seq " << obc->ssc->snapset.seq
-	       << " on " << soid << dendl;
-      delete ctx;
-      src_obc.clear();
-      osd->reply_op_error(op, -EOLDSNAPC);
-      return;
-    }
+  execute_ctx(ctx);
+}
 
+void ReplicatedPG::execute_ctx(OpContext *ctx)
+{
+  dout(10) << __func__ << " " << ctx << dendl;
+  OpRequestRef op = ctx->op;
+  MOSDOp *m = static_cast<MOSDOp*>(op->request);
+  ObjectContextRef obc = ctx->obc;
+  const hobject_t& soid = obc->obs.oi.soid;
+  map<hobject_t,ObjectContextRef>& src_obc = ctx->src_obc;
+
+  // this method must be idempotent since we may call it several times
+  // before we finally apply the resulting transaction.
+  ctx->op_t = ObjectStore::Transaction();
+  ctx->local_t = ObjectStore::Transaction();
+
+  // dup/replay?
+  if (op->may_write()) {
     const pg_log_entry_t *entry = pg_log.get_log().get_request(ctx->reqid);
     if (entry) {
       const eversion_t& oldv = entry->version;
       dout(3) << "do_op dup " << ctx->reqid << " was " << oldv << dendl;
-      delete ctx;
       if (already_complete(oldv)) {
-	osd->reply_op_error(op, 0, oldv, entry->user_version);
+	reply_ctx(ctx, 0, oldv, entry->user_version);
       } else {
+	delete ctx;
+
 	if (m->wants_ack()) {
 	  if (already_ack(oldv)) {
 	    MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
@@ -932,6 +930,24 @@ void ReplicatedPG::do_op(OpRequestRef op)
 
     op->mark_started();
 
+    // snap
+    if (pool.info.is_pool_snaps_mode()) {
+      // use pool's snapc
+      ctx->snapc = pool.snapc;
+    } else {
+      // client specified snapc
+      ctx->snapc.seq = m->get_snap_seq();
+      ctx->snapc.snaps = m->get_snaps();
+    }
+    if ((m->get_flags() & CEPH_OSD_FLAG_ORDERSNAP) &&
+	ctx->snapc.seq < obc->ssc->snapset.seq) {
+      dout(10) << " ORDERSNAP flag set and snapc seq " << ctx->snapc.seq
+	       << " < snapset seq " << obc->ssc->snapset.seq
+	       << " on " << obc->obs.oi.soid << dendl;
+      reply_ctx(ctx, -EOLDSNAPC);
+      return;
+    }
+
     // version
     ctx->at_version = pg_log.get_head();
 
@@ -941,7 +957,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
     assert(ctx->at_version > pg_log.get_head());
 
     ctx->mtime = m->get_mtime();
-    
+
     dout(10) << "do_op " << soid << " " << ctx->ops
 	     << " ov " << obc->obs.oi.version << " av " << ctx->at_version 
 	     << " snapc " << ctx->snapc
@@ -993,8 +1009,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
   // check for full
   if (ctx->delta_stats.num_bytes > 0 &&
       pool.info.get_flags() & pg_pool_t::FLAG_FULL) {
-    delete ctx;
-    osd->reply_op_error(op, -ENOSPC);
+    reply_ctx(ctx, -ENOSPC);
     return;
   }
 
@@ -1084,6 +1099,17 @@ void ReplicatedPG::do_op(OpRequestRef op)
   repop->put();
 }
 
+void ReplicatedPG::reply_ctx(OpContext *ctx, int r)
+{
+  osd->reply_op_error(ctx->op, r);
+  delete ctx;
+}
+
+void ReplicatedPG::reply_ctx(OpContext *ctx, int r, eversion_t v, version_t uv)
+{
+  osd->reply_op_error(ctx->op, r, v, uv);
+  delete ctx;
+}
 
 void ReplicatedPG::log_op_stats(OpContext *ctx)
 {
