@@ -647,8 +647,8 @@ struct ObjectOperation {
   }
 
   void assert_version(uint64_t ver) {
-    bufferlist bl;
-    add_watch(CEPH_OSD_OP_ASSERT_VER, 0, ver, 0, bl);
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_ASSERT_VER);
+    osd_op.op.assert_ver.ver = ver;
   }
   void assert_src_version(const object_t& srcoid, snapid_t srcsnapid, uint64_t ver) {
     bufferlist bl;

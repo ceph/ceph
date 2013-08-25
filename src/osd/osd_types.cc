@@ -3416,6 +3416,9 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_LIST_WATCHERS:
     case CEPH_OSD_OP_LIST_SNAPS:
       break;
+    case CEPH_OSD_OP_ASSERT_VER:
+      out << " v" << op.op.assert_ver.ver;
+      break;
     case CEPH_OSD_OP_TRUNCATE:
       out << " " << op.op.extent.offset;
       break;
