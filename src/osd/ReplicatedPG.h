@@ -575,6 +575,9 @@ protected:
   void _make_clone(ObjectStore::Transaction& t,
 		   const hobject_t& head, const hobject_t& coid,
 		   object_info_t *poi);
+  void execute_ctx(OpContext *ctx);
+  void reply_ctx(OpContext *ctx, int err);
+  void reply_ctx(OpContext *ctx, int err, eversion_t v, version_t uv);
   void make_writeable(OpContext *ctx);
   void log_op_stats(OpContext *ctx);
 
