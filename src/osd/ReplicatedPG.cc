@@ -2536,7 +2536,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_ASSERT_SRC_VERSION:
       ++ctx->num_read;
       {
-	uint64_t ver = op.watch.ver;
+	uint64_t ver = op.assert_ver.ver;
 	if (!ver)
 	  result = -EINVAL;
         else if (ver < src_obc->obs.oi.user_version)
