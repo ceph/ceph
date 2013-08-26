@@ -13,10 +13,12 @@ import subprocess
 import sys
 import time
 import yaml
+import urlparse
 
 from teuthology import misc as teuthology
 from teuthology import safepath
 from teuthology import lock as lock
+from teuthology.config import config
 
 log = logging.getLogger(__name__)
 
@@ -375,6 +377,14 @@ def _results(args):
         generate_coverage(args)
 
 
+def get_http_log_path(archive_dir, job_id):
+    http_base = config.archive_server
+    if not http_base:
+        return None
+    archive_subdir = os.path.split(archive_dir)[-1]
+    return urlparse.urljoin(http_base, archive_subdir, str(job_id))
+
+
 def build_email_body(name, archive_dir, timeout):
     failed = []
     unfinished = []
@@ -405,6 +415,9 @@ def build_email_body(name, archive_dir, timeout):
             full_desc = long_desc
             if 'failure_reason' in summary:
                 full_desc += '\n    %s' % summary['failure_reason']
+            http_log = get_http_log_path(archive_dir, job)
+            if http_log:
+                full_desc += '\n    %s' % http_log
             failed.append(full_desc)
 
     maybe_comma = lambda s: ', ' if s else ' '
