@@ -43,7 +43,7 @@ def run_tasks(tasks, ctx):
             }
             exc_id = sentry.get_ident(sentry.captureException(tags=tags))
             event_url = "{server}/search?q={id}".format(
-                server=teuth_config.sentry_server, id=exc_id)
+                server=teuth_config.sentry_server.strip('/'), id=exc_id)
             log.exception(" Sentry event: %s" % event_url)
             sentry_url_list = ctx.summary.get('sentry_events', [])
             sentry_url_list.append(event_url)
