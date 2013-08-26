@@ -4985,36 +4985,8 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
       rm->tls.push_back(&rm->localt);
       rm->tls.push_back(&rm->opt);
 
-    } else {
-      // do op
-      assert(0);
-
-      // TODO: this is severely broken because we don't know whether this object is really lost or
-      // not. We just always assume that it's not right now.
-      // Also, we're taking the address of a variable on the stack. 
-      object_info_t oi(soid);
-      oi.lost = false; // I guess?
-      oi.version = m->old_version;
-      oi.size = m->old_size;
-      ObjectState obs(oi, m->old_exists);
-      SnapSetContext ssc(m->poid.oid);
-      
-      rm->ctx = new OpContext(op, m->reqid, m->ops, &obs, &ssc, this);
-      
-      rm->ctx->mtime = m->mtime;
-      rm->ctx->at_version = m->version;
-      rm->ctx->snapc = m->snapc;
-
-      ssc.snapset = m->snapset;
-      rm->ctx->obc->ssc = &ssc;
-      
-      prepare_transaction(rm->ctx);
-      append_log(rm->ctx->log, m->pg_trim_to, rm->ctx->local_t);
-    
-      rm->tls.push_back(&rm->ctx->op_t);
-      rm->tls.push_back(&rm->ctx->local_t);
     }
-
+    
     rm->bytes_written = rm->opt.get_encoded_bytes();
 
   } else {
