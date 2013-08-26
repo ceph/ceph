@@ -107,9 +107,8 @@ health_status_t DataHealthService::get_health(
     if (f) {
       f->open_object_section("mon");
       f->dump_string("name", mon_name.c_str());
-      f->open_object_section("data_stats");
+      // leave this unenclosed by an object section to avoid breaking backward-compatibility
       stats.dump(f);
-      f->close_section();
       f->dump_stream("health") << health_status;
       if (health_status != HEALTH_OK)
         f->dump_string("health_detail", health_detail);
