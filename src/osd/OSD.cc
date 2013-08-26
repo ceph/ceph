@@ -4279,7 +4279,7 @@ bool OSD::_share_map_incoming(entity_name_t name, Connection *con, epoch_t epoch
   }
 
   // does peer have old map?
-  if (name.is_osd() &&
+  if (con->get_messenger() == cluster_messenger &&
       osdmap->is_up(name.num()) &&
       (osdmap->get_cluster_addr(name.num()) == con->get_peer_addr() ||
        osdmap->get_hb_back_addr(name.num()) == con->get_peer_addr())) {
@@ -5695,7 +5695,7 @@ bool OSD::require_same_or_newer_map(OpRequestRef op, epoch_t epoch)
   }
 
   // ok, our map is same or newer.. do they still exist?
-  if (m->get_source().is_osd()) {
+  if (m->get_connection()->get_messenger() == cluster_messenger) {
     int from = m->get_source().num();
     if (!osdmap->have_inst(from) ||
 	osdmap->get_cluster_addr(from) != m->get_source_inst().addr) {
@@ -6804,11 +6804,8 @@ void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v)
   flags = m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
 
   MOSDOpReply *reply = new MOSDOpReply(m, err, osdmap->get_epoch(), flags);
-  Messenger *msgr = client_messenger;
   reply->set_version(v);
-  if (m->get_source().is_osd())
-    msgr = cluster_messenger;
-  msgr->send_message(reply, m->get_connection());
+  m->get_connection()->get_messenger()->send_message(reply, m->get_connection());
 }
 
 void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
