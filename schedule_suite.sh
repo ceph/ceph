@@ -122,7 +122,7 @@ name=`whoami`"-$stamp-$suite-$ceph-$kernel-$flavor-$mtype"
 
 echo "name $name"
 
-~/src/teuthology/virtualenv/bin/teuthology-suite -v $fn \
+./virtualenv/bin/teuthology-suite -v $fn \
     --collections ~/src/ceph-qa-suite/suites/$suite/* \
     --email $email \
     --timeout 36000 \
