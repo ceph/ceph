@@ -1,11 +1,11 @@
 At present, there is one main version, maintained on-disk as
 pg_log.head and in-memory as OpContext::at_version.
-Clients see this
-version in one of two ways:
+Clients see this version in one of two ways:
 1) The long-standing MOSDOpReply::reassert_version,
 2) the much newer objclass API function get_current_version().
 
 The semantics on both of these are not quite as you'd expect.
+
 reassert_version is usually set by looking at the
 OpContext::reply_version. reply_version is left at zero on successful
 read operations. On any operation returning ENOENT, reassert_version
@@ -51,13 +51,13 @@ provided. Obviously old clients won't be able to handle the caching
 pools, so we don't need to worry about them when we do these. But we
 *do* need them to interoperate with new clients on non-caching
 pools. This obviously means:
-*) new and old clients must use and
-spread the same version on operations in normal pools.
+
+*) new and old clients must use and spread the same version on
+ operations in normal pools.
 
 However, the old clients have only one version (the reassert_version),
 which they must use both for replay and as the version they spread
 (eg, in notifies). That implies:
-
 1) we cannot fix the conflict in reassert_version on watch ops for old
 clients.
 2) the reassert version must match the user version seen by new
@@ -67,7 +67,8 @@ clients for all ops on normal pools
 3) we need to keep track of the old-style user version and return that
 in the reassert_version from the OSD
 
-Conclusions: We add two new fields to MOSDOpReply: user_version and
+Conclusions:
+We add two new fields to MOSDOpReply: user_version and
 replay_version. The old replay_version becomes bad_replay_version (or
 similar) and stays in the same place it used to be in the encoding for
 old clients to use. New clients reference replay_version and
@@ -78,7 +79,45 @@ based on the user_version instead of the OpContext::at_version. For
 normal pools, the at_version will always be the higher value and so
 old clients see the same behavior they always have. New clients,
 seeing a user_version matching the bad_replay_version which the old
-clients are consuming, interoperate successfully on normal pools.  On
-caching pools, we don't need to worry about old clients, and new
-clients are happy because our MAX algorithm ensures they never see
-versions go backwards. Hurray!
+clients are consuming, interoperate successfully on normal pools.
+On caching pools, we don't need to worry about old clients, and new clients are happy because our MAX algorithm ensures they never see versions go backwards. Hurray!
+
+===============================
+
+Now, we maintain two versions on disk: an eversion_t pg_log.head and a
+version_t info.user_version. Each object is tagged with both the pg
+version and user_version it was last modified with.  The PG version is
+modified by manipulating OpContext::at_version and then persisting it
+to the pg log as transactions, and is incremented in all the places it
+used to be. The user_version is modified by manipulating the new
+OpContext::user_at_version and is also persisted via the pg log
+transactions.
+user_at_version is modified only in ReplicatedPG::prepare_transaction
+when the op was a "user modify" (a non-watch write), and the durable
+user_version is updated according to the following rules:
+1) increment user_at_version
+2) set user_at_version to the maximum of itself and
+ctx->at_version.version.
+3) ctx->new_obs.oi.user_version = ctx->user_at_version (to change the
+object's user_version)
+
+This set of update semantics mean that for traditional pools the
+user_version will be equal to the past reassert_version, while for
+caching pools the object and PG user-version will be able to cross
+pools without making a total mess of things.
+In order to support old clients, we rename the old reassert_version to
+"bad_replay_version" and fill it in as before: for writes it is set to
+the at_version (and is the proper replay version); for watches it is
+set to our user version; for ENOENT replies it is set to the full PG
+version. The one difference is that we now fill in the version_t
+portion of the bad_replay_version on read ops as well as write ops,
+which should be fine for all old clients.
+
+For new clients, we split this into two proper members (and they
+cannot access the bad_replay_version): user_version and
+replay_version; user_version is filled in on every operation (reads
+included) while replay_version is filled in for writes.
+
+The objclass function get_current_version() now always returns the
+user_at_version, which means it is guaranteed to contain the version
+of the last user update in the PG (including on reads!).
