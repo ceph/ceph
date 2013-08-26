@@ -13,7 +13,6 @@ import subprocess
 import sys
 import time
 import yaml
-import urlparse
 
 from teuthology import misc as teuthology
 from teuthology import safepath
@@ -382,7 +381,7 @@ def get_http_log_path(archive_dir, job_id):
     if not http_base:
         return None
     archive_subdir = os.path.split(archive_dir)[-1]
-    return urlparse.urljoin(http_base, archive_subdir, str(job_id))
+    return os.path.join(http_base, archive_subdir, str(job_id))
 
 
 def build_email_body(name, archive_dir, timeout):
