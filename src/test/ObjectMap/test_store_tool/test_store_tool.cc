@@ -90,6 +90,17 @@ class StoreTool
     exists = false;
     return bufferlist();
   }
+
+  uint64_t get_size() {
+    map<string,uint64_t> extras;
+    uint64_t s = db->get_estimated_size(extras);
+    for (map<string,uint64_t>::iterator p = extras.begin();
+         p != extras.end(); ++p) {
+      std::cout << p->first << " - " << p->second << std::endl;
+    }
+    std::cout << "total: " << s << std::endl;
+    return s;
+  }
 };
 
 void usage(const char *pname)
@@ -101,6 +112,7 @@ void usage(const char *pname)
     << "  exists <prefix> [key]\n"
     << "  get <prefix> <key>\n"
     << "  verify <store path>\n"
+    << "  get-size\n"
     << std::endl;
 }
 
@@ -173,6 +185,8 @@ int main(int argc, const char *argv[])
 
   } else if (cmd == "verify") {
     assert(0);
+  } else if (cmd == "get-size") {
+    std::cout << "estimated store size: " << st.get_size() << std::endl;
   } else {
     std::cerr << "Unrecognized command: " << cmd << std::endl;
     return 1;
