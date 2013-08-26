@@ -217,6 +217,7 @@ enum {
 	CEPH_OSD_OP_OMAPRMKEYS    = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 24,
 	CEPH_OSD_OP_OMAP_CMP      = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 25,
 
+	CEPH_OSD_OP_COPY_FROM = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 26,
 	CEPH_OSD_OP_COPY_GET = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 27,
 
 	/** multi **/
@@ -410,6 +411,10 @@ struct ceph_osd_op {
 		struct {
 			__le64 max;     /* max data in reply */
 		} __attribute__ ((packed)) copy_get;
+		struct {
+			__le64 snapid;
+			__le64 src_version;
+		} __attribute__ ((packed)) copy_from;
 	};
 	__le32 payload_len;
 } __attribute__ ((packed));
