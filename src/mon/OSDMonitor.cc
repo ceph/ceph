@@ -3592,7 +3592,7 @@ done:
 	  ss << "crush ruleset " << n << " does not exist";
 	  err = -ENOENT;
 	}
-      } 
+      }
       pending_inc.new_pools[pool].last_change = pending_inc.epoch;
       getline(ss, rs);
       wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
