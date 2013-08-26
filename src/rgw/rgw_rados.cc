@@ -897,7 +897,9 @@ int RGWRados::init_complete()
 
   ret = region_map.read(cct, this);
   if (ret < 0) {
-    ldout(cct, 0) << "WARNING: cannot read region map" << dendl;
+    if (ret != -ENOENT) {
+      ldout(cct, 0) << "WARNING: cannot read region map" << dendl;
+    }
     ret = region_map.update(region);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: failed to update regionmap with local region info" << dendl;
