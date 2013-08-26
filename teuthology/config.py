@@ -9,31 +9,29 @@ log = logging.getLogger(__name__)
 
 
 class _Config(object):
+    """
+    This class is intended to unify teuthology's many configuration files and
+    objects. Currently it serves as a convenient interface to
+    ~/.teuthology.yaml and nothing else.
+    """
     def __init__(self):
-        self.__conf = {}
         if not os.path.exists(CONF_FILE):
             log.debug("%s not found", CONF_FILE)
+            self.__conf = {}
             return
 
-        with file(CONF_FILE) as f:
-            conf_obj = yaml.safe_load_all(f)
-            for item in conf_obj:
-                self.__conf.update(item)
+        self.__conf = yaml.safe_load(file(CONF_FILE))
 
+    # This property declaration exists mainly as an example; it is not
+    # necessary unless you want to, say, define a set method and/or a
+    # docstring.
     @property
     def lock_server(self):
         return self.__conf.get('lock_server')
 
-    @property
-    def queue_host(self):
-        return self.__conf.get('queue_host')
-
-    @property
-    def queue_port(self):
-        return self.__conf.get('queue_port')
-
-    @property
-    def sentry_dsn(self):
-        return self.__conf.get('sentry_dsn')
+    # This takes care of any and all of the rest.
+    # If the parameter is defined, return it. Otherwise return None.
+    def __getattr__(self, name):
+        return self.__conf.get(name)
 
 config = _Config()
