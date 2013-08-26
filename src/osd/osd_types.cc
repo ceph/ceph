@@ -1614,7 +1614,7 @@ void pg_info_t::dump(Formatter *f) const
   f->dump_stream("last_update") << last_update;
   f->dump_stream("last_complete") << last_complete;
   f->dump_stream("log_tail") << log_tail;
-  f->dump_int("last_user_update", last_user_version);
+  f->dump_int("last_user_version", last_user_version);
   f->dump_stream("last_backfill") << last_backfill;
   f->dump_stream("purged_snaps") << purged_snaps;
   f->open_object_section("history");
@@ -1640,6 +1640,7 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
   o.back()->pgid = pg_t(1, 2, -1);
   o.back()->last_update = eversion_t(3, 4);
   o.back()->last_complete = eversion_t(5, 6);
+  o.back()->last_user_version = 2;
   o.back()->log_tail = eversion_t(7, 8);
   o.back()->last_backfill = hobject_t(object_t("objname"), "key", 123, 456, -1, "");
   list<pg_stat_t*> s;
