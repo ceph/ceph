@@ -417,6 +417,9 @@ def build_email_body(name, archive_dir, timeout):
             http_log = get_http_log_path(archive_dir, job)
             if http_log:
                 full_desc += '\n    %s' % http_log
+            sentry_events = summary.get('sentry_events')
+            if sentry_events:
+                full_desc += '\n    %s' % '\n    '.join(sentry_events)
             failed.append(full_desc)
 
     maybe_comma = lambda s: ', ' if s else ' '
