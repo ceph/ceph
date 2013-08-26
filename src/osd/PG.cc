@@ -1751,6 +1751,8 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   info.last_update = pg_log.get_head();
   child->info.last_update = child->pg_log.get_head();
 
+  child->info.last_user_version = info.last_user_version;
+
   info.log_tail = pg_log.get_tail();
   child->info.log_tail = child->pg_log.get_tail();
 
