@@ -453,7 +453,7 @@ kern.* -{adir}/syslog/kern.log;RSYSLOG_FileFormat
                 args=[
                     'egrep',
                     '\\bBUG\\b|\\bINFO\\b|\\bDEADLOCK\\b',
-                    run.Raw('{adir}/archive/syslog/*.log'.format(adir=archive_dir)),
+                    run.Raw('{adir}/syslog/*.log'.format(adir=archive_dir)),
                     run.Raw('|'),
                     'grep', '-v', 'task .* blocked for more than .* seconds',
                     run.Raw('|'),
@@ -494,7 +494,7 @@ kern.* -{adir}/syslog/kern.log;RSYSLOG_FileFormat
             ctx.cluster.run(
                 args=[
                     'find',
-                    '{adir}/archive/syslog'.format(adir=archive_dir),
+                    '{adir}/syslog'.format(adir=archive_dir),
                     '-name',
                     '*.log',
                     '-print0',
