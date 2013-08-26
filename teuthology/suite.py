@@ -337,13 +337,14 @@ def results():
         log.exception('error generating results')
         raise
 
+
 def _results(args):
     running_tests = [
         f for f in sorted(os.listdir(args.archive_dir))
         if not f.startswith('.')
         and os.path.isdir(os.path.join(args.archive_dir, f))
         and not os.path.exists(os.path.join(args.archive_dir, f, 'summary.yaml'))
-        ]
+    ]
     starttime = time.time()
     log.info('Waiting up to %d seconds for tests to finish...', args.timeout)
     while running_tests and args.timeout > 0:
@@ -359,67 +360,8 @@ def _results(args):
             time.sleep(10)
     log.info('Tests finished! gathering results...')
 
-    descriptions = []
-    failures = []
-    num_failures = 0
-    unfinished = []
-    passed = []
-    all_jobs = sorted(os.listdir(args.archive_dir))
-    for j in all_jobs:
-        job_dir = os.path.join(args.archive_dir, j)
-        if j.startswith('.') or not os.path.isdir(job_dir):
-            continue
-        summary_fn = os.path.join(job_dir, 'summary.yaml')
-        if not os.path.exists(summary_fn):
-            unfinished.append(j)
-            continue
-        summary = {}
-        with file(summary_fn) as f:
-            g = yaml.safe_load_all(f)
-            for new in g:
-                summary.update(new)
-        desc = '{test}: ({duration}s) {desc}'.format(
-            duration=int(summary.get('duration', 0)),
-            desc=summary['description'],
-            test=j,
-            )
-        descriptions.append(desc)
-        if summary['success']:
-            passed.append(desc)
-        else:
-            failures.append(desc)
-            num_failures += 1
-            if 'failure_reason' in summary:
-                failures.append('    {reason}'.format(
-                        reason=summary['failure_reason'],
-                        ))
-
-    if failures or unfinished:
-        subject = ('{num_failed} failed, {num_hung} hung, '
-                   '{num_passed} passed in {suite}'.format(
-                num_failed=num_failures,
-                num_hung=len(unfinished),
-                num_passed=len(passed),
-                suite=args.name,
-                ))
-        body = """
-The following tests failed:
-
-{failures}
-
-These tests may be hung (did not finish in {timeout} seconds after the last test in the suite):
-{unfinished}
-
-These tests passed:
-{passed}""".format(
-            failures='\n'.join(failures),
-            unfinished='\n'.join(unfinished),
-            passed='\n'.join(passed),
-            timeout=args.timeout,
-            )
-    else:
-        subject = '{num_passed} passed in {suite}'.format(suite=args.name, num_passed=len(passed))
-        body = '\n'.join(descriptions)
+    (subject, body) = build_email_body(args.name, args.archive_dir,
+                                       args.timeout)
 
     try:
         if args.email:
@@ -428,9 +370,68 @@ These tests passed:
                 from_=args.teuthology_config['results_sending_email'],
                 to=args.email,
                 body=body,
-                )
+            )
     finally:
         generate_coverage(args)
+
+
+def build_email_body(name, archive_dir, timeout):
+    failed = []
+    unfinished = []
+    passed = []
+    all_jobs = sorted(os.listdir(archive_dir))
+    for job in all_jobs:
+        job_dir = os.path.join(archive_dir, job)
+        if job.startswith('.') or not os.path.isdir(job_dir):
+            continue
+
+        summary_file = os.path.join(job_dir, 'summary.yaml')
+        # Unfinished jobs will have no summary.yaml
+        if not os.path.exists(summary_file):
+            unfinished.append(job)
+            continue
+
+        summary = {}
+        with file(summary_file) as f:
+            summary = yaml.safe_load(f)
+        long_desc = '{test}: ({duration}s) {desc}'.format(
+            duration=int(summary.get('duration', 0)),
+            desc=summary['description'],
+            test=job,
+        )
+        if summary['success']:
+            passed.append(long_desc)
+        else:
+            full_desc = long_desc
+            if 'failure_reason' in summary:
+                full_desc += '\n    %s' % summary['failure_reason']
+            failed.append(full_desc)
+
+    maybe_comma = lambda s: ', ' if s else ' '
+
+    subject = ''
+    body = ''
+    if failed:
+        subject += '{num_failed} failed{sep}'.format(
+            num_failed=len(failed),
+            sep=maybe_comma(unfinished or passed)
+        )
+        body += 'The following tests failed:\n%s\n\n\n' % '\n'.join(failed)
+    if unfinished:
+        subject += '{num_hung} hung{sep}'.format(
+            num_hung=len(unfinished),
+            sep=maybe_comma(passed)
+        )
+        body += 'These tests may be hung (did not finish in {timeout} seconds after the last test in the suite):\n{hung_jobs}\n\n\n'.format(
+            timeout=timeout,
+            hung_jobs='\n'.join(unfinished),
+        )
+    if passed:
+        subject += '%s passed ' % len(passed)
+        body += 'These tests passed:\n%s' % '\n'.join(passed)
+    subject += 'in {suite}'.format(suite=name)
+    return (subject.strip(), body.strip())
+
 
 def get_arch(config):
     for yamlfile in config:
@@ -445,6 +446,7 @@ def get_arch(config):
                     return arch
     return None
 
+
 def get_os_type(configs):
     for config in configs:
         yamlfile = config[2]
@@ -453,6 +455,7 @@ def get_os_type(configs):
         if os_type:
             return os_type
     return None
+
 
 def get_exclude_arch(configs):
     for config in configs:
@@ -463,6 +466,7 @@ def get_exclude_arch(configs):
             return os_type
     return None
 
+
 def get_exclude_os_type(configs):
     for config in configs:
         yamlfile = config[2]
@@ -471,6 +475,7 @@ def get_exclude_os_type(configs):
         if os_type:
             return os_type
     return None
+
 
 def get_machine_type(config):
     for yamlfile in config:
