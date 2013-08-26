@@ -37,7 +37,11 @@ def run_tasks(tasks, ctx):
         log.exception('Saw exception from tasks.')
         sentry = get_sentry_client()
         if sentry:
-            exc_id = sentry.get_ident(sentry.captureException())
+            tags = {
+                'task': taskname,
+                'owner': ctx.owner,
+            }
+            exc_id = sentry.get_ident(sentry.captureException(tags=tags))
             event_url = "{server}/search?q={id}".format(
                 server=teuth_config.sentry_server, id=exc_id)
             log.exception(" Sentry event: %s" % event_url)
