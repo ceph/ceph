@@ -149,7 +149,7 @@ These are the rpm packages needed to install in an rpm-based OS:
     python-argparse
     python-flask
     libuuid-devel
-    libnss-devel
+    nss-devel
     fuse-devel
     gperftools-devel
     libedit-devel
