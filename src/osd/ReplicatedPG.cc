@@ -4901,71 +4901,41 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
   rm->epoch_started = get_osdmap()->get_epoch();
 
   if (!m->noop) {
-    if (m->logbl.length()) {
-      // shipped transaction and log entries
-      vector<pg_log_entry_t> log;
-      
-      bufferlist::iterator p = m->get_data().begin();
+    assert(m->logbl.length());
+    // shipped transaction and log entries
+    vector<pg_log_entry_t> log;
 
-      ::decode(rm->opt, p);
-      if (!(m->get_connection()->get_features() & CEPH_FEATURE_OSD_SNAPMAPPER))
-	rm->opt.set_tolerate_collection_add_enoent();
-      p = m->logbl.begin();
-      ::decode(log, p);
-      if (m->hobject_incorrect_pool) {
-	for (vector<pg_log_entry_t>::iterator i = log.begin();
-	     i != log.end();
-	     ++i) {
-	  if (i->soid.pool == -1)
-	    i->soid.pool = info.pgid.pool();
-	}
-	rm->opt.set_pool_override(info.pgid.pool());
+    bufferlist::iterator p = m->get_data().begin();
+
+    ::decode(rm->opt, p);
+    if (!(m->get_connection()->get_features() & CEPH_FEATURE_OSD_SNAPMAPPER))
+      rm->opt.set_tolerate_collection_add_enoent();
+    p = m->logbl.begin();
+    ::decode(log, p);
+    if (m->hobject_incorrect_pool) {
+      for (vector<pg_log_entry_t>::iterator i = log.begin();
+	  i != log.end();
+	  ++i) {
+	if (i->soid.pool == -1)
+	  i->soid.pool = info.pgid.pool();
       }
-      rm->opt.set_replica();
-      
-      info.stats = m->pg_stats;
-      if (!rm->opt.empty()) {
-	// If the opt is non-empty, we infer we are before
-	// last_backfill (according to the primary, not our
-	// not-quite-accurate value), and should update the
-	// collections now.  Otherwise, we do it later on push.
-	update_snap_map(log, rm->localt);
-      }
-      append_log(log, m->pg_trim_to, rm->localt);
-
-      rm->tls.push_back(&rm->localt);
-      rm->tls.push_back(&rm->opt);
-
-    } else {
-      // do op
-      assert(0);
-
-      // TODO: this is severely broken because we don't know whether this object is really lost or
-      // not. We just always assume that it's not right now.
-      // Also, we're taking the address of a variable on the stack. 
-      object_info_t oi(soid);
-      oi.lost = false; // I guess?
-      oi.version = m->old_version;
-      oi.size = m->old_size;
-      ObjectState obs(oi, m->old_exists);
-      SnapSetContext ssc(m->poid.oid);
-      
-      rm->ctx = new OpContext(op, m->reqid, m->ops, &obs, &ssc, this);
-      
-      rm->ctx->mtime = m->mtime;
-      rm->ctx->at_version = m->version;
-      rm->ctx->snapc = m->snapc;
-
-      ssc.snapset = m->snapset;
-      rm->ctx->obc->ssc = &ssc;
-      
-      prepare_transaction(rm->ctx);
-      append_log(rm->ctx->log, m->pg_trim_to, rm->ctx->local_t);
-    
-      rm->tls.push_back(&rm->ctx->op_t);
-      rm->tls.push_back(&rm->ctx->local_t);
+      rm->opt.set_pool_override(info.pgid.pool());
     }
+    rm->opt.set_replica();
 
+    info.stats = m->pg_stats;
+    if (!rm->opt.empty()) {
+      // If the opt is non-empty, we infer we are before
+      // last_backfill (according to the primary, not our
+      // not-quite-accurate value), and should update the
+      // collections now.  Otherwise, we do it later on push.
+      update_snap_map(log, rm->localt);
+    }
+    append_log(log, m->pg_trim_to, rm->localt);
+
+    rm->tls.push_back(&rm->localt);
+    rm->tls.push_back(&rm->opt);
+    
     rm->bytes_written = rm->opt.get_encoded_bytes();
 
   } else {
