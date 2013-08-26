@@ -332,7 +332,7 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
 
     if (!all_unfound_are_queried_or_lost(get_osdmap())) {
       ss << "pg has " << unfound
-	 << " objects but we haven't probed all sources, not marking lost";
+	 << " unfound objects but we haven't probed all sources, not marking lost";
       return -EINVAL;
     }
 
