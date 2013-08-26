@@ -564,6 +564,30 @@ TEST(LibRadosMisc, BigAttrPP) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
+TEST(LibRadosMisc, CopyPP) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
+
+  char buf[64];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+
+  ASSERT_EQ(0, ioctx.write_full("foo", bl));
+
+
+  ObjectWriteOperation op;
+  op.copyfrom("foo", ioctx, ioctx.get_last_version());
+
+  ASSERT_EQ(0, ioctx.operate("bar", &op));
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);
