@@ -1031,27 +1031,9 @@ void ReplicatedPG::do_op(OpRequestRef op)
   ctx->reply->set_result(result);
 
   if (result >= 0) {
-    ctx->reply->set_replay_version(ctx->at_version);
-    ctx->reply->set_user_version(ctx->user_at_version);
-    /* We go through some shenanigans here for backwards compatibility
-     * with old clients, who do not look at our replay_version and
-     * user_version but instead see what we now call the
-     * bad_replay_version. On pools without caching
-     * the user_version infrastructure is a slightly-laggy copy of
-     * the regular pg version/at_version infrastructure; the difference
-     * being it is not updated on watch ops like that is -- but on updates
-     * it is set equal to at_version. This means that for non-watch write ops
-     * on classic pools, all three of replay_version, user_version, and
-     * bad_replay_version are identical. But for watch ops the replay_version
-     * has been updated, while the user_at_version has not, and the semantics
-     * we promised old clients are that the version they see is not an update.
-     * So set the bad_replay_version to be the same as the user_at_version. */
-    eversion_t bad_replay_version(ctx->at_version);
-    bad_replay_version.version = ctx->user_at_version;
-    ctx->reply->set_bad_replay_version(bad_replay_version);
+    ctx->reply->set_reply_versions(ctx->at_version, ctx->user_at_version);
   } else if (result == -ENOENT) {
-    ctx->reply->set_bad_replay_version(info.last_update);
-    ctx->reply->set_user_version(ctx->user_at_version);
+    ctx->reply->set_enoent_reply_versions(info.last_update, ctx->user_at_version);
   }
 
   // read or error?
@@ -4145,11 +4127,8 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	  repop->ctx->reply = NULL;
 	else {
 	  reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
-	  reply->set_replay_version(repop->ctx->at_version);
-	  reply->set_user_version(repop->ctx->user_at_version);
-	  eversion_t bad_replay_version(repop->ctx->at_version);
-	  bad_replay_version.version = repop->ctx->user_at_version;
-	  reply->set_bad_replay_version(bad_replay_version);
+	  reply->set_reply_versions(repop->ctx->at_version,
+	                            repop->ctx->user_at_version);
 	}
 	reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
 	dout(10) << " sending commit on " << *repop << " " << reply << dendl;
@@ -4171,11 +4150,8 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	     ++i) {
 	  MOSDOp *m = (MOSDOp*)(*i)->request;
 	  MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
-	  reply->set_replay_version(repop->ctx->at_version);
-	  reply->set_user_version(repop->ctx->user_at_version);
-	  eversion_t bad_replay_version(repop->ctx->at_version);
-	  bad_replay_version.version = repop->ctx->user_at_version;
-	  reply->set_bad_replay_version(bad_replay_version);
+	  reply->set_reply_versions(repop->ctx->at_version,
+	                            repop->ctx->user_at_version);
 	  reply->add_flags(CEPH_OSD_FLAG_ACK);
 	  osd->send_message_osd_client(reply, m->get_connection());
 	}
@@ -4189,11 +4165,8 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	  repop->ctx->reply = NULL;
 	else {
 	  reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
-	  reply->set_replay_version(repop->ctx->at_version);
-	  reply->set_user_version(repop->ctx->user_at_version);
-	  eversion_t bad_replay_version(repop->ctx->at_version);
-	  bad_replay_version.version = repop->ctx->user_at_version;
-	  reply->set_bad_replay_version(bad_replay_version);
+	  reply->set_reply_versions(repop->ctx->at_version,
+	                            repop->ctx->user_at_version);
 	}
 	reply->add_flags(CEPH_OSD_FLAG_ACK);
 	dout(10) << " sending ack on " << *repop << " " << reply << dendl;

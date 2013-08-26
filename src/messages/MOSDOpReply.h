@@ -58,9 +58,34 @@ public:
   version_t get_user_version() { return user_version; }
   
   void set_result(int r) { result = r; }
-  void set_bad_replay_version(eversion_t v) { bad_replay_version = v; }
-  void set_replay_version(eversion_t v) { replay_version = v; }
-  void set_user_version(version_t v) { user_version = v; }
+
+  void set_reply_versions(eversion_t v, version_t uv) {
+    replay_version = v;
+    user_version = uv;
+    /* We go through some shenanigans here for backwards compatibility
+     * with old clients, who do not look at our replay_version and
+     * user_version but instead see what we now call the
+     * bad_replay_version. On pools without caching
+     * the user_version infrastructure is a slightly-laggy copy of
+     * the regular pg version/at_version infrastructure; the difference
+     * being it is not updated on watch ops like that is -- but on updates
+     * it is set equal to at_version. This means that for non-watch write ops
+     * on classic pools, all three of replay_version, user_version, and
+     * bad_replay_version are identical. But for watch ops the replay_version
+     * has been updated, while the user_at_version has not, and the semantics
+     * we promised old clients are that the version they see is not an update.
+     * So set the bad_replay_version to be the same as the user_at_version. */
+    bad_replay_version = v;
+    if (uv) {
+      bad_replay_version.version = uv;
+    }
+  }
+
+  /* Don't fill in replay_version for non-write ops */
+  void set_enoent_reply_versions(eversion_t v, version_t uv) {
+    user_version = uv;
+    bad_replay_version = v;
+  }
 
   void add_flags(int f) { flags |= f; }
 
