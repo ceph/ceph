@@ -1,6 +1,7 @@
 import sys
 import logging
 from teuthology.sentry import get_client as get_sentry_client
+from .config import config
 
 log = logging.getLogger(__name__)
 
@@ -35,7 +36,9 @@ def run_tasks(tasks, ctx):
         sentry = get_sentry_client()
         if sentry:
             exc_id = sentry.captureException()
-            log.exception(" Sentry id %s" % exc_id)
+            log.exception(" Sentry event: {server}/search?q={id}".format(
+                server=config.sentry_server,
+                id=exc_id))
         if ctx.config.get('interactive-on-error'):
             from .task import interactive
             log.warning('Saw failure, going into interactive mode...')
