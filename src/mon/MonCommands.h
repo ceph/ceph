@@ -525,6 +525,10 @@ COMMAND("osd tier remove " \
 	"name=pool,type=CephPoolname " \
 	"name=tierpool,type=CephPoolname",
 	"remove the tier <tierpool> from base pool <pool>", "osd", "rw", "cli,rest")
+COMMAND("osd tier cache-mode " \
+	"name=pool,type=CephPoolname " \
+	"name=mode,type=CephChoices,strings=none|writeback|invalidate+forward|readonly", \
+	"specify the caching mode for cache tier <pool>", "osd", "rw", "cli,rest")
 /*
  * mon/ConfigKeyService.cc
  */
