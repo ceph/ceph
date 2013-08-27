@@ -5,6 +5,7 @@ import itertools
 import logging
 import os
 import re
+from textwrap import dedent, fill
 
 # this file is responsible for submitting tests into the queue
 # by generating combinations of facets found in
@@ -394,10 +395,48 @@ def get_jobs(archive_dir):
     return sorted(jobs)
 
 
+email_templates = {
+    'body_templ': dedent("""\
+        Test Run
+        =================================================================
+        logs:   {log_root}
+        failed: {fail_count}
+        hung:   {hung_count}
+        passed: {pass_count}
+
+        {fail_sect}{hung_sect}{pass_sect}
+        """),
+    'sect_templ': dedent("""\
+        {title}
+        =================================================================
+        {jobs}
+        """),
+    'fail_templ': dedent("""\
+        [{job_id}]  {desc}
+        -----------------------------------------------------------------
+        time:   {time}{log_line}{sentry_line}
+
+        {reason}
+
+        """),
+    'fail_log_templ': "\nlog:    {log}",
+    'fail_sentry_templ': "\nsentry: {sentries}",
+    'hung_templ': dedent("""\
+        [{job_id}]
+        """),
+    'pass_templ': dedent("""\
+        [{job_id}] {desc}
+        time:    {time}
+
+        """),
+}
+
+
+
 def build_email_body(name, archive_dir, timeout):
-    failed = []
-    unfinished = []
-    passed = []
+    failed = {}
+    hung = {}
+    passed = {}
 
     for job in get_jobs(archive_dir):
         job_dir = os.path.join(archive_dir, job)
@@ -405,53 +444,81 @@ def build_email_body(name, archive_dir, timeout):
 
         # Unfinished jobs will have no summary.yaml
         if not os.path.exists(summary_file):
-            unfinished.append(job)
+            hung[job] = email_templates['hung_templ'].format(job_id=job)
             continue
 
-        summary = {}
         with file(summary_file) as f:
             summary = yaml.safe_load(f)
-        long_desc = '{test}: ({duration}s) {desc}'.format(
-            duration=int(summary.get('duration', 0)),
-            desc=summary['description'],
-            test=job,
-        )
+
         if summary['success']:
-            passed.append(long_desc)
+            passed[job] = email_templates['pass_templ'].format(
+                job_id=job,
+                desc=summary.get('description'),
+                time=summary.get('duration'),
+            )
         else:
-            full_desc = long_desc
-            if 'failure_reason' in summary:
-                full_desc += '\n    %s' % summary['failure_reason']
-            http_log = get_http_log_path(archive_dir, job)
-            if http_log:
-                full_desc += '\n    %s' % http_log
+            log = get_http_log_path(archive_dir, job)
+            if log:
+                log_line = email_templates['fail_log_templ'].format(log=log)
+            else:
+                log_line = ''
             sentry_events = summary.get('sentry_events')
             if sentry_events:
-                full_desc += '\n    %s' % '\n    '.join(sentry_events)
-            failed.append(full_desc)
+                sentry_line = email_templates['fail_sentry_templ'].format(
+                    sentries='\n        '.join(sentry_events))
+            else:
+                sentry_line = ''
+
+            failed[job] = email_templates['fail_templ'].format(
+                job_id=job,
+                desc=summary.get('description'),
+                time=summary.get('duration'),
+                reason=fill(summary.get('failure_reason'), 79),
+                log_line=log_line,
+                sentry_line=sentry_line,
+            )
 
     maybe_comma = lambda s: ', ' if s else ' '
 
     subject = ''
-    body = ''
+    fail_sect = ''
+    hung_sect = ''
+    pass_sect = ''
     if failed:
         subject += '{num_failed} failed{sep}'.format(
             num_failed=len(failed),
-            sep=maybe_comma(unfinished or passed)
+            sep=maybe_comma(hung or passed)
         )
-        body += 'The following tests failed:\n%s\n\n\n' % '\n'.join(failed)
-    if unfinished:
+        fail_sect = email_templates['sect_templ'].format(
+            title='Failed',
+            jobs=''.join(failed.values())
+        )
+    if hung:
         subject += '{num_hung} hung{sep}'.format(
-            num_hung=len(unfinished),
-            sep=maybe_comma(passed)
+            num_hung=len(hung),
+            sep=maybe_comma(passed),
         )
-        body += 'These tests may be hung (did not finish in {timeout} seconds after the last test in the suite):\n{hung_jobs}\n\n\n'.format(
-            timeout=timeout,
-            hung_jobs='\n'.join(unfinished),
+        hung_sect = email_templates['sect_templ'].format(
+            title='Hung',
+            jobs=''.join(hung.values()),
         )
     if passed:
         subject += '%s passed ' % len(passed)
-        body += 'These tests passed:\n%s' % '\n'.join(passed)
+        pass_sect = email_templates['sect_templ'].format(
+            title='Passed',
+            jobs=''.join(passed.values()),
+        )
+
+    body = email_templates['body_templ'].format(
+        log_root=get_http_log_path(archive_dir, ''),
+        fail_count=len(failed),
+        hung_count=len(hung),
+        pass_count=len(passed),
+        fail_sect=fail_sect,
+        hung_sect=hung_sect,
+        pass_sect=pass_sect,
+    )
+
     subject += 'in {suite}'.format(suite=name)
     return (subject.strip(), body.strip())
 
