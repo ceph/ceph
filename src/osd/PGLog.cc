@@ -542,12 +542,13 @@ void PGLog::write_log(
 	     << ", dirty_from: " << dirty_from
 	     << ", dirty_divergent_priors: " << dirty_divergent_priors
 	     << dendl;
-    _write_log(t, log, log_oid, divergent_priors,
-	       dirty_to,
-	       dirty_from,
-	       dirty_divergent_priors,
-	       !touched_log,
-               &log_keys_debug);
+    _write_log(
+      t, log, log_oid, divergent_priors,
+      dirty_to,
+      dirty_from,
+      dirty_divergent_priors,
+      !touched_log,
+      (pg_log_debug ? &log_keys_debug : 0));
     undirty();
   } else {
     dout(10) << "log is not dirty" << dendl;
