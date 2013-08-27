@@ -205,11 +205,11 @@ protected:
 	 log_keys_debug->erase(i++));
   }
   void check() {
-    assert(log.log.size() == log_keys_debug.size());
     if (cct &&
         !(cct->_conf->osd_debug_pg_log_writeout)) {
       return;
     }
+    assert(log.log.size() == log_keys_debug.size());
     for (list<pg_log_entry_t>::iterator i = log.log.begin();
 	 i != log.log.end();
 	 ++i) {
