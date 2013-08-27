@@ -142,7 +142,7 @@ struct PGLog {
 	caller_ops[e.reqid] = &(log.back());
     }
 
-    void trim(eversion_t s);
+    void trim(eversion_t s, set<eversion_t> *trimmed);
 
     ostream& print(ostream& out) const;
   };
@@ -158,8 +158,10 @@ protected:
 
   /// Log is clean on [dirty_to, dirty_from)
   bool touched_log;
-  eversion_t dirty_to;
-  eversion_t dirty_from;
+  eversion_t dirty_to;         ///< must clear/writeout all keys up to dirty_to
+  eversion_t dirty_from;       ///< must clear/writeout all keys past dirty_from
+  eversion_t writeout_from;    ///< must writout keys past writeout_from
+  set<eversion_t> trimmed;     ///< must clear keys in trimmed
   bool dirty_divergent_priors;
   CephContext *cct;
 
@@ -167,7 +169,9 @@ protected:
     return !touched_log ||
       (dirty_to != eversion_t()) ||
       (dirty_from != eversion_t::max()) ||
-      dirty_divergent_priors;
+      dirty_divergent_priors ||
+      (writeout_from != eversion_t::max()) ||
+      !(trimmed.empty());
   }
   void mark_dirty_to(eversion_t to) {
     if (to > dirty_to)
@@ -176,6 +180,10 @@ protected:
   void mark_dirty_from(eversion_t from) {
     if (from < dirty_from)
       dirty_from = from;
+  }
+  void mark_writeout_from(eversion_t from) {
+    if (from < writeout_from)
+      writeout_from = from;
   }
   void add_divergent_prior(eversion_t version, hobject_t obj) {
     divergent_priors.insert(make_pair(version, obj));
@@ -221,6 +229,8 @@ protected:
     dirty_from = eversion_t::max();
     dirty_divergent_priors = false;
     touched_log = true;
+    trimmed.clear();
+    writeout_from = eversion_t::max();
     check();
   }
 public:
@@ -281,7 +291,7 @@ public:
   void unindex() { log.unindex(); }
 
   void add(pg_log_entry_t& e) {
-    mark_dirty_from(e.version);
+    mark_writeout_from(e.version);
     log.add(e);
   }
 
@@ -374,6 +384,8 @@ public:
     const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors,
     eversion_t dirty_to,
     eversion_t dirty_from,
+    eversion_t writeout_from,
+    const set<eversion_t> &trimmed,
     bool dirty_divergent_priors,
     bool touch_log,
     set<string> *log_keys_debug
