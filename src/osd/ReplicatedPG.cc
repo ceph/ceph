@@ -3361,6 +3361,77 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
 
+    case CEPH_OSD_OP_COPY_GET:
+      ++ctx->num_read;
+      {
+	object_copy_cursor_t cursor;
+	uint64_t out_max;
+	try {
+	  ::decode(cursor, bp);
+	  ::decode(out_max, bp);
+	}
+	catch (buffer::error& e) {
+	  result = -EINVAL;
+	  goto fail;
+	}
+
+	// size, mtime
+	::encode(oi.size, osd_op.outdata);
+	::encode(oi.mtime, osd_op.outdata);
+
+	// attrs
+	map<string,bufferptr> out_attrs;
+	if (!cursor.attr_complete) {
+	  result = osd->store->getattrs(coll, soid, out_attrs, true);
+	  if (result < 0)
+	    break;
+	  cursor.attr_complete = true;
+	}
+	::encode(out_attrs, osd_op.outdata);
+
+	int64_t left = out_max - osd_op.outdata.length();
+
+	// data
+	bufferlist bl;
+	if (left > 0 && !cursor.data_complete) {
+	  if (cursor.data_offset < oi.size) {
+	    result = osd->store->read(coll, oi.soid, cursor.data_offset, out_max, bl);
+	    if (result < 0)
+	      return result;
+	    assert(result <= left);
+	    left -= result;
+	    cursor.data_offset += result;
+	  }
+	  if (cursor.data_offset == oi.size)
+	    cursor.data_complete = true;
+	}
+	::encode(bl, osd_op.outdata);
+
+	// omap
+	std::map<std::string,bufferlist> out_omap;
+	if (left > 0 && !cursor.omap_complete) {
+	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(coll, oi.soid);
+	  assert(iter);
+	  if (iter->valid()) {
+	    iter->upper_bound(cursor.omap_offset);
+	    for (; left > 0 && iter->valid(); iter->next()) {
+	      out_omap.insert(make_pair(iter->key(), iter->value()));
+	      left -= iter->key().length() + 4 + iter->value().length() + 4;
+	    }
+	  }
+	  if (iter->valid()) {
+	    cursor.omap_offset = iter->key();
+	  } else {
+	    cursor.omap_complete = true;
+	  }
+	}
+	::encode(out_omap, osd_op.outdata);
+
+	::encode(cursor, osd_op.outdata);
+	result = 0;
+      }
+      break;
+
 
     default:
       dout(1) << "unrecognized osd op " << op.op
