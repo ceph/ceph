@@ -6785,17 +6785,27 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   context_registry_on_change();
 
   // requeue object waiters
-  requeue_ops(waiting_for_backfill_pos);
-  requeue_object_waiters(waiting_for_missing_object);
+  if (is_primary()) {
+    requeue_ops(waiting_for_backfill_pos);
+    requeue_object_waiters(waiting_for_missing_object);
+  } else {
+    waiting_for_backfill_pos.clear();
+    waiting_for_missing_object.clear();
+  }
   for (map<hobject_t,list<OpRequestRef> >::iterator p = waiting_for_degraded_object.begin();
        p != waiting_for_degraded_object.end();
        waiting_for_degraded_object.erase(p++)) {
-    requeue_ops(p->second);
+    if (is_primary())
+      requeue_ops(p->second);
+    else
+      p->second.clear();
     finish_degraded_object(p->first);
   }
 
-  requeue_ops(waiting_for_all_missing);
-  waiting_for_all_missing.clear();
+  if (is_primary())
+    requeue_ops(waiting_for_all_missing);
+  else
+    waiting_for_all_missing.clear();
 
   // this will requeue ops we were working on but didn't finish, and
   // any dups
