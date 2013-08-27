@@ -64,16 +64,21 @@ public:
   }
 
   bool get_next(const K &key, pair<K, VPtr> *next) {
-    VPtr next_val;
-    Mutex::Locker l(lock);
-    typename map<K, WeakVPtr>::iterator i = contents.upper_bound(key);
-    while (i != contents.end() &&
-	   !(next_val = i->second.lock()))
-      ++i;
-    if (i == contents.end())
-      return false;
+    pair<K, VPtr> r;
+    {
+      Mutex::Locker l(lock);
+      VPtr next_val;
+      typename map<K, WeakVPtr>::iterator i = contents.upper_bound(key);
+      while (i != contents.end() &&
+	     !(next_val = i->second.lock()))
+	++i;
+      if (i == contents.end())
+	return false;
+      if (next)
+	r = make_pair(i->first, next_val);
+    }
     if (next)
-      *next = make_pair(i->first, next_val);
+      *next = r;
     return true;
   }
 
