@@ -150,6 +150,7 @@ struct PGLog {
 
 protected:
   //////////////////// data members ////////////////////
+  bool pg_log_debug;
 
   map<eversion_t, hobject_t> divergent_priors;
   pg_missing_t     missing;
@@ -205,10 +206,8 @@ protected:
 	 log_keys_debug->erase(i++));
   }
   void check() {
-    if (cct &&
-        !(cct->_conf->osd_debug_pg_log_writeout)) {
+    if (!pg_log_debug)
       return;
-    }
     assert(log.log.size() == log_keys_debug.size());
     for (list<pg_log_entry_t>::iterator i = log.log.begin();
 	 i != log.log.end();
@@ -226,6 +225,7 @@ protected:
   }
 public:
   PGLog(CephContext *cct = 0) :
+    pg_log_debug(!(cct && !(cct->_conf->osd_debug_pg_log_writeout))),
     touched_log(false), dirty_from(eversion_t::max()),
     dirty_divergent_priors(false), cct(cct) {}
 
@@ -381,8 +381,10 @@ public:
 
   bool read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
 		const pg_info_t &info, ostringstream &oss) {
-    return read_log(store, coll, log_oid, info, divergent_priors,
-		    log, missing, oss, &log_keys_debug);
+    return read_log(
+      store, coll, log_oid, info, divergent_priors,
+      log, missing, oss,
+      (pg_log_debug ? &log_keys_debug : 0));
   }
 
   /// return true if the log should be rewritten
