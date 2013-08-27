@@ -516,6 +516,15 @@ COMMAND("osd thrash " \
 	"name=num_epochs,type=CephInt,range=0", \
 	"thrash OSDs for <num_epochs>", "osd", "rw", "cli,rest")
 
+// tiering
+COMMAND("osd tier add " \
+	"name=pool,type=CephPoolname " \
+	"name=tierpool,type=CephPoolname",
+	"add the tier <tierpool> to base pool <pool>", "osd", "rw", "cli,rest")
+COMMAND("osd tier remove " \
+	"name=pool,type=CephPoolname " \
+	"name=tierpool,type=CephPoolname",
+	"remove the tier <tierpool> from base pool <pool>", "osd", "rw", "cli,rest")
 /*
  * mon/ConfigKeyService.cc
  */
