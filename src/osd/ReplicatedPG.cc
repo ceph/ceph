@@ -60,8 +60,9 @@
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this, osd->whoami, get_osdmap()
 #undef dout_prefix
-#define dout_prefix _prefix(_dout, this, osd->whoami, get_osdmap())
-static ostream& _prefix(std::ostream *_dout, PG *pg, int whoami, OSDMapRef osdmap) {
+#define dout_prefix _prefix(_dout, this)
+template <typename T>
+static ostream& _prefix(std::ostream *_dout, T *pg) {
   return *_dout << pg->gen_prefix();
 }
 
