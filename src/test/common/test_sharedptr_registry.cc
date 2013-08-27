@@ -137,8 +137,8 @@ TEST_F(SharedPtrRegistry_all, wait_lookup_or_create) {
     EXPECT_TRUE(registry.lookup_or_create(key + 12345));
     registry.remove(key);
     ASSERT_TRUE(wait_for(registry, 0));
-    EXPECT_TRUE(t.ptr);
     t.join();
+    EXPECT_TRUE(t.ptr);
   }
   {
     unsigned int key = 2;
@@ -163,9 +163,9 @@ TEST_F(SharedPtrRegistry_all, wait_lookup_or_create) {
     }
     registry.remove(key);
     ASSERT_TRUE(wait_for(registry, 0));
+    t.join();
     EXPECT_TRUE(t.ptr);
     EXPECT_EQ(value, *t.ptr);
-    t.join();
   }
 }
 
@@ -200,8 +200,8 @@ TEST_F(SharedPtrRegistry_all, wait_lookup) {
   EXPECT_FALSE(registry.lookup(key + 12345));
   registry.remove(key);
   ASSERT_TRUE(wait_for(registry, 0));
-  EXPECT_FALSE(t.ptr);
   t.join();
+  EXPECT_FALSE(t.ptr);
 }
 
 TEST_F(SharedPtrRegistry_all, get_next) {
