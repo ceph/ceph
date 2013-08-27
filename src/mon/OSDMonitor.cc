@@ -1457,17 +1457,15 @@ bool OSDMonitor::prepare_remove_snaps(MRemoveSnaps *m)
       if (!pi.removed_snaps.contains(*q) &&
 	  (!pending_inc.new_pools.count(p->first) ||
 	   !pending_inc.new_pools[p->first].removed_snaps.contains(*q))) {
-	if (pending_inc.new_pools.count(p->first) == 0)
-	  pending_inc.new_pools[p->first] = pi;
-	pg_pool_t& newpi = pending_inc.new_pools[p->first];
-	newpi.removed_snaps.insert(*q);
+	pg_pool_t *newpi = pending_inc.get_new_pool(p->first, &pi);
+	newpi->removed_snaps.insert(*q);
 	dout(10) << " pool " << p->first << " removed_snaps added " << *q
-		 << " (now " << newpi.removed_snaps << ")" << dendl;
-	if (*q > newpi.get_snap_seq()) {
-	  dout(10) << " pool " << p->first << " snap_seq " << newpi.get_snap_seq() << " -> " << *q << dendl;
-	  newpi.set_snap_seq(*q);
+		 << " (now " << newpi->removed_snaps << ")" << dendl;
+	if (*q > newpi->get_snap_seq()) {
+	  dout(10) << " pool " << p->first << " snap_seq " << newpi->get_snap_seq() << " -> " << *q << dendl;
+	  newpi->set_snap_seq(*q);
 	}
-	newpi.set_snap_epoch(pending_inc.epoch);
+	newpi->set_snap_epoch(pending_inc.epoch);
       }
     }
   }
@@ -2326,9 +2324,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 void OSDMonitor::update_pool_flags(int64_t pool_id, uint64_t flags)
 {
   const pg_pool_t *pool = osdmap.get_pg_pool(pool_id);
-  if (pending_inc.new_pools.count(pool_id) == 0)
-    pending_inc.new_pools[pool_id] = *pool;
-  pending_inc.new_pools[pool_id].flags = flags;
+  pending_inc.get_new_pool(pool_id, pool)->flags = flags;
 }
 
 bool OSDMonitor::update_pools_status()
@@ -2505,22 +2501,24 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
   if (-1 == pending_inc.new_pool_max)
     pending_inc.new_pool_max = osdmap.pool_max;
   int64_t pool = ++pending_inc.new_pool_max;
-  pending_inc.new_pools[pool].type = pg_pool_t::TYPE_REP;
-  pending_inc.new_pools[pool].flags = g_conf->osd_pool_default_flags;
+  pg_pool_t empty;
+  pg_pool_t *pi = pending_inc.get_new_pool(pool, &empty);
+  pi->type = pg_pool_t::TYPE_REP;
+  pi->flags = g_conf->osd_pool_default_flags;
   if (g_conf->osd_pool_default_flag_hashpspool)
-    pending_inc.new_pools[pool].flags |= pg_pool_t::FLAG_HASHPSPOOL;
+    pi->flags |= pg_pool_t::FLAG_HASHPSPOOL;
 
-  pending_inc.new_pools[pool].size = g_conf->osd_pool_default_size;
-  pending_inc.new_pools[pool].min_size = g_conf->get_osd_pool_default_min_size();
+  pi->size = g_conf->osd_pool_default_size;
+  pi->min_size = g_conf->get_osd_pool_default_min_size();
   if (crush_rule >= 0)
-    pending_inc.new_pools[pool].crush_ruleset = crush_rule;
+    pi->crush_ruleset = crush_rule;
   else
-    pending_inc.new_pools[pool].crush_ruleset = g_conf->osd_pool_default_crush_rule;
-  pending_inc.new_pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
-  pending_inc.new_pools[pool].set_pg_num(pg_num ? pg_num : g_conf->osd_pool_default_pg_num);
-  pending_inc.new_pools[pool].set_pgp_num(pgp_num ? pgp_num : g_conf->osd_pool_default_pgp_num);
-  pending_inc.new_pools[pool].last_change = pending_inc.epoch;
-  pending_inc.new_pools[pool].auid = auid;
+    pi->crush_ruleset = g_conf->osd_pool_default_crush_rule;
+  pi->object_hash = CEPH_STR_HASH_RJENKINS;
+  pi->set_pg_num(pg_num ? pg_num : g_conf->osd_pool_default_pg_num);
+  pi->set_pgp_num(pgp_num ? pgp_num : g_conf->osd_pool_default_pgp_num);
+  pi->last_change = pending_inc.epoch;
+  pi->auid = auid;
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
@@ -3546,32 +3544,31 @@ done:
       cmd_getval(g_ceph_context, cmdmap, "val", n);
       string var;
       cmd_getval(g_ceph_context, cmdmap, "var", var);
-      if (pending_inc.new_pools.count(pool) == 0)
-	pending_inc.new_pools[pool] = *p;
       if (var == "size") {
 	if (n == 0 || n > 10) {
 	  ss << "pool size must be between 1 and 10";
 	  err = -EINVAL;
 	  goto reply;
 	}
-	pending_inc.new_pools[pool].size = n;
+	pending_inc.get_new_pool(pool, p)->size = n;
 	if (n < p->min_size)
-	  pending_inc.new_pools[pool].min_size = n;
+	  pending_inc.get_new_pool(pool, p)->min_size = n;
 	ss << "set pool " << pool << " size to " << n;
       } else if (var == "min_size") {
-	pending_inc.new_pools[pool].min_size = n;
+	pending_inc.get_new_pool(pool, p)->min_size = n;
 	ss << "set pool " << pool << " min_size to " << n;
       } else if (var == "crash_replay_interval") {
-	pending_inc.new_pools[pool].crash_replay_interval = n;
+	pending_inc.get_new_pool(pool, p)->crash_replay_interval = n;
 	ss << "set pool " << pool << " to crash_replay_interval to " << n;
       } else if (var == "pg_num") {
 	if (n <= p->get_pg_num()) {
 	  ss << "specified pg_num " << n << " <= current " << p->get_pg_num();
+	  err = -EINVAL;
 	} else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
 	  ss << "currently creating pgs, wait";
 	  err = -EAGAIN;
 	} else {
-	  pending_inc.new_pools[pool].set_pg_num(n);
+	  pending_inc.get_new_pool(pool, p)->set_pg_num(n);
 	  ss << "set pool " << pool << " pg_num to " << n;
 	}
       } else if (var == "pgp_num") {
@@ -3581,19 +3578,22 @@ done:
 	  ss << "still creating pgs, wait";
 	  err = -EAGAIN;
 	} else {
-	  pending_inc.new_pools[pool].set_pgp_num(n);
+	  pending_inc.get_new_pool(pool, p)->set_pgp_num(n);
 	  ss << "set pool " << pool << " pgp_num to " << n;
 	}
       } else if (var == "crush_ruleset") {
 	if (osdmap.crush->rule_exists(n)) {
-	  pending_inc.new_pools[pool].crush_ruleset = n;
+	  pending_inc.get_new_pool(pool, p)->crush_ruleset = n;
 	  ss << "set pool " << pool << " crush_ruleset to " << n;
 	} else {
 	  ss << "crush ruleset " << n << " does not exist";
 	  err = -ENOENT;
 	}
+      } else {
+	err = -EINVAL;
+	goto reply;
       }
-      pending_inc.new_pools[pool].last_change = pending_inc.epoch;
+      pending_inc.get_new_pool(pool, p)->last_change = pending_inc.epoch;
       getline(ss, rs);
       wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
       return true;
@@ -3627,13 +3627,11 @@ done:
       goto reply;
     }
 
-    if (pending_inc.new_pools.count(pool_id) == 0)
-      pending_inc.new_pools[pool_id] = *osdmap.get_pg_pool(pool_id);
-
+    pg_pool_t *pi = pending_inc.get_new_pool(pool_id, osdmap.get_pg_pool(pool_id));
     if (field == "max_objects") {
-      pending_inc.new_pools[pool_id].quota_max_objects = value;
+      pi->quota_max_objects = value;
     } else if (field == "max_bytes") {
-      pending_inc.new_pools[pool_id].quota_max_bytes = value;
+      pi->quota_max_bytes = value;
     } else {
       assert(0 == "unrecognized option");
     }
