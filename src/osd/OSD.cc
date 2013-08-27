@@ -6810,7 +6810,7 @@ void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v)
 
   MOSDOpReply *reply = new MOSDOpReply(m, err, osdmap->get_epoch(), flags);
   Messenger *msgr = client_messenger;
-  reply->set_replay_version(v);
+  reply->set_reply_versions(v, v.version);
   if (m->get_source().is_osd())
     msgr = cluster_messenger;
   msgr->send_message(reply, m->get_connection());

@@ -1028,11 +1028,9 @@ void ReplicatedPG::do_op(OpRequestRef op)
   ctx->reply->set_result(result);
 
   if (result >= 0) {
-    ctx->reply->set_replay_version(ctx->at_version);
-    ctx->reply->set_user_version(ctx->new_obs.oi.user_version);
+    ctx->reply->set_reply_versions(ctx->at_version, ctx->at_version.version);
   } else if (result == -ENOENT) {
-    ctx->reply->set_replay_version(info.last_update);
-    ctx->reply->set_user_version(info.last_update.version);
+    ctx->reply->set_enoent_reply_versions(info.last_update, info.last_update.version);
   }
 
   // read or error?
