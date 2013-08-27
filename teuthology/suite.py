@@ -414,7 +414,7 @@ email_templates = {
     'fail_templ': dedent("""\
         [{job_id}]  {desc}
         -----------------------------------------------------------------
-        time:   {time}{log_line}{sentry_line}
+        time:   {time}s{log_line}{sentry_line}
 
         {reason}
 
@@ -426,7 +426,7 @@ email_templates = {
         """),
     'pass_templ': dedent("""\
         [{job_id}] {desc}
-        time:    {time}
+        time:    {time}s
 
         """),
 }
@@ -454,7 +454,7 @@ def build_email_body(name, archive_dir, timeout):
             passed[job] = email_templates['pass_templ'].format(
                 job_id=job,
                 desc=summary.get('description'),
-                time=summary.get('duration'),
+                time=int(summary.get('duration')),
             )
         else:
             log = get_http_log_path(archive_dir, job)
@@ -472,7 +472,7 @@ def build_email_body(name, archive_dir, timeout):
             failed[job] = email_templates['fail_templ'].format(
                 job_id=job,
                 desc=summary.get('description'),
-                time=summary.get('duration'),
+                time=int(summary.get('duration')),
                 reason=fill(summary.get('failure_reason'), 79),
                 log_line=log_line,
                 sentry_line=sentry_line,
