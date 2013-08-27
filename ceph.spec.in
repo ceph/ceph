@@ -122,7 +122,6 @@ Requires:	apache2-mod_fcgid
 %else
 BuildRequires:	expat-devel
 BuildRequires:	fcgi-devel
-Requires:	mod_fcgid
 %endif
 %description radosgw
 radosgw is an S3 HTTP REST gateway for the RADOS object store. It is
