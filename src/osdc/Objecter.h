@@ -567,6 +567,82 @@ struct ObjectOperation {
     }
   }
 
+  struct C_ObjectOperation_copyget : public Context {
+    bufferlist bl;
+    object_copy_cursor_t *cursor;
+    uint64_t *out_size;
+    utime_t *out_mtime;
+    std::map<std::string,bufferlist> *out_attrs;
+    bufferlist *out_data;
+    std::map<std::string,bufferlist> *out_omap;
+    int *prval;
+    C_ObjectOperation_copyget(object_copy_cursor_t *c,
+			      uint64_t *s,
+			      utime_t *m,
+			      std::map<std::string,bufferlist> *a,
+			      bufferlist *d,
+			      std::map<std::string,bufferlist> *o,
+			      int *r)
+      : cursor(c),
+	out_size(s), out_mtime(m), out_attrs(a),
+	out_data(d), out_omap(o), prval(r) {}
+    void finish(int r) {
+      if (r < 0)
+	return;
+      try {
+	bufferlist::iterator p = bl.begin();
+	uint64_t size;
+	::decode(size, p);
+	if (out_size)
+	  *out_size = size;
+	utime_t mtime;
+	::decode(mtime, p);
+	if (out_mtime)
+	  *out_mtime = mtime;
+	if (out_attrs) {
+	  ::decode_noclear(*out_attrs, p);
+	} else {
+	  std::map<std::string,bufferlist> t;
+	  ::decode(t, p);
+	}
+	bufferlist bl;
+	::decode(bl, p);
+	if (out_data)
+	  out_data->claim_append(bl);
+	if (out_omap) {
+	  ::decode_noclear(*out_omap, p);
+	} else {
+	  std::map<std::string,bufferlist> t;
+	  ::decode(t, p);
+	}
+	::decode(*cursor, p);
+      } catch (buffer::error& e) {
+	if (prval)
+	  *prval = -EIO;
+      }
+    }
+  };
+
+  void copy_get(object_copy_cursor_t *cursor,
+		uint64_t max,
+		uint64_t *out_size,
+		utime_t *out_mtime,
+		std::map<std::string,bufferlist> *out_attrs,
+		bufferlist *out_data,
+		std::map<std::string,bufferlist> *out_omap,
+		int *prval) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET);
+    osd_op.op.copy_get.max = max;
+    ::encode(*cursor, osd_op.indata);
+    ::encode(max, osd_op.indata);
+    unsigned p = ops.size() - 1;
+    out_rval[p] = prval;
+    C_ObjectOperation_copyget *h =
+      new C_ObjectOperation_copyget(cursor, out_size, out_mtime, out_attrs, out_data, out_omap, prval);
+    out_bl[p] = &h->bl;
+    out_handler[p] = h;
+  }
+
   void omap_get_header(bufferlist *bl, int *prval) {
     add_op(CEPH_OSD_OP_OMAPGETHEADER);
     unsigned p = ops.size() - 1;
