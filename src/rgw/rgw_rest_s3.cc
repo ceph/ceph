@@ -893,6 +893,11 @@ int RGWPostObj_ObjStore_S3::get_params()
 
   rebuild_key(s->object_str);
 
+  if (s->object_str.empty()) {
+    err_msg = "Empty object name";
+    return -EINVAL;
+  }
+
   env.add_var("key", s->object_str);
 
   part_str("Content-Type", &content_type);
