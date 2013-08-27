@@ -753,6 +753,17 @@ struct pg_pool_t {
     default: return "unknown";
     }
   }
+  static cache_mode_t get_cache_mode_from_str(const string& s) {
+    if (s == "none")
+      return CACHEMODE_NONE;
+    if (s == "writeback")
+      return CACHEMODE_WRITEBACK;
+    if (s == "invalidate+forward")
+      return CACHEMODE_INVALIDATE_FORWARD;
+    if (s == "readonly")
+      return CACHEMODE_READONLY;
+    return (cache_mode_t)-1;
+  }
   const char *get_cache_mode_name() const {
     return get_cache_mode_name(cache_mode);
   }
