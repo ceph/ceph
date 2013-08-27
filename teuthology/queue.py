@@ -6,6 +6,7 @@ import subprocess
 import shutil
 import sys
 import tempfile
+import time
 import yaml
 
 import beanstalkc

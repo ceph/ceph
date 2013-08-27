@@ -220,7 +220,7 @@ class VirtualConsole():
             return
         self.connection = libvirt.open(phys_host)
         for i in self.connection.listDomainsID():
-            d = con.lookupByID(i)
+            d = self.connection.lookupByID(i)
             if d.name() == self.shortname:
                 self.vm_domain = d
                 break
