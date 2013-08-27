@@ -3,6 +3,7 @@ from cStringIO import StringIO
 import json
 import logging
 import os
+import time
 
 from ..orchestra import run
 from teuthology import misc as teuthology
