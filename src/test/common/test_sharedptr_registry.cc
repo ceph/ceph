@@ -137,8 +137,8 @@ TEST_F(SharedPtrRegistry_all, wait_lookup_or_create) {
     EXPECT_TRUE(registry.lookup_or_create(key + 12345));
     registry.remove(key);
     ASSERT_TRUE(wait_for(registry, 0));
-    EXPECT_TRUE(t.ptr);
     t.join();
+    EXPECT_TRUE(t.ptr);
   }
   {
     unsigned int key = 2;
@@ -163,9 +163,9 @@ TEST_F(SharedPtrRegistry_all, wait_lookup_or_create) {
     }
     registry.remove(key);
     ASSERT_TRUE(wait_for(registry, 0));
+    t.join();
     EXPECT_TRUE(t.ptr);
     EXPECT_EQ(value, *t.ptr);
-    t.join();
   }
 }
 
@@ -200,8 +200,8 @@ TEST_F(SharedPtrRegistry_all, wait_lookup) {
   EXPECT_FALSE(registry.lookup(key + 12345));
   registry.remove(key);
   ASSERT_TRUE(wait_for(registry, 0));
-  EXPECT_FALSE(t.ptr);
   t.join();
+  EXPECT_FALSE(t.ptr);
 }
 
 TEST_F(SharedPtrRegistry_all, get_next) {
@@ -237,6 +237,24 @@ TEST_F(SharedPtrRegistry_all, get_next) {
     EXPECT_EQ(value2, i.second);
 
     EXPECT_FALSE(registry.get_next(i.first, &i));
+  }
+  {
+    //
+    // http://tracker.ceph.com/issues/6117
+    // reproduce the issue.
+    //
+    SharedPtrRegistryTest registry;
+    const unsigned int key1 = 111;
+    shared_ptr<int> *ptr1 = new shared_ptr<int>(registry.lookup_or_create(key1));
+    const unsigned int key2 = 222;
+    shared_ptr<int> ptr2 = registry.lookup_or_create(key2);
+    
+    pair<unsigned int, shared_ptr<int> > i;
+    EXPECT_TRUE(registry.get_next(i.first, &i));
+    EXPECT_EQ(key1, i.first);
+    delete ptr1;
+    EXPECT_TRUE(registry.get_next(i.first, &i));    
+    EXPECT_EQ(key2, i.first);
   }
 }
 
