@@ -465,6 +465,8 @@ int main(int argc, const char **argv)
   register_async_signal_handler_oneshot(SIGINT, handle_osd_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_osd_signal);
 
+  osd->final_init();
+
   if (g_conf->inject_early_sigterm)
     kill(getpid(), SIGTERM);
 
