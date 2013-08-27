@@ -4,6 +4,7 @@ import errno
 import itertools
 import logging
 import os
+import re
 
 # this file is responsible for submitting tests into the queue
 # by generating combinations of facets found in
@@ -203,11 +204,8 @@ def ls():
         )
     args = parser.parse_args()
 
-    for j in sorted(os.listdir(args.archive_dir)):
+    for j in get_jobs(args.archive_dir):
         job_dir = os.path.join(args.archive_dir, j)
-        if j.startswith('.') or not os.path.isdir(job_dir):
-            continue
-
         summary = {}
         try:
             with file(os.path.join(job_dir, 'summary.yaml')) as f:
@@ -384,17 +382,27 @@ def get_http_log_path(archive_dir, job_id):
     return os.path.join(http_base, archive_subdir, str(job_id))
 
 
+def get_jobs(archive_dir):
+    dir_contents = os.listdir(archive_dir)
+
+    def is_job_dir(parent, subdir):
+        if os.path.isdir(os.path.join(parent, subdir)) and re.match('\d+$', subdir):
+            return True
+        return False
+
+    jobs = [job for job in dir_contents if is_job_dir(archive_dir, job)]
+    return sorted(jobs)
+
+
 def build_email_body(name, archive_dir, timeout):
     failed = []
     unfinished = []
     passed = []
-    all_jobs = sorted(os.listdir(archive_dir))
-    for job in all_jobs:
-        job_dir = os.path.join(archive_dir, job)
-        if job.startswith('.') or not os.path.isdir(job_dir):
-            continue
 
+    for job in get_jobs(archive_dir):
+        job_dir = os.path.join(archive_dir, job)
         summary_file = os.path.join(job_dir, 'summary.yaml')
+
         # Unfinished jobs will have no summary.yaml
         if not os.path.exists(summary_file):
             unfinished.append(job)
