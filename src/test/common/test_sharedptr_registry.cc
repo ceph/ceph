@@ -238,6 +238,24 @@ TEST_F(SharedPtrRegistry_all, get_next) {
 
     EXPECT_FALSE(registry.get_next(i.first, &i));
   }
+  {
+    //
+    // http://tracker.ceph.com/issues/6117
+    // reproduce the issue.
+    //
+    SharedPtrRegistryTest registry;
+    const unsigned int key1 = 111;
+    shared_ptr<int> *ptr1 = new shared_ptr<int>(registry.lookup_or_create(key1));
+    const unsigned int key2 = 222;
+    shared_ptr<int> ptr2 = registry.lookup_or_create(key2);
+    
+    pair<unsigned int, shared_ptr<int> > i;
+    EXPECT_TRUE(registry.get_next(i.first, &i));
+    EXPECT_EQ(key1, i.first);
+    delete ptr1;
+    EXPECT_TRUE(registry.get_next(i.first, &i));    
+    EXPECT_EQ(key2, i.first);
+  }
 }
 
 class SharedPtrRegistry_destructor : public ::testing::Test {
