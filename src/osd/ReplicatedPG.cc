@@ -905,13 +905,14 @@ void ReplicatedPG::do_op(OpRequestRef op)
       return;
     }
 
-    eversion_t oldv = pg_log.get_log().get_request_version(ctx->reqid);
-    if (oldv != eversion_t()) {
+    const pg_log_entry_t *entry = pg_log.get_log().get_request(ctx->reqid);
+    if (entry) {
+      const eversion_t& oldv = entry->version;
       dout(3) << "do_op dup " << ctx->reqid << " was " << oldv << dendl;
       delete ctx;
       src_obc.clear();
       if (already_complete(oldv)) {
-	osd->reply_op_error(op, 0, oldv);
+	osd->reply_op_error(op, 0, oldv, entry->user_version);
       } else {
 	if (m->wants_ack()) {
 	  if (already_ack(oldv)) {
@@ -952,6 +953,8 @@ void ReplicatedPG::do_op(OpRequestRef op)
 	     << " ov " << obc->obs.oi.version
 	     << dendl;  
   }
+
+  ctx->user_at_version = info.last_user_version;
 
   // note my stats
   utime_t now = ceph_clock_now(g_ceph_context);
@@ -1021,10 +1024,11 @@ void ReplicatedPG::do_op(OpRequestRef op)
   }
   ctx->reply->set_result(result);
 
-  if (result >= 0)
-    ctx->reply->set_version(ctx->reply_version);
-  else if (result == -ENOENT)
-    ctx->reply->set_version(info.last_update);
+  if (result >= 0) {
+    ctx->reply->set_reply_versions(ctx->at_version, ctx->user_at_version);
+  } else if (result == -ENOENT) {
+    ctx->reply->set_enoent_reply_versions(info.last_update, ctx->user_at_version);
+  }
 
   // read or error?
   if (ctx->op_t.empty() || result < 0) {
@@ -1567,6 +1571,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 	coid,
 	ctx->at_version,
 	ctx->obs->oi.version,
+	info.last_user_version,
 	osd_reqid_t(),
 	ctx->mtime)
       );
@@ -1589,6 +1594,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 	coid,
 	coi.version,
 	coi.prior_version,
+	info.last_user_version,
 	osd_reqid_t(),
 	ctx->mtime)
       );
@@ -1613,6 +1619,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 	snapoid,
 	ctx->at_version,
 	ctx->snapset_obc->obs.oi.version,
+	info.last_user_version,
 	osd_reqid_t(),
 	ctx->mtime)
       );
@@ -1627,6 +1634,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 	snapoid,
 	ctx->at_version,
 	ctx->snapset_obc->obs.oi.version,
+	info.last_user_version,
 	osd_reqid_t(),
 	ctx->mtime)
       );
@@ -2417,9 +2425,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	uint64_t ver = op.watch.ver;
 	if (!ver)
 	  result = -EINVAL;
-        else if (ver < oi.user_version.version)
+        else if (ver < oi.user_version)
 	  result = -ERANGE;
-	else if (ver > oi.user_version.version)
+	else if (ver > oi.user_version)
 	  result = -EOVERFLOW;
 	break;
       }
@@ -2534,9 +2542,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	uint64_t ver = op.watch.ver;
 	if (!ver)
 	  result = -EINVAL;
-        else if (ver < src_obc->obs.oi.user_version.version)
+        else if (ver < src_obc->obs.oi.user_version)
 	  result = -ERANGE;
-	else if (ver > src_obc->obs.oi.user_version.version)
+	else if (ver > src_obc->obs.oi.user_version)
 	  result = -EOVERFLOW;
 	break;
       }
@@ -2821,7 +2829,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	dout(10) << "watch: ctx->obc=" << (void *)obc.get() << " cookie=" << cookie
 		 << " oi.version=" << oi.version.version << " ctx->at_version=" << ctx->at_version << dendl;
-	dout(10) << "watch: oi.user_version=" << oi.user_version.version << dendl;
+	dout(10) << "watch: oi.user_version=" << oi.user_version<< dendl;
 	dout(10) << "watch: peer_addr="
 	  << ctx->op->request->get_connection()->get_peer_addr() << dendl;
 
@@ -3590,7 +3598,8 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
 	     << " to " << coid << " v " << ctx->at_version
 	     << " snaps=" << snaps << dendl;
     ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::CLONE, coid, ctx->at_version,
-				  ctx->obs->oi.version, ctx->reqid, ctx->new_obs.oi.mtime));
+				  ctx->obs->oi.version, info.last_user_version,
+				  ctx->reqid, ctx->new_obs.oi.mtime));
     ::encode(snaps, ctx->log.back().snaps);
 
     ctx->at_version.version++;
@@ -3707,7 +3716,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
 	p->timeout,
 	p->cookie,
 	osd->get_next_id(get_osdmap()->get_epoch()),
-	ctx->obc->obs.oi.user_version.version,
+	ctx->obc->obs.oi.user_version,
 	osd));
     for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator i =
 	   ctx->obc->watchers.begin();
@@ -3779,7 +3788,6 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
   // read-op?  done?
   if (ctx->op_t.empty() && !ctx->modify) {
-    ctx->reply_version = ctx->obs->oi.user_version;
     unstable_stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
     return result;
   }
@@ -3805,7 +3813,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 	dout(10) << " removing old " << snapoid << dendl;
 
 	ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::DELETE, snapoid, ctx->at_version, old_version,
-				      osd_reqid_t(), ctx->mtime));
+				      info.last_user_version, osd_reqid_t(), ctx->mtime));
  	ctx->at_version.version++;
 
 	ctx->snapset_obc->obs.exists = false;
@@ -3818,7 +3826,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     dout(10) << " final snapset " << ctx->new_snapset
 	     << " in " << snapoid << dendl;
     ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, snapoid, ctx->at_version, old_version,
-				  osd_reqid_t(), ctx->mtime));
+				  info.last_user_version, osd_reqid_t(), ctx->mtime));
 
     ctx->snapset_obc = get_object_context(snapoid, true);
     ctx->snapset_obc->obs.exists = true;
@@ -3837,11 +3845,16 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   // finish and log the op.
   if (ctx->user_modify) {
     /* update the user_version for any modify ops, except for the watch op */
-    ctx->new_obs.oi.user_version = ctx->at_version;
+    ++ctx->user_at_version;
+    assert(ctx->user_at_version > ctx->new_obs.oi.user_version);
+    /* In order for new clients and old clients to interoperate properly
+     * when exchanging versions, we need to lower bound the user_version
+     * (which our new clients pay proper attention to)
+     * by the at_version (which is all the old clients can ever see). */
+    ctx->user_at_version = MAX(ctx->at_version.version, ctx->user_at_version);
+    ctx->new_obs.oi.user_version = ctx->user_at_version;
   }
-  ctx->reply_version = ctx->new_obs.oi.user_version;
   ctx->bytes_written = ctx->op_t.get_encoded_bytes();
-  ctx->new_obs.oi.version = ctx->at_version;
  
   if (ctx->new_obs.exists) {
     // on the head object
@@ -3869,7 +3882,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   if (!ctx->new_obs.exists)
     logopcode = pg_log_entry_t::DELETE;
   ctx->log.push_back(pg_log_entry_t(logopcode, soid, ctx->at_version, old_version,
-				ctx->reqid, ctx->mtime));
+				ctx->user_at_version, ctx->reqid, ctx->mtime));
 
   // apply new object state.
   ctx->obc->obs = ctx->new_obs;
@@ -4081,7 +4094,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	for (list<OpRequestRef>::iterator i = waiting_for_ondisk[repop->v].begin();
 	     i != waiting_for_ondisk[repop->v].end();
 	     ++i) {
-	  osd->reply_op_error(*i, 0, repop->v);
+	  osd->reply_op_error(*i, 0, repop->v, 0);
 	}
 	waiting_for_ondisk.erase(repop->v);
       }
@@ -4097,8 +4110,11 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	MOSDOpReply *reply = repop->ctx->reply;
 	if (reply)
 	  repop->ctx->reply = NULL;
-	else
+	else {
 	  reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
+	  reply->set_reply_versions(repop->ctx->at_version,
+	                            repop->ctx->user_at_version);
+	}
 	reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
 	dout(10) << " sending commit on " << *repop << " " << reply << dendl;
 	assert(entity_name_t::TYPE_OSD != m->get_connection()->peer_type);
@@ -4119,6 +4135,8 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	     ++i) {
 	  MOSDOp *m = (MOSDOp*)(*i)->request;
 	  MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
+	  reply->set_reply_versions(repop->ctx->at_version,
+	                            repop->ctx->user_at_version);
 	  reply->add_flags(CEPH_OSD_FLAG_ACK);
 	  osd->send_message_osd_client(reply, m->get_connection());
 	}
@@ -4130,8 +4148,11 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	MOSDOpReply *reply = repop->ctx->reply;
 	if (reply)
 	  repop->ctx->reply = NULL;
-	else
+	else {
 	  reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
+	  reply->set_reply_versions(repop->ctx->at_version,
+	                            repop->ctx->user_at_version);
+	}
 	reply->add_flags(CEPH_OSD_FLAG_ACK);
 	dout(10) << " sending ack on " << *repop << " " << reply << dendl;
         assert(entity_name_t::TYPE_OSD != m->get_connection()->peer_type);
@@ -4472,6 +4493,7 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
   ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, obc->obs.oi.soid,
 				ctx->at_version,
 				obc->obs.oi.version,
+				info.last_user_version,
 				osd_reqid_t(), ctx->mtime));
 
   eversion_t old_last_update = pg_log.get_head();
@@ -4844,71 +4866,41 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
   rm->epoch_started = get_osdmap()->get_epoch();
 
   if (!m->noop) {
-    if (m->logbl.length()) {
-      // shipped transaction and log entries
-      vector<pg_log_entry_t> log;
-      
-      bufferlist::iterator p = m->get_data().begin();
+    assert(m->logbl.length());
+    // shipped transaction and log entries
+    vector<pg_log_entry_t> log;
 
-      ::decode(rm->opt, p);
-      if (!(m->get_connection()->get_features() & CEPH_FEATURE_OSD_SNAPMAPPER))
-	rm->opt.set_tolerate_collection_add_enoent();
-      p = m->logbl.begin();
-      ::decode(log, p);
-      if (m->hobject_incorrect_pool) {
-	for (vector<pg_log_entry_t>::iterator i = log.begin();
-	     i != log.end();
-	     ++i) {
-	  if (i->soid.pool == -1)
-	    i->soid.pool = info.pgid.pool();
-	}
-	rm->opt.set_pool_override(info.pgid.pool());
+    bufferlist::iterator p = m->get_data().begin();
+
+    ::decode(rm->opt, p);
+    if (!(m->get_connection()->get_features() & CEPH_FEATURE_OSD_SNAPMAPPER))
+      rm->opt.set_tolerate_collection_add_enoent();
+    p = m->logbl.begin();
+    ::decode(log, p);
+    if (m->hobject_incorrect_pool) {
+      for (vector<pg_log_entry_t>::iterator i = log.begin();
+	  i != log.end();
+	  ++i) {
+	if (i->soid.pool == -1)
+	  i->soid.pool = info.pgid.pool();
       }
-      rm->opt.set_replica();
-      
-      info.stats = m->pg_stats;
-      if (!rm->opt.empty()) {
-	// If the opt is non-empty, we infer we are before
-	// last_backfill (according to the primary, not our
-	// not-quite-accurate value), and should update the
-	// collections now.  Otherwise, we do it later on push.
-	update_snap_map(log, rm->localt);
-      }
-      append_log(log, m->pg_trim_to, rm->localt);
-
-      rm->tls.push_back(&rm->localt);
-      rm->tls.push_back(&rm->opt);
-
-    } else {
-      // do op
-      assert(0);
-
-      // TODO: this is severely broken because we don't know whether this object is really lost or
-      // not. We just always assume that it's not right now.
-      // Also, we're taking the address of a variable on the stack. 
-      object_info_t oi(soid);
-      oi.lost = false; // I guess?
-      oi.version = m->old_version;
-      oi.size = m->old_size;
-      ObjectState obs(oi, m->old_exists);
-      SnapSetContext ssc(m->poid.oid);
-      
-      rm->ctx = new OpContext(op, m->reqid, m->ops, &obs, &ssc, this);
-      
-      rm->ctx->mtime = m->mtime;
-      rm->ctx->at_version = m->version;
-      rm->ctx->snapc = m->snapc;
-
-      ssc.snapset = m->snapset;
-      rm->ctx->obc->ssc = &ssc;
-      
-      prepare_transaction(rm->ctx);
-      append_log(rm->ctx->log, m->pg_trim_to, rm->ctx->local_t);
-    
-      rm->tls.push_back(&rm->ctx->op_t);
-      rm->tls.push_back(&rm->ctx->local_t);
+      rm->opt.set_pool_override(info.pgid.pool());
     }
+    rm->opt.set_replica();
 
+    info.stats = m->pg_stats;
+    if (!rm->opt.empty()) {
+      // If the opt is non-empty, we infer we are before
+      // last_backfill (according to the primary, not our
+      // not-quite-accurate value), and should update the
+      // collections now.  Otherwise, we do it later on push.
+      update_snap_map(log, rm->localt);
+    }
+    append_log(log, m->pg_trim_to, rm->localt);
+
+    rm->tls.push_back(&rm->localt);
+    rm->tls.push_back(&rm->opt);
+    
     rm->bytes_written = rm->opt.get_encoded_bytes();
 
   } else {
@@ -6420,7 +6412,7 @@ ObjectContextRef ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
 
   // Add log entry
   ++info.last_update.version;
-  pg_log_entry_t e(what, oid, info.last_update, version, osd_reqid_t(), mtime);
+  pg_log_entry_t e(what, oid, info.last_update, version, info.last_user_version, osd_reqid_t(), mtime);
   pg_log.add(e);
   
   ObjectContextRef obc = get_object_context(oid, true);
@@ -6491,7 +6483,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 	++info.last_update.version;
 	pg_log_entry_t e(
 	  pg_log_entry_t::LOST_REVERT, oid, info.last_update,
-	  m->second.need, osd_reqid_t(), mtime);
+	  m->second.need, info.last_user_version, osd_reqid_t(), mtime);
 	e.reverting_to = prev;
 	pg_log.add(e);
 	dout(10) << e << dendl;
@@ -6508,7 +6500,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 	// log it
       	++info.last_update.version;
 	pg_log_entry_t e(pg_log_entry_t::LOST_DELETE, oid, info.last_update, m->second.need,
-		     osd_reqid_t(), mtime);
+		     info.last_user_version, osd_reqid_t(), mtime);
 	pg_log.add(e);
 	dout(10) << e << dendl;
 
