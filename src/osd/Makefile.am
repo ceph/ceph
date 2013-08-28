@@ -1,4 +1,9 @@
+## erasure code plugins
+erasure_codelibdir = $(libdir)/erasure-code
+erasure_codelib_LTLIBRARIES =  
+
 libosd_la_SOURCES = \
+	osd/ErasureCodePlugin.cc \
 	osd/PG.cc \
 	osd/PGLog.cc \
 	osd/ReplicatedPG.cc \
