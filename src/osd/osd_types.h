@@ -1499,9 +1499,10 @@ struct pg_log_entry_t {
       invalid_hash(false), invalid_pool(false), offset(0) {}
   pg_log_entry_t(int _op, const hobject_t& _soid, 
 		 const eversion_t& v, const eversion_t& pv,
+		 version_t uv,
 		 const osd_reqid_t& rid, const utime_t& mt)
     : op(_op), soid(_soid), version(v),
-      prior_version(pv), user_version(0),
+      prior_version(pv), user_version(uv),
       reqid(rid), mtime(mt), invalid_hash(false), invalid_pool(false),
       offset(0) {}
       
