@@ -116,6 +116,7 @@ public:
     utime_t mtime;
     SnapContext snapc;           // writer snap context
     eversion_t at_version;       // pg's current version pointer
+    version_t user_at_version;   // pg's current user version pointer
 
     int current_osd_subop_num;
 
@@ -147,7 +148,7 @@ public:
       op(_op), reqid(_reqid), ops(_ops), obs(_obs), snapset(0),
       new_obs(_obs->oi, _obs->exists),
       modify(false), user_modify(false),
-      bytes_written(0), bytes_read(0),
+      bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg),
       num_read(0),
