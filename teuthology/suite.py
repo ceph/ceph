@@ -1,3 +1,7 @@
+# this file is responsible for submitting tests into the queue
+# by generating combinations of facets found in
+# https://github.com/ceph/ceph-qa-suite.git
+
 import argparse
 import copy
 import errno
@@ -5,14 +9,10 @@ import itertools
 import logging
 import os
 import re
-from textwrap import dedent, fill
-
-# this file is responsible for submitting tests into the queue
-# by generating combinations of facets found in
-# https://github.com/ceph/ceph-qa-suite.git
-
 import subprocess
 import sys
+import tempfile
+from textwrap import dedent, fill
 import time
 import yaml
 
@@ -45,9 +45,19 @@ combination, and will override anything in the suite.
         help='be more verbose',
         )
     parser.add_argument(
+        '--dry-run',
+        action='store_true', default=None,
+        help='do a dry run; do not schedule anything',
+        )
+    parser.add_argument(
         '--name',
         help='name for this suite',
         required=True,
+        )
+    parser.add_argument(
+        '--base',
+        default=None,
+        help='base directory for the collection(s)'
         )
     parser.add_argument(
         '--collections',
@@ -108,43 +118,25 @@ combination, and will override anything in the suite.
     if args.owner:
         base_arg.extend(['--owner', args.owner])
 
-    for collection in args.collections:
-        if not os.path.isdir(collection):
-            print >>sys.stderr, 'Collection %s is not a directory' % collection
-            sys.exit(1)
-
     collections = [
-        (collection,
-         os.path.basename(safepath.munge(collection)))
+        (os.path.join(args.base, collection), collection)
         for collection in args.collections
         ]
 
     for collection, collection_name in sorted(collections):
         log.info('Collection %s in %s' % (collection_name, collection))
-        facets = [
-            f for f in sorted(os.listdir(collection))
-            if not f.startswith('.')
-            and os.path.isdir(os.path.join(collection, f))
-            ]
-        facet_configs = (
-            [(f, name, os.path.join(collection, f, name))
-             for name in sorted(os.listdir(os.path.join(collection, f)))
-             if not name.startswith('.')
-             and name.endswith('.yaml')
-             ]
-            for f in facets
-            )
+        configs = [(combine_path(collection_name, item[0]), item[1]) for item in build_matrix(collection)]
 
         arch = get_arch(args.config)
         machine_type = get_machine_type(args.config)
-        for configs in itertools.product(*facet_configs):
-            description = 'collection:%s ' % (collection_name);
-            description += ' '.join('{facet}:{name}'.format(
-                    facet=facet, name=name)
-                                 for facet, name, path in configs)
-            os_type = get_os_type(configs)
-            exclude_arch = get_exclude_arch(configs)
-            exclude_os_type = get_exclude_os_type(configs)
+        for description, config in configs:
+            raw_yaml = '\n'.join([file(a, 'r').read() for a in config])
+
+            parsed_yaml = yaml.load(raw_yaml)
+            os_type = parsed_yaml.get('os_type')
+            exclude_arch = parsed_yaml.get('exclude_arch')
+            exclude_os_type = parsed_yaml.get('exclude_os_type')
+
             if exclude_arch:
                 if exclude_arch == arch:
                     log.info(
@@ -167,7 +159,7 @@ combination, and will override anything in the suite.
                     continue
 
             log.info(
-                'Running teuthology-schedule with facets %s', description
+                'Scheduling %s', description
                 )
 
             arg = copy.deepcopy(base_arg)
@@ -176,19 +168,98 @@ combination, and will override anything in the suite.
                     '--',
                     ])
             arg.extend(args.config)
-            arg.extend(path for facet, name, path in configs)
-            subprocess.check_call(
-                args=arg,
-                )
+            arg.extend(config)
+
+            if args.dry_run:
+                log.info('dry-run: %s' % ' '.join(arg))
+            else:
+                subprocess.check_call(
+                    args=arg,
+                    )
+
     arg = copy.deepcopy(base_arg)
     arg.append('--last-in-suite')
     if args.email:
         arg.extend(['--email', args.email])
     if args.timeout:
         arg.extend(['--timeout', args.timeout])
-    subprocess.check_call(
-        args=arg,
-        )
+    if args.dry_run:
+        log.info('dry-run: %s' % ' '.join(arg))
+    else:
+        subprocess.check_call(
+            args=arg,
+            )
+
+
+def combine_path(left, right):
+    """
+    os.path.join(a, b) doesn't like it when b is None
+    """
+    if right:
+        return os.path.join(left, right)
+    return left
+
+def build_matrix(path):
+    """
+    Return a list of items describe by path
+
+    The input is just a path.  The output is an array of (description,
+    [file list]) tuples.
+
+    For a normal file we generate a new item for the result list.
+
+    For a directory, we (recursively) generate a new item for each
+    file/dir.
+
+    For a directory with a magic '+' file, we generate a single item
+    that concatenates all files/subdirs.
+
+    For a directory with a magic '%' file, we generate a result set
+    for each tiem in the directory, and then do a product to generate
+    a result list with all combinations.
+
+    The final description (after recursion) for each item will look
+    like a relative path.  If there was a % product, that path
+    component will appear as a file with braces listing the selection
+    of chosen subitems.
+    """
+    if os.path.isfile(path):
+        if path.endswith('.yaml'):
+            return [(None, [path])]
+    if os.path.isdir(path):
+        files = sorted(os.listdir(path))
+        if '+' in files:
+            # concatenate items
+            files.remove('+')
+            out = []
+            for fn in files:
+                out.extend(build_matrix(os.path.join(path, fn)))
+            return [(
+                    '+',
+                    [a[1] for a in out]
+                    )]
+        elif '%' in files:
+            # convolve items
+            files.remove('%')
+            sublists = []
+            for fn in files:
+                raw = build_matrix(os.path.join(path, fn))
+                sublists.append([(combine_path(fn, item[0]), item[1]) for item in raw])
+            out = []
+            for sublist in itertools.product(*sublists):
+                name = '{' + ' '.join([item[0] for item in sublist]) + '}'
+                val = []
+                for item in sublist:
+                    val.extend(item[1])
+                out.append((name, val))
+            return out
+        else:
+            # list items
+            out = []
+            for fn in files:
+                raw = build_matrix(os.path.join(path, fn))
+                out.extend([(combine_path(fn, item[0]), item[1]) for item in raw])
+            return out
 
 def ls():
     parser = argparse.ArgumentParser(description='List teuthology job results')
