@@ -69,3 +69,4 @@ web/*.html
 # dir from coverity tools
 cov-int/
 
+/test-driver

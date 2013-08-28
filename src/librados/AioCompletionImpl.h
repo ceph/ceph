@@ -35,7 +35,7 @@ struct librados::AioCompletionImpl {
   version_t objver;
 
   rados_callback_t callback_complete, callback_safe;
-  void *callback_arg;
+  void *callback_complete_arg, *callback_safe_arg;
 
   // for read
   bool is_read;
@@ -50,21 +50,24 @@ struct librados::AioCompletionImpl {
   AioCompletionImpl() : lock("AioCompletionImpl lock", false, false),
 			ref(1), rval(0), released(false), ack(false), safe(false),
 			objver(0),
-			callback_complete(0), callback_safe(0), callback_arg(0),
+			callback_complete(0),
+			callback_safe(0),
+			callback_complete_arg(0),
+			callback_safe_arg(0),
 			is_read(false), pbl(0), buf(0), maxlen(0),
 			io(NULL), aio_write_seq(0), aio_write_list_item(this) { }
 
   int set_complete_callback(void *cb_arg, rados_callback_t cb) {
     lock.Lock();
     callback_complete = cb;
-    callback_arg = cb_arg;
+    callback_complete_arg = cb_arg;
     lock.Unlock();
     return 0;
   }
   int set_safe_callback(void *cb_arg, rados_callback_t cb) {
     lock.Lock();
     callback_safe = cb;
-    callback_arg = cb_arg;
+    callback_safe_arg = cb_arg;
     lock.Unlock();
     return 0;
   }
@@ -172,7 +175,7 @@ struct C_AioComplete : public Context {
 
   void finish(int r) {
     rados_callback_t cb = c->callback_complete;
-    void *cb_arg = c->callback_arg;
+    void *cb_arg = c->callback_complete_arg;
     cb(c, cb_arg);
 
     c->lock.Lock();
@@ -191,7 +194,7 @@ struct C_AioSafe : public Context {
 
   void finish(int r) {
     rados_callback_t cb = c->callback_safe;
-    void *cb_arg = c->callback_arg;
+    void *cb_arg = c->callback_safe_arg;
     cb(c, cb_arg);
 
     c->lock.Lock();
@@ -223,13 +226,14 @@ struct C_AioCompleteAndSafe : public Context {
     c->safe = true;
     c->lock.Unlock();
     rados_callback_t cb_complete = c->callback_complete;
-    void *cb_arg = c->callback_arg;
+    void *cb_complete_arg = c->callback_complete_arg;
     if (cb_complete)
-      cb_complete(c, cb_arg);
+      cb_complete(c, cb_complete_arg);
 
     rados_callback_t cb_safe = c->callback_safe;
+    void *cb_safe_arg = c->callback_safe_arg;
     if (cb_safe)
-      cb_safe(c, cb_arg);
+      cb_safe(c, cb_safe_arg);
 
     c->lock.Lock();
     c->callback_complete = NULL;

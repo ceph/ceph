@@ -671,6 +671,7 @@ def mount(
         subprocess.check_call(
             args=[
                 'mount',
+                '-t', fstype,
                 '-o', options,
                 '--',
                 dev,
@@ -850,9 +851,21 @@ def prepare_journal_dev(
                 journal,
                 ],
             )
+
+        # try to make sure the kernel refreshes the table.  note
+        # that if this gets ebusy, we are probably racing with
+        # udev because it already updated it.. ignore failure here.
+        LOG.debug('Calling partprobe on prepared device %s', journal)
         subprocess.call(
             args=[
-                # wait for udev event queue to clear
+                'partprobe',
+                journal,
+                ],
+            )
+
+        # wait for udev event queue to clear
+        subprocess.call(
+            args=[
                 'udevadm',
                 'settle',
                 ],

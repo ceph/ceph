@@ -13,10 +13,9 @@ only install one monitor per host.**
 
 For high availability, you should run a production Ceph cluster with **AT
 LEAST** three monitors. Ceph uses the Paxos algorithm, which requires a
-consensus among the majority of monitors in a quorum. You can establish a
-monitor quorum with only one monitor; however, you can not determine a majority
-with two monitors. A majority of monitors must be counted as such: 1:1, 2:3,
-3:4, 3:5, 4:6, etc.
+consensus among the majority of monitors in a quorum. With Paxos, the monitors
+cannot determine a majority for establishing a quorum with only two monitors. A
+majority of monitors must be counted as such: 1:1, 2:3, 3:4, 3:5, 4:6, etc.
 
 See `Monitor Config Reference`_ for details on configuring monitors.
 

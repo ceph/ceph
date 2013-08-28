@@ -1719,6 +1719,7 @@ public:
   // startup/shutdown
   int pre_init();
   int init();
+  void final_init();
 
   void suicide(int exitcode);
   int shutdown();
