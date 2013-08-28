@@ -398,6 +398,7 @@ def get_jobs(archive_dir):
 email_templates = {
     'body_templ': dedent("""\
         Test Run
+        NOTE: Apologies for links inside the Inktank firewall; we are working to make them public.
         =================================================================
         logs:   {log_root}
         failed: {fail_count}
