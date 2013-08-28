@@ -1219,6 +1219,53 @@ Notable Changes
 * auth: ability to require new cephx signatures on messages (still off by default)
 
 
+
+v0.56.7 "bobtail"
+-----------------
+
+This bobtail update fixes a range of radosgw bugs (including an easily
+triggered crash from multi-delete), a possible data corruption issue
+with power failure on XFS, and several OSD problems, including a
+memory "leak" that will affect aged clusters.
+
+Notable changes
+~~~~~~~~~~~~~~~
+
+* ceph-fuse: create finisher flags after fork()
+* debian: fix prerm/postinst hooks; do not restart daemons on upgrade
+* librados: fix async aio completion wakeup (manifests as rbd hang)
+* librados: fix hang when osd becomes full and then not full
+* librados: fix locking for aio completion refcounting
+* librbd python bindings: fix stripe_unit, stripe_count
+* librbd: make image creation default configurable
+* mon: fix validation of mds ids in mon commands
+* osd: avoid excessive disk updates during peering
+* osd: avoid excessive memory usage on scrub
+* osd: avoid heartbeat failure/suicide when scrubbing
+* osd: misc minor bug fixes
+* osd: use fdatasync instead of sync_file_range (may avoid xfs power-loss corruption)
+* rgw: escape prefix correctly when listing objects
+* rgw: fix copy attrs
+* rgw: fix crash on multi delete
+* rgw: fix locking/crash when using ops log socket
+* rgw: fix usage logging
+* rgw: handle deep uri resources
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.56.7.txt>`.
+
+
+v0.56.6 "bobtail"
+-----------------
+
+Notable changes
+~~~~~~~~~~~~~~~
+
+* rgw: fix garbage collection
+* rpm: fix package dependencies
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.56.6.txt>`.
+
+
 v0.56.5 "bobtail"
 -----------------
 
