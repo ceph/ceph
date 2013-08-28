@@ -84,11 +84,11 @@ struct PGLog {
     bool logged_req(const osd_reqid_t &r) const {
       return caller_ops.count(r);
     }
-    eversion_t get_request_version(const osd_reqid_t &r) const {
+    const pg_log_entry_t *get_request(const osd_reqid_t &r) const {
       hash_map<osd_reqid_t,pg_log_entry_t*>::const_iterator p = caller_ops.find(r);
       if (p == caller_ops.end())
-	return eversion_t();
-      return p->second->version;    
+	return NULL;
+      return p->second;
     }
 
     void index() {

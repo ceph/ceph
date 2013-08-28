@@ -37,7 +37,7 @@ struct librados::IoCtxImpl {
   ::SnapContext snapc;
   uint64_t assert_ver;
   map<object_t, uint64_t> assert_src_version;
-  eversion_t last_objver;
+  version_t last_objver;
   uint32_t notify_timeout;
   object_locator_t oloc;
 
@@ -183,7 +183,7 @@ struct librados::IoCtxImpl {
   int pool_change_auid(unsigned long long auid);
   int pool_change_auid_async(unsigned long long auid, PoolAsyncCompletionImpl *c);
 
-  void set_sync_op_version(eversion_t& ver);
+  void set_sync_op_version(version_t ver);
   int watch(const object_t& oid, uint64_t ver, uint64_t *cookie, librados::WatchCtx *ctx);
   int unwatch(const object_t& oid, uint64_t cookie);
   int notify(const object_t& oid, uint64_t ver, bufferlist& bl);
@@ -191,7 +191,7 @@ struct librados::IoCtxImpl {
     const object_t& oid, uint64_t notify_id, uint64_t ver,
     uint64_t cookie);
 
-  eversion_t last_version();
+  version_t last_version();
   void set_assert_version(uint64_t ver);
   void set_assert_src_version(const object_t& oid, uint64_t ver);
   void set_notify_timeout(uint32_t timeout);
