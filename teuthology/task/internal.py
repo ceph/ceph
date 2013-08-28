@@ -465,6 +465,8 @@ kern.* -{adir}/syslog/kern.log;RSYSLOG_FileFormat
                     run.Raw('|'),
                     'grep', '-v', 'CRON',  # ignore cron noise
                     run.Raw('|'),
+                    'grep', '-v', 'BUG: bad unlock balance detected', # #6097
+                    run.Raw('|'),
                     'grep', '-v', 'inconsistent lock state', # FIXME see #2523
                     run.Raw('|'),
                     'grep', '-v', '*** DEADLOCK ***', # part of lockdep output
