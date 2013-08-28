@@ -414,7 +414,7 @@ public:
   void dec_scrubs_active();
 
   void reply_op_error(OpRequestRef op, int err);
-  void reply_op_error(OpRequestRef op, int err, eversion_t v);
+  void reply_op_error(OpRequestRef op, int err, eversion_t v, version_t uv);
   void handle_misdirected_op(PG *pg, OpRequestRef op);
 
   // -- Watch --
