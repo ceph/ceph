@@ -856,7 +856,7 @@ public:
 
   struct HeartbeatDispatcher : public Dispatcher {
     OSD *osd;
-    HeartbeatDispatcher(OSD *o) : Dispatcher(g_ceph_context), osd(o) {}
+    HeartbeatDispatcher(OSD *o) : Dispatcher(cct), osd(o) {}
     bool ms_dispatch(Message *m) {
       return osd->heartbeat_dispatch(m);
     };
@@ -1003,22 +1003,7 @@ private:
     bool _empty() {
       return peering_queue.empty();
     }
-    void _dequeue(list<PG*> *out) {
-      set<PG*> got;
-      for (list<PG*>::iterator i = peering_queue.begin();
-	   i != peering_queue.end() &&
-	     out->size() < g_conf->osd_peering_wq_batch_size;
-	   ) {
-	if (in_use.count(*i)) {
-	  ++i;
-	} else {
-	  out->push_back(*i);
-	  got.insert(*i);
-	  peering_queue.erase(i++);
-	}
-      }
-      in_use.insert(got.begin(), got.end());
-    }
+    void _dequeue(list<PG*> *out);
     void _process(
       const list<PG *> &pgs,
       ThreadPool::TPHandle &handle) {
@@ -1394,19 +1379,7 @@ protected:
     bool _empty() {
       return osd->recovery_queue.empty();
     }
-    bool _enqueue(PG *pg) {
-      if (!pg->recovery_item.is_on_list()) {
-	pg->get("RecoveryWQ");
-	osd->recovery_queue.push_back(&pg->recovery_item);
-
-	if (g_conf->osd_recovery_delay_start > 0) {
-	  osd->defer_recovery_until = ceph_clock_now(g_ceph_context);
-	  osd->defer_recovery_until += g_conf->osd_recovery_delay_start;
-	}
-	return true;
-      }
-      return false;
-    }
+    bool _enqueue(PG *pg);
     void _dequeue(PG *pg) {
       if (pg->recovery_item.remove_myself())
 	pg->put("RecoveryWQ");
@@ -1693,7 +1666,8 @@ protected:
  public:
   /* internal and external can point to the same messenger, they will still
    * be cleaned up properly*/
-  OSD(int id,
+  OSD(CephContext *cct_,
+      int id,
       Messenger *internal,
       Messenger *external,
       Messenger *hb_client,
@@ -1705,15 +1679,15 @@ protected:
 
   // static bits
   static int find_osd_dev(char *result, int whoami);
-  static ObjectStore *create_object_store(const std::string &dev, const std::string &jdev);
+  static ObjectStore *create_object_store(CephContext *cct, const std::string &dev, const std::string &jdev);
   static int convertfs(const std::string &dev, const std::string &jdev);
   static int do_convertfs(ObjectStore *store);
   static int convert_collection(ObjectStore *store, coll_t cid);
-  static int mkfs(const std::string &dev, const std::string &jdev,
+  static int mkfs(CephContext *cct, const std::string &dev, const std::string &jdev,
 		  uuid_d fsid, int whoami);
-  static int mkjournal(const std::string &dev, const std::string &jdev);
-  static int flushjournal(const std::string &dev, const std::string &jdev);
-  static int dump_journal(const std::string &dev, const std::string &jdev, ostream& out);
+  static int mkjournal(CephContext *cct, const std::string &dev, const std::string &jdev);
+  static int flushjournal(CephContext *cct, const std::string &dev, const std::string &jdev);
+  static int dump_journal(CephContext *cct, const std::string &dev, const std::string &jdev, ostream& out);
   /* remove any non-user xattrs from a map of them */
   void filter_xattrs(map<string, bufferptr>& attrs) {
     for (map<string, bufferptr>::iterator iter = attrs.begin();
