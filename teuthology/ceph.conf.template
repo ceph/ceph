@@ -25,6 +25,7 @@
         osd debug verify stray on activate = true
 
 	osd open classes on start = true
+        osd debug pg log writeout = true
 
 [mon]
 	debug ms = 1
