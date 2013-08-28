@@ -3879,8 +3879,7 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
 
  out:
   wait_for_finished_proposal(new OSDMonitor::C_PoolOp(this, m, ret, pending_inc.epoch, &reply_data));
-  propose_pending();
-  return false;
+  return true;
 }
 
 bool OSDMonitor::prepare_pool_op_create(MPoolOp *m)
