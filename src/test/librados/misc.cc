@@ -571,18 +571,44 @@ TEST(LibRadosMisc, CopyPP) {
   IoCtx ioctx;
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
 
-  char buf[64];
-  memset(buf, 0xcc, sizeof(buf));
-  bufferlist bl;
-  bl.append(buf, sizeof(buf));
+  bufferlist bl, x;
+  bl.append("hi there");
+  x.append("bar");
 
-  ASSERT_EQ(0, ioctx.write_full("foo", bl));
-
+  // small object
+  bufferlist blc = bl;
+  bufferlist xc = x;
+  ASSERT_EQ(0, ioctx.write_full("foo", blc));
+  ASSERT_EQ(0, ioctx.setxattr("foo", "myattr", xc));
 
   ObjectWriteOperation op;
-  op.copyfrom("foo", ioctx, ioctx.get_last_version());
+  op.copy_from("foo", ioctx, ioctx.get_last_version());
+  ASSERT_EQ(0, ioctx.operate("foo.copy", &op));
 
-  ASSERT_EQ(0, ioctx.operate("bar", &op));
+  bufferlist bl2, x2;
+  ASSERT_EQ((int)bl.length(), ioctx.read("foo.copy", bl2, 10000, 0));
+  ASSERT_TRUE(bl.contents_equal(bl2));
+  ASSERT_EQ((int)x.length(), ioctx.getxattr("foo.copy", "myattr", x2));
+  ASSERT_TRUE(x.contents_equal(x2));
+
+  // do a big object
+  bl.append(buffer::create(8000000));
+  bl.zero();
+  bl.append("tail");
+  blc = bl;
+  xc = x;
+  ASSERT_EQ(0, ioctx.write_full("big", blc));
+  ASSERT_EQ(0, ioctx.setxattr("big", "myattr", xc));
+
+  ObjectWriteOperation op2;
+  op.copy_from("big", ioctx, ioctx.get_last_version());
+  ASSERT_EQ(0, ioctx.operate("big.copy", &op));
+
+  bl2.clear();
+  ASSERT_EQ((int)bl.length(), ioctx.read("big.copy", bl2, bl.length(), 0));
+  ASSERT_TRUE(bl.contents_equal(bl2));
+  ASSERT_EQ((int)x.length(), ioctx.getxattr("foo.copy", "myattr", x2));
+  ASSERT_TRUE(x.contents_equal(x2));
 
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));

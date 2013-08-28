@@ -2130,6 +2130,9 @@ public:
   Cond cond;
   int unstable_writes, readers, writers_waiting, readers_waiting;
 
+  /// in-progress copyfrom ops for this object
+  int copyfrom_readside;
+
   // set if writes for this object are blocked on another objects recovery
   ObjectContextRef blocked_by;      // object blocking our writes
   set<ObjectContextRef> blocking;   // objects whose writes we block
@@ -2141,7 +2144,8 @@ public:
     : ssc(NULL),
       destructor_callback(0),
       lock("ReplicatedPG::ObjectContext::lock"),
-      unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0) {}
+      unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0),
+      copyfrom_readside(0) {}
 
   ~ObjectContext() {
     if (destructor_callback)
