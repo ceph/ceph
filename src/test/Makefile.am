@@ -313,6 +313,22 @@ unittest_ceph_argparse_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_ceph_argparse_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_ceph_argparse
 
+libec_example_la_SOURCES = test/osd/ErasureCodePluginExample.cc
+libec_example_la_CFLAGS = ${AM_CFLAGS}
+libec_example_la_CXXFLAGS= ${AM_CXXFLAGS}
+libec_example_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libec_example_la_LDFLAGS = ${AM_LDFLAGS} -export-symbols-regex '.*__erasure_code_.*'
+erasure_codelib_LTLIBRARIES += libec_example.la
+
+unittest_erasure_code_plugin_SOURCES = test/osd/TestErasureCodePluginExample.cc 
+unittest_erasure_code_plugin_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_erasure_code_plugin_LDADD = libosd.a libcommon.la $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+if LINUX
+unittest_erasure_code_plugin_LDADD += -ldl
+endif
+check_PROGRAMS += unittest_erasure_code_plugin
+
+
 unittest_erasure_code_example_SOURCES = test/osd/TestErasureCodeExample.cc 
 noinst_HEADERS += test/osd/ErasureCodeExample.h
 unittest_erasure_code_example_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
