@@ -1267,6 +1267,8 @@ struct pg_info_t {
   eversion_t last_complete;  // last version pg was complete through.
   epoch_t last_epoch_started;// last epoch at which this pg started on this osd
   
+  version_t last_user_version; // last user object version applied to store
+
   eversion_t log_tail;     // oldest log entry.
 
   hobject_t last_backfill;   // objects >= this and < last_complete may be missing
@@ -1278,11 +1280,13 @@ struct pg_info_t {
   pg_history_t history;
 
   pg_info_t()
-    : last_epoch_started(0), last_backfill(hobject_t::get_max())
+    : last_epoch_started(0), last_user_version(0),
+      last_backfill(hobject_t::get_max())
   { }
   pg_info_t(pg_t p)
     : pgid(p),
-      last_epoch_started(0), last_backfill(hobject_t::get_max())
+      last_epoch_started(0), last_user_version(0),
+      last_backfill(hobject_t::get_max())
   { }
   
   bool is_empty() const { return last_update.version == 0; }
@@ -1481,6 +1485,7 @@ struct pg_log_entry_t {
   __s32      op;
   hobject_t  soid;
   eversion_t version, prior_version, reverting_to;
+  version_t user_version; // the user version for this entry
   osd_reqid_t reqid;  // caller+tid to uniquely identify request
   utime_t     mtime;  // this is the _user_ mtime, mind you
   bufferlist snaps;   // only for clone entries
@@ -1490,12 +1495,14 @@ struct pg_log_entry_t {
   uint64_t offset;   // [soft state] my offset on disk
       
   pg_log_entry_t()
-    : op(0), invalid_hash(false), invalid_pool(false), offset(0) {}
+    : op(0), user_version(0),
+      invalid_hash(false), invalid_pool(false), offset(0) {}
   pg_log_entry_t(int _op, const hobject_t& _soid, 
 		 const eversion_t& v, const eversion_t& pv,
+		 version_t uv,
 		 const osd_reqid_t& rid, const utime_t& mt)
     : op(_op), soid(_soid), version(v),
-      prior_version(pv),
+      prior_version(pv), user_version(uv),
       reqid(rid), mtime(mt), invalid_hash(false), invalid_pool(false),
       offset(0) {}
       
@@ -1952,7 +1959,7 @@ struct object_info_t {
   string category;
 
   eversion_t version, prior_version;
-  eversion_t user_version;
+  version_t user_version;
   osd_reqid_t last_reqid;
 
   uint64_t size;
@@ -1983,12 +1990,12 @@ struct object_info_t {
   static void generate_test_instances(list<object_info_t*>& o);
 
   explicit object_info_t()
-    : size(0), lost(false),
+    : user_version(0), size(0), lost(false),
       truncate_seq(0), truncate_size(0), uses_tmap(false)
   {}
 
   object_info_t(const hobject_t& s)
-    : soid(s), size(0),
+    : soid(s), user_version(0), size(0),
       lost(false), truncate_seq(0), truncate_size(0), uses_tmap(false) {}
 
   object_info_t(bufferlist& bl) {

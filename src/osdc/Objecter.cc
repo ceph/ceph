@@ -357,7 +357,7 @@ tid_t Objecter::linger_mutate(const object_t& oid, const object_locator_t& oloc,
 			      const SnapContext& snapc, utime_t mtime,
 			      bufferlist& inbl, int flags,
 			      Context *onack, Context *oncommit,
-			      eversion_t *objver)
+			      version_t *objver)
 {
   LingerOp *info = new LingerOp;
   info->oid = oid;
@@ -388,7 +388,7 @@ tid_t Objecter::linger_read(const object_t& oid, const object_locator_t& oloc,
 			    ObjectOperation& op,
 			    snapid_t snap, bufferlist& inbl, bufferlist *poutbl, int flags,
 			    Context *onfinish,
-			    eversion_t *objver)
+			    version_t *objver)
 {
   LingerOp *info = new LingerOp;
   info->oid = oid;
@@ -1455,8 +1455,8 @@ void Objecter::send_op(Op *op)
   m->set_mtime(op->mtime);
   m->set_retry_attempt(op->attempts++);
 
-  if (op->version != eversion_t())
-    m->set_version(op->version);  // we're replaying this op!
+  if (op->replay_version != eversion_t())
+    m->set_version(op->replay_version);  // we're replaying this op!
 
   if (op->priority)
     m->set_priority(op->priority);
@@ -1525,7 +1525,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   ldout(cct, 7) << "handle_osd_op_reply " << tid
 		<< (m->is_ondisk() ? " ondisk":(m->is_onnvram() ? " onnvram":" ack"))
-		<< " v " << m->get_version() << " in " << m->get_pg()
+		<< " v " << m->get_replay_version() << " uv " << m->get_user_version()
+		<< " in " << m->get_pg()
 		<< " attempt " << m->get_retry_attempt()
 		<< dendl;
   Op *op = ops[tid];
@@ -1562,7 +1563,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   }
 
   if (op->objver)
-    *op->objver = m->get_version();
+    *op->objver = m->get_user_version();
   if (op->reply_epoch)
     *op->reply_epoch = m->get_map_epoch();
 
@@ -1602,7 +1603,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   // ack|commit -> ack
   if (op->onack) {
     ldout(cct, 15) << "handle_osd_op_reply ack" << dendl;
-    op->version = m->get_version();
+    op->replay_version = m->get_replay_version();
     onack = op->onack;
     op->onack = 0;  // only do callback once
     num_unacked--;
