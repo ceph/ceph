@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import os
 import yaml
 import logging
@@ -15,12 +14,11 @@ class _Config(object):
     ~/.teuthology.yaml and nothing else.
     """
     def __init__(self):
-        if not os.path.exists(CONF_FILE):
+        if os.path.exists(CONF_FILE):
+            self.__conf = yaml.safe_load(file(CONF_FILE))
+        else:
             log.debug("%s not found", CONF_FILE)
             self.__conf = {}
-            return
-
-        self.__conf = yaml.safe_load(file(CONF_FILE))
 
     # This property declaration exists mainly as an example; it is not
     # necessary unless you want to, say, define a set method and/or a
