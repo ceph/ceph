@@ -2,42 +2,51 @@ ceph-qa-suite
 -------------
 
 clusters/    - some predefined cluster layouts
-suites/      - sets of collections
+suites/      - set suite
 
-We have several collections, each a subdirectory within suites/*/.
-Each collection directory consists of a set facets.  The basic idea is
-that, for each collection, the set of tests to run consists of all
-combinations of taking one yaml fragment from each facet.
+The suites directory has a hierarchical collection of tests.  This can be
+freeform, but generally follows the convention of
 
-For example, given the files
+  suites/<test suite name>/<test group>/...
 
-  suite/collection/
-  suite/collection/foo/
-  suite/collection/foo/clusters/
-  suite/collection/foo/clusters/fixed-3.yaml
-  suite/collection/foo/clusters/fixed-9.yaml
-  suite/collection/foo/tasks/
-  suite/collection/foo/tasks/a
-  suite/collection/foo/tasks/b
-  suite/collection/foo/tasks/c
-  suite/collection/bar/
-  suite/collection/bar/clusters/fixed-3.yaml
-  suite/collection/bar/tasks/
-  suite/collection/bar/tasks/d
-  suite/collection/bar/tasks/e
+A test is described by a yaml fragment.
 
-teuthology-suite would run tasks a, b, and c on both fixed-3 and
-fixed-9 clusters.  It would also run tasks d and e on the fixed-3
-cluster.
+A test can exist as a single .yaml file in the directory tree.  For example:
 
-Note that the 'clusters' and 'tasks' terminology is actually
-meaningless here.  All teuthology-suite does is stick the yaml
-fragments together (one from each facet) and run teuthology on the
-result (optionally combined with any additional fragments passed on
-the command line).
+ suites/foo/one.yaml
+ suites/foo/two.yaml
 
-In practice, we can keep common/shared task and cluster definitions in
-the top-level clusters/ (which are otherwise ignored), and symlink to
-them from the collections that want to use them.
+is a simple group of two tests.
+
+A directory with a magic '+' file represents a test that combines all
+other items in the directory into a single yaml fragment.  For example:
+
+ suites/foo/bar/+
+ suites/foo/bar/a.yaml
+ suites/foo/bar/b.yaml
+ suites/foo/bar/c.yaml
+
+is a single test consisting of a + b + c.
+
+A directory with a magic '%' file represents a test matrix formed from
+all other items in the directory.  For example,
+
+ suites/baz/%
+ suites/baz/a.yaml
+ suites/baz/b/b1.yaml
+ suites/baz/b/b2.yaml
+ suites/baz/c.yaml
+ suites/baz/d/d1.yaml
+ suites/baz/d/d2.yaml
+
+is a 4-dimensional test matrix.  Two dimensions (a, c) are trivial (1
+item), so this is really 2x2 = 4 tests, which are
+
+  a + b1 + c + d1
+  a + b1 + c + d2
+  a + b2 + c + d1
+  a + b2 + c + d2
+
+Symlinks are okay.
 
 The teuthology code can be found in https://github.com/ceph/teuthology.git
