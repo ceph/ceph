@@ -1,5 +1,6 @@
 # jerasure plugin
 libec_jerasure_la_SOURCES = \
+  osd/ErasureCodePluginJerasure/ErasureCodePluginJerasure.cc \
   osd/ErasureCodePluginJerasure/ErasureCodeJerasure.cc \
   osd/ErasureCodePluginJerasure/cauchy.c \
   osd/ErasureCodePluginJerasure/galois.c \
