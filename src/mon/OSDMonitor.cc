@@ -3702,7 +3702,7 @@ bool OSDMonitor::preprocess_pool_op(MPoolOp *m)
     _pool_op_reply(m, 0, osdmap.get_epoch());
     return true;
   }
-  
+
   // check if the snap and snapname exists
   bool snap_exists = false;
   const pg_pool_t *p = osdmap.get_pg_pool(m->pool);
@@ -3798,6 +3798,38 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
   int ret = 0;
   bool changed = false;
 
+  if (!osdmap.have_pg_pool(m->pool)) {
+    _pool_op_reply(m, -ENOENT, osdmap.get_epoch());
+    return false;
+  }
+
+  const pg_pool_t *pool = osdmap.get_pg_pool(m->pool);
+
+  switch (m->op) {
+    case POOL_OP_CREATE_SNAP:
+    case POOL_OP_DELETE_SNAP:
+      if (!pool->is_unmanaged_snaps_mode()) {
+        bool snap_exists = pool->snap_exists(m->name.c_str());
+        if ((m->op == POOL_OP_CREATE_SNAP && snap_exists)
+          || (m->op == POOL_OP_CREATE_SNAP && !snap_exists)) {
+          ret = 0;
+        } else {
+          break;
+        }
+      } else {
+        ret = -EINVAL;
+      }
+      _pool_op_reply(m, ret, osdmap.get_epoch());
+      return false;
+
+    case POOL_OP_CREATE_UNMANAGED_SNAP:
+    case POOL_OP_DELETE_UNMANAGED_SNAP:
+      if (pool->is_pool_snaps_mode()) {
+        _pool_op_reply(m, -EINVAL, osdmap.get_epoch());
+        return false;
+      }
+  }
+
   // projected pool info
   pg_pool_t pp;
   if (pending_inc.new_pools.count(m->pool))
@@ -3824,7 +3856,7 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
       goto out;
     }
   }
- 
+
   switch (m->op) {
   case POOL_OP_CREATE_SNAP:
     if (!pp.snap_exists(m->name.c_str())) {
