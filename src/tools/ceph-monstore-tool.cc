@@ -179,7 +179,7 @@ int main(int argc, char **argv) {
 
   int fd;
   if (vm.count("out")) {
-    if ((fd = open(out_path.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666)) == -1) {
+    if ((fd = open(out_path.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666)) < 0) {
       int _err = errno;
       if (_err != EISDIR) {
         std::cerr << "Couldn't open " << out_path << ": " << cpp_strerror(_err) << std::endl; 
@@ -214,6 +214,7 @@ int main(int argc, char **argv) {
   } else if (cmd == "compact") {
     st.compact();
   } else if (cmd == "getmonmap") {
+    assert(fd >= 0);
     if (!store_path.size()) {
       std::cerr << "need mon store path" << std::endl;
       std::cerr << desc << std::endl;

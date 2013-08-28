@@ -817,6 +817,9 @@ void RGWRadosCtx::set_prefetch_data(rgw_obj& obj) {
 
 void RGWRados::finalize()
 {
+  if (need_watch_notify()) {
+    finalize_watch();
+  }
   delete meta_mgr;
   delete data_log;
   if (use_gc_thread) {
@@ -871,6 +874,14 @@ int RGWRados::init_rados()
 int RGWRados::init_complete()
 {
   int ret;
+
+  if (need_watch_notify()) {
+    ret = init_watch();
+    if (ret < 0) {
+      lderr(cct) << "ERROR: failed to initialize watch" << dendl;
+      return ret;
+    }
+  }
 
   ret = region.init(cct, this);
   if (ret < 0)

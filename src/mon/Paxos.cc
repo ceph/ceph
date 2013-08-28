@@ -282,10 +282,11 @@ void Paxos::share_state(MMonPaxos *m, version_t peer_first_committed,
  * be. All all this is done tightly wrapped in a transaction to ensure we
  * enjoy the atomicity guarantees given by our awesome k/v store.
  */
-void Paxos::store_state(MMonPaxos *m)
+bool Paxos::store_state(MMonPaxos *m)
 {
   MonitorDBStore::Transaction t;
   map<version_t,bufferlist>::iterator start = m->values.begin();
+  bool changed = false;
 
   // build map of values to store
   // we want to write the range [last_committed, m->last_committed] only.
@@ -327,6 +328,15 @@ void Paxos::store_state(MMonPaxos *m)
       // apply.
       decode_append_transaction(t, it->second);
     }
+
+    // discard obsolete uncommitted value?
+    if (uncommitted_v && uncommitted_v <= last_committed) {
+      dout(10) << " forgetting obsolete uncommitted value " << uncommitted_v
+	       << " pn " << uncommitted_pn << dendl;
+      uncommitted_v = 0;
+      uncommitted_pn = 0;
+      uncommitted_value.clear();
+    }
   }
   if (!t.empty()) {
     dout(30) << __func__ << " transaction dump:\n";
@@ -341,9 +351,12 @@ void Paxos::store_state(MMonPaxos *m)
     first_committed = get_store()->get(get_name(), "first_committed");
 
     _sanity_check_store();
+    changed = true;
   }
 
   remove_legacy_versions();
+
+  return changed;
 }
 
 void Paxos::remove_legacy_versions()
@@ -371,6 +384,8 @@ void Paxos::_sanity_check_store()
 // leader
 void Paxos::handle_last(MMonPaxos *last)
 {
+  bool need_refresh = false;
+
   dout(10) << "handle_last " << *last << dendl;
 
   if (!mon->is_leader()) {
@@ -397,7 +412,7 @@ void Paxos::handle_last(MMonPaxos *last)
   assert(g_conf->paxos_kill_at != 1);
 
   // store any committed values if any are specified in the message
-  store_state(last);
+  need_refresh = store_state(last);
 
   assert(g_conf->paxos_kill_at != 2);
 
@@ -419,7 +434,7 @@ void Paxos::handle_last(MMonPaxos *last)
 
     // did this person send back an accepted but uncommitted value?
     if (last->uncommitted_pn) {
-      if (last->uncommitted_pn > uncommitted_pn &&
+      if (last->uncommitted_pn >= uncommitted_pn &&
 	  last->last_committed >= last_committed &&
 	  last->last_committed + 1 >= uncommitted_v) {
 	uncommitted_v = last->last_committed+1;
@@ -473,6 +488,7 @@ void Paxos::handle_last(MMonPaxos *last)
 	dout(10) << "that's everyone.  active!" << dendl;
 	extend_lease();
 
+	need_refresh = false;
 	if (do_refresh()) {
 	  finish_round();
 
@@ -486,6 +502,9 @@ void Paxos::handle_last(MMonPaxos *last)
     // no, this is an old message, discard
     dout(10) << "old pn, ignoring" << dendl;
   }
+
+  if (need_refresh)
+    (void)do_refresh();
 
   last->put();
 }
@@ -793,17 +812,11 @@ void Paxos::handle_commit(MMonPaxos *commit)
 
   store_state(commit);
 
-  commit->put();
-
-  bool need_bootstrap = false;
-  mon->refresh_from_paxos(&need_bootstrap);
-  if (need_bootstrap) {
-    dout(10) << " doing requested bootstrap" << dendl;
-    mon->bootstrap();
-    return;
+  if (do_refresh()) {
+    finish_contexts(g_ceph_context, waiting_for_commit);
   }
 
-  finish_contexts(g_ceph_context, waiting_for_commit);
+  commit->put();
 }
 
 void Paxos::extend_lease()

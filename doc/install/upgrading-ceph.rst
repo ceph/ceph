@@ -202,19 +202,13 @@ Multi-MDS configurations with identical names must be adjusted accordingly to
 give daemons unique names. If you run your cluster with one  metadata server,
 you can disregard this notice for now.
 
+
 ceph-deploy
 -----------
 
-The ceph-deploy tool is now the preferred method of provisioning new
-clusters.  For existing clusters created via mkcephfs that would like
-to transition to the new tool, there is a migration path, documented
-at `Transitioning to ceph-deploy`_.  Note that transitioning to
-ceph-deploy is not required; it is entirely acceptable to continue
-provisioning new OSDs and monitors using the previous methods.
-However, ceph-deploy streamlines these processes significantly.
-
-.. _Transitioning to ceph-deploy: ../../rados/deployment/ceph-deploy-transition
-
+The ``ceph-deploy`` tool is now the preferred method of provisioning new clusters.
+For existing clusters created via ``mkcephfs`` that would like to transition to the
+new tool, there is a migration path, documented at `Transitioning to ceph-deploy`_.
 
 Cuttlefish to Dumpling
 ======================
@@ -248,7 +242,7 @@ Then add a new ``ceph.repo`` repository entry with the following contents.
 	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc	
 
 
-.. important:: Ensure you use the correct URL for your distribution. Check the
+.. note:: Ensure you use the correct URL for your distribution. Check the
    http://ceph.com/rpm directory for your distribution. 
 
 .. note:: Since you can upgrade using ``ceph-deploy`` you will only need to add
@@ -387,8 +381,8 @@ To upgrade a Ceph OSD Daemon, perform the following steps:
 	sudo restart ceph-osd id=N
 
    For multiple OSDs on a host, you may restart all of them with Upstart. ::
-   
-   sudo restart ceph-osd-all
+
+	sudo restart ceph-osd-all
 	
    For CentOS/Red Hat distributions, use::
 
@@ -461,6 +455,43 @@ cluster, we recommend upgrading ``ceph-common`` and client libraries
 
 If you do not have the latest version, you may need to uninstall, auto remove
 dependencies and reinstall.
+
+
+Transitioning to ceph-deploy
+============================
+
+If you have an existing cluster that you deployed with ``mkcephfs`` (usually
+Argonaut or Bobtail releases),  you will need to make a few changes to your
+configuration to  ensure that your cluster will work with ``ceph-deploy``.
+
+
+Monitor Keyring
+---------------
+
+You will need to add ``caps mon = "allow *"`` to your monitor keyring if it is
+not already in the keyring. By default, the monitor keyring is located under
+``/var/lib/ceph/mon/ceph-$id/keyring``. When you have added the ``caps``
+setting, your monitor keyring should look something like this::
+
+	[mon.]
+		key = AQBJIHhRuHCwDRAAZjBTSJcIBIoGpdOR9ToiyQ==
+		caps mon = "allow *" 
+		
+Adding ``caps mon = "allow *"`` will ease the transition from ``mkcephfs`` to
+``ceph-deploy`` by allowing ``ceph-create-keys`` to use the ``mon.`` keyring
+file in ``$mon_data`` and get the caps it needs.
+
+
+Use Default Paths
+-----------------
+
+Under the ``/var/lib/ceph`` directory, the ``mon`` and ``osd`` directories need
+to use the default paths.
+
+- **OSDs**: The path should be ``/var/lib/ceph/osd/ceph-$id``
+- **MON**: The path should be  ``/var/lib/ceph/mon/ceph-$id``
+
+Under those directories, the keyring should be in a file named ``keyring``.
 
 .. _Monitor Config Reference: ../../rados/configuration/mon-config-ref
 .. _Joao's blog post: http://ceph.com/dev-notes/cephs-new-monitor-changes 

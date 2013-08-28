@@ -513,12 +513,17 @@ void PGMap::dump_basic(Formatter *f) const
   pg_sum.dump(f);
   f->close_section();
 
-  f->open_object_section("pg_stats_delta");
-  pg_sum_delta.dump(f);
-  f->close_section();
-  
   f->open_object_section("osd_stats_sum");
   osd_sum.dump(f);
+  f->close_section();
+
+  dump_delta(f);
+}
+
+void PGMap::dump_delta(Formatter *f) const
+{
+  f->open_object_section("pg_stats_delta");
+  pg_sum_delta.dump(f);
   f->close_section();
 }
 
@@ -849,9 +854,9 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
     f->dump_unsigned("version", version);
     f->dump_unsigned("num_pgs", pg_stat.size());
     f->dump_unsigned("data_bytes", pg_sum.stats.sum.num_bytes);
-    f->dump_unsigned("bytes_used", osd_sum.kb_used * 4096ull);
-    f->dump_unsigned("bytes_avail", osd_sum.kb_avail * 4096ull);
-    f->dump_unsigned("bytes_total", osd_sum.kb * 4096ull);
+    f->dump_unsigned("bytes_used", osd_sum.kb_used * 1024ull);
+    f->dump_unsigned("bytes_avail", osd_sum.kb_avail * 1024ull);
+    f->dump_unsigned("bytes_total", osd_sum.kb * 1024ull);
   } else {
     *out << "      pgmap v" << version << ": "
 	 << pg_stat.size() << " pgs, " << pg_pool_sum.size() << " pools, "

@@ -114,6 +114,7 @@ void _usage()
   cerr << "   --access=<access>         Set access permissions for sub-user, should be one\n";
   cerr << "                             of read, write, readwrite, full\n";
   cerr << "   --display-name=<name>\n";
+  cerr << "   --system                  set the system flag on the user\n";
   cerr << "   --bucket=<bucket>\n";
   cerr << "   --pool=<pool>\n";
   cerr << "   --object=<object>\n";
@@ -853,6 +854,9 @@ int main(int argc, char **argv)
         cerr << "ERROR: invalid replica log type" << std::endl;
         return EINVAL;
       }
+    } else if (strncmp(*i, "-", 1) == 0) {
+      cerr << "ERROR: invalid flag " << *i << std::endl;
+      return EINVAL;
     } else {
       ++i;
     }
