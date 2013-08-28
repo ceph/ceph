@@ -46,7 +46,7 @@ def fetch_teuthology_branch(path, branch='master'):
     Make sure we have the correct teuthology branch checked out and up-to-date
     """
     # only let one worker create/update the checkout at a time
-    lock = filelock('%s.lock' % path);
+    lock = filelock('%s.lock' % path)
     lock.acquire()
     try:
         if not os.path.isdir(path):
@@ -54,8 +54,8 @@ def fetch_teuthology_branch(path, branch='master'):
             log.info(
                 subprocess.check_output(('git', 'clone', '--branch', branch,
                                          teuthology_git_upstream, path),
-                                        cwd=os.getenv("HOME"))
-                )
+                                        cwd=os.path.dirname(path))
+            )
         elif time.time() - os.stat('/etc/passwd').st_mtime > 60:
             # only do this at most once per minute
             log.info("Fetching %s from upstream", branch)
