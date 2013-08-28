@@ -879,7 +879,8 @@ protected:
   }
 
 public:
-  RadosBencher(librados::Rados& _r, librados::IoCtx& _i) : completions(NULL), rados(_r), io_ctx(_i), iterator_valid(false) {}
+  RadosBencher(CephContext *cct_, librados::Rados& _r, librados::IoCtx& _i)
+    : ObjBencher(cct), completions(NULL), rados(_r), io_ctx(_i), iterator_valid(false) {}
   ~RadosBencher() { }
 };
 
@@ -1987,7 +1988,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       operation = OP_RAND_READ;
     else
       usage_exit();
-    RadosBencher bencher(rados, io_ctx);
+    RadosBencher bencher(g_ceph_context, rados, io_ctx);
     bencher.set_show_time(show_time);
     ret = bencher.aio_bench(operation, seconds, num_objs,
 			    concurrent_ios, op_size, cleanup);
@@ -1998,7 +1999,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (!pool_name || nargs.size() < 2)
       usage_exit();
     const char *prefix = nargs[1];
-    RadosBencher bencher(rados, io_ctx);
+    RadosBencher bencher(g_ceph_context, rados, io_ctx);
     ret = bencher.clean_up(prefix, concurrent_ios);
     if (ret != 0)
       cerr << "error during cleanup: " << ret << std::endl;
