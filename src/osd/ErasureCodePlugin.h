@@ -17,6 +17,7 @@
 #ifndef CEPH_ERASURE_CODE_PLUGIN_H
 #define CEPH_ERASURE_CODE_PLUGIN_H
 
+#include "common/Mutex.h"
 #include "ErasureCodeInterface.h"
 
 extern "C" {
@@ -37,6 +38,32 @@ namespace ceph {
                         ErasureCodeInterfaceRef *erasure_code) = 0;
   };
 
+  class ErasureCodePluginRegistry {
+  public:
+    Mutex lock;
+    std::map<std::string,ErasureCodePlugin*> plugins;
+
+    static ErasureCodePluginRegistry singleton;
+
+    ErasureCodePluginRegistry();
+    ~ErasureCodePluginRegistry();
+
+    static ErasureCodePluginRegistry &instance() {
+      return singleton;
+    }
+
+    int factory(const std::string &plugin,
+		const map<std::string,std::string> &parameters,
+		ErasureCodeInterfaceRef *erasure_code);
+
+    int add(const std::string &name, ErasureCodePlugin *plugin);
+    ErasureCodePlugin *get(const std::string &name);
+
+    int load(const std::string &plugin_name,
+	     const map<std::string,std::string> &parameters,
+	     ErasureCodePlugin **plugin);
+
+  };
 }
 
 #endif
