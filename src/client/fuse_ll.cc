@@ -330,7 +330,7 @@ static void fuse_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *
   if (r == 0) {
     fi->fh = (long)fh;
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
-    if (g_conf->fuse_use_invalidate_cb)
+    if (cfuse->client->cct->_conf->fuse_use_invalidate_cb)
       fi->keep_cache = 1;
 #endif
     fuse_reply_open(req, fi);
@@ -673,24 +673,24 @@ int CephFuse::Handle::init(int argc, const char *argv[])
   newargv[newargc++] = argv[0];
   newargv[newargc++] = "-f";  // stay in foreground
 
-  if (g_conf->fuse_allow_other) {
+  if (client->cct->_conf->fuse_allow_other) {
     newargv[newargc++] = "-o";
     newargv[newargc++] = "allow_other";
   }
-  if (g_conf->fuse_default_permissions) {
+  if (client->cct->_conf->fuse_default_permissions) {
     newargv[newargc++] = "-o";
     newargv[newargc++] = "default_permissions";
   }
-  if (g_conf->fuse_big_writes) {
+  if (client->cct->_conf->fuse_big_writes) {
     newargv[newargc++] = "-o";
     newargv[newargc++] = "big_writes";
   }
-  if (g_conf->fuse_atomic_o_trunc) {
+  if (client->cct->_conf->fuse_atomic_o_trunc) {
     newargv[newargc++] = "-o";
     newargv[newargc++] = "atomic_o_trunc";
   }
 
-  if (g_conf->fuse_debug)
+  if (client->cct->_conf->fuse_debug)
     newargv[newargc++] = "-d";
 
   for (int argctr = 1; argctr < argc; argctr++)
@@ -744,7 +744,7 @@ int CephFuse::Handle::init(int argc, const char *argv[])
 
    */
 
-  if (g_conf->fuse_use_invalidate_cb)
+  if (client->cct->_conf->fuse_use_invalidate_cb)
     client->ll_register_ino_invalidate_cb(invalidate_cb, this);
 
 done:
