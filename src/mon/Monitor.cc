@@ -1292,7 +1292,8 @@ void Monitor::handle_probe_reply(MMonProbe *m)
   dout(10) << "handle_probe_reply " << m->get_source_inst() << *m << dendl;
   dout(10) << " monmap is " << *monmap << dendl;
 
-  if (!is_probing()) {
+  // discover name and addrs during probing or electing states.
+  if (!is_probing() && !is_electing()) {
     m->put();
     return;
   }
@@ -1326,6 +1327,12 @@ void Monitor::handle_probe_reply(MMonProbe *m)
 	     << peer_name << " -> " << m->name << " in my monmap"
 	     << dendl;
     monmap->rename(peer_name, m->name);
+
+    if (is_electing()) {
+      m->put();
+      bootstrap();
+      return;
+    }
   } else {
     dout(10) << " peer name is " << peer_name << dendl;
   }
@@ -1340,6 +1347,12 @@ void Monitor::handle_probe_reply(MMonProbe *m)
       bootstrap();
       return;
     }
+  }
+
+  // end discover phase
+  if (!is_probing()) {
+    m->put();
+    return;
   }
 
   assert(paxos != NULL);
