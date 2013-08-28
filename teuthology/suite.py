@@ -4,6 +4,8 @@ import errno
 import itertools
 import logging
 import os
+import re
+from textwrap import dedent, fill
 
 # this file is responsible for submitting tests into the queue
 # by generating combinations of facets found in
@@ -17,6 +19,7 @@ import yaml
 from teuthology import misc as teuthology
 from teuthology import safepath
 from teuthology import lock as lock
+from teuthology.config import config
 
 log = logging.getLogger(__name__)
 
@@ -202,11 +205,8 @@ def ls():
         )
     args = parser.parse_args()
 
-    for j in sorted(os.listdir(args.archive_dir)):
+    for j in get_jobs(args.archive_dir):
         job_dir = os.path.join(args.archive_dir, j)
-        if j.startswith('.') or not os.path.isdir(job_dir):
-            continue
-
         summary = {}
         try:
             with file(os.path.join(job_dir, 'summary.yaml')) as f:
@@ -337,13 +337,14 @@ def results():
         log.exception('error generating results')
         raise
 
+
 def _results(args):
     running_tests = [
         f for f in sorted(os.listdir(args.archive_dir))
         if not f.startswith('.')
         and os.path.isdir(os.path.join(args.archive_dir, f))
         and not os.path.exists(os.path.join(args.archive_dir, f, 'summary.yaml'))
-        ]
+    ]
     starttime = time.time()
     log.info('Waiting up to %d seconds for tests to finish...', args.timeout)
     while running_tests and args.timeout > 0:
@@ -359,67 +360,8 @@ def _results(args):
             time.sleep(10)
     log.info('Tests finished! gathering results...')
 
-    descriptions = []
-    failures = []
-    num_failures = 0
-    unfinished = []
-    passed = []
-    all_jobs = sorted(os.listdir(args.archive_dir))
-    for j in all_jobs:
-        job_dir = os.path.join(args.archive_dir, j)
-        if j.startswith('.') or not os.path.isdir(job_dir):
-            continue
-        summary_fn = os.path.join(job_dir, 'summary.yaml')
-        if not os.path.exists(summary_fn):
-            unfinished.append(j)
-            continue
-        summary = {}
-        with file(summary_fn) as f:
-            g = yaml.safe_load_all(f)
-            for new in g:
-                summary.update(new)
-        desc = '{test}: ({duration}s) {desc}'.format(
-            duration=int(summary.get('duration', 0)),
-            desc=summary['description'],
-            test=j,
-            )
-        descriptions.append(desc)
-        if summary['success']:
-            passed.append(desc)
-        else:
-            failures.append(desc)
-            num_failures += 1
-            if 'failure_reason' in summary:
-                failures.append('    {reason}'.format(
-                        reason=summary['failure_reason'],
-                        ))
-
-    if failures or unfinished:
-        subject = ('{num_failed} failed, {num_hung} hung, '
-                   '{num_passed} passed in {suite}'.format(
-                num_failed=num_failures,
-                num_hung=len(unfinished),
-                num_passed=len(passed),
-                suite=args.name,
-                ))
-        body = """
-The following tests failed:
-
-{failures}
-
-These tests may be hung (did not finish in {timeout} seconds after the last test in the suite):
-{unfinished}
-
-These tests passed:
-{passed}""".format(
-            failures='\n'.join(failures),
-            unfinished='\n'.join(unfinished),
-            passed='\n'.join(passed),
-            timeout=args.timeout,
-            )
-    else:
-        subject = '{num_passed} passed in {suite}'.format(suite=args.name, num_passed=len(passed))
-        body = '\n'.join(descriptions)
+    (subject, body) = build_email_body(args.name, args.archive_dir,
+                                       args.timeout)
 
     try:
         if args.email:
@@ -428,9 +370,166 @@ These tests passed:
                 from_=args.teuthology_config['results_sending_email'],
                 to=args.email,
                 body=body,
-                )
+            )
     finally:
         generate_coverage(args)
+
+
+def get_http_log_path(archive_dir, job_id):
+    http_base = config.archive_server
+    if not http_base:
+        return None
+    archive_subdir = os.path.split(archive_dir)[-1]
+    return os.path.join(http_base, archive_subdir, str(job_id))
+
+
+def get_jobs(archive_dir):
+    dir_contents = os.listdir(archive_dir)
+
+    def is_job_dir(parent, subdir):
+        if os.path.isdir(os.path.join(parent, subdir)) and re.match('\d+$', subdir):
+            return True
+        return False
+
+    jobs = [job for job in dir_contents if is_job_dir(archive_dir, job)]
+    return sorted(jobs)
+
+
+email_templates = {
+    'body_templ': dedent("""\
+        Test Run
+        NOTE: Apologies for links inside the Inktank firewall; we are working to make them public.
+        =================================================================
+        logs:   {log_root}
+        failed: {fail_count}
+        hung:   {hung_count}
+        passed: {pass_count}
+
+        {fail_sect}{hung_sect}{pass_sect}
+        """),
+    'sect_templ': dedent("""\
+        {title}
+        =================================================================
+        {jobs}
+        """),
+    'fail_templ': dedent("""\
+        [{job_id}]  {desc}
+        -----------------------------------------------------------------
+        time:   {time}s{log_line}{sentry_line}
+
+        {reason}
+
+        """),
+    'fail_log_templ': "\nlog:    {log}",
+    'fail_sentry_templ': "\nsentry: {sentries}",
+    'hung_templ': dedent("""\
+        [{job_id}]
+        """),
+    'pass_templ': dedent("""\
+        [{job_id}] {desc}
+        time:    {time}s
+
+        """),
+}
+
+
+
+def build_email_body(name, archive_dir, timeout):
+    failed = {}
+    hung = {}
+    passed = {}
+
+    for job in get_jobs(archive_dir):
+        job_dir = os.path.join(archive_dir, job)
+        summary_file = os.path.join(job_dir, 'summary.yaml')
+
+        # Unfinished jobs will have no summary.yaml
+        if not os.path.exists(summary_file):
+            hung[job] = email_templates['hung_templ'].format(job_id=job)
+            continue
+
+        with file(summary_file) as f:
+            summary = yaml.safe_load(f)
+
+        if summary['success']:
+            passed[job] = email_templates['pass_templ'].format(
+                job_id=job,
+                desc=summary.get('description'),
+                time=int(summary.get('duration')),
+            )
+        else:
+            log = get_http_log_path(archive_dir, job)
+            if log:
+                log_line = email_templates['fail_log_templ'].format(log=log)
+            else:
+                log_line = ''
+            sentry_events = summary.get('sentry_events')
+            if sentry_events:
+                sentry_line = email_templates['fail_sentry_templ'].format(
+                    sentries='\n        '.join(sentry_events))
+            else:
+                sentry_line = ''
+
+            # 'fill' is from the textwrap module and it collapses a given
+            # string into multiple lines of a maximum width as specified. We
+            # want 75 characters here so that when we indent by 4 on the next
+            # line, we have 79-character exception paragraphs.
+            reason = fill(summary.get('failure_reason'), 75)
+            reason = '\n'.join(('    ') + line for line in reason.splitlines())
+
+            failed[job] = email_templates['fail_templ'].format(
+                job_id=job,
+                desc=summary.get('description'),
+                time=int(summary.get('duration')),
+                reason=reason,
+                log_line=log_line,
+                sentry_line=sentry_line,
+            )
+
+    maybe_comma = lambda s: ', ' if s else ' '
+
+    subject = ''
+    fail_sect = ''
+    hung_sect = ''
+    pass_sect = ''
+    if failed:
+        subject += '{num_failed} failed{sep}'.format(
+            num_failed=len(failed),
+            sep=maybe_comma(hung or passed)
+        )
+        fail_sect = email_templates['sect_templ'].format(
+            title='Failed',
+            jobs=''.join(failed.values())
+        )
+    if hung:
+        subject += '{num_hung} hung{sep}'.format(
+            num_hung=len(hung),
+            sep=maybe_comma(passed),
+        )
+        hung_sect = email_templates['sect_templ'].format(
+            title='Hung',
+            jobs=''.join(hung.values()),
+        )
+    if passed:
+        subject += '%s passed ' % len(passed)
+        pass_sect = email_templates['sect_templ'].format(
+            title='Passed',
+            jobs=''.join(passed.values()),
+        )
+
+    body = email_templates['body_templ'].format(
+        log_root=get_http_log_path(archive_dir, ''),
+        fail_count=len(failed),
+        hung_count=len(hung),
+        pass_count=len(passed),
+        fail_sect=fail_sect,
+        hung_sect=hung_sect,
+        pass_sect=pass_sect,
+    )
+
+    subject += 'in {suite}'.format(suite=name)
+    return (subject.strip(), body.strip())
+
 
 def get_arch(config):
     for yamlfile in config:
@@ -445,6 +544,7 @@ def get_arch(config):
                     return arch
     return None
 
+
 def get_os_type(configs):
     for config in configs:
         yamlfile = config[2]
@@ -455,6 +555,7 @@ def get_os_type(configs):
         if os_type:
             return os_type
     return None
+
 
 def get_exclude_arch(configs):
     for config in configs:
@@ -467,6 +568,7 @@ def get_exclude_arch(configs):
             return exclude_arch
     return None
 
+
 def get_exclude_os_type(configs):
     for config in configs:
         yamlfile = config[2]
@@ -477,6 +579,7 @@ def get_exclude_os_type(configs):
         if exclude_os_type:
             return exclude_os_type
     return None
+
 
 def get_machine_type(config):
     for yamlfile in config:

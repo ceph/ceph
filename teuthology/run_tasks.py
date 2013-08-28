@@ -1,8 +1,10 @@
 import sys
 import logging
 from teuthology.sentry import get_client as get_sentry_client
+from .config import config as teuth_config
 
 log = logging.getLogger(__name__)
+
 
 def run_one_task(taskname, **kwargs):
     submod = taskname
@@ -13,6 +15,7 @@ def run_one_task(taskname, **kwargs):
     mod = getattr(parent, submod)
     fn = getattr(mod, subtask)
     return fn(**kwargs)
+
 
 def run_tasks(tasks, ctx):
     stack = []
@@ -31,12 +34,20 @@ def run_tasks(tasks, ctx):
         ctx.summary['success'] = False
         if 'failure_reason' not in ctx.summary:
             ctx.summary['failure_reason'] = str(e)
-        msg = 'Saw exception from tasks.'
-        sentry = get_sentry_client(ctx)
+        log.exception('Saw exception from tasks.')
+        sentry = get_sentry_client()
         if sentry:
-            exc_id = sentry.captureException()
-            msg += " Sentry id %s" % exc_id
-        log.exception(msg)
+            tags = {
+                'task': taskname,
+                'owner': ctx.owner,
+            }
+            exc_id = sentry.get_ident(sentry.captureException(tags=tags))
+            event_url = "{server}/search?q={id}".format(
+                server=teuth_config.sentry_server.strip('/'), id=exc_id)
+            log.exception(" Sentry event: %s" % event_url)
+            sentry_url_list = ctx.summary.get('sentry_events', [])
+            sentry_url_list.append(event_url)
+            ctx.summary['sentry_events'] = sentry_url_list
         if ctx.config.get('interactive-on-error'):
             from .task import interactive
             log.warning('Saw failure, going into interactive mode...')
