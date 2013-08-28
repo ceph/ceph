@@ -18,6 +18,7 @@ noinst_HEADERS += \
 	osd/Ager.h \
 	osd/ClassHandler.h \
 	osd/ErasureCodeInterface.h \
+	osd/ErasureCodePlugin.h \
 	osd/OSD.h \
 	osd/OSDCap.h \
 	osd/OSDMap.h \
