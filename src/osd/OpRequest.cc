@@ -30,9 +30,9 @@ OpRequest::OpRequest(Message *req, OpTracker *tracker) :
   seq(0) {
   received_time = request->get_recv_stamp();
   tracker->register_inflight_op(&xitem);
-  if (req->get_priority() < g_conf->osd_client_op_priority) {
+  if (req->get_priority() < tracker->cct->_conf->osd_client_op_priority) {
     // don't warn as quickly for low priority ops
-    warn_interval_multiplier = g_conf->osd_recovery_op_warn_multiple;
+    warn_interval_multiplier = tracker->cct->_conf->osd_recovery_op_warn_multiple;
   }
 }
 
@@ -56,14 +56,14 @@ void OpHistory::cleanup(utime_t now)
 {
   while (arrived.size() &&
 	 (now - arrived.begin()->first >
-	  (double)(g_conf->osd_op_history_duration))) {
+	  (double)(tracker->cct->_conf->osd_op_history_duration))) {
     duration.erase(make_pair(
 	arrived.begin()->second->get_duration(),
 	arrived.begin()->second));
     arrived.erase(arrived.begin());
   }
 
-  while (duration.size() > g_conf->osd_op_history_size) {
+  while (duration.size() > tracker->cct->_conf->osd_op_history_size) {
     arrived.erase(make_pair(
 	duration.begin()->second->get_arrived(),
 	duration.begin()->second));
@@ -75,8 +75,8 @@ void OpHistory::dump_ops(utime_t now, Formatter *f)
 {
   cleanup(now);
   f->open_object_section("OpHistory");
-  f->dump_int("num to keep", g_conf->osd_op_history_size);
-  f->dump_int("duration to keep", g_conf->osd_op_history_duration);
+  f->dump_int("num to keep", tracker->cct->_conf->osd_op_history_size);
+  f->dump_int("duration to keep", tracker->cct->_conf->osd_op_history_duration);
   {
     f->open_array_section("Ops");
     for (set<pair<utime_t, OpRequestRef> >::const_iterator i =
@@ -95,7 +95,7 @@ void OpHistory::dump_ops(utime_t now, Formatter *f)
 void OpTracker::dump_historic_ops(Formatter *f)
 {
   Mutex::Locker locker(ops_in_flight_lock);
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now(cct);
   history.dump_ops(now, f);
 }
 
@@ -105,7 +105,7 @@ void OpTracker::dump_ops_in_flight(Formatter *f)
   f->open_object_section("ops_in_flight"); // overall dump
   f->dump_int("num_ops", ops_in_flight.size());
   f->open_array_section("ops"); // list of OpRequests
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now(cct);
   for (xlist<OpRequest*>::iterator p = ops_in_flight.begin(); !p.end(); ++p) {
     f->open_object_section("op");
     (*p)->dump(now, f);
@@ -126,7 +126,7 @@ void OpTracker::unregister_inflight_op(OpRequest *i)
 {
   Mutex::Locker locker(ops_in_flight_lock);
   assert(i->xitem.get_list() == &ops_in_flight);
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now(cct);
   i->xitem.remove_myself();
   i->request->clear_data();
   history.insert(now, OpRequestRef(i));
@@ -138,9 +138,9 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
   if (!ops_in_flight.size())
     return false;
 
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now(cct);
   utime_t too_old = now;
-  too_old -= g_conf->osd_op_complaint_time;
+  too_old -= cct->_conf->osd_op_complaint_time;
 
   utime_t oldest_secs = now - ops_in_flight.front()->received_time;
 
@@ -148,11 +148,11 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
            << "; oldest is " << oldest_secs
            << " seconds old" << dendl;
 
-  if (oldest_secs < g_conf->osd_op_complaint_time)
+  if (oldest_secs < cct->_conf->osd_op_complaint_time)
     return false;
 
   xlist<OpRequest*>::iterator i = ops_in_flight.begin();
-  warning_vector.reserve(g_conf->osd_op_log_threshold + 1);
+  warning_vector.reserve(cct->_conf->osd_op_log_threshold + 1);
 
   int slow = 0;     // total slow
   int warned = 0;   // total logged
@@ -161,13 +161,13 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
 
     // exponential backoff of warning intervals
     if (((*i)->received_time +
-	 (g_conf->osd_op_complaint_time *
+	 (cct->_conf->osd_op_complaint_time *
 	  (*i)->warn_interval_multiplier)) < now) {
       // will warn
       if (warning_vector.empty())
 	warning_vector.push_back("");
       warned++;
-      if (warned > g_conf->osd_op_log_threshold)
+      if (warned > cct->_conf->osd_op_log_threshold)
         break;
 
       utime_t age = now - (*i)->received_time;
@@ -259,7 +259,7 @@ void OpRequest::dump(utime_t now, Formatter *f) const
 
 void OpTracker::mark_event(OpRequest *op, const string &dest)
 {
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now(cct);
   return _mark_event(op, dest, now);
 }
 
@@ -297,7 +297,7 @@ OpRequestRef OpTracker::create_request(Message *ref)
 
 void OpRequest::mark_event(const string &event)
 {
-  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t now = ceph_clock_now(tracker->cct);
   {
     Mutex::Locker l(lock);
     events.push_back(make_pair(now, event));

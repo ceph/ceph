@@ -8,7 +8,6 @@
 
 #include "common/Clock.h"
 #include "common/debug.h"
-#include "global/global_context.h"
 
 // ick
 #include <sys/types.h>
@@ -59,7 +58,7 @@ uint64_t Ager::age_fill(float pc, utime_t until) {
   bl.push_back(bp);
   uint64_t wrote = 0;
   while (1) {
-    if (ceph_clock_now(g_ceph_context) > until) break;
+    if (ceph_clock_now(cct) > until) break;
     
     struct statfs st;
     store->statfs(&st);
@@ -176,7 +175,7 @@ void Ager::age(int time,
 
   srand(0);
 
-  utime_t start = ceph_clock_now(g_ceph_context);
+  utime_t start = ceph_clock_now(cct);
   utime_t until = start;
   until.sec_ref() += time;
   
@@ -223,7 +222,7 @@ void Ager::age(int time,
   uint64_t wrote = 0;
 
   for (int c=1; c<=count; c++) {
-    if (ceph_clock_now(g_ceph_context) > until) break;
+    if (ceph_clock_now(cct) > until) break;
     
     //if (c == 7) start_debug = true;
     
@@ -253,7 +252,7 @@ void Ager::age(int time,
 
     // dump freelist?
     /*
-    if (ceph_clock_now(g_ceph_context) > nextfl) {
+    if (ceph_clock_now(cct) > nextfl) {
       elapsed += freelist_inc;
       save_freelist(elapsed);
       nextfl.sec_ref() += freelist_inc;
