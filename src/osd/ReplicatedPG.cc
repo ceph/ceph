@@ -1028,9 +1028,9 @@ void ReplicatedPG::do_op(OpRequestRef op)
   ctx->reply->set_result(result);
 
   if (result >= 0)
-    ctx->reply->set_version(ctx->reply_version);
+    ctx->reply->set_replay_version(ctx->reply_version);
   else if (result == -ENOENT)
-    ctx->reply->set_version(info.last_update);
+    ctx->reply->set_replay_version(info.last_update);
 
   // read or error?
   if (ctx->op_t.empty() || result < 0) {
