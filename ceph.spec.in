@@ -42,6 +42,7 @@ BuildRequires:  libcurl-devel
 BuildRequires:  libxml2-devel
 BuildRequires:  libuuid-devel
 BuildRequires:  leveldb-devel > 1.2
+BuildRequires:  yasm
 %if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
 BuildRequires:  snappy-devel
 %endif
@@ -125,7 +126,6 @@ Requires:	apache2-mod_fcgid
 %else
 BuildRequires:	expat-devel
 BuildRequires:	fcgi-devel
-Requires:	mod_fcgid
 %endif
 %description radosgw
 radosgw is an S3 HTTP REST gateway for the RADOS object store. It is
@@ -249,7 +249,7 @@ BuildRequires:  junit
 %description -n cephfs-java
 This package contains the Java libraries for the Ceph File System.
 
-%if (0%{?centos} || 0%{?opensuse} || 0%{?suse_version})
+%if 0%{?opensuse} || 0%{?suse_version}
 %debug_package
 %endif
 

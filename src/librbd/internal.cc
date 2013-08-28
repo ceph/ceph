@@ -2845,7 +2845,7 @@ reprotect_and_return_err:
   {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "aio_write " << ictx << " off = " << off << " len = "
-		   << len << " buf = " << &buf << dendl;
+		   << len << " buf = " << (void*)buf << dendl;
 
     if (!len)
       return 0;

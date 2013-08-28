@@ -203,6 +203,7 @@ OPTION(mon_leveldb_max_open_files, OPT_INT, 0) // monitor's leveldb max open fil
 OPTION(mon_leveldb_compression, OPT_BOOL, false) // monitor's leveldb uses compression
 OPTION(mon_leveldb_paranoid, OPT_BOOL, false)   // monitor's leveldb paranoid flag
 OPTION(mon_leveldb_log, OPT_STR, "")
+OPTION(mon_leveldb_size_warn, OPT_U64, 40*1024*1024*1024) // issue a warning when the monitor's leveldb goes over 40GB (in bytes)
 OPTION(paxos_stash_full_interval, OPT_INT, 25)   // how often (in commits) to stash a full copy of the PaxosService state
 OPTION(paxos_max_join_drift, OPT_INT, 10) // max paxos iterations before we must first sync the monitor stores
 OPTION(paxos_propose_interval, OPT_DOUBLE, 1.0)  // gather updates for this long before proposing a map update
@@ -243,6 +244,7 @@ OPTION(client_readahead_max_periods, OPT_LONGLONG, 4)  // as multiple of file la
 OPTION(client_snapdir, OPT_STR, ".snap")
 OPTION(client_mountpoint, OPT_STR, "/")
 OPTION(client_notify_timeout, OPT_INT, 10) // in seconds
+OPTION(osd_client_watch_timeout, OPT_INT, 30) // in seconds
 OPTION(client_caps_release_delay, OPT_INT, 5) // in seconds
 OPTION(client_oc, OPT_BOOL, true)
 OPTION(client_oc_size, OPT_INT, 1024*1024* 200)    // MB * n
@@ -425,6 +427,11 @@ OPTION(osd_heartbeat_addr, OPT_ADDR, entity_addr_t())
 OPTION(osd_heartbeat_interval, OPT_INT, 6)       // (seconds) how often we ping peers
 OPTION(osd_heartbeat_grace, OPT_INT, 20)         // (seconds) how long before we decide a peer has failed
 OPTION(osd_heartbeat_min_peers, OPT_INT, 10)     // minimum number of peers
+
+// minimum number of peers tha tmust be reachable to mark ourselves
+// back up after being wrongly marked down.
+OPTION(osd_heartbeat_min_healthy_ratio, OPT_FLOAT, .33)
+
 OPTION(osd_mon_heartbeat_interval, OPT_INT, 30)  // (seconds) how often to ping monitor if no peers
 OPTION(osd_mon_report_interval_max, OPT_INT, 120)
 OPTION(osd_mon_report_interval_min, OPT_INT, 5)  // pg stats, failures, up_thru, boot.
@@ -518,6 +525,7 @@ OPTION(osd_max_attr_size, OPT_U64, 65536)
 OPTION(filestore, OPT_BOOL, false)
 
 /// filestore wb throttle limits
+OPTION(filestore_wbthrottle_enable, OPT_BOOL, true)
 OPTION(filestore_wbthrottle_btrfs_bytes_start_flusher, OPT_U64, 41943040)
 OPTION(filestore_wbthrottle_btrfs_bytes_hard_limit, OPT_U64, 419430400)
 OPTION(filestore_wbthrottle_btrfs_ios_start_flusher, OPT_U64, 500)

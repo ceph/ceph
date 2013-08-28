@@ -8,28 +8,31 @@ Running Ceph with Upstart
 =========================
 
 When deploying Ceph Cuttlefish and beyond with ``ceph-deploy``,  you may start
-and stop Ceph daemons or the entire cluster  using the event-based `Upstart`_. 
+and stop Ceph daemons on a :term:`Ceph Node` using the event-based `Upstart`_. 
 Upstart does not require you to define daemon instances in the Ceph configuration
 file (although, they are still required for ``sysvinit`` should you choose to 
 use it).
 
-To list the Ceph Upstart jobs and instances, execute:: 
+To list the Ceph Upstart jobs and instances on a node, execute:: 
 
 	sudo initctl list | grep ceph
 
 See `initctl`_ for additional details.
 
-Starting a Cluster
-------------------
+Starting all Daemons
+--------------------
 
-To start the cluster, execute the following:: 
+To start all daemons on a Ceph Node (irrespective of type), execute the
+following:: 
 
 	sudo start ceph-all
 	
-Stopping a Cluster	
-------------------
 
-To stop the cluster, execute the following:: 
+Stopping all Daemons	
+--------------------
+
+To stop all daemons on a Ceph Node (irrespective of type), execute the
+following:: 
 
 	sudo stop ceph-all
 	
@@ -37,7 +40,8 @@ To stop the cluster, execute the following::
 Starting all Daemons by Type
 ----------------------------
 
-To start all daemons of a particular type, execute one of the following:: 
+To start all daemons of a particular type on a Ceph Node, execute one of the
+following:: 
 
 	sudo start ceph-osd-all
 	sudo start ceph-mon-all
@@ -47,7 +51,8 @@ To start all daemons of a particular type, execute one of the following::
 Stopping all Daemons by Type
 ----------------------------
 
-To stop all daemons of a particular type, execute one of the following::
+To stop all daemons of a particular type on a Ceph Node, execute one of the
+following::
 
 	sudo stop ceph-osd-all
 	sudo stop ceph-mon-all
@@ -57,7 +62,8 @@ To stop all daemons of a particular type, execute one of the following::
 Starting a Daemon
 -----------------
 
-To start a specific daemon instance, execute one of the following:: 
+To start a specific daemon instance on a Ceph Node, execute one of the
+following:: 
 
 	sudo start ceph-osd id={id}
 	sudo start ceph-mon id={hostname}
@@ -73,7 +79,8 @@ For example::
 Stopping a Daemon
 -----------------
 
-To stop a specific daemon instance, execute one of the following:: 
+To stop a specific daemon instance on a Ceph Node, execute one of the
+following:: 
 
 	sudo stop ceph-osd id={id}
 	sudo stop ceph-mon id={hostname}

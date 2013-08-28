@@ -20,7 +20,8 @@ EXTRA_DIST = \
 	libs3/mswin \
 	libs3/src \
 	libs3/test \
-	unittest_bufferlist.sh
+	unittest_bufferlist.sh \
+	yasm-wrapper
 
 CLEANFILES =
 bin_PROGRAMS =
@@ -1318,7 +1319,6 @@ AM_COMMON_FLAGS = \
 	-D_THREAD_SAFE \
 	-D__STDC_FORMAT_MACROS \
 	-D_GNU_SOURCE \
-	-rdynamic \
 	-Wall \
 	${WARN_TYPE_LIMITS} \
 	${WARN_IGNORED_QUALIFIERS} \
@@ -1327,6 +1327,9 @@ AM_COMMON_FLAGS = \
 	-Werror=format-security \
 	-fno-strict-aliasing \
 	-fsigned-char
+if !CLANG
+    AM_COMMON_FLAGS += -rdynamic
+endif
 
 AM_CFLAGS = $(AM_COMMON_FLAGS)
 AM_CXXFLAGS = \
@@ -1334,8 +1337,11 @@ AM_CXXFLAGS = \
 	$(AM_COMMON_FLAGS) \
 	-DCEPH_LIBDIR=\"${libdir}\" \
 	-Wnon-virtual-dtor \
-	-Wno-invalid-offsetof \
-	-Wstrict-null-sentinel
+	-Wno-invalid-offsetof
+
+if !CLANG
+    AM_CXXFLAGS += -Wstrict-null-sentinel
+endif
 # note: this is position dependant, it affects the -l options that
 # come after it on the command line. when you use ${AM_LDFLAGS} in
 # later rules, take care where you place it. for more information, see
@@ -1475,21 +1481,30 @@ clean-local:
 
 # libs
 
+CCAS = ${srcdir}/yasm-wrapper
+AM_CCASFLAGS = -f elf64
+
+# crc
+libcrc_la_SOURCES = \
+	common/sctp_crc32.c \
+	common/crc32c.cc \
+	common/crc32c_intel_baseline.c \
+	common/crc32c_intel_fast.c
+
+if WITH_GOOD_YASM_ELF64
+libcrc_la_SOURCES += common/crc32c_intel_fast_asm.S
+libcrc_la_LIBTOOLFLAGS = --tag=CC
+endif
+
+noinst_LTLIBRARIES += libcrc.la
+
+# common
 libcommon_la_SOURCES = $(libcommon_files)
 libcommon_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
 libcommon_la_CXXFLAGS= ${AM_CXXFLAGS}
 libcommon_la_LDFLAGS = -lrt
+libcommon_la_LIBADD = libcrc.la
 noinst_LTLIBRARIES += libcommon.la
-
-libglobal_la_SOURCES = \
-	global/global_context.cc \
-	global/global_init.cc \
-	global/pidfile.cc \
-	global/signal_handler.cc
-libglobal_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
-libglobal_la_CXXFLAGS= ${AM_CXXFLAGS}
-libglobal_la_LIBADD= libcommon.la
-noinst_LTLIBRARIES += libglobal.la
 
 crush_files = \
 	crush/builder.c \
@@ -1503,6 +1518,8 @@ crush_files = \
 # this list ommits the ceph_ver.c file
 libcommon_files = \
 	./ceph_ver.c \
+	arch/probe.cc \
+	arch/intel.c \
 	auth/AuthAuthorizeHandler.cc \
 	auth/AuthClientHandler.cc \
 	auth/AuthSessionHandler.cc \
@@ -1533,8 +1550,6 @@ libcommon_files = \
 	common/Timer.cc \
 	common/Finisher.cc \
 	common/environment.cc\
-	common/sctp_crc32.c\
-	common/crc32c-intel.c\
 	common/assert.cc \
         common/run_cmd.cc \
 	common/WorkQueue.cc \
@@ -1609,6 +1624,16 @@ else
 libcommon_files += perfglue/disabled_stubs.cc
 endif
 
+# global
+libglobal_la_SOURCES = \
+	global/global_context.cc \
+	global/global_init.cc \
+	global/pidfile.cc \
+	global/signal_handler.cc
+libglobal_la_CFLAGS= ${CRYPTO_CFLAGS} ${AM_CFLAGS}
+libglobal_la_CXXFLAGS= ${AM_CXXFLAGS}
+libglobal_la_LIBADD= libcommon.la
+noinst_LTLIBRARIES += libglobal.la
 
 
 libmon_a_SOURCES = \
@@ -1744,6 +1769,8 @@ python_PYTHON = pybind/rados.py \
 # that autotools doesn't magically identify.
 noinst_HEADERS = \
 	rados_sync.h \
+	arch/probe.h \
+	arch/intel.h \
 	auth/cephx/CephxAuthorizeHandler.h\
 	auth/cephx/CephxKeyServer.h\
 	auth/cephx/CephxProtocol.h\
@@ -1881,10 +1908,13 @@ noinst_HEADERS = \
 	common/ceph_crypto.h\
 	common/ceph_crypto_cms.h\
 	common/ceph_json.h\
+	common/crc32c_intel_baseline.h\
+	common/crc32c_intel_fast.h\
 	common/lru_map.h\
 	common/utf8.h\
 	common/mime.h\
 	common/pick_address.h\
+	common/sctp_crc32.h\
 	common/secret.h\
 	common/strtol.h\
 	common/static_assert.h\

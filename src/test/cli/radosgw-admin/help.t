@@ -75,6 +75,7 @@
      --access=<access>         Set access permissions for sub-user, should be one
                                of read, write, readwrite, full
      --display-name=<name>
+     --system                  set the system flag on the user
      --bucket=<bucket>
      --pool=<pool>
      --object=<object>

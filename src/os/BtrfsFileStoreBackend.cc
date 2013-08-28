@@ -51,7 +51,8 @@
 #define ALIGN_UP(x, by) (ALIGNED((x), (by)) ? (x) : (ALIGN_DOWN((x), (by)) + (by)))
 
 BtrfsFileStoreBackend::BtrfsFileStoreBackend(FileStore *fs):
-    GenericFileStoreBackend(fs), has_clone_range(false), has_snap_create(false),
+    GenericFileStoreBackend(fs), has_clone_range(false),
+    has_snap_create(false), has_snap_destroy(false),
     has_snap_create_v2(false), has_wait_sync(false), stable_commits(false),
     m_filestore_btrfs_clone_range(g_conf->filestore_btrfs_clone_range),
     m_filestore_btrfs_snap (g_conf->filestore_btrfs_snap) { }
@@ -298,8 +299,10 @@ int BtrfsFileStoreBackend::create_current()
 
 int BtrfsFileStoreBackend::list_checkpoints(list<string>& ls)
 {
+  int ret, err = 0;
+
   struct stat basest;
-  int ret = ::fstat(get_basedir_fd(), &basest);
+  ret = ::fstat(get_basedir_fd(), &basest);
   if (ret < 0) {
     ret = -errno;
     dout(0) << "list_checkpoints: cannot fstat basedir " << cpp_strerror(ret) << dendl;
@@ -317,8 +320,9 @@ int BtrfsFileStoreBackend::list_checkpoints(list<string>& ls)
 
   list<string> snaps;
   char path[PATH_MAX];
-  struct dirent buf, *de;
-  while (::readdir_r(dir, &buf, &de) == 0) {
+  char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
+  struct dirent *de;
+  while (::readdir_r(dir, (struct dirent *)&buf, &de) == 0) {
     if (!de)
       break;
 
@@ -327,10 +331,10 @@ int BtrfsFileStoreBackend::list_checkpoints(list<string>& ls)
     struct stat st;
     ret = ::stat(path, &st);
     if (ret < 0) {
-      ret = -errno;
+      err = -errno;
       dout(0) << "list_checkpoints: stat '" << path << "' failed: "
-	      << cpp_strerror(ret) << dendl;
-      return ret;
+	      << cpp_strerror(err) << dendl;
+      break;
     }
 
     if (!S_ISDIR(st.st_mode))
@@ -339,10 +343,10 @@ int BtrfsFileStoreBackend::list_checkpoints(list<string>& ls)
     struct statfs fs;
     ret = ::statfs(path, &fs);
     if (ret < 0) {
-      ret = -errno;
+      err = -errno;
       dout(0) << "list_checkpoints: statfs '" << path << "' failed: "
-	      << cpp_strerror(ret) << dendl;
-      return ret;
+	      << cpp_strerror(err) << dendl;
+      break;
     }
 
     if (fs.f_type == BTRFS_SUPER_MAGIC && basest.st_dev != st.st_dev)
@@ -352,8 +356,12 @@ int BtrfsFileStoreBackend::list_checkpoints(list<string>& ls)
   if (::closedir(dir) < 0) {
       ret = -errno;
       dout(0) << "list_checkpoints: closedir failed: " << cpp_strerror(ret) << dendl;
-      return ret;
+      if (!err)
+	err = ret;
   }
+
+  if (err)
+    return err;
 
   ls.swap(snaps);
   return 0;
@@ -367,7 +375,7 @@ int BtrfsFileStoreBackend::create_checkpoint(const string& name, uint64_t *trans
     memset(&async_args, 0, sizeof(async_args));
     async_args.fd = get_current_fd();
     async_args.flags = BTRFS_SUBVOL_CREATE_ASYNC;
-    strcpy(async_args.name, name.c_str());
+    strncpy(async_args.name, name.c_str(), sizeof(async_args.name));
 
     int r = ::ioctl(get_basedir_fd(), BTRFS_IOC_SNAP_CREATE_V2, &async_args);
     if (r < 0) {
@@ -455,7 +463,7 @@ int BtrfsFileStoreBackend::destroy_checkpoint(const string& name)
   btrfs_ioctl_vol_args vol_args;
   memset(&vol_args, 0, sizeof(vol_args));
   vol_args.fd = 0;
-  strcpy(vol_args.name, name.c_str());
+  strncpy(vol_args.name, name.c_str(), sizeof(vol_args.name));
 
   int ret = ::ioctl(get_basedir_fd(), BTRFS_IOC_SNAP_DESTROY, &vol_args);
   if (ret) {

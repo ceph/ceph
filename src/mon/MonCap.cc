@@ -346,7 +346,7 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
     quoted_string %=
       lexeme['"' >> +(char_ - '"') >> '"'] | 
       lexeme['\'' >> +(char_ - '\'') >> '\''];
-    unquoted_word %= +char_("a-zA-Z0-9_-");
+    unquoted_word %= +char_("a-zA-Z0-9_.-");
     str %= quoted_string | unquoted_word;
 
     spaces = +lit(' ');
