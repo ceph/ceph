@@ -228,9 +228,10 @@ public:
       if (header.version >= 5) {
 	::decode(replay_version, p);
 	::decode(user_version, p);
-      } else
+      } else {
 	replay_version = bad_replay_version;
 	user_version = replay_version.version;
+      }
     }
   }
 
