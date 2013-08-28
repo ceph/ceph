@@ -503,6 +503,11 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
     dout(2) << "No CORS configuration set yet for this bucket" << dendl;
     return false;
   }
+
+  RGWCORSRule *rule = bucket_cors.host_name_rule(orig);
+  if (!rule)
+    return false;
+
   const char *req_meth = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
   if (!req_meth) {
     req_meth = s->info.method;
@@ -511,7 +516,6 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   if (req_meth)
     method = req_meth;
 
-  RGWCORSRule *rule = bucket_cors.host_name_rule(orig);
   if (!validate_cors_rule_method(rule, req_meth)) {
     return false;
   }
