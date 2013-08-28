@@ -3325,7 +3325,11 @@ done:
     string snapname;
     cmd_getval(g_ceph_context, cmdmap, "snap", snapname);
     const pg_pool_t *p = osdmap.get_pg_pool(pool);
-    if (p->snap_exists(snapname.c_str())) {
+    if (p->is_unmanaged_snaps_mode()) {
+      ss << "pool " << poolstr << " is in unmanaged snaps mode";
+      err = -EINVAL;
+      goto reply;
+    } else if (p->snap_exists(snapname.c_str())) {
       ss << "pool " << poolstr << " snap " << snapname << " already exists";
       err = 0;
       goto reply;
@@ -3359,7 +3363,11 @@ done:
     string snapname;
     cmd_getval(g_ceph_context, cmdmap, "snap", snapname);
     const pg_pool_t *p = osdmap.get_pg_pool(pool);
-    if (!p->snap_exists(snapname.c_str())) {
+    if (p->is_unmanaged_snaps_mode()) {
+      ss << "pool " << poolstr << " is in unmanaged snaps mode";
+      err = -EINVAL;
+      goto reply;
+    } else if (!p->snap_exists(snapname.c_str())) {
       ss << "pool " << poolstr << " snap " << snapname << " does not exist";
       err = 0;
       goto reply;
