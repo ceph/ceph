@@ -39,7 +39,7 @@ int ClassHandler::open_class(const string& cname, ClassData **pcls)
 int ClassHandler::open_all_classes()
 {
   dout(10) << __func__ << dendl;
-  DIR *dir = ::opendir(g_conf->osd_class_dir.c_str());
+  DIR *dir = ::opendir(cct->_conf->osd_class_dir.c_str());
   if (!dir)
     return -errno;
 
@@ -101,7 +101,7 @@ int ClassHandler::_load_class(ClassData *cls)
       cls->status == ClassData::CLASS_MISSING) {
     char fname[PATH_MAX];
     snprintf(fname, sizeof(fname), "%s/" CLS_PREFIX "%s" CLS_SUFFIX,
-	     g_conf->osd_class_dir.c_str(),
+	     cct->_conf->osd_class_dir.c_str(),
 	     cls->name.c_str());
     dout(10) << "_load_class " << cls->name << " from " << fname << dendl;
 

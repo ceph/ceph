@@ -383,7 +383,7 @@ public:
     const char *state_name;
     utime_t enter_time;
     const char *get_state_name() { return state_name; }
-    NamedState() : state_name(0), enter_time(ceph_clock_now(g_ceph_context)) {}
+    NamedState() : state_name(0), enter_time(ceph_clock_now(g_ceph_context)) {};
     virtual ~NamedState() {}
   };
 
@@ -1060,21 +1060,8 @@ public:
 
   /* Encapsulates PG recovery process */
   class RecoveryState {
-    void start_handle(RecoveryCtx *new_ctx) {
-      assert(!rctx);
-      rctx = new_ctx;
-      if (rctx)
-	rctx->start_time = ceph_clock_now(g_ceph_context);
-    }
-
-    void end_handle() {
-      if (rctx) {
-	utime_t dur = ceph_clock_now(g_ceph_context) - rctx->start_time;
-	machine.event_time += dur;
-      }
-      machine.event_count++;
-      rctx = 0;
-    }
+    void start_handle(RecoveryCtx *new_ctx);
+    void end_handle();
 
     /* States */
     struct Initial;

@@ -26,15 +26,17 @@
 #include "osd/osd_types.h"
 
 struct OpRequest;
+class OpTracker;
 typedef std::tr1::shared_ptr<OpRequest> OpRequestRef;
 class OpHistory {
   set<pair<utime_t, OpRequestRef> > arrived;
   set<pair<double, OpRequestRef> > duration;
   void cleanup(utime_t now);
   bool shutdown;
+  OpTracker *tracker;
 
 public:
-  OpHistory() : shutdown(false) {}
+  OpHistory(OpTracker *tracker_) : shutdown(false), tracker(tracker_) {}
   ~OpHistory() {
     assert(arrived.empty());
     assert(duration.empty());
@@ -52,13 +54,18 @@ class OpTracker {
     void operator()(OpRequest *op);
   };
   friend class RemoveOnDelete;
+  friend class OpRequest;
+  friend class OpHistory;
   uint64_t seq;
   Mutex ops_in_flight_lock;
   xlist<OpRequest *> ops_in_flight;
   OpHistory history;
 
+protected:
+  CephContext *cct;
+
 public:
-  OpTracker() : seq(0), ops_in_flight_lock("OpTracker mutex") {}
+  OpTracker(CephContext *cct_) : seq(0), ops_in_flight_lock("OpTracker mutex"), history(this), cct(cct_) {}
   void dump_ops_in_flight(Formatter *f);
   void dump_historic_ops(Formatter *f);
   void register_inflight_op(xlist<OpRequest*>::item *i);
