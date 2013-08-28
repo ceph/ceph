@@ -338,6 +338,15 @@ unittest_erasure_code_jerasure_LDADD += -ldl
 endif
 check_PROGRAMS += unittest_erasure_code_jerasure
 
+unittest_erasure_code_plugin_jerasure_SOURCES = \
+	test/osd/TestErasureCodePluginJerasure.cc
+unittest_erasure_code_plugin_jerasure_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_erasure_code_plugin_jerasure_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+if LINUX
+unittest_erasure_code_plugin_jerasure_LDADD += -ldl
+endif
+check_PROGRAMS += unittest_erasure_code_plugin_jerasure
+
 unittest_erasure_code_example_SOURCES = test/osd/TestErasureCodeExample.cc 
 noinst_HEADERS += test/osd/ErasureCodeExample.h
 unittest_erasure_code_example_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
