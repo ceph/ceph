@@ -1024,27 +1024,30 @@ void ReplicatedPG::do_op(OpRequestRef op)
   }
   ctx->reply->set_result(result);
 
-  if (result >= 0) {
-    ctx->reply->set_reply_versions(ctx->at_version, ctx->user_at_version);
-  } else if (result == -ENOENT) {
-    ctx->reply->set_enoent_reply_versions(info.last_update, ctx->user_at_version);
-  }
-
   // read or error?
   if (ctx->op_t.empty() || result < 0) {
+    MOSDOpReply *reply = ctx->reply;
+    ctx->reply = NULL;
+
     if (result >= 0) {
       log_op_stats(ctx);
       publish_stats_to_osd();
+
+      // on read, return the current object version
+      reply->set_reply_versions(eversion_t(), ctx->obs->oi.user_version);
+    } else if (result == -ENOENT) {
+      // on ENOENT, set a floor for what the next user version will be. 
+      reply->set_enoent_reply_versions(info.last_update, ctx->user_at_version);
     }
     
-    MOSDOpReply *reply = ctx->reply;
-    ctx->reply = NULL;
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
     osd->send_message_osd_client(reply, m->get_connection());
     delete ctx;
     src_obc.clear();
     return;
   }
+
+  ctx->reply->set_reply_versions(ctx->at_version, ctx->user_at_version);
 
   assert(op->may_write());
 
