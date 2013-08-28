@@ -469,11 +469,18 @@ def build_email_body(name, archive_dir, timeout):
             else:
                 sentry_line = ''
 
+            # 'fill' is from the textwrap module and it collapses a given
+            # string into multiple lines of a maximum width as specified. We
+            # want 75 characters here so that when we indent by 4 on the next
+            # line, we have 79-character exception paragraphs.
+            reason = fill(summary.get('failure_reason'), 75)
+            reason = '\n'.join(('    ') + line for line in reason.splitlines())
+
             failed[job] = email_templates['fail_templ'].format(
                 job_id=job,
                 desc=summary.get('description'),
                 time=int(summary.get('duration')),
-                reason=fill(summary.get('failure_reason'), 79),
+                reason=reason,
                 log_line=log_line,
                 sentry_line=sentry_line,
             )
