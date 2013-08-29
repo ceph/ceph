@@ -4714,9 +4714,6 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
 
 void ReplicatedPG::object_context_destructor_callback(ObjectContext *obc)
 {
-  dout(10) << "object_context_destructor_callback " << obc << " "
-	   << obc->obs.oi.soid << dendl;
-
   if (obc->ssc)
     put_snapset_context(obc->ssc);
 }
@@ -4765,7 +4762,6 @@ SnapSetContext *ReplicatedPG::create_snapset_context(const object_t& oid)
 {
   Mutex::Locker l(snapset_contexts_lock);
   SnapSetContext *ssc = new SnapSetContext(oid);
-  dout(10) << "create_snapset_context " << ssc << " " << ssc->oid << dendl;
   _register_snapset_context(ssc);
   ssc->ref++;
   return ssc;
@@ -4803,8 +4799,6 @@ SnapSetContext *ReplicatedPG::get_snapset_context(const object_t& oid,
     }
   }
   assert(ssc);
-  dout(10) << "get_snapset_context " << ssc->oid << " "
-	   << ssc->ref << " -> " << (ssc->ref+1) << dendl;
   ssc->ref++;
   return ssc;
 }
@@ -4812,8 +4806,6 @@ SnapSetContext *ReplicatedPG::get_snapset_context(const object_t& oid,
 void ReplicatedPG::put_snapset_context(SnapSetContext *ssc)
 {
   Mutex::Locker l(snapset_contexts_lock);
-  dout(10) << "put_snapset_context " << ssc->oid << " "
-	   << ssc->ref << " -> " << (ssc->ref-1) << dendl;
   --ssc->ref;
   if (ssc->ref == 0) {
     if (ssc->registered)
