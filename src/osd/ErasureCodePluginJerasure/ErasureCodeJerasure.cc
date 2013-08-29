@@ -284,3 +284,68 @@ void ErasureCodeJerasureCauchyGood::prepare() {
   prepare_schedule(matrix);
   free(matrix);
 }
+
+// 
+// ErasureCodeJerasureLiberation
+//
+ErasureCodeJerasureLiberation::~ErasureCodeJerasureLiberation() {
+  if (bitmatrix)
+    free(bitmatrix);
+  if (schedule)
+    jerasure_free_schedule(schedule);
+}
+
+void ErasureCodeJerasureLiberation::jerasure_encode(char **data,
+                                                    char **coding,
+                                                    int blocksize) {
+  jerasure_schedule_encode(k, m, w, schedule, data, coding, blocksize, packetsize);
+}
+
+int ErasureCodeJerasureLiberation::jerasure_decode(int *erasures,
+                                                    char **data,
+                                                    char **coding,
+                                                    int blocksize) {
+  return jerasure_schedule_decode_lazy(k, m, w, bitmatrix, erasures, data, coding, blocksize, packetsize, 1);
+}
+
+unsigned ErasureCodeJerasureLiberation::pad_in_length(unsigned in_length) {
+  while (in_length%(k*w*packetsize*sizeof(int)) != 0) 
+    in_length++;
+  return in_length;
+}
+
+void ErasureCodeJerasureLiberation::parse(const map<std::string,std::string> &parameters) {
+  k = to_int("erasure-code-k", parameters, DEFAULT_K);
+  m = to_int("erasure-code-m", parameters, DEFAULT_M);
+  w = to_int("erasure-code-w", parameters, DEFAULT_W);
+  packetsize = to_int("erasure-code-packetsize", parameters, DEFAULT_PACKETSIZE);
+
+  bool error = false;
+  if (k > w) {
+    derr << "k=" << k << " must be less than or equal to w=" << w << dendl;
+    error = true;
+  }
+  if (w <= 2 || !is_prime(w)) {
+    derr <<  "w=" << w << " must be greater than two and be prime" << dendl;
+    error = true;
+  }
+  if (packetsize == 0) {
+    derr << "packetsize=" << packetsize << " must be set" << dendl;
+    error = true;
+  }
+  if ((packetsize%(sizeof(int))) != 0) {
+    derr << "packetsize=" << packetsize << " must be a multiple of sizeof(int) = " << sizeof(int) << dendl;
+    error = true;
+  }
+  if (error) {
+    derr << "reverting to k=" << DEFAULT_K << ", w=" << DEFAULT_W << ", packetsize=" << DEFAULT_PACKETSIZE << dendl;
+    k = DEFAULT_K;
+    w = DEFAULT_W;
+    packetsize = DEFAULT_PACKETSIZE;
+  }
+}
+
+void ErasureCodeJerasureLiberation::prepare() {
+  bitmatrix = liberation_coding_bitmatrix(k, w);
+  schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
+}
