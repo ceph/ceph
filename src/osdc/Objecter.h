@@ -746,6 +746,7 @@ public:
     
     object_t oid;
     object_locator_t base_oloc;
+    object_locator_t target_oloc;
 
     pg_t pgid;
     vector<int> acting;
