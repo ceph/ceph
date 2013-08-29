@@ -237,6 +237,7 @@ public:
   PGLog(CephContext *cct = 0) :
     pg_log_debug(!(cct && !(cct->_conf->osd_debug_pg_log_writeout))),
     touched_log(false), dirty_from(eversion_t::max()),
+    writeout_from(eversion_t::max()),
     dirty_divergent_priors(false), cct(cct) {}
 
 
