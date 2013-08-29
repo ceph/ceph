@@ -328,12 +328,21 @@ def main():
         level=loglevel,
         )
 
+    info = {}
     if ctx.archive:
         ctx.config = config_file(ctx.archive + '/config.yaml')
+        ifn = os.path.join(ctx.archive, 'info.yaml')
+        if os.path.exists(ifn):
+            with file(ifn, 'r') as fd:
+                info = yaml.load(fd.read())
         if not ctx.pid:
-            ctx.pid = int(open(ctx.archive + '/pid').read().rstrip('\n'))
+            ctx.pid = info.get('pid')
+            if not ctx.pid:
+                ctx.pid = int(open(ctx.archive + '/pid').read().rstrip('\n'))
         if not ctx.owner:
-            ctx.owner = open(ctx.archive + '/owner').read().rstrip('\n')
+            ctx.owner = info.get('owner')
+            if not ctx.owner:
+                ctx.owner = open(ctx.archive + '/owner').read().rstrip('\n')
 
     from teuthology.misc import read_config
     read_config(ctx)
