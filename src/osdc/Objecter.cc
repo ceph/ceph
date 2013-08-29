@@ -1299,6 +1299,7 @@ int Objecter::recalc_op_target(Op *op)
   pg_t pgid = op->pgid;
   op->target_oloc = op->base_oloc;
   if (op->precalc_pgid) {
+    assert(op->oid.name.empty()); // make sure this is a listing op
     ldout(cct, 10) << "recalc_op_target have " << pgid << " pool " << osdmap->have_pg_pool(pgid.pool()) << dendl;
     if (!osdmap->have_pg_pool(pgid.pool()))
       return RECALC_OP_TARGET_POOL_DNE;
