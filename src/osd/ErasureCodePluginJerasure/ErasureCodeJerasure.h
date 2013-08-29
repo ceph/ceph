@@ -209,4 +209,19 @@ public:
 
   virtual void prepare();
 };
+
+class ErasureCodeJerasureLiber8tion : public ErasureCodeJerasureLiberation {
+public:
+  static const int DEFAULT_K = 2;
+  static const int DEFAULT_M = 2;
+  static const int DEFAULT_W = 8;
+
+  ErasureCodeJerasureLiber8tion() :
+    ErasureCodeJerasureLiberation("liber8tion")
+  {}
+
+  virtual void parse(const map<std::string,std::string> &parameters);
+  virtual void prepare();
+};
+
 #endif
