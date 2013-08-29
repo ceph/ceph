@@ -468,7 +468,7 @@ def get_jobs(archive_dir):
 
 email_templates = {
     'body_templ': dedent("""\
-        Test Run
+        Test Run: {name}
         NOTE: Apologies for links inside the Inktank firewall; we are working to make them public.
         =================================================================
         logs:   {log_root}
@@ -589,6 +589,7 @@ def build_email_body(name, archive_dir, timeout):
         )
 
     body = email_templates['body_templ'].format(
+        name=name,
         log_root=get_http_log_path(archive_dir, ''),
         fail_count=len(failed),
         hung_count=len(hung),
