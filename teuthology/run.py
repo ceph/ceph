@@ -99,6 +99,31 @@ def main():
         level=loglevel,
         )
 
+    if ctx.owner is None:
+        from teuthology.misc import get_user
+        ctx.owner = get_user()
+
+    if ctx.archive is not None:
+        os.mkdir(ctx.archive)
+
+        handler = logging.FileHandler(
+            filename=os.path.join(ctx.archive, 'teuthology.log'),
+            )
+        formatter = logging.Formatter(
+            fmt='%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
+            datefmt='%Y-%m-%dT%H:%M:%S',
+            )
+        handler.setFormatter(formatter)
+        logging.getLogger().addHandler(handler)
+
+        with file(os.path.join(ctx.archive, 'pid'), 'w') as f:
+            f.write('%d' % os.getpid())
+
+        with file(os.path.join(ctx.archive, 'owner'), 'w') as f:
+            f.write(ctx.owner + '\n')
+
+        with file(os.path.join(ctx.archive, 'orig.config.yaml'), 'w') as f:
+            yaml.safe_dump(ctx.config, f, default_flow_style=False)
 
     if 'targets' in ctx.config and 'roles' in ctx.config:
         targets = len(ctx.config['targets'])
@@ -122,35 +147,10 @@ def main():
 
     ctx.summary = dict(success=True)
 
-    if ctx.owner is None:
-        from teuthology.misc import get_user
-        ctx.owner = get_user()
     ctx.summary['owner'] = ctx.owner
 
     if ctx.description is not None:
         ctx.summary['description'] = ctx.description
-
-    if ctx.archive is not None:
-        os.mkdir(ctx.archive)
-
-        handler = logging.FileHandler(
-            filename=os.path.join(ctx.archive, 'teuthology.log'),
-            )
-        formatter = logging.Formatter(
-            fmt='%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
-            datefmt='%Y-%m-%dT%H:%M:%S',
-            )
-        handler.setFormatter(formatter)
-        logging.getLogger().addHandler(handler)
-
-        with file(os.path.join(ctx.archive, 'pid'), 'w') as f:
-            f.write('%d' % os.getpid())
-
-        with file(os.path.join(ctx.archive, 'owner'), 'w') as f:
-            f.write(ctx.owner + '\n')
-
-        with file(os.path.join(ctx.archive, 'orig.config.yaml'), 'w') as f:
-            yaml.safe_dump(ctx.config, f, default_flow_style=False)
 
     for task in ctx.config['tasks']:
         assert 'kernel' not in task, \
