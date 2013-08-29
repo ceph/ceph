@@ -3,6 +3,10 @@ import os
 import yaml
 import StringIO
 import contextlib
+import logging
+import sys
+from traceback import format_tb
+
 
 def config_file(string):
     config = {}
@@ -82,23 +86,76 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-def main():
-    from gevent import monkey; monkey.patch_all(dns=False)
-    from .orchestra import monkey; monkey.patch_all()
 
-    import logging
-
-    log = logging.getLogger(__name__)
-    ctx = parse_args()
-
+def set_up_logging(ctx):
     loglevel = logging.INFO
     if ctx.verbose:
         loglevel = logging.DEBUG
 
-    logging.basicConfig(
-        level=loglevel,
-        )
+    logging.basicConfig(level=loglevel)
+    if ctx.archive is not None:
+        os.mkdir(ctx.archive)
 
+        handler = logging.FileHandler(
+            filename=os.path.join(ctx.archive, 'teuthology.log'),
+        )
+        formatter = logging.Formatter(
+            fmt='%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
+            datefmt='%Y-%m-%dT%H:%M:%S',
+        )
+        handler.setFormatter(formatter)
+        logging.getLogger().addHandler(handler)
+
+    install_except_hook()
+
+
+def install_except_hook():
+    def log_exception(exception_class, exception, traceback):
+        logging.critical(''.join(format_tb(traceback)))
+        if not exception.message:
+            logging.critical(exception_class.__name__)
+            return
+        logging.critical('{0}: {1}'.format(exception_class.__name__, exception))
+
+    sys.excepthook = log_exception
+
+
+def write_initial_metadata(ctx):
+    if ctx.archive is not None:
+        with file(os.path.join(ctx.archive, 'pid'), 'w') as f:
+            f.write('%d' % os.getpid())
+
+        with file(os.path.join(ctx.archive, 'owner'), 'w') as f:
+            f.write(ctx.owner + '\n')
+
+        with file(os.path.join(ctx.archive, 'orig.config.yaml'), 'w') as f:
+            yaml.safe_dump(ctx.config, f, default_flow_style=False)
+
+        info = {
+            'name': ctx.name,
+            'description': ctx.description,
+            'owner': ctx.owner,
+            'pid': os.getpid(),
+        }
+        with file(os.path.join(ctx.archive, 'info.yaml'), 'w') as f:
+            yaml.safe_dump(info, f, default_flow_style=False)
+
+
+def main():
+    from gevent import monkey
+    monkey.patch_all(dns=False)
+    from .orchestra import monkey
+    monkey.patch_all()
+
+    ctx = parse_args()
+    set_up_logging(ctx)
+    log = logging.getLogger(__name__)
+
+    if ctx.owner is None:
+        from teuthology.misc import get_user
+        ctx.owner = get_user()
+
+    write_initial_metadata(ctx)
 
     if 'targets' in ctx.config and 'roles' in ctx.config:
         targets = len(ctx.config['targets'])
@@ -122,35 +179,10 @@ def main():
 
     ctx.summary = dict(success=True)
 
-    if ctx.owner is None:
-        from teuthology.misc import get_user
-        ctx.owner = get_user()
     ctx.summary['owner'] = ctx.owner
 
     if ctx.description is not None:
         ctx.summary['description'] = ctx.description
-
-    if ctx.archive is not None:
-        os.mkdir(ctx.archive)
-
-        handler = logging.FileHandler(
-            filename=os.path.join(ctx.archive, 'teuthology.log'),
-            )
-        formatter = logging.Formatter(
-            fmt='%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
-            datefmt='%Y-%m-%dT%H:%M:%S',
-            )
-        handler.setFormatter(formatter)
-        logging.getLogger().addHandler(handler)
-
-        with file(os.path.join(ctx.archive, 'pid'), 'w') as f:
-            f.write('%d' % os.getpid())
-
-        with file(os.path.join(ctx.archive, 'owner'), 'w') as f:
-            f.write(ctx.owner + '\n')
-
-        with file(os.path.join(ctx.archive, 'orig.config.yaml'), 'w') as f:
-            yaml.safe_dump(ctx.config, f, default_flow_style=False)
 
     for task in ctx.config['tasks']:
         assert 'kernel' not in task, \
