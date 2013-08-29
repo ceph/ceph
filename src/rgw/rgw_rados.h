@@ -801,6 +801,7 @@ class RGWRados
   uint64_t *watch_handles;
   librados::IoCtx root_pool_ctx;      // .rgw
   librados::IoCtx control_pool_ctx;   // .rgw.control
+  bool watch_initialized;
 
   Mutex bucket_id_lock;
   uint64_t max_bucket_id;
@@ -864,6 +865,7 @@ public:
   RGWRados() : lock("rados_timer_lock"), timer(NULL),
                gc(NULL), use_gc_thread(false),
                num_watchers(0), watchers(NULL), watch_handles(NULL),
+               watch_initialized(false),
                bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
                cct(NULL), rados(NULL),
                pools_initialized(false),
