@@ -161,3 +161,39 @@ bool ErasureCodeJerasure::is_prime(int value) {
   return false;
 }
 
+// 
+// ErasureCodeJerasureReedSolomonVandermonde
+//
+void ErasureCodeJerasureReedSolomonVandermonde::jerasure_encode(char **data,
+                                                                char **coding,
+                                                                int blocksize) {
+  jerasure_matrix_encode(k, m, w, matrix, data, coding, blocksize);
+}
+
+int ErasureCodeJerasureReedSolomonVandermonde::jerasure_decode(int *erasures,
+                                                                char **data,
+                                                                char **coding,
+                                                                int blocksize) {
+  return jerasure_matrix_decode(k, m, w, matrix, 1, erasures, data, coding, blocksize);
+}
+
+unsigned ErasureCodeJerasureReedSolomonVandermonde::pad_in_length(unsigned in_length) {
+  while (in_length%(k*w*sizeof(int)) != 0) 
+    in_length++;
+  return in_length;
+}
+
+void ErasureCodeJerasureReedSolomonVandermonde::parse(const map<std::string,std::string> &parameters) {
+  k = to_int("erasure-code-k", parameters, DEFAULT_K);
+  m = to_int("erasure-code-m", parameters, DEFAULT_M);
+  w = to_int("erasure-code-w", parameters, DEFAULT_W);
+  if (w != 8 && w != 16 && w != 32) {
+    derr << "ReedSolomonVandermonde: w=" << w << " must be one of {8, 16, 32} : revert to 8 " << dendl;
+    w = 8;
+  }
+}
+
+void ErasureCodeJerasureReedSolomonVandermonde::prepare() {
+  matrix = reed_sol_vandermonde_coding_matrix(k, m, w);
+}
+

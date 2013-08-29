@@ -65,4 +65,31 @@ public:
   static bool is_prime(int value);
 };
 
+class ErasureCodeJerasureReedSolomonVandermonde : public ErasureCodeJerasure {
+public:
+  static const int DEFAULT_K = 7;
+  static const int DEFAULT_M = 3;
+  static const int DEFAULT_W = 8;
+  int *matrix;
+
+  ErasureCodeJerasureReedSolomonVandermonde() :
+    ErasureCodeJerasure("reed_sol_van"),
+    matrix(0)
+  { }
+  virtual ~ErasureCodeJerasureReedSolomonVandermonde() {
+    if (matrix)
+      free(matrix);
+  }
+
+  virtual void jerasure_encode(char **data,
+                               char **coding,
+                               int blocksize);
+  virtual int jerasure_decode(int *erasures,
+                               char **data,
+                               char **coding,
+                               int blocksize);
+  virtual unsigned pad_in_length(unsigned in_length);
+  virtual void parse(const map<std::string,std::string> &parameters);
+  virtual void prepare();
+};
 #endif
