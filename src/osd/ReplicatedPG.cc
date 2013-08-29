@@ -4714,9 +4714,6 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
 
 void ReplicatedPG::object_context_destructor_callback(ObjectContext *obc)
 {
-  dout(10) << "object_context_destructor_callback " << obc << " "
-	   << obc->obs.oi.soid << dendl;
-
   if (obc->ssc)
     put_snapset_context(obc->ssc);
 }
