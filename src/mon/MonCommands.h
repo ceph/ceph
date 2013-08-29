@@ -529,6 +529,14 @@ COMMAND("osd tier cache-mode " \
 	"name=pool,type=CephPoolname " \
 	"name=mode,type=CephChoices,strings=none|writeback|invalidate+forward|readonly", \
 	"specify the caching mode for cache tier <pool>", "osd", "rw", "cli,rest")
+COMMAND("osd tier set-overlay " \
+	"name=pool,type=CephPoolname " \
+	"name=overlaypool,type=CephPoolname", \
+	"set the overlay pool for base pool <pool> to be <overlaypool>", "osd", "rw", "cli,rest")
+COMMAND("osd tier remove-overlay " \
+	"name=pool,type=CephPoolname ", \
+	"remove the overlay pool for base pool <pool>", "osd", "rw", "cli,rest")
+
 /*
  * mon/ConfigKeyService.cc
  */

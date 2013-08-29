@@ -56,8 +56,17 @@ expect_false ceph osd tier add metadata cache
 ceph osd tier cache-mode cache writeback
 ceph osd tier cache-mode cache readonly
 ceph osd tier cache-mode cache none
+ceph osd tier set-overlay data cache
+expect_false ceph osd tier set-overlay data cache2
+expect_false ceph osd tier remove data cache
+ceph osd tier remove-overlay data
+ceph osd tier set-overlay data cache2
+ceph osd tier remove-overlay data
 ceph osd tier remove data cache
 ceph osd tier add metadata cache
+expect_false ceph osd tier set-overlay data cache
+ceph osd tier set-overlay metadata cache
+ceph osd tier remove-overlay metadata
 ceph osd tier remove metadata cache
 ceph osd tier remove data cache2
 ceph osd pool delete cache cache --yes-i-really-really-mean-it
