@@ -1297,7 +1297,16 @@ int Objecter::recalc_op_target(Op *op)
 {
   vector<int> acting;
   pg_t pgid = op->pgid;
+
+  bool is_read = op->flags & CEPH_OSD_FLAG_READ;
+  bool is_write = op->flags & CEPH_OSD_FLAG_WRITE;
+
   op->target_oloc = op->base_oloc;
+  if (is_read && osdmap->get_pg_pool(op->base_oloc.pool)->has_read_tier())
+    op->target_oloc.pool = osdmap->get_pg_pool(op->base_oloc.pool)->read_tier;
+  if (is_write && osdmap->get_pg_pool(op->base_oloc.pool)->has_write_tier())
+    op->target_oloc.pool = osdmap->get_pg_pool(op->base_oloc.pool)->write_tier;
+
   if (op->precalc_pgid) {
     assert(op->oid.name.empty()); // make sure this is a listing op
     ldout(cct, 10) << "recalc_op_target have " << pgid << " pool " << osdmap->have_pg_pool(pgid.pool()) << dendl;
@@ -1320,7 +1329,7 @@ int Objecter::recalc_op_target(Op *op)
     op->used_replica = false;
     if (!acting.empty()) {
       int osd;
-      bool read = (op->flags & CEPH_OSD_FLAG_READ) && (op->flags & CEPH_OSD_FLAG_WRITE) == 0;
+      bool read = is_read && !is_write;
       if (read && (op->flags & CEPH_OSD_FLAG_BALANCE_READS)) {
 	int p = rand() % acting.size();
 	if (p)
