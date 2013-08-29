@@ -125,6 +125,9 @@ def main():
         with file(os.path.join(ctx.archive, 'orig.config.yaml'), 'w') as f:
             yaml.safe_dump(ctx.config, f, default_flow_style=False)
 
+    log.debug('test')
+    raise RuntimeError('hi there')
+
     if 'targets' in ctx.config and 'roles' in ctx.config:
         targets = len(ctx.config['targets'])
         roles = len(ctx.config['roles'])
