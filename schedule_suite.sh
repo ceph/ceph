@@ -118,12 +118,14 @@ fi
 
 ##
 stamp=`date +%Y-%m-%d_%H:%M:%S`
-name=`whoami`"-$stamp-$suite-$ceph-$kernel-$flavor-$mtype"
+nicesuite=`echo $suite | sed 's/\//:/g'`
+name=`whoami`"-$stamp-$nicesuite-$ceph-$kernel-$flavor-$mtype"
 
 echo "name $name"
 
 ./virtualenv/bin/teuthology-suite -v $fn \
-    --collections ~/src/ceph-qa-suite/suites/$suite/* \
+    --base ~/src/ceph-qa-suite/suites \
+    --collections $suite \
     --email $email \
     --timeout 36000 \
     --name $name \
