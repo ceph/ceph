@@ -4,6 +4,9 @@ import yaml
 import StringIO
 import contextlib
 import logging
+import sys
+from traceback import format_tb
+
 
 def config_file(string):
     config = {}
@@ -102,6 +105,17 @@ def set_up_logging(ctx):
         )
         handler.setFormatter(formatter)
         logging.getLogger().addHandler(handler)
+
+    install_except_hook()
+
+
+def install_except_hook():
+    def log_exception(exception_class, exception, traceback):
+        logging.critical(''.join(format_tb(traceback)))
+        logging.critical('{0}: {1}'.format(exception_class, exception))
+
+    sys.excepthook = log_exception
+
 
 def write_initial_metadata(ctx):
     if ctx.archive is not None:
