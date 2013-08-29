@@ -495,7 +495,7 @@ email_templates = {
     'fail_log_templ': "\nlog:    {log}",
     'fail_sentry_templ': "\nsentry: {sentries}",
     'hung_templ': dedent("""\
-        [{job_id}]
+        [{job_id}] {desc}
         """),
     'pass_templ': dedent("""\
         [{job_id}] {desc}
@@ -517,7 +517,18 @@ def build_email_body(name, archive_dir, timeout):
 
         # Unfinished jobs will have no summary.yaml
         if not os.path.exists(summary_file):
-            hung[job] = email_templates['hung_templ'].format(job_id=job)
+            info_file = os.path.join(job_dir, 'info.yaml')
+
+            desc = ''
+            if os.path.exists(info_file):
+                with file(info_file) as f:
+                    info = yaml.safe_load(f)
+                    desc = info['description']
+
+            hung[job] = email_templates['hung_templ'].format(
+                job_id=job,
+                desc=desc,
+            )
             continue
 
         with file(summary_file) as f:
