@@ -201,32 +201,29 @@ def run_job(job_config, archive_path, teuth_bin_path):
         arg.append('-v')
 
     arg.extend([
-            '--lock',
-            '--block',
-            '--owner', job_config['owner'],
-            '--archive', archive_path,
-            '--name', job_config['name'],
-            ])
+        '--lock',
+        '--block',
+        '--owner', job_config['owner'],
+        '--archive', archive_path,
+        '--name', job_config['name'],
+    ])
     if job_config['description'] is not None:
         arg.extend(['--description', job_config['description']])
     arg.append('--')
 
-    with tempfile.NamedTemporaryFile(
-        prefix='teuthology-worker.',
-        suffix='.tmp',
-        ) as tmp:
+    with tempfile.NamedTemporaryFile(prefix='teuthology-worker.',
+                                     suffix='.tmp',) as tmp:
         yaml.safe_dump(data=job_config['config'], stream=tmp)
         tmp.flush()
         arg.append(tmp.name)
         p = subprocess.Popen(
             args=arg,
             close_fds=True,
-            stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            )
+        )
         child = logging.getLogger(__name__ + '.child')
-        for line in p.stdout:
-            child.info(': %s', line.rstrip('\n'))
+        for line in p.stderr:
+            child.error(': %s', line.rstrip('\n'))
         p.wait()
         if p.returncode != 0:
             log.error('Child exited with code %d', p.returncode)
