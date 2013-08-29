@@ -260,6 +260,7 @@ def build_matrix(path):
                 raw = build_matrix(os.path.join(path, fn))
                 out.extend([(combine_path(fn, item[0]), item[1]) for item in raw])
             return out
+    return []
 
 def ls():
     parser = argparse.ArgumentParser(description='List teuthology job results')
