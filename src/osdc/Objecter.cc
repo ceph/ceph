@@ -1243,7 +1243,7 @@ tid_t Objecter::_op_submit(Op *op)
 
   // send?
   ldout(cct, 10) << "op_submit oid " << op->oid
-           << " " << op->base_oloc 
+           << " " << op->base_oloc << " " << op->target_oloc
 	   << " " << op->ops << " tid " << op->tid
            << " osd." << (op->session ? op->session->osd : -1)
            << dendl;
@@ -1297,12 +1297,13 @@ int Objecter::recalc_op_target(Op *op)
 {
   vector<int> acting;
   pg_t pgid = op->pgid;
+  op->target_oloc = op->base_oloc;
   if (op->precalc_pgid) {
     ldout(cct, 10) << "recalc_op_target have " << pgid << " pool " << osdmap->have_pg_pool(pgid.pool()) << dendl;
     if (!osdmap->have_pg_pool(pgid.pool()))
       return RECALC_OP_TARGET_POOL_DNE;
   } else {
-    int ret = osdmap->object_locator_to_pg(op->oid, op->base_oloc, pgid);
+    int ret = osdmap->object_locator_to_pg(op->oid, op->target_oloc, pgid);
     if (ret == -ENOENT)
       return RECALC_OP_TARGET_POOL_DNE;
   }
@@ -1444,7 +1445,7 @@ void Objecter::send_op(Op *op)
   op->stamp = ceph_clock_now(cct);
 
   MOSDOp *m = new MOSDOp(client_inc, op->tid, 
-			 op->oid, op->base_oloc, op->pgid, osdmap->get_epoch(),
+			 op->oid, op->target_oloc, op->pgid, osdmap->get_epoch(),
 			 flags);
 
   m->set_snapid(op->snapid);
@@ -2211,6 +2212,7 @@ void Objecter::dump_ops(Formatter *fmt) const
     fmt->dump_int("attempts", op->attempts);
     fmt->dump_stream("object_id") << op->oid;
     fmt->dump_stream("object_locator") << op->base_oloc;
+    fmt->dump_stream("target_object_locator") << op->target_oloc;
     fmt->dump_stream("snapid") << op->snapid;
     fmt->dump_stream("snap_context") << op->snapc;
     fmt->dump_stream("mtime") << op->mtime;
