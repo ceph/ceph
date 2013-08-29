@@ -31,6 +31,7 @@ typedef ::testing::Types<
   ErasureCodeJerasureCauchyOrig,
   ErasureCodeJerasureCauchyGood,
   ErasureCodeJerasureLiberation,
+  ErasureCodeJerasureBlaumRoth,
 > JerasureTypes;
 TYPED_TEST_CASE(ErasureCodeTest, JerasureTypes);
 

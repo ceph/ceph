@@ -349,3 +349,11 @@ void ErasureCodeJerasureLiberation::prepare() {
   bitmatrix = liberation_coding_bitmatrix(k, w);
   schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
 }
+
+// 
+// ErasureCodeJerasureBlaumRoth
+//
+void ErasureCodeJerasureBlaumRoth::prepare() {
+  bitmatrix = blaum_roth_coding_bitmatrix(k, w);
+  schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
+}

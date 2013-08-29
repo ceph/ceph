@@ -200,4 +200,13 @@ public:
   virtual void parse(const map<std::string,std::string> &parameters);
   virtual void prepare();
 };
+
+class ErasureCodeJerasureBlaumRoth : public ErasureCodeJerasureLiberation {
+public:
+  ErasureCodeJerasureBlaumRoth() :
+    ErasureCodeJerasureLiberation("blaum_roth")
+  {}
+
+  virtual void prepare();
+};
 #endif
