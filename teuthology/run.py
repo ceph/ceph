@@ -130,6 +130,14 @@ def main():
         ctx.owner = get_user()
 
     write_initial_metadata(ctx)
+    if ctx.archive is not None:
+        info = {}
+        info['pid'] = os.getpid();
+        info['description'] = ctx.description;
+        info['run'] = ctx.name;
+        info['owner'] = ctx.owner;
+        with file(os.path.join(ctx.archive, 'info.yaml'), 'w') as f:
+            yaml.safe_dump(info, f, default_flow_style=False)
 
     log.debug('test')
     raise RuntimeError('hi there')
