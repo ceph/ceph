@@ -1486,18 +1486,16 @@ void RGWOptionsCORS_ObjStore_S3::send_response()
   uint32_t max_age = CORS_MAX_AGE_INVALID;
   /*EACCES means, there is no CORS registered yet for the bucket
    *ENOENT means, there is no match of the Origin in the list of CORSRule
-   *ENOTSUPP means, the HTTP_METHOD is not supported
    */
   if (ret == -ENOENT)
     ret = -EACCES;
-  if (ret != -EACCES) {
-    get_response_params(hdrs, exp_hdrs, &max_age);
-  } else {
+  if (ret < 0) {
     set_req_state_err(s, ret);
     dump_errno(s);
     end_header(s, NULL);
     return;
   }
+  get_response_params(hdrs, exp_hdrs, &max_age);
 
   dump_errno(s);
   dump_access_control(s, origin, req_meth, hdrs.c_str(), exp_hdrs.c_str(), max_age); 

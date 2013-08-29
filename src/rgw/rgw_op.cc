@@ -2043,7 +2043,7 @@ int RGWOptionsCORS::validate_cors_request(RGWCORSConfiguration *cc) {
   }
 
   if (!validate_cors_rule_method(rule, req_meth)) {
-    return -ENOTSUP;
+    return -ENOENT;
   }
   return 0;
 }
@@ -2059,12 +2059,7 @@ void RGWOptionsCORS::execute()
     dout(0) << 
     "Preflight request without mandatory Origin header"
     << dendl;
-    ret = -EACCES;
-    return;
-  }
-  if (!cors_exist) {
-    dout(2) << "No CORS configuration set yet for this bucket" << dendl;
-    ret = -ENOENT;
+    ret = -EINVAL;
     return;
   }
   req_meth = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
@@ -2072,7 +2067,12 @@ void RGWOptionsCORS::execute()
     dout(0) << 
     "Preflight request without mandatory Access-control-request-method header"
     << dendl;
-    ret = -EACCES;
+    ret = -EINVAL;
+    return;
+  }
+  if (!cors_exist) {
+    dout(2) << "No CORS configuration set yet for this bucket" << dendl;
+    ret = -ENOENT;
     return;
   }
   req_hdrs = s->info.env->get("HTTP_ACCESS_CONTROL_ALLOW_HEADERS");
