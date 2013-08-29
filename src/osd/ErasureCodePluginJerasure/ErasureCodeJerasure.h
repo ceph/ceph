@@ -171,4 +171,33 @@ public:
 
   virtual void prepare();
 };
+
+class ErasureCodeJerasureLiberation : public ErasureCodeJerasure {
+public:
+  static const int DEFAULT_K = 2;
+  static const int DEFAULT_M = 2;
+  static const int DEFAULT_W = 7;
+  static const int DEFAULT_PACKETSIZE = 8;
+  int *bitmatrix;
+  int **schedule;
+  int packetsize;
+
+  ErasureCodeJerasureLiberation(const char *technique = "liberation") :
+    ErasureCodeJerasure(technique),
+    bitmatrix(0),
+    schedule(0)
+  { }
+  virtual ~ErasureCodeJerasureLiberation();
+
+  virtual void jerasure_encode(char **data,
+                               char **coding,
+                               int blocksize);
+  virtual int jerasure_decode(int *erasures,
+                               char **data,
+                               char **coding,
+                               int blocksize);
+  virtual unsigned pad_in_length(unsigned in_length);
+  virtual void parse(const map<std::string,std::string> &parameters);
+  virtual void prepare();
+};
 #endif

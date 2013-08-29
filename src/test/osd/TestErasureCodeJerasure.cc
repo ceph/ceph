@@ -30,6 +30,7 @@ typedef ::testing::Types<
   ErasureCodeJerasureReedSolomonRAID6,
   ErasureCodeJerasureCauchyOrig,
   ErasureCodeJerasureCauchyGood,
+  ErasureCodeJerasureLiberation,
 > JerasureTypes;
 TYPED_TEST_CASE(ErasureCodeTest, JerasureTypes);
 
