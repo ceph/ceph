@@ -92,4 +92,31 @@ public:
   virtual void parse(const map<std::string,std::string> &parameters);
   virtual void prepare();
 };
+
+class ErasureCodeJerasureReedSolomonRAID6 : public ErasureCodeJerasure {
+public:
+  static const int DEFAULT_K = 7;
+  static const int DEFAULT_W = 8;
+  int *matrix;
+
+  ErasureCodeJerasureReedSolomonRAID6() :
+    ErasureCodeJerasure("reed_sol_r6_op"),
+    matrix(0)
+  { }
+  virtual ~ErasureCodeJerasureReedSolomonRAID6() {
+    if (matrix)
+      free(matrix);
+  }
+
+  virtual void jerasure_encode(char **data,
+                               char **coding,
+                               int blocksize);
+  virtual int jerasure_decode(int *erasures,
+                               char **data,
+                               char **coding,
+                               int blocksize);
+  virtual unsigned pad_in_length(unsigned in_length);
+  virtual void parse(const map<std::string,std::string> &parameters);
+  virtual void prepare();
+};
 #endif
