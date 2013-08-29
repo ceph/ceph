@@ -197,3 +197,38 @@ void ErasureCodeJerasureReedSolomonVandermonde::prepare() {
   matrix = reed_sol_vandermonde_coding_matrix(k, m, w);
 }
 
+// 
+// ErasureCodeJerasureReedSolomonRAID6
+//
+void ErasureCodeJerasureReedSolomonRAID6::jerasure_encode(char **data,
+                                                                char **coding,
+                                                                int blocksize) {
+  reed_sol_r6_encode(k, w, data, coding, blocksize);
+}
+
+int ErasureCodeJerasureReedSolomonRAID6::jerasure_decode(int *erasures,
+                                                                char **data,
+                                                                char **coding,
+                                                                int blocksize) {
+  return jerasure_matrix_decode(k, m, w, matrix, 1, erasures, data, coding, blocksize);
+}
+
+unsigned ErasureCodeJerasureReedSolomonRAID6::pad_in_length(unsigned in_length) {
+  while (in_length%(k*w*sizeof(int)) != 0) 
+    in_length++;
+  return in_length;
+}
+
+void ErasureCodeJerasureReedSolomonRAID6::parse(const map<std::string,std::string> &parameters) {
+  k = to_int("erasure-code-k", parameters, DEFAULT_K);
+  m = 2;
+  w = to_int("erasure-code-w", parameters, DEFAULT_W);
+  if (w != 8 && w != 16 && w != 32) {
+    derr << "ReedSolomonRAID6: w=" << w << " must be one of {8, 16, 32} : revert to 8 " << dendl;
+    w = 8;
+  }
+}
+
+void ErasureCodeJerasureReedSolomonRAID6::prepare() {
+  matrix = reed_sol_r6_coding_matrix(k, w);
+}
