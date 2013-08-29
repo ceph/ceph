@@ -1306,13 +1306,17 @@ class RollbackOp : public TestOp {
 public:
   string oid;
   int roll_back_to;
+  bool done;
+  librados::ObjectWriteOperation op;
+  librados::AioCompletion *comp;
+
   RollbackOp(RadosTestContext *context,
 	     const string &_oid,
 	     int snap,
 	     TestOpStat *stat = 0) :
     TestOp(context, stat),
     oid(_oid),
-    roll_back_to(snap)
+    roll_back_to(snap), done(false)
   {}
 
   void _begin()
@@ -1338,19 +1342,33 @@ public:
     context->state_lock.Unlock();
     assert(!context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset));
 
-	
-    int r = context->io_ctx.selfmanaged_snap_rollback(context->prefix+oid, 
-						      snap);
-    if (r) {
-      cerr << "r is " << r << std::endl;
+    op.selfmanaged_snap_rollback(snap);
+
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    comp = context->rados.aio_create_completion((void*) cb_arg, &write_callback,
+						NULL);
+    context->io_ctx.aio_operate(context->prefix+oid, comp, &op);
+  }
+
+  void _finish(CallbackInfo *info)
+  {
+    Mutex::Locker l(context->state_lock);
+    int r;
+    if ((r = comp->get_return_value())) {
+      cerr << "err " << r << std::endl;
       assert(0);
     }
+    done = true;
+    context->update_object_version(oid, comp->get_version());
+    context->oid_in_use.erase(oid);
+    context->oid_not_in_use.insert(oid);
+  }
 
-    {
-      Mutex::Locker l(context->state_lock);
-      context->oid_in_use.erase(oid);
-      context->oid_not_in_use.insert(oid);
-    }
+  bool finished()
+  {
+    return done;
   }
 
   string getType()
