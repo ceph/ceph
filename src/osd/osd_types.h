@@ -805,6 +805,7 @@ public:
 
   set<uint64_t> tiers;      ///< pools that are tiers of us
   int64_t tier_of;         ///< pool for which we are a tier
+  // Note that write wins for read+write ops
   int64_t read_tier;       ///< pool/tier for objecter to direct reads to
   int64_t write_tier;      ///< pool/tier for objecter to direct writes to
   cache_mode_t cache_mode;  ///< cache pool mode
