@@ -18,3 +18,11 @@ v0.68
   unlikely to notice but it could result in lower performance in some
   circumstances. Those who care should switch to using the async interfaces,
   which let you specify safety semantics precisely.
+
+* The C++ librados AioComplete::get_version() method was incorrectly
+  returning an int (usually 32-bits).  To avoid breaking library
+  compatibility, a get_version64() method is added that returns the
+  full-width value.  The old method is deprecated and will be removed
+  in a future release.  Users of the C++ librados API that make use of
+  the get_version() method should modify their code to avoid getting a
+  value that is truncated from 64 to to 32 bits.
