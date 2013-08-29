@@ -3668,10 +3668,79 @@ done:
       err = -EINVAL;
       goto reply;
     }
+    if (p->read_tier == tierpool_id) {
+      ss << "tier pool '" << tierpoolstr << "' is the overlay for '" << poolstr << "'; please remove-overlay first";
+      err = -EBUSY;
+      goto reply;
+    }
     // go
     pending_inc.get_new_pool(pool_id, p)->tiers.erase(tierpool_id);
     pending_inc.get_new_pool(tierpool_id, tp)->clear_tier();
     ss << "pool '" << tierpoolstr << "' is now (or already was) not a tier of '" << poolstr << "'";
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(), get_last_committed()));
+    return true;
+  } else if (prefix == "osd tier set-overlay") {
+    string poolstr;
+    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
+    if (pool_id < 0) {
+      ss << "unrecognized pool '" << poolstr << "'";
+      err = -ENOENT;
+      goto reply;
+    }
+    string overlaypoolstr;
+    cmd_getval(g_ceph_context, cmdmap, "overlaypool", overlaypoolstr);
+    int64_t overlaypool_id = osdmap.lookup_pg_pool_name(overlaypoolstr);
+    if (overlaypool_id < 0) {
+      ss << "unrecognized pool '" << overlaypoolstr << "'";
+      err = -ENOENT;
+      goto reply;
+    }
+    const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
+    assert(p);
+    if (p->tiers.count(overlaypool_id) == 0) {
+      ss << "tier pool '" << overlaypoolstr << "' is not a tier of '" << poolstr << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    if (p->read_tier == overlaypool_id) {
+      err = 0;
+      ss << "overlay for '" << poolstr << "' is now (or already was) '" << overlaypoolstr << "'";
+      goto reply;
+    }
+    if (p->has_read_tier()) {
+      ss << "pool '" << poolstr << "' has overlay '"
+	 << osdmap.get_pool_name(p->read_tier)
+	 << "'; please remove-overlay first";
+      err = -EINVAL;
+      goto reply;
+    }
+    // go
+    pending_inc.get_new_pool(pool_id, p)->read_tier = overlaypool_id;
+    pending_inc.get_new_pool(pool_id, p)->write_tier = overlaypool_id;
+    ss << "overlay for '" << poolstr << "' is now (or already was) '" << overlaypoolstr << "'";
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(), get_last_committed()));
+    return true;
+  } else if (prefix == "osd tier remove-overlay") {
+    string poolstr;
+    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
+    if (pool_id < 0) {
+      ss << "unrecognized pool '" << poolstr << "'";
+      err = -ENOENT;
+      goto reply;
+    }
+    const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
+    assert(p);
+    if (!p->has_read_tier()) {
+      err = 0;
+      ss << "there is now (or already was) no overlay for '" << poolstr << "'";
+      goto reply;
+    }
+    // go
+    pending_inc.get_new_pool(pool_id, p)->clear_read_tier();
+    pending_inc.get_new_pool(pool_id, p)->clear_write_tier();
+    ss << "there is now (or already was) no overlay for '" << poolstr << "'";
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(), get_last_committed()));
     return true;
   } else if (prefix == "osd tier cache-mode") {
