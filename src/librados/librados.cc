@@ -592,6 +592,12 @@ int librados::AioCompletion::AioCompletion::get_version()
   return c->get_version();
 }
 
+uint64_t librados::AioCompletion::AioCompletion::get_version64()
+{
+  AioCompletionImpl *c = (AioCompletionImpl *)pc;
+  return c->get_version();
+}
+
 void librados::AioCompletion::AioCompletion::release()
 {
   AioCompletionImpl *c = (AioCompletionImpl *)pc;
