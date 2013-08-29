@@ -875,14 +875,6 @@ int RGWRados::init_complete()
 {
   int ret;
 
-  if (need_watch_notify()) {
-    ret = init_watch();
-    if (ret < 0) {
-      lderr(cct) << "ERROR: failed to initialize watch" << dendl;
-      return ret;
-    }
-  }
-
   ret = region.init(cct, this);
   if (ret < 0)
     return ret;
@@ -917,6 +909,14 @@ int RGWRados::init_complete()
       RGWRegion& region = iter->second;
 
       region_conn_map[region.name] = new RGWRESTConn(cct, this, region.endpoints);
+    }
+  }
+
+  if (need_watch_notify()) {
+    ret = init_watch();
+    if (ret < 0) {
+      lderr(cct) << "ERROR: failed to initialize watch" << dendl;
+      return ret;
     }
   }
 
@@ -1108,6 +1108,8 @@ int RGWRados::init_watch()
     if (r < 0)
       return r;
   }
+
+  watch_initialized = true;
 
   return 0;
 }
@@ -4903,6 +4905,14 @@ int RGWRados::append_async(rgw_obj& obj, size_t size, bufferlist& bl)
 
 int RGWRados::distribute(const string& key, bufferlist& bl)
 {
+  /*
+   * we were called before watch was initialized. This can only happen if we're updating some system
+   * config object (e.g., zone info) during init. Don't try to distribute the cache info for these
+   * objects, they're currently only read on startup anyway.
+   */
+  if (!watch_initialized)
+    return 0;
+
   string notify_oid;
   pick_control_oid(key, notify_oid);
 
