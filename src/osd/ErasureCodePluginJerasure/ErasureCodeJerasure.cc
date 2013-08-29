@@ -357,3 +357,33 @@ void ErasureCodeJerasureBlaumRoth::prepare() {
   bitmatrix = blaum_roth_coding_bitmatrix(k, w);
   schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
 }
+
+// 
+// ErasureCodeJerasureLiber8tion
+//
+void ErasureCodeJerasureLiber8tion::parse(const map<std::string,std::string> &parameters) {
+  k = to_int("erasure-code-k", parameters, DEFAULT_K);
+  m = DEFAULT_M;
+  w = DEFAULT_W;
+  packetsize = to_int("erasure-code-packetsize", parameters, DEFAULT_PACKETSIZE);
+
+  bool error = false;
+  if (k > w) {
+    derr << "k=" << k << " must be less than or equal to w=" << w << dendl;
+    error = true;
+  }
+  if (packetsize == 0) {
+    derr << "packetsize=" << packetsize << " must be set" << dendl;
+    error = true;
+  }
+  if (error) {
+    derr << "reverting to k=" << DEFAULT_K << ", packetsize=" << DEFAULT_PACKETSIZE << dendl;
+    k = DEFAULT_K;
+    packetsize = DEFAULT_PACKETSIZE;
+  }
+}
+
+void ErasureCodeJerasureLiber8tion::prepare() {
+  bitmatrix = liber8tion_coding_bitmatrix(k);
+  schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
+}
