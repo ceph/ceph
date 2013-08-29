@@ -112,7 +112,10 @@ def set_up_logging(ctx):
 def install_except_hook():
     def log_exception(exception_class, exception, traceback):
         logging.critical(''.join(format_tb(traceback)))
-        logging.critical('{0}: {1}'.format(exception_class, exception))
+        if not exception.message:
+            logging.critical(exception_class.__name__)
+            return
+        logging.critical('{0}: {1}'.format(exception_class.__name__, exception))
 
     sys.excepthook = log_exception
 
@@ -153,9 +156,6 @@ def main():
         ctx.owner = get_user()
 
     write_initial_metadata(ctx)
-
-    log.debug('test')
-    raise RuntimeError('hi there')
 
     if 'targets' in ctx.config and 'roles' in ctx.config:
         targets = len(ctx.config['targets'])
