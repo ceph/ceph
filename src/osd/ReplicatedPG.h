@@ -903,6 +903,9 @@ public:
   int do_command(cmdmap_t cmdmap, ostream& ss, bufferlist& idata,
 		 bufferlist& odata);
 
+  void do_request(
+    OpRequestRef op,
+    ThreadPool::TPHandle &handle);
   void do_op(OpRequestRef op);
   bool pg_op_must_wait(MOSDOp *op);
   void do_pg_op(OpRequestRef op);
