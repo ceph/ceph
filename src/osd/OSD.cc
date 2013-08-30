@@ -3402,16 +3402,16 @@ void OSD::RemoveWQ::_process(pair<PGRef, DeletingStateRef> item)
   if (!item.second->start_clearing())
     return;
 
-  if (pg->have_temp_coll()) {
+  list<coll_t> colls_to_remove;
+  pg->get_colls(&colls_to_remove);
+  for (list<coll_t>::iterator i = colls_to_remove.begin();
+       i != colls_to_remove.end();
+       ++i) {
     bool cont = remove_dir(
-      pg->cct, store, &mapper, &driver, pg->osr.get(), pg->get_temp_coll(), item.second);
+      pg->cct, store, &mapper, &driver, pg->osr.get(), *i, item.second);
     if (!cont)
       return;
   }
-  bool cont = remove_dir(
-      pg->cct, store, &mapper, &driver, pg->osr.get(), coll, item.second);
-  if (!cont)
-    return;
 
   if (!item.second->start_deleting())
     return;
@@ -3422,9 +3422,12 @@ void OSD::RemoveWQ::_process(pair<PGRef, DeletingStateRef> item)
     OSD::make_infos_oid(),
     pg->log_oid,
     t);
-  if (pg->have_temp_coll())
-    t->remove_collection(pg->get_temp_coll());
-  t->remove_collection(coll);
+
+  for (list<coll_t>::iterator i = colls_to_remove.begin();
+       i != colls_to_remove.end();
+       ++i) {
+    t->remove_collection(*i);
+  }
 
   // We need the sequencer to stick around until the op is complete
   store->queue_transaction(
@@ -5879,22 +5882,11 @@ void OSD::split_pgs(
     dout(10) << "m_seed " << i->ps() << dendl;
     dout(10) << "split_bits is " << split_bits << dendl;
 
-    rctx->transaction->create_collection(
-      coll_t(*i));
-    rctx->transaction->split_collection(
-      coll_t(parent->info.pgid),
+    parent->split_colls(
+      *i,
       split_bits,
       i->m_seed,
-      coll_t(*i));
-    if (parent->have_temp_coll()) {
-      rctx->transaction->create_collection(
-	coll_t::make_temp_coll(*i));
-      rctx->transaction->split_collection(
-	coll_t::make_temp_coll(parent->info.pgid),
-	split_bits,
-	i->m_seed,
-	coll_t::make_temp_coll(*i));
-    }
+      rctx->transaction);
     parent->split_into(
       *i,
       child,
