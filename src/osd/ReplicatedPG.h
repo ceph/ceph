@@ -813,18 +813,6 @@ protected:
       pg->_committed_pushed_object(epoch, last_complete);
     }
   };
-  struct C_OSD_SendMessageOnConn: public Context {
-    OSDService *osd;
-    Message *reply;
-    ConnectionRef conn;
-    C_OSD_SendMessageOnConn(
-      OSDService *osd,
-      Message *reply,
-      ConnectionRef conn) : osd(osd), reply(reply), conn(conn) {}
-    void finish(int) {
-      osd->send_message_osd_cluster(reply, conn.get());
-    }
-  };
   struct C_OSD_CompletedPull : public Context {
     ReplicatedPGRef pg;
     hobject_t hoid;
@@ -862,7 +850,6 @@ protected:
   void _applied_recovered_object_replica();
   void _committed_pushed_object(epoch_t epoch, eversion_t lc);
   void recover_got(hobject_t oid, eversion_t v);
-  void sub_op_push(OpRequestRef op);
   void _failed_push(int from, const hobject_t &soid);
   void sub_op_push_reply(OpRequestRef op);
   bool handle_push_reply(int peer, PushReplyOp &op, PushOp *reply);
