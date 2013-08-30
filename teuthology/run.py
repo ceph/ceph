@@ -3,7 +3,6 @@ import os
 import yaml
 import StringIO
 import contextlib
-import logging
 import sys
 from traceback import format_tb
 
@@ -88,6 +87,8 @@ def parse_args():
 
 
 def set_up_logging(ctx):
+    import logging
+
     loglevel = logging.INFO
     if ctx.verbose:
         loglevel = logging.DEBUG
@@ -111,6 +112,8 @@ def set_up_logging(ctx):
 
 def install_except_hook():
     def log_exception(exception_class, exception, traceback):
+        import logging
+
         logging.critical(''.join(format_tb(traceback)))
         if not exception.message:
             logging.critical(exception_class.__name__)
@@ -146,6 +149,7 @@ def main():
     monkey.patch_all(dns=False)
     from .orchestra import monkey
     monkey.patch_all()
+    import logging
 
     ctx = parse_args()
     set_up_logging(ctx)
