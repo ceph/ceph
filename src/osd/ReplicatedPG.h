@@ -130,19 +130,23 @@ public:
   /// Listener methods
   void on_local_recover_start(
     const hobject_t &oid,
-    ObjectStore::Transaction *t) {}
+    ObjectStore::Transaction *t);
   void on_local_recover(
     const hobject_t &oid,
     const object_stat_sum_t &stat_diff,
     const ObjectRecoveryInfo &recovery_info,
+    ObjectContextRef obc,
     ObjectStore::Transaction *t
-    ) {}
+    );
   void on_peer_recover(
     int peer,
     const hobject_t &oid,
-    const ObjectRecoveryInfo &recovery_info) {}
+    const ObjectRecoveryInfo &recovery_info);
+  void begin_peer_recover(
+    int peer,
+    const hobject_t oid);
   void on_global_recover(
-    const hobject_t &oid) {}
+    const hobject_t &oid);
   void failed_push(int from, const hobject_t &soid);
 
   template <typename T>
@@ -206,6 +210,9 @@ public:
   }
   const map<int, pg_missing_t> &get_peer_missing() {
     return peer_missing;
+  }
+  const map<int, pg_info_t> &get_peer_info() {
+    return peer_info;
   }
   const pg_missing_t &get_local_missing() {
     return pg_log.get_missing();

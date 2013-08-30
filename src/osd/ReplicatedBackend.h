@@ -22,7 +22,6 @@
 class ReplicatedBackend : public PGBackend {
   struct RPGHandle : public PGBackend::RecoveryHandle {
     map<int, vector<PushOp> > pushes;
-    map<int, vector<PushReplyOp> > push_replies;
     map<int, vector<PullOp> > pulls;
   };
 private:
