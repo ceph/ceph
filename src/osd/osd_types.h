@@ -45,6 +45,7 @@
 
 typedef hobject_t collection_list_handle_t;
 
+typedef uint8_t shard_id_t;
 
 /**
  * osd request identifier

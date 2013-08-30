@@ -628,6 +628,7 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
 			   const PGPool &_pool, pg_t p, const hobject_t& oid,
 			   const hobject_t& ioid) :
   PG(o, curmap, _pool, p, oid, ioid),
+  pgbackend(new ReplicatedBackend(this, coll_t(p), o)),
   snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
   temp_created(false),
   temp_coll(coll_t::make_temp_coll(p)),
@@ -7228,6 +7229,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   // any dups
   apply_and_flush_repops(is_primary());
 
+  pgbackend->on_change(t);
   // clear pushing/pulling maps
   pushing.clear();
   pulling.clear();
@@ -7267,6 +7269,7 @@ void ReplicatedPG::_clear_recovery_state()
   backfill_pos = hobject_t();
   backfills_in_flight.clear();
   pending_backfill_updates.clear();
+  pgbackend->clear_state();
   pulling.clear();
   pushing.clear();
   pull_from_peer.clear();

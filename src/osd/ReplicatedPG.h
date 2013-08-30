@@ -33,6 +33,9 @@
 
 #include "common/sharedptr_registry.hpp"
 
+#include "PGBackend.h"
+#include "ReplicatedBackend.h"
+
 class MOSDSubOpReply;
 
 class ReplicatedPG;
@@ -80,7 +83,7 @@ public:
   virtual bool filter(bufferlist& xattr_data, bufferlist& outdata);
 };
 
-class ReplicatedPG : public PG {
+class ReplicatedPG : public PG, public PGBackend::Listener {
   friend class OSD;
   friend class Watch;
 
@@ -121,6 +124,109 @@ public:
     {}
   };
   typedef boost::shared_ptr<CopyOp> CopyOpRef;
+
+  boost::scoped_ptr<PGBackend> pgbackend;
+
+  /// Listener methods
+  void on_local_recover_start(
+    const hobject_t &oid,
+    ObjectStore::Transaction *t) {}
+  void on_local_recover(
+    const hobject_t &oid,
+    const object_stat_sum_t &stat_diff,
+    const ObjectRecoveryInfo &recovery_info,
+    ObjectStore::Transaction *t
+    ) {}
+  void on_peer_recover(
+    int peer,
+    const hobject_t &oid,
+    const ObjectRecoveryInfo &recovery_info) {}
+  void on_global_recover(
+    const hobject_t &oid) {}
+  void failed_push(int from, const hobject_t &soid);
+
+  template <typename T>
+  class BlessedGenContext : public GenContext<T> {
+    ReplicatedPG *pg;
+    GenContext<T> *c;
+    epoch_t e;
+  public:
+    BlessedGenContext(ReplicatedPG *pg, GenContext<T> *c, epoch_t e)
+      : pg(pg), c(c), e(e) {}
+    void finish(T t) {
+      pg->lock();
+      if (pg->pg_has_reset_since(e))
+	delete c;
+      else
+	c->complete(t);
+      pg->unlock();
+    }
+  };
+  class BlessedContext : public Context {
+    ReplicatedPG *pg;
+    Context *c;
+    epoch_t e;
+  public:
+    BlessedContext(ReplicatedPG *pg, Context *c, epoch_t e)
+      : pg(pg), c(c), e(e) {}
+    void finish(int r) {
+      pg->lock();
+      if (pg->pg_has_reset_since(e))
+	delete c;
+      else
+	c->complete(r);
+      pg->unlock();
+    }
+  };
+  Context *bless_context(Context *c) {
+    return new BlessedContext(this, c, get_osdmap()->get_epoch());
+  }
+  GenContext<ThreadPool::TPHandle&> *bless_gencontext(
+    GenContext<ThreadPool::TPHandle&> *c) {
+    return new BlessedGenContext<ThreadPool::TPHandle&>(
+      this, c, get_osdmap()->get_epoch());
+  }
+    
+  void send_message(int to_osd, Message *m) {
+    osd->send_message_osd_cluster(to_osd, m, get_osdmap()->get_epoch());
+  }
+  void queue_transaction(ObjectStore::Transaction *t) {
+    osd->store->queue_transaction(osr.get(), t);
+  }
+  epoch_t get_epoch() {
+    return get_osdmap()->get_epoch();
+  }
+  const vector<int> &get_acting() {
+    return acting;
+  }
+  std::string gen_dbg_prefix() const { return gen_prefix(); }
+  
+  const map<hobject_t, set<int> > &get_missing_loc() {
+    return missing_loc;
+  }
+  const map<int, pg_missing_t> &get_peer_missing() {
+    return peer_missing;
+  }
+  const pg_missing_t &get_local_missing() {
+    return pg_log.get_missing();
+  }
+  const PGLog &get_log() {
+    return pg_log;
+  }
+  bool pgb_is_primary() const {
+    return is_primary();
+  }
+  OSDMapRef pgb_get_osdmap() const {
+    return get_osdmap();
+  }
+  const pg_info_t &get_info() const {
+    return info;
+  }
+  ObjectContextRef get_obc(
+    const hobject_t &hoid,
+    map<string, bufferptr> &attrs) {
+    return get_object_context(hoid, true, &attrs);
+  }
 
   /*
    * Capture all object state associated with an in-progress read or write.
@@ -955,7 +1061,10 @@ public:
   void on_role_change();
   void on_change(ObjectStore::Transaction *t);
   void on_activate();
-  void on_flushed();
+  void on_flushed() {
+    assert(object_contexts.empty());
+    pgbackend->on_flushed();
+  }
   void on_removal(ObjectStore::Transaction *t);
   void on_shutdown();
 };
