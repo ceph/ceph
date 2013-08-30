@@ -4,7 +4,7 @@ tasks:
 - ceph:
 - install.upgrade:
     all:
-      tag: v0.67
+      tag: v0.67.1
 - ceph.restart:
 - parallel:
    - workload
