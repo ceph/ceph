@@ -329,7 +329,11 @@ public:
       string fpath = path + '/' + n;
       struct stat s;
       int err = stat(fpath.c_str(), &s);
-      if (err < 0) {
+      // we may race against leveldb while reading files; this should only
+      // happen when those files are being updated, data is being shuffled
+      // and files get removed, in which case there's not much of a problem
+      // as we'll get to them next time around.
+      if ((err < 0) && (err != -ENOENT)) {
         lderr(cct) << __func__ << " error obtaining stats for " << fpath
                    << ": " << cpp_strerror(errno) << dendl;
         goto err;
