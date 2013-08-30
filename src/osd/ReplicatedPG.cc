@@ -3772,7 +3772,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::CLONE, coid, ctx->at_version,
 				      ctx->obs->oi.version,
 				      ctx->obs->oi.user_version,
-				      ctx->reqid, ctx->new_obs.oi.mtime));
+				      osd_reqid_t(), ctx->new_obs.oi.mtime));
     ::encode(snaps, ctx->log.back().snaps);
 
     ctx->at_version.version++;
