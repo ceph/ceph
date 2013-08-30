@@ -165,6 +165,12 @@ public:
     Incremental(bufferlist::iterator &p) {
       decode(p);
     }
+
+    pg_pool_t *get_new_pool(int64_t pool, const pg_pool_t *orig) {
+      if (new_pools.count(pool) == 0)
+	new_pools[pool] = *orig;
+      return &new_pools[pool];
+    }
   };
   
 private:
