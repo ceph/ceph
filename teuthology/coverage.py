@@ -56,7 +56,7 @@ def store_coverage(ctx, test_coverage, rev, suite):
                 ' `function_cov`, `branches`, `branch_cov`)'
                 ' VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)',
                 rows)
-        except:
+        except Exception:
             log.exception('error updating database')
             db.rollback()
             raise
@@ -143,7 +143,7 @@ Analyze the coverage of a suite of test runs, generating html output with lcov.
 
     try:
         _analyze(args)
-    except:
+    except Exception:
         log.exception('error generating coverage')
         raise
 

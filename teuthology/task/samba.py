@@ -220,5 +220,6 @@ def task(ctx, config):
                         backend,
                         ],
                     )
-            except:
+            except Exception:
+                log.exception("Saw exception")
                 pass

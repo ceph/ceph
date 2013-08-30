@@ -99,7 +99,7 @@ def shutdown_daemons(ctx, log):
             wait=False,
             )
         nodes[remote.name] = proc
-    
+
     for name, proc in nodes.iteritems():
         log.info('Waiting for %s to finish shutdowns...', name)
         proc.exitstatus.get()
@@ -126,13 +126,13 @@ def find_kernel_mounts(ctx, log):
             kernel_mounts.append(remote)
         except run.CommandFailedError: # no mounts!
             log.debug('no kernel mount on %s', remote.name)
-    
+
     return kernel_mounts
 
 def remove_kernel_mounts(ctx, kernel_mounts, log):
     """
     properly we should be able to just do a forced unmount,
-    but that doesn't seem to be working, so you should reboot instead 
+    but that doesn't seem to be working, so you should reboot instead
     """
     from .orchestra import run
     nodes = {}
@@ -397,8 +397,8 @@ def nuke_one(ctx, targets, log, should_unlock, synch_clocks, reboot_all,
         )
     try:
         nuke_helper(ctx, log)
-    except:
-        log.exception('Could not nuke all targets in %s', targets)
+    except Exception:
+        log.exception('Could not nuke all targets in %s' % targets)
         # not re-raising the so that parallel calls aren't killed
         ret = targets
     else:

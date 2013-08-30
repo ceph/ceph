@@ -295,7 +295,7 @@ def archive(ctx, config):
 
     try:
         yield
-    except:
+    except Exception:
         # we need to know this below
         ctx.summary['success'] = False
         raise

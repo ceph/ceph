@@ -127,5 +127,5 @@ def task(ctx, config):
                         )
                     import time
                     time.sleep(1)
-                except:
+                except Exception:
                     break

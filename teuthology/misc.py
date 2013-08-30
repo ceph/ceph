@@ -580,7 +580,7 @@ def get_wwn_id_map(remote, devs):
             stdout=StringIO(),
             )
         stdout = r.stdout.getvalue()
-    except:
+    except Exception:
         log.error('Failed to get wwn devices! Using /dev/sd* devices...')
         return dict((d,d) for d in devs)
 
@@ -613,7 +613,7 @@ def get_scratch_devices(remote):
     try:
         file_data = get_file(remote, "/scratch_devs")
         devs = file_data.split()
-    except:
+    except Exception:
         r = remote.run(
                 args=['ls', run.Raw('/dev/[sv]d?')],
                 stdout=StringIO()
@@ -648,7 +648,8 @@ def get_scratch_devices(remote):
                     ]
                 )
             retval.append(dev)
-        except:
+        except Exception:
+            log.exception("Saw exception")
             pass
     return retval
 

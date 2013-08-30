@@ -294,7 +294,7 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
         # fail with the message 'rpm: no packages given for install'
         remote.run(args=['wget', base_url, ],)
         remote.run(args=['sudo', 'rpm', '-i', rpm_name, ], stderr=err_mess, )
-    except:
+    except Exception:
         cmp_msg = 'package {pkg} is already installed'.format(
             pkg=ceph_release)
         if cmp_msg != err_mess.getvalue().strip():

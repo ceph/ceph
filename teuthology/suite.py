@@ -405,7 +405,7 @@ def results():
 
     try:
         _results(args)
-    except:
+    except Exception:
         log.exception('error generating results')
         raise
 

@@ -229,7 +229,7 @@ def valgrind_post(ctx, config):
                     continue
                 try:
                     (file, kind) = line.split(':')
-                except:
+                except Exception:
                     log.error('failed to split line %s', line)
                     raise
                 log.debug('file %s kind %s', file, kind)
@@ -722,7 +722,7 @@ def cluster(ctx, config):
 
     try:
         yield
-    except:
+    except Exception:
         # we need to know this below
         ctx.summary['success'] = False
         raise

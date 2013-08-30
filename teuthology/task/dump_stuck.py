@@ -117,8 +117,8 @@ def task(ctx, config):
             manager.raw_cluster_cmd('tell', 'osd.0', 'flush_pg_stats')
             manager.raw_cluster_cmd('tell', 'osd.1', 'flush_pg_stats')
             break
-        except:
-            log.debug('osds must not be started yet, waiting...')
+        except Exception:
+            log.exception('osds must not be started yet, waiting...')
             time.sleep(1)
     manager.wait_for_clean(timeout)
 

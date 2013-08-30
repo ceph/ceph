@@ -182,7 +182,8 @@ class Lock:
                                            description=desc,
                                            locked_since=web.db.SQLLiteral('NOW()'))
                     assert num_locked == num, 'Failed to lock machines'
-            except:
+            except Exception:
+                log.exception("Saw exception")
                 tries += 1
                 if tries < 10:
                     continue
