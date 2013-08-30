@@ -97,10 +97,10 @@ nonce=`uuidgen`
 # stick the user info in the dir too
 dir="${id}_${user}_${nonce}"
 
-t1=$(tempfile) || exit
-t2=$(tempfile) || exit
-t3=$(tempfile) || exit
-t4=$(tempfile) || exit
+t1=$(mktemp) || exit
+t2=$(mktemp) || exit
+t3=$(mktemp) || exit
+t4=$(mktemp) || exit
 trap "rm -f -- '$t1' '$t2' '$t3' '$t4'" EXIT
 cat > $t1 <<EOF
 mkdir post/$dir
