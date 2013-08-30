@@ -27,8 +27,7 @@ class ReplicatedBackend : public PGBackend {
   };
 private:
   bool temp_created;
-  coll_t temp_coll;
-  coll_t get_temp_coll(ObjectStore::Transaction *t);
+  const coll_t temp_coll;
   coll_t get_temp_coll() const {
     return temp_coll;
   }
@@ -39,6 +38,7 @@ private:
 public:
   coll_t coll;
   OSDService *osd;
+  CephContext *cct;
 
   ReplicatedBackend(PGBackend::Listener *pg, coll_t coll, OSDService *osd);
 
@@ -78,14 +78,15 @@ public:
     int split_bits,
     int seed,
     ObjectStore::Transaction *t) {
+    coll_t target = coll_t::make_temp_coll(child);
     if (!temp_created)
       return;
-    t->create_collection(temp_coll);
+    t->create_collection(target);
     t->split_collection(
       temp_coll,
       split_bits,
       seed,
-      coll_t::make_temp_coll(child));
+      target);
   }
 
   virtual void dump_recovery_info(Formatter *f) const {
@@ -186,6 +187,15 @@ private:
       return recovery_progress.is_complete(recovery_info);
     }
   };
+
+  coll_t get_temp_coll(ObjectStore::Transaction *t);
+  void add_temp_obj(const hobject_t &oid) {
+    temp_contents.insert(oid);
+  }
+  void clear_temp_obj(const hobject_t &oid) {
+    temp_contents.erase(oid);
+  }
+
   map<hobject_t, PullInfo> pulling;
 
   // Reverse mapping from osd peer to objects beging pulled from that peer

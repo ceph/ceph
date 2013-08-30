@@ -188,6 +188,10 @@
 
    virtual void dump_recovery_info(Formatter *f) const = 0;
 
+   virtual coll_t get_temp_coll(ObjectStore::Transaction *t) = 0;
+   virtual void add_temp_obj(const hobject_t &oid) = 0;
+   virtual void clear_temp_obj(const hobject_t &oid) = 0;
+
    virtual ~PGBackend() {}
  };
 
