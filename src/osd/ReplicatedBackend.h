@@ -201,7 +201,7 @@ private:
   map<int, set<hobject_t> > pull_from_peer;
 
   void sub_op_push(OpRequestRef op);
-  void sub_op_push_reply(OpRequestRef op) {}
+  void sub_op_push_reply(OpRequestRef op);
   void sub_op_pull(OpRequestRef op) {}
 
   void _do_push(OpRequestRef op) {}

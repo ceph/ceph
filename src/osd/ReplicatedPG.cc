@@ -6590,7 +6590,7 @@ void ReplicatedPG::prep_push_op_blank(const hobject_t& soid, PushOp *op)
   op->soid = soid;
 }
 
-void ReplicatedPG::sub_op_push_reply(OpRequestRef op)
+void ReplicatedBackend::sub_op_push_reply(OpRequestRef op)
 {
   MOSDSubOpReply *reply = static_cast<MOSDSubOpReply*>(op->request);
   const hobject_t& soid = reply->get_poid();
