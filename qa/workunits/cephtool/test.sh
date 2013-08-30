@@ -47,6 +47,30 @@ function check_response()
 }
 
 
+# tiering
+ceph osd pool create cache 2
+ceph osd pool create cache2 2
+ceph osd tier add data cache
+ceph osd tier add data cache2
+expect_false ceph osd tier add metadata cache
+ceph osd tier cache-mode cache writeback
+ceph osd tier cache-mode cache readonly
+ceph osd tier cache-mode cache none
+ceph osd tier set-overlay data cache
+expect_false ceph osd tier set-overlay data cache2
+expect_false ceph osd tier remove data cache
+ceph osd tier remove-overlay data
+ceph osd tier set-overlay data cache2
+ceph osd tier remove-overlay data
+ceph osd tier remove data cache
+ceph osd tier add metadata cache
+expect_false ceph osd tier set-overlay data cache
+ceph osd tier set-overlay metadata cache
+ceph osd tier remove-overlay metadata
+ceph osd tier remove metadata cache
+ceph osd tier remove data cache2
+ceph osd pool delete cache cache --yes-i-really-really-mean-it
+ceph osd pool delete cache2 cache2 --yes-i-really-really-mean-it
 
 #
 # Assumes there are at least 3 MDSes and two OSDs
