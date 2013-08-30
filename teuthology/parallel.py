@@ -83,7 +83,7 @@ class parallel(object):
             for result in self:
                 log.debug('result is %s', repr(result))
                 pass
-        except:
+        except Exception:
             self.group.kill(block=True)
             raise
         return True

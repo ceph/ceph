@@ -164,10 +164,10 @@ def install_firmware(ctx, config):
             )
         role_remote.run(
             args=[
-                'sudo', 'git', '--git-dir=%s/.git' % fw_dir, 'config',           
+                'sudo', 'git', '--git-dir=%s/.git' % fw_dir, 'config',
                 '--get', 'remote.origin.url', run.Raw('>/dev/null'),
                 run.Raw('||'),
-                'sudo', 'git', '--git-dir=%s/.git' % fw_dir,           
+                'sudo', 'git', '--git-dir=%s/.git' % fw_dir,
                 'remote', 'add', 'origin', uri,
                 ],
             )
@@ -239,12 +239,12 @@ def download_deb(ctx, config):
 
 def _no_grub_link(in_file, remote, kernel_ver):
     boot1 = '/boot/%s' % in_file
-    boot2 = '%s.old' % boot1 
+    boot2 = '%s.old' % boot1
     remote.run(
         args=[
             'if', 'test', '-e', boot1, run.Raw(';'), 'then',
             'sudo', 'mv', boot1, boot2, run.Raw(';'), 'fi',],
-    ) 
+    )
     remote.run(
         args=['sudo', 'ln', '-s', '%s-%s' % (in_file, kernel_ver) , boot1, ],
     )
@@ -312,7 +312,7 @@ def install_and_reboot(ctx, config):
         # kernel entry appears later in the file than a submenu entry,
         # it's actually nested under that submenu.  If it gets more
         # complex this will totally break.
-        
+
         cmdout = StringIO()
         proc = role_remote.run(
             args=[
@@ -427,7 +427,8 @@ def wait_for_reboot(ctx, need_install, timeout):
                 assert not need_to_install(ctx, client, need_install[client]), \
                         'failed to install new kernel version within timeout'
                 del need_install[client]
-            except:
+            except Exception:
+                log.exception("Saw exception")
                 # ignore connection resets and asserts while time is left
                 if time.time() - starttime > timeout:
                     raise
