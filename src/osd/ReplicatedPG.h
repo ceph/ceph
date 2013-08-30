@@ -851,7 +851,6 @@ protected:
   void _committed_pushed_object(epoch_t epoch, eversion_t lc);
   void recover_got(hobject_t oid, eversion_t v);
   void _failed_push(int from, const hobject_t &soid);
-  void sub_op_push_reply(OpRequestRef op);
   bool handle_push_reply(int peer, PushReplyOp &op, PushOp *reply);
   void sub_op_pull(OpRequestRef op);
   void handle_pull(int peer, PullOp &op, PushOp *reply);
