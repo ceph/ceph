@@ -870,8 +870,12 @@ public:
   virtual void _scrub(ScrubMap &map) { }
   virtual void _scrub_clear_state() { }
   virtual void _scrub_finish() { }
-  virtual coll_t get_temp_coll() = 0;
-  virtual bool have_temp_coll() = 0;
+  virtual void get_colls(list<coll_t> *out) = 0;
+  virtual void split_colls(
+    pg_t child,
+    int split_bits,
+    int seed,
+    ObjectStore::Transaction *t) = 0;
   virtual bool _report_snap_collection_errors(
     const hobject_t &hoid,
     const map<string, bufferptr> &attrs,

@@ -630,8 +630,6 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
   PG(o, curmap, _pool, p, oid, ioid),
   pgbackend(new ReplicatedBackend(this, coll_t(p), o)),
   snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
-  temp_created(false),
-  temp_coll(coll_t::make_temp_coll(p)),
   temp_seq(0),
   snap_trimmer_machine(this)
 { 
@@ -3969,19 +3967,9 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
   }
 }
 
-bool ReplicatedPG::have_temp_coll()
-{
-  return temp_created || osd->store->collection_exists(temp_coll);
-}
-
 coll_t ReplicatedPG::get_temp_coll(ObjectStore::Transaction *t)
 {
-  if (temp_created)
-    return temp_coll;
-  if (!osd->store->collection_exists(temp_coll))
-      t->create_collection(temp_coll);
-  temp_created = true;
-  return temp_coll;
+  return pgbackend->get_temp_coll(t);
 }
 
 hobject_t ReplicatedPG::generate_temp_object()
@@ -3989,6 +3977,7 @@ hobject_t ReplicatedPG::generate_temp_object()
   ostringstream ss;
   ss << "temp_" << info.pgid << "_" << get_role() << "_" << osd->monc->get_global_id() << "_" << (++temp_seq);
   hobject_t hoid(object_t(ss.str()), "", CEPH_NOSNAP, 0, -1, "");
+  pgbackend->add_temp_obj(hoid);
   dout(20) << __func__ << " " << hoid << dendl;
   return hoid;
 }
@@ -4254,7 +4243,6 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
     if (cop->temp_cursor.is_initial()) {
       cop->temp_coll = get_temp_coll(&tctx->local_t);
       cop->temp_oid = generate_temp_object();
-      temp_contents.insert(cop->temp_oid);
       repop->ctx->new_temp_oid = cop->temp_oid;
     }
 
@@ -4324,7 +4312,7 @@ int ReplicatedPG::finish_copy(OpContext *ctx)
     // finish writing to temp object, then move into place
     _write_copy_chunk(cop, &t);
     t.collection_move_rename(cop->temp_coll, cop->temp_oid, coll, obs.oi.soid);
-    temp_contents.erase(cop->temp_oid);
+    pgbackend->clear_temp_obj(cop->temp_oid);
     ctx->discard_temp_oid = cop->temp_oid;
   }
 
@@ -5379,12 +5367,12 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
 
     if (m->new_temp_oid != hobject_t()) {
       dout(20) << __func__ << " start tracking temp " << m->new_temp_oid << dendl;
-      temp_contents.insert(m->new_temp_oid);
+      pgbackend->add_temp_obj(m->new_temp_oid);
       get_temp_coll(&rm->localt);
     }
     if (m->discard_temp_oid != hobject_t()) {
       dout(20) << __func__ << " stop tracking temp " << m->discard_temp_oid << dendl;
-      temp_contents.erase(m->discard_temp_oid);
+      pgbackend->clear_temp_obj(m->discard_temp_oid);
     }
 
     ::decode(rm->opt, p);
@@ -7153,20 +7141,6 @@ void ReplicatedPG::on_shutdown()
   cancel_recovery();
 }
 
-void ReplicatedPG::on_flushed()
-{
-  assert(object_contexts.empty());
-  if (have_temp_coll() &&
-      !osd->store->collection_empty(get_temp_coll())) {
-    vector<hobject_t> objects;
-    osd->store->collection_list(get_temp_coll(), objects);
-    derr << __func__ << ": found objects in the temp collection: "
-	 << objects << ", crashing now"
-	 << dendl;
-    assert(0 == "found garbage in the temp collection");
-  }
-}
-
 void ReplicatedPG::on_activate()
 {
   for (unsigned i = 1; i<acting.size(); i++) {
@@ -7234,16 +7208,6 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   pushing.clear();
   pulling.clear();
   pull_from_peer.clear();
-
-  // clear temp
-  for (set<hobject_t>::iterator i = temp_contents.begin();
-       i != temp_contents.end();
-       ++i) {
-    dout(10) << __func__ << ": Removing oid "
-	     << *i << " from the temp collection" << dendl;
-    t->remove(get_temp_coll(t), *i);
-  }
-  temp_contents.clear();
 
   // clear snap_trimmer state
   snap_trimmer_machine.process_event(Reset());

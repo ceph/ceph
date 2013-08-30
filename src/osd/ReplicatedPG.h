@@ -572,6 +572,9 @@ protected:
   void submit_push_complete(ObjectRecoveryInfo &recovery_info,
 			    ObjectStore::Transaction *t);
 
+  // Track contents of temp collection, clear on reset
+  set<hobject_t> temp_contents;
+
   /*
    * Backfill
    *
@@ -966,17 +969,30 @@ public:
 
   void do_osd_op_effects(OpContext *ctx);
 private:
-  bool temp_created;
-  coll_t temp_coll;
-  set<hobject_t> temp_contents;   ///< contents of temp collection, clear on reset
   uint64_t temp_seq; ///< last id for naming temp objects
   coll_t get_temp_coll(ObjectStore::Transaction *t);
   hobject_t generate_temp_object();  ///< generate a new temp object name
 public:
-  bool have_temp_coll();
-  coll_t get_temp_coll() {
-    return temp_coll;
+  void get_colls(list<coll_t> *out) {
+    out->push_back(coll);
+    return pgbackend->temp_colls(out);
   }
+  void split_colls(
+    pg_t child,
+    int split_bits,
+    int seed,
+    ObjectStore::Transaction *t) {
+    coll_t target = coll_t(child);
+    t->create_collection(target);
+    t->split_collection(
+      coll,
+      split_bits,
+      seed,
+      target);
+    pgbackend->split_colls(child, split_bits, seed, t);
+  }
+  /// TODOXXX: remove this one, stub
+  coll_t get_temp_coll(ObjectStore::Transaction *t) { return coll_t(); }
 private:
   struct NotTrimming;
   struct SnapTrim : boost::statechart::event< SnapTrim > {
