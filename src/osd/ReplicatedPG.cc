@@ -80,6 +80,7 @@ PGLSFilter::~PGLSFilter()
 {
 }
 
+
 // ======================
 // PGBackend::Listener
 
@@ -6870,7 +6871,7 @@ void ReplicatedPG::trim_pushed_data(
 /** op_push
  * NOTE: called from opqueue.
  */
-void ReplicatedPG::sub_op_push(OpRequestRef op)
+void ReplicatedBackend::sub_op_push(OpRequestRef op)
 {
   op->mark_started();
   MOSDSubOp *m = static_cast<MOSDSubOp *>(op->request);
@@ -6906,9 +6907,9 @@ void ReplicatedPG::sub_op_push(OpRequestRef op)
     assert(entity_name_t::TYPE_OSD == m->get_connection()->peer_type);
     handle_push(m->get_source().num(), pop, &resp, t);
     t->register_on_complete(new C_OSD_SendMessageOnConn(
-			     osd, reply, m->get_connection()));
+			      osd, reply, m->get_connection()));
   }
-  osd->store->queue_transaction(osr.get(), t);
+  get_parent()->queue_transaction(t);
   return;
 }
 
