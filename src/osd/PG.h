@@ -1793,10 +1793,10 @@ public:
 
 
   // abstract bits
-  void do_request(
+  virtual void do_request(
     OpRequestRef op,
     ThreadPool::TPHandle &handle
-  );
+  ) = 0;
 
   virtual void do_op(OpRequestRef op) = 0;
   virtual void do_sub_op(OpRequestRef op) = 0;
@@ -1806,9 +1806,6 @@ public:
     ThreadPool::TPHandle &handle
   ) = 0;
   virtual void do_backfill(OpRequestRef op) = 0;
-  virtual void do_push(OpRequestRef op) = 0;
-  virtual void do_pull(OpRequestRef op) = 0;
-  virtual void do_push_reply(OpRequestRef op) = 0;
   virtual void snap_trimmer() = 0;
 
   virtual int do_command(cmdmap_t cmdmap, ostream& ss,
