@@ -129,6 +129,10 @@ struct object_locator_t {
     nspace = "";
   }
 
+  bool empty() const {
+    return pool == -1;
+  }
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
