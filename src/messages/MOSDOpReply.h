@@ -54,8 +54,8 @@ public:
   bool     is_onnvram() const { return get_flags() & CEPH_OSD_FLAG_ONNVRAM; }
   
   int get_result() const { return result; }
-  eversion_t get_replay_version() { return replay_version; }
-  version_t get_user_version() { return user_version; }
+  eversion_t get_replay_version() const { return replay_version; }
+  version_t get_user_version() const { return user_version; }
   
   void set_result(int r) { result = r; }
 
@@ -239,7 +239,9 @@ public:
   
   void print(ostream& out) const {
     out << "osd_op_reply(" << get_tid()
-	<< " " << oid << " " << ops;
+	<< " " << oid << " " << ops
+	<< " v" << get_replay_version()
+	<< " uv" << get_user_version();
     if (is_ondisk())
       out << " ondisk";
     else if (is_onnvram())
