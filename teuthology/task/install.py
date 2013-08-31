@@ -42,7 +42,7 @@ PACKAGES['ceph']['deb'] = [
     'librbd1-dbg',
 ]
 PACKAGES['ceph']['rpm'] = [
-    'ceph-debug',
+    'ceph-debuginfo',
     'ceph-radosgw',
     'ceph-test',
     'ceph-devel',
@@ -541,7 +541,7 @@ deb_packages = {'ceph': [
 ]}
 
 rpm_packages = {'ceph': [
-    'ceph-debug',
+    'ceph-debuginfo',
     'ceph-radosgw',
     'ceph-test',
     'ceph-devel',
