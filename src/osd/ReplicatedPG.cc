@@ -969,7 +969,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 	     << dendl;  
   }
 
-  ctx->user_at_version = info.last_user_version;
+  ctx->user_at_version = obc->obs.oi.user_version;
 
   // note my stats
   utime_t now = ceph_clock_now(g_ceph_context);
@@ -3951,14 +3951,14 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
   // finish and log the op.
   if (ctx->user_modify) {
-    /* update the user_version for any modify ops, except for the watch op */
-    ++ctx->user_at_version;
-    assert(ctx->user_at_version > ctx->new_obs.oi.user_version);
+    // update the user_version for any modify ops, except for the watch op
+    ctx->user_at_version = MAX(info.last_user_version, ctx->new_obs.oi.user_version) + 1;
     /* In order for new clients and old clients to interoperate properly
      * when exchanging versions, we need to lower bound the user_version
      * (which our new clients pay proper attention to)
      * by the at_version (which is all the old clients can ever see). */
-    ctx->user_at_version = MAX(ctx->at_version.version, ctx->user_at_version);
+    if (ctx->at_version.version > ctx->user_at_version)
+      ctx->user_at_version = ctx->at_version.version;
     ctx->new_obs.oi.user_version = ctx->user_at_version;
   }
   ctx->bytes_written = ctx->op_t.get_encoded_bytes();
