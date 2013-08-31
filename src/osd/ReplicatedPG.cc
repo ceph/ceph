@@ -50,6 +50,8 @@
 #include "include/compat.h"
 #include "common/cmdparse.h"
 
+#include "osdc/Objecter.h"
+
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
 #include "include/assert.h"  // json_spirit clobbers it
@@ -836,7 +838,6 @@ void ReplicatedPG::do_op(OpRequestRef op)
       dout(10) << "no src oid specified for multi op " << osd_op << dendl;
       osd->reply_op_error(op, -EINVAL);
     }
-    src_obc.clear();
     return;
   }
 
@@ -867,7 +868,6 @@ void ReplicatedPG::do_op(OpRequestRef op)
 	  src_obc[clone_oid] = sobc;
 	  continue;
 	}
-	src_obc.clear();
 	return;
       } else {
 	continue;
@@ -877,43 +877,40 @@ void ReplicatedPG::do_op(OpRequestRef op)
 
   op->mark_started();
 
-  const hobject_t& soid = obc->obs.oi.soid;
   OpContext *ctx = new OpContext(op, m->get_reqid(), m->ops,
 				 &obc->obs, obc->ssc, 
 				 this);
   ctx->obc = obc;
   ctx->src_obc = src_obc;
 
-  if (op->may_write()) {
-    // snap
-    if (pool.info.is_pool_snaps_mode()) {
-      // use pool's snapc
-      ctx->snapc = pool.snapc;
-    } else {
-      // client specified snapc
-      ctx->snapc.seq = m->get_snap_seq();
-      ctx->snapc.snaps = m->get_snaps();
-    }
-    if ((m->get_flags() & CEPH_OSD_FLAG_ORDERSNAP) &&
-	ctx->snapc.seq < obc->ssc->snapset.seq) {
-      dout(10) << " ORDERSNAP flag set and snapc seq " << ctx->snapc.seq
-	       << " < snapset seq " << obc->ssc->snapset.seq
-	       << " on " << soid << dendl;
-      delete ctx;
-      src_obc.clear();
-      osd->reply_op_error(op, -EOLDSNAPC);
-      return;
-    }
+  execute_ctx(ctx);
+}
 
+void ReplicatedPG::execute_ctx(OpContext *ctx)
+{
+  dout(10) << __func__ << " " << ctx << dendl;
+  OpRequestRef op = ctx->op;
+  MOSDOp *m = static_cast<MOSDOp*>(op->request);
+  ObjectContextRef obc = ctx->obc;
+  const hobject_t& soid = obc->obs.oi.soid;
+  map<hobject_t,ObjectContextRef>& src_obc = ctx->src_obc;
+
+  // this method must be idempotent since we may call it several times
+  // before we finally apply the resulting transaction.
+  ctx->op_t = ObjectStore::Transaction();
+  ctx->local_t = ObjectStore::Transaction();
+
+  // dup/replay?
+  if (op->may_write()) {
     const pg_log_entry_t *entry = pg_log.get_log().get_request(ctx->reqid);
     if (entry) {
       const eversion_t& oldv = entry->version;
       dout(3) << "do_op dup " << ctx->reqid << " was " << oldv << dendl;
-      delete ctx;
-      src_obc.clear();
       if (already_complete(oldv)) {
-	osd->reply_op_error(op, 0, oldv, entry->user_version);
+	reply_ctx(ctx, 0, oldv, entry->user_version);
       } else {
+	delete ctx;
+
 	if (m->wants_ack()) {
 	  if (already_ack(oldv)) {
 	    MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
@@ -933,6 +930,24 @@ void ReplicatedPG::do_op(OpRequestRef op)
 
     op->mark_started();
 
+    // snap
+    if (pool.info.is_pool_snaps_mode()) {
+      // use pool's snapc
+      ctx->snapc = pool.snapc;
+    } else {
+      // client specified snapc
+      ctx->snapc.seq = m->get_snap_seq();
+      ctx->snapc.snaps = m->get_snaps();
+    }
+    if ((m->get_flags() & CEPH_OSD_FLAG_ORDERSNAP) &&
+	ctx->snapc.seq < obc->ssc->snapset.seq) {
+      dout(10) << " ORDERSNAP flag set and snapc seq " << ctx->snapc.seq
+	       << " < snapset seq " << obc->ssc->snapset.seq
+	       << " on " << obc->obs.oi.soid << dendl;
+      reply_ctx(ctx, -EOLDSNAPC);
+      return;
+    }
+
     // version
     ctx->at_version = pg_log.get_head();
 
@@ -942,7 +957,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
     assert(ctx->at_version > pg_log.get_head());
 
     ctx->mtime = m->get_mtime();
-    
+
     dout(10) << "do_op " << soid << " " << ctx->ops
 	     << " ov " << obc->obs.oi.version << " av " << ctx->at_version 
 	     << " snapc " << ctx->snapc
@@ -988,16 +1003,13 @@ void ReplicatedPG::do_op(OpRequestRef op)
   if (result == -EAGAIN) {
     // clean up after the ctx
     delete ctx;
-    src_obc.clear();
     return;
   }
 
   // check for full
   if (ctx->delta_stats.num_bytes > 0 &&
       pool.info.get_flags() & pg_pool_t::FLAG_FULL) {
-    delete ctx;
-    src_obc.clear();
-    osd->reply_op_error(op, -ENOSPC);
+    reply_ctx(ctx, -ENOSPC);
     return;
   }
 
@@ -1043,7 +1055,6 @@ void ReplicatedPG::do_op(OpRequestRef op)
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
     osd->send_message_osd_client(reply, m->get_connection());
     delete ctx;
-    src_obc.clear();
     return;
   }
 
@@ -1088,6 +1099,17 @@ void ReplicatedPG::do_op(OpRequestRef op)
   repop->put();
 }
 
+void ReplicatedPG::reply_ctx(OpContext *ctx, int r)
+{
+  osd->reply_op_error(ctx->op, r);
+  delete ctx;
+}
+
+void ReplicatedPG::reply_ctx(OpContext *ctx, int r, eversion_t v, version_t uv)
+{
+  osd->reply_op_error(ctx->op, r, v, uv);
+  delete ctx;
+}
 
 void ReplicatedPG::log_op_stats(OpContext *ctx)
 {
@@ -2542,7 +2564,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_ASSERT_SRC_VERSION:
       ++ctx->num_read;
       {
-	uint64_t ver = op.watch.ver;
+	uint64_t ver = op.assert_ver.ver;
 	if (!ver)
 	  result = -EINVAL;
         else if (ver < src_obc->obs.oi.user_version)
@@ -3057,6 +3079,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_rd++;
       }
       break;
+
     case CEPH_OSD_OP_OMAPGETVALS:
       ++ctx->num_read;
       {
@@ -3121,6 +3144,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_rd++;
       }
       break;
+
     case CEPH_OSD_OP_OMAPGETHEADER:
       ++ctx->num_read;
       {
@@ -3142,6 +3166,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_rd++;
       }
       break;
+
     case CEPH_OSD_OP_OMAPGETVALSBYKEYS:
       ++ctx->num_read;
       {
@@ -3182,6 +3207,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_rd++;
       }
       break;
+
     case CEPH_OSD_OP_OMAP_CMP:
       ++ctx->num_read;
       {
@@ -3247,6 +3273,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
       }
       break;
+
       // OMAP Write ops
     case CEPH_OSD_OP_OMAPSETVALS:
       ++ctx->num_write;
@@ -3277,6 +3304,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_wr++;
       }
       break;
+
     case CEPH_OSD_OP_OMAPSETHEADER:
       ++ctx->num_write;
       {
@@ -3292,6 +3320,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_wr++;
       }
       break;
+
     case CEPH_OSD_OP_OMAPCLEAR:
       ++ctx->num_write;
       {
@@ -3307,6 +3336,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_wr++;
       }
       break;
+
     case CEPH_OSD_OP_OMAPRMKEYS:
       ++ctx->num_write;
       {
@@ -3330,6 +3360,79 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_wr++;
       }
       break;
+
+    case CEPH_OSD_OP_COPY_GET:
+      ++ctx->num_read;
+      {
+	object_copy_cursor_t cursor;
+	uint64_t out_max;
+	try {
+	  ::decode(cursor, bp);
+	  ::decode(out_max, bp);
+	}
+	catch (buffer::error& e) {
+	  result = -EINVAL;
+	  goto fail;
+	}
+
+	// size, mtime
+	::encode(oi.size, osd_op.outdata);
+	::encode(oi.mtime, osd_op.outdata);
+
+	// attrs
+	map<string,bufferptr> out_attrs;
+	if (!cursor.attr_complete) {
+	  result = osd->store->getattrs(coll, soid, out_attrs, true);
+	  if (result < 0)
+	    break;
+	  cursor.attr_complete = true;
+	}
+	::encode(out_attrs, osd_op.outdata);
+
+	int64_t left = out_max - osd_op.outdata.length();
+
+	// data
+	bufferlist bl;
+	if (left > 0 && !cursor.data_complete) {
+	  if (cursor.data_offset < oi.size) {
+	    result = osd->store->read(coll, oi.soid, cursor.data_offset, out_max, bl);
+	    if (result < 0)
+	      return result;
+	    assert(result <= left);
+	    left -= result;
+	    cursor.data_offset += result;
+	  }
+	  if (cursor.data_offset == oi.size)
+	    cursor.data_complete = true;
+	}
+	::encode(bl, osd_op.outdata);
+
+	// omap
+	std::map<std::string,bufferlist> out_omap;
+	if (left > 0 && !cursor.omap_complete) {
+	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(coll, oi.soid);
+	  assert(iter);
+	  if (iter->valid()) {
+	    iter->upper_bound(cursor.omap_offset);
+	    for (; left > 0 && iter->valid(); iter->next()) {
+	      out_omap.insert(make_pair(iter->key(), iter->value()));
+	      left -= iter->key().length() + 4 + iter->value().length() + 4;
+	    }
+	  }
+	  if (iter->valid()) {
+	    cursor.omap_offset = iter->key();
+	  } else {
+	    cursor.omap_complete = true;
+	  }
+	}
+	::encode(out_omap, osd_op.outdata);
+
+	::encode(cursor, osd_op.outdata);
+	result = 0;
+      }
+      break;
+
+
     default:
       dout(1) << "unrecognized osd op " << op.op
 	      << " " << ceph_osd_op_name(op.op)
@@ -6682,17 +6785,27 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   context_registry_on_change();
 
   // requeue object waiters
-  requeue_ops(waiting_for_backfill_pos);
-  requeue_object_waiters(waiting_for_missing_object);
+  if (is_primary()) {
+    requeue_ops(waiting_for_backfill_pos);
+    requeue_object_waiters(waiting_for_missing_object);
+  } else {
+    waiting_for_backfill_pos.clear();
+    waiting_for_missing_object.clear();
+  }
   for (map<hobject_t,list<OpRequestRef> >::iterator p = waiting_for_degraded_object.begin();
        p != waiting_for_degraded_object.end();
        waiting_for_degraded_object.erase(p++)) {
-    requeue_ops(p->second);
+    if (is_primary())
+      requeue_ops(p->second);
+    else
+      p->second.clear();
     finish_degraded_object(p->first);
   }
 
-  requeue_ops(waiting_for_all_missing);
-  waiting_for_all_missing.clear();
+  if (is_primary())
+    requeue_ops(waiting_for_all_missing);
+  else
+    waiting_for_all_missing.clear();
 
   // this will requeue ops we were working on but didn't finish, and
   // any dups

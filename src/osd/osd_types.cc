@@ -2422,6 +2422,55 @@ void pg_missing_t::split_into(
   }
 }
 
+// -- object_copy_cursor_t --
+
+void object_copy_cursor_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(attr_complete, bl);
+  ::encode(data_offset, bl);
+  ::encode(data_complete, bl);
+  ::encode(omap_offset, bl);
+  ::encode(omap_complete, bl);
+  ENCODE_FINISH(bl);
+}
+
+void object_copy_cursor_t::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(attr_complete, bl);
+  ::decode(data_offset, bl);
+  ::decode(data_complete, bl);
+  ::decode(omap_offset, bl);
+  ::decode(omap_complete, bl);
+  DECODE_FINISH(bl);
+}
+
+void object_copy_cursor_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("attr_complete", (int)attr_complete);
+  f->dump_unsigned("data_offset", data_offset);
+  f->dump_unsigned("data_complete", (int)data_complete);
+  f->dump_string("omap_offset", omap_offset);
+  f->dump_unsigned("omap_complete", (int)omap_complete);
+}
+
+void object_copy_cursor_t::generate_test_instances(list<object_copy_cursor_t*>& o)
+{
+  o.push_back(new object_copy_cursor_t);
+  o.push_back(new object_copy_cursor_t);
+  o.back()->attr_complete = true;
+  o.back()->data_offset = 123;
+  o.push_back(new object_copy_cursor_t);
+  o.back()->attr_complete = true;
+  o.back()->data_complete = true;
+  o.back()->omap_offset = "foo";
+  o.push_back(new object_copy_cursor_t);
+  o.back()->attr_complete = true;
+  o.back()->data_complete = true;
+  o.back()->omap_complete = true;
+}
+
 // -- pg_create_t --
 
 void pg_create_t::encode(bufferlist &bl) const
@@ -3416,6 +3465,9 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_LIST_WATCHERS:
     case CEPH_OSD_OP_LIST_SNAPS:
       break;
+    case CEPH_OSD_OP_ASSERT_VER:
+      out << " v" << op.op.assert_ver.ver;
+      break;
     case CEPH_OSD_OP_TRUNCATE:
       out << " " << op.op.extent.offset;
       break;
@@ -3429,6 +3481,9 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_WATCH:
       out << (op.op.watch.flag ? " add":" remove")
 	  << " cookie " << op.op.watch.cookie << " ver " << op.op.watch.ver;
+      break;
+    case CEPH_OSD_OP_COPY_GET:
+      out << " max " << op.op.copy_get.max;
       break;
     default:
       out << " " << op.op.extent.offset << "~" << op.op.extent.length;
