@@ -1091,7 +1091,7 @@ public:
    * onto paxos-related keys), and then we will decode those same bufferlists
    * we just wrote and apply the transactions they hold. We will also update
    * our first and last committed values to point to the new values, if need
-   * be. All all this is done tightly wrapped in a transaction to ensure we
+   * be. All this is done tightly wrapped in a transaction to ensure we
    * enjoy the atomicity guarantees given by our awesome k/v store.
    *
    * @param m A message
