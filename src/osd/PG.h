@@ -46,6 +46,7 @@
 #include "common/cmdparse.h"
 #include "common/tracked_int_ptr.hpp"
 #include "common/WorkQueue.h"
+#include "common/ceph_context.h"
 #include "include/str_list.h"
 
 #include <list>
@@ -189,6 +190,7 @@ public:
   /*** PG ****/
 protected:
   OSDService *osd;
+  CephContext *cct;
   OSDriver osdriver;
   SnapMapper snap_mapper;
 public:
