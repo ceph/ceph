@@ -89,7 +89,7 @@ public:
     return perf_tracker.get_cur_stats();
   }
 
-  static const uint32_t on_disk_version = 3;
+  static const uint32_t target_version = 3;
 private:
   string internal_name;         ///< internal name, used to name the perfcounter instance
   string basedir, journalpath;
