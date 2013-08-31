@@ -423,7 +423,7 @@ int main(int argc, const char **argv)
   global_init_daemonize(g_ceph_context, 0);
   common_init_finish(g_ceph_context);
 
-  if (g_conf->filestore_update_to >= (int)FileStore::on_disk_version) {
+  if (g_conf->filestore_update_to >= (int)FileStore::target_version) {
     int err = OSD::convertfs(g_conf->osd_data, g_conf->osd_journal);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error converting store " << g_conf->osd_data
