@@ -41,7 +41,8 @@ class MonitorDBStore
     string key, endkey;
     bufferlist bl;
 
-    Op() { }
+    Op()
+      : type(0) { }
     Op(int t, string p, string k)
       : type(t), prefix(p), key(k) { }
     Op(int t, const string& p, string k, bufferlist& b)

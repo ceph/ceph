@@ -328,6 +328,12 @@ void MonClient::shutdown()
     version_requests.erase(version_requests.begin());
   }
 
+  while (!waiting_for_session.empty()) {
+    ldout(cct, 20) << __func__ << " discarding pending message " << *waiting_for_session.front() << dendl;
+    waiting_for_session.front()->put();
+    waiting_for_session.pop_front();
+  }
+
   monc_lock.Unlock();
 
   if (initialized) {
