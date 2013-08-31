@@ -475,6 +475,14 @@ public:
       ::encode(attrset, tbl);
       ops++;
     }
+    void setattrs(coll_t cid, const hobject_t& oid, map<string,bufferlist>& attrset) {
+      __u32 op = OP_SETATTRS;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(oid, tbl);
+      ::encode(attrset, tbl);
+      ops++;
+    }
     void rmattr(coll_t cid, const hobject_t& oid, const char *name) {
       string n(name);
       rmattr(cid, oid, n);
@@ -572,6 +580,13 @@ public:
       ops++;
     }
     void collection_setattrs(coll_t cid, map<string,bufferptr>& aset) {
+      __u32 op = OP_COLL_SETATTRS;
+      ::encode(op, tbl);
+      ::encode(cid, tbl);
+      ::encode(aset, tbl);
+      ops++;
+    }
+    void collection_setattrs(coll_t cid, map<string,bufferlist>& aset) {
       __u32 op = OP_COLL_SETATTRS;
       ::encode(op, tbl);
       ::encode(cid, tbl);

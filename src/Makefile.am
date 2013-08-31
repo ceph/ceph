@@ -96,7 +96,7 @@ bin_PROGRAMS += ceph_mon_store_converter
 
 # osd
 ceph_osd_SOURCES = ceph_osd.cc
-ceph_osd_LDADD = libosd.a $(LIBOS_LDA) $(LIBGLOBAL_LDA)
+ceph_osd_LDADD = libosd.a libosdc.la $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 ceph_osd_CXXFLAGS = ${AM_CXXFLAGS}
 bin_PROGRAMS += ceph-osd
 
@@ -119,7 +119,7 @@ ceph_authtool_SOURCES = ceph_authtool.cc
 ceph_authtool_LDADD = $(LIBGLOBAL_LDA)
 ceph_filestore_dump_SOURCES = tools/ceph-filestore-dump.cc
 ceph_filestore_dump_SOURCES += perfglue/disabled_heap_profiler.cc
-ceph_filestore_dump_LDADD = libosd.a $(LIBOS_LDA) $(LIBGLOBAL_LDA) -lboost_program_options
+ceph_filestore_dump_LDADD = libosd.a libosdc.la $(LIBOS_LDA) $(LIBGLOBAL_LDA) -lboost_program_options
 if LINUX
 ceph_filestore_dump_LDADD += -ldl
 endif
@@ -835,7 +835,7 @@ check_PROGRAMS += unittest_osd_types
 
 unittest_pglog_SOURCES = test/osd/TestPGLog.cc perfglue/disabled_heap_profiler.cc
 unittest_pglog_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
-unittest_pglog_LDADD =  libosd.a $(LIBOS_LDA) $(LIBGLOBAL_LDA) ${UNITTEST_LDADD} 
+unittest_pglog_LDADD =  libosd.a libosdc.la $(LIBOS_LDA) $(LIBGLOBAL_LDA) ${UNITTEST_LDADD}
 check_PROGRAMS += unittest_pglog
 
 if LINUX
@@ -1733,7 +1733,7 @@ libosd_a_SOURCES = \
 	osd/OpRequest.cc \
 	osd/SnapMapper.cc \
 	objclass/class_api.cc
-libosd_a_CXXFLAGS= ${AM_CXXFLAGS}
+libosd_a_CXXFLAGS = ${AM_CXXFLAGS}
 noinst_LIBRARIES += libosd.a
 
 libosdc_la_SOURCES = \

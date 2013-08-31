@@ -1816,6 +1816,37 @@ struct pg_ls_response_t {
 
 WRITE_CLASS_ENCODER(pg_ls_response_t)
 
+/**
+ * object_copy_cursor_t
+ */
+struct object_copy_cursor_t {
+  bool attr_complete;
+  uint64_t data_offset;
+  bool data_complete;
+  string omap_offset;
+  bool omap_complete;
+
+  object_copy_cursor_t()
+    : attr_complete(false),
+      data_offset(0),
+      data_complete(false),
+      omap_complete(false)
+  {}
+
+  bool is_initial() const {
+    return !attr_complete && data_offset == 0 && omap_offset.empty();
+  }
+  bool is_complete() const {
+    return attr_complete && data_complete && omap_complete;
+  }
+
+  static void generate_test_instances(list<object_copy_cursor_t*>& o);
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(object_copy_cursor_t)
+
 
 /**
  * pg creation info

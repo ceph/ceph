@@ -161,6 +161,7 @@ class OSDMap;
 class MLog;
 class MClass;
 class MOSDPGMissing;
+class Objecter;
 
 class Watch;
 class Notification;
@@ -417,6 +418,26 @@ public:
   void reply_op_error(OpRequestRef op, int err, eversion_t v, version_t uv);
   void handle_misdirected_op(PG *pg, OpRequestRef op);
 
+  // -- Objecter, for teiring reads/writes from/to other OSDs --
+  Mutex objecter_lock;
+  SafeTimer objecter_timer;
+  OSDMap objecter_osdmap;
+  Objecter *objecter;
+  Finisher objecter_finisher;
+  struct ObjecterDispatcher : public Dispatcher {
+    OSDService *osd;
+    bool ms_dispatch(Message *m);
+    bool ms_handle_reset(Connection *con);
+    void ms_handle_remote_reset(Connection *con) {}
+    void ms_handle_connect(Connection *con);
+    bool ms_get_authorizer(int dest_type,
+			   AuthAuthorizer **authorizer,
+			   bool force_new);
+    ObjecterDispatcher(OSDService *o) : Dispatcher(g_ceph_context), osd(o) {}
+  } objecter_dispatcher;
+  friend class ObjecterDispatcher;
+
+
   // -- Watch --
   Mutex watch_lock;
   SafeTimer watch_timer;
@@ -608,6 +629,7 @@ public:
 #endif
 
   OSDService(OSD *osd);
+  ~OSDService();
 };
 class OSD : public Dispatcher,
 	    public md_config_obs_t {
@@ -627,6 +649,7 @@ protected:
 
   Messenger   *cluster_messenger;
   Messenger   *client_messenger;
+  Messenger   *objecter_messenger;
   MonClient   *monc;
   PerfCounters      *logger;
   PerfCounters      *recoverystate_perf;
@@ -832,7 +855,8 @@ public:
   bool heartbeat_dispatch(Message *m);
 
   struct HeartbeatDispatcher : public Dispatcher {
-  private:
+    OSD *osd;
+    HeartbeatDispatcher(OSD *o) : Dispatcher(g_ceph_context), osd(o) {}
     bool ms_dispatch(Message *m) {
       return osd->heartbeat_dispatch(m);
     };
@@ -846,14 +870,7 @@ public:
       isvalid = true;
       return true;
     }
-  public:
-    OSD *osd;
-    HeartbeatDispatcher(OSD *o) 
-      : Dispatcher(g_ceph_context), osd(o)
-    {
-    }
   } heartbeat_dispatcher;
-
 
 private:
   // -- stats --
@@ -1676,8 +1693,13 @@ protected:
  public:
   /* internal and external can point to the same messenger, they will still
    * be cleaned up properly*/
-  OSD(int id, Messenger *internal, Messenger *external,
-      Messenger *hb_client, Messenger *hb_front_server, Messenger *hb_back_server,
+  OSD(int id,
+      Messenger *internal,
+      Messenger *external,
+      Messenger *hb_client,
+      Messenger *hb_front_server,
+      Messenger *hb_back_server,
+      Messenger *osdc_messenger,
       MonClient *mc, const std::string &dev, const std::string &jdev);
   ~OSD();
 

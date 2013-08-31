@@ -217,6 +217,8 @@ enum {
 	CEPH_OSD_OP_OMAPRMKEYS    = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 24,
 	CEPH_OSD_OP_OMAP_CMP      = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 25,
 
+	CEPH_OSD_OP_COPY_GET = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_DATA | 27,
+
 	/** multi **/
 	CEPH_OSD_OP_CLONERANGE = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_MULTI | 1,
 	CEPH_OSD_OP_ASSERT_SRC_VERSION = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_MULTI | 2,
@@ -398,9 +400,16 @@ struct ceph_osd_op {
 			__u8 flag;	/* 0 = unwatch, 1 = watch */
 		} __attribute__ ((packed)) watch;
 		struct {
+			__le64 unused;
+			__le64 ver;
+		} __attribute__ ((packed)) assert_ver;
+		struct {
 			__le64 offset, length;
 			__le64 src_offset;
 		} __attribute__ ((packed)) clonerange;
+		struct {
+			__le64 max;     /* max data in reply */
+		} __attribute__ ((packed)) copy_get;
 	};
 	__le32 payload_len;
 } __attribute__ ((packed));
