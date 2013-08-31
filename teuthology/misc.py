@@ -648,9 +648,6 @@ def get_scratch_devices(remote):
                     ]
                 )
             retval.append(dev)
-        except CommandFailedError:
-            log.debug("get_scratch_devices: %s is in use" % dev)
-            pass
         except Exception:
             log.exception("Saw exception")
             pass
