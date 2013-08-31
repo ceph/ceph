@@ -27,6 +27,7 @@
 #include "common/WorkQueue.h"
 #include "common/LogClient.h"
 #include "common/AsyncReserver.h"
+#include "common/ceph_context.h"
 
 #include "os/ObjectStore.h"
 #include "OSDCap.h"
@@ -282,6 +283,7 @@ class OSD;
 class OSDService {
 public:
   OSD *osd;
+  CephContext *cct;
   SharedPtrRegistry<pg_t, ObjectStore::Sequencer> osr_registry;
   SharedPtrRegistry<pg_t, DeletingState> deleting_pgs;
   const int whoami;
