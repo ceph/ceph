@@ -1596,7 +1596,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 	coid,
 	ctx->at_version,
 	ctx->obs->oi.version,
-	info.last_user_version,
+	0,
 	osd_reqid_t(),
 	ctx->mtime)
       );
@@ -1619,7 +1619,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 	coid,
 	coi.version,
 	coi.prior_version,
-	info.last_user_version,
+	0,
 	osd_reqid_t(),
 	ctx->mtime)
       );
@@ -1644,7 +1644,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 	snapoid,
 	ctx->at_version,
 	ctx->snapset_obc->obs.oi.version,
-	info.last_user_version,
+	0,
 	osd_reqid_t(),
 	ctx->mtime)
       );
@@ -1659,7 +1659,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 	snapoid,
 	ctx->at_version,
 	ctx->snapset_obc->obs.oi.version,
-	info.last_user_version,
+	0,
 	osd_reqid_t(),
 	ctx->mtime)
       );
@@ -3919,7 +3919,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 	dout(10) << " removing old " << snapoid << dendl;
 
 	ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::DELETE, snapoid, ctx->at_version, old_version,
-				      info.last_user_version, osd_reqid_t(), ctx->mtime));
+					  0, osd_reqid_t(), ctx->mtime));
  	ctx->at_version.version++;
 
 	ctx->snapset_obc->obs.exists = false;
@@ -4597,10 +4597,10 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
   ObjectStore::Transaction *t = &ctx->op_t;
 
   ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, obc->obs.oi.soid,
-				ctx->at_version,
-				obc->obs.oi.version,
-				info.last_user_version,
-				osd_reqid_t(), ctx->mtime));
+				    ctx->at_version,
+				    obc->obs.oi.version,
+				    0,
+				    osd_reqid_t(), ctx->mtime));
 
   eversion_t old_last_update = pg_log.get_head();
   bool old_exists = repop->obc->obs.exists;
@@ -6510,7 +6510,7 @@ ObjectContextRef ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
 
   // Add log entry
   ++info.last_update.version;
-  pg_log_entry_t e(what, oid, info.last_update, version, info.last_user_version, osd_reqid_t(), mtime);
+  pg_log_entry_t e(what, oid, info.last_update, version, 0, osd_reqid_t(), mtime);
   pg_log.add(e);
   
   ObjectContextRef obc = get_object_context(oid, true);
@@ -6581,7 +6581,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 	++info.last_update.version;
 	pg_log_entry_t e(
 	  pg_log_entry_t::LOST_REVERT, oid, info.last_update,
-	  m->second.need, info.last_user_version, osd_reqid_t(), mtime);
+	  m->second.need, 0, osd_reqid_t(), mtime);
 	e.reverting_to = prev;
 	pg_log.add(e);
 	dout(10) << e << dendl;
@@ -6598,7 +6598,7 @@ void ReplicatedPG::mark_all_unfound_lost(int what)
 	// log it
       	++info.last_update.version;
 	pg_log_entry_t e(pg_log_entry_t::LOST_DELETE, oid, info.last_update, m->second.need,
-		     info.last_user_version, osd_reqid_t(), mtime);
+		     0, osd_reqid_t(), mtime);
 	pg_log.add(e);
 	dout(10) << e << dendl;
 
