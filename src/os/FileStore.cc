@@ -124,7 +124,7 @@ int FileStore::init_index(coll_t cid)
 {
   char path[PATH_MAX];
   get_cdir(cid, path, sizeof(path));
-  int r = index_manager.init_index(cid, path, on_disk_version);
+  int r = index_manager.init_index(cid, path, target_version);
   assert(!m_filestore_fail_eio || r != -EIO);
   return r;
 }
@@ -942,7 +942,7 @@ int FileStore::version_stamp_is_valid(uint32_t *version)
   bl.push_back(bp);
   bufferlist::iterator i = bl.begin();
   ::decode(*version, i);
-  if (*version == on_disk_version)
+  if (*version == target_version)
     return 1;
   else
     return 0;
@@ -956,7 +956,7 @@ int FileStore::write_version_stamp()
   if (fd < 0)
     return -errno;
   bufferlist bl;
-  ::encode(on_disk_version, bl);
+  ::encode(target_version, bl);
   
   int ret = safe_write(fd, bl.c_str(), bl.length());
   TEMP_FAILURE_RETRY(::close(fd));
@@ -1058,7 +1058,7 @@ int FileStore::mount()
       ret = -EINVAL;
       derr << "FileStore::mount : stale version stamp " << version_stamp
 	   << ". Please run the FileStore update script before starting the "
-	   << "OSD, or set filestore_update_to to " << on_disk_version
+	   << "OSD, or set filestore_update_to to " << target_version
 	   << dendl;
       goto close_fsid_fd;
     }
@@ -3777,7 +3777,7 @@ int FileStore::collection_version_current(coll_t c, uint32_t *version)
   if (r < 0)
     return r;
   *version = index->collection_version();
-  if (*version == on_disk_version)
+  if (*version == target_version)
     return 1;
   else 
     return 0;
