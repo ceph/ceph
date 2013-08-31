@@ -155,6 +155,7 @@ static CompatSet get_osd_compat_set() {
 
 OSDService::OSDService(OSD *osd) :
   osd(osd),
+  cct(osd->cct),
   whoami(osd->whoami), store(osd->store), clog(osd->clog),
   pg_recovery_stats(osd->pg_recovery_stats),
   infos_oid(OSD::make_infos_oid()),
@@ -179,17 +180,17 @@ OSDService::OSDService(OSD *osd) :
   watch_timer(osd->client_messenger->cct, watch_lock),
   next_notif_id(0),
   backfill_request_lock("OSD::backfill_request_lock"),
-  backfill_request_timer(osd->cct, backfill_request_lock, false),
+  backfill_request_timer(cct, backfill_request_lock, false),
   last_tid(0),
   tid_lock("OSDService::tid_lock"),
-  reserver_finisher(osd->cct),
-  local_reserver(&reserver_finisher, osd->cct->_conf->osd_max_backfills),
-  remote_reserver(&reserver_finisher, osd->cct->_conf->osd_max_backfills),
+  reserver_finisher(cct),
+  local_reserver(&reserver_finisher, cct->_conf->osd_max_backfills),
+  remote_reserver(&reserver_finisher, cct->_conf->osd_max_backfills),
   pg_temp_lock("OSDService::pg_temp_lock"),
   map_cache_lock("OSDService::map_lock"),
-  map_cache(osd->cct->_conf->osd_map_cache_size),
-  map_bl_cache(osd->cct->_conf->osd_map_cache_size),
-  map_bl_inc_cache(osd->cct->_conf->osd_map_cache_size),
+  map_cache(cct->_conf->osd_map_cache_size),
+  map_bl_cache(cct->_conf->osd_map_cache_size),
+  map_bl_inc_cache(cct->_conf->osd_map_cache_size),
   in_progress_split_lock("OSDService::in_progress_split_lock"),
   full_status_lock("OSDService::full_status_lock"),
   cur_state(NONE),
@@ -2483,14 +2484,14 @@ void OSD::project_pg_history(pg_t pgid, pg_history_t& h, epoch_t from,
 
 float OSDService::get_full_ratio()
 {
-  float full_ratio = osd->cct->_conf->osd_failsafe_full_ratio;
+  float full_ratio = cct->_conf->osd_failsafe_full_ratio;
   if (full_ratio > 1.0) full_ratio /= 100.0;
   return full_ratio;
 }
 
 float OSDService::get_nearfull_ratio()
 {
-  float nearfull_ratio = osd->cct->_conf->osd_failsafe_nearfull_ratio;
+  float nearfull_ratio = cct->_conf->osd_failsafe_nearfull_ratio;
   if (nearfull_ratio > 1.0) nearfull_ratio /= 100.0;
   return nearfull_ratio;
 }
@@ -2518,7 +2519,7 @@ void OSDService::check_nearfull_warning(const osd_stat_t &osd_stat)
 
   if (cur_state != new_state) {
     cur_state = new_state;
-  } else if (now - last_msg < osd->cct->_conf->osd_op_complaint_time) {
+  } else if (now - last_msg < cct->_conf->osd_op_complaint_time) {
     return;
   }
   last_msg = now;
@@ -2540,7 +2541,7 @@ bool OSDService::too_full_for_backfill(double *_ratio, double *_max_ratio)
 {
   Mutex::Locker l(full_status_lock);
   double max_ratio;
-  max_ratio = osd->cct->_conf->osd_backfill_full_ratio;
+  max_ratio = cct->_conf->osd_backfill_full_ratio;
   if (_ratio)
     *_ratio = cur_ratio;
   if (_max_ratio)
@@ -3180,7 +3181,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 
     string poolstr;
 
-    cmd_getval(service->osd->cct, cmdmap, "pool", poolstr);
+    cmd_getval(service->cct, cmdmap, "pool", poolstr);
     pool = curmap->const_lookup_pg_pool_name(poolstr.c_str());
     //If we can't find it by name then maybe id specified
     if (pool < 0 && isdigit(poolstr[0]))
@@ -3191,7 +3192,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     }
     r = -1;
     string objname, nspace;
-    cmd_getval(service->osd->cct, cmdmap, "objname", objname);
+    cmd_getval(service->cct, cmdmap, "objname", objname);
     std::size_t found = objname.find_first_of('/');
     if (found != string::npos) {
       nspace = objname.substr(0, found);
@@ -3213,8 +3214,8 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       map<string, bufferlist> newattrs;
       bufferlist val;
       string key, valstr;
-      cmd_getval(service->osd->cct, cmdmap, "key", key);
-      cmd_getval(service->osd->cct, cmdmap, "val", valstr);
+      cmd_getval(service->cct, cmdmap, "key", key);
+      cmd_getval(service->cct, cmdmap, "val", valstr);
 
       val.append(valstr);
       newattrs[key] = val;
@@ -3227,7 +3228,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     } else if (command == "rmomapkey") {
       string key;
       set<string> keys;
-      cmd_getval(service->osd->cct, cmdmap, "key", key);
+      cmd_getval(service->cct, cmdmap, "key", key);
 
       keys.insert(key);
       t.omap_rmkeys(coll_t(pgid), obj, keys);
@@ -3240,7 +3241,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       bufferlist newheader;
       string headerstr;
 
-      cmd_getval(service->osd->cct, cmdmap, "header", headerstr);
+      cmd_getval(service->cct, cmdmap, "header", headerstr);
       newheader.append(headerstr);
       t.omap_setheader(coll_t(pgid), obj, newheader);
       r = store->apply_transaction(t);
@@ -3264,7 +3265,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       }
     } else if (command == "truncobj") {
       int64_t trunclen;
-      cmd_getval(service->osd->cct, cmdmap, "len", trunclen);
+      cmd_getval(service->cct, cmdmap, "len", trunclen);
       t.truncate(coll_t(pgid), obj, trunclen);
       r = store->apply_transaction(t);
       if (r < 0)
@@ -3354,12 +3355,12 @@ void OSD::RemoveWQ::_process(pair<PGRef, DeletingStateRef> item)
 
   if (pg->have_temp_coll()) {
     bool cont = remove_dir(
-      pg->osd->osd->cct, store, &mapper, &driver, pg->osr.get(), pg->get_temp_coll(), item.second);
+      pg->cct, store, &mapper, &driver, pg->osr.get(), pg->get_temp_coll(), item.second);
     if (!cont)
       return;
   }
   bool cont = remove_dir(
-      pg->osd->osd->cct, store, &mapper, &driver, pg->osr.get(), coll, item.second);
+      pg->cct, store, &mapper, &driver, pg->osr.get(), coll, item.second);
   if (!cont)
     return;
 
@@ -4806,13 +4807,13 @@ bool OSDService::inc_scrubs_pending()
   bool result = false;
 
   sched_scrub_lock.Lock();
-  if (scrubs_pending + scrubs_active < osd->cct->_conf->osd_max_scrubs) {
+  if (scrubs_pending + scrubs_active < cct->_conf->osd_max_scrubs) {
     dout(20) << "inc_scrubs_pending " << scrubs_pending << " -> " << (scrubs_pending+1)
-	     << " (max " << osd->cct->_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
+	     << " (max " << cct->_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
     result = true;
     ++scrubs_pending;
   } else {
-    dout(20) << "inc_scrubs_pending " << scrubs_pending << " + " << scrubs_active << " active >= max " << osd->cct->_conf->osd_max_scrubs << dendl;
+    dout(20) << "inc_scrubs_pending " << scrubs_pending << " + " << scrubs_active << " active >= max " << cct->_conf->osd_max_scrubs << dendl;
   }
   sched_scrub_lock.Unlock();
 
@@ -4823,7 +4824,7 @@ void OSDService::dec_scrubs_pending()
 {
   sched_scrub_lock.Lock();
   dout(20) << "dec_scrubs_pending " << scrubs_pending << " -> " << (scrubs_pending-1)
-	   << " (max " << osd->cct->_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
+	   << " (max " << cct->_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
   --scrubs_pending;
   assert(scrubs_pending >= 0);
   sched_scrub_lock.Unlock();
@@ -4836,12 +4837,12 @@ void OSDService::inc_scrubs_active(bool reserved)
   if (reserved) {
     --(scrubs_pending);
     dout(20) << "inc_scrubs_active " << (scrubs_active-1) << " -> " << scrubs_active
-	     << " (max " << osd->cct->_conf->osd_max_scrubs
+	     << " (max " << cct->_conf->osd_max_scrubs
 	     << ", pending " << (scrubs_pending+1) << " -> " << scrubs_pending << ")" << dendl;
     assert(scrubs_pending >= 0);
   } else {
     dout(20) << "inc_scrubs_active " << (scrubs_active-1) << " -> " << scrubs_active
-	     << " (max " << osd->cct->_conf->osd_max_scrubs
+	     << " (max " << cct->_conf->osd_max_scrubs
 	     << ", pending " << scrubs_pending << ")" << dendl;
   }
   sched_scrub_lock.Unlock();
@@ -4851,7 +4852,7 @@ void OSDService::dec_scrubs_active()
 {
   sched_scrub_lock.Lock();
   dout(20) << "dec_scrubs_active " << scrubs_active << " -> " << (scrubs_active-1)
-	   << " (max " << osd->cct->_conf->osd_max_scrubs << ", pending " << scrubs_pending << ")" << dendl;
+	   << " (max " << cct->_conf->osd_max_scrubs << ", pending " << scrubs_pending << ")" << dendl;
   --scrubs_active;
   sched_scrub_lock.Unlock();
 }
@@ -4870,10 +4871,10 @@ bool OSDService::prepare_to_stop()
 					      osdmap->get_epoch(),
 					      false
 					      ));
-    utime_t now = ceph_clock_now(osd->cct);
+    utime_t now = ceph_clock_now(cct);
     utime_t timeout;
-    timeout.set_from_double(now + osd->cct->_conf->osd_mon_shutdown_timeout);
-    while ((ceph_clock_now(osd->cct) < timeout) &&
+    timeout.set_from_double(now + cct->_conf->osd_mon_shutdown_timeout);
+    while ((ceph_clock_now(cct) < timeout) &&
 	   (state != STOPPING)) {
       is_stopping_cond.WaitUntil(is_stopping_lock, timeout);
     }
@@ -5634,7 +5635,7 @@ OSDMapRef OSDService::_add_map(OSDMap *o)
 {
   epoch_t e = o->get_epoch();
 
-  if (osd->cct->_conf->osd_map_dedup) {
+  if (cct->_conf->osd_map_dedup) {
     // Dedup against an existing map at a nearby epoch
     OSDMapRef for_dedup = map_cache.lower_bound(e);
     if (for_dedup) {
