@@ -437,10 +437,6 @@ protected:
     int from, PushOp &op, PushReplyOp *response,
     ObjectStore::Transaction *t);
   void send_pushes(int prio, map<int, vector<PushOp> > &pushes);
-  int send_push(int priority, int peer,
-		const ObjectRecoveryInfo& recovery_info,
-		const ObjectRecoveryProgress &progress,
-		ObjectRecoveryProgress *out_progress = 0);
   int build_push_op(const ObjectRecoveryInfo &recovery_info,
 		    const ObjectRecoveryProgress &progress,
 		    ObjectRecoveryProgress *out_progress,
