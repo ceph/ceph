@@ -228,7 +228,7 @@ private:
 			       bufferlist data_received,
 			       interval_set<uint64_t> *intervals_usable,
 			       bufferlist *data_usable);
-  void _failed_push(int from, const hobject_t &soid) {}
+  void _failed_push(int from, const hobject_t &soid);
 
   void send_pushes(int prio, map<int, vector<PushOp> > &pushes) {}
   void prep_push_op_blank(const hobject_t& soid, PushOp *op) {}

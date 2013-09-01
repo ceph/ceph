@@ -6922,8 +6922,9 @@ void ReplicatedBackend::sub_op_push(OpRequestRef op)
   return;
 }
 
-void ReplicatedPG::_failed_push(int from, const hobject_t &soid)
+void ReplicatedPG::failed_push(int from, const hobject_t &soid)
 {
+  // TODOSAM: this will need to update recovering
   map<hobject_t,set<int> >::iterator p = missing_loc.find(soid);
   if (p != missing_loc.end()) {
     dout(0) << "_failed_push " << soid << " from osd." << from
@@ -6936,9 +6937,15 @@ void ReplicatedPG::_failed_push(int from, const hobject_t &soid)
     dout(0) << "_failed_push " << soid << " from osd." << from
 	    << " but not in missing_loc ???" << dendl;
   }
-
   finish_recovery_op(soid);  // close out this attempt,
+}
+
+void ReplicatedBackend::_failed_push(int from, const hobject_t &soid)
+{
+  get_parent()->failed_push(from, soid);
   pull_from_peer[from].erase(soid);
+  if (pull_from_peer[from].empty())
+    pull_from_peer.erase(from);
   pulling.erase(soid);
 }
 
