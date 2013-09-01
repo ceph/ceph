@@ -216,18 +216,18 @@ private:
   void do_pull(OpRequestRef op);
   void do_push_reply(OpRequestRef op);
 
-  bool handle_push_reply(int peer, PushReplyOp &op, PushOp *reply) { return true; }
-  void handle_pull(int peer, PullOp &op, PushOp *reply) {}
+  bool handle_push_reply(int peer, PushReplyOp &op, PushOp *reply);
+  void handle_pull(int peer, PullOp &op, PushOp *reply);
   bool handle_pull_response(int from, PushOp &op, PullOp *response,
-			    ObjectStore::Transaction *t) { return true; }
+			    ObjectStore::Transaction *t);
   void handle_push(int from, PushOp &op, PushReplyOp *response,
-		   ObjectStore::Transaction *t) {}
+		   ObjectStore::Transaction *t);
 
   static void trim_pushed_data(const interval_set<uint64_t> &copy_subset,
 			       const interval_set<uint64_t> &intervals_received,
 			       bufferlist data_received,
 			       interval_set<uint64_t> *intervals_usable,
-			       bufferlist *data_usable) {}
+			       bufferlist *data_usable);
   void _failed_push(int from, const hobject_t &soid) {}
 
   void send_pushes(int prio, map<int, vector<PushOp> > &pushes) {}
