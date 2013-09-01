@@ -213,8 +213,8 @@ private:
       _do_push(op);
     }
   }
-  void do_pull(OpRequestRef op) {}
-  void do_push_reply(OpRequestRef op) {}
+  void do_pull(OpRequestRef op);
+  void do_push_reply(OpRequestRef op);
 
   bool handle_push_reply(int peer, PushReplyOp &op, PushOp *reply) { return true; }
   void handle_pull(int peer, PullOp &op, PushOp *reply) {}
