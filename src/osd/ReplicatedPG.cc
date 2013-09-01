@@ -6229,7 +6229,7 @@ ObjectRecoveryInfo ReplicatedPG::recalc_subsets(const ObjectRecoveryInfo& recove
   return new_info;
 }
 
-bool ReplicatedPG::handle_pull_response(
+bool ReplicatedBackend::handle_pull_response(
   int from, PushOp &pop, PullOp *response,
   ObjectStore::Transaction *t)
 {
@@ -6263,7 +6263,8 @@ bool ReplicatedPG::handle_pull_response(
       pop.recovery_info.copy_subset);
   }
 
-  pi.recovery_info = recalc_subsets(pi.recovery_info);
+  // TODOSAM: probably just kill this
+  //pi.recovery_info = recalc_subsets(pi.recovery_info);
 
   interval_set<uint64_t> usable_intervals;
   bufferlist usable_data;
@@ -6275,7 +6276,8 @@ bool ReplicatedPG::handle_pull_response(
   data_included = usable_intervals;
   data.claim(usable_data);
 
-  info.stats.stats.sum.num_bytes_recovered += data.length();
+  // TODOSAM: add into the stats passed into on_local_recover
+  //info.stats.stats.sum.num_bytes_recovered += data.length();
 
   bool first = pi.recovery_progress.first;
   pi.recovery_progress = pop.after_progress;
@@ -6312,13 +6314,16 @@ bool ReplicatedPG::handle_pull_response(
 		   pop.omap_entries,
 		   t);
 
-  info.stats.stats.sum.num_keys_recovered += pop.omap_entries.size();
+  // TODOSAM: add into the stats passed into on_local_recover
+  //info.stats.stats.sum.num_keys_recovered += pop.omap_entries.size();
 
   if (complete) {
     pulling.erase(hoid);
     pull_from_peer[from].erase(hoid);
-    info.stats.stats.sum.num_objects_recovered++;
-    on_local_recover(hoid, object_stat_sum_t(), pi.recovery_info, pi.obc, t);
+    // TODOSAM: add into the stats passed into on_local_recover
+    //info.stats.stats.sum.num_objects_recovered++;
+    get_parent()->on_local_recover(
+      hoid, object_stat_sum_t(), pi.recovery_info, pi.obc, t);
     return false;
   } else {
     response->soid = pop.soid;
@@ -6338,7 +6343,7 @@ struct C_OnPushCommit : public Context {
   }
 };
 
-void ReplicatedPG::handle_push(
+void ReplicatedBackend::handle_push(
   int from, PushOp &pop, PushReplyOp *response,
   ObjectStore::Transaction *t)
 {
@@ -6364,7 +6369,7 @@ void ReplicatedPG::handle_push(
 		   t);
 
   if (complete)
-    on_local_recover(
+    get_parent()->on_local_recover(
       pop.recovery_info.soid,
       object_stat_sum_t(),
       pop.recovery_info,
@@ -6611,7 +6616,7 @@ void ReplicatedBackend::sub_op_push_reply(OpRequestRef op)
     send_push_op_legacy(pushing[soid][peer].priority, peer, pop);
 }
 
-bool ReplicatedPG::handle_push_reply(int peer, PushReplyOp &op, PushOp *reply)
+bool ReplicatedBackend::handle_push_reply(int peer, PushReplyOp &op, PushOp *reply)
 {
   const hobject_t &soid = op.soid;
   if (pushing.count(soid) == 0) {
@@ -6638,14 +6643,14 @@ bool ReplicatedPG::handle_push_reply(int peer, PushReplyOp &op, PushOp *reply)
       return true;
     } else {
       // done!
-      on_peer_recover(peer, soid, pi->recovery_info);
+      get_parent()->on_peer_recover(peer, soid, pi->recovery_info);
       
       pushing[soid].erase(peer);
       pi = NULL;
       
       
       if (pushing[soid].empty()) {
-	on_global_recover(soid);
+	get_parent()->on_global_recover(soid);
       } else {
 	dout(10) << "pushed " << soid << ", still waiting for push ack from " 
 		 << pushing[soid].size() << " others" << dendl;
@@ -6713,13 +6718,14 @@ void ReplicatedBackend::sub_op_pull(OpRequestRef op)
   log_subop_stats(osd, op, 0, l_osd_sop_pull_lat);
 }
 
-void ReplicatedPG::handle_pull(int peer, PullOp &op, PushOp *reply)
+void ReplicatedBackend::handle_pull(int peer, PullOp &op, PushOp *reply)
 {
   const hobject_t &soid = op.soid;
   struct stat st;
   int r = osd->store->stat(coll, soid, &st);
   if (r != 0) {
-    osd->clog.error() << info.pgid << " " << peer << " tried to pull " << soid
+    osd->clog.error() << get_info().pgid << " "
+		      << peer << " tried to pull " << soid
 		      << " but got " << cpp_strerror(-r) << "\n";
     prep_push_op_blank(soid, reply);
   } else {
@@ -6836,7 +6842,7 @@ void ReplicatedPG::recover_got(hobject_t oid, eversion_t v)
  * @param intervals_usable intervals we want to keep
  * @param data_usable matching data we want to keep
  */
-void ReplicatedPG::trim_pushed_data(
+void ReplicatedBackend::trim_pushed_data(
   const interval_set<uint64_t> &copy_subset,
   const interval_set<uint64_t> &intervals_received,
   bufferlist data_received,
