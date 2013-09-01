@@ -230,16 +230,16 @@ private:
 			       bufferlist *data_usable);
   void _failed_push(int from, const hobject_t &soid);
 
-  void send_pushes(int prio, map<int, vector<PushOp> > &pushes) {}
-  void prep_push_op_blank(const hobject_t& soid, PushOp *op) {}
+  void send_pushes(int prio, map<int, vector<PushOp> > &pushes);
+  void prep_push_op_blank(const hobject_t& soid, PushOp *op);
   int send_push_op_legacy(int priority, int peer,
-			  PushOp &pop) { return 1; }
+			  PushOp &pop);
   int send_pull_legacy(int priority, int peer,
 		       const ObjectRecoveryInfo& recovery_info,
-		       ObjectRecoveryProgress progress) { return 1;}
+		       ObjectRecoveryProgress progress);
   void send_pulls(
     int priority,
-    map<int, vector<PullOp> > &pulls) {}
+    map<int, vector<PullOp> > &pulls);
 
   int build_push_op(const ObjectRecoveryInfo &recovery_info,
 		    const ObjectRecoveryProgress &progress,

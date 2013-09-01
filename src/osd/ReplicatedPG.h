@@ -545,17 +545,11 @@ protected:
   map<hobject_t, PullInfo> pulling;
 
   ObjectRecoveryInfo recalc_subsets(const ObjectRecoveryInfo& recovery_info);
-  void send_pushes(int prio, map<int, vector<PushOp> > &pushes);
   int build_push_op(const ObjectRecoveryInfo &recovery_info,
 		    const ObjectRecoveryProgress &progress,
 		    ObjectRecoveryProgress *out_progress,
 		    PushOp *out_op);
-  int send_push_op_legacy(int priority, int peer,
-		   PushOp &pop);
     
-  int send_pull_legacy(int priority, int peer,
-		const ObjectRecoveryInfo& recovery_info,
-		ObjectRecoveryProgress progress);
   void submit_push_data(ObjectRecoveryInfo &recovery_info,
 			bool first,
 			bool complete,
@@ -662,16 +656,12 @@ protected:
 		 interval_set<uint64_t> &data_subset,
 		 map<hobject_t, interval_set<uint64_t> >& clone_subsets,
 		 PushOp *op);
-  void prep_push_op_blank(const hobject_t& soid, PushOp *op);
 
   void finish_degraded_object(const hobject_t& oid);
 
   // Cancels/resets pulls from peer
   void check_recovery_sources(const OSDMapRef map);
 
-  void send_pulls(
-    int priority,
-    map<int, vector<PullOp> > &pulls);
   int prepare_pull(
     const hobject_t& oid, eversion_t v,
     int priority,
