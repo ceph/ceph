@@ -905,15 +905,7 @@ public:
     OpRequestRef op,
     ThreadPool::TPHandle &handle);
   void do_backfill(OpRequestRef op);
-  void _do_push(OpRequestRef op);
-  void _do_pull_response(OpRequestRef op);
-  void do_push(OpRequestRef op) {
-    if (is_primary()) {
-      _do_pull_response(op);
-    } else {
-      _do_push(op);
-    }
-  }
+
   void do_pull(OpRequestRef op);
   void do_push_reply(OpRequestRef op);
   RepGather *trim_object(const hobject_t &coid);
