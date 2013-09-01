@@ -6340,18 +6340,6 @@ void ReplicatedPG::send_pulls(int prio, map<int, vector<PullOp> > &pulls)
   }
 }
 
-int ReplicatedPG::send_push(int prio, int peer,
-			    const ObjectRecoveryInfo &recovery_info,
-			    const ObjectRecoveryProgress &progress,
-			    ObjectRecoveryProgress *out_progress)
-{
-  PushOp op;
-  int r = build_push_op(recovery_info, progress, out_progress, &op);
-  if (r < 0)
-    return r;
-  return send_push_op_legacy(prio, peer, op);
-}
-
 int ReplicatedPG::build_push_op(const ObjectRecoveryInfo &recovery_info,
 				const ObjectRecoveryProgress &progress,
 				ObjectRecoveryProgress *out_progress,
