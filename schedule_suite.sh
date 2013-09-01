@@ -10,14 +10,14 @@ mtype=$7
 template=$8
 distro=$9
 
-if [ -z "$email" ]; then
-    echo "usage: $0 <suite> <ceph branch> <kernel branch> <email> [flavor] [teuthology-branch] [machinetype] [template] [distro]"
+if [ -z "$kernel" ]; then
+    echo "usage: $0 <suite> <ceph branch> <kernel branch> [email] [flavor] [teuthology-branch] [machinetype] [template] [distro]"
     echo "  flavor can be 'basic', 'gcov', 'notcmalloc'."
     exit 1
 fi
 
+[ -z "$email" ] && email='ceph-qa@ceph.com'
 [ -z "$flavor" ] && flavor='basic'
-
 [ -z "$distro" ] && distro='ubuntu'
 
 if [ "$kernel" = "-" ]
