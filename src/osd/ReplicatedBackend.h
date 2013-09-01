@@ -204,8 +204,8 @@ private:
   void sub_op_push_reply(OpRequestRef op);
   void sub_op_pull(OpRequestRef op);
 
-  void _do_push(OpRequestRef op) {}
-  void _do_pull_response(OpRequestRef op) {}
+  void _do_push(OpRequestRef op);
+  void _do_pull_response(OpRequestRef op);
   void do_push(OpRequestRef op) {
     if (is_primary()) {
       _do_pull_response(op);

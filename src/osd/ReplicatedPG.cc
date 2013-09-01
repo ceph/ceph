@@ -1569,7 +1569,7 @@ void ReplicatedPG::do_scan(
   }
 }
 
-void ReplicatedPG::_do_push(OpRequestRef op)
+void ReplicatedBackend::_do_push(OpRequestRef op)
 {
   MOSDPGPush *m = static_cast<MOSDPGPush *>(op->request);
   assert(m->get_header().type == MSG_OSD_PG_PUSH);
@@ -1586,18 +1586,20 @@ void ReplicatedPG::_do_push(OpRequestRef op)
 
   MOSDPGPushReply *reply = new MOSDPGPushReply;
   reply->set_priority(m->get_priority());
-  reply->pgid = info.pgid;
+  reply->pgid = get_info().pgid;
   reply->map_epoch = m->map_epoch;
   reply->replies.swap(replies);
   reply->compute_cost(cct);
 
-  t->register_on_complete(new C_OSD_SendMessageOnConn(
-			    osd, reply, m->get_connection()));
+  t->register_on_complete(
+    get_parent()->bless_context(
+      new C_OSD_SendMessageOnConn(
+	osd, reply, m->get_connection())));
 
-  osd->store->queue_transaction(osr.get(), t);
+  get_parent()->queue_transaction(t);
 }
 
-void ReplicatedPG::_do_pull_response(OpRequestRef op)
+void ReplicatedBackend::_do_pull_response(OpRequestRef op)
 {
   MOSDPGPush *m = static_cast<MOSDPGPush *>(op->request);
   assert(m->get_header().type == MSG_OSD_PG_PUSH);
@@ -1617,16 +1619,18 @@ void ReplicatedPG::_do_pull_response(OpRequestRef op)
   if (replies.size()) {
     MOSDPGPull *reply = new MOSDPGPull;
     reply->set_priority(m->get_priority());
-    reply->pgid = info.pgid;
+    reply->pgid = get_info().pgid;
     reply->map_epoch = m->map_epoch;
     reply->pulls.swap(replies);
     reply->compute_cost(cct);
 
-    t->register_on_complete(new C_OSD_SendMessageOnConn(
-			      osd, reply, m->get_connection()));
+    t->register_on_complete(
+      get_parent()->bless_context(
+	new C_OSD_SendMessageOnConn(
+	  osd, reply, m->get_connection())));
   }
 
-  osd->store->queue_transaction(osr.get(), t);
+  get_parent()->queue_transaction(t);
 }
 
 void ReplicatedPG::do_pull(OpRequestRef op)
