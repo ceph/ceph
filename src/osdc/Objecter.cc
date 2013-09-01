@@ -1329,10 +1329,13 @@ int Objecter::recalc_op_target(Op *op)
   bool is_write = op->flags & CEPH_OSD_FLAG_WRITE;
 
   op->target_oloc = op->base_oloc;
-  if (is_read && osdmap->get_pg_pool(op->base_oloc.pool)->has_read_tier())
-    op->target_oloc.pool = osdmap->get_pg_pool(op->base_oloc.pool)->read_tier;
-  if (is_write && osdmap->get_pg_pool(op->base_oloc.pool)->has_write_tier())
-    op->target_oloc.pool = osdmap->get_pg_pool(op->base_oloc.pool)->write_tier;
+  const pg_pool_t *pi = osdmap->get_pg_pool(op->base_oloc.pool);
+  if (pi) {
+    if (is_read && pi->has_read_tier())
+      op->target_oloc.pool = pi->read_tier;
+    if (is_write && pi->has_write_tier())
+      op->target_oloc.pool = pi->write_tier;
+  }
 
   if (op->precalc_pgid) {
     assert(op->oid.name.empty()); // make sure this is a listing op
