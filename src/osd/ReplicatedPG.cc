@@ -80,6 +80,25 @@ PGLSFilter::~PGLSFilter()
 {
 }
 
+static void log_subop_stats(
+  OSDService *osd,
+  OpRequestRef op, int tag_inb, int tag_lat)
+{
+  utime_t now = ceph_clock_now(g_ceph_context);
+  utime_t latency = now;
+  latency -= op->request->get_recv_stamp();
+
+  uint64_t inb = op->request->get_data().length();
+
+  osd->logger->inc(l_osd_sop);
+
+  osd->logger->inc(l_osd_sop_inb, inb);
+  osd->logger->tinc(l_osd_sop_lat, latency);
+
+  if (tag_inb)
+    osd->logger->inc(tag_inb, inb);
+  osd->logger->tinc(tag_lat, latency);
+}
 
 // ======================
 // PGBackend::Listener
@@ -1416,26 +1435,6 @@ void ReplicatedPG::log_op_stats(OpContext *ctx)
 	   << " rlat " << rlatency
 	   << " lat " << latency << dendl;
 }
-
-void ReplicatedPG::log_subop_stats(OpRequestRef op, int tag_inb, int tag_lat)
-{
-  utime_t now = ceph_clock_now(cct);
-  utime_t latency = now;
-  latency -= op->request->get_recv_stamp();
-
-  uint64_t inb = op->request->get_data().length();
-
-  osd->logger->inc(l_osd_sop);
-
-  osd->logger->inc(l_osd_sop_inb, inb);
-  osd->logger->tinc(l_osd_sop_lat, latency);
-
-  if (tag_inb)
-    osd->logger->inc(tag_inb, inb);
-  osd->logger->tinc(tag_lat, latency);
-}
-
-
 
 void ReplicatedPG::do_sub_op(OpRequestRef op)
 {
@@ -5673,7 +5672,7 @@ void ReplicatedPG::sub_op_modify_commit(RepModify *rm)
 	     << last_peering_reset << dendl;
   }
   
-  log_subop_stats(rm->op, l_osd_sop_w_inb, l_osd_sop_w_lat);
+  log_subop_stats(osd, rm->op, l_osd_sop_w_inb, l_osd_sop_w_lat);
   bool done = rm->applied && rm->committed;
   unlock();
   if (done) {
@@ -6331,7 +6330,7 @@ struct C_OnPushCommit : public Context {
   C_OnPushCommit(ReplicatedPG *pg, OpRequestRef op) : pg(pg), op(op) {}
   void finish(int) {
     op->mark_event("committed");
-    pg->log_subop_stats(op, l_osd_push_inb, l_osd_sop_push_lat);
+    log_subop_stats(pg->osd, op, l_osd_push_inb, l_osd_sop_push_lat);
   }
 };
 
@@ -6707,7 +6706,7 @@ void ReplicatedPG::sub_op_pull(OpRequestRef op)
     m->get_source().num(),
     reply);
 
-  log_subop_stats(op, 0, l_osd_sop_pull_lat);
+  log_subop_stats(osd, op, 0, l_osd_sop_pull_lat);
 }
 
 void ReplicatedPG::handle_pull(int peer, PullOp &op, PushOp *reply)
