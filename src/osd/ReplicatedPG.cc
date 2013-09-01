@@ -1633,7 +1633,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
   get_parent()->queue_transaction(t);
 }
 
-void ReplicatedPG::do_pull(OpRequestRef op)
+void ReplicatedBackend::do_pull(OpRequestRef op)
 {
   MOSDPGPull *m = static_cast<MOSDPGPull *>(op->request);
   assert(m->get_header().type == MSG_OSD_PG_PULL);
@@ -1649,7 +1649,7 @@ void ReplicatedPG::do_pull(OpRequestRef op)
   send_pushes(m->get_priority(), replies);
 }
 
-void ReplicatedPG::do_push_reply(OpRequestRef op)
+void ReplicatedBackend::do_push_reply(OpRequestRef op)
 {
   MOSDPGPushReply *m = static_cast<MOSDPGPushReply *>(op->request);
   assert(m->get_header().type == MSG_OSD_PG_PUSH_REPLY);
