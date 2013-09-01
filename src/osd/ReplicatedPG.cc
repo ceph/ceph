@@ -6679,7 +6679,7 @@ void ReplicatedPG::finish_degraded_object(const hobject_t& oid)
  * process request to pull an entire object.
  * NOTE: called from opqueue.
  */
-void ReplicatedPG::sub_op_pull(OpRequestRef op)
+void ReplicatedBackend::sub_op_pull(OpRequestRef op)
 {
   MOSDSubOp *m = static_cast<MOSDSubOp*>(op->request);
   assert(m->get_header().type == MSG_OSD_SUBOP);
