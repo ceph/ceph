@@ -830,6 +830,7 @@ public:
     
     object_t base_oid;
     object_locator_t base_oloc;
+    object_t target_oid;
     object_locator_t target_oloc;
 
     pg_t pgid;
