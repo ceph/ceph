@@ -1364,6 +1364,7 @@ public:
     context->update_object_version(oid, comp->get_version());
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
+    context->kick();
   }
 
   bool finished()
