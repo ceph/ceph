@@ -1548,6 +1548,15 @@ void Objecter::throttle_op(Op *op, int op_budget)
   }
 }
 
+void Objecter::unregister_op(Op *op)
+{
+  if (op->onack)
+    num_unacked--;
+  if (op->oncommit)
+    num_uncommitted--;
+  ops.erase(op->tid);
+}
+
 /* This function DOES put the passed message before returning */
 void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 {
@@ -1596,10 +1605,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   if (rc == -EAGAIN) {
     ldout(cct, 7) << " got -EAGAIN, resubmitting" << dendl;
-    if (op->onack)
-      num_unacked--;
-    if (op->oncommit)
-      num_uncommitted--;
+    unregister_op(op);
     op_submit(op);
     m->put();
     return;
