@@ -1328,14 +1328,24 @@ int Objecter::recalc_op_target(Op *op)
   bool is_read = op->flags & CEPH_OSD_FLAG_READ;
   bool is_write = op->flags & CEPH_OSD_FLAG_WRITE;
 
-  op->target_oid = op->base_oid;
-  op->target_oloc = op->base_oloc;
-  const pg_pool_t *pi = osdmap->get_pg_pool(op->base_oloc.pool);
-  if (pi) {
-    if (is_read && pi->has_read_tier())
-      op->target_oloc.pool = pi->read_tier;
-    if (is_write && pi->has_write_tier())
-      op->target_oloc.pool = pi->write_tier;
+  bool need_check_tiering = false;
+  if (op->target_oid.name.empty()) {
+    op->target_oid = op->base_oid;
+    need_check_tiering = true;
+  }
+  if (op->target_oloc.empty()) {
+    op->target_oloc = op->base_oloc;
+    need_check_tiering = true;
+  }
+  
+  if (need_check_tiering) {
+    const pg_pool_t *pi = osdmap->get_pg_pool(op->base_oloc.pool);
+    if (pi) {
+      if (is_read && pi->has_read_tier())
+	op->target_oloc.pool = pi->read_tier;
+      if (is_write && pi->has_write_tier())
+	op->target_oloc.pool = pi->write_tier;
+    }
   }
 
   if (op->precalc_pgid) {
@@ -1602,6 +1612,15 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   Context *oncommit = 0;
 
   int rc = m->get_result();
+
+  if (m->is_redirect_reply()) {
+    ldout(cct, 5) << " got redirect reply; redirecting" << dendl;
+    unregister_op(op);
+    m->get_redirect().combine_with_locator(op->target_oloc, op->target_oid.name);
+    op_submit(op);
+    m->put();
+    return;
+  }
 
   if (rc == -EAGAIN) {
     ldout(cct, 7) << " got -EAGAIN, resubmitting" << dendl;
