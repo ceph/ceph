@@ -4,6 +4,7 @@
 #include "arch/probe.h"
 
 #include "arch/intel.h"
+#include "arch/neon.h"
 
 int ceph_arch_probe(void)
 {
@@ -11,6 +12,7 @@ int ceph_arch_probe(void)
     return 1;
 
   ceph_arch_intel_probe();
+  ceph_arch_neon_probe();
 
   ceph_arch_probed = 1;
   return 1;
