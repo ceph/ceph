@@ -382,6 +382,14 @@ void librados::ObjectWriteOperation::omap_rm_keys(
   o->omap_rm_keys(to_rm);
 }
 
+void librados::ObjectWriteOperation::copy_from(const std::string& src,
+					       const IoCtx& src_ioctx,
+					       uint64_t src_version)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->copy_from(object_t(src), src_ioctx.io_ctx_impl->snap_seq, src_ioctx.io_ctx_impl->oloc, src_version);
+}
+
 void librados::ObjectWriteOperation::tmap_put(const bufferlist &bl)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;

@@ -753,6 +753,14 @@ struct ObjectOperation {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_ROLLBACK);
     osd_op.op.snap.snapid = snapid;
   }
+
+  void copy_from(object_t src, snapid_t snapid, object_locator_t src_oloc, version_t src_version) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_FROM);
+    osd_op.op.copy_from.snapid = snapid;
+    osd_op.op.copy_from.src_version = src_version;
+    ::encode(src, osd_op.indata);
+    ::encode(src_oloc, osd_op.indata);
+  }
 };
 
 
