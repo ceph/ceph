@@ -109,7 +109,7 @@ public:
   }
   
   // osdmap
-  epoch_t get_map_epoch() { return osdmap_epoch; }
+  epoch_t get_map_epoch() const { return osdmap_epoch; }
 
   /*osd_reqid_t get_reqid() { return osd_reqid_t(get_dest(),
 					       head.client_inc,
