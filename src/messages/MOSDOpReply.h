@@ -31,7 +31,7 @@
 
 class MOSDOpReply : public Message {
 
-  static const int HEAD_VERSION = 4;
+  static const int HEAD_VERSION = 5;
   static const int COMPAT_VERSION = 2;
 
   object_t oid;
@@ -39,7 +39,9 @@ class MOSDOpReply : public Message {
   vector<OSDOp> ops;
   int64_t flags;
   int32_t result;
-  eversion_t reassert_version;
+  eversion_t bad_replay_version;
+  eversion_t replay_version;
+  version_t user_version;
   epoch_t osdmap_epoch;
   int32_t retry_attempt;
 
@@ -52,10 +54,38 @@ public:
   bool     is_onnvram() const { return get_flags() & CEPH_OSD_FLAG_ONNVRAM; }
   
   int get_result() const { return result; }
-  eversion_t get_version() { return reassert_version; }
+  eversion_t get_replay_version() { return replay_version; }
+  version_t get_user_version() { return user_version; }
   
   void set_result(int r) { result = r; }
-  void set_version(eversion_t v) { reassert_version = v; }
+
+  void set_reply_versions(eversion_t v, version_t uv) {
+    replay_version = v;
+    user_version = uv;
+    /* We go through some shenanigans here for backwards compatibility
+     * with old clients, who do not look at our replay_version and
+     * user_version but instead see what we now call the
+     * bad_replay_version. On pools without caching
+     * the user_version infrastructure is a slightly-laggy copy of
+     * the regular pg version/at_version infrastructure; the difference
+     * being it is not updated on watch ops like that is -- but on updates
+     * it is set equal to at_version. This means that for non-watch write ops
+     * on classic pools, all three of replay_version, user_version, and
+     * bad_replay_version are identical. But for watch ops the replay_version
+     * has been updated, while the user_at_version has not, and the semantics
+     * we promised old clients are that the version they see is not an update.
+     * So set the bad_replay_version to be the same as the user_at_version. */
+    bad_replay_version = v;
+    if (uv) {
+      bad_replay_version.version = uv;
+    }
+  }
+
+  /* Don't fill in replay_version for non-write ops */
+  void set_enoent_reply_versions(eversion_t v, version_t uv) {
+    user_version = uv;
+    bad_replay_version = v;
+  }
 
   void add_flags(int f) { flags |= f; }
 
@@ -99,7 +129,7 @@ public:
     oid = req->oid;
     pgid = req->pgid;
     osdmap_epoch = e;
-    reassert_version = req->reassert_version;
+    user_version = 0;
     retry_attempt = req->get_retry_attempt();
 
     // zero out ops payload_len
@@ -121,6 +151,7 @@ public:
       head.layout.ol_pgid = pgid.get_old_pg().v;
       head.flags = flags;
       head.osdmap_epoch = osdmap_epoch;
+      head.reassert_version = bad_replay_version;
       head.result = result;
       head.num_ops = ops.size();
       head.object_len = oid.name.length();
@@ -134,7 +165,7 @@ public:
       ::encode(pgid, payload);
       ::encode(flags, payload);
       ::encode(result, payload);
-      ::encode(reassert_version, payload);
+      ::encode(bad_replay_version, payload);
       ::encode(osdmap_epoch, payload);
 
       __u32 num_ops = ops.size();
@@ -146,6 +177,9 @@ public:
 
       for (unsigned i = 0; i < num_ops; i++)
 	::encode(ops[i].rval, payload);
+
+      ::encode(replay_version, payload);
+      ::encode(user_version, payload);
     }
   }
   virtual void decode_payload() {
@@ -161,7 +195,8 @@ public:
       pgid = pg_t(head.layout.ol_pgid);
       result = head.result;
       flags = head.flags;
-      reassert_version = head.reassert_version;
+      replay_version = head.reassert_version;
+      user_version = replay_version.version;
       osdmap_epoch = head.osdmap_epoch;
       retry_attempt = -1;
     } else {
@@ -169,7 +204,7 @@ public:
       ::decode(pgid, p);
       ::decode(flags, p);
       ::decode(result, p);
-      ::decode(reassert_version, p);
+      ::decode(bad_replay_version, p);
       ::decode(osdmap_epoch, p);
 
       __u32 num_ops = ops.size();
@@ -188,6 +223,14 @@ public:
 	  ::decode(ops[i].rval, p);
 
 	OSDOp::split_osd_op_vector_out_data(ops, data);
+      }
+
+      if (header.version >= 5) {
+	::decode(replay_version, p);
+	::decode(user_version, p);
+      } else {
+	replay_version = bad_replay_version;
+	user_version = replay_version.version;
       }
     }
   }

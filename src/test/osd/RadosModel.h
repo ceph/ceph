@@ -396,6 +396,21 @@ public:
     pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
   }
 
+  void update_object_version(const string &oid, uint64_t version)
+  {
+    for (map<int, map<string,ObjectDesc> >::reverse_iterator i = 
+	   pool_obj_cont.rbegin();
+	 i != pool_obj_cont.rend();
+	 ++i) {
+      map<string,ObjectDesc>::iterator j = i->second.find(oid);
+      if (j != i->second.end()) {
+	j->second.version = version;
+	cout << __func__ << " oid " << oid << " is version " << version << std::endl;
+	break;
+      }
+    }
+  }
+
   void remove_object(const string &oid)
   {
     assert(!get_watch_context(oid));
@@ -624,6 +639,7 @@ public:
       assert(0);
     }
     done = true;
+    context->update_object_version(oid, comp->get_version());
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
     context->kick();
@@ -714,6 +730,7 @@ public:
       assert(0);
     }
     done = true;
+    context->update_object_version(oid, comp->get_version());
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
     context->kick();
@@ -825,6 +842,7 @@ public:
     assert(!done);
     waiting_on--;
     if (waiting_on == 0) {
+      uint64_t version = 0;
       for (set<librados::AioCompletion *>::iterator i = waiting.begin();
 	   i != waiting.end();
 	   ) {
@@ -833,10 +851,13 @@ public:
 	  cerr << "Error: oid " << oid << " write returned error code "
 	       << err << std::endl;
 	}
+	if ((*i)->get_version64() > version)
+	  version = (*i)->get_version64();
 	(*i)->release();
 	waiting.erase(i++);
       }
       
+      context->update_object_version(oid, version);
       context->oid_in_use.erase(oid);
       context->oid_not_in_use.insert(oid);
       context->kick();
@@ -1027,6 +1048,7 @@ public:
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
     assert(completion->is_complete());
+    uint64_t version = completion->get_version64();
     if (int err = completion->get_return_value()) {
       if (!(err == -ENOENT && old_value.deleted())) {
 	cerr << "Error: oid " << oid << " read returned error code "
@@ -1074,6 +1096,11 @@ public:
 	cerr << "oid: " << oid << " xattrs.size() is " << xattrs.size()
 	     << " and old is " << old_value.attrs.size() << std::endl;
 	assert(xattrs.size() == old_value.attrs.size());
+      }
+      if (version != old_value.version) {
+	cerr << "oid: " << oid << " version is " << version
+	     << " and expected " << old_value.version << std::endl;
+	assert(version == old_value.version);
       }
       for (map<string, bufferlist>::iterator omap_iter = omap.begin();
 	   omap_iter != omap.end();
@@ -1279,13 +1306,17 @@ class RollbackOp : public TestOp {
 public:
   string oid;
   int roll_back_to;
+  bool done;
+  librados::ObjectWriteOperation op;
+  librados::AioCompletion *comp;
+
   RollbackOp(RadosTestContext *context,
 	     const string &_oid,
 	     int snap,
 	     TestOpStat *stat = 0) :
     TestOp(context, stat),
     oid(_oid),
-    roll_back_to(snap)
+    roll_back_to(snap), done(false)
   {}
 
   void _begin()
@@ -1311,19 +1342,33 @@ public:
     context->state_lock.Unlock();
     assert(!context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset));
 
-	
-    int r = context->io_ctx.selfmanaged_snap_rollback(context->prefix+oid, 
-						      snap);
-    if (r) {
-      cerr << "r is " << r << std::endl;
+    op.selfmanaged_snap_rollback(snap);
+
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    comp = context->rados.aio_create_completion((void*) cb_arg, &write_callback,
+						NULL);
+    context->io_ctx.aio_operate(context->prefix+oid, comp, &op);
+  }
+
+  void _finish(CallbackInfo *info)
+  {
+    Mutex::Locker l(context->state_lock);
+    int r;
+    if ((r = comp->get_return_value())) {
+      cerr << "err " << r << std::endl;
       assert(0);
     }
+    done = true;
+    context->update_object_version(oid, comp->get_version());
+    context->oid_in_use.erase(oid);
+    context->oid_not_in_use.insert(oid);
+  }
 
-    {
-      Mutex::Locker l(context->state_lock);
-      context->oid_in_use.erase(oid);
-      context->oid_not_in_use.insert(oid);
-    }
+  bool finished()
+  {
+    return done;
   }
 
   string getType()

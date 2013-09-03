@@ -89,12 +89,6 @@ you have many pools with many placement groups (e.g., 50 pools with 100
 placement groups each). The point of diminishing returns depends upon the power
 of the OSD host.
 
-.. important:: Increasing the number of placement groups in a pool after you 
-   create the pool is still an experimental feature in Bobtail (v 0.56). We 
-   recommend defining a reasonable number of placement groups and maintaining
-   that number until Ceph's placement group splitting and merging 
-   functionality matures.
-
 See `Placement Groups`_ for details on calculating an appropriate number of 
 placement groups for your pool.
 

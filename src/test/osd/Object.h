@@ -240,9 +240,9 @@ public:
 class ObjectDesc {
 public:
   ObjectDesc(ContentsGenerator *cont_gen) : 
-    exists(false), tmap(false), layers(), cont_gen(cont_gen) {};
+    exists(false), tmap(false), version(0), layers(), cont_gen(cont_gen) {};
   ObjectDesc(const ContDesc &init, ContentsGenerator *cont_gen) : 
-    exists(false), tmap(false), layers(), cont_gen(cont_gen) {
+    exists(false), tmap(false), version(0), layers(), cont_gen(cont_gen) {
     layers.push_front(init);
   };
 
@@ -314,6 +314,7 @@ public:
   bool exists;
   bool tmap;
   bufferlist tmap_contents;
+  uint64_t version;
 private:
   list<ContDesc> layers;
   ContentsGenerator *cont_gen;

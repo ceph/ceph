@@ -17,6 +17,11 @@ set -e
 [ -z "$CEPH_NUM_MDS" ] && CEPH_NUM_MDS=3
 [ -z "$CEPH_NUM_RGW" ] && CEPH_NUM_RGW=1
 
+[ -z "$CEPH_DIR" ] && CEPH_DIR="$PWD/"
+[ -z "$CEPH_DEV_DIR" ] && CEPH_DEV_DIR="$CEPH_DIR/dev"
+[ -z "$CEPH_OUT_DIR" ] && CEPH_OUT_DIR="$CEPH_DIR/out"
+[ -z "$CEPH_RGW_PORT" ] && CEPH_RGW_PORT=8000
+
 extra_conf=""
 new=0
 standby=0
@@ -34,9 +39,9 @@ cephx=1 #turn cephx on by default
 
 MON_ADDR=""
 
-conf="ceph.conf"
+conf="$CEPH_DIR/ceph.conf"
 
-keyring_fn="$PWD/keyring"
+keyring_fn="$CEPH_DIR/keyring"
 osdmap_fn="/tmp/ceph_osdmap.$$"
 monmap_fn="/tmp/ceph_monmap.$$"
 
@@ -194,6 +199,7 @@ else
     COSDDEBUG='
         debug ms = 1
         debug osd = 25
+        debug objecter = 20
         debug monc = 20
         debug journal = 20
         debug filestore = 20
@@ -223,7 +229,7 @@ fi
 
 
 # sudo if btrfs
-test -d dev/osd0/. && test -e dev/sudo && SUDO="sudo"
+test -d $CEPH_DEV_DIR/osd0/. && test -e $CEPH_DEV_DIR/sudo && SUDO="sudo"
 
 if [ "$start_all" -eq 1 ]; then
     $SUDO $CEPH_BIN/init-ceph stop
@@ -275,11 +281,11 @@ do
 done
 
 DAEMONOPTS="
-	log file = out/\$name.log
-        admin socket = out/\$name.asok
+	log file = $CEPH_OUT_DIR/\$name.log
+        admin socket = $CEPH_OUT_DIR/\$name.asok
 	chdir = \"\"
-	pid file = out/\$name.pid
-        heartbeat file = out/\$name.heartbeat
+	pid file = $CEPH_OUT_DIR/\$name.pid
+        heartbeat file = $CEPH_OUT_DIR/\$name.heartbeat
 "
 
 
@@ -294,7 +300,7 @@ if [ "$start_mon" -eq 1 ]; then
         osd pgp bits = 5  ; (invalid, but ceph should cope!)
         osd crush chooseleaf type = 0
         osd pool default min size = 1
-        run dir = out
+        run dir = $CEPH_OUT_DIR
 EOF
 if [ "$cephx" -eq 1 ] ; then
 cat <<EOF >> $conf
@@ -311,7 +317,7 @@ fi
 
 [client]
         keyring = $keyring_fn
-        log file = out/\$name.\$pid.log
+        log file = $CEPH_OUT_DIR/\$name.\$pid.log
 
 [mds]
 $DAEMONOPTS
@@ -319,12 +325,12 @@ $CMDSDEBUG
         mds debug frag = true
         mds debug auth pins = true
         mds debug subtrees = true
-        mds data = dev/mds.\$id
+        mds data = $CEPH_DEV_DIR/mds.\$id
 $extra_conf
 [osd]
 $DAEMONOPTS
-        osd data = dev/osd\$id
-        osd journal = dev/osd\$id.journal
+        osd data = $CEPH_DEV_DIR/osd\$id
+        osd journal = $CEPH_DEV_DIR/osd\$id.journal
         osd journal size = 100
         osd class tmp = out
         osd class dir = .libs
@@ -336,7 +342,7 @@ $extra_conf
 $DAEMONOPTS
 $CMONDEBUG
 $extra_conf
-        mon cluster log file = out/cluster.mon.\$id.log
+        mon cluster log file = $CEPH_OUT_DIR/cluster.mon.\$id.log
 [global]
 $extra_conf
 EOF
@@ -368,7 +374,7 @@ EOF
 				cat <<EOF >> $conf
 [mon.$f]
         host = $HOSTNAME
-        mon data = dev/mon.$f
+        mon data = $CEPH_DEV_DIR/mon.$f
         mon addr = $IP:$(($CEPH_PORT+$count))
 EOF
 			fi
@@ -380,10 +386,10 @@ EOF
 
 		for f in $MONS
 		do
-		    cmd="rm -rf dev/mon.$f"
+		    cmd="rm -rf $CEPH_DEV_DIR/mon.$f"
 		    echo $cmd
 		    $cmd
-                    cmd="mkdir dev/mon.$f"
+                    cmd="mkdir $CEPH_DEV_DIR/mon.$f"
                     echo $cmd
                     $cmd
 		    cmd="$CEPH_BIN/ceph-mon --mkfs -c $conf -i $f --monmap=$monmap_fn"
@@ -414,9 +420,9 @@ if [ "$start_osd" -eq 1 ]; then
 [osd.$osd]
         host = $HOSTNAME
 EOF
-		    rm -rf dev/osd$osd || true
-		    for f in dev/osd$osd/* ; do btrfs sub delete $f || true ; done || true
-		    mkdir -p dev/osd$osd
+		    rm -rf $CEPH_DEV_DIR/osd$osd || true
+		    for f in $CEPH_DEV_DIR/osd$osd/* ; do btrfs sub delete $f || true ; done || true
+		    mkdir -p $CEPH_DEV_DIR/osd$osd
 	    fi
 
 	    uuid=`uuidgen`
@@ -425,7 +431,7 @@ EOF
 	    $SUDO $CEPH_ADM osd crush add osd.$osd 1.0 host=localhost rack=localrack root=default
 	    $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --mkkey --osd-uuid $uuid
 
-	    key_fn=dev/osd$osd/keyring
+	    key_fn=$CEPH_DEV_DIR/osd$osd/keyring
 	    echo adding osd$osd key to auth repository
 	    $SUDO $CEPH_ADM -i $key_fn auth add osd.$osd osd "allow *" mon "allow profile osd"
 	fi
@@ -448,15 +454,15 @@ if [ "$start_mds" -eq 1 ]; then
     for name in a b c d e f g h i j k l m n o p
     do
 	if [ "$new" -eq 1 ]; then
-	    mkdir -p dev/mds.$name
-	    key_fn=dev/mds.$name/keyring
+	    mkdir -p $CEPH_DEV_DIR/mds.$name
+	    key_fn=$CEPH_DEV_DIR/mds.$name/keyring
 	    if [ $overwrite_conf -eq 1 ]; then
 	    	cat <<EOF >> $conf
 [mds.$name]
         host = $HOSTNAME
 EOF
 		if [ "$standby" -eq 1 ]; then
-		    mkdir -p dev/mds.${name}s
+		    mkdir -p $CEPH_DEV_DIR/mds.${name}s
 		    cat <<EOF >> $conf
        mds standby for rank = $mds
 [mds.${name}s]
@@ -469,8 +475,8 @@ EOF
 	    $SUDO $CEPH_ADM -i $key_fn auth add mds.$name mon 'allow profile mds' osd 'allow *' mds 'allow'
 	    if [ "$standby" -eq 1 ]; then
 		    $SUDO $CEPH_BIN/ceph-authtool --create-keyring --gen-key --name=mds.${name}s \
-			dev/mds.${name}s/keyring
-                    $SUDO $CEPH_ADM -i dev/mds.${name}s/keyring auth add mds.${name}s \
+			$CEPH_DEV_DIR/mds.${name}s/keyring
+                    $SUDO $CEPH_ADM -i $CEPH_DEV_DIR/mds.${name}s/keyring auth add mds.${name}s \
 			mon 'allow *' osd 'allow *' mds 'allow'
 	    fi
 	fi
@@ -497,7 +503,7 @@ fi
 if [ "$start_rgw" -eq 1 ]; then
     for rgw in `seq 0 $((CEPH_NUM_RGW-1))`
     do
-	rgwport=$(( 8000 + $rgw ))
+	rgwport=$(( $CEPH_RGW_PORT + $rgw ))
 	if [ "$new" -eq 1 ]; then
 	    if [ $overwrite_conf -eq 1 ]; then
 		    dnsname=`hostname -f`
@@ -505,13 +511,13 @@ if [ "$start_rgw" -eq 1 ]; then
 [client.radosgw.rgw$rgw]
         host = $HOSTNAME
 $DAEMONOPTS
-        keyring = out/keyring.client.radosgw.rgw$rgw
-        rgw socket path = out/sock.client.radosgw.rgw$rgw
+        keyring = $CEPH_OUT_DIR/keyring.client.radosgw.rgw$rgw
+        rgw socket path = $CEPH_OUT_DIR/sock.client.radosgw.rgw$rgw
         rgw dns name = $dnsname
 EOF
-		    mkdir -p out/htdocs
-		    mkdir -p out/fastcgi_sock
-		    cat <<EOF > out/apache.conf
+		    mkdir -p $CEPH_OUT_DIR/htdocs
+		    mkdir -p $CEPH_OUT_DIR/fastcgi_sock
+		    cat <<EOF > $CEPH_OUT_DIR/apache.conf
 LoadModule env_module /usr/lib/apache2/modules/mod_env.so
 LoadModule rewrite_module /usr/lib/apache2/modules/mod_rewrite.so
 LoadModule fastcgi_module /usr/lib/apache2/modules/mod_fastcgi.so
@@ -519,14 +525,14 @@ LoadModule fastcgi_module /usr/lib/apache2/modules/mod_fastcgi.so
 Listen $rgwport
 ServerName rgwtest.example.com
 
-ServerRoot $PWD/out
-ErrorLog $PWD/out/apache.error.log
+ServerRoot $CEPH_OUT_DIR
+ErrorLog $CEPH_OUT_DIR/apache.error.log
 LogFormat "%h l %u %t \"%r\" %>s %b \"{Referer}i\" \"%{User-agent}i\"" combined
-CustomLog $PWD/out/apache.access.log combined
-PidFile $PWD/out/apache.pid
-DocumentRoot $PWD/out/htdocs
-FastCgiIPCDir $PWD/out/fastcgi_sock
-FastCgiExternalServer $PWD/out/htdocs/rgw.fcgi -socket $PWD/out/sock.client.radosgw.rgw$rgw
+CustomLog $CEPH_OUT_DIR/apache.access.log combined
+PidFile $CEPH_OUT_DIR/apache.pid
+DocumentRoot $CEPH_OUT_DIR/htdocs
+FastCgiIPCDir $CEPH_OUT_DIR/fastcgi_sock
+FastCgiExternalServer $CEPH_OUT_DIR/htdocs/rgw.fcgi -socket $CEPH_OUT_DIR/sock.client.radosgw.rgw$rgw
 RewriteEngine On
 
 RewriteRule ^/([a-zA-Z0-9-_.]*)([/]?.*) /rgw.fcgi?page=$1&params=$2&%{QUERY_STRING} [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
@@ -537,7 +543,7 @@ SetEnv RGW_LOG_LEVEL 20
 SetEnv RGW_PRINT_CONTINUE yes
 SetEnv RGW_SHOULD_LOG yes
 
-<Directory $PWD/out/htdocs>
+<Directory $CEPH_OUT_DIR/htdocs>
   Options +ExecCGI
   AllowOverride All
   SetHandler fastcgi-script
@@ -546,7 +552,7 @@ SetEnv RGW_SHOULD_LOG yes
 AllowEncodedSlashes On
 ServerSignature Off
 EOF
-		    $SUDO $CEPH_ADM auth get-or-create client.radosgw.rgw$rgw osd 'allow rwx' mon 'allow r' -o out/keyring.client.radosgw.rgw$rgw
+		    $SUDO $CEPH_ADM auth get-or-create client.radosgw.rgw$rgw osd 'allow rwx' mon 'allow r' -o $CEPH_OUT_DIR/keyring.client.radosgw.rgw$rgw
 
 		    #akey=`echo $$ | md5sum | cut -c 1-20`
 		    #skey=`dd if=/dev/urandom of=/tmp/random.$$ bs=1 count=40 2>/dev/null ; base64 < /tmp/random.$$ ; rm /tmp/random.$$`
@@ -554,12 +560,12 @@ EOF
 		    skey='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
 		    echo access key $akey
 		    echo secret key $skey
-		    $CEPH_BIN/radosgw-admin user create --uid tester --access-key $akey --secret $skey --display-name 'M. Tester' --email tester@ceph.com
+		    $CEPH_BIN/radosgw-admin user create --uid tester --access-key $akey --secret $skey --display-name 'M. Tester' --email tester@ceph.com -c $conf
 	    fi
 	fi
 	echo start rgw$rgw on http://localhost:$rgwport
 	run 'rgw' $SUDO $CEPH_BIN/radosgw -n client.radosgw.rgw$rgw $ARGS
-	run 'apache2' $SUDO apache2 -f $PWD/out/apache.conf
+	run 'apache2' $SUDO apache2 -f $CEPH_OUT_DIR/apache.conf
     done
 fi
 

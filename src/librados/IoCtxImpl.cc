@@ -502,7 +502,7 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
   Cond cond;
   bool done;
   int r;
-  eversion_t ver;
+  version_t ver;
 
   Context *oncommit = new C_SafeCond(&mylock, &cond, &done, &r);
 
@@ -536,7 +536,7 @@ int librados::IoCtxImpl::operate_read(const object_t& oid,
   Cond cond;
   bool done;
   int r;
-  eversion_t ver;
+  version_t ver;
 
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
 
@@ -609,7 +609,6 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
     return -EDOM;
 
   Context *onack = new C_aio_Ack(c);
-  eversion_t ver;
 
   c->is_read = true;
   c->io = this;
@@ -1002,7 +1001,7 @@ int librados::IoCtxImpl::getxattrs(const object_t& oid,
   return r;
 }
 
-void librados::IoCtxImpl::set_sync_op_version(eversion_t& ver)
+void librados::IoCtxImpl::set_sync_op_version(version_t ver)
 {
   last_objver = ver;
 }
@@ -1016,7 +1015,7 @@ int librados::IoCtxImpl::watch(const object_t& oid, uint64_t ver,
   bool done;
   int r;
   Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
-  eversion_t objver;
+  version_t objver;
 
   lock->Lock();
 
@@ -1071,7 +1070,7 @@ int librados::IoCtxImpl::unwatch(const object_t& oid, uint64_t cookie)
   bool done;
   int r;
   Context *oncommit = new C_SafeCond(&mylock, &cond, &done, &r);
-  eversion_t ver;
+  version_t ver;
   lock->Lock();
 
   client->unregister_watcher(cookie);
@@ -1102,7 +1101,7 @@ int librados::IoCtxImpl::notify(const object_t& oid, uint64_t ver, bufferlist& b
   bool done, done_all;
   int r;
   Context *onack = new C_SafeCond(&mylock, &cond, &done, &r);
-  eversion_t objver;
+  version_t objver;
   uint64_t cookie;
   C_NotifyComplete *ctx = new C_NotifyComplete(&mylock_all, &cond_all, &done_all);
 
@@ -1144,7 +1143,7 @@ int librados::IoCtxImpl::notify(const object_t& oid, uint64_t ver, bufferlist& b
   return r;
 }
 
-eversion_t librados::IoCtxImpl::last_version()
+version_t librados::IoCtxImpl::last_version()
 {
   return last_objver;
 }

@@ -712,7 +712,8 @@ TEST(pg_missing_t, add_next_event)
   eversion_t version(10,5);
   eversion_t prior_version(3,4);
   pg_log_entry_t sample_e(pg_log_entry_t::DELETE, oid, version, prior_version,
-			  osd_reqid_t(entity_name_t::CLIENT(777), 8, 999), utime_t(8,9));
+			  0, osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
+			  utime_t(8,9));
 
   // new object (MODIFY)
   {
@@ -1008,8 +1009,7 @@ protected:
 TEST_F(ObjectContextTest, read_write_lock)
 {
   {
-    object_info_t oi;
-    ObjectContext obc(oi, false, NULL);
+    ObjectContext obc;
 
     //
     // write_lock
@@ -1044,8 +1044,7 @@ TEST_F(ObjectContextTest, read_write_lock)
   useconds_t delay = 0;
 
   {
-    object_info_t oi;
-    ObjectContext obc(oi, false, NULL);
+    ObjectContext obc;
 
     //
     // write_lock
@@ -1102,8 +1101,7 @@ TEST_F(ObjectContextTest, read_write_lock)
   }
 
   {
-    object_info_t oi;
-    ObjectContext obc(oi, false, NULL);
+    ObjectContext obc;
 
     //
     // read_lock

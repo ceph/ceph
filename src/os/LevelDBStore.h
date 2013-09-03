@@ -20,6 +20,12 @@
 #include "leveldb/filter_policy.h"
 #endif
 
+#include <errno.h>
+#include "common/errno.h"
+#include "common/dout.h"
+#include "include/assert.h"
+#include "common/Formatter.h"
+
 #include "common/ceph_context.h"
 
 class PerfCounters;
@@ -299,6 +305,68 @@ public:
     limit.push_back(1);
     return limit;
   }
+
+  virtual uint64_t get_estimated_size(map<string,uint64_t> &extra) {
+    DIR *store_dir = opendir(path.c_str());
+    if (!store_dir) {
+      lderr(cct) << __func__ << " something happened opening the store: "
+                 << cpp_strerror(errno) << dendl;
+      return 0;
+    }
+
+    uint64_t total_size = 0;
+    uint64_t sst_size = 0;
+    uint64_t log_size = 0;
+    uint64_t misc_size = 0;
+
+    struct dirent *entry = NULL;
+    while ((entry = readdir(store_dir)) != NULL) {
+      string n(entry->d_name);
+
+      if (n == "." || n == "..")
+        continue;
+
+      string fpath = path + '/' + n;
+      struct stat s;
+      int err = stat(fpath.c_str(), &s);
+      // we may race against leveldb while reading files; this should only
+      // happen when those files are being updated, data is being shuffled
+      // and files get removed, in which case there's not much of a problem
+      // as we'll get to them next time around.
+      if ((err < 0) && (err != -ENOENT)) {
+        lderr(cct) << __func__ << " error obtaining stats for " << fpath
+                   << ": " << cpp_strerror(errno) << dendl;
+        goto err;
+      }
+
+      size_t pos = n.find_last_of('.');
+      if (pos == string::npos) {
+        misc_size += s.st_size;
+        continue;
+      }
+
+      string ext = n.substr(pos+1);
+      if (ext == "sst") {
+        sst_size += s.st_size;
+      } else if (ext == "log") {
+        log_size += s.st_size;
+      } else {
+        misc_size += s.st_size;
+      }
+    }
+
+    total_size = sst_size + log_size + misc_size;
+
+    extra["sst"] = sst_size;
+    extra["log"] = log_size;
+    extra["misc"] = misc_size;
+    extra["total"] = total_size;
+
+err:
+    closedir(store_dir);
+    return total_size;
+  }
+
 
 protected:
   WholeSpaceIterator _get_iterator() {

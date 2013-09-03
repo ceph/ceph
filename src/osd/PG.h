@@ -232,7 +232,6 @@ protected:
    * put_unlock() when done with the current pointer (_most common_).
    */  
   Mutex _lock;
-  Cond _cond;
   atomic_t ref;
 
 #ifdef PG_DEBUG_REFS
@@ -260,14 +259,6 @@ public:
   }
   bool is_locked() const {
     return _lock.is_locked();
-  }
-  void wait() {
-    assert(_lock.is_locked());
-    _cond.Wait(_lock);
-  }
-  void kick() {
-    assert(_lock.is_locked());
-    _cond.Signal();
   }
 
 #ifdef PG_DEBUG_REFS

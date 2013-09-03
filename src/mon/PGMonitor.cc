@@ -1406,6 +1406,11 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 	if (what.count("pgs_brief")) {
 	  pg_map.dump_pg_stats(f.get(), true);
 	}
+	if (what.count("delta")) {
+	  f->open_object_section("delta");
+	  pg_map.dump_delta(f.get());
+	  f->close_section();
+	}
       }
       f->flush(ds);
     } else {

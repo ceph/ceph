@@ -1,6 +1,6 @@
-===========================
- Store Cluster Quick Start
-===========================
+=============================
+ Storage Cluster Quick Start
+=============================
 
 If you haven't completed your `Preflight Checklist`_, do that first. This
 **Quick Start** sets up a two-node demo cluster so you can explore some of the

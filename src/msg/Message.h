@@ -449,8 +449,8 @@ public:
   const utime_t& get_recv_complete_stamp() const { return recv_complete_stamp; }
 
   void calc_header_crc() {
-    header.crc = ceph_crc32c_le(0, (unsigned char*)&header,
-			   sizeof(header) - sizeof(header.crc));
+    header.crc = ceph_crc32c(0, (unsigned char*)&header,
+			     sizeof(header) - sizeof(header.crc));
   }
   void calc_front_crc() {
     footer.front_crc = payload.crc32c(0);

@@ -111,7 +111,7 @@ COMMAND("pg getmap", "get binary pg map to -o/stdout", "pg", "r", "cli,rest")
 COMMAND("pg send_pg_creates", "trigger pg creates to be issued",\
 	"pg", "rw", "cli,rest")
 COMMAND("pg dump " \
-	"name=dumpcontents,type=CephChoices,strings=all|summary|sum|pools|osds|pgs|pgs_brief,n=N,req=false", \
+	"name=dumpcontents,type=CephChoices,strings=all|summary|sum|delta|pools|osds|pgs|pgs_brief,n=N,req=false", \
 	"show human-readable versions of pg map", "pg", "r", "cli,rest")
 COMMAND("pg dump_json " \
 	"name=dumpcontents,type=CephChoices,strings=all|summary|sum|pools|osds|pgs,n=N,req=false", \
@@ -515,6 +515,27 @@ COMMAND("osd reweight-by-utilization " \
 COMMAND("osd thrash " \
 	"name=num_epochs,type=CephInt,range=0", \
 	"thrash OSDs for <num_epochs>", "osd", "rw", "cli,rest")
+
+// tiering
+COMMAND("osd tier add " \
+	"name=pool,type=CephPoolname " \
+	"name=tierpool,type=CephPoolname",
+	"add the tier <tierpool> to base pool <pool>", "osd", "rw", "cli,rest")
+COMMAND("osd tier remove " \
+	"name=pool,type=CephPoolname " \
+	"name=tierpool,type=CephPoolname",
+	"remove the tier <tierpool> from base pool <pool>", "osd", "rw", "cli,rest")
+COMMAND("osd tier cache-mode " \
+	"name=pool,type=CephPoolname " \
+	"name=mode,type=CephChoices,strings=none|writeback|invalidate+forward|readonly", \
+	"specify the caching mode for cache tier <pool>", "osd", "rw", "cli,rest")
+COMMAND("osd tier set-overlay " \
+	"name=pool,type=CephPoolname " \
+	"name=overlaypool,type=CephPoolname", \
+	"set the overlay pool for base pool <pool> to be <overlaypool>", "osd", "rw", "cli,rest")
+COMMAND("osd tier remove-overlay " \
+	"name=pool,type=CephPoolname ", \
+	"remove the overlay pool for base pool <pool>", "osd", "rw", "cli,rest")
 
 /*
  * mon/ConfigKeyService.cc

@@ -84,11 +84,11 @@ struct PGLog {
     bool logged_req(const osd_reqid_t &r) const {
       return caller_ops.count(r);
     }
-    eversion_t get_request_version(const osd_reqid_t &r) const {
+    const pg_log_entry_t *get_request(const osd_reqid_t &r) const {
       hash_map<osd_reqid_t,pg_log_entry_t*>::const_iterator p = caller_ops.find(r);
       if (p == caller_ops.end())
-	return eversion_t();
-      return p->second->version;    
+	return NULL;
+      return p->second;
     }
 
     void index() {
@@ -142,7 +142,7 @@ struct PGLog {
 	caller_ops[e.reqid] = &(log.back());
     }
 
-    void trim(eversion_t s);
+    void trim(eversion_t s, set<eversion_t> *trimmed);
 
     ostream& print(ostream& out) const;
   };
@@ -150,6 +150,7 @@ struct PGLog {
 
 protected:
   //////////////////// data members ////////////////////
+  bool pg_log_debug;
 
   map<eversion_t, hobject_t> divergent_priors;
   pg_missing_t     missing;
@@ -157,8 +158,10 @@ protected:
 
   /// Log is clean on [dirty_to, dirty_from)
   bool touched_log;
-  eversion_t dirty_to;
-  eversion_t dirty_from;
+  eversion_t dirty_to;         ///< must clear/writeout all keys up to dirty_to
+  eversion_t dirty_from;       ///< must clear/writeout all keys past dirty_from
+  eversion_t writeout_from;    ///< must writout keys past writeout_from
+  set<eversion_t> trimmed;     ///< must clear keys in trimmed
   bool dirty_divergent_priors;
   CephContext *cct;
 
@@ -166,7 +169,9 @@ protected:
     return !touched_log ||
       (dirty_to != eversion_t()) ||
       (dirty_from != eversion_t::max()) ||
-      dirty_divergent_priors;
+      dirty_divergent_priors ||
+      (writeout_from != eversion_t::max()) ||
+      !(trimmed.empty());
   }
   void mark_dirty_to(eversion_t to) {
     if (to > dirty_to)
@@ -175,6 +180,10 @@ protected:
   void mark_dirty_from(eversion_t from) {
     if (from < dirty_from)
       dirty_from = from;
+  }
+  void mark_writeout_from(eversion_t from) {
+    if (from < writeout_from)
+      writeout_from = from;
   }
   void add_divergent_prior(eversion_t version, hobject_t obj) {
     divergent_priors.insert(make_pair(version, obj));
@@ -205,11 +214,9 @@ protected:
 	 log_keys_debug->erase(i++));
   }
   void check() {
-    assert(log.log.size() == log_keys_debug.size());
-    if (cct &&
-        !(cct->_conf->osd_debug_pg_log_writeout)) {
+    if (!pg_log_debug)
       return;
-    }
+    assert(log.log.size() == log_keys_debug.size());
     for (list<pg_log_entry_t>::iterator i = log.log.begin();
 	 i != log.log.end();
 	 ++i) {
@@ -222,11 +229,15 @@ protected:
     dirty_from = eversion_t::max();
     dirty_divergent_priors = false;
     touched_log = true;
+    trimmed.clear();
+    writeout_from = eversion_t::max();
     check();
   }
 public:
   PGLog(CephContext *cct = 0) :
+    pg_log_debug(!(cct && !(cct->_conf->osd_debug_pg_log_writeout))),
     touched_log(false), dirty_from(eversion_t::max()),
+    writeout_from(eversion_t::max()),
     dirty_divergent_priors(false), cct(cct) {}
 
 
@@ -281,7 +292,7 @@ public:
   void unindex() { log.unindex(); }
 
   void add(pg_log_entry_t& e) {
-    mark_dirty_from(e.version);
+    mark_writeout_from(e.version);
     log.add(e);
   }
 
@@ -374,6 +385,8 @@ public:
     const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors,
     eversion_t dirty_to,
     eversion_t dirty_from,
+    eversion_t writeout_from,
+    const set<eversion_t> &trimmed,
     bool dirty_divergent_priors,
     bool touch_log,
     set<string> *log_keys_debug
@@ -381,8 +394,10 @@ public:
 
   bool read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
 		const pg_info_t &info, ostringstream &oss) {
-    return read_log(store, coll, log_oid, info, divergent_priors,
-		    log, missing, oss, &log_keys_debug);
+    return read_log(
+      store, coll, log_oid, info, divergent_priors,
+      log, missing, oss,
+      (pg_log_debug ? &log_keys_debug : 0));
   }
 
   /// return true if the log should be rewritten

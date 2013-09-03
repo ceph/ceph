@@ -3,6 +3,9 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ *
+ * Author: Loic Dachary <loic@dachary.org>
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -27,6 +30,9 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDSubOp.h"
+
+#include "common/sharedptr_registry.hpp"
+
 class MOSDSubOpReply;
 
 class ReplicatedPG;
@@ -80,180 +86,6 @@ class ReplicatedPG : public PG {
 public:  
 
   /*
-    object access states:
-
-    - idle
-      - no in-progress or waiting writes.
-      - read: ok
-      - write: ok.  move to 'delayed' or 'rmw'
-      - rmw: ok.  move to 'rmw'
-	  
-    - delayed
-      - delayed write in progress.  delay write application on primary.
-      - when done, move to 'idle'
-      - read: ok
-      - write: ok
-      - rmw: no.  move to 'delayed-flushing'
-
-    - rmw
-      - rmw cycles in flight.  applied immediately at primary.
-      - when done, move to 'idle'
-      - read: same client ok.  otherwise, move to 'rmw-flushing'
-      - write: same client ok.  otherwise, start write, but also move to 'rmw-flushing'
-      - rmw: same client ok.  otherwise, move to 'rmw-flushing'
-      
-    - delayed-flushing
-      - waiting for delayed writes to flush, then move to 'rmw'
-      - read, write, rmw: wait
-
-    - rmw-flushing
-      - waiting for rmw to flush, then move to 'idle'
-      - read, write, rmw: wait
-    
-   */
-
-  struct AccessMode {
-    typedef enum {
-      IDLE,
-      DELAYED,
-      RMW,
-      DELAYED_FLUSHING,
-      RMW_FLUSHING
-    } state_t;
-    static const char *get_state_name(int s) {
-      switch (s) {
-      case IDLE: return "idle";
-      case DELAYED: return "delayed";
-      case RMW: return "rmw";
-      case DELAYED_FLUSHING: return "delayed-flushing";
-      case RMW_FLUSHING: return "rmw-flushing";
-      default: return "???";
-      }
-    }
-    state_t state;
-    int num_wr;
-    list<OpRequestRef> waiting;
-    list<Cond*> waiting_cond;
-    bool wake;
-
-    AccessMode() : state(IDLE),
-		   num_wr(0), wake(false) {}
-
-    void check_mode() {
-      assert(state != DELAYED_FLUSHING && state != RMW_FLUSHING);
-      if (num_wr == 0)
-	state = IDLE;
-    }
-
-    bool want_delayed() {
-      check_mode();
-      switch (state) {
-      case IDLE:
-	state = DELAYED;
-      case DELAYED:
-	return true;
-      case RMW:
-	state = RMW_FLUSHING;
-	return true;
-      case DELAYED_FLUSHING:
-      case RMW_FLUSHING:
-	return false;
-      default:
-	assert(0);
-      }
-    }
-    bool want_rmw() {
-      check_mode();
-      switch (state) {
-      case IDLE:
-	state = RMW;
-	return true;
-      case DELAYED:
-	state = DELAYED_FLUSHING;
-	return false;
-      case RMW:
-	state = RMW_FLUSHING;
-	return false;
-      case DELAYED_FLUSHING:
-      case RMW_FLUSHING:
-	return false;
-      default:
-	assert(0);
-      }
-    }
-
-    bool try_read(entity_inst_t& c) {
-      check_mode();
-      switch (state) {
-      case IDLE:
-      case DELAYED:
-      case RMW:
-	return true;
-      case DELAYED_FLUSHING:
-      case RMW_FLUSHING:
-	return false;
-      default:
-	assert(0);
-      }
-    }
-    bool try_write(entity_inst_t& c) {
-      check_mode();
-      switch (state) {
-      case IDLE:
-	state = RMW;  /* default to RMW; it's a better all around policy */
-      case DELAYED:
-      case RMW:
-	return true;
-      case DELAYED_FLUSHING:
-      case RMW_FLUSHING:
-	return false;
-      default:
-	assert(0);
-      }
-    }
-    bool try_rmw(entity_inst_t& c) {
-      check_mode();
-      switch (state) {
-      case IDLE:
-	state = RMW;
-	return true;
-      case DELAYED:
-	state = DELAYED_FLUSHING;
-	return false;
-      case RMW:
-	return true;
-      case DELAYED_FLUSHING:
-      case RMW_FLUSHING:
-	return false;
-      default:
-	assert(0);
-      }
-    }
-
-    bool is_delayed_mode() {
-      return state == DELAYED || state == DELAYED_FLUSHING;
-    }
-    bool is_rmw_mode() {
-      return state == RMW || state == RMW_FLUSHING;
-    }
-
-    void write_start() {
-      num_wr++;
-      assert(state == DELAYED || state == RMW);
-    }
-    void write_applied() {
-      assert(num_wr > 0);
-      --num_wr;
-      if (num_wr == 0) {
-	state = IDLE;
-	wake = true;
-      }
-    }
-    void write_commit() {
-    }
-  };
-
-  /*
    * Capture all object state associated with an in-progress read or write.
    */
   struct OpContext {
@@ -290,7 +122,7 @@ public:
     utime_t mtime;
     SnapContext snapc;           // writer snap context
     eversion_t at_version;       // pg's current version pointer
-    eversion_t reply_version;    // the version that we report the client (depends on the op)
+    version_t user_at_version;   // pg's current user version pointer
 
     int current_osd_subop_num;
 
@@ -298,10 +130,10 @@ public:
     vector<pg_log_entry_t> log;
 
     interval_set<uint64_t> modified_ranges;
-    ObjectContext *obc;          // For ref counting purposes
-    map<hobject_t,ObjectContext*> src_obc;
-    ObjectContext *clone_obc;    // if we created a clone
-    ObjectContext *snapset_obc;  // if we created/deleted a snapdir
+    ObjectContextRef obc;
+    map<hobject_t,ObjectContextRef> src_obc;
+    ObjectContextRef clone_obc;    // if we created a clone
+    ObjectContextRef snapset_obc;  // if we created/deleted a snapdir
 
     int data_off;        // FIXME: we may want to kill this msgr hint off at some point!
 
@@ -322,9 +154,9 @@ public:
       op(_op), reqid(_reqid), ops(_ops), obs(_obs), snapset(0),
       new_obs(_obs->oi, _obs->exists),
       modify(false), user_modify(false),
-      bytes_written(0), bytes_read(0),
+      bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
-      obc(0), clone_obc(0), snapset_obc(0), data_off(0), reply(NULL), pg(_pg),
+      data_off(0), reply(NULL), pg(_pg),
       num_read(0),
       num_write(0) {
       if (_ssc) {
@@ -350,8 +182,8 @@ public:
     eversion_t v;
 
     OpContext *ctx;
-    ObjectContext *obc;
-    map<hobject_t,ObjectContext*> src_obc;
+    ObjectContextRef obc;
+    map<hobject_t,ObjectContextRef> src_obc;
 
     tid_t rep_tid;
 
@@ -371,7 +203,7 @@ public:
     list<ObjectStore::Transaction*> tls;
     bool queue_snap_trimmer;
     
-    RepGather(OpContext *c, ObjectContext *pi, tid_t rt, 
+    RepGather(OpContext *c, ObjectContextRef pi, tid_t rt, 
 	      eversion_t lc) :
       queue_item(this),
       nref(1),
@@ -403,8 +235,6 @@ public:
 
 protected:
 
-  AccessMode mode;
-
   // replica ops
   // [primary|tail]
   xlist<RepGather*> repop_queue;
@@ -416,7 +246,7 @@ protected:
   void eval_repop(RepGather*);
   void issue_repop(RepGather *repop, utime_t now,
 		   eversion_t old_last_update, bool old_exists, uint64_t old_size, eversion_t old_version);
-  RepGather *new_repop(OpContext *ctx, ObjectContext *obc, tid_t rep_tid);
+  RepGather *new_repop(OpContext *ctx, ObjectContextRef obc, tid_t rep_tid);
   void remove_repop(RepGather *repop);
   void repop_ack(RepGather *repop,
                  int result, int ack_type,
@@ -452,50 +282,42 @@ protected:
   friend struct C_OnPushCommit;
 
   // projected object info
-  map<hobject_t, ObjectContext*> object_contexts;
+  SharedPtrRegistry<hobject_t, ObjectContext> object_contexts;
   map<object_t, SnapSetContext*> snapset_contexts;
+  Mutex snapset_contexts_lock;
 
   // debug order that client ops are applied
   map<hobject_t, map<client_t, tid_t> > debug_op_order;
 
-  void populate_obc_watchers(ObjectContext *obc);
-  void check_blacklisted_obc_watchers(ObjectContext *);
+  void populate_obc_watchers(ObjectContextRef obc);
+  void check_blacklisted_obc_watchers(ObjectContextRef obc);
   void check_blacklisted_watchers();
   void get_watchers(list<obj_watch_item_t> &pg_watchers);
-  void get_obc_watchers(ObjectContext *obc, list<obj_watch_item_t> &pg_watchers);
+  void get_obc_watchers(ObjectContextRef obc, list<obj_watch_item_t> &pg_watchers);
 public:
   void handle_watch_timeout(WatchRef watch);
 protected:
 
-  ObjectContext *lookup_object_context(const hobject_t& soid) {
-    if (object_contexts.count(soid)) {
-      ObjectContext *obc = object_contexts[soid];
-      obc->ref++;
-      return obc;
-    }
-    return NULL;
-  }
-  ObjectContext *_lookup_object_context(const hobject_t& oid);
-  ObjectContext *create_object_context(const object_info_t& oi, SnapSetContext *ssc);
-  ObjectContext *get_object_context(const hobject_t& soid, bool can_create);
-  void register_object_context(ObjectContext *obc) {
-    if (!obc->registered) {
-      assert(object_contexts.count(obc->obs.oi.soid) == 0);
-      obc->registered = true;
-      object_contexts[obc->obs.oi.soid] = obc;
-    }
-    if (obc->ssc)
-      register_snapset_context(obc->ssc);
-  }
+  ObjectContextRef create_object_context(const object_info_t& oi, SnapSetContext *ssc);
+  ObjectContextRef get_object_context(const hobject_t& soid, bool can_create);
 
   void context_registry_on_change();
-  void put_object_context(ObjectContext *obc);
-  void put_object_contexts(map<hobject_t,ObjectContext*>& obcv);
+  void object_context_destructor_callback(ObjectContext *obc);
+  struct C_PG_ObjectContext : public Context {
+    ReplicatedPGRef pg;
+    ObjectContext *obc;
+    C_PG_ObjectContext(ReplicatedPG *p, ObjectContext *o) :
+      pg(p), obc(o) {}
+    void finish(int r) {
+      pg->object_context_destructor_callback(obc);
+     }
+  };
+
   int find_object_context(const hobject_t& oid,
-			  ObjectContext **pobc,
+			  ObjectContextRef *pobc,
 			  bool can_create, snapid_t *psnapid=NULL);
 
-  void add_object_context_to_pg_stat(ObjectContext *obc, pg_stat_t *stat);
+  void add_object_context_to_pg_stat(ObjectContextRef obc, pg_stat_t *stat);
 
   void get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc);
 
@@ -503,6 +325,11 @@ protected:
   SnapSetContext *get_snapset_context(const object_t& oid, const string &key,
 				      ps_t seed, bool can_create, const string &nspace);
   void register_snapset_context(SnapSetContext *ssc) {
+    Mutex::Locker l(snapset_contexts_lock);
+    _register_snapset_context(ssc);
+  }
+  void _register_snapset_context(SnapSetContext *ssc) {
+    assert(snapset_contexts_lock.is_locked());
     if (!ssc->registered) {
       assert(snapset_contexts.count(ssc->oid) == 0);
       ssc->registered = true;
@@ -701,7 +528,7 @@ protected:
   int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
 				 int priority,
 				 map<int, vector<PushOp> > *pushes);
-  void calc_head_subsets(ObjectContext *obc, SnapSet& snapset, const hobject_t& head,
+  void calc_head_subsets(ObjectContextRef obc, SnapSet& snapset, const hobject_t& head,
 			 pg_missing_t& missing,
 			 const hobject_t &last_backfill,
 			 interval_set<uint64_t>& data_subset,
@@ -711,17 +538,17 @@ protected:
 			  interval_set<uint64_t>& data_subset,
 			  map<hobject_t, interval_set<uint64_t> >& clone_subsets);
   void prep_push_to_replica(
-    ObjectContext *obc,
+    ObjectContextRef obc,
     const hobject_t& oid,
     int dest,
     int priority,
     PushOp *push_op);
   void prep_push(int priority,
-		 ObjectContext *obc,
+		 ObjectContextRef obc,
 		 const hobject_t& oid, int dest,
 		 PushOp *op);
   void prep_push(int priority,
-		 ObjectContext *obc,
+		 ObjectContextRef obc,
 		 const hobject_t& soid, int peer,
 		 eversion_t version,
 		 interval_set<uint64_t> &data_subset,
@@ -748,6 +575,9 @@ protected:
   void _make_clone(ObjectStore::Transaction& t,
 		   const hobject_t& head, const hobject_t& coid,
 		   object_info_t *poi);
+  void execute_ctx(OpContext *ctx);
+  void reply_ctx(OpContext *ctx, int err);
+  void reply_ctx(OpContext *ctx, int err, eversion_t v, version_t uv);
   void make_writeable(OpContext *ctx);
   void log_op_stats(OpContext *ctx);
 
@@ -824,8 +654,8 @@ protected:
     }
   };
   struct C_OSD_OndiskWriteUnlock : public Context {
-    ObjectContext *obc, *obc2;
-    C_OSD_OndiskWriteUnlock(ObjectContext *o, ObjectContext *o2=0) : obc(o), obc2(o2) {}
+    ObjectContextRef obc, obc2;
+    C_OSD_OndiskWriteUnlock(ObjectContextRef o, ObjectContextRef o2 = ObjectContextRef()) : obc(o), obc2(o2) {}
     void finish(int r) {
       obc->ondisk_write_unlock();
       if (obc2)
@@ -833,17 +663,17 @@ protected:
     }
   };
   struct C_OSD_OndiskWriteUnlockList : public Context {
-    list<ObjectContext*> *pls;
-    C_OSD_OndiskWriteUnlockList(list<ObjectContext*> *l) : pls(l) {}
+    list<ObjectContextRef> *pls;
+    C_OSD_OndiskWriteUnlockList(list<ObjectContextRef> *l) : pls(l) {}
     void finish(int r) {
-      for (list<ObjectContext*>::iterator p = pls->begin(); p != pls->end(); ++p)
+      for (list<ObjectContextRef>::iterator p = pls->begin(); p != pls->end(); ++p)
 	(*p)->ondisk_write_unlock();
     }
   };
   struct C_OSD_AppliedRecoveredObject : public Context {
     ReplicatedPGRef pg;
-    ObjectContext *obc;
-    C_OSD_AppliedRecoveredObject(ReplicatedPG *p, ObjectContext *o) :
+    ObjectContextRef obc;
+    C_OSD_AppliedRecoveredObject(ReplicatedPG *p, ObjectContextRef o) :
       pg(p), obc(o) {}
     void finish(int r) {
       pg->_applied_recovered_object(obc);
@@ -906,7 +736,7 @@ protected:
   void sub_op_modify_commit(RepModify *rm);
 
   void sub_op_modify_reply(OpRequestRef op);
-  void _applied_recovered_object(ObjectContext *obc);
+  void _applied_recovered_object(ObjectContextRef obc);
   void _applied_recovered_object_replica();
   void _committed_pushed_object(epoch_t epoch, eversion_t lc);
   void recover_got(hobject_t oid, eversion_t v);
@@ -1055,10 +885,10 @@ public:
 
   void mark_all_unfound_lost(int what);
   eversion_t pick_newest_available(const hobject_t& oid);
-  ObjectContext *mark_object_lost(ObjectStore::Transaction *t,
+  ObjectContextRef mark_object_lost(ObjectStore::Transaction *t,
 				  const hobject_t& oid, eversion_t version,
 				  utime_t mtime, int what);
-  void _finish_mark_all_unfound_lost(list<ObjectContext*>& obcs);
+  void _finish_mark_all_unfound_lost(list<ObjectContextRef>& obcs);
 
   void on_role_change();
   void on_change(ObjectStore::Transaction *t);
@@ -1080,15 +910,6 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
       << " wfdisk=" << repop.waitfor_disk;
   if (repop.ctx->op)
     out << " op=" << *(repop.ctx->op->request);
-  out << ")";
-  return out;
-}
-
-inline ostream& operator<<(ostream& out, ReplicatedPG::AccessMode& mode)
-{
-  out << mode.get_state_name(mode.state) << "(wr=" << mode.num_wr;
-  if (mode.wake)
-    out << " WAKE";
   out << ")";
   return out;
 }

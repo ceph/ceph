@@ -641,6 +641,14 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_stream("removed_snaps") << removed_snaps;
   f->dump_int("quota_max_bytes", quota_max_bytes);
   f->dump_int("quota_max_objects", quota_max_objects);
+  f->open_array_section("tiers");
+  for (set<uint64_t>::const_iterator p = tiers.begin(); p != tiers.end(); ++p)
+    f->dump_int("pool_id", *p);
+  f->close_section();
+  f->dump_int("tier_of", tier_of);
+  f->dump_int("read_tier", read_tier);
+  f->dump_int("write_tier", write_tier);
+  f->dump_string("cache_mode", get_cache_mode_name());
 }
 
 
@@ -845,7 +853,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(8, 5, bl);
+  ENCODE_START(9, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -866,6 +874,12 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(min_size, bl);
   ::encode(quota_max_bytes, bl);
   ::encode(quota_max_objects, bl);
+  ::encode(tiers, bl);
+  ::encode(tier_of, bl);
+  __u8 c = cache_mode;
+  ::encode(c, bl);
+  ::encode(read_tier, bl);
+  ::encode(write_tier, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -924,6 +938,15 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
     ::decode(quota_max_bytes, bl);
     ::decode(quota_max_objects, bl);
   }
+  if (struct_v >= 9) {
+    ::decode(tiers, bl);
+    ::decode(tier_of, bl);
+    __u8 v;
+    ::decode(v, bl);
+    cache_mode = (cache_mode_t)v;
+    ::decode(read_tier, bl);
+    ::decode(write_tier, bl);
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
 }
@@ -959,6 +982,12 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.removed_snaps.insert(2);   // not quite valid to combine with snaps!
   a.quota_max_bytes = 2473;
   a.quota_max_objects = 4374;
+  a.tiers.insert(0);
+  a.tiers.insert(1);
+  a.tier_of = 2;
+  a.cache_mode = CACHEMODE_WRITEBACK;
+  a.read_tier = 1;
+  a.write_tier = 1;
   o.push_back(new pg_pool_t(a));
 }
 
@@ -981,6 +1010,16 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
     out << " max_bytes " << p.quota_max_bytes;
   if (p.quota_max_objects)
     out << " max_objects " << p.quota_max_objects;
+  if (p.tiers.size())
+    out << " tiers " << p.tiers;
+  if (p.is_tier())
+    out << " tier_of " << p.tier_of;
+  if (p.has_read_tier())
+    out << " read_tier " << p.read_tier;
+  if (p.has_write_tier())
+    out << " write_tier " << p.write_tier;
+  if (p.cache_mode)
+    out << " cache_mode " << p.get_cache_mode_name();
   return out;
 }
 
@@ -1553,7 +1592,7 @@ void pg_history_t::generate_test_instances(list<pg_history_t*>& o)
 
 void pg_info_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(27, 26, bl);
+  ENCODE_START(28, 26, bl);
   ::encode(pgid, bl);
   ::encode(last_update, bl);
   ::encode(last_complete, bl);
@@ -1563,12 +1602,13 @@ void pg_info_t::encode(bufferlist &bl) const
   history.encode(bl);
   ::encode(purged_snaps, bl);
   ::encode(last_epoch_started, bl);
+  ::encode(last_user_version, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_info_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(27, 26, 26, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(28, 26, 26, bl);
   if (struct_v < 23) {
     old_pg_t opgid;
     ::decode(opgid, bl);
@@ -1598,6 +1638,10 @@ void pg_info_t::decode(bufferlist::iterator &bl)
   } else {
     ::decode(last_epoch_started, bl);
   }
+  if (struct_v >= 28)
+    ::decode(last_user_version, bl);
+  else
+    last_user_version = last_update.version;
   DECODE_FINISH(bl);
 }
 
@@ -1609,6 +1653,7 @@ void pg_info_t::dump(Formatter *f) const
   f->dump_stream("last_update") << last_update;
   f->dump_stream("last_complete") << last_complete;
   f->dump_stream("log_tail") << log_tail;
+  f->dump_int("last_user_version", last_user_version);
   f->dump_stream("last_backfill") << last_backfill;
   f->dump_stream("purged_snaps") << purged_snaps;
   f->open_object_section("history");
@@ -1634,6 +1679,7 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
   o.back()->pgid = pg_t(1, 2, -1);
   o.back()->last_update = eversion_t(3, 4);
   o.back()->last_complete = eversion_t(5, 6);
+  o.back()->last_user_version = 2;
   o.back()->log_tail = eversion_t(7, 8);
   o.back()->last_backfill = hobject_t(object_t("objname"), "key", 123, 456, -1, "");
   list<pg_stat_t*> s;
@@ -1912,7 +1958,7 @@ void pg_log_entry_t::decode_with_checksum(bufferlist::iterator& p)
 
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(7, 4, bl);
+  ENCODE_START(8, 4, bl);
   ::encode(op, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
@@ -1934,12 +1980,13 @@ void pg_log_entry_t::encode(bufferlist &bl) const
   if (op == LOST_REVERT)
     ::encode(prior_version, bl);
   ::encode(snaps, bl);
+  ::encode(user_version, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_entry_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(7, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(8, 4, 4, bl);
   ::decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -1976,6 +2023,11 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
     ::decode(snaps, bl);
   }
 
+  if (struct_v >= 8)
+    ::decode(user_version, bl);
+  else
+    user_version = version.version;
+
   DECODE_FINISH(bl);
 }
 
@@ -2008,7 +2060,8 @@ void pg_log_entry_t::generate_test_instances(list<pg_log_entry_t*>& o)
   o.push_back(new pg_log_entry_t());
   hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   o.push_back(new pg_log_entry_t(MODIFY, oid, eversion_t(1,2), eversion_t(3,4),
-				 osd_reqid_t(entity_name_t::CLIENT(777), 8, 999), utime_t(8,9)));
+				 1, osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
+				 utime_t(8,9)));
 }
 
 ostream& operator<<(ostream& out, const pg_log_entry_t& e)
@@ -2369,6 +2422,55 @@ void pg_missing_t::split_into(
   }
 }
 
+// -- object_copy_cursor_t --
+
+void object_copy_cursor_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(attr_complete, bl);
+  ::encode(data_offset, bl);
+  ::encode(data_complete, bl);
+  ::encode(omap_offset, bl);
+  ::encode(omap_complete, bl);
+  ENCODE_FINISH(bl);
+}
+
+void object_copy_cursor_t::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(attr_complete, bl);
+  ::decode(data_offset, bl);
+  ::decode(data_complete, bl);
+  ::decode(omap_offset, bl);
+  ::decode(omap_complete, bl);
+  DECODE_FINISH(bl);
+}
+
+void object_copy_cursor_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("attr_complete", (int)attr_complete);
+  f->dump_unsigned("data_offset", data_offset);
+  f->dump_unsigned("data_complete", (int)data_complete);
+  f->dump_string("omap_offset", omap_offset);
+  f->dump_unsigned("omap_complete", (int)omap_complete);
+}
+
+void object_copy_cursor_t::generate_test_instances(list<object_copy_cursor_t*>& o)
+{
+  o.push_back(new object_copy_cursor_t);
+  o.push_back(new object_copy_cursor_t);
+  o.back()->attr_complete = true;
+  o.back()->data_offset = 123;
+  o.push_back(new object_copy_cursor_t);
+  o.back()->attr_complete = true;
+  o.back()->data_complete = true;
+  o.back()->omap_offset = "foo";
+  o.push_back(new object_copy_cursor_t);
+  o.back()->attr_complete = true;
+  o.back()->data_complete = true;
+  o.back()->omap_complete = true;
+}
+
 // -- pg_create_t --
 
 void pg_create_t::encode(bufferlist &bl) const
@@ -2688,7 +2790,10 @@ void object_info_t::encode(bufferlist& bl) const
   ::encode(truncate_size, bl);
   ::encode(lost, bl);
   ::encode(old_watchers, bl);
-  ::encode(user_version, bl);
+  /* shenanigans to avoid breaking backwards compatibility in the disk format.
+   * When we can, switch this out for simply putting the version_t on disk. */
+  eversion_t user_eversion(0, user_version);
+  ::encode(user_eversion, bl);
   ::encode(uses_tmap, bl);
   ::encode(watchers, bl);
   ENCODE_FINISH(bl);
@@ -2733,7 +2838,9 @@ void object_info_t::decode(bufferlist::iterator& bl)
     lost = false;
   if (struct_v >= 4) {
     ::decode(old_watchers, bl);
-    ::decode(user_version, bl);
+    eversion_t user_eversion;
+    ::decode(user_eversion, bl);
+    user_version = user_eversion.version;
   }
   if (struct_v >= 9)
     ::decode(uses_tmap, bl);
@@ -3358,6 +3465,9 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_LIST_WATCHERS:
     case CEPH_OSD_OP_LIST_SNAPS:
       break;
+    case CEPH_OSD_OP_ASSERT_VER:
+      out << " v" << op.op.assert_ver.ver;
+      break;
     case CEPH_OSD_OP_TRUNCATE:
       out << " " << op.op.extent.offset;
       break;
@@ -3371,6 +3481,9 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_WATCH:
       out << (op.op.watch.flag ? " add":" remove")
 	  << " cookie " << op.op.watch.cookie << " ver " << op.op.watch.ver;
+      break;
+    case CEPH_OSD_OP_COPY_GET:
+      out << " max " << op.op.copy_get.max;
       break;
     default:
       out << " " << op.op.extent.offset << "~" << op.op.extent.length;

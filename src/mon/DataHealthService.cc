@@ -81,6 +81,18 @@ health_status_t DataHealthService::get_health(
       health_detail = "low disk space!";
     }
 
+    if (stats.store_stats.bytes_total >= g_conf->mon_leveldb_size_warn) {
+      if (health_status > HEALTH_WARN)
+        health_status = HEALTH_WARN;
+      if (!health_detail.empty())
+        health_detail.append("; ");
+      stringstream ss;
+      ss << "store is getting too big! "
+         << prettybyte_t(stats.store_stats.bytes_total)
+         << " >= " << prettybyte_t(g_conf->mon_leveldb_size_warn);
+      health_detail.append(ss.str());
+    }
+
     if (overall_status > health_status)
       overall_status = health_status;
 
@@ -95,18 +107,15 @@ health_status_t DataHealthService::get_health(
     if (f) {
       f->open_object_section("mon");
       f->dump_string("name", mon_name.c_str());
-      f->dump_int("kb_total", stats.kb_total);
-      f->dump_int("kb_used", stats.kb_used);
-      f->dump_int("kb_avail", stats.kb_avail);
-      f->dump_int("avail_percent", stats.latest_avail_percent);
-      f->dump_stream("last_updated") << stats.last_update;
+      // leave this unenclosed by an object section to avoid breaking backward-compatibility
+      stats.dump(f);
       f->dump_stream("health") << health_status;
       if (health_status != HEALTH_OK)
-	f->dump_string("health_detail", health_detail);
+        f->dump_string("health_detail", health_detail);
       f->close_section();
     }
   }
-  
+
   if (f) {
     f->close_section(); // mons
     f->close_section(); // data_health
@@ -114,6 +123,22 @@ health_status_t DataHealthService::get_health(
 
   return overall_status;
 }
+
+int DataHealthService::update_store_stats(DataStats &ours)
+{
+  map<string,uint64_t> extra;
+  uint64_t store_size = mon->store->get_estimated_size(extra);
+  assert(store_size > 0);
+
+  ours.store_stats.bytes_total = store_size;
+  ours.store_stats.bytes_sst = extra["sst"];
+  ours.store_stats.bytes_log = extra["log"];
+  ours.store_stats.bytes_misc = extra["misc"];
+  ours.last_update = ceph_clock_now(g_ceph_context);
+
+  return 0;
+}
+
 
 int DataHealthService::update_stats()
 {
@@ -135,7 +160,8 @@ int DataHealthService::update_stats()
           << " total " << ours.kb_total << " used " << ours.kb_used << " avail " << ours.kb_avail
           << dendl;
   ours.last_update = ceph_clock_now(g_ceph_context);
-  return 0;
+
+  return update_store_stats(ours);
 }
 
 void DataHealthService::share_stats()

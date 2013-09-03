@@ -1751,6 +1751,8 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   info.last_update = pg_log.get_head();
   child->info.last_update = child->pg_log.get_head();
 
+  child->info.last_user_version = info.last_user_version;
+
   info.log_tail = pg_log.get_tail();
   child->info.log_tail = child->pg_log.get_tail();
 
@@ -2304,6 +2306,7 @@ void PG::add_log_entry(pg_log_entry_t& e, bufferlist& log_bl)
   // raise last_update.
   assert(e.version > info.last_update);
   info.last_update = e.version;
+  info.last_user_version = e.user_version;
 
   // log mutation
   pg_log.add(e);
@@ -4526,9 +4529,6 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
 				ObjectStore::Transaction *t)
 {
   const OSDMapRef osdmap = get_osdmap();
-
-  // -- there was a change! --
-  kick();
 
   set_last_peering_reset();
 

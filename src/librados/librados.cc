@@ -592,6 +592,12 @@ int librados::AioCompletion::AioCompletion::get_version()
   return c->get_version();
 }
 
+uint64_t librados::AioCompletion::AioCompletion::get_version64()
+{
+  AioCompletionImpl *c = (AioCompletionImpl *)pc;
+  return c->get_version();
+}
+
 void librados::AioCompletion::AioCompletion::release()
 {
   AioCompletionImpl *c = (AioCompletionImpl *)pc;
@@ -1108,8 +1114,7 @@ const librados::ObjectIterator& librados::IoCtx::objects_end() const
 
 uint64_t librados::IoCtx::get_last_version()
 {
-  eversion_t ver = io_ctx_impl->last_version();
-  return ver.version;
+  return io_ctx_impl->last_version();
 }
 
 int librados::IoCtx::aio_read(const std::string& oid, librados::AioCompletion *c,
@@ -2142,8 +2147,7 @@ extern "C" int rados_read(rados_ioctx_t io, const char *o, char *buf, size_t len
 extern "C" uint64_t rados_get_last_version(rados_ioctx_t io)
 {
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  eversion_t ver = ctx->last_version();
-  return ver.version;
+  return ctx->last_version();
 }
 
 extern "C" int rados_pool_create(rados_t cluster, const char *name)

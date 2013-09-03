@@ -23,6 +23,10 @@
 #include <sys/param.h>
 #include <fcntl.h>
 
+#if defined(__linux__)
+#include <linux/falloc.h>
+#endif
+
 #include <sys/statvfs.h>
 
 #include <iostream>
@@ -7685,6 +7689,110 @@ int Client::ll_fsync(Fh *fh, bool syncdataonly)
   return _fsync(fh, syncdataonly);
 }
 
+#ifdef FALLOC_FL_PUNCH_HOLE
+
+int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
+{
+  if (offset < 0 || length <= 0)
+    return -EINVAL;
+
+  if (mode & ~(FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE))
+    return -EOPNOTSUPP;
+
+  if ((mode & FALLOC_FL_PUNCH_HOLE) && !(mode & FALLOC_FL_KEEP_SIZE))
+    return -EOPNOTSUPP;
+
+  if (osdmap->test_flag(CEPH_OSDMAP_FULL) && !(mode & FALLOC_FL_PUNCH_HOLE))
+    return -ENOSPC;
+
+  Inode *in = fh->inode;
+
+  if (in->snapid != CEPH_NOSNAP)
+    return -EROFS;
+
+  if ((fh->mode & CEPH_FILE_MODE_WR) == 0)
+    return -EBADF;
+
+  int have;
+  int r = get_caps(in, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &have, -1);
+  if (r < 0)
+    return r;
+
+  if (mode & FALLOC_FL_PUNCH_HOLE) {
+    Mutex flock("Client::_punch_hole flock");
+    Cond cond;
+    bool done = false;
+    Context *onfinish = new C_SafeCond(&flock, &cond, &done);
+    Context *onsafe = new C_Client_SyncCommit(this, in);
+
+    unsafe_sync_write++;
+    get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+
+    _invalidate_inode_cache(in, offset, length, true);
+    r = filer->zero(in->ino, &in->layout,
+                    in->snaprealm->get_snap_context(),
+                    offset, length,
+                    ceph_clock_now(cct),
+                    0, true, onfinish, onsafe);
+    if (r < 0)
+      goto done;
+
+    in->mtime = ceph_clock_now(cct);
+    mark_caps_dirty(in, CEPH_CAP_FILE_WR);
+
+    client_lock.Unlock();
+    flock.Lock();
+    while (!done)
+      cond.Wait(flock);
+    flock.Unlock();
+    client_lock.Lock();
+  } else if (!(mode & FALLOC_FL_KEEP_SIZE)) {
+    uint64_t size = offset + length;
+    if (size > in->size) {
+      in->size = size;
+      in->mtime = ceph_clock_now(cct);
+      mark_caps_dirty(in, CEPH_CAP_FILE_WR);
+
+      if ((in->size << 1) >= in->max_size &&
+          (in->reported_size << 1) < in->max_size)
+        check_caps(in, false);
+    }
+  }
+
+done:
+  put_cap_ref(in, CEPH_CAP_FILE_WR);
+  return r;
+}
+#else
+
+int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
+{
+  return -EOPNOTSUPP;
+}
+
+#endif
+
+
+int Client::ll_fallocate(Fh *fh, int mode, loff_t offset, loff_t length)
+{
+  Mutex::Locker lock(client_lock);
+  ldout(cct, 3) << "ll_fallocate " << fh << " " << fh->inode->ino << " " << dendl;
+  tout(cct) << "ll_fallocate " << mode << " " << offset << " " << length << std::endl;
+  tout(cct) << (unsigned long)fh << std::endl;
+
+  return _fallocate(fh, mode, offset, length);
+}
+
+int Client::fallocate(int fd, int mode, loff_t offset, loff_t length)
+{
+  Mutex::Locker lock(client_lock);
+  tout(cct) << "fallocate " << " " << fd << mode << " " << offset << " " << length << std::endl;
+
+  Fh *fh = get_filehandle(fd);
+  if (!fh)
+    return -EBADF;
+  return _fallocate(fh, mode, offset, length);
+}
 
 int Client::ll_release(Fh *fh)
 {

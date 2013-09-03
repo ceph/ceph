@@ -504,7 +504,7 @@ void Paxos::handle_last(MMonPaxos *last)
   }
 
   if (need_refresh)
-    do_refresh();
+    (void)do_refresh();
 
   last->put();
 }

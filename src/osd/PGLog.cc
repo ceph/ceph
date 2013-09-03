@@ -64,7 +64,7 @@ void PGLog::IndexedLog::split_into(
   index();
 }
 
-void PGLog::IndexedLog::trim(eversion_t s)
+void PGLog::IndexedLog::trim(eversion_t s, set<eversion_t> *trimmed)
 {
   if (complete_to != log.end() &&
       complete_to->version <= s) {
@@ -77,6 +77,8 @@ void PGLog::IndexedLog::trim(eversion_t s)
     if (e.version > s)
       break;
     generic_dout(20) << "trim " << e << dendl;
+    if (trimmed)
+      trimmed->insert(e.version);
     unindex(e);         // remove from index,
     log.pop_front();    // from log
   }
@@ -142,14 +144,8 @@ void PGLog::trim(eversion_t trim_to, pg_info_t &info)
     assert(trim_to <= info.last_complete);
 
     dout(10) << "trim " << log << " to " << trim_to << dendl;
-    log.trim(trim_to);
+    log.trim(trim_to, &trimmed);
     info.log_tail = log.tail;
-
-    if (log.log.empty()) {
-      mark_dirty_to(eversion_t::max());
-    } else {
-      mark_dirty_to(log.log.front().version);
-    }
   }
 }
 
@@ -514,6 +510,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
     log.index();   
 
     info.last_update = log.head = olog.head;
+    info.last_user_version = oinfo.last_user_version;
     info.purged_snaps = oinfo.purged_snaps;
 
     // process divergent items
@@ -541,13 +538,18 @@ void PGLog::write_log(
 	     << "dirty_to: " << dirty_to
 	     << ", dirty_from: " << dirty_from
 	     << ", dirty_divergent_priors: " << dirty_divergent_priors
+	     << ", writeout_from: " << writeout_from
+	     << ", trimmed: " << trimmed
 	     << dendl;
-    _write_log(t, log, log_oid, divergent_priors,
-	       dirty_to,
-	       dirty_from,
-	       dirty_divergent_priors,
-	       !touched_log,
-               &log_keys_debug);
+    _write_log(
+      t, log, log_oid, divergent_priors,
+      dirty_to,
+      dirty_from,
+      writeout_from,
+      trimmed,
+      dirty_divergent_priors,
+      !touched_log,
+      (pg_log_debug ? &log_keys_debug : 0));
     undirty();
   } else {
     dout(10) << "log is not dirty" << dendl;
@@ -557,8 +559,11 @@ void PGLog::write_log(
 void PGLog::write_log(ObjectStore::Transaction& t, pg_log_t &log,
     const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors)
 {
-  _write_log(t, log, log_oid, divergent_priors, eversion_t::max(), eversion_t(),
-	     true, true, 0);
+  _write_log(
+    t, log, log_oid,
+    divergent_priors, eversion_t::max(), eversion_t(), eversion_t(),
+    set<eversion_t>(),
+    true, true, 0);
 }
 
 void PGLog::_write_log(
@@ -566,11 +571,24 @@ void PGLog::_write_log(
   const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors,
   eversion_t dirty_to,
   eversion_t dirty_from,
+  eversion_t writeout_from,
+  const set<eversion_t> &trimmed,
   bool dirty_divergent_priors,
   bool touch_log,
   set<string> *log_keys_debug
   )
 {
+  set<string> to_remove;
+  for (set<eversion_t>::const_iterator i = trimmed.begin();
+       i != trimmed.end();
+       ++i) {
+    to_remove.insert(i->get_key_name());
+    if (log_keys_debug) {
+      assert(log_keys_debug->count(i->get_key_name()));
+      log_keys_debug->erase(i->get_key_name());
+    }
+  }
+
 //dout(10) << "write_log, clearing up to " << dirty_to << dendl;
   if (touch_log)
     t.touch(coll_t(), log_oid);
@@ -598,7 +616,8 @@ void PGLog::_write_log(
   }
 
   for (list<pg_log_entry_t>::reverse_iterator p = log.log.rbegin();
-       p != log.log.rend() && p->version >= dirty_from &&
+       p != log.log.rend() &&
+	 (p->version >= dirty_from || p->version >= writeout_from) &&
 	 p->version >= dirty_to;
        ++p) {
     bufferlist bl(sizeof(*p) * 2);
@@ -620,6 +639,7 @@ void PGLog::_write_log(
     ::encode(divergent_priors, keys["divergent_priors"]);
   }
 
+  t.omap_rmkeys(coll_t::META_COLL, log_oid, to_remove);
   t.omap_setkeys(coll_t::META_COLL, log_oid, keys);
 }
 
