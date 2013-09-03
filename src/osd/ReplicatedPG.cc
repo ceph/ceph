@@ -50,6 +50,7 @@
 #include "include/compat.h"
 #include "common/cmdparse.h"
 
+#include "mon/MonClient.h"
 #include "osdc/Objecter.h"
 
 #include "json_spirit/json_spirit_value.h"
@@ -622,7 +623,9 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
   PG(o, curmap, _pool, p, oid, ioid),
   snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
   temp_created(false),
-  temp_coll(coll_t::make_temp_coll(p)), snap_trimmer_machine(this)
+  temp_coll(coll_t::make_temp_coll(p)),
+  temp_seq(0),
+  snap_trimmer_machine(this)
 { 
   snap_trimmer_machine.initiate();
 }
@@ -3933,6 +3936,15 @@ coll_t ReplicatedPG::get_temp_coll(ObjectStore::Transaction *t)
       t->create_collection(temp_coll);
   temp_created = true;
   return temp_coll;
+}
+
+hobject_t ReplicatedPG::generate_temp_object()
+{
+  ostringstream ss;
+  ss << "temp_" << info.pgid << "_" << get_role() << "_" << osd->monc->get_global_id() << "_" << (++temp_seq);
+  hobject_t hoid(object_t(ss.str()), "", CEPH_NOSNAP, 0, -1, "");
+  dout(20) << __func__ << " " << hoid << dendl;
+  return hoid;
 }
 
 int ReplicatedPG::prepare_transaction(OpContext *ctx)
