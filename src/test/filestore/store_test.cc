@@ -898,6 +898,65 @@ TEST_F(StoreTest, TwoHash) {
   ASSERT_EQ(r, 0);
 }
 
+TEST_F(StoreTest, MoveRename) {
+  coll_t temp_cid("mytemp");
+  hobject_t temp_oid("tmp_oid", "", CEPH_NOSNAP, 0, 0, "");
+  coll_t cid("dest");
+  hobject_t oid("dest_oid", "", CEPH_NOSNAP, 0, 0, "");
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid);
+    t.touch(cid, oid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_TRUE(store->exists(cid, oid));
+  bufferlist data, attr;
+  map<string, bufferlist> omap;
+  data.append("data payload");
+  attr.append("attr value");
+  omap["omap_key"].append("omap value");
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(temp_cid);
+    t.touch(temp_cid, temp_oid);
+    t.write(temp_cid, temp_oid, 0, data.length(), data);
+    t.setattr(temp_cid, temp_oid, "attr", attr);
+    t.omap_setkeys(temp_cid, temp_oid, omap);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_TRUE(store->exists(temp_cid, temp_oid));
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, oid);
+    t.collection_move_rename(temp_cid, temp_oid, cid, oid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  ASSERT_TRUE(store->exists(cid, oid));
+  ASSERT_FALSE(store->exists(temp_cid, temp_oid));
+  {
+    bufferlist newdata;
+    r = store->read(cid, oid, 0, 1000, newdata);
+    ASSERT_GE(r, 0);
+    ASSERT_TRUE(newdata.contents_equal(data));
+    bufferlist newattr;
+    r = store->getattr(cid, oid, "attr", newattr);
+    ASSERT_GE(r, 0);
+    ASSERT_TRUE(newattr.contents_equal(attr));
+    set<string> keys;
+    keys.insert("omap_key");
+    map<string, bufferlist> newomap;
+    r = store->omap_get_values(cid, oid, keys, &newomap);
+    ASSERT_GE(r, 0);
+    ASSERT_EQ(1u, newomap.size());
+    ASSERT_TRUE(newomap.count("omap_key"));
+    ASSERT_TRUE(newomap["omap_key"].contents_equal(omap["omap_key"]));
+  }
+}
+
 //
 // support tests for qa/workunits/filestore/filestore.sh
 //
