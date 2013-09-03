@@ -1328,6 +1328,7 @@ int Objecter::recalc_op_target(Op *op)
   bool is_read = op->flags & CEPH_OSD_FLAG_READ;
   bool is_write = op->flags & CEPH_OSD_FLAG_WRITE;
 
+  op->target_oid = op->base_oid;
   op->target_oloc = op->base_oloc;
   const pg_pool_t *pi = osdmap->get_pg_pool(op->base_oloc.pool);
   if (pi) {
@@ -1343,7 +1344,7 @@ int Objecter::recalc_op_target(Op *op)
     if (!osdmap->have_pg_pool(pgid.pool()))
       return RECALC_OP_TARGET_POOL_DNE;
   } else {
-    int ret = osdmap->object_locator_to_pg(op->base_oid, op->target_oloc, pgid);
+    int ret = osdmap->object_locator_to_pg(op->target_oid, op->target_oloc, pgid);
     if (ret == -ENOENT)
       return RECALC_OP_TARGET_POOL_DNE;
   }
@@ -1485,7 +1486,8 @@ void Objecter::send_op(Op *op)
   op->stamp = ceph_clock_now(cct);
 
   MOSDOp *m = new MOSDOp(client_inc, op->tid, 
-			 op->base_oid, op->target_oloc, op->pgid, osdmap->get_epoch(),
+			 op->target_oid, op->target_oloc, op->pgid,
+			 osdmap->get_epoch(),
 			 flags);
 
   m->set_snapid(op->snapid);
