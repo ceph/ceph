@@ -48,7 +48,8 @@ enum TestOpType {
   TEST_OP_SETATTR,
   TEST_OP_RMATTR,
   TEST_OP_TMAPPUT,
-  TEST_OP_WATCH
+  TEST_OP_WATCH,
+  TEST_OP_COPY_FROM
 };
 
 class TestWatchContext : public librados::WatchCtx {
@@ -394,6 +395,12 @@ public:
     new_obj.update(contents);
     pool_obj_cont[current_snap].erase(oid);
     pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
+  }
+
+  void update_object_full(const string &oid, const ObjectDesc &contents)
+  {
+    pool_obj_cont.rbegin()->second.erase(oid);
+    pool_obj_cont.rbegin()->second.insert(pair<string,ObjectDesc>(oid, contents));
   }
 
   void update_object_version(const string &oid, uint64_t version)
@@ -1377,5 +1384,90 @@ public:
     return "RollBackOp";
   }
 };
+
+class CopyFromOp : public TestOp {
+public:
+  string oid, oid_src;
+  ObjectDesc src_value;
+  librados::ObjectWriteOperation op;
+  librados::AioCompletion *comp;
+  int snap;
+  bool done;
+  tid_t tid;
+  CopyFromOp(RadosTestContext *context,
+	     const string &oid,
+	     const string &oid_src,
+	     TestOpStat *stat)
+    : TestOp(context, stat), oid(oid), oid_src(oid_src),
+      src_value(&context->cont_gen),
+      comp(NULL), done(false), tid(0)
+  {}
+
+  void _begin()
+  {
+    ContDesc cont;
+    {
+      Mutex::Locker l(context->state_lock);
+      cont = ContDesc(context->seq_num, context->current_snap,
+		      context->seq_num, "");
+      context->oid_in_use.insert(oid);
+      context->oid_not_in_use.erase(oid);
+      context->oid_in_use.insert(oid_src);
+      context->oid_not_in_use.erase(oid_src);
+    }
+
+    // choose source snap
+    if (0 && !(rand() % 4) && !context->snaps.empty()) {
+      snap = rand_choose(context->snaps)->first;
+    } else {
+      snap = -1;
+    }
+    context->find_object(oid_src, &src_value, snap);
+
+    string src = context->prefix+oid_src;
+    op.copy_from(src.c_str(), context->io_ctx, src_value.version);
+
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    comp = context->rados.aio_create_completion((void*) cb_arg, &write_callback,
+						NULL);
+    tid = context->io_ctx.aio_operate(context->prefix+oid, comp, &op);
+  }
+
+  void _finish(CallbackInfo *info)
+  {
+    Mutex::Locker l(context->state_lock);
+    done = true;
+    int r;
+    assert(comp->is_complete());
+    cout << "finishing copy_from tid " << tid << " to " << context->prefix + oid << std::endl;
+    if ((r = comp->get_return_value())) {
+      if (!(r == -ENOENT && src_value.deleted())) {
+	cerr << "Error: oid " << oid << " copy_from " << oid_src << " returned error code "
+	     << r << std::endl;
+      }
+    } else {
+      context->update_object_full(oid, src_value);
+      context->update_object_version(oid, comp->get_version());
+    }
+    context->oid_in_use.erase(oid);
+    context->oid_not_in_use.insert(oid);
+    context->oid_in_use.erase(oid_src);
+    context->oid_not_in_use.insert(oid_src);
+    context->kick();
+  }
+
+  bool finished()
+  {
+    return done;
+  }
+
+  string getType()
+  {
+    return "TmapPutOp";
+  }
+};
+
 
 #endif
