@@ -1049,7 +1049,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
       reply->set_reply_versions(eversion_t(), ctx->obs->oi.user_version);
     } else if (result == -ENOENT) {
       // on ENOENT, set a floor for what the next user version will be. 
-      reply->set_enoent_reply_versions(info.last_update, ctx->user_at_version);
+      reply->set_enoent_reply_versions(info.last_update, info.last_user_version);
     }
     
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
