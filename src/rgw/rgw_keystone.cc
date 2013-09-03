@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <fnmatch.h>
 
 #include "common/errno.h"
 #include "common/ceph_json.h"
@@ -13,7 +14,7 @@
 bool KeystoneToken::User::has_role(const string& r) {
   list<Role>::iterator iter;
   for (iter = roles.begin(); iter != roles.end(); ++iter) {
-      if (r.compare((*iter).name) == 0) {
+      if (fnmatch(r.c_str(), ((*iter).name.c_str()), 0) == 0) {
         return true;
       }
   }
