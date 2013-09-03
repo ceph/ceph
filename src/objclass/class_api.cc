@@ -582,7 +582,7 @@ uint64_t cls_current_version(cls_method_context_t hctx)
 {
   ReplicatedPG::OpContext *ctx = *(ReplicatedPG::OpContext **)hctx;
 
-  return ctx->user_at_version;
+  return ctx->pg->info.last_user_version;
 }
 
 
