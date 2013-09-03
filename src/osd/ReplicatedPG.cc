@@ -278,10 +278,9 @@ void ReplicatedPG::wait_for_missing_object(const hobject_t& soid, OpRequestRef o
   }
   else {
     dout(7) << "missing " << soid << " v " << v << ", pulling." << dendl;
-    map<int, vector<PullOp> > pulls;
-    prepare_pull(soid, v, cct->_conf->osd_client_op_priority, &pulls);
-    // TODOSAM: replace
-    //send_pulls(g_conf->osd_client_op_priority, pulls);
+    PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
+    recover_missing(soid, v, cct->_conf->osd_client_op_priority, h);
+    pgbackend->run_recovery_op(h, cct->_conf->osd_client_op_priority);
   }
   waiting_for_missing_object[soid].push_back(op);
   op->mark_delayed("waiting for missing object");
@@ -5214,13 +5213,11 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
     obc->obs.oi = oi;
     obc->obs.exists = true;
 
-    if (can_create) {
-      obc->ssc = get_snapset_context(
-	soid.oid, soid.get_key(), soid.hash,
-	true, soid.get_namespace(),
-	soid.has_snapset() ? attrs : 0);
-      register_snapset_context(obc->ssc);
-    }
+    obc->ssc = get_snapset_context(
+      soid.oid, soid.get_key(), soid.hash,
+      true, soid.get_namespace(),
+      soid.has_snapset() ? attrs : 0);
+    register_snapset_context(obc->ssc);
 
     populate_obc_watchers(obc);
     dout(10) << "get_object_context " << obc << " " << soid << " 0 -> 1 read " << obc->obs.oi << dendl;
@@ -5773,11 +5770,12 @@ void ReplicatedPG::calc_head_subsets(ObjectContextRef obc, SnapSet& snapset, con
 	   << "  clone_subsets " << clone_subsets << dendl;
 }
 
-void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const hobject_t& soid,
-				      const pg_missing_t& missing,
-				      const hobject_t &last_backfill,
-				      interval_set<uint64_t>& data_subset,
-				      map<hobject_t, interval_set<uint64_t> >& clone_subsets)
+void ReplicatedBackend::calc_clone_subsets(
+  SnapSet& snapset, const hobject_t& soid,
+  const pg_missing_t& missing,
+  const hobject_t &last_backfill,
+  interval_set<uint64_t>& data_subset,
+  map<hobject_t, interval_set<uint64_t> >& clone_subsets)
 {
   dout(10) << "calc_clone_subsets " << soid
 	   << " clone_overlap " << snapset.clone_overlap << dendl;
@@ -5862,95 +5860,70 @@ void ReplicatedPG::calc_clone_subsets(SnapSet& snapset, const hobject_t& soid,
  */
 enum { PULL_NONE, PULL_OTHER, PULL_YES };
 
-int ReplicatedPG::prepare_pull(
-  const hobject_t& soid, eversion_t v,
+void ReplicatedBackend::prepare_pull(
+  const hobject_t& soid,
+  ObjectContextRef headctx,
   int priority,
-  map<int, vector<PullOp> > *pulls)
+  RPGHandle *h)
 {
+  assert(get_parent()->get_local_missing().missing.count(soid));
+  eversion_t v = get_parent()->get_local_missing().missing.find(
+    soid)->second.need;
+  const map<hobject_t, set<int> > &missing_loc(
+    get_parent()->get_missing_loc());
+  const map<int, pg_missing_t > &peer_missing(
+    get_parent()->get_peer_missing());
   int fromosd = -1;
-  map<hobject_t,set<int> >::iterator q = missing_loc.find(soid);
-  if (q != missing_loc.end()) {
-    // randomize the list of possible sources
-    // should we take weights into account?
-    vector<int> shuffle(q->second.begin(), q->second.end());
-    random_shuffle(shuffle.begin(), shuffle.end());
-    for (vector<int>::iterator p = shuffle.begin();
-	 p != shuffle.end();
-	 ++p) {
-      if (get_osdmap()->is_up(*p)) {
-	fromosd = *p;
-	break;
-      }
-    }
-  }
-  if (fromosd < 0) {
-    dout(7) << "pull " << soid
-	    << " v " << v 
-	    << " but it is unfound" << dendl;
-    return PULL_NONE;
-  }
+  map<hobject_t,set<int> >::const_iterator q = missing_loc.find(soid);
+  assert(q != missing_loc.end());
+  assert(!q->second.empty());
 
-  assert(peer_missing.count(fromosd));
-  if (peer_missing[fromosd].is_missing(soid, v)) {
-    assert(peer_missing[fromosd].missing[soid].have != v);
-    dout(10) << "pulling soid " << soid << " from osd " << fromosd
-	     << " at version " << peer_missing[fromosd].missing[soid].have
-	     << " rather than at version " << v << dendl;
-    v = peer_missing[fromosd].missing[soid].have;
-    assert(pg_log.get_log().objects.count(soid) &&
-	   pg_log.get_log().objects.find(soid)->second->op == pg_log_entry_t::LOST_REVERT &&
-	   pg_log.get_log().objects.find(soid)->second->reverting_to == v);
-  }
-  
+  // pick a pullee
+  vector<int> shuffle(q->second.begin(), q->second.end());
+  random_shuffle(shuffle.begin(), shuffle.end());
+  vector<int>::iterator p = shuffle.begin();
+  assert(get_osdmap()->is_up(*p));
+  fromosd = *p;
+  assert(fromosd >= 0);
+
   dout(7) << "pull " << soid
-	  << " v " << v 
-	  << " on osds " << missing_loc[soid]
+	  << "v " << v
+	  << " on osds " << *p
 	  << " from osd." << fromosd
 	  << dendl;
 
+  assert(peer_missing.count(fromosd));
+  const pg_missing_t &pmissing = peer_missing.find(fromosd)->second;
+  if (pmissing.is_missing(soid, v)) {
+    assert(pmissing.missing.find(soid)->second.have != v);
+    dout(10) << "pulling soid " << soid << " from osd " << fromosd
+	     << " at version " << pmissing.missing.find(soid)->second.have
+	     << " rather than at version " << v << dendl;
+    v = pmissing.missing.find(soid)->second.have;
+    assert(get_parent()->get_log().get_log().objects.count(soid) &&
+	   (get_parent()->get_log().get_log().objects.find(soid)->second->op ==
+	    pg_log_entry_t::LOST_REVERT) &&
+	   (get_parent()->get_log().get_log().objects.find(
+	     soid)->second->reverting_to ==
+	    v));
+  }
+  
   ObjectRecoveryInfo recovery_info;
 
-  // is this a snapped object?  if so, consult the snapset.. we may not need the entire object!
-  if (soid.snap && soid.snap < CEPH_NOSNAP) {
-    // do we have the head and/or snapdir?
-    hobject_t head = soid;
-    head.snap = CEPH_NOSNAP;
-    if (pg_log.get_missing().is_missing(head)) {
-      if (pulling.count(head)) {
-	dout(10) << " missing but already pulling head " << head << dendl;
-	return PULL_NONE;
-      } else {
-	int r = prepare_pull(
-	  head, pg_log.get_missing().missing.find(head)->second.need, priority,
-	  pulls);
-	if (r != PULL_NONE)
-	  return PULL_OTHER;
-	return PULL_NONE;
-      }
-    }
-    head.snap = CEPH_SNAPDIR;
-    if (pg_log.get_missing().is_missing(head)) {
-      if (pulling.count(head)) {
-	dout(10) << " missing but already pulling snapdir " << head << dendl;
-	return PULL_NONE;
-      } else {
-	int r = prepare_pull(
-	  head, pg_log.get_missing().missing.find(head)->second.need, priority,
-	  pulls);
-	if (r != PULL_NONE)
-	  return PULL_OTHER;
-	return PULL_NONE;
-      }
-    }
-
+  if (soid.is_snap()) {
+    assert(!get_parent()->get_local_missing().is_missing(
+	     soid.get_head()) ||
+	   !get_parent()->get_local_missing().is_missing(
+	     soid.get_snapdir()));
+    assert(headctx);
     // check snapset
-    SnapSetContext *ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, false, soid.get_namespace());
+    SnapSetContext *ssc = headctx->ssc;
     assert(ssc);
     dout(10) << " snapset " << ssc->snapset << dendl;
-    calc_clone_subsets(ssc->snapset, soid, pg_log.get_missing(), info.last_backfill,
+    calc_clone_subsets(ssc->snapset, soid, get_parent()->get_local_missing(),
+		       get_info().last_backfill,
 		       recovery_info.copy_subset,
 		       recovery_info.clone_subset);
-    put_snapset_context(ssc);
     // FIXME: this may overestimate if we are pulling multiple clones in parallel...
     dout(10) << " pulling " << recovery_info << dendl;
   } else {
@@ -5960,8 +5933,8 @@ int ReplicatedPG::prepare_pull(
     recovery_info.size = ((uint64_t)-1);
   }
 
-  (*pulls)[fromosd].push_back(PullOp());
-  PullOp &op = (*pulls)[fromosd].back();
+  h->pulls[fromosd].push_back(PullOp());
+  PullOp &op = h->pulls[fromosd].back();
   op.soid = soid;
 
   op.recovery_info = recovery_info;
@@ -5979,7 +5952,74 @@ int ReplicatedPG::prepare_pull(
   pi.recovery_progress = op.recovery_progress;
   pi.priority = priority;
 
+  // TODOSAM: do something??
+}
+
+int ReplicatedPG::recover_missing(
+  const hobject_t &soid, eversion_t v,
+  int priority,
+  PGBackend::RecoveryHandle *h)
+{
+  map<hobject_t,set<int> >::iterator q = missing_loc.find(soid);
+  if (q == missing_loc.end()) {
+    dout(7) << "pull " << soid
+	    << " v " << v 
+	    << " but it is unfound" << dendl;
+    return PULL_NONE;
+  }
+
+  // is this a snapped object?  if so, consult the snapset.. we may not need the entire object!
+  ObjectContextRef obc;
+  ObjectContextRef head_obc;
+  if (soid.snap && soid.snap < CEPH_NOSNAP) {
+    // do we have the head and/or snapdir?
+    hobject_t head = soid.get_head();
+    if (pg_log.get_missing().is_missing(head)) {
+      if (recovering.count(head)) {
+	dout(10) << " missing but already recovering head " << head << dendl;
+	return PULL_NONE;
+      } else {
+	int r = recover_missing(
+	  head, pg_log.get_missing().missing.find(head)->second.need, priority,
+	  h);
+	if (r != PULL_NONE)
+	  return PULL_OTHER;
+	return PULL_NONE;
+      }
+    }
+    head = soid.get_snapdir();
+    if (pg_log.get_missing().is_missing(head)) {
+      if (recovering.count(head)) {
+	dout(10) << " missing but already recovering snapdir " << head << dendl;
+	return PULL_NONE;
+      } else {
+	int r = recover_missing(
+	  head, pg_log.get_missing().missing.find(head)->second.need, priority,
+	  h);
+	if (r != PULL_NONE)
+	  return PULL_OTHER;
+	return PULL_NONE;
+      }
+    }
+
+    // we must have one or the other
+    head_obc = get_object_context(
+      soid.get_head(),
+      false,
+      0);
+    if (!head_obc)
+      head_obc = get_object_context(
+	soid.get_snapdir(),
+	false,
+	0);
+    assert(head_obc);
+  }
   start_recovery_op(soid);
+  pgbackend->recover_object(
+    soid,
+    head_obc,
+    obc,
+    h);
   return PULL_YES;
 }
 
@@ -6038,9 +6078,12 @@ void ReplicatedPG::prep_push_to_replica(
     SnapSetContext *ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, false, soid.get_namespace());
     assert(ssc);
     dout(15) << "push_to_replica snapset is " << ssc->snapset << dendl;
+// TODOSAM: fix
+#if 0
     calc_clone_subsets(ssc->snapset, soid, peer_missing[peer],
 		       peer_info[peer].last_backfill,
 		       data_subset, clone_subsets);
+#endif
     put_snapset_context(ssc);
   } else if (soid.snap == CEPH_NOSNAP) {
     // pushing head or unversioned object.
@@ -6227,8 +6270,11 @@ ObjectRecoveryInfo ReplicatedPG::recalc_subsets(const ObjectRecoveryInfo& recove
   new_info.copy_subset.clear();
   new_info.clone_subset.clear();
   assert(ssc);
+// TODOSAM: fix
+#if 0
   calc_clone_subsets(ssc->snapset, new_info.soid, pg_log.get_missing(), info.last_backfill,
 		     new_info.copy_subset, new_info.clone_subset);
+#endif
   put_snapset_context(ssc);
   return new_info;
 }
@@ -7571,7 +7617,7 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
   int started = 0;
   int skipped = 0;
 
-  map<int, vector<PullOp> > pulls;
+  PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
   map<version_t, hobject_t>::const_iterator p =
     missing.rmissing.lower_bound(pg_log.get_log().last_requested);
   while (p != missing.rmissing.end()) {
@@ -7678,14 +7724,14 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
       }
     }
    
-    if (!pulling.count(soid)) {
-      if (pulling.count(head)) {
+    if (!recovering.count(soid)) {
+      if (recovering.count(head)) {
 	++skipped;
       } else if (unfound) {
 	++skipped;
       } else {
-	int r = prepare_pull(
-	  soid, need, cct->_conf->osd_recovery_op_priority, &pulls);
+	int r = recover_missing(
+	  soid, need, cct->_conf->osd_recovery_op_priority, h);
 	switch (r) {
 	case PULL_YES:
 	  ++started;
@@ -7708,8 +7754,7 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
       pg_log.set_last_requested(v);
   }
  
-  // TODOSAM: replace
-  //send_pulls(g_conf->osd_recovery_op_priority, pulls);
+  pgbackend->run_recovery_op(h, cct->_conf->osd_recovery_op_priority);
   return started;
 }
 
