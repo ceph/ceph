@@ -505,3 +505,5 @@ number of the pid of that test.  Each of these directory contains a copy of the
 stored in files in the directory, and task-specific yaml files and other logs
 are saved in the subdirectories.
 
+These logs are also publically available at
+``http://qa-proxy.ceph.com/teuthology/``.
