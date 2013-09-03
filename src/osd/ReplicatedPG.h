@@ -419,9 +419,6 @@ protected:
   };
   map<hobject_t, PullInfo> pulling;
 
-  // Track contents of temp collection, clear on reset
-  set<hobject_t> temp_contents;
-
   ObjectRecoveryInfo recalc_subsets(const ObjectRecoveryInfo& recovery_info);
   static void trim_pushed_data(const interval_set<uint64_t> &copy_subset,
 			       const interval_set<uint64_t> &intervals_received,
@@ -852,7 +849,10 @@ public:
 private:
   bool temp_created;
   coll_t temp_coll;
+  set<hobject_t> temp_contents;   ///< contents of temp collection, clear on reset
+  uint64_t temp_seq; ///< last id for naming temp objects
   coll_t get_temp_coll(ObjectStore::Transaction *t);
+  hobject_t generate_temp_object();  ///< generate a new temp object name
 public:
   bool have_temp_coll();
   coll_t get_temp_coll() {
