@@ -775,6 +775,10 @@ unittest_addrs_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 unittest_addrs_LDADD = $(LIBGLOBAL_LDA) ${UNITTEST_LDADD}
 check_PROGRAMS += unittest_addrs
 
+unittest_arch_SOURCES = test/test_arch.c arch/intel.c arch/neon.c arch/probe.cc
+unittest_arch_CXXFLAGS = ${AM_CFLAGS}
+check_PROGRAMS += unittest_arch
+
 unittest_sharedptr_registry_SOURCES = test/common/test_sharedptr_registry.cc
 unittest_sharedptr_registry_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 unittest_sharedptr_registry_LDADD = libcommon.la ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
@@ -1340,6 +1344,11 @@ AM_CXXFLAGS = \
 	-Wnon-virtual-dtor \
 	-Wno-invalid-offsetof
 
+if ENABLE_FPU_NEON
+AM_CFLAGS += -mfpu=neon
+AM_CXXFLAGS += -mfpu=neon
+endif
+
 if !CLANG
     AM_CXXFLAGS += -Wstrict-null-sentinel
 endif
@@ -1521,6 +1530,7 @@ libcommon_files = \
 	./ceph_ver.c \
 	arch/probe.cc \
 	arch/intel.c \
+	arch/neon.c \
 	auth/AuthAuthorizeHandler.cc \
 	auth/AuthClientHandler.cc \
 	auth/AuthSessionHandler.cc \
@@ -1772,6 +1782,7 @@ noinst_HEADERS = \
 	rados_sync.h \
 	arch/probe.h \
 	arch/intel.h \
+	arch/neon.h \
 	auth/cephx/CephxAuthorizeHandler.h\
 	auth/cephx/CephxKeyServer.h\
 	auth/cephx/CephxProtocol.h\
