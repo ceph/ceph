@@ -1309,6 +1309,7 @@ private:
   // low-level
   tid_t op_submit(Op *op);
   tid_t _op_submit(Op *op);
+  inline void unregister_op(Op *op);
 
   // public interface
  public:
