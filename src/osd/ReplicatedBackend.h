@@ -256,6 +256,17 @@ private:
 			ObjectStore::Transaction *t);
   void submit_push_complete(ObjectRecoveryInfo &recovery_info,
 			    ObjectStore::Transaction *t);
+
+  void calc_clone_subsets(
+    SnapSet& snapset, const hobject_t& poid, const pg_missing_t& missing,
+    const hobject_t &last_backfill,
+    interval_set<uint64_t>& data_subset,
+    map<hobject_t, interval_set<uint64_t> >& clone_subsets);
+  void prepare_pull(
+    const hobject_t& soid,
+    ObjectContextRef headctx,
+    int priority,
+    RPGHandle *h);
 };
 
 #endif
