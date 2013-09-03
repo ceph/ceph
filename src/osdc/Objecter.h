@@ -828,7 +828,7 @@ public:
     xlist<Op*>::item session_item;
     int incarnation;
     
-    object_t oid;
+    object_t base_oid;
     object_locator_t base_oloc;
     object_locator_t target_oloc;
 
@@ -874,7 +874,7 @@ public:
     Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>& op,
        int f, Context *ac, Context *co, version_t *ov) :
       session(NULL), session_item(this), incarnation(0),
-      oid(o), base_oloc(ol),
+      base_oid(o), base_oloc(ol),
       used_replica(false), con(NULL),
       snapid(CEPH_NOSNAP),
       outbl(NULL),
