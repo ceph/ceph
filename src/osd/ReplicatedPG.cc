@@ -4201,7 +4201,8 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	for (list<OpRequestRef>::iterator i = waiting_for_ondisk[repop->v].begin();
 	     i != waiting_for_ondisk[repop->v].end();
 	     ++i) {
-	  osd->reply_op_error(*i, 0, repop->v, 0);
+	  osd->reply_op_error(*i, 0, repop->ctx->at_version,
+			      repop->ctx->user_at_version);
 	}
 	waiting_for_ondisk.erase(repop->v);
       }
