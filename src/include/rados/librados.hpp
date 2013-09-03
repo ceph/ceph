@@ -265,6 +265,19 @@ namespace librados
      */
     void omap_rm_keys(const std::set<std::string> &to_rm);
 
+    /**
+     * Copy an object
+     *
+     * Copies an object from another location.  The operation is atomic in that
+     * the copy either succeeds in its entirety or fails (e.g., because the
+     * source object was modified while the copy was in progress).
+     *
+     * @param src source object name
+     * @param src_ioctx ioctx for the source object
+     * @param version current version of the source object
+     */
+    void copy_from(const std::string& src, const IoCtx& src_ioctx, uint64_t src_version);
+
     friend class IoCtx;
   };
 
@@ -674,6 +687,7 @@ namespace librados
     IoCtx(IoCtxImpl *io_ctx_impl_);
 
     friend class Rados; // Only Rados can use our private constructor to create IoCtxes.
+    friend class ObjectWriteOperation;  // copy_from needs to see our IoCtxImpl
 
     IoCtxImpl *io_ctx_impl;
   };
