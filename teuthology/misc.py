@@ -631,6 +631,7 @@ def get_scratch_devices(remote):
     retval = []
     for dev in devs:
         try:
+            # FIXME: Split this into multiple calls.
             remote.run(
                 args=[
                     # node exists
@@ -645,13 +646,13 @@ def get_scratch_devices(remote):
                     'mount',
                     run.Raw('|'),
                     'grep', '-q', dev,
-                    ]
-                )
+                ]
+            )
             retval.append(dev)
-        except Exception:
-            log.exception("Saw exception")
-            pass
+        except run.CommandFailedError:
+            log.debug("get_scratch_devices: %s is in use" % dev)
     return retval
+
 
 def wait_until_healthy(ctx, remote):
     """Wait until a Ceph cluster is healthy."""
