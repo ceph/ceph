@@ -248,18 +248,25 @@ displays a page of more documentation and more concrete examples.
 Some of the more important / commonly used tasks include:
 
 * ``chef``: Run the chef task.
-* ``install``: by default, the install task goes to gitbuilder and installs the results of the latest build. You can, however, add additional parameters to the test configuration to cause it to install any branch, SHA, archive or URL. The following are valid parameters.
+* ``install``: by default, the install task goes to gitbuilder and installs the
+  results of the latest build. You can, however, add additional parameters to
+  the test configuration to cause it to install any branch, SHA, archive or
+  URL. The following are valid parameters.
 
 - ``branch``: specify a branch (bobtail, cuttlefish...)
-- ``flavor``: specify a flavor (next, unstable...). Flavors can be thought of as
-  subsets of branches.  Sometimes (unstable, for example) they may have
-  a predefined meaning.
+- ``flavor``: specify a flavor (next, unstable...). Flavors can be thought of
+  as subsets of branches.  Sometimes (unstable, for example) they may have a
+  predefined meaning.
 - ``project``: specify a project (ceph, samba...)
 - ``sha1``: install the build with this sha1 value.
 - ``tag``: specify a tag/identifying text for this build (v47.2, v48.1...)
 * ``ceph``: Bring up Ceph
 
-* ``overrides``: override behavior. Typically, this includes sub-tasks being overridden. Sub-tasks can nest further information.  For example, overrides of install tasks are project specific, so the following section of a yaml file would cause all ceph installation to default into using the cuttlefish branch::
+* ``overrides``: override behavior. Typically, this includes sub-tasks being
+  overridden. Sub-tasks can nest further information.  For example, overrides
+  of install tasks are project specific, so the following section of a yaml
+  file would cause all ceph installation to default into using the cuttlefish
+  branch::
 
     overrides:
       install:
@@ -267,10 +274,13 @@ Some of the more important / commonly used tasks include:
           branch: cuttlefish
 
 * ``workunit``: workunits are a way of grouping tasks and behavior on targets.
-* ``sequential``: group the sub-tasks into a unit where the sub-tasks run sequentially as listed.
-* ``parallel``: group the sub-tasks into a unit where the sub-task all run in parallel.
+* ``sequential``: group the sub-tasks into a unit where the sub-tasks run
+  sequentially as listed.
+* ``parallel``: group the sub-tasks into a unit where the sub-task all run in
+  parallel.
 
-Sequential and parallel tasks can be nested.  Tasks run sequentially if not specified.
+Sequential and parallel tasks can be nested.  Tasks run sequentially if not
+specified.
 
 The above list is a very incomplete description of the tasks available on
 teuthology. The teuthology/task subdirectory contains all the python files
@@ -303,22 +313,22 @@ Test Sandbox Directory
 ======================
 
 Teuthology currently places most test files and mount points in a sandbox
-directory, defaulting to ``/home/$USER/cephtest/{rundir}``.  The ``{rundir}`` is the
-name of the run (as given by ``--name``) or if no name is specified,
+directory, defaulting to ``/home/$USER/cephtest/{rundir}``.  The ``{rundir}``
+is the name of the run (as given by ``--name``) or if no name is specified,
 ``user@host-timestamp`` is used.  To change the location of the sandbox
 directory, the following options can be specified in
 ``$HOME/.teuthology.yaml``::
 
     base_test_dir: <directory>
 
-The ``base_test_dir`` option will set the base directory to use for the individual
-run directories.
+The ``base_test_dir`` option will set the base directory to use for the
+individual run directories.
 
     test_path: <directory>
 
-The ``test_path`` option will set the complete path to use for the test directory.
-This allows for the old behavior, where ``/tmp/cephtest`` was used as the sandbox
-directory.
+The ``test_path`` option will set the complete path to use for the test
+directory.  This allows for the old behavior, where ``/tmp/cephtest`` was used
+as the sandbox directory.
 
 
 VIRTUAL MACHINE SUPPORT
@@ -377,11 +387,11 @@ right virtual machine associations for the Inktank lab::
 DOWNBURST:
 ----------
 
-When a virtual machine is locked, downburst is run on that machine to
-install a new image.  This allows the user to set different virtual
-OSes to be installed on the newly created virtual machine.  Currently
-the default virtual machine is ubuntu (precise).  A different vm installation
-can be set using the ``--os-type`` option in ``teuthology.lock``.
+When a virtual machine is locked, downburst is run on that machine to install a
+new image.  This allows the user to set different virtual OSes to be installed
+on the newly created virtual machine.  Currently the default virtual machine is
+ubuntu (precise).  A different vm installation can be set using the
+``--os-type`` option in ``teuthology.lock``.
 
 When a virtual machine is unlocked, downburst destroys the image on the
 machine.
@@ -427,17 +437,17 @@ Test Suites
 
 Most of the current teuthology test suite execution scripts automatically
 download their tests from the master branch of the appropriate github
-repository.  People who want to run experimental test suites usually modify
-the download method in the ``teuthology/task`` script to use some other branch
-or repository. This should be generalized in later teuthology releases.
+repository.  People who want to run experimental test suites usually modify the
+download method in the ``teuthology/task`` script to use some other branch or
+repository. This should be generalized in later teuthology releases.
 Teuthology QA suites can be found in ``src/ceph-qa-suite``. Make sure that this
 directory exists in your source tree before running the test suites.
 
 Each suite name is determined by the name of the directory in ``ceph-qa-suite``
 that contains that suite. The directory contains subdirectories and yaml files,
 which, when assembled, produce valid tests that can be run. The test suite
-application generates combinations of these files and thus ends up running
-a set of tests based off the data in the directory for the suite.
+application generates combinations of these files and thus ends up running a
+set of tests based off the data in the directory for the suite.
 
 To run a suite, enter::
 
@@ -458,20 +468,19 @@ For example, consider::
 
      schedule_suite.sh rbd wip-fix cuttlefish bob.smith@foo.com master cuttlefish plana
 
-The above command runs the rbd suite using wip-fix as the ceph branch,
-a straight cuttlefish kernel, and the master flavor of cuttlefish teuthology.
-It will run on plana machines.
+The above command runs the rbd suite using wip-fix as the ceph branch, a
+straight cuttlefish kernel, and the master flavor of cuttlefish teuthology.  It
+will run on plana machines.
 
 In order for a queued task to be run, a teuthworker thread on
 ``teuthology.front.sepia.ceph.com`` needs to remove the task from the queue.
 On ``teuthology.front.sepia.ceph.com``, run ``ps aux | grep teuthology-worker``
 to view currently running tasks. If no processes are reading from the test
 version that you are running, additonal teuthworker tasks need to be started.
-To start these tasks:
-* copy your build tree to ``/home/teuthworker`` on ``teuthology.front.sepia.ceph.com``.
-* Give it a unique name (in this example, xxx)
-* start up some number of worker threads (as many as machines you are testing
-with, there are 60 running for the default queue)::
+To start these tasks: * copy your build tree to ``/home/teuthworker`` on
+``teuthology.front.sepia.ceph.com``.  * Give it a unique name (in this example,
+xxx) * start up some number of worker threads (as many as machines you are
+     testing with, there are 60 running for the default queue)::
 
     /home/virtualenv/bin/python
     /var/lib/teuthworker/xxx/virtualenv/bin/teuthworker
@@ -491,8 +500,10 @@ This is symbolically linked to /a for convenience. A new directory is created
 whose name consists of a concatenation of the date and time that the suite was
 started, the name of the suite, the ceph branch tested, the kernel used, and
 the flavor. For every test run there is a directory whose name is the pid
-number of the pid of that test.  Each of these directory contains a copy of
-the ``teuthology.log`` for that process.  Other information from the suite is
+number of the pid of that test.  Each of these directory contains a copy of the
+``teuthology.log`` for that process.  Other information from the suite is
 stored in files in the directory, and task-specific yaml files and other logs
 are saved in the subdirectories.
 
+These logs are also publically available at
+``http://qa-proxy.ceph.com/teuthology/``.
