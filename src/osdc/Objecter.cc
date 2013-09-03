@@ -1243,7 +1243,7 @@ tid_t Objecter::_op_submit(Op *op)
   }
 
   // send?
-  ldout(cct, 10) << "op_submit oid " << op->oid
+  ldout(cct, 10) << "op_submit oid " << op->base_oid
            << " " << op->base_oloc << " " << op->target_oloc
 	   << " " << op->ops << " tid " << op->tid
            << " osd." << (op->session ? op->session->osd : -1)
@@ -1338,12 +1338,12 @@ int Objecter::recalc_op_target(Op *op)
   }
 
   if (op->precalc_pgid) {
-    assert(op->oid.name.empty()); // make sure this is a listing op
+    assert(op->base_oid.name.empty()); // make sure this is a listing op
     ldout(cct, 10) << "recalc_op_target have " << pgid << " pool " << osdmap->have_pg_pool(pgid.pool()) << dendl;
     if (!osdmap->have_pg_pool(pgid.pool()))
       return RECALC_OP_TARGET_POOL_DNE;
   } else {
-    int ret = osdmap->object_locator_to_pg(op->oid, op->target_oloc, pgid);
+    int ret = osdmap->object_locator_to_pg(op->base_oid, op->target_oloc, pgid);
     if (ret == -ENOENT)
       return RECALC_OP_TARGET_POOL_DNE;
   }
@@ -1485,7 +1485,7 @@ void Objecter::send_op(Op *op)
   op->stamp = ceph_clock_now(cct);
 
   MOSDOp *m = new MOSDOp(client_inc, op->tid, 
-			 op->oid, op->target_oloc, op->pgid, osdmap->get_epoch(),
+			 op->base_oid, op->target_oloc, op->pgid, osdmap->get_epoch(),
 			 flags);
 
   m->set_snapid(op->snapid);
@@ -2219,7 +2219,7 @@ void Objecter::dump_active()
   for (map<tid_t,Op*>::iterator p = ops.begin(); p != ops.end(); ++p) {
     Op *op = p->second;
     ldout(cct, 20) << op->tid << "\t" << op->pgid << "\tosd." << (op->session ? op->session->osd : -1)
-	    << "\t" << op->oid << "\t" << op->ops << dendl;
+	    << "\t" << op->base_oid << "\t" << op->ops << dendl;
   }
 }
 
@@ -2250,7 +2250,7 @@ void Objecter::dump_ops(Formatter *fmt) const
     fmt->dump_int("osd", op->session ? op->session->osd : -1);
     fmt->dump_stream("last_sent") << op->stamp;
     fmt->dump_int("attempts", op->attempts);
-    fmt->dump_stream("object_id") << op->oid;
+    fmt->dump_stream("object_id") << op->base_oid;
     fmt->dump_stream("object_locator") << op->base_oloc;
     fmt->dump_stream("target_object_locator") << op->target_oloc;
     fmt->dump_stream("snapid") << op->snapid;
