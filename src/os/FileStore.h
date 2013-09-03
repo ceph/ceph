@@ -298,7 +298,7 @@ public:
     IndexedPath *path = 0,
     Index *index = 0);
   void lfn_close(FDRef fd);
-  int lfn_link(coll_t c, coll_t cid, const hobject_t& o) ;
+  int lfn_link(coll_t c, coll_t newcid, const hobject_t& o, const hobject_t& newoid) ;
   int lfn_unlink(coll_t cid, const hobject_t& o, const SequencerPosition &spos);
 
 public:

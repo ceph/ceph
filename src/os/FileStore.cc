@@ -246,14 +246,14 @@ void FileStore::lfn_close(FDRef fd)
 {
 }
 
-int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o) 
+int FileStore::lfn_link(coll_t c, coll_t newcid, const hobject_t& o, const hobject_t& newoid)
 {
   Index index_new, index_old;
   IndexedPath path_new, path_old;
   int exist;
   int r;
-  if (c < cid) {
-    r = get_index(cid, &index_new);
+  if (c < newcid) {
+    r = get_index(newcid, &index_new);
     if (r < 0)
       return r;
     r = get_index(c, &index_old);
@@ -263,7 +263,7 @@ int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o)
     r = get_index(c, &index_old);
     if (r < 0)
       return r;
-    r = get_index(cid, &index_new);
+    r = get_index(newcid, &index_new);
     if (r < 0)
       return r;
   }
@@ -276,7 +276,7 @@ int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o)
   if (!exist)
     return -ENOENT;
 
-  r = index_new->lookup(o, &path_new, &exist);
+  r = index_new->lookup(newoid, &path_new, &exist);
   if (r < 0) {
     assert(!m_filestore_fail_eio || r != -EIO);
     return r;
@@ -290,7 +290,7 @@ int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o)
   if (r < 0)
     return -errno;
 
-  r = index_new->created(o, path_new->path());
+  r = index_new->created(newoid, path_new->path());
   if (r < 0) {
     assert(!m_filestore_fail_eio || r != -EIO);
     return r;
@@ -4116,7 +4116,7 @@ int FileStore::_collection_add(coll_t c, coll_t oldcid, const hobject_t& o,
     _set_replay_guard(**fd, spos, &o, true);
   }
 
-  r = lfn_link(oldcid, c, o);
+  r = lfn_link(oldcid, c, o, o);
   if (replaying && !backend->can_checkpoint() &&
       r == -EEXIST)    // crashed between link() and set_replay_guard()
     r = 0;
