@@ -6095,13 +6095,15 @@ void ReplicatedPG::prep_push(
   pi.recovery_progress.data_complete = 0;
   pi.recovery_progress.omap_complete = 0;
   pi.priority = prio;
-
+// TODOSAM: replace
+#if 0
   ObjectRecoveryProgress new_progress;
   build_push_op(pi.recovery_info,
 		pi.recovery_progress,
 		&new_progress,
 		pop);
   pi.recovery_progress = new_progress;
+#endif
 }
 
 int ReplicatedBackend::send_pull_legacy(int prio, int peer,
@@ -6136,7 +6138,7 @@ int ReplicatedBackend::send_pull_legacy(int prio, int peer,
   return 0;
 }
 
-void ReplicatedPG::submit_push_data(
+void ReplicatedBackend::submit_push_data(
   ObjectRecoveryInfo &recovery_info,
   bool first,
   bool complete,
@@ -6158,7 +6160,7 @@ void ReplicatedPG::submit_push_data(
   }
 
   if (first) {
-    on_local_recover_start(recovery_info.soid, t);
+    get_parent()->on_local_recover_start(recovery_info.soid, t);
     t->remove(get_temp_coll(t), recovery_info.soid);
     t->touch(target_coll, recovery_info.soid);
     t->omap_setheader(target_coll, recovery_info.soid, omap_header);
@@ -6192,8 +6194,8 @@ void ReplicatedPG::submit_push_data(
   }
 }
 
-void ReplicatedPG::submit_push_complete(ObjectRecoveryInfo &recovery_info,
-					ObjectStore::Transaction *t)
+void ReplicatedBackend::submit_push_complete(ObjectRecoveryInfo &recovery_info,
+					     ObjectStore::Transaction *t)
 {
   for (map<hobject_t, interval_set<uint64_t> >::const_iterator p =
 	 recovery_info.clone_subset.begin();
@@ -6460,10 +6462,10 @@ void ReplicatedBackend::send_pulls(int prio, map<int, vector<PullOp> > &pulls)
   }
 }
 
-int ReplicatedPG::build_push_op(const ObjectRecoveryInfo &recovery_info,
-				const ObjectRecoveryProgress &progress,
-				ObjectRecoveryProgress *out_progress,
-				PushOp *out_op)
+int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
+				     const ObjectRecoveryProgress &progress,
+				     ObjectRecoveryProgress *out_progress,
+				     PushOp *out_op)
 {
   ObjectRecoveryProgress _new_progress;
   if (!out_progress)
@@ -6487,7 +6489,7 @@ int ReplicatedPG::build_push_op(const ObjectRecoveryInfo &recovery_info,
     object_info_t oi(bv);
 
     if (oi.version != recovery_info.version) {
-      osd->clog.error() << info.pgid << " push "
+      osd->clog.error() << get_info().pgid << " push "
 			<< recovery_info.soid << " v "
 			<< " failed because local copy is "
 			<< oi.version << "\n";
@@ -6550,11 +6552,13 @@ int ReplicatedPG::build_push_op(const ObjectRecoveryInfo &recovery_info,
 
   if (new_progress.is_complete(recovery_info)) {
     new_progress.data_complete = true;
-    info.stats.stats.sum.num_objects_recovered++;
+    // TODOSAM: fix
+    //info.stats.stats.sum.num_objects_recovered++;
   }
 
-  info.stats.stats.sum.num_keys_recovered += out_op->omap_entries.size();
-  info.stats.stats.sum.num_bytes_recovered += out_op->data.length();
+  // TODOSAM: fix
+  //info.stats.stats.sum.num_keys_recovered += out_op->omap_entries.size();
+  //info.stats.stats.sum.num_bytes_recovered += out_op->data.length();
 
   osd->logger->inc(l_osd_push);
   osd->logger->inc(l_osd_push_outb, out_op->data.length());

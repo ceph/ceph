@@ -545,10 +545,6 @@ protected:
   map<hobject_t, PullInfo> pulling;
 
   ObjectRecoveryInfo recalc_subsets(const ObjectRecoveryInfo& recovery_info);
-  int build_push_op(const ObjectRecoveryInfo &recovery_info,
-		    const ObjectRecoveryProgress &progress,
-		    ObjectRecoveryProgress *out_progress,
-		    PushOp *out_op);
     
   void submit_push_data(ObjectRecoveryInfo &recovery_info,
 			bool first,

@@ -244,7 +244,7 @@ private:
   int build_push_op(const ObjectRecoveryInfo &recovery_info,
 		    const ObjectRecoveryProgress &progress,
 		    ObjectRecoveryProgress *out_progress,
-		    PushOp *out_op) { return 1; }
+		    PushOp *out_op);
   void submit_push_data(ObjectRecoveryInfo &recovery_info,
 			bool first,
 			bool complete,
@@ -253,9 +253,9 @@ private:
 			bufferlist omap_header,
 			map<string, bufferptr> &attrs,
 			map<string, bufferlist> &omap_entries,
-			ObjectStore::Transaction *t) {}
+			ObjectStore::Transaction *t);
   void submit_push_complete(ObjectRecoveryInfo &recovery_info,
-			    ObjectStore::Transaction *t) {}
+			    ObjectStore::Transaction *t);
 };
 
 #endif
