@@ -495,6 +495,7 @@ kern.* -{adir}/syslog/kern.log;RSYSLOG_FileFormat
                     '*.log',
                     '-print0',
                     run.Raw('|'),
+                    'sudo',
                     'xargs',
                     '-0',
                     '--no-run-if-empty',
