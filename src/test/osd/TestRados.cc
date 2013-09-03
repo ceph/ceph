@@ -84,7 +84,7 @@ private:
 
   TestOp *gen_op(RadosTestContext &context, TestOpType type)
   {
-    string oid;
+    string oid, oid2;
     cout << "oids not in use " << context.oid_not_in_use.size() << std::endl;
     assert(context.oid_not_in_use.size());
     switch (type) {
@@ -152,6 +152,13 @@ private:
 	   << " current snap is " << context.current_snap << std::endl;
       return new WatchOp(&context, oid, m_stats);
 
+    case TEST_OP_COPY_FROM:
+      oid = *(rand_choose(context.oid_not_in_use));
+      oid2 = *(rand_choose(context.oid_not_in_use));
+      cout << "copy_from " << oid << " from " << oid2
+	   << " current snap is " << context.current_snap << std::endl;
+      return new CopyFromOp(&context, oid, oid2, m_stats);
+
     default:
       cerr << "Invalid op type " << type << std::endl;
       assert(0);
@@ -192,6 +199,7 @@ int main(int argc, char **argv)
     { TEST_OP_RMATTR, "rmattr" },
     { TEST_OP_TMAPPUT, "tmapput" },
     { TEST_OP_WATCH, "watch" },
+    { TEST_OP_COPY_FROM, "copy_from" },
     { TEST_OP_READ /* grr */, NULL },
   };
 
