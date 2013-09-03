@@ -709,7 +709,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
     int r = s->cio->read(bp.c_str(), cl, &read_len);
     len = read_len;
     if (r < 0)
-      return ret;
+      return r;
     bl.append(bp, 0, len);
   }
 
