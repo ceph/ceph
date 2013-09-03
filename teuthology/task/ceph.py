@@ -108,7 +108,8 @@ def ceph_log(ctx, config):
         ctx.cluster.run(
             args=[
                 'sudo',
-                'install', '-d', '-m0755', '--',
+                'chmod',
+                '777',
                 '/var/log/ceph',
                 ],
             wait=False,
