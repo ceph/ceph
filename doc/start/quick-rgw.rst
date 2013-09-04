@@ -306,7 +306,7 @@ Next, create a subuser for the Swift-compatible interface. ::
 
 ::
 
-  sudo radosgw-admin key create --subuser=johndoe:swift --key-type=swift
+  sudo radosgw-admin key create --subuser=johndoe:swift --key-type=swift --gen-secret
 
 .. code-block:: javascript
 
