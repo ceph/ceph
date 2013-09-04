@@ -4909,8 +4909,10 @@ void Server::_unlink_local(MDRequest *mdr, CDentry *dn, CDentry *straydn)
   inode_t *pi = in->project_inode();
   mdr->add_projected_inode(in); // do this _after_ my dn->pre_dirty().. we apply that one manually.
   pi->version = in->pre_dirty();
-  pi->nlink--;
   pi->ctime = mdr->now;
+  pi->nlink--;
+  if (pi->nlink == 0)
+    in->state_set(CInode::STATE_ORPHAN);
 
   if (dnl->is_primary()) {
     // primary link.  add stray dentry.
@@ -6054,8 +6056,10 @@ void Server::_rename_prepare(MDRequest *mdr,
 	pi->nlink--;
     }
     if (tpi) {
-      tpi->nlink--;
       tpi->ctime = mdr->now;
+      tpi->nlink--;
+      if (tpi->nlink == 0)
+	oldin->state_set(CInode::STATE_ORPHAN);
     }
   }
 
