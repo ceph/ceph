@@ -677,6 +677,7 @@ CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
   } else 
     assert(straydn->get_projected_linkage()->is_null());
 
+  straydn->state_set(CDentry::STATE_STRAY);
   return straydn;
 }
 
@@ -6314,6 +6315,12 @@ void MDCache::trim_non_auth()
       // add back into lru (at the top)
       lru.lru_insert_top(dn);
 
+      if (dn->get_dir()->get_inode()->is_stray()) {
+	dn->state_set(CDentry::STATE_STRAY);
+	if (dnl->is_primary() && dnl->get_inode()->inode.nlink == 0)
+	  dnl->get_inode()->state_set(CInode::STATE_ORPHAN);
+      }
+
       if (!first_auth) {
 	first_auth = dn;
       } else {
@@ -9495,9 +9502,6 @@ void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
   CInode *in = dn->get_linkage()->get_inode();
   dout(10) << "_purge_stray_logged " << *dn << " " << *in << dendl;
 
-  dn->state_clear(CDentry::STATE_PURGING);
-  dn->put(CDentry::PIN_PURGING);
-
   assert(!in->state_test(CInode::STATE_RECOVERING));
 
   // unlink
@@ -9507,6 +9511,10 @@ void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
   dn->mark_dirty(pdv, ls);
 
   dn->dir->pop_and_dirty_projected_fnode(ls);
+
+  in->state_clear(CInode::STATE_ORPHAN);
+  dn->state_clear(CDentry::STATE_PURGING);
+  dn->put(CDentry::PIN_PURGING);
 
   // drop inode
   if (in->is_dirty())

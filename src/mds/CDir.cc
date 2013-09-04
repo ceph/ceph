@@ -1469,6 +1469,7 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
   }
   bool purged_any = false;
 
+  bool stray = inode->is_stray();
 
   //int num_new_inodes_loaded = 0;
   loff_t baseoff = p.get_off();
@@ -1612,6 +1613,12 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
 
 	  if (in->inode.is_dirty_rstat())
 	    in->mark_dirty_rstat();
+
+	  if (stray) {
+	    dn->state_set(CDentry::STATE_STRAY);
+	    if (in->inode.nlink == 0)
+	      in->state_set(CInode::STATE_ORPHAN);
+	  }
 
 	  //in->hack_accessed = false;
 	  //in->hack_load_stamp = ceph_clock_now(g_ceph_context);
