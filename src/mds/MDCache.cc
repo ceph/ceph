@@ -9214,7 +9214,7 @@ void MDCache::eval_stray(CDentry *dn)
     }
     purge_stray(dn);
   }
-  else if (in->inode.nlink == 1) {
+  else if (in->inode.nlink >= 1) {
     // trivial reintegrate?
     if (!in->remote_parents.empty()) {
       CDentry *rlink = *in->remote_parents.begin();
