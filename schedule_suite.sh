@@ -89,6 +89,9 @@ overrides:
         debug ms: 1
         debug mon: 20
         debug paxos: 20
+      osd:
+        debug ms: 1
+        debug osd: 5
     log-whitelist:
     - slow request
   ceph-deploy:
