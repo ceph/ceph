@@ -3,7 +3,7 @@
 
 extern unsigned int crc32_iscsi_00(unsigned char const *buffer, int len, unsigned int crc);
 
-#ifdef WITH_GOOD_YASM_ELF64
+#ifdef HAVE_GOOD_YASM_ELF64
 
 uint32_t ceph_crc32c_intel_fast(uint32_t crc, unsigned char const *buffer, unsigned len)
 {
