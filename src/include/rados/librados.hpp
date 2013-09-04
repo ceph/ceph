@@ -439,8 +439,23 @@ namespace librados
     int create(const std::string& oid, bool exclusive);
     int create(const std::string& oid, bool exclusive, const std::string& category);
 
+    /**
+     * write bytes to an object at a specified offset
+     *
+     * NOTE: this call steals the contents of @param bl.
+     */
     int write(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
+    /**
+     * append bytes to an object
+     *
+     * NOTE: this call steals the contents of @param bl.
+     */
     int append(const std::string& oid, bufferlist& bl, size_t len);
+    /**
+     * replace object contents with provided data
+     *
+     * NOTE: this call steals the contents of @param bl.
+     */
     int write_full(const std::string& oid, bufferlist& bl);
     int clone_range(const std::string& dst_oid, uint64_t dst_off,
                    const std::string& src_oid, uint64_t src_off,
@@ -457,7 +472,17 @@ namespace librados
     int stat(const std::string& oid, uint64_t *psize, time_t *pmtime);
     int exec(const std::string& oid, const char *cls, const char *method,
 	     bufferlist& inbl, bufferlist& outbl);
+    /**
+     * modify object tmap based on encoded update sequence
+     *
+     * NOTE: this call steals the contents of @param bl
+     */
     int tmap_update(const std::string& oid, bufferlist& cmdbl);
+    /**
+     * replace object contents with provided encoded tmap data
+     *
+     * NOTE: this call steals the contents of @param bl
+     */
     int tmap_put(const std::string& oid, bufferlist& bl);
     int tmap_get(const std::string& oid, bufferlist& bl);
 
