@@ -282,8 +282,7 @@ def check_conflict(ctx, config):
 @contextlib.contextmanager
 def archive(ctx, config):
     log.info('Creating archive directory...')
-    testdir = teuthology.get_testdir(ctx)
-    archive_dir = '{tdir}/archive'.format(tdir=testdir)
+    archive_dir = teuthology.get_archive_dir(ctx)
     run.wait(
         ctx.cluster.run(
             args=[
@@ -326,7 +325,7 @@ def archive(ctx, config):
 @contextlib.contextmanager
 def coredump(ctx, config):
     log.info('Enabling coredump saving...')
-    archive_dir = '{tdir}/archive'.format(tdir=teuthology.get_testdir(ctx))
+    archive_dir = teuthology.get_archive_dir(ctx)
     run.wait(
         ctx.cluster.run(
             args=[
@@ -384,7 +383,7 @@ def syslog(ctx, config):
 
     log.info('Starting syslog monitoring...')
 
-    archive_dir = '{tdir}/archive'.format(tdir=teuthology.get_testdir(ctx))
+    archive_dir = teuthology.get_archive_dir(ctx)
     run.wait(
         ctx.cluster.run(
             args=[
