@@ -103,7 +103,6 @@ def task(ctx, config):
                 log.info('Running restart script %s...', c)
                 args = [
                     run.Raw('TESTDIR="{tdir}"'.format(tdir=testdir)),
-                    run.Raw('PYTHONPATH="$PYTHONPATH:{tdir}/binary/usr/local/lib/python2.7/dist-packages:{tdir}/binary/usr/local/lib/python2.6/dist-packages"'.format(tdir=testdir)),
                     ]
                 env = config.get('env')
                 if env is not None:
