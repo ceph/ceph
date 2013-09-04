@@ -13,11 +13,11 @@ user_at_version is modified only in ReplicatedPG::prepare_transaction
 when the op was a "user modify" (a non-watch write), and the durable
 user_version is updated according to the following rules:
 1) set user_at_version to the maximum of ctx->new_obs.oi.user_version+1
-   and info.last_user_version+1.
+and info.last_user_version+1.
 2) set user_at_version to the maximum of itself and
-   ctx->at_version.version.
+ctx->at_version.version.
 3) ctx->new_obs.oi.user_version = ctx->user_at_version (to change the
-   object's user_version)
+object's user_version)
 
 This set of update semantics mean that for traditional pools the
 user_version will be equal to the past reassert_version, while for
