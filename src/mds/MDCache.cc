@@ -9280,14 +9280,6 @@ void MDCache::fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Conte
   mds->objecter->getxattr(oid, object_locator_t(pool), "parent", CEPH_NOSNAP, &bl, 0, fin);
 }
 
-void MDCache::remove_backtrace(inodeno_t ino, int64_t pool, Context *fin)
-{
-  SnapContext snapc;
-  object_t oid = CInode::get_object_name(ino, frag_t(), "");
-  mds->objecter->removexattr(oid, object_locator_t(pool), "parent", snapc,
-			     ceph_clock_now(g_ceph_context), 0, NULL, fin);
-}
-
 class C_MDC_PurgeStrayPurged : public Context {
   MDCache *cache;
   CDentry *dn;
@@ -9326,15 +9318,28 @@ void MDCache::purge_stray(CDentry *dn)
   // that is implicit in the dentry's presence and non-use in the stray
   // dir.  on recovery, we'll need to re-eval all strays anyway.
   
+  SnapContext nullsnapc;
+  C_GatherBuilder gather(g_ceph_context, new C_MDC_PurgeStrayPurged(this, dn));
+
   if (in->is_dir()) {
-    dout(10) << "purge_stray dir ... implement me!" << dendl;  // FIXME XXX
-    // remove the backtrace
-    remove_backtrace(in->ino(), mds->mdsmap->get_metadata_pool(),
-		     new C_MDC_PurgeStrayPurged(this, dn));
+    object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+    list<frag_t> ls;
+    if (!in->dirfragtree.is_leaf(frag_t()))
+      in->dirfragtree.get_leaves(ls);
+    ls.push_back(frag_t());
+    for (list<frag_t>::iterator p = ls.begin();
+         p != ls.end();
+         ++p) {
+      object_t oid = CInode::get_object_name(in->inode.ino, *p, "");
+      dout(10) << "purge_stray remove dirfrag " << oid << dendl;
+      mds->objecter->remove(oid, oloc, nullsnapc, ceph_clock_now(g_ceph_context),
+                            0, NULL, gather.new_sub());
+    }
+    assert(gather.has_subs());
+    gather.activate();
     return;
   }
 
-  SnapContext nullsnap;
   const SnapContext *snapc;
   SnapRealm *realm = in->find_snaprealm();
   if (realm) {
@@ -9345,8 +9350,6 @@ void MDCache::purge_stray(CDentry *dn)
     snapc = &nullsnapc;
     assert(in->last == CEPH_NOSNAP);
   }
-
-  C_GatherBuilder gather(g_ceph_context, new C_MDC_PurgeStrayPurged(this, dn));
 
   if (in->is_file()) {
     uint64_t period = (uint64_t)in->inode.layout.fl_object_size *
