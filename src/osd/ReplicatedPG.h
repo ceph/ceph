@@ -279,8 +279,7 @@ protected:
   void op_applied(RepGather *repop);
   void op_commit(RepGather *repop);
   void eval_repop(RepGather*);
-  void issue_repop(RepGather *repop, utime_t now,
-		   eversion_t old_last_update, bool old_exists, uint64_t old_size, eversion_t old_version);
+  void issue_repop(RepGather *repop, utime_t now);
   RepGather *new_repop(OpContext *ctx, ObjectContextRef obc, tid_t rep_tid);
   void remove_repop(RepGather *repop);
   void repop_ack(RepGather *repop,
