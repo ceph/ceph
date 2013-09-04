@@ -646,6 +646,15 @@ public:
   }
   void touch_dentry_bottom(CDentry *dn) {
     lru.lru_bottouch(dn);
+    if (dn->get_projected_linkage()->is_primary()) {
+      CInode *in = dn->get_projected_linkage()->get_inode();
+      if (in->has_dirfrags()) {
+	list<CDir*> ls;
+	in->get_dirfrags(ls);
+	for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p)
+	  (*p)->touch_dentries_bottom();
+      }
+    }
   }
 protected:
 
