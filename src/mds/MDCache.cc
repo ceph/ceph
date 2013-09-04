@@ -127,7 +127,8 @@ long g_num_caps = 0;
 set<int> SimpleLock::empty_gather_set;
 
 
-MDCache::MDCache(MDS *m)
+MDCache::MDCache(MDS *m) :
+  delayed_eval_stray(member_offset(CDentry, item_stray))
 {
   mds = m;
   migrator = new Migrator(mds, this);
@@ -6018,8 +6019,15 @@ bool MDCache::trim(int max)
   }
   dout(7) << "trim max=" << max << "  cur=" << lru.lru_get_size() << dendl;
 
-  map<int, MCacheExpire*> expiremap;
+  // process delayed eval_stray()
+  for (elist<CDentry*>::iterator p = delayed_eval_stray.begin(); !p.end(); ) {
+    CDentry *dn = *p;
+    ++p;
+    dn->item_stray.remove_myself();
+    eval_stray(dn);
+  }
 
+  map<int, MCacheExpire*> expiremap;
   bool is_standby_replay = mds->is_standby_replay();
   int unexpirable = 0;
   list<CDentry*> unexpirables;
@@ -9148,7 +9156,7 @@ struct C_MDC_EvalStray : public Context {
   }
 };
 
-void MDCache::eval_stray(CDentry *dn)
+void MDCache::eval_stray(CDentry *dn, bool delay)
 {
   dout(10) << "eval_stray " << *dn << dendl;
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
@@ -9212,7 +9220,11 @@ void MDCache::eval_stray(CDentry *dn)
       dout(20) << " too many dn refs" << dendl;
       return;
     }
-    purge_stray(dn);
+    if (delay) {
+      if (!dn->item_stray.is_on_list())
+	delayed_eval_stray.push_back(&dn->item_stray);
+    } else
+      purge_stray(dn);
   }
   else if (in->inode.nlink >= 1) {
     // trivial reintegrate?
@@ -9382,7 +9394,9 @@ void MDCache::purge_stray(CDentry *dn)
   dn->get(CDentry::PIN_PURGING);
   in->state_set(CInode::STATE_PURGING);
 
-  
+  if (dn->item_stray.is_on_list())
+    dn->item_stray.remove_myself();
+
   // CHEAT.  there's no real need to journal our intent to purge, since
   // that is implicit in the dentry's presence and non-use in the stray
   // dir.  on recovery, we'll need to re-eval all strays anyway.

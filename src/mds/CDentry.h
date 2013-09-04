@@ -146,6 +146,7 @@ protected:
 
 public:
   elist<CDentry*>::item item_dirty;
+  elist<CDentry*>::item item_stray;
 
 protected:
   int auth_pins, nested_auth_pins;
