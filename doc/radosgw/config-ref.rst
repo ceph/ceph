@@ -422,7 +422,7 @@ the object to a file (e.g., ``region.json``); then, execute the following
 command:: 
 
 
-	sudo radosgw-admin region set < region.json
+	sudo radosgw-admin region set --infile region.json
 
 Where ``region.json`` is the JSON file you created.
 
@@ -476,7 +476,7 @@ JSON object is an example of a default region map.
 
 To set a region map, execute the following:: 
 
-	sudo radosgw-admin region-map set < regionmap.json
+	sudo radosgw-admin region-map set --infile regionmap.json
 
 Where ``regionmap.json`` is the JSON file you created. Ensure that you have
 zones created for the ones specified in the region map. Finally, update the map.
@@ -546,9 +546,9 @@ the same as the zone name. See `Pools`_ for details of configuring pools.
 
 To set a zone, create a JSON object consisting of the pools, save
 the object to a file (e.g., ``zone.json``); then, execute the following
-command::
+command, replacing ``{zone-name}`` with the name of the zone::
 
-	sudo radosgw-admin zone set < zone.json
+	sudo radosgw-admin zone set --rgw-zone={zone-name} --infile zone.json
 
 Where ``zone.json`` is the JSON file you created.
 
