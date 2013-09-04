@@ -1079,7 +1079,6 @@ void CInode::_stored_backtrace(version_t v, Context *fin)
     clear_dirty_parent();
   if (fin)
     fin->complete(0);
-  mdcache->maybe_eval_stray(this);
 }
 
 void CInode::_mark_dirty_parent(LogSegment *ls, bool dirty_pool)
