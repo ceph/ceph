@@ -6741,9 +6741,6 @@ void MDCache::inode_remove_replica(CInode *in, int from, set<SimpleLock *>& gath
   if (in->nestlock.remove_replica(from)) gather_locks.insert(&in->nestlock);
   if (in->flocklock.remove_replica(from)) gather_locks.insert(&in->flocklock);
   if (in->policylock.remove_replica(from)) gather_locks.insert(&in->policylock);
-
-  // trim?
-  maybe_eval_stray(in);
 }
 
 void MDCache::dentry_remove_replica(CDentry *dn, int from, set<SimpleLock *>& gather_locks)
@@ -6753,10 +6750,6 @@ void MDCache::dentry_remove_replica(CDentry *dn, int from, set<SimpleLock *>& ga
   // fix lock
   if (dn->lock.remove_replica(from))
     gather_locks.insert(&dn->lock);
-
-  CDentry::linkage_t *dnl = dn->get_projected_linkage();
-  if (dnl->is_primary())
-    maybe_eval_stray(dnl->get_inode());
 }
 
 void MDCache::trim_client_leases()
