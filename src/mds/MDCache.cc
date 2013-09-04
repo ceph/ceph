@@ -9299,94 +9299,6 @@ public:
   }
 };
 
-class C_MDC_PurgeForwardingPointers : public Context {
-  MDCache *cache;
-  CDentry *dn;
-public:
-  bufferlist bl;
-  C_MDC_PurgeForwardingPointers(MDCache *c, CDentry *d) :
-    cache(c), dn(d) {}
-  void finish(int r) {
-    cache->_purge_forwarding_pointers(bl, dn, r);
-  }
-};
-
-class C_MDC_PurgeStray : public Context {
-  MDCache *cache;
-  CDentry *dn;
-public:
-  C_MDC_PurgeStray(MDCache *c, CDentry *d) :
-    cache(c), dn(d) {}
-  void finish(int r) {
-    cache->_purge_stray(dn, r);
-  }
-};
-
-void MDCache::_purge_forwarding_pointers(bufferlist& bl, CDentry *dn, int r)
-{
-  assert(r == 0 || r == -ENOENT || r == -ENODATA);
-  inode_backtrace_t backtrace;
-  if (r == 0)
-    ::decode(backtrace, bl);
-
-  // setup gathering context
-  C_GatherBuilder gather_bld(g_ceph_context);
-
-  // remove all the objects with forwarding pointer backtraces (aka sentinels)
-  for (set<int64_t>::const_iterator i = backtrace.old_pools.begin();
-       i != backtrace.old_pools.end();
-       ++i) {
-    SnapContext snapc;
-    object_t oid = CInode::get_object_name(backtrace.ino, frag_t(), "");
-    object_locator_t oloc(*i);
-
-    mds->objecter->remove(oid, oloc, snapc, ceph_clock_now(g_ceph_context), 0,
-                         NULL, gather_bld.new_sub());
-  }
-
-  if (gather_bld.has_subs()) {
-    gather_bld.set_finisher(new C_MDC_PurgeStray(this, dn));
-    gather_bld.activate();
-  } else {
-    _purge_stray(dn, r);
-  }
-}
-
-void MDCache::_purge_stray(CDentry *dn, int r)
-{
-  // purge the strays
-  CDentry::linkage_t *dnl = dn->get_projected_linkage();
-  CInode *in = dnl->get_inode();
-  dout(10) << "_purge_stray " << *dn << " " << *in << dendl;
-
-  SnapRealm *realm = in->find_snaprealm();
-  SnapContext nullsnap;
-  const SnapContext *snapc;
-  if (realm) {
-    dout(10) << " realm " << *realm << dendl;
-    snapc = &realm->get_snap_context();
-  } else {
-    dout(10) << " NO realm, using null context" << dendl;
-    snapc = &nullsnap;
-    assert(in->last == CEPH_NOSNAP);
-  }
-
-  uint64_t period = (uint64_t)in->inode.layout.fl_object_size * (uint64_t)in->inode.layout.fl_stripe_count;
-  uint64_t cur_max_size = in->inode.get_max_size();
-  uint64_t to = MAX(in->inode.size, cur_max_size);
-  if (to && period) {
-    uint64_t num = (to + period - 1) / period;
-    dout(10) << "purge_stray 0~" << to << " objects 0~" << num << " snapc " << snapc << " on " << *in << dendl;
-    mds->filer->purge_range(in->inode.ino, &in->inode.layout, *snapc,
-                           0, num, ceph_clock_now(g_ceph_context), 0,
-			   new C_MDC_PurgeStrayPurged(this, dn));
-
-  } else {
-    dout(10) << "purge_stray 0 objects snapc " << snapc << " on " << *in << dendl;
-    _purge_stray_purged(dn);
-  }
-}
-
 void MDCache::purge_stray(CDentry *dn)
 {
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
@@ -9407,6 +9319,9 @@ void MDCache::purge_stray(CDentry *dn)
   if (dn->item_stray.is_on_list())
     dn->item_stray.remove_myself();
 
+  if (in->is_dirty_parent())
+    in->clear_dirty_parent();
+
   // CHEAT.  there's no real need to journal our intent to purge, since
   // that is implicit in the dentry's presence and non-use in the stray
   // dir.  on recovery, we'll need to re-eval all strays anyway.
@@ -9416,14 +9331,60 @@ void MDCache::purge_stray(CDentry *dn)
     // remove the backtrace
     remove_backtrace(in->ino(), mds->mdsmap->get_metadata_pool(),
 		     new C_MDC_PurgeStrayPurged(this, dn));
-  } else if (in->is_file()) {
-    // get the backtrace before blowing away the object
-    C_MDC_PurgeForwardingPointers *fin = new C_MDC_PurgeForwardingPointers(this, dn);
-    fetch_backtrace(in->ino(), in->get_inode().layout.fl_pg_pool, fin->bl, fin);
-  } else {
-    // not a dir or file; purged!
-    _purge_stray_purged(dn);
+    return;
   }
+
+  SnapContext nullsnap;
+  const SnapContext *snapc;
+  SnapRealm *realm = in->find_snaprealm();
+  if (realm) {
+    dout(10) << " realm " << *realm << dendl;
+    snapc = &realm->get_snap_context();
+  } else {
+    dout(10) << " NO realm, using null context" << dendl;
+    snapc = &nullsnapc;
+    assert(in->last == CEPH_NOSNAP);
+  }
+
+  C_GatherBuilder gather(g_ceph_context, new C_MDC_PurgeStrayPurged(this, dn));
+
+  if (in->is_file()) {
+    uint64_t period = (uint64_t)in->inode.layout.fl_object_size *
+		      (uint64_t)in->inode.layout.fl_stripe_count;
+    uint64_t cur_max_size = in->inode.get_max_size();
+    uint64_t to = MAX(in->inode.size, cur_max_size);
+    if (to && period) {
+      uint64_t num = (to + period - 1) / period;
+      dout(10) << "purge_stray 0~" << to << " objects 0~" << num
+	       << " snapc " << snapc << " on " << *in << dendl;
+      mds->filer->purge_range(in->inode.ino, &in->inode.layout, *snapc,
+			      0, num, ceph_clock_now(g_ceph_context), 0,
+			      gather.new_sub());
+    }
+  }
+
+  inode_t *pi = in->get_projected_inode();
+  object_t oid = CInode::get_object_name(pi->ino, frag_t(), "");
+  // remove the backtrace object if it was not purged
+  if (!gather.has_subs()) {
+    object_locator_t oloc(pi->layout.fl_pg_pool);
+    dout(10) << "purge_stray remove backtrace object " << oid
+	     << " pool " << oloc.pool << " snapc " << snapc << dendl;
+    mds->objecter->remove(oid, oloc, *snapc, ceph_clock_now(g_ceph_context), 0,
+			  NULL, gather.new_sub());
+  }
+  // remove old backtrace objects
+  for (vector<int64_t>::iterator p = pi->old_pools.begin();
+       p != pi->old_pools.end();
+       ++p) {
+    object_locator_t oloc(*p);
+    dout(10) << "purge_stray remove backtrace object " << oid
+	     << " old pool " << *p << " snapc " << snapc << dendl;
+    mds->objecter->remove(oid, oloc, *snapc, ceph_clock_now(g_ceph_context), 0,
+			  NULL, gather.new_sub());
+  }
+  assert(gather.has_subs());
+  gather.activate();
 }
 
 class C_MDC_PurgeStrayLogged : public Context {
@@ -9522,8 +9483,6 @@ void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
   // drop inode
   if (in->is_dirty())
     in->mark_clean();
-  if (in->is_dirty_parent())
-    in->clear_dirty_parent();
 
   remove_inode(in);
 
