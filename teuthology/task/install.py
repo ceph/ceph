@@ -83,6 +83,12 @@ def _get_config_value_for_remote(ctx, remote, config, key):
 
 
 def _get_baseurlinfo_and_dist(ctx, remote, config):
+    # XXX CLEANUP
+    # This helper function is in *dire* need of cleaning up What is `relval`?
+    # Why so many `dist_` prepending keys?
+    # The below list is an unfortunate usage of variables that confuse and make
+    # it harder to read/understand/improve anything here:
+    # dist, distro, distro_release, dist_release, dist_name, distri
     retval = {}
     relval = None
     r = remote.run(
@@ -112,7 +118,7 @@ def _get_baseurlinfo_and_dist(ctx, remote, config):
         distri = retval['distro']
         dist_name = 'fc'
         retval['distro_release'] = '%s%s' % (dist_name, retval['relval'])
-        retval['dist_release'] = retval['distro_release']
+        retval['dist'] = retval['dist_release'] = retval['distro_release']
     else:
         r = remote.run(
             args=['lsb_release', '-sc'],
