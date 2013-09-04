@@ -2,6 +2,73 @@
  Release Notes
 ===============
 
+v0.68
+----
+
+Upgrading
+~~~~
+
+* 'ceph osd crush set <id> <weight> <loc..>' no longer adds the osd to the
+  specified location, as that's a job for 'ceph osd crush add'.  It will
+  however continue to work just the same as long as the osd already exists
+  in the crush map.
+
+* The OSD now enforces that class write methods cannot both mutate an
+  object and return data.  The rbd.assign_bid method, the lone
+  offender, has been removed.  This breaks compatibility with
+  pre-bobtail librbd clients by preventing them from creating new
+  images.
+
+* librados now returns on commit instead of ack for synchronous calls.
+  This is a bit safer in the case where both OSDs and the client crash, and
+  is probably how it should have been acting from the beginning. Users are
+  unlikely to notice but it could result in lower performance in some
+  circumstances. Those who care should switch to using the async interfaces,
+  which let you specify safety semantics precisely.
+
+* The C++ librados AioComplete::get_version() method was incorrectly
+  returning an int (usually 32-bits).  To avoid breaking library
+  compatibility, a get_version64() method is added that returns the
+  full-width value.  The old method is deprecated and will be removed
+  in a future release.  Users of the C++ librados API that make use of
+  the get_version() method should modify their code to avoid getting a
+  value that is truncated from 64 to to 32 bits.
+
+
+
+Notable Changes
+~~~~
+
+* ceph-fuse: fix problem with readahead vs truncate race (Yan, Zheng)
+* ceph-post-file: new command to easily share logs or other files with ceph devs
+* ceph: parse CEPH_ARGS env variable
+* librados: fix async aio completion wakeup
+* librados: hello_world example (Greg Farnum)
+* librados: sync calls now return on commit (instead of ack) (Greg Farnum)
+* mds: fix mds rejoin with legacy parent backpointer xattrs (Alexandre Oliva)
+* mds: fix rare restart/failure race during fs creation
+* mds: notify clients about deleted files (so they can release from their cache) (Yan, Zheng)
+* mds: several bug fixes with clustered mds (Yan, Zheng)
+* mon: allow logging level of cluster log (/var/log/ceph/ceph.log) to be adjusted
+* mon: do not expose uncommitted state from 'osd crush {add,set} ...' (Joao Luis)
+* mon: fix byte counts (off by factor of 4) (Dan Mick, Joao Luis)
+* mon: fix paxos corner case
+* mon: modify 'auth add' semantics to make a bit more sense (Joao Luis)
+* mon: new 'osd perf' command to dump recent performance information (Samuel Just)
+* mon: new and improved 'ceph -s' or 'ceph status' command (more info, easier to read)
+* monc: fix small memory leak
+* new wireshark patches pulled into the tree (Kevin Jones)
+* objecter: fix possible hang when cluster is unpaused (Josh Durgin)
+* osd: 'osd recover clone overlap limit' option to limit cloning during recovery (Samuel Just)
+* osd: cls_hello OSD class example
+* osd: experiemental support for ZFS (zfsonlinux.org) (Yan, Zheng)
+* osd: instrument peering states (David Zafman)
+* osd: properly enforce RD/WR flags for rados classes
+* osd: remove old pg log on upgrade (Samuel Just)
+* rgw: complete in-progress requests before shutting down
+* rgw: fix S3 auth with response-* query string params (Sylvain Munaut, Yehuda Sadeh)
+* sysvinit: add condrestart command (Dan van der Ster)
+
 v0.67.2 "Dumpling"
 ------------------
 
