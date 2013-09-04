@@ -452,7 +452,7 @@ def get_http_log_path(archive_dir, job_id):
     if not http_base:
         return None
     archive_subdir = os.path.split(archive_dir)[-1]
-    return os.path.join(http_base, archive_subdir, str(job_id))
+    return os.path.join(http_base, archive_subdir, str(job_id), '')
 
 
 def get_jobs(archive_dir):
