@@ -1,3 +1,5 @@
+import teuthology.misc
+
 class Cluster(object):
     """
     Manage SSH connections to a cluster of machines.
@@ -50,6 +52,24 @@ class Cluster(object):
         """
         remotes = sorted(self.remotes.iterkeys(), key=lambda rem: rem.name)
         return [remote.run(**kwargs) for remote in remotes]
+
+    def write_file(self, file_name, content, sudo=False, perms=None):
+        """
+        Write text to a file on each node.
+
+        :param file_name: file name
+        :param content: file content
+        :param sudo: use sudo
+        :param perms: file permissions (passed to chmod) ONLY if sudo is True
+        """
+        remotes = sorted(self.remotes.iterkeys(), key=lambda rem: rem.name)
+        for remote in remotes:
+            if sudo:
+                teuthology.misc.sudo_write_file(remote, file_name, content, perms)
+            else:
+                if perms is not None:
+                    raise ValueError("To specify perms, sudo must be True")
+                teuthology.misc.write_file(remote, file_name, content, perms)
 
     def only(self, *roles):
         """
