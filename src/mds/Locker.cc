@@ -1640,9 +1640,6 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t 
       share_inode_max_size(in);
   }
   issue_caps_set(need_issue);
-
-  // unlinked stray?  may need to purge (e.g., after all caps are released)
-  mdcache->maybe_eval_stray(in);
 }
 
 Capability* Locker::issue_new_caps(CInode *in,
@@ -3011,8 +3008,6 @@ void Locker::remove_client_cap(CInode *in, client_t client)
   }
   
   try_eval(in, CEPH_CAP_LOCKS);
-
-  mds->mdcache->maybe_eval_stray(in);
 }
 
 
