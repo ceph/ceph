@@ -1,28 +1,2 @@
-v0.68
+v0.69
 ~~~~~
-
-* 'ceph osd crush set <id> <weight> <loc..>' no longer adds the osd to the
-  specified location, as that's a job for 'ceph osd crush add'.  It will
-  however continue to work just the same as long as the osd already exists
-  in the crush map.
-
-* The OSD now enforces that class write methods cannot both mutate an
-  object and return data.  The rbd.assign_bid method, the lone
-  offender, has been removed.  This breaks compatibility with
-  pre-bobtail librbd clients by preventing them from creating new
-  images.
-
-* librados now returns on commit instead of ack for synchronous calls.
-  This is a bit safer in the case where both OSDs and the client crash, and
-  is probably how it should have been acting from the beginning. Users are
-  unlikely to notice but it could result in lower performance in some
-  circumstances. Those who care should switch to using the async interfaces,
-  which let you specify safety semantics precisely.
-
-* The C++ librados AioComplete::get_version() method was incorrectly
-  returning an int (usually 32-bits).  To avoid breaking library
-  compatibility, a get_version64() method is added that returns the
-  full-width value.  The old method is deprecated and will be removed
-  in a future release.  Users of the C++ librados API that make use of
-  the get_version() method should modify their code to avoid getting a
-  value that is truncated from 64 to to 32 bits.
