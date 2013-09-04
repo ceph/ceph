@@ -979,12 +979,6 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
   // note my stats
   utime_t now = ceph_clock_now(cct);
 
-  // note some basic context for op replication that prepare_transaction may clobber
-  eversion_t old_last_update = pg_log.get_head();
-  bool old_exists = obc->obs.exists;
-  uint64_t old_size = obc->obs.oi.size;
-  eversion_t old_version = obc->obs.oi.version;
-
   if (op->may_read()) {
     dout(10) << " taking ondisk_read_lock" << dendl;
     obc->ondisk_read_lock();
@@ -1103,7 +1097,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 
   repop->src_obc.swap(src_obc); // and src_obc.
 
-  issue_repop(repop, now, old_last_update, old_exists, old_size, old_version);
+  issue_repop(repop, now);
 
   eval_repop(repop);
   repop->put();
@@ -4189,7 +4183,6 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
   assert(cop->rval >= 0);
 
   // FIXME: this is accumulating the entire object in memory.
-
   if (!cop->cursor.is_complete()) {
     dout(10) << __func__ << " fetching more" << dendl;
     _copy_some(ctx, cop);
@@ -4528,8 +4521,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   }
 }
 
-void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
-			       eversion_t old_last_update, bool old_exists, uint64_t old_size, eversion_t old_version)
+void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
 {
   OpContext *ctx = repop->ctx;
   const hobject_t& soid = ctx->obs->oi.soid;
@@ -4821,12 +4813,7 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
 				    0,
 				    osd_reqid_t(), ctx->mtime));
 
-  eversion_t old_last_update = pg_log.get_head();
-  bool old_exists = repop->obc->obs.exists;
-  uint64_t old_size = repop->obc->obs.oi.size;
-  eversion_t old_version = repop->obc->obs.oi.version;
-
-  obc->obs.oi.prior_version = old_version;
+  obc->obs.oi.prior_version = repop->obc->obs.oi.version;
   obc->obs.oi.version = ctx->at_version;
   bufferlist bl;
   ::encode(obc->obs.oi, bl);
@@ -4835,8 +4822,7 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
   append_log(repop->ctx->log, eversion_t(), repop->ctx->local_t);
 
   // obc ref swallowed by repop!
-  issue_repop(repop, repop->ctx->mtime, old_last_update, old_exists,
-	      old_size, old_version);
+  issue_repop(repop, repop->ctx->mtime);
   eval_repop(repop);
 }
 
@@ -8147,15 +8133,10 @@ boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
   dout(10) << "TrimmingObjects react trimming " << pos << dendl;
   RepGather *repop = pg->trim_object(pos);
   assert(repop);
-
   repop->queue_snap_trimmer = true;
-  eversion_t old_last_update = pg->pg_log.get_head();
-  bool old_exists = repop->obc->obs.exists;
-  uint64_t old_size = repop->obc->obs.oi.size;
-  eversion_t old_version = repop->obc->obs.oi.version;
 
   pg->append_log(repop->ctx->log, eversion_t(), repop->ctx->local_t);
-  pg->issue_repop(repop, repop->ctx->mtime, old_last_update, old_exists, old_size, old_version);
+  pg->issue_repop(repop, repop->ctx->mtime);
   pg->eval_repop(repop);
 
   repops.insert(repop);
