@@ -915,6 +915,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 	  if (already_ack(oldv)) {
 	    MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0);
 	    reply->add_flags(CEPH_OSD_FLAG_ACK);
+	    reply->set_reply_versions(oldv, entry->user_version);
 	    osd->send_message_osd_client(reply, m->get_connection());
 	  } else {
 	    dout(10) << " waiting for " << oldv << " to ack" << dendl;
