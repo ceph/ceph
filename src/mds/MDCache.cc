@@ -6036,13 +6036,12 @@ bool MDCache::trim(int max)
   while (lru.lru_get_size() + unexpirable > (unsigned)max) {
     CDentry *dn = static_cast<CDentry*>(lru.lru_expire());
     if (!dn) break;
-    if (is_standby_replay && dn->get_linkage() &&
-        dn->get_linkage()->inode->item_open_file.is_on_list()) {
+    if ((is_standby_replay && dn->get_linkage() &&
+        dn->get_linkage()->inode->item_open_file.is_on_list()) ||
+	trim_dentry(dn, expiremap)) {
       unexpirables.push_back(dn);
       ++unexpirable;
-      continue;
     }
-    trim_dentry(dn, expiremap);
   }
   for(list<CDentry*>::iterator i = unexpirables.begin();
       i != unexpirables.end();
@@ -6097,7 +6096,7 @@ void MDCache::send_expire_messages(map<int, MCacheExpire*>& expiremap)
 }
 
 
-void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
+bool MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
 {
   dout(12) << "trim_dentry " << *dn << dendl;
   
@@ -6152,6 +6151,9 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
     CInode *in = dnl->get_inode();
     assert(in);
     trim_inode(dn, in, con, expiremap);
+    // purging stray instead of trimming ?
+    if (dn->get_num_ref() > 0)
+      return true;
   } 
   else {
     assert(dnl->is_null());
@@ -6170,6 +6172,7 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
     migrator->export_empty_import(dir);
   
   if (mds->logger) mds->logger->inc(l_mds_iex);
+  return false;
 }
 
 
@@ -6232,7 +6235,14 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
     trim_dirfrag(*p, con ? con:*p, expiremap);  // if no container (e.g. root dirfrag), use *p
   
   // INODE
-  if (!in->is_auth()) {
+  if (in->is_auth()) {
+    // eval stray after closing dirfrags
+    if (dn) {
+      maybe_eval_stray(in);
+      if (dn->get_num_ref() > 0)
+	return;
+    }
+  } else {
     pair<int,int> auth = in->authority();
     
     dirfrag_t df;
