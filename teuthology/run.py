@@ -354,6 +354,11 @@ def schedule():
                 job.delete()
         return
 
+    # strip out targets; the worker will allocate new ones when we run
+    # the job with --lock.
+    if ctx.config.get('targets'):
+        del ctx.config['targets']
+
     job_config = dict(
             config=ctx.config,
             name=ctx.name,
