@@ -5,9 +5,11 @@
 
 #include "arch/probe.h"
 #include "arch/intel.h"
+#include "arch/neon.h"
 #include "common/sctp_crc32.h"
 #include "common/crc32c_intel_baseline.h"
 #include "common/crc32c_intel_fast.h"
+#include "common/crc32c_neon.h"
 
 /*
  * choose best implementation based on the CPU architecture.
@@ -22,6 +24,10 @@ ceph_crc32c_func_t ceph_choose_crc32(void)
   // use that.
   if (ceph_arch_intel_sse42 && ceph_crc32c_intel_fast_exists()) {
     return ceph_crc32c_intel_fast;
+  }
+
+  if (ceph_arch_neon) {
+    return ceph_crc32c_neon;
   }
 
   // default

@@ -1349,11 +1349,6 @@ AM_CXXFLAGS = \
 	-Wnon-virtual-dtor \
 	-Wno-invalid-offsetof
 
-if ENABLE_FPU_NEON
-AM_CFLAGS += -mfpu=neon
-AM_CXXFLAGS += -mfpu=neon
-endif
-
 if !CLANG
     AM_CXXFLAGS += -Wstrict-null-sentinel
 endif
@@ -1504,12 +1499,21 @@ libcrc_la_SOURCES = \
 	common/sctp_crc32.c \
 	common/crc32c.cc \
 	common/crc32c_intel_baseline.c \
-	common/crc32c_intel_fast.c
+	common/crc32c_intel_fast.c \
+	common/crc32c_neon.c
+libcrc_la_CFLAGS = ${AM_CFLAGS}
+libcrc_la_CXXFLAGS = ${AM_CXXFLAGS}
 
 if WITH_GOOD_YASM_ELF64
 libcrc_la_SOURCES += common/crc32c_intel_fast_asm.S
 libcrc_la_LIBTOOLFLAGS = --tag=CC
 endif
+
+if ENABLE_FPU_NEON
+libcrc_la_CFLAGS += -mfpu=neon
+libcrc_la_CXXFLAGS += -mfpu=neon
+endif
+
 
 noinst_LTLIBRARIES += libcrc.la
 
@@ -1927,6 +1931,7 @@ noinst_HEADERS = \
 	common/ceph_json.h\
 	common/crc32c_intel_baseline.h\
 	common/crc32c_intel_fast.h\
+	common/crc32c_neon.h\
 	common/lru_map.h\
 	common/utf8.h\
 	common/mime.h\
