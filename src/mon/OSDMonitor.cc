@@ -3983,7 +3983,7 @@ bool OSDMonitor::prepare_pool_op(MPoolOp *m)
       if (!pool->is_unmanaged_snaps_mode()) {
         bool snap_exists = pool->snap_exists(m->name.c_str());
         if ((m->op == POOL_OP_CREATE_SNAP && snap_exists)
-          || (m->op == POOL_OP_CREATE_SNAP && !snap_exists)) {
+          || (m->op == POOL_OP_DELETE_SNAP && !snap_exists)) {
           ret = 0;
         } else {
           break;
