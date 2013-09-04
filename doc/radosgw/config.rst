@@ -333,7 +333,7 @@ subuser and a Swift access key.
 
 ::
 
-  sudo radosgw-admin key create --subuser=johndoe:swift --key-type=swift
+  sudo radosgw-admin key create --subuser=johndoe:swift --key-type=swift --gen-secret
 
 .. code-block:: javascript
 
