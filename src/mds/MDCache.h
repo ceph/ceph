@@ -885,7 +885,6 @@ public:
   }
 protected:
   void fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin);
-  void remove_backtrace(inodeno_t ino, int64_t pool, Context *fin);
   void purge_stray(CDentry *dn);
   void _purge_stray_purged(CDentry *dn, int r=0);
   void _purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls);
