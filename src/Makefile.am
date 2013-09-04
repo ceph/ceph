@@ -779,6 +779,11 @@ unittest_arch_SOURCES = test/test_arch.c arch/intel.c arch/neon.c arch/probe.cc
 unittest_arch_CXXFLAGS = ${AM_CFLAGS}
 check_PROGRAMS += unittest_arch
 
+unittest_crc32c_SOURCES = test/common/test_crc32c.cc arch/intel.c arch/neon.c arch/probe.cc
+unittest_crc32c_CXXFLAGS = ${AM_CFLAGS} ${UNITTEST_CXXFLAGS}
+unittest_crc32c_LDADD = libcrc.la ${UNITTEST_LDADD} ${LIBGLOBAL_LDA}
+check_PROGRAMS += unittest_crc32c
+
 unittest_sharedptr_registry_SOURCES = test/common/test_sharedptr_registry.cc
 unittest_sharedptr_registry_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 unittest_sharedptr_registry_LDADD = libcommon.la ${LIBGLOBAL_LDA} ${UNITTEST_LDADD}
