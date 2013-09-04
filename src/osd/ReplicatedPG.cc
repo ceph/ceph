@@ -571,6 +571,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 				       CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK); 
   reply->set_data(outdata);
   reply->set_result(result);
+  reply->set_reply_versions(info.last_update, info.last_user_version);
   osd->send_message_osd_client(reply, m->get_connection());
   delete filter;
 }
