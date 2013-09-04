@@ -377,6 +377,20 @@ void dump_access_control(struct req_state *s, const char *origin, const char *me
   }
 }
 
+void dump_access_control(req_state *s, RGWOp *op)
+{
+  string origin;
+  string method;
+  string header;
+  string exp_header;
+  unsigned max_age = CORS_MAX_AGE_INVALID;
+
+  if (!op->generate_cors_headers(origin, method, header, exp_header, &max_age))
+    return;
+
+  dump_access_control(s, origin.c_str(), method.c_str(), header.c_str(), exp_header.c_str(), max_age);
+}
+
 void dump_start(struct req_state *s)
 {
   if (!s->content_started) {
@@ -386,9 +400,13 @@ void dump_start(struct req_state *s)
   }
 }
 
-void end_header(struct req_state *s, const char *content_type)
+void end_header(struct req_state *s, RGWOp *op, const char *content_type)
 {
   string ctype;
+
+  if (op) {
+    dump_access_control(s, op);
+  }
 
   if (!content_type || s->err.is_err()) {
     switch (s->format) {
@@ -424,7 +442,7 @@ void end_header(struct req_state *s, const char *content_type)
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-void abort_early(struct req_state *s, int err_no)
+void abort_early(struct req_state *s, RGWOp *op, int err_no)
 {
   if (!s->formatter) {
     s->formatter = new JSONFormatter;
@@ -432,7 +450,7 @@ void abort_early(struct req_state *s, int err_no)
   }
   set_req_state_err(s, err_no);
   dump_errno(s);
-  end_header(s);
+  end_header(s, op);
   rgw_flush_formatter_and_reset(s, s->formatter);
   perfcounter->inc(l_rgw_failed_req);
 }
@@ -644,7 +662,7 @@ void RGWRESTFlusher::do_start(int ret)
   set_req_state_err(s, ret); /* no going back from here */
   dump_errno(s);
   dump_start(s);
-  end_header(s);
+  end_header(s, op);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
@@ -927,7 +945,7 @@ void RGWRESTOp::send_response()
   if (!flusher.did_start()) {
     set_req_state_err(s, http_ret);
     dump_errno(s);
-    end_header(s);
+    end_header(s, this);
   }
   flusher.flush();
 }
@@ -1062,7 +1080,7 @@ int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
   case OP_COPY: // op itself will read and verify the permissions
     return 0;
   case OP_OPTIONS:
-    only_bucket = false;
+    only_bucket = true;
     break;
   default:
     return -EINVAL;

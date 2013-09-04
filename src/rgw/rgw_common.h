@@ -821,7 +821,6 @@ struct req_state {
    RGWUserInfo user; 
    RGWAccessControlPolicy *bucket_acl;
    RGWAccessControlPolicy *object_acl;
-   RGWCORSConfiguration   *bucket_cors;
 
    bool system_request;
 

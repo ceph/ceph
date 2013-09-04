@@ -25,11 +25,13 @@
 #define RGW_CORS_HEAD   0x4
 #define RGW_CORS_POST   0x8
 #define RGW_CORS_DELETE 0x10
-#define RGW_CORS_ALL    (RGW_CORS_GET   |  \
-                         RGW_CORS_PUT   |  \
-                         RGW_CORS_HEAD  |  \
-                         RGW_CORS_POST  |  \
-                         RGW_CORS_DELETE)
+#define RGW_CORS_COPY   0x20
+#define RGW_CORS_ALL    (RGW_CORS_GET    |  \
+                         RGW_CORS_PUT    |  \
+                         RGW_CORS_HEAD   |  \
+                         RGW_CORS_POST   |  \
+                         RGW_CORS_DELETE |  \
+                         RGW_CORS_COPY)
 
 #define CORS_MAX_AGE_INVALID ((uint32_t)-1)
 
