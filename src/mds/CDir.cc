@@ -655,6 +655,14 @@ void CDir::remove_null_dentries() {
   assert(get_num_any() == items.size());
 }
 
+void CDir::touch_dentries_bottom() {
+  dout(12) << "touch_dentries_bottom " << *this << dendl;
+
+  for (CDir::map_t::iterator p = items.begin();
+       p != items.end();
+       ++p)
+    inode->mdcache->touch_dentry_bottom(p->second);
+}
 
 bool CDir::try_trim_snap_dentry(CDentry *dn, const set<snapid_t>& snaps)
 {
