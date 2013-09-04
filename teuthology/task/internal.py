@@ -323,6 +323,24 @@ def archive(ctx, config):
             )
 
 @contextlib.contextmanager
+def sudo(ctx, config):
+    log.info('Configuring sudo...')
+    sudoers_file = '/etc/sudoers'
+    tty_expr = 's/requiretty/!requiretty/'
+    pw_expr = 's/!visiblepw/visiblepw/'
+
+    run.wait(
+        ctx.cluster.run(
+            args="sudo sed -i -e '{tty_expr}' -e '{pw_expr}' {path}".format(
+                tty_expr=tty_expr, pw_expr=pw_expr, path=sudoers_file
+            ),
+            wait=False,
+        )
+    )
+    yield
+
+
+@contextlib.contextmanager
 def coredump(ctx, config):
     log.info('Enabling coredump saving...')
     archive_dir = teuthology.get_archive_dir(ctx)
