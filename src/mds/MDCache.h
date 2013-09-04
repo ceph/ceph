@@ -19,6 +19,7 @@
 
 #include "include/types.h"
 #include "include/filepath.h"
+#include "include/elist.h"
 
 #include "CInode.h"
 #include "CDentry.h"
@@ -867,18 +868,20 @@ public:
 
   // -- stray --
 public:
+  elist<CDentry*> delayed_eval_stray;
+
   void scan_stray_dir();
-  void eval_stray(CDentry *dn);
+  void eval_stray(CDentry *dn, bool delay=false);
   void eval_remote(CDentry *dn);
 
-  void maybe_eval_stray(CInode *in) {
+  void maybe_eval_stray(CInode *in, bool delay=false) {
     if (in->inode.nlink > 0 || in->is_base())
       return;
     CDentry *dn = in->get_projected_parent_dn();
-    if (dn->get_projected_linkage()->is_primary() &&
-	dn->get_dir()->get_inode()->is_stray() &&
-	!dn->is_replicated())
-      eval_stray(dn);
+    if (!dn->state_test(CDentry::STATE_PURGING) &&
+	dn->get_projected_linkage()->is_primary() &&
+	dn->get_dir()->get_inode()->is_stray())
+      eval_stray(dn, delay);
   }
 protected:
   void fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin);
