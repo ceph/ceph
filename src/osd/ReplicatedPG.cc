@@ -4567,32 +4567,23 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now,
 	((static_cast<MOSDOp *>(ctx->op->request))->get_flags() & CEPH_OSD_FLAG_PARALLELEXEC)) {
       // replicate original op for parallel execution on replica
       assert(0 == "broken implementation, do not use");
-      wr->oloc = object_locator_t(repop->ctx->obs->oi.soid);
-      wr->ops = repop->ctx->ops;
-      wr->mtime = repop->ctx->mtime;
-      wr->old_exists = old_exists;
-      wr->old_size = old_size;
-      wr->old_version = old_version;
-      wr->snapset = repop->obc->ssc->snapset;
-      wr->snapc = repop->ctx->snapc;
-      wr->set_data(repop->ctx->op->request->get_data());   // _copy_ bufferlist
-    } else {
-      // ship resulting transaction, log entries, and pg_stats
-      if (peer == backfill_target && soid >= backfill_pos) {
-	dout(10) << "issue_repop shipping empty opt to osd." << peer << ", object beyond backfill_pos "
-		 << backfill_pos << ", last_backfill is " << pinfo.last_backfill << dendl;
-	ObjectStore::Transaction t;
-	::encode(t, wr->get_data());
-      } else {
-	::encode(repop->ctx->op_t, wr->get_data());
-      }
-      ::encode(repop->ctx->log, wr->logbl);
-
-      if (backfill_target >= 0 && backfill_target == peer)
-	wr->pg_stats = pinfo.stats;  // reflects backfill progress
-      else
-	wr->pg_stats = info.stats;
     }
+
+    // ship resulting transaction, log entries, and pg_stats
+    if (peer == backfill_target && soid >= backfill_pos) {
+      dout(10) << "issue_repop shipping empty opt to osd." << peer << ", object beyond backfill_pos "
+	       << backfill_pos << ", last_backfill is " << pinfo.last_backfill << dendl;
+      ObjectStore::Transaction t;
+      ::encode(t, wr->get_data());
+    } else {
+      ::encode(repop->ctx->op_t, wr->get_data());
+    }
+    ::encode(repop->ctx->log, wr->logbl);
+
+    if (backfill_target >= 0 && backfill_target == peer)
+      wr->pg_stats = pinfo.stats;  // reflects backfill progress
+    else
+      wr->pg_stats = info.stats;
     
     wr->pg_trim_to = pg_trim_to;
     osd->send_message_osd_cluster(peer, wr, get_osdmap()->get_epoch());
