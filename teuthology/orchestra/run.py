@@ -41,6 +41,7 @@ def quote(args):
                 yield pipes.quote(a)
     return ' '.join(_quote(args))
 
+
 def execute(client, args):
     """
     Execute a command remotely.
@@ -49,13 +50,16 @@ def execute(client, args):
 
     :param client: SSHConnection to run the command with
     :param args: command to run
-    :type args: list of string
+    :type args: string or list of strings
 
     Returns a RemoteProcess, where exitstatus is a callable that will
     block until the exit status is available.
     """
-    cmd = quote(args)
-    (host,port) = client.get_transport().getpeername()
+    if isinstance(args, basestring):
+        cmd = args
+    else:
+        cmd = quote(args)
+    (host, port) = client.get_transport().getpeername()
     log.debug('Running [{h}]: {cmd!r}'.format(h=host, cmd=cmd))
     (in_, out, err) = client.exec_command(cmd)
 
