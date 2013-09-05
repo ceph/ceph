@@ -104,6 +104,10 @@ def get_testdir_base(ctx):
     return ctx.teuthology_config.get('base_test_dir', '/home/%s/cephtest' %
                                      test_user)
 
+def get_archive_dir(ctx):
+    test_dir = get_testdir(ctx)
+    return os.path.normpath(os.path.join(test_dir, 'archive'))
+
 def get_ceph_binary_url(package=None,
                         branch=None, tag=None, sha1=None, dist=None,
                         flavor=None, format=None, arch=None):
