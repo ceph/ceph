@@ -755,6 +755,11 @@ def _upgrade_rpm_packages(ctx, config, remote, pkgs, branch):
     _run_and_log_error_if_fails(remote, args)
     _yum_fix_repo_priority(remote, project)
 
+    remote.run(
+        args=[
+            'sudo', 'yum', 'clean', 'all',
+        ])
+
     # Build a space-separated string consisting of $PKG-$VER for yum
     pkgs_with_vers = ["%s-%s" % (pkg, version) for pkg in pkgs]
 
