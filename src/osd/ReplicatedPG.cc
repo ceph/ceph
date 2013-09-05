@@ -4319,9 +4319,11 @@ void ReplicatedPG::op_applied(RepGather *repop)
 	   repop->waitfor_disk.count(whoami) == 0);  // commit before ondisk
     repop->waitfor_ack.erase(whoami);
 
-    assert(info.last_update >= repop->v);
-    assert(last_update_applied < repop->v);
-    last_update_applied = repop->v;
+    if (repop->v != eversion_t()) {
+      assert(info.last_update >= repop->v);
+      assert(last_update_applied < repop->v);
+      last_update_applied = repop->v;
+    }
 
     // chunky scrub
     if (scrubber.active && scrubber.is_chunky) {
@@ -4368,9 +4370,10 @@ void ReplicatedPG::op_commit(RepGather *repop)
     // is no separate reply sent.
     repop->waitfor_ack.erase(whoami);
     
-    last_update_ondisk = repop->v;
-
-    last_complete_ondisk = repop->pg_local_last_complete;
+    if (repop->v != eversion_t()) {
+      last_update_ondisk = repop->v;
+      last_complete_ondisk = repop->pg_local_last_complete;
+    }
     eval_repop(repop);
   }
 
@@ -5260,9 +5263,11 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
       osd->send_message_osd_cluster(rm->ackerosd, ack, get_osdmap()->get_epoch());
     }
     
-    assert(info.last_update >= m->version);
-    assert(last_update_applied < m->version);
-    last_update_applied = m->version;
+    if (m->version != eversion_t()) {
+      assert(info.last_update >= m->version);
+      assert(last_update_applied < m->version);
+      last_update_applied = m->version;
+    }
     if (scrubber.active_rep_scrub) {
       if (last_update_applied == scrubber.active_rep_scrub->scrub_to) {
 	osd->rep_scrub_wq.queue(scrubber.active_rep_scrub);
