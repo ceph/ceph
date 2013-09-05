@@ -7391,6 +7391,14 @@ void ReplicatedPG::_clear_recovery_state()
   pull_from_peer.clear();
 }
 
+void ReplicatedPG::cancel_pull(const hobject_t &soid)
+{
+  assert(recovering.count(soid));
+  recovering.erase(soid);
+  finish_recovery_op(soid);
+  pg_log.set_last_requested(0); // get recover_primary to start over
+}
+
 void ReplicatedPG::check_recovery_sources(const OSDMapRef osdmap)
 {
   /*
@@ -7407,26 +7415,10 @@ void ReplicatedPG::check_recovery_sources(const OSDMapRef osdmap)
     }
     dout(10) << "check_recovery_sources source osd." << *p << " now down" << dendl;
     now_down.insert(*p);
-
-    // reset pulls?
-    map<int, set<hobject_t> >::iterator j = pull_from_peer.find(*p);
-    if (j != pull_from_peer.end()) {
-      dout(10) << "check_recovery_sources resetting pulls from osd." << *p
-	       << ", osdmap has it marked down" << dendl;
-      for (set<hobject_t>::iterator i = j->second.begin();
-	   i != j->second.end();
-	   ++i) {
-	assert(pulling.count(*i) == 1);
-	pulling.erase(*i);
-	finish_recovery_op(*i);
-      }
-      pg_log.set_last_requested(0);
-      pull_from_peer.erase(j++);
-    }
-
-    // remove from missing_loc_sources
     missing_loc_sources.erase(p++);
   }
+  pgbackend->check_recovery_sources(osdmap);
+
   if (now_down.empty()) {
     dout(10) << "check_recovery_sources no source osds (" << missing_loc_sources << ") went down" << dendl;
   } else {

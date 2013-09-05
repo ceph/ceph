@@ -148,6 +148,7 @@ public:
   void on_global_recover(
     const hobject_t &oid);
   void failed_push(int from, const hobject_t &soid);
+  void cancel_pull(const hobject_t &soid);
 
   template <typename T>
   class BlessedGenContext : public GenContext<T> {

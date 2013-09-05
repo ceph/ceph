@@ -59,6 +59,8 @@ public:
     RecoveryHandle *h
     );
 
+  void check_recovery_sources(const OSDMapRef osdmap);
+
   /// @see PGBackend::handle_message
   bool handle_message(
     OpRequestRef op
