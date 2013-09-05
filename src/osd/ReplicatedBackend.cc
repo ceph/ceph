@@ -61,6 +61,28 @@ void ReplicatedBackend::recover_object(
   dout(10) << __func__ << dendl;
 }
 
+void ReplicatedBackend::check_recovery_sources(const OSDMapRef osdmap)
+{
+  for(map<int, set<hobject_t> >::iterator i = pull_from_peer.begin();
+      i != pull_from_peer.end();
+      ) {
+    if (osdmap->is_down(i->first)) {
+      dout(10) << "check_recovery_sources resetting pulls from osd." << i->first
+	       << ", osdmap has it marked down" << dendl;
+      for (set<hobject_t>::iterator j = i->second.begin();
+	   j != i->second.end();
+	   ++j) {
+	assert(pulling.count(*j) == 1);
+	get_parent()->cancel_pull(*j);
+	pulling.erase(*j);
+      }
+      pull_from_peer.erase(i++);
+    } else {
+      ++i;
+    }
+  }
+}
+
 bool ReplicatedBackend::handle_message(
   OpRequestRef op
   )
