@@ -109,6 +109,10 @@ public:
     map<string,bufferlist> omap;
     int rval;
 
+    coll_t temp_coll;
+    hobject_t temp_oid;
+    object_copy_cursor_t temp_cursor;
+
     CopyOp(OpContext *c, hobject_t s, object_locator_t l, version_t v)
       : ctx(c), src(s), oloc(l), version(v),
 	objecter_tid(0),
@@ -788,6 +792,7 @@ protected:
   int start_copy(OpContext *ctx, hobject_t src, object_locator_t oloc, version_t version,
 		 CopyOpRef *pcop);
   void process_copy_chunk(hobject_t oid, tid_t tid, int r);
+  void _write_copy_chunk(CopyOpRef cop, ObjectStore::Transaction *t);
   void _copy_some(OpContext *ctx, CopyOpRef cop);
   void cancel_copy(CopyOpRef cop);
   void requeue_cancel_copy_ops(bool requeue=true);
