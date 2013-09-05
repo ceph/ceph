@@ -592,7 +592,7 @@ TEST(LibRadosMisc, CopyPP) {
   ASSERT_TRUE(x.contents_equal(x2));
 
   // do a big object
-  bl.append(buffer::create(8000000));
+  bl.append(buffer::create(g_conf->osd_copyfrom_max_chunk * 3));
   bl.zero();
   bl.append("tail");
   blc = bl;
