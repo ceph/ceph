@@ -37,7 +37,8 @@ you may write data with one API and retrieve it with the other.
 	:maxdepth: 1
 
 	Manual Install <manual-install>
-	Configuration <config>
+	Simple Configuration <config>
+	Federated Configuration <federated-config>
 	Config Reference <config-ref>
 	Purging Temp Data <purge-temp>
 	S3 API <s3>
