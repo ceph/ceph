@@ -4578,6 +4578,10 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
       wr->pg_stats = info.stats;
     
     wr->pg_trim_to = pg_trim_to;
+
+    wr->new_temp_oid = repop->ctx->new_temp_oid;
+    wr->discard_temp_oid = repop->ctx->discard_temp_oid;
+
     osd->send_message_osd_cluster(peer, wr, get_osdmap()->get_epoch());
 
     // keep peer_info up to date
@@ -5174,6 +5178,16 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
     vector<pg_log_entry_t> log;
 
     bufferlist::iterator p = m->get_data().begin();
+
+    if (m->new_temp_oid != hobject_t()) {
+      dout(20) << __func__ << " start tracking temp " << m->new_temp_oid << dendl;
+      temp_contents.insert(m->new_temp_oid);
+      get_temp_coll(&rm->localt);
+    }
+    if (m->discard_temp_oid != hobject_t()) {
+      dout(20) << __func__ << " stop tracking temp " << m->discard_temp_oid << dendl;
+      temp_contents.erase(m->discard_temp_oid);
+    }
 
     ::decode(rm->opt, p);
     if (!(m->get_connection()->get_features() & CEPH_FEATURE_OSD_SNAPMAPPER))

@@ -180,6 +180,8 @@ public:
 
     CopyOpRef copy_op;
 
+    hobject_t new_temp_oid, discard_temp_oid;  ///< temp objects we should start/stop tracking
+
     OpContext(const OpContext& other);
     const OpContext& operator=(const OpContext& other);
 
