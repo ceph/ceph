@@ -79,10 +79,13 @@ Core Changes:
   APPEND, DELETE, (SET|RM)ATTR log entries.
 - The filestore needs to be able to deal with multiply versioned
   hobjects.  This probably means adapting the filestore internally to
-  use a vhobject which is basically a pair<version_t, hobject_t>.  The
-  version needs to be included in the on-disk filename.  An interface
-  needs to be added to get all versions of a particular hobject_t or
-  the most recently versioned instance of a particular hobject_t.
+  use a ghobject which is basically a tuple<hobject_t, gen_t,
+  shard_t>.  The gen_t + shard_t need to be included in the on-disk
+  filename.  gen_t is a unique object identifier to make sure there
+  are no name collisions when object N is created +
+  deleted + created again. An interface needs to be added to get all
+  versions of a particular hobject_t or the most recently versioned
+  instance of a particular hobject_t.
 
 PGBackend Interfaces:
 
@@ -178,7 +181,7 @@ acting set have different pieces of the erasure coding scheme and are
 not interchangeable.  Worse, crush might cause chunk 2 to be written
 to an osd which happens already to contain an (old) copy of chunk 4.
 This means that the OSD and PG messages need to work in terms of a
-type like pair<chunk_id_t, pg_t> in order to distinguish different pg
+type like pair<shard_t, pg_t> in order to distinguish different pg
 chunks on a single OSD.
 
 Because the mapping of object name to object in the filestore must
@@ -188,14 +191,14 @@ include the chunk id in the object key.
 
 Core changes:
 
-- The filestore `vhobject_t needs to also include a chunk id
+- The filestore `ghobject_t needs to also include a chunk id
   <http://tracker.ceph.com/issues/5862>`_ making it more like
-  tuple<hobject_t, version_t, chunk_id_t>.
-- coll_t needs to include a chunk_id_t.
+  tuple<hobject_t, gen_t, shard_t>.
+- coll_t needs to include a shard_t.
 - The `OSD pg_map and similar pg mappings need to work in terms of a
   cpg_t <http://tracker.ceph.com/issues/5863>`_ (essentially
-  pair<pg_t, chunk_id_t>).  Similarly, pg->pg messages need to include
-  a chunk_id_t
+  pair<pg_t, shard_t>).  Similarly, pg->pg messages need to include
+  a shard_t
 - For client->PG messages, the OSD will need a way to know which PG
   chunk should get the message since the OSD may contain both a
   primary and non-primary chunk for the same pg
