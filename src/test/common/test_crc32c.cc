@@ -23,6 +23,15 @@ TEST(Crc32c, Small) {
   ASSERT_EQ(3743019208u, ceph_crc32c(5678, (unsigned char *)b, strlen(b)));
 }
 
+TEST(Crc32c, PartialWord) {
+  const char *a = (const char *)malloc(5);
+  const char *b = (const char *)malloc(35);
+  memset((void *)a, 1, 5);
+  memset((void *)b, 1, 35);
+  ASSERT_EQ(2715569182u, ceph_crc32c(0, (unsigned char *)a, 5));
+  ASSERT_EQ(440531800u, ceph_crc32c(0, (unsigned char *)b, 35));
+}
+
 TEST(Crc32c, Big) {
   int len = 4096000;
   char *a = (char *)malloc(len);
