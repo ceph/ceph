@@ -1,5 +1,16 @@
 #!/bin/sh
+# If we're running as root, allow large amounts of open files.
+USER=$(whoami)
+
+# If a ulimit call fails, exit immediately.
 set -e
+
+if [ "$USER" = "root" ]
+then
+    # Enable large number of open files
+    ulimit -n 16384
+fi
+
+# Enable core dumps for everything
 ulimit -c unlimited
-ulimit -n 16384
 exec "$@"

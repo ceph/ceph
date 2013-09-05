@@ -507,10 +507,10 @@ def cluster(ctx, config):
                     '-p',
                     '/var/lib/ceph/mds/ceph-{id}'.format(id=id_),
                     run.Raw('&&'),
+                    'sudo',
                     '{tdir}/adjust-ulimits'.format(tdir=testdir),
                     'ceph-coverage',
                     coverage_dir,
-                    'sudo',
                     'ceph-authtool',
                     '--create-keyring',
                     '--gen-key',
@@ -610,11 +610,11 @@ def cluster(ctx, config):
         for id_ in teuthology.roles_of_type(roles_for_host, 'osd'):
             remote.run(
                 args=[
+                    'sudo',
                     'MALLOC_CHECK_=3',
                     '{tdir}/adjust-ulimits'.format(tdir=testdir),
                     'ceph-coverage',
                     coverage_dir,
-                    'sudo',
                     'ceph-osd',
                     '--mkfs',
                     '--mkkey',
@@ -695,10 +695,10 @@ def cluster(ctx, config):
                 )
             remote.run(
                 args=[
+                    'sudo',
                     '{tdir}/adjust-ulimits'.format(tdir=testdir),
                     'ceph-coverage',
                     coverage_dir,
-                    'sudo',
                     'ceph-mon',
                     '--mkfs',
                     '-i', id_,
@@ -874,10 +874,10 @@ def run_daemon(ctx, config, type_):
                 num_active += 1
 
             run_cmd = [
+                'sudo',
                 '{tdir}/adjust-ulimits'.format(tdir=testdir),
                 'ceph-coverage',
                 coverage_dir,
-                'sudo',
                 '{tdir}/daemon-helper'.format(tdir=testdir),
                 daemon_signal,
                 ]

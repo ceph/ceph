@@ -418,10 +418,10 @@ def run_xfstests_one_client(ctx, role, properties):
         # readlink -f <path> in order to get their canonical
         # pathname (so it matches what the kernel remembers).
         args = [
+            '/usr/bin/sudo',
             '{tdir}/adjust-ulimits'.format(tdir=testdir),
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
-            '/usr/bin/sudo',
             'TESTDIR={tdir}'.format(tdir=testdir),
             '/bin/bash',
             test_path,
