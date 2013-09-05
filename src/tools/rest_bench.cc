@@ -261,10 +261,12 @@ class RESTDispatcher {
   } req_wq;
 
 public:
-  RESTDispatcher(CephContext *cct, int num_threads)
-    : m_tp(cct, "RESTDispatcher::m_tp", num_threads),
-      req_wq(this, g_conf->rgw_op_thread_timeout,
-	     g_conf->rgw_op_thread_suicide_timeout, &m_tp) {
+  CephContext *cct;
+  RESTDispatcher(CephContext *cct_, int num_threads)
+    : m_tp(cct_, "RESTDispatcher::m_tp", num_threads),
+      req_wq(this, cct_->_conf->rgw_op_thread_timeout,
+        cct_->_conf->rgw_op_thread_suicide_timeout, &m_tp),
+      cct(cct_) {
 
 
     response_handler.propertiesCallback = properties_callback;
@@ -588,6 +590,7 @@ protected:
 
 public:
   RESTBencher(RESTDispatcher *_dispatcher) :
+      ObjBencher(_dispatcher->cct),
       dispatcher(_dispatcher),
       completions(NULL),
       list_start(NULL),

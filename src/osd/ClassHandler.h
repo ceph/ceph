@@ -7,11 +7,14 @@
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
+#include "common/ceph_context.h"
 
 
 class ClassHandler
 {
 public:
+  CephContext *cct;
+
   struct ClassData;
 
   struct ClassMethod {
@@ -76,7 +79,7 @@ private:
   int _load_class(ClassData *cls);
 
 public:
-  ClassHandler() : mutex("ClassHandler") {}
+  ClassHandler(CephContext *cct_) : cct(cct_), mutex("ClassHandler") {}
   
   int open_all_classes();
 

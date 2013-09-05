@@ -46,6 +46,7 @@
 #include "common/cmdparse.h"
 #include "common/tracked_int_ptr.hpp"
 #include "common/WorkQueue.h"
+#include "common/ceph_context.h"
 #include "include/str_list.h"
 
 #include <list>
@@ -189,6 +190,7 @@ public:
   /*** PG ****/
 protected:
   OSDService *osd;
+  CephContext *cct;
   OSDriver osdriver;
   SnapMapper snap_mapper;
 public:
@@ -383,7 +385,7 @@ public:
     const char *state_name;
     utime_t enter_time;
     const char *get_state_name() { return state_name; }
-    NamedState() : state_name(0), enter_time(ceph_clock_now(g_ceph_context)) {}
+    NamedState() : state_name(0), enter_time(ceph_clock_now(g_ceph_context)) {};
     virtual ~NamedState() {}
   };
 
@@ -1060,21 +1062,8 @@ public:
 
   /* Encapsulates PG recovery process */
   class RecoveryState {
-    void start_handle(RecoveryCtx *new_ctx) {
-      assert(!rctx);
-      rctx = new_ctx;
-      if (rctx)
-	rctx->start_time = ceph_clock_now(g_ceph_context);
-    }
-
-    void end_handle() {
-      if (rctx) {
-	utime_t dur = ceph_clock_now(g_ceph_context) - rctx->start_time;
-	machine.event_time += dur;
-      }
-      machine.event_count++;
-      rctx = 0;
-    }
+    void start_handle(RecoveryCtx *new_ctx);
+    void end_handle();
 
     /* States */
     struct Initial;
