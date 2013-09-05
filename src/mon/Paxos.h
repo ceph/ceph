@@ -131,7 +131,7 @@ class Paxos;
  * This libary is based on the Paxos algorithm, but varies in a few key ways:
  *  1- Only a single new value is generated at a time, simplifying the recovery logic.
  *  2- Nodes track "committed" values, and share them generously (and trustingly)
- *  3- A 'leasing' mechism is built-in, allowing nodes to determine when it is 
+ *  3- A 'leasing' mechanism is built-in, allowing nodes to determine when it is 
  *     safe to "read" their copy of the last committed value.
  *
  * This provides a simple replication substrate that services can be built on top of.
@@ -325,8 +325,7 @@ private:
    *
    * Instead of performing a full commit each time a read is requested, we
    * keep leases. Each lease will have an expiration date, which may or may
-   * not be extended. This member variable will keep when is the lease 
-   * expiring.
+   * not be extended. 
    */
   utime_t lease_expire;
   /**
@@ -1091,7 +1090,7 @@ public:
    * onto paxos-related keys), and then we will decode those same bufferlists
    * we just wrote and apply the transactions they hold. We will also update
    * our first and last committed values to point to the new values, if need
-   * be. All all this is done tightly wrapped in a transaction to ensure we
+   * be. All this is done tightly wrapped in a transaction to ensure we
    * enjoy the atomicity guarantees given by our awesome k/v store.
    *
    * @param m A message
