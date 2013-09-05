@@ -16,6 +16,7 @@
 
 #include "common/config.h"
 #include "common/Cond.h"
+#include "common/ceph_context.h"
 
 struct bench_interval_data {
   double min_bandwidth;
@@ -51,6 +52,8 @@ const int OP_RAND_READ = 3;
 
 class ObjBencher {
   bool show_time;
+public:
+  CephContext *cct;
 protected:
   Mutex lock;
 
@@ -89,7 +92,7 @@ protected:
   ostream& out(ostream& os);
   ostream& out(ostream& os, utime_t& t);
 public:
-  ObjBencher() : show_time(false), lock("ObjBencher::lock") {}
+  ObjBencher(CephContext *cct_) : show_time(false), cct(cct_), lock("ObjBencher::lock") {}
   virtual ~ObjBencher() {}
   int aio_bench(
     int operation, int secondsToRun, int maxObjectsToCreate,

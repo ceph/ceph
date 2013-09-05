@@ -7,12 +7,14 @@
 #include "include/Distribution.h"
 #include "os/ObjectStore.h"
 #include "common/Clock.h"
+#include "common/ceph_context.h"
 
 #include <list>
 #include <vector>
 using namespace std;
 
 class Ager {
+  CephContext *cct;
   ObjectStore *store;
 
  private:
@@ -28,7 +30,7 @@ class Ager {
   file_object_t age_get_oid();
 
  public:
-  Ager(ObjectStore *s) : store(s), did_distn(false) {} 
+  Ager(CephContext *cct_, ObjectStore *s) : cct(cct_), store(s), did_distn(false) {}
 
   void age(int time,
            float high_water,    // fill to this %
