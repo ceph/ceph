@@ -149,12 +149,28 @@ def ceph_log(ctx, config):
 @contextlib.contextmanager
 def ship_utilities(ctx, config):
     assert config is None
-    FILES = ['daemon-helper', 'adjust-ulimits', 'valgrind.supp', 'kcon_most']
+    testdir = teuthology.get_testdir(ctx)
+    filenames = []
+
+    log.info('Shipping valgrind.supp...')
+    with file(os.path.join(os.path.dirname(__file__), 'valgrind.supp'), 'rb') as f:
+        fn = os.path.join(testdir, 'valgrind.supp')
+        filenames.append(fn)
+        for rem in ctx.cluster.remotes.iterkeys():
+            teuthology.sudo_write_file(
+                remote=rem,
+                path=fn,
+                data=f,
+                )
+            f.seek(0)
+
+    FILES = ['daemon-helper', 'adjust-ulimits', 'kcon_most']
     destdir = '/usr/local/bin'
     for filename in FILES:
         log.info('Shipping %r...', filename)
         src = os.path.join(os.path.dirname(__file__), filename)
         dst = os.path.join(destdir, filename)
+        filenames.append(dst)
         with file(src, 'rb') as f:
             for rem in ctx.cluster.remotes.iterkeys():
                 teuthology.sudo_write_file(
@@ -176,11 +192,7 @@ def ship_utilities(ctx, config):
     try:
         yield
     finally:
-        log.info('Removing shipped files: %s...', ' '.join(FILES))
-        filenames = (
-            os.path.join(destdir, filename)
-            for filename in FILES
-        )
+        log.info('Removing shipped files: %s...', ' '.join(filenames))
         run.wait(
             ctx.cluster.run(
                 args=[
@@ -889,17 +901,19 @@ def run_daemon(ctx, config, type_):
                 '-f',
                 '-i', id_]
 
+            if type_ in config.get('cpu_profile', []):
+                profile_path = '/var/log/ceph/profiling-logger/%s.%s.prof' % (type_, id_)
+                run_cmd.extend([ 'env', 'CPUPROFILE=%s' % profile_path ])
+
             if config.get('valgrind') is not None:
                 valgrind_args = None
                 if type_ in config['valgrind']:
                     valgrind_args = config['valgrind'][type_]
                 if name in config['valgrind']:
                     valgrind_args = config['valgrind'][name]
-                run_cmd.extend(teuthology.get_valgrind_args(testdir, name, valgrind_args))
-
-            if type_ in config.get('cpu_profile', []):
-                profile_path = '/var/log/ceph/profiling-logger/%s.%s.prof' % (type_, id_)
-                run_cmd.extend([ 'env', 'CPUPROFILE=%s' % profile_path ])
+                run_cmd = teuthology.get_valgrind_args(testdir, name,
+                                                       run_cmd,
+                                                       valgrind_args)
 
             run_cmd.extend(run_cmd_tail)
 

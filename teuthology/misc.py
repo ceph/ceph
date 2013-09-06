@@ -862,7 +862,15 @@ def deep_merge(a, b):
         return a
     return b
 
-def get_valgrind_args(testdir, name, v):
+def get_valgrind_args(testdir, name, preamble, v):
+    """
+    Build a command line for running valgrind.
+
+    testdir - test results directory
+    name - name of daemon (for naming hte log file)
+    preamble - stuff we should run before valgrind
+    v - valgrind arguments
+    """
     if v is None:
         return []
     if not isinstance(v, list):
@@ -870,25 +878,25 @@ def get_valgrind_args(testdir, name, v):
     val_path = '/var/log/ceph/valgrind'.format(tdir=testdir)
     if '--tool=memcheck' in v or '--tool=helgrind' in v:
         extra_args = [
-            'cd', testdir,
-            run.Raw('&&'),
+
             'valgrind',
             '--num-callers=50',
-            '--suppressions=valgrind.supp',
+            '--suppressions={tdir}/valgrind.supp'.format(tdir=testdir),
             '--xml=yes',
             '--xml-file={vdir}/{n}.log'.format(vdir=val_path, n=name)
             ]
     else:
         extra_args = [
-            'cd', testdir,
-            run.Raw('&&'),
             'valgrind',
-            '--suppressions=valgrind.supp',
+            '--suppressions={tdir}/valgrind.supp'.format(tdir=testdir),
             '--log-file={vdir}/{n}.log'.format(vdir=val_path, n=name)
             ]
-    extra_args.extend(v)
-    log.debug('running %s under valgrind with args %s', name, extra_args)
-    return extra_args
+    args = [
+        'cd', testdir,
+        run.Raw('&&'),
+        ] + preamble + extra_args + v
+    log.debug('running %s under valgrind with args %s', name, args)
+    return args
 
 def stop_daemons_of_type(ctx, type_):
     log.info('Shutting down %s daemons...' % type_)
