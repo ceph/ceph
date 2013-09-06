@@ -435,7 +435,7 @@ public:
     bool ms_get_authorizer(int dest_type,
 			   AuthAuthorizer **authorizer,
 			   bool force_new);
-    ObjecterDispatcher(OSDService *o) : Dispatcher(g_ceph_context), osd(o) {}
+    ObjecterDispatcher(OSDService *o) : Dispatcher(cct), osd(o) {}
   } objecter_dispatcher;
   friend class ObjecterDispatcher;
 
