@@ -322,22 +322,33 @@ def archive(ctx, config):
                 ),
             )
 
+
 @contextlib.contextmanager
 def sudo(ctx, config):
     log.info('Configuring sudo...')
     sudoers_file = '/etc/sudoers'
+    backup_ext = '.orig'
     tty_expr = 's/requiretty/!requiretty/'
     pw_expr = 's/!visiblepw/visiblepw/'
 
     run.wait(
         ctx.cluster.run(
-            args="sudo sed -i -e '{tty_expr}' -e '{pw_expr}' {path}".format(
-                tty_expr=tty_expr, pw_expr=pw_expr, path=sudoers_file
+            args="sudo sed -i{ext} -e '{tty}' -e '{pw}' {path}".format(
+                ext=backup_ext, tty=tty_expr, pw=pw_expr,
+                path=sudoers_file
             ),
             wait=False,
         )
     )
-    yield
+    try:
+        yield
+    finally:
+        log.info('Restoring {}...'.format(sudoers_file))
+        ctx.cluster.run(
+            args="sudo mv -f {path}{ext} {path}".format(
+                path=sudoers_file, ext=backup_ext
+            )
+        )
 
 
 @contextlib.contextmanager
