@@ -60,8 +60,8 @@ def _run_and_log_error_if_fails(remote, args):
     Yet another wrapper around command execution. This one runs a command on
     the given remote, then, if execution fails, logs the error and re-raises.
 
-    :param: remote -- the teuthology.orchestra.remote.Remote object
-    :param: args -- list of arguments comprising the command the be executed
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param args: list of arguments comprising the command the be executed
     :returns: None
     :raises: CommandFailedError
     """
@@ -91,10 +91,10 @@ def _get_config_value_for_remote(ctx, remote, config, key):
 
     would return 'master'.
 
-    :param: ctx -- the argparse.Namespace object
-    :param: remote -- the teuthology.orchestra.remote.Remote object
-    :param: config -- the config dict
-    :param: key -- the name of the value to retrieve
+    :param ctx: the argparse.Namespace object
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param config: the config dict
+    :param key: the name of the value to retrieve
     """
     roles = ctx.cluster.remotes[remote]
     if 'all' in config:
@@ -122,9 +122,9 @@ def _get_baseurlinfo_and_dist(ctx, remote, config):
         'relval': '13.04',
         'uri': 'ref/master'}
 
-    :param: ctx -- the argparse.Namespace object
-    :param: remote -- the teuthology.orchestra.remote.Remote object
-    :param: config -- the config dict
+    :param ctx: the argparse.Namespace object
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param config: the config dict
     :returns: dict -- the information you want.
     """
     retval = {}
@@ -195,9 +195,9 @@ def _get_baseurl(ctx, remote, config):
 
     Example:
         'http://gitbuilder.ceph.com/ceph-deb-raring-x86_64-basic/ref/master'
-    :param: ctx -- the argparse.Namespace object
-    :param: remote -- the teuthology.orchestra.remote.Remote object
-    :param: config -- the config dict
+    :param ctx: the argparse.Namespace object
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param config: the config dict
     :returns: str -- the URL
     """
     # get distro name and arch
@@ -224,8 +224,8 @@ def _block_looking_for_package_version(remote, base_url, wait=False):
     """
     Look for, and parse, a file called 'version' in base_url.
 
-    :param: remote -- the teuthology.orchestra.remote.Remote object
-    :param: wait -- wait forever for the file to show up. (default False)
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param wait: wait forever for the file to show up. (default False)
     :returns: str -- the version e.g. '0.67-240-g67a95b9-1raring'
     :raises: VersionNotFoundError
     """
@@ -253,10 +253,10 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
 
     TODO: split this into at least two functions.
 
-    :param: ctx -- the argparse.Namespace object
-    :param: remote -- the teuthology.orchestra.remote.Remote object
-    :param: debs -- list of packages names to install
-    :param: config -- the config dict
+    :param ctx: the argparse.Namespace object
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param debs: list of packages names to install
+    :param config: the config dict
     """
 
     # check for ceph release key
@@ -333,8 +333,8 @@ def _yum_fix_repo_priority(remote, project):
 
         /etc/yum.repos.d/{project}.repo
 
-    :param: remote -- the teuthology.orchestra.remote.Remote object
-    :param: project -- the project whose repos need modification
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param project: the project whose repos need modification
     """
     remote.run(
         args=[
@@ -354,10 +354,10 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
 
     TODO: split this into at least two functions.
 
-    :param: ctx -- the argparse.Namespace object
-    :param: remote -- the teuthology.orchestra.remote.Remote object
-    :param: rpm -- list of packages names to install
-    :param: config -- the config dict
+    :param ctx: the argparse.Namespace object
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param rpm: list of packages names to install
+    :param config: the config dict
     """
     baseparms = _get_baseurlinfo_and_dist(ctx, remote, config)
     log.info("Installing packages: {pkglist} on remote rpm {arch}".format(
@@ -424,7 +424,7 @@ def purge_data(ctx):
     """
     Purge /var/lib/ceph on every remote in ctx.
 
-    :param: ctx -- the argparse.Namespace object
+    :param ctx: the argparse.Namespace object
     """
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
@@ -435,7 +435,7 @@ def _purge_data(remote):
     """
     Purge /var/lib/ceph on remote.
 
-    :param: remote -- the teuthology.orchestra.remote.Remote object
+    :param remote: the teuthology.orchestra.remote.Remote object
     """
     log.info('Purging /var/lib/ceph on %s', remote)
     remote.run(args=[
@@ -462,9 +462,9 @@ def install_packages(ctx, pkgs, config):
     """
     Installs packages on each remote in ctx.
 
-    :param: ctx -- the argparse.Namespace object
-    :param: pkgs -- list of packages names to install
-    :param: config -- the config dict
+    :param ctx: the argparse.Namespace object
+    :param pkgs: list of packages names to install
+    :param config: the config dict
     """
     install_pkgs = {
         "deb": _update_deb_package_list_and_install,
@@ -484,10 +484,10 @@ def _remove_deb(ctx, config, remote, debs):
 
     TODO: be less rude (e.g. using --force-yes)
 
-    :param: ctx -- the argparse.Namespace object
-    :param: config -- the config dict
-    :param: remote -- the teuthology.orchestra.remote.Remote object
-    :param: debs -- list of packages names to install
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param debs: list of packages names to install
     """
     log.info("Removing packages: {pkglist} on Debian system.".format(
         pkglist=", ".join(debs)))
@@ -534,10 +534,10 @@ def _remove_rpm(ctx, config, remote, rpm):
     """
     Removes RPM packages from remote
 
-    :param: ctx -- the argparse.Namespace object
-    :param: config -- the config dict
-    :param: remote -- the teuthology.orchestra.remote.Remote object
-    :param: rpm -- list of packages names to remove
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param rpm: list of packages names to remove
     """
     log.info("Removing packages: {pkglist} on rpm system.".format(
         pkglist=", ".join(rpm)))
@@ -573,9 +573,9 @@ def remove_packages(ctx, config, pkgs):
     """
     Removes packages from each remote in ctx.
 
-    :param: ctx -- the argparse.Namespace object
-    :param: config -- the config dict
-    :param: pkgs -- list of packages names to remove
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
+    :param pkgs: list of packages names to remove
     """
     remove_pkgs = {
         "deb": _remove_deb,
@@ -592,8 +592,8 @@ def _remove_sources_list_deb(remote, proj):
     Removes /etc/apt/sources.list.d/{proj}.list and then runs ``apt-get
     update``.
 
-    :param: remote -- the teuthology.orchestra.remote.Remote object
-    :param: proj -- the project whose sources.list needs removing
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param proj: the project whose sources.list needs removing
     """
     remote.run(
         args=[
@@ -612,8 +612,8 @@ def _remove_sources_list_rpm(remote, proj):
     """
     Removes /etc/yum.repos.d/{proj}.repo, /var/lib/{proj}, and /var/log/{proj}.
 
-    :param: remote -- the teuthology.orchestra.remote.Remote object
-    :param: proj -- the project whose sources.list needs removing
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param proj: the project whose sources.list needs removing
     """
     remote.run(
         args=[
@@ -649,8 +649,8 @@ def remove_sources(ctx, config):
     """
     Removes repo source files from each remote in ctx.
 
-    :param: ctx -- the argparse.Namespace object
-    :param: config -- the config dict
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
     """
     remove_sources_pkgs = {
         'deb': _remove_sources_list_deb,
@@ -700,8 +700,8 @@ def install(ctx, config):
     The install task. Installs packages for a given project on all hosts in
     ctx. May work for projects besides ceph, but may not. Patches welcomed!
 
-    :param: ctx -- the argparse.Namespace object
-    :param: config -- the config dict
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
     """
 
     project = config.get('project', 'ceph')
@@ -762,11 +762,11 @@ def _upgrade_deb_packages(ctx, config, remote, debs):
     Before doing so, installs the project's GPG key, writes a sources.list
     file, and runs ``apt-get update``.
 
-    :param: ctx -- the argparse.Namespace object
-    :param: config -- the config dict
-    :param: remote -- the teuthology.orchestra.remote.Remote object
-    :param: debs -- the Debian packages to be installed
-    :param: branch -- the branch of the project to be used
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param debs: the Debian packages to be installed
+    :param branch: the branch of the project to be used
     """
     # check for ceph release key
     r = remote.run(
@@ -864,11 +864,11 @@ def _upgrade_rpm_packages(ctx, config, remote, pkgs):
     Before doing so, it makes sure the project's -release RPM is installed -
     removing any previous version first.
 
-    :param: ctx -- the argparse.Namespace object
-    :param: config -- the config dict
-    :param: remote -- the teuthology.orchestra.remote.Remote object
-    :param: pkgs -- the RPM packages to be installed
-    :param: branch -- the branch of the project to be used
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param pkgs: the RPM packages to be installed
+    :param branch: the branch of the project to be used
     """
     distinfo = _get_baseurlinfo_and_dist(ctx, remote, config)
     log.info(
@@ -963,8 +963,9 @@ def upgrade(ctx, config):
         tasks:
         - install.upgrade:
             all:
-    :param: ctx -- the argparse.Namespace object
-    :param: config -- the config dict
+
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
     """
     assert config is None or isinstance(config, dict), \
         "install.upgrade only supports a dictionary for configuration"
@@ -1038,8 +1039,8 @@ def task(ctx, config):
         ceph:
           sha1: ...
 
-    :param: ctx -- the argparse.Namespace object
-    :param: config -- the config dict
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
     """
     if config is None:
         config = {}
