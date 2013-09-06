@@ -59,7 +59,7 @@ def create_users(ctx, config):
             _config_user(testswift_conf, '{user}.{client}'.format(user=user, client=client), user, suffix)
             ctx.cluster.only(client).run(
                 args=[
-                    '{tdir}/adjust-ulimits'.format(tdir=testdir),
+                    'adjust-ulimits',
                     'ceph-coverage',
                     '{tdir}/archive/coverage'.format(tdir=testdir),
                     'radosgw-admin',
@@ -80,7 +80,7 @@ def create_users(ctx, config):
                 uid = '{user}.{client}'.format(user=user, client=client)
                 ctx.cluster.only(client).run(
                     args=[
-                        '{tdir}/adjust-ulimits'.format(tdir=testdir),
+                        'adjust-ulimits',
                         'ceph-coverage',
                         '{tdir}/archive/coverage'.format(tdir=testdir),
                         'radosgw-admin',
