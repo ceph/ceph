@@ -44,7 +44,7 @@ def task(ctx, config):
 
         args =['CEPH_CLIENT_ID={id_}'.format(id_=id_),
                'CEPH_ARGS="{flags}"'.format(flags=config.get('flags', '')),
-               '{tdir}/daemon-helper'.format(tdir=testdir), 'kill',
+               'daemon-helper',
                'multi_stress_watch foo foo'
                ]
 

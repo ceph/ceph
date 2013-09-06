@@ -57,7 +57,7 @@ def task(ctx, config):
     op_weights = config.get('op_weights', {})
     testdir = teuthology.get_testdir(ctx)
     args = [
-        '{tdir}/adjust-ulimits'.format(tdir=testdir),
+        'adjust-ulimits',
         'ceph-coverage',
         '{tdir}/archive/coverage'.format(tdir=testdir),
         'ceph_test_rados',

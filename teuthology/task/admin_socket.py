@@ -74,7 +74,7 @@ def _socket_command(ctx, remote, socket_path, command, args):
         proc = remote.run(
             args=[
                 'sudo',
-                '{tdir}/adjust-ulimits'.format(tdir=testdir),
+                'adjust-ulimits',
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'ceph',

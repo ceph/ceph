@@ -71,7 +71,7 @@ def create_users(ctx, config):
             _config_user(s3tests_conf, section, '{user}.{client}'.format(user=user, client=client))
             ctx.cluster.only(client).run(
                 args=[
-                    '{tdir}/adjust-ulimits'.format(tdir=testdir),
+                    'adjust-ulimits',
                     'ceph-coverage',
                     '{tdir}/archive/coverage'.format(tdir=testdir),
                     'radosgw-admin',
@@ -92,7 +92,7 @@ def create_users(ctx, config):
                 uid = '{user}.{client}'.format(user=user, client=client)
                 ctx.cluster.only(client).run(
                     args=[
-                        '{tdir}/adjust-ulimits'.format(tdir=testdir),
+                        'adjust-ulimits',
                         'ceph-coverage',
                         '{tdir}/archive/coverage'.format(tdir=testdir),
                         'radosgw-admin',

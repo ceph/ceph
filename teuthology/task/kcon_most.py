@@ -44,7 +44,7 @@ def task(ctx, config):
         remote.run(
             args=[
                 'sudo',
-                '{tdir}/kcon_most'.format(tdir=testdir),
+                'kcon_most',
                 'on'
                 ],
             )
@@ -58,7 +58,7 @@ def task(ctx, config):
             remote.run(
                 args=[
                     'sudo',
-                    '{tdir}/kcon_most'.format(tdir=testdir),
+                    'kcon_most',
                     'off'
                     ],
                 )

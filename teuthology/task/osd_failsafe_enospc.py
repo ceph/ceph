@@ -60,7 +60,7 @@ def task(ctx, config):
 
     proc = mon.run(
              args=[
-                '{tdir}/daemon-helper'.format(tdir=teuthology.get_testdir(ctx)),
+                'daemon-helper',
                 'kill',
                 'ceph', '-w'
              ],
@@ -87,7 +87,7 @@ def task(ctx, config):
 
     proc = mon.run(
              args=[
-                '{tdir}/daemon-helper'.format(tdir=teuthology.get_testdir(ctx)),
+                'daemon-helper',
                 'kill',
                 'ceph', '-w'
              ],
@@ -128,7 +128,7 @@ def task(ctx, config):
 
     proc = mon.run(
              args=[
-                '{tdir}/daemon-helper'.format(tdir=teuthology.get_testdir(ctx)),
+                'daemon-helper',
                 'kill',
                 'ceph', '-w'
              ],
@@ -156,7 +156,7 @@ def task(ctx, config):
 
     proc = mon.run(
              args=[
-                '{tdir}/daemon-helper'.format(tdir=teuthology.get_testdir(ctx)),
+                'daemon-helper',
                 'kill',
                 'ceph', '-w'
              ],
@@ -186,7 +186,7 @@ def task(ctx, config):
 
     proc = mon.run(
              args=[
-                '{tdir}/daemon-helper'.format(tdir=teuthology.get_testdir(ctx)),
+                'daemon-helper',
                 'kill',
                 'ceph', '-w'
              ],

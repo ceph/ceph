@@ -42,7 +42,7 @@ def _run_one_client(ctx, config, role):
     (remote,) = ctx.cluster.only(role).remotes.iterkeys()
     remote.run(
         args=[
-            '{tdir}/adjust-ulimits'.format(tdir=testdir),
+            'adjust-ulimits',
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
             'ceph_test_librbd_fsx',

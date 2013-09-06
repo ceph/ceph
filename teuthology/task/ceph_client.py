@@ -16,7 +16,7 @@ def create_keyring(ctx):
             remote.run(
                 args=[
                     'sudo',
-                    '{tdir}/adjust-ulimits'.format(tdir=testdir),
+                    'adjust-ulimits',
                     'ceph-coverage',
                     coverage_dir,
                     'ceph-authtool',

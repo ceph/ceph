@@ -287,7 +287,7 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None):
                         env_arg = '{var}={val}'.format(var=var, val=quoted_val)
                         args.append(run.Raw(env_arg))
                 args.extend([
-                        '{tdir}/adjust-ulimits'.format(tdir=testdir),
+                        'adjust-ulimits',
                         'ceph-coverage',
                         '{tdir}/archive/coverage'.format(tdir=testdir),
                         '{srcdir}/{workunit}'.format(
