@@ -874,7 +874,7 @@ def get_valgrind_args(testdir, name, v):
             run.Raw('&&'),
             'valgrind',
             '--num-callers=50',
-            '--suppressions=valgrind.supp',
+            '--suppressions={tdir}/valgrind.supp'.format(tdir=testdir),
             '--xml=yes',
             '--xml-file={vdir}/{n}.log'.format(vdir=val_path, n=name)
             ]
@@ -883,7 +883,7 @@ def get_valgrind_args(testdir, name, v):
             'cd', testdir,
             run.Raw('&&'),
             'valgrind',
-            '--suppressions=valgrind.supp',
+            '--suppressions={tdir}/valgrind.supp'.format(tdir=testdir),
             '--log-file={vdir}/{n}.log'.format(vdir=val_path, n=name)
             ]
     extra_args.extend(v)
