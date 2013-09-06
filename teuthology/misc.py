@@ -291,7 +291,7 @@ def create_simple_monmap(ctx, remote, conf):
 
     testdir = get_testdir(ctx)
     args = [
-        '{tdir}/adjust-ulimits'.format(tdir=testdir),
+        'adjust-ulimits',
         'ceph-coverage',
         '{tdir}/archive/coverage'.format(tdir=testdir),
         'monmaptool',
@@ -664,7 +664,7 @@ def wait_until_healthy(ctx, remote):
     while True:
         r = remote.run(
             args=[
-                '{tdir}/adjust-ulimits'.format(tdir=testdir),
+                'adjust-ulimits',
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'ceph',
@@ -686,7 +686,7 @@ def wait_until_osds_up(ctx, cluster, remote):
     while True:
         r = remote.run(
             args=[
-                '{tdir}/adjust-ulimits'.format(tdir=testdir),
+                'adjust-ulimits',
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'ceph',
@@ -775,7 +775,7 @@ def write_secret_file(ctx, remote, role, keyring, filename):
     testdir = get_testdir(ctx)
     remote.run(
         args=[
-            '{tdir}/adjust-ulimits'.format(tdir=testdir),
+            'adjust-ulimits',
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
             'ceph-authtool',
@@ -870,17 +870,17 @@ def get_valgrind_args(testdir, name, v):
     val_path = '/var/log/ceph/valgrind'.format(tdir=testdir)
     if '--tool=memcheck' in v or '--tool=helgrind' in v:
         extra_args = [
-            '{tdir}/chdir-coredump'.format(tdir=testdir),
+            'chdir-coredump',
             'valgrind',
-            '--suppressions={tdir}/valgrind.supp'.format(tdir=testdir),
+            '--suppressions=valgrind.supp',
             '--xml=yes',
             '--xml-file={vdir}/{n}.log'.format(vdir=val_path, n=name)
             ]
     else:
         extra_args = [
-            '{tdir}/chdir-coredump'.format(tdir=testdir),
+            'chdir-coredump',
             'valgrind',
-            '--suppressions={tdir}/valgrind.supp'.format(tdir=testdir),
+            '--suppressions=valgrind.supp',
             '--log-file={vdir}/{n}.log'.format(vdir=val_path, n=name)
             ]
     extra_args.extend(v)

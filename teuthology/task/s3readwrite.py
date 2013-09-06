@@ -103,7 +103,7 @@ def create_users(ctx, config):
             else:
                 ctx.cluster.only(client).run(
                     args=[
-                        '{tdir}/adjust-ulimits'.format(tdir=testdir),
+                        'adjust-ulimits',
                         'ceph-coverage',
                         '{tdir}/archive/coverage'.format(tdir=testdir),
                         'radosgw-admin',
@@ -126,7 +126,7 @@ def create_users(ctx, config):
                 if delete_this_user:
                     ctx.cluster.only(client).run(
                         args=[
-                            '{tdir}/adjust-ulimits'.format(tdir=testdir),
+                            'adjust-ulimits',
                             'ceph-coverage',
                             '{tdir}/archive/coverage'.format(tdir=testdir),
                             'radosgw-admin',
