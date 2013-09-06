@@ -870,7 +870,8 @@ def get_valgrind_args(testdir, name, v):
     val_path = '/var/log/ceph/valgrind'.format(tdir=testdir)
     if '--tool=memcheck' in v or '--tool=helgrind' in v:
         extra_args = [
-            'chdir-coredump',
+            'cd', testdir,
+            run.Raw('&&'),
             'valgrind',
             '--num-callers=50',
             '--suppressions=valgrind.supp',
@@ -879,7 +880,8 @@ def get_valgrind_args(testdir, name, v):
             ]
     else:
         extra_args = [
-            'chdir-coredump',
+            'cd', testdir,
+            run.Raw('&&'),
             'valgrind',
             '--suppressions=valgrind.supp',
             '--log-file={vdir}/{n}.log'.format(vdir=val_path, n=name)

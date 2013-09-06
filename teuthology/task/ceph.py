@@ -149,8 +149,7 @@ def ceph_log(ctx, config):
 @contextlib.contextmanager
 def ship_utilities(ctx, config):
     assert config is None
-    FILES = ['daemon-helper', 'adjust-ulimits', 'chdir-coredump',
-             'valgrind.supp', 'kcon_most']
+    FILES = ['daemon-helper', 'adjust-ulimits', 'valgrind.supp', 'kcon_most']
     destdir = '/usr/local/bin'
     for filename in FILES:
         log.info('Shipping %r...', filename)
