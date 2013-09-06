@@ -284,6 +284,7 @@ protected:
 
   void prepare_next_part(off_t ofs);
   void complete_parts();
+  int complete_writing_data();
 
 public:
   ~RGWPutObjProcessor_Atomic() {}

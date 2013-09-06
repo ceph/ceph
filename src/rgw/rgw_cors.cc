@@ -79,7 +79,10 @@ static bool is_string_in_set(set<string>& s, string h) {
           << ", at offset not less than " << flen << dendl;
         if (h.compare((h.size() - sl.size()), sl.size(), sl) != 0)
           continue;
+        ssplit.pop_front();
       }
+      if (!ssplit.empty())
+        continue;
       return true;
     }
   }
