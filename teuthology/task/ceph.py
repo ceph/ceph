@@ -882,7 +882,7 @@ def run_daemon(ctx, config, type_):
                 'adjust-ulimits',
                 'ceph-coverage',
                 coverage_dir,
-                '	'.format(tdir=testdir),
+                'daemon-helper',
                 daemon_signal,
                 ]
             run_cmd_tail = [
