@@ -5118,7 +5118,7 @@ std::ostream& operator<<(std::ostream& oss,
 
 /*------Crashed-------*/
 PG::RecoveryState::Crashed::Crashed(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Crashed";
   context< RecoveryMachine >().log_enter(state_name);
@@ -5128,7 +5128,7 @@ PG::RecoveryState::Crashed::Crashed(my_context ctx)
 
 /*------Initial-------*/
 PG::RecoveryState::Initial::Initial(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Initial";
   context< RecoveryMachine >().log_enter(state_name);
@@ -5179,7 +5179,7 @@ void PG::RecoveryState::Initial::exit()
 
 /*------Started-------*/
 PG::RecoveryState::Started::Started(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started";
   context< RecoveryMachine >().log_enter(state_name);
@@ -5228,7 +5228,7 @@ void PG::RecoveryState::Started::exit()
 
 /*--------Reset---------*/
 PG::RecoveryState::Reset::Reset(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Reset";
   context< RecoveryMachine >().log_enter(state_name);
@@ -5303,7 +5303,7 @@ void PG::RecoveryState::Reset::exit()
 
 /*-------Start---------*/
 PG::RecoveryState::Start::Start(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Start";
   context< RecoveryMachine >().log_enter(state_name);
@@ -5328,7 +5328,7 @@ void PG::RecoveryState::Start::exit()
 
 /*---------Primary--------*/
 PG::RecoveryState::Primary::Primary(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/Primary";
   context< RecoveryMachine >().log_enter(state_name);
@@ -5377,7 +5377,7 @@ void PG::RecoveryState::Primary::exit()
 
 /*---------Peering--------*/
 PG::RecoveryState::Peering::Peering(my_context ctx)
-  : my_base(ctx), flushed(false)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct), flushed(false)
 {
   state_name = "Started/Primary/Peering";
   context< RecoveryMachine >().log_enter(state_name);
@@ -5466,7 +5466,7 @@ void PG::RecoveryState::Peering::exit()
 
 /*------Backfilling-------*/
 PG::RecoveryState::Backfilling::Backfilling(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/Primary/Active/Backfilling";
   context< RecoveryMachine >().log_enter(state_name);
@@ -5504,7 +5504,7 @@ void PG::RecoveryState::Backfilling::exit()
 /*--WaitRemoteBackfillReserved--*/
 
 PG::RecoveryState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/Primary/Active/WaitRemoteBackfillReserved";
   context< RecoveryMachine >().log_enter(state_name);
@@ -5559,7 +5559,7 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationReje
 
 /*--WaitLocalBackfillReserved--*/
 PG::RecoveryState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/Primary/Active/WaitLocalBackfillReserved";
   context< RecoveryMachine >().log_enter(state_name);
@@ -5583,7 +5583,7 @@ void PG::RecoveryState::WaitLocalBackfillReserved::exit()
 
 /*----NotBackfilling------*/
 PG::RecoveryState::NotBackfilling::NotBackfilling(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/Primary/Active/NotBackfilling";
   context< RecoveryMachine >().log_enter(state_name);
@@ -5599,7 +5599,7 @@ void PG::RecoveryState::NotBackfilling::exit()
 
 /*---RepNotRecovering----*/
 PG::RecoveryState::RepNotRecovering::RepNotRecovering(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/ReplicaActive/RepNotRecovering";
   context< RecoveryMachine >().log_enter(state_name);
@@ -5615,7 +5615,7 @@ void PG::RecoveryState::RepNotRecovering::exit()
 
 /*---RepWaitRecoveryReserved--*/
 PG::RecoveryState::RepWaitRecoveryReserved::RepWaitRecoveryReserved(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/ReplicaActive/RepWaitRecoveryReserved";
   context< RecoveryMachine >().log_enter(state_name);
@@ -5652,7 +5652,7 @@ void PG::RecoveryState::RepWaitRecoveryReserved::exit()
 
 /*-RepWaitBackfillReserved*/
 PG::RecoveryState::RepWaitBackfillReserved::RepWaitBackfillReserved(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/ReplicaActive/RepWaitBackfillReserved";
   context< RecoveryMachine >().log_enter(state_name);
@@ -5712,7 +5712,7 @@ PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteReservationRejecte
 
 /*---RepRecovering-------*/
 PG::RecoveryState::RepRecovering::RepRecovering(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/ReplicaActive/RepRecovering";
   context< RecoveryMachine >().log_enter(state_name);
@@ -5737,7 +5737,7 @@ void PG::RecoveryState::RepRecovering::exit()
 
 /*------Activating--------*/
 PG::RecoveryState::Activating::Activating(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/Primary/Active/Activating";
   context< RecoveryMachine >().log_enter(state_name);
@@ -5752,7 +5752,7 @@ void PG::RecoveryState::Activating::exit()
 }
 
 PG::RecoveryState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/Primary/Active/WaitLocalRecoveryReserved";
   context< RecoveryMachine >().log_enter(state_name);
@@ -5775,6 +5775,7 @@ void PG::RecoveryState::WaitLocalRecoveryReserved::exit()
 
 PG::RecoveryState::WaitRemoteRecoveryReserved::WaitRemoteRecoveryReserved(my_context ctx)
   : my_base(ctx),
+    NamedState(context< RecoveryMachine >().pg->cct),
     acting_osd_it(context< Active >().sorted_acting_set.begin())
 {
   state_name = "Started/Primary/Active/WaitRemoteRecoveryReserved";
@@ -5821,7 +5822,7 @@ void PG::RecoveryState::WaitRemoteRecoveryReserved::exit()
 }
 
 PG::RecoveryState::Recovering::Recovering(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/Primary/Active/Recovering";
   context< RecoveryMachine >().log_enter(state_name);
@@ -5884,7 +5885,7 @@ void PG::RecoveryState::Recovering::exit()
 }
 
 PG::RecoveryState::Recovered::Recovered(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   int newest_update_osd;
 
@@ -5918,7 +5919,7 @@ void PG::RecoveryState::Recovered::exit()
 }
 
 PG::RecoveryState::Clean::Clean(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/Primary/Active/Clean";
   context< RecoveryMachine >().log_enter(state_name);
@@ -5948,6 +5949,7 @@ void PG::RecoveryState::Clean::exit()
 /*---------Active---------*/
 PG::RecoveryState::Active::Active(my_context ctx)
   : my_base(ctx),
+    NamedState(context< RecoveryMachine >().pg->cct),
     sorted_acting_set(context< RecoveryMachine >().pg->acting.begin(),
                       context< RecoveryMachine >().pg->acting.end()),
     all_replicas_activated(false)
@@ -6198,7 +6200,7 @@ void PG::RecoveryState::Active::exit()
 
 /*------ReplicaActive-----*/
 PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx) 
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/ReplicaActive";
 
@@ -6291,7 +6293,7 @@ void PG::RecoveryState::ReplicaActive::exit()
 
 /*-------Stray---*/
 PG::RecoveryState::Stray::Stray(my_context ctx) 
-  : my_base(ctx) {
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct) {
   state_name = "Started/Stray";
   context< RecoveryMachine >().log_enter(state_name);
 
@@ -6393,7 +6395,7 @@ void PG::RecoveryState::Stray::exit()
 
 /*--------GetInfo---------*/
 PG::RecoveryState::GetInfo::GetInfo(my_context ctx)
-  : my_base(ctx) 
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/Primary/Peering/GetInfo";
   context< RecoveryMachine >().log_enter(state_name);
@@ -6568,7 +6570,7 @@ void PG::RecoveryState::GetInfo::exit()
 
 /*------GetLog------------*/
 PG::RecoveryState::GetLog::GetLog(my_context ctx) : 
-  my_base(ctx), newest_update_osd(-1), msg(0)
+  my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct), newest_update_osd(-1), msg(0)
 {
   state_name = "Started/Primary/Peering/GetLog";
   context< RecoveryMachine >().log_enter(state_name);
@@ -6683,7 +6685,7 @@ void PG::RecoveryState::GetLog::exit()
 
 /*------WaitActingChange--------*/
 PG::RecoveryState::WaitActingChange::WaitActingChange(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/Primary/Peering/WaitActingChange";
   context< RecoveryMachine >().log_enter(state_name);
@@ -6743,7 +6745,7 @@ void PG::RecoveryState::WaitActingChange::exit()
 
 /*------Incomplete--------*/
 PG::RecoveryState::Incomplete::Incomplete(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/Primary/Peering/Incomplete";
   context< RecoveryMachine >().log_enter(state_name);
@@ -6780,7 +6782,7 @@ void PG::RecoveryState::Incomplete::exit()
 
 /*------GetMissing--------*/
 PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/Primary/Peering/GetMissing";
   context< RecoveryMachine >().log_enter(state_name);
@@ -6905,7 +6907,7 @@ void PG::RecoveryState::GetMissing::exit()
 
 /*---WaitFlushedPeering---*/
 PG::RecoveryState::WaitFlushedPeering::WaitFlushedPeering(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/Primary/Peering/WaitFlushedPeering";
   PG *pg = context< RecoveryMachine >().pg;
@@ -6935,7 +6937,7 @@ PG::RecoveryState::WaitFlushedPeering::react(const QueryState &q)
 
 /*------WaitUpThru--------*/
 PG::RecoveryState::WaitUpThru::WaitUpThru(my_context ctx)
-  : my_base(ctx)
+  : my_base(ctx), NamedState(context< RecoveryMachine >().pg->cct)
 {
   state_name = "Started/Primary/Peering/WaitUpThru";
   context< RecoveryMachine >().log_enter(state_name);

@@ -385,7 +385,7 @@ public:
     const char *state_name;
     utime_t enter_time;
     const char *get_state_name() { return state_name; }
-    NamedState() : state_name(0), enter_time(ceph_clock_now(g_ceph_context)) {};
+    NamedState(CephContext *cct_) : state_name(0), enter_time(ceph_clock_now(cct_)) {};
     virtual ~NamedState() {}
   };
 
