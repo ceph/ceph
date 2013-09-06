@@ -222,7 +222,7 @@ def run_job(job_config, archive_path, teuth_bin_path):
         p = subprocess.Popen(
             args=arg,
             close_fds=True,
-            stderr=subprocess.STDOUT,
+            stderr=subprocess.PIPE,
         )
         child = logging.getLogger(__name__ + '.child')
         for line in p.stderr:
