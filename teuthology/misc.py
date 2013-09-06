@@ -872,6 +872,7 @@ def get_valgrind_args(testdir, name, v):
         extra_args = [
             'chdir-coredump',
             'valgrind',
+            '--num-callers=50',
             '--suppressions=valgrind.supp',
             '--xml=yes',
             '--xml-file={vdir}/{n}.log'.format(vdir=val_path, n=name)
