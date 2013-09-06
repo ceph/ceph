@@ -127,7 +127,10 @@ describe. One job is run at a time.
 
     logging.basicConfig(
         level=loglevel,
-        filename=os.path.join(ctx.log_dir, 'worker.{pid}'.format(pid=os.getpid())),
+        filename=os.path.join(ctx.log_dir, 'worker.{tube}.{pid}'.format(
+                pid=os.getpid(),
+                tube=ctx.tube,
+                )),
         format='%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
         datefmt='%Y-%m-%dT%H:%M:%S',
         )
