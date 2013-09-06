@@ -901,17 +901,19 @@ def run_daemon(ctx, config, type_):
                 '-f',
                 '-i', id_]
 
+            if type_ in config.get('cpu_profile', []):
+                profile_path = '/var/log/ceph/profiling-logger/%s.%s.prof' % (type_, id_)
+                run_cmd.extend([ 'env', 'CPUPROFILE=%s' % profile_path ])
+
             if config.get('valgrind') is not None:
                 valgrind_args = None
                 if type_ in config['valgrind']:
                     valgrind_args = config['valgrind'][type_]
                 if name in config['valgrind']:
                     valgrind_args = config['valgrind'][name]
-                run_cmd.extend(teuthology.get_valgrind_args(testdir, name, valgrind_args))
-
-            if type_ in config.get('cpu_profile', []):
-                profile_path = '/var/log/ceph/profiling-logger/%s.%s.prof' % (type_, id_)
-                run_cmd.extend([ 'env', 'CPUPROFILE=%s' % profile_path ])
+                run_cmd = teuthology.get_valgrind_args(testdir, name,
+                                                       run_cmd,
+                                                       valgrind_args)
 
             run_cmd.extend(run_cmd_tail)
 

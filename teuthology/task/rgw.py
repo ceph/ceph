@@ -177,12 +177,11 @@ def start_rgw(ctx, config):
             run.Raw('2>&1'),
             ]
 
-        run_cmd.extend(
-            teuthology.get_valgrind_args(
-                testdir,
-                client,
-                client_config.get('valgrind')
-                )
+        run_cmd = teuthology.get_valgrind_args(
+            testdir,
+            client,
+            run_cmd,
+            client_config.get('valgrind')
             )
 
         run_cmd.extend(run_cmd_tail)
