@@ -8066,7 +8066,9 @@ void ReplicatedPG::SnapTrimmer::log_exit(const char *state_name, utime_t enter_t
 		     << "SnapTrimmer state<" << get_state_name() << ">: ")
 
 /* NotTrimming */
-ReplicatedPG::NotTrimming::NotTrimming(my_context ctx) : my_base(ctx)
+ReplicatedPG::NotTrimming::NotTrimming(my_context ctx)
+  : my_base(ctx), 
+    NamedState(context< SnapTrimmer >().pg->cct)
 {
   state_name = "NotTrimming";
   context< SnapTrimmer >().requeue = false;
@@ -8107,7 +8109,9 @@ boost::statechart::result ReplicatedPG::NotTrimming::react(const SnapTrim&)
 }
 
 /* TrimmingObjects */
-ReplicatedPG::TrimmingObjects::TrimmingObjects(my_context ctx) : my_base(ctx)
+ReplicatedPG::TrimmingObjects::TrimmingObjects(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< SnapTrimmer >().pg->cct)
 {
   state_name = "Trimming/TrimmingObjects";
   context< SnapTrimmer >().log_enter(state_name);
@@ -8157,7 +8161,9 @@ boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
   return discard_event();
 }
 /* WaitingOnReplicasObjects */
-ReplicatedPG::WaitingOnReplicas::WaitingOnReplicas(my_context ctx) : my_base(ctx)
+ReplicatedPG::WaitingOnReplicas::WaitingOnReplicas(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< SnapTrimmer >().pg->cct)
 {
   state_name = "Trimming/WaitingOnReplicas";
   context< SnapTrimmer >().log_enter(state_name);
