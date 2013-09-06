@@ -44,6 +44,8 @@ void RGWCORSRule_S3::to_xml(XMLFormatter& f) {
     f.dump_string("AllowedMethod", "HEAD");
   if (allowed_methods & RGW_CORS_POST)
     f.dump_string("AllowedMethod", "POST");
+  if (allowed_methods & RGW_CORS_COPY)
+    f.dump_string("AllowedMethod", "COPY");
   /*AllowedOrigins*/
   for(set<string>::iterator it = allowed_origins.begin(); 
       it != allowed_origins.end(); 
@@ -87,6 +89,8 @@ bool RGWCORSRule_S3::xml_end(const char *el) {
         allowed_methods |= RGW_CORS_HEAD;
       } else if (strcasecmp(s, "PUT") == 0) {
         allowed_methods |= RGW_CORS_PUT;
+      } else if (strcasecmp(s, "COPY") == 0) {
+        allowed_methods |= RGW_CORS_COPY;
       } else {
         return false;
       }
