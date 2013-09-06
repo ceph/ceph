@@ -4134,7 +4134,7 @@ void ReplicatedPG::_copy_some(OpContext *ctx, CopyOpRef cop)
   dout(10) << __func__ << " " << ctx << " " << cop << dendl;
   ObjectOperation op;
   op.assert_version(cop->version);
-  op.copy_get(&cop->cursor, g_conf->osd_copyfrom_max_chunk,
+  op.copy_get(&cop->cursor, cct->_conf->osd_copyfrom_max_chunk,
 	      &cop->size, &cop->mtime, &cop->attrs,
 	      &cop->data, &cop->omap,
 	      &cop->rval);
