@@ -83,7 +83,7 @@ case "$1" in
             echo "$RADOSGW is running."
         else
             echo "$RADOSGW is not running."
-            RETVAL=1
+            exit 1
         fi
         ;;
     *)
