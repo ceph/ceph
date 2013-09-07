@@ -86,7 +86,7 @@ ceph_mon_LDADD = libmon.a $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 ceph_mon_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_PROGRAMS += ceph-mon
 
-ceph_mon_store_converter_SOURCES =  mon_store_converter.cc \
+ceph_mon_store_converter_SOURCES =  tools/mon_store_converter.cc \
 			       mon/MonitorStore.cc
 ceph_mon_store_converter_LDFLAGS = ${AM_LDFLAGS}
 ceph_mon_store_converter_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA)
@@ -112,10 +112,10 @@ ceph_mds_CXXFLAGS = ${AM_CXXFLAGS}
 
 # admin tools
 
-ceph_conf_SOURCES = ceph_conf.cc
+ceph_conf_SOURCES = tools/ceph_conf.cc
 ceph_conf_LDADD = $(LIBGLOBAL_LDA)
 ceph_conf_CXXFLAGS = ${AM_CXXFLAGS}
-ceph_authtool_SOURCES = ceph_authtool.cc
+ceph_authtool_SOURCES = tools/ceph_authtool.cc
 ceph_authtool_LDADD = $(LIBGLOBAL_LDA)
 ceph_filestore_dump_SOURCES = tools/ceph-filestore-dump.cc
 ceph_filestore_dump_SOURCES += perfglue/disabled_heap_profiler.cc
@@ -139,11 +139,11 @@ ceph_monstore_tool_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA) -lboost_program_option
 ceph_monstore_tool_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph-monstore-tool
 
-monmaptool_SOURCES = monmaptool.cc
+monmaptool_SOURCES = tools/monmaptool.cc
 monmaptool_LDADD = $(LIBGLOBAL_LDA)
-crushtool_SOURCES = crushtool.cc
+crushtool_SOURCES = tools/crushtool.cc
 crushtool_LDADD = $(LIBGLOBAL_LDA)
-osdmaptool_SOURCES = osdmaptool.cc
+osdmaptool_SOURCES = tools/osdmaptool.cc
 osdmaptool_LDADD = $(LIBGLOBAL_LDA)
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
@@ -227,7 +227,7 @@ ceph_mon_SOURCES += perfglue/disabled_heap_profiler.cc
 endif # WITH_TCMALLOC
 
 # debug targets
-ceph_psim_SOURCES = psim.cc
+ceph_psim_SOURCES = tools/psim.cc
 ceph_psim_LDADD = $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += ceph_psim
 
@@ -246,7 +246,7 @@ bin_DEBUGPROGRAMS += ceph_test_msgr
 ceph_test_ioctls_SOURCES = client/test_ioctls.c
 bin_DEBUGPROGRAMS += ceph_test_ioctls
 
-ceph_dupstore_SOURCES = dupstore.cc
+ceph_dupstore_SOURCES = tools/dupstore.cc
 ceph_dupstore_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 ceph_dupstore_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 ceph_streamtest_SOURCES = test/streamtest.cc
@@ -500,11 +500,11 @@ endif
 
 endif
 
-ceph_scratchtool_SOURCES = scratchtool.c
+ceph_scratchtool_SOURCES = tools/scratchtool.c
 ceph_scratchtool_LDADD = librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-ceph_scratchtoolpp_SOURCES = scratchtoolpp.cc
+ceph_scratchtoolpp_SOURCES = tools/scratchtoolpp.cc
 ceph_scratchtoolpp_LDADD = librados.la $(PTHREAD_LIBS) -lm
-ceph_radosacl_SOURCES = radosacl.cc
+ceph_radosacl_SOURCES = tools/radosacl.cc
 ceph_radosacl_LDADD = librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += ceph_scratchtool ceph_scratchtoolpp ceph_radosacl
 
