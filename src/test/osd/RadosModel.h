@@ -1,4 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+#include "include/int_types.h"
+
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "include/rados/librados.hpp"
@@ -15,7 +17,6 @@
 #include <time.h>
 #include "Object.h"
 #include "TestOpStat.h"
-#include "inttypes.h"
 #include "test/librados/test.h"
 
 #ifndef RADOSMODEL_H

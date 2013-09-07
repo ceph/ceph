@@ -11,16 +11,16 @@
  * Foundation.  See file COPYING.
  * 
  */
-
 #ifndef CEPH_BUFFER_H
 #define CEPH_BUFFER_H
+
+#include "include/int_types.h"
 
 #if defined(__linux__)
 #include <stdlib.h>
 #include <linux/types.h>
 #elif defined(__FreeBSD__)
 #include <sys/types.h>
-#include "include/inttypes.h"
 #include <stdlib.h>
 #endif
 

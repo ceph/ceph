@@ -3,6 +3,8 @@
  */
 #define FUSE_USE_VERSION 26
 
+#include "include/int_types.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -15,7 +17,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <getopt.h>
-#include <inttypes.h>
 
 #include "include/rbd/librbd.h"
 

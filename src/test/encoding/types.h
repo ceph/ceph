@@ -75,7 +75,7 @@ TYPE(ObjectStore::Transaction)
 #include "os/SequencerPosition.h"
 TYPE(SequencerPosition)
 
-#include "os/hobject.h"
+#include "common/hobject.h"
 TYPE(hobject_t)
 
 #include "mon/AuthMonitor.h"

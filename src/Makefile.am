@@ -86,7 +86,7 @@ ceph_mon_LDADD = libmon.a $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 ceph_mon_CXXFLAGS = ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 bin_PROGRAMS += ceph-mon
 
-ceph_mon_store_converter_SOURCES =  mon_store_converter.cc \
+ceph_mon_store_converter_SOURCES =  tools/mon_store_converter.cc \
 			       mon/MonitorStore.cc
 ceph_mon_store_converter_LDFLAGS = ${AM_LDFLAGS}
 ceph_mon_store_converter_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA)
@@ -112,10 +112,10 @@ ceph_mds_CXXFLAGS = ${AM_CXXFLAGS}
 
 # admin tools
 
-ceph_conf_SOURCES = ceph_conf.cc
+ceph_conf_SOURCES = tools/ceph_conf.cc
 ceph_conf_LDADD = $(LIBGLOBAL_LDA)
 ceph_conf_CXXFLAGS = ${AM_CXXFLAGS}
-ceph_authtool_SOURCES = ceph_authtool.cc
+ceph_authtool_SOURCES = tools/ceph_authtool.cc
 ceph_authtool_LDADD = $(LIBGLOBAL_LDA)
 ceph_filestore_dump_SOURCES = tools/ceph-filestore-dump.cc
 ceph_filestore_dump_SOURCES += perfglue/disabled_heap_profiler.cc
@@ -139,11 +139,11 @@ ceph_monstore_tool_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA) -lboost_program_option
 ceph_monstore_tool_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph-monstore-tool
 
-monmaptool_SOURCES = monmaptool.cc
+monmaptool_SOURCES = tools/monmaptool.cc
 monmaptool_LDADD = $(LIBGLOBAL_LDA)
-crushtool_SOURCES = crushtool.cc
+crushtool_SOURCES = tools/crushtool.cc
 crushtool_LDADD = $(LIBGLOBAL_LDA)
-osdmaptool_SOURCES = osdmaptool.cc
+osdmaptool_SOURCES = tools/osdmaptool.cc
 osdmaptool_LDADD = $(LIBGLOBAL_LDA)
 bin_PROGRAMS += monmaptool crushtool osdmaptool
 
@@ -162,7 +162,7 @@ ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libcls_lock_client.a \
 			  libosd.a libmds.a libosdc.la $(LIBOS_LDA) libmon.a
 bin_PROGRAMS += ceph-dencoder
 
-mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c include/addr_parsing.c
+mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c common/addr_parsing.c
 mount_ceph_LDADD = -lkeyutils
 if LINUX
 sbin_PROGRAMS += mount.ceph
@@ -227,7 +227,7 @@ ceph_mon_SOURCES += perfglue/disabled_heap_profiler.cc
 endif # WITH_TCMALLOC
 
 # debug targets
-ceph_psim_SOURCES = psim.cc
+ceph_psim_SOURCES = tools/psim.cc
 ceph_psim_LDADD = $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += ceph_psim
 
@@ -239,22 +239,22 @@ ceph_test_rewrite_latency_SOURCES = test/test_rewrite_latency.cc
 ceph_test_rewrite_latency_LDADD = libcommon.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += ceph_test_rewrite_latency
 
-ceph_test_msgr_SOURCES = testmsgr.cc
+ceph_test_msgr_SOURCES = test/testmsgr.cc
 ceph_test_msgr_LDADD = $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += ceph_test_msgr
 
 ceph_test_ioctls_SOURCES = client/test_ioctls.c
 bin_DEBUGPROGRAMS += ceph_test_ioctls
 
-ceph_dupstore_SOURCES = dupstore.cc
+ceph_dupstore_SOURCES = tools/dupstore.cc
 ceph_dupstore_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 ceph_dupstore_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-ceph_streamtest_SOURCES = streamtest.cc
+ceph_streamtest_SOURCES = test/streamtest.cc
 ceph_streamtest_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 ceph_streamtest_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += ceph_dupstore ceph_streamtest
 
-ceph_test_trans_SOURCES = test_trans.cc
+ceph_test_trans_SOURCES = test/test_trans.cc
 ceph_test_trans_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 ceph_test_trans_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += ceph_test_trans
@@ -298,22 +298,22 @@ ceph_multi_stress_watch_LDADD = librados.la $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += ceph_multi_stress_watch 
 
 if WITH_BUILD_TESTS
-ceph_test_libcommon_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files)
+ceph_test_libcommon_build_SOURCES = test/buildtest_skeleton.cc $(libcommon_files)
 ceph_test_libcommon_build_LDADD = libcrc.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += ceph_test_libcommon_build
 
-ceph_test_librados_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files) $(librados_SOURCES)
+ceph_test_librados_build_SOURCES = test/buildtest_skeleton.cc $(libcommon_files) $(librados_SOURCES)
 ceph_test_librados_build_LDADD = libcrc.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 ceph_test_librados_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_librados_build
 
-ceph_test_librgw_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files) \
+ceph_test_librgw_build_SOURCES = test/buildtest_skeleton.cc $(libcommon_files) \
 			    $(librados_SOURCES) $(librgw_la_SOURCES)
 ceph_test_librgw_build_LDADD = libcrc.la -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 ceph_test_librgw_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_librgw_build
 
-ceph_test_libcephfs_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files) \
+ceph_test_libcephfs_build_SOURCES = test/buildtest_skeleton.cc $(libcommon_files) \
 			    $(libosdc_la_SOURCES)
 ceph_test_libcephfs_build_LDADD = libcrc.la libcephfs.la -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 ceph_test_libcephfs_build_CXXFLAGS = $(AM_CXXFLAGS)
@@ -321,7 +321,7 @@ bin_DEBUGPROGRAMS += ceph_test_libcephfs_build
 endif
 
 if WITH_HADOOPCLIENT
-ceph_test_libhadoopcephfs_build_SOURCES = test/test_libcommon_build.cc \
+ceph_test_libhadoopcephfs_build_SOURCES = test/buildtest_skeleton.cc \
          $(libhadoopcephfs_la_SOURCES) \
 	 $(libosdc_la_SOURCES) $(libcommon_files)
 ceph_test_libhadoopcephfs_build_LDADD = libcrc.la libcephfs.la -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
@@ -479,7 +479,12 @@ librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 \
 	-export-symbols-regex '^rbd_.*' $(PTHREAD_LIBS) $(EXTRALIBS) 
 lib_LTLIBRARIES += librbd.la
 
-rados_SOURCES = rados.cc rados_import.cc rados_export.cc rados_sync.cc common/obj_bencher.cc
+rados_SOURCES = \
+	tools/rados/rados.cc \
+	tools/rados/rados_import.cc \
+	tools/rados/rados_export.cc \
+	tools/rados/rados_sync.cc \
+	common/obj_bencher.cc
 rados_LDADD = libcls_lock_client.a librados.la $(LIBGLOBAL_LDA)
 bin_PROGRAMS += rados
 
@@ -500,11 +505,11 @@ endif
 
 endif
 
-ceph_scratchtool_SOURCES = scratchtool.c
+ceph_scratchtool_SOURCES = tools/scratchtool.c
 ceph_scratchtool_LDADD = librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
-ceph_scratchtoolpp_SOURCES = scratchtoolpp.cc
+ceph_scratchtoolpp_SOURCES = tools/scratchtoolpp.cc
 ceph_scratchtoolpp_LDADD = librados.la $(PTHREAD_LIBS) -lm
-ceph_radosacl_SOURCES = radosacl.cc
+ceph_radosacl_SOURCES = tools/radosacl.cc
 ceph_radosacl_LDADD = librados.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += ceph_scratchtool ceph_scratchtoolpp ceph_radosacl
 
@@ -516,12 +521,12 @@ bin_PROGRAMS += rbd
 endif
 
 
-ceph_test_crypto_SOURCES = testcrypto.cc
+ceph_test_crypto_SOURCES = test/testcrypto.cc
 ceph_test_crypto_LDADD =  $(LIBGLOBAL_LDA)
 ceph_test_crypto_CXXFLAGS = ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_crypto
 
-ceph_test_keys_SOURCES = testkeys.cc
+ceph_test_keys_SOURCES = test/testkeys.cc
 ceph_test_keys_LDADD = libmon.a $(LIBGLOBAL_LDA) 
 ceph_test_keys_CXXFLAGS = ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_keys
@@ -1594,7 +1599,7 @@ libcommon_files = \
 	msg/Pipe.cc \
 	msg/SimpleMessenger.cc \
 	msg/msg_types.cc \
-	os/hobject.cc \
+	common/hobject.cc \
 	osd/OSDMap.cc \
 	osd/osd_types.cc \
 	mds/MDSMap.cc \
@@ -1613,10 +1618,10 @@ libcommon_files = \
 	common/Thread.cc \
 	common/Formatter.cc \
 	common/HeartbeatMap.cc \
-	include/ceph_fs.cc \
-	include/ceph_hash.cc \
-	include/ceph_strings.cc \
-	include/ceph_frag.cc \
+	common/ceph_fs.cc \
+	common/ceph_hash.cc \
+	common/ceph_strings.cc \
+	common/ceph_frag.cc \
 	common/config.cc \
 	common/utf8.c \
 	common/mime.c \
@@ -1631,7 +1636,7 @@ libcommon_files = \
 	common/ceph_json.cc \
 	common/ipaddr.cc \
 	common/pick_address.cc \
-	include/addr_parsing.c \
+	common/addr_parsing.c \
 	$(crush_files)
 
 if WITH_PROFILER
@@ -1784,7 +1789,7 @@ python_PYTHON = pybind/rados.py \
 # headers... and everything else we want to include in a 'make dist' 
 # that autotools doesn't magically identify.
 noinst_HEADERS = \
-	rados_sync.h \
+	tools/rados/rados_sync.h \
 	arch/probe.h \
 	arch/intel.h \
 	arch/neon.h \
@@ -1976,7 +1981,7 @@ noinst_HEADERS = \
         include/hash.h\
         include/intarith.h\
         include/interval_set.h\
-        include/inttypes.h\
+        include/int_types.h\
 	include/ipaddr.h\
 	include/linux_fiemap.h\
         include/lru.h\
@@ -2240,7 +2245,7 @@ noinst_HEADERS = \
 	os/btrfs_ioctl.h\
 	os/ZFS.h\
 	os/chain_xattr.h\
-	os/hobject.h \
+	common/hobject.h \
 	os/CollectionIndex.h\
         os/FileJournal.h\
         os/FileStore.h\

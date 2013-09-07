@@ -12,7 +12,8 @@
  * 
  */
 
-#include <inttypes.h>
+#include "include/int_types.h"
+
 #include <string>
 #include <stdio.h>
 

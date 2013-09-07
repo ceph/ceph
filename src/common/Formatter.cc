@@ -14,11 +14,12 @@
 
 #define LARGE_SIZE 1024
 
+#include "include/int_types.h"
+
 #include "assert.h"
 #include "Formatter.h"
 #include "common/escape.h"
 
-#include <inttypes.h>
 #include <iostream>
 #include <sstream>
 #include <stdarg.h>
