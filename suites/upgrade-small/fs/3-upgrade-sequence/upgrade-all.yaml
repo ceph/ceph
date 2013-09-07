@@ -1,0 +1,5 @@
+tasks:
+- install.upgrade:
+     all:
+        branch: next 
+

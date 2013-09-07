@@ -1,0 +1,7 @@
+tasks:
+- workunit:
+    branch: next
+    clients:
+      client.0:
+        - rados/test.sh
+        - cls
