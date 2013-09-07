@@ -1994,7 +1994,6 @@ int RGWDeleteCORS::verify_permission()
 
 void RGWDeleteCORS::execute()
 {
-  RGWCORSConfiguration bucket_cors;
   ret = read_bucket_cors();
   if (ret < 0)
     return;
