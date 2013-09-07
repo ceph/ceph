@@ -9,7 +9,7 @@
 /*
  * Some non-inline ceph helpers
  */
-#include "types.h"
+#include "include/types.h"
 
 /*
  * return true if @layout appears to be valid

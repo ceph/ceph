@@ -162,7 +162,7 @@ ceph_dencoder_LDADD = $(LIBGLOBAL_LDA) libcls_lock_client.a \
 			  libosd.a libmds.a libosdc.la $(LIBOS_LDA) libmon.a
 bin_PROGRAMS += ceph-dencoder
 
-mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c include/addr_parsing.c
+mount_ceph_SOURCES = mount/mount.ceph.c common/armor.c common/safe_io.c common/secret.c common/addr_parsing.c
 mount_ceph_LDADD = -lkeyutils
 if LINUX
 sbin_PROGRAMS += mount.ceph
@@ -1613,10 +1613,10 @@ libcommon_files = \
 	common/Thread.cc \
 	common/Formatter.cc \
 	common/HeartbeatMap.cc \
-	include/ceph_fs.cc \
-	include/ceph_hash.cc \
-	include/ceph_strings.cc \
-	include/ceph_frag.cc \
+	common/ceph_fs.cc \
+	common/ceph_hash.cc \
+	common/ceph_strings.cc \
+	common/ceph_frag.cc \
 	common/config.cc \
 	common/utf8.c \
 	common/mime.c \
@@ -1631,7 +1631,7 @@ libcommon_files = \
 	common/ceph_json.cc \
 	common/ipaddr.cc \
 	common/pick_address.cc \
-	include/addr_parsing.c \
+	common/addr_parsing.c \
 	$(crush_files)
 
 if WITH_PROFILER
