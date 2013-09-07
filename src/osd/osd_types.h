@@ -26,7 +26,7 @@
 #include "include/interval_set.h"
 #include "common/snap_types.h"
 #include "common/Formatter.h"
-#include "os/hobject.h"
+#include "common/hobject.h"
 #include "Watch.h"
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"

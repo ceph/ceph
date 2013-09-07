@@ -1594,7 +1594,7 @@ libcommon_files = \
 	msg/Pipe.cc \
 	msg/SimpleMessenger.cc \
 	msg/msg_types.cc \
-	os/hobject.cc \
+	common/hobject.cc \
 	osd/OSDMap.cc \
 	osd/osd_types.cc \
 	mds/MDSMap.cc \
@@ -2240,7 +2240,7 @@ noinst_HEADERS = \
 	os/btrfs_ioctl.h\
 	os/ZFS.h\
 	os/chain_xattr.h\
-	os/hobject.h \
+	common/hobject.h \
 	os/CollectionIndex.h\
         os/FileJournal.h\
         os/FileStore.h\
