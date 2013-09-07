@@ -7,15 +7,15 @@
  *          Kalpak Shah <kalpak.shah@sun.com>
  *          Andreas Dilger <adilger@sun.com>
  */
-
 #ifndef _LINUX_FIEMAP_H
 #define _LINUX_FIEMAP_H
+
+#include "include/int_types.h"
 
 #if defined(__linux__)
 #include <linux/types.h>
 #elif defined(__FreeBSD_)
 #include <sys/types.h>
-#include "include/inttypes.h"
 #endif
 
 struct fiemap_extent {

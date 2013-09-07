@@ -3,9 +3,9 @@
 #ifndef CEPH_LIBRBD_AIOREQUEST_H
 #define CEPH_LIBRBD_AIOREQUEST_H
 
-#include <map>
+#include "include/int_types.h"
 
-#include "inttypes.h"
+#include <map>
 
 #include "common/snap_types.h"
 #include "include/buffer.h"
