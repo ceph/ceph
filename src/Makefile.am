@@ -479,7 +479,12 @@ librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 \
 	-export-symbols-regex '^rbd_.*' $(PTHREAD_LIBS) $(EXTRALIBS) 
 lib_LTLIBRARIES += librbd.la
 
-rados_SOURCES = rados.cc rados_import.cc rados_export.cc rados_sync.cc common/obj_bencher.cc
+rados_SOURCES = \
+	tools/rados/rados.cc \
+	tools/rados/rados_import.cc \
+	tools/rados/rados_export.cc \
+	tools/rados/rados_sync.cc \
+	common/obj_bencher.cc
 rados_LDADD = libcls_lock_client.a librados.la $(LIBGLOBAL_LDA)
 bin_PROGRAMS += rados
 
@@ -1784,7 +1789,7 @@ python_PYTHON = pybind/rados.py \
 # headers... and everything else we want to include in a 'make dist' 
 # that autotools doesn't magically identify.
 noinst_HEADERS = \
-	rados_sync.h \
+	tools/rados/rados_sync.h \
 	arch/probe.h \
 	arch/intel.h \
 	arch/neon.h \
