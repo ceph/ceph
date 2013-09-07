@@ -1,6 +1,8 @@
 #ifndef CEPH_LIBRADOS_H
 #define CEPH_LIBRADOS_H
 
+#include "include/int_types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -10,7 +12,6 @@ extern "C" {
 #include <linux/types.h>
 #elif defined(__FreeBSD__)
 #include <sys/types.h>
-#include "include/inttypes.h"
 #endif
 #include <string.h>
 #include "rados_types.h"

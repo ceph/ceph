@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  *
  */
+#include "include/int_types.h"
 
 #include "rados_sync.h"
 #include "common/errno.h"
@@ -20,7 +21,6 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fstream>
-#include <inttypes.h>
 #include <iostream>
 #include <sstream>
 #include <stdlib.h>

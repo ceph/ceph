@@ -1,10 +1,11 @@
+#include "include/int_types.h"
 
 #if defined(__linux__)
 #include <linux/types.h>
 #elif defined(__FreeBSD__)
 #include <sys/types.h>
-#include "include/inttypes.h"
 #endif
+
 #include "hash.h"
 
 /*

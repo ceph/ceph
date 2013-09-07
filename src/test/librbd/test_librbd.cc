@@ -12,6 +12,7 @@
  *
  */
 
+#include "include/int_types.h"
 #include "include/rados/librados.h"
 #include "include/rbd_types.h"
 #include "include/rbd/librbd.h"
@@ -20,7 +21,6 @@
 #include "gtest/gtest.h"
 
 #include <errno.h>
-#include <inttypes.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>

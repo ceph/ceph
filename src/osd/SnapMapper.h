@@ -21,7 +21,7 @@
 #include <string.h>
 
 #include "common/map_cacher.hpp"
-#include "os/hobject.h"
+#include "common/hobject.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/object.h"

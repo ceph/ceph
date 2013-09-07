@@ -1,6 +1,8 @@
 #ifndef CEPH_COMMON_CRC32C_INTEL_BASELINE_H
 #define CEPH_COMMON_CRC32C_INTEL_BASELINE_H
 
+#include "include/int_types.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

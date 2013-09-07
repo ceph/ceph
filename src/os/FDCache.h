@@ -18,7 +18,7 @@
 #include <memory>
 #include <errno.h>
 #include <cstdio>
-#include "hobject.h"
+#include "common/hobject.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/shared_cache.hpp"
