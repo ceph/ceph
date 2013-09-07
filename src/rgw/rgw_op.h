@@ -531,7 +531,6 @@ public:
 class RGWGetCORS : public RGWOp {
 protected:
   int ret;
-  RGWCORSConfiguration bucket_cors;
 
 public:
   RGWGetCORS() : ret(0) {}
