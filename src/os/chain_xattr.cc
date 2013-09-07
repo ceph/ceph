@@ -3,7 +3,8 @@
 
 #include "chain_xattr.h"
 
-#include <inttypes.h>
+#include "include/int_types.h"
+
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -19,10 +20,6 @@
 
 #if defined(__linux__)
 #include <linux/fs.h>
-#endif
-
-#if defined(__FreeBSD__)
-#include "include/inttypes.h"
 #endif
 
 #include "common/xattr.h"

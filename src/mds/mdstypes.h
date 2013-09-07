@@ -3,7 +3,8 @@
 #ifndef CEPH_MDSTYPES_H
 #define CEPH_MDSTYPES_H
 
-#include <inttypes.h>
+#include "include/int_types.h"
+
 #include <math.h>
 #include <ostream>
 #include <set>

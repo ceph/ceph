@@ -11,11 +11,11 @@
  * Foundation.  See file COPYING.
  *
  */
+#include "include/int_types.h"
 
 #include <dirent.h>
 #include <errno.h>
 #include <fstream>
-#include <inttypes.h>
 #include <iostream>
 #include <sstream>
 #include <stdlib.h>
