@@ -12,7 +12,9 @@
  *
  */
 
-#include <inttypes.h>
+#include "include/int_types.h"
+#include "include/types.h"
+
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -22,7 +24,6 @@
 #include <sys/ioctl.h>
 #include "include/compat.h"
 #include "include/linux_fiemap.h"
-#include "include/types.h"
 #include "include/color.h"
 #include "include/buffer.h"
 #include "include/assert.h"

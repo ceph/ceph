@@ -3,7 +3,7 @@
 #ifndef CEPH_LIBRBD_INTERNAL_H
 #define CEPH_LIBRBD_INTERNAL_H
 
-#include <inttypes.h>
+#include "include/int_types.h"
 
 #include <map>
 #include <set>
