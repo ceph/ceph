@@ -20,7 +20,7 @@
 #include <tr1/memory>
 #include "include/buffer.h"
 #include "common/Formatter.h"
-#include "os/hobject.h"
+#include "common/hobject.h"
 #include "include/interval_set.h"
 #include "FDCache.h"
 #include "common/Thread.h"
