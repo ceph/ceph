@@ -299,23 +299,23 @@ bin_DEBUGPROGRAMS += ceph_multi_stress_watch
 
 if WITH_BUILD_TESTS
 ceph_test_libcommon_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files)
-ceph_test_libcommon_build_LDADD = $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+ceph_test_libcommon_build_LDADD = libcrc.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += ceph_test_libcommon_build
 
 ceph_test_librados_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files) $(librados_SOURCES)
-ceph_test_librados_build_LDADD = $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+ceph_test_librados_build_LDADD = libcrc.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 ceph_test_librados_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_librados_build
 
 ceph_test_librgw_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files) \
 			    $(librados_SOURCES) $(librgw_la_SOURCES)
-ceph_test_librgw_build_LDADD = -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+ceph_test_librgw_build_LDADD = libcrc.la -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 ceph_test_librgw_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_librgw_build
 
 ceph_test_libcephfs_build_SOURCES = test/test_libcommon_build.cc $(libcommon_files) \
 			    $(libosdc_la_SOURCES)
-ceph_test_libcephfs_build_LDADD = libcephfs.la -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+ceph_test_libcephfs_build_LDADD = libcrc.la libcephfs.la -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 ceph_test_libcephfs_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_libcephfs_build
 endif
@@ -324,7 +324,7 @@ if WITH_HADOOPCLIENT
 ceph_test_libhadoopcephfs_build_SOURCES = test/test_libcommon_build.cc \
          $(libhadoopcephfs_la_SOURCES) \
 	 $(libosdc_la_SOURCES) $(libcommon_files)
-ceph_test_libhadoopcephfs_build_LDADD = libcephfs.la -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+ceph_test_libhadoopcephfs_build_LDADD = libcrc.la libcephfs.la -lexpat $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 ceph_test_libhadoopcephfs_build_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_libhadoopcephfs_build
 endif
