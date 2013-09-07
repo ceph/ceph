@@ -1,7 +1,7 @@
 /*
  * Ceph string constants
  */
-#include "types.h"
+#include "include/types.h"
 
 const char *ceph_entity_type_name(int type)
 {

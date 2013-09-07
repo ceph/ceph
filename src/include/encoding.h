@@ -11,13 +11,13 @@
  * Foundation.  See file COPYING.
  * 
  */
-
 #ifndef CEPH_ENCODING_H
 #define CEPH_ENCODING_H
 
+#include "include/int_types.h"
+
 #include <tr1/memory>
 
-#include "inttypes.h"
 #include "byteorder.h"
 #include "buffer.h"
 #include "assert.h"

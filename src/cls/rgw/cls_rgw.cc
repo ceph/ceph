@@ -1,14 +1,14 @@
 // -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <iostream>
+#include "include/int_types.h"
+#include "include/types.h"
 
+#include <iostream>
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <inttypes.h>
 
-#include "include/types.h"
 #include "include/utime.h"
 #include "objclass/objclass.h"
 #include "cls/rgw/cls_rgw_ops.h"

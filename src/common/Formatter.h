@@ -1,8 +1,9 @@
 #ifndef CEPH_FORMATTER_H
 #define CEPH_FORMATTER_H
 
+#include "include/int_types.h"
+
 #include <deque>
-#include <inttypes.h>
 #include <iostream>
 #include <list>
 #include <ostream>

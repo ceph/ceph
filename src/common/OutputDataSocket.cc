@@ -12,6 +12,8 @@
  * 
  */
 
+#include "include/int_types.h"
+
 #include "common/Thread.h"
 #include "common/OutputDataSocket.h"
 #include "common/config.h"
@@ -25,7 +27,6 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <inttypes.h>
 #include <map>
 #include <poll.h>
 #include <set>

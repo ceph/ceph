@@ -15,7 +15,8 @@
 #ifndef CEPH_AUTHMETHODLIST_H
 #define CEPH_AUTHMETHODLIST_H
 
-#include "include/inttypes.h"
+#include "include/int_types.h"
+
 #include <list>
 #include <set>
 #include <string>
