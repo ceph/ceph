@@ -239,7 +239,7 @@ ceph_test_rewrite_latency_SOURCES = test/test_rewrite_latency.cc
 ceph_test_rewrite_latency_LDADD = libcommon.la $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 bin_DEBUGPROGRAMS += ceph_test_rewrite_latency
 
-ceph_test_msgr_SOURCES = testmsgr.cc
+ceph_test_msgr_SOURCES = test/testmsgr.cc
 ceph_test_msgr_LDADD = $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += ceph_test_msgr
 
@@ -249,12 +249,12 @@ bin_DEBUGPROGRAMS += ceph_test_ioctls
 ceph_dupstore_SOURCES = dupstore.cc
 ceph_dupstore_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 ceph_dupstore_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
-ceph_streamtest_SOURCES = streamtest.cc
+ceph_streamtest_SOURCES = test/streamtest.cc
 ceph_streamtest_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 ceph_streamtest_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += ceph_dupstore ceph_streamtest
 
-ceph_test_trans_SOURCES = test_trans.cc
+ceph_test_trans_SOURCES = test/test_trans.cc
 ceph_test_trans_CXXFLAGS= ${CRYPTO_CXXFLAGS} ${AM_CXXFLAGS}
 ceph_test_trans_LDADD = $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 bin_DEBUGPROGRAMS += ceph_test_trans
@@ -516,12 +516,12 @@ bin_PROGRAMS += rbd
 endif
 
 
-ceph_test_crypto_SOURCES = testcrypto.cc
+ceph_test_crypto_SOURCES = test/testcrypto.cc
 ceph_test_crypto_LDADD =  $(LIBGLOBAL_LDA)
 ceph_test_crypto_CXXFLAGS = ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_crypto
 
-ceph_test_keys_SOURCES = testkeys.cc
+ceph_test_keys_SOURCES = test/testkeys.cc
 ceph_test_keys_LDADD = libmon.a $(LIBGLOBAL_LDA) 
 ceph_test_keys_CXXFLAGS = ${AM_CXXFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_keys
