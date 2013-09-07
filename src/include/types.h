@@ -11,12 +11,11 @@
  * Foundation.  See file COPYING.
  * 
  */
-
 #ifndef CEPH_TYPES_H
 #define CEPH_TYPES_H
 
 // this is needed for ceph_fs to compile in userland
-#include "inttypes.h"
+#include "int_types.h"
 #include "byteorder.h"
 
 #include "uuid.h"

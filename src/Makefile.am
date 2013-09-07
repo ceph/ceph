@@ -1976,7 +1976,7 @@ noinst_HEADERS = \
         include/hash.h\
         include/intarith.h\
         include/interval_set.h\
-        include/inttypes.h\
+        include/int_types.h\
 	include/ipaddr.h\
 	include/linux_fiemap.h\
         include/lru.h\

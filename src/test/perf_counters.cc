@@ -11,6 +11,10 @@
  * Foundation.  See file COPYING.
  *
  */
+#include "include/int_types.h"
+#include "include/types.h" // FIXME: ordering shouldn't be important, but right 
+                           // now, this include has to come before the others.
+
 
 #include "common/perf_counters.h"
 #include "common/admin_socket_client.h"
@@ -18,9 +22,6 @@
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
-
-#include "include/types.h" // FIXME: ordering shouldn't be important, but right 
-                           // now, this include has to come before the others.
 
 #include "common/code_environment.h"
 #include "global/global_context.h"
@@ -30,7 +31,6 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <inttypes.h>
 #include <map>
 #include <poll.h>
 #include <sstream>

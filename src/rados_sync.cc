@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  *
  */
+#include "include/int_types.h"
 
 #include "common/ceph_argparse.h"
 #include "common/config.h"
@@ -27,7 +28,6 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fstream>
-#include <inttypes.h>
 #include <iostream>
 #include <memory>
 #include <sstream>

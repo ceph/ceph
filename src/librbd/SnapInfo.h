@@ -3,7 +3,7 @@
 #ifndef CEPH_LIBRBD_SNAPINFO_H
 #define CEPH_LIBRBD_SNAPINFO_H
 
-#include <inttypes.h>
+#include "include/int_types.h"
 
 #include "include/rados/librados.hpp"
 

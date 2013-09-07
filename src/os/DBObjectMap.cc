@@ -1,13 +1,13 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 
-#include <iostream>
-#include <inttypes.h>
+#include "include/int_types.h"
 #include "include/buffer.h"
+
+#include <iostream>
 #include <set>
 #include <map>
 #include <string>
 #include <tr1/memory>
-
 #include <vector>
 
 #include "ObjectMap.h"
