@@ -19,6 +19,7 @@ tasks:
     - osd.2
     - osd.3
 - workunit:
+    branch: dumpling
     clients:
       all:
       - cephtool/test.sh
