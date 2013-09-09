@@ -569,7 +569,11 @@ int main(int argc, const char **argv)
 
 	crush_bucket *b = crush_make_bucket(buckettype, CRUSH_HASH_DEFAULT, type, j, items, weights);
 	assert(b);
-	int id = crush_add_bucket(crush.crush, 0, b);
+	int id;
+	int r = crush_add_bucket(crush.crush, 0, b, &id);
+	if (r < 0) {
+		dout(0) << "Couldn't add root bucket: " << strerror(-r) << dendl;
+	}
 	rootid = id;
 
 	char format[20];
