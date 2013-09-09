@@ -223,10 +223,9 @@ void ReplicatedPG::on_peer_recover(
   info.stats.stats.sum.add(stat);
   publish_stats_to_osd();
   // done!
+  peer_missing[peer].got(soid, recovery_info.version);
   if (peer == backfill_target && backfills_in_flight.count(soid))
     backfills_in_flight.erase(soid);
-  else
-    peer_missing[peer].got(soid, recovery_info.version);
 }
 
 void ReplicatedPG::begin_peer_recover(
@@ -8053,16 +8052,16 @@ int ReplicatedPG::recover_backfill(
     send_remove_op(i->first, i->second, backfill_target);
   }
 
+  PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
   map<int, vector<PushOp> > pushes;
   for (map<hobject_t, pair<eversion_t, eversion_t> >::iterator i = to_push.begin();
        i != to_push.end();
        ++i) {
     handle.reset_tp_timeout();
     prep_backfill_object_push(
-      i->first, i->second.first, i->second.second, backfill_target, &pushes);
+      i->first, i->second.first, i->second.second, backfill_target, h);
   }
-  // TODOSAM: replace
-  //send_pushes(g_conf->osd_recovery_op_priority, pushes);
+  pgbackend->run_recovery_op(h, cct->_conf->osd_recovery_op_priority);
 
   release_waiting_for_backfill_pos();
   dout(5) << "backfill_pos is " << backfill_pos << " and pinfo.last_backfill is "
@@ -8108,23 +8107,25 @@ int ReplicatedPG::recover_backfill(
 
 void ReplicatedPG::prep_backfill_object_push(
   hobject_t oid, eversion_t v, eversion_t have, int peer,
-  map<int, vector<PushOp> > *pushes)
+  PGBackend::RecoveryHandle *h)
 {
   dout(10) << "push_backfill_object " << oid << " v " << v << " to osd." << peer << dendl;
 
   backfills_in_flight.insert(oid);
+  map<int, pg_missing_t>::iterator bpm = peer_missing.find(backfill_target);
+  assert(bpm != peer_missing.end());
+  bpm->second.add(oid, eversion_t(), eversion_t());
 
-  if (!recovering.count(oid))
-    start_recovery_op(oid);
+  assert(!recovering.count(oid));
+
+  start_recovery_op(oid);
+  recovering.insert(oid);
   ObjectContextRef obc = get_object_context(oid, false);
-// TODOSAM: fix
-#if 0
-  obc->ondisk_read_lock();
-  (*pushes)[peer].push_back(PushOp());
-  prep_push_to_replica(obc, oid, peer, cct->_conf->osd_recovery_op_priority,
-		       &((*pushes)[peer].back()));
-  obc->ondisk_read_unlock();
-#endif
+  pgbackend->recover_object(
+    oid,
+    ObjectContextRef(),
+    obc,
+    h);
 }
 
 void ReplicatedPG::scan_range(
