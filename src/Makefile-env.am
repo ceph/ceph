@@ -1,0 +1,172 @@
+AUTOMAKE_OPTIONS = gnu subdir-objects
+
+SUBDIRS =
+DIST_SUBDIRS =
+BUILT_SOURCES =
+EXTRA_DIST =
+CLEANFILES =
+
+noinst_HEADERS =
+bin_PROGRAMS =
+bin_SCRIPTS =
+sbin_PROGRAMS =
+sbin_SCRIPTS =
+dist_bin_SCRIPTS =
+lib_LTLIBRARIES = 
+noinst_LTLIBRARIES = 
+noinst_LIBRARIES =
+radoslib_LTLIBRARIES =
+
+# like bin_PROGRAMS, but these targets are only built for debug builds
+bin_DEBUGPROGRAMS =
+
+# like sbin_SCRIPTS but can be used to install to e.g. /usr/sbin
+ceph_sbindir = $(exec_prefix)$(sbindir)
+
+# C/C++ tests to build will be appended to this
+check_PROGRAMS =
+
+# when doing a debug build, make sure to make the targets
+if WITH_DEBUG
+bin_PROGRAMS += $(bin_DEBUGPROGRAMS)
+endif
+
+
+##################################
+## automake environment
+
+AM_COMMON_FLAGS = \
+	-D__CEPH__ \
+	-D_FILE_OFFSET_BITS=64 \
+	-D_REENTRANT \
+	-D_THREAD_SAFE \
+	-D__STDC_FORMAT_MACROS \
+	-D_GNU_SOURCE \
+	-rdynamic \
+	-Wall \
+	${WARN_TYPE_LIMITS} \
+	${WARN_IGNORED_QUALIFIERS} \
+	-Winit-self \
+	-Wpointer-arith \
+	-Werror=format-security \
+	-fno-strict-aliasing \
+	-fsigned-char
+
+AM_CFLAGS = $(AM_COMMON_FLAGS)
+AM_CPPFLAGS = \
+	$(AM_COMMON_FLAGS) \
+	-DCEPH_LIBDIR=\"${libdir}\"
+AM_CXXFLAGS = \
+	@AM_CXXFLAGS@ \
+	$(AM_COMMON_FLAGS) \
+	-DCEPH_LIBDIR=\"${libdir}\" \
+	-Wnon-virtual-dtor \
+	-Wno-invalid-offsetof \
+	-Wstrict-null-sentinel
+
+# note: this is position dependant, it affects the -l options that
+# come after it on the command line. when you use ${AM_LDFLAGS} in
+# later rules, take care where you place it. for more information, see
+# http://blog.flameeyes.eu/2008/11/19/relationship-between-as-needed-and-no-undefined-part-1-what-do-they-do
+# http://blog.flameeyes.eu/2008/11/20/misguided-link-and-as-needed
+# http://www.gentoo.org/proj/en/qa/asneeded.xml
+# http://gcc.gnu.org/ml/gcc-help/2010-12/msg00338.html
+# http://sigquit.wordpress.com/2011/02/16/why-asneeded-doesnt-work-as-expected-for-your-libraries-on-your-autotools-project/
+AM_LDFLAGS = -Wl,--as-needed
+
+if USE_BOOST_SPIRIT_OLD_HDR
+AM_CXXFLAGS += -DUSE_BOOST_SPIRIT_OLD_HDR
+endif
+
+if WITH_LIBATOMIC
+AM_LDFLAGS += -latomic_ops
+endif
+
+if ENABLE_COVERAGE
+AM_CFLAGS += -fprofile-arcs -ftest-coverage
+AM_CXXFLAGS += -fprofile-arcs -ftest-coverage -O0
+endif
+
+CCAS = ${srcdir}/yasm-wrapper
+AM_CCASFLAGS = -f elf64
+
+
+#####################
+## library definitions and dependencies
+
+EXTRALIBS = -luuid -lm -lkeyutils
+if FREEBSD
+EXTRALIBS += -lexecinfo
+endif # FREEBSD
+
+if LINUX
+EXTRALIBS += -lrt
+endif # LINUX
+
+if WITH_PROFILER
+EXTRALIBS += -lprofiler
+endif # PROFILER
+
+LIBGLOBAL = libglobal.la
+LIBCOMMON = libcommon.la
+LIBARCH = libarch.la
+LIBPERFGLUE = libperfglue.la
+LIBAUTH = libauth.la
+LIBMSG = libmsg.la
+LIBCRUSH = libcrush.la
+LIBJSON_SPIRIT = libjson_spirit.la
+LIBLOG = liblog.la
+LIBOS = libos.la
+LIBOSD = libosd.la
+LIBOSDC = libosdc.la
+LIBMON = libmon.la
+LIBMDS = libmds.la
+LIBCLIENT = libclient.la
+LIBCLIENT_FUSE = libclient_fuse.la
+LIBRADOS = librados.la
+LIBRGW = librgw.la
+LIBRBD = librbd.la
+LIBCEPHFS = libcephfs.la
+
+if WITH_LIBAIO
+LIBOS += -laio
+endif # WITH_LIBAIO
+
+if WITH_LIBZFS
+LIBOS += libos_zfs.a -lzfs
+endif # WITH_LIBZFS
+
+if WITH_TCMALLOC
+LIBPERFGLUE += -ltcmalloc
+endif # WITH_TCMALLOC
+
+if ENABLE_COVERAGE
+EXTRALIBS += -lgcov
+endif # ENABLE_COVERAGE
+
+# Libosd always needs osdc and os
+LIBOSD += $(LIBOSDC) $(LIBOS)
+
+# These have references to syms like ceph_using_tcmalloc(), glue libperfglue to them
+LIBMON += $(LIBPERFGLUE)
+LIBOSD += $(LIBPERFGLUE)
+LIBMDS += $(LIBPERFGLUE)
+
+# Always use system leveldb
+LIBOS += -lleveldb -lsnappy
+
+# Use this for binaries requiring libglobal
+CEPH_GLOBAL = $(LIBGLOBAL) $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+
+# This is set by [lib]/Makefile.am and used for build tests
+LIBCOMMON_DEPS =
+LIBRADOS_DEPS =
+LIBRGW_DEPS =
+
+# This is used by the dencoder test
+DENCODER_SOURCES =
+DENCODER_DEPS =
+
+
+radoslibdir = $(libdir)/rados-classes
+
