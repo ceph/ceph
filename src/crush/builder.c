@@ -123,7 +123,8 @@ int crush_get_next_bucket_id(struct crush_map *map)
 
 int crush_add_bucket(struct crush_map *map,
 		     int id,
-		     struct crush_bucket *bucket)
+		     struct crush_bucket *bucket,
+		     int *idout)
 {
 	int pos;
 
@@ -148,13 +149,16 @@ int crush_add_bucket(struct crush_map *map,
 		memset(map->buckets + oldsize, 0, (map->max_buckets-oldsize) * sizeof(map->buckets[0]));
 	}
 
-	assert(map->buckets[pos] == 0);
+	if (map->buckets[pos] != 0) {
+		return -EEXIST;
+	}
 
         /* add it */
 	bucket->id = id;
 	map->buckets[pos] = bucket;
 
-	return id;
+	if (idout) *idout = id;
+	return 0;
 }
 
 int crush_remove_bucket(struct crush_map *map, struct crush_bucket *bucket)
