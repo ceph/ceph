@@ -629,7 +629,7 @@ protected:
 
   void prep_backfill_object_push(
     hobject_t oid, eversion_t v, eversion_t have, int peer,
-    map<int, vector<PushOp> > *pushes);
+    PGBackend::RecoveryHandle *h);
   void send_remove_op(const hobject_t& oid, eversion_t v, int peer);
 
 
