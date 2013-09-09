@@ -5949,6 +5949,7 @@ void ReplicatedBackend::prepare_pull(
   assert(!pulling.count(soid));
   pull_from_peer[fromosd].insert(soid);
   PullInfo &pi = pulling[soid];
+  pi.head_ctx = headctx;
   pi.recovery_info = op.recovery_info;
   pi.recovery_progress = op.recovery_progress;
 }
@@ -6129,6 +6130,7 @@ void ReplicatedBackend::prep_push(
   get_parent()->begin_peer_recover(peer, soid);
   // take note.
   PushInfo &pi = pushing[soid][peer];
+  pi.obc = obc;
   pi.recovery_info.size = obc->obs.oi.size;
   pi.recovery_info.copy_subset = data_subset;
   pi.recovery_info.clone_subset = clone_subsets;
@@ -6336,21 +6338,8 @@ bool ReplicatedBackend::handle_pull_response(
 	   << dendl;
 
   if (first) {
-    bufferlist oibl;
-    if (pop.attrset.count(OI_ATTR)) {
-      oibl.push_back(pop.attrset[OI_ATTR]);
-      ::decode(pi.recovery_info.oi, oibl);
-    } else {
-      assert(0);
-    }
-    bufferlist ssbl;
-    if (pop.attrset.count(SS_ATTR)) {
-      ssbl.push_back(pop.attrset[SS_ATTR]);
-      ::decode(pi.recovery_info.ss, ssbl);
-    } else {
-      assert(pi.recovery_info.soid.snap != CEPH_NOSNAP &&
-	     pi.recovery_info.soid.snap != CEPH_SNAPDIR);
-    }
+    pi.obc = get_parent()->get_obc(pi.recovery_info.soid, pop.attrset);
+    pi.recovery_info.oi = pi.obc->obs.oi;
   }
 
   bool complete = pi.is_complete();
