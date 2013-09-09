@@ -1,4 +1,9 @@
+## erasure code plugins
+erasure_codelibdir = $(libdir)/erasure-code
+erasure_codelib_LTLIBRARIES =  
+
 libosd_la_SOURCES = \
+	osd/ErasureCodePlugin.cc \
 	osd/PG.cc \
 	osd/PGLog.cc \
 	osd/ReplicatedPG.cc \
@@ -17,6 +22,8 @@ noinst_LTLIBRARIES += libosd.la
 noinst_HEADERS += \
 	osd/Ager.h \
 	osd/ClassHandler.h \
+	osd/ErasureCodeInterface.h \
+	osd/ErasureCodePlugin.h \
 	osd/OSD.h \
 	osd/OSDCap.h \
 	osd/OSDMap.h \
