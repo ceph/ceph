@@ -267,8 +267,28 @@ private:
   void prepare_pull(
     const hobject_t& soid,
     ObjectContextRef headctx,
-    int priority,
     RPGHandle *h);
+  void start_pushes(
+    const hobject_t &soid,
+    ObjectContextRef obj,
+    RPGHandle *h);
+  void prep_push_to_replica(
+    ObjectContextRef obc, const hobject_t& soid, int peer,
+    PushOp *pop);
+  void prep_push(ObjectContextRef obc,
+		 const hobject_t& oid, int dest,
+		 PushOp *op);
+  void prep_push(ObjectContextRef obc,
+		 const hobject_t& soid, int peer,
+		 eversion_t version,
+		 interval_set<uint64_t> &data_subset,
+		 map<hobject_t, interval_set<uint64_t> >& clone_subsets,
+		 PushOp *op);
+  void calc_head_subsets(ObjectContextRef obc, SnapSet& snapset, const hobject_t& head,
+			 const pg_missing_t& missing,
+			 const hobject_t &last_backfill,
+			 interval_set<uint64_t>& data_subset,
+			 map<hobject_t, interval_set<uint64_t> >& clone_subsets);
 };
 
 #endif

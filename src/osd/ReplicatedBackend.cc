@@ -33,32 +33,37 @@ ReplicatedBackend::ReplicatedBackend(
   coll(coll), osd(osd), cct(osd->cct) {}
 
 void ReplicatedBackend::run_recovery_op(
-  PGBackend::RecoveryHandle *h,
+  PGBackend::RecoveryHandle *_h,
   int priority)
 {
+  RPGHandle *h = static_cast<RPGHandle *>(_h);
+  send_pushes(priority, h->pushes);
+  send_pulls(priority, h->pulls);
+  delete h;
 }
 
 void ReplicatedBackend::recover_object(
   const hobject_t &hoid,
   ObjectContextRef head,
   ObjectContextRef obc,
-  RecoveryHandle *h
+  RecoveryHandle *_h
   )
 {
-#if 0
-  op.recovery_progress.data_complete = false;
-  op.recovery_progress.omap_complete = false;
-  op.recovery_progress.data_recovered_to = 0;
-  op.recovery_progress.first = true;
-
-  assert(!pulling.count(soid));
-  pull_from_peer[fromosd].insert(soid);
-  PullInfo &pi = pulling[soid];
-  pi.recovery_info = op.recovery_info;
-  pi.recovery_progress = op.recovery_progress;
-  pi.priority = priority;
-#endif
-  dout(10) << __func__ << dendl;
+  dout(10) << __func__ << ": " << hoid << dendl;
+  RPGHandle *h = static_cast<RPGHandle *>(_h);
+  if (get_parent()->get_local_missing().is_missing(hoid)) {
+    assert(!obc);
+    // pull
+    prepare_pull(
+      hoid,
+      head,
+      h);
+    return;
+  } else {
+    assert(obc);
+    assert(head);
+    // TODOSAM: handle recovering replicas
+  }
 }
 
 void ReplicatedBackend::check_recovery_sources(const OSDMapRef osdmap)
