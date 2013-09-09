@@ -232,3 +232,55 @@ void ErasureCodeJerasureReedSolomonRAID6::parse(const map<std::string,std::strin
 void ErasureCodeJerasureReedSolomonRAID6::prepare() {
   matrix = reed_sol_r6_coding_matrix(k, w);
 }
+
+// 
+// ErasureCodeJerasureCauchy
+//
+void ErasureCodeJerasureCauchy::jerasure_encode(char **data,
+                                                    char **coding,
+                                                    int blocksize) {
+  jerasure_schedule_encode(k, m, w, schedule, data, coding, blocksize, packetsize);
+}
+
+int ErasureCodeJerasureCauchy::jerasure_decode(int *erasures,
+                                                    char **data,
+                                                    char **coding,
+                                                    int blocksize) {
+  return jerasure_schedule_decode_lazy(k, m, w, bitmatrix, erasures, data, coding, blocksize, packetsize, 1);
+}
+
+unsigned ErasureCodeJerasureCauchy::pad_in_length(unsigned in_length) {
+  while (in_length%(k*w*packetsize*sizeof(int)) != 0) 
+    in_length++;
+  return in_length;
+}
+
+void ErasureCodeJerasureCauchy::parse(const map<std::string,std::string> &parameters) {
+  k = to_int("erasure-code-k", parameters, DEFAULT_K);
+  m = to_int("erasure-code-m", parameters, DEFAULT_M);
+  w = to_int("erasure-code-w", parameters, DEFAULT_W);
+  packetsize = to_int("erasure-code-packetsize", parameters, DEFAULT_PACKETSIZE);
+}
+
+void ErasureCodeJerasureCauchy::prepare_schedule(int *matrix) {
+  bitmatrix = jerasure_matrix_to_bitmatrix(k, m, w, matrix);
+  schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
+}
+
+// 
+// ErasureCodeJerasureCauchyOrig
+//
+void ErasureCodeJerasureCauchyOrig::prepare() {
+  int *matrix = cauchy_original_coding_matrix(k, m, w);
+  prepare_schedule(matrix);
+  free(matrix);
+}
+
+// 
+// ErasureCodeJerasureCauchyGood
+//
+void ErasureCodeJerasureCauchyGood::prepare() {
+  int *matrix = cauchy_good_general_coding_matrix(k, m, w);
+  prepare_schedule(matrix);
+  free(matrix);
+}

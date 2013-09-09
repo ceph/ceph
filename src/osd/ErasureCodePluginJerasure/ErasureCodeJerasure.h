@@ -119,4 +119,56 @@ public:
   virtual void parse(const map<std::string,std::string> &parameters);
   virtual void prepare();
 };
+
+class ErasureCodeJerasureCauchy : public ErasureCodeJerasure {
+public:
+  static const int DEFAULT_K = 7;
+  static const int DEFAULT_M = 3;
+  static const int DEFAULT_W = 8;
+  static const int DEFAULT_PACKETSIZE = 8;
+  int *bitmatrix;
+  int **schedule;
+  int packetsize;
+
+  ErasureCodeJerasureCauchy(const char *technique) :
+    ErasureCodeJerasure(technique),
+    bitmatrix(0),
+    schedule(0)
+  { }
+  virtual ~ErasureCodeJerasureCauchy() {
+    if (bitmatrix)
+      free(bitmatrix);
+    if (schedule)
+      free(schedule);
+  }
+
+  virtual void jerasure_encode(char **data,
+                               char **coding,
+                               int blocksize);
+  virtual int jerasure_decode(int *erasures,
+                               char **data,
+                               char **coding,
+                               int blocksize);
+  virtual unsigned pad_in_length(unsigned in_length);
+  virtual void parse(const map<std::string,std::string> &parameters);
+  void prepare_schedule(int *matrix);
+};
+
+class ErasureCodeJerasureCauchyOrig : public ErasureCodeJerasureCauchy {
+public:
+  ErasureCodeJerasureCauchyOrig() :
+    ErasureCodeJerasureCauchy("cauchy_orig")
+  {}
+
+  virtual void prepare();
+};
+
+class ErasureCodeJerasureCauchyGood : public ErasureCodeJerasureCauchy {
+public:
+  ErasureCodeJerasureCauchyGood() :
+    ErasureCodeJerasureCauchy("cauchy_good")
+  {}
+
+  virtual void prepare();
+};
 #endif
