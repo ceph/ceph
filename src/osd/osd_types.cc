@@ -649,6 +649,14 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("read_tier", read_tier);
   f->dump_int("write_tier", write_tier);
   f->dump_string("cache_mode", get_cache_mode_name());
+  f->open_array_section("properties");
+  for (map<string,string>::const_iterator i = properties.begin();
+       i != properties.end();
+       ++i) {
+    string name = i->first;
+    f->dump_string(name.c_str(), i->second);
+  }
+  f->close_section();
 }
 
 
@@ -853,7 +861,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(9, 5, bl);
+  ENCODE_START(10, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -880,6 +888,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(c, bl);
   ::encode(read_tier, bl);
   ::encode(write_tier, bl);
+  ::encode(properties, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -947,6 +956,9 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
     ::decode(read_tier, bl);
     ::decode(write_tier, bl);
   }
+  if (struct_v >= 10) {
+    ::decode(properties, bl);
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
 }
@@ -988,6 +1000,8 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.cache_mode = CACHEMODE_WRITEBACK;
   a.read_tier = 1;
   a.write_tier = 1;
+  a.properties["p-1"] = "v-1";
+  a.properties["empty"] = string();
   o.push_back(new pg_pool_t(a));
 }
 

@@ -778,6 +778,7 @@ private:
 
 
 public:
+  map<string,string> properties;  /// interpreted according to the pool type
   epoch_t last_change;      /// most recent epoch changed, exclusing snapshot changes
   snapid_t snap_seq;        /// seq for per-pool snapshot
   epoch_t snap_epoch;       /// osdmap epoch of last snap
