@@ -21,3 +21,9 @@
    ../../man/8/monmaptool.rst
    ../../man/8/osdmaptool.rst
    ../../man/8/rados.rst
+
+
+.. toctree::
+	:hidden:
+	
+	../../man/8/ceph-post-file.rst
