@@ -28,6 +28,8 @@ class ErasureCodeTest : public ::testing::Test {
 typedef ::testing::Types<
   ErasureCodeJerasureReedSolomonVandermonde,
   ErasureCodeJerasureReedSolomonRAID6,
+  ErasureCodeJerasureCauchyOrig,
+  ErasureCodeJerasureCauchyGood,
 > JerasureTypes;
 TYPED_TEST_CASE(ErasureCodeTest, JerasureTypes);
 
