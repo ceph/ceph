@@ -26,7 +26,7 @@ Prior to building, it's necessary to update the pbuilder seed tarballs::
 The release key should be present::
 
   pub   4096R/17ED316D 2012-05-20
-  uid                  Ceph Release Key <sage@newdream.net>
+  uid   Ceph Release Key <sage@newdream.net>
 
 
 3. Set up build area
@@ -48,24 +48,25 @@ Checkout the submodules::
 4.  Update Build version numbers
 ================================
 
-Substitute the ceph release number where indicated below by the string 0.xx::
+Substitute the ceph release number where indicated below by the string ``0.xx``.
 
 Edit configure.ac and update the version number. Example diff::
 
-    -AC_INIT([ceph], [0.54], [ceph-devel@vger.kernel.org])
-    +AC_INIT([ceph], [0.55], [ceph-devel@vger.kernel.org])
+	-AC_INIT([ceph], [0.54], [ceph-devel@vger.kernel.org])
+	+AC_INIT([ceph], [0.55], [ceph-devel@vger.kernel.org])
  
 Update the version number in the debian change log::
 
-    DEBEMAIL user@host dch -v 0.xx-1
+	DEBEMAIL user@host dch -v 0.xx-1
 
 Commit the changes::
 
-    git commit -a
+	git commit -a
 
 Tag the release::
 
-    ../ceph-build/tag-release v0.xx
+	../ceph-build/tag-release v0.xx
+
 
 5. Create Makefiles
 ===================
@@ -74,7 +75,7 @@ The actual configure options used to build packages are in the
 ``ceph.spec.in`` and ``debian/rules`` files.  At this point we just
 need to create a Makefile.::
 
-     ./do_autogen.sh
+	./do_autogen.sh
 
 
 6. Run the release scripts
@@ -84,7 +85,8 @@ This creates tarballs and copies them, with other needed files to
 the build hosts listed in deb_hosts and rpm_hosts, runs a local build
 script, then rsyncs the results back tot the specified release directory.::
 
-    ../ceph-build/do_release.sh /tmp/release
+	../ceph-build/do_release.sh /tmp/release
+
 
 7. Create RPM Repo
 ==================
@@ -92,35 +94,38 @@ script, then rsyncs the results back tot the specified release directory.::
 Copy the rpms to the destination repo, creates the yum repository
 rpm and indexes.::
 
-   ../ceph-build/push_to_rpm_repo.sh /tmp/release /tmp/rpm-repo 0.xx
+	../ceph-build/push_to_rpm_repo.sh /tmp/release /tmp/rpm-repo 0.xx
+
 
 8. Create debian repo
 =====================
 
 The key-id used below is the id of the ceph release key from step 2::
 
-    mkdir /tmp/debian-repo
-    ../ceph-build/gen_reprepro_conf.sh /tmp/debian-repo key-id
-    ../ceph-build/push_to_deb_repo.sh /tmp/release /tmp/debian-repo 0.xx main
+	mkdir /tmp/debian-repo
+	../ceph-build/gen_reprepro_conf.sh /tmp/debian-repo key-id
+	../ceph-build/push_to_deb_repo.sh /tmp/release /tmp/debian-repo 0.xx main
+
 
 9.  Push repos to ceph.org
 ==========================
 
 For a development release::
 
-    rcp ceph-0.xx.tar.bz2 ceph-0.xx.tar.gz \
-        ceph_site@ceph.com:ceph.com/downloads/.
-    rsync -av /tmp/rpm-repo/0.xx/ ceph_site@ceph.com:ceph.com/rpm-testing
-    rsync -av /tmp/debian-repo/ ceph_site@ceph.com:ceph.com/debian-testing
+	rcp ceph-0.xx.tar.bz2 ceph-0.xx.tar.gz \
+	     ceph_site@ceph.com:ceph.com/downloads/.
+	rsync -av /tmp/rpm-repo/0.xx/ ceph_site@ceph.com:ceph.com/rpm-testing
+	rsync -av /tmp/debian-repo/ ceph_site@ceph.com:ceph.com/debian-testing
 
 For a stable release, replace {CODENAME} with the release codename (e.g., ``argonaut`` or ``bobtail``)::
 
-    rcp ceph-0.xx.tar.bz2 \
-        ceph_site@ceph.com:ceph.com/downloads/ceph-0.xx{CODENAME}.tar.bz2
-    rcp ceph-0.xx.tar.gz  \
-        ceph_site@ceph.com:ceph.com/downloads/ceph-0.xx{CODENAME}.tar.gz
-    rsync -av /tmp/rpm-repo/0.xx/ ceph_site@ceph.com:ceph.com/rpm-{CODENAME}
-    rsync -auv /tmp/debian-repo/ ceph_site@ceph.com:ceph.com/debian-{CODENAME}
+	rcp ceph-0.xx.tar.bz2 \
+	     ceph_site@ceph.com:ceph.com/downloads/ceph-0.xx{CODENAME}.tar.bz2
+	rcp ceph-0.xx.tar.gz  \
+	     ceph_site@ceph.com:ceph.com/downloads/ceph-0.xx{CODENAME}.tar.gz
+	rsync -av /tmp/rpm-repo/0.xx/ ceph_site@ceph.com:ceph.com/rpm-{CODENAME}
+	rsync -auv /tmp/debian-repo/ ceph_site@ceph.com:ceph.com/debian-{CODENAME}
+
 
 10. Update Git
 ==============
@@ -148,15 +153,16 @@ Similarly, for a development release, for both ``teuthology.git`` and ``ceph-qa-
 Stable release
 --------------
 
-For ``ceph.git``:
+For ``ceph.git``::
 
-    git push origin stable
+	git push origin stable
+
 
 Point release
 -------------
 
-Just push the new tag:
+Just push the new tag::
 
-    git push origin v0.xx
+	git push origin v0.xx
 
 
