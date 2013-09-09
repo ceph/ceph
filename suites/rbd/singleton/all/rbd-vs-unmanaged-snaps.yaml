@@ -6,5 +6,5 @@ tasks:
 - workunit:
     clients:
       all:
-        - rbd/rbd_snaps_ops.sh
+        - mon/rbd_snaps_ops.sh
 
