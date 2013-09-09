@@ -499,51 +499,6 @@ protected:
   }
   void put_snapset_context(SnapSetContext *ssc);
 
-  // push
-  struct PushInfo {
-    ObjectRecoveryProgress recovery_progress;
-    ObjectRecoveryInfo recovery_info;
-    int priority;
-
-    void dump(Formatter *f) const {
-      {
-	f->open_object_section("recovery_progress");
-	recovery_progress.dump(f);
-	f->close_section();
-      }
-      {
-	f->open_object_section("recovery_info");
-	recovery_info.dump(f);
-	f->close_section();
-      }
-    }
-  };
-  map<hobject_t, map<int, PushInfo> > pushing;
-
-  // pull
-  struct PullInfo {
-    ObjectRecoveryProgress recovery_progress;
-    ObjectRecoveryInfo recovery_info;
-    int priority;
-
-    void dump(Formatter *f) const {
-      {
-	f->open_object_section("recovery_progress");
-	recovery_progress.dump(f);
-	f->close_section();
-      }
-      {
-	f->open_object_section("recovery_info");
-	recovery_info.dump(f);
-	f->close_section();
-      }
-    }
-
-    bool is_complete() const {
-      return recovery_progress.is_complete(recovery_info);
-    }
-  };
-  map<hobject_t, PullInfo> pulling;
   set<hobject_t> recovering;
 
   ObjectRecoveryInfo recalc_subsets(const ObjectRecoveryInfo& recovery_info);
@@ -621,9 +576,6 @@ protected:
 
   /// leading edge of backfill
   hobject_t backfill_pos;
-
-  // Reverse mapping from osd peer to objects beging pulled from that peer
-  map<int, set<hobject_t> > pull_from_peer;
 
   int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
 				 int priority,
@@ -795,11 +747,6 @@ protected:
       const hobject_t &hoid,
       epoch_t epoch) : pg(pg), hoid(hoid), epoch(epoch) {}
     void finish(int) {
-      pg->lock();
-      if (!pg->pg_has_reset_since(epoch)) {
-	pg->finish_recovery_op(hoid);
-      }
-      pg->unlock();
     }
   };
   friend struct C_OSD_CompletedPull;

@@ -203,8 +203,9 @@ void ReplicatedPG::on_global_recover(
   const hobject_t &soid)
 {
   publish_stats_to_osd();
-  pushing.erase(soid);
   dout(10) << "pushed " << soid << " to all replicas" << dendl;
+  assert(recovering.count(soid));
+  recovering.erase(soid);
   finish_recovery_op(soid);
   if (waiting_for_degraded_object.count(soid)) {
     requeue_ops(waiting_for_degraded_object[soid]);
@@ -269,15 +270,15 @@ void ReplicatedPG::wait_for_missing_object(const hobject_t& soid, OpRequestRef o
   assert(g != missing.missing.end());
   const eversion_t &v(g->second.need);
 
-  map<hobject_t, PullInfo>::const_iterator p = pulling.find(soid);
-  if (p != pulling.end()) {
-    dout(7) << "missing " << soid << " v " << v << ", already pulling." << dendl;
+  set<hobject_t>::const_iterator p = recovering.find(soid);
+  if (p != recovering.end()) {
+    dout(7) << "missing " << soid << " v " << v << ", already recovering." << dendl;
   }
   else if (missing_loc.find(soid) == missing_loc.end()) {
     dout(7) << "missing " << soid << " v " << v << ", is unfound." << dendl;
   }
   else {
-    dout(7) << "missing " << soid << " v " << v << ", pulling." << dendl;
+    dout(7) << "missing " << soid << " v " << v << ", recovering." << dendl;
     PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
     recover_missing(soid, v, cct->_conf->osd_client_op_priority, h);
     pgbackend->run_recovery_op(h, cct->_conf->osd_client_op_priority);
@@ -317,15 +318,15 @@ void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
   assert(is_degraded_object(soid));
 
   // we don't have it (yet).
-  if (pushing.count(soid)) {
+  if (recovering.count(soid)) {
     dout(7) << "degraded "
 	    << soid 
-	    << ", already pushing"
+	    << ", already recovering"
 	    << dendl;
   } else {
     dout(7) << "degraded " 
 	    << soid 
-	    << ", pushing"
+	    << ", recovering"
 	    << dendl;
     eversion_t v;
     for (unsigned i = 1; i < acting.size(); i++) {
@@ -6015,6 +6016,8 @@ int ReplicatedPG::recover_missing(
     assert(head_obc);
   }
   start_recovery_op(soid);
+  assert(!recovering.count(soid));
+  recovering.insert(soid);
   pgbackend->recover_object(
     soid,
     head_obc,
@@ -6051,7 +6054,7 @@ void ReplicatedPG::prep_push_to_replica(
   const object_info_t& oi = obc->obs.oi;
   uint64_t size = obc->obs.oi.size;
 
-  dout(10) << __func__ << soid << " v" << oi.version
+  dout(10) << __func__ << ": " << soid << " v" << oi.version
 	   << " size " << size << " to osd." << peer << dendl;
 
   map<hobject_t, interval_set<uint64_t> > clone_subsets;
@@ -6976,7 +6979,8 @@ void ReplicatedBackend::sub_op_push(OpRequestRef op)
 
 void ReplicatedPG::failed_push(int from, const hobject_t &soid)
 {
-  // TODOSAM: this will need to update recovering
+  assert(recovering.count(soid));
+  recovering.erase(soid);
   map<hobject_t,set<int> >::iterator p = missing_loc.find(soid);
   if (p != missing_loc.end()) {
     dout(0) << "_failed_push " << soid << " from osd." << from
@@ -7356,10 +7360,6 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   apply_and_flush_repops(is_primary());
 
   pgbackend->on_change(t);
-  // clear pushing/pulling maps
-  pushing.clear();
-  pulling.clear();
-  pull_from_peer.clear();
 
   // clear snap_trimmer state
   snap_trimmer_machine.process_event(Reset());
@@ -7385,10 +7385,8 @@ void ReplicatedPG::_clear_recovery_state()
   backfill_pos = hobject_t();
   backfills_in_flight.clear();
   pending_backfill_updates.clear();
+  recovering.clear();
   pgbackend->clear_state();
-  pulling.clear();
-  pushing.clear();
-  pull_from_peer.clear();
 }
 
 void ReplicatedPG::cancel_pull(const hobject_t &soid)
@@ -7600,7 +7598,8 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
 
   const pg_missing_t &missing = pg_log.get_missing();
 
-  dout(10) << "recover_primary pulling " << pulling.size() << " in pg" << dendl;
+  dout(10) << "recover_primary recovering " << recovering.size()
+	   << " in pg" << dendl;
   dout(10) << "recover_primary " << missing << dendl;
   dout(25) << "recover_primary " << missing.missing << dendl;
 
@@ -7640,8 +7639,8 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
 	     << (unfound ? " (unfound)":"")
 	     << (missing.is_missing(soid) ? " (missing)":"")
 	     << (missing.is_missing(head) ? " (missing head)":"")
-             << (pulling.count(soid) ? " (pulling)":"")
-	     << (pulling.count(head) ? " (pulling head)":"")
+             << (recovering.count(soid) ? " (recovering)":"")
+	     << (recovering.count(head) ? " (recovering head)":"")
              << dendl;
 
     if (latest) {
@@ -7830,8 +7829,8 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
       handle.reset_tp_timeout();
       const hobject_t soid(p->second);
 
-      if (pushing.count(soid)) {
-	dout(10) << __func__ << ": already pushing " << soid << dendl;
+      if (recovering.count(soid)) {
+	dout(10) << __func__ << ": already recovering" << soid << dendl;
 	continue;
       }
 
@@ -8077,7 +8076,7 @@ void ReplicatedPG::prep_backfill_object_push(
 
   backfills_in_flight.insert(oid);
 
-  if (!pushing.count(oid))
+  if (!recovering.count(oid))
     start_recovery_op(oid);
   ObjectContextRef obc = get_object_context(oid, false);
   obc->ondisk_read_lock();
