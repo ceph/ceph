@@ -257,10 +257,10 @@ Core changes:
 
 - Ensure that crush behaves as above for INDEP.
 
-`Recovery <http://tracker.ceph.com/issues/5857>`_
+Recovery
 --------
 
-The logic for recovering an object depends on the backend.  With
+See `Issue #5857`_. The logic for recovering an object depends on the backend.  With
 the current replicated strategy, we first pull the object replica
 to the primary and then concurrently push it out to the replicas.
 With the erasure coded strategy, we probably want to read the
@@ -274,6 +274,7 @@ PGBackend impementation will have to be able to direct the search
 for pg replicas with unrecoverable object chunks and to be able
 to determine whether a particular object is recoverable.
 
+
 Core changes:
 
 - s/unfound/unrecoverable
@@ -284,10 +285,10 @@ PGBackend interfaces:
 - recoverable()
 - recover_object()
 
-`Backfill <http://tracker.ceph.com/issues/5856>`_
+Backfill
 --------
 
-For the most part, backfill itself should behave similarly between
+See `Issue #5856`_. For the most part, backfill itself should behave similarly between
 replicated and erasure coded pools with a few exceptions:
 
 1. We probably want to be able to backfill multiple osds concurrently
@@ -314,3 +315,7 @@ PGBackend interfaces:
 
 - choose_backfill(): allows the implementation to determine which osds
   should be backfilled in a particular interval.
+
+
+.. _Issue #5857: http://tracker.ceph.com/issues/5857
+.. _Issue #5856: http://tracker.ceph.com/issues/5856
