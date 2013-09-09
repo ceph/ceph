@@ -880,7 +880,7 @@ protected:
 
 public:
   RadosBencher(CephContext *cct_, librados::Rados& _r, librados::IoCtx& _i)
-    : ObjBencher(cct), completions(NULL), rados(_r), io_ctx(_i), iterator_valid(false) {}
+    : ObjBencher(cct_), completions(NULL), rados(_r), io_ctx(_i), iterator_valid(false) {}
   ~RadosBencher() { }
 };
 
