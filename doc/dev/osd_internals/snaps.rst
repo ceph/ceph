@@ -70,17 +70,18 @@ See ReplicatedPG::SnapTrimmer, SnapMapper
 This trimming is performed asynchronously by the snap_trim_wq while the
 pg is clean and not scrubbing.
 
-  1. The next snap in PG::snaptrimq is selected for trimming
-  2. We determine the next object for trimming out of PG::snap_mapper.
+  #. The next snap in PG::snaptrimq is selected for trimming
+  #. We determine the next object for trimming out of PG::snap_mapper.
      For each object, we create a log entry and repop updating the
      object info and the snap set (including adjusting the overlaps).
-  3. We also locally update our *SnapMapper* instance with the object's
+  #. We also locally update our *SnapMapper* instance with the object's
      new snaps.
-  4. The log entry containing the modification of the object also
+  #. The log entry containing the modification of the object also
      contains the new set of snaps, which the replica uses to update
      its own *SnapMapper* instance.
-  6. The primary shares the info with the replica, which persists
+  #. The primary shares the info with the replica, which persists
      the new set of purged_snaps along with the rest of the info.
+
 
 Recovery
 --------
