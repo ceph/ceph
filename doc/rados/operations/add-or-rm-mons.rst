@@ -164,7 +164,7 @@ a cluster that has placement groups that are persistently not ``active + clean``
 	ceph mon dump
 	ssh {mon-host}
 
-#. Stop the ``ceph-mon'' daemon and extract a copy of the monap file.  ::
+#. Stop the ``ceph-mon`` daemon and extract a copy of the monap file.  ::
 
 	service ceph stop mon || stop ceph-mon-all
         ceph-mon -i {mon-id} --extract-monmap {map-path}
