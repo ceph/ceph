@@ -794,6 +794,7 @@ protected:
   void process_copy_chunk(hobject_t oid, tid_t tid, int r);
   void _write_copy_chunk(CopyOpRef cop, ObjectStore::Transaction *t);
   void _copy_some(OpContext *ctx, CopyOpRef cop);
+  int finish_copy(OpContext *ctx);
   void cancel_copy(CopyOpRef cop);
   void requeue_cancel_copy_ops(bool requeue=true);
 
