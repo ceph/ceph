@@ -64,4 +64,8 @@ ceph osd crush rm host2
 ceph osd crush rm osd.$o1
 ceph osd crush rm osd.$o2
 
+ceph osd crush add-bucket foo host
+ceph osd crush move foo root=default rack=localrack
+ceph osd crush rm foo
+
 echo OK
