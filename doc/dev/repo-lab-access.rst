@@ -4,11 +4,11 @@ Notes on Ceph repositories and test lab
 Special branches
 ----------------
 
-* ``master'': current tip (integration branch)
-* ``next'': pending release (feature frozen, bugfixes only)
-* ``last'': last/previous release
-* ``dumpling'', ``cuttlefish'', ``bobtail'', ``argonaut'', etc.: stable release branches
-* ``dumpling-next'': backports for stable release, pending testing
+* ``master``: current tip (integration branch)
+* ``next``: pending release (feature frozen, bugfixes only)
+* ``last``: last/previous release
+* ``dumpling``, ``cuttlefish``, ``bobtail``, ``argonaut``, etc.: stable release branches
+* ``dumpling-next``: backports for stable release, pending testing
 
 Rules
 -----
@@ -18,7 +18,7 @@ The source repos are all on github.
 * Any branch pushed to ceph.git will kick off builds that will either
   run unit tests or generate packages for gitbuilder.ceph.com.  Try
   not to generate unnecessary load.  For private, unreviewed work,
-  only push to branches named ``wip-*''.  This avoids colliding with
+  only push to branches named ``wip-*``.  This avoids colliding with
   any special branches.
 
 * Nothing should every reach a special branch unless it has been
@@ -34,7 +34,7 @@ The source repos are all on github.
   Reviewed-by: directly to the commit so that it is also visible when
   the patch is cherry-picked for backports.
 
-* All backports should use ``git cherry-pick -x'' to capture which
+* All backports should use ``git cherry-pick -x`` to capture which
   commit they are cherry-picking from.
 
 
@@ -63,21 +63,21 @@ Locking machines
 * All tests pull their builds from gitbuilder.ceph.com.
 
 * Anybody can lock machines with ``teuthology-lock --lock-many NUM
-  --machine-type TYPE''.
+  --machine-type TYPE``.
 
-* Machines are locked as ``whoami''@``hostname -s''.  --owner to
+* Machines are locked as ``whoami''@``hostname -s``.  --owner to
   choose otherwise.
 
-* Automated tests current run on the ``plana''; please avoid locking
+* Automated tests current run on the ``plana``; please avoid locking
   these for personal use.
 
-* To unlock, please use ``teuthology-nuke -t list.yaml -r -u'', which
+* To unlock, please use ``teuthology-nuke -t list.yaml -r -u``, which
   will reboot and clean up any leftover test state before unlocking
-  (or fail to unlock).  It looks for a ``targets::'' section in the
+  (or fail to unlock).  It looks for a ``targets::`` section in the
   yaml, so the regular job yaml will work.  You can get a list of all
-  locked machines with ``teuthology-lock --list-targets''.
+  locked machines with ``teuthology-lock --list-targets``.
 
-* ``teuthology-lock -a --brief'' or ``teuthology-lock --summary'' to
+* ``teuthology-lock -a --brief`` or ``teuthology-lock --summary`` to
   see what is locked and by whom.
 
 * Be conscientious about scheduling entire qa runs.  Coordinate
@@ -85,4 +85,4 @@ Locking machines
   ceph-qa-suite.git and teuthology.git.
 
 * Results for scheduled runs appear in /a/$jobname on the teuthology
-  machine.  ``ls -alt | head'' to find them.
+  machine.  ``ls -alt | head`` to find them.
