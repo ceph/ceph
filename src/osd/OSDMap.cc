@@ -1845,7 +1845,9 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
   crush.set_type_name(6, "root");
 
   // root
-  int rootid = crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 6 /* pool */, 0, NULL, NULL);
+  int rootid;
+  int r = crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 6 /* pool */, 0, NULL, NULL, &rootid);
+  assert(r == 0);
   crush.set_item_name(rootid, "default");
 
   for (int o=0; o<nosd; o++) {
@@ -1975,7 +1977,9 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
   set<string> hosts, racks;
 
   // root
-  int rootid = crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 6 /* pool */, 0, NULL, NULL);
+  int rootid;
+  int r = crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 6 /* pool */, 0, NULL, NULL, &rootid);
+  assert(r == 0);
   crush.set_item_name(rootid, "default");
 
   // add osds

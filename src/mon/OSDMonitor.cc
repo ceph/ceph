@@ -2699,9 +2699,15 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       err = -EINVAL;
       goto reply;
     }
-    int bucketno = newcrush.add_bucket(0, CRUSH_BUCKET_STRAW,
+    int bucketno;
+    err = newcrush.add_bucket(0, CRUSH_BUCKET_STRAW,
 				       CRUSH_HASH_DEFAULT, type, 0, NULL,
-				       NULL);
+				       NULL, &bucketno);
+    if (err < 0) {
+      char buf[128];
+      ss << "add_bucket error: '" << strerror_r(-err, buf, sizeof(buf)) << "'";
+      goto reply;
+    }
     err = newcrush.set_item_name(bucketno, name);
     if (err < 0) {
       ss << "error setting bucket name to '" << name << "'";

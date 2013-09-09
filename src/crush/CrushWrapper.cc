@@ -363,9 +363,15 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
 
     if (!name_exists(q->second)) {
       ldout(cct, 5) << "insert_item creating bucket " << q->second << dendl;
-      int empty = 0;
-      cur = add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, p->first, 1, &cur, &empty);
-      set_item_name(cur, q->second);
+      int empty = 0, newid;
+      int r = add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, p->first, 1, &cur, &empty, &newid);
+      if (r < 0) {
+        char buf[128]; 
+        ldout(cct, 1) << "add_bucket failure error: " << strerror_r(-r, buf, sizeof(buf)) << dendl;
+        return r;
+      }
+      set_item_name(newid, q->second);
+      cur = newid;
       continue;
     }
 
