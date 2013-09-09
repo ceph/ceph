@@ -115,6 +115,10 @@ enum {
 
   l_osd_waiting_for_map,
 
+  l_osd_stat_bytes,
+  l_osd_stat_bytes_used,
+  l_osd_stat_bytes_avail,
+
   l_osd_last,
 };
 
