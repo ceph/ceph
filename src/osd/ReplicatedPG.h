@@ -503,20 +503,6 @@ protected:
 
   set<hobject_t> recovering;
 
-  ObjectRecoveryInfo recalc_subsets(const ObjectRecoveryInfo& recovery_info);
-    
-  void submit_push_data(ObjectRecoveryInfo &recovery_info,
-			bool first,
-			bool complete,
-			const interval_set<uint64_t> &intervals_included,
-			bufferlist data_included,
-			bufferlist omap_header,
-			map<string, bufferptr> &attrs,
-			map<string, bufferlist> &omap_entries,
-			ObjectStore::Transaction *t);
-  void submit_push_complete(ObjectRecoveryInfo &recovery_info,
-			    ObjectStore::Transaction *t);
-
   // Track contents of temp collection, clear on reset
   set<hobject_t> temp_contents;
 

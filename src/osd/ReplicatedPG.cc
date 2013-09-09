@@ -6292,27 +6292,19 @@ void ReplicatedBackend::submit_push_complete(ObjectRecoveryInfo &recovery_info,
   }
 }
 
-ObjectRecoveryInfo ReplicatedPG::recalc_subsets(const ObjectRecoveryInfo& recovery_info)
+ObjectRecoveryInfo ReplicatedBackend::recalc_subsets(
+  const ObjectRecoveryInfo& recovery_info,
+  SnapSetContext *ssc)
 {
   if (!recovery_info.soid.snap || recovery_info.soid.snap >= CEPH_NOSNAP)
     return recovery_info;
-
-  SnapSetContext *ssc = get_snapset_context(recovery_info.soid.oid,
-					    recovery_info.soid.get_key(),
-					    recovery_info.soid.hash,
-					    false,
-					    recovery_info.soid.get_namespace());
-  assert(ssc);
   ObjectRecoveryInfo new_info = recovery_info;
   new_info.copy_subset.clear();
   new_info.clone_subset.clear();
   assert(ssc);
-// TODOSAM: fix
-#if 0
-  calc_clone_subsets(ssc->snapset, new_info.soid, pg_log.get_missing(), info.last_backfill,
+  calc_clone_subsets(ssc->snapset, new_info.soid, get_parent()->get_local_missing(),
+		     get_info().last_backfill,
 		     new_info.copy_subset, new_info.clone_subset);
-#endif
-  put_snapset_context(ssc);
   return new_info;
 }
 
@@ -6352,8 +6344,13 @@ bool ReplicatedBackend::handle_pull_response(
       pop.recovery_info.copy_subset);
   }
 
-  // TODOSAM: probably just kill this
-  //pi.recovery_info = recalc_subsets(pi.recovery_info);
+  bool first = pi.recovery_progress.first;
+  if (first) {
+    pi.obc = get_parent()->get_obc(pi.recovery_info.soid, pop.attrset);
+    pi.recovery_info.oi = pi.obc->obs.oi;
+    pi.recovery_info = recalc_subsets(pi.recovery_info, pi.obc->ssc);
+  }
+
 
   interval_set<uint64_t> usable_intervals;
   bufferlist usable_data;
@@ -6366,7 +6363,6 @@ bool ReplicatedBackend::handle_pull_response(
   data.claim(usable_data);
 
 
-  bool first = pi.recovery_progress.first;
   pi.recovery_progress = pop.after_progress;
 
   pi.stat.num_bytes_recovered += data.length();
@@ -6374,11 +6370,6 @@ bool ReplicatedBackend::handle_pull_response(
   dout(10) << "new recovery_info " << pi.recovery_info
 	   << ", new progress " << pi.recovery_progress
 	   << dendl;
-
-  if (first) {
-    pi.obc = get_parent()->get_obc(pi.recovery_info.soid, pop.attrset);
-    pi.recovery_info.oi = pi.obc->obs.oi;
-  }
 
   bool complete = pi.is_complete();
 
