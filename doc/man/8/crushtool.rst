@@ -114,4 +114,3 @@ See also
 
 :doc:`ceph <ceph>`\(8),
 :doc:`osdmaptool <osdmaptool>`\(8),
-:doc:`mkcephfs <mkcephfs>`\(8)
