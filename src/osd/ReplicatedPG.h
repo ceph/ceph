@@ -578,30 +578,7 @@ protected:
   hobject_t backfill_pos;
 
   int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
-				 int priority,
-				 map<int, vector<PushOp> > *pushes);
-  void calc_head_subsets(ObjectContextRef obc, SnapSet& snapset, const hobject_t& head,
-			 pg_missing_t& missing,
-			 const hobject_t &last_backfill,
-			 interval_set<uint64_t>& data_subset,
-			 map<hobject_t, interval_set<uint64_t> >& clone_subsets);
-  void prep_push_to_replica(
-    ObjectContextRef obc,
-    const hobject_t& oid,
-    int dest,
-    int priority,
-    PushOp *push_op);
-  void prep_push(int priority,
-		 ObjectContextRef obc,
-		 const hobject_t& oid, int dest,
-		 PushOp *op);
-  void prep_push(int priority,
-		 ObjectContextRef obc,
-		 const hobject_t& soid, int peer,
-		 eversion_t version,
-		 interval_set<uint64_t> &data_subset,
-		 map<hobject_t, interval_set<uint64_t> >& clone_subsets,
-		 PushOp *op);
+				 PGBackend::RecoveryHandle *h);
 
   void finish_degraded_object(const hobject_t& oid);
 
