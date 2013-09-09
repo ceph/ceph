@@ -73,4 +73,3 @@ See also
 
 :doc:`ceph <ceph>`\(8),
 :doc:`crushtool <crushtool>`\(8),
-:doc:`mkcephfs <mkcephfs>`\(8)
