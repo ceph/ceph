@@ -46,8 +46,7 @@ Options
 
 .. option:: --mkfs
 
-   Create an empty object repository. Normally invoked by
-   :doc:`mkcephfs <mkcephfs>`\(8). This also initializes the journal
+   Create an empty object repository. This also initializes the journal
    (if one is defined).
 
 .. option:: --mkkey
