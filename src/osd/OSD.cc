@@ -1462,6 +1462,10 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_waiting_for_map,
 			  "messages_delayed_for_map"); // dup osdmap epochs
 
+  osd_plb.add_u64(l_osd_stat_bytes, "stat_bytes");
+  osd_plb.add_u64(l_osd_stat_bytes_used, "stat_bytes_used");
+  osd_plb.add_u64(l_osd_stat_bytes_avail, "stat_bytes_avail");
+
   logger = osd_plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -2590,9 +2594,17 @@ void OSD::update_osd_stat()
   struct statfs stbuf;
   store->statfs(&stbuf);
 
-  osd_stat.kb = stbuf.f_blocks * stbuf.f_bsize / 1024;
-  osd_stat.kb_used = (stbuf.f_blocks - stbuf.f_bfree) * stbuf.f_bsize / 1024;
-  osd_stat.kb_avail = stbuf.f_bavail * stbuf.f_bsize / 1024;
+  uint64_t bytes = stbuf.f_blocks * stbuf.f_bsize;
+  uint64_t used = (stbuf.f_blocks - stbuf.f_bfree) * stbuf.f_bsize;
+  uint64_t avail = stbuf.f_bavail * stbuf.f_bsize;
+
+  osd_stat.kb = bytes >> 10;
+  osd_stat.kb_used = used >> 10;
+  osd_stat.kb_avail = avail >> 10;
+
+  logger->set(l_osd_stat_bytes, bytes);
+  logger->set(l_osd_stat_bytes_used, used);
+  logger->set(l_osd_stat_bytes_avail, avail);
 
   osd_stat.hb_in.clear();
   for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin(); p != heartbeat_peers.end(); ++p)
