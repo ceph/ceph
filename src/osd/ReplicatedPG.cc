@@ -6664,7 +6664,7 @@ void ReplicatedBackend::sub_op_push_reply(OpRequestRef op)
   PushOp pop;
   bool more = handle_push_reply(peer, rop, &pop);
   if (more)
-    send_push_op_legacy(pushing[soid][peer].priority, peer, pop);
+    send_push_op_legacy(op->request->get_priority(), peer, pop);
 }
 
 bool ReplicatedBackend::handle_push_reply(int peer, PushReplyOp &op, PushOp *reply)
