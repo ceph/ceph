@@ -217,8 +217,11 @@ void ReplicatedPG::on_global_recover(
 void ReplicatedPG::on_peer_recover(
   int peer,
   const hobject_t &soid,
-  const ObjectRecoveryInfo &recovery_info)
+  const ObjectRecoveryInfo &recovery_info,
+  const object_stat_sum_t &stat)
 {
+  info.stats.stats.sum.add(stat);
+  publish_stats_to_osd();
   // done!
   if (peer == backfill_target && backfills_in_flight.count(soid))
     backfills_in_flight.erase(soid);
@@ -6146,7 +6149,8 @@ void ReplicatedBackend::prep_push(
   build_push_op(pi.recovery_info,
 		pi.recovery_progress,
 		&new_progress,
-		pop);
+		pop,
+		&(pi.stat));
   pi.recovery_progress = new_progress;
 }
 
@@ -6327,11 +6331,11 @@ bool ReplicatedBackend::handle_pull_response(
   data_included = usable_intervals;
   data.claim(usable_data);
 
-  // TODOSAM: add into the stats passed into on_local_recover
-  //info.stats.stats.sum.num_bytes_recovered += data.length();
 
   bool first = pi.recovery_progress.first;
   pi.recovery_progress = pop.after_progress;
+
+  pi.stat.num_bytes_recovered += data.length();
 
   dout(10) << "new recovery_info " << pi.recovery_info
 	   << ", new progress " << pi.recovery_progress
@@ -6352,16 +6356,14 @@ bool ReplicatedBackend::handle_pull_response(
 		   pop.omap_entries,
 		   t);
 
-  // TODOSAM: add into the stats passed into on_local_recover
-  //info.stats.stats.sum.num_keys_recovered += pop.omap_entries.size();
+  pi.stat.num_keys_recovered += pop.omap_entries.size();
 
   if (complete) {
     pulling.erase(hoid);
     pull_from_peer[from].erase(hoid);
-    // TODOSAM: add into the stats passed into on_local_recover
-    //info.stats.stats.sum.num_objects_recovered++;
+    pi.stat.num_objects_recovered++;
     get_parent()->on_local_recover(
-      hoid, object_stat_sum_t(), pi.recovery_info, pi.obc, t);
+      hoid, pi.stat, pi.recovery_info, pi.obc, t);
     return false;
   } else {
     response->soid = pop.soid;
@@ -6499,7 +6501,8 @@ void ReplicatedBackend::send_pulls(int prio, map<int, vector<PullOp> > &pulls)
 int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 				     const ObjectRecoveryProgress &progress,
 				     ObjectRecoveryProgress *out_progress,
-				     PushOp *out_op)
+				     PushOp *out_op,
+				     object_stat_sum_t *stat)
 {
   ObjectRecoveryProgress _new_progress;
   if (!out_progress)
@@ -6586,13 +6589,14 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 
   if (new_progress.is_complete(recovery_info)) {
     new_progress.data_complete = true;
-    // TODOSAM: fix
-    //info.stats.stats.sum.num_objects_recovered++;
+    if (stat)
+      stat->num_objects_recovered++;
   }
 
-  // TODOSAM: fix
-  //info.stats.stats.sum.num_keys_recovered += out_op->omap_entries.size();
-  //info.stats.stats.sum.num_bytes_recovered += out_op->data.length();
+  if (stat) {
+    stat->num_keys_recovered += out_op->omap_entries.size();
+    stat->num_bytes_recovered += out_op->data.length();
+  }
 
   osd->logger->inc(l_osd_push);
   osd->logger->inc(l_osd_push_outb, out_op->data.length());
@@ -6678,12 +6682,15 @@ bool ReplicatedBackend::handle_push_reply(int peer, PushReplyOp &op, PushOp *rep
       ObjectRecoveryProgress new_progress;
       build_push_op(
 	pi->recovery_info,
-	pi->recovery_progress, &new_progress, reply);
+	pi->recovery_progress, &new_progress, reply,
+	&(pi->stat));
       pi->recovery_progress = new_progress;
       return true;
     } else {
       // done!
-      get_parent()->on_peer_recover(peer, soid, pi->recovery_info);
+      get_parent()->on_peer_recover(
+	peer, soid, pi->recovery_info,
+	pi->stat);
       
       pushing[soid].erase(peer);
       pi = NULL;
@@ -7774,11 +7781,12 @@ int ReplicatedPG::prep_object_replica_pushes(
   return 1;
 }
 
-void ReplicatedBackend::start_pushes(
+int ReplicatedBackend::start_pushes(
   const hobject_t &soid,
   ObjectContextRef obc,
   RPGHandle *h)
 {
+  int pushes = 0;
   // who needs it?  
   for (unsigned i=1; i<get_parent()->get_acting().size(); i++) {
     int peer = get_parent()->get_acting()[i];
@@ -7786,14 +7794,14 @@ void ReplicatedBackend::start_pushes(
       get_parent()->get_peer_missing().find(peer);
     assert(j != get_parent()->get_peer_missing().end());
     if (j->second.is_missing(soid)) {
+      ++pushes;
       h->pushes[peer].push_back(PushOp());
       prep_push_to_replica(obc, soid, peer,
 			   &(h->pushes[peer].back())
 	);
     }
   }
-  
-  dout(10) << " ondisk_read_unlock on " << soid << dendl;
+  return pushes;
 }
 
 int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
