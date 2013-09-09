@@ -62,7 +62,11 @@ void ReplicatedBackend::recover_object(
   } else {
     assert(obc);
     assert(head);
-    // TODOSAM: handle recovering replicas
+    int started = start_pushes(
+      hoid,
+      obc,
+      h);
+    assert(started > 0);
   }
 }
 
