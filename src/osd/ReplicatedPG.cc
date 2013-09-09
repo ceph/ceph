@@ -3460,53 +3460,20 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EINVAL;
 	  goto fail;
 	}
-	pg_t raw_pg;
-	get_osdmap()->object_locator_to_pg(src_name, src_oloc, raw_pg);
-	hobject_t src(src_name, src_oloc.key, src_snapid,
-		      raw_pg.ps(), raw_pg.pool(),
-		      src_oloc.nspace);
 	if (!ctx->copy_op) {
 	  // start
+	  pg_t raw_pg;
+	  get_osdmap()->object_locator_to_pg(src_name, src_oloc, raw_pg);
+	  hobject_t src(src_name, src_oloc.key, src_snapid,
+			raw_pg.ps(), raw_pg.pool(),
+			src_oloc.nspace);
 	  result = start_copy(ctx, src, src_oloc, src_version, &ctx->copy_op);
 	  if (result < 0)
 	    goto fail;
 	  result = -EINPROGRESS;
 	} else {
 	  // finish
-	  CopyOpRef cop = ctx->copy_op;
-
-	  if (!obs.exists) {
-	    ctx->delta_stats.num_objects++;
-	    obs.exists = true;
-	  } else {
-	    t.remove(coll, soid);
-	  }
-
-	  if (cop->temp_cursor.is_initial()) {
-	    // write directly to final object
-	    cop->temp_coll = coll;
-	    cop->temp_oid = soid;
-	    _write_copy_chunk(cop, &t);
-	  } else {
-	    // finish writing to temp object, then move into place
-	    _write_copy_chunk(cop, &t);
-	    t.collection_move_rename(cop->temp_coll, cop->temp_oid, coll, soid);
-	    temp_contents.erase(cop->temp_oid);
-	    ctx->old_temp_oid = cop->temp_oid;
-	  }
-
-	  interval_set<uint64_t> ch;
-	  if (oi.size > 0)
-	    ch.insert(0, oi.size);
-	  ctx->modified_ranges.union_of(ch);
-
-	  if (cop->cursor.data_offset != oi.size) {
-	    ctx->delta_stats.num_bytes -= oi.size;
-	    ctx->delta_stats.num_bytes += oi.size;
-	    oi.size = cop->cursor.data_offset;
-	  }
-	  ctx->delta_stats.num_wr++;
-	  ctx->delta_stats.num_wr_kb += SHIFT_ROUND_UP(cop->data.length(), 10);
+	  result = finish_copy(ctx);
 	}
       }
       break;
@@ -4251,6 +4218,48 @@ void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, ObjectStore::Transaction *t)
     cop->omap.clear();
   }
   cop->temp_cursor = cop->cursor;
+}
+
+int ReplicatedPG::finish_copy(OpContext *ctx)
+{
+  CopyOpRef cop = ctx->copy_op;
+  ObjectState& obs = ctx->new_obs;
+  ObjectStore::Transaction& t = ctx->op_t;
+
+  if (!obs.exists) {
+    ctx->delta_stats.num_objects++;
+    obs.exists = true;
+  } else {
+    t.remove(coll, obs.oi.soid);
+  }
+
+  if (cop->temp_cursor.is_initial()) {
+    // write directly to final object
+    cop->temp_coll = coll;
+    cop->temp_oid = obs.oi.soid;
+    _write_copy_chunk(cop, &t);
+  } else {
+    // finish writing to temp object, then move into place
+    _write_copy_chunk(cop, &t);
+    t.collection_move_rename(cop->temp_coll, cop->temp_oid, coll, obs.oi.soid);
+    temp_contents.erase(cop->temp_oid);
+    ctx->discard_temp_oid = cop->temp_oid;
+  }
+
+  interval_set<uint64_t> ch;
+  if (obs.oi.size > 0)
+    ch.insert(0, obs.oi.size);
+  ctx->modified_ranges.union_of(ch);
+
+  if (cop->cursor.data_offset != obs.oi.size) {
+    ctx->delta_stats.num_bytes -= obs.oi.size;
+    ctx->delta_stats.num_bytes += obs.oi.size;
+    obs.oi.size = cop->cursor.data_offset;
+  }
+  ctx->delta_stats.num_wr++;
+  ctx->delta_stats.num_wr_kb += SHIFT_ROUND_UP(obs.oi.size, 10);
+
+  return 0;
 }
 
 void ReplicatedPG::cancel_copy(CopyOpRef cop)
