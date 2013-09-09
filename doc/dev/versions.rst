@@ -1,6 +1,7 @@
-==============
+==================
 Public OSD Version
-==============
+==================
+
 We maintain two versions on disk: an eversion_t pg_log.head and a
 version_t info.user_version. Each object is tagged with both the pg
 version and user_version it was last modified with.  The PG version is
