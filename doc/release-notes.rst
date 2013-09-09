@@ -3,10 +3,10 @@
 ===============
 
 v0.68
-----
+-----
 
 Upgrading
-~~~~
+~~~~~~~~~
 
 * 'ceph osd crush set <id> <weight> <loc..>' no longer adds the osd to the
   specified location, as that's a job for 'ceph osd crush add'.  It will
@@ -37,7 +37,7 @@ Upgrading
 
 
 Notable Changes
-~~~~
+~~~~~~~~~~~~~~~
 
 * ceph-fuse: fix problem with readahead vs truncate race (Yan, Zheng)
 * ceph-post-file: new command to easily share logs or other files with ceph devs
@@ -232,11 +232,11 @@ In addition to the above notes about upgrading from v0.66:
 * The 'ceph osd tell ...' and 'ceph mon tell ...' commands are no
   longer supported.  Any callers should use::
 
-    ceph tell osd.<id or *> ...
-    ceph tell mon.<id or name or *> ...
+	ceph tell osd.<id or *> ...
+	ceph tell mon.<id or name or *> ...
 
   The 'ceph mds tell ...' command is still there, but will soon also
-  transition to 'ceph tell mds.<id or name or *> ...'
+  transition to 'ceph tell mds.<id or name or \*> ...'
 
 * The 'ceph osd crush add ...' command used to take one of two forms::
 
@@ -261,7 +261,7 @@ In addition to the above notes about upgrading from v0.66:
   renamed to 'mon osd min down {reporters|reports}', and the
   documentation has been updated to reflect that these options apply
   to the monitors (who process failure reports) and not OSDs.  If you
-  have adjusted these settings, please update your ``ceph.conf''
+  have adjusted these settings, please update your ``ceph.conf``
   accordingly.
 
 
@@ -465,11 +465,11 @@ Upgrading
 * The 'ceph osd tell ...' and 'ceph mon tell ...' commands are no
   longer supported.  Any callers should use::
 
-    ceph tell osd.<id or *> ...
-    ceph tell mon.<id or name or *> ...
+	ceph tell osd.<id or *> ...
+	ceph tell mon.<id or name or *> ...
 
   The 'ceph mds tell ...' command is still there, but will soon also
-  transition to 'ceph tell mds.<id or name or *> ...'
+  transition to 'ceph tell mds.<id or name or \*> ...'
 
 * The 'ceph osd crush add ...' command used to take one of two forms::
 
@@ -563,7 +563,7 @@ Upgrading
   renamed to 'mon osd min down {reporters|reports}', and the
   documentation has been updated to reflect that these options apply
   to the monitors (who process failure reports) and not OSDs.  If you
-  have adjusted these settings, please update your ``ceph.conf''
+  have adjusted these settings, please update your ``ceph.conf``
   accordingly.
 
 Notable Changes
