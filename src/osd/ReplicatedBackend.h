@@ -149,6 +149,7 @@ private:
     ObjectRecoveryProgress recovery_progress;
     ObjectRecoveryInfo recovery_info;
     ObjectContextRef obc;
+    object_stat_sum_t stat;
 
     void dump(Formatter *f) const {
       {
@@ -171,6 +172,7 @@ private:
     ObjectRecoveryInfo recovery_info;
     ObjectContextRef head_ctx;
     ObjectContextRef obc;
+    object_stat_sum_t stat;
 
     void dump(Formatter *f) const {
       {
@@ -247,7 +249,8 @@ private:
   int build_push_op(const ObjectRecoveryInfo &recovery_info,
 		    const ObjectRecoveryProgress &progress,
 		    ObjectRecoveryProgress *out_progress,
-		    PushOp *out_op);
+		    PushOp *out_op,
+		    object_stat_sum_t *stat = 0);
   void submit_push_data(ObjectRecoveryInfo &recovery_info,
 			bool first,
 			bool complete,
@@ -269,7 +272,7 @@ private:
     const hobject_t& soid,
     ObjectContextRef headctx,
     RPGHandle *h);
-  void start_pushes(
+  int start_pushes(
     const hobject_t &soid,
     ObjectContextRef obj,
     RPGHandle *h);
