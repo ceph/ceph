@@ -761,6 +761,11 @@ int RGWPutObjProcessor_Atomic::complete_writing_data()
     }
   }
   complete_parts();
+
+  int r = drain_pending();
+  if (r < 0)
+    return r;
+
   return 0;
 }
 
