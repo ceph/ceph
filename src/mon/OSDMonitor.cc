@@ -2473,10 +2473,11 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
   MonSession *session = m->get_session();
   if (!session)
     return -EPERM;
+  vector<string> properties;
   if (m->auid)
-    return prepare_new_pool(m->name, m->auid, m->crush_rule, 0, 0);
+    return prepare_new_pool(m->name, m->auid, m->crush_rule, 0, 0, properties);
   else
-    return prepare_new_pool(m->name, session->auid, m->crush_rule, 0, 0);
+    return prepare_new_pool(m->name, session->auid, m->crush_rule, 0, 0, properties);
 }
 
 /**
@@ -2485,11 +2486,13 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
  * @param crush_rule The crush rule to use. If <0, will use the system default
  * @param pg_num The pg_num to use. If set to 0, will use the system default
  * @param pgp_num The pgp_num to use. If set to 0, will use the system default
+ * @param properties An opaque list of key[=value] pairs for pool configuration
  *
  * @return 0 in all cases. That's silly.
  */
 int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
-                                 unsigned pg_num, unsigned pgp_num)
+                                 unsigned pg_num, unsigned pgp_num,
+				 const vector<string> &properties)
 {
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
        p != pending_inc.new_pool_names.end();
@@ -2519,6 +2522,18 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
   pi->set_pgp_num(pgp_num ? pgp_num : g_conf->osd_pool_default_pgp_num);
   pi->last_change = pending_inc.epoch;
   pi->auid = auid;
+  for (vector<string>::const_iterator i = properties.begin();
+       i != properties.end();
+       i++) {
+    size_t equal = i->find('=');
+    if (equal != string::npos)
+      pi->properties[*i] = string();
+    else {
+      const string key = i->substr(0, equal);
+      const string value = i->substr(equal);
+      pi->properties[key] = value;
+    }
+  }
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
@@ -3480,9 +3495,13 @@ done:
       goto reply;
     }
 
+    vector<string> properties;
+    cmd_getval(g_ceph_context, cmdmap, "properties", properties);
+
     err = prepare_new_pool(poolstr, 0, // auid=0 for admin created pool
 			   -1,         // default crush rule
-			   pg_num, pgp_num);
+			   pg_num, pgp_num,
+			   properties);
     if (err < 0 && err != -EEXIST) {
       goto reply;
     }
