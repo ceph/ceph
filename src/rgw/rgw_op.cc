@@ -979,11 +979,11 @@ class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
   struct put_obj_aio_info pop_pending();
   int wait_pending_front();
   bool pending_has_completed();
-  int drain_pending();
 
 protected:
   uint64_t obj_len;
 
+  int drain_pending();
   int handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle);
   int throttle_data(void *handle);
 
@@ -1174,8 +1174,12 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, map<string, bufferlist>
 
   store->set_atomic(s->obj_ctx, head_obj);
 
-  int r = store->put_obj_meta(s->obj_ctx, head_obj, obj_len, NULL, attrs,
-                              RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE, NULL, &first_chunk, &manifest, NULL, NULL);
+  int r = drain_pending();
+  if (r < 0)
+    return r;
+
+  r = store->put_obj_meta(s->obj_ctx, head_obj, obj_len, NULL, attrs,
+                          RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE, NULL, &first_chunk, &manifest, NULL, NULL);
 
   return r;
 }
@@ -1220,7 +1224,11 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, map<string, bufferli
 {
   complete_parts();
 
-  int r = store->put_obj_meta(s->obj_ctx, head_obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, 0, NULL, NULL, NULL, NULL, NULL);
+  int r = drain_pending();
+  if (r < 0)
+    return r;
+
+  r = store->put_obj_meta(s->obj_ctx, head_obj, s->obj_size, NULL, attrs, RGW_OBJ_CATEGORY_MAIN, 0, NULL, NULL, NULL, NULL, NULL);
   if (r < 0)
     return r;
 
