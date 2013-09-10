@@ -1649,6 +1649,23 @@ TEST(BufferList, crc32c) {
   EXPECT_EQ((unsigned)0x5FA5C0CC, crc);
 }
 
+TEST(BufferList, crc32cappend) {
+  bufferlist bl1;
+  bufferlist bl2;
+
+  for (int j = 0; j < 200; ++j) {
+    bufferlist bl;
+    for (int i = 0; i < 200; ++i) {
+      char x = rand();
+      bl.append(x);
+      bl1.append(x);
+    }
+    bl.crc32c(rand()); // mess with the cached bufferptr crc values
+    bl2.append(bl);
+  }
+  ASSERT_EQ(bl1.crc32c(0), bl2.crc32c(0));
+}
+
 TEST(BufferList, compare) {
   bufferlist a;
   a.append("A");
