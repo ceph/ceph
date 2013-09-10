@@ -1039,15 +1039,12 @@ def prepare_journal_dev(
 
 
 def prepare_journal_file(
-    journal,
-    journal_size):
+    journal):
 
     if not os.path.exists(journal):
-        LOG.debug('Creating journal file %s with size %dM', journal, journal_size)
+        LOG.debug('Creating journal file %s with size 0 (ceph-osd will resize and allocate)', journal)
         with file(journal, 'wb') as journal_file:
-            journal_file.truncate(journal_size * 1048576)
-
-    # FIXME: should we resize an existing journal file?
+            pass
 
     LOG.debug('Journal is file %s', journal)
     LOG.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
@@ -1072,13 +1069,13 @@ def prepare_journal(
     if not os.path.exists(journal):
         if force_dev:
             raise Error('Journal does not exist; not a block device', journal)
-        return prepare_journal_file(journal, journal_size)
+        return prepare_journal_file(journal)
 
     jmode = os.stat(journal).st_mode
     if stat.S_ISREG(jmode):
         if force_dev:
             raise Error('Journal is not a block device', journal)
-        return prepare_journal_file(journal, journal_size)
+        return prepare_journal_file(journal)
 
     if stat.S_ISBLK(jmode):
         if force_file:
