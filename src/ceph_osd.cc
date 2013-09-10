@@ -417,6 +417,8 @@ int main(int argc, const char **argv)
   if (r < 0)
     exit(1);
 
+  ms_objecter->bind(g_conf->public_addr);
+
   // Set up crypto, daemonize, etc.
   global_init_daemonize(g_ceph_context, 0);
   common_init_finish(g_ceph_context);
