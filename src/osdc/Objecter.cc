@@ -297,7 +297,7 @@ void Objecter::send_linger(LingerOp *info)
     if (ops.count(info->register_tid)) {
       Op *o = ops[info->register_tid];
       op_cancel_map_check(o);
-      cancel_op(o);
+      cancel_linger_op(o);
     }
     info->register_tid = _op_submit(o);
   } else {
@@ -659,7 +659,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	send_op(op);
       }
     } else {
-      cancel_op(op);
+      cancel_linger_op(op);
     }
   }
   for (list<LingerOp*>::iterator p = need_resend_linger.begin(); p != need_resend_linger.end(); ++p) {
@@ -1003,7 +1003,7 @@ void Objecter::kick_requests(OSDSession *session)
     if (op->should_resend) {
       resend[op->tid] = op;
     } else {
-      cancel_op(op);
+      cancel_linger_op(op);
     }
   }
   while (!resend.empty()) {
@@ -1440,12 +1440,10 @@ bool Objecter::recalc_linger_op_target(LingerOp *linger_op)
   return RECALC_OP_TARGET_NO_ACTION;
 }
 
-void Objecter::cancel_op(Op *op)
+void Objecter::cancel_linger_op(Op *op)
 {
   ldout(cct, 15) << "cancel_op " << op->tid << dendl;
 
-  // currently this only works for linger registrations, since we just
-  // throw out the callbacks.
   assert(!op->should_resend);
   delete op->onack;
   delete op->oncommit;
