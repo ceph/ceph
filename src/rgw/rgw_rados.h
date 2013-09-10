@@ -238,11 +238,11 @@ class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
   struct put_obj_aio_info pop_pending();
   int wait_pending_front();
   bool pending_has_completed();
-  int drain_pending();
 
 protected:
   uint64_t obj_len;
 
+  int drain_pending();
   int handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle);
 
 public:
