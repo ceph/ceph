@@ -21,6 +21,7 @@
 #include "include/atomic.h"
 #include "include/types.h"
 #include "include/compat.h"
+#include "include/Spinlock.h"
 
 #include <errno.h>
 #include <fstream>
@@ -29,6 +30,9 @@
 #include <limits.h>
 
 namespace ceph {
+
+
+static unsigned char zbuf[128];
 
 #ifdef BUFFER_DEBUG
 static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
@@ -60,9 +64,14 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
     unsigned len;
     atomic_t nref;
 
-    raw(unsigned l) : data(NULL), len(l), nref(0)
+    Spinlock crc_lock;
+    map<pair<off_t, off_t>, pair<int64_t, int64_t> > crc_map;
+    int64_t crc_in;   ///< cached crc base; -1 if invalid
+    int64_t crc_out;  ///< cached crc value; -1 if invalid
+
+    raw(unsigned l) : data(NULL), len(l), nref(0), crc_in(-1), crc_out(-1)
     { }
-    raw(char *c, unsigned l) : data(c), len(l), nref(0)
+    raw(char *c, unsigned l) : data(c), len(l), nref(0), crc_in(-1), crc_out(-1)
     { }
     virtual ~raw() {};
 
@@ -77,11 +86,30 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
       return c;
     }
 
+    unsigned length() const {
+      return len;
+    }
+
     bool is_page_aligned() {
       return ((long)data & ~CEPH_PAGE_MASK) == 0;
     }
     bool is_n_page_sized() {
       return (len & ~CEPH_PAGE_MASK) == 0;
+    }
+    bool get_crc(const pair<off_t, off_t> &fromto,
+		 pair<int64_t, int64_t> *crc) const {
+      Spinlock::Locker l(crc_lock);
+      map<pair<off_t, off_t>, pair<int64_t, int64_t> >::const_iterator i =
+	crc_map.find(fromto);
+      if (i == crc_map.end())
+	return false;
+      *crc = i->second;
+      return true;
+    }
+    void set_crc(const pair<off_t, off_t> &fromto,
+		 const pair<uint64_t, uint64_t> &crc) {
+      Spinlock::Locker l(crc_lock);
+      crc_map[fromto] = crc;
     }
   };
 
@@ -1274,9 +1302,40 @@ __u32 buffer::list::crc32c(__u32 crc) const
 {
   for (std::list<ptr>::const_iterator it = _buffers.begin();
        it != _buffers.end();
-       ++it)
-    if (it->length())
-      crc = ceph_crc32c(crc, (unsigned char*)it->c_str(), it->length());
+       ++it) {
+    if (it->length()) {
+      raw *r = it->get_raw();
+      pair<off_t, off_t> ofs(it->offset(), it->offset() + it->length());
+      pair<int64_t, int64_t> ccrc;
+      if (r->get_crc(ofs, &ccrc)) {
+	if (ccrc.first == crc) {
+	  // got it already
+	  crc = ccrc.second;
+	} else {
+	  /* If we have cached crc32c(buf, v) for initial value v,
+	   * we can convert this to a different initial value v' by:
+	   * crc32c(buf, v') = crc32c(buf, v) ^ adjustment
+	   * where adjustment = crc32c(0*len(buf), v ^ v')
+	   *
+	   * http://crcutil.googlecode.com/files/crc-doc.1.0.pdf
+	   * note, u for our crc32c implementation is 0
+	   */
+	  int64_t adjustment = ccrc.first ^ crc;
+	  size_t remaining = it->length();
+	  for (; remaining > sizeof(zbuf); remaining -= sizeof(zbuf)) {
+	    adjustment = ceph_crc32c(adjustment, zbuf, sizeof(zbuf));
+	  }
+	  if (remaining)
+	    adjustment = ceph_crc32c(adjustment, zbuf, remaining);
+	  crc = ccrc.second ^ adjustment;
+	}
+      } else {
+	uint32_t base = crc;
+	crc = ceph_crc32c(crc, (unsigned char*)it->c_str(), it->length());
+	r->set_crc(ofs, make_pair(base, crc));
+      }
+    }
+  }
   return crc;
 }
 
