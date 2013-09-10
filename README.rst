@@ -312,23 +312,12 @@ this issue.
 Test Sandbox Directory
 ======================
 
-Teuthology currently places most test files and mount points in a sandbox
-directory, defaulting to ``/home/$USER/cephtest/{rundir}``.  The ``{rundir}``
-is the name of the run (as given by ``--name``) or if no name is specified,
-``user@host-timestamp`` is used.  To change the location of the sandbox
-directory, the following options can be specified in
-``$HOME/.teuthology.yaml``::
-
-    base_test_dir: <directory>
-
-The ``base_test_dir`` option will set the base directory to use for the
-individual run directories.
+Teuthology currently places most test files and mount points in a
+sandbox directory, defaulting to ``/home/$USER/cephtest``.  To change
+the location of the sandbox directory, the following option can be
+specified in ``$HOME/.teuthology.yaml``::
 
     test_path: <directory>
-
-The ``test_path`` option will set the complete path to use for the test
-directory.  This allows for the old behavior, where ``/tmp/cephtest`` was used
-as the sandbox directory.
 
 
 VIRTUAL MACHINE SUPPORT

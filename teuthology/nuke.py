@@ -263,13 +263,13 @@ def remove_installed_packages(ctx, log):
     install_task.purge_data(ctx)
 
 def remove_testing_tree(ctx, log):
-    from teuthology.misc import get_testdir_base
+    from teuthology.misc import get_testdir
     from .orchestra import run
     nodes = {}
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
             args=[
-                'sudo', 'rm', '-rf', get_testdir_base(ctx),
+                'sudo', 'rm', '-rf', get_testdir(ctx),
                 # just for old time's sake
                 run.Raw('&&'),
                 'sudo', 'rm', '-rf', '/tmp/cephtest',

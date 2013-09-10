@@ -21,8 +21,6 @@ log = logging.getLogger(__name__)
 
 import datetime
 stamp = datetime.datetime.now().strftime("%y%m%d%H%M")
-global_jobid = None
-checked_jobid = False
 is_vm = lambda x: x.startswith('vpm') or x.startswith('ubuntu@vpm')
 
 is_arm = lambda x: x.startswith('tala') or x.startswith('ubuntu@tala') or x.startswith('saya') or x.startswith('ubuntu@saya')
@@ -30,62 +28,11 @@ is_arm = lambda x: x.startswith('tala') or x.startswith('ubuntu@tala') or x.star
 def get_testdir(ctx):
     if 'test_path' in ctx.teuthology_config:
         return ctx.teuthology_config['test_path']
-
-    basedir = get_testdir_base(ctx)
-
-    global global_jobid
-    global checked_jobid
-
-    # check if a jobid exists in the machine status for all our targets
-    # and if its the same jobid, use that as the subdir for the test
-    if not checked_jobid and ctx.config.get('check-locks') != False:
-        jobids = {}
-        for machine in ctx.config['targets'].iterkeys():
-            status = lockstatus.get_status(ctx, machine)
-            if status is None or 'description' not in status or status['description'] is None:
-                continue
-            jid = status['description'].split('/')[-1]
-            if jid is None or jid == 'None':
-                continue
-            jobids[jid] = 1
-            if len(jobids) > 1:
-                break
-        if len(jobids) == 1:
-            # same job id on all machines, use that as the test subdir
-            (jobid,) = jobids.iterkeys()
-            if jobid is not None:
-                global_jobid = jobid
-                log.debug('setting my jobid to {jid}'.format(jid=global_jobid))
-        checked_jobid = True
-
-    # the subdir is chosen using the priority:
-    # 1. jobid chosen by the teuthology beanstalk queue
-    # 2. run name specified by teuthology schedule
-    # 3. user@timestamp
-    if global_jobid is not None:
-        log.debug('with jobid basedir: {b}'.format(b=global_jobid))
-        return '{basedir}/{jobid}'.format(
-                    basedir=basedir,
-                    jobid=global_jobid,
-                    )
-    elif hasattr(ctx, 'name') and ctx.name:
-        log.debug('with name basedir: {b}'.format(b=basedir))
-        # we need a short string to keep the path short
-        import re
-        m = re.match(r"(.*)-(.*)-(.*)-(.*)_(.*)-(.*)-(.*)-(.*)-(.*)", ctx.name)
-        (u, y, m, d, hms, s, c, k, f) = m.groups()
-        short = u[0:2] + y[2:4] + m[0:2] + d[0:2] + hms[0:2] + hms[3:5] + s[0] + c[0] + k[0] + f[0]
-        return '{basedir}/{rundir}'.format(
-                    basedir=basedir,
-                    rundir=short,
-                    )
-    else:
-        log.debug('basedir: {b}'.format(b=basedir))
-        return '{basedir}/{user}{stamp}'.format(
-                    basedir=basedir,
-                    user=get_user()[0:2],
-                    stamp=stamp)
-
+    test_user = get_test_user(ctx)
+    # FIXME this ideally should use os.path.expanduser() in the future, in case
+    # $HOME isn't /home/$USER - e.g. on a Mac. However, since we're executing
+    # this on the server side, it won't work properly.
+    return ctx.teuthology_config.get('test_path', '/home/%s/cephtest' % test_user)
 
 def get_test_user(ctx):
     """
@@ -93,16 +40,6 @@ def get_test_user(ctx):
     """
     return ctx.teuthology_config.get('test_user', 'ubuntu')
 
-
-def get_testdir_base(ctx):
-    if 'test_path' in ctx.teuthology_config:
-        return ctx.teuthology_config['test_path']
-    test_user = get_test_user(ctx)
-    # FIXME this ideally should use os.path.expanduser() in the future, in case
-    # $HOME isn't /home/$USER - e.g. on a Mac. However, since we're executing
-    # this on the server side, it won't work properly.
-    return ctx.teuthology_config.get('base_test_dir', '/home/%s/cephtest' %
-                                     test_user)
 
 def get_archive_dir(ctx):
     test_dir = get_testdir(ctx)
