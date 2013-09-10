@@ -129,6 +129,10 @@ struct object_locator_t {
     nspace = "";
   }
 
+  bool empty() const {
+    return pool == -1;
+  }
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
@@ -153,6 +157,47 @@ inline ostream& operator<<(ostream& out, const object_locator_t& loc)
   return out;
 }
 
+struct request_redirect_t {
+private:
+  object_locator_t redirect_locator; ///< this is authoritative
+  string redirect_object; ///< If non-empty, the request goes to this object name
+  bufferlist osd_instructions; ///< a bufferlist for the OSDs, passed but not interpreted by clients
+
+  friend ostream& operator<<(ostream& out, const request_redirect_t& redir);
+public:
+
+  request_redirect_t() {}
+  explicit request_redirect_t(const object_locator_t& orig, int64_t rpool) :
+      redirect_locator(orig) { redirect_locator.pool = rpool; }
+  explicit request_redirect_t(const object_locator_t& rloc) :
+      redirect_locator(rloc) {}
+  explicit request_redirect_t(const object_locator_t& orig,
+                              const string& robj) :
+      redirect_locator(orig), redirect_object(robj) {}
+
+  void set_instructions(const bufferlist& bl) { osd_instructions = bl; }
+  const bufferlist& get_instructions() { return osd_instructions; }
+
+  bool empty() const { return redirect_locator.empty() &&
+			      redirect_object.empty(); }
+
+  void combine_with_locator(object_locator_t& orig, string& obj) const {
+    orig = redirect_locator;
+    if (!redirect_object.empty())
+      obj = redirect_object;
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<request_redirect_t*>& o);
+};
+WRITE_CLASS_ENCODER(request_redirect_t)
+
+inline ostream& operator<<(ostream& out, const request_redirect_t& redir) {
+  out << "object " << redir.redirect_object << ", locator{" << redir.redirect_locator << "}";
+  return out;
+}
 
 // Internal OSD op flags - set by the OSD based on the op types
 enum {
