@@ -32,6 +32,7 @@ TYPE(CrushWrapper)
 #include "osd/osd_types.h"
 TYPE(osd_reqid_t)
 TYPE(object_locator_t)
+TYPE(request_redirect_t)
 TYPE(pg_t)
 TYPE(coll_t)
 TYPE(pow2_hist_t)
