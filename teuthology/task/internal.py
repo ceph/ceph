@@ -18,31 +18,17 @@ log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
 def base(ctx, config):
-    log.info('Creating base directory...')
-    test_basedir = teuthology.get_testdir_base(ctx)
+    log.info('Creating test directory...')
     testdir = teuthology.get_testdir(ctx)
-    # make base dir if it doesn't exist
     run.wait(
         ctx.cluster.run(
             args=[
-                'mkdir', '-m0755', '-p', '--',
-                test_basedir,
+                'mkdir', '-m0755', '--',
+                testdir,
                 ],
-                wait=False,
-                )
-        )
-    # only create testdir if its not set to basedir
-    if test_basedir != testdir:
-        run.wait(
-            ctx.cluster.run(
-                args=[
-                    'mkdir', '-m0755', '--',
-                    testdir,
-                ],
-                wait=False,
-                )
+            wait=False,
             )
-
+        )
     try:
         yield
     finally:
@@ -235,32 +221,6 @@ def check_ceph_data(ctx, config):
 
 def check_conflict(ctx, config):
     log.info('Checking for old test directory...')
-    test_basedir = teuthology.get_testdir_base(ctx)
-    processes = ctx.cluster.run(
-        args=[
-            'test', '!', '-e', test_basedir,
-            ],
-        wait=False,
-        )
-    for proc in processes:
-        assert isinstance(proc.exitstatus, gevent.event.AsyncResult)
-        try:
-            proc.exitstatus.get()
-        except run.CommandFailedError:
-            # base dir exists
-            r = proc.remote.run(
-                args=[
-                    'ls', test_basedir, run.Raw('|'), 'wc', '-l'
-                    ],
-                stdout=StringIO(),
-                )
-
-            if int(r.stdout.getvalue()) > 0:
-                log.error('WARNING: Host %s has stale test directories, these need to be investigated and cleaned up!',
-                          proc.remote.shortname)
-
-    # testdir might be the same as base dir (if test_path is set)
-    # need to bail out in that case if the testdir exists
     testdir = teuthology.get_testdir(ctx)
     processes = ctx.cluster.run(
         args=[
