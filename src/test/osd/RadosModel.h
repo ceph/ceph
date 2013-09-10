@@ -1404,9 +1404,11 @@ public:
   ObjectDesc src_value;
   librados::ObjectWriteOperation op;
   librados::AioCompletion *comp;
+  librados::AioCompletion *comp_racing_read;
   int snap;
-  bool done;
-  tid_t tid;
+  int done;
+  uint64_t version;
+  int r;
   CopyFromOp(int n,
 	     RadosTestContext *context,
 	     const string &oid,
@@ -1415,7 +1417,7 @@ public:
     : TestOp(n, context, stat),
       oid(oid), oid_src(oid_src),
       src_value(&context->cont_gen),
-      comp(NULL), done(false), tid(0)
+      comp(NULL), done(0), version(0), r(0)
   {}
 
   void _begin()
@@ -1447,35 +1449,67 @@ public:
 					       new TestOp::CallbackInfo(0));
     comp = context->rados.aio_create_completion((void*) cb_arg, &write_callback,
 						NULL);
-    tid = context->io_ctx.aio_operate(context->prefix+oid, comp, &op);
+    context->io_ctx.aio_operate(context->prefix+oid, comp, &op);
+
+    // queue up a racing read, too.
+    pair<TestOp*, TestOp::CallbackInfo*> *read_cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(1));
+    comp_racing_read = context->rados.aio_create_completion((void*) read_cb_arg, &write_callback,
+							    NULL);
+    context->io_ctx.aio_stat(context->prefix+oid, comp_racing_read, NULL, NULL);
   }
 
   void _finish(CallbackInfo *info)
   {
     Mutex::Locker l(context->state_lock);
-    done = true;
-    int r;
-    assert(comp->is_complete());
-    cout << num << ":  finishing copy_from tid " << tid << " to " << context->prefix + oid << std::endl;
-    if ((r = comp->get_return_value())) {
-      if (!(r == -ENOENT && src_value.deleted())) {
-	cerr << "Error: oid " << oid << " copy_from " << oid_src << " returned error code "
-	     << r << std::endl;
+
+    // note that the read can (and atm will) come back before the
+    // write reply, but will reflect the update and the versions will
+    // match.
+
+    if (info->id == 0) {
+      // copy_from
+      assert(comp->is_complete());
+      cout << num << ":  finishing copy_from to " << context->prefix + oid << std::endl;
+      if ((r = comp->get_return_value())) {
+	if (!(r == -ENOENT && src_value.deleted())) {
+	  cerr << "Error: oid " << oid << " copy_from " << oid_src << " returned error code "
+	       << r << std::endl;
+	}
+      } else {
+	assert(!version || comp->get_version64() == version);
+	version = comp->get_version64();
+	context->update_object_full(oid, src_value);
+	context->update_object_version(oid, comp->get_version64());
       }
-    } else {
-      context->update_object_full(oid, src_value);
-      context->update_object_version(oid, comp->get_version());
+      context->oid_in_use.erase(oid_src);
+      context->oid_not_in_use.insert(oid_src);
+      context->kick();
+    } else if (info->id == 1) {
+      // racing read
+      assert(comp_racing_read->is_complete());
+      cout << num << ":  finishing copy_from racing read to " << context->prefix + oid << std::endl;
+      if ((r = comp_racing_read->get_return_value())) {
+	if (!(r == -ENOENT && src_value.deleted())) {
+	  cerr << "Error: oid " << oid << " copy_from " << oid_src << " returned error code "
+	       << r << std::endl;
+	}
+      } else {
+	assert(comp_racing_read->get_return_value() == 0);
+	assert(!version || comp_racing_read->get_version64() == version);
+	version = comp_racing_read->get_version64();
+      }
+      context->oid_in_use.erase(oid);
+      context->oid_not_in_use.insert(oid);
+      context->kick();
     }
-    context->oid_in_use.erase(oid);
-    context->oid_not_in_use.insert(oid);
-    context->oid_in_use.erase(oid_src);
-    context->oid_not_in_use.insert(oid_src);
-    context->kick();
+    ++done;
   }
 
   bool finished()
   {
-    return done;
+    return done == 2;
   }
 
   string getType()
