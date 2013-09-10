@@ -101,6 +101,41 @@ void object_locator_t::generate_test_instances(list<object_locator_t*>& o)
   o.push_back(new object_locator_t(12, "n1", "key2"));
 }
 
+// -- request_redirect_t --
+void request_redirect_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(redirect_locator, bl);
+  ::encode(redirect_object, bl);
+  ::encode(osd_instructions, bl);
+  ENCODE_FINISH(bl);
+}
+
+void request_redirect_t::decode(bufferlist::iterator& bl)
+{
+  DECODE_START(1, bl);
+  ::decode(redirect_locator, bl);
+  ::decode(redirect_object, bl);
+  ::decode(osd_instructions, bl);
+  DECODE_FINISH(bl);
+}
+
+void request_redirect_t::dump(Formatter *f) const
+{
+  f->dump_string("object", redirect_object);
+  f->open_object_section("locator");
+  redirect_locator.dump(f);
+  f->close_section(); // locator
+}
+
+void request_redirect_t::generate_test_instances(list<request_redirect_t*>& o)
+{
+  object_locator_t loc(1, "redir_obj");
+  o.push_back(new request_redirect_t());
+  o.push_back(new request_redirect_t(loc, 0));
+  o.push_back(new request_redirect_t(loc, "redir_obj"));
+  o.push_back(new request_redirect_t(loc));
+}
 
 // -- pow2_hist_t --
 void pow2_hist_t::dump(Formatter *f) const

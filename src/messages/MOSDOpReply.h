@@ -31,7 +31,7 @@
 
 class MOSDOpReply : public Message {
 
-  static const int HEAD_VERSION = 5;
+  static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 2;
 
   object_t oid;
@@ -44,6 +44,7 @@ class MOSDOpReply : public Message {
   version_t user_version;
   epoch_t osdmap_epoch;
   int32_t retry_attempt;
+  request_redirect_t redirect;
 
 public:
   object_t get_oid() const { return oid; }
@@ -87,6 +88,10 @@ public:
     bad_replay_version = v;
   }
 
+  void set_redirect(const request_redirect_t& redir) { redirect = redir; }
+  const request_redirect_t& get_redirect() const { return redirect; }
+  bool is_redirect_reply() const { return !redirect.empty(); }
+
   void add_flags(int f) { flags |= f; }
 
   void claim_op_out_data(vector<OSDOp>& o) {
@@ -109,7 +114,7 @@ public:
   }
   
   // osdmap
-  epoch_t get_map_epoch() { return osdmap_epoch; }
+  epoch_t get_map_epoch() const { return osdmap_epoch; }
 
   /*osd_reqid_t get_reqid() { return osd_reqid_t(get_dest(),
 					       head.client_inc,
@@ -180,6 +185,7 @@ public:
 
       ::encode(replay_version, payload);
       ::encode(user_version, payload);
+      ::encode(redirect, payload);
     }
   }
   virtual void decode_payload() {
@@ -232,6 +238,9 @@ public:
 	replay_version = bad_replay_version;
 	user_version = replay_version.version;
       }
+
+      if (header.version >= 6)
+	::decode(redirect, p);
     }
   }
 
@@ -252,6 +261,9 @@ public:
     if (get_result() < 0) {
       char buf[80];
       out << " (" << strerror_r(-get_result(), buf, sizeof(buf)) << ")";
+    }
+    if (is_redirect_reply()) {
+      out << " redirect: { " << redirect << " }";
     }
     out << ")";
   }

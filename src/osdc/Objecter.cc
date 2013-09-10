@@ -1243,7 +1243,7 @@ tid_t Objecter::_op_submit(Op *op)
   }
 
   // send?
-  ldout(cct, 10) << "op_submit oid " << op->oid
+  ldout(cct, 10) << "op_submit oid " << op->base_oid
            << " " << op->base_oloc << " " << op->target_oloc
 	   << " " << op->ops << " tid " << op->tid
            << " osd." << (op->session ? op->session->osd : -1)
@@ -1328,22 +1328,33 @@ int Objecter::recalc_op_target(Op *op)
   bool is_read = op->flags & CEPH_OSD_FLAG_READ;
   bool is_write = op->flags & CEPH_OSD_FLAG_WRITE;
 
-  op->target_oloc = op->base_oloc;
-  const pg_pool_t *pi = osdmap->get_pg_pool(op->base_oloc.pool);
-  if (pi) {
-    if (is_read && pi->has_read_tier())
-      op->target_oloc.pool = pi->read_tier;
-    if (is_write && pi->has_write_tier())
-      op->target_oloc.pool = pi->write_tier;
+  bool need_check_tiering = false;
+  if (op->target_oid.name.empty()) {
+    op->target_oid = op->base_oid;
+    need_check_tiering = true;
+  }
+  if (op->target_oloc.empty()) {
+    op->target_oloc = op->base_oloc;
+    need_check_tiering = true;
+  }
+  
+  if (need_check_tiering) {
+    const pg_pool_t *pi = osdmap->get_pg_pool(op->base_oloc.pool);
+    if (pi) {
+      if (is_read && pi->has_read_tier())
+	op->target_oloc.pool = pi->read_tier;
+      if (is_write && pi->has_write_tier())
+	op->target_oloc.pool = pi->write_tier;
+    }
   }
 
   if (op->precalc_pgid) {
-    assert(op->oid.name.empty()); // make sure this is a listing op
+    assert(op->base_oid.name.empty()); // make sure this is a listing op
     ldout(cct, 10) << "recalc_op_target have " << pgid << " pool " << osdmap->have_pg_pool(pgid.pool()) << dendl;
     if (!osdmap->have_pg_pool(pgid.pool()))
       return RECALC_OP_TARGET_POOL_DNE;
   } else {
-    int ret = osdmap->object_locator_to_pg(op->oid, op->target_oloc, pgid);
+    int ret = osdmap->object_locator_to_pg(op->target_oid, op->target_oloc, pgid);
     if (ret == -ENOENT)
       return RECALC_OP_TARGET_POOL_DNE;
   }
@@ -1485,7 +1496,8 @@ void Objecter::send_op(Op *op)
   op->stamp = ceph_clock_now(cct);
 
   MOSDOp *m = new MOSDOp(client_inc, op->tid, 
-			 op->oid, op->target_oloc, op->pgid, osdmap->get_epoch(),
+			 op->target_oid, op->target_oloc, op->pgid,
+			 osdmap->get_epoch(),
 			 flags);
 
   m->set_snapid(op->snapid);
@@ -1546,6 +1558,15 @@ void Objecter::throttle_op(Op *op, int op_budget)
   }
 }
 
+void Objecter::unregister_op(Op *op)
+{
+  if (op->onack)
+    num_unacked--;
+  if (op->oncommit)
+    num_uncommitted--;
+  ops.erase(op->tid);
+}
+
 /* This function DOES put the passed message before returning */
 void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 {
@@ -1592,12 +1613,18 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   int rc = m->get_result();
 
+  if (m->is_redirect_reply()) {
+    ldout(cct, 5) << " got redirect reply; redirecting" << dendl;
+    unregister_op(op);
+    m->get_redirect().combine_with_locator(op->target_oloc, op->target_oid.name);
+    op_submit(op);
+    m->put();
+    return;
+  }
+
   if (rc == -EAGAIN) {
     ldout(cct, 7) << " got -EAGAIN, resubmitting" << dendl;
-    if (op->onack)
-      num_unacked--;
-    if (op->oncommit)
-      num_uncommitted--;
+    unregister_op(op);
     op_submit(op);
     m->put();
     return;
@@ -2219,7 +2246,7 @@ void Objecter::dump_active()
   for (map<tid_t,Op*>::iterator p = ops.begin(); p != ops.end(); ++p) {
     Op *op = p->second;
     ldout(cct, 20) << op->tid << "\t" << op->pgid << "\tosd." << (op->session ? op->session->osd : -1)
-	    << "\t" << op->oid << "\t" << op->ops << dendl;
+	    << "\t" << op->base_oid << "\t" << op->ops << dendl;
   }
 }
 
@@ -2250,7 +2277,7 @@ void Objecter::dump_ops(Formatter *fmt) const
     fmt->dump_int("osd", op->session ? op->session->osd : -1);
     fmt->dump_stream("last_sent") << op->stamp;
     fmt->dump_int("attempts", op->attempts);
-    fmt->dump_stream("object_id") << op->oid;
+    fmt->dump_stream("object_id") << op->base_oid;
     fmt->dump_stream("object_locator") << op->base_oloc;
     fmt->dump_stream("target_object_locator") << op->target_oloc;
     fmt->dump_stream("snapid") << op->snapid;
