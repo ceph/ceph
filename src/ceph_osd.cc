@@ -332,7 +332,7 @@ int main(int argc, const char **argv)
 						    entity_name_t::OSD(whoami), "hb_front_server",
 						    getpid());
   Messenger *ms_objecter = Messenger::create(g_ceph_context,
-					     entity_name_t::OSD(whoami), "hbclient",
+					     entity_name_t::OSD(whoami), "ms_objecter",
 					     getpid());
   ms_cluster->set_cluster_protocol(CEPH_OSD_PROTOCOL);
   ms_hbclient->set_cluster_protocol(CEPH_OSD_PROTOCOL);
