@@ -1187,7 +1187,7 @@ public:
   map<epoch_t,list< pair<Context*, int> > > waiting_for_map;
 
   void send_op(Op *op);
-  void cancel_op(Op *op);
+  void cancel_linger_op(Op *op);
   void finish_op(Op *op);
   bool is_pg_changed(vector<int>& a, vector<int>& b, bool any_change=false);
   enum recalc_op_target_result {
