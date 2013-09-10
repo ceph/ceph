@@ -338,19 +338,19 @@ def schedule():
     beanstalk.use(tube)
 
     if ctx.show:
-        for jobid in ctx.show:
-            job = beanstalk.peek(jobid)
+        for job_id in ctx.show:
+            job = beanstalk.peek(job_id)
             if job is None and ctx.verbose:
-                print 'job {jid} is not in the queue'.format(jid=jobid)
+                print 'job {jid} is not in the queue'.format(jid=job_id)
             else:
-                print 'job {jid} contains: '.format(jid=jobid), job.body
+                print 'job {jid} contains: '.format(jid=job_id), job.body
         return
 
     if ctx.delete:
-        for jobid in ctx.delete:
-            job = beanstalk.peek(jobid)
+        for job_id in ctx.delete:
+            job = beanstalk.peek(job_id)
             if job is None:
-                print 'job {jid} is not in the queue'.format(jid=jobid)
+                print 'job {jid} is not in the queue'.format(jid=job_id)
             else:
                 job.delete()
         return
