@@ -70,6 +70,7 @@ def task(ctx, config):
         '--op', 'setattr', str(op_weights.get('setattr', 0)),
         '--op', 'rmattr', str(op_weights.get('rmattr', 0)),
         '--op', 'watch', str(op_weights.get('watch', 0)),
+        '--op', 'copy_from', str(op_weights.get('copy_from', 0)),
         '--max-ops', str(config.get('ops', 10000)),
         '--objects', str(config.get('objects', 500)),
         '--max-in-flight', str(config.get('max_in_flight', 16)),
