@@ -16,7 +16,7 @@ from textwrap import dedent, fill
 import time
 import yaml
 
-from teuthology import misc as teuthology
+from teuthology import misc
 from teuthology import safepath
 from teuthology import lock as lock
 from teuthology.config import config
@@ -391,7 +391,7 @@ def results():
         level=loglevel,
         )
 
-    teuthology.read_config(args)
+    misc.read_config(args)
 
     handler = logging.FileHandler(
         filename=os.path.join(args.archive_dir, 'results.log'),
@@ -532,7 +532,7 @@ def build_email_body(name, archive_dir, timeout):
                 time=int(summary.get('duration')),
             )
         else:
-            log = teuthology.get_http_log_path(archive_dir, job)
+            log = misc.get_http_log_path(archive_dir, job)
             if log:
                 log_line = email_templates['fail_log_templ'].format(log=log)
             else:
@@ -593,7 +593,7 @@ def build_email_body(name, archive_dir, timeout):
 
     body = email_templates['body_templ'].format(
         name=name,
-        log_root=teuthology.get_http_log_path(archive_dir, ''),
+        log_root=misc.get_http_log_path(archive_dir, ''),
         fail_count=len(failed),
         hung_count=len(hung),
         pass_count=len(passed),
