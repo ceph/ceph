@@ -7293,6 +7293,13 @@ int ReplicatedPG::start_recovery_ops(
     return started;
   }
 
+  if (needs_recovery()) {
+    // this shouldn't happen!
+    // We already checked num_missing() so we must have missing replicas
+    osd->clog.error() << info.pgid << " recovery ending with missing replicas\n";
+    return started;
+  }
+
   if (state_test(PG_STATE_RECOVERING)) {
     state_clear(PG_STATE_RECOVERING);
     if (needs_backfill()) {
