@@ -140,6 +140,9 @@ def write_initial_metadata(ctx):
             'owner': ctx.owner,
             'pid': os.getpid(),
         }
+        if 'job_id' in ctx.config:
+            info['job_id'] = ctx.config['job_id']
+
         with file(os.path.join(ctx.archive, 'info.yaml'), 'w') as f:
             yaml.safe_dump(info, f, default_flow_style=False)
 
@@ -338,19 +341,19 @@ def schedule():
     beanstalk.use(tube)
 
     if ctx.show:
-        for jobid in ctx.show:
-            job = beanstalk.peek(jobid)
+        for job_id in ctx.show:
+            job = beanstalk.peek(job_id)
             if job is None and ctx.verbose:
-                print 'job {jid} is not in the queue'.format(jid=jobid)
+                print 'job {jid} is not in the queue'.format(jid=job_id)
             else:
-                print 'job {jid} contains: '.format(jid=jobid), job.body
+                print 'job {jid} contains: '.format(jid=job_id), job.body
         return
 
     if ctx.delete:
-        for jobid in ctx.delete:
-            job = beanstalk.peek(jobid)
+        for job_id in ctx.delete:
+            job = beanstalk.peek(job_id)
             if job is None:
-                print 'job {jid} is not in the queue'.format(jid=jobid)
+                print 'job {jid} is not in the queue'.format(jid=job_id)
             else:
                 job.delete()
         return
@@ -361,7 +364,6 @@ def schedule():
         del ctx.config['targets']
 
     job_config = dict(
-            config=ctx.config,
             name=ctx.name,
             last_in_suite=ctx.last_in_suite,
             email=ctx.email,
@@ -369,6 +371,8 @@ def schedule():
             owner=ctx.owner,
             verbose=ctx.verbose,
             )
+    # Merge job_config and ctx.config
+    job_config.update(ctx.config)
     if ctx.timeout is not None:
         job_config['results_timeout'] = ctx.timeout
 

@@ -3,10 +3,12 @@ from ..orchestra import cluster
 
 from nose.tools import (
     eq_ as eq,
+    assert_equal,
     assert_raises,
-    )
+)
 
 from .. import misc
+from ..config import config
 
 
 class FakeRemote(object):
@@ -27,3 +29,16 @@ def test_get_clients_simple():
     eq(got[0], ('1'))
     assert got[1] is remote
     assert_raises(StopIteration, next, g)
+
+
+def test_get_http_log_path():
+    archive_server = "http://example.com/server_root"
+    config.archive_server = archive_server
+    archive_dir = "/var/www/archives"
+
+    path = misc.get_http_log_path(archive_dir)
+    assert_equal(path, "http://example.com/server_root/archives/")
+
+    job_id = '12345'
+    path = misc.get_http_log_path(archive_dir, job_id)
+    assert_equal(path, "http://example.com/server_root/archives/12345/")

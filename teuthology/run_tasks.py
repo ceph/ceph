@@ -1,7 +1,9 @@
 import sys
 import logging
-from teuthology.sentry import get_client as get_sentry_client
+from .sentry import get_client as get_sentry_client
+from .misc import get_http_log_path
 from .config import config as teuth_config
+from copy import deepcopy
 
 log = logging.getLogger(__name__)
 
@@ -37,11 +39,30 @@ def run_tasks(tasks, ctx):
         log.exception('Saw exception from tasks.')
         sentry = get_sentry_client()
         if sentry:
+            config = deepcopy(ctx.config)
+
             tags = {
                 'task': taskname,
                 'owner': ctx.owner,
             }
-            exc_id = sentry.get_ident(sentry.captureException(tags=tags))
+            if 'teuthology_branch' in config:
+                tags['teuthology_branch'] = config['teuthology_branch']
+
+            # Remove ssh keys from reported config
+            if 'targets' in config:
+                targets = config['targets']
+                for host in targets.keys():
+                    targets[host] = '<redacted>'
+
+            job_id = getattr(ctx, 'job_id', None)
+            extra = {
+                'config': config,
+                'logs': get_http_log_path(ctx.archive, job_id),
+            }
+            exc_id = sentry.get_ident(sentry.captureException(
+                tags=tags,
+                extra=extra,
+            ))
             event_url = "{server}/search?q={id}".format(
                 server=teuth_config.sentry_server.strip('/'), id=exc_id)
             log.exception(" Sentry event: %s" % event_url)

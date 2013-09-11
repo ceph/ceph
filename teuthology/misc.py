@@ -16,6 +16,7 @@ import json
 from teuthology import safepath
 from teuthology import lockstatus
 from .orchestra import run
+from .config import config
 
 log = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ is_vm = lambda x: x.startswith('vpm') or x.startswith('ubuntu@vpm')
 
 is_arm = lambda x: x.startswith('tala') or x.startswith('ubuntu@tala') or x.startswith('saya') or x.startswith('ubuntu@saya')
 
+
 def get_testdir(ctx):
     if 'test_path' in ctx.teuthology_config:
         return ctx.teuthology_config['test_path']
@@ -33,6 +35,7 @@ def get_testdir(ctx):
     # $HOME isn't /home/$USER - e.g. on a Mac. However, since we're executing
     # this on the server side, it won't work properly.
     return ctx.teuthology_config.get('test_path', '/home/%s/cephtest' % test_user)
+
 
 def get_test_user(ctx):
     """
@@ -44,6 +47,17 @@ def get_test_user(ctx):
 def get_archive_dir(ctx):
     test_dir = get_testdir(ctx)
     return os.path.normpath(os.path.join(test_dir, 'archive'))
+
+
+def get_http_log_path(archive_dir, job_id=None):
+    http_base = config.archive_server
+    if not http_base:
+        return None
+    archive_subdir = os.path.split(archive_dir)[-1]
+    if job_id is None:
+        return os.path.join(http_base, archive_subdir, '')
+    return os.path.join(http_base, archive_subdir, str(job_id), '')
+
 
 def get_ceph_binary_url(package=None,
                         branch=None, tag=None, sha1=None, dist=None,
