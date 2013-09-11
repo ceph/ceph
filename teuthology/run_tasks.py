@@ -39,19 +39,22 @@ def run_tasks(tasks, ctx):
         log.exception('Saw exception from tasks.')
         sentry = get_sentry_client()
         if sentry:
+            config = deepcopy(ctx.config)
+
             tags = {
                 'task': taskname,
                 'owner': ctx.owner,
             }
-            job_id = getattr(ctx, 'job_id', None)
+            if 'teuthology_branch' in config:
+                tags['teuthology_branch'] = config['teuthology_branch']
 
-            config = deepcopy(ctx.config)
             # Remove ssh keys from reported config
             if 'targets' in config:
                 targets = config['targets']
                 for host in targets.keys():
                     targets[host] = '<redacted>'
 
+            job_id = getattr(ctx, 'job_id', None)
             extra = {
                 'config': config,
                 'logs': get_http_log_path(ctx.archive, job_id),
