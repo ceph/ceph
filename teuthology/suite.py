@@ -447,14 +447,6 @@ def _results(args):
         generate_coverage(args)
 
 
-def get_http_log_path(archive_dir, job_id):
-    http_base = config.archive_server
-    if not http_base:
-        return None
-    archive_subdir = os.path.split(archive_dir)[-1]
-    return os.path.join(http_base, archive_subdir, str(job_id), '')
-
-
 def get_jobs(archive_dir):
     dir_contents = os.listdir(archive_dir)
 
@@ -540,7 +532,7 @@ def build_email_body(name, archive_dir, timeout):
                 time=int(summary.get('duration')),
             )
         else:
-            log = get_http_log_path(archive_dir, job)
+            log = teuthology.get_http_log_path(archive_dir, job)
             if log:
                 log_line = email_templates['fail_log_templ'].format(log=log)
             else:
@@ -601,7 +593,7 @@ def build_email_body(name, archive_dir, timeout):
 
     body = email_templates['body_templ'].format(
         name=name,
-        log_root=get_http_log_path(archive_dir, ''),
+        log_root=teuthology.get_http_log_path(archive_dir, ''),
         fail_count=len(failed),
         hung_count=len(hung),
         pass_count=len(passed),
