@@ -1,6 +1,7 @@
 import sys
 import logging
-from teuthology.sentry import get_client as get_sentry_client
+from .sentry import get_client as get_sentry_client
+from .misc import get_http_log_path
 from .config import config as teuth_config
 
 log = logging.getLogger(__name__)
@@ -41,7 +42,13 @@ def run_tasks(tasks, ctx):
                 'task': taskname,
                 'owner': ctx.owner,
             }
-            exc_id = sentry.get_ident(sentry.captureException(tags=tags))
+            extra = {
+                'logs': get_http_log_path(ctx.archive, ctx.job_id),
+            }
+            exc_id = sentry.captureException(
+                tags=tags,
+                extra=extra,
+            )
             event_url = "{server}/search?q={id}".format(
                 server=teuth_config.sentry_server.strip('/'), id=exc_id)
             log.exception(" Sentry event: %s" % event_url)
