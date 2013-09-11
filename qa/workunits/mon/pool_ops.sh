@@ -2,7 +2,8 @@
 
 set -e
 
-ceph osd pool create foo 123 123
+ceph osd pool create foo 123 123 key1=+++              && exit 1 || true
+ceph osd pool create foo 123 123 key1=value1 key2 key3=value3
 ceph osd pool create fooo 123
 
 ceph osd pool create foo 123 # idempotent
