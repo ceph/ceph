@@ -546,6 +546,8 @@ unittest_texttable_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD)
 unittest_texttable_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_texttable
 
+check_SCRIPTS += test/pybind/test_ceph_argparse.py
+
 if WITH_RADOSGW
 ceph_test_cors_SOURCES = test/test_cors.cc
 ceph_test_cors_LDADD = \
