@@ -364,7 +364,6 @@ def schedule():
         del ctx.config['targets']
 
     job_config = dict(
-            config=ctx.config,
             name=ctx.name,
             last_in_suite=ctx.last_in_suite,
             email=ctx.email,
@@ -372,6 +371,8 @@ def schedule():
             owner=ctx.owner,
             verbose=ctx.verbose,
             )
+    # Merge job_config and ctx.config
+    job_config.update(ctx.config)
     if ctx.timeout is not None:
         job_config['results_timeout'] = ctx.timeout
 

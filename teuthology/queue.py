@@ -220,7 +220,7 @@ def run_job(job_config, teuth_bin_path):
 
     with tempfile.NamedTemporaryFile(prefix='teuthology-worker.',
                                      suffix='.tmp',) as tmp:
-        yaml.safe_dump(data=job_config['config'], stream=tmp)
+        yaml.safe_dump(data=job_config, stream=tmp)
         tmp.flush()
         arg.append(tmp.name)
         p = subprocess.Popen(
