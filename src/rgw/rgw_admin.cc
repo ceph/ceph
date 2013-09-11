@@ -127,6 +127,7 @@ void _usage()
   cerr << "                               mdlog trim\n";
   cerr << "                               replica mdlog get/delete\n";
   cerr << "                               replica datalog get/delete\n";
+  cerr << "   --metadata-key=<key>      key to retrieve metadata from with metadata get\n";
   cerr << "   --rgw-region=<region>     region in which radosgw is running\n";
   cerr << "   --rgw-zone=<zone>         zone in which radosgw is running\n";
   cerr << "   --fix                     besides checking bucket index, will also fix it\n";

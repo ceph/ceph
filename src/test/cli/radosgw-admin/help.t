@@ -88,6 +88,7 @@
                                  mdlog trim
                                  replica mdlog get/delete
                                  replica datalog get/delete
+     --metadata-key=<key>      key to retrieve metadata from with metadata get
      --rgw-region=<region>     region in which radosgw is running
      --rgw-zone=<zone>         zone in which radosgw is running
      --fix                     besides checking bucket index, will also fix it
