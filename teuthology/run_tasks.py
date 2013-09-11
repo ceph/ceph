@@ -42,8 +42,9 @@ def run_tasks(tasks, ctx):
                 'task': taskname,
                 'owner': ctx.owner,
             }
+            job_id = getattr(ctx, 'job_id', None)
             extra = {
-                'logs': get_http_log_path(ctx.archive, ctx.job_id),
+                'logs': get_http_log_path(ctx.archive, job_id),
             }
             exc_id = sentry.captureException(
                 tags=tags,

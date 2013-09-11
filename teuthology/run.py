@@ -139,8 +139,10 @@ def write_initial_metadata(ctx):
             'description': ctx.description,
             'owner': ctx.owner,
             'pid': os.getpid(),
-            'job_id': ctx.config['job_id'],
         }
+        if 'job_id' in ctx.config:
+            info['job_id'] = ctx.config['job_id']
+
         with file(os.path.join(ctx.archive, 'info.yaml'), 'w') as f:
             yaml.safe_dump(info, f, default_flow_style=False)
 
