@@ -123,7 +123,7 @@ void req_info::rebuild_from(req_info& src)
 
 
 req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL), op(OP_UNKNOWN),
-							    bucket_cors(NULL), has_acl_header(false),
+							    has_acl_header(false),
                                                             os_auth_token(NULL), info(_cct, e)
 {
   enable_ops_log = e->conf->enable_ops_log;
@@ -162,7 +162,6 @@ req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL)
 req_state::~req_state() {
   delete formatter;
   delete bucket_acl;
-  delete bucket_cors;
   delete object_acl;
   free((void *)object);
   free((void *)bucket_name);
