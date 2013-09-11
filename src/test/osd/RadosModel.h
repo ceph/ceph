@@ -803,6 +803,7 @@ public:
     }
     interval_set<uint64_t> ranges;
     context->cont_gen.get_ranges(cont, ranges);
+    std::cout << num << ":  seq_num " << context->seq_num << " ranges " << ranges << std::endl;
     context->state_lock.Unlock();
 
     int r = context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset);
@@ -826,8 +827,7 @@ public:
       assert(to_write.length() == i.get_len());
       assert(to_write.length() > 0);
       std::cout << num << ":  writing " << context->prefix+oid << " from " << i.get_start()
-		<< " to " << i.get_len() + i.get_start() << " tid " << tid
-		<< " ranges are " << ranges << std::endl;
+		<< " to " << i.get_len() + i.get_start() << " tid " << tid << std::endl;
       pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
 	new pair<TestOp*, TestOp::CallbackInfo*>(this,
 						 new TestOp::CallbackInfo(tid));
@@ -1086,7 +1086,7 @@ public:
 	  context->errors++;
 	}
 	if (!old_value.check(result)) {
-	  cerr << num << ": Object " << oid << " contents " << to_check << " corrupt" << std::endl;
+	  cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
 	  context->errors++;
 	}
 	if (context->errors) assert(0);
