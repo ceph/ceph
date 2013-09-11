@@ -3,6 +3,7 @@ import logging
 from .sentry import get_client as get_sentry_client
 from .misc import get_http_log_path
 from .config import config as teuth_config
+from copy import deepcopy
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +44,16 @@ def run_tasks(tasks, ctx):
                 'owner': ctx.owner,
             }
             job_id = getattr(ctx, 'job_id', None)
+
+            config = deepcopy(ctx.config)
+            # Remove ssh keys from reported config
+            if 'targets' in config:
+                targets = config['targets']
+                for host in targets.keys():
+                    targets[host] = '<redacted>'
+
             extra = {
+                'config': config,
                 'logs': get_http_log_path(ctx.archive, job_id),
             }
             exc_id = sentry.get_ident(sentry.captureException(
