@@ -158,7 +158,12 @@ describe. One job is run at a time.
         log.debug('Reserved job %d', job.jid)
         log.debug('Config is: %s', job.body)
         job_config = yaml.safe_load(job.body)
+
+        job_config['job_id'] = job.jid
         safe_archive = safepath.munge(job_config['name'])
+        archive_path_full = os.path.join(ctx.archive_dir, safe_archive, str(job.jid))
+        job_config['archive_path'] = archive_path_full
+
         teuthology_branch = job_config.get(
             'config', {}).get('teuthology_branch', 'master')
 
@@ -189,13 +194,12 @@ describe. One job is run at a time.
         else:
             log.debug('Creating archive dir...')
             safepath.makedirs(ctx.archive_dir, safe_archive)
-            archive_path = os.path.join(ctx.archive_dir, safe_archive, str(job.jid))
             log.info('Running job %d', job.jid)
-            run_job(job_config, archive_path, teuth_bin_path)
+            run_job(job_config, teuth_bin_path)
         job.delete()
 
 
-def run_job(job_config, archive_path, teuth_bin_path):
+def run_job(job_config, teuth_bin_path):
     arg = [
         os.path.join(teuth_bin_path, 'teuthology'),
     ]
@@ -207,7 +211,7 @@ def run_job(job_config, archive_path, teuth_bin_path):
         '--lock',
         '--block',
         '--owner', job_config['owner'],
-        '--archive', archive_path,
+        '--archive', job_config['archive_path'],
         '--name', job_config['name'],
     ])
     if job_config['description'] is not None:
