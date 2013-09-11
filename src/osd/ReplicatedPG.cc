@@ -192,6 +192,13 @@ void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
   op->mark_delayed("waiting for degraded object");
 }
 
+void ReplicatedPG::wait_for_blocked_object(const hobject_t& soid, OpRequestRef op)
+{
+  dout(10) << __func__ << " " << soid << " " << op << dendl;
+  waiting_for_blocked_object[soid].push_back(op);
+  op->mark_delayed("waiting for blocked object");
+}
+
 void ReplicatedPG::wait_for_backfill_pos(OpRequestRef op)
 {
   waiting_for_backfill_pos.push_back(op);
@@ -735,7 +742,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
     osd->reply_op_error(op, r);
     return;
   }
-  
+
   // make sure locator is consistent
   object_locator_t oloc(obc->obs.oi.soid);
   if (m->get_object_locator() != oloc) {
@@ -744,6 +751,12 @@ void ReplicatedPG::do_op(OpRequestRef op)
     osd->clog.warn() << "bad locator " << m->get_object_locator() 
 		     << " on object " << oloc
 		     << " op " << *m << "\n";
+  }
+
+  // io blocked on obc?
+  if (obc->is_blocked()) {
+    wait_for_blocked_object(obc->obs.oi.soid, op);
+    return;
   }
 
   if ((op->may_read()) && (obc->obs.oi.lost)) {
@@ -5140,6 +5153,24 @@ void ReplicatedPG::add_object_context_to_pg_stat(ObjectContextRef obc, pg_stat_t
     pgstat->stats.cat_sum[oi.category].add(stat);
 }
 
+void ReplicatedPG::kick_object_context_blocked(ObjectContextRef obc)
+{
+  const hobject_t& soid = obc->obs.oi.soid;
+  map<hobject_t, list<OpRequestRef> >::iterator p = waiting_for_blocked_object.find(soid);
+  if (p == waiting_for_blocked_object.end())
+    return;
+
+  if (obc->is_blocked()) {
+    dout(10) << __func__ << " " << soid << " still blocked" << dendl;
+    return;
+  }
+
+  list<OpRequestRef>& ls = waiting_for_blocked_object[soid];
+  dout(10) << __func__ << " " << soid << " requeuing " << ls.size() << " requests" << dendl;
+  requeue_ops(ls);
+  waiting_for_blocked_object.erase(soid);
+}
+
 SnapSetContext *ReplicatedPG::create_snapset_context(const object_t& oid)
 {
   Mutex::Locker l(snapset_contexts_lock);
@@ -7094,6 +7125,14 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
     else
       p->second.clear();
     finish_degraded_object(p->first);
+  }
+  for (map<hobject_t,list<OpRequestRef> >::iterator p = waiting_for_blocked_object.begin();
+       p != waiting_for_blocked_object.end();
+       waiting_for_blocked_object.erase(p++)) {
+    if (is_primary())
+      requeue_ops(p->second);
+    else
+      p->second.clear();
   }
 
   if (is_primary())
