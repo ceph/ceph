@@ -49,11 +49,13 @@ def get_archive_dir(ctx):
     return os.path.normpath(os.path.join(test_dir, 'archive'))
 
 
-def get_http_log_path(archive_dir, job_id):
+def get_http_log_path(archive_dir, job_id=None):
     http_base = config.archive_server
     if not http_base:
         return None
     archive_subdir = os.path.split(archive_dir)[-1]
+    if job_id is None:
+        return os.path.join(http_base, archive_subdir, '')
     return os.path.join(http_base, archive_subdir, str(job_id), '')
 
 
