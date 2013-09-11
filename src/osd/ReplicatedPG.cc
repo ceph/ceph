@@ -4132,7 +4132,13 @@ void ReplicatedPG::_copy_some(OpContext *ctx, CopyOpRef cop)
 {
   dout(10) << __func__ << " " << ctx << " " << cop << dendl;
   ObjectOperation op;
-  op.assert_version(cop->version);
+  if (cop->version) {
+    op.assert_version(cop->version);
+  } else {
+    // we should learn the version after the first chunk, if we didn't know
+    // it already!
+    assert(cop->cursor.is_initial());
+  }
   op.copy_get(&cop->cursor, cct->_conf->osd_copyfrom_max_chunk,
 	      &cop->size, &cop->mtime, &cop->attrs,
 	      &cop->data, &cop->omap,
@@ -4142,10 +4148,11 @@ void ReplicatedPG::_copy_some(OpContext *ctx, CopyOpRef cop)
 				   get_last_peering_reset());
   osd->objecter_lock.Lock();
   tid_t tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
-				       cop->src.snap, NULL, 0,
-				       new C_OnFinisher(fin,
-							&osd->objecter_finisher),
-				       NULL);
+				  cop->src.snap, NULL, 0,
+				  new C_OnFinisher(fin,
+						   &osd->objecter_finisher),
+				  // discover the object version if we don't know it yet
+				  cop->version ? NULL : &cop->version);
   fin->tid = tid;
   cop->objecter_tid = tid;
   osd->objecter_lock.Unlock();
