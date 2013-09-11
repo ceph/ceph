@@ -936,6 +936,9 @@ public:
   bool is_degraded_object(const hobject_t& oid);
   void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
 
+  void wait_for_blocked_object(const hobject_t& soid, OpRequestRef op);
+  void kick_object_context_blocked(ObjectContextRef obc);
+
   void mark_all_unfound_lost(int what);
   eversion_t pick_newest_available(const hobject_t& oid);
   ObjectContextRef mark_object_lost(ObjectStore::Transaction *t,
