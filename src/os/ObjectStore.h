@@ -159,6 +159,7 @@ public:
       OP_SPLIT_COLLECTION2 = 36, /* cid, bits, destination
 				    doesn't create the destination */
       OP_OMAP_RMKEYRANGE = 37,  // cid, oid, firstkey, lastkey
+      OP_COLL_MOVE_RENAME = 38,   // oldcid, oldoid, newcid, newoid
     };
 
   private:
@@ -553,6 +554,15 @@ public:
       collection_add(cid, oldcid, oid);
       collection_remove(oldcid, oid);
       return;
+    }
+    void collection_move_rename(coll_t oldcid, const hobject_t& oldoid,
+				coll_t cid, const hobject_t& oid) {
+      __u32 op = OP_COLL_MOVE_RENAME;
+      ::encode(op, tbl);
+      ::encode(oldcid, tbl);
+      ::encode(oldoid, tbl);
+      ::encode(cid, tbl);
+      ::encode(oid, tbl);
     }
 
     void collection_setattr(coll_t cid, const char* name, bufferlist& val) {
