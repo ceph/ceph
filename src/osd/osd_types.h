@@ -2153,7 +2153,7 @@ public:
   }
 
   bool is_blocked() const {
-    return false;
+    return copyfrom_readside > 0;
   }
 
   // do simple synchronous mutual exclusion, for now.  now waitqueues or anything fancy.

@@ -4170,6 +4170,7 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
   if (r < 0) {
     copy_ops.erase(ctx->obc->obs.oi.soid);
     --ctx->obc->copyfrom_readside;
+    kick_object_context_blocked(ctx->obc);
     reply_ctx(ctx, r);
     return;
   }
@@ -4207,6 +4208,7 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
   copy_ops.erase(ctx->obc->obs.oi.soid);
   --ctx->obc->copyfrom_readside;
   ctx->copy_op.reset();
+  kick_object_context_blocked(ctx->obc);
 }
 
 void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, ObjectStore::Transaction *t)
@@ -4291,6 +4293,8 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop)
   copy_ops.erase(ctx->obc->obs.oi.soid);
   --ctx->obc->copyfrom_readside;
   ctx->copy_op.reset();
+
+  kick_object_context_blocked(ctx->obc);
 
   delete ctx;
 }
