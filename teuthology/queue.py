@@ -164,8 +164,10 @@ describe. One job is run at a time.
         archive_path_full = os.path.join(ctx.archive_dir, safe_archive, str(job.jid))
         job_config['archive_path'] = archive_path_full
 
-        teuthology_branch = job_config.get(
-            'config', {}).get('teuthology_branch', 'master')
+        # If the teuthology branch was not specified, default to master and
+        # store that value.
+        teuthology_branch = job_config.get('teuthology_branch', 'master')
+        job_config['teuthology_branch'] = teuthology_branch
 
         teuth_path = os.path.join(os.getenv("HOME"),
                                   'teuthology-' + teuthology_branch)
