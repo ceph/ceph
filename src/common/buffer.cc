@@ -990,11 +990,14 @@ void buffer::list::rebuild_page_aligned()
    */
   char *buffer::list::c_str()
   {
-    if (_buffers.size() == 0) 
+    if (_buffers.empty())
       return 0;                         // no buffers
-    if (_buffers.size() > 1) 
+
+    std::list<ptr>::const_iterator iter = _buffers.begin();
+    iter++;
+
+    if (iter != _buffers.end())
       rebuild();
-    assert(_buffers.size() == 1);
     return _buffers.front().c_str();  // good, we're already contiguous.
   }
 
