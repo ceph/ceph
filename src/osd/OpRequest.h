@@ -25,13 +25,14 @@
 #include <tr1/memory>
 #include "common/TrackedOp.h"
 #include "osd/osd_types.h"
+// FIXME: augh, get these outta here!
+#include "messages/MOSDOp.h"
+#include "messages/MOSDSubOp.h"
 
-struct OpRequest;
 class OpTracker;
-typedef std::tr1::shared_ptr<OpRequest> OpRequestRef;
 class OpHistory {
-  set<pair<utime_t, OpRequestRef> > arrived;
-  set<pair<double, OpRequestRef> > duration;
+  set<pair<utime_t, TrackedOpRef> > arrived;
+  set<pair<double, TrackedOpRef> > duration;
   void cleanup(utime_t now);
   bool shutdown;
   OpTracker *tracker;
@@ -42,7 +43,7 @@ public:
     assert(arrived.empty());
     assert(duration.empty());
   }
-  void insert(utime_t now, OpRequestRef op);
+  void insert(utime_t now, TrackedOpRef op);
   void dump_ops(utime_t now, Formatter *f);
   void on_shutdown();
 };
@@ -52,14 +53,14 @@ class OpTracker {
     OpTracker *tracker;
   public:
     RemoveOnDelete(OpTracker *tracker) : tracker(tracker) {}
-    void operator()(OpRequest *op);
+    void operator()(TrackedOp *op);
   };
   friend class RemoveOnDelete;
   friend class OpRequest;
   friend class OpHistory;
   uint64_t seq;
   Mutex ops_in_flight_lock;
-  xlist<OpRequest *> ops_in_flight;
+  xlist<TrackedOp *> ops_in_flight;
   OpHistory history;
 
 protected:
@@ -69,8 +70,8 @@ public:
   OpTracker(CephContext *cct_) : seq(0), ops_in_flight_lock("OpTracker mutex"), history(this), cct(cct_) {}
   void dump_ops_in_flight(Formatter *f);
   void dump_historic_ops(Formatter *f);
-  void register_inflight_op(xlist<OpRequest*>::item *i);
-  void unregister_inflight_op(OpRequest *i);
+  void register_inflight_op(xlist<TrackedOp*>::item *i);
+  void unregister_inflight_op(TrackedOp *i);
 
   void get_age_ms_histogram(pow2_hist_t *h);
 
@@ -83,15 +84,33 @@ public:
    * @return True if there are any Ops to warn on, false otherwise.
    */
   bool check_ops_in_flight(std::vector<string> &warning_strings);
-  void mark_event(OpRequest *op, const string &evt);
-  void _mark_event(OpRequest *op, const string &evt, utime_t now);
-  OpRequestRef create_request(Message *req);
+  void mark_event(TrackedOp *op, const string &evt);
+  void _mark_event(TrackedOp *op, const string &evt, utime_t now);
+
   void on_shutdown() {
     Mutex::Locker l(ops_in_flight_lock);
     history.on_shutdown();
   }
   ~OpTracker() {
     assert(ops_in_flight.empty());
+  }
+
+  template <typename T, typename TRef>
+  TRef create_request(Message *ref)
+  {
+    TRef retval(new T(ref, this),
+                RemoveOnDelete(this));
+
+    if (ref->get_type() == CEPH_MSG_OSD_OP) {
+      retval->reqid = static_cast<MOSDOp*>(ref)->get_reqid();
+    } else if (ref->get_type() == MSG_OSD_SUBOP) {
+      retval->reqid = static_cast<MOSDSubOp*>(ref)->reqid;
+    }
+    _mark_event(retval.get(), "header_read", ref->get_recv_stamp());
+    _mark_event(retval.get(), "throttled", ref->get_throttle_stamp());
+    _mark_event(retval.get(), "all_read", ref->get_recv_complete_stamp());
+    _mark_event(retval.get(), "dispatched", ref->get_dispatch_stamp());
+    return retval;
   }
 };
 
@@ -102,8 +121,6 @@ public:
 struct OpRequest : public TrackedOp {
   friend class OpTracker;
   friend class OpHistory;
-  Message *request;
-  xlist<OpRequest*>::item xitem;
 
   // rmw flags
   int rmw_flags;
@@ -132,28 +149,13 @@ struct OpRequest : public TrackedOp {
   void set_class_write() { rmw_flags |= CEPH_OSD_RMW_FLAG_CLASS_WRITE; }
   void set_pg_op() { rmw_flags |= CEPH_OSD_RMW_FLAG_PGOP; }
 
-  utime_t received_time;
-  uint8_t warn_interval_multiplier;
-  utime_t get_arrived() const {
-    return received_time;
-  }
-  double get_duration() const {
-    return events.size() ?
-      (events.rbegin()->first - received_time) :
-      0.0;
-  }
-
   void dump(utime_t now, Formatter *f) const;
 
 private:
-  list<pair<utime_t, string> > events;
-  string current;
-  Mutex lock;
   OpTracker *tracker;
   osd_reqid_t reqid;
   uint8_t hit_flag_points;
   uint8_t latest_flag_point;
-  uint64_t seq;
   static const uint8_t flag_queued_for_pg=1 << 0;
   static const uint8_t flag_reached_pg =  1 << 1;
   static const uint8_t flag_delayed =     1 << 2;
@@ -162,6 +164,7 @@ private:
   static const uint8_t flag_commit_sent = 1 << 5;
 
   OpRequest(Message *req, OpTracker *tracker);
+
 public:
   ~OpRequest() {
     assert(request);
@@ -236,5 +239,8 @@ public:
     return reqid;
   }
 };
+
+typedef std::tr1::shared_ptr<OpRequest> OpRequestRef;
+
 
 #endif /* OPREQUEST_H_ */
