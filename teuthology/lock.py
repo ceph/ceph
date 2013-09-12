@@ -9,6 +9,7 @@ import collections
 import tempfile
 import os
 import time
+import textwrap
 
 from argparse import RawTextHelpFormatter
 from teuthology import lockstatus as ls
@@ -112,9 +113,18 @@ def canonicalize_hostname(s):
     return s
 
 def main():
-    parser = argparse.ArgumentParser(description='Lock, unlock, or query lock status of machines',
-epilog='Examples: \n teuthology-lock --summary \n teuthology-lock --lock-many 1 --machine-type vps \n teuthology-lock --lock -t target.yaml \n teuthology-lock --list-targets plana01 \n teuthology-lock --list --brief --owner user@host \n teuthology-lock --update --status down --desc testing plana01',
-formatter_class=RawTextHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description='Lock, unlock, or query lock status of machines',
+        epilog=textwrap.dedent('''
+            Examples:
+            teuthology-lock --summary
+            teuthology-lock --lock-many 1 --machine-type vps
+            teuthology-lock --lock -t target.yaml
+            teuthology-lock --list-targets plana01
+            teuthology-lock --list --brief --owner user@host
+            teuthology-lock --update --status down --desc testing plana01
+        '''),
+        formatter_class=RawTextHelpFormatter)
     parser.add_argument(
         '-v', '--verbose',
         action='store_true',
@@ -194,7 +204,7 @@ formatter_class=RawTextHelpFormatter)
     parser.add_argument(
         '--machine-type',
         default=None,
-        help='Type of machine to lock.It could be mira or plana or burnupi or vps or saya or tala',
+        help='Type of machine to lock, valid choices: mira | plana | burnupi | vps | saya | tala',
         )
     parser.add_argument(
         '--status',

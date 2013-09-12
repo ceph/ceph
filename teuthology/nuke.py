@@ -1,14 +1,20 @@
 import argparse
 import yaml
+import textwrap
 from argparse import RawTextHelpFormatter
 
 def parse_args():
     from teuthology.run import config_file
     from teuthology.run import MergeConfig
 
-    parser = argparse.ArgumentParser(description='Reset test machines',
-epilog='Examples: \n teuthology-nuke -t target.yaml --unlock --owner user@host \n teuthology-nuke -t target.yaml --pid 1234 --unlock --owner user@host \n',
-formatter_class=RawTextHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description='Reset test machines',
+        epilog=textwrap.dedent('''
+            Examples:
+            teuthology-nuke -t target.yaml --unlock --owner user@host
+            teuthology-nuke -t target.yaml --pid 1234 --unlock --owner user@host \n
+            '''),
+        formatter_class=RawTextHelpFormatter)
     parser.add_argument(
         '-v', '--verbose',
         action='store_true', default=None,
