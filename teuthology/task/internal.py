@@ -516,7 +516,7 @@ def vm_setup(ctx, config):
                     p.spawn(_handle_vm_init, remote)
 
 def _handle_vm_init(remote):
-    log.info('Running ceph_qa_chef on ', remote)
+    log.info('Running ceph_qa_chef on %s', remote)
     remote.run(args=['wget','-q','-O-',
             'http://ceph.com/git/?p=ceph-qa-chef.git;a=blob_plain;f=solo/solo-from-scratch;hb=HEAD',
             run.Raw('|'),
