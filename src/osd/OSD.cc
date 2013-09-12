@@ -6773,7 +6773,7 @@ void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
 {
   // see how many we should try to start.  note that this is a bit racy.
   recovery_wq.lock();
-  int max = MAX(cct->_conf->osd_recovery_max_active - recovery_ops_active,
+  int max = MIN(cct->_conf->osd_recovery_max_active - recovery_ops_active,
       cct->_conf->osd_recovery_max_single_start);
   if (max > 0) {
     dout(10) << "do_recovery can start " << max << " (" << recovery_ops_active << "/" << cct->_conf->osd_recovery_max_active
