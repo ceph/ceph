@@ -32,6 +32,7 @@ def test_get_clients_simple():
 
 
 def test_get_http_log_path():
+    # Fake configuration
     archive_server = "http://example.com/server_root"
     config.archive_server = archive_server
     archive_dir = "/var/www/archives"
@@ -42,3 +43,14 @@ def test_get_http_log_path():
     job_id = '12345'
     path = misc.get_http_log_path(archive_dir, job_id)
     assert_equal(path, "http://example.com/server_root/archives/12345/")
+
+    # Inktank configuration
+    archive_server = "http://qa-proxy.ceph.com/teuthology/"
+    config.archive_server = archive_server
+    archive_dir = "/var/lib/teuthworker/archive/teuthology-2013-09-12_11:49:50-ceph-deploy-master-testing-basic-vps"
+    job_id = 31087
+    path = misc.get_http_log_path(archive_dir, job_id)
+    assert_equal(path, "http://qa-proxy.ceph.com/teuthology/teuthology-2013-09-12_11:49:50-ceph-deploy-master-testing-basic-vps/31087/")
+
+    path = misc.get_http_log_path(archive_dir)
+    assert_equal(path, "http://qa-proxy.ceph.com/teuthology/teuthology-2013-09-12_11:49:50-ceph-deploy-master-testing-basic-vps/")
