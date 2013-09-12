@@ -593,7 +593,7 @@ def build_email_body(name, archive_dir, timeout):
 
     body = email_templates['body_templ'].format(
         name=name,
-        log_root=misc.get_http_log_path(archive_dir, ''),
+        log_root=misc.get_http_log_path(archive_dir),
         fail_count=len(failed),
         hung_count=len(hung),
         pass_count=len(passed),

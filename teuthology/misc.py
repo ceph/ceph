@@ -53,7 +53,14 @@ def get_http_log_path(archive_dir, job_id=None):
     http_base = config.archive_server
     if not http_base:
         return None
-    archive_subdir = os.path.split(archive_dir)[-1]
+
+    sep = os.path.sep
+    archive_subdir = archive_dir.split(sep)[-1]
+    if archive_subdir.endswith(str(job_id)):
+        archive_subdir = archive_dir.split(sep)[-2]
+
+    print archive_subdir
+
     if job_id is None:
         return os.path.join(http_base, archive_subdir, '')
     return os.path.join(http_base, archive_subdir, str(job_id), '')
