@@ -62,20 +62,22 @@ def fetch_teuthology_branch(path, branch='master'):
             log.info(
                 subprocess.check_output(('git', 'fetch', '-p', 'origin'),
                                         cwd=path)
-                )
+            )
             log.info(
                 subprocess.check_output(('touch', path))
-                )
+            )
         else:
             log.info("%s was just updated; assuming it is current", branch)
 
         # This try/except block will notice if the requested branch doesn't
         # exist, whether it was cloned or fetched.
         try:
-            subprocess.check_call(('git', 'reset', '--hard', 'origin/%s' % branch),
-                                  cwd=path)
+            subprocess.check_output(
+                ('git', 'reset', '--hard', 'origin/%s' % branch),
+                cwd=path,
+            )
         except subprocess.CalledProcessError:
-            log.error("teuthology branch not found: %s", branch)
+            log.exception("teuthology branch not found: %s", branch)
             shutil.rmtree(path)
             raise
 
@@ -87,7 +89,7 @@ def fetch_teuthology_branch(path, branch='master'):
         env['NO_CLOBBER'] = '1'
         log.info(
             subprocess.check_output(('./bootstrap'), cwd=path, env=env)
-            )
+        )
 
     finally:
         lock.release()
