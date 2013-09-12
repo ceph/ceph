@@ -13,8 +13,8 @@ class lru_map {
     typename std::list<K>::iterator lru_iter;
   };
 
-  std::map<K, entry> tokens;
-  std::list<K> tokens_lru;
+  std::map<K, entry> entries;
+  std::list<K> entries_lru;
 
   Mutex lock;
 
@@ -33,19 +33,19 @@ template <class K, class V>
 bool lru_map<K, V>::find(const K& key, V& value)
 {
   lock.Lock();
-  typename std::map<K, entry>::iterator iter = tokens.find(key);
-  if (iter == tokens.end()) {
+  typename std::map<K, entry>::iterator iter = entries.find(key);
+  if (iter == entries.end()) {
     lock.Unlock();
     return false;
   }
 
   entry& e = iter->second;
-  tokens_lru.erase(e.lru_iter);
+  entries_lru.erase(e.lru_iter);
 
   value = e.value;
 
-  tokens_lru.push_front(key);
-  e.lru_iter = tokens_lru.begin();
+  entries_lru.push_front(key);
+  e.lru_iter = entries_lru.begin();
 
   lock.Unlock();
 
@@ -56,23 +56,23 @@ template <class K, class V>
 void lru_map<K, V>::add(const K& key, V& value)
 {
   lock.Lock();
-  typename std::map<K, entry>::iterator iter = tokens.find(key);
-  if (iter != tokens.end()) {
+  typename std::map<K, entry>::iterator iter = entries.find(key);
+  if (iter != entries.end()) {
     entry& e = iter->second;
-    tokens_lru.erase(e.lru_iter);
+    entries_lru.erase(e.lru_iter);
   }
 
-  tokens_lru.push_front(key);
-  entry& e = tokens[key];
+  entries_lru.push_front(key);
+  entry& e = entries[key];
   e.value = value;
-  e.lru_iter = tokens_lru.begin();
+  e.lru_iter = entries_lru.begin();
 
-  while (tokens_lru.size() > max) {
-    typename std::list<K>::reverse_iterator riter = tokens_lru.rbegin();
-    iter = tokens.find(*riter);
-    // assert(iter != tokens.end());
-    tokens.erase(iter);
-    tokens_lru.pop_back();
+  while (entries_lru.size() > max) {
+    typename std::list<K>::reverse_iterator riter = entries_lru.rbegin();
+    iter = entries.find(*riter);
+    // assert(iter != entries.end());
+    entries.erase(iter);
+    entries_lru.pop_back();
   }
   
   lock.Unlock();
@@ -82,13 +82,13 @@ template <class K, class V>
 void lru_map<K, V>::erase(const K& key)
 {
   Mutex::Locker l(lock);
-  typename std::map<K, entry>::iterator iter = tokens.find(key);
-  if (iter == tokens.end())
+  typename std::map<K, entry>::iterator iter = entries.find(key);
+  if (iter == entries.end())
     return;
 
   entry& e = iter->second;
-  tokens_lru.erase(e.lru_iter);
-  tokens.erase(iter);
+  entries_lru.erase(e.lru_iter);
+  entries.erase(iter);
 }
 
 #endif
