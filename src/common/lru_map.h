@@ -67,7 +67,7 @@ void lru_map<K, V>::add(const K& key, V& value)
   e.value = value;
   e.lru_iter = entries_lru.begin();
 
-  while (entries_lru.size() > max) {
+  while (entries.size() > max) {
     typename std::list<K>::reverse_iterator riter = entries_lru.rbegin();
     iter = entries.find(*riter);
     // assert(iter != entries.end());
