@@ -333,14 +333,18 @@ if test "x$enable_cephfs_java" = "xyes"; then
 
 	# setup defaults for Debian default-jdk package (without --with-jdk-dir)
 	AS_IF([test -z "$with_jdk_dir"], [
-		   # This works with Debian's default-jdk package
-		   dir='/usr/lib/jvm/default-java/'
-		   javac_prog=`find $dir -name javac | head -n 1`
-		   AS_IF([test -x "$javac_prog"], [
-				  EXTRA_JDK_BIN_DIR=`dirname $javac_prog`])
-		   jnih=`find $dir -name jni.h | head -n 1`
-		   AS_IF([test -r "$jnih"], [
-				  EXTRA_JDK_INC_DIR=`dirname $jnih`])])
+		   # This works with Debian's and CentOS' default-jdk package
+       for dir in '/usr/lib/jvm/default-java/' '/usr/lib/jvm/java/' ; do
+          # only test if a suitable path has not yet been found
+          AS_IF([test "$EXTRA_JDK_BIN_DIR" == ""], [
+		          AS_IF([test -x "$javac_prog"], [
+				          EXTRA_JDK_BIN_DIR=`dirname $javac_prog`])
+		          jnih=`find $dir -name jni.h | head -n 1`
+		          AS_IF([test -r "$jnih"], [
+				          EXTRA_JDK_INC_DIR=`dirname $jnih`])
+              ])
+       done
+       ])
 
         # cephfs_java_test only makes sense if java is already turned on
 	# setup CLASSPATH for Debian default junit4.jar package 
