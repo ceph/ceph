@@ -194,8 +194,17 @@ public:
   void dump_osd_perf_stats(Formatter *f) const;
   void print_osd_perf_stats(std::ostream *ss) const;
 
-  void recovery_summary(Formatter *f, ostream *out) const;
-  void recovery_rate_summary(Formatter *f, ostream *out) const;
+  void recovery_summary(Formatter *f, ostream *out,
+                        pool_stat_t delta_sum) const;
+  void overall_recovery_summary(Formatter *f, ostream *out) const;
+  void pool_recovery_summary(Formatter *f, ostream *out,
+                             uint64_t poolid) const;
+  void recovery_rate_summary(Formatter *f, ostream *out,
+                             pool_stat_t delta_sum,
+                             utime_t delta_stamp) const;
+  void overall_recovery_rate_summary(Formatter *f, ostream *out) const;
+  void pool_recovery_rate_summary(Formatter *f, ostream *out,
+                                  uint64_t poolid) const;
   void print_summary(Formatter *f, ostream *out) const;
   void print_oneline_summary(ostream *out) const;
 

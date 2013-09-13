@@ -744,54 +744,59 @@ void PGMap::print_osd_perf_stats(std::ostream *ss) const
   (*ss) << tab;
 }
 
-void PGMap::recovery_summary(Formatter *f, ostream *out) const
+void PGMap::recovery_summary(Formatter *f, ostream *out,
+                             pool_stat_t delta_sum) const
 {
   bool first = true;
-  if (pg_sum.stats.sum.num_objects_degraded) {
-    double pc = (double)pg_sum.stats.sum.num_objects_degraded / (double)pg_sum.stats.sum.num_object_copies * (double)100.0;
+  if (delta_sum.stats.sum.num_objects_degraded) {
+    double pc = (double)delta_sum.stats.sum.num_objects_degraded /
+      (double)delta_sum.stats.sum.num_object_copies * (double)100.0;
     char b[20];
     snprintf(b, sizeof(b), "%.3lf", pc);
     if (f) {
-      f->dump_unsigned("degraded_objects", pg_sum.stats.sum.num_objects_degraded);
-      f->dump_unsigned("degraded_total", pg_sum.stats.sum.num_object_copies);
+      f->dump_unsigned("degraded_objects", delta_sum.stats.sum.num_objects_degraded);
+      f->dump_unsigned("degraded_total", delta_sum.stats.sum.num_object_copies);
       f->dump_string("degrated_ratio", b);
     } else {
-      *out << pg_sum.stats.sum.num_objects_degraded 
-	   << "/" << pg_sum.stats.sum.num_object_copies << " objects degraded (" << b << "%)";
+      *out << delta_sum.stats.sum.num_objects_degraded
+	   << "/" << delta_sum.stats.sum.num_object_copies << " objects degraded (" << b << "%)";
     }
     first = false;
   }
-  if (pg_sum.stats.sum.num_objects_unfound) {
-    double pc = (double)pg_sum.stats.sum.num_objects_unfound / (double)pg_sum.stats.sum.num_objects * (double)100.0;
+  if (delta_sum.stats.sum.num_objects_unfound) {
+    double pc = (double)delta_sum.stats.sum.num_objects_unfound /
+      (double)delta_sum.stats.sum.num_objects * (double)100.0;
     char b[20];
     snprintf(b, sizeof(b), "%.3lf", pc);
     if (f) {
-      f->dump_unsigned("unfound_objects", pg_sum.stats.sum.num_objects_unfound);
-      f->dump_unsigned("unfound_total", pg_sum.stats.sum.num_objects);
+      f->dump_unsigned("unfound_objects", delta_sum.stats.sum.num_objects_unfound);
+      f->dump_unsigned("unfound_total", delta_sum.stats.sum.num_objects);
       f->dump_string("unfound_ratio", b);
     } else {
       if (!first)
 	*out << "; ";
-      *out << pg_sum.stats.sum.num_objects_unfound
-	   << "/" << pg_sum.stats.sum.num_objects << " unfound (" << b << "%)";
+      *out << delta_sum.stats.sum.num_objects_unfound
+	   << "/" << delta_sum.stats.sum.num_objects << " unfound (" << b << "%)";
     }
     first = false;
   }
 }
 
-void PGMap::recovery_rate_summary(Formatter *f, ostream *out) const
+void PGMap::recovery_rate_summary(Formatter *f, ostream *out,
+                                  pool_stat_t delta_sum,
+                                  utime_t delta_stamp) const
 {
   // make non-negative; we can get negative values if osds send
   // uncommitted stats and then "go backward" or if they are just
   // buggy/wrong.
-  pool_stat_t pos_delta = pg_sum_delta;
+  pool_stat_t pos_delta = delta_sum;
   pos_delta.floor(0);
   if (pos_delta.stats.sum.num_objects_recovered ||
       pos_delta.stats.sum.num_bytes_recovered ||
       pos_delta.stats.sum.num_keys_recovered) {
-    int64_t objps = pos_delta.stats.sum.num_objects_recovered / (double)stamp_delta;
-    int64_t bps = pos_delta.stats.sum.num_bytes_recovered / (double)stamp_delta;
-    int64_t kps = pos_delta.stats.sum.num_keys_recovered / (double)stamp_delta;
+    int64_t objps = pos_delta.stats.sum.num_objects_recovered / (double)delta_stamp;
+    int64_t bps = pos_delta.stats.sum.num_bytes_recovered / (double)delta_stamp;
+    int64_t kps = pos_delta.stats.sum.num_keys_recovered / (double)delta_stamp;
     if (f) {
       f->dump_int("recovering_objects_per_sec", objps);
       f->dump_int("recovering_bytes_per_sec", bps);
@@ -805,6 +810,38 @@ void PGMap::recovery_rate_summary(Formatter *f, ostream *out) const
   }
 }
 
+void PGMap::overall_recovery_rate_summary(Formatter *f, ostream *out) const
+{
+  recovery_rate_summary(f, out, pg_sum_delta, stamp_delta);
+}
+
+void PGMap::overall_recovery_summary(Formatter *f, ostream *out) const
+{
+  recovery_summary(f, out, pg_sum);
+}
+
+void PGMap::pool_recovery_rate_summary(Formatter *f, ostream *out,
+                                       uint64_t poolid) const
+{
+  hash_map<uint64_t,pair<pool_stat_t,utime_t> >::const_iterator p =
+    per_pool_sum_delta.find(poolid);
+  if (p == per_pool_sum_delta.end())
+    return;
+  hash_map<uint64_t,utime_t>::const_iterator ts =
+    per_pool_sum_deltas_stamps.find(p->first);
+  assert(ts != per_pool_sum_deltas_stamps.end());
+  recovery_rate_summary(f, out, p->second.first, ts->second);
+}
+
+void PGMap::pool_recovery_summary(Formatter *f, ostream *out,
+                                  uint64_t poolid) const
+{
+  hash_map<uint64_t,pair<pool_stat_t,utime_t> >::const_iterator p =
+    per_pool_sum_delta.find(poolid);
+  if (p == per_pool_sum_delta.end())
+    return;
+  recovery_summary(f, out, p->second.first);
+}
 void PGMap::update_delta(CephContext *cct, utime_t inc_stamp, pool_stat_t& pg_sum_old)
 {
   utime_t delta_t;
@@ -914,7 +951,7 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
   }
 
   std::stringstream ssr;
-  recovery_summary(f, &ssr);
+  overall_recovery_summary(f, &ssr);
   if (!f && ssr.str().length())
     *out << "            " << ssr.str() << "\n";
   ssr.clear();
@@ -923,7 +960,7 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
   if (!f)
     *out << ss.str();   // pgs by state
 
-  recovery_rate_summary(f, &ssr);
+  overall_recovery_rate_summary(f, &ssr);
   if (!f && ssr.str().length())
     *out << "recovery io " << ssr.str() << "\n";
 
@@ -1005,12 +1042,12 @@ void PGMap::print_oneline_summary(ostream *out) const
   }
 
   std::stringstream ssr;
-  recovery_summary(NULL, &ssr);
+  overall_recovery_summary(NULL, &ssr);
   if (ssr.str().length())
     *out << "; " << ssr.str();
   ssr.clear();
   ssr.str("");
-  recovery_rate_summary(NULL, &ssr);
+  overall_recovery_rate_summary(NULL, &ssr);
   if (ssr.str().length())
     *out << "; " << ssr.str() << " recovering";
 }

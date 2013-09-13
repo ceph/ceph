@@ -1849,7 +1849,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 
   // recovery
   stringstream rss;
-  pg_map.recovery_summary(NULL, &rss);
+  pg_map.overall_recovery_summary(NULL, &rss);
   if (!rss.str().empty()) {
     summary.push_back(make_pair(HEALTH_WARN, "recovery " + rss.str()));
     if (detail)
