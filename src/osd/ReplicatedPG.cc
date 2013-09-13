@@ -7534,7 +7534,8 @@ int ReplicatedPG::start_recovery_ops(
   }
 
   bool deferred_backfill = false;
-  if (state_test(PG_STATE_BACKFILL) &&
+  if (recovering.empty() &&
+      state_test(PG_STATE_BACKFILL) &&
       backfill_target >= 0 && started < max &&
       missing.num_missing() == 0 &&
       !waiting_on_backfill) {
@@ -7562,9 +7563,11 @@ int ReplicatedPG::start_recovery_ops(
   dout(10) << " started " << started << dendl;
   osd->logger->inc(l_osd_rop, started);
 
-  if (started || recovery_ops_active > 0 || deferred_backfill)
+  if (!recovering.empty() ||
+      started || recovery_ops_active > 0 || deferred_backfill)
     return started;
 
+  assert(recovering.empty());
   assert(recovery_ops_active == 0);
 
   int unfound = get_num_unfound();
