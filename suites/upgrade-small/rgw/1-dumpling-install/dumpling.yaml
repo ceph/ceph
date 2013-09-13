@@ -2,3 +2,4 @@ tasks:
 - install:
     branch: dumpling
 - ceph:
+- rgw: [client.0]
