@@ -76,11 +76,33 @@ public:
   utime_t stamp;
 
   // recent deltas, and summation
+  /**
+   * keep track of last deltas for each pool, calculated using
+   * @p pg_pool_sum as baseline.
+   */
+  hash_map<uint64_t, list< pair<pool_stat_t, utime_t> > > per_pool_sum_deltas;
+  /**
+   * keep track of per-pool timestamp deltas, according to last update on
+   * each pool.
+   */
+  hash_map<uint64_t, utime_t> per_pool_sum_deltas_stamps;
+  /**
+   * keep track of sum deltas, per-pool, taking into account any previous
+   * deltas existing in @p per_pool_sum_deltas.  The utime_t as second member
+   * of the pair is the timestamp refering to the last update (i.e., the first
+   * member of the pair) for a given pool.
+   */
+  hash_map<uint64_t, pair<pool_stat_t,utime_t> > per_pool_sum_delta;
+
   list< pair<pool_stat_t, utime_t> > pg_sum_deltas;
   pool_stat_t pg_sum_delta;
   utime_t stamp_delta;
 
   void update_delta(CephContext *cct, utime_t inc_stamp, pool_stat_t& pg_sum_old);
+  void update_one_pool_delta(CephContext *cct, utime_t inc_stamp,
+                             uint64_t pool, pool_stat_t& old_pool_sum);
+  void update_pool_deltas(CephContext *cct, utime_t inc_stamp,
+                          hash_map<uint64_t, pool_stat_t>& pg_pool_sum_old);
   void clear_delta();
 
   set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
@@ -172,8 +194,37 @@ public:
   void dump_osd_perf_stats(Formatter *f) const;
   void print_osd_perf_stats(std::ostream *ss) const;
 
-  void recovery_summary(Formatter *f, ostream *out) const;
-  void recovery_rate_summary(Formatter *f, ostream *out) const;
+  void recovery_summary(Formatter *f, ostream *out,
+                        pool_stat_t delta_sum) const;
+  void overall_recovery_summary(Formatter *f, ostream *out) const;
+  void pool_recovery_summary(Formatter *f, ostream *out,
+                             uint64_t poolid) const;
+  void recovery_rate_summary(Formatter *f, ostream *out,
+                             pool_stat_t delta_sum,
+                             utime_t delta_stamp) const;
+  void overall_recovery_rate_summary(Formatter *f, ostream *out) const;
+  void pool_recovery_rate_summary(Formatter *f, ostream *out,
+                                  uint64_t poolid) const;
+  /**
+   * Obtain a formatted/plain output for client I/O, source from stats for a
+   * given @p delta_sum pool over a given @p delta_stamp period of time.
+   */
+  void client_io_rate_summary(Formatter *f, ostream *out,
+                              pool_stat_t delta_sum,
+                              utime_t delta_stamp) const;
+  /**
+   * Obtain a formatted/plain output for the overall client I/O, which is
+   * calculated resorting to @p pg_sum_delta and @p stamp_delta.
+   */
+  void overall_client_io_rate_summary(Formatter *f, ostream *out) const;
+  /**
+   * Obtain a formatted/plain output for client I/O over a given pool
+   * with id @p pool_id.  We will then obtain pool-specific data
+   * from @p per_pool_sum_delta.
+   */
+  void pool_client_io_rate_summary(Formatter *f, ostream *out,
+                                   uint64_t poolid) const;
+
   void print_summary(Formatter *f, ostream *out) const;
   void print_oneline_summary(ostream *out) const;
 
