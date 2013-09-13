@@ -116,19 +116,6 @@ test_build_libcephfs_CFLAGS = $(AM_CFLAGS)
 test_build_libcephfs_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += test_build_libcephfs
 
-if WITH_HADOOPCLIENT
-test_build_libhadoopcephfs_SOURCES = \
-	test/buildtest_skeleton.cc \
-	$(libhadoopcephfs_la_SOURCES)
-test_build_libhadoopcephfs_LDADD = \
-	$(LIBCEPHFS) -lexpat \
-	$(PTHREAD_LIBS) $(CRYPTO_LIBS) $(EXTRALIBS)
-test_build_libhadoopcephfs_LDFLAGS = -static-libtool-libs
-test_build_libhadoopcephfs_CFLAGS = $(AM_CFLAGS)
-test_build_libhadoopcephfs_CXXFLAGS = $(AM_CXXFLAGS)
-bin_DEBUGPROGRAMS += test_build_libhadoopcephfs
-endif # WITH_HADOOPCLIENT
-
 endif # WITH_BUILD_TESTS
 
 
