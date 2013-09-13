@@ -391,25 +391,6 @@ if test "x$enable_cephfs_java" = "xyes"; then
 fi
 AM_CONDITIONAL(HAVE_JUNIT4, [test "$have_junit4" = "1"])
 
-# jni?
-# clear cache (from java above) -- this whole thing will get
-# folded into the bigger java package later -- for now maintain
-# backward compat
-AS_UNSET(ac_cv_header_jni_h)
-AC_ARG_WITH([hadoop],
-            [AS_HELP_STRING([--with-hadoop], [build hadoop client])],
-            [],
-            [with_hadoop=check])
-AS_IF([test "x$with_hadoop" != xno],
-	    [AC_CHECK_HEADER([jni.h],
-             [HAVE_JNI=1],
-             [if test "x$with_hadoop" != xcheck; then
-                 AC_MSG_FAILURE(
-                   [--with-hadoop was given but jni.h not found])
-               fi
-             ])])
-AM_CONDITIONAL(WITH_HADOOPCLIENT, [test "$HAVE_JNI" = "1"])
-
 #
 # FreeBSD has it in base.
 #
