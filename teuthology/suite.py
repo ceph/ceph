@@ -123,9 +123,12 @@ combination, and will override anything in the suite.
         for collection in args.collections
         ]
 
+    num_jobs = 0
     for collection, collection_name in sorted(collections):
-        log.info('Collection %s in %s' % (collection_name, collection))
+        log.debug('Collection %s in %s' % (collection_name, collection))
         configs = [(combine_path(collection_name, item[0]), item[1]) for item in build_matrix(collection)]
+        log.info('Collection %s in %s generated %d jobs' % (collection_name, collection, len(configs)))
+        num_jobs + len(configs)
 
         arch = get_arch(args.config)
         machine_type = get_machine_type(args.config)
@@ -177,18 +180,19 @@ combination, and will override anything in the suite.
                     args=arg,
                     )
 
-    arg = copy.deepcopy(base_arg)
-    arg.append('--last-in-suite')
-    if args.email:
-        arg.extend(['--email', args.email])
-    if args.timeout:
-        arg.extend(['--timeout', args.timeout])
-    if args.dry_run:
-        log.info('dry-run: %s' % ' '.join(arg))
-    else:
-        subprocess.check_call(
-            args=arg,
-            )
+    if num_jobs:
+        arg = copy.deepcopy(base_arg)
+        arg.append('--last-in-suite')
+        if args.email:
+            arg.extend(['--email', args.email])
+        if args.timeout:
+            arg.extend(['--timeout', args.timeout])
+        if args.dry_run:
+            log.info('dry-run: %s' % ' '.join(arg))
+        else:
+            subprocess.check_call(
+                args=arg,
+                )
 
 
 def combine_path(left, right):
@@ -246,12 +250,13 @@ def build_matrix(path):
                 raw = build_matrix(os.path.join(path, fn))
                 sublists.append([(combine_path(fn, item[0]), item[1]) for item in raw])
             out = []
-            for sublist in itertools.product(*sublists):
-                name = '{' + ' '.join([item[0] for item in sublist]) + '}'
-                val = []
-                for item in sublist:
-                    val.extend(item[1])
-                out.append((name, val))
+            if sublists:
+                for sublist in itertools.product(*sublists):
+                    name = '{' + ' '.join([item[0] for item in sublist]) + '}'
+                    val = []
+                    for item in sublist:
+                        val.extend(item[1])
+                        out.append((name, val))
             return out
         else:
             # list items
