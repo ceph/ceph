@@ -508,6 +508,10 @@ COMMAND("osd pool set-quota " \
 	"name=field,type=CephChoices,strings=max_objects|max_bytes " \
 	"name=val,type=CephString",
 	"set object or byte limit on pool", "osd", "rw", "cli,rest")
+COMMAND("osd pool stats " \
+        "name=name,type=CephString,req=false",
+        "obtain stats from all pools, or from specified pool",
+        "osd", "r", "cli,rest")
 COMMAND("osd reweight-by-utilization " \
 	"name=oload,type=CephInt,range=100,req=false", \
 	"reweight OSDs by utilization [overload-percentage-for-consideration, default 120]", \
