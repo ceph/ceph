@@ -103,18 +103,6 @@ libcephfs_la_LIBADD = $(LIBCLIENT) $(LIBCOMMON) $(PTHREAD_LIBS) $(CRYPTO_LIBS) $
 libcephfs_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^ceph_.*'
 lib_LTLIBRARIES += libcephfs.la
 
-# order matters! this *must* come after libcephfs, or else you'll encounter something
-# like "error: relink libhadoopcephfs.la with the above command before installing it"
-if WITH_HADOOPCLIENT
-JAVA_BASE = /usr/lib/jvm/java-6-sun
-libhadoopcephfs_la_SOURCES = client/hadoop/CephFSInterface.cc
-libhadoopcephfs_la_LIBADD = $(LIBCEPHFS)
-libhadoopcephfs_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex 'hadoopcephfs_.*'
-lib_LTLIBRARIES += libhadoopcephfs.la
-noinst_HEADERS += client/hadoop/CephFSInterface.h
-endif # WITH_HADOOPCLIENT
-
-
 # jni library (java source is in src/java)
 
 if ENABLE_CEPHFS_JAVA
