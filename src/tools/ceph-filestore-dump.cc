@@ -1017,7 +1017,7 @@ int main(int argc, char **argv)
     ("pgid", po::value<string>(&pgidstr),
      "PG id, mandatory")
     ("type", po::value<string>(&type),
-     "Type one of info, log, export, or import, mandatory")
+     "Type one of info, log, remove, export, or import, mandatory")
     ("file", po::value<string>(&file),
      "path of file to export or import")
     ("debug", "Enable diagnostic output to stderr")
