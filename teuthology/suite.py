@@ -180,18 +180,19 @@ combination, and will override anything in the suite.
                     args=arg,
                     )
 
-    arg = copy.deepcopy(base_arg)
-    arg.append('--last-in-suite')
-    if args.email:
-        arg.extend(['--email', args.email])
-    if args.timeout:
-        arg.extend(['--timeout', args.timeout])
-    if args.dry_run:
-        log.info('dry-run: %s' % ' '.join(arg))
-    else:
-        subprocess.check_call(
-            args=arg,
-            )
+    if num_jobs:
+        arg = copy.deepcopy(base_arg)
+        arg.append('--last-in-suite')
+        if args.email:
+            arg.extend(['--email', args.email])
+        if args.timeout:
+            arg.extend(['--timeout', args.timeout])
+        if args.dry_run:
+            log.info('dry-run: %s' % ' '.join(arg))
+        else:
+            subprocess.check_call(
+                args=arg,
+                )
 
 
 def combine_path(left, right):
