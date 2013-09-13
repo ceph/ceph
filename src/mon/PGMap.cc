@@ -166,6 +166,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   stamp = inc.stamp;
 
   pool_stat_t pg_sum_old = pg_sum;
+  hash_map<uint64_t, pool_stat_t> pg_pool_sum_old;
 
   bool ratios_changed = false;
   if (inc.full_ratio != full_ratio && inc.full_ratio != -1) {
@@ -185,6 +186,9 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     const pg_t &update_pg(p->first);
     const pg_stat_t &update_stat(p->second);
 
+    if (pg_pool_sum_old.count(update_pg.pool()) == 0)
+      pg_pool_sum_old[update_pg.pool()] = pg_pool_sum[update_pg.pool()];
+
     hash_map<pg_t,pg_stat_t>::iterator t = pg_stat.find(update_pg);
     if (t == pg_stat.end()) {
       hash_map<pg_t,pg_stat_t>::value_type v(update_pg, update_stat);
@@ -200,7 +204,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
        ++p) {
     int osd = p->first;
     const osd_stat_t &new_stats(p->second);
-    
+
     hash_map<int32_t,osd_stat_t>::iterator t = osd_stat.find(osd);
     if (t == osd_stat.end()) {
       hash_map<int32_t,osd_stat_t>::value_type v(osd, new_stats);
@@ -211,7 +215,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     }
 
     stat_osd_add(new_stats);
-    
+
     // adjust [near]full status
     register_nearfull_status(osd, new_stats);
   }
@@ -225,7 +229,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
       pg_stat.erase(s);
     }
   }
-  
+
   for (set<int>::iterator p = inc.osd_stat_rm.begin();
        p != inc.osd_stat_rm.end();
        ++p) {
@@ -252,7 +256,9 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     stamp_delta -= pg_sum_deltas.front().second;
     pg_sum_deltas.pop_front();
   }
-  
+
+  update_pool_deltas(cct, inc.stamp, pg_pool_sum_old);
+
   if (inc.osdmap_epoch)
     last_osdmap_epoch = inc.osdmap_epoch;
   if (inc.pg_scan)
@@ -817,6 +823,45 @@ void PGMap::update_delta(CephContext *cct, utime_t inc_stamp, pool_stat_t& pg_su
     pg_sum_delta.stats.sub(pg_sum_deltas.front().first.stats);
     stamp_delta -= pg_sum_deltas.front().second;
     pg_sum_deltas.pop_front();
+  }
+}
+
+void PGMap::update_one_pool_delta(CephContext *cct, utime_t inc_stamp,
+                                  uint64_t pool, pool_stat_t& old_pool_sum)
+{
+
+  if (per_pool_sum_deltas.count(pool) == 0) {
+    assert(per_pool_sum_deltas_stamps.count(pool) == 0);
+    assert(per_pool_sum_delta.count(pool) == 0);
+  }
+
+  pair<pool_stat_t,utime_t>& sum_delta = per_pool_sum_delta[pool];
+
+  utime_t delta_t;
+  delta_t = inc_stamp;
+  delta_t -= sum_delta.second;
+  sum_delta.second = inc_stamp;
+
+  pool_stat_t d = pg_pool_sum[pool];
+  d.stats.sub(old_pool_sum.stats);
+  per_pool_sum_deltas[pool].push_back(make_pair(d, delta_t));
+  per_pool_sum_deltas_stamps[pool] += delta_t;
+
+  sum_delta.first.stats.add(d.stats);
+  size_t s = MAX(1, cct ? cct->_conf->mon_stat_smooth_intervals : 1);
+  if (per_pool_sum_deltas[pool].size() > (std::list<pair<pool_stat_t,utime_t> >::size_type)s) {
+    sum_delta.first.stats.sub(per_pool_sum_deltas[pool].front().first.stats);
+    per_pool_sum_deltas_stamps[pool] -= per_pool_sum_deltas[pool].front().second;
+    per_pool_sum_deltas[pool].pop_front();
+  }
+}
+
+void PGMap::update_pool_deltas(CephContext *cct, utime_t inc_stamp,
+                               hash_map<uint64_t,pool_stat_t>& pg_pool_sum_old)
+{
+  for (hash_map<uint64_t,pool_stat_t>::iterator it = pg_pool_sum_old.begin();
+       it != pg_pool_sum_old.end(); ++it) {
+    update_one_pool_delta(cct, inc_stamp, it->first, it->second);
   }
 }
 

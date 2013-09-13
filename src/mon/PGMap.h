@@ -76,11 +76,33 @@ public:
   utime_t stamp;
 
   // recent deltas, and summation
+  /**
+   * keep track of last deltas for each pool, calculated using
+   * @p pg_pool_sum as baseline.
+   */
+  hash_map<uint64_t, list< pair<pool_stat_t, utime_t> > > per_pool_sum_deltas;
+  /**
+   * keep track of per-pool timestamp deltas, according to last update on
+   * each pool.
+   */
+  hash_map<uint64_t, utime_t> per_pool_sum_deltas_stamps;
+  /**
+   * keep track of sum deltas, per-pool, taking into account any previous
+   * deltas existing in @p per_pool_sum_deltas.  The utime_t as second member
+   * of the pair is the timestamp refering to the last update (i.e., the first
+   * member of the pair) for a given pool.
+   */
+  hash_map<uint64_t, pair<pool_stat_t,utime_t> > per_pool_sum_delta;
+
   list< pair<pool_stat_t, utime_t> > pg_sum_deltas;
   pool_stat_t pg_sum_delta;
   utime_t stamp_delta;
 
   void update_delta(CephContext *cct, utime_t inc_stamp, pool_stat_t& pg_sum_old);
+  void update_one_pool_delta(CephContext *cct, utime_t inc_stamp,
+                             uint64_t pool, pool_stat_t& old_pool_sum);
+  void update_pool_deltas(CephContext *cct, utime_t inc_stamp,
+                          hash_map<uint64_t, pool_stat_t>& pg_pool_sum_old);
   void clear_delta();
 
   set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
