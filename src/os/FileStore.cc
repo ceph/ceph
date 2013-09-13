@@ -1711,7 +1711,7 @@ int FileStore::_do_transactions(
   for (list<Transaction*>::iterator p = tls.begin();
        p != tls.end();
        ++p, trans_num++) {
-    r = _do_transaction(**p, op_seq, trans_num);
+    r = _do_transaction(**p, op_seq, trans_num, handle);
     if (r < 0)
       break;
     if (handle)
@@ -1973,7 +1973,9 @@ int FileStore::_check_replay_guard(int fd, const SequencerPosition& spos)
   }
 }
 
-unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_num)
+unsigned FileStore::_do_transaction(
+  Transaction& t, uint64_t op_seq, int trans_num,
+  ThreadPool::TPHandle *handle)
 {
   dout(10) << "_do_transaction on " << &t << dendl;
 
@@ -1981,6 +1983,9 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
   
   SequencerPosition spos(op_seq, trans_num, 0);
   while (i.have_op()) {
+    if (handle)
+      handle->reset_tp_timeout();
+
     int op = i.get_op();
     int r = 0;
 
@@ -3918,6 +3923,7 @@ int FileStore::collection_list_partial(coll_t c, hobject_t start,
 				       int min, int max, snapid_t seq,
 				       vector<hobject_t> *ls, hobject_t *next)
 {
+  dout(10) << "collection_list_partial: " << c << dendl;
   Index index;
   int r = get_index(c, &index);
   if (r < 0)
@@ -3929,6 +3935,8 @@ int FileStore::collection_list_partial(coll_t c, hobject_t start,
     assert(!m_filestore_fail_eio || r != -EIO);
     return r;
   }
+  if (ls)
+    dout(20) << "objects: " << *ls << dendl;
   return 0;
 }
 
