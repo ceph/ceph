@@ -7,10 +7,6 @@ Files: *
 Copyright: (c) 2004-2010 by Sage Weil <sage@newdream.net>
 License: LGPL2.1 (see /usr/share/common-licenses/LGPL-2.1)
 
-Files: src/client/hadoop/ceph
-Copyright: Copyright (C) New Dream Network and contributors
-License: Apache License v2
-
 Files: src/mount/canonicalize.c
 Copyright: Copyright (C) 1993 Rick Sladkey <jrs@world.std.com>
 License: LGPL2 or later
