@@ -79,6 +79,11 @@ public:
     return ret;
   }
 
+  /// @return true iff the object should have a snapset in it's attrs
+  bool has_snapset() const {
+    return (snap == CEPH_NOSNAP) || (snap == CEPH_SNAPDIR);
+  }
+
   /* Do not use when a particular hash function is needed */
   explicit hobject_t(const sobject_t &o) :
     oid(o.oid), snap(o.snap), max(false), pool(-1) {

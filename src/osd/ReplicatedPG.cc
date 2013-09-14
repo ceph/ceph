@@ -4888,7 +4888,8 @@ void ReplicatedPG::check_blacklisted_obc_watchers(ObjectContextRef obc)
 void ReplicatedPG::populate_obc_watchers(ObjectContextRef obc)
 {
   assert(is_active());
-  assert(!is_missing_object(obc->obs.oi.soid) ||
+  assert((recovering.count(obc->obs.oi.soid) ||
+	  !is_missing_object(obc->obs.oi.soid)) ||
 	 (pg_log.get_log().objects.count(obc->obs.oi.soid) && // or this is a revert... see recover_primary()
 	  pg_log.get_log().objects.find(obc->obs.oi.soid)->second->op ==
 	    pg_log_entry_t::LOST_REVERT &&
@@ -5001,23 +5002,37 @@ ObjectContextRef ReplicatedPG::create_object_context(const object_info_t& oi,
 }
 
 ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
-						  bool can_create)
+						  bool can_create,
+						  map<string, bufferptr> *attrs)
 {
+  assert(
+    attrs || !pg_log.get_missing().is_missing(soid) ||
+    // or this is a revert... see recover_primary()
+    (pg_log.get_log().objects.count(soid) &&
+      pg_log.get_log().objects.find(soid)->second->op ==
+      pg_log_entry_t::LOST_REVERT));
   ObjectContextRef obc = object_contexts.lookup(soid);
   if (obc) {
     dout(10) << "get_object_context " << obc << " " << soid << dendl;
   } else {
     // check disk
     bufferlist bv;
-    int r = osd->store->getattr(coll, soid, OI_ATTR, bv);
-    if (r < 0) {
-      if (!can_create)
-	return ObjectContextRef();   // -ENOENT!
+    if (attrs) {
+      assert(attrs->count(OI_ATTR));
+      bv.push_back(attrs->find(OI_ATTR)->second);
+    } else {
+      int r = osd->store->getattr(coll, soid, OI_ATTR, bv);
+      if (r < 0) {
+	if (!can_create)
+	  return ObjectContextRef();   // -ENOENT!
 
-      // new object.
-      object_info_t oi(soid);
-      SnapSetContext *ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, true, soid.get_namespace());
-      return create_object_context(oi, ssc);
+	// new object.
+	object_info_t oi(soid);
+	SnapSetContext *ssc = get_snapset_context(
+	  soid.oid, soid.get_key(), soid.hash, true, soid.get_namespace(),
+	  soid.has_snapset() ? attrs : 0);
+	return create_object_context(oi, ssc);
+      }
     }
 
     object_info_t oi(bv);
@@ -5030,7 +5045,10 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
     obc->obs.exists = true;
 
     if (can_create) {
-      obc->ssc = get_snapset_context(soid.oid, soid.get_key(), soid.hash, true, soid.get_namespace());
+      obc->ssc = get_snapset_context(
+	soid.oid, soid.get_key(), soid.hash,
+	true, soid.get_namespace(),
+	soid.has_snapset() ? attrs : 0);
       register_snapset_context(obc->ssc);
     }
 
@@ -5251,11 +5269,13 @@ SnapSetContext *ReplicatedPG::create_snapset_context(const object_t& oid)
   return ssc;
 }
 
-SnapSetContext *ReplicatedPG::get_snapset_context(const object_t& oid,
-						  const string& key,
-						  ps_t seed,
-						  bool can_create,
-						  const string& nspace)
+SnapSetContext *ReplicatedPG::get_snapset_context(
+  const object_t& oid,
+  const string& key,
+  ps_t seed,
+  bool can_create,
+  const string& nspace,
+  map<string, bufferptr> *attrs)
 {
   Mutex::Locker l(snapset_contexts_lock);
   SnapSetContext *ssc;
@@ -5264,20 +5284,25 @@ SnapSetContext *ReplicatedPG::get_snapset_context(const object_t& oid,
     ssc = p->second;
   } else {
     bufferlist bv;
-    hobject_t head(oid, key, CEPH_NOSNAP, seed,
-		   info.pgid.pool(), nspace);
-    int r = osd->store->getattr(coll, head, SS_ATTR, bv);
-    if (r < 0) {
-      // try _snapset
-      hobject_t snapdir(oid, key, CEPH_SNAPDIR, seed,
-			info.pgid.pool(), nspace);
-      r = osd->store->getattr(coll, snapdir, SS_ATTR, bv);
-      if (r < 0 && !can_create)
-	return NULL;
+    if (!attrs) {
+      hobject_t head(oid, key, CEPH_NOSNAP, seed,
+		     info.pgid.pool(), nspace);
+      int r = osd->store->getattr(coll, head, SS_ATTR, bv);
+      if (r < 0) {
+	// try _snapset
+	hobject_t snapdir(oid, key, CEPH_SNAPDIR, seed,
+			  info.pgid.pool(), nspace);
+	r = osd->store->getattr(coll, snapdir, SS_ATTR, bv);
+	if (r < 0 && !can_create)
+	  return NULL;
+      }
+    } else {
+      assert(attrs->count(SS_ATTR));
+      bv.push_back(attrs->find(SS_ATTR)->second);
     }
     ssc = new SnapSetContext(oid);
     _register_snapset_context(ssc);
-    if (r >= 0) {
+    if (bv.length()) {
       bufferlist::iterator bvp = bv.begin();
       ssc->snapset.decode(bvp);
     }
