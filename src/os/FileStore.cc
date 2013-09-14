@@ -937,7 +937,7 @@ int FileStore::version_stamp_is_valid(uint32_t *version)
   int ret = safe_read(fd, bp.c_str(), bp.length());
   TEMP_FAILURE_RETRY(::close(fd));
   if (ret < 0)
-    return -errno;
+    return ret;
   bufferlist bl;
   bl.push_back(bp);
   bufferlist::iterator i = bl.begin();
@@ -960,9 +960,7 @@ int FileStore::write_version_stamp()
   
   int ret = safe_write(fd, bl.c_str(), bl.length());
   TEMP_FAILURE_RETRY(::close(fd));
-  if (ret < 0)
-    return -errno;
-  return 0;
+  return ret;
 }
 
 int FileStore::read_op_seq(uint64_t *seq)
