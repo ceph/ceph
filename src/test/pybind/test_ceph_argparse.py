@@ -494,6 +494,516 @@ class TestMon(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['mon', 'remove']))
         assert_equal({}, validate_command(sigdict, ['mon', 'remove',
                                                     'name', 'toomany']))
+
+
+class TestOSD(TestArgparse):
+
+    def test_stat(self):
+        self.check_no_arg('osd', 'stat')
+
+    def test_dump(self):
+        self.check_0_or_1_natural_arg('osd', 'dump')
+
+    def test_osd_tree(self):
+        self.check_0_or_1_natural_arg('osd', 'tree')
+
+    def test_osd_ls(self):
+        self.check_0_or_1_natural_arg('osd', 'ls')
+
+    def test_osd_getmap(self):
+        self.check_0_or_1_natural_arg('osd', 'getmap')
+
+    def test_osd_getcrushmap(self):
+        self.check_0_or_1_natural_arg('osd', 'getcrushmap')
+
+    def test_perf(self):
+        self.check_no_arg('osd', 'perf')
+
+    def test_getmaxosd(self):
+        self.check_no_arg('osd', 'getmaxosd')
+
+    def test_find(self):
+        self.check_1_natural_arg('osd', 'find')
+
+    def test_map(self):
+        self.assert_valid_command(['osd', 'map', 'poolname', 'objectname'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'map']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'map', 'poolname']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'map',
+                                                    'poolname', 'objectname',
+                                                    'toomany']))
+
+    def test_scrub(self):
+        self.check_1_string_arg('osd', 'scrub')
+
+    def test_deep_scrub(self):
+        self.check_1_string_arg('osd', 'deep-scrub')
+
+    def test_repair(self):
+        self.check_1_string_arg('osd', 'repair')
+
+    def test_lspools(self):
+        self.assert_valid_command(['osd', 'lspools'])
+        self.assert_valid_command(['osd', 'lspools', '1'])
+        self.assert_valid_command(['osd', 'lspools', '-1'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'lspools',
+                                                    '1', 'toomany']))
+
+    def test_blacklist_ls(self):
+        self.assert_valid_command(['osd', 'blacklist', 'ls'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'blacklist']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'blacklist',
+                                                    'ls', 'toomany']))
+
+    def test_crush_rule(self):
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush', 'rule']))
+        for subcommand in ('list', 'ls', 'dump'):
+            self.assert_valid_command(['osd', 'crush', 'rule', subcommand])
+            assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                        'rule', subcommand,
+                                                        'toomany']))
+
+    def test_crush_dump(self):
+        self.assert_valid_command(['osd', 'crush', 'dump'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'dump', 'toomany']))
+
+    def test_setcrushmap(self):
+        self.check_no_arg('osd', 'setcrushmap')
+
+    def test_crush_add_bucket(self):
+        self.assert_valid_command(['osd', 'crush', 'add-bucket',
+                                   'name', 'type'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'add-bucket']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'add-bucket', 'name',
+                                                    'type',
+                                                    'toomany']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'add-bucket', '!!!',
+                                                    'type']))
+
+    def check_crush_setter(self, setter):
+        self.assert_valid_command(['osd', 'crush', setter,
+                                   '*', '2.3', 'AZaz09-_.='])
+        self.assert_valid_command(['osd', 'crush', setter,
+                                   'osd.0', '2.3', 'AZaz09-_.='])
+        self.assert_valid_command(['osd', 'crush', setter,
+                                   '0', '2.3', 'AZaz09-_.='])
+        self.assert_valid_command(['osd', 'crush', setter,
+                                   '0', '2.3', 'AZaz09-_.=', 'AZaz09-_.='])
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    setter,
+                                                    'osd.0']))
+        assert_in(validate_command(sigdict, ['osd', 'crush',
+                                             setter,
+                                             'osd.0',
+                                             '-1.0']),
+                  [None, {}])
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    setter,
+                                                    'osd.0',
+                                                    '1.0',
+                                                    '!!!']))
+
+    def test_crush_set(self):
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush']))
+        self.check_crush_setter('set')
+
+    def test_crush_add(self):
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush']))
+        self.check_crush_setter('add')
+
+    def test_crush_create_or_move(self):
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush']))
+        self.check_crush_setter('create-or-move')
+
+    def test_crush_move(self):
+        self.assert_valid_command(['osd', 'crush', 'move',
+                                   'AZaz09-_.', 'AZaz09-_.='])
+        self.assert_valid_command(['osd', 'crush', 'move',
+                                   '0', 'AZaz09-_.=', 'AZaz09-_.='])
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'move']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'move', 'AZaz09-_.']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'move', '!!!',
+                                                    'AZaz09-_.=']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'move', 'AZaz09-_.',
+                                                    '!!!']))
+
+    def test_crush_link(self):
+        self.assert_valid_command(['osd', 'crush', 'link',
+                                   'name', 'AZaz09-_.='])
+        self.assert_valid_command(['osd', 'crush', 'link',
+                                   'name', 'AZaz09-_.=', 'AZaz09-_.='])
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'link']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'link',
+                                                    'name']))
+
+    def test_crush_rm(self):
+        for alias in ('rm', 'remove', 'unlink'):
+            self.assert_valid_command(['osd', 'crush', alias, 'AZaz09-_.'])
+            self.assert_valid_command(['osd', 'crush', alias,
+                                       'AZaz09-_.', 'AZaz09-_.'])
+            assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                        alias]))
+            assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                        alias,
+                                                        'AZaz09-_.',
+                                                        'AZaz09-_.',
+                                                        'toomany']))
+
+    def test_crush_reweight(self):
+        self.assert_valid_command(['osd', 'crush', 'reweight',
+                                   'AZaz09-_.', '2.3'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'reweight']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'reweight',
+                                                    'AZaz09-_.']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'reweight',
+                                                    'AZaz09-_.',
+                                                    '-1.0']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'reweight',
+                                                    '!!!',
+                                                    '2.3']))
+
+    def test_crush_tunables(self):
+        for tunable in ('legacy', 'argonaut', 'bobtail', 'optimal', 'default'):
+            self.assert_valid_command(['osd', 'crush', 'tunables',
+                                       tunable])
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'tunables']))
+        assert_equal(None, validate_command(sigdict, ['osd', 'crush',
+                                                      'default', 'toomany']))
+
+    def test_crush_rule_create_simple(self):
+        self.assert_valid_command(['osd', 'crush', 'rule', 'create-simple',
+                                   'AZaz09-_.', 'AZaz09-_.', 'AZaz09-_.'])
+        assert_equal(None, validate_command(sigdict, ['osd', 'crush',
+                                                      'create-simple']))
+        assert_equal(None, validate_command(sigdict, ['osd', 'crush',
+                                                      'create-simple',
+                                                      'AZaz09-_.']))
+        assert_equal(None, validate_command(sigdict, ['osd', 'crush',
+                                                      'create-simple',
+                                                      'AZaz09-_.',
+                                                      'AZaz09-_.']))
+        assert_equal(None, validate_command(sigdict, ['osd', 'crush',
+                                                      'create-simple',
+                                                      '!!!',
+                                                      'AZaz09-_.',
+                                                      'AZaz09-_.']))
+        assert_equal(None, validate_command(sigdict, ['osd', 'crush',
+                                                      'create-simple',
+                                                      'AZaz09-_.',
+                                                      '|||',
+                                                      'AZaz09-_.']))
+        assert_equal(None, validate_command(sigdict, ['osd', 'crush',
+                                                      'create-simple',
+                                                      'AZaz09-_.',
+                                                      'AZaz09-_.',
+                                                      '+++']))
+        assert_equal(None, validate_command(sigdict, ['osd', 'crush',
+                                                      'create-simple',
+                                                      'AZaz09-_.',
+                                                      'AZaz09-_.',
+                                                      'AZaz09-_.',
+                                                      'toomany']))
+
+    def test_crush_rule_rm(self):
+        self.assert_valid_command(['osd', 'crush', 'rule', 'rm', 'AZaz09-_.'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'rule', 'rm']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'rule', 'rm',
+                                                    '!!!!']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'rule', 'rm',
+                                                    'AZaz09-_.',
+                                                    'toomany']))
+
+    def test_setmaxosd(self):
+        self.check_1_natural_arg('osd', 'setmaxosd')
+
+    def test_pause(self):
+        self.check_no_arg('osd', 'pause')
+
+    def test_unpause(self):
+        self.check_no_arg('osd', 'unpause')
+
+    def test_set_unset(self):
+        for action in ('set', 'unset'):
+            for flag in ('pause', 'noup', 'nodown', 'noout', 'noin',
+                         'nobackfill', 'norecover', 'noscrub', 'nodeep-scrub'):
+                self.assert_valid_command(['osd', action, flag])
+            assert_equal({}, validate_command(sigdict, ['osd', action]))
+            assert_equal({}, validate_command(sigdict, ['osd', action,
+                                                        'invalid']))
+            assert_equal({}, validate_command(sigdict, ['osd', action,
+                                                        'pause', 'toomany']))
+
+    def test_cluster_snap(self):
+        assert_equal(None, validate_command(sigdict, ['osd', 'cluster_snap']))
+
+    def test_down(self):
+        self.check_1_or_more_string_args('osd', 'down')
+
+    def test_out(self):
+        self.check_1_or_more_string_args('osd', 'out')
+
+    def test_in(self):
+        self.check_1_or_more_string_args('osd', 'in')
+
+    def test_rm(self):
+        self.check_1_or_more_string_args('osd', 'rm')
+
+    def test_reweight(self):
+        self.assert_valid_command(['osd', 'reweight', '1', '0.1'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'reweight']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'reweight',
+                                                    '1']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'reweight',
+                                                    '1', '2.0']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'reweight',
+                                                    '-1', '0.1']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'reweight',
+                                                    '1', '0.1',
+                                                    'toomany']))
+
+    def test_lost(self):
+        self.assert_valid_command(['osd', 'lost', '1',
+                                   '--yes-i-really-mean-it'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'lost']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'lost',
+                                                    '1']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'lost',
+                                                    '1',
+                                                    'what?']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'lost',
+                                                    '-1',
+                                                    '--yes-i-really-mean-it']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'lost',
+                                                    '1',
+                                                    '--yes-i-really-mean-it',
+                                                    'toomany']))
+
+    def test_create(self):
+        uuid = '12345678123456781234567812345678'
+        self.assert_valid_command(['osd', 'create'])
+        self.assert_valid_command(['osd', 'create',
+                                   uuid])
+        assert_equal({}, validate_command(sigdict, ['osd', 'create',
+                                                    'invalid']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'create',
+                                                    uuid,
+                                                    'toomany']))
+
+    def test_blackist(self):
+        for action in ('add', 'rm'):
+            self.assert_valid_command(['osd', 'blacklist', action,
+                                       '1.2.3.4/nonce'])
+            self.assert_valid_command(['osd', 'blacklist', action,
+                                       '1.2.3.4/nonce', '600.40'])
+            assert_equal({}, validate_command(sigdict, ['osd', 'blacklist',
+                                                        action,
+                                                        'invalid',
+                                                        '600.40']))
+            assert_equal({}, validate_command(sigdict, ['osd', 'blacklist',
+                                                        action,
+                                                        '1.2.3.4/nonce',
+                                                        '-1.0']))
+            assert_equal({}, validate_command(sigdict, ['osd', 'blacklist',
+                                                        action,
+                                                        '1.2.3.4/nonce',
+                                                        '600.40',
+                                                        'toomany']))
+
+    def test_pool_mksnap(self):
+        self.assert_valid_command(['osd', 'pool', 'mksnap',
+                                   'poolname', 'snapname'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'mksnap']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'mksnap',
+                                                    'poolname']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'mksnap',
+                                                    'poolname', 'snapname',
+                                                    'toomany']))
+
+    def test_pool_rmsnap(self):
+        self.assert_valid_command(['osd', 'pool', 'rmsnap',
+                                   'poolname', 'snapname'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'rmsnap']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'rmsnap',
+                                                    'poolname']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'rmsnap',
+                                                    'poolname', 'snapname',
+                                                    'toomany']))
+
+    def test_pool_create(self):
+        self.assert_valid_command(['osd', 'pool', 'create',
+                                   'poolname', '128'])
+        self.assert_valid_command(['osd', 'pool', 'create',
+                                   'poolname', '128', '128'])
+        self.assert_valid_command(['osd', 'pool', 'create',
+                                   'poolname', '128', '128',
+                                   'foo=bar'])
+        self.assert_valid_command(['osd', 'pool', 'create',
+                                   'poolname', '128', '128',
+                                   'foo=bar', 'baz=frob'])
+        self.assert_valid_command(['osd', 'pool', 'create',
+                                   'poolname', '128',
+                                   'foo=bar', 'baz=frob'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
+                                                    'poolname']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
+                                                    'poolname', '-1']))
+
+    def test_pool_delete(self):
+        self.assert_valid_command(['osd', 'pool', 'delete',
+                                   'poolname', 'poolname',
+                                   '--yes-i-really-really-mean-it'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'delete']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'delete',
+                                                    'poolname']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'delete',
+                                                    'poolname', 'poolname']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'delete',
+                                                    'poolname', 'poolname',
+                                                    'not really']))
+        assert_equal({}, validate_command(sigdict,
+                                          ['osd', 'pool', 'delete',
+                                           'poolname', 'poolname',
+                                           '--yes-i-really-really-mean-it',
+                                           'toomany']))
+
+    def test_pool_rename(self):
+        self.assert_valid_command(['osd', 'pool', 'rename',
+                                   'poolname', 'othername'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'rename']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'rename',
+                                                    'poolname']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'rename',
+                                                    'poolname', 'othername',
+                                                    'toomany']))
+
+    def test_pool_get(self):
+        for var in ('size', 'min_size', 'crash_replay_interval',
+                    'pg_num', 'pgp_num', 'crush_ruleset'):
+            self.assert_valid_command(['osd', 'pool', 'get', 'poolname', var])
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool',
+                                                    'get']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool',
+                                                    'get', 'poolname']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool',
+                                                    'get', 'poolname',
+                                                    'size', 'toomany']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool',
+                                                    'get', 'poolname',
+                                                    'invalid']))
+
+    def test_pool_set(self):
+        for var in ('size', 'min_size', 'crash_replay_interval',
+                    'pg_num', 'pgp_num', 'crush_ruleset'):
+            self.assert_valid_command(['osd', 'pool',
+                                       'set', 'poolname', var, '-1'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool',
+                                                    'set']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool',
+                                                    'set', 'poolname']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool',
+                                                    'set', 'poolname',
+                                                    'size', 'invalid']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool',
+                                                    'set', 'poolname',
+                                                    'invalid', '-1']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool',
+                                                    'set', 'poolname',
+                                                    'size', '-1',
+                                                    'toomany']))
+
+    def test_pool_set_quota(self):
+        for field in ('max_objects', 'max_bytes'):
+            self.assert_valid_command(['osd', 'pool', 'set-quota',
+                                       'poolname', field, '10K'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool',
+                                                    'set-quota']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool',
+                                                    'set-quota',
+                                                    'poolname']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool',
+                                                    'set-quota',
+                                                    'poolname',
+                                                    'max_objects']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool',
+                                                    'set-quota',
+                                                    'poolname',
+                                                    'invalid',
+                                                    '10K']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'pool',
+                                                    'set-quota',
+                                                    'poolname',
+                                                    'max_objects',
+                                                    '10K',
+                                                    'toomany']))
+
+    def test_reweight_by_utilization(self):
+        self.assert_valid_command(['osd', 'reweight-by-utilization'])
+        self.assert_valid_command(['osd', 'reweight-by-utilization', '100'])
+        assert_equal({}, validate_command(sigdict, ['osd',
+                                                    'reweight-by-utilization',
+                                                    '50']))
+        assert_equal({}, validate_command(sigdict, ['osd',
+                                                    'reweight-by-utilization',
+                                                    '100',
+                                                    'toomany']))
+
+    def test_thrash(self):
+        self.check_1_natural_arg('osd', 'thrash')
+
+    def test_tier_op(self):
+        for op in ('add', 'remove', 'set-overlay'):
+            self.assert_valid_command(['osd', 'tier', op,
+                                       'poolname', 'othername'])
+            assert_equal({}, validate_command(sigdict, ['osd', 'tier', op]))
+            assert_equal({}, validate_command(sigdict, ['osd', 'tier', op,
+                                                        'poolname']))
+            assert_equal({}, validate_command(sigdict, ['osd', 'tier', op,
+                                                        'poolname',
+                                                        'othername',
+                                                        'toomany']))
+
+    def test_tier_cache_mode(self):
+        for mode in ('none', 'writeback', 'invalidate+forward', 'readonly'):
+            self.assert_valid_command(['osd', 'tier', 'cache-mode',
+                                       'poolname', mode])
+        assert_equal({}, validate_command(sigdict, ['osd', 'tier',
+                                                    'cache-mode']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'tier',
+                                                    'cache-mode',
+                                                    'invalid']))
+
+    def test_tier_remove_overlay(self):
+        self.assert_valid_command(['osd', 'tier', 'remove-overlay',
+                                   'poolname'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'tier',
+                                                    'remove-overlay']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'tier',
+                                                    'remove-overlay',
+                                                    'poolname',
+                                                    'toomany']))
 # Local Variables:
 # compile-command: "cd ../.. ; make -j4 && 
 #  PYTHONPATH=pybind nosetests --stop \
