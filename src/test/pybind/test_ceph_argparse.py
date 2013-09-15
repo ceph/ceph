@@ -1004,6 +1004,31 @@ class TestOSD(TestArgparse):
                                                     'remove-overlay',
                                                     'poolname',
                                                     'toomany']))
+
+
+class TestConfigKey(TestArgparse):
+
+    def test_get(self):
+        self.check_1_string_arg('config-key', 'get')
+
+    def test_put(self):
+        self.assert_valid_command(['config-key', 'put',
+                                   'key'])
+        self.assert_valid_command(['config-key', 'put',
+                                   'key', 'value'])
+        assert_equal({}, validate_command(sigdict, ['config-key', 'put']))
+        assert_equal({}, validate_command(sigdict, ['config-key', 'put',
+                                                    'key', 'value',
+                                                    'toomany']))
+
+    def test_del(self):
+        self.check_1_string_arg('config-key', 'del')
+
+    def test_exists(self):
+        self.check_1_string_arg('config-key', 'exists')
+
+    def test_list(self):
+        self.check_no_arg('config-key', 'list')
 # Local Variables:
 # compile-command: "cd ../.. ; make -j4 && 
 #  PYTHONPATH=pybind nosetests --stop \
