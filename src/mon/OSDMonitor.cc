@@ -195,6 +195,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     bufferlist full_bl;
     osdmap.encode(full_bl);
     put_version_full(&t, osdmap.epoch, full_bl);
+    put_version_latest_full(&t, osdmap.epoch);
 
     // share
     dout(1) << osdmap << dendl;
