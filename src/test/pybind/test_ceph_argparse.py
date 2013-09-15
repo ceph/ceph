@@ -465,6 +465,35 @@ class TestMDS(TestArgparse):
                                                     '1',
                                                     '-1',
                                                     '--yes-i-really-mean-it']))
+
+
+class TestMon(TestArgparse):
+
+    def test_dump(self):
+        self.check_0_or_1_natural_arg('mon', 'dump')
+
+    def test_stat(self):
+        self.check_no_arg('mon', 'stat')
+
+    def test_getmap(self):
+        self.check_0_or_1_natural_arg('mon', 'getmap')
+
+    def test_add(self):
+        self.assert_valid_command(['mon', 'add', 'name', '1.2.3.4:1234'])
+        assert_equal({}, validate_command(sigdict, ['mon', 'add']))
+        assert_equal({}, validate_command(sigdict, ['mon', 'add', 'name']))
+        assert_equal({}, validate_command(sigdict, ['mon', 'add',
+                                                    'name',
+                                                    '400.500.600.700']))
+        assert_equal({}, validate_command(sigdict, ['mon', 'add', 'name',
+                                                    '1.2.3.4:1234',
+                                                    'toomany']))
+
+    def test_remove(self):
+        self.assert_valid_command(['mon', 'remove', 'name'])
+        assert_equal({}, validate_command(sigdict, ['mon', 'remove']))
+        assert_equal({}, validate_command(sigdict, ['mon', 'remove',
+                                                    'name', 'toomany']))
 # Local Variables:
 # compile-command: "cd ../.. ; make -j4 && 
 #  PYTHONPATH=pybind nosetests --stop \
