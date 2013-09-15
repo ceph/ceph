@@ -331,6 +331,140 @@ class TestMonitor(TestArgparse):
             self.assert_valid_command(['tell', name + ".42",
                                        'something',
                                        'something else'])
+
+
+class TestMDS(TestArgparse):
+
+    def test_stat(self):
+        self.check_no_arg('mds', 'stat')
+
+    def test_dump(self):
+        self.check_0_or_1_natural_arg('mds', 'dump')
+
+    def test_tell(self):
+        self.assert_valid_command(['mds', 'tell',
+                                   'someone',
+                                   'something'])
+        self.assert_valid_command(['mds', 'tell',
+                                   'someone',
+                                   'something',
+                                   'something else'])
+        assert_equal({}, validate_command(sigdict, ['mds', 'tell']))
+        assert_equal({}, validate_command(sigdict, ['mds', 'tell',
+                                                    'someone']))
+
+    def test_compat_show(self):
+        self.assert_valid_command(['mds', 'compat', 'show'])
+        assert_equal({}, validate_command(sigdict, ['mds', 'compat']))
+        assert_equal({}, validate_command(sigdict, ['mds', 'compat',
+                                                    'show', 'toomany']))
+
+    def test_stop(self):
+        self.assert_valid_command(['mds', 'stop', 'someone'])
+        assert_equal({}, validate_command(sigdict, ['mds', 'stop']))
+        assert_equal({}, validate_command(sigdict, ['mds', 'stop',
+                                                    'someone', 'toomany']))
+
+    def test_deactivate(self):
+        self.assert_valid_command(['mds', 'deactivate', 'someone'])
+        assert_equal({}, validate_command(sigdict, ['mds', 'deactivate']))
+        assert_equal({}, validate_command(sigdict, ['mds', 'deactivate',
+                                                    'someone', 'toomany']))
+
+    def test_set_max_mds(self):
+        self.check_1_natural_arg('mds', 'set_max_mds')
+
+    def test_setmap(self):
+        self.check_1_natural_arg('mds', 'setmap')
+
+    def test_set_state(self):
+        self.assert_valid_command(['mds', 'set_state', '1', '2'])
+        assert_equal({}, validate_command(sigdict, ['mds', 'set_state']))
+        assert_equal({}, validate_command(sigdict, ['mds', 'set_state', '-1']))
+        assert_equal({}, validate_command(sigdict, ['mds', 'set_state',
+                                                    '1', '-1']))
+        assert_equal({}, validate_command(sigdict, ['mds', 'set_state',
+                                                    '1', '21']))
+
+    def test_fail(self):
+        self.check_1_string_arg('mds', 'fail')
+
+    def test_rm(self):
+        assert_equal({}, validate_command(sigdict, ['mds', 'rm']))
+        assert_equal({}, validate_command(sigdict, ['mds', 'rm', '1']))
+        for name in ('osd', 'mon', 'client', 'mds'):
+            self.assert_valid_command(['mds', 'rm', '1', name + '.42'])
+            assert_equal({}, validate_command(sigdict, ['mds', 'rm',
+                                                        '-1', name + '.42']))
+            assert_equal({}, validate_command(sigdict, ['mds', 'rm',
+                                                        '-1', name]))
+            assert_equal({}, validate_command(sigdict, ['mds', 'rm',
+                                                        '1', name + '.42',
+                                                        'toomany']))
+
+    def test_rmfailed(self):
+        self.check_1_natural_arg('mds', 'rmfailed')
+
+    def test_cluster_down(self):
+        self.check_no_arg('mds', 'cluster_down')
+
+    def test_cluster_up(self):
+        self.check_no_arg('mds', 'cluster_up')
+
+    def test_compat_rm_compat(self):
+        self.assert_valid_command(['mds', 'compat', 'rm_compat', '1'])
+        assert_equal({}, validate_command(sigdict, ['mds',
+                                                    'compat',
+                                                    'rm_compat']))
+        assert_equal({}, validate_command(sigdict, ['mds',
+                                                    'compat',
+                                                    'rm_compat', '-1']))
+        assert_equal({}, validate_command(sigdict, ['mds',
+                                                    'compat',
+                                                    'rm_compat', '1', '1']))
+
+    def test_incompat_rm_incompat(self):
+        self.assert_valid_command(['mds', 'compat', 'rm_incompat', '1'])
+        assert_equal({}, validate_command(sigdict, ['mds',
+                                                    'compat',
+                                                    'rm_incompat']))
+        assert_equal({}, validate_command(sigdict, ['mds',
+                                                    'compat',
+                                                    'rm_incompat', '-1']))
+        assert_equal({}, validate_command(sigdict, ['mds',
+                                                    'compat',
+                                                    'rm_incompat', '1', '1']))
+
+    def test_add_data_pool(self):
+        self.check_1_natural_arg('mds', 'add_data_pool')
+
+    def test_remove_data_pool(self):
+        self.check_1_natural_arg('mds', 'remove_data_pool')
+
+    def test_newfs(self):
+        self.assert_valid_command(['mds', 'newfs', '1', '2',
+                                   '--yes-i-really-mean-it'])
+        assert_equal({}, validate_command(sigdict, ['mds', 'newfs']))
+        assert_equal({}, validate_command(sigdict, ['mds', 'newfs', '1']))
+        assert_equal({}, validate_command(sigdict, ['mds', 'newfs', '1', '1']))
+        assert_equal({}, validate_command(sigdict, ['mds', 'newfs', '1', '1',
+                                                    'no I dont']))
+        assert_equal({}, validate_command(sigdict, ['mds',
+                                                    'newfs',
+                                                    '1',
+                                                    '2',
+                                                    '--yes-i-really-mean-it',
+                                                    'toomany']))
+        assert_equal({}, validate_command(sigdict, ['mds',
+                                                    'newfs',
+                                                    '-1',
+                                                    '2',
+                                                    '--yes-i-really-mean-it']))
+        assert_equal({}, validate_command(sigdict, ['mds',
+                                                    'newfs',
+                                                    '1',
+                                                    '-1',
+                                                    '--yes-i-really-mean-it']))
 # Local Variables:
 # compile-command: "cd ../.. ; make -j4 && 
 #  PYTHONPATH=pybind nosetests --stop \
