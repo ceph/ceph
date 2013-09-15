@@ -182,6 +182,58 @@ class TestPG(TestArgparse):
 
     def test_set_nearfull_ratio(self):
         self.set_ratio('set_nearfull_ratio')
+
+
+class TestAuth(TestArgparse):
+
+    def test_export(self):
+        self.assert_valid_command(['auth', 'export'])
+        self.assert_valid_command(['auth',
+                                   'export',
+                                   'string'])
+        assert_equal({}, validate_command(sigdict, ['auth',
+                                                    'export',
+                                                    'string',
+                                                    'toomany']))
+
+    def test_get(self):
+        self.check_1_string_arg('auth', 'get')
+
+    def test_get_key(self):
+        self.check_1_string_arg('auth', 'get-key')
+
+    def test_print_key(self):
+        self.check_1_string_arg('auth', 'print-key')
+        self.check_1_string_arg('auth', 'print_key')
+
+    def test_list(self):
+        self.check_no_arg('auth', 'list')
+
+    def test_import(self):
+        self.check_no_arg('auth', 'import')
+
+    def test_add(self):
+        self.check_1_or_more_string_args('auth', 'add')
+
+    def test_get_or_create_key(self):
+        self.check_1_or_more_string_args('auth', 'get-or-create-key')
+
+    def test_get_or_create(self):
+        self.check_1_or_more_string_args('auth', 'get-or-create')
+
+    def test_caps(self):
+        assert_equal({}, validate_command(sigdict, ['auth',
+                                                    'caps']))
+        assert_equal({}, validate_command(sigdict, ['auth',
+                                                    'caps',
+                                                    'string']))
+        self.assert_valid_command(['auth',
+                                   'caps',
+                                   'string',
+                                   'more string'])
+
+    def test_del(self):
+        self.check_1_string_arg('auth', 'del')
 # Local Variables:
 # compile-command: "cd ../.. ; make -j4 && 
 #  PYTHONPATH=pybind nosetests --stop \
