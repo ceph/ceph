@@ -84,6 +84,104 @@ class TestArgparse:
         assert_equal({}, validate_command(sigdict, [prefix,
                                                     command,
                                                     'toomany']))
+
+
+class TestPG(TestArgparse):
+
+    def test_stat(self):
+        self.assert_valid_command(['pg', 'stat'])
+
+    def test_getmap(self):
+        self.assert_valid_command(['pg', 'getmap'])
+
+    def test_send_pg_creates(self):
+        self.assert_valid_command(['pg', 'send_pg_creates'])
+
+    def test_dump(self):
+        self.assert_valid_command(['pg', 'dump'])
+        self.assert_valid_command(['pg', 'dump',
+                                   'all',
+                                   'summary',
+                                   'sum',
+                                   'delta',
+                                   'pools',
+                                   'osds',
+                                   'pgs',
+                                   'pgs_brief'])
+        assert_equal({}, validate_command(sigdict, ['pg', 'dump', 'invalid']))
+
+    def test_dump_json(self):
+        self.assert_valid_command(['pg', 'dump_json'])
+        self.assert_valid_command(['pg', 'dump_json',
+                                   'all',
+                                   'summary',
+                                   'sum',
+                                   'pools',
+                                   'osds',
+                                   'pgs'])
+        assert_equal({}, validate_command(sigdict, ['pg', 'dump_json',
+                                                    'invalid']))
+
+    def test_dump_pools_json(self):
+        self.assert_valid_command(['pg', 'dump_pools_json'])
+
+    def test_dump_pools_stuck(self):
+        self.assert_valid_command(['pg', 'dump_stuck'])
+        self.assert_valid_command(['pg', 'dump_stuck',
+                                   'inactive',
+                                   'unclean',
+                                   'stale'])
+        assert_equal({}, validate_command(sigdict, ['pg', 'dump_stuck',
+                                                    'invalid']))
+        self.assert_valid_command(['pg', 'dump_stuck',
+                                   'inactive',
+                                   '1234'])
+
+    def one_pgid(self, command):
+        self.assert_valid_command(['pg', command, '1.1'])
+        assert_equal({}, validate_command(sigdict, ['pg', command]))
+        assert_equal({}, validate_command(sigdict, ['pg', command, '1']))
+
+    def test_map(self):
+        self.one_pgid('map')
+
+    def test_scrub(self):
+        self.one_pgid('scrub')
+
+    def test_deep_scrub(self):
+        self.one_pgid('deep-scrub')
+
+    def test_repair(self):
+        self.one_pgid('repair')
+
+    def test_debug(self):
+        self.assert_valid_command(['pg',
+                                   'debug',
+                                   'unfound_objects_exist'])
+        self.assert_valid_command(['pg',
+                                   'debug',
+                                   'degraded_pgs_exist'])
+        assert_equal({}, validate_command(sigdict, ['pg', 'debug']))
+        assert_equal({}, validate_command(sigdict, ['pg', 'debug',
+                                                    'invalid']))
+
+    def test_force_create_pg(self):
+        self.one_pgid('force_create_pg')
+
+    def set_ratio(self, command):
+        self.assert_valid_command(['pg',
+                                   command,
+                                   '0.0'])
+        assert_equal({}, validate_command(sigdict, ['pg', command]))
+        assert_equal({}, validate_command(sigdict, ['pg',
+                                                    command,
+                                                    '2.0']))
+
+    def test_set_full_ratio(self):
+        self.set_ratio('set_full_ratio')
+
+    def test_set_nearfull_ratio(self):
+        self.set_ratio('set_nearfull_ratio')
 # Local Variables:
 # compile-command: "cd ../.. ; make -j4 && 
 #  PYTHONPATH=pybind nosetests --stop \
