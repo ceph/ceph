@@ -234,6 +234,103 @@ class TestAuth(TestArgparse):
 
     def test_del(self):
         self.check_1_string_arg('auth', 'del')
+
+
+class TestMonitor(TestArgparse):
+
+    def test_compact(self):
+        self.assert_valid_command(['compact'])
+
+    def test_scrub(self):
+        self.assert_valid_command(['scrub'])
+
+    def test_fsid(self):
+        self.assert_valid_command(['fsid'])
+
+    def test_log(self):
+        assert_equal({}, validate_command(sigdict, ['log']))
+        self.assert_valid_command(['log', 'a logtext'])
+        self.assert_valid_command(['log', 'a logtext', 'and another'])
+
+    def test_injectargs(self):
+        assert_equal({}, validate_command(sigdict, ['injectargs']))
+        self.assert_valid_command(['injectargs', 'one'])
+        self.assert_valid_command(['injectargs', 'one', 'two'])
+
+    def test_status(self):
+        self.assert_valid_command(['status'])
+
+    def test_health(self):
+        self.assert_valid_command(['health'])
+        self.assert_valid_command(['health', 'detail'])
+        assert_equal({}, validate_command(sigdict, ['health', 'invalid']))
+        assert_equal({}, validate_command(sigdict, ['health', 'detail',
+                                                    'toomany']))
+
+    def test_df(self):
+        self.assert_valid_command(['df'])
+        self.assert_valid_command(['df', 'detail'])
+        assert_equal({}, validate_command(sigdict, ['df', 'invalid']))
+        assert_equal({}, validate_command(sigdict, ['df', 'detail',
+                                                    'toomany']))
+
+    def test_report(self):
+        self.assert_valid_command(['report'])
+        self.assert_valid_command(['report', 'tag1'])
+        self.assert_valid_command(['report', 'tag1', 'tag2'])
+
+    def test_quorum_status(self):
+        self.assert_valid_command(['quorum_status'])
+
+    def test_mon_status(self):
+        self.assert_valid_command(['mon_status'])
+
+    def test_sync_force(self):
+        self.assert_valid_command(['sync',
+                                   'force',
+                                   '--yes-i-really-mean-it',
+                                   '--i-know-what-i-am-doing'])
+        assert_equal({}, validate_command(sigdict, ['sync']))
+        assert_equal({}, validate_command(sigdict, ['sync',
+                                                    'force']))
+        assert_equal({}, validate_command(sigdict, ['sync',
+                                                    'force',
+                                                    '--yes-i-really-mean-it']))
+        assert_equal({}, validate_command(sigdict, ['sync',
+                                                    'force',
+                                                    '--yes-i-really-mean-it',
+                                                    '--i-know-what-i-am-doing',
+                                                    'toomany']))
+
+    def test_heap(self):
+        assert_equal({}, validate_command(sigdict, ['heap']))
+        assert_equal({}, validate_command(sigdict, ['heap', 'invalid']))
+        self.assert_valid_command(['heap', 'dump'])
+        self.assert_valid_command(['heap', 'start_profiler'])
+        self.assert_valid_command(['heap', 'stop_profiler'])
+        self.assert_valid_command(['heap', 'release'])
+        self.assert_valid_command(['heap', 'stats'])
+
+    def test_quorum(self):
+        assert_equal({}, validate_command(sigdict, ['quorum']))
+        assert_equal({}, validate_command(sigdict, ['quorum', 'invalid']))
+        self.assert_valid_command(['quorum', 'enter'])
+        self.assert_valid_command(['quorum', 'exit'])
+        assert_equal({}, validate_command(sigdict, ['quorum',
+                                                    'enter',
+                                                    'toomany']))
+
+    def test_tell(self):
+        assert_equal({}, validate_command(sigdict, ['tell']))
+        assert_equal({}, validate_command(sigdict, ['tell', 'invalid']))
+        for name in ('osd', 'mon', 'client', 'mds'):
+            assert_equal({}, validate_command(sigdict, ['tell', name]))
+            assert_equal({}, validate_command(sigdict, ['tell',
+                                                        name + ".42"]))
+            self.assert_valid_command(['tell', name + ".42", 'something'])
+            self.assert_valid_command(['tell', name + ".42",
+                                       'something',
+                                       'something else'])
 # Local Variables:
 # compile-command: "cd ../.. ; make -j4 && 
 #  PYTHONPATH=pybind nosetests --stop \
