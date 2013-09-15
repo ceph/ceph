@@ -36,6 +36,54 @@ def test_parse_json_funcsigs():
     commands = get_command_descriptions("pull585")
     assert_raises(TypeError, parse_json_funcsigs, commands, 'cli')
 
+sigdict = parse_json_funcsigs(get_command_descriptions("all"), 'cli')
+
+
+class TestArgparse:
+
+    def assert_valid_command(self, args):
+        result = validate_command(sigdict, args)
+        assert_not_in(result, [None, {}])
+
+    def check_1_natural_arg(self, prefix, command):
+        self.assert_valid_command([prefix, command, '1'])
+        assert_equal({}, validate_command(sigdict, [prefix, command]))
+        assert_equal({}, validate_command(sigdict, [prefix, command, '-1']))
+        assert_equal({}, validate_command(sigdict, [prefix, command, '1',
+                                                    '1']))
+
+    def check_0_or_1_natural_arg(self, prefix, command):
+        self.assert_valid_command([prefix, command, '1'])
+        self.assert_valid_command([prefix, command])
+        assert_equal({}, validate_command(sigdict, [prefix, command, '-1']))
+        assert_equal({}, validate_command(sigdict, [prefix, command, '1',
+                                                    '1']))
+
+    def check_1_string_arg(self, prefix, command):
+        assert_equal({}, validate_command(sigdict, [prefix, command]))
+        self.assert_valid_command([prefix, command, 'string'])
+        assert_equal({}, validate_command(sigdict, [prefix,
+                                                    command,
+                                                    'string',
+                                                    'toomany']))
+
+    def check_1_or_more_string_args(self, prefix, command):
+        assert_equal({}, validate_command(sigdict, [prefix,
+                                                    command]))
+        self.assert_valid_command([prefix,
+                                   command,
+                                   'string'])
+        self.assert_valid_command([prefix,
+                                   command,
+                                   'string',
+                                   'more string'])
+
+    def check_no_arg(self, prefix, command):
+        self.assert_valid_command([prefix,
+                                   command])
+        assert_equal({}, validate_command(sigdict, [prefix,
+                                                    command,
+                                                    'toomany']))
 # Local Variables:
 # compile-command: "cd ../.. ; make -j4 && 
 #  PYTHONPATH=pybind nosetests --stop \
