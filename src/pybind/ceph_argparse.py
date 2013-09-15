@@ -278,7 +278,10 @@ class CephEntityAddr(CephIPAddr):
     EntityAddress, that is, IP address/nonce
     """
     def valid(self, s, partial=False):
-        ip, nonce = s.split('/')
+        try:
+            ip, nonce = s.split('/')
+        except:
+            raise ArgumentValid('{0} must contain a /'.format(s))
         super(self.__class__, self).valid(ip)
         self.nonce = nonce
         self.val = s
