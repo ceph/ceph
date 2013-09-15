@@ -179,13 +179,13 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   }
 
   // walk through incrementals
-  MonitorDBStore::Transaction t;
   while (version > osdmap.epoch) {
+    MonitorDBStore::Transaction t;
     bufferlist inc_bl;
     int err = get_version(osdmap.epoch+1, inc_bl);
     assert(err == 0);
     assert(inc_bl.length());
-    
+
     dout(7) << "update_from_paxos  applying incremental " << osdmap.epoch+1 << dendl;
     OSDMap::Incremental inc(inc_bl);
     err = osdmap.apply_incremental(inc);
@@ -202,9 +202,9 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     if (osdmap.epoch == 1) {
       t.erase("mkfs", "osdmap");
     }
+    if (!t.empty())
+      mon->store->apply_transaction(t);
   }
-  if (!t.empty())
-    mon->store->apply_transaction(t);
 
   for (int o = 0; o < osdmap.get_max_osd(); o++) {
     if (osdmap.is_down(o)) {
