@@ -250,13 +250,12 @@ def build_matrix(path):
                 raw = build_matrix(os.path.join(path, fn))
                 sublists.append([(combine_path(fn, item[0]), item[1]) for item in raw])
             out = []
-            if sublists:
-                for sublist in itertools.product(*sublists):
-                    name = '{' + ' '.join([item[0] for item in sublist]) + '}'
-                    val = []
-                    for item in sublist:
-                        val.extend(item[1])
-                        out.append((name, val))
+            for sublist in itertools.product(*sublists):
+                name = '{' + ' '.join([item[0] for item in sublist]) + '}'
+                val = []
+                for item in sublist:
+                    val.extend(item[1])
+                out.append((name, val))
             return out
         else:
             # list items
