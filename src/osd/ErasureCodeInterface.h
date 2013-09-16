@@ -25,15 +25,15 @@
     are systematic (i.e. the data is not mangled and can be
     reconstructed by concatenating chunks ).
     
-    All methods returns **0** on success and a negative value on
+    All methods return **0** on success and a negative value on
     error. If the value returned on error is not explained in
     **ErasureCodeInterface**, the sources or the documentation of the
-    interface implementer must be read to figure out what it means. It
-    is recommended that each error code matches an *errno* value that
-    relates to the cause of the error.
+    interface implementer (i.e. the plugin ) must be read to figure
+    out what it means. It is recommended that each error code matches
+    an *errno* value that relates to the cause of the error.
 
     Assuming the interface implementer provides three data chunks ( K
-    = 3 ) and two coding chunks ( M = 2 ), a buffer can be encoded as
+    = 3 ) and two coding chunks ( M = 2 ), a buffer could be encoded as
     follows:
     
     ~~~~~~~~~~~~~~~~{.c}
@@ -50,16 +50,20 @@
     encoded[4]         // coding chunk 1
     ~~~~~~~~~~~~~~~~
 
-    If encoded[2] ( which contains **EF** ) is missing and accessing
-    encoded[3] ( the first coding chunk ) is more expensive than
-    accessing encoded[4] ( the second coding chunk ), the
-    **minimum_to_decode_with_cost** method can be called as follows:
+    The **minimum_to_decode_with_cost** method can be used to minimize
+    the cost of fetching the chunks necessary to retrieve a given
+    content. For instance, if encoded[2] (contained **EF**) is missing
+    and accessing encoded[3] (the first coding chunk) is more
+    expensive than accessing encoded[4] (the second coding chunk),
+    **minimum_to_decode_with_cost** is expected to chose the first
+    coding chunk.
 
     ~~~~~~~~~~~~~~~~{.c}
     set<int> want_to_read(2); // want the chunk containing "EF"
     map<int,int> available(
           0 => 1,  // data chunk 0 : available and costs 1
           1 => 1,  // data chunk 1 : available and costs 1
+                   // data chunk 2 : missing
           3 => 9,  // coding chunk 1 : available and costs 9
           4 => 1,  // coding chunk 2 : available and costs 1
     );
@@ -67,14 +71,14 @@
     minimum_to_decode_with_cost(want_to_read,
                                 available,
                                 &minimum);
-    minimum == set<int>(0, 1, 4);
+    minimum == set<int>(0, 1, 4); // NOT set<int>(0, 1, 3);
     ~~~~~~~~~~~~~~~~
     
     It sets **minimum** with three chunks to reconstruct the desired
     data chunk and will pick the second coding chunk ( 4 ) because it
     is less expensive ( 1 < 9 ) to retrieve than the first coding
     chunk ( 3 ). The caller is responsible for retrieving the chunks
-    and call **decode** to reconstruct the second data chunk content.
+    and call **decode** to reconstruct the second data chunk.
     
     ~~~~~~~~~~~~~~~~{.c}
     map<int,bufferlist> chunks;
@@ -85,6 +89,10 @@
     decoded[2] == "EF"
     ~~~~~~~~~~~~~~~~
 
+    The semantic of the cost value is defined by the caller and must
+    be known to the implementer. For instance, it may be more
+    expensive to retrieve two chunks with cost 1 + 9 = 10 than two
+    chunks with cost 6 + 6 = 12. 
  */ 
 
 #include <map>
@@ -113,7 +121,7 @@ namespace ceph {
      *
      * @param [in] want_to_read chunk indexes to be decoded
      * @param [in] available chunk indexes containing valid data
-     * @param [out] minimum chunk indexes to retrieve for decode
+     * @param [out] minimum chunk indexes to retrieve 
      * @return **0** on success or a negative errno on error.
      */
     virtual int minimum_to_decode(const set<int> &want_to_read,
@@ -124,8 +132,8 @@ namespace ceph {
      * Compute the smallest subset of **available** chunks that needs
      * to be retrieved in order to successfully decode
      * **want_to_read** chunks. If there are more than one possible
-     * subset, select the subset that contains the chunks with the
-     * lowest cost.
+     * subset, select the subset that minimizes the overall retrieval
+     * cost.
      *
      * The **available** parameter maps chunk indexes to their
      * retrieval cost. The higher the cost value, the more costly it
@@ -141,7 +149,7 @@ namespace ceph {
      * @param [in] want_to_read chunk indexes to be decoded
      * @param [in] available map chunk indexes containing valid data 
      *             to their retrieval cost
-     * @param [out] minimum chunk indexes to retrieve for decode
+     * @param [out] minimum chunk indexes to retrieve 
      * @return **0** on success or a negative errno on error.
      */
     virtual int minimum_to_decode_with_cost(const set<int> &want_to_read,
@@ -150,15 +158,31 @@ namespace ceph {
 
     /**
      * Encode the content of **in** and store the result in
-     * **encoded**. The **encoded** map contains at least all
-     * chunk indexes found in the **want_to_encode** set. 
+     * **encoded**. All buffers pointed to by **encoded** have the
+     * same size. The **encoded** map contains at least all chunk
+     * indexes found in the **want_to_encode** set.
      *
      * The **encoded** map is expected to be a pointer to an empty
      * map.
      *
+     * Assuming the **in** parameter is **length** bytes long, 
+     * the concatenation of the first **length** bytes of the
+     * **encoded** buffers is equal to the content of the **in**
+     * parameter.
+     *
      * The **encoded** map may contain more chunks than required by
      * **want_to_encode** and the caller is expected to permanently
-     * store all of them, not just the chunks from **want_to_encode**.
+     * store all of them, not just the chunks listed in
+     * **want_to_encode**.
+     *
+     * The **encoded** map may contain pointers to data stored in
+     * the **in** parameter. If the caller modifies the content of
+     * **in** after calling the encode method, it may have a side
+     * effect on the content of **encoded**. 
+     *
+     * The **encoded** map may contain pointers to buffers allocated
+     * by the encode method. They will be freed when **encoded** is
+     * freed. The allocation method is not specified.
      *
      * Returns 0 on success.
      *
@@ -172,24 +196,30 @@ namespace ceph {
                        map<int, bufferlist> *encoded) = 0;
 
     /**
-     * Decode the **chunks** and store at least **want_to_read** chunks
-     * in **decoded**. 
+     * Decode the **chunks** and store at least **want_to_read**
+     * chunks in **decoded**.
+     *
+     * The **decoded** map must be a pointer to an empty map.
      *
      * There must be enough **chunks** ( as returned by
      * **minimum_to_decode** or **minimum_to_decode_with_cost** ) to
-     * perform a successfull decoding of all chunks found in
+     * perform a successful decoding of all chunks listed in
      * **want_to_read**.
      *
-     * The **decoded** map is expected to be a pointer to an empty
-     * map.
+     * All buffers pointed by **in** must have the same size.
      *
-     * The **decoded** map may contain more chunks than required by
-     * **want_to_read** and they can safely be used by the caller.
+     * On success, the **decoded** map may contain more chunks than
+     * required by **want_to_read** and they can safely be used by the
+     * caller.
      *
-     * If a chunk is listed in **want_to_read** and there is
-     * corresponding **bufferlist** in **chunks**, it will be copied
-     * verbatim into **decoded**. If not it will be reconstructed from
-     * the existing chunks.
+     * If a chunk is listed in **want_to_read** and there is a
+     * corresponding **bufferlist** in **chunks**, it will be
+     * referenced in **decoded**. If not it will be reconstructed from
+     * the existing chunks. 
+     *
+     * Because **decoded** may contain pointers to data found in
+     * **chunks**, modifying the content of **chunks** after calling
+     * decode may have a side effect on the content of **decoded**.
      *
      * Returns 0 on success.
      *
