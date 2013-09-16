@@ -287,7 +287,7 @@ def archive(ctx, config):
 def sudo(ctx, config):
     log.info('Configuring sudo...')
     sudoers_file = '/etc/sudoers'
-    backup_ext = '.orig'
+    backup_ext = '.orig.teuthology'
     tty_expr = 's/requiretty/!requiretty/'
     pw_expr = 's/!visiblepw/visiblepw/'
 
