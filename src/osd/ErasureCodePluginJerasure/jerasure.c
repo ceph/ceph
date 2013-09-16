@@ -1242,7 +1242,7 @@ int **jerasure_smart_bitmatrix_to_schedule(int k, int m, int w, int *bitmatrix)
   int *diff, *from, *b1, *flink, *blink;
   int *ptr, no, row;
   int optodo;
-  int bestrow, bestdiff, top;
+  int bestrow = 0, bestdiff, top;
 
 /*   printf("Scheduling:\n\n");
   jerasure_print_bitmatrix(bitmatrix, m*w, k*w, w); */
