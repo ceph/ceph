@@ -503,9 +503,6 @@ protected:
 
   set<hobject_t> recovering;
 
-  // Track contents of temp collection, clear on reset
-  set<hobject_t> temp_contents;
-
   /*
    * Backfill
    *
@@ -819,8 +816,6 @@ public:
       target);
     pgbackend->split_colls(child, split_bits, seed, t);
   }
-  /// TODOXXX: remove this one, stub
-  coll_t get_temp_coll(ObjectStore::Transaction *t) { return coll_t(); }
 private:
   struct NotTrimming;
   struct SnapTrim : boost::statechart::event< SnapTrim > {
