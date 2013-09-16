@@ -372,10 +372,6 @@ if test "x$enable_cephfs_java" = "xyes"; then
         CLASSPATH=$CLASSPATH:$EXTRA_CLASSPATH_JAR
         export CLASSPATH
         AC_MSG_NOTICE([classpath - $CLASSPATH])
-        AS_IF([test "$have_junit4" = "1"], [
-		AC_CHECK_CLASS([org.junit.rules.ExternalResource], [], [
-		AC_MSG_NOTICE(Could not find org.junit.rules.ExternalResource)
-		have_junit4=0])])
 
         # Check for jni.h
 	CPPFLAGS_save=$CPPFLAGS
