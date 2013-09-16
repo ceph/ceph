@@ -1,4 +1,0 @@
-Unlike the rest of the code in this repository, this
-directory (src/client/hadoop) is licensed under the Apache License 2.0. This
-is for the obvious reason that we want to integrate it into the Apache Hadoop
-project.

@@ -10,7 +10,6 @@ do_autogen.sh: make a ceph build by running autogen, etc.
                                  level 1: -g
                                  level 3: -Wextra
                                  level 4: even more...
--H                               --with-hadoop
 -T                               --without-tcmalloc
 -e <path>                        dump encoded objects to <path>
 -P                               profiling build
@@ -45,8 +44,6 @@ do
 
     h) usage
         exit 0;;
-
-    H) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --with-hadoop";;
 
     T) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --without-tcmalloc";;
 
