@@ -83,14 +83,16 @@ public:
 
 class TestOp {
 public:
+  int num;
   RadosTestContext *context;
   TestOpStat *stat;
   bool done;
-  TestOp(RadosTestContext *context,
-	 TestOpStat *stat = 0) :
-    context(context),
-    stat(stat),
-    done(0)
+  TestOp(int n, RadosTestContext *context,
+	 TestOpStat *stat = 0)
+    : num(n),
+      context(context),
+      stat(stat),
+      done(0)
   {}
 
   virtual ~TestOp() {};
@@ -230,6 +232,7 @@ public:
 	for (list<TestOp*>::iterator i = inflight.begin();
 	     i != inflight.end();) {
 	  if ((*i)->finished()) {
+	    cout << (*i)->num << ": done (" << (inflight.size()-1) << " left)" << std::endl;
 	    delete *i;
 	    inflight.erase(i++);
 	  } else {
@@ -238,7 +241,7 @@ public:
 	}
 	
 	if (inflight.size() >= (unsigned) max_in_flight || (!next && !inflight.empty())) {
-	  cout << "Waiting on " << inflight.size() << std::endl;
+	  cout << " waiting on " << inflight.size() << std::endl;
 	  wait();
 	} else {
 	  break;
@@ -488,11 +491,11 @@ public:
   librados::ObjectWriteOperation op;
   librados::AioCompletion *comp;
   bool done;
-  RemoveAttrsOp(RadosTestContext *context,
+  RemoveAttrsOp(int n, RadosTestContext *context,
 	       const string &oid,
-	       TestOpStat *stat) :
-    TestOp(context, stat), oid(oid), comp(NULL), done(false)
-    {}
+	       TestOpStat *stat)
+    : TestOp(n, context, stat), oid(oid), comp(NULL), done(false)
+  {}
 
   void _begin()
   {
@@ -577,11 +580,12 @@ public:
   librados::ObjectWriteOperation op;
   librados::AioCompletion *comp;
   bool done;
-  TmapPutOp(RadosTestContext *context,
-	       const string &oid,
-	       TestOpStat *stat) :
-    TestOp(context, stat), oid(oid), comp(NULL), done(false)
-    {}
+  TmapPutOp(int n,
+	    RadosTestContext *context,
+	    const string &oid,
+	    TestOpStat *stat)
+    : TestOp(n, context, stat), oid(oid), comp(NULL), done(false)
+  {}
 
   void _begin()
   {
@@ -647,7 +651,7 @@ public:
       assert(0);
     }
     done = true;
-    context->update_object_version(oid, comp->get_version());
+    context->update_object_version(oid, comp->get_version64());
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
     context->kick();
@@ -670,11 +674,13 @@ public:
   librados::ObjectWriteOperation op;
   librados::AioCompletion *comp;
   bool done;
-  SetAttrsOp(RadosTestContext *context,
-	       const string &oid,
-	       TestOpStat *stat) :
-    TestOp(context, stat), oid(oid), comp(NULL), done(false)
-    {}
+  SetAttrsOp(int n,
+	     RadosTestContext *context,
+	     const string &oid,
+	     TestOpStat *stat)
+    : TestOp(n, context, stat),
+      oid(oid), comp(NULL), done(false)
+  {}
 
   void _begin()
   {
@@ -738,7 +744,7 @@ public:
       assert(0);
     }
     done = true;
-    context->update_object_version(oid, comp->get_version());
+    context->update_object_version(oid, comp->get_version64());
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
     context->kick();
@@ -763,11 +769,12 @@ public:
   uint64_t waiting_on;
   uint64_t last_acked_tid;
 
-  WriteOp(RadosTestContext *context, 
+  WriteOp(int n,
+	  RadosTestContext *context,
 	  const string &oid,
-	  TestOpStat *stat = 0) : 
-    TestOp(context, stat),
-    oid(oid), waiting_on(0), last_acked_tid(0)
+	  TestOpStat *stat = 0)
+    : TestOp(n, context, stat),
+      oid(oid), waiting_on(0), last_acked_tid(0)
   {}
 		
   void _begin()
@@ -796,16 +803,17 @@ public:
     }
     interval_set<uint64_t> ranges;
     context->cont_gen.get_ranges(cont, ranges);
+    std::cout << num << ":  seq_num " << context->seq_num << " ranges " << ranges << std::endl;
     context->state_lock.Unlock();
 
     int r = context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset);
     if (r) {
-      cerr << "r is " << r << " snapset is " << snapset << " seq is " << context->seq << std::endl;
+      cerr << " r is " << r << " snapset is " << snapset << " seq is " << context->seq << std::endl;
       assert(0);
     }
 
     waiting_on = ranges.num_intervals();
-    cout << "waiting_on = " << waiting_on << std::endl;
+    //cout << " waiting_on = " << waiting_on << std::endl;
     ContentsGenerator::iterator gen_pos = context->cont_gen.get_iterator(cont);
     uint64_t tid = 1;
     for (interval_set<uint64_t>::iterator i = ranges.begin(); 
@@ -818,9 +826,8 @@ public:
       }
       assert(to_write.length() == i.get_len());
       assert(to_write.length() > 0);
-      std::cout << "Writing " << context->prefix+oid << " from " << i.get_start()
-		<< " to " << i.get_len() + i.get_start() << " tid " << tid
-		<< " ranges are " << ranges << std::endl;
+      std::cout << num << ":  writing " << context->prefix+oid << " from " << i.get_start()
+		<< " to " << i.get_len() + i.get_start() << " tid " << tid << std::endl;
       pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
 	new pair<TestOp*, TestOp::CallbackInfo*>(this,
 						 new TestOp::CallbackInfo(tid));
@@ -838,7 +845,7 @@ public:
     context->state_lock.Lock();
     uint64_t tid = info->id;
 
-    cout << "finishing write tid " << tid << " to " << context->prefix + oid << std::endl;
+    cout << num << ":  finishing write tid " << tid << " to " << context->prefix + oid << std::endl;
 
     if (tid <= last_acked_tid) {
       cerr << "Error: finished tid " << tid
@@ -889,10 +896,11 @@ class DeleteOp : public TestOp {
 public:
   string oid;
 
-  DeleteOp(RadosTestContext *context,
+  DeleteOp(int n,
+	   RadosTestContext *context,
 	   const string &oid,
-	   TestOpStat *stat = 0) :
-    TestOp(context, stat), oid(oid)
+	   TestOpStat *stat = 0)
+    : TestOp(n, context, stat), oid(oid)
   {}
 
   void _begin()
@@ -970,16 +978,17 @@ public:
   bufferlist header;
 
   map<string, bufferlist> xattrs;
-  ReadOp(RadosTestContext *context, 
+  ReadOp(int n,
+	 RadosTestContext *context,
 	 const string &oid,
-	 TestOpStat *stat = 0) : 
-    TestOp(context, stat),
-    completion(NULL),
-    oid(oid),
-    old_value(&context->cont_gen),
-    snap(0),
-    retval(0),
-    attrretval(0)
+	 TestOpStat *stat = 0)
+    : TestOp(n, context, stat),
+      completion(NULL),
+      oid(oid),
+      old_value(&context->cont_gen),
+      snap(0),
+      retval(0),
+      attrretval(0)
   {}
 		
   void _begin()
@@ -1002,9 +1011,9 @@ public:
     if (ctx) {
       assert(old_value.exists);
       TestAlarm alarm;
-      std::cerr << "about to start" << std::endl;
+      std::cerr << num << ":  about to start" << std::endl;
       ctx->start();
-      std::cerr << "started" << std::endl;
+      std::cerr << num << ":  started" << std::endl;
       bufferlist bl;
       context->io_ctx.set_notify_timeout(600);
       int r = context->io_ctx.notify(context->prefix+oid, 0, bl);
@@ -1012,7 +1021,7 @@ public:
 	std::cerr << "r is " << r << std::endl;
 	assert(0);
       }
-      std::cerr << "notified, waiting" << std::endl;
+      std::cerr << num << ":  notified, waiting" << std::endl;
       ctx->wait();
     }
     if (snap >= 0) {
@@ -1059,7 +1068,7 @@ public:
     uint64_t version = completion->get_version64();
     if (int err = completion->get_return_value()) {
       if (!(err == -ENOENT && old_value.deleted())) {
-	cerr << "Error: oid " << oid << " read returned error code "
+	cerr << num << ": Error: oid " << oid << " read returned error code "
 	     << err << std::endl;
       }
     } else {
@@ -1068,16 +1077,16 @@ public:
 	ContDesc to_check;
 	bufferlist::iterator p = result.begin();
 	if (!context->cont_gen.read_header(p, to_check)) {
-	  cerr << "Unable to decode oid " << oid << " at snap " << context->current_snap << std::endl;
+	  cerr << num << ": Unable to decode oid " << oid << " at snap " << context->current_snap << std::endl;
 	  context->errors++;
 	}
 	if (to_check != old_value.most_recent()) {
-	  cerr << "Found incorrect object contents " << to_check
+	  cerr << num << ": Found incorrect object contents " << to_check
 	       << ", expected " << old_value.most_recent() << " oid " << oid << std::endl;
 	  context->errors++;
 	}
 	if (!old_value.check(result)) {
-	  cerr << "Object " << oid << " contents " << to_check << " corrupt" << std::endl;
+	  cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
 	  context->errors++;
 	}
 	if (context->errors) assert(0);
@@ -1085,28 +1094,28 @@ public:
 
       // Attributes
       if (!(old_value.header == header)) {
-	cerr << "oid: " << oid << " header does not match, old size: "
+	cerr << num << ": oid " << oid << " header does not match, old size: "
 	     << old_value.header.length() << " new size " << header.length()
 	     << std::endl;
 	assert(old_value.header == header);
       }
       if (omap.size() != old_value.attrs.size()) {
-	cerr << "oid: " << oid << " tmap.size() is " << omap.size()
+	cerr << num << ": oid " << oid << " tmap.size() is " << omap.size()
 	     << " and old is " << old_value.attrs.size() << std::endl;
 	assert(omap.size() == old_value.attrs.size());
       }
       if (omap_keys.size() != old_value.attrs.size()) {
-	cerr << "oid: " << oid << " tmap.size() is " << omap_keys.size()
+	cerr << num << ": oid " << oid << " tmap.size() is " << omap_keys.size()
 	     << " and old is " << old_value.attrs.size() << std::endl;
 	assert(omap_keys.size() == old_value.attrs.size());
       }
       if (xattrs.size() != old_value.attrs.size()) {
-	cerr << "oid: " << oid << " xattrs.size() is " << xattrs.size()
+	cerr << num << ": oid " << oid << " xattrs.size() is " << xattrs.size()
 	     << " and old is " << old_value.attrs.size() << std::endl;
 	assert(xattrs.size() == old_value.attrs.size());
       }
       if (version != old_value.version) {
-	cerr << "oid: " << oid << " version is " << version
+	cerr << num << ": oid " << oid << " version is " << version
 	     << " and expected " << old_value.version << std::endl;
 	assert(version == old_value.version);
       }
@@ -1163,9 +1172,10 @@ public:
 
 class SnapCreateOp : public TestOp {
 public:
-  SnapCreateOp(RadosTestContext *context,
-	       TestOpStat *stat = 0) :
-    TestOp(context, stat)
+  SnapCreateOp(int n,
+	       RadosTestContext *context,
+	       TestOpStat *stat = 0)
+    : TestOp(n, context, stat)
   {}
 
   void _begin()
@@ -1201,11 +1211,11 @@ public:
 class SnapRemoveOp : public TestOp {
 public:
   int to_remove;
-  SnapRemoveOp(RadosTestContext *context,
+  SnapRemoveOp(int n, RadosTestContext *context,
 	       int snap,
-	       TestOpStat *stat = 0) :
-    TestOp(context, stat),
-    to_remove(snap)
+	       TestOpStat *stat = 0)
+    : TestOp(n, context, stat),
+      to_remove(snap)
   {}
 
   void _begin()
@@ -1241,11 +1251,12 @@ public:
 class WatchOp : public TestOp {
   string oid;
 public:
-  WatchOp(RadosTestContext *context,
-	     const string &_oid,
-	     TestOpStat *stat = 0) :
-    TestOp(context, stat),
-    oid(_oid)
+  WatchOp(int n,
+	  RadosTestContext *context,
+	  const string &_oid,
+	  TestOpStat *stat = 0)
+    : TestOp(n, context, stat),
+      oid(_oid)
   {}
 
   void _begin()
@@ -1318,13 +1329,14 @@ public:
   librados::ObjectWriteOperation op;
   librados::AioCompletion *comp;
 
-  RollbackOp(RadosTestContext *context,
+  RollbackOp(int n,
+	     RadosTestContext *context,
 	     const string &_oid,
 	     int snap,
-	     TestOpStat *stat = 0) :
-    TestOp(context, stat),
-    oid(_oid),
-    roll_back_to(snap), done(false)
+	     TestOpStat *stat = 0)
+    : TestOp(n, context, stat),
+      oid(_oid),
+      roll_back_to(snap), done(false)
   {}
 
   void _begin()
@@ -1369,7 +1381,7 @@ public:
       assert(0);
     }
     done = true;
-    context->update_object_version(oid, comp->get_version());
+    context->update_object_version(oid, comp->get_version64());
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
     context->kick();
@@ -1392,16 +1404,20 @@ public:
   ObjectDesc src_value;
   librados::ObjectWriteOperation op;
   librados::AioCompletion *comp;
+  librados::AioCompletion *comp_racing_read;
   int snap;
-  bool done;
-  tid_t tid;
-  CopyFromOp(RadosTestContext *context,
+  int done;
+  uint64_t version;
+  int r;
+  CopyFromOp(int n,
+	     RadosTestContext *context,
 	     const string &oid,
 	     const string &oid_src,
 	     TestOpStat *stat)
-    : TestOp(context, stat), oid(oid), oid_src(oid_src),
+    : TestOp(n, context, stat),
+      oid(oid), oid_src(oid_src),
       src_value(&context->cont_gen),
-      comp(NULL), done(false), tid(0)
+      comp(NULL), done(0), version(0), r(0)
   {}
 
   void _begin()
@@ -1433,35 +1449,67 @@ public:
 					       new TestOp::CallbackInfo(0));
     comp = context->rados.aio_create_completion((void*) cb_arg, &write_callback,
 						NULL);
-    tid = context->io_ctx.aio_operate(context->prefix+oid, comp, &op);
+    context->io_ctx.aio_operate(context->prefix+oid, comp, &op);
+
+    // queue up a racing read, too.
+    pair<TestOp*, TestOp::CallbackInfo*> *read_cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(1));
+    comp_racing_read = context->rados.aio_create_completion((void*) read_cb_arg, &write_callback,
+							    NULL);
+    context->io_ctx.aio_stat(context->prefix+oid, comp_racing_read, NULL, NULL);
   }
 
   void _finish(CallbackInfo *info)
   {
     Mutex::Locker l(context->state_lock);
-    done = true;
-    int r;
-    assert(comp->is_complete());
-    cout << "finishing copy_from tid " << tid << " to " << context->prefix + oid << std::endl;
-    if ((r = comp->get_return_value())) {
-      if (!(r == -ENOENT && src_value.deleted())) {
-	cerr << "Error: oid " << oid << " copy_from " << oid_src << " returned error code "
-	     << r << std::endl;
+
+    // note that the read can (and atm will) come back before the
+    // write reply, but will reflect the update and the versions will
+    // match.
+
+    if (info->id == 0) {
+      // copy_from
+      assert(comp->is_complete());
+      cout << num << ":  finishing copy_from to " << context->prefix + oid << std::endl;
+      if ((r = comp->get_return_value())) {
+	if (!(r == -ENOENT && src_value.deleted())) {
+	  cerr << "Error: oid " << oid << " copy_from " << oid_src << " returned error code "
+	       << r << std::endl;
+	}
+      } else {
+	assert(!version || comp->get_version64() == version);
+	version = comp->get_version64();
+	context->update_object_full(oid, src_value);
+	context->update_object_version(oid, comp->get_version64());
       }
-    } else {
-      context->update_object_full(oid, src_value);
-      context->update_object_version(oid, comp->get_version());
+      context->oid_in_use.erase(oid_src);
+      context->oid_not_in_use.insert(oid_src);
+      context->kick();
+    } else if (info->id == 1) {
+      // racing read
+      assert(comp_racing_read->is_complete());
+      cout << num << ":  finishing copy_from racing read to " << context->prefix + oid << std::endl;
+      if ((r = comp_racing_read->get_return_value())) {
+	if (!(r == -ENOENT && src_value.deleted())) {
+	  cerr << "Error: oid " << oid << " copy_from " << oid_src << " returned error code "
+	       << r << std::endl;
+	}
+      } else {
+	assert(comp_racing_read->get_return_value() == 0);
+	assert(!version || comp_racing_read->get_version64() == version);
+	version = comp_racing_read->get_version64();
+      }
+      context->oid_in_use.erase(oid);
+      context->oid_not_in_use.insert(oid);
+      context->kick();
     }
-    context->oid_in_use.erase(oid);
-    context->oid_not_in_use.insert(oid);
-    context->oid_in_use.erase(oid_src);
-    context->oid_not_in_use.insert(oid_src);
-    context->kick();
+    ++done;
   }
 
   bool finished()
   {
-    return done;
+    return done == 2;
   }
 
   string getType()

@@ -48,8 +48,8 @@ public:
     if (m_op <= m_objects) {
       stringstream oid;
       oid << m_op;
-      cout << m_op << ": Writing initial " << oid.str() << std::endl;
-      return new WriteOp(&context, oid.str());
+      cout << m_op << ": write initial oid " << oid.str() << std::endl;
+      return new WriteOp(m_op, &context, oid.str());
     } else if (m_op >= m_ops) {
       return NULL;
     }
@@ -71,7 +71,6 @@ public:
 	   it != m_weight_sums.end();
 	   ++it) {
 	if (rand_val < it->second) {
-	  cout << m_op << ": ";
 	  retval = gen_op(context, it->first);
 	  break;
 	}
@@ -85,37 +84,39 @@ private:
   TestOp *gen_op(RadosTestContext &context, TestOpType type)
   {
     string oid, oid2;
-    cout << "oids not in use " << context.oid_not_in_use.size() << std::endl;
+    //cout << "oids not in use " << context.oid_not_in_use.size() << std::endl;
     assert(context.oid_not_in_use.size());
+
+    cout << m_op << ": ";
     switch (type) {
     case TEST_OP_READ:
       oid = *(rand_choose(context.oid_not_in_use));
-      cout << "Reading " << oid << std::endl;
-      return new ReadOp(&context, oid, m_stats);
+      cout << "read oid " << oid << std::endl;
+      return new ReadOp(m_op, &context, oid, m_stats);
 
     case TEST_OP_WRITE:
       oid = *(rand_choose(context.oid_not_in_use));
-      cout << "Writing " << oid << " current snap is "
+      cout << "write oid " << oid << " current snap is "
 	   << context.current_snap << std::endl;
-      return new WriteOp(&context, oid, m_stats);
+      return new WriteOp(m_op, &context, oid, m_stats);
 
     case TEST_OP_DELETE:
       oid = *(rand_choose(context.oid_not_in_use));
-      cout << "Deleting " << oid << " current snap is "
+      cout << "delete oid " << oid << " current snap is "
 	   << context.current_snap << std::endl;
-      return new DeleteOp(&context, oid, m_stats);
+      return new DeleteOp(m_op, &context, oid, m_stats);
 
     case TEST_OP_SNAP_CREATE:
-      cout << "Snapping" << std::endl;
-      return new SnapCreateOp(&context, m_stats);
+      cout << "snap_create" << std::endl;
+      return new SnapCreateOp(m_op, &context, m_stats);
 
     case TEST_OP_SNAP_REMOVE:
       if (context.snaps.empty()) {
 	return NULL;
       } else {
 	int snap = rand_choose(context.snaps)->first;
-	cout << "RemovingSnap " << snap << std::endl;
-	return new SnapRemoveOp(&context, snap, m_stats);
+	cout << "snap_remove snap " << snap << std::endl;
+	return new SnapRemoveOp(m_op, &context, snap, m_stats);
       }
 
     case TEST_OP_ROLLBACK:
@@ -124,40 +125,40 @@ private:
       } else {
 	int snap = rand_choose(context.snaps)->first;
 	string oid = *(rand_choose(context.oid_not_in_use));
-	cout << "RollingBack " << oid << " to " << snap << std::endl;
-        return new RollbackOp(&context, oid, snap);
+	cout << "rollback oid " << oid << " to " << snap << std::endl;
+        return new RollbackOp(m_op, &context, oid, snap);
       }
 
     case TEST_OP_SETATTR:
       oid = *(rand_choose(context.oid_not_in_use));
-      cout << "Setting attrs on " << oid
+      cout << "setattr oid " << oid
 	   << " current snap is " << context.current_snap << std::endl;
-      return new SetAttrsOp(&context, oid, m_stats);
+      return new SetAttrsOp(m_op, &context, oid, m_stats);
 
     case TEST_OP_RMATTR:
       oid = *(rand_choose(context.oid_not_in_use));
-      cout << "Removing attrs on " << oid
+      cout << "rmattr oid " << oid
 	   << " current snap is " << context.current_snap << std::endl;
-      return new RemoveAttrsOp(&context, oid, m_stats);
+      return new RemoveAttrsOp(m_op, &context, oid, m_stats);
 
     case TEST_OP_TMAPPUT:
       oid = *(rand_choose(context.oid_not_in_use));
-      cout << "Setting tmap on " << oid
+      cout << "tmapput oid " << oid
 	   << " current snap is " << context.current_snap << std::endl;
-      return new TmapPutOp(&context, oid, m_stats);
+      return new TmapPutOp(m_op, &context, oid, m_stats);
 
     case TEST_OP_WATCH:
       oid = *(rand_choose(context.oid_not_in_use));
-      cout << "Watching " << oid
+      cout << "watch oid " << oid
 	   << " current snap is " << context.current_snap << std::endl;
-      return new WatchOp(&context, oid, m_stats);
+      return new WatchOp(m_op, &context, oid, m_stats);
 
     case TEST_OP_COPY_FROM:
       oid = *(rand_choose(context.oid_not_in_use));
       oid2 = *(rand_choose(context.oid_not_in_use));
-      cout << "copy_from " << oid << " from " << oid2
+      cout << "copy_from oid " << oid << " from oid " << oid2
 	   << " current snap is " << context.current_snap << std::endl;
-      return new CopyFromOp(&context, oid, oid2, m_stats);
+      return new CopyFromOp(m_op, &context, oid, oid2, m_stats);
 
     default:
       cerr << "Invalid op type " << type << std::endl;

@@ -393,6 +393,8 @@ ostream& operator<<(ostream& out, const pg_t &pg)
 
 // -- coll_t --
 
+const coll_t coll_t::META_COLL("meta");
+
 bool coll_t::is_temp(pg_t& pgid) const
 {
   const char *cstr(str.c_str());
