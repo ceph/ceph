@@ -444,6 +444,7 @@ protected:
    */
   struct BackfillInterval {
     // info about a backfill interval on a peer
+    eversion_t version; /// version at which the scan occurred
     map<hobject_t,eversion_t> objects;
     hobject_t begin;
     hobject_t end;
@@ -452,6 +453,7 @@ protected:
     void clear() {
       objects.clear();
       begin = end = hobject_t();
+      version = eversion_t();
     }
 
     void reset(hobject_t start) {
