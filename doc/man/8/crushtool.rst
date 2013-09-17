@@ -7,8 +7,8 @@
 Synopsis
 ========
 
-| **crushtool** ( -d *map* | -c *map.txt* | --build *numosds*
-  *layer1* *...* ) [ -o *outfile* [ --clobber ]]
+| **crushtool** ( -d *map* | -c *map.txt* | --build --num_osds *numosds*
+  *layer1* *...* ) [ -o *outfile* ]
 
 
 Description
@@ -41,9 +41,11 @@ The tool has four modes of operation.
    will create a relatively generic map with the given layer
    structure. See below for examples.
 
-.. option:: --test ...
+.. option:: --test
+
    will perform a dry run of a CRUSH mapping for a range of input object 
-   names, see crushtool --help for more information. 
+   names, see crushtool --help for more information.
+   
 
 Options
 =======
@@ -52,10 +54,7 @@ Options
 
    will specify the output file.
 
-.. option:: --clobber
-
-   will allow the tool to overwrite an existing outfile (it will normally refuse).
-
+	
 
 Building a map
 ==============
@@ -83,22 +82,26 @@ preceding layer.
 Example
 =======
 
-Suppose we have 128 devices, each grouped into shelves with 4 devices
-each, and 8 shelves per rack. We could create a three level hierarchy
-with::
+Suppose we have two rows with two racks each and 20 nodes per rack. Suppose
+each node contains 4 storage devices for Ceph OSD Daemons. This configuration
+allows us to deploy 320 Ceph OSD Daemons. Lets assume a 42U rack with 2U nodes,
+leaving an extra 2U for a rack switch.
 
-       crushtool --build 128 shelf uniform 4 rack straw 8 root straw 0 -o map
+To reflect our hierarchy of devices, nodes, racks and rows, we would execute
+the following::
+
+	crushtool -o crushmap --build --num_osds 320 node straw 4 rack straw 20 row straw 2
 
 To adjust the default (generic) mapping rules, we can run::
 
        # decompile
-       crushtool -d map -o map.txt
+       crushtool -d crushmap -o map.txt
 
        # edit
        vi map.txt
 
        # recompile
-       crushtool -c map.txt -o map
+       crushtool -c map.txt -o crushmap
 
 
 Availability
