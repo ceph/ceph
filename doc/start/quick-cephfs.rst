@@ -3,7 +3,7 @@
 =====================
 
 To use the :term:`Ceph FS` Quick Start guide, you must have executed the
-procedures in the `Ceph Deploy Quick Start`_ guide first. Execute this quick
+procedures in the `Storage Cluster Quick Start`_ guide first. Execute this quick
 start on the Admin Host.
 
 Prerequisites
@@ -91,7 +91,7 @@ See `Ceph FS`_ for additional information. Ceph FS is not quite as stable
 as the Ceph Block Device and Ceph Object Storage. See `Troubleshooting`_
 if you encounter trouble. 
 
-.. _Ceph Deploy Quick Start: ../quick-ceph-deploy
+.. _Storage Cluster Quick Start: ../quick-ceph-deploy
 .. _Ceph FS: ../../cephfs/
 .. _FAQ: http://wiki.ceph.com/03FAQs/01General_FAQ#How_Can_I_Give_Ceph_a_Try.3F
 .. _Troubleshooting: ../../cephfs/troubleshooting
