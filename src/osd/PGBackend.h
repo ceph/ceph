@@ -205,6 +205,26 @@
    virtual void clear_temp_obj(const hobject_t &oid) = 0;
 
    virtual ~PGBackend() {}
+
+   /// List objects in collection
+   virtual int objects_list_partial(
+     const hobject_t &begin,
+     int min,
+     int max,
+     snapid_t seq,
+     vector<hobject_t> *ls,
+     hobject_t *next) = 0;
+
+   virtual int objects_list_range(
+     const hobject_t &start,
+     const hobject_t &end,
+     snapid_t seq,
+     vector<hobject_t> *ls) = 0;
+
+   virtual int objects_get_attr(
+     const hobject_t &hoid,
+     const string &attr,
+     bufferlist *out) = 0;
  };
 
 #endif
