@@ -2,7 +2,7 @@
  Object Storage Quick Start
 ============================
 
-To use this guide, you must have executed the procedures in the `Ceph Deploy
+To use this guide, you must have executed the procedures in the `Storage Cluster
 Quick Start`_ guide first. Ensure your :term:`Ceph Storage Cluster` is in an
 ``active + clean`` state before working with the :term:`Ceph Object Storage`.
 
@@ -344,7 +344,7 @@ tutorials. See the `S3-compatible`_ and `Swift-compatible`_ APIs for details.
 
 
 .. _Create rgw.conf: ../../radosgw/config/index.html#create-rgw-conf
-.. _Ceph Deploy Quick Start: ../quick-ceph-deploy
+.. _Storage Cluster Quick Start: ../quick-ceph-deploy
 .. _Ceph Object Storage Manual Install: ../../radosgw/manual-install
 .. _RGW Configuration: ../../radosgw/config
 .. _S3-compatible: ../../radosgw/s3
