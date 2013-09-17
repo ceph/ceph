@@ -109,6 +109,10 @@ public:
     map<string,bufferlist> omap;
     int rval;
 
+    coll_t temp_coll;
+    hobject_t temp_oid;
+    object_copy_cursor_t temp_cursor;
+
     CopyOp(OpContext *c, hobject_t s, object_locator_t l, version_t v)
       : ctx(c), src(s), oloc(l), version(v),
 	objecter_tid(0),
@@ -179,6 +183,8 @@ public:
     int num_write;   ///< count update ops
 
     CopyOpRef copy_op;
+
+    hobject_t new_temp_oid, discard_temp_oid;  ///< temp objects we should start/stop tracking
 
     OpContext(const OpContext& other);
     const OpContext& operator=(const OpContext& other);
@@ -279,8 +285,7 @@ protected:
   void op_applied(RepGather *repop);
   void op_commit(RepGather *repop);
   void eval_repop(RepGather*);
-  void issue_repop(RepGather *repop, utime_t now,
-		   eversion_t old_last_update, bool old_exists, uint64_t old_size, eversion_t old_version);
+  void issue_repop(RepGather *repop, utime_t now);
   RepGather *new_repop(OpContext *ctx, ObjectContextRef obc, tid_t rep_tid);
   void remove_repop(RepGather *repop);
   void repop_ack(RepGather *repop,
@@ -418,9 +423,6 @@ protected:
     }
   };
   map<hobject_t, PullInfo> pulling;
-
-  // Track contents of temp collection, clear on reset
-  set<hobject_t> temp_contents;
 
   ObjectRecoveryInfo recalc_subsets(const ObjectRecoveryInfo& recovery_info);
   static void trim_pushed_data(const interval_set<uint64_t> &copy_subset,
@@ -793,7 +795,9 @@ protected:
   int start_copy(OpContext *ctx, hobject_t src, object_locator_t oloc, version_t version,
 		 CopyOpRef *pcop);
   void process_copy_chunk(hobject_t oid, tid_t tid, int r);
+  void _write_copy_chunk(CopyOpRef cop, ObjectStore::Transaction *t);
   void _copy_some(OpContext *ctx, CopyOpRef cop);
+  int finish_copy(OpContext *ctx);
   void cancel_copy(CopyOpRef cop);
   void requeue_cancel_copy_ops(bool requeue=true);
 
@@ -855,7 +859,10 @@ public:
 private:
   bool temp_created;
   coll_t temp_coll;
+  set<hobject_t> temp_contents;   ///< contents of temp collection, clear on reset
+  uint64_t temp_seq; ///< last id for naming temp objects
   coll_t get_temp_coll(ObjectStore::Transaction *t);
+  hobject_t generate_temp_object();  ///< generate a new temp object name
 public:
   bool have_temp_coll();
   coll_t get_temp_coll() {
@@ -931,6 +938,9 @@ public:
 
   bool is_degraded_object(const hobject_t& oid);
   void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
+
+  void wait_for_blocked_object(const hobject_t& soid, OpRequestRef op);
+  void kick_object_context_blocked(ObjectContextRef obc);
 
   void mark_all_unfound_lost(int what);
   eversion_t pick_newest_available(const hobject_t& oid);
