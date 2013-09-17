@@ -5666,6 +5666,57 @@ void Client::unlock_fh_pos(Fh *f)
   f->pos_locked = false;
 }
 
+int Client::migration_inline_data(Inode *in)
+{
+  ObjectOperation ops;
+  bufferlist inline_version_bl;
+  ::encode(in->inline_version, inline_version_bl);
+  ops.cmpxattr("inline_version",
+               CEPH_OSD_CMPXATTR_OP_GT,
+               CEPH_OSD_CMPXATTR_MODE_U64,
+               CEPH_OSD_OP_FLAG_NOENTOK,
+               inline_version_bl);
+  bufferlist inline_data = in->inline_data;
+  ops.write(0, inline_data, in->truncate_size, in->truncate_seq);
+  ops.setxattr("inline_version", inline_version_bl);
+
+  char oid_buf[32];
+  snprintf(oid_buf, sizeof(oid_buf), "%llx.00000000", (long long unsigned)in->ino);
+  object_t oid = oid_buf;
+
+  Mutex flock("Client::migration_inline_data flock");
+  Cond cond;
+  bool done = false;
+  int ret;
+  Context *oncommit = new C_SafeCond(&flock, &cond, &done, &ret);
+
+  objecter->mutate(oid,
+                   OSDMap::file_to_object_locator(in->layout),
+                   ops,
+                   in->snaprealm->get_snap_context(),
+                   ceph_clock_now(cct),
+                   0,
+                   NULL,
+                   oncommit);
+
+  client_lock.Unlock();
+  flock.Lock();
+  while (!done)
+    cond.Wait(flock);
+  flock.Unlock();
+  client_lock.Lock();
+
+  if (ret >= 0 || ret == -ECANCELED) {
+    in->inline_data.clear();
+    in->inline_version = CEPH_INLINE_DISABLED;
+    mark_caps_dirty(in, CEPH_CAP_FILE_WR);
+    check_caps(in, false);
+
+    ret = 0;
+  }
+
+  return ret;
+}
 
 // 
 
