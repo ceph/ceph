@@ -2067,19 +2067,16 @@ void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
 	 ++j) {
       if (j->snap < CEPH_MAXSNAP) {
 	OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
-	bufferptr bp;
-	r = store->getattr(
-	  cid,
+	bufferlist bl;
+	r = get_pgbackend()->objects_get_attr(
 	  *j,
 	  OI_ATTR,
-	  bp);
+	  &bl);
 	if (r < 0) {
 	  derr << __func__ << ": getattr returned "
 	       << cpp_strerror(r) << dendl;
 	  assert(0);
 	}
-	bufferlist bl;
-	bl.push_back(bp);
 	object_info_t oi(bl);
 	set<snapid_t> oi_snaps(oi.snaps.begin(), oi.snaps.end());
 	set<snapid_t> cur_snaps;
