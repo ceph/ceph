@@ -3,26 +3,31 @@
 =============================
 
 If you haven't completed your `Preflight Checklist`_, do that first. This
-**Quick Start** sets up a two-node demo cluster so you can explore some of the
-:term:`Ceph Storage Cluster` functionality. This **Quick Start**  will help you
-install a minimal Ceph Storage Cluster on a server node from your admin node
-using ``ceph-deploy``.
+**Quick Start** sets up an ``ceph-deploy`` node and a three Ceph Node cluster so
+you can explore some of the :term:`Ceph Storage Cluster` functionality. 
 
 .. ditaa:: 
-           /----------------\         /----------------\
-           |   Admin Node   |<------->|   Server Node  |
-           | cCCC           |         | cCCC           |
-           +----------------+         +----------------+
-           |  Ceph Commands |         |   ceph - mon   |
-           \----------------/         +----------------+
-                                      |   ceph - osd   |
-                                      +----------------+
-                                      |   ceph - mds   |
-                                      \----------------/
+           /------------------\         /----------------\
+           | ceph deploy Node |         |    Ceph Node   |
+           |                  +-------->+                |
+           |                  |         | cCCC           |
+           \---------+--------/         \----------------/
+                     |
+                     |                  /----------------\
+                     |                  |    Ceph Node   |
+                     +----------------->+                |
+                     |                  | cCCC           |
+                     |                  \----------------/
+                     |
+                     |                  /----------------\
+                     |                  |    Ceph Node   |
+                     +----------------->+                |
+                                        | cCCC           |
+                                        \----------------/
 
 
-For best results, create a directory on your admin node for maintaining the
-configuration of your cluster. ::
+For best results, create a directory on your ``ceph-deploy`` node for
+maintaining the configuration of your cluster. ::
 
 	mkdir my-cluster
 	cd my-cluster
@@ -31,228 +36,241 @@ configuration of your cluster. ::
    current directory. Ensure you are in this directory when executing
    ``ceph-deploy``.
 
+As a first exercise, create a Ceph Storage Cluster with one Ceph Monitor and two
+Ceph OSD Daemons. Once the cluster reaches a ``active + clean`` state, we will 
+expand it by adding a third Ceph OSD Daemon and two more Ceph Monitors.
+
+.. note:: In a production cluster, Ceph Monitors and Ceph OSD Daemons do not
+   reside on the same Ceph Node, because ``fsync`` issues can introduce 
+   latency.
+
 
 Create a Cluster
 ================
 
-To create your Ceph Storage Cluster, declare its initial monitors, generate a
-filesystem ID (``fsid``) and generate monitor keys by entering the following
-command on a commandline prompt:: 
+On your ``ceph-deploy`` node, perform the following steps.
 
-	ceph-deploy new {mon-server-name}
-	ceph-deploy new mon-ceph-node
 
-Check the output of ``ceph-deploy`` with ``ls`` and ``cat`` in the current
-directory. You should see a Ceph configuration file, a keyring, and a log file
-for the new cluster.  See `ceph-deploy new -h`_ for additional details.
+#. Create the cluster. :: 
 
-.. topic:: Single Node Quick Start
+	ceph-deploy new {ceph-node}
+	ceph-deploy new ceph-node1
 
-	Assuming only one node for your Ceph Storage Cluster, you	will need to 
-	modify the default ``osd crush chooseleaf type`` setting (it defaults to 
-	``1`` for ``node``) to ``0`` for ``device`` so that it will peer with OSDs 
-	on the local node. Add the following line to your Ceph configuration file:: 
+   Check the output of ``ceph-deploy`` with ``ls`` and ``cat`` in the current
+   directory. You should see a Ceph configuration file, a keyring, and a log 
+   file for the new cluster.  See `ceph-deploy new -h`_ for additional details.
+
+#. Install Ceph. :: 
+
+	ceph-deploy install {ceph-node}[{ceph-node} ...]
+	ceph-deploy install ceph-node1 ceph-node2 ceph-node3
+
+
+#. Add a Ceph Monitor. :: 
+
+	ceph-deploy mon create {ceph-node}
+	ceph-deploy mon create ceph-node1
 	
-		osd crush chooseleaf type = 0 
+#. Gather keys. :: 
 
-.. tip:: If you deploy without executing foregoing step on a single node 
-   cluster, your Ceph Storage Cluster will not achieve an ``active + clean``
-   state. To remedy this situation, you must modify your `CRUSH Map`_.
+	ceph-deploy gatherkeys {ceph-node}
+	ceph-deploy gatherkeys ceph-node1
 
-Install Ceph
-============
+   Once you have gathered keys, your local directory should have the following keyrings:
 
-To install Ceph on your server node, open a command line on your admin
-node and type the following::
-
-	ceph-deploy install {server-node-name}[,{server-node-name}]
-	ceph-deploy install mon-ceph-node
-
-Without additional arguments, ``ceph-deploy`` will install the most recent
-stable Ceph package to the server node. See `ceph-deploy install -h`_ for
-additional details.
-
-.. tip:: When ``ceph-deploy`` completes installation successfully, 
-   it should echo ``OK``.
-
-
-Add a Monitor
-=============
-
-To run a Ceph cluster, you need at least one Ceph Monitor. When using
-``ceph-deploy``, the tool enforces a single Ceph Monitor per node. Execute the
-following to create a Ceph Monitor::
-
-	ceph-deploy mon create {mon-server-name}
-	ceph-deploy mon create mon-ceph-node
-
-.. tip:: In production environments, we recommend running Ceph Monitors on 
-   nodes that do not run OSDs.
-
-When you have added a monitor successfully, directories under ``/var/lib/ceph``
-on your server node should have subdirectories ``bootstrap-mds`` and
-``bootstrap-osd`` that contain keyrings. If these directories do not contain
-keyrings, execute ``ceph-deploy mon create`` again on the admin node.
-
-
-Gather Keys
-===========
-
-To deploy additional daemons and provision them with monitor authentication keys
-from your admin node, you must first gather keys from a monitor node. Execute
-the following to gather keys:: 
-
-	ceph-deploy gatherkeys {mon-server-name}
-	ceph-deploy gatherkeys mon-ceph-node
-
-
-Once you have gathered keys, your local directory should have the following keyrings:
-
-- ``{cluster-name}.client.admin.keyring``
-- ``{cluster-name}.bootstrap-osd.keyring``
-- ``{cluster-name}.bootstrap-mds.keyring``
-
-If you don't have these keyrings, you may not have created a monitor successfully, 
-or you may have a problem with your network connection. Ensure that you complete
-this step such that you have the foregoing keyrings before proceeding further.
-
-.. tip:: You may repeat this procedure. If it fails, check to see if the 
-   ``/var/lib/ceph/boostrap-{osd}|{mds}`` directories on the server node 
-   have keyrings. If they do not have keyrings, try adding the monitor again;
-   then, return to this step.
-
-
-Add Ceph OSD Daemons
-====================
-
-For a cluster's object placement groups to reach an ``active + clean`` state,
-you must have at least two instances of a :term:`Ceph OSD Daemon` running and 
-at least two copies of an object (``osd pool default size`` is ``2`` 
-by default).
-
-Adding Ceph OSD Daemons is slightly more involved than other ``ceph-deploy`` 
-commands, because a Ceph OSD Daemon involves both a data store and a journal. 
-The ``ceph-deploy`` tool has the ability to invoke ``ceph-disk-prepare`` to 
-prepare the disk and activate the Ceph OSD Daemon for you.
-
-Multiple OSDs on the OS Disk (Demo Only)
-----------------------------------------
-
-For demonstration purposes, you may wish to add multiple OSDs to the OS disk
-(not recommended for production systems). To use Ceph OSDs daemons on the OS
-disk, you must use ``prepare`` and ``activate`` as separate steps. First, 
-define a directory for the Ceph OSD daemon(s). ::
+   - ``{cluster-name}.client.admin.keyring``
+   - ``{cluster-name}.bootstrap-osd.keyring``
+   - ``{cluster-name}.bootstrap-mds.keyring`` 
    
-	mkdir /tmp/osd0
-	mkdir /tmp/osd1
+
+#. Add two OSDs. For fast setup, this quick start uses a directory rather
+   than an entire disk per Ceph OSD Daemon. See `ceph-deploy osd`_ for 
+   additional details. Login to the Ceph Nodes and create a directory for 
+   the Ceph OSD Daemon. ::
    
-Then, use ``prepare`` to prepare the directory(ies) for use with a
-Ceph OSD Daemon. :: 
+	ssh ceph-node2
+	sudo mkdir /tmp/osd0
+	exit
+	
+	ssh ceph-node3
+	sudo mkdir /tmp/osd1
+	exit 	
+
+   Then, from your ``ceph-deploy`` node, prepare the OSDs. ::
+
+	ceph-deploy osd prepare {ceph-node}:/path/to/directory
+	ceph-deploy osd prepare ceph-node2:/tmp/osd0 ceph-node3:/tmp/osd1
+
+   Finally, activate the OSDs. :: 
+
+	ceph-deploy osd activate {ceph-node}:/path/to/directory
+	ceph-deploy osd activate ceph-node2:/tmp/osd0 ceph-node3:/tmp/osd1
+
+
+#. Make your ``ceph-deploy`` node an ``admin`` node so that you can
+   use the ``ceph`` CLI on the ``ceph-deploy`` node without having 
+   to specify the monitor address and ``ceph.client.admin.keyring`` 
+   each time you execute a command. :: 
    
-	ceph-deploy osd prepare {osd-node-name}:/tmp/osd0
-	ceph-deploy osd prepare {osd-node-name}:/tmp/osd1
+	ceph-deploy admin {ceph-node}
+	ceph-deploy admin ceph-deploy-node
 
-Finally, use ``activate`` to activate the Ceph OSD Daemons. :: 
+   **Note:** Since you are using ``ceph-deploy`` to talk to the
+   local host, your host must be reachable by its hostname 
+   (e.g., you can modify ``/etc/hosts`` if necessary). Ensure that
+   you have the correct permissions for the ``ceph.client.admin.keyring``. 
 
-	ceph-deploy osd activate {osd-node-name}:/tmp/osd0
-	ceph-deploy osd activate {osd-node-name}:/tmp/osd1		
+#. Check your cluster's health. ::
 
-.. tip:: You need two OSDs to reach an ``active + clean`` state. You can 
-   add one OSD at a time, but OSDs need to communicate with each other
-   for Ceph to run properly. Always use more than one OSD per cluster.
+	ceph health
 
-
-List Disks
-----------
-
-To list the available disk drives on a prospective :term:`Ceph Node`, execute 
-the following::
-
-	ceph-deploy disk list {osd-node-name}
-	ceph-deploy disk list ceph-node
+   Your cluster should return an ``active + clean`` state when it is 
+   healthy.
 
 
-Zap a Disk
-----------
+Operating Your Cluster
+======================
 
-To zap a disk (delete its partition table) in preparation for use with Ceph,
-execute the following::
-
-	ceph-deploy disk zap {osd-node-name}:{disk}
-	ceph-deploy disk zap ceph-node:sdb ceph-node:sdb2
-
-.. important:: This will delete all data on the disk.
-
-
-Add OSDs on Standalone Disks
-----------------------------
-
-You can add OSDs using ``prepare`` and ``activate`` in two discrete
-steps. To prepare a disk for use with a Ceph OSD Daemon, execute the 
-following:: 
-
-	ceph-deploy osd prepare {osd-node-name}:{osd-disk-name}[:/path/to/journal]
-	ceph-deploy osd prepare ceph-node:sdb
-
-To activate the Ceph OSD Daemon, execute the following:: 
-
-	ceph-deploy osd activate {osd-node-name}:{osd-partition-name}
-	ceph-deploy osd activate ceph-node:sdb1
-
-To prepare an OSD disk and activate it in one step, execute the following:: 
-
-	ceph-deploy osd create {osd-node-name}:{osd-disk-name}[:/path/to/journal] [{osd-node-name}:{osd-disk-name}[:/path/to/journal]]
-	ceph-deploy osd create ceph-node:sdb:/dev/ssd1 ceph-node:sdc:/dev/ssd2
-
-
-.. note:: The journal example assumes you will use a partition on a separate 
-   solid state drive (SSD). If you omit a journal drive or partition, 
-   ``ceph-deploy`` will use create a separate partition for the journal
-   on the same drive. If you have already formatted your disks and created
-   partitions, you may also use partition syntax for your OSD disk.
-
-You must add a minimum of two Ceph OSD Daemons for the placement groups in 
-a cluster to achieve an ``active + clean`` state. 
-
-
-Add a MDS
-=========
-
-To use CephFS, you need at least one metadata node. Execute the following to
-create a metadata node::
-
-	ceph-deploy mds create {node-name}
-	ceph-deploy mds create ceph-node
-
-
-.. note:: Currently Ceph runs in production with one metadata node only. You 
-   may use more, but there is currently no commercial support for a cluster 
-   with multiple metadata nodes.
-
-
-Summary
-=======
-
-Deploying a Ceph cluster with ``ceph-deploy`` automatically starts the cluster.
-To operate the cluster daemons, see `Running Ceph with Upstart`_.
+Deploying a Ceph cluster with ``ceph-deploy`` automatically starts the cluster. 
+To operate the cluster daemons with Debian/Ubuntu distributions, see 
+`Running Ceph with Upstart`_.  To operate the cluster daemons with CentOS,
+Red Hat, Fedora, and SLES distributions, see `Running Ceph with sysvinit`_.
 
 Once you deploy a Ceph cluster, you can try out some of the administration
-functionality, the object store command line, and then proceed to Quick Start
-guides for RBD, CephFS, and the Ceph Gateway.
+functionality, the ``rados`` object store command line, and then proceed to
+Quick Start guides for Ceph Block Device, Ceph Filesystem, and the Ceph Object
+Gateway.
 
-.. topic:: Other ceph-deploy Commands
 
-	To view other ``ceph-deploy`` commands, execute: 
-	
-	``ceph-deploy -h``
-	
+Expanding Your Cluster
+======================
 
-See `Ceph Deploy`_ for additional details.
+Once you have a basic cluster up and running, the next step is to 
+expand cluster. 
+
+Adding an OSD
+-------------
+
+Since we are running a 3-node cluster for demonstration purposes, add the OSD to
+the monitor node. ::
+
+	ssh ceph-node1
+	sudo mkdir /tmp/osd2
+	exit
+
+Then, from your ``ceph-deploy`` node, prepare the OSD. ::
+
+	ceph-deploy osd prepare {ceph-node}:/path/to/directory
+	ceph-deploy osd prepare ceph-node1:/tmp/osd2
+
+Finally, activate the OSDs. ::
+
+	ceph-deploy osd activate {ceph-node}:/path/to/directory
+	ceph-deploy osd activate ceph-node1:/tmp/osd2
+
+
+Once you have added your new OSD, Ceph will begin rebalancing the cluster by
+migrating placement groups to your new OSD. You can observe this process with
+the ``ceph`` CLI. ::
+
+	ceph -w
+
+You should see the placement group states change from ``active+clean`` to active
+with some degraded objects, and finally ``active+clean`` when migration
+completes. (Control-c to exit.)
+
+
+Adding Monitors
+---------------
+
+A Ceph Storage Cluster requires at least one Ceph Monitor to run. For high
+availability, Ceph Storage Clusters typically run multiple Ceph
+Monitors so that the failure of a single Ceph Monitor will not bring down the
+Ceph Storage Cluster. Ceph uses the Paxos algorithm, which requires a majority
+of monitors (i.e., 1, 2:3, 3:4, 3:5, 4:6, etc.) to form a quorum.
+
+Add two Ceph Monitors to your cluster. ::
+
+	ceph-deploy mon create {ceph-node}
+	ceph-deploy mon create ceph-node2 ceph-node3
+
+Once you have added your new Ceph Monitors, Ceph will begin synchronizing
+the monitors and form a quorum. You can check the quorum status by executing
+the following:: 
+
+	ceph quorum_status
+
+
+Add a Metadata Server
+---------------------
+
+To use CephFS, you need at least one metadata server. Execute the following to
+create a metadata server::
+
+	ceph-deploy mds create {ceph-node}
+	ceph-deploy mds create ceph-node1
+
+
+.. note:: Currently Ceph runs in production with one metadata server only. You 
+   may use more, but there is currently no commercial support for a cluster 
+   with multiple metadata servers.
+
+
+Storing/Retrieving Object Data
+==============================
+
+To store object data in the Ceph Storage Cluster, a Ceph client must: 
+
+#. Set an object name
+#. Specify a `pool`_
+
+The Ceph Client retrieves the latest cluster map and the CRUSH algorithm
+calculates how to map the object to a `placement group`_, and then calculates
+how to assign the placement group to a Ceph OSD Daemon dynamically. To find the
+object location, all you need is the object name and the pool name. For
+example:: 
+
+	ceph osd map {poolname} {object-name}
+
+.. topic:: Exercise: Locate an Object
+
+	As an exercise, lets create an object. Specify an object name, a path to a
+	test file containing some object data and a pool name using the 
+	``rados put`` command on the command line. For example::
+   
+		rados put {object-name} {file-path} --pool=data   	
+		rados put test-object-1 testfile.txt --pool=data
+   
+	To verify that the Ceph Storage Cluster stored the object, execute the following::
+   
+		rados -p data ls
+   
+	Now, identify the object location::	
+
+		ceph osd map {pool-name} {object-name}
+		ceph osd map data test-object-1
+   
+	Ceph should output the object's location. For example:: 
+   
+		osdmap e537 pool 'data' (0) object 'test-object-1' -> pg 0.d1743484 (0.4) -> up [1,0] acting [1,0]
+   
+	To remove the test object, simply delete it using the ``rados rm`` command.
+	For example:: 
+   
+		rados rm test-object-1 --pool=data
+   
+As the cluster evolves, the object location may change dynamically. One benefit
+of Ceph's dynamic rebalancing is that Ceph relieves you from having to perform
+the migration manually.
 
 
 .. _Preflight Checklist: ../quick-start-preflight
 .. _Ceph Deploy: ../../rados/deployment
 .. _ceph-deploy install -h: ../../rados/deployment/ceph-deploy-install
 .. _ceph-deploy new -h: ../../rados/deployment/ceph-deploy-new
+.. _ceph-deploy osd: ../../rados/deployment/ceph-deploy-osd
 .. _Running Ceph with Upstart: ../../rados/operations/operating#running-ceph-with-upstart
+.. _Running Ceph with sysvinit: ../../rados/operations/operating#running-ceph-with-sysvinit
 .. _CRUSH Map: ../../rados/operations/crush-map
+.. _pool: ../../rados/operations/pools
+.. _placement group: ../../rados/operations/placement-groups
