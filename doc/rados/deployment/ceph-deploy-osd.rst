@@ -8,10 +8,6 @@ write data to the disk and to journals. So you need to provide a disk for the
 OSD and a path to the journal partition (i.e., this is the most common
 configuration, but you may configure your system to  your own needs).
 
-By default, ``ceph-deploy`` will create an OSD with the XFS filesystem. You may
-override the filesystem type by providing a ``--fs-type FS_TYPE`` argument,
-where ``FS_TYPE``  is an alternate filesystem such as ``ext4`` or ``btrfs``.
-
 In Ceph v0.60 and later releases, Ceph supports ``dm-crypt`` on disk encryption.
 You may specify the ``--dm-crypt`` argument when preparing an OSD to tell
 ``ceph-deploy`` that you want to use encryption. You may also specify the
