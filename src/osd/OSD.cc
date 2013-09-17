@@ -1721,13 +1721,13 @@ int OSD::read_superblock()
     derr << " daemon features " << osd_compat << dendl;
 
     if (osd_compat.writeable(superblock.compat_features)) {
-      derr << "it is still writeable, though. Missing features:" << dendl;
       CompatSet diff = osd_compat.unsupported(superblock.compat_features);
+      derr << "it is still writeable, though. Missing features: " << diff << dendl;
       return -EOPNOTSUPP;
     }
     else {
-      derr << "Cannot write to disk! Missing features:" << dendl;
       CompatSet diff = osd_compat.unsupported(superblock.compat_features);
+      derr << "Cannot write to disk! Missing features: " << diff << dendl;
       return -EOPNOTSUPP;
     }
   }
