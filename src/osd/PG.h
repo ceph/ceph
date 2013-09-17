@@ -48,6 +48,7 @@
 #include "common/WorkQueue.h"
 #include "common/ceph_context.h"
 #include "include/str_list.h"
+#include "PGBackend.h"
 
 #include <list>
 #include <memory>
@@ -193,6 +194,8 @@ protected:
   CephContext *cct;
   OSDriver osdriver;
   SnapMapper snap_mapper;
+
+  virtual PGBackend *get_pgbackend() = 0;
 public:
   void update_snap_mapper_bits(uint32_t bits) {
     snap_mapper.update_bits(bits);
