@@ -2197,6 +2197,11 @@ public:
     if (destructor_callback)
       destructor_callback->complete(0);
   }
+
+  bool is_blocked() const {
+    return copyfrom_readside > 0;
+  }
+
   // do simple synchronous mutual exclusion, for now.  now waitqueues or anything fancy.
   void ondisk_write_lock() {
     lock.Lock();

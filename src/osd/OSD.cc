@@ -134,8 +134,6 @@ static ostream& _prefix(std::ostream* _dout, int whoami, OSDMapRef osdmap) {
 		<< " ";
 }
 
-const coll_t coll_t::META_COLL("meta");
-
 static CompatSet get_osd_compat_set() {
   CompatSet::FeatureSet ceph_osd_feature_compat;
   CompatSet::FeatureSet ceph_osd_feature_ro_compat;
