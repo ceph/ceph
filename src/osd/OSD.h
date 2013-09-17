@@ -179,8 +179,6 @@ class HistoricOpsSocketHook;
 class TestOpsSocketHook;
 struct C_CompleteSplits;
 
-extern const coll_t meta_coll;
-
 typedef std::tr1::shared_ptr<ObjectStore::Sequencer> SequencerRef;
 
 class DeletingState {

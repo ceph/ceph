@@ -246,14 +246,14 @@ void FileStore::lfn_close(FDRef fd)
 {
 }
 
-int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o) 
+int FileStore::lfn_link(coll_t c, coll_t newcid, const hobject_t& o, const hobject_t& newoid)
 {
   Index index_new, index_old;
   IndexedPath path_new, path_old;
   int exist;
   int r;
-  if (c < cid) {
-    r = get_index(cid, &index_new);
+  if (c < newcid) {
+    r = get_index(newcid, &index_new);
     if (r < 0)
       return r;
     r = get_index(c, &index_old);
@@ -263,7 +263,7 @@ int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o)
     r = get_index(c, &index_old);
     if (r < 0)
       return r;
-    r = get_index(cid, &index_new);
+    r = get_index(newcid, &index_new);
     if (r < 0)
       return r;
   }
@@ -276,7 +276,7 @@ int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o)
   if (!exist)
     return -ENOENT;
 
-  r = index_new->lookup(o, &path_new, &exist);
+  r = index_new->lookup(newoid, &path_new, &exist);
   if (r < 0) {
     assert(!m_filestore_fail_eio || r != -EIO);
     return r;
@@ -290,7 +290,7 @@ int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o)
   if (r < 0)
     return -errno;
 
-  r = index_new->created(o, path_new->path());
+  r = index_new->created(newoid, path_new->path());
   if (r < 0) {
     assert(!m_filestore_fail_eio || r != -EIO);
     return r;
@@ -299,7 +299,8 @@ int FileStore::lfn_link(coll_t c, coll_t cid, const hobject_t& o)
 }
 
 int FileStore::lfn_unlink(coll_t cid, const hobject_t& o,
-			  const SequencerPosition &spos)
+			  const SequencerPosition &spos,
+			  bool force_clear_omap)
 {
   Index index;
   int r = get_index(cid, &index);
@@ -315,14 +316,17 @@ int FileStore::lfn_unlink(coll_t cid, const hobject_t& o,
       return r;
     }
 
-    struct stat st;
-    r = ::stat(path->path(), &st);
-    if (r < 0) {
-      r = -errno;
-      assert(!m_filestore_fail_eio || r != -EIO);
-      return r;
+    if (!force_clear_omap) {
+      struct stat st;
+      r = ::stat(path->path(), &st);
+      if (r < 0) {
+	r = -errno;
+	assert(!m_filestore_fail_eio || r != -EIO);
+	return r;
+      }
+      force_clear_omap = true;
     }
-    if (st.st_nlink == 1) {
+    if (force_clear_omap) {
       dout(20) << __func__ << ": clearing omap on " << o
 	       << " in cid " << cid << dendl;
       r = object_map->clear(o, &spos);
@@ -2173,6 +2177,16 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	if (r == 0 &&
 	    (_check_replay_guard(ocid, oid, spos) > 0))
 	  r = _remove(ocid, oid, spos);
+      }
+      break;
+
+    case Transaction::OP_COLL_MOVE_RENAME:
+      {
+	coll_t oldcid = i.get_cid();
+	hobject_t oldoid = i.get_oid();
+	coll_t newcid = i.get_cid();
+	hobject_t newoid = i.get_oid();
+	r = _collection_move_rename(oldcid, oldoid, newcid, newoid, spos);
       }
       break;
 
@@ -4086,7 +4100,7 @@ int FileStore::_destroy_collection(coll_t c)
 
 
 int FileStore::_collection_add(coll_t c, coll_t oldcid, const hobject_t& o,
-			       const SequencerPosition& spos) 
+			       const SequencerPosition& spos)
 {
   dout(15) << "collection_add " << c << "/" << o << " from " << oldcid << "/" << o << dendl;
   
@@ -4116,7 +4130,7 @@ int FileStore::_collection_add(coll_t c, coll_t oldcid, const hobject_t& o,
     _set_replay_guard(**fd, spos, &o, true);
   }
 
-  r = lfn_link(oldcid, c, o);
+  r = lfn_link(oldcid, c, o, o);
   if (replaying && !backend->can_checkpoint() &&
       r == -EEXIST)    // crashed between link() and set_replay_guard()
     r = 0;
@@ -4130,6 +4144,73 @@ int FileStore::_collection_add(coll_t c, coll_t oldcid, const hobject_t& o,
   lfn_close(fd);
 
   dout(10) << "collection_add " << c << "/" << o << " from " << oldcid << "/" << o << " = " << r << dendl;
+  return r;
+}
+
+int FileStore::_collection_move_rename(coll_t oldcid, const hobject_t& oldoid,
+				       coll_t c, const hobject_t& o,
+				       const SequencerPosition& spos)
+{
+  dout(15) << __func__ << " " << c << "/" << o << " from " << oldcid << "/" << oldoid << dendl;
+  int r;
+  int dstcmp, srccmp;
+
+  dstcmp = _check_replay_guard(c, o, spos);
+  if (dstcmp < 0)
+    goto out_rm_src;
+
+  // check the src name too; it might have a newer guard, and we don't
+  // want to clobber it
+  srccmp = _check_replay_guard(oldcid, oldoid, spos);
+  if (srccmp < 0)
+    return 0;
+
+  {
+    // open guard on object so we don't any previous operations on the
+    // new name that will modify the source inode.
+    FDRef fd;
+    r = lfn_open(oldcid, oldoid, 0, &fd);
+    if (r < 0) {
+      // the source collection/object does not exist. If we are replaying, we
+      // should be safe, so just return 0 and move on.
+      assert(replaying);
+      dout(10) << __func__ << " " << c << "/" << o << " from "
+	       << oldcid << "/" << oldoid << " (dne, continue replay) " << dendl;
+      return 0;
+    }
+    if (dstcmp > 0) {      // if dstcmp == 0 the guard already says "in-progress"
+      _set_replay_guard(**fd, spos, &o, true);
+    }
+
+    r = lfn_link(oldcid, c, oldoid, o);
+    if (replaying && !backend->can_checkpoint() &&
+	r == -EEXIST)    // crashed between link() and set_replay_guard()
+      r = 0;
+
+    _inject_failure();
+
+    // the name changed; link the omap content
+    r = object_map->clone(oldoid, o, &spos);
+    if (r == -ENOENT)
+      r = 0;
+
+    _inject_failure();
+
+    // close guard on object so we don't do this again
+    if (r == 0) {
+      _close_replay_guard(**fd, spos);
+    }
+    lfn_close(fd);
+  }
+
+ out_rm_src:
+  // remove source
+  if (_check_replay_guard(oldcid, oldoid, spos) > 0) {
+    r = lfn_unlink(oldcid, oldoid, spos, true);
+  }
+
+  dout(10) << __func__ << " " << c << "/" << o << " from " << oldcid << "/" << oldoid
+	   << " = " << r << dendl;
   return r;
 }
 

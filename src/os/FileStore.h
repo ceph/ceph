@@ -298,8 +298,9 @@ public:
     IndexedPath *path = 0,
     Index *index = 0);
   void lfn_close(FDRef fd);
-  int lfn_link(coll_t c, coll_t cid, const hobject_t& o) ;
-  int lfn_unlink(coll_t cid, const hobject_t& o, const SequencerPosition &spos);
+  int lfn_link(coll_t c, coll_t newcid, const hobject_t& o, const hobject_t& newoid) ;
+  int lfn_unlink(coll_t cid, const hobject_t& o, const SequencerPosition &spos,
+		 bool force_clear_omap=false);
 
 public:
   FileStore(const std::string &base, const std::string &jdev, const char *internal_name = "filestore", bool update_to=false);
@@ -499,6 +500,9 @@ public:
   int _destroy_collection(coll_t c);
   int _collection_add(coll_t c, coll_t ocid, const hobject_t& o,
 		      const SequencerPosition& spos);
+  int _collection_move_rename(coll_t oldcid, const hobject_t& oldoid,
+			      coll_t c, const hobject_t& o,
+			      const SequencerPosition& spos);
   void dump_start(const std::string& file);
   void dump_stop();
   void dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t seq, OpSequencer *osr);

@@ -25,7 +25,7 @@
 
 class MOSDSubOp : public Message {
 
-  static const int HEAD_VERSION = 7;
+  static const int HEAD_VERSION = 8;
   static const int COMPAT_VERSION = 1;
 
 public:
@@ -85,6 +85,9 @@ public:
 
   // indicates that we must fix hobject_t encoding
   bool hobject_incorrect_pool;
+
+  hobject_t new_temp_oid;      ///< new temp object that we must now start tracking
+  hobject_t discard_temp_oid;  ///< previously used temp object that we can now stop tracking
 
   int get_cost() const {
     if (ops.size() == 1 && ops[0].op.op == CEPH_OSD_OP_PULL)
@@ -150,6 +153,11 @@ public:
 	poid.pool = pgid.pool();
       hobject_incorrect_pool = true;
     }
+
+    if (header.version >= 8) {
+      ::decode(new_temp_oid, p);
+      ::decode(discard_temp_oid, p);
+    }
   }
 
   virtual void encode_payload(uint64_t features) {
@@ -194,6 +202,8 @@ public:
     ::encode(current_progress, payload);
     ::encode(omap_entries, payload);
     ::encode(omap_header, payload);
+    ::encode(new_temp_oid, payload);
+    ::encode(discard_temp_oid, payload);
   }
 
   MOSDSubOp()
