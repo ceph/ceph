@@ -179,8 +179,9 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   }
 
   // walk through incrementals
+  MonitorDBStore::Transaction *t = NULL;
+  size_t tx_size = 0;
   while (version > osdmap.epoch) {
-    MonitorDBStore::Transaction t;
     bufferlist inc_bl;
     int err = get_version(osdmap.epoch+1, inc_bl);
     assert(err == 0);
@@ -191,20 +192,35 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     err = osdmap.apply_incremental(inc);
     assert(err == 0);
 
+    if (t == NULL)
+      t = new MonitorDBStore::Transaction;
+
     // write out the full map for all past epochs
     bufferlist full_bl;
     osdmap.encode(full_bl);
-    put_version_full(&t, osdmap.epoch, full_bl);
-    put_version_latest_full(&t, osdmap.epoch);
+    tx_size += full_bl.length();
+
+    put_version_full(t, osdmap.epoch, full_bl);
+    put_version_latest_full(t, osdmap.epoch);
 
     // share
     dout(1) << osdmap << dendl;
 
     if (osdmap.epoch == 1) {
-      t.erase("mkfs", "osdmap");
+      t->erase("mkfs", "osdmap");
     }
-    if (!t.empty())
-      mon->store->apply_transaction(t);
+
+    if (tx_size > g_conf->mon_sync_max_payload_size*2) {
+      mon->store->apply_transaction(*t);
+      delete t;
+      t = NULL;
+      tx_size = 0;
+    }
+  }
+
+  if (t != NULL) {
+    mon->store->apply_transaction(*t);
+    delete t;
   }
 
   for (int o = 0; o < osdmap.get_max_osd(); o++) {
