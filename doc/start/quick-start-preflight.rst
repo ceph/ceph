@@ -4,74 +4,68 @@
 
 .. versionadded:: 0.60
 
-Thank you for trying Ceph! Petabyte-scale data clusters are quite an
-undertaking. Before delving deeper into Ceph, we recommend setting up a two-node
-demo cluster to explore some of the functionality. This **Preflight Checklist**
-will help you prepare an admin node and a server node for use with
-``ceph-deploy``.
+Thank you for trying Ceph! We recommend setting up a ``ceph-deploy`` node and a
+3-node :term:`Ceph Storage Cluster` to explore the basics of Ceph. This
+**Preflight Checklist** will help you prepare a ``ceph-deploy`` node and three
+Ceph Nodes (or virtual machines) that will host your Ceph Storage Cluster.
+
 
 .. ditaa:: 
-           /----------------\         /----------------\
-           |   Admin Node   |<------->|   Server Node  |
-           | cCCC           |         | cCCC           |
-           \----------------/         \----------------/
- 
+           /------------------\         /----------------\
+           | ceph deploy Node |         |    Ceph Node   |
+           |                  +-------->+                |
+           |                  |         | cCCC           |
+           \---------+--------/         \----------------/
+                     |
+                     |                  /----------------\
+                     |                  |    Ceph Node   |
+                     +----------------->+                |
+                     |                  | cCCC           |
+                     |                  \----------------/
+                     |
+                     |                  /----------------\
+                     |                  |    Ceph Node   |
+                     +----------------->|                |
+                                        | cCCC           |
+                                        \----------------/
 
-Before you can deploy Ceph using ``ceph-deploy``, you need to ensure that you
-have a few things set up first on your admin node and on nodes running Ceph
-daemons.
- 
-
-Install an Operating System
-===========================
-
-Install a recent release of Debian or Ubuntu (e.g., 12.04, 12.10, 13.04) on your
-nodes. For additional details on operating systems or to use other operating
-systems other than Debian or Ubuntu, see `OS Recommendations`_.
-
-
-Install an SSH Server
-=====================
-
-The ``ceph-deploy`` utility requires ``ssh``, so your server node(s) require an
-SSH server. ::
-
-	sudo apt-get install openssh-server
+Ceph runs on recent distributions of Linux (e.g., Ubuntu, Red Hat, CentOS,
+etc.).
 
 
-Create a User
-=============
+Ceph Node Setup
+===============
 
-Create a user on nodes running Ceph daemons. 
+A :term:`Ceph Node` requires the following: 
 
-.. tip:: We recommend a username that brute force attackers won't
-   guess easily (e.g., something other than ``root``, ``ceph``, etc).
+- A recent Linux distribution.
+- A user with ``root`` privileges.
+- An SSH server.
+- Network connectivity and access to/for other Ceph Nodes.
 
-::
+
+Perform the following steps:
+
+#. Create a user on each Ceph Node. :: 
 
 	ssh user@ceph-server
 	sudo useradd -d /home/ceph -m ceph
 	sudo passwd ceph
 
-
-``ceph-deploy`` installs packages onto your nodes. This means that
-the user you create requires passwordless ``sudo`` privileges. 
-
-.. note:: We **DO NOT** recommend enabling the ``root`` password 
-   for security reasons. 
-
-To provide full privileges to the user, add the following to 
-``/etc/sudoers.d/ceph``. ::
+#. Add ``root`` privileges for the user on each Ceph Node. :: 
 
 	echo "ceph ALL = (root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/ceph
 	sudo chmod 0440 /etc/sudoers.d/ceph
 
 
-Configure SSH
-=============
+#. Install an SSH server (if necessary):: 
 
-Configure your admin machine with password-less SSH access to each node
-running Ceph daemons (leave the passphrase empty). ::
+	sudo apt-get install openssh-server
+	sudo yum install openssh-server
+	
+	
+#. Configure your ``ceph-deploy`` node with password-less SSH access to each 
+   Ceph Node. Leave the passphrase empty::
 
 	ssh-keygen
 	Generating public/private key pair.
@@ -81,74 +75,79 @@ running Ceph daemons (leave the passphrase empty). ::
 	Your identification has been saved in /ceph-client/.ssh/id_rsa.
 	Your public key has been saved in /ceph-client/.ssh/id_rsa.pub.
 
-Copy the key to each node running Ceph daemons:: 
+#. Copy the key to each Ceph Node. ::
 
 	ssh-copy-id ceph@ceph-server
 
-Modify your ~/.ssh/config file of your admin node so that it defaults 
-to logging in as the user you created when no username is specified. ::
+
+#. Modify the ``~/.ssh/config`` file of your ``ceph-deploy`` node so that it
+   logs in to Ceph Nodes as the user you created (e.g., ``ceph``). ::
 
 	Host ceph-server
-		Hostname ceph-server.fqdn-or-ip-address.com
-		User ceph
+	   Hostname ceph-server.fqdn-or-ip-address.com
+	   User ceph
 
 
-Install ceph-deploy
-===================
-
-To install ``ceph-deploy``, execute the following:: 
-
-	wget -q -O- 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc' | sudo apt-key add -
-	echo deb http://ceph.com/debian-dumpling/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
-	sudo apt-get update
-	sudo apt-get install ceph-deploy
+#. Ensure connectivity using ``ping`` with hostnames (i.e., not IP addresses). 
+   Address hostname resolution issues and firewall issues as necessary.
 
 
-Ensure Connectivity
-===================
+Ceph Deploy Setup
+=================
 
-Ensure that your admin node has connectivity to the network and to your Server
-node (e.g., ensure ``iptables``, ``ufw`` or other tools that may prevent
-connections, traffic forwarding, etc. to allow what you need).
-
-.. tip:: The ``ceph-deploy`` tool is new and you may encounter some issues
-   without  effective error messages. 
-
-Once you have completed this pre-flight checklist, you are ready to begin using
+Add Ceph repositories to the ``ceph-deploy`` node. Then, install
 ``ceph-deploy``.
 
 
-Hostname Resolution
-===================
+Advanced Package Tool (APT)
+---------------------------
 
-Ensure that your admin node can resolve the server node's hostname. ::
+For Debian and Ubuntu distributions, perform the following steps:
 
-	ping {server-node}
+#. Add the release key::
 
-If you execute ``ceph-deploy`` against the localhost, ``ceph-deploy``
-must be able to resolve its IP address. Consider adding the IP address
-to your ``/etc/hosts`` file such that it resolves to the hostname. ::
+	wget -q -O- 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc' | sudo apt-key add -
 
-	hostname
-	host -4 {hostname}
-	sudo vim /etc/hosts
+#. Add the Ceph packages to your repository. Replace ``{ceph-stable-release}``
+   with a stable Ceph release (e.g., ``cuttlefish``, ``dumpling``, etc.). 
+   For example::
+	
+	echo deb http://ceph.com/debian-{ceph-stable-release}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
-	{ip-address} {hostname}
+#. Update your repository and install ``ceph-deploy``:: 
 
-	ceph-deploy {command} {hostname}
+	sudo apt-get update && sudo apt-get install ceph-deploy
 
-.. tip:: The ``ceph-deploy`` tool will not resolve to ``localhost``. Use
-   the hostname.
 
-Summary
-=======
+Red Hat Package Manager (RPM)
+-----------------------------
 
-Once you have passwordless ``ssh`` connectivity, passwordless ``sudo``,
-installed ``ceph-deploy``, and you have ensured appropriate connectivity,
-proceed to the `Storage Cluster Quick Start`_.
+For Red Hat(rhel6), CentOS (el6), Fedora 17-19 (f17-f19), OpenSUSE 12
+(opensuse12), and SLES (sles11) perform the following steps:
 
-.. tip:: The ``ceph-deploy`` utility can install Ceph packages on remote 
-   machines from the admin node!
+
+#. Add the package to your repository. Open a text editor and create a 
+   Yellowdog Updater, Modified (YUM) entry under ``/etc/yum.repos.d``:: 
+
+	[ceph]
+	   name=Ceph Packages $basearch
+	   baseurl=http://ceph.com/rpm-{ceph-stable-release}/{distro}/$basearch
+	   enabled=1
+	   gpgcheck=1
+	   type=rpm-md
+	   gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc 
+
+   Ensure that you use the correct path for your Linux distribution. Replace 
+   ``{ceph-stable-release}`` with the recent stable release of Ceph 
+   (e.g., ``dumpling``). Replace ``{distro}`` with your Linux distribution
+   (e.g., CentOS (``el6``), Red Hat (``rhel6``), Fedora (``fc18`` or ``fc19``),
+   SLES (``sles11``)).
+
+#. Update your repository and install ``ceph-deploy``:: 
+
+	sudo yum update && sudo yum install ceph-deploy python-pushy
+
+
 
 .. _Storage Cluster Quick Start: ../quick-ceph-deploy
 .. _OS Recommendations: ../../install/os-recommendations
