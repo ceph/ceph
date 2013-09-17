@@ -126,7 +126,7 @@ combination, and will override anything in the suite.
         log.debug('Collection %s in %s' % (collection_name, collection))
         configs = [(combine_path(collection_name, item[0]), item[1]) for item in build_matrix(collection)]
         log.info('Collection %s in %s generated %d jobs' % (collection_name, collection, len(configs)))
-        num_jobs + len(configs)
+        num_jobs += len(configs)
 
         arch = get_arch(args.config)
         machine_type = get_machine_type(args.config)
