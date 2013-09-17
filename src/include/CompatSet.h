@@ -36,8 +36,8 @@ struct CompatSet {
     FeatureSet() : mask(1), names() {}
     void insert(Feature f) {
       assert(f.id > 0);
-      assert(f.id < 63);
-      mask |= (1<<f.id);
+      assert(f.id < 64);
+      mask |= ((uint64_t)1<<f.id);
       names[f.id] = f.name;
     }
 
@@ -50,7 +50,7 @@ struct CompatSet {
     void remove(uint64_t f) {
       if (names.count(f)) {
 	names.erase(f);
-	mask &= ~(1<<f);
+	mask &= ~((uint64_t)1<<f);
       }
     }
     void remove(Feature f) {
@@ -156,19 +156,16 @@ struct CompatSet {
       ((other.ro_compat.mask ^ ro_compat.mask) & other.ro_compat.mask);
     uint64_t other_incompat =
       ((other.incompat.mask ^ incompat.mask) & other.incompat.mask);
-    for (int i = 0; i < 64; ++i) {
-      int mask = 1 << i;
+    for (int id = 1; id < 64; ++id) {
+      uint64_t mask = (uint64_t)1 << id;
       if (mask & other_compat) {
-	diff.compat.insert( Feature(mask & other_compat,
-				    other.compat.names[mask&other_compat]));
+	diff.compat.insert( Feature(id, other.compat.names[id]));
       }
       if (mask & other_ro_compat) {
-	diff.ro_compat.insert(Feature(mask & other_ro_compat,
-				      other.compat.names[mask&other_ro_compat]));
+	diff.ro_compat.insert(Feature(id, other.ro_compat.names[id]));
       }
       if (mask & other_incompat) {
-	diff.incompat.insert( Feature(mask & other_incompat,
-				      other.incompat.names[mask&other_incompat]));
+	diff.incompat.insert( Feature(id, other.incompat.names[id]));
       }
     }
     return diff;
