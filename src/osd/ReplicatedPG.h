@@ -618,8 +618,14 @@ protected:
    * @bi [out] resulting map of objects to eversion_t's
    */
   void scan_range(
-    hobject_t begin, int min, int max, BackfillInterval *bi,
+    int min, int max, BackfillInterval *bi,
     ThreadPool::TPHandle &handle
+    );
+
+  /// Update a hash range to reflect changes since the last scan
+  void update_range(
+    BackfillInterval *bi,        ///< [in,out] interval to update
+    ThreadPool::TPHandle &handle ///< [in] tp handle
     );
 
   void prep_backfill_object_push(
