@@ -1996,8 +1996,7 @@ void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
       hobject_t cur;
       vector<hobject_t> objects;
       while (1) {
-	int r = store->collection_list_partial(
-	  cid,
+	int r = get_pgbackend()->objects_list_partial(
 	  cur,
 	  store->get_ideal_list_min(),
 	  store->get_ideal_list_max(),
@@ -2045,8 +2044,7 @@ void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
   while (1) {
     dout(1) << "Updating snap_mapper from main collection, "
 	    << done << " objects done" << dendl;
-    int r = store->collection_list_partial(
-      cid,
+    int r = get_pgbackend()->objects_list_partial(
       cur,
       store->get_ideal_list_min(),
       store->get_ideal_list_max(),
@@ -3038,9 +3036,9 @@ int PG::build_scrub_map_chunk(
 
   // objects
   vector<hobject_t> ls;
-  int ret = osd->store->collection_list_range(coll, start, end, 0, &ls);
+  int ret = get_pgbackend()->objects_list_range(start, end, 0, &ls);
   if (ret < 0) {
-    dout(5) << "collection_list_range error: " << ret << dendl;
+    dout(5) << "objects_list_range error: " << ret << dendl;
     return ret;
   }
 
@@ -3560,11 +3558,13 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
           hobject_t start = scrubber.start;
           while (!boundary_found) {
             vector<hobject_t> objects;
-            ret = osd->store->collection_list_partial(coll, start,
-                                                      cct->_conf->osd_scrub_chunk_min,
-						      cct->_conf->osd_scrub_chunk_max,
-						      0,
-                                                      &objects, &scrubber.end);
+            ret = get_pgbackend()->objects_list_partial(
+	      start,
+	      cct->_conf->osd_scrub_chunk_min,
+	      cct->_conf->osd_scrub_chunk_max,
+	      0,
+	      &objects,
+	      &scrubber.end);
             assert(ret >= 0);
 
             // in case we don't find a boundary: start again at the end
