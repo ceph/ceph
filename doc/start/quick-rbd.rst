@@ -2,10 +2,10 @@
  Block Device Quick Start
 ==========================
 
-To use this guide, you must have executed the procedures in the `Object Store
-Quick Start`_ guide first. Ensure your :term:`Ceph Storage Cluster` is in an
-``active + clean`` state before working with the :term:`Ceph Block Device`.
-Execute this quick start on the admin node.
+To use this guide, you must have executed the procedures in the `Storage
+Cluster Quick Start`_ guide first. Ensure your :term:`Ceph Storage Cluster` is
+in an ``active + clean`` state before working with the :term:`Ceph Block
+Device`. Execute this quick start on the admin node.
 
 .. note:: The Ceph Block Device is also known as :term:`RBD` or :term:`RADOS`
    Block Device.
@@ -43,6 +43,6 @@ Execute this quick start on the admin node.
 
 See `block devices`_ for additional details.
 
-.. _Object Store Quick Start: ../quick-ceph-deploy
+.. _Storage Cluster Quick Start: ../quick-ceph-deploy
 .. _block devices: ../../rbd/rbd
 .. _FAQ: http://wiki.ceph.com/03FAQs/01General_FAQ#How_Can_I_Give_Ceph_a_Try.3F
