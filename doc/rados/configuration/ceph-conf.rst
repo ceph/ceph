@@ -504,12 +504,8 @@ See `General Settings`_, `OSD Settings`_, `Monitor Settings`_, `MDS Settings`_,
 .. _RGW Settings: ../../../radosgw/config-ref/
 .. _Log Settings: ../log-and-debug-ref
 
-When deploying the Ceph configuration file, ensure that you use the cluster name
-in your command line syntax. For example:: 
 
-	ssh myserver01 sudo tee /etc/ceph/openstack.conf < /etc/ceph/openstack.conf
-
-When creating default directories or files, you should also use the cluster
+When creating default directories or files, you should use the cluster
 name at the appropriate places in the path. For example:: 
 
 	sudo mkdir /var/lib/ceph/osd/openstack-0
@@ -520,10 +516,10 @@ name at the appropriate places in the path. For example::
    have monitors using port 6789, use a different port for your other cluster(s). 
 
 To invoke a cluster other than the default ``ceph`` cluster, use the 
-``--cluster=clustername`` option with the ``ceph`` command. For example:: 
+``-c {filename}.conf`` option with the ``ceph`` command. For example:: 
 
-	ceph --cluster=openstack health
-
+	ceph -c {cluster-name}.conf health
+	ceph -c openstack.conf health
 
 
 .. _Hardware Recommendations: ../../../install/hardware-recommendations
