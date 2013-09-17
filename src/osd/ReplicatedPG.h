@@ -124,6 +124,9 @@ public:
   typedef boost::shared_ptr<CopyOp> CopyOpRef;
 
   boost::scoped_ptr<PGBackend> pgbackend;
+  PGBackend *get_pgbackend() {
+    return pgbackend.get();
+  }
 
   /// Listener methods
   void on_local_recover_start(
