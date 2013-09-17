@@ -639,12 +639,13 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	hobject_t next;
 	hobject_t current = response.handle;
 	osr->flush();
-	int r = osd->store->collection_list_partial(coll, current,
-						    list_size,
-						    list_size,
-						    snapid,
-						    &sentries,
-						    &next);
+	int r = pgbackend->objects_list_partial(
+	  current,
+	  list_size,
+	  list_size,
+	  snapid,
+	  &sentries,
+	  &next);
 	if (r != 0) {
 	  result = -EINVAL;
 	  break;
@@ -8209,8 +8210,7 @@ void ReplicatedPG::scan_range(
 
   vector<hobject_t> ls;
   ls.reserve(max);
-  int r = osd->store->collection_list_partial(coll, bi->begin, min, max,
-					      0, &ls, &bi->end);
+  int r = pgbackend->objects_list_partial(bi->begin, min, max, 0, &ls, &bi->end);
   assert(r >= 0);
   dout(10) << " got " << ls.size() << " items, next " << bi->end << dendl;
   dout(20) << ls << dendl;
@@ -8225,7 +8225,7 @@ void ReplicatedPG::scan_range(
       dout(20) << "  " << *p << " " << obc->obs.oi.version << dendl;
     } else {
       bufferlist bl;
-      int r = osd->store->getattr(coll, *p, OI_ATTR, bl);
+      int r = pgbackend->objects_get_attr(*p, OI_ATTR, &bl);
       assert(r >= 0);
       object_info_t oi(bl);
       bi->objects[*p] = oi.version;
