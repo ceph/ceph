@@ -5762,6 +5762,30 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
     movepos = true;
   }
 
+  if (in->inline_version < CEPH_INLINE_DISABLED) {
+    if (!(have & CEPH_CAP_FILE_CACHE)) {
+      r = migration_inline_data(in);
+      if (r < 0)
+        goto done;
+    } else {
+      uint32_t len = in->inline_data.length();
+
+      uint64_t endoff = offset + size;
+      if (endoff > in->size)
+        endoff = in->size;
+
+      if (endoff > len) {
+        if (offset < len)
+          bl->substr_of(in->inline_data, offset, len - offset);
+        bl->append_zero(endoff - len);
+      } else if (endoff > (uint64_t)offset) {
+        bl->substr_of(in->inline_data, offset, endoff - offset);
+      }
+
+      goto success;
+    }
+  }
+
   if (!conf->client_debug_force_sync_read &&
       (cct->_conf->client_oc && (have & CEPH_CAP_FILE_CACHE))) {
 
@@ -5777,6 +5801,8 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
   if (r < 0) {
     goto done;
   }
+
+success:
 
   if (movepos) {
     // adjust fd pos
