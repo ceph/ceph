@@ -202,9 +202,7 @@ Installing Ceph Object Storage
 	ServerName {FQDN}
 	
 	
-#. Create an Apache httpd virtual host in ``/etc/httpd/conf.d/rgw.conf``.
-
-.. code-block:: ini
+#. Create an Apache httpd virtual host in ``/etc/httpd/conf.d/rgw.conf``. ::
 
 	FastCgiExternalServer /var/www/s3gw.fcgi -socket /tmp/radosgw.sock
 	<VirtualHost *:80>
