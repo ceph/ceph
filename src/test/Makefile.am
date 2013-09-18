@@ -300,6 +300,11 @@ unittest_ceph_argparse_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_ceph_argparse_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_ceph_argparse
 
+unittest_ceph_compatset_SOURCES = test/ceph_compatset.cc
+unittest_ceph_compatset_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_ceph_compatset_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_ceph_compatset
+
 libec_example_la_SOURCES = test/osd/ErasureCodePluginExample.cc
 libec_example_la_CFLAGS = ${AM_CFLAGS}
 libec_example_la_CXXFLAGS= ${AM_CXXFLAGS}
