@@ -2616,7 +2616,7 @@ int RGWRados::copy_obj(void *ctx,
     { /* opening scope so that we can do goto, sorry */
       bufferlist& extra_data_bl = processor.get_extra_data();
       if (extra_data_bl.length()) {
-        extra_data_bl.push_back((char)0);
+        extra_data_bl.append((char)0);
         JSONParser jp;
         if (!jp.parse(extra_data_bl.c_str(), extra_data_bl.length())) {
           ldout(cct, 0) << "failed to parse response extra data. len=" << extra_data_bl.length() << " data=" << extra_data_bl.c_str() << dendl;
