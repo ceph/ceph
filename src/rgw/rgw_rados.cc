@@ -761,6 +761,11 @@ int RGWPutObjProcessor_Atomic::complete_writing_data()
     }
   }
   complete_parts();
+
+  int r = drain_pending();
+  if (r < 0)
+    return r;
+
   return 0;
 }
 
@@ -2611,6 +2616,7 @@ int RGWRados::copy_obj(void *ctx,
     { /* opening scope so that we can do goto, sorry */
       bufferlist& extra_data_bl = processor.get_extra_data();
       if (extra_data_bl.length()) {
+        extra_data_bl.push_back((char)0);
         JSONParser jp;
         if (!jp.parse(extra_data_bl.c_str(), extra_data_bl.length())) {
           ldout(cct, 0) << "failed to parse response extra data. len=" << extra_data_bl.length() << " data=" << extra_data_bl.c_str() << dendl;

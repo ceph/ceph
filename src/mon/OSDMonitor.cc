@@ -2846,6 +2846,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 
       string args;
       vector<string> argvec;
+      cmd_getval(g_ceph_context, cmdmap, "name", name);
       cmd_getval(g_ceph_context, cmdmap, "args", argvec);
       map<string,string> loc;
       parse_loc_map(argvec, &loc);

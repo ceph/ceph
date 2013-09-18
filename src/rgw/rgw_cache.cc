@@ -107,7 +107,7 @@ void ObjectCache::remove(string& name)
 
 void ObjectCache::touch_lru(string& name, std::list<string>::iterator& lru_iter)
 {
-  while (lru.size() > (size_t)cct->_conf->rgw_cache_lru_size) {
+  while (lru_size > (size_t)cct->_conf->rgw_cache_lru_size) {
     list<string>::iterator iter = lru.begin();
     if ((*iter).compare(name) == 0) {
       /*
@@ -121,10 +121,12 @@ void ObjectCache::touch_lru(string& name, std::list<string>::iterator& lru_iter)
     if (map_iter != cache_map.end())
       cache_map.erase(map_iter);
     lru.pop_front();
+    lru_size--;
   }
 
   if (lru_iter == lru.end()) {
     lru.push_back(name);
+    lru_size++;
     lru_iter--;
     ldout(cct, 10) << "adding " << name << " to cache LRU end" << dendl;
   } else {
@@ -142,6 +144,7 @@ void ObjectCache::remove_lru(string& name, std::list<string>::iterator& lru_iter
     return;
 
   lru.erase(lru_iter);
+  lru_size--;
   lru_iter = lru.end();
 }
 
