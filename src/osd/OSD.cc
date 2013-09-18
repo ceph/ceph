@@ -1149,6 +1149,7 @@ public:
 
 int OSD::init()
 {
+  CompatSet initial, diff;
   Mutex::Locker lock(osd_lock);
   if (is_stopping())
     return 0;
@@ -1173,9 +1174,48 @@ int OSD::init()
   r = read_superblock();
   if (r < 0) {
     derr << "OSD::init() : unable to read osd superblock" << dendl;
-    store->umount();
-    delete store;
-    return -EINVAL;
+    r = -EINVAL;
+    goto out;
+  }
+
+  if (osd_compat.compare(superblock.compat_features) < 0) {
+    derr << "The disk uses features unsupported by the executable." << dendl;
+    derr << " ondisk features " << superblock.compat_features << dendl;
+    derr << " daemon features " << osd_compat << dendl;
+
+    if (osd_compat.writeable(superblock.compat_features)) {
+      CompatSet diff = osd_compat.unsupported(superblock.compat_features);
+      derr << "it is still writeable, though. Missing features: " << diff << dendl;
+      r = -EOPNOTSUPP;
+      goto out;
+    }
+    else {
+      CompatSet diff = osd_compat.unsupported(superblock.compat_features);
+      derr << "Cannot write to disk! Missing features: " << diff << dendl;
+      r = -EOPNOTSUPP;
+      goto out;
+    }
+  }
+
+  assert_warn(whoami == superblock.whoami);
+  if (whoami != superblock.whoami) {
+    derr << "OSD::init: superblock says osd"
+	 << superblock.whoami << " but i am osd." << whoami << dendl;
+    r = -EINVAL;
+    goto out;
+  }
+
+  initial = get_osd_initial_compat_set();
+  diff = superblock.compat_features.unsupported(initial);
+  if (superblock.compat_features.merge(initial)) {
+    // We need to persist the new compat_set before we
+    // do anything else
+    dout(5) << "Upgrading superblock adding: " << diff << dendl;
+    ObjectStore::Transaction t;
+    write_superblock(t);
+    r = store->apply_transaction(t);
+    if (r < 0)
+      goto out;
   }
 
   // make sure info object exists
@@ -1185,7 +1225,7 @@ int OSD::init()
     t.touch(coll_t::META_COLL, service.infos_oid);
     r = store->apply_transaction(t);
     if (r < 0)
-      return r;
+      goto out;
   }
 
   // make sure snap mapper object exists
@@ -1195,20 +1235,7 @@ int OSD::init()
     t.touch(coll_t::META_COLL, OSD::make_snapmapper_oid());
     r = store->apply_transaction(t);
     if (r < 0)
-      return r;
-  }
-
-  CompatSet initial = get_osd_initial_compat_set();
-  CompatSet diff = superblock.compat_features.unsupported(initial);
-  if (superblock.compat_features.merge(initial)) {
-    // We need to persist the new compat_set before we
-    // do anything else
-    dout(5) << "Upgrading superblock adding: " << diff << dendl;
-    ObjectStore::Transaction t;
-    write_superblock(t);
-    r = store->apply_transaction(t);
-    if (r < 0)
-      return r;
+      goto out;
   }
 
   class_handler = new ClassHandler(cct);
@@ -1224,7 +1251,8 @@ int OSD::init()
   assert_warn(!osdmap);
   if (osdmap) {
     derr << "OSD::init: unable to read current osdmap" << dendl;
-    return -EINVAL;
+    r = -EINVAL;
+    goto out;
   }
   osdmap = get_map(superblock.current_epoch);
   check_osdmap_features();
@@ -1237,12 +1265,6 @@ int OSD::init()
   load_pgs();
 
   dout(2) << "superblock: i am osd." << superblock.whoami << dendl;
-  assert_warn(whoami == superblock.whoami);
-  if (whoami != superblock.whoami) {
-    derr << "OSD::init: logic error: superblock says osd"
-	 << superblock.whoami << " but i am osd." << whoami << dendl;
-    return -EINVAL;
-  }
 
   create_logger();
     
@@ -1259,7 +1281,7 @@ int OSD::init()
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
   r = monc->init();
   if (r < 0)
-    return r;
+    goto out;
 
   // tell monc about log_client so it will know about mon session resets
   monc->set_log_client(&clog);
@@ -1283,12 +1305,10 @@ int OSD::init()
 
   r = monc->authenticate();
   if (r < 0) {
-    monc->shutdown();
-    store->umount();
     osd_lock.Lock(); // locker is going to unlock this on function exit
     if (is_stopping())
-      return 0;
-    return r;
+      r =  0;
+    goto monout;
   }
 
   while (monc->wait_auth_rotating(30.0) < 0) {
@@ -1308,6 +1328,13 @@ int OSD::init()
   start_boot();
 
   return 0;
+monout:
+  monc->shutdown();
+
+out:
+  store->umount();
+  delete store;
+  return r;
 }
 
 void OSD::final_init()
@@ -1726,28 +1753,6 @@ int OSD::read_superblock()
   ::decode(superblock, p);
 
   dout(10) << "read_superblock " << superblock << dendl;
-  if (osd_compat.compare(superblock.compat_features) < 0) {
-    derr << "The disk uses features unsupported by the executable." << dendl;
-    derr << " ondisk features " << superblock.compat_features << dendl;
-    derr << " daemon features " << osd_compat << dendl;
-
-    if (osd_compat.writeable(superblock.compat_features)) {
-      CompatSet diff = osd_compat.unsupported(superblock.compat_features);
-      derr << "it is still writeable, though. Missing features: " << diff << dendl;
-      return -EOPNOTSUPP;
-    }
-    else {
-      CompatSet diff = osd_compat.unsupported(superblock.compat_features);
-      derr << "Cannot write to disk! Missing features: " << diff << dendl;
-      return -EOPNOTSUPP;
-    }
-  }
-
-  if (whoami != superblock.whoami) {
-    derr << "read_superblock superblock says osd." << superblock.whoami
-         << ", but i (think i) am osd." << whoami << dendl;
-    return -1;
-  }
   
   return 0;
 }
