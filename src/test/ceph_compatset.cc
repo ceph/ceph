@@ -128,3 +128,37 @@ TEST(CephCompatSet, other) {
   EXPECT_EQ(diff.ro_compat.mask, (uint64_t)1);
   EXPECT_EQ(diff.incompat.mask, (uint64_t)1<<4 | 1);
 }
+
+TEST(CephCompatSet, merge) {
+  CompatSet s1, s2, s1dup, s2dup;
+
+  s1.compat.insert(CompatSet::Feature(1, "c1"));
+  s1.compat.insert(CompatSet::Feature(2, "c2"));
+  s1.compat.insert(CompatSet::Feature(32, "c32"));
+  s1.ro_compat.insert(CompatSet::Feature(63, "r63"));
+  s1.incompat.insert(CompatSet::Feature(1, "i1"));
+
+  s1dup = s1;
+
+  s2.compat.insert(CompatSet::Feature(1, "c1"));
+  s2.compat.insert(CompatSet::Feature(32, "c32"));
+  s2.ro_compat.insert(CompatSet::Feature(1, "r1"));
+  s2.ro_compat.insert(CompatSet::Feature(63, "r63"));
+  s2.incompat.insert(CompatSet::Feature(1, "i1"));
+
+  s2dup = s2;
+
+  //Nothing to merge if they are the same
+  EXPECT_FALSE(s1.merge(s1dup));
+  EXPECT_FALSE(s2.merge(s2dup));
+
+  EXPECT_TRUE(s1.merge(s2));
+  EXPECT_EQ(s1.compat.mask, (uint64_t)1<<1 | (uint64_t)1<<2 | (uint64_t)1<<32 | 1);
+  EXPECT_EQ(s1.ro_compat.mask, (uint64_t)1<<1 | (uint64_t)1<<63 | 1);
+  EXPECT_EQ(s1.incompat.mask, (uint64_t)1<<1 | 1);
+
+  EXPECT_TRUE(s2.merge(s1dup));
+  EXPECT_EQ(s2.compat.mask, (uint64_t)1<<1 | (uint64_t)1<<2 | (uint64_t)1<<32 | 1);
+  EXPECT_EQ(s2.ro_compat.mask, (uint64_t)1<<1 | (uint64_t)1<<63 | 1);
+  EXPECT_EQ(s2.incompat.mask, (uint64_t)1<<1 | 1);
+}
