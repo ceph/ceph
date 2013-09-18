@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:3; indent-tabs-mode:t -*-
+// vim: ts=8 sw=3 smarttab
+
 /*
  *******************************************************************
  *                                                                 *
