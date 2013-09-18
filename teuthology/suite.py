@@ -533,7 +533,7 @@ def build_email_body(name, archive_dir, timeout):
             passed[job] = email_templates['pass_templ'].format(
                 job_id=job,
                 desc=summary.get('description'),
-                time=int(summary.get('duration')),
+                time=int(summary.get('duration'), 0),
             )
         else:
             log = misc.get_http_log_path(archive_dir, job)
@@ -558,7 +558,7 @@ def build_email_body(name, archive_dir, timeout):
             failed[job] = email_templates['fail_templ'].format(
                 job_id=job,
                 desc=summary.get('description'),
-                time=int(summary.get('duration')),
+                time=int(summary.get('duration', 0)),
                 reason=reason,
                 log_line=log_line,
                 sentry_line=sentry_line,
