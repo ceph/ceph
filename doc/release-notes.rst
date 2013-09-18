@@ -2,6 +2,56 @@
  Release Notes
 ===============
 
+v0.69
+-----
+
+Upgrading
+~~~~~~~~~
+
+* Users of the librados C++ API should replace users of get_version()
+  with get_version64() as the old method only returns a 32-bit value
+  for a 64-bit field.  The existing 32-bit get_version() method is now
+  deprecated.
+
+* The OSDs are now more picky that request payload match their
+  declared size.  A write operation across N bytes that includes M
+  bytes of data will now be rejected.  No known clients do this, but
+  the because the server-side behavior has changed it is possible that
+  an application misusing the interface may now get errors.
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* build cleanly under clang (Christophe Courtaut)
+* common: migrate SharedPtrRegistry to use boost::shared_ptr<> (Loic Dachary)
+* doc: erasure coding design notes (Loic Dachary)
+* improved intel-optimized crc32c support (~8x faster on my laptop!)
+* librados: get_version64() method for C++ API
+* mds: fix locking deadlock (David Disseldorp)
+* mon, osd: initial CLI for configuring tiering
+* mon: allow cap strings with . to be unquoted
+* mon: continue to discover peer addr info during election phase
+* mon: fix 'osd crush move ...' command for buckets (Joao Luis)
+* mon: warn when mon data stores grow very large (Joao Luis)
+* objecter, librados: redirect requests based on cache tier config
+* osd, librados: add new COPY_FROM rados operation
+* osd, librados: add new COPY_GET rados operations (used by COPY_FROM)
+* osd: add 'osd heartbeat min healthy ratio' configurable (was hard-coded at 33%)
+* osd: add option to disable pg log debug code (which burns CPU)
+* osd: allow cap strings with . to be unquoted
+* osd: fix version value returned by various operations (Greg Farnum)
+* osd: infrastructure to copy objects from other OSDs
+* osd: use fdatasync(2) instead of fsync(2) to improve performance (Sam Just)
+* rgw: fix major CPU utilization bug with internal caching (Yehuda Sadeh, Mark Nelson)
+* rgw: fix ordering of write operations (preventing data loss on crash) (Yehuda Sadeh)
+* rgw: fix ordering of writes for mulitpart upload (Yehuda Sadeh)
+* rgw: fix various CORS bugs (Yehuda Sadeh)
+* rgw: improve help output (Christophe Courtaut)
+* rgw: validate S3 tokens against keystone (Roald J. van Loon)
+* rgw: wildcard support for keystone roles (Christophe Courtaut)
+* sysvinit radosgw: fix status return code (Danny Al-Gaaf)
+* sysvinit rbdmap: fix error 'service rbdmap stop' (Laurent Barbe)
+
 v0.68
 -----
 
