@@ -55,13 +55,26 @@ public:
    bloom_filter(const std::size_t& predicted_inserted_element_count,
                 const double& false_positive_probability,
                 const std::size_t& random_seed)
-   : bit_table_(0),
-     predicted_inserted_element_count_(predicted_inserted_element_count),
-     inserted_element_count_(0),
-     random_seed_((random_seed) ? random_seed : 0xA5A5A5A5),
-     desired_false_positive_probability_(false_positive_probability)
+      : bit_table_(0),
+	inserted_element_count_(0),
+	random_seed_((random_seed) ? random_seed : 0xA5A5A5A5)
    {
-      find_optimal_parameters();
+      find_optimal_parameters(predicted_inserted_element_count, false_positive_probability,
+			      &salt_count_, &table_size_);
+      generate_unique_salt();
+      raw_table_size_ = table_size_ / bits_per_char;
+      bit_table_ = new cell_type[raw_table_size_];
+      std::fill_n(bit_table_,raw_table_size_,0x00);
+   }
+
+   bloom_filter(const std::size_t& salt_count, std::size_t table_size,
+                const std::size_t& random_seed)
+      : bit_table_(0),
+	salt_count_(salt_count),
+	table_size_(table_size),
+	inserted_element_count_(0),
+	random_seed_((random_seed) ? random_seed : 0xA5A5A5A5)
+   {
       generate_unique_salt();
       raw_table_size_ = table_size_ / bits_per_char;
       bit_table_ = new cell_type[raw_table_size_];
@@ -79,10 +92,8 @@ public:
         salt_count_ = filter.salt_count_;
         table_size_ = filter.table_size_;
         raw_table_size_ = filter.raw_table_size_;
-        predicted_inserted_element_count_ = filter.predicted_inserted_element_count_;
         inserted_element_count_ = filter.inserted_element_count_;
         random_seed_ = filter.random_seed_;
-        desired_false_positive_probability_ = filter.desired_false_positive_probability_;
         delete[] bit_table_;
         bit_table_ = new cell_type[raw_table_size_];
         std::copy(filter.bit_table_,filter.bit_table_ + raw_table_size_,bit_table_);
@@ -370,7 +381,10 @@ protected:
       }
    }
 
-   void find_optimal_parameters()
+   static void find_optimal_parameters(std::size_t target_insert_count,
+				       double target_fpp,
+				       std::size_t *salt_count,
+				       std::size_t *table_size)
    {
       /*
         Note:
@@ -386,8 +400,8 @@ protected:
       double k = 1.0;
       while (k < 1000.0)
       {
-         double numerator   = (- k * predicted_inserted_element_count_);
-         double denominator = std::log(1.0 - std::pow(desired_false_positive_probability_, 1.0 / k));
+         double numerator   = (- k * target_insert_count);
+         double denominator = std::log(1.0 - std::pow(target_fpp, 1.0 / k));
          curr_m = numerator / denominator;
 
          if (curr_m < min_m)
@@ -398,9 +412,10 @@ protected:
          k += 1.0;
       }
 
-      salt_count_ = static_cast<std::size_t>(min_k);
-      table_size_ = static_cast<std::size_t>(min_m);
-      table_size_ += (((table_size_ % bits_per_char) != 0) ? (bits_per_char - (table_size_ % bits_per_char)) : 0);
+      *salt_count = static_cast<std::size_t>(min_k);
+      size_t t = static_cast<std::size_t>(min_m);
+      t += (((t % bits_per_char) != 0) ? (bits_per_char - (t % bits_per_char)) : 0);
+      *table_size = t;
    }
 
    inline bloom_type hash_ap(const unsigned char* begin, std::size_t remaining_length, bloom_type hash) const
@@ -436,10 +451,8 @@ protected:
    std::size_t             salt_count_;
    std::size_t             table_size_;
    std::size_t             raw_table_size_;
-   std::size_t             predicted_inserted_element_count_;
    std::size_t             inserted_element_count_;
    std::size_t             random_seed_;
-   double                  desired_false_positive_probability_;
 };
 
 inline bloom_filter operator & (const bloom_filter& a, const bloom_filter& b)
@@ -497,7 +510,6 @@ public:
          return false;
       }
 
-      desired_false_positive_probability_ = effective_fpp();
       cell_type* tmp = new cell_type[new_table_size / bits_per_char];
       std::copy(bit_table_, bit_table_ + (new_table_size / bits_per_char), tmp);
       cell_type* itr = bit_table_ + (new_table_size / bits_per_char);
