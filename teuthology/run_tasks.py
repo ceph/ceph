@@ -54,10 +54,11 @@ def run_tasks(tasks, ctx):
                 for host in targets.keys():
                     targets[host] = '<redacted>'
 
-            job_id = getattr(ctx, 'job_id', None)
+            job_id = ctx.config.get('job_id')
+            archive_path = ctx.config.get('archive_path')
             extra = {
                 'config': config,
-                'logs': get_http_log_path(ctx.archive, job_id),
+                'logs': get_http_log_path(archive_path, job_id),
             }
             exc_id = sentry.get_ident(sentry.captureException(
                 tags=tags,
