@@ -171,6 +171,33 @@ struct CompatSet {
     return diff;
   }
   
+  /* Merge features supported by other CompatSet into this one.
+   * Return: true if some features were merged
+   */
+  bool merge(CompatSet& other) {
+    uint64_t other_compat =
+      ((other.compat.mask ^ compat.mask) & other.compat.mask);
+    uint64_t other_ro_compat =
+      ((other.ro_compat.mask ^ ro_compat.mask) & other.ro_compat.mask);
+    uint64_t other_incompat =
+      ((other.incompat.mask ^ incompat.mask) & other.incompat.mask);
+    if (!other_compat && !other_ro_compat && !other_incompat)
+      return false;
+    for (int id = 1; id < 64; ++id) {
+      uint64_t mask = (uint64_t)1 << id;
+      if (mask & other_compat) {
+	compat.insert( Feature(id, other.compat.names[id]));
+      }
+      if (mask & other_ro_compat) {
+	ro_compat.insert(Feature(id, other.ro_compat.names[id]));
+      }
+      if (mask & other_incompat) {
+	incompat.insert( Feature(id, other.incompat.names[id]));
+      }
+    }
+    return true;
+  }
+
   void encode(bufferlist& bl) const {
     compat.encode(bl);
     ro_compat.encode(bl);
