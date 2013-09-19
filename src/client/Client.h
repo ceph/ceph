@@ -134,7 +134,7 @@ struct dir_result_t {
     return ((uint64_t)frag << SHIFT) | (uint64_t)off;
   }
   static unsigned fpos_frag(uint64_t p) {
-    return p >> SHIFT;
+    return (p & ~END) >> SHIFT;
   }
   static unsigned fpos_off(uint64_t p) {
     return p & MASK;
@@ -173,8 +173,8 @@ struct dir_result_t {
     offset = (uint64_t)f << SHIFT;
     assert(sizeof(offset) == 8);
   }
-  void set_end() { offset = END; }
-  bool at_end() { return (offset == END); }
+  void set_end() { offset |= END; }
+  bool at_end() { return (offset & END); }
 
   void reset() {
     last_name.clear();
