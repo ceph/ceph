@@ -856,11 +856,16 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   
   double fac = 1.0 / (double)(1 << bits);  // for scaling load vecs
 
-  nest_info_t olddiff;  // old += f - af;
-  dout(10) << "           rstat " << fnode.rstat << dendl;
-  dout(10) << " accounted_rstat " << fnode.accounted_rstat << dendl;
-  olddiff.add_delta(fnode.rstat, fnode.accounted_rstat);
-  dout(10) << "         olddiff " << olddiff << dendl;
+  dout(15) << "           rstat " << fnode.rstat << dendl;
+  dout(15) << " accounted_rstat " << fnode.accounted_rstat << dendl;
+  nest_info_t rstatdiff;
+  rstatdiff.add_delta(fnode.accounted_rstat, fnode.rstat);
+  dout(15) << "           fragstat " << fnode.fragstat << dendl;
+  dout(15) << " accounted_fragstat " << fnode.accounted_fragstat << dendl;
+  frag_info_t fragstatdiff;
+  bool touched_mtime;
+  fragstatdiff.add_delta(fnode.accounted_fragstat, fnode.fragstat, touched_mtime);
+  dout(10) << " rstatdiff " << rstatdiff << " fragstatdiff " << fragstatdiff << dendl;
 
   prepare_old_fragment(replay);
 
@@ -905,27 +910,24 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
     f->steal_dentry(dn);
   }
 
+  // FIXME: handle dirty old rstat
+
   // fix up new frag fragstats
-  bool stale_fragstat = fnode.fragstat.version != fnode.accounted_fragstat.version;
-  bool stale_rstat = fnode.rstat.version != fnode.accounted_rstat.version;
   for (int i=0; i<n; i++) {
-    subfrags[i]->fnode.fragstat.version = fnode.fragstat.version;
-    subfrags[i]->fnode.accounted_fragstat = subfrags[i]->fnode.fragstat;
-    if (i == 0) {
-      if (stale_fragstat)
-	subfrags[0]->fnode.accounted_fragstat.version--;
-      if (stale_rstat)
-	subfrags[0]->fnode.accounted_rstat.version--;
-    }
-    dout(10) << "      fragstat " << subfrags[i]->fnode.fragstat << " on " << *subfrags[i] << dendl;
+    CDir *f = subfrags[i];
+    f->fnode.rstat.version = fnode.rstat.version;
+    f->fnode.accounted_rstat = f->fnode.rstat;
+    f->fnode.fragstat.version = fnode.fragstat.version;
+    f->fnode.accounted_fragstat = f->fnode.fragstat;
+    dout(10) << " rstat " << f->fnode.rstat << " fragstat " << f->fnode.fragstat
+	     << " on " << *f << dendl;
   }
 
   // give any outstanding frag stat differential to first frag
-  //   af[0] -= olddiff
-  dout(10) << "giving olddiff " << olddiff << " to " << *subfrags[0] << dendl;
-  nest_info_t zero;
-  subfrags[0]->fnode.accounted_rstat.add_delta(zero, olddiff);
-  dout(10) << "               " << subfrags[0]->fnode.accounted_fragstat << dendl;
+  dout(10) << " giving rstatdiff " << rstatdiff << " fragstatdiff" << fragstatdiff
+           << " to " << *subfrags[0] << dendl;
+  subfrags[0]->fnode.accounted_rstat.add(rstatdiff);
+  subfrags[0]->fnode.accounted_fragstat.add(fragstatdiff);
 
   finish_old_fragment(waiters, replay);
 }
@@ -936,15 +938,23 @@ void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
 
   prepare_new_fragment(replay);
 
-  // see if _any_ of the source frags have stale fragstat or rstat
-  int stale_rstat = 0;
-  int stale_fragstat = 0;
+  nest_info_t rstatdiff;
+  frag_info_t fragstatdiff;
+  bool touched_mtime;
+  version_t rstat_version = inode->get_projected_inode()->rstat.version;
+  version_t dirstat_version = inode->get_projected_inode()->dirstat.version;
 
   for (list<CDir*>::iterator p = subs.begin(); p != subs.end(); ++p) {
     CDir *dir = *p;
     dout(10) << " subfrag " << dir->get_frag() << " " << *dir << dendl;
     assert(!dir->is_auth() || dir->is_complete() || replay);
-    
+
+    if (dir->fnode.accounted_rstat.version == rstat_version)
+      rstatdiff.add_delta(dir->fnode.accounted_rstat, dir->fnode.rstat);
+    if (dir->fnode.accounted_fragstat.version == dirstat_version)
+      fragstatdiff.add_delta(dir->fnode.accounted_fragstat, dir->fnode.fragstat,
+			     touched_mtime);
+
     dir->prepare_old_fragment(replay);
 
     // steal dentries
@@ -964,21 +974,6 @@ void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
     if (dir->get_version() > get_version())
       set_version(dir->get_version());
 
-    // *stat versions
-    if (fnode.fragstat.version < dir->fnode.fragstat.version)
-      fnode.fragstat.version = dir->fnode.fragstat.version;
-    if (fnode.rstat.version < dir->fnode.rstat.version)
-      fnode.rstat.version = dir->fnode.rstat.version;
-
-    if (dir->fnode.accounted_fragstat.version != dir->fnode.fragstat.version)
-      stale_fragstat = 1;
-    if (dir->fnode.accounted_rstat.version != dir->fnode.rstat.version)
-      stale_rstat = 1;
-
-    // sum accounted_*
-    fnode.accounted_fragstat.add(dir->fnode.accounted_fragstat);
-    fnode.accounted_rstat.add(dir->fnode.accounted_rstat, 1);
-
     // merge state
     state_set(dir->get_state() & MASK_STATE_FRAGMENT_KEPT);
     dir_auth = dir->dir_auth;
@@ -987,9 +982,14 @@ void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
     inode->close_dirfrag(dir->get_frag());
   }
 
-  // offset accounted_* version by -1 if any source frag was stale
-  fnode.accounted_fragstat.version = fnode.fragstat.version - stale_fragstat;
-  fnode.accounted_rstat.version = fnode.rstat.version - stale_rstat;
+  // FIXME: merge dirty old rstat
+  fnode.rstat.version = rstat_version;
+  fnode.accounted_rstat = fnode.rstat;
+  fnode.accounted_rstat.add(rstatdiff);
+
+  fnode.fragstat.version = dirstat_version;
+  fnode.accounted_fragstat = fnode.fragstat;
+  fnode.accounted_fragstat.add(fragstatdiff);
 
   init_fragment_pins();
 }
