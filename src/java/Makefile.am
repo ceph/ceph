@@ -64,7 +64,6 @@ BUILT_SOURCES = $(JAVA_H)
 if HAVE_JUNIT4
 
 JAVA_TEST_CLASSES = $(JAVA_TEST_SRC:test/%.java=%.class)
-ESCAPED_JAVA_TEST_CLASSES = com/ceph/fs/CephAllTests\$$1.class
 
 CEPH_TEST_PROXY=test/com/ceph/fs/CephMountTest.class
 
@@ -73,7 +72,7 @@ $(CEPH_TEST_PROXY): $(JAVA_TEST_SRC) $(CEPH_PROXY)
 	$(JAVAC) -source 1.5 -target 1.5 -Xlint:-options test/com/ceph/fs/*.java
 
 libcephfs-test.jar: $(CEPH_TEST_PROXY)
-	$(JAR) cf $@ $(JAVA_TEST_CLASSES:%=-C test %) $(ESCAPED_JAVA_TEST_CLASSES:%=-C test %)
+	$(JAR) cf $@ $(JAVA_TEST_CLASSES:%=-C test %) 
 
 java_DATA += libcephfs-test.jar
 
