@@ -809,16 +809,28 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     ::decode(end, p);
     ::decode(complete, p);
 
-    ldout(cct, 10) << "insert_trace " << numdn << " readdir items, end=" << (int)end
-		   << ", offset " << request->readdir_offset
-		   << ", readdir_start " << request->readdir_start << dendl;
+    frag_t fg = request->readdir_frag;
+    uint64_t readdir_offset = request->readdir_offset;
+    string readdir_start = request->readdir_start;
+    if (fg != dst.frag) {
+      ldout(cct, 10) << "insert_trace got new frag " << fg << " -> " << dst.frag << dendl;
+      fg = dst.frag;
+      if (fg.is_leftmost())
+	readdir_offset = 2;
+      else
+	readdir_offset = 0;
+      readdir_start.clear();
+    }
 
+    ldout(cct, 10) << "insert_trace " << numdn << " readdir items, end=" << (int)end
+		   << ", offset " << readdir_offset
+		   << ", readdir_start " << readdir_start << dendl;
+
+    request->readdir_reply_frag = fg;
     request->readdir_end = end;
     request->readdir_num = numdn;
 
-    map<string,Dentry*>::iterator pd = dir->dentry_map.upper_bound(request->readdir_start);
-
-    frag_t fg = request->readdir_frag;
+    map<string,Dentry*>::iterator pd = dir->dentry_map.upper_bound(readdir_start);
 
     string dname;
     LeaseStat dlease;
@@ -869,7 +881,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 	dn = link(dir, dname, in, NULL);
       }
       update_dentry_lease(dn, &dlease, request->sent_stamp, session);
-      dn->offset = dir_result_t::make_fpos(request->readdir_frag, i + request->readdir_offset);
+      dn->offset = dir_result_t::make_fpos(fg, i + readdir_offset);
 
       // add to cached result list
       in->get();
@@ -4950,8 +4962,16 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
 
     dirp->buffer = new vector<pair<string,Inode*> >;
     dirp->buffer->swap(req->readdir_result);
-    dirp->buffer_frag = fg;
 
+    if (fg != req->readdir_reply_frag) {
+      fg = req->readdir_reply_frag;
+      if (fg.is_leftmost())
+	dirp->next_offset = 2;
+      else
+	dirp->next_offset = 0;
+      dirp->offset = dir_result_t::make_fpos(fg, dirp->next_offset);
+    }
+    dirp->buffer_frag = fg;
     dirp->this_offset = dirp->next_offset;
     ldout(cct, 10) << "_readdir_get_frag " << dirp << " got frag " << dirp->buffer_frag
 	     << " this_offset " << dirp->this_offset
@@ -5130,14 +5150,18 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
       int r = _readdir_get_frag(dirp);
       if (r)
 	return r;
+      // _readdir_get_frag () may updates dirp->offset if the replied dirfrag is
+      // different than the requested one. (our dirfragtree was outdated)
       fg = dirp->buffer_frag;
+      off = dirp->fragpos();
     }
 
     ldout(cct, 10) << "off " << off << " this_offset " << hex << dirp->this_offset << dec << " size " << dirp->buffer->size()
 	     << " frag " << fg << dendl;
+
+    dirp->offset = dir_result_t::make_fpos(fg, off);
     while (off >= dirp->this_offset &&
 	   off - dirp->this_offset < dirp->buffer->size()) {
-      uint64_t pos = dir_result_t::make_fpos(fg, off);
       pair<string,Inode*>& ent = (*dirp->buffer)[off - dirp->this_offset];
 
       int stmask = fill_stat(ent.second, &st);  
@@ -5153,7 +5177,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
 	return r;
       
       off++;
-      dirp->offset = pos + 1;
+      dirp->offset++;
     }
 
     if (dirp->last_name.length()) {
@@ -5164,10 +5188,10 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
 
     if (!fg.is_rightmost()) {
       // next frag!
-      dirp->next_frag();
-      off = 0;
+      _readdir_next_frag(dirp);
       ldout(cct, 10) << " advancing to next frag: " << fg << " -> " << dirp->frag() << dendl;
       fg = dirp->frag();
+      off = 0;
       continue;
     }
 
