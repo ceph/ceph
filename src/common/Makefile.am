@@ -64,7 +64,8 @@ libcommon_la_SOURCES = \
 	common/ceph_strings.cc \
 	common/ceph_frag.cc \
 	common/addr_parsing.c \
-	common/hobject.cc
+	common/hobject.cc \
+	common/bloom_filter.cc
 
 if LINUX
 libcommon_la_SOURCES += common/secret.c

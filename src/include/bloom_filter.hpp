@@ -29,6 +29,8 @@
 #include <string>
 #include <vector>
 
+#include "include/encoding.h"
+#include "common/Formatter.h"
 
 static const std::size_t bits_per_char = 0x08;    // 8 bits in 1 char(unsigned)
 static const unsigned char bit_mask[bits_per_char] = {
@@ -52,6 +54,15 @@ protected:
 
 public:
 
+   bloom_filter()
+      : bit_table_(0),
+	salt_count_(0),
+	table_size_(0),
+	raw_table_size_(0),
+	inserted_element_count_(0),
+	random_seed_(0)
+   {}
+
    bloom_filter(const std::size_t& predicted_inserted_element_count,
                 const double& false_positive_probability,
                 const std::size_t& random_seed)
@@ -61,10 +72,7 @@ public:
    {
       find_optimal_parameters(predicted_inserted_element_count, false_positive_probability,
 			      &salt_count_, &table_size_);
-      generate_unique_salt();
-      raw_table_size_ = table_size_ / bits_per_char;
-      bit_table_ = new cell_type[raw_table_size_];
-      std::fill_n(bit_table_,raw_table_size_,0x00);
+      init();
    }
 
    bloom_filter(const std::size_t& salt_count, std::size_t table_size,
@@ -75,6 +83,10 @@ public:
 	inserted_element_count_(0),
 	random_seed_((random_seed) ? random_seed : 0xA5A5A5A5)
    {
+      init();
+   }
+
+   void init() {
       generate_unique_salt();
       raw_table_size_ = table_size_ / bits_per_char;
       bit_table_ = new cell_type[raw_table_size_];
@@ -453,7 +465,14 @@ protected:
    std::size_t             raw_table_size_;
    std::size_t             inserted_element_count_;
    std::size_t             random_seed_;
+
+public:
+   void encode(bufferlist& bl) const;
+   void decode(bufferlist::iterator& bl);
+   void dump(Formatter *f) const;
+   static void generate_test_instances(list<bloom_filter*>& ls);
 };
+WRITE_CLASS_ENCODER(bloom_filter)
 
 inline bloom_filter operator & (const bloom_filter& a, const bloom_filter& b)
 {
