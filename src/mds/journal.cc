@@ -2381,6 +2381,7 @@ void EFragment::replay(MDS *mds)
 
   list<CDir*> resultfrags;
   list<Context*> waiters;
+  list<frag_t> old_frags;
   pair<dirfrag_t,int> desc(dirfrag_t(ino,basefrag), bits);
 
   // in may be NULL if it wasn't in our cache yet.  if it's a prepare
@@ -2390,26 +2391,23 @@ void EFragment::replay(MDS *mds)
 
   switch (op) {
   case OP_PREPARE:
-    mds->mdcache->uncommitted_fragments.insert(desc);
+    mds->mdcache->add_uncommitted_fragment(dirfrag_t(ino, basefrag), bits, old_frags);
     // fall-thru
   case OP_ONESHOT:
     if (in)
       mds->mdcache->adjust_dir_fragments(in, basefrag, bits, resultfrags, waiters, true);
     break;
 
+  case OP_ROLLBACK:
+    if (in)
+      mds->mdcache->adjust_dir_fragments(in, basefrag, -bits, resultfrags, waiters, true);
+    // fall-thru
   case OP_COMMIT:
-    mds->mdcache->uncommitted_fragments.erase(desc);
+    mds->mdcache->finish_uncommitted_fragment(dirfrag_t(ino, basefrag));
     break;
 
-  case OP_ROLLBACK:
-    if (mds->mdcache->uncommitted_fragments.count(desc)) {
-      mds->mdcache->uncommitted_fragments.erase(desc);
-      assert(in);
-      mds->mdcache->adjust_dir_fragments(in, basefrag, -bits, resultfrags, waiters, true);
-    } else {
-      dout(10) << " no record of prepare for " << desc << dendl;
-    }
-    break;
+  default:
+    assert(0);
   }
   metablob.replay(mds, _segment);
   if (in && g_conf->mds_debug_frag)
