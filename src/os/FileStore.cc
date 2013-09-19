@@ -4152,7 +4152,7 @@ int FileStore::_collection_move_rename(coll_t oldcid, const hobject_t& oldoid,
 				       const SequencerPosition& spos)
 {
   dout(15) << __func__ << " " << c << "/" << o << " from " << oldcid << "/" << oldoid << dendl;
-  int r;
+  int r = 0;
   int dstcmp, srccmp;
 
   dstcmp = _check_replay_guard(c, o, spos);
