@@ -389,6 +389,11 @@ unittest_crc32c_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_crc32c_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_crc32c
 
+unittest_arch_SOURCES = test/test_arch.c
+unittest_arch_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_arch_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_arch
+
 unittest_crypto_SOURCES = test/crypto.cc
 unittest_crypto_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_crypto_CXXFLAGS = $(UNITTEST_CXXFLAGS)
