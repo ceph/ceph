@@ -458,13 +458,6 @@ frag_t CInode::pick_dirfrag(const string& dn)
 bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
 {
   bool all = true;
-  for (map<frag_t,CDir*>::iterator p = dirfrags.begin(); p != dirfrags.end(); ++p) {
-    if (fg.contains(p->first))
-      ls.push_back(p->second);
-    else
-      all = false;
-  }
-  /*
   list<frag_t> fglist;
   dirfragtree.get_leaves_under(fg, fglist);
   for (list<frag_t>::iterator p = fglist.begin();
@@ -474,7 +467,6 @@ bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
       ls.push_back(dirfrags[*p]);
     else 
       all = false;
-  */
   return all;
 }
 
