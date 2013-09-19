@@ -14,12 +14,10 @@
 
 
 OpRequest::OpRequest(Message *req, OpTracker *tracker) :
-  TrackedOp(req),
+  TrackedOp(req, tracker),
   rmw_flags(0),
   tracker(tracker),
   hit_flag_points(0), latest_flag_point(0) {
-  received_time = request->get_recv_stamp();
-  tracker->register_inflight_op(&xitem);
   if (req->get_priority() < tracker->cct->_conf->osd_client_op_priority) {
     // don't warn as quickly for low priority ops
     warn_interval_multiplier = tracker->cct->_conf->osd_recovery_op_warn_multiple;

@@ -109,28 +109,38 @@ public:
 };
 
 class TrackedOp {
+public:
+  Message *request; /// the logical request we are tracking
+private:
+  friend class OpHistory;
+  friend class OpTracker;
+  xlist<TrackedOp*>::item xitem;
 protected:
+  OpTracker *tracker; /// the tracker we are associated with
+
   list<pair<utime_t, string> > events; /// list of events and their times
   Mutex lock; /// to protect the events list
-public:
-  // move these to private once friended OpTracker
-  Message *request;
-  xlist<TrackedOp*>::item xitem;
-  utime_t received_time;
-  // figure out how to get rid of this one?
-  uint8_t warn_interval_multiplier;
-  string current;
-  uint64_t seq;
+  utime_t received_time; /// the time the triggering Message was received
+  string current; /// the current state the event is in
+  uint64_t seq; /// a unique value set by the OpTracker
 
-  TrackedOp(Message *req) :
-    lock("TrackedOp::lock"),
+  uint8_t warn_interval_multiplier; // limits output of a given op warning
+
+  TrackedOp(Message *req, OpTracker *_tracker) :
     request(req),
     xitem(this),
-    warn_interval_multiplier(1),
-    seq(0) {}
+    tracker(_tracker),
+    lock("TrackedOp::lock"),
+    seq(0),
+    warn_interval_multiplier(1)
+  {
+    received_time = request->get_recv_stamp();
+    tracker->register_inflight_op(&xitem);
+  }
 
   virtual void init_from_message() {};
 
+public:
   virtual ~TrackedOp() {}
 
   utime_t get_arrived() const {
