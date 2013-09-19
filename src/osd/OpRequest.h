@@ -62,7 +62,6 @@ struct OpRequest : public TrackedOp {
   void dump(utime_t now, Formatter *f) const;
 
 private:
-  OpTracker *tracker;
   osd_reqid_t reqid;
   uint8_t hit_flag_points;
   uint8_t latest_flag_point;
