@@ -946,6 +946,7 @@ private:
   struct ufragment {
     int bits;
     list<frag_t> old_frags;
+    bufferlist rollback;
     ufragment() : bits(0) {}
   };
   map<dirfrag_t, ufragment> uncommitted_fragments;
@@ -999,7 +1000,8 @@ private:
 
   void handle_fragment_notify(MMDSFragmentNotify *m);
 
-  void add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, list<frag_t>& old_frag);
+  void add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, list<frag_t>& old_frag,
+				bufferlist *rollback=NULL);
   void finish_uncommitted_fragment(dirfrag_t basedirfrag);
 
   // -- updates --
