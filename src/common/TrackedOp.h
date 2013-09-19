@@ -141,7 +141,7 @@ protected:
   virtual void init_from_message() {};
 
 public:
-  virtual ~TrackedOp() {}
+  virtual ~TrackedOp() { if (request) request->put(); }
 
   utime_t get_arrived() const {
     return received_time;
