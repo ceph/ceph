@@ -942,10 +942,14 @@ protected:
 
 
   // -- fragmenting --
-public:
-  set< pair<dirfrag_t,int> > uncommitted_fragments;  // prepared but uncommitted refragmentations
-
 private:
+  struct ufragment {
+    int bits;
+    list<frag_t> old_frags;
+    ufragment() : bits(0) {}
+  };
+  map<dirfrag_t, ufragment> uncommitted_fragments;
+
   struct fragment_info_t {
     frag_t basefrag;
     int bits;
@@ -981,6 +985,9 @@ private:
   void fragment_unmark_unfreeze_dirs(list<CDir*>& dirs);
   void dispatch_fragment_dir(MDRequest *mdr);
   void fragment_logged_and_stored(MDRequest *mdr);
+  void _fragment_committed(dirfrag_t f, list<CDir*>& resultfrags);
+  void _fragment_finish(dirfrag_t f, list<CDir*>& resultfrags);
+
 public:
   void rollback_uncommitted_fragments();
 private:
@@ -988,9 +995,12 @@ private:
   friend class C_MDC_FragmentFrozen;
   friend class C_MDC_FragmentMarking;
   friend class C_MDC_FragmentLoggedAndStored;
+  friend class C_MDC_FragmentCommit;
 
   void handle_fragment_notify(MMDSFragmentNotify *m);
 
+  void add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, list<frag_t>& old_frag);
+  void finish_uncommitted_fragment(dirfrag_t basedirfrag);
 
   // -- updates --
   //int send_inode_updates(CInode *in);
