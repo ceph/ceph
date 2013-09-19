@@ -57,6 +57,7 @@ public:
   string readdir_start;  // starting _after_ this name
   uint64_t readdir_offset;
 
+  frag_t readdir_reply_frag;
   vector<pair<string,Inode*> > readdir_result;
   bool readdir_end;
   int readdir_num;
