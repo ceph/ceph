@@ -2382,7 +2382,6 @@ void EFragment::replay(MDS *mds)
   list<CDir*> resultfrags;
   list<Context*> waiters;
   list<frag_t> old_frags;
-  pair<dirfrag_t,int> desc(dirfrag_t(ino,basefrag), bits);
 
   // in may be NULL if it wasn't in our cache yet.  if it's a prepare
   // it will be once we replay the metablob , but first we need to
@@ -2391,7 +2390,7 @@ void EFragment::replay(MDS *mds)
 
   switch (op) {
   case OP_PREPARE:
-    mds->mdcache->add_uncommitted_fragment(dirfrag_t(ino, basefrag), bits, old_frags);
+    mds->mdcache->add_uncommitted_fragment(dirfrag_t(ino, basefrag), bits, orig_frags);
     // fall-thru
   case OP_ONESHOT:
     if (in)
@@ -2399,34 +2398,41 @@ void EFragment::replay(MDS *mds)
     break;
 
   case OP_ROLLBACK:
-    if (in)
+    if (in) {
+      in->dirfragtree.get_leaves_under(basefrag, old_frags);
       mds->mdcache->adjust_dir_fragments(in, basefrag, -bits, resultfrags, waiters, true);
-    // fall-thru
+    }
+    mds->mdcache->rollback_uncommitted_fragment(dirfrag_t(ino, basefrag), old_frags);
+    break;
+
   case OP_COMMIT:
-    mds->mdcache->finish_uncommitted_fragment(dirfrag_t(ino, basefrag));
+  case OP_FINISH:
+    mds->mdcache->finish_uncommitted_fragment(dirfrag_t(ino, basefrag), op);
     break;
 
   default:
     assert(0);
   }
+
   metablob.replay(mds, _segment);
   if (in && g_conf->mds_debug_frag)
     in->verify_dirfrags();
 }
 
 void EFragment::encode(bufferlist &bl) const {
-  ENCODE_START(4, 4, bl);
+  ENCODE_START(5, 4, bl);
   ::encode(stamp, bl);
   ::encode(op, bl);
   ::encode(ino, bl);
   ::encode(basefrag, bl);
   ::encode(bits, bl);
   ::encode(metablob, bl);
+  ::encode(orig_frags, bl);
   ENCODE_FINISH(bl);
 }
 
 void EFragment::decode(bufferlist::iterator &bl) {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, bl);
   if (struct_v >= 2)
     ::decode(stamp, bl);
   if (struct_v >= 3)
@@ -2437,6 +2443,8 @@ void EFragment::decode(bufferlist::iterator &bl) {
   ::decode(basefrag, bl);
   ::decode(bits, bl);
   ::decode(metablob, bl);
+  if (struct_v >= 5)
+    ::decode(orig_frags, bl);
   DECODE_FINISH(bl);
 }
 
