@@ -204,6 +204,7 @@ enum {
   OPT_BUCKET_STATS,
   OPT_BUCKET_CHECK,
   OPT_BUCKET_RM,
+  OPT_BUCKET_REWRITE,
   OPT_POLICY,
   OPT_POOL_ADD,
   OPT_POOL_RM,
@@ -335,6 +336,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_BUCKET_STATS;
     if (strcmp(cmd, "rm") == 0)
       return OPT_BUCKET_RM;
+    if (strcmp(cmd, "rewrite") == 0)
+      return OPT_BUCKET_REWRITE;
     if (strcmp(cmd, "check") == 0)
       return OPT_BUCKET_CHECK;
   } else if (strcmp(prev_cmd, "log") == 0) {
@@ -746,6 +749,13 @@ int set_user_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, in
     return -r;
   }
   return 0;
+}
+
+static bool bucket_object_check_filter(const string& name)
+{
+  string ns;
+  string obj = name;
+  return rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns);
 }
 
 int main(int argc, char **argv) 
@@ -1835,9 +1845,70 @@ next:
     ret = store->rewrite_obj(obj);
 
     if (ret < 0) {
-      cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
+      cerr << "ERROR: object rewrite returned: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
+  }
+
+  if (opt_cmd == OPT_BUCKET_REWRITE) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+
+    int ret = init_bucket(bucket_name, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    bool is_truncated = true;
+
+    string marker;
+    string prefix;
+
+    formatter->open_object_section("result");
+    formatter->dump_string("bucket", bucket_name);
+    formatter->open_array_section("objects");
+    while (is_truncated) {
+      map<string, RGWObjEnt> result;
+      string ns;
+      int r = store->cls_bucket_list(bucket, marker, prefix, 1000, 
+                                     result, &is_truncated, &marker,
+                                     bucket_object_check_filter);
+
+      if (r < 0 && r != -ENOENT) {
+        cerr << "ERROR: failed operation r=" << r << std::endl;
+      }
+
+      if (r == -ENOENT)
+        break;
+
+      map<string, RGWObjEnt>::iterator iter;
+      for (iter = result.begin(); iter != result.end(); ++iter) {
+        string name = iter->first;
+
+        formatter->open_object_section("object");
+        formatter->dump_string("name", iter->first);
+        formatter->dump_int("size", iter->second.size);
+        utime_t ut(iter->second.mtime, 0);
+        ut.gmtime(formatter->dump_stream("mtime"));
+
+        rgw_obj obj(bucket, name);
+        r = store->rewrite_obj(obj);
+        if (r == 0) {
+          formatter->dump_string("status", "Success");
+        } else {
+          formatter->dump_string("status", cpp_strerror(-r));
+        }
+
+        formatter->close_section();
+        formatter->flush(cout);
+      }
+    }
+    formatter->close_section();
+    formatter->close_section();
+    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT_OBJECT_UNLINK) {
