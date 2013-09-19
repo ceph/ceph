@@ -165,7 +165,7 @@ def ship_utilities(ctx, config):
             f.seek(0)
 
     FILES = ['daemon-helper', 'adjust-ulimits', 'kcon_most']
-    destdir = '/usr/local/bin'
+    destdir = '/usr/bin'
     for filename in FILES:
         log.info('Shipping %r...', filename)
         src = os.path.join(os.path.dirname(__file__), filename)
