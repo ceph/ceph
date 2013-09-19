@@ -10942,7 +10942,7 @@ void MDCache::merge_dir(CInode *diri, frag_t frag)
   dout(10) << " we are merginb by " << bits << " bits" << dendl;
 
   C_GatherBuilder gather(g_ceph_context,
-	  new C_MDC_FragmentFrozen(this, dirs, frag, bits));
+	  new C_MDC_FragmentFrozen(this, dirs, frag, -bits));
   fragment_freeze_dirs(dirs, gather);
   gather.activate();
 
