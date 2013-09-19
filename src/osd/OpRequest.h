@@ -78,6 +78,7 @@ public:
   ~OpRequest() {
     assert(request);
     request->put();
+    request = NULL;
   }
 
   bool been_queued_for_pg() { return hit_flag_points & flag_queued_for_pg; }
