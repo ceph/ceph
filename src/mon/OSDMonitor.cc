@@ -2154,7 +2154,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 				osdmap.get_inst(i));
 	}
       r = 0;
-      ss << " instructed to " << whostr;
+      ss << " instructed to " << pvec.back();
     } else {
       long osd = parse_osd_id(whostr.c_str(), &ss);
       if (osd < 0) {
