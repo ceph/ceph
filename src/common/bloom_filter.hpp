@@ -19,8 +19,8 @@
 */
 
 
-#ifndef INCLUDE_BLOOM_FILTER_HPP
-#define INCLUDE_BLOOM_FILTER_HPP
+#ifndef COMMON_BLOOM_FILTER_HPP
+#define COMMON_BLOOM_FILTER_HPP
 
 #include <cstddef>
 #include <algorithm>

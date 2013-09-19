@@ -18,7 +18,6 @@ rados_include_DATA = \
 	$(srcdir)/include/crc32c.h
 
 noinst_HEADERS += \
-	include/bloom_filter.hpp \
 	include/Context.h \
 	include/CompatSet.h \
 	include/Distribution.h \
