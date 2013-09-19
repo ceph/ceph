@@ -2,61 +2,49 @@
  Configuring Federated Gateways
 ================================
 
-To deploy federated Ceph Object Gateways, you must have at least one :term:`Ceph
-Storage Cluster` running.  For each :term:`Ceph Node` that runs a :term:`Ceph
-Object Gateway`, you must install Apache, FastCGI and the Ceph Object Gateway
-daemon (``radosgw``). See `Install Apache, FastCGI and Gateway`_ for details.
+.. versionadded:: 0.69
 
-Introduction
-============
-
-Configuring a :term:`Ceph Object Store` service involves the scope and 
-configuration of the overall service, and configuring each gateway 
-instance to use the Ceph Storage Cluster.
-
-.. versionadded:: 0.67
-
-Ceph Object Gateway v0.67 (Dumpling) and beyond supports regions and zones.
+In Ceph version 0.69 and beyond, you may configure Ceph Object Gateways in a
+federated architecture, spanning multiple geographic regions (read affinity and
+failover), and with multiple zones within a region (disaster recovery).
 
 - **Region**: A region represents a geographical area and contains one
-  or more zones. A cluster with multiple regions must specify a default region.
+  or more zones. A cluster with multiple regions must specify a master region.
   
 - **Zone**: A zone is a logical grouping of one or more Ceph Object Gateway 
-  instance(s). A region has a master zone that processes client requests. 
-  **Note**: Replicating data between multiple zones in a region requires the 
-  data synchronization agent of Ceph v0.69 and beyond.
-  
-Small Ceph Object Storage clusters typically use the default region and zone.
-You may skip configuring regions and zones for small clusters and proceed with
-the `Simple Configuration`_ guide. 
+  instance(s). A region has a master zone that processes client requests.
 
-A large, geographically distributed Ceph Object Storage service may define
-multiple regions within the cluster and at least one zone within each region.
-**Note:** You may create zones in Ceph v0.67, but they are not useful without
-the data synchronization agent released in Ceph v0.69. If you plan to deploy a
-geographically distributed service, create at least one zone and region first 
-so that you may associate individual Ceph Object Gateway instances with a zone 
-and region.
-
-Once you have addressed whether or not to configure regions and zones, you must
-configure each instance of a :term:`Ceph Object Gateway` to use the Ceph 
-Storage Cluster as the data storage backend.
-
-Configuring Regions and Zones
-=============================
+.. image:: ../images/region-zone-sync.png
 
 When you deploy a :term:`Ceph Object Store` service that spans geographical
 locales, configuring Ceph Object Gateway regions and metadata synchronization
-agents enables the service to maintain a global namespace for the cluster, even
-though Ceph Object Gateway instances run in different geographic locales.
-
-.. versionadded:: 0.69
+agents enables the service to maintain a global namespace, even though Ceph
+Object Gateway instances run in different geographic locales and potentially
+on different Ceph Storage Clusters.
 
 When you separate one or more Ceph Object Gateway instances within a region into
 separate logical containers to maintain an extra copy (or copies) of the data,
 configuring Ceph Object Gateway zones and data synchronization agents enables
 the service to maintain one or more copy(ies) of the master zone's data. Extra
 copies of the data are important for failover, backup and disaster recovery.
+
+You may deploy a single Ceph Storage Cluster with a federated architecture
+if you have low latency network connections (this isn't recommended). You may
+also deploy one Ceph Storage Cluster per region with a separate set of 
+pools for each zone (typical). You may also deploy a separate Ceph Storage
+Cluster for each zone if your requirements and resources warrant this level
+of redundancy.
+
+Once you configure regions and zones, you must configure each instance of a
+:term:`Ceph Object Gateway` to use the Ceph  Storage Cluster as the data storage
+backend.
+
+Configuring Regions and Zones
+=============================
+
+For each :term:`Ceph Node` that runs a :term:`Ceph
+Object Gateway`, you must install Apache, FastCGI and the Ceph Object Gateway
+daemon (``radosgw``). See `Install Apache, FastCGI and Gateway`_ for details.
 
 
 Default Region and Zone
@@ -66,6 +54,7 @@ The Ceph Object Gateway can generate its own default gateway and zone. These
 defaults are the master region and master zone for a cluster. When you configure
 your cluster for regions and zones, you will be replacing (and likely deleting,
 if it exists) the default region and zone.
+
 
 Create a Region
 ---------------
