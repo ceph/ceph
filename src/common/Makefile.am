@@ -97,6 +97,7 @@ LIBCOMMON_DEPS += libcommon_crc.la
 noinst_LTLIBRARIES += libcommon_crc.la
 
 noinst_HEADERS += \
+	common/bloom_filter.hpp \
 	common/sctp_crc32.h \
 	common/crc32c_intel_baseline.h \
 	common/crc32c_intel_fast.h

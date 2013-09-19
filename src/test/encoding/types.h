@@ -4,7 +4,7 @@ TYPE(CompatSet)
 #include "include/filepath.h"
 TYPE(filepath)
 
-#include "include/bloom_filter.hpp"
+#include "common/bloom_filter.hpp"
 TYPE(bloom_filter)
 
 #include "common/snap_types.h"
