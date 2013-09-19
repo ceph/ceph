@@ -1851,7 +1851,8 @@ CDir::map_t::iterator CDir::_commit_partial(ObjectOperation& m,
 	try_trim_snap_dentry(dn, *snaps))
       continue;
 
-    if (!dn->is_dirty())
+    if (!dn->is_dirty() &&
+	(!dn->state_test(CDentry::STATE_FRAGMENTING) || dn->get_linkage()->is_null()))
       continue;  // skip clean dentries
 
     if (dn->get_linkage()->is_null()) {
@@ -1995,7 +1996,8 @@ void CDir::_commit(version_t want)
   unsigned max_write_size = cache->max_dir_commit_size;
 
   if (is_complete() &&
-      (num_dirty > (num_head_items*g_conf->mds_dir_commit_ratio))) {
+      ((num_dirty > (num_head_items*g_conf->mds_dir_commit_ratio)) ||
+       state_test(CDir::STATE_FRAGMENTING))) {
     fnode.snap_purged_thru = realm->get_last_destroyed();
     committed_dn = _commit_full(m, snaps, max_write_size);
   } else {
