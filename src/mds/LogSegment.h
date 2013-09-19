@@ -56,6 +56,7 @@ class LogSegment {
 
   map<int, hash_set<version_t> > pending_commit_tids;  // mdstable
   set<metareqid_t> uncommitted_masters;
+  set<dirfrag_t> uncommitted_fragments;
 
   // client request ids
   map<int, tid_t> last_client_tids;

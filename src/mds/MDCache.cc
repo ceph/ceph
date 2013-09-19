@@ -11177,7 +11177,7 @@ void MDCache::dispatch_fragment_dir(MDRequest *mdr)
   mdr->ls->dirty_dirfrag_dirfragtree.push_back(&diri->item_dirty_dirfrag_dirfragtree);
   mdr->add_updated_lock(&diri->dirfragtreelock);
 
-  add_uncommitted_fragment(dirfrag_t(diri->ino(), info.basefrag), info.bits, old_frags);
+  add_uncommitted_fragment(dirfrag_t(diri->ino(), info.basefrag), info.bits, old_frags, mdr->ls);
   mds->mdlog->submit_entry(le, new C_MDC_FragmentPrep(this, mdr));
   mds->mdlog->flush();
 }
@@ -11364,13 +11364,16 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
   notify->put();
 }
 
-void MDCache::add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, list<frag_t>& old_frags)
+void MDCache::add_uncommitted_fragment(dirfrag_t basedirfrag, int bits,
+				       list<frag_t>& old_frags, LogSegment *ls)
 {
   dout(10) << "add_uncommitted_fragment: base dirfrag " << basedirfrag << " bits " << bits << dendl;
   assert(!uncommitted_fragments.count(basedirfrag));
   ufragment& uf = uncommitted_fragments[basedirfrag];
   uf.old_frags.swap(old_frags);
   uf.bits = bits;
+  uf.ls = ls;
+  ls->uncommitted_fragments.insert(basedirfrag);
 }
 
 void MDCache::finish_uncommitted_fragment(dirfrag_t basedirfrag, int op)
@@ -11379,10 +11382,13 @@ void MDCache::finish_uncommitted_fragment(dirfrag_t basedirfrag, int op)
 	   << " op " << EFragment::op_name(op) << dendl;
   if (uncommitted_fragments.count(basedirfrag)) {
     ufragment& uf = uncommitted_fragments[basedirfrag];
-    if (op != EFragment::OP_FINISH && !uf.old_frags.empty())
+    if (op != EFragment::OP_FINISH && !uf.old_frags.empty()) {
       uf.committed = true;
-    else
+    } else {
+      uf.ls->uncommitted_fragments.erase(basedirfrag);
+      mds->queue_waiters(uf.waiters);
       uncommitted_fragments.erase(basedirfrag);
+    }
   }
 }
 
@@ -11395,8 +11401,10 @@ void MDCache::rollback_uncommitted_fragment(dirfrag_t basedirfrag, list<frag_t>&
     if (!uf.old_frags.empty()) {
       uf.old_frags.swap(old_frags);
       uf.committed = true;
-    } else
+    } else {
+      uf.ls->uncommitted_fragments.erase(basedirfrag);
       uncommitted_fragments.erase(basedirfrag);
+    }
   }
 }
 

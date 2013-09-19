@@ -119,6 +119,14 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
     mds->mdcache->wait_for_uncommitted_master(*p, gather_bld.new_sub());
   }
 
+  // uncommitted fragments
+  for (set<dirfrag_t>::iterator p = uncommitted_fragments.begin();
+       p != uncommitted_fragments.end();
+       ++p) {
+    dout(10) << "try_to_expire waiting for uncommitted fragment " << *p << dendl;
+    mds->mdcache->wait_for_uncommitted_fragment(*p, gather_bld.new_sub());
+  }
+
   // nudge scatterlocks
   for (elist<CInode*>::iterator p = dirty_dirfrag_dir.begin(); !p.end(); ++p) {
     CInode *in = *p;
@@ -2390,7 +2398,7 @@ void EFragment::replay(MDS *mds)
 
   switch (op) {
   case OP_PREPARE:
-    mds->mdcache->add_uncommitted_fragment(dirfrag_t(ino, basefrag), bits, orig_frags);
+    mds->mdcache->add_uncommitted_fragment(dirfrag_t(ino, basefrag), bits, orig_frags, _segment);
     // fall-thru
   case OP_ONESHOT:
     if (in)
