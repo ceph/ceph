@@ -4,6 +4,9 @@ TYPE(CompatSet)
 #include "include/filepath.h"
 TYPE(filepath)
 
+#include "include/bloom_filter.hpp"
+TYPE(bloom_filter)
+
 #include "common/snap_types.h"
 TYPE(SnapContext)
 TYPE(SnapRealmInfo)
