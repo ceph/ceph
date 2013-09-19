@@ -30,6 +30,7 @@
 #include "common/bloom_filter.hpp"
 #include "common/hobject.h"
 #include "common/snap_types.h"
+#include "HitSet.h"
 #include "Watch.h"
 #include "OpRequest.h"
 
@@ -809,13 +810,16 @@ public:
   int64_t write_tier;      ///< pool/tier for objecter to direct writes to
   cache_mode_t cache_mode;  ///< cache pool mode
 
-
   bool is_tier() const { return tier_of >= 0; }
   void clear_tier() { tier_of = -1; }
   bool has_read_tier() const { return read_tier >= 0; }
   void clear_read_tier() { read_tier = -1; }
   bool has_write_tier() const { return write_tier >= 0; }
   void clear_write_tier() { write_tier = -1; }
+
+  HitSet::Params hit_set_params; ///< The HitSet params to use on this pool
+  uint32_t hit_set_period;      ///< periodicity of HitSet segments (seconds)
+  uint32_t hit_set_count;       ///< number of periods to retain
 
   pg_pool_t()
     : flags(0), type(0), size(0), min_size(0),
@@ -828,7 +832,10 @@ public:
       quota_max_bytes(0), quota_max_objects(0),
       pg_num_mask(0), pgp_num_mask(0),
       tier_of(-1), read_tier(-1), write_tier(-1),
-      cache_mode(CACHEMODE_NONE)
+      cache_mode(CACHEMODE_NONE),
+      hit_set_params(),
+      hit_set_period(0),
+      hit_set_count(0)
   { }
 
   void dump(Formatter *f) const;

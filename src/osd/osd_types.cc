@@ -709,6 +709,11 @@ void pg_pool_t::dump(Formatter *f) const
     f->dump_string(name.c_str(), i->second);
   }
   f->close_section();
+  f->open_object_section("hit_set_params");
+  hit_set_params.dump(f);
+  f->close_section(); // hit_set_params
+  f->dump_unsigned("hit_set_period", hit_set_period);
+  f->dump_unsigned("hit_set_count", hit_set_count);
 }
 
 
@@ -931,7 +936,8 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(10, 5, bl);
+  __u8 encode_compat = 5;
+  ENCODE_START(11, encode_compat, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -959,12 +965,17 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(read_tier, bl);
   ::encode(write_tier, bl);
   ::encode(properties, bl);
-  ENCODE_FINISH(bl);
+  if (hit_set_params.get_type() != HitSet::TYPE_NONE)
+    encode_compat = MAX(encode_compat, 11); // need to be able to understand all the data!
+  ::encode(hit_set_params, bl);
+  ::encode(hit_set_period, bl);
+  ::encode(hit_set_count, bl);
+  ENCODE_FINISH_NEW_COMPAT(bl, encode_compat);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(11, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -1029,6 +1040,15 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 10) {
     ::decode(properties, bl);
   }
+  if (struct_v >= 11) {
+    ::decode(hit_set_params, bl);
+    ::decode(hit_set_period, bl);
+    ::decode(hit_set_count, bl);
+  } else {
+    pg_pool_t def;
+    hit_set_period = def.hit_set_period;
+    hit_set_count = def.hit_set_count;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
 }
@@ -1072,6 +1092,9 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.write_tier = 1;
   a.properties["p-1"] = "v-1";
   a.properties["empty"] = string();
+  a.hit_set_params = HitSet::Params(new BloomHitSet::Params);
+  a.hit_set_period = 3600;
+  a.hit_set_count = 8;
   o.push_back(new pg_pool_t(a));
 }
 
@@ -1104,6 +1127,11 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
     out << " write_tier " << p.write_tier;
   if (p.cache_mode)
     out << " cache_mode " << p.get_cache_mode_name();
+  if (p.hit_set_params.get_type() != HitSet::TYPE_NONE) {
+    out << " hit_set (" << p.hit_set_params
+	<< ") " << p.hit_set_period << "s"
+	<< " x" << p.hit_set_count;
+  }
   return out;
 }
 
