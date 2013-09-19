@@ -5468,10 +5468,10 @@ void ReplicatedPG::kick_object_context_blocked(ObjectContextRef obc)
     return;
   }
 
-  list<OpRequestRef>& ls = waiting_for_blocked_object[soid];
+  list<OpRequestRef>& ls = p->second;
   dout(10) << __func__ << " " << soid << " requeuing " << ls.size() << " requests" << dendl;
   requeue_ops(ls);
-  waiting_for_blocked_object.erase(soid);
+  waiting_for_blocked_object.erase(p);
 }
 
 SnapSetContext *ReplicatedPG::create_snapset_context(const object_t& oid)
