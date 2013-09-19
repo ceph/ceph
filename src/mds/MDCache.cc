@@ -11125,9 +11125,12 @@ void MDCache::dispatch_fragment_dir(MDRequest *mdr)
 			        info.basefrag, info.bits);
   mds->mdlog->start_entry(le);
 
-  list<frag_t> old_frags;
-  for (list<CDir*>::iterator p = info.dirs.begin(); p != info.dirs.end(); ++p)
-    old_frags.push_back((*p)->get_frag());
+  for (list<CDir*>::iterator p = info.dirs.begin(); p != info.dirs.end(); ++p) {
+    CDir *dir = *p;
+    dirfrag_rollback rollback;
+    rollback.fnode = dir->fnode;
+    le->add_orig_frag(dir->get_frag(), &rollback);
+  }
 
   // refragment
   list<Context*> waiters;
@@ -11136,6 +11139,9 @@ void MDCache::dispatch_fragment_dir(MDRequest *mdr)
   if (g_conf->mds_debug_frag)
     diri->verify_dirfrags();
   mds->queue_waiters(waiters);
+
+  for (list<frag_t>::iterator p = le->orig_frags.begin(); p != le->orig_frags.end(); ++p)
+    assert(!diri->dirfragtree.is_leaf(*p));
 
   le->metablob.add_dir_context(*info.resultfrags.begin());
 
@@ -11172,7 +11178,7 @@ void MDCache::dispatch_fragment_dir(MDRequest *mdr)
     dir->commit(0, gather.new_sub(), true);  // ignore authpinnability
   }
 
-  add_uncommitted_fragment(dirfrag_t(diri->ino(), info.basefrag), info.bits, old_frags);
+  add_uncommitted_fragment(dirfrag_t(diri->ino(), info.basefrag), info.bits, le->orig_frags);
   mds->mdlog->submit_entry(le, gather.new_sub());
   mds->mdlog->flush();
   gather.activate();
@@ -11328,13 +11334,16 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
   notify->put();
 }
 
-void MDCache::add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, list<frag_t>& old_frags)
+void MDCache::add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, list<frag_t>& old_frags,
+				       bufferlist *rollback)
 {
   dout(10) << "add_uncommitted_fragment: base dirfrag " << basedirfrag << " bits " << bits << dendl;
   assert(!uncommitted_fragments.count(basedirfrag));
   ufragment& uf = uncommitted_fragments[basedirfrag];
   uf.old_frags = old_frags;
   uf.bits = bits;
+  if (rollback)
+    uf.rollback.swap(*rollback);
 }
 
 void MDCache::finish_uncommitted_fragment(dirfrag_t basedirfrag)
@@ -11355,14 +11364,59 @@ void MDCache::rollback_uncommitted_fragments()
     CInode *diri = get_inode(p->first.ino);
     assert(diri);
     dout(10) << " rolling back " << p->first << " refragment by " << uf.bits << " bits" << dendl;
+
+    LogSegment *ls = mds->mdlog->get_current_segment();
+    EFragment *le = new EFragment(mds->mdlog, EFragment::OP_ROLLBACK, diri->ino(), p->first.frag, uf.bits);
+    mds->mdlog->start_entry(le);
+
     list<CDir*> resultfrags;
-    list<Context*> waiters;
-    adjust_dir_fragments(diri, p->first.frag, -uf.bits, resultfrags, waiters, true);
+    if (uf.old_frags.empty()) {
+      // created by old format EFragment
+      list<Context*> waiters;
+      adjust_dir_fragments(diri, p->first.frag, -uf.bits, resultfrags, waiters, true);
+    } else {
+      bufferlist::iterator bp = uf.rollback.begin();
+      for (list<frag_t>::iterator q = uf.old_frags.begin(); q != uf.old_frags.end(); ++q) {
+	CDir *dir = force_dir_fragment(diri, *q);
+	resultfrags.push_back(dir);
+
+	dirfrag_rollback rollback;
+	::decode(rollback, bp);
+
+	dir->set_version(rollback.fnode.version);
+	dir->fnode = rollback.fnode;
+
+	dir->_mark_dirty(ls);
+
+	if (!(dir->fnode.rstat == dir->fnode.accounted_rstat)) {
+	  dout(10) << "    dirty nestinfo on " << *dir << dendl;
+	  mds->locker->mark_updated_scatterlock(&dir->inode->nestlock);
+	  ls->dirty_dirfrag_nest.push_back(&dir->inode->item_dirty_dirfrag_nest);
+	  dir->get_inode()->nestlock.mark_dirty();
+	}
+	if (!(dir->fnode.fragstat == dir->fnode.accounted_fragstat)) {
+	  dout(10) << "    dirty fragstat on " << *dir << dendl;
+	  mds->locker->mark_updated_scatterlock(&dir->inode->filelock);
+	  ls->dirty_dirfrag_dir.push_back(&dir->inode->item_dirty_dirfrag_dir);
+	  dir->get_inode()->filelock.mark_dirty();
+	}
+
+	le->add_orig_frag(dir->get_frag());
+	le->metablob.add_dir_context(dir);
+	le->metablob.add_dir(dir, true);
+      }
+    }
+
     if (g_conf->mds_debug_frag)
       diri->verify_dirfrags();
 
-    EFragment *le = new EFragment(mds->mdlog, EFragment::OP_ROLLBACK, diri->ino(), p->first.frag, uf.bits);
-    mds->mdlog->start_submit_entry(le);
+    for (list<CDir*>::iterator q = resultfrags.begin(); q != resultfrags.end(); ++q) {
+      CDir *dir = *q;
+      dir->auth_pin(this);
+      dir->state_set(CDir::STATE_FRAGMENTING);
+    }
+
+    mds->mdlog->submit_entry(le);
   }
   uncommitted_fragments.clear();
 }
