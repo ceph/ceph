@@ -19,6 +19,7 @@
 
 #include <include/utime.h>
 #include "common/Mutex.h"
+#include "include/histogram.h"
 #include "include/xlist.h"
 #include "msg/Message.h"
 #include <tr1/memory>
