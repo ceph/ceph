@@ -702,6 +702,10 @@ void pg_pool_t::dump(Formatter *f) const
     f->dump_string(name.c_str(), i->second);
   }
   f->close_section();
+  f->dump_string("hit_set_type", HitSet::get_type_name(hit_set_type));
+  f->dump_unsigned("hit_set_false_positive_probability", get_hit_set_fpp());
+  f->dump_unsigned("hit_set_period", hit_set_period);
+  f->dump_unsigned("hit_set_count", hit_set_count);
 }
 
 
@@ -924,7 +928,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(10, 5, bl);
+  ENCODE_START(11, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -952,12 +956,17 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(read_tier, bl);
   ::encode(write_tier, bl);
   ::encode(properties, bl);
+  c = hit_set_type;
+  ::encode(c, bl);
+  ::encode(hit_set_fpp_micro, bl);
+  ::encode(hit_set_period, bl);
+  ::encode(hit_set_count, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(11, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -1022,6 +1031,20 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 10) {
     ::decode(properties, bl);
   }
+  if (struct_v >= 11) {
+    __u8 v;
+    ::decode(v, bl);
+    hit_set_type = (HitSet::type_t)v;
+    ::decode(hit_set_fpp_micro, bl);
+    ::decode(hit_set_period, bl);
+    ::decode(hit_set_count, bl);
+  } else {
+    pg_pool_t def;
+    hit_set_type = HitSet::TYPE_NONE;
+    hit_set_fpp_micro = def.hit_set_fpp_micro;
+    hit_set_period = def.hit_set_period;
+    hit_set_count = def.hit_set_count;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
 }
@@ -1065,6 +1088,10 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.write_tier = 1;
   a.properties["p-1"] = "v-1";
   a.properties["empty"] = string();
+  a.hit_set_type = HitSet::TYPE_BLOOM;
+  a.hit_set_fpp_micro = 6000;
+  a.hit_set_period = 3600;
+  a.hit_set_count = 8;
   o.push_back(new pg_pool_t(a));
 }
 
@@ -1097,6 +1124,12 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
     out << " write_tier " << p.write_tier;
   if (p.cache_mode)
     out << " cache_mode " << p.get_cache_mode_name();
+  if (p.hit_set_type != HitSet::TYPE_NONE) {
+    out << " hit_set " << HitSet::get_type_name(p.hit_set_type)
+	<< " " << p.hit_set_period << "s"
+	<< " " << p.get_hit_set_fpp() << "%"
+	<< " x" << p.hit_set_count;
+  }
   return out;
 }
 
