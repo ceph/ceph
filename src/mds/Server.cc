@@ -2735,13 +2735,15 @@ void Server::handle_client_readdir(MDRequest *mdr)
 
   // which frag?
   frag_t fg = (__u32)req->head.args.readdir.frag;
-  dout(10) << " frag " << fg << dendl;
+  string offset_str = req->get_path2();
+  dout(10) << " frag " << fg << " offset '" << offset_str << "'" << dendl;
 
   // does the frag exist?
   if (diri->dirfragtree[fg.value()] != fg) {
-    dout(10) << "frag " << fg << " doesn't appear in fragtree " << diri->dirfragtree << dendl;
-    reply_request(mdr, -EAGAIN);
-    return;
+    frag_t newfg = diri->dirfragtree[fg.value()];
+    dout(10) << " adjust frag " << fg << " -> " << newfg << " " << diri->dirfragtree << dendl;
+    fg = newfg;
+    offset_str.clear();
   }
   
   CDir *dir = try_open_auth_dirfrag(diri, fg, mdr);
@@ -2770,12 +2772,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   mdr->now = ceph_clock_now(g_ceph_context);
 
   snapid_t snapid = mdr->snapid;
-
-  string offset_str = req->get_path2();
-  const char *offset = offset_str.length() ? offset_str.c_str() : 0;
-
-  dout(10) << "snapid " << snapid << " offset '" << offset_str << "'" << dendl;
-
+  dout(10) << "snapid " << snapid << dendl;
 
   // purge stale snap data?
   const set<snapid_t> *snaps = 0;
@@ -2831,7 +2828,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
       continue;
     }
 
-    if (offset && strcmp(dn->get_name().c_str(), offset) <= 0)
+    if (!offset_str.empty() && dn->get_name().compare(offset_str) <= 0)
       continue;
 
     CInode *in = dnl->get_inode();
@@ -2901,7 +2898,7 @@ void Server::handle_client_readdir(MDRequest *mdr)
   }
   
   __u8 end = (it == dir->end());
-  __u8 complete = (end && !offset);  // FIXME: what purpose does this serve
+  __u8 complete = (end && offset_str.empty());  // FIXME: what purpose does this serve
   
   // finish final blob
   ::encode(numfiles, dirbl);
