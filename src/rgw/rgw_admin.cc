@@ -1817,6 +1817,14 @@ next:
   }
 
   if (opt_cmd == OPT_OBJECT_REWRITE) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    if (object.empty()) {
+      cerr << "ERROR: object not specified" << std::endl;
+      return EINVAL;
+    }
     int ret = init_bucket(bucket_name, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
@@ -1828,7 +1836,7 @@ next:
 
     if (ret < 0) {
       cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
-      return 1;
+      return -ret;
     }
   }
 
