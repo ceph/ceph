@@ -946,6 +946,14 @@ public:
   set< pair<dirfrag_t,int> > uncommitted_fragments;  // prepared but uncommitted refragmentations
 
 private:
+  struct fragment_info_t {
+    frag_t basefrag;
+    int bits;
+    list<CDir*> dirs;
+    list<CDir*> resultfrags;
+  };
+  map<metareqid_t, fragment_info_t> fragment_requests;
+
   void adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
 			    list<CDir*>& frags, list<Context*>& waiters, bool replay);
   void adjust_dir_fragments(CInode *diri,
@@ -960,7 +968,6 @@ private:
 
   friend class EFragment;
 
-  bool can_fragment_lock(CInode *diri);
   bool can_fragment(CInode *diri, list<CDir*>& dirs);
 
 public:
@@ -972,7 +979,8 @@ private:
   void fragment_mark_and_complete(list<CDir*>& dirs);
   void fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits);
   void fragment_unmark_unfreeze_dirs(list<CDir*>& dirs);
-  void fragment_logged_and_stored(Mutation *mut, list<CDir*>& resultfrags, frag_t basefrag, int bits);
+  void dispatch_fragment_dir(MDRequest *mdr);
+  void fragment_logged_and_stored(MDRequest *mdr);
 public:
   void rollback_uncommitted_fragments();
 private:
