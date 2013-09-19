@@ -217,6 +217,7 @@ enum {
   OPT_OBJECT_RM,
   OPT_OBJECT_UNLINK,
   OPT_OBJECT_STAT,
+  OPT_OBJECT_REWRITE,
   OPT_QUOTA_SET,
   OPT_QUOTA_ENABLE,
   OPT_QUOTA_DISABLE,
@@ -373,6 +374,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_OBJECT_UNLINK;
     if (strcmp(cmd, "stat") == 0)
       return OPT_OBJECT_STAT;
+    if (strcmp(cmd, "rewrite") == 0)
+      return OPT_OBJECT_REWRITE;
   } else if (strcmp(prev_cmd, "region") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_REGION_GET;
@@ -1810,6 +1813,22 @@ next:
     if (ret < 0) {
       cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
       return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT_OBJECT_REWRITE) {
+    int ret = init_bucket(bucket_name, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    rgw_obj obj(bucket, object);
+    ret = store->rewrite_obj(obj);
+
+    if (ret < 0) {
+      cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
+      return 1;
     }
   }
 
