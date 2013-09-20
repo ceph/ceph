@@ -14,7 +14,6 @@ avail yourself of help by getting involved in the Ceph community.
 .. toctree::
 
    Preflight <quick-start-preflight>
-   Get Involved <get-involved>
 
 .. raw:: html 
 
