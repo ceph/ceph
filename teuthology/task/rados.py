@@ -70,7 +70,6 @@ def task(ctx, config):
         '--op', 'setattr', str(op_weights.get('setattr', 0)),
         '--op', 'rmattr', str(op_weights.get('rmattr', 0)),
         '--op', 'watch', str(op_weights.get('watch', 0)),
-        '--op', 'copy_from', str(op_weights.get('copy_from', 0)),
         '--max-ops', str(config.get('ops', 10000)),
         '--objects', str(config.get('objects', 500)),
         '--max-in-flight', str(config.get('max_in_flight', 16)),
@@ -79,6 +78,10 @@ def task(ctx, config):
         '--max-stride-size', str(config.get('max_stride_size', object_size / 5)),
         '--max-seconds', str(config.get('max_seconds', 0))
         ]
+    if 'copy_from' in op_weights:
+        args.extend([
+                '--op', 'copy_from', str(op_weights.get('copy_from', 0))
+                ])
 
     def thread():
         if not hasattr(ctx, 'manager'):
