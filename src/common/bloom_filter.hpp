@@ -131,6 +131,17 @@ public:
     inserted_element_count_ = 0;
   }
 
+  inline void insert(uint32_t val) {
+    std::size_t bit_index = 0;
+    std::size_t bit = 0;
+    for (std::size_t i = 0; i < salt_.size(); ++i)
+    {
+      compute_indices(hash_ap(val,salt_[i]),bit_index,bit);
+      bit_table_[bit_index / bits_per_char] |= bit_mask[bit];
+    }
+    ++inserted_element_count_;
+  }
+
   inline void insert(const unsigned char* key_begin, const std::size_t& length)
   {
     std::size_t bit_index = 0;
@@ -168,6 +179,21 @@ public:
     {
       insert(*(itr++));
     }
+  }
+
+  inline virtual bool contains(uint32_t val) const
+  {
+    std::size_t bit_index = 0;
+    std::size_t bit = 0;
+    for (std::size_t i = 0; i < salt_.size(); ++i)
+    {
+      compute_indices(hash_ap(val,salt_[i]),bit_index,bit);
+      if ((bit_table_[bit_index / bits_per_char] & bit_mask[bit]) != bit_mask[bit])
+      {
+        return false;
+      }
+    }
+    return true;
   }
 
   inline virtual bool contains(const unsigned char* key_begin, const std::size_t length) const
@@ -423,6 +449,15 @@ protected:
     size_t t = static_cast<std::size_t>(min_m);
     t += (((t % bits_per_char) != 0) ? (bits_per_char - (t % bits_per_char)) : 0);
     *table_size = t;
+  }
+
+  inline bloom_type hash_ap(uint32_t val, bloom_type hash) const
+  {
+    hash ^=    (hash <<  7) ^  ((val & 0xff000000) >> 24) * (hash >> 3);
+    hash ^= (~((hash << 11) + (((val & 0xff0000) >> 16) ^ (hash >> 5))));
+    hash ^=    (hash <<  7) ^  ((val & 0xff00) >> 8) * (hash >> 3);
+    hash ^= (~((hash << 11) + (((val & 0xff)) ^ (hash >> 5))));
+    return hash;
   }
 
   inline bloom_type hash_ap(const unsigned char* begin, std::size_t remaining_length, bloom_type hash) const
