@@ -324,7 +324,8 @@ int FileStore::lfn_unlink(coll_t cid, const hobject_t& o,
 	assert(!m_filestore_fail_eio || r != -EIO);
 	return r;
       }
-      force_clear_omap = true;
+      if (st.st_nlink == 1)
+	force_clear_omap = true;
     }
     if (force_clear_omap) {
       dout(20) << __func__ << ": clearing omap on " << o
