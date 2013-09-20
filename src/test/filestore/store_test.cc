@@ -51,9 +51,9 @@ public:
   }
 };
 
-bool sorted(const vector<hobject_t> &in) {
-  hobject_t start;
-  for (vector<hobject_t>::const_iterator i = in.begin();
+bool sorted(const vector<ghobject_t> &in) {
+  ghobject_t start;
+  for (vector<ghobject_t>::const_iterator i = in.begin();
        i != in.end();
        ++i) {
     if (start > *i) return false;
@@ -105,7 +105,7 @@ TEST_F(StoreTest, SimpleObjectTest) {
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
   }
-  hobject_t hoid(sobject_t("Object 1", CEPH_NOSNAP));
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
   {
     ObjectStore::Transaction t;
     t.touch(cid, hoid);
@@ -133,7 +133,7 @@ TEST_F(StoreTest, SimpleObjectLongnameTest) {
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
   }
-  hobject_t hoid(sobject_t("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaObjectaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 1", CEPH_NOSNAP));
+  ghobject_t hoid(hobject_t(sobject_t("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaObjectaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 1", CEPH_NOSNAP)));
   {
     ObjectStore::Transaction t;
     t.touch(cid, hoid);
@@ -157,7 +157,7 @@ TEST_F(StoreTest, ManyObjectTest) {
   coll_t cid("blah");
   string base = "";
   for (int i = 0; i < 100; ++i) base.append("aaaaa");
-  set<hobject_t> created;
+  set<ghobject_t> created;
   {
     ObjectStore::Transaction t;
     t.create_collection(cid);
@@ -171,27 +171,27 @@ TEST_F(StoreTest, ManyObjectTest) {
     ObjectStore::Transaction t;
     char buf[100];
     snprintf(buf, sizeof(buf), "%d", i);
-    hobject_t hoid(sobject_t(string(buf) + base, CEPH_NOSNAP));
+    ghobject_t hoid(hobject_t(sobject_t(string(buf) + base, CEPH_NOSNAP)));
     t.touch(cid, hoid);
     created.insert(hoid);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
   }
 
-  for (set<hobject_t>::iterator i = created.begin();
+  for (set<ghobject_t>::iterator i = created.begin();
        i != created.end();
        ++i) {
     struct stat buf;
     ASSERT_TRUE(!store->stat(cid, *i, &buf));
   }
 
-  set<hobject_t> listed;
-  vector<hobject_t> objects;
+  set<ghobject_t> listed;
+  vector<ghobject_t> objects;
   r = store->collection_list(cid, objects);
   ASSERT_EQ(r, 0);
 
   cerr << "objects.size() is " << objects.size() << std::endl;
-  for (vector<hobject_t> ::iterator i = objects.begin();
+  for (vector<ghobject_t> ::iterator i = objects.begin();
        i != objects.end();
        ++i) {
     listed.insert(*i);
@@ -199,11 +199,11 @@ TEST_F(StoreTest, ManyObjectTest) {
   }
   ASSERT_TRUE(listed.size() == created.size());
 
-  hobject_t start, next;
+  ghobject_t start, next;
   objects.clear();
   r = store->collection_list_partial(
     cid,
-    hobject_t::get_max(),
+    ghobject_t::get_max(),
     50,
     60,
     0,
@@ -234,13 +234,13 @@ TEST_F(StoreTest, ManyObjectTest) {
   }
   cerr << "listed.size() is " << listed.size() << std::endl;
   ASSERT_TRUE(listed.size() == created.size());
-  for (set<hobject_t>::iterator i = listed.begin();
+  for (set<ghobject_t>::iterator i = listed.begin();
        i != listed.end();
        ++i) {
     ASSERT_TRUE(created.count(*i));
   }
 
-  for (set<hobject_t>::iterator i = created.begin();
+  for (set<ghobject_t>::iterator i = created.begin();
        i != created.end();
        ++i) {
     ObjectStore::Transaction t;
@@ -259,7 +259,7 @@ TEST_F(StoreTest, ManyObjectTest) {
 
 class ObjectGenerator {
 public:
-  virtual hobject_t create_object(gen_type *gen) = 0;
+  virtual ghobject_t create_object(gen_type *gen) = 0;
   virtual ~ObjectGenerator() {}
 };
 
@@ -267,7 +267,7 @@ class MixedGenerator : public ObjectGenerator {
 public:
   unsigned seq;
   MixedGenerator() : seq(0) {}
-  hobject_t create_object(gen_type *gen) {
+  ghobject_t create_object(gen_type *gen) {
     char buf[100];
     snprintf(buf, sizeof(buf), "%u", seq);
 
@@ -283,7 +283,7 @@ public:
     // hash
     //boost::binomial_distribution<uint32_t> bin(0xFFFFFF, 0.5);
     ++seq;
-    return hobject_t(name, string(), rand() & 2 ? CEPH_NOSNAP : rand(), rand() & 0xFF, 0, "");
+    return ghobject_t(hobject_t(name, string(), rand() & 2 ? CEPH_NOSNAP : rand(), rand() & 0xFF, 0, ""));
   }
 };
 
@@ -293,8 +293,8 @@ public:
   static const unsigned max_objects = 3000;
   coll_t cid;
   unsigned in_flight;
-  set<hobject_t> available_objects;
-  set<hobject_t> in_use_objects;
+  set<ghobject_t> available_objects;
+  set<ghobject_t> in_use_objects;
   ObjectGenerator *object_gen;
   gen_type *rng;
   ObjectStore *store;
@@ -307,9 +307,9 @@ public:
   public:
     SyntheticWorkloadState *state;
     ObjectStore::Transaction *t;
-    hobject_t hoid;
+    ghobject_t hoid;
     C_SyntheticOnReadable(SyntheticWorkloadState *state,
-			  ObjectStore::Transaction *t, hobject_t hoid)
+			  ObjectStore::Transaction *t, ghobject_t hoid)
       : state(state), t(t), hoid(hoid) {}
 
     void finish(int r) {
@@ -339,14 +339,14 @@ public:
     return store->apply_transaction(t);
   }
 
-  hobject_t get_uniform_random_object() {
+  ghobject_t get_uniform_random_object() {
     while (in_flight >= max_in_flight || available_objects.empty())
       cond.Wait(lock);
     boost::uniform_int<> choose(0, available_objects.size() - 1);
     int index = choose(*rng);
-    set<hobject_t>::iterator i = available_objects.begin();
+    set<ghobject_t>::iterator i = available_objects.begin();
     for ( ; index > 0; --index, ++i) ;
-    hobject_t ret = *i;
+    ghobject_t ret = *i;
     available_objects.erase(i);
     return ret;
   }
@@ -375,7 +375,7 @@ public:
     if (!can_create())
       return -ENOSPC;
     wait_for_ready();
-    hobject_t new_obj = object_gen->create_object(rng);
+    ghobject_t new_obj = object_gen->create_object(rng);
     in_use_objects.insert(new_obj);
     available_objects.erase(new_obj);
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
@@ -388,9 +388,9 @@ public:
     Mutex::Locker locker(lock);
     while (in_flight)
       cond.Wait(lock);
-    vector<hobject_t> objects;
-    set<hobject_t> objects_set, objects_set2;
-    hobject_t next, current;
+    vector<ghobject_t> objects;
+    set<ghobject_t> objects_set, objects_set2;
+    ghobject_t next, current;
     while (1) {
       cerr << "scanning..." << std::endl;
       int r = store->collection_list_partial(cid, current, 50, 100, 
@@ -403,7 +403,7 @@ public:
       current = next;
     }
     ASSERT_EQ(objects_set.size(), available_objects.size());
-    for (set<hobject_t>::iterator i = objects_set.begin();
+    for (set<ghobject_t>::iterator i = objects_set.begin();
 	 i != objects_set.end();
 	 ++i) {
       ASSERT_GT(available_objects.count(*i), (unsigned)0);
@@ -413,7 +413,7 @@ public:
     ASSERT_EQ(r, 0);
     objects_set2.insert(objects.begin(), objects.end());
     ASSERT_EQ(objects_set2.size(), available_objects.size());
-    for (set<hobject_t>::iterator i = objects_set2.begin();
+    for (set<ghobject_t>::iterator i = objects_set2.begin();
 	 i != objects_set2.end();
 	 ++i) {
       ASSERT_GT(available_objects.count(*i), (unsigned)0);
@@ -421,7 +421,7 @@ public:
   }
 
   int stat() {
-    hobject_t hoid;
+    ghobject_t hoid;
     {
       Mutex::Locker locker(lock);
       if (!can_unlink())
@@ -446,7 +446,7 @@ public:
     Mutex::Locker locker(lock);
     if (!can_unlink())
       return -ENOENT;
-    hobject_t to_remove = get_uniform_random_object();
+    ghobject_t to_remove = get_uniform_random_object();
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     t->remove(cid, to_remove);
     ++in_flight;
@@ -505,7 +505,7 @@ TEST_F(StoreTest, HashCollisionTest) {
   }
   string base = "";
   for (int i = 0; i < 100; ++i) base.append("aaaaa");
-  set<hobject_t> created;
+  set<ghobject_t> created;
   for (int n = 0; n < 10; ++n) {
     char nbuf[100];
     sprintf(nbuf, "n%d", n);
@@ -515,7 +515,7 @@ TEST_F(StoreTest, HashCollisionTest) {
     if (!(i % 5)) {
       cerr << "Object n" << n << " "<< i << std::endl;
     }
-    hobject_t hoid(string(buf) + base, string(), CEPH_NOSNAP, 0, 0, string(nbuf));
+    ghobject_t hoid(hobject_t(string(buf) + base, string(), CEPH_NOSNAP, 0, 0, string(nbuf)));
     {
       ObjectStore::Transaction t;
       t.touch(cid, hoid);
@@ -525,21 +525,21 @@ TEST_F(StoreTest, HashCollisionTest) {
     created.insert(hoid);
   }
   }
-  vector<hobject_t> objects;
+  vector<ghobject_t> objects;
   r = store->collection_list(cid, objects);
   ASSERT_EQ(r, 0);
-  set<hobject_t> listed(objects.begin(), objects.end());
+  set<ghobject_t> listed(objects.begin(), objects.end());
   cerr << "listed.size() is " << listed.size() << " and created.size() is " << created.size() << std::endl;
   ASSERT_TRUE(listed.size() == created.size());
   objects.clear();
   listed.clear();
-  hobject_t current, next;
+  ghobject_t current, next;
   while (1) {
     r = store->collection_list_partial(cid, current, 50, 60,
 				       0, &objects, &next);
     ASSERT_EQ(r, 0);
     ASSERT_TRUE(sorted(objects));
-    for (vector<hobject_t>::iterator i = objects.begin();
+    for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
       if (listed.count(*i))
@@ -555,13 +555,13 @@ TEST_F(StoreTest, HashCollisionTest) {
   }
   cerr << "listed.size() is " << listed.size() << std::endl;
   ASSERT_TRUE(listed.size() == created.size());
-  for (set<hobject_t>::iterator i = listed.begin();
+  for (set<ghobject_t>::iterator i = listed.begin();
        i != listed.end();
        ++i) {
     ASSERT_TRUE(created.count(*i));
   }
 
-  for (set<hobject_t>::iterator i = created.begin();
+  for (set<ghobject_t>::iterator i = created.begin();
        i != created.end();
        ++i) {
     ObjectStore::Transaction t;
@@ -576,7 +576,7 @@ TEST_F(StoreTest, HashCollisionTest) {
 
 TEST_F(StoreTest, OMapTest) {
   coll_t cid("blah");
-  hobject_t hoid("tesomap", "", CEPH_NOSNAP, 0, 0, "");
+  ghobject_t hoid(hobject_t("tesomap", "", CEPH_NOSNAP, 0, 0, ""));
   int r;
   {
     ObjectStore::Transaction t;
@@ -672,7 +672,7 @@ TEST_F(StoreTest, OMapTest) {
 
 TEST_F(StoreTest, XattrTest) {
   coll_t cid("blah");
-  hobject_t hoid("tesomap", "", CEPH_NOSNAP, 0, 0, "");
+  ghobject_t hoid(hobject_t("tesomap", "", CEPH_NOSNAP, 0, 0, ""));
   bufferlist big;
   for (unsigned i = 0; i < 10000; ++i) {
     big.append('\0');
@@ -769,12 +769,12 @@ void colsplittest(
     for (uint32_t i = 0; i < 2*num_objects; ++i) {
       stringstream objname;
       objname << "obj" << i;
-      t.touch(cid, hobject_t(
+      t.touch(cid, ghobject_t(hobject_t(
 	  objname.str(),
 	  "",
 	  CEPH_NOSNAP,
 	  i<<common_suffix_size,
-	  0, ""));
+	  0, "")));
     }
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
@@ -788,14 +788,14 @@ void colsplittest(
   }
 
   ObjectStore::Transaction t;
-  vector<hobject_t> objects;
+  vector<ghobject_t> objects;
   r = store->collection_list(cid, objects);
   ASSERT_EQ(r, 0);
   ASSERT_EQ(objects.size(), num_objects);
-  for (vector<hobject_t>::iterator i = objects.begin();
+  for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
-    ASSERT_EQ(!(i->hash & (1<<common_suffix_size)), 0u);
+    ASSERT_EQ(!(i->hobj.hash & (1<<common_suffix_size)), 0u);
     t.remove(cid, *i);
   }
 
@@ -803,10 +803,10 @@ void colsplittest(
   r = store->collection_list(tid, objects);
   ASSERT_EQ(r, 0);
   ASSERT_EQ(objects.size(), num_objects);
-  for (vector<hobject_t>::iterator i = objects.begin();
+  for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
-    ASSERT_EQ(i->hash & (1<<common_suffix_size), 0u);
+    ASSERT_EQ(i->hobj.hash & (1<<common_suffix_size), 0u);
     t.remove(tid, *i);
   }
 
@@ -848,12 +848,12 @@ TEST_F(StoreTest, TwoHash) {
   std::cout << "Making objects" << std::endl;
   for (int i = 0; i < 360; ++i) {
     ObjectStore::Transaction t;
-    hobject_t o;
+    ghobject_t o;
     if (i < 8) {
-      o.hash = (i << 16) | 0xA1;
+      o.hobj.hash = (i << 16) | 0xA1;
       t.touch(cid, o);
     }
-    o.hash = (i << 16) | 0xB1;
+    o.hobj.hash = (i << 16) | 0xB1;
     t.touch(cid, o);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
@@ -861,8 +861,8 @@ TEST_F(StoreTest, TwoHash) {
   std::cout << "Removing half" << std::endl;
   for (int i = 1; i < 8; ++i) {
     ObjectStore::Transaction t;
-    hobject_t o;
-    o.hash = (i << 16) | 0xA1;
+    ghobject_t o;
+    o.hobj.hash = (i << 16) | 0xA1;
     t.remove(cid, o);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
@@ -870,24 +870,24 @@ TEST_F(StoreTest, TwoHash) {
   std::cout << "Checking" << std::endl;
   for (int i = 1; i < 8; ++i) {
     ObjectStore::Transaction t;
-    hobject_t o;
-    o.hash = (i << 16) | 0xA1;
+    ghobject_t o;
+    o.hobj.hash = (i << 16) | 0xA1;
     bool exists = store->exists(cid, o);
     ASSERT_EQ(exists, false);
   }
   {
-    hobject_t o;
-    o.hash = 0xA1;
+    ghobject_t o;
+    o.hobj.hash = 0xA1;
     bool exists = store->exists(cid, o);
     ASSERT_EQ(exists, true);
   }
   std::cout << "Cleanup" << std::endl;
   for (int i = 0; i < 360; ++i) {
     ObjectStore::Transaction t;
-    hobject_t o;
-    o.hash = (i << 16) | 0xA1;
+    ghobject_t o;
+    o.hobj.hash = (i << 16) | 0xA1;
     t.remove(cid, o);
-    o.hash = (i << 16) | 0xB1;
+    o.hobj.hash = (i << 16) | 0xB1;
     t.remove(cid, o);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
