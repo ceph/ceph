@@ -59,11 +59,13 @@ libcls_lock_client_la_SOURCES = \
 	cls/lock/cls_lock_types.cc \
 	cls/lock/cls_lock_ops.cc
 noinst_LTLIBRARIES += libcls_lock_client.la
+DENCODER_DEPS += libcls_lock_client.la
 
 libcls_refcount_client_la_SOURCES = \
 	cls/refcount/cls_refcount_client.cc \
 	cls/refcount/cls_refcount_ops.cc
 noinst_LTLIBRARIES += libcls_refcount_client.la
+DENCODER_DEPS += libcls_refcount_client.la
 
 libcls_version_client_a_SOURCES =  \
 	cls/version/cls_version_client.cc \
@@ -81,12 +83,14 @@ libcls_replica_log_client_a_SOURCES = \
 	cls/replica_log/cls_replica_log_ops.cc \
 	cls/replica_log/cls_replica_log_client.cc
 noinst_LIBRARIES += libcls_replica_log_client.a
+DENCODER_DEPS += libcls_replica_log_client.a
 
 libcls_rgw_client_la_SOURCES = \
 	cls/rgw/cls_rgw_client.cc \
 	cls/rgw/cls_rgw_types.cc \
 	cls/rgw/cls_rgw_ops.cc
 noinst_LTLIBRARIES += libcls_rgw_client.la
+DENCODER_DEPS += libcls_rgw_client.la
 
 libcls_rbd_client_la_SOURCES = cls/rbd/cls_rbd_client.cc
 noinst_LTLIBRARIES += libcls_rbd_client.la
