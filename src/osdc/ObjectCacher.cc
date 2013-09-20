@@ -899,11 +899,10 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
     ob->last_commit_tid = tid;
 
     // waiters?
+    list<Context*> ls;
     if (ob->waitfor_commit.count(tid)) {
-      list<Context*> ls;
       ls.splice(ls.begin(), ob->waitfor_commit[tid]);
       ob->waitfor_commit.erase(tid);
-      finish_contexts(cct, ls, r);
     }
 
     // is the entire object set now clean and fully committed?
@@ -915,6 +914,9 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
 	oset->dirty_or_tx == 0) {        // nothing dirty/tx
       flush_set_callback(flush_set_callback_arg, oset);      
     }
+
+    if (!ls.empty())
+      finish_contexts(cct, ls, r);
   }
 }
 
