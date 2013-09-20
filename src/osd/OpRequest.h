@@ -98,9 +98,6 @@ public:
 /**
  * The OpRequest takes in a Message* and takes over a single reference
  * to it, which it puts() when destroyed.
- * OpRequest is itself ref-counted. The expectation is that you get a Message
- * you want to track, create an OpRequest with it, and then pass around that OpRequest
- * the way you used to pass around the Message.
  */
 struct OpRequest : public TrackedOp {
   friend class OpTracker;
