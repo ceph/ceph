@@ -10,17 +10,18 @@ import tempfile
 import os
 import time
 import textwrap
-
 from argparse import RawTextHelpFormatter
-from teuthology import lockstatus as ls
-from teuthology import misc as teuthology
+
+from .config import config
+from . import lockstatus as ls
+from . import misc as teuthology
 
 log = logging.getLogger(__name__)
 
 def lock_many(ctx, num, machinetype, user=None, description=None):
     if user is None:
         user = teuthology.get_user()
-    success, content, status = ls.send_request('POST', ls._lock_url(ctx),
+    success, content, status = ls.send_request('POST', config.lock_server,
                                     urllib.urlencode(dict(
                 user=user,
                 num=num,
@@ -49,7 +50,7 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
 def lock(ctx, name, user=None, description=None):
     if user is None:
         user = teuthology.get_user()
-    success, _, _ = ls.send_request('POST', ls._lock_url(ctx) + '/' + name,
+    success, _, _ = ls.send_request('POST', config.lock_server + '/' + name,
                               urllib.urlencode(dict(user=user, desc=description)))
     if success:
         log.debug('locked %s as %s', name, user)
@@ -60,7 +61,7 @@ def lock(ctx, name, user=None, description=None):
 def unlock(ctx, name, user=None):
     if user is None:
         user = teuthology.get_user()
-    success, _ , _ = ls.send_request('DELETE', ls._lock_url(ctx) + '/' + name + '?' + \
+    success, _ , _ = ls.send_request('DELETE', config.lock_server + '/' + name + '?' + \
                                   urllib.urlencode(dict(user=user)))
     if success:
         log.debug('unlocked %s', name)
@@ -72,7 +73,7 @@ def unlock(ctx, name, user=None):
     return success
 
 def list_locks(ctx):
-    success, content, _ = ls.send_request('GET', ls._lock_url(ctx))
+    success, content, _ = ls.send_request('GET', config.lock_server)
     if success:
         return json.loads(content)
     return None
@@ -94,7 +95,7 @@ def update_lock(ctx, name, description=None, status=None, sshpubkey=None):
         updated['sshpubkey'] = sshpubkey
 
     if updated:
-        success, _, _ = ls.send_request('PUT', ls._lock_url(ctx) + '/' + name,
+        success, _, _ = ls.send_request('PUT', config.lock_server + '/' + name,
                                   body=urllib.urlencode(updated),
                                   headers={'Content-type': 'application/x-www-form-urlencoded'})
         return success
@@ -398,7 +399,7 @@ def main():
                     log.error("Locking failed.")
                     for machn in result:
                         unlock(ctx,machn)
-                    ret = 1 
+                    ret = 1
                 else:
                     log.info("Successfully Locked:\n%s\n" % shortnames)
                     log.info("Unable to display keys at this time (virtual machines are booting).")
