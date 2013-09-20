@@ -27,22 +27,22 @@ def test_split_user_empty_user():
 @nose.with_setup(fudge.clear_expectations)
 @fudge.with_fakes
 def test_connect():
-    sshclient = fudge.Fake('SSHClient')
-    ssh = sshclient.expects_call().with_args().returns_fake()
-    ssh.remember_order()
+    ssh = fudge.Fake('SSHClient')
+    ssh.expects_call().with_args().returns(ssh)
+    ssh.expects('set_missing_host_key_policy')
     ssh.expects('load_system_host_keys').with_args()
     ssh.expects('connect').with_args(
         hostname='orchestra.test.newdream.net.invalid',
         username='jdoe',
         timeout=60,
-        )
+    )
     transport = ssh.expects('get_transport').with_args().returns_fake()
     transport.remember_order()
     transport.expects('set_keepalive').with_args(False)
     got = connection.connect(
         'jdoe@orchestra.test.newdream.net.invalid',
-        _SSHClient=sshclient,
-        )
+        _SSHClient=ssh,
+    )
     assert got is ssh
 
 @nose.with_setup(fudge.clear_expectations)
