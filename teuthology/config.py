@@ -2,22 +2,25 @@ import os
 import yaml
 import logging
 
-CONF_FILE = os.path.join(os.environ['HOME'], '.teuthology.yaml')
-
 log = logging.getLogger(__name__)
 
 
-class _Config(object):
+class Config(object):
     """
     This class is intended to unify teuthology's many configuration files and
     objects. Currently it serves as a convenient interface to
     ~/.teuthology.yaml and nothing else.
     """
+    teuthology_yaml = os.path.join(os.environ['HOME'], '.teuthology.yaml')
+
     def __init__(self):
-        if os.path.exists(CONF_FILE):
-            self.__conf = yaml.safe_load(file(CONF_FILE))
+        self.load_files()
+
+    def load_files(self):
+        if os.path.exists(self.teuthology_yaml):
+            self.__conf = yaml.safe_load(file(self.teuthology_yaml))
         else:
-            log.debug("%s not found", CONF_FILE)
+            log.debug("%s not found", self.teuthology_yaml)
             self.__conf = {}
 
     # This property declaration exists mainly as an example; it is not
@@ -48,4 +51,4 @@ class _Config(object):
     def __getattr__(self, name):
         return self.__conf.get(name)
 
-config = _Config()
+config = Config()
