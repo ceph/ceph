@@ -32,6 +32,17 @@ class _Config(object):
         """
         return self.__conf.get('lock_server')
 
+    @property
+    def ceph_git_base_url(self):
+        """
+        The base URL to use for ceph-related git repositories.
+
+        Defaults to https://github.com/ceph/
+        """
+        base_url = self.__conf.get('ceph_git_base_url')
+        base_url = base_url or "https://github.com/ceph/"
+        return base_url
+
     # This takes care of any and all of the rest.
     # If the parameter is defined, return it. Otherwise return None.
     def __getattr__(self, name):
