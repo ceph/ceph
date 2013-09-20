@@ -784,7 +784,7 @@ void PGLog::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
 
   // In case of sobject_t based encoding, may need to list objects in the store
   // to find hashes
-  vector<hobject_t> ls;
+  vector<ghobject_t> ls;
   
   if (ondisklog_head > 0) {
     // read
@@ -853,11 +853,13 @@ void PGLog::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
 	  listed_collection = true;
 	}
 	bool found = false;
-	for (vector<hobject_t>::iterator i = ls.begin();
+	for (vector<ghobject_t>::iterator i = ls.begin();
 	     i != ls.end();
 	     ++i) {
-	  if (i->oid == e.soid.oid && i->snap == e.soid.snap) {
-	    e.soid = *i;
+          // Older OSD can't have new format objects
+          assert(i->generation == ghobject_t::NO_GEN);
+	  if (i->hobj.oid == e.soid.oid && i->hobj.snap == e.soid.snap) {
+	    e.soid = i->hobj;
 	    found = true;
 	    break;
 	  }

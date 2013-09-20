@@ -55,16 +55,16 @@ public:
   }
 
   void set_key(const string &objname, const string &key, const string &value) {
-    set_key(hobject_t(sobject_t(objname, CEPH_NOSNAP)),
+    set_key(ghobject_t(hobject_t(sobject_t(objname, CEPH_NOSNAP))),
 	    key, value);
   }
 
   void set_xattr(const string &objname, const string &key, const string &value) {
-    set_xattr(hobject_t(sobject_t(objname, CEPH_NOSNAP)),
+    set_xattr(ghobject_t(hobject_t(sobject_t(objname, CEPH_NOSNAP))),
 	      key, value);
   }
 
-  void set_key(hobject_t hoid,
+  void set_key(ghobject_t hoid,
 	       string key, string value) {
     map<string, bufferlist> to_write;
     bufferptr bp(value.c_str(), value.size());
@@ -74,7 +74,7 @@ public:
     db->set_keys(hoid, to_write);
   }
 
-  void set_xattr(hobject_t hoid,
+  void set_xattr(ghobject_t hoid,
 		 string key, string value) {
     map<string, bufferlist> to_write;
     bufferptr bp(value.c_str(), value.size());
@@ -85,11 +85,11 @@ public:
   }
 
   void set_header(const string &objname, const string &value) {
-    set_header(hobject_t(sobject_t(objname, CEPH_NOSNAP)),
+    set_header(ghobject_t(hobject_t(sobject_t(objname, CEPH_NOSNAP))),
 	       value);
   }
 
-  void set_header(hobject_t hoid,
+  void set_header(ghobject_t hoid,
 		  const string &value) {
     bufferlist header;
     header.append(bufferptr(value.c_str(), value.size() + 1));
@@ -97,11 +97,11 @@ public:
   }
 
   int get_header(const string &objname, string *value) {
-    return get_header(hobject_t(sobject_t(objname, CEPH_NOSNAP)),
+    return get_header(ghobject_t(hobject_t(sobject_t(objname, CEPH_NOSNAP))),
 		      value);
   }
 
-  int get_header(hobject_t hoid,
+  int get_header(ghobject_t hoid,
 		 string *value) {
     bufferlist header;
     int r = db->get_header(hoid, &header);
@@ -115,11 +115,11 @@ public:
   }
 
   int get_xattr(const string &objname, const string &key, string *value) {
-    return get_xattr(hobject_t(sobject_t(objname, CEPH_NOSNAP)),
+    return get_xattr(ghobject_t(hobject_t(sobject_t(objname, CEPH_NOSNAP))),
 		     key, value);
   }
 
-  int get_xattr(hobject_t hoid,
+  int get_xattr(ghobject_t hoid,
 		string key, string *value) {
     set<string> to_get;
     to_get.insert(key);
@@ -135,11 +135,11 @@ public:
   }
 
   int get_key(const string &objname, const string &key, string *value) {
-    return get_key(hobject_t(sobject_t(objname, CEPH_NOSNAP)),
+    return get_key(ghobject_t(hobject_t(sobject_t(objname, CEPH_NOSNAP))),
 		   key, value);
   }
 
-  int get_key(hobject_t hoid,
+  int get_key(ghobject_t hoid,
 	      string key, string *value) {
     set<string> to_get;
     to_get.insert(key);
@@ -155,11 +155,11 @@ public:
   }
 
   void remove_key(const string &objname, const string &key) {
-    remove_key(hobject_t(sobject_t(objname, CEPH_NOSNAP)),
+    remove_key(ghobject_t(hobject_t(sobject_t(objname, CEPH_NOSNAP))),
 	       key);
   }
 
-  void remove_key(hobject_t hoid,
+  void remove_key(ghobject_t hoid,
 		  string key) {
     set<string> to_remove;
     to_remove.insert(key);
@@ -167,11 +167,11 @@ public:
   }
 
   void remove_xattr(const string &objname, const string &key) {
-    remove_xattr(hobject_t(sobject_t(objname, CEPH_NOSNAP)),
+    remove_xattr(ghobject_t(hobject_t(sobject_t(objname, CEPH_NOSNAP))),
 		 key);
   }
 
-  void remove_xattr(hobject_t hoid,
+  void remove_xattr(ghobject_t hoid,
 		    string key) {
     set<string> to_remove;
     to_remove.insert(key);
@@ -179,20 +179,20 @@ public:
   }
 
   void clone(const string &objname, const string &target) {
-    clone(hobject_t(sobject_t(objname, CEPH_NOSNAP)),
-	  hobject_t(sobject_t(target, CEPH_NOSNAP)));
+    clone(ghobject_t(hobject_t(sobject_t(objname, CEPH_NOSNAP))),
+	  ghobject_t(hobject_t(sobject_t(target, CEPH_NOSNAP))));
   }
 
-  void clone(hobject_t hoid,
-	     hobject_t hoid2) {
+  void clone(ghobject_t hoid,
+	     ghobject_t hoid2) {
     db->clone(hoid, hoid2);
   }
 
   void clear(const string &objname) {
-    clear(hobject_t(sobject_t(objname, CEPH_NOSNAP)));
+    clear(ghobject_t(hobject_t(sobject_t(objname, CEPH_NOSNAP))));
   }
 
-  void clear(hobject_t hoid) {
+  void clear(ghobject_t hoid) {
     db->clear(hoid);
   }
 
@@ -543,7 +543,7 @@ int main(int argc, char **argv) {
 }
 
 TEST_F(ObjectMapTest, CreateOneObject) {
-  hobject_t hoid(sobject_t("foo", CEPH_NOSNAP));
+  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)), 100, 0);
   map<string, bufferlist> to_set;
   string key("test");
   string val("test_val");
@@ -579,8 +579,8 @@ TEST_F(ObjectMapTest, CreateOneObject) {
 }
 
 TEST_F(ObjectMapTest, CloneOneObject) {
-  hobject_t hoid(sobject_t("foo", CEPH_NOSNAP));
-  hobject_t hoid2(sobject_t("foo2", CEPH_NOSNAP));
+  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)), 200, 0);
+  ghobject_t hoid2(hobject_t(sobject_t("foo2", CEPH_NOSNAP)), 201, 1);
 
   tester.set_key(hoid, "foo", "bar");
   tester.set_key(hoid, "foo2", "bar2");
@@ -640,8 +640,8 @@ TEST_F(ObjectMapTest, CloneOneObject) {
 }
 
 TEST_F(ObjectMapTest, OddEvenClone) {
-  hobject_t hoid(sobject_t("foo", CEPH_NOSNAP));
-  hobject_t hoid2(sobject_t("foo2", CEPH_NOSNAP));
+  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)));
+  ghobject_t hoid2(hobject_t(sobject_t("foo2", CEPH_NOSNAP)));
 
   for (unsigned i = 0; i < 1000; ++i) {
     tester.set_key(hoid, "foo" + num_str(i), "bar" + num_str(i));

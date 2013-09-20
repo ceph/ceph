@@ -380,8 +380,8 @@ void remove_coll(ObjectStore *store, const coll_t &coll)
     OSD::make_snapmapper_oid());
   SnapMapper mapper(&driver, 0, 0, 0);
 
-  vector<hobject_t> objects;
-  hobject_t next;
+  vector<ghobject_t> objects;
+  ghobject_t next;
   int r = 0;
   int64_t num = 0;
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
@@ -391,13 +391,14 @@ void remove_coll(ObjectStore *store, const coll_t &coll)
       &objects, &next);
     if (r < 0)
       goto out;
-    for (vector<hobject_t>::iterator i = objects.begin();
+    for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i, ++num) {
 
+      assert(i->generation == ghobject_t::NO_GEN);
       OSDriver::OSTransaction _t(driver.get_transaction(t));
       cout << "remove " << *i << std::endl;
-      int r = mapper.remove_oid(*i, &_t);
+      int r = mapper.remove_oid(i->hobj, &_t);
       if (r != 0 && r != -ENOENT) {
         assert(0);
       }
@@ -654,18 +655,19 @@ int export_file(ObjectStore *store, coll_t cid, hobject_t &obj)
 
 int export_files(ObjectStore *store, coll_t coll)
 {
-  vector<hobject_t> objects;
-  hobject_t next;
+  vector<ghobject_t> objects;
+  ghobject_t next;
 
   while (!next.is_max()) {
     int r = store->collection_list_partial(coll, next, 200, 300, 0,
       &objects, &next);
     if (r < 0)
       return r;
-    for (vector<hobject_t>::iterator i = objects.begin();
+    for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
-      r = export_file(store, coll, *i);
+      assert(i->generation == ghobject_t::NO_GEN);
+      r = export_file(store, coll, i->hobj);
       if (r < 0)
         return r;
     }

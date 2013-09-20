@@ -153,6 +153,7 @@ public:
   friend bool operator>=(const hobject_t&, const hobject_t&);
   friend bool operator==(const hobject_t&, const hobject_t&);
   friend bool operator!=(const hobject_t&, const hobject_t&);
+  friend class ghobject_t;
 };
 WRITE_CLASS_ENCODER(hobject_t)
 
@@ -179,4 +180,98 @@ WRITE_CMP_OPERATORS_7(hobject_t,
 		      oid,
 		      snap)
 
+typedef uint64_t gen_t;
+typedef uint8_t shard_t;
+
+#ifndef UINT8_MAX
+#define UINT8_MAX (255)
+#endif
+#ifndef UINT64_MAX
+#define UINT64_MAX (18446744073709551615ULL)
+#endif
+
+struct ghobject_t {
+  hobject_t hobj;
+  gen_t generation;
+  shard_t shard_id;
+
+public:
+  static const shard_t NO_SHARD = UINT8_MAX;
+  static const gen_t NO_GEN = UINT64_MAX;
+
+  ghobject_t() : generation(NO_GEN), shard_id(NO_SHARD) {}
+
+  ghobject_t(const hobject_t &obj) : hobj(obj), generation(NO_GEN), shard_id(NO_SHARD) {}
+
+  ghobject_t(const hobject_t &obj, gen_t gen, shard_t shard) : hobj(obj), generation(gen), shard_id(shard) {}
+
+  bool match(uint32_t bits, uint32_t match) const {
+    return hobj.match_hash(hobj.hash, bits, match);
+  }
+  /// @return min ghobject_t ret s.t. ret.hash == this->hash
+  ghobject_t get_boundary() const {
+    if (hobj.is_max())
+      return *this;
+    ghobject_t ret;
+    ret.hobj.hash = hobj.hash;
+    return ret;
+  }
+  filestore_hobject_key_t get_filestore_key_u32() const {
+    assert(!hobj.max);
+    return hobj._reverse_nibbles(hobj.hash);
+  }
+  filestore_hobject_key_t get_filestore_key() const {
+    if (hobj.max)
+      return 0x100000000ull;
+    else
+      return get_filestore_key_u32();
+  }
+
+  // maximum sorted value.
+  static ghobject_t get_max() {
+    ghobject_t h(hobject_t::get_max());
+    return h;
+  }
+  bool is_max() const {
+    return hobj.is_max();
+  }
+
+  void swap(ghobject_t &o) {
+    ghobject_t temp(o);
+    o = (*this);
+    (*this) = temp;
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void decode(json_spirit::Value& v);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<ghobject_t*>& o);
+  friend bool operator<(const ghobject_t&, const ghobject_t&);
+  friend bool operator>(const ghobject_t&, const ghobject_t&);
+  friend bool operator<=(const ghobject_t&, const ghobject_t&);
+  friend bool operator>=(const ghobject_t&, const ghobject_t&);
+  friend bool operator==(const ghobject_t&, const ghobject_t&);
+  friend bool operator!=(const ghobject_t&, const ghobject_t&);
+};
+WRITE_CLASS_ENCODER(ghobject_t)
+
+namespace __gnu_cxx {
+  template<> struct hash<ghobject_t> {
+    size_t operator()(const ghobject_t &r) const {
+      static hash<object_t> H;
+      static rjhash<uint64_t> I;
+      return H(r.hobj.oid) ^ I(r.hobj.snap);
+    }
+  };
+}
+
+ostream& operator<<(ostream& out, const ghobject_t& o);
+
+WRITE_EQ_OPERATORS_3(ghobject_t, hobj, generation, shard_id)
+// sort ghobject_t's by <hobj, generation, shard_id>
+WRITE_CMP_OPERATORS_3(ghobject_t,
+		      hobj,
+		      shard_id,
+		      generation)
 #endif

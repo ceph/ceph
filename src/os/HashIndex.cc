@@ -66,7 +66,7 @@ int HashIndex::reset_attr(
     return r;
   if (!exists)
     return 0;
-  map<string, hobject_t> objects;
+  map<string, ghobject_t> objects;
   set<string> subdirs;
   r = list_objects(path, 0, 0, &objects);
   if (r < 0)
@@ -98,7 +98,7 @@ int HashIndex::col_split_level(
   int r = from.list_subdirs(path, &subdirs);
   if (r < 0)
     return r;
-  map<string, hobject_t> objects;
+  map<string, ghobject_t> objects;
   r = from.list_objects(path, 0, 0, &objects);
   if (r < 0)
     return r;
@@ -134,8 +134,8 @@ int HashIndex::col_split_level(
   }
 
   /* Then, do the same for each object */
-  map<string, hobject_t> objs_to_move;
-  for (map<string, hobject_t>::iterator i = objects.begin();
+  map<string, ghobject_t> objs_to_move;
+  for (map<string, ghobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
     if (i->second.match(inbits, match)) {
@@ -199,7 +199,7 @@ int HashIndex::col_split_level(
       return r;
   }
 
-  for (map<string, hobject_t>::iterator i = objs_to_move.begin();
+  for (map<string, ghobject_t>::iterator i = objs_to_move.begin();
        i != objs_to_move.end();
        ++i) {
     from_info.objs--;
@@ -244,7 +244,7 @@ int HashIndex::_init() {
 
 /* LFNIndex virtual method implementations */
 int HashIndex::_created(const vector<string> &path,
-			const hobject_t &hoid,
+			const ghobject_t &oid,
 			const string &mangled_name) {
   subdir_info_s info;
   int r;
@@ -267,10 +267,10 @@ int HashIndex::_created(const vector<string> &path,
 }
 
 int HashIndex::_remove(const vector<string> &path,
-		       const hobject_t &hoid,
+		       const ghobject_t &oid,
 		       const string &mangled_name) {
   int r;
-  r = remove_object(path, hoid);
+  r = remove_object(path, oid);
   if (r < 0)
     return r;
   subdir_info_s info;
@@ -291,12 +291,12 @@ int HashIndex::_remove(const vector<string> &path,
   }
 }
 
-int HashIndex::_lookup(const hobject_t &hoid,
+int HashIndex::_lookup(const ghobject_t &oid,
 		       vector<string> *path,
 		       string *mangled_name,
 		       int *exists_out) {
   vector<string> path_comp;
-  get_path_components(hoid, &path_comp);
+  get_path_components(oid, &path_comp);
   vector<string>::iterator next = path_comp.begin();
   int exists;
   while (1) {
@@ -313,22 +313,22 @@ int HashIndex::_lookup(const hobject_t &hoid,
       break;
     path->push_back(*(next++));
   }
-  return get_mangled_name(*path, hoid, mangled_name, exists_out);
+  return get_mangled_name(*path, oid, mangled_name, exists_out);
 }
 
-int HashIndex::_collection_list(vector<hobject_t> *ls) {
+int HashIndex::_collection_list(vector<ghobject_t> *ls) {
   vector<string> path;
   return list_by_hash(path, 0, 0, 0, 0, ls);
 }
 
-int HashIndex::_collection_list_partial(const hobject_t &start,
+int HashIndex::_collection_list_partial(const ghobject_t &start,
 					int min_count,
 					int max_count,
 					snapid_t seq,
-					vector<hobject_t> *ls,
-					hobject_t *next) {
+					vector<ghobject_t> *ls,
+					ghobject_t *next) {
   vector<string> path;
-  hobject_t _next;
+  ghobject_t _next;
   if (!next)
     next = &_next;
   *next = start;
@@ -345,7 +345,7 @@ int HashIndex::recursive_remove(const vector<string> &path) {
   int r = list_subdirs(path, &subdirs);
   if (r < 0)
     return r;
-  map<string, hobject_t> objects;
+  map<string, ghobject_t> objects;
   r = list_objects(path, 0, 0, &objects);
   if (r < 0)
     return r;
@@ -475,7 +475,7 @@ int HashIndex::initiate_split(const vector<string> &path, subdir_info_s info) {
 
 int HashIndex::complete_split(const vector<string> &path, subdir_info_s info) {
   int level = info.hash_level;
-  map<string, hobject_t> objects;
+  map<string, ghobject_t> objects;
   vector<string> dst = path;
   int r;
   dst.push_back("");
@@ -486,17 +486,17 @@ int HashIndex::complete_split(const vector<string> &path, subdir_info_s info) {
   r = list_subdirs(path, &subdirs);
   if (r < 0)
     return r;
-  map<string, map<string, hobject_t> > mapped;
-  map<string, hobject_t> moved;
+  map<string, map<string, ghobject_t> > mapped;
+  map<string, ghobject_t> moved;
   int num_moved = 0;
-  for (map<string, hobject_t>::iterator i = objects.begin();
+  for (map<string, ghobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
     vector<string> new_path;
     get_path_components(i->second, &new_path);
     mapped[new_path[level]][i->first] = i->second;
   }
-  for (map<string, map<string, hobject_t> >::iterator i = mapped.begin();
+  for (map<string, map<string, ghobject_t> >::iterator i = mapped.begin();
        i != mapped.end();
        ) {
     dst[level] = i->first;
@@ -505,7 +505,7 @@ int HashIndex::complete_split(const vector<string> &path, subdir_info_s info) {
     subdir_info_s temp;
     // subdir has already been fully copied
     if (subdirs.count(i->first) && !get_info(dst, &temp)) {
-      for (map<string, hobject_t>::iterator j = i->second.begin();
+      for (map<string, ghobject_t>::iterator j = i->second.begin();
 	   j != i->second.end();
 	   ++j) {
 	moved[j->first] = j->second;
@@ -533,7 +533,7 @@ int HashIndex::complete_split(const vector<string> &path, subdir_info_s info) {
 	return r;
     } // else subdir has been created but only partially copied
 
-    for (map<string, hobject_t>::iterator j = i->second.begin();
+    for (map<string, ghobject_t>::iterator j = i->second.begin();
 	 j != i->second.end();
 	 ++j) {
       moved[j->first] = j->second;
@@ -574,12 +574,12 @@ int HashIndex::complete_split(const vector<string> &path, subdir_info_s info) {
   return end_split_or_merge(path);
 }
 
-void HashIndex::get_path_components(const hobject_t &hoid,
+void HashIndex::get_path_components(const ghobject_t &oid,
 				    vector<string> *path) {
   char buf[MAX_HASH_LEVEL + 1];
-  snprintf(buf, sizeof(buf), "%.*X", MAX_HASH_LEVEL, (uint32_t)hoid.get_filestore_key());
+  snprintf(buf, sizeof(buf), "%.*X", MAX_HASH_LEVEL, (uint32_t)oid.hobj.get_filestore_key());
 
-  // Path components are the hex characters of hoid.hash, least
+  // Path components are the hex characters of oid.hobj.hash, least
   // significant first
   for (int i = 0; i < MAX_HASH_LEVEL; ++i) {
     path->push_back(string(&buf[i], 1));
@@ -596,9 +596,9 @@ string HashIndex::get_hash_str(uint32_t hash) {
   return retval;
 }
 
-string HashIndex::get_path_str(const hobject_t &hoid) {
-  assert(!hoid.is_max());
-  return get_hash_str(hoid.hash);
+string HashIndex::get_path_str(const ghobject_t &oid) {
+  assert(!oid.is_max());
+  return get_hash_str(oid.hobj.hash);
 }
 
 uint32_t HashIndex::hash_prefix_to_hash(string prefix) {
@@ -616,12 +616,12 @@ uint32_t HashIndex::hash_prefix_to_hash(string prefix) {
 
 int HashIndex::get_path_contents_by_hash(const vector<string> &path,
 					 const string *lower_bound,
-					 const hobject_t *next_object,
+					 const ghobject_t *next_object,
 					 const snapid_t *seq,
 					 set<string> *hash_prefixes,
-					 set<pair<string, hobject_t> > *objects) {
+					 set<pair<string, ghobject_t> > *objects) {
   set<string> subdirs;
-  map<string, hobject_t> rev_objects;
+  map<string, ghobject_t> rev_objects;
   int r;
   string cur_prefix;
   for (vector<string>::const_iterator i = path.begin();
@@ -632,7 +632,7 @@ int HashIndex::get_path_contents_by_hash(const vector<string> &path,
   r = list_objects(path, 0, 0, &rev_objects);
   if (r < 0)
     return r;
-  for (map<string, hobject_t>::iterator i = rev_objects.begin();
+  for (map<string, ghobject_t>::iterator i = rev_objects.begin();
        i != rev_objects.end();
        ++i) {
     string hash_prefix = get_path_str(i->second);
@@ -640,10 +640,10 @@ int HashIndex::get_path_contents_by_hash(const vector<string> &path,
       continue;
     if (next_object && i->second < *next_object)
       continue;
-    if (seq && i->second.snap < *seq)
+    if (seq && i->second.hobj.snap < *seq)
       continue;
     hash_prefixes->insert(hash_prefix);
-    objects->insert(pair<string, hobject_t>(hash_prefix, i->second));
+    objects->insert(pair<string, ghobject_t>(hash_prefix, i->second));
   }
   r = list_subdirs(path, &subdirs);
   if (r < 0)
@@ -667,13 +667,13 @@ int HashIndex::list_by_hash(const vector<string> &path,
 			    int min_count,
 			    int max_count,
 			    snapid_t seq,
-			    hobject_t *next,
-			    vector<hobject_t> *out) {
+			    ghobject_t *next,
+			    vector<ghobject_t> *out) {
   assert(out);
   vector<string> next_path = path;
   next_path.push_back("");
   set<string> hash_prefixes;
-  set<pair<string, hobject_t> > objects;
+  set<pair<string, ghobject_t> > objects;
   int r = get_path_contents_by_hash(path,
 				    NULL,
 				    next,
@@ -686,16 +686,16 @@ int HashIndex::list_by_hash(const vector<string> &path,
   for (set<string>::iterator i = hash_prefixes.begin();
        i != hash_prefixes.end();
        ++i) {
-    set<pair<string, hobject_t> >::iterator j = objects.lower_bound(
-      make_pair(*i, hobject_t()));
+    set<pair<string, ghobject_t> >::iterator j = objects.lower_bound(
+      make_pair(*i, ghobject_t()));
     if (j == objects.end() || j->first != *i) {
       if (min_count > 0 && out->size() > (unsigned)min_count) {
 	if (next)
-	  *next = hobject_t("", "", CEPH_NOSNAP, hash_prefix_to_hash(*i), -1, "");
+	  *next = ghobject_t(hobject_t("", "", CEPH_NOSNAP, hash_prefix_to_hash(*i), -1, ""));
 	return 0;
       }
       *(next_path.rbegin()) = *(i->rbegin());
-      hobject_t next_recurse;
+      ghobject_t next_recurse;
       if (next)
 	next_recurse = *next;
       r = list_by_hash(next_path,
@@ -727,6 +727,6 @@ int HashIndex::list_by_hash(const vector<string> &path,
     }
   }
   if (next)
-    *next = hobject_t::get_max();
+    *next = ghobject_t(hobject_t::get_max());
   return 0;
 }

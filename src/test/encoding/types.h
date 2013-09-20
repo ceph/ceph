@@ -78,6 +78,7 @@ TYPE(SequencerPosition)
 
 #include "common/hobject.h"
 TYPE(hobject_t)
+TYPE(ghobject_t)
 
 #include "mon/AuthMonitor.h"
 TYPE(AuthMonitor::Incremental)

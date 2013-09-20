@@ -45,10 +45,10 @@ public:
 		     std::tr1::shared_ptr<CollectionIndex> dest
 		     ) { return 0; }
 
-  void test_generate_and_parse(const hobject_t &hoid, const std::string &mangled_expected) {
+  void test_generate_and_parse(const ghobject_t &hoid, const std::string &mangled_expected) {
     const std::string mangled_name = lfn_generate_object_name(hoid);
     EXPECT_EQ(mangled_expected, mangled_name);
-    hobject_t hoid_parsed;
+    ghobject_t hoid_parsed;
     EXPECT_TRUE(lfn_parse_object_name(mangled_name, &hoid_parsed));
     EXPECT_EQ(hoid, hoid_parsed);
   }
@@ -58,34 +58,34 @@ protected:
 
   virtual int _created(
 		       const vector<string> &path,
-		       const hobject_t &hoid,     
+		       const ghobject_t &hoid,
 		       const string &mangled_name 
 		       ) { return 0; }
 
   virtual int _remove(
 		      const vector<string> &path,
-		      const hobject_t &hoid,    
+		      const ghobject_t &hoid,
 		      const string &mangled_name
 		      ) { return 0; }
 
   virtual int _lookup(
-		      const hobject_t &hoid,
+		      const ghobject_t &hoid,
 		      vector<string> *path,
 		      string *mangled_name,
 		      int *exists		 
 		      ) { return 0; }
 
   virtual int _collection_list(
-			       vector<hobject_t> *ls
+			       vector<ghobject_t> *ls
 			       ) { return 0; }
 
   virtual int _collection_list_partial(
-				       const hobject_t &start,
+				       const ghobject_t &start,
 				       int min_count,
 				       int max_count,
 				       snapid_t seq,
-				       vector<hobject_t> *ls,
-				       hobject_t *next
+				       vector<ghobject_t> *ls,
+				       ghobject_t *next
 				       ) { return 0; }
 };
 
@@ -101,9 +101,9 @@ TEST_F(TestHASH_INDEX_TAG, generate_and_parse_name) {
   uint64_t hash = 0xABABABAB;
   uint64_t pool = -1;
 
-  test_generate_and_parse(hobject_t(object_t(".A/B_\\C.D"), key, CEPH_NOSNAP, hash, pool, ""),
+  test_generate_and_parse(ghobject_t(hobject_t(object_t(".A/B_\\C.D"), key, CEPH_NOSNAP, hash, pool, "")),
 			  "\\.A\\sB_\\\\C.D_head_ABABABAB");
-  test_generate_and_parse(hobject_t(object_t("DIR_A"), key, CEPH_NOSNAP, hash, pool, ""),
+  test_generate_and_parse(ghobject_t(hobject_t(object_t("DIR_A"), key, CEPH_NOSNAP, hash, pool, "")),
 			  "\\dA_head_ABABABAB");
 }
 
@@ -123,11 +123,11 @@ TEST_F(TestHASH_INDEX_TAG_2, generate_and_parse_name) {
   {
     std::string name(".XA/B_\\C.D");
     name[1] = '\0';
-    hobject_t hoid(object_t(name), key, CEPH_NOSNAP, hash, pool, "");
+    ghobject_t hoid(hobject_t(object_t(name), key, CEPH_NOSNAP, hash, pool, ""));
 
     test_generate_and_parse(hoid, "\\.\\nA\\sB\\u\\\\C.D_KEY_head_ABABABAB");
   }
-  test_generate_and_parse(hobject_t(object_t("DIR_A"), key, CEPH_NOSNAP, hash, pool, ""),
+  test_generate_and_parse(ghobject_t(hobject_t(object_t("DIR_A"), key, CEPH_NOSNAP, hash, pool, "")),
 			  "\\dA_KEY_head_ABABABAB");
 }
 
@@ -143,20 +143,36 @@ TEST_F(TestHOBJECT_WITH_POOL, generate_and_parse_name) {
   const std::string key("KEY");
   uint64_t hash = 0xABABABAB;
   uint64_t pool = 0xCDCDCDCD;
+  int64_t gen = 0xefefefefef;
+  int8_t shard_id = 0xb;
 
   {
     std::string name(".XA/B_\\C.D");
     name[1] = '\0';
-    hobject_t hoid(object_t(name), key, CEPH_NOSNAP, hash, pool, "");
-    hoid.nspace = "NSPACE";
+    ghobject_t hoid(hobject_t(object_t(name), key, CEPH_NOSNAP, hash, pool, ""));
+    hoid.hobj.nspace = "NSPACE";
 
     test_generate_and_parse(hoid, "\\.\\nA\\sB\\u\\\\C.D_KEY_head_ABABABAB_NSPACE_cdcdcdcd");
   }
   {
-    hobject_t hoid(object_t("DIR_A"), key, CEPH_NOSNAP, hash, pool, "");
-    hoid.nspace = "NSPACE";
+    ghobject_t hoid(hobject_t(object_t("DIR_A"), key, CEPH_NOSNAP, hash, pool, ""));
+    hoid.hobj.nspace = "NSPACE";
 
     test_generate_and_parse(hoid, "\\dA_KEY_head_ABABABAB_NSPACE_cdcdcdcd");
+  }
+  {
+    std::string name(".XA/B_\\C.D");
+    name[1] = '\0';
+    ghobject_t hoid(hobject_t(object_t(name), key, CEPH_NOSNAP, hash, pool, ""), gen, shard_id);
+    hoid.hobj.nspace = "NSPACE";
+
+    test_generate_and_parse(hoid, "\\.\\nA\\sB\\u\\\\C.D_KEY_head_ABABABAB_NSPACE_cdcdcdcd_efefefefef_b");
+  }
+  {
+    ghobject_t hoid(hobject_t(object_t("DIR_A"), key, CEPH_NOSNAP, hash, pool, ""), gen, shard_id);
+    hoid.hobj.nspace = "NSPACE";
+
+    test_generate_and_parse(hoid, "\\dA_KEY_head_ABABABAB_NSPACE_cdcdcdcd_efefefefef_b");
   }
 }
 
@@ -185,7 +201,7 @@ TEST_F(TestLFNIndex, remove_object) {
   {
     std::string mangled_name;
     int exists = 666;
-    hobject_t hoid(sobject_t("ABC", CEPH_NOSNAP));
+    ghobject_t hoid(hobject_t(sobject_t("ABC", CEPH_NOSNAP)));
 
     EXPECT_EQ(0, ::chmod("PATH", 0000));
     EXPECT_EQ(-EACCES, remove_object(path, hoid));
@@ -205,7 +221,7 @@ TEST_F(TestLFNIndex, remove_object) {
     std::string mangled_name;
     int exists;
     const std::string object_name(1024, 'A');
-    hobject_t hoid(sobject_t(object_name, CEPH_NOSNAP));
+    ghobject_t hoid(hobject_t(sobject_t(object_name, CEPH_NOSNAP)));
 
     EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name, &exists));
     EXPECT_EQ(0, exists);
@@ -226,7 +242,7 @@ TEST_F(TestLFNIndex, remove_object) {
     std::string mangled_name;
     int exists;
     const std::string object_name(1024, 'A');
-    hobject_t hoid(sobject_t(object_name, CEPH_NOSNAP));
+    ghobject_t hoid(hobject_t(sobject_t(object_name, CEPH_NOSNAP)));
 
     //
     //   PATH/AAA..._0_long => does not match long object name
@@ -275,7 +291,7 @@ TEST_F(TestLFNIndex, remove_object) {
     std::string mangled_name;
     int exists;
     const std::string object_name(1024, 'A');
-    hobject_t hoid(sobject_t(object_name, CEPH_NOSNAP));
+    ghobject_t hoid(hobject_t(sobject_t(object_name, CEPH_NOSNAP)));
 
     //
     //   PATH/AAA..._0_long => matches long object name
@@ -323,7 +339,7 @@ TEST_F(TestLFNIndex, get_mangled_name) {
   {
     std::string mangled_name;
     int exists = 666;
-    hobject_t hoid(sobject_t("ABC", CEPH_NOSNAP));
+    ghobject_t hoid(hobject_t(sobject_t("ABC", CEPH_NOSNAP)));
 
     EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name, &exists));
     EXPECT_NE(std::string::npos, mangled_name.find("ABC__head"));
@@ -343,7 +359,7 @@ TEST_F(TestLFNIndex, get_mangled_name) {
     std::string mangled_name;
     int exists;
     const std::string object_name(1024, 'A');
-    hobject_t hoid(sobject_t(object_name, CEPH_NOSNAP));
+    ghobject_t hoid(hobject_t(sobject_t(object_name, CEPH_NOSNAP)));
 
     //
     // long version of the mangled name and no matching
