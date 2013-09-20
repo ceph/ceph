@@ -25,6 +25,11 @@ class _Config(object):
     # docstring.
     @property
     def lock_server(self):
+        """
+        The URL to your lock server. For example, Inktank uses:
+
+            http://teuthology.front.sepia.ceph.com/locker/lock
+        """
         return self.__conf.get('lock_server')
 
     # This takes care of any and all of the rest.
