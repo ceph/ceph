@@ -7890,6 +7890,8 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
     int peer = acting[i];
     map<int, pg_missing_t>::const_iterator pm = peer_missing.find(peer);
     assert(pm != peer_missing.end());
+    map<int, pg_info_t>::const_iterator pi = peer_info.find(peer);
+    assert(pi != peer_info.end());
     size_t m_sz = pm->second.num_missing();
 
     dout(10) << " peer osd." << peer << " missing " << m_sz << " objects." << dendl;
@@ -7902,6 +7904,15 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
 	   ++p) {
       handle.reset_tp_timeout();
       const hobject_t soid(p->second);
+
+      if (soid > pi->second.last_backfill) {
+	if (!recovering.count(soid)) {
+	  derr << __func__ << ": object added to missing set for backfill, but "
+	       << "is not in recovering, error!" << dendl;
+	  assert(0);
+	}
+	continue;
+      }
 
       if (recovering.count(soid)) {
 	dout(10) << __func__ << ": already recovering" << soid << dendl;
