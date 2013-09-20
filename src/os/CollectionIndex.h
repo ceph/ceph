@@ -127,26 +127,26 @@ protected:
    * @return Error Code, 0 for success
    */
   virtual int created(
-    const hobject_t &hoid, ///< [in] Created object.
+    const ghobject_t &oid, ///< [in] Created object.
     const char *path       ///< [in] Path to created object.
     ) = 0;
 
   /**
-   * Removes hoid from the collection
+   * Removes oid from the collection
    *
    * @return Error Code, 0 for success
    */
   virtual int unlink(
-    const hobject_t &hoid ///< [in] Object to remove
+    const ghobject_t &oid ///< [in] Object to remove
     ) = 0;
 
   /**
-   * Gets the IndexedPath for hoid.
+   * Gets the IndexedPath for oid.
    *
    * @return Error Code, 0 for success
    */
   virtual int lookup(
-    const hobject_t &hoid, ///< [in] Object to lookup
+    const ghobject_t &oid, ///< [in] Object to lookup
     IndexedPath *path,	   ///< [out] Path to object
     int *exist	           ///< [out] True if the object exists, else false
     ) = 0;
@@ -167,17 +167,17 @@ protected:
 
   /// List contents of collection by hash
   virtual int collection_list_partial(
-    const hobject_t &start, ///< [in] object at which to start
+    const ghobject_t &start, ///< [in] object at which to start
     int min_count,          ///< [in] get at least min_count objects
     int max_count,          ///< [in] return at most max_count objects
     snapid_t seq,           ///< [in] list only objects with snap >= seq
-    vector<hobject_t> *ls,  ///< [out] Listed objects
-    hobject_t *next         ///< [out] Next object to list
+    vector<ghobject_t> *ls,  ///< [out] Listed objects
+    ghobject_t *next         ///< [out] Next object to list
     ) = 0;
 
   /// List contents of collection.
   virtual int collection_list(
-    vector<hobject_t> *ls ///< [out] Listed Objects
+    vector<ghobject_t> *ls ///< [out] Listed Objects
     ) = 0;
 
   /// Call prior to removing directory

@@ -30,102 +30,102 @@ class ObjectMap {
 public:
   /// Set keys and values from specified map
   virtual int set_keys(
-    const hobject_t &hoid,              ///< [in] object containing map
+    const ghobject_t &oid,              ///< [in] object containing map
     const map<string, bufferlist> &set,  ///< [in] key to value map to set
     const SequencerPosition *spos=0     ///< [in] sequencer position
     ) = 0;
 
   /// Set header
   virtual int set_header(
-    const hobject_t &hoid,              ///< [in] object containing map
+    const ghobject_t &oid,              ///< [in] object containing map
     const bufferlist &bl,               ///< [in] header to set
     const SequencerPosition *spos=0     ///< [in] sequencer position
     ) = 0;
 
   /// Retrieve header
   virtual int get_header(
-    const hobject_t &hoid,              ///< [in] object containing map
+    const ghobject_t &oid,              ///< [in] object containing map
     bufferlist *bl                      ///< [out] header to set
     ) = 0;
 
-  /// Clear all map keys and values from hoid
+  /// Clear all map keys and values from oid
   virtual int clear(
-    const hobject_t &hoid,             ///< [in] object containing map
+    const ghobject_t &oid,             ///< [in] object containing map
     const SequencerPosition *spos=0     ///< [in] sequencer position
     ) = 0;
 
-  /// Clear all map keys and values from hoid
+  /// Clear all map keys and values from oid
   virtual int rm_keys(
-    const hobject_t &hoid,              ///< [in] object containing map
+    const ghobject_t &oid,              ///< [in] object containing map
     const set<string> &to_clear,        ///< [in] Keys to clear
     const SequencerPosition *spos=0     ///< [in] sequencer position
     ) = 0;
 
   /// Get all keys and values
   virtual int get(
-    const hobject_t &hoid,             ///< [in] object containing map
+    const ghobject_t &oid,             ///< [in] object containing map
     bufferlist *header,                ///< [out] Returned Header
     map<string, bufferlist> *out       ///< [out] Returned keys and values
     ) = 0;
 
   /// Get values for supplied keys
   virtual int get_keys(
-    const hobject_t &hoid,             ///< [in] object containing map
-    set<string> *keys                  ///< [out] Keys defined on hoid
+    const ghobject_t &oid,             ///< [in] object containing map
+    set<string> *keys                  ///< [out] Keys defined on oid
     ) = 0;
 
   /// Get values for supplied keys
   virtual int get_values(
-    const hobject_t &hoid,             ///< [in] object containing map
+    const ghobject_t &oid,             ///< [in] object containing map
     const set<string> &keys,           ///< [in] Keys to get
     map<string, bufferlist> *out       ///< [out] Returned keys and values
     ) = 0;
 
   /// Check key existence
   virtual int check_keys(
-    const hobject_t &hoid,             ///< [in] object containing map
+    const ghobject_t &oid,             ///< [in] object containing map
     const set<string> &keys,           ///< [in] Keys to check
-    set<string> *out                   ///< [out] Subset of keys defined on hoid
+    set<string> *out                   ///< [out] Subset of keys defined on oid
     ) = 0;
 
   /// Get xattrs
   virtual int get_xattrs(
-    const hobject_t &hoid,             ///< [in] object
+    const ghobject_t &oid,             ///< [in] object
     const set<string> &to_get,         ///< [in] keys to get
     map<string, bufferlist> *out       ///< [out] subset of attrs/vals defined
     ) = 0;
 
   /// Get all xattrs
   virtual int get_all_xattrs(
-    const hobject_t &hoid,             ///< [in] object
+    const ghobject_t &oid,             ///< [in] object
     set<string> *out       ///< [out] attrs and values
     ) = 0;
 
   /// set xattrs in to_set
   virtual int set_xattrs(
-    const hobject_t &hoid,                ///< [in] object
+    const ghobject_t &oid,                ///< [in] object
     const map<string, bufferlist> &to_set,///< [in] attrs/values to set
     const SequencerPosition *spos=0     ///< [in] sequencer position
     ) = 0;
 
   /// remove xattrs in to_remove
   virtual int remove_xattrs(
-    const hobject_t &hoid,               ///< [in] object
+    const ghobject_t &oid,               ///< [in] object
     const set<string> &to_remove,        ///< [in] attrs to remove
     const SequencerPosition *spos=0     ///< [in] sequencer position
     ) = 0;
 
 
-  /// Clone keys efficiently from hoid map to target map
+  /// Clone keys efficiently from oid map to target map
   virtual int clone(
-    const hobject_t &hoid,             ///< [in] object containing map
-    const hobject_t &target,           ///< [in] target of clone
+    const ghobject_t &oid,             ///< [in] object containing map
+    const ghobject_t &target,           ///< [in] target of clone
     const SequencerPosition *spos=0     ///< [in] sequencer position
     ) { return 0; }
 
   /// Ensure all previous writes are durable
   virtual int sync(
-    const hobject_t *hoid=0,          ///< [in] object
+    const ghobject_t *oid=0,          ///< [in] object
     const SequencerPosition *spos=0   ///< [in] Sequencer
     ) { return 0; }
 
@@ -144,7 +144,7 @@ public:
     virtual ~ObjectMapIteratorImpl() {}
   };
   typedef std::tr1::shared_ptr<ObjectMapIteratorImpl> ObjectMapIterator;
-  virtual ObjectMapIterator get_iterator(const hobject_t &hoid) {
+  virtual ObjectMapIterator get_iterator(const ghobject_t &oid) {
     return ObjectMapIterator();
   }
 

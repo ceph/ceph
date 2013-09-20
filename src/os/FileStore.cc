@@ -99,6 +99,7 @@ static CompatSet get_fs_initial_compat_set() {
 static CompatSet get_fs_supported_compat_set() {
   CompatSet compat =  get_fs_initial_compat_set();
   //Any features here can be set in code, but not in initial superblock
+  compat.incompat.insert(CEPH_FS_FEATURE_INCOMPAT_SHARDS);
   return compat;
 }
 
@@ -145,7 +146,7 @@ int FileStore::init_index(coll_t cid)
   return r;
 }
 
-int FileStore::lfn_find(coll_t cid, const hobject_t& oid, IndexedPath *path)
+int FileStore::lfn_find(coll_t cid, const ghobject_t& oid, IndexedPath *path)
 {
   Index index; 
   int r, exist;
@@ -163,7 +164,7 @@ int FileStore::lfn_find(coll_t cid, const hobject_t& oid, IndexedPath *path)
   return 0;
 }
 
-int FileStore::lfn_truncate(coll_t cid, const hobject_t& oid, off_t length)
+int FileStore::lfn_truncate(coll_t cid, const ghobject_t& oid, off_t length)
 {
   IndexedPath path;
   int r = lfn_find(cid, oid, &path);
@@ -176,7 +177,7 @@ int FileStore::lfn_truncate(coll_t cid, const hobject_t& oid, off_t length)
   return r;
 }
 
-int FileStore::lfn_stat(coll_t cid, const hobject_t& oid, struct stat *buf)
+int FileStore::lfn_stat(coll_t cid, const ghobject_t& oid, struct stat *buf)
 {
   IndexedPath path;
   int r = lfn_find(cid, oid, &path);
@@ -189,12 +190,13 @@ int FileStore::lfn_stat(coll_t cid, const hobject_t& oid, struct stat *buf)
 }
 
 int FileStore::lfn_open(coll_t cid,
-			const hobject_t& oid,
+			const ghobject_t& oid,
 			bool create,
 			FDRef *outfd,
 			IndexedPath *path,
 			Index *index) 
 {
+  assert(get_allow_sharded_objects() || oid.shard_id == ghobject_t::NO_SHARD);
   assert(outfd);
   int flags = O_RDWR;
   if (create)
@@ -262,7 +264,7 @@ void FileStore::lfn_close(FDRef fd)
 {
 }
 
-int FileStore::lfn_link(coll_t c, coll_t newcid, const hobject_t& o, const hobject_t& newoid)
+int FileStore::lfn_link(coll_t c, coll_t newcid, const ghobject_t& o, const ghobject_t& newoid)
 {
   Index index_new, index_old;
   IndexedPath path_new, path_old;
@@ -314,7 +316,7 @@ int FileStore::lfn_link(coll_t c, coll_t newcid, const hobject_t& o, const hobje
   return 0;
 }
 
-int FileStore::lfn_unlink(coll_t cid, const hobject_t& o,
+int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
 			  const SequencerPosition &spos,
 			  bool force_clear_omap)
 {
@@ -1912,7 +1914,7 @@ void FileStore::_set_replay_guard(coll_t cid,
 
 void FileStore::_set_replay_guard(int fd,
 				  const SequencerPosition& spos,
-				  const hobject_t *hoid,
+				  const ghobject_t *hoid,
 				  bool in_progress)
 {
   if (backend->can_checkpoint())
@@ -1993,7 +1995,7 @@ void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos)
   dout(10) << "_close_replay_guard " << spos << " done" << dendl;
 }
 
-int FileStore::_check_replay_guard(coll_t cid, hobject_t oid, const SequencerPosition& spos)
+int FileStore::_check_replay_guard(coll_t cid, ghobject_t oid, const SequencerPosition& spos)
 {
   if (!replaying || backend->can_checkpoint())
     return 1;
@@ -2091,7 +2093,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_TOUCH:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _touch(cid, oid);
       }
@@ -2100,7 +2102,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_WRITE:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	uint64_t off = i.get_length();
 	uint64_t len = i.get_length();
 	bool replica = i.get_replica();
@@ -2114,7 +2116,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_ZERO:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	uint64_t off = i.get_length();
 	uint64_t len = i.get_length();
 	if (_check_replay_guard(cid, oid, spos) > 0)
@@ -2135,7 +2137,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_TRUNCATE:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	uint64_t off = i.get_length();
 	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _truncate(cid, oid, off);
@@ -2145,7 +2147,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_REMOVE:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _remove(cid, oid, spos);
       }
@@ -2154,7 +2156,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_SETATTR:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	string name = i.get_attrname();
 	bufferlist bl;
 	i.get_bl(bl);
@@ -2172,7 +2174,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_SETATTRS:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	map<string, bufferptr> aset;
 	i.get_attrset(aset);
 	if (_check_replay_guard(cid, oid, spos) > 0)
@@ -2185,7 +2187,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_RMATTR:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	string name = i.get_attrname();
 	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _rmattr(cid, oid, name.c_str(), spos);
@@ -2195,7 +2197,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_RMATTRS:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _rmattrs(cid, oid, spos);
       }
@@ -2204,8 +2206,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_CLONE:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
-	hobject_t noid = i.get_oid();
+	ghobject_t oid = i.get_oid();
+	ghobject_t noid = i.get_oid();
 	r = _clone(cid, oid, noid, spos);
       }
       break;
@@ -2213,8 +2215,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_CLONERANGE:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
-	hobject_t noid = i.get_oid();
+	ghobject_t oid = i.get_oid();
+	ghobject_t noid = i.get_oid();
  	uint64_t off = i.get_length();
 	uint64_t len = i.get_length();
 	r = _clone_range(cid, oid, noid, off, len, off, spos);
@@ -2224,8 +2226,8 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_CLONERANGE2:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
-	hobject_t noid = i.get_oid();
+	ghobject_t oid = i.get_oid();
+	ghobject_t noid = i.get_oid();
  	uint64_t srcoff = i.get_length();
 	uint64_t len = i.get_length();
  	uint64_t dstoff = i.get_length();
@@ -2253,7 +2255,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
       {
 	coll_t ncid = i.get_cid();
 	coll_t ocid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	r = _collection_add(ncid, ocid, oid, spos);
       }
       break;
@@ -2261,7 +2263,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_COLL_REMOVE:
        {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	if (_check_replay_guard(cid, oid, spos) > 0)
 	  r = _remove(cid, oid, spos);
        }
@@ -2272,7 +2274,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 	// WARNING: this is deprecated and buggy; only here to replay old journals.
 	coll_t ocid = i.get_cid();
 	coll_t ncid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	r = _collection_add(ocid, ncid, oid, spos);
 	if (r == 0 &&
 	    (_check_replay_guard(ocid, oid, spos) > 0))
@@ -2283,9 +2285,9 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_COLL_MOVE_RENAME:
       {
 	coll_t oldcid = i.get_cid();
-	hobject_t oldoid = i.get_oid();
+	ghobject_t oldoid = i.get_oid();
 	coll_t newcid = i.get_cid();
-	hobject_t newoid = i.get_oid();
+	ghobject_t newoid = i.get_oid();
 	r = _collection_move_rename(oldcid, oldoid, newcid, newoid, spos);
       }
       break;
@@ -2325,14 +2327,14 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_OMAP_CLEAR:
       {
 	coll_t cid(i.get_cid());
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	r = _omap_clear(cid, oid, spos);
       }
       break;
     case Transaction::OP_OMAP_SETKEYS:
       {
 	coll_t cid(i.get_cid());
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	map<string, bufferlist> aset;
 	i.get_attrset(aset);
 	r = _omap_setkeys(cid, oid, aset, spos);
@@ -2341,7 +2343,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_OMAP_RMKEYS:
       {
 	coll_t cid(i.get_cid());
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	set<string> keys;
 	i.get_keyset(keys);
 	r = _omap_rmkeys(cid, oid, keys, spos);
@@ -2350,7 +2352,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_OMAP_RMKEYRANGE:
       {
 	coll_t cid(i.get_cid());
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	string first, last;
 	first = i.get_key();
 	last = i.get_key();
@@ -2360,7 +2362,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
     case Transaction::OP_OMAP_SETHEADER:
       {
 	coll_t cid(i.get_cid());
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	bufferlist bl;
 	i.get_bl(bl);
 	r = _omap_setheader(cid, oid, bl, spos);
@@ -2480,7 +2482,7 @@ unsigned FileStore::_do_transaction(Transaction& t, uint64_t op_seq, int trans_n
 // --------------------
 // objects
 
-bool FileStore::exists(coll_t cid, const hobject_t& oid)
+bool FileStore::exists(coll_t cid, const ghobject_t& oid)
 {
   struct stat st;
   if (stat(cid, oid, &st) == 0)
@@ -2490,7 +2492,7 @@ bool FileStore::exists(coll_t cid, const hobject_t& oid)
 }
   
 int FileStore::stat(
-  coll_t cid, const hobject_t& oid, struct stat *st, bool allow_eio)
+  coll_t cid, const ghobject_t& oid, struct stat *st, bool allow_eio)
 {
   int r = lfn_stat(cid, oid, st);
   assert(allow_eio || !m_filestore_fail_eio || r != -EIO);
@@ -2512,7 +2514,7 @@ int FileStore::stat(
 
 int FileStore::read(
   coll_t cid,
-  const hobject_t& oid, 
+  const ghobject_t& oid,
   uint64_t offset,
   size_t len,
   bufferlist& bl,
@@ -2560,7 +2562,7 @@ int FileStore::read(
   }
 }
 
-int FileStore::fiemap(coll_t cid, const hobject_t& oid,
+int FileStore::fiemap(coll_t cid, const ghobject_t& oid,
                     uint64_t offset, size_t len,
                     bufferlist& bl)
 {
@@ -2638,7 +2640,7 @@ done:
 }
 
 
-int FileStore::_remove(coll_t cid, const hobject_t& oid,
+int FileStore::_remove(coll_t cid, const ghobject_t& oid,
 		       const SequencerPosition &spos) 
 {
   dout(15) << "remove " << cid << "/" << oid << dendl;
@@ -2647,7 +2649,7 @@ int FileStore::_remove(coll_t cid, const hobject_t& oid,
   return r;
 }
 
-int FileStore::_truncate(coll_t cid, const hobject_t& oid, uint64_t size)
+int FileStore::_truncate(coll_t cid, const ghobject_t& oid, uint64_t size)
 {
   dout(15) << "truncate " << cid << "/" << oid << " size " << size << dendl;
   int r = lfn_truncate(cid, oid, size);
@@ -2656,7 +2658,7 @@ int FileStore::_truncate(coll_t cid, const hobject_t& oid, uint64_t size)
 }
 
 
-int FileStore::_touch(coll_t cid, const hobject_t& oid)
+int FileStore::_touch(coll_t cid, const ghobject_t& oid)
 {
   dout(15) << "touch " << cid << "/" << oid << dendl;
 
@@ -2671,7 +2673,7 @@ int FileStore::_touch(coll_t cid, const hobject_t& oid)
   return r;
 }
 
-int FileStore::_write(coll_t cid, const hobject_t& oid, 
+int FileStore::_write(coll_t cid, const ghobject_t& oid,
                      uint64_t offset, size_t len,
                      const bufferlist& bl, bool replica)
 {
@@ -2720,7 +2722,7 @@ int FileStore::_write(coll_t cid, const hobject_t& oid,
   return r;
 }
 
-int FileStore::_zero(coll_t cid, const hobject_t& oid, uint64_t offset, size_t len)
+int FileStore::_zero(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len)
 {
   dout(15) << "zero " << cid << "/" << oid << " " << offset << "~" << len << dendl;
   int ret = 0;
@@ -2763,7 +2765,7 @@ int FileStore::_zero(coll_t cid, const hobject_t& oid, uint64_t offset, size_t l
   return ret;
 }
 
-int FileStore::_clone(coll_t cid, const hobject_t& oldoid, const hobject_t& newoid,
+int FileStore::_clone(coll_t cid, const ghobject_t& oldoid, const ghobject_t& newoid,
 		      const SequencerPosition& spos)
 {
   dout(15) << "clone " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << dendl;
@@ -2897,7 +2899,7 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
   return r;
 }
 
-int FileStore::_clone_range(coll_t cid, const hobject_t& oldoid, const hobject_t& newoid,
+int FileStore::_clone_range(coll_t cid, const ghobject_t& oldoid, const ghobject_t& newoid,
 			    uint64_t srcoff, uint64_t len, uint64_t dstoff,
 			    const SequencerPosition& spos)
 {
@@ -3338,23 +3340,23 @@ int FileStore::_fsetattrs(int fd, map<string, bufferptr> &aset)
 }
 
 // debug EIO injection
-void FileStore::inject_data_error(const hobject_t &oid) {
+void FileStore::inject_data_error(const ghobject_t &oid) {
   Mutex::Locker l(read_error_lock);
   dout(10) << __func__ << ": init error on " << oid << dendl;
   data_error_set.insert(oid);
 }
-void FileStore::inject_mdata_error(const hobject_t &oid) {
+void FileStore::inject_mdata_error(const ghobject_t &oid) {
   Mutex::Locker l(read_error_lock);
   dout(10) << __func__ << ": init error on " << oid << dendl;
   mdata_error_set.insert(oid);
 }
-void FileStore::debug_obj_on_delete(const hobject_t &oid) {
+void FileStore::debug_obj_on_delete(const ghobject_t &oid) {
   Mutex::Locker l(read_error_lock);
   dout(10) << __func__ << ": clear error on " << oid << dendl;
   data_error_set.erase(oid);
   mdata_error_set.erase(oid);
 }
-bool FileStore::debug_data_eio(const hobject_t &oid) {
+bool FileStore::debug_data_eio(const ghobject_t &oid) {
   Mutex::Locker l(read_error_lock);
   if (data_error_set.count(oid)) {
     dout(10) << __func__ << ": inject error on " << oid << dendl;
@@ -3363,7 +3365,7 @@ bool FileStore::debug_data_eio(const hobject_t &oid) {
     return false;
   }
 }
-bool FileStore::debug_mdata_eio(const hobject_t &oid) {
+bool FileStore::debug_mdata_eio(const ghobject_t &oid) {
   Mutex::Locker l(read_error_lock);
   if (mdata_error_set.count(oid)) {
     dout(10) << __func__ << ": inject error on " << oid << dendl;
@@ -3376,7 +3378,7 @@ bool FileStore::debug_mdata_eio(const hobject_t &oid) {
 
 // objects
 
-int FileStore::getattr(coll_t cid, const hobject_t& oid, const char *name, bufferptr &bp)
+int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr &bp)
 {
   dout(15) << "getattr " << cid << "/" << oid << " '" << name << "'" << dendl;
   FDRef fd;
@@ -3422,7 +3424,7 @@ int FileStore::getattr(coll_t cid, const hobject_t& oid, const char *name, buffe
   }
 }
 
-int FileStore::getattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset, bool user_only) 
+int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset, bool user_only)
 {
   dout(15) << "getattrs " << cid << "/" << oid << dendl;
   FDRef fd;
@@ -3481,7 +3483,7 @@ int FileStore::getattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>&
   }
 }
 
-int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>& aset,
+int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset,
 			 const SequencerPosition &spos)
 {
   map<string, bufferlist> omap_set;
@@ -3566,7 +3568,7 @@ int FileStore::_setattrs(coll_t cid, const hobject_t& oid, map<string,bufferptr>
 }
 
 
-int FileStore::_rmattr(coll_t cid, const hobject_t& oid, const char *name,
+int FileStore::_rmattr(coll_t cid, const ghobject_t& oid, const char *name,
 		       const SequencerPosition &spos)
 {
   dout(15) << "rmattr " << cid << "/" << oid << " '" << name << "'" << dendl;
@@ -3601,7 +3603,7 @@ int FileStore::_rmattr(coll_t cid, const hobject_t& oid, const char *name,
   return r;
 }
 
-int FileStore::_rmattrs(coll_t cid, const hobject_t& oid,
+int FileStore::_rmattrs(coll_t cid, const ghobject_t& oid,
 			const SequencerPosition &spos)
 {
   dout(15) << "rmattrs " << cid << "/" << oid << dendl;
@@ -3797,14 +3799,14 @@ int FileStore::_collection_remove_recursive(const coll_t &cid,
     return r;
   }
 
-  vector<hobject_t> objects;
-  hobject_t max;
+  vector<ghobject_t> objects;
+  ghobject_t max;
   r = 0;
   while (!max.is_max()) {
     r = collection_list_partial(cid, max, 200, 300, 0, &objects, &max);
     if (r < 0)
       return r;
-    for (vector<hobject_t>::iterator i = objects.begin();
+    for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
       assert(_check_replay_guard(cid, *i, spos));
@@ -3969,9 +3971,9 @@ bool FileStore::collection_empty(coll_t c)
   int r = get_index(c, &index);
   if (r < 0)
     return false;
-  vector<hobject_t> ls;
+  vector<ghobject_t> ls;
   collection_list_handle_t handle;
-  r = index->collection_list_partial(hobject_t(), 1, 1, 0, &ls, NULL);
+  r = index->collection_list_partial(ghobject_t(), 1, 1, 0, &ls, NULL);
   if (r < 0) {
     assert(!m_filestore_fail_eio || r != -EIO);
     return false;
@@ -3979,14 +3981,14 @@ bool FileStore::collection_empty(coll_t c)
   return ls.empty();
 }
 
-int FileStore::collection_list_range(coll_t c, hobject_t start, hobject_t end,
-                                     snapid_t seq, vector<hobject_t> *ls)
+int FileStore::collection_list_range(coll_t c, ghobject_t start, ghobject_t end,
+                                     snapid_t seq, vector<ghobject_t> *ls)
 {
   bool done = false;
-  hobject_t next = start;
+  ghobject_t next = start;
 
   while (!done) {
-    vector<hobject_t> next_objects;
+    vector<ghobject_t> next_objects;
     int r = collection_list_partial(c, next,
                                 get_ideal_list_min(), get_ideal_list_max(),
                                 seq, &next_objects, &next);
@@ -4013,9 +4015,9 @@ int FileStore::collection_list_range(coll_t c, hobject_t start, hobject_t end,
   return 0;
 }
 
-int FileStore::collection_list_partial(coll_t c, hobject_t start,
+int FileStore::collection_list_partial(coll_t c, ghobject_t start,
 				       int min, int max, snapid_t seq,
-				       vector<hobject_t> *ls, hobject_t *next)
+				       vector<ghobject_t> *ls, ghobject_t *next)
 {
   Index index;
   int r = get_index(c, &index);
@@ -4031,7 +4033,7 @@ int FileStore::collection_list_partial(coll_t c, hobject_t start,
   return 0;
 }
 
-int FileStore::collection_list(coll_t c, vector<hobject_t>& ls) 
+int FileStore::collection_list(coll_t c, vector<ghobject_t>& ls)
 {  
   Index index;
   int r = get_index(c, &index);
@@ -4042,7 +4044,7 @@ int FileStore::collection_list(coll_t c, vector<hobject_t>& ls)
   return r;
 }
 
-int FileStore::omap_get(coll_t c, const hobject_t &hoid,
+int FileStore::omap_get(coll_t c, const ghobject_t &hoid,
 			bufferlist *header,
 			map<string, bufferlist> *out)
 {
@@ -4061,7 +4063,7 @@ int FileStore::omap_get(coll_t c, const hobject_t &hoid,
 
 int FileStore::omap_get_header(
   coll_t c,
-  const hobject_t &hoid,
+  const ghobject_t &hoid,
   bufferlist *bl,
   bool allow_eio)
 {
@@ -4078,7 +4080,7 @@ int FileStore::omap_get_header(
   return 0;
 }
 
-int FileStore::omap_get_keys(coll_t c, const hobject_t &hoid, set<string> *keys)
+int FileStore::omap_get_keys(coll_t c, const ghobject_t &hoid, set<string> *keys)
 {
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   IndexedPath path;
@@ -4093,7 +4095,7 @@ int FileStore::omap_get_keys(coll_t c, const hobject_t &hoid, set<string> *keys)
   return 0;
 }
 
-int FileStore::omap_get_values(coll_t c, const hobject_t &hoid,
+int FileStore::omap_get_values(coll_t c, const ghobject_t &hoid,
 			       const set<string> &keys,
 			       map<string, bufferlist> *out)
 {
@@ -4110,7 +4112,7 @@ int FileStore::omap_get_values(coll_t c, const hobject_t &hoid,
   return 0;
 }
 
-int FileStore::omap_check_keys(coll_t c, const hobject_t &hoid,
+int FileStore::omap_check_keys(coll_t c, const ghobject_t &hoid,
 			       const set<string> &keys,
 			       set<string> *out)
 {
@@ -4128,7 +4130,7 @@ int FileStore::omap_check_keys(coll_t c, const hobject_t &hoid,
 }
 
 ObjectMap::ObjectMapIterator FileStore::get_omap_iterator(coll_t c,
-							  const hobject_t &hoid)
+							  const ghobject_t &hoid)
 {
   dout(15) << __func__ << " " << c << "/" << hoid << dendl;
   IndexedPath path;
@@ -4199,7 +4201,7 @@ int FileStore::_destroy_collection(coll_t c)
 }
 
 
-int FileStore::_collection_add(coll_t c, coll_t oldcid, const hobject_t& o,
+int FileStore::_collection_add(coll_t c, coll_t oldcid, const ghobject_t& o,
 			       const SequencerPosition& spos)
 {
   dout(15) << "collection_add " << c << "/" << o << " from " << oldcid << "/" << o << dendl;
@@ -4247,8 +4249,8 @@ int FileStore::_collection_add(coll_t c, coll_t oldcid, const hobject_t& o,
   return r;
 }
 
-int FileStore::_collection_move_rename(coll_t oldcid, const hobject_t& oldoid,
-				       coll_t c, const hobject_t& o,
+int FileStore::_collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
+				       coll_t c, const ghobject_t& o,
 				       const SequencerPosition& spos)
 {
   dout(15) << __func__ << " " << c << "/" << o << " from " << oldcid << "/" << oldoid << dendl;
@@ -4327,7 +4329,7 @@ void FileStore::_inject_failure()
   }
 }
 
-int FileStore::_omap_clear(coll_t cid, const hobject_t &hoid,
+int FileStore::_omap_clear(coll_t cid, const ghobject_t &hoid,
 			   const SequencerPosition &spos) {
   dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
   IndexedPath path;
@@ -4340,7 +4342,7 @@ int FileStore::_omap_clear(coll_t cid, const hobject_t &hoid,
   return 0;
 }
 
-int FileStore::_omap_setkeys(coll_t cid, const hobject_t &hoid,
+int FileStore::_omap_setkeys(coll_t cid, const ghobject_t &hoid,
 			     const map<string, bufferlist> &aset,
 			     const SequencerPosition &spos) {
   dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
@@ -4351,7 +4353,7 @@ int FileStore::_omap_setkeys(coll_t cid, const hobject_t &hoid,
   return object_map->set_keys(hoid, aset, &spos);
 }
 
-int FileStore::_omap_rmkeys(coll_t cid, const hobject_t &hoid,
+int FileStore::_omap_rmkeys(coll_t cid, const ghobject_t &hoid,
 			    const set<string> &keys,
 			    const SequencerPosition &spos) {
   dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
@@ -4365,7 +4367,7 @@ int FileStore::_omap_rmkeys(coll_t cid, const hobject_t &hoid,
   return 0;
 }
 
-int FileStore::_omap_rmkeyrange(coll_t cid, const hobject_t &hoid,
+int FileStore::_omap_rmkeyrange(coll_t cid, const ghobject_t &hoid,
 				const string& first, const string& last,
 				const SequencerPosition &spos) {
   dout(15) << __func__ << " " << cid << "/" << hoid << " [" << first << "," << last << "]" << dendl;
@@ -4382,7 +4384,7 @@ int FileStore::_omap_rmkeyrange(coll_t cid, const hobject_t &hoid,
   return _omap_rmkeys(cid, hoid, keys, spos);
 }
 
-int FileStore::_omap_setheader(coll_t cid, const hobject_t &hoid,
+int FileStore::_omap_setheader(coll_t cid, const ghobject_t &hoid,
 			       const bufferlist &bl,
 			       const SequencerPosition &spos)
 {
@@ -4442,8 +4444,8 @@ int FileStore::_split_collection(coll_t cid,
     _close_replay_guard(dest, spos);
   }
   if (g_conf->filestore_debug_verify_split) {
-    vector<hobject_t> objects;
-    hobject_t next;
+    vector<ghobject_t> objects;
+    ghobject_t next;
     while (1) {
       collection_list_partial(
 	cid,
@@ -4453,7 +4455,7 @@ int FileStore::_split_collection(coll_t cid,
 	&next);
       if (objects.empty())
 	break;
-      for (vector<hobject_t>::iterator i = objects.begin();
+      for (vector<ghobject_t>::iterator i = objects.begin();
 	   i != objects.end();
 	   ++i) {
 	dout(20) << __func__ << ": " << *i << " still in source "
@@ -4462,7 +4464,7 @@ int FileStore::_split_collection(coll_t cid,
       }
       objects.clear();
     }
-    next = hobject_t();
+    next = ghobject_t();
     while (1) {
       collection_list_partial(
 	dest,
@@ -4472,7 +4474,7 @@ int FileStore::_split_collection(coll_t cid,
 	&next);
       if (objects.empty())
 	break;
-      for (vector<hobject_t>::iterator i = objects.begin();
+      for (vector<ghobject_t>::iterator i = objects.begin();
 	   i != objects.end();
 	   ++i) {
 	dout(20) << __func__ << ": " << *i << " now in dest "
