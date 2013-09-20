@@ -11429,8 +11429,17 @@ void MDCache::rollback_uncommitted_fragments()
     diri->dirfragtree.get_leaves_under(p->first.frag, old_frags);
 
     list<CDir*> resultfrags;
-    list<Context*> waiters;
-    adjust_dir_fragments(diri, p->first.frag, -uf.bits, resultfrags, waiters, true);
+    if (uf.old_frags.empty()) {
+      // created by old format EFragment
+      list<Context*> waiters;
+      adjust_dir_fragments(diri, p->first.frag, -uf.bits, resultfrags, waiters, true);
+    } else {
+      for (list<frag_t>::iterator p = uf.old_frags.begin(); p != uf.old_frags.end(); ++p) {
+	CDir *dir = force_dir_fragment(diri, *p);
+	resultfrags.push_back(dir);
+      }
+    }
+
     if (g_conf->mds_debug_frag)
       diri->verify_dirfrags();
 

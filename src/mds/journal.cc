@@ -2400,7 +2400,13 @@ void EFragment::replay(MDS *mds)
   case OP_ROLLBACK:
     if (in) {
       in->dirfragtree.get_leaves_under(basefrag, old_frags);
-      mds->mdcache->adjust_dir_fragments(in, basefrag, -bits, resultfrags, waiters, true);
+      if (orig_frags.empty()) {
+	// old format EFragment
+	mds->mdcache->adjust_dir_fragments(in, basefrag, -bits, resultfrags, waiters, true);
+      } else {
+	for (list<frag_t>::iterator p = orig_frags.begin(); p != orig_frags.end(); ++p)
+	  mds->mdcache->force_dir_fragment(in, *p);
+      }
     }
     mds->mdcache->rollback_uncommitted_fragment(dirfrag_t(ino, basefrag), old_frags);
     break;
