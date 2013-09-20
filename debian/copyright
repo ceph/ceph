@@ -19,6 +19,10 @@ Files: src/include/ceph_hash.cc
 Copyright: None
 License: Public domain
 
+Files: src/common/bloom_filter.hpp
+Copyright: Copyright (C) 2000 Arash Partow
+License: Boost Software License, Version 1.0
+
 Files: m4/acx_pthread.m4
 Copyright: Steven G. Johnson <stevenj@alum.mit.edu>
 License: GPLWithACException
