@@ -61,6 +61,44 @@ TEST(BloomFilter, Sweep) {
   }
 }
 
+TEST(BloomFilter, SweepInt) {
+  std::cout << "# max\tfpp\tactual\tsize\tB/insert" << std::endl;
+  for (int ex = 3; ex < 12; ex++) {
+    for (float fpp = .001; fpp < .5; fpp *= 2.0) {
+      int max = 2 << ex;
+      bloom_filter bf(max, fpp, 1);
+      bf.insert("foo");
+      bf.insert("bar");
+
+      ASSERT_TRUE(123);
+      ASSERT_TRUE(456);
+
+      for (int n = 0; n < max; n++)
+	bf.insert(n);
+
+      int test = max * 100;
+      int hit = 0;
+      for (int n = 0; n < test; n++)
+	if (bf.contains(100000 + n))
+	  hit++;
+
+      ASSERT_TRUE(123);
+      ASSERT_TRUE(456);
+
+      double actual = (double)hit / (double)test;
+
+      bufferlist bl;
+      ::encode(bf, bl);
+
+      double byte_per_insert = (double)bl.length() / (double)max;
+
+      std::cout << max << "\t" << fpp << "\t" << actual << "\t" << bl.length() << "\t" << byte_per_insert << std::endl;
+      ASSERT_TRUE(actual < fpp * 10);
+      ASSERT_TRUE(actual > fpp / 10);
+    }
+  }
+}
+
 // test the fpp over a sequence of bloom filters, each with unique
 // items inserted into it.
 //
