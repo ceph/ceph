@@ -32,7 +32,7 @@ public:
 
   bool expired() {
     uint64_t now = ceph_clock_now(NULL).sec();
-    return (now < (uint64_t)expiration);
+    return (now >= (uint64_t)expiration);
   }
 };
 
