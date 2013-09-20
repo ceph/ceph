@@ -3599,7 +3599,7 @@ done:
 	  ss << "specified pg_num " << n << " <= current " << p->get_pg_num();
 	  err = -EINVAL;
 	} else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
-	  ss << "currently creating pgs, wait";
+	  ss << "busy creating pgs; try again later";
 	  err = -EAGAIN;
 	} else {
 	  pending_inc.get_new_pool(pool, p)->set_pg_num(n);
@@ -3609,7 +3609,7 @@ done:
 	if (n > p->get_pg_num()) {
 	  ss << "specified pgp_num " << n << " > pg_num " << p->get_pg_num();
 	} else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
-	  ss << "still creating pgs, wait";
+	  ss << "busy creating pgs; try again later";
 	  err = -EAGAIN;
 	} else {
 	  pending_inc.get_new_pool(pool, p)->set_pgp_num(n);
