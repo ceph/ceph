@@ -37,3 +37,34 @@ algorithm, Ceph calculates which placement group should contain the object,
 and further calculates which Ceph OSD Daemon should store the placement group.
 The CRUSH algorithm enables the Ceph Storage Cluster to scale, rebalance, and
 recover dynamically.
+
+
+.. raw:: html
+
+	<style type="text/css">div.body h3{margin:5px 0px 0px 0px;}</style>
+	<table cellpadding="10"><colgroup><col width="50%"><col width="50%"></colgroup><tbody valign="top"><tr><td><h3>Recommendations</h3>
+	
+To begin using Ceph in production, you should review our hardware
+recommendations and operating system recommendations. 
+
+.. toctree::
+   :maxdepth: 2
+
+   Hardware Recommendations <hardware-recommendations>
+   OS Recommendations <os-recommendations>
+
+
+.. raw:: html 
+
+	</td><td><h3>Get Involved</h3>
+
+   You can avail yourself of help or contribute documentation, source 
+   code or bugs by getting involved in the Ceph community.
+
+.. toctree::
+
+   get-involved
+
+.. raw:: html
+
+	</td></tr></tbody></table>
