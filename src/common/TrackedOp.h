@@ -109,13 +109,12 @@ public:
 };
 
 class TrackedOp {
-public:
-  Message *request; /// the logical request we are tracking
 private:
   friend class OpHistory;
   friend class OpTracker;
   xlist<TrackedOp*>::item xitem;
 protected:
+  Message *request; /// the logical request we are tracking
   OpTracker *tracker; /// the tracker we are associated with
 
   list<pair<utime_t, string> > events; /// list of events and their times
@@ -127,8 +126,8 @@ protected:
   uint8_t warn_interval_multiplier; // limits output of a given op warning
 
   TrackedOp(Message *req, OpTracker *_tracker) :
-    request(req),
     xitem(this),
+    request(req),
     tracker(_tracker),
     lock("TrackedOp::lock"),
     seq(0),
@@ -152,6 +151,7 @@ public:
       (events.rbegin()->first - received_time) :
       0.0;
   }
+  Message *get_req() const { return request; }
 
   virtual void mark_event(const string &event);
   virtual const char *state_string() const = 0;

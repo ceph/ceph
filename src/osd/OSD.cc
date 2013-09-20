@@ -4598,7 +4598,7 @@ void OSD::do_waiters()
 
 void OSD::dispatch_op(OpRequestRef op)
 {
-  switch (op->request->get_type()) {
+  switch (op->get_req()->get_type()) {
 
   case MSG_OSD_PG_CREATE:
     handle_pg_create(op);
@@ -5770,9 +5770,9 @@ bool OSD::require_mon_peer(Message *m)
 
 bool OSD::require_osd_peer(OpRequestRef op)
 {
-  if (!op->request->get_connection()->peer_is_osd()) {
-    dout(0) << "require_osd_peer received from non-osd " << op->request->get_connection()->get_peer_addr()
-	    << " " << *op->request << dendl;
+  if (!op->get_req()->get_connection()->peer_is_osd()) {
+    dout(0) << "require_osd_peer received from non-osd " << op->get_req()->get_connection()->get_peer_addr()
+	    << " " << *op->get_req() << dendl;
     return false;
   }
   return true;
@@ -5784,7 +5784,7 @@ bool OSD::require_osd_peer(OpRequestRef op)
  */
 bool OSD::require_same_or_newer_map(OpRequestRef op, epoch_t epoch)
 {
-  Message *m = op->request;
+  Message *m = op->get_req();
   dout(15) << "require_same_or_newer_map " << epoch << " (i am " << osdmap->get_epoch() << ") " << m << dendl;
 
   assert(osd_lock.is_locked());
@@ -5907,7 +5907,7 @@ void OSD::split_pgs(
  */
 void OSD::handle_pg_create(OpRequestRef op)
 {
-  MOSDPGCreate *m = (MOSDPGCreate*)op->request;
+  MOSDPGCreate *m = (MOSDPGCreate*)op->get_req();
   assert(m->get_header().type == MSG_OSD_PG_CREATE);
 
   dout(10) << "handle_pg_create " << *m << dendl;
@@ -5933,10 +5933,10 @@ void OSD::handle_pg_create(OpRequestRef op)
    * up automatically by our OpTracker infrastructure). Otherwise,
    * we put the extra ref ourself.
    */
-  if (!require_mon_peer(op->request->get())) {
+  if (!require_mon_peer(op->get_req()->get())) {
     return;
   }
-  op->request->put();
+  op->get_req()->put();
 
   if (!require_same_or_newer_map(op, m->epoch)) return;
 
@@ -6241,7 +6241,7 @@ void OSD::do_infos(map<int,vector<pair<pg_notify_t, pg_interval_map_t> > >& info
  */
 void OSD::handle_pg_notify(OpRequestRef op)
 {
-  MOSDPGNotify *m = (MOSDPGNotify*)op->request;
+  MOSDPGNotify *m = (MOSDPGNotify*)op->get_req();
   assert(m->get_header().type == MSG_OSD_PG_NOTIFY);
 
   dout(7) << "handle_pg_notify from " << m->get_source() << dendl;
@@ -6276,7 +6276,7 @@ void OSD::handle_pg_notify(OpRequestRef op)
 
 void OSD::handle_pg_log(OpRequestRef op)
 {
-  MOSDPGLog *m = (MOSDPGLog*) op->request;
+  MOSDPGLog *m = (MOSDPGLog*) op->get_req();
   assert(m->get_header().type == MSG_OSD_PG_LOG);
   dout(7) << "handle_pg_log " << *m << " from " << m->get_source() << dendl;
 
@@ -6304,7 +6304,7 @@ void OSD::handle_pg_log(OpRequestRef op)
 
 void OSD::handle_pg_info(OpRequestRef op)
 {
-  MOSDPGInfo *m = static_cast<MOSDPGInfo *>(op->request);
+  MOSDPGInfo *m = static_cast<MOSDPGInfo *>(op->get_req());
   assert(m->get_header().type == MSG_OSD_PG_INFO);
   dout(7) << "handle_pg_info " << *m << " from " << m->get_source() << dendl;
 
@@ -6337,7 +6337,7 @@ void OSD::handle_pg_info(OpRequestRef op)
 
 void OSD::handle_pg_trim(OpRequestRef op)
 {
-  MOSDPGTrim *m = (MOSDPGTrim *)op->request;
+  MOSDPGTrim *m = (MOSDPGTrim *)op->get_req();
   assert(m->get_header().type == MSG_OSD_PG_TRIM);
 
   dout(7) << "handle_pg_trim " << *m << " from " << m->get_source() << dendl;
@@ -6390,7 +6390,7 @@ void OSD::handle_pg_trim(OpRequestRef op)
 
 void OSD::handle_pg_scan(OpRequestRef op)
 {
-  MOSDPGScan *m = static_cast<MOSDPGScan*>(op->request);
+  MOSDPGScan *m = static_cast<MOSDPGScan*>(op->get_req());
   assert(m->get_header().type == MSG_OSD_PG_SCAN);
   dout(10) << "handle_pg_scan " << *m << " from " << m->get_source() << dendl;
   
@@ -6418,7 +6418,7 @@ void OSD::handle_pg_scan(OpRequestRef op)
 
 void OSD::handle_pg_backfill(OpRequestRef op)
 {
-  MOSDPGBackfill *m = static_cast<MOSDPGBackfill*>(op->request);
+  MOSDPGBackfill *m = static_cast<MOSDPGBackfill*>(op->get_req());
   assert(m->get_header().type == MSG_OSD_PG_BACKFILL);
   dout(10) << "handle_pg_backfill " << *m << " from " << m->get_source() << dendl;
   
@@ -6446,7 +6446,7 @@ void OSD::handle_pg_backfill(OpRequestRef op)
 
 void OSD::handle_pg_backfill_reserve(OpRequestRef op)
 {
-  MBackfillReserve *m = static_cast<MBackfillReserve*>(op->request);
+  MBackfillReserve *m = static_cast<MBackfillReserve*>(op->get_req());
   assert(m->get_header().type == MSG_OSD_BACKFILL_RESERVE);
 
   if (!require_osd_peer(op))
@@ -6490,7 +6490,7 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
 
 void OSD::handle_pg_recovery_reserve(OpRequestRef op)
 {
-  MRecoveryReserve *m = static_cast<MRecoveryReserve*>(op->request);
+  MRecoveryReserve *m = static_cast<MRecoveryReserve*>(op->get_req());
   assert(m->get_header().type == MSG_OSD_RECOVERY_RESERVE);
 
   if (!require_osd_peer(op))
@@ -6542,7 +6542,7 @@ void OSD::handle_pg_query(OpRequestRef op)
 {
   assert(osd_lock.is_locked());
 
-  MOSDPGQuery *m = (MOSDPGQuery*)op->request;
+  MOSDPGQuery *m = (MOSDPGQuery*)op->get_req();
   assert(m->get_header().type == MSG_OSD_PG_QUERY);
 
   if (!require_osd_peer(op))
@@ -6629,7 +6629,7 @@ void OSD::handle_pg_query(OpRequestRef op)
 
 void OSD::handle_pg_remove(OpRequestRef op)
 {
-  MOSDPGRemove *m = (MOSDPGRemove *)op->request;
+  MOSDPGRemove *m = (MOSDPGRemove *)op->get_req();
   assert(m->get_header().type == MSG_OSD_PG_REMOVE);
   assert(osd_lock.is_locked());
 
@@ -6902,7 +6902,7 @@ void OSDService::reply_op_error(OpRequestRef op, int err)
 void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v,
                                 version_t uv)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->request);
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
   int flags;
   flags = m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
@@ -6914,7 +6914,7 @@ void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v,
 
 void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->request);
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
 
   if (m->get_map_epoch() < pg->info.history.same_primary_since) {
@@ -6933,7 +6933,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 
 void OSD::handle_op(OpRequestRef op)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->request);
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
   if (op_is_discardable(m)) {
     dout(10) << " discardable " << *m << dendl;
@@ -7068,7 +7068,7 @@ void OSD::handle_op(OpRequestRef op)
 template<typename T, int MSGTYPE>
 void OSD::handle_replica_op(OpRequestRef op)
 {
-  T *m = static_cast<T *>(op->request);
+  T *m = static_cast<T *>(op->get_req());
   assert(m->get_header().type == MSGTYPE);
 
   dout(10) << __func__ << *m << " epoch " << m->map_epoch << dendl;
@@ -7122,24 +7122,24 @@ bool OSD::op_is_discardable(MOSDOp *op)
  */
 void OSD::enqueue_op(PG *pg, OpRequestRef op)
 {
-  utime_t latency = ceph_clock_now(cct) - op->request->get_recv_stamp();
-  dout(15) << "enqueue_op " << op << " prio " << op->request->get_priority()
-	   << " cost " << op->request->get_cost()
+  utime_t latency = ceph_clock_now(cct) - op->get_req()->get_recv_stamp();
+  dout(15) << "enqueue_op " << op << " prio " << op->get_req()->get_priority()
+	   << " cost " << op->get_req()->get_cost()
 	   << " latency " << latency
-	   << " " << *(op->request) << dendl;
+	   << " " << *(op->get_req()) << dendl;
   pg->queue_op(op);
 }
 
 void OSD::OpWQ::_enqueue(pair<PGRef, OpRequestRef> item)
 {
-  unsigned priority = item.second->request->get_priority();
-  unsigned cost = item.second->request->get_cost();
+  unsigned priority = item.second->get_req()->get_priority();
+  unsigned cost = item.second->get_req()->get_cost();
   if (priority >= CEPH_MSG_PRIO_LOW)
     pqueue.enqueue_strict(
-      item.second->request->get_source_inst(),
+      item.second->get_req()->get_source_inst(),
       priority, item);
   else
-    pqueue.enqueue(item.second->request->get_source_inst(),
+    pqueue.enqueue(item.second->get_req()->get_source_inst(),
       priority, cost, item);
   osd->logger->set(l_osd_opq, pqueue.length());
 }
@@ -7154,14 +7154,14 @@ void OSD::OpWQ::_enqueue_front(pair<PGRef, OpRequestRef> item)
       pg_for_processing[&*(item.first)].pop_back();
     }
   }
-  unsigned priority = item.second->request->get_priority();
-  unsigned cost = item.second->request->get_cost();
+  unsigned priority = item.second->get_req()->get_priority();
+  unsigned cost = item.second->get_req()->get_cost();
   if (priority >= CEPH_MSG_PRIO_LOW)
     pqueue.enqueue_strict_front(
-      item.second->request->get_source_inst(),
+      item.second->get_req()->get_source_inst(),
       priority, item);
   else
-    pqueue.enqueue_front(item.second->request->get_source_inst(),
+    pqueue.enqueue_front(item.second->get_req()->get_source_inst(),
       priority, cost, item);
   osd->logger->set(l_osd_opq, pqueue.length());
 }
@@ -7213,11 +7213,11 @@ void OSD::dequeue_op(
   PGRef pg, OpRequestRef op,
   ThreadPool::TPHandle &handle)
 {
-  utime_t latency = ceph_clock_now(cct) - op->request->get_recv_stamp();
-  dout(10) << "dequeue_op " << op << " prio " << op->request->get_priority()
-	   << " cost " << op->request->get_cost()
+  utime_t latency = ceph_clock_now(cct) - op->get_req()->get_recv_stamp();
+  dout(10) << "dequeue_op " << op << " prio " << op->get_req()->get_priority()
+	   << " cost " << op->get_req()->get_cost()
 	   << " latency " << latency
-	   << " " << *(op->request)
+	   << " " << *(op->get_req())
 	   << " pg " << *pg << dendl;
   if (pg->deleting)
     return;
@@ -7336,7 +7336,7 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
 
 int OSD::init_op_flags(OpRequestRef op)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->request);
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   vector<OSDOp>::iterator iter;
 
   // client flags have no bearing on whether an op is a read, write, etc.
