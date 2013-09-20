@@ -15,6 +15,8 @@ from .util import assert_raises
 @fudge.with_fakes
 def test_run_log_simple():
     ssh = fudge.Fake('SSHConnection')
+    transport = ssh.expects('get_transport').with_args().returns_fake()
+    transport.expects('getpeername').with_args().returns(('HOST', 22))
     cmd = ssh.expects('exec_command')
     cmd.with_args("foo 'bar baz'")
     in_ = fudge.Fake('ChannelFile(stdin)')
@@ -30,11 +32,11 @@ def test_run_log_simple():
     logger = fudge.Fake('logger')
     log_err = fudge.Fake('log_err')
     logger.expects('getChild').with_args('err').returns(log_err)
-    log_err.expects('log').with_args(logging.INFO, 'bad')
+    log_err.expects('log').with_args(logging.INFO, '[HOST]: bad')
     log_out = fudge.Fake('log_out')
     logger.expects('getChild').with_args('out').returns(log_out)
-    log_out.expects('log').with_args(logging.INFO, 'foo')
-    log_out.expects('log').with_args(logging.INFO, 'bar')
+    log_out.expects('log').with_args(logging.INFO, '[HOST]: foo')
+    log_out.expects('log').with_args(logging.INFO, '[HOST]: bar')
     channel = fudge.Fake('channel')
     out.has_attr(channel=channel)
     channel.expects('recv_exit_status').with_args().returns(0)
@@ -50,6 +52,8 @@ def test_run_log_simple():
 @fudge.with_fakes
 def test_run_capture_stdout():
     ssh = fudge.Fake('SSHConnection')
+    transport = ssh.expects('get_transport').with_args().returns_fake()
+    transport.expects('getpeername').with_args().returns(('HOST', 22))
     cmd = ssh.expects('exec_command')
     cmd.with_args("foo 'bar baz'")
     in_ = fudge.Fake('ChannelFile(stdin)')
@@ -68,7 +72,7 @@ def test_run_capture_stdout():
     logger = fudge.Fake('logger')
     log_err = fudge.Fake('log_err')
     logger.expects('getChild').with_args('err').returns(log_err)
-    log_err.expects('log').with_args(logging.INFO, 'bad')
+    log_err.expects('log').with_args(logging.INFO, '[HOST]: bad')
     channel = fudge.Fake('channel')
     out.has_attr(channel=channel)
     channel.expects('recv_exit_status').with_args().returns(0)
@@ -88,6 +92,8 @@ def test_run_capture_stdout():
 @fudge.with_fakes
 def test_run_status_bad():
     ssh = fudge.Fake('SSHConnection')
+    transport = ssh.expects('get_transport').with_args().returns_fake()
+    transport.expects('getpeername').with_args().returns(('HOST', 22))
     cmd = ssh.expects('exec_command')
     cmd.with_args("foo")
     in_ = fudge.Fake('ChannelFile').is_a_stub()
@@ -109,13 +115,15 @@ def test_run_status_bad():
         )
     eq(e.command, 'foo')
     eq(e.exitstatus, 42)
-    eq(str(e), "Command failed with status 42: 'foo'")
+    eq(str(e), "Command failed on HOST with status 42: 'foo'")
 
 
 @nose.with_setup(fudge.clear_expectations)
 @fudge.with_fakes
 def test_run_status_bad_nocheck():
     ssh = fudge.Fake('SSHConnection')
+    transport = ssh.expects('get_transport').with_args().returns_fake()
+    transport.expects('getpeername').with_args().returns(('HOST', 22))
     cmd = ssh.expects('exec_command')
     cmd.with_args("foo")
     in_ = fudge.Fake('ChannelFile').is_a_stub()
@@ -141,6 +149,9 @@ def test_run_status_bad_nocheck():
 @fudge.with_fakes
 def test_run_status_crash():
     ssh = fudge.Fake('SSHConnection')
+    transport = ssh.expects('get_transport').with_args().returns_fake()
+    transport.expects('getpeername').with_args().returns(('HOST', 22))
+    transport.expects('is_active').with_args().returns(True)
     cmd = ssh.expects('exec_command')
     cmd.with_args("foo")
     in_ = fudge.Fake('ChannelFile').is_a_stub()
@@ -153,8 +164,6 @@ def test_run_status_crash():
     channel = fudge.Fake('channel')
     out.has_attr(channel=channel)
     channel.expects('recv_exit_status').with_args().returns(-1)
-    transport = ssh.expects('get_transport').with_args().returns_fake()
-    transport.expects('is_active').with_args().returns(True)
     e = assert_raises(
         run.CommandCrashedError,
         run.run,
@@ -170,6 +179,8 @@ def test_run_status_crash():
 @fudge.with_fakes
 def test_run_status_crash_nocheck():
     ssh = fudge.Fake('SSHConnection')
+    transport = ssh.expects('get_transport').with_args().returns_fake()
+    transport.expects('getpeername').with_args().returns(('HOST', 22))
     cmd = ssh.expects('exec_command')
     cmd.with_args("foo")
     in_ = fudge.Fake('ChannelFile').is_a_stub()
@@ -208,6 +219,7 @@ def test_run_status_lost():
     out.has_attr(channel=channel)
     channel.expects('recv_exit_status').with_args().returns(-1)
     transport = ssh.expects('get_transport').with_args().returns_fake()
+    transport.expects('getpeername').with_args().returns(('HOST', 22))
     transport.expects('is_active').with_args().returns(False)
     e = assert_raises(
         run.ConnectionLostError,
@@ -225,6 +237,8 @@ def test_run_status_lost():
 @fudge.with_fakes
 def test_run_status_lost_nocheck():
     ssh = fudge.Fake('SSHConnection')
+    transport = ssh.expects('get_transport').with_args().returns_fake()
+    transport.expects('getpeername').with_args().returns(('HOST', 22))
     cmd = ssh.expects('exec_command')
     cmd.with_args("foo")
     in_ = fudge.Fake('ChannelFile').is_a_stub()
@@ -250,6 +264,8 @@ def test_run_status_lost_nocheck():
 @fudge.with_fakes
 def test_run_nowait():
     ssh = fudge.Fake('SSHConnection')
+    transport = ssh.expects('get_transport').with_args().returns_fake()
+    transport.expects('getpeername').with_args().returns(('HOST', 22))
     cmd = ssh.expects('exec_command')
     cmd.with_args("foo")
     in_ = fudge.Fake('ChannelFile').is_a_stub()
@@ -275,13 +291,15 @@ def test_run_nowait():
         r.exitstatus.get,
         )
     eq(e.exitstatus, 42)
-    eq(str(e), "Command failed with status 42: 'foo'")
+    eq(str(e), "Command failed on HOST with status 42: 'foo'")
 
 
 @nose.with_setup(fudge.clear_expectations)
 @fudge.with_fakes
 def test_run_stdin_pipe():
     ssh = fudge.Fake('SSHConnection')
+    transport = ssh.expects('get_transport').with_args().returns_fake()
+    transport.expects('getpeername').with_args().returns(('HOST', 22))
     cmd = ssh.expects('exec_command')
     cmd.with_args("foo")
     in_ = fudge.Fake('ChannelFile').is_a_stub()
@@ -313,6 +331,8 @@ def test_run_stdin_pipe():
 @fudge.with_fakes
 def test_run_stdout_pipe():
     ssh = fudge.Fake('SSHConnection')
+    transport = ssh.expects('get_transport').with_args().returns_fake()
+    transport.expects('getpeername').with_args().returns(('HOST', 22))
     cmd = ssh.expects('exec_command')
     cmd.with_args("foo")
     in_ = fudge.Fake('ChannelFile').is_a_stub()
@@ -348,6 +368,8 @@ def test_run_stdout_pipe():
 @fudge.with_fakes
 def test_run_stderr_pipe():
     ssh = fudge.Fake('SSHConnection')
+    transport = ssh.expects('get_transport').with_args().returns_fake()
+    transport.expects('getpeername').with_args().returns(('HOST', 22))
     cmd = ssh.expects('exec_command')
     cmd.with_args("foo")
     in_ = fudge.Fake('ChannelFile').is_a_stub()

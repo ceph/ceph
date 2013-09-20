@@ -43,6 +43,7 @@ def test_run():
         stdout=None,
         stderr=None,
         exitstatus=None,
+        exited=None,
         )
     run.expects_call().with_args(
         client=fudge.inspector.arg.passes_test(lambda v: v is ssh),
