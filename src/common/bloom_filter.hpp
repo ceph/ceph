@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <list>
 #include <string>
 #include <vector>
 
@@ -470,7 +471,7 @@ public:
    void encode(bufferlist& bl) const;
    void decode(bufferlist::iterator& bl);
    void dump(Formatter *f) const;
-   static void generate_test_instances(list<bloom_filter*>& ls);
+   static void generate_test_instances(std::list<bloom_filter*>& ls);
 };
 WRITE_CLASS_ENCODER(bloom_filter)
 
