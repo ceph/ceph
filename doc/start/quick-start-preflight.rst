@@ -12,37 +12,26 @@ Ceph Nodes (or virtual machines) that will host your Ceph Storage Cluster.
 
 .. ditaa:: 
            /------------------\         /----------------\
-           | ceph deploy Node |         |    Ceph Node   |
+           | ceph–deploy Node |         |   ceph–node1   |
            |                  +-------->+                |
            |                  |         | cCCC           |
            \---------+--------/         \----------------/
                      |
                      |                  /----------------\
-                     |                  |    Ceph Node   |
+                     |                  |   ceph–node2   |
                      +----------------->+                |
                      |                  | cCCC           |
                      |                  \----------------/
                      |
                      |                  /----------------\
-                     |                  |    Ceph Node   |
+                     |                  |   ceph–node3   |
                      +----------------->|                |
                                         | cCCC           |
                                         \----------------/
 
-Ceph runs on recent distributions of Linux (e.g., Ubuntu, Red Hat, CentOS,
-etc.).
-
 
 Ceph Node Setup
 ===============
-
-A :term:`Ceph Node` requires the following: 
-
-- A recent Linux distribution.
-- A user with ``root`` privileges.
-- An SSH server.
-- Network connectivity and access to/for other Ceph Nodes.
-
 
 Perform the following steps:
 
@@ -127,27 +116,37 @@ For Red Hat(rhel6), CentOS (el6), Fedora 17-19 (f17-f19), OpenSUSE 12
 
 
 #. Add the package to your repository. Open a text editor and create a 
-   Yellowdog Updater, Modified (YUM) entry under ``/etc/yum.repos.d``:: 
+   Yellowdog Updater, Modified (YUM) entry. Use the file path
+   ``/etc/yum.repos.d/ceph.repo``. For example:: 
 
-	[ceph]
-	   name=Ceph Packages $basearch
-	   baseurl=http://ceph.com/rpm-{ceph-stable-release}/{distro}/$basearch
-	   enabled=1
-	   gpgcheck=1
-	   type=rpm-md
-	   gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc 
+	sudo vim /etc/yum.repos.d/ceph.repo
 
-   Ensure that you use the correct path for your Linux distribution. Replace 
-   ``{ceph-stable-release}`` with the recent stable release of Ceph 
-   (e.g., ``dumpling``). Replace ``{distro}`` with your Linux distribution
-   (e.g., CentOS (``el6``), Red Hat (``rhel6``), Fedora (``fc18`` or ``fc19``),
-   SLES (``sles11``)).
+   Paste the following example code. Replace ``{ceph-stable-release}`` with 
+   the recent stable release of Ceph (e.g., ``dumpling``). Replace ``{distro}``
+   with your Linux distribution (e.g., ``el6`` for CentOS 6, ``rhel6`` for 
+   Red Hat 6, ``fc18`` or ``fc19`` for Fedora 18 or Fedora 19, and ``sles11`` 
+   for SLES 11). Finally, save the contents to the 
+   ``/etc/yum.repos.d/ceph.repo`` file. ::
+
+	[ceph-noarch]
+	name=Ceph noarch packages
+	baseurl=http://ceph.com/rpm-{ceph-stable-release}/{distro}/noarch
+	enabled=1
+	gpgcheck=1
+	type=rpm-md
+	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc 
+
 
 #. Update your repository and install ``ceph-deploy``:: 
 
-	sudo yum update && sudo yum install ceph-deploy python-pushy
+	sudo yum update && sudo yum install ceph-deploy
 
 
+Summary
+=======
+
+This completes the Quick Start Preflight. Proceed to the `Storage Cluster
+Quick Start`_.
 
 .. _Storage Cluster Quick Start: ../quick-ceph-deploy
 .. _OS Recommendations: ../../install/os-recommendations
