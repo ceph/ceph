@@ -8,23 +8,22 @@ you can explore some of the :term:`Ceph Storage Cluster` functionality.
 
 .. ditaa:: 
            /------------------\         /----------------\
-           | ceph deploy Node |         |    Ceph Node   |
+           | ceph–deploy Node |         |   ceph–node1   |
            |                  +-------->+                |
            |                  |         | cCCC           |
            \---------+--------/         \----------------/
                      |
                      |                  /----------------\
-                     |                  |    Ceph Node   |
+                     |                  |   ceph–node2   |
                      +----------------->+                |
                      |                  | cCCC           |
                      |                  \----------------/
                      |
                      |                  /----------------\
-                     |                  |    Ceph Node   |
-                     +----------------->+                |
+                     |                  |   ceph–node3   |
+                     +----------------->|                |
                                         | cCCC           |
                                         \----------------/
-
 
 For best results, create a directory on your ``ceph-deploy`` node for
 maintaining the configuration of your cluster. ::
