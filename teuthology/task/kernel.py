@@ -136,8 +136,8 @@ def need_to_install(ctx, role, sha1):
     return ret
 
 def install_firmware(ctx, config):
-    # uri = 'git://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git'
-    uri = 'git://ceph.com/git/linux-firmware.git'
+    linux_firmware_git_upstream = 'git://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git'
+    uri = teuth_config.linux_firmware_git_url or linux_firmware_git_upstream
     fw_dir = '/lib/firmware/updates'
 
     for role in config.iterkeys():
