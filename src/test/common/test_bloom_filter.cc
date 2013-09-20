@@ -60,3 +60,81 @@ TEST(BloomFilter, Sweep) {
     }
   }
 }
+
+// test the fpp over a sequence of bloom filters, each with unique
+// items inserted into it.
+//
+// we expect:  actual_fpp = num_filters * per_filter_fpp
+TEST(BloomFilter, Sequence) {
+
+  int max = 1024;
+  double fpp = .01;
+  for (int seq = 2; seq <= 128; seq *= 2) {
+    std::vector<bloom_filter*> ls;
+    for (int i=0; i<seq; i++) {
+      ls.push_back(new bloom_filter(max*2, fpp, i));
+      for (int j=0; j<max; j++) {
+	ls.back()->insert("ok" + stringify(j) + "_" + stringify(i));
+	if (ls.size() > 1)
+	  ls[ls.size() - 2]->insert("ok" + stringify(j) + "_" + stringify(i));
+      }
+    }
+
+    int hit = 0;
+    int test = max * 100;
+    for (int i=0; i<test; ++i) {
+      for (std::vector<bloom_filter*>::iterator j = ls.begin(); j != ls.end(); ++j) {
+	if ((*j)->contains("bad" + stringify(i))) {
+	  hit++;
+	  break;
+	}
+      }
+    }
+
+    double actual = (double)hit / (double)test;
+    std::cout << "seq " << seq << " max " << max << " fpp " << fpp << " actual " << actual << std::endl;
+  }
+}
+
+// test the ffp over a sequence of bloom filters, where actual values
+// are always inserted into a consecutive pair of filters.  in order
+// to have a false positive, we need to falsely match two consecutive
+// filters.
+//
+// we expect:  actual_fpp = num_filters * per_filter_fpp^2
+TEST(BloomFilter, SequenceDouble) {
+  int max = 1024;
+  double fpp = .01;
+  for (int seq = 2; seq <= 128; seq *= 2) {
+    std::vector<bloom_filter*> ls;
+    for (int i=0; i<seq; i++) {
+      ls.push_back(new bloom_filter(max*2, fpp, i));
+      for (int j=0; j<max; j++) {
+	ls.back()->insert("ok" + stringify(j) + "_" + stringify(i));
+	if (ls.size() > 1)
+	  ls[ls.size() - 2]->insert("ok" + stringify(j) + "_" + stringify(i));
+      }
+    }
+
+    int hit = 0;
+    int test = max * 100;
+    int run = 0;
+    for (int i=0; i<test; ++i) {
+      for (std::vector<bloom_filter*>::iterator j = ls.begin(); j != ls.end(); ++j) {
+	if ((*j)->contains("bad" + stringify(i))) {
+	  run++;
+	  if (run >= 2) {
+	    hit++;
+	    break;
+	  }
+	} else {
+	  run = 0;
+	}
+      }
+    }
+
+    double actual = (double)hit / (double)test;
+    std::cout << "seq " << seq << " max " << max << " fpp " << fpp << " actual " << actual
+	      << " expected " << (fpp*fpp*(double)seq) << std::endl;
+  }
+}
