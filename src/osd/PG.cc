@@ -1333,10 +1333,10 @@ void PG::do_pending_flush()
 bool PG::op_has_sufficient_caps(OpRequestRef op)
 {
   // only check MOSDOp
-  if (op->request->get_type() != CEPH_MSG_OSD_OP)
+  if (op->get_req()->get_type() != CEPH_MSG_OSD_OP)
     return true;
 
-  MOSDOp *req = static_cast<MOSDOp*>(op->request);
+  MOSDOp *req = static_cast<MOSDOp*>(op->get_req());
 
   OSD::Session *session = (OSD::Session *)req->get_connection()->get_priv();
   if (!session) {
@@ -1420,7 +1420,7 @@ void PG::do_request(
     return;
   }
 
-  switch (op->request->get_type()) {
+  switch (op->get_req()->get_type()) {
   case CEPH_MSG_OSD_OP:
     if (is_replay() || !is_active()) {
       dout(20) << " replay, waiting for active on " << op << dendl;
@@ -1488,7 +1488,7 @@ void PG::replay_queued_ops()
       c = p->first;
     }
     dout(10) << "activate replay " << p->first << " "
-             << *p->second->request << dendl;
+             << *p->second->get_req() << dendl;
     replay.push_back(p->second);
   }
   replay_queue.clear();
@@ -2694,7 +2694,7 @@ void PG::unreg_next_scrub()
 
 void PG::sub_op_scrub_map(OpRequestRef op)
 {
-  MOSDSubOp *m = static_cast<MOSDSubOp *>(op->request);
+  MOSDSubOp *m = static_cast<MOSDSubOp *>(op->get_req());
   assert(m->get_header().type == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_map" << dendl;
 
@@ -2880,7 +2880,7 @@ void PG::_request_scrub_map(int replica, eversion_t version,
 
 void PG::sub_op_scrub_reserve(OpRequestRef op)
 {
-  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->request);
+  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
   assert(m->get_header().type == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_reserve" << dendl;
 
@@ -2900,7 +2900,7 @@ void PG::sub_op_scrub_reserve(OpRequestRef op)
 
 void PG::sub_op_scrub_reserve_reply(OpRequestRef op)
 {
-  MOSDSubOpReply *reply = static_cast<MOSDSubOpReply*>(op->request);
+  MOSDSubOpReply *reply = static_cast<MOSDSubOpReply*>(op->get_req());
   assert(reply->get_header().type == MSG_OSD_SUBOPREPLY);
   dout(7) << "sub_op_scrub_reserve_reply" << dendl;
 
@@ -2933,7 +2933,7 @@ void PG::sub_op_scrub_reserve_reply(OpRequestRef op)
 
 void PG::sub_op_scrub_unreserve(OpRequestRef op)
 {
-  assert(op->request->get_header().type == MSG_OSD_SUBOP);
+  assert(op->get_req()->get_header().type == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_unreserve" << dendl;
 
   op->mark_started();
@@ -2945,7 +2945,7 @@ void PG::sub_op_scrub_stop(OpRequestRef op)
 {
   op->mark_started();
 
-  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->request);
+  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
   assert(m->get_header().type == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_stop" << dendl;
 
@@ -4806,7 +4806,7 @@ ostream& operator<<(ostream& out, const PG& pg)
 
 bool PG::can_discard_op(OpRequestRef op)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->request);
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   if (OSD::op_is_discardable(m)) {
     dout(20) << " discard " << *m << dendl;
     return true;
@@ -4834,7 +4834,7 @@ bool PG::can_discard_op(OpRequestRef op)
 template<typename T, int MSGTYPE>
 bool PG::can_discard_replica_op(OpRequestRef op)
 {
-  T *m = static_cast<T *>(op->request);
+  T *m = static_cast<T *>(op->get_req());
   assert(m->get_header().type == MSGTYPE);
 
   // same pg?
@@ -4850,7 +4850,7 @@ bool PG::can_discard_replica_op(OpRequestRef op)
 
 bool PG::can_discard_scan(OpRequestRef op)
 {
-  MOSDPGScan *m = static_cast<MOSDPGScan *>(op->request);
+  MOSDPGScan *m = static_cast<MOSDPGScan *>(op->get_req());
   assert(m->get_header().type == MSG_OSD_PG_SCAN);
 
   if (old_peering_msg(m->map_epoch, m->query_epoch)) {
@@ -4862,7 +4862,7 @@ bool PG::can_discard_scan(OpRequestRef op)
 
 bool PG::can_discard_backfill(OpRequestRef op)
 {
-  MOSDPGBackfill *m = static_cast<MOSDPGBackfill *>(op->request);
+  MOSDPGBackfill *m = static_cast<MOSDPGBackfill *>(op->get_req());
   assert(m->get_header().type == MSG_OSD_PG_BACKFILL);
 
   if (old_peering_msg(m->map_epoch, m->query_epoch)) {
@@ -4876,7 +4876,7 @@ bool PG::can_discard_backfill(OpRequestRef op)
 
 bool PG::can_discard_request(OpRequestRef op)
 {
-  switch (op->request->get_type()) {
+  switch (op->get_req()->get_type()) {
   case CEPH_MSG_OSD_OP:
     return can_discard_op(op);
   case MSG_OSD_SUBOP:
@@ -4901,55 +4901,55 @@ bool PG::can_discard_request(OpRequestRef op)
 bool PG::split_request(OpRequestRef op, unsigned match, unsigned bits)
 {
   unsigned mask = ~((~0)<<bits);
-  switch (op->request->get_type()) {
+  switch (op->get_req()->get_type()) {
   case CEPH_MSG_OSD_OP:
-    return (static_cast<MOSDOp*>(op->request)->get_pg().m_seed & mask) == match;
+    return (static_cast<MOSDOp*>(op->get_req())->get_pg().m_seed & mask) == match;
   }
   return false;
 }
 
 bool PG::op_must_wait_for_map(OSDMapRef curmap, OpRequestRef op)
 {
-  switch (op->request->get_type()) {
+  switch (op->get_req()->get_type()) {
   case CEPH_MSG_OSD_OP:
     return !have_same_or_newer_map(
       curmap,
-      static_cast<MOSDOp*>(op->request)->get_map_epoch());
+      static_cast<MOSDOp*>(op->get_req())->get_map_epoch());
 
   case MSG_OSD_SUBOP:
     return !have_same_or_newer_map(
       curmap,
-      static_cast<MOSDSubOp*>(op->request)->map_epoch);
+      static_cast<MOSDSubOp*>(op->get_req())->map_epoch);
 
   case MSG_OSD_SUBOPREPLY:
     return !have_same_or_newer_map(
       curmap,
-      static_cast<MOSDSubOpReply*>(op->request)->map_epoch);
+      static_cast<MOSDSubOpReply*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_SCAN:
     return !have_same_or_newer_map(
       curmap,
-      static_cast<MOSDPGScan*>(op->request)->map_epoch);
+      static_cast<MOSDPGScan*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_BACKFILL:
     return !have_same_or_newer_map(
       curmap,
-      static_cast<MOSDPGBackfill*>(op->request)->map_epoch);
+      static_cast<MOSDPGBackfill*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_PUSH:
     return !have_same_or_newer_map(
       curmap,
-      static_cast<MOSDPGPush*>(op->request)->map_epoch);
+      static_cast<MOSDPGPush*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_PULL:
     return !have_same_or_newer_map(
       curmap,
-      static_cast<MOSDPGPull*>(op->request)->map_epoch);
+      static_cast<MOSDPGPull*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_PUSH_REPLY:
     return !have_same_or_newer_map(
       curmap,
-      static_cast<MOSDPGPushReply*>(op->request)->map_epoch);
+      static_cast<MOSDPGPushReply*>(op->get_req())->map_epoch);
   }
   assert(0);
   return false;
