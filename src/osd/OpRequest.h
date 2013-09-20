@@ -75,10 +75,6 @@ private:
   OpRequest(Message *req, OpTracker *tracker);
 
 public:
-  ~OpRequest() {
-    assert(request);
-  }
-
   bool been_queued_for_pg() { return hit_flag_points & flag_queued_for_pg; }
   bool been_reached_pg() { return hit_flag_points & flag_reached_pg; }
   bool been_delayed() { return hit_flag_points & flag_delayed; }
