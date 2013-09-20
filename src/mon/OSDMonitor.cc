@@ -2526,7 +2526,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
        i != properties.end();
        i++) {
     size_t equal = i->find('=');
-    if (equal != string::npos)
+    if (equal == string::npos)
       pi->properties[*i] = string();
     else {
       const string key = i->substr(0, equal);
