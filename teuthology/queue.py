@@ -11,12 +11,10 @@ import yaml
 
 import beanstalkc
 
-from teuthology import safepath
+from .config import config as teuth_config
+from . import safepath
 
 log = logging.getLogger(__name__)
-
-#teuthology_git_upstream = "https://github.com/ceph/teuthology.git"
-teuthology_git_upstream = "git://ceph.com/teuthology.git"
 
 # simple flock class
 class filelock(object):
@@ -51,6 +49,7 @@ def fetch_teuthology_branch(path, branch='master'):
     try:
         if not os.path.isdir(path):
             log.info("Cloning %s from upstream", branch)
+            teuthology_git_upstream = teuth_config.ceph_git_base_url + 'teuthology.git'
             log.info(
                 subprocess.check_output(('git', 'clone', '--branch', branch,
                                          teuthology_git_upstream, path),
