@@ -8,6 +8,7 @@ CLEANFILES =
 
 noinst_HEADERS =
 bin_PROGRAMS =
+noinst_PROGRAMS =
 bin_SCRIPTS =
 sbin_PROGRAMS =
 sbin_SCRIPTS =
