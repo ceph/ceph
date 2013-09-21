@@ -1860,6 +1860,21 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
     }
   }
+  if (!pg_map.pg_stat.empty()) {
+    for (hash_map<int,pool_stat_t>::const_iterator p = pg_map.pg_pool_sum.begin();
+	 p != pg_map.pg_pool_sum.end();
+	 ++p) {
+      const pg_pool_t *pi = mon->osdmon()->osdmap.get_pg_pool(p->first);
+      if (pi->get_pg_num() > pi->get_pgp_num()) {
+	ostringstream ss;
+	ss << "pool " << mon->osdmon()->osdmap.get_pool_name(p->first) << " pg_num "
+	   << pi->get_pg_num() << " > pgp_num " << pi->get_pgp_num();
+	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+	if (detail)
+	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+    }
+  }
 }
 
 void PGMonitor::check_full_osd_health(list<pair<health_status_t,string> >& summary,
