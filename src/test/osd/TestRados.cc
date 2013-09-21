@@ -155,7 +155,9 @@ private:
 
     case TEST_OP_COPY_FROM:
       oid = *(rand_choose(context.oid_not_in_use));
-      oid2 = *(rand_choose(context.oid_not_in_use));
+      do {
+	oid2 = *(rand_choose(context.oid_not_in_use));
+      } while (oid == oid2);
       cout << "copy_from oid " << oid << " from oid " << oid2
 	   << " current snap is " << context.current_snap << std::endl;
       return new CopyFromOp(m_op, &context, oid, oid2, m_stats);
