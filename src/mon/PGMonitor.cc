@@ -1847,6 +1847,19 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
       detail->push_back(make_pair(HEALTH_ERR, ss.str()));
     }
   }
+
+  // pg skew
+  int num_in = mon->osdmon()->osdmap.get_num_in_osds();
+  if (num_in && g_conf->mon_pg_warn_min_per_osd > 0) {
+    int per = pg_map.pg_stat.size() / num_in;
+    if (per < g_conf->mon_pg_warn_min_per_osd) {
+      ostringstream ss;
+      ss << "too few pgs per osd (" << per << " < min " << g_conf->mon_pg_warn_min_per_osd << ")";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      if (detail)
+	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+    }
+  }
 }
 
 void PGMonitor::check_full_osd_health(list<pair<health_status_t,string> >& summary,
