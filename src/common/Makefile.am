@@ -112,7 +112,7 @@ noinst_HEADERS += \
 LIBCOMMON_DEPS += \
 	$(LIBMSG) $(LIBAUTH) \
 	$(LIBCRUSH) $(LIBJSON_SPIRIT) $(LIBLOG) $(LIBARCH) \
-	-lkeyutils
+	$(KEYUTILS_LIB)
 
 if LINUX
 LIBCOMMON_DEPS += -lrt
