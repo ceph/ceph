@@ -118,8 +118,41 @@ AX_CXX_STATIC_CAST
 # Checks for libraries.
 ACX_PTHREAD
 AC_CHECK_LIB([uuid], [uuid_parse], [true], AC_MSG_FAILURE([libuuid not found]))
+
+#
+# Check for res_nquery in libresolv. There are several variations. On OSX
+# res_nquery is a macro defined in resolv.h, so the typical AC_CHECK_LIB
+# doesn't work. On FreeBSD res_nquery can be found in libc. The required
+# library for linking (if any) is defined RESOLV_LIBS.
+#
+AC_CHECK_HEADER([resolv.h], [], [], [#include <netinet/in.h>])
+
+AC_DEFUN([CHECK_RESOLV_LIBS], [{
+  AC_MSG_CHECKING([if res_nquery will link (LIBS=$1)])
+  saved_LIBS="${LIBS}"
+  LIBS="$1"
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+        #include <netinet/in.h>
+        #include <resolv.h>
+      ]], [[res_nquery(0, 0, 0, 0, 0, 0);]])],
+      [AC_MSG_RESULT([yes])
+      [$2]],
+      AC_MSG_RESULT([no]))
+  LIBS="${saved_LIBS}"
+}])
+
+RESOLV_LIBS=""
+CHECK_RESOLV_LIBS([$RESOLV_LIBS], [resolv_libs="ok"])
+if test x"$resolv_libs" != "xok"; then
+  RESOLV_LIBS="-lresolv"
+  CHECK_RESOLV_LIBS([$RESOLV_LIBS], [resolv_libs="ok"])
+  if test x"$resolv_libs" != "xok"; then
+    AC_MSG_FAILURE([no resolv library found])
+  fi
+fi
+AC_SUBST([RESOLV_LIBS])
+
 AC_CHECK_LIB([m], [pow], [true], AC_MSG_FAILURE([libm not found]))
-AC_CHECK_LIB([resolv], [__res_nquery], [true], AC_MSG_FAILURE([libresolv not found]))
 if test x"$linux" = x"yes"; then
 	AC_CHECK_LIB([keyutils], [add_key], [true], AC_MSG_FAILURE([libkeyutils not found]))
 fi
