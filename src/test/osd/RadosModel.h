@@ -1482,9 +1482,6 @@ public:
 	context->update_object_full(oid, src_value);
 	context->update_object_version(oid, comp->get_version64());
       }
-      context->oid_in_use.erase(oid_src);
-      context->oid_not_in_use.insert(oid_src);
-      context->kick();
     } else if (info->id == 1) {
       // racing read
       assert(comp_racing_read->is_complete());
@@ -1499,11 +1496,14 @@ public:
 	assert(!version || comp_racing_read->get_version64() == version);
 	version = comp_racing_read->get_version64();
       }
+    }
+    if (++done == 2) {
       context->oid_in_use.erase(oid);
       context->oid_not_in_use.insert(oid);
+      context->oid_in_use.erase(oid_src);
+      context->oid_not_in_use.insert(oid_src);
       context->kick();
     }
-    ++done;
   }
 
   bool finished()
