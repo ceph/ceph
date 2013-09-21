@@ -35,13 +35,16 @@ endif
 ##################################
 ## automake environment
 
-AM_COMMON_FLAGS = \
+AM_COMMON_CPPFLAGS = \
 	-D__CEPH__ \
 	-D_FILE_OFFSET_BITS=64 \
 	-D_REENTRANT \
 	-D_THREAD_SAFE \
 	-D__STDC_FORMAT_MACROS \
 	-D_GNU_SOURCE \
+	-DCEPH_LIBDIR=\"${libdir}\"
+
+AM_COMMON_CFLAGS = \
 	-rdynamic \
 	-Wall \
 	${WARN_TYPE_LIMITS} \
@@ -52,14 +55,11 @@ AM_COMMON_FLAGS = \
 	-fno-strict-aliasing \
 	-fsigned-char
 
-AM_CFLAGS = $(AM_COMMON_FLAGS)
-AM_CPPFLAGS = \
-	$(AM_COMMON_FLAGS) \
-	-DCEPH_LIBDIR=\"${libdir}\"
+AM_CFLAGS = $(AM_COMMON_CFLAGS)
+AM_CPPFLAGS = $(AM_COMMON_CPPFLAGS)
 AM_CXXFLAGS = \
 	@AM_CXXFLAGS@ \
-	$(AM_COMMON_FLAGS) \
-	-DCEPH_LIBDIR=\"${libdir}\" \
+	$(AM_COMMON_CFLAGS) \
 	-Wnon-virtual-dtor \
 	-Wno-invalid-offsetof \
 	-Wstrict-null-sentinel
