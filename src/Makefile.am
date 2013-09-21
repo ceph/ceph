@@ -112,7 +112,7 @@ libcephfs_jni_la_SOURCES = \
 	java/native/JniConstants.cpp \
 	java/native/JniConstants.h
 libcephfs_jni_la_LIBADD = $(LIBCEPHFS) $(EXTRALIBS)
-libcephfs_jni_la_CPPFLAGS = $(JDK_CPPFLAGS)
+libcephfs_jni_la_CPPFLAGS = $(JDK_CPPFLAGS) $(AM_CPPFLAGS)
 libcephfs_jni_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
 lib_LTLIBRARIES += libcephfs_jni.la
 endif
