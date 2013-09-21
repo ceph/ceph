@@ -284,8 +284,8 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  if (max_in_flight > objects) {
-    cerr << "Error: max_in_flight must be less than the number of objects"
+  if (max_in_flight * 2 > objects) {
+    cerr << "Error: max_in_flight must be <= than the number of objects / 2"
 	 << std::endl;
     return 1;
   }
