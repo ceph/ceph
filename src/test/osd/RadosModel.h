@@ -792,8 +792,6 @@ public:
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
 
-    context->seq_num++;
-
     vector<uint64_t> snapset(context->snaps.size());
     int j = 0;
     for (map<int,uint64_t>::reverse_iterator i = context->snaps.rbegin();
@@ -804,6 +802,7 @@ public:
     interval_set<uint64_t> ranges;
     context->cont_gen.get_ranges(cont, ranges);
     std::cout << num << ":  seq_num " << context->seq_num << " ranges " << ranges << std::endl;
+    context->seq_num++;
     context->state_lock.Unlock();
 
     int r = context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset);
@@ -1081,8 +1080,8 @@ public:
 	  context->errors++;
 	}
 	if (to_check != old_value.most_recent()) {
-	  cerr << num << ": Found incorrect object contents " << to_check
-	       << ", expected " << old_value.most_recent() << " oid " << oid << std::endl;
+	  cerr << num << ": oid " << oid << " found incorrect object contents " << to_check
+	       << ", expected " << old_value.most_recent() << std::endl;
 	  context->errors++;
 	}
 	if (!old_value.check(result)) {
