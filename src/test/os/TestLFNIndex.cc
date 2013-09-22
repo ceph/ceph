@@ -167,12 +167,12 @@ public:
 
   virtual void SetUp() {
     ::chmod("PATH", 0700);
-    ::system("rm -fr PATH");
-    ::mkdir("PATH", 0700);
+    ASSERT_EQ(0, ::system("rm -fr PATH"));
+    ASSERT_EQ(0, ::mkdir("PATH", 0700));
   }
 
   virtual void TearDown() {
-    ::system("rm -fr PATH");
+    ASSERT_EQ(0, ::system("rm -fr PATH"));
   }
 };
 
@@ -441,6 +441,11 @@ int main(int argc, char **argv) {
   }
 }
 
-// Local Variables:
-// compile-command: "cd ../.. ; make unittest_lfnindex ; valgrind --tool=memcheck ./unittest_lfnindex # --gtest_filter=TestLFNIndex.* --log-to-stderr=true --debug-filestore=20"
-// End:
+/* 
+ * Local Variables:
+ * compile-command: "cd ../.. ; 
+ *   make unittest_lfnindex && 
+ *   valgrind --tool=memcheck ./unittest_lfnindex \
+ *   # --gtest_filter=TestLFNIndex.* --log-to-stderr=true --debug-filestore=20"
+ * End:
+ */
