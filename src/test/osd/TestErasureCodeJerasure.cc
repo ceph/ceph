@@ -14,6 +14,7 @@
  * 
  */
 
+#include <errno.h>
 #include "global/global_init.h"
 #include "osd/ErasureCodePluginJerasure/ErasureCodeJerasure.h"
 #include "common/ceph_argparse.h"
@@ -36,7 +37,8 @@ typedef ::testing::Types<
 > JerasureTypes;
 TYPED_TEST_CASE(ErasureCodeTest, JerasureTypes);
 
-TYPED_TEST(ErasureCodeTest, encode_decode) {
+TYPED_TEST(ErasureCodeTest, encode_decode)
+{
   TypeParam jerasure;
   map<std::string,std::string> parameters;
   parameters["erasure-code-k"] = "2";
@@ -92,7 +94,106 @@ TYPED_TEST(ErasureCodeTest, encode_decode) {
   }
 }
 
-int main(int argc, char **argv) {
+TYPED_TEST(ErasureCodeTest, minimum_to_decode)
+{
+  TypeParam jerasure;
+  map<std::string,std::string> parameters;
+  parameters["erasure-code-k"] = "2";
+  parameters["erasure-code-m"] = "2";
+  parameters["erasure-code-w"] = "7";
+  parameters["erasure-code-packetsize"] = "8";
+  jerasure.init(parameters);
+
+  //
+  // If trying to read nothing, the minimum is empty.
+  //
+  {
+    set<int> want_to_read;
+    set<int> available_chunks;
+    set<int> minimum;
+
+    EXPECT_EQ(0, jerasure.minimum_to_decode(want_to_read,
+					    available_chunks,
+					    &minimum));
+    EXPECT_TRUE(minimum.empty());
+  }
+  //
+  // There is no way to read a chunk if none are available.
+  //
+  {
+    set<int> want_to_read;
+    set<int> available_chunks;
+    set<int> minimum;
+
+    want_to_read.insert(0);
+
+    EXPECT_EQ(-EIO, jerasure.minimum_to_decode(want_to_read,
+					       available_chunks,
+					       &minimum));
+  }
+  //
+  // Reading a subset of the available chunks is always possible.
+  //
+  {
+    set<int> want_to_read;
+    set<int> available_chunks;
+    set<int> minimum;
+
+    want_to_read.insert(0);
+    available_chunks.insert(0);
+
+    EXPECT_EQ(0, jerasure.minimum_to_decode(want_to_read,
+					    available_chunks,
+					    &minimum));
+    EXPECT_EQ(want_to_read, minimum);
+  }
+  //
+  // There is no way to read a missing chunk if there is less than k
+  // chunks available.
+  //
+  {
+    set<int> want_to_read;
+    set<int> available_chunks;
+    set<int> minimum;
+
+    want_to_read.insert(0);
+    want_to_read.insert(1);
+    available_chunks.insert(0);
+
+    EXPECT_EQ(-EIO, jerasure.minimum_to_decode(want_to_read,
+					       available_chunks,
+					       &minimum));
+  }
+  //
+  // When chunks are not available, the minimum can be made of any
+  // chunks. For instance, to read 1 and 3 below the minimum could be
+  // 2 and 3 which may seem better because it contains one of the
+  // chunks to be read. But it won't be more efficient than retrieving
+  // 0 and 2 instead because, in both cases, the decode function will
+  // need to run the same recovery operation and use the same amount
+  // of CPU and memory.
+  //
+  {
+    set<int> want_to_read;
+    set<int> available_chunks;
+    set<int> minimum;
+
+    want_to_read.insert(1);
+    want_to_read.insert(3);
+    available_chunks.insert(0);
+    available_chunks.insert(2);
+    available_chunks.insert(3);
+
+    EXPECT_EQ(0, jerasure.minimum_to_decode(want_to_read,
+					    available_chunks,
+					    &minimum));
+    EXPECT_EQ(2u, minimum.size());
+    EXPECT_EQ(0u, minimum.count(3));
+  }
+}
+
+int main(int argc, char **argv)
+{
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
