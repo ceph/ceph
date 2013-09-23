@@ -567,4 +567,14 @@ void CDentry::remove_client_lease(ClientLease *l, Locker *locker)
     locker->eval_gather(&lock);
 }
 
-
+void CDentry::_put()
+{
+  if (get_num_ref() <= (int)is_dirty() + 1) {
+    CDentry::linkage_t *dnl = get_projected_linkage();
+    if (dnl->is_primary()) {
+      CInode *in = dnl->get_inode();
+      if (get_num_ref() == (int)is_dirty() + !!in->get_num_ref())
+	in->mdcache->maybe_eval_stray(in, true);
+    }
+  }
+}
