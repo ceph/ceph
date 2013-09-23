@@ -155,7 +155,9 @@ private:
 
     case TEST_OP_COPY_FROM:
       oid = *(rand_choose(context.oid_not_in_use));
-      oid2 = *(rand_choose(context.oid_not_in_use));
+      do {
+	oid2 = *(rand_choose(context.oid_not_in_use));
+      } while (oid == oid2);
       cout << "copy_from oid " << oid << " from oid " << oid2
 	   << " current snap is " << context.current_snap << std::endl;
       return new CopyFromOp(m_op, &context, oid, oid2, m_stats);
@@ -282,8 +284,8 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  if (max_in_flight > objects) {
-    cerr << "Error: max_in_flight must be less than the number of objects"
+  if (max_in_flight * 2 > objects) {
+    cerr << "Error: max_in_flight must be <= than the number of objects / 2"
 	 << std::endl;
     return 1;
   }
