@@ -15,6 +15,7 @@
 #include <tr1/memory>
 #include "ObjectStore.h"
 #include "common/Formatter.h"
+#include "FileStore.h"
 
 ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s)
 {
@@ -497,3 +498,47 @@ void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transac
   o.push_back(t);  
 }
 
+int ObjectStore::collection_list(coll_t c, vector<hobject_t>& o)
+{
+  vector<ghobject_t> go;
+  FileStore *fs = dynamic_cast<FileStore * >(this);
+  int ret = fs->collection_list(c, go);
+  if (ret == 0) {
+    o.reserve(go.size());
+    for (vector<ghobject_t>::iterator i = go.begin(); i != go.end() ; i++)
+      o.push_back(i->hobj);
+  }
+  return ret;
+}
+
+int ObjectStore::collection_list_partial(coll_t c, hobject_t start,
+			      int min, int max, snapid_t snap,
+				      vector<hobject_t> *ls, hobject_t *next)
+{
+  vector<ghobject_t> go;
+  ghobject_t gnext, gstart(start);
+  FileStore *fs = dynamic_cast<FileStore * >(this);
+  int ret = fs->collection_list_partial(c, gstart, min, max, snap, &go, &gnext);
+  if (ret == 0) {
+    *next = gnext.hobj;
+    ls->reserve(go.size());
+    for (vector<ghobject_t>::iterator i = go.begin(); i != go.end() ; i++)
+      ls->push_back(i->hobj);
+  }
+  return ret;
+}
+
+int ObjectStore::collection_list_range(coll_t c, hobject_t start, hobject_t end,
+			    snapid_t seq, vector<hobject_t> *ls)
+{
+  vector<ghobject_t> go;
+  ghobject_t gstart(start), gend(end);
+  FileStore *fs = dynamic_cast<FileStore * >(this);
+  int ret = fs->collection_list_range(c, gstart, gend, seq, &go);
+  if (ret == 0) {
+    ls->reserve(go.size());
+    for (vector<ghobject_t>::iterator i = go.begin(); i != go.end() ; i++)
+      ls->push_back(i->hobj);
+  }
+  return ret;
+}
