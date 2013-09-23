@@ -70,3 +70,9 @@ web/*.html
 cov-int/
 
 /test-driver
+
+# gtags(1) generated files
+GPATH
+GRTAGS
+GSYMS
+GTAGS

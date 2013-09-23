@@ -65,6 +65,11 @@ endif
 
 bin_PROGRAMS += ceph-dencoder
 
+get_command_descriptions_SOURCES = test/common/get_command_descriptions.cc
+get_command_descriptions_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+get_command_descriptions_LDADD = $(LIBMON) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+noinst_PROGRAMS += get_command_descriptions
+
 
 ## Build tests
 # These should all use explicit _CXXFLAGS so avoid basename conflicts
@@ -227,6 +232,10 @@ bin_DEBUGPROGRAMS += ceph_bench_log
 
 
 ## Unit tests
+
+check_SCRIPTS += \
+	$(srcdir)/unittest_bufferlist.sh \
+	$(srcdir)/test/encoding/check-generated.sh
 
 # target to build but not run the unit tests
 unittests:: $(check_PROGRAMS)
@@ -536,6 +545,8 @@ unittest_texttable_SOURCES = test/test_texttable.cc
 unittest_texttable_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD)
 unittest_texttable_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_texttable
+
+check_SCRIPTS += test/pybind/test_ceph_argparse.py
 
 if WITH_RADOSGW
 ceph_test_cors_SOURCES = test/test_cors.cc

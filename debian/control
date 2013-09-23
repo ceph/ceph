@@ -34,6 +34,7 @@ Build-Depends: autoconf,
                libxml2-dev,
                pkg-config,
                python (>= 2.6.6-3~),
+               python-nose,
                uuid-dev,
                yasm
 Standards-Version: 3.9.3
