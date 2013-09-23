@@ -3966,6 +3966,10 @@ COMMAND("bench " \
 	"(default 1G size 4MB). Results in log.",
 	"osd", "rw", "cli,rest")
 COMMAND("flush_pg_stats", "flush pg stats", "osd", "rw", "cli,rest")
+COMMAND("heap " \
+	"name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
+	"show heap usage info (available only if compiled with tcmalloc)", \
+	"osd", "rw", "cli,rest")
 COMMAND("debug_dump_missing " \
 	"name=filename,type=CephFilepath",
 	"dump missing objects to a named file", "osd", "r", "cli,rest")
