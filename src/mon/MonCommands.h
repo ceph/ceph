@@ -290,7 +290,7 @@ COMMAND("mds newfs " \
  * Monmap commands
  */
 COMMAND("mon dump " \
-	"name=epoch,type=CephInt,req=false", \
+	"name=epoch,type=CephInt,range=0,req=false", \
 	"dump formatted monmap (optionally from epoch)", \
 	"mon", "r", "cli,rest")
 COMMAND("mon stat", "summarize monitor status", "mon", "r", "cli,rest")

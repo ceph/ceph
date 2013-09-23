@@ -251,10 +251,11 @@ shell_scripts += init-ceph mkcephfs
 # executables built, you need to replace this with manual assignments
 # target by target
 
-TESTS = $(check_PROGRAMS) unittest_bufferlist.sh
+TESTS = \
+	$(check_PROGRAMS) \
+	$(check_SCRIPTS)
 
 check-local:
-	$(srcdir)/test/encoding/check-generated.sh
 	$(srcdir)/test/encoding/readable.sh ../ceph-object-corpus
 
 

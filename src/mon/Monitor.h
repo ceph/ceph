@@ -844,5 +844,17 @@ public:
 
 long parse_pos_long(const char *s, ostream *pss = NULL);
 
+struct MonCommand {
+  string cmdstring;
+  string helpstring;
+  string module;
+  string req_perms;
+  string availability;
+};
+
+void get_command_descriptions(const MonCommand *commands,
+			      unsigned commands_size,
+			      Formatter *f,
+			      bufferlist *rdata);
 
 #endif
