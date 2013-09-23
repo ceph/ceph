@@ -46,8 +46,8 @@ private:
   PerfCounters *logger;
 
   // don't allow copying.
-  void operator=(Mutex &M) {}
-  Mutex( const Mutex &M ) {}
+  void operator=(Mutex &M);
+  Mutex(const Mutex &M);
 
   void _register() {
     id = lockdep_register(name);
