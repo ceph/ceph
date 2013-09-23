@@ -3532,6 +3532,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  hobject_t src(src_name, src_oloc.key, src_snapid,
 			raw_pg.ps(), raw_pg.pool(),
 			src_oloc.nspace);
+	  if (src == soid) {
+	    dout(20) << " copy from self is invalid" << dendl;
+	    result = -EINVAL;
+	    break;
+	  }
 	  result = start_copy(ctx, src, src_oloc, src_version, &ctx->copy_op);
 	  if (result < 0)
 	    goto fail;
