@@ -2737,7 +2737,7 @@ bool Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
     case MSG_MON_PAXOS:
       {
         MMonPaxos *pm = static_cast<MMonPaxos*>(m);
-        if (!src_is_mon &&
+        if (!src_is_mon ||
             !s->is_capable("mon", MON_CAP_X)) {
           //can't send these!
           pm->put();
