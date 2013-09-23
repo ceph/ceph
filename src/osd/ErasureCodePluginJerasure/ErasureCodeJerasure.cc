@@ -76,7 +76,9 @@ int ErasureCodeJerasure::encode(const set<int> &want_to_encode,
                                 const bufferlist &in,
                                 map<int, bufferlist> *encoded)
 {
-  unsigned in_length = pad_in_length(in.length());
+  unsigned alignment = get_alignment();
+  unsigned tail = in.length() % alignment;
+  unsigned in_length = in.length() + ( tail ?  ( alignment - tail ) : 0 );
   dout(10) << "encode adjusted buffer length from " << in.length()
 	   << " to " << in_length << dendl;
   assert(in_length % k == 0);
@@ -194,11 +196,9 @@ int ErasureCodeJerasureReedSolomonVandermonde::jerasure_decode(int *erasures,
 				erasures, data, coding, blocksize);
 }
 
-unsigned ErasureCodeJerasureReedSolomonVandermonde::pad_in_length(unsigned in_length)
+unsigned ErasureCodeJerasureReedSolomonVandermonde::get_alignment()
 {
-  while (in_length%(k*w*sizeof(int)) != 0) 
-    in_length++;
-  return in_length;
+  return k*w*sizeof(int);
 }
 
 void ErasureCodeJerasureReedSolomonVandermonde::parse(const map<std::string,std::string> &parameters)
@@ -236,11 +236,9 @@ int ErasureCodeJerasureReedSolomonRAID6::jerasure_decode(int *erasures,
   return jerasure_matrix_decode(k, m, w, matrix, 1, erasures, data, coding, blocksize);
 }
 
-unsigned ErasureCodeJerasureReedSolomonRAID6::pad_in_length(unsigned in_length)
+unsigned ErasureCodeJerasureReedSolomonRAID6::get_alignment()
 {
-  while (in_length%(k*w*sizeof(int)) != 0) 
-    in_length++;
-  return in_length;
+  return k*w*sizeof(int);
 }
 
 void ErasureCodeJerasureReedSolomonRAID6::parse(const map<std::string,std::string> &parameters)
@@ -280,11 +278,9 @@ int ErasureCodeJerasureCauchy::jerasure_decode(int *erasures,
 				       erasures, data, coding, blocksize, packetsize, 1);
 }
 
-unsigned ErasureCodeJerasureCauchy::pad_in_length(unsigned in_length)
+unsigned ErasureCodeJerasureCauchy::get_alignment()
 {
-  while (in_length%(k*w*packetsize*sizeof(int)) != 0) 
-    in_length++;
-  return in_length;
+  return k*w*packetsize*sizeof(int);
 }
 
 void ErasureCodeJerasureCauchy::parse(const map<std::string,std::string> &parameters)
@@ -349,11 +345,9 @@ int ErasureCodeJerasureLiberation::jerasure_decode(int *erasures,
 				       coding, blocksize, packetsize, 1);
 }
 
-unsigned ErasureCodeJerasureLiberation::pad_in_length(unsigned in_length)
+unsigned ErasureCodeJerasureLiberation::get_alignment()
 {
-  while (in_length%(k*w*packetsize*sizeof(int)) != 0) 
-    in_length++;
-  return in_length;
+  return k*w*packetsize*sizeof(int);
 }
 
 void ErasureCodeJerasureLiberation::parse(const map<std::string,std::string> &parameters)
