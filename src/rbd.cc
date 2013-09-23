@@ -68,6 +68,7 @@ static string dir_info_oid = RBD_INFO;
 bool udevadm_settle = true;
 bool progress = true;
 bool resize_allow_shrink = false;
+bool read_only = false;
 
 #define dout_subsys ceph_subsys_rbd
 
@@ -151,6 +152,7 @@ void usage()
 "  --pretty-format                    make json or xml output more readable\n"
 "  --no-settle                        do not wait for udevadm to settle on map/unmap\n"
 "  --no-progress                      do not show progress for long-running commands\n"
+"  --read-only                        set device readonly when mapping image\n"
 "  --allow-shrink                     allow shrinking of an image when resizing\n";
 }
 
@@ -1640,8 +1642,13 @@ static int do_kernel_add(const char *poolname, const char *imgname,
       oss << ",";
   }
 
+  if (read_only)
+    oss << " ro";
+  else
+    oss << " rw";
+
   const char *user = g_conf->name.get_id().c_str();
-  oss << " name=" << user;
+  oss << ",name=" << user;
 
   char key_name[strlen(user) + strlen("client.") + 1];
   snprintf(key_name, sizeof(key_name), "client.%s", user);
@@ -2200,6 +2207,8 @@ int main(int argc, const char **argv)
       lock_tag = strdup(val.c_str());
     } else if (ceph_argparse_flag(args, i, "--no-settle", (char *)NULL)) {
       udevadm_settle = false;
+    } else if (ceph_argparse_flag(args, i, "--read-only", (char *)NULL)) {
+      read_only = true;
     } else if (ceph_argparse_flag(args, i, "--no-progress", (char *)NULL)) {
       progress = false;
     } else if (ceph_argparse_flag(args, i , "--allow-shrink", (char *)NULL)) {
