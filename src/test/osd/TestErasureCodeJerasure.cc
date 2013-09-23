@@ -58,7 +58,8 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
   EXPECT_EQ(4u, encoded.size());
   unsigned length =  encoded[0].length();
   EXPECT_EQ(0, strncmp(encoded[0].c_str(), in.c_str(), length));
-  EXPECT_EQ(0, strncmp(encoded[1].c_str(), in.c_str() + length, in.length() - length));
+  EXPECT_EQ(0, strncmp(encoded[1].c_str(), in.c_str() + length,
+		       in.length() - length));
 
 
   // all chunks are available
@@ -72,7 +73,8 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
     EXPECT_EQ(4u, decoded.size()); 
     EXPECT_EQ(length, decoded[0].length());
     EXPECT_EQ(0, strncmp(decoded[0].c_str(), in.c_str(), length));
-    EXPECT_EQ(0, strncmp(decoded[1].c_str(), in.c_str() + length, in.length() - length));
+    EXPECT_EQ(0, strncmp(decoded[1].c_str(), in.c_str() + length,
+			 in.length() - length));
   }
 
   // two chunks are missing 
@@ -90,7 +92,8 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
     EXPECT_EQ(4u, decoded.size()); 
     EXPECT_EQ(length, decoded[0].length());
     EXPECT_EQ(0, strncmp(decoded[0].c_str(), in.c_str(), length));
-    EXPECT_EQ(0, strncmp(decoded[1].c_str(), in.c_str() + length, in.length() - length));
+    EXPECT_EQ(0, strncmp(decoded[1].c_str(), in.c_str() + length,
+			 in.length() - length));
   }
 }
 
@@ -204,6 +207,12 @@ int main(int argc, char **argv)
   return RUN_ALL_TESTS();
 }
 
-// Local Variables:
-// compile-command: "cd ../.. ; make -j4 && make unittest_erasure_code_jerasure && valgrind --tool=memcheck ./unittest_erasure_code_jerasure --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
-// End:
+/* 
+ * Local Variables:
+ * compile-command: "cd ../.. ; make -j4 && 
+ *   make unittest_erasure_code_jerasure && 
+ *   valgrind --tool=memcheck --leak-check=full \
+ *      ./unittest_erasure_code_jerasure \
+ *      --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
+ * End:
+ */
