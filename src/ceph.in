@@ -559,7 +559,6 @@ def main():
     cluster_handle = rados.Rados(name=name, clustername=clustername,
                                  conf_defaults=conf_defaults, conffile=conffile)
 
-    cluster_handle.conf_parse_env()
     retargs = cluster_handle.conf_parse_argv(childargs)
     #tmp = childargs
     childargs = retargs
