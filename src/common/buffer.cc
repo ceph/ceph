@@ -1270,6 +1270,15 @@ int buffer::list::write_fd(int fd) const
   return 0;
 }
 
+__u32 buffer::list::crc32c(__u32 crc) const
+{
+  for (std::list<ptr>::const_iterator it = _buffers.begin();
+       it != _buffers.end();
+       ++it)
+    if (it->length())
+      crc = ceph_crc32c(crc, (unsigned char*)it->c_str(), it->length());
+  return crc;
+}
 
 void buffer::list::hexdump(std::ostream &out) const
 {
