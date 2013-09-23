@@ -35,9 +35,27 @@ pools for each zone (typical). You may also deploy a separate Ceph Storage
 Cluster for each zone if your requirements and resources warrant this level
 of redundancy.
 
+
+Exemplary Cluster
+=================
+
+For the purposes of this configuration guide, we provide an exemplary
+procedure for setting up two regions and two zones within each region. 
+So the cluster will comprise four gateway instances. For naming purposes, 
+we will refer to them as follows:
+
+- Region 1: ``rg1``
+- Region 1, Zone 1: ``rg1-zn1``
+- Region 1, Zone 2: ``rg1-zn2``
+- Region 2: ``rg2``
+- Region 2, Zone 1: ``rg2-zn1``
+- Region 2, Zone 2: ``rg2-zn2``
+
+To configure the exemplary cluster, you must configure regions and zones.
 Once you configure regions and zones, you must configure each instance of a
 :term:`Ceph Object Gateway` to use the Ceph  Storage Cluster as the data storage
 backend.
+
 
 Configuring Regions and Zones
 =============================
@@ -56,25 +74,25 @@ your cluster for regions and zones, you will be replacing (and likely deleting,
 if it exists) the default region and zone.
 
 
-Create a Region
----------------
+Create Regions
+--------------
 
-#. Create a region called ``region1``.
+#. Create a region called ``rg1``.
 
    Set ``is_master`` to ``true``.  Copy the contents of the following example 
    to a text editor.  Replace ``{fqdn}`` with the fully-qualified domain name 
    of the endpoint. Then, save the file to ``region.json``. It will specify a 
-   master zone as ``region1-zone1`` and list it in the ``zones`` list. 
+   master zone as ``rg1-zn1`` and list it in the ``zones`` list. 
    See `Configuration Reference - Regions`_ for details.::
 
-	{ "name": "region1",
-	  "api_name": "reg1",
+	{ "name": "rg1",
+	  "api_name": "rg1",
 	  "is_master": "true",
 	  "endpoints": [
 	        "http:\/\/{fqdn}:80\/"],
-	  "master_zone": "region1-zone1",
+	  "master_zone": "rg1-zn1",
 	  "zones": [
-	        { "name": "region1-zone1",
+	        { "name": "rg1-zn1",
 	          "endpoints": [
 	                "http:\/\/{fqdn}:80\/"],
 	          "log_meta": "false",
@@ -83,9 +101,13 @@ Create a Region
 	  "default_placement": ""}
 
 
-#. To create ``region1``, execute:: 
+#. To create ``rg1``, execute:: 
 
 	sudo radosgw-admin region set --infile region.json
+
+   Repeat the foregoing process to create region ``rg2``, but set 
+   ``is_master`` to ``false`` and update the ``master_zone`` and 
+   ``zones`` fields.
 
 #. Delete the default region. :: 
 
@@ -93,27 +115,32 @@ Create a Region
 	
 #. Set the new region as the default region. :: 
 
-	radosgw-admin region default --rgw-region=region1
+	radosgw-admin region default --rgw-region=r1
 
 #. Update the region map. :: 
 
 	radosgw-admin regionmap update	
 
 
-Create a Zone User
-------------------
 
-You need to create a user before configuring the zone. :: 
+Create Zone Users
+-----------------
 
-	sudo radosgw-admin user create --uid="region1-zone1" --display-name="Region-1 Zone-1"
+Create zone users before configuring the zones. :: 
 
-Copy the ``access_key`` and ``secret_key`` fields for your zone configuration.
+	sudo radosgw-admin user create --uid="rg1-zn1" --display-name="Region-1 Zone-1"
+	sudo radosgw-admin user create --uid="rg1-zn2" --display-name="Region-1 Zone-2"
+	sudo radosgw-admin user create --uid="rg2-zn1" --display-name="Region-2 Zone-1"
+	sudo radosgw-admin user create --uid="rg2-zn2" --display-name="Region-2 Zone-2"
+
+Copy the ``access_key`` and ``secret_key`` fields for each user. You will need them
+to configure each zone.
 
 
 Create a Zone
 -------------
 
-#. Create a zone called ``region1-zone1``.
+#. Create a zone called ``rg1-zn1``.
 
    Paste the contents of the ``access_key`` and ``secret_key`` fields from the
    step of creating a zone user into the ``system_key`` field. This 
@@ -121,24 +148,26 @@ Create a Zone
    See `Configuration Reference - Pools`_ for details on gateway pools.
    See `Configuration Reference - Zones`_ for details on zones. ::
 
-	{ "domain_root": ".region1-zone1.rgw",
-	  "control_pool": ".region1-zone1.rgw.control",
-	  "gc_pool": ".region1-zone1.rgw.gc",
-	  "log_pool": ".region1-zone1.log",
-	  "intent_log_pool": ".region1-zone1.intent-log",
-	  "usage_log_pool": ".region1-zone1.usage",
-	  "user_keys_pool": ".region1-zone1.users",
-	  "user_email_pool": ".region1-zone1.users.email",
-	  "user_swift_pool": ".region1-zone1.users.swift",
-	  "user_uid_pool": ".region1-zone1.users.uid",
+	{ "domain_root": ".rg1-zn1.rgw",
+	  "control_pool": ".rg1-zn1.rgw.control",
+	  "gc_pool": ".rg1-zn1.rgw.gc",
+	  "log_pool": ".rg1-zn1.log",
+	  "intent_log_pool": ".rg1-zn1.intent-log",
+	  "usage_log_pool": ".rg1-zn1.usage",
+	  "user_keys_pool": ".rg1-zn1.users",
+	  "user_email_pool": ".rg1-zn1.users.email",
+	  "user_swift_pool": ".rg1-zn1.users.swift",
+	  "user_uid_pool": ".rg1-zn1.users.uid",
 	  "system_key": { "access_key": "", "secret_key": ""}
 	}
 
 
-#. To create ``region1-zone1``, execute:: 
+#. To create ``r1-zn1``, execute:: 
 
-	sudo radosgw-admin zone set --rgw-zone=region1-zone1 --infile zone.json
+	sudo radosgw-admin zone set --rgw-zone=rg1-zn1 --infile zone.json
 
+   Repeat the previous to steps to create zones ``rg1-zn2``, ``rg2-zn1``,
+   and ``rg2-zn2`` replacing ``rg*-zn*`` in the ``zone.json`` file.
 
 #. Delete the default zone. :: 
 
@@ -159,16 +188,16 @@ Monitor`, you must create the pools manually. See `Configuration Reference -
 Pools`_ for details on the default pools for gateways. See `Pools`_ for
 details on creating pools. For each pool name:
 
-- ``.region1-zone1.rgw``
-- ``.region1-zone1.rgw.control``
-- ``.region1-zone1.rgw.gc``
-- ``.region1-zone1.log``
-- ``.region1-zone1.intent-log``
-- ``.region1-zone1.usage``
-- ``.region1-zone1.users``
-- ``.region1-zone1.users.email``
-- ``.region1-zone1.users.swift``
-- ``.region1-zone1.users.uid``
+- ``.rg1-zn1.rgw``
+- ``.rg1-zn1.rgw.control``
+- ``.rg1-zn1.rgw.gc``
+- ``.rg1-zn1.log``
+- ``.rg1-zn1.intent-log``
+- ``.rg1-zn1.usage``
+- ``.rg1-zn1.users``
+- ``.rg1-zn1.users.email``
+- ``.rg1-zn1.users.swift``
+- ``.rg1-zn1.users.uid``
 
 Execute one of the following:: 
 
@@ -184,19 +213,19 @@ can name a Ceph Object Gateway instance anything you like. In large clusters
 with regions and zones, it may help to add region and zone names into your
 instance name. For example::
 
-	region1-zone1-instance1
+	rg1-zn1-instance1
 
 When referring to your instance identifier in the Ceph configuration file, it 
 is prepended with ``client.radosgw.``. For example, an instance named 
-``region1-zone1-instance1`` will look like this:: 
+``rg1-zn1-instance1`` will look like this:: 
 
-	[client.radosgw.region1-zone1-instance1]
+	[client.radosgw.rg1-zn1-instance1]
 
 Similarly, the default data path for an instance named
-``region1-zone1-instance1`` is prepended with ``{cluster}-radosgw.``. For
+``rg1-zn1-instance1`` is prepended with ``{cluster}-radosgw.``. For
 example::
 
-	/var/lib/ceph/radosgw/ceph-radosgw.region1-zone1-instance1	
+	/var/lib/ceph/radosgw/ceph-radosgw.rg1-zn1-instance1	
 	
 
 Create a Data Directory
@@ -204,7 +233,7 @@ Create a Data Directory
 
 Create a data directory on the node where you installed ``radosgw``. ::
 	
-	sudo mkdir -p /var/lib/ceph/radosgw/ceph-radosgw.region1-zone1-instance1
+	sudo mkdir -p /var/lib/ceph/radosgw/ceph-radosgw.rg1-zn1-instance1
 	
 
 Create a Storage Cluster User
@@ -217,8 +246,8 @@ Administration`_ for a discussion on adding keyrings and keys.
 
 #. Create a keyring for the Ceph Object Gateway. For example:: 
 
-	sudo ceph-authtool --create-keyring /etc/ceph/ceph.client.radosgw.region1-zone1.keyring
-	sudo chmod +r /etc/ceph/ceph.client.radosgw.region1-zone1.keyring
+	sudo ceph-authtool --create-keyring /etc/ceph/ceph.client.radosgw.rg1.keyring
+	sudo chmod +r /etc/ceph/ceph.client.radosgw.rg1.keyring
 
 
 #. Generate a key so that the Ceph Object Gateway can provide a user name and 
@@ -226,14 +255,14 @@ Administration`_ for a discussion on adding keyrings and keys.
    capabilities to the key. See `Configuration Reference - Pools`_ for details
    on the effect of write permissions for the monitor and creating pools. :: 
 
-	sudo ceph-authtool /etc/ceph/ceph.client.radosgw.region1-zone1.keyring -n client.radosgw.region1-zone1 --gen-key
-	sudo ceph-authtool -n client.radosgw.region1-zone1 --cap osd 'allow rwx' --cap mon 'allow rw' /etc/ceph/ceph.client.radosgw.region1-zone1.keyring
+	sudo ceph-authtool /etc/ceph/ceph.client.radosgw.rg1.keyring -n client.radosgw.rg1-zn1 --gen-key
+	sudo ceph-authtool -n client.radosgw.rg1-zn1 --cap osd 'allow rwx' --cap mon 'allow rw' /etc/ceph/ceph.client.radosgw.rg1.keyring
 
 #. Once you have created a keyring and key to enable the Ceph Object Gateway  
    with access to the Ceph Storage Cluster, add it as an entry to your Ceph
    Storage Cluster. For example::
 
-	sudo ceph -k /etc/ceph/ceph.client.admin.keyring auth add client.radosgw.region1-zone1 -i /etc/ceph/ceph.client.radosgw.region1-zone1.keyring
+	sudo ceph -k /etc/ceph/ceph.client.admin.keyring auth add client.radosgw.rg1-zn1 -i /etc/ceph/ceph.client.radosgw.rg1.keyring
 	
 
 Create a Gateway Configuration
@@ -292,7 +321,7 @@ script, execute the following procedures on the server node.
    Copy the following into the editor. ::
 
 	#!/bin/sh
-	exec /usr/bin/radosgw -c /etc/ceph/ceph.conf -n client.radosgw.region1-zone1
+	exec /usr/bin/radosgw -c /etc/ceph/ceph.conf -n client.radosgw.rg1-zn1-instance1
 
 #. Save the file. 
 
@@ -311,16 +340,16 @@ client of the Ceph Storage Cluster, so you must place each instance under a
 instance ID. For example::
 
 
-	[client.radosgw.region1-zone1-instance1]
+	[client.radosgw.rg1-zn1-instance1]
 			
 			#Region Info
-			rgw region = region1
-			rgw region root pool = .region1.rgw.root
+			rgw region = rg1
+			rgw region root pool = .rg1.rgw.root
 	
 			#Zone Info
-			rgw zone = region1-zone1
-			rgw zone root pool = .region1-zone1.rgw.root
-			keyring = /etc/ceph/ceph.client.radosgw.region1-zone1.keyring
+			rgw zone = rg1-zn1
+			rgw zone root pool = .rg1-zn1.rgw.root
+			keyring = /etc/ceph/ceph.client.radosgw.rg1.keyring
 
 			#DNS Info for S3 Subdomains
 			rgw dns name = {hostname}
