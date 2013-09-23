@@ -476,6 +476,9 @@ def complete(sigdict, args, target):
 ###
 
 def main():
+    ceph_args = os.environ.get('CEPH_ARGS')
+    if ceph_args:
+        sys.argv.extend(ceph_args.split())
 
     parser, parsed_args, childargs = parse_cmdargs()
 
