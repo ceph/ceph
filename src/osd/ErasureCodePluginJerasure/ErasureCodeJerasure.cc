@@ -15,6 +15,7 @@
  */
 
 #include <errno.h>
+#include <algorithm>
 #include "common/debug.h"
 #include "ErasureCodeJerasure.h"
 extern "C" {
@@ -43,12 +44,17 @@ void ErasureCodeJerasure::init(const map<std::string,std::string> &parameters) {
 int ErasureCodeJerasure::minimum_to_decode(const set<int> &want_to_read,
                                            const set<int> &available_chunks,
                                            set<int> *minimum) {
-  if (available_chunks.size() < (unsigned)k)
-    return -EIO;
-  set<int>::iterator i;
-  unsigned j;
-  for (i = available_chunks.begin(), j = 0; j < (unsigned)k; i++, j++)
-    minimum->insert(*i);
+  if (includes(available_chunks.begin(), available_chunks.end(),
+	       want_to_read.begin(), want_to_read.end())) {
+    *minimum = want_to_read;
+  } else {
+    if (available_chunks.size() < (unsigned)k)
+      return -EIO;
+    set<int>::iterator i;
+    unsigned j;
+    for (i = available_chunks.begin(), j = 0; j < (unsigned)k; i++, j++)
+      minimum->insert(*i);
+  }
   return 0;
 }
 
