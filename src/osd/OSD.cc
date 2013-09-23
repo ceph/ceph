@@ -2018,7 +2018,6 @@ void OSD::load_pgs()
 		 << " (pg " << pgid << " snap " << snap << ")" << dendl;
 	pgs[pgid].insert(snap);
       } else {
-	pgs[pgid];
 	head_pgs.insert(pgid);
       }
       continue;
