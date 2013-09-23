@@ -1768,7 +1768,7 @@ void CInode::finish_scatter_gather_update(int type)
 	CDir *dir = p->second;
 	dout(20) << fg << " " << *dir << dendl;
 
-	bool update = dir->is_auth() && !dir->is_frozen();
+	bool update = dir->is_auth() && dir->get_version() != 0 &&  !dir->is_frozen();
 
 	fnode_t *pf = dir->get_projected_fnode();
 	if (update)
@@ -1849,7 +1849,7 @@ void CInode::finish_scatter_gather_update(int type)
 	CDir *dir = p->second;
 	dout(20) << fg << " " << *dir << dendl;
 
-	bool update = dir->is_auth() && !dir->is_frozen();
+	bool update = dir->is_auth() && dir->get_version() != 0 && !dir->is_frozen();
 
 	fnode_t *pf = dir->get_projected_fnode();
 	if (update)
@@ -1936,7 +1936,7 @@ void CInode::finish_scatter_gather_update_accounted(int type, Mutation *mut, EMe
        p != dirfrags.end();
        ++p) {
     CDir *dir = p->second;
-    if (!dir->is_auth() || dir->is_frozen())
+    if (!dir->is_auth() || dir->get_version() == 0 || dir->is_frozen())
       continue;
     
     if (type == CEPH_LOCK_IDFT)
