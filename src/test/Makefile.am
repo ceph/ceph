@@ -307,7 +307,28 @@ libec_example_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libec_example_la_LDFLAGS = ${AM_LDFLAGS} -export-symbols-regex '.*__erasure_code_.*'
 erasure_codelib_LTLIBRARIES += libec_example.la
 
-unittest_erasure_code_plugin_SOURCES = test/osd/TestErasureCodePluginExample.cc 
+libec_missing_entry_point_la_SOURCES = test/osd/ErasureCodePluginMissingEntryPoint.cc
+libec_missing_entry_point_la_CFLAGS = ${AM_CFLAGS}
+libec_missing_entry_point_la_CXXFLAGS= ${AM_CXXFLAGS}
+libec_missing_entry_point_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libec_missing_entry_point_la_LDFLAGS = ${AM_LDFLAGS} -export-symbols-regex '.*__erasure_code_.*'
+erasure_codelib_LTLIBRARIES += libec_missing_entry_point.la
+
+libec_fail_to_initialize_la_SOURCES = test/osd/ErasureCodePluginFailToInitialize.cc
+libec_fail_to_initialize_la_CFLAGS = ${AM_CFLAGS}
+libec_fail_to_initialize_la_CXXFLAGS= ${AM_CXXFLAGS}
+libec_fail_to_initialize_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libec_fail_to_initialize_la_LDFLAGS = ${AM_LDFLAGS} -export-symbols-regex '.*__erasure_code_.*'
+erasure_codelib_LTLIBRARIES += libec_fail_to_initialize.la
+
+libec_fail_to_register_la_SOURCES = test/osd/ErasureCodePluginFailToRegister.cc
+libec_fail_to_register_la_CFLAGS = ${AM_CFLAGS}
+libec_fail_to_register_la_CXXFLAGS= ${AM_CXXFLAGS}
+libec_fail_to_register_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libec_fail_to_register_la_LDFLAGS = ${AM_LDFLAGS} -export-symbols-regex '.*__erasure_code_.*'
+erasure_codelib_LTLIBRARIES += libec_fail_to_register.la
+
+unittest_erasure_code_plugin_SOURCES = test/osd/TestErasureCodePlugin.cc 
 unittest_erasure_code_plugin_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_erasure_code_plugin_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 if LINUX
