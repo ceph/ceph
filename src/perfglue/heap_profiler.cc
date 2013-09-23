@@ -88,7 +88,7 @@ void ceph_heap_profiler_dump(const char *reason)
 void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
                                        ostream& out)
 {
-  if (cmd.size() == 2 && cmd[1] == "dump") {
+  if (cmd.size() == 1 && cmd[0] == "dump") {
     if (!ceph_heap_profiler_running()) {
       out << "heap profiler not running; can't dump";
       return;
@@ -98,16 +98,16 @@ void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
     out << g_conf->name << "dumping heap profile now.\n"
 	<< heap_stats;
     ceph_heap_profiler_dump("admin request");
-  } else if (cmd.size() == 2 && cmd[1] == "start_profiler") {
+  } else if (cmd.size() == 1 && cmd[0] == "start_profiler") {
     ceph_heap_profiler_start();
     out << g_conf->name << " started profiler";
-  } else if (cmd.size() == 2 && cmd[1] == "stop_profiler") {
+  } else if (cmd.size() == 1 && cmd[0] == "stop_profiler") {
     ceph_heap_profiler_stop();
     out << g_conf->name << " stopped profiler";
-  } else if (cmd.size() == 2 && cmd[1] == "release") {
+  } else if (cmd.size() == 1 && cmd[0] == "release") {
     ceph_heap_release_free_memory();
     out << g_conf->name << " releasing free RAM back to system.";
-  } else if (cmd.size() == 2 && cmd[1] == "stats") {
+  } else if (cmd.size() == 1 && cmd[0] == "stats") {
     char *heap_stats = new char[1024];
     ceph_heap_profiler_stats(heap_stats, 1024);
     out << g_conf->name << "tcmalloc heap stats:"
