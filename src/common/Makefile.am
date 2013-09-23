@@ -59,13 +59,16 @@ libcommon_la_SOURCES = \
 	common/pick_address.cc \
 	common/util.cc \
 	common/TextTable.cc \
-	common/secret.c \
 	common/ceph_fs.cc \
 	common/ceph_hash.cc \
 	common/ceph_strings.cc \
 	common/ceph_frag.cc \
 	common/addr_parsing.c \
 	common/hobject.cc
+
+if LINUX
+libcommon_la_SOURCES += common/secret.c
+endif
 
 # these should go out of libcommon
 libcommon_la_SOURCES += \
