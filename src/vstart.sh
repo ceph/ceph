@@ -339,6 +339,7 @@ $DAEMONOPTS
 $COSDDEBUG
 $extra_conf
 [mon]
+        mon pg warn min per osd = 10
 $DAEMONOPTS
 $CMONDEBUG
 $extra_conf

@@ -1847,6 +1847,52 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
       detail->push_back(make_pair(HEALTH_ERR, ss.str()));
     }
   }
+
+  // pg skew
+  int num_in = mon->osdmon()->osdmap.get_num_in_osds();
+  if (num_in && g_conf->mon_pg_warn_min_per_osd > 0) {
+    int per = pg_map.pg_stat.size() / num_in;
+    if (per < g_conf->mon_pg_warn_min_per_osd) {
+      ostringstream ss;
+      ss << "too few pgs per osd (" << per << " < min " << g_conf->mon_pg_warn_min_per_osd << ")";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      if (detail)
+	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+    }
+  }
+  if (!pg_map.pg_stat.empty()) {
+    for (hash_map<int,pool_stat_t>::const_iterator p = pg_map.pg_pool_sum.begin();
+	 p != pg_map.pg_pool_sum.end();
+	 ++p) {
+      const pg_pool_t *pi = mon->osdmon()->osdmap.get_pg_pool(p->first);
+      if (pi->get_pg_num() > pi->get_pgp_num()) {
+	ostringstream ss;
+	ss << "pool " << mon->osdmon()->osdmap.get_pool_name(p->first) << " pg_num "
+	   << pi->get_pg_num() << " > pgp_num " << pi->get_pgp_num();
+	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+	if (detail)
+	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+      int average_objects_per_pg = pg_map.pg_sum.stats.sum.num_objects / pg_map.pg_stat.size();
+      if (average_objects_per_pg > 0) {
+	int objects_per_pg = p->second.stats.sum.num_objects / pi->get_pg_num();
+	float ratio = (float)objects_per_pg / (float)average_objects_per_pg;
+	if (g_conf->mon_pg_warn_max_object_skew > 0 &&
+	    ratio > g_conf->mon_pg_warn_max_object_skew) {
+	  ostringstream ss;
+	  ss << "pool " << mon->osdmon()->osdmap.get_pool_name(p->first) << " has too few pgs";
+	  summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+	  if (detail) {
+	    ostringstream ss;
+	    ss << "pool " << mon->osdmon()->osdmap.get_pool_name(p->first) << " objects per pg ("
+	       << objects_per_pg << ") is more than " << ratio << " times cluster average ("
+	       << average_objects_per_pg << ")";
+	    detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+	  }
+	}
+      }
+    }
+  }
 }
 
 void PGMonitor::check_full_osd_health(list<pair<health_status_t,string> >& summary,
