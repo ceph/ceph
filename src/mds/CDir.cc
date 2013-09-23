@@ -655,6 +655,14 @@ void CDir::remove_null_dentries() {
   assert(get_num_any() == items.size());
 }
 
+void CDir::touch_dentries_bottom() {
+  dout(12) << "touch_dentries_bottom " << *this << dendl;
+
+  for (CDir::map_t::iterator p = items.begin();
+       p != items.end();
+       ++p)
+    inode->mdcache->touch_dentry_bottom(p->second);
+}
 
 bool CDir::try_trim_snap_dentry(CDentry *dn, const set<snapid_t>& snaps)
 {
@@ -1461,6 +1469,7 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
   }
   bool purged_any = false;
 
+  bool stray = inode->is_stray();
 
   //int num_new_inodes_loaded = 0;
   loff_t baseoff = p.get_off();
@@ -1604,6 +1613,12 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
 
 	  if (in->inode.is_dirty_rstat())
 	    in->mark_dirty_rstat();
+
+	  if (stray) {
+	    dn->state_set(CDentry::STATE_STRAY);
+	    if (in->inode.nlink == 0)
+	      in->state_set(CInode::STATE_ORPHAN);
+	  }
 
 	  //in->hack_accessed = false;
 	  //in->hack_load_stamp = ceph_clock_now(g_ceph_context);

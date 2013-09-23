@@ -19,6 +19,7 @@
 
 #include "include/types.h"
 #include "include/filepath.h"
+#include "include/elist.h"
 
 #include "CInode.h"
 #include "CDentry.h"
@@ -564,7 +565,7 @@ public:
 
   // trimming
   bool trim(int max = -1);   // trim cache
-  void trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap);
+  bool trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap);
   void trim_dirfrag(CDir *dir, CDir *con,
 		    map<int, MCacheExpire*>& expiremap);
   void trim_inode(CDentry *dn, CInode *in, CDir *con,
@@ -646,6 +647,15 @@ public:
   }
   void touch_dentry_bottom(CDentry *dn) {
     lru.lru_bottouch(dn);
+    if (dn->get_projected_linkage()->is_primary()) {
+      CInode *in = dn->get_projected_linkage()->get_inode();
+      if (in->has_dirfrags()) {
+	list<CDir*> ls;
+	in->get_dirfrags(ls);
+	for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p)
+	  (*p)->touch_dentries_bottom();
+      }
+    }
   }
 protected:
 
@@ -858,31 +868,28 @@ public:
 
   // -- stray --
 public:
+  elist<CDentry*> delayed_eval_stray;
+
   void scan_stray_dir();
-  void eval_stray(CDentry *dn);
+  void eval_stray(CDentry *dn, bool delay=false);
   void eval_remote(CDentry *dn);
 
-  void maybe_eval_stray(CInode *in) {
+  void maybe_eval_stray(CInode *in, bool delay=false) {
     if (in->inode.nlink > 0 || in->is_base())
       return;
     CDentry *dn = in->get_projected_parent_dn();
-    if (dn->get_projected_linkage()->is_primary() &&
-	dn->get_dir()->get_inode()->is_stray() &&
-	!dn->is_replicated())
-      eval_stray(dn);
+    if (!dn->state_test(CDentry::STATE_PURGING) &&
+	dn->get_projected_linkage()->is_primary() &&
+	dn->get_dir()->get_inode()->is_stray())
+      eval_stray(dn, delay);
   }
 protected:
   void fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin);
-  void remove_backtrace(inodeno_t ino, int64_t pool, Context *fin);
-  void _purge_forwarding_pointers(bufferlist& bl, CDentry *dn, int r);
-  void _purge_stray(CDentry *dn, int r);
   void purge_stray(CDentry *dn);
   void _purge_stray_purged(CDentry *dn, int r=0);
   void _purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls);
   void _purge_stray_logged_truncate(CDentry *dn, LogSegment *ls);
   friend class C_MDC_FetchedBacktrace;
-  friend class C_MDC_PurgeForwardingPointers;
-  friend class C_MDC_PurgeStray;
   friend class C_MDC_PurgeStrayLogged;
   friend class C_MDC_PurgeStrayLoggedTruncate;
   friend class C_MDC_PurgeStrayPurged;
