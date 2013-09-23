@@ -950,6 +950,16 @@ public:
   virtual int collection_list_range(coll_t c, ghobject_t start, ghobject_t end,
                                     snapid_t seq, vector<ghobject_t> *ls) = 0;
 
+  //TODO: Remove
+  int collection_list(coll_t c, vector<hobject_t>& o);
+
+  int collection_list_partial(coll_t c, hobject_t start,
+				      int min, int max, snapid_t snap,
+				      vector<hobject_t> *ls, hobject_t *next);
+
+  int collection_list_range(coll_t c, hobject_t start, hobject_t end,
+                                    snapid_t seq, vector<hobject_t> *ls);
+
   /// OMAP
   /// Get omap contents
   virtual int omap_get(
