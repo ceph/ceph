@@ -42,11 +42,15 @@ int KeyRing::from_ceph_context(CephContext *cct)
   int ret = -ENOENT;
   string filename;
 
-  if (ceph_resolve_file_search(conf->keyring, filename)) {
+  ret = ceph_resolve_file_search(conf->keyring, filename);
+  if (ret == 0) {
     ret = load(cct, filename);
     if (ret < 0)
       lderr(cct) << "failed to load " << filename
 		 << ": " << cpp_strerror(ret) << dendl;
+  } else {
+    lderr(cct) << "error opening keyring: " << cpp_strerror(errno) << dendl;
+    return -errno;
   }
 
   if (!conf->key.empty()) {
