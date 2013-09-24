@@ -2997,7 +2997,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       cmd_getval(g_ceph_context, cmdmap, "weight", w);
 
       err = newcrush.adjust_item_weightf(g_ceph_context, id, w);
-      if (err == 0) {
+      if (err >= 0) {
 	pending_inc.crush.clear();
 	newcrush.encode(pending_inc.crush);
 	ss << "reweighted item id " << id << " name '" << name << "' to " << w
