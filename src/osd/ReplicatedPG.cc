@@ -1603,20 +1603,20 @@ void ReplicatedBackend::_do_push(OpRequestRef op)
 
 struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
   ReplicatedBackend *bc;
-  list<pair<hobject_t, ObjectContextRef> > to_continue;
+  list<ObjectContextRef> to_continue;
   int priority;
   C_ReplicatedBackend_OnPullComplete(ReplicatedBackend *bc, int priority)
     : bc(bc), priority(priority) {}
 
   void finish(ThreadPool::TPHandle &handle) {
     ReplicatedBackend::RPGHandle *h = bc->_open_recovery_op();
-    for (list<pair<hobject_t, ObjectContextRef> >::iterator i =
+    for (list<ObjectContextRef>::iterator i =
 	   to_continue.begin();
 	 i != to_continue.end();
 	 ++i) {
-      if (!bc->start_pushes(i->first, i->second, h)) {
+      if (!bc->start_pushes((*i)->obs.oi.soid, *i, h)) {
 	bc->get_parent()->on_global_recover(
-	  i->first);
+	  (*i)->obs.oi.soid);
       }
       handle.reset_tp_timeout();
     }
@@ -1632,7 +1632,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
 
   vector<PullOp> replies(1);
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  list<pair<hobject_t, ObjectContextRef> > to_continue;
+  list<ObjectContextRef> to_continue;
   for (vector<PushOp>::iterator i = m->pushes.begin();
        i != m->pushes.end();
        ++i) {
@@ -6311,7 +6311,7 @@ ObjectRecoveryInfo ReplicatedBackend::recalc_subsets(
 
 bool ReplicatedBackend::handle_pull_response(
   int from, PushOp &pop, PullOp *response,
-  list<pair<hobject_t, ObjectContextRef> > *to_continue,
+  list<ObjectContextRef> *to_continue,
   ObjectStore::Transaction *t
   )
 {
@@ -6385,7 +6385,7 @@ bool ReplicatedBackend::handle_pull_response(
   pi.stat.num_keys_recovered += pop.omap_entries.size();
 
   if (complete) {
-    to_continue->push_back(make_pair(hoid, pi.obc));
+    to_continue->push_back(pi.obc);
     pi.stat.num_objects_recovered++;
     get_parent()->on_local_recover(
       hoid, pi.stat, pi.recovery_info, pi.obc, t);
@@ -6978,7 +6978,7 @@ void ReplicatedBackend::sub_op_push(OpRequestRef op)
   if (is_primary()) {
     PullOp resp;
     RPGHandle *h = _open_recovery_op();
-    list<pair<hobject_t, ObjectContextRef> > to_continue;
+    list<ObjectContextRef> to_continue;
     bool more = handle_pull_response(
       m->get_source().num(), pop, &resp,
       &to_continue, t);
