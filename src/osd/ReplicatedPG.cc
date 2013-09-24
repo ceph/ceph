@@ -4260,6 +4260,7 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
 
     issue_repop(repop, repop->ctx->mtime);
     eval_repop(repop);
+    repop->put();
 
     dout(10) << __func__ << " fetching more" << dendl;
     _copy_some(ctx, cop);
@@ -4979,6 +4980,7 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
   // obc ref swallowed by repop!
   issue_repop(repop, repop->ctx->mtime);
   eval_repop(repop);
+  repop->put();
 }
 
 ObjectContextRef ReplicatedPG::create_object_context(const object_info_t& oi,
