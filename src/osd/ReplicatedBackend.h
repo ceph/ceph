@@ -230,7 +230,7 @@ private:
   void handle_pull(int peer, PullOp &op, PushOp *reply);
   bool handle_pull_response(
     int from, PushOp &op, PullOp *response,
-    list<pair<hobject_t, ObjectContextRef> > *to_continue,
+    list<ObjectContextRef> *to_continue,
     ObjectStore::Transaction *t);
   void handle_push(int from, PushOp &op, PushReplyOp *response,
 		   ObjectStore::Transaction *t);
