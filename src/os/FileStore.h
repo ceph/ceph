@@ -301,6 +301,7 @@ private:
   void op_queue_release_throttle(Op *o);
   void _journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk);
   friend struct C_JournaledAhead;
+  int write_version_stamp();
 
   int open_journal();
 
@@ -330,7 +331,6 @@ public:
   int _sanity_check_fs();
   
   bool test_mount_in_use();
-  int write_version_stamp();
   int version_stamp_is_valid(uint32_t *version);
   int update_version_stamp();
   int read_op_seq(uint64_t *seq);
