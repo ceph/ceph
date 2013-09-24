@@ -126,18 +126,15 @@ you may skip the steps related to generating keys.
     auth service required = cephx
     auth client required = cephx
 
-#. Or, enable ``cephx`` authentication for versions ``0.50`` and below by
+#. Or, enable ``cephx`` authentication for Ceph versions ``0.50`` and below by
    setting the following option in the ``[global]`` section of your `Ceph 
-   configuration`_ file::
+   configuration`_ file. **NOTE:** Deprecated as of version ``0.50``. ::
 
     auth supported = cephx
 
-.. deprecated:: 0.51
 
-#. Start or restart the Ceph cluster. :: 
+#. Start or restart the Ceph cluster. See `Operating a Cluster`_ for details. 
 
-	sudo service ceph -a start
-	sudo service ceph -a restart
 
 
 .. _disable-cephx:
@@ -164,10 +161,8 @@ during setup and/or troubleshooting to temporarily disable authentication.
 
     auth supported = none
 
-#. Start or restart the Ceph cluster. :: 
+#. Start or restart the Ceph cluster. See `Operating a Cluster`_ for details. 
 
-	sudo service ceph -a start
-	sudo service ceph -a restart
 
 
 Daemon Keyrings
@@ -422,3 +417,4 @@ of the enhanced authentication.
 
 .. _Ceph configuration: ../../configuration/ceph-conf
 .. _Cephx Configuration Reference: ../../configuration/auth-config-ref
+.. _Operating a Cluster: ../operating
