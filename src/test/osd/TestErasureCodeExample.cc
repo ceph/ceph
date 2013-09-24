@@ -20,24 +20,9 @@
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
-TEST(ErasureCodeExample, constructor)
-{
-  map<std::string,std::string> parameters;
-  {
-    ErasureCodeExample example(parameters);
-    EXPECT_EQ(0u, example.delay);
-  }
-  parameters["usleep"] = "10";
-  {
-    ErasureCodeExample example(parameters);
-    EXPECT_EQ(10u, example.delay);
-  }
-}
-
 TEST(ErasureCodeExample, minimum_to_decode)
 {
-  map<std::string,std::string> parameters;
-  ErasureCodeExample example(parameters);
+  ErasureCodeExample example;
   set<int> available_chunks;
   set<int> want_to_read;
   want_to_read.insert(1);
@@ -72,8 +57,7 @@ TEST(ErasureCodeExample, minimum_to_decode)
 
 TEST(ErasureCodeExample, minimum_to_decode_with_cost)
 {
-  map<std::string,std::string> parameters;
-  ErasureCodeExample example(parameters);
+  ErasureCodeExample example;
   map<int,int> available;
   set<int> want_to_read;
   want_to_read.insert(1);
@@ -117,8 +101,7 @@ TEST(ErasureCodeExample, minimum_to_decode_with_cost)
 
 TEST(ErasureCodeExample, encode_decode)
 {
-  map<std::string,std::string> parameters;
-  ErasureCodeExample example(parameters);
+  ErasureCodeExample example;
 
   bufferlist in;
   in.append("ABCDE");

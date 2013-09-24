@@ -323,6 +323,13 @@ libec_missing_entry_point_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libec_missing_entry_point_la_LDFLAGS = ${AM_LDFLAGS} -export-symbols-regex '.*__erasure_code_.*'
 erasure_codelib_LTLIBRARIES += libec_missing_entry_point.la
 
+libec_hangs_la_SOURCES = test/osd/ErasureCodePluginHangs.cc
+libec_hangs_la_CFLAGS = ${AM_CFLAGS}
+libec_hangs_la_CXXFLAGS= ${AM_CXXFLAGS}
+libec_hangs_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libec_hangs_la_LDFLAGS = ${AM_LDFLAGS} -export-symbols-regex '.*__erasure_code_.*'
+erasure_codelib_LTLIBRARIES += libec_hangs.la
+
 libec_fail_to_initialize_la_SOURCES = test/osd/ErasureCodePluginFailToInitialize.cc
 libec_fail_to_initialize_la_CFLAGS = ${AM_CFLAGS}
 libec_fail_to_initialize_la_CXXFLAGS= ${AM_CXXFLAGS}
