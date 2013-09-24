@@ -78,9 +78,10 @@
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
-    --conf/-c        Read configuration from the given configuration file
-    --id/-i          set ID portion of my name
-    --name/-n        set name (TYPE.ID)
-    --version        show version and quit
+    --conf/-c FILE    read configuration from the given configuration file
+    --id/-i ID        set ID portion of my name
+    --name/-n TYPE.ID set name
+    --cluster NAME    set cluster name (default: ceph)
+    --version         show version and quit
   
   [1]
