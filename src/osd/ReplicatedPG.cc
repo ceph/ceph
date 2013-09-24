@@ -4980,6 +4980,7 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
   // obc ref swallowed by repop!
   issue_repop(repop, repop->ctx->mtime);
   eval_repop(repop);
+  repop->put();
 }
 
 ObjectContextRef ReplicatedPG::create_object_context(const object_info_t& oi,
