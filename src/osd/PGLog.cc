@@ -782,10 +782,6 @@ void PGLog::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
  
   log.tail = info.log_tail;
 
-  // In case of sobject_t based encoding, may need to list objects in the store
-  // to find hashes
-  vector<ghobject_t> ls;
-  
   if (ondisklog_head > 0) {
     // read
     bufferlist bl;
@@ -803,7 +799,6 @@ void PGLog::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
     assert(log.empty());
     eversion_t last;
     bool reorder = false;
-    bool listed_collection = false;
 
     while (!p.end()) {
       uint64_t pos = ondisklog_tail + p.get_off();
@@ -846,31 +841,7 @@ void PGLog::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
 	      << e.version << " after " << last << "\n";
       }
 
-      if (e.invalid_hash) {
-	// We need to find the object in the store to get the hash
-	if (!listed_collection) {
-	  store->collection_list(coll, ls);
-	  listed_collection = true;
-	}
-	bool found = false;
-	for (vector<ghobject_t>::iterator i = ls.begin();
-	     i != ls.end();
-	     ++i) {
-          // Older OSD can't have new format objects
-          assert(i->generation == ghobject_t::NO_GEN);
-	  if (i->hobj.oid == e.soid.oid && i->hobj.snap == e.soid.snap) {
-	    e.soid = i->hobj;
-	    found = true;
-	    break;
-	  }
-	}
-	if (!found) {
-	  // Didn't find the correct hash
-	  std::ostringstream oss;
-	  oss << "Could not find hash for hoid " << e.soid << std::endl;
-	  throw read_log_error(oss.str().c_str());
-	}
-      }
+      assert(!e.invalid_hash);
 
       if (e.invalid_pool) {
 	e.soid.pool = info.pgid.pool();
