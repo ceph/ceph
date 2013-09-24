@@ -7,6 +7,7 @@ import os
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
+from ..config import config as teuth_config
 from ..orchestra import run
 from ..orchestra.connection import split_user
 
@@ -22,7 +23,7 @@ def download(ctx, config):
         ctx.cluster.only(client).run(
             args=[
                 'git', 'clone',
-                config.ceph_git_base_url + 'swift.git',
+                teuth_config.ceph_git_base_url + 'swift.git',
                 '{tdir}/swift'.format(tdir=testdir),
                 ],
             )
