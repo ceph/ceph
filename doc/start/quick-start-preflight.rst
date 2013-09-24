@@ -4,17 +4,17 @@
 
 .. versionadded:: 0.60
 
-Thank you for trying Ceph! We recommend setting up a ``ceph-deploy`` node and a
-3-node :term:`Ceph Storage Cluster` to explore the basics of Ceph. This
-**Preflight Checklist** will help you prepare a ``ceph-deploy`` node and three
-Ceph Nodes (or virtual machines) that will host your Ceph Storage Cluster.
+Thank you for trying Ceph! We recommend setting up a ``ceph-deploy`` admin node
+and a 3-node :term:`Ceph Storage Cluster` to explore the basics of Ceph. This
+**Preflight Checklist** will help you prepare a ``ceph-deploy`` admin node and
+three Ceph Nodes (or virtual machines) that will host your Ceph Storage Cluster.
 
 
 .. ditaa:: 
            /------------------\         /----------------\
-           | ceph–deploy Node |         |   ceph–node1   |
+           |    Admin Node    |         |   ceph–node1   |
            |                  +-------->+                |
-           |                  |         | cCCC           |
+           | ceph–deploy      |         | cCCC           |
            \---------+--------/         \----------------/
                      |
                      |                  /----------------\
@@ -53,8 +53,8 @@ Perform the following steps:
 	sudo yum install openssh-server
 	
 	
-#. Configure your ``ceph-deploy`` node with password-less SSH access to each 
-   Ceph Node. Leave the passphrase empty::
+#. Configure your ``ceph-deploy`` admin node with password-less SSH access to
+   each Ceph Node. Leave the passphrase empty::
 
 	ssh-keygen
 	Generating public/private key pair.
@@ -69,8 +69,8 @@ Perform the following steps:
 	ssh-copy-id ceph@ceph-server
 
 
-#. Modify the ``~/.ssh/config`` file of your ``ceph-deploy`` node so that it
-   logs in to Ceph Nodes as the user you created (e.g., ``ceph``). ::
+#. Modify the ``~/.ssh/config`` file of your ``ceph-deploy`` admin node so that
+   it logs in to Ceph Nodes as the user you created (e.g., ``ceph``). ::
 
 	Host ceph-server
 	   Hostname ceph-server.fqdn-or-ip-address.com
@@ -84,7 +84,7 @@ Perform the following steps:
 Ceph Deploy Setup
 =================
 
-Add Ceph repositories to the ``ceph-deploy`` node. Then, install
+Add Ceph repositories to the ``ceph-deploy`` admin node. Then, install
 ``ceph-deploy``.
 
 
