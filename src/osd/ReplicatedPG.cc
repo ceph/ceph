@@ -6180,11 +6180,12 @@ void ReplicatedBackend::prep_push(
   pi.recovery_progress.omap_complete = 0;
 
   ObjectRecoveryProgress new_progress;
-  build_push_op(pi.recovery_info,
-		pi.recovery_progress,
-		&new_progress,
-		pop,
-		&(pi.stat));
+  int r = build_push_op(pi.recovery_info,
+			pi.recovery_progress,
+			&new_progress,
+			pop,
+			&(pi.stat));
+  assert(r == 0);
   pi.recovery_progress = new_progress;
 }
 
@@ -6710,10 +6711,11 @@ bool ReplicatedBackend::handle_push_reply(int peer, PushReplyOp &op, PushOp *rep
 	       << pi->recovery_progress.data_recovered_to
 	       << " of " << pi->recovery_info.copy_subset << dendl;
       ObjectRecoveryProgress new_progress;
-      build_push_op(
+      int r = build_push_op(
 	pi->recovery_info,
 	pi->recovery_progress, &new_progress, reply,
 	&(pi->stat));
+      assert(r == 0);
       pi->recovery_progress = new_progress;
       return true;
     } else {
