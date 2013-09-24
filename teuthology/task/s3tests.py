@@ -21,7 +21,7 @@ def extract_sync_client_data(ctx, client_name):
     return_dict = None
     client = ctx.ceph.conf.get(client_name, None)
     if client:
-        current_client_zone = client.get('rgw zone', None) 
+        current_client_zone = client.get('rgw zone', None)
         if current_client_zone:
             (endpoint_host, endpoint_port) = ctx.rgw.role_endpoints.get(client_name,(None,None))
             # pull out the radosgw_agent stuff
@@ -40,7 +40,7 @@ def extract_sync_client_data(ctx, client_name):
                         return_dict['port'] = endpoint_port
                         return_dict['host'] = endpoint_host
 
-                        # The s3tests expect the sync_agent_[addr|port} to be 
+                        # The s3tests expect the sync_agent_[addr|port} to be
                         # set on the non-master node for some reason
                         if not region_data['is master']:
                           (rgwagent_host,rgwagent_port) = ctx.radosgw_agent.endpoint
@@ -59,9 +59,9 @@ def update_conf_with_region_info(ctx, config, s3tests_conf):
         # we'll assume that there's only one sync relationship (source / destination) with client.X
         # as the key for now
 
-        # Iterate through all of the radosgw_agent (rgwa) configs and see if a 
-        # given client is involved in a relationship. 
-        # If a given client isn't, skip it 
+        # Iterate through all of the radosgw_agent (rgwa) configs and see if a
+        # given client is involved in a relationship.
+        # If a given client isn't, skip it
         this_client_in_rgwa_config = False
         for rgwa in ctx.radosgw_agent.config.keys():
             rgwa_data = ctx.radosgw_agent.config[rgwa]
@@ -111,8 +111,7 @@ def download(ctx, config):
             args=[
                 'git', 'clone',
                 '-b', branch,
-#                'https://github.com/ceph/s3-tests.git',
-                'git://ceph.com/git/s3-tests.git',
+                config.ceph_git_base_url + 's3-tests.git',
                 '{tdir}/s3-tests'.format(tdir=testdir),
                 ],
             )
