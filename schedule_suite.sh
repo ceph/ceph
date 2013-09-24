@@ -1,4 +1,4 @@
-#!/bin/sh -e
+#!/bin/bash
 
 suite=$1
 ceph=$2
@@ -16,29 +16,55 @@ if [ -z "$kernel" ]; then
     exit 1
 fi
 
-[ -z "$email" ] && email='ceph-qa@ceph.com'
+if [ -z "$email" ]
+then
+    email='ceph-qa@ceph.com'
+    email_specified=0
+else
+    email_specified=1
+fi
 [ -z "$flavor" ] && flavor='basic'
 [ -z "$distro" ] && distro='ubuntu'
+
+stamp=`date +%Y-%m-%d_%H:%M:%S`
+nicesuite=`echo $suite | sed 's/\//:/g'`
+name=`whoami`"-$stamp-$nicesuite-$ceph-$kernel-$flavor-$mtype"
+
+function schedule_fail {
+    SUBJECT="Failed to schedule $name"
+    MESSAGE="$@"
+    echo $SUBJECT:
+    echo $MESSAGE
+    if [ ! -z "$email" ] && [ "$email_specified" -eq 1 ]
+    then
+        echo "$MESSAGE" | mail -s "$SUBJECT" $email
+    fi
+    exit 1
+}
 
 if [ "$kernel" = "-" ]
 then
     kernelvalue=""
 else
     KERNEL_SHA1=`wget http://gitbuilder.ceph.com/kernel-deb-precise-x86_64-basic/ref/$kernel/sha1 -O- 2>/dev/null`
-    [ -z "$KERNEL_SHA1" ] && echo "kernel branch $kernel dne" && exit 1
+    [ -z "$KERNEL_SHA1" ] && schedule_fail "Couldn't find kernel branch $kernel"
     kernelvalue="kernel:
   kdb: true
   sha1: $KERNEL_SHA1"
 fi
 ##
-test ! -d ~/src/ceph-qa-suite && echo "error: expects to find ~/src/ceph-qa-suite" && exit 1
-test ! -d ~/src/teuthology/virtualenv/bin && echo "error: expects to find ~/src/teuthology/virtualenv/bin" && exit 1
+[ ! -d ~/src/ceph-qa-suite ] && schedule_fail "error: expects to find ~/src/ceph-qa-suite"
+[ ! -d ~/src/teuthology/virtualenv/bin ] && schedule_fail "error: expects to find ~/src/teuthology/virtualenv/bin"
 
 ## get sha1
 CEPH_SHA1=`wget http://gitbuilder.ceph.com/ceph-deb-precise-x86_64-$flavor/ref/$ceph/sha1 -O- 2>/dev/null`
 
-[ -z "$CEPH_SHA1" ] && echo "ceph branch $ceph dne" && exit 1
+[ -z "$CEPH_SHA1" ] && schedule_fail "Can't find ceph branch $ceph"
 
+# Are there packages for this sha1?
+CEPH_VER=`wget http://gitbuilder.ceph.com/ceph-deb-precise-x86_64-$flavor/sha1/$CEPH_SHA1/version -O- 2>/dev/null`
+
+[ -z "$CEPH_VER" ] && schedule_fail "Can't find packages for ceph branch $ceph sha1 $CEPH_SHA1"
 
 if [ -n "$teuthology_branch" ] && wget http://github.com/ceph/s3-tests/tree/$teuthology_branch -O- 2>/dev/null >/dev/null ; then
     s3branch=$teuthology_branch
@@ -118,11 +144,6 @@ fi
 if [ -n "$template" ]; then
     sed s/CEPH_SHA1/$CEPH_SHA1/ $template | sed s/KERNEL_SHA1/$KERNEL_SHA1/ >> $fn
 fi
-
-##
-stamp=`date +%Y-%m-%d_%H:%M:%S`
-nicesuite=`echo $suite | sed 's/\//:/g'`
-name=`whoami`"-$stamp-$nicesuite-$ceph-$kernel-$flavor-$mtype"
 
 echo "name $name"
 
