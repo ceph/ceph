@@ -4,7 +4,6 @@
 int ceph_arch_intel_sse42 = 0;
 
 
-/* this probably isn't specific enough for x86_64?  fix me someday */
 #ifdef __x86_64__
 
 /* intel cpu? */
