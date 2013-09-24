@@ -168,8 +168,6 @@ void ReplicatedPG::on_local_recover(
 
     t->register_on_applied(new C_OSD_AppliedRecoveredObject(this, obc));
     t->register_on_applied_sync(new C_OSD_OndiskWriteUnlock(obc));
-    t->register_on_complete(
-      new C_OSD_CompletedPull(this, hoid, get_osdmap()->get_epoch()));
 
     publish_stats_to_osd();
     if (waiting_for_missing_object.count(hoid)) {

@@ -700,18 +700,6 @@ protected:
       pg->_committed_pushed_object(epoch, last_complete);
     }
   };
-  struct C_OSD_CompletedPull : public Context {
-    ReplicatedPGRef pg;
-    hobject_t hoid;
-    epoch_t epoch;
-    C_OSD_CompletedPull(
-      ReplicatedPG *pg,
-      const hobject_t &hoid,
-      epoch_t epoch) : pg(pg), hoid(hoid), epoch(epoch) {}
-    void finish(int) {
-    }
-  };
-  friend struct C_OSD_CompletedPull;
   struct C_OSD_AppliedRecoveredObjectReplica : public Context {
     ReplicatedPGRef pg;
     C_OSD_AppliedRecoveredObjectReplica(ReplicatedPG *p) :
