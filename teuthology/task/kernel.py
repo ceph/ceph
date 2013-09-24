@@ -6,6 +6,7 @@ import shlex
 
 from teuthology import misc as teuthology
 from ..orchestra import run
+from ..config import config as teuth_config
 
 log = logging.getLogger(__name__)
 
