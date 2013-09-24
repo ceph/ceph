@@ -4260,6 +4260,7 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
 
     issue_repop(repop, repop->ctx->mtime);
     eval_repop(repop);
+    repop->put();
 
     dout(10) << __func__ << " fetching more" << dendl;
     _copy_some(ctx, cop);
