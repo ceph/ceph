@@ -2460,8 +2460,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = osd->store->getattr(coll, soid, name.c_str(), xattr);
 	else
 	  result = osd->store->getattr(coll, src_obc->obs.oi.soid, name.c_str(), xattr);
-	if (result < 0 && result != -EEXIST && result != -ENODATA)
+       int flags = le32_to_cpu(op.flags);
+	if (result < 0 && result != -EEXIST && result != -ENODATA &&
+	    (!(flags & CEPH_OSD_OP_FLAG_NOENTOK) || result != -ENOENT)) {
 	  break;
+	}
 	
 	ctx->delta_stats.num_rd++;
 	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(xattr.length(), 10);

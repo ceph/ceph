@@ -204,7 +204,7 @@ ostream& operator<<(ostream& out, const client_writeable_range_t& r)
  */
 void inode_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(7, 6, bl);
+  ENCODE_START(8, 8, bl);
 
   ::encode(ino, bl);
   ::encode(rdev, bl);
@@ -227,6 +227,8 @@ void inode_t::encode(bufferlist &bl) const
   ::encode(mtime, bl);
   ::encode(atime, bl);
   ::encode(time_warp_seq, bl);
+  ::encode(inline_version, bl);
+  ::encode(inline_data, bl);
   ::encode(client_ranges, bl);
 
   ::encode(dirstat, bl);
@@ -244,7 +246,7 @@ void inode_t::encode(bufferlist &bl) const
 
 void inode_t::decode(bufferlist::iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(7, 6, 6, p);
+  DECODE_START_LEGACY_COMPAT_LEN(8, 6, 6, p);
 
   ::decode(ino, p);
   ::decode(rdev, p);
@@ -273,6 +275,12 @@ void inode_t::decode(bufferlist::iterator &p)
   ::decode(mtime, p);
   ::decode(atime, p);
   ::decode(time_warp_seq, p);
+  if (struct_v >= 8) {
+    ::decode(inline_version, p);
+    ::decode(inline_data, p);
+  } else {
+    inline_version = CEPH_INLINE_DISABLED;
+  }
   if (struct_v >= 3) {
     ::decode(client_ranges, p);
   } else {
