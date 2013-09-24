@@ -46,6 +46,15 @@ class Config(object):
         base_url = base_url or "https://github.com/ceph/"
         return base_url
 
+    @property
+    def verify_host_keys(self):
+        """
+        Whether or not we should verify ssh host keys.
+
+        Defaults to True
+        """
+        return self.__conf.get('verify_host_keys', True)
+
     # This takes care of any and all of the rest.
     # If the parameter is defined, return it. Otherwise return None.
     def __getattr__(self, name):

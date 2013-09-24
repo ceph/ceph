@@ -1,5 +1,6 @@
 import base64
 import paramiko
+from ..config import config
 
 def split_user(user_at_host):
     try:
@@ -25,11 +26,11 @@ def connect(user_at_host, host_key=None, keep_alive=False,
         _SSHClient = paramiko.SSHClient
     ssh = _SSHClient()
     if host_key is None:
-    	ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     if _create_key is None:
         _create_key = create_key
 
-    if host_key is None:
+    if host_key is None and config.verify_host_keys is True:
         ssh.load_system_host_keys()
     else:
         keytype, key = host_key.split(' ', 1)
@@ -38,7 +39,7 @@ def connect(user_at_host, host_key=None, keep_alive=False,
             keytype=keytype,
             key=_create_key(keytype, key)
             )
-        
+
     # just let the exceptions bubble up to caller
     ssh.connect(
         hostname=host,
