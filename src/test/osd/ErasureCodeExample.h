@@ -34,17 +34,6 @@
 
 class ErasureCodeExample : public ErasureCodeInterface {
 public:
-  useconds_t delay;
-  ErasureCodeExample(const map<std::string,std::string> &parameters) :
-    delay(0)
-  {
-    if (parameters.find("usleep") != parameters.end()) {
-      std::istringstream ss(parameters.find("usleep")->second);
-      ss >> delay;
-      usleep(delay);
-    }
-  }
-
   virtual ~ErasureCodeExample() {}
   
   virtual int minimum_to_decode(const set<int> &want_to_read,
