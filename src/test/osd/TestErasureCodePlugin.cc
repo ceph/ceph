@@ -28,19 +28,12 @@ protected:
 
   class Thread_factory : public Thread {
   public:
-    useconds_t delay;
-
-    Thread_factory(useconds_t _delay) :
-      delay(_delay)
-    {}
-
     virtual void *entry() {
       map<std::string,std::string> parameters;
       parameters["erasure-code-directory"] = ".libs";
-      parameters["usleep"] = delay;
       ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
       ErasureCodeInterfaceRef erasure_code;
-      instance.factory("example", parameters, &erasure_code);
+      instance.factory("hangs", parameters, &erasure_code);
       return NULL;
     }
   };
@@ -58,7 +51,7 @@ TEST_F(ErasureCodePluginRegistryTest, factory_mutex) {
   //
   useconds_t delay = 0;
   const useconds_t DELAY_MAX = 20 * 1000 * 1000;
-  Thread_factory sleep_forever(1024 * 1024 * 1024);
+  Thread_factory sleep_forever;
   sleep_forever.create();
   do {
     cout << "Trying (1) with delay " << delay << "us\n";
@@ -71,7 +64,8 @@ TEST_F(ErasureCodePluginRegistryTest, factory_mutex) {
 
   EXPECT_FALSE(instance.lock.TryLock());
 
-  EXPECT_EQ(0, sleep_forever.detach());
+  EXPECT_EQ(0, pthread_cancel(sleep_forever.get_thread_id()));
+  EXPECT_EQ(0, sleep_forever.join());
 }
 
 TEST_F(ErasureCodePluginRegistryTest, all)
