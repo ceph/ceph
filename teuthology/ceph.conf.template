@@ -12,6 +12,8 @@
 
 	ms die on old message = true
 
+	mon pg warn min pg per osd = 5
+
 [osd]
         osd journal size = 100
 
