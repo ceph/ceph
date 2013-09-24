@@ -7,6 +7,7 @@ import logging
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
+from ..config import config as teuth_config
 import ceph as ceph_fn
 from ..orchestra import run
 
@@ -31,7 +32,7 @@ def download_ceph_deploy(ctx, config):
     ctx.cluster.only(ceph_admin).run(
         args=[
             'git', 'clone', '-b', ceph_deploy_branch,
-            config.ceph_git_base_url + 'ceph-deploy.git',
+            teuth_config.ceph_git_base_url + 'ceph-deploy.git',
             '{tdir}/ceph-deploy'.format(tdir=testdir),
             ],
         )

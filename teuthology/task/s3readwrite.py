@@ -9,6 +9,7 @@ import yaml
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
+from ..config import config as teuth_config
 from ..orchestra import run
 from ..orchestra.connection import split_user
 
@@ -29,7 +30,7 @@ def download(ctx, config):
             args=[
                 'git', 'clone',
                 '-b', branch,
-                config.ceph_git_base_url + 's3-tests.git',
+                teuth_config.ceph_git_base_url + 's3-tests.git',
                 '{tdir}/s3-tests'.format(tdir=testdir),
                 ],
             )

@@ -25,7 +25,7 @@ def download(ctx, config):
         ctx.cluster.only(client).run(
             args=[
                 'git', 'clone',
-                config.ceph_git_base_url + 's3-tests.git',
+                teuth_config.ceph_git_base_url + 's3-tests.git',
                 '{tdir}/s3-tests'.format(tdir=testdir),
                 ],
             )
