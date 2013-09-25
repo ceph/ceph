@@ -1865,6 +1865,8 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	 p != pg_map.pg_pool_sum.end();
 	 ++p) {
       const pg_pool_t *pi = mon->osdmon()->osdmap.get_pg_pool(p->first);
+      if (!pi)
+	continue;   // in case osdmap changes haven't propagated to PGMap yet
       if (pi->get_pg_num() > pi->get_pgp_num()) {
 	ostringstream ss;
 	ss << "pool " << mon->osdmon()->osdmap.get_pool_name(p->first) << " pg_num "
