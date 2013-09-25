@@ -7162,6 +7162,12 @@ struct C_MDS_mksnap_finish : public Context {
 /* This function takes responsibility for the passed mdr*/
 void Server::handle_client_mksnap(MDRequest *mdr)
 {
+  if (!mds->mdsmap->allows_snaps()) {
+    // you can't make snapshots until you set an option right now
+    reply_request(mdr, -EPERM);
+    return;
+  }
+
   MClientRequest *req = mdr->client_request;
   CInode *diri = mdcache->get_inode(req->get_filepath().get_ino());
   if (!diri || diri->state_test(CInode::STATE_PURGING)) {
