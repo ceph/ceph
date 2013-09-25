@@ -2,6 +2,8 @@
 
 set -e
 
+ceph mds set allow_new_snaps --yes-i-really-mean-it
+
 do_tarball() {
     wget http://ceph.com/qa/$1
     tar xvf$2 $1
