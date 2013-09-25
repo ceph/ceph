@@ -857,6 +857,8 @@ public:
   virtual int get_max_object_name_length() = 0;
   virtual int mkfs() = 0;  // wipe
   virtual int mkjournal() = 0; // journal only
+  virtual void set_allow_sharded_objects() = 0;
+  virtual bool get_allow_sharded_objects() = 0;
 
   virtual int statfs(struct statfs *buf) = 0;
 
