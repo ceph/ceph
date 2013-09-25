@@ -1402,6 +1402,7 @@ public:
   string oid, oid_src;
   ObjectDesc src_value;
   librados::ObjectWriteOperation op;
+  librados::ObjectReadOperation rd_op;
   librados::AioCompletion *comp;
   librados::AioCompletion *comp_racing_read;
   int snap;
@@ -1456,7 +1457,11 @@ public:
 					       new TestOp::CallbackInfo(1));
     comp_racing_read = context->rados.aio_create_completion((void*) read_cb_arg, &write_callback,
 							    NULL);
-    context->io_ctx.aio_stat(context->prefix+oid, comp_racing_read, NULL, NULL);
+    rd_op.stat(NULL, NULL, NULL);
+    context->io_ctx.aio_operate(context->prefix+oid, comp_racing_read, &rd_op,
+				librados::SNAP_HEAD,
+				librados::OPERATION_ORDER_READS_WRITES,  // order wrt previous write/update
+				NULL);
   }
 
   void _finish(CallbackInfo *info)
