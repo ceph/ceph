@@ -68,4 +68,13 @@ ceph osd crush add-bucket foo host
 ceph osd crush move foo root=default rack=localrack
 ceph osd crush rm foo
 
+# test reweight
+o3=`ceph osd create`
+ceph osd crush add $o3 123 root=foo
+ceph osd tree | grep osd.$o3 | grep 123
+ceph osd crush reweight osd.$o3 113
+ceph osd tree | grep osd.$o3 | grep 113
+ceph osd crush rm osd.$o3
+ceph osd rm osd.$o3
+
 echo OK
