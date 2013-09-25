@@ -134,7 +134,9 @@ static ostream& _prefix(std::ostream* _dout, int whoami, OSDMapRef osdmap) {
 		<< " ";
 }
 
-static CompatSet get_osd_compat_set() {
+//Initial features in new superblock.
+//Features here are also automatically upgraded
+CompatSet OSD::get_osd_initial_compat_set() {
   CompatSet::FeatureSet ceph_osd_feature_compat;
   CompatSet::FeatureSet ceph_osd_feature_ro_compat;
   CompatSet::FeatureSet ceph_osd_feature_incompat;
@@ -150,6 +152,13 @@ static CompatSet get_osd_compat_set() {
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER);
   return CompatSet(ceph_osd_feature_compat, ceph_osd_feature_ro_compat,
 		   ceph_osd_feature_incompat);
+}
+
+//Features are added here that this OSD supports.
+CompatSet OSD::get_osd_compat_set() {
+  CompatSet compat =  get_osd_initial_compat_set();
+  //Any features here can be set in code, but not in initial superblock
+  return compat;
 }
 
 OSDService::OSDService(OSD *osd) :
@@ -646,7 +655,7 @@ int OSD::mkfs(CephContext *cct, const std::string &dev, const std::string &jdev,
       sb.cluster_fsid = fsid;
       sb.osd_fsid = store->get_fsid();
       sb.whoami = whoami;
-      sb.compat_features = get_osd_compat_set();
+      sb.compat_features = get_osd_initial_compat_set();
 
       // benchmark?
       if (cct->_conf->osd_auto_weight) {
@@ -1188,11 +1197,12 @@ int OSD::init()
       return r;
   }
 
-  if (osd_compat.compare(superblock.compat_features) != 0) {
+  CompatSet initial = get_osd_initial_compat_set();
+  if (initial.compare(superblock.compat_features) != 0) {
     // We need to persist the new compat_set before we
     // do anything else
     dout(5) << "Upgrading superblock compat_set" << dendl;
-    superblock.compat_features = osd_compat;
+    superblock.compat_features = initial;
     ObjectStore::Transaction t;
     write_superblock(t);
     r = store->apply_transaction(t);
