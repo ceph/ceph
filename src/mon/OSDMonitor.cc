@@ -120,7 +120,12 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
    * We will possibly have a stashed latest that *we* wrote, and we will
    * always be sure to have the oldest full map in the first..last range
    * due to encode_trim_extra(), which includes the oldest full map in the trim
-   * transaction.  Start with whichever is newer.
+   * transaction.
+   *
+   * encode_trim_extra() does not however write the full map's
+   * version to 'full_latest'.  This is only done when we are building the
+   * full maps from the incremental versions.  But don't panic!  We make sure
+   * that the following conditions find whichever full map version is newer.
    */
   version_t latest_full = get_version_latest_full();
   if (latest_full == 0 && get_first_committed() > 1)
@@ -637,7 +642,6 @@ void OSDMonitor::encode_trim_extra(MonitorDBStore::Transaction *tx, version_t fi
   bufferlist bl;
   get_version_full(first, bl);
   put_version_full(tx, first, bl);
-  put_version_latest_full(tx, first);
 }
 
 // -------------
