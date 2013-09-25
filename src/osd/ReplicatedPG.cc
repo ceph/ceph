@@ -7821,11 +7821,19 @@ int ReplicatedPG::prep_object_replica_pushes(
   start_recovery_op(soid);
   assert(!recovering.count(soid));
   recovering.insert(soid);
+
+  /* We need this in case there is an in progress write on the object.  In fact,
+   * the only possible write is an update to the xattr due to a lost_revert --
+   * a client write would be blocked since the object is degraded.
+   * In almost all cases, therefore, this lock should be uncontended.
+   */
+  obc->ondisk_read_lock();
   pgbackend->recover_object(
     soid,
     ObjectContextRef(),
     obc, // has snapset context
     h);
+  obc->ondisk_read_unlock();
   return 1;
 }
 
