@@ -99,6 +99,12 @@ TEST(BloomFilter, SweepInt) {
   }
 }
 
+
+// disable these tests; doing dual insertions in consecutive filters
+// appears to be equivalent to doing a single insertion in a bloom
+// filter that is twice as big.
+#if 0
+
 // test the fpp over a sequence of bloom filters, each with unique
 // items inserted into it.
 //
@@ -176,3 +182,5 @@ TEST(BloomFilter, SequenceDouble) {
 	      << " expected " << (fpp*fpp*(double)seq) << std::endl;
   }
 }
+
+#endif
