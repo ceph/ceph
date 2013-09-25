@@ -233,8 +233,8 @@ bin_DEBUGPROGRAMS += ceph_bench_log
 ## Unit tests
 
 check_SCRIPTS += \
-	$(srcdir)/unittest_bufferlist.sh \
-	$(srcdir)/test/encoding/check-generated.sh
+	unittest_bufferlist.sh \
+	test/encoding/check-generated.sh
 
 # target to build but not run the unit tests
 unittests:: $(check_PROGRAMS)
