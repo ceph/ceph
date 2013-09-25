@@ -57,12 +57,22 @@ fi
 [ ! -d ~/src/teuthology/virtualenv/bin ] && schedule_fail "error: expects to find ~/src/teuthology/virtualenv/bin"
 
 ## get sha1
-CEPH_SHA1=`wget http://gitbuilder.ceph.com/ceph-deb-precise-x86_64-$flavor/ref/$ceph/sha1 -O- 2>/dev/null`
+if [ "$distro" = "ubuntu" ]
+then
+    CEPH_SHA1=`wget http://gitbuilder.ceph.com/ceph-deb-precise-x86_64-$flavor/ref/$ceph/sha1 -O- 2>/dev/null`
+else
+    CEPH_SHA1=`wget http://gitbuilder.ceph.com/ceph-rpm-fc18-x86_64-$flavor/ref/$ceph/sha1 -O- 2>/dev/null`
+fi
 
 [ -z "$CEPH_SHA1" ] && schedule_fail "Can't find ceph branch $ceph"
 
 # Are there packages for this sha1?
-CEPH_VER=`wget http://gitbuilder.ceph.com/ceph-deb-precise-x86_64-$flavor/sha1/$CEPH_SHA1/version -O- 2>/dev/null`
+if [ "$distro" = "ubuntu" ]
+then
+    CEPH_VER=`wget http://gitbuilder.ceph.com/ceph-deb-precise-x86_64-$flavor/sha1/$CEPH_SHA1/version -O- 2>/dev/null`
+else
+    CEPH_VER=`wget http://gitbuilder.ceph.com/ceph-rpm-fc18-x86_64-$flavor/sha1/$CEPH_SHA1/version -O- 2>/dev/null`
+fi
 
 [ -z "$CEPH_VER" ] && schedule_fail "Can't find packages for ceph branch $ceph sha1 $CEPH_SHA1"
 
