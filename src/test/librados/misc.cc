@@ -538,21 +538,25 @@ TEST(LibRadosMisc, BigAttrPP) {
 
   bufferlist got;
 
-  bl.clear();
-  got.clear();
-  bl.append(buffer::create(g_conf->osd_max_attr_size));
-  ASSERT_EQ(0, ioctx.setxattr("foo", "one", bl));
-  ASSERT_EQ((int)bl.length(), ioctx.getxattr("foo", "one", got));
-  ASSERT_TRUE(bl.contents_equal(got));
+  if (g_conf->osd_max_attr_size) {
+    bl.clear();
+    got.clear();
+    bl.append(buffer::create(g_conf->osd_max_attr_size));
+    ASSERT_EQ(0, ioctx.setxattr("foo", "one", bl));
+    ASSERT_EQ((int)bl.length(), ioctx.getxattr("foo", "one", got));
+    ASSERT_TRUE(bl.contents_equal(got));
 
-  bl.clear();
-  bl.append(buffer::create(g_conf->osd_max_attr_size+1));
-  ASSERT_EQ(-EFBIG, ioctx.setxattr("foo", "one", bl));
+    bl.clear();
+    bl.append(buffer::create(g_conf->osd_max_attr_size+1));
+    ASSERT_EQ(-EFBIG, ioctx.setxattr("foo", "one", bl));
+  } else {
+    cout << "osd_max_attr_size == 0; skipping test" << std::endl;
+  }
 
   for (int i=0; i<1000; i++) {
     bl.clear();
     got.clear();
-    bl.append(buffer::create(g_conf->osd_max_attr_size));
+    bl.append(buffer::create(MIN(g_conf->osd_max_attr_size, 1024)));
     char n[10];
     snprintf(n, sizeof(n), "a%d", i);
     ASSERT_EQ(0, ioctx.setxattr("foo", n, bl));
