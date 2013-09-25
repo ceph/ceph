@@ -4,6 +4,8 @@ set -e
 
 mkdir foo
 
+ceph mds set allow_new_snaps --yes-i-really-mean-it
+
 # make sure mds handles it when the client does not send flushsnap
 echo x > foo/x
 sync
