@@ -666,6 +666,25 @@ public:
     return oid;
   }
   static void recursive_remove_collection(ObjectStore *store, coll_t tmp);
+
+  /**
+   * get_osd_initial_compat_set()
+   *
+   * Get the initial feature set for this OSD.  Features
+   * here are automatically upgraded.
+   *
+   * Return value: Initial osd CompatSet
+   */
+  static CompatSet get_osd_initial_compat_set();
+
+  /**
+   * get_osd_compat_set()
+   *
+   * Get all features supported by this OSD
+   *
+   * Return value: CompatSet of all supported features
+   */
+  static CompatSet get_osd_compat_set();
   
 
 private:
