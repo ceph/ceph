@@ -78,32 +78,26 @@ int ErasureCodeJerasure::encode(const set<int> &want_to_encode,
 {
   unsigned alignment = get_alignment();
   unsigned tail = in.length() % alignment;
-  unsigned in_length = in.length() + ( tail ?  ( alignment - tail ) : 0 );
+  unsigned padded_length = in.length() + ( tail ?  ( alignment - tail ) : 0 );
   dout(10) << "encode adjusted buffer length from " << in.length()
-	   << " to " << in_length << dendl;
-  assert(in_length % k == 0);
-  unsigned blocksize = in_length / k;
+	   << " to " << padded_length << dendl;
+  assert(padded_length % k == 0);
+  unsigned blocksize = padded_length / k;
   unsigned length = blocksize * ( k + m );
   bufferlist out(in);
   bufferptr pad(length - in.length());
-  pad.zero(0, k);
+  pad.zero(0, padded_length - in.length());
   out.push_back(pad);
-  char *p = out.c_str();
-  char *data[k];
-  for (int i = 0; i < k; i++) {
-    data[i] = p + i * blocksize;
+  char *chunks[k + m];
+  for (int i = 0; i < k + m; i++) {
+    bufferlist &chunk = (*encoded)[i];
+    chunk.substr_of(out, i * blocksize, blocksize);
+    chunks[i] = chunk.c_str();
   }
-  char *coding[m];
-  for (int i = 0; i < m; i++) {
-    coding[i] = p + ( k + i ) * blocksize;
-  }
-  jerasure_encode(data, coding, blocksize);
-  const bufferptr ptr = out.buffers().front();
-  for (set<int>::iterator j = want_to_encode.begin();
-       j != want_to_encode.end();
-       j++) {
-    bufferptr chunk(ptr, (*j) * blocksize, blocksize);
-    (*encoded)[*j].push_front(chunk);
+  jerasure_encode(&chunks[0], &chunks[k], blocksize);
+  for (int i = 0; i < k + m; i++) {
+    if (want_to_encode.count(i) == 0)
+      encoded->erase(i);
   }
   return 0;
 }
