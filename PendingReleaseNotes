@@ -1,2 +1,3 @@
-v0.69
+v0.70
 ~~~~~
+mds: disable adding snapshots by default. (re-enable them with "ceph mds allow_snaps")

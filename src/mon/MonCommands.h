@@ -274,6 +274,15 @@ COMMAND("mds compat rm_compat " \
 COMMAND("mds compat rm_incompat " \
 	"name=feature,type=CephInt,range=0", \
 	"remove incompatible feature", "mds", "rw", "cli,rest")
+COMMAND("mds set " \
+        "name=key,type=CephChoices,strings=allow_new_snaps " \
+        "name=sure,type=CephString,req=false", \
+        "set <key>", \
+        "mds", "w", "cli,rest")
+COMMAND("mds unset " \
+        "name=key,type=CephChoices,strings=allow_new_snaps " \
+        "name=sure,type=CephString,req=false", \
+        "unset <key>", "mds", "w", "cli,rest")
 COMMAND("mds add_data_pool " \
 	"name=poolid,type=CephInt,range=0", \
 	"add data pool <poolid>", "mds", "rw", "cli,rest")

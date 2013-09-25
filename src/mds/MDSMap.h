@@ -175,6 +175,9 @@ protected:
   map<int32_t,uint64_t> up;        // who is in those roles
   map<uint64_t,mds_info_t> mds_info;
 
+  bool ever_allowed_snaps; //< the cluster has ever allowed snap creation
+  bool explicitly_allowed_snaps; //< the user has explicitly enabled snap creation
+
 public:
   CompatSet compat;
 
@@ -188,7 +191,9 @@ public:
       max_file_size(0),
       cas_pool(-1),
       metadata_pool(0),
-      max_mds(0)
+      max_mds(0),
+      ever_allowed_snaps(false),
+      explicitly_allowed_snaps(false)
   { }
 
   utime_t get_session_timeout() {
@@ -200,6 +205,14 @@ public:
   int test_flag(int f) const { return flags & f; }
   void set_flag(int f) { flags |= f; }
   void clear_flag(int f) { flags &= ~f; }
+
+  void set_snaps_allowed() {
+    set_flag(CEPH_MDSMAP_ALLOW_SNAPS);
+    ever_allowed_snaps = true;
+    explicitly_allowed_snaps = true;
+  }
+  bool allows_snaps() { return test_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
+  void clear_snaps_allowed() { clear_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
