@@ -66,6 +66,26 @@ static const __SWORD_TYPE ZFS_SUPER_MAGIC(0x2fc12fc1);
 
 class FileStoreBackend;
 
+#define CEPH_FS_FEATURE_INCOMPAT_SHARDS CompatSet::Feature(1, "sharded objects")
+
+class FSSuperblock {
+public:
+  CompatSet compat_features;
+
+  FSSuperblock() { }
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<FSSuperblock*>& o);
+};
+WRITE_CLASS_ENCODER(FSSuperblock)
+
+inline ostream& operator<<(ostream& out, const FSSuperblock& sb)
+{
+  return out << "sb(" << sb.compat_features << ")";
+}
+
 class FileStore : public JournalingObjectStore,
                   public md_config_obs_t
 {
@@ -321,6 +341,22 @@ public:
   int mkfs();
   int mkjournal();
 
+  /**
+   * set_allow_sharded_objects()
+   *
+   * Before sharded ghobject_t can be specified this function must be called
+   *
+   * Once this function is called the FileStore is not mountable by prior releases
+   */
+  void set_allow_sharded_objects();
+
+  /**
+   * get_allow_sharded_objects()
+   *
+   * return value: true if set_allow_sharded_objects() called, otherwise false
+   */
+  bool get_allow_sharded_objects();
+
   int statfs(struct statfs *buf);
 
   int _do_transactions(
@@ -553,6 +589,25 @@ private:
   std::ofstream m_filestore_dump;
   JSONFormatter m_filestore_dump_fmt;
   atomic_t m_filestore_kill_at;
+  FSSuperblock superblock;
+
+  /**
+   * write_superblock()
+   *
+   * Write superblock to persisent storage
+   *
+   * return value: 0 on success, otherwise negative errno
+   */
+  int write_superblock();
+
+  /**
+   * read_superblock()
+   *
+   * Fill in FileStore::superblock by reading persistent storage
+   *
+   * return value: 0 on success, otherwise negative errno
+   */
+  int read_superblock();
 
   friend class FileStoreBackend;
 };

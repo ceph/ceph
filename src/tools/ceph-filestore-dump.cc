@@ -52,6 +52,32 @@ enum {
     END_OF_TYPES,	//Keep at the end
 };
 
+//#define INTERNAL_TEST
+//#define INTERNAL_TEST2
+
+#ifdef INTERNAL_TEST
+CompatSet get_test_compat_set() {
+  CompatSet::FeatureSet ceph_osd_feature_compat;
+  CompatSet::FeatureSet ceph_osd_feature_ro_compat;
+  CompatSet::FeatureSet ceph_osd_feature_incompat;
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_BASE);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_PGINFO);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_OLOC);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_LEC);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_CATEGORIES);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_HOBJECTPOOL);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_BIGINFO);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_LEVELDBINFO);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_LEVELDBLOG);
+#ifdef INTERNAL_TEST2
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
+#endif
+  return CompatSet(ceph_osd_feature_compat, ceph_osd_feature_ro_compat,
+		   ceph_osd_feature_incompat);
+}
+#endif
+
 typedef uint8_t sectiontype_t;
 typedef uint32_t mymagic_t;
 typedef int64_t mysize_t;
@@ -69,7 +95,7 @@ const int fd_none = INT_MIN;
 //can be added to the export format.
 struct super_header {
   static const uint32_t super_magic = (shortmagic << 16) | shortmagic;
-  static const uint32_t super_ver = 1;
+  static const uint32_t super_ver = 2;
   static const uint32_t FIXED_LENGTH = 16;
   uint32_t magic;
   uint32_t version;
@@ -139,18 +165,25 @@ struct footer {
 
 struct pg_begin {
   pg_t pgid;
+  OSDSuperblock superblock;
 
-  pg_begin(pg_t pg): pgid(pg) { }
+  pg_begin(pg_t pg, OSDSuperblock sb):
+    pgid(pg), superblock(sb) { }
   pg_begin() { }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    // New super_ver prevents decode from ver 1
+    ENCODE_START(2, 2, bl);
     ::encode(pgid, bl);
+    ::encode(superblock, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(pgid, bl);
+    if (struct_v > 1) {
+      ::decode(superblock, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -664,7 +697,7 @@ void write_super()
 }
 
 int do_export(ObjectStore *fs, coll_t coll, pg_t pgid, pg_info_t &info,
-    epoch_t map_epoch, __u8 struct_ver)
+    epoch_t map_epoch, __u8 struct_ver, OSDSuperblock superblock)
 {
   PGLog::IndexedLog log;
   pg_missing_t missing;
@@ -675,7 +708,7 @@ int do_export(ObjectStore *fs, coll_t coll, pg_t pgid, pg_info_t &info,
 
   write_super();
 
-  pg_begin pgb(pgid);
+  pg_begin pgb(pgid, superblock);
   ret = write_section(TYPE_PG_BEGIN, pgb, file_fd);
   if (ret)
     return ret;
@@ -909,7 +942,7 @@ int get_pg_metadata(ObjectStore *store, coll_t coll, bufferlist &bl)
   return 0;
 }
 
-int do_import(ObjectStore *store)
+int do_import(ObjectStore *store, OSDSuperblock sb)
 {
   bufferlist ebl;
   pg_info_t info;
@@ -943,7 +976,16 @@ int do_import(ObjectStore *store)
   pg_begin pgb;
   pgb.decode(ebliter);
   pg_t pgid = pgb.pgid;
-  
+
+  if (debug) {
+    cout << "Exported features: " << pgb.superblock.compat_features << std::endl;
+  }
+  if (sb.compat_features.compare(pgb.superblock.compat_features) == -1) {
+    cout << "Export has incompatible features set "
+      << pgb.superblock.compat_features << std::endl;
+    return 1;
+  }
+
   log_oid = OSD::make_pg_log_oid(pgid);
   biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
 
@@ -1170,14 +1212,67 @@ int main(int argc, char **argv)
     return 1;
   }
 
+  bool fs_sharded_objects = fs->get_allow_sharded_objects();
+
   int ret = 0;
   vector<coll_t> ls;
   vector<coll_t>::iterator it;
+  CompatSet supported;
+
+#ifdef INTERNAL_TEST
+  supported = get_test_compat_set();
+#else
+  supported = OSD::get_osd_compat_set();
+#endif
+
+  bufferlist bl;
+  OSDSuperblock superblock;
+  bufferlist::iterator p;
+  ret = fs->read(coll_t::META_COLL, OSD_SUPERBLOCK_POBJECT, 0, 0, bl);
+  if (ret < 0) {
+    cout << "Failure to read OSD superblock error= " << r << std::endl;
+    goto out;
+  }
+
+  p = bl.begin();
+  ::decode(superblock, p);
+
+#ifdef INTERNAL_TEST2
+  fs->set_allow_sharded_objects();
+  assert(fs->get_allow_sharded_objects());
+  fs_sharded_objects = true;
+  superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
+#endif
+
+  if (debug && file_fd != STDOUT_FILENO) {
+    cout << "Supported features: " << supported << std::endl;
+    cout << "On-disk features: " << superblock.compat_features << std::endl;
+  }
+  if (supported.compare(superblock.compat_features) == -1) {
+    cout << "On-disk OSD incompatible features set "
+      << superblock.compat_features << std::endl;
+    ret = EINVAL;
+    goto out;
+  }
+
+  // If there was a crash as an OSD was transitioning to sharded objects
+  // and hadn't completed a set_allow_sharded_objects().
+  // This utility does not want to attempt to finish that transition.
+  if (superblock.compat_features.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SHARDS) != fs_sharded_objects) {
+    // An OSD should never have call set_allow_sharded_objects() before
+    // updating its own OSD features.
+    if (fs_sharded_objects)
+      cout << "FileStore sharded but OSD not set, Corruption?" << std::endl;
+    else
+      cout << "Found incomplete transition to sharded objects" << std::endl;
+    ret = EINVAL;
+    goto out;
+  }
 
   if (type == "import") {
 
     try {
-      ret = do_import(fs);
+      ret = do_import(fs, superblock);
     }
     catch (const buffer::error &e) {
       cout << "do_import threw exception error " << e.what() << std::endl;
@@ -1260,7 +1355,7 @@ int main(int argc, char **argv)
       cerr << "struct_v " << (int)struct_ver << std::endl;
 
     if (type == "export") {
-      ret = do_export(fs, coll, pgid, info, map_epoch, struct_ver);
+      ret = do_export(fs, coll, pgid, info, map_epoch, struct_ver, superblock);
     } else if (type == "info") {
       formatter->open_object_section("info");
       info.dump(formatter);
