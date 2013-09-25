@@ -2960,7 +2960,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_SETXATTR:
       ++ctx->num_write;
       {
-	if (op.xattr.value_len > cct->_conf->osd_max_attr_size) {
+	if (cct->_conf->osd_max_attr_size > 0 &&
+	    op.xattr.value_len > cct->_conf->osd_max_attr_size) {
 	  result = -EFBIG;
 	  break;
 	}

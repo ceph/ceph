@@ -179,32 +179,49 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   }
 
   // walk through incrementals
-  MonitorDBStore::Transaction t;
+  MonitorDBStore::Transaction *t = NULL;
+  size_t tx_size = 0;
   while (version > osdmap.epoch) {
     bufferlist inc_bl;
     int err = get_version(osdmap.epoch+1, inc_bl);
     assert(err == 0);
     assert(inc_bl.length());
-    
+
     dout(7) << "update_from_paxos  applying incremental " << osdmap.epoch+1 << dendl;
     OSDMap::Incremental inc(inc_bl);
     err = osdmap.apply_incremental(inc);
     assert(err == 0);
 
+    if (t == NULL)
+      t = new MonitorDBStore::Transaction;
+
     // write out the full map for all past epochs
     bufferlist full_bl;
     osdmap.encode(full_bl);
-    put_version_full(&t, osdmap.epoch, full_bl);
+    tx_size += full_bl.length();
+
+    put_version_full(t, osdmap.epoch, full_bl);
+    put_version_latest_full(t, osdmap.epoch);
 
     // share
     dout(1) << osdmap << dendl;
 
     if (osdmap.epoch == 1) {
-      t.erase("mkfs", "osdmap");
+      t->erase("mkfs", "osdmap");
+    }
+
+    if (tx_size > g_conf->mon_sync_max_payload_size*2) {
+      mon->store->apply_transaction(*t);
+      delete t;
+      t = NULL;
+      tx_size = 0;
     }
   }
-  if (!t.empty())
-    mon->store->apply_transaction(t);
+
+  if (t != NULL) {
+    mon->store->apply_transaction(*t);
+    delete t;
+  }
 
   for (int o = 0; o < osdmap.get_max_osd(); o++) {
     if (osdmap.is_down(o)) {
@@ -3001,7 +3018,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       cmd_getval(g_ceph_context, cmdmap, "weight", w);
 
       err = newcrush.adjust_item_weightf(g_ceph_context, id, w);
-      if (err == 0) {
+      if (err >= 0) {
 	pending_inc.crush.clear();
 	newcrush.encode(pending_inc.crush);
 	ss << "reweighted item id " << id << " name '" << name << "' to " << w
