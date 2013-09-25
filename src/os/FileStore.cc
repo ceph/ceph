@@ -98,6 +98,22 @@ static const __SWORD_TYPE BTRFS_SUPER_MAGIC(0x9123683E);
 #define REPLAY_GUARD_XATTR "user.cephos.seq"
 #define GLOBAL_REPLAY_GUARD_XATTR "user.cephos.gseq"
 
+//Initial features in new superblock.
+static CompatSet get_fs_initial_compat_set() {
+  CompatSet::FeatureSet ceph_osd_feature_compat;
+  CompatSet::FeatureSet ceph_osd_feature_ro_compat;
+  CompatSet::FeatureSet ceph_osd_feature_incompat;
+  return CompatSet(ceph_osd_feature_compat, ceph_osd_feature_ro_compat,
+		   ceph_osd_feature_incompat);
+}
+
+//Features are added here that this FileStore supports.
+static CompatSet get_fs_supported_compat_set() {
+  CompatSet compat =  get_fs_initial_compat_set();
+  //Any features here can be set in code, but not in initial superblock
+  return compat;
+}
+
 /*
  * long file names will have the following format:
  *
@@ -469,6 +485,8 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   plb.add_u64_counter(l_os_j_full, "journal_full");
 
   logger = plb.create_perf_counters();
+
+  superblock.compat_features = get_fs_initial_compat_set();
 }
 
 FileStore::~FileStore()
@@ -663,6 +681,13 @@ int FileStore::mkfs()
   ret = write_version_stamp();
   if (ret < 0) {
     derr << "mkfs: write_version_stamp() failed: "
+	 << cpp_strerror(ret) << dendl;
+    goto close_fsid_fd;
+  }
+
+  ret = write_superblock();
+  if (ret < 0) {
+    derr << "mkfs: write_superblock() failed: "
 	 << cpp_strerror(ret) << dendl;
     goto close_fsid_fd;
   }
@@ -1312,6 +1337,52 @@ int FileStore::_sanity_check_fs()
   return 0;
 }
 
+int FileStore::write_superblock()
+{
+  char fn[PATH_MAX];
+  snprintf(fn, sizeof(fn), "%s/superblock", basedir.c_str());
+  int fd = ::open(fn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
+  if (fd < 0)
+    return -errno;
+  bufferlist bl;
+  ::encode(superblock, bl);
+
+  int ret = safe_write(fd, bl.c_str(), bl.length());
+  if (ret < 0)
+    goto out;
+  ret = ::fsync(fd);
+  if (ret < 0)
+    ret = -errno;
+  // XXX: fsync() man page says I need to sync containing directory
+out:
+  TEMP_FAILURE_RETRY(::close(fd));
+  return ret;
+}
+
+int FileStore::read_superblock()
+{
+  char fn[PATH_MAX];
+  snprintf(fn, sizeof(fn), "%s/superblock", basedir.c_str());
+  int fd = ::open(fn, O_RDONLY, 0644);
+  if (fd < 0) {
+    if (errno == ENOENT) {
+      // If the file doesn't exist write initial CompatSet
+      return write_superblock();
+    } else
+      return -errno;
+  }
+  bufferptr bp(PATH_MAX);
+  int ret = safe_read(fd, bp.c_str(), bp.length());
+  TEMP_FAILURE_RETRY(::close(fd));
+  if (ret < 0)
+    return ret;
+  bufferlist bl;
+  bl.push_back(bp);
+  bufferlist::iterator i = bl.begin();
+  ::decode(superblock, i);
+  return 0;
+}
+
 int FileStore::update_version_stamp()
 {
   return write_version_stamp();
@@ -1399,6 +1470,7 @@ int FileStore::mount()
   char buf[PATH_MAX];
   uint64_t initial_op_seq;
   set<string> cluster_snaps;
+  CompatSet supported_compat_set = get_fs_supported_compat_set();
 
   dout(5) << "basedir " << basedir << " journal " << journalpath << dendl;
   
@@ -1461,6 +1533,20 @@ int FileStore::mount()
 	   << dendl;
       goto close_fsid_fd;
     }
+  }
+
+  ret = read_superblock();
+  if (ret < 0) {
+    ret = -EINVAL;
+    goto close_fsid_fd;
+  }
+
+  // Check if this FileStore supports all the necessary features to mount
+  if (supported_compat_set.compare(superblock.compat_features) == -1) {
+    derr << "FileStore::mount : Incompatible features set "
+	   << superblock.compat_features << dendl;
+    ret = -EINVAL;
+    goto close_fsid_fd;
   }
 
   // open some dir handles
@@ -5077,4 +5163,40 @@ void FileStore::dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t 
   m_filestore_dump_fmt.close_section();
   m_filestore_dump_fmt.flush(m_filestore_dump);
   m_filestore_dump.flush();
+}
+
+// -- FSSuperblock --
+
+void FSSuperblock::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  compat_features.encode(bl);
+  ENCODE_FINISH(bl);
+}
+
+void FSSuperblock::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  compat_features.decode(bl);
+  DECODE_FINISH(bl);
+}
+
+void FSSuperblock::dump(Formatter *f) const
+{
+  f->open_object_section("compat");
+  compat_features.dump(f);
+  f->close_section();
+}
+
+void FSSuperblock::generate_test_instances(list<FSSuperblock*>& o)
+{
+  FSSuperblock z;
+  o.push_back(new FSSuperblock(z));
+  CompatSet::FeatureSet feature_compat;
+  CompatSet::FeatureSet feature_ro_compat;
+  CompatSet::FeatureSet feature_incompat;
+  feature_incompat.insert(CEPH_FS_FEATURE_INCOMPAT_SHARDS);
+  z.compat_features = CompatSet(feature_compat, feature_ro_compat,
+                                feature_incompat);
+  o.push_back(new FSSuperblock(z));
 }
