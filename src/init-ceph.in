@@ -174,7 +174,7 @@ get_name_list "$@"
 
 # Reverse the order if we are stopping
 if [ "$command" = "stop" ]; then
-    for f in "$what"; do
+    for f in $what; do
        new_order="$f $new_order"
     done
     what="$new_order"
