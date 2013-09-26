@@ -80,7 +80,7 @@ stop_daemon() {
     action=$5
     [ -z "$action" ] && action="Stopping"
     echo -n "$action Ceph $name on $host..."
-    do_cmd "while [ 1 ]; do 
+    do_cmd "while [ 1 ]; do
 	[ -e $pidfile ] || break
 	pid=\`cat $pidfile\`
 	while [ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline ; do
@@ -172,6 +172,14 @@ command=$1
 get_local_name_list
 get_name_list "$@"
 
+# Reverse the order if we are stopping
+if [ "$command" = "stop" ]; then
+    for f in $what; do
+       new_order="$f $new_order"
+    done
+    what="$new_order"
+fi
+
 for name in $what; do
     type=`echo $name | cut -c 1-3`   # e.g. 'mon', if $item is 'mon1'
     id=`echo $name | cut -c 4- | sed 's/^\\.//'`
@@ -251,18 +259,18 @@ for name in $what; do
 	    wrap=""
 	    runmode=""
 	    runarg=""
-	    
+
 	    [ -z "$docrun" ] && get_conf_bool docrun "0" "restart on core dump"
 	    [ "$docrun" -eq 1 ] && wrap="$BINDIR/ceph-run"
-	    
+
 	    [ -z "$dovalgrind" ] && get_conf_bool valgrind "" "valgrind"
 	    [ -n "$valgrind" ] && wrap="$wrap valgrind $valgrind"
-	    
+
 	    [ -n "$wrap" ] && runmode="-f &" && runarg="-f"
 	    [ -n "$max_open_files" ] && files="ulimit -n $max_open_files;"
 
 	    cmd="$files $wrap $cmd $runmode"
-	    
+
 	    if [ $dofsmount -eq 1 ] && [ -n "$fs_devs" ]; then
 		get_conf pre_mount "true" "pre mount command"
 		get_conf fs_type "" "osd mkfs type"
@@ -361,7 +369,7 @@ for name in $what; do
 	    [ -n "$post_start" ] && do_cmd "$post_start"
 	    [ -n "$lockfile" ] && [ "$?" -eq 0 ] && touch $lockfile
 	    ;;
-	
+
 	stop)
 	    get_conf pre_stop "" "pre stop command"
 	    get_conf post_stop "" "post stop command"
@@ -402,13 +410,13 @@ for name in $what; do
 	    [ -n "$post_forcestop" ] && do_cmd "$post_forcestop"
 	    [ -n "$lockfile" ] && [ "$?" -eq 0 ] && rm -f $lockfile
 	    ;;
-	    
+
 	killall)
 	    echo "killall ceph-$type on $host"
 	    do_cmd "pkill ^ceph-$type || true"
 	    [ -n "$lockfile" ] && [ "$?" -eq 0 ] && rm -f $lockfile
 	    ;;
-	
+
 	force-reload | reload)
 	    signal_daemon $name ceph-$type $pid_file -1 "Reloading"
 	    ;;
