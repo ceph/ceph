@@ -2,6 +2,8 @@
 
 set -e
 
+ceph mds set allow_new_snaps --yes-i-really-mean-it
+
 touch foo
 chmod +x foo
 mkdir .snap/s

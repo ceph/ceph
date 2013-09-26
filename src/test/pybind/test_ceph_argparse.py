@@ -290,12 +290,12 @@ class TestMonitor(TestArgparse):
                                    'force',
                                    '--yes-i-really-mean-it',
                                    '--i-know-what-i-am-doing'])
+        self.assert_valid_command(['sync',
+                                   'force',
+                                   '--yes-i-really-mean-it'])
+        self.assert_valid_command(['sync',
+                                   'force'])
         assert_equal({}, validate_command(sigdict, ['sync']))
-        assert_equal({}, validate_command(sigdict, ['sync',
-                                                    'force']))
-        assert_equal({}, validate_command(sigdict, ['sync',
-                                                    'force',
-                                                    '--yes-i-really-mean-it']))
         assert_equal({}, validate_command(sigdict, ['sync',
                                                     'force',
                                                     '--yes-i-really-mean-it',
@@ -435,6 +435,30 @@ class TestMDS(TestArgparse):
                                                     'compat',
                                                     'rm_incompat', '1', '1']))
 
+    def test_mds_set(self):
+        self.assert_valid_command(['mds', 'set', 'allow_new_snaps'])
+        self.assert_valid_command(['mds', 'set', 'allow_new_snaps', 'sure'])
+        assert_equal({}, validate_command(sigdict, ['mds',
+                                                    'set',
+                                                    'invalid']))
+        assert_equal({}, validate_command(sigdict, ['mds',
+                                                    'set',
+                                                    'allow_new_snaps',
+													'sure',
+													'toomany']))
+
+    def test_mds_unset(self):
+        self.assert_valid_command(['mds', 'unset', 'allow_new_snaps'])
+        self.assert_valid_command(['mds', 'unset', 'allow_new_snaps', 'sure'])
+        assert_equal({}, validate_command(sigdict, ['mds',
+                                                    'unset',
+                                                    'invalid']))
+        assert_equal({}, validate_command(sigdict, ['mds',
+                                                    'unset',
+                                                    'allow_new_snaps',
+													'sure',
+													'toomany']))
+
     def test_add_data_pool(self):
         self.check_1_natural_arg('mds', 'add_data_pool')
 
@@ -444,11 +468,9 @@ class TestMDS(TestArgparse):
     def test_newfs(self):
         self.assert_valid_command(['mds', 'newfs', '1', '2',
                                    '--yes-i-really-mean-it'])
+        self.assert_valid_command(['mds', 'newfs', '1', '2'])
         assert_equal({}, validate_command(sigdict, ['mds', 'newfs']))
         assert_equal({}, validate_command(sigdict, ['mds', 'newfs', '1']))
-        assert_equal({}, validate_command(sigdict, ['mds', 'newfs', '1', '1']))
-        assert_equal({}, validate_command(sigdict, ['mds', 'newfs', '1', '1',
-                                                    'no I dont']))
         assert_equal({}, validate_command(sigdict, ['mds',
                                                     'newfs',
                                                     '1',
@@ -785,9 +807,8 @@ class TestOSD(TestArgparse):
     def test_lost(self):
         self.assert_valid_command(['osd', 'lost', '1',
                                    '--yes-i-really-mean-it'])
+        self.assert_valid_command(['osd', 'lost', '1'])
         assert_equal({}, validate_command(sigdict, ['osd', 'lost']))
-        assert_equal({}, validate_command(sigdict, ['osd', 'lost',
-                                                    '1']))
         assert_equal({}, validate_command(sigdict, ['osd', 'lost',
                                                     '1',
                                                     'what?']))
@@ -874,11 +895,11 @@ class TestOSD(TestArgparse):
         self.assert_valid_command(['osd', 'pool', 'delete',
                                    'poolname', 'poolname',
                                    '--yes-i-really-really-mean-it'])
+        self.assert_valid_command(['osd', 'pool', 'delete',
+                                   'poolname', 'poolname'])
+        self.assert_valid_command(['osd', 'pool', 'delete',
+                                   'poolname'])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'delete']))
-        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'delete',
-                                                    'poolname']))
-        assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'delete',
-                                                    'poolname', 'poolname']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'delete',
                                                     'poolname', 'poolname',
                                                     'not really']))

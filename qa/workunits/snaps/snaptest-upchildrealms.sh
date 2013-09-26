@@ -2,6 +2,8 @@
 
 set -e
 
+ceph mds set allow_new_snaps --yes-i-really-mean-it
+
 #
 # verify that a snap update on a parent realm will induce
 # snap cap writeback for inodes child realms
