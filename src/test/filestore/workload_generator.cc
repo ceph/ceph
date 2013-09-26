@@ -344,12 +344,12 @@ void WorkloadGenerator::do_destroy_collection(ObjectStore::Transaction *t,
 {  
   m_nr_runs.set(0);
   entry->m_osr.flush();
-  vector<hobject_t> ls;
+  vector<ghobject_t> ls;
   m_store->collection_list(entry->m_coll, ls);
   dout(2) << __func__ << " coll " << entry->m_coll
       << " (" << ls.size() << " objects)" << dendl;
 
-  for (vector<hobject_t>::iterator it = ls.begin(); it < ls.end(); ++it) {
+  for (vector<ghobject_t>::iterator it = ls.begin(); it < ls.end(); ++it) {
     t->remove(entry->m_coll, *it);
   }
 
