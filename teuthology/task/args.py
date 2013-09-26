@@ -3,8 +3,8 @@ def gen_args(name, args):
     usage += [name + ':']
     usage += \
         ["    {key}: <{usage}> ({default})".format(
-                key = key, usage = usage, default = default)
-         for (key, usage, default, _) in args]
+            key=key, usage=_usage, default=default)
+         for (key, _usage, default, _) in args]
     usage.append('')
     usage.append(name + ':')
     usage += \
