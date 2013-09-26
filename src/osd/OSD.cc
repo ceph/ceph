@@ -134,7 +134,9 @@ static ostream& _prefix(std::ostream* _dout, int whoami, OSDMapRef osdmap) {
 		<< " ";
 }
 
-static CompatSet get_osd_compat_set() {
+//Initial features in new superblock.
+//Features here are also automatically upgraded
+CompatSet OSD::get_osd_initial_compat_set() {
   CompatSet::FeatureSet ceph_osd_feature_compat;
   CompatSet::FeatureSet ceph_osd_feature_ro_compat;
   CompatSet::FeatureSet ceph_osd_feature_incompat;
@@ -150,6 +152,14 @@ static CompatSet get_osd_compat_set() {
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER);
   return CompatSet(ceph_osd_feature_compat, ceph_osd_feature_ro_compat,
 		   ceph_osd_feature_incompat);
+}
+
+//Features are added here that this OSD supports.
+CompatSet OSD::get_osd_compat_set() {
+  CompatSet compat =  get_osd_initial_compat_set();
+  //Any features here can be set in code, but not in initial superblock
+  compat.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
+  return compat;
 }
 
 OSDService::OSDService(OSD *osd) :
@@ -449,7 +459,7 @@ int OSD::convert_collection(ObjectStore *store, coll_t cid)
 {
   coll_t tmp0("convertfs_temp");
   coll_t tmp1("convertfs_temp1");
-  vector<hobject_t> objects;
+  vector<ghobject_t> objects;
 
   map<string, bufferptr> aset;
   int r = store->collection_getattrs(cid, aset);
@@ -469,10 +479,10 @@ int OSD::convert_collection(ObjectStore *store, coll_t cid)
     store->apply_transaction(t);
   }
 
-  hobject_t next;
+  ghobject_t next;
   while (!next.is_max()) {
     objects.clear();
-    hobject_t start = next;
+    ghobject_t start = next;
     r = store->collection_list_partial(cid, start,
 				       200, 300, 0,
 				       &objects, &next);
@@ -480,7 +490,7 @@ int OSD::convert_collection(ObjectStore *store, coll_t cid)
       return r;
 
     ObjectStore::Transaction t;
-    for (vector<hobject_t>::iterator i = objects.begin();
+    for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
       t.collection_add(tmp0, cid, *i);
@@ -646,7 +656,7 @@ int OSD::mkfs(CephContext *cct, const std::string &dev, const std::string &jdev,
       sb.cluster_fsid = fsid;
       sb.osd_fsid = store->get_fsid();
       sb.whoami = whoami;
-      sb.compat_features = get_osd_compat_set();
+      sb.compat_features = get_osd_initial_compat_set();
 
       // benchmark?
       if (cct->_conf->osd_auto_weight) {
@@ -1139,6 +1149,7 @@ public:
 
 int OSD::init()
 {
+  CompatSet initial, diff;
   Mutex::Locker lock(osd_lock);
   if (is_stopping())
     return 0;
@@ -1163,9 +1174,48 @@ int OSD::init()
   r = read_superblock();
   if (r < 0) {
     derr << "OSD::init() : unable to read osd superblock" << dendl;
-    store->umount();
-    delete store;
-    return -EINVAL;
+    r = -EINVAL;
+    goto out;
+  }
+
+  if (osd_compat.compare(superblock.compat_features) < 0) {
+    derr << "The disk uses features unsupported by the executable." << dendl;
+    derr << " ondisk features " << superblock.compat_features << dendl;
+    derr << " daemon features " << osd_compat << dendl;
+
+    if (osd_compat.writeable(superblock.compat_features)) {
+      CompatSet diff = osd_compat.unsupported(superblock.compat_features);
+      derr << "it is still writeable, though. Missing features: " << diff << dendl;
+      r = -EOPNOTSUPP;
+      goto out;
+    }
+    else {
+      CompatSet diff = osd_compat.unsupported(superblock.compat_features);
+      derr << "Cannot write to disk! Missing features: " << diff << dendl;
+      r = -EOPNOTSUPP;
+      goto out;
+    }
+  }
+
+  assert_warn(whoami == superblock.whoami);
+  if (whoami != superblock.whoami) {
+    derr << "OSD::init: superblock says osd"
+	 << superblock.whoami << " but i am osd." << whoami << dendl;
+    r = -EINVAL;
+    goto out;
+  }
+
+  initial = get_osd_initial_compat_set();
+  diff = superblock.compat_features.unsupported(initial);
+  if (superblock.compat_features.merge(initial)) {
+    // We need to persist the new compat_set before we
+    // do anything else
+    dout(5) << "Upgrading superblock adding: " << diff << dendl;
+    ObjectStore::Transaction t;
+    write_superblock(t);
+    r = store->apply_transaction(t);
+    if (r < 0)
+      goto out;
   }
 
   // make sure info object exists
@@ -1175,7 +1225,7 @@ int OSD::init()
     t.touch(coll_t::META_COLL, service.infos_oid);
     r = store->apply_transaction(t);
     if (r < 0)
-      return r;
+      goto out;
   }
 
   // make sure snap mapper object exists
@@ -1185,19 +1235,7 @@ int OSD::init()
     t.touch(coll_t::META_COLL, OSD::make_snapmapper_oid());
     r = store->apply_transaction(t);
     if (r < 0)
-      return r;
-  }
-
-  if (osd_compat.compare(superblock.compat_features) != 0) {
-    // We need to persist the new compat_set before we
-    // do anything else
-    dout(5) << "Upgrading superblock compat_set" << dendl;
-    superblock.compat_features = osd_compat;
-    ObjectStore::Transaction t;
-    write_superblock(t);
-    r = store->apply_transaction(t);
-    if (r < 0)
-      return r;
+      goto out;
   }
 
   class_handler = new ClassHandler(cct);
@@ -1213,7 +1251,8 @@ int OSD::init()
   assert_warn(!osdmap);
   if (osdmap) {
     derr << "OSD::init: unable to read current osdmap" << dendl;
-    return -EINVAL;
+    r = -EINVAL;
+    goto out;
   }
   osdmap = get_map(superblock.current_epoch);
   check_osdmap_features();
@@ -1226,12 +1265,6 @@ int OSD::init()
   load_pgs();
 
   dout(2) << "superblock: i am osd." << superblock.whoami << dendl;
-  assert_warn(whoami == superblock.whoami);
-  if (whoami != superblock.whoami) {
-    derr << "OSD::init: logic error: superblock says osd"
-	 << superblock.whoami << " but i am osd." << whoami << dendl;
-    return -EINVAL;
-  }
 
   create_logger();
     
@@ -1248,7 +1281,7 @@ int OSD::init()
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
   r = monc->init();
   if (r < 0)
-    return r;
+    goto out;
 
   // tell monc about log_client so it will know about mon session resets
   monc->set_log_client(&clog);
@@ -1272,12 +1305,10 @@ int OSD::init()
 
   r = monc->authenticate();
   if (r < 0) {
-    monc->shutdown();
-    store->umount();
     osd_lock.Lock(); // locker is going to unlock this on function exit
     if (is_stopping())
-      return 0;
-    return r;
+      r =  0;
+    goto monout;
   }
 
   while (monc->wait_auth_rotating(30.0) < 0) {
@@ -1297,6 +1328,13 @@ int OSD::init()
   start_boot();
 
   return 0;
+monout:
+  monc->shutdown();
+
+out:
+  store->umount();
+  delete store;
+  return r;
 }
 
 void OSD::final_init()
@@ -1715,28 +1753,6 @@ int OSD::read_superblock()
   ::decode(superblock, p);
 
   dout(10) << "read_superblock " << superblock << dendl;
-  if (osd_compat.compare(superblock.compat_features) < 0) {
-    derr << "The disk uses features unsupported by the executable." << dendl;
-    derr << " ondisk features " << superblock.compat_features << dendl;
-    derr << " daemon features " << osd_compat << dendl;
-
-    if (osd_compat.writeable(superblock.compat_features)) {
-      derr << "it is still writeable, though. Missing features:" << dendl;
-      CompatSet diff = osd_compat.unsupported(superblock.compat_features);
-      return -EOPNOTSUPP;
-    }
-    else {
-      derr << "Cannot write to disk! Missing features:" << dendl;
-      CompatSet diff = osd_compat.unsupported(superblock.compat_features);
-      return -EOPNOTSUPP;
-    }
-  }
-
-  if (whoami != superblock.whoami) {
-    derr << "read_superblock superblock says osd." << superblock.whoami
-         << ", but i (think i) am osd." << whoami << dendl;
-    return -1;
-  }
   
   return 0;
 }
@@ -1751,17 +1767,17 @@ void OSD::recursive_remove_collection(ObjectStore *store, coll_t tmp)
     make_snapmapper_oid());
   SnapMapper mapper(&driver, 0, 0, 0);
 
-  vector<hobject_t> objects;
+  vector<ghobject_t> objects;
   store->collection_list(tmp, objects);
 
   // delete them.
   ObjectStore::Transaction t;
   unsigned removed = 0;
-  for (vector<hobject_t>::iterator p = objects.begin();
+  for (vector<ghobject_t>::iterator p = objects.begin();
        p != objects.end();
        ++p, removed++) {
     OSDriver::OSTransaction _t(driver.get_transaction(&t));
-    int r = mapper.remove_oid(*p, &_t);
+    int r = mapper.remove_oid(p->hobj, &_t);
     if (r != 0 && r != -ENOENT)
       assert(0);
     t.collection_remove(tmp, *p);
@@ -3342,10 +3358,10 @@ bool remove_dir(
   ObjectStore::Sequencer *osr,
   coll_t coll, DeletingStateRef dstate)
 {
-  vector<hobject_t> olist;
+  vector<ghobject_t> olist;
   int64_t num = 0;
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  hobject_t next;
+  ghobject_t next;
   while (!next.is_max()) {
     store->collection_list_partial(
       coll,
@@ -3355,11 +3371,11 @@ bool remove_dir(
       0,
       &olist,
       &next);
-    for (vector<hobject_t>::iterator i = olist.begin();
+    for (vector<ghobject_t>::iterator i = olist.begin();
 	 i != olist.end();
 	 ++i, ++num) {
       OSDriver::OSTransaction _t(osdriver->get_transaction(t));
-      int r = mapper->remove_oid(*i, &_t);
+      int r = mapper->remove_oid(i->hobj, &_t);
       if (r != 0 && r != -ENOENT) {
 	assert(0);
       }

@@ -191,3 +191,90 @@ ostream& operator<<(ostream& out, const hobject_t& o)
   out << "/" << o.nspace << "/" << o.pool;
   return out;
 }
+
+// This is compatible with decode for hobject_t prior to
+// version 5.
+void ghobject_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(5, 3, bl);
+  ::encode(hobj.key, bl);
+  ::encode(hobj.oid, bl);
+  ::encode(hobj.snap, bl);
+  ::encode(hobj.hash, bl);
+  ::encode(hobj.max, bl);
+  ::encode(hobj.nspace, bl);
+  ::encode(hobj.pool, bl);
+  ::encode(generation, bl);
+  ::encode(shard_id, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ghobject_t::decode(bufferlist::iterator& bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
+  if (struct_v >= 1)
+    ::decode(hobj.key, bl);
+  ::decode(hobj.oid, bl);
+  ::decode(hobj.snap, bl);
+  ::decode(hobj.hash, bl);
+  if (struct_v >= 2)
+    ::decode(hobj.max, bl);
+  else
+    hobj.max = false;
+  if (struct_v >= 4) {
+    ::decode(hobj.nspace, bl);
+    ::decode(hobj.pool, bl);
+  }
+  if (struct_v >= 5) {
+    ::decode(generation, bl);
+    ::decode(shard_id, bl);
+  } else {
+    generation = ghobject_t::NO_GEN;
+    shard_id = ghobject_t::NO_SHARD;
+  }
+  DECODE_FINISH(bl);
+}
+
+void ghobject_t::dump(Formatter *f) const
+{
+  hobj.dump(f);
+  if (generation != NO_GEN) {
+    f->dump_int("generation", generation);
+    f->dump_int("shard_id", shard_id);
+  }
+}
+
+void ghobject_t::generate_test_instances(list<ghobject_t*>& o)
+{
+  o.push_back(new ghobject_t);
+  o.push_back(new ghobject_t);
+  o.back()->hobj.max = true;
+  o.push_back(new ghobject_t(hobject_t(object_t("oname"), string(), 1, 234, -1, "")));
+
+  o.push_back(new ghobject_t(hobject_t(object_t("oname2"), string("okey"), CEPH_NOSNAP,
+	67, 0, "n1"), 1, 0));
+  o.push_back(new ghobject_t(hobject_t(object_t("oname2"), string("okey"), CEPH_NOSNAP,
+	67, 0, "n1"), 1, 1));
+  o.push_back(new ghobject_t(hobject_t(object_t("oname2"), string("okey"), CEPH_NOSNAP,
+	67, 0, "n1"), 1, 2));
+  o.push_back(new ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
+	CEPH_SNAPDIR, 910, 1, "n2"), 1, 0));
+  o.push_back(new ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
+	CEPH_SNAPDIR, 910, 1, "n2"), 2, 0));
+  o.push_back(new ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
+	CEPH_SNAPDIR, 910, 1, "n2"), 3, 0));
+  o.push_back(new ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
+	CEPH_SNAPDIR, 910, 1, "n2"), 3, 1));
+  o.push_back(new ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
+	CEPH_SNAPDIR, 910, 1, "n2"), 3, 2));
+}
+
+ostream& operator<<(ostream& out, const ghobject_t& o)
+{
+  out << o.hobj;
+  if (o.generation != ghobject_t::NO_GEN) {
+    assert(o.shard_id != ghobject_t::NO_SHARD);
+    out << "/" << o.generation << "/" << o.shard_id;
+  }
+  return out;
+}

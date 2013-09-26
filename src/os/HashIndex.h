@@ -39,7 +39,7 @@
  * given by the hex characters in the hash beginning with the least
  * significant.
  * 
- * ex: hobject_t("object", CEPH_NO_SNAP, 0xA4CEE0D2)
+ * ex: ghobject_t("object", CEPH_NO_SNAP, 0xA4CEE0D2)
  * would be located in (root)/2/D/0/
  * 
  * Subdirectories are created when the number of objects in a directory
@@ -163,30 +163,30 @@ protected:
 
   int _created(
     const vector<string> &path,
-    const hobject_t &hoid,
+    const ghobject_t &oid,
     const string &mangled_name
     );
   int _remove(
     const vector<string> &path,
-    const hobject_t &hoid,
+    const ghobject_t &oid,
     const string &mangled_name
     );
   int _lookup(
-    const hobject_t &hoid,
+    const ghobject_t &oid,
     vector<string> *path,
     string *mangled_name,
     int *exists
     );
   int _collection_list(
-    vector<hobject_t> *ls
+    vector<ghobject_t> *ls
     );
   int _collection_list_partial(
-    const hobject_t &start,
+    const ghobject_t &start,
     int min_count,
     int max_count,
     snapid_t seq,
-    vector<hobject_t> *ls,
-    hobject_t *next
+    vector<ghobject_t> *ls,
+    ghobject_t *next
     );
 private:
   /// Recursively remove path and its subdirs
@@ -262,7 +262,7 @@ private:
 
   /// Determine path components from hoid hash
   void get_path_components(
-    const hobject_t &hoid, ///< [in] Object for which to get path components
+    const ghobject_t &oid, ///< [in] Object for which to get path components
     vector<string> *path   ///< [out] Path components for hoid.
     );
 
@@ -278,12 +278,12 @@ private:
     
 
   /** 
-   * Get string representation of hobject_t/hash
+   * Get string representation of ghobject_t/hash
    *
    * e.g: 0x01234567 -> "76543210"
    */
   static string get_path_str(
-    const hobject_t &hoid ///< [in] Object to get hash string for
+    const ghobject_t &oid ///< [in] Object to get hash string for
     ); ///< @return Hash string for hoid.
 
   /// Get string from hash, @see get_path_str
@@ -319,20 +319,20 @@ private:
   int get_path_contents_by_hash(
     const vector<string> &path,            /// [in] Path to list
     const string *lower_bound,             /// [in] list > *lower_bound
-    const hobject_t *next_object,          /// [in] list > *next_object
+    const ghobject_t *next_object,          /// [in] list > *next_object
     const snapid_t *seq,                   /// [in] list >= *seq
     set<string> *hash_prefixes,            /// [out] prefixes in dir
-    set<pair<string, hobject_t> > *objects /// [out] objects
+    set<pair<string, ghobject_t> > *objects /// [out] objects
     );
 
-  /// List objects in collection in hobject_t order
+  /// List objects in collection in ghobject_t order
   int list_by_hash(
     const vector<string> &path, /// [in] Path to list
     int min_count,              /// [in] List at least min_count
     int max_count,              /// [in] List at most max_count
     snapid_t seq,               /// [in] list only objects where snap >= seq
-    hobject_t *next,            /// [in,out] List objects >= *next
-    vector<hobject_t> *out      /// [out] Listed objects
+    ghobject_t *next,            /// [in,out] List objects >= *next
+    vector<ghobject_t> *out      /// [out] Listed objects
     ); ///< @return Error Code, 0 on success
 };
 
