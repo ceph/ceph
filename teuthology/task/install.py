@@ -287,7 +287,6 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     host = ctx.teuthology_config.get('gitbuilder_host',
                                      'gitbuilder.ceph.com')
     dist_release = baseparms['dist_release']
-    distro_release = baseparms['distro_release']
     start_of_url = 'http://{host}/ceph-rpm-{distro_release}-{arch}-{flavor}/{uri}'.format(host=host, **baseparms)
     ceph_release = 'ceph-release-{release}.{dist_release}.noarch'.format(
         release=RELEASE, dist_release=dist_release)

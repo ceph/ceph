@@ -1,5 +1,4 @@
 import argparse
-import os
 import yaml
 import textwrap
 from argparse import RawTextHelpFormatter
@@ -323,6 +322,7 @@ def main():
     from gevent import monkey; monkey.patch_all(dns=False)
     from .orchestra import monkey; monkey.patch_all()
     from teuthology.run import config_file
+    import os
 
     import logging
 
@@ -365,7 +365,6 @@ def main():
 
     if ctx.pid:
         if ctx.archive:
-            import os
             log.info('Killing teuthology process at pid %d', ctx.pid)
             os.system('grep -q %s /proc/%d/cmdline && sudo kill %d' % (
                     ctx.archive,

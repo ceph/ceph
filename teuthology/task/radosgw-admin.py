@@ -4,7 +4,6 @@
 #   grep '^ *# TESTCASE' | sed 's/^ *# TESTCASE //'
 #
 
-import contextlib
 import copy
 import json
 import logging
@@ -19,10 +18,10 @@ import boto.s3.acl
 import teuthology.task_util.rgw as rgw_utils
 
 from teuthology import misc as teuthology
-from teuthology import contextutil
 from teuthology.task_util.rgw import rgwadmin
 
 log = logging.getLogger(__name__)
+
 
 def successful_ops(out):
     summary = out['summary']
@@ -736,7 +735,6 @@ def task(ctx, config):
     assert err
 
     # delete should fail because ``key`` still exists
-    fails = False
     try:
         bucket.delete()
     except boto.exception.S3ResponseError as e:

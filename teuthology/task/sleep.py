@@ -1,10 +1,8 @@
 import logging
 import time
 
-from teuthology import misc as teuthology
-from ..orchestra import run
-
 log = logging.getLogger(__name__)
+
 
 def task(ctx, config):
     """

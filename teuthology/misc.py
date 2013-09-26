@@ -14,7 +14,6 @@ import yaml
 import json
 
 from teuthology import safepath
-from teuthology import lockstatus
 from .orchestra import run
 from .config import config
 
@@ -338,6 +337,7 @@ def move_file(remote, from_path, to_path, sudo=False):
         stdout=StringIO(),
         )
 
+
 def delete_file(remote, path, sudo=False, force=False):
     args = []
     if sudo:
@@ -346,13 +346,14 @@ def delete_file(remote, path, sudo=False, force=False):
     if force:
         args.extend(['-f'])
     args.extend([
-            '--',
-            path,
-            ])
-    proc = remote.run(
+        '--',
+        path,
+    ])
+    remote.run(
         args=args,
         stdout=StringIO(),
         )
+
 
 def remove_lines_from_file(remote, path, line_is_valid_test, string_to_test_for):
     # read in the specified file
@@ -415,6 +416,7 @@ def remote_mktemp(remote, sudo=False):
     data = proc.stdout.getvalue()
     return data
 
+
 def create_file(remote, path, data="", permissions=str(644), sudo=False):
     """
     Create a file on the remote host.
@@ -423,21 +425,22 @@ def create_file(remote, path, data="", permissions=str(644), sudo=False):
     if sudo:
         args.append('sudo')
     args.extend([
-            'touch',
-            path,
-            run.Raw('&&'),
-            'chmod',
-            permissions,
-            '--',
-            path
-            ])
-    proc = remote.run(
+        'touch',
+        path,
+        run.Raw('&&'),
+        'chmod',
+        permissions,
+        '--',
+        path
+    ])
+    remote.run(
         args=args,
         stdout=StringIO(),
         )
     # now write out the data if any was passed in
     if "" != data:
         append_lines_to_file(remote, path, data, sudo)
+
 
 def get_file(remote, path, sudo=False):
     """

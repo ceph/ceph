@@ -4,6 +4,9 @@ import subprocess
 
 from config import DB
 
+import logging
+log = logging.getLogger(__name__)
+
 def load_machine(name):
     results = list(DB.select('machine', what='*',
                              where='name = $name',

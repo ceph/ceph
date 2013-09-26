@@ -1,12 +1,11 @@
 import sys
 import logging
-import contextlib
 
 from teuthology import run_tasks
 from teuthology import parallel
-from ..orchestra import run
 
 log = logging.getLogger(__name__)
+
 
 def task(ctx, config):
     """
@@ -31,7 +30,7 @@ def task(ctx, config):
 
     Sequential task and Parallel tasks can be nested.
     """
-    
+
     log.info('starting parallel...')
     with parallel.parallel() as p:
         for entry in config:

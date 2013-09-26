@@ -2,8 +2,6 @@ import logging
 import contextlib
 import time
 
-from ..orchestra import run
-
 log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
@@ -14,7 +12,7 @@ def task(ctx, config):
     sequential task options.
 
     example:
-    
+
     tasks:
     - sequential:
         - tasktest:
@@ -30,7 +28,7 @@ def task(ctx, config):
     """
     try:
         delay = config.get('delay', 0)
-        id = config.get('id', 'UNKNOWN')    
+        id = config.get('id', 'UNKNOWN')
     except AttributeError:
         delay = 0
         id = 'UNKNOWN'

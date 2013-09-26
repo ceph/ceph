@@ -1,7 +1,6 @@
 from cStringIO import StringIO
 import random
 import time
-import re
 import gevent
 import json
 import threading
