@@ -9,10 +9,11 @@
 
 ostream &operator<<(ostream &out, const ContDesc &rhs)
 {
-  return out << "ObjNum: " << rhs.objnum
-	     << " snap: " << rhs.cursnap
-	     << " seqnum: " << rhs.seqnum
-	     << " prefix: " << rhs.prefix;
+  return out << "(ObjNum " << rhs.objnum
+	     << " snap " << rhs.cursnap
+	     << " seq_num " << rhs.seqnum
+    //<< " prefix " << rhs.prefix
+	     << ")";
 }
 
 void VarLenGenerator::get_ranges(const ContDesc &cont, interval_set<uint64_t> &out) {

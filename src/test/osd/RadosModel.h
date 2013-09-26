@@ -416,7 +416,7 @@ public:
       map<string,ObjectDesc>::iterator j = i->second.find(oid);
       if (j != i->second.end()) {
 	j->second.version = version;
-	cout << __func__ << " oid " << oid << " is version " << version << std::endl;
+	cout << __func__ << " oid " << oid << " v " << version << " " << j->second.most_recent() << std::endl;
 	break;
       }
     }
@@ -1071,6 +1071,7 @@ public:
 	     << err << std::endl;
       }
     } else {
+      cout << num << ":  expect " << old_value.most_recent() << std::endl;
       assert(!old_value.deleted());
       if (old_value.has_contents()) {
 	ContDesc to_check;
