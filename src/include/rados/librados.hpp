@@ -133,11 +133,16 @@ namespace librados
    * BALANCE_READS and LOCALIZE_READS should only be used
    * when reading from data you're certain won't change,
    * like a snapshot, or where eventual consistency is ok.
+   *
+   * ORDER_READS_WRITES will order reads the same way writes are
+   * ordered (e.g., waiting for degraded objects).  In particular, it
+   * will make a write followed by a read sequence be preserved.
    */
   enum ObjectOperationGlobalFlags {
     OPERATION_NOFLAG         = 0,
     OPERATION_BALANCE_READS  = 1,
     OPERATION_LOCALIZE_READS = 2,
+    OPERATION_ORDER_READS_WRITES = 4,
   };
 
   /*
