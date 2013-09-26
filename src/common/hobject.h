@@ -79,6 +79,30 @@ public:
     return ret;
   }
 
+  /// @return head version of this hobject_t
+  hobject_t get_head() const {
+    hobject_t ret(*this);
+    ret.snap = CEPH_NOSNAP;
+    return ret;
+  }
+
+  /// @return snapdir version of this hobject_t
+  hobject_t get_snapdir() const {
+    hobject_t ret(*this);
+    ret.snap = CEPH_SNAPDIR;
+    return ret;
+  }
+
+  /// @return true if object is neither head nor snapdir
+  bool is_snap() const {
+    return (snap != CEPH_NOSNAP) && (snap != CEPH_SNAPDIR);
+  }
+
+  /// @return true iff the object should have a snapset in it's attrs
+  bool has_snapset() const {
+    return !is_snap();
+  }
+
   /* Do not use when a particular hash function is needed */
   explicit hobject_t(const sobject_t &o) :
     oid(o.oid), snap(o.snap), max(false), pool(-1) {
