@@ -1982,8 +1982,8 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     }
 
     bool stop = false;
-    if (!pin->is_auth() || pin->is_ambiguous_auth()) {
-      dout(10) << "predirty_journal_parents !auth or ambig on " << *pin << dendl;
+    if (!pin->can_auth_pin() || pin->is_ambiguous_auth()) {
+      dout(10) << "predirty_journal_parents can't auth pin or ambig on " << *pin << dendl;
       stop = true;
     }
 
@@ -2008,8 +2008,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
 
     if (!stop &&
 	mut->wrlocks.count(&pin->nestlock) == 0 &&
-	(!pin->can_auth_pin() ||
-	 !pin->versionlock.can_wrlock() ||                   // make sure we can take versionlock, too
+	(!pin->versionlock.can_wrlock() ||                   // make sure we can take versionlock, too
 	 //true
 	 !mds->locker->wrlock_start(&pin->nestlock, static_cast<MDRequest*>(mut), true) // can cast only because i'm passing nowait=true
 	 )) {  // ** do not initiate.. see above comment **

@@ -2072,7 +2072,7 @@ void CInode::clear_ambiguous_auth()
 
 // auth_pins
 bool CInode::can_auth_pin() {
-  if (is_freezing_inode() || is_frozen_inode() || is_frozen_auth_pin())
+  if (!is_auth() || is_freezing_inode() || is_frozen_inode() || is_frozen_auth_pin())
     return false;
   if (parent)
     return parent->can_auth_pin();
