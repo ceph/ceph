@@ -323,6 +323,7 @@ def main():
     from gevent import monkey; monkey.patch_all(dns=False)
     from .orchestra import monkey; monkey.patch_all()
     from teuthology.run import config_file
+    import os
 
     import logging
 
