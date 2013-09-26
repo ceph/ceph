@@ -115,30 +115,30 @@ int main(int argc, char **argv) {
       i->value().hexdump(std::cout);
     }
   } else if (cmd == "dump-objects") {
-    vector<hobject_t> objects;
+    vector<ghobject_t> objects;
     r = omap.list_objects(&objects);
     if (r < 0) {
       std::cerr << "list_objects got: " << cpp_strerror(r) << std::endl;
       goto done;
     }
-    for (vector<hobject_t>::iterator i = objects.begin();
+    for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
       std::cout << *i << std::endl;
     }
     r = 0;
   } else if (cmd == "dump-objects-with-keys") {
-    vector<hobject_t> objects;
+    vector<ghobject_t> objects;
     r = omap.list_objects(&objects);
     if (r < 0) {
       std::cerr << "list_objects got: " << cpp_strerror(r) << std::endl;
       goto done;
     }
-    for (vector<hobject_t>::iterator i = objects.begin();
+    for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
       std::cout << "Object: " << *i << std::endl;
-      ObjectMap::ObjectMapIterator j = omap.get_iterator(*i);
+      ObjectMap::ObjectMapIterator j = omap.get_iterator(i->hobj);
       for (j->seek_to_first(); j->valid(); j->next()) {
 	std::cout << j->key() << std::endl;
 	j->value().hexdump(std::cout);
