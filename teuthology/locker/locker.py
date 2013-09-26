@@ -8,7 +8,7 @@ abspath = os.path.dirname(__file__)
 if abspath not in sys.path:
     sys.path.append(abspath)
 
-from api import Lock, MachineLock
+from api import Lock, MachineLock # noqa
 
 urls = (
     '/lock', 'Lock',
