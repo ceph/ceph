@@ -173,13 +173,20 @@ class Filer {
 	       __u32 truncate_seq,
 	       utime_t mtime,
 	       int flags,
+	       bool keep_first,
 	       Context *onack,
 	       Context *oncommit) {
     vector<ObjectExtent> extents;
     Striper::file_to_extents(cct, ino, layout, offset, len, 0, extents);
     if (extents.size() == 1) {
       vector<OSDOp> ops(1);
-      ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
+      if (keep_first && extents[0].objectno == 0) {
+	ops[0].op.op = CEPH_OSD_OP_TRUNCATE;
+	ops[0].op.extent.offset = extents[0].offset;
+      } else {
+	ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
+	ops[0].op.extent.length = (uint64_t)-1;
+      }
       ops[0].op.extent.truncate_seq = truncate_seq;
       ops[0].op.extent.truncate_size = extents[0].offset;
       objecter->_modify(extents[0].oid, extents[0].oloc, ops, mtime, snapc, flags, onack, oncommit);
@@ -188,7 +195,13 @@ class Filer {
       C_GatherBuilder gcom(cct, oncommit);
       for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
 	vector<OSDOp> ops(1);
-	ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
+	if (keep_first && p->objectno == 0) {
+	  ops[0].op.op = CEPH_OSD_OP_TRUNCATE;
+	  ops[0].op.extent.offset = p->offset;
+	} else {
+	  ops[0].op.op = CEPH_OSD_OP_TRIMTRUNC;
+	  ops[0].op.extent.length = (uint64_t)-1;
+	}
 	ops[0].op.extent.truncate_size = p->offset;
 	ops[0].op.extent.truncate_seq = truncate_seq;
 	objecter->_modify(p->oid, p->oloc, ops, mtime, snapc, flags,

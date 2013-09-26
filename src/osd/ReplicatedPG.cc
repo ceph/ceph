@@ -2190,6 +2190,17 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       op.op = CEPH_OSD_OP_TRUNCATE;
     }
 
+    if (op.op == CEPH_OSD_OP_TRIMTRUNC &&
+	obs.exists &&
+	op.extent.offset == 0 &&
+	op.extent.length == (uint64_t)-1 &&
+	op.extent.truncate_size == 0 &&
+	op.extent.truncate_seq > oi.truncate_seq) {
+      dout(10) << " munging TRIMTRUNC -> DELETE (truncate seq " << op.extent.truncate_seq
+	       << " > current " << oi.truncate_seq << ")" << dendl;
+      op.op = CEPH_OSD_OP_DELETE;
+    }
+
     switch (op.op) {
       
       // --- READS ---
