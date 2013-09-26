@@ -958,6 +958,8 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
     op_flags |= CEPH_OSD_FLAG_BALANCE_READS;
   if (flags & OPERATION_LOCALIZE_READS)
     op_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
+  if (flags & OPERATION_ORDER_READS_WRITES)
+    op_flags |= CEPH_OSD_FLAG_RWORDERED;
 
   return io_ctx_impl->aio_operate_read(obj, (::ObjectOperation*)o->impl, c->pc,
 				       op_flags, pbl);

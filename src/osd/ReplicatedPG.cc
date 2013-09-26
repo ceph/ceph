@@ -660,13 +660,21 @@ void ReplicatedPG::do_op(OpRequestRef op)
     return do_pg_op(op);
   }
 
-  dout(10) << "do_op " << *m << (op->may_write() ? " may_write" : "") << dendl;
+  // order this op as a write?
+  bool write_ordered = op->may_write() || (m->get_flags() & CEPH_OSD_FLAG_RWORDERED);
+
+  dout(10) << "do_op " << *m
+	   << (op->may_write() ? " may_write" : "")
+	   << (op->may_read() ? " may_read" : "")
+	   << " -> " << (write_ordered ? "write-ordered" : "read-ordered")
+	   << dendl;
 
   hobject_t head(m->get_oid(), m->get_object_locator().key,
 		 CEPH_NOSNAP, m->get_pg().ps(),
 		 info.pgid.pool(), m->get_object_locator().nspace);
 
-  if (op->may_write() && scrubber.write_blocked_by_scrub(head)) {
+
+  if (write_ordered && scrubber.write_blocked_by_scrub(head)) {
     dout(20) << __func__ << ": waiting for scrub" << dendl;
     waiting_for_active.push_back(op);
     op->mark_delayed("waiting for scrub");
@@ -680,7 +688,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
   }
 
   // degraded object?
-  if (op->may_write() && is_degraded_object(head)) {
+  if (write_ordered && is_degraded_object(head)) {
     wait_for_degraded_object(head, op);
     return;
   }
@@ -700,7 +708,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
   }
 
   // degraded object?
-  if (op->may_write() && is_degraded_object(snapdir)) {
+  if (write_ordered && is_degraded_object(snapdir)) {
     wait_for_degraded_object(snapdir, op);
     return;
   }
