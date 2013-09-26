@@ -307,6 +307,7 @@ public:
   ThreadPool::WorkQueue<PG> &scrub_wq;
   ThreadPool::WorkQueue<PG> &scrub_finalize_wq;
   ThreadPool::WorkQueue<MOSDRepScrub> &rep_scrub_wq;
+  GenContextWQ push_wq;
   ClassHandler  *&class_handler;
 
   void dequeue_pg(PG *pg, list<OpRequestRef> *dequeued);
@@ -635,6 +636,20 @@ public:
   OSDService(OSD *osd);
   ~OSDService();
 };
+
+struct C_OSD_SendMessageOnConn: public Context {
+  OSDService *osd;
+  Message *reply;
+  ConnectionRef conn;
+  C_OSD_SendMessageOnConn(
+    OSDService *osd,
+    Message *reply,
+    ConnectionRef conn) : osd(osd), reply(reply), conn(conn) {}
+  void finish(int) {
+    osd->send_message_osd_cluster(reply, conn.get());
+  }
+};
+
 class OSD : public Dispatcher,
 	    public md_config_obs_t {
   /** OSD **/
