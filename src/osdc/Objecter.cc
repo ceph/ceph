@@ -1338,7 +1338,7 @@ int Objecter::recalc_op_target(Op *op)
     need_check_tiering = true;
   }
   
-  if (need_check_tiering) {
+  if (honor_cache_redirects && need_check_tiering) {
     const pg_pool_t *pi = osdmap->get_pg_pool(op->base_oloc.pool);
     if (pi) {
       if (is_read && pi->has_read_tier())
