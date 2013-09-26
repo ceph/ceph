@@ -11,17 +11,15 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 from textwrap import dedent, fill
 import time
 import yaml
 
 from teuthology import misc
-from teuthology import safepath
 from teuthology import lock as lock
-from teuthology.config import config
 
 log = logging.getLogger(__name__)
+
 
 def main():
     parser = argparse.ArgumentParser(description="""

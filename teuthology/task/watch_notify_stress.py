@@ -3,9 +3,9 @@ import logging
 import proc_thrasher
 
 from ..orchestra import run
-from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
+
 
 @contextlib.contextmanager
 def task(ctx, config):

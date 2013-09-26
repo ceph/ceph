@@ -14,7 +14,6 @@ import yaml
 import json
 
 from teuthology import safepath
-from teuthology import lockstatus
 from .orchestra import run
 from .config import config
 

@@ -1,11 +1,10 @@
 import sys
 import logging
-import contextlib
 
 from teuthology import run_tasks
-from ..orchestra import run
 
 log = logging.getLogger(__name__)
+
 
 def task(ctx, config):
     """
