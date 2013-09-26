@@ -100,6 +100,42 @@ TEST(BloomFilter, SweepInt) {
 }
 
 
+TEST(BloomFilter, BinSweep) {
+  int total_max = 16384;
+  float total_fpp = .01;
+  std::cout << "total_inserts " << total_max << " target-fpp " << total_fpp << std::endl;
+  for (int bins = 1; bins < 16; ++bins) {
+    int max = total_max / bins;
+    float fpp = total_fpp / bins;//pow(total_fpp, bins);
+
+    std::vector<bloom_filter*> ls;
+    bufferlist bl;
+    for (int i=0; i<bins; i++) {
+      ls.push_back(new bloom_filter(max, fpp, i));
+      for (int j=0; j<max; j++) {
+	ls.back()->insert(10000 * (i+1) + j);
+      }
+      ::encode(*ls.front(), bl);
+    }
+
+    int hit = 0;
+    int test = max * 100;
+    for (int i=0; i<test; ++i) {
+      for (std::vector<bloom_filter*>::iterator j = ls.begin(); j != ls.end(); ++j) {
+	if ((*j)->contains(i * 732)) {  // note: sequential i does not work here; the intenral int hash is weak!!
+	  hit++;
+	  break;
+	}
+      }
+    }
+
+    double actual = (double)hit / (double)test;
+    std::cout << "bins " << bins << " bin-max " << max << " bin-fpp " << fpp
+	      << " actual-fpp " << actual
+	      << " total-size " << bl.length() << std::endl;
+  }
+}
+
 // disable these tests; doing dual insertions in consecutive filters
 // appears to be equivalent to doing a single insertion in a bloom
 // filter that is twice as big.
