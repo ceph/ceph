@@ -2254,7 +2254,8 @@ epoch_t PG::peek_map_epoch(ObjectStore *store, coll_t coll, hobject_t &infos_oid
   snapid_t snap;
   bool ok = coll.is_pg(pgid, snap);
   assert(ok);
-  store->collection_getattr(coll, "info", *bl);
+  int r = store->collection_getattr(coll, "info", *bl);
+  assert(r > 0);
   bufferlist::iterator bp = bl->begin();
   __u8 struct_v = 0;
   ::decode(struct_v, bp);
