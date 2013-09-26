@@ -3,9 +3,9 @@ import logging
 import os
 
 from teuthology import misc as teuthology
-from ..orchestra import run
 
 log = logging.getLogger(__name__)
+
 
 @contextlib.contextmanager
 def task(ctx, config):

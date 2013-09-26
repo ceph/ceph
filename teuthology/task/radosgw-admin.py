@@ -735,7 +735,6 @@ def task(ctx, config):
     assert err
 
     # delete should fail because ``key`` still exists
-    fails = False
     try:
         bucket.delete()
     except boto.exception.S3ResponseError as e:

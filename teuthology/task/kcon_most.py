@@ -5,6 +5,7 @@ from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
+
 @contextlib.contextmanager
 def task(ctx, config):
     """
@@ -34,8 +35,6 @@ def task(ctx, config):
         config = ['client.{id}'.format(id=id_)
                   for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
     clients = list(teuthology.get_clients(ctx=ctx, roles=config))
-
-    testdir = teuthology.get_testdir(ctx)
 
     for id_, remote in clients:
         # TODO: Don't have to run this more than once per node (remote)

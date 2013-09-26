@@ -46,6 +46,6 @@ def task(ctx, config):
             exc_info = sys.exc_info()
             while stack:
                 mgr = stack.pop()
-                endr = mgr.__exit__(*exc_info)
+                mgr.__exit__(*exc_info)
         finally:
             del exc_info

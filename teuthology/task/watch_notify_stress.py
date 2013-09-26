@@ -32,8 +32,6 @@ def task(ctx, config):
 
     remotes = []
 
-    testdir = teuthology.get_testdir(ctx)
-
     for role in config.get('clients', ['client.0']):
         assert isinstance(role, basestring)
         PREFIX = 'client.'
