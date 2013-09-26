@@ -224,6 +224,7 @@ struct ceph_mon_subscribe_ack {
  * mdsmap flags
  */
 #define CEPH_MDSMAP_DOWN    (1<<0)  /* cluster deliberately down */
+#define CEPH_MDSMAP_ALLOW_SNAPS   (1<<1)  /* cluster allowed to create snapshots */
 
 /*
  * mds states

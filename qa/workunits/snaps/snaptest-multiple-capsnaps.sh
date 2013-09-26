@@ -2,6 +2,8 @@
 
 set -e
 
+ceph mds set allow_new_snaps --yes-i-really-mean-it
+
 echo asdf > a
 mkdir .snap/1
 chmod 777 a
