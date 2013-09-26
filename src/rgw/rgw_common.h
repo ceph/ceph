@@ -599,6 +599,10 @@ struct rgw_bucket {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bucket*>& o);
+
+  bool operator<(const rgw_bucket& b) const {
+    return name.compare(b.name) < 0;
+  }
 };
 WRITE_CLASS_ENCODER(rgw_bucket)
 
@@ -1211,6 +1215,11 @@ static inline const char *rgw_obj_category_name(RGWObjCategory category)
   }
 
   return "unknown";
+}
+
+static inline uint64_t rgw_rounded_kb(uint64_t bytes)
+{
+  return (bytes + 1023) / 1024;
 }
 
 extern string rgw_string_unquote(const string& s);
