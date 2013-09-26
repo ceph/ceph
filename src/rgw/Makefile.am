@@ -50,6 +50,7 @@ LIBRGW_DEPS += \
 	-lfcgi
 
 radosgw_SOURCES = \
+	rgw/rgw_quota.cc \
 	rgw/rgw_resolve.cc \
 	rgw/rgw_rest.cc \
 	rgw/rgw_rest_swift.cc \
@@ -124,6 +125,7 @@ noinst_HEADERS += \
 	rgw/rgw_http_client.h \
 	rgw/rgw_swift.h \
 	rgw/rgw_swift_auth.h \
+	rgw/rgw_quota.h \
 	rgw/rgw_rados.h \
 	rgw/rgw_replica_log.h \
 	rgw/rgw_resolve.h \
