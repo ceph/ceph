@@ -13,6 +13,7 @@ paramiko >= 1.7.7
 pexpect
 requests == 0.14.0
 raven
+web.py
 
 # Test Dependencies
 # nose >=1.0.0
