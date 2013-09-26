@@ -53,6 +53,20 @@
         ...
 }
 {
+	inet_ntop does something lame on local stack
+	Memcheck:Value8
+	...
+	fun:inet_ntop
+	...
+}
+{
+	inet_ntop does something lame on local stack
+	Memcheck:Addr8
+	...
+	fun:inet_ntop
+	...
+}
+{
 	dl-lookup.c thing .. Invalid write of size 8
 	Memcheck:Value8
 	fun:do_lookup_x
