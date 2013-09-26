@@ -70,7 +70,7 @@ ceph osd crush rm foo
 
 # test reweight
 o3=`ceph osd create`
-ceph osd crush add $o3 123 root=foo
+ceph osd crush add $o3 123 root=default
 ceph osd tree | grep osd.$o3 | grep 123
 ceph osd crush reweight osd.$o3 113
 ceph osd tree | grep osd.$o3 | grep 113
