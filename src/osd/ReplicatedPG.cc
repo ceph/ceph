@@ -2645,6 +2645,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  op.extent.length = (op.extent.offset > oi.size ? 0 : oi.size - op.extent.offset);
 	  dout(10) << " old truncate_seq " << op.extent.truncate_seq << " < current " << seq
 		   << ", adjusting write length to " << op.extent.length << dendl;
+	  bufferlist t;
+	  t.substr_of(osd_op.indata, 0, op.extent.length);
+	  osd_op.indata.swap(t);
         }
 	if (op.extent.truncate_seq > seq) {
 	  // write arrives before trimtrunc
