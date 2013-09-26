@@ -2,6 +2,8 @@
 
 set -e
 
+ceph mds set allow_new_snaps --yes-i-really-mean-it
+
 # multiple intervening snapshots with no modifications, and thus no
 # snapflush client_caps messages.  make sure the mds can handle this.
 
