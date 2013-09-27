@@ -834,20 +834,24 @@ class TestOSD(TestArgparse):
     def test_blackist(self):
         for action in ('add', 'rm'):
             self.assert_valid_command(['osd', 'blacklist', action,
-                                       '1.2.3.4/nonce'])
+                                       '1.2.3.4/567'])
             self.assert_valid_command(['osd', 'blacklist', action,
-                                       '1.2.3.4/nonce', '600.40'])
+                                       '1.2.3.4'])
+            self.assert_valid_command(['osd', 'blacklist', action,
+                                       '1.2.3.4/567', '600.40'])
+            self.assert_valid_command(['osd', 'blacklist', action,
+                                       '1.2.3.4', '600.40'])
             assert_equal({}, validate_command(sigdict, ['osd', 'blacklist',
                                                         action,
                                                         'invalid',
                                                         '600.40']))
             assert_equal({}, validate_command(sigdict, ['osd', 'blacklist',
                                                         action,
-                                                        '1.2.3.4/nonce',
+                                                        '1.2.3.4/567',
                                                         '-1.0']))
             assert_equal({}, validate_command(sigdict, ['osd', 'blacklist',
                                                         action,
-                                                        '1.2.3.4/nonce',
+                                                        '1.2.3.4/567',
                                                         '600.40',
                                                         'toomany']))
 
