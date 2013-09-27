@@ -1441,6 +1441,8 @@ public:
       snap = -1;
     }
     context->find_object(oid_src, &src_value, snap);
+    if (!src_value.deleted())
+      context->update_object_full(oid, src_value);
 
     string src = context->prefix+oid_src;
     op.copy_from(src.c_str(), context->io_ctx, src_value.version);
@@ -1463,6 +1465,7 @@ public:
 				librados::SNAP_HEAD,
 				librados::OPERATION_ORDER_READS_WRITES,  // order wrt previous write/update
 				NULL);
+
   }
 
   void _finish(CallbackInfo *info)
@@ -1478,14 +1481,16 @@ public:
       assert(comp->is_complete());
       cout << num << ":  finishing copy_from to " << context->prefix + oid << std::endl;
       if ((r = comp->get_return_value())) {
-	if (!(r == -ENOENT && src_value.deleted())) {
+	if (r == -ENOENT && src_value.deleted()) {
+	  cout << num << ":  got expected ENOENT (src dne)" << std::endl;
+	} else {
 	  cerr << "Error: oid " << oid << " copy_from " << oid_src << " returned error code "
 	       << r << std::endl;
+	  assert(0);
 	}
       } else {
 	assert(!version || comp->get_version64() == version);
 	version = comp->get_version64();
-	context->update_object_full(oid, src_value);
 	context->update_object_version(oid, comp->get_version64());
       }
     } else if (info->id == 1) {
