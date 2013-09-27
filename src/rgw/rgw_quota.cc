@@ -9,6 +9,26 @@
 #define dout_subsys ceph_subsys_rgw
 
 
+struct RGWQuotaBucketStats {
+  RGWBucketStats stats;
+  utime_t expiration;
+};
+
+class RGWBucketStatsCache {
+  RGWRados *store;
+  lru_map<rgw_bucket, RGWQuotaBucketStats> stats_map;
+
+  int fetch_bucket_totals(rgw_bucket& bucket, RGWBucketStats& stats);
+
+public:
+#warning FIXME configurable stats_map size
+  RGWBucketStatsCache(RGWRados *_store) : store(_store), stats_map(10000) {}
+
+  int get_bucket_stats(rgw_bucket& bucket, RGWBucketStats& stats);
+  void adjust_bucket_stats(rgw_bucket& bucket, int objs_delta, uint64_t added_bytes, uint64_t removed_bytes);
+};
+
+
 int RGWBucketStatsCache::fetch_bucket_totals(rgw_bucket& bucket, RGWBucketStats& stats)
 {
   RGWBucketInfo bucket_info;
