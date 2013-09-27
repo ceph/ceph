@@ -792,24 +792,11 @@ public:
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
 
-    vector<uint64_t> snapset(context->snaps.size());
-    int j = 0;
-    for (map<int,uint64_t>::reverse_iterator i = context->snaps.rbegin();
-	 i != context->snaps.rend();
-	 ++i, ++j) {
-      snapset[j] = i->second;
-    }
     interval_set<uint64_t> ranges;
     context->cont_gen.get_ranges(cont, ranges);
     std::cout << num << ":  seq_num " << context->seq_num << " ranges " << ranges << std::endl;
     context->seq_num++;
     context->state_lock.Unlock();
-
-    int r = context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset);
-    if (r) {
-      cerr << " r is " << r << " snapset is " << snapset << " seq is " << context->seq << std::endl;
-      assert(0);
-    }
 
     waiting_on = ranges.num_intervals();
     //cout << " waiting_on = " << waiting_on << std::endl;
@@ -921,23 +908,10 @@ public:
 
     context->remove_object(oid);
 
-    vector<uint64_t> snapset(context->snaps.size());
-    int j = 0;
-    for (map<int,uint64_t>::reverse_iterator i = context->snaps.rbegin();
-	 i != context->snaps.rend();
-	 ++i, ++j) {
-      snapset[j] = i->second;
-    }
     interval_set<uint64_t> ranges;
     context->state_lock.Unlock();
 
-    int r = context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset);
-    if (r) {
-      cerr << "r is " << r << " snapset is " << snapset << " seq is " << context->seq << std::endl;
-      assert(0);
-    }
-
-    r = context->io_ctx.remove(context->prefix+oid);
+    int r = context->io_ctx.remove(context->prefix+oid);
     if (r && !(r == -ENOENT && !present)) {
       cerr << "r is " << r << " while deleting " << oid << " and present is " << present << std::endl;
       assert(0);
@@ -1272,17 +1246,8 @@ public:
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
 
-    vector<uint64_t> snapset(context->snaps.size());
-    int j = 0;
-    for (map<int,uint64_t>::reverse_iterator i = context->snaps.rbegin();
-	 i != context->snaps.rend();
-	 ++i, ++j) {
-      snapset[j] = i->second;
-    }
-
     TestWatchContext *ctx = context->get_watch_context(oid);
     context->state_lock.Unlock();
-    assert(!context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset));
     int r;
     if (!ctx) {
       {
@@ -1352,15 +1317,7 @@ public:
     context->roll_back(oid, roll_back_to);
     uint64_t snap = context->snaps[roll_back_to];
 
-    vector<uint64_t> snapset(context->snaps.size());
-    int j = 0;
-    for (map<int,uint64_t>::reverse_iterator i = context->snaps.rbegin();
-	 i != context->snaps.rend();
-	 ++i, ++j) {
-      snapset[j] = i->second;
-    }
     context->state_lock.Unlock();
-    assert(!context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset));
 
     op.selfmanaged_snap_rollback(snap);
 
