@@ -59,7 +59,7 @@
  * CephString: optional badchars
  * CephSocketpath: validation involves "is it S_ISSOCK"
  * CephIPAddr: v4 or v6 addr with optional port, syntax validated
- * CephEntityAddr: CephIPAddr + '/nonce'
+ * CephEntityAddr: CephIPAddr + optional '/nonce'
  * CephPoolname: Plainold string
  * CephObjectname: Another plainold string
  * CephPgid: n.xxx where n is an int > 0, xxx is a hex number > 0
