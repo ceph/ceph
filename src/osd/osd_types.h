@@ -2097,6 +2097,7 @@ struct object_info_t {
   // note: these are currently encoded into 8 bits; see encode()/decode()
   typedef enum {
     FLAG_LOST     = 1<<0,
+    FLAG_WHITEOUT = 1<<1,  // object logically does not exist
   } flag_t;
   flag_t flags;
 
@@ -2125,6 +2126,9 @@ struct object_info_t {
   }
   bool is_lost() const {
     return test_flag(FLAG_LOST);
+  }
+  bool is_whiteout() const {
+    return test_flag(FLAG_WHITEOUT);
   }
 
   void encode(bufferlist& bl) const;

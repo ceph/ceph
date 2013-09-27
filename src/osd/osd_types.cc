@@ -2966,6 +2966,8 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
     out << " " << oi.snaps;
   if (oi.is_lost())
     out << " LOST";
+  if (oi.is_whiteout())
+    out << " WHITEOUT";
   out << ")";
   return out;
 }
