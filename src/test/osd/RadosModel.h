@@ -403,8 +403,8 @@ public:
 
   void update_object_full(const string &oid, const ObjectDesc &contents)
   {
-    pool_obj_cont.rbegin()->second.erase(oid);
-    pool_obj_cont.rbegin()->second.insert(pair<string,ObjectDesc>(oid, contents));
+    pool_obj_cont[current_snap].erase(oid);
+    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, contents));
   }
 
   void update_object_version(const string &oid, uint64_t version)
