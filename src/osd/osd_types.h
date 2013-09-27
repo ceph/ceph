@@ -2093,7 +2093,12 @@ struct object_info_t {
 
   uint64_t size;
   utime_t mtime;
-  bool lost;
+
+  // note: these are currently encoded into 8 bits; see encode()/decode()
+  typedef enum {
+    FLAG_LOST     = 1<<0,
+  } flag_t;
+  flag_t flags;
 
   osd_reqid_t wrlock_by;   // [head]
   vector<snapid_t> snaps;  // [clone]
@@ -2109,6 +2114,19 @@ struct object_info_t {
   static ps_t legacy_object_locator_to_ps(const object_t &oid, 
 					  const object_locator_t &loc);
 
+  bool test_flag(flag_t f) const {
+    return (flags & f) == f;
+  }
+  void set_flag(flag_t f) {
+    flags = (flag_t)(flags | f);
+  }
+  void clear_flag(flag_t f) {
+    flags = (flag_t)(flags & ~f);
+  }
+  bool is_lost() const {
+    return test_flag(FLAG_LOST);
+  }
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   void decode(bufferlist& bl) {
@@ -2119,13 +2137,14 @@ struct object_info_t {
   static void generate_test_instances(list<object_info_t*>& o);
 
   explicit object_info_t()
-    : user_version(0), size(0), lost(false),
+    : user_version(0), size(0), flags((flag_t)0),
       truncate_seq(0), truncate_size(0), uses_tmap(false)
   {}
 
   object_info_t(const hobject_t& s)
-    : soid(s), user_version(0), size(0),
-      lost(false), truncate_seq(0), truncate_size(0), uses_tmap(false) {}
+    : soid(s),
+      user_version(0), size(0), flags((flag_t)0),
+      truncate_seq(0), truncate_size(0), uses_tmap(false) {}
 
   object_info_t(bufferlist& bl) {
     decode(bl);

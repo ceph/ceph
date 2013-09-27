@@ -981,7 +981,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
     return;
   }
 
-  if ((op->may_read()) && (obc->obs.oi.lost)) {
+  if ((op->may_read()) && (obc->obs.oi.is_lost())) {
     // This object is lost. Reading from it returns an error.
     dout(20) << __func__ << ": object " << obc->obs.oi.soid
 	     << " is lost" << dendl;
@@ -7108,7 +7108,7 @@ ObjectContextRef ReplicatedPG::mark_object_lost(ObjectStore::Transaction *t,
 
   obc->ondisk_write_lock();
 
-  obc->obs.oi.lost = true;
+  obc->obs.oi.set_flag(object_info_t::FLAG_LOST);
   obc->obs.oi.version = info.last_update;
   obc->obs.oi.prior_version = version;
 
