@@ -352,7 +352,9 @@ def schedule():
             if job is None and ctx.verbose:
                 print 'job {jid} is not in the queue'.format(jid=job_id)
             else:
-                print 'job {jid} contains: '.format(jid=job_id), job.body
+                print '--- job {jid} priority {prio} ---\n'.format(
+                    jid=job_id,
+                    prio=job.stats()['pri']), job.body
         return
 
     if ctx.delete:
