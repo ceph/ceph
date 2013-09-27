@@ -288,8 +288,12 @@ namespace __gnu_cxx {
 
 ostream& operator<<(ostream& out, const ghobject_t& o);
 
-WRITE_EQ_OPERATORS_3(ghobject_t, hobj, generation, shard_id)
-// sort ghobject_t's by <hobj, generation, shard_id>
+WRITE_EQ_OPERATORS_3(ghobject_t, hobj, shard_id, generation)
+// sort ghobject_t's by <hobj, shard_id, generation> 
+// 
+// Two objects which differ by generation are more related than
+// two objects of the same generation which differ by shard.
+// 
 WRITE_CMP_OPERATORS_3(ghobject_t,
 		      hobj,
 		      shard_id,
