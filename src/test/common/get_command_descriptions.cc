@@ -50,7 +50,7 @@ static void json_print(const MonCommand *mon_commands, int size)
   Formatter *f = new_formatter("json");
   get_command_descriptions(mon_commands, size, f, &rdata);
   delete f;
-  string data(rdata.c_str());
+  string data(rdata.c_str(), rdata.length());
   dout(0) << data << dendl;
 }
 
