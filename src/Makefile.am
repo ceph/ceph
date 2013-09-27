@@ -300,7 +300,7 @@ ceph: ceph.in ./ceph_ver.h Makefile
 		sed -e 's/#define \(.*VER\) /\1=/' >>$@.tmp
 	grep "#define CEPH_GIT_VER" ./ceph_ver.h | \
 	  sed -e 's/#define \(.*VER\) /\1=/' -e 's/=\(.*\)$$/="\1"/' >>$@.tmp
-	cat $@.in >>$@.tmp
+	cat $(srcdir)/$@.in >>$@.tmp
 	chmod a+x $@.tmp
 	chmod a-w $@.tmp
 	mv $@.tmp $@
