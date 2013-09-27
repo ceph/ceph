@@ -28,7 +28,6 @@ public:
   void adjust_bucket_stats(rgw_bucket& bucket, int objs_delta, uint64_t added_bytes, uint64_t removed_bytes);
 };
 
-
 int RGWBucketStatsCache::fetch_bucket_totals(rgw_bucket& bucket, RGWBucketStats& stats)
 {
   RGWBucketInfo bucket_info;
@@ -95,3 +94,23 @@ void RGWBucketStatsCache::adjust_bucket_stats(rgw_bucket& bucket, int objs_delta
 }
 
 
+class RGWQuotaHandlerImpl : public RGWQuotaHandler {
+  RGWBucketStatsCache stats_cache;
+public:
+  RGWQuotaHandlerImpl(RGWRados *store) : stats_cache(store) {}
+  virtual int check_quota(rgw_bucket& bucket, RGWQuotaInfo& bucket_quota,
+			  uint64_t num_objs, uint64_t size, bool *result) {
+    return 0;
+  }
+};
+
+
+RGWQuotaHandler *RGWQuotaHandler::generate_handler(RGWRados *store)
+{
+  return new RGWQuotaHandlerImpl(store);
+};
+
+void RGWQuotaHandler::free_handler(RGWQuotaHandler *handler)
+{
+  delete handler;
+}

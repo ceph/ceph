@@ -91,6 +91,7 @@ using ceph::crypto::MD5;
 #define RGW_OP_TYPE_WRITE        0x02
 #define RGW_OP_TYPE_DELETE       0x04
 
+#define RGW_OP_TYPE_MODIFY       (RGW_OP_TYPE_WRITE | RGW_OP_TYPE_DELETE)
 #define RGW_OP_TYPE_ALL          (RGW_OP_TYPE_READ | RGW_OP_TYPE_WRITE | RGW_OP_TYPE_DELETE)
 
 #define RGW_DEFAULT_MAX_BUCKETS 1000

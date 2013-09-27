@@ -421,6 +421,43 @@ int RGWOp::verify_op_mask()
   return 0;
 }
 
+int RGWOp::init_quota()
+{
+  /* init quota related stuff */
+  if (!(s->user.op_mask & RGW_OP_TYPE_MODIFY)) {
+    return 0;
+  }
+
+  /* only interested in object related ops */
+  if (s->object_str.empty()) {
+    return 0;
+  }
+
+  if (s->bucket_info.quota.enabled) {
+    bucket_quota = s->bucket_info.quota;
+    return 0;
+  }
+  if (s->user.user_id == s->bucket_owner.get_id()) {
+    if (s->user.bucket_quota.enabled) {
+      bucket_quota = s->user.bucket_quota;
+      return 0;
+    }
+  } else {
+    RGWUserInfo owner_info;
+    int r = rgw_get_user_info_by_uid(store, s->bucket_info.owner, owner_info);
+    if (r < 0)
+      return r;
+
+    if (owner_info.bucket_quota.enabled) {
+      bucket_quota = owner_info.bucket_quota;
+      return 0;
+    }
+  }
+
+  bucket_quota = store->region_map.bucket_quota;
+  return 0;
+}
+
 static bool validate_cors_rule_method(RGWCORSRule *rule, const char *req_meth) {
   uint8_t flags = 0;
   if (strcmp(req_meth, "GET") == 0) flags = RGW_CORS_GET;

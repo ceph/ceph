@@ -20,6 +20,7 @@
 #include "rgw_bucket.h"
 #include "rgw_acl.h"
 #include "rgw_cors.h"
+#include "rgw_quota.h"
 
 using namespace std;
 
@@ -36,6 +37,9 @@ protected:
   RGWRados *store;
   RGWCORSConfiguration bucket_cors;
   bool cors_exist;
+  RGWQuotaInfo bucket_quota;
+
+  virtual int init_quota();
 public:
   RGWOp() : s(NULL), dialect_handler(NULL), store(NULL), cors_exist(false) {}
   virtual ~RGWOp() {}

@@ -37,5 +37,16 @@ struct RGWQuotaInfo {
 };
 WRITE_CLASS_ENCODER(RGWQuotaInfo)
 
+class rgw_bucket;
+
+class RGWQuotaHandler {
+public:
+  virtual ~RGWQuotaHandler() {}
+  virtual int check_quota(rgw_bucket& bucket, RGWQuotaInfo& bucket_quota,
+			  uint64_t num_objs, uint64_t size, bool *result) =  0;
+
+  static RGWQuotaHandler *generate_handler(RGWRados *store);
+  static void free_handler(RGWQuotaHandler *handler);
+};
 
 #endif
