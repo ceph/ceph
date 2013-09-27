@@ -3585,6 +3585,8 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
       dout(10) << __func__ << " could not remove_xattrs r = " << r << dendl;
       assert(!m_filestore_fail_eio || r != -EIO);
       goto out_close;
+    } else {
+      r = 0; // don't confuse the debug output
     }
   }
   
