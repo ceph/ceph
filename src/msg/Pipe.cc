@@ -1136,6 +1136,19 @@ void Pipe::unregister_pipe()
   }
 }
 
+void Pipe::join()
+{
+  ldout(msgr->cct, 20) << "join" << dendl;
+  if (writer_thread.is_started())
+    writer_thread.join();
+  if (reader_thread.is_started())
+    reader_thread.join();
+  if (delay_thread) {
+    ldout(msgr->cct, 20) << "joining delay_thread" << dendl;
+    delay_thread->stop();
+    delay_thread->join();
+  }
+}
 
 void Pipe::requeue_sent()
 {
