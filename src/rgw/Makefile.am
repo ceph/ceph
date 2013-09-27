@@ -31,7 +31,8 @@ librgw_la_SOURCES =  \
 	rgw/rgw_auth_s3.cc \
 	rgw/rgw_metadata.cc \
 	rgw/rgw_replica_log.cc \
-	rgw/rgw_keystone.cc
+	rgw/rgw_keystone.cc \
+	rgw/rgw_quota.cc
 librgw_la_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
 noinst_LTLIBRARIES += librgw.la
 
@@ -50,7 +51,6 @@ LIBRGW_DEPS += \
 	-lfcgi
 
 radosgw_SOURCES = \
-	rgw/rgw_quota.cc \
 	rgw/rgw_resolve.cc \
 	rgw/rgw_rest.cc \
 	rgw/rgw_rest_swift.cc \

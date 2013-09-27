@@ -636,6 +636,8 @@ struct RGWRegionMap {
 
   string master_region;
 
+  RGWQuotaInfo bucket_quota;
+
   RGWRegionMap() : lock("RGWRegionMap") {}
 
   void encode(bufferlist& bl) const;
