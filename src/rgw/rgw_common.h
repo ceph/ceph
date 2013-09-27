@@ -29,6 +29,7 @@
 #include "include/utime.h"
 #include "rgw_acl.h"
 #include "rgw_cors.h"
+#include "rgw_quota.h"
 #include "cls/version/cls_version_types.h"
 #include "include/rados/librados.hpp"
 
@@ -423,11 +424,12 @@ struct RGWUserInfo
   __u8 system;
   string default_placement;
   list<string> placement_tags;
+  RGWQuotaInfo bucket_quota;
 
   RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS), op_mask(RGW_OP_TYPE_ALL), system(0) {}
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(13, 9, bl);
+     ENCODE_START(14, 9, bl);
      ::encode(auid, bl);
      string access_key;
      string secret_key;
@@ -462,6 +464,7 @@ struct RGWUserInfo
      ::encode(system, bl);
      ::encode(default_placement, bl);
      ::encode(placement_tags, bl);
+     ::encode(bucket_quota, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -517,6 +520,9 @@ struct RGWUserInfo
       ::decode(system, bl);
       ::decode(default_placement, bl);
       ::decode(placement_tags, bl); /* tags of allowed placement rules */
+    }
+    if (struct_v >= 14) {
+      ::decode(bucket_quota, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -665,9 +671,10 @@ struct RGWBucketInfo
   bool has_instance_obj;
   RGWObjVersionTracker objv_tracker; /* we don't need to serialize this, for runtime tracking */
   obj_version ep_objv; /* entry point object version, for runtime tracking only */
+  RGWQuotaInfo quota;
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(8, 4, bl);
+     ENCODE_START(9, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner, bl);
      ::encode(flags, bl);
@@ -676,6 +683,7 @@ struct RGWBucketInfo
      ::encode(ct, bl);
      ::encode(placement_rule, bl);
      ::encode(has_instance_obj, bl);
+     ::encode(quota, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -696,6 +704,8 @@ struct RGWBucketInfo
        ::decode(placement_rule, bl);
      if (struct_v >= 8)
        ::decode(has_instance_obj, bl);
+     if (struct_v >= 9)
+       ::decode(quota, bl);
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
