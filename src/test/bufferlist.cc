@@ -25,8 +25,10 @@
 #include <sys/uio.h>
 
 #include "include/buffer.h"
+#include "include/utime.h"
 #include "include/encoding.h"
 #include "common/environment.h"
+#include "common/Clock.h"
 
 #include "gtest/gtest.h"
 #include "stdlib.h"
@@ -1649,7 +1651,7 @@ TEST(BufferList, crc32c) {
   EXPECT_EQ((unsigned)0x5FA5C0CC, crc);
 }
 
-TEST(BufferList, crc32cappend) {
+TEST(BufferList, crc32c_append) {
   bufferlist bl1;
   bufferlist bl2;
 
@@ -1664,6 +1666,145 @@ TEST(BufferList, crc32cappend) {
     bl2.append(bl);
   }
   ASSERT_EQ(bl1.crc32c(0), bl2.crc32c(0));
+}
+
+TEST(BufferList, crc32c_append_perf) {
+  int len = 256 * 1024 * 1024;
+  bufferptr a(len);
+  bufferptr b(len);
+  bufferptr c(len);
+  bufferptr d(len);
+  std::cout << "populating large buffers (a, b=c=d)" << std::endl;
+  char *pa = a.c_str();
+  char *pb = b.c_str();
+  char *pc = c.c_str();
+  char *pd = c.c_str();
+  for (int i=0; i<len; i++) {
+    pa[i] = (i & 0xff) ^ 73;
+    pb[i] = (i & 0xff) ^ 123;
+    pc[i] = (i & 0xff) ^ 123;
+    pd[i] = (i & 0xff) ^ 123;
+  }
+
+  // track usage of cached crcs
+  buffer::track_cached_crc(true);
+
+  bufferlist bla;
+  bla.push_back(a);
+  bufferlist blb;
+  blb.push_back(b);
+  {
+    utime_t start = ceph_clock_now(NULL);
+    uint32_t r = bla.crc32c(0);
+    utime_t end = ceph_clock_now(NULL);
+    float rate = (float)len / (float)(1024*1024) / (float)(end - start);
+    std::cout << "a.crc32c(0) = " << r << " at " << rate << " MB/sec" << std::endl;
+    ASSERT_EQ(r, 1138817026u);
+  }
+  assert(buffer::get_cached_crc() == 0);
+  {
+    utime_t start = ceph_clock_now(NULL);
+    uint32_t r = bla.crc32c(0);
+    utime_t end = ceph_clock_now(NULL);
+    float rate = (float)len / (float)(1024*1024) / (float)(end - start);
+    std::cout << "a.crc32c(0) (again) = " << r << " at " << rate << " MB/sec" << std::endl;
+    ASSERT_EQ(r, 1138817026u);
+  }
+  assert(buffer::get_cached_crc() == 1);
+
+  {
+    utime_t start = ceph_clock_now(NULL);
+    uint32_t r = bla.crc32c(5);
+    utime_t end = ceph_clock_now(NULL);
+    float rate = (float)len / (float)(1024*1024) / (float)(end - start);
+    std::cout << "a.crc32c(5) = " << r << " at " << rate << " MB/sec" << std::endl;
+    ASSERT_EQ(r, 3239494520u);
+  }
+  assert(buffer::get_cached_crc() == 1);
+  assert(buffer::get_cached_crc_adjusted() == 1);
+  {
+    utime_t start = ceph_clock_now(NULL);
+    uint32_t r = bla.crc32c(5);
+    utime_t end = ceph_clock_now(NULL);
+    float rate = (float)len / (float)(1024*1024) / (float)(end - start);
+    std::cout << "a.crc32c(5) (again) = " << r << " at " << rate << " MB/sec" << std::endl;
+    ASSERT_EQ(r, 3239494520u);
+  }
+  assert(buffer::get_cached_crc() == 1);
+  assert(buffer::get_cached_crc_adjusted() == 2);
+
+  {
+    utime_t start = ceph_clock_now(NULL);
+    uint32_t r = blb.crc32c(0);
+    utime_t end = ceph_clock_now(NULL);
+    float rate = (float)len / (float)(1024*1024) / (float)(end - start);
+    std::cout << "b.crc32c(0) = " << r << " at " << rate << " MB/sec" << std::endl;
+    ASSERT_EQ(r, 2481791210u);
+  }
+  assert(buffer::get_cached_crc() == 1);
+  {
+    utime_t start = ceph_clock_now(NULL);
+    uint32_t r = blb.crc32c(0);
+    utime_t end = ceph_clock_now(NULL);
+    float rate = (float)len / (float)(1024*1024) / (float)(end - start);
+    std::cout << "b.crc32c(0) (again)= " << r << " at " << rate << " MB/sec" << std::endl;
+    ASSERT_EQ(r, 2481791210u);
+  }
+  assert(buffer::get_cached_crc() == 2);
+
+  bufferlist ab;
+  ab.push_back(a);
+  ab.push_back(b);
+  {
+    utime_t start = ceph_clock_now(NULL);
+    uint32_t r = ab.crc32c(0);
+    utime_t end = ceph_clock_now(NULL);
+    float rate = (float)ab.length() / (float)(1024*1024) / (float)(end - start);
+    std::cout << "ab.crc32c(0) = " << r << " at " << rate << " MB/sec" << std::endl;
+    ASSERT_EQ(r, 2988268779u);
+  }
+  assert(buffer::get_cached_crc() == 3);
+  assert(buffer::get_cached_crc_adjusted() == 3);
+  bufferlist ac;
+  ac.push_back(a);
+  ac.push_back(c);
+  {
+    utime_t start = ceph_clock_now(NULL);
+    uint32_t r = ac.crc32c(0);
+    utime_t end = ceph_clock_now(NULL);
+    float rate = (float)ac.length() / (float)(1024*1024) / (float)(end - start);
+    std::cout << "ac.crc32c(0) = " << r << " at " << rate << " MB/sec" << std::endl;
+    ASSERT_EQ(r, 2988268779u);
+  }
+  assert(buffer::get_cached_crc() == 4);
+  assert(buffer::get_cached_crc_adjusted() == 3);
+
+  bufferlist ba;
+  ba.push_back(b);
+  ba.push_back(a);
+  {
+    utime_t start = ceph_clock_now(NULL);
+    uint32_t r = ba.crc32c(0);
+    utime_t end = ceph_clock_now(NULL);
+    float rate = (float)ba.length() / (float)(1024*1024) / (float)(end - start);
+    std::cout << "ba.crc32c(0) = " << r << " at " << rate << " MB/sec" << std::endl;
+    ASSERT_EQ(r, 169240695u);
+  }
+  assert(buffer::get_cached_crc() == 5);
+  assert(buffer::get_cached_crc_adjusted() == 4);
+  {
+    utime_t start = ceph_clock_now(NULL);
+    uint32_t r = ba.crc32c(5);
+    utime_t end = ceph_clock_now(NULL);
+    float rate = (float)ba.length() / (float)(1024*1024) / (float)(end - start);
+    std::cout << "ba.crc32c(5) = " << r << " at " << rate << " MB/sec" << std::endl;
+    ASSERT_EQ(r, 1265464778u);
+  }
+  assert(buffer::get_cached_crc() == 5);
+  assert(buffer::get_cached_crc_adjusted() == 6);
+
+  cout << "crc cache hits (same start) = " << buffer::get_cached_crc() << std::endl;
+  cout << "crc cache hits (adjusted) = " << buffer::get_cached_crc_adjusted() << std::endl;
 }
 
 TEST(BufferList, compare) {
