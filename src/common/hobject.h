@@ -241,14 +241,10 @@ public:
     return ret;
   }
   filestore_hobject_key_t get_filestore_key_u32() const {
-    assert(!hobj.max);
-    return hobj._reverse_nibbles(hobj.hash);
+    return hobj.get_filestore_key_u32();
   }
   filestore_hobject_key_t get_filestore_key() const {
-    if (hobj.max)
-      return 0x100000000ull;
-    else
-      return get_filestore_key_u32();
+    return hobj.get_filestore_key();
   }
 
   // maximum sorted value.
