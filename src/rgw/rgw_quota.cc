@@ -47,7 +47,8 @@ int RGWBucketStatsCache::get_bucket_stats(rgw_bucket& bucket, RGWBucketStats& st
   if (ret < 0 && ret != -ENOENT)
     return ret;
 
-  qs.expiration = ceph_clock_now(store->ctx()) + store->ctx()->_conf->rgw_bucket_quota_ttl;
+  qs.expiration = ceph_clock_now(store->ctx());
+  qs.expiration += store->ctx()->_conf->rgw_bucket_quota_ttl;
 
   stats_map.add(bucket, qs);
 
