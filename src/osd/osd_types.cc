@@ -2796,7 +2796,7 @@ void object_info_t::copy_user_bits(const object_info_t& other)
   last_reqid = other.last_reqid;
   truncate_seq = other.truncate_seq;
   truncate_size = other.truncate_size;
-  lost = other.lost;
+  flags = other.flags;
   category = other.category;
   uses_tmap = other.uses_tmap;
 }
@@ -2839,7 +2839,7 @@ void object_info_t::encode(bufferlist& bl) const
     ::encode(snaps, bl);
   ::encode(truncate_seq, bl);
   ::encode(truncate_size, bl);
-  ::encode(lost, bl);
+  ::encode((__u8)flags, bl);
   ::encode(old_watchers, bl);
   /* shenanigans to avoid breaking backwards compatibility in the disk format.
    * When we can, switch this out for simply putting the version_t on disk. */
@@ -2883,10 +2883,13 @@ void object_info_t::decode(bufferlist::iterator& bl)
     ::decode(snaps, bl);
   ::decode(truncate_seq, bl);
   ::decode(truncate_size, bl);
-  if (struct_v >= 3)
-    ::decode(lost, bl);
-  else
-    lost = false;
+  if (struct_v >= 3) {
+    __u8 f;
+    ::decode(f, bl);
+    flags = (flag_t)f;
+  } else {
+    flags = (flag_t)0;
+  }
   if (struct_v >= 4) {
     ::decode(old_watchers, bl);
     eversion_t user_eversion;
@@ -2924,7 +2927,8 @@ void object_info_t::dump(Formatter *f) const
   f->dump_stream("last_reqid") << last_reqid;
   f->dump_unsigned("size", size);
   f->dump_stream("mtime") << mtime;
-  f->dump_unsigned("lost", lost);
+  f->dump_unsigned("lost", (int)is_lost());
+  f->dump_unsigned("flags", (int)flags);
   f->dump_stream("wrlock_by") << wrlock_by;
   f->open_array_section("snaps");
   for (vector<snapid_t>::const_iterator p = snaps.begin(); p != snaps.end(); ++p)
@@ -2960,7 +2964,7 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
     out << " wrlock_by=" << oi.wrlock_by;
   else
     out << " " << oi.snaps;
-  if (oi.lost)
+  if (oi.is_lost())
     out << " LOST";
   out << ")";
   return out;
