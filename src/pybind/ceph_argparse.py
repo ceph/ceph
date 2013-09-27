@@ -275,12 +275,26 @@ class CephIPAddr(CephArgtype):
 
 class CephEntityAddr(CephIPAddr):
     """
-    EntityAddress, that is, IP address/nonce
+    EntityAddress, that is, IP address[/nonce]
     """
     def valid(self, s, partial=False):
-        ip, nonce = s.split('/')
+        nonce = None
+        if '/' in s:
+            ip, nonce = s.split('/')
+        else:
+            ip = s
         super(self.__class__, self).valid(ip)
-        self.nonce = nonce
+        if nonce:
+            nonce_long = None
+            try:
+                nonce_long = long(nonce)
+            except ValueError:
+                pass
+            if nonce_long is None or nonce_long < 0:
+                raise ArgumentValid(
+                    '{0}: invalid entity, nonce {1} not integer > 0'.\
+                    format(s, nonce)
+                )
         self.val = s
 
     def __str__(self):
