@@ -43,8 +43,8 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
 # define bendl std::endl; }
 #endif
 
-atomic_t buffer_total_alloc;
-bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
+  atomic_t buffer_total_alloc;
+  bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
 
   void buffer::inc_total_alloc(unsigned len) {
     if (buffer_track_alloc)
@@ -57,6 +57,21 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
   int buffer::get_total_alloc() {
     return buffer_total_alloc.read();
   }
+
+  atomic_t buffer_cached_crc;
+  atomic_t buffer_cached_crc_adjusted;
+  bool buffer_track_crc = get_env_bool("CEPH_BUFFER_TRACK");
+
+  void buffer::track_cached_crc(bool b) {
+    buffer_track_crc = b;
+  }
+  int buffer::get_cached_crc() {
+    return buffer_cached_crc.read();
+  }
+  int buffer::get_cached_crc_adjusted() {
+    return buffer_cached_crc_adjusted.read();
+  }
+
 
   class buffer::raw {
   public:
@@ -1311,6 +1326,8 @@ __u32 buffer::list::crc32c(__u32 crc) const
 	if (ccrc.first == crc) {
 	  // got it already
 	  crc = ccrc.second;
+	  if (buffer_track_crc)
+	    buffer_cached_crc.inc();
 	} else {
 	  /* If we have cached crc32c(buf, v) for initial value v,
 	   * we can convert this to a different initial value v' by:
@@ -1328,6 +1345,8 @@ __u32 buffer::list::crc32c(__u32 crc) const
 	  if (remaining)
 	    adjustment = ceph_crc32c(adjustment, zbuf, remaining);
 	  crc = ccrc.second ^ adjustment;
+	  if (buffer_track_crc)
+	    buffer_cached_crc_adjusted.inc();
 	}
       } else {
 	uint32_t base = crc;
