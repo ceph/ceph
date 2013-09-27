@@ -535,7 +535,6 @@ OPTION(filestore_debug_inject_read_err, OPT_BOOL, false)
 
 OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
 // Use omap for xattrs for attrs over
-OPTION(filestore_xattr_use_omap, OPT_BOOL, false)
 // filestore_max_inline_xattr_size or
 OPTION(filestore_max_inline_xattr_size, OPT_U32, 512)
 // for more than filestore_max_inline_xattrs attrs
