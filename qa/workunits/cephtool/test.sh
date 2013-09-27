@@ -169,7 +169,16 @@ bl=192.168.0.1:0/1000
 ceph osd blacklist add $bl
 ceph osd blacklist ls | grep $bl
 ceph osd blacklist rm $bl
-expect_false "(ceph osd blacklist ls | grep $bl)"
+expect_false "ceph osd blacklist ls | grep $bl"
+
+bl=192.168.0.1
+# test without nonce, invalid nonce
+ceph osd blacklist add $bl
+ceph osd blacklist ls | grep $bl
+ceph osd blacklist rm $bl
+expect_false "ceph osd blacklist ls | grep $bl"
+expect_false "ceph osd blacklist $bl/-1"
+expect_false "ceph osd blacklist $bl/foo"
 
 ceph osd crush tunables legacy
 ceph osd crush tunables bobtail
