@@ -946,43 +946,25 @@ int FileStore::_sanity_check_fs()
 
 int FileStore::write_superblock()
 {
-  char fn[PATH_MAX];
-  snprintf(fn, sizeof(fn), "%s/superblock", basedir.c_str());
-  int fd = ::open(fn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
-  if (fd < 0)
-    return -errno;
   bufferlist bl;
   ::encode(superblock, bl);
-
-  int ret = safe_write(fd, bl.c_str(), bl.length());
-  if (ret < 0)
-    goto out;
-  ret = ::fsync(fd);
-  if (ret < 0)
-    ret = -errno;
-  // XXX: fsync() man page says I need to sync containing directory
-out:
-  TEMP_FAILURE_RETRY(::close(fd));
-  return ret;
+  return safe_write_file(basedir.c_str(), "superblock",
+      bl.c_str(), bl.length());
 }
 
 int FileStore::read_superblock()
 {
-  char fn[PATH_MAX];
-  snprintf(fn, sizeof(fn), "%s/superblock", basedir.c_str());
-  int fd = ::open(fn, O_RDONLY, 0644);
-  if (fd < 0) {
-    if (errno == ENOENT) {
+  bufferptr bp(PATH_MAX);
+  int ret = safe_read_file(basedir.c_str(), "superblock",
+      bp.c_str(), bp.length());
+  if (ret < 0) {
+    if (ret == -ENOENT) {
       // If the file doesn't exist write initial CompatSet
       return write_superblock();
-    } else
-      return -errno;
-  }
-  bufferptr bp(PATH_MAX);
-  int ret = safe_read(fd, bp.c_str(), bp.length());
-  TEMP_FAILURE_RETRY(::close(fd));
-  if (ret < 0)
+    }
     return ret;
+  }
+
   bufferlist bl;
   bl.push_back(bp);
   bufferlist::iterator i = bl.begin();
@@ -1012,20 +994,14 @@ int FileStore::update_version_stamp()
 
 int FileStore::version_stamp_is_valid(uint32_t *version)
 {
-  char fn[PATH_MAX];
-  snprintf(fn, sizeof(fn), "%s/store_version", basedir.c_str());
-  int fd = ::open(fn, O_RDONLY, 0644);
-  if (fd < 0) {
-    if (errno == ENOENT)
-      return 0;
-    else 
-      return -errno;
-  }
   bufferptr bp(PATH_MAX);
-  int ret = safe_read(fd, bp.c_str(), bp.length());
-  TEMP_FAILURE_RETRY(::close(fd));
-  if (ret < 0)
+  int ret = safe_read_file(basedir.c_str(), "store_version",
+      bp.c_str(), bp.length());
+  if (ret < 0) {
+    if (ret == -ENOENT)
+      return 0;
     return ret;
+  }
   bufferlist bl;
   bl.push_back(bp);
   bufferlist::iterator i = bl.begin();
@@ -1038,17 +1014,11 @@ int FileStore::version_stamp_is_valid(uint32_t *version)
 
 int FileStore::write_version_stamp()
 {
-  char fn[PATH_MAX];
-  snprintf(fn, sizeof(fn), "%s/store_version", basedir.c_str());
-  int fd = ::open(fn, O_WRONLY|O_CREAT|O_TRUNC, 0644);
-  if (fd < 0)
-    return -errno;
   bufferlist bl;
   ::encode(target_version, bl);
-  
-  int ret = safe_write(fd, bl.c_str(), bl.length());
-  TEMP_FAILURE_RETRY(::close(fd));
-  return ret;
+
+  return safe_write_file(basedir.c_str(), "store_version",
+      bl.c_str(), bl.length());
 }
 
 int FileStore::read_op_seq(uint64_t *seq)
