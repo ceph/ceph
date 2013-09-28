@@ -580,6 +580,58 @@ sctp_crc32c_sb8_64_bit(uint32_t crc,
 	return crc;
 }
 
+static uint32_t
+sctp_crc32c_sb8_64_bit_zero(uint32_t crc,
+    uint32_t length,
+    uint32_t offset)
+{
+	uint32_t li;
+	uint32_t term1, term2;
+	uint32_t running_length;
+	uint32_t end_bytes;
+	uint32_t init_bytes;
+
+	init_bytes = (4-offset) & 0x3;
+
+	if (init_bytes > length)
+		init_bytes = length;
+
+	running_length = ((length - init_bytes) / 8) * 8;
+	end_bytes = length - init_bytes - running_length;
+
+	for (li = 0; li < init_bytes; li++)
+		crc = sctp_crc_tableil8_o32[crc & 0x000000FF] ^
+		    (crc >> 8);
+	for (li = 0; li < running_length / 8; li++) {
+		term1 = sctp_crc_tableil8_o88[crc & 0x000000FF] ^
+		    sctp_crc_tableil8_o80[(crc >> 8) & 0x000000FF];
+		term2 = crc >> 16;
+		crc = term1 ^
+		    sctp_crc_tableil8_o72[term2 & 0x000000FF] ^
+		    sctp_crc_tableil8_o64[(term2 >> 8) & 0x000000FF];
+
+#if BYTE_ORDER == BIG_ENDIAN
+		crc ^= sctp_crc_tableil8_o56[0];
+		crc ^= sctp_crc_tableil8_o48[0];
+		crc ^= sctp_crc_tableil8_o40[0];
+		crc ^= sctp_crc_tableil8_o32[0];
+#else
+		term1 = sctp_crc_tableil8_o56[0] ^
+			sctp_crc_tableil8_o48[0];
+
+		term2 = 0;
+		crc = crc ^
+		    term1 ^
+		    sctp_crc_tableil8_o40[term2 & 0x000000FF] ^
+		    sctp_crc_tableil8_o32[(term2 >> 8) & 0x000000FF];
+#endif
+	}
+	for (li = 0; li < end_bytes; li++)
+		crc = sctp_crc_tableil8_o32[crc] ^
+		    (crc >> 8);
+	return crc;
+}
+
 
 /**
  *
@@ -606,7 +658,10 @@ update_crc32(uint32_t crc32c,
 		return (crc32c);
 	}
 	offset = ((uintptr_t) buffer) & 0x3;
-	return (sctp_crc32c_sb8_64_bit(crc32c, buffer, length, offset));
+	if (buffer)
+		return (sctp_crc32c_sb8_64_bit(crc32c, buffer, length, offset));
+	else
+		return (sctp_crc32c_sb8_64_bit_zero(crc32c, length, offset));
 }
 
 uint32_t sctp_crc_c[256] = {
