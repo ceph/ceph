@@ -286,6 +286,7 @@ protected:
  public:
   CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth);
   ~CDir() {
+    remove_bloom();
     g_num_dir--;
     g_num_dirs++;
   }
