@@ -31,18 +31,6 @@
 
 namespace ceph {
 
-  // some zeros; used when concatenating buffers with cached crc
-  static unsigned char zbuf[128] = {
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
-    };
-
 #ifdef BUFFER_DEBUG
 static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 # define bdout { simple_spin_lock(&buffer_debug_lock); std::cout
@@ -1346,14 +1334,7 @@ __u32 buffer::list::crc32c(__u32 crc) const
 	   * http://crcutil.googlecode.com/files/crc-doc.1.0.pdf
 	   * note, u for our crc32c implementation is 0
 	   */
-	  int64_t adjustment = ccrc.first ^ crc;
-	  size_t remaining = it->length();
-	  for (; remaining > sizeof(zbuf); remaining -= sizeof(zbuf)) {
-	    adjustment = ceph_crc32c(adjustment, zbuf, sizeof(zbuf));
-	  }
-	  if (remaining)
-	    adjustment = ceph_crc32c(adjustment, zbuf, remaining);
-	  crc = ccrc.second ^ adjustment;
+	  crc = ccrc.second ^ ceph_crc32c(ccrc.first ^ crc, NULL, it->length());
 	  if (buffer_track_crc)
 	    buffer_cached_crc_adjusted.inc();
 	}
