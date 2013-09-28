@@ -1414,7 +1414,7 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
     log_mark_dirty();
 
     // mark complete, !fetching
-    state_set(STATE_COMPLETE);
+    mark_complete();
     state_clear(STATE_FETCHING);
     auth_unpin(this);
     
@@ -1689,7 +1689,7 @@ void CDir::_fetched(bufferlist &bl, const string& want_dn)
     log_mark_dirty();
 
   // mark complete, !fetching
-  state_set(STATE_COMPLETE);
+  mark_complete();
   state_clear(STATE_FETCHING);
   auth_unpin(this);
 
