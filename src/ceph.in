@@ -644,7 +644,7 @@ def main():
     if parsed_args.output_file:
         try:
             outf = open(parsed_args.output_file, 'w')
-        except:
+        except Exception as e:
             print >> sys.stderr, \
                 'Can\'t open output file {0}: {1}'.\
                 format(parsed_args.output_file, e)
