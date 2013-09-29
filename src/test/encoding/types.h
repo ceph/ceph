@@ -16,6 +16,9 @@ TYPE(LogEntryKey)
 TYPE(LogEntry)
 TYPE(LogSummary)
 
+#include "common/SloppyCRCMap.h"
+TYPE(SloppyCRCMap)
+
 #include "msg/msg_types.h"
 TYPE(entity_name_t)
 TYPE(entity_addr_t)

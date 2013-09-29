@@ -4,6 +4,7 @@ libcommon_la_SOURCES = \
 	common/LogClient.cc \
 	common/LogEntry.cc \
 	common/PrebufferedStreambuf.cc \
+	common/SloppyCRCMap.cc \
 	common/BackTrace.cc \
 	common/perf_counters.cc \
 	common/Mutex.cc \
@@ -120,6 +121,7 @@ noinst_HEADERS += \
 	common/LogClient.h \
 	common/LogEntry.h \
 	common/Preforker.h \
+	common/SloppyCRCMap.h \
 	common/WorkQueue.h \
 	common/PrioritizedQueue.h \
 	common/ceph_argparse.h \
