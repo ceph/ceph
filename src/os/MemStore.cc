@@ -11,6 +11,15 @@
  * Foundation.  See file COPYING.
  *
  */
+#include "acconfig.h"
+
+#ifdef HAVE_SYS_MOUNT_H
+#include <sys/mount.h>
+#endif
+
+#ifdef HAVE_SYS_PARAM_H
+#include <sys/param.h>
+#endif
 
 #include "include/types.h"
 #include "include/stringify.h"

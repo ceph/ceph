@@ -25,6 +25,14 @@
 #include <sys/vfs.h>
 #endif
 
+#ifdef HAVE_SYS_MOUNT_H
+#include <sys/mount.h>
+#endif
+
+#ifdef HAVE_SYS_PARAM_H
+#include <sys/param.h>
+#endif
+
 #include "messages/MMonHealth.h"
 #include "include/types.h"
 #include "include/Context.h"
