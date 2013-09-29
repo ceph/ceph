@@ -1587,11 +1587,7 @@ void FileJournal::wrap_read_bl(
     else
       len = olen;                         // rest
     
-#ifdef DARWIN
-    int64_t actual = ::lseek(fd, pos, SEEK_SET);
-#else
     int64_t actual = ::lseek64(fd, pos, SEEK_SET);
-#endif
     assert(actual == pos);
     
     bufferptr bp = buffer::create(len);
@@ -1795,22 +1791,14 @@ void FileJournal::corrupt(
   if (corrupt_at >= header.max_size)
     corrupt_at = corrupt_at + get_top() - header.max_size;
 
-#ifdef DARWIN
-    int64_t actual = ::lseek(fd, corrupt_at, SEEK_SET);
-#else
     int64_t actual = ::lseek64(fd, corrupt_at, SEEK_SET);
-#endif
     assert(actual == corrupt_at);
 
     char buf[10];
     int r = safe_read_exact(fd, buf, 1);
     assert(r == 0);
 
-#ifdef DARWIN
-    actual = ::lseek(wfd, corrupt_at, SEEK_SET);
-#else
     actual = ::lseek64(wfd, corrupt_at, SEEK_SET);
-#endif
     assert(actual == corrupt_at);
 
     buf[0]++;
