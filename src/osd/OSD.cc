@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  * 
  */
+#include "acconfig.h"
 
 #include <fstream>
 #include <iostream>
@@ -21,10 +22,13 @@
 #include <ctype.h>
 #include <boost/scoped_ptr.hpp>
 
-#if defined(DARWIN) || defined(__FreeBSD__)
+#ifdef HAVE_SYS_PARAM_H
 #include <sys/param.h>
+#endif
+
+#ifdef HAVE_SYS_MOUNT_H
 #include <sys/mount.h>
-#endif // DARWIN || __FreeBSD__
+#endif
 
 #include "osd/PG.h"
 
