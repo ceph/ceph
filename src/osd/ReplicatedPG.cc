@@ -4583,10 +4583,9 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop)
 void ReplicatedPG::cancel_copy_ops()
 {
   dout(10) << __func__ << dendl;
-  for (map<hobject_t,CopyOpRef>::iterator p = copy_ops.begin();
-       p != copy_ops.end();
-       copy_ops.erase(p++)) {
-    cancel_copy(p->second);
+  map<hobject_t,CopyOpRef>::iterator p = copy_ops.begin();
+  while (p != copy_ops.end()) {
+    cancel_copy((p++)->second);
   }
 }
 
