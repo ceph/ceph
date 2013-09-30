@@ -3764,7 +3764,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    result = -EINVAL;
 	    break;
 	  }
-	  result = start_copy(ctx, ctx->obc, src, src_oloc, src_version);
+	  hobject_t temp_target = generate_temp_object();
+	  result = start_copy(ctx, ctx->obc, src, src_oloc, src_version,
+	                      temp_target);
 	  if (result < 0)
 	    goto fail;
 	  result = -EINPROGRESS;
@@ -4380,7 +4382,8 @@ struct C_Copyfrom : public Context {
 };
 
 int ReplicatedPG::start_copy(OpContext *ctx, ObjectContextRef obc,
-			     hobject_t src, object_locator_t oloc, version_t version)
+			     hobject_t src, object_locator_t oloc, version_t version,
+			     const hobject_t& temp_dest_oid)
 {
   const hobject_t& dest = ctx->obs->oi.soid;
   dout(10) << __func__ << " " << dest << " ctx " << ctx
@@ -4395,7 +4398,7 @@ int ReplicatedPG::start_copy(OpContext *ctx, ObjectContextRef obc,
     cancel_copy(cop);
   }
 
-  CopyOpRef cop(new CopyOp(ctx, obc, src, oloc, version));
+  CopyOpRef cop(new CopyOp(ctx, obc, src, oloc, version, temp_dest_oid));
   copy_ops[dest] = cop;
   ctx->copy_op = cop;
   ++obc->copyfrom_readside;
@@ -4466,7 +4469,6 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
 
       if (cop->temp_cursor.is_initial()) {
 	cop->temp_coll = get_temp_coll(&tctx->local_t);
-	cop->temp_oid = generate_temp_object();
 	repop->ctx->new_temp_oid = cop->temp_oid;
       }
 
