@@ -1541,7 +1541,7 @@ void Client::_closed_mds_session(MetaSession *s)
   signal_context_list(s->waiting_for_open);
   mount_cond.Signal();
   remove_session_caps(s);
-  kick_requests(s, true);
+  kick_requests_closed(s);
   mds_sessions.erase(s->mds_num);
   delete s;
 }
@@ -1914,7 +1914,7 @@ void Client::handle_mds_map(MMDSMap* m)
 
     if (newstate >= MDSMap::STATE_ACTIVE) {
       if (oldstate < MDSMap::STATE_ACTIVE) {
-	kick_requests(p->second, false);
+	kick_requests(p->second);
 	kick_flushing_caps(p->second);
 	signal_context_list(p->second->waiting_for_open);
 	kick_maxsize_requests(p->second);
@@ -1998,25 +1998,16 @@ void Client::send_reconnect(MetaSession *session)
 }
 
 
-void Client::kick_requests(MetaSession *session, bool signal)
+void Client::kick_requests(MetaSession *session)
 {
   ldout(cct, 10) << "kick_requests for mds." << session->mds_num << dendl;
-
   for (map<tid_t, MetaRequest*>::iterator p = mds_requests.begin();
        p != mds_requests.end();
-       ++p) 
+       ++p) {
     if (p->second->mds == session->mds_num) {
-      if (signal) {
-	// only signal caller if there is a caller
-	// otherwise, let resend_unsafe handle it
-	if (p->second->caller_cond) {
-	  p->second->kick = true;
-	  p->second->caller_cond->Signal();
-	}
-      } else {
-	send_request(p->second, session);
-      }
+      send_request(p->second, session);
     }
+  }
 }
 
 void Client::resend_unsafe_requests(MetaSession *session)
@@ -2025,6 +2016,25 @@ void Client::resend_unsafe_requests(MetaSession *session)
        !iter.end();
        ++iter)
     send_request(*iter, session);
+}
+
+void Client::kick_requests_closed(MetaSession *session)
+{
+  ldout(cct, 10) << "kick_requests_closed for mds." << session->mds_num << dendl;
+  for (map<tid_t, MetaRequest*>::iterator p = mds_requests.begin();
+       p != mds_requests.end();
+       ++p) {
+    if (p->second->mds == session->mds_num) {
+      if (p->second->caller_cond) {
+	p->second->kick = true;
+	p->second->caller_cond->Signal();
+      }
+      p->second->item.remove_myself();
+      p->second->unsafe_item.remove_myself();
+    }
+  }
+  assert(session->requests.empty());
+  assert(session->unsafe_requests.empty());
 }
 
 
