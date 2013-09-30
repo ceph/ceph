@@ -96,6 +96,7 @@ public:
 
   struct CopyOp {
     OpContext *ctx;
+    ObjectContextRef obc;
     hobject_t src;
     object_locator_t oloc;
     version_t version;
@@ -114,8 +115,8 @@ public:
     hobject_t temp_oid;
     object_copy_cursor_t temp_cursor;
 
-    CopyOp(OpContext *c, hobject_t s, object_locator_t l, version_t v)
-      : ctx(c), src(s), oloc(l), version(v),
+    CopyOp(OpContext *c, ObjectContextRef _obc, hobject_t s, object_locator_t l, version_t v)
+      : ctx(c), obc(_obc), src(s), oloc(l), version(v),
 	objecter_tid(0),
 	size(0),
 	rval(-1)
