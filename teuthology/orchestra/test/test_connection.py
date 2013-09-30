@@ -48,6 +48,28 @@ class TestConnection(object):
         assert got is ssh
 
     @fudge.with_fakes
+    def test_connect_no_verify_host_keys(self):
+        self.clear_config()
+        config.config.verify_host_keys = False
+        fudge.clear_expectations()
+        ssh = fudge.Fake('SSHClient')
+        ssh.expects_call().with_args().returns(ssh)
+        ssh.expects('set_missing_host_key_policy')
+        ssh.expects('connect').with_args(
+            hostname='orchestra.test.newdream.net.invalid',
+            username='jdoe',
+            timeout=60,
+        )
+        transport = ssh.expects('get_transport').with_args().returns_fake()
+        transport.remember_order()
+        transport.expects('set_keepalive').with_args(False)
+        got = connection.connect(
+            'jdoe@orchestra.test.newdream.net.invalid',
+            _SSHClient=ssh,
+        )
+        assert got is ssh
+
+    @fudge.with_fakes
     def test_connect_override_hostkeys(self):
         self.clear_config()
         fudge.clear_expectations()
