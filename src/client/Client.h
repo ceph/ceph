@@ -277,7 +277,8 @@ public:
   void connect_mds_targets(int mds);
   void send_request(MetaRequest *request, MetaSession *session);
   MClientRequest *build_client_request(MetaRequest *request);
-  void kick_requests(MetaSession *session, bool signal);
+  void kick_requests(MetaSession *session);
+  void kick_requests_closed(MetaSession *session);
   void handle_client_request_forward(MClientRequestForward *reply);
   void handle_client_reply(MClientReply *reply);
 
