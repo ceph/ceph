@@ -52,13 +52,9 @@ void PGLog::IndexedLog::split_into(
 
   if (log.empty())
     tail = head;
-  else
-    head = log.rbegin()->version;
 
   if (olog->empty())
     olog->tail = olog->head;
-  else
-    olog->head = olog->log.rbegin()->version;
 
   olog->index();
   index();
