@@ -4447,11 +4447,12 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
     return;
   }
   OpContext *ctx = cop->ctx;
+  ObjectContextRef obc = ctx->obc;
   cop->objecter_tid = 0;
   if (r < 0) {
-    copy_ops.erase(ctx->obc->obs.oi.soid);
-    --ctx->obc->copyfrom_readside;
-    kick_object_context_blocked(ctx->obc);
+    copy_ops.erase(obc->obs.oi.soid);
+    obc->copyfrom_readside;
+    kick_object_context_blocked(obc);
     reply_ctx(ctx, r);
     return;
   }
@@ -4462,9 +4463,9 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
     vector<OSDOp> ops;
     tid_t rep_tid = osd->get_tid();
     osd_reqid_t reqid(osd->get_cluster_msgr_name(), 0, rep_tid);
-    OpContext *tctx = new OpContext(OpRequestRef(), reqid, ops, &ctx->obc->obs, ctx->obc->ssc, this);
+    OpContext *tctx = new OpContext(OpRequestRef(), reqid, ops, &obc->obs, obc->ssc, this);
     tctx->mtime = ceph_clock_now(g_ceph_context);
-    RepGather *repop = new_repop(tctx, ctx->obc, rep_tid);
+    RepGather *repop = new_repop(tctx, obc, rep_tid);
 
     if (cop->temp_cursor.is_initial()) {
       cop->temp_coll = get_temp_coll(&tctx->local_t);
@@ -4479,17 +4480,17 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
     repop->put();
 
     dout(10) << __func__ << " fetching more" << dendl;
-    _copy_some(ctx->obc, cop);
+    _copy_some(obc, cop);
     return;
   }
 
   dout(20) << __func__ << " complete; committing" << dendl;
   execute_ctx(ctx);
 
-  copy_ops.erase(ctx->obc->obs.oi.soid);
-  --ctx->obc->copyfrom_readside;
+  copy_ops.erase(obc->obs.oi.soid);
+  --obc->copyfrom_readside;
   ctx->copy_op.reset();
-  kick_object_context_blocked(ctx->obc);
+  kick_object_context_blocked(obc);
 }
 
 void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, ObjectStore::Transaction *t)
