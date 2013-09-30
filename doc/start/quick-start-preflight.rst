@@ -14,7 +14,7 @@ three Ceph Nodes (or virtual machines) that will host your Ceph Storage Cluster.
            /------------------\         /----------------\
            |    Admin Node    |         |   ceph–node1   |
            |                  +-------->+                |
-           | ceph–deploy      |         | cCCC           |
+           |    ceph–deploy   |         | cCCC           |
            \---------+--------/         \----------------/
                      |
                      |                  /----------------\
