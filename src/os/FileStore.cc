@@ -422,7 +422,10 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   m_filestore_do_dump(false),
   m_filestore_dump_fmt(true),
   m_filestore_sloppy_crc(g_conf->filestore_sloppy_crc),
-  m_filestore_sloppy_crc_block_size(g_conf->filestore_sloppy_crc_block_size)
+  m_filestore_sloppy_crc_block_size(g_conf->filestore_sloppy_crc_block_size),
+  m_fs_type(FS_TYPE_NONE),
+  m_filestore_max_inline_xattr_size(0),
+  m_filestore_max_inline_xattrs(0)
 {
   m_filestore_kill_at.set(g_conf->filestore_kill_at);
 
@@ -825,12 +828,14 @@ int FileStore::_detect_fs()
 
   blk_size = st.f_bsize;
 
+  m_fs_type = FS_TYPE_OTHER;
 #if defined(__linux__)
   if (st.f_type == BTRFS_SUPER_MAGIC) {
     dout(0) << "mount detected btrfs" << dendl;
     backend = new BtrfsFileStoreBackend(this);
 
     wbthrottle.set_fs(WBThrottle::BTRFS);
+    m_fs_type = FS_TYPE_BTRFS;
   } else if (st.f_type == XFS_SUPER_MAGIC) {
     dout(1) << "mount detected xfs" << dendl;
     if (m_filestore_replica_fadvise) {
@@ -838,14 +843,18 @@ int FileStore::_detect_fs()
       g_conf->set_val("filestore_replica_fadvise", "false");
       g_conf->apply_changes(NULL);
       assert(m_filestore_replica_fadvise == false);
+      m_fs_type = FS_TYPE_XFS;
     }
   }
 #endif
 #ifdef HAVE_LIBZFS
   if (st.f_type == ZFS_SUPER_MAGIC) {
     backend = new ZFSFileStoreBackend(this);
+    m_fs_type = FS_TYPE_ZFS;
   }
 #endif
+
+  set_xattr_limits_via_conf();
 
   r = backend->detect_features();
   if (r < 0) {
@@ -3506,7 +3515,7 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
     char n[CHAIN_XATTR_MAX_NAME_LEN];
     get_attrname(p->first.c_str(), n, CHAIN_XATTR_MAX_NAME_LEN);
 
-    if (p->second.length() > g_conf->filestore_max_inline_xattr_size) {
+    if (p->second.length() > m_filestore_max_inline_xattr_size) {
 	if (inline_set.count(p->first)) {
 	  inline_set.erase(p->first);
 	  r = chain_fremovexattr(**fd, n);
@@ -3518,7 +3527,7 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
     }
 
     if (!inline_set.count(p->first) &&
-	  inline_set.size() >= g_conf->filestore_max_inline_xattrs) {
+	  inline_set.size() >= m_filestore_max_inline_xattrs) {
 	if (inline_set.count(p->first)) {
 	  inline_set.erase(p->first);
 	  r = chain_fremovexattr(**fd, n);
@@ -4547,6 +4556,17 @@ const char** FileStore::get_tracked_conf_keys() const
 void FileStore::handle_conf_change(const struct md_config_t *conf,
 			  const std::set <std::string> &changed)
 {
+  if (changed.count("filestore_max_inline_xattr_size") ||
+      changed.count("filestore_max_inline_xattr_size_xfs") ||
+      changed.count("filestore_max_inline_xattr_size_btrfs") ||
+      changed.count("filestore_max_inline_xattr_size_other") ||
+      changed.count("filestore_max_inline_xattrs") ||
+      changed.count("filestore_max_inline_xattrs_xfs") ||
+      changed.count("filestore_max_inline_xattrs_btrfs") ||
+      changed.count("filestore_max_inline_xattrs_other")) {
+    Mutex::Locker l(lock);
+    set_xattr_limits_via_conf();
+  }
   if (changed.count("filestore_min_sync_interval") ||
       changed.count("filestore_max_sync_interval") ||
       changed.count("filestore_queue_max_ops") ||
@@ -4624,6 +4644,44 @@ void FileStore::dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t 
   m_filestore_dump_fmt.close_section();
   m_filestore_dump_fmt.flush(m_filestore_dump);
   m_filestore_dump.flush();
+}
+
+void FileStore::set_xattr_limits_via_conf()
+{
+  uint32_t fs_xattr_size;
+  uint32_t fs_xattrs;
+
+  assert(m_fs_type != FS_TYPE_NONE);
+
+  switch(m_fs_type) {
+    case FS_TYPE_XFS:
+      fs_xattr_size = g_conf->filestore_max_inline_xattr_size_xfs;
+      fs_xattrs = g_conf->filestore_max_inline_xattrs_xfs;
+      break;
+    case FS_TYPE_BTRFS:
+      fs_xattr_size = g_conf->filestore_max_inline_xattr_size_btrfs;
+      fs_xattrs = g_conf->filestore_max_inline_xattrs_btrfs;
+      break;
+    case FS_TYPE_ZFS:
+    case FS_TYPE_OTHER:
+      fs_xattr_size = g_conf->filestore_max_inline_xattr_size_other;
+      fs_xattrs = g_conf->filestore_max_inline_xattrs_other;
+      break;
+    default:
+      assert(!"Unknown fs type");
+  }
+
+  //Use override value if set
+  if (g_conf->filestore_max_inline_xattr_size)
+    m_filestore_max_inline_xattr_size = g_conf->filestore_max_inline_xattr_size;
+  else
+    m_filestore_max_inline_xattr_size = fs_xattr_size;
+
+  //Use override value if set
+  if (g_conf->filestore_max_inline_xattrs)
+    m_filestore_max_inline_xattrs = g_conf->filestore_max_inline_xattrs;
+  else
+    m_filestore_max_inline_xattrs = fs_xattrs;
 }
 
 // -- FSSuperblock --
