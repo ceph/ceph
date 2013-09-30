@@ -12,6 +12,11 @@ class Config(object):
     ~/.teuthology.yaml and nothing else.
     """
     teuthology_yaml = os.path.join(os.environ['HOME'], '.teuthology.yaml')
+    defaults = {
+        'ceph_git_base_url': 'https://github.com/ceph/',
+        'lock_server': 'http://teuthology.front.sepia.ceph.com/locker/lock',
+        'verify_host_keys': True,
+    }
 
     def __init__(self):
         self.load_files()
@@ -23,41 +28,13 @@ class Config(object):
             log.debug("%s not found", self.teuthology_yaml)
             self.__conf = {}
 
-    # This property declaration exists mainly as an example; it is not
-    # necessary unless you want to, say, define a set method and/or a
-    # docstring.
-    @property
-    def lock_server(self):
-        """
-        The URL to your lock server. For example, Inktank uses:
-
-            http://teuthology.front.sepia.ceph.com/locker/lock
-        """
-        return self.__conf.get('lock_server')
-
-    @property
-    def ceph_git_base_url(self):
-        """
-        The base URL to use for ceph-related git repositories.
-
-        Defaults to https://github.com/ceph/
-        """
-        base_url = self.__conf.get('ceph_git_base_url')
-        base_url = base_url or "https://github.com/ceph/"
-        return base_url
-
-    @property
-    def verify_host_keys(self):
-        """
-        Whether or not we should verify ssh host keys.
-
-        Defaults to True
-        """
-        return self.__conf.get('verify_host_keys', True)
-
-    # This takes care of any and all of the rest.
-    # If the parameter is defined, return it. Otherwise return None.
     def __getattr__(self, name):
-        return self.__conf.get(name)
+        return self.__conf.get(name, self.defaults.get(name))
+
+    def __setattribute__(self, name, value):
+        if name.endswith('__conf'):
+            setattr(self, name, value)
+        else:
+            self.__conf[name] = value
 
 config = Config()
