@@ -64,6 +64,14 @@ static const __SWORD_TYPE XFS_SUPER_MAGIC(0x58465342);
 static const __SWORD_TYPE ZFS_SUPER_MAGIC(0x2fc12fc1);
 #endif
 
+enum fs_types {
+  FS_TYPE_NONE = 0,
+  FS_TYPE_XFS,
+  FS_TYPE_BTRFS,
+  FS_TYPE_ZFS,
+  FS_TYPE_OTHER
+};
+
 class FileStoreBackend;
 
 #define CEPH_FS_FEATURE_INCOMPAT_SHARDS CompatSet::Feature(1, "sharded objects")
@@ -593,6 +601,13 @@ private:
   atomic_t m_filestore_kill_at;
   bool m_filestore_sloppy_crc;
   int m_filestore_sloppy_crc_block_size;
+  enum fs_types m_fs_type;
+
+  //Determined xattr handling based on fs type
+  void set_xattr_limits_via_conf();
+  uint32_t m_filestore_max_inline_xattr_size;
+  uint32_t m_filestore_max_inline_xattrs;
+
   FSSuperblock superblock;
 
   /**
