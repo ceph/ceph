@@ -1,56 +1,55 @@
-from nose.tools import eq_ as eq
-
 from .. import safepath
 
-def test_simple():
-    got = safepath.munge('foo')
-    eq(got, 'foo')
+class TestSafepath(object):
+    def test_simple(self):
+        got = safepath.munge('foo')
+        assert got == 'foo'
 
-def test_empty():
-    # really odd corner case
-    got = safepath.munge('')
-    eq(got, '_')
+    def test_empty(self):
+        # really odd corner case
+        got = safepath.munge('')
+        assert got == '_'
 
-def test_slash():
-    got = safepath.munge('/')
-    eq(got, '_')
+    def test_slash(self):
+        got = safepath.munge('/')
+        assert got == '_'
 
-def test_slashslash():
-    got = safepath.munge('//')
-    eq(got, '_')
+    def test_slashslash(self):
+        got = safepath.munge('//')
+        assert got == '_'
 
-def test_absolute():
-    got = safepath.munge('/evil')
-    eq(got, 'evil')
+    def test_absolute(self):
+        got = safepath.munge('/evil')
+        assert got == 'evil'
 
-def test_absolute_subdir():
-    got = safepath.munge('/evil/here')
-    eq(got, 'evil/here')
+    def test_absolute_subdir(self):
+        got = safepath.munge('/evil/here')
+        assert got == 'evil/here'
 
-def test_dot_leading():
-    got = safepath.munge('./foo')
-    eq(got, 'foo')
+    def test_dot_leading(self):
+        got = safepath.munge('./foo')
+        assert got == 'foo'
 
-def test_dot_middle():
-    got = safepath.munge('evil/./foo')
-    eq(got, 'evil/foo')
+    def test_dot_middle(self):
+        got = safepath.munge('evil/./foo')
+        assert got == 'evil/foo'
 
-def test_dot_trailing():
-    got = safepath.munge('evil/foo/.')
-    eq(got, 'evil/foo')
+    def test_dot_trailing(self):
+        got = safepath.munge('evil/foo/.')
+        assert got == 'evil/foo'
 
-def test_dotdot():
-    got = safepath.munge('../evil/foo')
-    eq(got, '_./evil/foo')
+    def test_dotdot(self):
+        got = safepath.munge('../evil/foo')
+        assert got == '_./evil/foo'
 
-def test_dotdot_subdir():
-    got = safepath.munge('evil/../foo')
-    eq(got, 'evil/_./foo')
+    def test_dotdot_subdir(self):
+        got = safepath.munge('evil/../foo')
+        assert got == 'evil/_./foo'
 
-def test_hidden():
-    got = safepath.munge('.evil')
-    eq(got, '_evil')
+    def test_hidden(self):
+        got = safepath.munge('.evil')
+        assert got == '_evil'
 
-def test_hidden_subdir():
-    got = safepath.munge('foo/.evil')
-    eq(got, 'foo/_evil')
+    def test_hidden_subdir(self):
+        got = safepath.munge('foo/.evil')
+        assert got == 'foo/_evil'
