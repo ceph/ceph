@@ -15,7 +15,7 @@ Device`.
            /------------------\         /----------------\
            |    Admin Node    |         |   ceph–client  |
            |                  +-------->+ cCCC           |
-           | ceph–deploy      |         | ceph           |
+           |    ceph–deploy   |         |      ceph      |
            \------------------/         \----------------/
 
 
@@ -32,10 +32,8 @@ Install Ceph
 
 	ceph-deploy install ceph-client
 	
-#. On the admin node, use ``ceph-deploy`` to grant the ``ceph-client``
-   administrator privileges, so you don't have to provide the Ceph 
-   configuration file (``-c``) and key (``-k``) arguments. 
-   This step is optional. :: 
+#. On the admin node, use ``ceph-deploy`` to copy the Ceph configuration file
+   and the ``ceph.client.admin.keyring`` to the ``ceph-client``. :: 
 
 	ceph-deploy admin ceph-client
 
