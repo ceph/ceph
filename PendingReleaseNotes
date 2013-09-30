@@ -1,3 +1,10 @@
+v0.70
+~~~~~
+* librados::Rados::pool_create_async() and librados::Rados::pool_delete_async()
+  don't drop a reference to the completion object on error, caller needs to take
+  care of that. This has never really worked correctly and we were leaking an
+  object
+
 v0.68
 ~~~~~
 
