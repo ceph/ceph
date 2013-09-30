@@ -4580,19 +4580,13 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop)
   delete ctx;
 }
 
-void ReplicatedPG::requeue_cancel_copy_ops(bool requeue)
+void ReplicatedPG::cancel_copy_ops()
 {
   dout(10) << __func__ << dendl;
   for (map<hobject_t,CopyOpRef>::iterator p = copy_ops.begin();
        p != copy_ops.end();
        copy_ops.erase(p++)) {
-    // requeue initiating copy *and* any subsequent waiters
-    CopyOpRef cop = p->second;
-    if (requeue) {
-      cop->waiting.push_front(cop->ctx->op);
-      requeue_ops(cop->waiting);
-    }
-    cancel_copy(cop);
+    cancel_copy(p->second);
   }
 }
 
@@ -7332,7 +7326,7 @@ void ReplicatedPG::on_shutdown()
   deleting = true;
 
   unreg_next_scrub();
-  requeue_cancel_copy_ops(false);
+  cancel_copy_ops();
   apply_and_flush_repops(false);
   context_registry_on_change();
 
@@ -7369,7 +7363,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 
   context_registry_on_change();
 
-  requeue_cancel_copy_ops(is_primary());
+  cancel_copy_ops();
 
   // requeue object waiters
   if (is_primary()) {
