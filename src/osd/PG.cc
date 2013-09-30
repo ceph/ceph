@@ -2406,9 +2406,8 @@ void PG::log_weirdness()
 			<< " log bound mismatch, empty but (" << pg_log.get_tail() << ","
 			<< pg_log.get_head() << "]\n";
   } else {
-    if ((pg_log.get_log().log.begin()->version <= pg_log.get_tail()) || // sloppy check
-	(pg_log.get_log().log.rbegin()->version != pg_log.get_head() &&
-	 !(pg_log.get_head() == pg_log.get_tail())))
+    // sloppy check
+    if ((pg_log.get_log().log.begin()->version <= pg_log.get_tail()))
       osd->clog.error() << info.pgid
 			<< " log bound mismatch, info (" << pg_log.get_tail() << ","
 			<< pg_log.get_head() << "]"
