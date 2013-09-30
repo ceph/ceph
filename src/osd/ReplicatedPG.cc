@@ -4397,14 +4397,14 @@ int ReplicatedPG::start_copy(OpContext *ctx,
   ctx->copy_op = cop;
   ++ctx->obc->copyfrom_readside;
 
-  _copy_some(ctx, cop);
+  _copy_some(ctx->obc, cop);
 
   return 0;
 }
 
-void ReplicatedPG::_copy_some(OpContext *ctx, CopyOpRef cop)
+void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 {
-  dout(10) << __func__ << " " << ctx << " " << cop << dendl;
+  dout(10) << __func__ << " " << obc << " " << cop << dendl;
   ObjectOperation op;
   if (cop->version) {
     op.assert_version(cop->version);
@@ -4418,7 +4418,7 @@ void ReplicatedPG::_copy_some(OpContext *ctx, CopyOpRef cop)
 	      &cop->data, &cop->omap,
 	      &cop->rval);
 
-  C_Copyfrom *fin = new C_Copyfrom(this, ctx->obs->oi.soid,
+  C_Copyfrom *fin = new C_Copyfrom(this, obc->obs.oi.soid,
 				   get_last_peering_reset());
   osd->objecter_lock.Lock();
   tid_t tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
@@ -4479,7 +4479,7 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
     repop->put();
 
     dout(10) << __func__ << " fetching more" << dendl;
-    _copy_some(ctx, cop);
+    _copy_some(ctx->obc, cop);
     return;
   }
 
