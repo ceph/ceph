@@ -11,19 +11,19 @@ explore Ceph functionality.
            /------------------\         /----------------\
            |    Admin Node    |         |   ceph–node1   |
            |                  +-------->+ cCCC           |
-           | ceph–deploy      |         | mon.ceph–node1 |
+           |    ceph–deploy   |         | mon.ceph–node1 |
            \---------+--------/         \----------------/
                      |
                      |                  /----------------\
                      |                  |   ceph–node2   |
                      +----------------->+ cCCC           |
-                     |                  | osd.0          |
+                     |                  |     osd.0      |
                      |                  \----------------/
                      |
                      |                  /----------------\
                      |                  |   ceph–node3   |
                      +----------------->| cCCC           |
-                                        | osd.1          |
+                                        |     osd.1      |
                                         \----------------/
 
 For best results, create a directory on your admin node node for maintaining the
@@ -166,7 +166,7 @@ quorum of Ceph Monitors.
            |    ceph–deploy   |         |   ceph–node1   |
            |    Admin Node    |         | cCCC           |
            |                  +-------->+ mon.ceph–node1 |
-           |                  |         | osd.2          |
+           |                  |         |     osd.2      |
            |                  |         | mds.ceph–node1 |
            \---------+--------/         \----------------/
                      |
@@ -174,7 +174,7 @@ quorum of Ceph Monitors.
                      |                  |   ceph–node2   |
                      |                  | cCCC           |
                      +----------------->+                |
-                     |                  | osd.0          |
+                     |                  |     osd.0      |
                      |                  | mon.ceph–node2 |
                      |                  \----------------/
                      |
@@ -182,7 +182,7 @@ quorum of Ceph Monitors.
                      |                  |   ceph–node3   |
                      |                  | cCCC           |
                      +----------------->+                |
-                                        | osd.1          |
+                                        |     osd.1      |
                                         | mon.ceph–node3 |
                                         \----------------/
 
