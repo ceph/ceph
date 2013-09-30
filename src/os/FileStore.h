@@ -591,6 +591,8 @@ private:
   std::ofstream m_filestore_dump;
   JSONFormatter m_filestore_dump_fmt;
   atomic_t m_filestore_kill_at;
+  bool m_filestore_sloppy_crc;
+  int m_filestore_sloppy_crc_block_size;
   FSSuperblock superblock;
 
   /**
@@ -643,6 +645,9 @@ protected:
   int _copy_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) {
     return filestore->_do_copy_range(from, to, srcoff, len, dstoff);
   }
+  int get_crc_block_size() {
+    return filestore->m_filestore_sloppy_crc_block_size;
+  }
 public:
   FileStoreBackend(FileStore *fs) : filestore(fs) {}
   virtual ~FileStoreBackend() {};
@@ -658,6 +663,15 @@ public:
   virtual bool has_fiemap() = 0;
   virtual int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap) = 0;
   virtual int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) = 0;
+
+  // hooks for (sloppy) crc tracking
+  virtual int _crc_update_write(int fd, loff_t off, size_t len, const bufferlist& bl) = 0;
+  virtual int _crc_update_truncate(int fd, loff_t off) = 0;
+  virtual int _crc_update_zero(int fd, loff_t off, size_t len) = 0;
+  virtual int _crc_update_clone_range(int srcfd, int destfd,
+				      loff_t srcoff, size_t len, loff_t dstoff) = 0;
+  virtual int _crc_verify_read(int fd, loff_t off, size_t len, const bufferlist& bl,
+			       ostream *out) = 0;
 };
 
 #endif

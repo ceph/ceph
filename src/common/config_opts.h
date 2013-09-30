@@ -557,6 +557,9 @@ OPTION(filestore_max_inline_xattr_size, OPT_U32, 512)
 // for more than filestore_max_inline_xattrs attrs
 OPTION(filestore_max_inline_xattrs, OPT_U32, 2)
 
+OPTION(filestore_sloppy_crc, OPT_BOOL, false)         // track sloppy crcs
+OPTION(filestore_sloppy_crc_block_size, OPT_INT, 65536)
+
 OPTION(filestore_max_sync_interval, OPT_DOUBLE, 5)    // seconds
 OPTION(filestore_min_sync_interval, OPT_DOUBLE, .01)  // seconds
 OPTION(filestore_btrfs_snap, OPT_BOOL, true)
