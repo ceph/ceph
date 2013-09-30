@@ -28,6 +28,7 @@ class TestConnection(object):
     @fudge.with_fakes
     def test_connect(self):
         self.clear_config()
+        config.config.verify_host_keys = True
         fudge.clear_expectations()
         ssh = fudge.Fake('SSHClient')
         ssh.expects_call().with_args().returns(ssh)
