@@ -390,6 +390,8 @@ int RGWMetadataManager::remove(string& metadata_key)
 
   objv_tracker.read_version = obj->get_version();
 
+  delete obj;
+
   return handler->remove(store, entry, objv_tracker);
 }
 
