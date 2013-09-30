@@ -3764,7 +3764,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    result = -EINVAL;
 	    break;
 	  }
-	  result = start_copy(ctx, src, src_oloc, src_version);
+	  result = start_copy(ctx, ctx->obc, src, src_oloc, src_version);
 	  if (result < 0)
 	    goto fail;
 	  result = -EINPROGRESS;
@@ -4379,7 +4379,7 @@ struct C_Copyfrom : public Context {
   }
 };
 
-int ReplicatedPG::start_copy(OpContext *ctx,
+int ReplicatedPG::start_copy(OpContext *ctx, ObjectContextRef obc,
 			     hobject_t src, object_locator_t oloc, version_t version)
 {
   const hobject_t& dest = ctx->obs->oi.soid;
@@ -4395,12 +4395,12 @@ int ReplicatedPG::start_copy(OpContext *ctx,
     cancel_copy(cop);
   }
 
-  CopyOpRef cop(new CopyOp(ctx, ctx->obc, src, oloc, version));
+  CopyOpRef cop(new CopyOp(ctx, obc, src, oloc, version));
   copy_ops[dest] = cop;
   ctx->copy_op = cop;
-  ++ctx->obc->copyfrom_readside;
+  ++obc->copyfrom_readside;
 
-  _copy_some(ctx->obc, cop);
+  _copy_some(obc, cop);
 
   return 0;
 }
