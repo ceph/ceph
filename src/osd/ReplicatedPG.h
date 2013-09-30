@@ -102,8 +102,6 @@ public:
 
     tid_t objecter_tid;
 
-    list<OpRequestRef> waiting;
-
     object_copy_cursor_t cursor;
     uint64_t size;
     utime_t mtime;
@@ -724,14 +722,13 @@ protected:
   // -- copyfrom --
   map<hobject_t, CopyOpRef> copy_ops;
 
-  int start_copy(OpContext *ctx, hobject_t src, object_locator_t oloc, version_t version,
-		 CopyOpRef *pcop);
+  int start_copy(OpContext *ctx, hobject_t src, object_locator_t oloc, version_t version);
   void process_copy_chunk(hobject_t oid, tid_t tid, int r);
   void _write_copy_chunk(CopyOpRef cop, ObjectStore::Transaction *t);
   void _copy_some(OpContext *ctx, CopyOpRef cop);
   int finish_copy(OpContext *ctx);
   void cancel_copy(CopyOpRef cop);
-  void requeue_cancel_copy_ops(bool requeue=true);
+  void cancel_copy_ops();
 
   friend class C_Copyfrom;
 

@@ -3764,7 +3764,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    result = -EINVAL;
 	    break;
 	  }
-	  result = start_copy(ctx, src, src_oloc, src_version, &ctx->copy_op);
+	  result = start_copy(ctx, src, src_oloc, src_version);
 	  if (result < 0)
 	    goto fail;
 	  result = -EINPROGRESS;
@@ -4377,8 +4377,7 @@ struct C_Copyfrom : public Context {
 };
 
 int ReplicatedPG::start_copy(OpContext *ctx,
-			     hobject_t src, object_locator_t oloc, version_t version,
-			     CopyOpRef *pcop)
+			     hobject_t src, object_locator_t oloc, version_t version)
 {
   const hobject_t& dest = ctx->obs->oi.soid;
   dout(10) << __func__ << " " << dest << " ctx " << ctx
@@ -4581,19 +4580,13 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop)
   delete ctx;
 }
 
-void ReplicatedPG::requeue_cancel_copy_ops(bool requeue)
+void ReplicatedPG::cancel_copy_ops()
 {
   dout(10) << __func__ << dendl;
   for (map<hobject_t,CopyOpRef>::iterator p = copy_ops.begin();
        p != copy_ops.end();
        copy_ops.erase(p++)) {
-    // requeue initiating copy *and* any subsequent waiters
-    CopyOpRef cop = p->second;
-    if (requeue) {
-      cop->waiting.push_front(cop->ctx->op);
-      requeue_ops(cop->waiting);
-    }
-    cancel_copy(cop);
+    cancel_copy(p->second);
   }
 }
 
@@ -5468,10 +5461,10 @@ void ReplicatedPG::kick_object_context_blocked(ObjectContextRef obc)
     return;
   }
 
-  list<OpRequestRef>& ls = waiting_for_blocked_object[soid];
+  list<OpRequestRef>& ls = p->second;
   dout(10) << __func__ << " " << soid << " requeuing " << ls.size() << " requests" << dendl;
   requeue_ops(ls);
-  waiting_for_blocked_object.erase(soid);
+  waiting_for_blocked_object.erase(p);
 }
 
 SnapSetContext *ReplicatedPG::create_snapset_context(const object_t& oid)
@@ -7333,7 +7326,7 @@ void ReplicatedPG::on_shutdown()
   deleting = true;
 
   unreg_next_scrub();
-  requeue_cancel_copy_ops(false);
+  cancel_copy_ops();
   apply_and_flush_repops(false);
   context_registry_on_change();
 
@@ -7370,7 +7363,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 
   context_registry_on_change();
 
-  requeue_cancel_copy_ops(is_primary());
+  cancel_copy_ops();
 
   // requeue object waiters
   if (is_primary()) {
