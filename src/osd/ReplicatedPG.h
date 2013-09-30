@@ -115,11 +115,13 @@ public:
     hobject_t temp_oid;
     object_copy_cursor_t temp_cursor;
 
-    CopyOp(OpContext *c, ObjectContextRef _obc, hobject_t s, object_locator_t l, version_t v)
+    CopyOp(OpContext *c, ObjectContextRef _obc, hobject_t s, object_locator_t l,
+           version_t v, const hobject_t& dest)
       : ctx(c), obc(_obc), src(s), oloc(l), version(v),
 	objecter_tid(0),
 	size(0),
-	rval(-1)
+	rval(-1),
+	temp_oid(dest)
     {}
   };
   typedef boost::shared_ptr<CopyOp> CopyOpRef;
@@ -723,7 +725,9 @@ protected:
   // -- copyfrom --
   map<hobject_t, CopyOpRef> copy_ops;
 
-  int start_copy(OpContext *ctx, ObjectContextRef obc, hobject_t src, object_locator_t oloc, version_t version);
+  int start_copy(OpContext *ctx, ObjectContextRef obc, hobject_t src,
+                 object_locator_t oloc, version_t version,
+                 const hobject_t& temp_dest_oid);
   void process_copy_chunk(hobject_t oid, tid_t tid, int r);
   void _write_copy_chunk(CopyOpRef cop, ObjectStore::Transaction *t);
   void _copy_some(ObjectContextRef obc, CopyOpRef cop);
