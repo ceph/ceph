@@ -17,6 +17,8 @@
 
 #include "FileStore.h"
 
+class SloppyCRCMap;
+
 class GenericFileStoreBackend : public FileStoreBackend {
 private:
   bool ioctl_fiemap;
@@ -25,6 +27,7 @@ private:
 public:
   GenericFileStoreBackend(FileStore *fs);
   virtual ~GenericFileStoreBackend() {};
+
   virtual int detect_features();
   virtual int create_current();
   virtual bool can_checkpoint() { return false; };
@@ -39,5 +42,17 @@ public:
   virtual int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) {
     return _copy_range(from, to, srcoff, len, dstoff);
   }
+
+private:
+  int _crc_load_or_init(int fd, SloppyCRCMap *cm);
+  int _crc_save(int fd, SloppyCRCMap *cm);
+public:
+  virtual int _crc_update_write(int fd, loff_t off, size_t len, const bufferlist& bl);
+  virtual int _crc_update_truncate(int fd, loff_t off);
+  virtual int _crc_update_zero(int fd, loff_t off, size_t len);
+  virtual int _crc_update_clone_range(int srcfd, int destfd,
+				      loff_t srcoff, size_t len, loff_t dstoff);
+  virtual int _crc_verify_read(int fd, loff_t off, size_t len, const bufferlist& bl,
+			       ostream *out);
 };
 #endif

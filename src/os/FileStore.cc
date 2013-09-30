@@ -167,12 +167,17 @@ int FileStore::lfn_find(coll_t cid, const ghobject_t& oid, IndexedPath *path)
 int FileStore::lfn_truncate(coll_t cid, const ghobject_t& oid, off_t length)
 {
   IndexedPath path;
-  int r = lfn_find(cid, oid, &path);
+  FDRef fd;
+  int r = lfn_open(cid, oid, false, &fd, &path);
   if (r < 0)
     return r;
-  r = ::truncate(path->path(), length);
+  r = ::ftruncate(**fd, length);
   if (r < 0)
     r = -errno;
+  if (r >= 0 && m_filestore_sloppy_crc) {
+    int rc = backend->_crc_update_truncate(**fd, length);
+    assert(rc >= 0);
+  }
   assert(!m_filestore_fail_eio || r != -EIO);
   return r;
 }
@@ -415,7 +420,9 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   m_filestore_queue_committing_max_ops(g_conf->filestore_queue_committing_max_ops),
   m_filestore_queue_committing_max_bytes(g_conf->filestore_queue_committing_max_bytes),
   m_filestore_do_dump(false),
-  m_filestore_dump_fmt(true)
+  m_filestore_dump_fmt(true),
+  m_filestore_sloppy_crc(g_conf->filestore_sloppy_crc),
+  m_filestore_sloppy_crc_block_size(g_conf->filestore_sloppy_crc_block_size)
 {
   m_filestore_kill_at.set(g_conf->filestore_kill_at);
 
@@ -2555,6 +2562,17 @@ int FileStore::read(
   }
   bptr.set_length(got);   // properly size the buffer
   bl.push_back(bptr);   // put it in the target bufferlist
+
+  if (m_filestore_sloppy_crc && (!replaying || backend->can_checkpoint())) {
+    ostringstream ss;
+    int errors = backend->_crc_verify_read(**fd, offset, got, bl, &ss);
+    if (errors > 0) {
+      dout(0) << "FileStore::read " << cid << "/" << oid << " " << offset << "~"
+	      << got << " ... BAD CRC:\n" << ss.str() << dendl;
+      assert(0 == "bad crc on read");
+    }
+  }
+
   lfn_close(fd);
 
   dout(10) << "FileStore::read " << cid << "/" << oid << " " << offset << "~"
@@ -2716,6 +2734,11 @@ int FileStore::_write(coll_t cid, const ghobject_t& oid,
   if (r == 0)
     r = bl.length();
 
+  if (r >= 0 && m_filestore_sloppy_crc) {
+    int rc = backend->_crc_update_write(**fd, offset, len, bl);
+    assert(rc >= 0);
+  }
+
   // flush?
   if (!replaying &&
       g_conf->filestore_wbthrottle_enable)
@@ -2746,6 +2769,11 @@ int FileStore::_zero(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t 
   if (ret < 0)
     ret = -errno;
   lfn_close(fd);
+
+  if (ret >= 0 && m_filestore_sloppy_crc) {
+    int rc = backend->_crc_update_zero(**fd, offset, len);
+    assert(rc >= 0);
+  }
 
   if (ret == 0)
     goto out;  // yay!
@@ -2899,6 +2927,10 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
     if (r < 0)
       break;
     pos += r;
+  }
+  if (r >= 0 && m_filestore_sloppy_crc) {
+    int rc = backend->_crc_update_clone_range(from, to, srcoff, len, dstoff);
+    assert(rc >= 0);
   }
   dout(20) << "_do_copy_range " << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
   return r;
@@ -4548,6 +4580,8 @@ const char** FileStore::get_tracked_conf_keys() const
     "filestore_kill_at",
     "filestore_fail_eio",
     "filestore_replica_fadvise",
+    "filestore_sloppy_crc",
+    "filestore_sloppy_crc_block_size",
     NULL
   };
   return KEYS;
@@ -4564,6 +4598,8 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("filestore_queue_committing_max_bytes") ||
       changed.count("filestore_kill_at") ||
       changed.count("filestore_fail_eio") ||
+      changed.count("filestore_sloppy_crc") ||
+      changed.count("filestore_sloppy_crc_block_size") ||
       changed.count("filestore_replica_fadvise")) {
     Mutex::Locker l(lock);
     m_filestore_min_sync_interval = conf->filestore_min_sync_interval;
@@ -4575,6 +4611,8 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
     m_filestore_kill_at.set(conf->filestore_kill_at);
     m_filestore_fail_eio = conf->filestore_fail_eio;
     m_filestore_replica_fadvise = conf->filestore_replica_fadvise;
+    m_filestore_sloppy_crc = conf->filestore_sloppy_crc;
+    m_filestore_sloppy_crc_block_size = conf->filestore_sloppy_crc_block_size;
   }
   if (changed.count("filestore_commit_timeout")) {
     Mutex::Locker l(sync_entry_timeo_lock);
