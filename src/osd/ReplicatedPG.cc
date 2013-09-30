@@ -4395,7 +4395,7 @@ int ReplicatedPG::start_copy(OpContext *ctx,
     cancel_copy(cop);
   }
 
-  CopyOpRef cop(new CopyOp(ctx, src, oloc, version));
+  CopyOpRef cop(new CopyOp(ctx, ctx->obc, src, oloc, version));
   copy_ops[dest] = cop;
   ctx->copy_op = cop;
   ++ctx->obc->copyfrom_readside;
@@ -4449,8 +4449,7 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
 	     << " tid " << cop->objecter_tid << dendl;
     return;
   }
-  OpContext *ctx = cop->ctx;
-  ObjectContextRef obc = ctx->obc;
+  ObjectContextRef obc = cop->obc;
   cop->objecter_tid = 0;
 
   if (r >= 0) {
@@ -4484,11 +4483,11 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
   }
 
   dout(20) << __func__ << " complete; committing" << dendl;
-  execute_ctx(ctx);
+  execute_ctx(cop->ctx);
 
   copy_ops.erase(obc->obs.oi.soid);
   --obc->copyfrom_readside;
-  ctx->copy_op.reset();
+  cop->ctx->copy_op.reset();
   kick_object_context_blocked(obc);
 }
 
@@ -4571,11 +4570,11 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop)
     osd->objecter->op_cancel(cop->objecter_tid);
   }
 
-  copy_ops.erase(ctx->obc->obs.oi.soid);
-  --ctx->obc->copyfrom_readside;
+  copy_ops.erase(cop->obc->obs.oi.soid);
+  --cop->obc->copyfrom_readside;
   ctx->copy_op.reset();
 
-  kick_object_context_blocked(ctx->obc);
+  kick_object_context_blocked(cop->obc);
 
   delete ctx;
 }
