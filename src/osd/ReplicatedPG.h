@@ -723,7 +723,7 @@ protected:
   // -- copyfrom --
   map<hobject_t, CopyOpRef> copy_ops;
 
-  int start_copy(OpContext *ctx, hobject_t src, object_locator_t oloc, version_t version);
+  int start_copy(OpContext *ctx, ObjectContextRef obc, hobject_t src, object_locator_t oloc, version_t version);
   void process_copy_chunk(hobject_t oid, tid_t tid, int r);
   void _write_copy_chunk(CopyOpRef cop, ObjectStore::Transaction *t);
   void _copy_some(ObjectContextRef obc, CopyOpRef cop);
