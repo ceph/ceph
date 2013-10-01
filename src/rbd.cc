@@ -2256,7 +2256,7 @@ int main(int argc, const char **argv)
     opt_cmd = get_cmd(*i, false, false);
   }
   if (opt_cmd == OPT_NO_CMD) {
-    cerr << "rbd: error parsing command '" << *i << "'" << std::endl;
+    cerr << "rbd: error parsing command '" << *i << "'; -h or --help for usage" << std::endl;
     return EXIT_FAILURE;
   }
 
