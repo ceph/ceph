@@ -1813,8 +1813,15 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       bufferlist::iterator p = outdata.begin();
       bufferlist header;
       map<string, bufferlist> kv;
-      ::decode(header, p);
-      ::decode(kv, p);
+      try {
+	::decode(header, p);
+	::decode(kv, p);
+      }
+      catch (buffer::error& e) {
+	cerr << "error decoding tmap " << pool_name << "/" << oid << std::endl;
+	ret = -EINVAL;
+	goto out;
+      }
       cout << "header (" << header.length() << " bytes):\n";
       header.hexdump(cout);
       cout << "\n";
