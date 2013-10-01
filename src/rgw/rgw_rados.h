@@ -864,6 +864,8 @@ protected:
   string region_name;
   string zone_name;
 
+  RGWQuotaHandler *quota_handler;
+
 public:
   RGWRados() : lock("rados_timer_lock"), timer(NULL),
                gc(NULL), use_gc_thread(false),
@@ -872,6 +874,7 @@ public:
                bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
                cct(NULL), rados(NULL),
                pools_initialized(false),
+               quota_handler(NULL),
                rest_master_conn(NULL),
                meta_mgr(NULL), data_log(NULL) {}
 
@@ -1377,6 +1380,8 @@ public:
                          map<RGWObjCategory, RGWBucketStats> *calculated_stats);
   int bucket_rebuild_index(rgw_bucket& bucket);
   int remove_objs_from_index(rgw_bucket& bucket, list<string>& oid_list);
+
+  int check_quota(rgw_bucket& bucket, RGWQuotaInfo& quota_info, uint64_t obj_size);
 
   string unique_id(uint64_t unique_num) {
     char buf[32];
