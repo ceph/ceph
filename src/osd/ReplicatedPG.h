@@ -96,7 +96,6 @@ public:
   class CopyCallback;
 
   struct CopyOp {
-    OpContext *ctx;
     CopyCallback *cb;
     ObjectContextRef obc;
     hobject_t src;
@@ -117,9 +116,9 @@ public:
     hobject_t temp_oid;
     object_copy_cursor_t temp_cursor;
 
-    CopyOp(OpContext *c, CopyCallback *cb_, ObjectContextRef _obc, hobject_t s, object_locator_t l,
+    CopyOp(CopyCallback *cb_, ObjectContextRef _obc, hobject_t s, object_locator_t l,
            version_t v, const hobject_t& dest)
-      : ctx(c), cb(cb_), obc(_obc), src(s), oloc(l), version(v),
+      : cb(cb_), obc(_obc), src(s), oloc(l), version(v),
 	objecter_tid(0),
 	size(0),
 	rval(-1),
@@ -158,6 +157,10 @@ public:
 
     CopyCallback() : data_in_temp(false), data_size((uint64_t)-1),
 	result_code(0) {}
+    /**
+     * @param r The copy return code. 0 for success; -ECANCELLED if
+     * the operation was cancelled by the local OSD; -errno for other issues.
+     */
     virtual void finish(int r) { result_code = r; }
   public:
     /// Give the CopyCallback ops to perform to complete the copy
@@ -174,7 +177,21 @@ public:
 
   class CopyFromCallback: public CopyCallback {
   protected:
-    virtual void finish(int r) {}
+    virtual void finish(int r) {
+      result_code = r;
+      if (r >= 0) {
+	ctx->pg->execute_ctx(ctx);
+      }
+      ctx->copy_op.reset();
+      ctx->copy_cb = NULL;
+      if (r < 0) {
+	if (r == -ECANCELED) { // toss it out; client resends
+	  delete ctx;
+	} else {
+	  ctx->pg->osd->reply_op_error(ctx->op, r);
+	}
+      }
+    }
   public:
     OpContext *ctx;
     hobject_t temp_obj;
@@ -183,6 +200,7 @@ public:
     void copy_complete_ops(ObjectStore::Transaction& t) {}
     ~CopyFromCallback() {}
   };
+  friend class CopyFromCallback;
 
   boost::scoped_ptr<PGBackend> pgbackend;
 
