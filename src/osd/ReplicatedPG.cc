@@ -1602,9 +1602,8 @@ void ReplicatedBackend::_do_push(OpRequestRef op)
   reply->compute_cost(cct);
 
   t->register_on_complete(
-    get_parent()->bless_context(
-      new C_OSD_SendMessageOnConn(
-	osd, reply, m->get_connection())));
+    new C_OSD_SendMessageOnConn(
+      osd, reply, m->get_connection()));
 
   get_parent()->queue_transaction(t);
 }
@@ -1670,9 +1669,8 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
     reply->compute_cost(cct);
 
     t->register_on_complete(
-      get_parent()->bless_context(
-	new C_OSD_SendMessageOnConn(
-	  osd, reply, m->get_connection())));
+      new C_OSD_SendMessageOnConn(
+	osd, reply, m->get_connection()));
   }
 
   get_parent()->queue_transaction(t);
