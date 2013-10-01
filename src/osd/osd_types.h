@@ -2099,6 +2099,7 @@ struct object_info_t {
   typedef enum {
     FLAG_LOST     = 1<<0,
     FLAG_WHITEOUT = 1<<1,  // object logically does not exist
+    FLAG_DIRTY    = 1<<2,  // object has been modified since last flushed or undirtied
     // ...
     FLAG_USES_TMAP = 1<<8,
   } flag_t;
@@ -2131,6 +2132,9 @@ struct object_info_t {
   }
   bool is_whiteout() const {
     return test_flag(FLAG_WHITEOUT);
+  }
+  bool is_dirty() const {
+    return test_flag(FLAG_DIRTY);
   }
 
   void encode(bufferlist& bl) const;
