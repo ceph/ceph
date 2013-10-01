@@ -2093,7 +2093,16 @@ struct object_info_t {
 
   uint64_t size;
   utime_t mtime;
-  bool lost;
+
+  // note: these are currently encoded into a total 16 bits; see
+  // encode()/decode() for the weirdness.
+  typedef enum {
+    FLAG_LOST     = 1<<0,
+    FLAG_WHITEOUT = 1<<1,  // object logically does not exist
+    // ...
+    FLAG_USES_TMAP = 1<<8,
+  } flag_t;
+  flag_t flags;
 
   osd_reqid_t wrlock_by;   // [head]
   vector<snapid_t> snaps;  // [clone]
@@ -2102,12 +2111,27 @@ struct object_info_t {
 
 
   map<pair<uint64_t, entity_name_t>, watch_info_t> watchers;
-  bool uses_tmap;
 
   void copy_user_bits(const object_info_t& other);
 
   static ps_t legacy_object_locator_to_ps(const object_t &oid, 
 					  const object_locator_t &loc);
+
+  bool test_flag(flag_t f) const {
+    return (flags & f) == f;
+  }
+  void set_flag(flag_t f) {
+    flags = (flag_t)(flags | f);
+  }
+  void clear_flag(flag_t f) {
+    flags = (flag_t)(flags & ~f);
+  }
+  bool is_lost() const {
+    return test_flag(FLAG_LOST);
+  }
+  bool is_whiteout() const {
+    return test_flag(FLAG_WHITEOUT);
+  }
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
@@ -2119,13 +2143,14 @@ struct object_info_t {
   static void generate_test_instances(list<object_info_t*>& o);
 
   explicit object_info_t()
-    : user_version(0), size(0), lost(false),
-      truncate_seq(0), truncate_size(0), uses_tmap(false)
+    : user_version(0), size(0), flags((flag_t)0),
+      truncate_seq(0), truncate_size(0)
   {}
 
   object_info_t(const hobject_t& s)
-    : soid(s), user_version(0), size(0),
-      lost(false), truncate_seq(0), truncate_size(0), uses_tmap(false) {}
+    : soid(s),
+      user_version(0), size(0), flags((flag_t)0),
+      truncate_seq(0), truncate_size(0) {}
 
   object_info_t(bufferlist& bl) {
     decode(bl);
@@ -2135,7 +2160,7 @@ WRITE_CLASS_ENCODER(object_info_t)
 
 struct ObjectState {
   object_info_t oi;
-  bool exists;
+  bool exists;         ///< the stored object exists (i.e., we will remember the object_info_t)
 
   ObjectState() : exists(false) {}
 
