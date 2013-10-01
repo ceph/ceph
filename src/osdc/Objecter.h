@@ -617,9 +617,10 @@ struct ObjectOperation {
 	}
 	::decode(*cursor, p);
       } catch (buffer::error& e) {
-	if (prval)
-	  *prval = -EIO;
+	r = -EIO;
       }
+      if (prval)
+	*prval = r;
     }
   };
 
