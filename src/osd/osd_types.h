@@ -2103,13 +2103,31 @@ struct object_info_t {
     // ...
     FLAG_USES_TMAP = 1<<8,
   } flag_t;
+
   flag_t flags;
+
+  static string get_flag_string(flag_t flags) {
+    string s;
+    if (flags & FLAG_LOST)
+      s += "|lost";
+    if (flags & FLAG_WHITEOUT)
+      s += "|whiteout";
+    if (flags & FLAG_DIRTY)
+      s += "|dirty";
+    if (flags & FLAG_USES_TMAP)
+      s += "|uses_tmap";
+    if (s.length())
+      return s.substr(1);
+    return s;
+  }
+  string get_flag_string() const {
+    return get_flag_string(flags);
+  }
 
   osd_reqid_t wrlock_by;   // [head]
   vector<snapid_t> snaps;  // [clone]
 
   uint64_t truncate_seq, truncate_size;
-
 
   map<pair<uint64_t, entity_name_t>, watch_info_t> watchers;
 
