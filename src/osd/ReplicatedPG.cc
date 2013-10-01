@@ -3776,7 +3776,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  // finish
 	  result = ctx->copy_cb->get_result();
 	  if (result >= 0) { //success!
-	    result = finish_copy(ctx);
+	    result = finish_copyfrom(ctx);
 	  }
 	}
       }
@@ -4544,7 +4544,7 @@ void ReplicatedPG::_build_finish_copy_transaction(CopyOpRef cop,
   }
 }
 
-int ReplicatedPG::finish_copy(OpContext *ctx)
+int ReplicatedPG::finish_copyfrom(OpContext *ctx)
 {
   ObjectState& obs = ctx->new_obs;
   CopyFromCallback *cb = static_cast<CopyFromCallback*>(ctx->copy_cb);
