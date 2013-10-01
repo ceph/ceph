@@ -295,7 +295,7 @@ CLEANFILES += ceph_ver.h sample.fetch_config
 
 ceph: ceph.in ./ceph_ver.h Makefile
 	rm -f $@ $@.tmp
-	echo "#!/usr/bin/python" >$@.tmp
+	echo "#!/usr/bin/env python" >$@.tmp
 	grep "#define CEPH_GIT_NICE_VER" ./ceph_ver.h | \
 		sed -e 's/#define \(.*VER\) /\1=/' >>$@.tmp
 	grep "#define CEPH_GIT_VER" ./ceph_ver.h | \
