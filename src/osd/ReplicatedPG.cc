@@ -4517,16 +4517,12 @@ void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, ObjectStore::Transaction *t)
   cop->temp_cursor = cop->cursor;
 }
 
-int ReplicatedPG::finish_copy(OpContext *ctx)
+void ReplicatedPG::_build_finish_copy_transaction(CopyOpRef cop,
+                                                  ObjectStore::Transaction& t)
 {
-  CopyOpRef cop = ctx->copy_op;
-  ObjectState& obs = ctx->new_obs;
-  ObjectStore::Transaction& t = ctx->op_t;
+  ObjectState& obs = cop->obc->obs;
 
-  if (!obs.exists) {
-    ctx->delta_stats.num_objects++;
-    obs.exists = true;
-  } else {
+  if (obs.exists) {
     t.remove(coll, obs.oi.soid);
   }
 
@@ -4540,8 +4536,24 @@ int ReplicatedPG::finish_copy(OpContext *ctx)
     _write_copy_chunk(cop, &t);
     t.collection_move_rename(cop->temp_coll, cop->temp_oid, coll, obs.oi.soid);
     pgbackend->clear_temp_obj(cop->temp_oid);
+  }
+}
+
+int ReplicatedPG::finish_copy(OpContext *ctx)
+{
+  CopyOpRef cop = ctx->copy_op;
+  ObjectState& obs = ctx->new_obs;
+  ObjectStore::Transaction& t = ctx->op_t;
+
+  if (!ctx->obs->exists) {
+    ctx->delta_stats.num_objects++;
+    obs.exists = true;
+  }
+  if (cop->temp_cursor.is_initial()) {
     ctx->discard_temp_oid = cop->temp_oid;
   }
+
+  _build_finish_copy_transaction(cop, t);
 
   interval_set<uint64_t> ch;
   if (obs.oi.size > 0)
