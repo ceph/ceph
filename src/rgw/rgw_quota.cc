@@ -100,6 +100,7 @@ public:
   RGWQuotaHandlerImpl(RGWRados *store) : stats_cache(store) {}
   virtual int check_quota(rgw_bucket& bucket, RGWQuotaInfo& bucket_quota,
 			  uint64_t num_objs, uint64_t size) {
+    uint64_t size_kb = rgw_rounded_kb(size);
     if (!bucket_quota.enabled) {
       return 0;
     }
@@ -115,7 +116,7 @@ public:
       return -ERR_QUOTA_EXCEEDED;
     }
     if (bucket_quota.max_size_kb &&
-               stats.num_kb_rounded + size > bucket_quota.max_size_kb) {
+               stats.num_kb_rounded + size_kb > bucket_quota.max_size_kb) {
       return -ERR_QUOTA_EXCEEDED;
     }
 
