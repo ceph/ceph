@@ -2158,7 +2158,7 @@ WRITE_CLASS_ENCODER(object_info_t)
 
 struct ObjectState {
   object_info_t oi;
-  bool exists;
+  bool exists;         ///< the stored object exists (i.e., we will remember the object_info_t)
 
   ObjectState() : exists(false) {}
 
