@@ -1400,6 +1400,14 @@ void RGWPutObj::execute()
     ldout(s->cct, 15) << "supplied_md5=" << supplied_md5 << dendl;
   }
 
+  if (!chunked_upload) { /* with chunked upload we don't know how big is the upload.
+                            we also check sizes at the end anyway */
+    ret = store->check_quota(s->bucket, bucket_quota, s->content_length);
+    if (ret < 0) {
+      goto done;
+    }
+  }
+
   if (supplied_etag) {
     strncpy(supplied_md5, supplied_etag, sizeof(supplied_md5) - 1);
     supplied_md5[sizeof(supplied_md5) - 1] = '\0';
