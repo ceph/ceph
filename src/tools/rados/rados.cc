@@ -2235,8 +2235,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
   } else {
-    cerr << "unrecognized command " << nargs[0] << std::endl;
-    usage_exit();
+    cerr << "unrecognized command " << nargs[0] << "; -h or --help for usage" << std::endl;
+    ret = -EINVAL;
+    goto out;
   }
 
   if (ret < 0)
