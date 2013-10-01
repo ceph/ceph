@@ -94,6 +94,7 @@ public:
       crush_destroy(crush);
     crush = crush_create();
     assert(crush);
+    have_rmaps = false;
   }
 
   // tunables

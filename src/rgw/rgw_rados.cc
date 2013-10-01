@@ -2184,8 +2184,8 @@ int RGWRados::create_pools(vector<string>& names, vector<int>& retcodes)
       if (r < 0) {
         ldout(cct, 0) << "WARNING: async pool_create returned " << r << dendl;
       }
-      c->release();
     }
+    c->release();
     retcodes.push_back(r);
   }
   return 0;
