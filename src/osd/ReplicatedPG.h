@@ -182,7 +182,6 @@ public:
       if (r >= 0) {
 	ctx->pg->execute_ctx(ctx);
       }
-      ctx->copy_op.reset();
       ctx->copy_cb = NULL;
       if (r < 0) {
 	if (r == -ECANCELED) { // toss it out; client resends
@@ -195,9 +194,10 @@ public:
   public:
     OpContext *ctx;
     hobject_t temp_obj;
+    ObjectStore::Transaction final_tx;
     CopyFromCallback(OpContext *ctx_, const hobject_t& temp_obj_) :
       ctx(ctx_), temp_obj(temp_obj_) {}
-    void copy_complete_ops(ObjectStore::Transaction& t) {}
+    void copy_complete_ops(ObjectStore::Transaction& t) { final_tx.swap(t); }
     ~CopyFromCallback() {}
   };
   friend class CopyFromCallback;
@@ -375,7 +375,7 @@ public:
     int num_read;    ///< count read ops
     int num_write;   ///< count update ops
 
-    CopyOpRef copy_op;
+    CopyCallback *copy_cb;
 
     hobject_t new_temp_oid, discard_temp_oid;  ///< temp objects we should start/stop tracking
 
@@ -392,7 +392,8 @@ public:
       current_osd_subop_num(0),
       data_off(0), reply(NULL), pg(_pg),
       num_read(0),
-      num_write(0) {
+      num_write(0),
+      copy_cb(NULL) {
       if (_ssc) {
 	new_snapset = _ssc->snapset;
 	snapset = &_ssc->snapset;
@@ -801,7 +802,7 @@ protected:
   // -- copyfrom --
   map<hobject_t, CopyOpRef> copy_ops;
 
-  int start_copy(OpContext *ctx, CopyCallback *cb, ObjectContextRef obc, hobject_t src,
+  int start_copy(CopyCallback *cb, ObjectContextRef obc, hobject_t src,
                  object_locator_t oloc, version_t version,
                  const hobject_t& temp_dest_oid);
   void process_copy_chunk(hobject_t oid, tid_t tid, int r);
