@@ -991,7 +991,8 @@ void ReplicatedPG::do_op(OpRequestRef op)
   dout(25) << __func__ << ": object " << obc->obs.oi.soid
 	   << " has oi of " << obc->obs.oi << dendl;
   
-  if (!op->may_write() && !obc->obs.exists) {
+  if (!op->may_write() && (!obc->obs.exists ||
+			   obc->obs.oi.is_whiteout())) {
     osd->reply_op_error(op, -ENOENT);
     return;
   }
@@ -1048,6 +1049,8 @@ void ReplicatedPG::do_op(OpRequestRef op)
 	  wait_for_missing_object(wait_oid, op);
 	} else if (r) {
 	  osd->reply_op_error(op, r);
+	} else if (sobc->obs.oi.is_whiteout()) {
+	  osd->reply_op_error(op, -ENOENT);
 	} else {
 	  if (sobc->obs.oi.soid.get_key() != obc->obs.oi.soid.get_key() &&
 		   sobc->obs.oi.soid.get_key() != obc->obs.oi.soid.oid.name &&
@@ -1102,6 +1105,8 @@ void ReplicatedPG::do_op(OpRequestRef op)
 	  wait_for_missing_object(wait_oid, op);
 	} else if (r) {
 	  osd->reply_op_error(op, r);
+	} else if (sobc->obs.oi.is_whiteout()) {
+	  osd->reply_op_error(op, -ENOENT);
 	} else {
 	  dout(10) << " clone_oid " << clone_oid << " obc " << sobc << dendl;
 	  src_obc[clone_oid] = sobc;
@@ -3879,11 +3884,11 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     hobject_t(soid.oid, soid.get_key(), snapid, soid.hash, info.pgid.pool(), soid.get_namespace()),
     &rollback_to, false, &cloneid);
   if (ret) {
-    if (-ENOENT == ret) {
+    if (-ENOENT == ret || rollback_to->obs.oi.is_whiteout()) {
       // there's no snapshot here, or there's no object.
       // if there's no snapshot, we delete the object; otherwise, do nothing.
       dout(20) << "_rollback_to deleting head on " << soid.oid
-	       << " because got ENOENT on find_object_context" << dendl;
+	       << " because got ENOENT|whiteout on find_object_context" << dendl;
       if (ctx->obc->obs.oi.watchers.size()) {
 	// Cannot delete an object with watchers
 	ret = -EBUSY;
