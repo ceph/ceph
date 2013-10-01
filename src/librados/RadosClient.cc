@@ -459,7 +459,6 @@ int librados::RadosClient::pool_create_async(string& name, PoolAsyncCompletionIm
   Context *onfinish = new C_PoolAsync_Safe(c);
   int r = objecter->create_pool(name, onfinish, auid, crush_rule);
   if (r < 0) {
-    delete c;
     delete onfinish;
   }
   return r;
@@ -505,7 +504,6 @@ int librados::RadosClient::pool_delete_async(const char *name, PoolAsyncCompleti
   Context *onfinish = new C_PoolAsync_Safe(c);
   int r = objecter->delete_pool(tmp_pool_id, onfinish);
   if (r < 0) {
-    delete c;
     delete onfinish;
   }
   return r;
