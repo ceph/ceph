@@ -11,6 +11,8 @@
 
 #include "include/assert.h"
 
+#define MAX_FLUSH_UNDER_LOCK 20  ///< max bh's we start writeback on while holding the lock
+
 /*** ObjectCacher::BufferHead ***/
 
 
@@ -1447,8 +1449,10 @@ void ObjectCacher::flusher_entry()
       utime_t cutoff = ceph_clock_now(cct);
       cutoff -= max_dirty_age;
       BufferHead *bh = 0;
+      int max = MAX_FLUSH_UNDER_LOCK;
       while ((bh = static_cast<BufferHead*>(bh_lru_dirty.lru_get_next_expire())) != 0 &&
-	     bh->last_write < cutoff) {
+	     bh->last_write < cutoff &&
+	     --max > 0) {
 	ldout(cct, 10) << "flusher flushing aged dirty bh " << *bh << dendl;
 	bh_write(bh);
       }
