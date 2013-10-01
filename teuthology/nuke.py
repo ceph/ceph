@@ -197,12 +197,17 @@ def remove_osd_tmpfs(ctx, log):
         )
 
 def reboot(ctx, remotes, log):
+    from .orchestra import run
     import time
     nodes = {}
     for remote in remotes:
         log.info('rebooting %s', remote.name)
         proc = remote.run( # note use of -n to force a no-sync reboot
-            args=['sudo', 'reboot', '-f', '-n'],
+            args=[
+                'timeout', '5', 'sync',
+                run.Raw(';'),
+                'sudo', 'reboot', '-f', '-n'
+                ],
             wait=False
             )
         nodes[remote] = proc
