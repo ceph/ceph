@@ -77,9 +77,9 @@ backend.
 Configuring Regions and Zones
 =============================
 
-For each :term:`Ceph Node` that runs a :term:`Ceph
-Object Gateway`, you must install Apache, FastCGI and the Ceph Object Gateway
-daemon (``radosgw``). See `Install Apache, FastCGI and Gateway`_ for details.
+For each :term:`Ceph Node` that runs a :term:`Ceph Object Gateway`, you must
+install Apache, FastCGI and the Ceph Object Gateway daemon (``radosgw``). See
+`Install Apache, FastCGI and Gateway`_ for details.
 
 
 Default Region and Zone
@@ -94,12 +94,12 @@ if it exists) the default region and zone.
 Create Regions
 --------------
 
-#. Create a region called ``ny``.
+#. Configure a region infile called ``region.json`` for the ``ny`` region.
 
-   Set ``is_master`` to ``true``.  Copy the contents of the following example 
-   to a text editor.  Replace ``{fqdn}`` with the fully-qualified domain name 
-   of the endpoint. Then, save the file to ``region.json``. It will specify a 
-   master zone as ``ny-ny`` and list it in the ``zones`` list. 
+   Copy the contents of the following example to a text editor. Set 
+   ``is_master`` to ``true``. Replace ``{fqdn}`` with the fully-qualified 
+   domain name of the endpoint. It will specify a master zone as ``ny-ny`` and 
+   list it in the ``zones`` list along with the ``ny-ldn`` zone. 
    See `Configuration Reference - Regions`_ for details.::
 
 	{ "name": "ny",
@@ -113,26 +113,34 @@ Create Regions
 	          "endpoints": [
 	                "http:\/\/{fqdn}:80\/"],
 	          "log_meta": "false",
+	          "log_data": "false"},
+	          { "name": "ny-ldn",
+	          "endpoints": [
+	                "http:\/\/{fqdn}:80\/"],
+	          "log_meta": "false",
 	          "log_data": "false"}],
 	  "placement_targets": [],
 	  "default_placement": ""}
 
 
-#. To create ``ny``, execute:: 
+#. Create the ``ny`` region using the ``region.json`` infile you just 
+   created. :: 
 
 	sudo radosgw-admin region set --infile region.json
 
    Repeat the foregoing process to create region ``ldn``, but set 
    ``is_master`` to ``false`` and update the ``master_zone`` and 
-   ``zones`` fields.
+   ``zones`` values.
 
 #. Delete the default region. :: 
 
 	rados -p .rgw.root rm region_info.default
 	
-#. Set the new region as the default region. :: 
+#. Set the ``ny`` region as the default region. :: 
 
 	sudo radosgw-admin region default --rgw-region=ny
+
+   Only one region can be the default region for a cluster.
 
 #. Update the region map. :: 
 
@@ -157,13 +165,15 @@ to configure each zone.
 Create a Zone
 -------------
 
-#. Create a zone called ``ny-ny``.
+#. Configure a zone infile called ``zone.json`` for the ``ny-ny`` zone.
 
+   Copy the contents of the following example to a text editor.
    Paste the contents of the ``access_key`` and ``secret_key`` fields from the
    step of creating a zone user into the ``system_key`` field. This 
    configuration uses pool names prepended with the region name and zone name.
-   See `Configuration Reference - Pools`_ for details on gateway pools.
-   See `Configuration Reference - Zones`_ for details on zones. ::
+   See `Configuration Reference - Pools`_ for additional details on gateway 
+   pools. See `Configuration Reference - Zones`_ for additional details on 
+   zones. ::
 
 	{ "domain_root": ".ny-ny.rgw",
 	  "control_pool": ".ny-ny.rgw.control",
@@ -179,12 +189,14 @@ Create a Zone
 	}
 
 
-#. To create ``ny-ny``, execute:: 
+#. Create the ``ny-ny`` zone using the ``zone.json`` infile you just 
+   created. ::
 
 	sudo radosgw-admin zone set --rgw-zone=ny-ny --infile zone.json
 
-   Repeat the previous to steps to create zones ``ny-ldn``, ``ldn-ny``,
-   and ``ldn-ldn`` (replacing ``ny-ny`` in the ``zone.json`` file).
+   Repeat the previous two steps to create zones ``ny-ldn``, ``ldn-ldn``,
+   and ``ldn-ny`` (replacing ``ny-ny`` in the ``zone.json`` file).
+
 
 #. Delete the default zone. :: 
 
