@@ -306,6 +306,12 @@ def schedule():
         help='number of times to run/queue the job'
         )
     parser.add_argument(
+        '-p', '--priority',
+        default=1000,
+        type=int,
+        help='beanstalk priority (lower is sooner)'
+        )
+    parser.add_argument(
         '-v', '--verbose',
         action='store_true',
         default=False,
@@ -346,7 +352,9 @@ def schedule():
             if job is None and ctx.verbose:
                 print 'job {jid} is not in the queue'.format(jid=job_id)
             else:
-                print 'job {jid} contains: '.format(jid=job_id), job.body
+                print '--- job {jid} priority {prio} ---\n'.format(
+                    jid=job_id,
+                    prio=job.stats()['pri']), job.body
         return
 
     if ctx.delete:
@@ -379,6 +387,10 @@ def schedule():
     job = yaml.safe_dump(job_config)
     num = ctx.num
     while num > 0:
-        jid = beanstalk.put(job, ttr=60*60*24)
+        jid = beanstalk.put(
+            job,
+            ttr=60*60*24,
+            priority=ctx.priority,
+            )
         print 'Job scheduled with ID {jid}'.format(jid=jid)
         num -= 1
