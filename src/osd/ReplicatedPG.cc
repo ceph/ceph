@@ -4549,8 +4549,8 @@ int ReplicatedPG::finish_copy(OpContext *ctx)
 
   if (cop->cursor.data_offset != obs.oi.size) {
     ctx->delta_stats.num_bytes -= obs.oi.size;
-    ctx->delta_stats.num_bytes += obs.oi.size;
     obs.oi.size = cop->cursor.data_offset;
+    ctx->delta_stats.num_bytes += obs.oi.size;
   }
   ctx->delta_stats.num_wr++;
   ctx->delta_stats.num_wr_kb += SHIFT_ROUND_UP(obs.oi.size, 10);
