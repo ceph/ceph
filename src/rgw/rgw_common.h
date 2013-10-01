@@ -130,6 +130,7 @@ using ceph::crypto::MD5;
 #define ERR_NOT_FOUND            2023
 #define ERR_PERMANENT_REDIRECT   2024
 #define ERR_LOCKED               2025
+#define ERR_QUOTA_EXCEEDED       2026
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 
