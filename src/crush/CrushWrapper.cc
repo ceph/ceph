@@ -855,7 +855,6 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
     decode_32_or_64_string_map(type_map, blp);
     decode_32_or_64_string_map(name_map, blp);
     decode_32_or_64_string_map(rule_name_map, blp);
-    build_rmaps();
 
     // tunables
     if (!blp.end()) {
