@@ -99,7 +99,26 @@ class RGWQuotaHandlerImpl : public RGWQuotaHandler {
 public:
   RGWQuotaHandlerImpl(RGWRados *store) : stats_cache(store) {}
   virtual int check_quota(rgw_bucket& bucket, RGWQuotaInfo& bucket_quota,
-			  uint64_t num_objs, uint64_t size, bool *result) {
+			  uint64_t num_objs, uint64_t size) {
+    if (!bucket_quota.enabled) {
+      return 0;
+    }
+
+    RGWBucketStats stats;
+
+    int ret = stats_cache.get_bucket_stats(bucket, stats);
+    if (ret < 0)
+      return ret;
+
+    if (bucket_quota.max_objects &&
+        stats.num_objects + num_objs > bucket_quota.max_objects) {
+      return -ERR_QUOTA_EXCEEDED;
+    }
+    if (bucket_quota.max_size_kb &&
+               stats.num_kb_rounded + size > bucket_quota.max_size_kb) {
+      return -ERR_QUOTA_EXCEEDED;
+    }
+
     return 0;
   }
 };
