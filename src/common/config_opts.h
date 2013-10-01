@@ -362,12 +362,6 @@ OPTION(mds_standby_replay, OPT_BOOL, false)
 // If true, compact leveldb store on mount
 OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
 
-// If true, uses tmap as initial value for omap on old objects
-OPTION(osd_auto_upgrade_tmap, OPT_BOOL, true)
-
-// If true, TMAPPUT sets uses_tmap DEBUGGING ONLY
-OPTION(osd_tmapput_sets_uses_tmap, OPT_BOOL, false)
-
 // Maximum number of backfills to or from a single osd
 OPTION(osd_max_backfills, OPT_U64, 10)
 
