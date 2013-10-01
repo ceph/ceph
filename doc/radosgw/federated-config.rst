@@ -132,11 +132,11 @@ Create Regions
 	
 #. Set the new region as the default region. :: 
 
-	radosgw-admin region default --rgw-region=r1
+	sudo radosgw-admin region default --rgw-region=ny
 
 #. Update the region map. :: 
 
-	radosgw-admin regionmap update	
+	sudo radosgw-admin regionmap update	
 
 
 
@@ -147,8 +147,8 @@ Create zone users before configuring the zones. ::
 
 	sudo radosgw-admin user create --uid="ny-ny" --display-name="Region-NY Zone-NY"
 	sudo radosgw-admin user create --uid="ny-ldn" --display-name="Region-NY Zone-LDN"
-	sudo radosgw-admin user create --uid="ldn-ny" --display-name="Region-LDN Zone-LDN"
-	sudo radosgw-admin user create --uid="ldn-ldn" --display-name="Region-LDN Zone-NY"
+	sudo radosgw-admin user create --uid="ldn-ldn" --display-name="Region-LDN Zone-LDN"
+	sudo radosgw-admin user create --uid="ldn-ny" --display-name="Region-LDN Zone-NY"
 
 Copy the ``access_key`` and ``secret_key`` fields for each user. You will need them
 to configure each zone.
