@@ -4399,7 +4399,7 @@ int ReplicatedPG::start_copy(OpContext *ctx, CopyCallback *cb, ObjectContextRef 
     cancel_copy(cop);
   }
 
-  CopyOpRef cop(new CopyOp(ctx, cb, obc, src, oloc, version, temp_dest_oid));
+  CopyOpRef cop(new CopyOp(cb, obc, src, oloc, version, temp_dest_oid));
   copy_ops[dest] = cop;
   ctx->copy_op = cop;
   ++obc->copyfrom_readside;
@@ -4486,11 +4486,10 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
   }
 
   dout(20) << __func__ << " complete; committing" << dendl;
-  execute_ctx(cop->ctx);
+  cop->cb->complete(cop->rval);
 
   copy_ops.erase(obc->obs.oi.soid);
   --obc->copyfrom_readside;
-  cop->ctx->copy_op.reset();
   kick_object_context_blocked(obc);
 }
 
@@ -4574,8 +4573,7 @@ int ReplicatedPG::finish_copy(OpContext *ctx)
 
 void ReplicatedPG::cancel_copy(CopyOpRef cop)
 {
-  OpContext *ctx = cop->ctx;
-  dout(10) << __func__ << " " << ctx->obc->obs.oi.soid << " ctx " << ctx
+  dout(10) << __func__ << " " << cop->obc->obs.oi.soid
 	   << " from " << cop->src << " " << cop->oloc << " v" << cop->version
 	   << dendl;
 
@@ -4587,11 +4585,9 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop)
 
   copy_ops.erase(cop->obc->obs.oi.soid);
   --cop->obc->copyfrom_readside;
-  ctx->copy_op.reset();
 
   kick_object_context_blocked(cop->obc);
-
-  delete ctx;
+  cop->cb->complete(-ECANCELED);
 }
 
 void ReplicatedPG::cancel_copy_ops()
