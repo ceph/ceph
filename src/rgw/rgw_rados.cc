@@ -855,6 +855,7 @@ void RGWRados::finalize()
     RGWRESTConn *conn = iter->second;
     delete conn;
   }
+  RGWQuotaHandler::free_handler(quota_handler);
 }
 
 /** 
@@ -963,6 +964,8 @@ int RGWRados::init_complete()
 
   if (use_gc_thread)
     gc->start_processor();
+
+  quota_handler = RGWQuotaHandler::generate_handler(this);
 
   return ret;
 }
@@ -5483,6 +5486,10 @@ int RGWRados::cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& 
   return 0;
 }
 
+int RGWRados::check_quota(rgw_bucket& bucket, RGWQuotaInfo& quota_info, uint64_t obj_size)
+{
+  return quota_handler->check_quota(bucket, quota_info, 1, obj_size);
+}
 
 class IntentLogNameFilter : public RGWAccessListFilter
 {

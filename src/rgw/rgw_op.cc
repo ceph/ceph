@@ -1444,6 +1444,11 @@ void RGWPutObj::execute()
   s->obj_size = ofs;
   perfcounter->inc(l_rgw_put_b, s->obj_size);
 
+  ret = store->check_quota(s->bucket, bucket_quota, s->obj_size);
+  if (ret < 0) {
+    goto done;
+  }
+
   hash.Final(m);
 
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
