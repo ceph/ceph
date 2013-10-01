@@ -97,6 +97,7 @@ public:
 
   struct CopyOp {
     OpContext *ctx;
+    CopyCallback *cb;
     ObjectContextRef obc;
     hobject_t src;
     object_locator_t oloc;
@@ -116,9 +117,9 @@ public:
     hobject_t temp_oid;
     object_copy_cursor_t temp_cursor;
 
-    CopyOp(OpContext *c, ObjectContextRef _obc, hobject_t s, object_locator_t l,
+    CopyOp(OpContext *c, CopyCallback *cb_, ObjectContextRef _obc, hobject_t s, object_locator_t l,
            version_t v, const hobject_t& dest)
-      : ctx(c), obc(_obc), src(s), oloc(l), version(v),
+      : ctx(c), cb(cb_), obc(_obc), src(s), oloc(l), version(v),
 	objecter_tid(0),
 	size(0),
 	rval(-1),
@@ -179,7 +180,7 @@ public:
     hobject_t temp_obj;
     CopyFromCallback(OpContext *ctx_, const hobject_t& temp_obj_) :
       ctx(ctx_), temp_obj(temp_obj_) {}
-    void copy_complete_ops(ObjectStore::Transaction& t);
+    void copy_complete_ops(ObjectStore::Transaction& t) {}
     ~CopyFromCallback() {}
   };
 
@@ -782,7 +783,7 @@ protected:
   // -- copyfrom --
   map<hobject_t, CopyOpRef> copy_ops;
 
-  int start_copy(OpContext *ctx, ObjectContextRef obc, hobject_t src,
+  int start_copy(OpContext *ctx, CopyCallback *cb, ObjectContextRef obc, hobject_t src,
                  object_locator_t oloc, version_t version,
                  const hobject_t& temp_dest_oid);
   void process_copy_chunk(hobject_t oid, tid_t tid, int r);
