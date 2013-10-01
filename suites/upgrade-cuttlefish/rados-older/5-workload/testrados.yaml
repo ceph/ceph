@@ -10,4 +10,3 @@ workload:
       snap_create: 50
       snap_remove: 50
       rollback: 50
-
