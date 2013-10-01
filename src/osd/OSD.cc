@@ -434,6 +434,7 @@ void OSDService::init()
     objecter_timer.init();
     objecter->set_client_incarnation(0);
     objecter->init_locked();
+    objecter->unset_honor_cache_redirects();
   }
   watch_timer.init();
 }
