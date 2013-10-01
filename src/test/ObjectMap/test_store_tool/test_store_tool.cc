@@ -111,7 +111,7 @@ void usage(const char *pname)
     << "  list [prefix]\n"
     << "  exists <prefix> [key]\n"
     << "  get <prefix> <key>\n"
-    << "  verify <store path>\n"
+    << "  crc <prefix> <key>\n"
     << "  get-size\n"
     << std::endl;
 }
@@ -183,8 +183,23 @@ int main(int argc, const char *argv[])
     bl.hexdump(os);
     std::cout << os.str() << std::endl;
 
-  } else if (cmd == "verify") {
-    assert(0);
+  } else if (cmd == "crc") {
+    if (argc < 5) {
+      usage(argv[0]);
+      return 1;
+    }
+    string prefix(argv[3]);
+    string key(argv[4]);
+
+    bool exists = false;
+    bufferlist bl = st.get(prefix, key, exists);
+    std::cout << "(" << prefix << ", " << key << ") ";
+    if (!exists) {
+      std::cout << " does not exist" << std::endl;
+      return 1;
+    }
+    std::cout << " crc " << bl.crc32c(0) << std::endl;
+
   } else if (cmd == "get-size") {
     std::cout << "estimated store size: " << st.get_size() << std::endl;
   } else {
