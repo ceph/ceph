@@ -2798,7 +2798,6 @@ void object_info_t::copy_user_bits(const object_info_t& other)
   truncate_size = other.truncate_size;
   flags = other.flags;
   category = other.category;
-  uses_tmap = other.uses_tmap;
 }
 
 ps_t object_info_t::legacy_object_locator_to_ps(const object_t &oid, 
@@ -2839,13 +2838,15 @@ void object_info_t::encode(bufferlist& bl) const
     ::encode(snaps, bl);
   ::encode(truncate_seq, bl);
   ::encode(truncate_size, bl);
-  ::encode((__u8)flags, bl);
+  __u8 flags_lo = flags & 0xff;
+  __u8 flags_hi = (flags & 0xff00) >> 8;
+  ::encode(flags_lo, bl);
   ::encode(old_watchers, bl);
   /* shenanigans to avoid breaking backwards compatibility in the disk format.
    * When we can, switch this out for simply putting the version_t on disk. */
   eversion_t user_eversion(0, user_version);
   ::encode(user_eversion, bl);
-  ::encode(uses_tmap, bl);
+  ::encode(flags_hi, bl);
   ::encode(watchers, bl);
   ENCODE_FINISH(bl);
 }
@@ -2884,9 +2885,9 @@ void object_info_t::decode(bufferlist::iterator& bl)
   ::decode(truncate_seq, bl);
   ::decode(truncate_size, bl);
   if (struct_v >= 3) {
-    __u8 f;
-    ::decode(f, bl);
-    flags = (flag_t)f;
+    __u8 lo;
+    ::decode(lo, bl);
+    flags = (flag_t)lo;
   } else {
     flags = (flag_t)0;
   }
@@ -2896,10 +2897,13 @@ void object_info_t::decode(bufferlist::iterator& bl)
     ::decode(user_eversion, bl);
     user_version = user_eversion.version;
   }
-  if (struct_v >= 9)
-    ::decode(uses_tmap, bl);
-  else
-    uses_tmap = true;
+  if (struct_v >= 9) {
+    __u8 hi;
+    ::decode(hi, bl);
+    flags = (flag_t)(flags | ((unsigned)hi << 8));
+  } else {
+    set_flag(FLAG_USES_TMAP);
+  }
   if (struct_v < 10)
     soid.pool = myoloc.pool;
   if (struct_v >= 11) {

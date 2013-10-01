@@ -2094,10 +2094,13 @@ struct object_info_t {
   uint64_t size;
   utime_t mtime;
 
-  // note: these are currently encoded into 8 bits; see encode()/decode()
+  // note: these are currently encoded into a total 16 bits; see
+  // encode()/decode() for the weirdness.
   typedef enum {
     FLAG_LOST     = 1<<0,
     FLAG_WHITEOUT = 1<<1,  // object logically does not exist
+    // ...
+    FLAG_USES_TMAP = 1<<8,
   } flag_t;
   flag_t flags;
 
@@ -2108,7 +2111,6 @@ struct object_info_t {
 
 
   map<pair<uint64_t, entity_name_t>, watch_info_t> watchers;
-  bool uses_tmap;
 
   void copy_user_bits(const object_info_t& other);
 
@@ -2142,13 +2144,13 @@ struct object_info_t {
 
   explicit object_info_t()
     : user_version(0), size(0), flags((flag_t)0),
-      truncate_seq(0), truncate_size(0), uses_tmap(false)
+      truncate_seq(0), truncate_size(0)
   {}
 
   object_info_t(const hobject_t& s)
     : soid(s),
       user_version(0), size(0), flags((flag_t)0),
-      truncate_seq(0), truncate_size(0), uses_tmap(false) {}
+      truncate_seq(0), truncate_size(0) {}
 
   object_info_t(bufferlist& bl) {
     decode(bl);
