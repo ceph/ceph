@@ -3292,7 +3292,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	if (cct->_conf->osd_tmapput_sets_uses_tmap) {
 	  assert(cct->_conf->osd_auto_upgrade_tmap);
-	  oi.uses_tmap = true;
+	  oi.set_flag(object_info_t::FLAG_USES_TMAP);
 	}
 
 	// write it
@@ -3340,7 +3340,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	set<string> out_set;
 
-	if (oi.uses_tmap && cct->_conf->osd_auto_upgrade_tmap) {
+	if (oi.test_flag(object_info_t::FLAG_USES_TMAP) && cct->_conf->osd_auto_upgrade_tmap) {
 	  dout(20) << "CEPH_OSD_OP_OMAPGETKEYS: "
 		   << " Reading " << oi.soid << " omap from tmap" << dendl;
 	  map<string, bufferlist> vals;
@@ -3398,7 +3398,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	map<string, bufferlist> out_set;
 
-	if (oi.uses_tmap && cct->_conf->osd_auto_upgrade_tmap) {
+	if (oi.test_flag(object_info_t::FLAG_USES_TMAP) && cct->_conf->osd_auto_upgrade_tmap) {
 	  dout(20) << "CEPH_OSD_OP_OMAPGETVALS: "
 		   << " Reading " << oi.soid << " omap from tmap" << dendl;
 	  map<string, bufferlist> vals;
@@ -3449,7 +3449,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_OMAPGETHEADER:
       ++ctx->num_read;
       {
-	if (oi.uses_tmap && cct->_conf->osd_auto_upgrade_tmap) {
+	if (oi.test_flag(object_info_t::FLAG_USES_TMAP) && cct->_conf->osd_auto_upgrade_tmap) {
 	  dout(20) << "CEPH_OSD_OP_OMAPGETHEADER: "
 		   << " Reading " << oi.soid << " omap from tmap" << dendl;
 	  map<string, bufferlist> vals;
@@ -3480,7 +3480,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  goto fail;
 	}
 	map<string, bufferlist> out;
-	if (oi.uses_tmap && cct->_conf->osd_auto_upgrade_tmap) {
+	if (oi.test_flag(object_info_t::FLAG_USES_TMAP) && cct->_conf->osd_auto_upgrade_tmap) {
 	  dout(20) << "CEPH_OSD_OP_OMAPGET: "
 		   << " Reading " << oi.soid << " omap from tmap" << dendl;
 	  map<string, bufferlist> vals;
@@ -3579,7 +3579,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_OMAPSETVALS:
       ++ctx->num_write;
       {
-	if (oi.uses_tmap && cct->_conf->osd_auto_upgrade_tmap) {
+	if (oi.test_flag(object_info_t::FLAG_USES_TMAP) && cct->_conf->osd_auto_upgrade_tmap) {
 	  _copy_up_tmap(ctx);
 	}
 	if (!obs.exists) {
@@ -3609,7 +3609,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_OMAPSETHEADER:
       ++ctx->num_write;
       {
-	if (oi.uses_tmap && cct->_conf->osd_auto_upgrade_tmap) {
+	if (oi.test_flag(object_info_t::FLAG_USES_TMAP) && cct->_conf->osd_auto_upgrade_tmap) {
 	  _copy_up_tmap(ctx);
 	}
 	if (!obs.exists) {
@@ -3629,7 +3629,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -ENOENT;
 	  break;
 	}
-	if (oi.uses_tmap && cct->_conf->osd_auto_upgrade_tmap) {
+	if (oi.test_flag(object_info_t::FLAG_USES_TMAP) && cct->_conf->osd_auto_upgrade_tmap) {
 	  _copy_up_tmap(ctx);
 	}
 	t.touch(coll, soid);
@@ -3645,7 +3645,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -ENOENT;
 	  break;
 	}
-	if (oi.uses_tmap && cct->_conf->osd_auto_upgrade_tmap) {
+	if (oi.test_flag(object_info_t::FLAG_USES_TMAP) && cct->_conf->osd_auto_upgrade_tmap) {
 	  _copy_up_tmap(ctx);
 	}
 	t.touch(coll, soid);
@@ -3824,7 +3824,7 @@ int ReplicatedPG::_get_tmap(OpContext *ctx,
 int ReplicatedPG::_copy_up_tmap(OpContext *ctx)
 {
   dout(20) << "copying up tmap for " << ctx->new_obs.oi.soid << dendl;
-  ctx->new_obs.oi.uses_tmap = false;
+  ctx->new_obs.oi.clear_flag(object_info_t::FLAG_USES_TMAP);
   map<string, bufferlist> vals;
   bufferlist header;
   int r = _get_tmap(ctx, &vals, &header);
