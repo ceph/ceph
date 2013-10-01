@@ -2968,10 +2968,8 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
     out << " wrlock_by=" << oi.wrlock_by;
   else
     out << " " << oi.snaps;
-  if (oi.is_lost())
-    out << " LOST";
-  if (oi.is_whiteout())
-    out << " WHITEOUT";
+  if (oi.flags)
+    out << " " << oi.get_flag_string();
   out << ")";
   return out;
 }
