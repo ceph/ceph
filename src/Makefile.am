@@ -1269,7 +1269,7 @@ ceph_test_keyvaluedb_iterators_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS} ${
 bin_DEBUGPROGRAMS += ceph_test_keyvaluedb_iterators
 
 ceph_test_store_tool_SOURCES = test/ObjectMap/test_store_tool/test_store_tool.cc \
-			  os/LevelDBStore.cc
+			  os/LevelDBStore.cc common/strtol.cc
 ceph_test_store_tool_LDFLAGS = ${AM_LDFLAGS}
 ceph_test_store_tool_LDADD =  $(LIBOS_LDA) $(LIBGLOBAL_LDA)
 ceph_test_store_tool_CXXFLAGS = ${AM_CXXFLAGS} ${UNITTEST_CXXFLAGS}
