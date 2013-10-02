@@ -2561,53 +2561,57 @@ bool Monitor::_ms_dispatch(Message *m)
   EntityName entity_name;
   bool src_is_mon;
 
-  src_is_mon = !connection || (connection->get_peer_type() & CEPH_ENTITY_TYPE_MON);
+  // regardless of who we are or who the sender is, the message must
+  // have a connection associated.  If it doesn't then something fishy
+  // is going on.
+  assert(connection);
 
-  if (connection) {
-    bool reuse_caps = false;
-    dout(20) << "have connection" << dendl;
-    s = static_cast<MonSession *>(connection->get_priv());
-    if (s && s->closed) {
-      caps = s->caps;
-      reuse_caps = true;
-      s->put();
-      s = NULL;
+  src_is_mon = (connection->get_peer_type() & CEPH_ENTITY_TYPE_MON);
+
+  bool reuse_caps = false;
+  dout(20) << "have connection" << dendl;
+  s = static_cast<MonSession *>(connection->get_priv());
+  if (s && s->closed) {
+    caps = s->caps;
+    reuse_caps = true;
+    s->put();
+    s = NULL;
+  }
+  if (!s) {
+    if (!exited_quorum.is_zero() && !src_is_mon) {
+      waitlist_or_zap_client(m);
+      return true;
     }
-    if (!s) {
-      if (!exited_quorum.is_zero() && !src_is_mon) {
-	waitlist_or_zap_client(m);
-	return true;
-      }
-      dout(10) << "do not have session, making new one" << dendl;
-      s = session_map.new_session(m->get_source_inst(), m->get_connection().get());
-      m->get_connection()->set_priv(s->get());
-      dout(10) << "ms_dispatch new session " << s << " for " << s->inst << dendl;
+    dout(10) << "do not have session, making new one" << dendl;
+    s = session_map.new_session(m->get_source_inst(), m->get_connection().get());
+    m->get_connection()->set_priv(s->get());
+    dout(10) << "ms_dispatch new session " << s << " for " << s->inst << dendl;
 
-      if (m->get_connection()->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
-	dout(10) << "setting timeout on session" << dendl;
-	// set an initial timeout here, so we will trim this session even if they don't
-	// do anything.
-	s->until = ceph_clock_now(g_ceph_context);
-	s->until += g_conf->mon_subscribe_interval;
-      } else {
-	//give it monitor caps; the peer type has been authenticated
-	reuse_caps = false;
-	dout(5) << "setting monitor caps on this connection" << dendl;
-	if (!s->caps.is_allow_all()) //but no need to repeatedly copy
-	  s->caps = *mon_caps;
-      }
-      if (reuse_caps)
-        s->caps = caps;
+    if (m->get_connection()->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
+      dout(10) << "setting timeout on session" << dendl;
+      // set an initial timeout here, so we will trim this session even if they don't
+      // do anything.
+      s->until = ceph_clock_now(g_ceph_context);
+      s->until += g_conf->mon_subscribe_interval;
     } else {
-      dout(20) << "ms_dispatch existing session " << s << " for " << s->inst << dendl;
+      //give it monitor caps; the peer type has been authenticated
+      reuse_caps = false;
+      dout(5) << "setting monitor caps on this connection" << dendl;
+      if (!s->caps.is_allow_all()) //but no need to repeatedly copy
+        s->caps = *mon_caps;
     }
+    if (reuse_caps)
+      s->caps = caps;
+  } else {
+    dout(20) << "ms_dispatch existing session " << s << " for " << s->inst << dendl;
+  }
+
+  if (s) {
     if (s->auth_handler) {
       entity_name = s->auth_handler->get_entity_name();
     }
-  }
-
-  if (s)
     dout(20) << " caps " << s->caps.get_str() << dendl;
+  }
 
   if (is_synchronizing() && !src_is_mon) {
     waitlist_or_zap_client(m);
