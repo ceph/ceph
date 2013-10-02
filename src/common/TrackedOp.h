@@ -133,6 +133,8 @@ protected:
   }
 
   virtual void init_from_message() {};
+  /// output any type-specific data you want to get when dump() is called
+  virtual void _dump(utime_t now, Formatter *f) const {}
 
 public:
   virtual ~TrackedOp() { assert(request); request->put(); }
@@ -152,7 +154,7 @@ public:
   virtual const char *state_string() const {
     return events.rbegin()->second.c_str();
   }
-  virtual void dump(utime_t now, Formatter *f) const;
+  void dump(utime_t now, Formatter *f) const;
 };
 
 #endif
