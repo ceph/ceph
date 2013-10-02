@@ -2101,7 +2101,7 @@ struct object_info_t {
     FLAG_WHITEOUT = 1<<1,  // object logically does not exist
     FLAG_DIRTY    = 1<<2,  // object has been modified since last flushed or undirtied
     // ...
-    FLAG_USES_TMAP = 1<<8,
+    FLAG_USES_TMAP = 1<<8,  // deprecated; no longer used.
   } flag_t;
 
   flag_t flags;
