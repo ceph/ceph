@@ -52,17 +52,14 @@ class OpTracker {
     void operator()(TrackedOp *op);
   };
   friend class RemoveOnDelete;
-  friend class OpRequest;
   friend class OpHistory;
   uint64_t seq;
   Mutex ops_in_flight_lock;
   xlist<TrackedOp *> ops_in_flight;
   OpHistory history;
 
-protected:
-  CephContext *cct;
-
 public:
+  CephContext *cct;
   OpTracker(CephContext *cct_) : seq(0), ops_in_flight_lock("OpTracker mutex"), history(this), cct(cct_) {}
   void dump_ops_in_flight(Formatter *f);
   void dump_historic_ops(Formatter *f);
