@@ -644,6 +644,43 @@ struct ObjectOperation {
     out_handler[p] = h;
   }
 
+  void undirty() {
+    add_op(CEPH_OSD_OP_UNDIRTY);
+  }
+
+  struct C_ObjectOperation_isdirty : public Context {
+    bufferlist bl;
+    bool *pisdirty;
+    int *prval;
+    C_ObjectOperation_isdirty(bool *p, int *r)
+      : pisdirty(p), prval(r) {}
+    void finish(int r) {
+      if (r < 0)
+	return;
+      try {
+	bufferlist::iterator p = bl.begin();
+	bool isdirty;
+	::decode(isdirty, p);
+	if (pisdirty)
+	  *pisdirty = isdirty;
+      } catch (buffer::error& e) {
+	r = -EIO;
+      }
+      if (prval)
+	*prval = r;
+    }
+  };
+
+  void is_dirty(bool *pisdirty, int *prval) {
+    add_op(CEPH_OSD_OP_ISDIRTY);
+    unsigned p = ops.size() - 1;
+    out_rval[p] = prval;
+    C_ObjectOperation_isdirty *h =
+      new C_ObjectOperation_isdirty(pisdirty, prval);
+    out_bl[p] = &h->bl;
+    out_handler[p] = h;
+  }
+
   void omap_get_header(bufferlist *bl, int *prval) {
     add_op(CEPH_OSD_OP_OMAPGETHEADER);
     unsigned p = ops.size() - 1;

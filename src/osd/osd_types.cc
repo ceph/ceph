@@ -3523,6 +3523,8 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_DELETE:
     case CEPH_OSD_OP_LIST_WATCHERS:
     case CEPH_OSD_OP_LIST_SNAPS:
+    case CEPH_OSD_OP_UNDIRTY:
+    case CEPH_OSD_OP_ISDIRTY:
       break;
     case CEPH_OSD_OP_ASSERT_VER:
       out << " v" << op.op.assert_ver.ver;
