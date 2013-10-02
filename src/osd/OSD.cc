@@ -840,7 +840,7 @@ int OSD::read_meta(const  std::string &base, const std::string &file,
     int err = errno;
     return -err;
   }
-  len = safe_read(fd, val, vallen);
+  len = safe_read(fd, val, vallen - 1);
   if (len < 0) {
     TEMP_FAILURE_RETRY(::close(fd));
     return len;
