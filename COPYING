@@ -1,4 +1,4 @@
-Format-Specification: http://svn.debian.org/wsvn/dep/web/deps/dep5.mdwn?op=file&rev=135
+Format-Specification: http://anonscm.debian.org/viewvc/dep/web/deps/dep5/copyright-format.xml?revision=279&view=markup
 Name: ceph
 Maintainer: Sage Weil <sage@newdream.net>
 Source: http://ceph.com/
