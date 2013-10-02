@@ -269,6 +269,14 @@ void librados::ObjectReadOperation::list_snaps(
   o->list_snaps(out_snaps, prval);
 }
 
+void librados::ObjectReadOperation::is_dirty(bool *is_dirty, int *prval)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->is_dirty(is_dirty, prval);
+}
+
+
+
 int librados::IoCtx::omap_get_vals(const std::string& oid,
                                    const std::string& start_after,
                                    const std::string& filter_prefix,
@@ -388,6 +396,12 @@ void librados::ObjectWriteOperation::copy_from(const std::string& src,
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->copy_from(object_t(src), src_ioctx.io_ctx_impl->snap_seq, src_ioctx.io_ctx_impl->oloc, src_version);
+}
+
+void librados::ObjectWriteOperation::undirty()
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->undirty();
 }
 
 void librados::ObjectWriteOperation::tmap_put(const bufferlist &bl)

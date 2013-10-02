@@ -254,6 +254,7 @@ public:
 
     bool modify;          // (force) modification (even if op_t is empty)
     bool user_modify;     // user-visible modification
+    bool undirty;         // user explicitly un-dirtying this object
 
     // side effects
     list<watch_info_t> watch_connects;
@@ -308,7 +309,7 @@ public:
 	      ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(_obs), snapset(0),
       new_obs(_obs->oi, _obs->exists),
-      modify(false), user_modify(false),
+      modify(false), user_modify(false), undirty(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       data_off(0), reply(NULL), pg(_pg),
