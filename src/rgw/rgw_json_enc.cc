@@ -453,10 +453,8 @@ void RGWUserInfo::decode_json(JSONObj *obj)
 void RGWQuotaInfo::dump(Formatter *f) const
 {
   f->dump_bool("enabled", enabled);
-  if (enabled) {
-    f->dump_int("max_size_kb", max_size_kb);
-    f->dump_int("max_objects", max_objects);
-  }
+  f->dump_int("max_size_kb", max_size_kb);
+  f->dump_int("max_objects", max_objects);
 }
 
 void RGWQuotaInfo::decode_json(JSONObj *obj)
