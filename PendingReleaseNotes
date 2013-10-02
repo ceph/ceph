@@ -35,3 +35,19 @@ v0.70
 v0.71
 ~~~~~
 
+* The MDS now disallows snapshots by default as they are not
+  considered stable.  The command 'ceph mds set allow_snaps' will
+  enable them.
+
+* For clusters that were created before v0.44 (pre-argonaut, Spring
+  2012) and store radosgw data, the auto-upgrade from TMAP to OMAP
+  objects has been disabled.  Before upgrading, make sure that any
+  buckets created on pre-argonaut releases have been modified (e.g.,
+  by PUTing and then DELETEing an object from each bucket).  Any
+  cluster created with argonaut (v0.48) or a later release or not
+  using radosgw never relied on the automatic conversion and is not
+  affected by this change.
+
+* Any direct users of the 'tmap' portion of the librados API should be
+  aware that the automatic tmap -> omap conversion functionality has
+  been removed.
