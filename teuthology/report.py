@@ -68,9 +68,6 @@ class ResultsSerializer(object):
 
         return job_json
 
-    def print_pretty_json(self, json_obj):
-        log.info('\n'.join([l.rstrip() for l in json_obj.splitlines()]))
-
     def jobs_for_run(self, run_name):
         archive_dir = os.path.join(self.archive_base, run_name)
         if not os.path.isdir(archive_dir):
