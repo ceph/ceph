@@ -143,9 +143,10 @@ public:
   }
 
   void init_from_message();
+
+  typedef std::tr1::shared_ptr<OpRequest> Ref;
 };
 
-typedef std::tr1::shared_ptr<OpRequest> OpRequestRef;
-
+typedef OpRequest::Ref OpRequestRef;
 
 #endif /* OPREQUEST_H_ */
