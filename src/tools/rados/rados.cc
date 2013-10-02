@@ -98,6 +98,7 @@ void usage(ostream& out)
 "   rmomapkey <obj-name> <key>\n"
 "   getomapheader <obj-name>\n"
 "   setomapheader <obj-name> <val>\n"
+"   tmap-to-omap <obj-name>          convert tmap keys/values to omap\n"
 "   listwatchers <obj-name>          list the watchers of this object\n"
 "\n"
 "IMPORT AND EXPORT\n"
@@ -1813,8 +1814,15 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       bufferlist::iterator p = outdata.begin();
       bufferlist header;
       map<string, bufferlist> kv;
-      ::decode(header, p);
-      ::decode(kv, p);
+      try {
+	::decode(header, p);
+	::decode(kv, p);
+      }
+      catch (buffer::error& e) {
+	cerr << "error decoding tmap " << pool_name << "/" << oid << std::endl;
+	ret = -EINVAL;
+	goto out;
+      }
       cout << "header (" << header.length() << " bytes):\n";
       header.hexdump(cout);
       cout << "\n";
@@ -1839,6 +1847,50 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       ::encode(v, bl);
       ret = io_ctx.tmap_update(oid, bl);
     }
+  }
+
+  else if (strcmp(nargs[0], "tmap-to-omap") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage_exit();
+    string oid(nargs[1]);
+
+    bufferlist bl;
+    int r = io_ctx.tmap_get(oid, bl);
+    if (r < 0) {
+      ret = r;
+      cerr << "error reading tmap " << pool_name << "/" << oid
+	   << ": " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+    bufferlist hdr;
+    map<string, bufferlist> kv;
+    bufferlist::iterator p = bl.begin();
+    try {
+      ::decode(hdr, p);
+      ::decode(kv, p);
+    }
+    catch (buffer::error& e) {
+      cerr << "error decoding tmap " << pool_name << "/" << oid << std::endl;
+      ret = -EINVAL;
+      goto out;
+    }
+    if (!p.end()) {
+      cerr << "error decoding tmap (stray trailing data) in " << pool_name << "/" << oid << std::endl;
+      ret = -EINVAL;
+      goto out;
+    }
+    librados::ObjectWriteOperation wr;
+    wr.omap_set_header(hdr);
+    wr.omap_set(kv);
+    wr.truncate(0);  // delete the old tmap data
+    r = io_ctx.operate(oid, &wr);
+    if (r < 0) {
+      ret = r;
+      cerr << "error writing tmap data as omap on " << pool_name << "/" << oid
+	   << ": " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+    ret = 0;
   }
 
   else if (strcmp(nargs[0], "mkpool") == 0) {
