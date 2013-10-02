@@ -224,6 +224,41 @@ class ResultsReporter(object):
         return self.__http
 
 
+def create_run(run_name, base_uri=None):
+    """
+    Create a run on the results server. If it already exists, just smile and be
+    happy.
+
+    :param run_name: The name of the run.
+    :param base_uri: The endpoint of the results server. If you leave it out
+                     ResultsReporter will ask teuthology.config.
+    :return:         True if the run was successfully created.
+    """
+    # We are using archive_base='' here because we KNOW the serializer isn't
+    # needed for this codepath.
+    reporter = ResultsReporter(archive_base='', base_uri=base_uri)
+    status, msg, content = reporter.create_run(run_name)
+    return (status == 200 or msg.endswith('already exists'))
+
+
+def push_job_info(run_name, job_id, job_info, base_uri=None):
+    """
+    Push a job's info (example: ctx.config) to the results server.
+
+    :param run_name: The name of the run.
+    :param job_id:   The job's id
+    :param job_info: A dict containing the job's information.
+    :param base_uri: The endpoint of the results server. If you leave it out
+                     ResultsReporter will ask teuthology.config.
+    :return:         True if the run was successfully created.
+    """
+    # We are using archive_base='' here because we KNOW the serializer isn't
+    # needed for this codepath.
+    job_json = json.dumps(job_info)
+    reporter = ResultsReporter(archive_base='')
+    reporter.report_job(run_name, job_id, job_json)
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Submit test results to a web service")
