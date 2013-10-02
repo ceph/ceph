@@ -155,6 +155,11 @@ class ResultsPoster(object):
             num_jobs += self.submit_run(run_name)
         log.info("Total: %s jobs in %s runs", num_jobs, len(run_names))
 
+    def create_run(self, run_name):
+        run_uri = "{base}/runs/".format(base=self.base_uri, name=run_name)
+        run_json = json.dumps({'name': run_name})
+        return self.post_json(run_uri, run_json)
+
     def submit_run(self, run_name):
         jobs = self.serializer.jobs_for_run(run_name)
         log.info("{name} {jobs} jobs".format(
@@ -162,10 +167,7 @@ class ResultsPoster(object):
             jobs=len(jobs),
         ))
         if jobs:
-            run_uri = "{base}/runs/".format(
-                base=self.base_uri, name=run_name)
-            run_json = json.dumps({'name': run_name})
-            status, msg, content = self.post_json(run_uri, run_json)
+            status, msg, content = self.create_run(run_name)
             if status == 200:
                 self.submit_jobs(run_name, jobs.keys())
             elif msg.endswith('already exists'):
@@ -181,10 +183,11 @@ class ResultsPoster(object):
         for job_id in job_ids:
             self.submit_job(run_name, job_id)
 
-    def submit_job(self, run_name, job_id):
+    def submit_job(self, run_name, job_id, job_json=None):
         run_uri = "{base}/runs/{name}/".format(
             base=self.base_uri, name=run_name,)
-        job_json = self.serializer.json_for_job(run_name, job_id)
+        if job_json is None:
+            job_json = self.serializer.json_for_job(run_name, job_id)
         status, msg, content = self.post_json(run_uri, job_json)
 
         if msg.endswith('already exists'):
