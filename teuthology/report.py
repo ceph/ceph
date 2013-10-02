@@ -40,12 +40,25 @@ class RequestFailedError(RuntimeError):
 
 
 class ResultsSerializer(object):
+    """
+    This class exists to poke around in the archive directory doing things like
+    assembling lists of test runs, lists of their jobs, and merging sets of job
+    YAML files together to form JSON objects.
+    """
     yamls = ('orig.config.yaml', 'config.yaml', 'info.yaml', 'summary.yaml')
 
     def __init__(self, archive_base):
         self.archive_base = archive_base
 
     def json_for_job(self, run_name, job_id, pretty=False):
+        """
+        Given a run name and job id, merge the job's YAML files together to
+        create a JSON object.
+
+        :param run_name: The name of the run.
+        :param job_id:   The job's id.
+        :returns:        A JSON object.
+        """
         job_archive_dir = os.path.join(self.archive_base,
                                        run_name,
                                        job_id)
@@ -70,6 +83,13 @@ class ResultsSerializer(object):
         return job_json
 
     def jobs_for_run(self, run_name):
+        """
+        Given a run name, look on the filesystem for directories containing job
+        information, and return a dict mapping job IDs to job directories.
+
+        :param run_name: The name of the run.
+        :returns:        A dict like: {'1': '/path/to/1', '2': 'path/to/2'}
+        """
         archive_dir = os.path.join(self.archive_base, run_name)
         if not os.path.isdir(archive_dir):
             return {}
@@ -85,6 +105,10 @@ class ResultsSerializer(object):
 
     @property
     def all_runs(self):
+        """
+        Look in the base archive directory for all test runs. Return a list of
+        their names.
+        """
         archive_base = self.archive_base
         if not os.path.isdir(archive_base):
             return []
@@ -102,12 +126,18 @@ class ResultsReporter(object):
     def __init__(self, archive_base, base_uri=None, save=False, refresh=False):
         self.archive_base = archive_base
         self.base_uri = base_uri or config.results_server
-        self.base_uri = self.base_uri.rstrip('/')
+        if self.base_uri:
+            self.base_uri = self.base_uri.rstrip('/')
         self.serializer = ResultsSerializer(archive_base)
         self.save_last_run = save
         self.refresh = refresh
 
     def _do_request(self, uri, method, json_):
+        """
+        Perform an actual HTTP request on a given URI. If the request was not
+        successful and the reason was *not* that the object already exists,
+        raise a RequestFailedError.
+        """
         response, content = self.http.request(
             uri, method, json_, headers={'content-type': 'application/json'},
         )
@@ -125,12 +155,21 @@ class ResultsReporter(object):
         return response.status, message, content
 
     def post_json(self, uri, json_):
+        """
+        call self._do_request(uri, 'POST', json_)
+        """
         return self._do_request(uri, 'POST', json_)
 
     def put_json(self, uri, json_):
+        """
+        call self._do_request(uri, 'PUT', json_)
+        """
         return self._do_request(uri, 'PUT', json_)
 
     def report_all_runs(self):
+        """
+        Report *all* runs in self.archive_dir to the results server.
+        """
         all_runs = self.serializer.all_runs
         last_run = self.last_run
         if self.save_last_run and last_run and last_run in all_runs:
@@ -150,17 +189,34 @@ class ResultsReporter(object):
         log.info("Total: %s jobs in %s runs", num_jobs, num_runs)
 
     def report_runs(self, run_names):
+        """
+        Report several runs to the results server.
+
+        :param run_names: The names of the runs.
+        """
         num_jobs = 0
         for run_name in run_names:
             num_jobs += self.report_run(run_name)
         log.info("Total: %s jobs in %s runs", num_jobs, len(run_names))
 
     def create_run(self, run_name):
+        """
+        Create a run on the results server.
+
+        :param run_name: The name of the run.
+        :returns:        The result of self.post_json()
+        """
         run_uri = "{base}/runs/".format(base=self.base_uri, name=run_name)
         run_json = json.dumps({'name': run_name})
         return self.post_json(run_uri, run_json)
 
     def report_run(self, run_name):
+        """
+        Report a single run to the results server.
+
+        :param run_name: The name of the run.
+        :returns:        The number of jobs reported.
+        """
         jobs = self.serializer.jobs_for_run(run_name)
         log.info("{name} {jobs} jobs".format(
             name=run_name,
@@ -180,10 +236,24 @@ class ResultsReporter(object):
         return len(jobs)
 
     def report_jobs(self, run_name, job_ids):
+        """
+        Report several jobs to the results server.
+
+        :param run_name: The name of the run.
+        :param job_ids:  The jobs' ids
+        """
         for job_id in job_ids:
             self.report_job(run_name, job_id)
 
     def report_job(self, run_name, job_id, job_json=None):
+        """
+        Report a single job to the results server.
+
+        :param run_name: The name of the run.
+        :param job_id:   The job's id
+        :param job_json: The job's JSON object. Optional - if not present, we
+                         look at the archive.
+        """
         run_uri = "{base}/runs/{name}/".format(
             base=self.base_uri, name=run_name,)
         if job_json is None:
@@ -197,6 +267,9 @@ class ResultsReporter(object):
 
     @property
     def last_run(self):
+        """
+        The last run to be successfully reported.
+        """
         if hasattr(self, '__last_run'):
             return self.__last_run
         elif os.path.exists(self.last_run_file):
@@ -232,7 +305,7 @@ def create_run(run_name, base_uri=None):
     :param run_name: The name of the run.
     :param base_uri: The endpoint of the results server. If you leave it out
                      ResultsReporter will ask teuthology.config.
-    :return:         True if the run was successfully created.
+    :returns:         True if the run was successfully created.
     """
     # We are using archive_base='' here because we KNOW the serializer isn't
     # needed for this codepath.
@@ -250,7 +323,7 @@ def push_job_info(run_name, job_id, job_info, base_uri=None):
     :param job_info: A dict containing the job's information.
     :param base_uri: The endpoint of the results server. If you leave it out
                      ResultsReporter will ask teuthology.config.
-    :return:         True if the run was successfully created.
+    :returns:         True if the run was successfully created.
     """
     # We are using archive_base='' here because we KNOW the serializer isn't
     # needed for this codepath.
