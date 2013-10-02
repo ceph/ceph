@@ -2631,14 +2631,28 @@ bool Monitor::_ms_dispatch(Message *m)
     return true;
   }
 
-  {
-    switch (m->get_type()) {
-      
+  ret = dispatch(s, m, src_is_mon);
+
+  if (s) {
+    s->put();
+  }
+
+  return ret;
+}
+
+bool Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
+{
+  bool ret = true;
+
+  assert(m != NULL);
+
+  switch (m->get_type()) {
+
     case MSG_ROUTE:
       handle_route(static_cast<MRoute*>(m));
       break;
 
-      // misc
+    // misc
     case CEPH_MSG_MON_GET_MAP:
       handle_mon_get_map(static_cast<MMonGetMap*>(m));
       break;
@@ -2664,12 +2678,11 @@ bool Monitor::_ms_dispatch(Message *m)
     case MSG_MON_SYNC:
       handle_sync(static_cast<MMonSync*>(m));
       break;
-
     case MSG_MON_SCRUB:
       handle_scrub(static_cast<MMonScrub*>(m));
       break;
 
-      // OSDs
+    // OSDs
     case MSG_OSD_MARK_ME_DOWN:
     case MSG_OSD_FAILURE:
     case MSG_OSD_BOOT:
@@ -2682,20 +2695,20 @@ bool Monitor::_ms_dispatch(Message *m)
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
-      // MDSs
+    // MDSs
     case MSG_MDS_BEACON:
     case MSG_MDS_OFFLOAD_TARGETS:
       paxos_service[PAXOS_MDSMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
-      // auth
+    // auth
     case MSG_MON_GLOBAL_ID:
     case CEPH_MSG_AUTH:
       /* no need to check caps here */
       paxos_service[PAXOS_AUTH]->dispatch((PaxosServiceMessage*)m);
       break;
 
-      // pg
+    // pg
     case CEPH_MSG_STATFS:
     case MSG_PGSTATS:
     case MSG_GETPOOLSTATS:
@@ -2706,7 +2719,7 @@ bool Monitor::_ms_dispatch(Message *m)
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
-      // log
+    // log
     case MSG_LOG:
       paxos_service[PAXOS_LOG]->dispatch((PaxosServiceMessage*)m);
       break;
@@ -2715,60 +2728,60 @@ bool Monitor::_ms_dispatch(Message *m)
       clog.handle_log_ack((MLogAck*)m);
       break;
 
-      // monmap
+    // monmap
     case MSG_MON_JOIN:
       paxos_service[PAXOS_MONMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
-      // paxos
+    // paxos
     case MSG_MON_PAXOS:
       {
-	MMonPaxos *pm = static_cast<MMonPaxos*>(m);
-	if (!src_is_mon && 
-	    !s->is_capable("mon", MON_CAP_X)) {
-	  //can't send these!
-	  pm->put();
-	  break;
-	}
+        MMonPaxos *pm = static_cast<MMonPaxos*>(m);
+        if (!src_is_mon &&
+            !s->is_capable("mon", MON_CAP_X)) {
+          //can't send these!
+          pm->put();
+          break;
+        }
 
-	if (state == STATE_SYNCHRONIZING) {
-	  // we are synchronizing. These messages would do us no
-	  // good, thus just drop them and ignore them.
-	  dout(10) << __func__ << " ignore paxos msg from "
-		   << pm->get_source_inst() << dendl;
-	  pm->put();
-	  break;
-	}
+        if (state == STATE_SYNCHRONIZING) {
+          // we are synchronizing. These messages would do us no
+          // good, thus just drop them and ignore them.
+          dout(10) << __func__ << " ignore paxos msg from "
+            << pm->get_source_inst() << dendl;
+          pm->put();
+          break;
+        }
 
-	// sanitize
-	if (pm->epoch > get_epoch()) {
-	  bootstrap();
-	  pm->put();
-	  break;
-	}
-	if (pm->epoch != get_epoch()) {
-	  pm->put();
-	  break;
-	}
+        // sanitize
+        if (pm->epoch > get_epoch()) {
+          bootstrap();
+          pm->put();
+          break;
+        }
+        if (pm->epoch != get_epoch()) {
+          pm->put();
+          break;
+        }
 
-	paxos->dispatch((PaxosServiceMessage*)m);
+        paxos->dispatch((PaxosServiceMessage*)m);
       }
       break;
 
-      // elector messages
+    // elector messages
     case MSG_MON_ELECTION:
       //check privileges here for simplicity
       if (s &&
-	  !s->is_capable("mon", MON_CAP_X)) {
-	dout(0) << "MMonElection received from entity without enough caps!"
-		<< s->caps << dendl;
-	m->put();
-	break;
+          !s->is_capable("mon", MON_CAP_X)) {
+        dout(0) << "MMonElection received from entity without enough caps!"
+          << s->caps << dendl;
+        m->put();
+        break;
       }
       if (!is_probing() && !is_synchronizing()) {
-	elector.dispatch(m);
+        elector.dispatch(m);
       } else {
-	m->put();
+        m->put();
       }
       break;
 
@@ -2786,10 +2799,6 @@ bool Monitor::_ms_dispatch(Message *m)
 
     default:
       ret = false;
-    }
-  }
-  if (s) {
-    s->put();
   }
 
   return ret;
