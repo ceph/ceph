@@ -140,9 +140,8 @@ class ResultsPoster(object):
             jobs=len(jobs),
         ))
         if jobs:
-            h = httplib2.Http()
             run_json = json.dumps({'name': run_name})
-            resp, content = h.request(
+            resp, content = self.http.request(
                 "{base}/runs/".format(base=self.base_uri, name=run_name),
                 'POST',
                 run_json,
@@ -162,8 +161,7 @@ class ResultsPoster(object):
 
     def post_job(self, run_name, job_id):
         job_json = self.serializer.json_for_job(run_name, job_id)
-        h = httplib2.Http()
-        resp, content = h.request(
+        resp, content = self.http.request(
             "{base}/runs/{name}/".format(base=self.base_uri, name=run_name,),
             'POST',
             job_json,
@@ -175,7 +173,7 @@ class ResultsPoster(object):
             message = ''
 
         if message.endswith('already exists'):
-            resp, content = h.request(
+            resp, content = self.http.request(
                 "{base}/runs/{name}/".format(
                     base=self.base_uri,
                     name=run_name,),
@@ -207,6 +205,13 @@ class ResultsPoster(object):
         self.__last_run = None
         if os.path.exists(self.last_run_file):
             os.remove(self.last_run_file)
+
+    @property
+    def http(self):
+        if hasattr(self, '__http'):
+            return self.__http
+        self.__http = httplib2.Http()
+        return self.__http
 
 
 def parse_args():
