@@ -13,7 +13,8 @@ libos_la_SOURCES = \
 	os/WBThrottle.cc \
 	os/BtrfsFileStoreBackend.cc \
 	os/GenericFileStoreBackend.cc \
-	os/ZFSFileStoreBackend.cc
+	os/ZFSFileStoreBackend.cc \
+	common/TrackedOp.cc
 noinst_LTLIBRARIES += libos.la
 
 noinst_HEADERS += \
