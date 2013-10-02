@@ -1738,10 +1738,6 @@ protected:
   }
 
 private:
-  static int write_meta(const std::string &base, const std::string &file,
-			const char *val, size_t vallen);
-  static int read_meta(const std::string &base, const std::string &file,
-		       char *val, size_t vallen);
   static int write_meta(const std::string &base,
 			uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami);
 public:

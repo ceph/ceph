@@ -501,8 +501,7 @@ void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transac
 int ObjectStore::collection_list(coll_t c, vector<hobject_t>& o)
 {
   vector<ghobject_t> go;
-  FileStore *fs = dynamic_cast<FileStore * >(this);
-  int ret = fs->collection_list(c, go);
+  int ret = collection_list(c, go);
   if (ret == 0) {
     o.reserve(go.size());
     for (vector<ghobject_t>::iterator i = go.begin(); i != go.end() ; i++)
@@ -517,8 +516,7 @@ int ObjectStore::collection_list_partial(coll_t c, hobject_t start,
 {
   vector<ghobject_t> go;
   ghobject_t gnext, gstart(start);
-  FileStore *fs = dynamic_cast<FileStore * >(this);
-  int ret = fs->collection_list_partial(c, gstart, min, max, snap, &go, &gnext);
+  int ret = collection_list_partial(c, gstart, min, max, snap, &go, &gnext);
   if (ret == 0) {
     *next = gnext.hobj;
     ls->reserve(go.size());
@@ -533,8 +531,7 @@ int ObjectStore::collection_list_range(coll_t c, hobject_t start, hobject_t end,
 {
   vector<ghobject_t> go;
   ghobject_t gstart(start), gend(end);
-  FileStore *fs = dynamic_cast<FileStore * >(this);
-  int ret = fs->collection_list_range(c, gstart, gend, seq, &go);
+  int ret = collection_list_range(c, gstart, gend, seq, &go);
   if (ret == 0) {
     ls->reserve(go.size());
     for (vector<ghobject_t>::iterator i = go.begin(); i != go.end() ; i++)
