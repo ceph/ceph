@@ -1,5 +1,6 @@
 import logging
 import contextlib
+import time
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -33,6 +34,24 @@ def run_rest_api_daemon(ctx, api_clients):
                     stdin=run.PIPE,
                     wait=False,
                     )
+                for i in range(1, 12):
+                    log.info('testing for ceph-rest-api try {0}'.format(i))
+                    run_cmd = [
+                        'wget',
+                        '-O',
+                        '/dev/null',
+                        '-q',
+                        'http://localhost:5000/api/v0.1/status'
+                    ]
+                    proc = rems.run(
+                        args=run_cmd,
+                        check_status=False
+                    )
+                    if proc.exitstatus == 0:
+                        break
+                    time.sleep(5)
+                if proc.exitstatus != 0:
+                    raise RuntimeError('Cannot contact ceph-rest-api')
     try:
         yield
 
@@ -79,19 +98,17 @@ def task(ctx, config):
     remotes = ctx.cluster.only(teuthology.is_type('client')).remotes
     log.info(remotes)
     if config == None:
-        for _, role_v in remotes.iteritems():
-            for node in role_v:
-                api_clients.append(node)
+        api_clients = ['client.{id}'.format(id=id_)
+            for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
     else:
-        for role_v in config:
-            api_clients.append(role_v)
+        api_clients = config
     log.info(api_clients)
     testdir = teuthology.get_testdir(ctx)
     coverage_dir = '{tdir}/archive/coverage'.format(tdir=testdir)
     for rems, roles in remotes.iteritems():
         for whole_id_ in roles:
             if whole_id_ in api_clients:
-                id_ = whole_id_[len('clients'):]
+                id_ = whole_id_[len('client.'):]
                 keyring = '/etc/ceph/ceph.client.rest{id}.keyring'.format(
                         id=id_)
                 rems.run(
