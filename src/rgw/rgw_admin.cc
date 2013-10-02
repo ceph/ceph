@@ -62,6 +62,9 @@ void _usage()
   cerr << "  bucket check               check bucket index\n";
   cerr << "  object rm                  remove object\n";
   cerr << "  object unlink              unlink object from bucket index\n";
+  cerr << "  quota set                  set quota params\n";
+  cerr << "  quota enable               enable quota\n";
+  cerr << "  quota disable              disable quota\n";
   cerr << "  region get                 show region info\n";
   cerr << "  regions list               list all regions set on this cluster\n";
   cerr << "  region set                 set region info (requires infile)\n";
@@ -154,6 +157,10 @@ void _usage()
   cerr << "   --yes-i-really-mean-it    required for certain operations\n";
   cerr << "\n";
   cerr << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
+  cerr << "\nQuota options:\n";
+  cerr << "   --bucket                  specified bucket for quota command\n";
+  cerr << "   --max-objects             specify max objects\n";
+  cerr << "   --max-size                specify max size\n";
   cerr << "\n";
   generic_client_usage();
 }
@@ -203,6 +210,9 @@ enum {
   OPT_OBJECT_RM,
   OPT_OBJECT_UNLINK,
   OPT_OBJECT_STAT,
+  OPT_QUOTA_SET,
+  OPT_QUOTA_ENABLE,
+  OPT_QUOTA_DISABLE,
   OPT_GC_LIST,
   OPT_GC_PROCESS,
   OPT_REGION_GET,
@@ -253,6 +263,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       strcmp(cmd, "opstate") == 0 ||
       strcmp(cmd, "pool") == 0 ||
       strcmp(cmd, "pools") == 0 ||
+      strcmp(cmd, "quota") == 0 ||
       strcmp(cmd, "region") == 0 ||
       strcmp(cmd, "regions") == 0 ||
       strcmp(cmd, "region-map") == 0 ||
@@ -362,6 +373,13 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_REGION_SET;
     if (strcmp(cmd, "default") == 0)
       return OPT_REGION_DEFAULT;
+  } else if (strcmp(prev_cmd, "quota") == 0) {
+    if (strcmp(cmd, "set") == 0)
+      return OPT_QUOTA_SET;
+    if (strcmp(cmd, "enable") == 0)
+      return OPT_QUOTA_ENABLE;
+    if (strcmp(cmd, "disable") == 0)
+      return OPT_QUOTA_DISABLE;
   } else if (strcmp(prev_cmd, "regions") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_REGION_LIST;
@@ -722,6 +740,9 @@ int main(int argc, char **argv)
   ReplicaLogType replica_log_type = ReplicaLog_Invalid;
   string op_mask_str;
 
+  int64_t max_objects = -1;
+  int64_t max_size = -1;
+
   std::string val;
   std::ostringstream errs;
   long long tmp = 0;
@@ -788,6 +809,10 @@ int main(int argc, char **argv)
       max_buckets = atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--max-entries", (char*)NULL)) {
       max_entries = atoi(val.c_str());
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-size", (char*)NULL)) {
+      max_size = (int64_t)atoll(val.c_str());
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-objects", (char*)NULL)) {
+      max_objects = (int64_t)atoll(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--date", "--time", (char*)NULL)) {
       date = val;
       if (end_date.empty())
@@ -2226,6 +2251,48 @@ next:
       ret = logger.delete_bound(bucket, daemon_id);
       if (ret < 0)
         return -ret;
+    }
+  }
+
+  bool quota_op = (opt_cmd == OPT_QUOTA_SET || opt_cmd == OPT_QUOTA_ENABLE || opt_cmd == OPT_QUOTA_DISABLE);
+
+  if (quota_op) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket name was not specified" << std::endl;
+      return EINVAL;
+    }
+
+    RGWBucketInfo bucket_info;
+    map<string, bufferlist> attrs;
+    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL, &attrs);
+    if (r < 0) {
+      cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
+      return -r;
+    }
+
+    switch (opt_cmd) {
+      case OPT_QUOTA_ENABLE:
+        bucket_info.quota.enabled = true;
+
+        // falling through on purpose
+
+      case OPT_QUOTA_SET:
+        if (max_objects >= 0) {
+          bucket_info.quota.max_objects = max_objects;
+        }
+        if (max_size >= 0) {
+          bucket_info.quota.max_size_kb = rgw_rounded_kb(max_size);
+        }
+        break;
+      case OPT_QUOTA_DISABLE:
+        bucket_info.quota.enabled = false;
+        break;
+    }
+
+    r = store->put_bucket_instance_info(bucket_info, false, 0, &attrs);
+    if (r < 0) {
+      cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-r) << std::endl;
+      return -r;
     }
   }
   return 0;
