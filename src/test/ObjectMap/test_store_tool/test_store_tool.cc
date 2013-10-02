@@ -38,7 +38,7 @@ class StoreTool
     db.reset(db_ptr);
   }
 
-  void list(const string &prefix) {
+  void list(const string &prefix, const bool do_crc) {
     KeyValueDB::WholeSpaceIterator iter = db->get_iterator();
 
     if (prefix.empty())
@@ -51,7 +51,11 @@ class StoreTool
       if (!prefix.empty() && (rk.first != prefix))
 	break;
 
-      std::cout << rk.first << ":" << rk.second << std::endl;
+      std::cout << rk.first << ":" << rk.second;
+      if (do_crc) {
+        std::cout << " (" << iter->value().crc32c(0) << ")";
+      }
+      std::cout << std::endl;
       iter->next();
     }
   }
@@ -109,6 +113,7 @@ void usage(const char *pname)
     << "\n"
     << "Commands:\n"
     << "  list [prefix]\n"
+    << "  list-crc [prefix]\n"
     << "  exists <prefix> [key]\n"
     << "  get <prefix> <key>\n"
     << "  crc <prefix> <key>\n"
@@ -140,12 +145,14 @@ int main(int argc, const char *argv[])
 
   StoreTool st(path);
 
-  if (cmd == "list") {
+  if (cmd == "list" || cmd == "list-crc") {
     string prefix;
     if (argc > 3)
       prefix = argv[3];
 
-    st.list(prefix);
+    bool do_crc = (cmd == "list-crc");
+
+    st.list(prefix, do_crc);
 
   } else if (cmd == "exists") {
     string key;
