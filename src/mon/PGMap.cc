@@ -701,7 +701,8 @@ void PGMap::dump_stuck_plain(ostream& ss, PGMap::StuckPG type, utime_t cutoff) c
 {
   hash_map<pg_t, pg_stat_t> stuck_pg_stats;
   get_stuck_stats(type, cutoff, stuck_pg_stats);
-  dump_pg_stats_plain(ss, stuck_pg_stats);
+  if (!stuck_pg_stats.empty())
+    dump_pg_stats_plain(ss, stuck_pg_stats);
 }
 
 void PGMap::dump_osd_perf_stats(Formatter *f) const
