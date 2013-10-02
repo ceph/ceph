@@ -41,9 +41,12 @@ class rgw_bucket;
 
 class RGWQuotaHandler {
 public:
+  RGWQuotaHandler() {}
   virtual ~RGWQuotaHandler() {}
   virtual int check_quota(rgw_bucket& bucket, RGWQuotaInfo& bucket_quota,
 			  uint64_t num_objs, uint64_t size) = 0;
+
+  virtual void update_stats(rgw_bucket& bucket, int obj_delta, uint64_t added_bytes, uint64_t removed_bytes) = 0;
 
   static RGWQuotaHandler *generate_handler(RGWRados *store);
   static void free_handler(RGWQuotaHandler *handler);
