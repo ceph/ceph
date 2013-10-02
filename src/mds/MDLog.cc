@@ -499,7 +499,11 @@ void MDLog::_replay_thread()
     if (journaler->get_error()) {
       r = journaler->get_error();
       dout(0) << "_replay journaler got error " << r << ", aborting" << dendl;
-      if (r == -EINVAL) {
+      if (r == -ENOENT) {
+	// journal has been trimmed by somebody else?
+	assert(journaler->is_readonly());
+	r = -EAGAIN;
+      } else if (r == -EINVAL) {
         if (journaler->get_read_pos() < journaler->get_expire_pos()) {
           // this should only happen if you're following somebody else
           assert(journaler->is_readonly());
