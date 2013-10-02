@@ -2578,10 +2578,23 @@ bool Monitor::_ms_dispatch(Message *m)
     s = NULL;
   }
   if (!s) {
+    // if the sender is not a monitor, make sure their first message for a
+    // session is an MAuth.  If it is not, assume it's a stray message,
+    // and considering that we are creating a new session it is safe to
+    // assume that the sender hasn't authenticated yet, so we have no way
+    // of assessing whether we should handle it or not.
+    if (!src_is_mon && m->get_type() != CEPH_MSG_AUTH) {
+      dout(1) << __func__ << " dropping stray message " << *m
+        << " from " << m->get_source_inst() << dendl;
+      m->put();
+      return false;
+    }
+
     if (!exited_quorum.is_zero() && !src_is_mon) {
       waitlist_or_zap_client(m);
       return true;
     }
+
     dout(10) << "do not have session, making new one" << dendl;
     s = session_map.new_session(m->get_source_inst(), m->get_connection().get());
     m->get_connection()->set_priv(s->get());
