@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2013 CERN/Sitzerland
+ * Copyright (C) 2013 CERN/Switzerland
  *
  * Author: Andreas Joachim Peters <andreas.joachim.peters@cern.ch> 
  *

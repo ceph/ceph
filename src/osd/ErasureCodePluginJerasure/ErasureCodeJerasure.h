@@ -4,7 +4,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
- *               2013 CERN/Sitzerland
+ *               2013 CERN/Switzerland
  *
  * Authors: Loic Dachary <loic@dachary.org>
  *          Andreas-Joachim Peters <andreas.joachim.peters@cern.ch>
