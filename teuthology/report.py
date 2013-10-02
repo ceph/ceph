@@ -1,17 +1,19 @@
 #!/usr/bin/env python
 
-import sys
 import os
 import yaml
 import json
 import re
 import httplib2
 import logging
+import argparse
+from textwrap import dedent
 
 from teuthology.config import config
 
 
 log = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 
 class RequestFailedError(RuntimeError):
@@ -97,16 +99,19 @@ class ResultsSerializer(object):
 
 
 class ResultsPoster(object):
+    last_run_file = 'last_successful_run'
+
     def __init__(self, archive_base, base_uri=None):
         self.archive_base = archive_base
         self.base_uri = base_uri or config.results_server
         self.base_uri = self.base_uri.rstrip('/')
         self.serializer = ResultsSerializer(archive_base)
+        self.save_last_run = True
 
     def post_all_runs(self):
         all_runs = self.serializer.all_runs
         last_run = self.last_run
-        if last_run and last_run in all_runs:
+        if self.save_last_run and last_run and last_run in all_runs:
             next_index = all_runs.index(last_run) + 1
             runs = all_runs[next_index:]
         else:
@@ -117,8 +122,16 @@ class ResultsPoster(object):
         for run in runs:
             job_count = self.post_run(run)
             num_jobs += job_count
-            self.last_run = run
+            if self.save_last_run:
+                self.last_run = run
+        del self.last_run
         log.info("Total: %s jobs in %s runs", num_jobs, num_runs)
+
+    def post_runs(self, run_names):
+        num_jobs = 0
+        for run_name in run_names:
+            num_jobs += self.post_run(run_name)
+        log.info("Total: %s jobs in %s runs", num_jobs, len(run_names))
 
     def post_run(self, run_name):
         jobs = self.serializer.jobs_for_run(run_name)
@@ -140,6 +153,7 @@ class ResultsPoster(object):
                     self.post_job(run_name, job_id)
             elif resp.status != 200:
                 message = json.loads(content).get('message', '')
+                # FIXME: This will skip partially-submitted runs.
                 if message.endswith('already exists'):
                     log.info("    already present; skipped")
                 else:
@@ -177,23 +191,56 @@ class ResultsPoster(object):
     def last_run(self):
         if hasattr(self, '__last_run'):
             return self.__last_run
-        elif os.path.exists('last_successful_run'):
-            with file('last_successful_run') as f:
+        elif os.path.exists(self.last_run_file):
+            with file(self.last_run_file) as f:
                 self.__last_run = f.read().strip()
             return self.__last_run
 
     @last_run.setter
     def last_run(self, run_name):
         self.__last_run = run_name
-        with file('last_successful_run', 'w') as f:
+        with file(self.last_run_file, 'w') as f:
             f.write(run_name)
 
+    @last_run.deleter
+    def last_run(self):
+        self.__last_run = None
+        if os.path.exists(self.last_run_file):
+            os.remove(self.last_run_file)
 
-def main(argv):
-    archive_base = os.path.abspath(os.path.expanduser(argv[1]))
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Submit test results to a web service")
+    parser.add_argument('-a', '--archive', required=True,
+                        help="The base archive directory")
+    parser.add_argument('-r', '--run', nargs='*',
+                        help="A run (or list of runs) to submit")
+    parser.add_argument('--all-runs', action='store_true',
+                        help="Submit all runs in the archive")
+    parser.add_argument('-n', '--no-save', dest='save',
+                        action='store_false',
+                        help=dedent("""By default, when submitting all runs, we
+                        remember the last successful submission in a file
+                        called 'last_successful_run'. Pass this flag to disable
+                        that behavior."""))
+    args = parser.parse_args()
+    return args
+
+
+def main():
+    args = parse_args()
+    archive_base = os.path.abspath(os.path.expanduser(args.archive))
     poster = ResultsPoster(archive_base)
-    poster.post_all_runs()
+    if not args.save:
+        poster.save_last_run = False
+    if args.run and len(args.run) > 1:
+        poster.post_runs(args.run)
+    elif args.run:
+        poster.post_run(args.run[0])
+    elif args.all_runs:
+        poster.post_all_runs()
 
 
 if __name__ == "__main__":
-    main(sys.argv)
+    main()
