@@ -2600,7 +2600,7 @@ bool Monitor::_ms_dispatch(Message *m)
     m->get_connection()->set_priv(s->get());
     dout(10) << "ms_dispatch new session " << s << " for " << s->inst << dendl;
 
-    if (m->get_connection()->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
+    if (!src_is_mon) {
       dout(10) << "setting timeout on session" << dendl;
       // set an initial timeout here, so we will trim this session even if they don't
       // do anything.
