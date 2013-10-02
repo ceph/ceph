@@ -155,7 +155,7 @@ public:
   virtual const char *state_string() const {
     return events.rbegin()->second.c_str();
   }
-  virtual void dump(utime_t now, Formatter *f) const = 0;
+  virtual void dump(utime_t now, Formatter *f) const;
 };
 
 #endif
