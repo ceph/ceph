@@ -2,14 +2,13 @@
 PG Backend Proposal
 ===================
 
-See also `PGBackend.h <../PGBackend-h>`_
-
 Motivation
 ----------
 
-The purpose of the PG Backend interface is to abstract over the
-differences between replication and erasure coding as failure recovery
-mechanisms.
+The purpose of the `PG Backend interface
+<https://github.com/ceph/ceph/blob/a287167cf8625165249b7636540591aefc0a693d/src/osd/PGBackend.h>`_
+is to abstract over the differences between replication and erasure
+coding as failure recovery mechanisms.
 
 Much of the existing PG logic, particularly that for dealing with
 peering, will be common to each.  With both schemes, a log of recent
@@ -34,12 +33,12 @@ and erasure coding which PGBackend must abstract over:
    positions are not interchangeable.  In particular, it might make
    sense for a single OSD to hold more than 1 PG copy for different
    acting set positions.
-5. Selection of a pgtemp for backfill may difer between replicated
+5. Selection of a pgtemp for backfill may differ between replicated
    and erasure coded backends.
 6. The set of necessary osds from a particular interval required to
-   to continue peering may difer between replicated and erasure
+   to continue peering may differ between replicated and erasure
    coded backends.
-7. The selection of the authoritative log may difer between replicated
+7. The selection of the authoritative log may differ between replicated
    and erasure coded backends.
 
 Client Writes
@@ -78,8 +77,9 @@ Core Changes:
 - Current code should be adapted to use and rollback as appropriate
   APPEND, DELETE, (SET|RM)ATTR log entries.
 - The filestore needs to be able to deal with multiply versioned
-  hobjects.  This probably means adapting the filestore internally to
-  use a ghobject which is basically a tuple<hobject_t, gen_t,
+  hobjects.  This means adapting the filestore internally to
+  use a `ghobject <https://github.com/ceph/ceph/blob/aba6efda13eb6ab4b96930e9cc2dbddebbe03f26/src/common/hobject.h#L193>`_ 
+  which is basically a tuple<hobject_t, gen_t,
   shard_t>.  The gen_t + shard_t need to be included in the on-disk
   filename.  gen_t is a unique object identifier to make sure there
   are no name collisions when object N is created +
@@ -114,7 +114,7 @@ divergent objects.  Thus, we must choose the *oldest* last_update from
 the last interval which went active in order to minimize the number of
 divergent objects.
 
-The dificulty is that the current code assumes that as long as it has
+The difficulty is that the current code assumes that as long as it has
 an info from at least 1 osd from the prior interval, it can complete
 peering.  In order to ensure that we do not end up with an
 unrecoverably divergent object, a K+M erasure coded PG must hear from at
@@ -161,7 +161,7 @@ Client Reads
 ------------
 
 Reads with the replicated strategy can always be satisfied
-syncronously out of the primary osd.  With an erasure coded strategy,
+synchronously out of the primary osd.  With an erasure coded strategy,
 the primary will need to request data from some number of replicas in
 order to satisfy a read.  The perform_read() interface for PGBackend
 therefore will be async.
@@ -192,7 +192,7 @@ include the chunk id in the object key.
 Core changes:
 
 - The filestore `ghobject_t needs to also include a chunk id
-  <http://tracker.ceph.com/issues/5862>`_ making it more like
+  <https://github.com/ceph/ceph/blob/aba6efda13eb6ab4b96930e9cc2dbddebbe03f26/src/common/hobject.h#L193>`_ making it more like
   tuple<hobject_t, gen_t, shard_t>.
 - coll_t needs to include a shard_t.
 - The `OSD pg_map and similar pg mappings need to work in terms of a
@@ -260,7 +260,7 @@ Core changes:
 Recovery
 --------
 
-See `Issue #5857`_. The logic for recovering an object depends on the backend.  With
+The logic for recovering an object depends on the backend.  With
 the current replicated strategy, we first pull the object replica
 to the primary and then concurrently push it out to the replicas.
 With the erasure coded strategy, we probably want to read the
@@ -270,7 +270,7 @@ and push out the replacement chunks concurrently.
 Another difference is that objects in erasure coded pg may be
 unrecoverable without being unfound.  The "unfound" concept
 should probably then be renamed to unrecoverable.  Also, the
-PGBackend impementation will have to be able to direct the search
+PGBackend implementation will have to be able to direct the search
 for pg replicas with unrecoverable object chunks and to be able
 to determine whether a particular object is recoverable.
 
@@ -281,9 +281,11 @@ Core changes:
 
 PGBackend interfaces:
 
-- might_have_unrecoverable()
-- recoverable()
-- recover_object()
+- `on_local_recover_start <https://github.com/ceph/ceph/blob/a287167cf8625165249b7636540591aefc0a693d/src/osd/PGBackend.h#L46>`_
+- `on_local_recover <https://github.com/ceph/ceph/blob/a287167cf8625165249b7636540591aefc0a693d/src/osd/PGBackend.h#L52>`_
+- `on_global_recover <https://github.com/ceph/ceph/blob/a287167cf8625165249b7636540591aefc0a693d/src/osd/PGBackend.h#L64>`_
+- `on_peer_recover <https://github.com/ceph/ceph/blob/a287167cf8625165249b7636540591aefc0a693d/src/osd/PGBackend.h#L69>`_
+- `begin_peer_recover <https://github.com/ceph/ceph/blob/a287167cf8625165249b7636540591aefc0a693d/src/osd/PGBackend.h#L76>`_
 
 Backfill
 --------
@@ -316,6 +318,4 @@ PGBackend interfaces:
 - choose_backfill(): allows the implementation to determine which osds
   should be backfilled in a particular interval.
 
-
-.. _Issue #5857: http://tracker.ceph.com/issues/5857
 .. _Issue #5856: http://tracker.ceph.com/issues/5856

@@ -495,8 +495,7 @@ registry. The `ErasureCodePluginExample <https://github.com/ceph/ceph/blob/08a97
 
 The *ErasureCodePlugin* derived object must provide a factory method
 from which the concrete implementation of the *ErasureCodeInterface*
-object can be generated. The `ErasureCodePluginExample <https://github.com/ceph/ceph/blob/08a97ae45f4df58a6a8ea8a6400934d860cf5eb4/src/test/osd/ErasureCodePluginExample.cc#L22>`_ plugin
-reads:
+object can be generated. The `ErasureCodePluginExample plugin <https://github.com/ceph/ceph/blob/08a97ae45f4df58a6a8ea8a6400934d860cf5eb4/src/test/osd/ErasureCodePluginExample.cc#L22>`_ reads:
 
 ::
  
