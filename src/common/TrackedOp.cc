@@ -257,25 +257,9 @@ void TrackedOp::dump(utime_t now, Formatter *f) const
   f->dump_stream("received_at") << get_arrived();
   f->dump_float("age", now - get_arrived());
   f->dump_float("duration", get_duration());
-  f->dump_string("current_state", state_string());
-  if (m->get_orig_source().is_client()) {
-    f->open_object_section("client_info");
-    stringstream client_name;
-    client_name << m->get_orig_source();
-    f->dump_string("client", client_name.str());
-    f->dump_int("tid", m->get_tid());
-    f->close_section(); // client_info
-  }
   {
-    f->open_array_section("events");
-    for (list<pair<utime_t, string> >::const_iterator i = events.begin();
-	 i != events.end();
-	 ++i) {
-      f->open_object_section("event");
-      f->dump_stream("time") << i->first;
-      f->dump_string("event", i->second);
-      f->close_section();
-    }
+    f->open_array_section("type_data");
+    _dump(now, f);
     f->close_section();
   }
 }

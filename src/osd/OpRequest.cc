@@ -23,16 +23,9 @@ OpRequest::OpRequest(Message *req, OpTracker *tracker) :
   }
 }
 
-void OpRequest::dump(utime_t now, Formatter *f) const
+void OpRequest::_dump(utime_t now, Formatter *f) const
 {
   Message *m = request;
-  stringstream name;
-  m->print(name);
-  f->dump_string("description", name.str().c_str()); // this OpRequest
-  f->dump_unsigned("rmw_flags", rmw_flags);
-  f->dump_stream("received_at") << get_arrived();
-  f->dump_float("age", now - get_arrived());
-  f->dump_float("duration", get_duration());
   f->dump_string("flag_point", state_string());
   if (m->get_orig_source().is_client()) {
     f->open_object_section("client_info");

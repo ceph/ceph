@@ -59,7 +59,7 @@ struct OpRequest : public TrackedOp {
   void set_class_write() { rmw_flags |= CEPH_OSD_RMW_FLAG_CLASS_WRITE; }
   void set_pg_op() { rmw_flags |= CEPH_OSD_RMW_FLAG_PGOP; }
 
-  void dump(utime_t now, Formatter *f) const;
+  void _dump(utime_t now, Formatter *f) const;
 
 private:
   osd_reqid_t reqid;
