@@ -223,6 +223,11 @@ def parse_args():
                         help="A run (or list of runs) to submit")
     parser.add_argument('--all-runs', action='store_true',
                         help="Submit all runs in the archive")
+    parser.add_argument('-s', '--server',
+                        help=dedent(""""The server to post results to, e.g.
+                                    http://localhost:8080/ . May also be
+                                    specified in ~/.teuthology.yaml as
+                                    'results_server'"""))
     parser.add_argument('-n', '--no-save', dest='save',
                         action='store_false',
                         help=dedent("""By default, when submitting all runs, we
@@ -236,7 +241,7 @@ def parse_args():
 def main():
     args = parse_args()
     archive_base = os.path.abspath(os.path.expanduser(args.archive))
-    poster = ResultsPoster(archive_base)
+    poster = ResultsPoster(archive_base, base_uri=args.server)
     if not args.save:
         poster.save_last_run = False
     if args.run and len(args.run) > 1:
