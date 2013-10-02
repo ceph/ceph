@@ -9,11 +9,11 @@ class RGWRados;
 class JSONObj;
 
 struct RGWQuotaInfo {
-  uint64_t max_size_kb;
-  uint64_t max_objects;
+  int64_t max_size_kb;
+  int64_t max_objects;
   bool enabled;
 
-  RGWQuotaInfo() : max_size_kb(0), max_objects(0), enabled(false) {}
+  RGWQuotaInfo() : max_size_kb(-1), max_objects(-1), enabled(false) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
