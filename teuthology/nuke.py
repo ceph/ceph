@@ -358,7 +358,7 @@ def main():
             ctx.owner = info.get('owner')
             if not ctx.owner:
                 ctx.owner = open(ctx.archive + '/owner').read().rstrip('\n')
-        ctx.run_name = info.get('name')
+        ctx.name = info.get('name')
 
     from teuthology.misc import read_config
     read_config(ctx)
@@ -388,14 +388,14 @@ def nuke(ctx, log, should_unlock, sync_clocks=True, reboot_all=True,
     from teuthology.lock import list_locks
     total_unnuked = {}
     targets = dict(ctx.config['targets'])
-    if ctx.run_name:
+    if ctx.name:
         log.info('Checking targets against current locks')
         locks = list_locks(ctx)
         #Remove targets who's description doesn't match archive name.
         for lock in locks:
             for target in targets:
                  if target == lock['name']:
-                     if ctx.run_name not in lock['description']:
+                     if ctx.name not in lock['description']:
                          del ctx.config['targets'][lock['name']]
                          log.info('Not nuking %s because description doesn\'t match', lock['name'])
     with parallel() as p:
