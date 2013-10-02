@@ -246,6 +246,7 @@ void TrackedOp::mark_event(const string &event)
     events.push_back(make_pair(now, event));
   }
   tracker->mark_event(this, event);
+  _event_marked();
 }
 
 void TrackedOp::dump(utime_t now, Formatter *f) const

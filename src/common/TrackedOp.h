@@ -132,9 +132,11 @@ protected:
     tracker->register_inflight_op(&xitem);
   }
 
-  virtual void init_from_message() {};
+  virtual void init_from_message() {}
   /// output any type-specific data you want to get when dump() is called
   virtual void _dump(utime_t now, Formatter *f) const {}
+  /// if you want something else to happen when events are marked, implement
+  virtual void _event_marked() {}
 
 public:
   virtual ~TrackedOp() { assert(request); request->put(); }
@@ -150,7 +152,7 @@ public:
   }
   Message *get_req() const { return request; }
 
-  virtual void mark_event(const string &event);
+  void mark_event(const string &event);
   virtual const char *state_string() const {
     return events.rbegin()->second.c_str();
   }
