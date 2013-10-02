@@ -2634,6 +2634,25 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
 
+    case CEPH_OSD_OP_ISDIRTY:
+      ++ctx->num_read;
+      {
+	bool is_dirty = obs.oi.is_dirty();
+	::encode(is_dirty, osd_op.outdata);
+	ctx->delta_stats.num_rd++;
+	result = 0;
+      }
+      break;
+
+    case CEPH_OSD_OP_UNDIRTY:
+      ++ctx->num_write;
+      {
+	ctx->undirty = true;  // see make_writeable()
+	ctx->modify = true;
+	ctx->delta_stats.num_wr++;
+      }
+      break;
+
     case CEPH_OSD_OP_GETXATTR:
       ++ctx->num_read;
       {
@@ -2749,8 +2768,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -ERANGE;
 	else if (ver > oi.user_version)
 	  result = -EOVERFLOW;
-	break;
       }
+      break;
 
     case CEPH_OSD_OP_LIST_WATCHERS:
       ++ctx->num_read;
@@ -3058,7 +3077,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
       }
       break;
-      
+
     case CEPH_OSD_OP_TRIMTRUNC:
       op.extent.offset = op.extent.truncate_size;
       // falling through
@@ -3987,6 +4006,15 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   dout(20) << "make_writeable " << soid << " snapset=" << ctx->snapset
 	   << "  snapc=" << snapc << dendl;;
   
+  // we will mark the object dirty
+  if (ctx->undirty) {
+    dout(20) << " clearing DIRTY flag" << dendl;
+    ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
+  } else {
+    dout(20) << " setting DIRTY flag" << dendl;
+    ctx->new_obs.oi.set_flag(object_info_t::FLAG_DIRTY);
+  }
+
   // use newer snapc?
   if (ctx->new_snapset.seq > snapc.seq) {
     snapc.seq = ctx->new_snapset.seq;
