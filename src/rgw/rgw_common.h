@@ -770,6 +770,8 @@ struct RGWBucketStats
   uint64_t num_kb;
   uint64_t num_kb_rounded;
   uint64_t num_objects;
+
+  RGWBucketStats() : num_kb(0), num_kb_rounded(0), num_objects(0) {}
 };
 
 struct req_state;
