@@ -79,19 +79,17 @@ def task(ctx, config):
     remotes = ctx.cluster.only(teuthology.is_type('client')).remotes
     log.info(remotes)
     if config == None:
-        for _, role_v in remotes.iteritems():
-            for node in role_v:
-                api_clients.append(node)
+        api_clients = ['client.{id}'.format(id=id_)
+            for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
     else:
-        for role_v in config:
-            api_clients.append(role_v)
+        api_clients = config
     log.info(api_clients)
     testdir = teuthology.get_testdir(ctx)
     coverage_dir = '{tdir}/archive/coverage'.format(tdir=testdir)
     for rems, roles in remotes.iteritems():
         for whole_id_ in roles:
             if whole_id_ in api_clients:
-                id_ = whole_id_[len('clients'):]
+                id_ = whole_id_[len('client.'):]
                 keyring = '/etc/ceph/ceph.client.rest{id}.keyring'.format(
                         id=id_)
                 rems.run(
