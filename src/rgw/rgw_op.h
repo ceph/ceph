@@ -44,6 +44,14 @@ public:
   RGWOp() : s(NULL), dialect_handler(NULL), store(NULL), cors_exist(false) {}
   virtual ~RGWOp() {}
 
+  virtual int init_processing() {
+    int ret = init_quota();
+    if (ret < 0)
+      return ret;
+
+    return 0;
+  }
+
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *dialect_handler) {
     this->store = store;
     this->s = s;

@@ -423,6 +423,10 @@ int RGWOp::verify_op_mask()
 
 int RGWOp::init_quota()
 {
+  /* no quota enforcement for system requests */
+  if (s->system_request)
+    return 0;
+
   /* init quota related stuff */
   if (!(s->user.op_mask & RGW_OP_TYPE_MODIFY)) {
     return 0;
