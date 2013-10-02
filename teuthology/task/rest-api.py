@@ -1,5 +1,6 @@
 import logging
 import contextlib
+import time
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -33,6 +34,24 @@ def run_rest_api_daemon(ctx, api_clients):
                     stdin=run.PIPE,
                     wait=False,
                     )
+                for i in range(1, 12):
+                    log.info('testing for ceph-rest-api try {0}'.format(i))
+                    run_cmd = [
+                        'wget',
+                        '-O',
+                        '/dev/null',
+                        '-q',
+                        'http://localhost:5000/api/v0.1/status'
+                    ]
+                    proc = rems.run(
+                        args=run_cmd,
+                        check_status=False
+                    )
+                    if proc.exitstatus == 0:
+                        break
+                    time.sleep(5)
+                if proc.exitstatus != 0:
+                    raise RuntimeError('Cannot contact ceph-rest-api')
     try:
         yield
 
