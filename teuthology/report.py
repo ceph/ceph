@@ -130,7 +130,7 @@ class ResultsReporter(object):
     def put_json(self, uri, json_):
         return self._do_request(uri, 'PUT', json_)
 
-    def submit_all_runs(self):
+    def report_all_runs(self):
         all_runs = self.serializer.all_runs
         last_run = self.last_run
         if self.save_last_run and last_run and last_run in all_runs:
@@ -142,17 +142,17 @@ class ResultsReporter(object):
         num_jobs = 0
         log.info("Posting %s runs", num_runs)
         for run in runs:
-            job_count = self.submit_run(run)
+            job_count = self.report_run(run)
             num_jobs += job_count
             if self.save_last_run:
                 self.last_run = run
         del self.last_run
         log.info("Total: %s jobs in %s runs", num_jobs, num_runs)
 
-    def submit_runs(self, run_names):
+    def report_runs(self, run_names):
         num_jobs = 0
         for run_name in run_names:
-            num_jobs += self.submit_run(run_name)
+            num_jobs += self.report_run(run_name)
         log.info("Total: %s jobs in %s runs", num_jobs, len(run_names))
 
     def create_run(self, run_name):
@@ -160,7 +160,7 @@ class ResultsReporter(object):
         run_json = json.dumps({'name': run_name})
         return self.post_json(run_uri, run_json)
 
-    def submit_run(self, run_name):
+    def report_run(self, run_name):
         jobs = self.serializer.jobs_for_run(run_name)
         log.info("{name} {jobs} jobs".format(
             name=run_name,
@@ -169,21 +169,21 @@ class ResultsReporter(object):
         if jobs:
             status, msg, content = self.create_run(run_name)
             if status == 200:
-                self.submit_jobs(run_name, jobs.keys())
+                self.report_jobs(run_name, jobs.keys())
             elif msg.endswith('already exists'):
                 if self.refresh:
-                    self.submit_jobs(run_name, jobs.keys())
+                    self.report_jobs(run_name, jobs.keys())
                 else:
                     log.info("    already present; skipped")
         elif not jobs:
             log.debug("    no jobs; skipped")
         return len(jobs)
 
-    def submit_jobs(self, run_name, job_ids):
+    def report_jobs(self, run_name, job_ids):
         for job_id in job_ids:
-            self.submit_job(run_name, job_id)
+            self.report_job(run_name, job_id)
 
-    def submit_job(self, run_name, job_id, job_json=None):
+    def report_job(self, run_name, job_id, job_json=None):
         run_uri = "{base}/runs/{name}/".format(
             base=self.base_uri, name=run_name,)
         if job_json is None:
@@ -254,14 +254,14 @@ def parse_args():
 def main():
     args = parse_args()
     archive_base = os.path.abspath(os.path.expanduser(args.archive))
-    reporter = ResultsReporter(archive_base, base_uri=args.server, save=args.save,
-                               refresh=args.refresh)
+    reporter = ResultsReporter(archive_base, base_uri=args.server,
+                               save=args.save, refresh=args.refresh)
     if args.run and len(args.run) > 1:
-        reporter.submit_runs(args.run)
+        reporter.report_runs(args.run)
     elif args.run:
-        reporter.submit_run(args.run[0])
+        reporter.report_run(args.run[0])
     elif args.all_runs:
-        reporter.submit_all_runs()
+        reporter.report_all_runs()
 
 
 if __name__ == "__main__":
