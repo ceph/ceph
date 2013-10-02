@@ -96,7 +96,7 @@ class ResultsSerializer(object):
         return runs
 
 
-class ResultsPoster(object):
+class ResultsReporter(object):
     last_run_file = 'last_successful_run'
 
     def __init__(self, archive_base, base_uri=None, save=False, refresh=False):
@@ -254,14 +254,14 @@ def parse_args():
 def main():
     args = parse_args()
     archive_base = os.path.abspath(os.path.expanduser(args.archive))
-    poster = ResultsPoster(archive_base, base_uri=args.server, save=args.save,
-                           refresh=args.refresh)
+    reporter = ResultsReporter(archive_base, base_uri=args.server, save=args.save,
+                               refresh=args.refresh)
     if args.run and len(args.run) > 1:
-        poster.submit_runs(args.run)
+        reporter.submit_runs(args.run)
     elif args.run:
-        poster.submit_run(args.run[0])
+        reporter.submit_run(args.run[0])
     elif args.all_runs:
-        poster.submit_all_runs()
+        reporter.submit_all_runs()
 
 
 if __name__ == "__main__":
