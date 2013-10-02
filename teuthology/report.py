@@ -17,7 +17,8 @@ logging.basicConfig(level=logging.INFO)
 
 
 class RequestFailedError(RuntimeError):
-    def __init__(self, resp, content):
+    def __init__(self, uri, resp, content):
+        self.uri = uri
         self.status = resp.status
         self.reason = resp.reason
         self.content = content
@@ -25,13 +26,13 @@ class RequestFailedError(RuntimeError):
             self.content_obj = json.loads(content)
             self.message = self.content_obj['message']
         except ValueError:
-            #self.message = '<no message>'
             self.message = self.content
 
     def __str__(self):
-        templ = "Request failed with status {status}: {reason}: {message}"
+        templ = "Request to {uri} failed with status {status}: {reason}: {message}"  # noqa
 
         return templ.format(
+            uri=self.uri,
             status=self.status,
             reason=self.reason,
             message=self.message,
@@ -106,23 +107,28 @@ class ResultsPoster(object):
         self.save_last_run = save
         self.refresh = refresh
 
-    def post_json(self, uri, json_):
+    def _do_request(self, uri, method, json_):
         response, content = self.http.request(
-            uri,
-            'POST',
-            json_,
-            headers={'content-type': 'application/json'},
+            uri, method, json_, headers={'content-type': 'application/json'},
         )
-        return response, content
+
+        try:
+            content_obj = json.loads(content)
+        except ValueError:
+            content_obj = {}
+
+        message = content_obj.get('message', '')
+
+        if response.status != 200 and not message.endswith('already exists'):
+            raise RequestFailedError(uri, response, content)
+
+        return response.status, message, content
+
+    def post_json(self, uri, json_):
+        return self._do_request(uri, 'POST', json_)
 
     def put_json(self, uri, json_):
-        response, content = self.http.request(
-            uri,
-            'PUT',
-            json_,
-            headers={'content-type': 'application/json'},
-        )
-        return response, content
+        return self._do_request(uri, 'PUT', json_)
 
     def submit_all_runs(self):
         all_runs = self.serializer.all_runs
@@ -159,36 +165,31 @@ class ResultsPoster(object):
             run_uri = "{base}/runs/".format(
                 base=self.base_uri, name=run_name)
             run_json = json.dumps({'name': run_name})
-            resp, content = self.post_json(run_uri, run_json)
-            if resp.status == 200 or self.refresh:
-                for job_id in jobs.keys():
-                    self.submit_job(run_name, job_id)
-            elif resp.status != 200:
-                message = json.loads(content).get('message', '')
-                if message.endswith('already exists'):
-                    log.info("    already present; skipped")
+            status, msg, content = self.post_json(run_uri, run_json)
+            if status == 200:
+                self.submit_jobs(run_name, jobs.keys())
+            elif msg.endswith('already exists'):
+                if self.refresh:
+                    self.submit_jobs(run_name, jobs.keys())
                 else:
-                    raise RequestFailedError(resp, content)
+                    log.info("    already present; skipped")
         elif not jobs:
             log.debug("    no jobs; skipped")
         return len(jobs)
+
+    def submit_jobs(self, run_name, job_ids):
+        for job_id in job_ids:
+            self.submit_job(run_name, job_id)
 
     def submit_job(self, run_name, job_id):
         run_uri = "{base}/runs/{name}/".format(
             base=self.base_uri, name=run_name,)
         job_json = self.serializer.json_for_job(run_name, job_id)
-        resp, content = self.post_json(run_uri, job_json)
+        status, msg, content = self.post_json(run_uri, job_json)
 
-        try:
-            message = json.loads(content).get('message', '')
-        except ValueError:
-            message = ''
-
-        if message.endswith('already exists'):
+        if msg.endswith('already exists'):
             job_uri = os.path.join(run_uri, job_id, '')
-            resp, content = self.put_json(job_uri, job_json)
-        if resp.status != 200:
-            raise RequestFailedError(resp, content)
+            status, msg, content = self.put_json(job_uri, job_json)
         return job_id
 
     @property
