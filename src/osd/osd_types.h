@@ -2099,16 +2099,35 @@ struct object_info_t {
   typedef enum {
     FLAG_LOST     = 1<<0,
     FLAG_WHITEOUT = 1<<1,  // object logically does not exist
+    FLAG_DIRTY    = 1<<2,  // object has been modified since last flushed or undirtied
     // ...
     FLAG_USES_TMAP = 1<<8,
   } flag_t;
+
   flag_t flags;
+
+  static string get_flag_string(flag_t flags) {
+    string s;
+    if (flags & FLAG_LOST)
+      s += "|lost";
+    if (flags & FLAG_WHITEOUT)
+      s += "|whiteout";
+    if (flags & FLAG_DIRTY)
+      s += "|dirty";
+    if (flags & FLAG_USES_TMAP)
+      s += "|uses_tmap";
+    if (s.length())
+      return s.substr(1);
+    return s;
+  }
+  string get_flag_string() const {
+    return get_flag_string(flags);
+  }
 
   osd_reqid_t wrlock_by;   // [head]
   vector<snapid_t> snaps;  // [clone]
 
   uint64_t truncate_seq, truncate_size;
-
 
   map<pair<uint64_t, entity_name_t>, watch_info_t> watchers;
 
@@ -2131,6 +2150,9 @@ struct object_info_t {
   }
   bool is_whiteout() const {
     return test_flag(FLAG_WHITEOUT);
+  }
+  bool is_dirty() const {
+    return test_flag(FLAG_DIRTY);
   }
 
   void encode(bufferlist& bl) const;
