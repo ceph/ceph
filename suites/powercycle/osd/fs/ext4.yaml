@@ -1,3 +1,1 @@
-overrides:
-  ceph:
-    fs: ext4
+../../../../fs/ext4.yaml
