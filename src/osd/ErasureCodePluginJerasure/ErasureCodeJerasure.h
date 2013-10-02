@@ -4,8 +4,10 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ *               2013 CERN/Sitzerland
  *
- * Author: Loic Dachary <loic@dachary.org>
+ * Authors: Loic Dachary <loic@dachary.org>
+ *          Andreas-Joachim Peters <andreas.joachim.peters@cern.ch>
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Lesser General Public
@@ -26,8 +28,11 @@ public:
   int w;
   const char *technique;
 
+  int lp; // # of local parities to compute
+  static const int DEFAULT_LOCAL_PARITY = 0;
+  
   ErasureCodeJerasure(const char *_technique) :
-    technique(_technique)
+    technique(_technique) , lp(0)
   {}
 
   virtual ~ErasureCodeJerasure() {}
@@ -47,6 +52,18 @@ public:
   virtual int decode(const set<int> &want_to_read,
                      const map<int, bufferlist> &chunks,
                      map<int, bufferlist> *decoded);
+
+  virtual void lp_encode(char **data,
+			 char **coding, 
+			 int blocksize);
+
+  virtual bool lp_decode(int *erasures,
+			 char **data,
+			 char **coding, 
+			 int blocksize,
+			 std::set<int> &remaining_erasures,
+			 const set<int> &want_to_read
+			 );
 
   void init(const map<std::string,std::string> &parameters);
   virtual void jerasure_encode(char **data,
