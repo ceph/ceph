@@ -1,6 +1,1 @@
-overrides:
-  ceph:
-    fs: btrfs
-    conf:
-      osd:
-        osd op thread timeout: 60
+../../../../fs/btrfs.yaml
