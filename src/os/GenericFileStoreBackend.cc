@@ -263,6 +263,7 @@ int GenericFileStoreBackend::_crc_load_or_init(int fd, SloppyCRCMap *cm)
 {
   char buf[100];
   bufferptr bp;
+  int r = 0;
   int l = chain_fgetxattr(fd, SLOPPY_CRC_XATTR, buf, sizeof(buf));
   if (l == -ENODATA) {
     return 0;
@@ -284,16 +285,21 @@ int GenericFileStoreBackend::_crc_load_or_init(int fd, SloppyCRCMap *cm)
     ::decode(*cm, p);
   }
   catch (buffer::error &e) {
-    return -EIO;
+    r = -EIO;
   }
-  return 0;
+  if (r < 0)
+    derr << __func__ << " got " << cpp_strerror(r) << dendl;
+  return r;
 }
 
 int GenericFileStoreBackend::_crc_save(int fd, SloppyCRCMap *cm)
 {
   bufferlist bl;
   ::encode(*cm, bl);
-  return chain_fsetxattr(fd, SLOPPY_CRC_XATTR, bl.c_str(), bl.length());
+  int r = chain_fsetxattr(fd, SLOPPY_CRC_XATTR, bl.c_str(), bl.length());
+  if (r < 0)
+    derr << __func__ << " got " << cpp_strerror(r) << dendl;
+  return r;
 }
 
 int GenericFileStoreBackend::_crc_update_write(int fd, loff_t off, size_t len, const bufferlist& bl)
