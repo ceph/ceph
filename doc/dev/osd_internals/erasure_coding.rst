@@ -66,4 +66,3 @@ Table of content
    Developer notes <erasure_coding/developer_notes>
    Jerasure plugin <erasure_coding/jerasure>
    High level design document <erasure_coding/pgbackend>
-   Draft PGBackend.h header <erasure_coding/PGBackend-h>
