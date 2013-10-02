@@ -2347,6 +2347,11 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
     *mtime = set_mtime;
   }
 
+  if (state) {
+    /* update quota cache */
+    quota_handler->update_stats(bucket, (state->exists ? 0 : 1), size, state->size);
+  }
+
   return 0;
 
 done_cancel:
@@ -3216,6 +3221,11 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj, RGWObjVersionTracker *obj
 
   if (ret_not_existed)
     return -ENOENT;
+
+  if (state) {
+    /* update quota cache */
+    quota_handler->update_stats(bucket, -1, 0, state->size);
+  }
 
   return 0;
 }

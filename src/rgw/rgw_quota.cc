@@ -122,6 +122,10 @@ public:
 
     return 0;
   }
+
+  virtual void update_stats(rgw_bucket& bucket, int obj_delta, uint64_t added_bytes, uint64_t removed_bytes) {
+    stats_cache.adjust_bucket_stats(bucket, obj_delta, added_bytes, removed_bytes);
+  };
 };
 
 
