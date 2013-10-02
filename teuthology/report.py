@@ -98,14 +98,33 @@ class ResultsSerializer(object):
 class ResultsPoster(object):
     last_run_file = 'last_successful_run'
 
-    def __init__(self, archive_base, base_uri=None):
+    def __init__(self, archive_base, base_uri=None, save=False, refresh=False):
         self.archive_base = archive_base
         self.base_uri = base_uri or config.results_server
         self.base_uri = self.base_uri.rstrip('/')
         self.serializer = ResultsSerializer(archive_base)
-        self.save_last_run = True
+        self.save_last_run = save
+        self.refresh = refresh
 
-    def post_all_runs(self):
+    def post_json(self, uri, json_):
+        response, content = self.http.request(
+            uri,
+            'POST',
+            json_,
+            headers={'content-type': 'application/json'},
+        )
+        return response, content
+
+    def put_json(self, uri, json_):
+        response, content = self.http.request(
+            uri,
+            'PUT',
+            json_,
+            headers={'content-type': 'application/json'},
+        )
+        return response, content
+
+    def submit_all_runs(self):
         all_runs = self.serializer.all_runs
         last_run = self.last_run
         if self.save_last_run and last_run and last_run in all_runs:
@@ -117,67 +136,57 @@ class ResultsPoster(object):
         num_jobs = 0
         log.info("Posting %s runs", num_runs)
         for run in runs:
-            job_count = self.post_run(run)
+            job_count = self.submit_run(run)
             num_jobs += job_count
             if self.save_last_run:
                 self.last_run = run
         del self.last_run
         log.info("Total: %s jobs in %s runs", num_jobs, num_runs)
 
-    def post_runs(self, run_names):
+    def submit_runs(self, run_names):
         num_jobs = 0
         for run_name in run_names:
-            num_jobs += self.post_run(run_name)
+            num_jobs += self.submit_run(run_name)
         log.info("Total: %s jobs in %s runs", num_jobs, len(run_names))
 
-    def post_run(self, run_name):
+    def submit_run(self, run_name):
         jobs = self.serializer.jobs_for_run(run_name)
         log.info("{name} {jobs} jobs".format(
             name=run_name,
             jobs=len(jobs),
         ))
         if jobs:
+            run_uri = "{base}/runs/".format(
+                base=self.base_uri, name=run_name)
             run_json = json.dumps({'name': run_name})
-            resp, content = self.http.request(
-                "{base}/runs/".format(base=self.base_uri, name=run_name),
-                'POST',
-                run_json,
-                headers={'content-type': 'application/json'},
-            )
-            if resp.status == 200:
+            resp, content = self.post_json(run_uri, run_json)
+            if resp.status == 200 or self.refresh:
                 for job_id in jobs.keys():
-                    self.post_job(run_name, job_id)
+                    self.submit_job(run_name, job_id)
             elif resp.status != 200:
                 message = json.loads(content).get('message', '')
-                # FIXME: This will skip partially-submitted runs.
                 if message.endswith('already exists'):
                     log.info("    already present; skipped")
                 else:
                     raise RequestFailedError(resp, content)
+        elif not jobs:
+            log.debug("    no jobs; skipped")
         return len(jobs)
 
-    def post_job(self, run_name, job_id):
+    def submit_job(self, run_name, job_id):
+        run_uri = "{base}/runs/{name}/".format(
+            base=self.base_uri, name=run_name,)
         job_json = self.serializer.json_for_job(run_name, job_id)
-        resp, content = self.http.request(
-            "{base}/runs/{name}/".format(base=self.base_uri, name=run_name,),
-            'POST',
-            job_json,
-            headers={'content-type': 'application/json'},
-        )
+        resp, content = self.post_json(run_uri, job_json)
+
         try:
             message = json.loads(content).get('message', '')
         except ValueError:
             message = ''
 
         if message.endswith('already exists'):
-            resp, content = self.http.request(
-                "{base}/runs/{name}/".format(
-                    base=self.base_uri,
-                    name=run_name,),
-                'PUT',
-                job_json,
-                headers={'content-type': 'application/json'},
-            )
+            job_uri = os.path.join(run_uri, job_id, '')
+            resp, content = self.put_json(job_uri, job_json)
         if resp.status != 200:
             raise RequestFailedError(resp, content)
         return job_id
@@ -220,13 +229,16 @@ def parse_args():
                         help="A run (or list of runs) to submit")
     parser.add_argument('--all-runs', action='store_true',
                         help="Submit all runs in the archive")
+    parser.add_argument('-R', '--refresh', action='store_true', default=False,
+                        help=dedent("""Re-push any runs already stored on the
+                                    server. Note that this may be slow."""))
     parser.add_argument('-s', '--server',
                         help=dedent(""""The server to post results to, e.g.
                                     http://localhost:8080/ . May also be
                                     specified in ~/.teuthology.yaml as
                                     'results_server'"""))
     parser.add_argument('-n', '--no-save', dest='save',
-                        action='store_false',
+                        action='store_false', default=True,
                         help=dedent("""By default, when submitting all runs, we
                         remember the last successful submission in a file
                         called 'last_successful_run'. Pass this flag to disable
@@ -238,15 +250,14 @@ def parse_args():
 def main():
     args = parse_args()
     archive_base = os.path.abspath(os.path.expanduser(args.archive))
-    poster = ResultsPoster(archive_base, base_uri=args.server)
-    if not args.save:
-        poster.save_last_run = False
+    poster = ResultsPoster(archive_base, base_uri=args.server, save=args.save,
+                           refresh=args.refresh)
     if args.run and len(args.run) > 1:
-        poster.post_runs(args.run)
+        poster.submit_runs(args.run)
     elif args.run:
-        poster.post_run(args.run[0])
+        poster.submit_run(args.run[0])
     elif args.all_runs:
-        poster.post_all_runs()
+        poster.submit_all_runs()
 
 
 if __name__ == "__main__":
