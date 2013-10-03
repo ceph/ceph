@@ -39,7 +39,7 @@ For now, use a more inclusive regex.
   $ rbd info foo
   rbd image 'foo':
   \tsize 1024 MB in 256 objects (esc)
-  \torder 22 (4096 KB objects) (esc)
+  \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
   $ rbd info foo --format json | python -mjson.tool
@@ -67,7 +67,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd info foo@snap
   rbd image 'foo':
   \tsize 1024 MB in 256 objects (esc)
-  \torder 22 (4096 KB objects) (esc)
+  \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
   \tprotected: False (esc)
@@ -96,7 +96,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd info bar
   rbd image 'bar':
   \tsize 1024 MB in 256 objects (esc)
-  \torder 22 (4096 KB objects) (esc)
+  \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering (esc)
@@ -131,7 +131,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd info bar@snap
   rbd image 'bar':
   \tsize 512 MB in 128 objects (esc)
-  \torder 22 (4096 KB objects) (esc)
+  \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering (esc)
@@ -169,7 +169,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd info bar@snap2
   rbd image 'bar':
   \tsize 1024 MB in 256 objects (esc)
-  \torder 22 (4096 KB objects) (esc)
+  \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering (esc)
@@ -207,7 +207,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd info baz
   rbd image 'baz':
   \tsize 2048 MB in 512 objects (esc)
-  \torder 22 (4096 KB objects) (esc)
+  \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering (esc)
@@ -241,8 +241,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info quux
   rbd image 'quux':
-  \tsize 1024 KB in 1 objects (esc)
-  \torder 22 (4096 KB objects) (esc)
+  \tsize 1024 kB in 1 objects (esc)
+  \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
   $ rbd info quux --format json | python -mjson.tool
@@ -268,7 +268,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd info data/child
   rbd image 'child':
   \tsize 512 MB in 128 objects (esc)
-  \torder 22 (4096 KB objects) (esc)
+  \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering (esc)
@@ -303,7 +303,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd info data/child@snap
   rbd image 'child':
   \tsize 512 MB in 128 objects (esc)
-  \torder 22 (4096 KB objects) (esc)
+  \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering (esc)
@@ -375,7 +375,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   NAME       SIZE PARENT FMT PROT LOCK 
   foo       1024M          1           
   foo@snap  1024M          1           
-  quux      1024K          1      excl 
+  quux      1024k          1      excl 
   bar       1024M          2           
   bar@snap   512M          2 yes       
   bar@snap2 1024M          2           
