@@ -523,5 +523,5 @@ int main(int argc, char **argv) {
 }
 
 // Local Variables:
-// compile-command: "cd ../.. ; make -j4 && make unittest_erasure_code_pyramid_jerasure && valgrind --tool=memcheck ./unittest_erasure_code_pryamid_jerasure --gtest_filter=*.* --log-to-stderr=true --debug-osd=20 [--object-size=4]"
+// compile-command: "cd ../.. ; make -j4 && make unittest_erasure_code_pyramid_jerasure && valgrind --tool=memcheck ./unittest_erasure_code_pyramid_jerasure --gtest_filter=*.* --log-to-stderr=true --debug-osd=20 [--object-size=4]"
 // End:
