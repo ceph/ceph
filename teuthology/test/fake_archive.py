@@ -8,19 +8,20 @@ class FakeArchive(object):
     def __init__(self, archive_base="./test_archive"):
         self.archive_base = archive_base
 
-    def get_random_metadata(self, name, hung=False):
+    def get_random_metadata(self, run_name, job_id=None, hung=False):
         """
         Generate a random info dict for a fake job. If 'hung' is not True, also
         generate a summary dict.
 
-        :param name: test name e.g. 'test_foo'
-        :param hung: simulate a hung job e.g. don't return a summary.yaml
-        :return: a dict with keys 'job_id', 'info' and possibly 'summary', with
-                corresponding values
+        :param run_name:   Run name e.g. 'test_foo'
+        :param job_id: Job ID e.g. '12345'
+        :param hung:   Simulate a hung job e.g. don't return a summary.yaml
+        :return:       A dict with keys 'job_id', 'info' and possibly
+                       'summary', with corresponding values
         """
         rand = random.Random()
 
-        description = 'description for job with name %s' % name
+        description = 'description for job with id %s' % job_id
         owner = 'job@owner'
         duration = rand.randint(1, 36000)
         pid = rand.randint(1000, 99999)
@@ -29,7 +30,7 @@ class FakeArchive(object):
         info = {
             'description': description,
             'job_id': job_id,
-            'name': name,
+            'run_name': run_name,
             'owner': owner,
             'pid': pid,
         }
@@ -60,9 +61,14 @@ class FakeArchive(object):
             shutil.rmtree(self.archive_base)
         os.mkdir(self.archive_base)
 
-    def populate_archive(self, jobs):
+    def teardown(self):
+        shutil.rmtree(self.archive_base)
+
+    def populate_archive(self, run_name, jobs):
+        run_archive_dir = os.path.join(self.archive_base, run_name)
+        os.mkdir(run_archive_dir)
         for job in jobs:
-            archive_dir = os.path.join(self.archive_base, str(job['job_id']))
+            archive_dir = os.path.join(run_archive_dir, str(job['job_id']))
             os.mkdir(archive_dir)
 
             with file(os.path.join(archive_dir, 'info.yaml'), 'w') as yfile:
@@ -72,7 +78,4 @@ class FakeArchive(object):
                 summary_path = os.path.join(archive_dir, 'summary.yaml')
                 with file(summary_path, 'w') as yfile:
                     yaml.safe_dump(job['summary'], yfile)
-
-    def teardown(self):
-        shutil.rmtree(self.archive_base)
 

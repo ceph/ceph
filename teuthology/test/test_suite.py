@@ -1,3 +1,4 @@
+import os
 import textwrap
 from .. import suite
 from .fake_archive import FakeArchive
@@ -5,7 +6,7 @@ from .fake_archive import FakeArchive
 
 class TestResultsEmail(object):
     reference = {
-        'name': 'test_name',
+        'run_name': 'test_name',
         'jobs': [
             {'info': {'description': 'description for job with name test_name',
                       'job_id': 30481,
@@ -39,7 +40,7 @@ class TestResultsEmail(object):
         'body': textwrap.dedent("""
     Test Run: test_name
     =================================================================
-    logs:   http://qa-proxy.ceph.com/teuthology/test_archive/
+    logs:   http://qa-proxy.ceph.com/teuthology/test_name/
     failed: 1
     hung:   1
     passed: 1
@@ -49,7 +50,7 @@ class TestResultsEmail(object):
     [88979]  description for job with name test_name
     -----------------------------------------------------------------
     time:   35190s
-    log:    http://qa-proxy.ceph.com/teuthology/test_archive/88979/
+    log:    http://qa-proxy.ceph.com/teuthology/test_name/88979/
 
         Failure reason!
 
@@ -68,14 +69,18 @@ class TestResultsEmail(object):
     def setup(self):
         self.archive = FakeArchive()
         self.archive.setup()
+        self.archive_base = self.archive.archive_base
 
     def teardown(self):
         self.archive.teardown()
 
     def test_build_email_body(self):
-        self.archive.populate_archive(self.reference['jobs'])
+        run_name = self.reference['run_name']
+        run_dir = os.path.join(self.archive_base, run_name)
+        self.archive.populate_archive(run_name, self.reference['jobs'])
         (subject, body) = suite.build_email_body(
-            self.reference['name'],
-            self.archive.archive_base, 36000)
+            run_name,
+            run_dir,
+            36000)
         assert subject == self.reference['subject']
         assert body == self.reference['body']
