@@ -51,7 +51,7 @@ abbreviations:
 
 Zones are logical containers for the gateway instances. The physical location of
 the gateway instances is up to you, but disaster recovery is an important
-consideration. A disaster can be as simple as a power  failure or a network
+consideration. A disaster can be as simple as a power failure or a network
 failure. Yet, it can also involve a natural disaster or a significant political
 or economic event. In such cases, it is prudent to maintain a secondary zone
 outside of the geographic (not logical) region.
@@ -90,6 +90,10 @@ defaults are the master region and master zone for a cluster. When you configure
 your cluster for regions and zones, you will be replacing (and likely deleting,
 if it exists) the default region and zone.
 
+In the exemplary cluster, the New York region and New York zone (``ny-ny``)
+are the master region and zone respectively. All other instances retrieve 
+their metadata from the master region and zone.
+
 
 Create Regions
 --------------
@@ -114,7 +118,7 @@ Create Regions
 	                "http:\/\/{fqdn}:80\/"],
 	          "log_meta": "false",
 	          "log_data": "false"},
-	          { "name": "ny-ldn",
+	        { "name": "ny-ldn",
 	          "endpoints": [
 	                "http:\/\/{fqdn}:80\/"],
 	          "log_meta": "false",
@@ -129,8 +133,9 @@ Create Regions
 	sudo radosgw-admin region set --infile region.json
 
    Repeat the foregoing process to create region ``ldn``, but set 
-   ``is_master`` to ``false`` and update the ``master_zone`` and 
-   ``zones`` values.
+   ``is_master`` to ``false``. Update the ``master_zone`` so that it is
+   set to ``ldn-ldn``. Ensure that you have entries for ``ldn-ldn`` and
+   ``ldn-ny`` in the ``zones`` values.
 
 #. Delete the default region. :: 
 
