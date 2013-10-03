@@ -4,6 +4,9 @@ TYPE(CompatSet)
 #include "include/filepath.h"
 TYPE(filepath)
 
+#include "common/bloom_filter.hpp"
+TYPE(bloom_filter)
+
 #include "common/snap_types.h"
 TYPE(SnapContext)
 TYPE(SnapRealmInfo)
@@ -15,6 +18,9 @@ TYPE(DecayCounter)
 TYPE(LogEntryKey)
 TYPE(LogEntry)
 TYPE(LogSummary)
+
+#include "common/SloppyCRCMap.h"
+TYPE(SloppyCRCMap)
 
 #include "msg/msg_types.h"
 TYPE(entity_name_t)
@@ -80,6 +86,7 @@ TYPE(SequencerPosition)
 
 #include "common/hobject.h"
 TYPE(hobject_t)
+TYPE(ghobject_t)
 
 #include "mon/AuthMonitor.h"
 TYPE(AuthMonitor::Incremental)

@@ -403,8 +403,8 @@ public:
 
   void update_object_full(const string &oid, const ObjectDesc &contents)
   {
-    pool_obj_cont.rbegin()->second.erase(oid);
-    pool_obj_cont.rbegin()->second.insert(pair<string,ObjectDesc>(oid, contents));
+    pool_obj_cont[current_snap].erase(oid);
+    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, contents));
   }
 
   void update_object_version(const string &oid, uint64_t version)
@@ -416,7 +416,7 @@ public:
       map<string,ObjectDesc>::iterator j = i->second.find(oid);
       if (j != i->second.end()) {
 	j->second.version = version;
-	cout << __func__ << " oid " << oid << " is version " << version << std::endl;
+	cout << __func__ << " oid " << oid << " v " << version << " " << j->second.most_recent() << std::endl;
 	break;
       }
     }
@@ -792,25 +792,11 @@ public:
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
 
-    context->seq_num++;
-
-    vector<uint64_t> snapset(context->snaps.size());
-    int j = 0;
-    for (map<int,uint64_t>::reverse_iterator i = context->snaps.rbegin();
-	 i != context->snaps.rend();
-	 ++i, ++j) {
-      snapset[j] = i->second;
-    }
     interval_set<uint64_t> ranges;
     context->cont_gen.get_ranges(cont, ranges);
     std::cout << num << ":  seq_num " << context->seq_num << " ranges " << ranges << std::endl;
+    context->seq_num++;
     context->state_lock.Unlock();
-
-    int r = context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset);
-    if (r) {
-      cerr << " r is " << r << " snapset is " << snapset << " seq is " << context->seq << std::endl;
-      assert(0);
-    }
 
     waiting_on = ranges.num_intervals();
     //cout << " waiting_on = " << waiting_on << std::endl;
@@ -922,23 +908,10 @@ public:
 
     context->remove_object(oid);
 
-    vector<uint64_t> snapset(context->snaps.size());
-    int j = 0;
-    for (map<int,uint64_t>::reverse_iterator i = context->snaps.rbegin();
-	 i != context->snaps.rend();
-	 ++i, ++j) {
-      snapset[j] = i->second;
-    }
     interval_set<uint64_t> ranges;
     context->state_lock.Unlock();
 
-    int r = context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset);
-    if (r) {
-      cerr << "r is " << r << " snapset is " << snapset << " seq is " << context->seq << std::endl;
-      assert(0);
-    }
-
-    r = context->io_ctx.remove(context->prefix+oid);
+    int r = context->io_ctx.remove(context->prefix+oid);
     if (r && !(r == -ENOENT && !present)) {
       cerr << "r is " << r << " while deleting " << oid << " and present is " << present << std::endl;
       assert(0);
@@ -1072,6 +1045,7 @@ public:
 	     << err << std::endl;
       }
     } else {
+      cout << num << ":  expect " << old_value.most_recent() << std::endl;
       assert(!old_value.deleted());
       if (old_value.has_contents()) {
 	ContDesc to_check;
@@ -1081,8 +1055,8 @@ public:
 	  context->errors++;
 	}
 	if (to_check != old_value.most_recent()) {
-	  cerr << num << ": Found incorrect object contents " << to_check
-	       << ", expected " << old_value.most_recent() << " oid " << oid << std::endl;
+	  cerr << num << ": oid " << oid << " found incorrect object contents " << to_check
+	       << ", expected " << old_value.most_recent() << std::endl;
 	  context->errors++;
 	}
 	if (!old_value.check(result)) {
@@ -1272,17 +1246,8 @@ public:
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
 
-    vector<uint64_t> snapset(context->snaps.size());
-    int j = 0;
-    for (map<int,uint64_t>::reverse_iterator i = context->snaps.rbegin();
-	 i != context->snaps.rend();
-	 ++i, ++j) {
-      snapset[j] = i->second;
-    }
-
     TestWatchContext *ctx = context->get_watch_context(oid);
     context->state_lock.Unlock();
-    assert(!context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset));
     int r;
     if (!ctx) {
       {
@@ -1352,15 +1317,7 @@ public:
     context->roll_back(oid, roll_back_to);
     uint64_t snap = context->snaps[roll_back_to];
 
-    vector<uint64_t> snapset(context->snaps.size());
-    int j = 0;
-    for (map<int,uint64_t>::reverse_iterator i = context->snaps.rbegin();
-	 i != context->snaps.rend();
-	 ++i, ++j) {
-      snapset[j] = i->second;
-    }
     context->state_lock.Unlock();
-    assert(!context->io_ctx.selfmanaged_snap_set_write_ctx(context->seq, snapset));
 
     op.selfmanaged_snap_rollback(snap);
 
@@ -1403,6 +1360,7 @@ public:
   string oid, oid_src;
   ObjectDesc src_value;
   librados::ObjectWriteOperation op;
+  librados::ObjectReadOperation rd_op;
   librados::AioCompletion *comp;
   librados::AioCompletion *comp_racing_read;
   int snap;
@@ -1440,6 +1398,8 @@ public:
       snap = -1;
     }
     context->find_object(oid_src, &src_value, snap);
+    if (!src_value.deleted())
+      context->update_object_full(oid, src_value);
 
     string src = context->prefix+oid_src;
     op.copy_from(src.c_str(), context->io_ctx, src_value.version);
@@ -1457,7 +1417,12 @@ public:
 					       new TestOp::CallbackInfo(1));
     comp_racing_read = context->rados.aio_create_completion((void*) read_cb_arg, &write_callback,
 							    NULL);
-    context->io_ctx.aio_stat(context->prefix+oid, comp_racing_read, NULL, NULL);
+    rd_op.stat(NULL, NULL, NULL);
+    context->io_ctx.aio_operate(context->prefix+oid, comp_racing_read, &rd_op,
+				librados::SNAP_HEAD,
+				librados::OPERATION_ORDER_READS_WRITES,  // order wrt previous write/update
+				NULL);
+
   }
 
   void _finish(CallbackInfo *info)
@@ -1473,19 +1438,18 @@ public:
       assert(comp->is_complete());
       cout << num << ":  finishing copy_from to " << context->prefix + oid << std::endl;
       if ((r = comp->get_return_value())) {
-	if (!(r == -ENOENT && src_value.deleted())) {
+	if (r == -ENOENT && src_value.deleted()) {
+	  cout << num << ":  got expected ENOENT (src dne)" << std::endl;
+	} else {
 	  cerr << "Error: oid " << oid << " copy_from " << oid_src << " returned error code "
 	       << r << std::endl;
+	  assert(0);
 	}
       } else {
 	assert(!version || comp->get_version64() == version);
 	version = comp->get_version64();
-	context->update_object_full(oid, src_value);
 	context->update_object_version(oid, comp->get_version64());
       }
-      context->oid_in_use.erase(oid_src);
-      context->oid_not_in_use.insert(oid_src);
-      context->kick();
     } else if (info->id == 1) {
       // racing read
       assert(comp_racing_read->is_complete());
@@ -1500,11 +1464,14 @@ public:
 	assert(!version || comp_racing_read->get_version64() == version);
 	version = comp_racing_read->get_version64();
       }
+    }
+    if (++done == 2) {
       context->oid_in_use.erase(oid);
       context->oid_not_in_use.insert(oid);
+      context->oid_in_use.erase(oid_src);
+      context->oid_not_in_use.insert(oid_src);
       context->kick();
     }
-    ++done;
   }
 
   bool finished()

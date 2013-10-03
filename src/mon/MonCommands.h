@@ -59,7 +59,7 @@
  * CephString: optional badchars
  * CephSocketpath: validation involves "is it S_ISSOCK"
  * CephIPAddr: v4 or v6 addr with optional port, syntax validated
- * CephEntityAddr: CephIPAddr + '/nonce'
+ * CephEntityAddr: CephIPAddr + optional '/nonce'
  * CephPoolname: Plainold string
  * CephObjectname: Another plainold string
  * CephPgid: n.xxx where n is an int > 0, xxx is a hex number > 0
@@ -210,8 +210,8 @@ COMMAND("quorum_status", "report status of monitor quorum", \
 	"mon", "r", "cli,rest")
 COMMAND("mon_status", "report status of monitors", "mon", "r", "cli,rest")
 COMMAND("sync force " \
-	"name=validate1,type=CephChoices,strings=--yes-i-really-mean-it " \
-	"name=validate2,type=CephChoices,strings=--i-know-what-i-am-doing", \
+	"name=validate1,type=CephChoices,strings=--yes-i-really-mean-it,req=false " \
+	"name=validate2,type=CephChoices,strings=--i-know-what-i-am-doing,req=false", \
 	"force sync of and clear monitor store", "mon", "rw", "cli,rest")
 COMMAND("heap " \
 	"name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
@@ -274,6 +274,15 @@ COMMAND("mds compat rm_compat " \
 COMMAND("mds compat rm_incompat " \
 	"name=feature,type=CephInt,range=0", \
 	"remove incompatible feature", "mds", "rw", "cli,rest")
+COMMAND("mds set " \
+        "name=key,type=CephChoices,strings=allow_new_snaps " \
+        "name=sure,type=CephString,req=false", \
+        "set <key>", \
+        "mds", "w", "cli,rest")
+COMMAND("mds unset " \
+        "name=key,type=CephChoices,strings=allow_new_snaps " \
+        "name=sure,type=CephString,req=false", \
+        "unset <key>", "mds", "w", "cli,rest")
 COMMAND("mds add_data_pool " \
 	"name=poolid,type=CephInt,range=0", \
 	"add data pool <poolid>", "mds", "rw", "cli,rest")
@@ -283,14 +292,14 @@ COMMAND("mds remove_data_pool " \
 COMMAND("mds newfs " \
 	"name=metadata,type=CephInt,range=0 " \
 	"name=data,type=CephInt,range=0 " \
-	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it", \
+	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"make new filesystom using pools <metadata> and <data>", \
 	"mds", "rw", "cli,rest")
 /*
  * Monmap commands
  */
 COMMAND("mon dump " \
-	"name=epoch,type=CephInt,req=false", \
+	"name=epoch,type=CephInt,range=0,req=false", \
 	"dump formatted monmap (optionally from epoch)", \
 	"mon", "r", "cli,rest")
 COMMAND("mon stat", "summarize monitor status", "mon", "r", "cli,rest")
@@ -456,7 +465,7 @@ COMMAND("osd reweight " \
 	"reweight osd to 0.0 < <weight> < 1.0", "osd", "rw", "cli,rest")
 COMMAND("osd lost " \
 	"name=id,type=CephInt,range=0 " \
-	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it", \
+	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"mark osd as permanently lost. THIS DESTROYS DATA IF NO MORE REPLICAS EXIST, BE CAREFUL", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd create " \
@@ -484,9 +493,9 @@ COMMAND("osd pool create " \
 	"create pool", "osd", "rw", "cli,rest")
 COMMAND("osd pool delete " \
 	"name=pool,type=CephPoolname " \
-	"name=pool2,type=CephPoolname " \
-	"name=sure,type=CephChoices,strings=--yes-i-really-really-mean-it", \
-	"delete pool (say pool twice, add --yes-i-really-really-mean-it)", \
+	"name=pool2,type=CephPoolname,req=false " \
+	"name=sure,type=CephChoices,strings=--yes-i-really-really-mean-it,req=false", \
+	"delete pool", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd pool rename " \
 	"name=srcpool,type=CephPoolname " \

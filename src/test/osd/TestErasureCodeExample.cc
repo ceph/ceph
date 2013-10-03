@@ -20,24 +20,9 @@
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
-TEST(ErasureCodeExample, constructor)
-{
-  map<std::string,std::string> parameters;
-  {
-    ErasureCodeExample example(parameters);
-    EXPECT_EQ(0u, example.delay);
-  }
-  parameters["usleep"] = "10";
-  {
-    ErasureCodeExample example(parameters);
-    EXPECT_EQ(10u, example.delay);
-  }
-}
-
 TEST(ErasureCodeExample, minimum_to_decode)
 {
-  map<std::string,std::string> parameters;
-  ErasureCodeExample example(parameters);
+  ErasureCodeExample example;
   set<int> available_chunks;
   set<int> want_to_read;
   want_to_read.insert(1);
@@ -65,16 +50,58 @@ TEST(ErasureCodeExample, minimum_to_decode)
     EXPECT_EQ(0, example.minimum_to_decode(want_to_read,
                                            available_chunks,
                                            &minimum));
+    EXPECT_EQ(1u, minimum.size());
+    EXPECT_EQ(1u, minimum.count(1));
+  }
+}
+
+TEST(ErasureCodeExample, minimum_to_decode_with_cost)
+{
+  ErasureCodeExample example;
+  map<int,int> available;
+  set<int> want_to_read;
+  want_to_read.insert(1);
+  {
+    set<int> minimum;
+    EXPECT_EQ(-EIO, example.minimum_to_decode_with_cost(want_to_read,
+							available,
+							&minimum));
+  }
+  available[0] = 1;
+  available[2] = 1;
+  {
+    set<int> minimum;
+    EXPECT_EQ(0, example.minimum_to_decode_with_cost(want_to_read,
+						     available,
+						     &minimum));
     EXPECT_EQ(2u, minimum.size());
     EXPECT_EQ(1u, minimum.count(0));
+    EXPECT_EQ(1u, minimum.count(2));
+  }
+  {
+    set<int> minimum;
+    available[1] = 1;
+    EXPECT_EQ(0, example.minimum_to_decode_with_cost(want_to_read,
+						     available,
+						     &minimum));
+    EXPECT_EQ(1u, minimum.size());
     EXPECT_EQ(1u, minimum.count(1));
+  }
+  {
+    set<int> minimum;
+    available[1] = 2;
+    EXPECT_EQ(0, example.minimum_to_decode_with_cost(want_to_read,
+						     available,
+						     &minimum));
+    EXPECT_EQ(2u, minimum.size());
+    EXPECT_EQ(1u, minimum.count(0));
+    EXPECT_EQ(1u, minimum.count(2));
   }
 }
 
 TEST(ErasureCodeExample, encode_decode)
 {
-  map<std::string,std::string> parameters;
-  ErasureCodeExample example(parameters);
+  ErasureCodeExample example;
 
   bufferlist in;
   in.append("ABCDE");
@@ -142,5 +169,5 @@ int main(int argc, char **argv) {
 }
 
 // Local Variables:
-// compile-command: "cd ../.. ; make -j4 && make unittest_erasure_code_example && ./unittest_erasure_code_example --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
+// compile-command: "cd ../.. ; make -j4 && make unittest_erasure_code_example && valgrind  --leak-check=full --tool=memcheck ./unittest_erasure_code_example --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
 // End:

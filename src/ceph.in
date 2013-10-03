@@ -476,6 +476,9 @@ def complete(sigdict, args, target):
 ###
 
 def main():
+    ceph_args = os.environ.get('CEPH_ARGS')
+    if ceph_args:
+        sys.argv.extend(ceph_args.split())
 
     parser, parsed_args, childargs = parse_cmdargs()
 
@@ -556,7 +559,6 @@ def main():
     cluster_handle = rados.Rados(name=name, clustername=clustername,
                                  conf_defaults=conf_defaults, conffile=conffile)
 
-    cluster_handle.conf_parse_env()
     retargs = cluster_handle.conf_parse_argv(childargs)
     #tmp = childargs
     childargs = retargs
@@ -642,7 +644,7 @@ def main():
     if parsed_args.output_file:
         try:
             outf = open(parsed_args.output_file, 'w')
-        except:
+        except Exception as e:
             print >> sys.stderr, \
                 'Can\'t open output file {0}: {1}'.\
                 format(parsed_args.output_file, e)

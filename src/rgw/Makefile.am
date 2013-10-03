@@ -93,11 +93,6 @@ DENCODER_SOURCES += \
 	rgw/rgw_common.cc \
 	rgw/rgw_env.cc \
 	rgw/rgw_json_enc.cc
-DENCODER_DEPS +=  \
-	libcls_lock_client.la \
-	libcls_rgw_client.la \
-	libcls_replica_log_client.a \
-	libcls_refcount_client.la
 
 
 endif # WITH_RADOSGW

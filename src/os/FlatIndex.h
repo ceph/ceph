@@ -52,35 +52,35 @@ public:
 
   /// @see CollectionIndex
   int created(
-    const hobject_t &hoid,
+    const ghobject_t &oid,
     const char *path
     );
 
   /// @see CollectionIndex
   int unlink(
-    const hobject_t &hoid
+    const ghobject_t &oid
     );
 
   /// @see CollectionIndex
   int lookup(
-    const hobject_t &hoid,
+    const ghobject_t &oid,
     IndexedPath *path,
     int *exist
     );
 
   /// @see CollectionIndex
   int collection_list(
-    vector<hobject_t> *ls
+    vector<ghobject_t> *ls
     );
 
   /// @see CollectionIndex
   int collection_list_partial(
-    const hobject_t &start,
+    const ghobject_t &start,
     int min_count,
     int max_count,
     snapid_t seq,
-    vector<hobject_t> *ls,
-    hobject_t *next
+    vector<ghobject_t> *ls,
+    ghobject_t *next
     );
 };
 

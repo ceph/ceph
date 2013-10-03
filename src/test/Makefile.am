@@ -65,6 +65,10 @@ endif
 
 bin_PROGRAMS += ceph-dencoder
 
+get_command_descriptions_SOURCES = test/common/get_command_descriptions.cc
+get_command_descriptions_LDADD = $(LIBMON) $(LIBCOMMON) $(CEPH_GLOBAL)
+noinst_PROGRAMS += get_command_descriptions
+
 
 ## Build tests
 # These should all use explicit _CXXFLAGS so avoid basename conflicts
@@ -228,6 +232,10 @@ bin_DEBUGPROGRAMS += ceph_bench_log
 
 ## Unit tests
 
+check_SCRIPTS += \
+	unittest_bufferlist.sh \
+	test/encoding/check-generated.sh
+
 # target to build but not run the unit tests
 unittests:: $(check_PROGRAMS)
 
@@ -250,10 +258,20 @@ unittest_addrs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_addrs_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_addrs
 
+unittest_bloom_filter_SOURCES = test/common/test_bloom_filter.cc
+unittest_bloom_filter_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_bloom_filter_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_bloom_filter
+
 unittest_sharedptr_registry_SOURCES = test/common/test_sharedptr_registry.cc
 unittest_sharedptr_registry_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_sharedptr_registry_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_sharedptr_registry
+
+unittest_sloppy_crc_map_SOURCES = test/common/test_sloppy_crc_map.cc
+unittest_sloppy_crc_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_sloppy_crc_map_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_sloppy_crc_map
 
 unittest_util_SOURCES = test/common/test_util.cc
 unittest_util_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -300,6 +318,11 @@ unittest_ceph_argparse_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_ceph_argparse_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_ceph_argparse
 
+unittest_ceph_compatset_SOURCES = test/ceph_compatset.cc
+unittest_ceph_compatset_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_ceph_compatset_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_ceph_compatset
+
 libec_example_la_SOURCES = test/osd/ErasureCodePluginExample.cc
 libec_example_la_CFLAGS = ${AM_CFLAGS}
 libec_example_la_CXXFLAGS= ${AM_CXXFLAGS}
@@ -307,7 +330,35 @@ libec_example_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libec_example_la_LDFLAGS = ${AM_LDFLAGS} -export-symbols-regex '.*__erasure_code_.*'
 erasure_codelib_LTLIBRARIES += libec_example.la
 
-unittest_erasure_code_plugin_SOURCES = test/osd/TestErasureCodePluginExample.cc 
+libec_missing_entry_point_la_SOURCES = test/osd/ErasureCodePluginMissingEntryPoint.cc
+libec_missing_entry_point_la_CFLAGS = ${AM_CFLAGS}
+libec_missing_entry_point_la_CXXFLAGS= ${AM_CXXFLAGS}
+libec_missing_entry_point_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libec_missing_entry_point_la_LDFLAGS = ${AM_LDFLAGS} -export-symbols-regex '.*__erasure_code_.*'
+erasure_codelib_LTLIBRARIES += libec_missing_entry_point.la
+
+libec_hangs_la_SOURCES = test/osd/ErasureCodePluginHangs.cc
+libec_hangs_la_CFLAGS = ${AM_CFLAGS}
+libec_hangs_la_CXXFLAGS= ${AM_CXXFLAGS}
+libec_hangs_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libec_hangs_la_LDFLAGS = ${AM_LDFLAGS} -export-symbols-regex '.*__erasure_code_.*'
+erasure_codelib_LTLIBRARIES += libec_hangs.la
+
+libec_fail_to_initialize_la_SOURCES = test/osd/ErasureCodePluginFailToInitialize.cc
+libec_fail_to_initialize_la_CFLAGS = ${AM_CFLAGS}
+libec_fail_to_initialize_la_CXXFLAGS= ${AM_CXXFLAGS}
+libec_fail_to_initialize_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libec_fail_to_initialize_la_LDFLAGS = ${AM_LDFLAGS} -export-symbols-regex '.*__erasure_code_.*'
+erasure_codelib_LTLIBRARIES += libec_fail_to_initialize.la
+
+libec_fail_to_register_la_SOURCES = test/osd/ErasureCodePluginFailToRegister.cc
+libec_fail_to_register_la_CFLAGS = ${AM_CFLAGS}
+libec_fail_to_register_la_CXXFLAGS= ${AM_CXXFLAGS}
+libec_fail_to_register_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libec_fail_to_register_la_LDFLAGS = ${AM_LDFLAGS} -export-symbols-regex '.*__erasure_code_.*'
+erasure_codelib_LTLIBRARIES += libec_fail_to_register.la
+
+unittest_erasure_code_plugin_SOURCES = test/osd/TestErasureCodePlugin.cc 
 unittest_erasure_code_plugin_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_erasure_code_plugin_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 if LINUX
@@ -388,6 +439,11 @@ unittest_crc32c_SOURCES = test/common/test_crc32c.cc
 unittest_crc32c_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_crc32c_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_crc32c
+
+unittest_arch_SOURCES = test/test_arch.c
+unittest_arch_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_arch_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_arch
 
 unittest_crypto_SOURCES = test/crypto.cc
 unittest_crypto_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
@@ -510,6 +566,8 @@ unittest_texttable_SOURCES = test/test_texttable.cc
 unittest_texttable_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD)
 unittest_texttable_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_texttable
+
+check_SCRIPTS += test/pybind/test_ceph_argparse.py
 
 if WITH_RADOSGW
 ceph_test_cors_SOURCES = test/test_cors.cc

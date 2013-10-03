@@ -2796,9 +2796,8 @@ void object_info_t::copy_user_bits(const object_info_t& other)
   last_reqid = other.last_reqid;
   truncate_seq = other.truncate_seq;
   truncate_size = other.truncate_size;
-  lost = other.lost;
+  flags = other.flags;
   category = other.category;
-  uses_tmap = other.uses_tmap;
 }
 
 ps_t object_info_t::legacy_object_locator_to_ps(const object_t &oid, 
@@ -2824,7 +2823,7 @@ void object_info_t::encode(bufferlist& bl) const
        ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(11, 8, bl);
+  ENCODE_START(12, 8, bl);
   ::encode(soid, bl);
   ::encode(myoloc, bl);	//Retained for compatibility
   ::encode(category, bl);
@@ -2839,13 +2838,15 @@ void object_info_t::encode(bufferlist& bl) const
     ::encode(snaps, bl);
   ::encode(truncate_seq, bl);
   ::encode(truncate_size, bl);
-  ::encode(lost, bl);
+  __u8 flags_lo = flags & 0xff;
+  __u8 flags_hi = (flags & 0xff00) >> 8;
+  ::encode(flags_lo, bl);
   ::encode(old_watchers, bl);
   /* shenanigans to avoid breaking backwards compatibility in the disk format.
    * When we can, switch this out for simply putting the version_t on disk. */
   eversion_t user_eversion(0, user_version);
   ::encode(user_eversion, bl);
-  ::encode(uses_tmap, bl);
+  ::encode(flags_hi, bl);
   ::encode(watchers, bl);
   ENCODE_FINISH(bl);
 }
@@ -2853,7 +2854,7 @@ void object_info_t::encode(bufferlist& bl) const
 void object_info_t::decode(bufferlist::iterator& bl)
 {
   object_locator_t myoloc;
-  DECODE_START_LEGACY_COMPAT_LEN(11, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(12, 8, 8, bl);
   map<entity_name_t, watch_info_t> old_watchers;
   if (struct_v >= 2 && struct_v <= 5) {
     sobject_t obj;
@@ -2883,20 +2884,26 @@ void object_info_t::decode(bufferlist::iterator& bl)
     ::decode(snaps, bl);
   ::decode(truncate_seq, bl);
   ::decode(truncate_size, bl);
-  if (struct_v >= 3)
-    ::decode(lost, bl);
-  else
-    lost = false;
+  if (struct_v >= 3) {
+    __u8 lo;
+    ::decode(lo, bl);
+    flags = (flag_t)lo;
+  } else {
+    flags = (flag_t)0;
+  }
   if (struct_v >= 4) {
     ::decode(old_watchers, bl);
     eversion_t user_eversion;
     ::decode(user_eversion, bl);
     user_version = user_eversion.version;
   }
-  if (struct_v >= 9)
-    ::decode(uses_tmap, bl);
-  else
-    uses_tmap = true;
+  if (struct_v >= 9) {
+    __u8 hi;
+    ::decode(hi, bl);
+    flags = (flag_t)(flags | ((unsigned)hi << 8));
+  } else {
+    set_flag(FLAG_USES_TMAP);
+  }
   if (struct_v < 10)
     soid.pool = myoloc.pool;
   if (struct_v >= 11) {
@@ -2924,7 +2931,8 @@ void object_info_t::dump(Formatter *f) const
   f->dump_stream("last_reqid") << last_reqid;
   f->dump_unsigned("size", size);
   f->dump_stream("mtime") << mtime;
-  f->dump_unsigned("lost", lost);
+  f->dump_unsigned("lost", (int)is_lost());
+  f->dump_unsigned("flags", (int)flags);
   f->dump_stream("wrlock_by") << wrlock_by;
   f->open_array_section("snaps");
   for (vector<snapid_t>::const_iterator p = snaps.begin(); p != snaps.end(); ++p)
@@ -2960,8 +2968,8 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
     out << " wrlock_by=" << oi.wrlock_by;
   else
     out << " " << oi.snaps;
-  if (oi.lost)
-    out << " LOST";
+  if (oi.flags)
+    out << " " << oi.get_flag_string();
   out << ")";
   return out;
 }
@@ -3515,6 +3523,8 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_DELETE:
     case CEPH_OSD_OP_LIST_WATCHERS:
     case CEPH_OSD_OP_LIST_SNAPS:
+    case CEPH_OSD_OP_UNDIRTY:
+    case CEPH_OSD_OP_ISDIRTY:
       break;
     case CEPH_OSD_OP_ASSERT_VER:
       out << " v" << op.op.assert_ver.ver;

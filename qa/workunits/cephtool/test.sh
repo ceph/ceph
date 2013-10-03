@@ -169,7 +169,16 @@ bl=192.168.0.1:0/1000
 ceph osd blacklist add $bl
 ceph osd blacklist ls | grep $bl
 ceph osd blacklist rm $bl
-expect_false "(ceph osd blacklist ls | grep $bl)"
+expect_false "ceph osd blacklist ls | grep $bl"
+
+bl=192.168.0.1
+# test without nonce, invalid nonce
+ceph osd blacklist add $bl
+ceph osd blacklist ls | grep $bl
+ceph osd blacklist rm $bl
+expect_false "ceph osd blacklist ls | grep $bl"
+expect_false "ceph osd blacklist $bl/-1"
+expect_false "ceph osd blacklist $bl/foo"
 
 ceph osd crush tunables legacy
 ceph osd crush tunables bobtail
@@ -333,5 +342,12 @@ ceph pg set_full_ratio 95 2>$TMPFILE; check_response $? 22 'not in range'
 
 # expect "not in range" for invalid overload percentage
 ceph osd reweight-by-utilization 80 2>$TMPFILE; check_response $? 22 'not in range'
+
+# expect 'heap' commands to be correctly parsed
+ceph heap stats
+ceph heap start_profiler
+ceph heap dump
+ceph heap stop_profiler
+ceph heap release
 
 echo OK

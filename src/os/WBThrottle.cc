@@ -116,7 +116,7 @@ void WBThrottle::handle_conf_change(const md_config_t *conf,
 }
 
 bool WBThrottle::get_next_should_flush(
-  boost::tuple<hobject_t, FDRef, PendingWB> *next)
+  boost::tuple<ghobject_t, FDRef, PendingWB> *next)
 {
   assert(lock.is_locked());
   assert(next);
@@ -128,9 +128,9 @@ bool WBThrottle::get_next_should_flush(
   if (stopping)
     return false;
   assert(!pending_wbs.empty());
-  hobject_t obj(pop_object());
+  ghobject_t obj(pop_object());
   
-  map<hobject_t, pair<PendingWB, FDRef> >::iterator i =
+  map<ghobject_t, pair<PendingWB, FDRef> >::iterator i =
     pending_wbs.find(obj);
   *next = boost::make_tuple(obj, i->second.second, i->second.first);
   pending_wbs.erase(i);
@@ -141,7 +141,7 @@ bool WBThrottle::get_next_should_flush(
 void *WBThrottle::entry()
 {
   Mutex::Locker l(lock);
-  boost::tuple<hobject_t, FDRef, PendingWB> wb;
+  boost::tuple<ghobject_t, FDRef, PendingWB> wb;
   while (get_next_should_flush(&wb)) {
     clearing = wb.get<0>();
     lock.Unlock();
@@ -149,24 +149,24 @@ void *WBThrottle::entry()
     if (wb.get<2>().nocache)
       posix_fadvise(**wb.get<1>(), 0, 0, POSIX_FADV_DONTNEED);
     lock.Lock();
-    clearing = hobject_t();
+    clearing = ghobject_t();
     cur_ios -= wb.get<2>().ios;
     logger->dec(l_wbthrottle_ios_dirtied, wb.get<2>().ios);
     cur_size -= wb.get<2>().size;
     logger->dec(l_wbthrottle_bytes_dirtied, wb.get<2>().size);
     logger->dec(l_wbthrottle_inodes_dirtied);
     cond.Signal();
-    wb = boost::tuple<hobject_t, FDRef, PendingWB>();
+    wb = boost::tuple<ghobject_t, FDRef, PendingWB>();
   }
   return 0;
 }
 
 void WBThrottle::queue_wb(
-  FDRef fd, const hobject_t &hoid, uint64_t offset, uint64_t len,
+  FDRef fd, const ghobject_t &hoid, uint64_t offset, uint64_t len,
   bool nocache)
 {
   Mutex::Locker l(lock);
-  map<hobject_t, pair<PendingWB, FDRef> >::iterator wbiter =
+  map<ghobject_t, pair<PendingWB, FDRef> >::iterator wbiter =
     pending_wbs.find(hoid);
   if (wbiter == pending_wbs.end()) {
     wbiter = pending_wbs.insert(
@@ -192,7 +192,7 @@ void WBThrottle::queue_wb(
 void WBThrottle::clear()
 {
   Mutex::Locker l(lock);
-  for (map<hobject_t, pair<PendingWB, FDRef> >::iterator i =
+  for (map<ghobject_t, pair<PendingWB, FDRef> >::iterator i =
 	 pending_wbs.begin();
        i != pending_wbs.end();
        ++i) {
@@ -208,12 +208,12 @@ void WBThrottle::clear()
   cond.Signal();
 }
 
-void WBThrottle::clear_object(const hobject_t &hoid)
+void WBThrottle::clear_object(const ghobject_t &hoid)
 {
   Mutex::Locker l(lock);
   while (clearing == hoid)
     cond.Wait(lock);
-  map<hobject_t, pair<PendingWB, FDRef> >::iterator i =
+  map<ghobject_t, pair<PendingWB, FDRef> >::iterator i =
     pending_wbs.find(hoid);
   if (i == pending_wbs.end())
     return;

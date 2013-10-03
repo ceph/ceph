@@ -464,18 +464,19 @@ CephInitParameters ceph_argparse_early_args
 static void generic_usage(bool is_server)
 {
   cout << "\
-  --conf/-c        Read configuration from the given configuration file\n\
-  --id/-i          set ID portion of my name\n\
-  --name/-n        set name (TYPE.ID)\n\
-  --version        show version and quit\n\
+  --conf/-c FILE    read configuration from the given configuration file\n\
+  --id/-i ID        set ID portion of my name\n\
+  --name/-n TYPE.ID set name\n\
+  --cluster NAME    set cluster name (default: ceph)\n\
+  --version         show version and quit\n\
 " << std::endl;
 
   if (is_server) {
     cout << "\
-  -d               Run in foreground, log to stderr.\n\
-  -f               Run in foreground, log to usual location.\n";
-    cout << "  --debug_ms N\n";
-    cout << "        set message debug level (e.g. 1)\n";
+  -d                run in foreground, log to stderr.\n\
+  -f                run in foreground, log to usual location.\n";
+    cout << "\
+  --debug_ms N      set message debug level (e.g. 1)\n";
   }
 }
 

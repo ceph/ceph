@@ -51,7 +51,8 @@ TEST(ErasureCodePlugin, factory)
   }
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
@@ -62,6 +63,12 @@ int main(int argc, char **argv) {
   return RUN_ALL_TESTS();
 }
 
-// Local Variables:
-// compile-command: "cd ../.. ; make -j4 && make unittest_erasure_code_jerasure_plugin && valgrind --tool=memcheck ./unittest_erasure_code_jerasure_plugin --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
-// End:
+/* 
+ * Local Variables:
+ * compile-command: "cd ../.. ; make -j4 && 
+ *   make unittest_erasure_code_plugin_jerasure && 
+ *   valgrind --tool=memcheck ./unittest_erasure_code_plugin_jerasure \
+ *      --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
+ * End:
+ */
+

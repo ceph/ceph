@@ -897,7 +897,9 @@ int RGWRados::init_complete()
 
   ret = region_map.read(cct, this);
   if (ret < 0) {
-    ldout(cct, 0) << "WARNING: cannot read region map" << dendl;
+    if (ret != -ENOENT) {
+      ldout(cct, 0) << "WARNING: cannot read region map" << dendl;
+    }
     ret = region_map.update(region);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: failed to update regionmap with local region info" << dendl;
@@ -2182,8 +2184,8 @@ int RGWRados::create_pools(vector<string>& names, vector<int>& retcodes)
       if (r < 0) {
         ldout(cct, 0) << "WARNING: async pool_create returned " << r << dendl;
       }
-      c->release();
     }
+    c->release();
     retcodes.push_back(r);
   }
   return 0;
@@ -2493,6 +2495,22 @@ static void set_copy_attrs(map<string, bufferlist>& src_attrs, map<string, buffe
   }
 }
 
+class GetObjHandleDestructor {
+  RGWRados *store;
+  void **handle;
+
+public:
+    GetObjHandleDestructor(RGWRados *_store) : store(_store), handle(NULL) {}
+    ~GetObjHandleDestructor() {
+      if (handle) {
+        store->finish_get_obj(handle);
+      }
+    }
+    void set_handle(void **_h) {
+      handle = _h;
+    }
+};
+
 /**
  * Copy an object.
  * dest_obj: the object to copy into
@@ -2547,6 +2565,7 @@ int RGWRados::copy_obj(void *ctx,
   ldout(cct, 5) << "Copy object " << src_obj.bucket << ":" << src_obj.object << " => " << dest_obj.bucket << ":" << dest_obj.object << dendl;
 
   void *handle = NULL;
+  GetObjHandleDestructor handle_destructor(this);
 
   map<string, bufferlist> src_attrs;
   off_t ofs = 0;
@@ -2556,6 +2575,8 @@ int RGWRados::copy_obj(void *ctx,
                   mod_ptr, unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &obj_size, NULL, &handle, err);
     if (ret < 0)
       return ret;
+
+    handle_destructor.set_handle(&handle);
   } else {
     /* source is in a different region, copy it there */
 
@@ -2616,7 +2637,6 @@ int RGWRados::copy_obj(void *ctx,
     { /* opening scope so that we can do goto, sorry */
       bufferlist& extra_data_bl = processor.get_extra_data();
       if (extra_data_bl.length()) {
-        extra_data_bl.push_back((char)0);
         JSONParser jp;
         if (!jp.parse(extra_data_bl.c_str(), extra_data_bl.length())) {
           ldout(cct, 0) << "failed to parse response extra data. len=" << extra_data_bl.length() << " data=" << extra_data_bl.c_str() << dendl;
@@ -2699,7 +2719,7 @@ set_err_state:
 
     return 0;
   } else if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
-    return copy_obj_data(ctx, handle, end, dest_obj, src_obj, mtime, src_attrs, category, ptag, err);
+    return copy_obj_data(ctx, &handle, end, dest_obj, src_obj, mtime, src_attrs, category, ptag, err);
   }
 
   map<uint64_t, RGWObjManifestPart>::iterator miter = astate->manifest.objs.begin();
@@ -2804,7 +2824,7 @@ done_ret:
 
 
 int RGWRados::copy_obj_data(void *ctx,
-	       void *handle, off_t end,
+	       void **handle, off_t end,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
 	       time_t *mtime,
@@ -2830,7 +2850,7 @@ int RGWRados::copy_obj_data(void *ctx,
 
   do {
     bufferlist bl;
-    ret = get_obj(ctx, NULL, &handle, src_obj, bl, ofs, end);
+    ret = get_obj(ctx, NULL, handle, src_obj, bl, ofs, end);
     if (ret < 0)
       return ret;
 
@@ -2877,12 +2897,9 @@ int RGWRados::copy_obj_data(void *ctx,
   if (mtime)
     obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL, NULL, NULL);
 
-  finish_get_obj(&handle);
-
   return ret;
 done_err:
   delete_obj(ctx, shadow_obj);
-  finish_get_obj(&handle);
   return r;
 }
 

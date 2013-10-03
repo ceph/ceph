@@ -120,7 +120,12 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
    * We will possibly have a stashed latest that *we* wrote, and we will
    * always be sure to have the oldest full map in the first..last range
    * due to encode_trim_extra(), which includes the oldest full map in the trim
-   * transaction.  Start with whichever is newer.
+   * transaction.
+   *
+   * encode_trim_extra() does not however write the full map's
+   * version to 'full_latest'.  This is only done when we are building the
+   * full maps from the incremental versions.  But don't panic!  We make sure
+   * that the following conditions find whichever full map version is newer.
    */
   version_t latest_full = get_version_latest_full();
   if (latest_full == 0 && get_first_committed() > 1)
@@ -179,32 +184,49 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   }
 
   // walk through incrementals
-  MonitorDBStore::Transaction t;
+  MonitorDBStore::Transaction *t = NULL;
+  size_t tx_size = 0;
   while (version > osdmap.epoch) {
     bufferlist inc_bl;
     int err = get_version(osdmap.epoch+1, inc_bl);
     assert(err == 0);
     assert(inc_bl.length());
-    
+
     dout(7) << "update_from_paxos  applying incremental " << osdmap.epoch+1 << dendl;
     OSDMap::Incremental inc(inc_bl);
     err = osdmap.apply_incremental(inc);
     assert(err == 0);
 
+    if (t == NULL)
+      t = new MonitorDBStore::Transaction;
+
     // write out the full map for all past epochs
     bufferlist full_bl;
     osdmap.encode(full_bl);
-    put_version_full(&t, osdmap.epoch, full_bl);
+    tx_size += full_bl.length();
+
+    put_version_full(t, osdmap.epoch, full_bl);
+    put_version_latest_full(t, osdmap.epoch);
 
     // share
     dout(1) << osdmap << dendl;
 
     if (osdmap.epoch == 1) {
-      t.erase("mkfs", "osdmap");
+      t->erase("mkfs", "osdmap");
+    }
+
+    if (tx_size > g_conf->mon_sync_max_payload_size*2) {
+      mon->store->apply_transaction(*t);
+      delete t;
+      t = NULL;
+      tx_size = 0;
     }
   }
-  if (!t.empty())
-    mon->store->apply_transaction(t);
+
+  if (t != NULL) {
+    mon->store->apply_transaction(*t);
+    delete t;
+  }
 
   for (int o = 0; o < osdmap.get_max_osd(); o++) {
     if (osdmap.is_down(o)) {
@@ -620,7 +642,6 @@ void OSDMonitor::encode_trim_extra(MonitorDBStore::Transaction *tx, version_t fi
   bufferlist bl;
   get_version_full(first, bl);
   put_version_full(tx, first, bl);
-  put_version_latest_full(tx, first);
 }
 
 // -------------
@@ -2154,7 +2175,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 				osdmap.get_inst(i));
 	}
       r = 0;
-      ss << " instructed to " << whostr;
+      ss << " instructed to " << pvec.back();
     } else {
       long osd = parse_osd_id(whostr.c_str(), &ss);
       if (osd < 0) {
@@ -2526,7 +2547,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
        i != properties.end();
        i++) {
     size_t equal = i->find('=');
-    if (equal != string::npos)
+    if (equal == string::npos)
       pi->properties[*i] = string();
     else {
       const string key = i->substr(0, equal);
@@ -3001,7 +3022,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       cmd_getval(g_ceph_context, cmdmap, "weight", w);
 
       err = newcrush.adjust_item_weightf(g_ceph_context, id, w);
-      if (err == 0) {
+      if (err >= 0) {
 	pending_inc.crush.clear();
 	newcrush.encode(pending_inc.crush);
 	ss << "reweighted item id " << id << " name '" << name << "' to " << w
@@ -3599,7 +3620,7 @@ done:
 	  ss << "specified pg_num " << n << " <= current " << p->get_pg_num();
 	  err = -EINVAL;
 	} else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
-	  ss << "currently creating pgs, wait";
+	  ss << "busy creating pgs; try again later";
 	  err = -EAGAIN;
 	} else {
 	  pending_inc.get_new_pool(pool, p)->set_pg_num(n);
@@ -3609,7 +3630,7 @@ done:
 	if (n > p->get_pg_num()) {
 	  ss << "specified pgp_num " << n << " > pg_num " << p->get_pg_num();
 	} else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
-	  ss << "still creating pgs, wait";
+	  ss << "busy creating pgs; try again later";
 	  err = -EAGAIN;
 	} else {
 	  pending_inc.get_new_pool(pool, p)->set_pgp_num(n);
