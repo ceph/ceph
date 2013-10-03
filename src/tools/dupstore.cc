@@ -27,7 +27,7 @@ int dupstore(ObjectStore* src, ObjectStore* dst)
   if (dst->mount() < 0) return 1;
 
   // objects
-  hash_map<hobject_t, coll_t> did_object;
+  hash_map<ghobject_t, coll_t> did_object;
 
   // collections
   vector<coll_t> collections;
@@ -54,11 +54,11 @@ int dupstore(ObjectStore* src, ObjectStore* dst)
       dst->apply_transaction(t);
     }
 
-    vector<hobject_t> o;
+    vector<ghobject_t> o;
     src->collection_list(*p, o);
     int numo = o.size();
     int j = 1;
-    for (vector<hobject_t>::iterator q = o.begin(); q != o.end(); ++q) {
+    for (vector<ghobject_t>::iterator q = o.begin(); q != o.end(); ++q) {
       ObjectStore::Transaction t;
       if (did_object.count(*q))
 	t.collection_add(*p, did_object[*q], *q);

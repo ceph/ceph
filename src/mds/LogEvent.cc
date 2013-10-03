@@ -46,10 +46,16 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   ::decode(type, p);
 
   if (EVENT_NEW_ENCODING == type) {
-    DECODE_START(1, p);
-    ::decode(type, p);
-    event = decode_event(bl, p, type);
-    DECODE_FINISH(p);
+    try {
+      DECODE_START(1, p);
+      ::decode(type, p);
+      event = decode_event(bl, p, type);
+      DECODE_FINISH(p);
+    }
+    catch (const buffer::error &e) {
+      generic_dout(0) << "failed to decode LogEvent (type maybe " << type << ")" << dendl;
+      return NULL;
+    }
   } else { // we are using classic encoding
     event = decode_event(bl, p, type);
   }

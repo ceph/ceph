@@ -538,21 +538,25 @@ TEST(LibRadosMisc, BigAttrPP) {
 
   bufferlist got;
 
-  bl.clear();
-  got.clear();
-  bl.append(buffer::create(g_conf->osd_max_attr_size));
-  ASSERT_EQ(0, ioctx.setxattr("foo", "one", bl));
-  ASSERT_EQ((int)bl.length(), ioctx.getxattr("foo", "one", got));
-  ASSERT_TRUE(bl.contents_equal(got));
+  if (g_conf->osd_max_attr_size) {
+    bl.clear();
+    got.clear();
+    bl.append(buffer::create(g_conf->osd_max_attr_size));
+    ASSERT_EQ(0, ioctx.setxattr("foo", "one", bl));
+    ASSERT_EQ((int)bl.length(), ioctx.getxattr("foo", "one", got));
+    ASSERT_TRUE(bl.contents_equal(got));
 
-  bl.clear();
-  bl.append(buffer::create(g_conf->osd_max_attr_size+1));
-  ASSERT_EQ(-EFBIG, ioctx.setxattr("foo", "one", bl));
+    bl.clear();
+    bl.append(buffer::create(g_conf->osd_max_attr_size+1));
+    ASSERT_EQ(-EFBIG, ioctx.setxattr("foo", "one", bl));
+  } else {
+    cout << "osd_max_attr_size == 0; skipping test" << std::endl;
+  }
 
   for (int i=0; i<1000; i++) {
     bl.clear();
     got.clear();
-    bl.append(buffer::create(g_conf->osd_max_attr_size));
+    bl.append(buffer::create(MIN(g_conf->osd_max_attr_size, 1024)));
     char n[10];
     snprintf(n, sizeof(n), "a%d", i);
     ASSERT_EQ(0, ioctx.setxattr("foo", n, bl));
@@ -637,6 +641,60 @@ TEST(LibRadosMisc, CopyPP) {
     ASSERT_TRUE(bl.contents_equal(bl2));
     ASSERT_EQ((int)x.length(), ioctx.getxattr("foo.copy2", "myattr", x2));
     ASSERT_TRUE(x.contents_equal(x2));
+  }
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
+TEST(LibRadosMisc, Dirty) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
+
+  {
+    ObjectWriteOperation op;
+    op.create(true);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bool dirty = false;
+    int r = -1;
+    ObjectReadOperation op;
+    op.is_dirty(&dirty, &r);
+    ASSERT_EQ(0, ioctx.operate("foo", &op, NULL));
+    ASSERT_TRUE(dirty);
+    ASSERT_EQ(0, r);
+  }
+  {
+    ObjectWriteOperation op;
+    op.undirty();
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bool dirty = false;
+    int r = -1;
+    ObjectReadOperation op;
+    op.is_dirty(&dirty, &r);
+    ASSERT_EQ(0, ioctx.operate("foo", &op, NULL));
+    ASSERT_FALSE(dirty);
+    ASSERT_EQ(0, r);
+  }
+  {
+    ObjectWriteOperation op;
+    op.truncate(0);  // still a write even tho it is a no-op
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  {
+    bool dirty = false;
+    int r = -1;
+    ObjectReadOperation op;
+    op.is_dirty(&dirty, &r);
+    ASSERT_EQ(0, ioctx.operate("foo", &op, NULL));
+    ASSERT_TRUE(dirty);
+    ASSERT_EQ(0, r);
   }
 
   ioctx.close();

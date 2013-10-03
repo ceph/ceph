@@ -4,8 +4,7 @@
 int ceph_arch_intel_sse42 = 0;
 
 
-/* this probably isn't specific enough for x86_64?  fix me someday */
-#ifdef __LP64__
+#ifdef __x86_64__
 
 /* intel cpu? */
 static void do_cpuid(unsigned int *eax, unsigned int *ebx, unsigned int *ecx,
@@ -35,7 +34,7 @@ int ceph_arch_intel_probe(void)
 	return 0;
 }
 
-#else // __LP64__
+#else // __x86_64__
 
 int ceph_arch_intel_probe(void)
 {
@@ -43,4 +42,4 @@ int ceph_arch_intel_probe(void)
 	return 0;
 }
 
-#endif // __LP64__
+#endif // __x86_64__

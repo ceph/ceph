@@ -15,6 +15,7 @@
 #include <tr1/memory>
 #include "ObjectStore.h"
 #include "common/Formatter.h"
+#include "FileStore.h"
 
 ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s)
 {
@@ -77,7 +78,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_TOUCH:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	f->dump_string("op_name", "touch");
 	f->dump_stream("collection") << cid;
 	f->dump_stream("oid") << oid;
@@ -87,7 +88,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_WRITE:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	uint64_t off = i.get_length();
 	uint64_t len = i.get_length();
 	bufferlist bl;
@@ -104,7 +105,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_ZERO:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	uint64_t off = i.get_length();
 	uint64_t len = i.get_length();
 	f->dump_string("op_name", "zero");
@@ -118,7 +119,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_TRIMCACHE:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	uint64_t off = i.get_length();
 	uint64_t len = i.get_length();
 	f->dump_string("op_name", "trim_cache");
@@ -132,7 +133,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_TRUNCATE:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	uint64_t off = i.get_length();
 	f->dump_string("op_name", "truncate");
 	f->dump_stream("collection") << cid;
@@ -144,7 +145,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_REMOVE:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	f->dump_string("op_name", "remove");
 	f->dump_stream("collection") << cid;
 	f->dump_stream("oid") << oid;
@@ -154,7 +155,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_SETATTR:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	string name = i.get_attrname();
 	bufferlist bl;
 	i.get_bl(bl);
@@ -169,7 +170,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_SETATTRS:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	map<string, bufferptr> aset;
 	i.get_attrset(aset);
 	f->dump_string("op_name", "setattrs");
@@ -187,7 +188,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_RMATTR:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	string name = i.get_attrname();
 	f->dump_string("op_name", "rmattr");
 	f->dump_stream("collection") << cid;
@@ -199,7 +200,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_RMATTRS:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	f->dump_string("op_name", "rmattrs");
 	f->dump_stream("collection") << cid;
 	f->dump_stream("oid") << oid;
@@ -209,8 +210,8 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_CLONE:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
-	hobject_t noid = i.get_oid();
+	ghobject_t oid = i.get_oid();
+	ghobject_t noid = i.get_oid();
 	f->dump_string("op_name", "clone");
 	f->dump_stream("collection") << cid;
 	f->dump_stream("src_oid") << oid;
@@ -221,8 +222,8 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_CLONERANGE:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
-	hobject_t noid = i.get_oid();
+	ghobject_t oid = i.get_oid();
+	ghobject_t noid = i.get_oid();
  	uint64_t off = i.get_length();
 	uint64_t len = i.get_length();
 	f->dump_string("op_name", "clonerange");
@@ -237,8 +238,8 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_CLONERANGE2:
       {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
-	hobject_t noid = i.get_oid();
+	ghobject_t oid = i.get_oid();
+	ghobject_t noid = i.get_oid();
  	uint64_t srcoff = i.get_length();
 	uint64_t len = i.get_length();
  	uint64_t dstoff = i.get_length();
@@ -272,7 +273,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
       {
 	coll_t ocid = i.get_cid();
 	coll_t ncid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	f->dump_string("op_name", "collection_add");
 	f->dump_stream("src_collection") << ocid;
 	f->dump_stream("dst_collection") << ncid;
@@ -283,7 +284,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_COLL_REMOVE:
        {
 	coll_t cid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	f->dump_string("op_name", "collection_remove");
 	f->dump_stream("collection") << cid;
 	f->dump_stream("oid") << oid;
@@ -294,7 +295,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
        {
 	coll_t ocid = i.get_cid();
 	coll_t ncid = i.get_cid();
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	f->open_object_section("collection_move");
 	f->dump_stream("src_collection") << ocid;
 	f->dump_stream("dst_collection") << ncid;
@@ -344,7 +345,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_OMAP_CLEAR:
       {
 	coll_t cid(i.get_cid());
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	f->dump_string("op_name", "omap_clear");
 	f->dump_stream("collection") << cid;
 	f->dump_stream("oid") << oid;
@@ -354,7 +355,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_OMAP_SETKEYS:
       {
 	coll_t cid(i.get_cid());
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	map<string, bufferlist> aset;
 	i.get_attrset(aset);
 	f->dump_string("op_name", "omap_setkeys");
@@ -372,7 +373,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_OMAP_RMKEYS:
       {
 	coll_t cid(i.get_cid());
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	set<string> keys;
 	i.get_keyset(keys);
 	f->dump_string("op_name", "omap_rmkeys");
@@ -384,7 +385,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_OMAP_SETHEADER:
       {
 	coll_t cid(i.get_cid());
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	bufferlist bl;
 	i.get_bl(bl);
 	f->dump_string("op_name", "omap_setheader");
@@ -425,7 +426,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_OMAP_RMKEYRANGE:
       {
 	coll_t cid(i.get_cid());
-	hobject_t oid = i.get_oid();
+	ghobject_t oid = i.get_oid();
 	string first, last;
 	first = i.get_key();
 	last = i.get_key();
@@ -460,9 +461,9 @@ void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transac
   t = new Transaction;
   coll_t c("foocoll");
   coll_t c2("foocoll2");
-  hobject_t o1("obj", "", 123, 456, -1, "");
-  hobject_t o2("obj2", "", 123, 456, -1, "");
-  hobject_t o3("obj3", "", 123, 456, -1, "");
+  ghobject_t o1(hobject_t("obj", "", 123, 456, -1, ""));
+  ghobject_t o2(hobject_t("obj2", "", 123, 456, -1, ""));
+  ghobject_t o3(hobject_t("obj3", "", 123, 456, -1, ""));
   t->touch(c, o1);
   bufferlist bl;
   bl.append("some data");
@@ -497,3 +498,44 @@ void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transac
   o.push_back(t);  
 }
 
+int ObjectStore::collection_list(coll_t c, vector<hobject_t>& o)
+{
+  vector<ghobject_t> go;
+  int ret = collection_list(c, go);
+  if (ret == 0) {
+    o.reserve(go.size());
+    for (vector<ghobject_t>::iterator i = go.begin(); i != go.end() ; i++)
+      o.push_back(i->hobj);
+  }
+  return ret;
+}
+
+int ObjectStore::collection_list_partial(coll_t c, hobject_t start,
+			      int min, int max, snapid_t snap,
+				      vector<hobject_t> *ls, hobject_t *next)
+{
+  vector<ghobject_t> go;
+  ghobject_t gnext, gstart(start);
+  int ret = collection_list_partial(c, gstart, min, max, snap, &go, &gnext);
+  if (ret == 0) {
+    *next = gnext.hobj;
+    ls->reserve(go.size());
+    for (vector<ghobject_t>::iterator i = go.begin(); i != go.end() ; i++)
+      ls->push_back(i->hobj);
+  }
+  return ret;
+}
+
+int ObjectStore::collection_list_range(coll_t c, hobject_t start, hobject_t end,
+			    snapid_t seq, vector<hobject_t> *ls)
+{
+  vector<ghobject_t> go;
+  ghobject_t gstart(start), gend(end);
+  int ret = collection_list_range(c, gstart, gend, seq, &go);
+  if (ret == 0) {
+    ls->reserve(go.size());
+    for (vector<ghobject_t>::iterator i = go.begin(); i != go.end() ; i++)
+      ls->push_back(i->hobj);
+  }
+  return ret;
+}

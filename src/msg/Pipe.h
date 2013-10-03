@@ -234,16 +234,7 @@ class DispatchQueue;
 
     void register_pipe();
     void unregister_pipe();
-    void join() {
-      if (writer_thread.is_started())
-        writer_thread.join();
-      if (reader_thread.is_started())
-        reader_thread.join();
-      if (delay_thread) {
-	delay_thread->stop();
-	delay_thread->join();
-      }
-    }
+    void join();
     void stop();
 
     void _send(Message *m) {

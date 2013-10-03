@@ -276,6 +276,9 @@ function install_xfstests() {
 
 	cd xfstests
 
+	# FIXME: use an older version before the tests were rearranged!
+	git reset --hard e5f1a13792f20cfac097fef98007610b422f2cac
+
 	ncpu=$(getconf _NPROCESSORS_ONLN 2>&1)
 	[ -n "${ncpu}" -a "${ncpu}" -gt 1 ] && multiple="-j ${ncpu}"
 

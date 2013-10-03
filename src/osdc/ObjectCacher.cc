@@ -11,6 +11,8 @@
 
 #include "include/assert.h"
 
+#define MAX_FLUSH_UNDER_LOCK 20  ///< max bh's we start writeback on while holding the lock
+
 /*** ObjectCacher::BufferHead ***/
 
 
@@ -899,11 +901,10 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
     ob->last_commit_tid = tid;
 
     // waiters?
+    list<Context*> ls;
     if (ob->waitfor_commit.count(tid)) {
-      list<Context*> ls;
       ls.splice(ls.begin(), ob->waitfor_commit[tid]);
       ob->waitfor_commit.erase(tid);
-      finish_contexts(cct, ls, r);
     }
 
     // is the entire object set now clean and fully committed?
@@ -915,6 +916,9 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
 	oset->dirty_or_tx == 0) {        // nothing dirty/tx
       flush_set_callback(flush_set_callback_arg, oset);      
     }
+
+    if (!ls.empty())
+      finish_contexts(cct, ls, r);
   }
 }
 
@@ -1446,8 +1450,10 @@ void ObjectCacher::flusher_entry()
       utime_t cutoff = ceph_clock_now(cct);
       cutoff -= max_dirty_age;
       BufferHead *bh = 0;
+      int max = MAX_FLUSH_UNDER_LOCK;
       while ((bh = static_cast<BufferHead*>(bh_lru_dirty.lru_get_next_expire())) != 0 &&
-	     bh->last_write < cutoff) {
+	     bh->last_write < cutoff &&
+	     --max > 0) {
 	ldout(cct, 10) << "flusher flushing aged dirty bh " << *bh << dendl;
 	bh_write(bh);
       }
