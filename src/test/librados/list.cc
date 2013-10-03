@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
+#include "include/stringify.h"
 #include "test/librados/test.h"
 
 #include "gtest/gtest.h"
@@ -191,3 +192,39 @@ TEST(LibRadosList, ListObjectsPPNS) {
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
+
+TEST(LibRadosList, ListObjectsManyPP) {
+  std::string pool_name = get_temp_pool_name();
+  Rados cluster;
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+
+  for (int i=0; i<256; ++i) {
+    ASSERT_EQ((int)sizeof(buf), ioctx.write(stringify(i), bl, bl.length(), 0));
+  }
+
+  librados::ObjectIterator it = ioctx.objects_begin();
+  std::set<std::string> saw_obj;
+  std::set<int> saw_pg;
+  for (; it != ioctx.objects_end(); ++it) {
+    std::cout << it->first
+	      << " " << it.get_pg_hash_position() << std::endl;
+    saw_obj.insert(it->first);
+    saw_pg.insert(it.get_pg_hash_position());
+  }
+  std::cout << "saw " << saw_pg.size() << " pgs " << std::endl;
+
+  // make sure they are 0..n
+  for (unsigned i = 0; i < saw_pg.size(); ++i)
+    ASSERT_TRUE(saw_pg.count(i));
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
