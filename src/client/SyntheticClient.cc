@@ -1269,10 +1269,10 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       }
     } else if (strcmp(op, "ll_readlink") == 0) {
       int64_t i = t.get_int();
-      const char *value;
+      char buf[PATH_MAX];
       if (ll_inos.count(i)) {
 	i1 = client->ll_get_inode(vinodeno_t(ll_inos[i],CEPH_NOSNAP));
-	client->ll_readlink(i1, &value);
+	client->ll_readlink(i1, buf, sizeof(buf));
 	client->ll_put(i1);
       }
     } else if (strcmp(op, "ll_mknod") == 0) {
