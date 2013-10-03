@@ -1,8 +1,7 @@
 #ifndef CEPH_CRC32C_H
 #define CEPH_CRC32C_H
 
-#include "include/int_types.h"
-
+#include <inttypes.h>
 #include <string.h>
 
 typedef uint32_t (*ceph_crc32c_func_t)(uint32_t crc, unsigned char const *data, unsigned length);
