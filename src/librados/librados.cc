@@ -506,6 +506,11 @@ void librados::ObjectIterator::get_next()
   cur_obj = make_pair(entry, key ? key : string());
 }
 
+uint32_t librados::ObjectIterator::get_pg_hash_position() const
+{
+  return ctx->lc->get_pg_hash_position();
+}
+
 const librados::ObjectIterator librados::ObjectIterator::__EndObjectIterator(NULL);
 
 ///////////////////////////// PoolAsyncCompletion //////////////////////////////
@@ -2543,6 +2548,13 @@ extern "C" void rados_objects_list_close(rados_list_ctx_t h)
 {
   librados::ObjListCtx *lh = (librados::ObjListCtx *)h;
   delete lh;
+}
+
+extern "C" uint32_t rados_objects_list_get_pg_hash_position(
+  rados_list_ctx_t listctx)
+{
+  librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
+  return lh->lc->get_pg_hash_position();
 }
 
 extern "C" int rados_objects_list_next(rados_list_ctx_t listctx, const char **entry, const char **key)
