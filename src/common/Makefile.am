@@ -65,7 +65,8 @@ libcommon_la_SOURCES = \
 	common/ceph_strings.cc \
 	common/ceph_frag.cc \
 	common/addr_parsing.c \
-	common/hobject.cc
+	common/hobject.cc \
+	common/bloom_filter.cc
 
 if LINUX
 libcommon_la_SOURCES += common/secret.c
@@ -97,6 +98,7 @@ LIBCOMMON_DEPS += libcommon_crc.la
 noinst_LTLIBRARIES += libcommon_crc.la
 
 noinst_HEADERS += \
+	common/bloom_filter.hpp \
 	common/sctp_crc32.h \
 	common/crc32c_intel_baseline.h \
 	common/crc32c_intel_fast.h
