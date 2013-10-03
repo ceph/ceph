@@ -18,6 +18,7 @@
 #include <sstream>
 #include <stdio.h>
 #include <memory>
+#include <boost/scoped_ptr.hpp>
 
 #include "msg/msg_types.h"
 #include "include/types.h"
@@ -25,9 +26,10 @@
 #include "include/CompatSet.h"
 #include "include/histogram.h"
 #include "include/interval_set.h"
-#include "common/snap_types.h"
 #include "common/Formatter.h"
+#include "common/bloom_filter.hpp"
 #include "common/hobject.h"
+#include "common/snap_types.h"
 #include "Watch.h"
 #include "OpRequest.h"
 

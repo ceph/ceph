@@ -307,6 +307,11 @@ public:
     return insert_count_;
   }
 
+  inline bool is_full() const
+  {
+    return insert_count_ >= target_element_count_;
+  }
+
   /*
    * density of bits set.  inconvenient units, but:
    *    .3  = ~50% target insertions
