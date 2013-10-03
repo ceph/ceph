@@ -387,7 +387,7 @@ steps to compute PG IDs.
 #. CRUSH calculates the hash modulo the number of OSDs. (e.g., ``0x58``) to get 
    a PG ID.
 #. CRUSH gets the pool ID given the pool name (e.g., "liverpool" = ``4``)
-#. CRUSH prepends the pool ID to the pool ID to the PG ID (e.g., ``4.0x58``).
+#. CRUSH prepends the pool ID to the PG ID (e.g., ``4.0x58``).
 
 Computing object locations is much faster than performing object location query
 over a chatty session. The :abbr:`CRUSH (Controlled Replication Under Scalable
