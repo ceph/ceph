@@ -1232,8 +1232,8 @@ struct pg_hit_set_info_t {
   eversion_t version;   ///< version this HitSet object was written
 
   pg_hit_set_info_t() : size(0), target_size(0) {}
-  pg_hit_set_info_t(uint32_t target, utime_t st)
-    : size(0), target_size(target), begin(st) {}
+  pg_hit_set_info_t(uint32_t target, utime_t b)
+    : size(0), target_size(target), begin(b) {}
 
   bool is_full() const {
     return size && size >= target_size;
@@ -1384,6 +1384,7 @@ struct pg_info_t {
   pg_stat_t stats;
 
   pg_history_t history;
+  pg_hit_set_history_t hit_set;
 
   pg_info_t()
     : last_epoch_started(0), last_user_version(0),
