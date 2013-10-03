@@ -27,7 +27,7 @@
 #include "MDLog.h"
 #include "LogSegment.h"
 
-#include "include/bloom_filter.hpp"
+#include "common/bloom_filter.hpp"
 #include "include/Context.h"
 #include "common/Clock.h"
 
