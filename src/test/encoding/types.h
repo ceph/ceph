@@ -6,6 +6,7 @@ TYPE(filepath)
 
 #include "common/bloom_filter.hpp"
 TYPE(bloom_filter)
+TYPE(compressible_bloom_filter)
 
 #include "common/snap_types.h"
 TYPE(SnapContext)

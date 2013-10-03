@@ -549,10 +549,20 @@ class compressible_bloom_filter : public bloom_filter
 {
 public:
 
+  compressible_bloom_filter() : bloom_filter() {}
+
   compressible_bloom_filter(const std::size_t& predicted_element_count,
 			    const double& false_positive_probability,
 			    const std::size_t& random_seed)
     : bloom_filter(predicted_element_count,false_positive_probability,random_seed)
+  {
+    size_list.push_back(table_size_);
+  }
+
+  compressible_bloom_filter(const std::size_t& salt_count,
+			    std::size_t table_size,
+			    const std::size_t& random_seed)
+    : bloom_filter(salt_count, table_size, random_seed)
   {
     size_list.push_back(table_size_);
   }
@@ -592,6 +602,8 @@ public:
     delete[] bit_table_;
     bit_table_ = tmp;
     size_list.push_back(new_table_size);
+    table_size_ = new_table_size;
+    raw_table_size_ = table_size_ / bits_per_char;
 
     return true;
   }
@@ -609,7 +621,13 @@ private:
   }
 
   std::vector<std::size_t> size_list;
+public:
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<compressible_bloom_filter*>& ls);
 };
+WRITE_CLASS_ENCODER(compressible_bloom_filter)
 
 #endif
 
