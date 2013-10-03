@@ -2653,6 +2653,99 @@ void pg_create_t::generate_test_instances(list<pg_create_t*>& o)
 }
 
 
+// -- pg_hit_set_info_t --
+
+void pg_hit_set_info_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(size, bl);
+  ::encode(target_size, bl);
+  ::encode(begin, bl);
+  ::encode(end, bl);
+  ENCODE_FINISH(bl);
+}
+
+void pg_hit_set_info_t::decode(bufferlist::iterator& p)
+{
+  DECODE_START(1, p);
+  ::decode(size, p);
+  ::decode(target_size, p);
+  ::decode(begin, p);
+  ::decode(end, p);
+  DECODE_FINISH(p);
+}
+
+void pg_hit_set_info_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("size", size);
+  f->dump_unsigned("target_size", target_size);
+  f->dump_stream("begin") << begin;
+  f->dump_stream("end") << end;
+}
+
+void pg_hit_set_info_t::generate_test_instances(list<pg_hit_set_info_t*>& ls)
+{
+  ls.push_back(new pg_hit_set_info_t);
+  ls.push_back(new pg_hit_set_info_t);
+  ls.back()->size = 123;
+  ls.back()->target_size = 345;
+  ls.back()->begin = utime_t(1, 2);
+  ls.back()->end = utime_t(3, 4);
+}
+
+
+// -- pg_hit_set_history_t --
+
+void pg_hit_set_history_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(current_last_update, bl);
+  ::encode(current_last_stamp, bl);
+  ::encode(current_info, bl);
+  ::encode(history, bl);
+  ENCODE_FINISH(bl);
+}
+
+void pg_hit_set_history_t::decode(bufferlist::iterator& p)
+{
+  DECODE_START(1, p);
+  ::decode(current_last_update, p);
+  ::decode(current_last_stamp, p);
+  ::decode(current_info, p);
+  ::decode(history, p);
+  DECODE_FINISH(p);
+}
+
+void pg_hit_set_history_t::dump(Formatter *f) const
+{
+  f->dump_stream("current_last_update") << current_last_update;
+  f->dump_stream("current_last_stamp") << current_last_stamp;
+  f->open_object_section("current_info");
+  current_info.dump(f);
+  f->close_section();
+  f->open_array_section("history");
+  for (list<pg_hit_set_info_t>::const_iterator p = history.begin();
+       p != history.end(); ++p) {
+    f->open_object_section("info");
+    p->dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void pg_hit_set_history_t::generate_test_instances(list<pg_hit_set_history_t*>& ls)
+{
+  ls.push_back(new pg_hit_set_history_t);
+  ls.push_back(new pg_hit_set_history_t);
+  ls.back()->current_last_update = eversion_t(1, 2);
+  ls.back()->current_last_stamp = utime_t(100, 123);
+  ls.back()->current_info.size = 3;
+  ls.back()->current_info.begin = utime_t(2, 4);
+  ls.back()->current_info.end = utime_t(62, 24);
+  ls.back()->history.push_back(ls.back()->current_info);
+  ls.back()->history.push_back(pg_hit_set_info_t());
+}
+
 // -- osd_peer_stat_t --
 
 void osd_peer_stat_t::encode(bufferlist& bl) const
