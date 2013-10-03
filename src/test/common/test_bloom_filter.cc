@@ -25,8 +25,8 @@ TEST(BloomFilter, Basic) {
 
 TEST(BloomFilter, Sweep) {
   std::cout << "# max\tfpp\tactual\tsize\tB/insert" << std::endl;
-  for (int ex = 3; ex < 12; ex++) {
-    for (float fpp = .001; fpp < .5; fpp *= 2.0) {
+  for (int ex = 3; ex < 12; ex += 2) {
+    for (float fpp = .001; fpp < .5; fpp *= 4.0) {
       int max = 2 << ex;
       bloom_filter bf(max, fpp, 1);
       bf.insert("foo");
@@ -63,8 +63,8 @@ TEST(BloomFilter, Sweep) {
 
 TEST(BloomFilter, SweepInt) {
   std::cout << "# max\tfpp\tactual\tsize\tB/insert" << std::endl;
-  for (int ex = 3; ex < 12; ex++) {
-    for (float fpp = .001; fpp < .5; fpp *= 2.0) {
+  for (int ex = 3; ex < 12; ex += 2) {
+    for (float fpp = .001; fpp < .5; fpp *= 4.0) {
       int max = 2 << ex;
       bloom_filter bf(max, fpp, 1);
       bf.insert("foo");
