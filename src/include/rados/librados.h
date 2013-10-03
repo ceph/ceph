@@ -1,8 +1,6 @@
 #ifndef CEPH_LIBRADOS_H
 #define CEPH_LIBRADOS_H
 
-#include "include/int_types.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -566,7 +564,7 @@ int rados_pool_create_with_auid(rados_t cluster, const char *pool_name, uint64_t
  * @returns 0 on success, negative error code on failure
  */
 int rados_pool_create_with_crush_rule(rados_t cluster, const char *pool_name,
-				      __u8 crush_rule_num);
+				      uint8_t crush_rule_num);
 
 /**
  * Create a pool with a specific CRUSH rule and auid
@@ -581,7 +579,7 @@ int rados_pool_create_with_crush_rule(rados_t cluster, const char *pool_name,
  * @returns 0 on success, negative error code on failure
  */
 int rados_pool_create_with_all(rados_t cluster, const char *pool_name, uint64_t auid,
-			       __u8 crush_rule_num);
+			       uint8_t crush_rule_num);
 
 /**
  * Delete a pool and all data inside it
