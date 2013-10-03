@@ -131,6 +131,15 @@ public:
     inserted_element_count_ = 0;
   }
 
+  /**
+   * insert a u32 into the set
+   *
+   * NOTE: the internal hash is weak enough that consecutive inputs do
+   * not achieve the desired fpp.  Well-mixed values should be used
+   * here (e.g., put rjhash(x) into the filter instead of just x).
+   *
+   * @param val integer value to insert
+   */
   inline void insert(uint32_t val) {
     std::size_t bit_index = 0;
     std::size_t bit = 0;
@@ -181,6 +190,16 @@ public:
     }
   }
 
+  /**
+   * check if a u32 is contained by set
+   *
+   * NOTE: the internal hash is weak enough that consecutive inputs do
+   * not achieve the desired fpp.  Well-mixed values should be used
+   * here (e.g., put rjhash(x) into the filter instead of just x).
+   *
+   * @param val integer value to query
+   * @returns true if value is (probably) in the set, false if it definitely is not
+   */
   inline virtual bool contains(uint32_t val) const
   {
     std::size_t bit_index = 0;
