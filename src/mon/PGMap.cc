@@ -885,6 +885,57 @@ void PGMap::pool_recovery_summary(Formatter *f, ostream *out,
   recovery_summary(f, out, p->second.first);
 }
 
+void PGMap::client_io_rate_summary(Formatter *f, ostream *out,
+                                   pool_stat_t delta_sum,
+                                   utime_t delta_stamp) const
+{
+  pool_stat_t pos_delta = delta_sum;
+  pos_delta.floor(0);
+  if (pos_delta.stats.sum.num_rd ||
+      pos_delta.stats.sum.num_wr) {
+    if (pos_delta.stats.sum.num_rd) {
+      int64_t rd = (pos_delta.stats.sum.num_rd_kb << 10) / (double)delta_stamp;
+      if (f) {
+	f->dump_int("read_bytes_sec", rd);
+      } else {
+	*out << pretty_si_t(rd) << "B/s rd, ";
+      }
+    }
+    if (pos_delta.stats.sum.num_wr) {
+      int64_t wr = (pos_delta.stats.sum.num_wr_kb << 10) / (double)delta_stamp;
+      if (f) {
+	f->dump_int("write_bytes_sec", wr);
+      } else {
+	*out << pretty_si_t(wr) << "B/s wr, ";
+      }
+    }
+    int64_t iops = (pos_delta.stats.sum.num_rd + pos_delta.stats.sum.num_wr) / (double)delta_stamp;
+    if (f) {
+      f->dump_int("op_per_sec", iops);
+    } else {
+      *out << pretty_si_t(iops) << "op/s";
+    }
+  }
+}
+
+void PGMap::overall_client_io_rate_summary(Formatter *f, ostream *out) const
+{
+  client_io_rate_summary(f, out, pg_sum_delta, stamp_delta);
+}
+
+void PGMap::pool_client_io_rate_summary(Formatter *f, ostream *out,
+                                        uint64_t poolid) const
+{
+  hash_map<uint64_t,pair<pool_stat_t,utime_t> >::const_iterator p =
+    per_pool_sum_delta.find(poolid);
+  if (p == per_pool_sum_delta.end())
+    return;
+  hash_map<uint64_t,utime_t>::const_iterator ts =
+    per_pool_sum_deltas_stamps.find(p->first);
+  assert(ts != per_pool_sum_deltas_stamps.end());
+  client_io_rate_summary(f, out, p->second.first, ts->second);
+}
+
 /**
  * update aggregated delta
  *
@@ -1054,39 +1105,13 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
   if (!f && ssr.str().length())
     *out << "recovery io " << ssr.str() << "\n";
 
-  // make non-negative; we can get negative values if osds send
-  // uncommitted stats and then "go backward" or if they are just
-  // buggy/wrong.
-  pool_stat_t pos_delta = pg_sum_delta;
-  pos_delta.floor(0);
-  if (pos_delta.stats.sum.num_rd ||
-      pos_delta.stats.sum.num_wr) {
-    if (!f)
-      *out << "  client io ";
-    if (pos_delta.stats.sum.num_rd) {
-      int64_t rd = (pos_delta.stats.sum.num_rd_kb << 10) / (double)stamp_delta;
-      if (f) {
-	f->dump_int("read_bytes_sec", rd);
-      } else {
-	*out << pretty_si_t(rd) << "B/s rd, ";
-      }
-    }
-    if (pos_delta.stats.sum.num_wr) {
-      int64_t wr = (pos_delta.stats.sum.num_wr_kb << 10) / (double)stamp_delta;
-      if (f) {
-	f->dump_int("write_bytes_sec", wr);
-      } else {
-	*out << pretty_si_t(wr) << "B/s wr, ";
-      }
-    }
-    int64_t iops = (pos_delta.stats.sum.num_rd + pos_delta.stats.sum.num_wr) / (double)stamp_delta;
-    if (f) {
-      f->dump_int("op_per_sec", iops);
-    } else {
-      *out << pretty_si_t(iops) << "op/s";
-      *out << "\n";
-    }
-  }
+  ssr.clear();
+  ssr.str("");
+
+  overall_client_io_rate_summary(f, &ssr);
+  if (!f && ssr.str().length())
+    *out << "  client io " << ssr.str() << "\n";
+
 
 }
 

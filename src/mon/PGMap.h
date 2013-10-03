@@ -254,6 +254,26 @@ public:
   void overall_recovery_rate_summary(Formatter *f, ostream *out) const;
   void pool_recovery_rate_summary(Formatter *f, ostream *out,
                                   uint64_t poolid) const;
+  /**
+   * Obtain a formatted/plain output for client I/O, source from stats for a
+   * given @p delta_sum pool over a given @p delta_stamp period of time.
+   */
+  void client_io_rate_summary(Formatter *f, ostream *out,
+                              pool_stat_t delta_sum,
+                              utime_t delta_stamp) const;
+  /**
+   * Obtain a formatted/plain output for the overall client I/O, which is
+   * calculated resorting to @p pg_sum_delta and @p stamp_delta.
+   */
+  void overall_client_io_rate_summary(Formatter *f, ostream *out) const;
+  /**
+   * Obtain a formatted/plain output for client I/O over a given pool
+   * with id @p pool_id.  We will then obtain pool-specific data
+   * from @p per_pool_sum_delta.
+   */
+  void pool_client_io_rate_summary(Formatter *f, ostream *out,
+                                   uint64_t poolid) const;
+
   void print_summary(Formatter *f, ostream *out) const;
   void print_oneline_summary(ostream *out) const;
 
