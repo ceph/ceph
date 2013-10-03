@@ -1006,13 +1006,17 @@ int OSDMap::object_locator_to_pg(
   if (!pool)
     return -ENOENT;
   ps_t ps;
-  string key;
-  if (!loc.key.empty())
-    key = make_hash_str(loc.key, loc.nspace);
-  else
-    key = make_hash_str(oid.name, loc.nspace);
+  if (loc.hash >= 0) {
+    ps = loc.hash;
+  } else {
+    string key;
+    if (!loc.key.empty())
+      key = make_hash_str(loc.key, loc.nspace);
+    else
+      key = make_hash_str(oid.name, loc.nspace);
 
-  ps = ceph_str_hash(pool->object_hash, key.c_str(), key.length());
+    ps = ceph_str_hash(pool->object_hash, key.c_str(), key.length());
+  }
   pg = pg_t(ps, loc.get_pool(), -1);
   return 0;
 }
