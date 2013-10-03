@@ -1,3 +1,9 @@
+ceph (0.67.4-1) stable; urgency=low
+
+  * New upstream release 
+
+ -- Gary Lowell <glowell@jenkins.front.sepia.ceph.com>  Thu, 03 Oct 2013 22:40:44 +0000
+
 ceph (0.67.3-1) precise; urgency=low
 
   * New upstream release 
