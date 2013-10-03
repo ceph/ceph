@@ -3952,10 +3952,19 @@ void ReplicatedPG::apply_repop(RepGather *repop)
   if (repop->ctx->clone_obc)
     repop->ctx->clone_obc->ondisk_write_lock();
 
+  bool unlock_snapset_obc = false;
+  if (repop->ctx->snapset_obc && repop->ctx->snapset_obc->obs.oi.soid !=
+      repop->obc->obs.oi.soid) {
+    repop->ctx->snapset_obc->ondisk_write_lock();
+    unlock_snapset_obc = true;
+  }
+
   Context *oncommit = new C_OSD_OpCommit(this, repop);
   Context *onapplied = new C_OSD_OpApplied(this, repop);
-  Context *onapplied_sync = new C_OSD_OndiskWriteUnlock(repop->obc,
-							repop->ctx->clone_obc);
+  Context *onapplied_sync = new C_OSD_OndiskWriteUnlock(
+    repop->obc,
+    repop->ctx->clone_obc,
+    unlock_snapset_obc ? repop->ctx->snapset_obc : 0);
   int r = osd->store->queue_transactions(osr.get(), repop->tls, onapplied, oncommit, onapplied_sync, repop->ctx->op);
   if (r) {
     derr << "apply_repop  queue_transactions returned " << r << " on " << *repop << dendl;
