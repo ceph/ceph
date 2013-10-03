@@ -25,6 +25,7 @@ else
 fi
 [ -z "$flavor" ] && flavor='basic'
 [ -z "$distro" ] && distro='ubuntu'
+[ -z "$mtype" ] && mtype='plana'
 
 stamp=`date +%Y-%m-%d_%H:%M:%S`
 nicesuite=`echo $suite | sed 's/\//:/g'`
@@ -95,8 +96,6 @@ if [ -z "$teuthology_branch" ]; then
     fi
 fi
 echo "teuthology branch $teuthology_branch"
-
-[ -z "$mtype" ] && mtype="plana"
 
 ## always include this
 fn="/tmp/schedule.suite.$$"
