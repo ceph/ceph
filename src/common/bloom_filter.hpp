@@ -53,13 +53,19 @@ protected:
   typedef unsigned int bloom_type;
   typedef unsigned char cell_type;
 
+  unsigned char*       bit_table_;   ///< pointer to bit map
+  std::vector<bloom_type> salt_;     ///< vector of salts
+  std::size_t         salt_count_;   ///< number of salts
+  std::size_t         table_size_;   ///< bit table size in bytes
+  std::size_t         inserted_element_count_;  ///< insertion count
+  std::size_t         random_seed_;  ///< random seed
+
 public:
 
   bloom_filter()
     : bit_table_(0),
       salt_count_(0),
       table_size_(0),
-      raw_table_size_(0),
       inserted_element_count_(0),
       random_seed_(0)
   {}
@@ -76,7 +82,8 @@ public:
     init();
   }
 
-  bloom_filter(const std::size_t& salt_count, std::size_t table_size,
+  bloom_filter(const std::size_t& salt_count,
+	       std::size_t table_size,
 	       const std::size_t& random_seed)
     : bit_table_(0),
       salt_count_(salt_count),
@@ -89,9 +96,8 @@ public:
 
   void init() {
     generate_unique_salt();
-    raw_table_size_ = table_size_ / bits_per_char;
-    bit_table_ = new cell_type[raw_table_size_];
-    std::fill_n(bit_table_,raw_table_size_,0x00);
+    bit_table_ = new cell_type[table_size_];
+    std::fill_n(bit_table_, table_size_, 0x00);
   }
 
   bloom_filter(const bloom_filter& filter)
@@ -104,12 +110,11 @@ public:
     if (this != &filter) {
       salt_count_ = filter.salt_count_;
       table_size_ = filter.table_size_;
-      raw_table_size_ = filter.raw_table_size_;
       inserted_element_count_ = filter.inserted_element_count_;
       random_seed_ = filter.random_seed_;
       delete[] bit_table_;
-      bit_table_ = new cell_type[raw_table_size_];
-      std::copy(filter.bit_table_,filter.bit_table_ + raw_table_size_,bit_table_);
+      bit_table_ = new cell_type[table_size_];
+      std::copy(filter.bit_table_, filter.bit_table_ + table_size_, bit_table_);
       salt_ = filter.salt_;
     }
     return *this;
@@ -127,7 +132,7 @@ public:
 
   inline void clear()
   {
-    std::fill_n(bit_table_,raw_table_size_,0x00);
+    std::fill_n(bit_table_, table_size_, 0x00);
     inserted_element_count_ = 0;
   }
 
@@ -146,7 +151,7 @@ public:
     for (std::size_t i = 0; i < salt_.size(); ++i)
     {
       compute_indices(hash_ap(val,salt_[i]),bit_index,bit);
-      bit_table_[bit_index / bits_per_char] |= bit_mask[bit];
+      bit_table_[bit_index >> 3] |= bit_mask[bit];
     }
     ++inserted_element_count_;
   }
@@ -158,7 +163,7 @@ public:
     for (std::size_t i = 0; i < salt_.size(); ++i)
     {
       compute_indices(hash_ap(key_begin,length,salt_[i]),bit_index,bit);
-      bit_table_[bit_index / bits_per_char] |= bit_mask[bit];
+      bit_table_[bit_index >> 3] |= bit_mask[bit];
     }
     ++inserted_element_count_;
   }
@@ -207,7 +212,7 @@ public:
     for (std::size_t i = 0; i < salt_.size(); ++i)
     {
       compute_indices(hash_ap(val,salt_[i]),bit_index,bit);
-      if ((bit_table_[bit_index / bits_per_char] & bit_mask[bit]) != bit_mask[bit])
+      if ((bit_table_[bit_index >> 3] & bit_mask[bit]) != bit_mask[bit])
       {
         return false;
       }
@@ -222,7 +227,7 @@ public:
     for (std::size_t i = 0; i < salt_.size(); ++i)
     {
       compute_indices(hash_ap(key_begin,length,salt_[i]),bit_index,bit);
-      if ((bit_table_[bit_index / bits_per_char] & bit_mask[bit]) != bit_mask[bit])
+      if ((bit_table_[bit_index >> 3] & bit_mask[bit]) != bit_mask[bit])
       {
         return false;
       }
@@ -278,7 +283,7 @@ public:
 
   inline virtual std::size_t size() const
   {
-    return table_size_;
+    return table_size_ * bits_per_char;
   }
 
   inline std::size_t element_count() const
@@ -306,7 +311,7 @@ public:
 	(table_size_  == filter.table_size_) &&
 	(random_seed_ == filter.random_seed_)
 	) {
-      for (std::size_t i = 0; i < raw_table_size_; ++i) {
+      for (std::size_t i = 0; i < table_size_; ++i) {
 	bit_table_[i] &= filter.bit_table_[i];
       }
     }
@@ -321,7 +326,7 @@ public:
 	(table_size_  == filter.table_size_) &&
 	(random_seed_ == filter.random_seed_)
 	) {
-      for (std::size_t i = 0; i < raw_table_size_; ++i) {
+      for (std::size_t i = 0; i < table_size_; ++i) {
         bit_table_[i] |= filter.bit_table_[i];
       }
     }
@@ -336,7 +341,7 @@ public:
 	(table_size_  == filter.table_size_) &&
 	(random_seed_ == filter.random_seed_)
 	) {
-      for (std::size_t i = 0; i < raw_table_size_; ++i) {
+      for (std::size_t i = 0; i < table_size_; ++i) {
 	bit_table_[i] ^= filter.bit_table_[i];
       }
     }
@@ -352,8 +357,8 @@ protected:
 
   inline virtual void compute_indices(const bloom_type& hash, std::size_t& bit_index, std::size_t& bit) const
   {
-    bit_index = hash % table_size_;
-    bit = bit_index % bits_per_char;
+    bit_index = hash % (table_size_ << 3);
+    bit = bit_index & 7;
   }
 
   void generate_unique_salt()
@@ -418,7 +423,8 @@ protected:
     }
     else
     {
-      std::copy(predef_salt,predef_salt + predef_salt_count,std::back_inserter(salt_));
+      std::copy(predef_salt,predef_salt + predef_salt_count,
+		std::back_inserter(salt_));
       srand(static_cast<unsigned int>(random_seed_));
       while (salt_.size() < salt_count_)
       {
@@ -466,8 +472,8 @@ protected:
 
     *salt_count = static_cast<std::size_t>(min_k);
     size_t t = static_cast<std::size_t>(min_m);
-    t += (((t % bits_per_char) != 0) ? (bits_per_char - (t % bits_per_char)) : 0);
-    *table_size = t;
+    t += (((t & 7) != 0) ? (bits_per_char - (t & 7)) : 0);
+    *table_size = t >> 3;
   }
 
   inline bloom_type hash_ap(uint32_t val, bloom_type hash) const
@@ -506,14 +512,6 @@ protected:
 
     return hash;
   }
-
-  std::vector<bloom_type> salt_;
-  unsigned char*       bit_table_;
-  std::size_t         salt_count_;
-  std::size_t         table_size_;
-  std::size_t         raw_table_size_;
-  std::size_t         inserted_element_count_;
-  std::size_t         random_seed_;
 
 public:
   void encode(bufferlist& bl) const;
@@ -569,7 +567,7 @@ public:
 
   inline virtual std::size_t size() const
   {
-    return size_list.back();
+    return size_list.back() * bits_per_char;
   }
 
   inline bool compress(const double& percentage)
@@ -581,17 +579,16 @@ public:
 
     std::size_t original_table_size = size_list.back();
     std::size_t new_table_size = static_cast<std::size_t>((size_list.back() * (1.0 - (percentage / 100.0))));
-    new_table_size -= (((new_table_size % bits_per_char) != 0) ? (new_table_size % bits_per_char) : 0);
 
-    if ((bits_per_char > new_table_size) || (new_table_size >= original_table_size))
+    if ((!new_table_size) || (new_table_size >= original_table_size))
     {
       return false;
     }
 
-    cell_type* tmp = new cell_type[new_table_size / bits_per_char];
-    std::copy(bit_table_, bit_table_ + (new_table_size / bits_per_char), tmp);
-    cell_type* itr = bit_table_ + (new_table_size / bits_per_char);
-    cell_type* end = bit_table_ + (original_table_size / bits_per_char);
+    cell_type* tmp = new cell_type[new_table_size];
+    std::copy(bit_table_, bit_table_ + (new_table_size), tmp);
+    cell_type* itr = bit_table_ + (new_table_size);
+    cell_type* end = bit_table_ + (original_table_size);
     cell_type* itr_tmp = tmp;
 
     while (end != itr)
@@ -603,7 +600,6 @@ public:
     bit_table_ = tmp;
     size_list.push_back(new_table_size);
     table_size_ = new_table_size;
-    raw_table_size_ = table_size_ / bits_per_char;
 
     return true;
   }
@@ -615,9 +611,9 @@ private:
     bit_index = hash;
     for (std::size_t i = 0; i < size_list.size(); ++i)
     {
-      bit_index %= size_list[i];
+      bit_index %= size_list[i] << 3;
     }
-    bit = bit_index % bits_per_char;
+    bit = bit_index & 7;
   }
 
   std::vector<std::size_t> size_list;
