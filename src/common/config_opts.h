@@ -158,6 +158,8 @@ OPTION(mon_timecheck_interval, OPT_FLOAT, 300.0) // on leader, timecheck (clock 
 OPTION(mon_accept_timeout, OPT_FLOAT, 10.0)    // on leader, if paxos update isn't accepted
 OPTION(mon_pg_create_interval, OPT_FLOAT, 30.0) // no more than every 30s
 OPTION(mon_pg_stuck_threshold, OPT_INT, 300) // number of seconds after which pgs can be considered inactive, unclean, or stale (see doc/control.rst under dump_stuck for more info)
+OPTION(mon_pg_warn_min_per_osd, OPT_INT, 20)  // min # pgs per (in) osd before we warn the admin
+OPTION(mon_pg_warn_max_object_skew, OPT_FLOAT, 10.0) // max skew few average in objects per pg
 OPTION(mon_osd_full_ratio, OPT_FLOAT, .95) // what % full makes an OSD "full"
 OPTION(mon_osd_nearfull_ratio, OPT_FLOAT, .85) // what % full makes an OSD near full
 OPTION(mon_globalid_prealloc, OPT_INT, 100)   // how many globalids to prealloc
@@ -360,12 +362,6 @@ OPTION(mds_standby_replay, OPT_BOOL, false)
 // If true, compact leveldb store on mount
 OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
 
-// If true, uses tmap as initial value for omap on old objects
-OPTION(osd_auto_upgrade_tmap, OPT_BOOL, true)
-
-// If true, TMAPPUT sets uses_tmap DEBUGGING ONLY
-OPTION(osd_tmapput_sets_uses_tmap, OPT_BOOL, false)
-
 // Maximum number of backfills to or from a single osd
 OPTION(osd_max_backfills, OPT_U64, 10)
 
@@ -520,7 +516,7 @@ OPTION(osd_recovery_op_warn_multiple, OPT_U32, 16)
 OPTION(osd_mon_shutdown_timeout, OPT_DOUBLE, 5)
 
 OPTION(osd_max_object_size, OPT_U64, 100*1024L*1024L*1024L) // OSD's maximum object size
-OPTION(osd_max_attr_size, OPT_U64, 65536)
+OPTION(osd_max_attr_size, OPT_U64, 0)
 
 OPTION(filestore, OPT_BOOL, false)
 
@@ -554,6 +550,9 @@ OPTION(filestore_xattr_use_omap, OPT_BOOL, false)
 OPTION(filestore_max_inline_xattr_size, OPT_U32, 512)
 // for more than filestore_max_inline_xattrs attrs
 OPTION(filestore_max_inline_xattrs, OPT_U32, 2)
+
+OPTION(filestore_sloppy_crc, OPT_BOOL, false)         // track sloppy crcs
+OPTION(filestore_sloppy_crc_block_size, OPT_INT, 65536)
 
 OPTION(filestore_max_sync_interval, OPT_DOUBLE, 5)    // seconds
 OPTION(filestore_min_sync_interval, OPT_DOUBLE, .01)  // seconds

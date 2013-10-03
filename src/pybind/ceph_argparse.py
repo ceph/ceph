@@ -275,12 +275,26 @@ class CephIPAddr(CephArgtype):
 
 class CephEntityAddr(CephIPAddr):
     """
-    EntityAddress, that is, IP address/nonce
+    EntityAddress, that is, IP address[/nonce]
     """
     def valid(self, s, partial=False):
-        ip, nonce = s.split('/')
+        nonce = None
+        if '/' in s:
+            ip, nonce = s.split('/')
+        else:
+            ip = s
         super(self.__class__, self).valid(ip)
-        self.nonce = nonce
+        if nonce:
+            nonce_long = None
+            try:
+                nonce_long = long(nonce)
+            except ValueError:
+                pass
+            if nonce_long is None or nonce_long < 0:
+                raise ArgumentValid(
+                    '{0}: invalid entity, nonce {1} not integer > 0'.\
+                    format(s, nonce)
+                )
         self.val = s
 
     def __str__(self):
@@ -829,6 +843,11 @@ def validate(args, signature, partial=False):
                     # wanted n, got too few
                     if partial:
                         return d
+                    # special-case the "0 expected 1" case
+                    if desc.numseen == 0 and desc.n == 1:
+                        raise ArgumentNumber(
+                            'missing required parameter {0}'.format(desc)
+                        )
                     raise ArgumentNumber(
                         'saw {0} of {1}, expected {2}'.\
                         format(desc.numseen, desc, desc.n)
@@ -937,6 +956,7 @@ def validate_command(sigdict, args, verbose=False):
                     # Stop now, because we have the right command but
                     # some other input is invalid
                     print >> sys.stderr, "Invalid command: ", str(e)
+                    print >> sys.stderr, concise_sig(sig), ': ', cmd['help']
                     return {}
             if found:
                 break

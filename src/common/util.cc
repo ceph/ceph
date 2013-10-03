@@ -58,6 +58,7 @@ int64_t unit_to_bytesize(string val, ostream *pss)
     switch (c) {
     case 'B':
       break;
+    case 'k':
     case 'K':
       modifier = 10;
       break;

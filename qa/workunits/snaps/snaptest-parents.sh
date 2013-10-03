@@ -2,6 +2,8 @@
 
 set -e
 
+ceph mds set allow_new_snaps --yes-i-really-mean-it
+
 echo "making directory tree and files"
 mkdir -p 1/a/b/c/
 echo "i'm file1" > 1/a/file1

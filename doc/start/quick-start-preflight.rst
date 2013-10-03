@@ -10,17 +10,17 @@ demo cluster to explore some of the functionality. This **Preflight Checklist**
 will help you prepare an admin node and a server node for use with
 ``ceph-deploy``.
 
-.. ditaa:: 
+.. ditaa::
            /----------------\         /----------------\
            |   Admin Node   |<------->|   Server Node  |
            | cCCC           |         | cCCC           |
            \----------------/         \----------------/
- 
+
 
 Before you can deploy Ceph using ``ceph-deploy``, you need to ensure that you
 have a few things set up first on your admin node and on nodes running Ceph
 daemons.
- 
+
 
 Install an Operating System
 ===========================
@@ -42,7 +42,7 @@ SSH server. ::
 Create a User
 =============
 
-Create a user on nodes running Ceph daemons. 
+Create a user on nodes running Ceph daemons.
 
 .. tip:: We recommend a username that brute force attackers won't
    guess easily (e.g., something other than ``root``, ``ceph``, etc).
@@ -55,12 +55,12 @@ Create a user on nodes running Ceph daemons.
 
 
 ``ceph-deploy`` installs packages onto your nodes. This means that
-the user you create requires passwordless ``sudo`` privileges. 
+the user you create requires passwordless ``sudo`` privileges.
 
-.. note:: We **DO NOT** recommend enabling the ``root`` password 
-   for security reasons. 
+.. note:: We **DO NOT** recommend enabling the ``root`` password
+   for security reasons.
 
-To provide full privileges to the user, add the following to 
+To provide full privileges to the user, add the following to
 ``/etc/sudoers.d/ceph``. ::
 
 	echo "ceph ALL = (root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/ceph
@@ -81,22 +81,25 @@ running Ceph daemons (leave the passphrase empty). ::
 	Your identification has been saved in /ceph-client/.ssh/id_rsa.
 	Your public key has been saved in /ceph-client/.ssh/id_rsa.pub.
 
-Copy the key to each node running Ceph daemons:: 
+Copy the key to each node running Ceph daemons::
 
 	ssh-copy-id ceph@ceph-server
 
-Modify your ~/.ssh/config file of your admin node so that it defaults 
+Modify your ~/.ssh/config file of your admin node so that it defaults
 to logging in as the user you created when no username is specified. ::
 
 	Host ceph-server
 		Hostname ceph-server.fqdn-or-ip-address.com
 		User ceph
 
+.. note:: Do not call ceph-deploy with ``sudo`` or run as ``root`` if you are
+          login in as a different user (as in the ssh config above) because it
+          will not issue ``sudo`` commands needed on the remote host.
 
 Install ceph-deploy
 ===================
 
-To install ``ceph-deploy``, execute the following:: 
+To install ``ceph-deploy``, execute the following::
 
 	wget -q -O- 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc' | sudo apt-key add -
 	echo deb http://ceph.com/debian-dumpling/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
@@ -112,7 +115,7 @@ node (e.g., ensure ``iptables``, ``ufw`` or other tools that may prevent
 connections, traffic forwarding, etc. to allow what you need).
 
 .. tip:: The ``ceph-deploy`` tool is new and you may encounter some issues
-   without  effective error messages. 
+   without  effective error messages.
 
 Once you have completed this pre-flight checklist, you are ready to begin using
 ``ceph-deploy``.
@@ -147,7 +150,7 @@ Once you have passwordless ``ssh`` connectivity, passwordless ``sudo``,
 installed ``ceph-deploy``, and you have ensured appropriate connectivity,
 proceed to the `Storage Cluster Quick Start`_.
 
-.. tip:: The ``ceph-deploy`` utility can install Ceph packages on remote 
+.. tip:: The ``ceph-deploy`` utility can install Ceph packages on remote
    machines from the admin node!
 
 .. _Storage Cluster Quick Start: ../quick-ceph-deploy

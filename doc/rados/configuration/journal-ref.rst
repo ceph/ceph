@@ -27,6 +27,7 @@ Ceph OSDs use a journal for two reasons: speed and consistency.
 
 Ceph OSD Daemons support the following journal settings: 
 
+
 ``journal dio``
 
 :Description: Enables direct i/o to the journal. Requires ``journal block 
@@ -37,14 +38,17 @@ Ceph OSD Daemons support the following journal settings:
 :Default: ``true``
 
 
+
 ``journal aio``
+
+.. versionchanged:: 0.61 Cuttlefish
 
 :Description: Enables using ``libaio`` for asynchronous writes to the journal. 
               Requires ``journal dio`` set to ``true``.
 
 :Type: Boolean 
 :Required: No.
-:Default: ``false``
+:Default: Version 0.61 and later, ``true``. Version 0.60 and earlier, ``false``.
 
 
 ``journal block align``

@@ -23,7 +23,6 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.UUID;
 import org.junit.*;
-import org.junit.rules.ExternalResource;
 import org.junit.runners.Suite;
 import org.junit.runner.RunWith;
 import static org.junit.Assert.*;
@@ -42,16 +41,4 @@ import static org.junit.Assert.*;
  */
 public class CephAllTests{
 
-  @Rule
-  public static ExternalResource testRule = new ExternalResource(){
-    @Override
-    protected void before() throws Throwable{
-      // Add debugging messages or setup code here
-    };
-
-    @Override
-    protected void after(){
-      // Add debugging messages or cleanup code here
-    };
-  };
 }

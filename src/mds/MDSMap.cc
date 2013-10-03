@@ -470,7 +470,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(cas_pool, bl);
 
     // kclient ignores everything from here
-    __u16 ev = 5;
+    __u16 ev = 6;
     ::encode(ev, bl);
     ::encode(compat, bl);
     ::encode(metadata_pool, bl);
@@ -483,6 +483,8 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(failed, bl);
     ::encode(stopped, bl);
     ::encode(last_failure_osd_epoch, bl);
+    ::encode(ever_allowed_snaps, bl);
+    ::encode(explicitly_allowed_snaps, bl);
     ENCODE_FINISH(bl);
   }
 }
@@ -540,5 +542,12 @@ void MDSMap::decode(bufferlist::iterator& p)
   ::decode(stopped, p);
   if (ev >= 4)
     ::decode(last_failure_osd_epoch, p);
+  if (ev >= 6) {
+    ::decode(ever_allowed_snaps, p);
+    ::decode(explicitly_allowed_snaps, p);
+  } else {
+    ever_allowed_snaps = true;
+    explicitly_allowed_snaps = false;
+  }
   DECODE_FINISH(p);
 }

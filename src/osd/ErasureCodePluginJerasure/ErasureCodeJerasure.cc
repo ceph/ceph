@@ -15,6 +15,7 @@
  */
 
 #include <errno.h>
+#include <algorithm>
 #include "common/debug.h"
 #include "ErasureCodeJerasure.h"
 extern "C" {
@@ -34,7 +35,8 @@ static ostream& _prefix(std::ostream* _dout)
   return *_dout << "ErasureCodeJerasure: ";
 }
 
-void ErasureCodeJerasure::init(const map<std::string,std::string> &parameters) {
+void ErasureCodeJerasure::init(const map<std::string,std::string> &parameters)
+{
   dout(10) << "technique=" << technique << dendl;
   parse(parameters);
   prepare();
@@ -42,19 +44,26 @@ void ErasureCodeJerasure::init(const map<std::string,std::string> &parameters) {
 
 int ErasureCodeJerasure::minimum_to_decode(const set<int> &want_to_read,
                                            const set<int> &available_chunks,
-                                           set<int> *minimum) {
-  if (available_chunks.size() < (unsigned)k)
-    return -EIO;
-  set<int>::iterator i;
-  unsigned j;
-  for (i = available_chunks.begin(), j = 0; j < (unsigned)k; i++, j++)
-    minimum->insert(*i);
+                                           set<int> *minimum) 
+{
+  if (includes(available_chunks.begin(), available_chunks.end(),
+	       want_to_read.begin(), want_to_read.end())) {
+    *minimum = want_to_read;
+  } else {
+    if (available_chunks.size() < (unsigned)k)
+      return -EIO;
+    set<int>::iterator i;
+    unsigned j;
+    for (i = available_chunks.begin(), j = 0; j < (unsigned)k; i++, j++)
+      minimum->insert(*i);
+  }
   return 0;
 }
 
 int ErasureCodeJerasure::minimum_to_decode_with_cost(const set<int> &want_to_read,
                                                      const map<int, int> &available,
-                                                     set<int> *minimum) {
+                                                     set<int> *minimum)
+{
   set <int> available_chunks;
   for (map<int, int>::const_iterator i = available.begin();
        i != available.end();
@@ -65,39 +74,38 @@ int ErasureCodeJerasure::minimum_to_decode_with_cost(const set<int> &want_to_rea
 
 int ErasureCodeJerasure::encode(const set<int> &want_to_encode,
                                 const bufferlist &in,
-                                map<int, bufferlist> *encoded) {
-  unsigned in_length = pad_in_length(in.length());
-  dout(10) << "encode adjusted buffer length from " << in.length() << " to " << in_length << dendl;
-  assert(in_length % k == 0);
-  unsigned blocksize = in_length / k;
+                                map<int, bufferlist> *encoded)
+{
+  unsigned alignment = get_alignment();
+  unsigned tail = in.length() % alignment;
+  unsigned padded_length = in.length() + ( tail ?  ( alignment - tail ) : 0 );
+  dout(10) << "encode adjusted buffer length from " << in.length()
+	   << " to " << padded_length << dendl;
+  assert(padded_length % k == 0);
+  unsigned blocksize = padded_length / k;
   unsigned length = blocksize * ( k + m );
   bufferlist out(in);
   bufferptr pad(length - in.length());
-  pad.zero(0, k);
+  pad.zero(0, padded_length - in.length());
   out.push_back(pad);
-  char *p = out.c_str();
-  char *data[k];
-  for (int i = 0; i < k; i++) {
-    data[i] = p + i * blocksize;
+  char *chunks[k + m];
+  for (int i = 0; i < k + m; i++) {
+    bufferlist &chunk = (*encoded)[i];
+    chunk.substr_of(out, i * blocksize, blocksize);
+    chunks[i] = chunk.c_str();
   }
-  char *coding[m];
-  for (int i = 0; i < m; i++) {
-    coding[i] = p + ( k + i ) * blocksize;
-  }
-  jerasure_encode(data, coding, blocksize);
-  const bufferptr ptr = out.buffers().front();
-  for (set<int>::iterator j = want_to_encode.begin();
-       j != want_to_encode.end();
-       j++) {
-    bufferptr chunk(ptr, (*j) * blocksize, blocksize);
-    (*encoded)[*j].push_front(chunk);
+  jerasure_encode(&chunks[0], &chunks[k], blocksize);
+  for (int i = 0; i < k + m; i++) {
+    if (want_to_encode.count(i) == 0)
+      encoded->erase(i);
   }
   return 0;
 }
 
 int ErasureCodeJerasure::decode(const set<int> &want_to_read,
                                 const map<int, bufferlist> &chunks,
-                                map<int, bufferlist> *decoded) {
+                                map<int, bufferlist> *decoded)
+{
   unsigned blocksize = (*chunks.begin()).second.length();
   int erasures[k + m + 1];
   int erasures_count = 0;
@@ -127,7 +135,8 @@ int ErasureCodeJerasure::decode(const set<int> &want_to_read,
 
 int ErasureCodeJerasure::to_int(const std::string &name,
                                 const map<std::string,std::string> &parameters,
-                                int default_value) {
+                                int default_value)
+{
   if (parameters.find(name) == parameters.end() ||
       parameters.find(name)->second.size() == 0) {
     dout(10) << name << " defaults to " << default_value << dendl;
@@ -147,7 +156,8 @@ int ErasureCodeJerasure::to_int(const std::string &name,
   return r;
 }
 
-bool ErasureCodeJerasure::is_prime(int value) {
+bool ErasureCodeJerasure::is_prime(int value)
+{
   int prime55[] = {
     2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,
     73,79,83,89,97,101,103,107,109,113,127,131,137,139,149,
@@ -166,34 +176,39 @@ bool ErasureCodeJerasure::is_prime(int value) {
 //
 void ErasureCodeJerasureReedSolomonVandermonde::jerasure_encode(char **data,
                                                                 char **coding,
-                                                                int blocksize) {
+                                                                int blocksize)
+{
   jerasure_matrix_encode(k, m, w, matrix, data, coding, blocksize);
 }
 
 int ErasureCodeJerasureReedSolomonVandermonde::jerasure_decode(int *erasures,
                                                                 char **data,
                                                                 char **coding,
-                                                                int blocksize) {
-  return jerasure_matrix_decode(k, m, w, matrix, 1, erasures, data, coding, blocksize);
+                                                                int blocksize)
+{
+  return jerasure_matrix_decode(k, m, w, matrix, 1,
+				erasures, data, coding, blocksize);
 }
 
-unsigned ErasureCodeJerasureReedSolomonVandermonde::pad_in_length(unsigned in_length) {
-  while (in_length%(k*w*sizeof(int)) != 0) 
-    in_length++;
-  return in_length;
+unsigned ErasureCodeJerasureReedSolomonVandermonde::get_alignment()
+{
+  return k*w*sizeof(int);
 }
 
-void ErasureCodeJerasureReedSolomonVandermonde::parse(const map<std::string,std::string> &parameters) {
+void ErasureCodeJerasureReedSolomonVandermonde::parse(const map<std::string,std::string> &parameters)
+{
   k = to_int("erasure-code-k", parameters, DEFAULT_K);
   m = to_int("erasure-code-m", parameters, DEFAULT_M);
   w = to_int("erasure-code-w", parameters, DEFAULT_W);
   if (w != 8 && w != 16 && w != 32) {
-    derr << "ReedSolomonVandermonde: w=" << w << " must be one of {8, 16, 32} : revert to 8 " << dendl;
+    derr << "ReedSolomonVandermonde: w=" << w
+	 << " must be one of {8, 16, 32} : revert to 8 " << dendl;
     w = 8;
   }
 }
 
-void ErasureCodeJerasureReedSolomonVandermonde::prepare() {
+void ErasureCodeJerasureReedSolomonVandermonde::prepare()
+{
   matrix = reed_sol_vandermonde_coding_matrix(k, m, w);
 }
 
@@ -202,34 +217,38 @@ void ErasureCodeJerasureReedSolomonVandermonde::prepare() {
 //
 void ErasureCodeJerasureReedSolomonRAID6::jerasure_encode(char **data,
                                                                 char **coding,
-                                                                int blocksize) {
+                                                                int blocksize)
+{
   reed_sol_r6_encode(k, w, data, coding, blocksize);
 }
 
 int ErasureCodeJerasureReedSolomonRAID6::jerasure_decode(int *erasures,
-                                                                char **data,
-                                                                char **coding,
-                                                                int blocksize) {
+							 char **data,
+							 char **coding,
+							 int blocksize)
+{
   return jerasure_matrix_decode(k, m, w, matrix, 1, erasures, data, coding, blocksize);
 }
 
-unsigned ErasureCodeJerasureReedSolomonRAID6::pad_in_length(unsigned in_length) {
-  while (in_length%(k*w*sizeof(int)) != 0) 
-    in_length++;
-  return in_length;
+unsigned ErasureCodeJerasureReedSolomonRAID6::get_alignment()
+{
+  return k*w*sizeof(int);
 }
 
-void ErasureCodeJerasureReedSolomonRAID6::parse(const map<std::string,std::string> &parameters) {
+void ErasureCodeJerasureReedSolomonRAID6::parse(const map<std::string,std::string> &parameters)
+{
   k = to_int("erasure-code-k", parameters, DEFAULT_K);
   m = 2;
   w = to_int("erasure-code-w", parameters, DEFAULT_W);
   if (w != 8 && w != 16 && w != 32) {
-    derr << "ReedSolomonRAID6: w=" << w << " must be one of {8, 16, 32} : revert to 8 " << dendl;
+    derr << "ReedSolomonRAID6: w=" << w
+	 << " must be one of {8, 16, 32} : revert to 8 " << dendl;
     w = 8;
   }
 }
 
-void ErasureCodeJerasureReedSolomonRAID6::prepare() {
+void ErasureCodeJerasureReedSolomonRAID6::prepare()
+{
   matrix = reed_sol_r6_coding_matrix(k, w);
 }
 
@@ -237,32 +256,37 @@ void ErasureCodeJerasureReedSolomonRAID6::prepare() {
 // ErasureCodeJerasureCauchy
 //
 void ErasureCodeJerasureCauchy::jerasure_encode(char **data,
-                                                    char **coding,
-                                                    int blocksize) {
-  jerasure_schedule_encode(k, m, w, schedule, data, coding, blocksize, packetsize);
+						char **coding,
+						int blocksize)
+{
+  jerasure_schedule_encode(k, m, w, schedule,
+			   data, coding, blocksize, packetsize);
 }
 
 int ErasureCodeJerasureCauchy::jerasure_decode(int *erasures,
-                                                    char **data,
-                                                    char **coding,
-                                                    int blocksize) {
-  return jerasure_schedule_decode_lazy(k, m, w, bitmatrix, erasures, data, coding, blocksize, packetsize, 1);
+					       char **data,
+					       char **coding,
+					       int blocksize)
+{
+  return jerasure_schedule_decode_lazy(k, m, w, bitmatrix,
+				       erasures, data, coding, blocksize, packetsize, 1);
 }
 
-unsigned ErasureCodeJerasureCauchy::pad_in_length(unsigned in_length) {
-  while (in_length%(k*w*packetsize*sizeof(int)) != 0) 
-    in_length++;
-  return in_length;
+unsigned ErasureCodeJerasureCauchy::get_alignment()
+{
+  return k*w*packetsize*sizeof(int);
 }
 
-void ErasureCodeJerasureCauchy::parse(const map<std::string,std::string> &parameters) {
+void ErasureCodeJerasureCauchy::parse(const map<std::string,std::string> &parameters)
+{
   k = to_int("erasure-code-k", parameters, DEFAULT_K);
   m = to_int("erasure-code-m", parameters, DEFAULT_M);
   w = to_int("erasure-code-w", parameters, DEFAULT_W);
   packetsize = to_int("erasure-code-packetsize", parameters, DEFAULT_PACKETSIZE);
 }
 
-void ErasureCodeJerasureCauchy::prepare_schedule(int *matrix) {
+void ErasureCodeJerasureCauchy::prepare_schedule(int *matrix)
+{
   bitmatrix = jerasure_matrix_to_bitmatrix(k, m, w, matrix);
   schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
 }
@@ -270,7 +294,8 @@ void ErasureCodeJerasureCauchy::prepare_schedule(int *matrix) {
 // 
 // ErasureCodeJerasureCauchyOrig
 //
-void ErasureCodeJerasureCauchyOrig::prepare() {
+void ErasureCodeJerasureCauchyOrig::prepare()
+{
   int *matrix = cauchy_original_coding_matrix(k, m, w);
   prepare_schedule(matrix);
   free(matrix);
@@ -279,7 +304,8 @@ void ErasureCodeJerasureCauchyOrig::prepare() {
 // 
 // ErasureCodeJerasureCauchyGood
 //
-void ErasureCodeJerasureCauchyGood::prepare() {
+void ErasureCodeJerasureCauchyGood::prepare()
+{
   int *matrix = cauchy_good_general_coding_matrix(k, m, w);
   prepare_schedule(matrix);
   free(matrix);
@@ -288,7 +314,8 @@ void ErasureCodeJerasureCauchyGood::prepare() {
 // 
 // ErasureCodeJerasureLiberation
 //
-ErasureCodeJerasureLiberation::~ErasureCodeJerasureLiberation() {
+ErasureCodeJerasureLiberation::~ErasureCodeJerasureLiberation()
+{
   if (bitmatrix)
     free(bitmatrix);
   if (schedule)
@@ -297,24 +324,28 @@ ErasureCodeJerasureLiberation::~ErasureCodeJerasureLiberation() {
 
 void ErasureCodeJerasureLiberation::jerasure_encode(char **data,
                                                     char **coding,
-                                                    int blocksize) {
-  jerasure_schedule_encode(k, m, w, schedule, data, coding, blocksize, packetsize);
+                                                    int blocksize)
+{
+  jerasure_schedule_encode(k, m, w, schedule, data,
+			   coding, blocksize, packetsize);
 }
 
 int ErasureCodeJerasureLiberation::jerasure_decode(int *erasures,
                                                     char **data,
                                                     char **coding,
-                                                    int blocksize) {
-  return jerasure_schedule_decode_lazy(k, m, w, bitmatrix, erasures, data, coding, blocksize, packetsize, 1);
+                                                    int blocksize)
+{
+  return jerasure_schedule_decode_lazy(k, m, w, bitmatrix, erasures, data,
+				       coding, blocksize, packetsize, 1);
 }
 
-unsigned ErasureCodeJerasureLiberation::pad_in_length(unsigned in_length) {
-  while (in_length%(k*w*packetsize*sizeof(int)) != 0) 
-    in_length++;
-  return in_length;
+unsigned ErasureCodeJerasureLiberation::get_alignment()
+{
+  return k*w*packetsize*sizeof(int);
 }
 
-void ErasureCodeJerasureLiberation::parse(const map<std::string,std::string> &parameters) {
+void ErasureCodeJerasureLiberation::parse(const map<std::string,std::string> &parameters)
+{
   k = to_int("erasure-code-k", parameters, DEFAULT_K);
   m = to_int("erasure-code-m", parameters, DEFAULT_M);
   w = to_int("erasure-code-w", parameters, DEFAULT_W);
@@ -334,18 +365,21 @@ void ErasureCodeJerasureLiberation::parse(const map<std::string,std::string> &pa
     error = true;
   }
   if ((packetsize%(sizeof(int))) != 0) {
-    derr << "packetsize=" << packetsize << " must be a multiple of sizeof(int) = " << sizeof(int) << dendl;
+    derr << "packetsize=" << packetsize
+	 << " must be a multiple of sizeof(int) = " << sizeof(int) << dendl;
     error = true;
   }
   if (error) {
-    derr << "reverting to k=" << DEFAULT_K << ", w=" << DEFAULT_W << ", packetsize=" << DEFAULT_PACKETSIZE << dendl;
+    derr << "reverting to k=" << DEFAULT_K << ", w="
+	 << DEFAULT_W << ", packetsize=" << DEFAULT_PACKETSIZE << dendl;
     k = DEFAULT_K;
     w = DEFAULT_W;
     packetsize = DEFAULT_PACKETSIZE;
   }
 }
 
-void ErasureCodeJerasureLiberation::prepare() {
+void ErasureCodeJerasureLiberation::prepare()
+{
   bitmatrix = liberation_coding_bitmatrix(k, w);
   schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
 }
@@ -353,7 +387,8 @@ void ErasureCodeJerasureLiberation::prepare() {
 // 
 // ErasureCodeJerasureBlaumRoth
 //
-void ErasureCodeJerasureBlaumRoth::prepare() {
+void ErasureCodeJerasureBlaumRoth::prepare()
+{
   bitmatrix = blaum_roth_coding_bitmatrix(k, w);
   schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
 }
@@ -361,7 +396,8 @@ void ErasureCodeJerasureBlaumRoth::prepare() {
 // 
 // ErasureCodeJerasureLiber8tion
 //
-void ErasureCodeJerasureLiber8tion::parse(const map<std::string,std::string> &parameters) {
+void ErasureCodeJerasureLiber8tion::parse(const map<std::string,std::string> &parameters)
+{
   k = to_int("erasure-code-k", parameters, DEFAULT_K);
   m = DEFAULT_M;
   w = DEFAULT_W;
@@ -377,13 +413,15 @@ void ErasureCodeJerasureLiber8tion::parse(const map<std::string,std::string> &pa
     error = true;
   }
   if (error) {
-    derr << "reverting to k=" << DEFAULT_K << ", packetsize=" << DEFAULT_PACKETSIZE << dendl;
+    derr << "reverting to k=" << DEFAULT_K << ", packetsize="
+	 << DEFAULT_PACKETSIZE << dendl;
     k = DEFAULT_K;
     packetsize = DEFAULT_PACKETSIZE;
   }
 }
 
-void ErasureCodeJerasureLiber8tion::prepare() {
+void ErasureCodeJerasureLiber8tion::prepare()
+{
   bitmatrix = liber8tion_coding_bitmatrix(k);
   schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
 }

@@ -1854,13 +1854,7 @@ void Monitor::get_status(stringstream &ss, Formatter *f)
 }
 
 #undef COMMAND
-struct MonCommand {
-  string cmdstring;
-  string helpstring;
-  string module;
-  string req_perms;
-  string availability;
-} mon_commands[] = {
+MonCommand mon_commands[] = {
 #define COMMAND(parsesig, helptext, modulename, req_perms, avail) \
   {parsesig, helptext, modulename, req_perms, avail},
 #include <mon/MonCommands.h>
@@ -1909,6 +1903,26 @@ bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
   return capable;
 }
 
+void get_command_descriptions(const MonCommand *commands,
+			      unsigned commands_size,
+			      Formatter *f,
+			      bufferlist *rdata) {
+  int cmdnum = 0;
+  f->open_object_section("command_descriptions");
+  for (const MonCommand *cp = commands;
+       cp < &commands[commands_size]; cp++) {
+
+    ostringstream secname;
+    secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
+    dump_cmddesc_to_json(f, secname.str(),
+			 cp->cmdstring, cp->helpstring, cp->module,
+			 cp->req_perms, cp->availability);
+    cmdnum++;
+  }
+  f->close_section();	// command_descriptions
+
+  f->flush(*rdata);
+}
 
 void Monitor::handle_command(MMonCommand *m)
 {
@@ -1953,23 +1967,9 @@ void Monitor::handle_command(MMonCommand *m)
 
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
   if (prefix == "get_command_descriptions") {
-    int cmdnum = 0;
-    Formatter *f = new_formatter("json");
-    f->open_object_section("command_descriptions");
-    for (MonCommand *cp = mon_commands;
-	 cp < &mon_commands[ARRAY_SIZE(mon_commands)]; cp++) {
-
-      ostringstream secname;
-      secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      dump_cmddesc_to_json(f, secname.str(),
-			   cp->cmdstring, cp->helpstring, cp->module,
-			   cp->req_perms, cp->availability);
-      cmdnum++;
-    }
-    f->close_section();	// command_descriptions
-
     bufferlist rdata;
-    f->flush(rdata);
+    Formatter *f = new_formatter("json");
+    get_command_descriptions(mon_commands, ARRAY_SIZE(mon_commands), f, &rdata);
     delete f;
     reply_command(m, 0, "", rdata, 0);
     return;

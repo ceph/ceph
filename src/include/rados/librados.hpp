@@ -133,11 +133,16 @@ namespace librados
    * BALANCE_READS and LOCALIZE_READS should only be used
    * when reading from data you're certain won't change,
    * like a snapshot, or where eventual consistency is ok.
+   *
+   * ORDER_READS_WRITES will order reads the same way writes are
+   * ordered (e.g., waiting for degraded objects).  In particular, it
+   * will make a write followed by a read sequence be preserved.
    */
   enum ObjectOperationGlobalFlags {
     OPERATION_NOFLAG         = 0,
     OPERATION_BALANCE_READS  = 1,
     OPERATION_LOCALIZE_READS = 2,
+    OPERATION_ORDER_READS_WRITES = 4,
   };
 
   /*
@@ -278,6 +283,13 @@ namespace librados
      */
     void copy_from(const std::string& src, const IoCtx& src_ioctx, uint64_t src_version);
 
+    /**
+     * undirty an object
+     *
+     * Clear an objects dirty flag
+     */
+    void undirty();
+
     friend class IoCtx;
   };
 
@@ -395,6 +407,14 @@ namespace librados
      * @param prval [out] place error code in prval upon completion
      */
     void list_snaps(snap_set_t *out_snaps, int *prval);
+
+    /**
+     * query dirty state of an object
+     *
+     * @param out_dirty [out] pointer to resulting bool
+     * @param prval [out] place error code in prval upon completion
+     */
+    void is_dirty(bool *isdirty, int *prval);
 
   };
 

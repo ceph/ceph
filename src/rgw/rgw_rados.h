@@ -1130,7 +1130,7 @@ public:
                void *progress_data);
 
   int copy_obj_data(void *ctx,
-	       void *handle, off_t end,
+	       void **handle, off_t end,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
 	       time_t *mtime,

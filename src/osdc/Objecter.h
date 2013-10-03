@@ -617,9 +617,10 @@ struct ObjectOperation {
 	}
 	::decode(*cursor, p);
       } catch (buffer::error& e) {
-	if (prval)
-	  *prval = -EIO;
+	r = -EIO;
       }
+      if (prval)
+	*prval = r;
     }
   };
 
@@ -639,6 +640,43 @@ struct ObjectOperation {
     out_rval[p] = prval;
     C_ObjectOperation_copyget *h =
       new C_ObjectOperation_copyget(cursor, out_size, out_mtime, out_attrs, out_data, out_omap, prval);
+    out_bl[p] = &h->bl;
+    out_handler[p] = h;
+  }
+
+  void undirty() {
+    add_op(CEPH_OSD_OP_UNDIRTY);
+  }
+
+  struct C_ObjectOperation_isdirty : public Context {
+    bufferlist bl;
+    bool *pisdirty;
+    int *prval;
+    C_ObjectOperation_isdirty(bool *p, int *r)
+      : pisdirty(p), prval(r) {}
+    void finish(int r) {
+      if (r < 0)
+	return;
+      try {
+	bufferlist::iterator p = bl.begin();
+	bool isdirty;
+	::decode(isdirty, p);
+	if (pisdirty)
+	  *pisdirty = isdirty;
+      } catch (buffer::error& e) {
+	r = -EIO;
+      }
+      if (prval)
+	*prval = r;
+    }
+  };
+
+  void is_dirty(bool *pisdirty, int *prval) {
+    add_op(CEPH_OSD_OP_ISDIRTY);
+    unsigned p = ops.size() - 1;
+    out_rval[p] = prval;
+    C_ObjectOperation_isdirty *h =
+      new C_ObjectOperation_isdirty(pisdirty, prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
   }
@@ -785,6 +823,7 @@ class Objecter {
   int global_op_flags; // flags which are applied to each IO op
   bool keep_balanced_budget;
   bool honor_osdmap_full;
+  bool honor_cache_redirects;
 
   void maybe_request_map();
 
@@ -1260,6 +1299,7 @@ public:
     num_unacked(0), num_uncommitted(0),
     global_op_flags(0),
     keep_balanced_budget(false), honor_osdmap_full(true),
+    honor_cache_redirects(true),
     last_seen_osdmap_version(0),
     last_seen_pgmap_version(0),
     client_lock(l), timer(t),
@@ -1292,6 +1332,9 @@ public:
 
   void set_honor_osdmap_full() { honor_osdmap_full = true; }
   void unset_honor_osdmap_full() { honor_osdmap_full = false; }
+
+  void set_honor_cache_redirects() { honor_cache_redirects = true; }
+  void unset_honor_cache_redirects() { honor_cache_redirects = false; }
 
   void scan_requests(bool skipped_map,
 		     map<tid_t, Op*>& need_resend,

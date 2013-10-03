@@ -56,7 +56,7 @@ public:
                                char **data,
                                char **coding,
                                int blocksize) = 0;
-  virtual unsigned pad_in_length(unsigned in_length) = 0;
+  virtual unsigned get_alignment() = 0;
   virtual void parse(const map<std::string,std::string> &parameters) = 0;
   virtual void prepare() = 0;
   static int to_int(const std::string &name,
@@ -88,7 +88,7 @@ public:
                                char **data,
                                char **coding,
                                int blocksize);
-  virtual unsigned pad_in_length(unsigned in_length);
+  virtual unsigned get_alignment();
   virtual void parse(const map<std::string,std::string> &parameters);
   virtual void prepare();
 };
@@ -115,7 +115,7 @@ public:
                                char **data,
                                char **coding,
                                int blocksize);
-  virtual unsigned pad_in_length(unsigned in_length);
+  virtual unsigned get_alignment();
   virtual void parse(const map<std::string,std::string> &parameters);
   virtual void prepare();
 };
@@ -149,7 +149,7 @@ public:
                                char **data,
                                char **coding,
                                int blocksize);
-  virtual unsigned pad_in_length(unsigned in_length);
+  virtual unsigned get_alignment();
   virtual void parse(const map<std::string,std::string> &parameters);
   void prepare_schedule(int *matrix);
 };
@@ -196,7 +196,7 @@ public:
                                char **data,
                                char **coding,
                                int blocksize);
-  virtual unsigned pad_in_length(unsigned in_length);
+  virtual unsigned get_alignment();
   virtual void parse(const map<std::string,std::string> &parameters);
   virtual void prepare();
 };

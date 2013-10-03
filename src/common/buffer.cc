@@ -990,11 +990,14 @@ void buffer::list::rebuild_page_aligned()
    */
   char *buffer::list::c_str()
   {
-    if (_buffers.size() == 0) 
+    if (_buffers.empty())
       return 0;                         // no buffers
-    if (_buffers.size() > 1) 
+
+    std::list<ptr>::const_iterator iter = _buffers.begin();
+    iter++;
+
+    if (iter != _buffers.end())
       rebuild();
-    assert(_buffers.size() == 1);
     return _buffers.front().c_str();  // good, we're already contiguous.
   }
 
@@ -1267,6 +1270,15 @@ int buffer::list::write_fd(int fd) const
   return 0;
 }
 
+__u32 buffer::list::crc32c(__u32 crc) const
+{
+  for (std::list<ptr>::const_iterator it = _buffers.begin();
+       it != _buffers.end();
+       ++it)
+    if (it->length())
+      crc = ceph_crc32c(crc, (unsigned char*)it->c_str(), it->length());
+  return crc;
+}
 
 void buffer::list::hexdump(std::ostream &out) const
 {

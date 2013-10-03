@@ -131,7 +131,7 @@ bool FileStoreDiff::diff_objects(FileStore *a_store, FileStore *b_store, coll_t 
   bool ret = false;
 
   int err;
-  std::vector<hobject_t> b_objects, a_objects;
+  std::vector<ghobject_t> b_objects, a_objects;
   err = b_store->collection_list(coll, b_objects);
   if (err < 0) {
     dout(0) << "diff_objects list on verify coll " << coll.to_str()
@@ -151,11 +151,11 @@ bool FileStoreDiff::diff_objects(FileStore *a_store, FileStore *b_store, coll_t 
     ret = true;
   }
 
-  std::vector<hobject_t>::iterator b_it = b_objects.begin();
-  std::vector<hobject_t>::iterator a_it = b_objects.begin();
+  std::vector<ghobject_t>::iterator b_it = b_objects.begin();
+  std::vector<ghobject_t>::iterator a_it = b_objects.begin();
   for (; b_it != b_objects.end(); ++b_it, ++a_it) {
-    hobject_t b_obj = *b_it, a_obj = *a_it;
-    if (b_obj.oid.name != a_obj.oid.name) {
+    ghobject_t b_obj = *b_it, a_obj = *a_it;
+    if (b_obj.hobj.oid.name != a_obj.hobj.oid.name) {
       dout(0) << "diff_objects name mismatch on A object "
           << coll << "/" << a_obj << " and B object "
           << coll << "/" << b_obj << dendl;
@@ -167,7 +167,7 @@ bool FileStoreDiff::diff_objects(FileStore *a_store, FileStore *b_store, coll_t 
     err = b_store->stat(coll, b_obj, &b_stat);
     if (err < 0) {
       dout(0) << "diff_objects error stating B object "
-	      << coll.to_str() << "/" << b_obj.oid.name << dendl;
+	      << coll.to_str() << "/" << b_obj.hobj.oid.name << dendl;
       ret = true;
     }
     err = a_store->stat(coll, a_obj, &a_stat);

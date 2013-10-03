@@ -134,7 +134,9 @@ static ostream& _prefix(std::ostream* _dout, int whoami, OSDMapRef osdmap) {
 		<< " ";
 }
 
-static CompatSet get_osd_compat_set() {
+//Initial features in new superblock.
+//Features here are also automatically upgraded
+CompatSet OSD::get_osd_initial_compat_set() {
   CompatSet::FeatureSet ceph_osd_feature_compat;
   CompatSet::FeatureSet ceph_osd_feature_ro_compat;
   CompatSet::FeatureSet ceph_osd_feature_incompat;
@@ -150,6 +152,14 @@ static CompatSet get_osd_compat_set() {
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER);
   return CompatSet(ceph_osd_feature_compat, ceph_osd_feature_ro_compat,
 		   ceph_osd_feature_incompat);
+}
+
+//Features are added here that this OSD supports.
+CompatSet OSD::get_osd_compat_set() {
+  CompatSet compat =  get_osd_initial_compat_set();
+  //Any features here can be set in code, but not in initial superblock
+  compat.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
+  return compat;
 }
 
 OSDService::OSDService(OSD *osd) :
@@ -170,6 +180,7 @@ OSDService::OSDService(OSD *osd) :
   scrub_wq(osd->scrub_wq),
   scrub_finalize_wq(osd->scrub_finalize_wq),
   rep_scrub_wq(osd->rep_scrub_wq),
+  push_wq("push_wq", cct->_conf->osd_recovery_thread_timeout, &osd->recovery_tp),
   class_handler(osd->class_handler),
   publish_lock("OSDService::publish_lock"),
   pre_publish_lock("OSDService::pre_publish_lock"),
@@ -423,6 +434,7 @@ void OSDService::init()
     objecter_timer.init();
     objecter->set_client_incarnation(0);
     objecter->init_locked();
+    objecter->unset_honor_cache_redirects();
   }
   watch_timer.init();
 }
@@ -449,7 +461,7 @@ int OSD::convert_collection(ObjectStore *store, coll_t cid)
 {
   coll_t tmp0("convertfs_temp");
   coll_t tmp1("convertfs_temp1");
-  vector<hobject_t> objects;
+  vector<ghobject_t> objects;
 
   map<string, bufferptr> aset;
   int r = store->collection_getattrs(cid, aset);
@@ -469,10 +481,10 @@ int OSD::convert_collection(ObjectStore *store, coll_t cid)
     store->apply_transaction(t);
   }
 
-  hobject_t next;
+  ghobject_t next;
   while (!next.is_max()) {
     objects.clear();
-    hobject_t start = next;
+    ghobject_t start = next;
     r = store->collection_list_partial(cid, start,
 				       200, 300, 0,
 				       &objects, &next);
@@ -480,7 +492,7 @@ int OSD::convert_collection(ObjectStore *store, coll_t cid)
       return r;
 
     ObjectStore::Transaction t;
-    for (vector<hobject_t>::iterator i = objects.begin();
+    for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
       t.collection_add(tmp0, cid, *i);
@@ -646,7 +658,7 @@ int OSD::mkfs(CephContext *cct, const std::string &dev, const std::string &jdev,
       sb.cluster_fsid = fsid;
       sb.osd_fsid = store->get_fsid();
       sb.whoami = whoami;
-      sb.compat_features = get_osd_compat_set();
+      sb.compat_features = get_osd_initial_compat_set();
 
       // benchmark?
       if (cct->_conf->osd_auto_weight) {
@@ -701,7 +713,7 @@ int OSD::mkfs(CephContext *cct, const std::string &dev, const std::string &jdev,
       goto umount_store;
     }
 
-    ret = write_meta(dev, "ready", "ready\n", 6);
+    ret = safe_write_file(dev.c_str(), "ready", "ready\n", 6);
     if (ret) {
       derr << "OSD::mkfs: failed to write ready file: error " << ret << dendl;
       goto umount_store;
@@ -757,103 +769,19 @@ int OSD::dump_journal(CephContext *cct, const std::string &dev, const std::strin
   return err;
 }
 
-int OSD::write_meta(const std::string &base, const std::string &file,
-		    const char *val, size_t vallen)
-{
-  int ret;
-  char fn[PATH_MAX];
-  char tmp[PATH_MAX];
-  int fd;
-
-  // does the file already have correct content?
-  char oldval[80];
-  ret = read_meta(base, file, oldval, sizeof(oldval));
-  if (ret == (int)vallen && memcmp(oldval, val, vallen) == 0)
-    return 0;  // yes.
-
-  snprintf(fn, sizeof(fn), "%s/%s", base.c_str(), file.c_str());
-  snprintf(tmp, sizeof(tmp), "%s/%s.tmp", base.c_str(), file.c_str());
-  fd = ::open(tmp, O_WRONLY|O_CREAT|O_TRUNC, 0644);
-  if (fd < 0) {
-    ret = errno;
-    derr << "write_meta: error opening '" << tmp << "': "
-	 << cpp_strerror(ret) << dendl;
-    return -ret;
-  }
-  ret = safe_write(fd, val, vallen);
-  if (ret) {
-    derr << "write_meta: failed to write to '" << tmp << "': "
-	 << cpp_strerror(ret) << dendl;
-    TEMP_FAILURE_RETRY(::close(fd));
-    return ret;
-  }
-
-  ret = ::fsync(fd);
-  TEMP_FAILURE_RETRY(::close(fd));
-  if (ret) {
-    ::unlink(tmp);
-    derr << "write_meta: failed to fsync to '" << tmp << "': "
-	 << cpp_strerror(ret) << dendl;
-    return ret;
-  }
-  ret = ::rename(tmp, fn);
-  if (ret) {
-    ::unlink(tmp);
-    derr << "write_meta: failed to rename '" << tmp << "' to '" << fn << "': "
-	 << cpp_strerror(ret) << dendl;
-    return ret;
-  }
-
-  fd = ::open(base.c_str(), O_RDONLY);
-  if (fd < 0) {
-    ret = errno;
-    derr << "write_meta: failed to open dir '" << base << "': "
-	 << cpp_strerror(ret) << dendl;
-    return -ret;
-  }
-  ::fsync(fd);
-  TEMP_FAILURE_RETRY(::close(fd));
-
-  return 0;
-}
-
-int OSD::read_meta(const  std::string &base, const std::string &file,
-		   char *val, size_t vallen)
-{
-  char fn[PATH_MAX];
-  int fd, len;
-
-  snprintf(fn, sizeof(fn), "%s/%s", base.c_str(), file.c_str());
-  fd = ::open(fn, O_RDONLY);
-  if (fd < 0) {
-    int err = errno;
-    return -err;
-  }
-  len = safe_read(fd, val, vallen);
-  if (len < 0) {
-    TEMP_FAILURE_RETRY(::close(fd));
-    return len;
-  }
-  // close sometimes returns errors, but only after write()
-  TEMP_FAILURE_RETRY(::close(fd));
-
-  val[len] = 0;
-  return len;
-}
-
 int OSD::write_meta(const std::string &base, uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami)
 {
   char val[80];
   
   snprintf(val, sizeof(val), "%s\n", CEPH_OSD_ONDISK_MAGIC);
-  write_meta(base, "magic", val, strlen(val));
+  safe_write_file(base.c_str(), "magic", val, strlen(val));
 
   snprintf(val, sizeof(val), "%d\n", whoami);
-  write_meta(base, "whoami", val, strlen(val));
+  safe_write_file(base.c_str(), "whoami", val, strlen(val));
 
   cluster_fsid.print(val);
   strcat(val, "\n");
-  write_meta(base, "ceph_fsid", val, strlen(val));
+  safe_write_file(base.c_str(), "ceph_fsid", val, strlen(val));
 
   return 0;
 }
@@ -863,24 +791,24 @@ int OSD::peek_meta(const std::string &dev, std::string& magic,
 {
   char val[80] = { 0 };
 
-  if (read_meta(dev, "magic", val, sizeof(val)) < 0)
+  if (safe_read_file(dev.c_str(), "magic", val, sizeof(val)) < 0)
     return -errno;
   int l = strlen(val);
   if (l && val[l-1] == '\n')
     val[l-1] = 0;
   magic = val;
 
-  if (read_meta(dev, "whoami", val, sizeof(val)) < 0)
+  if (safe_read_file(dev.c_str(), "whoami", val, sizeof(val)) < 0)
     return -errno;
   whoami = atoi(val);
 
-  if (read_meta(dev, "ceph_fsid", val, sizeof(val)) < 0)
+  if (safe_read_file(dev.c_str(), "ceph_fsid", val, sizeof(val)) < 0)
     return -errno;
   if (strlen(val) > 36)
     val[36] = 0;
   cluster_fsid.parse(val);
 
-  if (read_meta(dev, "fsid", val, sizeof(val)) < 0)
+  if (safe_read_file(dev.c_str(), "fsid", val, sizeof(val)) < 0)
     osd_fsid = uuid_d();
   else {
     if (strlen(val) > 36)
@@ -1143,6 +1071,7 @@ public:
 
 int OSD::init()
 {
+  CompatSet initial, diff;
   Mutex::Locker lock(osd_lock);
   if (is_stopping())
     return 0;
@@ -1167,9 +1096,48 @@ int OSD::init()
   r = read_superblock();
   if (r < 0) {
     derr << "OSD::init() : unable to read osd superblock" << dendl;
-    store->umount();
-    delete store;
-    return -EINVAL;
+    r = -EINVAL;
+    goto out;
+  }
+
+  if (osd_compat.compare(superblock.compat_features) < 0) {
+    derr << "The disk uses features unsupported by the executable." << dendl;
+    derr << " ondisk features " << superblock.compat_features << dendl;
+    derr << " daemon features " << osd_compat << dendl;
+
+    if (osd_compat.writeable(superblock.compat_features)) {
+      CompatSet diff = osd_compat.unsupported(superblock.compat_features);
+      derr << "it is still writeable, though. Missing features: " << diff << dendl;
+      r = -EOPNOTSUPP;
+      goto out;
+    }
+    else {
+      CompatSet diff = osd_compat.unsupported(superblock.compat_features);
+      derr << "Cannot write to disk! Missing features: " << diff << dendl;
+      r = -EOPNOTSUPP;
+      goto out;
+    }
+  }
+
+  assert_warn(whoami == superblock.whoami);
+  if (whoami != superblock.whoami) {
+    derr << "OSD::init: superblock says osd"
+	 << superblock.whoami << " but i am osd." << whoami << dendl;
+    r = -EINVAL;
+    goto out;
+  }
+
+  initial = get_osd_initial_compat_set();
+  diff = superblock.compat_features.unsupported(initial);
+  if (superblock.compat_features.merge(initial)) {
+    // We need to persist the new compat_set before we
+    // do anything else
+    dout(5) << "Upgrading superblock adding: " << diff << dendl;
+    ObjectStore::Transaction t;
+    write_superblock(t);
+    r = store->apply_transaction(t);
+    if (r < 0)
+      goto out;
   }
 
   // make sure info object exists
@@ -1179,7 +1147,7 @@ int OSD::init()
     t.touch(coll_t::META_COLL, service.infos_oid);
     r = store->apply_transaction(t);
     if (r < 0)
-      return r;
+      goto out;
   }
 
   // make sure snap mapper object exists
@@ -1189,19 +1157,7 @@ int OSD::init()
     t.touch(coll_t::META_COLL, OSD::make_snapmapper_oid());
     r = store->apply_transaction(t);
     if (r < 0)
-      return r;
-  }
-
-  if (osd_compat.compare(superblock.compat_features) != 0) {
-    // We need to persist the new compat_set before we
-    // do anything else
-    dout(5) << "Upgrading superblock compat_set" << dendl;
-    superblock.compat_features = osd_compat;
-    ObjectStore::Transaction t;
-    write_superblock(t);
-    r = store->apply_transaction(t);
-    if (r < 0)
-      return r;
+      goto out;
   }
 
   class_handler = new ClassHandler(cct);
@@ -1217,7 +1173,8 @@ int OSD::init()
   assert_warn(!osdmap);
   if (osdmap) {
     derr << "OSD::init: unable to read current osdmap" << dendl;
-    return -EINVAL;
+    r = -EINVAL;
+    goto out;
   }
   osdmap = get_map(superblock.current_epoch);
   check_osdmap_features();
@@ -1230,12 +1187,6 @@ int OSD::init()
   load_pgs();
 
   dout(2) << "superblock: i am osd." << superblock.whoami << dendl;
-  assert_warn(whoami == superblock.whoami);
-  if (whoami != superblock.whoami) {
-    derr << "OSD::init: logic error: superblock says osd"
-	 << superblock.whoami << " but i am osd." << whoami << dendl;
-    return -EINVAL;
-  }
 
   create_logger();
     
@@ -1252,7 +1203,7 @@ int OSD::init()
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
   r = monc->init();
   if (r < 0)
-    return r;
+    goto out;
 
   // tell monc about log_client so it will know about mon session resets
   monc->set_log_client(&clog);
@@ -1276,12 +1227,10 @@ int OSD::init()
 
   r = monc->authenticate();
   if (r < 0) {
-    monc->shutdown();
-    store->umount();
     osd_lock.Lock(); // locker is going to unlock this on function exit
     if (is_stopping())
-      return 0;
-    return r;
+      r =  0;
+    goto monout;
   }
 
   while (monc->wait_auth_rotating(30.0) < 0) {
@@ -1301,6 +1250,13 @@ int OSD::init()
   start_boot();
 
   return 0;
+monout:
+  monc->shutdown();
+
+out:
+  store->umount();
+  delete store;
+  return r;
 }
 
 void OSD::final_init()
@@ -1719,28 +1675,6 @@ int OSD::read_superblock()
   ::decode(superblock, p);
 
   dout(10) << "read_superblock " << superblock << dendl;
-  if (osd_compat.compare(superblock.compat_features) < 0) {
-    derr << "The disk uses features unsupported by the executable." << dendl;
-    derr << " ondisk features " << superblock.compat_features << dendl;
-    derr << " daemon features " << osd_compat << dendl;
-
-    if (osd_compat.writeable(superblock.compat_features)) {
-      derr << "it is still writeable, though. Missing features:" << dendl;
-      CompatSet diff = osd_compat.unsupported(superblock.compat_features);
-      return -EOPNOTSUPP;
-    }
-    else {
-      derr << "Cannot write to disk! Missing features:" << dendl;
-      CompatSet diff = osd_compat.unsupported(superblock.compat_features);
-      return -EOPNOTSUPP;
-    }
-  }
-
-  if (whoami != superblock.whoami) {
-    derr << "read_superblock superblock says osd." << superblock.whoami
-         << ", but i (think i) am osd." << whoami << dendl;
-    return -1;
-  }
   
   return 0;
 }
@@ -1755,17 +1689,17 @@ void OSD::recursive_remove_collection(ObjectStore *store, coll_t tmp)
     make_snapmapper_oid());
   SnapMapper mapper(&driver, 0, 0, 0);
 
-  vector<hobject_t> objects;
+  vector<ghobject_t> objects;
   store->collection_list(tmp, objects);
 
   // delete them.
   ObjectStore::Transaction t;
   unsigned removed = 0;
-  for (vector<hobject_t>::iterator p = objects.begin();
+  for (vector<ghobject_t>::iterator p = objects.begin();
        p != objects.end();
        ++p, removed++) {
     OSDriver::OSTransaction _t(driver.get_transaction(&t));
-    int r = mapper.remove_oid(*p, &_t);
+    int r = mapper.remove_oid(p->hobj, &_t);
     if (r != 0 && r != -ENOENT)
       assert(0);
     t.collection_remove(tmp, *p);
@@ -3346,10 +3280,10 @@ bool remove_dir(
   ObjectStore::Sequencer *osr,
   coll_t coll, DeletingStateRef dstate)
 {
-  vector<hobject_t> olist;
+  vector<ghobject_t> olist;
   int64_t num = 0;
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  hobject_t next;
+  ghobject_t next;
   while (!next.is_max()) {
     store->collection_list_partial(
       coll,
@@ -3359,11 +3293,11 @@ bool remove_dir(
       0,
       &olist,
       &next);
-    for (vector<hobject_t>::iterator i = olist.begin();
+    for (vector<ghobject_t>::iterator i = olist.begin();
 	 i != olist.end();
 	 ++i, ++num) {
       OSDriver::OSTransaction _t(osdriver->get_transaction(t));
-      int r = mapper->remove_oid(*i, &_t);
+      int r = mapper->remove_oid(i->hobj, &_t);
       if (r != 0 && r != -ENOENT) {
 	assert(0);
       }
@@ -3406,16 +3340,16 @@ void OSD::RemoveWQ::_process(pair<PGRef, DeletingStateRef> item)
   if (!item.second->start_clearing())
     return;
 
-  if (pg->have_temp_coll()) {
+  list<coll_t> colls_to_remove;
+  pg->get_colls(&colls_to_remove);
+  for (list<coll_t>::iterator i = colls_to_remove.begin();
+       i != colls_to_remove.end();
+       ++i) {
     bool cont = remove_dir(
-      pg->cct, store, &mapper, &driver, pg->osr.get(), pg->get_temp_coll(), item.second);
+      pg->cct, store, &mapper, &driver, pg->osr.get(), *i, item.second);
     if (!cont)
       return;
   }
-  bool cont = remove_dir(
-      pg->cct, store, &mapper, &driver, pg->osr.get(), coll, item.second);
-  if (!cont)
-    return;
 
   if (!item.second->start_deleting())
     return;
@@ -3426,9 +3360,12 @@ void OSD::RemoveWQ::_process(pair<PGRef, DeletingStateRef> item)
     OSD::make_infos_oid(),
     pg->log_oid,
     t);
-  if (pg->have_temp_coll())
-    t->remove_collection(pg->get_temp_coll());
-  t->remove_collection(coll);
+
+  for (list<coll_t>::iterator i = colls_to_remove.begin();
+       i != colls_to_remove.end();
+       ++i) {
+    t->remove_collection(*i);
+  }
 
   // We need the sequencer to stick around until the op is complete
   store->queue_transaction(
@@ -3970,6 +3907,10 @@ COMMAND("bench " \
 	"(default 1G size 4MB). Results in log.",
 	"osd", "rw", "cli,rest")
 COMMAND("flush_pg_stats", "flush pg stats", "osd", "rw", "cli,rest")
+COMMAND("heap " \
+	"name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
+	"show heap usage info (available only if compiled with tcmalloc)", \
+	"osd", "rw", "cli,rest")
 COMMAND("debug_dump_missing " \
 	"name=filename,type=CephFilepath",
 	"dump missing objects to a named file", "osd", "r", "cli,rest")
@@ -5879,22 +5820,11 @@ void OSD::split_pgs(
     dout(10) << "m_seed " << i->ps() << dendl;
     dout(10) << "split_bits is " << split_bits << dendl;
 
-    rctx->transaction->create_collection(
-      coll_t(*i));
-    rctx->transaction->split_collection(
-      coll_t(parent->info.pgid),
+    parent->split_colls(
+      *i,
       split_bits,
       i->m_seed,
-      coll_t(*i));
-    if (parent->have_temp_coll()) {
-      rctx->transaction->create_collection(
-	coll_t::make_temp_coll(*i));
-      rctx->transaction->split_collection(
-	coll_t::make_temp_coll(parent->info.pgid),
-	split_bits,
-	i->m_seed,
-	coll_t::make_temp_coll(*i));
-    }
+      rctx->transaction);
     parent->split_into(
       *i,
       child,

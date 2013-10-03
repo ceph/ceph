@@ -4,6 +4,7 @@ libcommon_la_SOURCES = \
 	common/LogClient.cc \
 	common/LogEntry.cc \
 	common/PrebufferedStreambuf.cc \
+	common/SloppyCRCMap.cc \
 	common/BackTrace.cc \
 	common/perf_counters.cc \
 	common/Mutex.cc \
@@ -59,13 +60,17 @@ libcommon_la_SOURCES = \
 	common/pick_address.cc \
 	common/util.cc \
 	common/TextTable.cc \
-	common/secret.c \
 	common/ceph_fs.cc \
 	common/ceph_hash.cc \
 	common/ceph_strings.cc \
 	common/ceph_frag.cc \
 	common/addr_parsing.c \
-	common/hobject.cc
+	common/hobject.cc \
+	common/bloom_filter.cc
+
+if LINUX
+libcommon_la_SOURCES += common/secret.c
+endif
 
 # these should go out of libcommon
 libcommon_la_SOURCES += \
@@ -93,6 +98,7 @@ LIBCOMMON_DEPS += libcommon_crc.la
 noinst_LTLIBRARIES += libcommon_crc.la
 
 noinst_HEADERS += \
+	common/bloom_filter.hpp \
 	common/sctp_crc32.h \
 	common/crc32c_intel_baseline.h \
 	common/crc32c_intel_fast.h
@@ -117,6 +123,7 @@ noinst_HEADERS += \
 	common/LogClient.h \
 	common/LogEntry.h \
 	common/Preforker.h \
+	common/SloppyCRCMap.h \
 	common/WorkQueue.h \
 	common/PrioritizedQueue.h \
 	common/ceph_argparse.h \

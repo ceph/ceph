@@ -156,6 +156,8 @@ public:
   static const int STATE_STRAYPINNED = (1<<16);
   static const int STATE_FROZENAUTHPIN = (1<<17);
   static const int STATE_DIRTYPOOL =   (1<<18);
+  // orphan inode needs notification of releasing reference
+  static const int STATE_ORPHAN =	STATE_NOTIFYREF;
 
   static const int MASK_STATE_EXPORTED =
     (STATE_DIRTY|STATE_NEEDSRECOVER|STATE_DIRTYPARENT|STATE_DIRTYPOOL);
@@ -812,6 +814,7 @@ public:
   }
   void first_get();
   void last_put();
+  void _put();
 
 
   // -- hierarchy stuff --

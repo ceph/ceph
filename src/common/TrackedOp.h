@@ -136,7 +136,7 @@ protected:
   string current; /// the current state the event is in
   uint64_t seq; /// a unique value set by the OpTracker
 
-  uint8_t warn_interval_multiplier; // limits output of a given op warning
+  uint32_t warn_interval_multiplier; // limits output of a given op warning
 
   TrackedOp(Message *req, OpTracker *_tracker) :
     xitem(this),

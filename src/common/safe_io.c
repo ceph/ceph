@@ -14,8 +14,12 @@
 
 #define _XOPEN_SOURCE 500
 
+#include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
 
 #include "common/safe_io.h"
 
@@ -111,4 +115,80 @@ ssize_t safe_pwrite(int fd, const void *buf, size_t count, off_t offset)
 		offset += r;
 	}
 	return 0;
+}
+
+int safe_write_file(const char *base, const char *file,
+		    const char *val, size_t vallen)
+{
+  int ret;
+  char fn[PATH_MAX];
+  char tmp[PATH_MAX];
+  int fd;
+
+  // does the file already have correct content?
+  char oldval[80];
+  ret = safe_read_file(base, file, oldval, sizeof(oldval));
+  if (ret == (int)vallen && memcmp(oldval, val, vallen) == 0)
+    return 0;  // yes.
+
+  snprintf(fn, sizeof(fn), "%s/%s", base, file);
+  snprintf(tmp, sizeof(tmp), "%s/%s.tmp", base, file);
+  fd = open(tmp, O_WRONLY|O_CREAT|O_TRUNC, 0644);
+  if (fd < 0) {
+    ret = errno;
+    return -ret;
+  }
+  ret = safe_write(fd, val, vallen);
+  if (ret) {
+    TEMP_FAILURE_RETRY(close(fd));
+    return ret;
+  }
+
+  ret = fsync(fd);
+  if (ret < 0) ret = -errno;
+  TEMP_FAILURE_RETRY(close(fd));
+  if (ret < 0) {
+    unlink(tmp);
+    return ret;
+  }
+  ret = rename(tmp, fn);
+  if (ret < 0) {
+    ret = -errno;
+    unlink(tmp);
+    return ret;
+  }
+
+  fd = open(base, O_RDONLY);
+  if (fd < 0) {
+    ret = -errno;
+    return ret;
+  }
+  ret = fsync(fd);
+  if (ret < 0) ret = -errno;
+  TEMP_FAILURE_RETRY(close(fd));
+
+  return ret;
+}
+
+int safe_read_file(const char *base, const char *file,
+		   char *val, size_t vallen)
+{
+  char fn[PATH_MAX];
+  int fd, len;
+
+  snprintf(fn, sizeof(fn), "%s/%s", base, file);
+  fd = open(fn, O_RDONLY);
+  if (fd < 0) {
+    return -errno;
+  }
+  len = safe_read(fd, val, vallen - 1);
+  if (len < 0) {
+    TEMP_FAILURE_RETRY(close(fd));
+    return len;
+  }
+  // close sometimes returns errors, but only after write()
+  TEMP_FAILURE_RETRY(close(fd));
+
+  val[len] = 0;
+  return len;
 }

@@ -134,18 +134,18 @@ static void lfn_translate(const char *path, const char *name, char *new_name, in
   return;
 }
 
-static int append_oname(const hobject_t &oid, char *s, int len)
+static int append_oname(const ghobject_t &oid, char *s, int len)
 {
   //assert(sizeof(oid) == 28);
   char *end = s + len;
   char *t = s + strlen(s);
 
-  const char *i = oid.oid.name.c_str();
+  const char *i = oid.hobj.oid.name.c_str();
   while (*i && t < end) {
     if (*i == '\\') {
       *t++ = '\\';
       *t++ = '\\';      
-    } else if (*i == '.' && i == oid.oid.name.c_str()) {  // only escape leading .
+    } else if (*i == '.' && i == oid.hobj.oid.name.c_str()) {  // only escape leading .
       *t++ = '\\';
       *t++ = '.';
     } else if (*i == '/') {
@@ -158,17 +158,17 @@ static int append_oname(const hobject_t &oid, char *s, int len)
 
   int size = t - s;
 
-  if (oid.snap == CEPH_NOSNAP)
+  if (oid.hobj.snap == CEPH_NOSNAP)
     size += snprintf(t, end - t, "_head");
-  else if (oid.snap == CEPH_SNAPDIR)
+  else if (oid.hobj.snap == CEPH_SNAPDIR)
     size += snprintf(t, end - t, "_snapdir");
   else
-    size += snprintf(t, end - t, "_%llx", (long long unsigned)oid.snap);
+    size += snprintf(t, end - t, "_%llx", (long long unsigned)oid.hobj.snap);
 
   return size;
 }
 
-static bool parse_object(char *s, hobject_t& oid)
+static bool parse_object(char *s, ghobject_t& oid)
 {
   sobject_t o;
   char *bar = s + strlen(s) - 1;
@@ -201,13 +201,13 @@ static bool parse_object(char *s, hobject_t& oid)
       o.snap = CEPH_SNAPDIR;
     else
       o.snap = strtoull(bar+1, &s, 16);
-    oid = hobject_t(o);
+    oid = ghobject_t(hobject_t(o));
     return true;
   }
   return false;
 }
 
-static int lfn_get(const char *coll_path, const hobject_t& oid, char *pathname, int len, char *lfn, int lfn_len, int *exist, int *is_lfn)
+static int lfn_get(const char *coll_path, const ghobject_t& oid, char *pathname, int len, char *lfn, int lfn_len, int *exist, int *is_lfn)
 {
   int i = 0;
   strncpy(pathname, coll_path, len);
@@ -277,7 +277,7 @@ int FlatIndex::init() {
   return 0;
 }
 
-int FlatIndex::created(const hobject_t &hoid, const char *path) {
+int FlatIndex::created(const ghobject_t &hoid, const char *path) {
   char long_name[PATH_MAX];
   long_name[0] = '\0';
   int actual_len = append_oname(hoid, long_name, sizeof(long_name));
@@ -292,7 +292,7 @@ int FlatIndex::created(const hobject_t &hoid, const char *path) {
   return 0;
 }
 
-int FlatIndex::unlink(const hobject_t &o) {
+int FlatIndex::unlink(const ghobject_t &o) {
   char long_fn[PATH_MAX];
   char short_fn[PATH_MAX];
   char short_fn2[PATH_MAX];
@@ -346,7 +346,7 @@ int FlatIndex::unlink(const hobject_t &o) {
   return 0;
 }
 
-int FlatIndex::lookup(const hobject_t &hoid, IndexedPath *path, int *exist) {
+int FlatIndex::lookup(const ghobject_t &hoid, IndexedPath *path, int *exist) {
   char long_fn[PATH_MAX];
   char short_fn[PATH_MAX];
   int r;
@@ -361,7 +361,7 @@ int FlatIndex::lookup(const hobject_t &hoid, IndexedPath *path, int *exist) {
 }
 
 static int get_hobject_from_oinfo(const char *dir, const char *file, 
-				  hobject_t *o) {
+				  ghobject_t *o) {
   char path[PATH_MAX];
   bufferptr bp(PATH_MAX);
   snprintf(path, sizeof(path), "%s/%s", dir, file);
@@ -376,17 +376,17 @@ static int get_hobject_from_oinfo(const char *dir, const char *file,
   return 0;
 }
 
-int FlatIndex::collection_list_partial(const hobject_t &start,
+int FlatIndex::collection_list_partial(const ghobject_t &start,
 				       int min_count,
 				       int max_count,
 				       snapid_t seq,
-				       vector<hobject_t> *ls,
-				       hobject_t *next) {
+				       vector<ghobject_t> *ls,
+				       ghobject_t *next) {
   assert(0); // Should not be called
   return 0;
 }
 
-int FlatIndex::collection_list(vector<hobject_t> *ls) {
+int FlatIndex::collection_list(vector<ghobject_t> *ls) {
   char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
   char dir_name[PATH_MAX], new_name[PATH_MAX];
   strncpy(dir_name, base_path.c_str(), sizeof(dir_name));
@@ -397,7 +397,7 @@ int FlatIndex::collection_list(vector<hobject_t> *ls) {
     return -errno;
   
   // first, build (ino, object) list
-  vector< pair<ino_t,hobject_t> > inolist;
+  vector< pair<ino_t,ghobject_t> > inolist;
 
   struct dirent *de;
   while (::readdir_r(dir, (struct dirent *)buf, &de) == 0) {
@@ -407,11 +407,11 @@ int FlatIndex::collection_list(vector<hobject_t> *ls) {
     if (de->d_name[0] == '.')
       continue;
     //cout << "  got object " << de->d_name << std::endl;
-    hobject_t o;
+    ghobject_t o;
     lfn_translate(dir_name, de->d_name, new_name, sizeof(new_name));
     if (parse_object(new_name, o)) {
       get_hobject_from_oinfo(dir_name, de->d_name, &o);
-      inolist.push_back(pair<ino_t,hobject_t>(de->d_ino, o));
+      inolist.push_back(pair<ino_t,ghobject_t>(de->d_ino, o));
       ls->push_back(o);
     }
   }
@@ -422,7 +422,7 @@ int FlatIndex::collection_list(vector<hobject_t> *ls) {
   // build final list
   ls->resize(inolist.size());
   int i = 0;
-  for (vector< pair<ino_t,hobject_t> >::iterator p = inolist.begin(); p != inolist.end(); ++p)
+  for (vector< pair<ino_t,ghobject_t> >::iterator p = inolist.begin(); p != inolist.end(); ++p)
     (*ls)[i++].swap(p->second);
   
   ::closedir(dir);

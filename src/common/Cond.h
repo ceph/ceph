@@ -32,8 +32,8 @@ class Cond {
   Mutex *waiter_mutex;
 
   // don't allow copying.
-  void operator=(Cond &C) {}
-  Cond( const Cond &C ) {}
+  void operator=(Cond &C);
+  Cond(const Cond &C);
 
  public:
   Cond() : waiter_mutex(NULL) {

@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 import argparse
 import errno
@@ -570,7 +570,7 @@ def get_fsid(cluster):
     fsid = get_conf(cluster=cluster, variable='fsid')
     if fsid is None:
         raise Error('getting cluster uuid from configuration failed')
-    return fsid
+    return fsid.lower()
 
 
 def get_or_create_dmcrypt_key(
@@ -888,15 +888,12 @@ def prepare_journal_dev(
 
 
 def prepare_journal_file(
-    journal,
-    journal_size):
+    journal):
 
     if not os.path.exists(journal):
-        LOG.debug('Creating journal file %s with size %dM', journal, journal_size)
+        LOG.debug('Creating journal file %s with size 0 (ceph-osd will resize and allocate)', journal)
         with file(journal, 'wb') as journal_file:
-            journal_file.truncate(journal_size * 1048576)
-
-    # FIXME: should we resize an existing journal file?
+            pass
 
     LOG.debug('Journal is file %s', journal)
     LOG.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
@@ -921,13 +918,13 @@ def prepare_journal(
     if not os.path.exists(journal):
         if force_dev:
             raise Error('Journal does not exist; not a block device', journal)
-        return prepare_journal_file(journal, journal_size)
+        return prepare_journal_file(journal)
 
     jmode = os.stat(journal).st_mode
     if stat.S_ISREG(jmode):
         if force_dev:
             raise Error('Journal is not a block device', journal)
-        return prepare_journal_file(journal, journal_size)
+        return prepare_journal_file(journal)
 
     if stat.S_ISBLK(jmode):
         if force_file:
@@ -1604,6 +1601,7 @@ def find_cluster_by_uuid(_uuid):
     Find a cluster name by searching /etc/ceph/*.conf for a conf file
     with the right uuid.
     """
+    _uuid = _uuid.lower()
     no_fsid = []
     if not os.path.exists('/etc/ceph'):
         return None
@@ -1611,11 +1609,15 @@ def find_cluster_by_uuid(_uuid):
         if not conf_file.endswith('.conf'):
             continue
         cluster = conf_file[:-5]
-        fsid = get_conf(cluster, 'fsid')
-        if fsid is None:
+        try:
+            fsid = get_fsid(cluster)
+        except Error as e: 
+            if e.message != 'getting cluster uuid from configuration failed':
+                raise e
             no_fsid.append(cluster)
-        elif fsid == _uuid:
-            return cluster
+        else:
+            if fsid == _uuid:
+                return cluster
     # be tolerant of /etc/ceph/ceph.conf without an fsid defined.
     if len(no_fsid) == 1 and no_fsid[0] == 'ceph':
         LOG.warning('No fsid defined in /etc/ceph/ceph.conf; using anyway')

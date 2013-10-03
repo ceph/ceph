@@ -40,6 +40,12 @@
 #include "common/config.h"
 #include "common/sync_filesystem.h"
 
+#include "common/SloppyCRCMap.h"
+#include "os/chain_xattr.h"
+
+#define SLOPPY_CRC_XATTR "user.cephos.scrc"
+
+
 #define dout_subsys ceph_subsys_filestore
 #undef dout_prefix
 #define dout_prefix *_dout << "genericfilestorebackend(" << get_basedir_path() << ") "
@@ -250,4 +256,111 @@ done_err:
   *pfiemap = NULL;
   free(fiemap);
   return ret;
+}
+
+
+int GenericFileStoreBackend::_crc_load_or_init(int fd, SloppyCRCMap *cm)
+{
+  char buf[100];
+  bufferptr bp;
+  int r = 0;
+  int l = chain_fgetxattr(fd, SLOPPY_CRC_XATTR, buf, sizeof(buf));
+  if (l == -ENODATA) {
+    return 0;
+  }
+  if (l >= 0) {
+    bp = buffer::create(l);
+    memcpy(bp.c_str(), buf, l);
+  } else if (l == -ERANGE) {
+    l = chain_fgetxattr(fd, SLOPPY_CRC_XATTR, 0, 0);
+    if (l > 0) {
+      bp = buffer::create(l);
+      l = chain_fgetxattr(fd, SLOPPY_CRC_XATTR, bp.c_str(), l);
+    }
+  }
+  bufferlist bl;
+  bl.append(bp);
+  bufferlist::iterator p = bl.begin();
+  try {
+    ::decode(*cm, p);
+  }
+  catch (buffer::error &e) {
+    r = -EIO;
+  }
+  if (r < 0)
+    derr << __func__ << " got " << cpp_strerror(r) << dendl;
+  return r;
+}
+
+int GenericFileStoreBackend::_crc_save(int fd, SloppyCRCMap *cm)
+{
+  bufferlist bl;
+  ::encode(*cm, bl);
+  int r = chain_fsetxattr(fd, SLOPPY_CRC_XATTR, bl.c_str(), bl.length());
+  if (r < 0)
+    derr << __func__ << " got " << cpp_strerror(r) << dendl;
+  return r;
+}
+
+int GenericFileStoreBackend::_crc_update_write(int fd, loff_t off, size_t len, const bufferlist& bl)
+{
+  SloppyCRCMap scm(get_crc_block_size());
+  int r = _crc_load_or_init(fd, &scm);
+  if (r < 0)
+    return r;
+  ostringstream ss;
+  scm.write(off, len, bl, &ss);
+  dout(30) << __func__ << "\n" << ss.str() << dendl;
+  r = _crc_save(fd, &scm);
+  return r;
+}
+
+int GenericFileStoreBackend::_crc_update_truncate(int fd, loff_t off)
+{
+  SloppyCRCMap scm(get_crc_block_size());
+  int r = _crc_load_or_init(fd, &scm);
+  if (r < 0)
+    return r;
+  scm.truncate(off);
+  r = _crc_save(fd, &scm);
+  return r;
+}
+
+int GenericFileStoreBackend::_crc_update_zero(int fd, loff_t off, size_t len)
+{
+  SloppyCRCMap scm(get_crc_block_size());
+  int r = _crc_load_or_init(fd, &scm);
+  if (r < 0)
+    return r;
+  scm.zero(off, len);
+  r = _crc_save(fd, &scm);
+  return r;
+}
+
+int GenericFileStoreBackend::_crc_update_clone_range(int srcfd, int destfd,
+						     loff_t srcoff, size_t len, loff_t dstoff)
+{
+  SloppyCRCMap scm_src(get_crc_block_size());
+  SloppyCRCMap scm_dst(get_crc_block_size());
+  int r = _crc_load_or_init(srcfd, &scm_src);
+  if (r < 0)
+    return r;
+  r = _crc_load_or_init(destfd, &scm_dst);
+  if (r < 0)
+    return r;
+  ostringstream ss;
+  scm_dst.clone_range(srcoff, len, dstoff, scm_src, &ss);
+  dout(30) << __func__ << "\n" << ss.str() << dendl;
+  r = _crc_save(destfd, &scm_dst);
+  return r;
+}
+
+int GenericFileStoreBackend::_crc_verify_read(int fd, loff_t off, size_t len, const bufferlist& bl,
+					      ostream *out)
+{
+  SloppyCRCMap scm(get_crc_block_size());
+  int r = _crc_load_or_init(fd, &scm);
+  if (r < 0)
+    return r;
+  return scm.read(off, len, bl, out);
 }

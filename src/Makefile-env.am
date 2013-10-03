@@ -8,6 +8,7 @@ CLEANFILES =
 
 noinst_HEADERS =
 bin_PROGRAMS =
+noinst_PROGRAMS =
 bin_SCRIPTS =
 sbin_PROGRAMS =
 sbin_SCRIPTS =
@@ -26,6 +27,12 @@ ceph_sbindir = $(exec_prefix)$(sbindir)
 # C/C++ tests to build will be appended to this
 check_PROGRAMS =
 
+# tests scripts will be appended to this
+check_SCRIPTS =
+
+# python unit tests need to know where the scripts are located
+export PYTHONPATH=$(top_srcdir)/src/pybind
+
 # when doing a debug build, make sure to make the targets
 if WITH_DEBUG
 bin_PROGRAMS += $(bin_DEBUGPROGRAMS)
@@ -35,13 +42,16 @@ endif
 ##################################
 ## automake environment
 
-AM_COMMON_FLAGS = \
+AM_COMMON_CPPFLAGS = \
 	-D__CEPH__ \
 	-D_FILE_OFFSET_BITS=64 \
 	-D_REENTRANT \
 	-D_THREAD_SAFE \
 	-D__STDC_FORMAT_MACROS \
 	-D_GNU_SOURCE \
+	-DCEPH_LIBDIR=\"${libdir}\"
+
+AM_COMMON_CFLAGS = \
 	-rdynamic \
 	-Wall \
 	${WARN_TYPE_LIMITS} \
@@ -52,14 +62,11 @@ AM_COMMON_FLAGS = \
 	-fno-strict-aliasing \
 	-fsigned-char
 
-AM_CFLAGS = $(AM_COMMON_FLAGS)
-AM_CPPFLAGS = \
-	$(AM_COMMON_FLAGS) \
-	-DCEPH_LIBDIR=\"${libdir}\"
+AM_CFLAGS = $(AM_COMMON_CFLAGS)
+AM_CPPFLAGS = $(AM_COMMON_CPPFLAGS)
 AM_CXXFLAGS = \
 	@AM_CXXFLAGS@ \
-	$(AM_COMMON_FLAGS) \
-	-DCEPH_LIBDIR=\"${libdir}\" \
+	$(AM_COMMON_CFLAGS) \
 	-Wnon-virtual-dtor \
 	-Wno-invalid-offsetof \
 	-Wstrict-null-sentinel

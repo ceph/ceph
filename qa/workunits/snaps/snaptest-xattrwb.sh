@@ -2,6 +2,8 @@
 
 set -e
 
+ceph mds set allow_new_snaps --yes-i-really-mean-it
+
 echo "testing simple xattr wb"
 touch x
 setfattr -n user.foo x

@@ -499,7 +499,11 @@ void MDLog::_replay_thread()
     if (journaler->get_error()) {
       r = journaler->get_error();
       dout(0) << "_replay journaler got error " << r << ", aborting" << dendl;
-      if (r == -EINVAL) {
+      if (r == -ENOENT) {
+	// journal has been trimmed by somebody else?
+	assert(journaler->is_readonly());
+	r = -EAGAIN;
+      } else if (r == -EINVAL) {
         if (journaler->get_read_pos() < journaler->get_expire_pos()) {
           // this should only happen if you're following somebody else
           assert(journaler->is_readonly());
@@ -605,7 +609,7 @@ void MDLog::_replay_thread()
   }
 
   dout(10) << "_replay_thread kicking waiters" << dendl;
-  finish_contexts(g_ceph_context, waitfor_replay, 0);  
+  finish_contexts(g_ceph_context, waitfor_replay, r);  
 
   dout(10) << "_replay_thread finish" << dendl;
   mds->mds_lock.Unlock();

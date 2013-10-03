@@ -127,7 +127,8 @@ long g_num_caps = 0;
 set<int> SimpleLock::empty_gather_set;
 
 
-MDCache::MDCache(MDS *m)
+MDCache::MDCache(MDS *m) :
+  delayed_eval_stray(member_offset(CDentry, item_stray))
 {
   mds = m;
   migrator = new Migrator(mds, this);
@@ -676,6 +677,7 @@ CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
   } else 
     assert(straydn->get_projected_linkage()->is_null());
 
+  straydn->state_set(CDentry::STATE_STRAY);
   return straydn;
 }
 
@@ -5934,8 +5936,9 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
 
   EUpdate *le = new EUpdate(mds->mdlog, "truncate finish");
   mds->mdlog->start_entry(le);
-  le->metablob.add_dir_context(in->get_parent_dir());
-  le->metablob.add_primary_dentry(in->get_projected_parent_dn(), in, true);
+  CDentry *dn = in->get_projected_parent_dn();
+  le->metablob.add_dir_context(dn->get_dir());
+  le->metablob.add_primary_dentry(dn, in, true);
   le->metablob.add_truncate_finish(in->ino(), ls->offset);
 
   journal_dirty_inode(mut, &le->metablob, in);
@@ -6017,8 +6020,15 @@ bool MDCache::trim(int max)
   }
   dout(7) << "trim max=" << max << "  cur=" << lru.lru_get_size() << dendl;
 
-  map<int, MCacheExpire*> expiremap;
+  // process delayed eval_stray()
+  for (elist<CDentry*>::iterator p = delayed_eval_stray.begin(); !p.end(); ) {
+    CDentry *dn = *p;
+    ++p;
+    dn->item_stray.remove_myself();
+    eval_stray(dn);
+  }
 
+  map<int, MCacheExpire*> expiremap;
   bool is_standby_replay = mds->is_standby_replay();
   int unexpirable = 0;
   list<CDentry*> unexpirables;
@@ -6026,13 +6036,12 @@ bool MDCache::trim(int max)
   while (lru.lru_get_size() + unexpirable > (unsigned)max) {
     CDentry *dn = static_cast<CDentry*>(lru.lru_expire());
     if (!dn) break;
-    if (is_standby_replay && dn->get_linkage() &&
-        dn->get_linkage()->inode->item_open_file.is_on_list()) {
+    if ((is_standby_replay && dn->get_linkage() &&
+        dn->get_linkage()->inode->item_open_file.is_on_list()) ||
+	trim_dentry(dn, expiremap)) {
       unexpirables.push_back(dn);
       ++unexpirable;
-      continue;
     }
-    trim_dentry(dn, expiremap);
   }
   for(list<CDentry*>::iterator i = unexpirables.begin();
       i != unexpirables.end();
@@ -6087,7 +6096,7 @@ void MDCache::send_expire_messages(map<int, MCacheExpire*>& expiremap)
 }
 
 
-void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
+bool MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
 {
   dout(12) << "trim_dentry " << *dn << dendl;
   
@@ -6142,6 +6151,9 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
     CInode *in = dnl->get_inode();
     assert(in);
     trim_inode(dn, in, con, expiremap);
+    // purging stray instead of trimming ?
+    if (dn->get_num_ref() > 0)
+      return true;
   } 
   else {
     assert(dnl->is_null());
@@ -6160,6 +6172,7 @@ void MDCache::trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap)
     migrator->export_empty_import(dir);
   
   if (mds->logger) mds->logger->inc(l_mds_iex);
+  return false;
 }
 
 
@@ -6222,7 +6235,14 @@ void MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<int, MCacheExpi
     trim_dirfrag(*p, con ? con:*p, expiremap);  // if no container (e.g. root dirfrag), use *p
   
   // INODE
-  if (!in->is_auth()) {
+  if (in->is_auth()) {
+    // eval stray after closing dirfrags
+    if (dn) {
+      maybe_eval_stray(in);
+      if (dn->get_num_ref() > 0)
+	return;
+    }
+  } else {
     pair<int,int> auth = in->authority();
     
     dirfrag_t df;
@@ -6304,6 +6324,12 @@ void MDCache::trim_non_auth()
     if (dn->is_auth()) {
       // add back into lru (at the top)
       lru.lru_insert_top(dn);
+
+      if (dn->get_dir()->get_inode()->is_stray()) {
+	dn->state_set(CDentry::STATE_STRAY);
+	if (dnl->is_primary() && dnl->get_inode()->inode.nlink == 0)
+	  dnl->get_inode()->state_set(CInode::STATE_ORPHAN);
+      }
 
       if (!first_auth) {
 	first_auth = dn;
@@ -6725,9 +6751,6 @@ void MDCache::inode_remove_replica(CInode *in, int from, set<SimpleLock *>& gath
   if (in->nestlock.remove_replica(from)) gather_locks.insert(&in->nestlock);
   if (in->flocklock.remove_replica(from)) gather_locks.insert(&in->flocklock);
   if (in->policylock.remove_replica(from)) gather_locks.insert(&in->policylock);
-
-  // trim?
-  maybe_eval_stray(in);
 }
 
 void MDCache::dentry_remove_replica(CDentry *dn, int from, set<SimpleLock *>& gather_locks)
@@ -6737,10 +6760,6 @@ void MDCache::dentry_remove_replica(CDentry *dn, int from, set<SimpleLock *>& ga
   // fix lock
   if (dn->lock.remove_replica(from))
     gather_locks.insert(&dn->lock);
-
-  CDentry::linkage_t *dnl = dn->get_projected_linkage();
-  if (dnl->is_primary())
-    maybe_eval_stray(dnl->get_inode());
 }
 
 void MDCache::trim_client_leases()
@@ -9147,7 +9166,7 @@ struct C_MDC_EvalStray : public Context {
   }
 };
 
-void MDCache::eval_stray(CDentry *dn)
+void MDCache::eval_stray(CDentry *dn, bool delay)
 {
   dout(10) << "eval_stray " << *dn << dendl;
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
@@ -9211,9 +9230,13 @@ void MDCache::eval_stray(CDentry *dn)
       dout(20) << " too many dn refs" << dendl;
       return;
     }
-    purge_stray(dn);
+    if (delay) {
+      if (!dn->item_stray.is_on_list())
+	delayed_eval_stray.push_back(&dn->item_stray);
+    } else
+      purge_stray(dn);
   }
-  else if (in->inode.nlink == 1) {
+  else if (in->inode.nlink >= 1) {
     // trivial reintegrate?
     if (!in->remote_parents.empty()) {
       CDentry *rlink = *in->remote_parents.begin();
@@ -9257,14 +9280,6 @@ void MDCache::fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Conte
   mds->objecter->getxattr(oid, object_locator_t(pool), "parent", CEPH_NOSNAP, &bl, 0, fin);
 }
 
-void MDCache::remove_backtrace(inodeno_t ino, int64_t pool, Context *fin)
-{
-  SnapContext snapc;
-  object_t oid = CInode::get_object_name(ino, frag_t(), "");
-  mds->objecter->removexattr(oid, object_locator_t(pool), "parent", snapc,
-			     ceph_clock_now(g_ceph_context), 0, NULL, fin);
-}
-
 class C_MDC_PurgeStrayPurged : public Context {
   MDCache *cache;
   CDentry *dn;
@@ -9275,94 +9290,6 @@ public:
     cache->_purge_stray_purged(dn, r);
   }
 };
-
-class C_MDC_PurgeForwardingPointers : public Context {
-  MDCache *cache;
-  CDentry *dn;
-public:
-  bufferlist bl;
-  C_MDC_PurgeForwardingPointers(MDCache *c, CDentry *d) :
-    cache(c), dn(d) {}
-  void finish(int r) {
-    cache->_purge_forwarding_pointers(bl, dn, r);
-  }
-};
-
-class C_MDC_PurgeStray : public Context {
-  MDCache *cache;
-  CDentry *dn;
-public:
-  C_MDC_PurgeStray(MDCache *c, CDentry *d) :
-    cache(c), dn(d) {}
-  void finish(int r) {
-    cache->_purge_stray(dn, r);
-  }
-};
-
-void MDCache::_purge_forwarding_pointers(bufferlist& bl, CDentry *dn, int r)
-{
-  assert(r == 0 || r == -ENOENT || r == -ENODATA);
-  inode_backtrace_t backtrace;
-  if (r == 0)
-    ::decode(backtrace, bl);
-
-  // setup gathering context
-  C_GatherBuilder gather_bld(g_ceph_context);
-
-  // remove all the objects with forwarding pointer backtraces (aka sentinels)
-  for (set<int64_t>::const_iterator i = backtrace.old_pools.begin();
-       i != backtrace.old_pools.end();
-       ++i) {
-    SnapContext snapc;
-    object_t oid = CInode::get_object_name(backtrace.ino, frag_t(), "");
-    object_locator_t oloc(*i);
-
-    mds->objecter->remove(oid, oloc, snapc, ceph_clock_now(g_ceph_context), 0,
-                         NULL, gather_bld.new_sub());
-  }
-
-  if (gather_bld.has_subs()) {
-    gather_bld.set_finisher(new C_MDC_PurgeStray(this, dn));
-    gather_bld.activate();
-  } else {
-    _purge_stray(dn, r);
-  }
-}
-
-void MDCache::_purge_stray(CDentry *dn, int r)
-{
-  // purge the strays
-  CDentry::linkage_t *dnl = dn->get_projected_linkage();
-  CInode *in = dnl->get_inode();
-  dout(10) << "_purge_stray " << *dn << " " << *in << dendl;
-
-  SnapRealm *realm = in->find_snaprealm();
-  SnapContext nullsnap;
-  const SnapContext *snapc;
-  if (realm) {
-    dout(10) << " realm " << *realm << dendl;
-    snapc = &realm->get_snap_context();
-  } else {
-    dout(10) << " NO realm, using null context" << dendl;
-    snapc = &nullsnap;
-    assert(in->last == CEPH_NOSNAP);
-  }
-
-  uint64_t period = (uint64_t)in->inode.layout.fl_object_size * (uint64_t)in->inode.layout.fl_stripe_count;
-  uint64_t cur_max_size = in->inode.get_max_size();
-  uint64_t to = MAX(in->inode.size, cur_max_size);
-  if (to && period) {
-    uint64_t num = (to + period - 1) / period;
-    dout(10) << "purge_stray 0~" << to << " objects 0~" << num << " snapc " << snapc << " on " << *in << dendl;
-    mds->filer->purge_range(in->inode.ino, &in->inode.layout, *snapc,
-                           0, num, ceph_clock_now(g_ceph_context), 0,
-			   new C_MDC_PurgeStrayPurged(this, dn));
-
-  } else {
-    dout(10) << "purge_stray 0 objects snapc " << snapc << " on " << *in << dendl;
-    _purge_stray_purged(dn);
-  }
-}
 
 void MDCache::purge_stray(CDentry *dn)
 {
@@ -9381,24 +9308,86 @@ void MDCache::purge_stray(CDentry *dn)
   dn->get(CDentry::PIN_PURGING);
   in->state_set(CInode::STATE_PURGING);
 
-  
+  if (dn->item_stray.is_on_list())
+    dn->item_stray.remove_myself();
+
+  if (in->is_dirty_parent())
+    in->clear_dirty_parent();
+
   // CHEAT.  there's no real need to journal our intent to purge, since
   // that is implicit in the dentry's presence and non-use in the stray
   // dir.  on recovery, we'll need to re-eval all strays anyway.
   
+  SnapContext nullsnapc;
+  C_GatherBuilder gather(g_ceph_context, new C_MDC_PurgeStrayPurged(this, dn));
+
   if (in->is_dir()) {
-    dout(10) << "purge_stray dir ... implement me!" << dendl;  // FIXME XXX
-    // remove the backtrace
-    remove_backtrace(in->ino(), mds->mdsmap->get_metadata_pool(),
-		     new C_MDC_PurgeStrayPurged(this, dn));
-  } else if (in->is_file()) {
-    // get the backtrace before blowing away the object
-    C_MDC_PurgeForwardingPointers *fin = new C_MDC_PurgeForwardingPointers(this, dn);
-    fetch_backtrace(in->ino(), in->get_inode().layout.fl_pg_pool, fin->bl, fin);
-  } else {
-    // not a dir or file; purged!
-    _purge_stray_purged(dn);
+    object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+    list<frag_t> ls;
+    if (!in->dirfragtree.is_leaf(frag_t()))
+      in->dirfragtree.get_leaves(ls);
+    ls.push_back(frag_t());
+    for (list<frag_t>::iterator p = ls.begin();
+         p != ls.end();
+         ++p) {
+      object_t oid = CInode::get_object_name(in->inode.ino, *p, "");
+      dout(10) << "purge_stray remove dirfrag " << oid << dendl;
+      mds->objecter->remove(oid, oloc, nullsnapc, ceph_clock_now(g_ceph_context),
+                            0, NULL, gather.new_sub());
+    }
+    assert(gather.has_subs());
+    gather.activate();
+    return;
   }
+
+  const SnapContext *snapc;
+  SnapRealm *realm = in->find_snaprealm();
+  if (realm) {
+    dout(10) << " realm " << *realm << dendl;
+    snapc = &realm->get_snap_context();
+  } else {
+    dout(10) << " NO realm, using null context" << dendl;
+    snapc = &nullsnapc;
+    assert(in->last == CEPH_NOSNAP);
+  }
+
+  if (in->is_file()) {
+    uint64_t period = (uint64_t)in->inode.layout.fl_object_size *
+		      (uint64_t)in->inode.layout.fl_stripe_count;
+    uint64_t cur_max_size = in->inode.get_max_size();
+    uint64_t to = MAX(in->inode.size, cur_max_size);
+    if (to && period) {
+      uint64_t num = (to + period - 1) / period;
+      dout(10) << "purge_stray 0~" << to << " objects 0~" << num
+	       << " snapc " << snapc << " on " << *in << dendl;
+      mds->filer->purge_range(in->inode.ino, &in->inode.layout, *snapc,
+			      0, num, ceph_clock_now(g_ceph_context), 0,
+			      gather.new_sub());
+    }
+  }
+
+  inode_t *pi = in->get_projected_inode();
+  object_t oid = CInode::get_object_name(pi->ino, frag_t(), "");
+  // remove the backtrace object if it was not purged
+  if (!gather.has_subs()) {
+    object_locator_t oloc(pi->layout.fl_pg_pool);
+    dout(10) << "purge_stray remove backtrace object " << oid
+	     << " pool " << oloc.pool << " snapc " << snapc << dendl;
+    mds->objecter->remove(oid, oloc, *snapc, ceph_clock_now(g_ceph_context), 0,
+			  NULL, gather.new_sub());
+  }
+  // remove old backtrace objects
+  for (vector<int64_t>::iterator p = pi->old_pools.begin();
+       p != pi->old_pools.end();
+       ++p) {
+    object_locator_t oloc(*p);
+    dout(10) << "purge_stray remove backtrace object " << oid
+	     << " old pool " << *p << " snapc " << snapc << dendl;
+    mds->objecter->remove(oid, oloc, *snapc, ceph_clock_now(g_ceph_context), 0,
+			  NULL, gather.new_sub());
+  }
+  assert(gather.has_subs());
+  gather.activate();
 }
 
 class C_MDC_PurgeStrayLogged : public Context {
@@ -9480,9 +9469,6 @@ void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
   CInode *in = dn->get_linkage()->get_inode();
   dout(10) << "_purge_stray_logged " << *dn << " " << *in << dendl;
 
-  dn->state_clear(CDentry::STATE_PURGING);
-  dn->put(CDentry::PIN_PURGING);
-
   assert(!in->state_test(CInode::STATE_RECOVERING));
 
   // unlink
@@ -9493,11 +9479,13 @@ void MDCache::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls)
 
   dn->dir->pop_and_dirty_projected_fnode(ls);
 
+  in->state_clear(CInode::STATE_ORPHAN);
+  dn->state_clear(CDentry::STATE_PURGING);
+  dn->put(CDentry::PIN_PURGING);
+
   // drop inode
   if (in->is_dirty())
     in->mark_clean();
-  if (in->is_dirty_parent())
-    in->clear_dirty_parent();
 
   remove_inode(in);
 
@@ -10639,7 +10627,7 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 	    !in->state_test(CInode::STATE_EXPORTINGCAPS))
 	  migrator->export_caps(in);
 	
-	lru.lru_bottouch(straydn);  // move stray to end of lru
+	touch_dentry_bottom(straydn); // move stray to end of lru
 	straydn = NULL;
       } else {
 	assert(!straydn);
@@ -10649,7 +10637,7 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
       assert(dnl->is_null());
       
       // move to bottom of lru
-      lru.lru_bottouch(dn);
+      touch_dentry_bottom(dn);
     }
   }
 

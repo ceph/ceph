@@ -14,6 +14,8 @@
  * 
  */
 
+#include <unistd.h>
+
 #include "osd/ErasureCodePlugin.h"
 #include "ErasureCodeExample.h"
 
@@ -22,7 +24,7 @@ public:
   virtual int factory(const map<std::string,std::string> &parameters,
                       ErasureCodeInterfaceRef *erasure_code)
   {
-    *erasure_code = ErasureCodeInterfaceRef(new ErasureCodeExample(parameters));
+    *erasure_code = ErasureCodeInterfaceRef(new ErasureCodeExample());
     return 0;
   }
 };

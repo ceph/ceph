@@ -135,7 +135,7 @@ bool entity_addr_t::parse(const char *s, const char **end)
 ostream& operator<<(ostream& out, const sockaddr_storage &ss)
 {
   char buf[NI_MAXHOST] = { 0 };
-  char serv[20] = { 0 };
+  char serv[NI_MAXSERV] = { 0 };
   size_t hostlen;
 
   if (ss.ss_family == AF_INET)

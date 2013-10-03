@@ -76,6 +76,8 @@ public:
   static const int STATE_FRAGMENTING =  (1<<1);
   static const int STATE_PURGING =      (1<<2);
   static const int STATE_BADREMOTEINO = (1<<3);
+  // stray dentry needs notification of releasing reference
+  static const int STATE_STRAY =	STATE_NOTIFYREF;
 
   // -- pins --
   static const int PIN_INODEPIN =     1;  // linked inode is pinned
@@ -146,6 +148,7 @@ protected:
 
 public:
   elist<CDentry*>::item item_dirty;
+  elist<CDentry*>::item item_stray;
 
 protected:
   int auth_pins, nested_auth_pins;
@@ -254,6 +257,7 @@ public:
   void last_put() {
     lru_unpin();
   }
+  void _put();
 
   // auth pins
   bool can_auth_pin();

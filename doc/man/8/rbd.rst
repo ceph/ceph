@@ -113,6 +113,10 @@ Parameters
 
    Make json or xml formatted output more human-readable.
 
+.. option:: --read-only
+
+   Set device readonly when mapping image.
+
 
 Commands
 ========
