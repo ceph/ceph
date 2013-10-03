@@ -5,6 +5,7 @@ import yaml
 import json
 import re
 import httplib2
+import urllib
 import logging
 import argparse
 from textwrap import dedent
@@ -138,6 +139,9 @@ class ResultsReporter(object):
         successful and the reason was *not* that the object already exists,
         raise a RequestFailedError.
         """
+        # Use urllib.quote() to escape things like spaces. Pass safe=':/' to
+        # avoid it mangling http:// etc.
+        uri = urllib.quote(uri, safe=':/')
         response, content = self.http.request(
             uri, method, json_, headers={'content-type': 'application/json'},
         )
