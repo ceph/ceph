@@ -32,9 +32,12 @@ class OpHistory {
   void cleanup(utime_t now);
   bool shutdown;
   OpTracker *tracker;
+  uint32_t history_size;
+  uint32_t history_duration;
 
 public:
-  OpHistory(OpTracker *tracker_) : shutdown(false), tracker(tracker_) {}
+  OpHistory(OpTracker *tracker_) : shutdown(false), tracker(tracker_),
+  history_size(0), history_duration(0) {}
   ~OpHistory() {
     assert(arrived.empty());
     assert(duration.empty());
@@ -42,6 +45,10 @@ public:
   void insert(utime_t now, TrackedOpRef op);
   void dump_ops(utime_t now, Formatter *f);
   void on_shutdown();
+  void set_size_and_duration(uint32_t new_size, uint32_t new_duration) {
+    history_size = new_size;
+    history_duration = new_duration;
+  }
 };
 
 class OpTracker {
@@ -57,10 +64,20 @@ class OpTracker {
   Mutex ops_in_flight_lock;
   xlist<TrackedOp *> ops_in_flight;
   OpHistory history;
+  float complaint_time;
+  int log_threshold;
 
 public:
   CephContext *cct;
-  OpTracker(CephContext *cct_) : seq(0), ops_in_flight_lock("OpTracker mutex"), history(this), cct(cct_) {}
+  OpTracker(CephContext *cct_) : seq(0), ops_in_flight_lock("OpTracker mutex"),
+      history(this), complaint_time(0), log_threshold(0), cct(cct_) {}
+  void set_complaint_and_threshold(float time, int threshold) {
+    complaint_time = time;
+    log_threshold = threshold;
+  }
+  void set_history_size_and_duration(uint32_t new_size, uint32_t new_duration) {
+    history.set_size_and_duration(new_size, new_duration);
+  }
   void dump_ops_in_flight(Formatter *f);
   void dump_historic_ops(Formatter *f);
   void register_inflight_op(xlist<TrackedOp*>::item *i);
