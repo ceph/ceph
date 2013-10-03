@@ -1208,6 +1208,56 @@ struct pool_stat_t {
 WRITE_CLASS_ENCODER_FEATURES(pool_stat_t)
 
 
+// -----------------------------------------
+
+/**
+ * pg_hit_set_info_t - information about a single recorded HitSet
+ *
+ * Track basic metadata about a HitSet, like the nubmer of insertions
+ * and the time range it covers.
+ */
+struct pg_hit_set_info_t {
+  uint32_t size;        ///< number of insertions
+  uint32_t target_size; ///< expected insertions
+  utime_t begin, end;   ///< time interval
+
+  pg_hit_set_info_t() : size(0), target_size(0) {}
+  pg_hit_set_info_t(uint32_t target, utime_t st)
+    : size(0), target_size(target), begin(st) {}
+
+  bool is_full() const {
+    return size && size >= target_size;
+  }
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_hit_set_info_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_hit_set_info_t)
+
+/**
+ * pg_hit_set_history_t - information about a history of hitsets
+ *
+ * Include information about the currently accumulating hit set as well
+ * as archived/historical ones.
+ */
+struct pg_hit_set_history_t {
+  eversion_t current_last_update;  ///< last version inserted into current set
+  utime_t current_last_stamp;      ///< timestamp of last insert
+  pg_hit_set_info_t current_info;  ///< metadata about the current set
+  list<pg_hit_set_info_t> history; ///< archived sets, sorted oldest -> newest
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_hit_set_history_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_hit_set_history_t)
+
+
+// -----------------------------------------
+
 /**
  * pg_history_t - information about recent pg peering/mapping history
  *
