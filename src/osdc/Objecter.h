@@ -1020,6 +1020,10 @@ public:
     ListContext() : current_pg(0), current_pg_epoch(0), starting_pg_num(0),
 		    at_end(false), pool_id(0),
 		    pool_snap_seq(0), max_entries(0) {}
+
+    uint32_t get_pg_hash_position() const {
+      return current_pg;
+    }
   };
 
   struct C_List : public Context {
