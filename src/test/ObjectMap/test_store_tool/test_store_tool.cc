@@ -24,6 +24,7 @@
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/config.h"
+#include "common/strtol.h"
 
 using namespace std;
 
@@ -38,7 +39,7 @@ class StoreTool
     db.reset(db_ptr);
   }
 
-  void list(const string &prefix) {
+  void list(const string &prefix, const bool do_crc) {
     KeyValueDB::WholeSpaceIterator iter = db->get_iterator();
 
     if (prefix.empty())
@@ -51,7 +52,11 @@ class StoreTool
       if (!prefix.empty() && (rk.first != prefix))
 	break;
 
-      std::cout << rk.first << ":" << rk.second << std::endl;
+      std::cout << rk.first << ":" << rk.second;
+      if (do_crc) {
+        std::cout << " (" << iter->value().crc32c(0) << ")";
+      }
+      std::cout << std::endl;
       iter->next();
     }
   }
@@ -79,7 +84,7 @@ class StoreTool
     assert(!prefix.empty() && !key.empty());
 
     map<string,bufferlist> result;
-    set<string> keys;
+    std::set<std::string> keys;
     keys.insert(key);
     db->get(prefix, keys, &result);
 
@@ -101,6 +106,18 @@ class StoreTool
     std::cout << "total: " << s << std::endl;
     return s;
   }
+
+  bool set(const string &prefix, const string &key, bufferlist &val) {
+    assert(!prefix.empty());
+    assert(!key.empty());
+    assert(val.length() > 0);
+
+    KeyValueDB::Transaction tx = db->get_transaction();
+    tx->set(prefix, key, val);
+    int ret = db->submit_transaction_sync(tx);
+
+    return (ret == 0);
+  }
 };
 
 void usage(const char *pname)
@@ -109,10 +126,12 @@ void usage(const char *pname)
     << "\n"
     << "Commands:\n"
     << "  list [prefix]\n"
+    << "  list-crc [prefix]\n"
     << "  exists <prefix> [key]\n"
     << "  get <prefix> <key>\n"
-    << "  verify <store path>\n"
+    << "  crc <prefix> <key>\n"
     << "  get-size\n"
+    << "  set <prefix> <key> [ver <N>|in <file>]\n"
     << std::endl;
 }
 
@@ -140,12 +159,14 @@ int main(int argc, const char *argv[])
 
   StoreTool st(path);
 
-  if (cmd == "list") {
+  if (cmd == "list" || cmd == "list-crc") {
     string prefix;
     if (argc > 3)
       prefix = argv[3];
 
-    st.list(prefix);
+    bool do_crc = (cmd == "list-crc");
+
+    st.list(prefix, do_crc);
 
   } else if (cmd == "exists") {
     string key;
@@ -183,10 +204,63 @@ int main(int argc, const char *argv[])
     bl.hexdump(os);
     std::cout << os.str() << std::endl;
 
-  } else if (cmd == "verify") {
-    assert(0);
+  } else if (cmd == "crc") {
+    if (argc < 5) {
+      usage(argv[0]);
+      return 1;
+    }
+    string prefix(argv[3]);
+    string key(argv[4]);
+
+    bool exists = false;
+    bufferlist bl = st.get(prefix, key, exists);
+    std::cout << "(" << prefix << ", " << key << ") ";
+    if (!exists) {
+      std::cout << " does not exist" << std::endl;
+      return 1;
+    }
+    std::cout << " crc " << bl.crc32c(0) << std::endl;
+
   } else if (cmd == "get-size") {
     std::cout << "estimated store size: " << st.get_size() << std::endl;
+
+  } else if (cmd == "set") {
+    if (argc < 7) {
+      usage(argv[0]);
+      return 1;
+    }
+    string prefix(argv[3]);
+    string key(argv[4]);
+    string subcmd(argv[5]);
+
+    bufferlist val;
+    string errstr;
+    if (subcmd == "ver") {
+      version_t v = (version_t) strict_strtoll(argv[6], 10, &errstr);
+      if (!errstr.empty()) {
+        std::cerr << "error reading version: " << errstr << std::endl;
+        return 1;
+      }
+      ::encode(v, val);
+    } else if (subcmd == "in") {
+      int ret = val.read_file(argv[6], &errstr);
+      if (ret < 0 || !errstr.empty()) {
+        std::cerr << "error reading file: " << errstr << std::endl;
+        return 1;
+      }
+    } else {
+      std::cerr << "unrecognized subcommand '" << subcmd << "'" << std::endl;
+      usage(argv[0]);
+      return 1;
+    }
+
+    bool ret = st.set(prefix, key, val);
+    if (!ret) {
+      std::cerr << "error setting ("
+                << prefix << "," << key << ")" << std::endl;
+      return 1;
+    }
+
   } else {
     std::cerr << "Unrecognized command: " << cmd << std::endl;
     return 1;
