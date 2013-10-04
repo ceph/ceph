@@ -3717,10 +3717,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  hobject_t temp_target = generate_temp_object();
 	  CopyFromCallback *cb = new CopyFromCallback(ctx, temp_target);
 	  ctx->copy_cb = cb;
-	  result = start_copy(cb, ctx->obc, src, src_oloc, src_version,
+	  start_copy(cb, ctx->obc, src, src_oloc, src_version,
 	                      temp_target);
-	  if (result < 0)
-	    goto fail;
 	  result = -EINPROGRESS;
 	} else {
 	  // finish
@@ -4322,7 +4320,7 @@ struct C_Copyfrom : public Context {
   }
 };
 
-int ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
+void ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
 			     hobject_t src, object_locator_t oloc, version_t version,
 			     const hobject_t& temp_dest_oid)
 {
@@ -4344,8 +4342,6 @@ int ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
   ++obc->copyfrom_readside;
 
   _copy_some(obc, cop);
-
-  return 0;
 }
 
 void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
