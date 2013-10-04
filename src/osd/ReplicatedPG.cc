@@ -1147,6 +1147,10 @@ void ReplicatedPG::do_op(OpRequestRef op)
 bool ReplicatedPG::maybe_handle_cache(OpRequestRef op, ObjectContextRef obc,
                                       int r)
 {
+  if (obc.get() && obc->is_blocked()) {
+    // we're already doing something with this object
+    return false;
+  }
   switch(pool.info.cache_mode) {
   case pg_pool_t::CACHEMODE_NONE:
     return false;
