@@ -1549,11 +1549,14 @@ void ReplicatedPG::do_scan(
       }
 
       BackfillInterval bi;
-      osr->flush();
       bi.begin = m->begin;
+      // No need to flush, there won't be any in progress writes occuring
+      // past m->begin
       scan_range(
 	cct->_conf->osd_backfill_scan_min,
-	cct->_conf->osd_backfill_scan_max, &bi, handle);
+	cct->_conf->osd_backfill_scan_max,
+	&bi,
+	handle);
       MOSDPGScan *reply = new MOSDPGScan(MOSDPGScan::OP_SCAN_DIGEST,
 					 get_osdmap()->get_epoch(), m->query_epoch,
 					 info.pgid, bi.begin, bi.end);
@@ -7930,9 +7933,6 @@ int ReplicatedPG::recover_backfill(
 	   << " interval " << pbi.begin << "-" << pbi.end
 	   << " " << pbi.objects.size() << " objects" << dendl;
 
-  int local_min = cct->_conf->osd_backfill_scan_min;
-  int local_max = cct->_conf->osd_backfill_scan_max;
-
   // update our local interval to cope with recent changes
   backfill_info.begin = backfill_pos;
   update_range(&backfill_info, handle);
@@ -7948,10 +7948,11 @@ int ReplicatedPG::recover_backfill(
   while (ops < max) {
     if (backfill_info.begin <= pbi.begin &&
 	!backfill_info.extends_to_end() && backfill_info.empty()) {
-      osr->flush();
-      backfill_info.begin = backfill_info.end;
-      scan_range(local_min, local_max, &backfill_info,
-		 handle);
+      hobject_t next = backfill_info.end;
+      backfill_info.clear();
+      backfill_info.begin = next;
+      backfill_info.end = hobject_t::get_max();
+      update_range(&backfill_info, handle);
       backfill_info.trim();
     }
     backfill_pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
@@ -8128,6 +8129,19 @@ void ReplicatedPG::update_range(
 {
   int local_min = cct->_conf->osd_backfill_scan_min;
   int local_max = cct->_conf->osd_backfill_scan_max;
+
+  if (bi->version < info.log_tail) {
+    dout(10) << __func__<< ": bi is old, rescanning local backfill_info"
+	     << dendl;
+    if (last_update_applied >= info.log_tail) {
+      bi->version = last_update_applied;
+    } else {
+      osr->flush();
+      bi->version = info.last_update;
+    }
+    scan_range(local_min, local_max, bi, handle);
+  }
+
   if (bi->version >= info.last_update) {
     dout(10) << __func__<< ": bi is current " << dendl;
     assert(bi->version == info.last_update);
@@ -8167,10 +8181,7 @@ void ReplicatedPG::update_range(
     }
     bi->version = info.last_update;
   } else {
-    dout(10) << __func__<< ": bi is old, rescanning local backfill_info"
-	     << dendl;
-    osr->flush();
-    scan_range(local_min, local_max, &backfill_info, handle);
+    assert(0 == "scan_range should have raised bi->version past log_tail");
   }
 }
 
@@ -8180,7 +8191,6 @@ void ReplicatedPG::scan_range(
 {
   assert(is_locked());
   dout(10) << "scan_range from " << bi->begin << dendl;
-  bi->version = info.last_update;
   bi->objects.clear();  // for good measure
 
   vector<hobject_t> ls;
