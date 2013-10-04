@@ -152,13 +152,18 @@ def main():
     monkey.patch_all(dns=False)
     from .orchestra import monkey
     monkey.patch_all()
+
+
+    # WARNING: Do not import any modules that import logging before this next
+    # block. That would cause connections to hang because the monkey patching
+    # hadn't been done.
     import logging
-
-    from . import report
-
     ctx = parse_args()
     set_up_logging(ctx)
     log = logging.getLogger(__name__)
+
+    # Now it is safe to import other teuthology modules.
+    from . import report
 
     if ctx.owner is None:
         from teuthology.misc import get_user
