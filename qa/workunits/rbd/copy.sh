@@ -109,8 +109,8 @@ test_ls() {
     rbd ls | grep test2
     rbd ls | wc -l | grep 2
     # look for fields in output of ls -l without worrying about space
-    rbd ls -l | grep 'test1.*1024K.*1'
-    rbd ls -l | grep 'test2.*1024K.*1'
+    rbd ls -l | grep 'test1.*1024k.*1'
+    rbd ls -l | grep 'test2.*1024k.*1'
 
     rbd rm test1
     rbd rm test2
@@ -120,8 +120,8 @@ test_ls() {
     rbd ls | grep test1
     rbd ls | grep test2
     rbd ls | wc -l | grep 2
-    rbd ls -l | grep 'test1.*1024K.*2'
-    rbd ls -l | grep 'test2.*1024K.*2'
+    rbd ls -l | grep 'test1.*1024k.*2'
+    rbd ls -l | grep 'test2.*1024k.*2'
 
     rbd rm test1
     rbd rm test2
@@ -131,8 +131,8 @@ test_ls() {
     rbd ls | grep test1
     rbd ls | grep test2
     rbd ls | wc -l | grep 2
-    rbd ls -l | grep 'test1.*1024K.*2'
-    rbd ls -l | grep 'test2.*1024K.*1'
+    rbd ls -l | grep 'test1.*1024k.*2'
+    rbd ls -l | grep 'test2.*1024k.*1'
     remove_images
 	
     # test that many images can be shown by ls
