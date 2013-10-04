@@ -52,6 +52,6 @@ v0.71
   aware that the automatic tmap -> omap conversion functionality has
   been removed.
 
-* Most output that used K or KK (e.g., for kilobyte) now uses a
+* Most output that used K or KB (e.g., for kilobyte) now uses a
   lower-case k to match the official SI convention.  Any scripts that
   parse output and check for an upper-case K will need to be modified.
