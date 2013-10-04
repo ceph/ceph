@@ -988,21 +988,8 @@ void ReplicatedPG::do_op(OpRequestRef op)
     return;
   }
 
-  if ((op->may_read()) && (obc->obs.oi.is_lost())) {
-    // This object is lost. Reading from it returns an error.
-    dout(20) << __func__ << ": object " << obc->obs.oi.soid
-	     << " is lost" << dendl;
-    osd->reply_op_error(op, -ENFILE);
-    return;
-  }
   dout(25) << __func__ << ": object " << obc->obs.oi.soid
 	   << " has oi of " << obc->obs.oi << dendl;
-  
-  if (!op->may_write() && (!obc->obs.exists ||
-			   obc->obs.oi.is_whiteout())) {
-    osd->reply_op_error(op, -ENOENT);
-    return;
-  }
 
   // are writes blocked by another object?
   if (obc->blocked_by) {
@@ -1126,11 +1113,31 @@ void ReplicatedPG::do_op(OpRequestRef op)
     }
   }
 
-  op->mark_started();
-
   OpContext *ctx = new OpContext(op, m->get_reqid(), m->ops,
 				 &obc->obs, obc->ssc, 
 				 this);
+  if (!get_rw_locks(ctx)) {
+    op->mark_delayed("waiting for rw locks");
+    close_op_ctx(ctx);
+    return;
+  }
+
+  if ((op->may_read()) && (obc->obs.oi.is_lost())) {
+    // This object is lost. Reading from it returns an error.
+    dout(20) << __func__ << ": object " << obc->obs.oi.soid
+	     << " is lost" << dendl;
+    close_op_ctx(ctx);
+    osd->reply_op_error(op, -ENFILE);
+    return;
+  }
+  if (!op->may_write() && (!obc->obs.exists ||
+                           obc->obs.oi.is_whiteout())) {
+    close_op_ctx(ctx);
+    osd->reply_op_error(op, -ENOENT);
+    return;
+  }
+
+  op->mark_started();
   ctx->obc = obc;
   ctx->src_obc = src_obc;
 
@@ -1207,7 +1214,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
       if (already_complete(oldv)) {
 	reply_ctx(ctx, 0, oldv, entry->user_version);
       } else {
-	delete ctx;
+	close_op_ctx(ctx);
 
 	if (m->wants_ack()) {
 	  if (already_ack(oldv)) {
@@ -1300,7 +1307,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 
   if (result == -EAGAIN) {
     // clean up after the ctx
-    delete ctx;
+    close_op_ctx(ctx);
     return;
   }
 
@@ -1352,7 +1359,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
     
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
     osd->send_message_osd_client(reply, m->get_connection());
-    delete ctx;
+    close_op_ctx(ctx);
     return;
   }
 
@@ -1400,13 +1407,13 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 void ReplicatedPG::reply_ctx(OpContext *ctx, int r)
 {
   osd->reply_op_error(ctx->op, r);
-  delete ctx;
+  close_op_ctx(ctx);
 }
 
 void ReplicatedPG::reply_ctx(OpContext *ctx, int r, eversion_t v, version_t uv)
 {
   osd->reply_op_error(ctx->op, r, v, uv);
-  delete ctx;
+  close_op_ctx(ctx);
 }
 
 void ReplicatedPG::log_op_stats(OpContext *ctx)
@@ -4724,6 +4731,8 @@ void ReplicatedPG::eval_repop(RepGather *repop)
     // ondisk?
     if (repop->waitfor_disk.empty()) {
 
+      release_op_ctx_locks(repop->ctx);
+
       log_op_stats(repop->ctx);
       publish_stats_to_osd();
 
@@ -4929,6 +4938,7 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContextRe
  
 void ReplicatedPG::remove_repop(RepGather *repop)
 {
+  release_op_ctx_locks(repop->ctx);
   repop_map.erase(repop->rep_tid);
   repop->put();
 
