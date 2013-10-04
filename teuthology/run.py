@@ -152,17 +152,28 @@ def main():
     monkey.patch_all(dns=False)
     from .orchestra import monkey
     monkey.patch_all()
+
+    # WARNING: Do not import any modules that import logging before this next
+    # block. That would cause connections to hang because the monkey patching
+    # hadn't been done.
     import logging
-
-    from . import report
-
     ctx = parse_args()
     set_up_logging(ctx)
     log = logging.getLogger(__name__)
 
+    # Now it is safe to import other teuthology modules.
+    from . import report
+
     if ctx.owner is None:
         from teuthology.misc import get_user
         ctx.owner = get_user()
+
+    # Older versions of teuthology stored job_id as an int. Convert it to a str
+    # if necessary.
+    job_id = ctx.config.get('job_id')
+    if job_id is not None:
+        job_id = str(job_id)
+        ctx.config['job_id'] = job_id
 
     write_initial_metadata(ctx)
     report.try_push_job_info(ctx.config)
@@ -252,7 +263,6 @@ def main():
                 email_results(subject,"Teuthology",ctx.config['email-on-error'],emsg)
 
         report.try_push_job_info(ctx.config, ctx.summary)
-        report.try_push_job_info(ctx.config)
 
         if ctx.summary.get('success', True):
             log.info('pass')
@@ -380,13 +390,13 @@ def schedule():
         del ctx.config['targets']
 
     job_config = dict(
-            name=ctx.name,
-            last_in_suite=ctx.last_in_suite,
-            email=ctx.email,
-            description=ctx.description,
-            owner=ctx.owner,
-            verbose=ctx.verbose,
-            )
+        name=ctx.name,
+        last_in_suite=ctx.last_in_suite,
+        email=ctx.email,
+        description=ctx.description,
+        owner=ctx.owner,
+        verbose=ctx.verbose,
+    )
     # Merge job_config and ctx.config
     job_config.update(ctx.config)
     if ctx.timeout is not None:
@@ -400,5 +410,6 @@ def schedule():
             ttr=60*60*24,
             priority=ctx.priority,
             )
-        print 'Job scheduled with ID {jid}'.format(jid=jid)
+        print 'Job scheduled with name {name} and ID {jid}'.format(
+            name=ctx.name, jid=jid)
         num -= 1
