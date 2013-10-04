@@ -48,6 +48,7 @@
 #include "common/WorkQueue.h"
 #include "common/ceph_context.h"
 #include "include/str_list.h"
+#include "PGBackend.h"
 
 #include <list>
 #include <memory>
@@ -193,6 +194,8 @@ protected:
   CephContext *cct;
   OSDriver osdriver;
   SnapMapper snap_mapper;
+
+  virtual PGBackend *get_pgbackend() = 0;
 public:
   void update_snap_mapper_bits(uint32_t bits) {
     snap_mapper.update_bits(bits);
@@ -439,6 +442,7 @@ protected:
    */
   struct BackfillInterval {
     // info about a backfill interval on a peer
+    eversion_t version; /// version at which the scan occurred
     map<hobject_t,eversion_t> objects;
     hobject_t begin;
     hobject_t end;
@@ -447,6 +451,7 @@ protected:
     void clear() {
       objects.clear();
       begin = end = hobject_t();
+      version = eversion_t();
     }
 
     void reset(hobject_t start) {

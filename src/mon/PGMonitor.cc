@@ -494,15 +494,19 @@ void PGMonitor::encode_pending(MonitorDBStore::Transaction *t)
   {
     bufferlist dirty;
     string prefix = pgmap_osd_prefix;
-    for (map<int32_t,osd_stat_t>::const_iterator p = pending_inc.osd_stat_updates.begin();
-	 p != pending_inc.osd_stat_updates.end();
+    for (map<int32_t,osd_stat_t>::const_iterator p =
+	   pending_inc.get_osd_stat_updates().begin();
+	 p != pending_inc.get_osd_stat_updates().end();
 	 ++p) {
       ::encode(p->first, dirty);
       bufferlist bl;
       ::encode(p->second, bl, features);
       t->put(prefix, stringify(p->first), bl);
     }
-    for (set<int32_t>::const_iterator p = pending_inc.osd_stat_rm.begin(); p != pending_inc.osd_stat_rm.end(); ++p) {
+    for (set<int32_t>::const_iterator p =
+	   pending_inc.get_osd_stat_rm().begin();
+	 p != pending_inc.get_osd_stat_rm().end();
+	 ++p) {
       ::encode(*p, dirty);
       t->erase(prefix, stringify(*p));
     }
@@ -725,7 +729,11 @@ bool PGMonitor::prepare_pg_stats(MPGStats *stats)
   }
 
   // osd stat
-  pending_inc.osd_stat_updates[from] = stats->osd_stat;
+  if (mon->osdmon()->osdmap.is_in(from)) {
+    pending_inc.update_stat(from, stats->epoch, stats->osd_stat);
+  } else {
+    pending_inc.update_stat(from, stats->epoch, osd_stat_t());
+  }
   
   if (pg_map.osd_stat.count(from))
     dout(10) << " got osd." << from << " " << stats->osd_stat << " (was " << pg_map.osd_stat[from] << ")" << dendl;
@@ -842,11 +850,7 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 	 ++p)
       if (p->second == CEPH_OSD_OUT) {
 	dout(10) << "check_osd_map  osd." << p->first << " went OUT" << dendl;
-	pending_inc.osd_stat_rm.insert(p->first);
-      } else {
-	dout(10) << "check_osd_map  osd." << p->first << " is IN" << dendl;
-	pending_inc.osd_stat_rm.erase(p->first);
-	pending_inc.osd_stat_updates[p->first]; 
+	pending_inc.stat_osd_out(p->first);
       }
 
     // this is conservative: we want to know if any osds (maybe) got marked down.
@@ -867,7 +871,7 @@ void PGMonitor::check_osd_map(epoch_t epoch)
 	// whether it was created *or* destroyed, we can safely drop
 	// it's osd_stat_t record.
 	dout(10) << "check_osd_map  osd." << p->first << " created or destroyed" << dendl;
-	pending_inc.osd_stat_rm.insert(p->first);
+	pending_inc.rm_stat(p->first);
 
 	// and adjust full, nearfull set
 	pg_map.nearfull_osds.erase(p->first);

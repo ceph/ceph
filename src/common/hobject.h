@@ -247,6 +247,10 @@ public:
     return hobj.get_filestore_key();
   }
 
+  bool is_degenerate() const {
+    return generation == NO_GEN && shard_id == NO_SHARD;
+  }
+
   // maximum sorted value.
   static ghobject_t get_max() {
     ghobject_t h(hobject_t::get_max());

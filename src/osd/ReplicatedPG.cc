@@ -398,8 +398,10 @@ bool PGLSPlainFilter::filter(bufferlist& xattr_data, bufferlist& outdata)
 bool ReplicatedPG::pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& outdata)
 {
   bufferlist bl;
-
-  int ret = osd->store->getattr(coll_t(info.pgid), sobj, filter->get_xattr().c_str(), bl);
+  int ret = pgbackend->objects_get_attr(
+    sobj,
+    filter->get_xattr(),
+    &bl);
   dout(0) << "getattr (sobj=" << sobj << ", attr=" << filter->get_xattr() << ") returned " << ret << dendl;
   if (ret < 0)
     return false;
@@ -639,12 +641,13 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	hobject_t next;
 	hobject_t current = response.handle;
 	osr->flush();
-	int r = osd->store->collection_list_partial(coll, current,
-						    list_size,
-						    list_size,
-						    snapid,
-						    &sentries,
-						    &next);
+	int r = pgbackend->objects_list_partial(
+	  current,
+	  list_size,
+	  list_size,
+	  snapid,
+	  &sentries,
+	  &next);
 	if (r != 0) {
 	  result = -EINVAL;
 	  break;
@@ -682,13 +685,17 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	  if (snapid != CEPH_NOSNAP) {
 	    bufferlist bl;
 	    if (candidate.snap == CEPH_NOSNAP) {
-	      osd->store->getattr(coll, candidate, SS_ATTR, bl);
+	      pgbackend->objects_get_attr(
+		candidate,
+		SS_ATTR,
+		&bl);
 	      SnapSet snapset(bl);
 	      if (snapid <= snapset.seq)
 		continue;
 	    } else {
 	      bufferlist attr_bl;
-	      osd->store->getattr(coll, candidate, OI_ATTR, attr_bl);
+	      pgbackend->objects_get_attr(
+		candidate, OI_ATTR, &attr_bl);
 	      object_info_t oi(attr_bl);
 	      vector<snapid_t>::iterator i = find(oi.snaps.begin(),
 						  oi.snaps.end(),
@@ -1536,8 +1543,9 @@ void ReplicatedPG::do_scan(
 
       BackfillInterval bi;
       osr->flush();
+      bi.begin = m->begin;
       scan_range(
-	m->begin, cct->_conf->osd_backfill_scan_min,
+	cct->_conf->osd_backfill_scan_min,
 	cct->_conf->osd_backfill_scan_max, &bi, handle);
       MOSDPGScan *reply = new MOSDPGScan(MOSDPGScan::OP_SCAN_DIGEST,
 					 get_osdmap()->get_epoch(), m->query_epoch,
@@ -2659,7 +2667,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	string aname;
 	bp.copy(op.xattr.name_len, aname);
 	string name = "_" + aname;
-	int r = osd->store->getattr(coll, soid, name.c_str(), osd_op.outdata);
+	int r = pgbackend->objects_get_attr(
+	  soid,
+	  name,
+	  &(osd_op.outdata));
 	if (r >= 0) {
 	  op.xattr.value_len = r;
 	  result = 0;
@@ -2702,9 +2713,15 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	
 	bufferlist xattr;
 	if (op.op == CEPH_OSD_OP_CMPXATTR)
-	  result = osd->store->getattr(coll, soid, name.c_str(), xattr);
+	  result = pgbackend->objects_get_attr(
+	    soid,
+	    name,
+	    &xattr);
 	else
-	  result = osd->store->getattr(coll, src_obc->obs.oi.soid, name.c_str(), xattr);
+	  result = pgbackend->objects_get_attr(
+	    src_obc->obs.oi.soid,
+	    name,
+	    &xattr);
 	if (result < 0 && result != -EEXIST && result != -ENODATA)
 	  break;
 	
@@ -4550,10 +4567,19 @@ void ReplicatedPG::apply_repop(RepGather *repop)
   if (repop->ctx->clone_obc)
     repop->ctx->clone_obc->ondisk_write_lock();
 
+  bool unlock_snapset_obc = false;
+  if (repop->ctx->snapset_obc && repop->ctx->snapset_obc->obs.oi.soid !=
+      repop->obc->obs.oi.soid) {
+    repop->ctx->snapset_obc->ondisk_write_lock();
+    unlock_snapset_obc = true;
+  }
+
   Context *oncommit = new C_OSD_OpCommit(this, repop);
   Context *onapplied = new C_OSD_OpApplied(this, repop);
-  Context *onapplied_sync = new C_OSD_OndiskWriteUnlock(repop->obc,
-							repop->ctx->clone_obc);
+  Context *onapplied_sync = new C_OSD_OndiskWriteUnlock(
+    repop->obc,
+    repop->ctx->clone_obc,
+    unlock_snapset_obc ? repop->ctx->snapset_obc : ObjectContextRef());
   int r = osd->store->queue_transactions(osr.get(), repop->tls, onapplied, oncommit, onapplied_sync, repop->ctx->op);
   if (r) {
     derr << "apply_repop  queue_transactions returned " << r << " on " << *repop << dendl;
@@ -5143,7 +5169,7 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
       assert(attrs->count(OI_ATTR));
       bv.push_back(attrs->find(OI_ATTR)->second);
     } else {
-      int r = osd->store->getattr(coll, soid, OI_ATTR, bv);
+      int r = pgbackend->objects_get_attr(soid, OI_ATTR, &bv);
       if (r < 0) {
 	if (!can_create)
 	  return ObjectContextRef();   // -ENOENT!
@@ -5407,12 +5433,12 @@ SnapSetContext *ReplicatedPG::get_snapset_context(
     if (!attrs) {
       hobject_t head(oid, key, CEPH_NOSNAP, seed,
 		     info.pgid.pool(), nspace);
-      int r = osd->store->getattr(coll, head, SS_ATTR, bv);
+      int r = pgbackend->objects_get_attr(head, SS_ATTR, &bv);
       if (r < 0) {
 	// try _snapset
 	hobject_t snapdir(oid, key, CEPH_SNAPDIR, seed,
 			  info.pgid.pool(), nspace);
-	r = osd->store->getattr(coll, snapdir, SS_ATTR, bv);
+	r = pgbackend->objects_get_attr(snapdir, SS_ATTR, &bv);
 	if (r < 0 && !can_create)
 	  return NULL;
       }
@@ -7789,6 +7815,8 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
     int peer = acting[i];
     map<int, pg_missing_t>::const_iterator pm = peer_missing.find(peer);
     assert(pm != peer_missing.end());
+    map<int, pg_info_t>::const_iterator pi = peer_info.find(peer);
+    assert(pi != peer_info.end());
     size_t m_sz = pm->second.num_missing();
 
     dout(10) << " peer osd." << peer << " missing " << m_sz << " objects." << dendl;
@@ -7801,6 +7829,15 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
 	   ++p) {
       handle.reset_tp_timeout();
       const hobject_t soid(p->second);
+
+      if (soid > pi->second.last_backfill) {
+	if (!recovering.count(soid)) {
+	  derr << __func__ << ": object added to missing set for backfill, but "
+	       << "is not in recovering, error!" << dendl;
+	  assert(0);
+	}
+	continue;
+      }
 
       if (recovering.count(soid)) {
 	dout(10) << __func__ << ": already recovering" << soid << dendl;
@@ -7869,17 +7906,12 @@ int ReplicatedPG::recover_backfill(
 	   << " interval " << pbi.begin << "-" << pbi.end
 	   << " " << pbi.objects.size() << " objects" << dendl;
 
-  int local_min = osd->store->get_ideal_list_min();
-  int local_max = osd->store->get_ideal_list_max();
+  int local_min = cct->_conf->osd_backfill_scan_min;
+  int local_max = cct->_conf->osd_backfill_scan_max;
 
-  // re-scan our local interval to cope with recent changes
-  // FIXME: we could track the eversion_t when we last scanned, and invalidate
-  // that way.  or explicitly modify/invalidate when we actually change specific
-  // objects.
-  dout(10) << " rescanning local backfill_info from " << backfill_pos << dendl;
-  backfill_info.clear();
-  osr->flush();
-  scan_range(backfill_pos, local_min, local_max, &backfill_info, handle);
+  // update our local interval to cope with recent changes
+  backfill_info.begin = backfill_pos;
+  update_range(&backfill_info, handle);
 
   int ops = 0;
   map<hobject_t, pair<eversion_t, eversion_t> > to_push;
@@ -7893,7 +7925,8 @@ int ReplicatedPG::recover_backfill(
     if (backfill_info.begin <= pbi.begin &&
 	!backfill_info.extends_to_end() && backfill_info.empty()) {
       osr->flush();
-      scan_range(backfill_info.end, local_min, local_max, &backfill_info,
+      backfill_info.begin = backfill_info.end;
+      scan_range(local_min, local_max, &backfill_info,
 		 handle);
       backfill_info.trim();
     }
@@ -8054,26 +8087,81 @@ void ReplicatedPG::prep_backfill_object_push(
   start_recovery_op(oid);
   recovering.insert(oid);
   ObjectContextRef obc = get_object_context(oid, false);
+
+  // We need to take the read_lock here in order to flush in-progress writes
+  obc->ondisk_read_lock();
   pgbackend->recover_object(
     oid,
     ObjectContextRef(),
     obc,
     h);
+  obc->ondisk_read_unlock();
+}
+
+void ReplicatedPG::update_range(
+  BackfillInterval *bi,
+  ThreadPool::TPHandle &handle)
+{
+  int local_min = cct->_conf->osd_backfill_scan_min;
+  int local_max = cct->_conf->osd_backfill_scan_max;
+  if (bi->version >= info.last_update) {
+    dout(10) << __func__<< ": bi is current " << dendl;
+    assert(bi->version == info.last_update);
+  } else if (bi->version >= info.log_tail) {
+    assert(!pg_log.get_log().empty());
+    dout(10) << __func__<< ": bi is old, (" << bi->version
+	     << ") can be updated with log" << dendl;
+    list<pg_log_entry_t>::const_iterator i =
+      pg_log.get_log().log.end();
+    --i;
+    while (i != pg_log.get_log().log.begin() &&
+           i->version > bi->version) {
+      --i;
+    }
+    if (i->version == bi->version)
+      ++i;
+
+    assert(i != pg_log.get_log().log.end());
+    dout(10) << __func__ << ": updating from version " << i->version
+	     << dendl;
+    for (; i != pg_log.get_log().log.end(); ++i) {
+      const hobject_t &soid = i->soid;
+      if (soid >= bi->begin && soid < bi->end) {
+	if (i->is_update()) {
+	  dout(10) << __func__ << ": " << i->soid << " updated to version "
+		   << i->version << dendl;
+	  bi->objects.erase(i->soid);
+	  bi->objects.insert(
+	    make_pair(
+	      i->soid,
+	      i->version));
+	} else if (i->is_delete()) {
+	  dout(10) << __func__ << ": " << i->soid << " removed" << dendl;
+	  bi->objects.erase(i->soid);
+	}
+      }
+    }
+    bi->version = info.last_update;
+  } else {
+    dout(10) << __func__<< ": bi is old, rescanning local backfill_info"
+	     << dendl;
+    osr->flush();
+    scan_range(local_min, local_max, &backfill_info, handle);
+  }
 }
 
 void ReplicatedPG::scan_range(
-  hobject_t begin, int min, int max, BackfillInterval *bi,
+  int min, int max, BackfillInterval *bi,
   ThreadPool::TPHandle &handle)
 {
   assert(is_locked());
-  dout(10) << "scan_range from " << begin << dendl;
-  bi->begin = begin;
+  dout(10) << "scan_range from " << bi->begin << dendl;
+  bi->version = info.last_update;
   bi->objects.clear();  // for good measure
 
   vector<hobject_t> ls;
   ls.reserve(max);
-  int r = osd->store->collection_list_partial(coll, begin, min, max,
-					      0, &ls, &bi->end);
+  int r = pgbackend->objects_list_partial(bi->begin, min, max, 0, &ls, &bi->end);
   assert(r >= 0);
   dout(10) << " got " << ls.size() << " items, next " << bi->end << dendl;
   dout(20) << ls << dendl;
@@ -8088,7 +8176,7 @@ void ReplicatedPG::scan_range(
       dout(20) << "  " << *p << " " << obc->obs.oi.version << dendl;
     } else {
       bufferlist bl;
-      int r = osd->store->getattr(coll, *p, OI_ATTR, bl);
+      int r = pgbackend->objects_get_attr(*p, OI_ATTR, &bl);
       assert(r >= 0);
       object_info_t oi(bl);
       bi->objects[*p] = oi.version;
