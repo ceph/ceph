@@ -1043,6 +1043,7 @@ public:
       if (!(err == -ENOENT && old_value.deleted())) {
 	cerr << num << ": Error: oid " << oid << " read returned error code "
 	     << err << std::endl;
+	context->errors++;
       }
     } else {
       cout << num << ":  expect " << old_value.most_recent() << std::endl;
