@@ -946,9 +946,11 @@ private:
   struct ufragment {
     int bits;
     bool committed;
+    LogSegment *ls;
+    list<Context*> waiters;
     list<frag_t> old_frags;
     bufferlist rollback;
-    ufragment() : bits(0), committed(false) {}
+    ufragment() : bits(0), committed(false), ls(NULL) {}
   };
   map<dirfrag_t, ufragment> uncommitted_fragments;
 
@@ -993,10 +995,14 @@ private:
   void handle_fragment_notify(MMDSFragmentNotify *m);
 
   void add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, list<frag_t>& old_frag,
-				bufferlist *rollback=NULL);
+				LogSegment *ls, bufferlist *rollback=NULL);
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, list<frag_t>& old_frags);
 public:
+  void wait_for_uncommitted_fragment(dirfrag_t dirfrag, Context *c) {
+    assert(uncommitted_fragments.count(dirfrag));
+    uncommitted_fragments[dirfrag].waiters.push_back(c);
+  }
   void split_dir(CDir *dir, int byn);
   void merge_dir(CInode *diri, frag_t fg);
   void rollback_uncommitted_fragments();
