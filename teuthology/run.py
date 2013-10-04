@@ -6,9 +6,6 @@ import contextlib
 import sys
 from traceback import format_tb
 
-from . import report
-from .config import config as teuth_config
-
 
 def config_file(string):
     config = {}
@@ -156,6 +153,9 @@ def main():
     from .orchestra import monkey
     monkey.patch_all()
     import logging
+
+    from . import report
+    from .config import config as teuth_config
 
     ctx = parse_args()
     set_up_logging(ctx)
