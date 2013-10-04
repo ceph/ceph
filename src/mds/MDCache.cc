@@ -11191,7 +11191,7 @@ void MDCache::dispatch_fragment_dir(MDRequest *mdr)
   mut->add_updated_lock(&diri->nestlock);
   */
 
-  add_uncommitted_fragment(dirfrag_t(diri->ino(), info.basefrag), info.bits, le->orig_frags);
+  add_uncommitted_fragment(dirfrag_t(diri->ino(), info.basefrag), info.bits, le->orig_frags, mdr->ls);
   mds->mdlog->submit_entry(le, new C_MDC_FragmentPrep(this, mdr));
   mds->mdlog->flush();
 }
@@ -11379,13 +11379,15 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
 }
 
 void MDCache::add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, list<frag_t>& old_frags,
-				       bufferlist *rollback)
+				       LogSegment *ls, bufferlist *rollback)
 {
   dout(10) << "add_uncommitted_fragment: base dirfrag " << basedirfrag << " bits " << bits << dendl;
   assert(!uncommitted_fragments.count(basedirfrag));
   ufragment& uf = uncommitted_fragments[basedirfrag];
   uf.old_frags = old_frags;
   uf.bits = bits;
+  uf.ls = ls;
+  ls->uncommitted_fragments.insert(basedirfrag);
   if (rollback)
     uf.rollback.swap(*rollback);
 }
@@ -11399,6 +11401,8 @@ void MDCache::finish_uncommitted_fragment(dirfrag_t basedirfrag, int op)
     if (op != EFragment::OP_FINISH && !uf.old_frags.empty()) {
       uf.committed = true;
     } else {
+      uf.ls->uncommitted_fragments.erase(basedirfrag);
+      mds->queue_waiters(uf.waiters);
       uncommitted_fragments.erase(basedirfrag);
     }
   }
@@ -11414,6 +11418,7 @@ void MDCache::rollback_uncommitted_fragment(dirfrag_t basedirfrag, list<frag_t>&
       uf.old_frags.swap(old_frags);
       uf.committed = true;
     } else {
+      uf.ls->uncommitted_fragments.erase(basedirfrag);
       uncommitted_fragments.erase(basedirfrag);
     }
   }
