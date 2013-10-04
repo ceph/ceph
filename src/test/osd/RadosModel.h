@@ -139,6 +139,7 @@ public:
   map<int, map<string,ObjectDesc> > pool_obj_cont;
   set<string> oid_in_use;
   set<string> oid_not_in_use;
+  set<int> snaps_in_use;
   int current_snap;
   string pool_name;
   librados::IoCtx io_ctx;
@@ -1298,6 +1299,8 @@ public:
     }
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
+    context->snaps_in_use.insert(roll_back_to);
+
     context->roll_back(oid, roll_back_to);
     uint64_t snap = context->snaps[roll_back_to];
 
@@ -1323,7 +1326,8 @@ public:
       Mutex::Locker l(context->state_lock);
       context->oid_in_use.erase(oid);
       context->oid_not_in_use.insert(oid);
-    }
+      context->snaps_in_use.erase(roll_back_to);
+   }
   }
 
   string getType()
