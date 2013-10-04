@@ -120,6 +120,40 @@ Notable Changes
 * sysvinit: add condrestart command (Dan van der Ster)
 
 
+
+v0.67.4 "Dumpling"
+------------------
+
+This point release fixes an important performance issue with radosgw,
+keystone authentication token caching, and CORS.  All users
+(especially those of rgw) are encouraged to upgrade.
+
+Notable changes
+~~~~~~~~~~~~~~~
+
+* crush: fix invalidation of cached names
+* crushtool: do not crash on non-unique bucket ids
+* mds: be more careful when decoding LogEvents
+* mds: fix heap check debugging commands
+* mon: avoid rebuilding old full osdmaps
+* mon: fix 'ceph crush move ...'
+* mon: fix 'ceph osd crush reweight ...'
+* mon: fix writeout of full osdmaps during trim
+* mon: limit size of transactions
+* mon: prevent both unmanaged and pool snaps
+* osd: disable xattr size limit (prevents upload of large rgw objects)
+* osd: fix recovery op throttling
+* osd: fix throttling of log messages for very slow requests
+* rgw: drain pending requests before completing write
+* rgw: fix CORS
+* rgw: fix inefficient list::size() usage
+* rgw: fix keystone token expiration
+* rgw: fix minor memory leaks
+* rgw: fix null termination of buffer
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.67.4.txt>`.
+
+
 v0.67.3 "Dumpling"
 ------------------
 
