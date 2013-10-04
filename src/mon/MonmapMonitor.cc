@@ -298,20 +298,45 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
       addr.set_port(CEPH_MON_PORT);
     }
 
-    if (pending_map.contains(addr) ||
-	pending_map.contains(name)) {
+    /**
+     * If we have a monitor with the same name and different addr, then EEXIST
+     * If we have a monitor with the same addr and different name, then EEXIST
+     * If we have a monitor with the same addr and same name, then return as if
+     * we had just added the monitor.
+     * If we don't have the monitor, add it.
+     */
+
+    err = 0;
+    if (!ss.str().empty())
+      ss << "; ";
+
+    do {
+      if (pending_map.contains(addr)) {
+        string n = pending_map.get_name(addr);
+        if (n == name)
+          break;
+      } else if (pending_map.contains(name)) {
+        entity_addr_t tmp_addr = pending_map.get_addr(name);
+        if (tmp_addr == addr)
+          break;
+      } else {
+        break;
+      }
       err = -EEXIST;
-      if (!ss.str().empty())
-	ss << "; ";
-      ss << "mon " << name << " " << addr << " already exists";
+      ss << "mon." << name << " at " << addr << " already exists";
+      goto out;
+    } while (false);
+
+    ss << "added mon." << name << " at " << addr;
+    if (pending_map.contains(name)) {
       goto out;
     }
 
     pending_map.add(name, addr);
     pending_map.last_changed = ceph_clock_now(g_ceph_context);
-    ss << "added mon." << name << " at " << addr;
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+                                                      get_last_committed()));
     return true;
 
   } else if (prefix == "mon remove") {
