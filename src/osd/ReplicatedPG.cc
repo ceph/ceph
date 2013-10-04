@@ -4456,6 +4456,7 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
   ObjectContextRef obc = cop->obc;
   cop->objecter_tid = 0;
 
+  CopyResults results;
   if (r >= 0) {
     assert(cop->rval >= 0);
 
@@ -4483,15 +4484,14 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
       _copy_some(obc, cop);
       return;
     } else {
-      ObjectStore::Transaction t;
-      _build_finish_copy_transaction(cop, t);
-      cop->cb->copy_complete_ops(t);
-      cop->cb->set_data_size(cop->temp_cursor.data_offset);
+      _build_finish_copy_transaction(cop, results.get<3>());
+      results.get<1>() = cop->temp_cursor.data_offset;
     }
   }
 
   dout(20) << __func__ << " complete; committing" << dendl;
-  cop->cb->complete(cop->rval);
+  results.get<0>() = cop->rval;
+  cop->cb->complete(results);
 
   copy_ops.erase(obc->obs.oi.soid);
   --obc->copyfrom_readside;
@@ -4556,8 +4556,8 @@ int ReplicatedPG::finish_copyfrom(OpContext *ctx)
   if (cb->is_temp_obj_used()) {
     ctx->discard_temp_oid = cb->temp_obj;
   }
-  ctx->op_t.swap(cb->final_tx);
-  ctx->op_t.append(cb->final_tx);
+  ctx->op_t.swap(cb->results.get<3>());
+  ctx->op_t.append(cb->results.get<3>());
 
   interval_set<uint64_t> ch;
   if (obs.oi.size > 0)
@@ -4591,7 +4591,9 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop)
   --cop->obc->copyfrom_readside;
 
   kick_object_context_blocked(cop->obc);
-  cop->cb->complete(-ECANCELED);
+  bool temp_obj_created = !cop->cursor.is_initial();
+  CopyResults result(-ECANCELED, 0, temp_obj_created, ObjectStore::Transaction());
+  cop->cb->complete(result);
 }
 
 void ReplicatedPG::cancel_copy_ops()
