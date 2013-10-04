@@ -18,6 +18,7 @@
 #define CEPH_REPLICATEDPG_H
 
 #include <boost/optional.hpp>
+#include <boost/tuple/tuple.hpp>
 
 #include "include/assert.h" 
 #include "common/cmdparse.h"
@@ -131,54 +132,49 @@ public:
    * The CopyCallback class defines an interface for completions to the
    * copy_start code. Users of the copy infrastructure must implement
    * one and give an instance of the class to start_copy.
-   * In particular,
-   * 1) Once the copy code has placed data in the temp object, it calls
-   * the data_in_temp_obj() function.
-   * 2) if everything has succeeded, it may call copy_complete_ops() and
-   * pass in a Transaction which contains the ops that must be executed
-   * in order to complete the copy. The implementer must make sure these ops
-   * are executed if they are provide (at present, they are).
-   * 3) If everything has succeeded, it will call data_size() with the
-   * size of copied object
-   * 4) It will call finish().
    *
    * The implementer is responsible for making sure that the CopyCallback
    * can associate itself with the correct copy operation. The presence
-   * of copy_complete_ops ensures that write operations can be performed
+   * of the closing Transaction ensures that write operations can be performed
    * atomically with the copy being completed (which doing them in separate
    * transactions would not allow); if you are doing the copy for a read
    * op you will have to generate a separate op to finish the copy with.
    */
-  class CopyCallback : public Context {
+  /// return code, total object size, data in temp object?, final Transaction
+  typedef boost::tuple<int, size_t, bool, ObjectStore::Transaction> CopyResults;
+  class CopyCallback : public GenContext<CopyResults&> {
   protected:
-    bool data_in_temp;
-    uint64_t data_size;
-    int result_code;
-
-    CopyCallback() : data_in_temp(false), data_size((uint64_t)-1),
-	result_code(0) {}
+    CopyCallback() {}
     /**
-     * @param r The copy return code. 0 for success; -ECANCELLED if
+     * results.get<0>() is the return code: 0 for success; -ECANCELLED if
      * the operation was cancelled by the local OSD; -errno for other issues.
+     * results.get<1>() is the total size of the object (for updating pg stats)
+     * results.get<2>() indicates whether we have already written data to
+     * the temp object (so it needs to get cleaned up, if the return code
+     * indicates a failure)
+     * results.get<3>() is a Transaction; if non-empty you need to perform
+     * its results before any other accesses to the object in order to
+     * complete the copy.
      */
-    virtual void finish(int r) { result_code = r; }
+    virtual void finish(CopyResults& results_) = 0;
+
   public:
-    /// Give the CopyCallback ops to perform to complete the copy
-    virtual void copy_complete_ops(ObjectStore::Transaction& t) = 0;
-    /// Tell the CopyCallback that there is now data in the temp object
-    virtual void data_in_temp_obj() { data_in_temp = true; };
-    bool is_temp_obj_used() { return data_in_temp; }
     /// Provide the final size of the copied object to the CopyCallback
-    virtual void set_data_size(uint64_t size) { data_size = size; }
-    uint64_t get_data_size() { return data_size; }
-    int get_result() { return result_code; }
     virtual ~CopyCallback() {};
   };
 
   class CopyFromCallback: public CopyCallback {
-  protected:
-    virtual void finish(int r) {
-      result_code = r;
+  public:
+    CopyResults results;
+    OpContext *ctx;
+    hobject_t temp_obj;
+    CopyFromCallback(OpContext *ctx_, const hobject_t& temp_obj_) :
+      ctx(ctx_), temp_obj(temp_obj_) {}
+    ~CopyFromCallback() {}
+
+    virtual void finish(CopyResults& results_) {
+      results = results_;
+      int r = results.get<0>();
       if (r >= 0) {
 	ctx->pg->execute_ctx(ctx);
       }
@@ -191,14 +187,10 @@ public:
 	}
       }
     }
-  public:
-    OpContext *ctx;
-    hobject_t temp_obj;
-    ObjectStore::Transaction final_tx;
-    CopyFromCallback(OpContext *ctx_, const hobject_t& temp_obj_) :
-      ctx(ctx_), temp_obj(temp_obj_) {}
-    void copy_complete_ops(ObjectStore::Transaction& t) { final_tx.swap(t); }
-    ~CopyFromCallback() {}
+
+    bool is_temp_obj_used() { return results.get<2>(); }
+    uint64_t get_data_size() { return results.get<1>(); }
+    int get_result() { return results.get<0>(); }
   };
   friend class CopyFromCallback;
 
@@ -375,7 +367,7 @@ public:
     int num_read;    ///< count read ops
     int num_write;   ///< count update ops
 
-    CopyCallback *copy_cb;
+    CopyFromCallback *copy_cb;
 
     hobject_t new_temp_oid, discard_temp_oid;  ///< temp objects we should start/stop tracking
 
