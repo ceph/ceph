@@ -148,9 +148,12 @@ Client::Client(Messenger *m, MonClient *mc)
     timer(m->cct, client_lock),
     ino_invalidate_cb(NULL),
     ino_invalidate_cb_handle(NULL),
+    dentry_invalidate_cb(NULL),
+    dentry_invalidate_cb_handle(NULL),
     getgroups_cb(NULL),
     getgroups_cb_handle(NULL),
     async_ino_invalidator(m->cct),
+    async_dentry_invalidator(m->cct),
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(m->get_myname().num()),
     initialized(false), mounted(false), unmounting(false),
@@ -410,9 +413,15 @@ void Client::shutdown()
   admin_socket->unregister_command("dump_cache");
 
   if (ino_invalidate_cb) {
-    ldout(cct, 10) << "shutdown stopping invalidator finisher" << dendl;
+    ldout(cct, 10) << "shutdown stopping cache invalidator finisher" << dendl;
     async_ino_invalidator.wait_for_empty();
     async_ino_invalidator.stop();
+  }
+
+  if (dentry_invalidate_cb) {
+    ldout(cct, 10) << "shutdown stopping dentry invalidator finisher" << dendl;
+    async_dentry_invalidator.wait_for_empty();
+    async_dentry_invalidator.stop();
   }
 
   objectcacher->stop();  // outside of client_lock! this does a join.
@@ -1532,7 +1541,7 @@ void Client::_closed_mds_session(MetaSession *s)
   signal_context_list(s->waiting_for_open);
   mount_cond.Signal();
   remove_session_caps(s);
-  kick_requests(s, true);
+  kick_requests_closed(s);
   mds_sessions.erase(s->mds_num);
   delete s;
 }
@@ -1905,7 +1914,7 @@ void Client::handle_mds_map(MMDSMap* m)
 
     if (newstate >= MDSMap::STATE_ACTIVE) {
       if (oldstate < MDSMap::STATE_ACTIVE) {
-	kick_requests(p->second, false);
+	kick_requests(p->second);
 	kick_flushing_caps(p->second);
 	signal_context_list(p->second->waiting_for_open);
 	kick_maxsize_requests(p->second);
@@ -1989,25 +1998,16 @@ void Client::send_reconnect(MetaSession *session)
 }
 
 
-void Client::kick_requests(MetaSession *session, bool signal)
+void Client::kick_requests(MetaSession *session)
 {
   ldout(cct, 10) << "kick_requests for mds." << session->mds_num << dendl;
-
   for (map<tid_t, MetaRequest*>::iterator p = mds_requests.begin();
        p != mds_requests.end();
-       ++p) 
+       ++p) {
     if (p->second->mds == session->mds_num) {
-      if (signal) {
-	// only signal caller if there is a caller
-	// otherwise, let resend_unsafe handle it
-	if (p->second->caller_cond) {
-	  p->second->kick = true;
-	  p->second->caller_cond->Signal();
-	}
-      } else {
-	send_request(p->second, session);
-      }
+      send_request(p->second, session);
     }
+  }
 }
 
 void Client::resend_unsafe_requests(MetaSession *session)
@@ -2016,6 +2016,25 @@ void Client::resend_unsafe_requests(MetaSession *session)
        !iter.end();
        ++iter)
     send_request(*iter, session);
+}
+
+void Client::kick_requests_closed(MetaSession *session)
+{
+  ldout(cct, 10) << "kick_requests_closed for mds." << session->mds_num << dendl;
+  for (map<tid_t, MetaRequest*>::iterator p = mds_requests.begin();
+       p != mds_requests.end();
+       ++p) {
+    if (p->second->mds == session->mds_num) {
+      if (p->second->caller_cond) {
+	p->second->kick = true;
+	p->second->caller_cond->Signal();
+      }
+      p->second->item.remove_myself();
+      p->second->unsafe_item.remove_myself();
+    }
+  }
+  assert(session->requests.empty());
+  assert(session->unsafe_requests.empty());
 }
 
 
@@ -3551,6 +3570,45 @@ void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, MClientCa
   m->put();
 }
 
+class C_Client_DentryInvalidate : public Context  {
+private:
+  Client *client;
+  vinodeno_t dirino;
+  vinodeno_t ino;
+  string name;
+public:
+  C_Client_DentryInvalidate(Client *c, Dentry *dn) :
+			    client(c), dirino(dn->dir->parent_inode->vino()),
+			    ino(dn->inode->vino()), name(dn->name) { }
+  void finish(int r) {
+    client->_async_dentry_invalidate(dirino, ino, name);
+  }
+};
+
+void Client::_async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, string& name)
+{
+  ldout(cct, 10) << "_async_dentry_invalidate '" << name << "' ino " << ino
+		 << " in dir " << dirino << dendl;
+  dentry_invalidate_cb(dentry_invalidate_cb_handle, dirino, ino, name);
+}
+
+void Client::_schedule_invalidate_dentry_callback(Dentry *dn)
+{
+  if (dentry_invalidate_cb && dn->inode->ll_ref > 0)
+    async_dentry_invalidator.queue(new C_Client_DentryInvalidate(this, dn));
+}
+
+void Client::_invalidate_inode_parents(Inode *in)
+{
+  set<Dentry*>::iterator q = in->dn_set.begin();
+  while (q != in->dn_set.end()) {
+    Dentry *dn = *q++;
+    // FIXME: we play lots of unlink/link tricks when handling MDS replies,
+    //        so in->dn_set doesn't always reflect the state of kernel's dcache.
+    _schedule_invalidate_dentry_callback(dn);
+    unlink(dn, false);
+  }
+}
 
 void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClientCaps *m)
 {
@@ -3578,8 +3636,12 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     in->uid = m->head.uid;
     in->gid = m->head.gid;
   }
+  bool deleted_inode = false;
   if ((issued & CEPH_CAP_LINK_EXCL) == 0) {
     in->nlink = m->head.nlink;
+    if (in->nlink == 0 &&
+	(new_caps & (CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL)))
+      deleted_inode = true;
   }
   if ((issued & CEPH_CAP_XATTR_EXCL) == 0 &&
       m->xattrbl.length() &&
@@ -3632,6 +3694,10 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   // wake up waiters
   if (new_caps)
     signal_cond_list(in->waitfor_caps);
+
+  // may drop inode's last ref
+  if (deleted_inode)
+    _invalidate_inode_parents(in);
 
   m->put();
 }
@@ -6317,6 +6383,17 @@ void Client::ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handl
   ino_invalidate_cb = cb;
   ino_invalidate_cb_handle = handle;
   async_ino_invalidator.start();
+}
+
+void Client::ll_register_dentry_invalidate_cb(client_dentry_callback_t cb, void *handle)
+{
+  Mutex::Locker l(client_lock);
+  ldout(cct, 10) << "ll_register_dentry_invalidate_cb cb " << (void*)cb << " p " << (void*)handle << dendl;
+  if (cb == NULL)
+    return;
+  dentry_invalidate_cb = cb;
+  dentry_invalidate_cb_handle = handle;
+  async_dentry_invalidator.start();
 }
 
 void Client::ll_register_getgroups_cb(client_getgroups_callback_t cb, void *handle)

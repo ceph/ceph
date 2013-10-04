@@ -120,6 +120,9 @@ struct MetaRequest;
 
 typedef void (*client_ino_callback_t)(void *handle, vinodeno_t ino, int64_t off, int64_t len);
 
+typedef void (*client_dentry_callback_t)(void *handle, vinodeno_t dirino,
+					 vinodeno_t ino, string& name);
+
 typedef int (*client_getgroups_callback_t)(void *handle, uid_t uid, gid_t **sgids);
 
 // ========================================================
@@ -211,10 +214,14 @@ class Client : public Dispatcher {
   client_ino_callback_t ino_invalidate_cb;
   void *ino_invalidate_cb_handle;
 
+  client_dentry_callback_t dentry_invalidate_cb;
+  void *dentry_invalidate_cb_handle;
+
   client_getgroups_callback_t getgroups_cb;
   void *getgroups_cb_handle;
 
   Finisher async_ino_invalidator;
+  Finisher async_dentry_invalidator;
 
   Context *tick_event;
   utime_t last_cap_renew;
@@ -270,7 +277,8 @@ public:
   void connect_mds_targets(int mds);
   void send_request(MetaRequest *request, MetaSession *session);
   MClientRequest *build_client_request(MetaRequest *request);
-  void kick_requests(MetaSession *session, bool signal);
+  void kick_requests(MetaSession *session);
+  void kick_requests_closed(MetaSession *session);
   void handle_client_request_forward(MClientRequestForward *reply);
   void handle_client_reply(MClientReply *reply);
 
@@ -357,6 +365,7 @@ protected:
 
   friend class C_Client_PutInode; // calls put_inode()
   friend class C_Client_CacheInvalidate;  // calls ino_invalidate_cb
+  friend class C_Client_DentryInvalidate;  // calls dentry_invalidate_cb
 
   //int get_cache_size() { return lru.lru_get_size(); }
   //void set_cache_size(int m) { lru.lru_set_max(m); }
@@ -458,6 +467,10 @@ protected:
   void queue_cap_snap(Inode *in, snapid_t seq=0);
   void finish_cap_snap(Inode *in, CapSnap *capsnap, int used);
   void _flushed_cap_snap(Inode *in, snapid_t seq);
+
+  void _schedule_invalidate_dentry_callback(Dentry *dn);
+  void _async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, string& name);
+  void _invalidate_inode_parents(Inode *in);
 
   void _schedule_invalidate_callback(Inode *in, int64_t off, int64_t len, bool keep_caps);
   void _invalidate_inode_cache(Inode *in, bool keep_caps);
@@ -734,6 +747,8 @@ public:
   int ll_statfs(vinodeno_t vino, struct statvfs *stbuf);
 
   void ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handle);
+
+  void ll_register_dentry_invalidate_cb(client_dentry_callback_t cb, void *handle);
 
   void ll_register_getgroups_cb(client_getgroups_callback_t cb, void *handle);
 };

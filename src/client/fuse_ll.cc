@@ -12,7 +12,7 @@
  * 
  */
 
-#define FUSE_USE_VERSION 26
+#define FUSE_USE_VERSION 30
 
 #include <fuse/fuse.h>
 #include <fuse/fuse_lowlevel.h>
@@ -551,12 +551,25 @@ static int getgroups_cb(void *handle, uid_t uid, gid_t **sgids)
 }
 #endif
 
-static void invalidate_cb(void *handle, vinodeno_t vino, int64_t off, int64_t len)
+static void ino_invalidate_cb(void *handle, vinodeno_t vino, int64_t off, int64_t len)
 {
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
   CephFuse::Handle *cfuse = (CephFuse::Handle *)handle;
   fuse_ino_t fino = cfuse->make_fake_ino(vino.ino, vino.snapid);
   fuse_lowlevel_notify_inval_inode(cfuse->ch, fino, off, len);
+#endif
+}
+
+static void dentry_invalidate_cb(void *handle, vinodeno_t dirino,
+				 vinodeno_t ino, string& name)
+{
+  CephFuse::Handle *cfuse = (CephFuse::Handle *)handle;
+  fuse_ino_t fdirino = cfuse->make_fake_ino(dirino.ino, dirino.snapid);
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
+  fuse_ino_t fino = cfuse->make_fake_ino(ino.ino, ino.snapid);
+  fuse_lowlevel_notify_delete(cfuse->ch, fdirino, fino, name.c_str(), name.length());
+#elif FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
+  fuse_lowlevel_notify_inval_entry(cfuse->ch, fdirino, name.c_str(), name.length());
 #endif
 }
 
@@ -743,9 +756,10 @@ int CephFuse::Handle::init(int argc, const char *argv[])
   client->ll_register_getgroups_cb(getgroups_cb, this);
 
    */
+  client->ll_register_dentry_invalidate_cb(dentry_invalidate_cb, this);
 
   if (client->cct->_conf->fuse_use_invalidate_cb)
-    client->ll_register_ino_invalidate_cb(invalidate_cb, this);
+    client->ll_register_ino_invalidate_cb(ino_invalidate_cb, this);
 
 done:
   fuse_opt_free_args(&args);
