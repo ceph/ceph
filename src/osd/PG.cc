@@ -1,4 +1,3 @@
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
@@ -1997,8 +1996,7 @@ void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
       hobject_t cur;
       vector<hobject_t> objects;
       while (1) {
-	int r = store->collection_list_partial(
-	  cid,
+	int r = get_pgbackend()->objects_list_partial(
 	  cur,
 	  store->get_ideal_list_min(),
 	  store->get_ideal_list_max(),
@@ -2046,8 +2044,7 @@ void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
   while (1) {
     dout(1) << "Updating snap_mapper from main collection, "
 	    << done << " objects done" << dendl;
-    int r = store->collection_list_partial(
-      cid,
+    int r = get_pgbackend()->objects_list_partial(
       cur,
       store->get_ideal_list_min(),
       store->get_ideal_list_max(),
@@ -2070,19 +2067,16 @@ void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
 	 ++j) {
       if (j->snap < CEPH_MAXSNAP) {
 	OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
-	bufferptr bp;
-	r = store->getattr(
-	  cid,
+	bufferlist bl;
+	r = get_pgbackend()->objects_get_attr(
 	  *j,
 	  OI_ATTR,
-	  bp);
+	  &bl);
 	if (r < 0) {
 	  derr << __func__ << ": getattr returned "
 	       << cpp_strerror(r) << dendl;
 	  assert(0);
 	}
-	bufferlist bl;
-	bl.push_back(bp);
 	object_info_t oi(bl);
 	set<snapid_t> oi_snaps(oi.snaps.begin(), oi.snaps.end());
 	set<snapid_t> cur_snaps;
@@ -2412,9 +2406,8 @@ void PG::log_weirdness()
 			<< " log bound mismatch, empty but (" << pg_log.get_tail() << ","
 			<< pg_log.get_head() << "]\n";
   } else {
-    if ((pg_log.get_log().log.begin()->version <= pg_log.get_tail()) || // sloppy check
-	(pg_log.get_log().log.rbegin()->version != pg_log.get_head() &&
-	 !(pg_log.get_head() == pg_log.get_tail())))
+    // sloppy check
+    if ((pg_log.get_log().log.begin()->version <= pg_log.get_tail()))
       osd->clog.error() << info.pgid
 			<< " log bound mismatch, info (" << pg_log.get_tail() << ","
 			<< pg_log.get_head() << "]"
@@ -3039,9 +3032,9 @@ int PG::build_scrub_map_chunk(
 
   // objects
   vector<hobject_t> ls;
-  int ret = osd->store->collection_list_range(coll, start, end, 0, &ls);
+  int ret = get_pgbackend()->objects_list_range(start, end, 0, &ls);
   if (ret < 0) {
-    dout(5) << "collection_list_range error: " << ret << dendl;
+    dout(5) << "objects_list_range error: " << ret << dendl;
     return ret;
   }
 
@@ -3561,11 +3554,13 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
           hobject_t start = scrubber.start;
           while (!boundary_found) {
             vector<hobject_t> objects;
-            ret = osd->store->collection_list_partial(coll, start,
-                                                      cct->_conf->osd_scrub_chunk_min,
-						      cct->_conf->osd_scrub_chunk_max,
-						      0,
-                                                      &objects, &scrubber.end);
+            ret = get_pgbackend()->objects_list_partial(
+	      start,
+	      cct->_conf->osd_scrub_chunk_min,
+	      cct->_conf->osd_scrub_chunk_max,
+	      0,
+	      &objects,
+	      &scrubber.end);
             assert(ret >= 0);
 
             // in case we don't find a boundary: start again at the end

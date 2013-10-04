@@ -124,6 +124,9 @@ public:
   typedef boost::shared_ptr<CopyOp> CopyOpRef;
 
   boost::scoped_ptr<PGBackend> pgbackend;
+  PGBackend *get_pgbackend() {
+    return pgbackend.get();
+  }
 
   /// Listener methods
   void on_local_recover_start(
@@ -619,8 +622,14 @@ protected:
    * @bi [out] resulting map of objects to eversion_t's
    */
   void scan_range(
-    hobject_t begin, int min, int max, BackfillInterval *bi,
+    int min, int max, BackfillInterval *bi,
     ThreadPool::TPHandle &handle
+    );
+
+  /// Update a hash range to reflect changes since the last scan
+  void update_range(
+    BackfillInterval *bi,        ///< [in,out] interval to update
+    ThreadPool::TPHandle &handle ///< [in] tp handle
     );
 
   void prep_backfill_object_push(
@@ -662,12 +671,17 @@ protected:
     }
   };
   struct C_OSD_OndiskWriteUnlock : public Context {
-    ObjectContextRef obc, obc2;
-    C_OSD_OndiskWriteUnlock(ObjectContextRef o, ObjectContextRef o2 = ObjectContextRef()) : obc(o), obc2(o2) {}
+    ObjectContextRef obc, obc2, obc3;
+    C_OSD_OndiskWriteUnlock(
+      ObjectContextRef o,
+      ObjectContextRef o2 = ObjectContextRef(),
+      ObjectContextRef o3 = ObjectContextRef()) : obc(o), obc2(o2), obc3(o3) {}
     void finish(int r) {
       obc->ondisk_write_unlock();
       if (obc2)
 	obc2->ondisk_write_unlock();
+      if (obc3)
+	obc3->ondisk_write_unlock();
     }
   };
   struct C_OSD_OndiskWriteUnlockList : public Context {
