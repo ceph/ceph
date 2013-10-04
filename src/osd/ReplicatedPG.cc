@@ -3774,10 +3774,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EINPROGRESS;
 	} else {
 	  // finish
-	  result = ctx->copy_cb->get_result();
-	  if (result >= 0) { //success!
-	    result = finish_copyfrom(ctx);
-	  }
+	  assert(ctx->copy_cb->get_result() >= 0);
+	  result = finish_copyfrom(ctx);
 	}
       }
       break;
