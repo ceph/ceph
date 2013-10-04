@@ -513,8 +513,9 @@ public:
       pg_local_last_complete(lc),
       queue_snap_trimmer(false) { }
 
-    void get() {
+    RepGather *get() {
       nref++;
+      return this;
     }
     void put() {
       assert(nref > 0);
@@ -615,6 +616,9 @@ protected:
   void repop_ack(RepGather *repop,
                  int result, int ack_type,
                  int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
+
+  RepGather *simple_repop_create(ObjectContextRef obc);
+  void simple_repop_submit(RepGather *repop);
 
   /// true if we can send an ondisk/commit for v
   bool already_complete(eversion_t v) {

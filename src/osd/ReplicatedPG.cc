@@ -1866,20 +1866,9 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 	   << " old snapset " << snapset << dendl;
   assert(snapset.seq);
 
-  vector<OSDOp> ops;
-  tid_t rep_tid = osd->get_tid();
-  osd_reqid_t reqid(osd->get_cluster_msgr_name(), 0, rep_tid);
-  OpContext *ctx = new OpContext(
-    OpRequestRef(),
-    reqid,
-    ops,
-    &obc->obs,
-    obc->ssc,
-    this);
-  ctx->mtime = ceph_clock_now(cct);
+  RepGather *repop = simple_repop_create(obc);
+  OpContext *ctx = repop->ctx;
   ctx->at_version = get_next_version();
-
-  RepGather *repop = new_repop(ctx, obc, rep_tid);
 
   ObjectStore::Transaction *t = &ctx->op_t;
   OSDriver::OSTransaction os_t(osdriver.get_transaction(t));
@@ -4456,23 +4445,14 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
 
     if (!cop->cursor.is_complete()) {
       // write out what we have so far
-      vector<OSDOp> ops;
-      tid_t rep_tid = osd->get_tid();
-      osd_reqid_t reqid(osd->get_cluster_msgr_name(), 0, rep_tid);
-      OpContext *tctx = new OpContext(OpRequestRef(), reqid, ops, &obc->obs, obc->ssc, this);
-      tctx->mtime = ceph_clock_now(g_ceph_context);
-      RepGather *repop = new_repop(tctx, obc, rep_tid);
-
+      ObjectContextRef tempobc = get_object_context(cop->temp_oid, true);
+      RepGather *repop = simple_repop_create(tempobc);
       if (cop->temp_cursor.is_initial()) {
-	cop->temp_coll = get_temp_coll(&tctx->local_t);
+	cop->temp_coll = get_temp_coll(&repop->ctx->local_t);
 	repop->ctx->new_temp_oid = cop->temp_oid;
       }
-
-      _write_copy_chunk(cop, &tctx->op_t);
-
-      issue_repop(repop, repop->ctx->mtime);
-      eval_repop(repop);
-      repop->put();
+      _write_copy_chunk(cop, &repop->ctx->op_t);
+      simple_repop_submit(repop);
 
       dout(10) << __func__ << " fetching more" << dendl;
       _copy_some(obc, cop);
@@ -5090,6 +5070,28 @@ void ReplicatedPG::repop_ack(RepGather *repop, int result, int ack_type,
 }
 
 
+ReplicatedPG::RepGather *ReplicatedPG::simple_repop_create(ObjectContextRef obc)
+{
+  dout(20) << __func__ << " " << obc->obs.oi.soid << dendl;
+  vector<OSDOp> ops;
+  tid_t rep_tid = osd->get_tid();
+  osd_reqid_t reqid(osd->get_cluster_msgr_name(), 0, rep_tid);
+  OpContext *ctx = new OpContext(OpRequestRef(), reqid, ops,
+				 &obc->obs, obc->ssc, this);
+  ctx->mtime = ceph_clock_now(g_ceph_context);
+  RepGather *repop = new_repop(ctx, obc, rep_tid);
+  return repop;
+}
+
+void ReplicatedPG::simple_repop_submit(RepGather *repop)
+{
+  dout(20) << __func__ << " " << repop << dendl;
+  if (!repop->ctx->log.empty())
+    append_log(repop->ctx->log, eversion_t(), repop->ctx->local_t);
+  issue_repop(repop, repop->ctx->mtime);
+  eval_repop(repop);
+  repop->put();
+}
 
 
 
@@ -8744,12 +8746,8 @@ boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
   RepGather *repop = pg->trim_object(pos);
   assert(repop);
   repop->queue_snap_trimmer = true;
-
-  pg->append_log(repop->ctx->log, eversion_t(), repop->ctx->local_t);
-  pg->issue_repop(repop, repop->ctx->mtime);
-  pg->eval_repop(repop);
-
-  repops.insert(repop);
+  repops.insert(repop->get());
+  simple_repop_submit(repop);
   return discard_event();
 }
 /* WaitingOnReplicasObjects */
