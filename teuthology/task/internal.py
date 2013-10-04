@@ -50,9 +50,9 @@ def base(ctx, config):
 @contextlib.contextmanager
 def lock_machines(ctx, config):
     log.info('Locking machines...')
-    assert isinstance(config[0], int), 'config must be an integer'
+    assert isinstance(config[0], int), 'config[0] must be an integer'
     machine_type = config[1]
-    config = config[0]
+    how_many = config[0]
 
     while True:
         # make sure there are enough machines up
@@ -64,14 +64,14 @@ def lock_machines(ctx, config):
                 continue
             else:
                 assert 0, 'error listing machines'
-        num_up = len(filter(lambda machine: machine['up'] and machine['type'] == machine_type, machines))
-        assert num_up >= config, 'not enough machines are up'
+        num_up = len(filter(lambda machine: machine['up'] and machine['type']
+                            == machine_type, machines))
+        assert num_up >= how_many, 'not enough machines are up'
 
         # make sure there are machines for non-automated jobs to run
-        num_free = len(filter(
-                lambda machine: machine['up'] and machine['locked'] == 0 and machine['type'] == machine_type,
-                machines
-                ))
+        num_free = len(filter(lambda machine: machine['up'] and
+                              machine['locked'] == 0 and machine['type'] ==
+                              machine_type, machines))
         if num_free < 6 and ctx.owner.startswith('scheduled'):
             if ctx.block:
                 log.info('waiting for more machines to be free...')
@@ -80,24 +80,27 @@ def lock_machines(ctx, config):
             else:
                 assert 0, 'not enough machines free'
 
-        newly_locked = lock.lock_many(ctx, config, machine_type, ctx.owner, ctx.archive)
-        if len(newly_locked) == config:
+        newly_locked = lock.lock_many(ctx, how_many, machine_type, ctx.owner,
+                                      ctx.archive)
+        if len(newly_locked) == how_many:
             vmlist = []
             for lmach in newly_locked:
-                if lock.create_if_vm(ctx,lmach):
+                if lock.create_if_vm(ctx, lmach):
                     vmlist.append(lmach)
             if vmlist:
                 log.info('Waiting for virtual machines to come up')
                 keyscan_out = ''
-                loopcount=0
+                loopcount = 0
                 while len(keyscan_out.splitlines()) != len(vmlist):
                     loopcount += 1
                     time.sleep(10)
-                    keyscan_out, current_locks = lock.keyscan_check(ctx, vmlist)
+                    keyscan_out, current_locks = lock.keyscan_check(ctx,
+                                                                    vmlist)
                     log.info('virtual machine is stil unavailable')
                     if loopcount == 40:
                         loopcount = 0
-                        log.info('virtual machine(s) still not up, recreating unresponsive ones.')
+                        log.info('virtual machine(s) still not up, ' +
+                                 'recreating unresponsive ones.')
                         for guest in vmlist:
                             if guest not in keyscan_out:
                                 log.info('recreating: ' + guest)
@@ -112,6 +115,7 @@ def lock_machines(ctx, config):
                 ctx.config['targets'] = newscandict
             else:
                 ctx.config['targets'] = newly_locked
+            # FIXME: Ugh.
             log.info('\n  '.join(['Locked targets:', ] + yaml.safe_dump(ctx.config['targets'], default_flow_style=False).splitlines()))
             break
         elif not ctx.block:
