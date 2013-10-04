@@ -120,13 +120,16 @@ private:
       }
 
     case TEST_OP_ROLLBACK:
-      if (context.snaps.empty()) {
+      if (context.snaps.size() <= context.snaps_in_use.size()) {
 	return NULL;
-      } else {
+      }
+      while (true) {
 	int snap = rand_choose(context.snaps)->first;
+	if (context.snaps_in_use.count(snap))
+	  continue;  // in use; try again!
 	string oid = *(rand_choose(context.oid_not_in_use));
 	cout << "rollback oid " << oid << " to " << snap << std::endl;
-        return new RollbackOp(m_op, &context, oid, snap);
+	return new RollbackOp(m_op, &context, oid, snap);
       }
 
     case TEST_OP_SETATTR:
