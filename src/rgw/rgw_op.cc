@@ -1604,6 +1604,13 @@ void RGWPutMetadata::execute()
     }
   }
 
+  map<string, string>::iterator giter;
+  for (giter = s->generic_attrs.begin(); giter != s->generic_attrs.end(); ++giter) {
+    bufferlist& attrbl = attrs[giter->first];
+    const string& val = giter->second;
+    attrbl.append(val.c_str(), val.size() + 1);
+  }
+
   if (has_policy) {
     policy.encode(bl);
     attrs[RGW_ATTR_ACL] = bl;
