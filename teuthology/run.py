@@ -263,7 +263,6 @@ def main():
                 email_results(subject,"Teuthology",ctx.config['email-on-error'],emsg)
 
         report.try_push_job_info(ctx.config, ctx.summary)
-        report.try_push_job_info(ctx.config)
 
         if ctx.summary.get('success', True):
             log.info('pass')

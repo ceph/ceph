@@ -335,14 +335,14 @@ def push_job_info(run_name, job_id, job_info, base_uri=None):
     reporter.report_job(run_name, job_id, job_json)
 
 
-def try_push_job_info(job_config, job_info=None):
+def try_push_job_info(job_config, extra_info=None):
     """
     Wrap push_job_info, gracefully doing nothing if:
         A RequestFailedError is raised
         config.results_server is not set
 
-    :param job_config: The ctx.config object
-    :param job_info:   Dict to push (commonly None)
+    :param job_config: The ctx.config object to push
+    :param extra_info: Optional second dict to push
     """
     if not config.results_server:
         msg = "No results_server set in {yaml}; not attempting to push results"
@@ -350,10 +350,16 @@ def try_push_job_info(job_config, job_info=None):
     else:
         run_name = job_config['name']
         job_id = job_config['job_id']
-        if job_info is None:
+
+        if extra_info is not None:
+            job_info = extra_info.copy()
+            job_info.update(job_config)
+        else:
             job_info = job_config
 
         try:
+            log.info("Pushing job info to %s", config.results_server)
+            create_run(run_name)
             push_job_info(run_name, job_id, job_info)
         except RequestFailedError:
             log.exception("Could not report results to %s" %
