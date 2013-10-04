@@ -83,6 +83,8 @@ class FakeArchive(object):
         """
         Creates a fake run using run_name. Uses the YAML specified for each
         job's config.yaml
+
+        Returns a list of job_ids
         """
         assert os.path.exists(yaml_path)
         assert job_count > 0
@@ -96,4 +98,5 @@ class FakeArchive(object):
             job_yaml_path = os.path.join(self.archive_base, run_name,
                                          str(job_id), 'config.yaml')
             shutil.copyfile(yaml_path, job_yaml_path)
+        return jobs
 
