@@ -1153,6 +1153,17 @@ public:
   void wait_for_blocked_object(const hobject_t& soid, OpRequestRef op);
   void kick_object_context_blocked(ObjectContextRef obc);
 
+  struct C_KickBlockedObject : public Context {
+    ObjectContextRef obc;
+    ReplicatedPG *pg;
+    C_KickBlockedObject(ObjectContextRef obc_, ReplicatedPG *pg_) :
+      obc(obc_), pg(pg_) {}
+  protected:
+    void finish(int r) {
+      pg->kick_object_context_blocked(obc);
+    }
+  };
+
   void mark_all_unfound_lost(int what);
   eversion_t pick_newest_available(const hobject_t& oid);
   ObjectContextRef mark_object_lost(ObjectStore::Transaction *t,
