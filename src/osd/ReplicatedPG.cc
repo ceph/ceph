@@ -3785,37 +3785,35 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
   int ret = find_object_context(
     hobject_t(soid.oid, soid.get_key(), snapid, soid.hash, info.pgid.pool(), soid.get_namespace()),
     &rollback_to, false, &cloneid);
-  if (ret) {
-    if (-ENOENT == ret || rollback_to->obs.oi.is_whiteout()) {
-      // there's no snapshot here, or there's no object.
-      // if there's no snapshot, we delete the object; otherwise, do nothing.
-      dout(20) << "_rollback_to deleting head on " << soid.oid
-	       << " because got ENOENT|whiteout on find_object_context" << dendl;
-      if (ctx->obc->obs.oi.watchers.size()) {
-	// Cannot delete an object with watchers
-	ret = -EBUSY;
-      } else {
-	_delete_head(ctx);
-	ret = 0;
-      }
-    } else if (-EAGAIN == ret) {
-      /* a different problem, like degraded pool
-       * with not-yet-restored object. We shouldn't have been able
-       * to get here; recovery should have completed first! */
-      hobject_t rollback_target(soid.oid, soid.get_key(), cloneid, soid.hash,
-				info.pgid.pool(), soid.get_namespace());
-      assert(is_missing_object(rollback_target));
-      dout(20) << "_rollback_to attempted to roll back to a missing object " 
-	       << rollback_target << " (requested snapid: ) " << snapid << dendl;
-      wait_for_missing_object(rollback_target, ctx->op);
+  if (ret == -ENOENT || (rollback_to && rollback_to->obs.oi.is_whiteout())) {
+    // there's no snapshot here, or there's no object.
+    // if there's no snapshot, we delete the object; otherwise, do nothing.
+    dout(20) << "_rollback_to deleting head on " << soid.oid
+	     << " because got ENOENT|whiteout on find_object_context" << dendl;
+    if (ctx->obc->obs.oi.watchers.size()) {
+      // Cannot delete an object with watchers
+      ret = -EBUSY;
     } else {
-      // ummm....huh? It *can't* return anything else at time of writing.
-      assert(0);
+      _delete_head(ctx);
+      ret = 0;
     }
+  } else if (-EAGAIN == ret) {
+    /* a different problem, like degraded pool
+     * with not-yet-restored object. We shouldn't have been able
+     * to get here; recovery should have completed first! */
+    hobject_t rollback_target(soid.oid, soid.get_key(), cloneid, soid.hash,
+			      info.pgid.pool(), soid.get_namespace());
+    assert(is_missing_object(rollback_target));
+    dout(20) << "_rollback_to attempted to roll back to a missing object "
+	     << rollback_target << " (requested snapid: ) " << snapid << dendl;
+    wait_for_missing_object(rollback_target, ctx->op);
+  } else if (ret) {
+    // ummm....huh? It *can't* return anything else at time of writing.
+    assert(0 == "unexpected error code in _rollback_to");
   } else { //we got our context, let's use it to do the rollback!
     hobject_t& rollback_to_sobject = rollback_to->obs.oi.soid;
     if (is_degraded_object(rollback_to_sobject)) {
-      dout(20) << "_rollback_to attempted to roll back to a degraded object " 
+      dout(20) << "_rollback_to attempted to roll back to a degraded object "
 	       << rollback_to_sobject << " (requested snapid: ) " << snapid << dendl;
       wait_for_degraded_object(rollback_to_sobject, ctx->op);
       ret = -EAGAIN;
