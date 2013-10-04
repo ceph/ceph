@@ -51,3 +51,7 @@ v0.71
 * Any direct users of the 'tmap' portion of the librados API should be
   aware that the automatic tmap -> omap conversion functionality has
   been removed.
+
+* Most output that used K or KK (e.g., for kilobyte) now uses a
+  lower-case k to match the official SI convention.  Any scripts that
+  parse output and check for an upper-case K will need to be modified.
