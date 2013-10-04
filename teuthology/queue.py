@@ -160,7 +160,7 @@ describe. One job is run at a time.
         log.debug('Config is: %s', job.body)
         job_config = yaml.safe_load(job.body)
 
-        job_config['job_id'] = job.jid
+        job_config['job_id'] = str(job.jid)
         safe_archive = safepath.munge(job_config['name'])
         archive_path_full = os.path.join(ctx.archive_dir, safe_archive, str(job.jid))
         job_config['archive_path'] = archive_path_full

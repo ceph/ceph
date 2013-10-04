@@ -153,7 +153,6 @@ def main():
     from .orchestra import monkey
     monkey.patch_all()
 
-
     # WARNING: Do not import any modules that import logging before this next
     # block. That would cause connections to hang because the monkey patching
     # hadn't been done.
@@ -168,6 +167,13 @@ def main():
     if ctx.owner is None:
         from teuthology.misc import get_user
         ctx.owner = get_user()
+
+    # Older versions of teuthology stored job_id as an int. Convert it to a str
+    # if necessary.
+    job_id = ctx.config.get('job_id')
+    if job_id is not None:
+        job_id = str(job_id)
+        ctx.config['job_id'] = job_id
 
     write_initial_metadata(ctx)
     report.try_push_job_info(ctx.config)
