@@ -91,7 +91,7 @@ libcommon_crc_la_SOURCES = \
 	common/crc32c_intel_fast.c
 
 if WITH_GOOD_YASM_ELF64
-libcommon_crc_la_SOURCES += common/crc32c_intel_fast_asm.S
+libcommon_crc_la_SOURCES += common/crc32c_intel_fast_asm.S common/crc32c_intel_fast_zero_asm.S
 libcommon_crc_la_LIBTOOLFLAGS = --tag=CC
 endif
 LIBCOMMON_DEPS += libcommon_crc.la
