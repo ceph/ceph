@@ -327,13 +327,37 @@ def push_job_info(run_name, job_id, job_info, base_uri=None):
     :param job_info: A dict containing the job's information.
     :param base_uri: The endpoint of the results server. If you leave it out
                      ResultsReporter will ask teuthology.config.
-    :returns:         True if the run was successfully created.
     """
     # We are using archive_base='' here because we KNOW the serializer isn't
     # needed for this codepath.
     job_json = json.dumps(job_info)
     reporter = ResultsReporter(archive_base='')
     reporter.report_job(run_name, job_id, job_json)
+
+
+def try_push_job_info(job_config, job_info=None):
+    """
+    Wrap push_job_info, gracefully doing nothing if:
+        A RequestFailedError is raised
+        config.results_server is not set
+
+    :param job_config: The ctx.config object
+    :param job_info:   Dict to push (commonly None)
+    """
+    if not config.results_server:
+        msg = "No results_server set in {yaml}; not attempting to push results"
+        log.debug(msg.format(yaml=config.teuthology_yaml))
+    else:
+        run_name = job_config['name']
+        job_id = job_config['job_id']
+        if job_info is None:
+            job_info = job_config
+
+        try:
+            push_job_info(run_name, job_id, job_info)
+        except RequestFailedError:
+            log.exception("Could not report results to %s" %
+                          config.results_server)
 
 
 def parse_args():

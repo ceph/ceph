@@ -6,9 +6,6 @@ import contextlib
 import sys
 from traceback import format_tb
 
-from . import report
-from .config import config as teuth_config
-
 
 def config_file(string):
     config = {}
@@ -157,6 +154,8 @@ def main():
     monkey.patch_all()
     import logging
 
+    from . import report
+
     ctx = parse_args()
     set_up_logging(ctx)
     log = logging.getLogger(__name__)
@@ -166,15 +165,7 @@ def main():
         ctx.owner = get_user()
 
     write_initial_metadata(ctx)
-    if teuth_config.results_server:
-        try:
-            run_name = ctx.config['name']
-            report.create_run(run_name)
-            report.push_job_info(run_name, ctx.config['job_id'], ctx.config)
-        except report.RequestFailedError:
-            log.exception("Could not report results to %s" %
-                          teuth_config.results_server)
-
+    report.try_push_job_info(ctx.config)
 
     if 'targets' in ctx.config and 'roles' in ctx.config:
         targets = len(ctx.config['targets'])
@@ -259,15 +250,9 @@ def main():
                 subject = "Teuthology error -- %s" % ctx.summary['failure_reason']
                 from teuthology.suite import email_results
                 email_results(subject,"Teuthology",ctx.config['email-on-error'],emsg)
-        if teuth_config.results_server:
-            try:
-                run_name = ctx.config['name']
-                job_id = ctx.config['name']
-                report.push_job_info(run_name, job_id, ctx.config)
-                report.push_job_info(run_name, job_id, ctx.summary)
-            except report.RequestFailedError:
-                log.exception("Could not report results to %s" %
-                            teuth_config.results_server)
+
+        report.try_push_job_info(ctx.config, ctx.summary)
+        report.try_push_job_info(ctx.config)
 
         if ctx.summary.get('success', True):
             log.info('pass')
@@ -275,6 +260,7 @@ def main():
             log.info('FAIL')
             import sys
             sys.exit(1)
+
 
 def schedule():
     parser = argparse.ArgumentParser(description='Schedule ceph integration tests')
