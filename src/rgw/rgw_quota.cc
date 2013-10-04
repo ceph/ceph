@@ -75,22 +75,28 @@ int RGWBucketStatsCache::get_bucket_stats(rgw_bucket& bucket, RGWBucketStats& st
 }
 
 
+class RGWBucketStatsUpdate : public lru_map<rgw_bucket, RGWQuotaBucketStats>::UpdateContext {
+  int objs_delta;
+  uint64_t added_bytes;
+  uint64_t removed_bytes;
+public:
+  RGWBucketStatsUpdate(int _objs_delta, uint64_t _added_bytes, uint64_t _removed_bytes) : 
+                    objs_delta(_objs_delta), added_bytes(_added_bytes), removed_bytes(_removed_bytes) {}
+  void update(RGWQuotaBucketStats& entry) {
+    uint64_t rounded_kb_added = rgw_rounded_kb(added_bytes);
+    uint64_t rounded_kb_removed = rgw_rounded_kb(removed_bytes);
+
+    entry.stats.num_kb_rounded += (rounded_kb_added - rounded_kb_removed);
+    entry.stats.num_kb += (added_bytes - removed_bytes) / 1024;
+    entry.stats.num_objects += objs_delta;
+  }
+};
+
+
 void RGWBucketStatsCache::adjust_bucket_stats(rgw_bucket& bucket, int objs_delta, uint64_t added_bytes, uint64_t removed_bytes)
 {
-  RGWQuotaBucketStats qs;
-  if (!stats_map.find(bucket, qs)) {
-    /* not have cached info, can't update anything */
-    return;
-  }
-
-  uint64_t rounded_kb_added = rgw_rounded_kb(added_bytes);
-  uint64_t rounded_kb_removed = rgw_rounded_kb(removed_bytes);
-
-  qs.stats.num_kb_rounded += (rounded_kb_added - rounded_kb_removed);
-  qs.stats.num_kb += (added_bytes - removed_bytes) / 1024;
-  qs.stats.num_objects += objs_delta;
-
-  stats_map.add(bucket, qs);
+  RGWBucketStatsUpdate update(objs_delta, added_bytes, removed_bytes);
+  stats_map.find_and_update(bucket, NULL, &update);
 }
 
 
