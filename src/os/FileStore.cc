@@ -422,7 +422,10 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, const cha
   m_filestore_do_dump(false),
   m_filestore_dump_fmt(true),
   m_filestore_sloppy_crc(g_conf->filestore_sloppy_crc),
-  m_filestore_sloppy_crc_block_size(g_conf->filestore_sloppy_crc_block_size)
+  m_filestore_sloppy_crc_block_size(g_conf->filestore_sloppy_crc_block_size),
+  m_fs_type(FS_TYPE_NONE),
+  m_filestore_max_inline_xattr_size(0),
+  m_filestore_max_inline_xattrs(0)
 {
   m_filestore_kill_at.set(g_conf->filestore_kill_at);
 
@@ -825,12 +828,14 @@ int FileStore::_detect_fs()
 
   blk_size = st.f_bsize;
 
+  m_fs_type = FS_TYPE_OTHER;
 #if defined(__linux__)
   if (st.f_type == BTRFS_SUPER_MAGIC) {
     dout(0) << "mount detected btrfs" << dendl;
     backend = new BtrfsFileStoreBackend(this);
 
     wbthrottle.set_fs(WBThrottle::BTRFS);
+    m_fs_type = FS_TYPE_BTRFS;
   } else if (st.f_type == XFS_SUPER_MAGIC) {
     dout(1) << "mount detected xfs" << dendl;
     if (m_filestore_replica_fadvise) {
@@ -838,14 +843,18 @@ int FileStore::_detect_fs()
       g_conf->set_val("filestore_replica_fadvise", "false");
       g_conf->apply_changes(NULL);
       assert(m_filestore_replica_fadvise == false);
+      m_fs_type = FS_TYPE_XFS;
     }
   }
 #endif
 #ifdef HAVE_LIBZFS
   if (st.f_type == ZFS_SUPER_MAGIC) {
     backend = new ZFSFileStoreBackend(this);
+    m_fs_type = FS_TYPE_ZFS;
   }
 #endif
+
+  set_xattr_limits_via_conf();
 
   r = backend->detect_features();
   if (r < 0) {
@@ -887,14 +896,7 @@ int FileStore::_detect_fs()
   chain_fsetxattr(tmpfd, "user.test4", &buf, sizeof(buf));
   ret = chain_fsetxattr(tmpfd, "user.test5", &buf, sizeof(buf));
   if (ret == -ENOSPC) {
-    if (!g_conf->filestore_xattr_use_omap) {
-      dout(0) << "limited size xattrs -- automatically enabling filestore_xattr_use_omap" << dendl;
-      g_conf->set_val("filestore_xattr_use_omap", "true");
-      g_conf->apply_changes(NULL);
-      assert(g_conf->filestore_xattr_use_omap == true);
-    } else {
-      dout(0) << "limited size xattrs -- filestore_xattr_use_omap already enabled" << dendl;
-    }
+    dout(0) << "limited size xattrs" << dendl;
   }
   chain_fremovexattr(tmpfd, "user.test");
   chain_fremovexattr(tmpfd, "user.test2");
@@ -3397,7 +3399,7 @@ int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, buff
   get_attrname(name, n, CHAIN_XATTR_MAX_NAME_LEN);
   r = _fgetattr(**fd, n, bp);
   lfn_close(fd);
-  if (r == -ENODATA && g_conf->filestore_xattr_use_omap) {
+  if (r == -ENODATA) {
     map<string, bufferlist> got;
     set<string> to_get;
     to_get.insert(string(name));
@@ -3433,6 +3435,9 @@ int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, buff
 
 int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset, bool user_only)
 {
+  set<string> omap_attrs;
+  map<string, bufferlist> omap_aset;
+  Index index;
   dout(15) << "getattrs " << cid << "/" << oid << dendl;
   FDRef fd;
   int r = lfn_open(cid, oid, false, &fd);
@@ -3440,43 +3445,41 @@ int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>
     goto out;
   }
   r = _fgetattrs(**fd, aset, user_only);
+  if (r < 0) {
+    goto out;
+  }
   lfn_close(fd);
-  if (g_conf->filestore_xattr_use_omap) {
-    set<string> omap_attrs;
-    map<string, bufferlist> omap_aset;
-    Index index;
-    int r = get_index(cid, &index);
-    if (r < 0) {
-      dout(10) << __func__ << " could not get index r = " << r << dendl;
-      goto out;
-    }
-    r = object_map->get_all_xattrs(oid, &omap_attrs);
-    if (r < 0 && r != -ENOENT) {
-      dout(10) << __func__ << " could not get omap_attrs r = " << r << dendl;
-      goto out;
-    }
-    r = object_map->get_xattrs(oid, omap_attrs, &omap_aset);
-    if (r < 0 && r != -ENOENT) {
-      dout(10) << __func__ << " could not get omap_attrs r = " << r << dendl;
-      goto out;
-    }
-    assert(omap_attrs.size() == omap_aset.size());
-    for (map<string, bufferlist>::iterator i = omap_aset.begin();
+  r = get_index(cid, &index);
+  if (r < 0) {
+    dout(10) << __func__ << " could not get index r = " << r << dendl;
+    goto out;
+  }
+  r = object_map->get_all_xattrs(oid, &omap_attrs);
+  if (r < 0 && r != -ENOENT) {
+    dout(10) << __func__ << " could not get omap_attrs r = " << r << dendl;
+    goto out;
+  }
+  r = object_map->get_xattrs(oid, omap_attrs, &omap_aset);
+  if (r < 0 && r != -ENOENT) {
+    dout(10) << __func__ << " could not get omap_attrs r = " << r << dendl;
+    goto out;
+  }
+  assert(omap_attrs.size() == omap_aset.size());
+  for (map<string, bufferlist>::iterator i = omap_aset.begin();
 	 i != omap_aset.end();
 	 ++i) {
-      string key;
-      if (user_only) {
+    string key;
+    if (user_only) {
 	if (i->first[0] != '_')
 	  continue;
 	if (i->first == "_")
 	  continue;
 	key = i->first.substr(1, i->first.size());
-      } else {
+    } else {
 	key = i->first;
-      }
-      aset.insert(make_pair(key,
-			    bufferptr(i->second.c_str(), i->second.length())));
     }
+    aset.insert(make_pair(key,
+			    bufferptr(i->second.c_str(), i->second.length())));
   }
  out:
   dout(10) << "getattrs " << cid << "/" << oid << " = " << r << dendl;
@@ -3502,10 +3505,8 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
   if (r < 0) {
     goto out;
   }
-  if (g_conf->filestore_xattr_use_omap) {
-    r = _fgetattrs(**fd, inline_set, false);
-    assert(!m_filestore_fail_eio || r != -EIO);
-  }
+  r = _fgetattrs(**fd, inline_set, false);
+  assert(!m_filestore_fail_eio || r != -EIO);
   dout(15) << "setattrs " << cid << "/" << oid << dendl;
   r = 0;
   for (map<string,bufferptr>::iterator p = aset.begin();
@@ -3513,20 +3514,8 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
        ++p) {
     char n[CHAIN_XATTR_MAX_NAME_LEN];
     get_attrname(p->first.c_str(), n, CHAIN_XATTR_MAX_NAME_LEN);
-    if (g_conf->filestore_xattr_use_omap) {
-      if (p->second.length() > g_conf->filestore_max_inline_xattr_size) {
-	if (inline_set.count(p->first)) {
-	  inline_set.erase(p->first);
-	  r = chain_fremovexattr(**fd, n);
-	  if (r < 0)
-	    goto out_close;
-	}
-	omap_set[p->first].push_back(p->second);
-	continue;
-      }
 
-      if (!inline_set.count(p->first) &&
-	  inline_set.size() >= g_conf->filestore_max_inline_xattrs) {
+    if (p->second.length() > m_filestore_max_inline_xattr_size) {
 	if (inline_set.count(p->first)) {
 	  inline_set.erase(p->first);
 	  r = chain_fremovexattr(**fd, n);
@@ -3535,10 +3524,21 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
 	}
 	omap_set[p->first].push_back(p->second);
 	continue;
-      }
-      omap_remove.insert(p->first);
-      inline_set.insert(*p);
     }
+
+    if (!inline_set.count(p->first) &&
+	  inline_set.size() >= m_filestore_max_inline_xattrs) {
+	if (inline_set.count(p->first)) {
+	  inline_set.erase(p->first);
+	  r = chain_fremovexattr(**fd, n);
+	  if (r < 0)
+	    goto out_close;
+	}
+	omap_set[p->first].push_back(p->second);
+	continue;
+    }
+    omap_remove.insert(p->first);
+    inline_set.insert(*p);
 
     inline_to_set.insert(*p);
 
@@ -3549,7 +3549,6 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
     goto out_close;
 
   if (!omap_remove.empty()) {
-    assert(g_conf->filestore_xattr_use_omap);
     r = object_map->remove_xattrs(oid, omap_remove, &spos);
     if (r < 0 && r != -ENOENT) {
       dout(10) << __func__ << " could not remove_xattrs r = " << r << dendl;
@@ -3561,7 +3560,6 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
   }
   
   if (!omap_set.empty()) {
-    assert(g_conf->filestore_xattr_use_omap);
     r = object_map->set_xattrs(oid, omap_set, &spos);
     if (r < 0) {
       dout(10) << __func__ << " could not set_xattrs r = " << r << dendl;
@@ -3589,7 +3587,7 @@ int FileStore::_rmattr(coll_t cid, const ghobject_t& oid, const char *name,
   char n[CHAIN_XATTR_MAX_NAME_LEN];
   get_attrname(name, n, CHAIN_XATTR_MAX_NAME_LEN);
   r = chain_fremovexattr(**fd, n);
-  if (r == -ENODATA && g_conf->filestore_xattr_use_omap) {
+  if (r == -ENODATA) {
     Index index;
     r = get_index(cid, &index);
     if (r < 0) {
@@ -3619,6 +3617,8 @@ int FileStore::_rmattrs(coll_t cid, const ghobject_t& oid,
 
   map<string,bufferptr> aset;
   FDRef fd;
+  set<string> omap_attrs;
+  Index index;
   int r = lfn_open(cid, oid, false, &fd);
   if (r < 0) {
     goto out;
@@ -3635,25 +3635,21 @@ int FileStore::_rmattrs(coll_t cid, const ghobject_t& oid,
   }
   lfn_close(fd);
 
-  if (g_conf->filestore_xattr_use_omap) {
-    set<string> omap_attrs;
-    Index index;
-    r = get_index(cid, &index);
-    if (r < 0) {
-      dout(10) << __func__ << " could not get index r = " << r << dendl;
-      return r;
-    }
-    r = object_map->get_all_xattrs(oid, &omap_attrs);
-    if (r < 0 && r != -ENOENT) {
-      dout(10) << __func__ << " could not get omap_attrs r = " << r << dendl;
-      assert(!m_filestore_fail_eio || r != -EIO);
-      return r;
-    }
-    r = object_map->remove_xattrs(oid, omap_attrs, &spos);
-    if (r < 0 && r != -ENOENT) {
-      dout(10) << __func__ << " could not remove omap_attrs r = " << r << dendl;
-      return r;
-    }
+  r = get_index(cid, &index);
+  if (r < 0) {
+    dout(10) << __func__ << " could not get index r = " << r << dendl;
+    return r;
+  }
+  r = object_map->get_all_xattrs(oid, &omap_attrs);
+  if (r < 0 && r != -ENOENT) {
+    dout(10) << __func__ << " could not get omap_attrs r = " << r << dendl;
+    assert(!m_filestore_fail_eio || r != -EIO);
+    return r;
+  }
+  r = object_map->remove_xattrs(oid, omap_attrs, &spos);
+  if (r < 0 && r != -ENOENT) {
+    dout(10) << __func__ << " could not remove omap_attrs r = " << r << dendl;
+    return r;
   }
  out:
   dout(10) << "rmattrs " << cid << "/" << oid << " = " << r << dendl;
@@ -4562,6 +4558,17 @@ const char** FileStore::get_tracked_conf_keys() const
 void FileStore::handle_conf_change(const struct md_config_t *conf,
 			  const std::set <std::string> &changed)
 {
+  if (changed.count("filestore_max_inline_xattr_size") ||
+      changed.count("filestore_max_inline_xattr_size_xfs") ||
+      changed.count("filestore_max_inline_xattr_size_btrfs") ||
+      changed.count("filestore_max_inline_xattr_size_other") ||
+      changed.count("filestore_max_inline_xattrs") ||
+      changed.count("filestore_max_inline_xattrs_xfs") ||
+      changed.count("filestore_max_inline_xattrs_btrfs") ||
+      changed.count("filestore_max_inline_xattrs_other")) {
+    Mutex::Locker l(lock);
+    set_xattr_limits_via_conf();
+  }
   if (changed.count("filestore_min_sync_interval") ||
       changed.count("filestore_max_sync_interval") ||
       changed.count("filestore_queue_max_ops") ||
@@ -4639,6 +4646,44 @@ void FileStore::dump_transactions(list<ObjectStore::Transaction*>& ls, uint64_t 
   m_filestore_dump_fmt.close_section();
   m_filestore_dump_fmt.flush(m_filestore_dump);
   m_filestore_dump.flush();
+}
+
+void FileStore::set_xattr_limits_via_conf()
+{
+  uint32_t fs_xattr_size;
+  uint32_t fs_xattrs;
+
+  assert(m_fs_type != FS_TYPE_NONE);
+
+  switch(m_fs_type) {
+    case FS_TYPE_XFS:
+      fs_xattr_size = g_conf->filestore_max_inline_xattr_size_xfs;
+      fs_xattrs = g_conf->filestore_max_inline_xattrs_xfs;
+      break;
+    case FS_TYPE_BTRFS:
+      fs_xattr_size = g_conf->filestore_max_inline_xattr_size_btrfs;
+      fs_xattrs = g_conf->filestore_max_inline_xattrs_btrfs;
+      break;
+    case FS_TYPE_ZFS:
+    case FS_TYPE_OTHER:
+      fs_xattr_size = g_conf->filestore_max_inline_xattr_size_other;
+      fs_xattrs = g_conf->filestore_max_inline_xattrs_other;
+      break;
+    default:
+      assert(!"Unknown fs type");
+  }
+
+  //Use override value if set
+  if (g_conf->filestore_max_inline_xattr_size)
+    m_filestore_max_inline_xattr_size = g_conf->filestore_max_inline_xattr_size;
+  else
+    m_filestore_max_inline_xattr_size = fs_xattr_size;
+
+  //Use override value if set
+  if (g_conf->filestore_max_inline_xattrs)
+    m_filestore_max_inline_xattrs = g_conf->filestore_max_inline_xattrs;
+  else
+    m_filestore_max_inline_xattrs = fs_xattrs;
 }
 
 // -- FSSuperblock --
