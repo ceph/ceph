@@ -180,11 +180,10 @@ public:
       }
       ctx->copy_cb = NULL;
       if (r < 0) {
-	if (r == -ECANCELED) { // toss it out; client resends
-	  delete ctx;
-	} else {
+	if (r != -ECANCELED) { // on cancel just toss it out; client resends
 	  ctx->pg->osd->reply_op_error(ctx->op, r);
 	}
+	delete ctx;
       }
     }
 
