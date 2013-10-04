@@ -194,3 +194,75 @@ void ReplicatedBackend::on_flushed()
     assert(0 == "found garbage in the temp collection");
   }
 }
+
+
+int ReplicatedBackend::objects_list_partial(
+  const hobject_t &begin,
+  int min,
+  int max,
+  snapid_t seq,
+  vector<hobject_t> *ls,
+  hobject_t *next)
+{
+  vector<ghobject_t> objects;
+  ghobject_t _next;
+  int r = osd->store->collection_list_partial(
+    coll,
+    begin,
+    min,
+    max,
+    seq,
+    &objects,
+    &_next);
+  ls->reserve(objects.size());
+  for (vector<ghobject_t>::iterator i = objects.begin();
+       i != objects.end();
+       ++i) {
+    assert(i->is_degenerate());
+    ls->push_back(i->hobj);
+  }
+  assert(_next.is_degenerate());
+  *next = _next.hobj;
+  return r;
+}
+
+int ReplicatedBackend::objects_list_range(
+  const hobject_t &start,
+  const hobject_t &end,
+  snapid_t seq,
+  vector<hobject_t> *ls)
+{
+  vector<ghobject_t> objects;
+  int r = osd->store->collection_list_range(
+    coll,
+    start,
+    end,
+    seq,
+    &objects);
+  ls->reserve(objects.size());
+  for (vector<ghobject_t>::iterator i = objects.begin();
+       i != objects.end();
+       ++i) {
+    assert(i->is_degenerate());
+    ls->push_back(i->hobj);
+  }
+  return r;
+}
+
+int ReplicatedBackend::objects_get_attr(
+  const hobject_t &hoid,
+  const string &attr,
+  bufferlist *out)
+{
+  bufferptr bp;
+  int r = osd->store->getattr(
+    coll,
+    hoid,
+    attr.c_str(),
+    bp);
+  if (r >= 0 && out) {
+    out->clear();
+    out->push_back(bp);
+  }
+  return r;
+}
