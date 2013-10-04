@@ -391,13 +391,13 @@ def schedule():
         del ctx.config['targets']
 
     job_config = dict(
-            name=ctx.name,
-            last_in_suite=ctx.last_in_suite,
-            email=ctx.email,
-            description=ctx.description,
-            owner=ctx.owner,
-            verbose=ctx.verbose,
-            )
+        name=ctx.name,
+        last_in_suite=ctx.last_in_suite,
+        email=ctx.email,
+        description=ctx.description,
+        owner=ctx.owner,
+        verbose=ctx.verbose,
+    )
     # Merge job_config and ctx.config
     job_config.update(ctx.config)
     if ctx.timeout is not None:
@@ -411,5 +411,6 @@ def schedule():
             ttr=60*60*24,
             priority=ctx.priority,
             )
-        print 'Job scheduled with ID {jid}'.format(jid=jid)
+        print 'Job scheduled with name {name} and ID {jid}'.format(
+            name=ctx.name, jid=jid)
         num -= 1
