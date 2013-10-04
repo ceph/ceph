@@ -544,12 +544,19 @@ OPTION(filestore_index_retry_probability, OPT_DOUBLE, 0)
 OPTION(filestore_debug_inject_read_err, OPT_BOOL, false)
 
 OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
+
 // Use omap for xattrs for attrs over
-OPTION(filestore_xattr_use_omap, OPT_BOOL, false)
 // filestore_max_inline_xattr_size or
-OPTION(filestore_max_inline_xattr_size, OPT_U32, 512)
+OPTION(filestore_max_inline_xattr_size, OPT_U32, 0)	//Override
+OPTION(filestore_max_inline_xattr_size_xfs, OPT_U32, 65536)
+OPTION(filestore_max_inline_xattr_size_btrfs, OPT_U32, 2048)
+OPTION(filestore_max_inline_xattr_size_other, OPT_U32, 512)
+
 // for more than filestore_max_inline_xattrs attrs
-OPTION(filestore_max_inline_xattrs, OPT_U32, 2)
+OPTION(filestore_max_inline_xattrs, OPT_U32, 0)	//Override
+OPTION(filestore_max_inline_xattrs_xfs, OPT_U32, 10)
+OPTION(filestore_max_inline_xattrs_btrfs, OPT_U32, 10)
+OPTION(filestore_max_inline_xattrs_other, OPT_U32, 2)
 
 OPTION(filestore_sloppy_crc, OPT_BOOL, false)         // track sloppy crcs
 OPTION(filestore_sloppy_crc_block_size, OPT_INT, 65536)
