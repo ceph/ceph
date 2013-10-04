@@ -1,7 +1,7 @@
 tasks:
 - pexec:
     client.1:
-      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.lock
+#      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.lock
       - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.fdpass
       - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.unlink
       - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.attr
