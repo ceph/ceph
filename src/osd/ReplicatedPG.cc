@@ -4544,6 +4544,7 @@ void ReplicatedPG::_build_finish_copy_transaction(CopyOpRef cop,
 
 int ReplicatedPG::finish_copyfrom(OpContext *ctx)
 {
+  dout(20) << "finish_copyfrom on " << ctx->obs->oi.soid << dendl;
   ObjectState& obs = ctx->new_obs;
   CopyFromCallback *cb = static_cast<CopyFromCallback*>(ctx->copy_cb);
 
