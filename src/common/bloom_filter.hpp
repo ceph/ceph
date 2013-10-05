@@ -296,6 +296,31 @@ public:
     return insert_count_;
   }
 
+  /*
+   * density of bits set.  inconvenient units, but:
+   *    .3  = ~50% target insertions
+   *    .5  = 100% target insertions, "perfectly full"
+   *    .75 = 200% target insertions
+   *   1.0  = all bits set... infinite insertions
+   */
+  inline double density() const
+  {
+    size_t set = 0;
+    uint8_t *p = bit_table_;
+    size_t left = table_size_;
+    while (left-- > 0) {
+      uint8_t c = *p;
+      for (; c; ++set)
+	c &= c - 1;
+      ++p;
+    }
+    return (double)set / (double)(table_size_ << 3);
+  }
+
+  inline double approx_unique_element_count() const {
+    // this is not a very good estimate; a better solution should have
+    // some asymptotic behavior as density() approaches 1.0.
+    return (double)target_element_count_ * 2.0 * density();
   }
 
   inline double effective_fpp() const

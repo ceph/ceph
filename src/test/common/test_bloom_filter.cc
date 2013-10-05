@@ -62,7 +62,7 @@ TEST(BloomFilter, Sweep) {
 }
 
 TEST(BloomFilter, SweepInt) {
-  std::cout << "# max\tfpp\tactual\tsize\tB/insert" << std::endl;
+  std::cout << "# max\tfpp\tactual\tsize\tB/insert\tdensity\tapprox_element_count" << std::endl;
   for (int ex = 3; ex < 12; ex += 2) {
     for (float fpp = .001; fpp < .5; fpp *= 4.0) {
       int max = 2 << ex;
@@ -92,7 +92,8 @@ TEST(BloomFilter, SweepInt) {
 
       double byte_per_insert = (double)bl.length() / (double)max;
 
-      std::cout << max << "\t" << fpp << "\t" << actual << "\t" << bl.length() << "\t" << byte_per_insert << std::endl;
+      std::cout << max << "\t" << fpp << "\t" << actual << "\t" << bl.length() << "\t" << byte_per_insert
+		<< "\t" << bf.density() << "\t" << bf.approx_unique_element_count() << std::endl;
       ASSERT_TRUE(actual < fpp * 10);
       ASSERT_TRUE(actual > fpp / 10);
     }
