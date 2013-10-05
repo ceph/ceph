@@ -24,6 +24,8 @@ TEST(BloomFilter, Basic) {
 }
 
 TEST(BloomFilter, Sweep) {
+  std::cout.setf(std::ios_base::fixed, std::ios_base::floatfield);
+  std::cout.precision(5);
   std::cout << "# max\tfpp\tactual\tsize\tB/insert" << std::endl;
   for (int ex = 3; ex < 12; ex += 2) {
     for (float fpp = .001; fpp < .5; fpp *= 4.0) {
@@ -62,6 +64,8 @@ TEST(BloomFilter, Sweep) {
 }
 
 TEST(BloomFilter, SweepInt) {
+  std::cout.setf(std::ios_base::fixed, std::ios_base::floatfield);
+  std::cout.precision(5);
   std::cout << "# max\tfpp\tactual\tsize\tB/insert\tdensity\tapprox_element_count" << std::endl;
   for (int ex = 3; ex < 12; ex += 2) {
     for (float fpp = .001; fpp < .5; fpp *= 4.0) {
@@ -96,12 +100,66 @@ TEST(BloomFilter, SweepInt) {
 		<< "\t" << bf.density() << "\t" << bf.approx_unique_element_count() << std::endl;
       ASSERT_TRUE(actual < fpp * 10);
       ASSERT_TRUE(actual > fpp / 10);
+      ASSERT_TRUE(bf.density() > 0.40);
+      ASSERT_TRUE(bf.density() < 0.60);
     }
   }
 }
 
 
+TEST(BloomFilter, CompressibleSweep) {
+  std::cout.setf(std::ios_base::fixed, std::ios_base::floatfield);
+  std::cout.precision(5);
+  std::cout << "# max\tins\test ins\tafter\ttgtfpp\tactual\tsize\tb/elem\n";
+  float fpp = .01;
+  int max = 1024;
+  for (int div = 1; div < 10; div++) {
+    compressible_bloom_filter bf(max, fpp, 1);
+    int t = max/div;
+    for (int n = 0; n < t; n++)
+      bf.insert(n);
+
+    unsigned est = bf.approx_unique_element_count();
+    if (div > 1)
+      bf.compress(1.0 / div);
+
+    for (int n = 0; n < t; n++)
+      ASSERT_TRUE(bf.contains(n));
+
+    int test = max * 100;
+    int hit = 0;
+    for (int n = 0; n < test; n++)
+      if (bf.contains(100000 + n))
+	hit++;
+
+    double actual = (double)hit / (double)test;
+
+    bufferlist bl;
+    ::encode(bf, bl);
+
+    double byte_per_insert = (double)bl.length() / (double)max;
+    unsigned est_after = bf.approx_unique_element_count();
+    std::cout << max
+	      << "\t" << t
+	      << "\t" << est
+	      << "\t" << est_after
+	      << "\t" << fpp
+	      << "\t" << actual
+	      << "\t" << bl.length() << "\t" << byte_per_insert
+	      << std::endl;
+
+    ASSERT_TRUE(actual < fpp * 2.0);
+    ASSERT_TRUE(actual > fpp / 2.0);
+    ASSERT_TRUE(est_after < est * 2);
+    ASSERT_TRUE(est_after > est / 2);
+  }
+}
+
+
+
 TEST(BloomFilter, BinSweep) {
+  std::cout.setf(std::ios_base::fixed, std::ios_base::floatfield);
+  std::cout.precision(5);
   int total_max = 16384;
   float total_fpp = .01;
   std::cout << "total_inserts " << total_max << " target-fpp " << total_fpp << std::endl;

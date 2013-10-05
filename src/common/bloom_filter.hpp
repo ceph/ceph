@@ -603,15 +603,15 @@ public:
     return size_list.back() * bits_per_char;
   }
 
-  inline bool compress(const double& percentage)
+  inline bool compress(const double& target_ratio)
   {
-    if ((0.0 >= percentage) || (percentage >= 100.0))
+    if ((0.0 >= target_ratio) || (target_ratio >= 1.0))
     {
       return false;
     }
 
     std::size_t original_table_size = size_list.back();
-    std::size_t new_table_size = static_cast<std::size_t>((size_list.back() * (1.0 - (percentage / 100.0))));
+    std::size_t new_table_size = static_cast<std::size_t>(size_list.back() * target_ratio);
 
     if ((!new_table_size) || (new_table_size >= original_table_size))
     {
@@ -623,10 +623,12 @@ public:
     cell_type* itr = bit_table_ + (new_table_size);
     cell_type* end = bit_table_ + (original_table_size);
     cell_type* itr_tmp = tmp;
-
+    cell_type* itr_end = tmp + (new_table_size);
     while (end != itr)
     {
       *(itr_tmp++) |= (*itr++);
+      if (itr_tmp == itr_end)
+	itr_tmp = tmp;
     }
 
     delete[] bit_table_;
