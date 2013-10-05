@@ -8,7 +8,8 @@ void bloom_filter::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl);
   ::encode((uint64_t)salt_count_, bl);
-  ::encode((uint64_t)inserted_element_count_, bl);
+  ::encode((uint64_t)insert_count_, bl);
+  ::encode((uint64_t)target_element_count_, bl);
   ::encode((uint64_t)random_seed_, bl);
   bufferptr bp((const char*)bit_table_, table_size_);
   ::encode(bp, bl);
@@ -22,7 +23,9 @@ void bloom_filter::decode(bufferlist::iterator& p)
   ::decode(v, p);
   salt_count_ = v;
   ::decode(v, p);
-  inserted_element_count_ = v;
+  insert_count_ = v;
+  ::decode(v, p);
+  target_element_count_ = v;
   ::decode(v, p);
   random_seed_ = v;
   bufferlist t;
@@ -46,7 +49,8 @@ void bloom_filter::dump(Formatter *f) const
 {
   f->dump_unsigned("salt_count", salt_count_);
   f->dump_unsigned("table_size", table_size_);
-  f->dump_unsigned("insert_count", inserted_element_count_);
+  f->dump_unsigned("insert_count", insert_count_);
+  f->dump_unsigned("target_element_count", target_element_count_);
   f->dump_unsigned("random_seed", random_seed_);
 
   f->open_array_section("salt_table");
@@ -62,11 +66,11 @@ void bloom_filter::dump(Formatter *f) const
 
 void bloom_filter::generate_test_instances(list<bloom_filter*>& ls)
 {
-  ls.push_back(new bloom_filter(10, .5, 1));
-  ls.push_back(new bloom_filter(10, .5, 1));
+  ls.push_back(new bloom_filter(10, .5, 1, 5));
+  ls.push_back(new bloom_filter(10, .5, 1, 5));
   ls.back()->insert("foo");
   ls.back()->insert("bar");
-  ls.push_back(new bloom_filter(50, .5, 1));
+  ls.push_back(new bloom_filter(50, .5, 1, 5));
   ls.back()->insert("foo");
   ls.back()->insert("bar");
   ls.back()->insert("baz");
@@ -84,7 +88,8 @@ void compressible_bloom_filter::encode(bufferlist& bl) const
   for (vector<size_t>::const_iterator p = size_list.begin();
        p != size_list.end(); ++p)
     ::encode((uint64_t)*p, bl);
-  ::encode((uint64_t)inserted_element_count_, bl);
+  ::encode((uint64_t)insert_count_, bl);
+  ::encode((uint64_t)target_element_count_, bl);
   ::encode((uint64_t)random_seed_, bl);
   bufferptr bp((const char*)bit_table_, table_size_);
   ::encode(bp, bl);
@@ -107,7 +112,9 @@ void compressible_bloom_filter::decode(bufferlist::iterator& p)
   }
 
   ::decode(v, p);
-  inserted_element_count_ = v;
+  insert_count_ = v;
+  ::decode(v, p);
+  target_element_count_ = v;
   ::decode(v, p);
   random_seed_ = v;
   bufferlist t;
@@ -132,7 +139,8 @@ void compressible_bloom_filter::decode(bufferlist::iterator& p)
 void compressible_bloom_filter::dump(Formatter *f) const
 {
   f->dump_unsigned("salt_count", salt_count_);
-  f->dump_unsigned("insert_count", inserted_element_count_);
+  f->dump_unsigned("insert_count", insert_count_);
+  f->dump_unsigned("target_element_count", target_element_count_);
   f->dump_unsigned("random_seed", random_seed_);
   f->dump_unsigned("table_size", table_size_);
   f->open_array_section("table_sizes");
@@ -154,11 +162,11 @@ void compressible_bloom_filter::dump(Formatter *f) const
 
 void compressible_bloom_filter::generate_test_instances(list<compressible_bloom_filter*>& ls)
 {
-  ls.push_back(new compressible_bloom_filter(10, .5, 1));
-  ls.push_back(new compressible_bloom_filter(10, .5, 1));
+  ls.push_back(new compressible_bloom_filter(10, .5, 1, 4));
+  ls.push_back(new compressible_bloom_filter(10, .5, 1, 4));
   ls.back()->insert("foo");
   ls.back()->insert("bar");
-  ls.push_back(new compressible_bloom_filter(50, .5, 1));
+  ls.push_back(new compressible_bloom_filter(50, .5, 1, 4));
   ls.back()->insert("foo");
   ls.back()->insert("bar");
   ls.back()->insert("baz");

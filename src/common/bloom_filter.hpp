@@ -57,7 +57,8 @@ protected:
   std::vector<bloom_type> salt_;     ///< vector of salts
   std::size_t         salt_count_;   ///< number of salts
   std::size_t         table_size_;   ///< bit table size in bytes
-  std::size_t         inserted_element_count_;  ///< insertion count
+  std::size_t         insert_count_;  ///< insertion count
+  std::size_t         target_element_count_;  ///< target number of unique insertions
   std::size_t         random_seed_;  ///< random seed
 
 public:
@@ -66,7 +67,8 @@ public:
     : bit_table_(0),
       salt_count_(0),
       table_size_(0),
-      inserted_element_count_(0),
+      insert_count_(0),
+      target_element_count_(0),
       random_seed_(0)
   {}
 
@@ -74,7 +76,8 @@ public:
 	       const double& false_positive_probability,
 	       const std::size_t& random_seed)
     : bit_table_(0),
-      inserted_element_count_(0),
+      insert_count_(0),
+      target_element_count_(predicted_inserted_element_count),
       random_seed_((random_seed) ? random_seed : 0xA5A5A5A5)
   {
     find_optimal_parameters(predicted_inserted_element_count, false_positive_probability,
@@ -84,11 +87,13 @@ public:
 
   bloom_filter(const std::size_t& salt_count,
 	       std::size_t table_size,
-	       const std::size_t& random_seed)
+	       const std::size_t& random_seed,
+	       std::size_t target_element_count)
     : bit_table_(0),
       salt_count_(salt_count),
       table_size_(table_size),
-      inserted_element_count_(0),
+      insert_count_(0),
+      target_element_count_(target_element_count),
       random_seed_((random_seed) ? random_seed : 0xA5A5A5A5)
   {
     init();
@@ -110,7 +115,7 @@ public:
     if (this != &filter) {
       salt_count_ = filter.salt_count_;
       table_size_ = filter.table_size_;
-      inserted_element_count_ = filter.inserted_element_count_;
+      insert_count_ = filter.insert_count_;
       random_seed_ = filter.random_seed_;
       delete[] bit_table_;
       bit_table_ = new cell_type[table_size_];
@@ -133,7 +138,7 @@ public:
   inline void clear()
   {
     std::fill_n(bit_table_, table_size_, 0x00);
-    inserted_element_count_ = 0;
+    insert_count_ = 0;
   }
 
   /**
@@ -153,7 +158,7 @@ public:
       compute_indices(hash_ap(val,salt_[i]),bit_index,bit);
       bit_table_[bit_index >> 3] |= bit_mask[bit];
     }
-    ++inserted_element_count_;
+    ++insert_count_;
   }
 
   inline void insert(const unsigned char* key_begin, const std::size_t& length)
@@ -165,7 +170,7 @@ public:
       compute_indices(hash_ap(key_begin,length,salt_[i]),bit_index,bit);
       bit_table_[bit_index >> 3] |= bit_mask[bit];
     }
-    ++inserted_element_count_;
+    ++insert_count_;
   }
 
   template<typename T>
@@ -288,7 +293,9 @@ public:
 
   inline std::size_t element_count() const
   {
-    return inserted_element_count_;
+    return insert_count_;
+  }
+
   }
 
   inline double effective_fpp() const
@@ -300,7 +307,7 @@ public:
       the current number of inserted elements - not the user defined
       predicated/expected number of inserted elements.
     */
-    return std::pow(1.0 - std::exp(-1.0 * salt_.size() * inserted_element_count_ / size()), 1.0 * salt_.size());
+    return std::pow(1.0 - std::exp(-1.0 * salt_.size() * insert_count_ / size()), 1.0 * salt_.size());
   }
 
   inline bloom_filter& operator &= (const bloom_filter& filter)
@@ -552,15 +559,16 @@ public:
   compressible_bloom_filter(const std::size_t& predicted_element_count,
 			    const double& false_positive_probability,
 			    const std::size_t& random_seed)
-    : bloom_filter(predicted_element_count,false_positive_probability,random_seed)
+    : bloom_filter(predicted_element_count, false_positive_probability, random_seed)
   {
     size_list.push_back(table_size_);
   }
 
   compressible_bloom_filter(const std::size_t& salt_count,
 			    std::size_t table_size,
-			    const std::size_t& random_seed)
-    : bloom_filter(salt_count, table_size, random_seed)
+			    const std::size_t& random_seed,
+			    std::size_t target_count)
+    : bloom_filter(salt_count, table_size, random_seed, target_count)
   {
     size_list.push_back(table_size_);
   }
