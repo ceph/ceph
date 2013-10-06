@@ -587,7 +587,6 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 
   op->mark_started();
 
-  bufferlist outdata;
   int result = 0;
   string cname, mname;
   PGLSFilter *filter = NULL;
@@ -595,7 +594,10 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 
   snapid_t snapid = m->get_snapid();
 
-  for (vector<OSDOp>::iterator p = m->ops.begin(); p != m->ops.end(); ++p) {
+  vector<OSDOp> ops = m->ops;
+
+  for (vector<OSDOp>::iterator p = ops.begin(); p != ops.end(); ++p) {
+    OSDOp& osd_op = *p;
     bufferlist::iterator bp = p->indata.begin();
     switch (p->op.op) {
     case CEPH_OSD_OP_PGLS_FILTER:
@@ -738,11 +740,11 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	  result = 1;
 	}
 	response.handle = next;
-	::encode(response, outdata);
+	::encode(response, osd_op.outdata);
 	if (filter)
-	  ::encode(filter_out, outdata);
+	  ::encode(filter_out, osd_op.outdata);
 	dout(10) << " pgls result=" << result << " outdata.length()="
-		 << outdata.length() << dendl;
+		 << osd_op.outdata.length() << dendl;
       }
       break;
 
@@ -755,7 +757,7 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
   // reply
   MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(),
 				       CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK); 
-  reply->set_data(outdata);
+  reply->claim_op_out_data(ops);
   reply->set_result(result);
   reply->set_reply_versions(info.last_update, info.last_user_version);
   osd->send_message_osd_client(reply, m->get_connection());
