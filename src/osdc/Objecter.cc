@@ -1757,20 +1757,9 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
   bufferlist *bl = new bufferlist();
   C_List *onack = new C_List(list_context, onfinish, bl, this);
 
-  object_t oid;
   object_locator_t oloc(list_context->pool_id, list_context->nspace);
-
-  // 
-  Op *o = new Op(oid, oloc, op.ops, CEPH_OSD_FLAG_READ, onack, NULL, NULL);
-  o->priority = op.priority;
-  o->snapid = list_context->pool_snap_seq;
-  o->outbl = bl;
-  o->reply_epoch = &onack->epoch;
-
-  o->base_pgid = pg_t(list_context->current_pg, list_context->pool_id, -1);
-  o->precalc_pgid = true;
-
-  op_submit(o);
+  pg_read(list_context->current_pg, oloc, op,
+	  bl, 0, onack, &onack->epoch);
 }
 
 void Objecter::_list_reply(ListContext *list_context, int r, bufferlist *bl,
