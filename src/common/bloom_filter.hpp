@@ -317,7 +317,7 @@ public:
     return (double)set / (double)(table_size_ << 3);
   }
 
-  inline double approx_unique_element_count() const {
+  virtual inline double approx_unique_element_count() const {
     // this is not a very good estimate; a better solution should have
     // some asymptotic behavior as density() approaches 1.0.
     return (double)target_element_count_ * 2.0 * density();
@@ -635,6 +635,14 @@ public:
     table_size_ = new_table_size;
 
     return true;
+  }
+
+  virtual inline double approx_unique_element_count() const {
+    // this is not a very good estimate; a better solution should have
+    // some asymptotic behavior as density() approaches 1.0.
+    //
+    // the compress() correction is also bad; it tends to under-estimate.
+    return (double)target_element_count_ * 2.0 * density() * (double)size_list.back() / (double)size_list.front();
   }
 
 private:
