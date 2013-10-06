@@ -2586,7 +2586,6 @@ bool Monitor::_ms_dispatch(Message *m)
     if (!src_is_mon && m->get_type() != CEPH_MSG_AUTH) {
       dout(1) << __func__ << " dropping stray message " << *m
         << " from " << m->get_source_inst() << dendl;
-      m->put();
       return false;
     }
 
