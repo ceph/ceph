@@ -1428,6 +1428,25 @@ private:
     o->out_rval.swap(op.out_rval);
     return op_submit(o);
   }
+  tid_t pg_read(uint32_t hash, object_locator_t oloc,
+		ObjectOperation& op,
+		bufferlist *pbl, int flags,
+		Context *onack,
+		epoch_t *reply_epoch) {
+    Op *o = new Op(object_t(), oloc,
+		   op.ops, flags | global_op_flags | CEPH_OSD_FLAG_READ,
+		   onack, NULL, NULL);
+    o->precalc_pgid = true;
+    o->base_pgid = pg_t(hash, oloc.pool);
+    o->priority = op.priority;
+    o->snapid = CEPH_NOSNAP;
+    o->outbl = pbl;
+    o->out_bl.swap(op.out_bl);
+    o->out_handler.swap(op.out_handler);
+    o->out_rval.swap(op.out_rval);
+    o->reply_epoch = reply_epoch;
+    return op_submit(o);
+  }
   tid_t linger_mutate(const object_t& oid, const object_locator_t& oloc,
 		      ObjectOperation& op,
 		      const SnapContext& snapc, utime_t mtime,
