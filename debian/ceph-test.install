@@ -56,6 +56,7 @@ usr/bin/ceph_test_rados_api_io
 usr/bin/ceph_test_rados_api_list
 usr/bin/ceph_test_rados_api_lock
 usr/bin/ceph_test_rados_api_misc
+usr/bin/ceph_test_rados_api_tier
 usr/bin/ceph_test_rados_api_pool
 usr/bin/ceph_test_rados_api_snapshots
 usr/bin/ceph_test_rados_api_stat
