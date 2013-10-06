@@ -672,6 +672,11 @@ namespace librados
      */
     int aio_remove(const std::string& oid, AioCompletion *c);
 
+    /**
+     * Wait for all currently pending aio writes to be safe.
+     *
+     * @returns 0 on success, negative error code on failure
+     */
     int aio_flush();
 
     /**
