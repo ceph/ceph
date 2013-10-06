@@ -2,6 +2,37 @@
  Release Notes
 ===============
 
+v0.70
+-----
+
+Upgrading
+~~~~~~~~~
+
+* librados::Rados::pool_create_async() and librados::Rados::pool_delete_async()
+  don't drop a reference to the completion object on error, caller needs to take
+  care of that. This has never really worked correctly and we were leaking an
+  object
+
+* 'ceph osd crush set <id> <weight> <loc..>' no longer adds the osd to the
+  specified location, as that's a job for 'ceph osd crush add'.  It will
+  however continue to work just the same as long as the osd already exists
+  in the crush map.
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* mon: a few 'ceph mon add' races fixed (command is now idempotent) (Joao Luis)
+* crush: fix name caching
+* rgw: fix a few minor memory leaks (Yehuda Sadeh)
+* ceph: improve parsing of CEPH_ARGS (Benoit Knecht)
+* mon: avoid rewriting full osdmaps on restart (Joao Luis)
+* crc32c: fix optimized crc32c code (it now detects arch support properly)
+* mon: fix 'ceph osd crush reweight ...' (Joao Luis)
+* osd: revert xattr size limit (fixes large rgw uploads)
+* mds: fix heap profiler commands (Joao Luis)
+* rgw: fix inefficient use of std::list::size() (Yehuda Sadeh)
+
+
 v0.69
 -----
 
@@ -18,6 +49,28 @@ Upgrading
   bytes of data will now be rejected.  No known clients do this, but
   the because the server-side behavior has changed it is possible that
   an application misusing the interface may now get errors.
+
+* The OSD now enforces that class write methods cannot both mutate an
+  object and return data.  The rbd.assign_bid method, the lone
+  offender, has been removed.  This breaks compatibility with
+  pre-bobtail librbd clients by preventing them from creating new
+  images.
+
+* librados now returns on commit instead of ack for synchronous calls.
+  This is a bit safer in the case where both OSDs and the client crash, and
+  is probably how it should have been acting from the beginning. Users are
+  unlikely to notice but it could result in lower performance in some
+  circumstances. Those who care should switch to using the async interfaces,
+  which let you specify safety semantics precisely.
+
+* The C++ librados AioComplete::get_version() method was incorrectly
+  returning an int (usually 32-bits).  To avoid breaking library
+  compatibility, a get_version64() method is added that returns the
+  full-width value.  The old method is deprecated and will be removed
+  in a future release.  Users of the C++ librados API that make use of
+  the get_version() method should modify their code to avoid getting a
+  value that is truncated from 64 to to 32 bits.
+
 
 Notable Changes
 ~~~~~~~~~~~~~~~
