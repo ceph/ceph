@@ -861,8 +861,11 @@ public:
     object_t target_oid;
     object_locator_t target_oloc;
 
-    pg_t pgid;
-    vector<int> acting;
+    bool precalc_pgid;   ///< true if we are directed at base_pgid, not base_oid
+    pg_t base_pgid;      ///< explciti pg target, if any
+
+    pg_t pgid;           ///< last pg we mapped to
+    vector<int> acting;  ///< acting for last pg we mapped to
     bool used_replica;
 
     ConnectionRef con;  // for rx buffer only
@@ -892,7 +895,6 @@ public:
 
     utime_t stamp;
 
-    bool precalc_pgid;
     epoch_t map_dne_bound;
 
     bool budgeted;
@@ -904,12 +906,13 @@ public:
        int f, Context *ac, Context *co, version_t *ov) :
       session(NULL), session_item(this), incarnation(0),
       base_oid(o), base_oloc(ol),
+      precalc_pgid(false),
       used_replica(false), con(NULL),
       snapid(CEPH_NOSNAP),
       outbl(NULL),
       flags(f), priority(0), onack(ac), oncommit(co),
       tid(0), attempts(0),
-      paused(false), objver(ov), reply_epoch(NULL), precalc_pgid(false),
+      paused(false), objver(ov), reply_epoch(NULL),
       map_dne_bound(0),
       budgeted(false),
       should_resend(true) {
