@@ -23,6 +23,14 @@ TEST(BloomFilter, Basic) {
   ASSERT_TRUE(bf.contains("bar"));
 }
 
+TEST(BloomFilter, Empty) {
+  bloom_filter bf;
+  for (int i=0; i<100; ++i) {
+    ASSERT_FALSE(bf.contains(i));
+    ASSERT_FALSE(bf.contains(stringify(i)));
+  }
+}
+
 TEST(BloomFilter, Sweep) {
   std::cout.setf(std::ios_base::fixed, std::ios_base::floatfield);
   std::cout.precision(5);

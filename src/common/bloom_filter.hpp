@@ -101,8 +101,12 @@ public:
 
   void init() {
     generate_unique_salt();
-    bit_table_ = new cell_type[table_size_];
-    std::fill_n(bit_table_, table_size_, 0x00);
+    if (table_size_) {
+      bit_table_ = new cell_type[table_size_];
+      std::fill_n(bit_table_, table_size_, 0x00);
+    } else {
+      bit_table_ = NULL;
+    }
   }
 
   bloom_filter(const bloom_filter& filter)
@@ -137,7 +141,8 @@ public:
 
   inline void clear()
   {
-    std::fill_n(bit_table_, table_size_, 0x00);
+    if (bit_table_)
+      std::fill_n(bit_table_, table_size_, 0x00);
     insert_count_ = 0;
   }
 
@@ -151,6 +156,7 @@ public:
    * @param val integer value to insert
    */
   inline void insert(uint32_t val) {
+    assert(bit_table_);
     std::size_t bit_index = 0;
     std::size_t bit = 0;
     for (std::size_t i = 0; i < salt_.size(); ++i)
@@ -163,6 +169,7 @@ public:
 
   inline void insert(const unsigned char* key_begin, const std::size_t& length)
   {
+    assert(bit_table_);
     std::size_t bit_index = 0;
     std::size_t bit = 0;
     for (std::size_t i = 0; i < salt_.size(); ++i)
@@ -212,6 +219,8 @@ public:
    */
   inline virtual bool contains(uint32_t val) const
   {
+    if (!bit_table_)
+      return false;
     std::size_t bit_index = 0;
     std::size_t bit = 0;
     for (std::size_t i = 0; i < salt_.size(); ++i)
@@ -227,6 +236,8 @@ public:
 
   inline virtual bool contains(const unsigned char* key_begin, const std::size_t length) const
   {
+    if (!bit_table_)
+      return false;
     std::size_t bit_index = 0;
     std::size_t bit = 0;
     for (std::size_t i = 0; i < salt_.size(); ++i)
@@ -305,6 +316,8 @@ public:
    */
   inline double density() const
   {
+    if (!bit_table_)
+      return 0.0;
     size_t set = 0;
     uint8_t *p = bit_table_;
     size_t left = table_size_;
@@ -605,6 +618,9 @@ public:
 
   inline bool compress(const double& target_ratio)
   {
+    if (!bit_table_)
+      return false;
+
     if ((0.0 >= target_ratio) || (target_ratio >= 1.0))
     {
       return false;
