@@ -231,7 +231,7 @@ struct pg_t {
   int32_t m_preferred;
 
   pg_t() : m_pool(0), m_seed(0), m_preferred(-1) {}
-  pg_t(ps_t seed, uint64_t pool, int pref) {
+  pg_t(ps_t seed, uint64_t pool, int pref=-1) {
     m_seed = seed;
     m_pool = pool;
     m_preferred = pref;
