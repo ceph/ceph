@@ -1322,9 +1322,6 @@ bool Objecter::is_pg_changed(vector<int>& o, vector<int>& n, bool any_change)
 
 int Objecter::recalc_op_target(Op *op)
 {
-  vector<int> acting;
-  pg_t pgid = op->pgid;
-
   bool is_read = op->flags & CEPH_OSD_FLAG_READ;
   bool is_write = op->flags & CEPH_OSD_FLAG_WRITE;
 
@@ -1348,16 +1345,22 @@ int Objecter::recalc_op_target(Op *op)
     }
   }
 
+  pg_t pgid;
   if (op->precalc_pgid) {
     assert(op->base_oid.name.empty()); // make sure this is a listing op
-    ldout(cct, 10) << "recalc_op_target have " << pgid << " pool " << osdmap->have_pg_pool(pgid.pool()) << dendl;
-    if (!osdmap->have_pg_pool(pgid.pool()))
+    ldout(cct, 10) << "recalc_op_target have " << op->base_pgid << " pool "
+		   << osdmap->have_pg_pool(op->base_pgid.pool()) << dendl;
+    if (!osdmap->have_pg_pool(op->base_pgid.pool()))
       return RECALC_OP_TARGET_POOL_DNE;
+    pgid = osdmap->raw_pg_to_pg(op->base_pgid);
   } else {
-    int ret = osdmap->object_locator_to_pg(op->target_oid, op->target_oloc, pgid);
+    int ret = osdmap->object_locator_to_pg(op->target_oid, op->target_oloc,
+					   pgid);
     if (ret == -ENOENT)
       return RECALC_OP_TARGET_POOL_DNE;
   }
+  op->pgid = pgid;
+  vector<int> acting;
   osdmap->pg_to_acting_osds(pgid, acting);
 
   if (op->pgid != pgid || is_pg_changed(op->acting, acting, op->used_replica)) {
@@ -1764,7 +1767,7 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
   o->outbl = bl;
   o->reply_epoch = &onack->epoch;
 
-  o->pgid = pg_t(list_context->current_pg, list_context->pool_id, -1);
+  o->base_pgid = pg_t(list_context->current_pg, list_context->pool_id, -1);
   o->precalc_pgid = true;
 
   op_submit(o);
