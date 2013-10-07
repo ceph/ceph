@@ -253,12 +253,12 @@ class ResultsReporter(object):
         """
         Report a single job to the results server.
 
-        :param run_name: The name of the run.
+        :param run_name: The name of the run. The run must already exist.
         :param job_id:   The job's id
         :param job_json: The job's JSON object. Optional - if not present, we
                          look at the archive.
         """
-        run_uri = "{base}/runs/{name}/".format(
+        run_uri = "{base}/runs/{name}/jobs/".format(
             base=self.base_uri, name=run_name,)
         if job_json is None:
             job_json = self.serializer.json_for_job(run_name, job_id)
