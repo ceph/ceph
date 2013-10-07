@@ -5315,19 +5315,28 @@ bool Server::_dir_is_nonempty(MDRequest *mdr, CInode *in)
 {
   dout(10) << "dir_is_nonempty " << *in << dendl;
   assert(in->is_auth());
+  assert(in->filelock.can_read(-1));
 
-  if (in->snaprealm && in->snaprealm->srnode.snaps.size())
-    return true; // in a snapshot!
+  frag_info_t dirstat;
+  version_t dirstat_version = in->get_projected_inode()->dirstat.version;
 
-  if (in->get_projected_inode()->dirstat.size() > 0) {	
-    dout(10) << "dir_is_nonempty projected dir size still "
-	     << in->get_projected_inode()->dirstat.size()
-	     << " on " << *in
-	     << dendl;
-    return true;
+  list<CDir*> ls;
+  in->get_dirfrags(ls);
+  for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
+    CDir *dir = *p;
+    if (dir->get_projected_fnode()->fragstat.size()) {
+      dout(10) << "dir_is_nonempty_unlocked dirstat has "
+	       << dir->get_projected_fnode()->fragstat.size() << " items " << *dir << dendl;
+      return true;
+    }
+
+    if (dir->fnode.accounted_fragstat.version == dirstat_version)
+      dirstat.add(dir->fnode.accounted_fragstat);
+    else
+      dirstat.add(dir->fnode.fragstat);
   }
 
-  return false;
+  return dirstat.size() != in->get_projected_inode()->dirstat.size();
 }
 
 
