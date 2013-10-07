@@ -4412,14 +4412,13 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
       dout(10) << __func__ << " fetching more" << dendl;
       _copy_some(obc, cop);
       return;
-    } else {
-      _build_finish_copy_transaction(cop, results.get<3>());
-      results.get<1>() = cop->temp_cursor.data_offset;
     }
+    _build_finish_copy_transaction(cop, results.get<3>());
+    results.get<1>() = cop->temp_cursor.data_offset;
   }
 
   dout(20) << __func__ << " complete; committing" << dendl;
-  results.get<0>() = cop->rval;
+  results.get<0>() = r;
   cop->cb->complete(results);
 
   copy_ops.erase(obc->obs.oi.soid);
