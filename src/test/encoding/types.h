@@ -36,13 +36,15 @@ TYPEWITHSTRAYDATA(OSDMap::Incremental)
 #include "crush/CrushWrapper.h"
 TYPE(CrushWrapper)
 
+#include "include/histogram.h"
+TYPE(pow2_hist_t)
+
 #include "osd/osd_types.h"
 TYPE(osd_reqid_t)
 TYPE(object_locator_t)
 TYPE(request_redirect_t)
 TYPE(pg_t)
 TYPE(coll_t)
-TYPE(pow2_hist_t)
 TYPE(filestore_perf_stat_t)
 TYPE(osd_stat_t)
 TYPE(OSDSuperblock)
