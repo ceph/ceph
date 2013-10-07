@@ -96,7 +96,7 @@ bool ReplicatedBackend::handle_message(
   )
 {
   dout(10) << __func__ << ": " << op << dendl;
-  switch (op->request->get_type()) {
+  switch (op->get_req()->get_type()) {
   case MSG_OSD_PG_PUSH:
     // TODOXXX: needs to be active possibly
     do_push(op);
@@ -111,7 +111,7 @@ bool ReplicatedBackend::handle_message(
     return true;
 
   case MSG_OSD_SUBOP: {
-    MOSDSubOp *m = static_cast<MOSDSubOp*>(op->request);
+    MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
     if (m->ops.size() >= 1) {
       OSDOp *first = &m->ops[0];
       switch (first->op.op) {
@@ -130,7 +130,7 @@ bool ReplicatedBackend::handle_message(
   }
 
   case MSG_OSD_SUBOPREPLY: {
-    MOSDSubOpReply *r = static_cast<MOSDSubOpReply*>(op->request);
+    MOSDSubOpReply *r = static_cast<MOSDSubOpReply*>(op->get_req());
     if (r->ops.size() >= 1) {
       OSDOp &first = r->ops[0];
       switch (first.op.op) {

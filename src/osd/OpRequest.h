@@ -25,87 +25,12 @@
 #include "common/TrackedOp.h"
 #include "osd/osd_types.h"
 
-struct OpRequest;
-class OpTracker;
-typedef std::tr1::shared_ptr<OpRequest> OpRequestRef;
-class OpHistory {
-  set<pair<utime_t, OpRequestRef> > arrived;
-  set<pair<double, OpRequestRef> > duration;
-  void cleanup(utime_t now);
-  bool shutdown;
-  OpTracker *tracker;
-
-public:
-  OpHistory(OpTracker *tracker_) : shutdown(false), tracker(tracker_) {}
-  ~OpHistory() {
-    assert(arrived.empty());
-    assert(duration.empty());
-  }
-  void insert(utime_t now, OpRequestRef op);
-  void dump_ops(utime_t now, Formatter *f);
-  void on_shutdown();
-};
-
-class OpTracker {
-  class RemoveOnDelete {
-    OpTracker *tracker;
-  public:
-    RemoveOnDelete(OpTracker *tracker) : tracker(tracker) {}
-    void operator()(OpRequest *op);
-  };
-  friend class RemoveOnDelete;
-  friend class OpRequest;
-  friend class OpHistory;
-  uint64_t seq;
-  Mutex ops_in_flight_lock;
-  xlist<OpRequest *> ops_in_flight;
-  OpHistory history;
-
-protected:
-  CephContext *cct;
-
-public:
-  OpTracker(CephContext *cct_) : seq(0), ops_in_flight_lock("OpTracker mutex"), history(this), cct(cct_) {}
-  void dump_ops_in_flight(Formatter *f);
-  void dump_historic_ops(Formatter *f);
-  void register_inflight_op(xlist<OpRequest*>::item *i);
-  void unregister_inflight_op(OpRequest *i);
-
-  void get_age_ms_histogram(pow2_hist_t *h);
-
-  /**
-   * Look for Ops which are too old, and insert warning
-   * strings for each Op that is too old.
-   *
-   * @param warning_strings A vector<string> reference which is filled
-   * with a warning string for each old Op.
-   * @return True if there are any Ops to warn on, false otherwise.
-   */
-  bool check_ops_in_flight(std::vector<string> &warning_strings);
-  void mark_event(OpRequest *op, const string &evt);
-  void _mark_event(OpRequest *op, const string &evt, utime_t now);
-  OpRequestRef create_request(Message *req);
-  void on_shutdown() {
-    Mutex::Locker l(ops_in_flight_lock);
-    history.on_shutdown();
-  }
-  ~OpTracker() {
-    assert(ops_in_flight.empty());
-  }
-};
-
 /**
  * The OpRequest takes in a Message* and takes over a single reference
  * to it, which it puts() when destroyed.
- * OpRequest is itself ref-counted. The expectation is that you get a Message
- * you want to track, create an OpRequest with it, and then pass around that OpRequest
- * the way you used to pass around the Message.
  */
 struct OpRequest : public TrackedOp {
   friend class OpTracker;
-  friend class OpHistory;
-  Message *request;
-  xlist<OpRequest*>::item xitem;
 
   // rmw flags
   int rmw_flags;
@@ -134,28 +59,12 @@ struct OpRequest : public TrackedOp {
   void set_class_write() { rmw_flags |= CEPH_OSD_RMW_FLAG_CLASS_WRITE; }
   void set_pg_op() { rmw_flags |= CEPH_OSD_RMW_FLAG_PGOP; }
 
-  utime_t received_time;
-  uint32_t warn_interval_multiplier;
-  utime_t get_arrived() const {
-    return received_time;
-  }
-  double get_duration() const {
-    return events.size() ?
-      (events.rbegin()->first - received_time) :
-      0.0;
-  }
-
-  void dump(utime_t now, Formatter *f) const;
+  void _dump(utime_t now, Formatter *f) const;
 
 private:
-  list<pair<utime_t, string> > events;
-  string current;
-  Mutex lock;
-  OpTracker *tracker;
   osd_reqid_t reqid;
   uint8_t hit_flag_points;
   uint8_t latest_flag_point;
-  uint64_t seq;
   static const uint8_t flag_queued_for_pg=1 << 0;
   static const uint8_t flag_reached_pg =  1 << 1;
   static const uint8_t flag_delayed =     1 << 2;
@@ -164,12 +73,8 @@ private:
   static const uint8_t flag_commit_sent = 1 << 5;
 
   OpRequest(Message *req, OpTracker *tracker);
-public:
-  ~OpRequest() {
-    assert(request);
-    request->put();
-  }
 
+public:
   bool been_queued_for_pg() { return hit_flag_points & flag_queued_for_pg; }
   bool been_reached_pg() { return hit_flag_points & flag_reached_pg; }
   bool been_delayed() { return hit_flag_points & flag_delayed; }
@@ -233,10 +138,15 @@ public:
     latest_flag_point = flag_commit_sent;
   }
 
-  void mark_event(const string &event);
   osd_reqid_t get_reqid() const {
     return reqid;
   }
+
+  void init_from_message();
+
+  typedef std::tr1::shared_ptr<OpRequest> Ref;
 };
+
+typedef OpRequest::Ref OpRequestRef;
 
 #endif /* OPREQUEST_H_ */
