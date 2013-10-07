@@ -993,7 +993,7 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
     //<< " wfnvram=" << repop.waitfor_nvram
       << " wfdisk=" << repop.waitfor_disk;
   if (repop.ctx->op)
-    out << " op=" << *(repop.ctx->op->request);
+    out << " op=" << *(repop.ctx->op->get_req());
   out << ")";
   return out;
 }
