@@ -66,11 +66,11 @@ void bloom_filter::dump(Formatter *f) const
 
 void bloom_filter::generate_test_instances(list<bloom_filter*>& ls)
 {
-  ls.push_back(new bloom_filter(10, .5, 1, 5));
-  ls.push_back(new bloom_filter(10, .5, 1, 5));
+  ls.push_back(new bloom_filter(10, .5, 1));
+  ls.push_back(new bloom_filter(10, .5, 1));
   ls.back()->insert("foo");
   ls.back()->insert("bar");
-  ls.push_back(new bloom_filter(50, .5, 1, 5));
+  ls.push_back(new bloom_filter(50, .5, 1));
   ls.back()->insert("foo");
   ls.back()->insert("bar");
   ls.back()->insert("baz");
@@ -123,11 +123,11 @@ void compressible_bloom_filter::dump(Formatter *f) const
 
 void compressible_bloom_filter::generate_test_instances(list<compressible_bloom_filter*>& ls)
 {
-  ls.push_back(new compressible_bloom_filter(10, .5, 1, 4));
-  ls.push_back(new compressible_bloom_filter(10, .5, 1, 4));
+  ls.push_back(new compressible_bloom_filter(10, .5, 1));
+  ls.push_back(new compressible_bloom_filter(10, .5, 1));
   ls.back()->insert("foo");
   ls.back()->insert("bar");
-  ls.push_back(new compressible_bloom_filter(50, .5, 1, 4));
+  ls.push_back(new compressible_bloom_filter(50, .5, 1));
   ls.back()->insert("foo");
   ls.back()->insert("bar");
   ls.back()->insert("baz");
