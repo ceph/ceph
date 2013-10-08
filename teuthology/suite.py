@@ -190,23 +190,10 @@ def build_matrix(path):
             return out
     return []
 
-def ls():
-    parser = argparse.ArgumentParser(description='List teuthology job results')
-    parser.add_argument(
-        '--archive-dir',
-        metavar='DIR',
-        help='path under which to archive results',
-        required=True,
-        )
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true', default=False,
-        help='show reasons tests failed',
-        )
-    args = parser.parse_args()
 
-    for j in get_jobs(args.archive_dir):
-        job_dir = os.path.join(args.archive_dir, j)
+def ls(archive_dir, verbose):
+    for j in get_jobs(archive_dir):
+        job_dir = os.path.join(archive_dir, j)
         summary = {}
         try:
             with file(os.path.join(job_dir, 'summary.yaml')) as f:
@@ -224,15 +211,16 @@ def ls():
                     if os.path.isfile(pidfile):
                         pid = open(pidfile, 'r').read()
                         if os.path.isdir("/proc/%s" % pid):
-                            cmdline = open('/proc/%s/cmdline' % pid, 'r').read()
-                            if cmdline.find(args.archive_dir) >= 0:
+                            cmdline = open('/proc/%s/cmdline' % pid,
+                                           'r').read()
+                            if cmdline.find(archive_dir) >= 0:
                                 print '(pid %s)' % pid,
                                 found = True
                     if not found:
                         print '(no process or summary.yaml)',
                     # tail
                     tail = os.popen(
-                        'tail -1 %s/%s/teuthology.log' % (args.archive_dir, j)
+                        'tail -1 %s/%s/teuthology.log' % (archive_dir, j)
                         ).read().rstrip()
                     print tail,
                 except IOError, e:
@@ -249,7 +237,7 @@ def ls():
             success='pass' if summary.get('success', False) else 'FAIL',
             duration=int(summary.get('duration', 0)),
             )
-        if args.verbose and 'failure_reason' in summary:
+        if verbose and 'failure_reason' in summary:
             print '    {reason}'.format(reason=summary['failure_reason'])
 
 def generate_coverage(args):

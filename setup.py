@@ -19,7 +19,7 @@ setup(
             'teuthology = teuthology.run:main',
             'teuthology-nuke = scripts.nuke:main',
             'teuthology-suite = scripts.suite:main',
-            'teuthology-ls = teuthology.suite:ls',
+            'teuthology-ls = scripts.ls:main',
             'teuthology-worker = teuthology.queue:worker',
             'teuthology-lock = teuthology.lock:main',
             'teuthology-schedule = teuthology.run:schedule',
