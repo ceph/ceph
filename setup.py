@@ -18,7 +18,7 @@ setup(
         'console_scripts': [
             'teuthology = teuthology.run:main',
             'teuthology-nuke = scripts.nuke:main',
-            'teuthology-suite = teuthology.suite:main',
+            'teuthology-suite = scripts.suite:main',
             'teuthology-ls = teuthology.suite:ls',
             'teuthology-worker = teuthology.queue:worker',
             'teuthology-lock = teuthology.lock:main',
