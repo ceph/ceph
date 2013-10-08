@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 import os
 import yaml
 import json
@@ -7,14 +5,24 @@ import re
 import httplib2
 import urllib
 import logging
-import argparse
-from textwrap import dedent
 
 from teuthology.config import config
 
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+
+def main(args):
+    archive_base = os.path.abspath(os.path.expanduser(args.archive))
+    reporter = ResultsReporter(archive_base, base_uri=args.server,
+                               save=args.save, refresh=args.refresh)
+    if args.run and len(args.run) > 1:
+        reporter.report_runs(args.run)
+    elif args.run:
+        reporter.report_run(args.run[0])
+    elif args.all_runs:
+        reporter.report_all_runs()
 
 
 class RequestFailedError(RuntimeError):
@@ -364,47 +372,3 @@ def try_push_job_info(job_config, extra_info=None):
         except RequestFailedError:
             log.exception("Could not report results to %s" %
                           config.results_server)
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Submit test results to a web service")
-    parser.add_argument('-a', '--archive', required=True,
-                        help="The base archive directory")
-    parser.add_argument('-r', '--run', nargs='*',
-                        help="A run (or list of runs) to submit")
-    parser.add_argument('--all-runs', action='store_true',
-                        help="Submit all runs in the archive")
-    parser.add_argument('-R', '--refresh', action='store_true', default=False,
-                        help=dedent("""Re-push any runs already stored on the
-                                    server. Note that this may be slow."""))
-    parser.add_argument('-s', '--server',
-                        help=dedent(""""The server to post results to, e.g.
-                                    http://localhost:8080/ . May also be
-                                    specified in ~/.teuthology.yaml as
-                                    'results_server'"""))
-    parser.add_argument('-n', '--no-save', dest='save',
-                        action='store_false', default=True,
-                        help=dedent("""By default, when submitting all runs, we
-                        remember the last successful submission in a file
-                        called 'last_successful_run'. Pass this flag to disable
-                        that behavior."""))
-    args = parser.parse_args()
-    return args
-
-
-def main():
-    args = parse_args()
-    archive_base = os.path.abspath(os.path.expanduser(args.archive))
-    reporter = ResultsReporter(archive_base, base_uri=args.server,
-                               save=args.save, refresh=args.refresh)
-    if args.run and len(args.run) > 1:
-        reporter.report_runs(args.run)
-    elif args.run:
-        reporter.report_run(args.run[0])
-    elif args.all_runs:
-        reporter.report_all_runs()
-
-
-if __name__ == "__main__":
-    main()

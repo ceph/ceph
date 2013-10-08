@@ -26,7 +26,7 @@ setup(
             'teuthology-updatekeys = scripts.updatekeys:main',
             'teuthology-coverage = teuthology.coverage:analyze',
             'teuthology-results = teuthology.suite:results',
-            'teuthology-report = teuthology.report:main',
+            'teuthology-report = scripts.report:main',
             ],
         },
 
