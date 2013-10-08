@@ -767,8 +767,12 @@ public:
   string oid;
   ContDesc cont;
   set<librados::AioCompletion *> waiting;
+  librados::AioCompletion *rcompletion;
   uint64_t waiting_on;
   uint64_t last_acked_tid;
+
+  librados::ObjectReadOperation read_op;
+  bufferlist rbuffer;
 
   WriteOp(int n,
 	  RadosTestContext *context,
@@ -824,6 +828,21 @@ public:
       context->io_ctx.aio_write(context->prefix+oid, completion,
 				to_write, i.get_len(), i.get_start());
     }
+
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(
+	this,
+	new TestOp::CallbackInfo(tid));
+    rcompletion = context->rados.aio_create_completion(
+      (void*) cb_arg, &write_callback, NULL);
+    waiting_on++;
+    read_op.read(0, 1, &rbuffer, 0);
+    context->io_ctx.aio_operate(
+      context->prefix+oid, rcompletion,
+      &read_op,
+      librados::SNAP_HEAD,
+      librados::OPERATION_ORDER_READS_WRITES,  // order wrt previous write/update
+      0);
   }
 
   void _finish(CallbackInfo *info)
@@ -860,6 +879,13 @@ public:
       }
       
       context->update_object_version(oid, version);
+      if (rcompletion->get_version64() != version) {
+	cerr << "Error: racing read on " << oid << " returned version "
+	     << rcompletion->get_version64() << " rather than version "
+	     << version << std::endl;
+	assert(0 == "racing read got wrong version");
+      }
+      rcompletion->release();
       context->oid_in_use.erase(oid);
       context->oid_not_in_use.insert(oid);
       context->kick();
