@@ -18,19 +18,24 @@ from . import misc as teuthology
 
 log = logging.getLogger(__name__)
 
+
 def lock_many(ctx, num, machinetype, user=None, description=None):
     if user is None:
         user = teuthology.get_user()
-    success, content, status = ls.send_request('POST', config.lock_server,
-                                    urllib.urlencode(dict(
+    success, content, status = ls.send_request(
+        'POST',
+        config.lock_server,
+        urllib.urlencode(
+            dict(
                 user=user,
                 num=num,
                 machinetype=machinetype,
                 desc=description,
-                )))
+            )))
     if success:
         machines = json.loads(content)
-        log.debug('locked {machines}'.format(machines=', '.join(machines.keys())))
+        log.debug('locked {machines}'.format(
+            machines=', '.join(machines.keys())))
         if ctx.machine_type == 'vps':
             ok_machs = {}
             for machine in machines:
@@ -47,36 +52,44 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
         log.error('Could not lock %d nodes, reason: unknown.', num)
     return []
 
+
 def lock(ctx, name, user=None, description=None):
     if user is None:
         user = teuthology.get_user()
-    success, _, _ = ls.send_request('POST', config.lock_server + '/' + name,
-                              urllib.urlencode(dict(user=user, desc=description)))
+    success, _, _ = ls.send_request(
+        'POST',
+        config.lock_server + '/' + name,
+        urllib.urlencode(dict(user=user, desc=description)))
     if success:
         log.debug('locked %s as %s', name, user)
     else:
         log.error('failed to lock %s', name)
     return success
 
+
 def unlock(ctx, name, user=None):
     if user is None:
         user = teuthology.get_user()
-    success, _ , _ = ls.send_request('DELETE', config.lock_server + '/' + name + '?' + \
-                                  urllib.urlencode(dict(user=user)))
+    success, _, _ = ls.send_request(
+        'DELETE',
+        config.lock_server + '/' + name + '?' +
+        urllib.urlencode(dict(user=user)))
     if success:
         log.debug('unlocked %s', name)
         if not destroy_if_vm(ctx, name):
-            log.error('downburst destroy failed for %s',name)
+            log.error('downburst destroy failed for %s', name)
             log.info('%s is not locked' % name)
     else:
         log.error('failed to unlock %s', name)
     return success
+
 
 def list_locks(ctx):
     success, content, _ = ls.send_request('GET', config.lock_server)
     if success:
         return json.loads(content)
     return None
+
 
 def update_lock(ctx, name, description=None, status=None, sshpubkey=None):
     status_info = ls.get_status(ctx, name)
@@ -95,11 +108,14 @@ def update_lock(ctx, name, description=None, status=None, sshpubkey=None):
         updated['sshpubkey'] = sshpubkey
 
     if updated:
-        success, _, _ = ls.send_request('PUT', config.lock_server + '/' + name,
-                                  body=urllib.urlencode(updated),
-                                  headers={'Content-type': 'application/x-www-form-urlencoded'})
+        success, _, _ = ls.send_request(
+            'PUT',
+            config.lock_server + '/' + name,
+            body=urllib.urlencode(updated),
+            headers={'Content-type': 'application/x-www-form-urlencoded'})
         return success
     return True
+
 
 def _positive_int(string):
     value = int(string)
@@ -108,10 +124,12 @@ def _positive_int(string):
             '{string} is not positive'.format(string=string))
     return value
 
+
 def canonicalize_hostname(s):
     if re.match('ubuntu@.*\.front\.sepia\.ceph\.com', s) is None:
         s = 'ubuntu@' + s + '.front.sepia.ceph.com'
     return s
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -131,118 +149,123 @@ def main():
         action='store_true',
         default=False,
         help='be more verbose',
-        )
+    )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
         '--list',
         action='store_true',
         default=False,
-        help='Show lock info for machines owned by you, or only machines specified. Can be restricted by --owner, --status, and --locked.',
-        )
+        help='Show lock info for machines owned by you, or only machines ' +
+        'specified. Can be restricted by --owner, --status, and --locked.',
+    )
     group.add_argument(
         '--list-targets',
         action='store_true',
         default=False,
-        help='Show lock info for all machines, or only machines specified, in targets: yaml format. Can be restricted by --owner, --status, and --locked.',
-        )
+        help='Show lock info for all machines, or only machines specified, ' +
+        'in targets: yaml format. Can be restricted by --owner, --status, ' +
+        'and --locked.',
+    )
     group.add_argument(
         '--lock',
         action='store_true',
         default=False,
         help='lock particular machines',
-        )
+    )
     group.add_argument(
         '--unlock',
         action='store_true',
         default=False,
         help='unlock particular machines',
-        )
+    )
     group.add_argument(
         '--lock-many',
         dest='num_to_lock',
         type=_positive_int,
         help='lock this many machines',
-        )
+    )
     group.add_argument(
         '--update',
         action='store_true',
         default=False,
         help='update the description or status of some machines',
-        )
+    )
     group.add_argument(
         '--summary',
         action='store_true',
         default=False,
         help='summarize locked-machine counts by owner',
-        )
+    )
     parser.add_argument(
         '-a', '--all',
         action='store_true',
         default=False,
         help='list all machines, not just those owned by you',
-        )
+    )
     parser.add_argument(
         '--owner',
         default=None,
         help='owner of the lock(s) (must match to unlock a machine)',
-        )
+    )
     parser.add_argument(
         '-f',
         action='store_true',
         default=False,
-        help='don\'t exit after the first error, continue locking or unlocking other machines',
-        )
+        help="don't exit after the first error, continue locking or " +
+        "unlocking other machines",
+    )
     parser.add_argument(
         '--desc',
         default=None,
         help='lock description',
-        )
+    )
     parser.add_argument(
         '--desc-pattern',
         default=None,
         help='lock description',
-        )
+    )
     parser.add_argument(
         '--machine-type',
         default=None,
-        help='Type of machine to lock, valid choices: mira | plana | burnupi | vps | saya | tala',
-        )
+        help='Type of machine to lock, valid choices: mira | plana | ' +
+        'burnupi | vps | saya | tala',
+    )
     parser.add_argument(
         '--status',
         default=None,
         choices=['up', 'down'],
         help='whether a machine is usable for testing',
-        )
+    )
     parser.add_argument(
         '--locked',
         default=None,
         choices=['true', 'false'],
         help='whether a machine is locked',
-        )
+    )
     parser.add_argument(
         '--brief',
         action='store_true',
         default=False,
         help='Shorten information reported from --list',
-        )
+    )
     parser.add_argument(
         '-t', '--targets',
         dest='targets',
         default=None,
         help='input yaml containing targets',
-        )
+    )
     parser.add_argument(
         'machines',
         metavar='MACHINE',
         default=[],
         nargs='*',
         help='machines to operate on',
-        )
+    )
     parser.add_argument(
         '--os-type',
         default='ubuntu',
         help='virtual machine type',
-        )
+    )
 
     ctx = parser.parse_args()
 
@@ -252,7 +275,7 @@ def main():
 
     logging.basicConfig(
         level=loglevel,
-        )
+    )
 
     teuthology.read_config(ctx)
 
@@ -269,7 +292,7 @@ def main():
                     if 'targets' in new:
                         for t in new['targets'].iterkeys():
                             machines.append(t)
-        except IOError, e:
+        except IOError as e:
             raise argparse.ArgumentTypeError(str(e))
 
     if ctx.f:
@@ -321,31 +344,32 @@ def main():
             # Listing specific machines will update the keys.
             if machines:
                 scan_for_locks(ctx, vmachines)
-                statuses = [ls.get_status(ctx, machine) for machine in machines]
+                statuses = [ls.get_status(ctx, machine)
+                            for machine in machines]
             else:
                 statuses = list_locks(ctx)
         if statuses:
             if ctx.machine_type:
-                statuses = [status for status in statuses \
-                                if status['type'] == ctx.machine_type]
+                statuses = [status for status in statuses
+                            if status['type'] == ctx.machine_type]
             if not machines and ctx.owner is None and not ctx.all:
                 ctx.owner = teuthology.get_user()
             if ctx.owner is not None:
-                statuses = [status for status in statuses \
-                                if status['locked_by'] == ctx.owner]
+                statuses = [status for status in statuses
+                            if status['locked_by'] == ctx.owner]
             if ctx.status is not None:
-                statuses = [status for status in statuses \
-                                if status['up'] == (ctx.status == 'up')]
+                statuses = [status for status in statuses
+                            if status['up'] == (ctx.status == 'up')]
             if ctx.locked is not None:
-                statuses = [status for status in statuses \
-                                if status['locked'] == (ctx.locked == 'true')]
+                statuses = [status for status in statuses
+                            if status['locked'] == (ctx.locked == 'true')]
             if ctx.desc is not None:
-                statuses = [status for status in statuses \
-                                if status['description'] == ctx.desc]
+                statuses = [status for status in statuses
+                            if status['description'] == ctx.desc]
             if ctx.desc_pattern is not None:
-                statuses = [status for status in statuses \
-                                if status['description'] is not None and \
-                                status['description'].find(ctx.desc_pattern) >= 0]
+                statuses = [status for status in statuses
+                            if status['description'] is not None and
+                            status['description'].find(ctx.desc_pattern) >= 0]
             if ctx.list:
                 if ctx.brief:
                     for s in statuses:
@@ -353,12 +377,12 @@ def main():
                         mo = re.match('\w+@(\w+?)\..*', s['name'])
                         host = mo.group(1) if mo else s['name']
                         print '{host} {locked}locked {owner} "{desc}"'.format(
-                            locked = locked, host = host,
+                            locked=locked, host=host,
                             owner=s['locked_by'], desc=s['description'])
                 else:
                     print json.dumps(statuses, indent=4)
             else:
-                frag = { 'targets': {} }
+                frag = {'targets': {}}
                 for f in statuses:
                     frag['targets'][f['name']] = f['sshpubkey']
                 print yaml.safe_dump(frag, default_flow_style=False)
@@ -394,18 +418,28 @@ def main():
         else:
             machines_to_update = result.keys()
             if ctx.machine_type == 'vps':
-                shortnames = ' '.join([name.split('@')[1].split('.')[0] for name in result.keys()])
+                shortnames = ' '.join(
+                    [name.split('@')[1].split('.')[0]
+                        for name in result.keys()]
+                )
                 if len(result) < ctx.num_to_lock:
                     log.error("Locking failed.")
                     for machn in result:
-                        unlock(ctx,machn)
+                        unlock(ctx, machn)
                     ret = 1
                 else:
                     log.info("Successfully Locked:\n%s\n" % shortnames)
-                    log.info("Unable to display keys at this time (virtual machines are booting).")
-                    log.info("Please run teuthology-lock --list-targets %s once these machines come up." % shortnames)
+                    log.info(
+                        "Unable to display keys at this time (virtual " +
+                        "machines are booting).")
+                    log.info(
+                        "Please run teuthology-lock --list-targets %s once " +
+                        "these machines come up.",
+                        shortnames)
             else:
-                print yaml.safe_dump(dict(targets=result), default_flow_style=False)
+                print yaml.safe_dump(
+                    dict(targets=result),
+                    default_flow_style=False)
     elif ctx.update:
         assert ctx.desc is not None or ctx.status is not None, \
             'you must specify description or status to update'
@@ -418,6 +452,7 @@ def main():
 
     return ret
 
+
 def update_hostkeys():
     parser = argparse.ArgumentParser(description="""
 Update any hostkeys that have changed. You can list specific machines
@@ -427,26 +462,26 @@ to run on, or use -a to check all of them automatically.
         '-t', '--targets',
         default=None,
         help='input yaml containing targets to check',
-        )
+    )
     parser.add_argument(
         'machines',
         metavar='MACHINES',
         default=[],
         nargs='*',
         help='hosts to check for updated keys',
-        )
+    )
     parser.add_argument(
         '-v', '--verbose',
         action='store_true',
         default=False,
         help='be more verbose',
-        )
+    )
     parser.add_argument(
         '-a', '--all',
         action='store_true',
         default=False,
         help='update hostkeys of all machines in the db',
-        )
+    )
 
     ctx = parser.parse_args()
 
@@ -456,11 +491,12 @@ to run on, or use -a to check all of them automatically.
 
     logging.basicConfig(
         level=loglevel,
-        )
+    )
 
     teuthology.read_config(ctx)
 
-    assert ctx.all or ctx.targets or ctx.machines, 'You must specify machines to update'
+    msg = 'You must specify machines to update'
+    assert ctx.all or ctx.targets or ctx.machines, msg
     if ctx.all:
         assert not ctx.targets and not ctx.machines, \
             'You can\'t specify machines with the --all option'
@@ -474,10 +510,11 @@ to run on, or use -a to check all of them automatically.
                     if 'targets' in new:
                         for t in new['targets'].iterkeys():
                             machines.append(t)
-        except IOError, e:
+        except IOError as e:
             raise argparse.ArgumentTypeError(str(e))
 
     return scan_for_locks(ctx, machines)
+
 
 def keyscan_check(ctx, machines):
     locks = list_locks(ctx)
@@ -497,10 +534,11 @@ def keyscan_check(ctx, machines):
     p = subprocess.Popen(
         args=args,
         stdout=subprocess.PIPE,
-        )
+    )
     out, _ = p.communicate()
-    #assert p.returncode == 0, 'ssh-keyscan failed'
+    # assert p.returncode == 0, 'ssh-keyscan failed'
     return (out, current_locks)
+
 
 def update_keys(ctx, out, current_locks):
     ret = 0
@@ -517,38 +555,44 @@ def update_keys(ctx, out, current_locks):
                 ret = 1
     return ret
 
+
 def scan_for_locks(ctx, machines):
     out, current_locks = keyscan_check(ctx, machines)
     return update_keys(ctx, out, current_locks)
 
+
 def do_summary(ctx):
-    lockd = collections.defaultdict(lambda: [0,0,'unknown'])
+    lockd = collections.defaultdict(lambda: [0, 0, 'unknown'])
     for l in list_locks(ctx):
         if ctx.machine_type and l['type'] != ctx.machine_type:
             continue
-        who =  l['locked_by'] if l['locked'] == 1 else '(free)', l['type']
+        who = l['locked_by'] if l['locked'] == 1 else '(free)', l['type']
         lockd[who][0] += 1
         lockd[who][1] += l['up']         # up is 1 or 0
         lockd[who][2] = l['type']
 
-    locks = sorted([p for p in lockd.iteritems()], key=lambda sort: (sort[1][2],sort[1][0]))
+    locks = sorted([p for p in lockd.iteritems()
+                    ], key=lambda sort: (sort[1][2], sort[1][0]))
     total_count, total_up = 0, 0
     print "TYPE     COUNT  UP  OWNER"
 
     for (owner, (count, upcount, machinetype)) in locks:
-            #if machinetype == spectype:
-            print "{machinetype:8s} {count:3d}  {up:3d}  {owner}".format(count = count,
-                up = upcount, owner = owner[0], machinetype=machinetype)
+            # if machinetype == spectype:
+            print "{machinetype:8s} {count:3d}  {up:3d}  {owner}".format(
+                count=count, up=upcount, owner=owner[0],
+                machinetype=machinetype)
             total_count += count
             total_up += upcount
 
     print "         ---  ---"
-    print "{cnt:12d}  {up:3d}".format(cnt = total_count, up = total_up)
+    print "{cnt:12d}  {up:3d}".format(cnt=total_count, up=total_up)
+
 
 def decanonicalize_hostname(s):
     if re.match('ubuntu@.*\.front\.sepia\.ceph\.com', s):
         s = s[len('ubuntu@'): -len('.front.sepia.ceph.com')]
     return s
+
 
 def _get_downburst_exec():
     """
@@ -558,7 +602,7 @@ def _get_downburst_exec():
     """
     path = os.environ.get('PATH', None)
     if path:
-        for p in os.environ.get('PATH','').split(os.pathsep):
+        for p in os.environ.get('PATH', '').split(os.pathsep):
             pth = os.path.join(p, 'downburst')
             if os.access(pth, os.X_OK):
                 return pth
@@ -573,6 +617,8 @@ def _get_downburst_exec():
 #
 # Use downburst to create a virtual machine
 #
+
+
 def create_if_vm(ctx, machine_name):
     status_info = ls.get_status(ctx, machine_name)
     phys_host = status_info['vpshost']
@@ -588,7 +634,7 @@ def create_if_vm(ctx, machine_name):
         sles="11-sp2",
         rhel="6.3",
         debian='6.0'
-        )
+    )
     createMe = decanonicalize_hostname(machine_name)
     with tempfile.NamedTemporaryFile() as tmp:
         try:
@@ -598,7 +644,8 @@ def create_if_vm(ctx, machine_name):
 
         distro = lcnfg.get('distro', os_type.lower())
         try:
-            distroversion = ctx.config.get('os_version', default_os_version[distro])
+            distroversion = ctx.config.get(
+                'os_version', default_os_version[distro])
         except AttributeError:
             distroversion = default_os_version[distro]
 
@@ -607,13 +654,13 @@ def create_if_vm(ctx, machine_name):
         file_info['ram'] = lcnfg.get('ram', '1.9G')
         file_info['cpus'] = lcnfg.get('cpus', 1)
         file_info['networks'] = lcnfg.get('networks',
-                [{'source' : 'front', 'mac' : status_info['mac']}])
+                 [{'source': 'front', 'mac': status_info['mac']}])
         file_info['distro'] = distro
         file_info['distroversion'] = distroversion
         file_info['additional-disks'] = lcnfg.get(
-                'additional-disks', 3)
+            'additional-disks', 3)
         file_info['additional-disks-size'] = lcnfg.get(
-                'additional-disks-size', '200G')
+            'additional-disks-size', '200G')
         file_info['arch'] = lcnfg.get('arch', 'x86_64')
         file_out = {'downburst': file_info}
         yaml.safe_dump(file_out, tmp)
@@ -623,15 +670,15 @@ def create_if_vm(ctx, machine_name):
             log.error("No downburst executable found.")
             return False
         p = subprocess.Popen([dbrst, '-c', phys_host,
-                'create', metadata, createMe],
-                stdout=subprocess.PIPE,stderr=subprocess.PIPE,)
-        owt,err = p.communicate()
+                              'create', metadata, createMe],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,)
+        owt, err = p.communicate()
         if err:
             log.info("Downburst completed on %s: %s" %
-                    (machine_name,err))
+                    (machine_name, err))
         else:
-            log.info("%s created: %s" % (machine_name,owt))
-        #If the guest already exists first destroy then re-create:
+            log.info("%s created: %s" % (machine_name, owt))
+        # If the guest already exists first destroy then re-create:
         if 'exists' in err:
             log.info("Guest files exist. Re-creating guest: %s" %
                     (machine_name))
@@ -641,6 +688,8 @@ def create_if_vm(ctx, machine_name):
 #
 # Use downburst to destroy a virtual machine
 #
+
+
 def destroy_if_vm(ctx, machine_name):
     """
     Return False only on vm downburst failures.
@@ -655,13 +704,12 @@ def destroy_if_vm(ctx, machine_name):
         log.error("No downburst executable found.")
         return False
     p = subprocess.Popen([dbrst, '-c', phys_host,
-            'destroy', destroyMe],
-            stdout=subprocess.PIPE,stderr=subprocess.PIPE,)
-    owt,err = p.communicate()
+                          'destroy', destroyMe],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE,)
+    owt, err = p.communicate()
     if err:
         log.error(err)
         return False
     else:
-        log.info("%s destroyed: %s" % (machine_name,owt))
+        log.info("%s destroyed: %s" % (machine_name, owt))
     return True
-
