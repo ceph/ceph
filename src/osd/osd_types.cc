@@ -2523,6 +2523,69 @@ void object_copy_cursor_t::generate_test_instances(list<object_copy_cursor_t*>& 
   o.back()->omap_complete = true;
 }
 
+// -- object_copy_data_t --
+
+void object_copy_data_t::encode(bufferlist& bl) const
+{
+  ::encode(size, bl);
+  ::encode(mtime, bl);
+  ::encode(attrs, bl);
+  ::encode(data, bl);
+  ::encode(omap, bl);
+  ::encode(cursor, bl);
+}
+
+void object_copy_data_t::decode(bufferlist::iterator& bl)
+{
+  ::decode(size, bl);
+  ::decode(mtime, bl);
+  ::decode(attrs, bl);
+  ::decode(data, bl);
+  ::decode(omap, bl);
+  ::decode(cursor, bl);
+}
+
+void object_copy_data_t::generate_test_instances(list<object_copy_data_t*>& o)
+{
+  o.push_back(new object_copy_data_t());
+
+  list<object_copy_cursor_t*> cursors;
+  object_copy_cursor_t::generate_test_instances(cursors);
+  list<object_copy_cursor_t*>::iterator ci = cursors.begin();
+  o.back()->cursor = **(ci++);
+
+  o.push_back(new object_copy_data_t());
+  o.back()->cursor = **(ci++);
+
+  o.push_back(new object_copy_data_t());
+  o.back()->size = 1234;
+  o.back()->mtime.set_from_double(1234);
+  bufferptr bp("there", 5);
+  bufferlist bl;
+  bl.push_back(bp);
+  o.back()->attrs["hello"] = bl;
+  bufferptr bp2("not", 3);
+  bufferlist bl2;
+  bl2.push_back(bp2);
+  o.back()->omap["why"] = bl2;
+  bufferptr databp("iamsomedatatocontain", 20);
+  o.back()->data.push_back(databp);
+}
+
+void object_copy_data_t::dump(Formatter *f) const
+{
+  f->open_object_section("cursor");
+  cursor.dump(f);
+  f->close_section(); // cursor
+  f->dump_int("size", size);
+  f->dump_stream("mtime") << mtime;
+  /* we should really print out the attrs here, but bufferlist
+     const-correctness prents that */
+  f->dump_int("attrs_size", attrs.size());
+  f->dump_int("omap_size", omap.size());
+  f->dump_int("data_length", data.length());
+}
+
 // -- pg_create_t --
 
 void pg_create_t::encode(bufferlist &bl) const
