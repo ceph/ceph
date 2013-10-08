@@ -127,7 +127,7 @@ Hosts running ``nova-compute`` do not need the keyring. Instead, they
 store the secret key in libvirt. Create a temporary copy of the secret
 key on the hosts running ``nova-compute``::
 
-  ssh {your-compute-host} client.volumes.key <`ceph auth get-key client.volumes`
+  ceph auth get-key client.volumes | ssh {your-compute-host} tee client.volumes.key 
 
 Then, on the compute hosts, add the secret key to libvirt and remove the
 temporary copy of the key::
