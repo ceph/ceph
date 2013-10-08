@@ -24,7 +24,7 @@ public:
   class UpdateContext {
     public:
       virtual ~UpdateContext() {}
-      virtual void update(V& v) = 0;
+      virtual bool update(V& v) = 0;
   };
 
   bool _find(const K& key, V *value, UpdateContext *ctx);
@@ -51,8 +51,10 @@ bool lru_map<K, V>::_find(const K& key, V *value, UpdateContext *ctx)
   entry& e = iter->second;
   entries_lru.erase(e.lru_iter);
 
+  bool r = true;
+
   if (ctx)
-    ctx->update(e.value);
+    r = ctx->update(e.value);
 
   if (value)
     *value = e.value;
@@ -60,7 +62,7 @@ bool lru_map<K, V>::_find(const K& key, V *value, UpdateContext *ctx)
   entries_lru.push_front(key);
   e.lru_iter = entries_lru.begin();
 
-  return true;
+  return r;
 }
 
 template <class K, class V>

@@ -114,15 +114,30 @@ void AsyncRefreshHandler::handle_response(int r)
   cache->async_refresh_response(bucket, bs);
 }
 
+class RGWBucketStatsAsyncTestSet : public lru_map<rgw_bucket, RGWQuotaBucketStats>::UpdateContext {
+  int objs_delta;
+  uint64_t added_bytes;
+  uint64_t removed_bytes;
+public:
+  RGWBucketStatsAsyncTestSet() {}
+  bool update(RGWQuotaBucketStats& entry) {
+    if (entry.async_refresh_time.sec() == 0)
+      return false;
+
+    entry.async_refresh_time = utime_t(0, 0);
+
+    return true;
+  }
+};
+
 int RGWBucketStatsCache::async_refresh(rgw_bucket& bucket, RGWQuotaBucketStats& qs)
 {
-#if 0
-  if (qs.async_update_flag.inc() != 1) { /* are we the first one here? */
-    qs.async_update_flag.dec();
+  /* protect against multiple updates */
+  RGWBucketStatsAsyncTestSet test_update;
+  if (!stats_map.find_and_update(bucket, NULL, &test_update)) {
+    /* most likely we just raced with another update */
     return 0;
   }
-#endif
-#warning protect against multiple updates
 
   async_refcount->get();
 
@@ -166,7 +181,7 @@ int RGWBucketStatsCache::get_bucket_stats(rgw_bucket& bucket, RGWBucketStats& st
   RGWQuotaBucketStats qs;
   utime_t now = ceph_clock_now(store->ctx());
   if (stats_map.find(bucket, qs)) {
-    if (now >= qs.async_refresh_time) {
+    if (qs.async_refresh_time.sec() > 0 && now >= qs.async_refresh_time) {
       int r = async_refresh(bucket, qs);
       if (r < 0) {
         ldout(store->ctx(), 0) << "ERROR: quota async refresh returned ret=" << r << dendl;
@@ -197,13 +212,15 @@ class RGWBucketStatsUpdate : public lru_map<rgw_bucket, RGWQuotaBucketStats>::Up
 public:
   RGWBucketStatsUpdate(int _objs_delta, uint64_t _added_bytes, uint64_t _removed_bytes) : 
                     objs_delta(_objs_delta), added_bytes(_added_bytes), removed_bytes(_removed_bytes) {}
-  void update(RGWQuotaBucketStats& entry) {
+  bool update(RGWQuotaBucketStats& entry) {
     uint64_t rounded_kb_added = rgw_rounded_kb(added_bytes);
     uint64_t rounded_kb_removed = rgw_rounded_kb(removed_bytes);
 
     entry.stats.num_kb_rounded += (rounded_kb_added - rounded_kb_removed);
     entry.stats.num_kb += (added_bytes - removed_bytes) / 1024;
     entry.stats.num_objects += objs_delta;
+
+    return true;
   }
 };
 
