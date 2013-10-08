@@ -4614,6 +4614,38 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_
   return 0;
 }
 
+class RGWGetBucketStatsContext : public RGWGetDirHeader_CB {
+  RGWGetBucketStats_CB *cb;
+
+public:
+  RGWGetBucketStatsContext(RGWGetBucketStats_CB *_cb) : cb(_cb) {}
+  void handle_response(int r, rgw_bucket_dir_header& header) {
+    map<RGWObjCategory, RGWBucketStats> stats;
+
+    if (r >= 0) {
+      translate_raw_stats(header, stats);
+      cb->set_response(header.ver, header.master_ver, &stats, header.max_marker);
+    }
+
+    cb->handle_response(r);
+
+    cb->put();
+  }
+};
+
+int RGWRados::get_bucket_stats_async(rgw_bucket& bucket, RGWGetBucketStats_CB *ctx)
+{
+  RGWGetBucketStatsContext *get_ctx = new RGWGetBucketStatsContext(ctx);
+  int r = cls_bucket_head_async(bucket, get_ctx);
+  if (r < 0) {
+    ctx->put();
+    delete get_ctx;
+    return r;
+  }
+
+  return 0;
+}
+
 void RGWRados::get_bucket_instance_entry(rgw_bucket& bucket, string& entry)
 {
   entry = bucket.name + ":" + bucket.bucket_id;
@@ -5490,6 +5522,21 @@ int RGWRados::cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& 
     return r;
 
   r = cls_rgw_get_dir_header(index_ctx, oid, &header);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int RGWRados::cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx)
+{
+  librados::IoCtx index_ctx;
+  string oid;
+  int r = open_bucket_index(bucket, index_ctx, oid);
+  if (r < 0)
+    return r;
+
+  r = cls_rgw_get_dir_header_async(index_ctx, oid, ctx);
   if (r < 0)
     return r;
 

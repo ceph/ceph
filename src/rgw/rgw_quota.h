@@ -3,6 +3,7 @@
 
 
 #include "include/utime.h"
+#include "include/atomic.h"
 #include "common/lru_map.h"
 
 class RGWRados;
@@ -42,7 +43,8 @@ class rgw_bucket;
 class RGWQuotaHandler {
 public:
   RGWQuotaHandler() {}
-  virtual ~RGWQuotaHandler() {}
+  virtual ~RGWQuotaHandler() {
+  }
   virtual int check_quota(rgw_bucket& bucket, RGWQuotaInfo& bucket_quota,
 			  uint64_t num_objs, uint64_t size) = 0;
 
