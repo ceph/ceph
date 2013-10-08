@@ -28,14 +28,14 @@ def main(args):
 
     logging.basicConfig(
         level=loglevel,
-        )
+    )
 
     base_arg = [
         os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-schedule'),
         '--name', args.name,
         '--num', str(args.num),
         '--worker', args.worker,
-        ]
+    ]
     if args.verbose:
         base_arg.append('-v')
     if args.owner:
@@ -44,13 +44,15 @@ def main(args):
     collections = [
         (os.path.join(args.base, collection), collection)
         for collection in args.collections
-        ]
+    ]
 
     num_jobs = 0
     for collection, collection_name in sorted(collections):
         log.debug('Collection %s in %s' % (collection_name, collection))
-        configs = [(combine_path(collection_name, item[0]), item[1]) for item in build_matrix(collection)]
-        log.info('Collection %s in %s generated %d jobs' % (collection_name, collection, len(configs)))
+        configs = [(combine_path(collection_name, item[0]), item[1])
+                   for item in build_matrix(collection)]
+        log.info('Collection %s in %s generated %d jobs' %
+                 (collection_name, collection, len(configs)))
         num_jobs += len(configs)
 
         arch = get_arch(args.config)
@@ -65,34 +67,33 @@ def main(args):
 
             if exclude_arch:
                 if exclude_arch == arch:
-                    log.info(
-                        'Skipping due to excluded_arch: %s facets %s', exclude_arch, description
-                         )
+                    log.info('Skipping due to excluded_arch: %s facets %s',
+                             exclude_arch, description)
                     continue
             if exclude_os_type:
                 if exclude_os_type == os_type:
-                    log.info(
-                        'Skipping due to excluded_os_type: %s facets %s', exclude_os_type, description
-                         )
+                    log.info('Skipping due to excluded_os_type: %s facets %s',
+                             exclude_os_type, description)
                     continue
-            # We should not run multiple tests (changing distros) unless the machine is a VPS
+            # We should not run multiple tests (changing distros) unless the
+            # machine is a VPS.
             # Re-imaging baremetal is not yet supported.
             if machine_type != 'vps':
                 if os_type and os_type != 'ubuntu':
                     log.info(
-                        'Skipping due to non-ubuntu on baremetal facets %s', description
-                         )
+                        'Skipping due to non-ubuntu on baremetal facets %s',
+                        description)
                     continue
 
             log.info(
                 'Scheduling %s', description
-                )
+            )
 
             arg = copy.deepcopy(base_arg)
             arg.extend([
-                    '--description', description,
-                    '--',
-                    ])
+                '--description', description,
+                '--',
+            ])
             arg.extend(args.config)
             arg.extend(config)
 
@@ -101,7 +102,7 @@ def main(args):
             else:
                 subprocess.check_call(
                     args=arg,
-                    )
+                )
 
     if num_jobs:
         arg = copy.deepcopy(base_arg)
@@ -115,7 +116,7 @@ def main(args):
         else:
             subprocess.check_call(
                 args=arg,
-                )
+            )
 
 
 def combine_path(left, right):
@@ -125,6 +126,7 @@ def combine_path(left, right):
     if right:
         return os.path.join(left, right)
     return left
+
 
 def build_matrix(path):
     """
@@ -171,7 +173,8 @@ def build_matrix(path):
             sublists = []
             for fn in files:
                 raw = build_matrix(os.path.join(path, fn))
-                sublists.append([(combine_path(fn, item[0]), item[1]) for item in raw])
+                sublists.append([(combine_path(fn, item[0]), item[1])
+                                for item in raw])
             out = []
             if sublists:
                 for sublist in itertools.product(*sublists):
@@ -186,7 +189,8 @@ def build_matrix(path):
             out = []
             for fn in files:
                 raw = build_matrix(os.path.join(path, fn))
-                out.extend([(combine_path(fn, item[0]), item[1]) for item in raw])
+                out.extend([(combine_path(fn, item[0]), item[1])
+                           for item in raw])
             return out
     return []
 
@@ -200,7 +204,7 @@ def ls(archive_dir, verbose):
                 g = yaml.safe_load_all(f)
                 for new in g:
                     summary.update(new)
-        except IOError, e:
+        except IOError as e:
             if e.errno == errno.ENOENT:
                 print '%s      ' % j,
 
@@ -221,9 +225,9 @@ def ls(archive_dir, verbose):
                     # tail
                     tail = os.popen(
                         'tail -1 %s/%s/teuthology.log' % (archive_dir, j)
-                        ).read().rstrip()
+                    ).read().rstrip()
                     print tail,
-                except IOError, e:
+                except IOError as e:
                     continue
                 print ''
                 continue
@@ -236,9 +240,10 @@ def ls(archive_dir, verbose):
             desc=summary.get('description', '-'),
             success='pass' if summary.get('success', False) else 'FAIL',
             duration=int(summary.get('duration', 0)),
-            )
+        )
         if verbose and 'failure_reason' in summary:
             print '    {reason}'.format(reason=summary['failure_reason'])
+
 
 def generate_coverage(args):
     log.info('starting coverage generation')
@@ -247,14 +252,17 @@ def generate_coverage(args):
             os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-coverage'),
             '-v',
             '-o',
-            os.path.join(args.teuthology_config['coverage_output_dir'], args.name),
+            os.path.join(args.teuthology_config[
+                         'coverage_output_dir'], args.name),
             '--html-output',
-            os.path.join(args.teuthology_config['coverage_html_dir'], args.name),
+            os.path.join(args.teuthology_config[
+                         'coverage_html_dir'], args.name),
             '--cov-tools-dir',
             args.teuthology_config['coverage_tools_dir'],
             args.archive_dir,
-            ],
-        )
+        ],
+    )
+
 
 def email_results(subject, from_, to, body):
     log.info('Sending results to {to}: {body}'.format(to=to, body=body))
@@ -269,34 +277,37 @@ def email_results(subject, from_, to, body):
     smtp.sendmail(msg['From'], [msg['To']], msg.as_string())
     smtp.quit()
 
+
 def results():
-    parser = argparse.ArgumentParser(description='Email teuthology suite results')
+    parser = argparse.ArgumentParser(
+        description='Email teuthology suite results')
     parser.add_argument(
         '--email',
         help='address to email test failures to',
-        )
+    )
     parser.add_argument(
         '--timeout',
-        help='how many seconds to wait for all tests to finish (default no wait)',
+        help='how many seconds to wait for all tests to finish (default no ' +
+        'wait)',
         type=int,
         default=0,
-        )
+    )
     parser.add_argument(
         '--archive-dir',
         metavar='DIR',
         help='path under which results for the suite are stored',
         required=True,
-        )
+    )
     parser.add_argument(
         '--name',
         help='name of the suite',
         required=True,
-        )
+    )
     parser.add_argument(
         '-v', '--verbose',
         action='store_true', default=False,
         help='be more verbose',
-        )
+    )
     args = parser.parse_args()
 
     loglevel = logging.INFO
@@ -305,17 +316,17 @@ def results():
 
     logging.basicConfig(
         level=loglevel,
-        )
+    )
 
     misc.read_config(args)
 
     handler = logging.FileHandler(
         filename=os.path.join(args.archive_dir, 'results.log'),
-        )
+    )
     formatter = logging.Formatter(
         fmt='%(asctime)s.%(msecs)03d %(levelname)s:%(message)s',
         datefmt='%Y-%m-%dT%H:%M:%S',
-        )
+    )
     handler.setFormatter(formatter)
     logging.getLogger().addHandler(handler)
 
@@ -331,7 +342,8 @@ def _results(args):
         f for f in sorted(os.listdir(args.archive_dir))
         if not f.startswith('.')
         and os.path.isdir(os.path.join(args.archive_dir, f))
-        and not os.path.exists(os.path.join(args.archive_dir, f, 'summary.yaml'))
+        and not os.path.exists(os.path.join(
+            args.archive_dir, f, 'summary.yaml'))
     ]
     starttime = time.time()
     log.info('Waiting up to %d seconds for tests to finish...', args.timeout)
@@ -367,7 +379,8 @@ def get_jobs(archive_dir):
     dir_contents = os.listdir(archive_dir)
 
     def is_job_dir(parent, subdir):
-        if os.path.isdir(os.path.join(parent, subdir)) and re.match('\d+$', subdir):
+        if (os.path.isdir(os.path.join(parent, subdir)) and re.match('\d+$',
+                                                                     subdir)):
             return True
         return False
 
@@ -410,7 +423,6 @@ email_templates = {
 
         """),
 }
-
 
 
 def build_email_body(name, archive_dir, timeout):
@@ -581,4 +593,3 @@ def get_machine_type(config):
         if machine_type:
             return machine_type
     return None
-
