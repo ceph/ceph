@@ -24,8 +24,7 @@ class RGWBucketStatsCache {
   int fetch_bucket_totals(rgw_bucket& bucket, RGWBucketStats& stats);
 
 public:
-#warning FIXME configurable stats_map size
-  RGWBucketStatsCache(RGWRados *_store) : store(_store), stats_map(10000) {
+  RGWBucketStatsCache(RGWRados *_store) : store(_store), stats_map(store->ctx()->_conf->rgw_bucket_quota_cache_size) {
     async_refcount = new RefCountedWaitObject;
   }
   ~RGWBucketStatsCache() {
