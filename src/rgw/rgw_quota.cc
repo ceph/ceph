@@ -1,6 +1,7 @@
 
 #include "include/utime.h"
 #include "common/lru_map.h"
+#include "common/RefCountedObj.h"
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
@@ -12,20 +13,31 @@
 struct RGWQuotaBucketStats {
   RGWBucketStats stats;
   utime_t expiration;
+  utime_t async_refresh_time;
 };
 
 class RGWBucketStatsCache {
   RGWRados *store;
   lru_map<rgw_bucket, RGWQuotaBucketStats> stats_map;
+  RefCountedWaitObject *async_refcount;
 
   int fetch_bucket_totals(rgw_bucket& bucket, RGWBucketStats& stats);
 
 public:
 #warning FIXME configurable stats_map size
-  RGWBucketStatsCache(RGWRados *_store) : store(_store), stats_map(10000) {}
+  RGWBucketStatsCache(RGWRados *_store) : store(_store), stats_map(10000) {
+    async_refcount = new RefCountedWaitObject;
+  }
+  ~RGWBucketStatsCache() {
+    async_refcount->put_wait(); /* wait for all pending async requests to complete */
+  }
 
   int get_bucket_stats(rgw_bucket& bucket, RGWBucketStats& stats);
   void adjust_bucket_stats(rgw_bucket& bucket, int objs_delta, uint64_t added_bytes, uint64_t removed_bytes);
+
+  void set_stats(rgw_bucket& bucket, RGWQuotaBucketStats& qs, RGWBucketStats& stats);
+  int async_refresh(rgw_bucket& bucket, RGWQuotaBucketStats& qs);
+  void async_refresh_response(rgw_bucket& bucket, RGWBucketStats& stats);
 };
 
 int RGWBucketStatsCache::fetch_bucket_totals(rgw_bucket& bucket, RGWBucketStats& stats)
@@ -42,6 +54,8 @@ int RGWBucketStatsCache::fetch_bucket_totals(rgw_bucket& bucket, RGWBucketStats&
     return r;
   }
 
+  stats = RGWBucketStats();
+
   map<RGWObjCategory, RGWBucketStats>::iterator iter;
   for (iter = bucket_stats.begin(); iter != bucket_stats.end(); ++iter) {
     RGWBucketStats& s = iter->second;
@@ -53,23 +67,124 @@ int RGWBucketStatsCache::fetch_bucket_totals(rgw_bucket& bucket, RGWBucketStats&
   return 0;
 }
 
+class AsyncRefreshHandler : public RGWGetBucketStats_CB {
+  RGWRados *store;
+  RGWBucketStatsCache *cache;
+public:
+  AsyncRefreshHandler(RGWRados *_store, RGWBucketStatsCache *_cache, rgw_bucket& _bucket) : RGWGetBucketStats_CB(_bucket), store(_store), cache(_cache) {}
+
+  int init_fetch();
+
+  void handle_response(int r);
+};
+
+
+int AsyncRefreshHandler::init_fetch()
+{
+  ldout(store->ctx(), 20) << "initiating async quota refresh for bucket=" << bucket << dendl;
+  map<RGWObjCategory, RGWBucketStats> bucket_stats;
+  int r = store->get_bucket_stats_async(bucket, this);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket.name << dendl;
+
+    /* get_bucket_stats_async() dropped our reference already */
+    return r;
+  }
+
+  return 0;
+}
+
+void AsyncRefreshHandler::handle_response(int r)
+{
+  if (r < 0) {
+    ldout(store->ctx(), 20) << "AsyncRefreshHandler::handle_response() r=" << r << dendl;
+    return; /* nothing to do here */
+  }
+
+  RGWBucketStats bs;
+
+  map<RGWObjCategory, RGWBucketStats>::iterator iter;
+  for (iter = stats->begin(); iter != stats->end(); ++iter) {
+    RGWBucketStats& s = iter->second;
+    bs.num_kb += s.num_kb;
+    bs.num_kb_rounded += s.num_kb_rounded;
+    bs.num_objects += s.num_objects;
+  }
+
+  cache->async_refresh_response(bucket, bs);
+}
+
+int RGWBucketStatsCache::async_refresh(rgw_bucket& bucket, RGWQuotaBucketStats& qs)
+{
+#if 0
+  if (qs.async_update_flag.inc() != 1) { /* are we the first one here? */
+    qs.async_update_flag.dec();
+    return 0;
+  }
+#endif
+#warning protect against multiple updates
+
+  async_refcount->get();
+
+  AsyncRefreshHandler *handler = new AsyncRefreshHandler(store, this, bucket);
+
+  int ret = handler->init_fetch();
+  if (ret < 0) {
+    async_refcount->put();
+    handler->put();
+    return ret;
+  }
+
+  return 0;
+}
+
+void RGWBucketStatsCache::async_refresh_response(rgw_bucket& bucket, RGWBucketStats& stats)
+{
+  ldout(store->ctx(), 20) << "async stats refresh response for bucket=" << bucket << dendl;
+
+  RGWQuotaBucketStats qs;
+
+  stats_map.find(bucket, qs);
+
+  set_stats(bucket, qs, stats);
+
+  async_refcount->put();
+}
+
+void RGWBucketStatsCache::set_stats(rgw_bucket& bucket, RGWQuotaBucketStats& qs, RGWBucketStats& stats)
+{
+  qs.stats = stats;
+  qs.expiration = ceph_clock_now(store->ctx());
+  qs.async_refresh_time = qs.expiration;
+  qs.expiration += store->ctx()->_conf->rgw_bucket_quota_ttl;
+  qs.async_refresh_time += store->ctx()->_conf->rgw_bucket_quota_ttl / 2;
+
+  stats_map.add(bucket, qs);
+}
+
 int RGWBucketStatsCache::get_bucket_stats(rgw_bucket& bucket, RGWBucketStats& stats) {
   RGWQuotaBucketStats qs;
+  utime_t now = ceph_clock_now(store->ctx());
   if (stats_map.find(bucket, qs)) {
+    if (now >= qs.async_refresh_time) {
+      int r = async_refresh(bucket, qs);
+      if (r < 0) {
+        ldout(store->ctx(), 0) << "ERROR: quota async refresh returned ret=" << r << dendl;
+
+        /* continue processing, might be a transient error, async refresh is just optimization */
+      }
+    }
     if (qs.expiration > ceph_clock_now(store->ctx())) {
       stats = qs.stats;
       return 0;
     }
   }
 
-  int ret = fetch_bucket_totals(bucket, qs.stats);
+  int ret = fetch_bucket_totals(bucket, stats);
   if (ret < 0 && ret != -ENOENT)
     return ret;
 
-  qs.expiration = ceph_clock_now(store->ctx());
-  qs.expiration += store->ctx()->_conf->rgw_bucket_quota_ttl;
-
-  stats_map.add(bucket, qs);
+  set_stats(bucket, qs, stats);
 
   return 0;
 }

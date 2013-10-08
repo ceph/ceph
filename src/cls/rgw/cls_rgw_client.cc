@@ -2,6 +2,7 @@
 
 #include "include/types.h"
 #include "cls/rgw/cls_rgw_ops.h"
+#include "cls/rgw/cls_rgw_client.h"
 #include "include/rados/librados.hpp"
 
 #include "common/debug.h"
@@ -155,6 +156,44 @@ int cls_rgw_get_dir_header(IoCtx& io_ctx, string& oid, rgw_bucket_dir_header *he
     *header = ret.dir.header;
 
  return r;
+}
+
+class GetDirHeaderCompletion : public ObjectOperationCompletion {
+  RGWGetDirHeader_CB *ret_ctx;
+public:
+  GetDirHeaderCompletion(RGWGetDirHeader_CB *_ctx) : ret_ctx(_ctx) {}
+  ~GetDirHeaderCompletion() {
+    ret_ctx->put();
+  }
+  void handle_completion(int r, bufferlist& outbl) {
+    struct rgw_cls_list_ret ret;
+    try {
+      bufferlist::iterator iter = outbl.begin();
+      ::decode(ret, iter);
+    } catch (buffer::error& err) {
+      r = -EIO;
+    }
+
+    ret_ctx->handle_response(r, ret.dir.header);
+  };
+};
+
+int cls_rgw_get_dir_header_async(IoCtx& io_ctx, string& oid, RGWGetDirHeader_CB *ctx)
+{
+  bufferlist in, out;
+  struct rgw_cls_list_op call;
+  call.num_entries = 0;
+  ::encode(call, in);
+  ObjectReadOperation op;
+  GetDirHeaderCompletion *cb = new GetDirHeaderCompletion(ctx);
+  op.exec("rgw", "bucket_list", in, cb);
+  AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  int r = io_ctx.aio_operate(oid, c, &op, NULL);
+  c->release();
+  if (r < 0)
+    return r;
+
+  return 0;
 }
 
 int cls_rgw_bi_log_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max,
