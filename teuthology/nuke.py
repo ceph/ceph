@@ -369,7 +369,7 @@ def nuke(ctx, log, should_unlock, sync_clocks=True, reboot_all=True,
 
 def nuke_one(ctx, targets, log, should_unlock, synch_clocks, reboot_all,
              check_locks, noipmi):
-    from teuthology.lock import unlock
+    from teuthology.lock import unlock_one
     ret = None
     ctx = argparse.Namespace(
         config=dict(targets=targets),
@@ -390,7 +390,7 @@ def nuke_one(ctx, targets, log, should_unlock, synch_clocks, reboot_all,
     else:
         if should_unlock:
             for target in targets.keys():
-                unlock(ctx, target, ctx.owner)
+                unlock_one(ctx, target, ctx.owner)
     return ret
 
 
