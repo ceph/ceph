@@ -196,13 +196,13 @@ struct SignalHandler : public Thread {
       lock.Lock();
       int num_fds = 0;
       fds[num_fds].fd = pipefd[0];
-      fds[num_fds].events = POLLIN | POLLOUT | POLLERR;
+      fds[num_fds].events = POLLIN | POLLERR;
       fds[num_fds].revents = 0;
       ++num_fds;
       for (unsigned i=0; i<32; i++) {
 	if (handlers[i]) {
 	  fds[num_fds].fd = handlers[i]->pipefd[0];
-	  fds[num_fds].events = POLLIN | POLLOUT | POLLERR;
+	  fds[num_fds].events = POLLIN | POLLERR;
 	  fds[num_fds].revents = 0;
 	  ++num_fds;
 	}
