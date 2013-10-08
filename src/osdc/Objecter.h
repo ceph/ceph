@@ -588,31 +588,19 @@ struct ObjectOperation {
 	return;
       try {
 	bufferlist::iterator p = bl.begin();
-	uint64_t size;
-	::decode(size, p);
+	object_copy_data_t copy_reply;
+	::decode(copy_reply, p);
 	if (out_size)
-	  *out_size = size;
-	utime_t mtime;
-	::decode(mtime, p);
+	  *out_size = copy_reply.size;
 	if (out_mtime)
-	  *out_mtime = mtime;
-	if (out_attrs) {
-	  ::decode_noclear(*out_attrs, p);
-	} else {
-	  std::map<std::string,bufferlist> t;
-	  ::decode(t, p);
-	}
-	bufferlist bl;
-	::decode(bl, p);
+	  *out_mtime = copy_reply.mtime;
+	if (out_attrs)
+	  *out_attrs = copy_reply.attrs;
 	if (out_data)
-	  out_data->claim_append(bl);
-	if (out_omap) {
-	  ::decode_noclear(*out_omap, p);
-	} else {
-	  std::map<std::string,bufferlist> t;
-	  ::decode(t, p);
-	}
-	::decode(*cursor, p);
+	  out_data->claim_append(copy_reply.data);
+	if (out_omap)
+	  *out_omap = copy_reply.omap;
+	*cursor = copy_reply.cursor;
       } catch (buffer::error& e) {
 	if (prval)
 	  *prval = -EIO;
