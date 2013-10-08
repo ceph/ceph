@@ -22,7 +22,7 @@ setup(
             'teuthology-ls = scripts.ls:main',
             'teuthology-worker = scripts.worker:main',
             'teuthology-lock = scripts.lock:main',
-            'teuthology-schedule = teuthology.run:schedule',
+            'teuthology-schedule = scripts.schedule:main',
             'teuthology-updatekeys = teuthology.lock:update_hostkeys',
             'teuthology-coverage = teuthology.coverage:analyze',
             'teuthology-results = teuthology.suite:results',
