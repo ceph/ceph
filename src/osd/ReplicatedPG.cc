@@ -4348,8 +4348,8 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 {
   dout(10) << __func__ << " " << obc << " " << cop << dendl;
   ObjectOperation op;
-  if (cop->version) {
-    op.assert_version(cop->version);
+  if (cop->user_version) {
+    op.assert_version(cop->user_version);
   } else {
     // we should learn the version after the first chunk, if we didn't know
     // it already!
@@ -4368,7 +4368,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 				  new C_OnFinisher(fin,
 						   &osd->objecter_finisher),
 				  // discover the object version if we don't know it yet
-				  cop->version ? NULL : &cop->version);
+				  cop->user_version ? NULL : &cop->user_version);
   fin->tid = tid;
   cop->objecter_tid = tid;
   osd->objecter_lock.Unlock();
@@ -4514,7 +4514,7 @@ int ReplicatedPG::finish_copyfrom(OpContext *ctx)
 void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
 {
   dout(10) << __func__ << " " << cop->obc->obs.oi.soid
-	   << " from " << cop->src << " " << cop->oloc << " v" << cop->version
+	   << " from " << cop->src << " " << cop->oloc << " v" << cop->user_version
 	   << dendl;
 
   // cancel objecter op, if we can

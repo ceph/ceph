@@ -101,7 +101,7 @@ public:
     ObjectContextRef obc;
     hobject_t src;
     object_locator_t oloc;
-    version_t version;
+    version_t user_version;
 
     tid_t objecter_tid;
 
@@ -119,7 +119,7 @@ public:
 
     CopyOp(CopyCallback *cb_, ObjectContextRef _obc, hobject_t s, object_locator_t l,
            version_t v, const hobject_t& dest)
-      : cb(cb_), obc(_obc), src(s), oloc(l), version(v),
+      : cb(cb_), obc(_obc), src(s), oloc(l), user_version(v),
 	objecter_tid(0),
 	size(0),
 	rval(-1),
