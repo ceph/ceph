@@ -2593,6 +2593,17 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       var == "crash_replay_interval" || var == "pg_num" ||
       var == "pgp_num" || var == "crush_ruleset") {
     cmd_getval(g_ceph_context, cmdmap, "val", n);
+  } else if (var == "hashpspool") {
+    string flag;
+    cmd_getval(g_ceph_context, cmdmap, "val", flag);
+    if (flag == "true") {
+      n = 1;
+    } else if (flag == "false") {
+      n = 0;
+    } else {
+      ss << "unrecognized value '" << flag << "'; use 'true' or 'false'";
+      return -EINVAL;
+    }
   } else {
     ss << "unrecognized variable '" << var << "'";
     return -EINVAL;
@@ -2641,6 +2652,15 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "crush ruleset " << n << " does not exist";
       return -ENOENT;
     }
+  } else if (var == "hashpspool") {
+    if (n) {
+      pending_inc.new_pools[pool].flags |= pg_pool_t::FLAG_HASHPSPOOL;
+      ss << "set";
+    } else {
+      pending_inc.new_pools[pool].flags &= ~(pg_pool_t::FLAG_HASHPSPOOL);
+      ss << "unset";
+    }
+    ss << " pool " << pool << " flag hashpspool";
   }
   pending_inc.new_pools[pool].last_change = pending_inc.epoch;
   return 0;
