@@ -2110,7 +2110,10 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       f->dump_string(p->first.c_str(), p->second);
     f->close_section();
     f->close_section();
-    f->flush(rdata);
+    ostringstream rs;
+    f->flush(rs);
+    rs << "\n";
+    rdata.append(rs.str());
   } else if (prefix == "osd map") {
     string poolstr, objstr, namespacestr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
