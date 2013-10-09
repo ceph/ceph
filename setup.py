@@ -16,7 +16,7 @@ setup(
     # and find sub foo
     entry_points={
         'console_scripts': [
-            'teuthology = teuthology.run:main',
+            'teuthology = scripts.run:main',
             'teuthology-nuke = scripts.nuke:main',
             'teuthology-suite = scripts.suite:main',
             'teuthology-ls = scripts.ls:main',
