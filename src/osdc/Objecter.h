@@ -212,10 +212,11 @@ struct ObjectOperation {
 	  if (ptime)
 	    *ptime = mtime.sec();
 	} catch (buffer::error& e) {
-	  if (prval)
-	    *prval = -EIO;
+	  r = -EIO;
 	}
       }
+      if (prval)
+	*prval = r;
     }
   };
   void stat(uint64_t *psize, utime_t *pmtime, int *prval) {
@@ -262,10 +263,11 @@ struct ObjectOperation {
 	  ::decode(*extents, iter);
 	  ::decode(*data_bl, iter);
 	} catch (buffer::error& e) {
-	  if (prval)
-	    *prval = -EIO;
+	  r = -EIO;
 	}
       }
+      if (prval)
+	*prval = r;
     }
   };
   void sparse_read(uint64_t off, uint64_t len, std::map<uint64_t,uint64_t> *m,
@@ -335,10 +337,11 @@ struct ObjectOperation {
 	    ::decode(*pattrs, p);
 	}
 	catch (buffer::error& e) {
-	  if (prval)
-	    *prval = -EIO;
+	  r = -EIO;
 	}
       }
+      if (prval)
+	*prval = r;
     }
   };
   struct C_ObjectOperation_decodekeys : public Context {
@@ -355,10 +358,11 @@ struct ObjectOperation {
 	    ::decode(*pattrs, p);
 	}
 	catch (buffer::error& e) {
-	  if (prval)
-	    *prval = -EIO;
+	  r = -EIO;
 	}
-      }	
+      }
+      if (prval)
+	*prval = r;
     }
   };
   struct C_ObjectOperation_decodewatchers : public Context {
@@ -389,10 +393,11 @@ struct ObjectOperation {
           *prval = 0;
 	}
 	catch (buffer::error& e) {
-	  if (prval)
-	    *prval = -EIO;
+	  r = -EIO;
 	}
-      }	
+      }
+      if (prval)
+	*prval = r;
     }
   };
   struct C_ObjectOperation_decodesnaps : public Context {
@@ -424,14 +429,14 @@ struct ObjectOperation {
             }
 	    psnaps->seq = resp.seq;
           }
-          if (prval)
-	    *prval = 0;
+	  r = 0;
 	}
 	catch (buffer::error& e) {
-	  if (prval)
-	    *prval = -EIO;
+	  r = -EIO;
 	}
       }
+      if (prval)
+	*prval = r;
     }
   };
   void getxattrs(std::map<std::string,bufferlist> *pattrs, int *prval) {
@@ -588,7 +593,7 @@ struct ObjectOperation {
 	out_data(d), out_omap(o), prval(r) {}
     void finish(int r) {
       if (r < 0)
-	return;
+	goto out;
       try {
 	bufferlist::iterator p = bl.begin();
 	uint64_t size;
@@ -619,6 +624,7 @@ struct ObjectOperation {
       } catch (buffer::error& e) {
 	r = -EIO;
       }
+    out:
       if (prval)
 	*prval = r;
     }
@@ -656,7 +662,7 @@ struct ObjectOperation {
       : pisdirty(p), prval(r) {}
     void finish(int r) {
       if (r < 0)
-	return;
+	goto out;
       try {
 	bufferlist::iterator p = bl.begin();
 	bool isdirty;
@@ -666,6 +672,7 @@ struct ObjectOperation {
       } catch (buffer::error& e) {
 	r = -EIO;
       }
+    out:
       if (prval)
 	*prval = r;
     }
