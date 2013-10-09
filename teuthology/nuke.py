@@ -30,9 +30,9 @@ def shutdown_daemons(ctx, log):
                 'apache2',
                 run.Raw('||'),
                 'true',  # ignore errors from ceph binaries not being found
-                ],
+            ],
             wait=False,
-            )
+        )
         nodes[remote.name] = proc
 
     for name, proc in nodes.iteritems():
@@ -50,9 +50,9 @@ def find_kernel_mounts(ctx, log):
                 'grep', '-q', ' ceph ', '/etc/mtab',
                 run.Raw('||'),
                 'grep', '-q', '^/dev/rbd', '/etc/mtab',
-                ],
+            ],
             wait=False,
-            )
+        )
         nodes[remote] = proc
     kernel_mounts = list()
     for remote, proc in nodes.iteritems():
@@ -83,9 +83,9 @@ def remove_kernel_mounts(ctx, kernel_mounts, log):
                 'xargs', '-r',
                 'sudo', 'umount', '-f', run.Raw(';'),
                 'fi'
-                ],
+            ],
             wait=False
-            )
+        )
         nodes[remote] = proc
 
     for remote, proc in nodes:
@@ -107,8 +107,8 @@ def remove_osd_mounts(ctx, log):
             'xargs', '-r',
             'sudo', 'umount', run.Raw(';'),
             'true'
-            ],
-        )
+        ],
+    )
 
 
 def remove_osd_tmpfs(ctx, log):
@@ -123,8 +123,8 @@ def remove_osd_tmpfs(ctx, log):
             'xargs', '-r',
             'sudo', 'umount', run.Raw(';'),
             'true'
-            ],
-        )
+        ],
+    )
 
 
 def reboot(ctx, remotes, log):
@@ -144,8 +144,8 @@ def reboot(ctx, remotes, log):
         nodes[remote] = proc
         # we just ignore these procs because reboot -f doesn't actually
         # send anything back to the ssh client!
-        #for remote, proc in nodes.iteritems():
-        #proc.exitstatus.get()
+        # for remote, proc in nodes.iteritems():
+        # proc.exitstatus.get()
     from teuthology.misc import reconnect
     if remotes:
         log.info('waiting for nodes to reboot')
@@ -168,9 +168,9 @@ def reset_syslog_dir(ctx, log):
                 run.Raw(';'),
                 'fi',
                 run.Raw(';'),
-                ],
+            ],
             wait=False,
-            )
+        )
         nodes[remote.name] = proc
 
     for name, proc in nodes.iteritems():
@@ -189,9 +189,9 @@ def dpkg_configure(ctx, log):
                 'sudo', 'apt-get', '-f', 'install',
                 run.Raw('||'),
                 ':',
-                ],
+            ],
             wait=False,
-            )
+        )
         nodes[remote.name] = proc
 
     for name, proc in nodes.iteritems():
@@ -230,9 +230,9 @@ def remove_testing_tree(ctx, log):
                 'sudo', 'rm', '-rf', '/home/ubuntu/cephtest',
                 run.Raw('&&'),
                 'sudo', 'rm', '-rf', '/etc/ceph',
-                ],
+            ],
             wait=False,
-            )
+        )
         nodes[remote.name] = proc
 
     for name, proc in nodes.iteritems():
@@ -255,9 +255,9 @@ def synch_clocks(remotes, log):
                 'sudo', 'service', 'ntp', 'start',
                 run.Raw('||'),
                 'true',    # ignore errors; we may be racing with ntpd startup
-                ],
+            ],
             wait=False,
-            )
+        )
         nodes[remote.name] = proc
     for name, proc in nodes.iteritems():
         log.info('Waiting for clock to synchronize on %s...', name)
@@ -336,13 +336,15 @@ def nuke(ctx, log, should_unlock, sync_clocks=True, reboot_all=True,
     if ctx.name:
         log.info('Checking targets against current locks')
         locks = list_locks(ctx)
-        #Remove targets who's description doesn't match archive name.
+        # Remove targets who's description doesn't match archive name.
         for lock in locks:
             for target in targets:
-                 if target == lock['name']:
-                     if ctx.name not in lock['description']:
-                         del ctx.config['targets'][lock['name']]
-                         log.info('Not nuking %s because description doesn\'t match', lock['name'])
+                if target == lock['name']:
+                    if ctx.name not in lock['description']:
+                        del ctx.config['targets'][lock['name']]
+                        log.info(
+                            "Not nuking %s because description doesn't match",
+                            lock['name'])
     with parallel() as p:
         for target, hostkey in ctx.config['targets'].iteritems():
             p.spawn(
@@ -355,7 +357,7 @@ def nuke(ctx, log, should_unlock, sync_clocks=True, reboot_all=True,
                 reboot_all,
                 ctx.config.get('check-locks', True),
                 noipmi,
-                )
+            )
         for unnuked in p:
             if unnuked:
                 total_unnuked.update(unnuked)
@@ -380,7 +382,7 @@ def nuke_one(ctx, targets, log, should_unlock, synch_clocks, reboot_all,
         teuthology_config=ctx.teuthology_config,
         name=ctx.name,
         noipmi=noipmi,
-        )
+    )
     try:
         nuke_helper(ctx, log)
     except Exception:
@@ -446,8 +448,8 @@ def nuke_helper(ctx, log):
         remove_osd_mounts(ctx, log)
         log.info('Unmount any osd tmpfs dirs...')
         remove_osd_tmpfs(ctx, log)
-        #log.info('Dealing with any kernel mounts...')
-        #remove_kernel_mounts(ctx, need_reboot, log)
+        # log.info('Dealing with any kernel mounts...')
+        # remove_kernel_mounts(ctx, need_reboot, log)
 
     if need_reboot:
         reboot(ctx, need_reboot, log)
