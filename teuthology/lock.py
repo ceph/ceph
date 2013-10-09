@@ -317,11 +317,6 @@ def updatekeys(ctx):
 
     teuthology.read_config(ctx)
 
-    msg = 'You must specify machines to update'
-    assert ctx.all or ctx.targets or ctx.machines, msg
-    if ctx.all:
-        assert not ctx.targets and not ctx.machines, \
-            'You can\'t specify machines with the --all option'
     machines = [canonicalize_hostname(m) for m in ctx.machines]
 
     if ctx.targets:
@@ -353,12 +348,7 @@ def keyscan_check(ctx, machines):
             _, machines[i] = machine.rsplit('@')
     args = ['ssh-keyscan']
     args.extend(machines)
-    p = subprocess.Popen(
-        args=args,
-        stdout=subprocess.PIPE,
-    )
-    out, _ = p.communicate()
-    # assert p.returncode == 0, 'ssh-keyscan failed'
+    out = subprocess.check_output(args)
     return (out, current_locks)
 
 
