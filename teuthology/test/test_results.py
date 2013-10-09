@@ -1,6 +1,6 @@
 import os
 import textwrap
-from .. import suite
+from .. import results
 from .fake_archive import FakeArchive
 
 
@@ -78,7 +78,7 @@ class TestResultsEmail(object):
         run_name = self.reference['run_name']
         run_dir = os.path.join(self.archive_base, run_name)
         self.archive.populate_archive(run_name, self.reference['jobs'])
-        (subject, body) = suite.build_email_body(
+        (subject, body) = results.build_email_body(
             run_name,
             run_dir,
             36000)
