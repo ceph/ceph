@@ -49,6 +49,7 @@ const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_WATCH: return "watch";
 
 	case CEPH_OSD_OP_COPY_GET_CLASSIC: return "copy-get-classic";
+	case CEPH_OSD_OP_COPY_GET: return "copy-get";
 	case CEPH_OSD_OP_COPY_FROM: return "copy-from";
 	case CEPH_OSD_OP_UNDIRTY: return "undirty";
 	case CEPH_OSD_OP_ISDIRTY: return "isdirty";

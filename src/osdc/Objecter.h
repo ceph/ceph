@@ -616,7 +616,7 @@ struct ObjectOperation {
 		bufferlist *out_data,
 		std::map<std::string,bufferlist> *out_omap,
 		int *prval) {
-    OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET_CLASSIC);
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET);
     osd_op.op.copy_get.max = max;
     ::encode(*cursor, osd_op.indata);
     ::encode(max, osd_op.indata);

@@ -1882,6 +1882,8 @@ public:
   object_copy_data_t() : size((uint64_t)-1) {}
 
   static void generate_test_instances(list<object_copy_data_t*>& o);
+  void encode_classic(bufferlist& bl) const;
+  void decode_classic(bufferlist::iterator& bl);
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
