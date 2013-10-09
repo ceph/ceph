@@ -108,6 +108,7 @@ public:
     object_copy_cursor_t cursor;
     uint64_t size;
     utime_t mtime;
+    string category;
     map<string,bufferlist> attrs;
     bufferlist data;
     map<string,bufferlist> omap;
