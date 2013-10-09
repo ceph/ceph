@@ -1,8 +1,11 @@
 import argparse
 
-from teuthology.run import config_file
-from teuthology.run import MergeConfig
-from teuthology.run import schedule
+import teuthology.run
+import teuthology.schedule
+
+
+def main():
+    teuthology.schedule.main(parse_args())
 
 
 def parse_args():
@@ -12,8 +15,8 @@ def parse_args():
         'config',
         metavar='CONFFILE',
         nargs='*',
-        type=config_file,
-        action=MergeConfig,
+        type=teuthology.run.config_file,
+        action=teuthology.run.MergeConfig,
         default={},
         help='config file to read',
     )
@@ -85,15 +88,12 @@ def parse_args():
         help='output the contents of specified jobs in the queue',
     )
 
-    return parser.parse_args()
+    args = parser.parse_args()
 
-
-def main():
-    args = parse_args()
     if not args.last_in_suite:
         msg = '--email is only applicable to the last job in a suite'
         assert not args.email, msg
         msg = '--timeout is only applicable to the last job in a suite'
         assert not args.timeout, msg
-    schedule(args)
 
+    return args
