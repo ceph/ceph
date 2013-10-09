@@ -3611,9 +3611,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
 
-    case CEPH_OSD_OP_COPY_GET:
+    case CEPH_OSD_OP_COPY_GET_CLASSIC:
       ++ctx->num_read;
-      result = fill_in_copy_get(bp, osd_op, oi);
+      result = fill_in_copy_get(bp, osd_op, oi, true);
       if (result == -EINVAL)
 	goto fail;
       break;
@@ -4252,8 +4252,9 @@ struct C_Copyfrom : public Context {
 };
 
 int ReplicatedPG::fill_in_copy_get(bufferlist::iterator& bp, OSDOp& osd_op,
-                                   object_info_t& oi)
+                                   object_info_t& oi, bool classic)
 {
+  assert(classic);
   hobject_t& soid = oi.soid;
   int result = 0;
   object_copy_cursor_t cursor;
