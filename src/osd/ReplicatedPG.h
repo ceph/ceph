@@ -97,19 +97,36 @@ public:
   struct OpContext;
   class CopyCallback;
 
+  /**
+   * CopyResults stores the object metadata of interest to a copy initiator.
+   */
+  struct CopyResults {
+    utime_t mtime; ///< the copy source's mtime
+    uint64_t object_size; ///< the copied object's size
+    bool started_temp_obj; ///< true if the callback needs to delete temp object
+    /**
+     * Final transaction; if non-empty the callback must execute it before any
+     * other accesses to the object (in order to complete the copy).
+     */
+    ObjectStore::Transaction final_tx;
+    string category; ///< The copy source's category
+    version_t user_version; ///< The copy source's user version
+    bool should_requeue;  ///< op should be requeued on cancel
+    CopyResults() : object_size(0), started_temp_obj(false),
+		    user_version(0), should_requeue(false) {}
+  };
+
   struct CopyOp {
     CopyCallback *cb;
     ObjectContextRef obc;
     hobject_t src;
     object_locator_t oloc;
-    version_t user_version;
+
+    CopyResults *results;
 
     tid_t objecter_tid;
 
     object_copy_cursor_t cursor;
-    uint64_t size;
-    utime_t mtime;
-    string category;
     map<string,bufferlist> attrs;
     bufferlist data;
     map<string,bufferlist> omap;
@@ -121,12 +138,15 @@ public:
 
     CopyOp(CopyCallback *cb_, ObjectContextRef _obc, hobject_t s, object_locator_t l,
            version_t v, const hobject_t& dest)
-      : cb(cb_), obc(_obc), src(s), oloc(l), user_version(v),
+      : cb(cb_), obc(_obc), src(s), oloc(l),
+        results(NULL),
 	objecter_tid(0),
-	size(0),
 	rval(-1),
 	temp_oid(dest)
-    {}
+    {
+      results = new CopyResults();
+      results->user_version = v;
+    }
   };
   typedef boost::shared_ptr<CopyOp> CopyOpRef;
 
@@ -136,32 +156,19 @@ public:
    * one and give an instance of the class to start_copy.
    *
    * The implementer is responsible for making sure that the CopyCallback
-   * can associate itself with the correct copy operation. The presence
-   * of the closing Transaction ensures that write operations can be performed
-   * atomically with the copy being completed (which doing them in separate
-   * transactions would not allow); if you are doing the copy for a read
-   * op you will have to generate a separate op to finish the copy with.
+   * can associate itself with the correct copy operation.
    */
-  /// return code, total object size, data in temp object?, final Transaction, should requeue Op
-  typedef boost::tuple<int, size_t, bool, ObjectStore::Transaction, bool> CopyResults;
-  class CopyCallback : public GenContext<CopyResults&> {
+  typedef boost::tuple<int, CopyResults*> CopyCallbackResults;
+  class CopyCallback : public GenContext<CopyCallbackResults> {
   protected:
     CopyCallback() {}
     /**
      * results.get<0>() is the return code: 0 for success; -ECANCELLED if
      * the operation was cancelled by the local OSD; -errno for other issues.
-     * results.get<1>() is the total size of the object (for updating pg stats)
-     * results.get<2>() indicates whether we have already written data to
-     * the temp object (so it needs to get cleaned up, if the return code
-     * indicates a failure)
-     * results.get<3>() is a Transaction; if non-empty you need to perform
-     * its results before any other accesses to the object in order to
-     * complete the copy.
-     * results.get<4>() is a bool; if true you must requeue the client Op
-     * after processing the rest of the results (this will only be true
-     * in conjunction with an ECANCELED return code).
+     * results.get<1>() is a pointer to a CopyResults object, which you are
+     * responsible for deleting.
      */
-    virtual void finish(CopyResults& results_) = 0;
+    virtual void finish(CopyCallbackResults results_) = 0;
 
   public:
     /// Provide the final size of the copied object to the CopyCallback
@@ -170,16 +177,18 @@ public:
 
   class CopyFromCallback: public CopyCallback {
   public:
-    CopyResults results;
+    CopyResults *results;
+    int retval;
     OpContext *ctx;
     hobject_t temp_obj;
     CopyFromCallback(OpContext *ctx_, const hobject_t& temp_obj_) :
-      ctx(ctx_), temp_obj(temp_obj_) {}
+      results(NULL), retval(0), ctx(ctx_), temp_obj(temp_obj_) {}
     ~CopyFromCallback() {}
 
-    virtual void finish(CopyResults& results_) {
-      results = results_;
-      int r = results.get<0>();
+    virtual void finish(CopyCallbackResults results_) {
+      results = results_.get<1>();
+      int r = results_.get<0>();
+      retval = r;
       if (r >= 0) {
 	ctx->pg->execute_ctx(ctx);
       }
@@ -187,16 +196,17 @@ public:
       if (r < 0) {
 	if (r != -ECANCELED) { // on cancel just toss it out; client resends
 	  ctx->pg->osd->reply_op_error(ctx->op, r);
-	} else if (results_.get<4>()) {
+	} else if (results->should_requeue) {
 	  ctx->pg->requeue_op(ctx->op);
 	}
 	ctx->pg->close_op_ctx(ctx);
       }
+      delete results;
     }
 
-    bool is_temp_obj_used() { return results.get<2>(); }
-    uint64_t get_data_size() { return results.get<1>(); }
-    int get_result() { return results.get<0>(); }
+    bool is_temp_obj_used() { return results->started_temp_obj; }
+    uint64_t get_data_size() { return results->object_size; }
+    int get_result() { return retval; }
   };
   friend class CopyFromCallback;
 
