@@ -1,4 +1,3 @@
-import argparse
 import fcntl
 import logging
 import os
@@ -17,7 +16,10 @@ from . import safepath
 log = logging.getLogger(__name__)
 
 # simple flock class
+
+
 class filelock(object):
+
     def __init__(self, fn):
         self.fn = fn
         self.fd = None
@@ -49,7 +51,8 @@ def fetch_teuthology_branch(path, branch='master'):
     try:
         if not os.path.isdir(path):
             log.info("Cloning %s from upstream", branch)
-            teuthology_git_upstream = teuth_config.ceph_git_base_url + 'teuthology.git'
+            teuthology_git_upstream = teuth_config.ceph_git_base_url + \
+                'teuthology.git'
             log.info(
                 subprocess.check_output(('git', 'clone', '--branch', branch,
                                          teuthology_git_upstream, path),
@@ -93,6 +96,7 @@ def fetch_teuthology_branch(path, branch='master'):
     finally:
         lock.release()
 
+
 def worker(ctx):
     loglevel = logging.INFO
     if ctx.verbose:
@@ -101,18 +105,18 @@ def worker(ctx):
     logging.basicConfig(
         level=loglevel,
         filename=os.path.join(ctx.log_dir, 'worker.{tube}.{pid}'.format(
-                pid=os.getpid(),
-                tube=ctx.tube,
-                )),
+                              pid=os.getpid(),
+                              tube=ctx.tube,
+                              )),
         format='%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
         datefmt='%Y-%m-%dT%H:%M:%S',
-        )
+    )
 
     if not os.path.isdir(ctx.archive_dir):
         sys.exit("{prog}: archive directory must exist: {path}".format(
-                prog=os.path.basename(sys.argv[0]),
-                path=ctx.archive_dir,
-                ))
+            prog=os.path.basename(sys.argv[0]),
+            path=ctx.archive_dir,
+        ))
 
     from teuthology.misc import read_config
     read_config(ctx)
@@ -134,7 +138,8 @@ def worker(ctx):
 
         job_config['job_id'] = str(job.jid)
         safe_archive = safepath.munge(job_config['name'])
-        archive_path_full = os.path.join(ctx.archive_dir, safe_archive, str(job.jid))
+        archive_path_full = os.path.join(
+            ctx.archive_dir, safe_archive, str(job.jid))
         job_config['archive_path'] = archive_path_full
 
         # If the teuthology branch was not specified, default to master and
