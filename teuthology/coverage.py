@@ -31,15 +31,17 @@ CREATE TABLE `coverage` (
 
 """
 
+
 def connect_to_db(ctx):
     db = MySQLdb.connect(
         host=ctx.teuthology_config['coverage_db_host'],
         user=ctx.teuthology_config['coverage_db_user'],
         db=ctx.teuthology_config['coverage_db_name'],
         passwd=ctx.teuthology_config['coverage_db_password'],
-        )
+    )
     db.autocommit(False)
     return db
+
 
 def store_coverage(ctx, test_coverage, rev, suite):
     with closing(connect_to_db(ctx)) as db:
@@ -66,6 +68,7 @@ def store_coverage(ctx, test_coverage, rev, suite):
         finally:
             cursor.close()
 
+
 def read_coverage(output):
     log.debug('reading coverage from output: %s', output)
     coverage = [None, None, None]
@@ -85,6 +88,7 @@ def read_coverage(output):
             break
     return coverage
 
+
 def analyze():
     parser = argparse.ArgumentParser(description="""
 Analyze the coverage of a suite of test runs, generating html output with lcov.
@@ -93,32 +97,32 @@ Analyze the coverage of a suite of test runs, generating html output with lcov.
         '-o', '--lcov-output',
         help='the directory in which to store results',
         required=True,
-        )
+    )
     parser.add_argument(
         '--html-output',
         help='the directory in which to store html output',
-        )
+    )
     parser.add_argument(
         '--cov-tools-dir',
         help='the location of coverage scripts (cov-init and cov-analyze)',
         default='../../coverage',
-        )
+    )
     parser.add_argument(
         '--skip-init',
         help='skip initialization (useful if a run stopped partway through)',
         action='store_true',
         default=False,
-        )
+    )
     parser.add_argument(
         '-v', '--verbose',
         help='be more verbose',
         action='store_true',
         default=False,
-        )
+    )
     parser.add_argument(
         'test_dir',
         help='the location of the test results',
-        )
+    )
     args = parser.parse_args()
 
     loglevel = logging.INFO
@@ -127,17 +131,17 @@ Analyze the coverage of a suite of test runs, generating html output with lcov.
 
     logging.basicConfig(
         level=loglevel,
-        )
+    )
 
     teuthology.read_config(args)
 
     handler = logging.FileHandler(
         filename=os.path.join(args.test_dir, 'coverage.log'),
-        )
+    )
     formatter = logging.Formatter(
         fmt='%(asctime)s.%(msecs)03d %(levelname)s:%(message)s',
         datefmt='%Y-%m-%dT%H:%M:%S',
-        )
+    )
     handler.setFormatter(formatter)
     logging.getLogger().addHandler(handler)
 
@@ -146,6 +150,7 @@ Analyze the coverage of a suite of test runs, generating html output with lcov.
     except Exception:
         log.exception('error generating coverage')
         raise
+
 
 def _analyze(args):
     tests = [
@@ -184,12 +189,12 @@ def _analyze(args):
                 os.path.join(
                     args.teuthology_config['ceph_build_output_dir'],
                     '{suite}.tgz'.format(suite=suite),
-                    ),
-                ])
+                ),
+            ])
         shutil.copy(
             os.path.join(args.lcov_output, 'base.lcov'),
             os.path.join(args.lcov_output, 'total.lcov')
-            )
+        )
 
     test_coverage = {}
     for test, summary in test_summaries.iteritems():
@@ -202,9 +207,9 @@ def _analyze(args):
                 '-t', os.path.join(args.test_dir, test),
                 '-d', args.lcov_output,
                 '-o', test,
-                ],
+            ],
             stdout=subprocess.PIPE,
-            )
+        )
         output, _ = proc.communicate()
         desc = summary.get('description', test)
         test_coverage[desc] = read_coverage(output)
@@ -216,15 +221,15 @@ def _analyze(args):
                 '-a', os.path.join(args.lcov_output, lcov_file),
                 '-a', os.path.join(args.lcov_output, 'total.lcov'),
                 '-o', os.path.join(args.lcov_output, 'total_tmp.lcov'),
-                ],
+            ],
             stdout=subprocess.PIPE,
-            )
+        )
         output, _ = proc.communicate()
 
         os.rename(
             os.path.join(args.lcov_output, 'total_tmp.lcov'),
             os.path.join(args.lcov_output, 'total.lcov')
-            )
+        )
 
     coverage = read_coverage(output)
     test_coverage['total for {suite}'.format(suite=suite)] = coverage
@@ -239,6 +244,6 @@ def _analyze(args):
                 '-t', 'Total for {suite}'.format(suite=suite),
                 '--',
                 os.path.join(args.lcov_output, 'total.lcov'),
-                ])
+            ])
 
     store_coverage(args, test_coverage, summary['ceph-sha1'], suite)
