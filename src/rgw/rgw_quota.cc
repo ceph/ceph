@@ -31,13 +31,44 @@ public:
     async_refcount->put_wait(); /* wait for all pending async requests to complete */
   }
 
-  int get_bucket_stats(rgw_bucket& bucket, RGWBucketStats& stats);
+  int get_bucket_stats(rgw_bucket& bucket, RGWBucketStats& stats, RGWQuotaInfo& quota);
   void adjust_bucket_stats(rgw_bucket& bucket, int objs_delta, uint64_t added_bytes, uint64_t removed_bytes);
+
+  bool can_use_cached_stats(RGWQuotaInfo& quota, RGWBucketStats& stats);
 
   void set_stats(rgw_bucket& bucket, RGWQuotaBucketStats& qs, RGWBucketStats& stats);
   int async_refresh(rgw_bucket& bucket, RGWQuotaBucketStats& qs);
   void async_refresh_response(rgw_bucket& bucket, RGWBucketStats& stats);
 };
+
+bool RGWBucketStatsCache::can_use_cached_stats(RGWQuotaInfo& quota, RGWBucketStats& cached_stats)
+{
+  if (quota.max_size_kb >= 0) {
+    if (quota.max_size_soft_threshold < 0) {
+      quota.max_size_soft_threshold = quota.max_size_kb * store->ctx()->_conf->rgw_bucket_quota_soft_threshold;
+    }
+
+    if (cached_stats.num_kb_rounded >= (uint64_t)quota.max_size_soft_threshold) {
+      ldout(store->ctx(), 20) << "quota: can't use cached stats, exceeded soft threshold (size): "
+        << cached_stats.num_kb_rounded << " >= " << quota.max_size_soft_threshold << dendl;
+      return false;
+    }
+  }
+
+  if (quota.max_objects >= 0) {
+    if (quota.max_objs_soft_threshold < 0) {
+      quota.max_objs_soft_threshold = quota.max_objects * store->ctx()->_conf->rgw_bucket_quota_soft_threshold;
+    }
+
+    if (cached_stats.num_objects >= (uint64_t)quota.max_objs_soft_threshold) {
+      ldout(store->ctx(), 20) << "quota: can't use cached stats, exceeded soft threshold (num objs): "
+        << cached_stats.num_objects << " >= " << quota.max_objs_soft_threshold << dendl;
+      return false;
+    }
+  }
+
+  return true;
+}
 
 int RGWBucketStatsCache::fetch_bucket_totals(rgw_bucket& bucket, RGWBucketStats& stats)
 {
@@ -176,7 +207,7 @@ void RGWBucketStatsCache::set_stats(rgw_bucket& bucket, RGWQuotaBucketStats& qs,
   stats_map.add(bucket, qs);
 }
 
-int RGWBucketStatsCache::get_bucket_stats(rgw_bucket& bucket, RGWBucketStats& stats) {
+int RGWBucketStatsCache::get_bucket_stats(rgw_bucket& bucket, RGWBucketStats& stats, RGWQuotaInfo& quota) {
   RGWQuotaBucketStats qs;
   utime_t now = ceph_clock_now(store->ctx());
   if (stats_map.find(bucket, qs)) {
@@ -188,7 +219,8 @@ int RGWBucketStatsCache::get_bucket_stats(rgw_bucket& bucket, RGWBucketStats& st
         /* continue processing, might be a transient error, async refresh is just optimization */
       }
     }
-    if (qs.expiration > ceph_clock_now(store->ctx())) {
+
+    if (can_use_cached_stats(quota, qs.stats) && qs.expiration > ceph_clock_now(store->ctx())) {
       stats = qs.stats;
       return 0;
     }
@@ -245,7 +277,7 @@ public:
 
     RGWBucketStats stats;
 
-    int ret = stats_cache.get_bucket_stats(bucket, stats);
+    int ret = stats_cache.get_bucket_stats(bucket, stats, bucket_quota);
     if (ret < 0)
       return ret;
 
