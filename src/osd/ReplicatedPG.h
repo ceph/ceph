@@ -107,7 +107,6 @@ public:
     utime_t mtime; ///< the copy source's mtime
     uint64_t object_size; ///< the copied object's size
     bool started_temp_obj; ///< true if the callback needs to delete temp object
-    coll_t temp_coll;      ///< temp collection (if any)
     hobject_t temp_oid;    ///< temp object (if any)
     /**
      * Final transaction; if non-empty the callback must execute it before any
