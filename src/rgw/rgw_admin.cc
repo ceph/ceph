@@ -678,6 +678,64 @@ static bool dump_string(const char *field_name, bufferlist& bl, Formatter *f)
   return true;
 }
 
+void set_quota_info(RGWQuotaInfo& quota, int opt_cmd, int64_t max_size, int64_t max_objects)
+{
+  switch (opt_cmd) {
+    case OPT_QUOTA_ENABLE:
+      quota.enabled = true;
+
+      // falling through on purpose
+
+    case OPT_QUOTA_SET:
+      if (max_objects >= 0) {
+        quota.max_objects = max_objects;
+      }
+      if (max_size >= 0) {
+        quota.max_size_kb = rgw_rounded_kb(max_size);
+      }
+      break;
+    case OPT_QUOTA_DISABLE:
+      quota.enabled = false;
+      break;
+  }
+}
+
+int set_bucket_quota(RGWRados *store, int opt_cmd, string& bucket_name, int64_t max_size, int64_t max_objects)
+{
+  RGWBucketInfo bucket_info;
+  map<string, bufferlist> attrs;
+  int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL, &attrs);
+  if (r < 0) {
+    cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+
+  set_quota_info(bucket_info.quota, opt_cmd, max_size, max_objects);
+
+   r = store->put_bucket_instance_info(bucket_info, false, 0, &attrs);
+  if (r < 0) {
+    cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+  return 0;
+}
+
+int set_user_bucket_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects)
+{
+  RGWUserInfo& user_info = op_state.get_user_info();
+
+  set_quota_info(user_info.bucket_quota, opt_cmd, max_size, max_objects);
+
+  op_state.set_bucket_quota(user_info.bucket_quota);
+
+  string err;
+  int r = user.modify(op_state, &err);
+  if (r < 0) {
+    cerr << "ERROR: failed updating user info: " << cpp_strerror(-r) << ": " << err << std::endl;
+    return -r;
+  }
+  return 0;
+}
 
 int main(int argc, char **argv) 
 {
@@ -2257,42 +2315,15 @@ next:
   bool quota_op = (opt_cmd == OPT_QUOTA_SET || opt_cmd == OPT_QUOTA_ENABLE || opt_cmd == OPT_QUOTA_DISABLE);
 
   if (quota_op) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket name was not specified" << std::endl;
+    if (bucket_name.empty() && user_id.empty()) {
+      cerr << "ERROR: bucket name or uid is required for quota operation" << std::endl;
       return EINVAL;
     }
 
-    RGWBucketInfo bucket_info;
-    map<string, bufferlist> attrs;
-    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL, &attrs);
-    if (r < 0) {
-      cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
-      return -r;
-    }
-
-    switch (opt_cmd) {
-      case OPT_QUOTA_ENABLE:
-        bucket_info.quota.enabled = true;
-
-        // falling through on purpose
-
-      case OPT_QUOTA_SET:
-        if (max_objects >= 0) {
-          bucket_info.quota.max_objects = max_objects;
-        }
-        if (max_size >= 0) {
-          bucket_info.quota.max_size_kb = rgw_rounded_kb(max_size);
-        }
-        break;
-      case OPT_QUOTA_DISABLE:
-        bucket_info.quota.enabled = false;
-        break;
-    }
-
-    r = store->put_bucket_instance_info(bucket_info, false, 0, &attrs);
-    if (r < 0) {
-      cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-r) << std::endl;
-      return -r;
+    if (!bucket_name.empty()) {
+      set_bucket_quota(store, opt_cmd, bucket_name, max_size, max_objects);
+    } else if (!user_id.empty()) {
+      set_user_bucket_quota(opt_cmd, user, user_op, max_size, max_objects);
     }
   }
   return 0;
