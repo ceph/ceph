@@ -1796,7 +1796,7 @@ void Objecter::_list_reply(ListContext *list_context, int r,
 
     // if the osd returns 1 (newer code), or no entries, it means we
     // hit the end of the pg.
-    if (r == 0 && response_size > 0) {
+    if (r == 0) {
       // not yet done with this pg
       list_objects(list_context, final_finish);
       return;
