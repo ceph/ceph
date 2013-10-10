@@ -171,6 +171,19 @@ public:
     const hobject_t &hoid,
     const string &attr,
     bufferlist *out);
+
+  /**
+   * Client IO
+   */
+  PGTransaction *get_transaction();
+  void submit_transaction(
+    PGTransaction *t,
+    vector<pg_log_entry_t> &log_entries,
+    Context *on_all_acked,
+    Context *on_all_commit,
+    tid_t tid
+    );
+
 private:
   // push
   struct PushInfo {
