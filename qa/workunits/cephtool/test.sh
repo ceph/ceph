@@ -330,6 +330,11 @@ ceph osd pool set data size 2
 ceph osd pool set data hashpspool true
 ceph osd pool set data hashpspool false
 
+ceph osd pool set rbd hit_set_type explicit_hash
+ceph osd pool set rbd hit_set_period 123
+ceph osd pool set rbd hit_set_count 12
+ceph osd pool set rbd hit_set_fpp .01
+
 ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 2'
 
 ceph osd thrash 10
