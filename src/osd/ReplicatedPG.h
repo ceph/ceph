@@ -211,13 +211,15 @@ public:
   friend class CopyFromCallback;
 
   class PromoteCallback: public CopyCallback {
+    OpRequestRef op;
     ObjectContextRef obc;
     hobject_t temp_obj;
     ReplicatedPG *pg;
   public:
-    PromoteCallback(ObjectContextRef obc_, const hobject_t& temp_obj_,
+    PromoteCallback(OpRequestRef op_, ObjectContextRef obc_,
+                    const hobject_t& temp_obj_,
                     ReplicatedPG *pg_) :
-      obc(obc_), temp_obj(temp_obj_), pg(pg_) {}
+      op(op_), obc(obc_), temp_obj(temp_obj_), pg(pg_) {}
 
     virtual void finish(CopyCallbackResults results) {
       CopyResults* results_data = results.get<1>();
