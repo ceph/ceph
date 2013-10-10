@@ -706,6 +706,25 @@ struct pg_pool_t {
     return get_type_name(type);
   }
 
+  static const char *get_flag_name(int f) {
+    switch (f) {
+    case FLAG_HASHPSPOOL: return "hashpspool";
+    case FLAG_FULL: return "full";
+    default: return "???";
+    }
+  }
+  string get_flags_string() const {
+    string s;
+    if (flags & FLAG_HASHPSPOOL)
+      s += get_flag_name(FLAG_HASHPSPOOL);
+    if (flags & FLAG_FULL) {
+      if (s.length())
+        s += ",";
+      s += get_flag_name(FLAG_FULL);
+    }
+    return s;
+  }
+
   uint64_t flags;           /// FLAG_* 
   __u8 type;                /// TYPE_*
   __u8 size, min_size;      /// number of osds in each pg
