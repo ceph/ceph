@@ -228,7 +228,7 @@ def start_apache(ctx, config):
                 'daemon-helper',
                 'kill',
                 apache_name,
-                '-X',
+    #            '-X',
                 '-f',
                 '{tdir}/apache/apache.{client}.conf'.format(tdir=testdir,
                                                             client=client),
