@@ -75,6 +75,9 @@ namespace librados
     /// get current hash position of the iterator, rounded to the current pg
     uint32_t get_pg_hash_position() const;
 
+    /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
+    uint32_t seek(uint32_t pos);
+
   private:
     void get_next();
     std::tr1::shared_ptr < ObjListCtx > ctx;
@@ -588,7 +591,11 @@ namespace librados
 		     std::list<librados::locker_t> *lockers);
 
 
+    /// Start enumerating objects for a pool
     ObjectIterator objects_begin();
+    /// Start enumerating objects for a pool starting from a hash position
+    ObjectIterator objects_begin(uint32_t start_hash_position);
+    /// Iterator indicating the end of a pool
     const ObjectIterator& objects_end() const;
 
     uint64_t get_last_version();

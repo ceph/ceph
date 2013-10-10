@@ -1801,6 +1801,7 @@ private:
   }
 
   void list_objects(ListContext *p, Context *onfinish);
+  uint32_t list_objects_seek(ListContext *p, uint32_t pos);
 
   // -------------------------
   // pool ops
