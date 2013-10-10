@@ -298,3 +298,201 @@ int ReplicatedBackend::objects_get_attr(
   }
   return r;
 }
+
+
+class RPGTransaction : public PGBackend::PGTransaction {
+  coll_t coll;
+  coll_t temp_coll;
+  set<hobject_t> temp_added;
+  set<hobject_t> temp_cleared;
+  ObjectStore::Transaction *t;
+  const coll_t &get_coll_ct(const hobject_t &hoid) {
+    if (hoid.is_temp()) {
+      temp_cleared.erase(hoid);
+      temp_added.insert(hoid);
+    }
+    return get_coll(hoid);
+  }
+  const coll_t &get_coll_rm(const hobject_t &hoid) {
+    if (hoid.is_temp()) {
+      temp_added.erase(hoid);
+      temp_cleared.insert(hoid);
+    }
+    return get_coll(hoid);
+  }
+  const coll_t &get_coll(const hobject_t &hoid) {
+    if (hoid.is_temp())
+      return temp_coll;
+    else
+      return coll;
+  }
+public:
+  RPGTransaction(coll_t coll, coll_t temp_coll)
+  : coll(coll), t(new ObjectStore::Transaction)
+  {}
+
+  /// Yields ownership of contained transaction
+  ObjectStore::Transaction *get_transaction() {
+    ObjectStore::Transaction *_t = t;
+    t = 0;
+    return _t;
+  }
+  const set<hobject_t> &get_temp_added() {
+    return temp_added;
+  }
+  const set<hobject_t> &get_temp_cleared() {
+    return temp_cleared;
+  }
+
+  void write(
+    const hobject_t &hoid,
+    uint64_t off,
+    uint64_t len,
+    bufferlist &bl
+    ) {
+    t->write(get_coll_ct(hoid), hoid, off, len, bl);
+  }
+  void remove(
+    const hobject_t &hoid
+    ) {
+    t->remove(get_coll_rm(hoid), hoid);
+  }
+  void stash(
+    const hobject_t &hoid,
+    version_t former_version) {
+    t->collection_move_rename(
+      coll, hoid, coll,
+      ghobject_t(hoid, former_version, 0));
+  }
+  void setattrs(
+    const hobject_t &hoid,
+    map<string, bufferlist> &attrs
+    ) {
+    t->setattrs(get_coll(hoid), hoid, attrs);
+  }
+  void setattr(
+    const hobject_t &hoid,
+    const string &attrname,
+    bufferlist &bl
+    ) {
+    t->setattr(get_coll(hoid), hoid, attrname, bl);
+  }
+  void rmattr(
+    const hobject_t &hoid,
+    const string &attrname
+    ) {
+    t->rmattr(get_coll(hoid), hoid, attrname);
+  }
+  void omap_setkeys(
+    const hobject_t &hoid,
+    map<string, bufferlist> &attrs
+    ) {
+    return t->omap_setkeys(get_coll(hoid), hoid, attrs);
+  }
+  void omap_rmkeys(
+    const hobject_t &hoid,
+    set<string> &attrs
+    ) {
+    t->omap_rmkeys(get_coll(hoid), hoid, attrs);
+  }
+  void omap_clear(
+    const hobject_t &hoid
+    ) {
+    t->omap_clear(get_coll(hoid), hoid);
+  }
+  void omap_setheader(
+    const hobject_t &hoid,
+    bufferlist &header
+    ) {
+    t->omap_setheader(get_coll(hoid), hoid, header);
+  }
+  void clone_range(
+    const hobject_t &from,
+    const hobject_t &to,
+    uint64_t fromoff,
+    uint64_t len,
+    uint64_t tooff
+    ) {
+    assert(get_coll(from) == get_coll_ct(to)  && get_coll(from) == coll);
+    t->clone_range(coll, from, to, fromoff, len, tooff);
+  }
+  void clone(
+    const hobject_t &from,
+    const hobject_t &to
+    ) {
+    assert(get_coll(from) == get_coll_ct(to)  && get_coll(from) == coll);
+    t->clone(coll, from, to);
+  }
+  void rename(
+    const hobject_t &from,
+    const hobject_t &to
+    ) {
+    t->collection_move_rename(
+      get_coll_rm(from),
+      from,
+      get_coll_ct(to),
+      to);
+  }
+
+  void touch(
+    const hobject_t &hoid
+    ) {
+    t->touch(get_coll_ct(hoid), hoid);
+  }
+
+  void truncate(
+    const hobject_t &hoid,
+    uint64_t off
+    ) {
+    t->truncate(get_coll(hoid), hoid, off);
+  }
+  void zero(
+    const hobject_t &hoid,
+    uint64_t off,
+    uint64_t len
+    ) {
+    t->zero(get_coll(hoid), hoid, off, len);
+  }
+
+  void append(
+    PGTransaction *_to_append
+    ) {
+    RPGTransaction *to_append = dynamic_cast<RPGTransaction*>(_to_append);
+    t->append(*(to_append->t));
+    for (set<hobject_t>::iterator i = to_append->temp_added.begin();
+	 i != to_append->temp_added.end();
+	 ++i) {
+      temp_cleared.erase(*i);
+      temp_added.insert(*i);
+    }
+    for (set<hobject_t>::iterator i = to_append->temp_cleared.begin();
+	 i != to_append->temp_cleared.end();
+	 ++i) {
+      temp_added.erase(*i);
+      temp_cleared.insert(*i);
+    }
+  }
+  void nop() {
+    t->nop();
+  }
+  bool empty() const {
+    return t->empty();
+  }
+  ~RPGTransaction() { delete t; }
+};
+
+PGBackend::PGTransaction *ReplicatedBackend::get_transaction()
+{
+  return new RPGTransaction(coll, get_temp_coll());
+}
+
+void ReplicatedBackend::submit_transaction(
+  PGTransaction *_t,
+  vector<pg_log_entry_t> &log_entries,
+  Context *on_all_acked,
+  Context *on_all_commit,
+  tid_t tid)
+{
+  //RPGTransaction *t = dynamic_cast<RPGTransaction*>(_t);
+  return;
+}
