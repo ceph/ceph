@@ -223,11 +223,27 @@ public:
 
     virtual void finish(CopyCallbackResults results) {
       CopyResults* results_data = results.get<1>();
-      assert(results.get<0>() == 0); // we don't handle errors right now
-      pg->finish_promote(results_data, obc, temp_obj);
+      int r = results.get<0>();
+      if (r >= 0) {
+	pg->finish_promote(results_data, obc, temp_obj);
+      } else {
+	// we need to get rid of the op in the blocked queue
+	map<hobject_t,list<OpRequestRef> >::iterator blocked_iter;
+	blocked_iter = pg->waiting_for_blocked_object.find(obc->obs.oi.soid);
+	assert(blocked_iter != pg->waiting_for_blocked_object.end());
+	assert(blocked_iter->second.begin()->get() == op.get());
+	blocked_iter->second.pop_front();
+	if (blocked_iter->second.empty()) {
+	  pg->waiting_for_blocked_object.erase(blocked_iter);
+	}
+	if (r != -ECANCELED) { // on cancel the client will resend
+	  pg->osd->reply_op_error(op, r);
+	}
+      }
       delete results_data;
     }
   };
+  friend class PromoteCallback;
 
   boost::scoped_ptr<PGBackend> pgbackend;
   PGBackend *get_pgbackend() {
