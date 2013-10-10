@@ -13,8 +13,11 @@ struct RGWQuotaInfo {
   int64_t max_size_kb;
   int64_t max_objects;
   bool enabled;
+  int64_t max_size_soft_threshold;
+  int64_t max_objs_soft_threshold;
 
-  RGWQuotaInfo() : max_size_kb(-1), max_objects(-1), enabled(false) {}
+  RGWQuotaInfo() : max_size_kb(-1), max_objects(-1), enabled(false),
+                   max_size_soft_threshold(-1), max_objs_soft_threshold(-1) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
