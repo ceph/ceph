@@ -210,6 +210,23 @@ public:
   };
   friend class CopyFromCallback;
 
+  class PromoteCallback: public CopyCallback {
+    ObjectContextRef obc;
+    hobject_t temp_obj;
+    ReplicatedPG *pg;
+  public:
+    PromoteCallback(ObjectContextRef obc_, const hobject_t& temp_obj_,
+                    ReplicatedPG *pg_) :
+      obc(obc_), temp_obj(temp_obj_), pg(pg_) {}
+
+    virtual void finish(CopyCallbackResults results) {
+      CopyResults* results_data = results.get<1>();
+      assert(results.get<0>() == 0); // we don't handle errors right now
+      pg->finish_promote(results_data, obc, temp_obj);
+      delete results_data;
+    }
+  };
+
   boost::scoped_ptr<PGBackend> pgbackend;
   PGBackend *get_pgbackend() {
     return pgbackend.get();
@@ -784,8 +801,19 @@ protected:
 				   uint64_t offset, uint64_t length, bool count_bytes);
   void add_interval_usage(interval_set<uint64_t>& s, object_stat_sum_t& st);
 
+  /**
+   * This helper function is called from do_op if the ObjectContext lookup fails.
+   * @returns true if the caching code is handling the Op, false otherwise.
+   */
   inline bool maybe_handle_cache(OpRequestRef op, ObjectContextRef obc, int r);
+  /**
+   * This helper function tells the client to redirect their request elsewhere.
+   */
   void do_cache_redirect(OpRequestRef op, ObjectContextRef obc);
+  /**
+   * This function starts up a copy from
+   */
+  void promote_object(OpRequestRef op, ObjectContextRef obc);
 
   int prepare_transaction(OpContext *ctx);
   
@@ -954,6 +982,8 @@ protected:
   void _build_finish_copy_transaction(CopyOpRef cop,
                                       ObjectStore::Transaction& t);
   void finish_copyfrom(OpContext *ctx);
+  void finish_promote(CopyResults *results, ObjectContextRef obc,
+                      hobject_t& temp_obj);
   void cancel_copy(CopyOpRef cop, bool requeue);
   void cancel_copy_ops(bool requeue);
 
