@@ -370,7 +370,7 @@ int librados::IoCtxImpl::list(Objecter::ListContext *context, int max_entries)
   object_t oid;
   Mutex mylock("IoCtxImpl::list::mylock");
 
-  if (context->at_end)
+  if (context->at_end())
     return 0;
 
   context->max_entries = max_entries;
