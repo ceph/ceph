@@ -508,7 +508,7 @@ COMMAND("osd pool get " \
 COMMAND("osd pool set " \
 	"name=pool,type=CephPoolname " \
 	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset " \
-	"name=val,type=CephInt", \
+	"name=val,type=CephString", \
 	"set pool parameter <var> to <val>", "osd", "rw", "cli,rest")
 // 'val' is a CephString because it can include a unit.  Perhaps
 // there should be a Python type for validation/conversion of strings
