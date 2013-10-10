@@ -1753,21 +1753,19 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
   ObjectOperation op;
   op.pg_ls(list_context->max_entries, list_context->filter, list_context->cookie,
 	   list_context->current_pg_epoch);
-
-  bufferlist *bl = new bufferlist();
-  C_List *onack = new C_List(list_context, onfinish, bl, this);
-
+  list_context->bl.clear();
+  C_List *onack = new C_List(list_context, onfinish, this);
   object_locator_t oloc(list_context->pool_id, list_context->nspace);
   pg_read(list_context->current_pg, oloc, op,
-	  bl, 0, onack, &onack->epoch);
+	  &list_context->bl, 0, onack, &onack->epoch);
 }
 
-void Objecter::_list_reply(ListContext *list_context, int r, bufferlist *bl,
+void Objecter::_list_reply(ListContext *list_context, int r,
 			   Context *final_finish, epoch_t reply_epoch)
 {
   ldout(cct, 10) << "_list_reply" << dendl;
 
-  bufferlist::iterator iter = bl->begin();
+  bufferlist::iterator iter = list_context->bl.begin();
   pg_ls_response_t response;
   bufferlist extra_info;
   ::decode(response, iter);
@@ -1790,7 +1788,6 @@ void Objecter::_list_reply(ListContext *list_context, int r, bufferlist *bl,
     list_context->list.merge(response.entries);
     if (response_size >= list_context->max_entries) {
       final_finish->complete(0);
-      delete bl;
       return;
     }
 
@@ -1801,7 +1798,6 @@ void Objecter::_list_reply(ListContext *list_context, int r, bufferlist *bl,
     // hit the end of the pg.
     if (r == 0 && response_size > 0) {
       // not yet done with this pg
-      delete bl;
       list_objects(list_context, final_finish);
       return;
     }
@@ -1813,7 +1809,6 @@ void Objecter::_list_reply(ListContext *list_context, int r, bufferlist *bl,
   ldout(cct, 20) << "emptied current pg, moving on to next one:" << list_context->current_pg << dendl;
   if (list_context->current_pg < list_context->starting_pg_num){ // we have more pgs to go through
     list_context->cookie = collection_list_handle_t();
-    delete bl;
     list_objects(list_context, final_finish);
     return;
   }
@@ -1821,7 +1816,6 @@ void Objecter::_list_reply(ListContext *list_context, int r, bufferlist *bl,
   // if we make it this far, there are no more pgs
   ldout(cct, 20) << "out of pgs, returning to" << final_finish << dendl;
   list_context->at_end = true;
-  delete bl;
   final_finish->complete(0);
   return;
 }
