@@ -105,18 +105,32 @@ def zone_for_client(ctx, client):
     ceph_config.update(ctx.ceph.conf.get(client, {}))
     return ceph_config.get('rgw zone')
 
+def region_for_client(ctx, client):
+    ceph_config = ctx.ceph.conf.get('global', {})
+    ceph_config.update(ctx.ceph.conf.get('client', {}))
+    ceph_config.update(ctx.ceph.conf.get(client, {}))
+    return ceph_config.get('rgw region')
 
-def radosgw_agent_sync(ctx, agent_host, agent_port):
+
+def radosgw_agent_sync_data(ctx, agent_host, agent_port, full=False):
     log.info('sync agent {h}:{p}'.format(h=agent_host, p=agent_port))
-    return requests.post('http://{addr}:{port}/metadata/incremental'.format(addr = agent_host, port = agent_port))
+    method = "full" if full else "incremental"
+    return requests.post('http://{addr}:{port}/data/{method}'.format(addr = agent_host, port = agent_port, method = method))
 
-def radosgw_agent_sync_all(ctx):
+def radosgw_agent_sync_metadata(ctx, agent_host, agent_port, full=False):
+    log.info('sync agent {h}:{p}'.format(h=agent_host, p=agent_port))
+    method = "full" if full else "incremental"
+    return requests.post('http://{addr}:{port}/metadata/{method}'.format(addr = agent_host, port = agent_port, method = method))
+
+def radosgw_agent_sync_all(ctx, full=False, data=False):
     if ctx.radosgw_agent.procs:
         for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
             zone_for_client(ctx, agent_client)
             sync_host, sync_port = get_sync_agent(ctx, agent_client)
             log.debug('doing a sync via {host1}'.format(host1=sync_host))
-            radosgw_agent_sync(ctx, sync_host, sync_port)
+            radosgw_agent_sync_metadata(ctx, sync_host, sync_port, full)
+	    if (data):
+                radosgw_agent_sync_data(ctx, sync_host, sync_port, full)
 
 def host_for_role(ctx, role):
     for target, roles in zip(ctx.config['targets'].iterkeys(), ctx.config['roles']):

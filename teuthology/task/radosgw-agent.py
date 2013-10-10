@@ -26,6 +26,9 @@ def run_radosgw_agent(ctx, config):
         src_zone = rgw_utils.zone_for_client(ctx, src_client)
         dest_zone = rgw_utils.zone_for_client(ctx, dest_client)
 
+        src_region = rgw_utils.region_for_client(ctx, src_client)
+        dest_region = rgw_utils.region_for_client(ctx, dest_client)
+
         log.info("source is %s", src_zone)
         log.info("dest is %s", dest_zone)
 
@@ -81,18 +84,13 @@ def run_radosgw_agent(ctx, config):
 		        '-v',
 		        '--src-access-key', src_access,
 		        '--src-secret-key', src_secret,
-		        '--src-host', src_host,
-		        '--src-port', str(src_port),
-		        '--src-zone', src_zone,
+			'--source', "http://{addr}:{port}".format(addr=src_host, port=src_port),
 		        '--dest-access-key', dest_access,
 		        '--dest-secret-key', dest_secret,
-		        '--dest-host', dest_host,
-		        '--dest-port', str(dest_port),
-		        '--dest-zone', dest_zone,
-		        '--daemon-id', daemon_name,
 		        '--log-file', '{tdir}/archive/rgw_sync_agent.{client}.log'.format(
 		            tdir=testdir,
 		            client=client),
+			"http://{addr}:{port}".format(addr=dest_host, port=dest_port),
 		        ]
         # the test server and full/incremental flags are mutually exclusive
         if sync_scope is None:
