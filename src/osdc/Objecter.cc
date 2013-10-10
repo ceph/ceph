@@ -1769,8 +1769,24 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 }
 
 
-void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
+uint32_t Objecter::list_objects_seek(ListContext *list_context,
+				     uint32_t pos)
+{
+  assert(client_lock.is_locked());
+  pg_t actual = osdmap->raw_pg_to_pg(pg_t(pos, list_context->pool_id));
+  ldout(cct, 10) << "list_objects_seek " << list_context
+		 << " pos " << pos << " -> " << actual << dendl;
+  list_context->current_pg = actual.ps();
+  list_context->cookie = collection_list_handle_t();
+  list_context->at_end_of_pg = false;
+  list_context->at_end_of_pool = false;
+  list_context->current_pg_epoch = 0;
+  return list_context->current_pg;
+}
 
+void Objecter::list_objects(ListContext *list_context, Context *onfinish)
+{
+  assert(client_lock.is_locked());
   ldout(cct, 10) << "list_objects" << dendl;
   ldout(cct, 20) << " pool_id " << list_context->pool_id
 	   << " pool_snap_seq " << list_context->pool_snap_seq

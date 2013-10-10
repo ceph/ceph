@@ -400,6 +400,14 @@ int librados::IoCtxImpl::list(Objecter::ListContext *context, int max_entries)
   return r;
 }
 
+uint32_t librados::IoCtxImpl::list_seek(Objecter::ListContext *context,
+					uint32_t pos)
+{
+  Mutex::Locker l(*lock);
+  context->list.clear();
+  return objecter->list_objects_seek(context, pos);
+}
+
 int librados::IoCtxImpl::create(const object_t& oid, bool exclusive)
 {
   ::ObjectOperation op;
