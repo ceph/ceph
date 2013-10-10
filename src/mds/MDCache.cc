@@ -5902,8 +5902,8 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
   }
   dout(10) << "_truncate_inode  snapc " << snapc << " on " << *in << dendl;
   mds->filer->truncate(in->inode.ino, &in->inode.layout, *snapc,
-		       pi->truncate_size, pi->truncate_from-pi->truncate_size, pi->truncate_seq, utime_t(), 0,
-		       0, new C_MDC_TruncateFinish(this, in, ls));
+		       pi->truncate_size, pi->truncate_from-pi->truncate_size, pi->truncate_seq,
+		       utime_t(), 0, true, 0, new C_MDC_TruncateFinish(this, in, ls));
 }
 
 struct C_MDC_TruncateLogged : public Context {
