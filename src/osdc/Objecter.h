@@ -1392,8 +1392,9 @@ private:
   int op_cancel(tid_t tid);
 
   // commands
-  int osd_command(int osd, vector<string>& cmd, bufferlist& inbl, tid_t *ptid,
-		    bufferlist *poutbl, string *prs, Context *onfinish) {
+  int osd_command(int osd, vector<string>& cmd,
+		  const bufferlist& inbl, tid_t *ptid,
+		  bufferlist *poutbl, string *prs, Context *onfinish) {
     assert(osd >= 0);
     CommandOp *c = new CommandOp;
     c->cmd = cmd;
@@ -1404,8 +1405,9 @@ private:
     c->target_osd = osd;
     return _submit_command(c, ptid);
   }
-  int pg_command(pg_t pgid, vector<string>& cmd, bufferlist& inbl, tid_t *ptid,
-		   bufferlist *poutbl, string *prs, Context *onfinish) {
+  int pg_command(pg_t pgid, vector<string>& cmd,
+		 const bufferlist& inbl, tid_t *ptid,
+		 bufferlist *poutbl, string *prs, Context *onfinish) {
     CommandOp *c = new CommandOp;
     c->cmd = cmd;
     c->inbl = inbl;
