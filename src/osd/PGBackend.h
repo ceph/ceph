@@ -213,6 +213,117 @@
 
    virtual ~PGBackend() {}
 
+   /**
+    * Client IO Interface
+    */
+   class PGTransaction {
+   public:
+     /// Write
+     virtual void touch(
+       const hobject_t &hoid  ///< [in] obj to touch
+       ) = 0;
+     virtual void stash(
+       const hobject_t &hoid,   ///< [in] obj to remove
+       version_t former_version ///< [in] former object version
+       ) = 0;
+     virtual void remove(
+       const hobject_t &hoid ///< [in] obj to remove
+       ) = 0;
+     virtual void setattrs(
+       const hobject_t &hoid,         ///< [in] object to write
+       map<string, bufferlist> &attrs ///< [in] attrs, may be cleared
+       ) = 0;
+     virtual void setattr(
+       const hobject_t &hoid,         ///< [in] object to write
+       const string &attrname,        ///< [in] attr to write
+       bufferlist &bl                 ///< [in] val to write, may be claimed
+       ) = 0;
+     virtual void rmattr(
+       const hobject_t &hoid,         ///< [in] object to write
+       const string &attrname         ///< [in] attr to remove
+       ) = 0;
+     virtual void clone(
+       const hobject_t &from,
+       const hobject_t &to
+       ) = 0;
+     virtual void rename(
+       const hobject_t &from,
+       const hobject_t &to
+       ) = 0;
+
+     /// Optional, not supported on ec-pool
+     virtual void write(
+       const hobject_t &hoid, ///< [in] object to write
+       uint64_t off,          ///< [in] off at which to write
+       uint64_t len,          ///< [in] len to write from bl
+       bufferlist &bl         ///< [in] bl to write will be claimed to len
+       ) { assert(0); }
+     virtual void omap_setkeys(
+       const hobject_t &hoid,         ///< [in] object to write
+       map<string, bufferlist> &attrs ///< [in] omap keys, may be cleared
+       ) { assert(0); }
+     virtual void omap_rmkeys(
+       const hobject_t &hoid,         ///< [in] object to write
+       set<string> &attrs             ///< [in] omap keys, may be cleared
+       ) { assert(0); }
+     virtual void omap_clear(
+       const hobject_t &hoid          ///< [in] object to write
+       ) { assert(0); }
+     virtual void omap_setheader(
+       const hobject_t &hoid,         ///< [in] object to write
+       bufferlist &header             ///< [in] header
+       ) { assert(0); }
+     virtual void clone_range(
+       const hobject_t &from,         ///< [in] from
+       const hobject_t &to,           ///< [in] to
+       uint64_t fromoff,              ///< [in] offset
+       uint64_t len,                  ///< [in] len
+       uint64_t tooff                 ///< [in] offset
+       ) { assert(0); }
+     virtual void truncate(
+       const hobject_t &hoid,
+       uint64_t off
+       ) { assert(0); }
+     virtual void zero(
+       const hobject_t &hoid,
+       uint64_t off,
+       uint64_t len
+       ) { assert(0); }
+
+     virtual void append(
+       const hobject_t &hoid, ///< [in] object to write
+       uint64_t off,          ///< [in] off at which to write
+       uint64_t len,          ///< [in] len to write from bl
+       bufferlist &bl         ///< [in] bl to write will be claimed to len
+       ) { write(hoid, off, len, bl); }
+
+     /// to_append *must* have come from the same PGBackend (same concrete type)
+     virtual void append(
+       PGTransaction *to_append ///< [in] trans to append, to_append is cleared
+       ) = 0;
+     virtual void nop() = 0;
+     virtual bool empty() const = 0;
+     virtual uint64_t get_bytes_written() const = 0;
+     virtual ~PGTransaction() {}
+   };
+   /// Get implementation specific empty transaction
+   virtual PGTransaction *get_transaction() = 0;
+
+   /// execute implementation specific transaction
+   virtual void submit_transaction(
+     const hobject_t &hoid,               ///< [in] object
+     const eversion_t &at_version,        ///< [in] version
+     PGTransaction *t,                    ///< [in] trans to execute
+     const eversion_t &trim_to,           ///< [in] trim log to here
+     vector<pg_log_entry_t> &log_entries, ///< [in] log entries for t
+     Context *on_local_applied_sync,      ///< [in] called when applied locally
+     Context *on_all_applied,               ///< [in] called when all acked
+     Context *on_all_commit,              ///< [in] called when all commit
+     tid_t tid,                           ///< [in] tid
+     osd_reqid_t reqid,                   ///< [in] reqid
+     OpRequestRef op                      ///< [in] op
+     ) = 0;
+
    /// List objects in collection
    virtual int objects_list_partial(
      const hobject_t &begin,
