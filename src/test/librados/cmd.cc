@@ -62,6 +62,21 @@ TEST(LibRadosCmd, MonDescribe) {
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
+TEST(LibRadosCmd, MonDescribePP) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+
+  bufferlist inbl, outbl;
+  string outs;
+  ASSERT_EQ(0, cluster.mon_command("{\"prefix\": \"get_command_descriptions\"}",
+				   inbl, &outbl, &outs));
+  ASSERT_LT(0u, outbl.length());
+  ASSERT_LE(0u, outs.length());
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
 TEST(LibRadosCmd, OSDCmd) {
   rados_t cluster;
   std::string pool_name = get_temp_pool_name();

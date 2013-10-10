@@ -790,6 +790,9 @@ namespace librados
 
     uint64_t get_instance_id();
 
+    int mon_command(std::string cmd, const bufferlist& inbl,
+		    bufferlist *outbl, std::string *outs);
+
     int ioctx_create(const char *name, IoCtx &pioctx);
 
     // Features useful for test cases

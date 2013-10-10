@@ -1509,6 +1509,14 @@ int librados::Rados::pool_reverse_lookup(int64_t id, std::string *name)
   return client->pool_get_name(id, name);
 }
 
+int librados::Rados::mon_command(string cmd, const bufferlist& inbl,
+				 bufferlist *outbl, string *outs)
+{
+  vector<string> cmdvec;
+  cmdvec.push_back(cmd);
+  return client->mon_command(cmdvec, inbl, outbl, outs);
+}
+
 int librados::Rados::ioctx_create(const char *name, IoCtx &io)
 {
   rados_ioctx_t p;
