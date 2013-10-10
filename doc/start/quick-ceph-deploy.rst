@@ -40,10 +40,9 @@ As a first exercise, create a Ceph Storage Cluster with one Ceph Monitor and two
 Ceph OSD Daemons. Once the cluster reaches a ``active + clean`` state, expand it 
 by adding a third Ceph OSD Daemon, a Metadata Server and two more Ceph Monitors.
 
-.. note:: In a production cluster, Ceph Monitors and Ceph OSD Daemons do not
-   reside on the same Ceph Node, because ``fsync`` issues can introduce 
-   latency.
-
+.. important:: Do not call ``ceph-deploy`` with ``sudo`` or run it as ``root`` 
+   if you are logged in as a different user, because it will not issue ``sudo`` 
+   commands needed on the remote host.
 
 Create a Cluster
 ================
@@ -82,7 +81,8 @@ On your admin node, perform the following steps using ``ceph-deploy``.
 	ceph-deploy gatherkeys {ceph-node}
 	ceph-deploy gatherkeys ceph-node1
 
-   Once you have gathered keys, your local directory should have the following keyrings:
+   Once you have gathered keys, your local directory should have the following 
+   keyrings:
 
    - ``{cluster-name}.client.admin.keyring``
    - ``{cluster-name}.bootstrap-osd.keyring``
@@ -189,8 +189,8 @@ quorum of Ceph Monitors.
 Adding an OSD
 -------------
 
-Since you are running a 3-node cluster for demonstration purposes, add the OSD to
-the monitor node. ::
+Since you are running a 3-node cluster for demonstration purposes, add the OSD
+to the monitor node. ::
 
 	ssh ceph-node1
 	sudo mkdir /tmp/osd2
@@ -273,14 +273,15 @@ example::
 
 .. topic:: Exercise: Locate an Object
 
-	As an exercise, lets create an object. Specify an object name, a path to a
-	test file containing some object data and a pool name using the 
+	As an exercise, lets create an object. Specify an object name, a path to
+	a test file containing some object data and a pool name using the 
 	``rados put`` command on the command line. For example::
    
 		rados put {object-name} {file-path} --pool=data   	
 		rados put test-object-1 testfile.txt --pool=data
    
-	To verify that the Ceph Storage Cluster stored the object, execute the following::
+	To verify that the Ceph Storage Cluster stored the object, execute 
+	the following::
    
 		rados -p data ls
    
@@ -293,8 +294,8 @@ example::
    
 		osdmap e537 pool 'data' (0) object 'test-object-1' -> pg 0.d1743484 (0.4) -> up [1,0] acting [1,0]
    
-	To remove the test object, simply delete it using the ``rados rm`` command.
-	For example:: 
+	To remove the test object, simply delete it using the ``rados rm`` 
+	command.	For example:: 
    
 		rados rm test-object-1 --pool=data
    
