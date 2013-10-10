@@ -2,47 +2,73 @@
  Block Device Quick Start
 ==========================
 
-To use this guide, you must have executed the procedures in the `Object Store
-Quick Start`_ guide first. Ensure your :term:`Ceph Storage Cluster` is in an
-``active + clean`` state before working with the :term:`Ceph Block Device`.
-Execute this quick start on the admin node.
+To use this guide, you must have executed the procedures in the `Storage
+Cluster Quick Start`_ guide first. Ensure your :term:`Ceph Storage Cluster` is
+in an ``active + clean`` state before working with the :term:`Ceph Block
+Device`. 
 
 .. note:: The Ceph Block Device is also known as :term:`RBD` or :term:`RADOS`
    Block Device.
 
-#. Install ``ceph-common``. ::
 
-	sudo apt-get install ceph-common
+.. ditaa:: 
+           /------------------\         /----------------\
+           |    Admin Node    |         |   ceph–client  |
+           |                  +-------->+ cCCC           |
+           |    ceph–deploy   |         |      ceph      |
+           \------------------/         \----------------/
 
-#. Create a block device image. :: 
 
-	rbd create foo --size 4096	[-m {mon-IP}] [-k /path/to/ceph.client.admin.keyring]
+You may use a virtual machine for your ``ceph-client`` node, but do not 
+execute the following procedures on the same physical node as your Ceph 
+Storage Cluster nodes (unless you use a VM). See `FAQ`_ for details.
 
-#. Load the ``rbd`` client module. ::
+
+Install Ceph
+============
+
+#. On the admin node, use ``ceph-deploy`` to install Ceph on your 
+   ``ceph-client`` node. ::
+
+	ceph-deploy install ceph-client
+	
+#. On the admin node, use ``ceph-deploy`` to copy the Ceph configuration file
+   and the ``ceph.client.admin.keyring`` to the ``ceph-client``. :: 
+
+	ceph-deploy admin ceph-client
+
+
+Configure a Block Device
+========================
+
+#. On the ``ceph-client`` node, create a block device image. :: 
+
+	rbd create foo --size 4096 [-m {mon-IP}] [-k /path/to/ceph.client.admin.keyring]
+
+#. On the ``ceph-client`` node, load the ``rbd`` client module. ::
 
 	sudo modprobe rbd
 
-#. Map the image to a block device. :: 
+#. On the ``ceph-client`` node, map the image to a block device. :: 
 
 	sudo rbd map foo --pool rbd --name client.admin [-m {mon-IP}] [-k /path/to/ceph.client.admin.keyring]
 	
-#. Use the block device. In the following example, create a file system. :: 
+#. Use the block device by creating a file system on the ``ceph-client`` 
+   node. :: 
 
 	sudo mkfs.ext4 -m0 /dev/rbd/rbd/foo
 	
 	This may take a few moments.
 	
-#. Mount the file system. ::
+#. Mount the file system on the ``ceph-client`` node. ::
 
 	sudo mkdir /mnt/ceph-block-device
 	sudo mount /dev/rbd/rbd/foo /mnt/ceph-block-device
 	cd /mnt/ceph-block-device
 
-.. note:: Mount the block device on the client machine, 
-   not the server machine. See `FAQ`_ for details.
 
 See `block devices`_ for additional details.
 
-.. _Object Store Quick Start: ../quick-ceph-deploy
+.. _Storage Cluster Quick Start: ../quick-ceph-deploy
 .. _block devices: ../../rbd/rbd
 .. _FAQ: http://wiki.ceph.com/03FAQs/01General_FAQ#How_Can_I_Give_Ceph_a_Try.3F

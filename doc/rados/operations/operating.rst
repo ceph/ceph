@@ -7,17 +7,18 @@
 Running Ceph with Upstart
 =========================
 
-When deploying Ceph Cuttlefish and beyond with ``ceph-deploy``,  you may start
-and stop Ceph daemons on a :term:`Ceph Node` using the event-based `Upstart`_. 
-Upstart does not require you to define daemon instances in the Ceph configuration
-file (although, they are still required for ``sysvinit`` should you choose to 
-use it).
+When deploying Ceph Cuttlefish and beyond with ``ceph-deploy`` on Debian/Ubuntu
+distributions, you may start and stop Ceph daemons on a :term:`Ceph Node` using
+the event-based `Upstart`_.  Upstart does not require you to define daemon
+instances in the Ceph configuration file (although, they are still required for
+``sysvinit`` should you choose to  use it).
 
 To list the Ceph Upstart jobs and instances on a node, execute:: 
 
 	sudo initctl list | grep ceph
 
 See `initctl`_ for additional details.
+
 
 Starting all Daemons
 --------------------
@@ -93,29 +94,20 @@ For example::
 	sudo start ceph-mds id=ceph-server
 
 
-
 .. index:: Ceph service; sysvinit; operating a cluster
 
 
-Running Ceph as a Service
-=========================
+Running Ceph
+============
 
-When you deploy Ceph Argonaut or Bobtail with ``mkcephfs``, use the 
-service or traditional sysvinit.
+Each time you to **start**, **restart**, and  **stop** Ceph daemons (or your
+entire cluster) you must specify at least one option and one command. You may
+also specify a daemon type or a daemon instance. ::
 
-The ``ceph`` service provides functionality to **start**, **restart**, and 
-**stop** your Ceph cluster. Each time you execute ``ceph`` processes, you
-must specify at least one option and one command. You may also specify a daemon 
-type or a daemon instance. For most newer Debian/Ubuntu distributions, you may 
-use the following syntax:: 
+	{commandline} [options] [commands] [daemons]
 
-	sudo service ceph [options] [commands] [daemons]
 
-For older distributions, you may wish to use the ``/etc/init.d/ceph`` path:: 
-
-	sudo /etc/init.d/ceph [options] [commands] [daemons]
-
-The ``ceph`` service options include:
+The ``ceph`` options include:
 
 +-----------------+----------+-------------------------------------------------+
 | Option          | Shortcut | Description                                     |
@@ -134,7 +126,7 @@ The ``ceph`` service options include:
 | ``--conf``      |  ``-c``  | Use an alternate configuration file.            |
 +-----------------+----------+-------------------------------------------------+
 
-The ``ceph`` service commands include:
+The ``ceph`` commands include:
 
 +------------------+------------------------------------------------------------+
 | Command          | Description                                                |
@@ -152,83 +144,213 @@ The ``ceph`` service commands include:
 | ``cleanalllogs`` | Cleans out **everything** in the log directory.            |
 +------------------+------------------------------------------------------------+
 
-For subsystem operations, the ``ceph`` service can target specific daemon types by
-adding a particular daemon type for the ``[daemons]`` option. Daemon types include: 
+For subsystem operations, the ``ceph`` service can target specific daemon types
+by adding a particular daemon type for the ``[daemons]`` option. Daemon types
+include: 
 
 - ``mon``
 - ``osd``
 - ``mds``
 
-The ``ceph`` service's ``[daemons]`` setting may also target a specific instance.
-
-To start a Ceph daemon on the local :term:`Ceph Node`, use the following syntax::
-
-	sudo /etc/init.d/ceph start osd.0
-
-To start a Ceph daemon on another node, use the following syntax:: 
-
-	sudo /etc/init.d/ceph -a start osd.0
-
-Where ``osd.0`` is the first OSD in the cluster.
 
 
-Starting a Cluster
-------------------
+Running Ceph with sysvinit
+--------------------------
+
+Using traditional ``sysvinit`` is the recommended way to run  Ceph with CentOS,
+Red Hat, Fedora, and SLES distributions. You may also use it for older
+distributions of Debian/Ubuntu.
+
+
+Starting all Daemons
+~~~~~~~~~~~~~~~~~~~~
 
 To start your Ceph cluster, execute ``ceph`` with the ``start`` command. 
-The usage may differ based upon your Linux distribution. For example, for most
-newer Debian/Ubuntu distributions, you may use the following syntax:: 
-
-	sudo service ceph [options] [start|restart] [daemonType|daemonID]
-
-For older distributions, you may wish to use the ``/etc/init.d/ceph`` path:: 
+Use the following syntax:: 
 
 	sudo /etc/init.d/ceph [options] [start|restart] [daemonType|daemonID]
 	
 The following examples illustrates a typical use case::
 
-	sudo service ceph -a start	
 	sudo /etc/init.d/ceph -a start
 
 Once you execute with ``-a`` (i.e., execute on all nodes), Ceph should begin
-operating. You may also specify a particular daemon instance to constrain the
-command to a single instance. To start a Ceph daemon on the local Ceph Node, 
-use the following syntax::
+operating.
 
+
+Stopping all Daemons	
+~~~~~~~~~~~~~~~~~~~~
+
+To stop your Ceph cluster, execute ``ceph`` with the ``stop`` command. 
+Use the following syntax:: 
+
+	sudo /etc/init.d/ceph [options] stop [daemonType|daemonID]
+	
+The following examples illustrates a typical use case::
+
+	sudo /etc/init.d/ceph -a stop
+
+Once you execute with ``-a`` (i.e., execute on all nodes), Ceph should stop
+operating.
+
+
+Starting all Daemons by Type
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To start all Ceph daemons of a particular type on the local Ceph Node, use the
+following syntax::
+
+	sudo /etc/init.d/ceph start {daemon-type}
+	sudo /etc/init.d/ceph start osd
+
+To start all Ceph daemons of a particular type on another node, use the
+following syntax:: 
+
+	sudo /etc/init.d/ceph -a start {daemon-type}
+	sudo /etc/init.d/ceph -a start osd
+
+
+Stopping all Daemons by Type
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To stop all Ceph daemons of a particular type on the local Ceph Node, use the
+following syntax::
+
+	sudo /etc/init.d/ceph stop {daemon-type}
+	sudo /etc/init.d/ceph stop osd
+
+To stop all Ceph daemons of a particular type on another node, use the
+following syntax:: 
+
+	sudo /etc/init.d/ceph -a stop {daemon-type}
+	sudo /etc/init.d/ceph -a stop osd
+
+
+Starting a Daemon
+~~~~~~~~~~~~~~~~~
+
+To start a Ceph daemon on the local Ceph Node, use the following syntax::
+
+	sudo /etc/init.d/ceph start {daemon-type}.{instance}
 	sudo /etc/init.d/ceph start osd.0
 
 To start a Ceph daemon on another node, use the following syntax:: 
 
+	sudo /etc/init.d/ceph -a start {daemon-type}.{instance}
 	sudo /etc/init.d/ceph -a start osd.0
 
 
-Stopping a Cluster
-------------------
+Stopping a Daemon
+~~~~~~~~~~~~~~~~~
+
+To stop a Ceph daemon on the local Ceph Node, use the following syntax::
+
+	sudo /etc/init.d/ceph stop {daemon-type}.{instance}
+	sudo /etc/init.d/ceph stop osd.0
+
+To stop a Ceph daemon on another node, use the following syntax:: 
+
+	sudo /etc/init.d/ceph -a stop {daemon-type}.{instance}
+	sudo /etc/init.d/ceph -a stop osd.0
+
+
+Running Ceph as a Service
+-------------------------
+
+When you deploy Ceph Argonaut or Bobtail with ``mkcephfs``, you operate
+Ceph as a service (you may also use sysvinit).
+
+
+Starting all Daemons
+~~~~~~~~~~~~~~~~~~~~
+
+To start your Ceph cluster, execute ``ceph`` with the ``start`` command. 
+Use the following syntax:: 
+
+	sudo service ceph [options] [start|restart] [daemonType|daemonID]
+	
+The following examples illustrates a typical use case::
+
+	sudo service ceph -a start	
+
+Once you execute with ``-a`` (i.e., execute on all nodes), Ceph should begin
+operating. 
+
+
+Stopping all Daemons	
+~~~~~~~~~~~~~~~~~~~~
 
 To stop your Ceph cluster, execute ``ceph`` with the ``stop`` command. 
-The usage may differ based upon your Linux distribution. For example, for most
-newer Debian/Ubuntu distributions, you may use the following syntax:: 
+Use the following syntax:: 
 
 	sudo service ceph [options] stop [daemonType|daemonID]
 
 For example:: 
 
-	sudo service ceph -a stop	
-
-For older distributions, you may wish to use the ``/etc/init.d/ceph`` path:: 
-
-	sudo /etc/init.d/ceph -a stop
+	sudo service ceph -a stop
 	
 Once you execute with ``-a`` (i.e., execute on all nodes), Ceph should shut
-down. You may also specify a particular daemon instance to constrain the
-command to a single instance. To stop a Ceph daemon on the local Ceph Node, 
-use the following syntax::
+down.
 
-	sudo /etc/init.d/ceph stop osd.0
+
+Starting all Daemons by Type
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To start all Ceph daemons of a particular type on the local Ceph Node, use the
+following syntax::
+
+	sudo service ceph start {daemon-type}
+	sudo service ceph start osd
+
+To start all Ceph daemons of a particular type on all nodes, use the following
+syntax:: 
+
+	sudo service ceph -a start {daemon-type}
+	sudo service ceph -a start osd
+
+
+Stopping all Daemons by Type
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To stop all Ceph daemons of a particular type on the local Ceph Node, use the
+following syntax::
+
+	sudo service ceph stop {daemon-type}
+	sudo service ceph stop osd
+
+To stop all Ceph daemons of a particular type on all nodes, use the following
+syntax:: 
+
+	sudo service ceph -a stop {daemon-type}
+	sudo service ceph -a stop osd
+
+
+Starting a Daemon
+~~~~~~~~~~~~~~~~~
+
+To start a Ceph daemon on the local Ceph Node,  use the following syntax::
+
+	sudo service ceph start {daemon-type}.{instance}
+	sudo service ceph start osd.0
+
+To start a Ceph daemon on another node, use the following syntax:: 
+
+	sudo service ceph -a start {daemon-type}.{instance}
+	sudo service ceph -a start osd.0
+
+
+Stopping a Daemon
+~~~~~~~~~~~~~~~~~
+
+To stop a Ceph daemon on the local Ceph Node, use the following syntax::
+
+	sudo service ceph stop {daemon-type}.{instance}
+	sudo service ceph stop osd.0
 
 To stop a Ceph daemon on another node, use the following syntax:: 
 
-	sudo /etc/init.d/ceph -a stop osd.0
+	sudo service ceph -a stop {daemon-type}.{instance}
+	sudo service ceph -a stop osd.0
 
 
 

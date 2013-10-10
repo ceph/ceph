@@ -1,6 +1,6 @@
-==============
- Installation
-==============
+=======================
+ Installation (Manual)
+=======================
 
 The Ceph Object Store is the foundation of all Ceph clusters, and it consists
 primarily of two types of daemons: Object Storage Daemons (OSDs) and monitors.
@@ -13,22 +13,7 @@ by focusing first on the object storage cluster.
 
 .. raw:: html
 
-	<table cellpadding="10"><colgroup><col width="33%"><col width="33%"><col width="33%"></colgroup><tbody valign="top"><tr><td><h3>Recommendations</h3>
-	
-To begin using Ceph in production, you should review our hardware
-recommendations and operating system recommendations. Many of the
-frequently-asked questions in our mailing list involve hardware-related
-questions and how to install Ceph on various distributions. 
-
-.. toctree::
-   :maxdepth: 2
-
-   Hardware Recommendations <hardware-recommendations>
-   OS Recommendations <os-recommendations>
-
-.. raw:: html 
-
-	</td><td><h3>Installation</h3>
+	<table cellpadding="10"><colgroup><col width="50%"><col width="50%"></colgroup><tbody valign="top"><tr><td><h3>Installation</h3>
 
 If you are deploying a Ceph cluster (that is, not developing Ceph),
 install Ceph using our stable release packages. For testing, you 

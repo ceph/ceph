@@ -1,34 +1,6 @@
-=================
- Getting Started
-=================
-
-Whether you want to provide :term:`Ceph Object Storage` and/or :term:`Ceph Block
-Device` services to :term:`Cloud Platforms`, deploy a :term:`Ceph Filesystem` or
-use Ceph for another purpose, all :term:`Ceph Storage Cluster` deployments begin
-with setting up each :term:`Ceph Node`, your network and the Ceph Storage
-Cluster. A Ceph Storage Cluster has three essential daemons:
-
-.. ditaa::  +---------------+ +---------------+ +---------------+
-            |      OSDs     | |    Monitor    | |      MDS      |
-            +---------------+ +---------------+ +---------------+
-
-- **OSDs**: A :term:`Ceph OSD Daemon` (OSD) stores data, handles data 
-  replication, recovery, backfilling, rebalancing, and provides some monitoring
-  information to Ceph Monitors by checking other Ceph OSD Daemons for a 
-  heartbeat. A Ceph Storage Cluster requires at least two Ceph OSD Daemons to 
-  achieve an ``active + clean`` state.
-  
-- **Monitors**: A :term:`Ceph Monitor` maintains maps of the cluster state, 
-  including the monitor map, the OSD map, the Placement Group (PG) map, and the
-  CRUSH map. Ceph maintains a history (called an "epoch") of each state change 
-  in the Ceph Monitors, Ceph OSD Daemons, and PGs.
-
-- **MDSs**: A :term:`Ceph Metadata Server` (MDS) stores metadata on behalf of 
-  the :term:`Ceph Filesystem` (i.e., Ceph Block Devices and Ceph Object Storage
-  do not use MDS). Ceph Metadata Servers make it feasible for POSIX file system 
-  users to execute basic commands like ``ls``, ``find``, etc. without placing 
-  an enormous burden on the Ceph Storage Cluster.
-
+======================
+ Installation (Quick)
+======================
 
 .. raw:: html
 
@@ -37,18 +9,17 @@ Cluster. A Ceph Storage Cluster has three essential daemons:
 
 A :term:`Ceph Client` and a :term:`Ceph Node` may require some basic
 configuration  work prior to deploying a Ceph Storage Cluster. You can also
-avail yourself of help  from the Ceph community by getting involved.
+avail yourself of help by getting involved in the Ceph community.
 
 .. toctree::
 
-   Get Involved <get-involved>
    Preflight <quick-start-preflight>
 
 .. raw:: html 
 
 	</td><td><h3>Step 2: Storage Cluster</h3>
 	
-Once you've completed your preflight checklist,  you should be able to begin
+Once you've completed your preflight checklist, you should be able to begin
 deploying a Ceph Storage Cluster.
 
 .. toctree::
