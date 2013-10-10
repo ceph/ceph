@@ -1961,6 +1961,15 @@ extern "C" int rados_mon_command(rados_t cluster, const char **cmd,
   return ret;
 }
 
+extern "C" int rados_mon_command2(rados_t cluster, const char *cmd,
+				  const char *inbuf, size_t inbuflen,
+				  char **outbuf, size_t *outbuflen,
+				  char **outs, size_t *outslen)
+{
+  return rados_mon_command(cluster, &cmd, 1, inbuf, inbuflen,
+			   outbuf, outbuflen, outs, outslen);
+}
+
 extern "C" int rados_mon_command_target(rados_t cluster, const char *name,
 					const char **cmd,
 					size_t cmdlen,
@@ -2000,6 +2009,17 @@ extern "C" int rados_mon_command_target(rados_t cluster, const char *name,
   return ret;
 }
 
+extern "C" int rados_mon_command_target2(rados_t cluster, const char *name,
+					 const char *cmd,
+					 const char *inbuf, size_t inbuflen,
+					 char **outbuf, size_t *outbuflen,
+					 char **outs, size_t *outslen)
+{
+  return rados_mon_command_target(cluster, name, &cmd, 1,
+				  inbuf, inbuflen, outbuf, outbuflen,
+				  outs, outslen);
+}
+
 extern "C" int rados_osd_command(rados_t cluster, int osdid, const char **cmd,
 				 size_t cmdlen,
 				 const char *inbuf, size_t inbuflen,
@@ -2023,7 +2043,14 @@ extern "C" int rados_osd_command(rados_t cluster, int osdid, const char **cmd,
   return ret;
 }
 
-
+extern "C" int rados_osd_command2(rados_t cluster, int osdid, const char *cmd,
+				  const char *inbuf, size_t inbuflen,
+				  char **outbuf, size_t *outbuflen,
+				  char **outs, size_t *outslen)
+{
+  return rados_osd_command(cluster, osdid, &cmd, 1, inbuf, inbuflen,
+			   outbuf, outbuflen, outs, outslen);
+}
 
 extern "C" int rados_pg_command(rados_t cluster, const char *pgstr,
 				const char **cmd, size_t cmdlen,
@@ -2051,6 +2078,17 @@ extern "C" int rados_pg_command(rados_t cluster, const char *pgstr,
   do_out_buffer(outstring, outs, outslen);
   return ret;
 }
+
+extern "C" int rados_pg_command2(rados_t cluster, const char *pgstr,
+				const char *cmd,
+				const char *inbuf, size_t inbuflen,
+				char **outbuf, size_t *outbuflen,
+				char **outs, size_t *outslen)
+{
+  return rados_pg_command(cluster, pgstr, &cmd, 1, inbuf, inbuflen,
+			  outbuf, outbuflen, outs, outslen);
+}
+
 
 extern "C" void rados_buffer_free(char *buf)
 {
