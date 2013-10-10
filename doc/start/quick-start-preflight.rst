@@ -29,10 +29,6 @@ three Ceph Nodes (or virtual machines) that will host your Ceph Storage Cluster.
                                         | cCCC           |
                                         \----------------/
 
-Before you can deploy Ceph using ``ceph-deploy``, you need to ensure that you
-have a few things set up first on your admin node and on nodes running Ceph
-daemons.
- 
 
 Ceph Node Setup
 ===============
@@ -91,6 +87,10 @@ Ceph Deploy Setup
 Add Ceph repositories to the ``ceph-deploy`` admin node. Then, install
 ``ceph-deploy``.
 
+.. important:: Do not call ``ceph-deploy`` with ``sudo`` or run it as ``root`` 
+   if you are logged in as a different user, because it will not issue ``sudo`` 
+   commands needed on the remote host.
+
 
 Advanced Package Tool (APT)
 ---------------------------
@@ -114,17 +114,12 @@ For Debian and Ubuntu distributions, perform the following steps:
 
 	sudo apt-get update && sudo apt-get install ceph-deploy
 
-.. tip:: The ``ceph-deploy`` tool is new and you may encounter some issues
-   without  effective error messages. 
 
 Red Hat Package Manager (RPM)
 -----------------------------
 
 For Red Hat(rhel6), CentOS (el6), Fedora 17-19 (f17-f19), OpenSUSE 12
 (opensuse12), and SLES (sles11) perform the following steps:
-
-Hostname Resolution
-===================
 
 #. Add the package to your repository. Open a text editor and create a 
    Yellowdog Updater, Modified (YUM) entry. Use the file path
@@ -147,7 +142,6 @@ Hostname Resolution
 	type=rpm-md
 	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc 
 
-	{ip-address} {hostname}
 
 #. Update your repository and install ``ceph-deploy``:: 
 
