@@ -210,6 +210,56 @@ public:
   };
   friend class CopyFromCallback;
 
+  class PromoteCallback: public CopyCallback {
+    ObjectContextRef obc;
+    hobject_t temp_obj;
+    ReplicatedPG *pg;
+  public:
+    PromoteCallback(ObjectContextRef obc_, const hobject_t& temp_obj_,
+                    ReplicatedPG *pg_) :
+      obc(obc_), temp_obj(temp_obj_), pg(pg_) {}
+
+    virtual void finish(CopyCallbackResults results) {
+      CopyResults* results_data = results.get<1>();
+      vector<OSDOp> ops;
+      tid_t rep_tid = pg->osd->get_tid();
+      osd_reqid_t reqid(pg->osd->get_cluster_msgr_name(), 0, rep_tid);
+      OpContext *tctx = new OpContext(OpRequestRef(), reqid, ops, &obc->obs, obc->ssc, pg);
+      tctx->mtime = ceph_clock_now(g_ceph_context);
+      tctx->op_t.swap(results_data->final_tx);
+      if (results_data->started_temp_obj) {
+	tctx->discard_temp_oid = temp_obj;
+      }
+
+      RepGather *repop = pg->new_repop(tctx, obc, rep_tid);
+      C_KickBlockedObject *blockedcb = new C_KickBlockedObject(obc, pg);
+      repop->ondone = blockedcb;
+      object_stat_sum_t delta;
+      ++delta.num_objects;
+      obc->obs.exists = true;
+      delta.num_bytes += results_data->object_size;
+      obc->obs.oi.category = results_data->category;
+      pg->info.stats.stats.add(delta, obc->obs.oi.category);
+      tctx->at_version.epoch = pg->get_osdmap()->get_epoch();
+      tctx->at_version.version = pg->pg_log.get_head().version + 1;
+      tctx->user_at_version = results_data->user_version;
+
+      tctx->log.push_back(pg_log_entry_t(
+	  pg_log_entry_t::MODIFY,
+	  obc->obs.oi.soid,
+	  tctx->at_version,
+	  tctx->obs->oi.version,
+	  tctx->user_at_version,
+	  osd_reqid_t(),
+	  repop->ctx->mtime));
+      pg->append_log(tctx->log, eversion_t(), tctx->local_t);
+      pg->issue_repop(repop, repop->ctx->mtime);
+      pg->eval_repop(repop);
+      repop->put();
+      delete results_data;
+    }
+  };
+
   boost::scoped_ptr<PGBackend> pgbackend;
   PGBackend *get_pgbackend() {
     return pgbackend.get();
@@ -785,8 +835,19 @@ protected:
 				   uint64_t offset, uint64_t length, bool count_bytes);
   void add_interval_usage(interval_set<uint64_t>& s, object_stat_sum_t& st);
 
+  /**
+   * This helper function is called from do_op if the ObjectContext lookup fails.
+   * @returns true if the caching code is handling the Op, false otherwise.
+   */
   inline bool maybe_handle_cache(OpRequestRef op, ObjectContextRef obc, int r);
+  /**
+   * This helper function tells the client to redirect their request elsewhere.
+   */
   void do_cache_redirect(OpRequestRef op, ObjectContextRef obc);
+  /**
+   * This function starts up a copy from
+   */
+  void promote_object(OpRequestRef op, ObjectContextRef obc);
 
   int prepare_transaction(OpContext *ctx);
   
