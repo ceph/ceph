@@ -10,8 +10,7 @@ Running Ceph with Upstart
 When deploying Ceph Cuttlefish and beyond with ``ceph-deploy`` on Debian/Ubuntu
 distributions, you may start and stop Ceph daemons on a :term:`Ceph Node` using
 the event-based `Upstart`_.  Upstart does not require you to define daemon
-instances in the Ceph configuration file (although, they are still required for
-``sysvinit`` should you choose to  use it).
+instances in the Ceph configuration file.
 
 To list the Ceph Upstart jobs and instances on a node, execute:: 
 
