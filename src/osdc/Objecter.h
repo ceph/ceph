@@ -1009,6 +1009,8 @@ public:
     int pool_snap_seq;
     int max_entries;
     string nspace;
+
+    bufferlist bl;   // raw data read to here
     std::list<pair<object_t, string> > list;
 
     bufferlist filter;
@@ -1023,14 +1025,13 @@ public:
   struct C_List : public Context {
     ListContext *list_context;
     Context *final_finish;
-    bufferlist *bl;
     Objecter *objecter;
     epoch_t epoch;
-    C_List(ListContext *lc, Context * finish, bufferlist *b, Objecter *ob) :
-      list_context(lc), final_finish(finish), bl(b), objecter(ob), epoch(0) {}
+    C_List(ListContext *lc, Context * finish, Objecter *ob) :
+      list_context(lc), final_finish(finish), objecter(ob), epoch(0) {}
     void finish(int r) {
       if (r >= 0) {
-        objecter->_list_reply(list_context, r, bl, final_finish, epoch);
+        objecter->_list_reply(list_context, r, final_finish, epoch);
       } else {
         final_finish->complete(r);
       }
@@ -1251,7 +1252,7 @@ public:
   void reopen_session(OSDSession *session);
   void close_session(OSDSession *session);
   
-  void _list_reply(ListContext *list_context, int r, bufferlist *bl, Context *final_finish,
+  void _list_reply(ListContext *list_context, int r, Context *final_finish,
 		   epoch_t reply_epoch);
 
   void resend_mon_ops();
