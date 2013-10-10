@@ -1288,7 +1288,7 @@ void ReplicatedPG::promote_object(OpRequestRef op, ObjectContextRef obc)
 dout(10) << __func__ << " " << obc->obs.oi.soid << dendl;
 
   hobject_t temp_target = generate_temp_object();
-  PromoteCallback *cb = new PromoteCallback(obc, temp_target, this);
+  PromoteCallback *cb = new PromoteCallback(op, obc, temp_target, this);
   object_locator_t oloc(m->get_object_locator());
   oloc.pool = pool.info.tier_of;
   start_copy(cb, obc, obc->obs.oi.soid, oloc, 0, temp_target);
