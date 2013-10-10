@@ -1717,15 +1717,27 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
 
   ldout(cct, 10) << "list_objects" << dendl;
-  ldout(cct, 20) << "pool_id " << list_context->pool_id
-	   << "\npool_snap_seq " << list_context->pool_snap_seq
-	   << "\nmax_entries " << list_context->max_entries
-	   << "\nlist_context " << list_context
-	   << "\nonfinish " << onfinish
-	   << "\nlist_context->current_pg" << list_context->current_pg
-	   << "\nlist_context->cookie" << list_context->cookie << dendl;
+  ldout(cct, 20) << " pool_id " << list_context->pool_id
+	   << " pool_snap_seq " << list_context->pool_snap_seq
+	   << " max_entries " << list_context->max_entries
+	   << " list_context " << list_context
+	   << " onfinish " << onfinish
+	   << " list_context->current_pg " << list_context->current_pg
+	   << " list_context->cookie " << list_context->cookie << dendl;
 
-  if (list_context->at_end) {
+  if (list_context->at_end_of_pg) {
+    list_context->at_end_of_pg = false;
+    ++list_context->current_pg;
+    list_context->current_pg_epoch = 0;
+    list_context->cookie = collection_list_handle_t();
+    if (list_context->current_pg >= list_context->starting_pg_num) {
+      list_context->at_end_of_pool = true;
+      ldout(cct, 20) << " no more pgs; reached end of pool" << dendl;
+    } else {
+      ldout(cct, 20) << " move to next pg " << list_context->current_pg << dendl;
+    }
+  }
+  if (list_context->at_end_of_pool) {
     onfinish->complete(0);
     return;
   }
@@ -1739,16 +1751,13 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
   }
   if (list_context->starting_pg_num != pg_num) {
     // start reading from the beginning; the pgs have changed
-    ldout(cct, 10) << "The placement groups have changed, restarting with " << pg_num << dendl;
+    ldout(cct, 10) << " pg_num changed; restarting with " << pg_num << dendl;
     list_context->current_pg = 0;
     list_context->cookie = collection_list_handle_t();
     list_context->current_pg_epoch = 0;
     list_context->starting_pg_num = pg_num;
   }
-  if (list_context->current_pg == pg_num){ //this context got all the way through
-    onfinish->complete(0);
-    return;
-  }
+  assert(list_context->current_pg <= pg_num);
 
   ObjectOperation op;
   op.pg_ls(list_context->max_entries, list_context->filter, list_context->cookie,
@@ -1775,50 +1784,42 @@ void Objecter::_list_reply(ListContext *list_context, int r,
   list_context->cookie = response.handle;
   if (!list_context->current_pg_epoch) {
     // first pgls result, set epoch marker
-    ldout(cct, 20) << "first pgls piece, reply_epoch is " << reply_epoch << dendl;
+    ldout(cct, 20) << " first pgls piece, reply_epoch is "
+		   << reply_epoch << dendl;
     list_context->current_pg_epoch = reply_epoch;
   }
 
   int response_size = response.entries.size();
-  ldout(cct, 20) << "response.entries.size " << response_size
-	   << ", response.entries " << response.entries << dendl;
+  ldout(cct, 20) << " response.entries.size " << response_size
+		 << ", response.entries " << response.entries << dendl;
   list_context->extra_info.append(extra_info);
   if (response_size) {
-    ldout(cct, 20) << "got a response with objects, proceeding" << dendl;
     list_context->list.merge(response.entries);
-    if (response_size >= list_context->max_entries) {
-      final_finish->complete(0);
-      return;
-    }
+  }
 
-    // ask for fewer objects next time around
-    list_context->max_entries -= response_size;
-
-    // if the osd returns 1 (newer code), or no entries, it means we
-    // hit the end of the pg.
-    if (r == 0) {
-      // not yet done with this pg
+  // if the osd returns 1 (newer code), or no entries, it means we
+  // hit the end of the pg.
+  if (response_size == 0 || r == 1) {
+    ldout(cct, 20) << " at end of pg" << dendl;
+    list_context->at_end_of_pg = true;
+  } else {
+    // there is more for this pg; get it?
+    if (response_size < list_context->max_entries) {
+      list_context->max_entries -= response_size;
       list_objects(list_context, final_finish);
       return;
     }
   }
-
-  // if we make this this far, there are no objects left in the current pg, but we want more!
-  ++list_context->current_pg;
-  list_context->current_pg_epoch = 0;
-  ldout(cct, 20) << "emptied current pg, moving on to next one:" << list_context->current_pg << dendl;
-  if (list_context->current_pg < list_context->starting_pg_num){ // we have more pgs to go through
-    list_context->cookie = collection_list_handle_t();
-    list_objects(list_context, final_finish);
+  if (!list_context->list.empty()) {
+    ldout(cct, 20) << " returning results so far" << dendl;
+    final_finish->complete(0);
     return;
   }
-  
-  // if we make it this far, there are no more pgs
-  ldout(cct, 20) << "out of pgs, returning to" << final_finish << dendl;
-  list_context->at_end = true;
-  final_finish->complete(0);
-  return;
+
+  // continue!
+  list_objects(list_context, final_finish);
 }
+
 
 
 //snapshots
