@@ -858,7 +858,6 @@ public:
 
   // -- stray --
 public:
-  void scan_stray_dir();
   void eval_stray(CDentry *dn);
   void eval_remote(CDentry *dn);
 
@@ -872,6 +871,7 @@ public:
       eval_stray(dn);
   }
 protected:
+  void scan_stray_dir(dirfrag_t next=dirfrag_t());
   void fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin);
   void remove_backtrace(inodeno_t ino, int64_t pool, Context *fin);
   void _purge_forwarding_pointers(bufferlist& bl, CDentry *dn, int r);
@@ -880,6 +880,7 @@ protected:
   void _purge_stray_purged(CDentry *dn, int r=0);
   void _purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls);
   void _purge_stray_logged_truncate(CDentry *dn, LogSegment *ls);
+  friend class C_MDC_RetryScanStray;
   friend class C_MDC_FetchedBacktrace;
   friend class C_MDC_PurgeForwardingPointers;
   friend class C_MDC_PurgeStray;
