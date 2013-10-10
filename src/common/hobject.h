@@ -35,6 +35,7 @@ struct hobject_t {
   uint32_t hash;
 private:
   bool max;
+  static const int64_t POOL_IS_TEMP = -1;
 public:
   int64_t pool;
   string nspace;
@@ -54,6 +55,14 @@ public:
   }
   bool match(uint32_t bits, uint32_t match) const {
     return match_hash(hash, bits, match);
+  }
+
+  static hobject_t make_temp(const string &name) {
+    hobject_t ret(object_t(name), "", CEPH_NOSNAP, 0, POOL_IS_TEMP, "");
+    return ret;
+  }
+  bool is_temp() const {
+    return pool == POOL_IS_TEMP;
   }
   
   hobject_t() : snap(0), hash(0), max(false), pool(-1) {}
