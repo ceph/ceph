@@ -269,7 +269,7 @@ static int read_policy(RGWRados *store, struct req_state *s,
   string oid = object;
   rgw_obj obj;
 
-  if (bucket_info.flags & BUCKET_SUSPENDED) {
+  if (!s->system_request && bucket_info.flags & BUCKET_SUSPENDED) {
     ldout(s->cct, 0) << "NOTICE: bucket " << bucket_info.bucket.name << " is suspended" << dendl;
     return -ERR_USER_SUSPENDED;
   }
@@ -292,7 +292,7 @@ static int read_policy(RGWRados *store, struct req_state *s,
     if (ret < 0)
       return ret;
     string& owner = bucket_policy.get_owner().get_id();
-    if (owner.compare(s->user.user_id) != 0 &&
+    if (!s->system_request && owner.compare(s->user.user_id) != 0 &&
         !bucket_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_READ))
       ret = -EACCES;
     else
