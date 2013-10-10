@@ -2618,6 +2618,113 @@ void OSDMonitor::parse_loc_map(const vector<string>& args,  map<string,string> *
   }
 }
 
+int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
+                                         stringstream& ss)
+{
+  string poolstr;
+  cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+  int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
+  if (pool < 0) {
+    ss << "unrecognized pool '" << poolstr << "'";
+    return -ENOENT;
+  }
+  string var;
+  cmd_getval(g_ceph_context, cmdmap, "var", var);
+
+  pg_pool_t p = *osdmap.get_pg_pool(pool);
+  if (pending_inc.new_pools.count(pool))
+    p = pending_inc.new_pools[pool];
+
+  // accept val as a json string or int, and parse out int or float
+  // values from the string as needed
+  string val;
+  cmd_getval(g_ceph_context, cmdmap, "val", val);
+  string interr;
+  int64_t n = 0;
+  if (!cmd_getval(g_ceph_context, cmdmap, "val", n))
+    n = strict_strtoll(val.c_str(), 10, &interr);
+  string floaterr;
+  float f;
+  if (!cmd_getval(g_ceph_context, cmdmap, "val", f))
+    f = strict_strtod(val.c_str(), &floaterr);
+
+  if (var == "size") {
+    if (interr.length()) {
+      ss << "error parsing integer value '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    if (n == 0 || n > 10) {
+      ss << "pool size must be between 1 and 10";
+      return -EINVAL;
+    }
+    p.size = n;
+    if (n < p.min_size)
+      p.min_size = n;
+    ss << "set pool " << pool << " size to " << n;
+  } else if (var == "min_size") {
+    if (interr.length()) {
+      ss << "error parsing integer value '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    p.min_size = n;
+    ss << "set pool " << pool << " min_size to " << n;
+  } else if (var == "crash_replay_interval") {
+    if (interr.length()) {
+      ss << "error parsing integer value '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    p.crash_replay_interval = n;
+    ss << "set pool " << pool << " to crash_replay_interval to " << n;
+  } else if (var == "pg_num") {
+    if (interr.length()) {
+      ss << "error parsing integer value '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    if (n <= (int)p.get_pg_num()) {
+      ss << "specified pg_num " << n << " <= current " << p.get_pg_num();
+    } else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
+      ss << "currently creating pgs, wait";
+      return -EAGAIN;
+    } else {
+      p.set_pg_num(n);
+      ss << "set pool " << pool << " pg_num to " << n;
+    }
+  } else if (var == "pgp_num") {
+    if (interr.length()) {
+      ss << "error parsing integer value '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    if (n > (int)p.get_pg_num()) {
+      ss << "specified pgp_num " << n << " > pg_num " << p.get_pg_num();
+    } else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
+      ss << "still creating pgs, wait";
+      return -EAGAIN;
+    } else {
+      p.set_pgp_num(n);
+      ss << "set pool " << pool << " pgp_num to " << n;
+    }
+  } else if (var == "crush_ruleset") {
+    if (interr.length()) {
+      ss << "error parsing integer value '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    if (osdmap.crush->rule_exists(n)) {
+      p.crush_ruleset = n;
+      ss << "set pool " << pool << " crush_ruleset to " << n;
+    } else {
+      ss << "crush ruleset " << n << " does not exist";
+      return -ENOENT;
+    }
+  } else {
+    ss << "unrecognized variable '" << var << "'";
+    return -EINVAL;
+  }
+
+  p.last_change = pending_inc.epoch;
+  pending_inc.new_pools[pool] = p;
+  return 0;
+}
+
 bool OSDMonitor::prepare_command(MMonCommand *m)
 {
   bool ret = false;
@@ -3586,73 +3693,13 @@ done:
       return true;
     }
   } else if (prefix == "osd pool set") {
-    // set a pool variable to a positive int
-    string poolstr;
-    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
-    int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
-    if (pool < 0) {
-      ss << "unrecognized pool '" << poolstr << "'";
-      err = -ENOENT;
-    } else {
-      const pg_pool_t *p = osdmap.get_pg_pool(pool);
-      int64_t n;
-      cmd_getval(g_ceph_context, cmdmap, "val", n);
-      string var;
-      cmd_getval(g_ceph_context, cmdmap, "var", var);
-      if (var == "size") {
-	if (n == 0 || n > 10) {
-	  ss << "pool size must be between 1 and 10";
-	  err = -EINVAL;
-	  goto reply;
-	}
-	pending_inc.get_new_pool(pool, p)->size = n;
-	if (n < p->min_size)
-	  pending_inc.get_new_pool(pool, p)->min_size = n;
-	ss << "set pool " << pool << " size to " << n;
-      } else if (var == "min_size") {
-	pending_inc.get_new_pool(pool, p)->min_size = n;
-	ss << "set pool " << pool << " min_size to " << n;
-      } else if (var == "crash_replay_interval") {
-	pending_inc.get_new_pool(pool, p)->crash_replay_interval = n;
-	ss << "set pool " << pool << " to crash_replay_interval to " << n;
-      } else if (var == "pg_num") {
-	if (n <= p->get_pg_num()) {
-	  ss << "specified pg_num " << n << " <= current " << p->get_pg_num();
-	  err = -EINVAL;
-	} else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
-	  ss << "busy creating pgs; try again later";
-	  err = -EAGAIN;
-	} else {
-	  pending_inc.get_new_pool(pool, p)->set_pg_num(n);
-	  ss << "set pool " << pool << " pg_num to " << n;
-	}
-      } else if (var == "pgp_num") {
-	if (n > p->get_pg_num()) {
-	  ss << "specified pgp_num " << n << " > pg_num " << p->get_pg_num();
-	} else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
-	  ss << "busy creating pgs; try again later";
-	  err = -EAGAIN;
-	} else {
-	  pending_inc.get_new_pool(pool, p)->set_pgp_num(n);
-	  ss << "set pool " << pool << " pgp_num to " << n;
-	}
-      } else if (var == "crush_ruleset") {
-	if (osdmap.crush->rule_exists(n)) {
-	  pending_inc.get_new_pool(pool, p)->crush_ruleset = n;
-	  ss << "set pool " << pool << " crush_ruleset to " << n;
-	} else {
-	  ss << "crush ruleset " << n << " does not exist";
-	  err = -ENOENT;
-	}
-      } else {
-	err = -EINVAL;
-	goto reply;
-      }
-      pending_inc.get_new_pool(pool, p)->last_change = pending_inc.epoch;
-      getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
-      return true;
-    }
+    err = prepare_command_pool_set(cmdmap, ss);
+    if (err < 0)
+      goto reply;
+
+    getline(ss, rs);
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    return true;
   } else if (prefix == "osd tier add") {
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);

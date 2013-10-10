@@ -324,6 +324,9 @@ private:
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
 
+  int prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
+                               stringstream& ss);
+
   void handle_osd_timeouts(const utime_t &now,
 			   std::map<int,utime_t> &last_osd_report);
   void mark_all_down();
