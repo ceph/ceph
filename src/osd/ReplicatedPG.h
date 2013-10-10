@@ -544,13 +544,6 @@ protected:
 	assert(state == WRITE);
 	dec(requeue);
       }
-      void clear(list<OpRequestRef> *requeue) {
-	state = NONE;
-	count = 0;
-	assert(requeue);
-	assert(requeue->empty());
-	requeue->swap(waiters);
-      }
       bool empty() const { return state == NONE; }
     };
     map<hobject_t, ObjState > obj_state;
