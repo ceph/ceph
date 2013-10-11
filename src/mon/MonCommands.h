@@ -497,7 +497,7 @@ COMMAND("osd pool get " \
 	"get pool parameter <var>", "osd", "r", "cli,rest")
 COMMAND("osd pool set " \
 	"name=pool,type=CephPoolname " \
-	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset " \
+	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset|hashpspool " \
 	"name=val,type=CephInt", \
 	"set pool parameter <var> to <val>", "osd", "rw", "cli,rest")
 // 'val' is a CephString because it can include a unit.  Perhaps

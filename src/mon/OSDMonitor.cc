@@ -3635,7 +3635,24 @@ done:
 	  ss << "crush ruleset " << n << " does not exist";
 	  err = -ENOENT;
 	}
-      } 
+      } else if (var == "hashpspool") {
+	pg_pool_t new_pool = *p;
+	if (pending_inc.new_pools.count(pool))
+	  new_pool = pending_inc.new_pools[pool];
+	if (n == 1) {
+	  new_pool.flags |= pg_pool_t::FLAG_HASHPSPOOL;
+	  ss << "set";
+	} else if (n == 0) {
+	  new_pool.flags &= ~pg_pool_t::FLAG_HASHPSPOOL;
+	  ss << "unset";
+	} else {
+	  ss << "expecting value 1 or 0";
+	  err = -EINVAL;
+	}
+	pending_inc.new_pools[pool] = new_pool;
+	ss << " pool " << pool << " flag hashpspool";
+      }
+
       pending_inc.new_pools[pool].last_change = pending_inc.epoch;
       getline(ss, rs);
       wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
