@@ -265,10 +265,6 @@ def synch_clocks(remotes, log):
 
 
 def main(ctx):
-    import gevent.monkey
-    gevent.monkey.patch_all(dns=False)
-    from teuthology.orchestra import monkey
-    monkey.patch_all()
     from teuthology.run import config_file
     import os
 

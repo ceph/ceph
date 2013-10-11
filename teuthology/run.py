@@ -91,19 +91,10 @@ def write_initial_metadata(ctx):
 
 
 def main(ctx):
-    from gevent import monkey
-    monkey.patch_all(dns=False)
-    from .orchestra import monkey
-    monkey.patch_all()
-
-    # WARNING: Do not import any modules that import logging before this next
-    # block. That would cause connections to hang because the monkey patching
-    # hadn't been done.
     import logging
     set_up_logging(ctx)
     log = logging.getLogger(__name__)
 
-    # Now it is safe to import other teuthology modules.
     from . import report
 
     if ctx.owner is None:
