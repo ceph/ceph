@@ -357,6 +357,13 @@ void RGWProcess::handle_request(RGWRequest *req)
     goto done;
   }
 
+  req->log(s, "init op");
+  ret = op->init_processing();
+  if (ret < 0) {
+    abort_early(s, op, ret);
+    goto done;
+  }
+
   req->log(s, "verifying op mask");
   ret = op->verify_op_mask();
   if (ret < 0) {
