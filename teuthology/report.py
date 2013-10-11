@@ -158,6 +158,11 @@ class ResultsReporter(object):
         response, content = self.http.request(
             uri, method, json_, headers={'content-type': 'application/json'},
         )
+        log.debug("{method} to {uri}: {status}".format(
+            method=method,
+            uri=uri,
+            status=response.status,
+        ))
 
         try:
             content_obj = json.loads(content)
