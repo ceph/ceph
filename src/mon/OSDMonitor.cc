@@ -2715,6 +2715,18 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "crush ruleset " << n << " does not exist";
       return -ENOENT;
     }
+  } else if (var == "hashpspool") {
+    if (val == "true") {
+      p.flags |= pg_pool_t::FLAG_HASHPSPOOL;
+      ss << "set";
+    } else if (val == "false") {
+      p.flags ^= pg_pool_t::FLAG_HASHPSPOOL;
+      ss << "unset";
+    } else {
+      ss << "expecting value true or false";
+      return -EINVAL;
+    }
+    ss << " pool " << pool << " flag hashpspool";
   } else {
     ss << "unrecognized variable '" << var << "'";
     return -EINVAL;
