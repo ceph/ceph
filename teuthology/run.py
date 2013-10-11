@@ -4,7 +4,18 @@ import yaml
 import StringIO
 import contextlib
 import sys
+import logging
 from traceback import format_tb
+
+from . import report
+from .misc import deep_merge
+from .misc import get_distro
+from .misc import get_user
+from .misc import read_config
+from .nuke import nuke
+from .run_tasks import run_tasks
+from .suite import email_results
+
 
 
 def config_file(string):
@@ -23,14 +34,11 @@ class MergeConfig(argparse.Action):
 
     def __call__(self, parser, namespace, values, option_string=None):
         config = getattr(namespace, self.dest)
-        from teuthology.misc import deep_merge
         for new in values:
             deep_merge(config, new)
 
 
 def set_up_logging(ctx):
-    import logging
-
     loglevel = logging.INFO
     if ctx.verbose:
         loglevel = logging.DEBUG
@@ -54,8 +62,6 @@ def set_up_logging(ctx):
 
 def install_except_hook():
     def log_exception(exception_class, exception, traceback):
-        import logging
-
         logging.critical(''.join(format_tb(traceback)))
         if not exception.message:
             logging.critical(exception_class.__name__)
@@ -91,14 +97,10 @@ def write_initial_metadata(ctx):
 
 
 def main(ctx):
-    import logging
     set_up_logging(ctx)
     log = logging.getLogger(__name__)
 
-    from . import report
-
     if ctx.owner is None:
-        from teuthology.misc import get_user
         ctx.owner = get_user()
 
     # Older versions of teuthology stored job_id as an int. Convert it to a str
@@ -127,7 +129,6 @@ def main(ctx):
         assert ctx.lock, \
             'the --block option is only supported with the --lock option'
 
-    from teuthology.misc import read_config
     read_config(ctx)
 
     log.debug('\n  '.join(['Config:', ] + yaml.safe_dump(
@@ -162,7 +163,6 @@ def main(ctx):
         {'internal.vm_setup': None},
     ])
     if 'kernel' in ctx.config:
-        from teuthology.misc import get_distro
         distro = get_distro(ctx)
         if distro == 'ubuntu':
             init_tasks.append({'kernel': ctx.config['kernel']})
@@ -177,12 +177,10 @@ def main(ctx):
 
     ctx.config['tasks'][:0] = init_tasks
 
-    from teuthology.run_tasks import run_tasks
     try:
         run_tasks(tasks=ctx.config['tasks'], ctx=ctx)
     finally:
         if not ctx.summary.get('success') and ctx.config.get('nuke-on-error'):
-            from teuthology.nuke import nuke
             # only unlock if we locked them in the first place
             nuke(ctx, log, ctx.lock)
         if ctx.archive is not None:
@@ -199,7 +197,6 @@ def main(ctx):
                 emsg = f.getvalue()
                 subject = "Teuthology error -- %s" % ctx.summary[
                     'failure_reason']
-                from teuthology.suite import email_results
                 email_results(subject, "Teuthology", ctx.config[
                               'email-on-error'], emsg)
 
@@ -209,5 +206,4 @@ def main(ctx):
             log.info('pass')
         else:
             log.info('FAIL')
-            import sys
             sys.exit(1)
