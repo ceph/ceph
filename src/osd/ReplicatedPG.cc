@@ -950,14 +950,13 @@ void ReplicatedPG::do_op(OpRequestRef op)
   ObjectContextRef obc;
   bool can_create = op->may_write();
   snapid_t snapid;
-  int r = find_object_context(
-    hobject_t(m->get_oid(), 
-	      m->get_object_locator().key,
-	      m->get_snapid(),
-	      m->get_pg().ps(),
-	      m->get_object_locator().get_pool(),
-	      m->get_object_locator().nspace),
-    &obc, can_create, &snapid);
+  hobject_t oid(m->get_oid(),
+		m->get_object_locator().key,
+		m->get_snapid(),
+		m->get_pg().ps(),
+		m->get_object_locator().get_pool(),
+		m->get_object_locator().nspace);
+  int r = find_object_context(oid, &obc, can_create, &snapid);
 
   if (r == -EAGAIN) {
     // If we're not the primary of this OSD, and we have
@@ -973,6 +972,14 @@ void ReplicatedPG::do_op(OpRequestRef op)
 		     info.pgid.pool(), m->get_object_locator().nspace);
       wait_for_missing_object(soid, op);
       return;
+    }
+  }
+
+  if (hit_set) {
+    hit_set->insert(oid);
+    if (hit_set->is_full() ||
+	hit_set_start_stamp + pool.info.hit_set_period <= m->get_recv_stamp()) {
+      hit_set_persist();
     }
   }
 
@@ -7354,11 +7361,18 @@ void ReplicatedPG::on_activate()
 	       << " from " << last_backfill_started << dendl;
     }
   }
+
+  hit_set_setup();
 }
 
 void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 {
   dout(10) << "on_change" << dendl;
+
+  if (hit_set && hit_set->insert_count() == 0) {
+    dout(20) << " discarding empty hit_set" << dendl;
+    hit_set_clear();
+  }
 
   // requeue everything in the reverse order they should be
   // reexamined.
@@ -7415,8 +7429,17 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 void ReplicatedPG::on_role_change()
 {
   dout(10) << "on_role_change" << dendl;
+  if (get_role() != 0 && hit_set) {
+    dout(10) << " clearing hit set" << dendl;
+    hit_set_clear();
+  }
 }
 
+void ReplicatedPG::on_pool_change()
+{
+  dout(10) << __func__ << dendl;
+  hit_set_setup();
+}
 
 // clear state.  called on recovery completion AND cancellation.
 void ReplicatedPG::_clear_recovery_state()
@@ -8373,6 +8396,194 @@ void ReplicatedPG::check_local()
 }
 
 
+
+// ===========================
+// hit sets
+
+hobject_t ReplicatedPG::get_hit_set_current_object(utime_t stamp)
+{
+  ostringstream ss;
+  ss << "hit_set_" << info.pgid << "_current_" << stamp;
+  hobject_t hoid(sobject_t(ss.str(), CEPH_NOSNAP), "",
+		 info.pgid.ps(), info.pgid.pool(), "");
+  dout(20) << __func__ << " " << hoid << dendl;
+  return hoid;
+}
+
+hobject_t ReplicatedPG::get_hit_set_archive_object(utime_t start, utime_t end)
+{
+  ostringstream ss;
+  ss << "hit_set_" << info.pgid << "_archive_" << start << "_" << end;
+  hobject_t hoid(sobject_t(ss.str(), CEPH_NOSNAP), "",
+		 info.pgid.ps(), info.pgid.pool(), "");
+  dout(20) << __func__ << " " << hoid << dendl;
+  return hoid;
+}
+
+void ReplicatedPG::hit_set_clear()
+{
+  hit_set.reset(NULL);
+  hit_set_start_stats.reset(NULL);
+  hit_set_start_stamp = utime_t();
+}
+
+void ReplicatedPG::hit_set_setup()
+{
+  if (!pool.info.hit_set_count ||
+      !pool.info.hit_set_period ||
+      pool.info.hit_set_params.get_type() == HitSet::TYPE_NONE) {
+    hit_set_clear();
+    return;
+  }
+
+  // FIXME: discard any previous data for now
+  hit_set_create();
+}
+
+void ReplicatedPG::hit_set_create()
+{
+  utime_t now = ceph_clock_now(NULL);
+  // make a copy of the params to modify
+  HitSet::Params *params = new HitSet::Params(pool.info.hit_set_params);
+  uint64_t target_size = 0;
+
+  if (pool.info.hit_set_params.get_type() == HitSet::TYPE_BLOOM) {
+    BloomHitSet::Params *p =
+      static_cast<BloomHitSet::Params*>(params->impl.get());
+
+    // convert false positive rate so it holds up across the full period
+    p->false_positive = p->false_positive / pool.info.hit_set_count;
+
+    // if we don't have specified size, estimate target size based on the
+    // previous bin!
+    if (p->target_size == 0 && hit_set) {
+      utime_t dur = now - hit_set_start_stamp;
+      unsigned unique = hit_set->approx_unique_insert_count();
+      dout(20) << __func__ << " previous set had approx " << unique
+	       << " unique items over " << dur << " seconds" << dendl;
+      p->target_size = (double)unique * (double)pool.info.hit_set_period
+		     / (double)dur;
+    }
+    if (p->target_size < static_cast<uint64_t>(g_conf->osd_hit_set_min_size))
+      p->target_size = g_conf->osd_hit_set_min_size;
+    target_size = p->target_size;
+
+    p->seed = now.sec();
+
+    dout(10) << __func__ << " target_size " << p->target_size
+	<< " fpp " << p->false_positive << dendl;
+  }
+  hit_set.reset(new HitSet(params));
+  hit_set_start_stats.reset(new pg_stat_t(info.stats));
+  hit_set_start_stamp = now;
+  info.hit_set.current_info = pg_hit_set_info_t(target_size, now);
+}
+
+/**
+ * apply log entries to set
+ *
+ * this would only happen after peering, to at least capture writes
+ * during an interval that was potentially lost.
+ */
+bool ReplicatedPG::hit_set_apply_log()
+{
+  if (!hit_set)
+    return false;
+
+  eversion_t to = info.last_update;
+  eversion_t from = info.hit_set.current_last_update;
+  if (to <= from) {
+    dout(20) << __func__ << " no update" << dendl;
+    return false;
+  }
+
+  dout(20) << __func__ << " " << to << " .. " << info.last_update << dendl;
+  list<pg_log_entry_t>::const_reverse_iterator p = pg_log.get_log().log.rbegin();
+  while (p != pg_log.get_log().log.rend() && p->version > to)
+    ++p;
+  while (p != pg_log.get_log().log.rend() && p->version > from) {
+    hit_set->insert(p->soid);
+    ++p;
+  }
+
+  info.hit_set.current_last_update = to;
+  info.hit_set.current_info.size = hit_set->insert_count();
+  return true;
+}
+
+void ReplicatedPG::hit_set_persist()
+{
+  dout(10) << __func__  << dendl;
+  bufferlist bl;
+  hit_set->seal();
+  ::encode(*hit_set, bl);
+
+  utime_t now = ceph_clock_now(cct);
+  RepGather *repop;
+  hobject_t oid;
+  bool reset = false;
+
+  if (!info.hit_set.current_info.begin)
+    info.hit_set.current_info.begin = hit_set_start_stamp;
+  info.hit_set.current_info.size = hit_set->insert_count();
+  if (info.hit_set.current_info.is_full()) {
+    // archive
+    info.hit_set.current_info.end = now;
+    oid = get_hit_set_archive_object(info.hit_set.current_info.begin,
+				     info.hit_set.current_info.end);
+    dout(20) << __func__ << " archive " << oid << dendl;
+    reset = true;
+  } else {
+    // persist snapshot of current hitset
+    oid = get_hit_set_current_object(now);
+    dout(20) << __func__ << " checkpoint " << oid << dendl;
+  }
+
+  ObjectContextRef obc = get_object_context(oid, true);
+  repop = simple_repop_create(obc);
+  repop->ctx->at_version = get_next_version();
+
+  if (info.hit_set.current_last_stamp != utime_t()) {
+    // FIXME: we cheat slightly here by bundling in a remove on a object
+    // other the RepGather object.  we aren't carrying an ObjectContext for
+    // the deleted object over this period.
+    hobject_t old_obj =
+      get_hit_set_current_object(info.hit_set.current_last_stamp);
+    repop->ctx->op_t.remove(coll, old_obj);
+    repop->ctx->log.push_back(
+        pg_log_entry_t(pg_log_entry_t::DELETE,
+		       old_obj,
+		       repop->ctx->at_version,
+		       info.hit_set.current_last_update,
+		       0,
+		       osd_reqid_t(),
+		       repop->ctx->mtime));
+    ++repop->ctx->at_version.version;
+  }
+
+  info.hit_set.current_last_update = info.last_update; // *after* above remove!
+  info.hit_set.current_last_stamp = now;
+  info.hit_set.current_info.version = repop->ctx->at_version;
+  if (reset) {
+    info.hit_set.history.push_back(info.hit_set.current_info);
+    hit_set_create();
+    info.hit_set.current_info.version = repop->ctx->at_version;
+  }
+
+  repop->ctx->op_t.write(coll, oid, 0, bl.length(), bl);
+  repop->ctx->log.push_back(
+        pg_log_entry_t(
+	  pg_log_entry_t::MODIFY,
+	  oid,
+	  repop->ctx->at_version,
+	  repop->ctx->obs->oi.version,
+	  0,
+	  osd_reqid_t(),
+	  repop->ctx->mtime)
+        );
+
+  simple_repop_submit(repop);
+}
 
 
 // ==========================================================================================
