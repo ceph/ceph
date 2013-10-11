@@ -11111,8 +11111,9 @@ void MDCache::fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits)
 
 void MDCache::dispatch_fragment_dir(MDRequest *mdr)
 {
-  assert(fragment_requests.count(mdr->reqid));
-  fragment_info_t &info = fragment_requests[mdr->reqid];
+  map<metareqid_t, fragment_info_t>::iterator it = fragment_requests.find(mdr->reqid);
+  assert(it != fragment_requests.end());
+  fragment_info_t &info = it->second;
   CInode *diri = info.dirs.front()->get_inode();
 
   dout(10) << "dispatch_fragment_dir " << info.resultfrags << " "
@@ -11197,8 +11198,9 @@ void MDCache::dispatch_fragment_dir(MDRequest *mdr)
 
 void MDCache::_fragment_logged(MDRequest *mdr)
 {
-  assert(fragment_requests.count(mdr->reqid));
-  fragment_info_t &info = fragment_requests[mdr->reqid];
+  map<metareqid_t, fragment_info_t>::iterator it = fragment_requests.find(mdr->reqid);
+  assert(it != fragment_requests.end());
+  fragment_info_t &info = it->second;
   CInode *diri = info.resultfrags.front()->get_inode();
 
   dout(10) << "fragment_logged " << info.resultfrags << " " << info.basefrag
@@ -11224,8 +11226,9 @@ void MDCache::_fragment_logged(MDRequest *mdr)
 
 void MDCache::_fragment_stored(MDRequest *mdr)
 {
-  assert(fragment_requests.count(mdr->reqid));
-  fragment_info_t &info = fragment_requests[mdr->reqid];
+  map<metareqid_t, fragment_info_t>::iterator it = fragment_requests.find(mdr->reqid);
+  assert(it != fragment_requests.end());
+  fragment_info_t &info = it->second;
   CInode *diri = info.resultfrags.front()->get_inode();
 
   dout(10) << "fragment_stored " << info.resultfrags << " " << info.basefrag
@@ -11278,15 +11281,16 @@ void MDCache::_fragment_stored(MDRequest *mdr)
   mds->mdlog->start_submit_entry(le, new C_MDC_FragmentCommit(this, diri->ino(), info.basefrag,
 							      info.resultfrags));
 
-  fragment_requests.erase(mdr->reqid);
+  fragment_requests.erase(it);
   request_finish(mdr);
 }
 
 void MDCache::_fragment_committed(dirfrag_t basedirfrag, list<CDir*>& resultfrags)
 {
   dout(10) << "fragment_committed " << basedirfrag << dendl;
-  assert(uncommitted_fragments.count(basedirfrag));
-  ufragment &uf = uncommitted_fragments[basedirfrag];
+  map<dirfrag_t, ufragment>::iterator it = uncommitted_fragments.find(basedirfrag);
+  assert(it != uncommitted_fragments.end());
+  ufragment &uf = it->second;
 
   // remove old frags
   C_GatherBuilder gather(g_ceph_context, new C_MDC_FragmentFinish(this, basedirfrag, resultfrags));
@@ -11317,8 +11321,9 @@ void MDCache::_fragment_committed(dirfrag_t basedirfrag, list<CDir*>& resultfrag
 void MDCache::_fragment_finish(dirfrag_t basedirfrag, list<CDir*>& resultfrags)
 {
   dout(10) << "fragment_finish " << basedirfrag << dendl;
-  assert(uncommitted_fragments.count(basedirfrag));
-  ufragment &uf = uncommitted_fragments[basedirfrag];
+  map<dirfrag_t, ufragment>::iterator it = uncommitted_fragments.find(basedirfrag);
+  assert(it != uncommitted_fragments.end());
+  ufragment &uf = it->second;
 
   // unmark & auth_unpin
   for (list<CDir*>::iterator p = resultfrags.begin(); p != resultfrags.end(); ++p) {
@@ -11395,14 +11400,15 @@ void MDCache::finish_uncommitted_fragment(dirfrag_t basedirfrag, int op)
 {
   dout(10) << "finish_uncommitted_fragments: base dirfrag " << basedirfrag
 	   << " op " << EFragment::op_name(op) << dendl;
-  if (uncommitted_fragments.count(basedirfrag)) {
-    ufragment& uf = uncommitted_fragments[basedirfrag];
+  map<dirfrag_t, ufragment>::iterator it = uncommitted_fragments.find(basedirfrag);
+  if (it != uncommitted_fragments.end()) {
+    ufragment& uf = it->second;
     if (op != EFragment::OP_FINISH && !uf.old_frags.empty()) {
       uf.committed = true;
     } else {
       uf.ls->uncommitted_fragments.erase(basedirfrag);
       mds->queue_waiters(uf.waiters);
-      uncommitted_fragments.erase(basedirfrag);
+      uncommitted_fragments.erase(it);
     }
   }
 }
@@ -11411,14 +11417,15 @@ void MDCache::rollback_uncommitted_fragment(dirfrag_t basedirfrag, list<frag_t>&
 {
   dout(10) << "rollback_uncommitted_fragment: base dirfrag " << basedirfrag
            << " old_frags (" << old_frags << ")" << dendl;
-  if (uncommitted_fragments.count(basedirfrag)) {
-    ufragment& uf = uncommitted_fragments[basedirfrag];
+  map<dirfrag_t, ufragment>::iterator it = uncommitted_fragments.find(basedirfrag);
+  if (it != uncommitted_fragments.end()) {
+    ufragment& uf = it->second;
     if (!uf.old_frags.empty()) {
       uf.old_frags.swap(old_frags);
       uf.committed = true;
     } else {
       uf.ls->uncommitted_fragments.erase(basedirfrag);
-      uncommitted_fragments.erase(basedirfrag);
+      uncommitted_fragments.erase(it);
     }
   }
 }
