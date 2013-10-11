@@ -2,34 +2,53 @@
  Installation (Manual)
 =======================
 
-The Ceph Object Store is the foundation of all Ceph clusters, and it consists
-primarily of two types of daemons: Object Storage Daemons (OSDs) and monitors.
-The Ceph Object Store is based upon the concept of 
-:abbr:`RADOS (Reliable Autonomic Distributed Object Store)`, which eliminates
-single points of failure and delivers infinite scalability. For details on 
-the architecture of Ceph and RADOS, refer to `Ceph Architecture`_. All Ceph
-deployments have OSDs and monitors, so you should prepare your Ceph cluster
-by focusing first on the object storage cluster.
-
 .. raw:: html
 
-	<table cellpadding="10"><colgroup><col width="50%"><col width="50%"></colgroup><tbody valign="top"><tr><td><h3>Installation</h3>
+	<table><colgroup><col width="50%"><col width="50%"></colgroup><tbody valign="top"><tr><td><h3>Advanced Package Tool (APT)</h3>
 
-If you are deploying a Ceph cluster (that is, not developing Ceph),
-install Ceph using our stable release packages. For testing, you 
-may install development release and testing packages.
+If you are deploying a Ceph cluster on Debian or Ubuntu distributions,
+use the instructions below to install packages manually.
 
 .. toctree::
    :maxdepth: 2
 
    Installing Debian/Ubuntu Packages <debian>
+   Installing on Calxeda Hardware <calxeda>
+   Installing QEMU <qemu-deb>
+   Installing libvirt <libvirt-deb>
+
+.. raw:: html
+
+	</td><td><h3>Redhat Package Manager (RPM) / Yellowdog Updater, Modified (YUM) </h3>
+	
+If you are deploying a Ceph cluster on Red Hat(rhel6), CentOS (el6), Fedora
+17-19 (f17-f19), OpenSUSE 12 (opensuse12), and SLES (sles11) distributions, use
+the instructions below to install packages manually.
+
+.. toctree::
+   :maxdepth: 2
+
    Installing RPM Packages <rpm>
-   Installing on Calxeda <calxeda>
+   Installing YUM Priorities <yum-priorities>
+   Installing QEMU <qemu-rpm>
+   Installing libvirt <libvirt-rpm>
+
+.. raw:: html
+
+	</td></tr><tr><td><h3>Upgrading Ceph</h3>
+	
+If you are upgrading Ceph from a previous release, please read the the upgrade
+documentation to ensure that you follow the proper upgrade sequence.
+
+.. toctree::
+   :maxdepth: 2
+
    Upgrading Ceph <upgrading-ceph>
+	
 
-.. raw:: html 
+.. raw:: html
 
-	</td><td><h3>Building Ceph from Source</h3>
+	</td><td><h3>Building Ceph</h3>
 
 You can build Ceph from source by downloading a release or cloning the ``ceph``
 repository at github. If you intend to build Ceph from source, please see the
@@ -48,9 +67,10 @@ will save you time.
 	Build a Package <build-packages>
 	Contributing Code <contributing>
 
+See the `Development`_ section for additional development details.
 
 .. raw:: html
 
 	</td></tr></tbody></table>
-
-.. _Ceph Architecture: ../architecture/
+	
+.. _Development: ../../dev
