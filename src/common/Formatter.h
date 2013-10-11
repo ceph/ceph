@@ -44,7 +44,7 @@ class Formatter {
   virtual void dump_float(const char *name, double d) = 0;
   virtual void dump_string(const char *name, std::string s) = 0;
   virtual void dump_bool(const char *name, bool b) {
-    dump_string(name, (b ? "true" : "false"));
+    dump_format_unquoted(name, "%s", (b ? "true" : "false"));
   }
   virtual std::ostream& dump_stream(const char *name) = 0;
   virtual void dump_format(const char *name, const char *fmt, ...) = 0;
