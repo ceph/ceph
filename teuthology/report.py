@@ -191,16 +191,7 @@ class ResultsReporter(object):
             runs = all_runs[next_index:]
         else:
             runs = all_runs
-        num_runs = len(runs)
-        num_jobs = 0
-        log.info("Posting %s runs", num_runs)
-        for run in runs:
-            job_count = self.report_run(run)
-            num_jobs += job_count
-            if self.save_last_run:
-                self.last_run = run
-        del self.last_run
-        log.info("Total: %s jobs in %s runs", num_jobs, num_runs)
+        return self.report_runs(runs)
 
     def report_runs(self, run_names):
         """
@@ -208,9 +199,15 @@ class ResultsReporter(object):
 
         :param run_names: The names of the runs.
         """
+        num_runs = len(run_names)
         num_jobs = 0
-        for run_name in run_names:
-            num_jobs += self.report_run(run_name)
+        log.info("Posting %s runs", num_runs)
+        for run in run_names:
+            job_count = self.report_run(run)
+            num_jobs += job_count
+            if self.save_last_run:
+                self.last_run = run
+        del self.last_run
         log.info("Total: %s jobs in %s runs", num_jobs, len(run_names))
 
     def create_run(self, run_name):
