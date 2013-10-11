@@ -2315,8 +2315,11 @@ void PG::add_log_entry(pg_log_entry_t& e, bufferlist& log_bl)
 
 
 void PG::append_log(
-  vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t)
+  vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t,
+  bool do_update_snap_map)
 {
+  if (do_update_snap_map)
+    update_snap_map(logv, t);
   dout(10) << "append_log " << pg_log.get_log() << " " << logv << dendl;
 
   map<string,bufferlist> keys;

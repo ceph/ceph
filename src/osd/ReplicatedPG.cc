@@ -2129,25 +2129,12 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
   ctx->at_version = get_next_version();
 
   ObjectStore::Transaction *t = &ctx->op_t;
-  OSDriver::OSTransaction os_t(osdriver.get_transaction(t));
-    
   set<snapid_t> new_snaps;
   for (set<snapid_t>::iterator i = old_snaps.begin();
        i != old_snaps.end();
        ++i) {
     if (!pool.info.is_removed_snap(*i))
       new_snaps.insert(*i);
-  }
-
-  r = snap_mapper.update_snaps(
-    coid,
-    new_snaps,
-    &old_snaps, // debug
-    &os_t);
-  if (r != 0) {
-    derr << __func__ << ": snap_mapper.update_snap returned "
-	 << cpp_strerror(r) << dendl;
-    assert(0);
   }
 
   if (new_snaps.empty()) {
@@ -4353,10 +4340,6 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
       snap_oi->set_flag(object_info_t::FLAG_DIRTY);
     _make_clone(t, soid, coid, snap_oi);
     
-    OSDriver::OSTransaction _t(osdriver.get_transaction(&(ctx->local_t)));
-    set<snapid_t> _snaps(snaps.begin(), snaps.end());
-    snap_mapper.add_oid(coid, _snaps, &_t);
-    
     ctx->delta_stats.num_objects++;
     if (snap_oi->is_dirty())
       ctx->delta_stats.num_objects_dirty++;
@@ -4694,7 +4677,6 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
 				    ctx->user_at_version, ctx->reqid,
 				    ctx->mtime));
   if (soid.snap < CEPH_NOSNAP) {
-    OSDriver::OSTransaction _t(osdriver.get_transaction(&(ctx->local_t)));
     set<snapid_t> _snaps(ctx->new_obs.oi.snaps.begin(),
 			 ctx->new_obs.oi.snaps.end());
     switch (log_op_type) {
@@ -4703,15 +4685,13 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
       dout(20) << __func__ << " encoding snaps " << ctx->new_obs.oi.snaps
 	       << dendl;
       ::encode(ctx->new_obs.oi.snaps, ctx->log.back().snaps);
-      snap_mapper.add_oid(soid, _snaps, &_t);
       break;
     case pg_log_entry_t::CLEAN:
       dout(20) << __func__ << " encoding snaps " << ctx->new_obs.oi.snaps
 	       << dendl;
       ::encode(ctx->new_obs.oi.snaps, ctx->log.back().snaps);
       break;
-    case pg_log_entry_t::DELETE:
-      snap_mapper.remove_oid(soid, &_t);
+    default:
       break;
     }
   }
@@ -6683,14 +6663,15 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
     rm->opt.set_replica();
 
     info.stats = m->pg_stats;
+    bool update_snaps = false;
     if (!rm->opt.empty()) {
       // If the opt is non-empty, we infer we are before
       // last_backfill (according to the primary, not our
       // not-quite-accurate value), and should update the
       // collections now.  Otherwise, we do it later on push.
-      update_snap_map(log, rm->localt);
+      update_snaps = true;
     }
-    append_log(log, m->pg_trim_to, rm->localt);
+    append_log(log, m->pg_trim_to, rm->localt, update_snaps);
 
     rm->tls.push_back(&rm->localt);
     rm->tls.push_back(&rm->opt);
