@@ -797,6 +797,7 @@ int main(int argc, char **argv)
   string replica_log_type_str;
   ReplicaLogType replica_log_type = ReplicaLog_Invalid;
   string op_mask_str;
+  string quota_scope;
 
   int64_t max_objects = -1;
   int64_t max_size = -1;
@@ -931,6 +932,8 @@ int main(int argc, char **argv)
       start_marker = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--end-marker", (char*)NULL)) {
       end_marker = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--quota-scope", (char*)NULL)) {
+      quota_scope = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--replica-log-type", (char*)NULL)) {
       replica_log_type_str = val;
       replica_log_type = get_replicalog_type(replica_log_type_str);
@@ -2323,6 +2326,10 @@ next:
     if (!bucket_name.empty()) {
       set_bucket_quota(store, opt_cmd, bucket_name, max_size, max_objects);
     } else if (!user_id.empty()) {
+      if (quota_scope != "bucket") {
+        cerr << "ERROR: only bucket-level user quota can be handled. Please specify --quota-scope=bucket" << std::endl;
+        return EINVAL;
+      }
       set_user_bucket_quota(opt_cmd, user, user_op, max_size, max_objects);
     }
   }
