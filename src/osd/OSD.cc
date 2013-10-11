@@ -2036,8 +2036,8 @@ void OSD::load_pgs()
     pg->reg_next_scrub();
 
     // generate state for PG's current mapping
-    pg->get_osdmap()->pg_to_up_acting_osds(pgid, pg->up, pg->acting);
-    int role = pg->get_osdmap()->calc_pg_role(whoami, pg->acting);
+    pg->get_osdmap()->pg_to_up_acting_osds(pgid, pg->up, pg->actingonly);
+    int role = pg->get_osdmap()->calc_pg_role(whoami, pg->actingonly);
     pg->set_role(role);
 
     PG::RecoveryCtx rctx(0, 0, 0, 0, 0, 0);
@@ -2280,7 +2280,7 @@ void OSD::handle_pg_peering_evt(
 	true,
 	old_pg_state->role,
 	old_pg_state->up,
-	old_pg_state->acting,
+	old_pg_state->actingonly,
 	old_pg_state->info.history,
 	old_pg_state->past_intervals,
 	*rctx.transaction);
@@ -2309,7 +2309,7 @@ void OSD::handle_pg_peering_evt(
 	true,
 	old_pg_state->role,
 	old_pg_state->up,
-	old_pg_state->acting,
+	old_pg_state->actingonly,
 	old_pg_state->info.history,
 	old_pg_state->past_intervals,
 	*rctx.transaction
@@ -6016,8 +6016,11 @@ void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg)
 bool OSD::compat_must_dispatch_immediately(PG *pg)
 {
   assert(pg->is_locked());
-  for (vector<int>::iterator i = pg->acting.begin();
-       i != pg->acting.end();
+  vector<int> *tmpacting = &pg->actingonly;
+  if (pg->actingbackfill.size() > 0)
+    tmpacting = &pg->actingbackfill;
+  for (vector<int>::iterator i = tmpacting->begin();
+       i != tmpacting->end();
        ++i) {
     if (*i == whoami)
       continue;
@@ -6878,7 +6881,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
   clog.warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
 	      << " pg " << m->get_pg()
 	      << " to osd." << whoami
-	      << " not " << pg->acting
+	      << " not " << pg->actingonly
 	      << " in e" << m->get_map_epoch() << "/" << osdmap->get_epoch() << "\n";
   reply_op_error(op, -ENXIO);
 }
