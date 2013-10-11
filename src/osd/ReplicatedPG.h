@@ -23,8 +23,9 @@
 #include "include/assert.h" 
 #include "common/cmdparse.h"
 
-#include "PG.h"
+#include "HitSet.h"
 #include "OSD.h"
+#include "PG.h"
 #include "Watch.h"
 #include "OpRequest.h"
 
@@ -575,6 +576,20 @@ protected:
   RepGather *simple_repop_create(ObjectContextRef obc);
   void simple_repop_submit(RepGather *repop);
 
+  // hot/cold tracking
+  boost::scoped_ptr<HitSet> hit_set;  ///< currently accumulating HitSet
+  utime_t hit_set_start_stamp;   ///< time the current HitSet started recording
+  boost::scoped_ptr<pg_stat_t>  hit_set_start_stats;
+
+  void hit_set_clear();     ///< discard any HitSet state
+  void hit_set_setup();     ///< initialize HitSet state
+  void hit_set_create();    ///< create a new HitSet
+  void hit_set_persist();   ///< persist hit info
+  bool hit_set_apply_log(); ///< apply log entries to update in-memory HitSet
+
+  hobject_t get_hit_set_current_object(utime_t stamp);
+  hobject_t get_hit_set_archive_object(utime_t start, utime_t end);
+
   /// true if we can send an ondisk/commit for v
   bool already_complete(eversion_t v) {
     for (xlist<RepGather*>::iterator i = repop_queue.begin();
@@ -1093,6 +1108,7 @@ public:
   void _finish_mark_all_unfound_lost(list<ObjectContextRef>& obcs);
 
   void on_role_change();
+  void on_pool_change();
   void on_change(ObjectStore::Transaction *t);
   void on_activate();
   void on_flushed();
