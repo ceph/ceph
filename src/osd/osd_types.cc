@@ -820,6 +820,24 @@ SnapContext pg_pool_t::get_snap_context() const
   return SnapContext(get_snap_seq(), s);
 }
 
+static string make_hash_str(const string &inkey, const string &nspace)
+{
+  if (nspace.empty())
+    return inkey;
+  return nspace + '\037' + inkey;
+}
+
+uint32_t pg_pool_t::hash_key(const string& key, const string& ns) const
+{
+  string n = make_hash_str(key, ns);
+  return ceph_str_hash(object_hash, n.c_str(), n.length());
+}
+
+uint32_t pg_pool_t::raw_hash_to_pg(uint32_t v) const
+{
+  return ceph_stable_mod(v, pg_num, pg_num_mask);
+}
+
 /*
  * map a raw pg (with full precision ps) into an actual pg, for storage
  */
