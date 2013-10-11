@@ -741,6 +741,9 @@ namespace librados
 
     int64_t get_id();
 
+    uint32_t get_object_hash_position(const std::string& oid);
+    uint32_t get_object_pg_hash_position(const std::string& oid);
+
     config_t cct();
 
   private:
