@@ -357,7 +357,7 @@ def try_push_job_info(job_config, extra_info=None):
         log.debug(msg.format(yaml=config.teuthology_yaml))
         return
     elif job_config.get('job_id') is None:
-        log.debug('No job_id found; not reporting results')
+        log.warning('No job_id found; not reporting results')
         return
 
     run_name = job_config['name']
