@@ -74,7 +74,11 @@ def lock_machines(ctx, config):
                               machine_type, machines))
         if num_free < 6 and ctx.owner.startswith('scheduled'):
             if ctx.block:
-                log.info('waiting for more machines to be free...')
+                log.info(
+                    'waiting for more machines to be free (need %s see %s)...',
+                    how_many,
+                    num_free,
+                )
                 time.sleep(10)
                 continue
             else:
