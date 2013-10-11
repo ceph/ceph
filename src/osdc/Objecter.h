@@ -1345,6 +1345,9 @@ public:
 		     list<LingerOp*>& need_resend_linger,
 		     map<tid_t, CommandOp*>& need_resend_command);
 
+  int64_t get_object_hash_position(int64_t pool, const string& key, const string& ns);
+  int64_t get_object_pg_hash_position(int64_t pool, const string& key, const string& ns);
+
   // messages
  public:
   void dispatch(Message *m);
