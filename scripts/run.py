@@ -1,5 +1,6 @@
 import argparse
 
+import teuthology.misc
 import teuthology.run
 
 
@@ -18,8 +19,8 @@ def parse_args():
         'config',
         metavar='CONFFILE',
         nargs='+',
-        type=teuthology.run.config_file,
-        action=teuthology.run.MergeConfig,
+        type=teuthology.misc.config_file,
+        action=teuthology.misc.MergeConfig,
         default={},
         help='config file to read',
     )

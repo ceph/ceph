@@ -2,6 +2,7 @@ import argparse
 from argparse import RawTextHelpFormatter
 import textwrap
 
+import teuthology.misc
 import teuthology.nuke
 
 
@@ -10,9 +11,6 @@ def main():
 
 
 def parse_args():
-    from teuthology.run import config_file
-    from teuthology.run import MergeConfig
-
     parser = argparse.ArgumentParser(
         description='Reset test machines',
         epilog=textwrap.dedent('''
@@ -29,8 +27,8 @@ def parse_args():
     parser.add_argument(
         '-t', '--targets',
         nargs='+',
-        type=config_file,
-        action=MergeConfig,
+        type=teuthology.misc.config_file,
+        action=teuthology.misc.MergeConfig,
         default={},
         dest='config',
         help='yaml config containing machines to nuke',

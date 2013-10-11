@@ -10,8 +10,9 @@ import yaml
 
 import beanstalkc
 
-from .config import config as teuth_config
 from . import safepath
+from .config import config as teuth_config
+from .misc import read_config
 
 log = logging.getLogger(__name__)
 
@@ -118,7 +119,6 @@ def worker(ctx):
             path=ctx.archive_dir,
         ))
 
-    from teuthology.misc import read_config
     read_config(ctx)
 
     beanstalk = connect(ctx)

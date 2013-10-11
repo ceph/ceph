@@ -5,7 +5,8 @@ import teuthology.lock
 
 
 def main():
-    teuthology.lock.updatekeys(parse_args())
+    status = teuthology.lock.updatekeys(parse_args())
+    sys.exit(status)
 
 
 def parse_args():

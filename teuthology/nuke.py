@@ -1,9 +1,26 @@
 import argparse
+import logging
+import os
+import subprocess
+import time
 import yaml
+
+from . import orchestra
+from .orchestra import run
+from .lock import list_locks
+from .lock import unlock_one
+from .misc import config_file
+from .misc import get_testdir
+from .misc import get_user
+from .misc import read_config
+from .misc import reconnect
+from .parallel import parallel
+from .task import install as install_task
+from .task.internal import check_lock
+from .task.internal import connect
 
 
 def shutdown_daemons(ctx, log):
-    from .orchestra import run
     nodes = {}
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
@@ -41,7 +58,6 @@ def shutdown_daemons(ctx, log):
 
 
 def find_kernel_mounts(ctx, log):
-    from .orchestra import run
     nodes = {}
     log.info('Looking for kernel mounts to handle...')
     for remote in ctx.cluster.remotes.iterkeys():
@@ -71,7 +87,6 @@ def remove_kernel_mounts(ctx, kernel_mounts, log):
     properly we should be able to just do a forced unmount,
     but that doesn't seem to be working, so you should reboot instead
     """
-    from .orchestra import run
     nodes = {}
     for remote in kernel_mounts:
         log.info('clearing kernel mount from %s', remote.name)
@@ -96,7 +111,6 @@ def remove_osd_mounts(ctx, log):
     """
     unmount any osd data mounts (scratch disks)
     """
-    from .orchestra import run
     ctx.cluster.run(
         args=[
             'grep',
@@ -115,7 +129,6 @@ def remove_osd_tmpfs(ctx, log):
     """
     unmount tmpfs mounts
     """
-    from .orchestra import run
     ctx.cluster.run(
         args=[
             'egrep', 'tmpfs\s+/mnt', '/etc/mtab', run.Raw('|'),
@@ -128,8 +141,6 @@ def remove_osd_tmpfs(ctx, log):
 
 
 def reboot(ctx, remotes, log):
-    from .orchestra import run
-    import time
     nodes = {}
     for remote in remotes:
         log.info('rebooting %s', remote.name)
@@ -146,7 +157,6 @@ def reboot(ctx, remotes, log):
         # send anything back to the ssh client!
         # for remote, proc in nodes.iteritems():
         # proc.exitstatus.get()
-    from teuthology.misc import reconnect
     if remotes:
         log.info('waiting for nodes to reboot')
         time.sleep(5)  # if we try and reconnect too quickly, it succeeds!
@@ -154,7 +164,6 @@ def reboot(ctx, remotes, log):
 
 
 def reset_syslog_dir(ctx, log):
-    from .orchestra import run
     nodes = {}
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
@@ -179,7 +188,6 @@ def reset_syslog_dir(ctx, log):
 
 
 def dpkg_configure(ctx, log):
-    from .orchestra import run
     nodes = {}
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
@@ -202,7 +210,6 @@ def dpkg_configure(ctx, log):
 
 
 def remove_installed_packages(ctx, log):
-    from teuthology.task import install as install_task
 
     dpkg_configure(ctx, log)
     config = {'project': 'ceph'}
@@ -216,8 +223,6 @@ def remove_installed_packages(ctx, log):
 
 
 def remove_testing_tree(ctx, log):
-    from teuthology.misc import get_testdir
-    from .orchestra import run
     nodes = {}
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
@@ -241,7 +246,6 @@ def remove_testing_tree(ctx, log):
 
 
 def synch_clocks(remotes, log):
-    from .orchestra import run
     nodes = {}
     for remote in remotes:
         proc = remote.run(
@@ -265,11 +269,6 @@ def synch_clocks(remotes, log):
 
 
 def main(ctx):
-    from teuthology.run import config_file
-    import os
-
-    import logging
-
     log = logging.getLogger(__name__)
 
     loglevel = logging.INFO
@@ -296,7 +295,6 @@ def main(ctx):
             if not ctx.owner:
                 ctx.owner = open(ctx.archive + '/owner').read().rstrip('\n')
 
-    from teuthology.misc import read_config
     read_config(ctx)
 
     log.info(
@@ -306,7 +304,6 @@ def main(ctx):
                 default_flow_style=False).splitlines()))
 
     if ctx.owner is None:
-        from teuthology.misc import get_user
         ctx.owner = get_user()
 
     if ctx.pid:
@@ -317,7 +314,6 @@ def main(ctx):
                 ctx.pid,
                 ctx.pid))
         else:
-            import subprocess
             subprocess.check_call(["kill", "-9", str(ctx.pid)])
 
     nuke(ctx, log, ctx.unlock, ctx.synch_clocks, ctx.reboot_all, ctx.noipmi)
@@ -325,8 +321,6 @@ def main(ctx):
 
 def nuke(ctx, log, should_unlock, sync_clocks=True, reboot_all=True,
          noipmi=False):
-    from teuthology.parallel import parallel
-    from teuthology.lock import list_locks
     total_unnuked = {}
     targets = dict(ctx.config['targets'])
     if ctx.name:
@@ -367,7 +361,6 @@ def nuke(ctx, log, should_unlock, sync_clocks=True, reboot_all=True,
 
 def nuke_one(ctx, targets, log, should_unlock, synch_clocks, reboot_all,
              check_locks, noipmi):
-    from teuthology.lock import unlock_one
     ret = None
     ctx = argparse.Namespace(
         config=dict(targets=targets),
@@ -394,7 +387,6 @@ def nuke_one(ctx, targets, log, should_unlock, synch_clocks, reboot_all,
 
 def nuke_helper(ctx, log):
     # ensure node is up with ipmi
-    from teuthology.orchestra import remote
 
     (target,) = ctx.config['targets'].keys()
     host = target.split('@')[-1]
@@ -404,7 +396,7 @@ def nuke_helper(ctx, log):
     log.debug('shortname: %s' % shortname)
     log.debug('{ctx}'.format(ctx=ctx))
     if not ctx.noipmi and 'ipmi_user' in ctx.teuthology_config:
-        console = remote.getRemoteConsole(
+        console = orchestra.remote.getRemoteConsole(
             name=host,
             ipmiuser=ctx.teuthology_config['ipmi_user'],
             ipmipass=ctx.teuthology_config['ipmi_password'],
@@ -425,7 +417,6 @@ def nuke_helper(ctx, log):
         else:
             log.info('console ready on %s' % cname)
 
-    from teuthology.task.internal import check_lock, connect
     if ctx.check_locks:
         check_lock(ctx, None)
     connect(ctx, None)

@@ -348,7 +348,11 @@ def keyscan_check(ctx, machines):
             _, machines[i] = machine.rsplit('@')
     args = ['ssh-keyscan']
     args.extend(machines)
-    out = subprocess.check_output(args)
+    p = subprocess.Popen(
+        args=args,
+        stdout=subprocess.PIPE,
+    )
+    out, err = p.communicate()
     return (out, current_locks)
 
 
