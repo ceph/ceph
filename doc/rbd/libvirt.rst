@@ -40,46 +40,11 @@ The most common ``libvirt`` use case involves providing Ceph block devices to
 cloud solutions like OpenStack or CloudStack. The cloud solution uses
 ``libvirt`` to  interact with QEMU/KVM, and QEMU/KVM interacts with Ceph block
 devices via  ``librbd``. See `Block Devices and OpenStack`_ and `Block Devices
-and CloudStack`_ for details.
+and CloudStack`_ for details. See `Installation`_ for installation details.
 
 You can also use Ceph block devices with ``libvirt``, ``virsh`` and the
 ``libvirt`` API. See `libvirt Virtualization API`_ for details.
 
-Prerequisites
-=============
-
-- `Install`_ and `configure`_ a Ceph cluster
-- `Install and configure`_ QEMU/KVM
-
-
-Installing ``libvirt`` on Ubuntu 12.04 Precise
-==============================================
-
-``libvirt`` packages are incorporated into the Ubuntu 12.04 precise 
-distribution. To install ``libvirt`` on precise, execute the following:: 
-
-	sudo apt-get update && sudo apt-get install libvirt-bin
-
-
-Installing ``libvirt`` on Earlier Versions of Ubuntu
-====================================================
-
-For Ubuntu distributions 11.10 oneiric and earlier, you must build  ``libvirt``
-from source. Clone the ``libvirt`` repository, and use `AutoGen`_ to generate
-the build. Then, execute ``make`` and ``make install`` to complete the
-installation. For example::
-
-	git clone git://libvirt.org/libvirt.git
-	cd libvirt
-	./autogen.sh
-	make
-	sudo make install 
-
-See `libvirt Installation`_ for details.
-
-
-Using Ceph with Virtual Machines
-================================
 
 To create VMs that use Ceph block devices, use the procedures in the following
 sections. In the exemplary embodiment, we've used ``libvirt-pool`` for the pool
@@ -89,7 +54,7 @@ when executing commands in the subsequent procedures.
 
 
 Configuring Ceph
-----------------
+================
 
 To configure Ceph for use with ``libvirt``, perform the following steps:
 
@@ -132,7 +97,7 @@ To configure Ceph for use with ``libvirt``, perform the following steps:
 
 
 Preparing the VM Manager
-------------------------
+========================
 
 You may use ``libvirt`` without a VM manager, but you may find it simpler to
 create your first domain with ``virt-manager``. 
@@ -150,7 +115,7 @@ create your first domain with ``virt-manager``.
 
 
 Creating a VM
--------------
+=============
 
 To create a VM with ``virt-manager``, perform the following steps:
 
@@ -182,7 +147,7 @@ To create a VM with ``virt-manager``, perform the following steps:
 
 
 Configuring the VM
-------------------
+==================
 
 When configuring the VM for use with Ceph, it is important  to use ``virsh``
 where appropriate. Additionally, ``virsh`` commands often require root
@@ -290,7 +255,7 @@ commands, refer to `Virsh Command Reference`_.
 
 
 Summary
--------
+=======
 
 Once you have configured the VM for use with Ceph, you can start the VM.
 To verify that the VM and Ceph are communicating, you may perform the
@@ -320,13 +285,8 @@ If everything looks okay, you may begin using the Ceph block device
 within your VM.
 
 
-
-.. _AutoGen: http://www.gnu.org/software/autogen/
-.. _libvirt Installation: http://www.libvirt.org/compiling.html
+.. _Installation: ../../install
 .. _libvirt Virtualization API: http://www.libvirt.org
-.. _Install: ../../install
-.. _configure: ../../rados/configuration
-.. _Install and configure: ../qemu-rbd
 .. _Block Devices and OpenStack: ../rbd-openstack
 .. _Block Devices and CloudStack: ../rbd-cloudstack
 .. _Create a pool: ../../rados/operations/pools#create-a-pool
