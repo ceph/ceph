@@ -1320,6 +1320,24 @@ bool Objecter::is_pg_changed(vector<int>& o, vector<int>& n, bool any_change)
   return false;      // same primary (tho replicas may have changed)
 }
 
+int64_t Objecter::get_object_hash_position(int64_t pool, const string& key,
+					   const string& ns)
+{
+  const pg_pool_t *p = osdmap->get_pg_pool(pool);
+  if (!p)
+    return -ENOENT;
+  return p->hash_key(key, ns);
+}
+
+int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
+					      const string& ns)
+{
+  const pg_pool_t *p = osdmap->get_pg_pool(pool);
+  if (!p)
+    return -ENOENT;
+  return p->raw_hash_to_pg(p->hash_key(key, ns));
+}
+
 int Objecter::recalc_op_target(Op *op)
 {
   bool is_read = op->flags & CEPH_OSD_FLAG_READ;
