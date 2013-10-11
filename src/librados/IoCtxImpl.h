@@ -91,6 +91,9 @@ struct librados::IoCtxImpl {
     return poolid;
   }
 
+  uint32_t get_object_hash_position(const std::string& oid);
+  uint32_t get_object_pg_hash_position(const std::string& oid);
+
   ::ObjectOperation *prepare_assert_ops(::ObjectOperation *op);
 
   // snaps
