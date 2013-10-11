@@ -632,7 +632,7 @@ void MDCache::populate_mydir()
       CDir *dir = strays[i]->get_dirfrag(fg);
       if (!dir)
 	dir = strays[i]->get_or_open_dirfrag(this, fg);
-      if (!dir->is_complete()) {
+      if (dir->get_version() == 0) {
 	dir->fetch(new C_MDS_RetryOpenRoot(this));
 	return;
       }
@@ -653,6 +653,8 @@ void MDCache::populate_mydir()
   assert(!open);    
   open = true;
   mds->queue_waiters(waiting_for_open);
+
+  scan_stray_dir();
 }
 
 void MDCache::open_foreign_mdsdir(inodeno_t ino, Context *fin)
@@ -9135,19 +9137,34 @@ void MDCache::_snaprealm_create_finish(MDRequest *mdr, Mutation *mut, CInode *in
 // -------------------------------------------------------------------------------
 // STRAYS
 
-void MDCache::scan_stray_dir()
+struct C_MDC_RetryScanStray : public Context {
+  MDCache *cache;
+  dirfrag_t next;
+  C_MDC_RetryScanStray(MDCache *c,  dirfrag_t n) : cache(c), next(n) { }
+  void finish(int r) {
+    cache->scan_stray_dir(next);
+  }
+};
+
+void MDCache::scan_stray_dir(dirfrag_t next)
 {
-  dout(10) << "scan_stray_dir" << dendl;
-  
+  dout(10) << "scan_stray_dir " << next << dendl;
+
   list<CDir*> ls;
   for (int i = 0; i < NUM_STRAY; ++i) {
-    if (strays[i]) {
-      strays[i]->get_dirfrags(ls);
-    }
+    if (strays[i]->ino() < next.ino)
+      continue;
+    strays[i]->get_dirfrags(ls);
   }
 
   for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
     CDir *dir = *p;
+    if (dir->dirfrag() < next)
+      continue;
+    if (!dir->is_complete()) {
+      dir->fetch(new C_MDC_RetryScanStray(this, dir->dirfrag()));
+      return;
+    }
     for (CDir::map_t::iterator q = dir->items.begin(); q != dir->items.end(); ++q) {
       CDentry *dn = q->second;
       CDentry::linkage_t *dnl = dn->get_projected_linkage();
