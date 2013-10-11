@@ -14,6 +14,9 @@ logging.basicConfig(level=logging.INFO)
 
 
 def main(args):
+    if args.verbose:
+        log.setLevel(logging.DEBUG)
+
     archive_base = os.path.abspath(os.path.expanduser(args.archive))
     reporter = ResultsReporter(archive_base, base_uri=args.server,
                                save=args.save, refresh=args.refresh)
