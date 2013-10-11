@@ -132,7 +132,8 @@ class ResultsSerializer(object):
 class ResultsReporter(object):
     last_run_file = 'last_successful_run'
 
-    def __init__(self, archive_base, base_uri=None, save=False, refresh=False):
+    def __init__(self, archive_base, base_uri=None, save=False, refresh=False,
+                 timeout=20):
         self.archive_base = archive_base
         self.base_uri = base_uri or config.results_server
         if self.base_uri:
@@ -140,6 +141,7 @@ class ResultsReporter(object):
         self.serializer = ResultsSerializer(archive_base)
         self.save_last_run = save
         self.refresh = refresh
+        self.timeout = timeout
 
     def _do_request(self, uri, method, json_):
         """
@@ -305,7 +307,7 @@ class ResultsReporter(object):
     def http(self):
         if hasattr(self, '__http'):
             return self.__http
-        self.__http = httplib2.Http()
+        self.__http = httplib2.Http(timeout=self.timeout)
         return self.__http
 
 
