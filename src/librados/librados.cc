@@ -1333,6 +1333,16 @@ int64_t librados::IoCtx::get_id()
   return io_ctx_impl->get_id();
 }
 
+uint32_t librados::IoCtx::get_object_hash_position(const std::string& oid)
+{
+  return io_ctx_impl->get_object_hash_position(oid);
+}
+
+uint32_t librados::IoCtx::get_object_pg_hash_position(const std::string& oid)
+{
+  return io_ctx_impl->get_object_pg_hash_position(oid);
+}
+
 librados::config_t librados::IoCtx::cct()
 {
   return (config_t)io_ctx_impl->client->cct;
