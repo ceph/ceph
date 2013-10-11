@@ -655,6 +655,7 @@ void pool_snap_info_t::generate_test_instances(list<pool_snap_info_t*>& o)
 void pg_pool_t::dump(Formatter *f) const
 {
   f->dump_unsigned("flags", get_flags());
+  f->dump_string("flags_names", get_flags_string());
   f->dump_int("type", get_type());
   f->dump_int("size", get_size());
   f->dump_int("min_size", get_min_size());
@@ -1054,7 +1055,7 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
       << " last_change " << p.get_last_change()
       << " owner " << p.get_auid();
   if (p.flags)
-    out << " flags " << p.flags;
+    out << " flags " << p.get_flags_string();
   if (p.crash_replay_interval)
     out << " crash_replay_interval " << p.crash_replay_interval;
   if (p.quota_max_bytes)
