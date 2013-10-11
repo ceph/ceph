@@ -7,6 +7,7 @@ development release packages (for the latest features), or development
 testing packages (for development and QA only).  Do not add multiple
 package sources at the same time.
 
+
 Install Release Key
 ===================
 
@@ -139,142 +140,54 @@ You can download the RPMs directly from::
 
 
 
+Adding Ceph to YUM
+==================
+
+You may also add Ceph to the ``/etc/yum.repos.d`` directory. Create a
+``ceph.repo`` file. In the example below, replace ``{ceph-stable}`` with 
+a stable release of Ceph (e.g., ``cuttlefish``, ``dumpling``, etc.) and
+``{distro}`` with your Linux distribution (e.g., ``el6``, ``rhel6``, etc.). ::
+
+	[ceph]
+	name=Ceph packages for $basearch
+	baseurl=http://ceph.com/rpm-{ceph-stable}/{distro}/$basearch
+	enabled=1
+	gpgcheck=1
+	type=rpm-md
+	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+
+	[ceph-noarch]
+	name=Ceph noarch packages
+	baseurl=http://ceph.com/rpm-{ceph-stable}/{distro}/noarch
+	enabled=1
+	gpgcheck=1
+	type=rpm-md
+	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+
+	[ceph-source]
+	name=Ceph source packages
+	baseurl=http://ceph.com/rpm-{ceph-stable}/{distro}/SRPMS
+	enabled=0
+	gpgcheck=1
+	type=rpm-md
+	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+
+
 Installing Ceph Deploy
 ======================
 
-Once you have added either release or development packages to ``yum``, you
-can install ``ceph-deploy``. ::
+Once you have added either release or development packages, or added a
+``ceph.repo`` file to ``/etc/yum.repos.d``, you can install ``ceph-deploy``. ::
 
 	sudo yum install ceph-deploy python-pushy
-
 
 
 Installing Ceph Packages
 ========================
 
-Once you have added either release or development packages to ``yum``, you
-can install Ceph packages. You can also use ``ceph-deploy`` to install Ceph
-packages. ::
+Once you have added either release or development packages, or added a
+``ceph.repo`` file to ``/etc/yum.repos.d``, you can install Ceph packages. :: 
 
 	sudo yum install ceph
 
-
-
-Installing Ceph Object Storage
-==============================
-
-:term:`Ceph Object Storage` runs on Apache and FastCGI in conjunction with the
-:term:`Ceph Storage Cluster`. 
-
-#. Install Apache and FastCGI. ::
-
-	rpm -ivh fcgi-2.4.0-10.el6.x86_64.rpm 
- 	rpm -ivh mod_fastcgi-2.4.6-2.el6.rf.x86_64.rpm
-
-
-#. Install the Ceph Object Storage daemon. :: 
-
-	yum install ceph-radosgw
-
-
-#. Add the following lines to your Ceph configuration file.
-
-.. code-block:: ini
-
-  [client.radosgw.gateway]
-        host = {fqdn}
-        keyring = /etc/ceph/keyring.radosgw.gateway
-        rgw socket path = /tmp/radosgw.sock
-        log file = /var/log/ceph/radosgw.log
-        rgw print continue = false
-        
-.. note:: Replace ``{fqdn}`` with the output from ``hostname``. This is 
-   important. Debian systems use the simple hostname, but on CentOS 6/RHEL 6
-   you must use the fully qualified domain name.
-   
-#. Create a data directory. :: 
-
-	mkdir -p /var/lib/ceph/radosgw/ceph-radosgw.gateway
-
-
-#. Change ``httpd ServerName`` in ``/etc/httpd/conf/httpd.conf``. ::
-
-	ServerName {FQDN}
-	
-	
-#. Create an Apache httpd virtual host in ``/etc/httpd/conf.d/rgw.conf``. ::
-
-	FastCgiExternalServer /var/www/s3gw.fcgi -socket /tmp/radosgw.sock
-	<VirtualHost *:80>
-		ServerName <FQDN of the host>
-		ServerAdmin root@localhost
-		DocumentRoot /var/www
-		RewriteEngine On
-		RewriteRule ^/([a-zA-Z0-9-_.]*)([/]?.*) /s3gw.fcgi?page=$1&params=$2&%{QUERY_STRING} [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
-		<IfModule mod_fastcgi.c>
-			<Directory /var/www>
-				Options +ExecCGI
-				AllowOverride All
-				SetHandler fastcgi-script
-				Order allow,deny
-				Allow from all
-				AuthBasicAuthoritative Off
-			</Directory>
-		</IfModule>
-		AllowEncodedSlashes On
-		ErrorLog /var/log/httpd/error.log
-		CustomLog /var/log/httpd/access.log combined
-		ServerSignature Off
-	</VirtualHost>
-
-#. Turn off ``fastcgiwrapper`` in ``/etc/httpd/conf.d/fastcgi.conf`` by
-   commenting out the following line:: 
-
-	#FastCgiWrapper On
-
-
-#. Add a ``fastcgi`` script with the following path ``/var/www/s3gw.fcgi``. ::
-
-	#!/bin/sh 
-	exec /usr/bin/radosgw -c /etc/ceph/ceph.conf -n client.radosgw.gateway
-	
-	
-#. Make ``s3gw.fcgi`` executable::
-	
-	chmod +x /var/www/s3gw.fcgi
-
-
-#. Create a user key. ::
-
-	ceph-authtool -C -n client.radosgw.gateway --gen-key /etc/ceph/keyring.radosgw.gateway
-	ceph-authtool -n client.radosgw.gateway --cap mon 'allow rw' --cap osd 'allow rwx' /etc/ceph/keyring.radosgw.gateway
-	ceph auth add client.radosgw.gateway --in-file=/etc/ceph/keyring.radosgw.gateway
-	
-	
-#. Please make sure ``/etc/ceph/keyring.radosgw.gateway`` file and 
-   ``/var/log/ceph/radosgw.log`` are accessible by the ``apache`` user. ::
-
-	sudo chown apache:apache /etc/ceph/keyring.radosgw.gateway 
-	sudo chown apache:apache /var/log/ceph/radosgw.log
-
-.. note:: This is important. The user is ``root`` for Debian.
-
-
-#. Create ``.rgw.buckets`` and add it to the Ceph Object Storage daemon. ::
-
-     rados mkpool .rgw.buckets
-     radosgw-admin pool add --pool .rgw.buckets	
-
-#. Configure Apache and the Ceph Object Storage daemon to start on boot. :: 
-
-	chkconfig httpd on
-	chkconfig ceph-radosgw on
-
-#. Start the services. ::
-
-	/etc/init.d/httpd start
-	/etc/init.d/ceph-radosgw start
-	
-See `Ceph Object Storage`_ for additional details.
-
-.. _Ceph Object Storage: ../../radosgw
+.. note:: You can also use ``ceph-deploy`` to install Ceph packages.
