@@ -422,7 +422,6 @@ namespace librados
      * @param prval [out] place error code in prval upon completion
      */
     void is_dirty(bool *isdirty, int *prval);
-
   };
 
   /* IoCtx : This is a context in which we can perform I/O.
@@ -597,6 +596,27 @@ namespace librados
     ObjectIterator objects_begin(uint32_t start_hash_position);
     /// Iterator indicating the end of a pool
     const ObjectIterator& objects_end() const;
+
+    /**
+     * List available hit set objects
+     *
+     * @param uint32_t [in] hash position to query
+     * @param c [in] completion
+     * @param pls [out] list of available intervals
+     */
+    int hit_set_list(uint32_t hash, AioCompletion *c,
+		     std::list< std::pair<time_t, time_t> > *pls);
+
+    /**
+     * Retrieve hit set for a given hash, and time
+     *
+     * @param uint32_t [in] hash position
+     * @param c [in] completion
+     * @param stamp [in] time interval that falls within the hit set's interval
+     * @param pbl [out] buffer to store the result in
+     */
+    int hit_set_get(uint32_t hash, AioCompletion *c, time_t stamp,
+		    bufferlist *pbl);
 
     uint64_t get_last_version();
 

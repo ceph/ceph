@@ -808,6 +808,37 @@ int librados::IoCtxImpl::aio_stat(const object_t& oid, AioCompletionImpl *c,
   return 0;
 }
 
+int librados::IoCtxImpl::hit_set_list(uint32_t hash, AioCompletionImpl *c,
+			      std::list< std::pair<time_t, time_t> > *pls)
+{
+  Context *onack = new C_aio_Ack(c);
+  c->is_read = true;
+  c->io = this;
+
+  Mutex::Locker l(*lock);
+  ::ObjectOperation rd;
+  rd.hit_set_ls(pls, NULL);
+  object_locator_t oloc(poolid);
+  objecter->pg_read(hash, oloc, rd, NULL, 0, onack, NULL);
+  return 0;
+}
+
+int librados::IoCtxImpl::hit_set_get(uint32_t hash, AioCompletionImpl *c,
+				     time_t stamp,
+				     bufferlist *pbl)
+{
+  Context *onack = new C_aio_Ack(c);
+  c->is_read = true;
+  c->io = this;
+
+  Mutex::Locker l(*lock);
+  ::ObjectOperation rd;
+  rd.hit_set_get(utime_t(stamp, 0), pbl, 0);
+  object_locator_t oloc(poolid);
+  objecter->pg_read(hash, oloc, rd, NULL, 0, onack, NULL);
+  return 0;
+}
+
 int librados::IoCtxImpl::remove(const object_t& oid)
 {
   ::ObjectOperation op;
