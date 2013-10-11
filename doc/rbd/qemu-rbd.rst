@@ -27,32 +27,11 @@ image each time it spins up a new virtual machine.
 
 Ceph Block Devices can integrate with the QEMU virtual machine. For details on
 QEMU, see  `QEMU Open Source Processor Emulator`_. For QEMU documentation, see
-`QEMU Manual`_. 
+`QEMU Manual`_. For installation details, see `Installation`_.
 
 .. important:: To use Ceph Block Devices with QEMU, you must have access to a 
    running Ceph cluster.
 
-
-Installing QEMU (12.04 Precise and later)
-=========================================
-
-QEMU packages are incorporated into Ubuntu 12.04 Precise Pangolin and later
-versions. To  install QEMU, execute the following:: 
-
-	sudo apt-get install qemu
-
-Installing QEMU (11.10 Oneric and earlier)
-==========================================
-
-For Ubuntu distributions 11.10 Oneiric and earlier, you must install 
-the 0.15 version of QEMU or later. To build QEMU from source, use the
-following procedure::
-
-	cd {your-development-directory}
-	git clone git://git.qemu.org/qemu.git
-	cd qemu
-	./configure --enable-rbd
-	make; make install
 
 Creating Images with QEMU
 =========================
@@ -200,3 +179,4 @@ QEMU command line settings override the Ceph configuration file settings.
 .. _QEMU Manual: http://wiki.qemu.org/Manual
 .. _RBD Cache: ../rbd-config-ref/
 .. _Snapshots: ../rbd-snapshot/
+.. _Installation: ../../install
