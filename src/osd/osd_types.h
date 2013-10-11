@@ -911,6 +911,12 @@ public:
 
   SnapContext get_snap_context() const;
 
+  /// hash a object name+namespace key to a hash position
+  uint32_t hash_key(const string& key, const string& ns) const;
+
+  /// round a hash position down to a pg num
+  uint32_t raw_hash_to_pg(uint32_t v) const;
+
   /*
    * map a raw pg (with full precision ps) into an actual pg, for storage
    */
