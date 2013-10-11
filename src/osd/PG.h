@@ -1838,6 +1838,7 @@ public:
   virtual bool same_for_rep_modify_since(epoch_t e) = 0;
 
   virtual void on_role_change() = 0;
+  virtual void on_pool_change() = 0;
   virtual void on_change(ObjectStore::Transaction *t) = 0;
   virtual void on_activate() = 0;
   virtual void on_flushed() = 0;
