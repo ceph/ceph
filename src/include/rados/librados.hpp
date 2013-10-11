@@ -744,7 +744,12 @@ namespace librados
     int cluster_stat(cluster_stat_t& result);
     int cluster_fsid(std::string *fsid);
 
-    /* pool aio */
+    /*
+     * pool aio
+     *
+     * It is up to the caller to release the completion handler, even if the pool_create_async()
+     * and/or pool_delete_async() fails and does not send the async request
+     */
     static PoolAsyncCompletion *pool_async_create_completion();
 
    // -- aio --
