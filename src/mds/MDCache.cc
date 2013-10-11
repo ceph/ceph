@@ -5787,21 +5787,15 @@ void MDCache::do_file_recover()
       dout(10) << "do_file_recover skipping " << in->inode.size
 	       << " " << *in << dendl;
       in->state_clear(CInode::STATE_RECOVERING);
+      mds->locker->eval(in, CEPH_LOCK_IFILE);
       in->auth_unpin(this);
-      if (in->filelock.is_stable()) {
-	bool need_issue = false;
-	mds->locker->eval(&in->filelock, &need_issue);
-	if (in->is_head() && need_issue)
-	  mds->locker->issue_caps(in);
-      } else
-	mds->locker->eval_gather(&in->filelock);
     }
   }
 }
 
 void MDCache::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
 {
-  dout(10) << "_recovered r=" << r << " size=" << in->inode.size << " mtime=" << in->inode.mtime
+  dout(10) << "_recovered r=" << r << " size=" << size << " mtime=" << mtime
 	   << " for " << *in << dendl;
 
   if (r != 0) {
@@ -5823,6 +5817,7 @@ void MDCache::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
   } else {
     // journal
     mds->locker->check_inode_max_size(in, true, true, size, false, 0, mtime);
+    mds->locker->eval(in, CEPH_LOCK_IFILE);
     in->auth_unpin(this);
   }
 
