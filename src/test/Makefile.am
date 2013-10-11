@@ -769,7 +769,8 @@ bin_DEBUGPROGRAMS += ceph_test_rados_api_misc
 
 ceph_test_rados_api_tier_SOURCES = \
 	test/librados/tier.cc \
-	test/librados/test.cc
+	test/librados/test.cc \
+	osd/HitSet.cc
 ceph_test_rados_api_tier_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_rados_api_tier_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_tier
