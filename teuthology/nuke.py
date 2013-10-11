@@ -9,12 +9,12 @@ from . import orchestra
 from .orchestra import run
 from .lock import list_locks
 from .lock import unlock_one
+from .misc import config_file
 from .misc import get_testdir
 from .misc import get_user
 from .misc import read_config
 from .misc import reconnect
 from .parallel import parallel
-from .run import config_file
 from .task import install as install_task
 from .task.internal import check_lock
 from .task.internal import connect

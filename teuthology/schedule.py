@@ -1,7 +1,8 @@
 import yaml
 
-from teuthology.misc import read_config, get_user
 import teuthology.queue
+from teuthology.misc import get_user
+from teuthology.misc import read_config
 
 
 def main(ctx):

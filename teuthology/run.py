@@ -1,4 +1,3 @@
-import argparse
 import os
 import yaml
 import StringIO
@@ -8,34 +7,12 @@ import logging
 from traceback import format_tb
 
 from . import report
-from .misc import deep_merge
 from .misc import get_distro
 from .misc import get_user
 from .misc import read_config
 from .nuke import nuke
 from .run_tasks import run_tasks
-from .suite import email_results
-
-
-
-def config_file(string):
-    config = {}
-    try:
-        with file(string) as f:
-            g = yaml.safe_load_all(f)
-            for new in g:
-                config.update(new)
-    except IOError as e:
-        raise argparse.ArgumentTypeError(str(e))
-    return config
-
-
-class MergeConfig(argparse.Action):
-
-    def __call__(self, parser, namespace, values, option_string=None):
-        config = getattr(namespace, self.dest)
-        for new in values:
-            deep_merge(config, new)
+from .results import email_results
 
 
 def set_up_logging(ctx):

@@ -1,5 +1,6 @@
 from cStringIO import StringIO
 
+import argparse
 import os
 import logging
 import configobj
@@ -24,6 +25,25 @@ stamp = datetime.datetime.now().strftime("%y%m%d%H%M")
 is_vm = lambda x: x.startswith('vpm') or x.startswith('ubuntu@vpm')
 
 is_arm = lambda x: x.startswith('tala') or x.startswith('ubuntu@tala') or x.startswith('saya') or x.startswith('ubuntu@saya')
+
+
+def config_file(string):
+    config_dict = {}
+    try:
+        with file(string) as f:
+            g = yaml.safe_load_all(f)
+            for new in g:
+                config_dict.update(new)
+    except IOError as e:
+        raise argparse.ArgumentTypeError(str(e))
+    return config_dict
+
+
+class MergeConfig(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        config_dict = getattr(namespace, self.dest)
+        for new in values:
+            deep_merge(config_dict, new)
 
 
 def get_testdir(ctx):
