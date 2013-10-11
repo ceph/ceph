@@ -6,16 +6,16 @@ import httplib2
 import urllib
 import logging
 
+import teuthology
 from teuthology.config import config
 
 
 log = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
 
 def main(args):
     if args.verbose:
-        log.setLevel(logging.DEBUG)
+        teuthology.log.setLevel(logging.DEBUG)
 
     archive_base = os.path.abspath(os.path.expanduser(args.archive))
     reporter = ResultsReporter(archive_base, base_uri=args.server,

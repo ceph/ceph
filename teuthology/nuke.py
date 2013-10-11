@@ -5,6 +5,7 @@ import subprocess
 import time
 import yaml
 
+import teuthology
 from . import orchestra
 from .orchestra import run
 from .lock import list_locks
@@ -271,13 +272,8 @@ def synch_clocks(remotes, log):
 def main(ctx):
     log = logging.getLogger(__name__)
 
-    loglevel = logging.INFO
     if ctx.verbose:
-        loglevel = logging.DEBUG
-
-    logging.basicConfig(
-        level=loglevel,
-    )
+        teuthology.log.setLevel(logging.DEBUG)
 
     info = {}
     if ctx.archive:

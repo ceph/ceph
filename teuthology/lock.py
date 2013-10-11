@@ -10,16 +10,17 @@ import tempfile
 import os
 import time
 
+import teuthology
 from .config import config
 from . import lockstatus as ls
-from . import misc as teuthology
+from . import misc
 
 log = logging.getLogger(__name__)
 
 
 def lock_many(ctx, num, machinetype, user=None, description=None):
     if user is None:
-        user = teuthology.get_user()
+        user = misc.get_user()
     success, content, status = ls.send_request(
         'POST',
         config.lock_server,
@@ -53,7 +54,7 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
 
 def lock_one(ctx, name, user=None, description=None):
     if user is None:
-        user = teuthology.get_user()
+        user = misc.get_user()
     success, _, _ = ls.send_request(
         'POST',
         config.lock_server + '/' + name,
@@ -67,7 +68,7 @@ def lock_one(ctx, name, user=None, description=None):
 
 def unlock_one(ctx, name, user=None):
     if user is None:
-        user = teuthology.get_user()
+        user = misc.get_user()
     success, _, _ = ls.send_request(
         'DELETE',
         config.lock_server + '/' + name + '?' +
@@ -122,15 +123,10 @@ def canonicalize_hostname(s):
 
 
 def main(ctx):
-    loglevel = logging.INFO
     if ctx.verbose:
-        loglevel = logging.DEBUG
+        teuthology.log.setLevel(logging.DEBUG)
 
-    logging.basicConfig(
-        level=loglevel,
-    )
-
-    teuthology.read_config(ctx)
+    misc.read_config(ctx)
 
     ret = 0
     user = ctx.owner
@@ -206,7 +202,7 @@ def main(ctx):
                 statuses = [status for status in statuses
                             if status['type'] == ctx.machine_type]
             if not machines and ctx.owner is None and not ctx.all:
-                ctx.owner = teuthology.get_user()
+                ctx.owner = misc.get_user()
             if ctx.owner is not None:
                 statuses = [status for status in statuses
                             if status['locked_by'] == ctx.owner]
@@ -315,7 +311,7 @@ def updatekeys(ctx):
         level=loglevel,
     )
 
-    teuthology.read_config(ctx)
+    misc.read_config(ctx)
 
     machines = [canonicalize_hostname(m) for m in ctx.machines]
 
