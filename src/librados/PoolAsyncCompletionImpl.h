@@ -94,6 +94,9 @@ namespace librados {
     C_PoolAsync_Safe(PoolAsyncCompletionImpl *_c) : c(_c) {
       c->get();
     }
+    ~C_PoolAsync_Safe() {
+      c->put();
+    }
   
     void finish(int r) {
       c->lock.Lock();
@@ -109,7 +112,7 @@ namespace librados {
 	c->lock.Lock();
       }
 
-      c->put_unlock();
+      c->lock.Unlock();
     }
   };
 }
