@@ -24,7 +24,9 @@ public:
   class UpdateContext {
     public:
       virtual ~UpdateContext() {}
-      virtual bool update(V& v) = 0;
+
+      /* update should return true if object is updated */
+      virtual bool update(V *v) = 0;
   };
 
   bool _find(const K& key, V *value, UpdateContext *ctx);
@@ -35,6 +37,13 @@ public:
   virtual ~lru_map() {}
 
   bool find(const K& key, V& value);
+
+  /*
+   * find_and_update()
+   *
+   * - will return true if object is found
+   * - if ctx is set will return true if object is found and updated
+   */
   bool find_and_update(const K& key, V *value, UpdateContext *ctx);
   void add(const K& key, V& value);
   void erase(const K& key);
@@ -54,7 +63,7 @@ bool lru_map<K, V>::_find(const K& key, V *value, UpdateContext *ctx)
   bool r = true;
 
   if (ctx)
-    r = ctx->update(e.value);
+    r = ctx->update(&e.value);
 
   if (value)
     *value = e.value;
