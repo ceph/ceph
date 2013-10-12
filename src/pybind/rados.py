@@ -6,6 +6,7 @@ Copyright 2011, Hannu Valtonen <hannu.valtonen@ormod.com>
 from ctypes import CDLL, c_char_p, c_size_t, c_void_p, c_char, c_int, c_long, \
     c_ulong, create_string_buffer, byref, Structure, c_uint64, c_ubyte, \
     pointer, CFUNCTYPE
+from ctypes.util import find_library
 import ctypes
 import errno
 import threading
@@ -194,7 +195,10 @@ Rados object in state %s." % (self.state))
 
     def __init__(self, rados_id=None, name=None, clustername=None,
                  conf_defaults=None, conffile=None, conf=None, flags=0):
-        self.librados = CDLL('librados.so.2')
+        librados_path = find_library('rados')
+        if not librados_path:
+            raise EnvironmentError("Unable to find librados")
+        self.librados = CDLL(librados_path)
         self.cluster = c_void_p()
         self.rados_id = rados_id
         if rados_id is not None and not isinstance(rados_id, str):
