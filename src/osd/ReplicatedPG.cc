@@ -6700,6 +6700,23 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
   // op is cleaned up by oncommit/onapply when both are executed
 }
 
+void ReplicatedPG::op_applied_replica(
+  const eversion_t &applied_version)
+{
+  dout(10) << "op_applied_replica on version " << applied_version << dendl;
+  if (applied_version != eversion_t()) {
+    assert(info.last_update >= applied_version);
+    assert(last_update_applied < applied_version);
+    last_update_applied = applied_version;
+  }
+  if (scrubber.active_rep_scrub) {
+    if (last_update_applied == scrubber.active_rep_scrub->scrub_to) {
+      osd->rep_scrub_wq.queue(scrubber.active_rep_scrub);
+      scrubber.active_rep_scrub = 0;
+    }
+  }
+}
+
 void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
 {
   lock();
@@ -6718,17 +6735,7 @@ void ReplicatedPG::sub_op_modify_applied(RepModify *rm)
       osd->send_message_osd_cluster(rm->ackerosd, ack, get_osdmap()->get_epoch());
     }
     
-    if (m->version != eversion_t()) {
-      assert(info.last_update >= m->version);
-      assert(last_update_applied < m->version);
-      last_update_applied = m->version;
-    }
-    if (scrubber.active_rep_scrub) {
-      if (last_update_applied == scrubber.active_rep_scrub->scrub_to) {
-	osd->rep_scrub_wq.queue(scrubber.active_rep_scrub);
-	scrubber.active_rep_scrub = 0;
-      }
-    }
+    op_applied_replica(m->version);
   } else {
     dout(10) << "sub_op_modify_applied on " << rm << " op " << *rm->op->get_req()
 	     << " from epoch " << rm->epoch_started << " < last_peering_reset "
