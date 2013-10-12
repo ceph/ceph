@@ -1,3 +1,6 @@
+"""
+Handle parallel execution on remote hosts
+"""
 import logging
 
 from teuthology import misc as teuthology
@@ -10,10 +13,11 @@ from gevent import queue as queue
 from gevent import event as event
 
 def _init_barrier(barrier_queue, remote):
+    """current just queues a remote host""" 
     barrier_queue.put(remote)
 
 def _do_barrier(barrier, barrier_queue, remote):
-    # special case for barrier
+    """special case for barrier"""
     barrier_queue.get()
     if barrier_queue.empty():
         barrier.set()
@@ -29,6 +33,7 @@ def _do_barrier(barrier, barrier_queue, remote):
         barrier.wait()
 
 def _exec_host(barrier, barrier_queue, remote, sudo, testdir, ls):
+    """Execute command remotely"""
     log.info('Running commands on host %s', remote.name)
     args = [
         'TESTDIR={tdir}'.format(tdir=testdir),
@@ -55,6 +60,7 @@ def _exec_host(barrier, barrier_queue, remote, sudo, testdir, ls):
     tor.wait([r])
 
 def _generate_remotes(ctx, config):
+    """Return remote roles and the type of role specified in config"""
     if 'all' in config and len(config) == 1:
         ls = config['all']
         for remote in ctx.cluster.remotes.iterkeys():

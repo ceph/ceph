@@ -1,3 +1,6 @@
+"""
+Lost_unfound
+"""
 import logging
 import ceph_manager
 from teuthology import misc as teuthology
@@ -8,6 +11,8 @@ log = logging.getLogger(__name__)
 def task(ctx, config):
     """
     Test handling of lost objects.
+
+    A pretty rigid cluseter is brought up andtested by this task
     """
     if config is None:
         config = {}

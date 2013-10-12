@@ -1,3 +1,6 @@
+"""
+Parallel contextmanager test
+"""
 import contextlib
 import logging
 

@@ -1,3 +1,6 @@
+"""
+Qemu task
+"""
 from cStringIO import StringIO
 
 import contextlib
@@ -17,6 +20,9 @@ DEFAULT_MEM = 4096 # in megabytes
 
 @contextlib.contextmanager
 def create_dirs(ctx, config):
+    """
+    Handle directory creation and cleanup
+    """
     testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
         assert 'test' in client_config, 'You must specify a test to run'
@@ -42,6 +48,7 @@ def create_dirs(ctx, config):
 
 @contextlib.contextmanager
 def generate_iso(ctx, config):
+    """Execute system commands to generate iso"""
     log.info('generating iso...')
     testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
@@ -120,6 +127,7 @@ def generate_iso(ctx, config):
 
 @contextlib.contextmanager
 def download_image(ctx, config):
+    """Downland base image, remove image file when done"""
     log.info('downloading base image')
     testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
@@ -148,6 +156,7 @@ def download_image(ctx, config):
 
 @contextlib.contextmanager
 def run_qemu(ctx, config):
+    """Setup kvm environment and start qemu"""
     procs = []
     testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():

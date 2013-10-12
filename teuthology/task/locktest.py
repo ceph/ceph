@@ -1,3 +1,6 @@
+"""
+loctests
+"""
 import logging
 
 from ..orchestra import run
@@ -22,6 +25,9 @@ def task(ctx, config):
            [client.0, client.1]
 
     This task does not yield; there would be little point.
+
+    :param ctx: Context
+    :param config: Configuration
     """
 
     assert isinstance(config, list)

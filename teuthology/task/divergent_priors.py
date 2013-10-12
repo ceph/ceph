@@ -1,3 +1,6 @@
+"""
+Special case divergence test
+"""
 import logging
 import time
 

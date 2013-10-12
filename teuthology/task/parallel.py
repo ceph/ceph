@@ -1,3 +1,6 @@
+"""
+Task to group parallel running tasks
+"""
 import sys
 import logging
 
@@ -28,7 +31,7 @@ def task(ctx, config):
     That is, if the entry is not a dict, we will look it up in the top-level
     config.
 
-    Sequential task and Parallel tasks can be nested.
+    Sequential tasks and Parallel tasks can be nested.
     """
 
     log.info('starting parallel...')
@@ -40,6 +43,7 @@ def task(ctx, config):
             p.spawn(_run_spawned, ctx, confg, taskname)
 
 def _run_spawned(ctx,config,taskname):
+    """Run one of the tasks (this runs in parallel with others)"""
     mgr = {}
     try:
         log.info('In parallel, running task %s...' % taskname)

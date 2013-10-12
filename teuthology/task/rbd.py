@@ -1,3 +1,6 @@
+"""
+Rbd testing task
+"""
 import contextlib
 import logging
 import os
@@ -11,6 +14,9 @@ from teuthology.parallel import parallel
 log = logging.getLogger(__name__)
 
 def default_image_name(role):
+    """
+    Currently just append role to 'testimage.' string
+    """
     return 'testimage.{role}'.format(role=role)
 
 @contextlib.contextmanager
@@ -272,6 +278,7 @@ def mount(ctx, config):
         role_images = [(role, None) for role in config]
 
     def strip_client_prefix(role):
+        """Currently just removes 'client.' from start of role name"""
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         id_ = role[len(PREFIX):]
@@ -325,10 +332,12 @@ def mount(ctx, config):
                     ]
                 )
 
-# Determine the canonical path for a given path on the host
-# representing the given role.  A canonical path contains no
-# . or .. components, and includes no symbolic links.
 def canonical_path(ctx, role, path):
+    """
+    Determine the canonical path for a given path on the host
+    representing the given role.  A canonical path contains no
+    . or .. components, and includes no symbolic links.
+    """
     version_fp = StringIO()
     ctx.cluster.only(role).run(
         args=[ 'readlink', '-f', path ],
@@ -374,6 +383,9 @@ def run_xfstests(ctx, config):
     yield
 
 def run_xfstests_one_client(ctx, role, properties):
+    """
+    Spawned routine to handle xfs tests for a single client
+    """
     testdir = teuthology.get_testdir(ctx)
     try:
         count = properties.get('count')

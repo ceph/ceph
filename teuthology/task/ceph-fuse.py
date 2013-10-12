@@ -1,3 +1,6 @@
+"""
+Ceph FUSE client task
+"""
 import contextlib
 import logging
 import os
@@ -41,6 +44,8 @@ def task(ctx, config):
               valgrind: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
         - interactive:
 
+    :param ctx: Context
+    :param config: Configuration
     """
     log.info('Mounting ceph-fuse clients...')
     fuse_daemons = {}

@@ -1,3 +1,6 @@
+"""
+Cram tests
+"""
 import logging
 import os
 
@@ -34,6 +37,9 @@ def task(ctx, config):
         - cram:
             clients:
               all: [http://ceph.com/qa/test.t]
+
+    :param ctx: Context
+    :param config: Configuration
     """
     assert isinstance(config, dict)
     assert 'clients' in config and isinstance(config['clients'], dict), \
@@ -99,6 +105,12 @@ def task(ctx, config):
                 )
 
 def _run_tests(ctx, role):
+    """
+    For each role, check to make sure it's a client, then run the cram on that client
+
+    :param ctx: Context
+    :param role: Roles
+    """
     assert isinstance(role, basestring)
     PREFIX = 'client.'
     assert role.startswith(PREFIX)

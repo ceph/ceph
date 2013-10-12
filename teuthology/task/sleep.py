@@ -1,3 +1,6 @@
+"""
+Sleep task
+"""
 import logging
 import time
 
@@ -18,6 +21,8 @@ def task(ctx, config):
            duration: 10
        - interactive:
 
+    :param ctx: Context
+    :param config: Configuration
     """
     if not config:
         config = {}

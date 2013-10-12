@@ -1,3 +1,6 @@
+"""
+Filestore/filejournal handler
+"""
 import logging
 from ..orchestra import run
 import random
@@ -12,6 +15,9 @@ def task(ctx, config):
 
     Currently this is a kludge; we require the ceph task preceeds us just
     so that we get the tarball installed to run the test binary.
+
+    :param ctx: Context
+    :param config: Configuration
     """
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \

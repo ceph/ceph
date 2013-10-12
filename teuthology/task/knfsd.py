@@ -1,3 +1,6 @@
+"""
+Export/Unexport a ``nfs server`` client.
+"""
 import contextlib
 import logging
 import os
@@ -51,6 +54,8 @@ def task(ctx, config):
         ro,sync,wdelay,hide,nocrossmnt,secure,root_squash,no_all_squash,
         no_subtree_check,secure_locks,acl,anonuid=65534,anongid=65534
 
+    :param ctx: Context
+    :param config: Configuration
     """
     log.info('Exporting nfs server...')
 
@@ -114,7 +119,7 @@ def task(ctx, config):
             Prevent bogus clients from old runs from access our 
             export.  Specify all specify node addresses for this run.
             """
-            ips = [host for (host, port) in (remote.ssh.get_transport().getpeername() for (remote, roles) in ctx.cluster.remotes.items())]
+            ips = [host for (host, _) in (remote.ssh.get_transport().getpeername() for (remote, roles) in ctx.cluster.remotes.items())]
             for ip in ips:
                 args += [ '{ip}:{MNT}'.format(ip=ip, MNT=mnt) ]
 

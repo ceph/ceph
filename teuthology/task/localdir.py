@@ -1,3 +1,6 @@
+"""
+Localdir
+"""
 import contextlib
 import logging
 import os
@@ -24,6 +27,8 @@ def task(ctx, config):
         - localdir: [client.2]
         - interactive:
 
+    :param ctx: Context
+    :param config: Configuration
     """
     log.info('Creating local mnt dirs...')
 

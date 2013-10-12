@@ -1,3 +1,6 @@
+"""
+Run rados gateway agent in test mode
+"""
 import contextlib
 import logging
 import argparse

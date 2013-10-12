@@ -1,3 +1,6 @@
+"""
+Locking tests
+"""
 import logging
 import os
 
@@ -37,6 +40,9 @@ def task(ctx, config):
       
     In the past this test would have failed; there was a bug where waitlocks weren't
     cleaned up if the process failed. More involved scenarios are also possible.
+
+    :param ctx: Context
+    :param config: Configuration
     """
     log.info('Starting lockfile')
     try:
@@ -177,6 +183,9 @@ def task(ctx, config):
 # task
 
 def lock_one(op, ctx):
+    """
+    Perform the individual lock
+    """
     log.debug('spinning up locker with op={op_}'.format(op_=op))
     timeout = None
     proc = None

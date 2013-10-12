@@ -1,3 +1,6 @@
+"""
+Exececute custom commands
+"""
 import logging
 
 from teuthology import misc as teuthology
@@ -17,6 +20,8 @@ def task(ctx, config):
               - echo 'module ceph +p' > /sys/kernel/debug/dynamic_debug/control
         - interactive:
 
+    :param ctx: Context
+    :param config: Configuration
     """
     log.info('Executing custom commands...')
     assert isinstance(config, dict), "task exec got invalid config"

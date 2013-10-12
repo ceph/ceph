@@ -1,3 +1,6 @@
+"""
+Handle osdfailsafe configuration settings (nearfull ratio and full ratio)
+"""
 from cStringIO import StringIO
 import logging
 import time

@@ -1,3 +1,6 @@
+"""
+Drop into a python shell
+"""
 import code
 import readline
 import rlcompleter

@@ -1,3 +1,6 @@
+"""
+Mount/unmount a ``kernel`` client.
+"""
 import contextlib
 import logging
 import os
@@ -30,6 +33,9 @@ def task(ctx, config):
         - ceph-fuse: [client.0]
         - kclient: [client.1]
         - interactive:
+
+    :param ctx: Context
+    :param config: Configuration
     """
     log.info('Mounting kernel clients...')
     assert config is None or isinstance(config, list), \

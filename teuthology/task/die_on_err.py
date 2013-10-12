@@ -1,3 +1,6 @@
+"""
+Raise exceptions on osd coredumps or test err directories
+"""
 import contextlib
 import logging
 import time

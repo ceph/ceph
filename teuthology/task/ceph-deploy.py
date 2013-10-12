@@ -1,3 +1,6 @@
+"""
+Execute ceph-deploy as a task
+"""
 from cStringIO import StringIO
 
 import contextlib
@@ -82,6 +85,7 @@ def is_healthy(ctx, config):
         time.sleep(1)
 
 def get_nodes_using_roles(ctx, config, role):
+    """Extract the names of nodes that match a given role from a cluster"""
     newl = []
     for _remote, roles_for_host in ctx.cluster.remotes.iteritems():
         for id_ in teuthology.roles_of_type(roles_for_host, role):
@@ -95,6 +99,7 @@ def get_nodes_using_roles(ctx, config, role):
     return newl
 
 def get_dev_for_osd(ctx, config):
+    """Get a list of all osd device names."""
     osd_devs = []
     for remote, roles_for_host in ctx.cluster.remotes.iteritems():
         host = remote.name.split('@')[-1]
@@ -109,6 +114,7 @@ def get_dev_for_osd(ctx, config):
     return osd_devs
 
 def get_all_nodes(ctx, config):
+    """Return a string of node names separated by blanks"""
     nodelist = []
     for t, k in ctx.config['targets'].iteritems():
         host = t.split('@')[-1]
@@ -118,6 +124,7 @@ def get_all_nodes(ctx, config):
     return nodelist
 
 def execute_ceph_deploy(ctx, config, cmd):
+    """Remotely execute a ceph_deploy command"""
     testdir = teuthology.get_testdir(ctx)
     ceph_admin = teuthology.get_first_mon(ctx, config)
     exec_cmd = cmd
@@ -136,6 +143,7 @@ def execute_ceph_deploy(ctx, config, cmd):
 
 @contextlib.contextmanager
 def build_ceph_cluster(ctx, config):
+    """Build a ceph cluster"""
     log.info('Building ceph cluster using ceph-deploy...')
     testdir = teuthology.get_testdir(ctx)
     ceph_branch = None
@@ -178,12 +186,12 @@ def build_ceph_cluster(ctx, config):
     if config.get('conf') is not None:
         confp = config.get('conf')
         for section, keys in confp.iteritems():
-                lines = '[{section}]\n'.format(section=section)
+            lines = '[{section}]\n'.format(section=section)
+            teuthology.append_lines_to_file(remote, conf_path, lines, sudo=True)
+            for key, value in keys.iteritems():
+                log.info("[%s] %s = %s" % (section, key, value))
+                lines = '{key} = {value}\n'.format(key=key, value=value)
                 teuthology.append_lines_to_file(remote, conf_path, lines, sudo=True)
-                for key, value in keys.iteritems():
-                    log.info("[%s] %s = %s" % (section, key, value))
-                    lines = '{key} = {value}\n'.format(key=key, value=value)
-                    teuthology.append_lines_to_file(remote, conf_path, lines, sudo=True)
 
     estatus_install = execute_ceph_deploy(ctx, config, install_nodes)
     if estatus_install != 0:

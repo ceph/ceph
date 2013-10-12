@@ -1,3 +1,6 @@
+"""
+Rados modle-based integration tests
+"""
 import contextlib
 import logging
 import gevent
@@ -84,6 +87,7 @@ def task(ctx, config):
                 ])
 
     def thread():
+        """Thread spawned by gevent"""
         if not hasattr(ctx, 'manager'):
             first_mon = teuthology.get_first_mon(ctx, config)
             (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()

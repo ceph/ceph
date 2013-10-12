@@ -1,3 +1,6 @@
+"""
+Test Object locations going down
+"""
 import logging
 import ceph_manager
 from teuthology import misc as teuthology

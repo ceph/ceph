@@ -1,3 +1,6 @@
+"""
+Chef-solo task
+"""
 import logging
 
 from ..orchestra import run

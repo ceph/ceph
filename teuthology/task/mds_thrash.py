@@ -1,3 +1,6 @@
+"""
+Thrash mds by simulating failures
+"""
 import logging
 import contextlib
 import ceph_manager
@@ -100,13 +103,18 @@ class MDSThrasher:
     self.weight = weight
 
   def log(self, x):
+    """Write data to logger assigned to this MDThrasher""" 
     self.logger.info(x)
 
   def do_join(self):
+    """Thread finished"""
     self.stopping = True
     self.thread.get()
 
   def do_thrash(self):
+    """
+    Perform the random thrashing action
+    """
     self.log('starting mds_do_thrash for failure group: ' + ', '.join(['mds.{_id}'.format(_id=_f) for _f in self.failure_group]))
     while not self.stopping:
       delay = self.max_thrash_delay

@@ -1,3 +1,7 @@
+"""
+Parallel and sequential task tester.  Not used by any ceph tests, but used to
+unit test the parallel and sequential tasks
+"""
 import logging
 import contextlib
 import time

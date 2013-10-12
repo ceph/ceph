@@ -1,3 +1,6 @@
+"""
+Most ceph console logging
+"""
 import contextlib
 import logging
 

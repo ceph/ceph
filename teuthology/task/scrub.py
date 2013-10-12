@@ -1,3 +1,6 @@
+"""
+Scrub osds
+"""
 import contextlib
 import gevent
 import logging
@@ -59,7 +62,13 @@ def task(ctx, config):
         scrub_proc.do_join()
 
 class Scrubber:
+    """
+    Scrubbing is actually performed during initialzation
+    """
     def __init__(self, manager, config):
+        """
+        Spawn scrubbing thread upon completion.
+        """
         self.ceph_manager = manager
         self.ceph_manager.wait_for_clean()
 
@@ -72,6 +81,7 @@ class Scrubber:
 
         else:
             def tmp(x):
+                """Local display"""
                 print x
             self.log = tmp
 
@@ -82,10 +92,12 @@ class Scrubber:
         self.thread = gevent.spawn(self.do_scrub)
 
     def do_join(self):
+        """Scrubbing thread finished"""
         self.stopping = True
         self.thread.get()
 
     def do_scrub(self):
+        """Perform the scrub operation"""
         frequency = self.config.get("frequency", 30)
         deep = self.config.get("deep", 0)
 
