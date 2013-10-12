@@ -111,6 +111,9 @@
        const hobject_t &hoid,
        map<string, bufferptr> &attrs) = 0;
 
+     virtual void op_applied_replica(
+       const eversion_t &applied_version) = 0;
+
      virtual ~Listener() {}
    };
    Listener *parent;

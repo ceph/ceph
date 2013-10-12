@@ -323,6 +323,9 @@ public:
     return get_object_context(hoid, true, &attrs);
   }
 
+  void op_applied_replica(
+    const eversion_t &applied_version);
+
   /*
    * Capture all object state associated with an in-progress read or write.
    */
