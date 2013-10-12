@@ -823,7 +823,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
 
 bool Locker::eval(CInode *in, int mask, bool caps_imported)
 {
-  bool need_issue = false;
+  bool need_issue = caps_imported;
   list<Context*> finishers;
   
   dout(10) << "eval " << mask << " " << *in << dendl;
