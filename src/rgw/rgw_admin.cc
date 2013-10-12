@@ -160,7 +160,7 @@ void _usage()
   cerr << "\nQuota options:\n";
   cerr << "   --bucket                  specified bucket for quota command\n";
   cerr << "   --max-objects             specify max objects\n";
-  cerr << "   --max-size                specify max size\n";
+  cerr << "   --max-size                specify max size (in bytes)\n";
   cerr << "\n";
   generic_client_usage();
 }
