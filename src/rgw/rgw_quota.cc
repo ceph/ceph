@@ -164,11 +164,11 @@ class RGWBucketStatsAsyncTestSet : public lru_map<rgw_bucket, RGWQuotaBucketStat
   uint64_t removed_bytes;
 public:
   RGWBucketStatsAsyncTestSet() {}
-  bool update(RGWQuotaBucketStats& entry) {
-    if (entry.async_refresh_time.sec() == 0)
+  bool update(RGWQuotaBucketStats *entry) {
+    if (entry->async_refresh_time.sec() == 0)
       return false;
 
-    entry.async_refresh_time = utime_t(0, 0);
+    entry->async_refresh_time = utime_t(0, 0);
 
     return true;
   }
@@ -257,13 +257,13 @@ class RGWBucketStatsUpdate : public lru_map<rgw_bucket, RGWQuotaBucketStats>::Up
 public:
   RGWBucketStatsUpdate(int _objs_delta, uint64_t _added_bytes, uint64_t _removed_bytes) : 
                     objs_delta(_objs_delta), added_bytes(_added_bytes), removed_bytes(_removed_bytes) {}
-  bool update(RGWQuotaBucketStats& entry) {
+  bool update(RGWQuotaBucketStats *entry) {
     uint64_t rounded_kb_added = rgw_rounded_kb(added_bytes);
     uint64_t rounded_kb_removed = rgw_rounded_kb(removed_bytes);
 
-    entry.stats.num_kb_rounded += (rounded_kb_added - rounded_kb_removed);
-    entry.stats.num_kb += (added_bytes - removed_bytes) / 1024;
-    entry.stats.num_objects += objs_delta;
+    entry->stats.num_kb_rounded += (rounded_kb_added - rounded_kb_removed);
+    entry->stats.num_kb += (added_bytes - removed_bytes) / 1024;
+    entry->stats.num_objects += objs_delta;
 
     return true;
   }
