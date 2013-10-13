@@ -580,7 +580,6 @@ protected:
 	ctx->lock_to_release = OpContext::W_LOCK;
 	return true;
       } else {
-	assert(0 == "Currently there cannot be a read in flight here");
 	return false;
       }
     } else {
