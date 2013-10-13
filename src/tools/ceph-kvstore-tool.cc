@@ -39,7 +39,9 @@ class StoreTool
     db.reset(db_ptr);
   }
 
-  void list(const string &prefix, const bool do_crc) {
+  uint32_t traverse(const string &prefix,
+                    const bool do_crc,
+                    ostream *out) {
     KeyValueDB::WholeSpaceIterator iter = db->get_iterator();
 
     if (prefix.empty())
@@ -47,18 +49,36 @@ class StoreTool
     else
       iter->seek_to_first(prefix);
 
+    uint32_t crc = -1;
+
     while (iter->valid()) {
       pair<string,string> rk = iter->raw_key();
       if (!prefix.empty() && (rk.first != prefix))
-	break;
+        break;
 
-      std::cout << rk.first << ":" << rk.second;
+      if (out)
+        *out << rk.first << ":" << rk.second;
       if (do_crc) {
-        std::cout << " (" << iter->value().crc32c(0) << ")";
+        bufferlist bl;
+        bl.append(rk.first);
+        bl.append(rk.second);
+        bl.append(iter->value());
+
+        crc = bl.crc32c(crc);
+        if (out) {
+          *out << " (" << bl.crc32c(0) << ")";
+        }
       }
-      std::cout << std::endl;
+      if (out)
+        *out << std::endl;
       iter->next();
     }
+
+    return crc;
+  }
+
+  void list(const string &prefix, const bool do_crc) {
+    traverse(prefix, do_crc, &std::cout);
   }
 
   bool exists(const string &prefix) {
@@ -132,6 +152,7 @@ void usage(const char *pname)
     << "  crc <prefix> <key>\n"
     << "  get-size\n"
     << "  set <prefix> <key> [ver <N>|in <file>]\n"
+    << "  store-crc <path>\n"
     << std::endl;
 }
 
@@ -260,6 +281,9 @@ int main(int argc, const char *argv[])
                 << prefix << "," << key << ")" << std::endl;
       return 1;
     }
+  } else if (cmd == "store-crc") {
+    uint32_t crc = st.traverse(string(), true, NULL);
+    std::cout << "store at '" << path << "' crc " << crc << std::endl;
 
   } else {
     std::cerr << "Unrecognized command: " << cmd << std::endl;
