@@ -856,11 +856,6 @@ ceph_test_keyvaluedb_iterators_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_keyvaluedb_iterators_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_keyvaluedb_iterators
 
-ceph_test_store_tool_SOURCES = test/ObjectMap/test_store_tool/test_store_tool.cc
-ceph_test_store_tool_LDADD = $(LIBOS) $(CEPH_GLOBAL)
-ceph_test_store_tool_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-bin_DEBUGPROGRAMS += ceph_test_store_tool
-
 ceph_test_cfuse_cache_invalidate_SOURCES = test/test_cfuse_cache_invalidate.cc
 bin_DEBUGPROGRAMS += ceph_test_cfuse_cache_invalidate
 
