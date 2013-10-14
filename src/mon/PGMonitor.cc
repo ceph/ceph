@@ -141,6 +141,31 @@ void PGMonitor::tick()
     }
   }
 
+  /* If we have deltas for pools, run through pgmap's 'per_pool_sum_delta' and
+   * clear any deltas that are old enough.
+   *
+   * Note that 'per_pool_sum_delta' keeps a pool id as key, and a pair containing
+   * the calc'ed stats delta and an absolute timestamp from when those stats were
+   * obtained -- the timestamp IS NOT a delta itself.
+   */
+  if (!pg_map.per_pool_sum_deltas.empty()) {
+    hash_map<uint64_t,pair<pool_stat_t,utime_t> >::iterator it;
+    for (it = pg_map.per_pool_sum_delta.begin();
+         it != pg_map.per_pool_sum_delta.end(); ) {
+      utime_t age = ceph_clock_now(g_ceph_context) - it->second.second;
+      if (age > 2*g_conf->mon_delta_reset_interval) {
+        dout(10) << " clearing pg_map delta for pool " << it->first
+                 << " (" << age << " > " << g_conf->mon_delta_reset_interval
+                 << " seconds old)" << dendl;
+        pg_map.per_pool_sum_deltas.erase(it->first);
+        pg_map.per_pool_sum_deltas_stamps.erase(it->first);
+        pg_map.per_pool_sum_delta.erase((it++)->first);
+      } else {
+        ++it;
+      }
+    }
+  }
+
   dout(10) << pg_map << dendl;
 }
 
@@ -401,6 +426,7 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
   }
 
   pool_stat_t pg_sum_old = pg_map.pg_sum;
+  hash_map<uint64_t, pool_stat_t> pg_pool_sum_old;
 
   // pgs
   bufferlist::iterator p = dirty_pgs.begin();
@@ -410,6 +436,10 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
     dout(20) << " refreshing pg " << pgid << dendl;
     bufferlist bl;
     int r = mon->store->get(pgmap_pg_prefix, stringify(pgid), bl);
+
+    if (pg_pool_sum_old.count(pgid.pool()) == 0)
+      pg_pool_sum_old[pgid.pool()] = pg_map.pg_pool_sum[pgid.pool()];
+
     if (r >= 0) {
       pg_map.update_pg(pgid, bl);
     } else {
@@ -432,7 +462,8 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
     }
   }
 
-  pg_map.update_delta(g_ceph_context, inc_stamp, pg_sum_old);
+  pg_map.update_global_delta(g_ceph_context, inc_stamp, pg_sum_old);
+  pg_map.update_pool_deltas(g_ceph_context, inc_stamp, pg_pool_sum_old);
 
   // ok, we're now on the new version
   pg_map.version = v;
