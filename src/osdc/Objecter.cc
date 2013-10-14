@@ -969,6 +969,37 @@ void Objecter::wait_for_osd_map()
   lock.Unlock();
 }
 
+struct C_Objecter_GetVersion : public Context {
+  Objecter *objecter;
+  uint64_t oldest, newest;
+  Context *fin;
+  C_Objecter_GetVersion(Objecter *o, Context *c)
+    : objecter(o), oldest(0), newest(0), fin(c) {}
+  void finish(int r) {
+    if (r >= 0)
+      objecter->_get_latest_version(oldest, newest, fin);
+  }
+};
+
+void Objecter::wait_for_latest_osd_map(Context *fin)
+{
+  ldout(cct, 10) << __func__ << dendl;
+  C_Objecter_GetVersion *c = new C_Objecter_GetVersion(this, fin);
+  monc->get_version("osdmap", &c->newest, &c->oldest, c);
+}
+
+void Objecter::_get_latest_version(epoch_t oldest, epoch_t newest, Context *fin)
+{
+  if (osdmap->get_epoch() >= newest) {
+  ldout(cct, 10) << __func__ << " latest " << newest << ", have it" << dendl;
+    if (fin)
+      fin->complete(0);
+    return;
+  }
+
+  ldout(cct, 10) << __func__ << " latest " << newest << ", waiting" << dendl;
+  wait_for_new_map(fin, newest, 0);
+}
 
 void Objecter::maybe_request_map()
 {

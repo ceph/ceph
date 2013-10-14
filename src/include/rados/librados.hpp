@@ -811,6 +811,9 @@ namespace librados
     int cluster_stat(cluster_stat_t& result);
     int cluster_fsid(std::string *fsid);
 
+    /// get/wait for the most recent osdmap
+    int wait_for_latest_map();
+
     /*
      * pool aio
      *
