@@ -12,19 +12,15 @@ import subprocess
 import sys
 import yaml
 
+import teuthology
 from teuthology import lock as lock
 
 log = logging.getLogger(__name__)
 
 
 def main(args):
-    loglevel = logging.INFO
     if args.verbose:
-        loglevel = logging.DEBUG
-
-    logging.basicConfig(
-        level=loglevel,
-    )
+        teuthology.log.setLevel(logging.DEBUG)
 
     base_arg = [
         os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-schedule'),

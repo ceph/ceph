@@ -6,6 +6,7 @@ import subprocess
 import MySQLdb
 import yaml
 
+import teuthology
 from teuthology.misc import read_config
 
 log = logging.getLogger(__name__)
@@ -89,13 +90,9 @@ def read_coverage(output):
 
 
 def main(args):
-    loglevel = logging.INFO
     if args.verbose:
-        loglevel = logging.DEBUG
+        teuthology.log.setLevel(logging.DEBUG)
 
-    logging.basicConfig(
-        level=loglevel,
-    )
     log = logging.getLogger(__name__)
 
     read_config(args)

@@ -31,4 +31,9 @@ def parse_args():
                         remember the last successful submission in a file
                         called 'last_successful_run'. Pass this flag to disable
                         that behavior."""))
+    parser.add_argument(
+        '-v', '--verbose',
+        action='store_true', default=False,
+        help='be more verbose',
+    )
     return parser.parse_args()

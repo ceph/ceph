@@ -7,6 +7,7 @@ import subprocess
 from textwrap import dedent
 from textwrap import fill
 
+import teuthology
 from teuthology import misc
 from teuthology import suite
 
@@ -16,13 +17,8 @@ log = logging.getLogger(__name__)
 def main(args):
 
     log = logging.getLogger(__name__)
-    loglevel = logging.INFO
     if args.verbose:
-        loglevel = logging.DEBUG
-
-    logging.basicConfig(
-        level=loglevel,
-    )
+        teuthology.log.setLevel(logging.DEBUG)
 
     misc.read_config(args)
 

@@ -6,14 +6,17 @@ import httplib2
 import urllib
 import logging
 
+import teuthology
 from teuthology.config import config
 
 
 log = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
 
 def main(args):
+    if args.verbose:
+        teuthology.log.setLevel(logging.DEBUG)
+
     archive_base = os.path.abspath(os.path.expanduser(args.archive))
     reporter = ResultsReporter(archive_base, base_uri=args.server,
                                save=args.save, refresh=args.refresh)
@@ -155,6 +158,11 @@ class ResultsReporter(object):
         response, content = self.http.request(
             uri, method, json_, headers={'content-type': 'application/json'},
         )
+        log.debug("{method} to {uri}: {status}".format(
+            method=method,
+            uri=uri,
+            status=response.status,
+        ))
 
         try:
             content_obj = json.loads(content)
@@ -357,7 +365,7 @@ def try_push_job_info(job_config, extra_info=None):
         log.debug(msg.format(yaml=config.teuthology_yaml))
         return
     elif job_config.get('job_id') is None:
-        log.debug('No job_id found; not reporting results')
+        log.warning('No job_id found; not reporting results')
         return
 
     run_name = job_config['name']

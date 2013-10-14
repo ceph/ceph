@@ -6,6 +6,7 @@ import sys
 import logging
 from traceback import format_tb
 
+import teuthology
 from . import report
 from .misc import get_distro
 from .misc import get_user
@@ -16,11 +17,9 @@ from .results import email_results
 
 
 def set_up_logging(ctx):
-    loglevel = logging.INFO
     if ctx.verbose:
-        loglevel = logging.DEBUG
+        teuthology.log.setLevel(logging.DEBUG)
 
-    logging.basicConfig(level=loglevel)
     if ctx.archive is not None:
         os.mkdir(ctx.archive)
 

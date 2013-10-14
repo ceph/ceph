@@ -47,6 +47,7 @@ def main(ctx):
         description=ctx.description,
         owner=ctx.owner,
         verbose=ctx.verbose,
+        machine_type=ctx.worker,
     )
     # Merge job_config and ctx.config
     job_config.update(ctx.config)
