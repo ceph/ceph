@@ -1,21 +1,23 @@
-#!/bin/sh -e
+#!/bin/bash
+
+set -e
 
 DEPTH=5
 COUNT=10000
 
-function kill_jobs {
+kill_jobs() {
   jobs -p | xargs kill
 }
-trap kill_jobs SIGINT
+trap kill_jobs INT
 
-function create_files {
+create_files() {
   for i in `seq 1 $COUNT`
   do
     touch file$i
   done
 }
 
-function delete_files {
+delete_files() {
   for i in `ls -f`
   do
     if [[ ${i}a = file*a ]]
