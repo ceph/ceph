@@ -391,7 +391,6 @@ fi
 %{_bindir}/cephfs
 %{_bindir}/ceph-conf
 %{_bindir}/ceph-clsinfo
-%{_bindir}/ceph-rest-api
 %{_bindir}/crushtool
 %{_bindir}/monmaptool
 %{_bindir}/osdmaptool
@@ -422,6 +421,7 @@ fi
 /sbin/mount.ceph
 %dir %{_libdir}/rados-classes
 %{_libdir}/rados-classes/libcls_rbd.so*
+%{_libdir}/rados-classes/libcls_hello.so*
 %{_libdir}/rados-classes/libcls_rgw.so*
 %{_libdir}/rados-classes/libcls_lock.so*
 %{_libdir}/rados-classes/libcls_kvs.so*
