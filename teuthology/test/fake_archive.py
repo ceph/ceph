@@ -79,7 +79,7 @@ class FakeArchive(object):
                 with file(summary_path, 'w') as yfile:
                     yaml.safe_dump(job['summary'], yfile)
 
-    def create_fake_run(self, run_name, job_count, yaml_path):
+    def create_fake_run(self, run_name, job_count, yaml_path, num_hung=0):
         """
         Creates a fake run using run_name. Uses the YAML specified for each
         job's config.yaml
@@ -89,8 +89,13 @@ class FakeArchive(object):
         assert os.path.exists(yaml_path)
         assert job_count > 0
         jobs = []
+        made_hung = 0
         for i in range(job_count):
-            jobs.append(self.get_random_metadata(run_name))
+            if made_hung < num_hung:
+                jobs.append(self.get_random_metadata(run_name, hung=True))
+                made_hung += 1
+            else:
+                jobs.append(self.get_random_metadata(run_name, hung=False))
             #job_config = yaml.safe_load(yaml_path)
         self.populate_archive(run_name, jobs)
         for job in jobs:
