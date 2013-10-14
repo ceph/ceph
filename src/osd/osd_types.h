@@ -732,16 +732,19 @@ struct pg_pool_t {
     default: return "???";
     }
   }
-  string get_flags_string() const {
+  static string get_flags_string(uint64_t f) {
     string s;
-    if (flags & FLAG_HASHPSPOOL)
-      s += get_flag_name(FLAG_HASHPSPOOL);
-    if (flags & FLAG_FULL) {
-      if (s.length())
-        s += ",";
-      s += get_flag_name(FLAG_FULL);
+    for (unsigned n=0; f && n<64; ++n) {
+      if (f & (1ull << n)) {
+	if (s.length())
+	  s += ",";
+	s += get_flag_name(1ull << n);
+      }
     }
     return s;
+  }
+  string get_flags_string() const {
+    return get_flags_string(flags);
   }
 
   typedef enum {
