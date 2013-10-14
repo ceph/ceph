@@ -161,6 +161,7 @@ void _usage()
   cerr << "   --bucket                  specified bucket for quota command\n";
   cerr << "   --max-objects             specify max objects\n";
   cerr << "   --max-size                specify max size (in bytes)\n";
+  cerr << "   --quota-scope             scope of quota (bucket, user)\n";
   cerr << "\n";
   generic_client_usage();
 }
@@ -2324,6 +2325,10 @@ next:
     }
 
     if (!bucket_name.empty()) {
+      if (!quota_scope.empty() && quota_scope != "bucket") {
+        cerr << "ERROR: invalid quota scope specification." << std::endl;
+        return EINVAL;
+      }
       set_bucket_quota(store, opt_cmd, bucket_name, max_size, max_objects);
     } else if (!user_id.empty()) {
       if (quota_scope != "bucket") {
