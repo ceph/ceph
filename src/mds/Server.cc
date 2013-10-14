@@ -3086,6 +3086,7 @@ void Server::handle_client_file_readlock(MDRequest *mdr)
   checking_lock.length = req->head.args.filelock_change.length;
   checking_lock.client = req->get_orig_source().num();
   checking_lock.pid = req->head.args.filelock_change.pid;
+  checking_lock.pid_namespace = req->head.args.filelock_change.pid_namespace;
   checking_lock.type = req->head.args.filelock_change.type;
 
   // get the appropriate lock state

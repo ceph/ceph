@@ -12,7 +12,7 @@
 inline ostream& operator<<(ostream& out, ceph_filelock& l) {
   out << "start: " << l.start << ", length: " << l.length
       << ", client: " << l.client << ", pid: " << l.pid
-      << ", type: " << (int)l.type
+      << ", pid_ns: " << l.pid_namespace << ", type: " << (int)l.type
       << std::endl;
   return out;
 }
