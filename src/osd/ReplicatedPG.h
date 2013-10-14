@@ -326,6 +326,17 @@ public:
   void op_applied_replica(
     const eversion_t &applied_version);
 
+  bool should_send_op(
+    int peer,
+    const hobject_t &hoid) {
+    assert(peer_info.count(peer));
+    bool should_send = hoid.pool != (int64_t)info.pgid.pool() ||
+      hoid <= MAX(last_backfill_started, peer_info[peer].last_backfill);
+    if (!should_send)
+      assert(is_backfill_targets(peer));
+    return should_send;
+  }
+
   /*
    * Capture all object state associated with an in-progress read or write.
    */
