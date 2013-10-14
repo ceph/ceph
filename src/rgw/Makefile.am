@@ -31,7 +31,8 @@ librgw_la_SOURCES =  \
 	rgw/rgw_auth_s3.cc \
 	rgw/rgw_metadata.cc \
 	rgw/rgw_replica_log.cc \
-	rgw/rgw_keystone.cc
+	rgw/rgw_keystone.cc \
+	rgw/rgw_quota.cc
 librgw_la_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
 noinst_LTLIBRARIES += librgw.la
 
@@ -124,6 +125,7 @@ noinst_HEADERS += \
 	rgw/rgw_http_client.h \
 	rgw/rgw_swift.h \
 	rgw/rgw_swift_auth.h \
+	rgw/rgw_quota.h \
 	rgw/rgw_rados.h \
 	rgw/rgw_replica_log.h \
 	rgw/rgw_resolve.h \

@@ -636,6 +636,8 @@ struct RGWRegionMap {
 
   string master_region;
 
+  RGWQuotaInfo bucket_quota;
+
   RGWRegionMap() : lock("RGWRegionMap") {}
 
   void encode(bufferlist& bl) const;
@@ -759,6 +761,29 @@ public:
   int renew_state();
 };
 
+class RGWGetBucketStats_CB : public RefCountedObject {
+protected:
+  rgw_bucket bucket;
+  uint64_t bucket_ver;
+  uint64_t master_ver;
+  map<RGWObjCategory, RGWBucketStats> *stats;
+  string max_marker;
+public:
+  RGWGetBucketStats_CB(rgw_bucket& _bucket) : bucket(_bucket), stats(NULL) {}
+  virtual ~RGWGetBucketStats_CB() {}
+  virtual void handle_response(int r) = 0;
+  virtual void set_response(uint64_t _bucket_ver, uint64_t _master_ver,
+                            map<RGWObjCategory, RGWBucketStats> *_stats,
+                            const string &_max_marker) {
+    bucket_ver = _bucket_ver;
+    master_ver = _master_ver;
+    stats = _stats;
+    max_marker = _max_marker;
+  }
+};
+
+class RGWGetDirHeader_CB;
+
 
 class RGWRados
 {
@@ -862,6 +887,8 @@ protected:
   string region_name;
   string zone_name;
 
+  RGWQuotaHandler *quota_handler;
+
 public:
   RGWRados() : lock("rados_timer_lock"), timer(NULL),
                gc(NULL), use_gc_thread(false),
@@ -870,6 +897,7 @@ public:
                bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
                cct(NULL), rados(NULL),
                pools_initialized(false),
+               quota_handler(NULL),
                rest_master_conn(NULL),
                meta_mgr(NULL), data_log(NULL) {}
 
@@ -1290,6 +1318,7 @@ public:
   int decode_policy(bufferlist& bl, ACLOwner *owner);
   int get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_t *master_ver, map<RGWObjCategory, RGWBucketStats>& stats,
                        string *max_marker);
+  int get_bucket_stats_async(rgw_bucket& bucket, RGWGetBucketStats_CB *cb);
   void get_bucket_instance_obj(rgw_bucket& bucket, rgw_obj& obj);
   void get_bucket_instance_entry(rgw_bucket& bucket, string& entry);
   void get_bucket_meta_oid(rgw_bucket& bucket, string& oid);
@@ -1321,6 +1350,7 @@ public:
                       map<string, RGWObjEnt>& m, bool *is_truncated,
                       string *last_entry, bool (*force_check_filter)(const string&  name) = NULL);
   int cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header);
+  int cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx);
   int prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
                            RGWModifyOp op, rgw_obj& oid, string& tag);
   int complete_update_index(rgw_bucket& bucket, string& oid, string& tag, int64_t poolid, uint64_t epoch, uint64_t size,
@@ -1375,6 +1405,8 @@ public:
                          map<RGWObjCategory, RGWBucketStats> *calculated_stats);
   int bucket_rebuild_index(rgw_bucket& bucket);
   int remove_objs_from_index(rgw_bucket& bucket, list<string>& oid_list);
+
+  int check_quota(rgw_bucket& bucket, RGWQuotaInfo& quota_info, uint64_t obj_size);
 
   string unique_id(uint64_t unique_num) {
     char buf[32];

@@ -901,6 +901,7 @@ static int bucket_stats(RGWRados *store, std::string&  bucket_name, Formatter *f
   formatter->dump_int("mtime", mtime);
   formatter->dump_string("max_marker", max_marker);
   dump_bucket_usage(stats, formatter);
+  encode_json("bucket_quota", bucket_info.quota, formatter);
   formatter->close_section();
 
   return 0;

@@ -357,16 +357,20 @@ int RGWZoneParams::store_info(CephContext *cct, RGWRados *store, RGWRegion& regi
 }
 
 void RGWRegionMap::encode(bufferlist& bl) const {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ::encode(regions, bl);
   ::encode(master_region, bl);
+  ::encode(bucket_quota, bl);
   ENCODE_FINISH(bl);
 }
 
 void RGWRegionMap::decode(bufferlist::iterator& bl) {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   ::decode(regions, bl);
   ::decode(master_region, bl);
+
+  if (struct_v >= 2)
+    ::decode(bucket_quota, bl);
   DECODE_FINISH(bl);
 
   regions_by_api.clear();
@@ -851,6 +855,7 @@ void RGWRados::finalize()
     RGWRESTConn *conn = iter->second;
     delete conn;
   }
+  RGWQuotaHandler::free_handler(quota_handler);
 }
 
 /** 
@@ -961,6 +966,8 @@ int RGWRados::init_complete()
 
   if (use_gc_thread)
     gc->start_processor();
+
+  quota_handler = RGWQuotaHandler::generate_handler(this);
 
   return ret;
 }
@@ -2342,6 +2349,11 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
     *mtime = set_mtime;
   }
 
+  if (state) {
+    /* update quota cache */
+    quota_handler->update_stats(bucket, (state->exists ? 0 : 1), size, state->size);
+  }
+
   return 0;
 
 done_cancel:
@@ -3210,6 +3222,11 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj, RGWObjVersionTracker *obj
 
   if (ret_not_existed)
     return -ENOENT;
+
+  if (state) {
+    /* update quota cache */
+    quota_handler->update_stats(bucket, -1, 0, state->size);
+  }
 
   return 0;
 }
@@ -4598,6 +4615,38 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_
   return 0;
 }
 
+class RGWGetBucketStatsContext : public RGWGetDirHeader_CB {
+  RGWGetBucketStats_CB *cb;
+
+public:
+  RGWGetBucketStatsContext(RGWGetBucketStats_CB *_cb) : cb(_cb) {}
+  void handle_response(int r, rgw_bucket_dir_header& header) {
+    map<RGWObjCategory, RGWBucketStats> stats;
+
+    if (r >= 0) {
+      translate_raw_stats(header, stats);
+      cb->set_response(header.ver, header.master_ver, &stats, header.max_marker);
+    }
+
+    cb->handle_response(r);
+
+    cb->put();
+  }
+};
+
+int RGWRados::get_bucket_stats_async(rgw_bucket& bucket, RGWGetBucketStats_CB *ctx)
+{
+  RGWGetBucketStatsContext *get_ctx = new RGWGetBucketStatsContext(ctx);
+  int r = cls_bucket_head_async(bucket, get_ctx);
+  if (r < 0) {
+    ctx->put();
+    delete get_ctx;
+    return r;
+  }
+
+  return 0;
+}
+
 void RGWRados::get_bucket_instance_entry(rgw_bucket& bucket, string& entry)
 {
   entry = bucket.name + ":" + bucket.bucket_id;
@@ -5480,6 +5529,25 @@ int RGWRados::cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& 
   return 0;
 }
 
+int RGWRados::cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx)
+{
+  librados::IoCtx index_ctx;
+  string oid;
+  int r = open_bucket_index(bucket, index_ctx, oid);
+  if (r < 0)
+    return r;
+
+  r = cls_rgw_get_dir_header_async(index_ctx, oid, ctx);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int RGWRados::check_quota(rgw_bucket& bucket, RGWQuotaInfo& quota_info, uint64_t obj_size)
+{
+  return quota_handler->check_quota(bucket, quota_info, 1, obj_size);
+}
 
 class IntentLogNameFilter : public RGWAccessListFilter
 {

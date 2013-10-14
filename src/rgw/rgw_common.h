@@ -29,6 +29,7 @@
 #include "include/utime.h"
 #include "rgw_acl.h"
 #include "rgw_cors.h"
+#include "rgw_quota.h"
 #include "cls/version/cls_version_types.h"
 #include "include/rados/librados.hpp"
 
@@ -90,6 +91,7 @@ using ceph::crypto::MD5;
 #define RGW_OP_TYPE_WRITE        0x02
 #define RGW_OP_TYPE_DELETE       0x04
 
+#define RGW_OP_TYPE_MODIFY       (RGW_OP_TYPE_WRITE | RGW_OP_TYPE_DELETE)
 #define RGW_OP_TYPE_ALL          (RGW_OP_TYPE_READ | RGW_OP_TYPE_WRITE | RGW_OP_TYPE_DELETE)
 
 #define RGW_DEFAULT_MAX_BUCKETS 1000
@@ -128,6 +130,7 @@ using ceph::crypto::MD5;
 #define ERR_NOT_FOUND            2023
 #define ERR_PERMANENT_REDIRECT   2024
 #define ERR_LOCKED               2025
+#define ERR_QUOTA_EXCEEDED       2026
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 
@@ -423,11 +426,12 @@ struct RGWUserInfo
   __u8 system;
   string default_placement;
   list<string> placement_tags;
+  RGWQuotaInfo bucket_quota;
 
   RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS), op_mask(RGW_OP_TYPE_ALL), system(0) {}
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(13, 9, bl);
+     ENCODE_START(14, 9, bl);
      ::encode(auid, bl);
      string access_key;
      string secret_key;
@@ -462,6 +466,7 @@ struct RGWUserInfo
      ::encode(system, bl);
      ::encode(default_placement, bl);
      ::encode(placement_tags, bl);
+     ::encode(bucket_quota, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -517,6 +522,9 @@ struct RGWUserInfo
       ::decode(system, bl);
       ::decode(default_placement, bl);
       ::decode(placement_tags, bl); /* tags of allowed placement rules */
+    }
+    if (struct_v >= 14) {
+      ::decode(bucket_quota, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -599,6 +607,10 @@ struct rgw_bucket {
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bucket*>& o);
+
+  bool operator<(const rgw_bucket& b) const {
+    return name.compare(b.name) < 0;
+  }
 };
 WRITE_CLASS_ENCODER(rgw_bucket)
 
@@ -661,9 +673,10 @@ struct RGWBucketInfo
   bool has_instance_obj;
   RGWObjVersionTracker objv_tracker; /* we don't need to serialize this, for runtime tracking */
   obj_version ep_objv; /* entry point object version, for runtime tracking only */
+  RGWQuotaInfo quota;
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(8, 4, bl);
+     ENCODE_START(9, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner, bl);
      ::encode(flags, bl);
@@ -672,6 +685,7 @@ struct RGWBucketInfo
      ::encode(ct, bl);
      ::encode(placement_rule, bl);
      ::encode(has_instance_obj, bl);
+     ::encode(quota, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -692,6 +706,8 @@ struct RGWBucketInfo
        ::decode(placement_rule, bl);
      if (struct_v >= 8)
        ::decode(has_instance_obj, bl);
+     if (struct_v >= 9)
+       ::decode(quota, bl);
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -754,6 +770,8 @@ struct RGWBucketStats
   uint64_t num_kb;
   uint64_t num_kb_rounded;
   uint64_t num_objects;
+
+  RGWBucketStats() : num_kb(0), num_kb_rounded(0), num_objects(0) {}
 };
 
 struct req_state;
@@ -1211,6 +1229,11 @@ static inline const char *rgw_obj_category_name(RGWObjCategory category)
   }
 
   return "unknown";
+}
+
+static inline uint64_t rgw_rounded_kb(uint64_t bytes)
+{
+  return (bytes + 1023) / 1024;
 }
 
 extern string rgw_string_unquote(const string& s);
