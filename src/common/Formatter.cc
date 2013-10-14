@@ -123,6 +123,8 @@ void JSONFormatter::flush(std::ostream& os)
 {
   finish_pending_string();
   os << m_ss.str();
+  if (m_pretty)
+    os << "\n";
   m_ss.clear();
   m_ss.str("");
 }
@@ -312,6 +314,8 @@ void XMLFormatter::flush(std::ostream& os)
 {
   finish_pending_string();
   os << m_ss.str();
+  if (m_pretty)
+    os << "\n";
   m_ss.clear();
   m_ss.str("");
 }
