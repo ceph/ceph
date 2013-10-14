@@ -725,6 +725,28 @@ struct pg_pool_t {
     FLAG_FULL       = 2, // pool is full
   };
 
+  static const char *get_flag_name(int f) {
+    switch (f) {
+    case FLAG_HASHPSPOOL: return "hashpspool";
+    case FLAG_FULL: return "full";
+    default: return "???";
+    }
+  }
+  static string get_flags_string(uint64_t f) {
+    string s;
+    for (unsigned n=0; f && n<64; ++n) {
+      if (f & (1ull << n)) {
+	if (s.length())
+	  s += ",";
+	s += get_flag_name(1ull << n);
+      }
+    }
+    return s;
+  }
+  string get_flags_string() const {
+    return get_flags_string(flags);
+  }
+
   typedef enum {
     CACHEMODE_NONE = 0,                  ///< no caching
     CACHEMODE_WRITEBACK = 1,             ///< write to cache, flush later
