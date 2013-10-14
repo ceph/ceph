@@ -83,7 +83,7 @@ def unlock_one(ctx, name, user=None):
     return success
 
 
-def list_locks(ctx):
+def list_locks():
     success, content, _ = ls.send_request('GET', config.lock_server)
     if success:
         return json.loads(content)
@@ -181,7 +181,7 @@ def main(ctx):
                     log.error("Lockserver doesn't know about machine: %s" %
                               machine)
         else:
-            statuses = list_locks(ctx)
+            statuses = list_locks()
         vmachines = []
 
         for vmachine in statuses:
@@ -196,7 +196,7 @@ def main(ctx):
                 statuses = [ls.get_status(ctx, machine)
                             for machine in machines]
             else:
-                statuses = list_locks(ctx)
+                statuses = list_locks()
         if statuses:
             if ctx.machine_type:
                 statuses = [status for status in statuses
@@ -330,7 +330,7 @@ def updatekeys(ctx):
 
 
 def keyscan_check(ctx, machines):
-    locks = list_locks(ctx)
+    locks = list_locks()
     current_locks = {}
     for lock in locks:
         current_locks[lock['name']] = lock
@@ -375,7 +375,7 @@ def scan_for_locks(ctx, machines):
 
 def do_summary(ctx):
     lockd = collections.defaultdict(lambda: [0, 0, 'unknown'])
-    for l in list_locks(ctx):
+    for l in list_locks():
         if ctx.machine_type and l['type'] != ctx.machine_type:
             continue
         who = l['locked_by'] if l['locked'] == 1 else '(free)', l['type']

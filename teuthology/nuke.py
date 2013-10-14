@@ -321,7 +321,7 @@ def nuke(ctx, should_unlock, sync_clocks=True, reboot_all=True, noipmi=False):
     targets = dict(ctx.config['targets'])
     if ctx.name:
         log.info('Checking targets against current locks')
-        locks = list_locks(ctx)
+        locks = list_locks()
         # Remove targets who's description doesn't match archive name.
         for lock in locks:
             for target in targets:

@@ -255,8 +255,7 @@ def get_arch(config):
         y = yaml.safe_load(file(yamlfile))
         machine_type = y.get('machine_type')
         if machine_type:
-            fakectx = []
-            locks = lock.list_locks(fakectx)
+            locks = lock.list_locks()
             for machine in locks:
                 if machine['type'] == machine_type:
                     arch = machine['arch']
