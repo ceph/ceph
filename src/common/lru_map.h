@@ -21,41 +21,76 @@ class lru_map {
   size_t max;
 
 public:
+  class UpdateContext {
+    public:
+      virtual ~UpdateContext() {}
+
+      /* update should return true if object is updated */
+      virtual bool update(V *v) = 0;
+  };
+
+  bool _find(const K& key, V *value, UpdateContext *ctx);
+  void _add(const K& key, V& value);
+
+public:
   lru_map(int _max) : lock("lru_map"), max(_max) {}
   virtual ~lru_map() {}
 
   bool find(const K& key, V& value);
+
+  /*
+   * find_and_update()
+   *
+   * - will return true if object is found
+   * - if ctx is set will return true if object is found and updated
+   */
+  bool find_and_update(const K& key, V *value, UpdateContext *ctx);
   void add(const K& key, V& value);
   void erase(const K& key);
 };
 
 template <class K, class V>
-bool lru_map<K, V>::find(const K& key, V& value)
+bool lru_map<K, V>::_find(const K& key, V *value, UpdateContext *ctx)
 {
-  lock.Lock();
   typename std::map<K, entry>::iterator iter = entries.find(key);
   if (iter == entries.end()) {
-    lock.Unlock();
     return false;
   }
 
   entry& e = iter->second;
   entries_lru.erase(e.lru_iter);
 
-  value = e.value;
+  bool r = true;
+
+  if (ctx)
+    r = ctx->update(&e.value);
+
+  if (value)
+    *value = e.value;
 
   entries_lru.push_front(key);
   e.lru_iter = entries_lru.begin();
 
-  lock.Unlock();
-
-  return true;
+  return r;
 }
 
 template <class K, class V>
-void lru_map<K, V>::add(const K& key, V& value)
+bool lru_map<K, V>::find(const K& key, V& value)
 {
-  lock.Lock();
+  Mutex::Locker l(lock);
+  return _find(key, &value, NULL);
+}
+
+template <class K, class V>
+bool lru_map<K, V>::find_and_update(const K& key, V *value, UpdateContext *ctx)
+{
+  Mutex::Locker l(lock);
+  return _find(key, value, ctx);
+}
+
+template <class K, class V>
+void lru_map<K, V>::_add(const K& key, V& value)
+{
   typename std::map<K, entry>::iterator iter = entries.find(key);
   if (iter != entries.end()) {
     entry& e = iter->second;
@@ -74,8 +109,14 @@ void lru_map<K, V>::add(const K& key, V& value)
     entries.erase(iter);
     entries_lru.pop_back();
   }
-  
-  lock.Unlock();
+}
+
+
+template <class K, class V>
+void lru_map<K, V>::add(const K& key, V& value)
+{
+  Mutex::Locker l(lock);
+  _add(key, value);
 }
 
 template <class K, class V>

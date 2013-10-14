@@ -4,6 +4,13 @@
 #include "include/types.h"
 #include "include/rados/librados.hpp"
 #include "cls_rgw_types.h"
+#include "common/RefCountedObj.h"
+
+class RGWGetDirHeader_CB : public RefCountedObject {
+public:
+  virtual ~RGWGetDirHeader_CB() {}
+  virtual void handle_response(int r, rgw_bucket_dir_header& header) = 0;
+};
 
 /* bucket index */
 void cls_rgw_bucket_init(librados::ObjectWriteOperation& o);
@@ -27,6 +34,7 @@ int cls_rgw_bucket_check_index_op(librados::IoCtx& io_ctx, string& oid,
 int cls_rgw_bucket_rebuild_index_op(librados::IoCtx& io_ctx, string& oid);
   
 int cls_rgw_get_dir_header(librados::IoCtx& io_ctx, string& oid, rgw_bucket_dir_header *header);
+int cls_rgw_get_dir_header_async(librados::IoCtx& io_ctx, string& oid, RGWGetDirHeader_CB *ctx);
 
 void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, bufferlist& updates);
 

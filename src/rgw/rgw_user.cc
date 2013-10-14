@@ -1682,6 +1682,9 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.op_mask_specified)
     user_info.op_mask = op_state.get_op_mask();
 
+  if (op_state.has_bucket_quota())
+    user_info.bucket_quota = op_state.get_bucket_quota();
+
   // update the request
   op_state.set_user_info(user_info);
   op_state.set_populated();
@@ -1883,6 +1886,9 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   if (op_state.op_mask_specified)
     user_info.op_mask = op_state.get_op_mask();
+
+  if (op_state.has_bucket_quota())
+    user_info.bucket_quota = op_state.get_bucket_quota();
 
   if (op_state.has_suspension_op()) {
     __u8 suspended = op_state.get_suspension_status();
