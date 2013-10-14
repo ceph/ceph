@@ -9371,8 +9371,12 @@ void MDCache::purge_stray(CDentry *dn)
   if (in->is_file()) {
     uint64_t period = (uint64_t)in->inode.layout.fl_object_size *
 		      (uint64_t)in->inode.layout.fl_stripe_count;
-    uint64_t cur_max_size = in->inode.get_max_size();
-    uint64_t to = MAX(in->inode.size, cur_max_size);
+    uint64_t to = in->inode.get_max_size();
+    to = MAX(in->inode.size, to);
+    // when truncating a file, the filer does not delete stripe objects that are
+    // truncated to zero. so we need to purge stripe objects up to the max size
+    // the file has ever been.
+    to = MAX(in->inode.max_size_ever, to);
     if (to && period) {
       uint64_t num = (to + period - 1) / period;
       dout(10) << "purge_stray 0~" << to << " objects 0~" << num
