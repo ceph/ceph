@@ -123,6 +123,7 @@
      --bucket                  specified bucket for quota command
      --max-objects             specify max objects
      --max-size                specify max size (in bytes)
+     --quota-scope             scope of quota (bucket, user)
   
     --conf/-c        Read configuration from the given configuration file
     --id/-i          set ID portion of my name
