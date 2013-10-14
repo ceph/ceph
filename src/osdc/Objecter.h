@@ -386,7 +386,6 @@ struct ObjectOperation {
               pwatchers->push_back(ow);
             }
           }
-          *prval = 0;
 	}
 	catch (buffer::error& e) {
 	  if (prval)
@@ -424,8 +423,6 @@ struct ObjectOperation {
             }
 	    psnaps->seq = resp.seq;
           }
-          if (prval)
-	    *prval = 0;
 	}
 	catch (buffer::error& e) {
 	  if (prval)
@@ -617,10 +614,9 @@ struct ObjectOperation {
 	}
 	::decode(*cursor, p);
       } catch (buffer::error& e) {
-	r = -EIO;
+	if (prval)
+	  *prval = -EIO;
       }
-      if (prval)
-	*prval = r;
     }
   };
 
@@ -664,10 +660,9 @@ struct ObjectOperation {
 	if (pisdirty)
 	  *pisdirty = isdirty;
       } catch (buffer::error& e) {
-	r = -EIO;
+	if (prval)
+	  *prval = -EIO;
       }
-      if (prval)
-	*prval = r;
     }
   };
 
