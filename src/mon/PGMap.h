@@ -109,12 +109,50 @@ public:
   utime_t stamp;
 
   // recent deltas, and summation
+  /**
+   * keep track of last deltas for each pool, calculated using
+   * @p pg_pool_sum as baseline.
+   */
+  hash_map<uint64_t, list< pair<pool_stat_t, utime_t> > > per_pool_sum_deltas;
+  /**
+   * keep track of per-pool timestamp deltas, according to last update on
+   * each pool.
+   */
+  hash_map<uint64_t, utime_t> per_pool_sum_deltas_stamps;
+  /**
+   * keep track of sum deltas, per-pool, taking into account any previous
+   * deltas existing in @p per_pool_sum_deltas.  The utime_t as second member
+   * of the pair is the timestamp refering to the last update (i.e., the first
+   * member of the pair) for a given pool.
+   */
+  hash_map<uint64_t, pair<pool_stat_t,utime_t> > per_pool_sum_delta;
+
   list< pair<pool_stat_t, utime_t> > pg_sum_deltas;
   pool_stat_t pg_sum_delta;
   utime_t stamp_delta;
 
-  void update_delta(CephContext *cct, utime_t inc_stamp, pool_stat_t& pg_sum_old);
+  void update_global_delta(CephContext *cct,
+                           const utime_t ts, const pool_stat_t& pg_sum_old);
+  void update_pool_deltas(CephContext *cct,
+                          const utime_t ts,
+                          const hash_map<uint64_t, pool_stat_t>& pg_pool_sum_old);
   void clear_delta();
+
+ private:
+  void update_delta(CephContext *cct,
+                    const utime_t ts,
+                    const pool_stat_t& old_pool_sum,
+                    utime_t *last_ts,
+                    const pool_stat_t& current_pool_sum,
+                    pool_stat_t *result_pool_delta,
+                    utime_t *result_ts_delta,
+                    list<pair<pool_stat_t,utime_t> > *delta_avg_list);
+
+  void update_one_pool_delta(CephContext *cct,
+                             const utime_t ts,
+                             const uint64_t pool,
+                             const pool_stat_t& old_pool_sum);
+ public:
 
   set<pg_t> creating_pgs;   // lru: front = new additions, back = recently pinged
   map<int,set<pg_t> > creating_pgs_by_osd;
