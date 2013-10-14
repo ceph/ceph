@@ -48,6 +48,16 @@ TEST(LibRadosMisc, ClusterFSID) {
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
+TEST(LibRadosMisc, WaitOSDMapPP) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+
+  ASSERT_EQ(0, cluster.wait_for_latest_map());
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
 static std::string read_key_from_tmap(IoCtx& ioctx, const std::string &obj,
 				      const std::string &key)
 {

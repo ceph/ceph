@@ -388,6 +388,24 @@ void librados::RadosClient::wait_for_osdmap()
   }
 }
 
+int librados::RadosClient::wait_for_latest_osdmap()
+{
+  Mutex mylock("RadosClient::wait_for_latest_osdmap");
+  Cond cond;
+  bool done;
+
+  lock.Lock();
+  objecter->wait_for_latest_osd_map(new C_SafeCond(&mylock, &cond, &done));
+  lock.Unlock();
+
+  mylock.Lock();
+  while (!done)
+    cond.Wait(mylock);
+  mylock.Unlock();
+
+  return 0;
+}
+
 int librados::RadosClient::pool_list(std::list<std::string>& v)
 {
   Mutex::Locker l(lock);

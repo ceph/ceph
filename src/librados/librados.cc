@@ -1619,6 +1619,11 @@ int librados::Rados::cluster_fsid(string *fsid)
   return client->get_fsid(fsid);
 }
 
+int librados::Rados::wait_for_latest_map()
+{
+  return client->wait_for_latest_osdmap();
+}
+
 librados::PoolAsyncCompletion *librados::Rados::pool_async_create_completion()
 {
   PoolAsyncCompletionImpl *c = new PoolAsyncCompletionImpl;
