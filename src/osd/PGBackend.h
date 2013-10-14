@@ -114,6 +114,10 @@
      virtual void op_applied_replica(
        const eversion_t &applied_version) = 0;
 
+     virtual bool should_send_op(
+       int peer,
+       const hobject_t &hoid) = 0;
+
      virtual ~Listener() {}
    };
    Listener *parent;
