@@ -284,11 +284,11 @@ COMMAND("mds unset " \
         "name=sure,type=CephString,req=false", \
         "unset <key>", "mds", "w", "cli,rest")
 COMMAND("mds add_data_pool " \
-	"name=poolid,type=CephInt,range=0", \
-	"add data pool <poolid>", "mds", "rw", "cli,rest")
+	"name=pool,type=CephString", \
+	"add data pool <pool>", "mds", "rw", "cli,rest")
 COMMAND("mds remove_data_pool " \
-	"name=poolid,type=CephInt,range=0", \
-	"remove data pool <poolid>", "mds", "rw", "cli,rest")
+	"name=pool,type=CephString", \
+	"remove data pool <pool>", "mds", "rw", "cli,rest")
 COMMAND("mds newfs " \
 	"name=metadata,type=CephInt,range=0 " \
 	"name=data,type=CephInt,range=0 " \

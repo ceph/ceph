@@ -4,10 +4,12 @@ set -e
 
 touch foo.$$
 rados mkpool foo.$$
-poolid=$(ceph osd dump | grep "^pool" | awk '{print $2}' | tail -n 1)
-ceph mds add_data_pool ${poolid}
+ceph mds add_data_pool foo.$$
 setfattr -n ceph.file.layout.pool -v foo.$$ foo.$$
 
 # cleanup
-rados rmpool foo.$$ foo.$$ --yes-i-really-really-mean-it 
 rm foo.$$
+ceph mds remove_data_pool foo.$$
+rados rmpool foo.$$ foo.$$ --yes-i-really-really-mean-it
+
+echo OK
