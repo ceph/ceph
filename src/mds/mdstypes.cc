@@ -204,7 +204,7 @@ ostream& operator<<(ostream& out, const client_writeable_range_t& r)
  */
 void inode_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(7, 6, bl);
+  ENCODE_START(8, 6, bl);
 
   ::encode(ino, bl);
   ::encode(rdev, bl);
@@ -238,6 +238,7 @@ void inode_t::encode(bufferlist &bl) const
   ::encode(xattr_version, bl);
   ::encode(backtrace_version, bl);
   ::encode(old_pools, bl);
+  ::encode(max_size_ever, bl);
 
   ENCODE_FINISH(bl);
 }
@@ -294,6 +295,8 @@ void inode_t::decode(bufferlist::iterator &p)
     ::decode(backtrace_version, p);
   if (struct_v >= 7)
     ::decode(old_pools, p);
+  if (struct_v >= 8)
+    ::decode(max_size_ever, p);
 
   DECODE_FINISH(p);
 }
