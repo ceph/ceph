@@ -42,6 +42,9 @@ diff -q tmp.txt foo.txt
 rados -p base_pool get barobj tmp.txt
 diff -q tmp.txt foo.txt
 
+# try a nonexistent object and make sure we get an error
+expect_false rados -p base_pool get bazobj tmp.txt
+
 # switch cache pools and make sure contents differ
 ceph osd tier remove-overlay base_pool
 ceph osd tier set-overlay base_pool data_cache
