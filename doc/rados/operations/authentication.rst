@@ -154,7 +154,7 @@ during setup and/or troubleshooting to temporarily disable authentication.
     auth cluster required = none
     auth service required = none
     auth client required = none
-    auth_supported = none
+    auth supported = none
 
 #. Or, disable ``cephx`` authentication for versions ``0.50`` and below 
    (deprecated as of version 0.51) by setting the following option in the 
