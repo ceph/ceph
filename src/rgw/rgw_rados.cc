@@ -82,18 +82,26 @@ void RGWDefaultRegionInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("default_region", default_region, obj);
 }
 
-string RGWRegion::get_pool_name(CephContext *cct)
+int RGWRegion::get_pool_name(CephContext *cct, string *pool_name)
 {
-  string pool_name = cct->_conf->rgw_region_root_pool;
-  if (pool_name.empty()) {
-    pool_name = RGW_DEFAULT_REGION_ROOT_POOL;
+  *pool_name = cct->_conf->rgw_region_root_pool;
+  if (pool_name->empty()) {
+    *pool_name = RGW_DEFAULT_REGION_ROOT_POOL;
+  } else if ((*pool_name)[0] != '.') {
+    derr << "ERROR: region root pool name must start with a period" << dendl;
+    return -EINVAL;
   }
-  return pool_name;
+  return 0;
 }
 
 int RGWRegion::read_default(RGWDefaultRegionInfo& default_info)
 {
-  string pool_name = get_pool_name(cct);
+  string pool_name;
+
+  int ret = get_pool_name(cct, &pool_name);
+  if (ret < 0) {
+    return ret;
+  }
 
   string oid = cct->_conf->rgw_default_region_info_oid;
   if (oid.empty()) {
@@ -102,7 +110,7 @@ int RGWRegion::read_default(RGWDefaultRegionInfo& default_info)
 
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
-  int ret = rgw_get_system_obj(store, NULL, pool, oid, bl, NULL, NULL);
+  ret = rgw_get_system_obj(store, NULL, pool, oid, bl, NULL, NULL);
   if (ret < 0)
     return ret;
 
@@ -121,7 +129,10 @@ int RGWRegion::read_default(RGWDefaultRegionInfo& default_info)
 
 int RGWRegion::set_as_default()
 {
-  string pool_name = get_pool_name(cct);
+  string pool_name;
+  int ret = get_pool_name(cct, &pool_name);
+  if (ret < 0)
+    return ret;
 
   string oid = cct->_conf->rgw_default_region_info_oid;
   if (oid.empty()) {
@@ -136,7 +147,7 @@ int RGWRegion::set_as_default()
 
   ::encode(default_info, bl);
 
-  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, 0, NULL);
+  ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, 0, NULL);
   if (ret < 0)
     return ret;
 
@@ -185,7 +196,11 @@ int RGWRegion::init(CephContext *_cct, RGWRados *_store, bool setup_region)
 
 int RGWRegion::read_info(const string& region_name)
 {
-  string pool_name = get_pool_name(cct);
+  string pool_name;
+  int ret = get_pool_name(cct, &pool_name);
+  if (ret < 0)
+    return ret;
+
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
 
@@ -193,7 +208,7 @@ int RGWRegion::read_info(const string& region_name)
 
   string oid = region_info_oid_prefix + name;
 
-  int ret = rgw_get_system_obj(store, NULL, pool, oid, bl, NULL, NULL);
+  ret = rgw_get_system_obj(store, NULL, pool, oid, bl, NULL, NULL);
   if (ret < 0) {
     lderr(cct) << "failed reading region info from " << pool << ":" << oid << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -246,7 +261,10 @@ int RGWRegion::create_default()
 
 int RGWRegion::store_info(bool exclusive)
 {
-  string pool_name = get_pool_name(cct);
+  string pool_name;
+  int ret = get_pool_name(cct, &pool_name);
+  if (ret < 0)
+    return ret;
 
   rgw_bucket pool(pool_name.c_str());
 
@@ -254,7 +272,7 @@ int RGWRegion::store_info(bool exclusive)
 
   bufferlist bl;
   ::encode(*this, bl);
-  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), exclusive, NULL, 0, NULL);
+  ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), exclusive, NULL, 0, NULL);
 
   return ret;
 }
@@ -293,13 +311,17 @@ void RGWZoneParams::init_default(RGWRados *store)
   }
 }
 
-string RGWZoneParams::get_pool_name(CephContext *cct)
+int RGWZoneParams::get_pool_name(CephContext *cct, string *pool_name)
 {
-  string pool_name = cct->_conf->rgw_zone_root_pool;
-  if (pool_name.empty()) {
-    pool_name = RGW_DEFAULT_ZONE_ROOT_POOL;
+  *pool_name = cct->_conf->rgw_zone_root_pool;
+  if (pool_name->empty()) {
+    *pool_name = RGW_DEFAULT_ZONE_ROOT_POOL;
+  } else if ((*pool_name)[0] != '.') {
+    derr << "ERROR: zone root pool name must start with a period" << dendl;
+    return -EINVAL;
   }
-  return pool_name;
+
+  return 0;
 }
 
 void RGWZoneParams::init_name(CephContext *cct, RGWRegion& region)
@@ -319,13 +341,16 @@ int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWRegion& region)
 {
   init_name(cct, region);
 
-  string pool_name = get_pool_name(cct);
+  string pool_name;
+  int ret = get_pool_name(cct, &pool_name);
+  if (ret < 0)
+    return ret;
 
   rgw_bucket pool(pool_name.c_str());
   bufferlist bl;
 
   string oid = zone_info_oid_prefix + name;
-  int ret = rgw_get_system_obj(store, NULL, pool, oid, bl, NULL, NULL);
+  ret = rgw_get_system_obj(store, NULL, pool, oid, bl, NULL, NULL);
   if (ret < 0)
     return ret;
 
@@ -344,14 +369,17 @@ int RGWZoneParams::store_info(CephContext *cct, RGWRados *store, RGWRegion& regi
 {
   init_name(cct, region);
 
-  string pool_name = get_pool_name(cct);
+  string pool_name;
+  int ret = get_pool_name(cct, &pool_name);
+  if (ret < 0)
+    return ret;
 
   rgw_bucket pool(pool_name.c_str());
   string oid = zone_info_oid_prefix + name;
 
   bufferlist bl;
   ::encode(*this, bl);
-  int ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, 0, NULL);
+  ret = rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(), false, NULL, 0, NULL);
 
   return ret;
 }
@@ -1025,14 +1053,20 @@ int RGWRados::list_raw_prefixed_objs(string pool_name, const string& prefix, lis
 
 int RGWRados::list_regions(list<string>& regions)
 {
-  string pool_name = RGWRegion::get_pool_name(cct);
+  string pool_name;
+  int ret = RGWRegion::get_pool_name(cct, &pool_name);
+  if (ret < 0)
+    return ret;
 
   return list_raw_prefixed_objs(pool_name, region_info_oid_prefix, regions);
 }
 
 int RGWRados::list_zones(list<string>& zones)
 {
-  string pool_name = RGWZoneParams::get_pool_name(cct);
+  string pool_name;
+  int ret = RGWZoneParams::get_pool_name(cct, &pool_name);
+  if (ret < 0)
+    return ret;
 
   return list_raw_prefixed_objs(pool_name, zone_info_oid_prefix, zones);
 }
