@@ -449,9 +449,7 @@ protected:
     
     /// clear content
     void clear() {
-      objects.clear();
-      begin = end = hobject_t();
-      version = eversion_t();
+      *this = BackfillInterval();
     }
 
     void reset(hobject_t start) {
