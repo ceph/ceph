@@ -399,7 +399,7 @@ int main(int argc, const char **argv)
 
   /* alternative default for module */
   vector<const char *> def_args;
-  def_args.push_back("--debug-rgw=20");
+  def_args.push_back("--debug-rgw=1/5");
   def_args.push_back("--keyring=$rgw_data/keyring");
   def_args.push_back("--log-file=/var/log/radosgw/$cluster-$name");
 
