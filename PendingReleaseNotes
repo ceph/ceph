@@ -21,3 +21,12 @@ v0.71
 * Most output that used K or KB (e.g., for kilobyte) now uses a
   lower-case k to match the official SI convention.  Any scripts that
   parse output and check for an upper-case K will need to be modified.
+
+v0.72
+~~~~~
+
+* ceph-fuse and radosgw now use the same default values for the admin
+  socket and log file paths that the other daemons (ceph-osd,
+  ceph-mon, etc.) do.  If you run these daemons as non-root, you may
+  need to adjust your ceph.conf to disable these options or to adjust
+  the permissions on /var/run/ceph and /var/log/ceph.
