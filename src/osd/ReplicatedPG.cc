@@ -1921,6 +1921,8 @@ void ReplicatedBackend::_do_push(OpRequestRef op)
     new C_OSD_SendMessageOnConn(
       osd, reply, m->get_connection()));
 
+  t->register_on_applied(
+    new ObjectStore::C_DeleteTransaction(t));
   get_parent()->queue_transaction(t);
 }
 
@@ -1993,6 +1995,8 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
 	osd, reply, m->get_connection()));
   }
 
+  t->register_on_applied(
+    new ObjectStore::C_DeleteTransaction(t));
   get_parent()->queue_transaction(t);
 }
 
@@ -2074,7 +2078,7 @@ void ReplicatedPG::do_backfill(OpRequestRef op)
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       dirty_info = true;
       write_if_dirty(*t);
-      int tr = osd->store->queue_transaction(osr.get(), t);
+      int tr = osd->store->queue_transaction_and_cleanup(osr.get(), t);
       assert(tr == 0);
     }
     break;
@@ -8125,7 +8129,7 @@ void ReplicatedPG::sub_op_remove(OpRequestRef op)
 
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   remove_snap_mapped_object(*t, m->poid);
-  int r = osd->store->queue_transaction(osr.get(), t);
+  int r = osd->store->queue_transaction_and_cleanup(osr.get(), t);
   assert(r == 0);
 }
 
@@ -10218,7 +10222,7 @@ boost::statechart::result ReplicatedPG::WaitingOnReplicas::react(const SnapTrim&
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   pg->dirty_big_info = true;
   pg->write_if_dirty(*t);
-  int tr = pg->osd->store->queue_transaction(pg->osr.get(), t);
+  int tr = pg->osd->store->queue_transaction_and_cleanup(pg->osr.get(), t);
   assert(tr == 0);
 
   context<SnapTrimmer>().need_share_pg_info = true;

@@ -1499,7 +1499,7 @@ void PG::_activate_committed(epoch_t e)
   if (dirty_info) {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     write_if_dirty(*t);
-    int tr = osd->store->queue_transaction(osr.get(), t);
+    int tr = osd->store->queue_transaction_and_cleanup(osr.get(), t);
     assert(tr == 0);
   }
 
@@ -4241,7 +4241,7 @@ void PG::scrub_finish()
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     dirty_info = true;
     write_if_dirty(*t);
-    int tr = osd->store->queue_transaction(osr.get(), t);
+    int tr = osd->store->queue_transaction_and_cleanup(osr.get(), t);
     assert(tr == 0);
   }
 
