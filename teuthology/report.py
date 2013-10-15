@@ -115,6 +115,19 @@ class ResultsSerializer(object):
                 jobs[job_id] = job_dir
         return jobs
 
+    def running_jobs_for_run(self, run_name):
+        """
+        Like jobs_for_run(), but only returns jobs with no summary.yaml
+
+        :param run_name: The name of the run.
+        :returns:        A dict like: {'1': '/path/to/1', '2': 'path/to/2'}
+        """
+        jobs = self.jobs_for_run(run_name)
+        for name in jobs.keys():
+            if not os.path.exists(os.path.join(jobs[name], 'summary.yaml')):
+                jobs.pop(name)
+        return jobs
+
     @property
     def all_runs(self):
         """

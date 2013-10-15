@@ -45,6 +45,17 @@ class TestSerializer(object):
         got_jobs = self.reporter.serializer.jobs_for_run(run_name)
         assert sorted(job_ids) == sorted(got_jobs.keys())
 
+    def test_running_jobs_for_run(self):
+        run_name = "test_jobs_for_run"
+        yaml_path = "examples/3node_ceph.yaml"
+        job_count = 10
+        num_hung = 3
+        self.archive.create_fake_run(run_name, job_count, yaml_path,
+                                     num_hung=num_hung)
+
+        got_jobs = self.reporter.serializer.running_jobs_for_run(run_name)
+        assert len(got_jobs) == job_count - num_hung
+
     def test_json_for_job(self):
         run_name = "test_json_for_job"
         yaml_path = "examples/3node_ceph.yaml"

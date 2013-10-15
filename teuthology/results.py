@@ -10,6 +10,7 @@ from textwrap import fill
 import teuthology
 from teuthology import misc
 from teuthology import suite
+from .report import ResultsSerializer
 
 log = logging.getLogger(__name__)
 
@@ -40,26 +41,17 @@ def main(args):
 
 
 def results(args):
-    running_tests = [
-        f for f in sorted(os.listdir(args.archive_dir))
-        if not f.startswith('.')
-        and os.path.isdir(os.path.join(args.archive_dir, f))
-        and not os.path.exists(os.path.join(
-            args.archive_dir, f, 'summary.yaml'))
-    ]
+    archive_base = os.path.split(args.archive_dir, args.name)
+    serializer = ResultsSerializer(archive_base)
     starttime = time.time()
+
     log.info('Waiting up to %d seconds for tests to finish...', args.timeout)
-    while running_tests and args.timeout > 0:
-        if os.path.exists(os.path.join(
-                args.archive_dir,
-                running_tests[-1], 'summary.yaml')):
-            running_tests.pop()
-        else:
-            if time.time() - starttime > args.timeout:
-                log.warn('test(s) did not finish before timeout of %d seconds',
-                         args.timeout)
-                break
-            time.sleep(10)
+    while serializer.running_jobs_for_run(args.name) and args.timeout > 0:
+        if time.time() - starttime > args.timeout:
+            log.warn('test(s) did not finish before timeout of %d seconds',
+                     args.timeout)
+            break
+        time.sleep(10)
     log.info('Tests finished! gathering results...')
 
     (subject, body) = build_email_body(args.name, args.archive_dir,
