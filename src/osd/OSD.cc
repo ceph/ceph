@@ -3278,13 +3278,15 @@ bool remove_dir(
   ObjectStore *store, SnapMapper *mapper,
   OSDriver *osdriver,
   ObjectStore::Sequencer *osr,
-  coll_t coll, DeletingStateRef dstate)
+  coll_t coll, DeletingStateRef dstate,
+  ThreadPool::TPHandle &handle)
 {
   vector<ghobject_t> olist;
   int64_t num = 0;
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   ghobject_t next;
   while (!next.is_max()) {
+    handle.reset_tp_timeout();
     store->collection_list_partial(
       coll,
       next,
@@ -3306,7 +3308,9 @@ bool remove_dir(
 	C_SaferCond waiter;
 	store->queue_transaction(osr, t, &waiter);
 	bool cont = dstate->pause_clearing();
+	handle.suspend_tp_timeout();
 	waiter.wait();
+	handle.reset_tp_timeout();
 	if (cont)
 	  cont = dstate->resume_clearing();
 	delete t;
@@ -3322,14 +3326,18 @@ bool remove_dir(
   C_SaferCond waiter;
   store->queue_transaction(osr, t, &waiter);
   bool cont = dstate->pause_clearing();
+  handle.suspend_tp_timeout();
   waiter.wait();
+  handle.reset_tp_timeout();
   if (cont)
     cont = dstate->resume_clearing();
   delete t;
   return cont;
 }
 
-void OSD::RemoveWQ::_process(pair<PGRef, DeletingStateRef> item)
+void OSD::RemoveWQ::_process(
+  pair<PGRef, DeletingStateRef> item,
+  ThreadPool::TPHandle &handle)
 {
   PGRef pg(item.first);
   SnapMapper &mapper = pg->snap_mapper;
@@ -3346,7 +3354,8 @@ void OSD::RemoveWQ::_process(pair<PGRef, DeletingStateRef> item)
        i != colls_to_remove.end();
        ++i) {
     bool cont = remove_dir(
-      pg->cct, store, &mapper, &driver, pg->osr.get(), *i, item.second);
+      pg->cct, store, &mapper, &driver, pg->osr.get(), *i, item.second,
+      handle);
     if (!cont)
       return;
   }
