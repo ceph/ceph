@@ -112,7 +112,7 @@ COMMAND("pg send_pg_creates", "trigger pg creates to be issued",\
 	"pg", "rw", "cli,rest")
 COMMAND("pg dump " \
 	"name=dumpcontents,type=CephChoices,strings=all|summary|sum|delta|pools|osds|pgs|pgs_brief,n=N,req=false", \
-	"show human-readable versions of pg map", "pg", "r", "cli,rest")
+	"show human-readable versions of pg map (only 'all' valid with plain)", "pg", "r", "cli,rest")
 COMMAND("pg dump_json " \
 	"name=dumpcontents,type=CephChoices,strings=all|summary|sum|pools|osds|pgs,n=N,req=false", \
 	"show human-readable version of pg map in json only",\
