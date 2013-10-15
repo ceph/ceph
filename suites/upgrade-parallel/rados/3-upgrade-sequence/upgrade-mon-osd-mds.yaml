@@ -2,7 +2,6 @@ upgrade-sequence:
    sequential:
    - install.upgrade:
       all:
-         branch: next
    - ceph.restart:
        daemons: [mon.a]
        wait-for-healthy: false

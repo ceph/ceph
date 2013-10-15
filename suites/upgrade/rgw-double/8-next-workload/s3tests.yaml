@@ -1,5 +1,4 @@
 tasks:
 - s3tests:
     client.0:
-      force-branch: next
       rgw_server: client.0
