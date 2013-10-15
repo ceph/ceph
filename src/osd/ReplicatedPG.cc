@@ -988,21 +988,8 @@ void ReplicatedPG::do_op(OpRequestRef op)
     return;
   }
 
-  if ((op->may_read()) && (obc->obs.oi.is_lost())) {
-    // This object is lost. Reading from it returns an error.
-    dout(20) << __func__ << ": object " << obc->obs.oi.soid
-	     << " is lost" << dendl;
-    osd->reply_op_error(op, -ENFILE);
-    return;
-  }
   dout(25) << __func__ << ": object " << obc->obs.oi.soid
 	   << " has oi of " << obc->obs.oi << dendl;
-  
-  if (!op->may_write() && (!obc->obs.exists ||
-			   obc->obs.oi.is_whiteout())) {
-    osd->reply_op_error(op, -ENOENT);
-    return;
-  }
 
   // are writes blocked by another object?
   if (obc->blocked_by) {
@@ -1126,11 +1113,31 @@ void ReplicatedPG::do_op(OpRequestRef op)
     }
   }
 
-  op->mark_started();
-
   OpContext *ctx = new OpContext(op, m->get_reqid(), m->ops,
 				 &obc->obs, obc->ssc, 
 				 this);
+  if (!get_rw_locks(ctx)) {
+    op->mark_delayed("waiting for rw locks");
+    close_op_ctx(ctx);
+    return;
+  }
+
+  if ((op->may_read()) && (obc->obs.oi.is_lost())) {
+    // This object is lost. Reading from it returns an error.
+    dout(20) << __func__ << ": object " << obc->obs.oi.soid
+	     << " is lost" << dendl;
+    close_op_ctx(ctx);
+    osd->reply_op_error(op, -ENFILE);
+    return;
+  }
+  if (!op->may_write() && (!obc->obs.exists ||
+                           obc->obs.oi.is_whiteout())) {
+    close_op_ctx(ctx);
+    osd->reply_op_error(op, -ENOENT);
+    return;
+  }
+
+  op->mark_started();
   ctx->obc = obc;
   ctx->src_obc = src_obc;
 
@@ -1207,7 +1214,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
       if (already_complete(oldv)) {
 	reply_ctx(ctx, 0, oldv, entry->user_version);
       } else {
-	delete ctx;
+	close_op_ctx(ctx);
 
 	if (m->wants_ack()) {
 	  if (already_ack(oldv)) {
@@ -1300,7 +1307,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 
   if (result == -EAGAIN) {
     // clean up after the ctx
-    delete ctx;
+    close_op_ctx(ctx);
     return;
   }
 
@@ -1352,7 +1359,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
     
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
     osd->send_message_osd_client(reply, m->get_connection());
-    delete ctx;
+    close_op_ctx(ctx);
     return;
   }
 
@@ -1400,13 +1407,13 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 void ReplicatedPG::reply_ctx(OpContext *ctx, int r)
 {
   osd->reply_op_error(ctx->op, r);
-  delete ctx;
+  close_op_ctx(ctx);
 }
 
 void ReplicatedPG::reply_ctx(OpContext *ctx, int r, eversion_t v, version_t uv)
 {
   osd->reply_op_error(ctx->op, r, v, uv);
-  delete ctx;
+  close_op_ctx(ctx);
 }
 
 void ReplicatedPG::log_op_stats(OpContext *ctx)
@@ -1542,11 +1549,14 @@ void ReplicatedPG::do_scan(
       }
 
       BackfillInterval bi;
-      osr->flush();
       bi.begin = m->begin;
+      // No need to flush, there won't be any in progress writes occuring
+      // past m->begin
       scan_range(
 	cct->_conf->osd_backfill_scan_min,
-	cct->_conf->osd_backfill_scan_max, &bi, handle);
+	cct->_conf->osd_backfill_scan_max,
+	&bi,
+	handle);
       MOSDPGScan *reply = new MOSDPGScan(MOSDPGScan::OP_SCAN_DIGEST,
 					 get_osdmap()->get_epoch(), m->query_epoch,
 					 info.pgid, bi.begin, bi.end);
@@ -4724,6 +4734,8 @@ void ReplicatedPG::eval_repop(RepGather *repop)
     // ondisk?
     if (repop->waitfor_disk.empty()) {
 
+      release_op_ctx_locks(repop->ctx);
+
       log_op_stats(repop->ctx);
       publish_stats_to_osd();
 
@@ -4929,6 +4941,7 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(OpContext *ctx, ObjectContextRe
  
 void ReplicatedPG::remove_repop(RepGather *repop)
 {
+  release_op_ctx_locks(repop->ctx);
   repop_map.erase(repop->rep_tid);
   repop->put();
 
@@ -7920,9 +7933,6 @@ int ReplicatedPG::recover_backfill(
 	   << " interval " << pbi.begin << "-" << pbi.end
 	   << " " << pbi.objects.size() << " objects" << dendl;
 
-  int local_min = cct->_conf->osd_backfill_scan_min;
-  int local_max = cct->_conf->osd_backfill_scan_max;
-
   // update our local interval to cope with recent changes
   backfill_info.begin = backfill_pos;
   update_range(&backfill_info, handle);
@@ -7938,10 +7948,11 @@ int ReplicatedPG::recover_backfill(
   while (ops < max) {
     if (backfill_info.begin <= pbi.begin &&
 	!backfill_info.extends_to_end() && backfill_info.empty()) {
-      osr->flush();
-      backfill_info.begin = backfill_info.end;
-      scan_range(local_min, local_max, &backfill_info,
-		 handle);
+      hobject_t next = backfill_info.end;
+      backfill_info.clear();
+      backfill_info.begin = next;
+      backfill_info.end = hobject_t::get_max();
+      update_range(&backfill_info, handle);
       backfill_info.trim();
     }
     backfill_pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
@@ -8118,6 +8129,19 @@ void ReplicatedPG::update_range(
 {
   int local_min = cct->_conf->osd_backfill_scan_min;
   int local_max = cct->_conf->osd_backfill_scan_max;
+
+  if (bi->version < info.log_tail) {
+    dout(10) << __func__<< ": bi is old, rescanning local backfill_info"
+	     << dendl;
+    if (last_update_applied >= info.log_tail) {
+      bi->version = last_update_applied;
+    } else {
+      osr->flush();
+      bi->version = info.last_update;
+    }
+    scan_range(local_min, local_max, bi, handle);
+  }
+
   if (bi->version >= info.last_update) {
     dout(10) << __func__<< ": bi is current " << dendl;
     assert(bi->version == info.last_update);
@@ -8157,10 +8181,7 @@ void ReplicatedPG::update_range(
     }
     bi->version = info.last_update;
   } else {
-    dout(10) << __func__<< ": bi is old, rescanning local backfill_info"
-	     << dendl;
-    osr->flush();
-    scan_range(local_min, local_max, &backfill_info, handle);
+    assert(0 == "scan_range should have raised bi->version past log_tail");
   }
 }
 
@@ -8170,7 +8191,6 @@ void ReplicatedPG::scan_range(
 {
   assert(is_locked());
   dout(10) << "scan_range from " << bi->begin << dendl;
-  bi->version = info.last_update;
   bi->objects.clear();  // for good measure
 
   vector<hobject_t> ls;
