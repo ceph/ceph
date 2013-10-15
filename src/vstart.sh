@@ -237,6 +237,7 @@ fi
 $SUDO rm -f core*
 
 test -d out || mkdir out
+test -d dev || mkdir dev
 $SUDO rm -rf out/*
 test -d gmon && $SUDO rm -rf gmon/*
 
@@ -390,7 +391,7 @@ EOF
 		    cmd="rm -rf $CEPH_DEV_DIR/mon.$f"
 		    echo $cmd
 		    $cmd
-                    cmd="mkdir $CEPH_DEV_DIR/mon.$f"
+                    cmd="mkdir -p $CEPH_DEV_DIR/mon.$f"
                     echo $cmd
                     $cmd
 		    cmd="$CEPH_BIN/ceph-mon --mkfs -c $conf -i $f --monmap=$monmap_fn"
