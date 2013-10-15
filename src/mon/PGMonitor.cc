@@ -1911,7 +1911,9 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
       }
       int average_objects_per_pg = pg_map.pg_sum.stats.sum.num_objects / pg_map.pg_stat.size();
-      if (average_objects_per_pg > 0) {
+      if (average_objects_per_pg > 0 &&
+	  pg_map.pg_sum.stats.sum.num_objects >= g_conf->mon_pg_warn_min_objects &&
+	  p->second.stats.sum.num_objects >= g_conf->mon_pg_warn_min_pool_objects) {
 	int objects_per_pg = p->second.stats.sum.num_objects / pi->get_pg_num();
 	float ratio = (float)objects_per_pg / (float)average_objects_per_pg;
 	if (g_conf->mon_pg_warn_max_object_skew > 0 &&
