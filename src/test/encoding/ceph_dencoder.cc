@@ -93,7 +93,7 @@ public:
     // allow 0- or 1-based (by wrapping)
     if (i == 0)
       i = m_list.size();
-    if (i > m_list.size())
+    if ((i == 0) || (i > m_list.size()))
       return "invalid id for generated object";
     typename list<T*>::iterator p = m_list.begin();
     for (i--; i > 0 && p != m_list.end(); ++p, --i) ;
@@ -177,7 +177,7 @@ public:
     // allow 0- or 1-based (by wrapping)
     if (i == 0)
       i = m_list.size();
-    if (i > m_list.size())
+    if ((i == 0) || (i > m_list.size()))
       return "invalid id for generated object";
     typename list<T*>::iterator p = m_list.begin();
     for (i--; i > 0 && p != m_list.end(); ++p, --i) ;
