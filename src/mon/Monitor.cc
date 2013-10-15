@@ -52,6 +52,7 @@
 
 #include "messages/MTimeCheck.h"
 #include "messages/MMonHealth.h"
+#include "messages/MPing.h"
 
 #include "common/strtol.h"
 #include "common/ceph_argparse.h"
@@ -2591,6 +2592,10 @@ bool Monitor::_ms_dispatch(Message *m)
     // of assessing whether we should handle it or not.
     if (!src_is_mon && (m->get_type() != CEPH_MSG_AUTH &&
 			m->get_type() != CEPH_MSG_MON_GET_MAP)) {
+      if (m->get_type() == CEPH_MSG_PING) {
+        // let it go through and be dispatched immediately!
+        return dispatch(s, m, false);
+      }
       dout(1) << __func__ << " dropping stray message " << *m
         << " from " << m->get_source_inst() << dendl;
       return false;
@@ -2803,11 +2808,41 @@ bool Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
       health_monitor->dispatch(static_cast<MMonHealth *>(m));
       break;
 
+    case CEPH_MSG_PING:
+      handle_ping(static_cast<MPing*>(m));
+      break;
+
     default:
       ret = false;
   }
 
   return ret;
+}
+
+void Monitor::handle_ping(MPing *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+  MPing *reply = new MPing;
+  entity_inst_t inst = m->get_source_inst();
+  bufferlist payload;
+  Formatter *f = new JSONFormatter(true);
+  f->open_object_section("pong");
+
+  string health_str;
+  get_health(health_str, NULL, f);
+  {
+    stringstream ss;
+    _mon_status(f, ss);
+  }
+
+  f->close_section();
+  stringstream ss;
+  f->flush(ss);
+  ::encode(ss.str(), payload);
+  reply->set_payload(payload);
+  dout(10) << __func__ << " reply payload len " << reply->get_payload().length() << dendl;
+  messenger->send_message(reply, inst);
+  m->put();
 }
 
 void Monitor::timecheck_start()
