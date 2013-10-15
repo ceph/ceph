@@ -101,7 +101,7 @@ TEST(LibRadosCmd, PGCmd) {
 
   cmd[0] = (char *)"asdfasdf";
   // note: tolerate NXIO here in case the cluster is thrashing out underneath us.
-  r = rados_pg_command(cluster, pgid.c_str(), (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen);
+  int r = rados_pg_command(cluster, pgid.c_str(), (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen);
   ASSERT_TRUE(r == -22 || r == -ENXIO);
 
   // make sure the pg exists on the osd before we query it
