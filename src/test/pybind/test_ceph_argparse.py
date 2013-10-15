@@ -460,10 +460,12 @@ class TestMDS(TestArgparse):
 													'toomany']))
 
     def test_add_data_pool(self):
-        self.check_1_natural_arg('mds', 'add_data_pool')
+        self.assert_valid_command(['mds', 'add_data_pool', '1'])
+        self.assert_valid_command(['mds', 'add_data_pool', 'foo'])
 
     def test_remove_data_pool(self):
-        self.check_1_natural_arg('mds', 'remove_data_pool')
+        self.assert_valid_command(['mds', 'remove_data_pool', '1'])
+        self.assert_valid_command(['mds', 'remove_data_pool', 'foo'])
 
     def test_newfs(self):
         self.assert_valid_command(['mds', 'newfs', '1', '2',
