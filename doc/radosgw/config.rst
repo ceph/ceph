@@ -387,6 +387,7 @@ The following configuration options are available for Keystone integration::
 		rgw keystone accepted roles = {accepted user roles}
 		rgw keystone token cache size = {number of tokens to cache}
 		rgw keystone revocation interval = {number of seconds before checking revoked tickets}
+		rgw s3 auth use keystone = true
 		nss db path = {path to nss db}
 
 A Ceph Object Gateway user is mapped into a Keystone ``tenant``. A Keystone user
