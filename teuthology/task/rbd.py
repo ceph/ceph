@@ -10,14 +10,11 @@ from ..orchestra import run
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.parallel import parallel
+from teuthology.task.common_fs_utils import generic_mkfs
+from teuthology.task.common_fs_utils import generic_mount
+from teuthology.task.common_fs_utils import default_image_name
 
 log = logging.getLogger(__name__)
-
-def default_image_name(role):
-    """
-    Currently just append role to 'testimage.' string
-    """
-    return 'testimage.{role}'.format(role=role)
 
 @contextlib.contextmanager
 def create_image(ctx, config):
@@ -216,121 +213,9 @@ def dev_create(ctx, config):
                     ],
                 )
 
-@contextlib.contextmanager
-def mkfs(ctx, config):
-    """
-    Create a filesystem on a block device.
 
-    For example::
-
-        tasks:
-        - ceph:
-        - rbd.create_image: [client.0]
-        - rbd.modprobe: [client.0]
-        - rbd.dev_create: [client.0]
-        - rbd.mkfs:
-            client.0:
-                fs_type: xfs
-    """
-    assert isinstance(config, list) or isinstance(config, dict), \
-        "task mkfs must be configured with a list or dictionary"
-    if isinstance(config, dict):
-        images = config.items()
-    else:
-        images = [(role, None) for role in config]
-
-    for role, properties in images:
-        if properties is None:
-            properties = {}
-        (remote,) = ctx.cluster.only(role).remotes.keys()
-        image = properties.get('image_name', default_image_name(role))
-        fs = properties.get('fs_type', 'ext3')
-        remote.run(
-            args=[
-                'sudo',
-                'mkfs',
-                '-t', fs,
-                '/dev/rbd/rbd/{image}'.format(image=image),
-                ],
-            )
-    yield
-
-@contextlib.contextmanager
-def mount(ctx, config):
-    """
-    Mount an rbd image.
-
-    For example::
-
-        tasks:
-        - ceph:
-        - rbd.create_image: [client.0]
-        - rbd.modprobe: [client.0]
-        - rbd.mkfs: [client.0]
-        - rbd.mount:
-            client.0: testimage.client.0
-    """
-    assert isinstance(config, list) or isinstance(config, dict), \
-        "task mount must be configured with a list or dictionary"
-    if isinstance(config, dict):
-        role_images = config.items()
-    else:
-        role_images = [(role, None) for role in config]
-
-    def strip_client_prefix(role):
-        """Currently just removes 'client.' from start of role name"""
-        PREFIX = 'client.'
-        assert role.startswith(PREFIX)
-        id_ = role[len(PREFIX):]
-        return id_
-
-    testdir = teuthology.get_testdir(ctx)
-
-    mnt_template = '{tdir}/mnt.{id}'
-    mounted = []
-    for role, image in role_images:
-        if image is None:
-            image = default_image_name(role)
-        (remote,) = ctx.cluster.only(role).remotes.keys()
-        id_ = strip_client_prefix(role)
-        mnt = mnt_template.format(tdir=testdir, id=id_)
-        mounted.append((remote, mnt))
-        remote.run(
-            args=[
-                'mkdir',
-                '--',
-                mnt,
-                ]
-            )
-
-        remote.run(
-            args=[
-                'sudo',
-                'mount',
-                '/dev/rbd/rbd/{image}'.format(image=image),
-                mnt,
-                ],
-            )
-
-    try:
-        yield
-    finally:
-        log.info("Unmounting rbd images... %s", mounted)
-        for remote, mnt in mounted:
-            remote.run(
-                args=[
-                    'sudo',
-                    'umount',
-                    mnt,
-                    ],
-                )
-            remote.run(
-                args=[
-                    'rmdir',
-                    '--',
-                    mnt,
-                    ]
-                )
+def rbd_devname_rtn(ctx, image):
+    return '/dev/rbd/rbd/{image}'.format(image=image)    
 
 def canonical_path(ctx, role, path):
     """
@@ -613,7 +498,9 @@ def task(ctx, config):
         lambda: create_image(ctx=ctx, config=norm_config),
         lambda: modprobe(ctx=ctx, config=norm_config),
         lambda: dev_create(ctx=ctx, config=role_images),
-        lambda: mkfs(ctx=ctx, config=norm_config),
-        lambda: mount(ctx=ctx, config=role_images),
+        lambda: generic_mkfs(ctx=ctx, config=norm_config,
+                devname_rtn=rbd_devname_rtn),
+        lambda: generic_mount(ctx=ctx, config=role_images,
+                devname_rtn=rbd_devname_rtn),
         ):
         yield
