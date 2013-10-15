@@ -833,7 +833,7 @@ class TestOSD(TestArgparse):
                                                     uuid,
                                                     'toomany']))
 
-    def test_blackist(self):
+    def test_blacklist(self):
         for action in ('add', 'rm'):
             self.assert_valid_command(['osd', 'blacklist', action,
                                        '1.2.3.4/567'])
