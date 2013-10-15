@@ -147,7 +147,9 @@ ceph mds newfs 0 1 --yes-i-really-mean-it
 ceph osd pool create data2 10
 poolnum=$(ceph osd dump | grep 'pool.*data2' | awk '{print $2;}')
 ceph mds add_data_pool $poolnum
+ceph mds add_data_pool rbd
 ceph mds remove_data_pool $poolnum
+ceph mds remove_data_pool rbd
 ceph osd pool delete data2 data2 --yes-i-really-really-mean-it
 ceph mds set_max_mds 4
 ceph mds set_max_mds 3

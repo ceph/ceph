@@ -951,21 +951,44 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       }
     }
   } else if (prefix == "mds add_data_pool") {
-    int64_t poolid;
-    cmd_getval(g_ceph_context, cmdmap, "poolid", poolid);
-    pending_mdsmap.add_data_pool(poolid);
-    ss << "added data pool " << poolid << " to mdsmap";
-    r = 0;
-
-  } else if (prefix == "mds remove_data_pool") {
-    int64_t poolid;
-    cmd_getval(g_ceph_context, cmdmap, "poolid", poolid);
-    r = pending_mdsmap.remove_data_pool(poolid);
-    if (r == -ENOENT)
+    string poolname;
+    cmd_getval(g_ceph_context, cmdmap, "pool", poolname);
+    int64_t poolid = mon->osdmon()->osdmap.lookup_pg_pool_name(poolname);
+    if (poolid < 0) {
+      string err;
+      poolid = strict_strtol(poolname.c_str(), 10, &err);
+      if (err.length()) {
+	r = -ENOENT;
+	poolid = -1;
+	ss << "pool '" << poolname << "' does not exist";
+      }
+    }
+    if (poolid >= 0) {
+      pending_mdsmap.add_data_pool(poolid);
+      ss << "added data pool " << poolid << " to mdsmap";
       r = 0;
-    if (r == 0)
-      ss << "removed data pool " << poolid << " from mdsmap";
-
+    }
+  } else if (prefix == "mds remove_data_pool") {
+    string poolname;
+    cmd_getval(g_ceph_context, cmdmap, "pool", poolname);
+    int64_t poolid = mon->osdmon()->osdmap.lookup_pg_pool_name(poolname);
+    if (poolid < 0) {
+      string err;
+      poolid = strict_strtol(poolname.c_str(), 10, &err);
+      if (err.length()) {
+	r = -ENOENT;
+	poolid = -1;
+	ss << "pool '" << poolname << "' does not exist";
+      }
+    }
+    if (poolid >= 0) {
+      cmd_getval(g_ceph_context, cmdmap, "poolid", poolid);
+      r = pending_mdsmap.remove_data_pool(poolid);
+      if (r == -ENOENT)
+	r = 0;
+      if (r == 0)
+	ss << "removed data pool " << poolid << " from mdsmap";
+    }
   } else if (prefix == "mds newfs") {
     MDSMap newmap;
     int64_t metadata, data;
