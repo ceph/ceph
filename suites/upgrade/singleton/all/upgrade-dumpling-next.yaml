@@ -21,11 +21,9 @@ tasks:
         debug client: 20
 - install.upgrade:
      all:
-        branch: next
 - ceph.restart:
 - ceph-fuse: [client.0]
 - workunit:
-     branch: next
      clients:
         client.0:
            - suites/dbench.sh
