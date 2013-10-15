@@ -124,12 +124,12 @@ int GenericFileStoreBackend::detect_features()
       dout(0) << "detect_features: FIEMAP ioctl is supported and appears to work" << dendl;
       ioctl_fiemap = true;
     }
+    free(fiemap);
   }
   if (!m_filestore_fiemap) {
     dout(0) << "detect_features: FIEMAP ioctl is disabled via 'filestore fiemap' config option" << dendl;
     ioctl_fiemap = false;
   }
-  free(fiemap);
 
   ::unlink(fn);
   TEMP_FAILURE_RETRY(::close(fd));
