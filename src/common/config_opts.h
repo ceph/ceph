@@ -203,7 +203,7 @@ OPTION(mon_leveldb_bloom_size, OPT_INT, 0) // monitor's leveldb bloom bits per e
 OPTION(mon_leveldb_max_open_files, OPT_INT, 0) // monitor's leveldb max open files
 OPTION(mon_leveldb_compression, OPT_BOOL, false) // monitor's leveldb uses compression
 OPTION(mon_leveldb_paranoid, OPT_BOOL, false)   // monitor's leveldb paranoid flag
-OPTION(mon_leveldb_log, OPT_STR, "")
+OPTION(mon_leveldb_log, OPT_STR, "/dev/null")
 OPTION(mon_leveldb_size_warn, OPT_U64, 40*1024*1024*1024) // issue a warning when the monitor's leveldb goes over 40GB (in bytes)
 OPTION(paxos_stash_full_interval, OPT_INT, 25)   // how often (in commits) to stash a full copy of the PaxosService state
 OPTION(paxos_max_join_drift, OPT_INT, 10) // max paxos iterations before we must first sync the monitor stores
@@ -492,7 +492,7 @@ OPTION(osd_leveldb_bloom_size, OPT_INT, 0) // OSD's leveldb bloom bits per entry
 OPTION(osd_leveldb_max_open_files, OPT_INT, 0) // OSD's leveldb max open files
 OPTION(osd_leveldb_compression, OPT_BOOL, true) // OSD's leveldb uses compression
 OPTION(osd_leveldb_paranoid, OPT_BOOL, false) // OSD's leveldb paranoid flag
-OPTION(osd_leveldb_log, OPT_STR, "")  // enable OSD leveldb log file
+OPTION(osd_leveldb_log, OPT_STR, "/dev/null")  // enable OSD leveldb log file
 
 // determines whether PGLog::check() compares written out log to stored log
 OPTION(osd_debug_pg_log_writeout, OPT_BOOL, false)
