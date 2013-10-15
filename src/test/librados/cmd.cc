@@ -100,8 +100,9 @@ TEST(LibRadosCmd, PGCmd) {
   string pgid = stringify(poolid) + ".0";
 
   cmd[0] = (char *)"asdfasdf";
-  ASSERT_EQ(-22, rados_pg_command(cluster, pgid.c_str(), (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
-
+  // note: tolerate NXIO here in case the cluster is thrashing out underneath us.
+  r = rados_pg_command(cluster, pgid.c_str(), (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen);
+  ASSERT_TRUE(r == -22 || r == -ENXIO);
 
   // make sure the pg exists on the osd before we query it
   rados_ioctx_t io;
@@ -114,7 +115,9 @@ TEST(LibRadosCmd, PGCmd) {
 
   string qstr = "{\"prefix\":\"pg\", \"cmd\":\"query\", \"pgid\":\"" +  pgid + "\"}";
   cmd[0] = (char *)qstr.c_str();
-  ASSERT_EQ(0, rados_pg_command(cluster, pgid.c_str(), (const char **)cmd, 1, "", 0,  &buf, &buflen, &st, &stlen));
+  // note: tolerate ENOENT/ENXIO here if hte osd is thrashing out underneath us
+  r = rados_pg_command(cluster, pgid.c_str(), (const char **)cmd, 1, "", 0,  &buf, &buflen, &st, &stlen);
+  ASSERT_TRUE(r == 0 || r == -ENOENT || r == -ENXIO);
 
   ASSERT_LT(0u, buflen);
   rados_buffer_free(buf);
