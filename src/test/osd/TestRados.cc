@@ -111,15 +111,6 @@ private:
       return new SnapCreateOp(m_op, &context, m_stats);
 
     case TEST_OP_SNAP_REMOVE:
-      if (context.snaps.empty()) {
-	return NULL;
-      } else {
-	int snap = rand_choose(context.snaps)->first;
-	cout << "snap_remove snap " << snap << std::endl;
-	return new SnapRemoveOp(m_op, &context, snap, m_stats);
-      }
-
-    case TEST_OP_ROLLBACK:
       if (context.snaps.size() <= context.snaps_in_use.size()) {
 	return NULL;
       }
@@ -127,6 +118,16 @@ private:
 	int snap = rand_choose(context.snaps)->first;
 	if (context.snaps_in_use.count(snap))
 	  continue;  // in use; try again!
+	cout << "snap_remove snap " << snap << std::endl;
+	return new SnapRemoveOp(m_op, &context, snap, m_stats);
+      }
+
+    case TEST_OP_ROLLBACK:
+      if (context.snaps.empty()) {
+	return NULL;
+      }
+      {
+	int snap = rand_choose(context.snaps)->first;
 	string oid = *(rand_choose(context.oid_not_in_use));
 	cout << "rollback oid " << oid << " to " << snap << std::endl;
 	return new RollbackOp(m_op, &context, oid, snap);
