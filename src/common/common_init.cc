@@ -75,12 +75,8 @@ CephContext *common_preinit(const CephInitParameters &iparams,
 
   if ((flags & CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS) ||
       code_env != CODE_ENVIRONMENT_DAEMON) {
-    // no default log, pid_file, admin_socket
-    conf->set_val_or_die("pid_file", "");
-    conf->set_val_or_die("admin_socket", "");
-    conf->set_val_or_die("log_file", "");
-    // use less memory for logs
-    conf->set_val_or_die("log_max_recent", "500");
+    // do nothing special!  we used to do no default log, pid_file,
+    // admin_socket, but changed our minds.
   }
 
   return cct;
