@@ -20,17 +20,9 @@ PREFIX='client.radosgw.'
 #DEFAULT_USER='www-data'
 DEFAULT_USER='apache'
 
-# directory to write logs to
-LOGDIR='/var/log/radosgw'
-
 RADOSGW=`which radosgw`
 if [ ! -x "$RADOSGW" ]; then
     exit 0
-fi
-
-# make sure log dir exists
-if [ ! -d "$LOGDIR" ]; then
-    mkdir -p $LOGDIR
 fi
 
 case "$1" in
