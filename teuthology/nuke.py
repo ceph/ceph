@@ -21,8 +21,10 @@ from .task import install as install_task
 from .task.internal import check_lock
 from .task.internal import connect
 
+log = logging.getLogger(__name__)
 
-def shutdown_daemons(ctx, log):
+
+def shutdown_daemons(ctx):
     nodes = {}
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
@@ -59,7 +61,7 @@ def shutdown_daemons(ctx, log):
         proc.exitstatus.get()
 
 
-def find_kernel_mounts(ctx, log):
+def find_kernel_mounts(ctx):
     nodes = {}
     log.info('Looking for kernel mounts to handle...')
     for remote in ctx.cluster.remotes.iterkeys():
@@ -84,7 +86,7 @@ def find_kernel_mounts(ctx, log):
     return kernel_mounts
 
 
-def remove_kernel_mounts(ctx, kernel_mounts, log):
+def remove_kernel_mounts(ctx, kernel_mounts):
     """
     properly we should be able to just do a forced unmount,
     but that doesn't seem to be working, so you should reboot instead
@@ -109,7 +111,7 @@ def remove_kernel_mounts(ctx, kernel_mounts, log):
         proc.exitstatus.get()
 
 
-def remove_osd_mounts(ctx, log):
+def remove_osd_mounts(ctx):
     """
     unmount any osd data mounts (scratch disks)
     """
@@ -127,7 +129,7 @@ def remove_osd_mounts(ctx, log):
     )
 
 
-def remove_osd_tmpfs(ctx, log):
+def remove_osd_tmpfs(ctx):
     """
     unmount tmpfs mounts
     """
@@ -142,7 +144,7 @@ def remove_osd_tmpfs(ctx, log):
     )
 
 
-def reboot(ctx, remotes, log):
+def reboot(ctx, remotes):
     nodes = {}
     for remote in remotes:
         log.info('rebooting %s', remote.name)
@@ -165,7 +167,7 @@ def reboot(ctx, remotes, log):
         reconnect(ctx, 480)  # allow 8 minutes for the reboots
 
 
-def reset_syslog_dir(ctx, log):
+def reset_syslog_dir(ctx):
     nodes = {}
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
@@ -189,7 +191,7 @@ def reset_syslog_dir(ctx, log):
         proc.exitstatus.get()
 
 
-def dpkg_configure(ctx, log):
+def dpkg_configure(ctx):
     nodes = {}
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
@@ -211,9 +213,9 @@ def dpkg_configure(ctx, log):
         proc.exitstatus.get()
 
 
-def remove_installed_packages(ctx, log):
+def remove_installed_packages(ctx):
 
-    dpkg_configure(ctx, log)
+    dpkg_configure(ctx)
     config = {'project': 'ceph'}
     install_task.remove_packages(
         ctx,
@@ -224,7 +226,7 @@ def remove_installed_packages(ctx, log):
     install_task.purge_data(ctx)
 
 
-def remove_testing_tree(ctx, log):
+def remove_testing_tree(ctx):
     nodes = {}
     for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
@@ -247,7 +249,7 @@ def remove_testing_tree(ctx, log):
         proc.exitstatus.get()
 
 
-def synch_clocks(remotes, log):
+def synch_clocks(remotes):
     nodes = {}
     for remote in remotes:
         proc = remote.run(
@@ -271,8 +273,6 @@ def synch_clocks(remotes, log):
 
 
 def main(ctx):
-    log = logging.getLogger(__name__)
-
     if ctx.verbose:
         teuthology.log.setLevel(logging.DEBUG)
 
@@ -313,16 +313,15 @@ def main(ctx):
         else:
             subprocess.check_call(["kill", "-9", str(ctx.pid)])
 
-    nuke(ctx, log, ctx.unlock, ctx.synch_clocks, ctx.reboot_all, ctx.noipmi)
+    nuke(ctx, ctx.unlock, ctx.synch_clocks, ctx.reboot_all, ctx.noipmi)
 
 
-def nuke(ctx, log, should_unlock, sync_clocks=True, reboot_all=True,
-         noipmi=False):
+def nuke(ctx, should_unlock, sync_clocks=True, reboot_all=True, noipmi=False):
     total_unnuked = {}
     targets = dict(ctx.config['targets'])
     if ctx.name:
         log.info('Checking targets against current locks')
-        locks = list_locks(ctx)
+        locks = list_locks()
         # Remove targets who's description doesn't match archive name.
         for lock in locks:
             for target in targets:
@@ -356,7 +355,7 @@ def nuke(ctx, log, should_unlock, sync_clocks=True, reboot_all=True,
                                   default_flow_style=False).splitlines()))
 
 
-def nuke_one(ctx, targets, log, should_unlock, synch_clocks, reboot_all,
+def nuke_one(ctx, targets, should_unlock, synch_clocks, reboot_all,
              check_locks, noipmi):
     ret = None
     ctx = argparse.Namespace(
@@ -370,7 +369,7 @@ def nuke_one(ctx, targets, log, should_unlock, synch_clocks, reboot_all,
         noipmi=noipmi,
     )
     try:
-        nuke_helper(ctx, log)
+        nuke_helper(ctx)
     except Exception:
         log.exception('Could not nuke all targets in %s' % targets)
         # not re-raising the so that parallel calls aren't killed
@@ -382,7 +381,7 @@ def nuke_one(ctx, targets, log, should_unlock, synch_clocks, reboot_all,
     return ret
 
 
-def nuke_helper(ctx, log):
+def nuke_helper(ctx):
     # ensure node is up with ipmi
 
     (target,) = ctx.config['targets'].keys()
@@ -419,39 +418,39 @@ def nuke_helper(ctx, log):
     connect(ctx, None)
 
     log.info('Unmount ceph-fuse and killing daemons...')
-    shutdown_daemons(ctx, log)
+    shutdown_daemons(ctx)
     log.info('All daemons killed.')
 
-    need_reboot = find_kernel_mounts(ctx, log)
+    need_reboot = find_kernel_mounts(ctx)
 
     # no need to unmount anything if we're rebooting
     if ctx.reboot_all:
         need_reboot = ctx.cluster.remotes.keys()
     else:
         log.info('Unmount any osd data directories...')
-        remove_osd_mounts(ctx, log)
+        remove_osd_mounts(ctx)
         log.info('Unmount any osd tmpfs dirs...')
-        remove_osd_tmpfs(ctx, log)
+        remove_osd_tmpfs(ctx)
         # log.info('Dealing with any kernel mounts...')
-        # remove_kernel_mounts(ctx, need_reboot, log)
+        # remove_kernel_mounts(ctx, need_reboot)
 
     if need_reboot:
-        reboot(ctx, need_reboot, log)
+        reboot(ctx, need_reboot)
     log.info('All kernel mounts gone.')
 
     log.info('Synchronizing clocks...')
     if ctx.synch_clocks:
         need_reboot = ctx.cluster.remotes.keys()
-    synch_clocks(need_reboot, log)
+    synch_clocks(need_reboot)
 
     log.info('Making sure firmware.git is not locked...')
     ctx.cluster.run(args=['sudo', 'rm', '-f',
                           '/lib/firmware/updates/.git/index.lock', ])
 
     log.info('Reseting syslog output locations...')
-    reset_syslog_dir(ctx, log)
+    reset_syslog_dir(ctx)
     log.info('Clearing filesystem of test data...')
-    remove_testing_tree(ctx, log)
+    remove_testing_tree(ctx)
     log.info('Filesystem Cleared.')
-    remove_installed_packages(ctx, log)
+    remove_installed_packages(ctx)
     log.info('Installed packages removed.')

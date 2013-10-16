@@ -56,7 +56,7 @@ def lock_machines(ctx, config):
 
     while True:
         # make sure there are enough machines up
-        machines = lock.list_locks(ctx)
+        machines = lock.list_locks()
         if machines is None:
             if ctx.block:
                 log.warn('error listing machines, trying again')

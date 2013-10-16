@@ -158,7 +158,7 @@ def main(ctx):
     finally:
         if not ctx.summary.get('success') and ctx.config.get('nuke-on-error'):
             # only unlock if we locked them in the first place
-            nuke(ctx, log, ctx.lock)
+            nuke(ctx, ctx.lock)
         if ctx.archive is not None:
             with file(os.path.join(ctx.archive, 'summary.yaml'), 'w') as f:
                 yaml.safe_dump(ctx.summary, f, default_flow_style=False)
