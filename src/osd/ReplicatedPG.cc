@@ -1233,6 +1233,15 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
       }
       return;
     }
+    if (ctx->reqid.name.is_mds()) {
+      // write fence for mds
+      int32_t inc = pg_log.get_log().get_mds_inc((int)ctx->reqid.name.num());
+      if (inc > ctx->reqid.inc) {
+	dout(3) << "do_op stale " << ctx->reqid << " most recent mds inc " << inc << dendl;
+	reply_ctx(ctx, -ESTALE);
+	return;
+      }
+    }
 
     op->mark_started();
 
