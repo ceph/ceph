@@ -614,7 +614,7 @@ def install(ctx, config):
             purge_data(ctx)
 
 
-def _upgrade_deb_packages(ctx, config, remote, debs, branch):
+def _upgrade_deb_packages(ctx, config, remote, debs):
     """
     upgrade all packages
     """
@@ -653,7 +653,12 @@ def _upgrade_deb_packages(ctx, config, remote, debs, branch):
 
     # branch/tag/sha1 flavor
     flavor = 'basic'
-    uri = 'ref/' + branch
+    if 'sha1' in config:
+        uri = 'sha1/' + config.get('sha1')
+    elif 'branch' in config:
+        uri = 'ref/' + config.get('branch')
+    elif 'tag' in config:
+        uri = 'ref/' + config.get('tag')
     base_url = 'http://{host}/{proj}-deb-{dist}-{arch}-{flavor}/{uri}'.format(
         host=ctx.teuthology_config.get('gitbuilder_host',
                                        'gitbuilder.ceph.com'),
@@ -703,7 +708,7 @@ def _upgrade_deb_packages(ctx, config, remote, debs, branch):
     )
 
 
-def _upgrade_rpm_packages(ctx, config, remote, pkgs, branch):
+def _upgrade_rpm_packages(ctx, config, remote, pkgs):
     """
     Upgrade RPM packages.
     """
@@ -781,65 +786,74 @@ def upgrade(ctx, config):
         - install.upgrade:
              all:
                 branch: end
-    or
+
+    or specify specific roles::
+
         tasks:
         - install.upgrade:
              mon.a:
                 branch: end
              osd.0:
                 branch: other
+
+    or rely on the overrides for the target version::
+
+        overrides:
+          install:
+            ceph:
+              sha1: ...
+        tasks:
+        - install.upgrade:
+            all:
     """
     assert config is None or isinstance(config, dict), \
         "install.upgrade only supports a dictionary for configuration"
 
     for i in config.keys():
-            assert isinstance(config.get(i), dict), 'host supports dictionary'
-
-    branch = None
+            assert config.get(i) is None or isinstance(config.get(i), dict), 'host supports dictionary'
 
     project = config.get('project', 'ceph')
+
+    # use 'install' overrides here, in case the upgrade target is left
+    # unspecified/implicit.
+    install_overrides = ctx.config.get('overrides', {}).get('install', {}).get(project, {})
+    log.info('project %s overrides %s', project, install_overrides)
 
     # FIXME: extra_pkgs is not distro-agnostic
     extra_pkgs = config.get('extra_packages', [])
     log.info('extra packages: {packages}'.format(packages=extra_pkgs))
 
-    if config.get('all') is not None:
-        node = config.get('all')
-        for var, branch_val in node.iteritems():
-            if var == 'branch' or var == 'tag' or var == 'sha1':
-                branch = branch_val
+    # build a normalized remote -> config dict
+    remotes = {}
+    if 'all' in config:
         for remote in ctx.cluster.remotes.iterkeys():
-            system_type = teuthology.get_system_type(remote)
-            assert system_type in ('deb', 'rpm')
-            pkgs = PACKAGES[project][system_type]
-            log.info("Upgrading {proj} {system_type} packages: {pkgs}".format(
-                proj=project, system_type=system_type, pkgs=', '.join(pkgs)))
-            # FIXME: again, make extra_pkgs distro-agnostic
-            pkgs += extra_pkgs
-            if system_type == 'deb':
-                _upgrade_deb_packages(ctx, config, remote, pkgs, branch)
-            elif system_type == 'rpm':
-                _upgrade_rpm_packages(ctx, config, remote, pkgs, branch)
-    # FIXME: I highly doubt if this needs to be a separate codepath.
+            remotes[remote] = config.get('all')
     else:
-        list_roles = []
         for role in config.keys():
             (remote,) = ctx.cluster.only(role).remotes.iterkeys()
-            kkeys = config.get(role)
-            if remote in list_roles:
+            if remote in remotes:
+                log.warn('remote %s came up twice (role %s)', remote, role)
                 continue
-            else:
-                for var, branch_val in kkeys.iteritems():
-                    if var == 'branch' or var == 'tag' or var == 'sha1':
-                        branch = branch_val
-                        system_type = teuthology.get_system_type(remote)
-                        assert system_type in ('deb', 'rpm')
-                        pkgs = PACKAGES[project][system_type]
-                        if system_type == 'deb':
-                            _upgrade_deb_packages(ctx, config, remote, pkgs, branch)
-                        elif system_type == 'rpm':
-                            _upgrade_rpm_packages(ctx, config, remote, pkgs, branch)
-                        list_roles.append(remote)
+            remotes[remote] = config.get(role)
+
+    for remote, node in remotes.iteritems():
+        if not node:
+            node = {}
+        teuthology.deep_merge(node, install_overrides)
+        log.info('remote %s config %s', remote, node)
+        system_type = teuthology.get_system_type(remote)
+        assert system_type in ('deb', 'rpm')
+        pkgs = PACKAGES[project][system_type]
+        log.info("Upgrading {proj} {system_type} packages: {pkgs}".format(
+                proj=project, system_type=system_type, pkgs=', '.join(pkgs)))
+            # FIXME: again, make extra_pkgs distro-agnostic
+        pkgs += extra_pkgs
+        node['project'] = project
+        if system_type == 'deb':
+            _upgrade_deb_packages(ctx, node, remote, pkgs)
+        elif system_type == 'rpm':
+            _upgrade_rpm_packages(ctx, node, remote, pkgs)
+
     yield
 
 
