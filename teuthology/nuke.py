@@ -7,6 +7,7 @@ import yaml
 
 import teuthology
 from . import orchestra
+import orchestra.remote
 from .orchestra import run
 from .lock import list_locks
 from .lock import unlock_one
