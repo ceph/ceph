@@ -107,32 +107,31 @@ int MonClient::get_monmap_privately()
 {
   ldout(cct, 10) << "get_monmap_privately" << dendl;
   Mutex::Locker l(monc_lock);
-  
+
   bool temp_msgr = false;
   SimpleMessenger* smessenger = NULL;
   if (!messenger) {
     messenger = smessenger = new SimpleMessenger(cct,
                                                  entity_name_t::CLIENT(-1),
-						 "temp_mon_client",
-                                                 getpid());
+                                                 "temp_mon_client", getpid());
     messenger->add_dispatcher_head(this);
     smessenger->start();
-    temp_msgr = true; 
+    temp_msgr = true;
   }
-  
+
   int attempt = 10;
-  
+
   ldout(cct, 10) << "have " << monmap.epoch << " fsid " << monmap.fsid << dendl;
-  
+
   while (monmap.fsid.is_zero()) {
     cur_mon = _pick_random_mon();
     cur_con = messenger->get_connection(monmap.get_inst(cur_mon));
     ldout(cct, 10) << "querying mon." << cur_mon << " " << cur_con->get_peer_addr() << dendl;
     messenger->send_message(new MMonGetMap, cur_con);
-    
+
     if (--attempt == 0)
       break;
-    
+
     utime_t interval;
     interval.set_from_double(cct->_conf->mon_client_hunt_interval);
     map_cond.WaitInterval(cct, monc_lock, interval);
@@ -153,7 +152,7 @@ int MonClient::get_monmap_privately()
     messenger = 0;
     monc_lock.Lock();
   }
- 
+
   hunting = true;  // reset this to true!
   cur_mon.clear();
 
