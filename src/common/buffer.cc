@@ -89,6 +89,9 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     raw(const raw &other);
     const raw& operator=(const raw &other);
 
+    virtual char *get_data() {
+      return data;
+    }
     virtual raw* clone_empty() = 0;
     raw *clone() {
       raw *c = clone_empty();
@@ -100,7 +103,7 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
       return len;
     }
 
-    bool is_page_aligned() {
+    virtual bool is_page_aligned() {
       return ((long)data & ~CEPH_PAGE_MASK) == 0;
     }
     bool is_n_page_sized() {
@@ -375,8 +378,14 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
 
   bool buffer::ptr::at_buffer_tail() const { return _off + _len == _raw->len; }
 
-  const char *buffer::ptr::c_str() const { assert(_raw); return _raw->data + _off; }
-  char *buffer::ptr::c_str() { assert(_raw); return _raw->data + _off; }
+  const char *buffer::ptr::c_str() const {
+    assert(_raw);
+    return _raw->get_data() + _off;
+  }
+  char *buffer::ptr::c_str() {
+    assert(_raw);
+    return _raw->get_data() + _off;
+  }
 
   unsigned buffer::ptr::unused_tail_length() const
   {
@@ -389,13 +398,13 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
   {
     assert(_raw);
     assert(n < _len);
-    return _raw->data[_off + n];
+    return _raw->get_data()[_off + n];
   }
   char& buffer::ptr::operator[](unsigned n)
   {
     assert(_raw);
     assert(n < _len);
-    return _raw->data[_off + n];
+    return _raw->get_data()[_off + n];
   }
 
   const char *buffer::ptr::raw_c_str() const { assert(_raw); return _raw->data; }
