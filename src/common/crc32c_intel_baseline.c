@@ -115,13 +115,21 @@ uint32_t ceph_crc32c_intel_baseline(uint32_t crc_init2, unsigned char const *buf
 	unsigned int crc;
 	unsigned char* p_buf;
 
-	p_buf = (unsigned char*)buffer;
-	unsigned char const * p_end = buffer + len;
+	if (buffer) {
+		p_buf = (unsigned char*)buffer;
+		unsigned char const * p_end = buffer + len;
 
-	crc = crc_init;
+		crc = crc_init;
 
-	while(p_buf < (unsigned char *) p_end ){
-		crc = (crc >> 8) ^ crc32_table_iscsi_base[(crc & 0x000000FF) ^ *p_buf++] ;
+		while (p_buf < (unsigned char *) p_end ){
+			crc = (crc >> 8) ^ crc32_table_iscsi_base[(crc & 0x000000FF) ^ *p_buf++];
+		}
+	} else {
+		crc = crc_init;
+		while (len--) {
+			crc = (crc >> 8) ^ crc32_table_iscsi_base[(crc & 0x000000FF)];
+		}
+
 	}
 	return crc;	 
 }
