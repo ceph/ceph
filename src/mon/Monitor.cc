@@ -241,9 +241,11 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
 
   boost::scoped_ptr<Formatter> f(new_formatter(format));
 
-  if (command == "mon_status")
+  if (command == "mon_status") {
     _mon_status(f.get(), ss);
-  else if (command == "quorum_status")
+    if (f)
+      f->flush(ss);
+  } else if (command == "quorum_status")
     _quorum_status(f.get(), ss);
   else if (command == "sync_force") {
     string validate;
@@ -1673,9 +1675,11 @@ void Monitor::_mon_status(Formatter *f, ostream& ss)
 
   f->close_section(); // mon_status
 
-  f->flush(ss);
-  if (free_formatter)
+  if (free_formatter) {
+    // flush formatter to ss and delete it iff we created the formatter
+    f->flush(ss);
     delete f;
+  }
 }
 
 void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
@@ -2176,6 +2180,8 @@ void Monitor::handle_command(MMonCommand *m)
     r = 0;
   } else if (prefix == "mon_status") {
     _mon_status(f.get(), ds);
+    if (f)
+      f->flush(ds);
     rdata.append(ds);
     rs = "";
     r = 0;
