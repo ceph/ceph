@@ -48,6 +48,7 @@ struct PGLog {
   struct IndexedLog : public pg_log_t {
     hash_map<hobject_t,pg_log_entry_t*> objects;  // ptrs into log.  be careful!
     hash_map<osd_reqid_t,pg_log_entry_t*> caller_ops;
+    map<int,int32_t> mds_inc; // most recent mds incarnation.
 
     // recovery pointers
     list<pg_log_entry_t>::iterator complete_to;  // not inclusive of referenced item
@@ -55,6 +56,17 @@ struct PGLog {
 
     /****/
     IndexedLog() : last_requested(0) {}
+
+    void update_mds_inc(osd_reqid_t& reqid) {
+      if (reqid.name.is_mds()) {
+	int32_t& inc = mds_inc[(int)reqid.name.num()];
+	if (reqid.inc > inc)
+	  inc = reqid.inc;
+      }
+    }
+    int32_t get_mds_inc(int m) {
+      return mds_inc[m];
+    }
 
     void claim_log(const pg_log_t& o) {
       log = o.log;
@@ -101,6 +113,7 @@ struct PGLog {
 	if (i->reqid_is_indexed()) {
 	  //assert(caller_ops.count(i->reqid) == 0);  // divergent merge_log indexes new before unindexing old
 	  caller_ops[i->reqid] = &(*i);
+	  update_mds_inc(i->reqid);
 	}
       }
     }
@@ -112,6 +125,7 @@ struct PGLog {
       if (e.reqid_is_indexed()) {
 	//assert(caller_ops.count(i->reqid) == 0);  // divergent merge_log indexes new before unindexing old
 	caller_ops[e.reqid] = &e;
+	update_mds_inc(e.reqid);
       }
     }
     void unindex() {
@@ -138,8 +152,10 @@ struct PGLog {
 
       // to our index
       objects[e.soid] = &(log.back());
-      if (e.reqid_is_indexed())
+      if (e.reqid_is_indexed()) {
 	caller_ops[e.reqid] = &(log.back());
+	update_mds_inc(e.reqid);
+      }
     }
 
     void trim(eversion_t s, set<eversion_t> *trimmed);
