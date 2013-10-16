@@ -60,6 +60,7 @@
     ceph osd reweight <osd-id> <weight>
     ceph osd blacklist add <address>[:source_port] [time]
     ceph osd blacklist rm <address>[:source_port]
+    ceph osd lspools
     ceph osd pool mksnap <pool> <snapname>
     ceph osd pool rmsnap <pool> <snapname>
     ceph osd pool create <pool> <pg_num> [<pgp_num>]
