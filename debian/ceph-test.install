@@ -67,7 +67,6 @@ usr/bin/ceph_test_rados_watch_notify
 usr/bin/ceph_test_rewrite_latency
 usr/bin/ceph_test_signal_handlers
 usr/bin/ceph_test_snap_mapper
-usr/bin/ceph_test_store_tool
 usr/bin/ceph_test_stress_watch
 usr/bin/ceph_test_timers
 usr/bin/ceph_test_trans
@@ -75,4 +74,5 @@ usr/bin/ceph_tpbench
 usr/bin/ceph_xattr_bench
 usr/bin/ceph-monstore-tool
 usr/bin/ceph-osdomap-tool
+usr/bin/ceph-kvstore-tool
 usr/share/java/libcephfs-test.jar
