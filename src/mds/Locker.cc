@@ -2042,9 +2042,14 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   inode_t *latest = in->get_projected_inode();
   map<client_t, client_writeable_range_t> new_ranges;
   uint64_t size = latest->size;
-  if (update_size)
-    size = new_size;
   bool new_max = update_max;
+
+  if (update_size) {
+    new_size = size = MAX(size, new_size);
+    new_mtime = MAX(new_mtime, latest->mtime);
+    if (latest->size == new_size && latest->mtime == new_mtime)
+      update_size = false;
+  }
 
   uint64_t client_range_size = update_max ? new_max_size : size;
 
