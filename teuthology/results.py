@@ -41,7 +41,7 @@ def main(args):
 
 
 def results(args):
-    archive_base = os.path.split(args.archive_dir, args.name)
+    archive_base = os.path.split(args.archive_dir)[0]
     serializer = ResultsSerializer(archive_base)
     starttime = time.time()
 
