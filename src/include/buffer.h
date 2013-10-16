@@ -103,7 +103,19 @@ public:
   };
 
 
+  /// total bytes allocated
   static int get_total_alloc();
+
+  /// enable/disable alloc tracking
+  static void track_alloc(bool b);
+
+  /// count of cached crc hits (matching input)
+  static int get_cached_crc();
+  /// count of cached crc hits (mismatching input, required adjustment)
+  static int get_cached_crc_adjusted();
+  /// enable/disable tracking of cached crcs
+  static void track_cached_crc(bool b);
+
 
 private:
  
