@@ -43,6 +43,7 @@ Makefile
 /ceph_smalliobenchrbd
 /ceph-monstore-tool
 /ceph-osdomap-tool
+/ceph-kvstore-tool
 /ceph_ver.h
 /dev
 /init-ceph
