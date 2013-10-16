@@ -79,7 +79,7 @@ int RGWAccessControlPolicy::get_perm(string& id, int perm_mask) {
   if ((perm & perm_mask) != perm_mask) {
     perm |= acl.get_group_perm(ACL_GROUP_ALL_USERS, perm_mask);
 
-    if (compare_group_name(id, ACL_GROUP_ALL_USERS) != 0) {
+    if (!compare_group_name(id, ACL_GROUP_ALL_USERS)) {
       /* this is not the anonymous user */
       perm |= acl.get_group_perm(ACL_GROUP_AUTHENTICATED_USERS, perm_mask);
     }

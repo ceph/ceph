@@ -2296,6 +2296,105 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     }
     r = 0;
 
+  } else if (prefix == "osd pool stats") {
+    string pool_name;
+    cmd_getval(g_ceph_context, cmdmap, "name", pool_name);
+
+    PGMap& pg_map = mon->pgmon()->pg_map;
+
+    int64_t poolid = -ENOENT;
+    bool one_pool = false;
+    if (!pool_name.empty()) {
+      poolid = osdmap.lookup_pg_pool_name(pool_name);
+      if (poolid < 0) {
+        assert(poolid == -ENOENT);
+        ss << "unrecognized pool '" << pool_name << "'";
+        r = -ENOENT;
+        goto reply;
+      }
+      one_pool = true;
+    }
+
+    stringstream rs;
+
+    if (f)
+      f->open_array_section("pool_stats");
+    if (osdmap.get_pools().size() == 0) {
+      if (!f)
+        ss << "there are no pools!";
+      goto stats_out;
+    }
+
+    for (map<int64_t,pg_pool_t>::const_iterator it = osdmap.get_pools().begin();
+         it != osdmap.get_pools().end();
+         ++it) {
+
+      if (!one_pool)
+        poolid = it->first;
+
+      pool_name = osdmap.get_pool_name(poolid);
+
+      if (f) {
+        f->open_object_section("pool");
+        f->dump_string("pool_name", pool_name.c_str());
+        f->dump_int("pool_id", poolid);
+        f->open_object_section("recovery");
+      }
+
+      stringstream rss, tss;
+      pg_map.pool_recovery_summary(f.get(), &rss, poolid);
+      if (!f && !rss.str().empty())
+        tss << "  " << rss.str() << "\n";
+
+      if (f) {
+        f->close_section();
+        f->open_object_section("recovery_rate");
+      }
+
+      rss.clear();
+      rss.str("");
+
+      pg_map.pool_recovery_rate_summary(f.get(), &rss, poolid);
+      if (!f && !rss.str().empty())
+        tss << "  recovery io " << rss.str() << "\n";
+
+      if (f) {
+        f->close_section();
+        f->open_object_section("client_io_rate");
+      }
+
+      rss.clear();
+      rss.str("");
+
+      pg_map.pool_client_io_rate_summary(f.get(), &rss, poolid);
+      if (!f && !rss.str().empty())
+        tss << "  client io " << rss.str() << "\n";
+
+      if (f) {
+        f->close_section();
+        f->close_section();
+      } else {
+        rs << "pool " << pool_name << " id " << poolid << "\n";
+        if (!tss.str().empty())
+          rs << tss.str() << "\n";
+        else
+          rs << "  nothing is going on\n\n";
+      }
+
+      if (one_pool)
+        break;
+    }
+
+stats_out:
+    if (f) {
+      f->close_section();
+      f->flush(rdata);
+    } else {
+      rdata.append(rs.str());
+    }
+    rdata.append("\n");
+    r = 0;
+
   } else if (prefix == "osd crush rule list" ||
 	     prefix == "osd crush rule ls") {
     string format;
