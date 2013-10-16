@@ -141,6 +141,31 @@ void PGMonitor::tick()
     }
   }
 
+  /* If we have deltas for pools, run through pgmap's 'per_pool_sum_delta' and
+   * clear any deltas that are old enough.
+   *
+   * Note that 'per_pool_sum_delta' keeps a pool id as key, and a pair containing
+   * the calc'ed stats delta and an absolute timestamp from when those stats were
+   * obtained -- the timestamp IS NOT a delta itself.
+   */
+  if (!pg_map.per_pool_sum_deltas.empty()) {
+    hash_map<uint64_t,pair<pool_stat_t,utime_t> >::iterator it;
+    for (it = pg_map.per_pool_sum_delta.begin();
+         it != pg_map.per_pool_sum_delta.end(); ) {
+      utime_t age = ceph_clock_now(g_ceph_context) - it->second.second;
+      if (age > 2*g_conf->mon_delta_reset_interval) {
+        dout(10) << " clearing pg_map delta for pool " << it->first
+                 << " (" << age << " > " << g_conf->mon_delta_reset_interval
+                 << " seconds old)" << dendl;
+        pg_map.per_pool_sum_deltas.erase(it->first);
+        pg_map.per_pool_sum_deltas_stamps.erase(it->first);
+        pg_map.per_pool_sum_delta.erase((it++)->first);
+      } else {
+        ++it;
+      }
+    }
+  }
+
   dout(10) << pg_map << dendl;
 }
 
@@ -401,6 +426,7 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
   }
 
   pool_stat_t pg_sum_old = pg_map.pg_sum;
+  hash_map<uint64_t, pool_stat_t> pg_pool_sum_old;
 
   // pgs
   bufferlist::iterator p = dirty_pgs.begin();
@@ -410,6 +436,10 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
     dout(20) << " refreshing pg " << pgid << dendl;
     bufferlist bl;
     int r = mon->store->get(pgmap_pg_prefix, stringify(pgid), bl);
+
+    if (pg_pool_sum_old.count(pgid.pool()) == 0)
+      pg_pool_sum_old[pgid.pool()] = pg_map.pg_pool_sum[pgid.pool()];
+
     if (r >= 0) {
       pg_map.update_pg(pgid, bl);
     } else {
@@ -432,7 +462,8 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
     }
   }
 
-  pg_map.update_delta(g_ceph_context, inc_stamp, pg_sum_old);
+  pg_map.update_global_delta(g_ceph_context, inc_stamp, pg_sum_old);
+  pg_map.update_pool_deltas(g_ceph_context, inc_stamp, pg_pool_sum_old);
 
   // ok, we're now on the new version
   pg_map.version = v;
@@ -1831,7 +1862,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 
   // recovery
   stringstream rss;
-  pg_map.recovery_summary(NULL, &rss);
+  pg_map.overall_recovery_summary(NULL, &rss);
   if (!rss.str().empty()) {
     summary.push_back(make_pair(HEALTH_WARN, "recovery " + rss.str()));
     if (detail)
@@ -1880,7 +1911,9 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
       }
       int average_objects_per_pg = pg_map.pg_sum.stats.sum.num_objects / pg_map.pg_stat.size();
-      if (average_objects_per_pg > 0) {
+      if (average_objects_per_pg > 0 &&
+	  pg_map.pg_sum.stats.sum.num_objects >= g_conf->mon_pg_warn_min_objects &&
+	  p->second.stats.sum.num_objects >= g_conf->mon_pg_warn_min_pool_objects) {
 	int objects_per_pg = p->second.stats.sum.num_objects / pi->get_pg_num();
 	float ratio = (float)objects_per_pg / (float)average_objects_per_pg;
 	if (g_conf->mon_pg_warn_max_object_skew > 0 &&

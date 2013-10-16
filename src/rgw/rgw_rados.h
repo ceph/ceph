@@ -433,7 +433,7 @@ struct RGWZoneParams {
 
   map<string, RGWZonePlacementInfo> placement_pools;
 
-  static string get_pool_name(CephContext *cct);
+  static int get_pool_name(CephContext *cct, string *pool_name);
   void init_name(CephContext *cct, RGWRegion& region);
   int init(CephContext *cct, RGWRados *store, RGWRegion& region);
   void init_default(RGWRados *store);
@@ -622,7 +622,7 @@ struct RGWRegion {
   int set_as_default();
   int equals(const string& other_region);
 
-  static string get_pool_name(CephContext *cct);
+  static int get_pool_name(CephContext *cct, string *pool_name);
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
