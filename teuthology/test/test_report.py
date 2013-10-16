@@ -54,7 +54,7 @@ class TestSerializer(object):
                                      num_hung=num_hung)
 
         got_jobs = self.reporter.serializer.running_jobs_for_run(run_name)
-        assert len(got_jobs) == job_count - num_hung
+        assert len(got_jobs) == num_hung
 
     def test_json_for_job(self):
         run_name = "test_json_for_job"

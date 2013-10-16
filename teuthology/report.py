@@ -123,9 +123,9 @@ class ResultsSerializer(object):
         :returns:        A dict like: {'1': '/path/to/1', '2': 'path/to/2'}
         """
         jobs = self.jobs_for_run(run_name)
-        for name in jobs.keys():
-            if not os.path.exists(os.path.join(jobs[name], 'summary.yaml')):
-                jobs.pop(name)
+        for job_id in jobs.keys():
+            if os.path.exists(os.path.join(jobs[job_id], 'summary.yaml')):
+                jobs.pop(job_id)
         return jobs
 
     @property
