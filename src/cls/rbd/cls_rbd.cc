@@ -1525,7 +1525,8 @@ static int dir_remove_image_helper(cls_method_context_t hctx,
   string id_key = dir_key_for_id(id);
   int r = read_key(hctx, name_key, &stored_id);
   if (r < 0) {
-    CLS_ERR("error reading name to id mapping: %d", r);
+    if (r != -ENOENT)
+      CLS_ERR("error reading name to id mapping: %d", r);
     return r;
   }
   r = read_key(hctx, id_key, &stored_name);
@@ -1619,7 +1620,8 @@ int dir_get_id(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   string id;
   int r = read_key(hctx, dir_key_for_name(name), &id);
   if (r < 0) {
-    CLS_ERR("error reading id for name '%s': %d", name.c_str(), r);
+    if (r != -ENOENT)
+      CLS_ERR("error reading id for name '%s': %d", name.c_str(), r);
     return r;
   }
   ::encode(id, *out);
