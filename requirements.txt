@@ -14,6 +14,7 @@ pexpect
 requests == 0.14.0
 raven
 web.py
+docopt
 
 # Test Dependencies
 # nose >=1.0.0
