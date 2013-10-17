@@ -12,6 +12,8 @@ noinst_PROGRAMS =
 bin_SCRIPTS =
 sbin_PROGRAMS =
 sbin_SCRIPTS =
+su_sbin_PROGRAMS =
+su_sbin_SCRIPTS =
 dist_bin_SCRIPTS =
 lib_LTLIBRARIES = 
 noinst_LTLIBRARIES = 
@@ -22,7 +24,10 @@ radoslib_LTLIBRARIES =
 bin_DEBUGPROGRAMS =
 
 # like sbin_SCRIPTS but can be used to install to e.g. /usr/sbin
-ceph_sbindir = $(exec_prefix)$(sbindir)
+ceph_sbindir = $(sbindir)
+
+# certain things go straight into /sbin, though!
+su_sbindir = /sbin
 
 # C/C++ tests to build will be appended to this
 check_PROGRAMS =
