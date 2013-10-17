@@ -285,7 +285,7 @@ public:
    */
   void get_leaves_under(frag_t x, std::list<frag_t>& ls) const {
     std::list<frag_t> q;
-    q.push_back(get_branch(x));
+    q.push_back(get_branch_or_leaf(x));
     while (!q.empty()) {
       frag_t t = q.front();
       q.pop_front();

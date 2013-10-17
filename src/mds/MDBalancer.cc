@@ -351,7 +351,7 @@ void MDBalancer::do_fragmenting()
   }
 
   if (!split_queue.empty()) {
-    dout(0) << "do_fragmenting " << split_queue.size() << " dirs marked for possible splitting" << dendl;
+    dout(10) << "do_fragmenting " << split_queue.size() << " dirs marked for possible splitting" << dendl;
 
     set<dirfrag_t> q;
     q.swap(split_queue);
@@ -364,13 +364,13 @@ void MDBalancer::do_fragmenting()
 	  !dir->is_auth())
 	continue;
 
-      dout(0) << "do_fragmenting splitting " << *dir << dendl;
+      dout(10) << "do_fragmenting splitting " << *dir << dendl;
       mds->mdcache->split_dir(dir, g_conf->mds_bal_split_bits);
     }
   }
 
   if (!merge_queue.empty()) {
-    dout(0) << "do_fragmenting " << merge_queue.size() << " dirs marked for possible merging" << dendl;
+    dout(10) << "do_fragmenting " << merge_queue.size() << " dirs marked for possible merging" << dendl;
 
     set<dirfrag_t> q;
     q.swap(merge_queue);
@@ -384,7 +384,7 @@ void MDBalancer::do_fragmenting()
 	  dir->get_frag() == frag_t())  // ok who's the joker?
 	continue;
 
-      dout(0) << "do_fragmenting merging " << *dir << dendl;
+      dout(10) << "do_fragmenting merging " << *dir << dendl;
 
       CInode *diri = dir->get_inode();
 
@@ -1007,7 +1007,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
 	 (v > g_conf->mds_bal_split_rd && type == META_POP_IRD) ||
 	 (v > g_conf->mds_bal_split_wr && type == META_POP_IWR)) &&
 	split_queue.count(dir->dirfrag()) == 0) {
-      dout(1) << "hit_dir " << type << " pop is " << v << ", putting in split_queue: " << *dir << dendl;
+      dout(10) << "hit_dir " << type << " pop is " << v << ", putting in split_queue: " << *dir << dendl;
       split_queue.insert(dir->dirfrag());
     }
 
@@ -1015,7 +1015,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
     if (dir->get_frag() != frag_t() &&
 	(dir->get_num_head_items() < (unsigned)g_conf->mds_bal_merge_size) &&
 	merge_queue.count(dir->dirfrag()) == 0) {
-      dout(1) << "hit_dir " << type << " pop is " << v << ", putting in merge_queue: " << *dir << dendl;
+      dout(10) << "hit_dir " << type << " pop is " << v << ", putting in merge_queue: " << *dir << dendl;
       merge_queue.insert(dir->dirfrag());
     }
   }
