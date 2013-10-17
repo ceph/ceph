@@ -229,6 +229,7 @@ def start_apache(ctx, config):
                 'kill',
                 apache_name,
     #            '-X',
+                '-DNO_DETACH',
                 '-f',
                 '{tdir}/apache/apache.{client}.conf'.format(tdir=testdir,
                                                             client=client),
