@@ -329,7 +329,7 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/osd
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/mds
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-osd
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-mds
-
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/radosgw
 
 %if %{defined suse_version}
 # Fedora seems to have some problems with this macro, use it only on SUSE
