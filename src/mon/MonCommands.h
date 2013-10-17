@@ -469,8 +469,10 @@ COMMAND("osd lost " \
 	"mark osd as permanently lost. THIS DESTROYS DATA IF NO MORE REPLICAS EXIST, BE CAREFUL", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd create " \
-	"name=uuid,type=CephUUID,req=false", \
-	"create new osd (with optional UUID)", "osd", "rw", "cli,rest")
+	"name=uuid,type=CephUUID,req=false " \
+	"name=id,type=CephOsdName,req=false", \
+	"create new osd (with optional UUID) (with optional ID)", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd blacklist " \
 	"name=blacklistop,type=CephChoices,strings=add|rm " \
 	"name=addr,type=CephEntityAddr " \

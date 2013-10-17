@@ -827,10 +827,14 @@ class TestOSD(TestArgparse):
         self.assert_valid_command(['osd', 'create'])
         self.assert_valid_command(['osd', 'create',
                                    uuid])
+        self.assert_valid_command(['osd', 'create',
+                                   uuid, 'osd.0'])
         assert_equal({}, validate_command(sigdict, ['osd', 'create',
+                                                    uuid,
                                                     'invalid']))
         assert_equal({}, validate_command(sigdict, ['osd', 'create',
                                                     uuid,
+													'osd.0',
                                                     'toomany']))
 
     def test_blacklist(self):
