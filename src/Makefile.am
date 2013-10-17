@@ -58,9 +58,9 @@ bin_PROGRAMS += ceph-mds
 mount_ceph_SOURCES = mount/mount.ceph.c
 mount_ceph_LDADD = $(LIBCOMMON)
 if LINUX
-sbin_PROGRAMS += mount.ceph
+su_sbin_PROGRAMS += mount.ceph
 endif # LINUX
-sbin_SCRIPTS += mount.fuse.ceph
+su_sbin_SCRIPTS += mount.fuse.ceph
 
 cephfs_SOURCES = cephfs.cc
 cephfs_LDADD = $(LIBCOMMON)
@@ -239,7 +239,7 @@ bin_SCRIPTS += \
 	ceph-post-file
 
 BUILT_SOURCES += init-ceph
-sbin_SCRIPTS += mkcephfs
+su_sbin_SCRIPTS += mkcephfs
 
 shell_scripts += init-ceph mkcephfs
 
