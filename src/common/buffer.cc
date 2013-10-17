@@ -78,12 +78,10 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
 
     Spinlock crc_lock;
     map<pair<off_t, off_t>, pair<int64_t, int64_t> > crc_map;
-    int64_t crc_in;   ///< cached crc base; -1 if invalid
-    int64_t crc_out;  ///< cached crc value; -1 if invalid
 
-    raw(unsigned l) : data(NULL), len(l), nref(0), crc_in(-1), crc_out(-1)
+    raw(unsigned l) : data(NULL), len(l), nref(0)
     { }
-    raw(char *c, unsigned l) : data(c), len(l), nref(0), crc_in(-1), crc_out(-1)
+    raw(char *c, unsigned l) : data(c), len(l), nref(0)
     { }
     virtual ~raw() {};
 
