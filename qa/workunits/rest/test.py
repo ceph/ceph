@@ -197,8 +197,8 @@ if __name__ == '__main__':
             assert(p['pg_num'] == 10)
             break
     assert(poolnum is not None)
-    expect('mds/add_data_pool?poolid={0}'.format(poolnum), 'PUT', 200, '')
-    expect('mds/remove_data_pool?poolid={0}'.format(poolnum), 'PUT', 200, '')
+    expect('mds/add_data_pool?pool={0}'.format(poolnum), 'PUT', 200, '')
+    expect('mds/remove_data_pool?pool={0}'.format(poolnum), 'PUT', 200, '')
     expect('osd/pool/delete?pool=data2&pool2=data2'
            '&sure=--yes-i-really-really-mean-it', 'PUT', 200, '')
     expect('mds/set_max_mds?maxmds=4', 'PUT', 200, '')
