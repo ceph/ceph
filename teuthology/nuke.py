@@ -337,7 +337,6 @@ def nuke(ctx, should_unlock, sync_clocks=True, reboot_all=True, noipmi=False):
                 nuke_one,
                 ctx,
                 {target: hostkey},
-                log,
                 should_unlock,
                 sync_clocks,
                 reboot_all,
