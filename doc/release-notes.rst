@@ -779,6 +779,39 @@ Notable Changes
 
 
 
+
+v0.61.9 "Cuttlefish"
+--------------------
+
+This point release resolves several low to medium-impact bugs across
+the code base, and fixes a performance problem (CPU utilization) with
+radosgw.  We recommend that all production cuttlefish users upgrade.
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* ceph, ceph-authtool: fix help (Danny Al-Gaaf)
+* ceph-disk: partprobe after creating journal partition
+* ceph-disk: specific fs type when mounting (Alfredo Deza)
+* ceph-fuse: fix bug when compiled against old versions
+* ceph-fuse: fix use-after-free in caching code (Yan, Zheng)
+* ceph-fuse: misc caching bugs
+* ceph.spec: remove incorrect mod_fcgi dependency (Gary Lowell)
+* crush: fix name caching
+* librbd: fix bug when unpausing cluster (Josh Durgin)
+* mds: fix LAZYIO lock hang
+* mds: fix bug in file size recovery (after client crash)
+* mon: fix paxos recovery corner case
+* osd: fix exponential backoff for slow request warnings (Loic Dachary)
+* osd: fix readdir_r usage
+* osd: fix startup for long-stopped OSDs
+* rgw: avoid std::list::size() to avoid wasting CPU cycles (Yehuda Sadeh)
+* rgw: drain pending requests during write (fixes data safety issue) (Yehuda Sadeh)
+* rgw: fix authenticated users group ACL check (Yehuda Sadeh)
+* rgw: fix bug in POST (Yehuda Sadeh)
+* rgw: fix sysvinit script 'status' command, return value (Danny Al-Gaaf)
+* rgw: reduce default log level (Yehuda Sadeh)
+
 v0.61.8 "Cuttlefish"
 --------------------
 

@@ -1,0 +1,571 @@
+commit 7440dcd135750839fa0f00263f80722ff6f51e90
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Wed Oct 16 18:57:51 2013 +0000
+
+    v0.61.9
+
+commit fcf5f117a9111c2d88b8fa5d00c975a8e377df7e
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Oct 15 10:20:48 2013 -0700
+
+    rgw: fix authenticated users acl group check
+    
+    Fixes: #6553
+    Backport: bobtail, cuttlefish, dumpling
+    Authenticated users group acl bit was not working correctly. Check to
+    test whether user is anonymous was wrong.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit bebbd6cb7b71697b34b8f27652cabdc40c97a33b)
+
+commit 991ed515480114c476cd3c4d761f256d1708fb39
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Oct 15 10:55:07 2013 -0700
+
+    rgw: change default log level
+    
+    Fixes: #6554
+    Backport: cuttlefish, dumpling
+    Default log level was just too high, bring it down a bit.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 8d7dbf85472cfca9268d81ecf057ea078cf345b3)
+
+commit ebb9b0cb7e4ab60fdbbc410ecfb35e51cf11434d
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jul 6 09:21:47 2013 -0700
+
+    mds: do not allow GLAZYIO in mix->sync state
+    
+    GLAZYIO is not allowed in SYNC, so we cannot allow it in the preceding
+    gather state.
+    
+    I verified the other GLAZYIO rules look ok.  We should make a validater
+    to confirm that no gather state includes caps that its target state
+    does not... or at least assert as much in eval_gather().
+    
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit b88938e5a646fbf175a7135e872bcb2d1afafbb8)
+
+commit 33da08f683d40f33061cefa0cf145f3ff21ea089
+Author: Yan, Zheng <zheng.z.yan@intel.com>
+Date:   Thu Sep 12 10:36:39 2013 +0800
+
+    osdc/ObjectCacher: finish contexts after dropping object reference
+    
+    The context to finish can be class C_Client_PutInode, which may drop
+    inode's last reference. So we should first drop object's reference,
+    then finish contexts.
+    
+    Signed-off-by: Yan, Zheng <zheng.z.yan@intel.com>
+    (cherry picked from commit b66ac77fa7aa3ff37804918c4308a348f239af09)
+
+commit 346b43d80f728e6b389208ccd8054d96b76b093c
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jun 7 22:04:09 2013 -0700
+
+    mds: fix filelock eval_gather
+    
+    Broken by a08d62045657713bf0a5372bf14136082ec3b17e
+    
+    Reported-by: Yan, Zheng <yan.zheng@intel.com>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e8300d0afb5154d4d13536abdcf47bd5cc8ce810)
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+
+commit ffdc7fce132b3b98463b4222d2c51ccef6b94d82
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jun 6 21:38:56 2013 -0700
+
+    mds: do not double-queue file recovery in eval_gather
+    
+    This fixes a specific case of double-queuing seen in #4832:
+    
+     - client goes stale, inode marked NEEDSRECOVER
+     - eval does sync, queued, -> RECOVERING
+     - client resumes
+     - client goes stale (again), inode marked NEEDSRECOVER
+     - eval_gather queues *again*
+    
+    Note that a cursory look at the recovery code makes me think this needs
+    a much more serious overhaul.  In particular, I don't think we should
+    be triggering recovery when transitioning *from* a stable state, but
+    explicitly when we are flagged, or when gathering.  We should probably
+    also hold a wrlock over the recovery period and remove the force_wrlock
+    kludge from the final size check.  Opened ticket #5268.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a08d62045657713bf0a5372bf14136082ec3b17e)
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+
+commit 60033c31381d36cbbc6c873d7055cbe735f5deb2
+Author: Sandon Van Ness <sandon@inktank.com>
+Date:   Tue Oct 8 11:58:57 2013 -0700
+
+    Go back to $PWD in fsstress.sh if compiling from source.
+    
+    Although fsstress was being called with a static path the directory
+    it was writing to was in the current directory so doing a cd to the
+    source directory that is made in /tmp and then removing it later
+    caused it to be unable to write the files in a non-existent dir.
+    
+    This change gets the current path first and cd's back into it after
+    it is done compiling fsstress.
+    
+    Issue #6479.
+    
+    Signed-off-by: Sandon Van Ness <sandon@inktank.com>
+    Reviewed-by: Alfredo Deza <alfredo.deza@inktank.com>
+
+commit eb06f3738851d27914704821897ed80104c4c29c
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Tue Aug 27 09:53:12 2013 -0700
+
+    ceph.spec.in:  radosgw package doesn't require mod_fcgi
+    
+    Fixes #5702
+    
+    Signed-off-by: Gary Lowell  <gary.lowell@inktank.com>
+
+commit 5a426a1f1f34d3f5a510009cc3f3b219d3cbc74b
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Oct 1 15:53:42 2013 -0700
+
+    crush: invalidate rmap on create (and thus decode)
+    
+    If we have an existing CrushWrapper object and decode from a bufferlist,
+    reset build_rmaps so that they get rebuilt.
+    
+    Remove the build_rmaps() all in decode that was useless on a redecode
+    (because have_rmaps == true in that case and it did nothing).
+    
+    Fixes: #6442
+    Backport: dumpling, maybe cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 9b7a2ae329b6a511064dd3d6e549ba61f52cfd21)
+
+commit 6f342872cdd211e24deb19f5e00380494514c437
+Author: Loic Dachary <loic@dachary.org>
+Date:   Tue Sep 24 19:04:23 2013 +0200
+
+    osd: change warn_interval_multiplier to uint32_t
+    
+    to prevent overflow in OpTracker::check_ops_in_flight when
+    multiplying warn_interval_multiplier *= 2
+    
+    Backport: cuttlefish, dumpling
+    
+    http://tracker.ceph.com/issues/6370 fixes #6370
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 1bce1f009bffd3e28025a08775fec189907a81db)
+
+commit be2907ef85a31c2be8be7446fe71f5d2e1410ec0
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Sep 11 22:30:12 2013 -0700
+
+    rgw: don't call list::size() in ObjectCache
+    
+    Fixes: #6286
+    Use an external counter instead of calling list::size()
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 31e3a51e933429d286104fe077e98ea883437ad6)
+
+commit bbfbb097e2f9efbf4f7ec997c70befa20c79d27c
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Sep 10 12:18:55 2013 -0700
+
+    rgw: drain pending requests before completing write
+    
+    Fixes: #6268
+    When doing aio write of objects (either regular or multipart parts) we
+    need to drain pending aio requests. Otherwise if gateway goes down then
+    object might end up corrupted.
+    
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit b16f812362ccb1d9bdd4900d155e248d695ef0d7
+Merge: 97a97c3 5f16ea6
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Sep 7 13:32:40 2013 -0700
+
+    Merge pull request #573 from dalgaaf/fix/da-cuttlefish-fixes-and-cherry-picks
+    
+    Cherry-pick some smaller changes from master to cuttlefish
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit 5f16ea62cee4fad9be6e44f3562da31908303ae5
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Sat Sep 7 20:32:40 2013 +0200
+
+    tools/ceph.cc: add missig 'ceph osd lspools' command to help
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+
+commit 59f02ecf0b91a2248d8b7b75dc27b517f04ac292
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Sat Sep 7 11:30:15 2013 +0200
+
+    init-radosgw*: fix status return value if radosgw isn't running
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit b5137baf651eaaa9f67e3864509e437f9d5c3d5a)
+
+commit c25770c39ae006ab4ad14a5d75bf7a2dffe0279e
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Thu Jun 6 15:34:54 2013 +0200
+
+    init-radosgw*: add all sections to usage output
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit a0c5095be3640e98d5541920c19387bf3764a350)
+
+commit 1a8347e0d1cafc38259adc1f1a6154fa0d48f1d2
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Thu Jun 6 15:33:23 2013 +0200
+
+    init-radosgw*: add status
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 385457f8d871238a896229d0c2cbb25646969f6a)
+
+commit b1c2aa2c4a8c0266a01903eab5539e7929ea0431
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Thu Jun 6 15:21:30 2013 +0200
+
+    fix init-radosgw* to use the same indentation
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit b4d4e92ed2deae435a24b36d086c1a73e5997855)
+
+commit 794ed1faec7ced23b5b46d114f5320d718c9e9fb
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Sun Jul 28 23:25:58 2013 +0200
+
+    ceph_authtool.cc: update help/usage text
+    
+    Added implemented but not listed commands to the help/usage text:
+    * -g  shortcut for --gen-key
+    * -a  shortcut for --add-key
+    * -u/--set-uid to set auid
+    * --gen-print-key
+    * --import-keyring
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 9a9a0ef3f9f39909eaeb95eb99db4711a2425af5)
+
+commit 97a97c3c554f689dd3f987e63eaa2b9c5ec1dd0a
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Aug 26 19:46:43 2013 -0700
+
+    rgw: check object name after rebuilding it in S3 POST
+    
+    Fixes: #6088
+    Backport: bobtail, cuttlefish, dumpling
+    
+    When posting an object it is possible to provide a key
+    name that refers to the original filename, however we
+    need to verify that in the end we don't end up with an
+    empty object name.
+    
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit c8ec532fadc0df36e4b265fe20a2ff3e35319744)
+
+commit 7a0bd5bc2c6e5464f70b19154834448ac1e4c369
+Author: Gary Lowell <glowell@inktank.com>
+Date:   Thu Aug 22 13:29:32 2013 -0700
+
+    ceph.spec.in:  remove trailing paren in previous commit
+    
+    Signed-off-by: Gary Lowell  <gary.lowell@inktank.com>
+
+commit f1507d23707e7929f7a55fe2ea9418dcc715d8b2
+Author: Gary Lowell <glowell@inktank.com>
+Date:   Thu Aug 22 11:07:16 2013 -0700
+
+    ceph.spec.in:  Don't invoke debug_package macro on centos.
+    
+    If the redhat-rpm-config package is installed, the debuginfo rpms will
+    be built by default.   The build will fail when the package installed
+    and the specfile also invokes the macro.
+    
+    Signed-off-by: Gary Lowell  <gary.lowell@inktank.com>
+
+commit 65a10862feec199d14f17627d0c42fa7c85766fa
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jul 28 08:59:21 2013 -0700
+
+    osd: get initial full map after a map gap
+    
+    If there is a gap in our map history, get the full range of maps that
+    the mon has.  Make sure the first one is a full map.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit a6cd9fea50a4bd7048a222617a2bfe0680f7a969)
+
+commit aceef04f7fd56935e691c7deb05f25ace653bb76
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jul 28 08:55:38 2013 -0700
+
+    osd: fix off-by-one in map gap logic
+    
+    If we have map 250, and monitor's first is 251, but sends 260, we can
+    request the intervening range.
+    
+    Fixes: #5784
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit e24b50225c841a650d9303041bbe811e04bdd668)
+
+commit cdbfd66249cdf91c02a88af5df5a6517688a78df
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Mon Jul 22 16:00:07 2013 -0700
+
+    OSD: tolerate holes in stored maps
+    
+    We may have holes in stored maps during init_splits_between
+    and advance_pg.  In either case, we should simply skip the
+    missing maps.
+    
+    Fixes: #5677
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 6951d2345a5d837c3b14103bd4d8f5ee4407c937)
+    
+    Conflicts:
+    
+    	src/osd/OSD.cc
+
+commit 234d68c68028fcf9c2665cb9f45b9b76556241ba
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Aug 20 22:39:09 2013 -0700
+
+    ceph-disk: partprobe after creating journal partition
+    
+    At least one user reports that a partprobe is needed after creating the
+    journal partition.  It is not clear why sgdisk is not doing it, but this
+    fixes ceph-disk for them, and should be harmless for other users.
+    
+    Fixes: #5599
+    Tested-by: lurbs in #ceph
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 2af59d5e81c5e3e3d7cfc50d9330d7364659c5eb)
+
+commit cf2f31ac23b6eb43a81a1c8157907b9cae4d58a7
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Aug 15 21:48:06 2013 -0700
+
+    osdc/ObjectCacher: do not merge rx buffers
+    
+    We do not try to merge rx buffers currently.  Make that explicit and
+    documented in the code that it is not supported.  (Otherwise the
+    last_read_tid values will get lost and read results won't get applied
+    to the cache properly.)
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 1c50c446152ab0e571ae5508edb4ad7c7614c310)
+
+commit 02da55757a9fb53df4746db5dd14724e77da95b6
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Aug 15 21:47:18 2013 -0700
+
+    osdc/ObjectCacher: match reads with their original rx buffers
+    
+    Consider a sequence like:
+    
+     1- start read on 100~200
+           100~200 state rx
+     2- truncate to 200
+           100~100 state rx
+     3- start read on 200~200
+           100~100 state rx
+           200~200 state rx
+     4- get 100~200 read result
+    
+    Currently this makes us crash on
+    
+    osdc/ObjectCacher.cc: 738: FAILED assert(bh->length() <= start+(loff_t)length-opos)
+    
+    when processing the second 200~200 bufferhead (it is too big).  The
+    larger issue, though, is that we should not be looking at this data at
+    all; it has been truncated away.
+    
+    Fix this by marking each rx buffer with the read request that is sent to
+    fill it, and only fill it from that read request.  Then the first reply
+    will fill the first 100~100 extend but not touch the other extent; the
+    second read will do that.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit b59f930ae147767eb4c9ff18c3821f6936a83227)
+
+commit 43e7ad989dcb4deb18b32ec31f76c8755354d2a6
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Aug 22 15:54:48 2013 -0700
+
+    mon/Paxos: fix another uncommitted value corner case
+    
+    It is possible that we begin the paxos recovery with an uncommitted
+    value for, say, commit 100.  During last/collect we discover 100 has been
+    committed already.  But also, another node provides an uncommitted value
+    for 101 with the same pn.  Currently, we refuse to learn it, because the
+    pn is not strictly > than our current uncommitted pn... even though it is
+    the next last_committed+1 value that we need.
+    
+    There are two possible fixes here:
+    
+     - make this a >= as we can accept newer values from the same pn.
+     - discard our uncommitted value metadata when we commit the value.
+    
+    Let's do both!
+    
+    Fixes: #6090
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit fe5010380a3a18ca85f39403e8032de1dddbe905)
+
+commit 2de1515289f49f2e388448506f4788db56d0e25a
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Aug 23 11:45:35 2013 -0700
+
+    os: make readdir_r buffers larger
+    
+    PATH_MAX isn't quite big enough.
+    
+    Backport: dumpling, cuttlefish, bobtail
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 99a2ff7da99f8cf70976f05d4fe7aa28dd7afae5)
+
+commit af9818c486484c7617c07f26beaded8a3bc88043
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Aug 23 11:45:08 2013 -0700
+
+    os: fix readdir_r buffer size
+    
+    The buffer needs to be big or else we're walk all over the stack.
+    
+    Backport: dumpling, cuttlefish, bobtail
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 2df66d9fa214e90eb5141df4d5755b57e8ba9413)
+    
+    Conflicts:
+    
+    	src/os/BtrfsFileStoreBackend.cc
+
+commit cce1d1f9cd8b034deee29d8566780763beb0155f
+Author: Alfredo Deza <alfredo.deza@inktank.com>
+Date:   Fri Aug 23 08:56:07 2013 -0400
+
+    ceph-disk: specify the filetype when mounting
+    
+    Signed-off-by: Alfredo Deza <alfredo.deza@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit f040020fb2a7801ebbed23439159755ff8a3edbd)
+
+commit c25e7da57d704d4a8db59a2e97fb687968520c69
+Author: Sandon Van Ness <sandon@inktank.com>
+Date:   Thu Aug 22 19:44:40 2013 -0700
+
+    QA: Compile fsstress if missing on machine.
+    
+    Some distro's have a lack of ltp-kernel packages and all we need is
+    fstress. This just modified the shell script to download/compile
+    fstress from source and copy it to the right location if it doesn't
+    currently exist where it is expected. It is a very small/quick
+    compile and currently only SLES and debian do not have it already.
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Signed-off-by: Sandon Van Ness <sandon@inktank.com>
+
+commit c807f27c391d336a7223fcfdd3daad9bb374a3dc
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Aug 5 12:52:44 2013 -0700
+
+    mds: fix locking, use-after-free/race in handle_accept
+    
+    We need to hold mds_lock here.
+    
+    Normally the con also holds a reference, but an ill-timed connection reset
+    could drop it.
+    
+    Fixes: #5883
+    Backport: dumpling, cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a0929955cb84fb8cfdeb551d6863e4955b8e2a71)
+
+commit bd71192eaa6f884e879b1711e5937b1e3609d86d
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Aug 22 10:14:59 2013 -0700
+
+    .gitignore: ignore test-driver
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit edf2c3449ec96d91d3d7ad01c50f7a79b7b2f7cc)
+    
+    Conflicts:
+    
+    	.gitignore
+
+commit bc997ebea3263c2bc7df83661ae3a966470ba35e
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Aug 9 12:42:49 2013 -0700
+
+    fuse: fix warning when compiled against old fuse versions
+    
+    client/fuse_ll.cc: In function 'void invalidate_cb(void*, vinodeno_t, int64_t, int64_t)':
+    warning: client/fuse_ll.cc:540: unused variable 'fino'
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 9833e9dabe010e538cb98c51d79b6df58ce28f9e)
+
+commit 9cb2c2eb3627b52c3413b39b45e7fb7e0e9a074c
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Aug 9 12:40:34 2013 -0700
+
+    json_spirit: remove unused typedef
+    
+    In file included from json_spirit/json_spirit_writer.cpp:7:0:
+    json_spirit/json_spirit_writer_template.h: In function 'String_type json_spirit::non_printable_to_string(unsigned int)':
+    json_spirit/json_spirit_writer_template.h:37:50: warning: typedef 'Char_type' locally defined but not used [-Wunused-local-typedefs]
+             typedef typename String_type::value_type Char_type;
+    
+    (Also, ha ha, this file uses \r\n.)
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 6abae35a3952e5b513895267711fea63ff3bad09)
+
+commit d774559f118d26cd15ecf1a49468ce1a3d260efc
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Aug 9 12:31:41 2013 -0700
+
+    gtest: add build-aux/test-driver to .gitignore
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c9cdd19d1cd88b84e8a867f5ab85cb51fdc6f8e4)
+
+commit 1a2d9edde0311b51d3d68b87c20dea3061b2395b
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Aug 21 14:28:49 2013 -0700
+
+    objecter: resend unfinished lingers when osdmap is no longer paused
+    
+    Plain Ops that haven't finished yet need to be resent if the osdmap
+    transitions from full or paused to unpaused.  If these Ops are
+    triggered by LingerOps, they will be cancelled instead (since
+    should_resend = false), but the LingerOps that triggered them will not
+    be resent.
+    
+    Fix this by checking the registered flag for all linger ops, and
+    resending any of them that aren't paused anymore.
+    
+    Fixes: #6070
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    Reviewed-by: Sage Weil <sage.weil@inktank.com>
+    (cherry picked from commit 38a0ca66a79af4b541e6322467ae3a8a4483cc72)
