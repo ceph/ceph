@@ -27,6 +27,7 @@ setup(
             'teuthology-coverage = scripts.coverage:main',
             'teuthology-results = scripts.results:main',
             'teuthology-report = scripts.report:main',
+            'teuthology-kill = scripts.kill:main',
             ],
         },
 
