@@ -183,6 +183,7 @@ const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_RMSNAP: return "rmsnap";
 	case CEPH_MDS_OP_SETFILELOCK: return "setfilelock";
 	case CEPH_MDS_OP_GETFILELOCK: return "getfilelock";
+	case CEPH_MDS_OP_FRAGMENTDIR: return "fragmentdir";
 	}
 	return "???";
 }

@@ -458,13 +458,6 @@ frag_t CInode::pick_dirfrag(const string& dn)
 bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
 {
   bool all = true;
-  for (map<frag_t,CDir*>::iterator p = dirfrags.begin(); p != dirfrags.end(); ++p) {
-    if (fg.contains(p->first))
-      ls.push_back(p->second);
-    else
-      all = false;
-  }
-  /*
   list<frag_t> fglist;
   dirfragtree.get_leaves_under(fg, fglist);
   for (list<frag_t>::iterator p = fglist.begin();
@@ -474,7 +467,6 @@ bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
       ls.push_back(dirfrags[*p]);
     else 
       all = false;
-  */
   return all;
 }
 
@@ -1776,7 +1768,7 @@ void CInode::finish_scatter_gather_update(int type)
 	CDir *dir = p->second;
 	dout(20) << fg << " " << *dir << dendl;
 
-	bool update = dir->is_auth() && !dir->is_frozen();
+	bool update = dir->is_auth() && dir->get_version() != 0 &&  !dir->is_frozen();
 
 	fnode_t *pf = dir->get_projected_fnode();
 	if (update)
@@ -1857,7 +1849,7 @@ void CInode::finish_scatter_gather_update(int type)
 	CDir *dir = p->second;
 	dout(20) << fg << " " << *dir << dendl;
 
-	bool update = dir->is_auth() && !dir->is_frozen();
+	bool update = dir->is_auth() && dir->get_version() != 0 && !dir->is_frozen();
 
 	fnode_t *pf = dir->get_projected_fnode();
 	if (update)
@@ -1944,7 +1936,7 @@ void CInode::finish_scatter_gather_update_accounted(int type, Mutation *mut, EMe
        p != dirfrags.end();
        ++p) {
     CDir *dir = p->second;
-    if (!dir->is_auth() || dir->is_frozen())
+    if (!dir->is_auth() || dir->get_version() == 0 || dir->is_frozen())
       continue;
     
     if (type == CEPH_LOCK_IDFT)
@@ -2080,7 +2072,7 @@ void CInode::clear_ambiguous_auth()
 
 // auth_pins
 bool CInode::can_auth_pin() {
-  if (is_freezing_inode() || is_frozen_inode() || is_frozen_auth_pin())
+  if (!is_auth() || is_freezing_inode() || is_frozen_inode() || is_frozen_auth_pin())
     return false;
   if (parent)
     return parent->can_auth_pin();
