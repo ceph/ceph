@@ -201,6 +201,8 @@ Finally, on each host running ``cinder-volume`` or ``nova-volume``, add
 For example, on Ubuntu, add ``env CEPH_ARGS="--id volumes"``
 to the top of ``/etc/init/cinder-volume.conf``.
 
+For example, on RedHat/Centos add ``export CEPH_ARGS="--id volumes"`` to
+``/etc/sysconfig/openstack-cinder-volume``.
 
 Restart OpenStack
 =================
