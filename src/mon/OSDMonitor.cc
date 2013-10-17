@@ -2836,6 +2836,16 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
   return 0;
 }
 
+static bool is_osd_id_available(const OSDMap &osdmap,
+				const OSDMap::Incremental &pending_inc,
+				int id)
+{
+  return (!osdmap.exists(id) &&
+	  pending_inc.new_up_client.count(id) == 0 &&
+	  (pending_inc.new_state.count(id) == 0 ||
+	   (pending_inc.new_state.find(id)->second & CEPH_OSD_EXISTS) == 0));
+}
+
 bool OSDMonitor::prepare_command(MMonCommand *m)
 {
   bool ret = false;
@@ -3559,12 +3569,31 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       }
     }
 
+    // optional ID ?
+    string idstr;
+    if (cmd_getval(g_ceph_context, cmdmap, "id", idstr)) {
+      i = parse_osd_id(idstr.c_str(), &ss);
+      if (i < 0) {
+	ss << "invalid osd id " << i;
+	err = -EINVAL;
+	goto reply;
+      }
+
+      if (!is_osd_id_available(osdmap, pending_inc, i)) {
+	ss << "osd id in use " << i;
+	err = -EINVAL;
+	goto reply;
+      }	
+	
+      if (pending_inc.new_max_osd <= i)
+	pending_inc.new_max_osd = i + 1;
+
+      goto done;
+    }
+
     // allocate a new id
     for (i=0; i < osdmap.get_max_osd(); i++) {
-      if (!osdmap.exists(i) &&
-	  pending_inc.new_up_client.count(i) == 0 &&
-	  (pending_inc.new_state.count(i) == 0 ||
-	   (pending_inc.new_state[i] & CEPH_OSD_EXISTS) == 0))
+      if (is_osd_id_available(osdmap, pending_inc, i))
 	goto done;
     }
 
