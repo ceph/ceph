@@ -121,6 +121,10 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
       Spinlock::Locker l(crc_lock);
       crc_map[fromto] = crc;
     }
+    void invalidate_crc() {
+      Spinlock::Locker l(crc_lock);
+      crc_map.clear();
+    }
   };
 
   class buffer::raw_malloc : public buffer::raw {
@@ -451,17 +455,20 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     assert(_raw);
     assert(o <= _len);
     assert(o+l <= _len);
+    _raw->invalidate_crc();
     memcpy(c_str()+o, src, l);
   }
 
   void buffer::ptr::zero()
   {
+    _raw->invalidate_crc();
     memset(c_str(), 0, _len);
   }
 
   void buffer::ptr::zero(unsigned o, unsigned l)
   {
     assert(o+l <= _len);
+    _raw->invalidate_crc();
     memset(c_str()+o, 0, l);
   }
 
