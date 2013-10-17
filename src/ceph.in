@@ -196,7 +196,7 @@ def do_help(parser, args):
     parser.print_help()
     print '\n'
 
-    if (cluster_handle):
+    if (cluster_handle.state == "connected"):
         help_for_target(target=('mon', ''), partial=partial)
 
     return 0
