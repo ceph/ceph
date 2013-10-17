@@ -77,7 +77,7 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     atomic_t nref;
 
     Spinlock crc_lock;
-    map<pair<off_t, off_t>, pair<int64_t, int64_t> > crc_map;
+    map<pair<size_t, size_t>, pair<uint32_t, uint32_t> > crc_map;
 
     raw(unsigned l) : data(NULL), len(l), nref(0)
     { }
@@ -106,18 +106,18 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     bool is_n_page_sized() {
       return (len & ~CEPH_PAGE_MASK) == 0;
     }
-    bool get_crc(const pair<off_t, off_t> &fromto,
-		 pair<int64_t, int64_t> *crc) const {
+    bool get_crc(const pair<size_t, size_t> &fromto,
+		 pair<uint32_t, uint32_t> *crc) const {
       Spinlock::Locker l(crc_lock);
-      map<pair<off_t, off_t>, pair<int64_t, int64_t> >::const_iterator i =
+      map<pair<size_t, size_t>, pair<uint32_t, uint32_t> >::const_iterator i =
 	crc_map.find(fromto);
       if (i == crc_map.end())
 	return false;
       *crc = i->second;
       return true;
     }
-    void set_crc(const pair<off_t, off_t> &fromto,
-		 const pair<uint64_t, uint64_t> &crc) {
+    void set_crc(const pair<size_t, size_t> &fromto,
+		 const pair<uint32_t, uint32_t> &crc) {
       Spinlock::Locker l(crc_lock);
       crc_map[fromto] = crc;
     }
@@ -1315,8 +1315,8 @@ __u32 buffer::list::crc32c(__u32 crc) const
        ++it) {
     if (it->length()) {
       raw *r = it->get_raw();
-      pair<off_t, off_t> ofs(it->offset(), it->offset() + it->length());
-      pair<int64_t, int64_t> ccrc;
+      pair<size_t, size_t> ofs(it->offset(), it->offset() + it->length());
+      pair<uint32_t, uint32_t> ccrc;
       if (r->get_crc(ofs, &ccrc)) {
 	if (ccrc.first == crc) {
 	  // got it already
