@@ -23,33 +23,53 @@ def main(args):
 
 
 def kill_suite(suite_name, archive_base=None, owner=None, machine_type=None):
+    suite_info = {}
     if archive_base:
         suite_archive_dir = os.path.join(archive_base, suite_name)
-        job_info = find_suite_info(suite_archive_dir)
-        machine_type = job_info['machine_type']
-        owner = job_info['owner']
+        suite_info = find_suite_info(suite_archive_dir)
+        machine_type = suite_info['machine_type']
+        owner = suite_info['owner']
 
     remove_beanstalk_jobs(suite_name, machine_type)
-    kill_processes(suite_name)
+    kill_processes(suite_name, suite_info.get('pids'))
     nuke_machines(suite_name, owner)
 
 
 def find_suite_info(suite_archive_dir):
+    suite_info_fields = [
+        'machine_type',
+        'owner',
+    ]
+
+    suite_info = {}
     job_info = {}
-    for job_dir in os.listdir(suite_archive_dir):
-        if os.path.isdir(job_dir):
-            job_info = find_job_info(job_dir)
-            if job_info:
-                break
-    return job_info
+    for job_id in os.listdir(suite_archive_dir):
+        job_dir = os.path.join(suite_archive_dir, job_id)
+        if not os.path.isdir(job_dir):
+            break
+        job_info = find_job_info(job_dir)
+        for key in job_info.keys():
+            if key in suite_info_fields and key not in suite_info:
+                suite_info[key] = job_info[key]
+            if 'pid' in job_info:
+                pids = suite_info.get('pids', [])
+                pids.append(job_info['pid'])
+                suite_info['pids'] = pids
+    return suite_info
 
 
 def find_job_info(job_archive_dir):
+    job_info = {}
+
     info_file = os.path.join(job_archive_dir, 'info.yaml')
     if os.path.isfile(info_file):
-        job_info = yaml.safe_load(open(info_file, 'r'))
-        return job_info
-    return {}
+        job_info.update(yaml.safe_load(open(info_file, 'r')))
+
+    conf_file = os.path.join(job_archive_dir, 'config.yaml')
+    if os.path.isfile(conf_file):
+        job_info.update(yaml.safe_load(open(conf_file, 'r')))
+
+    return job_info
 
 
 def remove_beanstalk_jobs(suite_name, tube_name):
@@ -86,7 +106,21 @@ def remove_beanstalk_jobs(suite_name, tube_name):
     beanstalk.close()
 
 
-def kill_processes(suite_name):
+def kill_processes(suite_name, pids=None):
+    if pids:
+        to_kill = set(pids).intersection(psutil.get_pid_list())
+    else:
+        to_kill = find_pids(suite_name)
+
+    if len(to_kill) == 0:
+        log.info("No teuthology processes running")
+    else:
+        log.info("Killing Pids: " + str(to_kill))
+        for pid in to_kill:
+            subprocess.call(['sudo', 'kill', str(pid)])
+
+
+def find_pids(suite_name):
     suite_pids = []
     for pid in psutil.get_pid_list():
         try:
@@ -94,14 +128,8 @@ def kill_processes(suite_name):
         except psutil.NoSuchProcess:
             continue
         if suite_name in p.cmdline and sys.argv[0] not in p.cmdline:
-                suite_pids.append(str(pid))
-
-    if len(suite_pids) == 0:
-        log.info("No teuthology processes running")
-    else:
-        log.info("Killing Pids: " + str(suite_pids))
-        for pid in suite_pids:
-            subprocess.call(['sudo', 'kill', pid])
+                suite_pids.append(pid)
+    return suite_pids
 
 
 def find_targets(suite_name, owner):
