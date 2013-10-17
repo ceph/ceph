@@ -6,8 +6,11 @@ import yaml
 import psutil
 import subprocess
 import tempfile
+import logging
 
 from .config import config
+
+log = logging.getLogger(__name__)
 
 
 def main(args):
@@ -17,9 +20,6 @@ def main(args):
     machine_type = args['--machine_type']
 
     kill_suite(suite_name, archive_base, owner, machine_type)
-    #if args.suite:
-    #    for suite_name in args.suite:
-    #        kill_suite(args.archive, suite_name)
 
 
 def kill_suite(suite_name, archive_base=None, owner=None, machine_type=None):
@@ -59,7 +59,7 @@ def remove_beanstalk_jobs(suite_name, tube_name):
         raise RuntimeError(
             'Beanstalk queue information not found in {conf_path}'.format(
                 conf_path=config.teuthology_yaml))
-    print "Checking Beanstalk Queue..."
+    log.info("Checking Beanstalk Queue...")
     beanstalk = beanstalkc.Connection(host=qhost, port=qport)
     beanstalk.watch(tube_name)
     beanstalk.ignore('default')
@@ -79,7 +79,7 @@ def remove_beanstalk_jobs(suite_name, tube_name):
                         name=job_config['name'],
                         desc=job_config['description'],
                     )
-                print msg
+                log.info(msg)
                 job.delete()
     else:
         print "No jobs in Beanstalk Queue"
@@ -97,52 +97,64 @@ def kill_processes(suite_name):
                 suite_pids.append(str(pid))
 
     if len(suite_pids) == 0:
-        print "No teuthology processes running"
+        log.info("No teuthology processes running")
     else:
-        print 'Killing Pids: ' + str(suite_pids)
+        log.info("Killing Pids: " + str(suite_pids))
         for pid in suite_pids:
             subprocess.call(['sudo', 'kill', pid])
 
 
+def find_targets(suite_name, owner):
+    lock_args = [
+        'teuthology-lock',
+        '--list-targets',
+        '--desc-pattern',
+        '/' + suite_name + '/',
+        '--status',
+        'up',
+        '--owner',
+        owner
+    ]
+    proc = subprocess.Popen(lock_args, stdout=subprocess.PIPE)
+    stdout, stderr = proc.communicate()
+    out_obj = yaml.safe_load(stdout)
+    if not out_obj or 'targets' not in out_obj:
+        return {}
+
+    return out_obj
+
+
 def nuke_machines(suite_name, owner):
-    #lock_args = argparse.Namespace(
-    #    list_targets=True,
-    #    desc_pattern='/%s/' % suite_name,
-    #    status='up',
-    #    owner=owner,
-    #)
-    proc = subprocess.Popen(
-        ['teuthology-lock',
-            '--list-targets',
-            '--desc-pattern',
-            '/' + suite_name + '/',
-            '--status',
-            'up',
-            '--owner',
-            owner],
-        stdout=subprocess.PIPE)
-    tout, terr = proc.communicate()
+    targets_dict = find_targets(suite_name, owner)
+    targets = targets_dict.get('targets')
+    if not targets:
+        log.info("No locked machines. Not nuking anything")
 
-    tmp = tempfile.NamedTemporaryFile(delete=False)
-    tmp.write(tout)
-    tmp.close()
-
-    targets = yaml.safe_load(tout)['targets']
-    nuking = []
+    to_nuke = []
     for target in targets:
-        nuking.append(target.split('@')[1].split('.')[0])
-    if 'ubuntu' not in tout:
-        print 'No locked machines. Not nuking anything'
-    else:
-        print 'Nuking machines: ' + str(nuking)
-        nukeargs = [
-            '/var/lib/teuthworker/teuthology-master/virtualenv/bin/teuthology-nuke',  # noqa
-            '-t', tmp.name, '--unlock', '-r', '--owner', owner]
-        nuke = subprocess.Popen(
-            nukeargs, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        for line in iter(nuke.stdout.readline, ''):
-            line = line.replace('\r', '').replace('\n', '')
-            print line
-            sys.stdout.flush()
+        to_nuke.append(target.split('@')[1].split('.')[0])
 
-    os.unlink(tmp.name)
+    target_file = tempfile.NamedTemporaryFile(delete=False)
+    target_file.write(yaml.safe_dump(targets_dict))
+    target_file.close()
+
+    log.info("Nuking machines: " + str(to_nuke))
+    nuke_args = [
+        'teuthology-nuke',
+        '-t',
+        target_file.name,
+        '--unlock',
+        '-r',
+        '--owner',
+        owner
+    ]
+    proc = subprocess.Popen(
+        nuke_args,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT)
+    for line in iter(proc.stdout.readline, ''):
+        line = line.replace('\r', '').replace('\n', '')
+        log.info(line)
+        sys.stdout.flush()
+
+    os.unlink(target_file.name)
