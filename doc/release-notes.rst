@@ -812,6 +812,8 @@ Notable Changes
 * rgw: fix sysvinit script 'status' command, return value (Danny Al-Gaaf)
 * rgw: reduce default log level (Yehuda Sadeh)
 
+For more detailed information, see :download:`the complete changelog <changelog/v0.61.9.txt>`.
+
 v0.61.8 "Cuttlefish"
 --------------------
 
