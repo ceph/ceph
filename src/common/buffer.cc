@@ -98,11 +98,6 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
       memcpy(c->data, data, len);
       return c;
     }
-
-    unsigned length() const {
-      return len;
-    }
-
     virtual bool is_page_aligned() {
       return ((long)data & ~CEPH_PAGE_MASK) == 0;
     }
