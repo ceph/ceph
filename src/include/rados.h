@@ -67,6 +67,7 @@ struct ceph_pg {
  */
 #define CEPH_PG_TYPE_REP     1
 #define CEPH_PG_TYPE_RAID4   2
+#define CEPH_PG_TYPE_ENC     3
 
 /*
  * stable_mod func is used to control number of placement groups.
