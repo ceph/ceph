@@ -26,8 +26,7 @@ typedef struct stopwatch {
   utime_t start;
   utime_t stop;
 
-  utime_t realtime() const
-  {
+  utime_t realtime() const {
     return stop - start;
   }
 } stopwatch_t;
@@ -63,13 +62,12 @@ typedef ::testing::Types<
 ErasureCodeJerasureCauchyGood,
 ErasureCodeJerasureLiber8tion
 > JerasureTypes;
-TYPED_TEST_CASE(ErasureCodeTest_82, JerasureTypes);
-TYPED_TEST_CASE(ErasureCodeTest_BPC_822_Double_Failure, JerasureTypes);
-TYPED_TEST_CASE(ErasureCodeTest_BPC_822_Triple_Failure, JerasureTypes);
-TYPED_TEST_CASE(ErasureCodeTest_BPC_822_CRC32C, JerasureTypes);
+TYPED_TEST_CASE (ErasureCodeTest_82, JerasureTypes);
+TYPED_TEST_CASE (ErasureCodeTest_BPC_822_Double_Failure, JerasureTypes);
+TYPED_TEST_CASE (ErasureCodeTest_BPC_822_Triple_Failure, JerasureTypes);
+TYPED_TEST_CASE (ErasureCodeTest_BPC_822_CRC32C, JerasureTypes);
 
-TYPED_TEST(ErasureCodeTest_82, encode_decode)
-{
+TYPED_TEST (ErasureCodeTest_82, encode_decode) {
   TypeParam jerasure;
   map<std::string, std::string> parameters;
   parameters["erasure-code-k"] = "8";
@@ -96,8 +94,8 @@ TYPED_TEST(ErasureCodeTest_82, encode_decode)
 
   timing[jerasure.technique]["encode"].start = ceph_clock_now(0);
   EXPECT_EQ(0, jerasure.encode(set<int>(want_to_encode, want_to_encode + 10),
-          in,
-          &encoded));
+                               in,
+                               &encoded));
 
   timing[jerasure.technique]["encode"].stop = ceph_clock_now(0);
   EXPECT_EQ(10u, encoded.size());
@@ -111,8 +109,8 @@ TYPED_TEST(ErasureCodeTest_82, encode_decode)
     int want_to_decode[] = {0, 1};
     map<int, bufferlist> decoded;
     EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode + 2),
-            encoded,
-            &decoded));
+                                 encoded,
+                                 &decoded));
     // always decode all, regardless of want_to_decode
     EXPECT_EQ(10u, decoded.size());
     EXPECT_EQ(length, decoded[0].length());
@@ -130,8 +128,8 @@ TYPED_TEST(ErasureCodeTest_82, encode_decode)
     map<int, bufferlist> decoded;
     timing[jerasure.technique]["reco"].start = ceph_clock_now(0);
     EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode + 2),
-            degraded,
-            &decoded));
+                                 degraded,
+                                 &decoded));
     timing[jerasure.technique]["reco"].stop = ceph_clock_now(0);
     // always decode all, regardless of want_to_decode
     EXPECT_EQ(10u, decoded.size());
@@ -141,8 +139,7 @@ TYPED_TEST(ErasureCodeTest_82, encode_decode)
   }
 }
 
-TYPED_TEST(ErasureCodeTest_BPC_822_Double_Failure, encode_decode)
-{
+TYPED_TEST (ErasureCodeTest_BPC_822_Double_Failure, encode_decode) {
   TypeParam jerasure;
   map<std::string, std::string> parameters;
   parameters["erasure-code-k"] = "8";
@@ -171,8 +168,8 @@ TYPED_TEST(ErasureCodeTest_BPC_822_Double_Failure, encode_decode)
 
   timing[jerasure.technique]["encode-bpc"].start = ceph_clock_now(0);
   EXPECT_EQ(0, jerasure.encode(set<int>(want_to_encode, want_to_encode + 12),
-          in,
-          &encoded));
+                               in,
+                               &encoded));
 
   timing[jerasure.technique]["encode-bpc"].stop = ceph_clock_now(0);
   EXPECT_EQ(12u, encoded.size());
@@ -186,8 +183,8 @@ TYPED_TEST(ErasureCodeTest_BPC_822_Double_Failure, encode_decode)
     int want_to_decode[] = {0, 1};
     map<int, bufferlist> decoded;
     EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode + 2),
-            encoded,
-            &decoded));
+                                 encoded,
+                                 &decoded));
     // always decode all, regardless of want_to_decode
     EXPECT_EQ(12u, decoded.size());
     EXPECT_EQ(length, decoded[0].length());
@@ -205,8 +202,8 @@ TYPED_TEST(ErasureCodeTest_BPC_822_Double_Failure, encode_decode)
     map<int, bufferlist> decoded;
     timing[jerasure.technique]["reco-bpc"].start = ceph_clock_now(0);
     EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode + 2),
-            degraded,
-            &decoded));
+                                 degraded,
+                                 &decoded));
     timing[jerasure.technique]["reco-bpc"].stop = ceph_clock_now(0);
     // always decode all, regardless of want_to_decode
     EXPECT_EQ(12u, decoded.size());
@@ -221,8 +218,7 @@ TYPED_TEST(ErasureCodeTest_BPC_822_Double_Failure, encode_decode)
   }
 }
 
-TYPED_TEST(ErasureCodeTest_BPC_822_Triple_Failure, encode_decode)
-{
+TYPED_TEST (ErasureCodeTest_BPC_822_Triple_Failure, encode_decode) {
   TypeParam jerasure;
   map<std::string, std::string> parameters;
   parameters["erasure-code-k"] = "8";
@@ -251,8 +247,8 @@ TYPED_TEST(ErasureCodeTest_BPC_822_Triple_Failure, encode_decode)
 
   timing[jerasure.technique]["encode-bpc-triple"].start = ceph_clock_now(0);
   EXPECT_EQ(0, jerasure.encode(set<int>(want_to_encode, want_to_encode + 12),
-          in,
-          &encoded));
+                               in,
+                               &encoded));
 
   timing[jerasure.technique]["encode-bpc-triple"].stop = ceph_clock_now(0);
   EXPECT_EQ(12u, encoded.size());
@@ -266,8 +262,8 @@ TYPED_TEST(ErasureCodeTest_BPC_822_Triple_Failure, encode_decode)
     int want_to_decode[] = {0, 5};
     map<int, bufferlist> decoded;
     EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode + 2),
-            encoded,
-            &decoded));
+                                 encoded,
+                                 &decoded));
     // always decode all, regardless of want_to_decode
     EXPECT_EQ(12u, decoded.size());
     EXPECT_EQ(length, decoded[0].length());
@@ -286,8 +282,8 @@ TYPED_TEST(ErasureCodeTest_BPC_822_Triple_Failure, encode_decode)
     map<int, bufferlist> decoded;
     timing[jerasure.technique]["reco-bpc-triple"].start = ceph_clock_now(0);
     EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode + 3),
-            degraded,
-            &decoded));
+                                 degraded,
+                                 &decoded));
     timing[jerasure.technique]["reco-bpc-triple"].stop = ceph_clock_now(0);
     // always decode all, regardless of want_to_decode
     EXPECT_EQ(12u, decoded.size());
@@ -308,8 +304,8 @@ TYPED_TEST(ErasureCodeTest_BPC_822_Triple_Failure, encode_decode)
       for (std::map<int, bufferlist>::iterator it = degraded.begin(); it != degraded.end(); ++it)
         available.insert(it->first);
       int ret = jerasure.minimum_to_decode(set<int>(want_to_decode, want_to_decode + 3),
-              available,
-              &needed);
+                                           available,
+                                           &needed);
       std::ostringstream chunkstream;
       for (std::set<int>::iterator i = needed.begin(); i != needed.end(); i++) {
         if (i != needed.begin())
@@ -331,8 +327,8 @@ TYPED_TEST(ErasureCodeTest_BPC_822_Triple_Failure, encode_decode)
       for (std::map<int, bufferlist>::iterator it = degraded.begin(); it != degraded.end(); ++it)
         available.insert(it->first);
       int ret = jerasure.minimum_to_decode(set<int>(want_to_decode, want_to_decode + 3),
-              available,
-              &needed);
+                                           available,
+                                           &needed);
       std::ostringstream chunkstream;
       for (std::set<int>::iterator i = needed.begin(); i != needed.end(); i++) {
         if (i != needed.begin())
@@ -351,8 +347,8 @@ TYPED_TEST(ErasureCodeTest_BPC_822_Triple_Failure, encode_decode)
       for (std::map<int, bufferlist>::iterator it = degraded.begin(); it != degraded.end(); ++it)
         available.insert(it->first);
       int ret = jerasure.minimum_to_decode(set<int>(want_to_decode, want_to_decode + 3),
-              available,
-              &needed);
+                                           available,
+                                           &needed);
       std::ostringstream chunkstream;
       for (std::set<int>::iterator i = needed.begin(); i != needed.end(); i++) {
         if (i != needed.begin())
@@ -371,8 +367,8 @@ TYPED_TEST(ErasureCodeTest_BPC_822_Triple_Failure, encode_decode)
       for (std::map<int, bufferlist>::iterator it = degraded.begin(); it != degraded.end(); ++it)
         available.insert(it->first);
       int ret = jerasure.minimum_to_decode(set<int>(want_to_decode, want_to_decode + 3),
-              available,
-              &needed);
+                                           available,
+                                           &needed);
       EXPECT_EQ(-5, ret);
     }
   }
@@ -388,13 +384,12 @@ TYPED_TEST(ErasureCodeTest_BPC_822_Triple_Failure, encode_decode)
     int want_to_decode[] = {0, 5, 6, 7};
     map<int, bufferlist> decoded;
     EXPECT_EQ(-1, jerasure.decode(set<int>(want_to_decode, want_to_decode + 4),
-            degraded,
-            &decoded));
+                                  degraded,
+                                  &decoded));
   }
 }
 
-TYPED_TEST(ErasureCodeTest_BPC_822_CRC32C, encode_decode)
-{
+TYPED_TEST (ErasureCodeTest_BPC_822_CRC32C, encode_decode) {
   TypeParam jerasure;
   map<std::string, std::string> parameters;
   parameters["erasure-code-k"] = "8";
@@ -422,8 +417,8 @@ TYPED_TEST(ErasureCodeTest_BPC_822_CRC32C, encode_decode)
 
   timing[jerasure.technique]["encode-bpc-crc32c"].start = ceph_clock_now(0);
   EXPECT_EQ(0, jerasure.encode(set<int>(want_to_encode, want_to_encode + 12),
-          in,
-          &encoded));
+                               in,
+                               &encoded));
 
   for (map<int, bufferlist>::iterator it = encoded.begin(); it != encoded.end(); it++) {
     buffer::hash crc;
@@ -443,8 +438,8 @@ TYPED_TEST(ErasureCodeTest_BPC_822_CRC32C, encode_decode)
     int want_to_decode[] = {0, 1};
     map<int, bufferlist> decoded;
     EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode + 2),
-            encoded,
-            &decoded));
+                                 encoded,
+                                 &decoded));
 
     // always decode all, regardless of want_to_decode
     EXPECT_EQ(12u, decoded.size());
@@ -463,8 +458,8 @@ TYPED_TEST(ErasureCodeTest_BPC_822_CRC32C, encode_decode)
     map<int, bufferlist> decoded;
     timing[jerasure.technique]["reco-bpc-crc32c"].start = ceph_clock_now(0);
     EXPECT_EQ(0, jerasure.decode(set<int>(want_to_decode, want_to_decode + 2),
-            degraded,
-            &decoded));
+                                 degraded,
+                                 &decoded));
 
     for (map<int, bufferlist>::iterator it = decoded.begin(); it != decoded.end(); it++) {
       buffer::hash crc;
@@ -484,20 +479,19 @@ class ErasureCodeTiming : public ::testing::Test {
 public:
 };
 
-TEST_F(ErasureCodeTiming, PropertyOutput)
-{
+TEST_F (ErasureCodeTiming, PropertyOutput) {
   for (timing_map_t::const_iterator techniqueit = timing.begin(); techniqueit != timing.end(); ++techniqueit) {
     for (timing_t::const_iterator modeit = techniqueit->second.begin(); modeit != techniqueit->second.end(); ++modeit) {
       char timingout[4096];
       double speed = object_size / 1000000l / ((double) modeit->second.realtime()) / 1000.0;
       snprintf(timingout,
-              sizeof (timingout) - 1,
-              "[ -TIMING- ] technique=%-16s [ %18s ] speed=%02.03f [GB/s] latency=%02.03f ms\n",
-              techniqueit->first.c_str(),
-              modeit->first.c_str(),
-              speed,
-              object_size / (1000000 * speed)
-              );
+               sizeof (timingout) - 1,
+               "[ -TIMING- ] technique=%-16s [ %18s ] speed=%02.03f [GB/s] latency=%02.03f ms\n",
+               techniqueit->first.c_str(),
+               modeit->first.c_str(),
+               speed,
+               object_size / (1000000 * speed)
+               );
 
       cout << timingout;
       std::string property = std::string("jerasure::") + techniqueit->first.c_str() + "::" + modeit->first.c_str();
@@ -508,8 +502,8 @@ TEST_F(ErasureCodeTiming, PropertyOutput)
   RecordProperty("object-size", object_size);
 }
 
-int main(int argc, char **argv)
-{
+int
+main (int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **) argv, args);
 
