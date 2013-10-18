@@ -120,6 +120,10 @@ public:
   /// enable/disable tracking of cached crcs
   static void track_cached_crc(bool b);
 
+  /// count of calls to buffer::ptr::c_str()
+  static int get_c_str_accesses();
+  /// enable/disable tracking of buffer::ptr::c_str() calls
+  static void track_c_str(bool b);
 
 private:
  
