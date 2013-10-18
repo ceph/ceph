@@ -1,2 +1,2 @@
-var/log/ceph
+var/log/radosgw
 var/lib/ceph/radosgw
