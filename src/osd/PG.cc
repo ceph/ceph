@@ -2507,6 +2507,11 @@ void PG::requeue_object_waiters(map<hobject_t, list<OpRequestRef> >& m)
   m.clear();
 }
 
+void PG::requeue_op(OpRequestRef op)
+{
+  osd->op_wq.queue_front(make_pair(PGRef(this), op));
+}
+
 void PG::requeue_ops(list<OpRequestRef> &ls)
 {
   dout(15) << " requeue_ops " << ls << dendl;
