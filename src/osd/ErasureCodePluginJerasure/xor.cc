@@ -28,7 +28,5 @@ vector_xor (vector_op_t* cw, vector_op_t* dw, int vector_words) {
 
 void
 vector_assign (vector_op_t* cw, vector_op_t* dw, int vector_words) {
-  for (int i = 0; i < vector_words; ++i) {
-    *cw++ = *dw++;
-  }
+  memcpy((void*)cw,(void*)dw,VECTOR_WORDSIZE * vector_words);
 }
