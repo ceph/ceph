@@ -18,6 +18,7 @@
  */
 
 #include "vectorop.h"
+#include <string.h>
 
 void
 vector_xor (vector_op_t* cw, vector_op_t* dw, int vector_words) {
