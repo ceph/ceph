@@ -1489,6 +1489,12 @@ int buffer::list::read_file(const char *fn, std::string *error)
 
 ssize_t buffer::list::read_fd(int fd, size_t len)
 {
+  // try zero copy first
+  if (read_fd_zero_copy(fd, len) == 0) {
+    // TODO fix callers to not require correct read size, which is not
+    // available for raw_pipe until we actually inspect the data
+    return 0;
+  }
   int s = ROUND_UP_TO(len, CEPH_PAGE_SIZE);
   bufferptr bp = buffer::create_page_aligned(s);
   ssize_t ret = safe_read(fd, (void*)bp.c_str(), len);
@@ -1507,6 +1513,8 @@ int buffer::list::read_fd_zero_copy(int fd, size_t len)
     append(bp);
   } catch (buffer::error_code e) {
     return e.code;
+  } catch (buffer::malformed_input) {
+    return -EIO;
   }
   return 0;
 #else
