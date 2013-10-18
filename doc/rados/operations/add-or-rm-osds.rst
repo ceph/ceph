@@ -48,15 +48,6 @@ and root permissions.
 
 .. _Installing Debian/Ubuntu Packages: ../../../install/debian
 
-For clusters deployed with Chef, create a `chef user`_, `configure
-SSH keys`_, `install Ruby`_ and `install the Chef client`_ on your host. See 
-`Installing Chef`_ for details.
-
-.. _chef user: ../../deployment/install-chef#createuser
-.. _configure SSH keys: ../../deployment/install-chef#genkeys
-.. _install the Chef client: ../../deployment/install-chef#installchef
-.. _Installing Chef: ../../deployment/install-chef
-.. _Install Ruby: ../../deployment/install-chef#installruby
 
 Adding an OSD (Manual)
 ----------------------
@@ -175,34 +166,6 @@ hard drive than older hosts in the cluster (i.e., they may have greater weight).
  subsequent releases.
 
 
-Adding an OSD (Chef)
---------------------
-
-This procedure configures your OSD using ``chef-client``. If your host has
-multiple drives, you may need to execute the procedure for preparing an OSD
-drive for each data drive on your host.
-
-When you add the OSD to the CRUSH map, consider the weight you give to the new
-OSD.  Hard drive capacity grows 40% per year, so newer OSD hosts may have larger
-hard drive than older hosts in the cluster.
-
-#. Execute ``chef-client`` to register it with Chef as a Chef node.
-
-#. Edit the node. See `Configure Nodes`_ for details.
-   Change its environment to your Chef environment.
-   Add ``"role[ceph-osd]"`` to the run list.
-
-#. Execute `Prepare OSD Drives`_ for each drive.
-
-#. Execute ``chef-client`` to invoke the run list.
-
-#. Add the OSD to the CRUSH map so that it can begin receiving data. You may
-   also decompile the CRUSH map edit the file, recompile it and set it. See
-   `Add/Move an OSD`_ for details. :: 
-
-	ceph osd crush set {name} {weight} [{bucket-type}={bucket-name} ...]
-
-
 Starting the OSD
 ----------------
 
@@ -219,6 +182,7 @@ machine::
 
 
 Once you start your OSD, it is ``up``.
+
 
 Put the OSD ``in`` the Cluster
 ------------------------------
@@ -244,8 +208,6 @@ completes. (Control-c to exit.)
 
 
 .. _Add/Move an OSD: ../crush-map#addosd
-.. _Configure Nodes: ../../deployment/chef#confignodes
-.. _Prepare OSD Drives: ../../deployment/chef#prepdisks
 .. _ceph: ../monitoring
 
 
@@ -337,7 +299,7 @@ OSD for each drive by repeating this procedure.
    ``ceph.conf`` file. ::
 
 	ssh {admin-host}
-	cd /etc/chef
+	cd /etc/ceph
 	vim ceph.conf
 
 #. Remove the OSD entry from your ``ceph.conf`` file. ::
