@@ -80,7 +80,7 @@ ErasureCodeLocalParity::reconstruct (
   // ---------------------------------------------------------------------------
   // decode using a local parity : basic pyramid code
   // ---------------------------------------------------------------------------
-  for (register int i_lp = 0; i_lp < ec_lp; i_lp++) {
+  for (int i_lp = 0; i_lp < ec_lp; i_lp++) {
     // see how many are missing here
     int n_miss = 0;
     int reco_chunk = 0;
