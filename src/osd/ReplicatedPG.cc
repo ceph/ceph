@@ -4336,7 +4336,7 @@ int ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
     // FIXME: if the src etc match, we could avoid restarting from the
     // beginning.
     CopyOpRef cop = copy_ops[dest];
-    cancel_copy(cop);
+    cancel_copy(cop, false);
   }
 
   CopyOpRef cop(new CopyOp(cb, obc, src, oloc, version, temp_dest_oid));
@@ -4429,6 +4429,7 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
 
   dout(20) << __func__ << " complete; committing" << dendl;
   results.get<0>() = r;
+  results.get<4>() = false;
   cop->cb->complete(results);
 
   copy_ops.erase(obc->obs.oi.soid);
@@ -4514,7 +4515,7 @@ int ReplicatedPG::finish_copyfrom(OpContext *ctx)
   return 0;
 }
 
-void ReplicatedPG::cancel_copy(CopyOpRef cop)
+void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
 {
   dout(10) << __func__ << " " << cop->obc->obs.oi.soid
 	   << " from " << cop->src << " " << cop->oloc << " v" << cop->version
@@ -4531,16 +4532,18 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop)
 
   kick_object_context_blocked(cop->obc);
   bool temp_obj_created = !cop->cursor.is_initial();
-  CopyResults result(-ECANCELED, 0, temp_obj_created, ObjectStore::Transaction());
+  CopyResults result(-ECANCELED, 0, temp_obj_created,
+                     ObjectStore::Transaction(), requeue);
   cop->cb->complete(result);
 }
 
-void ReplicatedPG::cancel_copy_ops()
+void ReplicatedPG::cancel_copy_ops(bool requeue)
 {
   dout(10) << __func__ << dendl;
   map<hobject_t,CopyOpRef>::iterator p = copy_ops.begin();
   while (p != copy_ops.end()) {
-    cancel_copy((p++)->second);
+    // requeue this op? can I queue up all of them?
+    cancel_copy((p++)->second, requeue);
   }
 }
 
@@ -7292,7 +7295,7 @@ void ReplicatedPG::on_shutdown()
   deleting = true;
 
   unreg_next_scrub();
-  cancel_copy_ops();
+  cancel_copy_ops(false);
   apply_and_flush_repops(false);
   context_registry_on_change();
 
@@ -7329,7 +7332,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 
   context_registry_on_change();
 
-  cancel_copy_ops();
+  cancel_copy_ops(is_primary());
 
   // requeue object waiters
   if (is_primary()) {
