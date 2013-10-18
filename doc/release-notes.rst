@@ -51,6 +51,7 @@ Notable Changes
 * mds: fix LOOKUPSNAP bug
 * mds: fix standby-replay when we fall behind (Yan, Zheng)
 * mds: fix stray directory purging (Yan, Zheng)
+* mon: disallow CephFS snapshots until 'ceph mds set allow_new_snaps' (Greg Farnum)
 * mon, osd: improve osdmap trimming logic (Samuel Just)
 * mon: kv properties for pools to support EC (Loic Dachary)
 * mon: some auth check cleanups (Joao Luis)
