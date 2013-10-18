@@ -6,10 +6,17 @@
 	...
 }
 {
-	ignore all leveldb leaks
+	ignore all static leveldb leaks
 	Memcheck:Leak
 	...
 	fun:*leveldb*
+	...
+}
+{
+	ignore all dynamic libleveldb leaks
+	Memcheck:Leak
+	...
+	obj:*libleveldb.so*
 	...
 }
 {
