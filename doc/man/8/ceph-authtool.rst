@@ -9,7 +9,7 @@ Synopsis
 
 | **ceph-authtool** *keyringfile* [ -l | --list ] [ -C | --create-keyring
   ] [ -p | --print ] [ -n | --name *entityname* ] [ --gen-key ] [ -a |
-  --add-key *base64_key* ] [ --caps *capfils* ]
+  --add-key *base64_key* ] [ --caps *capfile* ]
 
 
 Description
