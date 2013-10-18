@@ -328,7 +328,7 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/osd
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/mds
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-osd
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-mds
-
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/radosgw
 
 %if %{defined suse_version}
 # Fedora seems to have some problems with this macro, use it only on SUSE
@@ -364,7 +364,7 @@ fi
 %endif
 # Package removal cleanup
 if [ "$1" -eq "0" ] ; then
-    rm -rf /var/log/ceph 
+    rm -rf /var/log/ceph
     rm -rf /etc/ceph
 fi
 
@@ -515,6 +515,7 @@ fi
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
 %{_sbindir}/rcceph-radosgw
+%dir %{_localstatedir}/log/radosgw/
 
 %post radosgw
 /sbin/ldconfig
@@ -533,6 +534,11 @@ fi
 %restart_on_update ceph-radosgw
 %insserv_cleanup
 %endif
+# Package removal cleanup
+if [ "$1" -eq "0" ] ; then
+    rm -rf /var/log/radosgw
+fi
+
 
 #################################################################################
 %if %{with ocf}
