@@ -141,7 +141,7 @@ TYPED_TEST(ErasureCodeTest_82, encode_decode)
   }
 }
 
-TYPED_TEST(ErasureCodeTest_BPC_822, encode_decode)
+TYPED_TEST(ErasureCodeTest_BPC_822_Double_Failure, encode_decode)
 {
   TypeParam jerasure;
   map<std::string, std::string> parameters;
@@ -492,7 +492,7 @@ TEST_F(ErasureCodeTiming, PropertyOutput)
       double speed = object_size / 1000000l / ((double) modeit->second.realtime()) / 1000.0;
       snprintf(timingout,
               sizeof (timingout) - 1,
-              "[ -TIMING- ] technique=%-16s [ %16s ] speed=%02.03f [GB/s] latency=%02.03f ms\n",
+              "[ -TIMING- ] technique=%-16s [ %18s ] speed=%02.03f [GB/s] latency=%02.03f ms\n",
               techniqueit->first.c_str(),
               modeit->first.c_str(),
               speed,

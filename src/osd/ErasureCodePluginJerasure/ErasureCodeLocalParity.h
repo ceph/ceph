@@ -19,6 +19,8 @@
 #ifndef CEPH_ERASURE_CODE_LOCALPARITY_H
 #define CEPH_ERASURE_CODE_LOCALPARITY_H
 
+#include <set>
+
 class ErasureCodeLocalParity
 {
 public:
@@ -27,7 +29,7 @@ public:
  char** ec_coding;
  int ec_k;
  int ec_m;
- int ec_lp,
+ int ec_lp;
  int ec_bs;
 
  /**
@@ -69,7 +71,7 @@ public:
   * @return list of missing chunks in erasures
   */
  int reconstruct (std::set<int> &erasures,
-                  const set<int> &want_to_read);
+                  const std::set<int> &want_to_read);
 
  /**
   * @brief compute the index of the first data chunk for local parity computation
@@ -92,8 +94,8 @@ public:
  rangeStop (int lpindex)
  {
   int n_chunks = ec_lp ? ec_k / ec_lp : 0;
-  int range = n_chunks * lpindex;
-  return range (range > ec_k) ec_k : range;
+  int range = n_chunks * (lpindex+1);
+  return (range > ec_k)? ec_k : range;
  }
 
  /**
@@ -104,13 +106,13 @@ public:
   * @param minimum set of chunks required 
   * @return 0 if decodable, otherwise -EIO
   */
- int minimum_to_decode (const set<int> &want_to_read,
-                        const set<int> &available_chunks,
-                        set<int> *minimum);
+int minimum_to_decode (const std::set<int> &want_to_read,
+		       const std::set<int> &available_chunks,
+		       std::set<int> *minimum);
 
  virtual
  ~ErasureCodeLocalParity () { }
-
+};
 
 #endif	/* CEPH_ERASURE_CODE_LOCALPARITY_H */
 

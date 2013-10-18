@@ -17,9 +17,12 @@
  */
 
 #include "ErasureCodeLocalParity.h"
+#include "ErasureCodeXor.h"
+#include <errno.h>
+#include <stdio.h>
 
 void
-ErasureCodeLocalParity::generate(std::set<int>)
+ErasureCodeLocalParity::generate()
 {
   // ---------------------------------------------------------------------------
   // place the vector operation pointer
@@ -27,23 +30,23 @@ ErasureCodeLocalParity::generate(std::set<int>)
   vector_op_t * vop_data[ec_k];
   vector_op_t * vop_coding[ec_lp];
 
-  for (int i = 0; i < k; i++) {
+  for (int i = 0; i < ec_k; i++) {
     vop_data[i] = (vector_op_t *) ec_data[i];
   }
 
-  for (int i = 0; i < lp; i++) {
+  for (int i = 0; i < ec_lp; i++) {
     vop_coding[i] = (vector_op_t *) ec_coding[i];
   }
 
   // ---------------------------------------------------------------------------
   // compute local parities : basic pyramid code
   // ---------------------------------------------------------------------------
-  for (int i_lp = 0; i_lp < lp; i_lp++) {
+  for (int i_lp = 0; i_lp < ec_lp; i_lp++) {
     // -------------------------------------------------------------------------
     // configure the set of local buffers to xor
     // -------------------------------------------------------------------------
     std::set<vector_op_t*> buffer_set;
-
+    
     for (int l = rangeStart(i_lp); l < rangeStop(i_lp); l++) {
       buffer_set.insert(vop_data[l]);
     }
@@ -52,35 +55,34 @@ ErasureCodeLocalParity::generate(std::set<int>)
     // compute a local parity
     // -------------------------------------------------------------------------
     ErasureCodeXor ecXor;
-    ecXor.compute(buffer_set, vop_coding[i_lp]);
+    ecXor.compute(buffer_set, vop_coding[i_lp], ec_bs);
   }
 }
 
 int
 ErasureCodeLocalParity::reconstruct(
         std::set<int> &erasures,
-        const set<int> &want_to_read)
+        const std::set<int> &want_to_read)
 {
-  vector_op_t * dataword[k];
-  vector_op_t * codingword[lp];
+  vector_op_t * dataword[ec_k];
+  vector_op_t * codingword[ec_lp];
 
   bool all_recovered = true;
 
   // data chunks
-  for (int i = 0; i < k; i++) {
+  for (int i = 0; i < ec_k; i++) {
     dataword[i] = (vector_op_t*) ec_data[i];
   }
 
   // parity chunks
-  for (int i = 0; i < lp; i++) {
-    codingword[i] = (vector_op_t*) ec_coding[m + i];
+  for (int i = 0; i < ec_lp; i++) {
+    codingword[i] = (vector_op_t*) ec_coding[ec_m + i];
   }
-
 
   // ---------------------------------------------------------------------------
   // decode using a local parity : basic pyramid code
   // ---------------------------------------------------------------------------
-  for (register int i_lp = 0; i_lp < lp; i_lp++) {
+  for (register int i_lp = 0; i_lp < ec_lp; i_lp++) {
     // see how many are missing here
     int n_miss = 0;
     int reco_chunk = 0;
@@ -100,7 +102,6 @@ ErasureCodeLocalParity::reconstruct(
       // only reconstruct if this chunk is actually wanted
       // -> we can repair this with local parity
       // -----------------------------------------------------------------------
-      bool x_or = false;
       // -----------------------------------------------------------------------
       // XOR all data blocks existing
       // -----------------------------------------------------------------------
@@ -110,11 +111,15 @@ ErasureCodeLocalParity::reconstruct(
               ++r) {
         reco_chunks.insert((vector_op_t*) dataword[*r]);
       }
+      // -----------------------------------------------------------------------
+      // add the parity chunk
+      // -----------------------------------------------------------------------
+      reco_chunks.insert((vector_op_t*) codingword[i_lp]);
 
       ErasureCodeXor ecXor;
-      ecXor.compute(reco_chunks, dataword[reco_chunk], blocksize);
+      ecXor.compute(reco_chunks, dataword[reco_chunk], ec_bs);
 
-      remaining_erasures.erase(reco_chunk);
+      erasures.erase(reco_chunk);
     }
   }
   // ---------------------------------------------------------------------------
@@ -124,7 +129,7 @@ ErasureCodeLocalParity::reconstruct(
   for (std::set<int>::iterator it = want_to_read.begin();
           it != want_to_read.end();
           it++) {
-    if (remaining_erasures.count(*it)) {
+    if (erasures.count(*it)) {
       all_recovered = false;
       break;
     }
@@ -133,14 +138,12 @@ ErasureCodeLocalParity::reconstruct(
 }
 
 int
-ErasureCodeLocalParity::minimum_to_decode(const set<int>& want_to_read,
-        const set<int>& available_chunks,
-        set<int>* minimum)
+ErasureCodeLocalParity::minimum_to_decode(const std::set<int>& want_to_read,
+					  const std::set<int>& available_chunks,
+					  std::set<int>* minimum)
 {
-  
-  int n_sub_chunks = k / lp;
   int lp_recovered = 0;
-
+  std::set<int>::const_iterator i;
   for (i = want_to_read.begin(); i != want_to_read.end(); ++i) {
     if (available_chunks.count(*i)) {
       // ---------------------------------------------------------------------
@@ -151,9 +154,9 @@ ErasureCodeLocalParity::minimum_to_decode(const set<int>& want_to_read,
       // ---------------------------------------------------------------------
       // check if only one chunk is missing in a local parity subset
       // ---------------------------------------------------------------------
-      ErasureCodeLocalParity ecParity(0, 0, k, m, lp, 0);
+      ErasureCodeLocalParity ecParity(0, 0, ec_k, ec_m, ec_lp, 0);
 
-      for (int s = 0; s < lp; s++) {
+      for (int s = 0; s < ec_lp; s++) {
         // -------------------------------------------------------------------
         // check if <i> is in the local parity subgroup
         // -------------------------------------------------------------------
@@ -174,22 +177,25 @@ ErasureCodeLocalParity::minimum_to_decode(const set<int>& want_to_read,
           // if only one is missing, we recover it with the subgroup
           // -----------------------------------------------------------------
           if (n_miss == 1) {
-            for (int l = n_sub_start; l < n_sub_stop; l++) {
+            for (int l = ecParity.rangeStart(s); l < ecParity.rangeStop(s); l++) {
               if (available_chunks.count(l)) {
                 minimum->insert(l);
               }
             }
-            minimum->insert(k + m + s);
+            minimum->insert(ec_k + ec_m + s);
             lp_recovered++;
           } else {
             // ---------------------------------------------------------------
             // if there are more missing we need to have at least k of (k+m) 
             // chunks
             // ---------------------------------------------------------------
+	    unsigned j;
+	    std::set<int>::const_iterator o;
+  
             for (o = available_chunks.begin(), j = 0;
-                    j < (unsigned) (k - lp_recovered);
+                    j < (unsigned) (ec_k - lp_recovered);
                     o++, j++) {
-              if ((*o) >= (k + m)) {
+              if ((*o) >= (ec_k + ec_m)) {
                 // -----------------------------------------------------------
                 // local parity is not usable for erasure recovery
                 // -----------------------------------------------------------

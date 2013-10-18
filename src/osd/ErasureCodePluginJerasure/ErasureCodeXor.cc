@@ -16,16 +16,18 @@
  * 
  */
 
+#include "ErasureCodeXor.h"
 #include "xor.h"
 
-int 
+void
 ErasureCodeXor::compute(const std::set<vector_op_t*> data,
-                     vector_op_t* parity,
-                     int blocksize) {
-  bool append=true;
-  for (std::set<char*>::const_iterator it = data.begin(); 
+			vector_op_t* parity,
+			int blocksize) {
+  bool append=false;
+  for (std::set<vector_op_t*>::const_iterator it = data.begin(); 
           it != data.end(); 
           ++it, append=true) {
+  
     if (append)
       vector_xor(parity,*it, blocksize/VECTOR_WORDSIZE);
     else

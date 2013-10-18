@@ -19,6 +19,9 @@
 #ifndef CEPH_ERASURE_CODE_XOR_H
 #define CEPH_ERASURE_CODE_XOR_H
 
+#include "vectorop.h"
+#include <set>
+
 class ErasureCodeXor  {
 public:
  
@@ -35,11 +38,10 @@ public:
                      vector_op_t* parity,
                      int blocksize);
   
-  ErasureCodeXor() :
-  {}
+  ErasureCodeXor() {}
 
   virtual ~ErasureCodeXor() {}
-
+};
 
 #endif	/* CEPH_ERASURE_CODE_XOR_H */
 

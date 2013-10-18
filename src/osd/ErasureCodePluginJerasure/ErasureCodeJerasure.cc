@@ -20,6 +20,8 @@
 #include <algorithm>
 #include "common/debug.h"
 #include "ErasureCodeJerasure.h"
+#include "ErasureCodeLocalParity.h"
+#include "vectorop.h"
 extern "C" {
 #include "jerasure.h"
 #include "reed_sol.h"
@@ -50,7 +52,7 @@ int ErasureCodeJerasure::minimum_to_decode(const set<int> &want_to_read,
 {
   set<int>::iterator i;
   set<int>::iterator o;
-  unsigned j;
+
   if (!lp) {
     // -------------------------------------------------------------------------
     // no local parity
@@ -177,7 +179,7 @@ int ErasureCodeJerasure::decode(const set<int> &want_to_read,
     // -------------------------------------------------------------------------
     if (lp) {
       ErasureCodeLocalParity ecParity(data, coding, k, m, lp, blocksize);
-      if (ecParity.reconstruct(erasures, want_to_read))
+      if (ecParity.reconstruct(remaining_erasures, want_to_read))
         return 0;
       // -----------------------------------------------------------------------
       // local parity was not enough ...
