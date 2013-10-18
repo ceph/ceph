@@ -233,9 +233,6 @@ int CrushCompiler::decompile(ostream &out)
     case CEPH_PG_TYPE_RAID4:
       out << "\ttype raid4\n";
       break;
-    case CEPH_PG_TYPE_ENC:
-      out << "\ttype encoded\n";
-      break;
     default:
       out << "\ttype " << crush.get_rule_mask_type(i) << "\n";
     }
@@ -567,9 +564,7 @@ int CrushCompiler::parse_rule(iter_t const& i)
     type = CEPH_PG_TYPE_REP;
   else if (tname == "raid4") 
     type = CEPH_PG_TYPE_RAID4;
-  else if (tname == "encoded") {
-    type = CEPH_PG_TYPE_ENC;
-  } else 
+  else 
     assert(0);    
 
   int minsize = int_node(i->children[start+4]);

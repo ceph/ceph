@@ -708,13 +708,11 @@ struct pg_pool_t {
   enum {
     TYPE_REP = 1,     // replication
     TYPE_RAID4 = 2,   // raid4 (never implemented)
-    TYPE_ENC = 3,     // encoded
   };
   static const char *get_type_name(int t) {
     switch (t) {
     case TYPE_REP: return "rep";
     case TYPE_RAID4: return "raid4";
-    case TYPE_ENC: return "encoded";
     default: return "???";
     }
   }
@@ -866,7 +864,6 @@ public:
 
   bool is_rep()   const { return get_type() == TYPE_REP; }
   bool is_raid4() const { return get_type() == TYPE_RAID4; }
-  bool is_encoded() const { return get_type() == TYPE_ENC; }
 
   unsigned get_pg_num() const { return pg_num; }
   unsigned get_pgp_num() const { return pgp_num; }

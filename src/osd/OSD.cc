@@ -41,7 +41,6 @@
 #include "os/FileJournal.h"
 
 #include "ReplicatedPG.h"
-#include "EncodedPG.h"
 
 #include "Ager.h"
 
@@ -1767,16 +1766,11 @@ PG* OSD::_make_pg(
   PG *pg;
   hobject_t logoid = make_pg_log_oid(pgid);
   hobject_t infooid = make_pg_biginfo_oid(pgid);
-  clog.error() << "Creating a PG of type " << createmap->get_pg_type(pgid) << "\n";
-  if (createmap->get_pg_type(pgid) == pg_pool_t::TYPE_REP) {
-    clog.info() << "Creating  ReplicatedPG\n";
+  if (createmap->get_pg_type(pgid) == pg_pool_t::TYPE_REP)
     pg = new ReplicatedPG(&service, createmap, pool, pgid, logoid, infooid);
-  } else if (createmap->get_pg_type(pgid) == pg_pool_t::TYPE_ENC) {
-    clog.info() << "Creating  EncodedPG\n";
-    pg = new EncodedPG(&service, createmap, pool, pgid, logoid, infooid);
-  } else {
+  else 
     assert(0);
-  }
+
   return pg;
 }
 
