@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2013 CERN/Sitzerland
+ * Copyright (C) 2013 CERN/Switzerland
  *               
  *
  * Authors: Andreas-Joachim Peters <andreas.joachim.peters@cern.ch> 
@@ -22,8 +22,7 @@
 #include <stdio.h>
 
 void
-ErasureCodeLocalParity::generate()
-{
+ErasureCodeLocalParity::generate () {
   // ---------------------------------------------------------------------------
   // place the vector operation pointer
   // ---------------------------------------------------------------------------
@@ -46,7 +45,7 @@ ErasureCodeLocalParity::generate()
     // configure the set of local buffers to xor
     // -------------------------------------------------------------------------
     std::set<vector_op_t*> buffer_set;
-    
+
     for (int l = rangeStart(i_lp); l < rangeStop(i_lp); l++) {
       buffer_set.insert(vop_data[l]);
     }
@@ -60,10 +59,9 @@ ErasureCodeLocalParity::generate()
 }
 
 int
-ErasureCodeLocalParity::reconstruct(
-        std::set<int> &erasures,
-        const std::set<int> &want_to_read)
-{
+ErasureCodeLocalParity::reconstruct (
+                                     std::set<int> &erasures,
+                                     const std::set<int> &want_to_read) {
   vector_op_t * dataword[ec_k];
   vector_op_t * codingword[ec_lp];
 
@@ -92,7 +90,8 @@ ErasureCodeLocalParity::reconstruct(
       if (erasures.count(l)) {
         n_miss++;
         reco_chunk = l;
-      } else {
+      }
+      else {
         reco_erasures.insert(l);
       }
     }
@@ -107,8 +106,8 @@ ErasureCodeLocalParity::reconstruct(
       // -----------------------------------------------------------------------
       std::set<vector_op_t*> reco_chunks;
       for (std::set<int>::iterator r = reco_erasures.begin();
-              r != reco_erasures.end();
-              ++r) {
+        r != reco_erasures.end();
+        ++r) {
         reco_chunks.insert((vector_op_t*) dataword[*r]);
       }
       // -----------------------------------------------------------------------
@@ -127,8 +126,8 @@ ErasureCodeLocalParity::reconstruct(
   // e.g. nothing is left in the remaining_erasures set
   // --------------------------------------------------------------------------
   for (std::set<int>::iterator it = want_to_read.begin();
-          it != want_to_read.end();
-          it++) {
+    it != want_to_read.end();
+    it++) {
     if (erasures.count(*it)) {
       all_recovered = false;
       break;
@@ -138,10 +137,9 @@ ErasureCodeLocalParity::reconstruct(
 }
 
 int
-ErasureCodeLocalParity::minimum_to_decode(const std::set<int>& want_to_read,
-					  const std::set<int>& available_chunks,
-					  std::set<int>* minimum)
-{
+ErasureCodeLocalParity::minimum_to_decode (const std::set<int>& want_to_read,
+                                           const std::set<int>& available_chunks,
+                                           std::set<int>* minimum) {
   int lp_recovered = 0;
   std::set<int>::const_iterator i;
   for (i = want_to_read.begin(); i != want_to_read.end(); ++i) {
@@ -150,7 +148,8 @@ ErasureCodeLocalParity::minimum_to_decode(const std::set<int>& want_to_read,
       // if wanted and ok, just add it to the minimum set
       // ---------------------------------------------------------------------
       minimum->insert(*i);
-    } else {
+    }
+    else {
       // ---------------------------------------------------------------------
       // check if only one chunk is missing in a local parity subset
       // ---------------------------------------------------------------------
@@ -184,17 +183,18 @@ ErasureCodeLocalParity::minimum_to_decode(const std::set<int>& want_to_read,
             }
             minimum->insert(ec_k + ec_m + s);
             lp_recovered++;
-          } else {
+          }
+          else {
             // ---------------------------------------------------------------
             // if there are more missing we need to have at least k of (k+m) 
             // chunks
             // ---------------------------------------------------------------
-	    unsigned j;
-	    std::set<int>::const_iterator o;
-  
+            unsigned j;
+            std::set<int>::const_iterator o;
+
             for (o = available_chunks.begin(), j = 0;
-                    j < (unsigned) (ec_k - lp_recovered);
-                    o++, j++) {
+              j < (unsigned) (ec_k - lp_recovered);
+              o++, j++) {
               if ((*o) >= (ec_k + ec_m)) {
                 // -----------------------------------------------------------
                 // local parity is not usable for erasure recovery

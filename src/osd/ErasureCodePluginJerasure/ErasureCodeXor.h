@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2013 CERN/Sitzerland
+ * Copyright (C) 2013 CERN/Switzerland
  *               
  *
  * Authors: Andreas-Joachim Peters <andreas.joachim.peters@cern.ch> 
@@ -22,25 +22,26 @@
 #include "vectorop.h"
 #include <set>
 
-class ErasureCodeXor  {
+class ErasureCodeXor {
 public:
- 
- /**
-  * @brief compute (=xor) all given data blocks and store the encoded block
-  * @param data set of addresses to data blocks to xor
-  * @param encoded address to store the xor'ed result
-  * @param blocksize size of each data block
-  * 
-  * The caller has to make supre, that the size of the vector data block is
-  * in agreement with the blocksize given.
-  */
-  void compute(const std::set<vector_op_t*> data,
-                     vector_op_t* parity,
-                     int blocksize);
-  
-  ErasureCodeXor() {}
 
-  virtual ~ErasureCodeXor() {}
+  /**
+   * @brief compute (=xor) all given data blocks and store the encoded block
+   * @param data set of addresses to data blocks to xor
+   * @param encoded address to store the xor'ed result
+   * @param blocksize size of each data block
+   * 
+   * The caller has to make supre, that the size of the vector data block is
+   * in agreement with the blocksize given.
+   */
+  void compute (const std::set<vector_op_t*> data,
+                vector_op_t* parity,
+                int blocksize);
+
+  ErasureCodeXor () { }
+
+  virtual
+  ~ErasureCodeXor () { }
 };
 
 #endif	/* CEPH_ERASURE_CODE_XOR_H */

@@ -4,7 +4,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2013 CERN/Sitzerland
+ * Copyright (C) 2013 CERN/Switzerland
  *               
  *
  * Authors: Andreas-Joachim Peters <andreas.joachim.peters@cern.ch> 
@@ -19,15 +19,15 @@
 
 #include "vectorop.h"
 
-void vector_xor(vector_op_t* cw, vector_op_t* dw, int vector_words)
-{
+void
+vector_xor (vector_op_t* cw, vector_op_t* dw, int vector_words) {
   for (int i = 0; i < vector_words; ++i) {
     *cw++ ^= *dw++;
   }
 }
 
-void vector_assign(vector_op_t* cw, vector_op_t* dw, int vector_words)
-{
+void
+vector_assign (vector_op_t* cw, vector_op_t* dw, int vector_words) {
   for (int i = 0; i < vector_words; ++i) {
     *cw++ = *dw++;
   }

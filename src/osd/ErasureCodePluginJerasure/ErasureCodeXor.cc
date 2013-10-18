@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2013 CERN/Sitzerland
+ * Copyright (C) 2013 CERN/Switzerland
  *               
  *
  * Authors: Andreas-Joachim Peters <andreas.joachim.peters@cern.ch> 
@@ -20,17 +20,17 @@
 #include "xor.h"
 
 void
-ErasureCodeXor::compute(const std::set<vector_op_t*> data,
-			vector_op_t* parity,
-			int blocksize) {
-  bool append=false;
-  for (std::set<vector_op_t*>::const_iterator it = data.begin(); 
-          it != data.end(); 
-          ++it, append=true) {
-  
+ErasureCodeXor::compute (const std::set<vector_op_t*> data,
+                         vector_op_t* parity,
+                         int blocksize) {
+  bool append = false;
+  for (std::set<vector_op_t*>::const_iterator it = data.begin();
+    it != data.end();
+    ++it, append = true) {
+
     if (append)
-      vector_xor(parity,*it, blocksize/VECTOR_WORDSIZE);
+      vector_xor(parity, *it, blocksize / VECTOR_WORDSIZE);
     else
-      vector_assign(parity,*it, blocksize/VECTOR_WORDSIZE);
+      vector_assign(parity, *it, blocksize / VECTOR_WORDSIZE);
   }
 }

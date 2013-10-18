@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2013 CERN/Sitzerland
+ * Copyright (C) 2013 CERN/Switzerland
  *               
  *
  * Authors: Andreas-Joachim Peters <andreas.joachim.peters@cern.ch> 
@@ -27,7 +27,7 @@
  * @param source is the start addr of the source block aligned to a vector_word
  * @param vector_words are the number of vector_op_t words
  */
-void vector_xor(vector_op_t* target, vector_op_t* source, int vector_words);
+void vector_xor (vector_op_t* target, vector_op_t* source, int vector_words);
 
 /**
  * @brief assign a vector source block to a target block e.g. target=source 
@@ -35,7 +35,7 @@ void vector_xor(vector_op_t* target, vector_op_t* source, int vector_words);
  * @param source is the start addr of the source block aligned to a vector_word
  * @param vector_words are the number of vector_op_t words
  */
-void vector_assign(vector_op_t*, vector_op_t*, int vector_words);
+void vector_assign (vector_op_t*, vector_op_t*, int vector_words);
 
 
 #endif	/* CEPH_XOR_H */
