@@ -28,9 +28,9 @@ enum WatcherState {
 };
 
 class OSDService;
-class ReplicatedPG;
-void intrusive_ptr_add_ref(ReplicatedPG *pg);
-void intrusive_ptr_release(ReplicatedPG *pg);
+class PG;
+void intrusive_ptr_add_ref(PG *pg);
+void intrusive_ptr_release(PG *pg);
 struct ObjectContext;
 class MWatchNotify;
 
@@ -150,7 +150,7 @@ class Watch {
   CancelableContext *cb;
 
   OSDService *osd;
-  boost::intrusive_ptr<ReplicatedPG> pg;
+  boost::intrusive_ptr<PG> pg;
   std::tr1::shared_ptr<ObjectContext> obc;
 
   std::map<uint64_t, NotifyRef> in_progress_notifies;
@@ -164,7 +164,7 @@ class Watch {
   bool discarded;
 
   Watch(
-    ReplicatedPG *pg, OSDService *osd,
+    PG *pg, OSDService *osd,
     std::tr1::shared_ptr<ObjectContext> obc, uint32_t timeout,
     uint64_t cookie, entity_name_t entity,
     entity_addr_t addr);
@@ -186,14 +186,14 @@ public:
 
   string gen_dbg_prefix();
   static WatchRef makeWatchRef(
-    ReplicatedPG *pg, OSDService *osd,
+    PG *pg, OSDService *osd,
     std::tr1::shared_ptr<ObjectContext> obc, uint32_t timeout, uint64_t cookie, entity_name_t entity, entity_addr_t addr);
   void set_self(WatchRef _self) {
     self = _self;
   }
 
   /// Does not grant a ref count!
-  boost::intrusive_ptr<ReplicatedPG> get_pg() { return pg; }
+  boost::intrusive_ptr<PG> get_pg() { return pg; }
 
   std::tr1::shared_ptr<ObjectContext> get_obc() { return obc; }
 
