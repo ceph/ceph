@@ -24,9 +24,6 @@
 #include "mon/Monitor.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
-#include "common/debug.h"
-
-#define dout_subsys ceph_subsys_mon
 
 static void usage(ostream &out)
 {
@@ -51,7 +48,7 @@ static void json_print(const MonCommand *mon_commands, int size)
   get_command_descriptions(mon_commands, size, f, &rdata);
   delete f;
   string data(rdata.c_str(), rdata.length());
-  dout(0) << data << dendl;
+  cout << data << std::endl;
 }
 
 static void all()
