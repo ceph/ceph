@@ -2626,7 +2626,6 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
   int64_t pool = ++pending_inc.new_pool_max;
   pg_pool_t empty;
   pg_pool_t *pi = pending_inc.get_new_pool(pool, &empty);
-  pi->type = pg_pool_t::TYPE_REP;
   pi->flags = g_conf->osd_pool_default_flags;
   if (g_conf->osd_pool_default_flag_hashpspool)
     pi->flags |= pg_pool_t::FLAG_HASHPSPOOL;
@@ -2637,6 +2636,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
     pi->crush_ruleset = crush_rule;
   else
     pi->crush_ruleset = g_conf->osd_pool_default_crush_rule;
+  pi->type = osdmap.crush->get_rule_mask_type(pi->crush_ruleset);
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
   pi->set_pg_num(pg_num ? pg_num : g_conf->osd_pool_default_pg_num);
   pi->set_pgp_num(pgp_num ? pgp_num : g_conf->osd_pool_default_pgp_num);
