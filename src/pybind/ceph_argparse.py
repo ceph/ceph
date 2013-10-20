@@ -19,6 +19,9 @@ import stat
 import sys
 import types
 import uuid
+import logging
+
+LOG = logging.getLogger(__name__)
 
 class ArgumentError(Exception):
     """
@@ -676,7 +679,7 @@ def parse_json_funcsigs(s, consumer):
     try:
         overall = json.loads(s)
     except Exception as e:
-        print >> sys.stderr, "Couldn't parse JSON {0}: {1}".format(s, e)
+        LOG.error("Couldn't parse JSON {0}: {1}".format(s, e))
         raise e
     sigdict = {}
     for cmdtag, cmd in overall.iteritems():
@@ -865,7 +868,7 @@ def validate(args, signature, partial=False):
                 if not desc.req:
                     # if not required, just push back; it might match
                     # the next arg
-                    print >> sys.stderr, myarg, 'not valid: ', str(e)
+                    LOG.error(myarg + 'not valid: ' + str(e))
                     myargs.insert(0, myarg)
                     break
                 else:
@@ -910,16 +913,16 @@ def validate_command(sigdict, args, verbose=False):
             matched = matchnum(args, sig, partial=True)
             if (matched > best_match_cnt):
                 if verbose:
-                    print >> sys.stderr, \
+                    LOG.error(
                         "better match: {0} > {1}: {2}:{3} ".format(matched,
-                                      best_match_cnt, cmdtag, concise_sig(sig))
+                                      best_match_cnt, cmdtag, concise_sig(sig)))
                 best_match_cnt = matched
                 bestcmds = [{cmdtag:cmd}]
             elif matched == best_match_cnt:
                 if verbose:
-                    print >> sys.stderr, \
+                    LOG.error(
                         "equal match: {0} > {1}: {2}:{3} ".format(matched,
-                                      best_match_cnt, cmdtag, concise_sig(sig))
+                                      best_match_cnt, cmdtag, concise_sig(sig)))
                 bestcmds.append({cmdtag:cmd})
 
         # Sort bestcmds by number of args so we can try shortest first
@@ -928,9 +931,7 @@ def validate_command(sigdict, args, verbose=False):
                                  cmp=lambda x,y:cmp(cmdsiglen(x), cmdsiglen(y)))
 
         if verbose:
-            print >> sys.stderr, "bestcmds_sorted: "
-            pprint.PrettyPrinter(stream=sys.stderr).pprint(bestcmds_sorted)
-
+            LOG.error("bestcmds_sorted: " + pprint.pformat(bestcmds_sorted))
         # for everything in bestcmds, look for a true match
         for cmdsig in bestcmds_sorted:
             for cmd in cmdsig.itervalues():
@@ -949,23 +950,23 @@ def validate_command(sigdict, args, verbose=False):
                     # cmdsigs we'll fall out unfound; if we're not, maybe
                     # the next one matches completely.  Whine, but pass.
                     if verbose:
-                        print >> sys.stderr, 'Not enough args supplied for ', \
-                                              concise_sig(sig)
+                        LOG.error('Not enough args supplied for ' +
+                                      concise_sig(sig))
                 except ArgumentError as e:
                     # Solid mismatch on an arg (type, range, etc.)
                     # Stop now, because we have the right command but
                     # some other input is invalid
-                    print >> sys.stderr, "Invalid command: ", str(e)
-                    print >> sys.stderr, concise_sig(sig), ': ', cmd['help']
+                    LOG.error("Invalid command: " + str(e))
                     return {}
             if found:
                 break
 
         if not found:
-            print >> sys.stderr, 'no valid command found; 10 closest matches:'
+            message = 'no valid command found; 10 closest matches:\n'
             for cmdsig in bestcmds[:10]:
                 for (cmdtag, cmd) in cmdsig.iteritems():
-                    print >> sys.stderr, concise_sig(cmd['sig'])
+                    message += concise_sig(cmd['sig']) + '\n'
+            LOG.error(message)
             return None
 
         return valid_dict
@@ -1032,8 +1033,7 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
             osdid = target[1]
 
             if verbose:
-                print >> sys.stderr, 'submit {0} to osd.{1}'.\
-                    format(cmd, osdid)
+                LOG.error('submit {0} to osd.{1}'.format(cmd, osdid))
             ret, outbuf, outs = \
                 cluster.osd_command(osdid, cmd, inbuf, timeout)
 
@@ -1048,15 +1048,13 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
                 cmddict = dict(pgid=pgid)
             cmd = [json.dumps(cmddict)]
             if verbose:
-                print >> sys.stderr, 'submit {0} for pgid {1}'.\
-                    format(cmd, pgid)
+                LOG.error('submit {0} for pgid {1}'.format(cmd, pgid))
             ret, outbuf, outs = \
                 cluster.pg_command(pgid, cmd, inbuf, timeout)
 
         elif target[0] == 'mon':
             if verbose:
-                print >> sys.stderr, '{0} to {1}'.\
-                    format(cmd, target[0])
+                LOG.error('{0} to {1}'.format(cmd, target[0]))
             if target[1] == '':
                 ret, outbuf, outs = cluster.mon_command(cmd, inbuf, timeout)
             else:

@@ -1,4 +1,4 @@
-# -*- mode:python -*-
+# -*- mode:python; tab-width:4; indent-tabs-mode:t -*-
 # vim: ts=4 sw=4 smarttab expandtab
 #
 # Processed in Makefile to add python #! line and version variable
@@ -56,6 +56,7 @@ import socket
 import string
 import struct
 import subprocess
+import logging
 
 from ceph_argparse import \
     concise_sig, descsort, parse_json_funcsigs, \
@@ -63,7 +64,7 @@ from ceph_argparse import \
     send_command, json_command
 
 # just a couple of globals
-
+LOG = logging.getLogger(__name__)
 verbose = False
 cluster_handle = None
 
@@ -192,9 +193,9 @@ def do_extended_help(parser, args):
                                          prefix='get_command_descriptions', 
                                          timeout=10)
         if ret:
-            print >> sys.stderr, \
+            LOG.error(\
                 "couldn't get command descriptions for {0}: {1}".\
-                format(target, outs)
+                format(target, outs))
         else:
             help_for_sigs(outbuf, partial)
 
@@ -396,23 +397,23 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                     if parsed_args.output_format:
                         valid_dict['format'] = parsed_args.output_format
                     if verbose:
-                        print >> sys.stderr, "Submitting command ", valid_dict
+                        LOG.error("Submitting command " + valid_dict)
                     ret, outbuf, outs = json_command(cluster_handle,
                                                      target=target,
                                                      argdict=valid_dict)
                     if ret:
                         ret = abs(ret)
-                        print >> sys.stderr, \
-                            'Error: {0} {1}'.format(ret, errno.errorcode[ret])
+                        LOG.error(\
+                            'Error: {0} {1}'.format(ret, errno.errorcode[ret]))
                     if outbuf:
                         print outbuf
                     if outs:
-                        print >> sys.stderr, 'Status:\n', outs
+                        LOG.error('Status:\n' + outs)
                 else:
-                    print >> sys.stderr, "Invalid command"
+                    LOG.error("Invalid command")
 
     if verbose:
-        print >> sys.stderr, "Submitting command ", valid_dict
+        LOG.error("Submitting command " + valid_dict)
     return json_command(cluster_handle, target=target, argdict=valid_dict,
                         inbuf=inbuf)
 
@@ -440,16 +441,16 @@ def complete(sigdict, args, target):
         matched = matchnum(args, sig, partial=True)
         if (matched > best_match_cnt):
             if complete_verbose:
-                print >> sys.stderr, \
+                LOG.error(\
                     "better match: {0} > {1}: {2}:{3} ".format(matched,
-                                  best_match_cnt, cmdtag, concise_sig(sig))
+                                  best_match_cnt, cmdtag, concise_sig(sig)))
             best_match_cnt = matched
             bestcmds = [{cmdtag:cmd}]
         elif matched == best_match_cnt:
             if complete_verbose:
-                print >> sys.stderr, \
+                LOG.error(\
                     "equal match: {0} > {1}: {2}:{3} ".format(matched,
-                                  best_match_cnt, cmdtag, concise_sig(sig))
+                                  best_match_cnt, cmdtag, concise_sig(sig)))
             bestcmds.append({cmdtag:cmd})
 
     # look through all matching sigs
@@ -463,14 +464,14 @@ def complete(sigdict, args, target):
             fullindex = matchnum(args, sig, partial=False) - 1
             partindex = matchnum(args, sig, partial=True) - 1
             if complete_verbose:
-                print >> sys.stderr, '{}: f {} p {} len {}'.format(sig, fullindex, partindex, len(sig))
+                LOG.error('{}: f {} p {} len {}'.format(sig, fullindex, partindex, len(sig)))
             if fullindex == partindex and fullindex + 1 < len(sig):
                 d = sig[fullindex + 1]
             else:
                 d = sig[partindex]
             comps.append(str(d))
     if complete_verbose:
-        print >> sys.stderr, '\n'.join(comps)
+        LOG.error('\n'.join(comps))
     print '\n'.join(comps)
 
     return 0
@@ -507,8 +508,8 @@ def main():
     verbose = parsed_args.verbose
 
     if parsed_args.admin_socket_nope:
-        print >> sys.stderr, '--admin-socket is used by daemons; '\
-        'you probably mean --admin-daemon/daemon'
+        LOG.error('--admin-socket is used by daemons; ' +
+                      'you probably mean --admin-daemon/daemon')
         return 1
 
     # pass on --id, --name, --conf
@@ -540,20 +541,19 @@ def main():
                 try:
                     sockpath = ceph_conf('admin_socket', childargs[1])
                 except Exception as e:
-                    print >> sys.stderr, \
-                        'Can\'t get admin socket path: ' + str(e)
+                    LOG.error('Can\'t get admin socket path: ' + str(e))
                     return errno.EINVAL
             # for both:
             childargs = childargs[2:]
         else:
-            print >> sys.stderr, 'daemon requires at least 3 arguments'
+            LOG.error('daemon requires at least 3 arguments')
             return errno.EINVAL
 
     if sockpath:
         try:
             print admin_socket(sockpath, childargs, format)
         except Exception as e:
-            print >> sys.stderr, 'admin_socket: {0}'.format(e)
+            LOG.error('admin_socket: {0}'.format(e))
             return errno.EINVAL
         return 0
 
@@ -605,7 +605,9 @@ def main():
     if len(childargs) >= 2 and \
         childargs[0] in ['mon', 'osd'] and \
         childargs[1] == 'tell':
-        print >> sys.stderr, '"{0} tell" is deprecated; try "tell {0}.<id>" instead (id can be "*") '.format(childargs[0])
+        LOG.error('"{0} tell" is deprecated; ' + 
+                      'try "tell {0}.<id>" ' + 
+                      'instead (id can be "*") '.format(childargs[0]))
         return 1
 
     if parsed_args.help:
@@ -626,11 +628,11 @@ def main():
             return ping_monitor(cluster_handle, childargs[1])
         cluster_handle.connect(timeout=timeout)
     except KeyboardInterrupt:
-        print >> sys.stderr, 'Cluster connection aborted'
+        LOG.error('Cluster connection aborted')
         return 1
     except Exception as e:
-        print >> sys.stderr, 'Error connecting to cluster: {0}'.\
-            format(e.__class__.__name__)
+        LOG.error('Error connecting to cluster: {0}'.\
+            format(e.__class__.__name__))
         return 1
 
     if parsed_args.help:
@@ -661,7 +663,7 @@ def main():
             if ret == 0:
                 outbuf += outs
         if ret:
-            print >> sys.stderr, "status query failed: ", outs
+            LOG.error("status query failed: " + outs)
             return ret
         print outbuf
 
@@ -683,7 +685,8 @@ def main():
             with open(parsed_args.input_file, 'r') as f:
                 inbuf = f.read()
         except Exception as e:
-            print >> sys.stderr, 'Can\'t open input file {0}: {1}'.format(parsed_args.input_file, e)
+            LOG.error('Can\'t open input file ' + 
+                          '{0}: {1}'.format(parsed_args.input_file, e))
             return 1
 
     # prepare output file, if any
@@ -691,9 +694,9 @@ def main():
         try:
             outf = open(parsed_args.output_file, 'w')
         except Exception as e:
-            print >> sys.stderr, \
+            LOG.error(\
                 'Can\'t open output file {0}: {1}'.\
-                format(parsed_args.output_file, e)
+                format(parsed_args.output_file, e))
             return 1
 
     # -s behaves like a command (ceph status).
@@ -769,11 +772,14 @@ def main():
                                                           sigdict, inbuf, verbose)
                     if ret < 0:
                         ret = -ret
-                        print >> sys.stderr, prefix + 'Second attempt of previously successful command failed with {0}: {1}'.format(errno.errorcode[ret], outs)
+                        LOG.error(prefix + 'Second attempt of previously '
+                                      'successful command failed with '
+                                      '{0}: {1}'.format(errno.errorcode[ret], outs))
 
         if ret < 0:
             ret = -ret
-            print >> sys.stderr, prefix + 'Error {0}: {1}'.format(errno.errorcode[ret], outs)
+            LOG.error(prefix + 'Error '
+                          '{0}: {1}'.format(errno.errorcode[ret], outs))
             if len(targets) > 1:
                 final_ret = ret
             else:
@@ -786,7 +792,7 @@ def main():
                 print outs
         else:
             if outs:
-                print >> sys.stderr, prefix + outs
+                LOG.error(prefix + outs)
 
         if (parsed_args.output_file):
             outf.write(outbuf)
