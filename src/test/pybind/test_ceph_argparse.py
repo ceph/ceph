@@ -24,9 +24,7 @@ import re
 import json
 
 def get_command_descriptions(what):
-    buffer = os.popen("./get_command_descriptions " + "--" + what
-					  + " 2>&1 | grep cmd000").read()
-    return re.sub(r'^.*?(\{.*\})', '\g<1>', buffer)
+    return os.popen("./get_command_descriptions " + "--" + what).read()
 
 def test_parse_json_funcsigs():
     commands = get_command_descriptions("all")
