@@ -536,6 +536,12 @@ AC_CHECK_FUNC([fallocate],
 	[])
 
 
+# splice/tee
+AC_CHECK_FUNC([splice],
+	[AC_DEFINE([CEPH_HAVE_SPLICE], [], [splice(2) is supported])],
+	[])
+
+AC_CHECK_HEADERS([arpa/nameser_compat.h])
 AC_CHECK_HEADERS([sys/prctl.h])
 AC_CHECK_FUNCS([prctl])
 
