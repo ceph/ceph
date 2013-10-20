@@ -140,8 +140,8 @@ public:
    * transactions would not allow); if you are doing the copy for a read
    * op you will have to generate a separate op to finish the copy with.
    */
-  /// return code, total object size, data in temp object?, final Transaction
-  typedef boost::tuple<int, size_t, bool, ObjectStore::Transaction> CopyResults;
+  /// return code, total object size, data in temp object?, final Transaction, should requeue Op
+  typedef boost::tuple<int, size_t, bool, ObjectStore::Transaction, bool> CopyResults;
   class CopyCallback : public GenContext<CopyResults&> {
   protected:
     CopyCallback() {}
@@ -155,6 +155,9 @@ public:
      * results.get<3>() is a Transaction; if non-empty you need to perform
      * its results before any other accesses to the object in order to
      * complete the copy.
+     * results.get<4>() is a bool; if true you must requeue the client Op
+     * after processing the rest of the results (this will only be true
+     * in conjunction with an ECANCELED return code).
      */
     virtual void finish(CopyResults& results_) = 0;
 
@@ -182,6 +185,8 @@ public:
       if (r < 0) {
 	if (r != -ECANCELED) { // on cancel just toss it out; client resends
 	  ctx->pg->osd->reply_op_error(ctx->op, r);
+	} else if (results_.get<4>()) {
+	  ctx->pg->requeue_op(ctx->op);
 	}
 	ctx->pg->close_op_ctx(ctx);
       }
@@ -978,8 +983,8 @@ protected:
   void _build_finish_copy_transaction(CopyOpRef cop,
                                       ObjectStore::Transaction& t);
   int finish_copyfrom(OpContext *ctx);
-  void cancel_copy(CopyOpRef cop);
-  void cancel_copy_ops();
+  void cancel_copy(CopyOpRef cop, bool requeue);
+  void cancel_copy_ops(bool requeue);
 
   friend class C_Copyfrom;
 
