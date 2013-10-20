@@ -66,7 +66,7 @@ AM_COMMON_CFLAGS = \
 	-fno-strict-aliasing \
 	-fsigned-char
 if !CLANG
-	AM_COMMON_FLAGS += -rdynamic
+	AM_COMMON_CFLAGS += -rdynamic
 endif
 
 AM_CFLAGS = $(AM_COMMON_CFLAGS)
