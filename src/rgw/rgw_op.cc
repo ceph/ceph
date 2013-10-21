@@ -339,7 +339,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
       s->local_source = store->region.equals(region);
     }
   }
-    
+
   if (s->bucket_name_str.size()) {
     s->bucket_exists = true;
     if (s->bucket_instance_id.empty()) {
@@ -1651,8 +1651,6 @@ bool RGWCopyObj::parse_copy_location(const char *src, string& bucket_name, strin
 
   url_decode(url_src, dec_src);
   src = dec_src.c_str();
-
-  ldout(s->cct, 15) << "decoded obj=" << src << dendl;
 
   if (*src == '/') ++src;
 

@@ -807,6 +807,8 @@ struct req_state {
    rgw_bucket bucket;
    string bucket_name_str;
    string object_str;
+   string src_bucket_name;
+   string src_object;
    ACLOwner bucket_owner;
    ACLOwner owner;
 
