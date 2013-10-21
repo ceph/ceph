@@ -210,7 +210,6 @@ namespace librbd {
     plb.add_u64_counter(l_librbd_discard, "discard");
     plb.add_u64_counter(l_librbd_discard_bytes, "discard_bytes");
     plb.add_time_avg(l_librbd_discard_latency, "discard_latency");
-    plb.add_u64_counter(l_librbd_flush, "flush");
     plb.add_u64_counter(l_librbd_aio_rd, "aio_rd");
     plb.add_u64_counter(l_librbd_aio_rd_bytes, "aio_rd_bytes");
     plb.add_time_avg(l_librbd_aio_rd_latency, "aio_rd_latency");
