@@ -1171,7 +1171,7 @@ void RGWDeleteBucket::execute()
 {
   ret = -EINVAL;
 
-  if (!s->bucket_name)
+  if (s->bucket_name_str.empty())
     return;
 
   RGWObjVersionTracker ot;

@@ -135,7 +135,6 @@ req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL)
   object_acl = NULL;
   expect_cont = false;
 
-  bucket_name = NULL;
   object = NULL;
 
   header_ended = false;
@@ -149,7 +148,6 @@ req_state::req_state(CephContext *_cct, struct RGWEnv *e) : cct(_cct), cio(NULL)
   perm_mask = 0;
   content_length = 0;
   object = NULL;
-  bucket_name = NULL;
   has_bad_meta = false;
   length = NULL;
   copy_source = NULL;
@@ -164,7 +162,6 @@ req_state::~req_state() {
   delete bucket_acl;
   delete object_acl;
   free((void *)object);
-  free((void *)bucket_name);
 }
 
 struct str_len {

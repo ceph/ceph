@@ -453,7 +453,7 @@ int RGWCopyObj_ObjStore_SWIFT::get_params()
 
   src_bucket_name = s->src_bucket_name;
   src_object = s->src_object;
-  dest_bucket_name = s->bucket_name;
+  dest_bucket_name = s->bucket_name_str;
   dest_object = s->object_str;
 
   return 0;
@@ -839,8 +839,6 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
     return 0;
 
   s->bucket_name_str = first;
-  s->bucket_name = strdup(s->bucket_name_str.c_str());
-
    
   s->info.effective_uri = "/" + s->bucket_name_str;
 
@@ -855,7 +853,7 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
 
 int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWClientIO *cio)
 {
-  dout(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket_name ? s->bucket_name : "<NULL>") << dendl;
+  dout(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (!s->bucket_name_str.empty() ? s->bucket_name_str : "<NULL>") << dendl;
 
   int ret = validate_bucket_name(s->bucket_name_str.c_str());
   if (ret)
@@ -894,8 +892,6 @@ int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWCli
     s->src_bucket_name = s->bucket_name_str;
     s->src_object = s->object_str;
     s->bucket_name_str = dest_bucket_name;
-    free(s->bucket_name);
-    s->bucket_name = strdup(s->bucket_name_str.c_str());
     s->object_str = dest_object;
     s->op = OP_PUT;
   }
@@ -910,7 +906,7 @@ RGWHandler *RGWRESTMgr_SWIFT::get_handler(struct req_state *s)
   if (ret < 0)
     return NULL;
 
-  if (!s->bucket_name)
+  if (s->bucket_name_str.empty())
     return new RGWHandler_ObjStore_Service_SWIFT;
   if (!s->object)
     return new RGWHandler_ObjStore_Bucket_SWIFT;

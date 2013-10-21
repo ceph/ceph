@@ -33,8 +33,8 @@ static inline void frame_metadata_key(req_state *s, string& out) {
 
   string metadata_key;
   string section;
-  if (s->bucket_name) {
-    section = s->bucket_name;
+  if (!s->bucket_name_str.empty()) {
+    section = s->bucket_name_str;
   } else {
     section = key;
     key.clear();

@@ -906,7 +906,7 @@ int RGWListBucketMultiparts_ObjStore::get_params()
 
 int RGWDeleteMultiObj_ObjStore::get_params()
 {
-  bucket_name = s->bucket_name;
+  bucket_name = s->bucket_name_str;
 
   if (bucket_name.empty()) {
     ret = -EINVAL;
