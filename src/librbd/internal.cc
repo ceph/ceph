@@ -2821,7 +2821,7 @@ reprotect_and_return_err:
       return r;
 
     ictx->user_flushed();
-    int r = _flush(ictx);
+    r = _flush(ictx);
     ictx->perfcounter->inc(l_librbd_flush);
     return r;
   }
