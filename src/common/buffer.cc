@@ -69,6 +69,8 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     return buffer_cached_crc_adjusted.read();
   }
 
+  buffer::error_code::error_code(int error) :
+    buffer::malformed_input(cpp_strerror(error).c_str()), code(error) {}
 
   class buffer::raw {
   public:
