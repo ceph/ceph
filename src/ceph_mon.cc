@@ -448,6 +448,8 @@ int main(int argc, const char **argv)
       ipaddr = g_conf->public_addr;
       if (ipaddr.get_port() == 0)
 	ipaddr.set_port(CEPH_MON_PORT);
+      dout(0) << "using public_addr " << g_conf->public_addr << " -> "
+	      << ipaddr << dendl;
     } else {
       MonMap tmpmap;
       int err = tmpmap.build_initial(g_ceph_context, cerr);
