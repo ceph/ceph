@@ -137,6 +137,7 @@ private:
   class raw_posix_aligned;
   class raw_hack_aligned;
   class raw_char;
+  class raw_pipe;
 
   friend std::ostream& operator<<(std::ostream& out, const raw &r);
 
@@ -152,8 +153,8 @@ public:
   static raw* claim_malloc(unsigned len, char *buf);
   static raw* create_static(unsigned len, char *buf);
   static raw* create_page_aligned(unsigned len);
-  
-  
+  static raw* create_zero_copy(unsigned len, int fd, loff_t *offset);
+
   /*
    * a buffer pointer.  references (a subsequence of) a raw buffer.
    */

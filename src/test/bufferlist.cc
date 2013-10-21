@@ -29,6 +29,7 @@
 #include "include/encoding.h"
 #include "common/environment.h"
 #include "common/Clock.h"
+#include "common/safe_io.h"
 
 #include "gtest/gtest.h"
 #include "stdlib.h"
@@ -141,6 +142,25 @@ TEST(Buffer, constructors) {
     bufferptr clone = ptr.clone();
     EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
   }
+#ifdef CEPH_HAVE_SPLICE
+  if (ceph_buffer_track)
+    EXPECT_EQ(0, buffer::get_total_alloc());
+  {
+    // no fd
+    EXPECT_THROW(buffer::create_zero_copy(len, -1, NULL), buffer::error_code);
+
+    unsigned zc_len = 4;
+    ::unlink("testfile");
+    ::system("echo ABC > testfile");
+    int fd = ::open("testfile", O_RDONLY);
+    bufferptr ptr(buffer::create_zero_copy(zc_len, fd, NULL));
+    EXPECT_EQ(zc_len, ptr.length());
+    if (ceph_buffer_track)
+      EXPECT_EQ(zc_len, (unsigned)buffer::get_total_alloc());
+    ::close(fd);
+    ::unlink("testfile");
+  }
+#endif
   if (ceph_buffer_track)
     EXPECT_EQ(0, buffer::get_total_alloc());
 }
@@ -152,6 +172,115 @@ TEST(BufferRaw, ostream) {
   EXPECT_GT(stream.str().size(), stream.str().find("buffer::raw("));
   EXPECT_GT(stream.str().size(), stream.str().find("len 1 nref 1)"));
 }
+
+#ifdef CEPH_HAVE_SPLICE
+class TestRawPipe : public ::testing::Test {
+protected:
+  virtual void SetUp() {
+    len = 4;
+    ::unlink("testfile");
+    ::system("echo ABC > testfile");
+    fd = ::open("testfile", O_RDONLY);
+    assert(fd >= 0);
+  }
+  virtual void TearDown() {
+    ::close(fd);
+    ::unlink("testfile");
+  }
+  int fd;
+  unsigned len;
+};
+
+TEST_F(TestRawPipe, create_zero_copy) {
+  bufferptr ptr(buffer::create_zero_copy(len, fd, NULL));
+  EXPECT_EQ(len, ptr.length());
+  if (get_env_bool("CEPH_BUFFER_TRACK"))
+    EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
+}
+
+TEST_F(TestRawPipe, c_str_no_fd) {
+  EXPECT_THROW(bufferptr ptr(buffer::create_zero_copy(len, -1, NULL)),
+	       buffer::error_code);
+}
+
+TEST_F(TestRawPipe, c_str_basic) {
+  bufferptr ptr = bufferptr(buffer::create_zero_copy(len, fd, NULL));
+  EXPECT_EQ(0, memcmp(ptr.c_str(), "ABC\n", len));
+  EXPECT_EQ(len, ptr.length());
+}
+
+TEST_F(TestRawPipe, c_str_twice) {
+  // make sure we're creating a copy of the data and not consuming it
+  bufferptr ptr = bufferptr(buffer::create_zero_copy(len, fd, NULL));
+  EXPECT_EQ(len, ptr.length());
+  EXPECT_EQ(0, memcmp(ptr.c_str(), "ABC\n", len));
+  EXPECT_EQ(0, memcmp(ptr.c_str(), "ABC\n", len));
+}
+
+TEST_F(TestRawPipe, c_str_basic_offset) {
+  loff_t offset = len - 1;
+  ::lseek(fd, offset, SEEK_SET);
+  bufferptr ptr = bufferptr(buffer::create_zero_copy(len - offset, fd, NULL));
+  EXPECT_EQ(len - offset, ptr.length());
+  EXPECT_EQ(0, memcmp(ptr.c_str(), "\n", len - offset));
+}
+
+TEST_F(TestRawPipe, c_str_dest_short) {
+  ::lseek(fd, 1, SEEK_SET);
+  bufferptr ptr = bufferptr(buffer::create_zero_copy(2, fd, NULL));
+  EXPECT_EQ(2u, ptr.length());
+  EXPECT_EQ(0, memcmp(ptr.c_str(), "BC", 2));
+}
+
+TEST_F(TestRawPipe, c_str_source_short) {
+  ::lseek(fd, 1, SEEK_SET);
+  bufferptr ptr = bufferptr(buffer::create_zero_copy(len, fd, NULL));
+  EXPECT_EQ(len - 1, ptr.length());
+  EXPECT_EQ(0, memcmp(ptr.c_str(), "BC\n", len - 1));
+}
+
+TEST_F(TestRawPipe, c_str_explicit_zero_offset) {
+  loff_t offset = 0;
+  ::lseek(fd, 1, SEEK_SET);
+  bufferptr ptr = bufferptr(buffer::create_zero_copy(len, fd, &offset));
+  EXPECT_EQ(len, offset);
+  EXPECT_EQ(len, ptr.length());
+  EXPECT_EQ(0, memcmp(ptr.c_str(), "ABC\n", len));
+}
+
+TEST_F(TestRawPipe, c_str_explicit_positive_offset) {
+  loff_t offset = 1;
+  bufferptr ptr = bufferptr(buffer::create_zero_copy(len - offset, fd,
+						     &offset));
+  EXPECT_EQ(len, offset);
+  EXPECT_EQ(len - 1, ptr.length());
+  EXPECT_EQ(0, memcmp(ptr.c_str(), "BC\n", len - 1));
+}
+
+TEST_F(TestRawPipe, c_str_explicit_positive_empty_result) {
+  loff_t offset = len;
+  bufferptr ptr = bufferptr(buffer::create_zero_copy(len - offset, fd,
+						     &offset));
+  EXPECT_EQ(len, offset);
+  EXPECT_EQ(0u, ptr.length());
+}
+
+TEST_F(TestRawPipe, c_str_source_short_explicit_offset) {
+  loff_t offset = 1;
+  bufferptr ptr = bufferptr(buffer::create_zero_copy(len, fd, &offset));
+  EXPECT_EQ(len, offset);
+  EXPECT_EQ(len - 1, ptr.length());
+  EXPECT_EQ(0, memcmp(ptr.c_str(), "BC\n", len - 1));
+}
+
+TEST_F(TestRawPipe, c_str_dest_short_explicit_offset) {
+  loff_t offset = 1;
+  bufferptr ptr = bufferptr(buffer::create_zero_copy(2, fd, &offset));
+  EXPECT_EQ(3, offset);
+  EXPECT_EQ(2u, ptr.length());
+  EXPECT_EQ(0, memcmp(ptr.c_str(), "BC", 2));
+}
+#endif // CEPH_HAVE_SPLICE
 
 //                                     
 // +-----------+                +-----+
