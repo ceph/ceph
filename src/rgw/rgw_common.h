@@ -819,7 +819,6 @@ struct req_state {
    uint32_t perm_mask;
    utime_t header_time;
 
-   const char *bucket_name;
    const char *object;
 
    rgw_bucket bucket;
