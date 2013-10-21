@@ -211,6 +211,9 @@ public:
       memcpy(dest, c_str()+o, l);
     }
 
+    bool can_zero_copy() const;
+    int zero_copy_to_fd(int fd, loff_t *offset) const;
+
     unsigned wasted();
 
     int cmp(const ptr& o);
@@ -310,6 +313,7 @@ public:
 
   private:
     mutable iterator last_p;
+    int zero_copy_to_fd(int fd) const;
 
   public:
     // cons/des
@@ -347,6 +351,7 @@ public:
     }
     bool contents_equal(buffer::list& other);
 
+    bool can_zero_copy() const;
     bool is_page_aligned() const;
     bool is_n_page_sized() const;
 
@@ -434,8 +439,10 @@ public:
     void hexdump(std::ostream &out) const;
     int read_file(const char *fn, std::string *error);
     ssize_t read_fd(int fd, size_t len);
+    int read_fd_zero_copy(int fd, size_t len);
     int write_file(const char *fn, int mode=0644);
     int write_fd(int fd) const;
+    int write_fd_zero_copy(int fd) const;
     uint32_t crc32c(uint32_t crc) const;
   };
 

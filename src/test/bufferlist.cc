@@ -280,6 +280,37 @@ TEST_F(TestRawPipe, c_str_dest_short_explicit_offset) {
   EXPECT_EQ(2u, ptr.length());
   EXPECT_EQ(0, memcmp(ptr.c_str(), "BC", 2));
 }
+
+TEST_F(TestRawPipe, buffer_list_read_fd_zero_copy) {
+  bufferlist bl;
+  EXPECT_EQ(-EBADF, bl.read_fd_zero_copy(-1, len));
+  bl = bufferlist();
+  EXPECT_EQ(0, bl.read_fd_zero_copy(fd, len));
+  EXPECT_EQ(len, bl.length());
+  EXPECT_EQ(0u, bl.buffers().front().unused_tail_length());
+  EXPECT_EQ(1u, bl.buffers().size());
+  EXPECT_EQ(len, bl.buffers().front().raw_length());
+  EXPECT_EQ(0, memcmp(bl.c_str(), "ABC\n", len));
+  EXPECT_TRUE(bl.can_zero_copy());
+}
+
+TEST_F(TestRawPipe, buffer_list_write_fd_zero_copy) {
+  ::unlink("testfile_out");
+  bufferlist bl;
+  EXPECT_EQ(0, bl.read_fd_zero_copy(fd, len));
+  EXPECT_TRUE(bl.can_zero_copy());
+  int out_fd = ::open("testfile_out", O_RDWR|O_CREAT|O_TRUNC, 0600);
+  EXPECT_EQ(0, bl.write_fd_zero_copy(out_fd));
+  struct stat st;
+  memset(&st, 0, sizeof(st));
+  EXPECT_EQ(0, ::stat("testfile_out", &st));
+  EXPECT_EQ(len, st.st_size);
+  char buf[len + 1];
+  EXPECT_EQ(len, safe_read(out_fd, buf, len + 1));
+  EXPECT_EQ(0, memcmp(buf, "ABC\n", len));
+  ::close(out_fd);
+  ::unlink("testfile_out");
+}
 #endif // CEPH_HAVE_SPLICE
 
 //                                     
