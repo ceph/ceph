@@ -502,9 +502,16 @@ protected:
 
       ObjState() : state(NONE), count(0) {}
       bool get_read(OpRequestRef op) {
-	// don't starve!
+	if (get_read_lock()) {
+	  return true;
+	} // else
+	waiters.push_back(op);
+	return false;
+      }
+      /// this function adjusts the counts if necessary
+      bool get_read_lock() {
+	// don't starve anybody!
 	if (!waiters.empty()) {
-	  waiters.push_back(op);
 	  return false;
 	}
 	switch (state) {
@@ -516,17 +523,23 @@ protected:
 	  count++;
 	  return true;
 	case WRITE:
-	  waiters.push_back(op);
 	  return false;
 	default:
 	  assert(0 == "unhandled case");
 	  return false;
 	}
       }
+
       bool get_write(OpRequestRef op) {
+	if (get_write_lock()) {
+	  return true;
+	} // else
+	waiters.push_back(op);
+	return false;
+      }
+      bool get_write_lock() {
+	// don't starve anybody!
 	if (!waiters.empty()) {
-	  // don't starve!
-	  waiters.push_back(op);
 	  return false;
 	}
 	switch (state) {
@@ -538,7 +551,6 @@ protected:
 	  count++;
 	  return true;
 	case READ:
-	  waiters.push_back(op);
 	  return false;
 	default:
 	  assert(0 == "unhandled case");
