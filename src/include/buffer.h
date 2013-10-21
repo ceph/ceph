@@ -101,6 +101,10 @@ public:
   private:
     char buf[256];
   };
+  struct error_code : public malformed_input {
+    explicit error_code(int error);
+    int code;
+  };
 
 
   /// total bytes allocated
