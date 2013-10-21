@@ -460,9 +460,6 @@ protected:
 
   int init_common();
 
-protected:
-  bool parse_copy_location(const char *src, string& bucket_name, string& object);
-
 public:
   RGWCopyObj() {
     if_mod = NULL;
@@ -481,6 +478,8 @@ public:
     replace_attrs = false;
     last_ofs = 0;
   }
+
+  static bool parse_copy_location(const char *src, string& bucket_name, string& object);
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
