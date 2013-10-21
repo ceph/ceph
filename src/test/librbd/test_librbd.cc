@@ -18,6 +18,10 @@
 #include "include/rbd/librbd.h"
 #include "include/rbd/librbd.hpp"
 
+#include "global/global_context.h"
+#include "global/global_init.h"
+#include "common/ceph_argparse.h"
+
 #include "gtest/gtest.h"
 
 #include <errno.h>
@@ -1771,4 +1775,17 @@ TEST(LibRBD, DiffIterateStress)
   }
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
+int main(int argc, char **argv)
+{
+  ::testing::InitGoogleTest(&argc, argv);
+
+  vector<const char*> args;
+  argv_to_vec(argc, (const char **)argv, args);
+
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(g_ceph_context);
+
+  return RUN_ALL_TESTS();
 }
