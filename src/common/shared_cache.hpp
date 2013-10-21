@@ -29,6 +29,7 @@ class SharedLRU {
   Mutex lock;
   size_t max_size;
   Cond cond;
+  unsigned size;
 
   map<K, typename list<pair<K, VPtr> >::iterator > contents;
   list<pair<K, VPtr> > lru;
@@ -36,7 +37,7 @@ class SharedLRU {
   map<K, WeakVPtr> weak_refs;
 
   void trim_cache(list<VPtr> *to_release) {
-    while (lru.size() > max_size) {
+    while (size > max_size) {
       to_release->push_back(lru.back().second);
       lru_remove(lru.back().first);
     }
@@ -46,6 +47,7 @@ class SharedLRU {
     if (!contents.count(key))
       return;
     lru.erase(contents[key]);
+    --size;
     contents.erase(key);
   }
 
@@ -53,6 +55,7 @@ class SharedLRU {
     if (contents.count(key)) {
       lru.splice(lru.begin(), lru, contents[key]);
     } else {
+      ++size;
       lru.push_front(make_pair(key, val));
       contents[key] = lru.begin();
       trim_cache(to_release);
@@ -77,7 +80,8 @@ class SharedLRU {
   };
 
 public:
-  SharedLRU(size_t max_size = 20) : lock("SharedLRU::lock"), max_size(max_size) {}
+  SharedLRU(size_t max_size = 20)
+    : lock("SharedLRU::lock"), max_size(max_size), size(0) {}
   
   ~SharedLRU() {
     contents.clear();
