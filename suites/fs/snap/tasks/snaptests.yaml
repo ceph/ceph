@@ -2,6 +2,6 @@ tasks:
 - workunit:
     clients:
       all:
-        - snap/snaptest-0.sh
-        - snap/snaptest-1.sh
-        - snap/snaptest-2.sh
+        - snaps/snaptest-0.sh
+        - snaps/snaptest-1.sh
+        - snaps/snaptest-2.sh
