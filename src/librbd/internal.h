@@ -26,7 +26,6 @@ enum {
   l_librbd_discard,
   l_librbd_discard_bytes,
   l_librbd_discard_latency,
-  l_librbd_flush,
 
   l_librbd_aio_rd,               // read ops
   l_librbd_aio_rd_bytes,         // bytes read
