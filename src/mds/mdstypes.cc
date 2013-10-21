@@ -295,6 +295,8 @@ void inode_t::decode(bufferlist::iterator &p)
     ::decode(backtrace_version, p);
   if (struct_v >= 7)
     ::decode(old_pools, p);
+  else
+    backtrace_version = 0; // note inode which has no backtrace
   if (struct_v >= 8)
     ::decode(max_size_ever, p);
 
