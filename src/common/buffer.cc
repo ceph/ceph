@@ -228,6 +228,125 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
   };
 #endif
 
+#ifdef CEPH_HAVE_SPLICE
+  class buffer::raw_pipe : public buffer::raw {
+  public:
+    raw_pipe(unsigned len) : raw(len), source_consumed(false) {
+      pipefds[0] = -1;
+      pipefds[1] = -1;
+      if (::pipe(pipefds) == -1) {
+	int r = -errno;
+	bdout << "raw_pipe: error creating pipe: " << cpp_strerror(r) << bendl;
+	throw error_code(r);
+      }
+      if (set_nonblocking(pipefds) < 0) {
+	int r = -errno;
+	bdout << "raw_pipe: error setting nonblocking flag on temp pipe: "
+	      << cpp_strerror(r) << bendl;
+	throw error_code(r);
+      }
+      inc_total_alloc(len);
+      bdout << "raw_pipe " << this << " alloc " << len << " "
+	    << buffer::get_total_alloc() << bendl;
+    }
+    ~raw_pipe() {
+      if (data)
+	delete data;
+      close_pipe(pipefds);
+      dec_total_alloc(len);
+      bdout << "raw_pipe " << this << " free " << (void *)data << " "
+	    << buffer::get_total_alloc() << bendl;
+    }
+      return false;
+    }
+    int set_source(int fd, loff_t *off) {
+      int flags = SPLICE_F_NONBLOCK;
+      ssize_t r = safe_splice(fd, off, pipefds[1], NULL, len, flags);
+      if (r < 0) {
+	bdout << "raw_pipe: error splicing into pipe: " << cpp_strerror(r)
+	      << bendl;
+	return r;
+      }
+      // update length with actual amount read
+      len = r;
+      return 0;
+    }
+      // cloning doesn't make sense for pipe-based buffers,
+      // and is only used by unit tests for other types of buffers
+      return NULL;
+    }
+    char *get_data() {
+      if (data)
+	return data;
+      return copy_pipe(pipefds);
+    }
+  private:
+    int set_nonblocking(int *fds) {
+      if (::fcntl(fds[0], F_SETFL, O_NONBLOCK) == -1)
+	return -errno;
+      if (::fcntl(fds[1], F_SETFL, O_NONBLOCK) == -1)
+	return -errno;
+      return 0;
+    }
+
+    void close_pipe(int *fds) {
+      if (fds[0] >= 0)
+	TEMP_FAILURE_RETRY(::close(fds[0]));
+      if (fds[1] >= 0)
+	TEMP_FAILURE_RETRY(::close(fds[1]));
+    }
+    char *copy_pipe(int *fds) {
+      /* preserve original pipe contents by copying into a temporary
+       * pipe before reading.
+       */
+      int tmpfd[2];
+      int r;
+
+      assert(!source_consumed);
+      assert(fds[0] >= 0);
+
+      if (::pipe(tmpfd) == -1) {
+	r = -errno;
+	bdout << "raw_pipe: error creating temp pipe: " << cpp_strerror(r)
+	      << bendl;
+	throw error_code(r);
+      }
+      r = set_nonblocking(tmpfd);
+      if (r < 0) {
+	bdout << "raw_pipe: error setting nonblocking flag on temp pipe: "
+	      << cpp_strerror(r) << bendl;
+	throw error_code(r);
+      }
+      int flags = SPLICE_F_NONBLOCK;
+      if (::tee(fds[0], tmpfd[1], len, flags) == -1) {
+	r = errno;
+	bdout << "raw_pipe: error tee'ing into temp pipe: " << cpp_strerror(r)
+	      << bendl;
+	close_pipe(tmpfd);
+	throw error_code(r);
+      }
+      data = (char *)malloc(len);
+      if (!data) {
+	close_pipe(tmpfd);
+	throw bad_alloc();
+      }
+      r = safe_read(tmpfd[0], data, len);
+      if (r < (ssize_t)len) {
+	bdout << "raw_pipe: error reading from temp pipe:" << cpp_strerror(r)
+	      << bendl;
+	delete data;
+	data = NULL;
+	close_pipe(tmpfd);
+	throw error_code(r);
+      }
+      close_pipe(tmpfd);
+      return data;
+    }
+    bool source_consumed;
+    int pipefds[2];
+  };
+#endif // CEPH_HAVE_SPLICE
+
   /*
    * primitive buffer types
    */
