@@ -100,6 +100,12 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
       memcpy(c->data, data, len);
       return c;
     }
+    virtual bool can_zero_copy() const {
+      return false;
+    }
+    virtual int zero_copy_to_fd(int fd, loff_t *offset) {
+      return -ENOTSUP;
+    }
     virtual bool is_page_aligned() {
       return ((long)data & ~CEPH_PAGE_MASK) == 0;
     }
@@ -257,6 +263,10 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
       bdout << "raw_pipe " << this << " free " << (void *)data << " "
 	    << buffer::get_total_alloc() << bendl;
     }
+    bool can_zero_copy() const {
+      return true;
+    }
+    bool is_page_aligned() {
       return false;
     }
     int set_source(int fd, loff_t *off) {
@@ -271,6 +281,19 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
       len = r;
       return 0;
     }
+    int zero_copy_to_fd(int fd, loff_t *offset) {
+      assert(!source_consumed);
+      int flags = SPLICE_F_NONBLOCK;
+      ssize_t r = safe_splice_exact(pipefds[0], NULL, fd, offset, len, flags);
+      if (r < 0) {
+	bdout << "raw_pipe: error splicing from pipe to fd: "
+	      << cpp_strerror(r) << bendl;
+	return r;
+      }
+      source_consumed = true;
+      return 0;
+    }
+    buffer::raw* clone_empty() {
       // cloning doesn't make sense for pipe-based buffers,
       // and is only used by unit tests for other types of buffers
       return NULL;
@@ -409,6 +432,20 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     return new raw_posix_aligned(len);
 #else
     return new raw_hack_aligned(len);
+#endif
+  }
+
+  buffer::raw* buffer::create_zero_copy(unsigned len, int fd, loff_t *offset) {
+#ifdef CEPH_HAVE_SPLICE
+    buffer::raw_pipe* buf = new raw_pipe(len);
+    int r = buf->set_source(fd, offset);
+    if (r < 0) {
+      delete buf;
+      throw error_code(r);
+    }
+    return buf;
+#else
+    throw error_code(-ENOTSUP);
 #endif
   }
 
@@ -597,6 +634,15 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     memset(c_str()+o, 0, l);
   }
 
+  bool buffer::ptr::can_zero_copy() const
+  {
+    return _raw->can_zero_copy();
+  }
+
+  int buffer::ptr::zero_copy_to_fd(int fd, loff_t *offset) const
+  {
+    return _raw->zero_copy_to_fd(fd, offset);
+  }
 
   // -- buffer::list::iterator --
   /*
@@ -857,6 +903,16 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
       }
       return true;
     }
+  }
+
+  bool buffer::list::can_zero_copy() const
+  {
+    for (std::list<ptr>::const_iterator it = _buffers.begin();
+	 it != _buffers.end();
+	 ++it)
+      if (!it->can_zero_copy())
+	return false;
+    return true;
   }
 
   bool buffer::list::is_page_aligned() const
@@ -1351,7 +1407,7 @@ int buffer::list::read_file(const char *fn, std::string *error)
   return 0;
 }
 
-ssize_t buffer::list::read_fd(int fd, size_t len) 
+ssize_t buffer::list::read_fd(int fd, size_t len)
 {
   int s = ROUND_UP_TO(len, CEPH_PAGE_SIZE);
   bufferptr bp = buffer::create_page_aligned(s);
@@ -1361,6 +1417,21 @@ ssize_t buffer::list::read_fd(int fd, size_t len)
     append(bp);
   }
   return ret;
+}
+
+int buffer::list::read_fd_zero_copy(int fd, size_t len)
+{
+#ifdef CEPH_HAVE_SPLICE
+  try {
+    bufferptr bp = buffer::create_zero_copy(len, fd, NULL);
+    append(bp);
+  } catch (buffer::error_code e) {
+    return e.code;
+  }
+  return 0;
+#else
+  return -ENOTSUP;
+#endif
 }
 
 int buffer::list::write_file(const char *fn, int mode)
@@ -1390,12 +1461,15 @@ int buffer::list::write_file(const char *fn, int mode)
 
 int buffer::list::write_fd(int fd) const
 {
+  if (can_zero_copy())
+    return write_fd_zero_copy(fd);
+
   // use writev!
   iovec iov[IOV_MAX];
   int iovlen = 0;
   ssize_t bytes = 0;
 
-  std::list<ptr>::const_iterator p = _buffers.begin(); 
+  std::list<ptr>::const_iterator p = _buffers.begin();
   while (p != _buffers.end()) {
     if (p->length() > 0) {
       iov[iovlen].iov_base = (void *)p->c_str();
@@ -1436,6 +1510,30 @@ int buffer::list::write_fd(int fd) const
       iovlen = 0;
       bytes = 0;
     }
+  }
+  return 0;
+}
+
+int buffer::list::write_fd_zero_copy(int fd) const
+{
+  if (!can_zero_copy())
+    return -ENOTSUP;
+  /* pass offset to each call to avoid races updating the fd seek
+   * position, since the I/O may be non-blocking
+   */
+  loff_t offset = ::lseek(fd, 0, SEEK_CUR);
+  loff_t *off_p = &offset;
+  if (offset < 0 && offset != ESPIPE)
+    return (int) offset;
+  if (offset == ESPIPE)
+    off_p = NULL;
+  for (std::list<ptr>::const_iterator it = _buffers.begin();
+       it != _buffers.end(); ++it) {
+    int r = it->zero_copy_to_fd(fd, off_p);
+    if (r < 0)
+      return r;
+    if (off_p)
+      offset += it->length();
   }
   return 0;
 }
