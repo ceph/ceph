@@ -7496,17 +7496,22 @@ void ReplicatedPG::check_recovery_sources(const OSDMapRef osdmap)
 }
   
 
-int ReplicatedPG::start_recovery_ops(
+bool ReplicatedPG::start_recovery_ops(
   int max, RecoveryCtx *prctx,
-  ThreadPool::TPHandle &handle)
+  ThreadPool::TPHandle &handle,
+  int *ops_started)
 {
-  int started = 0;
+  int& started = *ops_started;
+  started = 0;
+  bool work_in_progress = false;
   assert(is_primary());
 
   if (!state_test(PG_STATE_RECOVERING) &&
       !state_test(PG_STATE_BACKFILL)) {
+    /* TODO: I think this case is broken and will make do_recovery()
+     * unhappy since we're returning false */
     dout(10) << "recovery raced and were queued twice, ignoring!" << dendl;
-    return 0;
+    return false;
   }
 
   const pg_missing_t &missing = pg_log.get_missing();
@@ -7532,6 +7537,9 @@ int ReplicatedPG::start_recovery_ops(
     started = recover_replicas(max, handle);
   }
 
+  if (started)
+    work_in_progress = true;
+
   bool deferred_backfill = false;
   if (recovering.empty() &&
       state_test(PG_STATE_BACKFILL) &&
@@ -7555,7 +7563,7 @@ int ReplicatedPG::start_recovery_ops(
       }
       deferred_backfill = true;
     } else {
-      started += recover_backfill(max - started, handle);
+      started += recover_backfill(max - started, handle, &work_in_progress);
     }
   }
 
@@ -7563,8 +7571,8 @@ int ReplicatedPG::start_recovery_ops(
   osd->logger->inc(l_osd_rop, started);
 
   if (!recovering.empty() ||
-      started || recovery_ops_active > 0 || deferred_backfill)
-    return started;
+      work_in_progress || recovery_ops_active > 0 || deferred_backfill)
+    return work_in_progress;
 
   assert(recovering.empty());
   assert(recovery_ops_active == 0);
@@ -7572,21 +7580,21 @@ int ReplicatedPG::start_recovery_ops(
   int unfound = get_num_unfound();
   if (unfound) {
     dout(10) << " still have " << unfound << " unfound" << dendl;
-    return started;
+    return work_in_progress;
   }
 
   if (missing.num_missing() > 0) {
     // this shouldn't happen!
     osd->clog.error() << info.pgid << " recovery ending with " << missing.num_missing()
 		      << ": " << missing.missing << "\n";
-    return started;
+    return work_in_progress;
   }
 
   if (needs_recovery()) {
     // this shouldn't happen!
     // We already checked num_missing() so we must have missing replicas
     osd->clog.error() << info.pgid << " recovery ending with missing replicas\n";
-    return started;
+    return work_in_progress;
   }
 
   if (state_test(PG_STATE_RECOVERING)) {
@@ -7937,7 +7945,7 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
  */
 int ReplicatedPG::recover_backfill(
   int max,
-  ThreadPool::TPHandle &handle)
+  ThreadPool::TPHandle &handle, bool *work_started)
 {
   dout(10) << "recover_backfill (" << max << ")" << dendl;
   assert(backfill_target >= 0);
@@ -8117,6 +8125,8 @@ int ReplicatedPG::recover_backfill(
 
   dout(10) << " peer num_objects now " << pinfo.stats.stats.sum.num_objects
 	   << " / " << info.stats.stats.sum.num_objects << dendl;
+  if (ops)
+    *work_started = true;
   return ops;
 }
 
