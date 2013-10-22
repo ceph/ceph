@@ -3800,7 +3800,7 @@ inline int ReplicatedPG::_delete_head(OpContext *ctx)
   const hobject_t& soid = oi.soid;
   ObjectStore::Transaction& t = ctx->op_t;
 
-  if (!obs.exists)
+  if (!obs.exists || obs.oi.is_whiteout())
     return -ENOENT;
   
   t.remove(coll, soid);
