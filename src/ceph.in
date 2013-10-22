@@ -166,12 +166,19 @@ def parse_cmdargs(args=None, target=''):
 
     return parser, parsed_args, extras
 
-def do_help(parser, args):
+
+def hdr(s):
+    print '\n', s, '\n', '=' * len(s)
+
+def do_basic_help(parser, args):
     """
     Print basic parser help
     If the cluster is available, get and print monitor help
     """
+    hdr('General usage:')
+    parser.print_help()
 
+def do_extended_help(parser, args):
     def help_for_sigs(sigs, partial=None):
         sys.stdout.write(format_help(parse_json_funcsigs(sigs, 'cli'),
                          partial=partial))
@@ -187,18 +194,9 @@ def do_help(parser, args):
         else:
             help_for_sigs(outbuf, partial)
 
-
-    def hdr(s):
-        print '\n', s, '\n', '=' * len(s)
-
-    hdr('Monitor commands:')
     partial = ' '.join(args)
-    parser.print_help()
-    print '\n'
-
     if (cluster_handle.state == "connected"):
         help_for_target(target=('mon', ''), partial=partial)
-
     return 0
 
 DONTSPLIT = string.letters + '{[<>]}'
@@ -579,6 +577,12 @@ def main():
         print >> sys.stderr, '"{0} tell" is deprecated; try "tell {0}.<id>" instead (id can be "*") '.format(childargs[0])
         return 1
 
+    if parsed_args.help:
+        do_basic_help(parser, childargs)
+
+        hdr('Monitor commands:')
+        print '[Contacting monitor, timeout after %d seconds]' % timeout
+
     try:
         cluster_handle.connect()
     except KeyboardInterrupt:
@@ -590,7 +594,7 @@ def main():
         return 1
 
     if parsed_args.help:
-        return do_help(parser, childargs)
+        return do_extended_help(parser, childargs)
 
     # implement -w/--watch_*
     # This is ugly, but Namespace() isn't quite rich enough.
