@@ -222,24 +222,9 @@ public:
       op(op_), obc(obc_), temp_obj(temp_obj_), pg(pg_) {}
 
     virtual void finish(CopyCallbackResults results) {
-      CopyResults* results_data = results.get<1>();
+      CopyResults *results_data = results.get<1>();
       int r = results.get<0>();
-      if (r >= 0) {
-	pg->finish_promote(results_data, obc, temp_obj);
-      } else {
-	// we need to get rid of the op in the blocked queue
-	map<hobject_t,list<OpRequestRef> >::iterator blocked_iter;
-	blocked_iter = pg->waiting_for_blocked_object.find(obc->obs.oi.soid);
-	assert(blocked_iter != pg->waiting_for_blocked_object.end());
-	assert(blocked_iter->second.begin()->get() == op.get());
-	blocked_iter->second.pop_front();
-	if (blocked_iter->second.empty()) {
-	  pg->waiting_for_blocked_object.erase(blocked_iter);
-	}
-	if (r != -ECANCELED) { // on cancel the client will resend
-	  pg->osd->reply_op_error(op, r);
-	}
-      }
+      pg->finish_promote(r, op, results_data, obc, temp_obj);
       delete results_data;
     }
   };
@@ -1000,7 +985,8 @@ protected:
   void _build_finish_copy_transaction(CopyOpRef cop,
                                       ObjectStore::Transaction& t);
   void finish_copyfrom(OpContext *ctx);
-  void finish_promote(CopyResults *results, ObjectContextRef obc,
+  void finish_promote(int r, OpRequestRef op,
+		      CopyResults *results, ObjectContextRef obc,
                       hobject_t& temp_obj);
   void cancel_copy(CopyOpRef cop, bool requeue);
   void cancel_copy_ops(bool requeue);
