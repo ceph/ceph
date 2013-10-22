@@ -44,16 +44,20 @@ class SharedLRU {
   }
 
   void lru_remove(K key) {
-    if (!contents.count(key))
+    typename map<K, typename list<pair<K, VPtr> >::iterator>::iterator i =
+      contents.find(key);
+    if (i == contents.end())
       return;
-    lru.erase(contents[key]);
+    lru.erase(i->second);
     --size;
-    contents.erase(key);
+    contents.erase(i);
   }
 
   void lru_add(K key, VPtr val, list<VPtr> *to_release) {
-    if (contents.count(key)) {
-      lru.splice(lru.begin(), lru, contents[key]);
+    typename map<K, typename list<pair<K, VPtr> >::iterator>::iterator i =
+      contents.find(key);
+    if (i != contents.end()) {
+      lru.splice(lru.begin(), lru, i->second);
     } else {
       ++size;
       lru.push_front(make_pair(key, val));
