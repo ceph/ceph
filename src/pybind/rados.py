@@ -19,6 +19,10 @@ class Error(Exception):
     """ `Error` class, derived from `Exception` """
     pass
 
+class InterruptedOrTimeoutError(Error):
+    """ `InterruptedOrTimeoutError` class, derived from `Error` """
+    pass
+
 class PermissionError(Error):
     """ `PermissionError` class, derived from `Error` """
     pass
@@ -80,7 +84,8 @@ def make_ex(ret, msg):
         errno.EIO       : IOError,
         errno.ENOSPC    : NoSpace,
         errno.EEXIST    : ObjectExists,
-        errno.ENODATA   : NoData
+        errno.ENODATA   : NoData,
+        errno.EINTR     : InterruptedOrTimeoutError
         }
     ret = abs(ret)
     if ret in errors:
