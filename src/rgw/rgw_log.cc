@@ -171,7 +171,7 @@ static void log_usage(struct req_state *s, const string& op_name)
 
   string user;
 
-  if (s->bucket_name)
+  if (!s->bucket_name_str.empty())
     user = s->bucket_owner.get_id();
   else
     user = s->user.user_id;
@@ -267,7 +267,7 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   if (!s->enable_ops_log)
     return 0;
 
-  if (!s->bucket_name) {
+  if (s->bucket_name_str.empty()) {
     ldout(s->cct, 5) << "nothing to log for operation" << dendl;
     return -EINVAL;
   }
@@ -280,9 +280,9 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
   } else {
     bucket_id = s->bucket.bucket_id;
   }
-  entry.bucket = s->bucket_name;
+  entry.bucket = s->bucket_name_str;
 
-  if (check_utf8(s->bucket_name, entry.bucket.size()) != 0) {
+  if (check_utf8(s->bucket_name_str.c_str(), entry.bucket.size()) != 0) {
     ldout(s->cct, 5) << "not logging op on bucket with non-utf8 name" << dendl;
     return 0;
   }
