@@ -161,6 +161,10 @@ def parse_cmdargs(args=None, target=''):
     parser.add_argument('-f', '--format', choices=['json', 'json-pretty',
                         'xml', 'xml-pretty', 'plain'], dest='output_format')
 
+    parser.add_argument('--connect-timeout', dest='cluster_timeout',
+                        type=int,
+                        help='set a timeout for connecting to the cluster')
+
     # returns a Namespace with the parsed args, and a list of all extras
     parsed_args, extras = parser.parse_known_args(args)
 
@@ -577,6 +581,11 @@ def main():
         print >> sys.stderr, '"{0} tell" is deprecated; try "tell {0}.<id>" instead (id can be "*") '.format(childargs[0])
         return 1
 
+
+    timeout = None
+    if parsed_args.cluster_timeout:
+        timeout = parsed_args.cluster_timeout
+
     if parsed_args.help:
         do_basic_help(parser, childargs)
 
@@ -584,7 +593,7 @@ def main():
         print '[Contacting monitor, timeout after %d seconds]' % timeout
 
     try:
-        cluster_handle.connect()
+        cluster_handle.connect(timeout=timeout)
     except KeyboardInterrupt:
         print >> sys.stderr, 'Cluster connection aborted'
         return 1
