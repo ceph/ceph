@@ -4627,19 +4627,13 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     return;
   }
 
-  vector<OSDOp> ops;
-  tid_t rep_tid = osd->get_tid();
-  osd_reqid_t reqid(osd->get_cluster_msgr_name(), 0, rep_tid);
-  OpContext *tctx = new OpContext(OpRequestRef(), reqid, ops, &obc->obs, obc->ssc, this);
-  tctx->mtime = ceph_clock_now(g_ceph_context);
+  RepGather *repop = simple_repop_create(obc);
+  OpContext *tctx = repop->ctx;
   tctx->op_t.swap(results->final_tx);
   if (results->started_temp_obj) {
-	tctx->discard_temp_oid = temp_obj;
+    tctx->discard_temp_oid = temp_obj;
   }
 
-  RepGather *repop = new_repop(tctx, obc, rep_tid);
-  C_KickBlockedObject *blockedcb = new C_KickBlockedObject(obc, this);
-  repop->ondone = blockedcb;
   object_stat_sum_t delta;
   ++delta.num_objects;
   obc->obs.exists = true;
@@ -4658,10 +4652,9 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
 	  tctx->user_at_version,
 	  osd_reqid_t(),
 	  repop->ctx->mtime));
-  append_log(tctx->log, eversion_t(), tctx->local_t);
-  issue_repop(repop, repop->ctx->mtime);
-  eval_repop(repop);
-  repop->put();
+
+  repop->ondone = new C_KickBlockedObject(obc, this);
+  simple_repop_submit(repop);
 }
 
 void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
