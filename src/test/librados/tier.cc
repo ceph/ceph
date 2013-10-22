@@ -29,7 +29,7 @@ using std::map;
 using std::ostringstream;
 using std::string;
 
-TEST(LibRadosMisc, Dirty) {
+TEST(LibRadosTier, Dirty) {
   Rados cluster;
   std::string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
@@ -83,7 +83,7 @@ TEST(LibRadosMisc, Dirty) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(LibRadosMisc, HitSetNone) {
+TEST(LibRadosTier, HitSetNone) {
   Rados cluster;
   std::string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
@@ -126,7 +126,7 @@ string set_pool_str(string pool, string var, int val)
     + stringify(val) + string("}");
 }
 
-TEST(LibRadosMisc, HitSetRead) {
+TEST(LibRadosTier, HitSetRead) {
   Rados cluster;
   std::string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
