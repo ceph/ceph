@@ -5,6 +5,8 @@
 
 #include "include/types.h"
 
+#include "rgw_common.h"
+
 class RGWClientIO {
   bool account;
 
@@ -12,6 +14,10 @@ class RGWClientIO {
   size_t bytes_received;
 
 protected:
+  RGWEnv env;
+
+  virtual void init_env(CephContext *cct) = 0;
+
   virtual int write_data(const char *buf, int len) = 0;
   virtual int read_data(char *buf, int max) = 0;
 
@@ -19,12 +25,20 @@ public:
   virtual ~RGWClientIO() {}
   RGWClientIO() : account(false), bytes_sent(0), bytes_received(0) {}
 
+  void init(CephContext *cct) {
+    init_env(cct);
+  }
+
   int print(const char *format, ...);
   int write(const char *buf, int len);
   virtual void flush() = 0;
   int read(char *buf, int max, int *actual);
 
-  virtual const char **envp() = 0;
+  virtual int send_status(const char *status, const char *status_name) = 0;
+  virtual int send_100_continue() = 0;
+  virtual int complete_header() = 0;
+
+  RGWEnv& get_env() { return env; }
 
   void set_account(bool _account) {
     account = _account;

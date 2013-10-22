@@ -171,7 +171,7 @@ void RGWRESTSimpleRequest::get_params_str(map<string, string>& extra_args, strin
 
 int RGWRESTSimpleRequest::sign_request(RGWAccessKey& key, RGWEnv& env, req_info& info)
 {
-  map<string, string>& m = env.get_map();
+  map<string, string, ltstr_nocase>& m = env.get_map();
 
   map<string, string>::iterator i;
   for (i = m.begin(); i != m.end(); ++i) {
@@ -218,7 +218,7 @@ int RGWRESTSimpleRequest::forward_request(RGWAccessKey& key, req_info& info, siz
     return ret;
   }
 
-  map<string, string>& m = new_env.get_map();
+  map<string, string, ltstr_nocase>& m = new_env.get_map();
   map<string, string>::iterator iter;
   for (iter = m.begin(); iter != m.end(); ++iter) {
     headers.push_back(make_pair<string, string>(iter->first, iter->second));
@@ -364,7 +364,7 @@ static void grants_by_type_add_perm(map<int, string>& grants_by_type, int perm, 
   }
 }
 
-static void add_grants_headers(map<int, string>& grants, map<string, string>& attrs, map<string, string>& meta_map)
+static void add_grants_headers(map<int, string>& grants, map<string, string, ltstr_nocase>& attrs, map<string, string>& meta_map)
 {
   struct grant_type_to_header *t;
 
@@ -405,7 +405,7 @@ int RGWRESTStreamWriteRequest::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uin
   new_info.request_uri = new_info.script_uri;
   new_info.effective_uri = new_info.effective_uri;
 
-  map<string, string>& m = new_env.get_map();
+  map<string, string, ltstr_nocase>& m = new_env.get_map();
   map<string, bufferlist>::iterator bliter;
 
   /* merge send headers */
@@ -582,7 +582,7 @@ int RGWRESTStreamReadRequest::get_obj(RGWAccessKey& key, map<string, string>& ex
     return ret;
   }
 
-  map<string, string>& m = new_env.get_map();
+  map<string, string, ltstr_nocase>& m = new_env.get_map();
   map<string, string>::iterator iter;
   for (iter = m.begin(); iter != m.end(); ++iter) {
     headers.push_back(make_pair<string, string>(iter->first, iter->second));
