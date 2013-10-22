@@ -27,6 +27,12 @@ Storage Cluster nodes (unless you use a VM). See `FAQ`_ for details.
 Install Ceph
 ============
 
+#. Verify that you have an appropriate version of the Linux kernel. 
+   See `OS Recommendations`_ for details. ::
+   
+	lsb_release -a
+	uname -r
+
 #. On the admin node, use ``ceph-deploy`` to install Ceph on your 
    ``ceph-client`` node. ::
 
@@ -72,3 +78,4 @@ See `block devices`_ for additional details.
 .. _Storage Cluster Quick Start: ../quick-ceph-deploy
 .. _block devices: ../../rbd/rbd
 .. _FAQ: http://wiki.ceph.com/03FAQs/01General_FAQ#How_Can_I_Give_Ceph_a_Try.3F
+.. _OS Recommendations: ../os-recommendations
