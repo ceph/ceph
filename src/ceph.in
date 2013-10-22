@@ -589,6 +589,10 @@ def main():
     if parsed_args.help:
         do_basic_help(parser, childargs)
 
+        # short default timeout for -h
+        if not timeout:
+            timeout = 5
+
         hdr('Monitor commands:')
         print '[Contacting monitor, timeout after %d seconds]' % timeout
 
