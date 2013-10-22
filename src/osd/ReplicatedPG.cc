@@ -4606,9 +4606,26 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
   ctx->delta_stats.num_wr_kb += SHIFT_ROUND_UP(obs.oi.size, 10);
 }
 
-void ReplicatedPG::finish_promote(CopyResults *results, ObjectContextRef obc,
+void ReplicatedPG::finish_promote(int r, OpRequestRef op,
+				  CopyResults *results, ObjectContextRef obc,
                                   hobject_t& temp_obj)
 {
+  if (r < 0) {
+    // we need to get rid of the op in the blocked queue
+    map<hobject_t,list<OpRequestRef> >::iterator blocked_iter =
+      waiting_for_blocked_object.find(obc->obs.oi.soid);
+    assert(blocked_iter != waiting_for_blocked_object.end());
+    assert(blocked_iter->second.begin()->get() == op.get());
+    blocked_iter->second.pop_front();
+    if (blocked_iter->second.empty()) {
+      waiting_for_blocked_object.erase(blocked_iter);
+    }
+    if (r != -ECANCELED) { // on cancel the client will resend
+      osd->reply_op_error(op, r);
+    }
+    return;
+  }
+
   vector<OSDOp> ops;
   tid_t rep_tid = osd->get_tid();
   osd_reqid_t reqid(osd->get_cluster_msgr_name(), 0, rep_tid);
