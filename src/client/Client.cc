@@ -2921,8 +2921,6 @@ void Client::remove_cap(Cap *cap)
   i.seq = cap->issue_seq;
   i.migrate_seq = cap->mseq;
   session->release->caps.push_back(i);
-  
-  cap->cap_item.remove_myself();
 
   if (in->auth_cap == cap) {
     if (in->flushing_cap_item.is_on_list()) {
@@ -2933,7 +2931,13 @@ void Client::remove_cap(Cap *cap)
   }
   assert(in->caps.count(mds));
   in->caps.erase(mds);
-  delete cap;
+
+  if (cap == session->s_cap_iterator) {
+    cap->inode = NULL;
+  } else {
+    cap->cap_item.remove_myself();
+    delete cap;
+  }
 
   if (!in->is_any_caps()) {
     ldout(cct, 15) << "remove_cap last one, closing snaprealm " << in->snaprealm << dendl;
@@ -2966,7 +2970,7 @@ void Client::trim_caps(MetaSession *s, int max)
   xlist<Cap*>::iterator p = s->caps.begin();
   while (s->caps.size() > max && !p.end()) {
     Cap *cap = *p;
-    ++p;
+    s->s_cap_iterator = cap;
     Inode *in = cap->inode;
     if (in->caps.size() > 1 && cap != in->auth_cap) {
       // disposable non-auth cap
@@ -2992,7 +2996,14 @@ void Client::trim_caps(MetaSession *s, int max)
       if (all)
 	trimmed++;
     }
+
+    ++p;
+    if (!cap->inode) {
+      cap->cap_item.remove_myself();
+      delete cap;
+    }
   }
+  s->s_cap_iterator = NULL;
 }
 
 void Client::mark_caps_dirty(Inode *in, int caps)
