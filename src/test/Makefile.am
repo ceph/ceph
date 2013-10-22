@@ -615,7 +615,7 @@ endif # WITH_RADOSGW
 ceph_test_librbd_SOURCES = \
 	test/librbd/test_librbd.cc \
 	test/librados/test.cc
-ceph_test_librbd_LDADD = $(LIBRBD) $(LIBRADOS) $(UNITTEST_LDADD)
+ceph_test_librbd_LDADD = $(LIBRBD) $(LIBRADOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_librbd
 
