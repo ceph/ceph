@@ -898,13 +898,18 @@ protected:
   void _clear_recovery_state();
 
   void queue_for_recovery();
-  int start_recovery_ops(
+  bool start_recovery_ops(
     int max, RecoveryCtx *prctx,
-    ThreadPool::TPHandle &handle);
+    ThreadPool::TPHandle &handle, int *started);
 
   int recover_primary(int max, ThreadPool::TPHandle &handle);
   int recover_replicas(int max, ThreadPool::TPHandle &handle);
-  int recover_backfill(int max, ThreadPool::TPHandle &handle);
+  /**
+   * @param work_started will be set to true if recover_backfill got anywhere
+   * @returns the number of operations started
+   */
+  int recover_backfill(int max, ThreadPool::TPHandle &handle,
+                       bool *work_started);
 
   /**
    * scan a (hash) range of objects in the current pg
