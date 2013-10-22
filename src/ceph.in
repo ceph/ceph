@@ -1,8 +1,10 @@
+# -*- mode:python -*-
+# vim: ts=4 sw=4 smarttab expandtab
 #
 # Processed in Makefile to add python #! line and version variable
 #
 #
-# vim: ts=4 sw=4 smarttab expandtab
+
 
 """
 ceph.in becomes ceph, the command-line management tool for Ceph clusters.
