@@ -432,10 +432,9 @@ TEST(LibRBD, TestCopyPP)
 
 int test_ls_snaps(rbd_image_t image, int num_expected, ...)
 {
-  rbd_snap_info_t *snaps;
   int num_snaps, i, j, max_size = 10;
   va_list ap;
-  snaps = (rbd_snap_info_t *) malloc(sizeof(rbd_snap_info_t *) * max_size);
+  rbd_snap_info_t snaps[max_size];
   num_snaps = rbd_snap_list(image, snaps, &max_size);
   printf("num snaps is: %d\nexpected: %d\n", num_snaps, num_expected);
 
@@ -467,7 +466,6 @@ int test_ls_snaps(rbd_image_t image, int num_expected, ...)
   for (i = 0; i < num_snaps; i++) {
     assert(snaps[i].name == NULL);
   }
-  free(snaps);
 
   return num_snaps;
 }
