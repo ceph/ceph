@@ -92,7 +92,7 @@ int RGWRESTConn::get_obj(const string& uid, req_info *info /* optional */, rgw_o
   *req = new RGWRESTStreamReadRequest(cct, url, cb, NULL, &params);
   map<string, string> extra_headers;
   if (info) {
-    map<string, string>& orig_map = info->env->get_map();
+    map<string, string, ltstr_nocase>& orig_map = info->env->get_map();
 
     /* add original headers that start with HTTP_X_AMZ_ */
 #define SEARCH_AMZ_PREFIX "HTTP_X_AMZ_"
