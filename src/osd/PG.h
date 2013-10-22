@@ -560,14 +560,12 @@ public:
   void clear_primary_state();
 
  public:
-#if 0
   //This function not used
   bool is_acting(int osd) const { 
     for (unsigned i=0; i<actingonly.size(); i++)
       if (actingonly[i] == osd) return true;
     return false;
   }
-#endif
   bool is_up(int osd) const { 
     for (unsigned i=0; i<up.size(); i++)
       if (up[i] == osd) return true;

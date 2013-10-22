@@ -287,7 +287,7 @@ bool PG::proc_replica_info(int from, const pg_info_t &oinfo)
   reg_next_scrub();
   
   // stray?
-  if (!is_actingbackfill(from)) {
+  if (!is_acting(from)) {
     dout(10) << " osd." << from << " has stray content: " << oinfo << dendl;
     stray_set.insert(from);
     if (is_clean()) {
