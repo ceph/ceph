@@ -544,6 +544,14 @@ def main():
             return errno.EINVAL
         return 0
 
+    # basic help
+    timeout = None
+    if parsed_args.cluster_timeout:
+        timeout = parsed_args.cluster_timeout
+
+    if parsed_args.help:
+        do_basic_help(parser, childargs)
+
     # handle any 'generic' ceph arguments that we didn't parse here
     global cluster_handle
 
@@ -581,14 +589,7 @@ def main():
         print >> sys.stderr, '"{0} tell" is deprecated; try "tell {0}.<id>" instead (id can be "*") '.format(childargs[0])
         return 1
 
-
-    timeout = None
-    if parsed_args.cluster_timeout:
-        timeout = parsed_args.cluster_timeout
-
     if parsed_args.help:
-        do_basic_help(parser, childargs)
-
         # short default timeout for -h
         if not timeout:
             timeout = 5
