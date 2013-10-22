@@ -544,11 +544,11 @@ def main():
             return errno.EINVAL
         return 0
 
-    # basic help
     timeout = None
     if parsed_args.cluster_timeout:
         timeout = parsed_args.cluster_timeout
 
+    # basic help
     if parsed_args.help:
         do_basic_help(parser, childargs)
 
