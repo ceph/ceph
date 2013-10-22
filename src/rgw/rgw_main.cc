@@ -51,6 +51,9 @@
 #include "rgw_log.h"
 #include "rgw_tools.h"
 #include "rgw_resolve.h"
+#include "rgw_mongoose.h"
+
+#include "mongoose/mongoose.h"
 
 #include <map>
 #include <string>
@@ -76,7 +79,6 @@ static RGWProcess *pprocess = NULL;
 
 struct RGWRequest
 {
-  FCGX_Request fcgx;
   uint64_t id;
   struct req_state *s;
   string req_str;
@@ -123,51 +125,64 @@ struct RGWRequest
   }
 };
 
+
+struct RGWFCGXRequest : public RGWRequest {
+  FCGX_Request fcgx;
+};
+
+struct RGWProcessEnv {
+  RGWRados *store;
+  RGWREST *rest;
+  OpsLogSocket *olog;
+};
+
 class RGWProcess {
   RGWRados *store;
   OpsLogSocket *olog;
-  deque<RGWRequest *> m_req_queue;
+  deque<RGWFCGXRequest *> m_req_queue;
   ThreadPool m_tp;
   Throttle req_throttle;
   RGWREST *rest;
   int sock_fd;
 
-  struct RGWWQ : public ThreadPool::WorkQueue<RGWRequest> {
+  RGWProcessEnv *process_env;
+
+  struct RGWWQ : public ThreadPool::WorkQueue<RGWFCGXRequest> {
     RGWProcess *process;
     RGWWQ(RGWProcess *p, time_t timeout, time_t suicide_timeout, ThreadPool *tp)
-      : ThreadPool::WorkQueue<RGWRequest>("RGWWQ", timeout, suicide_timeout, tp), process(p) {}
+      : ThreadPool::WorkQueue<RGWFCGXRequest>("RGWWQ", timeout, suicide_timeout, tp), process(p) {}
 
-    bool _enqueue(RGWRequest *req) {
+    bool _enqueue(RGWFCGXRequest *req) {
       process->m_req_queue.push_back(req);
       perfcounter->inc(l_rgw_qlen);
       dout(20) << "enqueued request req=" << hex << req << dec << dendl;
       _dump_queue();
       return true;
     }
-    void _dequeue(RGWRequest *req) {
+    void _dequeue(RGWFCGXRequest *req) {
       assert(0);
     }
     bool _empty() {
       return process->m_req_queue.empty();
     }
-    RGWRequest *_dequeue() {
+    RGWFCGXRequest *_dequeue() {
       if (process->m_req_queue.empty())
 	return NULL;
-      RGWRequest *req = process->m_req_queue.front();
+      RGWFCGXRequest *req = process->m_req_queue.front();
       process->m_req_queue.pop_front();
       dout(20) << "dequeued request req=" << hex << req << dec << dendl;
       _dump_queue();
       perfcounter->inc(l_rgw_qlen, -1);
       return req;
     }
-    void _process(RGWRequest *req) {
+    void _process(RGWFCGXRequest *req) {
       perfcounter->inc(l_rgw_qactive);
       process->handle_request(req);
       process->req_throttle.put(1);
       perfcounter->inc(l_rgw_qactive, -1);
     }
     void _dump_queue() {
-      deque<RGWRequest *>::iterator iter;
+      deque<RGWFCGXRequest *>::iterator iter;
       if (process->m_req_queue.empty()) {
         dout(20) << "RGWWQ: empty" << dendl;
         return;
@@ -185,15 +200,15 @@ class RGWProcess {
   uint64_t max_req_id;
 
 public:
-  RGWProcess(CephContext *cct, RGWRados *rgwstore, OpsLogSocket *_olog, int num_threads, RGWREST *_rest)
-    : store(rgwstore), olog(_olog), m_tp(cct, "RGWProcess::m_tp", num_threads),
+  RGWProcess(CephContext *cct, RGWProcessEnv *pe, int num_threads)
+    : store(pe->store), olog(pe->olog), m_tp(cct, "RGWProcess::m_tp", num_threads),
       req_throttle(cct, "rgw_ops", num_threads * 2),
-      rest(_rest), sock_fd(-1),
+      rest(pe->rest), sock_fd(-1),
       req_wq(this, g_conf->rgw_op_thread_timeout,
 	     g_conf->rgw_op_thread_suicide_timeout, &m_tp),
       max_req_id(0) {}
   void run();
-  void handle_request(RGWRequest *req);
+  void handle_request(RGWFCGXRequest *req);
 
   void close_fd() {
     if (sock_fd >= 0)
@@ -241,7 +256,7 @@ void RGWProcess::run()
   m_tp.start();
 
   for (;;) {
-    RGWRequest *req = new RGWRequest;
+    RGWFCGXRequest *req = new RGWFCGXRequest;
     req->id = ++max_req_id;
     dout(10) << "allocated request req=" << hex << req << dec << dendl;
     FCGX_InitRequest(&req->fcgx, sock_fd, 0);
@@ -295,19 +310,20 @@ static int call_log_intent(RGWRados *store, void *ctx, rgw_obj& obj, RGWIntentEv
   return rgw_log_intent(store, s, obj, intent);
 }
 
-void RGWProcess::handle_request(RGWRequest *req)
+void RGWProcess::handle_request(RGWFCGXRequest *req)
 {
   FCGX_Request *fcgx = &req->fcgx;
   int ret;
-  RGWEnv rgw_env;
   RGWFCGX client_io(fcgx);
+
+  client_io.init(g_ceph_context);
 
   req->log_init();
 
   dout(1) << "====== starting new request req=" << hex << req << dec << " =====" << dendl;
   perfcounter->inc(l_rgw_req);
 
-  rgw_env.init(g_ceph_context, fcgx->envp);
+  RGWEnv& rgw_env = client_io.get_env();
 
   struct req_state *s = req->init_state(g_ceph_context, &rgw_env);
   s->obj_ctx = store->create_context(s);
@@ -412,6 +428,136 @@ done:
 
   dout(1) << "====== req done req=" << hex << req << dec << " http_status=" << http_ret << " ======" << dendl;
   delete req;
+}
+
+
+static int mongoose_callback(struct mg_event *event) {
+  RGWProcessEnv *pe = (RGWProcessEnv *)event->user_data;
+  RGWRados *store = pe->store;
+  RGWREST *rest = pe->rest;
+  OpsLogSocket *olog = pe->olog;
+
+  if (event->type != MG_REQUEST_BEGIN)
+    return 0;
+
+  RGWRequest *req = new RGWRequest;
+  int ret;
+  RGWMongoose client_io(event);
+
+  client_io.init(g_ceph_context);
+
+  req->log_init();
+
+  dout(1) << "====== starting new request req=" << hex << req << dec << " =====" << dendl;
+  perfcounter->inc(l_rgw_req);
+
+  RGWEnv& rgw_env = client_io.get_env();
+
+  struct req_state *s = req->init_state(g_ceph_context, &rgw_env);
+  s->obj_ctx = store->create_context(s);
+  store->set_intent_cb(s->obj_ctx, call_log_intent);
+
+  s->req_id = store->unique_id(req->id);
+
+  req->log(s, "initializing");
+
+  RGWOp *op = NULL;
+  int init_error = 0;
+  bool should_log = false;
+  RGWRESTMgr *mgr;
+  RGWHandler *handler = rest->get_handler(store, s, &client_io, &mgr, &init_error);
+  if (init_error != 0) {
+    abort_early(s, NULL, init_error);
+    goto done;
+  }
+
+  should_log = mgr->get_logging();
+
+  req->log(s, "getting op");
+  op = handler->get_op(store);
+  if (!op) {
+    abort_early(s, NULL, -ERR_METHOD_NOT_ALLOWED);
+    goto done;
+  }
+  req->op = op;
+
+  req->log(s, "authorizing");
+  ret = handler->authorize();
+  if (ret < 0) {
+    dout(10) << "failed to authorize request" << dendl;
+    abort_early(s, op, ret);
+    goto done;
+  }
+
+  if (s->user.suspended) {
+    dout(10) << "user is suspended, uid=" << s->user.user_id << dendl;
+    abort_early(s, op, -ERR_USER_SUSPENDED);
+    goto done;
+  }
+  req->log(s, "reading permissions");
+  ret = handler->read_permissions(op);
+  if (ret < 0) {
+    abort_early(s, op, ret);
+    goto done;
+  }
+
+  req->log(s, "init op");
+  ret = op->init_processing();
+  if (ret < 0) {
+    abort_early(s, op, ret);
+    goto done;
+  }
+
+  req->log(s, "verifying op mask");
+  ret = op->verify_op_mask();
+  if (ret < 0) {
+    abort_early(s, op, ret);
+    goto done;
+  }
+
+  req->log(s, "verifying op permissions");
+  ret = op->verify_permission();
+  if (ret < 0) {
+    if (s->system_request) {
+      dout(2) << "overriding permissions due to system operation" << dendl;
+    } else {
+      abort_early(s, op, ret);
+      goto done;
+    }
+  }
+
+  req->log(s, "verifying op params");
+  ret = op->verify_params();
+  if (ret < 0) {
+    abort_early(s, op, ret);
+    goto done;
+  }
+
+  if (s->expect_cont)
+    dump_continue(s);
+
+  req->log(s, "executing");
+  op->execute();
+  op->complete();
+done:
+  if (should_log) {
+    rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
+  }
+
+  int http_ret = s->err.http_ret;
+
+  req->log_format(s, "http status=%d", http_ret);
+
+  if (handler)
+    handler->put_op(op);
+  rest->put_handler(handler);
+  store->destroy_context(s->obj_ctx);
+
+  dout(1) << "====== req done req=" << hex << req << dec << " http_status=" << http_ret << " ======" << dendl;
+  delete req;
+
+// Mark as processed
+  return 1;
 }
 
 #ifdef HAVE_CURL_MULTI_WAIT
@@ -580,7 +726,15 @@ int main(int argc, const char **argv)
     olog->init(g_conf->rgw_ops_log_socket_path);
   }
 
-  pprocess = new RGWProcess(g_ceph_context, store, olog, g_conf->rgw_thread_pool_size, &rest);
+  struct mg_context *ctx;
+  const char *options[] = {"listening_ports", "8080", NULL};
+
+  RGWProcessEnv pe = { store, &rest, olog };
+
+  ctx = mg_start((const char **)&options, &mongoose_callback, &pe);
+  assert(ctx);
+
+  RGWProcess *pprocess = new RGWProcess(g_ceph_context, &pe, g_conf->rgw_thread_pool_size);
 
   init_async_signal_handler();
   register_async_signal_handler(SIGHUP, sighup_handler);
@@ -591,6 +745,9 @@ int main(int argc, const char **argv)
   sighandler_alrm = signal(SIGALRM, godown_alarm);
 
   pprocess->run();
+
+  mg_stop(ctx);
+
   derr << "shutting down" << dendl;
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
