@@ -41,7 +41,8 @@ class TestArgparse:
 
     def assert_valid_command(self, args):
         result = validate_command(sigdict, args)
-        assert_not_in(result, [None, {}])
+        assert_not_equal(result,None)
+        assert_not_equal(result,{})
 
     def check_1_natural_arg(self, prefix, command):
         self.assert_valid_command([prefix, command, '1'])
@@ -621,11 +622,11 @@ class TestOSD(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
                                                     setter,
                                                     'osd.0']))
-        assert_in(validate_command(sigdict, ['osd', 'crush',
+        ret = validate_command(sigdict, ['osd', 'crush',
                                              setter,
                                              'osd.0',
-                                             '-1.0']),
-                  [None, {}])
+                                             '-1.0'])
+        assert ret in [None, {}]
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
                                                     setter,
                                                     'osd.0',
