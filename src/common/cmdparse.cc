@@ -225,4 +225,6 @@ handle_bad_get(CephContext *cct, string k, const char *tname)
   ostringstream oss;
   bt.print(oss);
   lderr(cct) << oss << dendl;
+  if (status == 0)
+    free((char *)typestr);
 }
