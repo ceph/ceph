@@ -4611,7 +4611,17 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
 				  CopyResults *results, ObjectContextRef obc,
                                   hobject_t& temp_obj)
 {
-  if (r < 0) {
+  dout(10) << __func__ << " " << obc->obs.oi.soid << " r=" << r << dendl;
+
+  bool whiteout = false;
+  if (r == -ENOENT &&
+      (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK ||
+       pool.info.cache_mode == pg_pool_t::CACHEMODE_READONLY)) {
+    dout(10) << __func__ << " whiteout " << obc->obs.oi.soid << dendl;
+    whiteout = true;
+  }
+
+  if (r < 0 && !whiteout) {
     // we need to get rid of the op in the blocked queue
     map<hobject_t,list<OpRequestRef> >::iterator blocked_iter =
       waiting_for_blocked_object.find(obc->obs.oi.soid);
@@ -4629,20 +4639,26 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
 
   RepGather *repop = simple_repop_create(obc);
   OpContext *tctx = repop->ctx;
-  tctx->op_t.swap(results->final_tx);
-  if (results->started_temp_obj) {
-    tctx->discard_temp_oid = temp_obj;
-  }
 
   object_stat_sum_t delta;
   ++delta.num_objects;
   obc->obs.exists = true;
-  delta.num_bytes += results->object_size;
-  obc->obs.oi.category = results->category;
+  if (whiteout) {
+    // create a whiteout
+    tctx->op_t.touch(coll, obc->obs.oi.soid);
+    obc->obs.oi.set_flag(object_info_t::FLAG_WHITEOUT);
+  } else {
+    tctx->op_t.swap(results->final_tx);
+    if (results->started_temp_obj) {
+      tctx->discard_temp_oid = temp_obj;
+    }
+    delta.num_bytes += results->object_size;
+    obc->obs.oi.category = results->category;
+    tctx->user_at_version = results->user_version;
+  }
   info.stats.stats.add(delta, obc->obs.oi.category);
   tctx->at_version.epoch = get_osdmap()->get_epoch();
   tctx->at_version.version = pg_log.get_head().version + 1;
-  tctx->user_at_version = results->user_version;
 
   tctx->log.push_back(pg_log_entry_t(
 	  pg_log_entry_t::MODIFY,

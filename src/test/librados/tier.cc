@@ -127,11 +127,20 @@ TEST(LibRadosTier, Promote) {
     ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
   }
 
+  // read, trigger a whiteout
+  {
+    bufferlist bl;
+    ASSERT_EQ(-ENOENT, base_ioctx.read("bar", bl, 1, 0));
+    ASSERT_EQ(-ENOENT, base_ioctx.read("bar", bl, 1, 0));
+  }
+
   // verify the object is present in the cache tier
   {
     ObjectIterator it = cache_ioctx.objects_begin();
     ASSERT_TRUE(it != cache_ioctx.objects_end());
-    ASSERT_EQ(it->first, string("foo"));
+    ASSERT_TRUE(it->first == string("foo") || it->first == string("bar"));
+    ++it;
+    ASSERT_TRUE(it->first == string("foo") || it->first == string("bar"));
     ++it;
     ASSERT_TRUE(it == cache_ioctx.objects_end());
   }
