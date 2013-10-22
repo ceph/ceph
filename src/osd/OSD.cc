@@ -7023,7 +7023,7 @@ void OSD::handle_replica_op(OpRequestRef op)
   T *m = static_cast<T *>(op->get_req());
   assert(m->get_header().type == MSGTYPE);
 
-  dout(10) << __func__ << *m << " epoch " << m->map_epoch << dendl;
+  dout(10) << __func__ << " " << *m << " epoch " << m->map_epoch << dendl;
   if (m->map_epoch < up_epoch) {
     dout(3) << "replica op from before up" << dendl;
     return;
