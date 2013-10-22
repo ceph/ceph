@@ -159,6 +159,9 @@ def parse_cmdargs(args=None, target=''):
     parser.add_argument('-f', '--format', choices=['json', 'json-pretty',
                         'xml', 'xml-pretty', 'plain'], dest='output_format')
 
+    parser.add_argument('--connect-timeout', dest='cluster_timeout',
+                        help='set a timeout on the cluster connection; fail if we exceed it')
+
     # returns a Namespace with the parsed args, and a list of all extras
     parsed_args, extras = parser.parse_known_args(args)
 
@@ -194,7 +197,7 @@ def do_help(parser, args):
     parser.print_help()
     print '\n'
 
-    if (cluster_handle):
+    if (cluster_handle.state == "connected"):
         help_for_target(target=('mon', ''), partial=partial)
 
     return 0
@@ -412,6 +415,28 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
     return json_command(cluster_handle, target=target, argdict=valid_dict,
                         inbuf=inbuf)
 
+def check_for_local_options(parsed_args):
+    if parsed_args.help:
+        return True
+    return False
+
+def try_failure_options(timeout, parsed_args, parser, args):
+    handle_it = False
+    if parsed_args.help:
+        handle_it = True
+
+    if handle_it:
+        if timeout is not None:
+            print "\nCould not connect to cluster within {t} seconds, but doing what we can locally".format(t=timeout)
+            print "(You can control that timeout with the --connect-timeout option if you want to try longer)"
+        else:
+            print "Could not set up cluster, but doing what we can locally"
+
+        print "The following help text is incomplete as we could not fetch the monitor commands"
+        do_help(parser, args)
+
+    return handle_it
+
 def complete(sigdict, args, target):
     """
     Command completion.  Match as much of [args] as possible,
@@ -577,14 +602,30 @@ def main():
         print >> sys.stderr, '"{0} tell" is deprecated; try "tell {0}.<id>" instead (id can be "*") '.format(childargs[0])
         return 1
 
+    timeout = None
+    if check_for_local_options(parsed_args):
+        timeout = 2
+    if parsed_args.cluster_timeout:
+        timeout = parsed_args.cluster_timeout
+
     try:
-        cluster_handle.connect()
+        cluster_handle.connect(timeout=timeout)
     except KeyboardInterrupt:
         print >> sys.stderr, 'Cluster connection aborted'
         return 1
+    except rados.ObjectNotFound as e:
+        handled = try_failure_options(timeout=None, parsed_args=parsed_args,\
+                                          parser=parser, args=childargs)
+        if not handled:
+            print >> sys.stderr, 'Error connecting to cluster: {0}'.\
+                format(e.__class__.__name__)
+        return 1
     except Exception as e:
-        print >> sys.stderr, 'Error connecting to cluster: {0}'.\
-            format(e.__class__.__name__)
+        handled = try_failure_options(timeout=timeout, parsed_args=parsed_args,\
+                                          parser=parser, args=childargs)
+        if not handled:
+            print >> sys.stderr, 'Error connecting to cluster: {0}'.\
+                format(e.__class__.__name__)
         return 1
 
     if parsed_args.help:
