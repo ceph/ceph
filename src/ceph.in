@@ -568,10 +568,16 @@ def main():
     if parsed_args.cluster:
         clustername = parsed_args.cluster
 
-    cluster_handle = rados.Rados(name=name, clustername=clustername,
-                                 conf_defaults=conf_defaults, conffile=conffile)
+    try:
+        cluster_handle = rados.Rados(name=name, clustername=clustername,
+                                     conf_defaults=conf_defaults,
+                                     conffile=conffile)
+        retargs = cluster_handle.conf_parse_argv(childargs)
+    except rados.Error as e:
+        print >> sys.stderr, 'Error initializing cluster client: {0}'.\
+            format(e.__class__.__name__)
+        return 1
 
-    retargs = cluster_handle.conf_parse_argv(childargs)
     #tmp = childargs
     childargs = retargs
     if not childargs:
