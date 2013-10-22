@@ -1200,18 +1200,8 @@ int RGWCopyObj_ObjStore_S3::get_params()
   if_match = s->info.env->get("HTTP_X_AMZ_COPY_IF_MATCH");
   if_nomatch = s->info.env->get("HTTP_X_AMZ_COPY_IF_NONE_MATCH");
 
-  const char *req_src = s->copy_source;
-  if (!req_src) {
-    ldout(s->cct, 0) << "copy source is NULL" << dendl;
-    return -EINVAL;
-  }
-
-  ret = parse_copy_location(req_src, src_bucket_name, src_object);
-  if (!ret) {
-    ldout(s->cct, 0) << "failed to parse copy location" << dendl;
-    return -EINVAL;
-  }
-
+  src_bucket_name = s->src_bucket_name;
+  src_object = s->src_object;
   dest_bucket_name = s->bucket.name;
   dest_object = s->object_str;
 
@@ -1961,6 +1951,13 @@ int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClient
   s->has_acl_header = s->info.env->exists_prefix("HTTP_X_AMZ_GRANT");
 
   s->copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
+  if (s->copy_source) {
+    ret = RGWCopyObj::parse_copy_location(s->copy_source, s->src_bucket_name, s->src_object);
+    if (!ret) {
+      ldout(s->cct, 0) << "failed to parse copy location" << dendl;
+      return -EINVAL;
+    }
+  }
 
   s->dialect = "s3";
 
