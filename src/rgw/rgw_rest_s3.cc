@@ -250,7 +250,7 @@ void RGWListBucket_ObjStore_S3::send_response()
 
   s->formatter->open_object_section_in_ns("ListBucketResult",
 					  "http://s3.amazonaws.com/doc/2006-03-01/");
-  s->formatter->dump_string("Name", s->bucket_name_str.c_str());
+  s->formatter->dump_string("Name", s->bucket_name_str);
   if (!prefix.empty())
     s->formatter->dump_string("Prefix", prefix);
   s->formatter->dump_string("Marker", marker);
@@ -1204,8 +1204,8 @@ done:
     s->formatter->open_object_section("PostResponse");
     if (g_conf->rgw_dns_name.length())
       s->formatter->dump_format("Location", "%s/%s", s->info.script_uri.c_str(), s->object_str.c_str());
-    s->formatter->dump_string("Bucket", s->bucket_name_str.c_str());
-    s->formatter->dump_string("Key", s->object_str.c_str());
+    s->formatter->dump_string("Bucket", s->bucket_name_str);
+    s->formatter->dump_string("Key", s->object_str);
     s->formatter->close_section();
   }
   s->err.message = err_msg;
@@ -1519,7 +1519,7 @@ void RGWInitMultipart_ObjStore_S3::send_response()
     dump_start(s);
     s->formatter->open_object_section_in_ns("InitiateMultipartUploadResult",
 		  "http://s3.amazonaws.com/doc/2006-03-01/");
-    s->formatter->dump_string("Bucket", s->bucket_name_str.c_str());
+    s->formatter->dump_string("Bucket", s->bucket_name_str);
     s->formatter->dump_string("Key", s->object);
     s->formatter->dump_string("UploadId", upload_id);
     s->formatter->close_section();
@@ -1539,7 +1539,7 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
 			  "http://s3.amazonaws.com/doc/2006-03-01/");
     if (g_conf->rgw_dns_name.length())
       s->formatter->dump_format("Location", "%s.%s", s->bucket_name_str.c_str(), g_conf->rgw_dns_name.c_str());
-    s->formatter->dump_string("Bucket", s->bucket_name_str.c_str());
+    s->formatter->dump_string("Bucket", s->bucket_name_str);
     s->formatter->dump_string("Key", s->object);
     s->formatter->dump_string("ETag", etag);
     s->formatter->close_section();
@@ -1576,7 +1576,7 @@ void RGWListMultipart_ObjStore_S3::send_response()
     for (i = 0, test_iter = iter; test_iter != parts.end() && i < max_parts; ++test_iter, ++i) {
       cur_max = test_iter->first;
     }
-    s->formatter->dump_string("Bucket", s->bucket_name_str.c_str());
+    s->formatter->dump_string("Bucket", s->bucket_name_str);
     s->formatter->dump_string("Key", s->object);
     s->formatter->dump_string("UploadId", upload_id);
     s->formatter->dump_string("StorageClass", "STANDARD");
@@ -1624,7 +1624,7 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
     return;
 
   s->formatter->open_object_section("ListMultipartUploadsResult");
-  s->formatter->dump_string("Bucket", s->bucket_name_str.c_str());
+  s->formatter->dump_string("Bucket", s->bucket_name_str);
   if (!prefix.empty())
     s->formatter->dump_string("ListMultipartUploadsResult.Prefix", prefix);
   string& key_marker = marker.get_key();
