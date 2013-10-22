@@ -864,8 +864,8 @@ int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWCli
 
   s->copy_source = s->info.env->get("HTTP_X_COPY_FROM");
   if (s->copy_source) {
-    ret = RGWCopyObj::parse_copy_location(s->copy_source, s->src_bucket_name, s->src_object);
-    if (!ret)
+    bool result = RGWCopyObj::parse_copy_location(s->copy_source, s->src_bucket_name, s->src_object);
+    if (!result)
        return -ERR_BAD_URL;
   }
 
@@ -878,8 +878,8 @@ int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWCli
 
     string dest_bucket_name;
     string dest_object;
-    ret = RGWCopyObj::parse_copy_location(req_dest, dest_bucket_name, dest_object);
-    if (!ret)
+    bool result = RGWCopyObj::parse_copy_location(req_dest, dest_bucket_name, dest_object);
+    if (!result)
        return -ERR_BAD_URL;
 
     if (dest_bucket_name != s->bucket_name_str) {
