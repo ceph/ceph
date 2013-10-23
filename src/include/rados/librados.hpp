@@ -297,6 +297,16 @@ namespace librados
      */
     void undirty();
 
+    /**
+     * flush a cache tier object to backing tier
+     */
+    void cache_flush();
+
+    /**
+     * evict a clean cache tier object
+     */
+    void cache_evict();
+
     friend class IoCtx;
   };
 
