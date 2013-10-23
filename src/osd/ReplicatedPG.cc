@@ -2759,6 +2759,21 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
 
+    case CEPH_OSD_OP_CACHE_EVICT:
+      ++ctx->num_write;
+      {
+	if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE) {
+	  result = -EINVAL;
+	  break;
+	}
+	if (oi.is_dirty()) {
+	  result = -EBUSY;
+	  break;
+	}
+	result = _delete_head(ctx, true);
+      }
+      break;
+
     case CEPH_OSD_OP_GETXATTR:
       ++ctx->num_read;
       {
@@ -3247,7 +3262,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	// Cannot delete an object with watchers
 	result = -EBUSY;
       } else {
-	result = _delete_head(ctx);
+	result = _delete_head(ctx, false);
       }
       break;
 
@@ -3793,7 +3808,7 @@ int ReplicatedPG::_get_tmap(OpContext *ctx,
   return 0;
 }
 
-inline int ReplicatedPG::_delete_head(OpContext *ctx)
+inline int ReplicatedPG::_delete_head(OpContext *ctx, bool no_whiteout)
 {
   SnapSet& snapset = ctx->new_snapset;
   ObjectState& obs = ctx->new_obs;
@@ -3801,7 +3816,7 @@ inline int ReplicatedPG::_delete_head(OpContext *ctx)
   const hobject_t& soid = oi.soid;
   ObjectStore::Transaction& t = ctx->op_t;
 
-  if (!obs.exists || obs.oi.is_whiteout())
+  if (!obs.exists || (obs.oi.is_whiteout() && !no_whiteout))
     return -ENOENT;
   
   if (oi.size > 0) {
@@ -3815,7 +3830,7 @@ inline int ReplicatedPG::_delete_head(OpContext *ctx)
   oi.size = 0;
 
   // cache: writeback: set whiteout on delete?
-  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK) {
+  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK && !no_whiteout) {
     dout(20) << __func__ << " setting whiteout on " << soid << dendl;
     oi.set_flag(object_info_t::FLAG_WHITEOUT);
     t.truncate(coll, soid, 0);
@@ -3856,7 +3871,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       // Cannot delete an object with watchers
       ret = -EBUSY;
     } else {
-      _delete_head(ctx);
+      _delete_head(ctx, false);
       ret = 0;
     }
   } else if (-EAGAIN == ret) {
