@@ -141,12 +141,17 @@ namespace librados
    * ORDER_READS_WRITES will order reads the same way writes are
    * ordered (e.g., waiting for degraded objects).  In particular, it
    * will make a write followed by a read sequence be preserved.
+   *
+   * IGNORE_OVERLAY will ignore the pool overlay tiering metadata and
+   * process the op directly on the destination pool.  This is useful
+   * for CACHE_FLUSH and CACHE_EVICT operations.
    */
   enum ObjectOperationGlobalFlags {
     OPERATION_NOFLAG         = 0,
     OPERATION_BALANCE_READS  = 1,
     OPERATION_LOCALIZE_READS = 2,
     OPERATION_ORDER_READS_WRITES = 4,
+    OPERATION_IGNORE_OVERLAY = 8,
   };
 
   /*
