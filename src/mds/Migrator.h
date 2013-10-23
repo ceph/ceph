@@ -91,6 +91,15 @@ protected:
   
   list< pair<dirfrag_t,int> >  export_queue;
 
+  // for deadlock detection
+  struct freezing_state_t {
+    utime_t start_time;
+    int num_waiters;		// number of remote authpin waiters
+    freezing_state_t() : num_waiters(0) {}
+  };
+  map<CDir*,freezing_state_t >	export_freezing_state;
+  set<pair<utime_t,CDir*> >	export_freezing_dirs;
+
   // -- imports --
 public:
   const static int IMPORT_DISCOVERING   = 1; // waiting for prep
@@ -182,6 +191,13 @@ public:
     assert(export_state[dir] == EXPORT_NOTIFYING);
     return (export_notify_ack_waiting[dir].count(who) == 0);
   }
+
+  void export_freeze_inc_num_waiters(CDir *dir) {
+    assert(is_exporting(dir));
+    export_freezing_state[dir].num_waiters++;
+  }
+  void find_stale_export_freeze();
+
   // -- misc --
   void handle_mds_failure_or_stop(int who);
 
@@ -227,6 +243,7 @@ public:
   void handle_export_prep_ack(MExportDirPrepAck *m);
   void export_go(CDir *dir);
   void export_go_synced(CDir *dir);
+  void export_try_cancel(CDir *dir);
   void export_reverse(CDir *dir);
   void export_notify_abort(CDir *dir, set<CDir*>& bounds);
   void handle_export_ack(MExportDirAck *m);
@@ -237,6 +254,11 @@ public:
 
   void handle_export_caps_ack(MExportCapsAck *m);
 
+  void export_freeze_finish(CDir *dir) {
+    utime_t start = export_freezing_state[dir].start_time;
+    export_freezing_dirs.erase(make_pair(start, dir));
+    export_freezing_state.erase(dir);
+  }
 
   friend class C_MDC_ExportFreeze;
   friend class C_MDS_ExportFinishLogged;
