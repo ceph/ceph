@@ -1116,7 +1116,7 @@ private:
 
   int _get_tmap(OpContext *ctx, map<string, bufferlist> *out,
 		bufferlist *header);
-  int _delete_head(OpContext *ctx);
+  int _delete_head(OpContext *ctx, bool no_whiteout);
   int _rollback_to(OpContext *ctx, ceph_osd_op& op);
 public:
   bool same_for_read_since(epoch_t e);
