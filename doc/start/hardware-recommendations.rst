@@ -10,11 +10,7 @@ issues. Hardware planning should include distributing Ceph daemons and
 other processes that use Ceph across many hosts. Generally, we recommend 
 running Ceph daemons of a specific type on a host configured for that type 
 of daemon. We recommend using other hosts for processes that utilize your 
-data cluster (e.g., OpenStack, CloudStack, etc). 
-
-`Inktank`_ provides excellent premium support for hardware planning.
-
-.. _Inktank: http://www.inktank.com
+data cluster (e.g., OpenStack, CloudStack, etc).
 
 
 .. tip:: Check out the Ceph blog too. Articles like `Ceph Write Throughput 1`_,
@@ -251,33 +247,39 @@ Minimum Hardware Recommendations
 Ceph can run on inexpensive commodity hardware. Small production clusters
 and development clusters can run successfully with modest hardware.
 
-+--------------+----------------+------------------------------------+
-|  Process     | Criteria       | Minimum Recommended                |
-+==============+================+====================================+
-| ``ceph-osd`` | Processor      |  1x 64-bit AMD-64/i386 dual-core   |
-|              +----------------+------------------------------------+
-|              | RAM            |  500 MB per daemon                 |
-|              +----------------+------------------------------------+
-|              | Volume Storage |  1x Disk per daemon                |
-|              +----------------+------------------------------------+
-|              | Network        |  2x 1GB Ethernet NICs              |
-+--------------+----------------+------------------------------------+
-| ``ceph-mon`` | Processor      |  1x 64-bit AMD-64/i386             |
-|              +----------------+------------------------------------+
-|              | RAM            |  1 GB per daemon                   |
-|              +----------------+------------------------------------+
-|              | Disk Space     |  10 GB per daemon                  |
-|              +----------------+------------------------------------+
-|              | Network        |  2x 1GB Ethernet NICs              |
-+--------------+----------------+------------------------------------+
-| ``ceph-mds`` | Processor      |  1x 64-bit AMD-64/i386 quad-core   |
-|              +----------------+------------------------------------+
-|              | RAM            |  1 GB minimum per daemon           |
-|              +----------------+------------------------------------+
-|              | Disk Space     |  1 MB per daemon                   |
-|              +----------------+------------------------------------+
-|              | Network        |  2x 1GB Ethernet NICs              |
-+--------------+----------------+------------------------------------+
++--------------+----------------+--------------------------------------+
+|  Process     | Criteria       | Minimum Recommended                  |
++==============+================+======================================+
+| ``ceph-osd`` | Processor      | - 1x 64-bit AMD-64                   |
+|              |                | - 1x 32-bit ARM dual-core or better  |
+|              |                | - 1x i386 dual-core                  |
+|              +----------------+--------------------------------------+
+|              | RAM            |  500 MB per daemon                   |
+|              +----------------+--------------------------------------+
+|              | Volume Storage |  1x Disk per daemon                  |
+|              +----------------+--------------------------------------+
+|              | Network        |  2x 1GB Ethernet NICs                |
++--------------+----------------+--------------------------------------+
+| ``ceph-mon`` | Processor      | - 1x 64-bit AMD-64/i386              |
+|              |                | - 1x 32-bit ARM dual-core or better  |
+|              |                | - 1x i386 dual-core                  |
+|              +----------------+--------------------------------------+
+|              | RAM            |  1 GB per daemon                     |
+|              +----------------+--------------------------------------+
+|              | Disk Space     |  10 GB per daemon                    |
+|              +----------------+--------------------------------------+
+|              | Network        |  2x 1GB Ethernet NICs                |
++--------------+----------------+--------------------------------------+
+| ``ceph-mds`` | Processor      | - 1x 64-bit AMD-64 quad-core         |
+|              |                | - 1x 32-bit ARM quad-core            |
+|              |                | - 1x i386 quad-core                  |
+|              +----------------+--------------------------------------+
+|              | RAM            |  1 GB minimum per daemon             |
+|              +----------------+--------------------------------------+
+|              | Disk Space     |  1 MB per daemon                     |
+|              +----------------+--------------------------------------+
+|              | Network        |  2x 1GB Ethernet NICs                |
++--------------+----------------+--------------------------------------+
 
 .. tip:: If you are running an OSD with a single disk, create a
    partition for your volume storage that is separate from the partition
@@ -285,12 +287,15 @@ and development clusters can run successfully with modest hardware.
    OS and the volume storage.
 
 
-Production Cluster Example
-==========================
+Production Cluster Examples
+===========================
 
 Production clusters for petabyte scale data storage may also use commodity
 hardware, but should have considerably more memory, processing power and data
 storage to account for heavy traffic loads.
+
+Dell Example
+------------
 
 A recent (2012) Ceph cluster project is using two fairly robust hardware
 configurations for Ceph OSDs, and a lighter configuration for monitors.
@@ -324,6 +329,38 @@ configurations for Ceph OSDs, and a lighter configuration for monitors.
 |                +----------------+------------------------------------+
 |                | Mgmt. Network  |  2x 1GB Ethernet NICs              |
 +----------------+----------------+------------------------------------+
+
+
+Calxeda Example
+---------------
+
+A recent (2013) Ceph cluster project is using ARM hardware with low
+power consumption and high storage density for for Ceph OSDs.
+
++----------------+----------------+----------------------------------------+
+|  Configuration | Criteria       | Minimum Recommended                    |
++================+================+========================================+
+| SuperMicro     | Processor Card |  3x Calxeda EnergyCard building blocks |
+| SC 847 Chassis +----------------+----------------------------------------+
+| 4U             | CPU            |  4x ECX-1000 ARM 1.4 GHz SoC per card  |
+|                +----------------+----------------------------------------+
+|                | RAM            |  4 GB per System-on-a-chip (SoC)       |
+|                +----------------+----------------------------------------+
+|                | Volume Storage |  36x 3TB Seagate Barracuda SATA        |
+|                +----------------+----------------------------------------+
+|                | Client Network |  1x 10GB Ethernet NICs                 |
+|                +----------------+----------------------------------------+
+|                | OSD Network    |  1x 10GB Ethernet NICs                 |
+|                +----------------+----------------------------------------+
+|                | Mgmt. Network  |  1x 1GB Ethernet NICs                  |
++----------------+----------------+----------------------------------------+
+
+The project enables the deployment of 36 Ceph OSD Daemons, one for each
+3TB drive. Each processor runs 3 Ceph OSD Daemons. Four processors per
+card allows the 12 processors in with just four cards. This configuration
+provides 108TB of storage (slightly less after full ratio settings) per
+4U chassis.
+
 
 
 .. _Ceph Write Throughput 1: http://ceph.com/community/ceph-performance-part-1-disk-controller-write-throughput/
