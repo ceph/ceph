@@ -18,6 +18,8 @@ protected:
   int send_status(const char *status, const char *status_name);
   int send_100_continue();
   int complete_header();
+  int complete_request() { return 0; }
+  int send_content_length(uint64_t len);
 public:
   RGWFCGX(FCGX_Request *_fcgx) : fcgx(_fcgx) {}
   void flush();

@@ -1157,7 +1157,9 @@ done:
   s->err.message = err_msg;
   set_req_state_err(s, ret);
   dump_errno(s);
-  dump_content_length(s, s->formatter->get_len());
+  if (ret >= 0) {
+    dump_content_length(s, s->formatter->get_len());
+  }
   end_header(s, this);
   if (ret != STATUS_CREATED)
     return;
