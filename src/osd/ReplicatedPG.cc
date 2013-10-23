@@ -2727,7 +2727,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_STAT:
       // note: stat does not require RD
       {
-	if (obs.exists) {
+	if (obs.exists && !oi.is_whiteout()) {
 	  ::encode(oi.size, osd_op.outdata);
 	  ::encode(oi.mtime, osd_op.outdata);
 	  dout(10) << "stat oi has " << oi.size << " " << oi.mtime << dendl;
@@ -3073,7 +3073,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         }
 	if (op.extent.truncate_seq > seq) {
 	  // write arrives before trimtrunc
-	  if (obs.exists) {
+	  if (obs.exists && !oi.is_whiteout()) {
 	    dout(10) << " truncate_seq " << op.extent.truncate_seq << " > current " << seq
 		     << ", truncating to " << op.extent.truncate_size << dendl;
 	    t.truncate(coll, soid, op.extent.truncate_size);
@@ -3147,7 +3147,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (result < 0)
 	  break;
 	assert(op.extent.length);
-	if (obs.exists) {
+	if (obs.exists && !oi.is_whiteout()) {
 	  t.zero(coll, soid, op.extent.offset, op.extent.length);
 	  interval_set<uint64_t> ch;
 	  ch.insert(op.extent.offset, op.extent.length);
@@ -3162,7 +3162,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_write;
       {
         int flags = le32_to_cpu(op.flags);
-	if (obs.exists && (flags & CEPH_OSD_OP_FLAG_EXCL)) {
+	if (obs.exists && !oi.is_whiteout() &&
+	    (flags & CEPH_OSD_OP_FLAG_EXCL)) {
           result = -EEXIST; /* this is an exclusive create */
 	} else {
 	  if (osd_op.indata.length()) {
@@ -3176,7 +3177,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      goto fail;
 	    }
 	    if (category.size()) {
-	      if (obs.exists) {
+	      if (obs.exists && !oi.is_whiteout()) {
 		if (obs.oi.category != category)
 		  result = -EEXIST;  // category cannot be reset
 	      } else {
@@ -3201,7 +3202,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_write;
       {
 	// truncate
-	if (!obs.exists) {
+	if (!obs.exists || oi.is_whiteout()) {
 	  dout(10) << " object dne, truncate is a no-op" << dendl;
 	  break;
 	}
@@ -3557,7 +3558,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_OMAP_CMP:
       ++ctx->num_read;
       {
-	if (!obs.exists) {
+	if (!obs.exists || oi.is_whiteout()) {
 	  result = -ENOENT;
 	  break;
 	}
@@ -3664,7 +3665,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_OMAPCLEAR:
       ++ctx->num_write;
       {
-	if (!obs.exists) {
+	if (!obs.exists || oi.is_whiteout()) {
 	  result = -ENOENT;
 	  break;
 	}
@@ -3677,7 +3678,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_OMAPRMKEYS:
       ++ctx->num_write;
       {
-	if (!obs.exists) {
+	if (!obs.exists || oi.is_whiteout()) {
 	  result = -ENOENT;
 	  break;
 	}
