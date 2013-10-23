@@ -818,6 +818,11 @@ protected:
    */
   void promote_object(OpRequestRef op, ObjectContextRef obc);
 
+  /**
+   * Check if the op is such that we can skip promote (e.g., DELETE)
+   */
+  bool can_skip_promote(OpRequestRef op, ObjectContextRef obc);
+
   int prepare_transaction(OpContext *ctx);
   
   // pg on-disk content
