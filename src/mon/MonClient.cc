@@ -22,6 +22,7 @@
 #include "messages/MAuthReply.h"
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
+#include "messages/MPing.h"
 
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
@@ -107,32 +108,31 @@ int MonClient::get_monmap_privately()
 {
   ldout(cct, 10) << "get_monmap_privately" << dendl;
   Mutex::Locker l(monc_lock);
-  
+
   bool temp_msgr = false;
   SimpleMessenger* smessenger = NULL;
   if (!messenger) {
     messenger = smessenger = new SimpleMessenger(cct,
                                                  entity_name_t::CLIENT(-1),
-						 "temp_mon_client",
-                                                 getpid());
+                                                 "temp_mon_client", getpid());
     messenger->add_dispatcher_head(this);
     smessenger->start();
-    temp_msgr = true; 
+    temp_msgr = true;
   }
-  
+
   int attempt = 10;
-  
+
   ldout(cct, 10) << "have " << monmap.epoch << " fsid " << monmap.fsid << dendl;
-  
+
   while (monmap.fsid.is_zero()) {
     cur_mon = _pick_random_mon();
     cur_con = messenger->get_connection(monmap.get_inst(cur_mon));
     ldout(cct, 10) << "querying mon." << cur_mon << " " << cur_con->get_peer_addr() << dendl;
     messenger->send_message(new MMonGetMap, cur_con);
-    
+
     if (--attempt == 0)
       break;
-    
+
     utime_t interval;
     interval.set_from_double(cct->_conf->mon_client_hunt_interval);
     map_cond.WaitInterval(cct, monc_lock, interval);
@@ -153,7 +153,7 @@ int MonClient::get_monmap_privately()
     messenger = 0;
     monc_lock.Lock();
   }
- 
+
   hunting = true;  // reset this to true!
   cur_mon.clear();
 
@@ -164,6 +164,78 @@ int MonClient::get_monmap_privately()
   return -1;
 }
 
+
+/**
+ * Ping the monitor with id @p mon_id and set the resulting reply in
+ * the provided @p result_reply, if this last parameter is not NULL.
+ *
+ * So that we don't rely on the MonClient's default messenger, set up
+ * during connect(), we create our own messenger to comunicate with the
+ * specified monitor.  This is advantageous in the following ways:
+ *
+ * - Isolate the ping procedure from the rest of the MonClient's operations,
+ *   allowing us to not acquire or manage the big monc_lock, thus not
+ *   having to block waiting for some other operation to finish before we
+ *   can proceed.
+ *   * for instance, we can ping mon.FOO even if we are currently hunting
+ *     or blocked waiting for auth to complete with mon.BAR.
+ *
+ * - Ping a monitor prior to establishing a connection (using connect())
+ *   and properly establish the MonClient's messenger.  This frees us
+ *   from dealing with the complex foo that happens in connect().
+ *
+ * We also don't rely on MonClient as a dispatcher for this messenger,
+ * unlike what happens with the MonClient's default messenger.  This allows
+ * us to sandbox the whole ping, having it much as a separate entity in
+ * the MonClient class, considerably simplifying the handling and dispatching
+ * of messages without needing to consider monc_lock.
+ *
+ * Current drawback is that we will establish a messenger for each ping
+ * we want to issue, instead of keeping a single messenger instance that
+ * would be used for all pings.
+ */
+int MonClient::ping_monitor(const string &mon_id, string *result_reply)
+{
+  ldout(cct, 10) << __func__ << dendl;
+
+  if (mon_id.empty()) {
+    ldout(cct, 10) << __func__ << " specified mon id is empty!" << dendl;
+    return -EINVAL;
+  } else if (!monmap.contains(mon_id)) {
+    ldout(cct, 10) << __func__ << " no such monitor 'mon." << mon_id << "'"
+                   << dendl;
+    return -ENOENT;
+  }
+
+  MonClientPinger *pinger = new MonClientPinger(cct, result_reply);
+
+  Messenger *smsgr = new SimpleMessenger(cct,
+                                         entity_name_t::CLIENT(-1),
+                                         "temp_ping_client", getpid());
+  smsgr->add_dispatcher_head(pinger);
+  smsgr->start();
+
+  ConnectionRef con = smsgr->get_connection(monmap.get_inst(mon_id));
+  ldout(cct, 10) << __func__ << " ping mon." << mon_id
+                 << " " << con->get_peer_addr() << dendl;
+  smsgr->send_message(new MPing, con);
+
+  pinger->lock.Lock();
+  int ret = pinger->wait_for_reply(cct->_conf->client_mount_timeout);
+  if (ret == 0) {
+    ldout(cct,10) << __func__ << " got ping reply" << dendl;
+  } else {
+    ret = -ret;
+  }
+  pinger->lock.Unlock();
+
+  smsgr->mark_down(con);
+  smsgr->shutdown();
+  smsgr->wait();
+  delete smsgr;
+  delete pinger;
+  return ret;
+}
 
 bool MonClient::ms_dispatch(Message *m)
 {

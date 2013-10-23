@@ -1900,6 +1900,22 @@ static void do_out_buffer(string& outbl, char **outbuf, size_t *outbuflen)
     *outbuflen = outbl.length();
 }
 
+extern "C" int rados_ping_monitor(rados_t cluster, const char *mon_id,
+                                  char **outstr, size_t *outstrlen)
+{
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  string str;
+
+  if (!mon_id)
+    return -EINVAL;
+
+  int ret = client->ping_monitor(mon_id, &str);
+  if (ret == 0 && !str.empty() && outstr && outstrlen) {
+    do_out_buffer(str, outstr, outstrlen);
+  }
+  return ret;
+}
+
 extern "C" int rados_mon_command(rados_t cluster, const char **cmd,
 				 size_t cmdlen,
 				 const char *inbuf, size_t inbuflen,

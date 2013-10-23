@@ -224,6 +224,23 @@ int rados_create2(rados_t *pcluster, const char *const clustername,
 int rados_create_with_context(rados_t *cluster, rados_config_t cct);
 
 /**
+ * Ping the monitor with ID @p mon_id, storing the resulting reply in
+ * @p buf (if specified) with a maximum size of @p len.
+ *
+ * The result buffer is allocated on the heap; the caller is
+ * expected to release that memory with rados_buffer_free().  The
+ * buffer and length pointers can be NULL, in which case they are
+ * not filled in.
+ *
+ * @param      cluster    cluster handle
+ * @param[in]  mon_id     ID of the monitor to ping
+ * @param[out] outstr     double pointer with the resulting reply
+ * @param[out] outstrlen  pointer with the size of the reply in @p outstr
+ */
+int rados_ping_monitor(rados_t cluster, const char *mon_id,
+                       char **outstr, size_t *outstrlen);
+
+/**
  * Connect to the cluster.
  *
  * @note BUG: Before calling this, calling a function that communicates with the
