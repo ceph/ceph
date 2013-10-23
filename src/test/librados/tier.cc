@@ -173,6 +173,15 @@ TEST(LibRadosTier, Whiteout) {
   IoCtx base_ioctx;
   ASSERT_EQ(0, cluster.ioctx_create(base_pool_name.c_str(), base_ioctx));
 
+  // create object
+  {
+    bufferlist bl;
+    bl.append("hi there");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+  }
+
   // configure cache
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(
@@ -192,9 +201,9 @@ TEST(LibRadosTier, Whiteout) {
   cluster.wait_for_latest_osdmap();
 
   // create some whiteouts, verify they behave
-  ASSERT_EQ(-ENOENT, base_ioctx.remove("foo"));
+  ASSERT_EQ(0, base_ioctx.remove("foo"));
+
   ASSERT_EQ(-ENOENT, base_ioctx.remove("bar"));
-  ASSERT_EQ(-ENOENT, base_ioctx.remove("foo"));
   ASSERT_EQ(-ENOENT, base_ioctx.remove("bar"));
 
   // verify the whiteouts are there in the cache tier
@@ -207,6 +216,8 @@ TEST(LibRadosTier, Whiteout) {
     ++it;
     ASSERT_TRUE(it == cache_ioctx.objects_end());
   }
+
+  ASSERT_EQ(-ENOENT, base_ioctx.remove("foo"));
 
   // tear down tiers
   ASSERT_EQ(0, cluster.mon_command(
