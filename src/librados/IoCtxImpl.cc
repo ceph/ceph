@@ -593,7 +593,7 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 
 int librados::IoCtxImpl::aio_operate(const object_t& oid,
 				     ::ObjectOperation *o, AioCompletionImpl *c,
-				     const SnapContext& snap_context)
+				     const SnapContext& snap_context, int flags)
 {
   utime_t ut = ceph_clock_now(client->cct);
   /* can't write to a snapshot */
@@ -607,7 +607,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
   queue_aio_write(c);
 
   Mutex::Locker l(*lock);
-  objecter->mutate(oid, oloc, *o, snap_context, ut, 0, onack, oncommit,
+  objecter->mutate(oid, oloc, *o, snap_context, ut, flags, onack, oncommit,
 		   &c->objver);
 
   return 0;
