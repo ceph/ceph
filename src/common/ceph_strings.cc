@@ -53,6 +53,9 @@ const char *ceph_osd_op_name(int op)
 	case CEPH_OSD_OP_COPY_FROM: return "copy-from";
 	case CEPH_OSD_OP_UNDIRTY: return "undirty";
 	case CEPH_OSD_OP_ISDIRTY: return "isdirty";
+	case CEPH_OSD_OP_CACHE_FLUSH: return "cache-flush";
+	case CEPH_OSD_OP_CACHE_EVICT: return "cache-evict";
+	case CEPH_OSD_OP_CACHE_TRY_FLUSH: return "cache-try-flush";
 
 	case CEPH_OSD_OP_CLONERANGE: return "clonerange";
 	case CEPH_OSD_OP_ASSERT_SRC_VERSION: return "assert-src-version";

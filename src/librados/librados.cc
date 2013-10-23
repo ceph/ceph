@@ -402,6 +402,24 @@ void librados::ObjectWriteOperation::undirty()
   o->undirty();
 }
 
+void librados::ObjectWriteOperation::cache_flush()
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->cache_flush();
+}
+
+void librados::ObjectWriteOperation::cache_try_flush()
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->cache_try_flush();
+}
+
+void librados::ObjectWriteOperation::cache_evict()
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->cache_evict();
+}
+
 void librados::ObjectWriteOperation::tmap_put(const bufferlist &bl)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;

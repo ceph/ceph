@@ -294,6 +294,23 @@ namespace librados
      */
     void undirty();
 
+    /**
+     * flush a cache tier object to backing tier; will block racing
+     * updates.
+     */
+    void cache_flush();
+
+    /**
+     * flush a cache tier object to backing tier; will EAGAIN if we race
+     * with an update.  must be used with the SKIPRWLOCKS flag.
+     */
+    void cache_try_flush();
+
+    /**
+     * evict a clean cache tier object
+     */
+    void cache_evict();
+
     friend class IoCtx;
   };
 

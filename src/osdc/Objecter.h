@@ -867,6 +867,41 @@ struct ObjectOperation {
     ::encode(src, osd_op.indata);
     ::encode(src_oloc, osd_op.indata);
   }
+
+  /**
+   * writeback content to backing tier
+   *
+   * If object is marked dirty in the cache tier, write back content
+   * to backing tier. If the object is clean this is a no-op.
+   *
+   * If writeback races with an update, the update will block.
+   */
+  void cache_flush() {
+    add_op(CEPH_OSD_OP_CACHE_FLUSH);
+  }
+
+  /**
+   * writeback content to backing tier
+   *
+   * If object is marked dirty in the cache tier, write back content
+   * to backing tier. If the object is clean this is a no-op.
+   *
+   * If writeback races with an update, return EAGAIN.  Requires that
+   * the SKIPRWLOCKS flag be set.
+   */
+  void cache_try_flush() {
+    add_op(CEPH_OSD_OP_CACHE_TRY_FLUSH);
+  }
+
+  /**
+   * evict object from cache tier
+   *
+   * If object is marked clean, remove the object from the cache tier.
+   * Otherwise, return EBUSY.
+   */
+  void cache_evict() {
+    add_op(CEPH_OSD_OP_CACHE_EVICT);
+  }
 };
 
 
