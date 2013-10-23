@@ -1612,6 +1612,22 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
 	dout(10) << " waiting for authpinnable on " << **p << dendl;
 	(*p)->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
 	mdr->drop_local_auth_pins();
+
+	CDir *dir = NULL;
+	if (CInode *in = dynamic_cast<CInode*>(*p)) {
+	  if (!in->is_root())
+	    dir = in->get_parent_dir();
+	} else if (CDentry *dn = dynamic_cast<CDentry*>(*p)) {
+	  dir = dn->get_dir();
+	} else {
+	  assert(0);
+	}
+	if (dir && dir->is_freezing_tree()) {
+	  while (!dir->is_freezing_tree_root())
+	    dir = dir->get_parent_dir();
+	  mdcache->migrator->export_freeze_inc_num_waiters(dir);
+	}
+
 	return;
       }
     }
