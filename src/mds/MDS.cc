@@ -588,6 +588,7 @@ void MDS::tick()
   
   if (is_active()) {
     balancer->tick();
+    mdcache->migrator->find_stale_export_freeze();
     if (snapserver)
       snapserver->check_osd_map(false);
   }
