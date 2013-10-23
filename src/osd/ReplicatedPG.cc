@@ -3803,22 +3803,30 @@ inline int ReplicatedPG::_delete_head(OpContext *ctx)
   if (!obs.exists || obs.oi.is_whiteout())
     return -ENOENT;
   
-  t.remove(coll, soid);
-
   if (oi.size > 0) {
     interval_set<uint64_t> ch;
     ch.insert(0, oi.size);
     ctx->modified_ranges.union_of(ch);
   }
 
-  ctx->delta_stats.num_objects--;
+  ctx->delta_stats.num_wr++;
   ctx->delta_stats.num_bytes -= oi.size;
-
   oi.size = 0;
+
+  // cache: writeback: set whiteout on delete?
+  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK) {
+    dout(20) << __func__ << " setting whiteout on " << soid << dendl;
+    oi.set_flag(object_info_t::FLAG_WHITEOUT);
+    t.truncate(coll, soid, 0);
+    t.omap_clear(coll, soid);
+    t.rmattrs(coll, soid);
+    return 0;
+  }
+
+  t.remove(coll, soid);
+  ctx->delta_stats.num_objects--;
   snapset.head_exists = false;
   obs.exists = false;
-
-  ctx->delta_stats.num_wr++;
   return 0;
 }
 
