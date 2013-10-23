@@ -66,7 +66,9 @@ public:
   virtual int verify_op_mask();
   virtual void execute() = 0;
   virtual void send_response() {}
-  virtual void complete() { send_response(); }
+  virtual void complete() {
+    send_response();
+  }
   virtual const string name() = 0;
 
   virtual uint32_t op_mask() { return 0; }

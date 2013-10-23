@@ -27,7 +27,7 @@ void RGWEnv::set(const char *name, const char *val)
     val = "";
   env_map[name] = val;
 
-  dout(0) << "RGWEnv::set(): " << name << ": " << val << dendl;
+  dout(20) << "RGWEnv::set(): " << name << ": " << val << dendl;
 }
 
 void RGWEnv::init(CephContext *cct, char **envp)

@@ -540,6 +540,10 @@ static int mongoose_callback(struct mg_event *event) {
   op->execute();
   op->complete();
 done:
+  ret = client_io.complete_request();
+  if (ret < 0) {
+    dout(0) << "ERROR: client_io.complete_request() returned " << ret << dendl;
+  }
   if (should_log) {
     rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
   }
@@ -727,7 +731,7 @@ int main(int argc, const char **argv)
   }
 
   struct mg_context *ctx;
-  const char *options[] = {"listening_ports", "8080", NULL};
+  const char *options[] = {"listening_ports", "8080", "enable_keep_alive", "yes", NULL};
 
   RGWProcessEnv pe = { store, &rest, olog };
 

@@ -9,15 +9,18 @@
 
 int RGWMongoose::write_data(const char *buf, int len)
 {
-  if (!sent_header) {
+  if (!header_done) {
     header_data.append(buf, len);
     return 0;
   }
-  dout(0) << buf << dendl;
+  if (!sent_header) {
+    data.append(buf, len);
+    return 0;
+  }
   return mg_write(event->conn, buf, len);
 }
 
-RGWMongoose::RGWMongoose(mg_event *_event) : event(_event), sent_header(false) {
+RGWMongoose::RGWMongoose(mg_event *_event) : event(_event), header_done(false), sent_header(false), has_content_length(false) {
 }
 
 int RGWMongoose::read_data(char *buf, int len)
@@ -27,6 +30,29 @@ int RGWMongoose::read_data(char *buf, int len)
 
 void RGWMongoose::flush()
 {
+}
+
+int RGWMongoose::complete_request()
+{
+  if (!sent_header) {
+    if (!has_content_length) {
+      header_done = false; /* let's go back to writing the header */
+      int r = send_content_length(data.length());
+      if (r < 0)
+	return r;
+    }
+
+    complete_header();
+  }
+
+  if (data.length()) {
+    int r = write_data(data.c_str(), data.length());
+    if (r < 0)
+      return r;
+    data.clear();
+  }
+
+  return 0;
 }
 
 void RGWMongoose::init_env(CephContext *cct)
@@ -104,9 +130,23 @@ int RGWMongoose::send_100_continue()
 
 int RGWMongoose::complete_header()
 {
+  header_done = true;
+
+  if (!has_content_length) {
+    return 0;
+  }
+
   header_data.append("\r\n");
 
   sent_header = true;
 
   return write_data(header_data.c_str(), header_data.length());
+}
+
+int RGWMongoose::send_content_length(uint64_t len)
+{
+  has_content_length = true;
+  char buf[21];
+  snprintf(buf, sizeof(buf), "%"PRIu64, len);
+  return print("Content-Length: %s\n", buf);
 }

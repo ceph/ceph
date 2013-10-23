@@ -37,6 +37,8 @@ public:
   virtual int send_status(const char *status, const char *status_name) = 0;
   virtual int send_100_continue() = 0;
   virtual int complete_header() = 0;
+  virtual int complete_request() = 0;
+  virtual int send_content_length(uint64_t len) = 0;
 
   RGWEnv& get_env() { return env; }
 

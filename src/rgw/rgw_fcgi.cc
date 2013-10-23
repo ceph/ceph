@@ -44,6 +44,13 @@ int RGWFCGX::send_100_continue()
   return r;
 }
 
+int RGWFCGX::send_content_length(uint64_t len)
+{
+  char buf[21];
+  snprintf(buf, sizeof(buf), "%"PRIu64, len);
+  return print("Content-Length: %s\n", buf);
+}
+
 int RGWFCGX::complete_header()
 {
   return print("\r\n");
