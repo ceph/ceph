@@ -4628,20 +4628,21 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
 				  CopyResults *results, ObjectContextRef obc,
                                   hobject_t& temp_obj)
 {
-  dout(10) << __func__ << " " << obc->obs.oi.soid << " r=" << r << dendl;
+  const hobject_t& soid = obc->obs.oi.soid;
+  dout(10) << __func__ << " " << soid << " r=" << r << dendl;
 
   bool whiteout = false;
   if (r == -ENOENT &&
       (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK ||
        pool.info.cache_mode == pg_pool_t::CACHEMODE_READONLY)) {
-    dout(10) << __func__ << " whiteout " << obc->obs.oi.soid << dendl;
+    dout(10) << __func__ << " whiteout " << soid << dendl;
     whiteout = true;
   }
 
   if (r < 0 && !whiteout) {
     // we need to get rid of the op in the blocked queue
     map<hobject_t,list<OpRequestRef> >::iterator blocked_iter =
-      waiting_for_blocked_object.find(obc->obs.oi.soid);
+      waiting_for_blocked_object.find(soid);
     assert(blocked_iter != waiting_for_blocked_object.end());
     assert(blocked_iter->second.begin()->get() == op.get());
     blocked_iter->second.pop_front();
@@ -4662,7 +4663,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
   obc->obs.exists = true;
   if (whiteout) {
     // create a whiteout
-    tctx->op_t.touch(coll, obc->obs.oi.soid);
+    tctx->op_t.touch(coll, soid);
     obc->obs.oi.set_flag(object_info_t::FLAG_WHITEOUT);
   } else {
     tctx->op_t.swap(results->final_tx);
@@ -4679,12 +4680,21 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
 
   tctx->log.push_back(pg_log_entry_t(
 	  pg_log_entry_t::MODIFY,
-	  obc->obs.oi.soid,
+	  soid,
 	  tctx->at_version,
 	  tctx->obs->oi.version,
 	  tctx->user_at_version,
 	  osd_reqid_t(),
 	  repop->ctx->mtime));
+
+  // set object and snapset attrs
+  bufferlist bv(sizeof(tctx->new_obs.oi));
+  ::encode(tctx->new_obs.oi, bv);
+  tctx->op_t.setattr(coll, soid, OI_ATTR, bv);
+
+  bufferlist bss;
+  ::encode(tctx->new_snapset, bss);
+  tctx->op_t.setattr(coll, soid, SS_ATTR, bss);
 
   repop->ondone = new C_KickBlockedObject(obc, this);
   simple_repop_submit(repop);
