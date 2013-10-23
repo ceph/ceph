@@ -375,6 +375,8 @@ struct ceph_osd_request_head {
       out << " localize_reads";
     if (get_flags() & CEPH_OSD_FLAG_RWORDERED)
       out << " rwordered";
+    if (get_flags() & CEPH_OSD_FLAG_IGNORE_OVERLAY)
+      out << " ignore_overlay";
     out << " e" << osdmap_epoch;
     out << ")";
   }
