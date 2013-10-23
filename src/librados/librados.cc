@@ -940,6 +940,22 @@ int librados::IoCtx::omap_rm_keys(const std::string& oid,
   return operate(oid, &op);
 }
 
+
+
+static int translate_flags(int flags)
+{
+  int op_flags = 0;
+  if (flags & librados::OPERATION_BALANCE_READS)
+    op_flags |= CEPH_OSD_FLAG_BALANCE_READS;
+  if (flags & librados::OPERATION_LOCALIZE_READS)
+    op_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
+  if (flags & librados::OPERATION_ORDER_READS_WRITES)
+    op_flags |= CEPH_OSD_FLAG_RWORDERED;
+  if (flags & librados::OPERATION_IGNORE_OVERLAY)
+    op_flags |= CEPH_OSD_FLAG_IGNORE_OVERLAY;
+  return op_flags;
+}
+
 int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperation *o)
 {
   object_t obj(oid);
@@ -957,7 +973,15 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 {
   object_t obj(oid);
   return io_ctx_impl->aio_operate(obj, (::ObjectOperation*)o->impl, c->pc,
-				  io_ctx_impl->snapc);
+				  io_ctx_impl->snapc, 0);
+}
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+				 ObjectWriteOperation *o, int flags)
+{
+  object_t obj(oid);
+  return io_ctx_impl->aio_operate(obj, (::ObjectOperation*)o->impl, c->pc,
+				  io_ctx_impl->snapc,
+				  translate_flags(flags));
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
@@ -971,7 +995,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
     snv[i] = snaps[i];
   SnapContext snapc(snap_seq, snv);
   return io_ctx_impl->aio_operate(obj, (::ObjectOperation*)o->impl, c->pc,
-				  snapc);
+				  snapc, 0);
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
@@ -988,19 +1012,10 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 				 snap_t snapid, int flags, bufferlist *pbl)
 {
   object_t obj(oid);
-  int op_flags = 0;
-  if (flags & OPERATION_BALANCE_READS)
-    op_flags |= CEPH_OSD_FLAG_BALANCE_READS;
-  if (flags & OPERATION_LOCALIZE_READS)
-    op_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
-  if (flags & OPERATION_ORDER_READS_WRITES)
-    op_flags |= CEPH_OSD_FLAG_RWORDERED;
-  if (flags & OPERATION_IGNORE_OVERLAY)
-    op_flags |= CEPH_OSD_FLAG_IGNORE_OVERLAY;
-
   return io_ctx_impl->aio_operate_read(obj, (::ObjectOperation*)o->impl, c->pc,
-				       op_flags, pbl);
+				       translate_flags(flags), pbl);
 }
+
 
 void librados::IoCtx::snap_set_read(snap_t seq)
 {
