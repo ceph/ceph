@@ -499,7 +499,7 @@ public:
       ops++;
     }
     void rmattrs(coll_t cid, const ghobject_t& oid) {
-      __u32 op = OP_RMATTR;
+      __u32 op = OP_RMATTRS;
       ::encode(op, tbl);
       ::encode(cid, tbl);
       ::encode(oid, tbl);
