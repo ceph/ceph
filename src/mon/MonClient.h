@@ -42,6 +42,7 @@ class MMonCommandAck;
 class MCommandReply;
 struct MAuthReply;
 class MAuthRotating;
+class MPing;
 class LogClient;
 class AuthSupported;
 class AuthAuthorizeHandlerRegistry;
@@ -52,6 +53,58 @@ enum MonClientState {
   MC_STATE_NEGOTIATING,
   MC_STATE_AUTHENTICATING,
   MC_STATE_HAVE_SESSION,
+};
+
+struct MonClientPinger : public Dispatcher {
+
+  Mutex lock;
+  Cond ping_recvd_cond;
+  string *result;
+  bool done;
+
+  MonClientPinger(CephContext *cct_, string *res_) :
+    Dispatcher(cct_),
+    lock("MonClientPinger::lock"),
+    result(res_),
+    done(false)
+  { }
+
+  int wait_for_reply(double timeout = 0.0) {
+    utime_t until = ceph_clock_now(cct);
+    until += (timeout > 0 ? timeout : cct->_conf->client_mount_timeout);
+    done = false;
+
+    int ret = 0;
+    while (!done) {
+      ret = ping_recvd_cond.WaitUntil(lock, until);
+      if (ret == -ETIMEDOUT)
+        break;
+    }
+    return ret;
+  }
+
+  bool ms_dispatch(Message *m) {
+    Mutex::Locker l(lock);
+    if (m->get_type() != CEPH_MSG_PING)
+      return false;
+
+    bufferlist &payload = m->get_payload();
+    if (result && payload.length() > 0) {
+      bufferlist::iterator p = payload.begin();
+      ::decode(*result, p);
+    }
+    done = true;
+    ping_recvd_cond.SignalAll();
+    m->put();
+    return true;
+  }
+  bool ms_handle_reset(Connection *con) {
+    Mutex::Locker l(lock);
+    done = true;
+    ping_recvd_cond.SignalAll();
+    return true;
+  }
+  void ms_handle_remote_reset(Connection *con) {}
 };
 
 class MonClient : public Dispatcher {
@@ -211,6 +264,17 @@ public:
   int build_initial_monmap();
   int get_monmap();
   int get_monmap_privately();
+  /**
+   * Ping monitor with ID @p mon_id and record the resulting
+   * reply in @p result_reply.
+   *
+   * @param[in]  mon_id Target monitor's ID
+   * @param[out] Resulting reply from mon.ID, if param != NULL
+   * @returns    0 in case of success; < 0 in case of error,
+   *             -ETIMEDOUT if monitor didn't reply before timeout
+   *             expired (default: conf->client_mount_timeout).
+   */
+  int ping_monitor(const string &mon_id, string *result_reply);
 
   void send_mon_message(Message *m) {
     Mutex::Locker l(monc_lock);
