@@ -102,6 +102,10 @@ void RGWMongoose::init_env(CephContext *cct)
   env.set("QUERY_STRING", info->query_string);
   env.set("REMOTE_USER", info->remote_user);
   env.set("SCRIPT_URI", info->uri); /* FIXME */
+
+  char port[16];
+  snprintf(port, sizeof(port), "%d", cct->_conf->rgw_standalone_server_port);
+  env.set("SERVER_PORT", port);
 }
 
 int RGWMongoose::send_status(const char *status, const char *status_name)
