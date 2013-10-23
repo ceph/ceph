@@ -730,13 +730,19 @@ int main(int argc, const char **argv)
     olog->init(g_conf->rgw_ops_log_socket_path);
   }
 
-  struct mg_context *ctx;
-  const char *options[] = {"listening_ports", "8080", "enable_keep_alive", "yes", NULL};
-
+  bool use_mongoose = (g_conf->rgw_standalone_server_port != 0);
+  struct mg_context *ctx = NULL;
   RGWProcessEnv pe = { store, &rest, olog };
 
-  ctx = mg_start((const char **)&options, &mongoose_callback, &pe);
-  assert(ctx);
+  if (use_mongoose) {
+    char port_buf[32];
+    snprintf(port_buf, sizeof(port_buf), "%d", (int)g_conf->rgw_standalone_server_port);
+
+    const char *options[] = {"listening_ports", port_buf, "enable_keep_alive", "yes", NULL};
+
+    ctx = mg_start((const char **)&options, &mongoose_callback, &pe);
+    assert(ctx);
+  }
 
   RGWProcess *pprocess = new RGWProcess(g_ceph_context, &pe, g_conf->rgw_thread_pool_size);
 
@@ -750,7 +756,9 @@ int main(int argc, const char **argv)
 
   pprocess->run();
 
-  mg_stop(ctx);
+  if (use_mongoose) {
+    mg_stop(ctx);
+  }
 
   derr << "shutting down" << dendl;
 
