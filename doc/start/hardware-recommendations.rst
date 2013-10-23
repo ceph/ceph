@@ -339,8 +339,8 @@ configurations for Ceph OSDs, and a lighter configuration for monitors.
 Calxeda Example
 ---------------
 
-A recent (2013) Ceph cluster project is using ARM hardware with low
-power consumption and high storage density for for Ceph OSDs.
+A recent (2013) Ceph cluster project uses ARM hardware to obtain low
+power consumption and high storage density.
 
 +----------------+----------------+----------------------------------------+
 |  Configuration | Criteria       | Minimum Recommended                    |
@@ -360,12 +360,17 @@ power consumption and high storage density for for Ceph OSDs.
 |                | Mgmt. Network  |  1x 1GB Ethernet NICs                  |
 +----------------+----------------+----------------------------------------+
 
-The project enables the deployment of 36 Ceph OSD Daemons, one for each
-3TB drive. Each processor runs 3 Ceph OSD Daemons. Four processors per
-card allows the 12 processors in with just four cards. This configuration
-provides 108TB of storage (slightly less after full ratio settings) per
-4U chassis.
+The chassis configuration enables the deployment of 36 Ceph OSD Daemons per
+chassis, one for each 3TB drive. Each System-on-a-chip (SoC) processor runs 3
+Ceph OSD Daemons. Four SoC processors per card allows the 12 processors to run
+36 Ceph OSD Daemons with capacity remaining for rebalancing, backfilling and
+recovery. This configuration provides 108TB of storage (slightly less after full
+ratio settings) per 4U chassis. Using a chassis exclusively for Ceph OSD Daemons
+makes it easy to expand the cluster's storage capacity significantly with
+relative ease.
 
+**Note:** the project uses Ceph for cold storage, so there are no SSDs 
+for journals.
 
 
 .. _Ceph Write Throughput 1: http://ceph.com/community/ceph-performance-part-1-disk-controller-write-throughput/
