@@ -162,6 +162,69 @@ TEST(LibRadosTier, Promote) {
   ASSERT_EQ(0, destroy_one_pool_pp(base_pool_name, cluster));
 }
 
+TEST(LibRadosTier, Whiteout) {
+  Rados cluster;
+  std::string base_pool_name = get_temp_pool_name();
+  std::string cache_pool_name = base_pool_name + "-cache";
+  ASSERT_EQ("", create_one_pool_pp(base_pool_name, cluster));
+  ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
+  IoCtx cache_ioctx;
+  ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
+  IoCtx base_ioctx;
+  ASSERT_EQ(0, cluster.ioctx_create(base_pool_name.c_str(), base_ioctx));
+
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + base_pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+    "\", \"mode\": \"writeback\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create some whiteouts, verify they behave
+  ASSERT_EQ(-ENOENT, base_ioctx.remove("foo"));
+  ASSERT_EQ(-ENOENT, base_ioctx.remove("bar"));
+  ASSERT_EQ(-ENOENT, base_ioctx.remove("foo"));
+  ASSERT_EQ(-ENOENT, base_ioctx.remove("bar"));
+
+  // verify the whiteouts are there in the cache tier
+  {
+    ObjectIterator it = cache_ioctx.objects_begin();
+    ASSERT_TRUE(it != cache_ioctx.objects_end());
+    ASSERT_TRUE(it->first == string("foo") || it->first == string("bar"));
+    ++it;
+    ASSERT_TRUE(it->first == string("foo") || it->first == string("bar"));
+    ++it;
+    ASSERT_TRUE(it == cache_ioctx.objects_end());
+  }
+
+  // tear down tiers
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + base_pool_name +
+    "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+
+  base_ioctx.close();
+  cache_ioctx.close();
+
+  cluster.pool_delete(cache_pool_name.c_str());
+  ASSERT_EQ(0, destroy_one_pool_pp(base_pool_name, cluster));
+}
+
 TEST(LibRadosTier, HitSetNone) {
   Rados cluster;
   std::string pool_name = get_temp_pool_name();
