@@ -294,6 +294,32 @@ namespace librados
      */
     void undirty();
 
+    /**
+     * flush a cache tier object to backing tier; will block racing
+     * updates.
+     *
+     * This should be used in concert with OPERATION_IGNORE_CACHE to avoid
+     * triggering a promotion.
+     */
+    void cache_flush();
+
+    /**
+     * Flush a cache tier object to backing tier; will EAGAIN if we race
+     * with an update.  Must be used with the SKIPRWLOCKS flag.
+     *
+     * This should be used in concert with OPERATION_IGNORE_CACHE to avoid
+     * triggering a promotion.
+     */
+    void cache_try_flush();
+
+    /**
+     * evict a clean cache tier object
+     *
+     * This should be used in concert with OPERATION_IGNORE_CACHE to avoid
+     * triggering a promote on the OSD (that is then evicted).
+     */
+    void cache_evict();
+
     friend class IoCtx;
   };
 
