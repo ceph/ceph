@@ -222,8 +222,12 @@ void ReplicatedPG::on_peer_recover(
   publish_stats_to_osd();
   // done!
   peer_missing[peer].got(soid, recovery_info.version);
-  if (peer == backfill_target && backfills_in_flight.count(soid))
+  if (peer == backfill_target && backfills_in_flight.count(soid)) {
     backfills_in_flight.erase(soid);
+    list<OpRequestRef> requeue_list;
+    rw_manager.drop_backfill_read(soid, &requeue_list);
+    requeue_ops(requeue_list);
+  }
 }
 
 void ReplicatedPG::begin_peer_recover(
@@ -7414,7 +7418,14 @@ void ReplicatedPG::_clear_recovery_state()
   recovering_oids.clear();
 #endif
   backfill_pos = hobject_t();
-  backfills_in_flight.clear();
+  list<OpRequestRef> blocked_ops;
+  set<hobject_t>::iterator i = backfills_in_flight.begin();
+  while (i != backfills_in_flight.end()) {
+    rw_manager.drop_backfill_read(*i, &blocked_ops);
+    requeue_ops(blocked_ops);
+    backfills_in_flight.erase(i++);
+  }
+  assert(backfills_in_flight.empty());
   pending_backfill_updates.clear();
   recovering.clear();
   pgbackend->clear_state();
@@ -8026,20 +8037,25 @@ int ReplicatedPG::recover_backfill(
       // and we can't increment ops without requeueing ourself
       // for recovery.
     } else if (pbi.begin == backfill_info.begin) {
-      if (pbi.objects.begin()->second !=
-	  backfill_info.objects.begin()->second) {
-	dout(20) << " replacing peer " << pbi.begin << " with local "
-		 << backfill_info.objects.begin()->second << dendl;
-	to_push[pbi.begin] = make_pair(backfill_info.objects.begin()->second,
-				       pbi.objects.begin()->second);
-	ops++;
+      eversion_t& obj_v = backfill_info.objects.begin()->second;
+      if (pbi.objects.begin()->second != obj_v) {
+	if (rw_manager.get_backfill_read(backfill_info.begin)) {
+	  dout(20) << " replacing peer " << pbi.begin << " with local "
+		   << obj_v << dendl;
+	  to_push[pbi.begin] = make_pair(obj_v, pbi.objects.begin()->second);
+	  ops++;
+	} else {
+	  *work_started = true;
+	  dout(20) << "backfill blocking on " << backfill_info.begin
+		   << "; could not get rw_manager lock" << dendl;
+	  break;
+	}
       } else {
 	dout(20) << " keeping peer " << pbi.begin << " "
 		 << pbi.objects.begin()->second << dendl;
 	// Object was degraded, but won't be recovered
 	if (waiting_for_degraded_object.count(pbi.begin)) {
-	  requeue_ops(
-	    waiting_for_degraded_object[pbi.begin]);
+	  requeue_ops(waiting_for_degraded_object[pbi.begin]);
 	  waiting_for_degraded_object.erase(pbi.begin);
 	}
       }
@@ -8047,15 +8063,22 @@ int ReplicatedPG::recover_backfill(
       backfill_info.pop_front();
       pbi.pop_front();
     } else {
-      dout(20) << " pushing local " << backfill_info.begin << " "
-	       << backfill_info.objects.begin()->second
-	       << " to peer osd." << backfill_target << dendl;
-      to_push[backfill_info.begin] =
-	make_pair(backfill_info.objects.begin()->second,
-		  eversion_t());
-      add_to_stat.insert(backfill_info.begin);
-      backfill_info.pop_front();
-      ops++;
+      if (rw_manager.get_backfill_read(backfill_info.begin)) {
+	dout(20) << " pushing local " << backfill_info.begin << " "
+		 << backfill_info.objects.begin()->second
+		 << " to peer osd." << backfill_target << dendl;
+	to_push[backfill_info.begin] =
+	  make_pair(backfill_info.objects.begin()->second,
+		    eversion_t());
+	add_to_stat.insert(backfill_info.begin);
+	backfill_info.pop_front();
+	ops++;
+      } else {
+	*work_started = true;
+	dout(20) << "backfill blocking on " << backfill_info.begin
+		 << "; could not get rw_manager lock" << dendl;
+	break;
+      }
     }
   }
   backfill_pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
