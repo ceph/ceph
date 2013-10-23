@@ -219,6 +219,20 @@ TEST(LibRadosTier, Whiteout) {
 
   ASSERT_EQ(-ENOENT, base_ioctx.remove("foo"));
 
+  // recreate an object and verify we can read it
+  {
+    bufferlist bl;
+    bl.append("hi there");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('h', bl[0]);
+  }
+
   // tear down tiers
   ASSERT_EQ(0, cluster.mon_command(
     "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + base_pool_name +

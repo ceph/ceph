@@ -4216,6 +4216,14 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     return result;
   }
 
+  // cache: clear whiteout?
+  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK) {
+    if (ctx->user_modify &&
+	ctx->obc->obs.oi.is_whiteout()) {
+      dout(10) << __func__ << " clearing whiteout on " << soid << dendl;
+      ctx->new_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
+    }
+  }
 
   // clone, if necessary
   make_writeable(ctx);
