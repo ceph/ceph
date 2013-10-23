@@ -2,18 +2,24 @@
 libec_jerasure_la_SOURCES = \
   osd/ErasureCodePluginJerasure/ErasureCodePluginJerasure.cc \
   osd/ErasureCodePluginJerasure/ErasureCodeJerasure.cc \
+  osd/ErasureCodePluginJerasure/ErasureCodeLocalParity.cc \
+  osd/ErasureCodePluginJerasure/ErasureCodeXor.cc \
   osd/ErasureCodePluginJerasure/cauchy.c \
   osd/ErasureCodePluginJerasure/galois.c \
   osd/ErasureCodePluginJerasure/jerasure.c \
   osd/ErasureCodePluginJerasure/liberation.c \
-  osd/ErasureCodePluginJerasure/reed_sol.c
+  osd/ErasureCodePluginJerasure/reed_sol.c \
+  osd/ErasureCodePluginJerasure/xor.cc 
 noinst_HEADERS += \
   osd/ErasureCodePluginJerasure/ErasureCodeJerasure.h \
+  osd/ErasureCodePluginJerasure/ErasureCodeLocalParity.h \
+  osd/ErasureCodePluginJerasure/ErasureCodeXor.h \
   osd/ErasureCodePluginJerasure/cauchy.h \
   osd/ErasureCodePluginJerasure/galois.h \
   osd/ErasureCodePluginJerasure/jerasure.h \
   osd/ErasureCodePluginJerasure/liberation.h \
-  osd/ErasureCodePluginJerasure/reed_sol.h
+  osd/ErasureCodePluginJerasure/reed_sol.h \
+  osd/ErasureCodePluginJerasure/xor.h 
 libec_jerasure_la_CFLAGS = ${AM_CFLAGS} 
 libec_jerasure_la_CXXFLAGS= ${AM_CXXFLAGS} 
 libec_jerasure_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
