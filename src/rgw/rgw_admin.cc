@@ -468,27 +468,6 @@ ReplicaLogType get_replicalog_type(const string& name) {
   return ReplicaLog_Invalid;
 }
 
-string escape_str(string& src, char c)
-{
-  int pos = 0;
-  string dest;
-
-  do {
-    int new_pos = src.find(c, pos);
-    if (new_pos >= 0) {
-      dest += src.substr(pos, new_pos - pos);
-      dest += "\\";
-      dest += c;
-    } else {
-      dest += src.substr(pos);
-      return dest;
-    }
-    pos = new_pos + 1;
-  } while (pos < (int)src.size());
-
-  return dest;
-}
-
 static void show_user_info(RGWUserInfo& info, Formatter *formatter)
 {
   encode_json("user_info", info, formatter);
