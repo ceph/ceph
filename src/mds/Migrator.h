@@ -57,6 +57,7 @@ private:
   // -- exports --
 public:
   // export stages.  used to clean up intelligently if there's a failure.
+  const static int EXPORT_CANCELLED     = 0;  // cancelled
   const static int EXPORT_DISCOVERING   = 1;  // dest is disovering export dir
   const static int EXPORT_FREEZING      = 2;  // we're freezing the dir tree
   const static int EXPORT_PREPPING      = 3;  // sending dest spanning tree to export bounds
@@ -79,17 +80,18 @@ public:
 
 protected:
   // export fun
-  map<CDir*,int>               export_state;
-  map<CDir*,int>               export_peer;
-  map<CDir*,set<SimpleLock*> > export_locks;
+  struct export_state_t {
+    int state;
+    int peer;
+    set<SimpleLock*> locks;
+    set<int> warning_ack_waiting;
+    set<int> notify_ack_waiting;
+    list<Context*> waiting_for_finish;
+  };
 
-  //map<CDir*,list<bufferlist> > export_data;   // only during EXPORTING state
-  map<CDir*,set<int> >         export_warning_ack_waiting;
-  map<CDir*,set<int> >         export_notify_ack_waiting;
-
-  map<CDir*,list<Context*> >   export_finish_waiters;
+  map<CDir*, export_state_t>  export_state;
   
-  list< pair<dirfrag_t,int> >  export_queue;
+  list<pair<dirfrag_t,int> >  export_queue;
 
   // for deadlock detection
   struct freezing_state_t {
@@ -123,13 +125,17 @@ public:
   }
 
 protected:
-  map<dirfrag_t,int>              import_state;  // FIXME make these dirfrags
-  map<dirfrag_t,int>              import_peer;
+  struct import_state_t {
+    int state;
+    int peer;
+    set<int> bystanders;
+    list<dirfrag_t> bound_ls;
+    list<ScatterLock*> updated_scatterlocks;
+    map<CInode*, map<client_t,Capability::Export> > peer_exports;
+  };
+
+  map<dirfrag_t, import_state_t>  import_state;
   map<dirfrag_t,Message*>         import_pending_msg;
-  map<CDir*,set<int> >            import_bystanders;
-  map<CDir*,list<dirfrag_t> >     import_bound_ls;
-  map<CDir*,list<ScatterLock*> >  import_updated_scatterlocks;
-  map<CDir*, map<CInode*, map<client_t,Capability::Export> > > import_caps;
 
 
 public:
@@ -143,53 +149,60 @@ public:
   
   // -- status --
   int is_exporting(CDir *dir) {
-    if (export_state.count(dir)) return export_state[dir];
+    map<CDir*, export_state_t>::iterator it = export_state.find(dir);
+    if (it != export_state.end()) return it->second.state;
     return 0;
   }
   bool is_exporting() { return !export_state.empty(); }
   int is_importing(dirfrag_t df) {
-    if (import_state.count(df)) return import_state[df];
+    map<dirfrag_t, import_state_t>::iterator it = import_state.find(df);
+    if (it != import_state.end()) return it->second.state;
     return 0;
   }
   bool is_importing() { return !import_state.empty(); }
 
   bool is_ambiguous_import(dirfrag_t df) {
-    map<dirfrag_t,int>::iterator p = import_state.find(df);
+    map<dirfrag_t, import_state_t>::iterator p = import_state.find(df);
     if (p == import_state.end())
       return false;
-    if (p->second >= IMPORT_LOGGINGSTART &&
-	p->second < IMPORT_ABORTING)
+    if (p->second.state >= IMPORT_LOGGINGSTART &&
+	p->second.state < IMPORT_ABORTING)
       return true;
     return false;
   }
 
   int get_import_state(dirfrag_t df) {
-    assert(import_state.count(df));
-    return import_state[df];
+    map<dirfrag_t, import_state_t>::iterator it = import_state.find(df);
+    assert(it != import_state.end());
+    return it->second.state;
   }
   int get_import_peer(dirfrag_t df) {
-    assert(import_peer.count(df));
-    return import_peer[df];
+    map<dirfrag_t, import_state_t>::iterator it = import_state.find(df);
+    assert(it != import_state.end());
+    return it->second.peer;
   }
 
   int get_export_state(CDir *dir) {
-    assert(export_state.count(dir));
-    return export_state[dir];
+    map<CDir*, export_state_t>::iterator it = export_state.find(dir);
+    assert(it != export_state.end());
+    return it->second.state;
   }
   // this returns true if we are export @dir,
   // and are not waiting for @who to be
   // be warned of ambiguous auth.
   // only returns meaningful results during EXPORT_WARNING state.
   bool export_has_warned(CDir *dir, int who) {
-    assert(is_exporting(dir));
-    assert(export_state[dir] == EXPORT_WARNING); 
-    return (export_warning_ack_waiting[dir].count(who) == 0);
+    map<CDir*, export_state_t>::iterator it = export_state.find(dir);
+    assert(it != export_state.end());
+    assert(it->second.state == EXPORT_WARNING);
+    return (it->second.warning_ack_waiting.count(who) == 0);
   }
 
   bool export_has_notified(CDir *dir, int who) {
-    assert(is_exporting(dir));
-    assert(export_state[dir] == EXPORT_NOTIFYING);
-    return (export_notify_ack_waiting[dir].count(who) == 0);
+    map<CDir*, export_state_t>::iterator it = export_state.find(dir);
+    assert(it != export_state.end());
+    assert(it->second.state == EXPORT_NOTIFYING);
+    return (it->second.notify_ack_waiting.count(who) == 0);
   }
 
   void export_freeze_inc_num_waiters(CDir *dir) {
@@ -231,7 +244,9 @@ public:
   void finish_export_dir(CDir *dir, list<Context*>& finished, utime_t now);
 
   void add_export_finish_waiter(CDir *dir, Context *c) {
-    export_finish_waiters[dir].push_back(c);
+    map<CDir*, export_state_t>::iterator it = export_state.find(dir);
+    assert(it != export_state.end());
+    it->second.waiting_for_finish.push_back(c);
   }
   void clear_export_proxy_pins(CDir *dir);
 
