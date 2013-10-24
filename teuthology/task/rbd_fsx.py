@@ -51,7 +51,7 @@ def _run_one_client(ctx, config, role):
             '-p', str(config.get('progress_interval', 100)),  # show progress
             '-P', '{tdir}/archive'.format(tdir=testdir),
             '-t', str(config.get('truncbdy',1)),
-            '-l', str(config.get('size', 1073741824)),
+            '-l', str(config.get('size', 250000000)),
             '-S', str(config.get('seed', 0)),
             '-N', str(config.get('ops', 1000)),
             'pool_{pool}'.format(pool=role),
