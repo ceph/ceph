@@ -17,15 +17,15 @@ int RGWMongoose::write_data(const char *buf, int len)
     data.append(buf, len);
     return 0;
   }
-  return mg_write(event->conn, buf, len);
+  return mg_write(conn, buf, len);
 }
 
-RGWMongoose::RGWMongoose(mg_event *_event) : event(_event), header_done(false), sent_header(false), has_content_length(false) {
+RGWMongoose::RGWMongoose(mg_connection *_conn) : conn(_conn), header_done(false), sent_header(false), has_content_length(false) {
 }
 
 int RGWMongoose::read_data(char *buf, int len)
 {
-  return mg_read(event->conn, buf, len);
+  return mg_read(conn, buf, len);
 }
 
 void RGWMongoose::flush()
@@ -37,9 +37,16 @@ int RGWMongoose::complete_request()
   if (!sent_header) {
     if (!has_content_length) {
       header_done = false; /* let's go back to writing the header */
-      int r = send_content_length(data.length());
-      if (r < 0)
-	return r;
+
+      if (0 && data.length() == 0) {
+        has_content_length = true;
+        print("Transfer-Enconding: %s\n", "chunked");
+        data.append("0\r\n\r\n", sizeof("0\r\n\r\n")-1);
+      } else {
+        int r = send_content_length(data.length());
+        if (r < 0)
+	  return r;
+      }
     }
 
     complete_header();
@@ -58,7 +65,7 @@ int RGWMongoose::complete_request()
 void RGWMongoose::init_env(CephContext *cct)
 {
   env.init(cct);
-  struct mg_request_info *info = event->request_info;
+  struct mg_request_info *info = mg_get_request_info(conn);
   if (!info)
     return;
 
@@ -129,7 +136,7 @@ int RGWMongoose::send_100_continue()
 {
   char buf[] = "HTTP/1.1 100 CONTINUE\r\n\r\n";
 
-  return mg_write(event->conn, buf, sizeof(buf) - 1);
+  return mg_write(conn, buf, sizeof(buf) - 1);
 }
 
 int RGWMongoose::complete_header()
