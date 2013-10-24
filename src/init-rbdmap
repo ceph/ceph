@@ -1,4 +1,9 @@
 #!/bin/bash
+#
+# rbdmap Ceph RBD Mapping
+#
+# chkconfig: 2345 20 80
+# description: Ceph RBD Mapping
 
 ### BEGIN INIT INFO
 # Provides:          rbdmap
