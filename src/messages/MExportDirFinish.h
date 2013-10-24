@@ -24,9 +24,9 @@ class MExportDirFinish : public Message {
   dirfrag_t get_dirfrag() { return dirfrag; }
   
   MExportDirFinish() {}
-  MExportDirFinish(dirfrag_t dirfrag) :
-    Message(MSG_MDS_EXPORTDIRFINISH) {
-    this->dirfrag = dirfrag;
+  MExportDirFinish(dirfrag_t df, uint64_t tid) :
+    Message(MSG_MDS_EXPORTDIRFINISH), dirfrag(df) {
+    set_tid(tid);
   }
 private:
   ~MExportDirFinish() {}
