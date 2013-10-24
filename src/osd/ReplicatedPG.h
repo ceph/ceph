@@ -1144,9 +1144,14 @@ public:
   void on_role_change();
   void on_change(ObjectStore::Transaction *t);
   void on_activate();
-  void on_flushed() {
-    assert(object_contexts.empty());
-    pgbackend->on_flushed();
+  void on_flush_received() {
+    assert(flushes_in_progress > 0);
+    if (--flushes_in_progress == 0) {
+      flushed = true;
+      assert(object_contexts.empty());
+      pgbackend->on_flushed();
+      requeue_ops(waiting_for_active);
+    }
   }
   void on_removal(ObjectStore::Transaction *t);
   void on_shutdown();

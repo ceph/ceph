@@ -524,6 +524,7 @@ protected:
 
   // pg waiters
   bool flushed;
+  int flushes_in_progress;
 
   // Ops waiting on backfill_pos to change
   list<OpRequestRef> waiting_for_backfill_pos;
@@ -1283,7 +1284,6 @@ public:
 
     struct Peering : boost::statechart::state< Peering, Primary, GetInfo >, NamedState {
       std::auto_ptr< PriorSet > prior_set;
-      bool flushed;
 
       Peering(my_context ctx);
       void exit();
@@ -1837,7 +1837,7 @@ public:
   virtual void on_role_change() = 0;
   virtual void on_change(ObjectStore::Transaction *t) = 0;
   virtual void on_activate() = 0;
-  virtual void on_flushed() = 0;
+  virtual void on_flush_received() = 0;
   virtual void on_shutdown() = 0;
   virtual void check_blacklisted_watchers() = 0;
   virtual void get_watchers(std::list<obj_watch_item_t>&) = 0;

@@ -173,6 +173,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   backfill_reserved(0),
   backfill_reserving(0),
   flushed(false),
+  flushes_in_progress(0),
   pg_stats_publish_lock("PG::pg_stats_publish_lock"),
   pg_stats_publish_valid(false),
   osr(osd->osr_registry.lookup_or_create(p, (stringify(p)))),
@@ -1035,11 +1036,22 @@ bool PG::choose_acting(int& newest_update_osd)
   //We can only get here when new interval has arrived and
   //we've accepted the acting set.  Now we can create
   //actingbackfill and backfill_targets vectors.
-  assert(actingbackfill.size() == 0);
-  assert(backfill_targets.size() == 0);
   actingbackfill = actingonly;
   actingbackfill.insert(actingbackfill.end(), backfill.begin(), backfill.end());
-  backfill_targets = backfill;
+  assert(backfill_targets.empty() || backfill_targets == backfill);
+  if (backfill_targets.empty()) {
+    backfill_targets = backfill;
+    for (unsigned i = 0; i < backfill.size() ; ++i) {
+      stray_set.erase(backfill[i]);
+    }
+  } else {
+    //Will not change if already set because up would have had to change
+    assert(backfill_targets == backfill);
+    //Verify that nothing in backfill is in stray_set
+    for (unsigned i = 0; i < backfill.size() ; ++i) {
+      assert(stray_set.find(backfill[i]) == stray_set.end());
+    }
+  }
   dout(10) << "choose_acting want " << want << " (== acting) backfill_targets " 
     << backfill << dendl;
   return true;
@@ -4494,7 +4506,8 @@ void PG::start_flush(ObjectStore::Transaction *t,
   FlushStateRef flush_trigger(
     new FlushState(this, get_osdmap()->get_epoch()));
   t->nop();
-  assert(!flushed);
+  assert(flushes_in_progress <= 1);
+  flushes_in_progress++;
   on_applied->push_back(new ContainerContext<FlushStateRef>(flush_trigger));
   on_safe->push_back(new ContainerContext<FlushStateRef>(flush_trigger));
 }
@@ -5163,8 +5176,7 @@ boost::statechart::result
 PG::RecoveryState::Started::react(const FlushedEvt&)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->flushed = true;
-  pg->requeue_ops(pg->waiting_for_active);
+  pg->on_flush_received();
   return discard_event();
 }
 
@@ -5208,6 +5220,7 @@ PG::RecoveryState::Reset::Reset(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
   pg->flushed = false;
+  pg->flushes_in_progress = 0;
   pg->set_last_peering_reset();
 }
 
@@ -5215,9 +5228,7 @@ boost::statechart::result
 PG::RecoveryState::Reset::react(const FlushedEvt&)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->flushed = true;
-  pg->on_flushed();
-  pg->requeue_ops(pg->waiting_for_active);
+  pg->on_flush_received();
   return discard_event();
 }
 
@@ -5352,8 +5363,7 @@ void PG::RecoveryState::Primary::exit()
 /*---------Peering--------*/
 PG::RecoveryState::Peering::Peering(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Peering"),
-    flushed(false)
+    NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Peering")
 {
   context< RecoveryMachine >().log_enter(state_name);
 
@@ -6273,11 +6283,10 @@ PG::RecoveryState::Stray::Stray(my_context ctx)
   assert(!pg->is_active());
   assert(!pg->is_peering());
   assert(!pg->is_primary());
-  if (!pg->is_replica()) // stray, need to flush for pulls
-    pg->start_flush(
-      context< RecoveryMachine >().get_cur_transaction(),
-      context< RecoveryMachine >().get_on_applied_context_list(),
-      context< RecoveryMachine >().get_on_safe_context_list());
+  pg->start_flush(
+    context< RecoveryMachine >().get_cur_transaction(),
+    context< RecoveryMachine >().get_on_applied_context_list(),
+    context< RecoveryMachine >().get_on_safe_context_list());
 }
 
 boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
@@ -6896,8 +6905,7 @@ boost::statechart::result
 PG::RecoveryState::WaitFlushedPeering::react(const FlushedEvt &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->flushed = true;
-  pg->requeue_ops(pg->waiting_for_active);
+  pg->on_flush_received();
   return transit< WaitFlushedPeering >();
 }
 
