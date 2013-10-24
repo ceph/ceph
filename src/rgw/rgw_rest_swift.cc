@@ -451,28 +451,10 @@ int RGWCopyObj_ObjStore_SWIFT::get_params()
   if_match = s->info.env->get("HTTP_COPY_IF_MATCH");
   if_nomatch = s->info.env->get("HTTP_COPY_IF_NONE_MATCH");
 
-  if (s->op == OP_COPY) {
-    const char *req_dest = s->info.env->get("HTTP_DESTINATION");
-    if (!req_dest)
-      return -ERR_BAD_URL;
-
-    ret = parse_copy_location(req_dest, dest_bucket_name, dest_object);
-    if (!ret)
-       return -ERR_BAD_URL;
-    src_bucket_name = s->bucket_name;
-    src_object = s->object_str;
-  } else {
-    const char *req_src = s->copy_source;
-    if (!req_src)
-      return -ERR_BAD_URL;
-
-    ret = parse_copy_location(req_src, src_bucket_name, src_object);
-    if (!ret)
-       return -ERR_BAD_URL;
-
-    dest_bucket_name = s->bucket_name;
-    dest_object = s->object_str;
-  }
+  src_bucket_name = s->src_bucket_name;
+  src_object = s->src_object;
+  dest_bucket_name = s->bucket_name_str;
+  dest_object = s->object_str;
 
   return 0;
 }
@@ -701,7 +683,7 @@ RGWOp *RGWHandler_ObjStore_Obj_SWIFT::op_put()
   if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_SWIFT;
   }
-  if (!s->copy_source)
+  if (s->src_bucket_name.empty())
     return new RGWPutObj_ObjStore_SWIFT;
   else
     return new RGWCopyObj_ObjStore_SWIFT;
@@ -857,8 +839,6 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
     return 0;
 
   s->bucket_name_str = first;
-  s->bucket_name = strdup(s->bucket_name_str.c_str());
-
    
   s->info.effective_uri = "/" + s->bucket_name_str;
 
@@ -873,7 +853,7 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
 
 int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWClientIO *cio)
 {
-  dout(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket_name ? s->bucket_name : "<NULL>") << dendl;
+  dout(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (!s->bucket_name_str.empty() ? s->bucket_name_str : "<NULL>") << dendl;
 
   int ret = validate_bucket_name(s->bucket_name_str.c_str());
   if (ret)
@@ -883,8 +863,38 @@ int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWCli
     return ret;
 
   s->copy_source = s->info.env->get("HTTP_X_COPY_FROM");
+  if (s->copy_source) {
+    bool result = RGWCopyObj::parse_copy_location(s->copy_source, s->src_bucket_name, s->src_object);
+    if (!result)
+       return -ERR_BAD_URL;
+  }
 
   s->dialect = "swift";
+
+  if (s->op == OP_COPY) {
+    const char *req_dest = s->info.env->get("HTTP_DESTINATION");
+    if (!req_dest)
+      return -ERR_BAD_URL;
+
+    string dest_bucket_name;
+    string dest_object;
+    bool result = RGWCopyObj::parse_copy_location(req_dest, dest_bucket_name, dest_object);
+    if (!result)
+       return -ERR_BAD_URL;
+
+    if (dest_bucket_name != s->bucket_name_str) {
+      ret = validate_bucket_name(dest_bucket_name.c_str());
+      if (ret < 0)
+        return ret;
+    }
+
+    /* convert COPY operation into PUT */
+    s->src_bucket_name = s->bucket_name_str;
+    s->src_object = s->object_str;
+    s->bucket_name_str = dest_bucket_name;
+    s->object_str = dest_object;
+    s->op = OP_PUT;
+  }
 
   return RGWHandler_ObjStore::init(store, s, cio);
 }
@@ -896,7 +906,7 @@ RGWHandler *RGWRESTMgr_SWIFT::get_handler(struct req_state *s)
   if (ret < 0)
     return NULL;
 
-  if (!s->bucket_name)
+  if (s->bucket_name_str.empty())
     return new RGWHandler_ObjStore_Service_SWIFT;
   if (!s->object)
     return new RGWHandler_ObjStore_Bucket_SWIFT;

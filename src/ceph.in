@@ -1,8 +1,10 @@
+# -*- mode:python -*-
+# vim: ts=4 sw=4 smarttab expandtab
 #
 # Processed in Makefile to add python #! line and version variable
 #
 #
-# vim: ts=4 sw=4 smarttab expandtab
+
 
 """
 ceph.in becomes ceph, the command-line management tool for Ceph clusters.
@@ -159,17 +161,28 @@ def parse_cmdargs(args=None, target=''):
     parser.add_argument('-f', '--format', choices=['json', 'json-pretty',
                         'xml', 'xml-pretty', 'plain'], dest='output_format')
 
+    parser.add_argument('--connect-timeout', dest='cluster_timeout',
+                        type=int,
+                        help='set a timeout for connecting to the cluster')
+
     # returns a Namespace with the parsed args, and a list of all extras
     parsed_args, extras = parser.parse_known_args(args)
 
     return parser, parsed_args, extras
 
-def do_help(parser, args):
+
+def hdr(s):
+    print '\n', s, '\n', '=' * len(s)
+
+def do_basic_help(parser, args):
     """
     Print basic parser help
     If the cluster is available, get and print monitor help
     """
+    hdr('General usage:')
+    parser.print_help()
 
+def do_extended_help(parser, args):
     def help_for_sigs(sigs, partial=None):
         sys.stdout.write(format_help(parse_json_funcsigs(sigs, 'cli'),
                          partial=partial))
@@ -185,18 +198,9 @@ def do_help(parser, args):
         else:
             help_for_sigs(outbuf, partial)
 
-
-    def hdr(s):
-        print '\n', s, '\n', '=' * len(s)
-
-    hdr('Monitor commands:')
     partial = ' '.join(args)
-    parser.print_help()
-    print '\n'
-
-    if (cluster_handle):
+    if (cluster_handle.state == "connected"):
         help_for_target(target=('mon', ''), partial=partial)
-
     return 0
 
 DONTSPLIT = string.letters + '{[<>]}'
@@ -472,6 +476,19 @@ def complete(sigdict, args, target):
     return 0
 
 ###
+# ping a monitor
+###
+def ping_monitor(cluster_handle, name):
+    if 'mon.' not in name:
+        print >> sys.stderr, '"ping" expects a monitor to ping; try "ping mon.<id>"'
+        return 1
+
+    mon_id = name[len('mon.'):]
+    s = cluster_handle.ping_monitor(mon_id)
+    print s
+    return 0
+
+###
 # main
 ###
 
@@ -540,6 +557,14 @@ def main():
             return errno.EINVAL
         return 0
 
+    timeout = None
+    if parsed_args.cluster_timeout:
+        timeout = parsed_args.cluster_timeout
+
+    # basic help
+    if parsed_args.help:
+        do_basic_help(parser, childargs)
+
     # handle any 'generic' ceph arguments that we didn't parse here
     global cluster_handle
 
@@ -556,10 +581,16 @@ def main():
     if parsed_args.cluster:
         clustername = parsed_args.cluster
 
-    cluster_handle = rados.Rados(name=name, clustername=clustername,
-                                 conf_defaults=conf_defaults, conffile=conffile)
+    try:
+        cluster_handle = rados.Rados(name=name, clustername=clustername,
+                                     conf_defaults=conf_defaults,
+                                     conffile=conffile)
+        retargs = cluster_handle.conf_parse_argv(childargs)
+    except rados.Error as e:
+        print >> sys.stderr, 'Error initializing cluster client: {0}'.\
+            format(e.__class__.__name__)
+        return 1
 
-    retargs = cluster_handle.conf_parse_argv(childargs)
     #tmp = childargs
     childargs = retargs
     if not childargs:
@@ -577,8 +608,23 @@ def main():
         print >> sys.stderr, '"{0} tell" is deprecated; try "tell {0}.<id>" instead (id can be "*") '.format(childargs[0])
         return 1
 
+    if parsed_args.help:
+        # short default timeout for -h
+        if not timeout:
+            timeout = 5
+
+        hdr('Monitor commands:')
+        print '[Contacting monitor, timeout after %d seconds]' % timeout
+
+    if childargs and childargs[0] == 'ping':
+        if len(childargs) < 2:
+            print >> sys.stderr, '"ping" requires a monitor name as argument: "ping mon.<id>"'
+            return 1
+
     try:
-        cluster_handle.connect()
+        if childargs and childargs[0] == 'ping':
+            return ping_monitor(cluster_handle, childargs[1])
+        cluster_handle.connect(timeout=timeout)
     except KeyboardInterrupt:
         print >> sys.stderr, 'Cluster connection aborted'
         return 1
@@ -588,7 +634,7 @@ def main():
         return 1
 
     if parsed_args.help:
-        return do_help(parser, childargs)
+        return do_extended_help(parser, childargs)
 
     # implement -w/--watch_*
     # This is ugly, but Namespace() isn't quite rich enough.
