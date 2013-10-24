@@ -431,18 +431,16 @@ done:
 }
 
 
-static int mongoose_callback(struct mg_event *event) {
-  RGWProcessEnv *pe = (RGWProcessEnv *)event->user_data;
+static int mongoose_callback(struct mg_connection *conn) {
+  struct mg_request_info *req_info = mg_get_request_info(conn);
+  RGWProcessEnv *pe = (RGWProcessEnv *)req_info->user_data;
   RGWRados *store = pe->store;
   RGWREST *rest = pe->rest;
   OpsLogSocket *olog = pe->olog;
 
-  if (event->type != MG_REQUEST_BEGIN)
-    return 0;
-
   RGWRequest *req = new RGWRequest;
   int ret;
-  RGWMongoose client_io(event);
+  RGWMongoose client_io(conn);
 
   client_io.init(g_ceph_context);
 
@@ -738,9 +736,14 @@ int main(int argc, const char **argv)
     char port_buf[32];
     snprintf(port_buf, sizeof(port_buf), "%d", (int)g_conf->rgw_standalone_server_port);
 
-    const char *options[] = {"listening_ports", port_buf, "enable_keep_alive", "yes", NULL};
+    char thread_pool_buf[32];
+    snprintf(thread_pool_buf, sizeof(thread_pool_buf), "%d", (int)g_conf->rgw_thread_pool_size);
+    const char *options[] = {"listening_ports", port_buf, "enable_keep_alive", "yes", "num_threads", thread_pool_buf, NULL};
 
-    ctx = mg_start((const char **)&options, &mongoose_callback, &pe);
+    struct mg_callbacks cb;
+    memset((void *)&cb, 0, sizeof(cb));
+    cb.begin_request = mongoose_callback;
+    ctx = mg_start(&cb, &pe, (const char **)&options);
     assert(ctx);
   }
 
