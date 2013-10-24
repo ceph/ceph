@@ -352,7 +352,10 @@ public:
   int add_entry(rgw_bucket& bucket);
   int renew_entries();
   int list_entries(int shard, utime_t& start_time, utime_t& end_time, int max_entries,
-               list<rgw_data_change>& entries, string& marker, bool *truncated);
+		   list<rgw_data_change>& entries,
+		   const string& marker,
+		   string *out_marker,
+		   bool *truncated);
   int trim_entries(int shard_id, const utime_t& start_time, const utime_t& end_time,
                    const string& start_marker, const string& end_marker);
   int trim_entries(const utime_t& start_time, const utime_t& end_time,

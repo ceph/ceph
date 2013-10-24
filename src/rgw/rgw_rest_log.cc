@@ -471,10 +471,12 @@ void RGWOp_DATALog_List::execute() {
     }
   } 
   
-  bool truncated;
   do {
+    // Note that last_marker is updated to be the marker of the last
+    // entry listed
     http_ret = store->data_log->list_entries(shard_id, ut_st, ut_et, 
-                               max_entries, entries, marker, &truncated);
+					     max_entries, entries, marker,
+					     &last_marker, &truncated);
     if (http_ret < 0) 
       break;
 
@@ -491,12 +493,18 @@ void RGWOp_DATALog_List::send_response() {
   if (http_ret < 0)
     return;
 
-  s->formatter->open_array_section("entries");
-  for (list<rgw_data_change>::iterator iter = entries.begin(); 
-       iter != entries.end(); ++iter) {
-    rgw_data_change& entry = *iter;
-    encode_json("entry", entry, s->formatter);
-    flusher.flush();
+  s->formatter->open_object_section("log_entries");
+  s->formatter->dump_string("marker", last_marker);
+  s->formatter->dump_bool("truncated", truncated);
+  {
+    s->formatter->open_array_section("entries");
+    for (list<rgw_data_change>::iterator iter = entries.begin();
+	 iter != entries.end(); ++iter) {
+      rgw_data_change& entry = *iter;
+      encode_json("entry", entry, s->formatter);
+      flusher.flush();
+    }
+    s->formatter->close_section();
   }
   s->formatter->close_section();
   flusher.flush();
