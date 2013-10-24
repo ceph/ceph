@@ -46,6 +46,7 @@
 #include "perfglue/heap_profiler.h"
 
 #include "messages/MMonCommand.h"
+#include "messages/MPing.h"
 #include "mon/MonitorStore.h"
 #include "mon/MonitorDBStore.h"
 
@@ -485,6 +486,10 @@ private:
   /**
    * @}
    */
+  /**
+   * Handle ping messages from others.
+   */
+  void handle_ping(MPing *m);
 
   Context *probe_timeout_event;  // for probing
 

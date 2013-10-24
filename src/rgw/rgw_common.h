@@ -819,12 +819,13 @@ struct req_state {
    uint32_t perm_mask;
    utime_t header_time;
 
-   const char *bucket_name;
    const char *object;
 
    rgw_bucket bucket;
    string bucket_name_str;
    string object_str;
+   string src_bucket_name;
+   string src_object;
    ACLOwner bucket_owner;
    ACLOwner owner;
 
@@ -1256,6 +1257,7 @@ extern bool verify_object_permission(struct req_state *s, int perm);
 /** Convert an input URL into a sane object name
  * by converting %-escaped strings into characters, etc*/
 extern bool url_decode(string& src_str, string& dest_str);
+extern void url_encode(const string& src, string& dst);
 
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);

@@ -77,6 +77,7 @@ public:
 
   RadosClient(CephContext *cct_);
   ~RadosClient();
+  int ping_monitor(string mon_id, string *result);
   int connect();
   void shutdown();
 
