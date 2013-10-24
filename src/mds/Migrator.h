@@ -54,6 +54,7 @@ private:
   MDS *mds;
   MDCache *cache;
 
+  uint64_t last_export_tid;
   // -- exports --
 public:
   // export stages.  used to clean up intelligently if there's a failure.
@@ -83,6 +84,7 @@ protected:
   struct export_state_t {
     int state;
     int peer;
+    uint64_t tid;
     set<SimpleLock*> locks;
     set<int> warning_ack_waiting;
     set<int> notify_ack_waiting;
@@ -128,6 +130,7 @@ protected:
   struct import_state_t {
     int state;
     int peer;
+    uint64_t tid;
     set<int> bystanders;
     list<dirfrag_t> bound_ls;
     list<ScatterLock*> updated_scatterlocks;
@@ -135,12 +138,10 @@ protected:
   };
 
   map<dirfrag_t, import_state_t>  import_state;
-  map<dirfrag_t,Message*>         import_pending_msg;
-
 
 public:
   // -- cons --
-  Migrator(MDS *m, MDCache *c) : mds(m), cache(c) {}
+  Migrator(MDS *m, MDCache *c) : mds(m), cache(c), last_export_tid(0) {}
 
   void dispatch(Message*);
 
@@ -257,7 +258,7 @@ public:
   void export_frozen(CDir *dir);
   void handle_export_prep_ack(MExportDirPrepAck *m);
   void export_go(CDir *dir);
-  void export_go_synced(CDir *dir);
+  void export_go_synced(CDir *dir, uint64_t tid);
   void export_try_cancel(CDir *dir);
   void export_reverse(CDir *dir);
   void export_notify_abort(CDir *dir, set<CDir*>& bounds);

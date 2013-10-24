@@ -24,8 +24,10 @@ class MExportDirAck : public Message {
   dirfrag_t get_dirfrag() { return dirfrag; }
   
   MExportDirAck() : Message(MSG_MDS_EXPORTDIRACK) {}
-  MExportDirAck(dirfrag_t i) :
-    Message(MSG_MDS_EXPORTDIRACK), dirfrag(i) { }
+  MExportDirAck(dirfrag_t df, uint64_t tid) :
+    Message(MSG_MDS_EXPORTDIRACK), dirfrag(df) {
+    set_tid(tid);
+  }
 private:
   ~MExportDirAck() {}
 
