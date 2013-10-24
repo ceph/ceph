@@ -27,9 +27,9 @@ class MExportDir : public Message {
   bufferlist client_map;
 
   MExportDir() : Message(MSG_MDS_EXPORTDIR) {}
-  MExportDir(dirfrag_t df) : 
-    Message(MSG_MDS_EXPORTDIR),
-    dirfrag(df) {
+  MExportDir(dirfrag_t df, uint64_t tid) :
+    Message(MSG_MDS_EXPORTDIR), dirfrag(df) {
+    set_tid(tid);
   }
 private:
   ~MExportDir() {}
