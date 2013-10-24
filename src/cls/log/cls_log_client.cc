@@ -107,7 +107,8 @@ public:
 };
 
 void cls_log_list(librados::ObjectReadOperation& op, utime_t& from, utime_t& to,
-                  string& in_marker, int max_entries, list<cls_log_entry>& entries,
+                  const string& in_marker, int max_entries,
+		  list<cls_log_entry>& entries,
                   string *out_marker, bool *truncated)
 {
   bufferlist inbl;

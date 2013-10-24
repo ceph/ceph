@@ -211,9 +211,8 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
 
   if (iter == keys.end())
     done = true;
-  else
-    ret.marker = marker;
 
+  ret.marker = marker;
   ret.truncated = !done;
 
   ::encode(ret, *out);
