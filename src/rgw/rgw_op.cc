@@ -269,7 +269,7 @@ static int read_policy(RGWRados *store, struct req_state *s,
   string oid = object;
   rgw_obj obj;
 
-  if (bucket_info.flags & BUCKET_SUSPENDED) {
+  if (!s->system_request && bucket_info.flags & BUCKET_SUSPENDED) {
     ldout(s->cct, 0) << "NOTICE: bucket " << bucket_info.bucket.name << " is suspended" << dendl;
     return -ERR_USER_SUSPENDED;
   }
@@ -292,7 +292,7 @@ static int read_policy(RGWRados *store, struct req_state *s,
     if (ret < 0)
       return ret;
     string& owner = bucket_policy.get_owner().get_id();
-    if (owner.compare(s->user.user_id) != 0 &&
+    if (!s->system_request && owner.compare(s->user.user_id) != 0 &&
         !bucket_policy.verify_permission(s->user.user_id, s->perm_mask, RGW_PERM_READ))
       ret = -EACCES;
     else
@@ -339,7 +339,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
       s->local_source = store->region.equals(region);
     }
   }
-    
+
   if (s->bucket_name_str.size()) {
     s->bucket_exists = true;
     if (s->bucket_instance_id.empty()) {
@@ -1212,7 +1212,7 @@ void RGWDeleteBucket::execute()
 {
   ret = -EINVAL;
 
-  if (!s->bucket_name)
+  if (s->bucket_name_str.empty())
     return;
 
   RGWObjVersionTracker ot;
@@ -1705,8 +1705,6 @@ bool RGWCopyObj::parse_copy_location(const char *src, string& bucket_name, strin
 
   url_decode(url_src, dec_src);
   src = dec_src.c_str();
-
-  ldout(s->cct, 15) << "decoded obj=" << src << dendl;
 
   if (*src == '/') ++src;
 

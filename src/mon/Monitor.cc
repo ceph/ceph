@@ -52,6 +52,7 @@
 
 #include "messages/MTimeCheck.h"
 #include "messages/MMonHealth.h"
+#include "messages/MPing.h"
 
 #include "common/strtol.h"
 #include "common/ceph_argparse.h"
@@ -241,9 +242,11 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
 
   boost::scoped_ptr<Formatter> f(new_formatter(format));
 
-  if (command == "mon_status")
+  if (command == "mon_status") {
     _mon_status(f.get(), ss);
-  else if (command == "quorum_status")
+    if (f)
+      f->flush(ss);
+  } else if (command == "quorum_status")
     _quorum_status(f.get(), ss);
   else if (command == "sync_force") {
     string validate;
@@ -1673,9 +1676,11 @@ void Monitor::_mon_status(Formatter *f, ostream& ss)
 
   f->close_section(); // mon_status
 
-  f->flush(ss);
-  if (free_formatter)
+  if (free_formatter) {
+    // flush formatter to ss and delete it iff we created the formatter
+    f->flush(ss);
     delete f;
+  }
 }
 
 void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
@@ -2176,6 +2181,8 @@ void Monitor::handle_command(MMonCommand *m)
     r = 0;
   } else if (prefix == "mon_status") {
     _mon_status(f.get(), ds);
+    if (f)
+      f->flush(ds);
     rdata.append(ds);
     rs = "";
     r = 0;
@@ -2585,6 +2592,10 @@ bool Monitor::_ms_dispatch(Message *m)
     // of assessing whether we should handle it or not.
     if (!src_is_mon && (m->get_type() != CEPH_MSG_AUTH &&
 			m->get_type() != CEPH_MSG_MON_GET_MAP)) {
+      if (m->get_type() == CEPH_MSG_PING) {
+        // let it go through and be dispatched immediately!
+        return dispatch(s, m, false);
+      }
       dout(1) << __func__ << " dropping stray message " << *m
         << " from " << m->get_source_inst() << dendl;
       return false;
@@ -2797,11 +2808,41 @@ bool Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
       health_monitor->dispatch(static_cast<MMonHealth *>(m));
       break;
 
+    case CEPH_MSG_PING:
+      handle_ping(static_cast<MPing*>(m));
+      break;
+
     default:
       ret = false;
   }
 
   return ret;
+}
+
+void Monitor::handle_ping(MPing *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+  MPing *reply = new MPing;
+  entity_inst_t inst = m->get_source_inst();
+  bufferlist payload;
+  Formatter *f = new JSONFormatter(true);
+  f->open_object_section("pong");
+
+  string health_str;
+  get_health(health_str, NULL, f);
+  {
+    stringstream ss;
+    _mon_status(f, ss);
+  }
+
+  f->close_section();
+  stringstream ss;
+  f->flush(ss);
+  ::encode(ss.str(), payload);
+  reply->set_payload(payload);
+  dout(10) << __func__ << " reply payload len " << reply->get_payload().length() << dendl;
+  messenger->send_message(reply, inst);
+  m->put();
 }
 
 void Monitor::timecheck_start()

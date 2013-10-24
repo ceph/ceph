@@ -19,6 +19,10 @@ class Error(Exception):
     """ `Error` class, derived from `Exception` """
     pass
 
+class InterruptedOrTimeoutError(Error):
+    """ `InterruptedOrTimeoutError` class, derived from `Error` """
+    pass
+
 class PermissionError(Error):
     """ `PermissionError` class, derived from `Error` """
     pass
@@ -63,6 +67,10 @@ class LogicError(Error):
     """ `` class, derived from `Error` """
     pass
 
+class TimedOut(Error):
+    """ `TimedOut` class, derived from `Error` """
+    pass
+
 def make_ex(ret, msg):
     """
     Translate a librados return code into an exception.
@@ -80,7 +88,9 @@ def make_ex(ret, msg):
         errno.EIO       : IOError,
         errno.ENOSPC    : NoSpace,
         errno.EEXIST    : ObjectExists,
-        errno.ENODATA   : NoData
+        errno.ENODATA   : NoData,
+        errno.EINTR     : InterruptedOrTimeoutError,
+        errno.ETIMEDOUT : TimedOut
         }
     ret = abs(ret)
     if ret in errors:
@@ -355,6 +365,37 @@ Rados object in state %s." % (self.state))
                             (self.cluster, c_char_p(option), c_char_p(val)))
         if (ret != 0):
             raise make_ex(ret, "error calling conf_set")
+
+
+    def ping_monitor(self, mon_id):
+      """
+      Ping a monitor to assess liveness
+
+      May be used as a simply way to assess liveness, or to obtain
+      informations about the monitor in a simple way even in the
+      absence of quorum.
+
+      :param mon_id: the ID portion of the monitor's name (i.e., mon.<ID>)
+      :type mon_id: str
+      :returns: the string reply from the monitor
+      """
+
+      self.require_state("configuring", "connected")
+
+      outstrp = pointer(pointer(c_char()))
+      outstrlen = c_long()
+
+      ret = run_in_thread(self.librados.rados_ping_monitor,
+                          (self.cluster, c_char_p(mon_id),
+                           outstrp, byref(outstrlen)))
+
+      my_outstr = outstrp.contents[:(outstrlen.value)]
+      if outstrlen.value:
+        run_in_thread(self.librados.rados_buffer_free, (outstrp.contents,))
+
+      if ret != 0:
+        raise make_ex(ret, "error calling ping_monitor")
+      return my_outstr
 
     def connect(self, timeout=0):
         """

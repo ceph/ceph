@@ -906,7 +906,7 @@ int RGWListBucketMultiparts_ObjStore::get_params()
 
 int RGWDeleteMultiObj_ObjStore::get_params()
 {
-  bucket_name = s->bucket_name;
+  bucket_name = s->bucket_name_str;
 
   if (bucket_name.empty()) {
     ret = -EINVAL;
@@ -1060,6 +1060,7 @@ int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
     break;
   case OP_PUT:
   case OP_POST:
+  case OP_COPY:
     /* is it a 'multi-object delete' request? */
     if (s->info.request_params == "delete") {
       only_bucket = true;
@@ -1077,8 +1078,6 @@ int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
   case OP_DELETE:
     only_bucket = true;
     break;
-  case OP_COPY: // op itself will read and verify the permissions
-    return 0;
   case OP_OPTIONS:
     only_bucket = true;
     break;

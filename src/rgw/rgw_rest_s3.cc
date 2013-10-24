@@ -250,7 +250,7 @@ void RGWListBucket_ObjStore_S3::send_response()
 
   s->formatter->open_object_section_in_ns("ListBucketResult",
 					  "http://s3.amazonaws.com/doc/2006-03-01/");
-  s->formatter->dump_string("Name", s->bucket_name);
+  s->formatter->dump_string("Name", s->bucket_name_str);
   if (!prefix.empty())
     s->formatter->dump_string("Prefix", prefix);
   s->formatter->dump_string("Marker", marker);
@@ -1085,59 +1085,6 @@ int RGWPostObj_ObjStore_S3::get_data(bufferlist& bl)
   return bl.length();
 }
 
-static void escape_char(char c, string& dst)
-{
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%%%.2X", (unsigned int)c);
-  dst.append(buf);
-}
-
-static bool char_needs_url_encoding(char c)
-{
-  if (c < 0x20 || c >= 0x7f)
-    return true;
-
-  switch (c) {
-    case 0x20:
-    case 0x22:
-    case 0x23:
-    case 0x25:
-    case 0x26:
-    case 0x2B:
-    case 0x2C:
-    case 0x2F:
-    case 0x3A:
-    case 0x3B:
-    case 0x3C:
-    case 0x3E:
-    case 0x3D:
-    case 0x3F:
-    case 0x40:
-    case 0x5B:
-    case 0x5D:
-    case 0x5C:
-    case 0x5E:
-    case 0x60:
-    case 0x7B:
-    case 0x7D:
-      return true;
-  }
-  return false;
-}
-
-static void url_escape(const string& src, string& dst)
-{
-  const char *p = src.c_str();
-  for (unsigned i = 0; i < src.size(); i++, p++) {
-    if (char_needs_url_encoding(*p)) {
-      escape_char(*p, dst);
-      continue;
-    }
-
-    dst.append(p, 1);
-  }
-}
-
 void RGWPostObj_ObjStore_S3::send_response()
 {
   if (ret == 0 && parts.count("success_action_redirect")) {
@@ -1154,11 +1101,10 @@ void RGWPostObj_ObjStore_S3::send_response()
 
     string etag_url;
 
-    url_escape(s->bucket_name, bucket);
-    url_escape(s->object_str, key);
-    url_escape(etag_str, etag_url);
+    url_encode(s->bucket_name_str, bucket);
+    url_encode(s->object_str, key);
+    url_encode(etag_str, etag_url);
 
-    
     redirect.append("?bucket=");
     redirect.append(bucket);
     redirect.append("&key=");
@@ -1204,8 +1150,8 @@ done:
     s->formatter->open_object_section("PostResponse");
     if (g_conf->rgw_dns_name.length())
       s->formatter->dump_format("Location", "%s/%s", s->info.script_uri.c_str(), s->object_str.c_str());
-    s->formatter->dump_string("Bucket", s->bucket_name);
-    s->formatter->dump_string("Key", s->object_str.c_str());
+    s->formatter->dump_string("Bucket", s->bucket_name_str);
+    s->formatter->dump_string("Key", s->object_str);
     s->formatter->close_section();
   }
   s->err.message = err_msg;
@@ -1254,18 +1200,8 @@ int RGWCopyObj_ObjStore_S3::get_params()
   if_match = s->info.env->get("HTTP_X_AMZ_COPY_IF_MATCH");
   if_nomatch = s->info.env->get("HTTP_X_AMZ_COPY_IF_NONE_MATCH");
 
-  const char *req_src = s->copy_source;
-  if (!req_src) {
-    ldout(s->cct, 0) << "copy source is NULL" << dendl;
-    return -EINVAL;
-  }
-
-  ret = parse_copy_location(req_src, src_bucket_name, src_object);
-  if (!ret) {
-    ldout(s->cct, 0) << "failed to parse copy location" << dendl;
-    return -EINVAL;
-  }
-
+  src_bucket_name = s->src_bucket_name;
+  src_object = s->src_object;
   dest_bucket_name = s->bucket.name;
   dest_object = s->object_str;
 
@@ -1529,7 +1465,7 @@ void RGWInitMultipart_ObjStore_S3::send_response()
     dump_start(s);
     s->formatter->open_object_section_in_ns("InitiateMultipartUploadResult",
 		  "http://s3.amazonaws.com/doc/2006-03-01/");
-    s->formatter->dump_string("Bucket", s->bucket_name);
+    s->formatter->dump_string("Bucket", s->bucket_name_str);
     s->formatter->dump_string("Key", s->object);
     s->formatter->dump_string("UploadId", upload_id);
     s->formatter->close_section();
@@ -1548,8 +1484,8 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
     s->formatter->open_object_section_in_ns("CompleteMultipartUploadResult",
 			  "http://s3.amazonaws.com/doc/2006-03-01/");
     if (g_conf->rgw_dns_name.length())
-      s->formatter->dump_format("Location", "%s.%s", s->bucket_name, g_conf->rgw_dns_name.c_str());
-    s->formatter->dump_string("Bucket", s->bucket_name);
+      s->formatter->dump_format("Location", "%s.%s", s->bucket_name_str.c_str(), g_conf->rgw_dns_name.c_str());
+    s->formatter->dump_string("Bucket", s->bucket_name_str);
     s->formatter->dump_string("Key", s->object);
     s->formatter->dump_string("ETag", etag);
     s->formatter->close_section();
@@ -1586,7 +1522,7 @@ void RGWListMultipart_ObjStore_S3::send_response()
     for (i = 0, test_iter = iter; test_iter != parts.end() && i < max_parts; ++test_iter, ++i) {
       cur_max = test_iter->first;
     }
-    s->formatter->dump_string("Bucket", s->bucket_name);
+    s->formatter->dump_string("Bucket", s->bucket_name_str);
     s->formatter->dump_string("Key", s->object);
     s->formatter->dump_string("UploadId", upload_id);
     s->formatter->dump_string("StorageClass", "STANDARD");
@@ -1634,7 +1570,7 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
     return;
 
   s->formatter->open_object_section("ListMultipartUploadsResult");
-  s->formatter->dump_string("Bucket", s->bucket_name);
+  s->formatter->dump_string("Bucket", s->bucket_name_str);
   if (!prefix.empty())
     s->formatter->dump_string("ListMultipartUploadsResult.Prefix", prefix);
   string& key_marker = marker.get_key();
@@ -1920,9 +1856,8 @@ int RGWHandler_ObjStore_S3::init_from_header(struct req_state *s, int default_fo
     first = req;
   }
 
-  if (!s->bucket_name) {
+  if (s->bucket_name_str.empty()) {
     s->bucket_name_str = first;
-    s->bucket_name = strdup(s->bucket_name_str.c_str());
 
     if (pos >= 0) {
       string encoded_obj_str = req.substr(pos+1);
@@ -1999,7 +1934,7 @@ int RGWHandler_ObjStore_S3::validate_bucket_name(const string& bucket, bool rela
 
 int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClientIO *cio)
 {
-  dout(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (s->bucket_name ? s->bucket_name : "<NULL>") << dendl;
+  dout(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (!s->bucket_name_str.empty() ? s->bucket_name_str : "<NULL>") << dendl;
 
   bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
   int ret = validate_bucket_name(s->bucket_name_str, relaxed_names);
@@ -2016,6 +1951,13 @@ int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClient
   s->has_acl_header = s->info.env->exists_prefix("HTTP_X_AMZ_GRANT");
 
   s->copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
+  if (s->copy_source) {
+    ret = RGWCopyObj::parse_copy_location(s->copy_source, s->src_bucket_name, s->src_object);
+    if (!ret) {
+      ldout(s->cct, 0) << "failed to parse copy location" << dendl;
+      return -EINVAL;
+    }
+  }
 
   s->dialect = "s3";
 
@@ -2269,7 +2211,7 @@ RGWHandler *RGWRESTMgr_S3::get_handler(struct req_state *s)
   if (ret < 0)
     return NULL;
 
-  if (!s->bucket_name)
+  if (s->bucket_name_str.empty())
     return new RGWHandler_ObjStore_Service_S3;
 
   if (!s->object)
