@@ -1888,7 +1888,7 @@ next:
 
       bool truncated;
       do {
-        int ret = meta_log->list_entries(handle, 1000, entries, &truncated);
+	  int ret = meta_log->list_entries(handle, 1000, entries, NULL, &truncated);
         if (ret < 0) {
           cerr << "ERROR: meta_log->list_entries(): " << cpp_strerror(-ret) << std::endl;
           return -ret;

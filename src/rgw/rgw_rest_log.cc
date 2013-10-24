@@ -79,9 +79,9 @@ void RGWOp_MDLog_List::execute() {
 
   meta_log->init_list_entries(shard_id, ut_st, ut_et, marker, &handle);
 
-  bool truncated;
   do {
-    http_ret = meta_log->list_entries(handle, max_entries, entries, &truncated);
+    http_ret = meta_log->list_entries(handle, max_entries, entries,
+				      &last_marker, &truncated);
     if (http_ret < 0) 
       break;
 
@@ -100,12 +100,18 @@ void RGWOp_MDLog_List::send_response() {
   if (http_ret < 0)
     return;
 
-  s->formatter->open_array_section("entries");
-  for (list<cls_log_entry>::iterator iter = entries.begin(); 
-       iter != entries.end(); ++iter) {
-    cls_log_entry& entry = *iter;
-    store->meta_mgr->dump_log_entry(entry, s->formatter);
-    flusher.flush();
+  s->formatter->open_object_section("log_entries");
+  s->formatter->dump_string("marker", last_marker);
+  s->formatter->dump_bool("truncated", truncated);
+  {
+    s->formatter->open_array_section("entries");
+    for (list<cls_log_entry>::iterator iter = entries.begin();
+	 iter != entries.end(); ++iter) {
+      cls_log_entry& entry = *iter;
+      store->meta_mgr->dump_log_entry(entry, s->formatter);
+      flusher.flush();
+    }
+    s->formatter->close_section();
   }
   s->formatter->close_section();
   flusher.flush();

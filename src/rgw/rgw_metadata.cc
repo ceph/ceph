@@ -109,9 +109,10 @@ void RGWMetadataLog::complete_list_entries(void *handle) {
 }
 
 int RGWMetadataLog::list_entries(void *handle,
-                 int max_entries,
-                 list<cls_log_entry>& entries, 
-                 bool *truncated) {
+				 int max_entries,
+				 list<cls_log_entry>& entries,
+				 string *last_marker,
+				 bool *truncated) {
   LogListCtx *ctx = static_cast<LogListCtx *>(handle);
 
   if (!max_entries) {
@@ -120,7 +121,8 @@ int RGWMetadataLog::list_entries(void *handle,
   }
 
   int ret = store->time_log_list(ctx->cur_oid, ctx->from_time, ctx->end_time,
-                                 max_entries, entries, ctx->marker, truncated);
+				 max_entries, entries, ctx->marker,
+				 last_marker, truncated);
   if ((ret < 0) && (ret != -ENOENT))
     return ret;
 
