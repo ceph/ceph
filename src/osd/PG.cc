@@ -1036,13 +1036,19 @@ bool PG::choose_acting(int& newest_update_osd)
   //We can only get here when new interval has arrived and
   //we've accepted the acting set.  Now we can create
   //actingbackfill and backfill_targets vectors.
+  dout(0) << "choose_acting dump actingonly" << actingonly << dendl;
+  dout(0) << "choose_acting dump actingbackfill" << actingbackfill << dendl;
+  dout(0) << "choose_acting dump backfill_targets" << backfill_targets << dendl;
+  dout(0) << "choose_acting dump backfill" << backfill << dendl;
+  dout(0) << "choose_acting dump stray_set " << stray_set << dendl;
   actingbackfill = actingonly;
   actingbackfill.insert(actingbackfill.end(), backfill.begin(), backfill.end());
   assert(backfill_targets.empty() || backfill_targets == backfill);
   if (backfill_targets.empty()) {
     backfill_targets = backfill;
     for (unsigned i = 0; i < backfill.size() ; ++i) {
-      stray_set.erase(backfill[i]);
+      if (stray_set.erase(backfill[i]) == 1)
+        dout(0) << "choose_acting removed " << backfill[i] << " from stray_set" << dendl;
     }
   } else {
     //Will not change if already set because up would have had to change
