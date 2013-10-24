@@ -714,11 +714,10 @@ static void escape_char(char c, string& dst)
 
 static bool char_needs_url_encoding(char c)
 {
-  if (c < 0x20 || c >= 0x7f)
+  if (c <= 0x20 || c >= 0x7f)
     return true;
 
   switch (c) {
-    case 0x20:
     case 0x22:
     case 0x23:
     case 0x25:
