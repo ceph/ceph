@@ -3424,7 +3424,7 @@ int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, buff
     }
     bp = bufferptr(got.begin()->second.c_str(),
 		   got.begin()->second.length());
-    r = 0;
+    r = bp.length();
   }
  out:
   dout(10) << "getattr " << cid << "/" << oid << " '" << name << "' = " << r << dendl;
