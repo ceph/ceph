@@ -1989,7 +1989,7 @@ struct SnapSet {
   map<snapid_t, interval_set<uint64_t> > clone_overlap;  // overlap w/ next newest
   map<snapid_t, uint64_t> clone_size;
 
-  SnapSet() : head_exists(false) {}
+  SnapSet() : seq(0), head_exists(false) {}
   SnapSet(bufferlist& bl) {
     bufferlist::iterator p = bl.begin();
     decode(p);
