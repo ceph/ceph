@@ -4229,11 +4229,6 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   
   const hobject_t& soid = ctx->obs->oi.soid;
 
-  // we'll need this to log
-  eversion_t old_version = ctx->obs->oi.version;
-
-  bool head_existed = ctx->obs->exists;
-
   // valid snap context?
   if (!ctx->snapc.is_valid()) {
     dout(10) << " invalid snapc " << ctx->snapc << dendl;
@@ -4273,7 +4268,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   assert(ctx->new_obs.exists == ctx->new_snapset.head_exists);
 
   if (ctx->new_obs.exists) {
-    if (!head_existed) {
+    if (!ctx->obs->exists) {
       // if we logically recreated the head, remove old _snapdir object
       hobject_t snapoid(soid.oid, soid.get_key(), CEPH_SNAPDIR, soid.hash,
 			info.pgid.pool(), soid.get_namespace());
@@ -4283,7 +4278,9 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 	ctx->op_t.remove(coll, snapoid);
 	dout(10) << " removing old " << snapoid << dendl;
 
-	ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::DELETE, snapoid, ctx->at_version, old_version,
+	ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::DELETE, snapoid,
+					  ctx->at_version,
+					  ctx->obs->oi.version,
 					  0, osd_reqid_t(), ctx->mtime));
  	ctx->at_version.version++;
 
@@ -4296,7 +4293,9 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 		      info.pgid.pool(), soid.get_namespace());
     dout(10) << " final snapset " << ctx->new_snapset
 	     << " in " << snapoid << dendl;
-    ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, snapoid, ctx->at_version, old_version,
+    ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, snapoid,
+				      ctx->at_version,
+				      ctx->obs->oi.version,
 				      0, osd_reqid_t(), ctx->mtime));
 
     ctx->snapset_obc = get_object_context(snapoid, true);
@@ -4330,7 +4329,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   if (ctx->new_obs.exists) {
     // on the head object
     ctx->new_obs.oi.version = ctx->at_version;
-    ctx->new_obs.oi.prior_version = old_version;
+    ctx->new_obs.oi.prior_version = ctx->obs->oi.version;
     ctx->new_obs.oi.last_reqid = ctx->reqid;
     if (ctx->mtime != utime_t()) {
       ctx->new_obs.oi.mtime = ctx->mtime;
@@ -4352,8 +4351,10 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   int logopcode = pg_log_entry_t::MODIFY;
   if (!ctx->new_obs.exists)
     logopcode = pg_log_entry_t::DELETE;
-  ctx->log.push_back(pg_log_entry_t(logopcode, soid, ctx->at_version, old_version,
-				ctx->user_at_version, ctx->reqid, ctx->mtime));
+  ctx->log.push_back(pg_log_entry_t(logopcode, soid, ctx->at_version,
+				    ctx->obs.oi.version,
+				    ctx->user_at_version, ctx->reqid,
+				    ctx->mtime));
 
   // apply new object state.
   ctx->obc->obs = ctx->new_obs;
