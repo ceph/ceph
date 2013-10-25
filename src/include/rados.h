@@ -347,6 +347,7 @@ enum {
 	CEPH_OSD_FLAG_LOCALIZE_READS = 0x2000,  /* read from nearby replica, if any */
 	CEPH_OSD_FLAG_RWORDERED =      0x4000,  /* order wrt concurrent reads */
 	CEPH_OSD_FLAG_IGNORE_OVERLAY = 0x8000,  /* ignore pool overlay */
+	CEPH_OSD_FLAG_SKIPRWLOCKS =   0x10000,  /* skip rw locks */
 };
 
 enum {
