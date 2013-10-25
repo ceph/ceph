@@ -101,13 +101,14 @@ public:
     ObjectContextRef obc;
     hobject_t src;
     object_locator_t oloc;
-    version_t version;
+    version_t user_version;
 
     tid_t objecter_tid;
 
     object_copy_cursor_t cursor;
     uint64_t size;
     utime_t mtime;
+    string category;
     map<string,bufferlist> attrs;
     bufferlist data;
     map<string,bufferlist> omap;
@@ -119,7 +120,7 @@ public:
 
     CopyOp(CopyCallback *cb_, ObjectContextRef _obc, hobject_t s, object_locator_t l,
            version_t v, const hobject_t& dest)
-      : cb(cb_), obc(_obc), src(s), oloc(l), version(v),
+      : cb(cb_), obc(_obc), src(s), oloc(l), user_version(v),
 	objecter_tid(0),
 	size(0),
 	rval(-1),
@@ -414,6 +415,7 @@ public:
    * State on the PG primary associated with the replicated mutation
    */
   class RepGather {
+    bool is_done;
   public:
     xlist<RepGather*>::item queue_item;
     int nref;
@@ -426,7 +428,7 @@ public:
 
     tid_t rep_tid;
 
-    bool applying, applied, aborted, done;
+    bool applying, applied, aborted;
 
     set<int>  waitfor_ack;
     //set<int>  waitfor_nvram;
@@ -435,6 +437,8 @@ public:
     //bool sent_nvram;
     bool sent_disk;
     
+    Context *ondone; ///< if set, this Context will be activated when repop is done
+
     utime_t   start;
     
     eversion_t          pg_local_last_complete;
@@ -444,14 +448,16 @@ public:
     
     RepGather(OpContext *c, ObjectContextRef pi, tid_t rt, 
 	      eversion_t lc) :
+      is_done(false),
       queue_item(this),
       nref(1),
       ctx(c), obc(pi),
       rep_tid(rt), 
-      applying(false), applied(false), aborted(false), done(false),
+      applying(false), applied(false), aborted(false),
       sent_ack(false),
       //sent_nvram(false),
       sent_disk(false),
+      ondone(NULL),
       pg_local_last_complete(lc),
       queue_snap_trimmer(false) { }
 
@@ -467,6 +473,14 @@ public:
 	delete this;
 	//generic_dout(0) << "deleting " << this << dendl;
       }
+    }
+    void mark_done() {
+      is_done = true;
+      if (ondone)
+	ondone->complete(0);
+    }
+    bool done() {
+      return is_done;
     }
   };
 
@@ -974,7 +988,19 @@ protected:
   // -- copyfrom --
   map<hobject_t, CopyOpRef> copy_ops;
 
-  int start_copy(CopyCallback *cb, ObjectContextRef obc, hobject_t src,
+  int fill_in_copy_get(bufferlist::iterator& bp, OSDOp& op,
+                       object_info_t& oi, bool classic);
+  /**
+   * To copy an object, call start_copy.
+   *
+   * @param cb: The CopyCallback to be activated when the copy is complete
+   * @param obc: The ObjectContext we are copying into
+   * @param src: The source object
+   * @param oloc: the source object locator
+   * @param version: the version of the source object to copy (0 for any)
+   * @param temp_dest_oid: the temporary object to use for large objects
+   */
+  void start_copy(CopyCallback *cb, ObjectContextRef obc, hobject_t src,
                  object_locator_t oloc, version_t version,
                  const hobject_t& temp_dest_oid);
   void process_copy_chunk(hobject_t oid, tid_t tid, int r);
@@ -1129,6 +1155,17 @@ public:
 
   void wait_for_blocked_object(const hobject_t& soid, OpRequestRef op);
   void kick_object_context_blocked(ObjectContextRef obc);
+
+  struct C_KickBlockedObject : public Context {
+    ObjectContextRef obc;
+    ReplicatedPG *pg;
+    C_KickBlockedObject(ObjectContextRef obc_, ReplicatedPG *pg_) :
+      obc(obc_), pg(pg_) {}
+  protected:
+    void finish(int r) {
+      pg->kick_object_context_blocked(obc);
+    }
+  };
 
   void mark_all_unfound_lost(int what);
   eversion_t pick_newest_available(const hobject_t& oid);
