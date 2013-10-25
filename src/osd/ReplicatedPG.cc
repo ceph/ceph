@@ -4553,7 +4553,8 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 
 void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
 {
-  dout(10) << __func__ << " tid " << tid << " " << cpp_strerror(r) << dendl;
+  dout(10) << __func__ << " " << oid << " tid " << tid
+	   << " " << cpp_strerror(r) << dendl;
   map<hobject_t,CopyOpRef>::iterator p = copy_ops.find(oid);
   if (p == copy_ops.end()) {
     dout(10) << __func__ << " no copy_op found" << dendl;
