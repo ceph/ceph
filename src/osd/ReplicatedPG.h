@@ -403,6 +403,13 @@ public:
 	snapset = &_ssc->snapset;
       }
     }
+    void reset_obs(ObjectContextRef obc) {
+      new_obs = ObjectState(obc->obs.oi, obc->obs.exists);
+      if (obc->ssc) {
+	new_snapset = obc->ssc->snapset;
+	snapset = &obc->ssc->snapset;
+      }
+    }
     ~OpContext() {
       assert(!clone_obc);
       assert(lock_to_release == NONE);
