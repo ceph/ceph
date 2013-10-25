@@ -4278,6 +4278,7 @@ int ReplicatedPG::fill_in_copy_get(bufferlist::iterator& bp, OSDOp& osd_op,
   // size, mtime
   reply_obj.size = oi.size;
   reply_obj.mtime = oi.mtime;
+  reply_obj.category = oi.category;
 
   // attrs
   map<string,bufferlist>& out_attrs = reply_obj.attrs;

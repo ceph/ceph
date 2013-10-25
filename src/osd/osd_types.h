@@ -1878,6 +1878,7 @@ struct object_copy_data_t {
   map<string, bufferlist> attrs;
   bufferlist data;
   map<string, bufferlist> omap;
+  string category;
 public:
   object_copy_data_t() : size((uint64_t)-1) {}
 
