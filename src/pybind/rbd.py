@@ -432,7 +432,7 @@ class Image(object):
     def parent_info(self):
         ret = -errno.ERANGE
         size = 8
-        while ret == -errno.ERANGE and size < 128:
+        while ret == -errno.ERANGE and size <= 4096:
             pool = create_string_buffer(size)
             name = create_string_buffer(size)
             snapname = create_string_buffer(size)
