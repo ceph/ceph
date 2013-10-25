@@ -233,6 +233,7 @@ public:
   struct FlushOp {
     ObjectContextRef obc;
     OpRequestRef op;            ///< rados request that triggered this
+    list<OpRequestRef> dup_ops; ///< dup flush requests
     version_t flushed_version;  ///< user version we are flushing
     tid_t objecter_tid;         ///< copy-from request tid
     int rval;                   ///< copy-from result
