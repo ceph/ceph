@@ -4707,45 +4707,29 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
 
   RepGather *repop = simple_repop_create(obc);
   OpContext *tctx = repop->ctx;
+  tctx->at_version = get_next_version();
 
-  object_stat_sum_t delta;
-  ++delta.num_objects;
-  obc->obs.exists = true;
+  ++tctx->delta_stats.num_objects;
+  tctx->new_obs.exists = true;
+  tctx->new_snapset.head_exists = true;
+
   if (whiteout) {
     // create a whiteout
     tctx->op_t.touch(coll, soid);
-    obc->obs.oi.set_flag(object_info_t::FLAG_WHITEOUT);
+    tctx->new_obs.oi.set_flag(object_info_t::FLAG_WHITEOUT);
   } else {
     tctx->op_t.swap(results->final_tx);
     if (results->started_temp_obj) {
       tctx->discard_temp_oid = temp_obj;
     }
-    delta.num_bytes += results->object_size;
-    obc->obs.oi.category = results->category;
+    tctx->delta_stats.num_bytes += results->object_size;
+    tctx->new_obs.oi.category = results->category;
     tctx->user_at_version = results->user_version;
   }
-  info.stats.stats.add(delta, obc->obs.oi.category);
-  tctx->at_version.epoch = get_next_version();
-
-  tctx->log.push_back(pg_log_entry_t(
-	  pg_log_entry_t::MODIFY,
-	  soid,
-	  tctx->at_version,
-	  tctx->obs->oi.version,
-	  tctx->user_at_version,
-	  osd_reqid_t(),
-	  repop->ctx->mtime));
-
-  // set object and snapset attrs
-  bufferlist bv(sizeof(tctx->new_obs.oi));
-  ::encode(tctx->new_obs.oi, bv);
-  tctx->op_t.setattr(coll, soid, OI_ATTR, bv);
-
-  bufferlist bss;
-  ::encode(tctx->new_snapset, bss);
-  tctx->op_t.setattr(coll, soid, SS_ATTR, bss);
 
   repop->ondone = new C_KickBlockedObject(obc, this);
+
+  finish_ctx(tctx);
   simple_repop_submit(repop);
 }
 
