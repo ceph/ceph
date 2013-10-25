@@ -79,6 +79,8 @@ public:
 					map<client_t,uint64_t>& sseqmap);
   void finish_force_open_sessions(map<client_t,entity_inst_t> &cm,
 					map<client_t,uint64_t>& sseqmap);
+  void flush_client_sessions(set<client_t>& client_set, C_GatherBuilder& gather);
+  void finish_flush_session(Session *session, version_t seq);
   void terminate_sessions();
   void find_idle_sessions();
   void kill_session(Session *session);
@@ -238,6 +240,7 @@ public:
   void handle_slave_rename_prep(MDRequest *mdr);
   void handle_slave_rename_prep_ack(MDRequest *mdr, MMDSSlaveRequest *m);
   void handle_slave_rename_notify_ack(MDRequest *mdr, MMDSSlaveRequest *m);
+  void _slave_rename_sessions_flushed(MDRequest *mdr);
   void _logged_slave_rename(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void _commit_slave_rename(MDRequest *mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void do_rename_rollback(bufferlist &rbl, int master, MDRequest *mdr, bool finish_mdr=false);
