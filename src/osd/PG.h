@@ -333,7 +333,7 @@ public:
 
   // primary state
  public:
-  vector<int> up, acting, want_acting;
+  vector<int> up, actingonly, want_acting, actingbackfill;
   map<int,eversion_t> peer_last_complete_ondisk;
   eversion_t  min_last_complete_ondisk;  // up: min over last_complete_ondisk, peer_last_complete_ondisk
   eversion_t  pg_trim_to;
@@ -504,14 +504,18 @@ protected:
   
   BackfillInterval backfill_info;
   BackfillInterval peer_backfill_info;
-  int backfill_target;
+  vector<int> backfill_targets;
   bool backfill_reserved;
   bool backfill_reserving;
 
   friend class OSD;
 
 public:
+  //Compatibility with single backfill target code
   int get_backfill_target() const {
+    int backfill_target = -1;
+    if (backfill_targets.size() > 0)
+      backfill_target = backfill_targets[0];
     return backfill_target;
   }
 
@@ -556,14 +560,20 @@ public:
   void clear_primary_state();
 
  public:
+  //This function not used
   bool is_acting(int osd) const { 
-    for (unsigned i=0; i<acting.size(); i++)
-      if (acting[i] == osd) return true;
+    for (unsigned i=0; i<actingonly.size(); i++)
+      if (actingonly[i] == osd) return true;
     return false;
   }
   bool is_up(int osd) const { 
     for (unsigned i=0; i<up.size(); i++)
       if (up[i] == osd) return true;
+    return false;
+  }
+  bool is_actingbackfill(int osd) const {
+    for (unsigned i=0; i<actingbackfill.size(); i++)
+      if (actingbackfill[i] == osd) return true;
     return false;
   }
   
@@ -587,10 +597,11 @@ public:
 
   bool calc_min_last_complete_ondisk() {
     eversion_t min = last_complete_ondisk;
-    for (unsigned i=1; i<acting.size(); i++) {
-      if (peer_last_complete_ondisk.count(acting[i]) == 0)
+    assert(actingbackfill.size() > 0);
+    for (unsigned i=1; i<actingbackfill.size(); i++) {
+      if (peer_last_complete_ondisk.count(actingbackfill[i]) == 0)
 	return false;   // we don't have complete info
-      eversion_t a = peer_last_complete_ondisk[acting[i]];
+      eversion_t a = peer_last_complete_ondisk[actingbackfill[i]];
       if (a < min)
 	min = a;
     }
@@ -622,7 +633,7 @@ public:
   void trim_write_ahead();
 
   map<int, pg_info_t>::const_iterator find_best_info(const map<int, pg_info_t> &infos) const;
-  bool calc_acting(int& newest_update_osd, vector<int>& want) const;
+  bool calc_acting(int& newest_update_osd, vector<int>& want, vector<int>& backfill) const;
   bool choose_acting(int& newest_update_osd);
   void build_might_have_unfound();
   void replay_queued_ops();
@@ -1637,9 +1648,13 @@ public:
 
  public:
   pg_t       get_pgid() const { return info.pgid; }
+#if 0
+  //Not used
   int        get_nrep() const { return acting.size(); }
+#endif
 
-  int        get_primary() { return acting.empty() ? -1:acting[0]; }
+  // Rename actingonly -> acting
+  int        get_primary() { return actingonly.empty() ? -1:actingonly[0]; }
   
   int        get_role() const { return role; }
   void       set_role(int r) { role = r; }
