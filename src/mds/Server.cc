@@ -256,10 +256,33 @@ void Server::handle_client_session(MClientSession *m)
     }
     break;
 
+  case CEPH_SESSION_FLUSHMSG_ACK:
+    finish_flush_session(session, m->get_seq());
+    break;
+
   default:
     assert(0);
   }
   m->put();
+}
+
+void Server::flush_client_sessions(set<client_t>& client_set, C_GatherBuilder& gather)
+{
+  for (set<client_t>::iterator p = client_set.begin(); p != client_set.end(); ++p) {
+    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
+    assert(session);
+    if (session->is_stale())
+      continue;
+    version_t seq = session->wait_for_flush(gather.new_sub());
+    mds->send_message_client(new MClientSession(CEPH_SESSION_FLUSHMSG, seq), session);
+  }
+}
+
+void Server::finish_flush_session(Session *session, version_t seq)
+{
+  list<Context*> finished;
+  session->finish_flush(seq, finished);
+  mds->queue_waiters(finished);
 }
 
 void Server::_session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
@@ -439,6 +462,7 @@ void Server::find_idle_sessions()
     mds->locker->revoke_stale_caps(session);
     mds->locker->remove_stale_leases(session);
     mds->send_message_client(new MClientSession(CEPH_SESSION_STALE, session->get_push_seq()), session);
+    finish_flush_session(session, session->get_push_seq());
   }
 
   // autoclose
@@ -523,6 +547,8 @@ void Server::journal_close_session(Session *session, int state)
     ++p;
     mdcache->request_kill(mdr);
   }
+
+  finish_flush_session(session, session->get_push_seq());
 }
 
 void Server::reconnect_clients()
@@ -6386,6 +6412,20 @@ public:
   }
 };
 
+class C_MDS_SlaveRenameSessionsFlushed : public Context {
+  Server *server;
+  MDRequest *mdr;
+public:
+  C_MDS_SlaveRenameSessionsFlushed(Server *s, MDRequest *r) :
+    server(s), mdr(r) {
+      mdr->get();
+    }
+  void finish(int r) {
+    server->_slave_rename_sessions_flushed(mdr);
+    mdr->put();
+  }
+};
+
 /* This function DOES put the mdr->slave_request before returning*/
 void Server::handle_slave_rename_prep(MDRequest *mdr)
 {
@@ -6485,6 +6525,18 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
 	    MMDSSlaveRequest::OP_RENAMENOTIFY);
 	mds->send_message_mds(notify, *p);
 	mdr->more()->waiting_on_slave.insert(*p);
+      }
+
+      // make sure clients have received all cap related messages
+      set<client_t> export_client_set;
+      mdcache->migrator->get_export_client_set(srcdnl->get_inode(), export_client_set);
+
+      C_GatherBuilder gather(g_ceph_context);
+      flush_client_sessions(export_client_set, gather);
+      if (gather.has_subs()) {
+	mdr->more()->waiting_on_slave.insert(-1);
+	gather.set_finisher(new C_MDS_SlaveRenameSessionsFlushed(this, mdr));
+	gather.activate();
       }
     }
 
@@ -7100,7 +7152,21 @@ void Server::handle_slave_rename_notify_ack(MDRequest *mdr, MMDSSlaveRequest *ac
   }
 }
 
+void Server::_slave_rename_sessions_flushed(MDRequest *mdr)
+{
+  dout(10) << "_slave_rename_sessions_flushed " << *mdr << dendl;
 
+  if (mdr->more()->waiting_on_slave.count(-1)) {
+    mdr->more()->waiting_on_slave.erase(-1);
+
+    if (mdr->more()->waiting_on_slave.empty()) {
+      if (mdr->slave_request)
+	dispatch_slave_request(mdr);
+    } else
+      dout(10) << " still waiting for rename notify acks from "
+	<< mdr->more()->waiting_on_slave << dendl;
+  }
+}
 
 // snaps
 /* This function takes responsibility for the passed mdr*/
