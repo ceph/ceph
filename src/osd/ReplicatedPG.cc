@@ -4842,7 +4842,6 @@ void ReplicatedPG::start_flush(ObjectContextRef obc, OpRequestRef op)
 
   map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(soid);
   if (p != flush_ops.end()) {
-    // FIXME: need to handle racing flushes
     FlushOpRef fop = p->second;
     if (fop->op == op) {
       try_flush_mark_clean(fop);
@@ -4853,7 +4852,16 @@ void ReplicatedPG::start_flush(ObjectContextRef obc, OpRequestRef op)
       fop->dup_ops.push_back(op);
       return;
     }
-    assert(0 == "don't handle multiple flushes yet");
+
+    // cancel current flush since it will fail anyway.
+    dout(20) << __func__ << " canceling previous flush; it will fail" << dendl;
+    if (fop->op)
+      osd->reply_op_error(fop->op, -EAGAIN);
+    while (!fop->dup_ops.empty()) {
+      osd->reply_op_error(fop->dup_ops.front(), -EAGAIN);
+      fop->dup_ops.pop_front();
+    }
+    cancel_flush(fop, false);
   }
 
   FlushOpRef fop(new FlushOp);
