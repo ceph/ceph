@@ -1147,6 +1147,10 @@ void ReplicatedPG::do_op(OpRequestRef op)
 bool ReplicatedPG::maybe_handle_cache(OpRequestRef op, ObjectContextRef obc,
                                       int r)
 {
+  if (obc.get() && obc->is_blocked()) {
+    // we're already doing something with this object
+    return false;
+  }
   switch(pool.info.cache_mode) {
   case pg_pool_t::CACHEMODE_NONE:
     return false;
@@ -3607,84 +3611,18 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
 
+    case CEPH_OSD_OP_COPY_GET_CLASSIC:
+      ++ctx->num_read;
+      result = fill_in_copy_get(bp, osd_op, oi, true);
+      if (result == -EINVAL)
+	goto fail;
+      break;
+
     case CEPH_OSD_OP_COPY_GET:
       ++ctx->num_read;
-      {
-	object_copy_cursor_t cursor;
-	uint64_t out_max;
-	try {
-	  ::decode(cursor, bp);
-	  ::decode(out_max, bp);
-	}
-	catch (buffer::error& e) {
-	  result = -EINVAL;
-	  goto fail;
-	}
-
-	// size, mtime
-	::encode(oi.size, osd_op.outdata);
-	::encode(oi.mtime, osd_op.outdata);
-
-	// attrs
-	map<string,bufferptr> out_attrs;
-	if (!cursor.attr_complete) {
-	  result = osd->store->getattrs(coll, soid, out_attrs, true);
-	  if (result < 0)
-	    break;
-	  cursor.attr_complete = true;
-	  dout(20) << " got attrs" << dendl;
-	}
-	::encode(out_attrs, osd_op.outdata);
-
-	int64_t left = out_max - osd_op.outdata.length();
-
-	// data
-	bufferlist bl;
-	if (left > 0 && !cursor.data_complete) {
-	  if (cursor.data_offset < oi.size) {
-	    result = osd->store->read(coll, oi.soid, cursor.data_offset, left, bl);
-	    if (result < 0)
-	      return result;
-	    assert(result <= left);
-	    left -= result;
-	    cursor.data_offset += result;
-	  }
-	  if (cursor.data_offset == oi.size) {
-	    cursor.data_complete = true;
-	    dout(20) << " got data" << dendl;
-	  }
-	}
-	::encode(bl, osd_op.outdata);
-
-	// omap
-	std::map<std::string,bufferlist> out_omap;
-	if (left > 0 && !cursor.omap_complete) {
-	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(coll, oi.soid);
-	  assert(iter);
-	  if (iter->valid()) {
-	    iter->upper_bound(cursor.omap_offset);
-	    for (; left > 0 && iter->valid(); iter->next()) {
-	      out_omap.insert(make_pair(iter->key(), iter->value()));
-	      left -= iter->key().length() + 4 + iter->value().length() + 4;
-	    }
-	  }
-	  if (iter->valid()) {
-	    cursor.omap_offset = iter->key();
-	  } else {
-	    cursor.omap_complete = true;
-	    dout(20) << " got omap" << dendl;
-	  }
-	}
-	::encode(out_omap, osd_op.outdata);
-
-	dout(20) << " cursor.is_complete=" << cursor.is_complete()
-		 << " " << out_attrs.size() << " attrs"
-		 << " " << bl.length() << " bytes"
-		 << " " << out_omap.size() << " keys"
-		 << dendl;
-	::encode(cursor, osd_op.outdata);
-	result = 0;
-      }
+      result = fill_in_copy_get(bp, osd_op, oi, false);
+      if (result == -EINVAL)
+	goto fail;
       break;
 
     case CEPH_OSD_OP_COPY_FROM:
@@ -3717,10 +3655,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  hobject_t temp_target = generate_temp_object();
 	  CopyFromCallback *cb = new CopyFromCallback(ctx, temp_target);
 	  ctx->copy_cb = cb;
-	  result = start_copy(cb, ctx->obc, src, src_oloc, src_version,
+	  start_copy(cb, ctx->obc, src, src_oloc, src_version,
 	                      temp_target);
-	  if (result < 0)
-	    goto fail;
 	  result = -EINPROGRESS;
 	} else {
 	  // finish
@@ -4322,7 +4258,93 @@ struct C_Copyfrom : public Context {
   }
 };
 
-int ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
+int ReplicatedPG::fill_in_copy_get(bufferlist::iterator& bp, OSDOp& osd_op,
+                                   object_info_t& oi, bool classic)
+{
+  hobject_t& soid = oi.soid;
+  int result = 0;
+  object_copy_cursor_t cursor;
+  uint64_t out_max;
+  try {
+    ::decode(cursor, bp);
+    ::decode(out_max, bp);
+  }
+  catch (buffer::error& e) {
+    result = -EINVAL;
+    return result;
+  }
+
+  object_copy_data_t reply_obj;
+  // size, mtime
+  reply_obj.size = oi.size;
+  reply_obj.mtime = oi.mtime;
+  reply_obj.category = oi.category;
+
+  // attrs
+  map<string,bufferlist>& out_attrs = reply_obj.attrs;
+  if (!cursor.attr_complete) {
+    result = osd->store->getattrs(coll, soid, out_attrs, true);
+    if (result < 0)
+      return result;
+    cursor.attr_complete = true;
+    dout(20) << " got attrs" << dendl;
+  }
+
+  int64_t left = out_max - osd_op.outdata.length();
+
+  // data
+  bufferlist& bl = reply_obj.data;
+  if (left > 0 && !cursor.data_complete) {
+    if (cursor.data_offset < oi.size) {
+      result = osd->store->read(coll, oi.soid, cursor.data_offset, left, bl);
+      if (result < 0)
+	return result;
+      assert(result <= left);
+      left -= result;
+      cursor.data_offset += result;
+    }
+    if (cursor.data_offset == oi.size) {
+      cursor.data_complete = true;
+      dout(20) << " got data" << dendl;
+    }
+  }
+
+  // omap
+  std::map<std::string,bufferlist>& out_omap = reply_obj.omap;
+  if (left > 0 && !cursor.omap_complete) {
+    ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(coll, oi.soid);
+    assert(iter);
+    if (iter->valid()) {
+      iter->upper_bound(cursor.omap_offset);
+      for (; left > 0 && iter->valid(); iter->next()) {
+	out_omap.insert(make_pair(iter->key(), iter->value()));
+	left -= iter->key().length() + 4 + iter->value().length() + 4;
+      }
+    }
+    if (iter->valid()) {
+      cursor.omap_offset = iter->key();
+    } else {
+      cursor.omap_complete = true;
+      dout(20) << " got omap" << dendl;
+    }
+  }
+
+  dout(20) << " cursor.is_complete=" << cursor.is_complete()
+		     << " " << out_attrs.size() << " attrs"
+		     << " " << bl.length() << " bytes"
+		     << " " << out_omap.size() << " keys"
+		     << dendl;
+  reply_obj.cursor = cursor;
+  if (classic) {
+    reply_obj.encode_classic(osd_op.outdata);
+  } else {
+    ::encode(reply_obj, osd_op.outdata);
+  }
+  result = 0;
+  return result;
+}
+
+void ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
 			     hobject_t src, object_locator_t oloc, version_t version,
 			     const hobject_t& temp_dest_oid)
 {
@@ -4344,24 +4366,22 @@ int ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
   ++obc->copyfrom_readside;
 
   _copy_some(obc, cop);
-
-  return 0;
 }
 
 void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 {
   dout(10) << __func__ << " " << obc << " " << cop << dendl;
   ObjectOperation op;
-  if (cop->version) {
-    op.assert_version(cop->version);
+  if (cop->user_version) {
+    op.assert_version(cop->user_version);
   } else {
     // we should learn the version after the first chunk, if we didn't know
     // it already!
     assert(cop->cursor.is_initial());
   }
   op.copy_get(&cop->cursor, cct->_conf->osd_copyfrom_max_chunk,
-	      &cop->size, &cop->mtime, &cop->attrs,
-	      &cop->data, &cop->omap,
+	      &cop->size, &cop->mtime, &cop->category,
+	      &cop->attrs, &cop->data, &cop->omap,
 	      &cop->rval);
 
   C_Copyfrom *fin = new C_Copyfrom(this, obc->obs.oi.soid,
@@ -4372,7 +4392,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 				  new C_OnFinisher(fin,
 						   &osd->objecter_finisher),
 				  // discover the object version if we don't know it yet
-				  cop->version ? NULL : &cop->version);
+				  cop->user_version ? NULL : &cop->user_version);
   fin->tid = tid;
   cop->objecter_tid = tid;
   osd->objecter_lock.Unlock();
@@ -4518,7 +4538,7 @@ int ReplicatedPG::finish_copyfrom(OpContext *ctx)
 void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
 {
   dout(10) << __func__ << " " << cop->obc->obs.oi.soid
-	   << " from " << cop->src << " " << cop->oloc << " v" << cop->version
+	   << " from " << cop->src << " " << cop->oloc << " v" << cop->user_version
 	   << dendl;
 
   // cancel objecter op, if we can
@@ -4715,14 +4735,14 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   if (m)
     dout(10) << "eval_repop " << *repop
 	     << " wants=" << (m->wants_ack() ? "a":"") << (m->wants_ondisk() ? "d":"")
-	     << (repop->done ? " DONE" : "")
+	     << (repop->done() ? " DONE" : "")
 	     << dendl;
   else
     dout(10) << "eval_repop " << *repop << " (no op)"
-	     << (repop->done ? " DONE" : "")
+	     << (repop->done() ? " DONE" : "")
 	     << dendl;
 
-  if (repop->done)
+  if (repop->done())
     return;
 
   // apply?
@@ -4827,7 +4847,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   // done.
   if (repop->waitfor_ack.empty() && repop->waitfor_disk.empty() &&
       repop->applied) {
-    repop->done = true;
+    repop->mark_done();
 
     calc_min_last_complete_ondisk();
 

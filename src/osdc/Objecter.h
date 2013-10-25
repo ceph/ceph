@@ -569,6 +569,7 @@ struct ObjectOperation {
     object_copy_cursor_t *cursor;
     uint64_t *out_size;
     utime_t *out_mtime;
+    string *out_category;
     std::map<std::string,bufferlist> *out_attrs;
     bufferlist *out_data;
     std::map<std::string,bufferlist> *out_omap;
@@ -576,43 +577,34 @@ struct ObjectOperation {
     C_ObjectOperation_copyget(object_copy_cursor_t *c,
 			      uint64_t *s,
 			      utime_t *m,
+			      string *cat,
 			      std::map<std::string,bufferlist> *a,
 			      bufferlist *d,
 			      std::map<std::string,bufferlist> *o,
 			      int *r)
       : cursor(c),
-	out_size(s), out_mtime(m), out_attrs(a),
-	out_data(d), out_omap(o), prval(r) {}
+	out_size(s), out_mtime(m), out_category(cat),
+	out_attrs(a), out_data(d), out_omap(o), prval(r) {}
     void finish(int r) {
       if (r < 0)
 	return;
       try {
 	bufferlist::iterator p = bl.begin();
-	uint64_t size;
-	::decode(size, p);
+	object_copy_data_t copy_reply;
+	::decode(copy_reply, p);
 	if (out_size)
-	  *out_size = size;
-	utime_t mtime;
-	::decode(mtime, p);
+	  *out_size = copy_reply.size;
 	if (out_mtime)
-	  *out_mtime = mtime;
-	if (out_attrs) {
-	  ::decode_noclear(*out_attrs, p);
-	} else {
-	  std::map<std::string,bufferlist> t;
-	  ::decode(t, p);
-	}
-	bufferlist bl;
-	::decode(bl, p);
+	  *out_mtime = copy_reply.mtime;
+	if (out_category)
+	  *out_category = copy_reply.category;
+	if (out_attrs)
+	  *out_attrs = copy_reply.attrs;
 	if (out_data)
-	  out_data->claim_append(bl);
-	if (out_omap) {
-	  ::decode_noclear(*out_omap, p);
-	} else {
-	  std::map<std::string,bufferlist> t;
-	  ::decode(t, p);
-	}
-	::decode(*cursor, p);
+	  out_data->claim_append(copy_reply.data);
+	if (out_omap)
+	  *out_omap = copy_reply.omap;
+	*cursor = copy_reply.cursor;
       } catch (buffer::error& e) {
 	if (prval)
 	  *prval = -EIO;
@@ -624,6 +616,7 @@ struct ObjectOperation {
 		uint64_t max,
 		uint64_t *out_size,
 		utime_t *out_mtime,
+		string *out_category,
 		std::map<std::string,bufferlist> *out_attrs,
 		bufferlist *out_data,
 		std::map<std::string,bufferlist> *out_omap,
@@ -635,7 +628,8 @@ struct ObjectOperation {
     unsigned p = ops.size() - 1;
     out_rval[p] = prval;
     C_ObjectOperation_copyget *h =
-      new C_ObjectOperation_copyget(cursor, out_size, out_mtime, out_attrs, out_data, out_omap, prval);
+      new C_ObjectOperation_copyget(cursor, out_size, out_mtime, out_category,
+                                    out_attrs, out_data, out_omap, prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
   }
