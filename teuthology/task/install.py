@@ -56,6 +56,15 @@ PACKAGES['ceph']['rpm'] = [
 
 
 def _run_and_log_error_if_fails(remote, args):
+    """
+    Yet another wrapper around command execution. This one runs a command on
+    the given remote, then, if execution fails, logs the error and re-raises.
+
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param args: list of arguments comprising the command the be executed
+    :returns: None
+    :raises: CommandFailedError
+    """
     response = StringIO()
     try:
         remote.run(
@@ -69,9 +78,24 @@ def _run_and_log_error_if_fails(remote, args):
 
 
 def _get_config_value_for_remote(ctx, remote, config, key):
-    # This function was written to figure out which branch should be used for a
-    # given remote. 'all' overrides any applicable roles.
+    """
+    Look through config, and attempt to determine the "best" value to use for a
+    given key. For example, given:
 
+        config = {
+            'all':
+                {'branch': 'master'},
+            'branch': 'next'
+        }
+        _get_config_value_for_remote(ctx, remote, config, 'branch')
+
+    would return 'master'.
+
+    :param ctx: the argparse.Namespace object
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param config: the config dict
+    :param key: the name of the value to retrieve
+    """
     roles = ctx.cluster.remotes[remote]
     if 'all' in config:
         return config['all'].get(key)
@@ -83,12 +107,26 @@ def _get_config_value_for_remote(ctx, remote, config, key):
 
 
 def _get_baseurlinfo_and_dist(ctx, remote, config):
-    # XXX CLEANUP
-    # This helper function is in *dire* need of cleaning up What is `relval`?
-    # Why so many `dist_` prepending keys?
-    # The below list is an unfortunate usage of variables that confuse and make
-    # it harder to read/understand/improve anything here:
-    # dist, distro, distro_release, dist_release, dist_name, distri
+    """
+    Through various commands executed on the remote, determines the
+    distribution name and version in use, as well as the portion of the repo
+    URI to use to specify which version of the project (normally ceph) to
+    install.Example:
+
+        {'arch': 'x86_64',
+        'dist': 'raring',
+        'dist_release': None,
+        'distro': 'Ubuntu',
+        'distro_release': None,
+        'flavor': 'basic',
+        'relval': '13.04',
+        'uri': 'ref/master'}
+
+    :param ctx: the argparse.Namespace object
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param config: the config dict
+    :returns: dict -- the information you want.
+    """
     retval = {}
     relval = None
     r = remote.run(
@@ -152,6 +190,16 @@ def _get_baseurlinfo_and_dist(ctx, remote, config):
 
 
 def _get_baseurl(ctx, remote, config):
+    """
+    Figures out which package repo base URL to use.
+
+    Example:
+        'http://gitbuilder.ceph.com/ceph-deb-raring-x86_64-basic/ref/master'
+    :param ctx: the argparse.Namespace object
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param config: the config dict
+    :returns: str -- the URL
+    """
     # get distro name and arch
     baseparms = _get_baseurlinfo_and_dist(ctx, remote, config)
     base_url = 'http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}'.format(
@@ -165,6 +213,7 @@ def _get_baseurl(ctx, remote, config):
 
 
 class VersionNotFoundError(Exception):
+
     def __init__(self, url):
         self.url = url
 
@@ -176,7 +225,10 @@ def _block_looking_for_package_version(remote, base_url, wait=False):
     """
     Look for, and parse, a file called 'version' in base_url.
 
-    wait -- wait forever for the file to show up. (default False)
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param wait: wait forever for the file to show up. (default False)
+    :returns: str -- the version e.g. '0.67-240-g67a95b9-1raring'
+    :raises: VersionNotFoundError
     """
     while True:
         r = remote.run(
@@ -197,8 +249,15 @@ def _block_looking_for_package_version(remote, base_url, wait=False):
 
 def _update_deb_package_list_and_install(ctx, remote, debs, config):
     """
-    updates the package list so that apt-get can
-    download the appropriate packages
+    Runs ``apt-get update`` first, then runs ``apt-get install``, installing
+    the requested packages on the remote system.
+
+    TODO: split this into at least two functions.
+
+    :param ctx: the argparse.Namespace object
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param debs: list of packages names to install
+    :param config: the config dict
     """
 
     # check for ceph release key
@@ -230,6 +289,7 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
     log.info('Pulling from %s', base_url)
 
     # get package version string
+    # FIXME this is a terrible hack.
     while True:
         r = remote.run(
             args=[
@@ -253,7 +313,8 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
         args=[
             'echo', 'deb', base_url, baseparms['dist'], 'main',
             run.Raw('|'),
-            'sudo', 'tee', '/etc/apt/sources.list.d/{proj}.list'.format(proj=config.get('project', 'ceph')),
+            'sudo', 'tee', '/etc/apt/sources.list.d/{proj}.list'.format(
+                proj=config.get('project', 'ceph')),
         ],
         stdout=StringIO(),
     )
@@ -261,7 +322,8 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
         args=[
             'sudo', 'apt-get', 'update', run.Raw('&&'),
             'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y', '--force-yes',
-            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw('Dpkg::Options::="--force-confold"'),
+            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw(
+                'Dpkg::Options::="--force-confold"'),
             'install',
         ] + ['%s=%s' % (d, version) for d in debs],
         stdout=StringIO(),
@@ -269,25 +331,46 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
 
 
 def _yum_fix_repo_priority(remote, project):
+    """
+    On the remote, 'priority=1' lines to each enabled repo in:
+
+        /etc/yum.repos.d/{project}.repo
+
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param project: the project whose repos need modification
+    """
     remote.run(
         args=[
             'sudo',
             'sed',
             '-i',
-            run.Raw('\':a;N;$!ba;s/enabled=1\\ngpg/enabled=1\\npriority=1\\ngpg/g\''),
+            run.Raw(
+                '\':a;N;$!ba;s/enabled=1\\ngpg/enabled=1\\npriority=1\\ngpg/g\''),
             '/etc/yum.repos.d/%s.repo' % project,
         ]
     )
 
 
 def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
+    """
+    Installs the ceph-release package for the relevant branch, then installs
+    the requested packages on the remote system.
+
+    TODO: split this into at least two functions.
+
+    :param ctx: the argparse.Namespace object
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param rpm: list of packages names to install
+    :param config: the config dict
+    """
     baseparms = _get_baseurlinfo_and_dist(ctx, remote, config)
     log.info("Installing packages: {pkglist} on remote rpm {arch}".format(
         pkglist=", ".join(rpm), arch=baseparms['arch']))
     host = ctx.teuthology_config.get('gitbuilder_host',
                                      'gitbuilder.ceph.com')
     dist_release = baseparms['dist_release']
-    start_of_url = 'http://{host}/ceph-rpm-{distro_release}-{arch}-{flavor}/{uri}'.format(host=host, **baseparms)
+    start_of_url = 'http://{host}/ceph-rpm-{distro_release}-{arch}-{flavor}/{uri}'.format(
+        host=host, **baseparms)
     ceph_release = 'ceph-release-{release}.{dist_release}.noarch'.format(
         release=RELEASE, dist_release=dist_release)
     rpm_name = "{rpm_nm}.rpm".format(rpm_nm=ceph_release)
@@ -307,7 +390,7 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
 
     remote.run(args=['rm', '-f', rpm_name])
 
-    #Fix Repo Priority
+    # Fix Repo Priority
     _yum_fix_repo_priority(remote, config.get('project', 'ceph'))
 
     remote.run(
@@ -334,7 +417,8 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     dloc = tmp_vers.rfind('-')
     t_vers1 = tmp_vers[0:dloc]
     t_vers2 = tmp_vers[dloc + 1:]
-    trailer = "-{tv1}-{tv2}.{dist_release}".format(tv1=t_vers1, tv2=t_vers2, dist_release=dist_release)
+    trailer = "-{tv1}-{tv2}.{dist_release}".format(
+        tv1=t_vers1, tv2=t_vers2, dist_release=dist_release)
     for cpack in rpm:
         pk_err_mess = StringIO()
         pkg2add = "{cpack}{trailer}".format(cpack=cpack, trailer=trailer)
@@ -344,7 +428,9 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
 
 def purge_data(ctx):
     """
-    Purge /var/lib/ceph
+    Purge /var/lib/ceph on every remote in ctx.
+
+    :param ctx: the argparse.Namespace object
     """
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
@@ -352,6 +438,11 @@ def purge_data(ctx):
 
 
 def _purge_data(remote):
+    """
+    Purge /var/lib/ceph on remote.
+
+    :param remote: the teuthology.orchestra.remote.Remote object
+    """
     log.info('Purging /var/lib/ceph on %s', remote)
     remote.run(args=[
         'sudo',
@@ -375,7 +466,11 @@ def _purge_data(remote):
 
 def install_packages(ctx, pkgs, config):
     """
-    installs Debian packages.
+    Installs packages on each remote in ctx.
+
+    :param ctx: the argparse.Namespace object
+    :param pkgs: list of packages names to install
+    :param config: the config dict
     """
     install_pkgs = {
         "deb": _update_deb_package_list_and_install,
@@ -390,6 +485,16 @@ def install_packages(ctx, pkgs, config):
 
 
 def _remove_deb(ctx, config, remote, debs):
+    """
+    Removes Debian packages from remote, rudely
+
+    TODO: be less rude (e.g. using --force-yes)
+
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param debs: list of packages names to install
+    """
     log.info("Removing packages: {pkglist} on Debian system.".format(
         pkglist=", ".join(debs)))
     # first ask nicely
@@ -400,7 +505,8 @@ def _remove_deb(ctx, config, remote, debs):
             run.Raw(';'),
             'do',
             'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y', '--force-yes',
-            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw('Dpkg::Options::="--force-confold"'), 'purge',
+            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw(
+                'Dpkg::Options::="--force-confold"'), 'purge',
             run.Raw('$d'),
             run.Raw('||'),
             'true',
@@ -424,7 +530,8 @@ def _remove_deb(ctx, config, remote, debs):
     remote.run(
         args=[
             'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y', '--force-yes',
-            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw('Dpkg::Options::="--force-confold"'),
+            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw(
+                'Dpkg::Options::="--force-confold"'),
             'autoremove',
         ],
         stdout=StringIO(),
@@ -432,6 +539,14 @@ def _remove_deb(ctx, config, remote, debs):
 
 
 def _remove_rpm(ctx, config, remote, rpm):
+    """
+    Removes RPM packages from remote
+
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param rpm: list of packages names to remove
+    """
     log.info("Removing packages: {pkglist} on rpm system.".format(
         pkglist=", ".join(rpm)))
     baseparms = _get_baseurlinfo_and_dist(ctx, remote, config)
@@ -454,7 +569,8 @@ def _remove_rpm(ctx, config, remote, rpm):
         args=[
             'sudo', 'yum', 'clean', 'all',
         ])
-    projRelease = '%s-release-%s.%s.noarch' % (config.get('project', 'ceph'), RELEASE, dist_release)
+    projRelease = '%s-release-%s.%s.noarch' % (
+        config.get('project', 'ceph'), RELEASE, dist_release)
     remote.run(args=['sudo', 'yum', 'erase', projRelease, '-y'])
     remote.run(
         args=[
@@ -463,6 +579,13 @@ def _remove_rpm(ctx, config, remote, rpm):
 
 
 def remove_packages(ctx, config, pkgs):
+    """
+    Removes packages from each remote in ctx.
+
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
+    :param pkgs: list of packages names to remove
+    """
     remove_pkgs = {
         "deb": _remove_deb,
         "rpm": _remove_rpm,
@@ -470,13 +593,22 @@ def remove_packages(ctx, config, pkgs):
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
             system_type = teuthology.get_system_type(remote)
-            p.spawn(remove_pkgs[system_type], ctx, config, remote, pkgs[system_type])
+            p.spawn(remove_pkgs[
+                    system_type], ctx, config, remote, pkgs[system_type])
 
 
 def _remove_sources_list_deb(remote, proj):
+    """
+    Removes /etc/apt/sources.list.d/{proj}.list and then runs ``apt-get
+    update``.
+
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param proj: the project whose sources.list needs removing
+    """
     remote.run(
         args=[
-            'sudo', 'rm', '-f', '/etc/apt/sources.list.d/{proj}.list'.format(proj=proj),
+            'sudo', 'rm', '-f', '/etc/apt/sources.list.d/{proj}.list'.format(
+                proj=proj),
             run.Raw('&&'),
             'sudo', 'apt-get', 'update',
             # ignore failure
@@ -488,16 +620,25 @@ def _remove_sources_list_deb(remote, proj):
 
 
 def _remove_sources_list_rpm(remote, proj):
+    """
+    Removes /etc/yum.repos.d/{proj}.repo, /var/lib/{proj}, and /var/log/{proj}.
+
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param proj: the project whose sources.list needs removing
+    """
     remote.run(
         args=[
-            'sudo', 'rm', '-f', '/etc/yum.repos.d/{proj}.repo'.format(proj=proj),
+            'sudo', 'rm', '-f', '/etc/yum.repos.d/{proj}.repo'.format(
+                proj=proj),
             run.Raw('||'),
             'true',
         ],
         stdout=StringIO(),
     )
-    # There probably should be a way of removing these files that is implemented in the yum/rpm
-    # remove procedures for the ceph package.
+    # FIXME
+    # There probably should be a way of removing these files that is
+    # implemented in the yum/rpm remove procedures for the ceph package.
+    # FIXME but why is this function doing these things?
     remote.run(
         args=[
             'sudo', 'rm', '-fr', '/var/lib/{proj}'.format(proj=proj),
@@ -517,15 +658,23 @@ def _remove_sources_list_rpm(remote, proj):
 
 
 def remove_sources(ctx, config):
+    """
+    Removes repo source files from each remote in ctx.
+
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
+    """
     remove_sources_pkgs = {
         'deb': _remove_sources_list_deb,
         'rpm': _remove_sources_list_rpm,
     }
-    log.info("Removing {proj} sources lists".format(proj=config.get('project', 'ceph')))
+    log.info("Removing {proj} sources lists".format(
+        proj=config.get('project', 'ceph')))
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
             system_type = teuthology.get_system_type(remote)
-            p.spawn(remove_sources_pkgs[system_type], remote, config.get('project', 'ceph'))
+            p.spawn(remove_sources_pkgs[
+                    system_type], remote, config.get('project', 'ceph'))
 
 deb_packages = {'ceph': [
     'ceph',
@@ -561,6 +710,13 @@ rpm_packages = {'ceph': [
 
 @contextlib.contextmanager
 def install(ctx, config):
+    """
+    The install task. Installs packages for a given project on all hosts in
+    ctx. May work for projects besides ceph, but may not. Patches welcomed!
+
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
+    """
 
     project = config.get('project', 'ceph')
 
@@ -578,7 +734,8 @@ def install(ctx, config):
     # the extras option right now is specific to the 'ceph' project
     extras = config.get('extras')
     if extras is not None:
-        debs = ['ceph-test', 'ceph-test-dbg', 'ceph-fuse', 'ceph-fuse-dbg', 'librados2', 'librados2-dbg', 'librbd1', 'librbd1-dbg', 'python-ceph']
+        debs = ['ceph-test', 'ceph-test-dbg', 'ceph-fuse', 'ceph-fuse-dbg',
+                'librados2', 'librados2-dbg', 'librbd1', 'librbd1-dbg', 'python-ceph']
         rpm = ['ceph-fuse', 'librbd1', 'librados2', 'ceph-test', 'python-ceph']
 
     # install lib deps (so we explicitly specify version), but do not
@@ -616,7 +773,15 @@ def install(ctx, config):
 
 def _upgrade_deb_packages(ctx, config, remote, debs):
     """
-    upgrade all packages
+    Upgrade project's packages on remote Debian host
+    Before doing so, installs the project's GPG key, writes a sources.list
+    file, and runs ``apt-get update``.
+
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param debs: the Debian packages to be installed
+    :param branch: the branch of the project to be used
     """
     # check for ceph release key
     r = remote.run(
@@ -693,7 +858,8 @@ def _upgrade_deb_packages(ctx, config, remote, debs):
         args=[
             'echo', 'deb', base_url, dist, 'main',
             run.Raw('|'),
-            'sudo', 'tee', '/etc/apt/sources.list.d/{proj}.list'.format(proj=config.get('project', 'ceph')),
+            'sudo', 'tee', '/etc/apt/sources.list.d/{proj}.list'.format(
+                proj=config.get('project', 'ceph')),
         ],
         stdout=StringIO(),
     )
@@ -701,7 +867,8 @@ def _upgrade_deb_packages(ctx, config, remote, debs):
         args=[
             'sudo', 'apt-get', 'update', run.Raw('&&'),
             'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y', '--force-yes',
-            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw('Dpkg::Options::="--force-confold"'),
+            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw(
+                'Dpkg::Options::="--force-confold"'),
             'install',
         ] + ['%s=%s' % (d, version) for d in debs],
         stdout=StringIO(),
@@ -710,7 +877,15 @@ def _upgrade_deb_packages(ctx, config, remote, debs):
 
 def _upgrade_rpm_packages(ctx, config, remote, pkgs):
     """
-    Upgrade RPM packages.
+    Upgrade project's packages on remote RPM-based host
+    Before doing so, it makes sure the project's -release RPM is installed -
+    removing any previous version first.
+
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
+    :param remote: the teuthology.orchestra.remote.Remote object
+    :param pkgs: the RPM packages to be installed
+    :param branch: the branch of the project to be used
     """
     distinfo = _get_baseurlinfo_and_dist(ctx, remote, config)
     log.info(
@@ -778,7 +953,7 @@ def _upgrade_rpm_packages(ctx, config, remote, pkgs):
 @contextlib.contextmanager
 def upgrade(ctx, config):
     """
-    upgrades project debian packages.
+    Upgrades packages for a given project.
 
     For example::
 
@@ -805,18 +980,23 @@ def upgrade(ctx, config):
         tasks:
         - install.upgrade:
             all:
+
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
     """
     assert config is None or isinstance(config, dict), \
         "install.upgrade only supports a dictionary for configuration"
 
     for i in config.keys():
-            assert config.get(i) is None or isinstance(config.get(i), dict), 'host supports dictionary'
+            assert config.get(i) is None or isinstance(
+                config.get(i), dict), 'host supports dictionary'
 
     project = config.get('project', 'ceph')
 
     # use 'install' overrides here, in case the upgrade target is left
     # unspecified/implicit.
-    install_overrides = ctx.config.get('overrides', {}).get('install', {}).get(project, {})
+    install_overrides = ctx.config.get(
+        'overrides', {}).get('install', {}).get(project, {})
     log.info('project %s overrides %s', project, install_overrides)
 
     # FIXME: extra_pkgs is not distro-agnostic
@@ -845,7 +1025,7 @@ def upgrade(ctx, config):
         assert system_type in ('deb', 'rpm')
         pkgs = PACKAGES[project][system_type]
         log.info("Upgrading {proj} {system_type} packages: {pkgs}".format(
-                proj=project, system_type=system_type, pkgs=', '.join(pkgs)))
+            proj=project, system_type=system_type, pkgs=', '.join(pkgs)))
             # FIXME: again, make extra_pkgs distro-agnostic
         pkgs += extra_pkgs
         node['project'] = project
@@ -860,7 +1040,7 @@ def upgrade(ctx, config):
 @contextlib.contextmanager
 def task(ctx, config):
     """
-    Install packages
+    Install packages for a given project.
 
     tasks:
     - install:
@@ -878,6 +1058,8 @@ def task(ctx, config):
         ceph:
           sha1: ...
 
+    :param ctx: the argparse.Namespace object
+    :param config: the config dict
     """
     if config is None:
         config = {}
@@ -905,7 +1087,8 @@ def task(ctx, config):
         flavor = 'local'
     else:
         if config.get('valgrind'):
-            log.info('Using notcmalloc flavor and running some daemons under valgrind')
+            log.info(
+                'Using notcmalloc flavor and running some daemons under valgrind')
             flavor = 'notcmalloc'
         else:
             if config.get('coverage'):
