@@ -4807,6 +4807,11 @@ void ReplicatedPG::cancel_copy_ops(bool requeue)
 // In order for the cache-flush (a write op) to not block the copy-get
 // from reading the object, the client *must* set the SKIPRWLOCKS
 // flag.
+//
+// NOTE: normally writes are strictly ordered for the client, but
+// flushes are special in that they can be reordered with respect to
+// other writes.  In particular, we can't have a flush request block
+// an update to the cache pool object!
 
 struct C_Flush : public Context {
   ReplicatedPGRef pg;
@@ -4835,10 +4840,17 @@ void ReplicatedPG::start_flush(ObjectContextRef obc, OpRequestRef op)
 	   << " uv" << oi.user_version
 	   << dendl;
 
-  if (flush_ops.count(soid)) {
+  map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(soid);
+  if (p != flush_ops.end()) {
     // FIXME: need to handle racing flushes
-    if (flush_ops[soid]->op == op) {
-      try_flush_mark_clean(flush_ops[soid]);
+    FlushOpRef fop = p->second;
+    if (fop->op == op) {
+      try_flush_mark_clean(fop);
+      return;
+    }
+    if (fop->flushed_version == obc->obs.oi.user_version) {
+      dout(20) << __func__ << " piggybacking on existing flush" << dendl;
+      fop->dup_ops.push_back(op);
       return;
     }
     assert(0 == "don't handle multiple flushes yet");
@@ -4931,6 +4943,12 @@ void ReplicatedPG::try_flush_mark_clean(FlushOpRef fop)
 
   finish_ctx(ctx);
 
+  if (!fop->dup_ops.empty()) {
+    dout(20) << __func__ << " queueing dups for " << ctx->at_version << dendl;
+    list<OpRequestRef>& ls = waiting_for_ondisk[ctx->at_version];
+    ls.splice(ls.end(), fop->dup_ops);
+  }
+
   simple_repop_submit(repop);
 
   flush_ops.erase(oid);
@@ -4945,8 +4963,10 @@ void ReplicatedPG::cancel_flush(FlushOpRef fop, bool requeue)
     osd->objecter->op_cancel(fop->objecter_tid);
   }
   flush_ops.erase(fop->obc->obs.oi.soid);
-  if (fop->op && requeue)
+  if (fop->op && requeue) {
     requeue_op(fop->op);
+    requeue_ops(fop->dup_ops);
+  }
 }
 
 void ReplicatedPG::cancel_flush_ops(bool requeue)
