@@ -213,6 +213,7 @@ def _get_baseurl(ctx, remote, config):
 
 
 class VersionNotFoundError(Exception):
+
     def __init__(self, url):
         self.url = url
 
@@ -312,7 +313,8 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
         args=[
             'echo', 'deb', base_url, baseparms['dist'], 'main',
             run.Raw('|'),
-            'sudo', 'tee', '/etc/apt/sources.list.d/{proj}.list'.format(proj=config.get('project', 'ceph')),
+            'sudo', 'tee', '/etc/apt/sources.list.d/{proj}.list'.format(
+                proj=config.get('project', 'ceph')),
         ],
         stdout=StringIO(),
     )
@@ -320,7 +322,8 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
         args=[
             'sudo', 'apt-get', 'update', run.Raw('&&'),
             'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y', '--force-yes',
-            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw('Dpkg::Options::="--force-confold"'),
+            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw(
+                'Dpkg::Options::="--force-confold"'),
             'install',
         ] + ['%s=%s' % (d, version) for d in debs],
         stdout=StringIO(),
@@ -341,7 +344,8 @@ def _yum_fix_repo_priority(remote, project):
             'sudo',
             'sed',
             '-i',
-            run.Raw('\':a;N;$!ba;s/enabled=1\\ngpg/enabled=1\\npriority=1\\ngpg/g\''),
+            run.Raw(
+                '\':a;N;$!ba;s/enabled=1\\ngpg/enabled=1\\npriority=1\\ngpg/g\''),
             '/etc/yum.repos.d/%s.repo' % project,
         ]
     )
@@ -365,7 +369,8 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     host = ctx.teuthology_config.get('gitbuilder_host',
                                      'gitbuilder.ceph.com')
     dist_release = baseparms['dist_release']
-    start_of_url = 'http://{host}/ceph-rpm-{distro_release}-{arch}-{flavor}/{uri}'.format(host=host, **baseparms)
+    start_of_url = 'http://{host}/ceph-rpm-{distro_release}-{arch}-{flavor}/{uri}'.format(
+        host=host, **baseparms)
     ceph_release = 'ceph-release-{release}.{dist_release}.noarch'.format(
         release=RELEASE, dist_release=dist_release)
     rpm_name = "{rpm_nm}.rpm".format(rpm_nm=ceph_release)
@@ -385,7 +390,7 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
 
     remote.run(args=['rm', '-f', rpm_name])
 
-    #Fix Repo Priority
+    # Fix Repo Priority
     _yum_fix_repo_priority(remote, config.get('project', 'ceph'))
 
     remote.run(
@@ -412,7 +417,8 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     dloc = tmp_vers.rfind('-')
     t_vers1 = tmp_vers[0:dloc]
     t_vers2 = tmp_vers[dloc + 1:]
-    trailer = "-{tv1}-{tv2}.{dist_release}".format(tv1=t_vers1, tv2=t_vers2, dist_release=dist_release)
+    trailer = "-{tv1}-{tv2}.{dist_release}".format(
+        tv1=t_vers1, tv2=t_vers2, dist_release=dist_release)
     for cpack in rpm:
         pk_err_mess = StringIO()
         pkg2add = "{cpack}{trailer}".format(cpack=cpack, trailer=trailer)
@@ -499,7 +505,8 @@ def _remove_deb(ctx, config, remote, debs):
             run.Raw(';'),
             'do',
             'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y', '--force-yes',
-            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw('Dpkg::Options::="--force-confold"'), 'purge',
+            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw(
+                'Dpkg::Options::="--force-confold"'), 'purge',
             run.Raw('$d'),
             run.Raw('||'),
             'true',
@@ -523,7 +530,8 @@ def _remove_deb(ctx, config, remote, debs):
     remote.run(
         args=[
             'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y', '--force-yes',
-            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw('Dpkg::Options::="--force-confold"'),
+            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw(
+                'Dpkg::Options::="--force-confold"'),
             'autoremove',
         ],
         stdout=StringIO(),
@@ -561,7 +569,8 @@ def _remove_rpm(ctx, config, remote, rpm):
         args=[
             'sudo', 'yum', 'clean', 'all',
         ])
-    projRelease = '%s-release-%s.%s.noarch' % (config.get('project', 'ceph'), RELEASE, dist_release)
+    projRelease = '%s-release-%s.%s.noarch' % (
+        config.get('project', 'ceph'), RELEASE, dist_release)
     remote.run(args=['sudo', 'yum', 'erase', projRelease, '-y'])
     remote.run(
         args=[
@@ -584,7 +593,8 @@ def remove_packages(ctx, config, pkgs):
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
             system_type = teuthology.get_system_type(remote)
-            p.spawn(remove_pkgs[system_type], ctx, config, remote, pkgs[system_type])
+            p.spawn(remove_pkgs[
+                    system_type], ctx, config, remote, pkgs[system_type])
 
 
 def _remove_sources_list_deb(remote, proj):
@@ -597,7 +607,8 @@ def _remove_sources_list_deb(remote, proj):
     """
     remote.run(
         args=[
-            'sudo', 'rm', '-f', '/etc/apt/sources.list.d/{proj}.list'.format(proj=proj),
+            'sudo', 'rm', '-f', '/etc/apt/sources.list.d/{proj}.list'.format(
+                proj=proj),
             run.Raw('&&'),
             'sudo', 'apt-get', 'update',
             # ignore failure
@@ -617,7 +628,8 @@ def _remove_sources_list_rpm(remote, proj):
     """
     remote.run(
         args=[
-            'sudo', 'rm', '-f', '/etc/yum.repos.d/{proj}.repo'.format(proj=proj),
+            'sudo', 'rm', '-f', '/etc/yum.repos.d/{proj}.repo'.format(
+                proj=proj),
             run.Raw('||'),
             'true',
         ],
@@ -656,11 +668,13 @@ def remove_sources(ctx, config):
         'deb': _remove_sources_list_deb,
         'rpm': _remove_sources_list_rpm,
     }
-    log.info("Removing {proj} sources lists".format(proj=config.get('project', 'ceph')))
+    log.info("Removing {proj} sources lists".format(
+        proj=config.get('project', 'ceph')))
     with parallel() as p:
         for remote in ctx.cluster.remotes.iterkeys():
             system_type = teuthology.get_system_type(remote)
-            p.spawn(remove_sources_pkgs[system_type], remote, config.get('project', 'ceph'))
+            p.spawn(remove_sources_pkgs[
+                    system_type], remote, config.get('project', 'ceph'))
 
 deb_packages = {'ceph': [
     'ceph',
@@ -720,7 +734,8 @@ def install(ctx, config):
     # the extras option right now is specific to the 'ceph' project
     extras = config.get('extras')
     if extras is not None:
-        debs = ['ceph-test', 'ceph-test-dbg', 'ceph-fuse', 'ceph-fuse-dbg', 'librados2', 'librados2-dbg', 'librbd1', 'librbd1-dbg', 'python-ceph']
+        debs = ['ceph-test', 'ceph-test-dbg', 'ceph-fuse', 'ceph-fuse-dbg',
+                'librados2', 'librados2-dbg', 'librbd1', 'librbd1-dbg', 'python-ceph']
         rpm = ['ceph-fuse', 'librbd1', 'librados2', 'ceph-test', 'python-ceph']
 
     # install lib deps (so we explicitly specify version), but do not
@@ -843,7 +858,8 @@ def _upgrade_deb_packages(ctx, config, remote, debs):
         args=[
             'echo', 'deb', base_url, dist, 'main',
             run.Raw('|'),
-            'sudo', 'tee', '/etc/apt/sources.list.d/{proj}.list'.format(proj=config.get('project', 'ceph')),
+            'sudo', 'tee', '/etc/apt/sources.list.d/{proj}.list'.format(
+                proj=config.get('project', 'ceph')),
         ],
         stdout=StringIO(),
     )
@@ -851,7 +867,8 @@ def _upgrade_deb_packages(ctx, config, remote, debs):
         args=[
             'sudo', 'apt-get', 'update', run.Raw('&&'),
             'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y', '--force-yes',
-            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw('Dpkg::Options::="--force-confold"'),
+            '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw(
+                'Dpkg::Options::="--force-confold"'),
             'install',
         ] + ['%s=%s' % (d, version) for d in debs],
         stdout=StringIO(),
@@ -971,13 +988,15 @@ def upgrade(ctx, config):
         "install.upgrade only supports a dictionary for configuration"
 
     for i in config.keys():
-            assert config.get(i) is None or isinstance(config.get(i), dict), 'host supports dictionary'
+            assert config.get(i) is None or isinstance(
+                config.get(i), dict), 'host supports dictionary'
 
     project = config.get('project', 'ceph')
 
     # use 'install' overrides here, in case the upgrade target is left
     # unspecified/implicit.
-    install_overrides = ctx.config.get('overrides', {}).get('install', {}).get(project, {})
+    install_overrides = ctx.config.get(
+        'overrides', {}).get('install', {}).get(project, {})
     log.info('project %s overrides %s', project, install_overrides)
 
     # FIXME: extra_pkgs is not distro-agnostic
@@ -1006,7 +1025,7 @@ def upgrade(ctx, config):
         assert system_type in ('deb', 'rpm')
         pkgs = PACKAGES[project][system_type]
         log.info("Upgrading {proj} {system_type} packages: {pkgs}".format(
-                proj=project, system_type=system_type, pkgs=', '.join(pkgs)))
+            proj=project, system_type=system_type, pkgs=', '.join(pkgs)))
             # FIXME: again, make extra_pkgs distro-agnostic
         pkgs += extra_pkgs
         node['project'] = project
@@ -1068,7 +1087,8 @@ def task(ctx, config):
         flavor = 'local'
     else:
         if config.get('valgrind'):
-            log.info('Using notcmalloc flavor and running some daemons under valgrind')
+            log.info(
+                'Using notcmalloc flavor and running some daemons under valgrind')
             flavor = 'notcmalloc'
         else:
             if config.get('coverage'):
