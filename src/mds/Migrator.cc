@@ -778,6 +778,36 @@ void Migrator::handle_export_discover_ack(MExportDirDiscoverAck *m)
   m->put();  // done
 }
 
+class C_M_ExportSessionsFlushed : public Context {
+  Migrator *migrator;
+  CDir *dir;
+  uint64_t tid;
+public:
+  C_M_ExportSessionsFlushed(Migrator *m, CDir *d, uint64_t t) :
+    migrator(m), dir(d), tid(t) {}
+  void finish(int r) {
+    migrator->export_sessions_flushed(dir, tid);
+  }
+};
+
+void Migrator::export_sessions_flushed(CDir *dir, uint64_t tid)
+{
+  dout(7) << "export_sessions_flushed " << *dir << dendl;
+
+  map<CDir*,export_state_t>::iterator it = export_state.find(dir);
+  if (it == export_state.end() || it->second.tid != tid) {
+    // export must have aborted.
+    dout(7) << "export must have aborted on " << dir << dendl;
+    return;
+  }
+
+  assert(it->second.state == EXPORT_PREPPING || it->second.state == EXPORT_WARNING);
+  assert(it->second.warning_ack_waiting.count(-1) > 0);
+  it->second.warning_ack_waiting.erase(-1);
+  if (it->second.state == EXPORT_WARNING && it->second.warning_ack_waiting.empty())
+    export_go(dir);     // start export.
+}
+
 void Migrator::export_frozen(CDir *dir)
 {
   dout(7) << "export_frozen on " << *dir << dendl;
@@ -913,6 +943,60 @@ void Migrator::export_frozen(CDir *dir)
   it->second.state = EXPORT_PREPPING;
   mds->send_message_mds(prep, it->second.peer);
   assert (g_conf->mds_kill_export_at != 4);
+
+  // make sure any new instantiations of caps are flushed out
+  assert(it->second.warning_ack_waiting.empty());
+
+  set<client_t> export_client_set;
+  get_export_client_set(dir, export_client_set);
+
+  C_GatherBuilder gather(g_ceph_context);
+  mds->server->flush_client_sessions(export_client_set, gather);
+  if (gather.has_subs()) {
+    it->second.warning_ack_waiting.insert(-1);
+    gather.set_finisher(new C_M_ExportSessionsFlushed(this, dir, it->second.tid));
+    gather.activate();
+  }
+}
+
+void Migrator::get_export_client_set(CDir *dir, set<client_t>& client_set)
+{
+  list<CDir*> dfs;
+  dfs.push_back(dir);
+  while (!dfs.empty()) {
+    CDir *dir = dfs.front();
+    dfs.pop_front();
+    for (CDir::map_t::iterator p = dir->begin(); p != dir->end(); ++p) {
+      CDentry *dn = p->second;
+      if (!dn->get_linkage()->is_primary())
+	continue;
+      CInode *in = dn->get_linkage()->get_inode();
+      if (in->is_dir()) {
+	// directory?
+	list<CDir*> ls;
+	in->get_dirfrags(ls);
+	for (list<CDir*>::iterator q = ls.begin(); q != ls.end(); ++q) {
+	  if (!(*q)->state_test(CDir::STATE_EXPORTBOUND)) {
+	    // include nested dirfrag
+	    assert((*q)->get_dir_auth().first == CDIR_AUTH_PARENT);
+	    dfs.push_back(*q); // it's ours, recurse (later)
+	  }
+	}
+      }
+      for (map<client_t, Capability*>::iterator q = in->client_caps.begin();
+	   q != in->client_caps.end();
+	   ++q)
+	client_set.insert(q->first);
+    }
+  }
+}
+
+void Migrator::get_export_client_set(CInode *in, set<client_t>& client_set)
+{
+  for (map<client_t, Capability*>::iterator q = in->client_caps.begin();
+      q != in->client_caps.end();
+      ++q)
+    client_set.insert(q->first);
 }
 
 /* This function DOES put the passed message before returning*/
@@ -939,7 +1023,9 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
   set<CDir*> bounds;
   cache->get_subtree_bounds(dir, bounds);
 
-  assert(it->second.warning_ack_waiting.empty());
+  assert(it->second.warning_ack_waiting.empty() ||
+         (it->second.warning_ack_waiting.size() == 1 &&
+	  it->second.warning_ack_waiting.count(-1) > 0));
   assert(it->second.notify_ack_waiting.empty());
 
   for (map<int,unsigned>::iterator p = dir->replicas_begin();

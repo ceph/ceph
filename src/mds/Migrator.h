@@ -230,6 +230,8 @@ public:
   }
   
   void get_export_lock_set(CDir *dir, set<SimpleLock*>& locks);
+  void get_export_client_set(CDir *dir, set<client_t> &client_set);
+  void get_export_client_set(CInode *in, set<client_t> &client_set);
 
   void encode_export_inode(CInode *in, bufferlist& bl, 
 			   map<client_t,entity_inst_t>& exported_client_map);
@@ -257,6 +259,7 @@ public:
   void handle_export_discover_ack(MExportDirDiscoverAck *m);
   void export_frozen(CDir *dir);
   void handle_export_prep_ack(MExportDirPrepAck *m);
+  void export_sessions_flushed(CDir *dir, uint64_t tid);
   void export_go(CDir *dir);
   void export_go_synced(CDir *dir, uint64_t tid);
   void export_try_cancel(CDir *dir);
@@ -279,6 +282,7 @@ public:
   friend class C_MDC_ExportFreeze;
   friend class C_MDS_ExportFinishLogged;
   friend class C_M_ExportGo;
+  friend class C_M_ExportSessionsFlushed;
 
   // importer
   void handle_export_discover(MExportDirDiscover *m);
