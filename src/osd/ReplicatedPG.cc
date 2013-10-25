@@ -3613,81 +3613,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_COPY_GET:
       ++ctx->num_read;
-      {
-	object_copy_cursor_t cursor;
-	uint64_t out_max;
-	try {
-	  ::decode(cursor, bp);
-	  ::decode(out_max, bp);
-	}
-	catch (buffer::error& e) {
-	  result = -EINVAL;
-	  goto fail;
-	}
-
-	object_copy_data_t reply_obj;
-	// size, mtime
-	reply_obj.size = oi.size;
-	reply_obj.mtime = oi.mtime;
-
-	// attrs
-	map<string,bufferptr>& out_attrs = reply_obj.attrs;
-	if (!cursor.attr_complete) {
-	  result = osd->store->getattrs(coll, soid, out_attrs, true);
-	  if (result < 0)
-	    break;
-	  cursor.attr_complete = true;
-	  dout(20) << " got attrs" << dendl;
-	}
-
-	int64_t left = out_max - osd_op.outdata.length();
-
-	// data
-	bufferlist& bl = reply_obj.data;
-	if (left > 0 && !cursor.data_complete) {
-	  if (cursor.data_offset < oi.size) {
-	    result = osd->store->read(coll, oi.soid, cursor.data_offset, left, bl);
-	    if (result < 0)
-	      return result;
-	    assert(result <= left);
-	    left -= result;
-	    cursor.data_offset += result;
-	  }
-	  if (cursor.data_offset == oi.size) {
-	    cursor.data_complete = true;
-	    dout(20) << " got data" << dendl;
-	  }
-	}
-
-	// omap
-	std::map<std::string,bufferlist>& out_omap = reply_obj.omap;
-	if (left > 0 && !cursor.omap_complete) {
-	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(coll, oi.soid);
-	  assert(iter);
-	  if (iter->valid()) {
-	    iter->upper_bound(cursor.omap_offset);
-	    for (; left > 0 && iter->valid(); iter->next()) {
-	      out_omap.insert(make_pair(iter->key(), iter->value()));
-	      left -= iter->key().length() + 4 + iter->value().length() + 4;
-	    }
-	  }
-	  if (iter->valid()) {
-	    cursor.omap_offset = iter->key();
-	  } else {
-	    cursor.omap_complete = true;
-	    dout(20) << " got omap" << dendl;
-	  }
-	}
-
-	dout(20) << " cursor.is_complete=" << cursor.is_complete()
-		 << " " << out_attrs.size() << " attrs"
-		 << " " << bl.length() << " bytes"
-		 << " " << out_omap.size() << " keys"
-		 << dendl;
-	reply_obj.cursor = cursor;
-	::encode(reply_obj, osd_op.outdata);
-	result = 0;
-      }
+      result = fill_in_copy_get(bp, osd_op, oi);
+      if (result == -EINVAL)
+	goto fail;
       break;
 
     case CEPH_OSD_OP_COPY_FROM:
@@ -4322,6 +4250,87 @@ struct C_Copyfrom : public Context {
     pg->unlock();
   }
 };
+
+int ReplicatedPG::fill_in_copy_get(bufferlist::iterator& bp, OSDOp& osd_op,
+                                   object_info_t& oi)
+{
+  hobject_t& soid = oi.soid;
+  int result = 0;
+  object_copy_cursor_t cursor;
+  uint64_t out_max;
+  try {
+    ::decode(cursor, bp);
+    ::decode(out_max, bp);
+  }
+  catch (buffer::error& e) {
+    result = -EINVAL;
+    return result;
+  }
+
+  object_copy_data_t reply_obj;
+  // size, mtime
+  reply_obj.size = oi.size;
+  reply_obj.mtime = oi.mtime;
+
+  // attrs
+  map<string,bufferlist>& out_attrs = reply_obj.attrs;
+  if (!cursor.attr_complete) {
+    result = osd->store->getattrs(coll, soid, out_attrs, true);
+    if (result < 0)
+      return result;
+    cursor.attr_complete = true;
+    dout(20) << " got attrs" << dendl;
+  }
+
+  int64_t left = out_max - osd_op.outdata.length();
+
+  // data
+  bufferlist& bl = reply_obj.data;
+  if (left > 0 && !cursor.data_complete) {
+    if (cursor.data_offset < oi.size) {
+      result = osd->store->read(coll, oi.soid, cursor.data_offset, left, bl);
+      if (result < 0)
+	return result;
+      assert(result <= left);
+      left -= result;
+      cursor.data_offset += result;
+    }
+    if (cursor.data_offset == oi.size) {
+      cursor.data_complete = true;
+      dout(20) << " got data" << dendl;
+    }
+  }
+
+  // omap
+  std::map<std::string,bufferlist>& out_omap = reply_obj.omap;
+  if (left > 0 && !cursor.omap_complete) {
+    ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(coll, oi.soid);
+    assert(iter);
+    if (iter->valid()) {
+      iter->upper_bound(cursor.omap_offset);
+      for (; left > 0 && iter->valid(); iter->next()) {
+	out_omap.insert(make_pair(iter->key(), iter->value()));
+	left -= iter->key().length() + 4 + iter->value().length() + 4;
+      }
+    }
+    if (iter->valid()) {
+      cursor.omap_offset = iter->key();
+    } else {
+      cursor.omap_complete = true;
+      dout(20) << " got omap" << dendl;
+    }
+  }
+
+  dout(20) << " cursor.is_complete=" << cursor.is_complete()
+		     << " " << out_attrs.size() << " attrs"
+		     << " " << bl.length() << " bytes"
+		     << " " << out_omap.size() << " keys"
+		     << dendl;
+  reply_obj.cursor = cursor;
+  ::encode(reply_obj, osd_op.outdata);
+  result = 0;
+  return result;
+}
 
 void ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
 			     hobject_t src, object_locator_t oloc, version_t version,
