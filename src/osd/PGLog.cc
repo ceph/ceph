@@ -691,6 +691,7 @@ bool PGLog::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
 	 i != log.log.rend();
 	 ++i) {
       if (i->version <= info.last_complete) break;
+      if (i->soid > info.last_backfill) continue;
       if (did.count(i->soid)) continue;
       did.insert(i->soid);
       
@@ -714,6 +715,7 @@ bool PGLog::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
 	 i != divergent_priors.rend();
 	 ++i) {
       if (i->first <= info.last_complete) break;
+      if (i->second > info.last_backfill) continue;
       if (did.count(i->second)) continue;
       did.insert(i->second);
       bufferlist bv;
