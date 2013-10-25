@@ -234,6 +234,21 @@ public:
   };
   friend class PromoteCallback;
 
+  struct FlushOp {
+    OpContext *ctx;             ///< the parent OpContext
+    list<OpRequestRef> dup_ops; ///< dup flush requests
+    version_t flushed_version;  ///< user version we are flushing
+    tid_t objecter_tid;         ///< copy-from request tid
+    int rval;                   ///< copy-from result
+    bool blocking;              ///< whether we are blocking updates
+    bool removal;               ///< we are removing the backend object
+
+    FlushOp()
+      : ctx(NULL), objecter_tid(0), rval(0),
+	blocking(false), removal(false) {}
+  };
+  typedef boost::shared_ptr<FlushOp> FlushOpRef;
+
   boost::scoped_ptr<PGBackend> pgbackend;
   PGBackend *get_pgbackend() {
     return pgbackend.get();
@@ -1003,6 +1018,17 @@ protected:
 
   friend class C_Copyfrom;
 
+  // -- flush --
+  map<hobject_t, FlushOpRef> flush_ops;
+
+  int start_flush(OpContext *ctx, bool blocking);
+  void finish_flush(hobject_t oid, tid_t tid, int r);
+  int try_flush_mark_clean(FlushOpRef fop);
+  void cancel_flush(FlushOpRef fop, bool requeue);
+  void cancel_flush_ops(bool requeue);
+
+  friend class C_Flush;
+
   // -- scrub --
   virtual void _scrub(ScrubMap& map);
   virtual void _scrub_clear_state();
@@ -1180,6 +1206,8 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
       << " wfack=" << repop.waitfor_ack
     //<< " wfnvram=" << repop.waitfor_nvram
       << " wfdisk=" << repop.waitfor_disk;
+  if (repop.ctx->lock_to_release != ReplicatedPG::OpContext::NONE)
+    out << " lock=" << (int)repop.ctx->lock_to_release;
   if (repop.ctx->op)
     out << " op=" << *(repop.ctx->op->get_req());
   out << ")";
