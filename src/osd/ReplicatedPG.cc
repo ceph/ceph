@@ -4725,8 +4725,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     tctx->user_at_version = results->user_version;
   }
   info.stats.stats.add(delta, obc->obs.oi.category);
-  tctx->at_version.epoch = get_osdmap()->get_epoch();
-  tctx->at_version.version = pg_log.get_head().version + 1;
+  tctx->at_version.epoch = get_next_version();
 
   tctx->log.push_back(pg_log_entry_t(
 	  pg_log_entry_t::MODIFY,
