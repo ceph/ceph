@@ -4352,27 +4352,28 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   if (!ctx->new_obs.exists)
     logopcode = pg_log_entry_t::DELETE;
   ctx->log.push_back(pg_log_entry_t(logopcode, soid, ctx->at_version,
-				    ctx->obs.oi.version,
+				    ctx->obs->oi.version,
 				    ctx->user_at_version, ctx->reqid,
 				    ctx->mtime));
 
   // apply new object state.
   ctx->obc->obs = ctx->new_obs;
   ctx->obc->ssc->snapset = ctx->new_snapset;
-  info.stats.stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
+  info.stats.stats.add(ctx->delta_stats, ctx->obs->oi.category);
 
   if (backfill_target >= 0) {
     pg_info_t& pinfo = peer_info[backfill_target];
     if (soid <= pinfo.last_backfill)
-      pinfo.stats.stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
+      pinfo.stats.stats.add(ctx->delta_stats, ctx->obs->oi.category);
     else if (soid <= last_backfill_started)
-      pending_backfill_updates[soid].stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
+      pending_backfill_updates[soid].stats.add(ctx->delta_stats,
+					       ctx->obs->oi.category);
   }
 
   if (scrubber.active && scrubber.is_chunky) {
     assert(soid < scrubber.start || soid >= scrubber.end);
     if (soid < scrubber.start)
-      scrub_cstat.add(ctx->delta_stats, ctx->obc->obs.oi.category);
+      scrub_cstat.add(ctx->delta_stats, ctx->obs->oi.category);
   }
 
   return result;
