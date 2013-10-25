@@ -36,6 +36,7 @@ const char *ceph_osd_flag_name(unsigned flag)
   case CEPH_OSD_FLAG_LOCALIZE_READS: return "localize_reads";
   case CEPH_OSD_FLAG_RWORDERED: return "rwordered";
   case CEPH_OSD_FLAG_IGNORE_OVERLAY: return "ignore_overlay";
+  case CEPH_OSD_FLAG_SKIPRWLOCKS: return "skiprwlocks";
   default: return "???";
   }
 }
