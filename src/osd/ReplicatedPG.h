@@ -230,6 +230,17 @@ public:
   };
   friend class PromoteCallback;
 
+  struct FlushOp {
+    ObjectContextRef obc;
+    OpRequestRef op;            ///< rados request that triggered this
+    version_t flushed_version;  ///< user version we are flushing
+    tid_t objecter_tid;         ///< copy-from request tid
+    int rval;                   ///< copy-from result
+
+    FlushOp() : objecter_tid(0), rval(0) {}
+  };
+  typedef boost::shared_ptr<FlushOp> FlushOpRef;
+
   boost::scoped_ptr<PGBackend> pgbackend;
   PGBackend *get_pgbackend() {
     return pgbackend.get();
@@ -999,6 +1010,17 @@ protected:
   void cancel_copy_ops(bool requeue);
 
   friend class C_Copyfrom;
+
+  // -- flush --
+  map<hobject_t, FlushOpRef> flush_ops;
+
+  void start_flush(ObjectContextRef obc, OpRequestRef op);
+  void finish_flush(hobject_t oid, tid_t tid, int r);
+  void try_flush_mark_clean(FlushOpRef fop);
+  void cancel_flush(FlushOpRef fop, bool requeue);
+  void cancel_flush_ops(bool requeue);
+
+  friend class C_Flush;
 
   // -- scrub --
   virtual void _scrub(ScrubMap& map);

@@ -2505,6 +2505,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       // non user-visible modifications
     case CEPH_OSD_OP_WATCH:
     case CEPH_OSD_OP_CACHE_EVICT:
+    case CEPH_OSD_OP_CACHE_FLUSH:
     case CEPH_OSD_OP_UNDIRTY:
       break;
     default:
@@ -2780,6 +2781,27 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->undirty = true;  // see make_writeable()
 	ctx->modify = true;
 	ctx->delta_stats.num_wr++;
+      }
+      break;
+
+    case CEPH_OSD_OP_CACHE_FLUSH:
+      ++ctx->num_write;
+      {
+	if (ctx->lock_to_release != OpContext::NONE) {
+	  dout(10) << "cache-flush without SKIPRWLOCKS flag set" << dendl;
+	  result = -EINVAL;
+	  break;
+	}
+	if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE) {
+	  result = -EINVAL;
+	  break;
+	}
+	if (oi.is_dirty()) {
+	  start_flush(ctx->obc, ctx->op);
+	  result = -EINPROGRESS;
+	} else {
+	  result = 0;
+	}
       }
       break;
 
@@ -4764,6 +4786,180 @@ void ReplicatedPG::cancel_copy_ops(bool requeue)
   }
 }
 
+
+// ========================================================================
+// flush
+//
+// Flush a dirty object in the cache tier by writing it back to the
+// base tier.  The sequence looks like:
+//
+//  * send a copy-from operation to the base tier to copy the current
+//    version of the object
+//  * base tier will pull the object via (perhaps multiple) copy-get(s)
+//  * on completion, we check if the object has been modified.  if so,
+//    just reply with -EAGAIN.
+//  * try to take a write lock so we can clear the dirty flag.  if this
+//    fails, wait and retry
+//  * start a repop that clears the bit.
+//
+// If we have to wait, we will retry by coming back through the
+// start_flush method.  We check if a flush is already in progress
+// and, if so, try to finish it by rechecking the version and trying
+// to clear the dirty bit.
+//
+// In order for the cache-flush (a write op) to not block the copy-get
+// from reading the object, the client *must* set the SKIPRWLOCKS
+// flag.
+
+struct C_Flush : public Context {
+  ReplicatedPGRef pg;
+  hobject_t oid;
+  epoch_t last_peering_reset;
+  tid_t tid;
+  C_Flush(ReplicatedPG *p, hobject_t o, epoch_t lpr)
+    : pg(p), oid(o), last_peering_reset(lpr),
+      tid(0)
+  {}
+  void finish(int r) {
+    pg->lock();
+    if (last_peering_reset == pg->get_last_peering_reset()) {
+      pg->finish_flush(oid, tid, r);
+    }
+    pg->unlock();
+  }
+};
+
+void ReplicatedPG::start_flush(ObjectContextRef obc, OpRequestRef op)
+{
+  const object_info_t& oi = obc->obs.oi;
+  const hobject_t& soid = oi.soid;
+  dout(10) << __func__ << " " << soid
+	   << " v" << oi.version
+	   << " uv" << oi.user_version
+	   << dendl;
+
+  if (flush_ops.count(soid)) {
+    // FIXME: need to handle racing flushes
+    if (flush_ops[soid]->op == op) {
+      try_flush_mark_clean(flush_ops[soid]);
+      return;
+    }
+    assert(0 == "don't handle multiple flushes yet");
+  }
+
+  FlushOpRef fop(new FlushOp);
+  fop->obc = obc;
+  fop->flushed_version = oi.user_version;
+  fop->op = op;
+
+  ObjectOperation o;
+  object_locator_t oloc(soid);
+  o.copy_from(soid.oid.name, soid.snap, oloc, oi.user_version);
+
+  C_Flush *fin = new C_Flush(this, soid, get_last_peering_reset());
+  object_locator_t base_oloc(soid);
+  base_oloc.pool = pool.info.tier_of;
+  SnapContext snapc;  // FIXME
+
+  osd->objecter_lock.Lock();
+  tid_t tid = osd->objecter->mutate(soid.oid, base_oloc, o, snapc, oi.mtime,
+				    CEPH_OSD_FLAG_IGNORE_OVERLAY,
+				    NULL, fin);
+  fin->tid = tid;
+  fop->objecter_tid = tid;
+  osd->objecter_lock.Unlock();
+
+  flush_ops[soid] = fop;
+}
+
+void ReplicatedPG::finish_flush(hobject_t oid, tid_t tid, int r)
+{
+  dout(10) << __func__ << " " << oid << " tid " << tid
+	   << " " << cpp_strerror(r) << dendl;
+  map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(oid);
+  if (p == flush_ops.end()) {
+    dout(10) << __func__ << " no flush_op found" << dendl;
+    return;
+  }
+  FlushOpRef fop = p->second;
+  if (tid != fop->objecter_tid) {
+    dout(10) << __func__ << " tid " << tid << " != fop " << fop
+	     << " tid " << fop->objecter_tid << dendl;
+    return;
+  }
+  ObjectContextRef obc = fop->obc;
+  fop->objecter_tid = 0;
+
+  if (r < 0) {
+    if (fop->op)
+      osd->reply_op_error(fop->op, -EAGAIN, obc->obs.oi.version,
+			  obc->obs.oi.user_version);
+    return;
+  }
+
+  try_flush_mark_clean(fop);
+}
+
+void ReplicatedPG::try_flush_mark_clean(FlushOpRef fop)
+{
+  ObjectContextRef obc = fop->obc;
+  const hobject_t& oid = obc->obs.oi.soid;
+
+  if (fop->flushed_version != obc->obs.oi.user_version) {
+    dout(10) << __func__ << " flushed_versoin " << fop->flushed_version
+	     << " != current " << obc->obs.oi.user_version
+	     << dendl;
+    if (fop->op)
+      osd->reply_op_error(fop->op, -EAGAIN, obc->obs.oi.version,
+			  obc->obs.oi.user_version);
+    return;
+  }
+
+  // successfully flushed; can we clear the dirty bit?
+
+  // try to take the lock manually, since we don't have a ctx yet.
+  if (!obc->get_write(fop->op)) {
+    dout(10) << __func__ << " waiting on lock" << dendl;
+    return;
+  }
+
+  dout(10) << __func__ << " clearing DIRTY flag for " << oid << dendl;
+  RepGather *repop = simple_repop_create(obc);
+  OpContext *ctx = repop->ctx;
+  ctx->lock_to_release = OpContext::W_LOCK;  // we took it above
+  ctx->op = fop->op;
+  ctx->obc = obc;
+  ctx->at_version = get_next_version();
+  ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
+
+  finish_ctx(ctx);
+
+  simple_repop_submit(repop);
+
+  flush_ops.erase(oid);
+}
+
+void ReplicatedPG::cancel_flush(FlushOpRef fop, bool requeue)
+{
+  dout(10) << __func__ << " " << fop->obc->obs.oi.soid << " tid "
+	   << fop->objecter_tid << dendl;
+  if (fop->objecter_tid) {
+    Mutex::Locker l(osd->objecter_lock);
+    osd->objecter->op_cancel(fop->objecter_tid);
+  }
+  flush_ops.erase(fop->obc->obs.oi.soid);
+  if (fop->op && requeue)
+    requeue_op(fop->op);
+}
+
+void ReplicatedPG::cancel_flush_ops(bool requeue)
+{
+  dout(10) << __func__ << dendl;
+  map<hobject_t,FlushOpRef>::iterator p = flush_ops.begin();
+  while (p != flush_ops.end()) {
+    cancel_flush((p++)->second, requeue);
+  }
+}
 
 // ========================================================================
 // rep op gather
@@ -7545,6 +7741,7 @@ void ReplicatedPG::on_shutdown()
 
   unreg_next_scrub();
   cancel_copy_ops(false);
+  cancel_flush_ops(false);
   apply_and_flush_repops(false);
   context_registry_on_change();
 
@@ -7589,6 +7786,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   context_registry_on_change();
 
   cancel_copy_ops(is_primary());
+  cancel_flush_ops(is_primary());
 
   // requeue object waiters
   if (is_primary()) {
