@@ -7,6 +7,7 @@
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/assert.h"
+#include "common/RWLock.h"
 
 enum {
   UPDATE_OBJ,
@@ -126,23 +127,31 @@ WRITE_CLASS_ENCODER(RGWCacheNotifyInfo)
 struct ObjectCacheEntry {
   ObjectCacheInfo info;
   std::list<string>::iterator lru_iter;
+  uint64_t lru_promotion_ts;
+
+  ObjectCacheEntry() : lru_promotion_ts(0) {}
 };
 
 class ObjectCache {
   std::map<string, ObjectCacheEntry> cache_map;
   std::list<string> lru;
   unsigned long lru_size;
-  Mutex lock;
+  unsigned long lru_counter;
+  unsigned long lru_window;
+  RWLock lock;
   CephContext *cct;
 
-  void touch_lru(string& name, std::list<string>::iterator& lru_iter);
+  void touch_lru(string& name, ObjectCacheEntry& entry, std::list<string>::iterator& lru_iter);
   void remove_lru(string& name, std::list<string>::iterator& lru_iter);
 public:
-  ObjectCache() : lru_size(0), lock("ObjectCache"), cct(NULL) { }
+  ObjectCache() : lru_size(0), lru_counter(0), lru_window(0), lock("ObjectCache"), cct(NULL) { }
   int get(std::string& name, ObjectCacheInfo& bl, uint32_t mask);
   void put(std::string& name, ObjectCacheInfo& bl);
   void remove(std::string& name);
-  void set_ctx(CephContext *_cct) { cct = _cct; }
+  void set_ctx(CephContext *_cct) {
+    cct = _cct;
+    lru_window = cct->_conf->rgw_cache_lru_size / 2;
+  }
 };
 
 template <class T>
