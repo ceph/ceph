@@ -5121,6 +5121,7 @@ PG::RecoveryState::Started::react(const FlushedEvt&)
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->flushed = true;
+  pg->on_flushed();
   pg->requeue_ops(pg->waiting_for_active);
   return discard_event();
 }
@@ -6853,6 +6854,7 @@ PG::RecoveryState::WaitFlushedPeering::react(const FlushedEvt &evt)
   PG *pg = context< RecoveryMachine >().pg;
   pg->flushed = true;
   pg->requeue_ops(pg->waiting_for_active);
+  pg->on_flushed();
   return transit< WaitFlushedPeering >();
 }
 
