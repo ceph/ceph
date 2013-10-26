@@ -761,6 +761,11 @@ bool buffer_track_alloc = get_env_bool("CEPH_BUFFER_TRACK");
       nb = buffer::create_page_aligned(_len);
     else
       nb = buffer::create(_len);
+    rebuild(nb);
+  }
+
+  void buffer::list::rebuild(ptr& nb)
+  {
     unsigned pos = 0;
     for (std::list<ptr>::iterator it = _buffers.begin();
 	 it != _buffers.end();
@@ -804,7 +809,8 @@ void buffer::list::rebuild_page_aligned()
 	     (!p->is_page_aligned() ||
 	      !p->is_n_page_sized() ||
 	      (offset & ~CEPH_PAGE_MASK)));
-    unaligned.rebuild();
+    ptr nb(buffer::create_page_aligned(_len));
+    unaligned.rebuild(nb);
     _buffers.insert(p, unaligned._buffers.front());
   }
 }
