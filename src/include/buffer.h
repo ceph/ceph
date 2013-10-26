@@ -379,6 +379,7 @@ public:
 
     bool is_contiguous();
     void rebuild();
+    void rebuild(ptr& nb);
     void rebuild_page_aligned();
 
     // sort-of-like-assignment-op
