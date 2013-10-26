@@ -29,6 +29,7 @@
 #include "common/Formatter.h"
 #include "common/hobject.h"
 #include "Watch.h"
+#include "OpRequest.h"
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
@@ -49,27 +50,6 @@ typedef hobject_t collection_list_handle_t;
 
 typedef uint8_t shard_id_t;
 
-/**
- * osd request identifier
- *
- * caller name + incarnation# + tid to unique identify this request.
- */
-struct osd_reqid_t {
-  entity_name_t name; // who
-  tid_t         tid;
-  int32_t       inc;  // incarnation
-
-  osd_reqid_t()
-    : tid(0), inc(0) {}
-  osd_reqid_t(const entity_name_t& a, int i, tid_t t)
-    : name(a), tid(t), inc(i) {}
-
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<osd_reqid_t*>& o);
-};
-WRITE_CLASS_ENCODER(osd_reqid_t)
 
 inline ostream& operator<<(ostream& out, const osd_reqid_t& r) {
   return out << r.name << "." << r.inc << ":" << r.tid;
