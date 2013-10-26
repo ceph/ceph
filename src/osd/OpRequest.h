@@ -23,7 +23,28 @@
 #include "msg/Message.h"
 #include <tr1/memory>
 #include "common/TrackedOp.h"
-#include "osd/osd_types.h"
+
+/**
+ * osd request identifier
+ *
+ * caller name + incarnation# + tid to unique identify this request.
+ */
+struct osd_reqid_t {
+  entity_name_t name; // who
+  tid_t         tid;
+  int32_t       inc;  // incarnation
+
+  osd_reqid_t()
+    : tid(0), inc(0) {}
+  osd_reqid_t(const entity_name_t& a, int i, tid_t t)
+    : name(a), tid(t), inc(i) {}
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<osd_reqid_t*>& o);
+};
+WRITE_CLASS_ENCODER(osd_reqid_t)
 
 /**
  * The OpRequest takes in a Message* and takes over a single reference
