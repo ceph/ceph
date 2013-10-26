@@ -186,16 +186,6 @@ void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
   op->mark_delayed("waiting for degraded object");
 }
 
-void ReplicatedPG::wait_for_backfill_pos(OpRequestRef op)
-{
-  waiting_for_backfill_pos.push_back(op);
-}
-
-void ReplicatedPG::release_waiting_for_backfill_pos()
-{
-  requeue_ops(waiting_for_backfill_pos);
-}
-
 bool PGLSParentFilter::filter(bufferlist& xattr_data, bufferlist& outdata)
 {
   bufferlist::iterator iter = xattr_data.begin();
@@ -691,11 +681,6 @@ void ReplicatedPG::do_op(OpRequestRef op)
   // degraded object?
   if (write_ordered && is_degraded_object(head)) {
     wait_for_degraded_object(head, op);
-    return;
-  }
-
-  if (head == backfill_pos) {
-    wait_for_backfill_pos(op);
     return;
   }
 
@@ -1348,7 +1333,6 @@ void ReplicatedPG::do_scan(
 
       backfill_pos = backfill_info.begin > peer_backfill_info.begin ?
 	peer_backfill_info.begin : backfill_info.begin;
-      release_waiting_for_backfill_pos();
       dout(10) << " backfill_pos now " << backfill_pos << dendl;
 
       assert(waiting_on_backfill);
@@ -6785,7 +6769,6 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   context_registry_on_change();
 
   // requeue object waiters
-  requeue_ops(waiting_for_backfill_pos);
   requeue_object_waiters(waiting_for_missing_object);
   for (map<hobject_t,list<OpRequestRef> >::iterator p = waiting_for_degraded_object.begin();
        p != waiting_for_degraded_object.end();
@@ -7480,7 +7463,6 @@ int ReplicatedPG::recover_backfill(
   }
   send_pushes(g_conf->osd_recovery_op_priority, pushes);
 
-  release_waiting_for_backfill_pos();
   dout(5) << "backfill_pos is " << backfill_pos << " and pinfo.last_backfill is "
 	  << pinfo.last_backfill << dendl;
   for (set<hobject_t>::iterator i = backfills_in_flight.begin();
