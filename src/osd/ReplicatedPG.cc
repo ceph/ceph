@@ -15,6 +15,7 @@
  * 
  */
 
+#include "boost/tuple/tuple.hpp"
 #include "PG.h"
 #include "ReplicatedPG.h"
 #include "OSD.h"
@@ -202,8 +203,9 @@ void ReplicatedPG::on_global_recover(
 {
   publish_stats_to_osd();
   dout(10) << "pushed " << soid << " to all replicas" << dendl;
-  assert(recovering.count(soid));
-  recovering.erase(soid);
+  map<hobject_t, ObjectContextRef>::iterator i = recovering.find(soid);
+  assert(i != recovering.end());
+  recovering.erase(i);
   finish_recovery_op(soid);
   if (waiting_for_degraded_object.count(soid)) {
     requeue_ops(waiting_for_degraded_object[soid]);
@@ -223,10 +225,12 @@ void ReplicatedPG::on_peer_recover(
   // done!
   peer_missing[peer].got(soid, recovery_info.version);
   if (peer == backfill_target && backfills_in_flight.count(soid)) {
-    backfills_in_flight.erase(soid);
+    map<hobject_t, ObjectContextRef>::iterator i = recovering.find(soid);
+    assert(i != recovering.end());
     list<OpRequestRef> requeue_list;
-    rw_manager.drop_backfill_read(soid, &requeue_list);
+    i->second->drop_backfill_read(&requeue_list);
     requeue_ops(requeue_list);
+    backfills_in_flight.erase(soid);
   }
 }
 
@@ -275,7 +279,7 @@ void ReplicatedPG::wait_for_missing_object(const hobject_t& soid, OpRequestRef o
   assert(g != missing.missing.end());
   const eversion_t &v(g->second.need);
 
-  set<hobject_t>::const_iterator p = recovering.find(soid);
+  map<hobject_t, ObjectContextRef>::const_iterator p = recovering.find(soid);
   if (p != recovering.end()) {
     dout(7) << "missing " << soid << " v " << v << ", already recovering." << dendl;
   }
@@ -794,7 +798,6 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
 			   const hobject_t& ioid) :
   PG(o, curmap, _pool, p, oid, ioid),
   pgbackend(new ReplicatedBackend(this, coll_t(p), o)),
-  rw_manager(),
   snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
   temp_seq(0),
   snap_trimmer_machine(this)
@@ -1121,6 +1124,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
   OpContext *ctx = new OpContext(op, m->get_reqid(), m->ops,
 				 &obc->obs, obc->ssc, 
 				 this);
+  ctx->obc = obc;
   if (!get_rw_locks(ctx)) {
     op->mark_delayed("waiting for rw locks");
     close_op_ctx(ctx);
@@ -1143,7 +1147,6 @@ void ReplicatedPG::do_op(OpRequestRef op)
   }
 
   op->mark_started();
-  ctx->obc = obc;
   ctx->src_obc = src_obc;
 
   execute_ctx(ctx);
@@ -4661,7 +4664,6 @@ void ReplicatedPG::op_applied(RepGather *repop)
   }
 
   repop->src_obc.clear();
-  repop->obc = ObjectContextRef();
 
   if (!repop->aborted) {
     assert(repop->waitfor_ack.count(whoami) ||
@@ -6049,7 +6051,7 @@ int ReplicatedPG::recover_missing(
   }
   start_recovery_op(soid);
   assert(!recovering.count(soid));
-  recovering.insert(soid);
+  recovering.insert(make_pair(soid, obc));
   pgbackend->recover_object(
     soid,
     head_obc,
@@ -7422,7 +7424,8 @@ void ReplicatedPG::_clear_recovery_state()
   list<OpRequestRef> blocked_ops;
   set<hobject_t>::iterator i = backfills_in_flight.begin();
   while (i != backfills_in_flight.end()) {
-    rw_manager.drop_backfill_read(*i, &blocked_ops);
+    assert(recovering.count(*i));
+    recovering[*i]->drop_backfill_read(&blocked_ops);
     requeue_ops(blocked_ops);
     backfills_in_flight.erase(i++);
   }
@@ -7834,7 +7837,7 @@ int ReplicatedPG::prep_object_replica_pushes(
 
   start_recovery_op(soid);
   assert(!recovering.count(soid));
-  recovering.insert(soid);
+  recovering.insert(make_pair(soid, obc));
 
   /* We need this in case there is an in progress write on the object.  In fact,
    * the only possible write is an update to the xattr due to a lost_revert --
@@ -7982,7 +7985,8 @@ int ReplicatedPG::recover_backfill(
   update_range(&backfill_info, handle);
 
   int ops = 0;
-  map<hobject_t, pair<eversion_t, eversion_t> > to_push;
+  map<hobject_t,
+      boost::tuple<eversion_t, eversion_t, ObjectContextRef> > to_push;
   map<hobject_t, eversion_t> to_remove;
   set<hobject_t> add_to_stat;
 
@@ -8040,10 +8044,13 @@ int ReplicatedPG::recover_backfill(
     } else if (pbi.begin == backfill_info.begin) {
       eversion_t& obj_v = backfill_info.objects.begin()->second;
       if (pbi.objects.begin()->second != obj_v) {
-	if (rw_manager.get_backfill_read(backfill_info.begin)) {
+	ObjectContextRef obc = get_object_context(backfill_info.begin, false);
+	assert(obc);
+	if (obc->get_backfill_read()) {
 	  dout(20) << " replacing peer " << pbi.begin << " with local "
 		   << obj_v << dendl;
-	  to_push[pbi.begin] = make_pair(obj_v, pbi.objects.begin()->second);
+	  to_push[pbi.begin] = boost::make_tuple(
+	    obj_v, pbi.objects.begin()->second, obc);
 	  ops++;
 	} else {
 	  *work_started = true;
@@ -8064,13 +8071,17 @@ int ReplicatedPG::recover_backfill(
       backfill_info.pop_front();
       pbi.pop_front();
     } else {
-      if (rw_manager.get_backfill_read(backfill_info.begin)) {
+      ObjectContextRef obc = get_object_context(backfill_info.begin, false);
+      assert(obc);
+      if (obc->get_backfill_read()) {
 	dout(20) << " pushing local " << backfill_info.begin << " "
 		 << backfill_info.objects.begin()->second
 		 << " to peer osd." << backfill_target << dendl;
 	to_push[backfill_info.begin] =
-	  make_pair(backfill_info.objects.begin()->second,
-		    eversion_t());
+	  boost::make_tuple(
+	    backfill_info.objects.begin()->second,
+	    eversion_t(),
+	    obc);
 	add_to_stat.insert(backfill_info.begin);
 	backfill_info.pop_front();
 	ops++;
@@ -8101,12 +8112,15 @@ int ReplicatedPG::recover_backfill(
 
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
   map<int, vector<PushOp> > pushes;
-  for (map<hobject_t, pair<eversion_t, eversion_t> >::iterator i = to_push.begin();
+  for (map<hobject_t,
+	   boost::tuple<eversion_t, eversion_t, ObjectContextRef> >::iterator i =
+	     to_push.begin();
        i != to_push.end();
        ++i) {
     handle.reset_tp_timeout();
     prep_backfill_object_push(
-      i->first, i->second.first, i->second.second, backfill_target, h);
+      i->first, i->second.get<0>(), i->second.get<1>(), i->second.get<2>(),
+      backfill_target, h);
   }
   pgbackend->run_recovery_op(h, cct->_conf->osd_recovery_op_priority);
 
@@ -8155,7 +8169,9 @@ int ReplicatedPG::recover_backfill(
 }
 
 void ReplicatedPG::prep_backfill_object_push(
-  hobject_t oid, eversion_t v, eversion_t have, int peer,
+  hobject_t oid, eversion_t v, eversion_t have,
+  ObjectContextRef obc,
+  int peer,
   PGBackend::RecoveryHandle *h)
 {
   dout(10) << "push_backfill_object " << oid << " v " << v << " to osd." << peer << dendl;
@@ -8168,8 +8184,7 @@ void ReplicatedPG::prep_backfill_object_push(
   assert(!recovering.count(oid));
 
   start_recovery_op(oid);
-  recovering.insert(oid);
-  ObjectContextRef obc = get_object_context(oid, false);
+  recovering.insert(make_pair(oid, obc));
 
   // We need to take the read_lock here in order to flush in-progress writes
   obc->ondisk_read_lock();
