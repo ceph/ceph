@@ -3942,6 +3942,18 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
 				      osd_reqid_t(), ctx->new_obs.oi.mtime));
     ::encode(snaps, ctx->log.back().snaps);
 
+    /**
+     * In order to keep backfill_info up to date and avoid skipping this
+     * new clone, we must add the clone to backfill_pos.  Furthermore, this
+     * is the only way in which an object might be created prior to backfill_pos
+     * without having the transaction shipped to the replica
+     */
+    if (ctx->obs->oi.soid == backfill_pos) {
+      backfill_info.objects.insert(make_pair(coid, ctx->at_version));
+      backfill_info.begin = coid;
+      backfill_pos = backfill_info.begin;
+    }
+
     ctx->at_version.version++;
   }
 
