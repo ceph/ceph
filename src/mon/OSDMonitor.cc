@@ -4348,7 +4348,7 @@ int OSDMonitor::_prepare_rename_pool(uint64_t pool, string newname)
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
        p != pending_inc.new_pool_names.end();
        ++p) {
-    if (p->second == newname) {
+    if (p->second == newname && p->first != pool) {
       return -EEXIST;
     }
   }
