@@ -149,7 +149,12 @@ def parse_args():
     parser.add_argument(
         '--os-type',
         default='ubuntu',
-        help='virtual machine type',
+        help='OS type (distro)',
+    )
+    parser.add_argument(
+        '--os-version',
+        default=None,
+        help='OS (distro) version such as "12.10"',
     )
 
     return parser.parse_args()
