@@ -474,7 +474,6 @@ public:
     void put() {
       assert(nref > 0);
       if (--nref == 0) {
-	assert(!obc);
 	assert(src_obc.empty());
 	delete ctx; // must already be unlocked
 	delete this;
@@ -495,144 +494,6 @@ public:
 
 protected:
 
-  /// Tracks pending readers or writers on an object
-  class RWTracker {
-    struct ObjState {
-      enum State {
-	NONE,
-	READ,
-	WRITE
-      };
-      State state;                 /// rw state
-      uint64_t count;              /// number of readers or writers
-      list<OpRequestRef> waiters;  /// ops waiting on state change
-
-      /// if set, restart backfill when we can get a read lock
-      bool backfill_read_marker;
-
-      ObjState() : state(NONE), count(0), backfill_read_marker(false) {}
-      bool get_read(OpRequestRef op) {
-	if (get_read_lock()) {
-	  return true;
-	} // else
-	waiters.push_back(op);
-	return false;
-      }
-      /// this function adjusts the counts if necessary
-      bool get_read_lock() {
-	// don't starve anybody!
-	if (!waiters.empty()) {
-	  return false;
-	}
-	switch (state) {
-	case NONE:
-	  assert(count == 0);
-	  state = READ;
-	  // fall through
-	case READ:
-	  count++;
-	  return true;
-	case WRITE:
-	  return false;
-	default:
-	  assert(0 == "unhandled case");
-	  return false;
-	}
-      }
-
-      bool get_write(OpRequestRef op) {
-	if (get_write_lock()) {
-	  return true;
-	} // else
-	waiters.push_back(op);
-	return false;
-      }
-      bool get_write_lock() {
-	// don't starve anybody!
-	if (!waiters.empty() ||
-	    backfill_read_marker) {
-	  return false;
-	}
-	switch (state) {
-	case NONE:
-	  assert(count == 0);
-	  state = WRITE;
-	  // fall through
-	case WRITE:
-	  count++;
-	  return true;
-	case READ:
-	  return false;
-	default:
-	  assert(0 == "unhandled case");
-	  return false;
-	}
-      }
-      void dec(list<OpRequestRef> *requeue) {
-	assert(count > 0);
-	assert(requeue);
-	assert(requeue->empty());
-	count--;
-	if (count == 0) {
-	  state = NONE;
-	  requeue->swap(waiters);
-	}
-      }
-      void put_read(list<OpRequestRef> *requeue) {
-	assert(state == READ);
-	dec(requeue);
-      }
-      void put_write(list<OpRequestRef> *requeue) {
-	assert(state == WRITE);
-	dec(requeue);
-      }
-      bool empty() const { return state == NONE; }
-    };
-    map<hobject_t, ObjState > obj_state; ///< map of rw_lock states
-  public:
-    RWTracker() {}
-
-    bool get_read(const hobject_t &hoid, OpRequestRef op) {
-      return obj_state[hoid].get_read(op);
-    }
-    bool get_write(const hobject_t &hoid, OpRequestRef op) {
-      return obj_state[hoid].get_write(op);
-    }
-    void put_read(const hobject_t &hoid, list<OpRequestRef> *to_wake) {
-      obj_state[hoid].put_read(to_wake);
-      if (obj_state[hoid].empty()) {
-	obj_state.erase(hoid);
-      }
-    }
-    void put_write(const hobject_t &hoid, list<OpRequestRef> *to_wake,
-                   bool *requeue_recovery) {
-      obj_state[hoid].put_write(to_wake);
-      if (obj_state[hoid].empty()) {
-	if (obj_state[hoid].backfill_read_marker)
-	  *requeue_recovery = true;
-	obj_state.erase(hoid);
-      }
-    }
-    bool get_backfill_read(const hobject_t &hoid) {
-      ObjState& obj_locker = obj_state[hoid];
-      obj_locker.backfill_read_marker = true;
-      if (obj_locker.get_read_lock()) {
-	return true;
-      } // else
-      return false;
-    }
-    void drop_backfill_read(const hobject_t &hoid, list<OpRequestRef> *ls) {
-      map<hobject_t, ObjState>::iterator i = obj_state.find(hoid);
-      ObjState& obj_locker = i->second;
-      assert(obj_locker.backfill_read_marker = true);
-      obj_locker.put_read(ls);
-      if (obj_locker.empty())
-	obj_state.erase(i);
-      else
-	obj_locker.backfill_read_marker = false;
-    }
-  } rw_manager;
-
   /**
    * Grabs locks for OpContext, should be cleaned up in close_op_ctx
    *
@@ -641,7 +502,7 @@ protected:
    */
   bool get_rw_locks(OpContext *ctx) {
     if (ctx->op->may_write()) {
-      if (rw_manager.get_write(ctx->obs->oi.soid, ctx->op)) {
+      if (ctx->obc->get_write(ctx->op)) {
 	ctx->lock_to_release = OpContext::W_LOCK;
 	return true;
       } else {
@@ -649,7 +510,7 @@ protected:
       }
     } else {
       assert(ctx->op->may_read());
-      if (rw_manager.get_read(ctx->obs->oi.soid, ctx->op)) {
+      if (ctx->obc->get_read(ctx->op)) {
 	ctx->lock_to_release = OpContext::R_LOCK;
 	return true;
       } else {
@@ -678,12 +539,12 @@ protected:
     bool requeue_recovery = false;
     switch (ctx->lock_to_release) {
     case OpContext::W_LOCK:
-      rw_manager.put_write(ctx->obs->oi.soid, &to_req, &requeue_recovery);
+      ctx->obc->put_write(&to_req, &requeue_recovery);
       if (requeue_recovery)
 	osd->recovery_wq.queue(this);
       break;
     case OpContext::R_LOCK:
-      rw_manager.put_read(ctx->obs->oi.soid, &to_req);
+      ctx->obc->put_read(&to_req);
       break;
     case OpContext::NONE:
       break;
@@ -803,7 +664,7 @@ protected:
   }
   void put_snapset_context(SnapSetContext *ssc);
 
-  set<hobject_t> recovering;
+  map<hobject_t, ObjectContextRef> recovering;
 
   /*
    * Backfill
@@ -847,10 +708,10 @@ protected:
     }
     {
       f->open_array_section("recovering");
-      for (set<hobject_t>::const_iterator i = recovering.begin();
+      for (map<hobject_t, ObjectContextRef>::const_iterator i = recovering.begin();
 	   i != recovering.end();
 	   ++i) {
-	f->dump_stream("object") << *i;
+	f->dump_stream("object") << i->first;
       }
       f->close_section();
     }
@@ -938,7 +799,8 @@ protected:
     );
 
   void prep_backfill_object_push(
-    hobject_t oid, eversion_t v, eversion_t have, int peer,
+    hobject_t oid, eversion_t v, eversion_t have, ObjectContextRef obc,
+    int peer,
     PGBackend::RecoveryHandle *h);
   void send_remove_op(const hobject_t& oid, eversion_t v, int peer);
 
