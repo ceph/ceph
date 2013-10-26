@@ -6558,6 +6558,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     if (oi.version != recovery_info.version) {
       osd->clog.error() << get_info().pgid << " push "
 			<< recovery_info.soid << " v "
+			<< recovery_info.version
 			<< " failed because local copy is "
 			<< oi.version << "\n";
       return -EINVAL;
