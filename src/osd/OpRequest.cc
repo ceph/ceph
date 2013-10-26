@@ -10,6 +10,7 @@
 #include "messages/MOSDOp.h"
 #include "messages/MOSDSubOp.h"
 #include "include/assert.h"
+#include "osd/osd_types.h"
 
 
 
@@ -57,3 +58,27 @@ void OpRequest::init_from_message()
     reqid = static_cast<MOSDSubOp*>(request)->reqid;
   }
 }
+
+bool OpRequest::check_rmw(int flag) {
+  return rmw_flags & flag;
+}
+bool OpRequest::may_read() { return need_read_cap() || need_class_read_cap(); }
+bool OpRequest::may_write() { return need_write_cap() || need_class_write_cap(); }
+bool OpRequest::includes_pg_op() { return check_rmw(CEPH_OSD_RMW_FLAG_PGOP); }
+bool OpRequest::need_read_cap() {
+  return check_rmw(CEPH_OSD_RMW_FLAG_READ);
+}
+bool OpRequest::need_write_cap() {
+  return check_rmw(CEPH_OSD_RMW_FLAG_WRITE);
+}
+bool OpRequest::need_class_read_cap() {
+  return check_rmw(CEPH_OSD_RMW_FLAG_CLASS_READ);
+}
+bool OpRequest::need_class_write_cap() {
+  return check_rmw(CEPH_OSD_RMW_FLAG_CLASS_WRITE);
+}
+void OpRequest::set_read() { rmw_flags |= CEPH_OSD_RMW_FLAG_READ; }
+void OpRequest::set_write() { rmw_flags |= CEPH_OSD_RMW_FLAG_WRITE; }
+void OpRequest::set_class_read() { rmw_flags |= CEPH_OSD_RMW_FLAG_CLASS_READ; }
+void OpRequest::set_class_write() { rmw_flags |= CEPH_OSD_RMW_FLAG_CLASS_WRITE; }
+void OpRequest::set_pg_op() { rmw_flags |= CEPH_OSD_RMW_FLAG_PGOP; }
