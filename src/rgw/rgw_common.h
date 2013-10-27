@@ -96,6 +96,9 @@ using ceph::crypto::MD5;
 
 #define RGW_DEFAULT_MAX_BUCKETS 1000
 
+#define RGW_DEFER_TO_BUCKET_ACLS_RECURSE 1
+#define RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL 2
+
 #define STATUS_CREATED           1900
 #define STATUS_ACCEPTED          1901
 #define STATUS_NO_CONTENT        1902
@@ -298,10 +301,11 @@ protected:
   void init(CephContext *cct, RGWEnv * env);
 public:
   RGWConf() :
-    enable_ops_log(1), enable_usage_log(1) {}
+    enable_ops_log(1), enable_usage_log(1), defer_to_bucket_acls(0) {}
 
   int enable_ops_log;
   int enable_usage_log;
+  uint8_t defer_to_bucket_acls;
 };
 
 enum http_op {
@@ -816,6 +820,7 @@ struct req_state {
    uint64_t obj_size;
    bool enable_ops_log;
    bool enable_usage_log;
+   uint8_t defer_to_bucket_acls;
    uint32_t perm_mask;
    utime_t header_time;
 
