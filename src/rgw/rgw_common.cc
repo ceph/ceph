@@ -128,6 +128,7 @@ req_state::req_state(CephContext *_cct, class RGWEnv *e) : cct(_cct), cio(NULL),
 {
   enable_ops_log = e->conf->enable_ops_log;
   enable_usage_log = e->conf->enable_usage_log;
+  defer_to_bucket_acls = e->conf->defer_to_bucket_acls;
   content_started = false;
   format = 0;
   formatter = NULL;
@@ -615,8 +616,18 @@ bool verify_bucket_permission(struct req_state *s, int perm)
   return s->bucket_acl->verify_permission(s->user.user_id, perm, perm);
 }
 
+static inline bool check_deferred_bucket_acl(struct req_state *s, uint8_t deferred_check, int perm)
+{
+  return (s->defer_to_bucket_acls == deferred_check && verify_bucket_permission(s, perm));
+}
+
 bool verify_object_permission(struct req_state *s, RGWAccessControlPolicy *bucket_acl, RGWAccessControlPolicy *object_acl, int perm)
 {
+  if (check_deferred_bucket_acl(s, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
+      check_deferred_bucket_acl(s, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL)) {
+    return true;
+  }
+
   if (!object_acl)
     return false;
 
