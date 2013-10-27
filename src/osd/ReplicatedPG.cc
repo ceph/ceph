@@ -8609,6 +8609,13 @@ ReplicatedPG::TrimmingObjects::TrimmingObjects(my_context ctx)
 void ReplicatedPG::TrimmingObjects::exit()
 {
   context< SnapTrimmer >().log_exit(state_name, enter_time);
+  // Clean up repops in case of reset
+  set<RepGather *> &repops = context<SnapTrimmer>().repops;
+  for (set<RepGather *>::iterator i = repops.begin();
+       i != repops.end();
+       repops.erase(i++)) {
+    (*i)->put();
+  }
 }
 
 boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
