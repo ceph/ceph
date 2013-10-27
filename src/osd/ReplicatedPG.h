@@ -1091,10 +1091,7 @@ public:
   void on_role_change();
   void on_change(ObjectStore::Transaction *t);
   void on_activate();
-  void on_flushed() {
-    assert(object_contexts.empty());
-    pgbackend->on_flushed();
-  }
+  void on_flushed();
   void on_removal(ObjectStore::Transaction *t);
   void on_shutdown();
 };
