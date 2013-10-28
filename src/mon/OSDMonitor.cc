@@ -2793,7 +2793,9 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
-    if (n > (int)p.get_pg_num()) {
+    if (n <= 0) {
+      ss << "specified pgp_num must > 0, but you set to " << n;
+    } else if (n > (int)p.get_pg_num()) {
       ss << "specified pgp_num " << n << " > pg_num " << p.get_pg_num();
     } else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
       ss << "still creating pgs, wait";
