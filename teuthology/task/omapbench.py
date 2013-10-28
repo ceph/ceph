@@ -1,3 +1,6 @@
+"""
+Run omapbench executable within teuthology
+"""
 import contextlib
 import logging
 

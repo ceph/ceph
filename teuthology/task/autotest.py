@@ -1,3 +1,6 @@
+""" 
+Run an autotest test on the ceph cluster.
+"""
 import json
 import logging
 import os
@@ -70,6 +73,9 @@ def task(ctx, config):
             p.spawn(_run_tests, testdir, remote, role, tests)
 
 def _download(testdir, remote):
+    """
+    Download.  Does not explicitly support muliple tasks in a single run.
+    """
     remote.run(
         args=[
             # explicitly does not support multiple autotest tasks
@@ -94,6 +100,9 @@ def _download(testdir, remote):
         )
 
 def _run_tests(testdir, remote, role, tests):
+    """
+    Spawned to run test on remote site
+    """
     assert isinstance(role, basestring)
     PREFIX = 'client.'
     assert role.startswith(PREFIX)

@@ -1,3 +1,4 @@
+"""Scrub testing"""
 from cStringIO import StringIO
 
 import logging

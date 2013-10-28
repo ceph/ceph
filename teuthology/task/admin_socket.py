@@ -1,3 +1,6 @@
+"""
+Admin Socket task -- used in rados, powercycle, and smoke testing
+"""
 from cStringIO import StringIO
 
 import json
@@ -10,6 +13,7 @@ from teuthology import misc as teuthology
 from teuthology.parallel import parallel
 
 log = logging.getLogger(__name__)
+
 
 def task(ctx, config):
     """
@@ -54,18 +58,30 @@ def task(ctx, config):
     Note that there must be a ceph client with an admin socket running
     before this task is run. The tests are parallelized at the client
     level. Tests for a single client are run serially.
+
+    :param ctx: Context
+    :param config: Configuration
     """
     assert isinstance(config, dict), \
         'admin_socket task requires a dict for configuration'
     teuthology.replace_all_with_clients(ctx.cluster, config)
 
-    with parallel() as p:
+    with parallel() as ptask:
         for client, tests in config.iteritems():
-            p.spawn(_run_tests, ctx, client, tests)
+            ptask.spawn(_run_tests, ctx, client, tests)
+
 
 def _socket_command(ctx, remote, socket_path, command, args):
     """
     Run an admin socket command and return the result as a string.
+
+    :param ctx: Context
+    :param remote: Remote site
+    :param socket_path: path to socket
+    :param command: command to be run remotely
+    :param args: command arguments
+
+    :returns: output of command in json format
     """
     json_fp = StringIO()
     testdir = teuthology.get_testdir(ctx)
@@ -87,7 +103,8 @@ def _socket_command(ctx, remote, socket_path, command, args):
             break
         assert max_tries > 0
         max_tries -= 1
-        log.info('ceph cli returned an error, command not registered yet?  sleeping and retrying ...')
+        log.info('ceph cli returned an error, command not registered yet?')
+        log.info('sleeping and retrying ...')
         time.sleep(1)
     out = json_fp.getvalue()
     json_fp.close()
@@ -95,6 +112,15 @@ def _socket_command(ctx, remote, socket_path, command, args):
     return json.loads(out)
 
 def _run_tests(ctx, client, tests):
+    """
+    Create a temp directory and wait for a client socket to be created.
+    For each test, copy the executable locally and run the test.
+    Remove temp directory when finished.
+
+    :param ctx: Context
+    :param client: client machine to run the test
+    :param tests: list of tests to run
+    """
     testdir = teuthology.get_testdir(ctx)
     log.debug('Running admin socket tests on %s', client)
     (remote,) = ctx.cluster.only(client).remotes.iterkeys()
@@ -164,4 +190,3 @@ def _run_tests(ctx, client, tests):
                 'rm', '-rf', '--', tmp_dir,
                 ],
             )
-

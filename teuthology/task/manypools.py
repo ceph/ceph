@@ -1,3 +1,6 @@
+"""
+Force pg creation on all osds
+"""
 from teuthology import misc as teuthology
 from ..orchestra import run
 import logging

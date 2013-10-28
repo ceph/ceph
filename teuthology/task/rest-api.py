@@ -1,3 +1,6 @@
+"""
+Rest Api
+"""
 import logging
 import contextlib
 import time
@@ -12,6 +15,9 @@ log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
 def run_rest_api_daemon(ctx, api_clients):
+    """
+    Wrapper starts the rest api daemons
+    """
     if not hasattr(ctx, 'daemons'):
         ctx.daemons = CephState()
     remotes = ctx.cluster.only(teuthology.is_type('client')).remotes

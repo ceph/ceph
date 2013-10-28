@@ -1,3 +1,6 @@
+"""
+Task sequencer
+"""
 import sys
 import logging
 
@@ -28,7 +31,10 @@ def task(ctx, config):
     That is, if the entry is not a dict, we will look it up in the top-level
     config.
 
-    Sequential task and Parallel tasks can be nested.
+    Sequential tasks and Parallel tasks can be nested.
+
+    :param ctx: Context
+    :param config: Configuration
     """
     stack = []
     try:

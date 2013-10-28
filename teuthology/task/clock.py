@@ -1,3 +1,6 @@
+"""
+Clock synchronizer 
+"""
 import logging
 import contextlib
 
@@ -22,6 +25,8 @@ def task(ctx, config):
 
     to sync.
 
+    :param ctx: Context
+    :param config: Configuration
     """
 
     log.info('Syncing clocks and checking initial clock skew...')
@@ -68,6 +73,12 @@ def task(ctx, config):
 
 @contextlib.contextmanager
 def check(ctx, config):
+    """
+    Run ntpdc at the start and the end of the task.
+   
+    :param ctx: Context
+    :param config: Configuration
+    """
     log.info('Checking initial clock skew...')
     for rem in ctx.cluster.remotes.iterkeys():
         rem.run(

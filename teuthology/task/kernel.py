@@ -1,3 +1,6 @@
+"""
+Kernel installation task
+"""
 from cStringIO import StringIO
 
 import logging
@@ -45,6 +48,9 @@ def normalize_config(ctx, config):
 
     If config is None or just specifies a version to use,
     it is applied to all nodes.
+
+    :param ctx: Context
+    :param config: Configuration
     """
     if config is None or \
             len(filter(lambda x: x in ['tag', 'branch', 'sha1', 'kdb',
@@ -74,6 +80,12 @@ def normalize_config(ctx, config):
 def _find_arch_and_dist(ctx):
     """
     Return the arch and distro value as a tuple.
+
+    Currently this only returns armv7l on the quantal distro or x86_64
+    on the precise distro
+  
+    :param ctx: Context
+    :returns: arch,distro
     """
     info = ctx.config.get('machine_type', 'plana')
     if teuthology.is_arm(info):
@@ -81,6 +93,13 @@ def _find_arch_and_dist(ctx):
     return ('x86_64', 'precise')
 
 def validate_config(ctx, config):
+    """
+    Make sure that all kernels in the list of remove kernels
+    refer to the same kernel.
+
+    :param ctx: Context
+    :param config: Configuration
+    """
     for _, roles_for_host in ctx.cluster.remotes.iteritems():
         kernel = None
         for role in roles_for_host:
@@ -94,17 +113,27 @@ def validate_config(ctx, config):
                     del config[role]
 
 def _vsplitter(version):
-    """kernels from Calxeda are named ...ceph-<sha1>...highbank
-    kernels that we generate named ...-g<sha1>
+    """Kernels from Calxeda are named ...ceph-<sha1>...highbank.
+    Kernels that we generate are named ...-g<sha1>.
     This routine finds the text in front of the sha1 that is used by
     need_to_install() to extract information from the kernel name.
-    """
 
+    :param version: Name of the kernel
+    """
     if version.endswith('highbank'):
         return 'ceph-'
     return '-g'
 
 def need_to_install(ctx, role, sha1):
+    """
+    Check to see if we need to install a kernel.  Get the version
+    of the currently running kernel, extract the sha1 value from 
+    its name, and compare it against the value passed in.
+
+    :param ctx: Context
+    :param role: machine associated with each role
+    :param sha1: sha1 to compare against (used in checking)
+    """
     ret = True
     log.info('Checking kernel version of {role}, want {sha1}...'.format(
             role=role,
@@ -137,6 +166,12 @@ def need_to_install(ctx, role, sha1):
     return ret
 
 def install_firmware(ctx, config):
+    """
+    Go to the github to get the latest firmware.
+
+    :param ctx: Context
+    :param config: Configuration
+    """
     linux_firmware_git_upstream = 'git://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git'
     uri = teuth_config.linux_firmware_git_url or linux_firmware_git_upstream
     fw_dir = '/lib/firmware/updates'
@@ -183,6 +218,12 @@ def install_firmware(ctx, config):
             )
 
 def download_deb(ctx, config):
+    """
+    Download a Debian kernel and copy the assocated linux image.
+
+    :param ctx: Context
+    :param config: Configuration
+    """
     procs = {}
     for role, src in config.iteritems():
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
@@ -239,6 +280,14 @@ def download_deb(ctx, config):
 
 
 def _no_grub_link(in_file, remote, kernel_ver):
+    """
+    Copy and link kernel related files if grub cannot be used
+    (as is the case in Arm kernels)
+
+    :param infile: kernel file or image file to be copied.
+    :param remote: remote machine 
+    :param kernel_ver: kernel version
+    """
     boot1 = '/boot/%s' % in_file
     boot2 = '%s.old' % boot1
     remote.run(
@@ -251,6 +300,17 @@ def _no_grub_link(in_file, remote, kernel_ver):
     )
 
 def install_and_reboot(ctx, config):
+    """
+    Install and reboot the kernel.  This mostly performs remote
+    installation operations.   The code does check for Arm images
+    and skips grub operations if the kernel is Arm.  Otherwise, it
+    extracts kernel titles from submenu entries and makes the appropriate
+    grub calls.   The assumptions here are somewhat simplified in that
+    it expects kernel entries to be present under submenu entries.
+
+    :param ctx: Context
+    :param config: Configuration
+    """
     procs = {}
     kernel_title = ''
     for role, src in config.iteritems():
@@ -390,6 +450,13 @@ def install_and_reboot(ctx, config):
         proc.exitstatus.get()
 
 def enable_disable_kdb(ctx, config):
+    """
+    Enable kdb on remote machines in use.  Disable on those that are
+    not in use.
+
+    :param ctx: Context
+    :param config: Configuration
+    """
     for role, enable in config.iteritems():
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
         if "mira" in role_remote.name:
@@ -417,6 +484,10 @@ def wait_for_reboot(ctx, need_install, timeout):
     """
     Loop reconnecting and checking kernel versions until
     they're all correct or the timeout is exceeded.
+
+    :param ctx: Context
+    :param need_install: list of packages that we need to reinstall.
+    :param timeout: number of second before we timeout.
     """
     import time
     starttime = time.time()
@@ -484,6 +555,8 @@ def task(ctx, config):
         kernel:
           kdb: true
 
+    :param ctx: Context
+    :param config: Configuration
     """
     assert config is None or isinstance(config, dict), \
         "task kernel only supports a dictionary for configuration"

@@ -1,3 +1,6 @@
+"""
+Daemon restart
+"""
 import logging
 import pipes
 
@@ -8,6 +11,9 @@ from ..orchestra import run
 log = logging.getLogger(__name__)
 
 def restart_daemon(ctx, config, role, id_, *args):
+    """
+    Handle restart (including the execution of the command parameters passed)
+    """
     log.info('Restarting {r}.{i} daemon...'.format(r=role, i=id_))
     daemon = ctx.daemons.get_daemon(role, id_)
     log.debug('Waiting for exit of {r}.{i} daemon...'.format(r=role, i=id_))
@@ -24,6 +30,7 @@ def restart_daemon(ctx, config, role, id_, *args):
         daemon.restart()
 
 def get_tests(ctx, config, role, remote, testdir):
+    """Download restart tests"""
     srcdir = '{tdir}/restart.{role}'.format(tdir=testdir, role=role)
 
     refspec = config.get('branch')

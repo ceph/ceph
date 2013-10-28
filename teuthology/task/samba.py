@@ -1,3 +1,6 @@
+"""
+Samba
+"""
 import contextlib
 import logging
 import sys
@@ -8,6 +11,13 @@ from ..orchestra import run
 log = logging.getLogger(__name__)
 
 def get_sambas(ctx, roles):
+    """
+    Scan for roles that are samba.  Yield the id of the the samba role
+    (samba.0, samba.1...)  and the associated remote site 
+    
+    :param ctx: Context
+    :param roles: roles for this test (extracted from yaml files)
+    """
     for role in roles:
         assert isinstance(role, basestring)
         PREFIX = 'samba.'
@@ -65,6 +75,8 @@ def task(ctx, config):
     role, the default behavior is to enable the ceph UNC //localhost/ceph
     and use the ceph vfs module as the smbd backend.
 
+    :param ctx: Context
+    :param config: Configuration
     """
     log.info("Setting up smbd with ceph vfs...")
     assert config is None or isinstance(config, list) or isinstance(config, dict), \

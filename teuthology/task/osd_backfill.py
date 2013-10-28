@@ -1,3 +1,6 @@
+"""
+Osd backfill test
+"""
 import logging
 import ceph_manager
 import time
@@ -8,6 +11,9 @@ log = logging.getLogger(__name__)
 
 
 def rados_start(ctx, remote, cmd):
+    """
+    Run a remote rados command (currently used to only write data)
+    """
     log.info("rados %s" % ' '.join(cmd))
     testdir = teuthology.get_testdir(ctx)
     pre = [

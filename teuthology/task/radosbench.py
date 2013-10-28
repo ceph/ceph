@@ -1,3 +1,6 @@
+"""
+Rados benchmarking
+"""
 import contextlib
 import logging
 

@@ -1,3 +1,6 @@
+"""
+Rgw admin testing against a running instance
+"""
 # The test cases in this file have been annotated for inventory.
 # To extract the inventory (in csv format) use the command:
 #
@@ -24,6 +27,7 @@ log = logging.getLogger(__name__)
 
 
 def successful_ops(out):
+    """Extract total from the first summary entry (presumed to be only one)"""
     summary = out['summary']
     if len(summary) == 0:
         return 0

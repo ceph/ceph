@@ -1,3 +1,6 @@
+"""
+Dump_stuck command
+"""
 import logging
 import re
 import time
@@ -9,6 +12,17 @@ from teuthology import misc as teuthology
 log = logging.getLogger(__name__)
 
 def check_stuck(manager, num_inactive, num_unclean, num_stale, timeout=10):
+    """
+    Do checks.  Make sure get_stuck_pgs return the right amout of information, then
+    extract health information from the raw_cluster_cmd and compare the results with
+    values passed in.  This passes if all asserts pass.
+ 
+    :param num_manager: Ceph manager
+    :param num_inactive: number of inaactive pages that are stuck
+    :param num_unclean: number of unclean pages that are stuck
+    :paran num_stale: number of stale pages that are stuck
+    :param timeout: timeout value for get_stuck_pgs calls
+    """
     inactive = manager.get_stuck_pgs('inactive', timeout)
     assert len(inactive) == num_inactive
     unclean = manager.get_stuck_pgs('unclean', timeout)
@@ -33,6 +47,8 @@ def task(ctx, config):
     """
     Test the dump_stuck command.
 
+    :param ctx: Context
+    :param config: Configuration
     """
     assert config is None, \
         'dump_stuck requires no configuration'

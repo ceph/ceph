@@ -1,3 +1,6 @@
+"""
+Thrash -- Simulate random osd failures.
+"""
 import contextlib
 import logging
 import ceph_manager

@@ -1,3 +1,6 @@
+"""
+Set up client keyring
+"""
 import logging
 
 from teuthology import misc as teuthology
@@ -6,6 +9,9 @@ from ..orchestra import run
 log = logging.getLogger(__name__)
 
 def create_keyring(ctx):
+    """
+    Set up key ring on remote sites
+    """
     log.info('Setting up client nodes...')
     clients = ctx.cluster.only(teuthology.is_type('client'))
     testdir = teuthology.get_testdir(ctx)

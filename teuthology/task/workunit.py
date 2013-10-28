@@ -1,3 +1,6 @@
+"""
+Workunit task -- Run ceph on sets of specific clients
+"""
 import logging
 import pipes
 import os
@@ -10,7 +13,7 @@ log = logging.getLogger(__name__)
 
 def task(ctx, config):
     """
-    Run ceph all workunits found under the specified path.
+    Run ceph on all workunits found under the specified path.
 
     For example::
 
@@ -48,6 +51,9 @@ def task(ctx, config):
             env:
               FOO: bar
               BAZ: quux
+
+    :param ctx: Context
+    :param config: Configuration
     """
     assert isinstance(config, dict)
     assert isinstance(config.get('clients'), dict), \
@@ -100,14 +106,22 @@ def task(ctx, config):
         PREFIX = 'client.'
         assert role.startswith(PREFIX)
         if created_dir_dict[role]:
-            _delete_dir(ctx, role, config.get('subdir'))
+            _delete_dir(ctx, role)
 
-def _delete_dir(ctx, role, subdir):
+def _delete_dir(ctx, role):
+    """
+    Delete file used by this role, and delete the directory that this
+    role appeared in.
+
+    :param ctx: Context
+    :param role: "role.#" where # is used for the role id.
+    """
     PREFIX = 'client.'
     testdir = teuthology.get_testdir(ctx)
     id_ = role[len(PREFIX):]
     (remote,) = ctx.cluster.only(role).remotes.iterkeys()
     mnt = os.path.join(testdir, 'mnt.{id}'.format(id=id_))
+    # Is there any reason why this is not: join(mnt, role) ?
     client = os.path.join(mnt, 'client.{id}'.format(id=id_))
     try:
         remote.run(
@@ -135,6 +149,14 @@ def _delete_dir(ctx, role, subdir):
         log.exception("Caught an execption deleting dir {dir}".format(dir=mnt))
 
 def _make_scratch_dir(ctx, role, subdir):
+    """
+    Make scratch directories for this role.  This also makes the mount
+    point if that directory does not exist.
+
+    :param ctx: Context
+    :param role: "role.#" where # is used for the role id.
+    :param subdir: use this subdir (False if not used)
+    """
     retVal = False
     PREFIX = 'client.'
     id_ = role[len(PREFIX):]
@@ -200,6 +222,17 @@ def _make_scratch_dir(ctx, role, subdir):
     return retVal
 
 def _spawn_on_all_clients(ctx, refspec, tests, env, subdir):
+    """
+    Make a scratch directory for each client in the cluster, and then for each
+    test spawn _run_tests for each role.    
+
+    :param ctx: Context
+    :param refspec: branch, sha1, or version tag used to identify this
+                    build 
+    :param tests: specific tests specified.
+    :param env: evnironment set in yaml file.  Could be None.
+    :param subdir: subdirectory set in yaml file.  Could be None
+    """
     client_generator = teuthology.all_roles_of_type(ctx.cluster, 'client')
     client_remotes = list()
     for client in client_generator:
@@ -215,9 +248,21 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, subdir):
     # cleanup the generated client directories
     client_generator = teuthology.all_roles_of_type(ctx.cluster, 'client')
     for client in client_generator:
-        _delete_dir(ctx, 'client.{id}'.format(id=client), subdir)
+        _delete_dir(ctx, 'client.{id}'.format(id=client))
 
 def _run_tests(ctx, refspec, role, tests, env, subdir=None):
+    """
+    Run the individual test.  Create a scratch directory and then extract the workunits
+    from the git-hub.  Make the executables, and then run the tests.
+    Clean up (remove files created) after the tests are finished.
+
+    :param ctx: Context
+    :param refspec: branch, sha1, or version tag used to identify this
+                    build 
+    :param tests: specific tests specified.
+    :param env: evnironment set in yaml file.  Could be None.
+    :param subdir: subdirectory set in yaml file.  Could be None
+    """
     testdir = teuthology.get_testdir(ctx)
     assert isinstance(role, basestring)
     PREFIX = 'client.'

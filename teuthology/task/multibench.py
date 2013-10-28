@@ -1,3 +1,6 @@
+"""
+Multibench testing
+"""
 import contextlib
 import logging
 import radosbench
@@ -33,6 +36,7 @@ def task(ctx, config):
         "please list clients to run on"
 
     def run_one(num):
+    """Run test spawn from gevent"""
         start = time.time()
         benchcontext = copy.copy(config.get('radosbench'))
         iterations = 0

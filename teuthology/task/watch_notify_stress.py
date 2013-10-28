@@ -1,3 +1,6 @@
+"""
+test_stress_watch task
+"""
 import contextlib
 import logging
 import proc_thrasher

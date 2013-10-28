@@ -1,3 +1,6 @@
+"""
+Start mpi processes (and allow commands to be run inside process)
+"""
 import logging
 
 from teuthology import misc as teuthology
@@ -52,6 +55,8 @@ def task(ctx, config):
             clients:
               - rm -f {testdir}/gmnt
 
+    :param ctx: Context
+    :param config: Configuration
     """
     assert isinstance(config, dict), 'task mpi got invalid config'
     assert 'exec' in config, 'task mpi got invalid config, missing exec'

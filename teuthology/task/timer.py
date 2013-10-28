@@ -1,3 +1,6 @@
+"""
+Timer task
+"""
 import logging
 import contextlib
 import datetime

@@ -1,3 +1,6 @@
+"""
+Run fsx on an rbd image
+"""
 import contextlib
 import logging
 
@@ -38,6 +41,7 @@ def task(ctx, config):
     yield
 
 def _run_one_client(ctx, config, role):
+    """Spawned task that runs the client"""
     testdir = teuthology.get_testdir(ctx)
     (remote,) = ctx.cluster.only(role).remotes.iterkeys()
     remote.run(
