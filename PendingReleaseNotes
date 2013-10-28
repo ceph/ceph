@@ -1,8 +1,3 @@
-v0.72
+v0.73
 ~~~~~
 
-* ceph-fuse and radosgw now use the same default values for the admin
-  socket and log file paths that the other daemons (ceph-osd,
-  ceph-mon, etc.) do.  If you run these daemons as non-root, you may
-  need to adjust your ceph.conf to disable these options or to adjust
-  the permissions on /var/run/ceph and /var/log/ceph.
