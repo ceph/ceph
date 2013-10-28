@@ -4656,15 +4656,6 @@ void ReplicatedPG::op_applied(RepGather *repop)
   // (logical) local ack.
   int whoami = osd->get_nodeid();
 
-  if (repop->ctx->clone_obc) {
-    repop->ctx->clone_obc = ObjectContextRef();
-  }
-  if (repop->ctx->snapset_obc) {
-    repop->ctx->snapset_obc = ObjectContextRef();
-  }
-
-  repop->src_obc.clear();
-
   if (!repop->aborted) {
     assert(repop->waitfor_ack.count(whoami) ||
 	   repop->waitfor_disk.count(whoami) == 0);  // commit before ondisk

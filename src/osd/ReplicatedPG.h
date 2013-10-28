@@ -411,7 +411,6 @@ public:
       }
     }
     ~OpContext() {
-      assert(!clone_obc);
       assert(lock_to_release == NONE);
       if (reply)
 	reply->put();
