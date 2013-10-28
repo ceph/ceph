@@ -603,7 +603,7 @@ protected:
    *   - are on the peer
    *   - are included in the peer stats
    *
-   * objects between last_backfill and backfill_pos
+   * objects \in (last_backfill, last_backfill_started]
    *   - are on the peer or are in backfills_in_flight
    *   - are not included in pg stats (yet)
    *   - have their stats in pending_backfill_updates on the primary
@@ -614,7 +614,7 @@ protected:
   void dump_recovery_info(Formatter *f) const {
     f->dump_int("backfill_target", get_backfill_target());
     f->dump_int("waiting_on_backfill", waiting_on_backfill);
-    f->dump_stream("backfill_pos") << backfill_pos;
+    f->dump_stream("last_backfill_started") << last_backfill_started;
     {
       f->open_object_section("backfill_info");
       backfill_info.dump(f);
@@ -687,8 +687,8 @@ protected:
     }
   }
 
-  /// leading edge of backfill
-  hobject_t backfill_pos;
+  /// last backfill operation started
+  hobject_t last_backfill_started;
 
   // Reverse mapping from osd peer to objects beging pulled from that peer
   map<int, set<hobject_t> > pull_from_peer;
