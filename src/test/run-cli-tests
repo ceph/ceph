@@ -42,7 +42,7 @@ FAILED=0
 for tool in "$SRCDIR"/cli/*; do
     toolname="$(basename "$tool")"
     install -d -m0755 -- "$BUILDDIR/cli/$toolname"
-    if ! env --ignore-environment \
+    if ! env -i \
 	PATH="$BUILDDIR_ABS/..:$SRCDIR_ABS/..:$PATH" \
 	CEPH_CONF=/dev/null \
 	CCACHE_DIR="$CCACHE_DIR" \
