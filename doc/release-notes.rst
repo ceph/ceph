@@ -5,6 +5,12 @@
 v0.72 Emperor
 -------------
 
+This is the fifth major release of Ceph, the fourth since adopting a
+3-month development cycle.  This release brings several new features,
+including multi-datacenter replication for the radosgw, improved
+usability, and lands a lot of incremental performance and internal
+refactoring work to support upcoming features in Firefly.
+
 Highlights
 ~~~~~~~~~~
 
@@ -21,7 +27,7 @@ Highlights
 * rgw: performance improvements
 * rgw: validate S3 tokens against Keystone
 
-Outside of core Ceph, the Emperor release also brings::
+Coincident with core Ceph, the Emperor release also brings::
 
 * radosgw-agent: support for multi-datacenter replication for disaster recovery
 * tgt: improved support for iSCSI via upstream tgt
