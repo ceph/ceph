@@ -121,8 +121,8 @@
   
   Quota options:
      --bucket                  specified bucket for quota command
-     --max-objects             specify max objects
-     --max-size                specify max size (in bytes)
+     --max-objects             specify max objects (negative value to disable)
+     --max-size                specify max size (in bytes, negative value to disable)
      --quota-scope             scope of quota (bucket, user)
   
     --conf/-c FILE    read configuration from the given configuration file
