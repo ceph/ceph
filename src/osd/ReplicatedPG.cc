@@ -7950,8 +7950,13 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
  * All objects < MIN(peer_backfill_info.begin, backfill_info.begin) in PG are
  * backfilled.  No deleted objects in this interval remain on backfill_target.
  *
- * peer_info[backfill_target].last_backfill = MIN(peer_backfill_info.begin,
- * backfill_info.begin, backfills_in_flight)
+ * All objects <= peer_info[backfill_target].last_backfill have been backfilled
+ * to backfill_target
+ *
+ * There *MAY* be objects between last_backfill_started and
+ * MIN(peer_backfill_info.begin, backfill_info.begin) in the event that client
+ * io created objects since the last scan.  For this reason, we call
+ * update_range() again before continuing backfill.
  */
 int ReplicatedPG::recover_backfill(
   int max,
@@ -8135,18 +8140,24 @@ int ReplicatedPG::recover_backfill(
     dout(20) << *i << " is still in flight" << dendl;
   }
 
-  hobject_t bound = backfills_in_flight.size() ?
+  hobject_t next_backfill_to_complete = backfills_in_flight.size() ?
     *(backfills_in_flight.begin()) : backfill_pos;
-  if (bound > pinfo.last_backfill) {
-    pinfo.last_backfill = bound;
-    for (map<hobject_t, pg_stat_t>::iterator i = pending_backfill_updates.begin();
-	 i != pending_backfill_updates.end() && i->first < bound;
-	 pending_backfill_updates.erase(i++)) {
-      pinfo.stats.add(i->second);
-    }
+  hobject_t new_last_backfill = pinfo.last_backfill;
+  for (map<hobject_t, pg_stat_t>::iterator i = pending_backfill_updates.begin();
+       i != pending_backfill_updates.end() &&
+	 i->first < next_backfill_to_complete;
+       pending_backfill_updates.erase(i++)) {
+    pinfo.stats.add(i->second);
+    assert(i->first > new_last_backfill);
+    new_last_backfill = i->first;
+  }
+  assert(!pending_backfill_updates.empty() ||
+	 new_last_backfill == last_backfill_started);
+  if (new_last_backfill > pinfo.last_backfill) {
+    pinfo.last_backfill = new_last_backfill;
     epoch_t e = get_osdmap()->get_epoch();
     MOSDPGBackfill *m = NULL;
-    if (bound.is_max()) {
+    if (pinfo.last_backfill.is_max()) {
       m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_FINISH, e, e, info.pgid);
       // Use default priority here, must match sub_op priority
       /* pinfo.stats might be wrong if we did log-based recovery on the
@@ -8158,7 +8169,7 @@ int ReplicatedPG::recover_backfill(
       m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_PROGRESS, e, e, info.pgid);
       // Use default priority here, must match sub_op priority
     }
-    m->last_backfill = bound;
+    m->last_backfill = pinfo.last_backfill;
     m->stats = pinfo.stats;
     osd->send_message_osd_cluster(backfill_target, m, get_osdmap()->get_epoch());
   }
