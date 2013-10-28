@@ -532,7 +532,7 @@ void PGMap::dirty_all(Incremental& inc)
     inc.pg_stat_updates[p->first] = p->second;
   }
   for (hash_map<int32_t, osd_stat_t>::const_iterator p = osd_stat.begin(); p != osd_stat.end(); ++p) {
-    assert(inc.get_osd_epochs().count(p->first));
+    assert(osd_epochs.count(p->first));
     inc.update_stat(p->first,
 		   inc.get_osd_epochs().find(p->first)->second,
 		   p->second);
