@@ -479,10 +479,7 @@ protected:
     void pop_front() {
       assert(!objects.empty());
       objects.erase(objects.begin());
-      if (objects.empty())
-	begin = end;
-      else
-	begin = objects.begin()->first;
+      trim();
     }
 
     /// dump
