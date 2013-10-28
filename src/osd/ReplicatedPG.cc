@@ -4231,7 +4231,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
   if (backfill_target >= 0) {
     pg_info_t& pinfo = peer_info[backfill_target];
-    if (soid < pinfo.last_backfill)
+    if (soid <= pinfo.last_backfill)
       pinfo.stats.stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
     else if (soid < backfill_pos)
       pending_backfill_updates[soid].stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
