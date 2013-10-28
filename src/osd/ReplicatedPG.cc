@@ -8106,7 +8106,11 @@ int ReplicatedPG::recover_backfill(
        i != to_remove.end();
        ++i) {
     handle.reset_tp_timeout();
+
+    // ordered before any subsequent updates
     send_remove_op(i->first, i->second, backfill_target);
+
+    pending_backfill_updates[i->first]; // add empty stat!
   }
 
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
