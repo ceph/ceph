@@ -3786,25 +3786,43 @@ done:
     string srcpoolstr, destpoolstr;
     cmd_getval(g_ceph_context, cmdmap, "srcpool", srcpoolstr);
     cmd_getval(g_ceph_context, cmdmap, "destpool", destpoolstr);
-    int64_t pool = osdmap.lookup_pg_pool_name(srcpoolstr.c_str());
-    if (pool < 0) {
-      ss << "unrecognized pool '" << srcpoolstr << "'";
-      err = -ENOENT;
-    } else if (osdmap.lookup_pg_pool_name(destpoolstr.c_str()) >= 0) {
+    int64_t pool_src = osdmap.lookup_pg_pool_name(srcpoolstr.c_str());
+    int64_t pool_dst = osdmap.lookup_pg_pool_name(destpoolstr.c_str());
+
+    if (pool_src < 0) {
+      if (pool_dst >= 0) {
+        // src pool doesn't exist, dst pool does exist: to ensure idempotency
+        // of operations, assume this rename succeeded, as it is not changing
+        // the current state.  Make sure we output something understandable
+        // for whoever is issuing the command, if they are paying attention,
+        // in case it was not intentional; or to avoid a "wtf?" and a bug
+        // report in case it was intentional, while expecting a failure.
+        ss << "pool '" << srcpoolstr << "' does not exist; pool '"
+          << destpoolstr << "' does -- assuming successful rename";
+        err = 0;
+      } else {
+        ss << "unrecognized pool '" << srcpoolstr << "'";
+        err = -ENOENT;
+      }
+      goto reply;
+    } else if (pool_dst >= 0) {
+      // source pool exists and so does the destination pool
       ss << "pool '" << destpoolstr << "' already exists";
       err = -EEXIST;
-    } else {
-      int ret = _prepare_rename_pool(pool, destpoolstr);
-      if (ret == 0) {
-	ss << "pool '" << srcpoolstr << "' renamed to '" << destpoolstr << "'";
-      } else {
-	ss << "failed to rename pool '" << srcpoolstr << "' to '" << destpoolstr << "': "
-	   << cpp_strerror(ret);
-      }
-      getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, ret, rs, get_last_committed()));
-      return true;
+      goto reply;
     }
+
+    int ret = _prepare_rename_pool(pool_src, destpoolstr);
+    if (ret == 0) {
+      ss << "pool '" << srcpoolstr << "' renamed to '" << destpoolstr << "'";
+    } else {
+      ss << "failed to rename pool '" << srcpoolstr << "' to '" << destpoolstr << "': "
+        << cpp_strerror(ret);
+    }
+    getline(ss, rs);
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, ret, rs, get_last_committed()));
+    return true;
+
   } else if (prefix == "osd pool set") {
     err = prepare_command_pool_set(cmdmap, ss);
     if (err < 0)
@@ -4332,7 +4350,7 @@ int OSDMonitor::_prepare_rename_pool(uint64_t pool, string newname)
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
        p != pending_inc.new_pool_names.end();
        ++p) {
-    if (p->second == newname) {
+    if (p->second == newname && p->first != pool) {
       return -EEXIST;
     }
   }

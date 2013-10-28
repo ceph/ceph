@@ -23,7 +23,28 @@
 #include "msg/Message.h"
 #include <tr1/memory>
 #include "common/TrackedOp.h"
-#include "osd/osd_types.h"
+
+/**
+ * osd request identifier
+ *
+ * caller name + incarnation# + tid to unique identify this request.
+ */
+struct osd_reqid_t {
+  entity_name_t name; // who
+  tid_t         tid;
+  int32_t       inc;  // incarnation
+
+  osd_reqid_t()
+    : tid(0), inc(0) {}
+  osd_reqid_t(const entity_name_t& a, int i, tid_t t)
+    : name(a), tid(t), inc(i) {}
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<osd_reqid_t*>& o);
+};
+WRITE_CLASS_ENCODER(osd_reqid_t)
 
 /**
  * The OpRequest takes in a Message* and takes over a single reference
@@ -35,29 +56,19 @@ struct OpRequest : public TrackedOp {
   // rmw flags
   int rmw_flags;
 
-  bool check_rmw(int flag) {
-    return rmw_flags & flag;
-  }
-  bool may_read() { return need_read_cap() || need_class_read_cap(); }
-  bool may_write() { return need_write_cap() || need_class_write_cap(); }
-  bool includes_pg_op() { return check_rmw(CEPH_OSD_RMW_FLAG_PGOP); }
-  bool need_read_cap() {
-    return check_rmw(CEPH_OSD_RMW_FLAG_READ);
-  }
-  bool need_write_cap() {
-    return check_rmw(CEPH_OSD_RMW_FLAG_WRITE);
-  }
-  bool need_class_read_cap() {
-    return check_rmw(CEPH_OSD_RMW_FLAG_CLASS_READ);
-  }
-  bool need_class_write_cap() {
-    return check_rmw(CEPH_OSD_RMW_FLAG_CLASS_WRITE);
-  }
-  void set_read() { rmw_flags |= CEPH_OSD_RMW_FLAG_READ; }
-  void set_write() { rmw_flags |= CEPH_OSD_RMW_FLAG_WRITE; }
-  void set_class_read() { rmw_flags |= CEPH_OSD_RMW_FLAG_CLASS_READ; }
-  void set_class_write() { rmw_flags |= CEPH_OSD_RMW_FLAG_CLASS_WRITE; }
-  void set_pg_op() { rmw_flags |= CEPH_OSD_RMW_FLAG_PGOP; }
+  bool check_rmw(int flag);
+  bool may_read();
+  bool may_write();
+  bool includes_pg_op();
+  bool need_read_cap();
+  bool need_write_cap();
+  bool need_class_read_cap();
+  bool need_class_write_cap();
+  void set_read();
+  void set_write();
+  void set_class_read();
+  void set_class_write();
+  void set_pg_op();
 
   void _dump(utime_t now, Formatter *f) const;
 

@@ -101,13 +101,14 @@ public:
     ObjectContextRef obc;
     hobject_t src;
     object_locator_t oloc;
-    version_t version;
+    version_t user_version;
 
     tid_t objecter_tid;
 
     object_copy_cursor_t cursor;
     uint64_t size;
     utime_t mtime;
+    string category;
     map<string,bufferlist> attrs;
     bufferlist data;
     map<string,bufferlist> omap;
@@ -119,7 +120,7 @@ public:
 
     CopyOp(CopyCallback *cb_, ObjectContextRef _obc, hobject_t s, object_locator_t l,
            version_t v, const hobject_t& dest)
-      : cb(cb_), obc(_obc), src(s), oloc(l), version(v),
+      : cb(cb_), obc(_obc), src(s), oloc(l), user_version(v),
 	objecter_tid(0),
 	size(0),
 	rval(-1),
@@ -402,6 +403,13 @@ public:
 	snapset = &_ssc->snapset;
       }
     }
+    void reset_obs(ObjectContextRef obc) {
+      new_obs = ObjectState(obc->obs.oi, obc->obs.exists);
+      if (obc->ssc) {
+	new_snapset = obc->ssc->snapset;
+	snapset = &obc->ssc->snapset;
+      }
+    }
     ~OpContext() {
       assert(!clone_obc);
       assert(lock_to_release == NONE);
@@ -414,6 +422,7 @@ public:
    * State on the PG primary associated with the replicated mutation
    */
   class RepGather {
+    bool is_done;
   public:
     xlist<RepGather*>::item queue_item;
     int nref;
@@ -426,7 +435,7 @@ public:
 
     tid_t rep_tid;
 
-    bool applying, applied, aborted, done;
+    bool applying, applied, aborted;
 
     set<int>  waitfor_ack;
     //set<int>  waitfor_nvram;
@@ -435,6 +444,8 @@ public:
     //bool sent_nvram;
     bool sent_disk;
     
+    Context *ondone; ///< if set, this Context will be activated when repop is done
+
     utime_t   start;
     
     eversion_t          pg_local_last_complete;
@@ -444,14 +455,16 @@ public:
     
     RepGather(OpContext *c, ObjectContextRef pi, tid_t rt, 
 	      eversion_t lc) :
+      is_done(false),
       queue_item(this),
       nref(1),
       ctx(c), obc(pi),
       rep_tid(rt), 
-      applying(false), applied(false), aborted(false), done(false),
+      applying(false), applied(false), aborted(false),
       sent_ack(false),
       //sent_nvram(false),
       sent_disk(false),
+      ondone(NULL),
       pg_local_last_complete(lc),
       queue_snap_trimmer(false) { }
 
@@ -461,117 +474,25 @@ public:
     void put() {
       assert(nref > 0);
       if (--nref == 0) {
-	assert(!obc);
 	assert(src_obc.empty());
 	delete ctx; // must already be unlocked
 	delete this;
 	//generic_dout(0) << "deleting " << this << dendl;
       }
     }
+    void mark_done() {
+      is_done = true;
+      if (ondone)
+	ondone->complete(0);
+    }
+    bool done() {
+      return is_done;
+    }
   };
 
 
 
 protected:
-
-  /// Tracks pending readers or writers on an object
-  class RWTracker {
-    struct ObjState {
-      enum State {
-	NONE,
-	READ,
-	WRITE
-      };
-      State state;                 /// rw state
-      uint64_t count;              /// number of readers or writers
-      list<OpRequestRef> waiters;  /// ops waiting on state change
-
-      ObjState() : state(NONE), count(0) {}
-      bool get_read(OpRequestRef op) {
-	// don't starve!
-	if (!waiters.empty()) {
-	  waiters.push_back(op);
-	  return false;
-	}
-	switch (state) {
-	case NONE:
-	  assert(count == 0);
-	  state = READ;
-	  // fall through
-	case READ:
-	  count++;
-	  return true;
-	case WRITE:
-	  waiters.push_back(op);
-	  return false;
-	default:
-	  assert(0 == "unhandled case");
-	  return false;
-	}
-      }
-      bool get_write(OpRequestRef op) {
-	if (!waiters.empty()) {
-	  // don't starve!
-	  waiters.push_back(op);
-	  return false;
-	}
-	switch (state) {
-	case NONE:
-	  assert(count == 0);
-	  state = WRITE;
-	  // fall through
-	case WRITE:
-	  count++;
-	  return true;
-	case READ:
-	  waiters.push_back(op);
-	  return false;
-	default:
-	  assert(0 == "unhandled case");
-	  return false;
-	}
-      }
-      void dec(list<OpRequestRef> *requeue) {
-	assert(count > 0);
-	assert(requeue);
-	assert(requeue->empty());
-	count--;
-	if (count == 0) {
-	  state = NONE;
-	  requeue->swap(waiters);
-	}
-      }
-      void put_read(list<OpRequestRef> *requeue) {
-	assert(state == READ);
-	dec(requeue);
-      }
-      void put_write(list<OpRequestRef> *requeue) {
-	assert(state == WRITE);
-	dec(requeue);
-      }
-      bool empty() const { return state == NONE; }
-    };
-    map<hobject_t, ObjState > obj_state;
-  public:
-    bool get_read(const hobject_t &hoid, OpRequestRef op) {
-      return obj_state[hoid].get_read(op);
-    }
-    bool get_write(const hobject_t &hoid, OpRequestRef op) {
-      return obj_state[hoid].get_write(op);
-    }
-    void put_read(const hobject_t &hoid, list<OpRequestRef> *to_wake) {
-      obj_state[hoid].put_read(to_wake);
-      if (obj_state[hoid].empty()) {
-	obj_state.erase(hoid);
-      }
-    }
-    void put_write(const hobject_t &hoid, list<OpRequestRef> *to_wake) {
-      obj_state[hoid].put_write(to_wake);
-      if (obj_state[hoid].empty()) {
-	obj_state.erase(hoid);
-      }
-    }
-  } rw_manager;
 
   /**
    * Grabs locks for OpContext, should be cleaned up in close_op_ctx
@@ -581,7 +502,7 @@ protected:
    */
   bool get_rw_locks(OpContext *ctx) {
     if (ctx->op->may_write()) {
-      if (rw_manager.get_write(ctx->obs->oi.soid, ctx->op)) {
+      if (ctx->obc->get_write(ctx->op)) {
 	ctx->lock_to_release = OpContext::W_LOCK;
 	return true;
       } else {
@@ -589,7 +510,7 @@ protected:
       }
     } else {
       assert(ctx->op->may_read());
-      if (rw_manager.get_read(ctx->obs->oi.soid, ctx->op)) {
+      if (ctx->obc->get_read(ctx->op)) {
 	ctx->lock_to_release = OpContext::R_LOCK;
 	return true;
       } else {
@@ -615,12 +536,15 @@ protected:
    */
   void release_op_ctx_locks(OpContext *ctx) {
     list<OpRequestRef> to_req;
+    bool requeue_recovery = false;
     switch (ctx->lock_to_release) {
     case OpContext::W_LOCK:
-      rw_manager.put_write(ctx->obs->oi.soid, &to_req);
+      ctx->obc->put_write(&to_req, &requeue_recovery);
+      if (requeue_recovery)
+	osd->recovery_wq.queue(this);
       break;
     case OpContext::R_LOCK:
-      rw_manager.put_read(ctx->obs->oi.soid, &to_req);
+      ctx->obc->put_read(&to_req);
       break;
     case OpContext::NONE:
       break;
@@ -740,7 +664,7 @@ protected:
   }
   void put_snapset_context(SnapSetContext *ssc);
 
-  set<hobject_t> recovering;
+  map<hobject_t, ObjectContextRef> recovering;
 
   /*
    * Backfill
@@ -784,10 +708,10 @@ protected:
     }
     {
       f->open_array_section("recovering");
-      for (set<hobject_t>::const_iterator i = recovering.begin();
+      for (map<hobject_t, ObjectContextRef>::const_iterator i = recovering.begin();
 	   i != recovering.end();
 	   ++i) {
-	f->dump_stream("object") << *i;
+	f->dump_stream("object") << i->first;
       }
       f->close_section();
     }
@@ -842,13 +766,18 @@ protected:
   void _clear_recovery_state();
 
   void queue_for_recovery();
-  int start_recovery_ops(
+  bool start_recovery_ops(
     int max, RecoveryCtx *prctx,
-    ThreadPool::TPHandle &handle);
+    ThreadPool::TPHandle &handle, int *started);
 
   int recover_primary(int max, ThreadPool::TPHandle &handle);
   int recover_replicas(int max, ThreadPool::TPHandle &handle);
-  int recover_backfill(int max, ThreadPool::TPHandle &handle);
+  /**
+   * @param work_started will be set to true if recover_backfill got anywhere
+   * @returns the number of operations started
+   */
+  int recover_backfill(int max, ThreadPool::TPHandle &handle,
+                       bool *work_started);
 
   /**
    * scan a (hash) range of objects in the current pg
@@ -870,7 +799,8 @@ protected:
     );
 
   void prep_backfill_object_push(
-    hobject_t oid, eversion_t v, eversion_t have, int peer,
+    hobject_t oid, eversion_t v, eversion_t have, ObjectContextRef obc,
+    int peer,
     PGBackend::RecoveryHandle *h);
   void send_remove_op(const hobject_t& oid, eversion_t v, int peer);
 
@@ -974,7 +904,19 @@ protected:
   // -- copyfrom --
   map<hobject_t, CopyOpRef> copy_ops;
 
-  int start_copy(CopyCallback *cb, ObjectContextRef obc, hobject_t src,
+  int fill_in_copy_get(bufferlist::iterator& bp, OSDOp& op,
+                       object_info_t& oi, bool classic);
+  /**
+   * To copy an object, call start_copy.
+   *
+   * @param cb: The CopyCallback to be activated when the copy is complete
+   * @param obc: The ObjectContext we are copying into
+   * @param src: The source object
+   * @param oloc: the source object locator
+   * @param version: the version of the source object to copy (0 for any)
+   * @param temp_dest_oid: the temporary object to use for large objects
+   */
+  void start_copy(CopyCallback *cb, ObjectContextRef obc, hobject_t src,
                  object_locator_t oloc, version_t version,
                  const hobject_t& temp_dest_oid);
   void process_copy_chunk(hobject_t oid, tid_t tid, int r);
@@ -1121,14 +1063,23 @@ public:
   bool is_missing_object(const hobject_t& oid);
   void wait_for_missing_object(const hobject_t& oid, OpRequestRef op);
   void wait_for_all_missing(OpRequestRef op);
-  void wait_for_backfill_pos(OpRequestRef op);
-  void release_waiting_for_backfill_pos();
 
   bool is_degraded_object(const hobject_t& oid);
   void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
 
   void wait_for_blocked_object(const hobject_t& soid, OpRequestRef op);
   void kick_object_context_blocked(ObjectContextRef obc);
+
+  struct C_KickBlockedObject : public Context {
+    ObjectContextRef obc;
+    ReplicatedPG *pg;
+    C_KickBlockedObject(ObjectContextRef obc_, ReplicatedPG *pg_) :
+      obc(obc_), pg(pg_) {}
+  protected:
+    void finish(int r) {
+      pg->kick_object_context_blocked(obc);
+    }
+  };
 
   void mark_all_unfound_lost(int what);
   eversion_t pick_newest_available(const hobject_t& oid);
@@ -1140,10 +1091,7 @@ public:
   void on_role_change();
   void on_change(ObjectStore::Transaction *t);
   void on_activate();
-  void on_flushed() {
-    assert(object_contexts.empty());
-    pgbackend->on_flushed();
-  }
+  void on_flushed();
   void on_removal(ObjectStore::Transaction *t);
   void on_shutdown();
 };
