@@ -7993,7 +7993,7 @@ int ReplicatedPG::recover_backfill(
   pbi.trim_to(last_backfill_started);
   backfill_info.trim_to(last_backfill_started);
 
-  hobject_t backfill_pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
+  hobject_t backfill_pos = MIN(backfill_info.begin, pbi.begin);
   while (ops < max) {
     if (backfill_info.begin <= pbi.begin &&
 	!backfill_info.extends_to_end() && backfill_info.empty()) {
@@ -8004,7 +8004,7 @@ int ReplicatedPG::recover_backfill(
       update_range(&backfill_info, handle);
       backfill_info.trim();
     }
-    backfill_pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
+    backfill_pos = MIN(backfill_info.begin, pbi.begin);
 
     dout(20) << "   my backfill " << backfill_info.begin << "-" << backfill_info.end
 	     << " " << backfill_info.objects << dendl;
@@ -8097,7 +8097,7 @@ int ReplicatedPG::recover_backfill(
       }
     }
   }
-  backfill_pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
+  backfill_pos = MIN(backfill_info.begin, pbi.begin);
 
   for (set<hobject_t>::iterator i = add_to_stat.begin();
        i != add_to_stat.end();
