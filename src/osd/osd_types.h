@@ -29,6 +29,7 @@
 #include "common/Formatter.h"
 #include "common/hobject.h"
 #include "Watch.h"
+#include "OpRequest.h"
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
@@ -49,27 +50,6 @@ typedef hobject_t collection_list_handle_t;
 
 typedef uint8_t shard_id_t;
 
-/**
- * osd request identifier
- *
- * caller name + incarnation# + tid to unique identify this request.
- */
-struct osd_reqid_t {
-  entity_name_t name; // who
-  tid_t         tid;
-  int32_t       inc;  // incarnation
-
-  osd_reqid_t()
-    : tid(0), inc(0) {}
-  osd_reqid_t(const entity_name_t& a, int i, tid_t t)
-    : name(a), tid(t), inc(i) {}
-
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<osd_reqid_t*>& o);
-};
-WRITE_CLASS_ENCODER(osd_reqid_t)
 
 inline ostream& operator<<(ostream& out, const osd_reqid_t& r) {
   return out << r.name << "." << r.inc << ":" << r.tid;
@@ -2230,6 +2210,128 @@ public:
   // any entity in obs.oi.watchers MUST be in either watchers or unconnected_watchers.
   map<pair<uint64_t, entity_name_t>, WatchRef> watchers;
 
+  struct RWState {
+    enum State {
+      RWNONE,
+      RWREAD,
+      RWWRITE
+    };
+    State state;                 /// rw state
+    uint64_t count;              /// number of readers or writers
+    list<OpRequestRef> waiters;  /// ops waiting on state change
+
+    /// if set, restart backfill when we can get a read lock
+    bool backfill_read_marker;
+
+    RWState() : state(RWNONE), count(0), backfill_read_marker(false) {}
+    bool get_read(OpRequestRef op) {
+      if (get_read_lock()) {
+	return true;
+      } // else
+      waiters.push_back(op);
+      return false;
+    }
+    /// this function adjusts the counts if necessary
+    bool get_read_lock() {
+      // don't starve anybody!
+      if (!waiters.empty()) {
+	return false;
+      }
+      switch (state) {
+      case RWNONE:
+	assert(count == 0);
+	state = RWREAD;
+	// fall through
+      case RWREAD:
+	count++;
+	return true;
+      case RWWRITE:
+	return false;
+      default:
+	assert(0 == "unhandled case");
+	return false;
+      }
+    }
+
+    bool get_write(OpRequestRef op) {
+      if (get_write_lock()) {
+	return true;
+      } // else
+      waiters.push_back(op);
+      return false;
+    }
+    bool get_write_lock() {
+      // don't starve anybody!
+      if (!waiters.empty() ||
+	  backfill_read_marker) {
+	return false;
+      }
+      switch (state) {
+      case RWNONE:
+	assert(count == 0);
+	state = RWWRITE;
+	// fall through
+      case RWWRITE:
+	count++;
+	return true;
+      case RWREAD:
+	return false;
+      default:
+	assert(0 == "unhandled case");
+	return false;
+      }
+    }
+    void dec(list<OpRequestRef> *requeue) {
+      assert(count > 0);
+      assert(requeue);
+      assert(requeue->empty());
+      count--;
+      if (count == 0) {
+	state = RWNONE;
+	requeue->swap(waiters);
+      }
+    }
+    void put_read(list<OpRequestRef> *requeue) {
+      assert(state == RWREAD);
+      dec(requeue);
+    }
+    void put_write(list<OpRequestRef> *requeue) {
+      assert(state == RWWRITE);
+      dec(requeue);
+    }
+    bool empty() const { return state == RWNONE; }
+  } rwstate;
+
+  bool get_read(OpRequestRef op) {
+    return rwstate.get_read(op);
+  }
+  bool get_write(OpRequestRef op) {
+    return rwstate.get_write(op);
+  }
+  bool get_backfill_read() {
+    rwstate.backfill_read_marker = true;
+    if (rwstate.get_read_lock()) {
+      return true;
+    }
+    return false;
+  }
+  void drop_backfill_read(list<OpRequestRef> *ls) {
+    assert(rwstate.backfill_read_marker);
+    rwstate.put_read(ls);
+    rwstate.backfill_read_marker = false;
+  }
+  void put_read(list<OpRequestRef> *to_wake) {
+    rwstate.put_read(to_wake);
+  }
+  void put_write(list<OpRequestRef> *to_wake,
+		 bool *requeue_recovery) {
+    rwstate.put_write(to_wake);
+    if (rwstate.empty() && rwstate.backfill_read_marker) {
+      rwstate.backfill_read_marker = false;
+      *requeue_recovery = true;
+    }
+  }
+
   ObjectContext()
     : ssc(NULL),
       destructor_callback(0),
@@ -2238,6 +2340,7 @@ public:
       copyfrom_readside(0) {}
 
   ~ObjectContext() {
+    assert(rwstate.empty());
     if (destructor_callback)
       destructor_callback->complete(0);
   }

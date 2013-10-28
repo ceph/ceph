@@ -6762,7 +6762,9 @@ void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
 #endif
     
     PG::RecoveryCtx rctx = create_context();
-    int started = pg->start_recovery_ops(max, &rctx, handle);
+
+    int started;
+    bool more = pg->start_recovery_ops(max, &rctx, handle, &started);
     dout(10) << "do_recovery started " << started << "/" << max << " on " << *pg << dendl;
 
     /*
@@ -6771,7 +6773,7 @@ void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
      * It may be that our initial locations were bad and we errored
      * out while trying to pull.
      */
-    if (!started && pg->have_unfound()) {
+    if (!more && pg->have_unfound()) {
       pg->discover_all_missing(*rctx.query_map);
       if (rctx.query_map->empty()) {
 	dout(10) << "do_recovery  no luck, giving up on this pg for now" << dendl;

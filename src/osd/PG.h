@@ -522,7 +522,6 @@ protected:
   bool flushed;
 
   // Ops waiting on backfill_pos to change
-  list<OpRequestRef> waiting_for_backfill_pos;
   list<OpRequestRef>            waiting_for_active;
   list<OpRequestRef>            waiting_for_all_missing;
   map<hobject_t, list<OpRequestRef> > waiting_for_missing_object,
@@ -645,9 +644,14 @@ public:
 
   virtual void check_local() = 0;
 
-  virtual int start_recovery_ops(
+  /**
+   * @param ops_begun returns how many recovery ops the function started
+   * @returns true if any useful work was accomplished; false otherwise
+   */
+  virtual bool start_recovery_ops(
     int max, RecoveryCtx *prctx,
-    ThreadPool::TPHandle &handle) = 0;
+    ThreadPool::TPHandle &handle,
+    int *ops_begun) = 0;
 
   void purge_strays();
 
