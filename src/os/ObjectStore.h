@@ -499,7 +499,7 @@ public:
       ops++;
     }
     void rmattrs(coll_t cid, const ghobject_t& oid) {
-      __u32 op = OP_RMATTR;
+      __u32 op = OP_RMATTRS;
       ::encode(op, tbl);
       ::encode(cid, tbl);
       ::encode(oid, tbl);
@@ -905,6 +905,16 @@ public:
     return r;
   }
   virtual int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset, bool user_only = false) {return 0;};
+  int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferlist>& aset, bool user_only = false) {
+    map<string,bufferptr> bmap;
+    int r = getattrs(cid, oid, bmap, user_only);
+    for (map<string,bufferptr>::iterator i = bmap.begin();
+	i != bmap.end();
+	++i) {
+      aset[i->first].append(i->second);
+    }
+    return r;
+  }
 
    
   // collections
