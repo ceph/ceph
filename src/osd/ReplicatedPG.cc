@@ -1630,21 +1630,25 @@ void ReplicatedBackend::_do_push(OpRequestRef op)
 
 struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
   ReplicatedBackend *bc;
-  list<ObjectContextRef> to_continue;
+  list<hobject_t> to_continue;
   int priority;
   C_ReplicatedBackend_OnPullComplete(ReplicatedBackend *bc, int priority)
     : bc(bc), priority(priority) {}
 
   void finish(ThreadPool::TPHandle &handle) {
     ReplicatedBackend::RPGHandle *h = bc->_open_recovery_op();
-    for (list<ObjectContextRef>::iterator i =
+    for (list<hobject_t>::iterator i =
 	   to_continue.begin();
 	 i != to_continue.end();
 	 ++i) {
-      if (!bc->start_pushes((*i)->obs.oi.soid, *i, h)) {
+      map<hobject_t, ReplicatedBackend::PullInfo>::iterator j =
+	bc->pulling.find(*i);
+      assert(j != bc->pulling.end());
+      if (!bc->start_pushes(*i, j->second.obc, h)) {
 	bc->get_parent()->on_global_recover(
-	  (*i)->obs.oi.soid);
+	  *i);
       }
+      bc->pulling.erase(*i);
       handle.reset_tp_timeout();
     }
     bc->run_recovery_op(h, priority);
@@ -1659,7 +1663,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
 
   vector<PullOp> replies(1);
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  list<ObjectContextRef> to_continue;
+  list<hobject_t> to_continue;
   for (vector<PushOp>::iterator i = m->pushes.begin();
        i != m->pushes.end();
        ++i) {
@@ -6308,7 +6312,7 @@ ObjectRecoveryInfo ReplicatedBackend::recalc_subsets(
 
 bool ReplicatedBackend::handle_pull_response(
   int from, PushOp &pop, PullOp *response,
-  list<ObjectContextRef> *to_continue,
+  list<hobject_t> *to_continue,
   ObjectStore::Transaction *t
   )
 {
@@ -6382,11 +6386,10 @@ bool ReplicatedBackend::handle_pull_response(
   pi.stat.num_keys_recovered += pop.omap_entries.size();
 
   if (complete) {
-    to_continue->push_back(pi.obc);
+    to_continue->push_back(hoid);
     pi.stat.num_objects_recovered++;
     get_parent()->on_local_recover(
       hoid, pi.stat, pi.recovery_info, pi.obc, t);
-    pulling.erase(hoid);
     pull_from_peer[from].erase(hoid);
     if (pull_from_peer[from].empty())
       pull_from_peer.erase(from);
@@ -6976,7 +6979,7 @@ void ReplicatedBackend::sub_op_push(OpRequestRef op)
   if (is_primary()) {
     PullOp resp;
     RPGHandle *h = _open_recovery_op();
-    list<ObjectContextRef> to_continue;
+    list<hobject_t> to_continue;
     bool more = handle_pull_response(
       m->get_source().num(), pop, &resp,
       &to_continue, t);
