@@ -310,20 +310,19 @@ static int call_log_intent(RGWRados *store, void *ctx, rgw_obj& obj, RGWIntentEv
   return rgw_log_intent(store, s, obj, intent);
 }
 
-void RGWProcess::handle_request(RGWFCGXRequest *req)
-{
-  FCGX_Request *fcgx = &req->fcgx;
-  int ret;
-  RGWFCGX client_io(fcgx);
 
-  client_io.init(g_ceph_context);
+static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWClientIO *client_io, OpsLogSocket *olog)
+{
+  int ret = 0;
+
+  client_io->init(g_ceph_context);
 
   req->log_init();
 
   dout(1) << "====== starting new request req=" << hex << req << dec << " =====" << dendl;
   perfcounter->inc(l_rgw_req);
 
-  RGWEnv& rgw_env = client_io.get_env();
+  RGWEnv& rgw_env = client_io->get_env();
 
   struct req_state *s = req->init_state(g_ceph_context, &rgw_env);
   s->obj_ctx = store->create_context(s);
@@ -337,7 +336,7 @@ void RGWProcess::handle_request(RGWFCGXRequest *req)
   int init_error = 0;
   bool should_log = false;
   RGWRESTMgr *mgr;
-  RGWHandler *handler = rest->get_handler(store, s, &client_io, &mgr, &init_error);
+  RGWHandler *handler = rest->get_handler(store, s, client_io, &mgr, &init_error);
   if (init_error != 0) {
     abort_early(s, NULL, init_error);
     goto done;
@@ -412,6 +411,10 @@ void RGWProcess::handle_request(RGWFCGXRequest *req)
   op->execute();
   op->complete();
 done:
+  int r = client_io->complete_request();
+  if (r < 0) {
+    dout(0) << "ERROR: client_io->complete_request() returned " << r << dendl;
+  }
   if (should_log) {
     rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
   }
@@ -424,9 +427,26 @@ done:
     handler->put_op(op);
   rest->put_handler(handler);
   store->destroy_context(s->obj_ctx);
-  FCGX_Finish_r(fcgx);
 
   dout(1) << "====== req done req=" << hex << req << dec << " http_status=" << http_ret << " ======" << dendl;
+
+  return ret;
+}
+
+void RGWProcess::handle_request(RGWFCGXRequest *req)
+{
+  FCGX_Request *fcgx = &req->fcgx;
+  RGWFCGX client_io(fcgx);
+
+ 
+  int ret = process_request(store, rest, req, &client_io, olog);
+  if (ret < 0) {
+    /* we don't really care about return code */
+    dout(20) << "process_request() returned " << ret << dendl;
+  }
+
+  FCGX_Finish_r(fcgx);
+
   delete req;
 }
 
@@ -439,123 +459,17 @@ static int mongoose_callback(struct mg_connection *conn) {
   OpsLogSocket *olog = pe->olog;
 
   RGWRequest *req = new RGWRequest;
-  int ret;
   RGWMongoose client_io(conn);
 
   client_io.init(g_ceph_context);
 
-  req->log_init();
 
-  dout(1) << "====== starting new request req=" << hex << req << dec << " =====" << dendl;
-  perfcounter->inc(l_rgw_req);
-
-  RGWEnv& rgw_env = client_io.get_env();
-
-  struct req_state *s = req->init_state(g_ceph_context, &rgw_env);
-  s->obj_ctx = store->create_context(s);
-  store->set_intent_cb(s->obj_ctx, call_log_intent);
-
-  s->req_id = store->unique_id(req->id);
-
-  req->log(s, "initializing");
-
-  RGWOp *op = NULL;
-  int init_error = 0;
-  bool should_log = false;
-  RGWRESTMgr *mgr;
-  RGWHandler *handler = rest->get_handler(store, s, &client_io, &mgr, &init_error);
-  if (init_error != 0) {
-    abort_early(s, NULL, init_error);
-    goto done;
-  }
-
-  should_log = mgr->get_logging();
-
-  req->log(s, "getting op");
-  op = handler->get_op(store);
-  if (!op) {
-    abort_early(s, NULL, -ERR_METHOD_NOT_ALLOWED);
-    goto done;
-  }
-  req->op = op;
-
-  req->log(s, "authorizing");
-  ret = handler->authorize();
+  int ret = process_request(store, rest, req, &client_io, olog);
   if (ret < 0) {
-    dout(10) << "failed to authorize request" << dendl;
-    abort_early(s, op, ret);
-    goto done;
+    /* we don't really care about return code */
+    dout(20) << "process_request() returned " << ret << dendl;
   }
 
-  if (s->user.suspended) {
-    dout(10) << "user is suspended, uid=" << s->user.user_id << dendl;
-    abort_early(s, op, -ERR_USER_SUSPENDED);
-    goto done;
-  }
-  req->log(s, "reading permissions");
-  ret = handler->read_permissions(op);
-  if (ret < 0) {
-    abort_early(s, op, ret);
-    goto done;
-  }
-
-  req->log(s, "init op");
-  ret = op->init_processing();
-  if (ret < 0) {
-    abort_early(s, op, ret);
-    goto done;
-  }
-
-  req->log(s, "verifying op mask");
-  ret = op->verify_op_mask();
-  if (ret < 0) {
-    abort_early(s, op, ret);
-    goto done;
-  }
-
-  req->log(s, "verifying op permissions");
-  ret = op->verify_permission();
-  if (ret < 0) {
-    if (s->system_request) {
-      dout(2) << "overriding permissions due to system operation" << dendl;
-    } else {
-      abort_early(s, op, ret);
-      goto done;
-    }
-  }
-
-  req->log(s, "verifying op params");
-  ret = op->verify_params();
-  if (ret < 0) {
-    abort_early(s, op, ret);
-    goto done;
-  }
-
-  if (s->expect_cont)
-    dump_continue(s);
-
-  req->log(s, "executing");
-  op->execute();
-  op->complete();
-done:
-  ret = client_io.complete_request();
-  if (ret < 0) {
-    dout(0) << "ERROR: client_io.complete_request() returned " << ret << dendl;
-  }
-  if (should_log) {
-    rgw_log_op(store, s, (op ? op->name() : "unknown"), olog);
-  }
-
-  int http_ret = s->err.http_ret;
-
-  req->log_format(s, "http status=%d", http_ret);
-
-  if (handler)
-    handler->put_op(op);
-  rest->put_handler(handler);
-  store->destroy_context(s->obj_ctx);
-
-  dout(1) << "====== req done req=" << hex << req << dec << " http_status=" << http_ret << " ======" << dendl;
   delete req;
 
 // Mark as processed
