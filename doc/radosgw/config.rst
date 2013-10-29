@@ -399,7 +399,7 @@ according to the ``rgw keystone accepted roles`` configurable.
 Keystone itself needs to be configured to point to the Ceph Object Gateway as an
 object-storage endpoint::
 
-	keystone service-create --name swift --type-object store
+	keystone service-create --name swift --type object-store
 	keystone endpoint-create --service-id <id> --publicurl http://radosgw.example.com/swift/v1 \
 		--internalurl http://radosgw.example.com/swift/v1 --adminurl http://radosgw.example.com/swift/v1
 
