@@ -26,9 +26,6 @@ def run_radosgw_agent(ctx, config):
         src_zone = rgw_utils.zone_for_client(ctx, src_client)
         dest_zone = rgw_utils.zone_for_client(ctx, dest_client)
 
-        src_region = rgw_utils.region_for_client(ctx, src_client)
-        dest_region = rgw_utils.region_for_client(ctx, dest_client)
-
         log.info("source is %s", src_zone)
         log.info("dest is %s", dest_zone)
 
