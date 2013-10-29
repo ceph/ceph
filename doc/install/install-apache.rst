@@ -27,16 +27,16 @@ RPM Packages
 To install Apache and FastCGI RPMs, execute the following:: 
 
 	rpm -ivh fcgi-2.4.0-10.el6.x86_64.rpm 
- 	rpm -ivh mod_fastcgi-2.4.6-2.el6.rf.x86_64.rpm
+	rpm -ivh mod_fastcgi-2.4.6-2.el6.rf.x86_64.rpm
 
    Or:: 
-   
-   sudo yum install httpd mod_fastcgi
+
+	sudo yum install httpd mod_fastcgi
 
 
 Install w/ 100-Continue
 =======================
-	
+
 The Ceph community provides a slightly optimized version of the  ``apache2``
 and ``fastcgi`` packages. The material difference is that  the Ceph packages are
 optimized for the ``100-continue`` HTTP response,  where the server determines
