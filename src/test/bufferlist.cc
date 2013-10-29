@@ -969,17 +969,17 @@ TEST(BufferList, is_page_aligned) {
   }
   {
     bufferlist bl;
-    bufferptr ptr(2);
+    bufferptr ptr(buffer::create_page_aligned(2));
     ptr.set_offset(1);
     ptr.set_length(1);
     bl.append(ptr);
     EXPECT_FALSE(bl.is_page_aligned());
     bl.rebuild_page_aligned();
-    EXPECT_FALSE(bl.is_page_aligned());
+    EXPECT_TRUE(bl.is_page_aligned());
   }
   {
     bufferlist bl;
-    bufferptr ptr(CEPH_PAGE_SIZE + 1);
+    bufferptr ptr(buffer::create_page_aligned(CEPH_PAGE_SIZE + 1));
     ptr.set_offset(1);
     ptr.set_length(CEPH_PAGE_SIZE);
     bl.append(ptr);
@@ -1126,7 +1126,7 @@ TEST(BufferList, is_contiguous) {
 TEST(BufferList, rebuild) {
   {
     bufferlist bl;
-    bufferptr ptr(2);
+    bufferptr ptr(buffer::create_page_aligned(2));
     ptr.set_offset(1);
     ptr.set_length(1);
     bl.append(ptr);
@@ -1151,7 +1151,7 @@ TEST(BufferList, rebuild_page_aligned) {
   {
     bufferlist bl;
     {
-      bufferptr ptr(CEPH_PAGE_SIZE + 1);
+      bufferptr ptr(buffer::create_page_aligned(CEPH_PAGE_SIZE + 1));
       ptr.set_offset(1);
       ptr.set_length(CEPH_PAGE_SIZE);
       bl.append(ptr);
@@ -1166,30 +1166,42 @@ TEST(BufferList, rebuild_page_aligned) {
     bufferlist bl;
     {
       bufferptr ptr(buffer::create_page_aligned(CEPH_PAGE_SIZE));
+      EXPECT_TRUE(ptr.is_page_aligned());
+      EXPECT_TRUE(ptr.is_n_page_sized());
       bl.append(ptr);
     }
     {
-      bufferptr ptr(CEPH_PAGE_SIZE + 1);
+      bufferptr ptr(buffer::create_page_aligned(CEPH_PAGE_SIZE + 1));
+      EXPECT_TRUE(ptr.is_page_aligned());
+      EXPECT_FALSE(ptr.is_n_page_sized());
       bl.append(ptr);
     }
     {
-      bufferptr ptr(2);
+      bufferptr ptr(buffer::create_page_aligned(2));
       ptr.set_offset(1);
       ptr.set_length(1);
+      EXPECT_FALSE(ptr.is_page_aligned());
+      EXPECT_FALSE(ptr.is_n_page_sized());
       bl.append(ptr);
     }
     {
-      bufferptr ptr(CEPH_PAGE_SIZE - 2);
+      bufferptr ptr(buffer::create_page_aligned(CEPH_PAGE_SIZE - 2));
+      EXPECT_TRUE(ptr.is_page_aligned());
+      EXPECT_FALSE(ptr.is_n_page_sized());
       bl.append(ptr);
     }
     {
       bufferptr ptr(buffer::create_page_aligned(CEPH_PAGE_SIZE));
+      EXPECT_TRUE(ptr.is_page_aligned());
+      EXPECT_TRUE(ptr.is_n_page_sized());
       bl.append(ptr);
     }
     {
-      bufferptr ptr(CEPH_PAGE_SIZE + 1);
+      bufferptr ptr(buffer::create_page_aligned(CEPH_PAGE_SIZE + 1));
       ptr.set_offset(1);
       ptr.set_length(CEPH_PAGE_SIZE);
+      EXPECT_FALSE(ptr.is_page_aligned());
+      EXPECT_TRUE(ptr.is_n_page_sized());
       bl.append(ptr);
     }
     EXPECT_EQ((unsigned)6, bl.buffers().size());
@@ -2012,6 +2024,12 @@ TEST(BufferHash, all) {
   }
 }
 
-// Local Variables:
-// compile-command: "cd .. ; make unittest_bufferlist ; ulimit -s unlimited ; CEPH_BUFFER_TRACK=true valgrind --max-stackframe=20000000 --tool=memcheck ./unittest_bufferlist # --gtest_filter=BufferList.constructors"
-// End:
+/*
+ * Local Variables:
+ * compile-command: "cd .. ; make unittest_bufferlist && 
+ *    ulimit -s unlimited ; CEPH_BUFFER_TRACK=true valgrind \
+ *    --max-stackframe=20000000 --tool=memcheck \
+ *    ./unittest_bufferlist # --gtest_filter=BufferList.constructors"
+ * End:
+ */
+
