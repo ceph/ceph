@@ -4340,7 +4340,7 @@ int OSDMonitor::_prepare_remove_pool(uint64_t pool)
   return 0;
 }
 
-int OSDMonitor::_prepare_rename_pool(uint64_t pool, string newname)
+int OSDMonitor::_prepare_rename_pool(int64_t pool, string newname)
 {
   dout(10) << "_prepare_rename_pool " << pool << dendl;
   if (pending_inc.old_pools.count(pool)) {
