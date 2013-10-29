@@ -24,12 +24,12 @@ To install Apache and FastCGI Debian packages, execute the following::
 RPM Packages
 ------------
 
-To install Apache and FastCGI RPMs, execute the following:: 
+To install Apache and FastCGI RPMs, execute the following::
 
 	rpm -ivh fcgi-2.4.0-10.el6.x86_64.rpm 
 	rpm -ivh mod_fastcgi-2.4.6-2.el6.rf.x86_64.rpm
 
-   Or:: 
+Or::
 
 	sudo yum install httpd mod_fastcgi
 
@@ -67,7 +67,7 @@ RPM Packages
 To install Apache with 100-continue, execute the following steps:
 
 #. Ensure you have ``yum-plugin-priorities`` installed and enabled. See 
-   ``Installing YUM Priorities`_ for details.
+   `Installing YUM Priorities`_ for details.
 
 #. Add a ``ceph-apache.repo`` file to ``/etc/yum.repos.d``. Replace 
    ``{distro}`` with the name of your distribution (e.g., ``centos6``, 
@@ -193,3 +193,6 @@ RPM-based Packages
 
 	etc/init.d/httpd restart
 
+.. _RFC 2616, Section 8: http://www.w3.org/Protocols/rfc2616/rfc2616-sec8.html
+.. _gitbuilder.ceph.com: http://gitbuilder.ceph.com
+.. _Installing YUM Priorities: ../yum-priorities
