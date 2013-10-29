@@ -2785,11 +2785,6 @@ void Server::handle_client_readdir(MDRequest *mdr)
     assert(snapid == CEPH_NOSNAP || snaps->count(snapid));  // just checkin'! 
   }
 
-  // build dir contents
-  bufferlist dnbl;
-
-  CDir::map_t::iterator it = dir->begin(); 
-
   unsigned max = req->head.args.readdir.max_entries;
   if (!max)
     max = dir->get_num_any();  // whatever, something big.
@@ -2807,8 +2802,13 @@ void Server::handle_client_readdir(MDRequest *mdr)
   int bytes_left = max_bytes - front_bytes;
   bytes_left -= realm->get_snap_trace().length();
 
+  // build dir contents
+  bufferlist dnbl;
   __u32 numfiles = 0;
-  while (it != dir->end() && numfiles < max) {
+  __u8 end = (dir->begin() == dir->end());
+  for (CDir::map_t::iterator it = dir->begin();
+       !end && numfiles < max;
+       end = (it == dir->end())) {
     CDentry *dn = it->second;
     ++it;
 
@@ -2897,7 +2897,6 @@ void Server::handle_client_readdir(MDRequest *mdr)
     mdcache->lru.lru_touch(dn);
   }
   
-  __u8 end = (it == dir->end());
   __u8 complete = (end && offset_str.empty());  // FIXME: what purpose does this serve
   
   // finish final blob
