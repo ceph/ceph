@@ -2734,18 +2734,16 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
   if (pending_inc.new_pools.count(pool))
     p = pending_inc.new_pools[pool];
 
-  // accept val as a json string or int, and parse out int or float
-  // values from the string as needed
+  // accept val as a json string, but try to parse int or float values
+  // out in case we need them below.
   string val;
-  cmd_getval(g_ceph_context, cmdmap, "val", val);
+  if (!cmd_getval(g_ceph_context, cmdmap, "val", val)) {
+    return -EINVAL;
+  }
   string interr;
-  int64_t n = 0;
-  if (!cmd_getval(g_ceph_context, cmdmap, "val", n))
-    n = strict_strtoll(val.c_str(), 10, &interr);
+  int64_t n = strict_strtoll(val.c_str(), 10, &interr);
   string floaterr;
-  float f;
-  if (!cmd_getval(g_ceph_context, cmdmap, "val", f))
-    f = strict_strtod(val.c_str(), &floaterr);
+  float f = strict_strtod(val.c_str(), &floaterr);
 
   if (var == "size") {
     if (interr.length()) {
