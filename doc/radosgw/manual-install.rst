@@ -46,6 +46,17 @@ You may also clone Ceph's Apache and FastCGI git repositories::
 
        rgw print continue = false
 
+OpenStack Horizon support
+-------------------------
+
+As of `OpenStack Grizzly
+<http://www.openstack.org/software/grizzly/>`_ the `Horizon
+<https://github.com/openstack/horizon>`_ dashboard `does not send
+Content-Length <https://bugs.launchpad.net/horizon/+bug/1200534>`_
+which will trigger a ``411 Length Required`` error from
+libapache2-mod-fastcgi when uploading an object. The recommended
+workaround is to install the package from the ceph repositories as
+instructed above.
 
 Apache Configuration
 ====================
