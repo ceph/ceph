@@ -44,8 +44,7 @@ It is also possible to do a rolling upgrade from 0.61.x Cuttlefish,
 but there are ordering restrictions.  (This is the same set of
 restrictions for Cuttlefish to Dumpling.)::
 
-#. Upgrade ceph-common on all nodes that will use the command line
-   'ceph' utility.
+#. Upgrade ceph-common on all nodes that will use the command line 'ceph' utility.
 #. Upgrade all monitors (upgrade ceph package, restart ceph-mon
    daemons).  This can happen one daemon or host at a time.  Note that
    because cuttlefish and dumpling monitors can't talk to each other,
