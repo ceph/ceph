@@ -473,7 +473,6 @@ public:
     void put() {
       assert(nref > 0);
       if (--nref == 0) {
-	assert(src_obc.empty());
 	delete ctx; // must already be unlocked
 	delete this;
 	//generic_dout(0) << "deleting " << this << dendl;
