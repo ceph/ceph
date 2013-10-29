@@ -150,7 +150,7 @@ int main(int argc, char **argv)
     detailed_ops = &cerr;
   }
 
-  std::tr1::shared_ptr<StatCollector> col(
+  ceph::shared_ptr<StatCollector> col(
     new DetailedStatCollector(
       1, new JSONFormatter, detailed_ops, &cout,
       new MorePrinting(g_ceph_context)));
@@ -175,9 +175,9 @@ int main(int argc, char **argv)
     fs.apply_transaction(t);
   }
 
-  vector<std::tr1::shared_ptr<Bencher> > benchers(
+  vector<ceph::shared_ptr<Bencher> > benchers(
     vm["num-writers"].as<unsigned>());
-  for (vector<std::tr1::shared_ptr<Bencher> >::iterator i = benchers.begin();
+  for (vector<ceph::shared_ptr<Bencher> >::iterator i = benchers.begin();
        i != benchers.end();
        ++i) {
     set<string> objects;
@@ -227,12 +227,12 @@ int main(int argc, char **argv)
     (*i).reset(bencher);
   }
 
-  for (vector<std::tr1::shared_ptr<Bencher> >::iterator i = benchers.begin();
+  for (vector<ceph::shared_ptr<Bencher> >::iterator i = benchers.begin();
        i != benchers.end();
        ++i) {
     (*i)->create();
   }
-  for (vector<std::tr1::shared_ptr<Bencher> >::iterator i = benchers.begin();
+  for (vector<ceph::shared_ptr<Bencher> >::iterator i = benchers.begin();
        i != benchers.end();
        ++i) {
     (*i)->join();

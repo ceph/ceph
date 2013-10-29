@@ -4501,7 +4501,7 @@ struct FlushState {
     pg->unlock();
   }
 };
-typedef std::tr1::shared_ptr<FlushState> FlushStateRef;
+typedef ceph::shared_ptr<FlushState> FlushStateRef;
 
 void PG::start_flush(ObjectStore::Transaction *t,
 		     list<Context *> *on_applied,

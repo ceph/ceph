@@ -61,9 +61,8 @@ extern "C" {
 
 using namespace std;
 
-#include <ext/hash_map>
-using namespace __gnu_cxx;
-
+#include "include/unordered_map.h"
+#include "include/hash_namespace.h"
 
 #include "object.h"
 #include "intarith.h"
@@ -87,7 +86,8 @@ typedef off_t off64_t;
 
 // -- stl crap --
 
-namespace __gnu_cxx {
+
+CEPH_HASH_NAMESPACE_START
   template<> struct hash< std::string >
   {
     size_t operator()( const std::string& x ) const
@@ -111,8 +111,7 @@ namespace __gnu_cxx {
     }
   };
 #endif
-
-}
+CEPH_HASH_NAMESPACE_END
 
 
 
@@ -211,8 +210,8 @@ inline ostream& operator<<(ostream& out, const multimap<A,B>& m)
 /*
  * comparators for stl containers
  */
-// for hash_map:
-//   hash_map<const char*, long, hash<const char*>, eqstr> vals;
+// for ceph::unordered_map:
+//   ceph::unordered_map<const char*, long, hash<const char*>, eqstr> vals;
 struct eqstr
 {
   bool operator()(const char* s1, const char* s2) const
@@ -329,7 +328,7 @@ inline ostream& operator<<(ostream& out, inodeno_t ino) {
   return out << hex << ino.val << dec;
 }
 
-namespace __gnu_cxx {
+CEPH_HASH_NAMESPACE_START
   template<> struct hash< inodeno_t >
   {
     size_t operator()( const inodeno_t& x ) const
@@ -338,7 +337,7 @@ namespace __gnu_cxx {
       return H(x.val);
     }
   };
-}
+CEPH_HASH_NAMESPACE_END
 
 
 // file modes

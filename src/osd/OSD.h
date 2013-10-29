@@ -42,12 +42,11 @@
 
 #include <map>
 #include <memory>
-#include <tr1/memory>
+#include "include/memory.h"
 using namespace std;
 
-#include <ext/hash_map>
-#include <ext/hash_set>
-using namespace __gnu_cxx;
+#include "include/unordered_map.h"
+#include "include/unordered_set.h"
 
 #include "Watch.h"
 #include "common/shared_cache.hpp"
@@ -179,7 +178,7 @@ class HistoricOpsSocketHook;
 class TestOpsSocketHook;
 struct C_CompleteSplits;
 
-typedef std::tr1::shared_ptr<ObjectStore::Sequencer> SequencerRef;
+typedef ceph::shared_ptr<ObjectStore::Sequencer> SequencerRef;
 
 class DeletingState {
   Mutex lock;
@@ -279,7 +278,7 @@ public:
     return status != DELETED_DIR;
   } ///< @return true if we don't need to recreate the collection
 };
-typedef std::tr1::shared_ptr<DeletingState> DeletingStateRef;
+typedef ceph::shared_ptr<DeletingState> DeletingStateRef;
 
 class OSD;
 class OSDService {
@@ -1142,7 +1141,7 @@ private:
 
 protected:
   // -- placement groups --
-  hash_map<pg_t, PG*> pg_map;
+  ceph::unordered_map<pg_t, PG*> pg_map;
   map<pg_t, list<OpRequestRef> > waiting_for_pg;
   map<pg_t, list<PG::CephPeeringEvtRef> > peering_wait_for_split;
   PGRecoveryStats pg_recovery_stats;
@@ -1220,7 +1219,7 @@ protected:
     set<int> prior;
     pg_t parent;
   };
-  hash_map<pg_t, create_pg_info> creating_pgs;
+  ceph::unordered_map<pg_t, create_pg_info> creating_pgs;
   double debug_drop_pg_create_probability;
   int debug_drop_pg_create_duration;
   int debug_drop_pg_create_left;  // 0 if we just dropped the last one, -1 if we can drop more

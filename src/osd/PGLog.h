@@ -46,8 +46,8 @@ struct PGLog {
    * plus some methods to manipulate it all.
    */
   struct IndexedLog : public pg_log_t {
-    hash_map<hobject_t,pg_log_entry_t*> objects;  // ptrs into log.  be careful!
-    hash_map<osd_reqid_t,pg_log_entry_t*> caller_ops;
+    ceph::unordered_map<hobject_t,pg_log_entry_t*> objects;  // ptrs into log.  be careful!
+    ceph::unordered_map<osd_reqid_t,pg_log_entry_t*> caller_ops;
 
     // recovery pointers
     list<pg_log_entry_t>::iterator complete_to;  // not inclusive of referenced item
@@ -85,7 +85,7 @@ struct PGLog {
       return caller_ops.count(r);
     }
     const pg_log_entry_t *get_request(const osd_reqid_t &r) const {
-      hash_map<osd_reqid_t,pg_log_entry_t*>::const_iterator p = caller_ops.find(r);
+      ceph::unordered_map<osd_reqid_t,pg_log_entry_t*>::const_iterator p = caller_ops.find(r);
       if (p == caller_ops.end())
 	return NULL;
       return p->second;

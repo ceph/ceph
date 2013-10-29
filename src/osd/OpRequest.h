@@ -21,7 +21,7 @@
 #include "common/Mutex.h"
 #include "include/xlist.h"
 #include "msg/Message.h"
-#include <tr1/memory>
+#include "include/memory.h"
 #include "common/TrackedOp.h"
 
 /**
@@ -157,7 +157,7 @@ public:
 
   void init_from_message();
 
-  typedef std::tr1::shared_ptr<OpRequest> Ref;
+  typedef ceph::shared_ptr<OpRequest> Ref;
 };
 
 typedef OpRequest::Ref OpRequestRef;
