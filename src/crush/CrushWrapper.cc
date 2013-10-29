@@ -193,6 +193,44 @@ int CrushWrapper::remove_item_under(CephContext *cct, int item, int ancestor, bo
   return ret;
 }
 
+int CrushWrapper::parse_loc_map(const std::vector<string>& args,
+				std::map<string,string> *ploc)
+{
+  ploc->clear();
+  for (unsigned i = 0; i < args.size(); ++i) {
+    const char *s = args[i].c_str();
+    const char *pos = strchr(s, '=');
+    if (!pos)
+      return -EINVAL;
+    string key(s, 0, pos-s);
+    string value(pos+1);
+    if (value.length())
+      (*ploc)[key] = value;
+    else
+      return -EINVAL;
+  }
+  return 0;
+}
+
+int CrushWrapper::parse_loc_multimap(const std::vector<string>& args,
+					    std::multimap<string,string> *ploc)
+{
+  ploc->clear();
+  for (unsigned i = 0; i < args.size(); ++i) {
+    const char *s = args[i].c_str();
+    const char *pos = strchr(s, '=');
+    if (!pos)
+      return -EINVAL;
+    string key(s, 0, pos-s);
+    string value(pos+1);
+    if (value.length())
+      ploc->insert(make_pair(key, value));
+    else
+      return -EINVAL;
+  }
+  return 0;
+}
+
 bool CrushWrapper::check_item_loc(CephContext *cct, int item, const map<string,string>& loc,
 				  int *weight)
 {
