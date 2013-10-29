@@ -17,6 +17,7 @@ class RGWMongoose : public RGWClientIO
   bool header_done;
   bool sent_header;
   bool has_content_length;
+  bool explicit_keepalive;
 
 public:
   void init_env(CephContext *cct);

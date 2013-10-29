@@ -20,7 +20,9 @@ int RGWMongoose::write_data(const char *buf, int len)
   return mg_write(conn, buf, len);
 }
 
-RGWMongoose::RGWMongoose(mg_connection *_conn) : conn(_conn), header_done(false), sent_header(false), has_content_length(false) {
+RGWMongoose::RGWMongoose(mg_connection *_conn) : conn(_conn), header_done(false), sent_header(false), has_content_length(false),
+                                                 explicit_keepalive(false)
+{
 }
 
 int RGWMongoose::read_data(char *buf, int len)
@@ -80,6 +82,10 @@ void RGWMongoose::init_env(CephContext *cct)
     if (strcasecmp(header->name, "content-type") == 0) {
       env.set("CONTENT_TYPE", header->value);
       continue;
+    }
+
+    if (strcasecmp(header->name, "connection") == 0) {
+      explicit_keepalive = (strcasecmp(header->value, "keep-alive") == 0);
     }
 
     int len = strlen(header->name) + 5; /* HTTP_ prepended */
@@ -146,6 +152,9 @@ int RGWMongoose::complete_header()
   if (!has_content_length) {
     return 0;
   }
+
+  if (explicit_keepalive)
+    header_data.append("Connection: Keep-Alive\r\n");
 
   header_data.append("\r\n");
 
