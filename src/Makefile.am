@@ -180,7 +180,6 @@ EXTRA_DIST += \
 	ceph-disk-udev \
 	ceph-create-keys \
 	ceph-rest-api \
-	ceph-crush-location \
 	mount.fuse.ceph \
 	rbdmap \
 	unittest_bufferlist.sh \
@@ -237,8 +236,7 @@ bin_SCRIPTS += \
 	ceph-clsinfo \
 	ceph-debugpack \
 	ceph-rbdnamer \
-	ceph-post-file \
-	ceph-crush-location
+	ceph-post-file
 
 BUILT_SOURCES += init-ceph
 su_sbin_SCRIPTS += mkcephfs
