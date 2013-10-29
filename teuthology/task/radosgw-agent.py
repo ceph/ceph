@@ -87,7 +87,6 @@ def run_radosgw_agent(ctx, config):
             '--log-file', '{tdir}/archive/rgw_sync_agent.{client}.log'.format(
                 tdir=testdir,
                 client=client),
-            "http://{addr}:{port}".format(addr=dest_host, port=dest_port),
             ]
         # the test server and full/incremental flags are mutually exclusive
         if sync_scope is None:
@@ -102,6 +101,10 @@ def run_radosgw_agent(ctx, config):
             in_args.append('--sync-scope')
             in_args.append(sync_scope)
             log.debug('Starting a {scope} sync on {client}'.format(scope=sync_scope,client=client))
+
+        # positional arg for destination must come last
+        in_args.append("http://{addr}:{port}".format(addr=dest_host,
+                                                     port=dest_port))
 
         return_list.append((client, remote.run(
             args=in_args,
