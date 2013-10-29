@@ -16,7 +16,7 @@ regions, and with multiple zones for a region.
 
 
 Background
-----------
+==========
 
 When you deploy a :term:`Ceph Object Store` service that spans geographical
 locales, configuring Ceph Object Gateway regions and metadata synchronization
@@ -36,7 +36,7 @@ each zone (typical). You may also deploy a separate Ceph Storage Cluster for
 each zone if your requirements and resources warrant this level of redundancy.
 
 About this Guide
-----------------
+================
 
 In the following sections, we will demonstrate how to configure a federated
 cluster in two logical steps: 
@@ -703,10 +703,15 @@ with the following differences:
 
 #. `Start Gateway Instances`_.
 
-#. `Replicate Data`_ by specifying the master zone of the master region as the
-   source zone and the master zone of the secondary region as the secondary
-   zone. When activating the ``radosgw-agent``, specify ``--metadata-only`` so
-   that it only copies metadata.
+Replicate Metadata
+------------------
+
+`Replicate Data`_ by specifying the master zone of the master region as the
+source zone and the master zone of the secondary region as the secondary
+zone. When activating the ``radosgw-agent``, specify ``--metadata-only`` so
+that it only copies metadata. For example:: 
+
+	radosgw-agent -c inter-region-data-sync.conf --metadata-only
 
 Once you have completed the foregoing procedure, you should have a cluster
 consisting of a master region (``us``) and a secondary region (``eu``) where
