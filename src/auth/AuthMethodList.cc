@@ -12,6 +12,8 @@
  * 
  */
 
+#include <algorithm>
+
 #include "common/Mutex.h"
 #include "common/config.h"
 #include "common/debug.h"
