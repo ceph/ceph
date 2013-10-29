@@ -312,7 +312,7 @@ def sudo(ctx, config):
     try:
         yield
     finally:
-        log.info('Restoring {}...'.format(sudoers_file))
+        log.info('Restoring {0}...'.format(sudoers_file))
         ctx.cluster.run(
             args="sudo mv -f {path}{ext} {path}".format(
                 path=sudoers_file, ext=backup_ext
