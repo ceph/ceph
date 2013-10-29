@@ -88,6 +88,10 @@ def run_radosgw_agent(ctx, config):
                 tdir=testdir,
                 client=client),
             ]
+
+        if cconf.get('metadata-only', False):
+            in_args.append('--metadata-only')
+
         # the test server and full/incremental flags are mutually exclusive
         if sync_scope is None:
             in_args.append('--test-server-host')
@@ -132,7 +136,11 @@ def task(ctx, config):
     Alternatively, a single full sync can be triggered by
     specifying 'sync-scope: full' or a loop of incremental syncs can be triggered
     by specifying 'sync-scope: incremental' (the loop will sleep
-    '--incremental-sync-delay' seconds between each sync, default is 20 seconds).
+    '--incremental-sync-delay' seconds between each sync, default is 30 seconds).
+
+    By default, both data and metadata are synced. To only sync
+    metadata, for example because you want to sync between regions,
+    set metadata-only: true.
 
     An example::
 
@@ -152,6 +160,7 @@ def task(ctx, config):
             src: client.0
             dest: client.1
             sync-scope: full
+            metadata-only: true
             # port: 8000 (default)
           client.1:
             src: client.1
