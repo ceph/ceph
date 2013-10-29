@@ -24,8 +24,7 @@
 #include <fstream>
 using namespace std;
 
-#include <ext/hash_map>
-using namespace __gnu_cxx;
+#include "include/unordered_map.h"
 
 #include "include/assert.h"
 

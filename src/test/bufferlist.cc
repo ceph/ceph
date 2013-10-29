@@ -19,7 +19,7 @@
  *
  */
 
-#include <tr1/memory>
+#include "include/memory.h"
 #include <limits.h>
 #include <errno.h>
 #include <sys/uio.h>
@@ -2144,7 +2144,7 @@ TEST(BufferList, TestDirectAppend) {
 
 TEST(BufferList, TestCopyAll) {
   const static size_t BIG_SZ = 10737414;
-  std::tr1::shared_ptr <unsigned char> big(
+  ceph::shared_ptr <unsigned char> big(
       (unsigned char*)malloc(BIG_SZ), free);
   unsigned char c = 0;
   for (size_t i = 0; i < BIG_SZ; ++i) {
@@ -2156,7 +2156,7 @@ TEST(BufferList, TestCopyAll) {
   bufferlist bl2;
   i.copy_all(bl2);
   ASSERT_EQ(bl2.length(), BIG_SZ);
-  std::tr1::shared_ptr <unsigned char> big2(
+  ceph::shared_ptr <unsigned char> big2(
       (unsigned char*)malloc(BIG_SZ), free);
   bl2.copy(0, BIG_SZ, (char*)big2.get());
   ASSERT_EQ(memcmp(big.get(), big2.get(), BIG_SZ), 0);

@@ -40,7 +40,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <time.h>
-#include <tr1/memory>
+#include "include/memory.h"
 #include <sys/ioctl.h>
 
 #include "include/rbd_types.h"
@@ -1827,7 +1827,7 @@ static int do_kernel_showmapped(Formatter *f)
   TextTable tbl;
 
   const char *devices_path = "/sys/bus/rbd/devices";
-  std::tr1::shared_ptr<DIR> device_dir(opendir(devices_path), do_closedir);
+  ceph::shared_ptr<DIR> device_dir(opendir(devices_path), do_closedir);
   if (!device_dir.get()) {
     r = -errno;
     cerr << "rbd: could not open " << devices_path << ": "
