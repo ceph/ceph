@@ -651,13 +651,12 @@ bool verify_object_permission(struct req_state *s, int perm)
   return verify_object_permission(s, s->bucket_acl, s->object_acl, perm);
 }
 
-static char hex_to_num(char c)
+class HexTable
 {
-  static char table[256];
-  static bool initialized = false;
+  char table[256];
 
-
-  if (!initialized) {
+public:
+  HexTable() {
     memset(table, -1, sizeof(table));
     int i;
     for (i = '0'; i<='9'; i++)
@@ -667,7 +666,16 @@ static char hex_to_num(char c)
     for (i = 'a'; i<='f'; i++)
       table[i] = i - 'a' + 0xa;
   }
-  return table[(int)c];
+
+  char to_num(char c) {
+    return table[(int)c];
+  }
+};
+
+static char hex_to_num(char c)
+{
+  static HexTable hex_table;
+  return hex_table.to_num(c);
 }
 
 bool url_decode(string& src_str, string& dest_str)
