@@ -1160,6 +1160,16 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
     return true;
   }
 
+  if (osdmap.exists(from) &&
+      !osdmap.get_uuid(from).is_zero() &&
+      osdmap.get_uuid(from) != m->sb.osd_fsid) {
+    dout(7) << __func__ << " from " << m->get_orig_source_inst()
+            << " clashes with existing osd: different fsid"
+            << " (ours: " << osdmap.get_uuid(from)
+            << " ; theirs: " << m->sb.osd_fsid << ")" << dendl;
+    goto ignore;
+  }
+
   // noup?
   if (!can_mark_up(from)) {
     dout(7) << "preprocess_boot ignoring boot from " << m->get_orig_source_inst() << dendl;
@@ -1200,7 +1210,9 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
   // already up?  mark down first?
   if (osdmap.is_up(from)) {
     dout(7) << "prepare_boot was up, first marking down " << osdmap.get_inst(from) << dendl;
-    assert(osdmap.get_inst(from) != m->get_orig_source_inst());  // preproces should have caught it
+    // preprocess should have caught these;  if not, assert.
+    assert(osdmap.get_inst(from) != m->get_orig_source_inst());
+    assert(osdmap.get_uuid(from) == m->sb.osd_fsid);
     
     if (pending_inc.new_state.count(from) == 0 ||
 	(pending_inc.new_state[from] & CEPH_OSD_UP) == 0) {
@@ -1239,8 +1251,11 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 
     // set uuid?
     dout(10) << " setting osd." << from << " uuid to " << m->sb.osd_fsid << dendl;
-    if (!osdmap.exists(from) || osdmap.get_uuid(from) != m->sb.osd_fsid)
+    if (!osdmap.exists(from) || osdmap.get_uuid(from) != m->sb.osd_fsid) {
+      // preprocess should have caught this;  if not, assert.
+      assert(!osdmap.exists(from) || osdmap.get_uuid(from).is_zero());
       pending_inc.new_uuid[from] = m->sb.osd_fsid;
+    }
 
     // fresh osd?
     if (m->sb.newest_map == 0 && osdmap.exists(from)) {
@@ -3471,13 +3486,15 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       } else if (prefix == "osd rm") {
 	if (osdmap.is_up(osd)) {
-	ss << "osd." << osd << " is still up; must be down before removal. ";
+          ss << "osd." << osd << " is still up; must be down before removal. ";
 	} else {
 	  pending_inc.new_state[osd] = osdmap.get_state(osd);
-	  if (any)
+          pending_inc.new_uuid[osd] = uuid_d();
+	  if (any) {
 	    ss << ", osd." << osd;
-	  else 
+          } else {
 	    ss << "removed osd." << osd;
+          }
 	  any = true;
 	}
       }
@@ -4350,7 +4367,7 @@ int OSDMonitor::_prepare_rename_pool(int64_t pool, string newname)
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
        p != pending_inc.new_pool_names.end();
        ++p) {
-    if (p->second == newname && p->first != pool) {
+    if (p->second == newname && (uint64_t)p->first != pool) {
       return -EEXIST;
     }
   }
