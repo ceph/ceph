@@ -129,7 +129,7 @@ def radosgw_agent_sync_all(ctx, full=False, data=False):
             sync_host, sync_port = get_sync_agent(ctx, agent_client)
             log.debug('doing a sync via {host1}'.format(host1=sync_host))
             radosgw_agent_sync_metadata(ctx, sync_host, sync_port, full)
-	    if (data):
+            if (data):
                 radosgw_agent_sync_data(ctx, sync_host, sync_port, full)
 
 def host_for_role(ctx, role):
