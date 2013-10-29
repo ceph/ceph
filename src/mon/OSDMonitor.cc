@@ -3192,13 +3192,15 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       } else if (prefix == "osd rm") {
 	if (osdmap.is_up(osd)) {
-	ss << "osd." << osd << " is still up; must be down before removal. ";
+          ss << "osd." << osd << " is still up; must be down before removal. ";
 	} else {
 	  pending_inc.new_state[osd] = osdmap.get_state(osd);
-	  if (any)
+          pending_inc.new_uuid[osd] = uuid_d();
+	  if (any) {
 	    ss << ", osd." << osd;
-	  else 
+          } else {
 	    ss << "removed osd." << osd;
+          }
 	  any = true;
 	}
       }
