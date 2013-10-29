@@ -663,6 +663,8 @@ static char hex_to_num(char c)
       table[i] = i - 'A' + 0xa;
     for (i = 'a'; i<='f'; i++)
       table[i] = i - 'a' + 0xa;
+
+    initialized = true;
   }
   return table[(int)c];
 }
