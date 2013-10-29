@@ -1,0 +1,87 @@
+#!/bin/sh
+#
+# Generate a CRUSH location for the given entity
+#
+# The CRUSH location consists of a list of key=value pairs, separated
+# by spaces, all on a single line.  This describes where in CRUSH
+# hierarhcy this entity should be placed.
+#
+# Arguments:
+#   --cluster <clustername>   name of the cluster (see /etc/ceph/$cluster.conf)
+#   --type <osd|mds|client>   daemon/entity type
+#   --id <id>                 id (osd number, mds name, client name)
+#
+
+# if we start up as ./ceph-crush-location, assume everything else is
+# in the current directory too.
+if [ `dirname $0` = "." ] && [ $PWD != "/usr/bin" ]; then
+    BINDIR=.
+    SBINDIR=.
+    LIBDIR=.
+    ETCDIR=.
+else
+    BINDIR=@bindir@
+    SBINDIR=@prefix@/sbin
+    LIBDIR=@libdir@/ceph
+    ETCDIR=@sysconfdir@/ceph
+fi
+
+usage_exit() {
+    echo "usage: $0 [--cluster <cluster>] --id <id> --type <osd|mds|client>"
+    exit
+}
+
+cluster="ceph"
+type=""
+id=""
+while [ $# -ge 1 ]; do
+    case $1 in
+	--cluster | -C)
+	    shift
+	    cluster="$1"
+	    shift
+	    ;;
+	--id | -i)
+	    shift
+	    id="$1"
+	    shift
+	    ;;
+	--type | -t)
+	    shift
+	    type="$1"
+	    shift
+	    ;;
+	*)
+	    echo "unrecognized option '$1'"
+	    usage_exit
+	    ;;
+    esac
+done
+
+if [ -z "$type" ]; then
+    echo "must specify entity type"
+    usage_exit
+fi
+
+if [ -z "$id" ]; then
+    echo "must specify id"
+    usage_exit
+fi
+
+# try a type-specific config, e.g. 'osd crush location'
+location="$($BINDIR/ceph-conf --cluster=${cluster:-ceph} --name=$type.$id --lookup ${type}_crush_location || :)"
+if [ -n "$location" ]; then
+    echo $location
+    exit 0
+fi
+
+# try a generic location
+location="$($BINDIR/ceph-conf --cluster=${cluster:-ceph} --name=$type.$id --lookup crush_location || :)"
+if [ -n "$location" ]; then
+    echo $location
+    exit 0
+fi
+
+# spit out something generic
+echo "host=$(hostname -s) root=default"
+
