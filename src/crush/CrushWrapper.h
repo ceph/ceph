@@ -473,6 +473,19 @@ public:
   int remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
 
   /**
+   * parse a set of key/value pairs out of a string vector
+   *
+   * These are used to describe a location in the CRUSH hierarchy.
+   *
+   * @param args list of strings (each key= or key=value)
+   * @param ploc pointer to a resulting location map or multimap
+   */
+  static int parse_loc_map(const std::vector<string>& args,
+			   std::map<string,string> *ploc);
+  static int parse_loc_multimap(const std::vector<string>& args,
+				std::multimap<string,string> *ploc);
+
+  /**
    * get an item's weight
    *
    * Will return the weight for the first instance it finds.
