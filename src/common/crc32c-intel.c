@@ -7,8 +7,7 @@
 #include <sys/wait.h>
 
 
-/* this probably isn't specific enough for x86_64?  fix me someday */
-#ifdef __LP64__
+#ifdef __x86_64__
 
 /*
  *  * Based on a posting to lkml by Austin Zhang <austin.zhang@intel.com>
