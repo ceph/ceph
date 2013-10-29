@@ -392,6 +392,7 @@ fi
 %{_bindir}/ceph-authtool
 %{_bindir}/ceph-syn
 %{_bindir}/ceph-post-file
+%{_bindir}/ceph-crush-location
 %{_bindir}/ceph-run
 %{_bindir}/ceph-mon
 %{_bindir}/ceph-mds

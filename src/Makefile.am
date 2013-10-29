@@ -128,7 +128,7 @@ editpaths = sed \
 	-e 's|@datadir[@]|$(pkgdatadir)|g' \
 	-e 's|@prefix[@]|$(prefix)|g' \
 	-e 's|@@GCOV_PREFIX_STRIP[@][@]|$(GCOV_PREFIX_STRIP)|g'
-shell_scripts = ceph-debugpack ceph-post-file
+shell_scripts = ceph-debugpack ceph-post-file ceph-crush-location
 $(shell_scripts): Makefile
 $(shell_scripts): %: %.in
 	rm -f $@ $@.tmp
@@ -180,6 +180,7 @@ EXTRA_DIST += \
 	ceph-disk-udev \
 	ceph-create-keys \
 	ceph-rest-api \
+	ceph-crush-location \
 	mount.fuse.ceph \
 	rbdmap \
 	unittest_bufferlist.sh \
@@ -236,7 +237,8 @@ bin_SCRIPTS += \
 	ceph-clsinfo \
 	ceph-debugpack \
 	ceph-rbdnamer \
-	ceph-post-file
+	ceph-post-file \
+	ceph-crush-location
 
 BUILT_SOURCES += init-ceph
 su_sbin_SCRIPTS += mkcephfs
