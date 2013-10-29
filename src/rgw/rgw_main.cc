@@ -134,6 +134,7 @@ struct RGWProcessEnv {
   RGWRados *store;
   RGWREST *rest;
   OpsLogSocket *olog;
+  int port;
 };
 
 class RGWProcess {
@@ -459,7 +460,7 @@ static int mongoose_callback(struct mg_connection *conn) {
   OpsLogSocket *olog = pe->olog;
 
   RGWRequest *req = new RGWRequest;
-  RGWMongoose client_io(conn);
+  RGWMongoose client_io(conn, pe->port);
 
   client_io.init(g_ceph_context);
 
@@ -642,39 +643,78 @@ int main(int argc, const char **argv)
     olog->init(g_conf->rgw_ops_log_socket_path);
   }
 
-  bool use_mongoose = (g_conf->rgw_standalone_server_port != 0);
-  struct mg_context *ctx = NULL;
-  RGWProcessEnv pe = { store, &rest, olog };
-
-  if (use_mongoose) {
-    char port_buf[32];
-    snprintf(port_buf, sizeof(port_buf), "%d", (int)g_conf->rgw_standalone_server_port);
-
-    char thread_pool_buf[32];
-    snprintf(thread_pool_buf, sizeof(thread_pool_buf), "%d", (int)g_conf->rgw_thread_pool_size);
-    const char *options[] = {"listening_ports", port_buf, "enable_keep_alive", "yes", "num_threads", thread_pool_buf, NULL};
-
-    struct mg_callbacks cb;
-    memset((void *)&cb, 0, sizeof(cb));
-    cb.begin_request = mongoose_callback;
-    ctx = mg_start(&cb, &pe, (const char **)&options);
-    assert(ctx);
-  }
-
-  RGWProcess *pprocess = new RGWProcess(g_ceph_context, &pe, g_conf->rgw_thread_pool_size);
-
   init_async_signal_handler();
   register_async_signal_handler(SIGHUP, sighup_handler);
   register_async_signal_handler(SIGTERM, handle_sigterm);
   register_async_signal_handler(SIGINT, handle_sigterm);
   register_async_signal_handler(SIGUSR1, handle_sigterm);
-
   sighandler_alrm = signal(SIGALRM, godown_alarm);
+
+  string frontend_frameworks = g_conf->rgw_frontends;
+
+  list<string> frontends;
+
+  get_str_list(g_conf->rgw_frontends, frontends);
+
+  map<string, int> fe_map;
+
+  for (list<string>::iterator iter = frontends.begin(); iter != frontends.end(); ++iter) {
+    string& f = *iter;
+    string framework;
+    int port;
+    int pos = f.find (':');
+    if (pos >= 0) {
+      framework = f.substr(0, pos);
+      string port_str = f.substr(pos + 1);
+      string err;
+      port = strict_strtol(port_str.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "error parsing frontend config for framework " << framework << ": " << err << std::endl;
+        return EINVAL;
+      }
+    } else {
+      framework = f;
+      port = 0;
+    }
+
+    fe_map[framework] = port;
+  }
+
+  struct mg_context *mongoose_ctx = NULL;
+  RGWProcessEnv *mongoose_pe = NULL;
+  
+  RGWProcessEnv fcgi_pe = { store, &rest, olog, 0 };
+
+  RGWProcess *pprocess = new RGWProcess(g_ceph_context, &fcgi_pe, g_conf->rgw_thread_pool_size);
+
+  for (map<string, int>::iterator fiter = fe_map.begin(); fiter != fe_map.end(); ++fiter) {
+    int port = fiter->second;
+    dout(0) << "handler: " << fiter->first << ":" << port << dendl;
+    if (fiter->first == "fastcgi" || fiter->first == "fcgi") {
+      // later
+    } else if (fiter->first == "mongoose") {
+      mongoose_pe = new RGWProcessEnv;
+      *mongoose_pe = { store, &rest, olog, port };
+      char port_buf[32];
+      snprintf(port_buf, sizeof(port_buf), "%d", port);
+
+      char thread_pool_buf[32];
+      snprintf(thread_pool_buf, sizeof(thread_pool_buf), "%d", (int)g_conf->rgw_thread_pool_size);
+      const char *options[] = {"listening_ports", port_buf, "enable_keep_alive", "yes", "num_threads", thread_pool_buf, NULL};
+
+      struct mg_callbacks cb;
+      memset((void *)&cb, 0, sizeof(cb));
+      cb.begin_request = mongoose_callback;
+      mongoose_ctx = mg_start(&cb, mongoose_pe, (const char **)&options);
+      assert(mongoose_ctx);
+    }
+  }
+
 
   pprocess->run();
 
-  if (use_mongoose) {
-    mg_stop(ctx);
+  if (mongoose_ctx) {
+    mg_stop(mongoose_ctx);
   }
 
   derr << "shutting down" << dendl;
@@ -686,6 +726,7 @@ int main(int argc, const char **argv)
   shutdown_async_signal_handler();
 
   delete pprocess;
+  delete mongoose_pe;
 
   if (do_swift) {
     swift_finalize();
