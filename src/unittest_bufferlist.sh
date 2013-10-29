@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 #
 # Ceph - scalable distributed file system
 #
