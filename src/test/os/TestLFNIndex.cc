@@ -42,7 +42,7 @@ public:
   virtual int _split(
 		     uint32_t match,                           
 		     uint32_t bits,                            
-		     std::tr1::shared_ptr<CollectionIndex> dest
+		     ceph::shared_ptr<CollectionIndex> dest
 		     ) { return 0; }
 
   void test_generate_and_parse(const ghobject_t &hoid, const std::string &mangled_expected) {

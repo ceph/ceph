@@ -30,8 +30,7 @@
 #include <boost/random/binomial_distribution.hpp>
 #include <gtest/gtest.h>
 
-#include <ext/hash_map>
-using __gnu_cxx::hash_map;
+#include "include/unordered_map.h"
 typedef boost::mt11213b gen_type;
 
 class StoreTest : public ::testing::Test {

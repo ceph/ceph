@@ -20,10 +20,10 @@
 #include "include/histogram.h"
 #include "include/xlist.h"
 #include "msg/Message.h"
-#include <tr1/memory>
+#include "include/memory.h"
 
 class TrackedOp;
-typedef std::tr1::shared_ptr<TrackedOp> TrackedOpRef;
+typedef ceph::shared_ptr<TrackedOp> TrackedOpRef;
 
 class OpTracker;
 class OpHistory {

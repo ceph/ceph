@@ -575,7 +575,7 @@ void SimpleMessenger::mark_down_all()
   accepting_pipes.clear();
 
   while (!rank_pipe.empty()) {
-    hash_map<entity_addr_t,Pipe*>::iterator it = rank_pipe.begin();
+    ceph::unordered_map<entity_addr_t,Pipe*>::iterator it = rank_pipe.begin();
     Pipe *p = it->second;
     ldout(cct,5) << "mark_down_all " << it->first << " " << p << dendl;
     rank_pipe.erase(it);

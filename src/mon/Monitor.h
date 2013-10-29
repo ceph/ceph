@@ -51,7 +51,7 @@
 #include "mon/MonitorDBStore.h"
 
 #include <memory>
-#include <tr1/memory>
+#include "include/memory.h"
 #include <errno.h>
 
 

@@ -29,7 +29,7 @@
 #include <boost/random/binomial_distribution.hpp>
 #include <gtest/gtest.h>
 
-#include <ext/hash_map>
+#include "include/unordered_map.h"
 
 void usage(const string &name) {
   std::cerr << "Usage: " << name << " [xattr|omap] store_path store_journal"

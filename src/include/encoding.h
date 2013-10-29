@@ -16,7 +16,7 @@
 
 #include "include/int_types.h"
 
-#include <tr1/memory>
+#include "include/memory.h"
 
 #include "byteorder.h"
 #include "buffer.h"
@@ -290,8 +290,8 @@ inline void decode(T &o, bufferlist& bl)
 #ifndef _BACKWARD_BACKWARD_WARNING_H
 #define _BACKWARD_BACKWARD_WARNING_H   // make gcc 4.3 shut up about hash_*
 #endif
-#include <ext/hash_map>
-#include <ext/hash_set>
+#include "include/unordered_map.h"
+#include "include/unordered_set.h"
 
 #include "triple.h"
 
@@ -363,14 +363,14 @@ inline void decode(std::list<T>& ls, bufferlist::iterator& p)
 }
 
 template<class T>
-inline void encode(const std::list<std::tr1::shared_ptr<T> >& ls, bufferlist& bl)
+inline void encode(const std::list<ceph::shared_ptr<T> >& ls, bufferlist& bl)
 {
   // should i pre- or post- count?
   if (!ls.empty()) {
     unsigned pos = bl.length();
     unsigned n = 0;
     encode(n, bl);
-    for (typename std::list<std::tr1::shared_ptr<T> >::const_iterator p = ls.begin(); p != ls.end(); ++p) {
+    for (typename std::list<ceph::shared_ptr<T> >::const_iterator p = ls.begin(); p != ls.end(); ++p) {
       n++;
       encode(**p, bl);
     }
@@ -380,18 +380,18 @@ inline void encode(const std::list<std::tr1::shared_ptr<T> >& ls, bufferlist& bl
   } else {
     __u32 n = ls.size();    // FIXME: this is slow on a list.
     encode(n, bl);
-    for (typename std::list<std::tr1::shared_ptr<T> >::const_iterator p = ls.begin(); p != ls.end(); ++p)
+    for (typename std::list<ceph::shared_ptr<T> >::const_iterator p = ls.begin(); p != ls.end(); ++p)
       encode(**p, bl);
   }
 }
 template<class T>
-inline void decode(std::list<std::tr1::shared_ptr<T> >& ls, bufferlist::iterator& p)
+inline void decode(std::list<ceph::shared_ptr<T> >& ls, bufferlist::iterator& p)
 {
   __u32 n;
   decode(n, p);
   ls.clear();
   while (n--) {
-    std::tr1::shared_ptr<T> v(new T);
+    ceph::shared_ptr<T> v(new T);
     decode(*v, p);
     ls.push_back(v);
   }
@@ -481,18 +481,18 @@ inline void decode_nohead(int len, std::vector<T>& v, bufferlist::iterator& p)
 
 // vector (shared_ptr)
 template<class T>
-inline void encode(const std::vector<std::tr1::shared_ptr<T> >& v, bufferlist& bl)
+inline void encode(const std::vector<ceph::shared_ptr<T> >& v, bufferlist& bl)
 {
   __u32 n = v.size();
   encode(n, bl);
-  for (typename std::vector<std::tr1::shared_ptr<T> >::const_iterator p = v.begin(); p != v.end(); ++p)
+  for (typename std::vector<ceph::shared_ptr<T> >::const_iterator p = v.begin(); p != v.end(); ++p)
     if (*p)
       encode(**p, bl);
     else
       encode(T(), bl);
 }
 template<class T>
-inline void decode(std::vector<std::tr1::shared_ptr<T> >& v, bufferlist::iterator& p)
+inline void decode(std::vector<ceph::shared_ptr<T> >& v, bufferlist::iterator& p)
 {
   __u32 n;
   decode(n, p);
@@ -624,19 +624,19 @@ inline void decode(std::multimap<T,U>& m, bufferlist::iterator& p)
   }
 }
 
-// hash_map
+// ceph::unordered_map
 template<class T, class U>
-inline void encode(const __gnu_cxx::hash_map<T,U>& m, bufferlist& bl)
+inline void encode(const unordered_map<T,U>& m, bufferlist& bl)
 {
   __u32 n = m.size();
   encode(n, bl);
-  for (typename __gnu_cxx::hash_map<T,U>::const_iterator p = m.begin(); p != m.end(); ++p) {
+  for (typename unordered_map<T,U>::const_iterator p = m.begin(); p != m.end(); ++p) {
     encode(p->first, bl);
     encode(p->second, bl);
   }
 }
 template<class T, class U>
-inline void decode(__gnu_cxx::hash_map<T,U>& m, bufferlist::iterator& p)
+inline void decode(unordered_map<T,U>& m, bufferlist::iterator& p)
 {
   __u32 n;
   decode(n, p);
@@ -648,17 +648,17 @@ inline void decode(__gnu_cxx::hash_map<T,U>& m, bufferlist::iterator& p)
   }
 }
 
-// hash_set
+// ceph::unordered_set
 template<class T>
-inline void encode(const __gnu_cxx::hash_set<T>& m, bufferlist& bl)
+inline void encode(const ceph::unordered_set<T>& m, bufferlist& bl)
 {
   __u32 n = m.size();
   encode(n, bl);
-  for (typename __gnu_cxx::hash_set<T>::const_iterator p = m.begin(); p != m.end(); ++p)
+  for (typename ceph::unordered_set<T>::const_iterator p = m.begin(); p != m.end(); ++p)
     encode(*p, bl);
 }
 template<class T>
-inline void decode(__gnu_cxx::hash_set<T>& m, bufferlist::iterator& p)
+inline void decode(ceph::unordered_set<T>& m, bufferlist::iterator& p)
 {
   __u32 n;
   decode(n, p);

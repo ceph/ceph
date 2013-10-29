@@ -237,11 +237,11 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld)
   }
 
   // pending commit atids
-  for (map<int, hash_set<version_t> >::iterator p = pending_commit_tids.begin();
+  for (map<int, ceph::unordered_set<version_t> >::iterator p = pending_commit_tids.begin();
        p != pending_commit_tids.end();
        ++p) {
     MDSTableClient *client = mds->get_table_client(p->first);
-    for (hash_set<version_t>::iterator q = p->second.begin();
+    for (ceph::unordered_set<version_t>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 ++q) {
       dout(10) << "try_to_expire " << get_mdstable_name(p->first) << " transaction " << *q 
@@ -715,7 +715,7 @@ void EMetaBlob::dirlump::dump(Formatter *f) const
   f->dump_int("nnull", nnull);
 
   f->open_array_section("full bits");
-  for (list<std::tr1::shared_ptr<fullbit> >::const_iterator
+  for (list<ceph::shared_ptr<fullbit> >::const_iterator
       iter = dfull.begin(); iter != dfull.end(); ++iter) {
     f->open_object_section("fullbit");
     (*iter)->dump(f);
@@ -789,7 +789,7 @@ void EMetaBlob::decode(bufferlist::iterator &bl)
     ::decode(rootbl, bl);
     if (rootbl.length()) {
       bufferlist::iterator p = rootbl.begin();
-      roots.push_back(std::tr1::shared_ptr<fullbit>(new fullbit(p)));
+      roots.push_back(ceph::shared_ptr<fullbit>(new fullbit(p)));
     }
   }
   ::decode(table_tids, bl);
@@ -844,7 +844,7 @@ void EMetaBlob::dump(Formatter *f) const
   f->close_section(); // lumps
   
   f->open_array_section("roots");
-  for (list<std::tr1::shared_ptr<fullbit> >::const_iterator i = roots.begin();
+  for (list<ceph::shared_ptr<fullbit> >::const_iterator i = roots.begin();
        i != roots.end(); ++i) {
     f->open_object_section("root");
     (*i)->dump(f);
@@ -929,7 +929,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 
   assert(g_conf->mds_kill_journal_replay_at != 1);
 
-  for (list<std::tr1::shared_ptr<fullbit> >::iterator p = roots.begin(); p != roots.end(); ++p) {
+  for (list<ceph::shared_ptr<fullbit> >::iterator p = roots.begin(); p != roots.end(); ++p) {
     CInode *in = mds->mdcache->get_inode((*p)->inode.ino);
     bool isnew = in ? false:true;
     if (!in)
@@ -1032,10 +1032,10 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     lump._decode_bits();
 
     // full dentry+inode pairs
-    for (list<std::tr1::shared_ptr<fullbit> >::iterator pp = lump.get_dfull().begin();
+    for (list<ceph::shared_ptr<fullbit> >::iterator pp = lump.get_dfull().begin();
 	 pp != lump.get_dfull().end();
 	 ++pp) {
-      std::tr1::shared_ptr<fullbit> p = *pp;
+      ceph::shared_ptr<fullbit> p = *pp;
       CDentry *dn = dir->lookup_exact_snap(p->dn, p->dnlast);
       if (!dn) {
 	dn = dir->add_null_dentry(p->dn, p->dnfirst, p->dnlast);

@@ -132,7 +132,7 @@ int main(int argc, char **argv)
 
   librbd::RBD rbd;
   {
-    map<string, std::tr1::shared_ptr<librbd::Image> > images;
+    map<string, ceph::shared_ptr<librbd::Image> > images;
     int order = vm["order"].as<unsigned>();
     uint64_t image_size = ((uint64_t)vm["image-size"].as<unsigned>()) << 20;
     for (set<string>::const_iterator i = image_names.begin();
@@ -142,7 +142,7 @@ int main(int argc, char **argv)
 	cerr << "error creating image " << *i << " r=" << r << std::endl;
 	return -r;
       }
-      std::tr1::shared_ptr<librbd::Image> image(new librbd::Image());
+      ceph::shared_ptr<librbd::Image> image(new librbd::Image());
       r = rbd.open(ioctx, *image, i->c_str());
       if (r < 0) {
 	cerr << "error opening image " << *i << " r=" << r << std::endl;
