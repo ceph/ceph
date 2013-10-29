@@ -159,8 +159,8 @@ void _usage()
   cerr << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
   cerr << "\nQuota options:\n";
   cerr << "   --bucket                  specified bucket for quota command\n";
-  cerr << "   --max-objects             specify max objects\n";
-  cerr << "   --max-size                specify max size (in bytes)\n";
+  cerr << "   --max-objects             specify max objects (negative value to disable)\n";
+  cerr << "   --max-size                specify max size (in bytes, negative value to disable)\n";
   cerr << "   --quota-scope             scope of quota (bucket, user)\n";
   cerr << "\n";
   generic_client_usage();
@@ -658,7 +658,8 @@ static bool dump_string(const char *field_name, bufferlist& bl, Formatter *f)
   return true;
 }
 
-void set_quota_info(RGWQuotaInfo& quota, int opt_cmd, int64_t max_size, int64_t max_objects)
+void set_quota_info(RGWQuotaInfo& quota, int opt_cmd, int64_t max_size, int64_t max_objects,
+                    bool have_max_size, bool have_max_objects)
 {
   switch (opt_cmd) {
     case OPT_QUOTA_ENABLE:
@@ -667,10 +668,10 @@ void set_quota_info(RGWQuotaInfo& quota, int opt_cmd, int64_t max_size, int64_t 
       // falling through on purpose
 
     case OPT_QUOTA_SET:
-      if (max_objects >= 0) {
+      if (have_max_objects) {
         quota.max_objects = max_objects;
       }
-      if (max_size >= 0) {
+      if (have_max_size) {
         quota.max_size_kb = rgw_rounded_kb(max_size);
       }
       break;
@@ -680,7 +681,8 @@ void set_quota_info(RGWQuotaInfo& quota, int opt_cmd, int64_t max_size, int64_t 
   }
 }
 
-int set_bucket_quota(RGWRados *store, int opt_cmd, string& bucket_name, int64_t max_size, int64_t max_objects)
+int set_bucket_quota(RGWRados *store, int opt_cmd, string& bucket_name, int64_t max_size, int64_t max_objects,
+                     bool have_max_size, bool have_max_objects)
 {
   RGWBucketInfo bucket_info;
   map<string, bufferlist> attrs;
@@ -690,7 +692,7 @@ int set_bucket_quota(RGWRados *store, int opt_cmd, string& bucket_name, int64_t 
     return -r;
   }
 
-  set_quota_info(bucket_info.quota, opt_cmd, max_size, max_objects);
+  set_quota_info(bucket_info.quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
 
    r = store->put_bucket_instance_info(bucket_info, false, 0, &attrs);
   if (r < 0) {
@@ -700,11 +702,12 @@ int set_bucket_quota(RGWRados *store, int opt_cmd, string& bucket_name, int64_t 
   return 0;
 }
 
-int set_user_bucket_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects)
+int set_user_bucket_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects,
+                          bool have_max_size, bool have_max_objects)
 {
   RGWUserInfo& user_info = op_state.get_user_info();
 
-  set_quota_info(user_info.bucket_quota, opt_cmd, max_size, max_objects);
+  set_quota_info(user_info.bucket_quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
 
   op_state.set_bucket_quota(user_info.bucket_quota);
 
@@ -781,9 +784,12 @@ int main(int argc, char **argv)
 
   int64_t max_objects = -1;
   int64_t max_size = -1;
+  bool have_max_objects = false;
+  bool have_max_size = false;
 
   std::string val;
   std::ostringstream errs;
+  string err;
   long long tmp = 0;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -849,9 +855,19 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--max-entries", (char*)NULL)) {
       max_entries = atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--max-size", (char*)NULL)) {
-      max_size = (int64_t)atoll(val.c_str());
+      max_size = (int64_t)strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max size: " << err << std::endl;
+        return EINVAL;
+      }
+      have_max_size = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-objects", (char*)NULL)) {
-      max_objects = (int64_t)atoll(val.c_str());
+      max_objects = (int64_t)strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max objects: " << err << std::endl;
+        return EINVAL;
+      }
+      have_max_objects = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--date", "--time", (char*)NULL)) {
       date = val;
       if (end_date.empty())
@@ -2308,13 +2324,13 @@ next:
         cerr << "ERROR: invalid quota scope specification." << std::endl;
         return EINVAL;
       }
-      set_bucket_quota(store, opt_cmd, bucket_name, max_size, max_objects);
+      set_bucket_quota(store, opt_cmd, bucket_name, max_size, max_objects, have_max_size, have_max_objects);
     } else if (!user_id.empty()) {
       if (quota_scope != "bucket") {
         cerr << "ERROR: only bucket-level user quota can be handled. Please specify --quota-scope=bucket" << std::endl;
         return EINVAL;
       }
-      set_user_bucket_quota(opt_cmd, user, user_op, max_size, max_objects);
+      set_user_bucket_quota(opt_cmd, user, user_op, max_size, max_objects, have_max_size, have_max_objects);
     }
   }
   return 0;

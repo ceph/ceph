@@ -467,6 +467,14 @@ protected:
       return end == hobject_t::get_max();
     }
 
+    /// removes items <= soid and adjusts begin to the first object
+    void trim_to(const hobject_t &soid) {
+      trim();
+      while (!objects.empty() && objects.begin()->first <= soid) {
+	pop_front();
+      }
+    }
+
     /// Adjusts begin to the first object
     void trim() {
       if (!objects.empty())
@@ -479,10 +487,7 @@ protected:
     void pop_front() {
       assert(!objects.empty());
       objects.erase(objects.begin());
-      if (objects.empty())
-	begin = end;
-      else
-	begin = objects.begin()->first;
+      trim();
     }
 
     /// dump
