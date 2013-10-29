@@ -3,6 +3,7 @@ This module is a thin wrapper around libcephfs.
 """
 from ctypes import CDLL, c_char_p, c_size_t, c_void_p, c_int, c_long, c_uint, c_ulong, \
     create_string_buffer, byref, Structure
+from ctypes.util import find_library
 import errno
 
 class Error(Exception):
@@ -124,7 +125,10 @@ class LibCephFS(object):
                                   "CephFS object in state %s." % (self.state))
 
     def __init__(self, conf=None, conffile=None):
-        self.libcephfs = CDLL('libcephfs.so.1')
+        libcephfs_path = find_library('cephfs')
+        if not libcephfs_path:
+            raise EnvironmentError("Unable to find libcephfs")
+        self.libcephfs = CDLL(libcephfs_path)
         self.cluster = c_void_p()
 
         if conffile is not None and not isinstance(conffile, str):
