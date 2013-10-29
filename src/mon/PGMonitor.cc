@@ -306,6 +306,7 @@ void PGMonitor::post_paxos_update()
 {
   if (mon->osdmon()->osdmap.get_epoch()) {
     map_pg_creates();
+    send_pg_creates();
   }
 }
 
