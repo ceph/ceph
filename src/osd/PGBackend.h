@@ -173,6 +173,13 @@
      RecoveryHandle *h      ///< [in,out] handle to attach recovery op to
      ) = 0;
 
+   /**
+    * true if PGBackend can handle this message while inactive
+    *
+    * If it returns true, handle_message *must* also return true
+    */
+   virtual bool can_handle_while_inactive(OpRequestRef op) = 0;
+
    /// gives PGBackend a crack at an incoming message
    virtual bool handle_message(
      OpRequestRef op ///< [in] message received

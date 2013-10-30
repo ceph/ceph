@@ -841,12 +841,25 @@ void ReplicatedPG::do_request(
     return;
   }
 
+  if (!is_active()) {
+    // Delay unless PGBackend says it's ok
+    if (pgbackend->can_handle_while_inactive(op)) {
+      bool handled = pgbackend->handle_message(op);
+      assert(handled);
+      return;
+    } else {
+      waiting_for_active.push_back(op);
+      return;
+    }
+  }
+
+  assert(is_active() && flushes_in_progress == 0);
   if (pgbackend->handle_message(op))
     return;
 
   switch (op->get_req()->get_type()) {
   case CEPH_MSG_OSD_OP:
-    if (is_replay() || !is_active()) {
+    if (is_replay()) {
       dout(20) << " replay, waiting for active on " << op << dendl;
       waiting_for_active.push_back(op);
       return;
