@@ -1279,7 +1279,6 @@ public:
 
     struct Peering : boost::statechart::state< Peering, Primary, GetInfo >, NamedState {
       std::auto_ptr< PriorSet > prior_set;
-      bool flushed;
 
       Peering(my_context ctx);
       void exit();

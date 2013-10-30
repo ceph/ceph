@@ -5277,8 +5277,7 @@ void PG::RecoveryState::Primary::exit()
 /*---------Peering--------*/
 PG::RecoveryState::Peering::Peering(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Peering"),
-    flushed(false)
+    NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Peering")
 {
   context< RecoveryMachine >().log_enter(state_name);
 
