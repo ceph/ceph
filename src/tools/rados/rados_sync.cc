@@ -579,6 +579,7 @@ int BackedUpObject::download(IoCtx &io_ctx, const char *path)
     if (rlen < 0) {
       cerr << ERR_PREFIX << "download: io_ctx.read(" << rados_name << ") returned "
 	   << rlen << std::endl;
+      fclose(fp);
       return rlen;
     }
     if (rlen < CHUNK_SZ)
