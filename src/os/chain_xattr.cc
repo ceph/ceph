@@ -355,7 +355,7 @@ int chain_listxattr(const char *fn, char *names, size_t len) {
 
   r = sys_listxattr(fn, full_buf, total_len);
   if (r < 0)
-    return r;
+    goto done;
 
   char *p = full_buf;
   const char *end = full_buf + r;
