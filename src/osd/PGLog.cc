@@ -422,8 +422,6 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
       log.index(*to);
       dout(15) << *to << dendl;
     }
-    assert(to != olog.log.end() ||
-	   (olog.head == info.last_update));
       
     // splice into our log.
     log.log.splice(log.log.begin(),
