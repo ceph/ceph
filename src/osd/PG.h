@@ -417,8 +417,6 @@ protected:
   // primary-only, recovery-only state
   set<int>             might_have_unfound;  // These osds might have objects on them
 					    // which are unfound on the primary
-  bool need_flush;     // need to flush before any new activity
-
   epoch_t last_peering_reset;
 
 

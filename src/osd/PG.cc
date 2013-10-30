@@ -167,7 +167,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   state(0),
   send_notify(false),
   need_up_thru(false),
-  need_flush(false),
   last_peering_reset(0),
   heartbeat_peer_lock("PG::heartbeat_peer_lock"),
   backfill_target(-1),
@@ -1307,26 +1306,12 @@ void PG::activate(ObjectStore::Transaction& t,
     publish_stats_to_osd();
   }
 
-  // we need to flush this all out before doing anything else..
-  need_flush = true;
-
   // waiters
   if (!is_replay()) {
     requeue_ops(waiting_for_active);
   }
 
   on_activate();
-}
-
-void PG::do_pending_flush()
-{
-  assert(is_locked());
-  if (need_flush) {
-    dout(10) << "do_pending_flush doing pending flush" << dendl;
-    osr->flush();
-    need_flush = false;
-    dout(10) << "do_pending_flush done" << dendl;
-  }
 }
 
 bool PG::op_has_sufficient_caps(OpRequestRef op)
@@ -5881,6 +5866,10 @@ PG::RecoveryState::Active::Active(my_context ctx)
 	       *context< RecoveryMachine >().get_on_safe_context_list(),
 	       *context< RecoveryMachine >().get_query_map(),
 	       context< RecoveryMachine >().get_info_map());
+  pg->start_flush(
+    context< RecoveryMachine >().get_cur_transaction(),
+    context< RecoveryMachine >().get_on_applied_context_list(),
+    context< RecoveryMachine >().get_on_safe_context_list());
   assert(pg->is_active());
   dout(10) << "Activate Finished" << dendl;
 }
