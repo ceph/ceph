@@ -91,6 +91,31 @@ void ReplicatedBackend::check_recovery_sources(const OSDMapRef osdmap)
   }
 }
 
+bool ReplicatedBackend::can_handle_while_inactive(OpRequestRef op)
+{
+  dout(10) << __func__ << ": " << op << dendl;
+  switch (op->get_req()->get_type()) {
+  case MSG_OSD_PG_PULL:
+    return true;
+  case MSG_OSD_SUBOP: {
+    MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
+    if (m->ops.size() >= 1) {
+      OSDOp *first = &m->ops[0];
+      switch (first->op.op) {
+      case CEPH_OSD_OP_PULL:
+	return true;
+      default:
+	return false;
+      }
+    } else {
+      return false;
+    }
+  }
+  default:
+    return false;
+  }
+}
+
 bool ReplicatedBackend::handle_message(
   OpRequestRef op
   )
