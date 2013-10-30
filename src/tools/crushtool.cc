@@ -186,7 +186,7 @@ int main(int argc, const char **argv)
 
   CrushWrapper crush;
 
-  CrushTester tester(crush, cerr, 1);
+  CrushTester tester(crush, cerr);
 
   vector<const char *> empty_args;  // we use -c, don't confuse the generic arg parsing
   global_init(NULL, empty_args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
