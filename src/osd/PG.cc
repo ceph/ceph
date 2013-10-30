@@ -173,7 +173,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   backfill_target(-1),
   backfill_reserved(0),
   backfill_reserving(0),
-  flushed(false),
+  flushes_in_progress(0),
   pg_stats_publish_lock("PG::pg_stats_publish_lock"),
   pg_stats_publish_valid(false),
   osr(osd->osr_registry.lookup_or_create(p, (stringify(p)))),
@@ -4448,7 +4448,7 @@ void PG::start_flush(ObjectStore::Transaction *t,
   FlushStateRef flush_trigger(
     new FlushState(this, get_osdmap()->get_epoch()));
   t->nop();
-  assert(!flushed);
+  flushes_in_progress++;
   on_applied->push_back(new ContainerContext<FlushStateRef>(flush_trigger));
   on_safe->push_back(new ContainerContext<FlushStateRef>(flush_trigger));
 }
@@ -5149,7 +5149,7 @@ PG::RecoveryState::Reset::Reset(my_context ctx)
 {
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
-  pg->flushed = false;
+  pg->flushes_in_progress = 0;
   pg->set_last_peering_reset();
 }
 
@@ -6826,7 +6826,7 @@ PG::RecoveryState::WaitFlushedPeering::WaitFlushedPeering(my_context ctx)
 {
   PG *pg = context< RecoveryMachine >().pg;
   context< RecoveryMachine >().log_enter(state_name);
-  if (context< RecoveryMachine >().pg->flushed)
+  if (context< RecoveryMachine >().pg->flushes_in_progress == 0)
     post_event(Activate(pg->get_osdmap()->get_epoch()));
 }
 

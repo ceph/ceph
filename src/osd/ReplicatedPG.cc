@@ -836,8 +836,10 @@ void ReplicatedPG::do_request(
   if (can_discard_request(op)) {
     return;
   }
-  if (!flushed) {
-    dout(20) << " !flushed, waiting for active on " << op << dendl;
+  if (flushes_in_progress > 0) {
+    dout(20) << flushes_in_progress
+	     << " flushes_in_progress pending "
+	     << "waiting for active on " << op << dendl;
     waiting_for_active.push_back(op);
     return;
   }
@@ -7296,14 +7298,19 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
 
 void ReplicatedPG::on_flushed()
 {
-  pair<hobject_t, ObjectContextRef> i;
-  while (object_contexts.get_next(i.first, &i)) {
-    derr << "on_flushed: object " << i.first << " obc still alive" << dendl;
+  assert(flushes_in_progress > 0);
+  flushes_in_progress--;
+  if (flushes_in_progress == 0) {
+    requeue_ops(waiting_for_active);
   }
-  assert(object_contexts.empty());
+  if (!is_active() || !is_primary()) {
+    pair<hobject_t, ObjectContextRef> i;
+    while (object_contexts.get_next(i.first, &i)) {
+      derr << "on_flushed: object " << i.first << " obc still alive" << dendl;
+    }
+    assert(object_contexts.empty());
+  }
   pgbackend->on_flushed();
-  flushed = true;
-  requeue_ops(pg->waiting_for_active);
 }
 
 void ReplicatedPG::on_removal(ObjectStore::Transaction *t)

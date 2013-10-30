@@ -524,7 +524,7 @@ protected:
 
 
   // pg waiters
-  bool flushed;
+  unsigned flushes_in_progress;
 
   // Ops waiting on backfill_pos to change
   list<OpRequestRef>            waiting_for_active;
