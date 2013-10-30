@@ -312,10 +312,10 @@ bool ReplicatedPG::is_degraded_object(const hobject_t& soid)
       return true;
 
     // Object is degraded if after last_backfill AND
-    // we have are backfilling it
+    // we are backfilling it
     if (peer == backfill_target &&
 	peer_info[peer].last_backfill <= soid &&
-	backfill_pos >= soid &&
+	last_backfill_started >= soid &&
 	backfills_in_flight.count(soid))
       return true;
   }
@@ -1586,10 +1586,6 @@ void ReplicatedPG::do_scan(
 	  bi.objects[first] = i->second;
 	}
       }
-
-      backfill_pos = backfill_info.begin > peer_backfill_info.begin ?
-	peer_backfill_info.begin : backfill_info.begin;
-      dout(10) << " backfill_pos now " << backfill_pos << dendl;
 
       assert(waiting_on_backfill);
       waiting_on_backfill = false;
@@ -3930,18 +3926,6 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
 				      osd_reqid_t(), ctx->new_obs.oi.mtime));
     ::encode(snaps, ctx->log.back().snaps);
 
-    /**
-     * In order to keep backfill_info up to date and avoid skipping this
-     * new clone, we must add the clone to backfill_pos.  Furthermore, this
-     * is the only way in which an object might be created prior to backfill_pos
-     * without having the transaction shipped to the replica
-     */
-    if (ctx->obs->oi.soid == backfill_pos) {
-      backfill_info.objects.insert(make_pair(coid, ctx->at_version));
-      backfill_info.begin = coid;
-      backfill_pos = backfill_info.begin;
-    }
-
     ctx->at_version.version++;
   }
 
@@ -4231,9 +4215,9 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
   if (backfill_target >= 0) {
     pg_info_t& pinfo = peer_info[backfill_target];
-    if (soid < pinfo.last_backfill)
+    if (soid <= pinfo.last_backfill)
       pinfo.stats.stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
-    else if (soid < backfill_pos)
+    else if (soid <= last_backfill_started)
       pending_backfill_updates[soid].stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
   }
 
@@ -4909,10 +4893,13 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
     }
 
     // ship resulting transaction, log entries, and pg_stats
-    if (peer == backfill_target && soid >= backfill_pos &&
-	soid.pool == (int64_t)info.pgid.pool()) {  // only skip normal (not temp pool=-1) objects
-      dout(10) << "issue_repop shipping empty opt to osd." << peer << ", object beyond backfill_pos "
-	       << backfill_pos << ", last_backfill is " << pinfo.last_backfill << dendl;
+    if (peer == backfill_target && soid > last_backfill_started &&
+        // only skip normal (not temp pool=-1) objects
+	soid.pool == (int64_t)info.pgid.pool()) {
+      dout(10) << "issue_repop shipping empty opt to osd." << peer
+	       <<", object beyond last_backfill_started"
+	       << last_backfill_started << ", last_backfill is "
+	       << pinfo.last_backfill << dendl;
       ObjectStore::Transaction t;
       ::encode(t, wr->get_data());
     } else {
@@ -7342,9 +7329,9 @@ void ReplicatedPG::on_activate()
     if (peer_info[acting[i]].last_backfill != hobject_t::get_max()) {
       assert(backfill_target == -1);
       backfill_target = acting[i];
-      backfill_pos = peer_info[acting[i]].last_backfill;
+      last_backfill_started = peer_info[acting[i]].last_backfill;
       dout(10) << " chose backfill target osd." << backfill_target
-	       << " from " << backfill_pos << dendl;
+	       << " from " << last_backfill_started << dendl;
     }
   }
 }
@@ -7419,7 +7406,7 @@ void ReplicatedPG::_clear_recovery_state()
 #ifdef DEBUG_RECOVERY_OIDS
   recovering_oids.clear();
 #endif
-  backfill_pos = hobject_t();
+  last_backfill_started = hobject_t();
   list<OpRequestRef> blocked_ops;
   set<hobject_t>::iterator i = backfills_in_flight.begin();
   while (i != backfills_in_flight.end()) {
@@ -7954,8 +7941,13 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
  * All objects < MIN(peer_backfill_info.begin, backfill_info.begin) in PG are
  * backfilled.  No deleted objects in this interval remain on backfill_target.
  *
- * peer_info[backfill_target].last_backfill = MIN(peer_backfill_info.begin,
- * backfill_info.begin, backfills_in_flight)
+ * All objects <= peer_info[backfill_target].last_backfill have been backfilled
+ * to backfill_target
+ *
+ * There *MAY* be objects between last_backfill_started and
+ * MIN(peer_backfill_info.begin, backfill_info.begin) in the event that client
+ * io created objects since the last scan.  For this reason, we call
+ * update_range() again before continuing backfill.
  */
 int ReplicatedPG::recover_backfill(
   int max,
@@ -7974,13 +7966,13 @@ int ReplicatedPG::recover_backfill(
   }
 
   dout(10) << " peer osd." << backfill_target
-	   << " pos " << backfill_pos
+	   << " last_backfill_started " << last_backfill_started
 	   << " info " << pinfo
 	   << " interval " << pbi.begin << "-" << pbi.end
 	   << " " << pbi.objects.size() << " objects" << dendl;
 
   // update our local interval to cope with recent changes
-  backfill_info.begin = backfill_pos;
+  backfill_info.begin = last_backfill_started;
   update_range(&backfill_info, handle);
 
   int ops = 0;
@@ -7989,9 +7981,10 @@ int ReplicatedPG::recover_backfill(
   map<hobject_t, eversion_t> to_remove;
   set<hobject_t> add_to_stat;
 
-  pbi.trim();
-  backfill_info.trim();
+  pbi.trim_to(last_backfill_started);
+  backfill_info.trim_to(last_backfill_started);
 
+  hobject_t backfill_pos = MIN(backfill_info.begin, pbi.begin);
   while (ops < max) {
     if (backfill_info.begin <= pbi.begin &&
 	!backfill_info.extends_to_end() && backfill_info.empty()) {
@@ -8002,7 +7995,7 @@ int ReplicatedPG::recover_backfill(
       update_range(&backfill_info, handle);
       backfill_info.trim();
     }
-    backfill_pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
+    backfill_pos = MIN(backfill_info.begin, pbi.begin);
 
     dout(20) << "   my backfill " << backfill_info.begin << "-" << backfill_info.end
 	     << " " << backfill_info.objects << dendl;
@@ -8035,6 +8028,7 @@ int ReplicatedPG::recover_backfill(
 	  waiting_for_degraded_object[pbi.begin]);
 	waiting_for_degraded_object.erase(pbi.begin);
       }
+      last_backfill_started = pbi.begin;
       pbi.pop_front();
       // Don't increment ops here because deletions
       // are cheap and not replied to unlike real recovery_ops,
@@ -8066,6 +8060,7 @@ int ReplicatedPG::recover_backfill(
 	  waiting_for_degraded_object.erase(pbi.begin);
 	}
       }
+      last_backfill_started = pbi.begin;
       add_to_stat.insert(pbi.begin);
       backfill_info.pop_front();
       pbi.pop_front();
@@ -8082,6 +8077,7 @@ int ReplicatedPG::recover_backfill(
 	    eversion_t(),
 	    obc);
 	add_to_stat.insert(backfill_info.begin);
+	last_backfill_started = backfill_info.begin;
 	backfill_info.pop_front();
 	ops++;
       } else {
@@ -8092,7 +8088,7 @@ int ReplicatedPG::recover_backfill(
       }
     }
   }
-  backfill_pos = backfill_info.begin > pbi.begin ? pbi.begin : backfill_info.begin;
+  backfill_pos = MIN(backfill_info.begin, pbi.begin);
 
   for (set<hobject_t>::iterator i = add_to_stat.begin();
        i != add_to_stat.end();
@@ -8106,7 +8102,11 @@ int ReplicatedPG::recover_backfill(
        i != to_remove.end();
        ++i) {
     handle.reset_tp_timeout();
+
+    // ordered before any subsequent updates
     send_remove_op(i->first, i->second, backfill_target);
+
+    pending_backfill_updates[i->first]; // add empty stat!
   }
 
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
@@ -8131,18 +8131,30 @@ int ReplicatedPG::recover_backfill(
     dout(20) << *i << " is still in flight" << dendl;
   }
 
-  hobject_t bound = backfills_in_flight.size() ?
+  hobject_t next_backfill_to_complete = backfills_in_flight.size() ?
     *(backfills_in_flight.begin()) : backfill_pos;
-  if (bound > pinfo.last_backfill) {
-    pinfo.last_backfill = bound;
-    for (map<hobject_t, pg_stat_t>::iterator i = pending_backfill_updates.begin();
-	 i != pending_backfill_updates.end() && i->first < bound;
-	 pending_backfill_updates.erase(i++)) {
-      pinfo.stats.add(i->second);
-    }
+  hobject_t new_last_backfill = pinfo.last_backfill;
+  for (map<hobject_t, pg_stat_t>::iterator i = pending_backfill_updates.begin();
+       i != pending_backfill_updates.end() &&
+	 i->first < next_backfill_to_complete;
+       pending_backfill_updates.erase(i++)) {
+    pinfo.stats.add(i->second);
+    assert(i->first > new_last_backfill);
+    new_last_backfill = i->first;
+  }
+  assert(!pending_backfill_updates.empty() ||
+	 new_last_backfill == last_backfill_started);
+  if (pending_backfill_updates.empty() &&
+      backfill_pos.is_max()) {
+    assert(backfills_in_flight.empty());
+    new_last_backfill = backfill_pos;
+    last_backfill_started = backfill_pos;
+  }
+  if (new_last_backfill > pinfo.last_backfill) {
+    pinfo.last_backfill = new_last_backfill;
     epoch_t e = get_osdmap()->get_epoch();
     MOSDPGBackfill *m = NULL;
-    if (bound.is_max()) {
+    if (pinfo.last_backfill.is_max()) {
       m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_FINISH, e, e, info.pgid);
       // Use default priority here, must match sub_op priority
       /* pinfo.stats might be wrong if we did log-based recovery on the
@@ -8154,7 +8166,7 @@ int ReplicatedPG::recover_backfill(
       m = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_PROGRESS, e, e, info.pgid);
       // Use default priority here, must match sub_op priority
     }
-    m->last_backfill = bound;
+    m->last_backfill = pinfo.last_backfill;
     m->stats = pinfo.stats;
     osd->send_message_osd_cluster(backfill_target, m, get_osdmap()->get_epoch());
   }
