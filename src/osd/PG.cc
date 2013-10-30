@@ -6203,11 +6203,10 @@ PG::RecoveryState::Stray::Stray(my_context ctx)
   assert(!pg->is_active());
   assert(!pg->is_peering());
   assert(!pg->is_primary());
-  if (!pg->is_replica()) // stray, need to flush for pulls
-    pg->start_flush(
-      context< RecoveryMachine >().get_cur_transaction(),
-      context< RecoveryMachine >().get_on_applied_context_list(),
-      context< RecoveryMachine >().get_on_safe_context_list());
+  pg->start_flush(
+    context< RecoveryMachine >().get_cur_transaction(),
+    context< RecoveryMachine >().get_on_applied_context_list(),
+    context< RecoveryMachine >().get_on_safe_context_list());
 }
 
 boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
