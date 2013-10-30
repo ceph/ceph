@@ -29,6 +29,8 @@ class RGWSwift {
   int parse_keystone_token_response(const string& token, bufferlist& bl, struct rgw_swift_auth_info *info,
 		                    KeystoneToken& t);
   int update_user_info(RGWRados *store, struct rgw_swift_auth_info *info, RGWUserInfo& user_info);
+  int get_keystone_url(std::string& url);
+  int get_keystone_admin_token(std::string& token);
 
   class KeystoneRevokeThread : public Thread {
     CephContext *cct;
