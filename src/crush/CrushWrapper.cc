@@ -323,32 +323,16 @@ map<string, string> CrushWrapper::get_full_location(int id)
 
 int CrushWrapper::get_full_location_ordered(int id, vector<pair<string, string> >& path)
 {
-  int parent_id, ret;
-  pair<string, string> parent_coord;
-  parent_coord = get_immediate_parent(id, &ret);
-
-  // read the type map and get the name of the type with the largest ID
-  int high_type = 0;
-  for (map<int, string>::iterator it = type_map.begin(); it != type_map.end(); ++it){
-    if ( (*it).first > high_type )
-      high_type = (*it).first;
-  }
-
-  string high_type_name = type_map[high_type];
-
-  path.push_back(parent_coord);
-  parent_id = get_item_id(parent_coord.second);
-
-
-  while (parent_coord.first != high_type_name) {
-    parent_coord = get_immediate_parent(parent_id);
+  int cur = id;
+  int ret;
+  while (true) {
+    pair<string, string> parent_coord = get_immediate_parent(cur, &ret);
+    if (ret != 0)
+      break;
     path.push_back(parent_coord);
-    if ( parent_coord.first != high_type_name ){
-      parent_id = get_item_id(parent_coord.second);
-    }
+    cur = get_item_id(parent_coord.second);
   }
-
-  return ret;
+  return 0;
 }
 
 
