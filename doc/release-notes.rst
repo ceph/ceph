@@ -27,7 +27,7 @@ Highlights
 * rgw: performance improvements
 * rgw: validate S3 tokens against Keystone
 
-Coincident with core Ceph, the Emperor release also brings::
+Coincident with core Ceph, the Emperor release also brings:
 
 * radosgw-agent: support for multi-datacenter replication for disaster recovery
 * tgt: improved support for iSCSI via upstream tgt
