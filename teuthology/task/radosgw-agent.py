@@ -42,7 +42,7 @@ def run_radosgw_agent(ctx, config):
         remote.run(
             args=[
                 'cd', testdir, run.Raw('&&'),
-                'git', 'clone', 
+                'git', 'clone',
                 '-b', branch,
                 'https://github.com/ceph/radosgw-agent.git',
                 'radosgw-agent.{client}'.format(client=client),
@@ -77,30 +77,28 @@ def run_radosgw_agent(ctx, config):
         port = cconf.get('port', 8000)
         daemon_name = '{host}.{port}.syncdaemon'.format(host=remote.name, port=port)
         in_args=[
-		        'daemon-helper',
-		        'kill',
-		        '{tdir}/radosgw-agent.{client}/radosgw-agent'.format(tdir=testdir,
-		                                                             client=client),
-		        '-v',
-		        '--src-access-key', src_access,
-		        '--src-secret-key', src_secret,
-		        '--src-host', src_host,
-		        '--src-port', str(src_port),
-		        '--src-zone', src_zone,
-		        '--dest-access-key', dest_access,
-		        '--dest-secret-key', dest_secret,
-		        '--dest-host', dest_host,
-		        '--dest-port', str(dest_port),
-		        '--dest-zone', dest_zone,
-		        '--daemon-id', daemon_name,
-		        '--log-file', '{tdir}/archive/rgw_sync_agent.{client}.log'.format(
-		            tdir=testdir,
-		            client=client),
-		        ]
+            'daemon-helper',
+            'kill',
+            '{tdir}/radosgw-agent.{client}/radosgw-agent'.format(tdir=testdir,
+                                                                 client=client),
+            '-v',
+            '--src-access-key', src_access,
+            '--src-secret-key', src_secret,
+            '--source', "http://{addr}:{port}".format(addr=src_host, port=src_port),
+            '--dest-access-key', dest_access,
+            '--dest-secret-key', dest_secret,
+            '--log-file', '{tdir}/archive/rgw_sync_agent.{client}.log'.format(
+                tdir=testdir,
+                client=client),
+            ]
+
+        if cconf.get('metadata-only', False):
+            in_args.append('--metadata-only')
+
         # the test server and full/incremental flags are mutually exclusive
         if sync_scope is None:
             in_args.append('--test-server-host')
-            in_args.append('0.0.0.0') 
+            in_args.append('0.0.0.0')
             in_args.append('--test-server-port')
             in_args.append(str(port))
             log.debug('Starting a sync test server on {client}'.format(client=client))
@@ -111,12 +109,16 @@ def run_radosgw_agent(ctx, config):
             in_args.append(sync_scope)
             log.debug('Starting a {scope} sync on {client}'.format(scope=sync_scope,client=client))
 
+        # positional arg for destination must come last
+        in_args.append("http://{addr}:{port}".format(addr=dest_host,
+                                                     port=dest_port))
+
         return_list.append((client, remote.run(
             args=in_args,
-		        wait=False,
-		        stdin=run.PIPE,
-		        logger=log.getChild(daemon_name),
-		        )))
+            wait=False,
+            stdin=run.PIPE,
+            logger=log.getChild(daemon_name),
+            )))
     return return_list
 
 
@@ -130,15 +132,19 @@ def task(ctx, config):
     to 0.0.0.0. Port defaults to 8000. This must be run on clients
     that have the correct zone root pools and rgw zone set in
     ceph.conf, or the task cannot read the region information from the
-    cluster. 
+    cluster.
 
     By default, this task will start an HTTP server that will trigger full
-    or incremental syncs based on requests made to it. 
+    or incremental syncs based on requests made to it.
     Alternatively, a single full sync can be triggered by
     specifying 'sync-scope: full' or a loop of incremental syncs can be triggered
     by specifying 'sync-scope: incremental' (the loop will sleep
-    '--incremental-sync-delay' seconds between each sync, default is 20 seconds).
-    
+    '--incremental-sync-delay' seconds between each sync, default is 30 seconds).
+
+    By default, both data and metadata are synced. To only sync
+    metadata, for example because you want to sync between regions,
+    set metadata-only: true.
+
     An example::
 
       tasks:
@@ -157,6 +163,7 @@ def task(ctx, config):
             src: client.0
             dest: client.1
             sync-scope: full
+            metadata-only: true
             # port: 8000 (default)
           client.1:
             src: client.1
