@@ -41,12 +41,11 @@ struct AuthAuthorizeHandler {
 class AuthAuthorizeHandlerRegistry {
   Mutex m_lock;
   map<int,AuthAuthorizeHandler*> m_authorizers;
-  CephContext *cct;
   AuthMethodList supported;
 
 public:
   AuthAuthorizeHandlerRegistry(CephContext *cct_, std::string methods)
-    : m_lock("AuthAuthorizeHandlerRegistry::m_lock"), cct(cct_), supported(cct_, methods)
+    : m_lock("AuthAuthorizeHandlerRegistry::m_lock"), supported(cct_, methods)
   {}
   ~AuthAuthorizeHandlerRegistry();
   
