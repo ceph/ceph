@@ -1307,7 +1307,7 @@ void PG::activate(ObjectStore::Transaction& t,
   }
 
   // waiters
-  if (!is_replay()) {
+  if (!is_replay() && flushes_in_progress == 0) {
     requeue_ops(waiting_for_active);
   }
 
@@ -5861,15 +5861,15 @@ PG::RecoveryState::Active::Active(my_context ctx)
   assert(!pg->backfill_reserved);
   assert(pg->is_primary());
   dout(10) << "In Active, about to call activate" << dendl;
+  pg->start_flush(
+    context< RecoveryMachine >().get_cur_transaction(),
+    context< RecoveryMachine >().get_on_applied_context_list(),
+    context< RecoveryMachine >().get_on_safe_context_list());
   pg->activate(*context< RecoveryMachine >().get_cur_transaction(),
 	       pg->get_osdmap()->get_epoch(),
 	       *context< RecoveryMachine >().get_on_safe_context_list(),
 	       *context< RecoveryMachine >().get_query_map(),
 	       context< RecoveryMachine >().get_info_map());
-  pg->start_flush(
-    context< RecoveryMachine >().get_cur_transaction(),
-    context< RecoveryMachine >().get_on_applied_context_list(),
-    context< RecoveryMachine >().get_on_safe_context_list());
   assert(pg->is_active());
   dout(10) << "Activate Finished" << dendl;
 }
