@@ -825,9 +825,6 @@ void ReplicatedPG::do_request(
   OpRequestRef op,
   ThreadPool::TPHandle &handle)
 {
-  // do any pending flush
-  do_pending_flush();
-
   if (!op_has_sufficient_caps(op)) {
     osd->reply_op_error(op, -EPERM);
     return;
