@@ -36,8 +36,10 @@ void BackTrace::print(std::ostream& out)
     if (begin && end) {
       int len = end - begin;
       char *foo = (char *)malloc(len+1);
-      if (!foo)
-        return;
+      if (!foo) {
+	free(function);
+	return;
+      }
       memcpy(foo, begin, len);
       foo[len] = 0;
 
