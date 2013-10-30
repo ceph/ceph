@@ -7,18 +7,17 @@ Get Software
 ============
 
 There are several methods for getting Ceph software. The easiest and most common
-method is to add Ceph repositories for use with package management tools such as
-the Advanced Package Tool (APT) or Yellowdog Updater, Modified (YUM). You may
-also retrieve pre-compiled packages from the Ceph repository. Finally, you can
-retrieve tarballs or clone the Ceph source code repository and build Ceph
-yourself.
+method is to `get packages`_ by adding repositories for use with package
+management tools such as the Advanced Package Tool (APT) or Yellowdog Updater,
+Modified (YUM). You may also retrieve pre-compiled packages from the Ceph
+repository. Finally, you can retrieve tarballs or clone the Ceph source code
+repository and build Ceph yourself.
 
 
 .. toctree::
    :maxdepth: 1 
 
-   Add Repositories <add-repositories>
-	Get Release Packages <get-packages>
+	Get Packages <get-packages>
 	Get Tarballs <get-tarballs>
 	Clone Source <clone-source>
 	Build Ceph <build-ceph>
@@ -38,12 +37,9 @@ QEMU.
    :maxdepth: 1
 
 	Install ceph-deploy <install-ceph-deploy>
-   Install Ceph Storage Cluster daemons <install-storage-cluster>
-   Install yum priorities <yum-priorities>
-   Install Apache/FastCGI <install-apache>
-	Install QEMU/KVM <install-qemu>
-	Install libvirt <install-libvirt>
-	
+   Install Ceph Storage Cluster <install-storage-cluster>
+	Install Ceph Object Gateway <install-ceph-gateway>
+	Install VM/Cloud Enablement <install-vm-cloud>	
 
 Upgrade Software	
 ================
@@ -57,3 +53,5 @@ sequence.
    :maxdepth: 2
 
    Upgrading Ceph <upgrading-ceph>
+   
+.. _get packages: ../install/get-packages
