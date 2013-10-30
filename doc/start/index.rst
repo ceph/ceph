@@ -38,7 +38,7 @@ Ceph Block Devices, the Ceph Filesystem, and Ceph Object Storage.
 	
    Block Device Quick Start <quick-rbd>
    Filesystem Quick Start <quick-cephfs>
-
+   Object Storage Quick Start <quick-rgw>
 
 .. raw:: html
 
