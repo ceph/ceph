@@ -1464,23 +1464,33 @@ int Objecter::recalc_op_target(Op *op)
 	  op->used_replica = true;
 	osd = acting[p];
 	ldout(cct, 10) << " chose random osd." << osd << " of " << acting << dendl;
-      } else if (read && (op->flags & CEPH_OSD_FLAG_LOCALIZE_READS)) {
-	// look for a local replica
-	int i;
-	/* loop through the OSD replicas and see if any are local to read from.
-	 * We don't need to check the primary since we default to it. (Be
-         * careful to preserve that default, which is why we iterate in reverse
-         * order.) */
-	for (i = acting.size()-1; i > 0; --i) {
-	  if (osdmap->get_addr(acting[i]).is_same_host(messenger->get_myaddr())) {
-	    op->used_replica = true;
-	    ldout(cct, 10) << " chose local osd." << acting[i] << " of " << acting << dendl;
-	    break;
+      } else if (read && (op->flags & CEPH_OSD_FLAG_LOCALIZE_READS) &&
+		 acting.size() > 1) {
+	// look for a local replica.  prefer the primary if the
+	// distance is the same.
+	int best;
+	int best_locality;
+	for (unsigned i = 0; i < acting.size(); ++i) {
+	  int locality = osdmap->crush->get_common_ancestor_distance(
+		 cct, acting[i], crush_location);
+	  ldout(cct, 20) << __func__ << " localize: rank " << i
+			 << " osd." << acting[i]
+			 << " locality " << locality << dendl;
+	  if (i == 0 ||
+	      (locality >= 0 && best_locality >= 0 &&
+	       locality < best_locality) ||
+	      (best_locality < 0 && locality >= 0)) {
+	    best = i;
+	    best_locality = locality;
+	    if (i)
+	      op->used_replica = true;
 	  }
 	}
-	osd = acting[i];
-      } else
+	assert(best >= 0);
+	osd = acting[best];
+      } else {
 	osd = acting[0];
+      }
       s = get_session(osd);
     }
 
