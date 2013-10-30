@@ -219,9 +219,6 @@ class Thrasher:
         self.ceph_manager.wait_for_clean(
             timeout=self.config.get('timeout')
             )
-        # now we wait 20s to ensure that any backfill peers have heard about
-        # the cleanness
-        time.sleep(20)
 
         self.log("Recovered, killing an osd")
         self.kill_osd(mark_down=True, mark_out=True)
