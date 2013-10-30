@@ -92,7 +92,7 @@ class PrioritizedQueue {
     SubQueue()
       : tokens(0),
 	max_tokens(0),
-	size(0) {}
+	size(0), cur(q.begin()) {}
     void set_max_tokens(unsigned mt) {
       max_tokens = mt;
     }
