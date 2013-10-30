@@ -928,7 +928,7 @@ protected:
   void cancel_copy(CopyOpRef cop, bool requeue);
   void cancel_copy_ops(bool requeue);
 
-  friend class C_Copyfrom;
+  friend struct C_Copyfrom;
 
   // -- scrub --
   virtual void _scrub(ScrubMap& map);

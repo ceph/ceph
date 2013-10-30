@@ -440,7 +440,7 @@ public:
 			   bool force_new);
     ObjecterDispatcher(OSDService *o) : Dispatcher(cct), osd(o) {}
   } objecter_dispatcher;
-  friend class ObjecterDispatcher;
+  friend struct ObjecterDispatcher;
 
 
   // -- Watch --
