@@ -473,6 +473,19 @@ public:
   int remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
 
   /**
+   * calculate the locality/distance from a given id to a crush location map
+   *
+   * Specifically, we look for the lowest-valued type for which the
+   * location of id matches that described in loc.
+   *
+   * @param cct cct
+   * @param id the existing id in the map
+   * @param loc a set of key=value pairs describing a location in the hierarchy
+   */
+  int get_common_ancestor_distance(CephContext *cct, int id,
+				   const std::multimap<string,string>& loc);
+
+  /**
    * parse a set of key/value pairs out of a string vector
    *
    * These are used to describe a location in the CRUSH hierarchy.

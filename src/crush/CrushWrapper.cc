@@ -193,6 +193,33 @@ int CrushWrapper::remove_item_under(CephContext *cct, int item, int ancestor, bo
   return ret;
 }
 
+int CrushWrapper::get_common_ancestor_distance(CephContext *cct, int id,
+			       const std::multimap<string,string>& loc)
+{
+  ldout(cct, 5) << __func__ << " " << id << " " << loc << dendl;
+  if (!item_exists(id))
+    return -ENOENT;
+  map<string,string> id_loc = get_full_location(id);
+  ldout(cct, 20) << " id is at " << id_loc << dendl;
+
+  for (map<int,string>::const_iterator p = type_map.begin();
+       p != type_map.end();
+       ++p) {
+    map<string,string>::iterator ip = id_loc.find(p->second);
+    if (ip == id_loc.end())
+      continue;
+    for (std::multimap<string,string>::const_iterator q = loc.find(p->second);
+	 q != loc.end();
+	 ++q) {
+      if (q->first != p->second)
+	break;
+      if (q->second == ip->second)
+	return p->first;
+    }
+  }
+  return -ERANGE;
+}
+
 int CrushWrapper::parse_loc_map(const std::vector<string>& args,
 				std::map<string,string> *ploc)
 {
