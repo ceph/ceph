@@ -45,9 +45,11 @@ Emperor (0.71)
 +==========+==========+====================+==============+=========+============+
 | Ubuntu   | 12.04    | Precise Pangolin   | linux-3.2.0  | 1, 2    | B, I, C    |
 +----------+----------+--------------------+--------------+---------+------------+
-| Ubuntu   | 12.10    | Quantal Quetzal    | linux-3.5.4  | 2       | B          |
+| Ubuntu   | 12.10    | Quantal Quetzal    | linux-3.5.4  | 2, 4    | B          |
 +----------+----------+--------------------+--------------+---------+------------+
-| Ubuntu   | 13.04    | Raring Ringtail    | linux-3.8.5  |         | B          |
+| Ubuntu   | 13.04    | Raring Ringtail    | linux-3.8.5  | 4       | B          |
++----------+----------+--------------------+--------------+---------+------------+
+| Ubuntu   | 13.10    | Saucy Salamander   | linux-3.11.2 | 4       | B          |
 +----------+----------+--------------------+--------------+---------+------------+
 | Debian   | 6.0      | Squeeze            | linux-2.6.32 | 1, 2, 3 | B          |
 +----------+----------+--------------------+--------------+---------+------------+
@@ -187,6 +189,8 @@ Notes
   ``ceph-osd`` daemons using ``XFS`` or ``ext4`` on the same host will
   not perform as well as they could.
 
+- **4**: Ceph provides ARM support for Quantal and Raring. Saucy support is
+  not supported yet, but support is coming soon.
 
 Testing
 -------
