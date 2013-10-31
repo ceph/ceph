@@ -1,6 +1,6 @@
-=============================
- Install VM/Cloud Enablement
-=============================
+=========================================
+ Install Virtualization for Block Device
+=========================================
 
 If you intend to use Ceph Block Devices and the Ceph Storage Cluster as a
 backend for Virtual Machines (VMs) or  :term:`Cloud Platforms` the QEMU/KVM and
@@ -22,7 +22,6 @@ of Cloud Platforms include OpenStack, CloudStack, OpenNebula, etc.
             +------------------------+-+------------------------+
             |          OSDs          | |        Monitors        |
             +------------------------+ +------------------------+
-            
 
 
 Install QEMU
@@ -59,11 +58,12 @@ To install QEMU, execute the following:
 	enabled = 1
 
 #. Create a ``/etc/yum.repos.d/ceph-qemu.conf`` file with the following 
-   contents:: 
+   contents, and replace ``{distro}`` with your Linux distribution. Follow
+   the ``baseurl`` path below to see which distributions Ceph supports:: 
 
 	[ceph-qemu]
 	name=Ceph Packages for QEMU
-	baseurl=http://ceph.com/packages/ceph-extras/rpm/centos6.3/$basearch
+	baseurl=http://ceph.com/packages/ceph-extras/rpm/{distro}/$basearch
 	enabled=1
 	priority=2
 	gpgcheck=1
@@ -72,7 +72,7 @@ To install QEMU, execute the following:
 	
 	[ceph-qemu-noarch]
 	name=Ceph QEMU noarch
-	baseurl=http://ceph.com/packages/ceph-extras/rpm/centos6.3/noarch
+	baseurl=http://ceph.com/packages/ceph-extras/rpm/{distro}/noarch
 	enabled=1
 	priority=2	
 	gpgcheck=1
@@ -81,7 +81,7 @@ To install QEMU, execute the following:
 	
 	[ceph-qemu-source]
 	name=Ceph QEMU Sources
-	baseurl=http://ceph.com/packages/ceph-extras/rpm/centos6.3/SRPMS
+	baseurl=http://ceph.com/packages/ceph-extras/rpm/{distro}/SRPMS
 	enabled=1
 	priority=2
 	gpgcheck=1
@@ -137,7 +137,7 @@ RPM Packages
 
 To use ``libvirt`` with a Ceph Storage Cluster, you must  have a running Ceph
 Storage Cluster and you must also install a version of QEMU with ``rbd`` format
-support.  See `QEMU`_ for details.
+support.  See `Install QEMU`_ for details.
 
 
 ``libvirt`` packages are incorporated into the recent CentOS/RHEL distributions. 
