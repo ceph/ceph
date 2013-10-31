@@ -354,8 +354,10 @@ int chain_listxattr(const char *fn, char *names, size_t len) {
     return -ENOMEM;
 
   r = sys_listxattr(fn, full_buf, total_len);
-  if (r < 0)
+  if (r < 0) {
+    free(full_buf);
     return r;
+  }
 
   char *p = full_buf;
   const char *end = full_buf + r;
