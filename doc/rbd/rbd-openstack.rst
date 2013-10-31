@@ -47,12 +47,16 @@ Two parts of OpenStack integrate with Ceph's block devices:
   to boot VMs, or to attach volumes to running VMs. OpenStack manages 
   volumes using Cinder services.
 
-You can use  OpenStack Glance to store images in a Ceph Block Device, and  you
+You can use  OpenStack Glance to store images in a Ceph Block Device, and you
 can use Cinder to boot a VM using a copy-on-write clone of an image.
 
 The instructions below detail the setup for Glance and Cinder, although
 they do not have to be used together. You may store images in Ceph block devices
 while running VMs using a local disk, or vice versa.
+
+.. tip:: This document describes using Ceph Block Devices with OpenStack Havana. 
+   For earlier versions of OpenStack see 
+   `Block Devices and OpenStack (Dumpling)`_.
 
 .. index:: pools; OpenStack
 
@@ -152,6 +156,14 @@ default, edit ``/etc/glance/glance-api.conf`` and add::
     rbd_store_user=images
     rbd_store_pool=images
 
+If you’re using Folsom and want to enable copy-on-write cloning of images into
+volumes, also add::
+
+	show_image_direct_url=True
+
+Note that this exposes the back end location via Glance’s API, so the endpoint
+with this option enabled should not be publicly accessible.
+
 
 Configuring Cinder
 ------------------
@@ -212,3 +224,4 @@ instance, choosing the image that you created the volume from, and selecting
 'boot from volume' and the volume you created.
 
 .. _qemu-img: ../qemu-rbd/#running-qemu-with-rbd
+.. _Block Devices and OpenStack (Dumpling): http://ceph.com/docs/dumpling/rbd/rbd-openstack
