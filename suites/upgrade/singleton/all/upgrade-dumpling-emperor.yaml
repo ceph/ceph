@@ -21,6 +21,7 @@ tasks:
         debug client: 20
 - install.upgrade:
      all:
+        branch: emperor
 - ceph.restart:
 - ceph-fuse: [client.0]
 - workunit:

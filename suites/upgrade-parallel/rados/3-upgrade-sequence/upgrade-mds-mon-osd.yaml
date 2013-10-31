@@ -2,6 +2,7 @@ upgrade-sequence:
    sequential:
    - install.upgrade:
       all:
+         branch: emperor
    - ceph.restart: [mds.a]
    - sleep:
        duration: 60
