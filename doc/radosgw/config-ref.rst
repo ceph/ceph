@@ -511,7 +511,7 @@ Get a Zone
 
 To get the configuration of a zone, execute:: 
 
-	sudo radosgw-admin zone [--rgw-zone=<zone>]
+	sudo radosgw-admin zone get [--rgw-zone=<zone>]
 
 The ``default`` zone looks like this:
 
