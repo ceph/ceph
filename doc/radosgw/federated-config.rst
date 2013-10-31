@@ -14,6 +14,9 @@ regions, and with multiple zones for a region.
 - **Zone**: A zone is a *logical* grouping of one or more Ceph Object Gateway 
   instance(s). A region has a master zone that processes client requests.
 
+.. important:: Only write objects to the master zone in a region. You may read
+   objects from secondary zones. Currently, the Gateway does not prevent you
+   from writing to a secondary zone, but DON'T DO IT.
 
 Background
 ==========
@@ -41,15 +44,16 @@ About this Guide
 In the following sections, we will demonstrate how to configure a federated
 cluster in two logical steps: 
 
-#. **Configure a Master Region:** This section of the guide describes how to 
-   set up a region with multiple zones, and how to synchronize data between the
-   master zone and the secondary zone(s) within the master region.
-   
-#. **Configure a Secondary Region:**  This section of the guide describes how 
-   to repeat the section on setting up a master region and multiple zones so 
-   that you have two regions with intra-zone synchronization in each region. 
-   Finally, you will learn how to set up a metadata synchronization agent so 
-   that you can maintain a global namespace for the regions in your cluster.
+- **Configure a Master Region:** This section of the guide describes how to 
+  set up a region with multiple zones, and how to synchronize data between the
+  master zone and the secondary zone(s) within the master region.
+  
+- **Configure a Secondary Region:**  This section of the guide describes how 
+  to repeat the section on setting up a master region and multiple zones so 
+  that you have two regions with intra-zone synchronization in each region. 
+  Finally, you will learn how to set up a metadata synchronization agent so 
+  that you can maintain a global namespace for the regions in your cluster.
+
 
 
 Configure a Master Region
@@ -59,6 +63,7 @@ This section provides an exemplary procedure for setting up a region, and two
 zones within the region. The cluster will comprise two gateway daemon
 instances--one per zone. This region will serve as the master region.
 
+.. image:: ../images/zone-sync.png
 
 Naming for the Master Region
 ----------------------------
@@ -359,7 +364,7 @@ Create a Region
 #. Create the ``us`` region using the ``us.json`` infile you just 
    created. :: 
 
-	sudo radosgw-admin region set --infile us.json --name client.radosgw.us-east-1
+	radosgw-admin region set --infile us.json --name client.radosgw.us-east-1
 
 #. Delete the default region (if it exists). :: 
 
@@ -367,13 +372,13 @@ Create a Region
 	
 #. Set the ``us`` region as the default region. :: 
 
-	sudo radosgw-admin region default --rgw-region=us --name client.radosgw.us-east-1
+	radosgw-admin region default --rgw-region=us --name client.radosgw.us-east-1
 
    Only one region can be the default region for a cluster.
 
 #. Update the region map. :: 
 
-	sudo radosgw-admin regionmap update --name client.radosgw.us-east-1
+	radosgw-admin regionmap update --name client.radosgw.us-east-1
 
 
 
@@ -407,15 +412,15 @@ Create Zones
    just created in both the east and west pools by specifying their respective
    user names (i.e., ``--name``). ::
 
-	sudo radosgw-admin zone set --rgw-zone=us-east --infile us-east.json --name client.radosgw.us-east-1
-	sudo radosgw-admin zone set --rgw-zone=us-east --infile us-east.json --name client.radosgw.us-west-1
+	radosgw-admin zone set --rgw-zone=us-east --infile us-east.json --name client.radosgw.us-east-1
+	radosgw-admin zone set --rgw-zone=us-east --infile us-east.json --name client.radosgw.us-west-1
 
    Repeat step 1 to create a zone infile for ``us-west``. Then add the zone 
    using the ``us-west.json`` infile in both the east and west pools by 
    specifying their respective user names (i.e., ``--name``). ::
 
-	sudo radosgw-admin zone set --rgw-zone=us-west --infile us-west.json --name client.radosgw.us-east-1
-	sudo radosgw-admin zone set --rgw-zone=us-west --infile us-west.json --name client.radosgw.us-west-1
+	radosgw-admin zone set --rgw-zone=us-west --infile us-west.json --name client.radosgw.us-east-1
+	radosgw-admin zone set --rgw-zone=us-west --infile us-west.json --name client.radosgw.us-west-1
 
 
 #. Delete the default zone (if it exists). :: 
@@ -425,7 +430,7 @@ Create Zones
 
 #. Update the region map. :: 
 
-	sudo radosgw-admin regionmap update --name client.radosgw.us-east-1
+	radosgw-admin regionmap update --name client.radosgw.us-east-1
 
 
 
@@ -437,8 +442,8 @@ users after configuring the zones. Copy the ``access_key`` and  ``secret_key``
 fields for each user so you can update your zone configuration once you complete
 this step. :: 
 
-	sudo radosgw-admin user create --uid="us-east" --display-name="Region-US Zone-East" --name client.radosgw.us-east-1 --system
-	sudo radosgw-admin user create --uid="us-west" --display-name="Region-US Zone-West" --name client.radosgw.us-west-1 --system
+	radosgw-admin user create --uid="us-east" --display-name="Region-US Zone-East" --name client.radosgw.us-east-1 --system
+	radosgw-admin user create --uid="us-west" --display-name="Region-US Zone-West" --name client.radosgw.us-west-1 --system
 
 
 Update Zone Configurations
@@ -471,14 +476,14 @@ the synchronization agents can authenticate with the zones.
 
 #. Save the ``us-east.json`` file. Then, update your zone configuration. :: 
 
-	sudo radosgw-admin zone set --rgw-zone=us-east --infile us-east.json --name client.radosgw.us-east-1
-	sudo radosgw-admin zone set --rgw-zone=us-east --infile us-east.json --name client.radosgw.us-west-1	
+	radosgw-admin zone set --rgw-zone=us-east --infile us-east.json --name client.radosgw.us-east-1
+	radosgw-admin zone set --rgw-zone=us-east --infile us-east.json --name client.radosgw.us-west-1	
 	
 #. Repeat step 1 to update the zone infile for ``us-west``. Then, update 
    your zone configuration. :: 
 
-	sudo radosgw-admin zone set --rgw-zone=us-west --infile us-west.json --name client.radosgw.us-east-1
-	sudo radosgw-admin zone set --rgw-zone=us-west --infile us-west.json --name client.radosgw.us-west-1
+	radosgw-admin zone set --rgw-zone=us-west --infile us-west.json --name client.radosgw.us-east-1
+	radosgw-admin zone set --rgw-zone=us-west --infile us-west.json --name client.radosgw.us-west-1
 
 
 Restart Services
@@ -533,37 +538,32 @@ Replicate Data
 
 The data synchronization agent replicates the data of a master zone to a
 secondary zone. The master zone of a region is the source for the secondary zone
-of the region.
+of the region and it gets selected automatically.
 
+To configure the synchronization agent, retrieve the access key and secret for
+the source and destination, and the destination URL and port.
 
-To configure the synchronization agent, retrieve the following from each zone:
-
-- Zone Name
-- Access Key
-- Secret Key
-- Hostname
-- Port
+You may use ``radosgw-admin zone list`` to get a list of zone names. You 
+may use ``radosgw-admin zone get`` to identify the key and secret for the 
+zone. You may refer to the gateway configuration file you created under
+`Create a Gateway Configuration`_ to identify the port number.
 
 You only need the hostname and port for a single instance (assuming all 
 gateway instances in a region/zone access the same Ceph Storage Cluster). 
 Specify these values in a configuration file 
-(e.g., ``cluster-data-sync.conf``), and include a ``log_file`` name and an 
-identifier for the ``daemon_id``. For example:
+(e.g., ``cluster-data-sync.conf``), and include a ``log_file`` name. 
+
+
+For example:
 
 .. code-block:: ini
 
 	src_access_key: {source-access-key}
 	src_secret_key: {source-secret-key}
-	src_host: {source-hostname}
-	src_port: {source-port}
-	src_zone: {source-zone}
+	destination: https://zone-name.fqdn.com:port
 	dest_access_key: {destination-access-key}
 	dest_secret_key: {destination-secret-key}
-	dest_host: {destination-hostname}
-	dest_port: {destination-port}
-	dest_zone: {destination-zone}
 	log_file: {log.filename}
-	daemon_id: {daemon-id}
 
 A concrete example may look like this:
 
@@ -571,17 +571,10 @@ A concrete example may look like this:
 
 	src_access_key: DG8RE354EFPZBICHIAF0
 	src_secret_key: i3U0HiRP8CXaBWrcF8bbh6CbsxGYuPPwRkixfFSb
-	src_host: ceph-gateway-east
-	src_port: 80
-	src_zone: us-east
+	destination: https://us-west.storage.net:80
 	dest_access_key: U60RFI6B08F32T2PD30G
 	dest_secret_key: W3HuUor7Gl1Ee93pA2pq2wFk1JMQ7hTrSDecYExl
-	dest_host: ceph-gateway-west
-	dest_port: 80
-	dest_zone: us-west
 	log_file: /var/log/radosgw/radosgw-sync-us-east-west.log
-	daemon_id: rgw-east-2-west
-
 
 To activate the data synchronization agent, open a terminal and
 execute the following::
@@ -612,6 +605,9 @@ This section provides an exemplary procedure for setting up a cluster with
 multiple regions. Configuring a cluster that spans regions requires maintaining
 a global namespace, so that there are no namespace clashes among object names
 stored across in different regions.
+
+.. image:: ../images/region-zone-sync.png
+   :align: center
 
 This section extends the procedure in `Configure a Master Region`_, but 
 changes the region name and modifies a few procedures. See the following 
@@ -677,7 +673,7 @@ with the following differences:
    ``false``. For consistency, create the master region in the secondary region
    too. ::
 
-	sudo radosgw-admin region set --infile us.json --name client.radosgw.eu-east-1
+	radosgw-admin region set --infile us.json --name client.radosgw.eu-east-1
 
 #. `Create Zones`_ using ``eu`` instead of ``us``. Ensure that you update the
    user name (i.e., ``--name``) so that you create the zones in the correct 
@@ -687,17 +683,17 @@ with the following differences:
 
 #. Create zones from master region in the secondary region. ::
 
-	sudo radosgw-admin zone set --rgw-zone=us-east --infile us-east.json --name client.radosgw.eu-east-1
-	sudo radosgw-admin zone set --rgw-zone=us-east --infile us-east.json --name client.radosgw.eu-west-1	
-	sudo radosgw-admin zone set --rgw-zone=us-west --infile us-west.json --name client.radosgw.eu-east-1
-	sudo radosgw-admin zone set --rgw-zone=us-west --infile us-west.json --name client.radosgw.eu-west-1	
+	radosgw-admin zone set --rgw-zone=us-east --infile us-east.json --name client.radosgw.eu-east-1
+	radosgw-admin zone set --rgw-zone=us-east --infile us-east.json --name client.radosgw.eu-west-1	
+	radosgw-admin zone set --rgw-zone=us-west --infile us-west.json --name client.radosgw.eu-east-1
+	radosgw-admin zone set --rgw-zone=us-west --infile us-west.json --name client.radosgw.eu-west-1	
 
 #. Create zones from secondary region in the master region. ::
 
-	sudo radosgw-admin zone set --rgw-zone=eu-east --infile eu-east.json --name client.radosgw.us-east-1
-	sudo radosgw-admin zone set --rgw-zone=eu-east --infile eu-east.json --name client.radosgw.us-west-1	
-	sudo radosgw-admin zone set --rgw-zone=eu-west --infile eu-west.json --name client.radosgw.us-east-1
-	sudo radosgw-admin zone set --rgw-zone=eu-west --infile eu-west.json --name client.radosgw.us-west-1
+	radosgw-admin zone set --rgw-zone=eu-east --infile eu-east.json --name client.radosgw.us-east-1
+	radosgw-admin zone set --rgw-zone=eu-east --infile eu-east.json --name client.radosgw.us-west-1	
+	radosgw-admin zone set --rgw-zone=eu-west --infile eu-west.json --name client.radosgw.us-east-1
+	radosgw-admin zone set --rgw-zone=eu-west --infile eu-west.json --name client.radosgw.us-west-1
 
 #. `Restart Services`_.
 
@@ -705,6 +701,9 @@ with the following differences:
 
 Replicate Metadata
 ------------------
+
+Metadata consists of gateway users and buckets, but not the objects within
+the buckets.
 
 `Replicate Data`_ by specifying the master zone of the master region as the
 source zone and the master zone of the secondary region as the secondary
