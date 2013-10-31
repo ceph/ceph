@@ -118,8 +118,8 @@ For Debian and Ubuntu distributions, perform the following steps:
 Red Hat Package Manager (RPM)
 -----------------------------
 
-For Red Hat(rhel6), CentOS (el6), Fedora 17-19 (f17-f19), OpenSUSE 12
-(opensuse12), and SLES (sles11) perform the following steps:
+For Red Hat(rhel6), CentOS (el6), and Fedora 17-19 (f17-f19) perform the
+following steps:
 
 #. Add the package to your repository. Open a text editor and create a 
    Yellowdog Updater, Modified (YUM) entry. Use the file path
