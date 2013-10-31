@@ -39,7 +39,7 @@ QEMU.
 	Install ceph-deploy <install-ceph-deploy>
    Install Ceph Storage Cluster <install-storage-cluster>
 	Install Ceph Object Gateway <install-ceph-gateway>
-	Install VM/Cloud Enablement <install-vm-cloud>	
+	Install Virtualization for Block <install-vm-cloud>	
 
 Upgrade Software	
 ================
