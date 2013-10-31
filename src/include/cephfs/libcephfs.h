@@ -40,7 +40,7 @@ extern "C" {
 
 struct ceph_mount_info;
 struct ceph_dir_result;
-class CephContext;
+struct CephContext;
 
 /* setattr mask bits */
 #ifndef CEPH_SETATTR_MODE
@@ -94,7 +94,7 @@ int ceph_create(struct ceph_mount_info **cmount, const char * const id);
  * @param conf reuse this pre-existing CephContext config
  * @returns 0 on success, negative error code on failure
  */
-int ceph_create_with_context(struct ceph_mount_info **cmount, class CephContext *conf);
+int ceph_create_with_context(struct ceph_mount_info **cmount, struct CephContext *conf);
 
 /**
  * Perform a mount using the path for the root of the mount.
@@ -142,7 +142,7 @@ void ceph_shutdown(struct ceph_mount_info *cmount);
  * @param cmount the ceph mount handle to get the context from.
  * @returns the CephContext associated with the mount handle.
  */
-class CephContext *ceph_get_mount_context(struct ceph_mount_info *cmount);
+struct CephContext *ceph_get_mount_context(struct ceph_mount_info *cmount);
 
 /*
  * Check mount status.
