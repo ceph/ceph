@@ -2,6 +2,7 @@ upgrade-sequence:
    sequential:
    - install.upgrade:
       all:
+         branch: emperor
    - ceph.restart: [osd.0]
    - sleep:
        duration: 60

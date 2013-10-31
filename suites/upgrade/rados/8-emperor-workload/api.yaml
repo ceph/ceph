@@ -1,5 +1,7 @@
 tasks:
 - workunit:
+    branch: emperor
     clients:
       client.0:
         - rados/test.sh
+        - cls
