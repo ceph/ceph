@@ -156,7 +156,7 @@ default, edit ``/etc/glance/glance-api.conf`` and add::
     rbd_store_user=images
     rbd_store_pool=images
 
-If you’re using Folsom and want to enable copy-on-write cloning of images into
+If want to enable copy-on-write cloning of images into
 volumes, also add::
 
 	show_image_direct_url=True
