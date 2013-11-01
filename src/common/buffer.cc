@@ -854,7 +854,7 @@ void buffer::list::rebuild_page_aligned()
 	     (!p->is_page_aligned() ||
 	      !p->is_n_page_sized() ||
 	      (offset & ~CEPH_PAGE_MASK)));
-    ptr nb(buffer::create_page_aligned(_len));
+    ptr nb(buffer::create_page_aligned(unaligned._len));
     unaligned.rebuild(nb);
     _buffers.insert(p, unaligned._buffers.front());
   }
