@@ -40,7 +40,7 @@ case "$1" in
 
             # mapped to this host?
             host=`ceph-conf -n $name host`
-            if [ "$host" != `hostname` ]; then
+            if [ "$host" != `hostname -s` ]; then
                 continue
             fi
 
