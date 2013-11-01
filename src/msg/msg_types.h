@@ -17,6 +17,7 @@
 
 #include <netinet/in.h>
 
+#include "acconfig.h"
 #include "include/types.h"
 #include "include/blobhash.h"
 #include "include/encoding.h"
@@ -150,6 +151,65 @@ namespace __gnu_cxx {
 }
 
 
+// Convert a native sockaddr_storage to a portable ceph_sockaddr_storage
+static inline void encode(const sockaddr_storage& src, ceph_sockaddr_storage& dst) {
+  size_t copylen, zerolen;
+
+  //Copy the entire structure, then deal with the ss_len and ss_family fields.
+  //It's probably no slower than copying everything except those two fields.
+  //In case dst is longer than src, zero out its tail
+  copylen = MIN(sizeof(src), sizeof(dst));
+  zerolen = MAX(0, sizeof(dst) - sizeof(src));
+  memmove(&dst, &src, copylen);
+  bzero((uint8_t*)&dst + copylen, zerolen);
+  dst.ss_family = htons((short)src.ss_family);
+  //Note: when encoding, we can ignore ss_len.  It is always 0 on the wire
+}
+
+// Convert a portable ceph_sockaddr_storage to a native sockaddr_storage 
+// Note: src and dst  may overlap!
+static inline void decode(sockaddr_storage& dst, const ceph_sockaddr_storage& src) {
+  size_t copylen, zerolen;
+
+  copylen = MIN(sizeof(dst), sizeof(struct ceph_sockaddr_storage));
+  zerolen = MAX(0, sizeof(dst) - sizeof(struct ceph_sockaddr_storage));
+  memmove(&dst, &src, copylen);
+  bzero((uint8_t*)&dst + copylen, zerolen);
+  dst.ss_family = ntohs(
+                reinterpret_cast<struct ceph_sockaddr_storage&>(dst).ss_family);
+#ifdef HAVE_SS_LEN_IN_SOCKADDR_STORAGE
+  // Since ss_len is not sent over the wire, we must calculate it here.
+  // There are dozens of address families, but we only care about those that
+  // may be used as a Ceph network.
+  switch(dst.ss_family) {
+    case AF_INET:
+      dst.ss_len = sizeof(struct sockaddr_in);
+      break;
+    case AF_INET6:
+      dst.ss_len = sizeof(struct sockaddr_in6);
+      break;
+    default:
+      dst.ss_len = sizeof(struct sockaddr_storage);
+      break;
+  }
+#endif
+}
+
+/*
+ * encode sockaddr.ss_family in big endian
+ */
+static inline void encode(const sockaddr_storage& src, bufferlist& bl) {
+  struct ceph_sockaddr_storage imm;
+
+  ::encode(src, imm);
+  ::encode_raw(imm, bl);
+}
+
+static inline void decode(sockaddr_storage& dst, bufferlist::iterator& bl) {
+  struct ceph_sockaddr_storage imm;
+  ::decode_raw(imm, bl);
+  ::decode(dst, imm);
+}
 
 /*
  * an entity's network address.
@@ -157,24 +217,6 @@ namespace __gnu_cxx {
  * thus identifies a particular process instance.
  * ipv4 for now.
  */
-
-/*
- * encode sockaddr.ss_family in big endian
- */
-static inline void encode(const sockaddr_storage& a, bufferlist& bl) {
-  struct sockaddr_storage ss = a;
-#if !defined(__FreeBSD__)
-  ss.ss_family = htons(ss.ss_family);
-#endif
-  ::encode_raw(ss, bl);
-}
-static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
-  ::decode_raw(a, bl);
-#if !defined(__FreeBSD__)
-  a.ss_family = ntohs(a.ss_family);
-#endif
-}
-
 struct entity_addr_t {
   __u32 type;
   __u32 nonce;
@@ -202,10 +244,7 @@ struct entity_addr_t {
   entity_addr_t(const ceph_entity_addr &o) {
     type = o.type;
     nonce = o.nonce;
-    addr = o.in_addr;
-#if !defined(__FreeBSD__)
-    addr.ss_family = ntohs(addr.ss_family);
-#endif
+    ::decode(addr, o.in_addr);
   }
 
   __u32 get_nonce() const { return nonce; }
@@ -216,6 +255,9 @@ struct entity_addr_t {
   }
   void set_family(int f) {
     addr.ss_family = f;
+#ifdef HAVE_SS_LEN_IN_SOCKADDR_STORAGE
+    addr.ss_len = addr_size();
+#endif
   }
   
   sockaddr_storage &ss_addr() {
@@ -276,10 +318,8 @@ struct entity_addr_t {
     ceph_entity_addr a;
     a.type = 0;
     a.nonce = nonce;
-    a.in_addr = addr;
-#if !defined(__FreeBSD__)
-    a.in_addr.ss_family = htons(addr.ss_family);
-#endif
+    ::encode(addr, a.in_addr);
+
     return a;
   }
 

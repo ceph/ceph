@@ -58,13 +58,26 @@ struct ceph_entity_name {
 
 extern const char *ceph_entity_type_name(int type);
 
+
+/*
+ * A portable version of sockaddr_storage.  For backwards compatibility, it is
+ * defined binary compatibly with Linux 3.2.0 amd64.
+ * On Linux amd64 this must be castable to a struct sockaddr_storage.  On
+ * other platforms, it must be translated.
+ */
+struct ceph_sockaddr_storage {
+	__be16 ss_family;            /* Big endian */
+	__u8   __ss_padding[126];
+} __attribute__ ((__packed__));
+
+
 /*
  * entity_addr -- network address
  */
 struct ceph_entity_addr {
 	__le32 type;
 	__le32 nonce;  /* unique id for process (e.g. pid) */
-	struct sockaddr_storage in_addr;
+	struct ceph_sockaddr_storage in_addr;
 } __attribute__ ((packed));
 
 struct ceph_entity_inst {

@@ -97,6 +97,9 @@ bool entity_addr_t::parse(const char *s, const char **end)
   } else {
     return false;
   }
+#if HAVE_SS_LEN_IN_SOCKADDR_STORAGE
+  addr.ss_len = addr_size();
+#endif
 
   if (brackets) {
     if (*p != ']')
