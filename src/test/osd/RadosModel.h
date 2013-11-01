@@ -1325,11 +1325,10 @@ public:
   RollbackOp(int n,
 	     RadosTestContext *context,
 	     const string &_oid,
-	     int snap,
 	     TestOpStat *stat = 0)
     : TestOp(n, context, stat),
       oid(_oid),
-      roll_back_to(snap), done(false)
+      roll_back_to(-1), done(false)
   {}
 
   void _begin()
@@ -1340,9 +1339,21 @@ public:
       context->state_lock.Unlock();
       return;
     }
+
+    if (context->snaps.empty()) {
+      context->kick();
+      context->state_lock.Unlock();
+      done = true;
+      return;
+    }
+
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
+
+    roll_back_to = rand_choose(context->snaps)->first;
     context->snaps_in_use.insert(roll_back_to);
+
+    cout << "rollback oid " << oid << " to " << roll_back_to << std::endl;
 
     context->roll_back(oid, roll_back_to);
     uint64_t snap = context->snaps[roll_back_to];
