@@ -981,6 +981,9 @@ def upgrade(ctx, config):
         - install.upgrade:
             all:
 
+    (HACK: the overrides will *only* apply the sha1/branch/tag if those
+    keys are not present in the config.)
+
     :param ctx: the argparse.Namespace object
     :param config: the config dict
     """
@@ -997,7 +1000,7 @@ def upgrade(ctx, config):
     # unspecified/implicit.
     install_overrides = ctx.config.get(
         'overrides', {}).get('install', {}).get(project, {})
-    log.info('project %s overrides %s', project, install_overrides)
+    log.info('project %s config %s overrides %s', project, config, install_overrides)
 
     # FIXME: extra_pkgs is not distro-agnostic
     extra_pkgs = config.get('extra_packages', [])
@@ -1019,8 +1022,16 @@ def upgrade(ctx, config):
     for remote, node in remotes.iteritems():
         if not node:
             node = {}
-        teuthology.deep_merge(node, install_overrides)
+
+        this_overrides = install_overrides
+        if 'sha1' in node or 'tag' in node or 'branch' in node:
+            log.info('config contains sha1|tag|branch, removing those keys from override')
+            this_overrides.pop('sha1', None)
+            this_overrides.pop('tag', None)
+            this_overrides.pop('branch', None)
+        teuthology.deep_merge(node, this_overrides)
         log.info('remote %s config %s', remote, node)
+
         system_type = teuthology.get_system_type(remote)
         assert system_type in ('deb', 'rpm')
         pkgs = PACKAGES[project][system_type]
