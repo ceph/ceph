@@ -2796,10 +2796,15 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     if (n <= (int)p.get_pg_num()) {
       ss << "specified pg_num " << n << " <= current " << p.get_pg_num();
-    } else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
-      ss << "currently creating pgs, wait";
-      return -EAGAIN;
     } else {
+      for(set<pg_t>::iterator i = mon->pgmon()->pg_map.creating_pgs.begin();
+	  i != mon->pgmon()->pg_map.creating_pgs.end();
+	  ++i) {
+	if (i->m_pool == static_cast<uint64_t>(pool)) {
+	  ss << "currently creating pgs, wait";
+	  return -EAGAIN;
+	}
+      }
       p.set_pg_num(n);
       ss << "set pool " << pool << " pg_num to " << n;
     }
@@ -2812,10 +2817,15 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "specified pgp_num must > 0, but you set to " << n;
     } else if (n > (int)p.get_pg_num()) {
       ss << "specified pgp_num " << n << " > pg_num " << p.get_pg_num();
-    } else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
-      ss << "still creating pgs, wait";
-      return -EAGAIN;
     } else {
+      for(set<pg_t>::iterator i = mon->pgmon()->pg_map.creating_pgs.begin();
+	  i != mon->pgmon()->pg_map.creating_pgs.end();
+	  ++i) {
+	if (i->m_pool == static_cast<uint64_t>(pool)) {
+	  ss << "currently creating pgs, wait";
+	  return -EAGAIN;
+	}
+      }
       p.set_pgp_num(n);
       ss << "set pool " << pool << " pgp_num to " << n;
     }
