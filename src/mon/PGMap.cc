@@ -787,7 +787,7 @@ void PGMap::print_osd_perf_stats(std::ostream *ss) const
 }
 
 void PGMap::recovery_summary(Formatter *f, ostream *out,
-                             pool_stat_t delta_sum) const
+                             const pool_stat_t& delta_sum) const
 {
   bool first = true;
   if (delta_sum.stats.sum.num_objects_degraded) {
@@ -825,7 +825,7 @@ void PGMap::recovery_summary(Formatter *f, ostream *out,
 }
 
 void PGMap::recovery_rate_summary(Formatter *f, ostream *out,
-                                  pool_stat_t delta_sum,
+                                  const pool_stat_t& delta_sum,
                                   utime_t delta_stamp) const
 {
   // make non-negative; we can get negative values if osds send
@@ -886,7 +886,7 @@ void PGMap::pool_recovery_summary(Formatter *f, ostream *out,
 }
 
 void PGMap::client_io_rate_summary(Formatter *f, ostream *out,
-                                   pool_stat_t delta_sum,
+                                   const pool_stat_t& delta_sum,
                                    utime_t delta_stamp) const
 {
   pool_stat_t pos_delta = delta_sum;
