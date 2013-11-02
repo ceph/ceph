@@ -233,6 +233,9 @@ int CrushCompiler::decompile(ostream &out)
     case CEPH_PG_TYPE_RAID4:
       out << "\ttype raid4\n";
       break;
+    case CEPH_PG_TYPE_ERASURE:
+      out << "\ttype erasure\n";
+      break;
     default:
       out << "\ttype " << crush.get_rule_mask_type(i) << "\n";
     }
@@ -562,8 +565,10 @@ int CrushCompiler::parse_rule(iter_t const& i)
   int type;
   if (tname == "replicated")
     type = CEPH_PG_TYPE_REP;
-  else if (tname == "raid4") 
+  else if (tname == "raid4")
     type = CEPH_PG_TYPE_RAID4;
+  else if (tname == "erasure")
+    type = CEPH_PG_TYPE_ERASURE;
   else 
     assert(0);    
 
