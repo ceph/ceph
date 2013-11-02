@@ -1119,6 +1119,115 @@ void CrushWrapper::list_rules(Formatter *f) const
   }
 }
 
+struct qi {
+  int item;
+  int depth;
+  float weight;
+  qi() : item(0), depth(0), weight(0) {}
+  qi(int i, int d, float w) : item(i), depth(d), weight(w) {}
+};
+
+void CrushWrapper::dump_tree(const vector<__u32>& w, ostream *out, Formatter *f) const
+{
+  if (out)
+    *out << "# id\tweight\ttype name\tup/down\treweight\n";
+  if (f)
+    f->open_array_section("nodes");
+  set<int> touched;
+  set<int> roots;
+  find_roots(roots);
+  for (set<int>::iterator p = roots.begin(); p != roots.end(); ++p) {
+    list<qi> q;
+    q.push_back(qi(*p, 0, get_bucket_weight(*p) / (float)0x10000));
+    while (!q.empty()) {
+      int cur = q.front().item;
+      int depth = q.front().depth;
+      float weight = q.front().weight;
+      q.pop_front();
+
+      if (out) {
+	*out << cur << "\t";
+	int oldprecision = out->precision();
+	*out << std::setprecision(4) << weight << std::setprecision(oldprecision) << "\t";
+
+	for (int k=0; k<depth; k++)
+	  *out << "\t";
+      }
+      if (f) {
+	f->open_object_section("item");
+      }
+      if (cur >= 0) {
+
+	if (f) {
+	  f->dump_unsigned("id", cur);
+	  f->dump_stream("name") << "osd." << cur;
+	  f->dump_string("type", get_type_name(0));
+	  f->dump_int("type_id", 0);
+	}
+	if (out)
+	  *out << "osd." << cur << "\t";
+
+	double wf = (double)w[cur] / (double)0x10000;
+	if (out) {
+	  std::streamsize p = out->precision();
+	  *out << std::setprecision(4)
+	       << wf
+	       << std::setprecision(p)
+	       << "\t";
+	}
+	if (f) {
+	  f->dump_float("reweight", wf);
+	}
+
+	if (out)
+	  *out << "\n";
+	if (f) {
+	  f->dump_float("crush_weight", weight);
+	  f->dump_unsigned("depth", depth);
+	  f->close_section();
+	}
+	touched.insert(cur);
+      }
+      if (cur >= 0) {
+	continue;
+      }
+
+      // queue bucket contents...
+      int type = get_bucket_type(cur);
+      int s = get_bucket_size(cur);
+      if (f) {
+	f->dump_int("id", cur);
+	f->dump_string("name", get_item_name(cur));
+	f->dump_string("type", get_type_name(type));
+	f->dump_int("type_id", type);
+	f->open_array_section("children");
+      }
+      for (int k=s-1; k>=0; k--) {
+	int item = get_bucket_item(cur, k);
+	q.push_front(qi(item, depth+1, (float)get_bucket_item_weight(cur, k) / (float)0x10000));
+	if (f)
+	  f->dump_int("child", item);
+      }
+      if (f)
+	f->close_section();
+
+      if (out)
+	*out << get_type_name(type) << " " << get_item_name(cur) << "\n";
+      if (f) {
+	f->close_section();
+      }
+
+    }
+  }
+  if (f) {
+    f->close_section();
+    f->open_array_section("stray");
+  }
+
+  if (f)
+    f->close_section();
+}
+
 void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
 {
   o.push_back(new CrushWrapper);
