@@ -794,6 +794,7 @@ public:
   void dump(Formatter *f) const;
   void dump_rules(Formatter *f) const;
   void list_rules(Formatter *f) const;
+  void dump_tree(const vector<__u32>& w, ostream *out, Formatter *f) const;
   static void generate_test_instances(list<CrushWrapper*>& o);
 
 
