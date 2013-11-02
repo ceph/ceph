@@ -1643,12 +1643,12 @@ static int do_kernel_add(const char *poolname, const char *imgname,
   }
 
   if (read_only)
-    oss << " ro";
+    oss << " ro,";
   else
-    oss << " rw";
+    oss << " ";
 
   const char *user = g_conf->name.get_id().c_str();
-  oss << ",name=" << user;
+  oss << "name=" << user;
 
   char key_name[strlen(user) + strlen("client.") + 1];
   snprintf(key_name, sizeof(key_name), "client.%s", user);
