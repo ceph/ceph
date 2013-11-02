@@ -1,6 +1,7 @@
 from cStringIO import StringIO
 
 import contextlib
+import copy
 import logging
 import time
 
@@ -1023,7 +1024,7 @@ def upgrade(ctx, config):
         if not node:
             node = {}
 
-        this_overrides = install_overrides
+        this_overrides = copy.deepcopy(install_overrides)
         if 'sha1' in node or 'tag' in node or 'branch' in node:
             log.info('config contains sha1|tag|branch, removing those keys from override')
             this_overrides.pop('sha1', None)
