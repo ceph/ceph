@@ -52,7 +52,7 @@ tasks:
     client.0:
       src: client.0
       dest: client.1
-
+      metadata-only: true
 - s3tests:
     client.0:
       rgw_server: client.0
