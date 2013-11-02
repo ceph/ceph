@@ -279,7 +279,7 @@ static int is_out(const struct crush_map *map, const __u32 *weight, int weight_m
 }
 
 /**
- * crush_choose - choose numrep distinct items of given type
+ * crush_choose_firstn - choose numrep distinct items of given type
  * @param map the crush_map
  * @param bucket the bucket we are choose an item from
  * @param x crush input value
@@ -287,18 +287,17 @@ static int is_out(const struct crush_map *map, const __u32 *weight, int weight_m
  * @param type the type of item to choose
  * @param out pointer to output vector
  * @param outpos our position in that vector
- * @param firstn true if choosing "first n" items, false if choosing "indep"
  * @param recurse_to_leaf: true if we want one device under each item of given type
  * @descend_once: true if we should only try one descent before giving up
  * @param out2 second output vector for leaf items (if @a recurse_to_leaf)
  */
-static int crush_choose(const struct crush_map *map,
-			struct crush_bucket *bucket,
-			const __u32 *weight, int weight_max,
-			int x, int numrep, int type,
-			int *out, int outpos,
-			int firstn, int recurse_to_leaf,
-			int descend_once, int *out2)
+static int crush_choose_firstn(const struct crush_map *map,
+			       struct crush_bucket *bucket,
+			       const __u32 *weight, int weight_max,
+			       int x, int numrep, int type,
+			       int *out, int outpos,
+			       int recurse_to_leaf,
+			       int descend_once, int *out2)
 {
 	int rep;
 	unsigned int ftotal, flocal;
@@ -327,26 +326,8 @@ static int crush_choose(const struct crush_map *map,
 				collide = 0;
 				retry_bucket = 0;
 				r = rep;
-				if (in->alg == CRUSH_BUCKET_UNIFORM) {
-					/* be careful */
-					if (firstn || (__u32)numrep >= in->size)
-						/* r' = r + f_total */
-						r += ftotal;
-					else if (in->size % numrep == 0)
-						/* r'=r+(n+1)*f_local */
-						r += (numrep+1) *
-							(flocal+ftotal);
-					else
-						/* r' = r + n*f_local */
-						r += numrep * (flocal+ftotal);
-				} else {
-					if (firstn)
-						/* r' = r + f_total */
-						r += ftotal;
-					else
-						/* r' = r + n*f_local */
-						r += numrep * (flocal+ftotal);
-				}
+				/* r' = r + f_total */
+				r += ftotal;
 
 				/* bucket choose */
 				if (in->size == 0) {
@@ -396,12 +377,12 @@ static int crush_choose(const struct crush_map *map,
 				reject = 0;
 				if (!collide && recurse_to_leaf) {
 					if (item < 0) {
-						if (crush_choose(map,
+						if (crush_choose_firstn(map,
 							 map->buckets[-1-item],
 							 weight, weight_max,
 							 x, outpos+1, 0,
 							 out2, outpos,
-							 firstn, 0,
+							 0,
 							 map->chooseleaf_descend_once,
 							 NULL) <= outpos)
 							/* didn't get leaf */
@@ -451,12 +432,8 @@ reject:
 		} while (retry_descent);
 
 		if (skip_rep) {
-			if (firstn) {
-				dprintk("skip rep\n");
-				continue;
-			}
-			dprintk("undef rep, continuing\n");
-			item = CRUSH_ITEM_UNDEF;
+			dprintk("skip rep\n");
+			continue;
 		}
 
 		dprintk("CHOOSE got %d\n", item);
@@ -473,7 +450,7 @@ reject:
 
 
 /**
- * choose indep: alternative breadth-first positionally stable mapping
+ * crush_choose_indep: alternative breadth-first positionally stable mapping
  *
  */
 static void crush_choose_indep(const struct crush_map *map,
@@ -703,24 +680,25 @@ int crush_do_rule(const struct crush_map *map,
 				}
 				j = 0;
 				if (firstn) {
-					osize += crush_choose(map,
-							      map->buckets[-1-w[i]],
-							      weight, weight_max,
-							      x, numrep,
-							      curstep->arg2,
-							      o+osize, j,
-							      firstn,
-							      recurse_to_leaf,
-							      descend_once, c+osize);
+					osize += crush_choose_firstn(
+						map,
+						map->buckets[-1-w[i]],
+						weight, weight_max,
+						x, numrep,
+						curstep->arg2,
+						o+osize, j,
+						recurse_to_leaf,
+						descend_once, c+osize);
 				} else {
-					crush_choose_indep(map,
-							   map->buckets[-1-w[i]],
-							   weight, weight_max,
-							   x, numrep,
-							   curstep->arg2,
-							   o+osize, j,
-							   recurse_to_leaf,
-							   c+osize);
+					crush_choose_indep(
+						map,
+						map->buckets[-1-w[i]],
+						weight, weight_max,
+						x, numrep,
+						curstep->arg2,
+						o+osize, j,
+						recurse_to_leaf,
+						c+osize);
 					osize += numrep;
 				}
 			}
