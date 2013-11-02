@@ -1029,20 +1029,28 @@ ceph_object_layout OSDMap::make_object_layout(
   return ol;
 }
 
-void OSDMap::_remove_nonexistent_osds(vector<int>& osds) const
+void OSDMap::_remove_nonexistent_osds(const pg_pool_t& pool,
+				      vector<int>& osds) const
 {
-  unsigned removed = 0;
-  for (unsigned i = 0; i < osds.size(); i++) {
-    if (!exists(osds[i])) {
-      removed++;
-      continue;
+  if (pool.can_shift_osds()) {
+    unsigned removed = 0;
+    for (unsigned i = 0; i < osds.size(); i++) {
+      if (!exists(osds[i])) {
+	removed++;
+	continue;
+      }
+      if (removed) {
+	osds[i - removed] = osds[i];
+      }
     }
-    if (removed) {
-      osds[i - removed] = osds[i];
+    if (removed)
+      osds.resize(osds.size() - removed);
+  } else {
+    for (vector<int>::iterator p = osds.begin(); p != osds.end(); ++p) {
+      if (!exists(*p))
+	*p = CRUSH_ITEM_NONE;
     }
   }
-  if (removed)
-    osds.resize(osds.size() - removed);
 }
 
 int OSDMap::_pg_to_osds(const pg_pool_t& pool, pg_t pg, vector<int>& osds) const
@@ -1056,7 +1064,7 @@ int OSDMap::_pg_to_osds(const pg_pool_t& pool, pg_t pg, vector<int>& osds) const
   if (ruleno >= 0)
     crush->do_rule(ruleno, pps, osds, size, osd_weight);
 
-  _remove_nonexistent_osds(osds);
+  _remove_nonexistent_osds(pool, osds);
 
   return osds.size();
 }
