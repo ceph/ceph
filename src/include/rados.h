@@ -64,9 +64,13 @@ struct ceph_pg {
 
 /*
  * pg pool types
+ *
+ * NOTE: These map 1:1 on to the pg_pool_t::TYPE_* values.  They are
+ * duplicated here only for CrushCompiler's benefit.
  */
 #define CEPH_PG_TYPE_REP     1
 #define CEPH_PG_TYPE_RAID4   2
+#define CEPH_PG_TYPE_ERASURE 3
 
 /*
  * stable_mod func is used to control number of placement groups.
