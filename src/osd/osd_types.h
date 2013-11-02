@@ -848,6 +848,18 @@ public:
   bool is_raid4() const { return get_type() == TYPE_RAID4; }
   bool is_erasure() const { return get_type() == TYPE_ERASURE; }
 
+  bool can_shift_osds() const {
+    switch (get_type()) {
+    case TYPE_REP:
+      return true;
+    case TYPE_RAID4:
+    case TYPE_ERASURE:
+      return false;
+    default:
+      assert(0 == "unhandled pool type");
+    }
+  }
+
   unsigned get_pg_num() const { return pg_num; }
   unsigned get_pgp_num() const { return pgp_num; }
 
