@@ -184,7 +184,7 @@ public:
   friend bool operator>=(const hobject_t&, const hobject_t&);
   friend bool operator==(const hobject_t&, const hobject_t&);
   friend bool operator!=(const hobject_t&, const hobject_t&);
-  friend class ghobject_t;
+  friend struct ghobject_t;
 };
 WRITE_CLASS_ENCODER(hobject_t)
 
