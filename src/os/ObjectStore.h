@@ -78,6 +78,16 @@ static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) 
 
 class ObjectStore {
 public:
+  /**
+   * create - create an ObjectStore instance
+   *
+   * @param type type of store
+   * @param data path (or other descriptor) for data
+   * @param journal path (or other descriptor) for journal (optional)
+   */
+  static ObjectStore *create(const string& type,
+			     const string& data,
+			     const string& journal);
 
   Logger *logger;
 
@@ -1040,8 +1050,6 @@ public:
   virtual void inject_data_error(const ghobject_t &oid) {}
   virtual void inject_mdata_error(const ghobject_t &oid) {}
 };
-
-
 WRITE_CLASS_ENCODER(ObjectStore::Transaction)
 
 ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s);

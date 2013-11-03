@@ -17,6 +17,16 @@
 #include "common/Formatter.h"
 #include "FileStore.h"
 
+ObjectStore *ObjectStore::create(const string& type,
+				 const string& data,
+				 const string& journal)
+{
+  if (type == "filestore") {
+    return new FileStore(data, journal);
+  }
+  return NULL;
+}
+
 ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s)
 {
   return out << "osr(" << s.get_name() << " " << &s << ")";
