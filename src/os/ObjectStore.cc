@@ -11,11 +11,13 @@
  * Foundation.  See file COPYING.
  * 
  */
+#include <ctype.h>
 #include <sstream>
 #include <tr1/memory>
 #include "ObjectStore.h"
 #include "common/Formatter.h"
 #include "FileStore.h"
+#include "common/safe_io.h"
 
 ObjectStore *ObjectStore::create(const string& type,
 				 const string& data,
@@ -26,6 +28,37 @@ ObjectStore *ObjectStore::create(const string& type,
   }
   return NULL;
 }
+
+int ObjectStore::write_meta(const std::string& key,
+			    const std::string& value)
+{
+  string v = value;
+  v += "\n";
+  int r = safe_write_file(path.c_str(), key.c_str(),
+			  v.c_str(), v.length());
+  if (r < 0)
+    return r;
+  return 0;
+}
+
+int ObjectStore::read_meta(const std::string& key,
+			   std::string *value)
+{
+  char buf[4096];
+  int r = safe_read_file(path.c_str(), key.c_str(),
+			 buf, sizeof(buf));
+  if (r <= 0)
+    return r;
+  // drop trailing newlines
+  while (r && isspace(buf[r-1])) {
+    --r;
+  }
+  *value = string(buf, r);
+  return 0;
+}
+
+
+
 
 ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s)
 {
