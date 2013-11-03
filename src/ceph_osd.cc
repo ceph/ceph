@@ -23,7 +23,7 @@
 using namespace std;
 
 #include "osd/OSD.h"
-#include "os/FileStore.h"
+#include "os/ObjectStore.h"
 #include "mon/MonClient.h"
 #include "include/ceph_features.h"
 
@@ -435,7 +435,7 @@ int main(int argc, const char **argv)
   global_init_daemonize(g_ceph_context, 0);
   common_init_finish(g_ceph_context);
 
-  if (g_conf->filestore_update_to >= (int)FileStore::target_version) {
+  if (g_conf->filestore_update_to >= (int)store->get_target_version()) {
     int err = OSD::do_convertfs(store);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error converting store " << g_conf->osd_data

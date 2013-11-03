@@ -875,6 +875,11 @@ public:
   virtual int statfs(struct statfs *buf) = 0;
 
   /**
+   * get the most recent "on-disk format version" supported
+   */
+  virtual uint32_t get_target_version() = 0;
+
+  /**
    * get ideal min value for collection_list_partial()
    *
    * default to some arbitrary values; the implementation will override.
