@@ -288,7 +288,7 @@ int main(int argc, const char **argv)
   string magic;
   uuid_d cluster_fsid, osd_fsid;
   int w;
-  int r = OSD::peek_meta(g_conf->osd_data, magic, cluster_fsid, osd_fsid, w);
+  int r = OSD::peek_meta(store, magic, cluster_fsid, osd_fsid, w);
   if (r < 0) {
     derr << TEXT_RED << " ** ERROR: unable to open OSD superblock on "
 	 << g_conf->osd_data << ": " << cpp_strerror(-r)
