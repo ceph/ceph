@@ -569,27 +569,12 @@ int OSD::do_convertfs(ObjectStore *store)
   return store->umount();
 }
 
-int OSD::convertfs(CephContext *cct)
-{
-  boost::scoped_ptr<ObjectStore> store(ObjectStore::create(cct->_conf->osd_objectstore,
-							   cct->_conf->osd_data,
-							   cct->_conf->osd_journal));
-  int r = do_convertfs(store.get());
-  return r;
-}
-
-int OSD::mkfs(CephContext *cct, const std::string &dev, const std::string &jdev, uuid_d fsid, int whoami)
+int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
+	      uuid_d fsid, int whoami)
 {
   int ret;
-  ObjectStore *store = NULL;
 
   try {
-    store = ObjectStore::create(cct->_conf->osd_objectstore, dev, jdev);
-    if (!store) {
-      ret = -ENOENT;
-      goto out;
-    }
-
     // if we are fed a uuid for this osd, use it.
     store->set_fsid(cct->_conf->osd_uuid);
 
@@ -719,40 +704,7 @@ umount_store:
   store->umount();
 free_store:
   delete store;
-out:
   return ret;
-}
-
-int OSD::mkjournal(CephContext *cct, const std::string &dev, const std::string &jdev)
-{
-  ObjectStore *store = ObjectStore::create(cct->_conf->osd_objectstore, dev, jdev);
-  if (!store)
-    return -ENOENT;
-  return store->mkjournal();
-}
-
-int OSD::flushjournal(CephContext *cct, const std::string &dev, const std::string &jdev)
-{
-  ObjectStore *store = ObjectStore::create(cct->_conf->osd_objectstore, dev, jdev);
-  if (!store)
-    return -ENOENT;
-  int err = store->mount();
-  if (!err) {
-    store->sync_and_flush();
-    store->umount();
-  }
-  delete store;
-  return err;
-}
-
-int OSD::dump_journal(CephContext *cct, const std::string &dev, const std::string &jdev, ostream& out)
-{
-  ObjectStore *store = ObjectStore::create(cct->_conf->osd_objectstore, dev, jdev);
-  if (!store)
-    return -ENOENT;
-  int err = store->dump_journal(out);
-  delete store;
-  return err;
 }
 
 int OSD::write_meta(const std::string &base, uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami)
@@ -820,7 +772,8 @@ int OSD::peek_journal_fsid(string path, uuid_d& fsid)
 
 // cons/des
 
-OSD::OSD(CephContext *cct_, int id, Messenger *internal_messenger, Messenger *external_messenger,
+OSD::OSD(CephContext *cct_, ObjectStore *store_,
+	 int id, Messenger *internal_messenger, Messenger *external_messenger,
 	 Messenger *hb_clientm,
 	 Messenger *hb_front_serverm,
 	 Messenger *hb_back_serverm,
@@ -844,7 +797,7 @@ OSD::OSD(CephContext *cct_, int id, Messenger *internal_messenger, Messenger *ex
   monc(mc),
   logger(NULL),
   recoverystate_perf(NULL),
-  store(NULL),
+  store(store_),
   clog(cct, client_messenger, &mc->monmap, LogClient::NO_FLAGS),
   whoami(id),
   dev_path(dev), journal_path(jdev),
@@ -927,13 +880,6 @@ int OSD::pre_init()
   if (is_stopping())
     return 0;
   
-  assert(!store);
-  store = ObjectStore::create(cct->_conf->osd_objectstore, dev_path, journal_path);
-  if (!store) {
-    derr << "OSD::pre_init: unable to create object store" << dendl;
-    return -ENODEV;
-  }
-
   if (store->test_mount_in_use()) {
     derr << "OSD::pre_init: object store '" << dev_path << "' is "
          << "currently in use. (Is ceph-osd already running?)" << dendl;
