@@ -880,6 +880,11 @@ public:
   virtual uint32_t get_target_version() = 0;
 
   /**
+   * check the journal uuid/fsid, without opening
+   */
+  virtual int peek_journal_fsid(uuid_d *fsid) = 0;
+
+  /**
    * get ideal min value for collection_list_partial()
    *
    * default to some arbitrary values; the implementation will override.
