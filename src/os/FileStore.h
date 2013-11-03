@@ -103,6 +103,8 @@ public:
     return target_version;
   }
 
+  int peek_journal_fsid(uuid_d *fsid);
+
   struct FSPerfTracker {
     PerfCounters::avg_tracker<uint64_t> os_commit_latency;
     PerfCounters::avg_tracker<uint64_t> os_apply_latency;
