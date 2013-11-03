@@ -37,7 +37,8 @@
 
 #include "common/ceph_argparse.h"
 #include "common/version.h"
-#include "os/FileStore.h"
+
+#include "os/ObjectStore.h"
 #include "os/FileJournal.h"
 
 #include "ReplicatedPG.h"
@@ -439,21 +440,6 @@ void OSDService::init()
   watch_timer.init();
 }
 
-ObjectStore *OSD::create_object_store(CephContext *cct, const std::string &dev, const std::string &jdev)
-{
-  struct stat st;
-  if (::stat(dev.c_str(), &st) != 0)
-    return 0;
-
-  if (cct->_conf->filestore)
-    return new FileStore(dev, jdev);
-
-  if (S_ISDIR(st.st_mode))
-    return new FileStore(dev, jdev);
-  else
-    return 0;
-}
-
 #undef dout_prefix
 #define dout_prefix *_dout
 
@@ -526,7 +512,7 @@ int OSD::do_convertfs(ObjectStore *store)
   if (r == 1)
     return store->umount();
 
-  derr << "FileStore is old at version " << version << ".  Updating..."  << dendl;
+  derr << "ObjectStore is old at version " << version << ".  Updating..."  << dendl;
 
   derr << "Removing tmp pgs" << dendl;
   vector<coll_t> collections;
@@ -583,11 +569,11 @@ int OSD::do_convertfs(ObjectStore *store)
   return store->umount();
 }
 
-int OSD::convertfs(const std::string &dev, const std::string &jdev)
+int OSD::convertfs(CephContext *cct)
 {
-  boost::scoped_ptr<ObjectStore> store(
-    new FileStore(dev, jdev, "filestore", 
-		  true));
+  boost::scoped_ptr<ObjectStore> store(ObjectStore::create(cct->_conf->osd_objectstore,
+							   cct->_conf->osd_data,
+							   cct->_conf->osd_journal));
   int r = do_convertfs(store.get());
   return r;
 }
@@ -598,7 +584,7 @@ int OSD::mkfs(CephContext *cct, const std::string &dev, const std::string &jdev,
   ObjectStore *store = NULL;
 
   try {
-    store = create_object_store(cct, dev, jdev);
+    store = ObjectStore::create(cct->_conf->osd_objectstore, dev, jdev);
     if (!store) {
       ret = -ENOENT;
       goto out;
@@ -609,13 +595,13 @@ int OSD::mkfs(CephContext *cct, const std::string &dev, const std::string &jdev,
 
     ret = store->mkfs();
     if (ret) {
-      derr << "OSD::mkfs: FileStore::mkfs failed with error " << ret << dendl;
+      derr << "OSD::mkfs: ObjectStore::mkfs failed with error " << ret << dendl;
       goto free_store;
     }
 
     ret = store->mount();
     if (ret) {
-      derr << "OSD::mkfs: couldn't mount FileStore: error " << ret << dendl;
+      derr << "OSD::mkfs: couldn't mount ObjectStore: error " << ret << dendl;
       goto free_store;
     }
 
@@ -739,7 +725,7 @@ out:
 
 int OSD::mkjournal(CephContext *cct, const std::string &dev, const std::string &jdev)
 {
-  ObjectStore *store = create_object_store(cct, dev, jdev);
+  ObjectStore *store = ObjectStore::create(cct->_conf->osd_objectstore, dev, jdev);
   if (!store)
     return -ENOENT;
   return store->mkjournal();
@@ -747,7 +733,7 @@ int OSD::mkjournal(CephContext *cct, const std::string &dev, const std::string &
 
 int OSD::flushjournal(CephContext *cct, const std::string &dev, const std::string &jdev)
 {
-  ObjectStore *store = create_object_store(cct, dev, jdev);
+  ObjectStore *store = ObjectStore::create(cct->_conf->osd_objectstore, dev, jdev);
   if (!store)
     return -ENOENT;
   int err = store->mount();
@@ -761,7 +747,7 @@ int OSD::flushjournal(CephContext *cct, const std::string &dev, const std::strin
 
 int OSD::dump_journal(CephContext *cct, const std::string &dev, const std::string &jdev, ostream& out)
 {
-  ObjectStore *store = create_object_store(cct, dev, jdev);
+  ObjectStore *store = ObjectStore::create(cct->_conf->osd_objectstore, dev, jdev);
   if (!store)
     return -ENOENT;
   int err = store->dump_journal(out);
@@ -942,7 +928,7 @@ int OSD::pre_init()
     return 0;
   
   assert(!store);
-  store = create_object_store(cct, dev_path, journal_path);
+  store = ObjectStore::create(cct->_conf->osd_objectstore, dev_path, journal_path);
   if (!store) {
     derr << "OSD::pre_init: unable to create object store" << dendl;
     return -ENODEV;
