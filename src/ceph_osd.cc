@@ -256,7 +256,7 @@ int main(int argc, const char **argv)
 
 
   if (convertfilestore) {
-    int err = OSD::convertfs(g_conf->osd_data, g_conf->osd_journal);
+    int err = OSD::convertfs(g_ceph_context);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error converting store " << g_conf->osd_data
 	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
@@ -424,7 +424,7 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   if (g_conf->filestore_update_to >= (int)FileStore::target_version) {
-    int err = OSD::convertfs(g_conf->osd_data, g_conf->osd_journal);
+    int err = OSD::convertfs(g_ceph_context);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error converting store " << g_conf->osd_data
 	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;

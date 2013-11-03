@@ -1720,8 +1720,7 @@ protected:
 
   // static bits
   static int find_osd_dev(char *result, int whoami);
-  static ObjectStore *create_object_store(CephContext *cct, const std::string &dev, const std::string &jdev);
-  static int convertfs(const std::string &dev, const std::string &jdev);
+  static int convertfs(CephContext *cct);
   static int do_convertfs(ObjectStore *store);
   static int convert_collection(ObjectStore *store, coll_t cid);
   static int mkfs(CephContext *cct, const std::string &dev, const std::string &jdev,
