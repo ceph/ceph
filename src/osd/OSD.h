@@ -440,7 +440,7 @@ public:
 			   bool force_new);
     ObjecterDispatcher(OSDService *o) : Dispatcher(cct), osd(o) {}
   } objecter_dispatcher;
-  friend class ObjecterDispatcher;
+  friend struct ObjecterDispatcher;
 
 
   // -- Watch --
@@ -1555,12 +1555,11 @@ protected:
 
   struct ScrubFinalizeWQ : public ThreadPool::WorkQueue<PG> {
   private:
-    OSD *osd;
     xlist<PG*> scrub_finalize_queue;
 
   public:
-    ScrubFinalizeWQ(OSD *o, time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<PG>("OSD::ScrubFinalizeWQ", ti, ti*10, tp), osd(o) {}
+    ScrubFinalizeWQ(time_t ti, ThreadPool *tp)
+      : ThreadPool::WorkQueue<PG>("OSD::ScrubFinalizeWQ", ti, ti*10, tp) {}
 
     bool _empty() {
       return scrub_finalize_queue.empty();

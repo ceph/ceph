@@ -2938,7 +2938,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     // sanity check: test some inputs to make sure this map isn't totally broken
     dout(10) << " testing map" << dendl;
     stringstream ess;
-    CrushTester tester(crush, ess, 1);
+    CrushTester tester(crush, ess);
     tester.test();
     dout(10) << " result " << ess.str() << dendl;
 
