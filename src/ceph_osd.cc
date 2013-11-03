@@ -279,7 +279,7 @@ int main(int argc, const char **argv)
   
   if (get_journal_fsid) {
     uuid_d fsid;
-    int r = OSD::peek_journal_fsid(g_conf->osd_journal, fsid);
+    int r = store->peek_journal_fsid(&fsid);
     if (r == 0)
       cout << fsid << std::endl;
     exit(r);

@@ -39,7 +39,6 @@
 #include "common/version.h"
 
 #include "os/ObjectStore.h"
-#include "os/FileJournal.h"
 
 #include "ReplicatedPG.h"
 
@@ -755,15 +754,6 @@ int OSD::peek_meta(const std::string &dev, std::string& magic,
   }
 
   return 0;
-}
-
-int OSD::peek_journal_fsid(string path, uuid_d& fsid)
-{
-  // make sure we don't try to use aio or direct_io (and get annoying
-  // error messages from failing to do so); performance implications
-  // should be irrelevant for this use
-  FileJournal j(fsid, 0, 0, path.c_str(), false, false);
-  return j.peek_fsid(fsid);
 }
 
 

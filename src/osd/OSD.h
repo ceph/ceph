@@ -1743,7 +1743,6 @@ private:
 public:
   static int peek_meta(const std::string &dev, string& magic,
 		       uuid_d& cluster_fsid, uuid_d& osd_fsid, int& whoami);
-  static int peek_journal_fsid(std::string jpath, uuid_d& fsid);
   
 
   // startup/shutdown
