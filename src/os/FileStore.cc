@@ -386,6 +386,7 @@ int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
 }
 
 FileStore::FileStore(const std::string &base, const std::string &jdev, const char *name, bool do_update) :
+  JournalingObjectStore(base),
   internal_name(name),
   basedir(base), journalpath(jdev),
   blk_size(0),

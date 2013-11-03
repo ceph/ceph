@@ -120,9 +120,12 @@ public:
   }
 
 public:
-  JournalingObjectStore() : journal(NULL), finisher(g_ceph_context),
-			    apply_manager(journal, finisher),
-			    replaying(false) {}
+  JournalingObjectStore(const std::string& path)
+    : ObjectStore(path),
+      journal(NULL),
+      finisher(g_ceph_context),
+      apply_manager(journal, finisher),
+      replaying(false) {}
   
 };
 

@@ -1738,10 +1738,10 @@ protected:
   }
 
 private:
-  static int write_meta(const std::string &base,
+  static int write_meta(ObjectStore *store,
 			uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami);
 public:
-  static int peek_meta(const std::string &dev, string& magic,
+  static int peek_meta(ObjectStore *store, string& magic,
 		       uuid_d& cluster_fsid, uuid_d& osd_fsid, int& whoami);
   
 
