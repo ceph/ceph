@@ -573,7 +573,6 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
     string val;
     int64_t epocharg;
     epoch_t epoch;
-    epoch = epocharg;
 
     MDSMap *p = &mdsmap;
     if (cmd_getval(g_ceph_context, cmdmap, "epoch", epocharg)) {
