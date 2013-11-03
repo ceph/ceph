@@ -520,8 +520,6 @@ OPTION(osd_mon_shutdown_timeout, OPT_DOUBLE, 5)
 OPTION(osd_max_object_size, OPT_U64, 100*1024L*1024L*1024L) // OSD's maximum object size
 OPTION(osd_max_attr_size, OPT_U64, 0)
 
-OPTION(filestore, OPT_BOOL, false)
-
 /// filestore wb throttle limits
 OPTION(filestore_wbthrottle_enable, OPT_BOOL, true)
 OPTION(filestore_wbthrottle_btrfs_bytes_start_flusher, OPT_U64, 41943040)
