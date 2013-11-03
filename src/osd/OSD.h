@@ -1708,6 +1708,7 @@ protected:
   /* internal and external can point to the same messenger, they will still
    * be cleaned up properly*/
   OSD(CephContext *cct_,
+      ObjectStore *store_,
       int id,
       Messenger *internal,
       Messenger *external,
@@ -1720,14 +1721,11 @@ protected:
 
   // static bits
   static int find_osd_dev(char *result, int whoami);
-  static int convertfs(CephContext *cct);
   static int do_convertfs(ObjectStore *store);
   static int convert_collection(ObjectStore *store, coll_t cid);
-  static int mkfs(CephContext *cct, const std::string &dev, const std::string &jdev,
+  static int mkfs(CephContext *cct, ObjectStore *store,
+		  const string& dev,
 		  uuid_d fsid, int whoami);
-  static int mkjournal(CephContext *cct, const std::string &dev, const std::string &jdev);
-  static int flushjournal(CephContext *cct, const std::string &dev, const std::string &jdev);
-  static int dump_journal(CephContext *cct, const std::string &dev, const std::string &jdev, ostream& out);
   /* remove any non-user xattrs from a map of them */
   void filter_xattrs(map<string, bufferptr>& attrs) {
     for (map<string, bufferptr>::iterator iter = attrs.begin();

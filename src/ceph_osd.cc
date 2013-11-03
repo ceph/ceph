@@ -162,6 +162,15 @@ int main(int argc, const char **argv)
     usage();
   }
 
+  // the store
+  ObjectStore *store = ObjectStore::create(g_conf->osd_objectstore,
+					   g_conf->osd_data,
+					   g_conf->osd_journal);
+  if (!store) {
+    derr << "unable to create object store" << dendl;
+    return -ENODEV;
+  }
+
   if (mkfs) {
     common_init_finish(g_ceph_context);
     MonClient mc(g_ceph_context);
@@ -170,7 +179,8 @@ int main(int argc, const char **argv)
     if (mc.get_monmap_privately() < 0)
       return -1;
 
-    int err = OSD::mkfs(g_ceph_context, g_conf->osd_data, g_conf->osd_journal, mc.monmap.fsid, whoami);
+    int err = OSD::mkfs(g_ceph_context, store, g_conf->osd_data,
+			mc.monmap.fsid, whoami);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error creating empty object store in "
 	   << g_conf->osd_data << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
@@ -213,7 +223,7 @@ int main(int argc, const char **argv)
     exit(0);
   if (mkjournal) {
     common_init_finish(g_ceph_context);
-    int err = OSD::mkjournal(g_ceph_context, g_conf->osd_data, g_conf->osd_journal);
+    int err = store->mkjournal();
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error creating fresh journal " << g_conf->osd_journal
 	   << " for object store " << g_conf->osd_data
@@ -226,13 +236,15 @@ int main(int argc, const char **argv)
   }
   if (flushjournal) {
     common_init_finish(g_ceph_context);
-    int err = OSD::flushjournal(g_ceph_context, g_conf->osd_data, g_conf->osd_journal);
+    int err = store->mount();
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error flushing journal " << g_conf->osd_journal
 	   << " for object store " << g_conf->osd_data
 	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
       exit(1);
     }
+    store->sync_and_flush();
+    store->umount();
     derr << "flushed journal " << g_conf->osd_journal
 	 << " for object store " << g_conf->osd_data
 	 << dendl;
@@ -240,7 +252,7 @@ int main(int argc, const char **argv)
   }
   if (dump_journal) {
     common_init_finish(g_ceph_context);
-    int err = OSD::dump_journal(g_ceph_context, g_conf->osd_data, g_conf->osd_journal, cout);
+    int err = store->dump_journal(cout);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error dumping journal " << g_conf->osd_journal
 	   << " for object store " << g_conf->osd_data
@@ -256,7 +268,7 @@ int main(int argc, const char **argv)
 
 
   if (convertfilestore) {
-    int err = OSD::convertfs(g_ceph_context);
+    int err = OSD::do_convertfs(store);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error converting store " << g_conf->osd_data
 	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
@@ -424,7 +436,7 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   if (g_conf->filestore_update_to >= (int)FileStore::target_version) {
-    int err = OSD::convertfs(g_ceph_context);
+    int err = OSD::do_convertfs(store);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error converting store " << g_conf->osd_data
 	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
@@ -437,7 +449,9 @@ int main(int argc, const char **argv)
     return -1;
   global_init_chdir(g_ceph_context);
 
-  osd = new OSD(g_ceph_context, whoami,
+  osd = new OSD(g_ceph_context,
+		store,
+		whoami,
 		ms_cluster,
 		ms_public,
 		ms_hbclient,
