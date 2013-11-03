@@ -5441,22 +5441,6 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
       waiting_for_pg.erase(p++);
     }
   }
-  map<pg_t, list<PG::CephPeeringEvtRef> >::iterator q =
-    peering_wait_for_split.begin();
-  while (q != peering_wait_for_split.end()) {
-    pg_t pgid = q->first;
-
-    // am i still primary?
-    vector<int> acting;
-    int nrep = osdmap->pg_to_acting_osds(pgid, acting);
-    int role = osdmap->calc_pg_role(whoami, acting, nrep);
-    if (role >= 0) {
-      ++q;  // still me
-    } else {
-      dout(10) << " discarding waiting ops for " << pgid << dendl;
-      peering_wait_for_split.erase(q++);
-    }
-  }
 }
 
 void OSD::consume_map()
