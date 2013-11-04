@@ -37,11 +37,14 @@ also add keys and recommended packages.
   releases (common) and one for development (programmers and QA only). Choose 
   the key that suits your needs. See `Add Keys`_ for details.
 
-- **Ceph Extras: (Recommended)** The Ceph Extras repository contains a number 
-  of enabling packages such as ``ceph-deploy``, QEMU for CentOS/RHEL 
-  distribution, and iSCSI among others. If you intend to use any of the 
+- **Ceph Extras: (Required)** The Ceph Extras repository provides newer 
+  Ceph-enabled versions of packages which are already provided in your Linux 
+  distribution, but where newer versions are required to support Ceph. Examples 
+  of newer versions of available packages include QEMU for CentOS/RHEL 
+  distribution and iSCSI among others. If you intend to use any of the 
   foregoing packages, you must add the Ceph Extras repository or download the 
-  packages manually. See `Add Ceph Extras`_ for details.
+  packages manually. This repository also contains Ceph dependencies for those
+  who intend to install Ceph manually.  See `Add Ceph Extras`_ for details.
 
 - **Ceph: (Required)** All Ceph deployments require Ceph release packages, 
   except for deployments that use development packages (development, QA, and 
@@ -104,10 +107,12 @@ To install the ``autobuild.asc`` key, execute the following
 Add Ceph Extras
 ===============
 
-Some Ceph deployments require additional Ceph packages. Ceph Extras contains
-packages for ``curl``, ``leveldb``, ``ceph-deploy``, the SCSI target framework
-and even some QEMU packages for RPMs. Add the Ceph Extras repository to ensure
-you obtain these additional packages from the Ceph repository.
+Some Ceph deployments require newer Ceph-enabled versions of packages that are
+already available in your Linux distribution. For example, Ceph Extras contains
+newer Ceph-enabled packages for the SCSI target framework and QEMU packages for
+RPMs. The repository also contains ``curl``, ``leveldb`` and other Ceph
+dependencies. Add the Ceph Extras repository to ensure you obtain these
+additional packages from the Ceph repository.
 
 
 Debian Packages
