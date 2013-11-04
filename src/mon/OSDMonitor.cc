@@ -3303,10 +3303,13 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     return true;
 
   } else if (prefix == "osd crush rule create-simple") {
-    string name, root, type;
+    string name, root, type, mode;
     cmd_getval(g_ceph_context, cmdmap, "name", name);
     cmd_getval(g_ceph_context, cmdmap, "root", root);
     cmd_getval(g_ceph_context, cmdmap, "type", type);
+    cmd_getval(g_ceph_context, cmdmap, "mode", mode);
+    if (mode == "")
+      mode = "firstn";
 
     if (osdmap.crush->rule_exists(name)) {
       ss << "rule " << name << " already exists";
@@ -3321,7 +3324,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       ss << "rule " << name << " already exists";
       err = 0;
     } else {
-      int rule = newcrush.add_simple_rule(name, root, type, &ss);
+      int rule = newcrush.add_simple_rule(name, root, type, mode, &ss);
       if (rule < 0) {
 	err = rule;
 	goto reply;
