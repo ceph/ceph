@@ -36,7 +36,7 @@ you may write data with one API and retrieve it with the other.
 .. toctree::
 	:maxdepth: 1
 
-	Manual Install <manual-install>
+	Manual Install <../../install/install-ceph-gateway>
 	Simple Configuration <config>
 	Federated Configuration <federated-config>
 	Config Reference <config-ref>
