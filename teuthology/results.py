@@ -142,10 +142,15 @@ def build_email_body(name, archive_dir, timeout):
                 log_line = email_templates['fail_log_templ'].format(log=log)
             else:
                 log_line = ''
+            # Transitioning from sentry_events -> sentry_event
             sentry_events = summary.get('sentry_events')
             if sentry_events:
+                sentry_event = sentry_events[0]
+            else:
+                sentry_event = summary.get('sentry_event', '')
+            if sentry_event:
                 sentry_line = email_templates['fail_sentry_templ'].format(
-                    sentries='\n        '.join(sentry_events))
+                    sentry_event='\n        '.join(sentry_event))
             else:
                 sentry_line = ''
 
@@ -235,7 +240,7 @@ email_templates = {
 
         """),
     'fail_log_templ': "\nlog:    {log}",
-    'fail_sentry_templ': "\nsentry: {sentries}",
+    'fail_sentry_templ': "\nsentry: {sentry_event}",
     'hung_templ': dedent("""\
         [{job_id}] {desc}
         """),

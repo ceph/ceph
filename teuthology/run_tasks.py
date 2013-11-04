@@ -67,9 +67,7 @@ def run_tasks(tasks, ctx):
             event_url = "{server}/search?q={id}".format(
                 server=teuth_config.sentry_server.strip('/'), id=exc_id)
             log.exception(" Sentry event: %s" % event_url)
-            sentry_url_list = ctx.summary.get('sentry_events', [])
-            sentry_url_list.append(event_url)
-            ctx.summary['sentry_events'] = sentry_url_list
+            ctx.summary['sentry_event'] = event_url
         if ctx.config.get('interactive-on-error'):
             from .task import interactive
             log.warning('Saw failure, going into interactive mode...')
