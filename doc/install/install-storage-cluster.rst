@@ -2,6 +2,14 @@
  Install Ceph Storage Cluster
 ==============================
 
+This guide describes installing Ceph packages manually. This procedure
+is only for users who are not installing with a deployment tool such as
+``ceph-deploy``, ``chef``, ``juju``, etc. 
+
+.. tip:: You can also use ``ceph-deploy`` to install Ceph packages, which may
+   be more convenient since you can install ``ceph`` on multiple hosts with
+   a single command.
+
 
 Installing with APT
 ===================
@@ -11,8 +19,7 @@ update APT's database and install Ceph::
 
 	sudo apt-get update && sudo apt-get install ceph ceph-mds
 
-	
-	
+
 Installing with RPM
 ===================
 
@@ -24,9 +31,6 @@ Once you have added either release or development packages, or added a
 ``ceph.repo`` file to ``/etc/yum.repos.d``, you can install Ceph packages. :: 
 
 	sudo yum install ceph
-
-.. note:: You can also use ``ceph-deploy`` to install Ceph packages.
-
 
 Installing a Build
 ==================
