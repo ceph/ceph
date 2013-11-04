@@ -63,7 +63,6 @@ This section provides an exemplary procedure for setting up a region, and two
 zones within the region. The cluster will comprise two gateway daemon
 instances--one per zone. This region will serve as the master region.
 
-.. image:: ../images/zone-sync.png
 
 Naming for the Master Region
 ----------------------------
@@ -533,71 +532,6 @@ to the domain name should return the following:
    </ListAllMyBucketsResult>
 
 
-Replicate Data
---------------
-
-The data synchronization agent replicates the data of a master zone to a
-secondary zone. The master zone of a region is the source for the secondary zone
-of the region and it gets selected automatically.
-
-To configure the synchronization agent, retrieve the access key and secret for
-the source and destination, and the destination URL and port.
-
-You may use ``radosgw-admin zone list`` to get a list of zone names. You 
-may use ``radosgw-admin zone get`` to identify the key and secret for the 
-zone. You may refer to the gateway configuration file you created under
-`Create a Gateway Configuration`_ to identify the port number.
-
-You only need the hostname and port for a single instance (assuming all 
-gateway instances in a region/zone access the same Ceph Storage Cluster). 
-Specify these values in a configuration file 
-(e.g., ``cluster-data-sync.conf``), and include a ``log_file`` name. 
-
-
-For example:
-
-.. code-block:: ini
-
-	src_access_key: {source-access-key}
-	src_secret_key: {source-secret-key}
-	destination: https://zone-name.fqdn.com:port
-	dest_access_key: {destination-access-key}
-	dest_secret_key: {destination-secret-key}
-	log_file: {log.filename}
-
-A concrete example may look like this:
-
-.. code-block:: ini
-
-	src_access_key: DG8RE354EFPZBICHIAF0
-	src_secret_key: i3U0HiRP8CXaBWrcF8bbh6CbsxGYuPPwRkixfFSb
-	destination: https://us-west.storage.net:80
-	dest_access_key: U60RFI6B08F32T2PD30G
-	dest_secret_key: W3HuUor7Gl1Ee93pA2pq2wFk1JMQ7hTrSDecYExl
-	log_file: /var/log/radosgw/radosgw-sync-us-east-west.log
-
-To activate the data synchronization agent, open a terminal and
-execute the following::
-
-	radosgw-agent -c region-data-sync.conf
-
-When the synchronization agent is running, you should see output
-indicating that the agent is synchronizing shards of data. ::
-
-	INFO:radosgw_agent.sync:Starting incremental sync
-	INFO:radosgw_agent.worker:17910 is processing shard number 0
-	INFO:radosgw_agent.worker:shard 0 has 0 entries after ''
-	INFO:radosgw_agent.worker:finished processing shard 0
-	INFO:radosgw_agent.worker:17910 is processing shard number 1
-	INFO:radosgw_agent.sync:1/64 shards processed
-	INFO:radosgw_agent.worker:shard 1 has 0 entries after ''
-	INFO:radosgw_agent.worker:finished processing shard 1
-	INFO:radosgw_agent.sync:2/64 shards processed
-	...
-
-.. note:: You must have an agent for each source-destination pair.
-
-
 Configure a Secondary Region
 ============================
 
@@ -605,9 +539,6 @@ This section provides an exemplary procedure for setting up a cluster with
 multiple regions. Configuring a cluster that spans regions requires maintaining
 a global namespace, so that there are no namespace clashes among object names
 stored across in different regions.
-
-.. image:: ../images/region-zone-sync.png
-   :align: center
 
 This section extends the procedure in `Configure a Master Region`_, but 
 changes the region name and modifies a few procedures. See the following 
@@ -699,16 +630,91 @@ with the following differences:
 
 #. `Start Gateway Instances`_.
 
-Replicate Metadata
-------------------
 
-Metadata consists of gateway users and buckets, but not the objects within
-the buckets.
+Multi-Site Data Replication
+===========================
 
-`Replicate Data`_ by specifying the master zone of the master region as the
-source zone and the master zone of the secondary region as the secondary
-zone. When activating the ``radosgw-agent``, specify ``--metadata-only`` so
-that it only copies metadata. For example:: 
+The data synchronization agent replicates the data of a master zone to a
+secondary zone. The master zone of a region is the source for the secondary zone
+of the region and it gets selected automatically.
+
+.. image:: ../images/zone-sync.png
+
+To configure the synchronization agent, retrieve the access key and secret for
+the source and destination, and the destination URL and port.
+
+You may use ``radosgw-admin zone list`` to get a list of zone names. You 
+may use ``radosgw-admin zone get`` to identify the key and secret for the 
+zone. You may refer to the gateway configuration file you created under
+`Create a Gateway Configuration`_ to identify the port number.
+
+You only need the hostname and port for a single instance (assuming all 
+gateway instances in a region/zone access the same Ceph Storage Cluster). 
+Specify these values in a configuration file 
+(e.g., ``cluster-data-sync.conf``), and include a ``log_file`` name. 
+
+
+For example:
+
+.. code-block:: ini
+
+	src_access_key: {source-access-key}
+	src_secret_key: {source-secret-key}
+	destination: https://zone-name.fqdn.com:port
+	dest_access_key: {destination-access-key}
+	dest_secret_key: {destination-secret-key}
+	log_file: {log.filename}
+
+A concrete example may look like this:
+
+.. code-block:: ini
+
+	src_access_key: DG8RE354EFPZBICHIAF0
+	src_secret_key: i3U0HiRP8CXaBWrcF8bbh6CbsxGYuPPwRkixfFSb
+	destination: https://us-west.storage.net:80
+	dest_access_key: U60RFI6B08F32T2PD30G
+	dest_secret_key: W3HuUor7Gl1Ee93pA2pq2wFk1JMQ7hTrSDecYExl
+	log_file: /var/log/radosgw/radosgw-sync-us-east-west.log
+
+To activate the data synchronization agent, open a terminal and
+execute the following::
+
+	radosgw-agent -c region-data-sync.conf
+
+When the synchronization agent is running, you should see output
+indicating that the agent is synchronizing shards of data. ::
+
+	INFO:radosgw_agent.sync:Starting incremental sync
+	INFO:radosgw_agent.worker:17910 is processing shard number 0
+	INFO:radosgw_agent.worker:shard 0 has 0 entries after ''
+	INFO:radosgw_agent.worker:finished processing shard 0
+	INFO:radosgw_agent.worker:17910 is processing shard number 1
+	INFO:radosgw_agent.sync:1/64 shards processed
+	INFO:radosgw_agent.worker:shard 1 has 0 entries after ''
+	INFO:radosgw_agent.worker:finished processing shard 1
+	INFO:radosgw_agent.sync:2/64 shards processed
+	...
+
+.. note:: You must have an agent for each source-destination pair.
+
+
+Inter-Region Metadata Replication
+=================================
+
+The data synchronization agent replicates the metadata of master zone in the
+master region to a master zone in a secondary region. Metadata consists of
+gateway users and buckets, but not the objects within the buckets--ensuring a
+unified namespace across the cluster. The master zone of the master region is
+the source for the master zone of the secondary region and it gets selected
+automatically.
+
+.. image:: ../images/region-zone-sync.png
+   :align: center
+
+Follow the same steps in `Multi-Site Data Replication`_ by specifying the master
+zone of the master region as the source zone and the master zone of the
+secondary region as the secondary zone. When activating the ``radosgw-agent``,
+specify ``--metadata-only`` so that it only copies metadata. For example:: 
 
 	radosgw-agent -c inter-region-data-sync.conf --metadata-only
 
