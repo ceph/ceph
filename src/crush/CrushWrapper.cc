@@ -647,7 +647,9 @@ void CrushWrapper::reweight(CephContext *cct)
   }
 }
 
-int CrushWrapper::add_simple_rule(string name, string root_name, string failure_domain_name,
+int CrushWrapper::add_simple_rule(string name, string root_name,
+				  string failure_domain_name,
+				  string mode,
 				  ostream *err)
 {
   if (rule_exists(name)) {
@@ -670,6 +672,11 @@ int CrushWrapper::add_simple_rule(string name, string root_name, string failure_
       return -EINVAL;
     }
   }
+  if (mode != "firstn" && mode != "indep") {
+    if (err)
+      *err << "unknown mode " << mode;
+    return -EINVAL;
+  }
 
   int ruleset = 0;
   for (int i = 0; i < get_max_rules(); i++) {
@@ -684,12 +691,14 @@ int CrushWrapper::add_simple_rule(string name, string root_name, string failure_
   crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
   if (type)
     crush_rule_set_step(rule, 1,
-			CRUSH_RULE_CHOOSE_LEAF_FIRSTN,
+			mode == "firstn" ? CRUSH_RULE_CHOOSE_LEAF_FIRSTN :
+			CRUSH_RULE_CHOOSE_LEAF_INDEP,
 			CRUSH_CHOOSE_N,
 			type);
   else
     crush_rule_set_step(rule, 1,
-			CRUSH_RULE_CHOOSE_FIRSTN,
+			mode == "firstn" ? CRUSH_RULE_CHOOSE_FIRSTN :
+			CRUSH_RULE_CHOOSE_INDEP,
 			CRUSH_CHOOSE_N,
 			0);
   crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
