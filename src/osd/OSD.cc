@@ -2238,9 +2238,10 @@ void OSD::handle_pg_peering_evt(
     int role = osdmap->calc_pg_role(whoami, acting, acting.size());
 
     pg_history_t history = info.history;
-    project_pg_history(info.pgid, history, epoch, up, acting);
+    bool valid_history = project_pg_history(
+      info.pgid, history, epoch, up, acting);
 
-    if (epoch < history.same_interval_since) {
+    if (!valid_history || epoch < history.same_interval_since) {
       dout(10) << "get_or_create_pg " << info.pgid << " acting changed in "
 	       << history.same_interval_since << " (msg from " << epoch << ")" << dendl;
       return;
@@ -2416,7 +2417,7 @@ void OSD::calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& ps
  * Fill in the passed history so you know same_interval_since, same_up_since,
  * and same_primary_since.
  */
-void OSD::project_pg_history(pg_t pgid, pg_history_t& h, epoch_t from,
+bool OSD::project_pg_history(pg_t pgid, pg_history_t& h, epoch_t from,
 			     const vector<int>& currentup,
 			     const vector<int>& currentacting)
 {
@@ -2430,7 +2431,11 @@ void OSD::project_pg_history(pg_t pgid, pg_history_t& h, epoch_t from,
        e > from;
        e--) {
     // verify during intermediate epoch (e-1)
-    OSDMapRef oldmap = get_map(e-1);
+    OSDMapRef oldmap = service.try_get_map(e-1);
+    if (!oldmap) {
+      dout(15) << __func__ << ": found map gap, returning false" << dendl;
+      return false;
+    }
     assert(oldmap->have_pg_pool(pgid.pool()));
 
     vector<int> up, acting;
@@ -2480,6 +2485,7 @@ void OSD::project_pg_history(pg_t pgid, pg_history_t& h, epoch_t from,
   }
 
   dout(15) << "project_pg_history end " << h << dendl;
+  return true;
 }
 
 // -------------------------------------
@@ -6087,7 +6093,12 @@ void OSD::handle_pg_create(OpRequestRef op)
     utime_t now = ceph_clock_now(NULL);
     history.last_scrub_stamp = now;
     history.last_deep_scrub_stamp = now;
-    project_pg_history(pgid, history, created, up, acting);
+    bool valid_history =
+      project_pg_history(pgid, history, created, up, acting);
+    /* the pg creation message must have come from a mon and therefore
+     * cannot be on the other side of a map gap
+     */
+    assert(valid_history);
     
     // register.
     creating_pgs[pgid].history = history;
@@ -6645,9 +6656,11 @@ void OSD::handle_pg_query(OpRequestRef op)
 
     // same primary?
     pg_history_t history = it->second.history;
-    project_pg_history(pgid, history, it->second.epoch_sent, up, acting);
+    bool valid_history =
+      project_pg_history(pgid, history, it->second.epoch_sent, up, acting);
 
-    if (it->second.epoch_sent < history.same_interval_since) {
+    if (!valid_history ||
+        it->second.epoch_sent < history.same_interval_since) {
       dout(10) << " pg " << pgid << " dne, and pg has changed in "
 	       << history.same_interval_since
 	       << " (msg from " << it->second.epoch_sent << ")" << dendl;
@@ -6714,9 +6727,11 @@ void OSD::handle_pg_remove(OpRequestRef op)
     pg_history_t history = pg->info.history;
     vector<int> up, acting;
     osdmap->pg_to_up_acting_osds(pgid, up, acting);
-    project_pg_history(pg->info.pgid, history, pg->get_osdmap()->get_epoch(),
-		       up, acting);
-    if (history.same_interval_since <= m->get_epoch()) {
+    bool valid_history =
+      project_pg_history(pg->info.pgid, history, pg->get_osdmap()->get_epoch(),
+	up, acting);
+    if (valid_history &&
+        history.same_interval_since <= m->get_epoch()) {
       assert(pg->get_primary() == m->get_source().num());
       PGRef _pg(pg);
       _remove_pg(pg);
