@@ -216,50 +216,63 @@ int FileStore::lfn_open(coll_t cid,
   if (!(*index)) {
     r = get_index(cid, index);
   }
-  Mutex::Locker l(fdcache_lock);
-  if (!replaying)
-    *outfd = fdcache.lookup(oid);
-  if (*outfd) {
-    return 0;
-  }
-  IndexedPath path2;
-  if (!path)
-    path = &path2;
+
   int fd, exist;
-  if (r < 0) {
-    derr << "error getting collection index for " << cid
-	 << ": " << cpp_strerror(-r) << dendl;
-    goto fail;
-  }
-  r = (*index)->lookup(oid, path, &exist);
-  if (r < 0) {
-    derr << "could not find " << oid << " in index: "
-	 << cpp_strerror(-r) << dendl;
-    goto fail;
+  if (replaying) {
+    Mutex::Locker l(fdcache_lock);
+    *outfd = fdcache.lookup(oid);
+    if (*outfd)
+      return 0;
   }
 
-  r = ::open((*path)->path(), flags, 0644);
-  if (r < 0) {
-    r = -errno;
-    dout(10) << "error opening file " << (*path)->path() << " with flags="
-	     << flags << ": " << cpp_strerror(-r) << dendl;
-    goto fail;
-  }
-  fd = r;
-
-  if (create && (!exist)) {
-    r = (*index)->created(oid, (*path)->path());
+  {
+    IndexedPath path2;
+    if (!path)
+      path = &path2;
     if (r < 0) {
-      TEMP_FAILURE_RETRY(::close(fd));
-      derr << "error creating " << oid << " (" << (*path)->path()
-	   << ") in index: " << cpp_strerror(-r) << dendl;
+      derr << "error getting collection index for " << cid
+	   << ": " << cpp_strerror(-r) << dendl;
       goto fail;
     }
+    r = (*index)->lookup(oid, path, &exist);
+    if (r < 0) {
+      derr << "could not find " << oid << " in index: "
+	   << cpp_strerror(-r) << dendl;
+      goto fail;
+    }
+
+    r = ::open((*path)->path(), flags, 0644);
+    if (r < 0) {
+      r = -errno;
+      dout(10) << "error opening file " << (*path)->path() << " with flags="
+	       << flags << ": " << cpp_strerror(-r) << dendl;
+      goto fail;
+    }
+    fd = r;
+
+    if (create && (!exist)) {
+      r = (*index)->created(oid, (*path)->path());
+      if (r < 0) {
+	TEMP_FAILURE_RETRY(::close(fd));
+	derr << "error creating " << oid << " (" << (*path)->path()
+	     << ") in index: " << cpp_strerror(-r) << dendl;
+	goto fail;
+      }
+    }
   }
-  if (!replaying)
-    *outfd = fdcache.add(oid, fd);
-  else
+
+  if (replaying) {
+    Mutex::Locker l(fdcache_lock);
+    *outfd = fdcache.lookup(oid);
+    if (*outfd) {
+      TEMP_FAILURE_RETRY(::close(fd));
+      return 0;
+    } else {
+      *outfd = fdcache.add(oid, fd);
+    }
+  } else {
     *outfd = FDRef(new FDCache::FD(fd));
+  }
   return 0;
 
  fail:
