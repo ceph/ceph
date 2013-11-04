@@ -213,7 +213,106 @@ RPM-based Packages
 .. _Installing YUM Priorities: ../yum-priorities
 
 
+Enable SSL
+==========
 
+Some REST clients use HTTPS by default. So you should consider enabling SSL
+for Apache. Use the following procedures to enable SSL.
+
+.. note:: You can use self-certified certificates. Some client
+   APIs check for a trusted certificate authority. You may need to obtain
+   a SSL certificate from a trusted authority to use those client APIs.
+
+
+Debian Packages
+---------------
+
+To enable SSL for Debian/Ubuntu systems, execute the following steps:
+
+#. Ensure that you have installed the dependencies. :: 
+
+	sudo apt-get install openssl ssl-cert
+
+#. Enable the SSL module. ::
+
+	sudo a2enmod ssl
+
+#. Generate a certificate. ::
+
+	sudo mkdir /etc/apache2/ssl
+	sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/apache2/ssl/apache.key -out /etc/apache2/ssl/apache.crt
+
+#. Restart Apache. ::
+
+	service apache2 restart
+
+
+See the `Ubuntu Server Guide`_ for additional details.
+
+
+RPM Packages
+------------
+
+To enable SSL for RPM-based systems, execute the following steps:
+
+#. Ensure that you have installed the dependencies. ::
+
+	sudo yum install mod_ssl openssl
+
+#. Ensure the SSL module is enabled.
+
+#. Generate a certificate and copy it the appropriate locations. ::
+
+	openssl x509 -req -days 365 -in ca.csr -signkey ca.key -out ca.crt
+	cp ca.crt /etc/pki/tls/certs
+	cp ca.key /etc/pki/tls/private/ca.key
+	cp ca.csr /etc/pki/tls/private/ca.csr
+
+#. Restart Apache. ::
+
+	/etc/init.d/httpd restart
+
+See `Setting up an SSL secured Webserver with CentOS`_ for additional details.
+
+
+
+Add Wildcard to DNS
+===================
+
+To use Ceph with S3-style subdomains (e.g., ``bucket-name.domain-name.com``),
+you need to add a wildcard to the DNS record of the DNS server you use with the
+``radosgw`` daemon.
+
+.. tip:: The address of the DNS must also be specified in the Ceph 
+   configuration file with the ``rgw dns name = {hostname}`` setting.
+
+For ``dnsmasq``, consider addding the following ``address`` setting with a dot
+(.) prepended to the host name:: 
+
+	address=/.{hostname-or-fqdn}/{host-ip-address}
+	address=/.ceph-node/192.168.0.1
+
+For ``bind``, consider adding the a wildcard to the DNS record::
+
+	$TTL	604800
+	@	IN	SOA	ceph-node. root.ceph-node. (
+				      2		; Serial
+				 604800		; Refresh
+				  86400		; Retry
+				2419200		; Expire
+				 604800 )	; Negative Cache TTL
+	;
+	@	IN	NS	ceph-node.
+	@	IN	A	192.168.122.113
+	*	IN	CNAME	@
+
+Restart your DNS server and ping your server with a subdomain to 
+ensure that your Ceph Object Store ``radosgw`` daemon can process
+the subdomain requests. :: 
+
+	ping mybucket.{fqdn}
+	ping mybucket.ceph-node
+	
 
 Install Ceph Object Gateway
 ===========================
@@ -252,3 +351,7 @@ To install the Ceph Object Gateway synchronization agent, execute the
 following::
 
 	yum install radosgw-agent
+	
+
+.. _Ubuntu Server Guide: https://help.ubuntu.com/12.04/serverguide/httpd.html
+.. _Setting up an SSL secured Webserver with CentOS: http://wiki.centos.org/HowTos/Https
