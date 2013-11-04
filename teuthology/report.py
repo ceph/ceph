@@ -255,14 +255,12 @@ class ResultsReporter(object):
             jobs=len(jobs),
         ))
         if jobs:
-            status, msg, content = self.create_run(run_name)
-            if status == 200:
-                self.report_jobs(run_name, jobs.keys())
-            elif msg.endswith('already exists'):
-                if self.refresh:
-                    self.report_jobs(run_name, jobs.keys())
-                else:
+            if not self.refresh:
+                status, msg, content = self.create_run(run_name)
+                if status != 200:
                     log.info("    already present; skipped")
+                    return
+            self.report_jobs(run_name, jobs.keys())
         elif not jobs:
             log.debug("    no jobs; skipped")
         return len(jobs)
@@ -392,7 +390,6 @@ def try_push_job_info(job_config, extra_info=None):
 
     try:
         log.info("Pushing job info to %s", config.results_server)
-        create_run(run_name)
         push_job_info(run_name, job_id, job_info)
     except RequestFailedError:
         log.exception("Could not report results to %s" %
