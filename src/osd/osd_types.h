@@ -759,25 +759,25 @@ struct pg_pool_t {
     return get_cache_mode_name(cache_mode);
   }
 
-  uint64_t flags;           /// FLAG_* 
-  __u8 type;                /// TYPE_*
-  __u8 size, min_size;      /// number of osds in each pg
-  __u8 crush_ruleset;       /// crush placement rule set
-  __u8 object_hash;         /// hash mapping object name to ps
+  uint64_t flags;           ///< FLAG_*
+  __u8 type;                ///< TYPE_*
+  __u8 size, min_size;      ///< number of osds in each pg
+  __u8 crush_ruleset;       ///< crush placement rule set
+  __u8 object_hash;         ///< hash mapping object name to ps
 private:
-  __u32 pg_num, pgp_num;    /// number of pgs
+  __u32 pg_num, pgp_num;    ///< number of pgs
 
 
 public:
-  map<string,string> properties;  /// interpreted according to the pool type
-  epoch_t last_change;      /// most recent epoch changed, exclusing snapshot changes
-  snapid_t snap_seq;        /// seq for per-pool snapshot
-  epoch_t snap_epoch;       /// osdmap epoch of last snap
-  uint64_t auid;            /// who owns the pg
-  __u32 crash_replay_interval; /// seconds to allow clients to replay ACKed but unCOMMITted requests
+  map<string,string> properties;  ///< interpreted according to the pool type
+  epoch_t last_change;      ///< most recent epoch changed, exclusing snapshot changes
+  snapid_t snap_seq;        ///< seq for per-pool snapshot
+  epoch_t snap_epoch;       ///< osdmap epoch of last snap
+  uint64_t auid;            ///< who owns the pg
+  __u32 crash_replay_interval; ///< seconds to allow clients to replay ACKed but unCOMMITted requests
 
-  uint64_t quota_max_bytes; /// maximum number of bytes for this pool
-  uint64_t quota_max_objects; /// maximum number of objects for this pool
+  uint64_t quota_max_bytes; ///< maximum number of bytes for this pool
+  uint64_t quota_max_objects; ///< maximum number of objects for this pool
 
   /*
    * Pool snaps (global to this pool).  These define a SnapContext for
