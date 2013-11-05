@@ -316,13 +316,11 @@ static void handle_sigterm(int signum)
   dout(1) << __func__ << dendl;
   FCGX_ShutdownPending();
 
-  signal_shutdown();
-
   // send a signal to make fcgi's accept(2) wake up.  unfortunately the
   // initial signal often isn't sufficient because we race with accept's
   // check of the flag wet by ShutdownPending() above.
   if (signum != SIGUSR1) {
-    kill(getpid(), SIGUSR1);
+    signal_shutdown();
 
     // safety net in case we get stuck doing an orderly shutdown.
     uint64_t secs = g_ceph_context->_conf->rgw_exit_timeout_secs;
@@ -589,6 +587,7 @@ public:
 
   void stop() {
     pprocess->close_fd();
+    thread->kill(SIGUSR1);
   }
 
   void join() {
@@ -783,7 +782,7 @@ int main(int argc, const char **argv)
 
   get_str_list(g_conf->rgw_frontends, frontends);
 
-  map<string, string> fe_map;
+  multimap<string, string> fe_map;
 
   for (list<string>::iterator iter = frontends.begin(); iter != frontends.end(); ++iter) {
     string& f = *iter;
@@ -798,16 +797,16 @@ int main(int argc, const char **argv)
       framework = f;
     }
 
-    fe_map[framework] = config;
+    fe_map.insert(make_pair<string, string>(framework, config));
   }
 
   if (fe_map.empty()) {
-    fe_map["fastcgi"] = "";
+    fe_map.insert(make_pair<string, string>("fastcgi", ""));
   }
 
   list<RGWFrontend *> fes;
 
-  for (map<string, string>::iterator fiter = fe_map.begin(); fiter != fe_map.end(); ++fiter) {
+  for (multimap<string, string>::iterator fiter = fe_map.begin(); fiter != fe_map.end(); ++fiter) {
     const string& framework = fiter->first;
     const string& config = fiter->second;
     dout(0) << "handler: " << fiter->first << ":" << config << dendl;
