@@ -18,6 +18,7 @@
 #include "Object.h"
 #include "TestOpStat.h"
 #include "test/librados/test.h"
+#include "common/sharedptr_registry.hpp"
 
 #ifndef RADOSMODEL_H
 #define RADOSMODEL_H
@@ -143,7 +144,7 @@ public:
   map<int, map<string,ObjectDesc> > pool_obj_cont;
   set<string> oid_in_use;
   set<string> oid_not_in_use;
-  set<int> snaps_in_use;
+  SharedPtrRegistry<int, int> snaps_in_use;
   int current_snap;
   string pool_name;
   librados::IoCtx io_ctx;
@@ -1321,6 +1322,7 @@ public:
   bool done;
   librados::ObjectWriteOperation op;
   librados::AioCompletion *comp;
+  std::tr1::shared_ptr<int> in_use;
 
   RollbackOp(int n,
 	     RadosTestContext *context,
@@ -1351,7 +1353,9 @@ public:
     context->oid_not_in_use.erase(oid);
 
     roll_back_to = rand_choose(context->snaps)->first;
-    context->snaps_in_use.insert(roll_back_to);
+    in_use = context->snaps_in_use.lookup_or_create(
+      roll_back_to,
+      roll_back_to);
 
     cout << "rollback oid " << oid << " to " << roll_back_to << std::endl;
 
@@ -1382,7 +1386,7 @@ public:
     context->update_object_version(oid, comp->get_version64());
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
-    context->snaps_in_use.erase(roll_back_to);
+    in_use = std::tr1::shared_ptr<int>();
     context->kick();
   }
 
