@@ -112,6 +112,7 @@ int ErasureCodePluginRegistry::load(const std::string &plugin_name,
     if (r != 0) {
       derr << "erasure_code_init(" << plugin_name
            << "): " << strerror(-r) << dendl;
+      dlclose(library);
       return r;
     }
   } else {
