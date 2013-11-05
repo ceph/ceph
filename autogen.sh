@@ -1,5 +1,7 @@
 #!/bin/sh
 
+set -e
+
 check_for_pkg_config() {
     which pkg-config >/dev/null && return
 
