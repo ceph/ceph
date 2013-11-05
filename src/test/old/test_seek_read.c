@@ -38,7 +38,7 @@ int main(int argc, char **argv)
 
     utime_t start = ceph_clock_now(g_ceph_context);
     for (int i=0; i<count; i++) {
-      off64_t so, o = (lrand48() % numblocks) * 4096;
+      off64_t o = (lrand48() % numblocks) * 4096;
       //cout << "s = " << s << " o = " << o << endl;
       //::lseek(fd, o, SEEK_SET);
       lseek64(fd, o, SEEK_SET);
