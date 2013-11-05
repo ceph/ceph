@@ -24,6 +24,13 @@ daemon_is_running() {
     fi
 }
 
+VERBOSE=0
+for opt in $*; do
+    if [ "$opt" = "-v" ] || [ "$opt" = "--verbose" ]; then
+       VERBOSE=1
+    fi
+done
+
 # prefix for radosgw instances in ceph.conf
 PREFIX='client.radosgw.'
 
@@ -33,6 +40,7 @@ DEFAULT_USER='apache'
 
 RADOSGW=`which radosgw`
 if [ ! -x "$RADOSGW" ]; then
+    [ $VERBOSE -eq 1 ] && echo "$RADOSGW could not start, it is not executable."
     exit 1
 fi
 
@@ -54,7 +62,9 @@ case "$1" in
 
             # mapped to this host?
             host=`ceph-conf -n $name host`
-            if [ "$host" != `hostname -s` ]; then
+            hostname=`hostname -s`
+            if [ "$host" != "$hostname" ]; then
+                [ $VERBOSE -eq 1 ] && echo "hostname $hostname could not be found in ceph.conf:[$name], not starting."
                 continue
             fi
 
@@ -93,7 +103,7 @@ case "$1" in
         daemon_is_running $RADOSGW
         ;;
     *)
-        echo "Usage: $0 start|stop|restart|force-reload|reload|status" >&2
+        echo "Usage: $0 {start|stop|restart|force-reload|reload|status} [-v|--verbose]" >&2
         exit 3
         ;;
 esac
