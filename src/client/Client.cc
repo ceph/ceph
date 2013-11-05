@@ -109,7 +109,6 @@ Client::CommandHook::CommandHook(Client *client) :
 bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
 			       std::string format, bufferlist& out)
 {
-  stringstream ss;
   Formatter *f = new_formatter(format);
   f->open_object_section("result");
   m_client->client_lock.Lock();
