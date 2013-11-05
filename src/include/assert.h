@@ -27,7 +27,7 @@ struct FailedAssertion {
 #endif
 
 
-#if defined __cplusplus && __GNUC_PREREQ (2,95)
+#ifdef HAVE_STATIC_CAST
 # define __CEPH_ASSERT_VOID_CAST static_cast<void>
 #else
 # define __CEPH_ASSERT_VOID_CAST (void)
