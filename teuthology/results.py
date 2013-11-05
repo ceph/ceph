@@ -150,7 +150,7 @@ def build_email_body(name, archive_dir, timeout):
                 sentry_event = summary.get('sentry_event', '')
             if sentry_event:
                 sentry_line = email_templates['fail_sentry_templ'].format(
-                    sentry_event='\n        '.join(sentry_event))
+                    sentry_event=sentry_event)
             else:
                 sentry_line = ''
 
