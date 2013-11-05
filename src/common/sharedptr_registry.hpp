@@ -149,6 +149,11 @@ public:
     return retval;
   }
 
+  unsigned size() {
+    Mutex::Locker l(lock);
+    return contents.size();
+  }
+
   void remove(const K &key) {
     Mutex::Locker l(lock);
     contents.erase(key);
