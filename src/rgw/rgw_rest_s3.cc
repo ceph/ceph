@@ -1085,59 +1085,6 @@ int RGWPostObj_ObjStore_S3::get_data(bufferlist& bl)
   return bl.length();
 }
 
-static void escape_char(char c, string& dst)
-{
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%%%.2X", (unsigned int)c);
-  dst.append(buf);
-}
-
-static bool char_needs_url_encoding(char c)
-{
-  if (c < 0x20 || c >= 0x7f)
-    return true;
-
-  switch (c) {
-    case 0x20:
-    case 0x22:
-    case 0x23:
-    case 0x25:
-    case 0x26:
-    case 0x2B:
-    case 0x2C:
-    case 0x2F:
-    case 0x3A:
-    case 0x3B:
-    case 0x3C:
-    case 0x3E:
-    case 0x3D:
-    case 0x3F:
-    case 0x40:
-    case 0x5B:
-    case 0x5D:
-    case 0x5C:
-    case 0x5E:
-    case 0x60:
-    case 0x7B:
-    case 0x7D:
-      return true;
-  }
-  return false;
-}
-
-static void url_escape(const string& src, string& dst)
-{
-  const char *p = src.c_str();
-  for (unsigned i = 0; i < src.size(); i++, p++) {
-    if (char_needs_url_encoding(*p)) {
-      escape_char(*p, dst);
-      continue;
-    }
-
-    dst.append(p, 1);
-  }
-}
-
 void RGWPostObj_ObjStore_S3::send_response()
 {
   if (ret == 0 && parts.count("success_action_redirect")) {
@@ -1154,11 +1101,10 @@ void RGWPostObj_ObjStore_S3::send_response()
 
     string etag_url;
 
-    url_escape(s->bucket_name, bucket);
-    url_escape(s->object_str, key);
-    url_escape(etag_str, etag_url);
+    url_encode(s->bucket_name, bucket);
+    url_encode(s->object_str, key);
+    url_encode(etag_str, etag_url);
 
-    
     redirect.append("?bucket=");
     redirect.append(bucket);
     redirect.append("&key=");

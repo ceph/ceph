@@ -897,7 +897,9 @@ int RGWRados::init_complete()
 
   ret = region_map.read(cct, this);
   if (ret < 0) {
-    ldout(cct, 0) << "WARNING: cannot read region map" << dendl;
+    if (ret != -ENOENT) {
+      ldout(cct, 0) << "WARNING: cannot read region map" << dendl;
+    }
     ret = region_map.update(region);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: failed to update regionmap with local region info" << dendl;
@@ -1543,7 +1545,10 @@ int RGWRados::time_log_add(const string& oid, list<cls_log_entry>& entries)
 }
 
 int RGWRados::time_log_list(const string& oid, utime_t& start_time, utime_t& end_time,
-                            int max_entries, list<cls_log_entry>& entries, string& marker, bool *truncated)
+                            int max_entries, list<cls_log_entry>& entries,
+			    const string& marker,
+			    string *out_marker,
+			    bool *truncated)
 {
   librados::IoCtx io_ctx;
 
@@ -1553,7 +1558,8 @@ int RGWRados::time_log_list(const string& oid, utime_t& start_time, utime_t& end
     return r;
   librados::ObjectReadOperation op;
 
-  cls_log_list(op, start_time, end_time, marker, max_entries, entries, &marker, truncated);
+  cls_log_list(op, start_time, end_time, marker, max_entries, entries,
+	       out_marker, truncated);
 
   bufferlist obl;
 

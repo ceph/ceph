@@ -74,9 +74,11 @@ public:
 
 class RGWOp_MDLog_List : public RGWRESTOp {
   list<cls_log_entry> entries;
+  string last_marker;
+  bool truncated;
   int http_ret;
 public:
-  RGWOp_MDLog_List() : http_ret(0) {}
+  RGWOp_MDLog_List() : truncated(false), http_ret(0) {}
   ~RGWOp_MDLog_List() {}
 
   int check_caps(RGWUserCaps& caps) {
@@ -175,9 +177,11 @@ public:
 
 class RGWOp_DATALog_List : public RGWRESTOp {
   list<rgw_data_change> entries;
+  string last_marker;
+  bool truncated;
   int http_ret;
 public:
-  RGWOp_DATALog_List() : http_ret(0) {}
+  RGWOp_DATALog_List() : truncated(false), http_ret(0) {}
   ~RGWOp_DATALog_List() {}
 
   int check_caps(RGWUserCaps& caps) {
