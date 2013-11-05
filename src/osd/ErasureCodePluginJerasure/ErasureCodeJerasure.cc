@@ -54,7 +54,7 @@ int ErasureCodeJerasure::minimum_to_decode(const set<int> &want_to_read,
       return -EIO;
     set<int>::iterator i;
     unsigned j;
-    for (i = available_chunks.begin(), j = 0; j < (unsigned)k; i++, j++)
+    for (i = available_chunks.begin(), j = 0; j < (unsigned)k; ++i, j++)
       minimum->insert(*i);
   }
   return 0;
@@ -67,7 +67,7 @@ int ErasureCodeJerasure::minimum_to_decode_with_cost(const set<int> &want_to_rea
   set <int> available_chunks;
   for (map<int, int>::const_iterator i = available.begin();
        i != available.end();
-       i++)
+       ++i)
     available_chunks.insert(i->first);
   return minimum_to_decode(want_to_read, available_chunks, minimum);
 }
