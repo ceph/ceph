@@ -22,7 +22,7 @@ DEFAULT_USER='apache'
 
 RADOSGW=`which radosgw`
 if [ ! -x "$RADOSGW" ]; then
-    exit 0
+    exit 1
 fi
 
 case "$1" in
