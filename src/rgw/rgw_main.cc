@@ -27,6 +27,7 @@
 #include "common/WorkQueue.h"
 #include "common/Timer.h"
 #include "common/Throttle.h"
+#include "common/safe_io.h"
 #include "include/str_list.h"
 #include "rgw_common.h"
 #include "rgw_rados.h"
@@ -72,7 +73,8 @@ static sighandler_t sighandler_alrm;
 
 class RGWProcess;
 
-int signal_fd[2] = {0, 0};
+static int signal_fd[2] = {0, 0};
+static atomic_t disable_signal_fd;
 
 
 #define SOCKET_BACKLOG 1024
@@ -277,13 +279,44 @@ void RGWProcess::run()
   m_tp.stop();
 }
 
+static void signal_shutdown()
+{
+  if (!disable_signal_fd.read()) {
+    int val = 0;
+    int ret = write(signal_fd[0], (char *)&val, sizeof(val));
+    if (ret < 0) {
+      int err = -errno;
+      derr << "ERROR: " << __func__ << ": write() returned " << cpp_strerror(-err) << dendl;
+    }
+  }
+}
+
+static void wait_shutdown()
+{
+  int val;
+  int r = safe_read_exact(signal_fd[1], &val, sizeof(val));
+  if (r < 0) {
+    derr << "safe_read_exact returned with error" << dendl;
+  }
+}
+
+int signal_fd_init()
+{
+  return socketpair(AF_UNIX, SOCK_STREAM, 0, signal_fd);
+}
+
+static void signal_fd_finalize()
+{
+  close(signal_fd[0]);
+  close(signal_fd[1]);
+}
+
 static void handle_sigterm(int signum)
 {
   dout(1) << __func__ << dendl;
   FCGX_ShutdownPending();
 
-  int val = 0;
-  write(signal_fd[0], (char *)&val, sizeof(val));
+  signal_shutdown();
 
   // send a signal to make fcgi's accept(2) wake up.  unfortunately the
   // initial signal often isn't sufficient because we race with accept's
@@ -731,9 +764,9 @@ int main(int argc, const char **argv)
     olog->init(g_conf->rgw_ops_log_socket_path);
   }
 
-  r = socketpair(AF_UNIX, SOCK_STREAM, 0, signal_fd);
+  r = signal_fd_init();
   if (r < 0) {
-    cerr << "radosgw[" << getpid() << "]: unable to create socketpair: " << cpp_strerror(errno) << std::endl;
+    derr << "ERROR: unable to initialize signal fds" << dendl;
     exit(1);
   }
 
@@ -803,10 +836,7 @@ int main(int argc, const char **argv)
     fes.push_back(fe);
   }
 
-
-  /* FIXME: exact read */
-  int val;
-  read(signal_fd[1], &val, sizeof(val));
+  wait_shutdown();
 
   derr << "shutting down" << dendl;
 
@@ -846,6 +876,8 @@ int main(int argc, const char **argv)
   g_ceph_context->put();
 
   ceph::crypto::shutdown();
+
+  signal_fd_finalize();
 
   return 0;
 }
