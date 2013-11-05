@@ -418,6 +418,13 @@ int RGWOp::verify_op_mask()
     return -EPERM;
   }
 
+  if (!s->system_request &&
+      (required_mask & (RGW_OP_TYPE_WRITE | RGW_OP_TYPE_DELETE)) &&
+      !store->zone.is_master)  {
+    ldout(s->cct, 5) << "NOTICE: modify request to a non-master zone by a non-system user, permission denied"  << dendl;
+    return -EPERM;
+  }
+
   return 0;
 }
 

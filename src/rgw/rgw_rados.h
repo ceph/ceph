@@ -428,10 +428,13 @@ struct RGWZoneParams {
   rgw_bucket user_uid_pool;
 
   string name;
+  bool is_master;
 
   RGWAccessKey system_key;
 
   map<string, RGWZonePlacementInfo> placement_pools;
+
+  RGWZoneParams() : is_master(false) {}
 
   static string get_pool_name(CephContext *cct);
   void init_name(CephContext *cct, RGWRegion& region);

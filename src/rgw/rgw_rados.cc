@@ -337,6 +337,10 @@ int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWRegion& region)
     return -EIO;
   }
 
+  is_master = (name == region.master_zone) || (region.master_zone.empty() && name == "default");
+
+  ldout(cct, 2) << "zone " << name << " is " << (is_master ? "" : "NOT ") << "master" << dendl;
+
   return 0;
 }
 
