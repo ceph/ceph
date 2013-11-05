@@ -30,6 +30,19 @@ public:
     map<dirfrag_t, __u32> dirs;
     map<dirfrag_t, map<pair<string,snapid_t>,__u32> > dentries;
 
+    void merge(realm& o) {
+      inodes.insert(o.inodes.begin(), o.inodes.end());
+      dirs.insert(o.dirs.begin(), o.dirs.end());
+      for (map<dirfrag_t,map<pair<string,snapid_t>,__u32> >::iterator p = o.dentries.begin();
+	   p != o.dentries.end();
+	   ++p) {
+	if (dentries.count(p->first) == 0)
+	  dentries[p->first] = p->second;
+	else
+	  dentries[p->first].insert(p->second.begin(), p->second.end());
+      }
+    }
+
     void encode(bufferlist &bl) const {
       ::encode(inodes, bl);
       ::encode(dirs, bl);
@@ -68,7 +81,10 @@ public:
   }
 
   void add_realm(dirfrag_t df, realm& r) {
-    realms[df] = r;
+    if (realms.count(df) == 0)
+      realms[df] = r;
+    else
+      realms[df].merge(r);
   }
 
   void decode_payload() {
