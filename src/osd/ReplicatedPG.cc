@@ -655,19 +655,38 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	map<hobject_t, pg_missing_t::item>::const_iterator missing_iter =
 	  pg_log.get_missing().missing.lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
+	hobject_t _max = hobject_t::get_max();
 	while (1) {
-	  if (ls_iter == sentries.end()) {
-	    break;
-	  }
+	  const hobject_t &mcand =
+	    missing_iter == pg_log.get_missing().missing.end() ?
+	    _max :
+	    missing_iter->first;
+	  const hobject_t &lcand =
+	    ls_iter == sentries.end() ?
+	    _max :
+	    *ls_iter;
 
 	  hobject_t candidate;
-	  if (missing_iter == pg_log.get_missing().missing.end() ||
-	      *ls_iter < missing_iter->first) {
-	    candidate = *(ls_iter++);
+	  if (mcand == lcand) {
+	    candidate = mcand;
+	    if (!mcand.is_max()) {
+	      ls_iter++;
+	      missing_iter++;
+	    }
+	  } else if (mcand < lcand) {
+	    candidate = mcand;
+	    assert(!mcand.is_max());
+	    ++missing_iter;
 	  } else {
-	    candidate = (missing_iter++)->first;
+	    candidate = lcand;
+	    assert(!lcand.is_max());
+	    ++ls_iter;
 	  }
 
+	  if (candidate >= next) {
+	    break;
+	  }
+	    
 	  if (response.entries.size() == list_size) {
 	    next = candidate;
 	    break;
