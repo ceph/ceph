@@ -1294,26 +1294,26 @@ protected:
   // --------------------------------------------
   // replication (across mds cluster)
  protected:
-  __s16        replica_nonce; // [replica] defined on replica
-  map<int,int> replica_map;   // [auth] mds -> nonce
+  unsigned		replica_nonce; // [replica] defined on replica
+  map<int,unsigned>	replica_map;   // [auth] mds -> nonce
 
  public:
   bool is_replicated() { return !replica_map.empty(); }
   bool is_replica(int mds) { return replica_map.count(mds); }
   int num_replicas() { return replica_map.size(); }
-  int add_replica(int mds) {
+  unsigned add_replica(int mds) {
     if (replica_map.count(mds)) 
       return ++replica_map[mds];  // inc nonce
     if (replica_map.empty()) 
       get(PIN_REPLICATED);
     return replica_map[mds] = 1;
   }
-  void add_replica(int mds, int nonce) {
+  void add_replica(int mds, unsigned nonce) {
     if (replica_map.empty()) 
       get(PIN_REPLICATED);
     replica_map[mds] = nonce;
   }
-  int get_replica_nonce(int mds) {
+  unsigned get_replica_nonce(int mds) {
     assert(replica_map.count(mds));
     return replica_map[mds];
   }
@@ -1328,18 +1328,18 @@ protected:
       put(PIN_REPLICATED);
     replica_map.clear();
   }
-  map<int,int>::iterator replicas_begin() { return replica_map.begin(); }
-  map<int,int>::iterator replicas_end() { return replica_map.end(); }
-  const map<int,int>& get_replicas() { return replica_map; }
+  map<int,unsigned>::iterator replicas_begin() { return replica_map.begin(); }
+  map<int,unsigned>::iterator replicas_end() { return replica_map.end(); }
+  const map<int,unsigned>& get_replicas() { return replica_map; }
   void list_replicas(set<int>& ls) {
-    for (map<int,int>::const_iterator p = replica_map.begin();
+    for (map<int,unsigned>::const_iterator p = replica_map.begin();
 	 p != replica_map.end();
 	 ++p) 
       ls.insert(p->first);
   }
 
-  int get_replica_nonce() { return replica_nonce;}
-  void set_replica_nonce(int n) { replica_nonce = n; }
+  unsigned get_replica_nonce() { return replica_nonce; }
+  void set_replica_nonce(unsigned n) { replica_nonce = n; }
 
 
   // ---------------------------------------------
