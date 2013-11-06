@@ -3,6 +3,12 @@
 #include <arpa/nameser.h>
 #include <resolv.h>
 
+#include "acconfig.h"
+
+#ifdef HAVE_ARPA_NAMESER_COMPAT_H
+#include <arpa/nameser_compat.h>
+#endif
+
 #include "rgw_common.h"
 #include "rgw_resolve.h"
 
