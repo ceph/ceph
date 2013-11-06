@@ -16,6 +16,7 @@
 #include <map>
 #include <memory>
 #include <sstream>
+#include <algorithm>
 
 #include "auth/AuthMethodList.h"
 #include "auth/Crypto.h"
