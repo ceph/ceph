@@ -138,8 +138,9 @@ public:
   }
 
   void sleep() {
-    struct timespec ts = { (__time_t)tv.tv_sec, (long)tv.tv_nsec };
-    nanosleep(&ts, &ts);
+    struct timespec ts;
+    to_timespec(&ts);
+    nanosleep(&ts, NULL);
   }
 
   // output
