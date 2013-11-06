@@ -435,8 +435,8 @@ protected:
   CDir* rejoin_invent_dirfrag(dirfrag_t df);
   void handle_cache_rejoin_strong(MMDSCacheRejoin *m);
   void rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack,
-				      set<SimpleLock *>& gather_locks,
-				      set<vinodeno_t>& acked_inodes);
+				      set<vinodeno_t>& acked_inodes,
+				      set<SimpleLock *>& gather_locks);
   void handle_cache_rejoin_ack(MMDSCacheRejoin *m);
   void handle_cache_rejoin_purge(MMDSCacheRejoin *m);
   void handle_cache_rejoin_missing(MMDSCacheRejoin *m);

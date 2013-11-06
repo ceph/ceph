@@ -3893,6 +3893,10 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
   } else {
     assert(mds->is_rejoin());
 
+    // we may have already received a strong rejoin from the sender.
+    rejoin_scour_survivor_replicas(from, NULL, acked_inodes, gather_locks);
+    assert(gather_locks.empty());
+
     // check cap exports.
     for (map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> >::iterator p = weak->cap_exports.begin();
 	 p != weak->cap_exports.end();
@@ -4048,7 +4052,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       ack->add_inode_base(in);
     }
 
-    rejoin_scour_survivor_replicas(from, ack, gather_locks, acked_inodes);
+    rejoin_scour_survivor_replicas(from, ack, acked_inodes, gather_locks);
     mds->send_message(ack, weak->get_connection());
 
     for (set<SimpleLock*>::iterator p = gather_locks.begin(); p != gather_locks.end(); ++p)
@@ -4200,13 +4204,11 @@ bool MDCache::parallel_fetch_traverse_dir(inodeno_t ino, filepath& path,
  * ack, the replica dne, and we can remove it from our replica maps.
  */
 void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack,
-					     set<SimpleLock *>& gather_locks,
-					     set<vinodeno_t>& acked_inodes)
+					     set<vinodeno_t>& acked_inodes,
+					     set<SimpleLock *>& gather_locks)
 {
   dout(10) << "rejoin_scour_survivor_replicas from mds." << from << dendl;
 
-  // FIXME: what about root and stray inodes.
-  
   for (hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
        p != inode_map.end();
        ++p) {
@@ -4215,7 +4217,7 @@ void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack,
     // inode?
     if (in->is_auth() &&
 	in->is_replica(from) &&
-	acked_inodes.count(p->second->vino()) == 0) {
+	(ack == NULL || acked_inodes.count(p->second->vino()) == 0)) {
       inode_remove_replica(in, from, gather_locks);
       dout(10) << " rem " << *in << dendl;
     }
@@ -4231,7 +4233,7 @@ void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack,
       
       if (dir->is_auth() &&
 	  dir->is_replica(from) &&
-	  ack->strong_dirfrags.count(dir->dirfrag()) == 0) {
+	  (ack == NULL || ack->strong_dirfrags.count(dir->dirfrag()) == 0)) {
 	dir->remove_replica(from);
 	dout(10) << " rem " << *dir << dendl;
       } 
@@ -4243,7 +4245,8 @@ void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack,
 	CDentry *dn = p->second;
 	
 	if (dn->is_replica(from) &&
-	    (ack->strong_dentries.count(dir->dirfrag()) == 0 ||
+	    (ack == NULL ||
+	     ack->strong_dentries.count(dir->dirfrag()) == 0 ||
 	     ack->strong_dentries[dir->dirfrag()].count(string_snap_t(dn->name, dn->last)) == 0)) {
 	  dentry_remove_replica(dn, from, gather_locks);
 	  dout(10) << " rem " << *dn << dendl;
