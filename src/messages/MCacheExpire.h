@@ -26,9 +26,9 @@ public:
     that makes it less work to process when exports are in progress.
   */
   struct realm {
-    map<vinodeno_t, __s32> inodes;
-    map<dirfrag_t, __s32> dirs;
-    map<dirfrag_t, map<pair<string,snapid_t>,__s32> > dentries;
+    map<vinodeno_t, __u32> inodes;
+    map<dirfrag_t, __u32> dirs;
+    map<dirfrag_t, map<pair<string,snapid_t>,__u32> > dentries;
 
     void encode(bufferlist &bl) const {
       ::encode(inodes, bl);
@@ -57,13 +57,13 @@ private:
 public:
   virtual const char *get_type_name() const { return "cache_expire";}
   
-  void add_inode(dirfrag_t r, vinodeno_t vino, int nonce) {
+  void add_inode(dirfrag_t r, vinodeno_t vino, unsigned nonce) {
     realms[r].inodes[vino] = nonce;
   }
-  void add_dir(dirfrag_t r, dirfrag_t df, int nonce) {
+  void add_dir(dirfrag_t r, dirfrag_t df, unsigned nonce) {
     realms[r].dirs[df] = nonce;
   }
-  void add_dentry(dirfrag_t r, dirfrag_t df, const string& dn, snapid_t last, int nonce) {
+  void add_dentry(dirfrag_t r, dirfrag_t df, const string& dn, snapid_t last, unsigned nonce) {
     realms[r].dentries[df][pair<string,snapid_t>(dn,last)] = nonce;
   }
 

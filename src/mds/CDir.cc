@@ -964,10 +964,10 @@ void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
       steal_dentry(dir->items.begin()->second);
     
     // merge replica map
-    for (map<int,int>::iterator p = dir->replica_map.begin();
+    for (map<int,unsigned>::iterator p = dir->replicas_begin();
 	 p != dir->replica_map.end();
 	 ++p) {
-      int cur = replica_map[p->first];
+      unsigned cur = replica_map[p->first];
       if (p->second > cur)
 	replica_map[p->first] = p->second;
     }

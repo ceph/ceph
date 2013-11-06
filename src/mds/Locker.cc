@@ -105,7 +105,7 @@ void Locker::dispatch(Message *m)
 
 void Locker::send_lock_message(SimpleLock *lock, int msg)
 {
-  for (map<int,int>::iterator it = lock->get_parent()->replicas_begin(); 
+  for (map<int,unsigned>::iterator it = lock->get_parent()->replicas_begin();
        it != lock->get_parent()->replicas_end(); 
        ++it) {
     if (mds->mdsmap->get_state(it->first) < MDSMap::STATE_REJOIN) 
@@ -117,7 +117,7 @@ void Locker::send_lock_message(SimpleLock *lock, int msg)
 
 void Locker::send_lock_message(SimpleLock *lock, int msg, const bufferlist &data)
 {
-  for (map<int,int>::iterator it = lock->get_parent()->replicas_begin(); 
+  for (map<int,unsigned>::iterator it = lock->get_parent()->replicas_begin();
        it != lock->get_parent()->replicas_end(); 
        ++it) {
     if (mds->mdsmap->get_state(it->first) < MDSMap::STATE_REJOIN) 
