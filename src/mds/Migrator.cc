@@ -277,9 +277,12 @@ void Migrator::export_try_cancel(CDir *dir)
         bd->put(CDir::PIN_EXPORTBOUND);
         bd->state_clear(CDir::STATE_EXPORTBOUND);
       }
-      // notify bystanders
-      if (state == EXPORT_WARNING)
-        export_notify_abort(dir, bounds);
+      if (state == EXPORT_WARNING) {
+	// notify bystanders
+	export_notify_abort(dir, bounds);
+	// process delayed expires
+	cache->process_delayed_expire(dir);
+      }
     }
     dir->unfreeze_tree();
     cache->adjust_subtree_auth(dir, mds->get_nodeid());
