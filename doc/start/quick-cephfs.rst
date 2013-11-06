@@ -9,13 +9,21 @@ start on the Admin Host.
 Prerequisites
 =============
 
-Install ``ceph-common``. ::
+#. Verify that you have an appropriate version of the Linux kernel. 
+   See `OS Recommendations`_ for details. ::
+   
+	lsb_release -a
+	uname -r
 
-	sudo apt-get install ceph-common
+#. On the admin node, use ``ceph-deploy`` to install Ceph on your 
+   ``ceph-client`` node. ::
 
-Ensure that the :term:`Ceph Storage Cluster` is running and in an ``active +
-clean``  state. Also, ensure that you have at least one :term:`Ceph Metadata
-Server` running. :: 
+	ceph-deploy install ceph-client
+
+
+#. Ensure that the :term:`Ceph Storage Cluster` is running and in an ``active +
+   clean``  state. Also, ensure that you have at least one :term:`Ceph Metadata
+   Server` running. :: 
 
 	ceph -s [-m {monitor-ip-address}] [-k {path/to/ceph.client.admin.keyring}]
 
@@ -95,3 +103,4 @@ if you encounter trouble.
 .. _Ceph FS: ../../cephfs/
 .. _FAQ: http://wiki.ceph.com/03FAQs/01General_FAQ#How_Can_I_Give_Ceph_a_Try.3F
 .. _Troubleshooting: ../../cephfs/troubleshooting
+.. _OS Recommendations: ../os-recommendations
