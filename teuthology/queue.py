@@ -102,16 +102,16 @@ def worker(ctx):
     loglevel = logging.INFO
     if ctx.verbose:
         loglevel = logging.DEBUG
+    log.setLevel(loglevel)
 
-    logging.basicConfig(
-        level=loglevel,
-        filename=os.path.join(ctx.log_dir, 'worker.{tube}.{pid}'.format(
-                              pid=os.getpid(),
-                              tube=ctx.tube,
-                              )),
-        format='%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
-        datefmt='%Y-%m-%dT%H:%M:%S',
-    )
+    log_file_path = os.path.join(ctx.log_dir, 'worker.{tube}.{pid}'.format(
+        pid=os.getpid(), tube=ctx.tube,))
+    log_handler = logging.FileHandler(filename=log_file_path)
+    log_formatter = logging.Formatter(
+        fmt='%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
+        datefmt='%Y-%m-%dT%H:%M:%S')
+    log_handler.setFormatter(log_formatter)
+    log.addHandler(log_handler)
 
     if not os.path.isdir(ctx.archive_dir):
         sys.exit("{prog}: archive directory must exist: {path}".format(
