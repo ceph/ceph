@@ -1,6 +1,7 @@
 
 #include "CrushTester.h"
 
+#include <algorithm>
 #include <stdlib.h>
 
 
@@ -203,7 +204,7 @@ bool CrushTester::check_valid_placement(int ruleno, vector<int> in, const vector
 
   // check that we don't have any duplicate id's
   for (vector<int>::iterator it = included_devices.begin(); it != included_devices.end(); ++it) {
-    int num_copies = count(included_devices.begin(), included_devices.end(), (*it) );
+    int num_copies = std::count(included_devices.begin(), included_devices.end(), (*it) );
     if (num_copies > 1) {
       valid_placement = false;
     }

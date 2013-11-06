@@ -1,6 +1,7 @@
 
 #include "MonMap.h"
 
+#include <algorithm>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
