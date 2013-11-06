@@ -822,7 +822,7 @@ void Migrator::export_frozen(CDir *dir)
   MExportDirPrep *prep = new MExportDirPrep(dir->dirfrag(), it->second.tid);
 
   // include list of bystanders
-  for (map<int,int>::iterator p = dir->replicas_begin();
+  for (map<int,unsigned>::iterator p = dir->replicas_begin();
        p != dir->replicas_end();
        ++p) {
     if (p->first != it->second.peer) {
@@ -939,7 +939,7 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
   assert(it->second.warning_ack_waiting.empty());
   assert(it->second.notify_ack_waiting.empty());
 
-  for (map<int,int>::iterator p = dir->replicas_begin();
+  for (map<int,unsigned>::iterator p = dir->replicas_begin();
        p != dir->replicas_end();
        ++p) {
     if (p->first == it->second.peer) continue;
@@ -1277,7 +1277,7 @@ void Migrator::finish_export_dir(CDir *dir, list<Context*>& finished, utime_t no
   assert(dir->is_auth());
   dir->state_clear(CDir::STATE_AUTH);
   dir->remove_bloom();
-  dir->replica_nonce = CDir::NONCE_EXPORT;
+  dir->replica_nonce = CDir::EXPORT_NONCE;
 
   if (dir->is_dirty())
     dir->mark_clean();

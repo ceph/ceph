@@ -368,7 +368,7 @@ public:
   }
 
   void init_gather() {
-    for (map<int,int>::const_iterator p = parent->replicas_begin(); 
+    for (map<int,unsigned>::const_iterator p = parent->replicas_begin();
 	 p != parent->replicas_end(); 
 	 ++p)
       more()->gather_set.insert(p->first);
