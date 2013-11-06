@@ -1003,7 +1003,8 @@ void Objecter::kick_requests(OSDSession *session)
     ++p;
     logger->inc(l_osdc_op_resend);
     if (op->should_resend) {
-      resend[op->tid] = op;
+      if (!op->paused)
+	resend[op->tid] = op;
     } else {
       cancel_op(op);
     }
