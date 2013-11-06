@@ -3949,7 +3949,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       dout(10) << " already have " << p->frag << " -> " << fg << " " << *dir << dendl;
     } else {
       dirs_to_share.insert(dir);
-      int nonce = dir->add_replica(from);
+      unsigned nonce = dir->add_replica(from);
       dout(10) << " have " << p->frag << " -> " << fg << " " << *dir << dendl;
       if (ack)
 	ack->add_strong_dirfrag(dir->dirfrag(), nonce, dir->dir_rep);
@@ -3988,7 +3988,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       
       if (survivor && dn->is_replica(from)) 
 	dentry_remove_replica(dn, from, gather_locks);
-      int dnonce = dn->add_replica(from);
+      unsigned dnonce = dn->add_replica(from);
       dout(10) << " have " << *dn << dendl;
       if (ack) 
 	ack->add_strong_dentry(dir->dirfrag(), dn->name, dn->first, dn->last,
@@ -4001,7 +4001,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 
       if (survivor && in->is_replica(from)) 
 	inode_remove_replica(in, from, gather_locks);
-      int inonce = in->add_replica(from);
+      unsigned inonce = in->add_replica(from);
       dout(10) << " have " << *in << dendl;
 
       // scatter the dirlock, just in case?
@@ -4024,7 +4024,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     assert(in);   // hmm fixme wrt stray?
     if (survivor && in->is_replica(from)) 
       inode_remove_replica(in, from, gather_locks);
-    int inonce = in->add_replica(from);
+    unsigned inonce = in->add_replica(from);
     dout(10) << " have base " << *in << dendl;
     
     if (ack) {
@@ -5510,7 +5510,7 @@ void MDCache::rejoin_send_acks()
       dq.pop_front();
       
       // dir
-      for (map<int,int>::iterator r = dir->replicas_begin();
+      for (map<int,unsigned>::iterator r = dir->replicas_begin();
 	   r != dir->replicas_end();
 	   ++r) {
 	ack[r->first]->add_strong_dirfrag(dir->dirfrag(), ++r->second, dir->dir_rep);
@@ -5529,7 +5529,7 @@ void MDCache::rejoin_send_acks()
 	  in = dnl->get_inode();
 
 	// dentry
-	for (map<int,int>::iterator r = dn->replicas_begin();
+	for (map<int,unsigned>::iterator r = dn->replicas_begin();
 	     r != dn->replicas_end();
 	     ++r) {
 	  ack[r->first]->add_strong_dentry(dir->dirfrag(), dn->name, dn->first, dn->last,
@@ -5546,7 +5546,7 @@ void MDCache::rejoin_send_acks()
 	if (!in)
 	  continue;
 
-	for (map<int,int>::iterator r = in->replicas_begin();
+	for (map<int,unsigned>::iterator r = in->replicas_begin();
 	     r != in->replicas_end();
 	     ++r) {
 	  ack[r->first]->add_inode_base(in);
@@ -5561,14 +5561,14 @@ void MDCache::rejoin_send_acks()
 
   // base inodes too
   if (root && root->is_auth()) 
-    for (map<int,int>::iterator r = root->replicas_begin();
+    for (map<int,unsigned>::iterator r = root->replicas_begin();
 	 r != root->replicas_end();
 	 ++r) {
       ack[r->first]->add_inode_base(root);
       ack[r->first]->add_inode_locks(root, ++r->second);
     }
   if (myin)
-    for (map<int,int>::iterator r = myin->replicas_begin();
+    for (map<int,unsigned>::iterator r = myin->replicas_begin();
 	 r != myin->replicas_end();
 	 ++r) {
       ack[r->first]->add_inode_base(myin);
@@ -5580,7 +5580,7 @@ void MDCache::rejoin_send_acks()
        p != rejoin_potential_updated_scatterlocks.end();
        ++p) {
     CInode *in = *p;
-    for (map<int,int>::iterator r = in->replicas_begin();
+    for (map<int,unsigned>::iterator r = in->replicas_begin();
 	 r != in->replicas_end();
 	 ++r)
       ack[r->first]->add_inode_base(in);
@@ -6596,11 +6596,11 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
     }
 
     // INODES
-    for (map<vinodeno_t,int>::iterator it = p->second.inodes.begin();
+    for (map<vinodeno_t,uint32_t>::iterator it = p->second.inodes.begin();
 	 it != p->second.inodes.end();
 	 ++it) {
       CInode *in = get_inode(it->first);
-      int nonce = it->second;
+      unsigned nonce = it->second;
       
       if (!in) {
 	dout(0) << " inode expire on " << it->first << " from " << from 
@@ -6626,11 +6626,11 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
     }
     
     // DIRS
-    for (map<dirfrag_t,int>::iterator it = p->second.dirs.begin();
+    for (map<dirfrag_t,uint32_t>::iterator it = p->second.dirs.begin();
 	 it != p->second.dirs.end();
 	 ++it) {
       CDir *dir = get_dirfrag(it->first);
-      int nonce = it->second;
+      unsigned nonce = it->second;
       
       if (!dir) {
 	dout(0) << " dir expire on " << it->first << " from " << from 
@@ -6655,7 +6655,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
     }
     
     // DENTRIES
-    for (map<dirfrag_t, map<pair<string,snapid_t>,int> >::iterator pd = p->second.dentries.begin();
+    for (map<dirfrag_t, map<pair<string,snapid_t>,uint32_t> >::iterator pd = p->second.dentries.begin();
 	 pd != p->second.dentries.end();
 	 ++pd) {
       dout(10) << " dn expires in dir " << pd->first << dendl;
@@ -6670,10 +6670,10 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	assert(dir->is_auth());
       }
       
-      for (map<pair<string,snapid_t>,int>::iterator p = pd->second.begin();
+      for (map<pair<string,snapid_t>,uint32_t>::iterator p = pd->second.begin();
 	   p != pd->second.end();
 	   ++p) {
-	int nonce = p->second;
+	unsigned nonce = p->second;
 	CDentry *dn;
 	
 	if (dir) {
@@ -10418,7 +10418,7 @@ int MDCache::send_dir_updates(CDir *dir, bool bcast)
   if (bcast) {
     mds->get_mds_map()->get_active_mds_set(who);
   } else {
-    for (map<int,int>::iterator p = dir->replicas_begin();
+    for (map<int,unsigned>::iterator p = dir->replicas_begin();
 	 p != dir->replicas_end();
 	 ++p)
       who.insert(p->first);
@@ -10498,7 +10498,7 @@ void MDCache::send_dentry_link(CDentry *dn)
   dout(7) << "send_dentry_link " << *dn << dendl;
 
   CDir *subtree = get_subtree_root(dn->get_dir());
-  for (map<int,int>::iterator p = dn->replicas_begin(); 
+  for (map<int,unsigned>::iterator p = dn->replicas_begin();
        p != dn->replicas_end(); 
        ++p) {
     if (mds->mdsmap->get_state(p->first) < MDSMap::STATE_REJOIN ||
@@ -10584,7 +10584,7 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequest *mdr)
 {
   dout(10) << "send_dentry_unlink " << *dn << dendl;
   // share unlink news with replicas
-  for (map<int,int>::iterator it = dn->replicas_begin();
+  for (map<int,unsigned>::iterator it = dn->replicas_begin();
        it != dn->replicas_end();
        ++it) {
     // don't tell (rmdir) witnesses; they already know
@@ -11254,7 +11254,7 @@ void MDCache::_fragment_stored(MDRequest *mdr)
 
   // tell peers
   CDir *first = *info.resultfrags.begin();
-  for (map<int,int>::iterator p = first->replica_map.begin();
+  for (map<int,unsigned>::iterator p = first->replicas_begin();
        p != first->replica_map.end();
        ++p) {
     if (mds->mdsmap->get_state(p->first) <= MDSMap::STATE_REJOIN)
