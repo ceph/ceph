@@ -2,75 +2,56 @@
  Installation (Manual)
 =======================
 
-.. raw:: html
 
-	<table><colgroup><col width="50%"><col width="50%"></colgroup><tbody valign="top"><tr><td><h3>Advanced Package Tool (APT)</h3>
+Get Software
+============
 
-If you are deploying a Ceph cluster on Debian or Ubuntu distributions,
-use the instructions below to install packages manually.
+There are several methods for getting Ceph software. The easiest and most common
+method is to `get packages`_ by adding repositories for use with package
+management tools such as the Advanced Package Tool (APT) or Yellowdog Updater,
+Modified (YUM). You may also retrieve pre-compiled packages from the Ceph
+repository. Finally, you can retrieve tarballs or clone the Ceph source code
+repository and build Ceph yourself.
 
-.. toctree::
-   :maxdepth: 2
-
-   Installing Debian/Ubuntu Packages <debian>
-   Installing on Calxeda Hardware <calxeda>
-   Installing QEMU <qemu-deb>
-   Installing libvirt <libvirt-deb>
-
-.. raw:: html
-
-	</td><td><h3>Redhat Package Manager (RPM) / Yellowdog Updater, Modified (YUM) </h3>
-	
-If you are deploying a Ceph cluster on Red Hat(rhel6), CentOS (el6), Fedora
-17-19 (f17-f19), OpenSUSE 12 (opensuse12), and SLES (sles11) distributions, use
-the instructions below to install packages manually.
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1 
 
-   Installing RPM Packages <rpm>
-   Installing YUM Priorities <yum-priorities>
-   Installing QEMU <qemu-rpm>
-   Installing libvirt <libvirt-rpm>
+	Get Packages <get-packages>
+	Get Tarballs <get-tarballs>
+	Clone Source <clone-source>
+	Build Ceph <build-ceph>
 
-.. raw:: html
 
-	</td></tr><tr><td><h3>Upgrading Ceph</h3>
-	
-If you are upgrading Ceph from a previous release, please read the the upgrade
-documentation to ensure that you follow the proper upgrade sequence.
+Install Software
+================
+
+Once you have the Ceph software (or added repositories), installing the software
+is easy. To install packages on each :term:`Ceph Node` in your cluster. You may
+use  ``ceph-deploy`` to install Ceph for your storage cluster, or use package
+management tools. You should install Yum Priorities for RHEL/CentOS and other
+distributions that use Yum if you intend to install the Ceph Object Gateway or
+QEMU.
+
+.. toctree:: 
+   :maxdepth: 1
+
+	Install ceph-deploy <install-ceph-deploy>
+   Install Ceph Storage Cluster <install-storage-cluster>
+	Install Ceph Object Gateway <install-ceph-gateway>
+	Install Virtualization for Block <install-vm-cloud>	
+
+Upgrade Software	
+================
+
+As new versions of Ceph become available, you may upgrade your cluster to take
+advantage of new functionality. Read the upgrade documentation before you
+upgrade your cluster. Sometimes upgrading Ceph requires you to follow an upgrade
+sequence.
 
 .. toctree::
    :maxdepth: 2
 
    Upgrading Ceph <upgrading-ceph>
-	
-
-.. raw:: html
-
-	</td><td><h3>Building Ceph</h3>
-
-You can build Ceph from source by downloading a release or cloning the ``ceph``
-repository at github. If you intend to build Ceph from source, please see the
-build pre-requisites first. Making sure you have all the pre-requisites
-will save you time.
-
-.. toctree::
-   :maxdepth: 1
-
-	Prerequisites <build-prerequisites>
-	Get a Tarball <get-tarballs>
-	Set Up Git <git>
-	Clone the Source <clone-source>
-	Build the Source <building-ceph>
-	Install CPU Profiler <cpu-profiler>
-	Build a Package <build-packages>
-	Contributing Code <contributing>
-
-See the `Development`_ section for additional development details.
-
-.. raw:: html
-
-	</td></tr></tbody></table>
-	
-.. _Development: ../../dev
+   
+.. _get packages: ../install/get-packages
