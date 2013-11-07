@@ -886,6 +886,7 @@ OSD::OSD(CephContext *cct_, int id, Messenger *internal_messenger, Messenger *ex
   peering_wq(this, cct->_conf->osd_op_thread_timeout, &op_tp),
   map_lock("OSD::map_lock"),
   peer_map_epoch_lock("OSD::peer_map_epoch_lock"),
+  pg_map_lock("OSD::pg_map_lock"),
   debug_drop_pg_create_probability(cct->_conf->osd_debug_drop_pg_create_probability),
   debug_drop_pg_create_duration(cct->_conf->osd_debug_drop_pg_create_duration),
   debug_drop_pg_create_left(-1),
@@ -1005,20 +1006,22 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     f->close_section(); //blacklist
   } else if (command == "dump_watchers") {
     list<obj_watch_item_t> watchers;
-    osd_lock.Lock();
     // scan pg's
-    for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
-	 it != pg_map.end();
-	 ++it) {
+    {
+      Mutex::Locker l(osd_lock);
+      RWLock::RLocker l2(pg_map_lock);
+      for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
+	   it != pg_map.end();
+	   ++it) {
 
-      list<obj_watch_item_t> pg_watchers;
-      PG *pg = it->second;
-      pg->lock();
-      pg->get_watchers(pg_watchers);
-      pg->unlock();
-      watchers.splice(watchers.end(), pg_watchers);
+	list<obj_watch_item_t> pg_watchers;
+	PG *pg = it->second;
+	pg->lock();
+	pg->get_watchers(pg_watchers);
+	pg->unlock();
+	watchers.splice(watchers.end(), pg_watchers);
+      }
     }
-    osd_lock.Unlock();
 
     f->open_array_section("watchers");
     for (list<obj_watch_item_t>::iterator it = watchers.begin();
@@ -1517,14 +1520,17 @@ int OSD::shutdown()
   cct->_conf->apply_changes(NULL);
   
   // Shutdown PGs
-  for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
-       p != pg_map.end();
-       ++p) {
-    dout(20) << " kicking pg " << p->first << dendl;
-    p->second->lock();
-    p->second->on_shutdown();
-    p->second->unlock();
-    p->second->osr->flush();
+  {
+    RWLock::RLocker l(pg_map_lock);
+    for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
+	 p != pg_map.end();
+	 ++p) {
+      dout(20) << " kicking pg " << p->first << dendl;
+      p->second->lock();
+      p->second->on_shutdown();
+      p->second->unlock();
+      p->second->osr->flush();
+    }
   }
   
   // finish ops
@@ -1613,20 +1619,23 @@ int OSD::shutdown()
 #ifdef PG_DEBUG_REFS
   service.dump_live_pgids();
 #endif
-  for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
-       p != pg_map.end();
-       ++p) {
-    dout(20) << " kicking pg " << p->first << dendl;
-    p->second->lock();
-    if (p->second->ref.read() != 1) {
-      derr << "pgid " << p->first << " has ref count of "
-	   << p->second->ref.read() << dendl;
-      assert(0);
+  {
+    RWLock::WLocker l(pg_map_lock);
+    for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
+	 p != pg_map.end();
+	 ++p) {
+      dout(20) << " kicking pg " << p->first << dendl;
+      p->second->lock();
+      if (p->second->ref.read() != 1) {
+	derr << "pgid " << p->first << " has ref count of "
+	     << p->second->ref.read() << dendl;
+	assert(0);
+      }
+      p->second->unlock();
+      p->second->put("PGMap");
     }
-    p->second->unlock();
-    p->second->put("PGMap");
+    pg_map.clear();
   }
-  pg_map.clear();
 #ifdef PG_DEBUG_REFS
   service.dump_live_pgids();
 #endif
@@ -1748,7 +1757,10 @@ PG *OSD::_open_lock_pg(
 
   PG* pg = _make_pg(createmap, pgid);
 
-  pg_map[pgid] = pg;
+  {
+    RWLock::WLocker l(pg_map_lock);
+    pg_map[pgid] = pg;
+  }
 
   pg->lock(no_lockdep_check);
   pg->get("PGMap");  // because it's in pg_map
@@ -1779,7 +1791,10 @@ void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
 {
   epoch_t e(service.get_osdmap()->get_epoch());
   pg->get("PGMap");  // For pg_map
-  pg_map[pg->info.pgid] = pg;
+  {
+    RWLock::WLocker l(pg_map_lock);
+    pg_map[pg->info.pgid] = pg;
+  }
   dout(10) << "Adding newly split pg " << *pg << dendl;
   vector<int> up, acting;
   pg->get_osdmap()->pg_to_up_acting_osds(pg->info.pgid, up, acting);
@@ -1889,6 +1904,7 @@ PG *OSD::_create_lock_pg(
 
 bool OSD::_have_pg(pg_t pgid)
 {
+  RWLock::RLocker l(pg_map_lock);
   assert(osd_lock.is_locked());
   return pg_map.count(pgid);
 }
@@ -1896,6 +1912,7 @@ bool OSD::_have_pg(pg_t pgid)
 PG *OSD::_lookup_lock_pg(pg_t pgid)
 {
   assert(osd_lock.is_locked());
+  RWLock::RLocker l(pg_map_lock);
   if (!pg_map.count(pgid))
     return NULL;
   PG *pg = pg_map[pgid];
@@ -1907,6 +1924,7 @@ PG *OSD::_lookup_lock_pg(pg_t pgid)
 PG *OSD::_lookup_pg(pg_t pgid)
 {
   assert(osd_lock.is_locked());
+  RWLock::RLocker l(pg_map_lock);
   if (!pg_map.count(pgid))
     return NULL;
   PG *pg = pg_map[pgid];
@@ -1916,6 +1934,7 @@ PG *OSD::_lookup_pg(pg_t pgid)
 PG *OSD::_lookup_lock_pg_with_map_lock_held(pg_t pgid)
 {
   assert(osd_lock.is_locked());
+  RWLock::RLocker l(pg_map_lock);
   assert(pg_map.count(pgid));
   PG *pg = pg_map[pgid];
   pg->lock();
@@ -2069,6 +2088,7 @@ struct pistate {
 
 void OSD::build_past_intervals_parallel()
 {
+  RWLock::RLocker l(pg_map_lock);
   map<PG*,pistate> pis;
 
   // calculate untion of map range
@@ -2655,6 +2675,7 @@ void OSD::maybe_update_heartbeat_peers()
 
   // build heartbeat from set
   if (is_active()) {
+    RWLock::RLocker l(pg_map_lock);
     for (hash_map<pg_t, PG*>::iterator i = pg_map.begin();
 	 i != pg_map.end();
 	 ++i) {
@@ -4140,6 +4161,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     }
 
     std::set <pg_t> keys;
+    RWLock::RLocker l(pg_map_lock);
     for (hash_map<pg_t, PG*>::const_iterator pg_map_e = pg_map.begin();
 	 pg_map_e != pg_map.end(); ++pg_map_e) {
       keys.insert(pg_map_e->first);
@@ -4719,6 +4741,7 @@ void OSD::handle_scrub(MOSDScrub *m)
     return;
   }
 
+  RWLock::RLocker l(pg_map_lock);
   if (m->scrub_pgs.empty()) {
     for (hash_map<pg_t, PG*>::iterator p = pg_map.begin();
 	 p != pg_map.end();
@@ -5392,7 +5415,6 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
   assert(osd_lock.is_locked());
 
   dout(7) << "advance_map epoch " << osdmap->get_epoch()
-          << "  " << pg_map.size() << " pgs"
           << dendl;
 
   if (!up_epoch &&
@@ -5456,30 +5478,30 @@ void OSD::consume_map()
 
   int num_pg_primary = 0, num_pg_replica = 0, num_pg_stray = 0;
   list<PGRef> to_remove;
+  {
+    RWLock::RLocker l(pg_map_lock);
+    // scan pg's
+    for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
+	 it != pg_map.end();
+	 ++it) {
+      PG *pg = it->second;
+      pg->lock();
+      if (pg->is_primary())
+	num_pg_primary++;
+      else if (pg->is_replica())
+	num_pg_replica++;
+      else
+	num_pg_stray++;
 
-  // scan pg's
-  for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
-       it != pg_map.end();
-       ++it) {
-    PG *pg = it->second;
-    pg->lock();
-    if (pg->is_primary())
-      num_pg_primary++;
-    else if (pg->is_replica())
-      num_pg_replica++;
-    else
-      num_pg_stray++;
-
-    if (!osdmap->have_pg_pool(pg->info.pgid.pool())) {
-      //pool is deleted!
-      to_remove.push_back(PGRef(pg));
-    } else {
-      service.init_splits_between(it->first, service.get_osdmap(), osdmap);
+      if (!osdmap->have_pg_pool(pg->info.pgid.pool())) {
+	//pool is deleted!
+	to_remove.push_back(PGRef(pg));
+      } else {
+	service.init_splits_between(it->first, service.get_osdmap(), osdmap);
+      }
+      pg->unlock();
     }
-
-    pg->unlock();
   }
-
   for (list<PGRef>::iterator i = to_remove.begin();
        i != to_remove.end();
        to_remove.erase(i++)) {
@@ -5496,16 +5518,19 @@ void OSD::consume_map()
   service.publish_map(osdmap);
 
   // scan pg's
-  for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
-       it != pg_map.end();
-       ++it) {
-    PG *pg = it->second;
-    pg->lock();
-    pg->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
-    pg->unlock();
+  {
+    RWLock::RLocker l(pg_map_lock);
+    for (hash_map<pg_t,PG*>::iterator it = pg_map.begin();
+	 it != pg_map.end();
+	 ++it) {
+      PG *pg = it->second;
+      pg->lock();
+      pg->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
+      pg->unlock();
+    }
+    logger->set(l_osd_pg, pg_map.size());
   }
   
-  logger->set(l_osd_pg, pg_map.size());
   logger->set(l_osd_pg_primary, num_pg_primary);
   logger->set(l_osd_pg_replica, num_pg_replica);
   logger->set(l_osd_pg_stray, num_pg_stray);
@@ -6524,13 +6549,16 @@ void OSD::handle_pg_query(OpRequestRef op)
       continue;
     }
 
-    if (pg_map.count(pgid)) {
-      PG *pg = 0;
-      pg = _lookup_lock_pg(pgid);
-      pg->queue_query(it->second.epoch_sent, it->second.epoch_sent,
-		      from, it->second);
-      pg->unlock();
-      continue;
+    {
+      RWLock::RLocker l(pg_map_lock);
+      if (pg_map.count(pgid)) {
+	PG *pg = 0;
+	pg = _lookup_lock_pg(pgid);
+	pg->queue_query(it->second.epoch_sent, it->second.epoch_sent,
+			from, it->second);
+	pg->unlock();
+	continue;
+      }
     }
 
     if (!osdmap->have_pg_pool(pgid.pool()))
@@ -6602,9 +6630,12 @@ void OSD::handle_pg_remove(OpRequestRef op)
       continue;
     }
     
-    if (pg_map.count(pgid) == 0) {
-      dout(10) << " don't have pg " << pgid << dendl;
-      continue;
+    {
+      RWLock::RLocker l(pg_map_lock);
+      if (pg_map.count(pgid) == 0) {
+	dout(10) << " don't have pg " << pgid << dendl;
+	continue;
+      }
     }
     dout(5) << "queue_pg_for_deletion: " << pgid << dendl;
     PG *pg = _lookup_lock_pg(pgid);
@@ -6631,6 +6662,7 @@ void OSD::handle_pg_remove(OpRequestRef op)
 
 void OSD::_remove_pg(PG *pg)
 {
+  RWLock::WLocker l(pg_map_lock);
   ObjectStore::Transaction *rmt = new ObjectStore::Transaction;
 
   // on_removal, which calls remove_watchers_and_notifies, and the erasure from
@@ -6684,6 +6716,7 @@ void OSD::check_replay_queue()
 
   for (list< pair<pg_t,utime_t> >::iterator p = pgids.begin(); p != pgids.end(); ++p) {
     pg_t pgid = p->first;
+    RWLock::RLocker l(pg_map_lock);
     if (pg_map.count(pgid)) {
       PG *pg = _lookup_lock_pg_with_map_lock_held(pgid);
       dout(10) << "check_replay_queue " << *pg << dendl;
