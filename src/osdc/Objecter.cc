@@ -655,7 +655,10 @@ void Objecter::handle_osd_map(MOSDMap *m)
   for (map<tid_t, Op*>::iterator p = need_resend.begin(); p != need_resend.end(); ++p) {
     Op *op = p->second;
     if (op->should_resend) {
-      if (op->session) {
+      bool paused = op->paused &&
+        (((op->flags & CEPH_OSD_FLAG_READ) && pauserd) ||
+         ((op->flags & CEPH_OSD_FLAG_WRITE) && pausewr));
+      if (op->session && !paused) {
 	logger->inc(l_osdc_op_resend);
 	send_op(op);
       }
@@ -1312,6 +1315,17 @@ int Objecter::recalc_op_target(Op *op)
   }
   osdmap->pg_to_acting_osds(pgid, acting);
 
+  bool paused = ((op->flags & CEPH_OSD_FLAG_WRITE && osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) ||
+      (op->flags & CEPH_OSD_FLAG_READ && osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) ||
+      (op->flags & CEPH_OSD_FLAG_WRITE && osdmap->test_flag(CEPH_OSDMAP_FULL)));
+
+  bool need_resend = false;
+
+  if (!paused && paused != op->paused) {
+    op->paused = false;
+    need_resend = true;
+  }
+
   if (op->pgid != pgid || is_pg_changed(op->acting, acting, op->used_replica)) {
     op->pgid = pgid;
     op->acting = acting;
@@ -1359,6 +1373,9 @@ int Objecter::recalc_op_target(Op *op)
       else
 	num_homeless_ops++;
     }
+    need_resend = true;
+  }
+  if (need_resend) {
     return RECALC_OP_TARGET_NEED_RESEND;
   }
   return RECALC_OP_TARGET_NO_ACTION;
