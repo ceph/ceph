@@ -1184,6 +1184,7 @@ private:
 
 protected:
   // -- placement groups --
+  RWLock pg_map_lock;
   hash_map<pg_t, PG*> pg_map;
   map<pg_t, list<OpRequestRef> > waiting_for_pg;
   map<pg_t, list<PG::CephPeeringEvtRef> > peering_wait_for_split;

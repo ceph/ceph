@@ -31,7 +31,7 @@ public:
   virtual ~Dispatcher() { }
 
   /// True if Messenger should use ms_fast_dispatch
-  virtual bool ms_can_fast_dispatch(Message *m) { return false;}
+  virtual bool ms_can_fast_dispatch(Message *m) const { return false;}
 
   /// Fast dispatch method
   virtual void ms_fast_dispatch(Message *m) { assert(0); }
