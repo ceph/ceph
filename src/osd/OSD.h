@@ -1382,9 +1382,6 @@ protected:
   void handle_pg_info(OpRequestRef op);
   void handle_pg_trim(OpRequestRef op);
 
-  void handle_pg_scan(OpRequestRef op);
-
-  void handle_pg_backfill(OpRequestRef op);
   void handle_pg_backfill_reserve(OpRequestRef op);
   void handle_pg_recovery_reserve(OpRequestRef op);
 

@@ -4608,12 +4608,6 @@ void OSD::dispatch_op(OpRequestRef op)
     assert(0 ==
 	   "received MOSDPGMissing; this message is supposed to be unused!?!");
     break;
-  case MSG_OSD_PG_SCAN:
-    handle_pg_scan(op);
-    break;
-  case MSG_OSD_PG_BACKFILL:
-    handle_pg_backfill(op);
-    break;
 
   case MSG_OSD_BACKFILL_RESERVE:
     handle_pg_backfill_reserve(op);
@@ -4642,6 +4636,12 @@ void OSD::dispatch_op(OpRequestRef op)
     break;
   case MSG_OSD_PG_PUSH_REPLY:
     handle_replica_op<MOSDPGPushReply, MSG_OSD_PG_PUSH_REPLY>(op);
+    break;
+  case MSG_OSD_PG_SCAN:
+    handle_replica_op<MOSDPGScan, MSG_OSD_PG_SCAN>(op);
+    break;
+  case MSG_OSD_PG_BACKFILL:
+    handle_replica_op<MOSDPGBackfill, MSG_OSD_PG_BACKFILL>(op);
     break;
   }
 }
@@ -6350,62 +6350,6 @@ void OSD::handle_pg_trim(OpRequestRef op)
     }
     pg->unlock();
   }
-}
-
-void OSD::handle_pg_scan(OpRequestRef op)
-{
-  MOSDPGScan *m = static_cast<MOSDPGScan*>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_PG_SCAN);
-  dout(10) << "handle_pg_scan " << *m << " from " << m->get_source() << dendl;
-  
-  if (!require_osd_peer(op))
-    return;
-  if (!require_same_or_newer_map(op, m->query_epoch))
-    return;
-
-  if (m->pgid.preferred() >= 0) {
-    dout(10) << "ignoring localized pg " << m->pgid << dendl;
-    return;
-  }
-
-  PG *pg;
-  
-  if (!_have_pg(m->pgid)) {
-    return;
-  }
-
-  pg = _lookup_pg(m->pgid);
-  assert(pg);
-
-  enqueue_op(pg, op);
-}
-
-void OSD::handle_pg_backfill(OpRequestRef op)
-{
-  MOSDPGBackfill *m = static_cast<MOSDPGBackfill*>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_PG_BACKFILL);
-  dout(10) << "handle_pg_backfill " << *m << " from " << m->get_source() << dendl;
-  
-  if (!require_osd_peer(op))
-    return;
-  if (!require_same_or_newer_map(op, m->query_epoch))
-    return;
-
-  if (m->pgid.preferred() >= 0) {
-    dout(10) << "ignoring localized pg " << m->pgid << dendl;
-    return;
-  }
-
-  PG *pg;
-  
-  if (!_have_pg(m->pgid)) {
-    return;
-  }
-
-  pg = _lookup_pg(m->pgid);
-  assert(pg);
-
-  enqueue_op(pg, op);
 }
 
 void OSD::handle_pg_backfill_reserve(OpRequestRef op)
