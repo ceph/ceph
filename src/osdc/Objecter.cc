@@ -628,37 +628,11 @@ void Objecter::handle_osd_map(MOSDMap *m)
   if (was_pauserd || was_pausewr || pauserd || pausewr)
     maybe_request_map();
 
-  // unpause requests?
-  if ((was_pauserd && !pauserd) ||
-      (was_pausewr && !pausewr)) {
-    for (map<tid_t,Op*>::iterator p = ops.begin();
-	 p != ops.end();
-	 ++p) {
-      Op *op = p->second;
-      if (op->paused &&
-	  !((op->flags & CEPH_OSD_FLAG_READ) && pauserd) &&   // not still paused as a read
-	  !((op->flags & CEPH_OSD_FLAG_WRITE) && pausewr))    // not still paused as a write
-	need_resend[op->tid] = op;
-    }
-    for (map<tid_t, LingerOp*>::iterator lp = linger_ops.begin();
-	 lp != linger_ops.end();
-	 ++lp) {
-      LingerOp *op = lp->second;
-      if (!op->registered &&
-	  !pauserd &&                                      // not still paused as a read
-	  !((op->flags & CEPH_OSD_FLAG_WRITE) && pausewr)) // not still paused as a write
-	need_resend_linger.push_back(op);
-    }
-  }
-
   // resend requests
   for (map<tid_t, Op*>::iterator p = need_resend.begin(); p != need_resend.end(); ++p) {
     Op *op = p->second;
     if (op->should_resend) {
-      bool paused = op->paused &&
-        (((op->flags & CEPH_OSD_FLAG_READ) && pauserd) ||
-         ((op->flags & CEPH_OSD_FLAG_WRITE) && pausewr));
-      if (op->session && !paused) {
+      if (op->session && !op->paused) {
 	logger->inc(l_osdc_op_resend);
 	send_op(op);
       }
@@ -1300,6 +1274,15 @@ bool Objecter::is_pg_changed(vector<int>& o, vector<int>& n, bool any_change)
   return false;      // same primary (tho replicas may have changed)
 }
 
+bool Objecter::op_should_be_paused(Op *op)
+{
+  bool pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
+  bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || osdmap->test_flag(CEPH_OSDMAP_FULL);
+
+  return (op->flags & CEPH_OSD_FLAG_READ && pauserd) ||
+         (op->flags & CEPH_OSD_FLAG_WRITE && pausewr);
+}
+
 int Objecter::recalc_op_target(Op *op)
 {
   vector<int> acting;
@@ -1315,12 +1298,9 @@ int Objecter::recalc_op_target(Op *op)
   }
   osdmap->pg_to_acting_osds(pgid, acting);
 
-  bool paused = ((op->flags & CEPH_OSD_FLAG_WRITE && osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) ||
-      (op->flags & CEPH_OSD_FLAG_READ && osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) ||
-      (op->flags & CEPH_OSD_FLAG_WRITE && osdmap->test_flag(CEPH_OSDMAP_FULL)));
-
   bool need_resend = false;
 
+  bool paused = op_should_be_paused(op);
   if (!paused && paused != op->paused) {
     op->paused = false;
     need_resend = true;
