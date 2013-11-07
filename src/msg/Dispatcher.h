@@ -30,6 +30,12 @@ public:
   }
   virtual ~Dispatcher() { }
 
+  /// True if Messenger should use ms_fast_dispatch
+  virtual bool ms_can_fast_dispatch(Message *m) { return false;}
+
+  /// Fast dispatch method
+  virtual void ms_fast_dispatch(Message *m) { assert(0); }
+
   // how i receive messages
   virtual bool ms_dispatch(Message *m) = 0;
 

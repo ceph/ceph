@@ -62,17 +62,23 @@ void DispatchQueue::post_dispatch(Message *m, uint64_t msize)
 
 void DispatchQueue::enqueue(Message *m, int priority, uint64_t id)
 {
-  Mutex::Locker l(lock);
-  ldout(cct,20) << "queue " << m << " prio " << priority << dendl;
-  add_arrival(m);
-  if (priority >= CEPH_MSG_PRIO_LOW) {
-    mqueue.enqueue_strict(
-      id, priority, QueueItem(m));
+  if (msgr->ms_can_fast_dispatch(m)) {
+    uint64_t msize = pre_dispatch(m);
+    msgr->ms_fast_dispatch(m);
+    post_dispatch(m, msize);
   } else {
-    mqueue.enqueue(
-      id, priority, m->get_cost(), QueueItem(m));
+    Mutex::Locker l(lock);
+    ldout(cct,20) << "queue " << m << " prio " << priority << dendl;
+    add_arrival(m);
+    if (priority >= CEPH_MSG_PRIO_LOW) {
+      mqueue.enqueue_strict(
+	id, priority, QueueItem(m));
+    } else {
+      mqueue.enqueue(
+	id, priority, m->get_cost(), QueueItem(m));
+    }
+    cond.Signal();
   }
-  cond.Signal();
 }
 
 void DispatchQueue::local_delivery(Message *m, int priority)
