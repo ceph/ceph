@@ -1225,6 +1225,7 @@ public:
     RECALC_OP_TARGET_OSD_DNE,
     RECALC_OP_TARGET_OSD_DOWN,
   };
+  bool op_should_be_paused(Op *op);
   int recalc_op_target(Op *op);
   bool recalc_linger_op_target(LingerOp *op);
 
