@@ -106,6 +106,9 @@ class DispatchQueue {
     }
   } dispatch_thread;
 
+  uint64_t pre_dispatch(Message *m);
+  void post_dispatch(Message *m, uint64_t msize);
+
   public:
   bool stop;
   void local_delivery(Message *m, int priority);
