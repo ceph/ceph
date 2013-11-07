@@ -194,7 +194,13 @@ void Pipe::DelayedDelivery::flush()
   while (!delay_queue.empty()) {
     Message *m = delay_queue.front().second;
     delay_queue.pop_front();
-    pipe->in_q->enqueue(m, m->get_priority(), pipe->conn_id);
+    if (pipe->in_q->can_fast_dispatch(m)) {
+      delay_lock.Unlock();
+      pipe->in_q->fast_dispatch(m);
+      delay_lock.Lock();
+    } else {
+      pipe->in_q->enqueue(m, m->get_priority(), pipe->conn_id);
+    }
   }
 }
 
@@ -220,7 +226,13 @@ void *Pipe::DelayedDelivery::entry()
     }
     lgeneric_subdout(pipe->msgr->cct, ms, 10) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry dequeuing message " << m << " for delivery, past " << release << dendl;
     delay_queue.pop_front();
-    pipe->in_q->enqueue(m, m->get_priority(), pipe->conn_id);
+    if (pipe->in_q->can_fast_dispatch(m)) {
+      delay_lock.Unlock();
+      pipe->in_q->fast_dispatch(m);
+      delay_lock.Lock();
+    } else {
+      pipe->in_q->enqueue(m, m->get_priority(), pipe->conn_id);
+    }
   }
   lgeneric_subdout(pipe->msgr->cct, ms, 20) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry stop" << dendl;
   return NULL;
@@ -662,6 +674,7 @@ int Pipe::accept()
 
   // notify
   msgr->dispatch_queue.queue_accept(connection_state.get());
+  msgr->ms_deliver_handle_fast_accept(connection_state.get());
 
   // ok!
   if (msgr->dispatch_queue.stop)
@@ -1107,6 +1120,7 @@ int Pipe::connect()
       }
 
       msgr->dispatch_queue.queue_connect(connection_state.get());
+      msgr->ms_deliver_handle_fast_connect(connection_state.get());
       
       if (!reader_running) {
 	ldout(msgr->cct,20) << "connect starting reader" << dendl;
@@ -1514,19 +1528,26 @@ void Pipe::reader()
       ldout(msgr->cct,10) << "reader got message "
 	       << m->get_seq() << " " << m << " " << *m
 	       << dendl;
+      in_q->fast_preprocess(m);
 
       if (delay_thread) {
-	utime_t release;
-	if (rand() % 10000 < msgr->cct->_conf->ms_inject_delay_probability * 10000.0) {
-	  release = m->get_recv_stamp();
-	  release += msgr->cct->_conf->ms_inject_delay_max * (double)(rand() % 10000) / 10000.0;
-	  lsubdout(msgr->cct, ms, 1) << "queue_received will delay until " << release << " on " << m << " " << *m << dendl;
-	}
-	delay_thread->queue(release, m);
+        utime_t release;
+        if (rand() % 10000 < msgr->cct->_conf->ms_inject_delay_probability * 10000.0) {
+          release = m->get_recv_stamp();
+          release += msgr->cct->_conf->ms_inject_delay_max * (double)(rand() % 10000) / 10000.0;
+          lsubdout(msgr->cct, ms, 1) << "queue_received will delay until " << release << " on " << m << " " << *m << dendl;
+        }
+        delay_thread->queue(release, m);
       } else {
-	in_q->enqueue(m, m->get_priority(), conn_id);
+        if (in_q->can_fast_dispatch(m)) {
+          pipe_lock.Unlock();
+          in_q->fast_dispatch(m);
+          pipe_lock.Lock();
+        } else {
+          in_q->enqueue(m, m->get_priority(), conn_id);
+        }
       }
-    } 
+    }
     
     else if (tag == CEPH_MSGR_TAG_CLOSE) {
       ldout(msgr->cct,20) << "reader got CLOSE" << dendl;

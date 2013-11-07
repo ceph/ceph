@@ -161,6 +161,9 @@ class DispatchQueue {
     cond.Signal();
   }
 
+  bool can_fast_dispatch(Message *m);
+  void fast_dispatch(Message *m);
+  void fast_preprocess(Message *m);
   void enqueue(Message *m, int priority, uint64_t id);
   void discard_queue(uint64_t id);
   uint64_t get_id() {
