@@ -3,6 +3,7 @@
   osdmaptool: writing epoch 1 to myosdmap
 
   $ ORIG_FSID="$(osdmaptool --print myosdmap|grep ^fsid)"
+  osdmaptool: osdmap file 'myosdmap'
 
   $ osdmaptool --createsimple 3 myosdmap
   osdmaptool: osdmap file 'myosdmap'
@@ -27,6 +28,7 @@
   
 
   $ NEW_FSID="$(osdmaptool --print myosdmap|grep ^fsid)"
+  osdmaptool: osdmap file 'myosdmap'
   $ [ "$ORIG_FSID" = "$NEW_FSID" ]
 
   $ osdmaptool --createsimple 1 --clobber myosdmap
@@ -49,6 +51,7 @@
   
 
   $ NEW_FSID="$(osdmaptool --print myosdmap|grep ^fsid)"
+  osdmaptool: osdmap file 'myosdmap'
 #TODO --clobber should probably set new fsid, remove the [1]
   $ [ "$ORIG_FSID" != "$NEW_FSID" ]
   [1]
