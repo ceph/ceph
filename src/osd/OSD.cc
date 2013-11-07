@@ -5492,6 +5492,7 @@ void OSD::consume_map()
   service.expand_pg_num(service.get_osdmap(), osdmap);
 
   service.pre_publish_map(osdmap);
+  service.await_reserved_maps();
   service.publish_map(osdmap);
 
   // scan pg's
