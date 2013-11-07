@@ -1454,6 +1454,7 @@ void Pipe::reader()
 	       << m->get_seq() << " " << m << " " << *m
 	       << dendl;
 
+      pipe_lock.Unlock();
       if (delay_thread) {
 	utime_t release;
 	if (rand() % 10000 < msgr->cct->_conf->ms_inject_delay_probability * 10000.0) {
@@ -1465,6 +1466,7 @@ void Pipe::reader()
       } else {
 	in_q->enqueue(m, m->get_priority(), conn_id);
       }
+      pipe_lock.Lock();
     } 
     
     else if (tag == CEPH_MSGR_TAG_CLOSE) {

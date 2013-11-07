@@ -572,6 +572,33 @@ protected:
    */
 public:
   /**
+   * Determine whether a message can be fast-dispatched
+   */
+  bool ms_can_fast_dispatch(Message *m) {
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+	 p != dispatchers.end();
+	 ++p) {
+      if ((*p)->ms_can_fast_dispatch(m))
+	return true;
+    }
+    return false;
+  }
+
+  /**
+   * Fast dispatch
+   */
+  void ms_fast_dispatch(Message *m) {
+    for (list<Dispatcher*>::iterator p = dispatchers.begin();
+	 p != dispatchers.end();
+	 ++p) {
+      if ((*p)->ms_can_fast_dispatch(m)) {
+	(*p)->ms_fast_dispatch(m);
+	return;
+      }
+    }
+    assert(0);
+  }
+  /**
    *  Deliver a single Message. Send it to each Dispatcher
    *  in sequence until one of them handles it.
    *  If none of our Dispatchers can handle it, assert(0).
