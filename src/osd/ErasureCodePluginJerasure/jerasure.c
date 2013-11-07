@@ -276,7 +276,7 @@ int *jerasure_matrix_to_bitmatrix(int k, int m, int w, int *matrix)
   int rowelts, rowindex, colindex, elt, i, j, l, x;
 
   bitmatrix = talloc(int, k*m*w*w);
-  if (matrix == NULL) { return NULL; }
+  if (bitmatrix == NULL) { return NULL; }
 
   rowelts = k * w;
   rowindex = 0;
@@ -839,7 +839,11 @@ static int **jerasure_generate_decoding_schedule(int k, int m, int w, int *bitma
   row_ids = talloc(int, k+m);
   ind_to_row = talloc(int, k+m);
 
-  if (set_up_ids_for_scheduled_decoding(k, m, erasures, row_ids, ind_to_row) < 0) return NULL;
+  if (set_up_ids_for_scheduled_decoding(k, m, erasures, row_ids, ind_to_row) < 0) {
+    free(row_ids);
+    free(ind_to_row);
+    return NULL;
+  }
 
   /* Now, we're going to create one decoding matrix which is going to 
      decode everything with one call.  The hope is that the scheduler
