@@ -126,7 +126,6 @@ public:
 int AsyncRefreshHandler::init_fetch()
 {
   ldout(store->ctx(), 20) << "initiating async quota refresh for bucket=" << bucket << dendl;
-  map<RGWObjCategory, RGWBucketStats> bucket_stats;
   int r = store->get_bucket_stats_async(bucket, this);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket.name << dendl;

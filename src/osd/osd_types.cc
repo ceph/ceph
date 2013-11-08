@@ -1062,7 +1062,7 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
     out << " max_bytes " << p.quota_max_bytes;
   if (p.quota_max_objects)
     out << " max_objects " << p.quota_max_objects;
-  if (p.tiers.size())
+  if (!p.tiers.empty())
     out << " tiers " << p.tiers;
   if (p.is_tier())
     out << " tier_of " << p.tier_of;

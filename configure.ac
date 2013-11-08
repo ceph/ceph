@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [0.72-rc1], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [0.72], [ceph-devel@vger.kernel.org])
 
 # Create release string.  Used with VERSION for RPMs.
 RPM_RELEASE=0
@@ -539,6 +539,17 @@ AC_CHECK_FUNC([fallocate],
 	[AC_DEFINE([CEPH_HAVE_FALLOCATE], [], [fallocate(2) is supported])],
 	[])
 
+#
+# Test for time-related `struct stat` members.
+#
+
+AC_CHECK_MEMBER([struct stat.st_mtim.tv_nsec],
+  [AC_DEFINE(HAVE_STAT_ST_MTIM_TV_NSEC, 1,
+    [Define if you have struct stat.st_mtim.tv_nsec])])
+
+AC_CHECK_MEMBER([struct stat.st_mtimespec.tv_nsec],
+  [AC_DEFINE(HAVE_STAT_ST_MTIMESPEC_TV_NSEC, 1,
+    [Define if you have struct stat.st_mtimespec.tv_nsec])])
 
 AC_CHECK_HEADERS([arpa/nameser_compat.h])
 AC_CHECK_HEADERS([sys/prctl.h])
