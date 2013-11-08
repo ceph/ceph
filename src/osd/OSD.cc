@@ -871,6 +871,7 @@ OSD::OSD(CephContext *cct_, int id, Messenger *internal_messenger, Messenger *ex
   disk_tp(cct, "OSD::disk_tp", cct->_conf->osd_disk_threads, "osd_disk_threads"),
   command_tp(cct, "OSD::command_tp", 1),
   paused_recovery(false),
+  session_waiting_for_map_lock("OSD::session_waiting_for_map_lock"),
   heartbeat_lock("OSD::heartbeat_lock"),
   heartbeat_stop(false), heartbeat_need_update(true), heartbeat_epoch(0),
   hbclient_messenger(hb_clientm),
