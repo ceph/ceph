@@ -6483,15 +6483,17 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
       if (mdr->slave_request->witnesses.size() > 1) {
 	dout(10) << " set srci ambiguous auth; providing srcdn replica list" << dendl;
 	reply_witness = true;
-	for (set<int>::iterator p = srcdnrep.begin(); p != srcdnrep.end(); ++p) {
-	  if (*p == mdr->slave_to_mds ||
-	      !mds->mdsmap->is_clientreplay_or_active_or_stopping(*p))
-	    continue;
-	  MMDSSlaveRequest *notify = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
-							  MMDSSlaveRequest::OP_RENAMENOTIFY);
-	  mds->send_message_mds(notify, *p);
-	  mdr->more()->waiting_on_slave.insert(*p);
-	}
+      }
+
+      // make sure bystanders have received all lock related messages
+      for (set<int>::iterator p = srcdnrep.begin(); p != srcdnrep.end(); ++p) {
+	if (*p == mdr->slave_to_mds ||
+	    !mds->mdsmap->is_clientreplay_or_active_or_stopping(*p))
+	  continue;
+	MMDSSlaveRequest *notify = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
+	    MMDSSlaveRequest::OP_RENAMENOTIFY);
+	mds->send_message_mds(notify, *p);
+	mdr->more()->waiting_on_slave.insert(*p);
       }
     }
 
