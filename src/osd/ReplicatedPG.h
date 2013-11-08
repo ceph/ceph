@@ -697,7 +697,11 @@ protected:
   map<hobject_t, pg_stat_t> pending_backfill_updates;
 
   void dump_recovery_info(Formatter *f) const {
-    f->dump_int("backfill_target", get_backfill_target());
+    f->open_array_section("backfill_targets");
+    for (vector<int>::const_iterator p = backfill_targets.begin();
+        p != backfill_targets.end(); ++p)
+      f->dump_int("osd", *p);
+    f->close_section();
     f->dump_int("waiting_on_backfill", waiting_on_backfill);
     f->dump_stream("last_backfill_started") << last_backfill_started;
     {

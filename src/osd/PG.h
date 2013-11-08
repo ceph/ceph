@@ -507,20 +507,13 @@ protected:
   
   BackfillInterval backfill_info;
   BackfillInterval peer_backfill_info;
-  vector<int> backfill_targets;
   bool backfill_reserved;
   bool backfill_reserving;
 
   friend class OSD;
 
 public:
-  // Compatibility with single backfill target code
-  int get_backfill_target() const {
-    int backfill_target = -1;
-    if (backfill_targets.size() > 0)
-      backfill_target = backfill_targets[0];
-    return backfill_target;
-  }
+  vector<int> backfill_targets;
 
 protected:
 
@@ -1083,8 +1076,8 @@ public:
   TrivialEvent(LocalRecoveryReserved)
   TrivialEvent(RemoteRecoveryReserved)
   TrivialEvent(AllRemotesReserved)
+  TrivialEvent(AllBackfillsReserved)
   TrivialEvent(Recovering)
-  TrivialEvent(WaitRemoteBackfillReserved)
   TrivialEvent(GoClean)
 
   TrivialEvent(AllReplicasActivated)
@@ -1310,6 +1303,7 @@ public:
       void exit();
 
       const set<int> sorted_acting_set;
+      const set<int> sorted_backfill_set;
       bool all_replicas_activated;
 
       typedef boost::mpl::list <
@@ -1368,8 +1362,10 @@ public:
     struct WaitRemoteBackfillReserved : boost::statechart::state< WaitRemoteBackfillReserved, Active >, NamedState {
       typedef boost::mpl::list<
 	boost::statechart::custom_reaction< RemoteBackfillReserved >,
-	boost::statechart::custom_reaction< RemoteReservationRejected >
+	boost::statechart::custom_reaction< RemoteReservationRejected >,
+	boost::statechart::transition< AllBackfillsReserved, Backfilling >
 	> reactions;
+      set<int>::const_iterator backfill_osd_it;
       WaitRemoteBackfillReserved(my_context ctx);
       void exit();
       boost::statechart::result react(const RemoteBackfillReserved& evt);
