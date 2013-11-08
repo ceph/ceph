@@ -4313,8 +4313,9 @@ void OSD::forget_peer_epoch(int peer, epoch_t as_of)
 bool OSD::_share_map_incoming(entity_name_t name, Connection *con, epoch_t epoch, Session* session)
 {
   bool shared = false;
-  dout(20) << "_share_map_incoming " << name << " " << con->get_peer_addr() << " " << epoch << dendl;
-  //assert(osd_lock.is_locked());
+  dout(20) << "_share_map_incoming "
+	   << name << " " << con->get_peer_addr()
+	   << " " << epoch << dendl;
 
   assert(is_active());
 
@@ -4326,11 +4327,13 @@ bool OSD::_share_map_incoming(entity_name_t name, Connection *con, epoch_t epoch
 	session->last_sent_epoch = osdmap->get_epoch();
       } else {
 	sendmap = false; //we don't need to send it out again
-	dout(15) << name << " already sent incremental to update from epoch "<< epoch << dendl;
+	dout(15) << name << " already sent incremental to update from epoch "
+		 << epoch << dendl;
       }
     }
     if (sendmap) {
-      dout(10) << name << " has old map " << epoch << " < " << osdmap->get_epoch() << dendl;
+      dout(10) << name << " has old map " << epoch
+	       << " < " << osdmap->get_epoch() << dendl;
       send_incremental_map(epoch, con);
       shared = true;
     }
@@ -4346,7 +4349,9 @@ bool OSD::_share_map_incoming(entity_name_t name, Connection *con, epoch_t epoch
 
     // share?
     if (has < osdmap->get_epoch()) {
-      dout(10) << name << " " << con->get_peer_addr() << " has old map " << epoch << " < " << osdmap->get_epoch() << dendl;
+      dout(10) << name << " " << con->get_peer_addr()
+	       << " has old map " << epoch << " < "
+	       << osdmap->get_epoch() << dendl;
       note_peer_epoch(name.num(), osdmap->get_epoch());
       send_incremental_map(epoch, con);
       shared = true;
