@@ -31,7 +31,6 @@ static inline void frame_metadata_key(req_state *s, string& out) {
   bool exists;
   string key = s->info.args.get("key", &exists);
 
-  string metadata_key;
   string section;
   if (!s->bucket_name_str.empty()) {
     section = s->bucket_name_str;

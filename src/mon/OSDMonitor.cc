@@ -2659,7 +2659,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
   pi->auid = auid;
   for (vector<string>::const_iterator i = properties.begin();
        i != properties.end();
-       i++) {
+       ++i) {
     size_t equal = i->find('=');
     if (equal == string::npos)
       pi->properties[*i] = string();

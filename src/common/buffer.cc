@@ -1045,7 +1045,7 @@ void buffer::list::rebuild_page_aligned()
       return 0;                         // no buffers
 
     std::list<ptr>::const_iterator iter = _buffers.begin();
-    iter++;
+    ++iter;
 
     if (iter != _buffers.end())
       rebuild();
