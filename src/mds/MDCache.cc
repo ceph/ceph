@@ -8350,8 +8350,18 @@ void MDCache::open_ino(inodeno_t ino, int64_t pool, Context* fin,
     open_ino_info_t& info = opening_inodes[ino];
     if (want_replica) {
       info.want_replica = true;
-      if (want_xlocked)
+      if (want_xlocked && !info.want_xlocked) {
+	if (!info.ancestors.empty()) {
+	  CInode *diri = get_inode(info.ancestors[0].dirino);
+	  if (diri) {
+	    frag_t fg = diri->pick_dirfrag(info.ancestors[0].dname);
+	    CDir *dir = diri->get_dirfrag(fg);
+	    if (dir && !dir->is_auth())
+	      discover_ino(dir, ino, NULL, true);
+	  }
+	}
 	info.want_xlocked = true;
+      }
     }
     info.waiters.push_back(fin);
   } else {
