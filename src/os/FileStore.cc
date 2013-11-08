@@ -218,7 +218,7 @@ int FileStore::lfn_open(coll_t cid,
   }
 
   int fd, exist;
-  if (replaying) {
+  if (!replaying) {
     Mutex::Locker l(fdcache_lock);
     *outfd = fdcache.lookup(oid);
     if (*outfd)
@@ -261,7 +261,7 @@ int FileStore::lfn_open(coll_t cid,
     }
   }
 
-  if (replaying) {
+  if (!replaying) {
     Mutex::Locker l(fdcache_lock);
     *outfd = fdcache.lookup(oid);
     if (*outfd) {
