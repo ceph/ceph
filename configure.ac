@@ -539,6 +539,17 @@ AC_CHECK_FUNC([fallocate],
 	[AC_DEFINE([CEPH_HAVE_FALLOCATE], [], [fallocate(2) is supported])],
 	[])
 
+#
+# Test for time-related `struct stat` members.
+#
+
+AC_CHECK_MEMBER([struct stat.st_mtim.tv_nsec],
+  [AC_DEFINE(HAVE_STAT_ST_MTIM_TV_NSEC, 1,
+    [Define if you have struct stat.st_mtim.tv_nsec])])
+
+AC_CHECK_MEMBER([struct stat.st_mtimespec.tv_nsec],
+  [AC_DEFINE(HAVE_STAT_ST_MTIMESPEC_TV_NSEC, 1,
+    [Define if you have struct stat.st_mtimespec.tv_nsec])])
 
 AC_CHECK_HEADERS([arpa/nameser_compat.h])
 AC_CHECK_HEADERS([sys/prctl.h])
