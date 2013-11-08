@@ -135,6 +135,8 @@ void do_simple_crypto() {
   exit(0);
 }
 
+#if GTEST_HAS_DEATH_TEST
 TEST_F(ForkDeathTest, MD5) {
   ASSERT_EXIT(do_simple_crypto(), ::testing::ExitedWithCode(0), "^$");
 }
+#endif //GTEST_HAS_DEATH_TEST

@@ -12,7 +12,6 @@
 class CrushTester {
   CrushWrapper& crush;
   ostream& err;
-  int verbose;
 
   map<int, int> device_weight;
   int min_rule, max_rule;
@@ -165,8 +164,8 @@ class CrushTester {
    void write_integer_indexed_scalar_data_string(vector<string> &dst, int index, float scalar_data);
 
 public:
-  CrushTester(CrushWrapper& c, ostream& eo, int verbosity=0)
-    : crush(c), err(eo), verbose(verbosity),
+  CrushTester(CrushWrapper& c, ostream& eo)
+    : crush(c), err(eo),
       min_rule(-1), max_rule(-1),
       min_x(-1), max_x(-1),
       min_rep(-1), max_rep(-1),
