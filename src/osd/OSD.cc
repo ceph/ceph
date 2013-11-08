@@ -5617,6 +5617,7 @@ void OSD::send_incremental_map(epoch_t since, Connection *con)
   dout(10) << "send_incremental_map " << since << " -> " << to
            << " to " << con << " " << con->get_peer_addr() << dendl;
 
+  OSDSuperblock superblock(service.get_superblock());
   if (since < superblock.oldest_map) {
     // just send latest full map
     MOSDMap *m = new MOSDMap(monc->get_fsid());
