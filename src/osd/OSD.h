@@ -1361,9 +1361,9 @@ private:
 
 protected:
   // -- placement groups --
-  RWLock pg_map_lock;
+  RWLock pg_map_lock; // this lock orders *above* individual PG _locks
   ceph::unordered_map<spg_t, PG*> pg_map; // protected by pg_map lock
-  map<spg_t, list<OpRequestRef> > waiting_for_pg;
+  map<spg_t, list<OpRequestRef> > waiting_for_pg; // protected by pg_map lock
   map<spg_t, list<PG::CephPeeringEvtRef> > peering_wait_for_split;
   PGRecoveryStats pg_recovery_stats;
 
@@ -1425,10 +1425,16 @@ protected:
     int lastactingprimary
     ); ///< @return false if there was a map gap between from and now
 
-  void wake_pg_waiters(spg_t pgid) {
-    if (waiting_for_pg.count(pgid)) {
-      take_waiters_front(waiting_for_pg[pgid]);
-      waiting_for_pg.erase(pgid);
+  void wake_pg_waiters(PG* pg, spg_t pgid) {
+    // Need write lock on pg_map
+    map<spg_t, list<OpRequestRef> >::iterator i = waiting_for_pg.find(pgid);
+    if (i != waiting_for_pg.end()) {
+      for (list<OpRequestRef>::iterator j = i->second.begin();
+	   j != i->second.end();
+	   ++j) {
+	enqueue_op(pg, *j);
+      }
+      waiting_for_pg.erase(i);
     }
   }
 
