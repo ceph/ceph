@@ -54,6 +54,11 @@ def parse_args():
         help='Distro/OS of machine to run test on.',
     )
     parser.add_argument(
+        '--os-version',
+        default=None,
+        help='Distro/OS version of machine to run test on.',
+    )
+    parser.add_argument(
         '--block',
         action='store_true',
         default=False,

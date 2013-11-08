@@ -921,3 +921,25 @@ def get_distro(ctx):
         return os_type
     except AttributeError:
         return ctx.os_type
+
+def get_distro_version(ctx):
+    default_os_version = dict(
+        ubuntu="12.04",
+        fedora="18",
+        centos="6.4",
+        opensuse="12.2",
+        sles="11-sp2",
+        rhel="6.4",
+        debian='7.0'
+    )
+    distro = get_distro(ctx)
+    if ctx.os_version is not None:
+        return ctx.os_version
+    try:
+        os_version = ctx.config.get('os_version', default_os_version[distro])
+    except AttributeError:
+        os_version = default_os_version[distro]
+    try:
+        return ctx.config['downburst'].get('distroversion', os_version)
+    except (KeyError, AttributeError):
+        return os_version

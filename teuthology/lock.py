@@ -14,6 +14,8 @@ import teuthology
 from .config import config
 from . import lockstatus as ls
 from . import misc
+from teuthology.misc import get_distro
+from teuthology.misc import get_distro_version
 
 log = logging.getLogger(__name__)
 
@@ -436,17 +438,9 @@ def create_if_vm(ctx, machine_name):
     phys_host = status_info['vpshost']
     if not phys_host:
         return False
-    from teuthology.misc import get_distro
     os_type = get_distro(ctx)
-    default_os_version = dict(
-        ubuntu="12.04",
-        fedora="18",
-        centos="6.4",
-        opensuse="12.2",
-        sles="11-sp2",
-        rhel="6.3",
-        debian='6.0'
-    )
+    os_version = get_distro_version(ctx)
+
     createMe = decanonicalize_hostname(machine_name)
     with tempfile.NamedTemporaryFile() as tmp:
         try:
@@ -455,11 +449,7 @@ def create_if_vm(ctx, machine_name):
             lcnfg = {}
 
         distro = lcnfg.get('distro', os_type.lower())
-        try:
-            distroversion = ctx.config.get(
-                'os_version', default_os_version[distro])
-        except AttributeError:
-            distroversion = default_os_version[distro]
+        distroversion = lcnfg.get('distroversion', os_version)
 
         file_info = {}
         file_info['disk-size'] = lcnfg.get('disk-size', '30G')
