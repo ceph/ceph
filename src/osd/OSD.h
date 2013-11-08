@@ -1803,10 +1803,10 @@ public:
   void handle_rep_scrub(MOSDRepScrub *m);
   void handle_scrub(struct MOSDScrub *m);
   void handle_osd_ping(class MOSDPing *m);
-  void handle_op(OpRequestRef op);
+  void handle_op(OpRequestRef op, OSDMapRef osdmap);
 
   template <typename T, int MSGTYPE>
-  void handle_replica_op(OpRequestRef op);
+  void handle_replica_op(OpRequestRef op, OSDMapRef osdmap);
 
   /// check if we can throw out op from a disconnected client
   static bool op_is_discardable(class MOSDOp *m);

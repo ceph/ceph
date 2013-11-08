@@ -4618,30 +4618,30 @@ void OSD::dispatch_op(OpRequestRef op)
 
     // client ops
   case CEPH_MSG_OSD_OP:
-    handle_op(op);
+    handle_op(op, osdmap);
     break;
 
     // for replication etc.
   case MSG_OSD_SUBOP:
-    handle_replica_op<MOSDSubOp, MSG_OSD_SUBOP>(op);
+    handle_replica_op<MOSDSubOp, MSG_OSD_SUBOP>(op, osdmap);
     break;
   case MSG_OSD_SUBOPREPLY:
-    handle_replica_op<MOSDSubOpReply, MSG_OSD_SUBOPREPLY>(op);
+    handle_replica_op<MOSDSubOpReply, MSG_OSD_SUBOPREPLY>(op, osdmap);
     break;
   case MSG_OSD_PG_PUSH:
-    handle_replica_op<MOSDPGPush, MSG_OSD_PG_PUSH>(op);
+    handle_replica_op<MOSDPGPush, MSG_OSD_PG_PUSH>(op, osdmap);
     break;
   case MSG_OSD_PG_PULL:
-    handle_replica_op<MOSDPGPull, MSG_OSD_PG_PULL>(op);
+    handle_replica_op<MOSDPGPull, MSG_OSD_PG_PULL>(op, osdmap);
     break;
   case MSG_OSD_PG_PUSH_REPLY:
-    handle_replica_op<MOSDPGPushReply, MSG_OSD_PG_PUSH_REPLY>(op);
+    handle_replica_op<MOSDPGPushReply, MSG_OSD_PG_PUSH_REPLY>(op, osdmap);
     break;
   case MSG_OSD_PG_SCAN:
-    handle_replica_op<MOSDPGScan, MSG_OSD_PG_SCAN>(op);
+    handle_replica_op<MOSDPGScan, MSG_OSD_PG_SCAN>(op, osdmap);
     break;
   case MSG_OSD_PG_BACKFILL:
-    handle_replica_op<MOSDPGBackfill, MSG_OSD_PG_BACKFILL>(op);
+    handle_replica_op<MOSDPGBackfill, MSG_OSD_PG_BACKFILL>(op, osdmap);
     break;
   }
 }
@@ -6862,7 +6862,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
   reply_op_error(op, -ENXIO);
 }
 
-void OSD::handle_op(OpRequestRef op)
+void OSD::handle_op(OpRequestRef op, OSDMapRef osdmap)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
@@ -6997,7 +6997,7 @@ void OSD::handle_op(OpRequestRef op)
 }
 
 template<typename T, int MSGTYPE>
-void OSD::handle_replica_op(OpRequestRef op)
+void OSD::handle_replica_op(OpRequestRef op, OSDMapRef osdmap)
 {
   T *m = static_cast<T *>(op->get_req());
   assert(m->get_header().type == MSGTYPE);
