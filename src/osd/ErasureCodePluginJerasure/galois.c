@@ -693,7 +693,7 @@ void galois_w32_region_multiply(char *region,      /* Region to multiply */
   nbytes /= sizeof(int);
 
   if (galois_split_w8[0]== NULL) {
-    if (galois_create_split_w8_tables(8) < 0) {
+    if (galois_create_split_w8_tables() < 0) {
       fprintf(stderr, "galois_32_region_multiply -- couldn't make split multiplication tables\n");
       exit(1);
     }
