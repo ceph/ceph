@@ -655,19 +655,38 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	map<hobject_t, pg_missing_t::item>::const_iterator missing_iter =
 	  pg_log.get_missing().missing.lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
+	hobject_t _max = hobject_t::get_max();
 	while (1) {
-	  if (ls_iter == sentries.end()) {
-	    break;
-	  }
+	  const hobject_t &mcand =
+	    missing_iter == pg_log.get_missing().missing.end() ?
+	    _max :
+	    missing_iter->first;
+	  const hobject_t &lcand =
+	    ls_iter == sentries.end() ?
+	    _max :
+	    *ls_iter;
 
 	  hobject_t candidate;
-	  if (missing_iter == pg_log.get_missing().missing.end() ||
-	      *ls_iter < missing_iter->first) {
-	    candidate = *(ls_iter++);
+	  if (mcand == lcand) {
+	    candidate = mcand;
+	    if (!mcand.is_max()) {
+	      ls_iter++;
+	      missing_iter++;
+	    }
+	  } else if (mcand < lcand) {
+	    candidate = mcand;
+	    assert(!mcand.is_max());
+	    ++missing_iter;
 	  } else {
-	    candidate = (missing_iter++)->first;
+	    candidate = lcand;
+	    assert(!lcand.is_max());
+	    ++ls_iter;
 	  }
 
+	  if (candidate >= next) {
+	    break;
+	  }
+	    
 	  if (response.entries.size() == list_size) {
 	    next = candidate;
 	    break;
@@ -8110,7 +8129,6 @@ int ReplicatedPG::recover_backfill(
   }
 
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
-  map<int, vector<PushOp> > pushes;
   for (map<hobject_t,
 	   boost::tuple<eversion_t, eversion_t, ObjectContextRef> >::iterator i =
 	     to_push.begin();
@@ -8142,6 +8160,17 @@ int ReplicatedPG::recover_backfill(
     assert(i->first > new_last_backfill);
     new_last_backfill = i->first;
   }
+
+  /* If last_backfill is snapdir, we know that head necessarily cannot exist,
+   * therefore it's safe to bump the snap up to NOSNAP.  This is necessary
+   * since we need avoid having SNAPDIR backfilled and HEAD not backfilled
+   * since a transaction on HEAD might change SNAPDIR
+   */
+  if (new_last_backfill.is_snapdir())
+    new_last_backfill = new_last_backfill.get_head();
+  if (last_backfill_started.is_snapdir())
+    last_backfill_started = last_backfill_started.get_head();
+
   assert(!pending_backfill_updates.empty() ||
 	 new_last_backfill == last_backfill_started);
   if (pending_backfill_updates.empty() &&
