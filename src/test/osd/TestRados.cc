@@ -116,7 +116,7 @@ private:
       }
       while (true) {
 	int snap = rand_choose(context.snaps)->first;
-	if (context.snaps_in_use.count(snap))
+	if (context.snaps_in_use.lookup(snap))
 	  continue;  // in use; try again!
 	cout << "snap_remove snap " << snap << std::endl;
 	return new SnapRemoveOp(m_op, &context, snap, m_stats);

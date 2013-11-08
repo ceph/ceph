@@ -360,7 +360,7 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
     }
     --p;
     mark_dirty_from(p->version);
-    if (p->version == newhead) {
+    if (p->version <= newhead) {
       ++p;
       divergent.splice(divergent.begin(), log.log, p, log.log.end());
       break;
