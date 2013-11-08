@@ -2399,13 +2399,7 @@ void PG::log_weirdness()
 		      << " != info.last_update " << info.last_update
 		      << "\n";
 
-  if (pg_log.get_log().empty()) {
-    // shoudl it be?
-    if (pg_log.get_head() != pg_log.get_tail())
-      osd->clog.error() << info.pgid
-			<< " log bound mismatch, empty but (" << pg_log.get_tail() << ","
-			<< pg_log.get_head() << "]\n";
-  } else {
+  if (!pg_log.get_log().empty()) {
     // sloppy check
     if ((pg_log.get_log().log.begin()->version <= pg_log.get_tail()))
       osd->clog.error() << info.pgid
@@ -4679,19 +4673,11 @@ ostream& operator<<(ostream& out, const PG& pg)
       pg.pg_log.get_head() != pg.info.last_update)
     out << " (info mismatch, " << pg.pg_log.get_log() << ")";
 
-  if (pg.pg_log.get_log().empty()) {
-    // shoudl it be?
-    if (pg.pg_log.get_head().version - pg.pg_log.get_tail().version != 0) {
-      out << " (log bound mismatch, empty)";
-    }
-  } else {
-    if ((pg.pg_log.get_log().log.begin()->version <= pg.pg_log.get_tail()) || // sloppy check
-        (pg.pg_log.get_log().log.rbegin()->version != pg.pg_log.get_head() &&
-	 !(pg.pg_log.get_head() == pg.pg_log.get_tail()))) {
+  if (!pg.pg_log.get_log().empty()) {
+    if ((pg.pg_log.get_log().log.begin()->version <= pg.pg_log.get_tail())) {
       out << " (log bound mismatch, actual=["
 	  << pg.pg_log.get_log().log.begin()->version << ","
 	  << pg.pg_log.get_log().log.rbegin()->version << "]";
-      //out << "len=" << pg.log.log.size();
       out << ")";
     }
   }

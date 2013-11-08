@@ -244,12 +244,12 @@ public:
   void print_osd_perf_stats(std::ostream *ss) const;
 
   void recovery_summary(Formatter *f, ostream *out,
-                        pool_stat_t delta_sum) const;
+                        const pool_stat_t& delta_sum) const;
   void overall_recovery_summary(Formatter *f, ostream *out) const;
   void pool_recovery_summary(Formatter *f, ostream *out,
                              uint64_t poolid) const;
   void recovery_rate_summary(Formatter *f, ostream *out,
-                             pool_stat_t delta_sum,
+                             const pool_stat_t& delta_sum,
                              utime_t delta_stamp) const;
   void overall_recovery_rate_summary(Formatter *f, ostream *out) const;
   void pool_recovery_rate_summary(Formatter *f, ostream *out,
@@ -259,7 +259,7 @@ public:
    * given @p delta_sum pool over a given @p delta_stamp period of time.
    */
   void client_io_rate_summary(Formatter *f, ostream *out,
-                              pool_stat_t delta_sum,
+                              const pool_stat_t& delta_sum,
                               utime_t delta_stamp) const;
   /**
    * Obtain a formatted/plain output for the overall client I/O, which is
