@@ -45,7 +45,7 @@ ErasureCodePluginRegistry::~ErasureCodePluginRegistry()
 {
   for (std::map<std::string,ErasureCodePlugin*>::iterator i = plugins.begin();
        i != plugins.end();
-       i++) {
+       ++i) {
     void *library = i->second->library;
     delete i->second;
     dlclose(library);
@@ -112,6 +112,7 @@ int ErasureCodePluginRegistry::load(const std::string &plugin_name,
     if (r != 0) {
       derr << "erasure_code_init(" << plugin_name
            << "): " << strerror(-r) << dendl;
+      dlclose(library);
       return r;
     }
   } else {

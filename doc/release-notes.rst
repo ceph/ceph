@@ -407,6 +407,12 @@ v0.69
 Upgrading
 ~~~~~~~~~
 
+* The sysvinit /etc/init.d/ceph script will, by default, update the
+  CRUSH location of an OSD when it starts.  Previously, if the
+  monitors were not available, this command would hang indefinitely.
+  Now, that step will time out after 10 seconds and the ceph-osd daemon
+  will not be started.
+
 * Users of the librados C++ API should replace users of get_version()
   with get_version64() as the old method only returns a 32-bit value
   for a 64-bit field.  The existing 32-bit get_version() method is now
