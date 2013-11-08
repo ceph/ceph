@@ -1431,14 +1431,6 @@ protected:
       waiting_for_pg.erase(pgid);
     }
   }
-  void wake_all_pg_waiters() {
-    for (map<spg_t, list<OpRequestRef> >::iterator p = waiting_for_pg.begin();
-	 p != waiting_for_pg.end();
-	 ++p)
-      take_waiters_front(p->second);
-    waiting_for_pg.clear();
-  }
-
 
   // -- pg creation --
   struct create_pg_info {
