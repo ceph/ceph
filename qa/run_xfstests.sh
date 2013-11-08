@@ -48,7 +48,7 @@ XFS_MKFS_OPTIONS="-l su=32k"
 
 # Override the default test list with a list of tests known to pass
 # until we can work through getting them all passing reliably.
-TESTS="1-9 11-15 17 19-21 26-29 31-34 41 46-48 50-54 56 61 63-67 69-70 74-76"
+TESTS="1-7 9 11-15 17 19-21 26-29 31-34 41 46-48 50-54 56 61 63-67 69-70 74-76"
 TESTS="${TESTS} 78 79 84-89 91-92 100 103 105 108 110 116-121 124 126"
 TESTS="${TESTS} 129-135 137-141 164-167 182 184 187-190 192 194"
 TESTS="${TESTS} 196 199 201 203 214-216 220-227 234 236-238 241 243-249"
@@ -58,6 +58,9 @@ TESTS="${TESTS} 253 257-259 261 262 269 273 275 277 278 280 285 286"
 
 ######
 # Some explanation of why tests have been excluded above:
+#
+# Test 008 was pulled because it contained a race condition leading to
+#          spurious failures.
 #
 # Test 049 was pulled because it caused a kernel fault.
 #	http://tracker.newdream.net/issues/2260

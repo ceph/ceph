@@ -41,6 +41,7 @@ TEST(FlatIndex, FlatIndex) {
   EXPECT_EQ(0, index.cleanup());
 }
 
+#ifdef GTEST_HAS_DEATH_TEST
 TEST(FlatIndex, collection) {
   coll_t collection("ABC");
   const std::string base_path("PATH");
@@ -53,6 +54,7 @@ TEST(FlatIndex, collection) {
   vector<ghobject_t> ls;
   ASSERT_DEATH(index.collection_list_partial(hoid, 0, 0, 0, &ls, &hoid), "0");
 }
+#endif //GTEST_HAS_DEATH_TEST
 
 TEST(FlatIndex, created_unlink) {
   coll_t collection("ABC");

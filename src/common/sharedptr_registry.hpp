@@ -33,7 +33,7 @@ public:
 private:
   Mutex lock;
   Cond cond;
-  map<K, WeakVPtr> contents;
+  map<K, pair<WeakVPtr, V*> > contents;
 
   class OnRemoval {
     SharedPtrRegistry<K,V> *parent;
@@ -44,8 +44,13 @@ private:
     void operator()(V *to_remove) {
       {
 	Mutex::Locker l(parent->lock);
-	parent->contents.erase(key);
-	parent->cond.Signal();
+	typename map<K, pair<WeakVPtr, V*> >::iterator i =
+	  parent->contents.find(key);
+	if (i != parent->contents.end() &&
+	    i->second.second == to_remove) {
+	  parent->contents.erase(i);
+	  parent->cond.Signal();
+	}
       }
       delete to_remove;
     }
@@ -68,9 +73,10 @@ public:
     {
       Mutex::Locker l(lock);
       VPtr next_val;
-      typename map<K, WeakVPtr>::iterator i = contents.upper_bound(key);
+      typename map<K, pair<WeakVPtr, V*> >::iterator i =
+	contents.upper_bound(key);
       while (i != contents.end() &&
-	     !(next_val = i->second.lock()))
+	     !(next_val = i->second.first.lock()))
 	++i;
       if (i == contents.end())
 	return false;
@@ -86,9 +92,10 @@ public:
   bool get_next(const K &key, pair<K, V> *next) {
     VPtr next_val;
     Mutex::Locker l(lock);
-    typename map<K, WeakVPtr>::iterator i = contents.upper_bound(key);
+    typename map<K, pair<WeakVPtr, V*> >::iterator i =
+      contents.upper_bound(key);
     while (i != contents.end() &&
-	   !(next_val = i->second.lock()))
+	   !(next_val = i->second.first.lock()))
       ++i;
     if (i == contents.end())
       return false;
@@ -101,8 +108,10 @@ public:
     Mutex::Locker l(lock);
     waiting++;
     while (1) {
-      if (contents.count(key)) {
-	VPtr retval = contents[key].lock();
+      typename map<K, pair<WeakVPtr, V*> >::iterator i =
+	contents.find(key);
+      if (i != contents.end()) {
+	VPtr retval = i->second.first.lock();
 	if (retval) {
 	  waiting--;
 	  return retval;
@@ -120,8 +129,10 @@ public:
     Mutex::Locker l(lock);
     waiting++;
     while (1) {
-      if (contents.count(key)) {
-	VPtr retval = contents[key].lock();
+      typename map<K, pair<WeakVPtr, V*> >::iterator i =
+	contents.find(key);
+      if (i != contents.end()) {
+	VPtr retval = i->second.first.lock();
 	if (retval) {
 	  waiting--;
 	  return retval;
@@ -131,10 +142,16 @@ public:
       }
       cond.Wait(lock);
     }
-    VPtr retval(new V(), OnRemoval(this, key));
-    contents[key] = retval;
+    V *ptr = new V();
+    VPtr retval(ptr, OnRemoval(this, key));
+    contents.insert(make_pair(key, make_pair(retval, ptr)));
     waiting--;
     return retval;
+  }
+
+  unsigned size() {
+    Mutex::Locker l(lock);
+    return contents.size();
   }
 
   void remove(const K &key) {
@@ -148,8 +165,10 @@ public:
     Mutex::Locker l(lock);
     waiting++;
     while (1) {
-      if (contents.count(key)) {
-	VPtr retval = contents[key].lock();
+      typename map<K, pair<WeakVPtr, V*> >::iterator i =
+	contents.find(key);
+      if (i != contents.end()) {
+	VPtr retval = i->second.first.lock();
 	if (retval) {
 	  waiting--;
 	  return retval;
@@ -159,8 +178,9 @@ public:
       }
       cond.Wait(lock);
     }
-    VPtr retval(new V(arg), OnRemoval(this, key));
-    contents[key] = retval;
+    V *ptr = new V(arg);
+    VPtr retval(ptr, OnRemoval(this, key));
+    contents.insert(make_pair(key, make_pair(retval, ptr)));
     waiting--;
     return retval;
   }

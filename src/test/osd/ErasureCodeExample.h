@@ -76,7 +76,7 @@ public:
     set <int> available_chunks;
     for (map<int, int>::const_iterator i = c2c.begin();
 	 i != c2c.end();
-	 i++)
+	 ++i)
       available_chunks.insert(i->first);
     return minimum_to_decode(want_to_read, available_chunks, minimum);
   }
@@ -109,7 +109,7 @@ public:
     const bufferptr ptr = out.buffers().front();
     for (set<int>::iterator j = want_to_encode.begin();
          j != want_to_encode.end();
-         j++) {
+         ++j) {
       bufferptr chunk(ptr, (*j) * chunk_length, chunk_length);
       (*encoded)[*j].push_front(chunk);
     }
@@ -125,7 +125,7 @@ public:
     unsigned chunk_length = (*chunks.begin()).second.length();
     for (set<int>::iterator i = want_to_read.begin();
          i != want_to_read.end();
-         i++) {
+         ++i) {
       if (chunks.find(*i) != chunks.end()) {
 	//
 	// If the chunk is available, just copy the bufferptr pointer
@@ -146,7 +146,7 @@ public:
         bufferptr chunk(chunk_length);
         map<int, bufferlist>::const_iterator k = chunks.begin();
         const char *a = k->second.buffers().front().c_str();
-        k++;
+        ++k;
         const char *b = k->second.buffers().front().c_str();
         for (unsigned j = 0; j < chunk_length; j++) {
           chunk[j] = a[j] ^ b[j];

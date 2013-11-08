@@ -2659,7 +2659,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
   pi->auid = auid;
   for (vector<string>::const_iterator i = properties.begin();
        i != properties.end();
-       i++) {
+       ++i) {
     size_t equal = i->find('=');
     if (equal == string::npos)
       pi->properties[*i] = string();
@@ -2796,10 +2796,15 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     if (n <= (int)p.get_pg_num()) {
       ss << "specified pg_num " << n << " <= current " << p.get_pg_num();
-    } else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
-      ss << "currently creating pgs, wait";
-      return -EAGAIN;
     } else {
+      for(set<pg_t>::iterator i = mon->pgmon()->pg_map.creating_pgs.begin();
+	  i != mon->pgmon()->pg_map.creating_pgs.end();
+	  ++i) {
+	if (i->m_pool == static_cast<uint64_t>(pool)) {
+	  ss << "currently creating pgs, wait";
+	  return -EAGAIN;
+	}
+      }
       p.set_pg_num(n);
       ss << "set pool " << pool << " pg_num to " << n;
     }
@@ -2812,10 +2817,15 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "specified pgp_num must > 0, but you set to " << n;
     } else if (n > (int)p.get_pg_num()) {
       ss << "specified pgp_num " << n << " > pg_num " << p.get_pg_num();
-    } else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
-      ss << "still creating pgs, wait";
-      return -EAGAIN;
     } else {
+      for(set<pg_t>::iterator i = mon->pgmon()->pg_map.creating_pgs.begin();
+	  i != mon->pgmon()->pg_map.creating_pgs.end();
+	  ++i) {
+	if (i->m_pool == static_cast<uint64_t>(pool)) {
+	  ss << "currently creating pgs, wait";
+	  return -EAGAIN;
+	}
+      }
       p.set_pgp_num(n);
       ss << "set pool " << pool << " pgp_num to " << n;
     }
@@ -2938,7 +2948,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     // sanity check: test some inputs to make sure this map isn't totally broken
     dout(10) << " testing map" << dendl;
     stringstream ess;
-    CrushTester tester(crush, ess, 1);
+    CrushTester tester(crush, ess);
     tester.test();
     dout(10) << " result " << ess.str() << dendl;
 
@@ -4367,7 +4377,7 @@ int OSDMonitor::_prepare_rename_pool(int64_t pool, string newname)
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
        p != pending_inc.new_pool_names.end();
        ++p) {
-    if (p->second == newname && (uint64_t)p->first != pool) {
+    if (p->second == newname && p->first != pool) {
       return -EEXIST;
     }
   }

@@ -440,7 +440,7 @@ public:
 			   bool force_new);
     ObjecterDispatcher(OSDService *o) : Dispatcher(cct), osd(o) {}
   } objecter_dispatcher;
-  friend class ObjecterDispatcher;
+  friend struct ObjecterDispatcher;
 
 
   // -- Watch --
@@ -1191,8 +1191,12 @@ protected:
   void build_past_intervals_parallel();
 
   void calc_priors_during(pg_t pgid, epoch_t start, epoch_t end, set<int>& pset);
-  void project_pg_history(pg_t pgid, pg_history_t& h, epoch_t from,
-			  const vector<int>& lastup, const vector<int>& lastacting);
+
+  /// project pg history from from to now
+  bool project_pg_history(
+    pg_t pgid, pg_history_t& h, epoch_t from,
+    const vector<int>& lastup, const vector<int>& lastacting
+    ); ///< @return false if there was a map gap between from and now
 
   void wake_pg_waiters(pg_t pgid) {
     if (waiting_for_pg.count(pgid)) {
@@ -1555,12 +1559,11 @@ protected:
 
   struct ScrubFinalizeWQ : public ThreadPool::WorkQueue<PG> {
   private:
-    OSD *osd;
     xlist<PG*> scrub_finalize_queue;
 
   public:
-    ScrubFinalizeWQ(OSD *o, time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<PG>("OSD::ScrubFinalizeWQ", ti, ti*10, tp), osd(o) {}
+    ScrubFinalizeWQ(time_t ti, ThreadPool *tp)
+      : ThreadPool::WorkQueue<PG>("OSD::ScrubFinalizeWQ", ti, ti*10, tp) {}
 
     bool _empty() {
       return scrub_finalize_queue.empty();

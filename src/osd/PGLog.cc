@@ -360,7 +360,7 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
     }
     --p;
     mark_dirty_from(p->version);
-    if (p->version == newhead) {
+    if (p->version <= newhead) {
       ++p;
       divergent.splice(divergent.begin(), log.log, p, log.log.end());
       break;
@@ -422,8 +422,6 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
       log.index(*to);
       dout(15) << *to << dendl;
     }
-    assert(to != olog.log.end() ||
-	   (olog.head == info.last_update));
       
     // splice into our log.
     log.log.splice(log.log.begin(),

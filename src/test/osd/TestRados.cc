@@ -116,21 +116,17 @@ private:
       }
       while (true) {
 	int snap = rand_choose(context.snaps)->first;
-	if (context.snaps_in_use.count(snap))
+	if (context.snaps_in_use.lookup(snap))
 	  continue;  // in use; try again!
 	cout << "snap_remove snap " << snap << std::endl;
 	return new SnapRemoveOp(m_op, &context, snap, m_stats);
       }
 
     case TEST_OP_ROLLBACK:
-      if (context.snaps.empty()) {
-	return NULL;
-      }
       {
-	int snap = rand_choose(context.snaps)->first;
 	string oid = *(rand_choose(context.oid_not_in_use));
-	cout << "rollback oid " << oid << " to " << snap << std::endl;
-	return new RollbackOp(m_op, &context, oid, snap);
+	cout << "rollback oid " << oid << std::endl;
+	return new RollbackOp(m_op, &context, oid);
       }
 
     case TEST_OP_SETATTR:

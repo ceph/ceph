@@ -1,3 +1,4 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "test/librados/test.h"
@@ -20,9 +21,12 @@ TEST(LibRadosList, ListObjects) {
   rados_list_ctx_t ctx;
   ASSERT_EQ(0, rados_objects_list_open(ioctx, &ctx));
   const char *entry;
-  ASSERT_EQ(0, rados_objects_list_next(ctx, &entry, NULL));
-  ASSERT_EQ(std::string(entry), "foo");
-  ASSERT_EQ(-ENOENT, rados_objects_list_next(ctx, &entry, NULL));
+  bool foundit = false;
+  while (rados_objects_list_next(ctx, &entry, NULL) != -ENOENT) {
+    foundit = true;
+    ASSERT_EQ(std::string(entry), "foo");
+  }
+  ASSERT_TRUE(foundit);
   rados_objects_list_close(ctx);
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
@@ -40,10 +44,13 @@ TEST(LibRadosList, ListObjectsPP) {
   bl1.append(buf, sizeof(buf));
   ASSERT_EQ((int)sizeof(buf), ioctx.write("foo", bl1, sizeof(buf), 0));
   ObjectIterator iter(ioctx.objects_begin());
-  ASSERT_EQ((iter == ioctx.objects_end()), false);
-  ASSERT_EQ((*iter).first, "foo");
-  ++iter;
-  ASSERT_EQ(true, (iter == ioctx.objects_end()));
+  bool foundit = false;
+  while (iter != ioctx.objects_end()) {
+    foundit = true;
+    ASSERT_EQ((*iter).first, "foo");
+    ++iter;
+  }
+  ASSERT_TRUE(foundit);
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
@@ -51,12 +58,18 @@ TEST(LibRadosList, ListObjectsPP) {
 static void check_list(std::set<std::string>& myset, rados_list_ctx_t& ctx)
 {
   const char *entry;
-  while(!myset.empty()) {
-    ASSERT_EQ(0, rados_objects_list_next(ctx, &entry, NULL));
-    ASSERT_TRUE(myset.end() != myset.find(std::string(entry)));
+  std::set<std::string> orig_set(myset);
+  /**
+   * During splitting, we might see duplicate items.
+   * We assert that every object returned is in myset and that
+   * we don't hit ENOENT until we have hit every item in myset
+   * at least once.
+   */
+  while (rados_objects_list_next(ctx, &entry, NULL) != -ENOENT) {
+    ASSERT_TRUE(orig_set.end() != orig_set.find(std::string(entry)));
     myset.erase(std::string(entry));
   }
-  ASSERT_EQ(-ENOENT, rados_objects_list_next(ctx, &entry, NULL));
+  ASSERT_TRUE(myset.empty());
 }
 
 TEST(LibRadosList, ListObjectsNS) {
@@ -117,18 +130,19 @@ TEST(LibRadosList, ListObjectsNS) {
 static void check_listpp(std::set<std::string>& myset, IoCtx& ioctx)
 {
   ObjectIterator iter(ioctx.objects_begin());
-  if (myset.empty()) {
-    ASSERT_EQ((iter == ioctx.objects_end()), true);
-    return;
-  }
-    
-  while(!myset.empty()) {
-    ASSERT_EQ((iter == ioctx.objects_end()), false);
-    ASSERT_TRUE(myset.end() != myset.find(std::string((*iter).first)));
+  std::set<std::string> orig_set(myset);
+  /**
+   * During splitting, we might see duplicate items.
+   * We assert that every object returned is in myset and that
+   * we don't hit ENOENT until we have hit every item in myset
+   * at least once.
+   */
+  while (iter != ioctx.objects_end()) {
+    ASSERT_TRUE(orig_set.end() != orig_set.find(std::string((*iter).first)));
     myset.erase(std::string((*iter).first));
     ++iter;
   }
-  ASSERT_EQ((iter == ioctx.objects_end()), true);
+  ASSERT_TRUE(myset.empty());
 }
 
 TEST(LibRadosList, ListObjectsPPNS) {
