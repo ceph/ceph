@@ -1903,6 +1903,21 @@ PG *OSD::_create_lock_pg(
   return pg;
 }
 
+PG *OSD::get_pg_or_queue_for_pg(pg_t pgid, OpRequestRef op)
+{
+  {
+    RWLock::RLocker l(pg_map_lock);
+    if (pg_map.count(pgid))
+      return pg_map[pgid];
+  }
+  RWLock::WLocker l(pg_map_lock);
+  if (pg_map.count(pgid)) {
+    return pg_map[pgid];
+  } else {
+    waiting_for_pg[pgid].push_back(op);
+    return NULL;
+  }
+}
 
 bool OSD::_have_pg(pg_t pgid)
 {
@@ -4479,6 +4494,34 @@ bool OSD::ms_dispatch(Message *m)
   return true;
 }
 
+void OSD::dispatch_session_waiting(Session *session, OSDMapRef osdmap)
+{
+  for (list<OpRequestRef>::iterator i = session->waiting_on_map.begin();
+       i != session->waiting_on_map.end() && dispatch_op_fast(*i, osdmap);
+       session->waiting_on_map.erase(i++));
+
+  if (session->waiting_on_map.empty()) {
+    clear_session_waiting_on_map(session);
+  } else {
+    register_session_waiting_on_map(session);
+  }
+}
+
+void OSD::ms_fast_dispatch(Message *m)
+{
+  OpRequestRef op = op_tracker.create_request<OpRequest>(m);
+  OSDMapRef nextmap = service.get_nextmap_reserved();
+  Session *session = static_cast<Session*>(m->get_connection()->get_priv());
+  assert(session);
+  {
+    Mutex::Locker l(session->session_dispatch_lock);
+    session->waiting_on_map.push_back(op);
+    dispatch_session_waiting(session, nextmap);
+  }
+  session->put();
+  service.release_map(nextmap);
+}
+
 bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
 {
   dout(10) << "OSD::ms_get_authorizer type=" << ceph_entity_type_name(dest_type) << dendl;
@@ -4618,8 +4661,56 @@ void OSD::dispatch_op(OpRequestRef op)
   case MSG_OSD_RECOVERY_RESERVE:
     handle_pg_recovery_reserve(op);
     break;
+  }
+}
 
-    // client ops
+template<typename T, int MSGTYPE>
+epoch_t replica_op_required_epoch(OpRequestRef op)
+{
+  T *m = static_cast<T *>(op->get_req());
+  assert(m->get_header().type == MSGTYPE);
+  return m->map_epoch;
+}
+
+epoch_t op_required_epoch(OpRequestRef op)
+{
+  switch (op->get_req()->get_type()) {
+  case CEPH_MSG_OSD_OP: {
+    MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+    return m->get_map_epoch();
+  }
+  case MSG_OSD_SUBOP:
+    return replica_op_required_epoch<MOSDSubOp, MSG_OSD_SUBOP>(op);
+  case MSG_OSD_SUBOPREPLY:
+    return replica_op_required_epoch<MOSDSubOpReply, MSG_OSD_SUBOPREPLY>(
+      op);
+  case MSG_OSD_PG_PUSH:
+    return replica_op_required_epoch<MOSDPGPush, MSG_OSD_PG_PUSH>(
+      op);
+  case MSG_OSD_PG_PULL:
+    return replica_op_required_epoch<MOSDPGPull, MSG_OSD_PG_PULL>(
+      op);
+  case MSG_OSD_PG_PUSH_REPLY:
+    return replica_op_required_epoch<MOSDPGPushReply, MSG_OSD_PG_PUSH_REPLY>(
+      op);
+  case MSG_OSD_PG_SCAN:
+    return replica_op_required_epoch<MOSDPGScan, MSG_OSD_PG_SCAN>(op);
+  case MSG_OSD_PG_BACKFILL:
+    return replica_op_required_epoch<MOSDPGBackfill, MSG_OSD_PG_BACKFILL>(
+      op);
+  default:
+    assert(0);
+    return 0;
+  }
+}
+
+bool OSD::dispatch_op_fast(OpRequestRef op, OSDMapRef osdmap) {
+  epoch_t msg_epoch(op_required_epoch(op));
+  if (msg_epoch > osdmap->get_epoch())
+    return false;
+
+  switch(op->get_req()->get_type()) {
+  // client ops
   case CEPH_MSG_OSD_OP:
     handle_op(op, osdmap);
     break;
@@ -4646,7 +4737,10 @@ void OSD::dispatch_op(OpRequestRef op)
   case MSG_OSD_PG_BACKFILL:
     handle_replica_op<MOSDPGBackfill, MSG_OSD_PG_BACKFILL>(op, osdmap);
     break;
+  default:
+    assert(0);
   }
+  return true;
 }
 
 void OSD::_dispatch(Message *m)
@@ -5454,6 +5548,7 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
   }
 
   // scan pgs with waiters
+  RWLock::WLocker l(pg_map_lock);
   map<pg_t, list<OpRequestRef> >::iterator p = waiting_for_pg.begin();
   while (p != waiting_for_pg.end()) {
     pg_t pgid = p->first;
@@ -5519,6 +5614,16 @@ void OSD::consume_map()
   service.pre_publish_map(osdmap);
   service.await_reserved_maps();
   service.publish_map(osdmap);
+
+  set<Session*> sessions_to_check;
+  get_sessions_waiting_for_map(&sessions_to_check);
+  for (set<Session*>::iterator i = sessions_to_check.begin();
+       i != sessions_to_check.end();
+       sessions_to_check.erase(i++)) {
+    Mutex::Locker l((*i)->session_dispatch_lock);
+    dispatch_session_waiting(*i, osdmap);
+    (*i)->put();
+  }
 
   // scan pg's
   {
@@ -6872,10 +6977,6 @@ void OSD::handle_op(OpRequestRef op, OSDMapRef osdmap)
   // we don't need encoded payload anymore
   m->clear_payload();
 
-  // require same or newer map
-  if (!require_same_or_newer_map(op, m->get_map_epoch()))
-    return;
-
   // object name too long?
   if (m->get_oid().name.size() > MAX_CEPH_OBJECT_NAME_LEN) {
     dout(4) << "handle_op '" << m->get_oid().name << "' is longer than "
@@ -6941,6 +7042,7 @@ void OSD::handle_op(OpRequestRef op, OSDMapRef osdmap)
       return;
     }
   }
+
   // calc actual pgid
   pg_t pgid = m->get_pg();
   int64_t pool = pgid.pool();
@@ -6948,55 +7050,43 @@ void OSD::handle_op(OpRequestRef op, OSDMapRef osdmap)
       osdmap->have_pg_pool(pool))
     pgid = osdmap->raw_pg_to_pg(pgid);
 
-  // get and lock *pg.
-  PG *pg = _have_pg(pgid) ? _lookup_pg(pgid) : NULL;
-  if (!pg) {
-    dout(7) << "hit non-existent pg " << pgid << dendl;
-
-    if (osdmap->get_pg_acting_role(pgid, whoami) >= 0) {
-      dout(7) << "we are valid target for op, waiting" << dendl;
-      waiting_for_pg[pgid].push_back(op);
-      op->mark_delayed("waiting for pg to exist locally");
-      return;
-    }
-
-    // okay, we aren't valid now; check send epoch
-    if (m->get_map_epoch() < superblock.oldest_map) {
-      dout(7) << "don't have sender's osdmap; assuming it was valid and that client will resend" << dendl;
-      return;
-    }
-    OSDMapRef send_map = get_map(m->get_map_epoch());
-
-    if (send_map->get_pg_acting_role(pgid, whoami) >= 0) {
-      dout(7) << "dropping request; client will resend when they get new map" << dendl;
-    } else if (!send_map->have_pg_pool(pgid.pool())) {
-      dout(7) << "dropping request; pool did not exist" << dendl;
-      clog.warn() << m->get_source_inst() << " invalid " << m->get_reqid()
-		  << " pg " << m->get_pg()
-		  << " to osd." << whoami
-		  << " in e" << osdmap->get_epoch()
-		  << ", client e" << m->get_map_epoch()
-		  << " when pool " << m->get_pg().pool() << " did not exist"
-		  << "\n";
-    } else {
-      dout(7) << "we are invalid target" << dendl;
-      pgid = m->get_pg();
-      if ((m->get_flags() & CEPH_OSD_FLAG_PGOP) == 0)
-	pgid = send_map->raw_pg_to_pg(pgid);
-      clog.warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
-		  << " pg " << m->get_pg()
-		  << " to osd." << whoami
-		  << " in e" << osdmap->get_epoch()
-		  << ", client e" << m->get_map_epoch()
-		  << " pg " << pgid
-		  << " features " << m->get_connection()->get_features()
-		  << "\n";
-      service.reply_op_error(op, -ENXIO);
-    }
+  OSDMapRef send_map = service.try_get_map(m->get_map_epoch());
+  // check send epoch
+  if (!send_map) {
+    dout(7) << "don't have sender's osdmap; assuming it was valid and that client will resend" << dendl;
     return;
   }
 
-  enqueue_op(pg, op);
+  if (!send_map->have_pg_pool(pgid.pool())) {
+    dout(7) << "dropping request; pool did not exist" << dendl;
+    clog.warn() << m->get_source_inst() << " invalid " << m->get_reqid()
+		<< " pg " << m->get_pg()
+		<< " to osd." << whoami
+		<< " in e" << osdmap->get_epoch()
+		<< ", client e" << m->get_map_epoch()
+		<< " when pool " << m->get_pg().pool() << " did not exist"
+		<< "\n";
+    return;
+  } else if (send_map->get_pg_acting_role(pgid, whoami) < 0) {
+    dout(7) << "we are invalid target" << dendl;
+    pgid = m->get_pg();
+    if ((m->get_flags() & CEPH_OSD_FLAG_PGOP) == 0)
+      pgid = send_map->raw_pg_to_pg(pgid);
+    clog.warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
+		<< " pg " << m->get_pg()
+		<< " to osd." << whoami
+		<< " in e" << osdmap->get_epoch()
+		<< ", client e" << m->get_map_epoch()
+		<< " pg " << pgid
+		<< " features " << m->get_connection()->get_features()
+		<< "\n";
+    service.reply_op_error(op, -ENXIO);
+    return;
+  }
+
+  PG *pg = get_pg_or_queue_for_pg(pgid, op);
+  if (pg)
+    enqueue_op(pg, op);
 }
 
 template<typename T, int MSGTYPE>
@@ -7006,6 +7096,7 @@ void OSD::handle_replica_op(OpRequestRef op, OSDMapRef osdmap)
   assert(m->get_header().type == MSGTYPE);
 
   dout(10) << __func__ << *m << " epoch " << m->map_epoch << dendl;
+
   if (m->map_epoch < up_epoch) {
     dout(3) << "replica op from before up" << dendl;
     return;
@@ -7017,28 +7108,15 @@ void OSD::handle_replica_op(OpRequestRef op, OSDMapRef osdmap)
   // must be a rep op.
   assert(m->get_source().is_osd());
   
-  // require same or newer map
-  if (!require_same_or_newer_map(op, m->map_epoch))
-    return;
-
   // share our map with sender, if they're old
   _share_map_incoming(
     m->get_source(), m->get_connection().get(), m->map_epoch,
     osdmap,
     static_cast<Session*>(m->get_connection()->get_priv()));
 
-  // make sure we have the pg
-  const pg_t pgid = m->pgid;
-  if (service.splitting(pgid)) {
-    waiting_for_pg[pgid].push_back(op);
-    return;
-  }
-
-  PG *pg = _have_pg(pgid) ? _lookup_pg(pgid) : NULL;
-  if (!pg) {
-    return;
-  }
-  enqueue_op(pg, op);
+  PG *pg = get_pg_or_queue_for_pg(m->pgid, op);
+  if (pg)
+    enqueue_op(pg, op);
 }
 
 bool OSD::op_is_discardable(MOSDOp *op)

@@ -738,6 +738,7 @@ protected:
   void tick();
   void _dispatch(Message *m);
   void dispatch_op(OpRequestRef op);
+  bool dispatch_op_fast(OpRequestRef op, OSDMapRef osdmap);
 
   void check_osdmap_features();
 
@@ -867,6 +868,7 @@ public:
       session_dispatch_lock("Session::session_dispatch_lock")
     {}
   };
+  void dispatch_session_waiting(Session *session, OSDMapRef osdmap);
   Mutex session_waiting_for_map_lock;
   set<Session*> session_waiting_for_map;
   /// Caller assumes refs for included Sessions
@@ -1212,13 +1214,15 @@ private:
 protected:
   // -- placement groups --
   RWLock pg_map_lock;
-  hash_map<pg_t, PG*> pg_map;
-  map<pg_t, list<OpRequestRef> > waiting_for_pg;
+  hash_map<pg_t, PG*> pg_map; // protected by pg_map_lock
+  map<pg_t, list<OpRequestRef> > waiting_for_pg; // protected by pg_map_lock
+
   map<pg_t, list<PG::CephPeeringEvtRef> > peering_wait_for_split;
   PGRecoveryStats pg_recovery_stats;
 
   PGPool _get_pool(int id, OSDMapRef createmap);
 
+  PG *get_pg_or_queue_for_pg(pg_t pgid, OpRequestRef op);
   bool  _have_pg(pg_t pgid);
   PG   *_lookup_lock_pg_with_map_lock_held(pg_t pgid);
   PG   *_lookup_lock_pg(pg_t pgid);
@@ -1761,6 +1765,22 @@ protected:
   }
 
  private:
+  bool ms_can_fast_dispatch(Message *m) const {
+    switch (m->get_type()) {
+    case CEPH_MSG_OSD_OP:
+    case MSG_OSD_SUBOP:
+    case MSG_OSD_SUBOPREPLY:
+    case MSG_OSD_PG_PUSH:
+    case MSG_OSD_PG_PULL:
+    case MSG_OSD_PG_PUSH_REPLY:
+    case MSG_OSD_PG_SCAN:
+    case MSG_OSD_PG_BACKFILL:
+      return true;
+    default:
+      return false;
+    }
+  }
+  void ms_fast_dispatch(Message *m);
   bool ms_dispatch(Message *m);
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
   bool ms_verify_authorizer(Connection *con, int peer_type,
