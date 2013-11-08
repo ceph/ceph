@@ -2677,7 +2677,7 @@ void MDCache::handle_mds_failure(int who)
 	dout(10) << " slave request " << *p->second << " no longer need rename notity ack from mds."
 		 << who << dendl;
 	p->second->more()->waiting_on_slave.erase(who);
-	if (p->second->more()->waiting_on_slave.empty())
+	if (p->second->more()->waiting_on_slave.empty() && p->second->slave_request)
 	  mds->queue_waiter(new C_MDS_RetryRequest(this, p->second));
       }
 
