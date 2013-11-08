@@ -1,5 +1,4 @@
 tasks:
 - s3tests:
-    force-branch: emperor
     client.0:
       rgw_server: client.0
