@@ -5,6 +5,7 @@ import re
 import httplib2
 import urllib
 import logging
+import socket
 
 import teuthology
 from teuthology.config import config
@@ -365,6 +366,7 @@ def try_push_job_info(job_config, extra_info=None):
     """
     Wrap push_job_info, gracefully doing nothing if:
         A RequestFailedError is raised
+        A socket.error is raised
         config.results_server is not set
         config['job_id'] is not present or is None
 
@@ -391,6 +393,6 @@ def try_push_job_info(job_config, extra_info=None):
     try:
         log.info("Pushing job info to %s", config.results_server)
         push_job_info(run_name, job_id, job_info)
-    except RequestFailedError:
+    except (RequestFailedError, socket.error):
         log.exception("Could not report results to %s" %
                       config.results_server)
