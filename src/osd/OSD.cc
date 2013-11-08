@@ -4310,7 +4310,12 @@ void OSD::forget_peer_epoch(int peer, epoch_t as_of)
 }
 
 
-bool OSD::_share_map_incoming(entity_name_t name, Connection *con, epoch_t epoch, Session* session)
+bool OSD::_share_map_incoming(
+  entity_name_t name,
+  Connection *con,
+  epoch_t epoch,
+  OSDMapRef osdmap,
+  Session* session)
 {
   bool shared = false;
   dout(20) << "_share_map_incoming "
@@ -6897,9 +6902,14 @@ void OSD::handle_op(OpRequestRef op, OSDMapRef osdmap)
     service.reply_op_error(op, -EBLACKLISTED);
     return;
   }
+
   // share our map with sender, if they're old
-  _share_map_incoming(m->get_source(), m->get_connection().get(), m->get_map_epoch(),
-		      static_cast<Session *>(m->get_connection()->get_priv()));
+  _share_map_incoming(
+    m->get_source(),
+    m->get_connection().get(),
+    m->get_map_epoch(),
+    osdmap,
+    static_cast<Session *>(m->get_connection()->get_priv()));
 
   if (op->rmw_flags == 0) {
     int r = init_op_flags(op);
@@ -7024,8 +7034,10 @@ void OSD::handle_replica_op(OpRequestRef op, OSDMapRef osdmap)
     return;
 
   // share our map with sender, if they're old
-  _share_map_incoming(m->get_source(), m->get_connection().get(), m->map_epoch,
-		      static_cast<Session*>(m->get_connection()->get_priv()));
+  _share_map_incoming(
+    m->get_source(), m->get_connection().get(), m->map_epoch,
+    osdmap,
+    static_cast<Session*>(m->get_connection()->get_priv()));
 
   // make sure we have the pg
   const pg_t pgid = m->pgid;
