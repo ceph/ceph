@@ -941,8 +941,5 @@ def get_distro_version(ctx):
         os_version = default_os_version[distro]
     try:
         return ctx.config['downburst'].get('distroversion', os_version)
-    except KeyError:
+    except (KeyError, AttributeError):
         return os_version
-    except AttributeError:
-        return os_version
-
