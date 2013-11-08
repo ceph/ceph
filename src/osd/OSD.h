@@ -1268,10 +1268,16 @@ protected:
     const vector<int>& lastup, const vector<int>& lastacting
     ); ///< @return false if there was a map gap between from and now
 
-  void wake_pg_waiters(pg_t pgid) {
-    if (waiting_for_pg.count(pgid)) {
-      take_waiters_front(waiting_for_pg[pgid]);
-      waiting_for_pg.erase(pgid);
+  void wake_pg_waiters(PG* pg, pg_t pgid) {
+    // Need write lock on pg_map
+    map<pg_t, list<OpRequestRef> >::iterator i = waiting_for_pg.find(pgid);
+    if (i != waiting_for_pg.end()) {
+      for (list<OpRequestRef>::iterator j = i->second.begin();
+	   j != i->second.end();
+	   ++j) {
+	enqueue_op(pg, *j);
+      }
+      waiting_for_pg.erase(i);
     }
   }
 
