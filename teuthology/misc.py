@@ -892,9 +892,9 @@ def stop_daemons_of_type(ctx, type_):
     if exc_info != (None, None, None):
         raise exc_info[0], exc_info[1], exc_info[2]
 
-def get_system_type(remote):
+def get_system_type(remote, distro=False):
     """
-    Return this system type (deb or rpm)
+    Return this system type (deb or rpm) or Distro.
     """
     r = remote.run(
         args=[
@@ -904,6 +904,8 @@ def get_system_type(remote):
     )
     system_value = r.stdout.getvalue().strip()
     log.debug("System to be installed: %s" % system_value)
+    if distro:
+        return system_value.lower()
     if system_value in ['Ubuntu','Debian']:
         return "deb"
     if system_value in ['CentOS','Fedora','RedHatEnterpriseServer']:

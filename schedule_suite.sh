@@ -47,9 +47,14 @@ if [ "$kernel" = "-" ]
 then
     kernelvalue=""
 else
-    KERNEL_SHA1=`wget http://gitbuilder.ceph.com/kernel-deb-precise-x86_64-basic/ref/$kernel/sha1 -O- 2>/dev/null`
-    [ -z "$KERNEL_SHA1" ] && schedule_fail "Couldn't find kernel branch $kernel"
-    kernelvalue="kernel:
+    if [ "$kernel" = "distro" ]
+    then
+        KERNEL_SHA1=distro
+    else
+        KERNEL_SHA1=`wget http://gitbuilder.ceph.com/kernel-deb-precise-x86_64-basic/ref/$kernel/sha1 -O- 2>/dev/null`
+    fi
+        [ -z "$KERNEL_SHA1" ] && schedule_fail "Couldn't find kernel branch $kernel"
+        kernelvalue="kernel:
   kdb: true
   sha1: $KERNEL_SHA1"
 fi
