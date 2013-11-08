@@ -859,8 +859,34 @@ public:
     ConnectionRef con;
     WatchConState wstate;
 
-    Session() : auid(-1), last_sent_epoch(0), con(0) {}
+    Mutex session_dispatch_lock;
+    list<OpRequestRef> waiting_on_map;
+
+    Session() :
+      auid(-1), last_sent_epoch(0), con(0),
+      session_dispatch_lock("Session::session_dispatch_lock")
+    {}
   };
+  Mutex session_waiting_for_map_lock;
+  set<Session*> session_waiting_for_map;
+  /// Caller assumes refs for included Sessions
+  void get_sessions_waiting_for_map(set<Session*> *out) {
+    Mutex::Locker l(session_waiting_for_map_lock);
+    out->swap(session_waiting_for_map);
+  }
+  void register_session_waiting_on_map(Session *session) {
+    Mutex::Locker l(session_waiting_for_map_lock);
+    session->get();
+    session_waiting_for_map.insert(session);
+  }
+  void clear_session_waiting_on_map(Session *session) {
+    Mutex::Locker l(session_waiting_for_map_lock);
+    set<Session*>::iterator i = session_waiting_for_map.find(session);
+    if (i != session_waiting_for_map.end()) {
+      (*i)->put();
+      session_waiting_for_map.erase(i);
+    }
+  }
 
 private:
   // -- heartbeat --
