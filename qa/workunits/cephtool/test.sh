@@ -212,6 +212,7 @@ for ((i=0; i < 100; i++)); do
 done
 ceph osd dump | grep 'osd.0 up'
 ceph osd find 1
+ceph osd metadata 1 | grep 'distro'
 ceph osd out 0
 ceph osd dump | grep 'osd.0.*out'
 ceph osd in 0
