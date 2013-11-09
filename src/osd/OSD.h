@@ -1783,6 +1783,7 @@ protected:
 			    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
 			    bool& isvalid, CryptoKey& session_key);
   void ms_handle_connect(Connection *con);
+  void ms_handle_accept(Connection *con);
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con) {}
 
