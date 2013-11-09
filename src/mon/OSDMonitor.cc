@@ -2143,6 +2143,30 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     f->close_section();
     f->close_section();
     f->flush(rdata);
+  } else if (prefix == "osd metadata") {
+    int64_t osd;
+    cmd_getval(g_ceph_context, cmdmap, "id", osd);
+    if (!osdmap.exists(osd)) {
+      ss << "osd." << osd << " does not exist";
+      r = -ENOENT;
+      goto reply;
+    }
+    string format;
+    cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
+    boost::scoped_ptr<Formatter> f(new_formatter(format));
+
+    bufferlist bl;
+    mon->store->get(OSD_METADATA_PREFIX, stringify(osd), bl);
+    map<string,string> m;
+    if (bl.length()) {
+      bufferlist::iterator p = bl.begin();
+      ::decode(m, p);
+    }
+    f->open_object_section("osd_metadata");
+    for (map<string,string>::iterator p = m.begin(); p != m.end(); ++p)
+      f->dump_string(p->first.c_str(), p->second);
+    f->close_section();
+    f->flush(rdata);
   } else if (prefix == "osd map") {
     string poolstr, objstr, namespacestr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
