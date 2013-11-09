@@ -3458,6 +3458,14 @@ void OSD::ms_handle_connect(Connection *con)
       monc->sub_want("osd_pg_creates", 0, CEPH_SUBSCRIBE_ONETIME);
       monc->renew_subs();
     }
+  } else {
+    Session *s = static_cast<Session *>(con->get_priv());
+    if (!s) {
+      s = new Session;
+      con->set_priv(s->get());
+      s->con = con;
+      dout(10) << " new session " << s << " con=" << s->con << " addr=" << s->con->get_peer_addr() << dendl;
+    }
   }
 }
 
