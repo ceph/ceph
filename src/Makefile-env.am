@@ -27,7 +27,7 @@ bin_DEBUGPROGRAMS =
 ceph_sbindir = $(sbindir)
 
 # certain things go straight into /sbin, though!
-su_sbindir = /sbin
+su_sbindir = $(prefix)/sbin
 
 # C/C++ tests to build will be appended to this
 check_PROGRAMS =
