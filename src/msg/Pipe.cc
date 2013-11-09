@@ -641,9 +641,6 @@ int Pipe::accept()
   session_security = get_auth_session_handler(msgr->cct, connect.authorizer_protocol, session_key,
 					      connection_state->get_features());
 
-  // notify
-  msgr->dispatch_queue.queue_accept(connection_state.get());
-
   // ok!
   if (msgr->dispatch_queue.stop)
     goto shutting_down;
@@ -652,6 +649,9 @@ int Pipe::accept()
   register_pipe();
   msgr->lock.Unlock();
   pipe_lock.Unlock();
+
+  // notify
+  msgr->ms_deliver_handle_accept(connection_state.get());
 
   r = tcp_write((char*)&reply, sizeof(reply));
   if (r < 0) {
@@ -1077,7 +1077,9 @@ int Pipe::connect()
 	session_security = NULL;
       }
 
-      msgr->dispatch_queue.queue_connect(connection_state.get());
+      pipe_lock.Unlock();
+      msgr->ms_deliver_handle_connect(connection_state.get());
+      pipe_lock.Lock();
       
       if (!reader_running) {
 	ldout(msgr->cct,20) << "connect starting reader" << dendl;
