@@ -60,7 +60,12 @@ fi
 ## get sha1
 if [ "$distro" = "ubuntu" ]
 then
-    CEPH_SHA1=`wget http://gitbuilder.ceph.com/ceph-deb-precise-x86_64-$flavor/ref/$ceph/sha1 -O- 2>/dev/null`
+    if [ "$mtype" = "saya" ]
+    then
+        CEPH_SHA1=`wget http://gitbuilder.ceph.com/ceph-deb-quantal-armv7l-$flavor/ref/$ceph/sha1 -O- 2>/dev/null`
+    else
+        CEPH_SHA1=`wget http://gitbuilder.ceph.com/ceph-deb-precise-x86_64-$flavor/ref/$ceph/sha1 -O- 2>/dev/null`
+    fi
 else
     CEPH_SHA1=`wget http://gitbuilder.ceph.com/ceph-rpm-fc18-x86_64-$flavor/ref/$ceph/sha1 -O- 2>/dev/null`
 fi
@@ -70,7 +75,12 @@ fi
 # Are there packages for this sha1?
 if [ "$distro" = "ubuntu" ]
 then
-    CEPH_VER=`wget http://gitbuilder.ceph.com/ceph-deb-precise-x86_64-$flavor/sha1/$CEPH_SHA1/version -O- 2>/dev/null`
+    if [ "$mtype" = "saya" ]
+    then
+        CEPH_VER=`wget http://gitbuilder.ceph.com/ceph-deb-quantal-armv7l-$flavor/sha1/$CEPH_SHA1/version -O- 2>/dev/null`
+    else
+        CEPH_VER=`wget http://gitbuilder.ceph.com/ceph-deb-precise-x86_64-$flavor/sha1/$CEPH_SHA1/version -O- 2>/dev/null`
+    fi
 else
     CEPH_VER=`wget http://gitbuilder.ceph.com/ceph-rpm-fc18-x86_64-$flavor/sha1/$CEPH_SHA1/version -O- 2>/dev/null`
 fi
