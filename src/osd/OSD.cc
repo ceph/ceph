@@ -3440,6 +3440,17 @@ void OSD::do_mon_report()
   send_pg_stats(now);
 }
 
+void OSD::ms_handle_accept(Connection *con)
+{
+  Session *s = static_cast<Session *>(con->get_priv());
+  if (!s) {
+    s = new Session;
+    con->set_priv(s->get());
+    s->con = con;
+    dout(10) << " new session " << s << " con=" << s->con << " addr=" << s->con->get_peer_addr() << dendl;
+  }
+}
+
 void OSD::ms_handle_connect(Connection *con)
 {
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
