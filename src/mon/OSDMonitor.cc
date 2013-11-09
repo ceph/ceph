@@ -591,6 +591,18 @@ void OSDMonitor::encode_pending(MonitorDBStore::Transaction *t)
   /* put everything in the transaction */
   put_version(t, pending_inc.epoch, bl);
   put_last_committed(t, pending_inc.epoch);
+
+  // metadata, too!
+  for (map<int,bufferlist>::iterator p = pending_metadata.begin();
+       p != pending_metadata.end();
+       ++p)
+    t->put(OSD_METADATA_PREFIX, stringify(p->first), p->second);
+  for (set<int>::iterator p = pending_metadata_rm.begin();
+       p != pending_metadata_rm.end();
+       ++p)
+    t->erase(OSD_METADATA_PREFIX, stringify(*p));
+  pending_metadata.clear();
+  pending_metadata_rm.clear();
 }
 
 void OSDMonitor::share_map_with_random_osd()
@@ -1265,6 +1277,11 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 	pending_inc.new_lost[from] = osdmap.get_epoch();
       }
     }
+
+    // metadata
+    bufferlist osd_metadata;
+    ::encode(m->metadata, osd_metadata);
+    pending_metadata[from] = osd_metadata;
 
     // adjust last clean unmount epoch?
     const osd_info_t& info = osdmap.get_info(from);
@@ -3500,6 +3517,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	} else {
 	  pending_inc.new_state[osd] = osdmap.get_state(osd);
           pending_inc.new_uuid[osd] = uuid_d();
+	  pending_metadata_rm.insert(osd);
 	  if (any) {
 	    ss << ", osd." << osd;
           } else {

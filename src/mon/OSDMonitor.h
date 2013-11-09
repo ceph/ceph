@@ -37,6 +37,8 @@ class Monitor;
 #include "messages/MOSDFailure.h"
 #include "messages/MPoolOp.h"
 
+#define OSD_METADATA_PREFIX "osd_metadata"
+
 /// information about a particular peer's failure reports for one osd
 struct failure_reporter_t {
   int num_reports;          ///< reports from this reporter
@@ -120,6 +122,8 @@ public:
 private:
   // [leader]
   OSDMap::Incremental pending_inc;
+  map<int, bufferlist> pending_metadata;
+  set<int>             pending_metadata_rm;
   map<int, failure_info_t> failure_info;
   map<int,utime_t>    down_pending_out;  // osd down -> out
 
