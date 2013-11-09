@@ -42,13 +42,15 @@ public:
 
   void unlock() {
     if (g_lockdep) id = lockdep_will_unlock(name, id);
-    pthread_rwlock_unlock(&L);
+    int r = pthread_rwlock_unlock(&L);
+    assert(r == 0);
   }
 
   // read
   void get_read() {
     if (g_lockdep) id = lockdep_will_lock(name, id);
-    pthread_rwlock_rdlock(&L);
+    int r = pthread_rwlock_rdlock(&L);
+    assert(r == 0);
     if (g_lockdep) id = lockdep_locked(name, id);
   }
   bool try_get_read() {
@@ -65,7 +67,8 @@ public:
   // write
   void get_write() {
     if (g_lockdep) id = lockdep_will_lock(name, id);
-    pthread_rwlock_wrlock(&L);
+    int r = pthread_rwlock_wrlock(&L);
+    assert(r == 0);
     if (g_lockdep) id = lockdep_locked(name, id);
   }
   bool try_get_write() {
