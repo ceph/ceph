@@ -2573,6 +2573,38 @@ void Locker::process_request_cap_release(MDRequest *mdr, client_t client, const 
     mdr->cap_releases[in->vino()] = cap->get_last_seq();
 }
 
+class C_Locker_RetryKickIssueCaps : public Context {
+  Locker *locker;
+  CInode *in;
+  client_t client;
+  ceph_seq_t seq;
+public:
+  C_Locker_RetryKickIssueCaps(Locker *l, CInode *i, client_t c, ceph_seq_t s) :
+    locker(l), in(i), client(c), seq(s) {
+    in->get(CInode::PIN_PTRWAITER);
+  }
+  void finish(int r) {
+    locker->kick_issue_caps(in, client, seq);
+    in->put(CInode::PIN_PTRWAITER);
+  }
+};
+
+void Locker::kick_issue_caps(CInode *in, client_t client, ceph_seq_t seq)
+{
+  Capability *cap = in->get_client_cap(client);
+  if (!cap || cap->get_last_sent() != seq)
+    return;
+  if (in->is_frozen()) {
+    dout(10) << "kick_issue_caps waiting for unfreeze on " << *in << dendl;
+    in->add_waiter(CInode::WAIT_UNFREEZE,
+	new C_Locker_RetryKickIssueCaps(this, in, client, seq));
+    return;
+  }
+  dout(10) << "kick_issue_caps released at current seq " << seq
+    << ", reissuing" << dendl;
+  issue_caps(in, cap);
+}
+
 void Locker::kick_cap_releases(MDRequest *mdr)
 {
   client_t client = mdr->get_client();
@@ -2582,17 +2614,9 @@ void Locker::kick_cap_releases(MDRequest *mdr)
     CInode *in = mdcache->get_inode(p->first);
     if (!in)
       continue;
-    Capability *cap = in->get_client_cap(client);
-    if (!cap)
-      continue;
-    if (cap->get_last_sent() == p->second) {
-      dout(10) << "kick_cap_releases released at current seq " << p->second
-	       << ", reissuing" << dendl;
-      issue_caps(in, cap);
-    }
+    kick_issue_caps(in, client, p->second);
   }
 }
-
 
 static uint64_t calc_bounding(uint64_t t)
 {
