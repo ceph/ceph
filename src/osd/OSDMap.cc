@@ -1838,15 +1838,17 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
 
   crush.set_type_name(0, "osd");
   crush.set_type_name(1, "host");
-  crush.set_type_name(2, "rack");
-  crush.set_type_name(3, "row");
-  crush.set_type_name(4, "room");
-  crush.set_type_name(5, "datacenter");
-  crush.set_type_name(6, "root");
+  crush.set_type_name(2, "chassis");
+  crush.set_type_name(3, "rack");
+  crush.set_type_name(4, "row");
+  crush.set_type_name(5, "room");
+  crush.set_type_name(6, "datacenter");
+  crush.set_type_name(7, "root");
 
   // root
   int rootid;
-  int r = crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 6 /* pool */, 0, NULL, NULL, &rootid);
+  int r = crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT,
+			   7 /* root */, 0, NULL, NULL, &rootid);
   assert(r == 0);
   crush.set_item_name(rootid, "default");
 
@@ -1968,17 +1970,19 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
 
   crush.set_type_name(0, "osd");
   crush.set_type_name(1, "host");
-  crush.set_type_name(2, "rack");
-  crush.set_type_name(3, "row");
-  crush.set_type_name(4, "room");
-  crush.set_type_name(5, "datacenter");
-  crush.set_type_name(6, "root");
+  crush.set_type_name(2, "chassis");
+  crush.set_type_name(3, "rack");
+  crush.set_type_name(4, "row");
+  crush.set_type_name(5, "room");
+  crush.set_type_name(6, "datacenter");
+  crush.set_type_name(7, "root");
 
   set<string> hosts, racks;
 
   // root
   int rootid;
-  int r = crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, 6 /* pool */, 0, NULL, NULL, &rootid);
+  int r = crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT,
+			   7 /* root */, 0, NULL, NULL, &rootid);
   assert(r == 0);
   crush.set_item_name(rootid, "default");
 
