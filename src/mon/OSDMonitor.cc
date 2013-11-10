@@ -2000,6 +2000,17 @@ void OSDMonitor::dump_info(Formatter *f)
   osdmap.dump(f);
   f->close_section();
 
+  f->open_array_section("osd_metadata");
+  for (int i=0; i<osdmap.get_max_osd(); ++i) {
+    if (osdmap.exists(i)) {
+      f->open_object_section("osd");
+      f->dump_unsigned("id", i);
+      dump_osd_metadata(i, f, NULL);
+      f->close_section();
+    }
+  }
+  f->close_section();
+
   f->dump_unsigned("osdmap_first_committed", get_first_committed());
 
   f->open_object_section("crushmap");
