@@ -100,9 +100,6 @@ For Debian and Ubuntu distributions, perform the following steps:
 #. Add the release key::
 
 	wget -q -O- 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc' | sudo apt-key add -
-	echo deb http://ceph.com/debian-dumpling/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
-	sudo apt-get update
-	sudo apt-get install ceph-deploy
 
 #. Add the Ceph packages to your repository. Replace ``{ceph-stable-release}``
    with a stable Ceph release (e.g., ``cuttlefish``, ``dumpling``, etc.). 
