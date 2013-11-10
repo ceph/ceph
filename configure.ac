@@ -541,6 +541,7 @@ AC_CHECK_FUNC([fallocate],
 
 
 AC_CHECK_HEADERS([arpa/nameser_compat.h])
+AC_CHECK_FUNCS([posix_fallocate])
 AC_CHECK_HEADERS([sys/prctl.h])
 AC_CHECK_FUNCS([prctl])
 AC_CHECK_FUNCS([pipe2])
