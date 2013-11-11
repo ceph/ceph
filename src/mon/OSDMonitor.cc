@@ -2021,6 +2021,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       int err = get_version_full(epoch, b);
       if (err == -ENOENT) {
 	r = -ENOENT;
+        ss << "there is no map for epoch " << epoch;
 	goto reply;
       }
       assert(err == 0);

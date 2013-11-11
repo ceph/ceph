@@ -37,7 +37,7 @@ specific distributions aside from the kernel and system initialization
 package (i.e., sysvinit, upstart, systemd).
 
 
-Emperor (0.71)
+Emperor (0.72)
 --------------
 
 +----------+----------+--------------------+--------------+---------+------------+
