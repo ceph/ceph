@@ -262,8 +262,11 @@ void dump_pair(struct req_state *s, const char *key, const char *value)
 
 void dump_bucket_from_state(struct req_state *s)
 {
-  if (!s->bucket_name_str.empty())
-    s->cio->print("Bucket: \"%s\"\n", s->bucket_name_str.c_str());
+  int expose_bucket = g_conf->rgw_expose_bucket;
+  if (expose_bucket) {
+    if (!s->bucket_name_str.empty())
+      s->cio->print("Bucket: \"%s\"\n", s->bucket_name_str.c_str());
+  }
 }
 
 void dump_object_from_state(struct req_state *s)
@@ -450,6 +453,7 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no)
   }
   set_req_state_err(s, err_no);
   dump_errno(s);
+  dump_bucket_from_state(s);
   end_header(s, op);
   rgw_flush_formatter_and_reset(s, s->formatter);
   perfcounter->inc(l_rgw_failed_req);

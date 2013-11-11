@@ -395,6 +395,14 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
   return ret;
 }
 
+static void rgw_bucket_object_pre_exec(struct req_state *s)
+{
+  if (s->expect_cont)
+    dump_continue(s);
+
+  dump_bucket_from_state(s);  
+}
+
 int RGWGetObj::verify_permission()
 {
   obj.init(s->bucket, s->object_str);
@@ -790,6 +798,11 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
   return send_response_data(bl, bl_ofs, bl_len);
 }
 
+void RGWGetObj::pre_exec()
+{
+    rgw_bucket_object_pre_exec(s);
+}
+
 void RGWGetObj::execute()
 {
   void *handle = NULL;
@@ -983,6 +996,11 @@ int RGWStatBucket::verify_permission()
   return 0;
 }
 
+void RGWStatBucket::pre_exec()
+{
+    rgw_bucket_object_pre_exec(s);
+}
+
 void RGWStatBucket::execute()
 {
   RGWUserBuckets buckets;
@@ -1028,6 +1046,11 @@ int RGWListBucket::parse_max_keys()
   }
 
   return 0;
+}
+
+void RGWListBucket::pre_exec()
+{
+    rgw_bucket_object_pre_exec(s);
 }
 
 void RGWListBucket::execute()
@@ -1092,6 +1115,11 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv, RGW
   }
 
   return 0;
+}
+
+void RGWCreateBucket::pre_exec()
+{
+    rgw_bucket_object_pre_exec(s);
 }
 
 void RGWCreateBucket::execute()
@@ -1215,6 +1243,11 @@ int RGWDeleteBucket::verify_permission()
     return -EACCES;
 
   return 0;
+}
+
+void RGWDeleteBucket::pre_exec()
+{
+    rgw_bucket_object_pre_exec(s);
 }
 
 void RGWDeleteBucket::execute()
@@ -1375,6 +1408,11 @@ void RGWPutObj::dispose_processor(RGWPutObjProcessor *processor)
   delete processor;
 }
 
+void RGWPutObj::pre_exec()
+{
+    rgw_bucket_object_pre_exec(s);
+}
+
 void RGWPutObj::execute()
 {
   RGWPutObjProcessor *processor = NULL;
@@ -1531,6 +1569,11 @@ void RGWPostObj::dispose_processor(RGWPutObjProcessor *processor)
   delete processor;
 }
 
+void RGWPostObj::pre_exec()
+{
+    rgw_bucket_object_pre_exec(s);
+}
+
 void RGWPostObj::execute()
 {
   RGWPutObjProcessor *processor = NULL;
@@ -1631,6 +1674,11 @@ int RGWPutMetadata::verify_permission()
   return 0;
 }
 
+void RGWPutMetadata::pre_exec()
+{
+    rgw_bucket_object_pre_exec(s);
+}
+
 void RGWPutMetadata::execute()
 {
   const char *meta_prefix = RGW_ATTR_META_PREFIX;
@@ -1695,6 +1743,11 @@ int RGWDeleteObj::verify_permission()
     return -EACCES;
 
   return 0;
+}
+
+void RGWDeleteObj::pre_exec()
+{
+    rgw_bucket_object_pre_exec(s);
 }
 
 void RGWDeleteObj::execute()
@@ -1849,6 +1902,11 @@ void RGWCopyObj::progress_cb(off_t ofs)
   last_ofs = ofs;
 }
 
+void RGWCopyObj::pre_exec()
+{
+    rgw_bucket_object_pre_exec(s);
+}
+
 void RGWCopyObj::execute()
 {
   rgw_obj src_obj, dst_obj;
@@ -1899,6 +1957,11 @@ int RGWGetACLs::verify_permission()
   return 0;
 }
 
+void RGWGetACLs::pre_exec()
+{
+    rgw_bucket_object_pre_exec(s);
+}
+
 void RGWGetACLs::execute()
 {
   stringstream ss;
@@ -1922,6 +1985,11 @@ int RGWPutACLs::verify_permission()
     return -EACCES;
 
   return 0;
+}
+
+void RGWPutACLs::pre_exec()
+{
+    rgw_bucket_object_pre_exec(s);
 }
 
 void RGWPutACLs::execute()
@@ -2159,6 +2227,11 @@ int RGWInitMultipart::verify_permission()
   return 0;
 }
 
+void RGWInitMultipart::pre_exec()
+{
+    rgw_bucket_object_pre_exec(s);
+}
+
 void RGWInitMultipart::execute()
 {
   bufferlist aclbl;
@@ -2254,6 +2327,11 @@ int RGWCompleteMultipart::verify_permission()
     return -EACCES;
 
   return 0;
+}
+
+void RGWCompleteMultipart::pre_exec()
+{
+    rgw_bucket_object_pre_exec(s);
 }
 
 void RGWCompleteMultipart::execute()
@@ -2405,6 +2483,11 @@ int RGWAbortMultipart::verify_permission()
   return 0;
 }
 
+void RGWAbortMultipart::pre_exec()
+{
+    rgw_bucket_object_pre_exec(s);
+}
+
 void RGWAbortMultipart::execute()
 {
   ret = -EINVAL;
@@ -2465,6 +2548,11 @@ int RGWListMultipart::verify_permission()
   return 0;
 }
 
+void RGWListMultipart::pre_exec()
+{
+    rgw_bucket_object_pre_exec(s);
+}
+
 void RGWListMultipart::execute()
 {
   map<string, bufferlist> xattrs;
@@ -2487,6 +2575,11 @@ int RGWListBucketMultiparts::verify_permission()
     return -EACCES;
 
   return 0;
+}
+
+void RGWListBucketMultiparts::pre_exec()
+{
+    rgw_bucket_object_pre_exec(s);
 }
 
 void RGWListBucketMultiparts::execute()
@@ -2533,6 +2626,11 @@ int RGWDeleteMultiObj::verify_permission()
     return -EACCES;
 
   return 0;
+}
+
+void RGWDeleteMultiObj::pre_exec()
+{
+    rgw_bucket_object_pre_exec(s);
 }
 
 void RGWDeleteMultiObj::execute()
