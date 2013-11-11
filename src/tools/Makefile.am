@@ -1,9 +1,9 @@
 ceph_osdomap_tool_SOURCES = tools/ceph-osdomap-tool.cc
-ceph_osdomap_tool_LDADD = $(LIBOS) $(CEPH_GLOBAL) -lboost_program_options
+ceph_osdomap_tool_LDADD = $(LIBOS) $(CEPH_GLOBAL) $(BOOST_PROGRAM_OPTIONS_LIBS)
 bin_DEBUGPROGRAMS += ceph-osdomap-tool
 
 ceph_monstore_tool_SOURCES = tools/ceph-monstore-tool.cc
-ceph_monstore_tool_LDADD = $(LIBOS) $(CEPH_GLOBAL) -lboost_program_options
+ceph_monstore_tool_LDADD = $(LIBOS) $(CEPH_GLOBAL) $(BOOST_PROGRAM_OPTIONS_LIBS)
 bin_DEBUGPROGRAMS += ceph-monstore-tool
 
 ceph_kvstore_tool_SOURCES = tools/ceph-kvstore-tool.cc
@@ -13,7 +13,7 @@ bin_DEBUGPROGRAMS += ceph-kvstore-tool
 
 
 ceph_filestore_dump_SOURCES = tools/ceph-filestore-dump.cc
-ceph_filestore_dump_LDADD = $(LIBOSD) $(LIBOS) $(CEPH_GLOBAL) -lboost_program_options
+ceph_filestore_dump_LDADD = $(LIBOSD) $(LIBOS) $(CEPH_GLOBAL) $(BOOST_PROGRAM_OPTIONS_LIBS)
 if LINUX
 ceph_filestore_dump_LDADD += -ldl
 endif # LINUX
