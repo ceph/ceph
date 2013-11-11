@@ -105,11 +105,6 @@ Upgrading from v0.67 Dumpling
   however continue to work just the same as long as the osd already exists
   in the crush map.
 
-* 'ceph osd crush set <id> <weight> <loc..>' no longer adds the osd to the
-  specified location, as that's a job for 'ceph osd crush add'.  It will
-  however continue to work just the same as long as the osd already exists
-  in the crush map.
-
 * The OSD now enforces that class write methods cannot both mutate an
   object and return data.  The rbd.assign_bid method, the lone
   offender, has been removed.  This breaks compatibility with
