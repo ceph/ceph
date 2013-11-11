@@ -71,9 +71,10 @@ Add Keys
 ========
 
 Add a key to your system's list of trusted keys to avoid a security warning. For
-major releases (e.g., ``cuttlefish``, ``emperor``) and development releases
-(``release-name-rc1``, ``release-name-rc2``), use the ``release.asc`` key. For
-development testing packages, use the ``autobuild.asc`` key (developers and QA).
+major releases (e.g., ``cuttlefish``, ``dumpling``, ``emperor``) and development
+releases (``release-name-rc1``, ``release-name-rc2``), use the ``release.asc``
+key. For development testing packages, use the ``autobuild.asc`` key (developers
+and QA).
 
 
 APT
