@@ -753,6 +753,7 @@ OPTION(rgw_replica_log_obj_prefix, OPT_STR, "replica_log") //
 OPTION(rgw_bucket_quota_ttl, OPT_INT, 600) // time for cached bucket stats to be cached within rgw instance
 OPTION(rgw_bucket_quota_soft_threshold, OPT_DOUBLE, 0.95) // threshold from which we don't rely on cached info for quota decisions
 OPTION(rgw_bucket_quota_cache_size, OPT_INT, 10000) // number of entries in bucket quota cache
+OPTION(rgw_expose_bucket, OPT_BOOL, false) // Return the bucket name in the 'Bucket' response header
 
 OPTION(rgw_frontends, OPT_STR, "") // alternative front ends
 
