@@ -488,6 +488,13 @@ librados::ObjectIterator librados::ObjectIterator::operator++(int)
   return ret;
 }
 
+uint32_t librados::ObjectIterator::seek(uint32_t pos)
+{
+  uint32_t r = rados_objects_list_seek(ctx.get(), pos);
+  get_next();
+  return r;
+}
+
 void librados::ObjectIterator::get_next()
 {
   const char *entry, *key;
@@ -504,6 +511,11 @@ void librados::ObjectIterator::get_next()
   }
 
   cur_obj = make_pair(entry, key ? key : string());
+}
+
+uint32_t librados::ObjectIterator::get_pg_hash_position() const
+{
+  return ctx->lc->get_pg_hash_position();
 }
 
 const librados::ObjectIterator librados::ObjectIterator::__EndObjectIterator(NULL);
@@ -1127,6 +1139,16 @@ librados::ObjectIterator librados::IoCtx::objects_begin()
   rados_list_ctx_t listh;
   rados_objects_list_open(io_ctx_impl, &listh);
   ObjectIterator iter((ObjListCtx*)listh);
+  iter.get_next();
+  return iter;
+}
+
+librados::ObjectIterator librados::IoCtx::objects_begin(uint32_t pos)
+{
+  rados_list_ctx_t listh;
+  rados_objects_list_open(io_ctx_impl, &listh);
+  ObjectIterator iter((ObjListCtx*)listh);
+  iter.seek(pos);
   iter.get_next();
   return iter;
 }
@@ -2543,6 +2565,21 @@ extern "C" void rados_objects_list_close(rados_list_ctx_t h)
 {
   librados::ObjListCtx *lh = (librados::ObjListCtx *)h;
   delete lh;
+}
+
+extern "C" uint32_t rados_objects_list_seek(rados_list_ctx_t listctx,
+					    uint32_t pos)
+{
+  librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
+  uint32_t r = lh->ctx->list_seek(lh->lc, pos);
+  return r;
+}
+
+extern "C" uint32_t rados_objects_list_get_pg_hash_position(
+  rados_list_ctx_t listctx)
+{
+  librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
+  return lh->lc->get_pg_hash_position();
 }
 
 extern "C" int rados_objects_list_next(rados_list_ctx_t listctx, const char **entry, const char **key)
