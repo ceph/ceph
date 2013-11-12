@@ -100,6 +100,8 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
   // done reading, make writeable.
   journal->make_writeable();
 
+  journal->committed_thru(fs_op_seq);
+
   return count;
 }
 
