@@ -2564,6 +2564,10 @@ int Migrator::decode_import_dir(bufferlist::iterator& blp,
     if (dn->is_replica(mds->get_nodeid()))
       dn->remove_replica(mds->get_nodeid());
 
+    // dentry lock in unreadable state can block path traverse
+    if (dn->lock.get_state() != LOCK_SYNC)
+      mds->locker->try_eval(&dn->lock, NULL);
+
     dout(15) << "decode_import_dir got " << *dn << dendl;
     
     // points to...
