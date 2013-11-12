@@ -952,6 +952,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
 	   << (op->may_write() ? " may_write" : "")
 	   << (op->may_read() ? " may_read" : "")
 	   << " -> " << (write_ordered ? "write-ordered" : "read-ordered")
+	   << " flags " << ceph_osd_flag_string(m->get_flags())
 	   << dendl;
 
   hobject_t head(m->get_oid(), m->get_object_locator().key,
