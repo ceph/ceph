@@ -976,8 +976,8 @@ void Locker::try_eval(SimpleLock *lock, bool *pneed_issue)
     }
   }
 
-  if (p->is_freezing()) {
-    dout(7) << "try_eval " << *lock << " frozen, waiting on " << *p << dendl;
+  if (lock->get_type() != CEPH_LOCK_DN && p->is_freezing()) {
+    dout(7) << "try_eval " << *lock << " freezing, waiting on " << *p << dendl;
     p->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_Locker_Eval(this, p, lock->get_type()));
     return;
   }
@@ -3427,8 +3427,13 @@ void Locker::simple_eval(SimpleLock *lock, bool *need_issue)
   assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
 
-  if (lock->get_parent()->is_freezing_or_frozen())
-    return;
+  if (lock->get_parent()->is_freezing_or_frozen()) {
+    // dentry lock in unreadable state can block path traverse
+    if ((lock->get_type() != CEPH_LOCK_DN ||
+	 lock->get_state() == LOCK_SYNC ||
+	 lock->get_parent()->is_frozen()))
+      return;
+  }
 
   CInode *in = 0;
   int wanted = 0;
