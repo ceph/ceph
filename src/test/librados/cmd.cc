@@ -37,6 +37,11 @@ TEST(LibRadosCmd, MonDescribe) {
   rados_buffer_free(buf);
   rados_buffer_free(st);
 
+  ASSERT_EQ(0, rados_mon_command2(cluster, cmd[0], "", 0, &buf, &buflen, &st, &stlen));
+  ASSERT_LT(0u, buflen);
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
+
   cmd[0] = (char *)"get_command_descriptions";
   ASSERT_EQ(-EINVAL, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen));
   rados_buffer_free(buf);
@@ -55,6 +60,21 @@ TEST(LibRadosCmd, MonDescribe) {
   rados_buffer_free(st);
 
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
+TEST(LibRadosCmd, MonDescribePP) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+
+  bufferlist inbl, outbl;
+  string outs;
+  ASSERT_EQ(0, cluster.mon_command("{\"prefix\": \"get_command_descriptions\"}",
+				   inbl, &outbl, &outs));
+  ASSERT_LT(0u, outbl.length());
+  ASSERT_LE(0u, outs.length());
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
 TEST(LibRadosCmd, OSDCmd) {
@@ -77,6 +97,11 @@ TEST(LibRadosCmd, OSDCmd) {
   ASSERT_TRUE(r == -22 || r == -ENXIO);
   cmd[0] = (char *)"{\"prefix\":\"version\"}";
   r = rados_osd_command(cluster, 0, (const char **)cmd, 1, "", 0, &buf, &buflen, &st, &stlen);
+  ASSERT_TRUE((r == 0 && buflen > 0) || (r == -ENXIO && buflen == 0));
+  rados_buffer_free(buf);
+  rados_buffer_free(st);
+
+  r = rados_osd_command2(cluster, 0, cmd[0], "", 0, &buf, &buflen, &st, &stlen);
   ASSERT_TRUE((r == 0 && buflen > 0) || (r == -ENXIO && buflen == 0));
   rados_buffer_free(buf);
   rados_buffer_free(st);
@@ -118,10 +143,19 @@ TEST(LibRadosCmd, PGCmd) {
   // note: tolerate ENOENT/ENXIO here if hte osd is thrashing out underneath us
   r = rados_pg_command(cluster, pgid.c_str(), (const char **)cmd, 1, "", 0,  &buf, &buflen, &st, &stlen);
   ASSERT_TRUE(r == 0 || r == -ENOENT || r == -ENXIO);
+  if (r == 0) {
+    ASSERT_LT(0u, buflen);
+    rados_buffer_free(buf);
+    rados_buffer_free(st);
+  }
 
-  ASSERT_LT(0u, buflen);
-  rados_buffer_free(buf);
-  rados_buffer_free(st);
+  r = rados_pg_command2(cluster, pgid.c_str(), cmd[0], "", 0,  &buf, &buflen, &st, &stlen);
+  ASSERT_TRUE(r == 0 || r == -ENOENT || r == -ENXIO);
+  if (r == 0) {
+    ASSERT_LT(0u, buflen);
+    rados_buffer_free(buf);
+    rados_buffer_free(st);
+  }
 
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }

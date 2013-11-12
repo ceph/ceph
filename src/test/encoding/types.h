@@ -73,12 +73,20 @@ TYPE(ObjectRecoveryInfo)
 TYPE(ObjectRecoveryProgress)
 TYPE(ScrubMap::object)
 TYPE(ScrubMap)
+TYPE(pg_hit_set_info_t)
+TYPE(pg_hit_set_history_t)
 TYPE(osd_peer_stat_t)
 TYPE(clone_info)
 TYPE(obj_list_snap_response_t)
 TYPE(PullOp)
 TYPE(PushOp)
 TYPE(PushReplyOp)
+
+#include "osd/HitSet.h"
+TYPE(ExplicitHashHitSet)
+TYPE(ExplicitObjectHitSet)
+TYPE(BloomHitSet)
+TYPE(HitSet)
 
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)
