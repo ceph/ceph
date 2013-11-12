@@ -7076,6 +7076,7 @@ void OSD::handle_op(OpRequestRef op, OSDMapRef osdmap)
     return;
   }
 
+#if 0
   if (!send_map->have_pg_pool(pgid.pool())) {
     dout(7) << "dropping request; pool did not exist" << dendl;
     clog.warn() << m->get_source_inst() << " invalid " << m->get_reqid()
@@ -7102,6 +7103,7 @@ void OSD::handle_op(OpRequestRef op, OSDMapRef osdmap)
     service.reply_op_error(op, -ENXIO);
     return;
   }
+#endif
 
   PG *pg = get_pg_or_queue_for_pg(pgid, op);
   if (pg)
