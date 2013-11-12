@@ -260,7 +260,7 @@ class ResultsReporter(object):
                 status, msg, content = self.create_run(run_name)
                 if status != 200:
                     log.info("    already present; skipped")
-                    return
+                    return 0
             self.report_jobs(run_name, jobs.keys())
         elif not jobs:
             log.debug("    no jobs; skipped")
