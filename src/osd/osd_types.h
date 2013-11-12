@@ -53,6 +53,11 @@ typedef hobject_t collection_list_handle_t;
 
 typedef uint8_t shard_id_t;
 
+/// convert a single CPEH_OSD_FLAG_* to a string
+const char *ceph_osd_flag_name(unsigned flag);
+
+/// convert CEPH_OSD_FLAG_* op flags to a string
+string ceph_osd_flag_string(unsigned flags);
 
 inline ostream& operator<<(ostream& out, const osd_reqid_t& r) {
   return out << r.name << "." << r.inc << ":" << r.tid;
