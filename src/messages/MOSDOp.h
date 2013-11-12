@@ -365,18 +365,7 @@ struct ceph_osd_request_head {
       out << " RETRY=" << get_retry_attempt();
     if (get_snap_seq())
       out << " snapc " << get_snap_seq() << "=" << snaps;
-    if (get_flags() & CEPH_OSD_FLAG_ORDERSNAP)
-      out << " ordersnap";
-    if (get_flags() & CEPH_OSD_FLAG_BALANCE_READS)
-      out << " balance_reads";
-    if (get_flags() & CEPH_OSD_FLAG_PARALLELEXEC)
-      out << " parallelexec";
-    if (get_flags() & CEPH_OSD_FLAG_LOCALIZE_READS)
-      out << " localize_reads";
-    if (get_flags() & CEPH_OSD_FLAG_RWORDERED)
-      out << " rwordered";
-    if (get_flags() & CEPH_OSD_FLAG_IGNORE_OVERLAY)
-      out << " ignore_overlay";
+    out << " " << ceph_osd_flag_string(get_flags());
     out << " e" << osdmap_epoch;
     out << ")";
   }
