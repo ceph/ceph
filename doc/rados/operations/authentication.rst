@@ -58,7 +58,7 @@ key on the monitor with admin capabilities and write it to a keyring
 on the local file system.  If the key already exists, its current
 value will be returned.	::
 
-	sudo ceph auth get-or-create client.admin mds 'allow' osd 'allow *' mon 'allow *' > /etc/ceph/keyring
+	sudo ceph auth get-or-create client.admin mds 'allow *' osd 'allow *' mon 'allow *' > /etc/ceph/keyring
 
 See `Enabling Cephx`_ step 1 for stepwise details to enable ``cephx``.
 
