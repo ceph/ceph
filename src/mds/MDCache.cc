@@ -9957,7 +9957,9 @@ void MDCache::handle_discover(MDiscover *dis)
     }
     
     // add dir
-    if (reply->is_empty() && !dis->wants_base_dir()) {
+    if (curdir->get_version() == 0) {
+      // fetch newly opened dir
+    } else if (reply->is_empty() && !dis->wants_base_dir()) {
       dout(7) << "handle_discover not adding unwanted base dir " << *curdir << dendl;
       // make sure the base frag is correct, though, in there was a refragment since the
       // original request was sent.
@@ -9972,7 +9974,9 @@ void MDCache::handle_discover(MDiscover *dis)
 
     // lookup
     CDentry *dn = 0;
-    if (dis->get_want_ino()) {
+    if (curdir->get_version() == 0) {
+      // fetch newly opened dir
+    } else if  (dis->get_want_ino()) {
       // lookup by ino
       CInode *in = get_inode(dis->get_want_ino(), snapid);
       if (in && in->is_auth() && in->get_parent_dn()->get_dir() == curdir) {

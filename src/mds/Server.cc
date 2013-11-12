@@ -5289,15 +5289,10 @@ bool Server::_dir_is_nonempty_unlocked(MDRequest *mdr, CInode *in)
   if (in->snaprealm && in->snaprealm->srnode.snaps.size())
     return true; // in a snapshot!
 
-  list<frag_t> frags;
-  in->dirfragtree.get_leaves(frags);
-
-  for (list<frag_t>::iterator p = frags.begin();
-       p != frags.end();
-       ++p) {
-    CDir *dir = in->get_or_open_dirfrag(mdcache, *p);
-    assert(dir);
-
+  list<CDir*> ls;
+  in->get_dirfrags(ls);
+  for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
+    CDir *dir = *p;
     // is the frag obviously non-empty?
     if (dir->is_auth()) {
       if (dir->get_projected_fnode()->fragstat.size()) {
