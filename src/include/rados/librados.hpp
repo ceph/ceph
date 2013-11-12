@@ -71,6 +71,13 @@ namespace librados
     ObjectIterator &operator++(); // Preincrement
     ObjectIterator operator++(int); // Postincrement
     friend class IoCtx;
+
+    /// get current hash position of the iterator, rounded to the current pg
+    uint32_t get_pg_hash_position() const;
+
+    /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
+    uint32_t seek(uint32_t pos);
+
   private:
     void get_next();
     std::tr1::shared_ptr < ObjListCtx > ctx;
@@ -137,12 +144,18 @@ namespace librados
    * ORDER_READS_WRITES will order reads the same way writes are
    * ordered (e.g., waiting for degraded objects).  In particular, it
    * will make a write followed by a read sequence be preserved.
+   *
+   * IGNORE_OVERLAY will ignore the pool overlay tiering metadata and
+   * process the op directly on the destination pool.  This is useful
+   * for CACHE_FLUSH and CACHE_EVICT operations.
    */
   enum ObjectOperationGlobalFlags {
     OPERATION_NOFLAG         = 0,
     OPERATION_BALANCE_READS  = 1,
     OPERATION_LOCALIZE_READS = 2,
     OPERATION_ORDER_READS_WRITES = 4,
+    OPERATION_IGNORE_OVERLAY = 8,
+    OPERATION_SKIPRWLOCKS = 16,
   };
 
   /*
@@ -290,6 +303,16 @@ namespace librados
      */
     void undirty();
 
+    /**
+     * flush a cache tier object to backing tier
+     */
+    void cache_flush();
+
+    /**
+     * evict a clean cache tier object
+     */
+    void cache_evict();
+
     friend class IoCtx;
   };
 
@@ -415,7 +438,6 @@ namespace librados
      * @param prval [out] place error code in prval upon completion
      */
     void is_dirty(bool *isdirty, int *prval);
-
   };
 
   /* IoCtx : This is a context in which we can perform I/O.
@@ -584,8 +606,33 @@ namespace librados
 		     std::list<librados::locker_t> *lockers);
 
 
+    /// Start enumerating objects for a pool
     ObjectIterator objects_begin();
+    /// Start enumerating objects for a pool starting from a hash position
+    ObjectIterator objects_begin(uint32_t start_hash_position);
+    /// Iterator indicating the end of a pool
     const ObjectIterator& objects_end() const;
+
+    /**
+     * List available hit set objects
+     *
+     * @param uint32_t [in] hash position to query
+     * @param c [in] completion
+     * @param pls [out] list of available intervals
+     */
+    int hit_set_list(uint32_t hash, AioCompletion *c,
+		     std::list< std::pair<time_t, time_t> > *pls);
+
+    /**
+     * Retrieve hit set for a given hash, and time
+     *
+     * @param uint32_t [in] hash position
+     * @param c [in] completion
+     * @param stamp [in] time interval that falls within the hit set's interval
+     * @param pbl [out] buffer to store the result in
+     */
+    int hit_set_get(uint32_t hash, AioCompletion *c, time_t stamp,
+		    bufferlist *pbl);
 
     uint64_t get_last_version();
 
@@ -661,6 +708,11 @@ namespace librados
      */
     int aio_remove(const std::string& oid, AioCompletion *c);
 
+    /**
+     * Wait for all currently pending aio writes to be safe.
+     *
+     * @returns 0 on success, negative error code on failure
+     */
     int aio_flush();
 
     /**
@@ -682,6 +734,7 @@ namespace librados
     int operate(const std::string& oid, ObjectWriteOperation *op);
     int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl);
     int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op);
+    int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op, int flags);
     /**
      * Schedule an async write operation with explicit snapshot parameters
      *
@@ -724,6 +777,9 @@ namespace librados
     void set_namespace(const std::string& nspace);
 
     int64_t get_id();
+
+    uint32_t get_object_hash_position(const std::string& oid);
+    uint32_t get_object_pg_hash_position(const std::string& oid);
 
     config_t cct();
 
@@ -774,6 +830,9 @@ namespace librados
 
     uint64_t get_instance_id();
 
+    int mon_command(std::string cmd, const bufferlist& inbl,
+		    bufferlist *outbl, std::string *outs);
+
     int ioctx_create(const char *name, IoCtx &pioctx);
 
     // Features useful for test cases
@@ -788,6 +847,9 @@ namespace librados
 		       std::map<std::string, stats_map>& stats);
     int cluster_stat(cluster_stat_t& result);
     int cluster_fsid(std::string *fsid);
+
+    /// get/wait for the most recent osdmap
+    int wait_for_latest_map();
 
     /*
      * pool aio

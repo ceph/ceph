@@ -969,6 +969,37 @@ void Objecter::wait_for_osd_map()
   lock.Unlock();
 }
 
+struct C_Objecter_GetVersion : public Context {
+  Objecter *objecter;
+  uint64_t oldest, newest;
+  Context *fin;
+  C_Objecter_GetVersion(Objecter *o, Context *c)
+    : objecter(o), oldest(0), newest(0), fin(c) {}
+  void finish(int r) {
+    if (r >= 0)
+      objecter->_get_latest_version(oldest, newest, fin);
+  }
+};
+
+void Objecter::wait_for_latest_osd_map(Context *fin)
+{
+  ldout(cct, 10) << __func__ << dendl;
+  C_Objecter_GetVersion *c = new C_Objecter_GetVersion(this, fin);
+  monc->get_version("osdmap", &c->newest, &c->oldest, c);
+}
+
+void Objecter::_get_latest_version(epoch_t oldest, epoch_t newest, Context *fin)
+{
+  if (osdmap->get_epoch() >= newest) {
+  ldout(cct, 10) << __func__ << " latest " << newest << ", have it" << dendl;
+    if (fin)
+      fin->complete(0);
+    return;
+  }
+
+  ldout(cct, 10) << __func__ << " latest " << newest << ", waiting" << dendl;
+  wait_for_new_map(fin, newest, 0);
+}
 
 void Objecter::maybe_request_map()
 {
@@ -1320,11 +1351,26 @@ bool Objecter::is_pg_changed(vector<int>& o, vector<int>& n, bool any_change)
   return false;      // same primary (tho replicas may have changed)
 }
 
+int64_t Objecter::get_object_hash_position(int64_t pool, const string& key,
+					   const string& ns)
+{
+  const pg_pool_t *p = osdmap->get_pg_pool(pool);
+  if (!p)
+    return -ENOENT;
+  return p->hash_key(key, ns);
+}
+
+int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
+					      const string& ns)
+{
+  const pg_pool_t *p = osdmap->get_pg_pool(pool);
+  if (!p)
+    return -ENOENT;
+  return p->raw_hash_to_pg(p->hash_key(key, ns));
+}
+
 int Objecter::recalc_op_target(Op *op)
 {
-  vector<int> acting;
-  pg_t pgid = op->pgid;
-
   bool is_read = op->flags & CEPH_OSD_FLAG_READ;
   bool is_write = op->flags & CEPH_OSD_FLAG_WRITE;
 
@@ -1348,16 +1394,22 @@ int Objecter::recalc_op_target(Op *op)
     }
   }
 
+  pg_t pgid;
   if (op->precalc_pgid) {
     assert(op->base_oid.name.empty()); // make sure this is a listing op
-    ldout(cct, 10) << "recalc_op_target have " << pgid << " pool " << osdmap->have_pg_pool(pgid.pool()) << dendl;
-    if (!osdmap->have_pg_pool(pgid.pool()))
+    ldout(cct, 10) << "recalc_op_target have " << op->base_pgid << " pool "
+		   << osdmap->have_pg_pool(op->base_pgid.pool()) << dendl;
+    if (!osdmap->have_pg_pool(op->base_pgid.pool()))
       return RECALC_OP_TARGET_POOL_DNE;
+    pgid = osdmap->raw_pg_to_pg(op->base_pgid);
   } else {
-    int ret = osdmap->object_locator_to_pg(op->target_oid, op->target_oloc, pgid);
+    int ret = osdmap->object_locator_to_pg(op->target_oid, op->target_oloc,
+					   pgid);
     if (ret == -ENOENT)
       return RECALC_OP_TARGET_POOL_DNE;
   }
+  op->pgid = pgid;
+  vector<int> acting;
   osdmap->pg_to_acting_osds(pgid, acting);
 
   if (op->pgid != pgid || is_pg_changed(op->acting, acting, op->used_replica)) {
@@ -1711,18 +1763,46 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 }
 
 
-void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
+uint32_t Objecter::list_objects_seek(ListContext *list_context,
+				     uint32_t pos)
+{
+  assert(client_lock.is_locked());
+  pg_t actual = osdmap->raw_pg_to_pg(pg_t(pos, list_context->pool_id));
+  ldout(cct, 10) << "list_objects_seek " << list_context
+		 << " pos " << pos << " -> " << actual << dendl;
+  list_context->current_pg = actual.ps();
+  list_context->cookie = collection_list_handle_t();
+  list_context->at_end_of_pg = false;
+  list_context->at_end_of_pool = false;
+  list_context->current_pg_epoch = 0;
+  return list_context->current_pg;
+}
 
+void Objecter::list_objects(ListContext *list_context, Context *onfinish)
+{
+  assert(client_lock.is_locked());
   ldout(cct, 10) << "list_objects" << dendl;
-  ldout(cct, 20) << "pool_id " << list_context->pool_id
-	   << "\npool_snap_seq " << list_context->pool_snap_seq
-	   << "\nmax_entries " << list_context->max_entries
-	   << "\nlist_context " << list_context
-	   << "\nonfinish " << onfinish
-	   << "\nlist_context->current_pg" << list_context->current_pg
-	   << "\nlist_context->cookie" << list_context->cookie << dendl;
+  ldout(cct, 20) << " pool_id " << list_context->pool_id
+	   << " pool_snap_seq " << list_context->pool_snap_seq
+	   << " max_entries " << list_context->max_entries
+	   << " list_context " << list_context
+	   << " onfinish " << onfinish
+	   << " list_context->current_pg " << list_context->current_pg
+	   << " list_context->cookie " << list_context->cookie << dendl;
 
-  if (list_context->at_end) {
+  if (list_context->at_end_of_pg) {
+    list_context->at_end_of_pg = false;
+    ++list_context->current_pg;
+    list_context->current_pg_epoch = 0;
+    list_context->cookie = collection_list_handle_t();
+    if (list_context->current_pg >= list_context->starting_pg_num) {
+      list_context->at_end_of_pool = true;
+      ldout(cct, 20) << " no more pgs; reached end of pool" << dendl;
+    } else {
+      ldout(cct, 20) << " move to next pg " << list_context->current_pg << dendl;
+    }
+  }
+  if (list_context->at_end_of_pool) {
     onfinish->complete(0);
     return;
   }
@@ -1736,46 +1816,30 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish) {
   }
   if (list_context->starting_pg_num != pg_num) {
     // start reading from the beginning; the pgs have changed
-    ldout(cct, 10) << "The placement groups have changed, restarting with " << pg_num << dendl;
+    ldout(cct, 10) << " pg_num changed; restarting with " << pg_num << dendl;
     list_context->current_pg = 0;
     list_context->cookie = collection_list_handle_t();
     list_context->current_pg_epoch = 0;
     list_context->starting_pg_num = pg_num;
   }
-  if (list_context->current_pg == pg_num){ //this context got all the way through
-    onfinish->complete(0);
-    return;
-  }
+  assert(list_context->current_pg <= pg_num);
 
   ObjectOperation op;
   op.pg_ls(list_context->max_entries, list_context->filter, list_context->cookie,
 	   list_context->current_pg_epoch);
-
-  bufferlist *bl = new bufferlist();
-  C_List *onack = new C_List(list_context, onfinish, bl, this);
-
-  object_t oid;
+  list_context->bl.clear();
+  C_List *onack = new C_List(list_context, onfinish, this);
   object_locator_t oloc(list_context->pool_id, list_context->nspace);
-
-  // 
-  Op *o = new Op(oid, oloc, op.ops, CEPH_OSD_FLAG_READ, onack, NULL, NULL);
-  o->priority = op.priority;
-  o->snapid = list_context->pool_snap_seq;
-  o->outbl = bl;
-  o->reply_epoch = &onack->epoch;
-
-  o->pgid = pg_t(list_context->current_pg, list_context->pool_id, -1);
-  o->precalc_pgid = true;
-
-  op_submit(o);
+  pg_read(list_context->current_pg, oloc, op,
+	  &list_context->bl, 0, onack, &onack->epoch);
 }
 
-void Objecter::_list_reply(ListContext *list_context, int r, bufferlist *bl,
+void Objecter::_list_reply(ListContext *list_context, int r,
 			   Context *final_finish, epoch_t reply_epoch)
 {
   ldout(cct, 10) << "_list_reply" << dendl;
 
-  bufferlist::iterator iter = bl->begin();
+  bufferlist::iterator iter = list_context->bl.begin();
   pg_ls_response_t response;
   bufferlist extra_info;
   ::decode(response, iter);
@@ -1785,54 +1849,42 @@ void Objecter::_list_reply(ListContext *list_context, int r, bufferlist *bl,
   list_context->cookie = response.handle;
   if (!list_context->current_pg_epoch) {
     // first pgls result, set epoch marker
-    ldout(cct, 20) << "first pgls piece, reply_epoch is " << reply_epoch << dendl;
+    ldout(cct, 20) << " first pgls piece, reply_epoch is "
+		   << reply_epoch << dendl;
     list_context->current_pg_epoch = reply_epoch;
   }
 
   int response_size = response.entries.size();
-  ldout(cct, 20) << "response.entries.size " << response_size
-	   << ", response.entries " << response.entries << dendl;
+  ldout(cct, 20) << " response.entries.size " << response_size
+		 << ", response.entries " << response.entries << dendl;
   list_context->extra_info.append(extra_info);
   if (response_size) {
-    ldout(cct, 20) << "got a response with objects, proceeding" << dendl;
     list_context->list.merge(response.entries);
-    if (response_size >= list_context->max_entries) {
-      final_finish->complete(0);
-      delete bl;
-      return;
-    }
+  }
 
-    // ask for fewer objects next time around
-    list_context->max_entries -= response_size;
-
-    // if the osd returns 1 (newer code), or no entries, it means we
-    // hit the end of the pg.
-    if (r == 0 && response_size > 0) {
-      // not yet done with this pg
-      delete bl;
+  // if the osd returns 1 (newer code), or no entries, it means we
+  // hit the end of the pg.
+  if (response_size == 0 || r == 1) {
+    ldout(cct, 20) << " at end of pg" << dendl;
+    list_context->at_end_of_pg = true;
+  } else {
+    // there is more for this pg; get it?
+    if (response_size < list_context->max_entries) {
+      list_context->max_entries -= response_size;
       list_objects(list_context, final_finish);
       return;
     }
   }
-
-  // if we make this this far, there are no objects left in the current pg, but we want more!
-  ++list_context->current_pg;
-  list_context->current_pg_epoch = 0;
-  ldout(cct, 20) << "emptied current pg, moving on to next one:" << list_context->current_pg << dendl;
-  if (list_context->current_pg < list_context->starting_pg_num){ // we have more pgs to go through
-    list_context->cookie = collection_list_handle_t();
-    delete bl;
-    list_objects(list_context, final_finish);
+  if (!list_context->list.empty()) {
+    ldout(cct, 20) << " returning results so far" << dendl;
+    final_finish->complete(0);
     return;
   }
-  
-  // if we make it this far, there are no more pgs
-  ldout(cct, 20) << "out of pgs, returning to" << final_finish << dendl;
-  list_context->at_end = true;
-  delete bl;
-  final_finish->complete(0);
-  return;
+
+  // continue!
+  list_objects(list_context, final_finish);
 }
+
 
 
 //snapshots

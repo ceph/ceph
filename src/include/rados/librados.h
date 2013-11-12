@@ -702,6 +702,23 @@ void rados_ioctx_set_namespace(rados_ioctx_t io, const char *nspace);
 int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *ctx);
 
 /**
+ * Return hash position of iterator, rounded to the current PG
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @returns current hash position, rounded to the current pg
+ */
+uint32_t rados_objects_list_get_pg_hash_position(rados_list_ctx_t ctx);
+
+/**
+ * Reposition object iterator to a different hash position
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @param pos hash position to move to
+ * @returns actual (rounded) position we moved to
+ */
+uint32_t rados_objects_list_seek(rados_list_ctx_t ctx, uint32_t pos);
+
+/**
  * Get the next object name and locator in the pool
  *
  * *entry and *key are valid until next call to rados_objects_list_*
@@ -1762,6 +1779,31 @@ int rados_mon_command(rados_t cluster, const char **cmd, size_t cmdlen,
 		      char **outs, size_t *outslen);
 
 /**
+ * Send monitor command.
+ *
+ * @note Takes command string in carefully-formatted JSON; must match
+ * defined commands, types, etc.
+ *
+ * The result buffers are allocated on the heap; the caller is
+ * expected to release that memory with rados_buffer_free().  The
+ * buffer and length pointers can all be NULL, in which case they are
+ * not filled in.
+ *
+ * @param cluster cluster handle
+ * @param cmd the command string
+ * @param inbuf any bulk input data (crush map, etc.)
+ * @param outbuf double pointer to output buffer
+ * @param outbuflen pointer to output buffer length
+ * @param outs double pointer to status string
+ * @param outslen pointer to status string length
+ * @returns 0 on success, negative error code on failure
+ */
+int rados_mon_command2(rados_t cluster, const char *cmd,
+		       const char *inbuf, size_t inbuflen,
+		       char **outbuf, size_t *outbuflen,
+		       char **outs, size_t *outslen);
+
+/**
  * Send monitor command to a specific monitor.
  *
  * @note Takes command string in carefully-formatted JSON; must match
@@ -1790,6 +1832,33 @@ int rados_mon_command_target(rados_t cluster, const char *name,
 			     char **outs, size_t *outslen);
 
 /**
+ * Send monitor command to a specific monitor.
+ *
+ * @note Takes command string in carefully-formatted JSON; must match
+ * defined commands, types, etc.
+ *
+ * The result buffers are allocated on the heap; the caller is
+ * expected to release that memory with rados_buffer_free().  The
+ * buffer and length pointers can all be NULL, in which case they are
+ * not filled in.
+ *
+ * @param cluster cluster handle
+ * @param name target monitor's name
+ * @param cmd command string
+ * @param inbuf any bulk input data (crush map, etc.)
+ * @param outbuf double pointer to output buffer
+ * @param outbuflen pointer to output buffer length
+ * @param outs double pointer to status string
+ * @param outslen pointer to status string length
+ * @returns 0 on success, negative error code on failure
+ */
+int rados_mon_command_target2(rados_t cluster, const char *name,
+			     const char *cmd,
+			     const char *inbuf, size_t inbuflen,
+			     char **outbuf, size_t *outbuflen,
+			     char **outs, size_t *outslen);
+
+/**
  * free a rados-allocated buffer
  *
  * Release memory allocated by librados calls like rados_mon_command().
@@ -1803,12 +1872,20 @@ int rados_osd_command(rados_t cluster, int osdid, const char **cmd,
 		      const char *inbuf, size_t inbuflen,
 		      char **outbuf, size_t *outbuflen,
 		      char **outs, size_t *outslen);
+int rados_osd_command2(rados_t cluster, int osdid, const char *cmd,
+		       const char *inbuf, size_t inbuflen,
+		       char **outbuf, size_t *outbuflen,
+		       char **outs, size_t *outslen);
 
 int rados_pg_command(rados_t cluster, const char *pgstr, const char **cmd,
 		     size_t cmdlen,
 		     const char *inbuf, size_t inbuflen,
 		     char **outbuf, size_t *outbuflen,
 		     char **outs, size_t *outslen);
+int rados_pg_command2(rados_t cluster, const char *pgstr, const char *cmd,
+		      const char *inbuf, size_t inbuflen,
+		      char **outbuf, size_t *outbuflen,
+		      char **outs, size_t *outslen);
 
 /*
  * This is not a doxygen comment leadin, because doxygen breaks on

@@ -23,8 +23,9 @@
 #include "include/assert.h" 
 #include "common/cmdparse.h"
 
-#include "PG.h"
+#include "HitSet.h"
 #include "OSD.h"
+#include "PG.h"
 #include "Watch.h"
 #include "OpRequest.h"
 
@@ -96,19 +97,36 @@ public:
   struct OpContext;
   class CopyCallback;
 
+  /**
+   * CopyResults stores the object metadata of interest to a copy initiator.
+   */
+  struct CopyResults {
+    utime_t mtime; ///< the copy source's mtime
+    size_t object_size; ///< the copied object's size
+    bool started_temp_obj; ///< true if the callback needs to delete temp object
+    /**
+     * Final transaction; if non-empty the callback must execute it before any
+     * other accesses to the object (in order to complete the copy).
+     */
+    ObjectStore::Transaction final_tx;
+    string category; ///< The copy source's category
+    version_t user_version; ///< The copy source's user version
+    bool should_requeue;  ///< op should be requeued on cancel
+    CopyResults() : object_size(0), started_temp_obj(false),
+		    user_version(0), should_requeue(false) {}
+  };
+
   struct CopyOp {
     CopyCallback *cb;
     ObjectContextRef obc;
     hobject_t src;
     object_locator_t oloc;
-    version_t user_version;
+
+    CopyResults *results;
 
     tid_t objecter_tid;
 
     object_copy_cursor_t cursor;
-    uint64_t size;
-    utime_t mtime;
-    string category;
     map<string,bufferlist> attrs;
     bufferlist data;
     map<string,bufferlist> omap;
@@ -120,12 +138,15 @@ public:
 
     CopyOp(CopyCallback *cb_, ObjectContextRef _obc, hobject_t s, object_locator_t l,
            version_t v, const hobject_t& dest)
-      : cb(cb_), obc(_obc), src(s), oloc(l), user_version(v),
+      : cb(cb_), obc(_obc), src(s), oloc(l),
+        results(NULL),
 	objecter_tid(0),
-	size(0),
 	rval(-1),
 	temp_oid(dest)
-    {}
+    {
+      results = new CopyResults();
+      results->user_version = v;
+    }
   };
   typedef boost::shared_ptr<CopyOp> CopyOpRef;
 
@@ -135,32 +156,19 @@ public:
    * one and give an instance of the class to start_copy.
    *
    * The implementer is responsible for making sure that the CopyCallback
-   * can associate itself with the correct copy operation. The presence
-   * of the closing Transaction ensures that write operations can be performed
-   * atomically with the copy being completed (which doing them in separate
-   * transactions would not allow); if you are doing the copy for a read
-   * op you will have to generate a separate op to finish the copy with.
+   * can associate itself with the correct copy operation.
    */
-  /// return code, total object size, data in temp object?, final Transaction, should requeue Op
-  typedef boost::tuple<int, size_t, bool, ObjectStore::Transaction, bool> CopyResults;
-  class CopyCallback : public GenContext<CopyResults&> {
+  typedef boost::tuple<int, CopyResults*> CopyCallbackResults;
+  class CopyCallback : public GenContext<CopyCallbackResults> {
   protected:
     CopyCallback() {}
     /**
      * results.get<0>() is the return code: 0 for success; -ECANCELLED if
      * the operation was cancelled by the local OSD; -errno for other issues.
-     * results.get<1>() is the total size of the object (for updating pg stats)
-     * results.get<2>() indicates whether we have already written data to
-     * the temp object (so it needs to get cleaned up, if the return code
-     * indicates a failure)
-     * results.get<3>() is a Transaction; if non-empty you need to perform
-     * its results before any other accesses to the object in order to
-     * complete the copy.
-     * results.get<4>() is a bool; if true you must requeue the client Op
-     * after processing the rest of the results (this will only be true
-     * in conjunction with an ECANCELED return code).
+     * results.get<1>() is a pointer to a CopyResults object, which you are
+     * responsible for deleting.
      */
-    virtual void finish(CopyResults& results_) = 0;
+    virtual void finish(CopyCallbackResults results_) = 0;
 
   public:
     /// Provide the final size of the copied object to the CopyCallback
@@ -169,16 +177,18 @@ public:
 
   class CopyFromCallback: public CopyCallback {
   public:
-    CopyResults results;
+    CopyResults *results;
+    int retval;
     OpContext *ctx;
     hobject_t temp_obj;
     CopyFromCallback(OpContext *ctx_, const hobject_t& temp_obj_) :
-      ctx(ctx_), temp_obj(temp_obj_) {}
+      results(NULL), retval(0), ctx(ctx_), temp_obj(temp_obj_) {}
     ~CopyFromCallback() {}
 
-    virtual void finish(CopyResults& results_) {
-      results = results_;
-      int r = results.get<0>();
+    virtual void finish(CopyCallbackResults results_) {
+      results = results_.get<1>();
+      int r = results_.get<0>();
+      retval = r;
       if (r >= 0) {
 	ctx->pg->execute_ctx(ctx);
       }
@@ -186,18 +196,51 @@ public:
       if (r < 0) {
 	if (r != -ECANCELED) { // on cancel just toss it out; client resends
 	  ctx->pg->osd->reply_op_error(ctx->op, r);
-	} else if (results_.get<4>()) {
+	} else if (results->should_requeue) {
 	  ctx->pg->requeue_op(ctx->op);
 	}
 	ctx->pg->close_op_ctx(ctx);
       }
+      delete results;
     }
 
-    bool is_temp_obj_used() { return results.get<2>(); }
-    uint64_t get_data_size() { return results.get<1>(); }
-    int get_result() { return results.get<0>(); }
+    bool is_temp_obj_used() { return results->started_temp_obj; }
+    uint64_t get_data_size() { return results->object_size; }
+    int get_result() { return retval; }
   };
   friend class CopyFromCallback;
+
+  class PromoteCallback: public CopyCallback {
+    OpRequestRef op;
+    ObjectContextRef obc;
+    hobject_t temp_obj;
+    ReplicatedPG *pg;
+  public:
+    PromoteCallback(OpRequestRef op_, ObjectContextRef obc_,
+                    const hobject_t& temp_obj_,
+                    ReplicatedPG *pg_) :
+      op(op_), obc(obc_), temp_obj(temp_obj_), pg(pg_) {}
+
+    virtual void finish(CopyCallbackResults results) {
+      CopyResults *results_data = results.get<1>();
+      int r = results.get<0>();
+      pg->finish_promote(r, op, results_data, obc, temp_obj);
+      delete results_data;
+    }
+  };
+  friend class PromoteCallback;
+
+  struct FlushOp {
+    ObjectContextRef obc;
+    OpRequestRef op;            ///< rados request that triggered this
+    list<OpRequestRef> dup_ops; ///< dup flush requests
+    version_t flushed_version;  ///< user version we are flushing
+    tid_t objecter_tid;         ///< copy-from request tid
+    int rval;                   ///< copy-from result
+
+    FlushOp() : objecter_tid(0), rval(0) {}
+  };
+  typedef boost::shared_ptr<FlushOp> FlushOpRef;
 
   boost::scoped_ptr<PGBackend> pgbackend;
   PGBackend *get_pgbackend() {
@@ -467,8 +510,9 @@ public:
       pg_local_last_complete(lc),
       queue_snap_trimmer(false) { }
 
-    void get() {
+    RepGather *get() {
       nref++;
+      return this;
     }
     void put() {
       assert(nref > 0);
@@ -568,6 +612,24 @@ protected:
   void repop_ack(RepGather *repop,
                  int result, int ack_type,
                  int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
+
+  RepGather *simple_repop_create(ObjectContextRef obc);
+  void simple_repop_submit(RepGather *repop);
+
+  // hot/cold tracking
+  boost::scoped_ptr<HitSet> hit_set;  ///< currently accumulating HitSet
+  utime_t hit_set_start_stamp;   ///< time the current HitSet started recording
+  boost::scoped_ptr<pg_stat_t>  hit_set_start_stats;
+
+  void hit_set_clear();     ///< discard any HitSet state
+  void hit_set_setup();     ///< initialize HitSet state
+  void hit_set_create();    ///< create a new HitSet
+  void hit_set_check();
+  void hit_set_persist();   ///< persist hit info
+  bool hit_set_apply_log(); ///< apply log entries to update in-memory HitSet
+
+  hobject_t get_hit_set_current_object(utime_t stamp);
+  hobject_t get_hit_set_archive_object(utime_t start, utime_t end);
 
   /// true if we can send an ondisk/commit for v
   bool already_complete(eversion_t v) {
@@ -743,6 +805,7 @@ protected:
 		   const hobject_t& head, const hobject_t& coid,
 		   object_info_t *poi);
   void execute_ctx(OpContext *ctx);
+  void finish_ctx(OpContext *ctx);
   void reply_ctx(OpContext *ctx, int err);
   void reply_ctx(OpContext *ctx, int err, eversion_t v, version_t uv);
   void make_writeable(OpContext *ctx);
@@ -753,8 +816,24 @@ protected:
 				   uint64_t offset, uint64_t length, bool count_bytes);
   void add_interval_usage(interval_set<uint64_t>& s, object_stat_sum_t& st);
 
+  /**
+   * This helper function is called from do_op if the ObjectContext lookup fails.
+   * @returns true if the caching code is handling the Op, false otherwise.
+   */
   inline bool maybe_handle_cache(OpRequestRef op, ObjectContextRef obc, int r);
+  /**
+   * This helper function tells the client to redirect their request elsewhere.
+   */
   void do_cache_redirect(OpRequestRef op, ObjectContextRef obc);
+  /**
+   * This function starts up a copy from
+   */
+  void promote_object(OpRequestRef op, ObjectContextRef obc);
+
+  /**
+   * Check if the op is such that we can skip promote (e.g., DELETE)
+   */
+  bool can_skip_promote(OpRequestRef op, ObjectContextRef obc);
 
   int prepare_transaction(OpContext *ctx);
   
@@ -922,11 +1001,25 @@ protected:
   void _copy_some(ObjectContextRef obc, CopyOpRef cop);
   void _build_finish_copy_transaction(CopyOpRef cop,
                                       ObjectStore::Transaction& t);
-  int finish_copyfrom(OpContext *ctx);
+  void finish_copyfrom(OpContext *ctx);
+  void finish_promote(int r, OpRequestRef op,
+		      CopyResults *results, ObjectContextRef obc,
+                      hobject_t& temp_obj);
   void cancel_copy(CopyOpRef cop, bool requeue);
   void cancel_copy_ops(bool requeue);
 
   friend struct C_Copyfrom;
+
+  // -- flush --
+  map<hobject_t, FlushOpRef> flush_ops;
+
+  void start_flush(ObjectContextRef obc, OpRequestRef op);
+  void finish_flush(hobject_t oid, tid_t tid, int r);
+  void try_flush_mark_clean(FlushOpRef fop);
+  void cancel_flush(FlushOpRef fop, bool requeue);
+  void cancel_flush_ops(bool requeue);
+
+  friend class C_Flush;
 
   // -- scrub --
   virtual void _scrub(ScrubMap& map);
@@ -1051,7 +1144,7 @@ private:
 
   int _get_tmap(OpContext *ctx, map<string, bufferlist> *out,
 		bufferlist *header);
-  int _delete_head(OpContext *ctx);
+  int _delete_head(OpContext *ctx, bool no_whiteout);
   int _rollback_to(OpContext *ctx, ceph_osd_op& op);
 public:
   bool same_for_read_since(epoch_t e);
@@ -1087,6 +1180,7 @@ public:
   void _finish_mark_all_unfound_lost(list<ObjectContextRef>& obcs);
 
   void on_role_change();
+  void on_pool_change();
   void on_change(ObjectStore::Transaction *t);
   void on_activate();
   void on_flushed();
