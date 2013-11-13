@@ -625,6 +625,7 @@ fi
 %{_bindir}/ceph_smalliobenchfs
 %{_bindir}/ceph_smalliobenchrbd
 %{_bindir}/ceph_filestore_dump
+%{_bindir}/ceph_filestore_tool
 %{_bindir}/ceph_streamtest
 %{_bindir}/ceph_test_cfuse_cache_invalidate
 %{_bindir}/ceph_test_cls_hello
