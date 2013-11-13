@@ -470,6 +470,8 @@ kern.* -{adir}/syslog/kern.log;RSYSLOG_FileFormat
                     run.Raw('|'),
                     'grep', '-v', 'INFO: possible irq lock inversion dependency detected', # FIXME see #2590 and #147
                     run.Raw('|'),
+                    'grep', '-v', 'INFO: NMI handler (perf_event_nmi_handler) took too long to run',
+                    run.Raw('|'),
                     'head', '-n', '1',
                     ],
                 stdout=StringIO(),
