@@ -100,9 +100,6 @@ For Debian and Ubuntu distributions, perform the following steps:
 #. Add the release key::
 
 	wget -q -O- 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc' | sudo apt-key add -
-	echo deb http://ceph.com/debian-dumpling/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
-	sudo apt-get update
-	sudo apt-get install ceph-deploy
 
 #. Add the Ceph packages to your repository. Replace ``{ceph-stable-release}``
    with a stable Ceph release (e.g., ``cuttlefish``, ``dumpling``, etc.). 
@@ -118,8 +115,8 @@ For Debian and Ubuntu distributions, perform the following steps:
 Red Hat Package Manager (RPM)
 -----------------------------
 
-For Red Hat(rhel6), CentOS (el6), Fedora 17-19 (f17-f19), OpenSUSE 12
-(opensuse12), and SLES (sles11) perform the following steps:
+For Red Hat(rhel6), CentOS (el6), and Fedora 17-19 (f17-f19) perform the
+following steps:
 
 #. Add the package to your repository. Open a text editor and create a 
    Yellowdog Updater, Modified (YUM) entry. Use the file path

@@ -4273,6 +4273,14 @@ int FileStore::_collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
   int r = 0;
   int dstcmp, srccmp;
 
+  if (replaying) {
+    /* If the destination collection doesn't exist during replay,
+     * we need to delete the src object and continue on
+     */
+    if (!collection_exists(c))
+      goto out_rm_src;
+  }
+
   dstcmp = _check_replay_guard(c, o, spos);
   if (dstcmp < 0)
     goto out_rm_src;

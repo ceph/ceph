@@ -105,11 +105,6 @@ Upgrading from v0.67 Dumpling
   however continue to work just the same as long as the osd already exists
   in the crush map.
 
-* 'ceph osd crush set <id> <weight> <loc..>' no longer adds the osd to the
-  specified location, as that's a job for 'ceph osd crush add'.  It will
-  however continue to work just the same as long as the osd already exists
-  in the crush map.
-
 * The OSD now enforces that class write methods cannot both mutate an
   object and return data.  The rbd.assign_bid method, the lone
   offender, has been removed.  This breaks compatibility with
@@ -406,6 +401,12 @@ v0.69
 
 Upgrading
 ~~~~~~~~~
+
+* The sysvinit /etc/init.d/ceph script will, by default, update the
+  CRUSH location of an OSD when it starts.  Previously, if the
+  monitors were not available, this command would hang indefinitely.
+  Now, that step will time out after 10 seconds and the ceph-osd daemon
+  will not be started.
 
 * Users of the librados C++ API should replace users of get_version()
   with get_version64() as the old method only returns a 32-bit value

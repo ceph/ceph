@@ -32,7 +32,9 @@ using namespace std::tr1;
 class SharedPtrRegistryTest : public SharedPtrRegistry<unsigned int, int> {
 public:
   Mutex &get_lock() { return lock; }
-  map<unsigned int, weak_ptr<int> > &get_contents() { return contents; }
+  map<unsigned int, pair<weak_ptr<int>, int*> > &get_contents() {
+    return contents;
+  }
 };
 
 class SharedPtrRegistry_all : public ::testing::Test {
@@ -125,9 +127,9 @@ TEST_F(SharedPtrRegistry_all, wait_lookup_or_create) {
     unsigned int key = 1;
     {
       shared_ptr<int> ptr(new int);
-      registry.get_contents()[key] = ptr;
+      registry.get_contents()[key] = make_pair(ptr, ptr.get());
     }
-    EXPECT_FALSE(registry.get_contents()[key].lock());
+    EXPECT_FALSE(registry.get_contents()[key].first.lock());
 
     Thread_wait t(registry, key, 0, Thread_wait::LOOKUP_OR_CREATE);
     t.create();
@@ -145,9 +147,9 @@ TEST_F(SharedPtrRegistry_all, wait_lookup_or_create) {
     int value = 3;
     {
       shared_ptr<int> ptr(new int);
-      registry.get_contents()[key] = ptr;
+      registry.get_contents()[key] = make_pair(ptr, ptr.get());
     }
-    EXPECT_FALSE(registry.get_contents()[key].lock());
+    EXPECT_FALSE(registry.get_contents()[key].first.lock());
 
     Thread_wait t(registry, key, value, Thread_wait::LOOKUP_OR_CREATE);
     t.create();
@@ -188,9 +190,9 @@ TEST_F(SharedPtrRegistry_all, wait_lookup) {
   int value = 2;
   {
     shared_ptr<int> ptr(new int);
-    registry.get_contents()[key] = ptr;
+    registry.get_contents()[key] = make_pair(ptr, ptr.get());
   }
-  EXPECT_FALSE(registry.get_contents()[key].lock());
+  EXPECT_FALSE(registry.get_contents()[key].first.lock());
 
   Thread_wait t(registry, key, value, Thread_wait::LOOKUP);
   t.create();
@@ -221,7 +223,7 @@ TEST_F(SharedPtrRegistry_all, get_next) {
 
     // entries with expired pointers are silentely ignored
     const unsigned int key_gone = 222;
-    registry.get_contents()[key_gone] = shared_ptr<int>();
+    registry.get_contents()[key_gone] = make_pair(shared_ptr<int>(), (int*)0);
 
     const unsigned int key1 = 111;
     shared_ptr<int> ptr1 = registry.lookup_or_create(key1);
@@ -255,6 +257,39 @@ TEST_F(SharedPtrRegistry_all, get_next) {
     delete ptr1;
     EXPECT_TRUE(registry.get_next(i.first, &i));    
     EXPECT_EQ(key2, i.first);
+  }
+}
+
+TEST_F(SharedPtrRegistry_all, remove) {
+  {
+    SharedPtrRegistryTest registry;
+    const unsigned int key1 = 1;
+    shared_ptr<int> ptr1 = registry.lookup_or_create(key1);
+    *ptr1 = 400;
+    registry.remove(key1);
+
+    shared_ptr<int> ptr2 = registry.lookup_or_create(key1);
+    *ptr2 = 500;
+
+    ptr1 = shared_ptr<int>();
+    shared_ptr<int> res = registry.lookup(key1);
+    assert(res);
+    assert(res == ptr2);
+    assert(*res == 500);
+  }
+  {
+    SharedPtrRegistryTest registry;
+    const unsigned int key1 = 1;
+    shared_ptr<int> ptr1 = registry.lookup_or_create(key1, 400);
+    registry.remove(key1);
+
+    shared_ptr<int> ptr2 = registry.lookup_or_create(key1, 500);
+
+    ptr1 = shared_ptr<int>();
+    shared_ptr<int> res = registry.lookup(key1);
+    assert(res);
+    assert(res == ptr2);
+    assert(*res == 500);
   }
 }
 

@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [0.72-rc1], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [0.72], [ceph-devel@vger.kernel.org])
 
 # Create release string.  Used with VERSION for RPMs.
 RPM_RELEASE=0
@@ -113,11 +113,48 @@ AM_CONDITIONAL([ENABLE_FPU_NEON], [case $target_cpu in arm*) true;; *) false;; e
 AX_CHECK_COMPILE_FLAG([-fvar-tracking-assignments], [HAS_VTA_SUPPORT=1], [HAS_VTA_SUPPORT=0])
 AM_CONDITIONAL(COMPILER_HAS_VTA, [test "$HAS_VTA_SUPPORT" = 1])
 
+AX_CXX_STATIC_CAST
+AX_C_VAR_FUNC
+AX_C_PRETTY_FUNC
+
 # Checks for libraries.
 ACX_PTHREAD
 AC_CHECK_LIB([uuid], [uuid_parse], [true], AC_MSG_FAILURE([libuuid not found]))
+
+#
+# Check for res_nquery in libresolv. There are several variations. On OSX
+# res_nquery is a macro defined in resolv.h, so the typical AC_CHECK_LIB
+# doesn't work. On FreeBSD res_nquery can be found in libc. The required
+# library for linking (if any) is defined RESOLV_LIBS.
+#
+AC_CHECK_HEADER([resolv.h], [], [], [#include <netinet/in.h>])
+
+AC_DEFUN([CHECK_RESOLV_LIBS], [{
+  AC_MSG_CHECKING([if res_nquery will link (LIBS=$1)])
+  saved_LIBS="${LIBS}"
+  LIBS="$1"
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+        #include <netinet/in.h>
+        #include <resolv.h>
+      ]], [[res_nquery(0, 0, 0, 0, 0, 0);]])],
+      [AC_MSG_RESULT([yes])
+      [$2]],
+      AC_MSG_RESULT([no]))
+  LIBS="${saved_LIBS}"
+}])
+
+RESOLV_LIBS=""
+CHECK_RESOLV_LIBS([$RESOLV_LIBS], [resolv_libs="ok"])
+if test x"$resolv_libs" != "xok"; then
+  RESOLV_LIBS="-lresolv"
+  CHECK_RESOLV_LIBS([$RESOLV_LIBS], [resolv_libs="ok"])
+  if test x"$resolv_libs" != "xok"; then
+    AC_MSG_FAILURE([no resolv library found])
+  fi
+fi
+AC_SUBST([RESOLV_LIBS])
+
 AC_CHECK_LIB([m], [pow], [true], AC_MSG_FAILURE([libm not found]))
-AC_CHECK_LIB([resolv], [__res_nquery], [true], AC_MSG_FAILURE([libresolv not found]))
 if test x"$linux" = x"yes"; then
 	AC_CHECK_LIB([keyutils], [add_key], [true], AC_MSG_FAILURE([libkeyutils not found]))
 fi
@@ -535,9 +572,23 @@ AC_CHECK_FUNC([fallocate],
 	[AC_DEFINE([CEPH_HAVE_FALLOCATE], [], [fallocate(2) is supported])],
 	[])
 
+#
+# Test for time-related `struct stat` members.
+#
 
+AC_CHECK_MEMBER([struct stat.st_mtim.tv_nsec],
+  [AC_DEFINE(HAVE_STAT_ST_MTIM_TV_NSEC, 1,
+    [Define if you have struct stat.st_mtim.tv_nsec])])
+
+AC_CHECK_MEMBER([struct stat.st_mtimespec.tv_nsec],
+  [AC_DEFINE(HAVE_STAT_ST_MTIMESPEC_TV_NSEC, 1,
+    [Define if you have struct stat.st_mtimespec.tv_nsec])])
+
+AC_CHECK_HEADERS([arpa/nameser_compat.h])
 AC_CHECK_HEADERS([sys/prctl.h])
 AC_CHECK_FUNCS([prctl])
+AC_CHECK_FUNCS([pipe2])
+AC_CHECK_FUNCS([posix_fadvise])
 
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
