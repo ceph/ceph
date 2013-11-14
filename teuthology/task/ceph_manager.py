@@ -308,6 +308,7 @@ class CephManager:
         self.ctx = ctx
         self.config = config
         self.controller = controller
+        self.next_pool_id = 0
         if (logger):
             self.log = lambda x: logger.info(x)
         else:
@@ -550,6 +551,14 @@ class CephManager:
         status = self.raw_cluster_status()
         self.log(status)
         return status['pgmap']['num_pgs']
+
+    def create_pool_with_unique_name(self, pg_num=1):
+        name = ""
+        with self.lock:
+            name = "unique_pool_%s"%(str(self.next_pool_id),)
+            self.next_pool_id += 1
+            self.create_pool(name, pg_num)
+        return name
 
     def create_pool(self, pool_name, pg_num=1):
         with self.lock:

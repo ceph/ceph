@@ -108,9 +108,8 @@ def task(ctx, config):
                 PREFIX = 'client.'
                 assert role.startswith(PREFIX)
                 id_ = role[len(PREFIX):]
-                pool = 'radosmodel-%s' % id_
+                pool = ctx.manager.create_pool_with_unique_name()
                 pools.append(pool)
-                ctx.manager.create_pool(pool)
                 (remote,) = ctx.cluster.only(role).remotes.iterkeys()
                 proc = remote.run(
                     args=["CEPH_CLIENT_ID={id_}".format(id_=id_)] + args +
