@@ -28,6 +28,9 @@ on the pinned dependencies listed in ``requirements.txt``, the ``setup.py``
 will not list any and will only be there to install the package entry points
 (a.k.a teuthology's scripts).
 
+    git clone https://github.com/ceph/teuthology.git
+    cd teuthology
+
 
 Bootstrap for Ubuntu Systems
 ----------------------------
