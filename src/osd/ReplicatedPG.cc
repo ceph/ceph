@@ -1272,13 +1272,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
     }
 
     // version
-    ctx->at_version = pg_log.get_head();
-
-    ctx->at_version.epoch = get_osdmap()->get_epoch();
-    ctx->at_version.version++;
-    assert(ctx->at_version > info.last_update);
-    assert(ctx->at_version > pg_log.get_head());
-
+    ctx->at_version = get_next_version();
     ctx->mtime = m->get_mtime();
 
     dout(10) << "do_op " << soid << " " << ctx->ops
@@ -1853,9 +1847,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
     obc->ssc,
     this);
   ctx->mtime = ceph_clock_now(cct);
-
-  ctx->at_version.epoch = get_osdmap()->get_epoch();
-  ctx->at_version.version = pg_log.get_head().version + 1;
+  ctx->at_version = get_next_version();
 
   RepGather *repop = new_repop(ctx, obc, rep_tid);
 
@@ -5167,9 +5159,7 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
   OpContext *ctx = new OpContext(OpRequestRef(), reqid, ops,
 				 &obc->obs, obc->ssc, this);
   ctx->mtime = ceph_clock_now(cct);
-
-  ctx->at_version.epoch = get_osdmap()->get_epoch();
-  ctx->at_version.version = pg_log.get_head().version + 1;
+  ctx->at_version = get_next_version();
 
   entity_inst_t nobody;
 
