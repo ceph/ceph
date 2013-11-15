@@ -2,6 +2,41 @@
  Release Notes
 ===============
 
+v0.72.1 Emperor
+---------------
+
+Changes
+~~~~~~~
+
+* osd: fix upgrade bug #6761
+* ceph_filestore_tool: introduced tool to repair errors caused by #6761
+
+This release addresses issue #6761.  Upgrading to Emperor can cause
+reads to begin returning ENFILE (too many open files).  v0.72.1 fixes
+that upgrade issue and adds a tool ceph_filestore_tool to repair osd
+stores affected by this bug.
+
+To repair a cluster affected by this bug:
+
+#. Upgrade all osd machines to v0.72.1
+#. Install the ceph-test package on each osd machine to get ceph_filestore_tool
+#. Stop all osd processes
+#. To see all lost objects, run the following on each osd with the osd stopped::
+
+     ceph_filestore_tool --list-lost-objects=true --filestore-path=<path-to-osd-filestore> --journal-path=<path-to-osd-journal>
+
+#. To fix all lost objects, run the following on each osd with the
+   osd stopped::
+
+     ceph_filestore_tool --fix-lost-objects=true --list-lost-objects=true --filestore-path=<path-to-osd-filestore> --journal-path=<path-to-osd-journal>
+
+#. Once lost objects have been repaired on each osd, you can restart
+   the cluster.
+
+Note, the ceph_filestore_tool performs a scan of all objects on the
+osd and may take some time.
+
+
 v0.72 Emperor
 -------------
 
