@@ -1383,6 +1383,8 @@ private:
   void set_client_incarnation(int inc) { client_inc = inc; }
 
   void wait_for_new_map(Context *c, epoch_t epoch, int err=0);
+  void wait_for_latest_osdmap(Context *fin);
+  void _get_latest_version(epoch_t oldest, epoch_t neweset, Context *fin);
 
   /** Get the current set of global op flags */
   int get_global_op_flags() { return global_op_flags; }
