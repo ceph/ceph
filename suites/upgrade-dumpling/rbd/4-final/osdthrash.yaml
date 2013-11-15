@@ -3,6 +3,7 @@ overrides:
     log-whitelist:
     - wrongly marked me down
     - objects unfound and apparently lost
+    - log bound mismatch
 tasks:
 - thrashosds:
     timeout: 1200
