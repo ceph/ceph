@@ -292,11 +292,11 @@ CephContext::CephContext(uint32_t module_type_)
 
 CephContext::~CephContext()
 {
+  join_service_thread();
+
   if (_conf->lockdep) {
     lockdep_unregister_ceph_context(this);
   }
-
-  join_service_thread();
 
   _admin_socket->unregister_command("perfcounters_dump");
   _admin_socket->unregister_command("perf dump");
