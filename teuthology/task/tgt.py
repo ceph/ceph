@@ -26,13 +26,14 @@ def start_tgt_remotes(ctx, start_tgtd):
             if _id in start_tgtd:
                 if not rem in tgtd_list:
                     tgtd_list.append(rem)
+                    size = ctx.config.get('image_size', 10240)
                     rem.run(
                         args=[
                             'rbd',
                             'create',
                             'iscsi-image',
                             '--size',
-                            '500',
+                            str(size),
                     ])
                     rem.run(
                         args=[
@@ -143,6 +144,13 @@ def task(ctx, config):
             client.0:
             client.3:
 
+    An image blocksize size can also be specified::
+        
+        tasks:
+        - ceph:
+        - tgt:
+            image_size = 20480
+
     The general flow of things here is:
         1. Find clients on which tgt is supposed to run (start_tgtd)
         2. Remotely start up tgt daemon
@@ -151,10 +159,14 @@ def task(ctx, config):
 
     The iscsi administration is handled by the iscsi task.
     """
+    if config:
+        config = {key : val for key, val in config.items()
+                if key.startswith('client')}
+    # config at this point should only contain keys starting with 'client'
     start_tgtd = []
     remotes = ctx.cluster.only(teuthology.is_type('client')).remotes
     log.info(remotes)
-    if config == None:
+    if not config:
         start_tgtd = ['client.{id}'.format(id=id_)
             for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
     else:
