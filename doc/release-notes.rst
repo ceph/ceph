@@ -21,12 +21,13 @@ To repair a cluster affected by this bug:
 #. Upgrade all osd machines to v0.72.1
 #. Install the ceph-test package on each osd machine to get ceph_filestore_tool
 #. Stop all osd processes
-#. To see all lost objects, run the following on each osd with the osd stopped::
+#. To see all lost objects, run the following on each osd with the osd stopped and
+   the osd data directory mounted::
 
      ceph_filestore_tool --list-lost-objects=true --filestore-path=<path-to-osd-filestore> --journal-path=<path-to-osd-journal>
 
 #. To fix all lost objects, run the following on each osd with the
-   osd stopped::
+   osd stopped and the osd data directory mounted::
 
      ceph_filestore_tool --fix-lost-objects=true --list-lost-objects=true --filestore-path=<path-to-osd-filestore> --journal-path=<path-to-osd-journal>
 
