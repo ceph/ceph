@@ -1926,7 +1926,7 @@ void Locker::request_inode_file_caps(CInode *in)
 {
   assert(!in->is_auth());
 
-  int wanted = in->get_caps_wanted();
+  int wanted = in->get_caps_wanted() & ~CEPH_CAP_PIN;
   if (wanted != in->replica_caps_wanted) {
     // wait for single auth
     if (in->is_ambiguous_auth()) {
