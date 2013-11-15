@@ -56,18 +56,24 @@ void osd_reqid_t::generate_test_instances(list<osd_reqid_t*>& o)
 
 void object_locator_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(5, 3, bl);
+  // verify that nobody's corrupted the locator
+  assert(hash == -1 || key.empty());
+  __u8 encode_compat = 3;
+  ENCODE_START(6, encode_compat, bl);
   ::encode(pool, bl);
   int32_t preferred = -1;  // tell old code there is no preferred osd (-1).
   ::encode(preferred, bl);
   ::encode(key, bl);
   ::encode(nspace, bl);
-  ENCODE_FINISH(bl);
+  ::encode(hash, bl);
+  if (hash != -1)
+    encode_compat = MAX(encode_compat, 6); // need to interpret the hash
+  ENCODE_FINISH_NEW_COMPAT(bl, encode_compat);
 }
 
 void object_locator_t::decode(bufferlist::iterator& p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, p);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, p);
   if (struct_v < 2) {
     int32_t op;
     ::decode(op, p);
@@ -82,7 +88,13 @@ void object_locator_t::decode(bufferlist::iterator& p)
   ::decode(key, p);
   if (struct_v >= 5)
     ::decode(nspace, p);
+  if (struct_v >= 6)
+    ::decode(hash, p);
+  else
+    hash = -1;
   DECODE_FINISH(p);
+  // verify that nobody's corrupted the locator
+  assert(hash == -1 || key.empty());
 }
 
 void object_locator_t::dump(Formatter *f) const
@@ -90,12 +102,14 @@ void object_locator_t::dump(Formatter *f) const
   f->dump_int("pool", pool);
   f->dump_string("key", key);
   f->dump_string("namespace", nspace);
+  f->dump_int("hash", hash);
 }
 
 void object_locator_t::generate_test_instances(list<object_locator_t*>& o)
 {
   o.push_back(new object_locator_t);
   o.push_back(new object_locator_t(123));
+  o.push_back(new object_locator_t(123, 876));
   o.push_back(new object_locator_t(1, "n2"));
   o.push_back(new object_locator_t(1234, "", "key"));
   o.push_back(new object_locator_t(12, "n1", "key2"));

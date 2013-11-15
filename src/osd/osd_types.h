@@ -87,20 +87,26 @@ namespace __gnu_cxx {
 // a locator constrains the placement of an object.  mainly, which pool
 // does it go in.
 struct object_locator_t {
-  int64_t pool;
-  string key;
-  string nspace;
+  // You specify either the hash or the key -- not both
+  int64_t pool;     ///< pool id
+  string key;       ///< key string (if non-empty)
+  string nspace;    ///< namespace
+  int64_t hash;     ///< hash position (if >= 0)
 
   explicit object_locator_t()
-    : pool(-1) {}
+    : pool(-1), hash(-1) {}
   explicit object_locator_t(int64_t po)
-    : pool(po) {}
+    : pool(po), hash(-1)  {}
+  explicit object_locator_t(int64_t po, int64_t ps)
+    : pool(po), hash(ps)  {}
   explicit object_locator_t(int64_t po, string ns)
-    : pool(po), nspace(ns) {}
+    : pool(po), nspace(ns), hash(-1) {}
+  explicit object_locator_t(int64_t po, string ns, int64_t ps)
+    : pool(po), nspace(ns), hash(ps) {}
   explicit object_locator_t(int64_t po, string ns, string s)
-    : pool(po), key(s), nspace(ns) {}
+    : pool(po), key(s), nspace(ns), hash(-1) {}
   explicit object_locator_t(const hobject_t& soid)
-    : pool(soid.pool), key(soid.get_key()), nspace(soid.nspace) {}
+    : pool(soid.pool), key(soid.get_key()), nspace(soid.nspace), hash(-1) {}
 
   int64_t get_pool() const {
     return pool;
@@ -110,6 +116,7 @@ struct object_locator_t {
     pool = -1;
     key = "";
     nspace = "";
+    hash = -1;
   }
 
   bool empty() const {
@@ -124,7 +131,7 @@ struct object_locator_t {
 WRITE_CLASS_ENCODER(object_locator_t)
 
 inline bool operator==(const object_locator_t& l, const object_locator_t& r) {
-  return l.pool == r.pool && l.key == r.key && l.nspace == r.nspace;
+  return l.pool == r.pool && l.key == r.key && l.nspace == r.nspace && l.hash == r.hash;
 }
 inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
   return !(l == r);
