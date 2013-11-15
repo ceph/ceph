@@ -331,7 +331,7 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
     )
 
 
-def _yum_fix_repo_priority(remote, project):
+def _yum_fix_repo_priority(remote, project, uri):
     """
     On the remote, 'priority=1' lines to each enabled repo in:
 
@@ -345,8 +345,11 @@ def _yum_fix_repo_priority(remote, project):
             'sudo',
             'sed',
             '-i',
+            '-e',
             run.Raw(
                 '\':a;N;$!ba;s/enabled=1\\ngpg/enabled=1\\npriority=1\\ngpg/g\''),
+            '-e',
+            run.Raw("'s;ref/[a-zA-Z0-9_]*/;{uri}/;g'".format(uri=uri)),
             '/etc/yum.repos.d/%s.repo' % project,
         ]
     )
@@ -392,7 +395,8 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     remote.run(args=['rm', '-f', rpm_name])
 
     # Fix Repo Priority
-    _yum_fix_repo_priority(remote, config.get('project', 'ceph'))
+    uri = baseparms['uri']
+    _yum_fix_repo_priority(remote, config.get('project', 'ceph'), uri)
 
     remote.run(
         args=[
@@ -933,7 +937,8 @@ def _upgrade_rpm_packages(ctx, config, remote, pkgs):
     # Upgrade the -release package
     args = ['sudo', 'rpm', '-Uv', release_rpm]
     _run_and_log_error_if_fails(remote, args)
-    _yum_fix_repo_priority(remote, project)
+    uri = _get_baseurlinfo_and_dist(ctx, remote, config)['uri']
+    _yum_fix_repo_priority(remote, project, uri)
 
     remote.run(
         args=[
