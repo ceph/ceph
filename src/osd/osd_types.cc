@@ -2913,7 +2913,7 @@ void object_info_t::encode(bufferlist& bl) const
        ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(12, 8, bl);
+  ENCODE_START(13, 8, bl);
   ::encode(soid, bl);
   ::encode(myoloc, bl);	//Retained for compatibility
   ::encode(category, bl);
@@ -2928,23 +2928,23 @@ void object_info_t::encode(bufferlist& bl) const
     ::encode(snaps, bl);
   ::encode(truncate_seq, bl);
   ::encode(truncate_size, bl);
-  __u8 flags_lo = flags & 0xff;
-  __u8 flags_hi = (flags & 0xff00) >> 8;
-  ::encode(flags_lo, bl);
+  ::encode(is_lost(), bl);
   ::encode(old_watchers, bl);
   /* shenanigans to avoid breaking backwards compatibility in the disk format.
    * When we can, switch this out for simply putting the version_t on disk. */
   eversion_t user_eversion(0, user_version);
   ::encode(user_eversion, bl);
-  ::encode(flags_hi, bl);
+  ::encode(test_flag(FLAG_USES_TMAP), bl);
   ::encode(watchers, bl);
+  __u32 _flags = flags;
+  ::encode(_flags, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_info_t::decode(bufferlist::iterator& bl)
 {
   object_locator_t myoloc;
-  DECODE_START_LEGACY_COMPAT_LEN(12, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(13, 8, 8, bl);
   map<entity_name_t, watch_info_t> old_watchers;
   if (struct_v >= 2 && struct_v <= 5) {
     sobject_t obj;
@@ -2975,6 +2975,9 @@ void object_info_t::decode(bufferlist::iterator& bl)
   ::decode(truncate_seq, bl);
   ::decode(truncate_size, bl);
   if (struct_v >= 3) {
+    // if this is struct_v >= 13, we will overwrite this
+    // below since this field is just here for backwards
+    // compatibility
     __u8 lo;
     ::decode(lo, bl);
     flags = (flag_t)lo;
@@ -2988,9 +2991,10 @@ void object_info_t::decode(bufferlist::iterator& bl)
     user_version = user_eversion.version;
   }
   if (struct_v >= 9) {
-    __u8 hi;
-    ::decode(hi, bl);
-    flags = (flag_t)(flags | ((unsigned)hi << 8));
+    bool uses_tmap = false;
+    ::decode(uses_tmap, bl);
+    if (uses_tmap)
+      set_flag(FLAG_USES_TMAP);
   } else {
     set_flag(FLAG_USES_TMAP);
   }
@@ -3006,6 +3010,11 @@ void object_info_t::decode(bufferlist::iterator& bl)
 	make_pair(
 	  make_pair(i->second.cookie, i->first), i->second));
     }
+  }
+  if (struct_v >= 13) {
+    __u32 _flags;
+    ::decode(_flags, bl);
+    flags = (flag_t)_flags;
   }
   DECODE_FINISH(bl);
 }

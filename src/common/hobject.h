@@ -98,6 +98,11 @@ public:
     return ret;
   }
 
+  /// @return true if object is head
+  bool is_head() const {
+    return snap == CEPH_NOSNAP;
+  }
+
   /// @return true if object is neither head nor snapdir
   bool is_snap() const {
     return (snap != CEPH_NOSNAP) && (snap != CEPH_SNAPDIR);
