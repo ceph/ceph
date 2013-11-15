@@ -282,8 +282,10 @@ public:
   void send_message(int to_osd, Message *m) {
     osd->send_message_osd_cluster(to_osd, m, get_osdmap()->get_epoch());
   }
-  void queue_transaction(ObjectStore::Transaction *t) {
-    osd->store->queue_transaction(osr.get(), t);
+  void queue_transaction(ObjectStore::Transaction *t, OpRequestRef op) {
+    list<ObjectStore::Transaction *> tls;
+    tls.push_back(t);
+    osd->store->queue_transaction(osr.get(), t, 0, 0, 0, op);
   }
   epoch_t get_epoch() {
     return get_osdmap()->get_epoch();

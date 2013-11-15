@@ -93,7 +93,10 @@
        GenContext<ThreadPool::TPHandle&> *c) = 0;
 
      virtual void send_message(int to_osd, Message *m) = 0;
-     virtual void queue_transaction(ObjectStore::Transaction *t) = 0;
+     virtual void queue_transaction(
+       ObjectStore::Transaction *t,
+       OpRequestRef op = OpRequestRef()
+       ) = 0;
      virtual epoch_t get_epoch() = 0;
      virtual const vector<int> &get_actingbackfill() = 0;
      virtual std::string gen_dbg_prefix() const = 0;
