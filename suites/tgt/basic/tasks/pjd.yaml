@@ -1,0 +1,10 @@
+tasks:
+- install:
+- chef:
+- ceph:
+- tgt:
+- iscsi:
+- workunit:
+    clients:
+        all:
+            - suites/pjd.sh
