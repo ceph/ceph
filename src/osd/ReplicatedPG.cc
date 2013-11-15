@@ -1046,9 +1046,12 @@ void ReplicatedPG::do_op(OpRequestRef op)
       if (!src_obc.count(src_oid)) {
 	ObjectContextRef sobc;
 	snapid_t ssnapid;
+	int r;
 
-	int r = find_object_context(src_oid, &sobc, false, &ssnapid);
-	if (r == -EAGAIN) {
+	if (src_oid.is_head() && is_missing_object(src_oid)) {
+	  wait_for_missing_object(src_oid, op);
+	} else if ((r = find_object_context(
+		      src_oid, &sobc, false, &ssnapid)) == -EAGAIN) {
 	  // missing the specific snap we need; requeue and wait.
 	  hobject_t wait_oid(osd_op.soid.oid, src_oloc.key, ssnapid, m->get_pg().ps(),
 			     info.pgid.pool(), m->get_object_locator().nspace);
