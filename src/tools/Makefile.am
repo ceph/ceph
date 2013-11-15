@@ -12,6 +12,13 @@ ceph_kvstore_tool_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph-kvstore-tool
 
 
+ceph_filestore_tool_SOURCES = tools/ceph-filestore-tool.cc
+ceph_filestore_tool_LDADD = $(LIBOSD) $(LIBOS) $(CEPH_GLOBAL) -lboost_program_options
+if LINUX
+ceph_filestore_tool_LDADD += -ldl
+endif # LINUX
+bin_PROGRAMS += ceph_filestore_tool
+
 ceph_filestore_dump_SOURCES = tools/ceph-filestore-dump.cc
 ceph_filestore_dump_LDADD = $(LIBOSD) $(LIBOS) $(CEPH_GLOBAL) -lboost_program_options
 if LINUX
