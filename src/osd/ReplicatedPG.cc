@@ -1844,6 +1844,7 @@ void ReplicatedPG::do_scan(
       int from = m->get_source().num();
       //XXX: Check that from is in backfill_targets vector
       //assert(from == get_backfill_target());
+      //XXX: Store per "from" peer
       BackfillInterval& bi = peer_backfill_info;
       bi.begin = m->begin;
       bi.end = m->end;
@@ -1864,8 +1865,9 @@ void ReplicatedPG::do_scan(
 	}
       }
 
-      assert(waiting_on_backfill);
-      waiting_on_backfill = false;
+      assert(waiting_on_backfill.find(from) != waiting_on_backfill.end());
+      waiting_on_backfill.erase(from);
+      //XXX: Should we wait for waiting_on_backfill == 0?
       finish_recovery_op(bi.begin);
     }
     break;
@@ -8342,7 +8344,7 @@ bool ReplicatedPG::start_recovery_ops(
       state_test(PG_STATE_BACKFILL) &&
       !backfill_targets.empty() && started < max &&
       missing.num_missing() == 0 &&
-      !waiting_on_backfill) {
+      waiting_on_backfill.find(backfill_targets[0]) == waiting_on_backfill.end()) {
     if (get_osdmap()->test_flag(CEPH_OSDMAP_NOBACKFILL)) {
       dout(10) << "deferring backfill due to NOBACKFILL" << dendl;
       deferred_backfill = true;
@@ -8809,7 +8811,8 @@ int ReplicatedPG::recover_backfill(
       MOSDPGScan *m = new MOSDPGScan(MOSDPGScan::OP_SCAN_GET_DIGEST, e, e, info.pgid,
 				     pbi.end, hobject_t());
       osd->send_message_osd_cluster(backfill_targets[0], m, get_osdmap()->get_epoch());
-      waiting_on_backfill = true;
+      assert(waiting_on_backfill.find(backfill_targets[0]) == waiting_on_backfill.end());
+      waiting_on_backfill.insert(backfill_targets[0]);
       start_recovery_op(pbi.end);
       ops++;
       break;

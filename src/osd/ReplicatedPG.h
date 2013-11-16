@@ -702,7 +702,11 @@ protected:
         p != backfill_targets.end(); ++p)
       f->dump_int("osd", *p);
     f->close_section();
-    f->dump_int("waiting_on_backfill", waiting_on_backfill);
+    f->open_array_section("waiting_on_backfill");
+    for (set<int>::const_iterator p = waiting_on_backfill.begin();
+        p != waiting_on_backfill.end(); ++p)
+      f->dump_int("osd", *p);
+    f->close_section();
     f->dump_stream("last_backfill_started") << last_backfill_started;
     {
       f->open_object_section("backfill_info");
