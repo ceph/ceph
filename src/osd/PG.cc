@@ -162,7 +162,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   coll(p), pg_log(cct), log_oid(loid), biginfo_oid(ioid),
   recovery_item(this), scrub_item(this), scrub_finalize_item(this), snap_trim_item(this), stat_queue_item(this),
   recovery_ops_active(0),
-  waiting_on_backfill(0),
   role(0),
   state(0),
   send_notify(false),
@@ -520,7 +519,7 @@ bool PG::needs_backfill() const
   bool ret = false;
 
   // We can assume that only possible osds that need backfill
-  // are on the backfill_targets vector.
+  // are on the backfill_targets vector nodes.
   vector<int>::const_iterator end = backfill_targets.end();
   vector<int>::const_iterator a = backfill_targets.begin();
   for (; a != end; ++a) {
@@ -1788,7 +1787,7 @@ void PG::clear_recovery_state()
   backfill_targets.clear();
   backfill_info.clear();
   peer_backfill_info.clear();
-  waiting_on_backfill = false;
+  waiting_on_backfill.clear();
   _clear_recovery_state();  // pg impl specific hook
 }
 
