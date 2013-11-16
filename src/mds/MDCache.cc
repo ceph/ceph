@@ -4055,8 +4055,10 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     rejoin_scour_survivor_replicas(from, ack, acked_inodes, gather_locks);
     mds->send_message(ack, weak->get_connection());
 
-    for (set<SimpleLock*>::iterator p = gather_locks.begin(); p != gather_locks.end(); ++p)
-      mds->locker->eval_gather(*p);
+    for (set<SimpleLock*>::iterator p = gather_locks.begin(); p != gather_locks.end(); ++p) {
+      if (!(*p)->is_stable())
+	mds->locker->eval_gather(*p);
+    }
   } else {
     // done?
     if (rejoin_gather.empty()) {
@@ -6706,11 +6708,13 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
     }
   }
 
-  for (set<SimpleLock*>::iterator p = gather_locks.begin(); p != gather_locks.end(); ++p)
-    mds->locker->eval_gather(*p);
-
   // done
   m->put();
+
+  for (set<SimpleLock*>::iterator p = gather_locks.begin(); p != gather_locks.end(); ++p) {
+    if (!(*p)->is_stable())
+      mds->locker->eval_gather(*p);
+  }
 }
 
 void MDCache::process_delayed_expire(CDir *dir)
