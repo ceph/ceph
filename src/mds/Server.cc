@@ -1118,10 +1118,6 @@ void Server::handle_client_request(MClientRequest *req)
     session->trim_completed_requests(req->get_oldest_client_tid());
   }
 
-  // request_start may drop the request, get a reference for cap release
-  if (!req->releases.empty() && req->get_source().is_client() && !req->is_replay())
-    req->get();
-
   // register + dispatch
   MDRequest *mdr = mdcache->request_start(req);
   if (mdr) {
@@ -1139,7 +1135,7 @@ void Server::handle_client_request(MClientRequest *req)
 	 p != req->releases.end();
 	 ++p)
       mds->locker->process_request_cap_release(mdr, client, p->item, p->dname);
-    req->put();
+    req->releases.clear();
   }
 
   if (mdr)
