@@ -8640,7 +8640,7 @@ void MDCache::request_finish(MDRequest *mdr)
   dout(7) << "request_finish " << *mdr << dendl;
 
   // slave finisher?
-  if (mdr->more()->slave_commit) {
+  if (mdr->has_more() && mdr->more()->slave_commit) {
     Context *fin = mdr->more()->slave_commit;
     mdr->more()->slave_commit = 0;
     fin->complete(0);   // this must re-call request_finish.
@@ -8691,6 +8691,9 @@ void MDCache::dispatch_request(MDRequest *mdr)
 
 void MDCache::request_drop_foreign_locks(MDRequest *mdr)
 {
+  if (!mdr->has_more())
+    return;
+
   // clean up slaves
   //  (will implicitly drop remote dn pins)
   for (set<int>::iterator p = mdr->more()->slaves.begin();
