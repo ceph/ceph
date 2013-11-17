@@ -1155,6 +1155,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 
   switch (type) {
   case CEPH_LOCK_IAUTH:
+    ::encode(inode.version, bl);
     ::encode(inode.ctime, bl);
     ::encode(inode.mode, bl);
     ::encode(inode.uid, bl);
@@ -1162,13 +1163,16 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     break;
     
   case CEPH_LOCK_ILINK:
+    ::encode(inode.version, bl);
     ::encode(inode.ctime, bl);
     ::encode(inode.nlink, bl);
     ::encode(inode.anchored, bl);
     break;
     
   case CEPH_LOCK_IDFT:
-    if (!is_auth()) {
+    if (is_auth()) {
+      ::encode(inode.version, bl);
+    } else {
       bool dirty = dirfragtreelock.is_dirty();
       ::encode(dirty, bl);
     }
@@ -1191,6 +1195,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     
   case CEPH_LOCK_IFILE:
     if (is_auth()) {
+      ::encode(inode.version, bl);
       ::encode(inode.mtime, bl);
       ::encode(inode.atime, bl);
       ::encode(inode.time_warp_seq, bl);
@@ -1233,7 +1238,9 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     break;
 
   case CEPH_LOCK_INEST:
-    if (!is_auth()) {
+    if (is_auth()) {
+      ::encode(inode.version, bl);
+    } else {
       bool dirty = nestlock.is_dirty();
       ::encode(dirty, bl);
     }
@@ -1268,20 +1275,24 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     break;
     
   case CEPH_LOCK_IXATTR:
+    ::encode(inode.version, bl);
     ::encode(xattrs, bl);
     break;
 
   case CEPH_LOCK_ISNAP:
+    ::encode(inode.version, bl);
     encode_snap(bl);
     break;
 
   case CEPH_LOCK_IFLOCK:
+    ::encode(inode.version, bl);
     ::encode(fcntl_locks, bl);
     ::encode(flock_locks, bl);
     break;
 
   case CEPH_LOCK_IPOLICY:
     if (inode.is_dir()) {
+      ::encode(inode.version, bl);
       ::encode(inode.layout, bl);
     }
     break;
@@ -1314,6 +1325,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   switch (type) {
   case CEPH_LOCK_IAUTH:
+    ::decode(inode.version, p);
     ::decode(tm, p);
     if (inode.ctime < tm) inode.ctime = tm;
     ::decode(inode.mode, p);
@@ -1322,6 +1334,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     break;
 
   case CEPH_LOCK_ILINK:
+    ::decode(inode.version, p);
     ::decode(tm, p);
     if (inode.ctime < tm) inode.ctime = tm;
     ::decode(inode.nlink, p);
@@ -1341,6 +1354,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	dout(10) << "decode_lock_state setting dftlock dirty flag" << dendl;
 	dirfragtreelock.mark_dirty();  // ok bc we're auth and caller will handle
       }
+    } else {
+      ::decode(inode.version, p);
     }
     {
       fragtree_t temp;
@@ -1376,6 +1391,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   case CEPH_LOCK_IFILE:
     if (!is_auth()) {
+      ::decode(inode.version, p);
       ::decode(inode.mtime, p);
       ::decode(inode.atime, p);
       ::decode(inode.time_warp_seq, p);
@@ -1458,6 +1474,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	dout(10) << "decode_lock_state setting nestlock dirty flag" << dendl;
 	nestlock.mark_dirty();  // ok bc we're auth and caller will handle
       }
+    } else {
+      ::decode(inode.version, p);
     }
     {
       nest_info_t rstat;
@@ -1520,11 +1538,13 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     break;
 
   case CEPH_LOCK_IXATTR:
+    ::decode(inode.version, p);
     ::decode(xattrs, p);
     break;
 
   case CEPH_LOCK_ISNAP:
     {
+      ::decode(inode.version, p);
       snapid_t seq = 0;
       if (snaprealm)
 	seq = snaprealm->srnode.seq;
@@ -1535,12 +1555,14 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     break;
 
   case CEPH_LOCK_IFLOCK:
+    ::decode(inode.version, p);
     ::decode(fcntl_locks, p);
     ::decode(flock_locks, p);
     break;
 
   case CEPH_LOCK_IPOLICY:
     if (inode.is_dir()) {
+      ::decode(inode.version, p);
       ::decode(inode.layout, p);
     }
     break;
