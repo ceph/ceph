@@ -8589,8 +8589,8 @@ MDRequest *MDCache::request_start(MClientRequest *req)
   if (active_requests.count(req->get_reqid())) {
     MDRequest *mdr = active_requests[req->get_reqid()];
     if (mdr->is_slave()) {
-      dout(10) << "request_start already had " << *mdr << ", forward new msg" << dendl;
-      mds->forward_message_mds(req, mdr->slave_to_mds);
+      dout(10) << "request_start already had " << *mdr << ", waiting for finish" << dendl;
+      mdr->more()->waiting_for_finish.push_back(new C_MDS_RetryMessage(mds, req));
     } else {
       dout(10) << "request_start already processing " << *mdr << ", dropping new msg" << dendl;
       req->put();
@@ -8748,8 +8748,12 @@ void MDCache::request_cleanup(MDRequest *mdr)
 {
   dout(15) << "request_cleanup " << *mdr << dendl;
 
-  if (mdr->has_more() && mdr->more()->is_ambiguous_auth)
-    mdr->clear_ambiguous_auth();
+  if (mdr->has_more()) {
+    if (mdr->more()->is_ambiguous_auth)
+      mdr->clear_ambiguous_auth();
+    if (!mdr->more()->waiting_for_finish.empty())
+      mds->queue_waiters(mdr->more()->waiting_for_finish);
+  }
 
   request_drop_locks(mdr);
 
