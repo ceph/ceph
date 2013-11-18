@@ -1125,8 +1125,10 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
     ::encode(endsize, bl);
 
     r = bl.write_fd(fd);
-    if (r < 0)
+    if (r < 0) {
+      close(fd);
       return r;
+    }
   }
 
   ExportContext ec(&image, fd, info.size);
@@ -1139,8 +1141,6 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
     bufferlist bl;
     ::encode(tag, bl);
     r = bl.write_fd(fd);
-    if (r < 0)
-      return r;
   }
 
  out:
