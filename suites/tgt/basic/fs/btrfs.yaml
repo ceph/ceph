@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    fs: btrfs
+    conf:
+      osd:
+        osd op thread timeout: 60
