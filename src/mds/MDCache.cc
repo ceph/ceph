@@ -11731,7 +11731,7 @@ void MDCache::dump_cache(const char *fn)
     std::string s = ss.str();
     r = safe_write(fd, s.c_str(), s.length());
     if (r < 0)
-      return;
+      goto out;
 
     list<CDir*> dfs;
     in->get_dirfrags(dfs);
