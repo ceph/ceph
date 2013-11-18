@@ -4025,7 +4025,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     int64_t bsize;
     // default count 1G, size 4MB
     cmd_getval(g_ceph_context, cmdmap, "count", count, (int64_t)1 << 30);
-    cmd_getval(g_ceph_context, cmdmap, "bsize", bsize, (int64_t)4 << 20);
+    cmd_getval(g_ceph_context, cmdmap, "size", bsize, (int64_t)4 << 20);
 
     bufferlist bl;
     bufferptr bp(bsize);
