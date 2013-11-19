@@ -319,7 +319,7 @@ class TestObject(object):
         eq(self.object.read(3), 'bar')
         eq(self.object.read(3), 'baz')
 
-class TestMonCommand(object):
+class TestCommand(object):
 
     def setUp(self):
         self.rados = Rados(conffile='')
@@ -373,3 +373,12 @@ class TestMonCommand(object):
         d = json.loads(buf)
         assert('epoch' in d)
 
+    def test_osd_bench(self):
+        cmd = dict(prefix='bench', size=4096, count=8192)
+        ret, buf, err = self.rados.osd_command(0, json.dumps(cmd), '',
+                                               timeout=30)
+        eq(ret, 0)
+        assert len(err) > 0
+        out = json.loads(err)
+        eq(out['blocksize'], cmd['size'])
+        eq(out['bytes_written'], cmd['count'])
