@@ -5,6 +5,14 @@
 v0.72.1 Emperor
 ---------------
 
+Important Note
+~~~~~~~~~~~~~~
+
+When you are upgrading from Dumpling to Emperor, do not run any of the
+"ceph osd pool set" commands while your monitors are running separate versions.
+Doing so could result in inadvertently changing cluster configuration settings
+that exhaust compute resources in your OSDs.
+
 Changes
 ~~~~~~~
 
@@ -47,6 +55,14 @@ including multi-datacenter replication for the radosgw, improved
 usability, and lands a lot of incremental performance and internal
 refactoring work to support upcoming features in Firefly.
 
+Important Note
+~~~~~~~~~~~~~~
+
+When you are upgrading from Dumpling to Emperor, do not run any of the
+"ceph osd pool set" commands while your monitors are running separate versions.
+Doing so could result in inadvertently changing cluster configuration settings
+that exhaust compute resources in your OSDs.
+
 Highlights
 ~~~~~~~~~~
 
@@ -74,7 +90,10 @@ Upgrade sequencing
 ~~~~~~~~~~~~~~~~~~
 
 There are no specific upgrade restrictions on the order or sequence of
-upgrading from 0.67.x Dumpling.  
+upgrading from 0.67.x Dumpling. However, you cannot run any of the
+"ceph osd pool set" commands while your monitors are running separate versions.
+Doing so could result in inadvertently changing cluster configuration settings
+and exhausting compute resources in your OSDs.
 
 It is also possible to do a rolling upgrade from 0.61.x Cuttlefish,
 but there are ordering restrictions.  (This is the same set of
