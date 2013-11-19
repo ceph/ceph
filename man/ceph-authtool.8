@@ -1,4 +1,4 @@
-.TH "CEPH-AUTHTOOL" "8" "April 29, 2013" "dev" "Ceph"
+.TH "CEPH-AUTHTOOL" "8" "November 18, 2013" "dev" "Ceph"
 .SH NAME
 ceph-authtool \- ceph keyring manipulation tool
 .
@@ -34,7 +34,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .nf
 \fBceph\-authtool\fP \fIkeyringfile\fP [ \-l | \-\-list ] [ \-C | \-\-create\-keyring
 ] [ \-p | \-\-print ] [ \-n | \-\-name \fIentityname\fP ] [ \-\-gen\-key ] [ \-a |
-\-\-add\-key \fIbase64_key\fP ] [ \-\-caps \fIcapfils\fP ]
+\-\-add\-key \fIbase64_key\fP ] [ \-\-caps \fIcapfile\fP ]
 .fi
 .sp
 .SH DESCRIPTION
@@ -69,30 +69,13 @@ will create a new keyring, overwriting any existing keyringfile
 .UNINDENT
 .INDENT 0.0
 .TP
-.B \-g, \-\-gen\-key
+.B \-\-gen\-key
 will generate a new secret key for the specified entityname
 .UNINDENT
 .INDENT 0.0
 .TP
-.B \-a, \-\-add\-key
+.B \-\-add\-key
 will add an encoded key to the keyring
-.UNINDENT
-.INDENT 0.0
-.TP
-.B \-u, \-\-set\-uid
-sets the auid (authenticated user id) for the specified entityname
-.UNINDENT
-.INDENT 0.0
-.TP
-.B \-\-gen\-print\-key
-will generate and print a new secret key without adding it to the keyringfile
-
-NOTE: will work without a given keyringfile
-.UNINDENT
-.INDENT 0.0
-.TP
-.B \-\-import\-keyring
-will import the content of a given keyring into the keyringfile
 .UNINDENT
 .INDENT 0.0
 .TP
