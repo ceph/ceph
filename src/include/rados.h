@@ -266,6 +266,8 @@ enum {
 	/** pg **/
 	CEPH_OSD_OP_PGLS      = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_PG | 1,
 	CEPH_OSD_OP_PGLS_FILTER = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_PG | 2,
+	CEPH_OSD_OP_PG_HITSET_LS = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_PG | 3,
+	CEPH_OSD_OP_PG_HITSET_GET = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_PG | 4,
 };
 
 static inline int ceph_osd_op_type_lock(int op)
@@ -418,6 +420,9 @@ struct ceph_osd_op {
 			__le64 snapid;
 			__le64 src_version;
 		} __attribute__ ((packed)) copy_from;
+		struct {
+			struct ceph_timespec stamp;
+		} __attribute__ ((packed)) hit_set_get;
 	};
 	__le32 payload_len;
 } __attribute__ ((packed));

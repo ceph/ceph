@@ -748,6 +748,56 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
       }
       break;
 
+    case CEPH_OSD_OP_PG_HITSET_LS:
+      {
+	list< pair<utime_t,utime_t> > ls;
+	for (list<pg_hit_set_info_t>::const_iterator p = info.hit_set.history.begin();
+	     p != info.hit_set.history.end();
+	     ++p)
+	  ls.push_back(make_pair(p->begin, p->end));
+	if (info.hit_set.current_info.begin)
+	  ls.push_back(make_pair(info.hit_set.current_info.begin, utime_t()));
+	else if (hit_set)
+	  ls.push_back(make_pair(hit_set_start_stamp, utime_t()));
+	::encode(ls, osd_op.outdata);
+      }
+      break;
+
+    case CEPH_OSD_OP_PG_HITSET_GET:
+      {
+	utime_t stamp(osd_op.op.hit_set_get.stamp);
+	if ((info.hit_set.current_info.begin &&
+	     stamp >= info.hit_set.current_info.begin) ||
+	    stamp >= hit_set_start_stamp) {
+	  // read the current in-memory HitSet, not the version we've
+	  // checkpointed.
+	  if (!hit_set) {
+	    result= -ENOENT;
+	    break;
+	  }
+	  ::encode(*hit_set, osd_op.outdata);
+	  result = osd_op.outdata.length();
+	} else {
+	  // read an archived HitSet.
+	  hobject_t oid;
+	  for (list<pg_hit_set_info_t>::const_iterator p = info.hit_set.history.begin();
+	       p != info.hit_set.history.end();
+	       ++p) {
+	    if (stamp >= p->begin && stamp <= p->end) {
+	      oid = get_hit_set_archive_object(p->begin, p->end);
+	      break;
+	    }
+	  }
+	  if (oid == hobject_t()) {
+	    result = -ENOENT;
+	    break;
+	  }
+	  result = osd->store->read(coll, oid, 0, 0, osd_op.outdata);
+	}
+      }
+      break;
+
+
     default:
       result = -EINVAL;
       break;
