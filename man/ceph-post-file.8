@@ -1,6 +1,4 @@
-.\" Man page generated from reStructuredText.
-.
-.TH "CEPH-POST-FILE" "8" "August 14, 2013" "dev" "Ceph"
+.TH "CEPH-POST-FILE" "8" "November 18, 2013" "dev" "Ceph"
 .SH NAME
 ceph-post-file \- post files for ceph developers
 .
@@ -30,33 +28,8 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
+.\" Man page generated from reStructuredText.
 .
-.nr rst2man-indent-level 0
-.
-.de1 rstReportMargin
-\\$1 \\n[an-margin]
-level \\n[rst2man-indent-level]
-level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
--
-\\n[rst2man-indent0]
-\\n[rst2man-indent1]
-\\n[rst2man-indent2]
-..
-.de1 INDENT
-.\" .rstReportMargin pre:
-. RS \\$1
-. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
-. nr rst2man-indent-level +1
-.\" .rstReportMargin post:
-..
-.de UNINDENT
-. RE
-.\" indent \\n[an-margin]
-.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
-.nr rst2man-indent-level -1
-.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
-.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
-..
 .SH SYNOPSIS
 .nf
 \fBceph\-post\-file\fP [\-d \fIdescription] [\-u *user\fP] \fIfile or dir\fP ...
@@ -89,33 +62,25 @@ to reference a bug number.  There is no default value.
 .INDENT 0.0
 .TP
 .B \-u *user*
-Set the user metadata for the upload.  This defaults to \fIwhoami\(ga@\(gahostname \-f\fP\&.
+Set the user metadata for the upload.  This defaults to \fIwhoami\(ga@\(gahostname \-f\fP.
 .UNINDENT
 .SH EXAMPLES
 .sp
 To upload a single log:
-.INDENT 0.0
-.INDENT 3.5
 .sp
 .nf
 .ft C
 ceph\-post\-file /var/log/ceph/ceph\-mon.\(gahostname\(ga.log
 .ft P
 .fi
-.UNINDENT
-.UNINDENT
 .sp
 To upload several directories:
-.INDENT 0.0
-.INDENT 3.5
 .sp
 .nf
 .ft C
 ceph\-post\-file \-d \(aqmon data directories\(aq /var/log/ceph/mon/*
 .ft P
 .fi
-.UNINDENT
-.UNINDENT
 .SH AVAILABILITY
 .sp
 \fBceph\-post\-file\fP is part of the Ceph distributed file system. Please refer to
