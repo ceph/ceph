@@ -2,3 +2,4 @@ tasks:
 - qemu:
     all:
       test: https://ceph.com/git/?p=ceph.git;a=blob_plain;f=qa/workunits/suites/bonnie.sh
+exclude_arch: armv7l
