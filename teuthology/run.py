@@ -135,9 +135,12 @@ def main(ctx):
         {'internal.check_lock': None},
         {'internal.connect': None},
         {'internal.check_conflict': None},
-        {'internal.check_ceph_data': None},
-        {'internal.vm_setup': None},
     ])
+    if not ctx.config.get('use_existing_cluster', False):
+        init_tasks.extend([
+            {'internal.check_ceph_data': None},
+            {'internal.vm_setup': None},
+        ])
     if 'kernel' in ctx.config:
         distro = get_distro(ctx)
         if distro == 'ubuntu':
