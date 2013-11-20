@@ -4,3 +4,4 @@ tasks:
       type: block
       num_rbd: 2
       test: https://ceph.com/git/?p=ceph.git;a=blob_plain;f=qa/run_xfstests_qemu.sh
+exclude_arch: armv7l
