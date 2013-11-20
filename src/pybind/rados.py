@@ -197,8 +197,15 @@ Rados object in state %s." % (self.state))
                  conf_defaults=None, conffile=None, conf=None, flags=0):
         librados_path = find_library('rados')
         if not librados_path:
-            raise EnvironmentError("Unable to find librados")
-        self.librados = CDLL(librados_path)
+            #maybe find_library can not find it correctly on all platforms.
+            try:
+                self.librados = CDLL('librados.so.2')
+            except OSError:
+                raise EnvironmentError("Unable to find librados")
+            except:
+                raise Error("Unexpected error")
+        else:
+            self.librados = CDLL(librados_path)
         self.cluster = c_void_p()
         self.rados_id = rados_id
         if rados_id is not None and not isinstance(rados_id, str):
