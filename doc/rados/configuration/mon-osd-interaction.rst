@@ -81,7 +81,7 @@ configuration file, or by setting the value at runtime. By default, only one
 Ceph OSD Daemon is required to report another Ceph OSD Daemon ``down``. You can
 change the number of Ceph OSD Daemones required to report a Ceph OSD Daemon
 ``down`` to a Ceph Monitor by adding an ``mon osd min down reporters`` setting
-(``osd min down reporters'' prior to v0.62) under the ``[mon]`` section of your
+(``osd min down reporters`` prior to v0.62) under the ``[mon]`` section of your
 Ceph configuration file, or by setting the value at runtime.
 
 
@@ -144,14 +144,18 @@ setting the value at runtime.
 OSDs Report Their Status
 ========================
 
-If an Ceph OSD Daemon doesn't report to a Ceph Monitor once at least every 120
-seconds, the Ceph Monitor will consider the Ceph OSD Daemon ``down``. You can
-change the Ceph Monitor report interval by adding an ``osd mon report interval
-max`` setting under the ``[osd]`` section of your Ceph configuration file, or by
-setting the value at runtime. The Ceph OSD Daemon attempts to report on its
-status every 30 seconds. You can change the Ceph OSD Daemon report interval by
-adding an ``osd mon report interval min`` setting under the ``[osd]`` section of
-your Ceph configuration file, or by setting the value at runtime.
+If an Ceph OSD Daemon doesn't report to a Ceph Monitor, the Ceph Monitor will
+consider the Ceph OSD Daemon ``down`` after the  ``mon osd report timeout``
+elapses. A Ceph OSD Daemon sends a report to a Ceph Monitor when a reportable
+event such as a failure, a change in placement group stats, a change in
+``up_thru`` or when it boots within 5 seconds. You can change the Ceph OSD
+Daemon minimum report interval by adding an ``osd mon report interval min``
+setting under the ``[osd]`` section of your Ceph configuration file, or by
+setting the value at runtime. A Ceph OSD Daemon sends a report to a Ceph 
+Monitor every 120 seconds irrespective of whether any notable changes occur. 
+You can change the Ceph Monitor report interval by adding an ``osd mon report 
+interval max`` setting under the ``[osd]`` section of your Ceph configuration 
+file, or by setting the value at runtime.
 
 
 .. ditaa:: +---------+          +---------+
@@ -162,17 +166,27 @@ your Ceph configuration file, or by setting the value at runtime.
                 |    | Interval      |
                 |<---+ Exceeded      |
                 |                    |
+                |----+ Reportable    |
+                |    | Event         |
+                |<---+ Occurs        |
+                |                    |
                 |     Report To      |
                 |      Monitor       |
                 |------------------->|
                 |                    |
-                |----+ Report Min    |
+                |----+ Report Max    |
                 |    | Interval      |
                 |<---+ Exceeded      |
                 |                    |
-                | No Report          |
-                                     +----+ Report Max
-                                     |    | Interval
+                |     Report To      |
+                |      Monitor       |
+                |------------------->|
+                |                    |
+                |----+ Monitor       |
+                |    | Fails         |
+                |<---+               |
+                                     +----+ Monitor OSD
+                                     |    | Report Timeout
                                      |<---+ Exceeded
                                      |
                                      +----+ Mark
@@ -348,9 +362,8 @@ OSD Settings
 
 ``osd mon report interval max`` 
 
-:Description: The maximum time in seconds for an Ceph OSD Daemon to report to 
-              a Ceph Monitor before the Ceph Monitor considers the 
-              Ceph OSD Daemon ``down``.
+:Description: The maximum time in seconds that a Ceph OSD Daemon can wait before
+              it must report to a Ceph Monitor.
 
 :Type: 32-bit Integer
 :Default: ``120`` 
@@ -358,9 +371,9 @@ OSD Settings
 
 ``osd mon report interval min`` 
 
-:Description: The minimum number of seconds for a Ceph OSD Daemon to report 
-              to a Ceph Monitor to prevent the Ceph Monitor from considering 
-              the Ceph OSD Daemon ``down``.
+:Description: The minimum number of seconds a Ceph OSD Daemon may wait
+              from startup or another reportable event before reporting 
+              to a Ceph Monitor.
 
 :Type: 32-bit Integer
 :Default: ``5``
