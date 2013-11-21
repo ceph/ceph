@@ -52,6 +52,7 @@ def lock_machines(ctx, config):
     log.info('Locking machines...')
     assert isinstance(config[0], int), 'config[0] must be an integer'
     machine_type = config[1]
+    machine_types = teuthology.get_multi_machine_types(machine_type)
     how_many = config[0]
 
     while True:
@@ -65,12 +66,12 @@ def lock_machines(ctx, config):
             else:
                 assert 0, 'error listing machines'
 
-        is_up = lambda machine: machine['up'] and machine['type'] == machine_type  # noqa
+        is_up = lambda machine: machine['up'] and machine['type'] in machine_types  # noqa
         num_up = len(filter(is_up, machines))
         assert num_up >= how_many, 'not enough machines are up'
 
         # make sure there are machines for non-automated jobs to run
-        is_up_and_free = lambda machine: machine['up'] and machine['locked'] == 0 and machine['type'] == machine_type  # noqa
+        is_up_and_free = lambda machine: machine['up'] and machine['locked'] == 0 and machine['type'] in machine_types  # noqa
         up_and_free = filter(is_up_and_free, machines)
         num_free = len(up_and_free)
         if num_free < 6 and ctx.owner.startswith('scheduled'):

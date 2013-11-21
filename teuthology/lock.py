@@ -39,7 +39,7 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
             machines = json.loads(content)
             log.debug('locked {machines}'.format(
                 machines=', '.join(machines.keys())))
-            if machine_type == 'vps':
+            if machinetype == 'vps':
                 ok_machs = {}
                 for machine in machines:
                     if create_if_vm(ctx, machine):

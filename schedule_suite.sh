@@ -27,6 +27,14 @@ fi
 [ -z "$distro" ] && distro='ubuntu'
 [ -z "$mtype" ] && mtype='plana'
 
+multi=`echo $mtype | awk -F' |,|-|\t' '{print NF}'`
+if [ $multi -gt 1 ]
+then
+    tube=multi
+else
+    tube=$mtype
+fi
+
 stamp=`date +%Y-%m-%d_%H:%M:%S`
 nicesuite=`echo $suite | sed 's/\//:/g'`
 name=`whoami`"-$stamp-$nicesuite-$ceph-$kernel-$flavor-$mtype"
@@ -172,4 +180,4 @@ echo "name $name"
     --email $email \
     --timeout 36000 \
     --name $name \
-    --worker $mtype
+    --worker $tube
