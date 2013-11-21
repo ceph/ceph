@@ -172,18 +172,6 @@ public:
     const string &attr,
     bufferlist *out);
 
-  /**
-   * Client IO
-   */
-  PGTransaction *get_transaction();
-  void submit_transaction(
-    PGTransaction *t,
-    vector<pg_log_entry_t> &log_entries,
-    Context *on_all_acked,
-    Context *on_all_commit,
-    tid_t tid
-    );
-
 private:
   // push
   struct PushInfo {
@@ -340,6 +328,99 @@ private:
     const ObjectRecoveryInfo& recovery_info,
     SnapSetContext *ssc
     );
+
+  /**
+   * Client IO
+   */
+  struct InProgressOp {
+    tid_t tid;
+    set<int> waiting_for_commit;
+    set<int> waiting_for_applied;
+    Context *on_commit;
+    Context *on_applied;
+    OpRequestRef op;
+    eversion_t v;
+    InProgressOp(
+      tid_t tid, Context *on_commit, Context *on_applied,
+      OpRequestRef op, eversion_t v)
+      : tid(tid), on_commit(on_commit), on_applied(on_applied),
+	op(op), v(v) {}
+    bool done() const {
+      return waiting_for_commit.empty() &&
+	waiting_for_applied.empty();
+    }
+  };
+  map<tid_t, InProgressOp> in_progress_ops;
+public:
+  PGTransaction *get_transaction();
+  friend class C_OSD_OnOpCommit;
+  friend class C_OSD_OnOpApplied;
+  void submit_transaction(
+    const hobject_t &hoid,
+    const eversion_t &at_version,
+    PGTransaction *t,
+    const eversion_t &trim_to,
+    vector<pg_log_entry_t> &log_entries,
+    Context *on_local_applied_sync,
+    Context *on_all_applied,
+    Context *on_all_commit,
+    tid_t tid,
+    osd_reqid_t reqid,
+    OpRequestRef op
+    );
+private:
+  void issue_op(
+    const hobject_t &soid,
+    const eversion_t &at_version,
+    tid_t tid,
+    osd_reqid_t reqid,
+    eversion_t pg_trim_to,
+    hobject_t new_temp_oid,
+    hobject_t discard_temp_oid,
+    vector<pg_log_entry_t> &log_entries,
+    InProgressOp *op,
+    ObjectStore::Transaction *op_t);
+  void op_applied(InProgressOp *op);
+  void op_commit(InProgressOp *op);
+  void sub_op_modify_reply(OpRequestRef op);
+  void sub_op_modify(OpRequestRef op);
+
+  struct RepModify {
+    OpRequestRef op;
+    bool applied, committed;
+    int ackerosd;
+    eversion_t last_complete;
+    epoch_t epoch_started;
+
+    uint64_t bytes_written;
+
+    ObjectStore::Transaction opt, localt;
+    
+    RepModify() : applied(false), committed(false), ackerosd(-1),
+		  epoch_started(0), bytes_written(0) {}
+  };
+  typedef std::tr1::shared_ptr<RepModify> RepModifyRef;
+
+  struct C_OSD_RepModifyApply : public Context {
+    ReplicatedBackend *pg;
+    RepModifyRef rm;
+    C_OSD_RepModifyApply(ReplicatedBackend *pg, RepModifyRef r)
+      : pg(pg), rm(r) {}
+    void finish(int r) {
+      pg->sub_op_modify_applied(rm);
+    }
+  };
+  struct C_OSD_RepModifyCommit : public Context {
+    ReplicatedBackend *pg;
+    RepModifyRef rm;
+    C_OSD_RepModifyCommit(ReplicatedBackend *pg, RepModifyRef r)
+      : pg(pg), rm(r) {}
+    void finish(int r) {
+      pg->sub_op_modify_commit(rm);
+    }
+  };
+  void sub_op_modify_applied(RepModifyRef rm);
+  void sub_op_modify_commit(RepModifyRef rm);
 };
 
 #endif
