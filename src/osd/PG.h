@@ -456,12 +456,12 @@ protected:
     }
 
     /// true if there are no objects in this interval
-    bool empty() {
+    bool empty() const {
       return objects.empty();
     }
 
     /// true if interval extends to the end of the range
-    bool extends_to_end() {
+    bool extends_to_end() const {
       return end.is_max();
     }
 
@@ -506,7 +506,7 @@ protected:
   };
   
   BackfillInterval backfill_info;
-  BackfillInterval peer_backfill_info;
+  map<int, BackfillInterval> peer_backfill_info;
   bool backfill_reserved;
   bool backfill_reserving;
 
@@ -514,6 +514,14 @@ protected:
 
 public:
   vector<int> backfill_targets;
+
+  bool is_backfill_targets(int osd) {
+    if (std::find(backfill_targets.begin(), backfill_targets.end(), osd)
+        != backfill_targets.end())
+      return true;
+    else
+      return false;
+  }
 
 protected:
 
