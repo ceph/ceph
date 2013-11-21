@@ -1,5 +1,5 @@
 """
-Ceph cluster task.   
+Ceph cluster task.
 
 Handle the setup, starting, and clean-up of a Ceph cluster.
 """
@@ -62,7 +62,7 @@ class DaemonState(object):
 
         :param args: positional arguments passed to remote.run
         :param kwargs: keyword arguments passed to remote.run
-        """ 
+        """
         self.log.info('Restarting')
         if self.proc is not None:
             self.log.debug('stopping old one...')
@@ -77,7 +77,7 @@ class DaemonState(object):
     def restart_with_args(self, extra_args):
         """
         Restart, adding new paramaters to the current command.
-        
+
         :param extra_args: Extra keyword arguments to be added.
         """
         self.log.info('Restarting')
@@ -106,7 +106,7 @@ class DaemonState(object):
     def running(self):
         """
         Are we running?
-        :return: True if remote run command value is set, False otherwise. 
+        :return: True if remote run command value is set, False otherwise.
         """
         return self.proc is not None
 
@@ -139,7 +139,7 @@ class CephState(object):
         """
         Add a daemon.  If there already is a daemon for this id_ and role, stop that
         daemon and.  Restart the damon once the new value is set.
-        
+
         :param remote: Remote site
         :param role: Role (osd, mds, mon, rgw,  for example)
         :param id_: Id (index into role dictionary)
@@ -299,7 +299,7 @@ def assign_devs(roles, devs):
     """
     Create a dictionary of devs indexed by roles
 
-    :param roles: List of roles 
+    :param roles: List of roles
     :param devs: Corresponding list of devices.
     :returns: Dictionary of devs indexed by roles.
     """
@@ -365,7 +365,7 @@ def valgrind_post(ctx, config):
 def mount_osd_data(ctx, remote, osd):
     """
     Mount a remote OSD
-    
+
     :param ctx: Context
     :param remote: Remote site
     :param ods: Osd name
@@ -420,7 +420,7 @@ def cluster(ctx, config):
         Mkfs osd nodes.
         Add keyring information to monmaps
         Mkfs mon nodes.
-         
+
     On exit:
         If errors occured, extract a failure message and store in ctx.summary.
         Unmount all test files and temporary journaling files.
@@ -430,6 +430,10 @@ def cluster(ctx, config):
     :param ctx: Context
     :param config: Configuration
     """
+    if ctx.config.get('use_existing_cluster', False) is True:
+        log.info("'use_existing_cluster' is true; skipping cluster creation")
+        yield
+
     testdir = teuthology.get_testdir(ctx)
     log.info('Creating ceph cluster...')
     run.wait(
@@ -889,8 +893,8 @@ def cluster(ctx, config):
         def first_in_ceph_log(pattern, excludes):
             """
             Find the first occurence of the pattern specified in the Ceph log,
-            Returns None if none found.  
-            
+            Returns None if none found.
+
             :param pattern: Pattern scanned for.
             :param excludes: Patterns to ignore.
             :return: First line of text (or None if not found)
