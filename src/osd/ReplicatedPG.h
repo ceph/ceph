@@ -112,7 +112,7 @@ public:
      * Final transaction; if non-empty the callback must execute it before any
      * other accesses to the object (in order to complete the copy).
      */
-    ObjectStore::Transaction final_tx;
+    PGBackend::PGTransaction *final_tx;
     string category; ///< The copy source's category
     version_t user_version; ///< The copy source's user version
     bool should_requeue;  ///< op should be requeued on cancel
@@ -324,8 +324,15 @@ public:
     map<string, bufferptr> &attrs) {
     return get_object_context(hoid, true, &attrs);
   }
+  void log_operation(
+    vector<pg_log_entry_t> &logv,
+    const eversion_t &trim_to,
+    bool update_snaps,
+    ObjectStore::Transaction *t) {
+    append_log(logv, trim_to, *t, update_snaps);
+  }
 
-  void op_applied_replica(
+  void op_applied(
     const eversion_t &applied_version);
 
   bool should_send_op(
@@ -334,6 +341,17 @@ public:
     assert(peer_info.count(peer));
     return hoid.pool != (int64_t)info.pgid.pool() ||
       hoid <= MAX(last_backfill_started, peer_info[peer].last_backfill);
+  }
+  
+  void update_peer_last_complete_ondisk(
+    int fromosd,
+    eversion_t lcod) {
+    peer_last_complete_ondisk[fromosd] = lcod;
+  }
+
+  void update_stats(
+    const pg_stat_t &stat) {
+    info.stats = stat;
   }
 
   /*
@@ -378,7 +396,7 @@ public:
 
     int current_osd_subop_num;
 
-    ObjectStore::Transaction op_t, local_t;
+    PGBackend::PGTransaction *op_t;
     vector<pg_log_entry_t> log;
 
     interval_set<uint64_t> modified_ranges;
@@ -442,7 +460,6 @@ public:
    * State on the PG primary associated with the replicated mutation
    */
   class RepGather {
-    bool is_done;
   public:
     xlist<RepGather*>::item queue_item;
     int nref;
@@ -455,11 +472,10 @@ public:
 
     tid_t rep_tid;
 
-    bool applying, applied, aborted;
+    bool rep_aborted, rep_done;
 
-    set<int>  waitfor_ack;
-    //set<int>  waitfor_nvram;
-    set<int>  waitfor_disk;
+    bool all_applied;
+    bool all_committed;
     bool sent_ack;
     //bool sent_nvram;
     bool sent_disk;
@@ -468,18 +484,16 @@ public:
     
     eversion_t          pg_local_last_complete;
 
-    list<ObjectStore::Transaction*> tls;
     bool queue_snap_trimmer;
     
     RepGather(OpContext *c, ObjectContextRef pi, tid_t rt, 
 	      eversion_t lc) :
-      is_done(false),
       queue_item(this),
       nref(1),
       ctx(c), obc(pi),
       rep_tid(rt), 
-      applying(false), applied(false), aborted(false),
-      sent_ack(false),
+      rep_aborted(false), rep_done(false),
+      all_applied(false), all_committed(false), sent_ack(false),
       //sent_nvram(false),
       sent_disk(false),
       pg_local_last_complete(lc),
@@ -497,14 +511,7 @@ public:
 	//generic_dout(0) << "deleting " << this << dendl;
       }
     }
-    void mark_done() {
-      is_done = true;
-    }
-    bool done() {
-      return is_done;
-    }
   };
-
 
 
 protected:
@@ -575,16 +582,14 @@ protected:
   xlist<RepGather*> repop_queue;
   map<tid_t, RepGather*> repop_map;
 
-  void apply_repop(RepGather *repop);
-  void op_applied(RepGather *repop);
-  void op_commit(RepGather *repop);
+  friend class C_OSD_RepopApplied;
+  friend class C_OSD_RepopCommit;
+  void repop_all_applied(RepGather *repop);
+  void repop_all_committed(RepGather *repop);
   void eval_repop(RepGather*);
   void issue_repop(RepGather *repop, utime_t now);
   RepGather *new_repop(OpContext *ctx, ObjectContextRef obc, tid_t rep_tid);
   void remove_repop(RepGather *repop);
-  void repop_ack(RepGather *repop,
-                 int result, int ack_type,
-                 int fromosd, eversion_t pg_complete_thru=eversion_t(0,0));
 
   RepGather *simple_repop_create(ObjectContextRef obc);
   void simple_repop_submit(RepGather *repop);
@@ -610,7 +615,7 @@ protected:
 	 ++i) {
       if ((*i)->v > v)
         break;
-      if (!(*i)->waitfor_disk.empty())
+      if (!(*i)->all_committed)
 	return false;
     }
     return true;
@@ -622,14 +627,12 @@ protected:
 	 ++i) {
       if ((*i)->v > v)
         break;
-      if (!(*i)->waitfor_ack.empty())
+      if (!(*i)->all_applied)
 	return false;
     }
     return true;
   }
 
-  friend class C_OSD_OpCommit;
-  friend class C_OSD_OpApplied;
   friend struct C_OnPushCommit;
 
   // projected object info
@@ -789,7 +792,7 @@ protected:
 
   // low level ops
 
-  void _make_clone(ObjectStore::Transaction& t,
+  void _make_clone(PGBackend::PGTransaction* t,
 		   const hobject_t& head, const hobject_t& coid,
 		   object_info_t *poi);
   void execute_ctx(OpContext *ctx);
@@ -875,38 +878,6 @@ protected:
   void send_remove_op(const hobject_t& oid, eversion_t v, int peer);
 
 
-  struct RepModify {
-    ReplicatedPG *pg;
-    OpRequestRef op;
-    OpContext *ctx;
-    bool applied, committed;
-    int ackerosd;
-    eversion_t last_complete;
-    epoch_t epoch_started;
-
-    uint64_t bytes_written;
-
-    ObjectStore::Transaction opt, localt;
-    list<ObjectStore::Transaction*> tls;
-    
-    RepModify() : pg(NULL), ctx(NULL), applied(false), committed(false), ackerosd(-1),
-		  epoch_started(0), bytes_written(0) {}
-  };
-
-  struct C_OSD_RepModifyApply : public Context {
-    RepModify *rm;
-    C_OSD_RepModifyApply(RepModify *r) : rm(r) { }
-    void finish(int r) {
-      rm->pg->sub_op_modify_applied(rm);
-    }
-  };
-  struct C_OSD_RepModifyCommit : public Context {
-    RepModify *rm;
-    C_OSD_RepModifyCommit(RepModify *r) : rm(r) { }
-    void finish(int r) {
-      rm->pg->sub_op_modify_commit(rm);
-    }
-  };
   struct C_OSD_OndiskWriteUnlock : public Context {
     ObjectContextRef obc, obc2, obc3;
     C_OSD_OndiskWriteUnlock(
@@ -961,11 +932,6 @@ protected:
 
   void sub_op_remove(OpRequestRef op);
 
-  void sub_op_modify(OpRequestRef op);
-  void sub_op_modify_applied(RepModify *rm);
-  void sub_op_modify_commit(RepModify *rm);
-
-  void sub_op_modify_reply(OpRequestRef op);
   void _applied_recovered_object(ObjectContextRef obc);
   void _applied_recovered_object_replica();
   void _committed_pushed_object(epoch_t epoch, eversion_t lc);
@@ -990,10 +956,10 @@ protected:
 		  object_locator_t oloc, version_t version, unsigned flags,
 		  bool mirror_snapset);
   void process_copy_chunk(hobject_t oid, tid_t tid, int r);
-  void _write_copy_chunk(CopyOpRef cop, ObjectStore::Transaction *t);
+  void _write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t);
   void _copy_some(ObjectContextRef obc, CopyOpRef cop);
   void _build_finish_copy_transaction(CopyOpRef cop,
-                                      ObjectStore::Transaction& t);
+                                      PGBackend::PGTransaction *t);
   void finish_copyfrom(OpContext *ctx);
   void finish_promote(int r, OpRequestRef op,
 		      CopyResults *results, ObjectContextRef obc);
@@ -1174,13 +1140,10 @@ public:
 inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
 {
   out << "repgather(" << &repop
-      << (repop.applying ? " applying" : "")
-      << (repop.applied ? " applied" : "")
       << " " << repop.v
       << " rep_tid=" << repop.rep_tid 
-      << " wfack=" << repop.waitfor_ack
-    //<< " wfnvram=" << repop.waitfor_nvram
-      << " wfdisk=" << repop.waitfor_disk;
+      << " committed?=" << repop.all_committed
+      << " applied?=" << repop.all_applied;
   if (repop.ctx->lock_to_release != ReplicatedPG::OpContext::NONE)
     out << " lock=" << (int)repop.ctx->lock_to_release;
   if (repop.ctx->op)
@@ -1188,5 +1151,9 @@ inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
   out << ")";
   return out;
 }
+
+void intrusive_ptr_add_ref(ReplicatedPG::RepGather *repop);
+void intrusive_ptr_release(ReplicatedPG::RepGather *repop);
+
 
 #endif

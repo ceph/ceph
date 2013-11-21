@@ -114,12 +114,25 @@
        const hobject_t &hoid,
        map<string, bufferptr> &attrs) = 0;
 
-     virtual void op_applied_replica(
+     virtual void op_applied(
        const eversion_t &applied_version) = 0;
 
      virtual bool should_send_op(
        int peer,
        const hobject_t &hoid) = 0;
+
+     virtual void log_operation(
+       vector<pg_log_entry_t> &logv,
+       const eversion_t &trim_to,
+       bool update_snaps,
+       ObjectStore::Transaction *t) = 0;
+
+     virtual void update_peer_last_complete_ondisk(
+       int fromosd,
+       eversion_t lcod) = 0;
+
+     virtual void update_stats(
+       const pg_stat_t &stat) = 0;
 
      virtual ~Listener() {}
    };
