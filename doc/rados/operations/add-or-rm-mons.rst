@@ -3,7 +3,8 @@
 ==========================
 
 When you have a cluster up and running, you may add or remove monitors
-from the cluster at runtime.
+from the cluster at runtime. To bootstrap a monitor, see `Manual Deployment`_
+or `Monitor Bootstrap`_.
 
 Adding Monitors
 ===============
@@ -13,12 +14,13 @@ cluster map. You can run a cluster with 1 monitor. We recommend at least 3
 monitors for a production cluster. Ceph monitors use PAXOS to establish 
 consensus about the master cluster map, which requires a majority of
 monitors running to establish a quorum for consensus about the cluster map
-(e.g., 1; 3 out of 5; 4 out of 6; etc.).
+(e.g., 1; 2 out of 3; 3 out of 4 or 5; 4 out of 6; etc.).
 
 Since monitors are light-weight, it is possible to run them on the same 
-host as an OSD; however, we recommend running them on separate hosts. 
+host as an OSD; however, we recommend running them on separate hosts,
+because fsync issues with the kernel may impair performance. 
 
-.. important:: A *majority* of monitors in your cluster must be able to 
+.. note:: A *majority* of monitors in your cluster must be able to 
    reach each other in order to establish a quorum.
 
 Deploy your Hardware
@@ -95,12 +97,6 @@ on ``mon.a``).
 
 	sudo ceph-mon -i {mon-id} --mkfs --monmap {tmp}/{filename} --keyring {tmp}/{filename}
 	
-
-#. Add a ``[mon.{mon-id}]`` entry for your new monitor in your ``ceph.conf`` file. ::
-
-	[mon.c]
-		host = new-mon-host
-		addr = ip-addr:6789
 
 #. Add the new monitor to the list of monitors for you cluster (runtime). This enables 
    other nodes to use this monitor during their initial startup. ::
@@ -200,6 +196,7 @@ as it is one of the required arguments of ``ceph-mon -i {mon-id} --mkfs``. The
 following sections explain the consistency requirements for Ceph monitors, and a
 few safe ways to change a monitor's IP address.
 
+
 Consistency Requirements
 ------------------------
 
@@ -259,6 +256,7 @@ that ``mon.d`` is  running before removing ``mon.c``, or it will break the
 quorum. Remove ``mon.c`` as described on  `Removing a Monitor (Manual)`_. Moving
 all three  monitors would thus require repeating this process as many times as
 needed.
+
 
 Changing a Monitor's IP address (The Messy Way)
 -----------------------------------------------
@@ -342,3 +340,7 @@ monitors, and inject the modified monmap into each new monitor.
 
 After this step, migration to the new location is complete and 
 the monitors should operate successfully.
+
+
+.. _Manual Deployment: ../../../install/manual-deployment
+.. _Monitor Bootstrap: ../../../dev/mon-bootstrap
