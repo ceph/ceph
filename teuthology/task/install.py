@@ -419,14 +419,11 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
         break
 
     tmp_vers = version_no.getvalue().strip()[1:]
-    dloc = tmp_vers.rfind('-')
-    t_vers1 = tmp_vers[0:dloc]
-    t_vers2 = tmp_vers[dloc + 1:]
-    trailer = "-{tv1}-{tv2}.{dist_release}".format(
-        tv1=t_vers1, tv2=t_vers2, dist_release=dist_release)
+    if '-' in tmp_vers:
+        tmp_vers = tmp_vers.split('-')[0]
     for cpack in rpm:
         pk_err_mess = StringIO()
-        pkg2add = "{cpack}{trailer}".format(cpack=cpack, trailer=trailer)
+        pkg2add = "{cpack}-{version}".format(cpack=cpack, version=tmp_vers)
         remote.run(args=['sudo', 'yum', 'install', pkg2add, '-y', ],
                    stderr=pk_err_mess)
 
@@ -915,11 +912,8 @@ def _upgrade_rpm_packages(ctx, config, remote, pkgs):
     # Point being, I have to mangle a little here.
     if version[0] == 'v':
         version = version[1:]
-    version = "{repover}.{therest}".format(
-        repover=version,
-        therest=distinfo['dist_release'],
-    )
-
+    if '-' in version:
+        version = version.split('-')[0]
     project = config.get('project', 'ceph')
 
     # Remove the -release package before upgrading it
