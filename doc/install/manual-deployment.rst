@@ -5,11 +5,11 @@
 All Ceph clusters require at least one monitor, and at least as many OSDs as
 copies of an object stored on the cluster.  Bootstrapping the initial monitor(s)
 is the first step in deploying a Ceph Storage Cluster. Monitor deployment also
-sets important criteria for the entire cluster, such as the number of replicas
-for pools, the number of placement groups per OSD, the heart beat intervals,
-whether authentication is required, etc. Most of these values are set by
-default, so it's useful to know about them when setting up your cluster for
-production.
+sets important criteria for the entire cluster, such as the default number of
+object  replicas in a pool, the number of placement groups per OSD, the heart
+beat intervals, whether authentication is required, etc. Ceph sets most of these
+values by default, but it's useful to know about frequently overridden settings
+when setting up your cluster for production.
 
 Following the same configuration as `Installation (Quick)`_, we will set up a
 cluster with ``node1`` as  the monitor node, and ``node2`` and ``node3`` for 
@@ -74,16 +74,15 @@ a number of things:
   a ``client.admin`` user. So you must generate the admin user and keyring,
   and you must also add the ``client.admin`` user to the monitor keyring.
 
-The foregoing requirements do not imply the creation of a Ceph Configuration 
-file. However, as a best practice, we recommend creating a Ceph configuration 
+The foregoing requirements do not imply the creation of a Ceph Configuration
+file. However, as a best practice, we recommend creating a Ceph configuration
 file and populating it with the ``fsid``, the ``mon initial members`` and the
-``mon host`` settings. 
-
-You can get and set all of the monitor settings at runtime as well. However,
-a Ceph Configuration file may contain only those settings that override the 
-default values. When you add settings to a Ceph configuration file, these
-settings override the default settings. Maintaining those settings in a 
-Ceph configuration file makes it easier to maintain your cluster.
+``mon host`` settings. You can get and set all of the monitor settings at
+runtime as well. However, a Ceph Configuration file may contain only those
+settings that override the  default values. When you add settings to a Ceph
+configuration file, these settings override the default settings. Maintaining
+overriden settings in a  Ceph configuration file makes it easier to maintain
+your cluster.
 
 The procedure is as follows:
 
@@ -125,7 +124,8 @@ The procedure is as follows:
 
 
 #. Add the IP address(es) of the initial monitor(s) to your Ceph configuration 
-   file and save the file (optional). :: 
+   file and save the file (optional). You may also want to store a copy on your
+   admin node. :: 
 
 	mon host = {ip-address}[,{ip-address}]
 	mon host = 192.168.0.1
@@ -144,6 +144,7 @@ The procedure is as follows:
 
 #. Add the ``client.admin`` key to the ``ceph.mon.keyring``. :: 
 
+	cd /tmp
 	ceph-authtool ceph.mon.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
 
 
@@ -255,12 +256,12 @@ a Ceph Node.
 To create the first two OSDs, perform this procedure on ``node2`` and ``node3``:
 
 
-#. Generate a UUID for the OSD. ::
+#. Generate a UUID for each OSD. ::
 
 	uuidgen
 
 
-#. Create the OSD. If no UUID is given, it will be set automatically when the 
+#. Create each OSD. If no UUID is given, it will be set automatically when the 
    OSD starts up. The following command will output the OSD number, which you 
    will need for subsequent steps. ::
 	
@@ -272,6 +273,8 @@ To create the first two OSDs, perform this procedure on ``node2`` and ``node3``:
 	ssh {new-osd-host}
 	sudo mkdir /var/lib/ceph/osd/ceph-{osd-number}
 	
+	sudo mkdir /var/lib/ceph/osd/ceph-0
+	sudo mkdir /var/lib/ceph/osd/ceph-1
 
 #. If the OSD is for a drive other than the OS drive, prepare it 
    for use with Ceph, and mount it to the directory you just created:: 
@@ -280,7 +283,8 @@ To create the first two OSDs, perform this procedure on ``node2`` and ``node3``:
 	sudo mkfs -t {fstype} /dev/{drive}
 	sudo mount -o user_xattr /dev/{hdd} /var/lib/ceph/osd/ceph-{osd-number}
 
-	
+   **Note:** Ceph typically uses ``xfs`` or ``ext4`` as the filesystem type.
+
 #. Initialize the OSD data directory. :: 
 
 	ssh {new-osd-host}
@@ -293,19 +297,20 @@ To create the first two OSDs, perform this procedure on ``node2`` and ``node3``:
    ``ceph-{osd-num}`` in the path is the ``$cluster-$id``.  If your 
    cluster name differs from ``ceph``, use your cluster name instead.::
 
+	ssh {new-osd-host}
 	sudo ceph auth add osd.{osd-num} osd 'allow *' mon 'allow rwx' -i /var/lib/ceph/osd/ceph-{osd-num}/keyring
 
 
 #. Add your Ceph Node to the CRUSH map. ::
 
-	ceph osd crush add-bucket {hostname} host
-	ceph osd crush add-bucket node1 host
-
+	ceph osd crush add-bucket {hostname} {device-type}
+	ceph osd crush add-bucket node2 host
+	ceph osd crush add-bucket node3 host
 
 #. Place the Ceph Node under the root ``default``. ::
 
-	ceph osd crush move node1 root=default
-
+	ceph osd crush move node2 root=default
+	ceph osd crush move node3 root=default
 
 #. Add the OSD to the CRUSH map so that it can begin receiving data. You may
    also decompile the CRUSH map, add the OSD to the device list, add the host as a
@@ -313,12 +318,16 @@ To create the first two OSDs, perform this procedure on ``node2`` and ``node3``:
    host, assign it a weight, recompile it and set it. ::
 
 	ceph osd crush add {id-or-name} {weight} [{bucket-type}={bucket-name} ...]
-	ceph osd crush add osd.0 1.0 host=node1
+	ceph osd crush add osd.0 1.0 host=node2
+	ceph osd crush add osd.1 1.0 host=node3
 
 
 #. After you add an OSD to Ceph, the OSD is in your configuration. However, 
-   it is not yet running. The OSD is ``down`` and ``in``. You must start 
-   your new OSD before it can begin receiving data.
+   it is not yet running. The OSD is ``down`` and ``in``. You must login to 
+   the Ceph Node containing your OSD and start your new OSD before it can 
+   begin receiving data. ::
+
+	ssh {new-osd-host}
 
    For Debian/Ubuntu, use Upstart::
 
@@ -351,9 +360,9 @@ You should see output that looks something like this::
 
 	# id	weight	type name	up/down	reweight
 	-1	2	root default
-	-2	2		host node1
+	-2	2		host node2
 	0	1			osd.0	up	1
-	-3	1		host node2
+	-3	1		host node3
 	1	1			osd.1	up	1	
 
 To add (or remove) additional monitors, see `Add/Remove Monitors`_. 
