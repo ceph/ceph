@@ -1,3 +1,4 @@
+exclude_arch: armv7l
 roles:
 - [mon.a, osd.0, osd.1, client.0]
 tasks:
