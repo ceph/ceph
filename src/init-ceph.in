@@ -317,7 +317,7 @@ for name in $what; do
 
 	    if [ "$type" = "osd" ]; then
 		get_conf update_crush "" "osd crush update on start"
-		if [ "${update_crush:-1}" = "1" -o "{$update_crush:-1}" = "true" ]; then
+		if [ "${update_crush:-1}" = "1" -o "${update_crush:-1}" = "true" ]; then
 		    # update location in crush
 		    get_conf osd_location_hook "$BINDIR/ceph-crush-location" "osd crush location hook"
 		    osd_location=`$osd_location_hook --cluster ceph --id $id --type osd`
