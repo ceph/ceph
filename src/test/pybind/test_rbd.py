@@ -19,7 +19,7 @@ IMG_NAME = 'foo'
 IMG_SIZE = 8 << 20 # 8 MiB
 IMG_ORDER = 22 # 4 MiB objects
 
-def setUp():
+def setup_module():
     global rados
     rados = Rados(conffile='')
     rados.connect()
@@ -31,7 +31,7 @@ def setUp():
     if features is not None:
         features = int(features)
 
-def tearDown():
+def teardown_module():
     global ioctx
     ioctx.__del__()
     global rados
