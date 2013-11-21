@@ -41,6 +41,18 @@ QEMU.
 	Install Ceph Object Gateway <install-ceph-gateway>
 	Install Virtualization for Block <install-vm-cloud>	
 
+
+Deploy a Cluster Manually
+=========================
+
+Once you have Ceph installed on your nodes, you can deploy a cluster manually. 
+The manual procedure is primarily for exemplary purposes for those developing
+deployment scripts with Chef, Juju, Puppet, etc.
+
+.. toctree:: 
+   
+   Manual Deployment <manual-deployment>
+
 Upgrade Software	
 ================
 
