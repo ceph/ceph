@@ -127,7 +127,7 @@ binary-arch: build install
 	dh_lintian -a
 	dh_link -a
 
-	dh_strip -pceph --dbg-package=ceph-dbg -k --exclude=libcls_
+	dh_strip -pceph --dbg-package=ceph-dbg
 	dh_strip -pceph-mds --dbg-package=ceph-mds-dbg
 	dh_strip -pceph-fuse --dbg-package=ceph-fuse-dbg
 	dh_strip -prbd-fuse --dbg-package=rbd-fuse-dbg
@@ -142,7 +142,7 @@ binary-arch: build install
 
 	dh_compress -a
 	dh_fixperms -a
-	dh_makeshlibs -a -X/usr/lib/rados-classes # exclude .so files in ceph package
+	dh_makeshlibs -a
 	dh_python2 -a
 	dh_installdeb -a
 	dh_shlibdeps -a
