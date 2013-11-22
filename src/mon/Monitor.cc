@@ -2423,6 +2423,9 @@ void Monitor::handle_command(MMonCommand *m)
       start_election();
       rs = "started responding to quorum, initiated new election";
       r = 0;
+    } else {
+      rs = "needs a valid 'quorum' command";
+      r = -EINVAL;
     }
   }
 
