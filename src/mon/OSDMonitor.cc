@@ -2414,7 +2414,10 @@ stats_out:
 	     prefix == "osd crush rule ls") {
     string format;
     cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-    boost::scoped_ptr<Formatter> f(new_formatter(format));
+    Formatter *fp = new_formatter(format);
+    if (!fp)
+      fp = new_formatter("json-pretty");
+    boost::scoped_ptr<Formatter> f(fp);
     f->open_array_section("rules");
     osdmap.crush->list_rules(f.get());
     f->close_section();
@@ -2425,7 +2428,10 @@ stats_out:
   } else if (prefix == "osd crush rule dump") {
     string format;
     cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-    boost::scoped_ptr<Formatter> f(new_formatter(format));
+    Formatter *fp = new_formatter(format);
+    if (!fp)
+      fp = new_formatter("json-pretty");
+    boost::scoped_ptr<Formatter> f(fp);
     f->open_array_section("rules");
     osdmap.crush->dump_rules(f.get());
     f->close_section();
@@ -2436,7 +2442,10 @@ stats_out:
   } else if (prefix == "osd crush dump") {
     string format;
     cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-    boost::scoped_ptr<Formatter> f(new_formatter(format));
+    Formatter *fp = new_formatter(format);
+    if (!fp)
+      fp = new_formatter("json-pretty");
+    boost::scoped_ptr<Formatter> f(fp);
     f->open_object_section("crush_map");
     osdmap.crush->dump(f.get());
     f->close_section();
@@ -2749,22 +2758,19 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
   if (pending_inc.new_pools.count(pool))
     p = pending_inc.new_pools[pool];
 
-  // accept val as a json string or int, and parse out int or float
+  // accept val as a json string or int, and parse out int
   // values from the string as needed
+  string raw_val = cmd_vartype_stringify(cmdmap["val"]);
   string val;
   cmd_getval(g_ceph_context, cmdmap, "val", val);
   string interr;
   int64_t n = 0;
   if (!cmd_getval(g_ceph_context, cmdmap, "val", n))
     n = strict_strtoll(val.c_str(), 10, &interr);
-  string floaterr;
-  float f;
-  if (!cmd_getval(g_ceph_context, cmdmap, "val", f))
-    f = strict_strtod(val.c_str(), &floaterr);
 
   if (var == "size") {
     if (interr.length()) {
-      ss << "error parsing integer value '" << val << "': " << interr;
+      ss << "error parsing integer value '" << raw_val << "': " << interr;
       return -EINVAL;
     }
     if (n == 0 || n > 10) {
@@ -2777,21 +2783,21 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     ss << "set pool " << pool << " size to " << n;
   } else if (var == "min_size") {
     if (interr.length()) {
-      ss << "error parsing integer value '" << val << "': " << interr;
+      ss << "error parsing integer value '" << raw_val << "': " << interr;
       return -EINVAL;
     }
     p.min_size = n;
     ss << "set pool " << pool << " min_size to " << n;
   } else if (var == "crash_replay_interval") {
     if (interr.length()) {
-      ss << "error parsing integer value '" << val << "': " << interr;
+      ss << "error parsing integer value '" << raw_val << "': " << interr;
       return -EINVAL;
     }
     p.crash_replay_interval = n;
     ss << "set pool " << pool << " to crash_replay_interval to " << n;
   } else if (var == "pg_num") {
     if (interr.length()) {
-      ss << "error parsing integer value '" << val << "': " << interr;
+      ss << "error parsing integer value '" << raw_val << "': " << interr;
       return -EINVAL;
     }
     if (n <= (int)p.get_pg_num()) {
@@ -2810,7 +2816,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
   } else if (var == "pgp_num") {
     if (interr.length()) {
-      ss << "error parsing integer value '" << val << "': " << interr;
+      ss << "error parsing integer value '" << raw_val << "': " << interr;
       return -EINVAL;
     }
     if (n <= 0) {
@@ -2831,7 +2837,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
   } else if (var == "crush_ruleset") {
     if (interr.length()) {
-      ss << "error parsing integer value '" << val << "': " << interr;
+      ss << "error parsing integer value '" << raw_val << "': " << interr;
       return -EINVAL;
     }
     if (osdmap.crush->rule_exists(n)) {
@@ -2842,14 +2848,16 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -ENOENT;
     }
   } else if (var == "hashpspool") {
-    if (val == "true") {
+    // make sure we only compare against 'n' if we didn't receive a string
+    int flag_val = (!val.empty() ? -1 : n);
+    if (val == "true" || flag_val == 1) {
       p.flags |= pg_pool_t::FLAG_HASHPSPOOL;
       ss << "set";
-    } else if (val == "false") {
+    } else if (val == "false" || flag_val == 0) {
       p.flags ^= pg_pool_t::FLAG_HASHPSPOOL;
       ss << "unset";
     } else {
-      ss << "expecting value true or false";
+      ss << "expecting value 0 or 1";
       return -EINVAL;
     }
     ss << " pool " << pool << " flag hashpspool";
