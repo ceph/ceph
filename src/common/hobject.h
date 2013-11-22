@@ -221,7 +221,7 @@ WRITE_CMP_OPERATORS_7(hobject_t,
 		      oid,
 		      snap)
 
-typedef uint64_t gen_t;
+typedef version_t gen_t;
 typedef uint8_t shard_t;
 
 #ifndef UINT8_MAX
