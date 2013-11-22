@@ -3798,7 +3798,11 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       newcrush.set_tunables_optimal();
     } else if (profile == "default") {
       newcrush.set_tunables_default();
-    } 
+    } else {
+      ss << "unrecognized profile '" << profile << "'";
+      err = -EINVAL;
+      goto reply;
+    }
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush);
     ss << "adjusted tunables profile to " << profile;
@@ -3992,6 +3996,10 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       return prepare_set_flag(m, CEPH_OSDMAP_NODEEP_SCRUB);
     else if (key == "notieragent")
       return prepare_set_flag(m, CEPH_OSDMAP_NOTIERAGENT);
+    else {
+      ss << "unrecognized flag '" << key << "'";
+      err = -EINVAL;
+    }
 
   } else if (prefix == "osd unset") {
     string key;
@@ -4016,6 +4024,10 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       return prepare_unset_flag(m, CEPH_OSDMAP_NODEEP_SCRUB);
     else if (key == "notieragent")
       return prepare_unset_flag(m, CEPH_OSDMAP_NOTIERAGENT);
+    else {
+      ss << "unrecognized flag '" << key << "'";
+      err = -EINVAL;
+    }
 
   } else if (prefix == "osd cluster_snap") {
     // ** DISABLE THIS FOR NOW **
