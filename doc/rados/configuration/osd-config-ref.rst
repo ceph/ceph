@@ -183,7 +183,9 @@ scrubbing operations.
 
 ``osd max scrubs`` 
 
-:Description: The maximum number of scrub operations for an Ceph OSD Daemon.
+:Description: The maximum number of simultaneous scrub operations for 
+              a Ceph OSD Daemon.
+
 :Type: 32-bit Int
 :Default: ``1`` 
 
@@ -206,8 +208,9 @@ scrubbing operations.
 
 ``osd scrub load threshold`` 
 
-:Description: The maximum CPU load. Ceph will not scrub when the CPU load is 
-              higher than this number. Default is 50%.
+:Description: The maximum load. Ceph will not scrub when the system load 
+              (as defined by ``getloadavg()``) is higher than this number. 
+              Default is ``0.5``.
 
 :Type: Float
 :Default: ``0.5`` 
