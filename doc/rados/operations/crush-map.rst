@@ -378,7 +378,7 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 
 .. topic:: Weighting Bucket Items
 
-   Ceph expresses bucket weights as double integers, which allows for fine
+   Ceph expresses bucket weights as doubles, which allows for fine
    weighting. A weight is the relative difference between device capacities. We
    recommend using ``1.00`` as the relative weight for a 1TB storage device.
    In such a scenario, a weight of ``0.5`` would represent approximately 500GB,
