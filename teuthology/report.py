@@ -393,6 +393,6 @@ def try_push_job_info(job_config, extra_info=None):
     try:
         log.info("Pushing job info to %s", config.results_server)
         push_job_info(run_name, job_id, job_info)
-    except (RequestFailedError, socket.error):
+    except (RequestFailedError, socket.error, httplib2.ServerNotFoundError):
         log.exception("Could not report results to %s" %
                       config.results_server)
