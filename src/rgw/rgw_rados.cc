@@ -3455,7 +3455,7 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
   bufferlist bl;
   bl.append(state->write_tag.c_str(), state->write_tag.size() + 1);
 
-  ldout(cct, 0) << "setting object write_tag=" << state->write_tag << dendl;
+  ldout(cct, 10) << "setting object write_tag=" << state->write_tag << dendl;
 
   op.setxattr(RGW_ATTR_ID_TAG, bl);
 
