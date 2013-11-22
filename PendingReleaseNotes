@@ -1,3 +1,13 @@
 v0.73
 ~~~~~
+- As part of fix for #6796, 'ceph osd pool set <pool> <var> <arg>' now
+  receives <arg> as an integer instead of a string.  This affects how
+  'hashpspool' flag is set/unset: instead of 'true' or 'false', it now
+  must be '0' or '1'.
 
+v0.72.2
+~~~~~~~
+- As part of fix for #6796, 'ceph osd pool set <pool> <var> <arg>' now
+  receives <arg> as an integer instead of a string.  This affects how
+  'hashpspool' flag is set/unset: instead of 'true' or 'false', it now
+  must be '0' or '1'.
