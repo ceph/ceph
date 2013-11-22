@@ -3006,6 +3006,11 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     BloomHitSet::Params *bloomp = static_cast<BloomHitSet::Params*>(p.hit_set_params.impl.get());
     bloomp->set_fpp(f);
+  } else if (var == "debug_fake_ec_pool") {
+    if (val == "true" || (interr.empty() && n == 1)) {
+      p.flags |= pg_pool_t::FLAG_DEBUG_FAKE_EC_POOL;
+    }
+    ss << " pool " << pool << " set debug_fake_ec_pool";
   } else {
     ss << "unrecognized variable '" << var << "'";
     return -EINVAL;

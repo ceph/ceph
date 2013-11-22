@@ -719,12 +719,14 @@ struct pg_pool_t {
   enum {
     FLAG_HASHPSPOOL = 1, // hash pg seed and pool together (instead of adding)
     FLAG_FULL       = 2, // pool is full
+    FLAG_DEBUG_FAKE_EC_POOL = 1<<2, // require ReplicatedPG to act like an EC pg
   };
 
   static const char *get_flag_name(int f) {
     switch (f) {
     case FLAG_HASHPSPOOL: return "hashpspool";
     case FLAG_FULL: return "full";
+    case FLAG_DEBUG_FAKE_EC_POOL: return "require_local_rollback";
     default: return "???";
     }
   }
@@ -847,6 +849,12 @@ public:
   void dump(Formatter *f) const;
 
   uint64_t get_flags() const { return flags; }
+
+  /// This method will later return true for ec pools as well
+  bool ec_pool() const {
+    return flags & FLAG_DEBUG_FAKE_EC_POOL;
+  }
+
   unsigned get_type() const { return type; }
   unsigned get_size() const { return size; }
   unsigned get_min_size() const { return min_size; }
