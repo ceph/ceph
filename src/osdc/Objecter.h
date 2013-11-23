@@ -1481,12 +1481,12 @@ public:
 
 private:
   // low-level
-  tid_t op_submit(Op *op);
   tid_t _op_submit(Op *op);
   inline void unregister_op(Op *op);
 
   // public interface
- public:
+public:
+  tid_t op_submit(Op *op);
   bool is_active() {
     return !(ops.empty() && linger_ops.empty() && poolstat_ops.empty() && statfs_ops.empty());
   }
@@ -1548,7 +1548,7 @@ private:
   }
 
   // mid-level helpers
-  tid_t mutate(const object_t& oid, const object_locator_t& oloc, 
+  Op *prepare_mutate_op(const object_t& oid, const object_locator_t& oloc, 
 	       ObjectOperation& op,
 	       const SnapContext& snapc, utime_t mtime, int flags,
 	       Context *onack, Context *oncommit, version_t *objver = NULL) {
@@ -1556,9 +1556,16 @@ private:
     o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
+    return o;
+  }
+  tid_t mutate(const object_t& oid, const object_locator_t& oloc, 
+	       ObjectOperation& op,
+	       const SnapContext& snapc, utime_t mtime, int flags,
+	       Context *onack, Context *oncommit, version_t *objver = NULL) {
+    Op *o = prepare_mutate_op(oid, oloc, op, snapc, mtime, flags, onack, oncommit, objver);
     return op_submit(o);
   }
-  tid_t read(const object_t& oid, const object_locator_t& oloc,
+  Op *prepare_read_op(const object_t& oid, const object_locator_t& oloc,
 	     ObjectOperation& op,
 	     snapid_t snapid, bufferlist *pbl, int flags,
 	     Context *onack, version_t *objver = NULL) {
@@ -1569,6 +1576,13 @@ private:
     o->out_bl.swap(op.out_bl);
     o->out_handler.swap(op.out_handler);
     o->out_rval.swap(op.out_rval);
+    return o;
+  }
+  tid_t read(const object_t& oid, const object_locator_t& oloc,
+	     ObjectOperation& op,
+	     snapid_t snapid, bufferlist *pbl, int flags,
+	     Context *onack, version_t *objver = NULL) {
+    Op *o = prepare_read_op(oid, oloc, op, snapid, pbl, flags, onack, objver);
     return op_submit(o);
   }
   tid_t pg_read(uint32_t hash, object_locator_t oloc,
