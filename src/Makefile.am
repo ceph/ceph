@@ -310,7 +310,8 @@ ceph: ceph.in ./ceph_ver.h Makefile
 # cleaning
 
 clean-local:
-	-rm *.so *.gcno *.gcda
+	rm -f *.so *.gcno *.gcda
+	rm -f ceph java/java/com/ceph/crush/Bucket.class
 
 
 # pybind
