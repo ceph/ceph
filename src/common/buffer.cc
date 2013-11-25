@@ -1504,7 +1504,7 @@ int buffer::list::read_file(const char *fn, std::string *error)
 ssize_t buffer::list::read_fd(int fd, size_t len)
 {
   // try zero copy first
-  if (read_fd_zero_copy(fd, len) == 0) {
+  if (false && read_fd_zero_copy(fd, len) == 0) {
     // TODO fix callers to not require correct read size, which is not
     // available for raw_pipe until we actually inspect the data
     return 0;
