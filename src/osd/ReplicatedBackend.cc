@@ -312,6 +312,15 @@ int ReplicatedBackend::objects_get_attr(
   return r;
 }
 
+int ReplicatedBackend::objects_get_attrs(
+  const hobject_t &hoid,
+  map<string, bufferlist> *out)
+{
+  return osd->store->getattrs(
+    coll,
+    hoid,
+    *out);
+}
 
 class RPGTransaction : public PGBackend::PGTransaction {
   coll_t coll;

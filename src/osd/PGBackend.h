@@ -405,6 +405,10 @@
      const hobject_t &hoid,
      const string &attr,
      bufferlist *out) = 0;
+
+   virtual int objects_get_attrs(
+     const hobject_t &hoid,
+     map<string, bufferlist> *out) = 0;
  };
 
 #endif

@@ -419,6 +419,28 @@ public:
 
     hobject_t new_temp_oid, discard_temp_oid;  ///< temp objects we should start/stop tracking
 
+    // pending xattr updates
+    map<ObjectContextRef,
+	map<string, boost::optional<bufferlist> > > pending_attrs;
+    void apply_pending_attrs() {
+      for (map<ObjectContextRef,
+	     map<string, boost::optional<bufferlist> > >::iterator i =
+	     pending_attrs.begin();
+	   i != pending_attrs.end();
+	   ++i) {
+	for (map<string, boost::optional<bufferlist> >::iterator j =
+	       i->second.begin();
+	     j != i->second.end();
+	     ++j) {
+	  if (j->second)
+	    i->first->attr_cache[j->first] = j->second.get();
+	  else
+	    i->first->attr_cache.erase(j->first);
+	}
+      }
+      pending_attrs.clear();
+    }
+
     enum { W_LOCK, R_LOCK, NONE } lock_to_release;
 
     OpContext(const OpContext& other);
@@ -792,9 +814,12 @@ protected:
 
   // low level ops
 
-  void _make_clone(PGBackend::PGTransaction* t,
-		   const hobject_t& head, const hobject_t& coid,
-		   object_info_t *poi);
+  void _make_clone(
+    OpContext *ctx,
+    PGBackend::PGTransaction* t,
+    ObjectContextRef obc,
+    const hobject_t& head, const hobject_t& coid,
+    object_info_t *poi);
   void execute_ctx(OpContext *ctx);
   void finish_ctx(OpContext *ctx, int log_op_type);
   void reply_ctx(OpContext *ctx, int err);
@@ -1135,6 +1160,26 @@ public:
   void on_flushed();
   void on_removal(ObjectStore::Transaction *t);
   void on_shutdown();
+
+  // attr cache handling
+  void setattr_maybe_cache(
+    ObjectContextRef obc,
+    OpContext *op,
+    PGBackend::PGTransaction *t,
+    const string &key,
+    bufferlist &val);
+  void rmattr_maybe_cache(
+    ObjectContextRef obc,
+    OpContext *op,
+    PGBackend::PGTransaction *t,
+    const string &key);
+  int getattr_maybe_cache(
+    ObjectContextRef obc,
+    const string &key,
+    bufferlist *val);
+  int getattrs_maybe_cache(
+    ObjectContextRef obc,
+    map<string, bufferlist> *out);
 };
 
 inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
