@@ -2625,6 +2625,9 @@ public:
       cond.Signal();
     lock.Unlock();
   }
+
+  // attr cache
+  map<string, bufferlist> attr_cache;
 };
 
 inline ostream& operator<<(ostream& out, const ObjectState& obs)
