@@ -412,6 +412,21 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
+class RGWSetTempUrl : public RGWOp {
+protected:
+  int ret;
+  string temp_url_key;
+public:
+  RGWSetTempUrl() : ret(0) {}
+
+  int verify_permission();
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual const string name() { return "set_temp_url"; }
+};
+
 class RGWDeleteObj : public RGWOp {
 protected:
   int ret;

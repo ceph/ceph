@@ -425,6 +425,29 @@ void RGWPutMetadata_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+int RGWSetTempUrl_ObjStore_SWIFT::get_params()
+{
+  const char *temp_url = s->info.env->get("HTTP_X_ACCOUNT_META_TEMP_URL");
+  if (temp_url)
+    return -EINVAL;
+
+  temp_url_key = temp_url;
+
+  return 0;
+}
+
+void RGWSetTempUrl_ObjStore_SWIFT::send_response()
+{
+  int r = ret;
+  if (!r)
+    r = STATUS_NO_CONTENT;
+
+  set_req_state_err(s, r);
+  dump_errno(s);
+  end_header(s, this);
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 void RGWDeleteObj_ObjStore_SWIFT::send_response()
 {
   int r = ret;
@@ -598,6 +621,15 @@ RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_get()
 RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_head()
 {
   return new RGWStatAccount_ObjStore_SWIFT;
+}
+
+RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_post()
+{
+  const char *temp_url = s->info.env->get("HTTP_X_ACCOUNT_META_TEMP_URL");
+  if (temp_url) {
+    return new RGWSetTempUrl_ObjStore_SWIFT;
+  }
+  return NULL;
 }
 
 RGWOp *RGWHandler_ObjStore_Bucket_SWIFT::get_obj_op(bool get_data)

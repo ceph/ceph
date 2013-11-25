@@ -1706,6 +1706,19 @@ void RGWPutMetadata::execute()
   }
 }
 
+int RGWSetTempUrl::verify_permission()
+{
+  if (s->perm_mask != RGW_PERM_FULL_CONTROL)
+    return -EACCES;
+
+  return 0;
+}
+
+void RGWSetTempUrl::execute()
+{
+}
+
+
 int RGWDeleteObj::verify_permission()
 {
   if (!verify_bucket_permission(s, RGW_PERM_WRITE))
