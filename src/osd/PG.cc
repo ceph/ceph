@@ -1204,9 +1204,6 @@ void PG::activate(ObjectStore::Transaction& t,
   if (is_primary()) {
     // start up replicas
 
-    // count replicas that are not backfilling
-    unsigned active = 1;
-
     assert(actingbackfill.size() > 0);
     for (unsigned i=1; i<actingbackfill.size(); i++) {
       int peer = actingbackfill[i];
@@ -1269,9 +1266,6 @@ void PG::activate(ObjectStore::Transaction& t,
       if (needs_past_intervals)
 	m->past_intervals = past_intervals;
 
-      if (pi.last_backfill == hobject_t::get_max())
-	active++;
-
       // update local version of peer's missing list!
       if (m && pi.last_backfill != hobject_t()) {
         for (list<pg_log_entry_t>::iterator p = m->log.log.begin();
@@ -1298,8 +1292,6 @@ void PG::activate(ObjectStore::Transaction& t,
         dout(10) << "activate peer osd." << peer << " " << pi << " missing " << pm << dendl;
       }
     }
-
-    assert(active == acting.size());
 
     // degraded?
     if (get_osdmap()->get_pg_size(info.pgid) > acting.size())
