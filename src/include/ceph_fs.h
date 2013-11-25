@@ -526,6 +526,9 @@ struct ceph_filelock {
 
 int ceph_flags_to_mode(int flags);
 
+/* inline data state */
+#define CEPH_INLINE_NONE	((__u64)-1)
+#define CEPH_INLINE_SIZE	(1 << 12)
 
 /* capability bits */
 #define CEPH_CAP_PIN         1  /* no specific capabilities beyond the pin */
