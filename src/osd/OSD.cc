@@ -3576,6 +3576,14 @@ void OSD::_collect_metadata(map<string,string> *pm)
 {
   (*pm)["ceph_version"] = pretty_version_to_str();
 
+  // config info
+  (*pm)["osd_data"] = dev_path;
+  (*pm)["osd_journal"] = journal_path;
+  (*pm)["front_addr"] = stringify(client_messenger->get_myaddr());
+  (*pm)["back_addr"] = stringify(cluster_messenger->get_myaddr());
+  (*pm)["hb_front_addr"] = stringify(hb_front_server_messenger->get_myaddr());
+  (*pm)["hb_back_addr"] = stringify(hb_back_server_messenger->get_myaddr());
+
   // kernel info
   struct utsname u;
   int r = uname(&u);
