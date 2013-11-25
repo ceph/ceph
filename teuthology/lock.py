@@ -21,36 +21,38 @@ log = logging.getLogger(__name__)
 
 
 def lock_many(ctx, num, machinetype, user=None, description=None):
+    machinetypes = misc.get_multi_machine_types(machinetype)
     if user is None:
         user = misc.get_user()
-    success, content, status = ls.send_request(
-        'POST',
-        config.lock_server,
-        urllib.urlencode(
-            dict(
-                user=user,
-                num=num,
-                machinetype=machinetype,
-                desc=description,
-            )))
-    if success:
-        machines = json.loads(content)
-        log.debug('locked {machines}'.format(
-            machines=', '.join(machines.keys())))
-        if ctx.machine_type == 'vps':
-            ok_machs = {}
-            for machine in machines:
-                if create_if_vm(ctx, machine):
-                    ok_machs[machine] = machines[machine]
-                else:
-                    log.error('Unable to create virtual machine: %s' % machine)
-                    unlock_one(ctx, machine)
-            return ok_machs
-        return machines
-    if status == 503:
-        log.error('Insufficient nodes available to lock %d nodes.', num)
-    else:
-        log.error('Could not lock %d nodes, reason: unknown.', num)
+    for machinetype in machinetypes:
+        success, content, status = ls.send_request(
+            'POST',
+            config.lock_server,
+            urllib.urlencode(
+                dict(
+                    user=user,
+                    num=num,
+                    machinetype=machinetype,
+                    desc=description,
+                )))
+        if success:
+            machines = json.loads(content)
+            log.debug('locked {machines}'.format(
+                machines=', '.join(machines.keys())))
+            if machinetype == 'vps':
+                ok_machs = {}
+                for machine in machines:
+                    if create_if_vm(ctx, machine):
+                        ok_machs[machine] = machines[machine]
+                    else:
+                        log.error('Unable to create virtual machine: %s' % machine)
+                        unlock_one(ctx, machine)
+                return ok_machs
+            return machines
+        if status == 503:
+            log.error('Insufficient nodes available to lock %d %s nodes.', num,machinetype)
+        else:
+            log.error('Could not lock %d %s nodes, reason: unknown.', num, machinetype)
     return []
 
 

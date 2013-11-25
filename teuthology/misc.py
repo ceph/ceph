@@ -943,3 +943,17 @@ def get_distro_version(ctx):
         return ctx.config['downburst'].get('distroversion', os_version)
     except (KeyError, AttributeError):
         return os_version
+
+def get_multi_machine_types(machinetype):
+    """
+    Converts machine type string to list based on common deliminators
+    """
+    machinetypes = []
+    machine_type_deliminator = [',',' ','\t']
+    for deliminator in machine_type_deliminator:
+        if deliminator in machinetype:
+            machinetypes = machinetype.split(deliminator)
+            break
+    if not machinetypes:
+        machinetypes.append(machinetype)
+    return machinetypes
