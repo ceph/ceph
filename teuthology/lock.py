@@ -22,9 +22,9 @@ log = logging.getLogger(__name__)
 
 def lock_many(ctx, num, machinetype, user=None, description=None):
     machinetypes = misc.get_multi_machine_types(machinetype)
+    if user is None:
+        user = misc.get_user()
     for machinetype in machinetypes:
-        if user is None:
-            user = misc.get_user()
         success, content, status = ls.send_request(
             'POST',
             config.lock_server,

@@ -14,11 +14,6 @@ class TestGetMultiMachineTypes(object):
         expect = ['burnupi','plana','vps']
         assert teuthology.get_multi_machine_types(give) == expect
 
-    def test_hiphen(self):
-        give = 'burnupi-plana-vps'
-        expect = ['burnupi','plana','vps']
-        assert teuthology.get_multi_machine_types(give) == expect
-
     def test_comma(self):
         give = 'burnupi,plana,vps'
         expect = ['burnupi','plana','vps']

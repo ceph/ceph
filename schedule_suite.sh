@@ -37,7 +37,7 @@ fi
 
 stamp=`date +%Y-%m-%d_%H:%M:%S`
 nicesuite=`echo $suite | sed 's/\//:/g'`
-name=`whoami`"-$stamp-$nicesuite-$ceph-$kernel-$flavor-$mtype"
+name=`whoami`"-$stamp-$nicesuite-$ceph-$kernel-$flavor-$tube"
 
 function schedule_fail {
     SUBJECT="Failed to schedule $name"
