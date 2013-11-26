@@ -124,9 +124,6 @@ void Migrator::dispatch(Message *m)
   case MSG_MDS_EXPORTCAPS:
     handle_export_caps(static_cast<MExportCaps*>(m));
     break;
-  case MSG_MDS_EXPORTCAPSACK:
-    handle_export_caps_ack(static_cast<MExportCapsAck*>(m));
-    break;
 
   default:
     assert(0);
@@ -1168,10 +1165,10 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state,
   in->encode_export(enc_state);
 
   // caps 
-  encode_export_inode_caps(in, enc_state, exported_client_map);
+  encode_export_inode_caps(in, true, enc_state, exported_client_map);
 }
 
-void Migrator::encode_export_inode_caps(CInode *in, bufferlist& bl, 
+void Migrator::encode_export_inode_caps(CInode *in, bool auth_cap, bufferlist& bl,
 					map<client_t,entity_inst_t>& exported_client_map)
 {
   dout(20) << "encode_export_inode_caps " << *in << dendl;
@@ -1180,10 +1177,12 @@ void Migrator::encode_export_inode_caps(CInode *in, bufferlist& bl,
   map<client_t,Capability::Export> cap_map;
   in->export_client_caps(cap_map);
   ::encode(cap_map, bl);
-  ::encode(in->get_mds_caps_wanted(), bl);
+  if (auth_cap) {
+    ::encode(in->get_mds_caps_wanted(), bl);
 
-  in->state_set(CInode::STATE_EXPORTINGCAPS);
-  in->get(CInode::PIN_EXPORTINGCAPS);
+    in->state_set(CInode::STATE_EXPORTINGCAPS);
+    in->get(CInode::PIN_EXPORTINGCAPS);
+  }
 
   // make note of clients named by exported capabilities
   for (map<client_t, Capability*>::iterator it = in->client_caps.begin();
@@ -2579,7 +2578,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
   in->last_journaled = log_offset;
 
   // caps
-  decode_import_inode_caps(in, blp, peer_exports);
+  decode_import_inode_caps(in, true, blp, peer_exports);
 
   // link before state  -- or not!  -sage
   if (dn->get_linkage()->get_inode() != in) {
@@ -2613,14 +2612,16 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
   
 }
 
-void Migrator::decode_import_inode_caps(CInode *in,
+void Migrator::decode_import_inode_caps(CInode *in, bool auth_cap,
 					bufferlist::iterator &blp,
 					map<CInode*, map<client_t,Capability::Export> >& peer_exports)
 {
   map<client_t,Capability::Export> cap_map;
   ::decode(cap_map, blp);
-  ::decode(in->get_mds_caps_wanted(), blp);
-  if (!cap_map.empty() || !in->get_mds_caps_wanted().empty()) {
+  if (auth_cap)
+    ::decode(in->get_mds_caps_wanted(), blp);
+  if (!cap_map.empty() ||
+      (auth_cap && !in->get_mds_caps_wanted().empty())) {
     peer_exports[in].swap(cap_map);
     in->get(CInode::PIN_IMPORTINGCAPS);
   }
@@ -2653,7 +2654,7 @@ void Migrator::finish_import_inode_caps(CInode *in, int peer, bool auth_cap,
       cap->merge(it->second, auth_cap);
       mds->mdcache->do_cap_import(session, in, cap, it->second.cap_id,
 				  it->second.seq, it->second.mseq - 1, peer,
-				  auth_cap ? CEPH_CAP_FLAG_AUTH : 0);
+				  auth_cap ? CEPH_CAP_FLAG_AUTH : CEPH_CAP_FLAG_RELEASE);
     }
   }
 
@@ -2828,17 +2829,7 @@ void Migrator::handle_export_notify(MExportDirNotify *m)
   m->put();
 }
 
-
-
-
-
-
-
-
 /** cap exports **/
-
-
-
 void Migrator::export_caps(CInode *in)
 {
   int dest = in->authority().first;
@@ -2852,24 +2843,10 @@ void Migrator::export_caps(CInode *in)
   MExportCaps *ex = new MExportCaps;
   ex->ino = in->ino();
 
-  encode_export_inode_caps(in, ex->cap_bl, ex->client_map);
+  encode_export_inode_caps(in, false, ex->cap_bl, ex->client_map);
 
   mds->send_message_mds(ex, dest);
 }
-
-/* This function DOES put the passed message before returning*/
-void Migrator::handle_export_caps_ack(MExportCapsAck *ack)
-{
-  CInode *in = cache->get_inode(ack->ino);
-  assert(in);
-  dout(10) << "handle_export_caps_ack " << *ack << " from " << ack->get_source() 
-	   << " on " << *in
-	   << dendl;
-  
-  finish_export_inode_caps(in);
-  ack->put();
-}
-
 
 class C_M_LoggedImportCaps : public Context {
   Migrator *migrator;
@@ -2904,7 +2881,7 @@ void Migrator::handle_export_caps(MExportCaps *ex)
 
   // decode new caps
   bufferlist::iterator blp = ex->cap_bl.begin();
-  decode_import_inode_caps(in, blp, finish->peer_exports);
+  decode_import_inode_caps(in, false, blp, finish->peer_exports);
   assert(!finish->peer_exports.empty());   // thus, inode is pinned.
 
   // journal open client sessions
@@ -2934,9 +2911,7 @@ void Migrator::logged_import_caps(CInode *in,
   map<client_t,Capability::Import> imported_caps;
 
   assert(peer_exports.count(in));
+  // clients will release caps from the exporter when they receive the cap import message.
   finish_import_inode_caps(in, from, false, peer_exports[in], imported_caps);
   mds->locker->eval(in, CEPH_CAP_LOCKS, true);
-
-  mds->send_message_mds(new MExportCapsAck(in->ino()), from);
 }
-
