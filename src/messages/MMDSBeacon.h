@@ -21,8 +21,6 @@
 
 #include "mds/MDSMap.h"
 
-#include <uuid/uuid.h>
-
 class MMDSBeacon : public PaxosServiceMessage {
 
   static const int HEAD_VERSION = 2;

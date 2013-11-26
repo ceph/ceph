@@ -119,7 +119,6 @@ AX_C_PRETTY_FUNC
 
 # Checks for libraries.
 ACX_PTHREAD
-AC_CHECK_LIB([uuid], [uuid_parse], [true], AC_MSG_FAILURE([libuuid not found]))
 
 #
 # Check for res_nquery in libresolv. There are several variations. On OSX
