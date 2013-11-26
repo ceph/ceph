@@ -6329,12 +6329,16 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
     // srcdn inode import?
     if (!srcdn->is_auth() && destdn->is_auth()) {
       assert(mdr->more()->inode_import.length() > 0);
+
+      map<client_t,Capability::Import> imported_caps;
       
       // finish cap imports
       finish_force_open_sessions(mdr->more()->imported_client_map, mdr->more()->sseq_map);
       if (mdr->more()->cap_imports.count(destdnl->get_inode())) {
-	mds->mdcache->migrator->finish_import_inode_caps(destdnl->get_inode(), srcdn->authority().first, 
-							 mdr->more()->cap_imports[destdnl->get_inode()]);
+	mds->mdcache->migrator->finish_import_inode_caps(destdnl->get_inode(),
+							 mdr->more()->srcdn_auth_mds,
+							 mdr->more()->cap_imports[destdnl->get_inode()],
+							 imported_caps);
       }
       /* hack: add an auth pin for each xlock we hold. These were
        * remote xlocks previously but now they're local and
