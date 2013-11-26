@@ -168,7 +168,7 @@ public:
     head.xattr_len = xattrbl.length();
 
     // record peer in unused fields of cap export message
-    if (head.op == CEPH_CAP_OP_EXPORT)
+    if ((features & CEPH_FEATURE_EXPORT_PEER) && head.op == CEPH_CAP_OP_EXPORT)
       memcpy(&head.size, &peer, sizeof(peer));
 
     ::encode(head, payload);
@@ -184,7 +184,7 @@ public:
       return;
     }
 
-    if (true) {
+    if (features & CEPH_FEATURE_EXPORT_PEER) {
       if (head.op == CEPH_CAP_OP_IMPORT)
 	::encode(peer, payload);
     } else {
