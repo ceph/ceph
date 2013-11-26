@@ -18,9 +18,10 @@
 #include "MExportDir.h"
 
 class MExportDirAck : public Message {
+public:
   dirfrag_t dirfrag;
+  bufferlist imported_caps;
 
- public:
   dirfrag_t get_dirfrag() { return dirfrag; }
   
   MExportDirAck() : Message(MSG_MDS_EXPORTDIRACK) {}
@@ -40,9 +41,11 @@ public:
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
+    ::decode(imported_caps, p);
   }
   void encode_payload(uint64_t features) {
     ::encode(dirfrag, payload);
+    ::encode(imported_caps, payload);
   }
 
 };

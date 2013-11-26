@@ -88,6 +88,7 @@ protected:
     set<SimpleLock*> locks;
     set<int> warning_ack_waiting;
     set<int> notify_ack_waiting;
+    map<inodeno_t,map<client_t,Capability::Import> > peer_imported;
     list<Context*> waiting_for_finish;
   };
 
@@ -299,7 +300,8 @@ public:
 				bufferlist::iterator &blp,
 				map<CInode*, map<client_t,Capability::Export> >& cap_imports);
   void finish_import_inode_caps(CInode *in, bool auth_cap,
-			        map<client_t,Capability::Export> &cap_map);
+				map<client_t,Capability::Export> &export_map,
+				map<client_t,Capability::Import> &import_map);
   int decode_import_dir(bufferlist::iterator& blp,
 			int oldauth,
 			CDir *import_root,
