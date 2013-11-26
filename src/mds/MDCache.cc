@@ -4759,6 +4759,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
       // mark client caps stale.
       MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0,
 				       cap_exports[p->first][q->first].cap_id, 0);
+      m->set_cap_peer(q->second.cap_id, q->second.issue_seq, q->second.mseq, from, 0);
       mds->send_message_client_counted(m, session);
 
       cap_exports[p->first].erase(q->first);
@@ -5214,7 +5215,7 @@ Capability* MDCache::rejoin_import_cap(CInode *in, client_t client, ceph_mds_cap
 
   if (frommds >= 0) {
     cap->rejoin_import();
-    do_cap_import(session, in, cap);
+    do_cap_import(session, in, cap, icr.cap_id, 0, 0, frommds, CEPH_CAP_FLAG_AUTH);
   }
 
   return cap;
@@ -5237,6 +5238,7 @@ void MDCache::export_remaining_imported_caps()
       if (session) {
 	// mark client caps stale.
 	MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0, 0, 0);
+	stale->set_cap_peer(0, 0, 0, -1, 0);
 	mds->send_message_client_counted(stale, q->first);
       }
     }
@@ -5276,7 +5278,9 @@ void MDCache::try_reconnect_cap(CInode *in, Session *session)
 // -------
 // cap imports and delayed snap parent opens
 
-void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap)
+void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap,
+			    uint64_t p_cap_id, ceph_seq_t p_seq, ceph_seq_t p_mseq,
+			    int peer, int p_flags)
 {
   client_t client = session->info.inst.name.num();
   SnapRealm *realm = in->find_snaprealm();
@@ -5293,6 +5297,7 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap)
 					cap->get_mseq());
     in->encode_cap_message(reap, cap);
     realm->build_snap_trace(reap->snapbl);
+    reap->set_cap_peer(p_cap_id, p_seq, p_mseq, peer, p_flags);
     mds->send_message_client_counted(reap, session);
   } else {
     dout(10) << "do_cap_import missing past snap parents, delaying " << session->info.inst.name << " mseq "
@@ -5308,6 +5313,8 @@ void MDCache::do_delayed_cap_imports()
 {
   dout(10) << "do_delayed_cap_imports" << dendl;
 
+  assert(delayed_imported_caps.empty());
+#if 0
   map<client_t,set<CInode*> > d;
   d.swap(delayed_imported_caps);
 
@@ -5332,6 +5339,7 @@ void MDCache::do_delayed_cap_imports()
 	mds->locker->issue_caps(in);
     }
   }    
+#endif
 }
 
 struct C_MDC_OpenSnapParents : public Context {

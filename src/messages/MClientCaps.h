@@ -21,11 +21,12 @@
 
 class MClientCaps : public Message {
 
-  static const int HEAD_VERSION = 2;   // added flock metadata
+  static const int HEAD_VERSION = 3;   // added flock metadata
   static const int COMPAT_VERSION = 1;
 
  public:
   struct ceph_mds_caps head;
+  struct ceph_mds_cap_peer peer;
   bufferlist snapbl;
   bufferlist xattrbl;
   bufferlist flockbl;
@@ -73,6 +74,14 @@ class MClientCaps : public Message {
   void set_mtime(const utime_t &t) { t.encode_timeval(&head.mtime); }
   void set_atime(const utime_t &t) { t.encode_timeval(&head.atime); }
 
+  void set_cap_peer(uint64_t id, ceph_seq_t seq, ceph_seq_t mseq, int mds, int flags) {
+    peer.cap_id = id;
+    peer.seq = seq;
+    peer.mseq = mseq;
+    peer.mds = mds;
+    peer.flags = flags;
+  }
+
   MClientCaps()
     : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION) { }
   MClientCaps(int op,
@@ -95,6 +104,7 @@ class MClientCaps : public Message {
     head.wanted = wanted;
     head.dirty = dirty;
     head.migrate_seq = mseq;
+    peer.cap_id = 0;
   }
   MClientCaps(int op,
 	      inodeno_t ino, inodeno_t realm,
@@ -106,6 +116,7 @@ class MClientCaps : public Message {
     head.realm = realm;
     head.cap_id = id;
     head.migrate_seq = mseq;
+    peer.cap_id = 0;
   }
 private:
   ~MClientCaps() {}
@@ -155,6 +166,11 @@ public:
   void encode_payload(uint64_t features) {
     head.snap_trace_len = snapbl.length();
     head.xattr_len = xattrbl.length();
+
+    // record peer in unused fields of cap export message
+    if (head.op == CEPH_CAP_OP_EXPORT)
+      memcpy(&head.size, &peer, sizeof(peer));
+
     ::encode(head, payload);
     ::encode_nohead(snapbl, payload);
 
@@ -164,7 +180,16 @@ public:
     if (features & CEPH_FEATURE_FLOCK) {
       ::encode(flockbl, payload);
     } else {
-      header.version = 1;  // old
+      header.version = 1;
+      return;
+    }
+
+    if (true) {
+      if (head.op == CEPH_CAP_OP_IMPORT)
+	::encode(peer, payload);
+    } else {
+      header.version = 2;
+      return;
     }
   }
 };
