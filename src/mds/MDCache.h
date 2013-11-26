@@ -505,7 +505,9 @@ public:
   map<CInode*,map<client_t, set<inodeno_t> > > missing_snap_parents; 
   map<client_t,set<CInode*> > delayed_imported_caps;
 
-  void do_cap_import(Session *session, CInode *in, Capability *cap);
+  void do_cap_import(Session *session, CInode *in, Capability *cap,
+		     uint64_t p_cap_id, ceph_seq_t p_seq, ceph_seq_t p_mseq,
+		     int peer, int p_flags);
   void do_delayed_cap_imports();
   void check_realm_past_parents(SnapRealm *realm);
   void open_snap_parents();

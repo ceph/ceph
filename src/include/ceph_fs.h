@@ -665,6 +665,15 @@ struct ceph_mds_caps {
 	__le32 time_warp_seq;
 } __attribute__ ((packed));
 
+/* extra info for cap import/export */
+struct ceph_mds_cap_peer {
+	__le64 cap_id;
+	__le32 seq;
+	__le32 mseq;
+	__le32 mds;
+	__u8   flags;
+} __attribute__ ((packed));
+
 /* cap release msg head */
 struct ceph_mds_cap_release {
 	__le32 num;                /* number of cap_items that follow */

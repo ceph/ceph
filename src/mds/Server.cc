@@ -6340,7 +6340,7 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
       finish_force_open_sessions(mdr->more()->imported_client_map, mdr->more()->sseq_map);
       if (mdr->more()->cap_imports.count(destdnl->get_inode())) {
 	mds->mdcache->migrator->finish_import_inode_caps(destdnl->get_inode(),
-							 mdr->more()->srcdn_auth_mds,
+							 mdr->more()->srcdn_auth_mds, true,
 							 mdr->more()->cap_imports[destdnl->get_inode()],
 							 imported_caps);
       }
@@ -6734,7 +6734,8 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
       ::decode(peer_imported, bp);
 
       dout(10) << " finishing inode export on " << *destdnl->get_inode() << dendl;
-      mdcache->migrator->finish_export_inode(destdnl->get_inode(), mdr->now, finished);
+      mdcache->migrator->finish_export_inode(destdnl->get_inode(), mdr->now,
+					     mdr->slave_to_mds, peer_imported, finished);
       mds->queue_waiters(finished);   // this includes SINGLEAUTH waiters.
 
       // unfreeze

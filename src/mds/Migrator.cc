@@ -1186,7 +1186,8 @@ void Migrator::encode_export_inode_caps(CInode *in, bufferlist& bl,
     exported_client_map[it->first] = mds->sessionmap.get_inst(entity_name_t::CLIENT(it->first.v));
 }
 
-void Migrator::finish_export_inode_caps(CInode *in)
+void Migrator::finish_export_inode_caps(CInode *in, int peer,
+					map<client_t,Capability::Import>& peer_imported)
 {
   dout(20) << "finish_export_inode_caps " << *in << dendl;
 
@@ -1198,21 +1199,23 @@ void Migrator::finish_export_inode_caps(CInode *in)
        it != in->client_caps.end();
        ++it) {
     Capability *cap = it->second;
-    dout(7) << "finish_export_inode telling client." << it->first
+    dout(7) << "finish_export_inode_caps telling client." << it->first
 	    << " exported caps on " << *in << dendl;
-    MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT,
-				     in->ino(),
-				     in->find_snaprealm()->inode->ino(),
-				     cap->get_cap_id(), cap->get_last_seq(), 
-				     cap->pending(), cap->wanted(), 0,
-				     cap->get_mseq());
+    MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT, in->ino(), 0,
+				     cap->get_cap_id(), cap->get_mseq());
+
+    map<client_t,Capability::Import>::iterator q = peer_imported.find(it->first);
+    assert(q != peer_imported.end());
+    m->set_cap_peer(q->second.cap_id, q->second.issue_seq, q->second.mseq, peer, 0);
     mds->send_message_client_counted(m, it->first);
   }
   in->clear_client_caps_after_export();
   mds->locker->eval(in, CEPH_CAP_LOCKS);
 }
 
-void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& finished)
+void Migrator::finish_export_inode(CInode *in, utime_t now, int peer,
+				   map<client_t,Capability::Import>& peer_imported,
+				   list<Context*>& finished)
 {
   dout(12) << "finish_export_inode " << *in << dendl;
 
@@ -1254,7 +1257,7 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, list<Context*>& fini
 
   in->finish_export(now);
   
-  finish_export_inode_caps(in);
+  finish_export_inode_caps(in, peer, peer_imported);
 
   // *** other state too?
 
@@ -1355,7 +1358,9 @@ int Migrator::encode_export_dir(bufferlist& exportbl,
   return num_exported;
 }
 
-void Migrator::finish_export_dir(CDir *dir, list<Context*>& finished, utime_t now)
+void Migrator::finish_export_dir(CDir *dir, utime_t now, int peer,
+				 map<inodeno_t,map<client_t,Capability::Import> >& peer_imported,
+				 list<Context*>& finished)
 {
   dout(10) << "finish_export_dir " << *dir << dendl;
 
@@ -1389,7 +1394,7 @@ void Migrator::finish_export_dir(CDir *dir, list<Context*>& finished, utime_t no
 
     // inode?
     if (dn->get_linkage()->is_primary()) {
-      finish_export_inode(in, now, finished);
+      finish_export_inode(in, now, peer, peer_imported[in->ino()], finished);
 
       // subdirs?
       in->get_nested_dirfrags(subdirs);
@@ -1398,7 +1403,7 @@ void Migrator::finish_export_dir(CDir *dir, list<Context*>& finished, utime_t no
 
   // subdirs
   for (list<CDir*>::iterator it = subdirs.begin(); it != subdirs.end(); ++it) 
-    finish_export_dir(*it, finished, now);
+    finish_export_dir(*it, now, peer, peer_imported, finished);
 }
 
 class C_MDS_ExportFinishLogged : public Context {
@@ -1665,7 +1670,8 @@ void Migrator::export_finish(CDir *dir)
   
   // finish export (adjust local cache state)
   C_Contexts *fin = new C_Contexts(g_ceph_context);
-  finish_export_dir(dir, fin->contexts, ceph_clock_now(g_ceph_context));
+  finish_export_dir(dir, ceph_clock_now(g_ceph_context),
+		    it->second.peer, it->second.peer_imported, fin->contexts);
   dir->add_waiter(CDir::WAIT_UNFREEZE, fin);
 
   // unfreeze
@@ -2382,7 +2388,8 @@ void Migrator::import_logged_start(dirfrag_t df, CDir *dir, int from,
   for (map<CInode*, map<client_t,Capability::Export> >::iterator p = it->second.peer_exports.begin();
        p != it->second.peer_exports.end();
        ++p) {
-    finish_import_inode_caps(p->first, true, p->second, imported_caps[p->first->ino()]);
+
+    finish_import_inode_caps(p->first, from, true, p->second, imported_caps[p->first->ino()]);
   }
   
   // send notify's etc.
@@ -2561,7 +2568,7 @@ void Migrator::decode_import_inode_caps(CInode *in,
   }
 }
 
-void Migrator::finish_import_inode_caps(CInode *in, bool auth_cap,
+void Migrator::finish_import_inode_caps(CInode *in, int peer, bool auth_cap,
 					map<client_t,Capability::Export> &export_map,
 					map<client_t,Capability::Import> &import_map)
 {
@@ -2583,7 +2590,9 @@ void Migrator::finish_import_inode_caps(CInode *in, bool auth_cap,
     im.issue_seq = cap->get_last_seq() + 1;
 
     cap->merge(it->second, auth_cap);
-    mds->mdcache->do_cap_import(session, in, cap);
+    mds->mdcache->do_cap_import(session, in, cap, it->second.cap_id,
+				it->second.seq, it->second.mseq - 1, peer,
+				auth_cap ? CEPH_CAP_FLAG_AUTH : 0);
   }
 
   in->replica_caps_wanted = 0;
@@ -2863,7 +2872,7 @@ void Migrator::logged_import_caps(CInode *in,
   map<client_t,Capability::Import> imported_caps;
 
   assert(peer_exports.count(in));
-  finish_import_inode_caps(in, false, peer_exports[in], imported_caps);
+  finish_import_inode_caps(in, from, false, peer_exports[in], imported_caps);
   mds->locker->eval(in, CEPH_CAP_LOCKS, true);
 
   mds->send_message_mds(new MExportCapsAck(in->ino()), from);
