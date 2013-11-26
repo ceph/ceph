@@ -1751,6 +1751,7 @@ class C_Dir_Committed : public Context {
 public:
   C_Dir_Committed(CDir *d, version_t v) : dir(d), version(v) { }
   void finish(int r) {
+    assert(r == 0);
     dir->_committed(version);
   }
 };
