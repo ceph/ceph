@@ -238,7 +238,7 @@ public:
 
   void encode_export_inode(CInode *in, bufferlist& bl, 
 			   map<client_t,entity_inst_t>& exported_client_map);
-  void encode_export_inode_caps(CInode *in, bufferlist& bl,
+  void encode_export_inode_caps(CInode *in, bool auth_cap, bufferlist& bl,
 				map<client_t,entity_inst_t>& exported_client_map);
   void finish_export_inode(CInode *in, utime_t now, int target,
 			   map<client_t,Capability::Import>& peer_imported,
@@ -280,8 +280,6 @@ public:
   void export_unlock(CDir *dir);
   void export_finish(CDir *dir);
 
-  void handle_export_caps_ack(MExportCapsAck *m);
-
   void export_freeze_finish(CDir *dir) {
     utime_t start = export_freezing_state[dir].start_time;
     export_freezing_dirs.erase(make_pair(start, dir));
@@ -304,8 +302,7 @@ public:
 			   LogSegment *ls, uint64_t log_offset,
 			   map<CInode*, map<client_t,Capability::Export> >& cap_imports,
 			   list<ScatterLock*>& updated_scatterlocks);
-  void decode_import_inode_caps(CInode *in,
-				bufferlist::iterator &blp,
+  void decode_import_inode_caps(CInode *in, bool auth_cap, bufferlist::iterator &blp,
 				map<CInode*, map<client_t,Capability::Export> >& cap_imports);
   void finish_import_inode_caps(CInode *in, int from, bool auth_cap,
 				map<client_t,Capability::Export> &export_map,
