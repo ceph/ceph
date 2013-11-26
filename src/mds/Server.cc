@@ -1585,6 +1585,9 @@ void Server::dispatch_slave_request(MDRequest *mdr)
     break;
 
   case MMDSSlaveRequest::OP_FINISH:
+    // information about rename imported caps
+    if (mdr->slave_request->inode_export.length() > 0)
+      mdr->more()->inode_import.claim(mdr->slave_request->inode_export);
     // finish off request.
     mdcache->request_finish(mdr);
     break;
@@ -6340,6 +6343,10 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
 							 mdr->more()->cap_imports[destdnl->get_inode()],
 							 imported_caps);
       }
+
+      mdr->more()->inode_import.clear();
+      ::encode(imported_caps, mdr->more()->inode_import);
+
       /* hack: add an auth pin for each xlock we hold. These were
        * remote xlocks previously but now they're local and
        * we're going to try and unpin when we xlock_finish. */
@@ -6720,6 +6727,10 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
 	    !lock->is_locallock())
 	  mds->locker->xlock_export(lock, mdr);
       }
+
+      map<client_t,Capability::Import> peer_imported;
+      bufferlist::iterator bp = mdr->more()->inode_import.begin();
+      ::decode(peer_imported, bp);
 
       dout(10) << " finishing inode export on " << *destdnl->get_inode() << dendl;
       mdcache->migrator->finish_export_inode(destdnl->get_inode(), mdr->now, finished);

@@ -8735,6 +8735,12 @@ void MDCache::request_drop_foreign_locks(MDRequest *mdr)
        ++p) {
     MMDSSlaveRequest *r = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
 					       MMDSSlaveRequest::OP_FINISH);
+
+    // information about rename imported caps
+    if (mdr->more()->srcdn_auth_mds == *p &&
+	mdr->more()->inode_import.length() > 0)
+      r->inode_export.claim(mdr->more()->inode_import);
+
     mds->send_message_mds(r, *p);
   }
 
