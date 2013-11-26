@@ -105,6 +105,11 @@ def general_io_test(ctx, rem, image_name):
     Do simple I/O tests to the iscsi interface before putting a
     filesystem on it.
     """
+    rem.run(
+        args=[
+            'udevadm',
+            'settle',
+    ])
     test_phrase = 'The time has come the walrus said to speak of many things.'
     lnkpath = tgt_devname_get(ctx, image_name)
     proc = rem.run(args=['mktemp'], stdout=StringIO(),)
@@ -154,21 +159,15 @@ def start_iscsi_initiators(ctx, tgt_link):
         ])
         if proc.exitstatus == 0:
             tgtd_list.append((rem, rem_name))
-        rem.run(
-            args=[
-                'udevadm',
-                'settle',
-        ])
         general_io_test(ctx, rem, host)
+    try:
         with contextutil.nested(
             lambda: generic_mkfs(ctx=ctx, config={host: {'fs_type': 'xfs'}},
                     devname_rtn=tgt_devname_rtn),
             lambda: generic_mount(ctx=ctx, config={host: None},
                     devname_rtn=tgt_devname_rtn),
             ):
-            pass
-    try:
-        yield
+            yield
     finally:
         for rem_info in tgtd_list:
             rem = rem_info[0]
@@ -181,18 +180,6 @@ def start_iscsi_initiators(ctx, tgt_link):
                     'node',
                     '--logout',
             ])
-            rem.run(
-                args=[
-                    'sudo',
-                    'iscsiadm',
-                    '-m',
-                    'discovery',
-                    '-p',
-                    rem_name,
-                    '-o',
-                    'delete',
-            ])
-
 
 @contextlib.contextmanager
 def task(ctx, config):
