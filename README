@@ -158,3 +158,8 @@ These are the rpm packages needed to install in an rpm-based OS:
     leveldb-devel
     libaio-devel
     boost-devel
+
+For example:
+
+      $ yum install autoconf automake gcc make libtool python-argparse python-flask libuuid-devel nss-devel fuse-devel gperftools-devel libedit-devel libatomic_ops-devel snappy-devel leveldb-devel libaio-devel boost-devel
+
