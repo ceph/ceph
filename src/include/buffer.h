@@ -101,6 +101,10 @@ public:
   private:
     char buf[256];
   };
+  struct error_code : public malformed_input {
+    explicit error_code(int error);
+    int code;
+  };
 
 
   /// total bytes allocated
@@ -116,6 +120,10 @@ public:
   /// enable/disable tracking of cached crcs
   static void track_cached_crc(bool b);
 
+  /// count of calls to buffer::ptr::c_str()
+  static int get_c_str_accesses();
+  /// enable/disable tracking of buffer::ptr::c_str() calls
+  static void track_c_str(bool b);
 
 private:
  
@@ -133,6 +141,7 @@ private:
   class raw_posix_aligned;
   class raw_hack_aligned;
   class raw_char;
+  class raw_pipe;
 
   friend std::ostream& operator<<(std::ostream& out, const raw &r);
 
@@ -148,8 +157,8 @@ public:
   static raw* claim_malloc(unsigned len, char *buf);
   static raw* create_static(unsigned len, char *buf);
   static raw* create_page_aligned(unsigned len);
-  
-  
+  static raw* create_zero_copy(unsigned len, int fd, loff_t *offset);
+
   /*
    * a buffer pointer.  references (a subsequence of) a raw buffer.
    */
@@ -205,6 +214,9 @@ public:
 	throw end_of_buffer();
       memcpy(dest, c_str()+o, l);
     }
+
+    bool can_zero_copy() const;
+    int zero_copy_to_fd(int fd, loff_t *offset) const;
 
     unsigned wasted();
 
@@ -305,6 +317,7 @@ public:
 
   private:
     mutable iterator last_p;
+    int zero_copy_to_fd(int fd) const;
 
   public:
     // cons/des
@@ -342,6 +355,7 @@ public:
     }
     bool contents_equal(buffer::list& other);
 
+    bool can_zero_copy() const;
     bool is_page_aligned() const;
     bool is_n_page_sized() const;
 
@@ -430,8 +444,10 @@ public:
     void hexdump(std::ostream &out) const;
     int read_file(const char *fn, std::string *error);
     ssize_t read_fd(int fd, size_t len);
+    int read_fd_zero_copy(int fd, size_t len);
     int write_file(const char *fn, int mode=0644);
     int write_fd(int fd) const;
+    int write_fd_zero_copy(int fd) const;
     uint32_t crc32c(uint32_t crc) const;
   };
 
