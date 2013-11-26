@@ -1775,13 +1775,8 @@ TEST(BufferList, read_fd) {
   bufferlist bl;
   EXPECT_EQ(-EBADF, bl.read_fd(fd, len));
   fd = ::open("testfile", O_RDONLY);
-#ifdef CEPH_HAVE_SPLICE
-  EXPECT_EQ(0, bl.read_fd(fd, len));
-  EXPECT_EQ(0u, bl.buffers().front().unused_tail_length());
-#else
   EXPECT_EQ(len, (unsigned)bl.read_fd(fd, len));
   EXPECT_EQ(CEPH_PAGE_SIZE - len, bl.buffers().front().unused_tail_length());
-#endif
   EXPECT_EQ(len, bl.length());
   ::close(fd);
   ::unlink("testfile");
