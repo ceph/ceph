@@ -238,14 +238,20 @@ public:
 			   map<client_t,entity_inst_t>& exported_client_map);
   void encode_export_inode_caps(CInode *in, bufferlist& bl,
 				map<client_t,entity_inst_t>& exported_client_map);
-  void finish_export_inode(CInode *in, utime_t now, list<Context*>& finished);
-  void finish_export_inode_caps(CInode *in);
+  void finish_export_inode(CInode *in, utime_t now, int target,
+			   map<client_t,Capability::Import>& peer_imported,
+			   list<Context*>& finished);
+  void finish_export_inode_caps(CInode *in, int target,
+			        map<client_t,Capability::Import>& peer_imported);
+
 
   int encode_export_dir(bufferlist& exportbl,
 			CDir *dir,
 			map<client_t,entity_inst_t>& exported_client_map,
 			utime_t now);
-  void finish_export_dir(CDir *dir, list<Context*>& finished, utime_t now);
+  void finish_export_dir(CDir *dir, utime_t now, int target,
+			 map<inodeno_t,map<client_t,Capability::Import> >& peer_imported,
+			 list<Context*>& finished);
 
   void add_export_finish_waiter(CDir *dir, Context *c) {
     map<CDir*, export_state_t>::iterator it = export_state.find(dir);
@@ -299,7 +305,7 @@ public:
   void decode_import_inode_caps(CInode *in,
 				bufferlist::iterator &blp,
 				map<CInode*, map<client_t,Capability::Export> >& cap_imports);
-  void finish_import_inode_caps(CInode *in, bool auth_cap,
+  void finish_import_inode_caps(CInode *in, int from, bool auth_cap,
 				map<client_t,Capability::Export> &export_map,
 				map<client_t,Capability::Import> &import_map);
   int decode_import_dir(bufferlist::iterator& blp,
