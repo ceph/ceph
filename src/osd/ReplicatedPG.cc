@@ -8132,7 +8132,6 @@ int ReplicatedPG::recover_backfill(
   }
 
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
-  map<int, vector<PushOp> > pushes;
   for (map<hobject_t,
 	   boost::tuple<eversion_t, eversion_t, ObjectContextRef> >::iterator i =
 	     to_push.begin();

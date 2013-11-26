@@ -78,4 +78,5 @@ noinst_HEADERS += \
 	include/rbd/features.h \
 	include/rbd/librbd.h \
 	include/rbd/librbd.hpp\
-	include/util.h
+	include/util.h\
+	include/stat.h

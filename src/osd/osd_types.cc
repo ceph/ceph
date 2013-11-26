@@ -669,7 +669,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_string("snap_mode", is_pool_snaps_mode() ? "pool" : "selfmanaged");
   f->dump_unsigned("snap_seq", get_snap_seq());
   f->dump_unsigned("snap_epoch", get_snap_epoch());
-  f->open_object_section("pool_snaps");
+  f->open_array_section("pool_snaps");
   for (map<snapid_t, pool_snap_info_t>::const_iterator p = snaps.begin(); p != snaps.end(); ++p) {
     f->open_object_section("pool_snap_info");
     p->second.dump(f);
@@ -1062,7 +1062,7 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
     out << " max_bytes " << p.quota_max_bytes;
   if (p.quota_max_objects)
     out << " max_objects " << p.quota_max_objects;
-  if (p.tiers.size())
+  if (!p.tiers.empty())
     out << " tiers " << p.tiers;
   if (p.is_tier())
     out << " tier_of " << p.tier_of;
