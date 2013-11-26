@@ -2555,8 +2555,8 @@ Capability *CInode::reconnect_cap(client_t client, ceph_mds_cap_reconnect& icr, 
     cap->set_wanted(icr.wanted);
     cap->issue_norevoke(icr.issued);
     cap->reset_seq();
+    cap->set_cap_id(icr.cap_id);
   }
-  cap->set_cap_id(icr.cap_id);
   cap->set_last_issue_stamp(ceph_clock_now(g_ceph_context));
   return cap;
 }

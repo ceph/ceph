@@ -246,6 +246,7 @@ public:
   }
   
   ceph_seq_t get_mseq() { return mseq; }
+  void inc_mseq() { mseq++; }
 
   ceph_seq_t get_last_sent() { return last_sent; }
   utime_t get_last_issue_stamp() { return last_issue_stamp; }
@@ -288,7 +289,6 @@ public:
   Export make_export() {
     return Export(cap_id, _wanted, issued(), pending(), client_follows, last_sent, mseq+1, last_issue_stamp);
   }
-  void rejoin_import() { mseq++; }
   void merge(Export& other, bool auth_cap) {
     // issued + pending
     int newpending = other.pending | pending();
