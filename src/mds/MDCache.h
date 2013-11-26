@@ -412,6 +412,7 @@ protected:
   set<int> rejoin_sent;        // nodes i sent a rejoin to
   set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
   map<int,map<inodeno_t,map<client_t,Capability::Import> > > rejoin_imported_caps;
+  map<inodeno_t,pair<int,map<client_t,Capability::Export> > > rejoin_slave_exports;
 
   map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> > cap_exports; // ino -> client -> capex
   map<inodeno_t,int> cap_export_targets; // ino -> auth mds
