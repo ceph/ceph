@@ -113,7 +113,8 @@ public:
   const static int IMPORT_PREPPED       = 4; // opened bounds, waiting for import
   const static int IMPORT_LOGGINGSTART  = 5; // got import, logging EImportStart
   const static int IMPORT_ACKING        = 6; // logged EImportStart, sent ack, waiting for finish
-  const static int IMPORT_ABORTING      = 7; // notifying bystanders of an abort before unfreezing
+  const static int IMPORT_FINISHING     = 7; // sent cap imports, waiting for finish
+  const static int IMPORT_ABORTING      = 8; // notifying bystanders of an abort before unfreezing
   static const char *get_import_statename(int s) {
     switch (s) {
     case IMPORT_DISCOVERING: return "discovering";
@@ -122,6 +123,7 @@ public:
     case IMPORT_PREPPED: return "prepped";
     case IMPORT_LOGGINGSTART: return "loggingstart";
     case IMPORT_ACKING: return "acking";
+    case IMPORT_FINISHING: return "finishing";
     case IMPORT_ABORTING: return "aborting";
     default: assert(0); return 0;
     }
@@ -135,6 +137,7 @@ protected:
     set<int> bystanders;
     list<dirfrag_t> bound_ls;
     list<ScatterLock*> updated_scatterlocks;
+    map<client_t,entity_inst_t> client_map;
     map<CInode*, map<client_t,Capability::Export> > peer_exports;
   };
 
@@ -332,7 +335,7 @@ protected:
 			   map<client_t,uint64_t>& sseqmap);
   void handle_export_finish(MExportDirFinish *m);
 public:
-  void import_finish(CDir *dir, bool notify);
+  void import_finish(CDir *dir, bool notify, bool last=true);
 protected:
 
   void handle_export_caps(MExportCaps *m);

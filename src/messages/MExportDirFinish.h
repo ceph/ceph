@@ -19,13 +19,15 @@
 
 class MExportDirFinish : public Message {
   dirfrag_t dirfrag;
+  bool last;
 
  public:
   dirfrag_t get_dirfrag() { return dirfrag; }
+  bool is_last() { return last; }
   
   MExportDirFinish() {}
-  MExportDirFinish(dirfrag_t df, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIRFINISH), dirfrag(df) {
+  MExportDirFinish(dirfrag_t df, bool l, uint64_t tid) :
+    Message(MSG_MDS_EXPORTDIRFINISH), dirfrag(df), last(l) {
     set_tid(tid);
   }
 private:
@@ -34,15 +36,17 @@ private:
 public:
   const char *get_type_name() const { return "ExFin"; }
   void print(ostream& o) const {
-    o << "export_finish(" << dirfrag << ")";
+    o << "export_finish(" << dirfrag << (last ? " last" : "") << ")";
   }
   
   void encode_payload(uint64_t features) {
     ::encode(dirfrag, payload);
+    ::encode(last, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
+    ::decode(last, p);
   }
 
 };
