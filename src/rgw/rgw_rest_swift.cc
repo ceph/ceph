@@ -848,9 +848,15 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
     first = req;
   }
 
+  string tenant_path;
+  if (!g_conf->rgw_swift_tenant_name.empty()) {
+    tenant_path = "/AUTH_";
+    tenant_path.append(g_conf->rgw_swift_tenant_name);
+  }
+
   /* verify that the request_uri conforms with what's expected */
-  char buf[g_conf->rgw_swift_url_prefix.length() + 16];
-  int blen = sprintf(buf, "/%s/v1", g_conf->rgw_swift_url_prefix.c_str());
+  char buf[g_conf->rgw_swift_url_prefix.length() + 16 + tenant_path.length()];
+  int blen = sprintf(buf, "/%s/v1%s", g_conf->rgw_swift_url_prefix.c_str(), tenant_path.c_str());
   if (s->decoded_uri[0] != '/' ||
     s->decoded_uri.compare(0, blen, buf) !=  0) {
     return -ENOENT;
