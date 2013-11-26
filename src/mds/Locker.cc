@@ -1850,7 +1850,7 @@ void Locker::revoke_stale_caps(Session *session)
 
   for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
     Capability *cap = *p;
-    cap->set_stale(true);
+    cap->mark_stale();
     CInode *in = cap->get_inode();
     int issued = cap->issued();
     if (issued) {
@@ -1887,7 +1887,7 @@ void Locker::resume_stale_caps(Session *session)
     assert(in->is_head());
     if (cap->is_stale()) {
       dout(10) << " clearing stale flag on " << *in << dendl;
-      cap->set_stale(false);
+      cap->clear_stale();
       if (!in->is_auth() || !eval(in, CEPH_CAP_LOCKS))
 	issue_caps(in, cap);
     }

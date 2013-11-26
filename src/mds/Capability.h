@@ -217,7 +217,10 @@ private:
   ceph_seq_t mseq;
 
   int suppress;
-  bool stale;
+  unsigned state;
+
+  const static unsigned STATE_STALE		= (1<<0);
+  const static unsigned STATE_NEW		= (1<<1);
 
 public:
   snapid_t client_follows;
@@ -234,7 +237,7 @@ public:
     last_sent(0),
     last_issue(0),
     mseq(0),
-    suppress(0), stale(false),
+    suppress(0), state(0),
     client_follows(0), client_xattr_version(0),
     item_session_caps(this), item_snaprealm_caps(this) {
     g_num_cap++;
@@ -262,8 +265,12 @@ public:
   void inc_suppress() { suppress++; }
   void dec_suppress() { suppress--; }
 
-  bool is_stale() { return stale; }
-  void set_stale(bool b) { stale = b; }
+  bool is_stale() { return state & STATE_STALE; }
+  void mark_stale() { state |= STATE_STALE; }
+  void clear_stale() { state &= ~STATE_STALE; }
+  bool is_new() { return state & STATE_NEW; }
+  void mark_new() { state |= STATE_NEW; }
+  void clear_new() { state &= ~STATE_NEW; }
 
   CInode *get_inode() { return inode; }
   client_t get_client() { return client; }
