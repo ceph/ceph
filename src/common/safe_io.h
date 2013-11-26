@@ -15,6 +15,7 @@
 #ifndef CEPH_SAFE_IO
 #define CEPH_SAFE_IO
 
+#include "acconfig.h"
 #include "common/compiler_extensions.h"
 #include <sys/types.h>
 
@@ -35,6 +36,18 @@ extern "C" {
       WARN_UNUSED_RESULT;
   ssize_t safe_pwrite(int fd, const void *buf, size_t count, off_t offset)
       WARN_UNUSED_RESULT;
+#ifdef CEPH_HAVE_SPLICE
+  /*
+   * Similar to the above (non-exact version) and below (exact version).
+   * See splice(2) for parameter descriptions.
+   */
+  ssize_t safe_splice(int fd_in, loff_t *off_in, int fd_out, loff_t *off_out,
+		      size_t len, unsigned int flags)
+    WARN_UNUSED_RESULT;
+  ssize_t safe_splice_exact(int fd_in, loff_t *off_in, int fd_out,
+			    loff_t *off_out, size_t len, unsigned int flags)
+    WARN_UNUSED_RESULT;
+#endif
 
   /*
    * Same as the above functions, but return -EDOM unless exactly the requested
