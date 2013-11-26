@@ -78,19 +78,32 @@ public:
   }
 public:
   struct Export {
+    int64_t cap_id;
     int32_t wanted;
     int32_t issued;
     int32_t pending;
     snapid_t client_follows;
+    ceph_seq_t seq;
     ceph_seq_t mseq;
     utime_t last_issue_stamp;
     Export() {}
-    Export(int w, int i, int p, snapid_t cf, ceph_seq_t s, utime_t lis) : 
-      wanted(w), issued(i), pending(p), client_follows(cf), mseq(s), last_issue_stamp(lis) {}
+    Export(int64_t id, int w, int i, int p, snapid_t cf, ceph_seq_t s, ceph_seq_t m, utime_t lis) :
+      cap_id(id), wanted(w), issued(i), pending(p), client_follows(cf),
+      seq(s), mseq(m), last_issue_stamp(lis) {}
     void encode(bufferlist &bl) const;
     void decode(bufferlist::iterator &p);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<Export*>& ls);
+  };
+  struct Import {
+    int64_t cap_id;
+    ceph_seq_t issue_seq;
+    ceph_seq_t mseq;
+    Import() {}
+    Import(int64_t i, ceph_seq_t s, ceph_seq_t m) : cap_id(i), issue_seq(s), mseq(m) {}
+    void encode(bufferlist &bl) const;
+    void decode(bufferlist::iterator &p);
+    void dump(Formatter *f) const;
   };
 
 private:
@@ -273,7 +286,7 @@ public:
   
   // -- exports --
   Export make_export() {
-    return Export(_wanted, issued(), pending(), client_follows, mseq+1, last_issue_stamp);
+    return Export(cap_id, _wanted, issued(), pending(), client_follows, last_sent, mseq+1, last_issue_stamp);
   }
   void rejoin_import() { mseq++; }
   void merge(Export& other, bool auth_cap) {
@@ -319,6 +332,7 @@ public:
 };
 
 WRITE_CLASS_ENCODER(Capability::Export)
+WRITE_CLASS_ENCODER(Capability::Import)
 WRITE_CLASS_ENCODER(Capability::revoke_info)
 WRITE_CLASS_ENCODER(Capability)
 
