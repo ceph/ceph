@@ -310,6 +310,14 @@ def extract_zone_info(ctx, client, client_config):
         else:
             zone_info[new_key] = '.' + region + '.' + zone + '.' + new_key
 
+    index_pool = '.' + region + '.' + zone + '.' + 'index_pool'
+    data_pool = '.' + region + '.' + zone + '.' + 'data_pool'
+
+    zone_info['placement_pools'] = [{'key': 'default_placement',
+                                     'val': {'index_pool': index_pool,
+                                             'data_pool': data_pool}
+                                     }]
+
     # these keys are meant for the zones argument in the region info.
     # We insert them into zone_info with a different format and then remove them
     # in the fill_in_endpoints() method
@@ -345,8 +353,11 @@ def extract_region_info(region, region_info):
         log_meta=region_info.get('log meta', False),
         log_data=region_info.get('log data', False),
         master_zone=region_info.get('master zone', region_info['zones'][0]),
-        placement_targets=region_info.get('placement targets', []),
-        default_placement=region_info.get('default placement', ''),
+        placement_targets=region_info.get('placement targets',
+                                          [{'name': 'default_placement',
+                                            'tags': []}]),
+        default_placement=region_info.get('default placement',
+                                          'default_placement'),
         )
 
 def assign_ports(ctx, config):
@@ -493,6 +504,12 @@ def configure_regions_and_zones(ctx, config, regions, role_endpoints):
             rados(ctx, mon,
                   cmd=['-p', zone_info['domain_root'],
                        'rm', 'zone_info.default'])
+            (remote,) = ctx.cluster.only(role).remotes.keys()
+            for pool_info in zone_info['placement_pools']:
+                remote.run(args=['ceph', 'osd', 'pool', 'create',
+                                 pool_info['val']['index_pool'], '64', '64'])
+                remote.run(args=['ceph', 'osd', 'pool', 'create',
+                                 pool_info['val']['data_pool'], '64', '64'])
             rgwadmin(ctx, client,
                      cmd=['-n', client, 'zone', 'set', '--rgw-zone', zone],
                      stdin=StringIO(json.dumps(dict(zone_info.items() + user_info.items()))),
