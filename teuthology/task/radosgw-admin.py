@@ -235,6 +235,10 @@ def task(ctx, config):
                 'bucket.instance:{bucket_name}:{bucket_instance}'.format(
                 bucket_name=bucket_name2,bucket_instance=dest_bucket_id)],
                 check_status=True)
+            del out1['data']['bucket_info']['bucket']['pool']
+            del out1['data']['bucket_info']['bucket']['index_pool']
+            del out2['data']['bucket_info']['bucket']['pool']
+            del out2['data']['bucket_info']['bucket']['index_pool']
             assert out1 == out2
 
         for agent_client, c_config in ctx.radosgw_agent.config.iteritems():
