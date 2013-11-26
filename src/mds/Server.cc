@@ -372,7 +372,8 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
 }
 
 void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
-					map<client_t,uint64_t>& sseqmap)
+					map<client_t,uint64_t>& sseqmap,
+					bool dec_import)
 {
   /*
    * FIXME: need to carefully consider the race conditions between a
@@ -403,7 +404,8 @@ void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
       dout(10) << "force_open_sessions skipping already-open " << session->info.inst << dendl;
       assert(session->is_open() || session->is_stale());
     }
-    session->dec_importing();
+    if (dec_import)
+      session->dec_importing();
   }
   mds->sessionmap.version++;
 }
