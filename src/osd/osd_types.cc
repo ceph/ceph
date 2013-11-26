@@ -669,7 +669,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_string("snap_mode", is_pool_snaps_mode() ? "pool" : "selfmanaged");
   f->dump_unsigned("snap_seq", get_snap_seq());
   f->dump_unsigned("snap_epoch", get_snap_epoch());
-  f->open_object_section("pool_snaps");
+  f->open_array_section("pool_snaps");
   for (map<snapid_t, pool_snap_info_t>::const_iterator p = snaps.begin(); p != snaps.end(); ++p) {
     f->open_object_section("pool_snap_info");
     p->second.dump(f);
