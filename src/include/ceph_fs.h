@@ -464,7 +464,8 @@ struct ceph_mds_reply_cap {
 	__u8 flags;                    /* CEPH_CAP_FLAG_* */
 } __attribute__ ((packed));
 
-#define CEPH_CAP_FLAG_AUTH  1          /* cap is issued by auth mds */
+#define CEPH_CAP_FLAG_AUTH	(1 << 0)	/* cap is issued by auth mds */
+#define CEPH_CAP_FLAG_RELEASE	(1 << 1)        /* ask client to release the cap */
 
 /* inode record, for bundling with mds reply */
 struct ceph_mds_reply_inode {
