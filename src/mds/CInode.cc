@@ -873,6 +873,7 @@ struct C_Inode_Stored : public Context {
   Context *fin;
   C_Inode_Stored(CInode *i, version_t v, Context *f) : in(i), version(v), fin(f) {}
   void finish(int r) {
+    assert(r == 0);
     in->_stored(version, fin);
   }
 };
@@ -1002,6 +1003,7 @@ struct C_Inode_StoredBacktrace : public Context {
   Context *fin;
   C_Inode_StoredBacktrace(CInode *i, version_t v, Context *f) : in(i), version(v), fin(f) {}
   void finish(int r) {
+    assert(r == 0);
     in->_stored_backtrace(version, fin);
   }
 };
