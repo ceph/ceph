@@ -3013,6 +3013,13 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
   i->atime.encode_timeval(&m->head.atime);
   m->head.time_warp_seq = i->time_warp_seq;
 
+  if (cap->client_inline_version < i->inline_version) {
+    m->inline_version = cap->client_inline_version = i->inline_version;
+    m->inline_data = i->inline_data;
+  } else {
+    m->inline_version = 0;
+  }
+
   // max_size is min of projected, actual.
   uint64_t oldms = oi->client_ranges.count(client) ? oi->client_ranges[client].range.last : 0;
   uint64_t newms = pi->client_ranges.count(client) ? pi->client_ranges[client].range.last : 0;
