@@ -743,7 +743,7 @@ RGWOp *RGWHandler_ObjStore_Obj_SWIFT::op_options()
 
 int RGWHandler_ObjStore_SWIFT::authorize()
 {
-  if (!s->os_auth_token) {
+  if (!s->os_auth_token && s->info.args.get("temp_url_sig").empty()) {
     /* anonymous access */
     rgw_get_anon_user(s->user);
     s->perm_mask = RGW_PERM_FULL_CONTROL;
@@ -869,6 +869,12 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
   string ver;
 
   next_tok(req, ver, '/');
+
+  string tenant;
+  if (!tenant_path.empty()) {
+    next_tok(req, tenant, '/');
+  }
+
   s->os_auth_token = s->info.env->get("HTTP_X_AUTH_TOKEN");
   next_tok(req, first, '/');
 

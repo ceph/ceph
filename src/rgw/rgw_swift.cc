@@ -522,11 +522,84 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
   return 0;
 }
 
+int authenticate_temp_url(RGWRados *store, req_state *s)
+{
+  /* temp url requires bucket and object specified in the requets */
+  if (s->bucket_name_str.empty())
+    return -EPERM;
+
+  if (s->object_str.empty())
+    return -EPERM;
+
+  string temp_url_sig = s->info.args.get("temp_url_sig");
+  if (temp_url_sig.empty())
+    return -EPERM;
+
+  string temp_url_expires = s->info.args.get("temp_url_expires");
+  if (temp_url_expires.empty())
+    return -EPERM;
+
+  /* need to get user info of bucket owner */
+  RGWBucketInfo bucket_info;
+
+  int ret = store->get_bucket_info(NULL, s->bucket_name_str, bucket_info, NULL);
+  if (ret < 0)
+    return -EPERM;
+
+  dout(20) << "temp url user (bucket owner): " << bucket_info.owner << dendl;
+  if (rgw_get_user_info_by_uid(store, bucket_info.owner, s->user) < 0) {
+    return -EPERM;
+  }
+
+  if (s->user.temp_url_key.empty()) {
+    dout(5) << "user does not have temp url key set, aborting" << dendl;
+    return -EPERM;
+  }
+
+  if (!s->info.method)
+    return -EPERM;
+
+  utime_t now = ceph_clock_now(g_ceph_context);
+
+  string err;
+  uint64_t expiration = (uint64_t)strict_strtoll(temp_url_expires.c_str(), 10, &err);
+  if (!err.empty()) {
+    dout(5) << "failed to parse temp_url_expires: " << err << dendl;
+    return -EPERM;
+  }
+  if (expiration <= (uint64_t)now.sec()) {
+    dout(5) << "temp url expired: " << expiration << " <= " << now.sec() << dendl;
+    return -EPERM;
+  }
+
+  /* strip the swift prefix from the uri */
+  int pos = g_conf->rgw_swift_url_prefix.find_last_not_of('/') + 1;
+  string object_path = s->info.request_uri.substr(pos + 1);
+  string str = string(s->info.method) + "\n" + temp_url_expires + "\n" + object_path;
+
+  dout(20) << "temp url signature (plain text): " << str << dendl;
+  char dest[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
+  calc_hmac_sha1(s->user.temp_url_key.c_str(), s->user.temp_url_key.size(),
+                 str.c_str(), str.size(), dest);
+
+  char dest_str[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2 + 1];
+  buf_to_hex((const unsigned char *)dest, sizeof(dest), dest_str);
+  dout(20) << "temp url signature (calculated): " << dest_str << dendl;
+
+  if (dest_str != temp_url_sig) {
+    dout(5) << "temp url signature mismatch: " << dest_str << " != " << temp_url_sig << dendl;
+    return -EPERM;
+  }
+
+  return 0;
+}
 
 bool RGWSwift::verify_swift_token(RGWRados *store, req_state *s)
 {
-  if (!s->os_auth_token)
-    return false;
+  if (!s->os_auth_token) {
+    int ret = authenticate_temp_url(store, s);
+    return (ret >= 0);
+  }
 
   if (strncmp(s->os_auth_token, "AUTH_rgwtk", 10) == 0) {
     int ret = rgw_swift_verify_signed_token(s->cct, store, s->os_auth_token, s->user);
