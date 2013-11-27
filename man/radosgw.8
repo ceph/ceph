@@ -1,4 +1,4 @@
-.TH "RADOSGW" "8" "April 29, 2013" "dev" "Ceph"
+.TH "RADOSGW" "8" "November 18, 2013" "dev" "Ceph"
 .SH NAME
 radosgw \- rados REST gateway
 .
@@ -121,7 +121,7 @@ authentication with the cluster:
 .nf
 .ft C
 ceph\-authtool \-C \-n client.radosgw.gateway \-\-gen\-key /etc/ceph/keyring.radosgw.gateway
-ceph\-authtool \-n client.radosgw.gateway \-\-cap mon \(aqallow r\(aq \-\-cap osd \(aqallow rwx\(aq /etc/ceph/keyring.radosgw.gateway
+ceph\-authtool \-n client.radosgw.gateway \-\-cap mon \(aqallow rw\(aq \-\-cap osd \(aqallow rwx\(aq /etc/ceph/keyring.radosgw.gateway
 .ft P
 .fi
 .sp

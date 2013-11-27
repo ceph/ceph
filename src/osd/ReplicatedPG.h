@@ -280,8 +280,8 @@ public:
   epoch_t get_epoch() {
     return get_osdmap()->get_epoch();
   }
-  const vector<int> &get_acting() {
-    return acting;
+  const vector<int> &get_actingbackfill() {
+    return actingbackfill;
   }
   std::string gen_dbg_prefix() const { return gen_prefix(); }
   

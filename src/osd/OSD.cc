@@ -4069,7 +4069,7 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
     int64_t bsize;
     // default count 1G, size 4MB
     cmd_getval(cct, cmdmap, "count", count, (int64_t)1 << 30);
-    cmd_getval(cct, cmdmap, "bsize", bsize, (int64_t)4 << 20);
+    cmd_getval(cct, cmdmap, "size", bsize, (int64_t)4 << 20);
 
     bufferlist bl;
     bufferptr bp(bsize);
@@ -6011,8 +6011,11 @@ void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg)
 bool OSD::compat_must_dispatch_immediately(PG *pg)
 {
   assert(pg->is_locked());
-  for (vector<int>::iterator i = pg->acting.begin();
-       i != pg->acting.end();
+  vector<int> *tmpacting = &pg->acting;
+  if (pg->actingbackfill.size() > 0)
+    tmpacting = &pg->actingbackfill;
+  for (vector<int>::iterator i = tmpacting->begin();
+       i != tmpacting->end();
        ++i) {
     if (*i == whoami)
       continue;
@@ -7024,7 +7027,7 @@ void OSD::handle_replica_op(OpRequestRef op)
   T *m = static_cast<T *>(op->get_req());
   assert(m->get_header().type == MSGTYPE);
 
-  dout(10) << __func__ << *m << " epoch " << m->map_epoch << dendl;
+  dout(10) << __func__ << " " << *m << " epoch " << m->map_epoch << dendl;
   if (m->map_epoch < up_epoch) {
     dout(3) << "replica op from before up" << dendl;
     return;

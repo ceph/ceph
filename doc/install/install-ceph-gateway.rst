@@ -335,7 +335,7 @@ following::
 To install the Ceph Object Gateway synchronization agent, execute the
 following::
 	
-	sudo apt-get radosgw-agent
+	sudo apt-get install radosgw-agent
 
 
 RPM Packages
