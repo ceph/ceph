@@ -592,7 +592,6 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 
   c->is_read = true;
   c->io = this;
-  c->pbl = pbl;
 
   Objecter::Op *objecter_op = objecter->prepare_read_op(oid, oloc,
 		 *o, snap_seq, pbl, flags,
@@ -635,11 +634,10 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 
   c->is_read = true;
   c->io = this;
-  c->pbl = pbl;
 
   Mutex::Locker l(*lock);
   objecter->read(oid, oloc,
-		 off, len, snapid, &c->bl, 0,
+		 off, len, snapid, pbl, 0,
 		 onack, &c->objver);
   return 0;
 }
@@ -655,8 +653,9 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 
   c->is_read = true;
   c->io = this;
-  c->buf = buf;
   c->maxlen = len;
+  c->bl.clear();
+  c->bl.push_back(buffer::create_static(len, buf));
 
   Mutex::Locker l(*lock);
   objecter->read(oid, oloc,
@@ -691,7 +690,6 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
 
   c->is_read = true;
   c->io = this;
-  c->pbl = NULL;
 
   onack->m_ops.sparse_read(off, len, m, data_bl, NULL);
 
@@ -1233,13 +1231,8 @@ void librados::IoCtxImpl::C_aio_Ack::finish(int r)
     c->safe = true;
   c->cond.Signal();
 
-  if (c->buf && c->bl.length() > 0) {
-    unsigned l = MIN(c->bl.length(), c->maxlen);
-    c->bl.copy(0, l, c->buf);
+  if (c->bl.length() > 0) {
     c->rval = c->bl.length();
-  }
-  if (c->pbl) {
-    *c->pbl = c->bl;
   }
 
   if (c->callback_complete) {

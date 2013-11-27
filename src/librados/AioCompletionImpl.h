@@ -39,8 +39,7 @@ struct librados::AioCompletionImpl {
 
   // for read
   bool is_read;
-  bufferlist bl, *pbl;
-  char *buf;
+  bufferlist bl;
   unsigned maxlen;
 
   IoCtxImpl *io;
@@ -54,7 +53,7 @@ struct librados::AioCompletionImpl {
 			callback_safe(0),
 			callback_complete_arg(0),
 			callback_safe_arg(0),
-			is_read(false), pbl(0), buf(0), maxlen(0),
+			is_read(false), maxlen(0),
 			io(NULL), aio_write_seq(0), aio_write_list_item(this) { }
 
   int set_complete_callback(void *cb_arg, rados_callback_t cb) {
