@@ -440,6 +440,13 @@ void PG::discover_all_missing(map< int, map<pg_t,pg_query_t> > &query_map)
       continue;
     }
 
+    map<int, pg_info_t>::const_iterator iter = peer_info.find(peer);
+    if (iter != peer_info.end() &&
+        (iter->second.is_empty() || iter->second.dne())) {
+      // ignore empty peers
+      continue;
+    }
+
     // If we've requested any of this stuff, the pg_missing_t information
     // should be on its way.
     // TODO: coalsce requested_* into a single data structure
@@ -672,6 +679,10 @@ bool PG::all_unfound_are_queried_or_lost(const OSDMapRef osdmap) const
   set<int>::const_iterator mend = might_have_unfound.end();
   for (; peer != mend; ++peer) {
     if (peer_missing.count(*peer))
+      continue;
+    map<int, pg_info_t>::const_iterator iter = peer_info.find(*peer);
+    if (iter != peer_info.end() &&
+        (iter->second.is_empty() || iter->second.dne()))
       continue;
     const osd_info_t &osd_info(osdmap->get_info(*peer));
     if (osd_info.lost_at <= osd_info.up_from) {
@@ -6704,6 +6715,21 @@ boost::statechart::result PG::RecoveryState::Incomplete::react(const AdvMap &adv
   }
 
   return forward_event();
+}
+
+boost::statechart::result PG::RecoveryState::Incomplete::react(const MNotifyRec& notevt) {
+  dout(7) << "handle_pg_notify from osd." << notevt.from << dendl;
+  PG *pg = context< RecoveryMachine >().pg;
+  if (pg->peer_info.count(notevt.from) &&
+      pg->peer_info[notevt.from].last_update == notevt.notify.info.last_update) {
+    dout(10) << *pg << " got dup osd." << notevt.from << " info " << notevt.notify.info
+	     << ", identical to ours" << dendl;
+    return discard_event();
+  } else {
+    pg->proc_replica_info(notevt.from, notevt.notify.info);
+    // try again!
+    return transit< GetLog >();
+  }
 }
 
 void PG::RecoveryState::Incomplete::exit()
