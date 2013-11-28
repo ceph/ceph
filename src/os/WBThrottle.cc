@@ -149,8 +149,10 @@ void *WBThrottle::entry()
     lock.Unlock();
     ::fdatasync(**wb.get<1>());
 #ifdef HAVE_POSIX_FADVISE
-    if (wb.get<2>().nocache)
-      posix_fadvise(**wb.get<1>(), 0, 0, POSIX_FADV_DONTNEED);
+    if (wb.get<2>().nocache) {
+      int fa_r = posix_fadvise(**wb.get<1>(), 0, 0, POSIX_FADV_DONTNEED);
+      assert(fa_r == 0);
+    }
 #endif
     lock.Lock();
     clearing = ghobject_t();
