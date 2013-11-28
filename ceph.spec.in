@@ -686,6 +686,8 @@ fi
 %{_bindir}/ceph-monstore-tool
 %{_bindir}/ceph-osdomap-tool
 %{_bindir}/ceph-kvstore-tool
+%{_bindir}/ceph_test_c_headers
+%{_bindir}/ceph_test_get_blkdev_size
 
 %files -n libcephfs_jni1
 %defattr(-,root,root,-)
