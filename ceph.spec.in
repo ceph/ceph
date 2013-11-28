@@ -681,6 +681,8 @@ fi
 %{_bindir}/ceph_test_signal_handlers
 %{_bindir}/ceph_test_snap_mapper
 %{_bindir}/ceph_test_timers
+%{_bindir}/ceph_test_c_headers
+%{_bindir}/ceph_test_get_blkdev_size
 %{_bindir}/ceph_tpbench
 %{_bindir}/ceph_xattr_bench
 %{_bindir}/ceph-monstore-tool
