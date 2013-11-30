@@ -605,6 +605,27 @@ void OSDMonitor::encode_pending(MonitorDBStore::Transaction *t)
   pending_metadata_rm.clear();
 }
 
+int OSDMonitor::dump_osd_metadata(int osd, Formatter *f, ostream *err)
+{
+  bufferlist bl;
+  int r = mon->store->get(OSD_METADATA_PREFIX, stringify(osd), bl);
+  if (r < 0)
+    return r;
+  map<string,string> m;
+  try {
+    bufferlist::iterator p = bl.begin();
+    ::decode(m, p);
+  }
+  catch (buffer::error& e) {
+    if (err)
+      *err << "osd." << osd << " metadata is corrupt";
+    return -EIO;
+  }
+  for (map<string,string>::iterator p = m.begin(); p != m.end(); ++p)
+    f->dump_string(p->first.c_str(), p->second);
+  return 0;
+}
+
 void OSDMonitor::share_map_with_random_osd()
 {
   if (osdmap.get_num_up_osds() == 0) {
@@ -2154,17 +2175,10 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     string format;
     cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
     boost::scoped_ptr<Formatter> f(new_formatter(format));
-
-    bufferlist bl;
-    mon->store->get(OSD_METADATA_PREFIX, stringify(osd), bl);
-    map<string,string> m;
-    if (bl.length()) {
-      bufferlist::iterator p = bl.begin();
-      ::decode(m, p);
-    }
     f->open_object_section("osd_metadata");
-    for (map<string,string>::iterator p = m.begin(); p != m.end(); ++p)
-      f->dump_string(p->first.c_str(), p->second);
+    r = dump_osd_metadata(osd, f.get(), &ss);
+    if (r < 0)
+      goto reply;
     f->close_section();
     f->flush(rdata);
   } else if (prefix == "osd map") {

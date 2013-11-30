@@ -343,6 +343,7 @@ private:
   epoch_t blacklist(const entity_addr_t& a, utime_t until);
 
   void dump_info(Formatter *f);
+  int dump_osd_metadata(int osd, Formatter *f, ostream *err);
 
   void check_subs();
   void check_sub(Subscription *sub);
