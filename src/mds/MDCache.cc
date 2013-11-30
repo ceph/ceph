@@ -5866,7 +5866,7 @@ struct C_MDC_TruncateFinish : public Context {
   C_MDC_TruncateFinish(MDCache *c, CInode *i, LogSegment *l) :
     mdc(c), in(i), ls(l) {}
   void finish(int r) {
-    assert(r != -EINVAL);
+    assert(r == 0 || r == -ENOENT);
     mdc->truncate_inode_finish(in, ls);
   }
 };
@@ -9298,6 +9298,7 @@ public:
   C_MDC_PurgeStrayPurged(MDCache *c, CDentry *d) : 
     cache(c), dn(d) { }
   void finish(int r) {
+    assert(r == 0 || r == -ENOENT);
     cache->_purge_stray_purged(dn, r);
   }
 };
@@ -11100,6 +11101,7 @@ public:
     resultfrags.swap(l);
   }
   virtual void finish(int r) {
+    assert(r == 0 || r == -ENOENT);
     mdcache->_fragment_finish(basedirfrag, resultfrags);
   }
 };
@@ -11731,7 +11733,7 @@ void MDCache::dump_cache(const char *fn)
     std::string s = ss.str();
     r = safe_write(fd, s.c_str(), s.length());
     if (r < 0)
-      return;
+      goto out;
 
     list<CDir*> dfs;
     in->get_dirfrags(dfs);

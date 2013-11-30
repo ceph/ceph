@@ -405,17 +405,17 @@ COMMAND("osd crush link " \
 COMMAND("osd crush rm " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=ancestor,type=CephString,req=false,goodchars=[A-Za-z0-9-_.]", \
-	"remove <name> from crush map (everywhere, or just at <ancestor>",\
+	"remove <name> from crush map (everywhere, or just at <ancestor>)",\
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush remove " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=ancestor,type=CephString,req=false,goodchars=[A-Za-z0-9-_.]", \
-	"remove <name> from crush map (everywhere, or just at <ancestor>", \
+	"remove <name> from crush map (everywhere, or just at <ancestor>)", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush unlink " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=ancestor,type=CephString,req=false,goodchars=[A-Za-z0-9-_.]", \
-	"unlink <name> from crush map (everywhere, or just at <ancestor>", \
+	"unlink <name> from crush map (everywhere, or just at <ancestor>)", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush reweight " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
@@ -429,7 +429,7 @@ COMMAND("osd crush rule create-simple " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=root,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=type,type=CephString,goodchars=[A-Za-z0-9-_.]",
-	"create crush rule <name> in <root> of type <type>", \
+	"create crush rule <name> to 'take' from bucket <root> and 'chooseleaf_first' a bucket <type>", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush rule rm " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] ",	\

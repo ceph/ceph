@@ -234,7 +234,7 @@ static int do_curl_wait(CephContext *cct, CURLM *handle)
 
 int RGWHTTPClient::process_request(void *handle, bool wait_for_data, bool *done)
 {
-  multi_req_data *req_data = (multi_req_data *)handle;
+  multi_req_data *req_data = static_cast<multi_req_data *>(handle);
   int still_running;
   int mstatus;
 
@@ -282,7 +282,7 @@ int RGWHTTPClient::complete_request(void *handle)
   do {
     ret = process_request(handle, true, &done);
   } while (!done && !ret);
-  multi_req_data *req_data = (multi_req_data *)handle;
+  multi_req_data *req_data = static_cast<multi_req_data *>(handle);
   delete req_data;
 
   return ret;

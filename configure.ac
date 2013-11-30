@@ -120,8 +120,41 @@ AX_C_PRETTY_FUNC
 # Checks for libraries.
 ACX_PTHREAD
 AC_CHECK_LIB([uuid], [uuid_parse], [true], AC_MSG_FAILURE([libuuid not found]))
+
+#
+# Check for res_nquery in libresolv. There are several variations. On OSX
+# res_nquery is a macro defined in resolv.h, so the typical AC_CHECK_LIB
+# doesn't work. On FreeBSD res_nquery can be found in libc. The required
+# library for linking (if any) is defined RESOLV_LIBS.
+#
+AC_CHECK_HEADER([resolv.h], [], [], [#include <netinet/in.h>])
+
+AC_DEFUN([CHECK_RESOLV_LIBS], [{
+  AC_MSG_CHECKING([if res_nquery will link (LIBS=$1)])
+  saved_LIBS="${LIBS}"
+  LIBS="$1"
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+        #include <netinet/in.h>
+        #include <resolv.h>
+      ]], [[res_nquery(0, 0, 0, 0, 0, 0);]])],
+      [AC_MSG_RESULT([yes])
+      [$2]],
+      AC_MSG_RESULT([no]))
+  LIBS="${saved_LIBS}"
+}])
+
+RESOLV_LIBS=""
+CHECK_RESOLV_LIBS([$RESOLV_LIBS], [resolv_libs="ok"])
+if test x"$resolv_libs" != "xok"; then
+  RESOLV_LIBS="-lresolv"
+  CHECK_RESOLV_LIBS([$RESOLV_LIBS], [resolv_libs="ok"])
+  if test x"$resolv_libs" != "xok"; then
+    AC_MSG_FAILURE([no resolv library found])
+  fi
+fi
+AC_SUBST([RESOLV_LIBS])
+
 AC_CHECK_LIB([m], [pow], [true], AC_MSG_FAILURE([libm not found]))
-AC_CHECK_LIB([resolv], [__res_nquery], [true], AC_MSG_FAILURE([libresolv not found]))
 if test x"$linux" = x"yes"; then
 	AC_CHECK_LIB([keyutils], [add_key], [true], AC_MSG_FAILURE([libkeyutils not found]))
 fi
@@ -538,6 +571,31 @@ AC_CHECK_FUNC([sync_file_range],
 AC_CHECK_FUNC([fallocate],
 	[AC_DEFINE([CEPH_HAVE_FALLOCATE], [], [fallocate(2) is supported])],
 	[])
+
+#
+# Test for time-related `struct stat` members.
+#
+
+AC_CHECK_MEMBER([struct stat.st_mtim.tv_nsec],
+  [AC_DEFINE(HAVE_STAT_ST_MTIM_TV_NSEC, 1,
+    [Define if you have struct stat.st_mtim.tv_nsec])])
+
+AC_CHECK_MEMBER([struct stat.st_mtimespec.tv_nsec],
+  [AC_DEFINE(HAVE_STAT_ST_MTIMESPEC_TV_NSEC, 1,
+    [Define if you have struct stat.st_mtimespec.tv_nsec])])
+
+# splice/tee
+AC_CHECK_FUNC([splice],
+	[AC_DEFINE([CEPH_HAVE_SPLICE], [], [splice(2) is supported])],
+	[])
+
+
+AC_CHECK_HEADERS([arpa/nameser_compat.h])
+
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <fcntl.h>
+F_SETPIPE_SZ]])],
+	[AC_DEFINE([CEPH_HAVE_SETPIPE_SZ], [], [F_SETPIPE_SZ is supported])],
+	[AC_MSG_NOTICE(["F_SETPIPE_SZ not found, zero-copy may be less efficent"])])
 
 
 AC_CHECK_HEADERS([arpa/nameser_compat.h])

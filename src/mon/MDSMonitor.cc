@@ -570,7 +570,6 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
     }
     r = 0;
   } else if (prefix == "mds dump") {
-    string val;
     int64_t epocharg;
     epoch_t epoch;
 
@@ -633,7 +632,6 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
   } else if (prefix == "mds tell") {
     string whostr;
     cmd_getval(g_ceph_context, cmdmap, "who", whostr);
-    string args;
     vector<string>args_vec;
     cmd_getval(g_ceph_context, cmdmap, "args", args_vec);
 

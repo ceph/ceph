@@ -1,4 +1,4 @@
-.TH "RADOS" "8" "April 29, 2013" "dev" "Ceph"
+.TH "RADOS" "8" "November 18, 2013" "dev" "Ceph"
 .SH NAME
 rados \- rados object storage utility
 .
@@ -111,11 +111,14 @@ List objects in given pool and write to outfile.
 .B \fBlssnap\fP
 List snapshots for given pool.
 .TP
+.B \fBclonedata\fP \fIsrcname\fP \fIdstname\fP \-\-object\-locator \fIkey\fP
+Clone object byte data from \fIsrcname\fP to \fIdstname\fP.  Both objects must be stored with the locator key \fIkey\fP (usually either \fIsrcname\fP or \fIdstname\fP).  Object attributes and omap keys are not copied or cloned.
+.TP
 .B \fBmksnap\fP \fIfoo\fP
 Create pool snapshot named \fIfoo\fP.
 .TP
 .B \fBrmsnap\fP \fIfoo\fP
-Remove pool snapshot names \fIfoo\fP.
+Remove pool snapshot named \fIfoo\fP.
 .TP
 .B \fBbench\fP \fIseconds\fP \fImode\fP [ \-b \fIobjsize\fP ] [ \-t \fIthreads\fP ]
 Benchmark for seconds. The mode can be write or read. The default
