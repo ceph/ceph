@@ -199,6 +199,12 @@ You may set values for the following keys:
 :Description: The ruleset to use for mapping object placement in the cluster.
 :Type: Integer
 
+``hashpspool``
+
+:Description: Set/Unset HASHPSPOOL flag on a given pool.
+:Type: Integer
+:Valid Range: 1 sets flag, 0 unsets flag
+
 
 .. note:: Version ``0.48`` Argonaut and above.	
 

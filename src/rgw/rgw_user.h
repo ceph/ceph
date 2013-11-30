@@ -409,6 +409,7 @@ struct RGWUserAdminOpState {
     perm_specified = false;
     op_mask_specified = false;
     suspension_op = false;
+    system_specified = false;
     key_op = false;
     populated = false;
     initialized = false;

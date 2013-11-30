@@ -258,9 +258,17 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
       return;
     }
     sync_force(f.get(), ss);
-  } else if (command.find("add_bootstrap_peer_hint") == 0)
+  } else if (command.find("add_bootstrap_peer_hint") == 0) {
     _add_bootstrap_peer_hint(command, cmdmap, ss);
-  else
+  } else if (command == "quorum enter") {
+    elector.start_participating();
+    start_election();
+    ss << "started responding to quorum, initiated new election";
+  } else if (command == "quorum exit") {
+    start_election();
+    elector.stop_participating();
+    ss << "stopped responding to quorum, initiated new election";
+  } else
     assert(0 == "bad AdminSocket command binding");
 }
 
@@ -503,6 +511,14 @@ int Monitor::preinit()
 				     admin_hook,
 				     "add peer address as potential bootstrap"
 				     " peer for cluster bringup");
+  assert(r == 0);
+  r = admin_socket->register_command("quorum enter", "quorum enter",
+                                     admin_hook,
+                                     "force monitor back into quorum");
+  assert(r == 0);
+  r = admin_socket->register_command("quorum exit", "quorum exit",
+                                     admin_hook,
+                                     "force monitor out of the quorum");
   assert(r == 0);
   lock.Lock();
 
