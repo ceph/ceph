@@ -1606,8 +1606,6 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t 
 
   set<CInode*> need_issue;
   drop_locks(mut, &need_issue);
-  mut->cleanup();
-  delete mut;
 
   if (!in->is_head() && !in->client_snap_caps.empty()) {
     dout(10) << " client_snap_caps " << in->client_snap_caps << dendl;
@@ -1640,6 +1638,10 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t 
       share_inode_max_size(in);
   }
   issue_caps_set(need_issue);
+ 
+  // auth unpin after issuing caps 
+  mut->cleanup();
+  delete mut;
 }
 
 Capability* Locker::issue_new_caps(CInode *in,
@@ -2174,6 +2176,7 @@ void Locker::share_inode_max_size(CInode *in, Capability *only_cap)
       continue;
     if (cap->pending() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
       dout(10) << "share_inode_max_size with client." << client << dendl;
+      cap->inc_last_seq();
       MClientCaps *m = new MClientCaps(CEPH_CAP_OP_GRANT,
 				       in->ino(),
 				       in->find_snaprealm()->inode->ino(),
