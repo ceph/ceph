@@ -4,14 +4,17 @@
 
 The :term:`Ceph Object Gateway` daemon runs on Apache and FastCGI. 
 
-To run a :term:`Ceph Object Storage` service, you must install  Apache and
+To run a :term:`Ceph Object Storage` service, you must install Apache and
 FastCGI. Then, you must install the Ceph Object Gateway daemon. The Ceph Object
 Gateway supports 100-continue, but you must install Ceph builds of Apache and
 FastCGI for 100-continue support. To install the Ceph Object Gateway, first
-install and configure Apache and FastCGI. Then, install  the Ceph Object Gateway
+install and configure Apache and FastCGI. Then, install the Ceph Object Gateway
 daemon. If you plan to run a Ceph Object Storage service with a federated
-architecture (multiple regions and zones), you  must also install the
+architecture (multiple regions and zones), you must also install the
 synchronization agent.
+
+See `Get Packages`_ for information on adding Ceph packages to each Ceph Node. 
+Ensure that you have executed those steps on each Ceph Node first.
 
 
 Apache/FastCGI w/out 100-Continue
@@ -326,8 +329,7 @@ zones and regions.
 Debian Packages
 ---------------
 
-To install the Ceph Object Gateway daemon, execute the
-following::
+To install the Ceph Object Gateway daemon, execute the following::
 
 	sudo apt-get install radosgw
 	
@@ -353,5 +355,6 @@ following::
 	yum install radosgw-agent
 	
 
+.. _Get Packages: ../get-packages
 .. _Ubuntu Server Guide: https://help.ubuntu.com/12.04/serverguide/httpd.html
 .. _Setting up an SSL secured Webserver with CentOS: http://wiki.centos.org/HowTos/Https
