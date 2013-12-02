@@ -89,6 +89,8 @@ that Ceph uses the entire partition for the journal.
 :Type: String
 :Default: ``$libdir/rados-classes``
 
+
+
 .. index:: OSD; journal settings
 
 Journal Settings
@@ -222,7 +224,7 @@ scrubbing operations.
               when the Ceph Storage Cluster load is low.
 
 :Type: Float
-:Default: 5 minutes. ``300`` 
+:Default: Once per day. ``60*60*24``
 
 
 ``osd scrub max interval`` 
@@ -231,12 +233,14 @@ scrubbing operations.
               irrespective of cluster load.
 
 :Type: Float
-:Default: Once per day. ``60*60*24`` 
+:Default: Once per week. ``7*60*60*24``
 
 
 ``osd deep scrub interval``
 
-:Description: The interval for "deep" scrubbing (fully reading all data).
+:Description: The interval for "deep" scrubbing (fully reading all data). The 
+              ``osd scrub load threshold`` does not affect this setting.
+
 :Type: Float
 :Default: Once per week.  ``60*60*24*7``
 
@@ -244,7 +248,7 @@ scrubbing operations.
 ``osd deep scrub stride``
 
 :Description: Read size when doing a deep scrub.
-:Type: 32-bit Int
+:Type: 32-bit Integer
 :Default: 512 KB. ``524288``
 
 
@@ -435,6 +439,8 @@ Ceph performs well as the OSD map grows larger.
 :Description: The maximum map entries allowed per MOSDMap message.
 :Type: 32-bit Integer
 :Default: ``100``
+
+
 
 .. index:: OSD; recovery
 
