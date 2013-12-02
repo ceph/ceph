@@ -2802,6 +2802,10 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     if (n <= (int)p.get_pg_num()) {
       ss << "specified pg_num " << n << " <= current " << p.get_pg_num();
+      if (n < (int)p.get_pg_num())
+	return -EEXIST;
+      else
+	return 0;
     } else {
       for(set<pg_t>::iterator i = mon->pgmon()->pg_map.creating_pgs.begin();
 	  i != mon->pgmon()->pg_map.creating_pgs.end();
