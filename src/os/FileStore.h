@@ -97,7 +97,13 @@ inline ostream& operator<<(ostream& out, const FSSuperblock& sb)
 class FileStore : public JournalingObjectStore,
                   public md_config_obs_t
 {
+  static const uint32_t target_version = 3;
 public:
+  uint32_t get_target_version() {
+    return target_version;
+  }
+
+  int peek_journal_fsid(uuid_d *fsid);
 
   struct FSPerfTracker {
     PerfCounters::avg_tracker<uint64_t> os_commit_latency;
@@ -117,7 +123,6 @@ public:
     return perf_tracker.get_cur_stats();
   }
 
-  static const uint32_t target_version = 3;
 private:
   string internal_name;         ///< internal name, used to name the perfcounter instance
   string basedir, journalpath;

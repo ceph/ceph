@@ -520,7 +520,7 @@ OPTION(osd_mon_shutdown_timeout, OPT_DOUBLE, 5)
 OPTION(osd_max_object_size, OPT_U64, 100*1024L*1024L*1024L) // OSD's maximum object size
 OPTION(osd_max_attr_size, OPT_U64, 0)
 
-OPTION(filestore, OPT_BOOL, false)
+OPTION(osd_objectstore, OPT_STR, "filestore")  // ObjectStore backend type
 
 /// filestore wb throttle limits
 OPTION(filestore_wbthrottle_enable, OPT_BOOL, true)
