@@ -1139,7 +1139,7 @@ struct qi {
 void CrushWrapper::dump_tree(const vector<__u32>& w, ostream *out, Formatter *f) const
 {
   if (out)
-    *out << "# id\tweight\ttype name\tup/down\treweight\n";
+    *out << "# id\tweight\ttype name\treweight\n";
   if (f)
     f->open_array_section("nodes");
   set<int> touched;
