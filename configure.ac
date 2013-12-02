@@ -61,7 +61,16 @@ if test "$CXX" = no || test "$CXX:$GXX" = "g++:"; then
   AC_MSG_ERROR([no C++ compiler found])
 fi
 
-AM_CONDITIONAL(CLANG, test x"$CXX" = x"clang++")
+AC_MSG_CHECKING([if compiler is clang])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [[
+#ifndef __clang__
+#error "Not Clang"
+#endif
+return 0;
+]])],
+[CLANG=yes], [CLANG=no])
+AC_MSG_RESULT([$CLANG])
+AM_CONDITIONAL(CLANG, test "$CLANG" = "yes")
 
 #AC_PROG_CC
 AC_PROG_MAKE_SET
@@ -552,6 +561,19 @@ AC_CHECK_LIB(boost_system-mt, main, [],
 AC_CHECK_LIB(boost_thread-mt, main, [],
     [AC_CHECK_LIB(boost_thread, main, [],
         AC_MSG_FAILURE(["Boost thread library not found."]))])
+
+#
+# Check for boost_program_options library (defines BOOST_PROGRAM_OPTIONS_LIBS).
+#
+BOOST_PROGRAM_OPTIONS_LIBS=""
+saved_LIBS="${LIBS}"
+LIBS=""
+AC_CHECK_LIB(boost_program_options-mt, main, [],
+    [AC_CHECK_LIB(boost_program_options, main, [],
+        AC_MSG_FAILURE(["Boost program options library not found."]))])
+BOOST_PROGRAM_OPTIONS_LIBS="${LIBS}"
+LIBS="${saved_LIBS}"
+AC_SUBST(BOOST_PROGRAM_OPTIONS_LIBS)
 
 AC_LANG([C])
 
