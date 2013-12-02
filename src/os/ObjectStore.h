@@ -77,7 +77,20 @@ static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) 
 }
 
 class ObjectStore {
+private:
+  string path;
+
 public:
+  /**
+   * create - create an ObjectStore instance
+   *
+   * @param type type of store
+   * @param data path (or other descriptor) for data
+   * @param journal path (or other descriptor) for journal (optional)
+   */
+  static ObjectStore *create(const string& type,
+			     const string& data,
+			     const string& journal);
 
   Logger *logger;
 
@@ -847,7 +860,7 @@ public:
   }
 
  public:
-  ObjectStore() : logger(NULL) {}
+  ObjectStore(const std::string& path_) : path(path_), logger(NULL) {}
   virtual ~ObjectStore() {}
 
   // mgmt
@@ -863,6 +876,47 @@ public:
   virtual bool get_allow_sharded_objects() = 0;
 
   virtual int statfs(struct statfs *buf) = 0;
+
+  /**
+   * get the most recent "on-disk format version" supported
+   */
+  virtual uint32_t get_target_version() = 0;
+
+  /**
+   * check the journal uuid/fsid, without opening
+   */
+  virtual int peek_journal_fsid(uuid_d *fsid) = 0;
+
+  /**
+   * write_meta - write a simple configuration key out-of-band
+   *
+   * Write a simple key/value pair for basic store configuration
+   * (e.g., a uuid or magic number) to an unopened/unmounted store.
+   * The default implementation writes this to a plaintext file in the
+   * path.
+   *
+   * A newline is appended.
+   *
+   * @param key key name (e.g., "fsid")
+   * @param value value (e.g., a uuid rendered as a string)
+   * @returns 0 for success, or an error code
+   */
+  virtual int write_meta(const std::string& key,
+			 const std::string& value);
+
+  /**
+   * read_meta - read a simple configuration key out-of-band
+   *
+   * Read a simple key value to an unopened/mounted store.
+   *
+   * Trailing whitespace is stripped off.
+   *
+   * @param key key name
+   * @param value pointer to value string
+   * @returns 0 for success, or an error code
+   */
+  virtual int read_meta(const std::string& key,
+			std::string *value);
 
   /**
    * get ideal min value for collection_list_partial()
@@ -1040,8 +1094,6 @@ public:
   virtual void inject_data_error(const ghobject_t &oid) {}
   virtual void inject_mdata_error(const ghobject_t &oid) {}
 };
-
-
 WRITE_CLASS_ENCODER(ObjectStore::Transaction)
 
 ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s);

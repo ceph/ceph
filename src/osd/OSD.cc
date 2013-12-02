@@ -37,8 +37,8 @@
 
 #include "common/ceph_argparse.h"
 #include "common/version.h"
-#include "os/FileStore.h"
-#include "os/FileJournal.h"
+
+#include "os/ObjectStore.h"
 
 #include "ReplicatedPG.h"
 
@@ -98,7 +98,6 @@
 #include "common/perf_counters.h"
 #include "common/Timer.h"
 #include "common/LogClient.h"
-#include "common/safe_io.h"
 #include "common/HeartbeatMap.h"
 #include "common/admin_socket.h"
 
@@ -439,21 +438,6 @@ void OSDService::init()
   watch_timer.init();
 }
 
-ObjectStore *OSD::create_object_store(CephContext *cct, const std::string &dev, const std::string &jdev)
-{
-  struct stat st;
-  if (::stat(dev.c_str(), &st) != 0)
-    return 0;
-
-  if (cct->_conf->filestore)
-    return new FileStore(dev, jdev);
-
-  if (S_ISDIR(st.st_mode))
-    return new FileStore(dev, jdev);
-  else
-    return 0;
-}
-
 #undef dout_prefix
 #define dout_prefix *_dout
 
@@ -526,7 +510,7 @@ int OSD::do_convertfs(ObjectStore *store)
   if (r == 1)
     return store->umount();
 
-  derr << "FileStore is old at version " << version << ".  Updating..."  << dendl;
+  derr << "ObjectStore is old at version " << version << ".  Updating..."  << dendl;
 
   derr << "Removing tmp pgs" << dendl;
   vector<coll_t> collections;
@@ -583,39 +567,24 @@ int OSD::do_convertfs(ObjectStore *store)
   return store->umount();
 }
 
-int OSD::convertfs(const std::string &dev, const std::string &jdev)
-{
-  boost::scoped_ptr<ObjectStore> store(
-    new FileStore(dev, jdev, "filestore", 
-		  true));
-  int r = do_convertfs(store.get());
-  return r;
-}
-
-int OSD::mkfs(CephContext *cct, const std::string &dev, const std::string &jdev, uuid_d fsid, int whoami)
+int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
+	      uuid_d fsid, int whoami)
 {
   int ret;
-  ObjectStore *store = NULL;
 
   try {
-    store = create_object_store(cct, dev, jdev);
-    if (!store) {
-      ret = -ENOENT;
-      goto out;
-    }
-
     // if we are fed a uuid for this osd, use it.
     store->set_fsid(cct->_conf->osd_uuid);
 
     ret = store->mkfs();
     if (ret) {
-      derr << "OSD::mkfs: FileStore::mkfs failed with error " << ret << dendl;
+      derr << "OSD::mkfs: ObjectStore::mkfs failed with error " << ret << dendl;
       goto free_store;
     }
 
     ret = store->mount();
     if (ret) {
-      derr << "OSD::mkfs: couldn't mount FileStore: error " << ret << dendl;
+      derr << "OSD::mkfs: couldn't mount ObjectStore: error " << ret << dendl;
       goto free_store;
     }
 
@@ -707,15 +676,9 @@ int OSD::mkfs(CephContext *cct, const std::string &dev, const std::string &jdev,
 
     store->sync_and_flush();
 
-    ret = write_meta(dev, sb.cluster_fsid, sb.osd_fsid, whoami);
+    ret = write_meta(store, sb.cluster_fsid, sb.osd_fsid, whoami);
     if (ret) {
       derr << "OSD::mkfs: failed to write fsid file: error " << ret << dendl;
-      goto umount_store;
-    }
-
-    ret = safe_write_file(dev.c_str(), "ready", "ready\n", 6);
-    if (ret) {
-      derr << "OSD::mkfs: failed to write ready file: error " << ret << dendl;
       goto umount_store;
     }
 
@@ -733,99 +696,68 @@ umount_store:
   store->umount();
 free_store:
   delete store;
-out:
   return ret;
 }
 
-int OSD::mkjournal(CephContext *cct, const std::string &dev, const std::string &jdev)
-{
-  ObjectStore *store = create_object_store(cct, dev, jdev);
-  if (!store)
-    return -ENOENT;
-  return store->mkjournal();
-}
-
-int OSD::flushjournal(CephContext *cct, const std::string &dev, const std::string &jdev)
-{
-  ObjectStore *store = create_object_store(cct, dev, jdev);
-  if (!store)
-    return -ENOENT;
-  int err = store->mount();
-  if (!err) {
-    store->sync_and_flush();
-    store->umount();
-  }
-  delete store;
-  return err;
-}
-
-int OSD::dump_journal(CephContext *cct, const std::string &dev, const std::string &jdev, ostream& out)
-{
-  ObjectStore *store = create_object_store(cct, dev, jdev);
-  if (!store)
-    return -ENOENT;
-  int err = store->dump_journal(out);
-  delete store;
-  return err;
-}
-
-int OSD::write_meta(const std::string &base, uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami)
+int OSD::write_meta(ObjectStore *store, uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami)
 {
   char val[80];
+  int r;
   
-  snprintf(val, sizeof(val), "%s\n", CEPH_OSD_ONDISK_MAGIC);
-  safe_write_file(base.c_str(), "magic", val, strlen(val));
+  snprintf(val, sizeof(val), "%s", CEPH_OSD_ONDISK_MAGIC);
+  r = store->write_meta("magic", val);
+  if (r < 0)
+    return r;
 
-  snprintf(val, sizeof(val), "%d\n", whoami);
-  safe_write_file(base.c_str(), "whoami", val, strlen(val));
+  snprintf(val, sizeof(val), "%d", whoami);
+  r = store->write_meta("whoami", val);
+  if (r < 0)
+    return r;
 
   cluster_fsid.print(val);
-  strcat(val, "\n");
-  safe_write_file(base.c_str(), "ceph_fsid", val, strlen(val));
+  r = store->write_meta("ceph_fsid", val);
+  if (r < 0)
+    return r;
+
+  r = store->write_meta("ready", "ready");
+  if (r < 0)
+    return r;
 
   return 0;
 }
 
-int OSD::peek_meta(const std::string &dev, std::string& magic,
+int OSD::peek_meta(ObjectStore *store, std::string& magic,
 		   uuid_d& cluster_fsid, uuid_d& osd_fsid, int& whoami)
 {
-  char val[80] = { 0 };
+  string val;
 
-  if (safe_read_file(dev.c_str(), "magic", val, sizeof(val)) < 0)
-    return -errno;
-  int l = strlen(val);
-  if (l && val[l-1] == '\n')
-    val[l-1] = 0;
+  int r = store->read_meta("magic", &magic);
+  if (r < 0)
+    return r;
   magic = val;
 
-  if (safe_read_file(dev.c_str(), "whoami", val, sizeof(val)) < 0)
-    return -errno;
-  whoami = atoi(val);
+  r = store->read_meta("whoami", &val);
+  if (r < 0)
+    return r;
+  whoami = atoi(val.c_str());
 
-  if (safe_read_file(dev.c_str(), "ceph_fsid", val, sizeof(val)) < 0)
-    return -errno;
-  if (strlen(val) > 36)
-    val[36] = 0;
-  cluster_fsid.parse(val);
+  r = store->read_meta("ceph_fsid", &val);
+  if (r < 0)
+    return r;
+  r = cluster_fsid.parse(val.c_str());
+  if (r < 0)
+    return r;
 
-  if (safe_read_file(dev.c_str(), "fsid", val, sizeof(val)) < 0)
+  r = store->read_meta("fsid", &val);
+  if (r < 0) {
     osd_fsid = uuid_d();
-  else {
-    if (strlen(val) > 36)
-      val[36] = 0;
-    osd_fsid.parse(val);
+  } else {
+    r = osd_fsid.parse(val.c_str());
+    if (r < 0)
+      return r;
   }
 
   return 0;
-}
-
-int OSD::peek_journal_fsid(string path, uuid_d& fsid)
-{
-  // make sure we don't try to use aio or direct_io (and get annoying
-  // error messages from failing to do so); performance implications
-  // should be irrelevant for this use
-  FileJournal j(fsid, 0, 0, path.c_str(), false, false);
-  return j.peek_fsid(fsid);
 }
 
 
@@ -834,7 +766,8 @@ int OSD::peek_journal_fsid(string path, uuid_d& fsid)
 
 // cons/des
 
-OSD::OSD(CephContext *cct_, int id, Messenger *internal_messenger, Messenger *external_messenger,
+OSD::OSD(CephContext *cct_, ObjectStore *store_,
+	 int id, Messenger *internal_messenger, Messenger *external_messenger,
 	 Messenger *hb_clientm,
 	 Messenger *hb_front_serverm,
 	 Messenger *hb_back_serverm,
@@ -858,7 +791,7 @@ OSD::OSD(CephContext *cct_, int id, Messenger *internal_messenger, Messenger *ex
   monc(mc),
   logger(NULL),
   recoverystate_perf(NULL),
-  store(NULL),
+  store(store_),
   clog(cct, client_messenger, &mc->monmap, LogClient::NO_FLAGS),
   whoami(id),
   dev_path(dev), journal_path(jdev),
@@ -941,13 +874,6 @@ int OSD::pre_init()
   if (is_stopping())
     return 0;
   
-  assert(!store);
-  store = create_object_store(cct, dev_path, journal_path);
-  if (!store) {
-    derr << "OSD::pre_init: unable to create object store" << dendl;
-    return -ENODEV;
-  }
-
   if (store->test_mount_in_use()) {
     derr << "OSD::pre_init: object store '" << dev_path << "' is "
          << "currently in use. (Is ceph-osd already running?)" << dendl;
