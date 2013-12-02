@@ -257,6 +257,7 @@ OPTION(client_oc_max_dirty_age, OPT_DOUBLE, 5.0)      // max age in cache before
 OPTION(client_oc_max_objects, OPT_INT, 1000)      // max objects in cache
 OPTION(client_debug_force_sync_read, OPT_BOOL, false)     // always read synchronously (go to osds)
 OPTION(client_debug_inject_tick_delay, OPT_INT, 0) // delay the client tick for a number of seconds
+OPTION(client_max_inline_size, OPT_INT, 4096)
 // note: the max amount of "in flight" dirty data is roughly (max - target)
 OPTION(fuse_use_invalidate_cb, OPT_BOOL, false) // use fuse 2.8+ invalidate callback to keep page cache consistent
 OPTION(fuse_allow_other, OPT_BOOL, true)
@@ -360,6 +361,7 @@ OPTION(max_mds, OPT_INT, 1)
 OPTION(mds_standby_for_name, OPT_STR, "")
 OPTION(mds_standby_for_rank, OPT_INT, -1)
 OPTION(mds_standby_replay, OPT_BOOL, false)
+OPTION(mds_inline_data, OPT_BOOL, false)
 
 // If true, compact leveldb store on mount
 OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
