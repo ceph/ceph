@@ -1835,8 +1835,8 @@ int OSDMap::_build_crush_types(CrushWrapper& crush)
   crush.set_type_name(2, "chassis");
   crush.set_type_name(3, "rack");
   crush.set_type_name(4, "row");
-  crush.set_type_naem(5, "pdu");
-  crush.set_type_naem(6, "pod");
+  crush.set_type_name(5, "pdu");
+  crush.set_type_name(6, "pod");
   crush.set_type_name(7, "room");
   crush.set_type_name(8, "datacenter");
   crush.set_type_name(9, "region");
