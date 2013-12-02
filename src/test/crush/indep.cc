@@ -161,15 +161,15 @@ TEST(CRUSH, indep_out_contig) {
   CrushWrapper *c = build_indep_map(g_ceph_context, 3, 3, 3);
   vector<__u32> weight(c->get_max_devices(), 0x10000);
 
-  // mark a bunch of osds out
-  int num = 3*3*3;
-  for (int i=0; i<num / 3; ++i)
+  // mark the first rack out, only six hosts left
+  for (int i=0; i<9; ++i)
     weight[i] = 0;
   c->dump_tree(weight, &cout, NULL);
 
   c->crush->choose_total_tries = 100;
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
+    // ask for seven items
     c->do_rule(0, x, out, 7, weight);
     cout << x << " -> " << out << std::endl;
     int num_none = 0;
@@ -177,6 +177,7 @@ TEST(CRUSH, indep_out_contig) {
       if (out[i] == CRUSH_ITEM_NONE)
 	num_none++;
     }
+    // there is only six hosts left, out will always be 1 short
     ASSERT_EQ(1, num_none);
     ASSERT_EQ(0, get_num_dups(out));
   }
@@ -264,6 +265,6 @@ int main(int argc, char **argv) {
  * compile-command: "cd ../.. ; make unittest_crush_indep && 
  *    valgrind \
  *    --max-stackframe=20000000 --tool=memcheck \
- *    ./unittest_crush_indep"
+ *    ./unittest_crush_indep # --gtest_filter=CRUSH.indep_out_alt"
  * End:
  */
