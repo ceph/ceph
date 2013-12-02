@@ -1828,6 +1828,21 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
   }
 }
 
+int OSDMap::_build_crush_types(CrushWrapper& crush)
+{
+  crush.set_type_name(0, "osd");
+  crush.set_type_name(1, "host");
+  crush.set_type_name(2, "chassis");
+  crush.set_type_name(3, "rack");
+  crush.set_type_name(4, "row");
+  crush.set_type_naem(5, "pdu");
+  crush.set_type_naem(6, "pod");
+  crush.set_type_name(7, "room");
+  crush.set_type_name(8, "datacenter");
+  crush.set_type_name(9, "region");
+  crush.set_type_name(10, "root");
+  return 10;
+}
 
 void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
 				    map<int, const char*>& rulesets, int nosd)
@@ -1836,19 +1851,11 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
 
   crush.create();
 
-  crush.set_type_name(0, "osd");
-  crush.set_type_name(1, "host");
-  crush.set_type_name(2, "chassis");
-  crush.set_type_name(3, "rack");
-  crush.set_type_name(4, "row");
-  crush.set_type_name(5, "room");
-  crush.set_type_name(6, "datacenter");
-  crush.set_type_name(7, "root");
-
   // root
+  int root_type = _build_crush_types(crush);
   int rootid;
   int r = crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT,
-			   7 /* root */, 0, NULL, NULL, &rootid);
+			   root_type, 0, NULL, NULL, &rootid);
   assert(r == 0);
   crush.set_item_name(rootid, "default");
 
@@ -1968,21 +1975,13 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
 
   crush.create();
 
-  crush.set_type_name(0, "osd");
-  crush.set_type_name(1, "host");
-  crush.set_type_name(2, "chassis");
-  crush.set_type_name(3, "rack");
-  crush.set_type_name(4, "row");
-  crush.set_type_name(5, "room");
-  crush.set_type_name(6, "datacenter");
-  crush.set_type_name(7, "root");
-
   set<string> hosts, racks;
 
   // root
+  int root_type = _build_crush_types(crush);
   int rootid;
   int r = crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT,
-			   7 /* root */, 0, NULL, NULL, &rootid);
+			   root_type, 0, NULL, NULL, &rootid);
   assert(r == 0);
   crush.set_item_name(rootid, "default");
 
