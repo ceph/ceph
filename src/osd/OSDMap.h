@@ -596,6 +596,8 @@ public:
   /*
    * handy helpers to build simple maps...
    */
+  /// build crush bucket types.  @return 'root' type id
+  int _build_crush_types(CrushWrapper& crush);
   void build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
 		    int num_osd, int pg_bits, int pgp_bits);
   int build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
