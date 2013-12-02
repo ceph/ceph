@@ -89,20 +89,22 @@ int get_num_dups(const vector<int>& v)
 }
 
 TEST(CRUSH, indep_toosmall) {
-  CrushWrapper *c = build_indep_map(g_ceph_context, 1, 3, 1);
+  int num_hosts = 3;
+  CrushWrapper *c = build_indep_map(g_ceph_context, 1, num_hosts, 1);
   vector<__u32> weight(c->get_max_devices(), 0x10000);
   c->dump_tree(weight, &cout, NULL);
 
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
-    c->do_rule(0, x, out, 5, weight);
+    int maxout = 5;
+    c->do_rule(0, x, out, maxout, weight);
     cout << x << " -> " << out << std::endl;
     int num_none = 0;
     for (unsigned i=0; i<out.size(); ++i) {
       if (out[i] == CRUSH_ITEM_NONE)
 	num_none++;
     }
-    ASSERT_EQ(2, num_none);
+    ASSERT_EQ(maxout - num_hosts, num_none);
     ASSERT_EQ(0, get_num_dups(out));
   }
   delete c;
@@ -256,3 +258,12 @@ int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+
+/*
+ * Local Variables:
+ * compile-command: "cd ../.. ; make unittest_crush_indep && 
+ *    valgrind \
+ *    --max-stackframe=20000000 --tool=memcheck \
+ *    ./unittest_crush_indep"
+ * End:
+ */
