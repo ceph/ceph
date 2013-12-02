@@ -1,3 +1,7 @@
+overrides:
+  ceph:
+    log-whitelist:
+    - wrongly marked me down
 tasks:
 - install:
 - ceph:
