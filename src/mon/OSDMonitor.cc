@@ -3610,6 +3610,10 @@ done:
       } else if (var == "pg_num") {
 	if (n <= p->get_pg_num()) {
 	  ss << "specified pg_num " << n << " <= current " << p->get_pg_num();
+	} else if (n > (int)p->get_pg_num() * g_conf->mon_osd_max_split_ratio) {
+	  ss << "specified pg_num " << n << " is too large (> current "
+	     << p->get_pg_num() << '*' << g_conf->mon_osd_max_split_ratio << ')';
+	  err = -E2BIG;
 	} else if (!mon->pgmon()->pg_map.creating_pgs.empty()) {
 	  ss << "currently creating pgs, wait";
 	  err = -EAGAIN;
