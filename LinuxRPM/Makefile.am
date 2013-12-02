@@ -5,7 +5,7 @@ CEPHFS_TAR = ../ceph-$(VERSION).tar.gz
 all:
 	@echo "To build RPMS run 'make cephrpms'"
 
-.PHONY: cephrpms prep srcrpm testsrpm clean
+.PHONY: cephrpms prep srcrpm clean
 
 cephrpms: prep srcrpm rpms
 	-rm -rf rpmbuild
