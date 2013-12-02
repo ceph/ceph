@@ -429,6 +429,9 @@ protected:
 
   void handle_lease(MClientLease *m);
 
+  // inline data
+  int uninline_data(Inode *in, Context *onfinish);
+
   // file caps
   void check_cap_issue(Inode *in, Cap *cap, unsigned issued);
   void add_update_cap(Inode *in, MetaSession *session, uint64_t cap_id,

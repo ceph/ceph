@@ -5767,6 +5767,47 @@ void Client::unlock_fh_pos(Fh *f)
   f->pos_locked = false;
 }
 
+int Client::uninline_data(Inode *in, Context *onfinish)
+{
+  char oid_buf[32];
+  snprintf(oid_buf, sizeof(oid_buf), "%llx.00000000", (long long unsigned)in->ino);
+  object_t oid = oid_buf;
+
+  ObjectOperation create_ops;
+  create_ops.create(false);
+
+  objecter->mutate(oid,
+                   OSDMap::file_to_object_locator(in->layout),
+                   create_ops,
+                   in->snaprealm->get_snap_context(),
+                   ceph_clock_now(cct),
+                   0,
+                   NULL,
+                   NULL);
+
+  bufferlist inline_version_bl;
+  ::encode(in->inline_version, inline_version_bl);
+
+  ObjectOperation uninline_ops;
+  uninline_ops.cmpxattr("inline_version",
+                        CEPH_OSD_CMPXATTR_OP_GT,
+                        CEPH_OSD_CMPXATTR_MODE_U64,
+                        inline_version_bl);
+  bufferlist inline_data = in->inline_data;
+  uninline_ops.write(0, inline_data, in->truncate_size, in->truncate_seq);
+  uninline_ops.setxattr("inline_version", inline_version_bl);
+
+  objecter->mutate(oid,
+                   OSDMap::file_to_object_locator(in->layout),
+                   uninline_ops,
+                   in->snaprealm->get_snap_context(),
+                   ceph_clock_now(cct),
+                   0,
+                   NULL,
+                   onfinish);
+
+  return 0;
+}
 
 // 
 
