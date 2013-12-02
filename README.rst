@@ -401,6 +401,9 @@ yaml file will look like this::
 
 These values are used by downburst to create the virtual machine.
 
+When locking a file, a downburst meta-data yaml file can be specified by using
+the downburst-conf parameter on the command line.
+
 HOST KEYS:
 ----------
 

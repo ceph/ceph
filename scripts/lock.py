@@ -156,5 +156,10 @@ def parse_args():
         default=None,
         help='OS (distro) version such as "12.10"',
     )
+    parser.add_argument(
+        '--downburst-conf',
+        default=None,
+        help='Downburst meta-data yaml file to be used for vps machines',
+    )
 
     return parser.parse_args()
