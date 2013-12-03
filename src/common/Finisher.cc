@@ -80,6 +80,7 @@ void *Finisher::finisher_thread_entry()
   finisher_empty_cond.Signal();
 
   ldout(cct, 10) << "finisher_thread stop" << dendl;
+  finisher_stop = false;
   finisher_lock.Unlock();
   return 0;
 }
