@@ -686,22 +686,28 @@ int CrushWrapper::add_simple_rule(string name, string root_name,
     }
   }
 
-  crush_rule *rule = crush_make_rule(3, ruleset, 1 /* pg_pool_t::TYPE_REP */, 1, 10);
+  int steps = 3;
+  if (mode == "indep")
+    steps = 4;
+  crush_rule *rule = crush_make_rule(steps, ruleset, 1 /* pg_pool_t::TYPE_REP */, 1, 10);
   assert(rule);
-  crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, root, 0);
+  int step = 0;
+  if (mode == "indep")
+    crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSE_LEAF_TRIES, 5, 0);
+  crush_rule_set_step(rule, step++, CRUSH_RULE_TAKE, root, 0);
   if (type)
-    crush_rule_set_step(rule, 1,
+    crush_rule_set_step(rule, step++,
 			mode == "firstn" ? CRUSH_RULE_CHOOSE_LEAF_FIRSTN :
 			CRUSH_RULE_CHOOSE_LEAF_INDEP,
 			CRUSH_CHOOSE_N,
 			type);
   else
-    crush_rule_set_step(rule, 1,
+    crush_rule_set_step(rule, step++,
 			mode == "firstn" ? CRUSH_RULE_CHOOSE_FIRSTN :
 			CRUSH_RULE_CHOOSE_INDEP,
 			CRUSH_CHOOSE_N,
 			0);
-  crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
+  crush_rule_set_step(rule, step++, CRUSH_RULE_EMIT, 0, 0);
   int rno = crush_add_rule(crush, rule, -1);
   set_rule_name(rno, name);
   have_rmaps = false;
