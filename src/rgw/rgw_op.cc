@@ -1198,8 +1198,12 @@ void RGWCreateBucket::execute()
   }
 
   ret = rgw_link_bucket(store, s->user.user_id, s->bucket, info.creation_time, false);
-  if (ret && !existed && ret != -EEXIST)   /* if it exists (or previously existed), don't remove it! */
-    rgw_unlink_bucket(store, s->user.user_id, s->bucket.name);
+  if (ret && !existed && ret != -EEXIST) {  /* if it exists (or previously existed), don't remove it! */
+    ret = rgw_unlink_bucket(store, s->user.user_id, s->bucket.name);
+    if (ret < 0) {
+      ldout(s->cct, 0) << "WARNING: failed to unlink bucket: ret=" << ret << dendl;
+    }
+  }
 
   if (ret == -EEXIST)
     ret = -ERR_BUCKET_EXISTS;
