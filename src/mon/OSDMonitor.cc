@@ -591,6 +591,39 @@ void OSDMonitor::encode_pending(MonitorDBStore::Transaction *t)
   /* put everything in the transaction */
   put_version(t, pending_inc.epoch, bl);
   put_last_committed(t, pending_inc.epoch);
+
+  // metadata, too!
+  for (map<int,bufferlist>::iterator p = pending_metadata.begin();
+       p != pending_metadata.end();
+       ++p)
+    t->put(OSD_METADATA_PREFIX, stringify(p->first), p->second);
+  for (set<int>::iterator p = pending_metadata_rm.begin();
+       p != pending_metadata_rm.end();
+       ++p)
+    t->erase(OSD_METADATA_PREFIX, stringify(*p));
+  pending_metadata.clear();
+  pending_metadata_rm.clear();
+}
+
+int OSDMonitor::dump_osd_metadata(int osd, Formatter *f, ostream *err)
+{
+  bufferlist bl;
+  int r = mon->store->get(OSD_METADATA_PREFIX, stringify(osd), bl);
+  if (r < 0)
+    return r;
+  map<string,string> m;
+  try {
+    bufferlist::iterator p = bl.begin();
+    ::decode(m, p);
+  }
+  catch (buffer::error& e) {
+    if (err)
+      *err << "osd." << osd << " metadata is corrupt";
+    return -EIO;
+  }
+  for (map<string,string>::iterator p = m.begin(); p != m.end(); ++p)
+    f->dump_string(p->first.c_str(), p->second);
+  return 0;
 }
 
 void OSDMonitor::share_map_with_random_osd()
@@ -1265,6 +1298,11 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 	pending_inc.new_lost[from] = osdmap.get_epoch();
       }
     }
+
+    // metadata
+    bufferlist osd_metadata;
+    ::encode(m->metadata, osd_metadata);
+    pending_metadata[from] = osd_metadata;
 
     // adjust last clean unmount epoch?
     const osd_info_t& info = osdmap.get_info(from);
@@ -1962,6 +2000,17 @@ void OSDMonitor::dump_info(Formatter *f)
   osdmap.dump(f);
   f->close_section();
 
+  f->open_array_section("osd_metadata");
+  for (int i=0; i<osdmap.get_max_osd(); ++i) {
+    if (osdmap.exists(i)) {
+      f->open_object_section("osd");
+      f->dump_unsigned("id", i);
+      dump_osd_metadata(i, f, NULL);
+      f->close_section();
+    }
+  }
+  f->close_section();
+
   f->dump_unsigned("osdmap_first_committed", get_first_committed());
 
   f->open_object_section("crushmap");
@@ -2125,6 +2174,23 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     for (map<string,string>::iterator p = loc.begin(); p != loc.end(); ++p)
       f->dump_string(p->first.c_str(), p->second);
     f->close_section();
+    f->close_section();
+    f->flush(rdata);
+  } else if (prefix == "osd metadata") {
+    int64_t osd;
+    cmd_getval(g_ceph_context, cmdmap, "id", osd);
+    if (!osdmap.exists(osd)) {
+      ss << "osd." << osd << " does not exist";
+      r = -ENOENT;
+      goto reply;
+    }
+    string format;
+    cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
+    boost::scoped_ptr<Formatter> f(new_formatter(format));
+    f->open_object_section("osd_metadata");
+    r = dump_osd_metadata(osd, f.get(), &ss);
+    if (r < 0)
+      goto reply;
     f->close_section();
     f->flush(rdata);
   } else if (prefix == "osd map") {
@@ -3509,6 +3575,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	} else {
 	  pending_inc.new_state[osd] = osdmap.get_state(osd);
           pending_inc.new_uuid[osd] = uuid_d();
+	  pending_metadata_rm.insert(osd);
 	  if (any) {
 	    ss << ", osd." << osd;
           } else {

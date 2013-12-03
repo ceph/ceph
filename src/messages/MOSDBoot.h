@@ -22,7 +22,7 @@
 
 class MOSDBoot : public PaxosServiceMessage {
 
-  static const int HEAD_VERSION = 4;
+  static const int HEAD_VERSION = 5;
   static const int COMPAT_VERSION = 2;
 
  public:
@@ -30,6 +30,7 @@ class MOSDBoot : public PaxosServiceMessage {
   entity_addr_t hb_back_addr, hb_front_addr;
   entity_addr_t cluster_addr;
   epoch_t boot_epoch;  // last epoch this daemon was added to the map (if any)
+  map<string,string> metadata; ///< misc metadata about this osd
 
   MOSDBoot()
     : PaxosServiceMessage(MSG_OSD_BOOT, 0, HEAD_VERSION, COMPAT_VERSION),
@@ -63,6 +64,7 @@ public:
     ::encode(cluster_addr, payload);
     ::encode(boot_epoch, payload);
     ::encode(hb_front_addr, payload);
+    ::encode(metadata, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -75,6 +77,8 @@ public:
       ::decode(boot_epoch, p);
     if (header.version >= 4)
       ::decode(hb_front_addr, p);
+    if (header.version >= 5)
+      ::decode(metadata, p);
   }
 };
 
