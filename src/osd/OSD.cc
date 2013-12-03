@@ -16,6 +16,7 @@
 #include <iostream>
 #include <errno.h>
 #include <sys/stat.h>
+#include <sys/utsname.h>
 #include <signal.h>
 #include <ctype.h>
 #include <boost/scoped_ptr.hpp>
@@ -3493,7 +3494,109 @@ void OSD::_send_boot()
 	   << ", hb_back_addr " << hb_back_addr
 	   << ", hb_front_addr " << hb_front_addr
 	   << dendl;
+  _collect_metadata(&mboot->metadata);
   monc->send_mon_message(mboot);
+}
+
+void OSD::_collect_metadata(map<string,string> *pm)
+{
+  (*pm)["ceph_version"] = pretty_version_to_str();
+
+  // config info
+  (*pm)["osd_data"] = dev_path;
+  (*pm)["osd_journal"] = journal_path;
+  (*pm)["front_addr"] = stringify(client_messenger->get_myaddr());
+  (*pm)["back_addr"] = stringify(cluster_messenger->get_myaddr());
+  (*pm)["hb_front_addr"] = stringify(hb_front_server_messenger->get_myaddr());
+  (*pm)["hb_back_addr"] = stringify(hb_back_server_messenger->get_myaddr());
+
+  // kernel info
+  struct utsname u;
+  int r = uname(&u);
+  if (r >= 0) {
+    (*pm)["os"] = u.sysname;
+    (*pm)["kernel_version"] = u.release;
+    (*pm)["kernel_description"] = u.version;
+    (*pm)["hostname"] = u.nodename;
+    (*pm)["arch"] = u.machine;
+  }
+
+  // memory
+  FILE *f = fopen("/proc/meminfo", "r");
+  if (f) {
+    char buf[100];
+    while (!feof(f)) {
+      char *line = fgets(buf, sizeof(buf), f);
+      if (!line)
+	break;
+      char key[40];
+      long long value;
+      int r = sscanf(line, "%s %lld", key, &value);
+      if (r == 2) {
+	if (strcmp(key, "MemTotal:") == 0)
+	  (*pm)["mem_total_kb"] = stringify(value);
+	else if (strcmp(key, "SwapTotal:") == 0)
+	  (*pm)["mem_swap_kb"] = stringify(value);
+      }
+    }
+    fclose(f);
+  }
+
+  // processor
+  f = fopen("/proc/cpuinfo", "r");
+  if (f) {
+    char buf[100];
+    while (!feof(f)) {
+      char *line = fgets(buf, sizeof(buf), f);
+      if (!line)
+	break;
+      if (strncmp(line, "model name", 10) == 0) {
+	char *c = strchr(buf, ':');
+	c++;
+	while (*c == ' ')
+	  ++c;
+	char *nl = c;
+	while (*nl != '\n')
+	  ++nl;
+	*nl = '\0';
+	(*pm)["cpu"] = c;
+	break;
+      }
+    }
+    fclose(f);
+  }
+
+  // distro info
+  f = fopen("/etc/lsb-release", "r");
+  if (f) {
+    char buf[100];
+    while (!feof(f)) {
+      char *line = fgets(buf, sizeof(buf), f);
+      if (!line)
+	break;
+      char *eq = strchr(buf, '=');
+      if (!eq)
+	break;
+      *eq = '\0';
+      ++eq;
+      while (*eq == '\"')
+	++eq;
+      while (*eq && (eq[strlen(eq)-1] == '\n' ||
+		     eq[strlen(eq)-1] == '\"'))
+	eq[strlen(eq)-1] = '\0';
+      if (strcmp(buf, "DISTRIB_ID") == 0)
+	(*pm)["distro"] = eq;
+      else if (strcmp(buf, "DISTRIB_RELEASE") == 0)
+	(*pm)["distro_version"] = eq;
+      else if (strcmp(buf, "DISTRIB_CODENAME") == 0)
+	(*pm)["distro_codename"] = eq;
+      else if (strcmp(buf, "DISTRIB_DESCRIPTION") == 0)
+	(*pm)["distro_description"] = eq;
+    }
+    fclose(f);
+  }
+
+  dout(10) << __func__ << " " << *pm << dendl;
 }
 
 void OSD::queue_want_up_thru(epoch_t want)

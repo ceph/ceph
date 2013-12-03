@@ -344,6 +344,10 @@ COMMAND("osd find " \
 	"name=id,type=CephInt,range=0", \
 	"find osd <id> in the CRUSH map and show its location", \
 	"osd", "r", "cli,rest")
+COMMAND("osd metadata " \
+	"name=id,type=CephInt,range=0", \
+	"fetch metadata for osd <id>", \
+	"osd", "r", "cli,rest")
 COMMAND("osd map " \
 	"name=pool,type=CephPoolname " \
 	"name=object,type=CephObjectname", \
