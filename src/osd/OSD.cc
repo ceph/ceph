@@ -731,7 +731,7 @@ int OSD::peek_meta(ObjectStore *store, std::string& magic,
 {
   string val;
 
-  int r = store->read_meta("magic", &magic);
+  int r = store->read_meta("magic", &val);
   if (r < 0)
     return r;
   magic = val;
