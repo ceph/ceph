@@ -296,6 +296,7 @@ static int crush_choose_firstn(const struct crush_map *map,
 			       const __u32 *weight, int weight_max,
 			       int x, int numrep, int type,
 			       int *out, int outpos,
+			       unsigned attempts, unsigned recurse_attempts,
 			       int recurse_to_leaf,
 			       int descend_once, int *out2)
 {
@@ -382,6 +383,7 @@ static int crush_choose_firstn(const struct crush_map *map,
 							 weight, weight_max,
 							 x, outpos+1, 0,
 							 out2, outpos,
+							 recurse_attempts, 0,
 							 0,
 							 map->chooseleaf_descend_once,
 							 NULL) <= outpos)
@@ -417,7 +419,7 @@ reject:
 						 flocal <= in->size + map->choose_local_fallback_tries)
 						/* exhaustive bucket search */
 						retry_bucket = 1;
-					else if (ftotal <= map->choose_total_tries)
+					else if (ftotal <= attempts)
 						/* then retry descent */
 						retry_descent = 1;
 					else
@@ -629,7 +631,8 @@ int crush_do_rule(const struct crush_map *map,
 	__u32 step;
 	int i, j;
 	int numrep;
-	int choose_leaf_tries = 1;
+	int choose_tries = map->choose_total_tries;
+	int choose_leaf_tries = 0;
 	const int descend_once = 0;
 
 	if ((__u32)ruleno >= map->max_rules) {
@@ -696,6 +699,8 @@ int crush_do_rule(const struct crush_map *map,
 						x, numrep,
 						curstep->arg2,
 						o+osize, j,
+						choose_tries,
+						choose_leaf_tries ? choose_leaf_tries : choose_tries,
 						recurse_to_leaf,
 						descend_once, c+osize);
 				} else {
@@ -706,8 +711,8 @@ int crush_do_rule(const struct crush_map *map,
 						x, numrep, numrep,
 						curstep->arg2,
 						o+osize, j,
-						map->choose_total_tries,
-						choose_leaf_tries,
+						choose_tries,
+						choose_leaf_tries ? choose_leaf_tries : 1,
 						recurse_to_leaf,
 						c+osize,
 						0);
