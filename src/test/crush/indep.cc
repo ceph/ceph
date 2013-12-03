@@ -52,14 +52,15 @@ CrushWrapper *build_indep_map(CephContext *cct, int num_rack, int num_host,
     }
   }
 
-  crush_rule *rule = crush_make_rule(3, 0, 123, 1, 20);
+  crush_rule *rule = crush_make_rule(4, 0, 123, 1, 20);
   assert(rule);
-  crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootno, 0);
-  crush_rule_set_step(rule, 1,
+  crush_rule_set_step(rule, 0, CRUSH_RULE_SET_CHOOSE_LEAF_TRIES, 10, 0);
+  crush_rule_set_step(rule, 1, CRUSH_RULE_TAKE, rootno, 0);
+  crush_rule_set_step(rule, 2,
 		      CRUSH_RULE_CHOOSE_LEAF_INDEP,
 		      CRUSH_CHOOSE_N,
 		      1);
-  crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
+  crush_rule_set_step(rule, 3, CRUSH_RULE_EMIT, 0, 0);
   int rno = crush_add_rule(c->crush, rule, -1);
   c->set_rule_name(rno, "data");
 
@@ -192,51 +193,54 @@ TEST(CRUSH, indep_out_progressive) {
   for (int x = 1; x < 5; ++x) {
     vector<__u32> weight(c->get_max_devices(), 0x10000);
 
-  std::map<int,unsigned> pos;
-  vector<int> prev;
-  for (unsigned i=0; i<weight.size(); ++i) {
-    vector<int> out;
-    c->do_rule(0, x, out, 7, weight);
-    cout << "(" << i << "/" << weight.size() << " out) "
-	 << x << " -> " << out << std::endl;
-    int num_none = 0;
-    for (unsigned k=0; k<out.size(); ++k) {
-      if (out[k] == CRUSH_ITEM_NONE)
-	num_none++;
-    }
-    ASSERT_EQ(0, get_num_dups(out));
+    std::map<int,unsigned> pos;
+    vector<int> prev;
+    for (unsigned i=0; i<weight.size(); ++i) {
+      vector<int> out;
+      c->do_rule(0, x, out, 7, weight);
+      cout << "(" << i << "/" << weight.size() << " out) "
+	   << x << " -> " << out << std::endl;
+      int num_none = 0;
+      for (unsigned k=0; k<out.size(); ++k) {
+	if (out[k] == CRUSH_ITEM_NONE)
+	  num_none++;
+      }
+      ASSERT_EQ(0, get_num_dups(out));
 
-    // make sure nothing moved
-    int moved = 0;
-    int changed = 0;
-    for (unsigned j=0; j<out.size()/2; ++j) {
-      if (i && out[j] != prev[j]) {
-	++changed;
-	++tchanged;
-      }
-      if (out[j] == CRUSH_ITEM_NONE) {
-	pos.erase(prev[j]);
-	continue;
-      }
-      if (i && pos.count(out[j])) {
-	// result shouldn't have moved position
-	if (j != pos[out[j]]) {
-	  cout << " " << out[j] << " moved from " << pos[out[j]] << " to " << j << std::endl;
-	  ++moved;
+      // make sure nothing moved
+      int moved = 0;
+      int changed = 0;
+      for (unsigned j=0; j<out.size(); ++j) {
+	if (i && out[j] != prev[j]) {
+	  ++changed;
+	  ++tchanged;
 	}
-	//ASSERT_EQ(j, pos[out[j]]);
+	if (out[j] == CRUSH_ITEM_NONE) {
+	  continue;
+	}
+	if (i && pos.count(out[j])) {
+	  // result shouldn't have moved position
+	  if (j != pos[out[j]]) {
+	    cout << " " << out[j] << " moved from " << pos[out[j]] << " to " << j << std::endl;
+	    ++moved;
+	  }
+	  //ASSERT_EQ(j, pos[out[j]]);
+	}
       }
-      pos[out[j]] = j;
-    }
-    if (moved || changed)
-      cout << " " << moved << " moved, " << changed << " changed" << std::endl;
-    ASSERT_LE(moved, 1);
-    ASSERT_LE(changed, 2);
+      if (moved || changed)
+	cout << " " << moved << " moved, " << changed << " changed" << std::endl;
+      ASSERT_LE(moved, 1);
+      ASSERT_LE(changed, 3);
 
-    // mark another osd out
-    weight[i] = 0;
-    prev = out;
-  }
+      // mark another osd out
+      weight[i] = 0;
+      prev = out;
+      pos.clear();
+      for (unsigned j=0; j<out.size(); ++j) {
+	if (out[j] != CRUSH_ITEM_NONE)
+	  pos[out[j]] = j;
+      }
+    }
   }
   cout << tchanged << " total changed" << std::endl;
 
