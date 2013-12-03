@@ -1,9 +1,19 @@
 v0.73
 ~~~~~
+
 - As part of fix for #6796, 'ceph osd pool set <pool> <var> <arg>' now
   receives <arg> as an integer instead of a string.  This affects how
   'hashpspool' flag is set/unset: instead of 'true' or 'false', it now
   must be '0' or '1'.
+
+- The behavior of the CRUSH 'indep' choose mode has been changed.  No
+  ceph cluster should have been using this behavior unless someone has
+  manually extracted a crush map, modified a CRUSH rule to replace
+  'firstn' with 'indep', recompiled, and reinjected the new map into
+  the cluster.  If the 'indep' mode is currently in use on a cluster,
+  the rule should be modified to use 'firstn' instead, and the
+  administrator should wait until any data movement completes before
+  upgrading.
 
 v0.72.2
 ~~~~~~~
