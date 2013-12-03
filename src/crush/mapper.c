@@ -456,13 +456,13 @@ reject:
 static void crush_choose_indep(const struct crush_map *map,
 			      struct crush_bucket *bucket,
 			      const __u32 *weight, int weight_max,
-			      int x, int numrep, int type,
 			      int *out, int outpos,
 			      int recurse_to_leaf,
 			      int *out2)
+			       int x, int left, int numrep, int type,
 {
 	struct crush_bucket *in = bucket;
-	int left = numrep - outpos;
+	int endpos = outpos + left;
 	int rep;
 	unsigned int ftotal;
 	int r;
@@ -475,14 +475,14 @@ static void crush_choose_indep(const struct crush_map *map,
 		bucket->id, x, outpos, numrep);
 
 	/* initially my result is undefined */
-	for (rep = outpos; rep < numrep; rep++) {
+	for (rep = outpos; rep < endpos; rep++) {
 		out[rep] = CRUSH_ITEM_UNDEF;
 		if (out2)
 			out2[rep] = CRUSH_ITEM_UNDEF;
 	}
 
 	for (ftotal = 0; left > 0 && ftotal < map->choose_total_tries; ftotal++) {
-		for (rep = outpos; rep < numrep; rep++) {
+		for (rep = outpos; rep < endpos; rep++) {
 			if (out[rep] != CRUSH_ITEM_UNDEF)
 				continue;
 
@@ -550,7 +550,7 @@ static void crush_choose_indep(const struct crush_map *map,
 
 				/* collision? */
 				collide = 0;
-				for (i = outpos; i < numrep; i++) {
+				for (i = outpos; i < endpos; i++) {
 					if (out[i] == item) {
 						collide = 1;
 						break;
@@ -564,9 +564,9 @@ static void crush_choose_indep(const struct crush_map *map,
 						crush_choose_indep(map,
 								   map->buckets[-1-item],
 								   weight, weight_max,
-								   x, rep+1, 0,
 								   out2, rep,
 								   0, NULL);
+						   x, 1, numrep, 0,
 						if (out2[rep] == CRUSH_ITEM_NONE) {
 							/* placed nothing; no leaf */
 							break;
@@ -589,7 +589,7 @@ static void crush_choose_indep(const struct crush_map *map,
 			}
 		}
 	}
-	for (rep = outpos; rep < numrep; rep++) {
+	for (rep = outpos; rep < endpos; rep++) {
 		if (out[rep] == CRUSH_ITEM_UNDEF) {
 			out[rep] = CRUSH_ITEM_NONE;
 		}
@@ -694,7 +694,7 @@ int crush_do_rule(const struct crush_map *map,
 						map,
 						map->buckets[-1-w[i]],
 						weight, weight_max,
-						x, numrep,
+						x, numrep, numrep,
 						curstep->arg2,
 						o+osize, j,
 						recurse_to_leaf,
