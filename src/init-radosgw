@@ -73,11 +73,12 @@ case "$1" in
             log_file=`$RADOSGW -n $name --show-config-value log_file`
             if [ -n "$log_file" ] && [ ! -e "$log_file" ]; then
                 touch "$log_file"
-                chown $user $log_file
             fi
+            chown $user $log_file
+            chown $user /var/run/ceph
 
             echo "Starting $name..."
-            start-stop-daemon --start -u $user -x $RADOSGW -- -n $name
+            start-stop-daemon --start -c $user -x $RADOSGW -- -n $name
         done
         daemon_is_running $RADOSGW
         ;;
