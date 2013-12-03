@@ -744,8 +744,8 @@ bool OSDMap::find_osd_on_ip(const entity_addr_t& ip) const
 
 uint64_t OSDMap::get_features(uint64_t *pmask) const
 {
-  uint64_t features = 0;
-  uint64_t mask = 0;
+  uint64_t features = 0;  // things we actually have
+  uint64_t mask = 0;      // things we could have
 
   if (crush->has_nondefault_tunables())
     features |= CEPH_FEATURE_CRUSH_TUNABLES;
@@ -762,7 +762,7 @@ uint64_t OSDMap::get_features(uint64_t *pmask) const
       features |= CEPH_FEATURE_OSD_CACHEPOOL;
     }
   }
-  mask |= CEPH_FEATURE_OSDHASHPSPOOL;
+  mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
 
   if (pmask)
     *pmask = mask;
