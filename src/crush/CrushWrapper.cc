@@ -1113,6 +1113,14 @@ void CrushWrapper::dump_rules(Formatter *f) const
 	f->dump_int("num", get_rule_arg1(i, j));
 	f->dump_string("type", get_type_name(get_rule_arg2(i, j)));
 	break;
+      case CRUSH_RULE_SET_CHOOSE_TRIES:
+	f->dump_string("op", "set_choose_tries");
+	f->dump_int("num", get_rule_arg1(i, j));
+	break;
+      case CRUSH_RULE_SET_CHOOSE_LEAF_TRIES:
+	f->dump_string("op", "set_chooseleaf_tries");
+	f->dump_int("num", get_rule_arg1(i, j));
+	break;
       default:
 	f->dump_int("opcode", get_rule_op(i, j));
 	f->dump_int("arg1", get_rule_arg1(i, j));
