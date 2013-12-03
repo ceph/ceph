@@ -95,6 +95,8 @@ public:
     crush = crush_create();
     assert(crush);
     have_rmaps = false;
+
+    set_tunables_default();
   }
 
   // tunables
