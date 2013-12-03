@@ -3616,6 +3616,30 @@ void OSD::_collect_metadata(map<string,string> *pm)
     fclose(f);
   }
 
+  // processor
+  f = fopen("/proc/cpuinfo", "r");
+  if (f) {
+    char buf[100];
+    while (!feof(f)) {
+      char *line = fgets(buf, sizeof(buf), f);
+      if (!line)
+	break;
+      if (strncmp(line, "model name", 10) == 0) {
+	char *c = strchr(buf, ':');
+	c++;
+	while (*c == ' ')
+	  ++c;
+	char *nl = c;
+	while (*nl != '\n')
+	  ++nl;
+	*nl = '\0';
+	(*pm)["cpu"] = c;
+	break;
+      }
+    }
+    fclose(f);
+  }
+
   // distro info
   f = fopen("/etc/lsb-release", "r");
   if (f) {
