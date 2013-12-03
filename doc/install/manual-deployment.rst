@@ -5,11 +5,11 @@
 All Ceph clusters require at least one monitor, and at least as many OSDs as
 copies of an object stored on the cluster.  Bootstrapping the initial monitor(s)
 is the first step in deploying a Ceph Storage Cluster. Monitor deployment also
-sets important criteria for the entire cluster, such as the default number of
-object  replicas in a pool, the number of placement groups per OSD, the heart
-beat intervals, whether authentication is required, etc. Ceph sets most of these
-values by default, but it's useful to know about frequently overridden settings
-when setting up your cluster for production.
+sets important criteria for the entire cluster, such as the number of replicas
+for pools, the number of placement groups per OSD, the heartbeat intervals,
+whether authentication is required, etc. Most of these values are set by
+default, so it's useful to know about them when setting up your cluster for
+production.
 
 Following the same configuration as `Installation (Quick)`_, we will set up a
 cluster with ``node1`` as  the monitor node, and ``node2`` and ``node3`` for 
@@ -46,24 +46,28 @@ a number of things:
 - **Unique Identifier:** The ``fsid`` is a unique identifier for the cluster, 
   and stands for File System ID from the days when the Ceph Storage Cluster was 
   principally for the Ceph Filesystem. Ceph now supports native interfaces, 
-  block device, and object storage gateway interfaces too, so ``fsid`` is a bit 
-  of a misnomer.
+  block devices, and object storage gateway interfaces too, so ``fsid`` is a 
+  bit of a misnomer.
 
-- **Cluster Name:** All Ceph clusters have a name, but the default name is
-  ``ceph``. Setting the cluster name to something other than ``ceph`` is 
+- **Cluster Name:** Ceph clusters have a cluster name, which is a simple string
+  without spaces. The the default cluster name is ``ceph``, but you may specify
+  a different cluster name. Overriding the default cluster name is 
   especially useful when you are working with multiple clusters and you need to 
-  clearly understand which cluster your are working with. For example, when you 
-  run multiple clusters on the same hardware, or if you are running Ceph in 
-  federated architectures, the cluster name defines which cluster you are
-  using (e.g., ``us-west``, ``us-east``). 
+  clearly understand which cluster your are working with. 
+  
+  For example, when you run multiple clusters in a `federated architecture`_, 
+  the cluster name (e.g., ``us-west``, ``us-east``) identifies the cluster for
+  the current session. **Note:** To identify the cluster name on the command 
+  line interface, specify the a Ceph configuration file with the cluster name
+  (e.g., ``ceph.conf``, ``us-west.conf``, ``us-east.conf``, etc.).
   
 - **Monitor Name:** Each monitor instance within a cluster has a unique name. 
   In common practice, the Ceph Monitor name is the host name (we recommend one
   Ceph Monitor per host, and no commingling of Ceph OSD Daemons with 
   Ceph Monitors).
 
-- **Cluster Map:** Bootstrapping the initial monitor(s) requires you to 
-  generate a cluster map. The cluster map requires the ``fsid``, the cluster 
+- **Monitor Map:** Bootstrapping the initial monitor(s) requires you to 
+  generate a monitor map. The monitor map requires the ``fsid``, the cluster 
   name (or uses the default), and at least one host name and its IP address.
 
 - **Monitor Keyring**: Monitors communicate with each other via a 
@@ -74,15 +78,16 @@ a number of things:
   a ``client.admin`` user. So you must generate the admin user and keyring,
   and you must also add the ``client.admin`` user to the monitor keyring.
 
-The foregoing requirements do not imply the creation of a Ceph Configuration
-file. However, as a best practice, we recommend creating a Ceph configuration
+The foregoing requirements do not imply the creation of a Ceph Configuration 
+file. However, as a best practice, we recommend creating a Ceph configuration 
 file and populating it with the ``fsid``, the ``mon initial members`` and the
-``mon host`` settings. You can get and set all of the monitor settings at
-runtime as well. However, a Ceph Configuration file may contain only those
-settings that override the  default values. When you add settings to a Ceph
-configuration file, these settings override the default settings. Maintaining
-overriden settings in a  Ceph configuration file makes it easier to maintain
-your cluster.
+``mon host`` settings. 
+
+You can get and set all of the monitor settings at runtime as well. However,
+a Ceph Configuration file may contain only those settings that override the 
+default values. When you add settings to a Ceph configuration file, these
+settings override the default settings. Maintaining those settings in a 
+Ceph configuration file makes it easier to maintain your cluster.
 
 The procedure is as follows:
 
@@ -90,15 +95,21 @@ The procedure is as follows:
 #. Log in to the initial monitor node(s)::
 
 	ssh {hostname}
+
+   For example:: 
+
 	ssh node1
 
 
 #. Ensure you have a directory for the Ceph configuration file. By default, 
-   Ceph uses ``/etc/ceph``. When you install ``ceph``, the directory will 
-   get created automatically. ::
+   Ceph uses ``/etc/ceph``. When you install ``ceph``, the installer will 
+   create the ``/etc/ceph`` directory automatically. ::
 
 	ls /etc/ceph   
 
+   **Note:** Deployment tools may remove this directory when purging a
+   cluster (e.g., ``ceph-deploy purgedata {node-name}``, ``ceph-deploy purge
+   {node-name}``).
 
 #. Create a Ceph configuration file (optional). By default, Ceph uses 
    ``ceph.conf``, where ``ceph`` reflects the cluster name. ::
@@ -114,22 +125,33 @@ The procedure is as follows:
 #. Add the unique ID to your Ceph configuration file (optional). :: 
 
 	fsid = {UUID}
+
+   For example:: 
+
 	fsid = a7f64266-0894-4f1e-a635-d0aeaca0e993
 
 
 #. Add the initial monitor(s) to your Ceph configuration file (optional). :: 
 
 	mon initial members = {hostname}[,{hostname}]
+
+   For example:: 
+
 	mon initial members = node1
 
 
 #. Add the IP address(es) of the initial monitor(s) to your Ceph configuration 
-   file and save the file (optional). You may also want to store a copy on your
-   admin node. :: 
+   file and save the file (optional). :: 
 
 	mon host = {ip-address}[,{ip-address}]
+
+   For example::
+
 	mon host = 192.168.0.1
 
+   **Note:** You may use IPv6 addresses too, but you must set ``ms bind ipv6`` 
+   to ``true``. See `Network Configuration Reference`_ for details about 
+   network configuration.
 
 #. Create a keyring for your cluster and generate a monitor secret key. ::
 
@@ -144,26 +166,34 @@ The procedure is as follows:
 
 #. Add the ``client.admin`` key to the ``ceph.mon.keyring``. :: 
 
-	cd /tmp
-	ceph-authtool ceph.mon.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
+	ceph-authtool /tmp/ceph.mon.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
 
 
 #. Generate a monitor map using the hostname(s), host IP address(es) and the FSID. 
    Save it as ``/tmp/monmap``:: 
 
 	monmaptool --create --add {hostname} {ip-address} --fsid {uuid} /tmp/monmap
+
+   For example::
+
 	monmaptool --create --add node1 192.168.0.1 --fsid a7f64266-0894-4f1e-a635-d0aeaca0e993 /tmp/monmap
 
 
 #. Create a default data directory (or directories) on the monitor host(s). ::
 
 	sudo mkdir /var/lib/ceph/mon/{cluster-name}-{hostname}
+
+   For example::
+
 	sudo mkdir /var/lib/ceph/mon/ceph-node1
 
 
 #. Populate the monitor daemon(s) with the monitor map and keyring. ::
 
 	ceph-mon --mkfs -i {hostname} --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
+
+   For example::
+
 	ceph-mon --mkfs -i node1 --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
 
 
@@ -256,12 +286,12 @@ a Ceph Node.
 To create the first two OSDs, perform this procedure on ``node2`` and ``node3``:
 
 
-#. Generate a UUID for each OSD. ::
+#. Generate a UUID for the OSD. ::
 
 	uuidgen
 
 
-#. Create each OSD. If no UUID is given, it will be set automatically when the 
+#. Create the OSD. If no UUID is given, it will be set automatically when the 
    OSD starts up. The following command will output the OSD number, which you 
    will need for subsequent steps. ::
 	
@@ -273,8 +303,6 @@ To create the first two OSDs, perform this procedure on ``node2`` and ``node3``:
 	ssh {new-osd-host}
 	sudo mkdir /var/lib/ceph/osd/ceph-{osd-number}
 	
-	sudo mkdir /var/lib/ceph/osd/ceph-0
-	sudo mkdir /var/lib/ceph/osd/ceph-1
 
 #. If the OSD is for a drive other than the OS drive, prepare it 
    for use with Ceph, and mount it to the directory you just created:: 
@@ -283,8 +311,7 @@ To create the first two OSDs, perform this procedure on ``node2`` and ``node3``:
 	sudo mkfs -t {fstype} /dev/{drive}
 	sudo mount -o user_xattr /dev/{hdd} /var/lib/ceph/osd/ceph-{osd-number}
 
-   **Note:** Ceph typically uses ``xfs`` or ``ext4`` as the filesystem type.
-
+	
 #. Initialize the OSD data directory. :: 
 
 	ssh {new-osd-host}
@@ -297,20 +324,22 @@ To create the first two OSDs, perform this procedure on ``node2`` and ``node3``:
    ``ceph-{osd-num}`` in the path is the ``$cluster-$id``.  If your 
    cluster name differs from ``ceph``, use your cluster name instead.::
 
-	ssh {new-osd-host}
 	sudo ceph auth add osd.{osd-num} osd 'allow *' mon 'allow rwx' -i /var/lib/ceph/osd/ceph-{osd-num}/keyring
 
 
 #. Add your Ceph Node to the CRUSH map. ::
 
-	ceph osd crush add-bucket {hostname} {device-type}
-	ceph osd crush add-bucket node2 host
-	ceph osd crush add-bucket node3 host
+	ceph osd crush add-bucket {hostname} host
+
+   For example::
+
+	ceph osd crush add-bucket node1 host
+
 
 #. Place the Ceph Node under the root ``default``. ::
 
-	ceph osd crush move node2 root=default
-	ceph osd crush move node3 root=default
+	ceph osd crush move node1 root=default
+
 
 #. Add the OSD to the CRUSH map so that it can begin receiving data. You may
    also decompile the CRUSH map, add the OSD to the device list, add the host as a
@@ -318,26 +347,31 @@ To create the first two OSDs, perform this procedure on ``node2`` and ``node3``:
    host, assign it a weight, recompile it and set it. ::
 
 	ceph osd crush add {id-or-name} {weight} [{bucket-type}={bucket-name} ...]
-	ceph osd crush add osd.0 1.0 host=node2
-	ceph osd crush add osd.1 1.0 host=node3
+
+   For example::
+
+	ceph osd crush add osd.0 1.0 host=node1
 
 
 #. After you add an OSD to Ceph, the OSD is in your configuration. However, 
-   it is not yet running. The OSD is ``down`` and ``in``. You must login to 
-   the Ceph Node containing your OSD and start your new OSD before it can 
-   begin receiving data. ::
-
-	ssh {new-osd-host}
+   it is not yet running. The OSD is ``down`` and ``in``. You must start 
+   your new OSD before it can begin receiving data.
 
    For Debian/Ubuntu, use Upstart::
 
 	sudo start ceph-osd id={osd-num}
+
+   For example::
+
 	sudo start ceph-osd id=0
 	sudo start ceph-osd id=1
 
    For CentOS/RHEL, use sysvinit::
 
 	sudo /etc/init.d/ceph start osd.{osd-num}
+
+   For example::
+
 	sudo /etc/init.d/ceph start osd.0
 	sudo /etc/init.d/ceph start osd.1
 
@@ -360,14 +394,17 @@ You should see output that looks something like this::
 
 	# id	weight	type name	up/down	reweight
 	-1	2	root default
-	-2	2		host node2
+	-2	2		host node1
 	0	1			osd.0	up	1
-	-3	1		host node3
+	-3	1		host node2
 	1	1			osd.1	up	1	
 
 To add (or remove) additional monitors, see `Add/Remove Monitors`_. 
 To add (or remove) additional Ceph OSD Daemons, see `Add/Remove OSDs`_.
 
+
+.. _federated architecture: ../../radosgw/federated-config
 .. _Installation (Quick): ../../start
 .. _Add/Remove Monitors: ../../rados/operations/add-or-rm-mons
 .. _Add/Remove OSDs: ../../rados/operations/add-or-rm-osds
+.. _Network Configuration Reference: ../../rados/configuration/network-config-ref
