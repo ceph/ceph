@@ -30,6 +30,8 @@ usr/bin/ceph_test_cls_rgw_meta
 usr/bin/ceph_test_cls_rgw_opstate
 usr/bin/ceph_test_cls_statelog
 usr/bin/ceph_test_cls_version
+usr/bin/ceph_test_c_headers
+usr/bin/ceph_test_get_blkdev_size
 usr/bin/ceph_test_cors
 usr/bin/ceph_test_crypto
 usr/bin/ceph_test_filejournal
