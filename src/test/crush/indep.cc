@@ -89,20 +89,22 @@ int get_num_dups(const vector<int>& v)
 }
 
 TEST(CRUSH, indep_toosmall) {
-  CrushWrapper *c = build_indep_map(g_ceph_context, 1, 3, 1);
+  int num_hosts = 3;
+  CrushWrapper *c = build_indep_map(g_ceph_context, 1, num_hosts, 1);
   vector<__u32> weight(c->get_max_devices(), 0x10000);
   c->dump_tree(weight, &cout, NULL);
 
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
-    c->do_rule(0, x, out, 5, weight);
+    int maxout = 5;
+    c->do_rule(0, x, out, maxout, weight);
     cout << x << " -> " << out << std::endl;
     int num_none = 0;
     for (unsigned i=0; i<out.size(); ++i) {
       if (out[i] == CRUSH_ITEM_NONE)
 	num_none++;
     }
-    ASSERT_EQ(2, num_none);
+    ASSERT_EQ(maxout - num_hosts, num_none);
     ASSERT_EQ(0, get_num_dups(out));
   }
   delete c;
@@ -159,15 +161,15 @@ TEST(CRUSH, indep_out_contig) {
   CrushWrapper *c = build_indep_map(g_ceph_context, 3, 3, 3);
   vector<__u32> weight(c->get_max_devices(), 0x10000);
 
-  // mark a bunch of osds out
-  int num = 3*3*3;
-  for (int i=0; i<num / 3; ++i)
+  // mark the first rack out, only six hosts left
+  for (int i=0; i<9; ++i)
     weight[i] = 0;
   c->dump_tree(weight, &cout, NULL);
 
   c->crush->choose_total_tries = 100;
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
+    // ask for seven items
     c->do_rule(0, x, out, 7, weight);
     cout << x << " -> " << out << std::endl;
     int num_none = 0;
@@ -175,6 +177,7 @@ TEST(CRUSH, indep_out_contig) {
       if (out[i] == CRUSH_ITEM_NONE)
 	num_none++;
     }
+    // there is only six hosts left, out will always be 1 short
     ASSERT_EQ(1, num_none);
     ASSERT_EQ(0, get_num_dups(out));
   }
@@ -192,51 +195,46 @@ TEST(CRUSH, indep_out_progressive) {
   for (int x = 1; x < 5; ++x) {
     vector<__u32> weight(c->get_max_devices(), 0x10000);
 
-  std::map<int,unsigned> pos;
-  vector<int> prev;
-  for (unsigned i=0; i<weight.size(); ++i) {
-    vector<int> out;
-    c->do_rule(0, x, out, 7, weight);
-    cout << "(" << i << "/" << weight.size() << " out) "
-	 << x << " -> " << out << std::endl;
-    int num_none = 0;
-    for (unsigned k=0; k<out.size(); ++k) {
-      if (out[k] == CRUSH_ITEM_NONE)
-	num_none++;
-    }
-    ASSERT_EQ(0, get_num_dups(out));
+    std::map<int,unsigned> pos;
+    vector<int> prev;
+    for (unsigned i=0; i<weight.size(); ++i) {
+      vector<int> out;
+      c->do_rule(0, x, out, 7, weight);
+      cout << "(" << i << "/" << weight.size() << " out) "
+	   << x << " -> " << out << std::endl;
+      ASSERT_EQ(0, get_num_dups(out));
 
-    // make sure nothing moved
-    int moved = 0;
-    int changed = 0;
-    for (unsigned j=0; j<out.size()/2; ++j) {
-      if (i && out[j] != prev[j]) {
-	++changed;
-	++tchanged;
-      }
-      if (out[j] == CRUSH_ITEM_NONE) {
-	pos.erase(prev[j]);
-	continue;
-      }
-      if (i && pos.count(out[j])) {
-	// result shouldn't have moved position
-	if (j != pos[out[j]]) {
-	  cout << " " << out[j] << " moved from " << pos[out[j]] << " to " << j << std::endl;
-	  ++moved;
+      // make sure nothing moved
+      int moved = 0;
+      int changed = 0;
+      for (unsigned j=0; j<out.size()/2; ++j) {
+	if (i && out[j] != prev[j]) {
+	  ++changed;
+	  ++tchanged;
 	}
-	//ASSERT_EQ(j, pos[out[j]]);
+	if (out[j] == CRUSH_ITEM_NONE) {
+	  pos.erase(prev[j]);
+	  continue;
+	}
+	if (i && pos.count(out[j])) {
+	  // result shouldn't have moved position
+	  if (j != pos[out[j]]) {
+	    cout << " " << out[j] << " moved from " << pos[out[j]] << " to " << j << std::endl;
+	    ++moved;
+	  }
+	  //ASSERT_EQ(j, pos[out[j]]);
+	}
+	pos[out[j]] = j;
       }
-      pos[out[j]] = j;
-    }
-    if (moved || changed)
-      cout << " " << moved << " moved, " << changed << " changed" << std::endl;
-    ASSERT_LE(moved, 1);
-    ASSERT_LE(changed, 2);
+      if (moved || changed)
+	cout << " " << moved << " moved, " << changed << " changed" << std::endl;
+      ASSERT_LE(moved, 1);
+      ASSERT_LE(changed, 2);
 
-    // mark another osd out
-    weight[i] = 0;
-    prev = out;
-  }
+      // mark another osd out
+      weight[i] = 0;
+      prev = out;
+    }
   }
   cout << tchanged << " total changed" << std::endl;
 
@@ -256,3 +254,12 @@ int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+
+/*
+ * Local Variables:
+ * compile-command: "cd ../.. ; make unittest_crush_indep && 
+ *    valgrind \
+ *    --max-stackframe=20000000 --tool=memcheck \
+ *    ./unittest_crush_indep # --gtest_filter=CRUSH.indep_out_alt"
+ * End:
+ */
