@@ -106,20 +106,21 @@ public:
     crush->choose_total_tries = 19;
     crush->chooseleaf_descend_once = 0;
   }
-  void set_tunables_optimal() {
+  void set_tunables_argonaut() {
+    set_tunables_legacy();
+  }
+  void set_tunables_bobtail() {
     crush->choose_local_tries = 0;
     crush->choose_local_fallback_tries = 0;
     crush->choose_total_tries = 50;
     crush->chooseleaf_descend_once = 1;
   }
-  void set_tunables_argonaut() {
-    set_tunables_legacy();
-  }
-  void set_tunables_bobtail() {
-    set_tunables_optimal();
+
+  void set_tunables_optimal() {
+    set_tunables_bobtail();
   }
   void set_tunables_default() {
-    set_tunables_legacy();
+    set_tunables_bobtail();
   }
 
   int get_choose_local_tries() const {
