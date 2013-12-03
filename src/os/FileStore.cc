@@ -3140,6 +3140,7 @@ void FileStore::sync_entry()
       goto again;
     }
   }
+  stop = false;
   lock.Unlock();
 }
 
