@@ -693,12 +693,12 @@ int CrushWrapper::add_simple_rule(string name, string root_name,
   assert(rule);
   int step = 0;
   if (mode == "indep")
-    crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSE_LEAF_TRIES, 5, 0);
+    crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 5, 0);
   crush_rule_set_step(rule, step++, CRUSH_RULE_TAKE, root, 0);
   if (type)
     crush_rule_set_step(rule, step++,
-			mode == "firstn" ? CRUSH_RULE_CHOOSE_LEAF_FIRSTN :
-			CRUSH_RULE_CHOOSE_LEAF_INDEP,
+			mode == "firstn" ? CRUSH_RULE_CHOOSELEAF_FIRSTN :
+			CRUSH_RULE_CHOOSELEAF_INDEP,
 			CRUSH_CHOOSE_N,
 			type);
   else
@@ -1103,12 +1103,12 @@ void CrushWrapper::dump_rules(Formatter *f) const
 	f->dump_int("num", get_rule_arg1(i, j));
 	f->dump_string("type", get_type_name(get_rule_arg2(i, j)));
 	break;
-      case CRUSH_RULE_CHOOSE_LEAF_FIRSTN:
+      case CRUSH_RULE_CHOOSELEAF_FIRSTN:
 	f->dump_string("op", "chooseleaf_firstn");
 	f->dump_int("num", get_rule_arg1(i, j));
 	f->dump_string("type", get_type_name(get_rule_arg2(i, j)));
 	break;
-      case CRUSH_RULE_CHOOSE_LEAF_INDEP:
+      case CRUSH_RULE_CHOOSELEAF_INDEP:
 	f->dump_string("op", "chooseleaf_indep");
 	f->dump_int("num", get_rule_arg1(i, j));
 	f->dump_string("type", get_type_name(get_rule_arg2(i, j)));
@@ -1117,7 +1117,7 @@ void CrushWrapper::dump_rules(Formatter *f) const
 	f->dump_string("op", "set_choose_tries");
 	f->dump_int("num", get_rule_arg1(i, j));
 	break;
-      case CRUSH_RULE_SET_CHOOSE_LEAF_TRIES:
+      case CRUSH_RULE_SET_CHOOSELEAF_TRIES:
 	f->dump_string("op", "set_chooseleaf_tries");
 	f->dump_int("num", get_rule_arg1(i, j));
 	break;

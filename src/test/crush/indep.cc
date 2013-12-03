@@ -54,10 +54,10 @@ CrushWrapper *build_indep_map(CephContext *cct, int num_rack, int num_host,
 
   crush_rule *rule = crush_make_rule(4, 0, 123, 1, 20);
   assert(rule);
-  crush_rule_set_step(rule, 0, CRUSH_RULE_SET_CHOOSE_LEAF_TRIES, 10, 0);
+  crush_rule_set_step(rule, 0, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 10, 0);
   crush_rule_set_step(rule, 1, CRUSH_RULE_TAKE, rootno, 0);
   crush_rule_set_step(rule, 2,
-		      CRUSH_RULE_CHOOSE_LEAF_INDEP,
+		      CRUSH_RULE_CHOOSELEAF_INDEP,
 		      CRUSH_CHOOSE_N,
 		      1);
   crush_rule_set_step(rule, 3, CRUSH_RULE_EMIT, 0, 0);
