@@ -850,6 +850,7 @@ def prepare_journal_dev(
                     num=num,
                     uuid=ptype,
                     ),
+                '--mbrtogpt',
                 '--',
                 journal,
                 ],
