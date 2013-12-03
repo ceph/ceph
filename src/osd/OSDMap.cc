@@ -1888,7 +1888,7 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
     assert(rule);
     crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
     crush_rule_set_step(rule, 1,
-			cct->_conf->osd_crush_chooseleaf_type ? CRUSH_RULE_CHOOSE_LEAF_FIRSTN : CRUSH_RULE_CHOOSE_FIRSTN,
+			cct->_conf->osd_crush_chooseleaf_type ? CRUSH_RULE_CHOOSELEAF_FIRSTN : CRUSH_RULE_CHOOSE_FIRSTN,
 			CRUSH_CHOOSE_N,
 			cct->_conf->osd_crush_chooseleaf_type);
     crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
@@ -2051,10 +2051,10 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
 
     if (racks.size() > 3) {
       // spread replicas across hosts
-      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_LEAF_FIRSTN, CRUSH_CHOOSE_N, 2);
+      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSELEAF_FIRSTN, CRUSH_CHOOSE_N, 2);
     } else if (hosts.size() > 1) {
       // spread replicas across hosts
-      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_LEAF_FIRSTN, CRUSH_CHOOSE_N, 1);
+      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSELEAF_FIRSTN, CRUSH_CHOOSE_N, 1);
     } else {
       // just spread across osds
       crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, CRUSH_CHOOSE_N, 0);

@@ -260,7 +260,7 @@ int CrushCompiler::decompile(ostream &out)
 	out << "\tstep set_choose_tries " << crush.get_rule_arg1(i, j)
 	    << "\n";
 	break;
-      case CRUSH_RULE_SET_CHOOSE_LEAF_TRIES:
+      case CRUSH_RULE_SET_CHOOSELEAF_TRIES:
 	out << "\tstep set_chooseleaf_tries " << crush.get_rule_arg1(i, j)
 	    << "\n";
 	break;
@@ -278,14 +278,14 @@ int CrushCompiler::decompile(ostream &out)
 	print_type_name(out, crush.get_rule_arg2(i, j), crush);
 	out << "\n";
 	break;
-      case CRUSH_RULE_CHOOSE_LEAF_FIRSTN:
+      case CRUSH_RULE_CHOOSELEAF_FIRSTN:
 	out << "\tstep chooseleaf firstn "
 	    << crush.get_rule_arg1(i, j) 
 	    << " type ";
 	print_type_name(out, crush.get_rule_arg2(i, j), crush);
 	out << "\n";
 	break;
-      case CRUSH_RULE_CHOOSE_LEAF_INDEP:
+      case CRUSH_RULE_CHOOSELEAF_INDEP:
 	out << "\tstep chooseleaf indep "
 	    << crush.get_rule_arg1(i, j) 
 	    << " type ";
