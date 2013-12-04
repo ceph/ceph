@@ -227,25 +227,32 @@ int ReplicatedBackend::objects_list_partial(
   vector<hobject_t> *ls,
   hobject_t *next)
 {
-  vector<ghobject_t> objects;
-  ghobject_t _next;
-  int r = osd->store->collection_list_partial(
-    coll,
-    begin,
-    min,
-    max,
-    seq,
-    &objects,
-    &_next);
-  ls->reserve(objects.size());
-  for (vector<ghobject_t>::iterator i = objects.begin();
-       i != objects.end();
-       ++i) {
-    assert(i->is_degenerate());
-    ls->push_back(i->hobj);
+  assert(ls);
+  ghobject_t _next(begin);
+  ls->reserve(max);
+  int r = 0;
+  while (!_next.is_max() && ls->size() < (unsigned)min) {
+    vector<ghobject_t> objects;
+    int r = osd->store->collection_list_partial(
+      coll,
+      _next,
+      min - ls->size(),
+      max - ls->size(),
+      seq,
+      &objects,
+      &_next);
+    if (r != 0)
+      break;
+    for (vector<ghobject_t>::iterator i = objects.begin();
+	 i != objects.end();
+	 ++i) {
+      if (i->is_degenerate()) {
+	ls->push_back(i->hobj);
+      }
+    }
   }
-  assert(_next.is_degenerate());
-  *next = _next.hobj;
+  if (r == 0)
+    *next = _next.hobj;
   return r;
 }
 
@@ -255,6 +262,7 @@ int ReplicatedBackend::objects_list_range(
   snapid_t seq,
   vector<hobject_t> *ls)
 {
+  assert(ls);
   vector<ghobject_t> objects;
   int r = osd->store->collection_list_range(
     coll,
@@ -266,8 +274,9 @@ int ReplicatedBackend::objects_list_range(
   for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
-    assert(i->is_degenerate());
-    ls->push_back(i->hobj);
+    if (i->is_degenerate()) {
+      ls->push_back(i->hobj);
+    }
   }
   return r;
 }
