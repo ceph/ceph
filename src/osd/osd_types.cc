@@ -19,6 +19,7 @@ extern "C" {
 }
 #include "PG.h"
 #include "OSDMap.h"
+#include "PGBackend.h"
 
 const char *ceph_osd_flag_name(unsigned flag)
 {
@@ -2281,7 +2282,7 @@ void pg_log_entry_t::decode_with_checksum(bufferlist::iterator& p)
 
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(8, 4, bl);
+  ENCODE_START(9, 4, bl);
   ::encode(op, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
@@ -2304,6 +2305,7 @@ void pg_log_entry_t::encode(bufferlist &bl) const
     ::encode(prior_version, bl);
   ::encode(snaps, bl);
   ::encode(user_version, bl);
+  ::encode(mod_desc, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2351,6 +2353,11 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
   else
     user_version = version.version;
 
+  if (struct_v >= 9)
+    ::decode(mod_desc, bl);
+  else
+    mod_desc.mark_unrollbackable();
+
   DECODE_FINISH(bl);
 }
 
@@ -2374,6 +2381,11 @@ void pg_log_entry_t::dump(Formatter *f) const
     f->open_object_section("snaps");
     for (vector<snapid_t>::iterator p = v.begin(); p != v.end(); ++p)
       f->dump_unsigned("snap", *p);
+    f->close_section();
+  }
+  {
+    f->open_object_section("mod_desc");
+    mod_desc.dump(f);
     f->close_section();
   }
 }
