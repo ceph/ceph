@@ -67,14 +67,13 @@ crush location could be described as::
 
 Note:
 
-*. Note that the order of the keys does not matter.
-*. The key name (left of ``='') must be a valid CRUSH ``type``.  By default
-   these include root, datacenter, row, rack, and host, but those types can be
-   customized to be anything appropriate by modifying the CRUSH map.
-*. Not all keys need to be specified.  For example, by default, Ceph
-   automatically sets a ceph-osd daemon's location to be
-   ``root=default host=HOSTNAME'' (based on the output from ``hostname
-   -s'').
+#. Note that the order of the keys does not matter.
+#. The key name (left of ``='') must be a valid CRUSH ``type``.  By default
+ these include root, datacenter, row, rack, and host, but those types can be
+ customized to be anything appropriate by modifying the CRUSH map.
+#. Not all keys need to be specified.  For example, by default, Ceph
+ automatically sets a ceph-osd daemon's location to be
+ ``root=default host=HOSTNAME'' (based on the output from ``hostname -s'').
 
 ceph-crush-location hook
 ------------------------
