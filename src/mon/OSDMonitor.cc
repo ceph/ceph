@@ -2826,19 +2826,26 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
   if (pending_inc.new_pools.count(pool))
     p = pending_inc.new_pools[pool];
 
-  // accept val as a json string or int, and parse out int
-  // values from the string as needed
-  string raw_val = cmd_vartype_stringify(cmdmap["val"]);
+  // accept val as a json string in the normal case (current
+  // generation monitor).  parse out int or float values from the
+  // string as needed.  however, if it is not a string, try to pull
+  // out an int, in case an older monitor with an older json schema is
+  // forwarding a request.
   string val;
-  cmd_getval(g_ceph_context, cmdmap, "val", val);
   string interr;
   int64_t n = 0;
-  if (!cmd_getval(g_ceph_context, cmdmap, "val", n))
+  if (!cmd_getval(g_ceph_context, cmdmap, "val", val)) {
+    // wasn't a string; maybe an older mon forwarded json with an int?
+    if (!cmd_getval(g_ceph_context, cmdmap, "val", n))
+      return -EINVAL;  // no value!
+  } else {
+    // we got a string.  see if it contains an int.
     n = strict_strtoll(val.c_str(), 10, &interr);
+  }
 
   if (var == "size") {
     if (interr.length()) {
-      ss << "error parsing integer value '" << raw_val << "': " << interr;
+      ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
     if (n == 0 || n > 10) {
@@ -2851,21 +2858,21 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     ss << "set pool " << pool << " size to " << n;
   } else if (var == "min_size") {
     if (interr.length()) {
-      ss << "error parsing integer value '" << raw_val << "': " << interr;
+      ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
     p.min_size = n;
     ss << "set pool " << pool << " min_size to " << n;
   } else if (var == "crash_replay_interval") {
     if (interr.length()) {
-      ss << "error parsing integer value '" << raw_val << "': " << interr;
+      ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
     p.crash_replay_interval = n;
     ss << "set pool " << pool << " to crash_replay_interval to " << n;
   } else if (var == "pg_num") {
     if (interr.length()) {
-      ss << "error parsing integer value '" << raw_val << "': " << interr;
+      ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
     if (n <= (int)p.get_pg_num()) {
@@ -2898,7 +2905,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
   } else if (var == "pgp_num") {
     if (interr.length()) {
-      ss << "error parsing integer value '" << raw_val << "': " << interr;
+      ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
     if (n <= 0) {
@@ -2919,7 +2926,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
   } else if (var == "crush_ruleset") {
     if (interr.length()) {
-      ss << "error parsing integer value '" << raw_val << "': " << interr;
+      ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
     if (osdmap.crush->rule_exists(n)) {
@@ -2931,15 +2938,14 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
   } else if (var == "hashpspool") {
     // make sure we only compare against 'n' if we didn't receive a string
-    int flag_val = (!val.empty() ? -1 : n);
-    if (val == "true" || flag_val == 1) {
+    if (val == "true" || (interr.empty() && n == 1)) {
       p.flags |= pg_pool_t::FLAG_HASHPSPOOL;
       ss << "set";
-    } else if (val == "false" || flag_val == 0) {
+    } else if (val == "false" || (interr.empty() && n == 0)) {
       p.flags ^= pg_pool_t::FLAG_HASHPSPOOL;
       ss << "unset";
     } else {
-      ss << "expecting value 0 or 1";
+      ss << "expecting value 'true', 'false', '0', or '1'";
       return -EINVAL;
     }
     ss << " pool " << pool << " flag hashpspool";
