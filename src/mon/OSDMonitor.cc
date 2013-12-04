@@ -3521,7 +3521,23 @@ done:
     } else {
       const pg_pool_t *p = osdmap.get_pg_pool(pool);
       int64_t n;
-      cmd_getval(g_ceph_context, cmdmap, "val", n);
+      if (!cmd_getval(g_ceph_context, cmdmap, "val", n)) {
+	// try to get it as a string.  this is a kludge for forward
+	// compatibility for future json schemas that pass 'val' as a
+	// string.
+	string val;
+	if (!cmd_getval(g_ceph_context, cmdmap, "val", val)) {
+	  err = -EINVAL;
+	  goto reply;
+	}
+	string interr;
+	n = strict_strtoll(val.c_str(), 10, &interr);
+	if (interr.length()) {
+	  ss << interr;
+	  err = -EINVAL;
+	  goto reply;
+	}
+      }
       string var;
       cmd_getval(g_ceph_context, cmdmap, "var", var);
       if (pending_inc.new_pools.count(pool) == 0)
