@@ -162,6 +162,13 @@ private:
 	   << " current snap is " << context.current_snap << std::endl;
       return new CopyFromOp(m_op, &context, oid, oid2, m_stats);
 
+    case TEST_OP_HIT_SET_LIST:
+      {
+	uint32_t hash = rjhash32(rand());
+	cout << "hit_set_list " << hash << std::endl;
+	return new HitSetListOp(m_op, &context, hash, m_stats);
+      }
+
     default:
       cerr << "Invalid op type " << type << std::endl;
       assert(0);
@@ -203,6 +210,7 @@ int main(int argc, char **argv)
     { TEST_OP_TMAPPUT, "tmapput" },
     { TEST_OP_WATCH, "watch" },
     { TEST_OP_COPY_FROM, "copy_from" },
+    { TEST_OP_HIT_SET_LIST, "hit_set_list" },
     { TEST_OP_READ /* grr */, NULL },
   };
 
