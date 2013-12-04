@@ -8569,11 +8569,12 @@ void ReplicatedPG::hit_set_create()
 {
   utime_t now = ceph_clock_now(NULL);
   // make a copy of the params to modify
-  HitSet::Params *params = new HitSet::Params(pool.info.hit_set_params);
+  HitSet::Params params(pool.info.hit_set_params);
 
   if (pool.info.hit_set_params.get_type() == HitSet::TYPE_BLOOM) {
     BloomHitSet::Params *p =
-      static_cast<BloomHitSet::Params*>(params->impl.get());
+      static_cast<BloomHitSet::Params*>(params.impl.get());
+    dout(20) << __func__ << " " << params << " " << p << dendl;
 
     // convert false positive rate so it holds up across the full period
     p->false_positive = p->false_positive / pool.info.hit_set_count;
