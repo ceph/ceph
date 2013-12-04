@@ -268,6 +268,14 @@ public:
     return generation == NO_GEN && shard_id == NO_SHARD;
   }
 
+  bool is_no_gen() const {
+    return generation == NO_GEN;
+  }
+
+  bool is_no_shard() const {
+    return shard_id == NO_SHARD;
+  }
+
   // maximum sorted value.
   static ghobject_t get_max() {
     ghobject_t h(hobject_t::get_max());
