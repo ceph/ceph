@@ -8559,6 +8559,10 @@ void ReplicatedPG::hit_set_setup()
 
   // FIXME: discard any previous data for now
   hit_set_create();
+
+  // include any writes we know about from the pg log.  this doesn't
+  // capture reads, but it is better than nothing!
+  hit_set_apply_log();
 }
 
 void ReplicatedPG::hit_set_create()
