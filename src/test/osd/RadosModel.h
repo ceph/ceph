@@ -51,7 +51,6 @@ enum TestOpType {
   TEST_OP_ROLLBACK,
   TEST_OP_SETATTR,
   TEST_OP_RMATTR,
-  TEST_OP_TMAPPUT,
   TEST_OP_WATCH,
   TEST_OP_COPY_FROM,
   TEST_OP_HIT_SET_LIST,
@@ -307,7 +306,6 @@ public:
 	 ++i) {
       new_obj.attrs.erase(*i);
     }
-    new_obj.tmap = false;
     pool_obj_cont[current_snap].erase(oid);
     pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
   }
@@ -345,23 +343,8 @@ public:
       }
     }
     new_obj.header = bl;
-    new_obj.tmap = false;
     new_obj.exists = true;
     pool_obj_cont[current_snap].erase(oid);
-    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
-  }
-
-  void set_object_tmap(const string &oid, const map<string, ContDesc> &attrs,
-		       bufferlist header,
-		       bufferlist tmap_contents)
-  {
-    ObjectDesc new_obj(&cont_gen);
-    pool_obj_cont[current_snap].erase(oid);
-    new_obj.attrs = attrs;
-    new_obj.tmap_contents = tmap_contents;
-    new_obj.header = header;
-    new_obj.tmap = true;
-    new_obj.exists = true;
     pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
   }
 
@@ -383,7 +366,6 @@ public:
 	 ++i) {
       new_obj.attrs[i->first] = i->second;
     }
-    new_obj.tmap = false;
     new_obj.exists = true;
     pool_obj_cont[current_snap].erase(oid);
     pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
@@ -403,11 +385,6 @@ public:
       }
     }
     new_obj.exists = true;
-    if (new_obj.tmap) {
-      new_obj.tmap = false;
-      new_obj.attrs.clear();
-      new_obj.header = bufferlist();
-    }
     new_obj.update(contents);
     pool_obj_cont[current_snap].erase(oid);
     pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
@@ -593,100 +570,6 @@ public:
   string getType()
   {
     return "RemoveAttrsOp";
-  }
-};
-
-class TmapPutOp : public TestOp {
-public:
-  string oid;
-  librados::ObjectWriteOperation op;
-  librados::AioCompletion *comp;
-  bool done;
-  TmapPutOp(int n,
-	    RadosTestContext *context,
-	    const string &oid,
-	    TestOpStat *stat)
-    : TestOp(n, context, stat), oid(oid), comp(NULL), done(false)
-  {}
-
-  void _begin()
-  {
-    ContDesc cont;
-    {
-      Mutex::Locker l(context->state_lock);
-      cont = ContDesc(context->seq_num, context->current_snap,
-		      context->seq_num, "");
-      context->oid_in_use.insert(oid);
-      context->oid_not_in_use.erase(oid);
-    }
-
-    op.remove();
-    map<string, bufferlist> omap_contents;
-    map<string, ContDesc> omap;
-    bufferlist header;
-    ContentsGenerator::iterator keygen = context->cont_gen.get_iterator(cont);
-    while (!*keygen) ++keygen;
-    while (*keygen) {
-      header.append(*keygen);
-      ++keygen;
-    }
-    for (int i = 0; i < 20; ++i) {
-      string key;
-      while (!*keygen) ++keygen;
-      while (*keygen && key.size() < 40) {
-	key.push_back((*keygen % 20) + 'a');
-	++keygen;
-      }
-      ContDesc val(cont);
-      val.seqnum += context->cont_gen.get_length(cont);
-      val.prefix = ("oid: " + oid);
-      omap[key] = val;
-      bufferlist val_buffer = context->cont_gen.gen_attribute(val);
-      omap_contents[key] = val_buffer;
-      op.setxattr(key.c_str(), val_buffer);
-    }
-
-    bufferlist tmap_contents;
-    ::encode(header, tmap_contents);
-    ::encode(omap_contents, tmap_contents);
-    op.tmap_put(tmap_contents);
-    {
-      Mutex::Locker l(context->state_lock);
-      context->set_object_tmap(oid, omap, header,
-			       tmap_contents);
-    }
-
-    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
-      new pair<TestOp*, TestOp::CallbackInfo*>(this,
-					       new TestOp::CallbackInfo(0));
-    comp = context->rados.aio_create_completion((void*) cb_arg, &write_callback,
-						NULL);
-    context->io_ctx.aio_operate(context->prefix+oid, comp, &op);
-  }
-
-  void _finish(CallbackInfo *info)
-  {
-    Mutex::Locker l(context->state_lock);
-    int r;
-    if ((r = comp->get_return_value())) {
-      cerr << "err " << r << std::endl;
-      assert(0);
-    }
-    done = true;
-    context->update_object_version(oid, comp->get_version64());
-    context->oid_in_use.erase(oid);
-    context->oid_not_in_use.insert(oid);
-    context->kick();
-  }
-
-  bool finished()
-  {
-    return done;
-  }
-
-  string getType()
-  {
-    return "TmapPutOp";
   }
 };
 
@@ -1052,13 +935,11 @@ public:
       context->io_ctx.snap_set_read(context->snaps[snap]);
     }
 
-    if (!old_value.tmap) {
-      op.read(0,
-	      !old_value.has_contents() ? 0 :
-	      context->cont_gen.get_length(old_value.most_recent()),
-	      &result,
-	      &retval);
-    }
+    op.read(0,
+	    !old_value.has_contents() ? 0 :
+	    context->cont_gen.get_length(old_value.most_recent()),
+	    &result,
+	    &retval);
 
     for (map<string, ContDesc>::iterator i = old_value.attrs.begin();
 	 i != old_value.attrs.end();
@@ -1552,7 +1433,7 @@ public:
 
   string getType()
   {
-    return "TmapPutOp";
+    return "CopyFromOp";
   }
 };
 

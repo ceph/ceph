@@ -141,12 +141,6 @@ private:
 	   << " current snap is " << context.current_snap << std::endl;
       return new RemoveAttrsOp(m_op, &context, oid, m_stats);
 
-    case TEST_OP_TMAPPUT:
-      oid = *(rand_choose(context.oid_not_in_use));
-      cout << m_op << ": " << "tmapput oid " << oid
-	   << " current snap is " << context.current_snap << std::endl;
-      return new TmapPutOp(m_op, &context, oid, m_stats);
-
     case TEST_OP_WATCH:
       oid = *(rand_choose(context.oid_not_in_use));
       cout << m_op << ": " << "watch oid " << oid
@@ -238,7 +232,6 @@ int main(int argc, char **argv)
     { TEST_OP_ROLLBACK, "rollback" },
     { TEST_OP_SETATTR, "setattr" },
     { TEST_OP_RMATTR, "rmattr" },
-    { TEST_OP_TMAPPUT, "tmapput" },
     { TEST_OP_WATCH, "watch" },
     { TEST_OP_COPY_FROM, "copy_from" },
     { TEST_OP_HIT_SET_LIST, "hit_set_list" },
