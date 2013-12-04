@@ -2742,10 +2742,6 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
   int64_t n = 0;
   if (!cmd_getval(g_ceph_context, cmdmap, "val", n))
     n = strict_strtoll(val.c_str(), 10, &interr);
-  string floaterr;
-  float f;
-  if (!cmd_getval(g_ceph_context, cmdmap, "val", f))
-    f = strict_strtod(val.c_str(), &floaterr);
 
   if (var == "size") {
     if (interr.length()) {
