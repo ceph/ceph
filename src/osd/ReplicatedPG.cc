@@ -8567,8 +8567,6 @@ void ReplicatedPG::hit_set_persist()
 {
   dout(10) << __func__  << dendl;
   bufferlist bl;
-  hit_set->seal();
-  ::encode(*hit_set, bl);
 
   utime_t now = ceph_clock_now(cct);
   RepGather *repop;
@@ -8579,6 +8577,8 @@ void ReplicatedPG::hit_set_persist()
     info.hit_set.current_info.begin = hit_set_start_stamp;
   if (hit_set->is_full()) {
     // archive
+    hit_set->seal();
+    ::encode(*hit_set, bl);
     info.hit_set.current_info.end = now;
     oid = get_hit_set_archive_object(info.hit_set.current_info.begin,
 				     info.hit_set.current_info.end);
@@ -8586,6 +8586,7 @@ void ReplicatedPG::hit_set_persist()
     reset = true;
   } else {
     // persist snapshot of current hitset
+    ::encode(*hit_set, bl);
     oid = get_hit_set_current_object(now);
     dout(20) << __func__ << " checkpoint " << oid << dendl;
   }
