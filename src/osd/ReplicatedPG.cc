@@ -8566,7 +8566,6 @@ void ReplicatedPG::hit_set_create()
   utime_t now = ceph_clock_now(NULL);
   // make a copy of the params to modify
   HitSet::Params *params = new HitSet::Params(pool.info.hit_set_params);
-  uint64_t target_size = 0;
 
   if (pool.info.hit_set_params.get_type() == HitSet::TYPE_BLOOM) {
     BloomHitSet::Params *p =
@@ -8587,7 +8586,6 @@ void ReplicatedPG::hit_set_create()
     }
     if (p->target_size < static_cast<uint64_t>(g_conf->osd_hit_set_min_size))
       p->target_size = g_conf->osd_hit_set_min_size;
-    target_size = p->target_size;
 
     p->seed = now.sec();
 
@@ -8597,7 +8595,7 @@ void ReplicatedPG::hit_set_create()
   hit_set.reset(new HitSet(params));
   hit_set_start_stats.reset(new pg_stat_t(info.stats));
   hit_set_start_stamp = now;
-  info.hit_set.current_info = pg_hit_set_info_t(target_size, now);
+  info.hit_set.current_info = pg_hit_set_info_t(now);
 }
 
 /**
@@ -8628,7 +8626,6 @@ bool ReplicatedPG::hit_set_apply_log()
   }
 
   info.hit_set.current_last_update = to;
-  info.hit_set.current_info.size = hit_set->insert_count();
   return true;
 }
 
@@ -8646,8 +8643,7 @@ void ReplicatedPG::hit_set_persist()
 
   if (!info.hit_set.current_info.begin)
     info.hit_set.current_info.begin = hit_set_start_stamp;
-  info.hit_set.current_info.size = hit_set->insert_count();
-  if (info.hit_set.current_info.is_full()) {
+  if (hit_set->is_full()) {
     // archive
     info.hit_set.current_info.end = now;
     oid = get_hit_set_archive_object(info.hit_set.current_info.begin,
