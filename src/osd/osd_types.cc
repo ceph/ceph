@@ -2725,8 +2725,6 @@ void pg_create_t::generate_test_instances(list<pg_create_t*>& o)
 void pg_hit_set_info_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(size, bl);
-  ::encode(target_size, bl);
   ::encode(begin, bl);
   ::encode(end, bl);
   ::encode(version, bl);
@@ -2736,8 +2734,6 @@ void pg_hit_set_info_t::encode(bufferlist& bl) const
 void pg_hit_set_info_t::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
-  ::decode(size, p);
-  ::decode(target_size, p);
   ::decode(begin, p);
   ::decode(end, p);
   ::decode(version, p);
@@ -2746,8 +2742,6 @@ void pg_hit_set_info_t::decode(bufferlist::iterator& p)
 
 void pg_hit_set_info_t::dump(Formatter *f) const
 {
-  f->dump_unsigned("size", size);
-  f->dump_unsigned("target_size", target_size);
   f->dump_stream("begin") << begin;
   f->dump_stream("end") << end;
   f->dump_stream("version") << version;
@@ -2757,8 +2751,6 @@ void pg_hit_set_info_t::generate_test_instances(list<pg_hit_set_info_t*>& ls)
 {
   ls.push_back(new pg_hit_set_info_t);
   ls.push_back(new pg_hit_set_info_t);
-  ls.back()->size = 123;
-  ls.back()->target_size = 345;
   ls.back()->begin = utime_t(1, 2);
   ls.back()->end = utime_t(3, 4);
 }
@@ -2809,7 +2801,6 @@ void pg_hit_set_history_t::generate_test_instances(list<pg_hit_set_history_t*>& 
   ls.push_back(new pg_hit_set_history_t);
   ls.back()->current_last_update = eversion_t(1, 2);
   ls.back()->current_last_stamp = utime_t(100, 123);
-  ls.back()->current_info.size = 3;
   ls.back()->current_info.begin = utime_t(2, 4);
   ls.back()->current_info.end = utime_t(62, 24);
   ls.back()->history.push_back(ls.back()->current_info);

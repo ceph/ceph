@@ -1233,18 +1233,12 @@ WRITE_CLASS_ENCODER_FEATURES(pool_stat_t)
  * and the time range it covers.
  */
 struct pg_hit_set_info_t {
-  uint32_t size;        ///< number of insertions
-  uint32_t target_size; ///< expected insertions
   utime_t begin, end;   ///< time interval
   eversion_t version;   ///< version this HitSet object was written
 
-  pg_hit_set_info_t() : size(0), target_size(0) {}
-  pg_hit_set_info_t(uint32_t target, utime_t b)
-    : size(0), target_size(target), begin(b) {}
-
-  bool is_full() const {
-    return size && size >= target_size;
-  }
+  pg_hit_set_info_t() {}
+  pg_hit_set_info_t(utime_t b)
+    : begin(b) {}
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
