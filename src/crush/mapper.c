@@ -16,6 +16,7 @@
 # define dprintk(args...) /* printf(args) */
 # define kmalloc(x, f) malloc(x)
 # define kfree(x) free(x)
+/*# define DEBUG_INDEP*/
 #endif
 
 #include "crush.h"
@@ -486,6 +487,20 @@ static void crush_choose_indep(const struct crush_map *map,
 	}
 
 	for (ftotal = 0; left > 0 && ftotal < attempts; ftotal++) {
+#ifdef DEBUG_INDEP
+		if (out2 && ftotal) {
+			printf("%d %d a: ", ftotal, left);
+			for (rep = outpos; rep < endpos; rep++) {
+				printf(" %d", out[rep]);
+			}
+			printf("\n");
+			printf("%d %d b: ", ftotal, left);
+			for (rep = outpos; rep < endpos; rep++) {
+				printf(" %d", out2[rep]);
+			}
+			printf("\n");
+		}
+#endif
 		for (rep = outpos; rep < endpos; rep++) {
 			if (out[rep] != CRUSH_ITEM_UNDEF)
 				continue;
@@ -602,6 +617,20 @@ static void crush_choose_indep(const struct crush_map *map,
 			out2[rep] = CRUSH_ITEM_NONE;
 		}
 	}
+#ifdef DEBUG_INDEP
+	if (out2) {
+		printf("%d %d a: ", ftotal, left);
+		for (rep = outpos; rep < endpos; rep++) {
+			printf(" %d", out[rep]);
+		}
+		printf("\n");
+		printf("%d %d b: ", ftotal, left);
+		for (rep = outpos; rep < endpos; rep++) {
+			printf(" %d", out2[rep]);
+		}
+		printf("\n");
+	}
+#endif
 }
 
 /**
