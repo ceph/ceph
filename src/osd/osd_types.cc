@@ -2111,6 +2111,145 @@ void pg_query_t::generate_test_instances(list<pg_query_t*>& o)
   o.push_back(new pg_query_t(pg_query_t::FULLLOG, *h.back(), 5));
 }
 
+// -- ObjectModDesc --
+void ObjectModDesc::visit(Visitor *visitor) const
+{
+  bufferlist::iterator bp = bl.begin();
+  try {
+    while (!bp.end()) {
+      DECODE_START(1, bp);
+      uint8_t code;
+      ::decode(code, bp);
+      switch (code) {
+      case APPEND: {
+	uint64_t size;
+	::decode(size, bp);
+	visitor->append(size);
+	break;
+      }
+      case SETATTRS: {
+	map<string, boost::optional<bufferlist> > attrs;
+	::decode(attrs, bp);
+	visitor->setattrs(attrs);
+	break;
+      }
+      case DELETE: {
+	version_t old_version;
+	::decode(old_version, bp);
+	visitor->rmobject(old_version);
+	break;
+      }
+      case CREATE: {
+	visitor->create();
+	break;
+      }
+      case UPDATE_SNAPS: {
+	set<snapid_t> snaps;
+	::decode(snaps, bp);
+	visitor->update_snaps(snaps);
+	break;
+      }
+      default:
+	assert(0 == "Invalid rollback code");
+      }
+      DECODE_FINISH(bp);
+    }
+  } catch (...) {
+    assert(0 == "Invalid encoding");
+  }
+}
+
+struct DumpVisitor : public ObjectModDesc::Visitor {
+  Formatter *f;
+  DumpVisitor(Formatter *f) : f(f) {}
+  void append(uint64_t old_size) {
+    f->open_object_section("op");
+    f->dump_string("code", "APPEND");
+    f->dump_unsigned("old_size", old_size);
+    f->close_section();
+  }
+  void setattrs(map<string, boost::optional<bufferlist> > &attrs) {
+    f->open_object_section("op");
+    f->dump_string("code", "SETATTRS");
+    f->open_array_section("attrs");
+    for (map<string, boost::optional<bufferlist> >::iterator i = attrs.begin();
+	 i != attrs.end();
+	 ++i) {
+      f->dump_string("attr_name", i->first);
+    }
+    f->close_section();
+    f->close_section();
+  }
+  void rmobject(version_t old_version) {
+    f->open_object_section("op");
+    f->dump_string("code", "RMOBJECT");
+    f->dump_unsigned("old_version", old_version);
+    f->close_section();
+  }
+  void create() {
+    f->open_object_section("op");
+    f->dump_string("code", "CREATE");
+    f->close_section();
+  }
+  void update_snaps(set<snapid_t> &snaps) {
+    f->open_object_section("op");
+    f->dump_string("code", "UPDATE_SNAPS");
+    f->dump_stream("snaps") << snaps;
+    f->close_section();
+  }
+};
+
+void ObjectModDesc::dump(Formatter *f) const
+{
+  f->open_object_section("object_mod_desc");
+  f->dump_stream("can_local_rollback") << can_local_rollback;
+  f->dump_stream("stashed") << stashed;
+  {
+    f->open_array_section("ops");
+    DumpVisitor vis(f);
+    visit(&vis);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void ObjectModDesc::generate_test_instances(list<ObjectModDesc*>& o)
+{
+  map<string, boost::optional<bufferlist> > attrs;
+  attrs[OI_ATTR];
+  attrs[SS_ATTR];
+  attrs["asdf"];
+  o.push_back(new ObjectModDesc());
+  o.back()->append(100);
+  o.back()->setattrs(attrs);
+  o.push_back(new ObjectModDesc());
+  o.back()->rmobject(1001);
+  o.push_back(new ObjectModDesc());
+  o.back()->create();
+  o.back()->setattrs(attrs);
+  o.push_back(new ObjectModDesc());
+  o.back()->create();
+  o.back()->setattrs(attrs);
+  o.back()->mark_unrollbackable();
+  o.back()->append(1000);
+}
+
+void ObjectModDesc::encode(bufferlist &_bl) const
+{
+  ENCODE_START(1, 1, _bl);
+  ::encode(can_local_rollback, _bl);
+  ::encode(stashed, _bl);
+  ::encode(bl, _bl);
+  ENCODE_FINISH(_bl);
+}
+void ObjectModDesc::decode(bufferlist::iterator &_bl)
+{
+  DECODE_START(1, _bl);
+  ::decode(can_local_rollback, _bl);
+  ::decode(stashed, _bl);
+  ::decode(bl, _bl);
+  DECODE_FINISH(_bl);
+}
 
 // -- pg_log_entry_t --
 
