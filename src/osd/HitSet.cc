@@ -203,9 +203,9 @@ void HitSet::Params::generate_test_instances(list<HitSet::Params*>& o)
 }
 
 ostream& operator<<(ostream& out, const HitSet::Params& p) {
-  out << "params{" << HitSet::get_type_name(p.get_type());
+  out << HitSet::get_type_name(p.get_type());
   if (p.impl) {
-    out << " ";
+    out << "{";
     p.impl->dump_stream(out);
   }
   out << "}";

@@ -1128,8 +1128,8 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   if (p.cache_mode)
     out << " cache_mode " << p.get_cache_mode_name();
   if (p.hit_set_params.get_type() != HitSet::TYPE_NONE) {
-    out << " hit_set (" << p.hit_set_params
-	<< ") " << p.hit_set_period << "s"
+    out << " hit_set " << p.hit_set_params
+	<< " " << p.hit_set_period << "s"
 	<< " x" << p.hit_set_count;
   }
   return out;

@@ -381,7 +381,7 @@ public:
     }
     void dump_stream(ostream& o) const {
       o << "false_positive_probability: "
-	<< false_positive << ", target size: " << target_size
+	<< false_positive << ", target_size: " << target_size
 	<< ", seed: " << seed;
     }
     static void generate_test_instances(list<Params*>& o) {
