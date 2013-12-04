@@ -7,6 +7,28 @@
 
 #include "Object.h"
 
+void ContDesc::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(objnum, bl);
+  ::encode(cursnap, bl);
+  ::encode(seqnum, bl);
+  ::encode(prefix, bl);
+  ::encode(oid, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ContDesc::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(objnum, bl);
+  ::decode(cursnap, bl);
+  ::decode(seqnum, bl);
+  ::decode(prefix, bl);
+  ::decode(oid, bl);
+  DECODE_FINISH(bl);
+}
+
 ostream &operator<<(ostream &out, const ContDesc &rhs)
 {
   return out << "(ObjNum " << rhs.objnum

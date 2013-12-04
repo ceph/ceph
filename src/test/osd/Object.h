@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 #include "include/interval_set.h"
 #include "include/buffer.h"
+#include "include/encoding.h"
 #include <list>
 #include <map>
 #include <set>
@@ -42,7 +43,10 @@ public:
   bool operator!=(const ContDesc &rhs) {
     return !((*this) == rhs);
   }
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bp);
 };
+WRITE_CLASS_ENCODER(ContDesc)
 
 ostream &operator<<(ostream &out, const ContDesc &rhs);
 
