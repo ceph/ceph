@@ -130,11 +130,14 @@ public:
     return *this;
   }
 
+
+  bool is_full() const {
+    return impl->is_full();
+  }
   /// insert a hash into the set
   void insert(const hobject_t& o) {
     impl->insert(o);
   }
-
   /// query whether a hash is in the set
   bool contains(const hobject_t& o) const {
     return impl->contains(o);
