@@ -65,6 +65,7 @@ protected:
 
   int write_bench(int secondsToRun, int maxObjects, int concurrentios);
   int seq_read_bench(int secondsToRun, int concurrentios, int num_objects, int writePid);
+  int rand_read_bench(int secondsToRun, int num_objects, int concurrentios, int writePid);
 
   int clean_up(int num_objects, int prevPid, int concurrentios);
   int clean_up_slow(const std::string& prefix, int concurrentios);
