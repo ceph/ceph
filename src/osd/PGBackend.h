@@ -15,8 +15,13 @@
 #ifndef PGBACKEND_H
 #define PGBACKEND_H
 
+#include "OSDMap.h"
+#include "PGLog.h"
+#include "osd_types.h"
+#include "common/WorkQueue.h"
 #include "osd_types.h"
 #include "include/Context.h"
+#include "os/ObjectStore.h"
 #include <string>
 
  /**
@@ -346,6 +351,40 @@
      osd_reqid_t reqid,                   ///< [in] reqid
      OpRequestRef op                      ///< [in] op
      ) = 0;
+
+
+   void rollback(
+     const hobject_t &hoid,
+     const ObjectModDesc &desc,
+     ObjectStore::Transaction *t);
+
+   /// Rollback reset attrs
+   virtual void rollback_setattrs(
+     const hobject_t &hoid,
+     map<string, boost::optional<bufferlist> > &old_attrs,
+     ObjectStore::Transaction *t) { assert(0); }
+
+   /// Rollback truncate
+   virtual void rollback_append(
+     const hobject_t &hoid,
+     uint64_t old_size,
+     ObjectStore::Transaction *t) { assert(0); }
+
+   /// Rollback unstash
+   virtual void rollback_unstash(
+     const hobject_t &hoid,
+     version_t old_version,
+     ObjectStore::Transaction *t) { assert(0); }
+
+   /// Rollback create
+   virtual void rollback_create(
+     const hobject_t &hoid,
+     ObjectStore::Transaction *t) { assert(0); }
+
+   /// Trim object stashed at stashed_version
+   virtual void trim_stashed_object(
+     const hobject_t &hoid,
+     version_t stashed_version) { assert(0); }
 
    /// List objects in collection
    virtual int objects_list_partial(
