@@ -2422,16 +2422,17 @@ ostream& operator<<(ostream& out, const pg_log_entry_t& e)
 
 void pg_log_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(4, 3, bl);
+  ENCODE_START(5, 3, bl);
   ::encode(head, bl);
   ::encode(tail, bl);
   ::encode(log, bl);
+  ::encode(can_rollback_to, bl);
   ENCODE_FINISH(bl);
 }
  
 void pg_log_t::decode(bufferlist::iterator &bl, int64_t pool)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
   ::decode(head, bl);
   ::decode(tail, bl);
   if (struct_v < 2) {
@@ -2439,6 +2440,8 @@ void pg_log_t::decode(bufferlist::iterator &bl, int64_t pool)
     ::decode(backlog, bl);
   }
   ::decode(log, bl);
+  if (struct_v >= 5)
+    ::decode(can_rollback_to, bl);
   DECODE_FINISH(bl);
 
   // handle hobject_t format change
@@ -2481,6 +2484,7 @@ void pg_log_t::generate_test_instances(list<pg_log_t*>& o)
 
 void pg_log_t::copy_after(const pg_log_t &other, eversion_t v) 
 {
+  can_rollback_to = other.can_rollback_to;
   head = other.head;
   tail = other.tail;
   for (list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
@@ -2498,6 +2502,7 @@ void pg_log_t::copy_after(const pg_log_t &other, eversion_t v)
 
 void pg_log_t::copy_range(const pg_log_t &other, eversion_t from, eversion_t to)
 {
+  can_rollback_to = other.can_rollback_to;
   list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
   assert(i != other.log.rend());
   while (i->version > to) {
@@ -2517,6 +2522,7 @@ void pg_log_t::copy_range(const pg_log_t &other, eversion_t from, eversion_t to)
 
 void pg_log_t::copy_up_to(const pg_log_t &other, int max)
 {
+  can_rollback_to = other.can_rollback_to;
   int n = 0;
   head = other.head;
   tail = other.tail;
