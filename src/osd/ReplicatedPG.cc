@@ -8553,6 +8553,7 @@ void ReplicatedPG::hit_set_setup()
       !pool.info.hit_set_period ||
       pool.info.hit_set_params.get_type() == HitSet::TYPE_NONE) {
     hit_set_clear();
+    //hit_set_remove_all();  // FIXME: implement me soon
     return;
   }
 
@@ -8702,7 +8703,30 @@ void ReplicatedPG::hit_set_persist()
 	  repop->ctx->mtime)
         );
 
+  hit_set_trim(repop, pool.info.hit_set_count);
+
   simple_repop_submit(repop);
+}
+
+void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
+{
+  for (unsigned num = info.hit_set.history.size(); num > max; --num) {
+    list<pg_hit_set_info_t>::iterator p = info.hit_set.history.begin();
+    assert(p != info.hit_set.history.end());
+    hobject_t oid = get_hit_set_archive_object(p->begin, p->end);
+    dout(20) << __func__ << " removing " << oid << dendl;
+    repop->ctx->op_t.remove(coll, oid);
+    ++repop->ctx->at_version.version;
+    repop->ctx->log.push_back(
+        pg_log_entry_t(pg_log_entry_t::DELETE,
+		       oid,
+		       repop->ctx->at_version,
+		       p->version,
+		       0,
+		       osd_reqid_t(),
+		       repop->ctx->mtime));
+    info.hit_set.history.pop_front();
+  }
 }
 
 
