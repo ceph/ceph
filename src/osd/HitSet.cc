@@ -16,19 +16,23 @@
 
 // -- HitSet --
 
-HitSet::HitSet(HitSet::Params *params)
+HitSet::HitSet(const HitSet::Params& params)
 {
-  switch (params->get_type()) {
+  switch (params.get_type()) {
   case TYPE_BLOOM:
-    impl.reset(new BloomHitSet(static_cast<BloomHitSet::Params*>(params->impl.get())));
+    {
+      BloomHitSet::Params *p =
+	static_cast<BloomHitSet::Params*>(params.impl.get());
+      impl.reset(new BloomHitSet(p));
+    }
     break;
 
   case TYPE_EXPLICIT_HASH:
-    impl.reset(new ExplicitHashHitSet(static_cast<ExplicitHashHitSet::Params*>(params->impl.get())));
+    impl.reset(new ExplicitHashHitSet(static_cast<ExplicitHashHitSet::Params*>(params.impl.get())));
     break;
 
   case TYPE_EXPLICIT_OBJECT:
-    impl.reset(new ExplicitObjectHitSet(static_cast<ExplicitObjectHitSet::Params*>(params->impl.get())));
+    impl.reset(new ExplicitObjectHitSet(static_cast<ExplicitObjectHitSet::Params*>(params.impl.get())));
     break;
 
   case TYPE_NONE:
