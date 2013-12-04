@@ -1801,13 +1801,16 @@ struct pg_log_t {
   eversion_t head;    // newest entry
   eversion_t tail;    // version prior to oldest
 
+  // We can rollback rollback-able objects to can_rollback_to
+  eversion_t can_rollback_to;
+
   list<pg_log_entry_t> log;  // the actual log.
   
   pg_log_t() {}
 
   void clear() {
     eversion_t z;
-    head = tail = z;
+    can_rollback_to = head = tail = z;
     log.clear();
   }
 
@@ -1895,7 +1898,8 @@ WRITE_CLASS_ENCODER(pg_log_t)
 
 inline ostream& operator<<(ostream& out, const pg_log_t& log) 
 {
-  out << "log(" << log.tail << "," << log.head << "]";
+  out << "log((" << log.tail << "," << log.head << "], crt="
+      << log.can_rollback_to << ")";
   return out;
 }
 

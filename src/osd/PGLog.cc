@@ -48,6 +48,7 @@ void PGLog::IndexedLog::split_into(
 
   olog->index();
   index();
+  olog->can_rollback_to = can_rollback_to;
 }
 
 void PGLog::IndexedLog::trim(eversion_t s, set<eversion_t> *trimmed)
@@ -622,6 +623,7 @@ void PGLog::_write_log(
     //dout(10) << "write_log: writing divergent_priors" << dendl;
     ::encode(divergent_priors, keys["divergent_priors"]);
   }
+  ::encode(log.can_rollback_to, keys["can_rollback_to"]);
 
   t.omap_rmkeys(coll_t::META_COLL, log_oid, to_remove);
   t.omap_setkeys(coll_t::META_COLL, log_oid, keys);
@@ -646,6 +648,8 @@ bool PGLog::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
     rewrite_log = true;
   } else {
     log.tail = info.log_tail;
+    // will get overridden below if it had been recorded
+    log.can_rollback_to = info.last_update;
     ObjectMap::ObjectMapIterator p = store->get_omap_iterator(coll_t::META_COLL, log_oid);
     if (p) for (p->seek_to_first(); p->valid() ; p->next()) {
       bufferlist bl = p->value();//Copy bufferlist before creating iterator
@@ -653,6 +657,10 @@ bool PGLog::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
       if (p->key() == "divergent_priors") {
 	::decode(divergent_priors, bp);
 	dout(20) << "read_log " << divergent_priors.size() << " divergent_priors" << dendl;
+      } else if (p->key() == "can_rollback_to") {
+	bufferlist bl = p->value();
+	bufferlist::iterator bp = bl.begin();
+	::decode(log.can_rollback_to, bp);
       } else {
 	pg_log_entry_t e;
 	e.decode_with_checksum(bp);
