@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <memory>
 #include <boost/scoped_ptr.hpp>
+#include <boost/optional.hpp>
 
 #include "include/rados/rados_types.hpp"
 
@@ -1731,6 +1732,9 @@ struct pg_log_entry_t {
   bool invalid_pool; // only when decoding pool-less hobject based entries
 
   uint64_t offset;   // [soft state] my offset on disk
+
+  /// describes state for a locally-rollbackable entry
+  ObjectModDesc mod_desc;
       
   pg_log_entry_t()
     : op(0), user_version(0),
