@@ -330,6 +330,10 @@ ceph osd pool set data size 2
 
 ceph osd pool set data hashpspool true
 ceph osd pool set data hashpspool false
+ceph osd pool set data hashpspool 0
+ceph osd pool set data hashpspool 1
+expect_false ceph osd pool set data hashpspool asdf
+expect_false ceph osd pool set data hashpspool 2
 
 ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 2'
 
