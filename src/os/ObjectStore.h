@@ -31,6 +31,8 @@
 #include <sys/vfs.h>    /* or <sys/statfs.h> */
 #endif /* DARWIN */
 
+class CephContext;
+
 using std::vector;
 using std::string;
 
@@ -77,7 +79,7 @@ static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) 
 }
 
 class ObjectStore {
-private:
+protected:
   string path;
 
 public:
@@ -88,7 +90,8 @@ public:
    * @param data path (or other descriptor) for data
    * @param journal path (or other descriptor) for journal (optional)
    */
-  static ObjectStore *create(const string& type,
+  static ObjectStore *create(CephContext *cct,
+			     const string& type,
 			     const string& data,
 			     const string& journal);
 

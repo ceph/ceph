@@ -19,7 +19,8 @@
 #include "FileStore.h"
 #include "common/safe_io.h"
 
-ObjectStore *ObjectStore::create(const string& type,
+ObjectStore *ObjectStore::create(CephContext *cct,
+				 const string& type,
 				 const string& data,
 				 const string& journal)
 {
