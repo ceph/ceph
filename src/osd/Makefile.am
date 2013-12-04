@@ -10,6 +10,7 @@ libosd_la_SOURCES = \
 	osd/PGLog.cc \
 	osd/ReplicatedPG.cc \
 	osd/ReplicatedBackend.cc \
+	osd/PGBackend.cc \
 	osd/Ager.cc \
 	osd/HitSet.cc \
 	osd/OSD.cc \
