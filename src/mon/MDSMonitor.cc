@@ -54,7 +54,7 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, MDSMap& mdsmap) {
 
 void MDSMonitor::print_map(MDSMap &m, int dbl)
 {
-  dout(7) << "print_map\n";
+  dout(dbl) << "print_map\n";
   m.print(*_dout);
   *_dout << dendl;
 }
