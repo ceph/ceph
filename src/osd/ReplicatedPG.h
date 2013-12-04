@@ -441,6 +441,8 @@ public:
       pending_attrs.clear();
     }
 
+    ObjectModDesc mod_desc;
+
     enum { W_LOCK, R_LOCK, NONE } lock_to_release;
 
     OpContext(const OpContext& other);
