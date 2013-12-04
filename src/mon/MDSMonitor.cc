@@ -137,6 +137,24 @@ void MDSMonitor::encode_pending(MonitorDBStore::Transaction *t)
   put_last_committed(t, pending_mdsmap.epoch);
 }
 
+version_t MDSMonitor::get_trim_to()
+{
+  version_t floor = 0;
+  if (g_conf->mon_mds_force_trim_to > 0 &&
+      g_conf->mon_mds_force_trim_to < (int)get_last_committed()) {
+    floor = g_conf->mon_mds_force_trim_to;
+    dout(10) << __func__ << " explicit mon_mds_force_trim_to = "
+             << floor << dendl;
+  }
+
+  unsigned max = g_conf->mon_max_mdsmap_epochs;
+  version_t last = get_last_committed();
+
+  if (last - get_first_committed() > max && floor < last - max)
+    return last - max;
+  return floor;
+}
+
 void MDSMonitor::update_logger()
 {
   dout(10) << "update_logger" << dendl;
