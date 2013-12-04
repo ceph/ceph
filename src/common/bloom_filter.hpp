@@ -80,6 +80,7 @@ public:
       target_element_count_(predicted_inserted_element_count),
       random_seed_((random_seed) ? random_seed : 0xA5A5A5A5)
   {
+    assert(false_positive_probability > 0.0);
     find_optimal_parameters(predicted_inserted_element_count, false_positive_probability,
 			    &salt_count_, &table_size_);
     init();
