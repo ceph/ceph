@@ -8649,7 +8649,8 @@ void ReplicatedPG::hit_set_persist()
 
   if (!info.hit_set.current_info.begin)
     info.hit_set.current_info.begin = hit_set_start_stamp;
-  if (hit_set->is_full()) {
+  if (hit_set->is_full() ||
+      hit_set_start_stamp + pool.info.hit_set_period <= now) {
     // archive
     hit_set->seal();
     ::encode(*hit_set, bl);
