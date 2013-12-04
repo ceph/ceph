@@ -55,6 +55,7 @@ public:
   const char *get_type_name() const { return "PGlog"; }
   void print(ostream& out) const {
     out << "pg_log(" << info.pgid << " epoch " << epoch
+	<< " log " << log
 	<< " query_epoch " << query_epoch << ")";
   }
 
