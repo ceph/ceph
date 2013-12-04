@@ -866,6 +866,10 @@ public:
   ObjectStore(const std::string& path_) : path(path_), logger(NULL) {}
   virtual ~ObjectStore() {}
 
+  // no copying
+  ObjectStore(const ObjectStore& o);
+  const ObjectStore& operator=(const ObjectStore& o);
+
   // mgmt
   virtual int version_stamp_is_valid(uint32_t *version) { return 1; }
   virtual int update_version_stamp() = 0;
