@@ -115,7 +115,7 @@ public:
 
   HitSet() : impl(NULL), sealed(false) {}
   HitSet(Impl *i) : impl(i), sealed(false) {}
-  HitSet(HitSet::Params *params);
+  HitSet(const HitSet::Params& params);
 
   HitSet(const HitSet& o) {
     sealed = o.sealed;
@@ -349,7 +349,8 @@ public:
     uint64_t target_size;  ///< number of unique insertions we expect to this HitSet
     uint64_t seed;         ///< seed to use when initializing the bloom filter
 
-    Params() : false_positive(0), target_size(0), seed(0) {}
+    Params()
+      : false_positive(0), target_size(0), seed(0) {}
     Params(double fpp, uint64_t t, uint64_t s)
       : false_positive(fpp), target_size(t), seed(s) {}
     Params(const Params &o)
