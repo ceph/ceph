@@ -5994,13 +5994,15 @@ PG::RecoveryCtx OSD::create_context()
   return rctx;
 }
 
-void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg)
+void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg,
+                                       ThreadPool::TPHandle *handle)
 {
   if (!ctx.transaction->empty()) {
     ctx.on_applied->add(new ObjectStore::C_DeleteTransaction(ctx.transaction));
     int tr = store->queue_transaction(
       pg->osr.get(),
-      ctx.transaction, ctx.on_applied, ctx.on_safe);
+      ctx.transaction, ctx.on_applied, ctx.on_safe, NULL,
+      TrackedOpRef(), handle);
     assert(tr == 0);
     ctx.transaction = new ObjectStore::Transaction;
     ctx.on_applied = new C_Contexts(cct);
@@ -6025,7 +6027,8 @@ bool OSD::compat_must_dispatch_immediately(PG *pg)
   return false;
 }
 
-void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap)
+void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
+                           ThreadPool::TPHandle *handle)
 {
   if (service.get_osdmap()->is_up(whoami)) {
     do_notifies(*ctx.notify_list, curmap);
@@ -6045,7 +6048,8 @@ void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap)
     ctx.on_applied->add(new ObjectStore::C_DeleteTransaction(ctx.transaction));
     int tr = store->queue_transaction(
       pg->osr.get(),
-      ctx.transaction, ctx.on_applied, ctx.on_safe);
+      ctx.transaction, ctx.on_applied, ctx.on_safe, NULL, TrackedOpRef(),
+      handle);
     assert(tr == 0);
   }
 }
@@ -7250,17 +7254,17 @@ void OSD::process_peering_events(
       split_pgs.clear();
     }
     if (compat_must_dispatch_immediately(pg)) {
-      dispatch_context(rctx, pg, curmap);
+      dispatch_context(rctx, pg, curmap, &handle);
       rctx = create_context();
     } else {
-      dispatch_context_transaction(rctx, pg);
+      dispatch_context_transaction(rctx, pg, &handle);
     }
     pg->unlock();
     handle.reset_tp_timeout();
   }
   if (need_up_thru)
     queue_want_up_thru(same_interval_since);
-  dispatch_context(rctx, 0, curmap);
+  dispatch_context(rctx, 0, curmap, &handle);
 
   service.send_pg_temp();
 }

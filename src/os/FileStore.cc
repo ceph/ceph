@@ -1564,7 +1564,7 @@ void FileStore::queue_op(OpSequencer *osr, Op *o)
   op_wq.queue(osr);
 }
 
-void FileStore::op_queue_reserve_throttle(Op *o)
+void FileStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle)
 {
   // Do not call while holding the journal lock!
   uint64_t max_ops = m_filestore_queue_max_ops;
@@ -1586,7 +1586,11 @@ void FileStore::op_queue_reserve_throttle(Op *o)
 	      && (op_queue_bytes + o->bytes) > max_bytes)) {
       dout(2) << "waiting " << op_queue_len + 1 << " > " << max_ops << " ops || "
 	      << op_queue_bytes + o->bytes << " > " << max_bytes << dendl;
+      if (handle)
+	handle->suspend_tp_timeout();
       op_throttle_cond.Wait(op_throttle_lock);
+      if (handle)
+	handle->reset_tp_timeout();
     }
 
     op_queue_len++;
@@ -1671,7 +1675,8 @@ struct C_JournaledAhead : public Context {
 };
 
 int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
-				  TrackedOpRef osd_op)
+				  TrackedOpRef osd_op,
+				  ThreadPool::TPHandle *handle)
 {
   Context *onreadable;
   Context *ondisk;
@@ -1699,7 +1704,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 
   if (journal && journal->is_writeable() && !m_filestore_journal_trailing) {
     Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
-    op_queue_reserve_throttle(o);
+    op_queue_reserve_throttle(o, handle);
     journal->throttle();
     uint64_t op_num = submit_manager.op_submit_start();
     o->op = op_num;
