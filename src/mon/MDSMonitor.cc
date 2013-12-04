@@ -124,7 +124,8 @@ void MDSMonitor::encode_pending(MonitorDBStore::Transaction *t)
 
   pending_mdsmap.modified = ceph_clock_now(g_ceph_context);
 
-  //print_map(pending_mdsmap);
+  // print map iff 'debug mon = 30' or higher
+  print_map(pending_mdsmap, 30);
 
   // apply to paxos
   assert(get_last_committed() + 1 == pending_mdsmap.epoch);
