@@ -345,22 +345,29 @@ public:
       return new BloomHitSet;
     }
 
-    double false_positive; ///< false positive probability
+    uint32_t fpp_micro;    ///< false positive probability / 1M
     uint64_t target_size;  ///< number of unique insertions we expect to this HitSet
     uint64_t seed;         ///< seed to use when initializing the bloom filter
 
     Params()
-      : false_positive(0), target_size(0), seed(0) {}
+      : fpp_micro(0), target_size(0), seed(0) {}
     Params(double fpp, uint64_t t, uint64_t s)
-      : false_positive(fpp), target_size(t), seed(s) {}
+      : fpp_micro(fpp * 1000000.0), target_size(t), seed(s) {}
     Params(const Params &o)
-      : false_positive(o.false_positive),
-	target_size(o.target_size), seed(o.seed) {}
+      : fpp_micro(o.fpp_micro),
+	target_size(o.target_size),
+	seed(o.seed) {}
     ~Params() {}
+
+    double get_fpp() const {
+      return (double)fpp_micro / 1000000.0;
+    }
+    void set_fpp(double f) {
+      fpp_micro = (unsigned)(f * 1000000.0);
+    }
 
     void encode(bufferlist& bl) const {
       ENCODE_START(1, 1, bl);
-      uint16_t fpp_micro = static_cast<uint16_t>(false_positive * 1000000.0);
       ::encode(fpp_micro, bl);
       ::encode(target_size, bl);
       ::encode(seed, bl);
@@ -368,27 +375,25 @@ public:
     }
     void decode(bufferlist::iterator& bl) {
       DECODE_START(1, bl);
-      uint16_t fpp_micro;
       ::decode(fpp_micro, bl);
-      false_positive = fpp_micro * 1000000.0;
       ::decode(target_size, bl);
       ::decode(seed, bl);
       DECODE_FINISH(bl);
     }
     void dump(Formatter *f) const {
-      f->dump_int("false_positive_probability", false_positive);
+      f->dump_int("false_positive_probability", get_fpp());
       f->dump_int("target_size", target_size);
       f->dump_int("seed", seed);
     }
     void dump_stream(ostream& o) const {
       o << "false_positive_probability: "
-	<< false_positive << ", target_size: " << target_size
+	<< get_fpp() << ", target_size: " << target_size
 	<< ", seed: " << seed;
     }
     static void generate_test_instances(list<Params*>& o) {
       o.push_back(new Params);
       o.push_back(new Params);
-      (*o.rbegin())->false_positive = .11;
+      (*o.rbegin())->fpp_micro = 123456;
       (*o.rbegin())->target_size = 300;
       (*o.rbegin())->seed = 99;
     }
@@ -399,7 +404,7 @@ public:
     : bloom(inserts, fpp, seed)
   {}
   BloomHitSet(const BloomHitSet::Params *p) : bloom(p->target_size,
-                                                    p->false_positive,
+                                                    p->get_fpp(),
                                                     p->seed)
   {}
 
