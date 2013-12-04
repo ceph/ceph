@@ -2734,18 +2734,22 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
   if (pending_inc.new_pools.count(pool))
     p = pending_inc.new_pools[pool];
 
-  // accept val as a json string or int, and parse out int or float
-  // values from the string as needed
+  // accept val as a json string in the normal case (current
+  // generation monitor).  parse out int or float values from the
+  // string as needed.  however, if it is not a string, try to pull
+  // out an int, in case an older monitor with an older json schema is
+  // forwarding a request.
   string val;
-  cmd_getval(g_ceph_context, cmdmap, "val", val);
   string interr;
   int64_t n = 0;
-  if (!cmd_getval(g_ceph_context, cmdmap, "val", n))
+  if (!cmd_getval(g_ceph_context, cmdmap, "val", val)) {
+    // wasn't a string; maybe an older mon forwarded json with an int?
+    if (!cmd_getval(g_ceph_context, cmdmap, "val", n))
+      return -EINVAL;  // no value!
+  } else {
+    // we got a string.  see if it contains an int.
     n = strict_strtoll(val.c_str(), 10, &interr);
-  string floaterr;
-  float f;
-  if (!cmd_getval(g_ceph_context, cmdmap, "val", f))
-    f = strict_strtod(val.c_str(), &floaterr);
+  }
 
   if (var == "size") {
     if (interr.length()) {
