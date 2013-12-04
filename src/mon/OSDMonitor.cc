@@ -2843,7 +2843,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       p.hit_set_params = HitSet::Params();
     else if (val == "bloom") {
       BloomHitSet::Params *bsp = new BloomHitSet::Params;
-      bsp->false_positive = .01;
+      bsp->set_fpp(.01);
       p.hit_set_params = HitSet::Params(bsp);
     } else if (val == "explicit_hash")
       p.hit_set_params = HitSet::Params(new ExplicitHashHitSet::Params);
@@ -2878,8 +2878,8 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
     BloomHitSet::Params *bloomp = static_cast<BloomHitSet::Params*>(p.hit_set_params.impl.get());
-    bloomp->false_positive = f;
-    ss << "set hit_set_fpp to " << bloomp->false_positive;
+    bloomp->set_fpp(f);
+    ss << "set hit_set_fpp to " << bloomp->get_fpp();
   } else {
     ss << "unrecognized variable '" << var << "'";
     return -EINVAL;

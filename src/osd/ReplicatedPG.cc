@@ -8576,11 +8576,10 @@ void ReplicatedPG::hit_set_create()
       static_cast<BloomHitSet::Params*>(params.impl.get());
     dout(20) << __func__ << " " << params << " " << p << dendl;
 
-    if (p->false_positive <= 0.0)
-      p->false_positive = .01;  // fpp cannot be zero!
-
     // convert false positive rate so it holds up across the full period
-    p->false_positive = p->false_positive / pool.info.hit_set_count;
+    p->set_fpp(p->get_fpp() / pool.info.hit_set_count);
+    if (p->get_fpp() <= 0.0)
+      p->set_fpp(.01);  // fpp cannot be zero!
 
     // if we don't have specified size, estimate target size based on the
     // previous bin!
@@ -8598,7 +8597,7 @@ void ReplicatedPG::hit_set_create()
     p->seed = now.sec();
 
     dout(10) << __func__ << " target_size " << p->target_size
-	     << " fpp " << p->false_positive << dendl;
+	     << " fpp " << p->get_fpp() << dendl;
   }
   hit_set.reset(new HitSet(params));
   hit_set_start_stats.reset(new pg_stat_t(info.stats));
