@@ -550,6 +550,7 @@ void MDSMonitor::dump_info(Formatter *f)
   f->close_section();
 
   f->dump_unsigned("mdsmap_first_committed", get_first_committed());
+  f->dump_unsigned("mdsmap_last_committed", get_last_committed());
 }
 
 bool MDSMonitor::preprocess_command(MMonCommand *m)
