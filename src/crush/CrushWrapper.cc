@@ -336,6 +336,17 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
   if (!is_valid_crush_name(name))
     return -EINVAL;
 
+
+  for (map<string,string>::const_iterator l = loc.begin(); l != loc.end(); l++) {
+    if (!is_valid_crush_name(l->second)) {
+      ldout(cct, 1) << "insert_item with loc["
+                    << l->first << "] = '"
+                    << l->second << "' is not a valid crush name ([A-Za-z0-9_-.]+)"
+                    << dendl;
+      return -ENFILE;
+    }
+  }
+
   if (name_exists(name)) {
     if (get_item_id(name) != item) {
       ldout(cct, 10) << "device name '" << name << "' already exists as id "
@@ -371,6 +382,7 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
         return r;
       }
       set_item_name(newid, q->second);
+      
       cur = newid;
       continue;
     }
@@ -398,14 +410,6 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
       return -EINVAL;
     }
 
-
-    // make sure the item doesn't already exist in this bucket
-    for (unsigned j=0; j<b->size; j++)
-      if (b->items[j] == cur) {
-	ldout(cct, 1) << "insert_item " << cur << " already exists in bucket " << b->id << dendl;
-	return -EEXIST;
-      }
-    
     // are we forming a loop?
     if (subtree_contains(cur, b->id)) {
       ldout(cct, 1) << "insert_item " << cur << " already contains " << b->id
