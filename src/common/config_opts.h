@@ -543,6 +543,8 @@ OPTION(osd_objectstore, OPT_STR, "filestore")  // ObjectStore backend type
 // Set to true for testing.  Users should NOT set this.
 OPTION(osd_debug_override_acting_compat, OPT_BOOL, false)
 
+OPTION(filestore_debug_disable_sharded_check, OPT_BOOL, false)
+
 /// filestore wb throttle limits
 OPTION(filestore_wbthrottle_enable, OPT_BOOL, true)
 OPTION(filestore_wbthrottle_btrfs_bytes_start_flusher, OPT_U64, 41943040)
