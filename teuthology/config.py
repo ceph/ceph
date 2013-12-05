@@ -16,6 +16,7 @@ class Config(object):
         'ceph_git_base_url': 'https://github.com/ceph/',
         'lock_server': 'http://teuthology.front.sepia.ceph.com/locker/lock',
         'verify_host_keys': True,
+        'watchdog_interval': 600,
     }
 
     def __init__(self):
