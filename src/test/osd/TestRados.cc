@@ -328,8 +328,13 @@ int main(int argc, char **argv)
   }
 
   char *id = getenv("CEPH_CLIENT_ID");
-  VarLenGenerator cont_gen(size, min_stride_size, max_stride_size);
-  RadosTestContext context(pool_name, max_in_flight, cont_gen, id);
+  RadosTestContext context(
+    pool_name,
+    max_in_flight,
+    size,
+    min_stride_size,
+    max_stride_size,
+    id);
 
   TestOpStat stats;
   WeightedTestGenerator gen = WeightedTestGenerator(ops, objects,
