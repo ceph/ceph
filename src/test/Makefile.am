@@ -308,6 +308,11 @@ unittest_throttle_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_throttle_CXXFLAGS = $(UNITTEST_CXXFLAGS) -O2
 check_PROGRAMS += unittest_throttle
 
+unittest_crush_wrapper_SOURCES = test/crush/TestCrushWrapper.cc
+unittest_crush_wrapper_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCRUSH)
+unittest_crush_wrapper_CXXFLAGS = $(UNITTEST_CXXFLAGS) -O2
+check_PROGRAMS += unittest_crush_wrapper
+
 unittest_base64_SOURCES = test/base64.cc
 unittest_base64_LDADD = $(LIBCEPHFS) -lm $(UNITTEST_LDADD)
 unittest_base64_CXXFLAGS = $(UNITTEST_CXXFLAGS)
