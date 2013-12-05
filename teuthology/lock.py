@@ -446,9 +446,22 @@ def create_if_vm(ctx, machine_name):
     createMe = decanonicalize_hostname(machine_name)
     with tempfile.NamedTemporaryFile() as tmp:
         try:
-            lcnfg = ctx.config['downburst']
-        except (KeyError, AttributeError):
-            lcnfg = {}
+            lfile = ctx.downburst_conf
+            with open(lfile) as downb_yaml:
+                lcnfg = yaml.safe_load(downb_yaml)
+                if lcnfg.keys() == ['downburst']:
+                    lcnfg = lcnfg['downburst']
+        except (TypeError, AttributeError):
+            try:
+                lcnfg = {}
+                for tdict in ctx.config['downburst']:
+                    for key in tdict:
+                        lcnfg[key] = tdict[key]
+            except (KeyError, AttributeError):
+                lcnfg = {}
+        except IOError:
+            print "Error reading %s" % lfile 
+            return False
 
         distro = lcnfg.get('distro', os_type.lower())
         distroversion = lcnfg.get('distroversion', os_version)
