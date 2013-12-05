@@ -50,6 +50,8 @@ private:
   MonClient monclient;
   SimpleMessenger *messenger;
 
+  uint64_t instance_id;
+
   bool _dispatch(Message *m);
   bool ms_dispatch(Message *m);
 
