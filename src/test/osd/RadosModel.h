@@ -172,12 +172,14 @@ public:
   const uint64_t min_stride_size;
   const uint64_t max_stride_size;
   AttrGenerator attr_gen;
+  const bool ec_pool;
 	
   RadosTestContext(const string &pool_name, 
 		   int max_in_flight,
 		   uint64_t max_size,
 		   uint64_t min_stride_size,
 		   uint64_t max_stride_size,
+		   bool ec_pool,
 		   const char *id = 0) :
     state_lock("Context Lock"),
     pool_obj_cont(),
@@ -190,7 +192,8 @@ public:
     rados_id(id), initialized(false),
     max_size(max_size), 
     min_stride_size(min_stride_size), max_stride_size(max_stride_size),
-    attr_gen(2000)
+    attr_gen(2000),
+    ec_pool(ec_pool)
   {
   }
 
@@ -539,9 +542,13 @@ public:
 	  done = true;
 	  return;
 	}
-	op.omap_rm_keys(to_remove);
+	if (!context->ec_pool) {
+	  op.omap_rm_keys(to_remove);
+	}
       } else {
-	op.omap_clear();
+	if (!context->ec_pool) {
+	  op.omap_clear();
+	}
 	for (map<string, ContDesc>::iterator i = obj.attrs.begin();
 	     i != obj.attrs.end();
 	     ++i) {
@@ -633,8 +640,10 @@ public:
       omap_contents[key] = val_buffer;
       op.setxattr(key.c_str(), val_buffer);
     }
-    op.omap_set_header(header);
-    op.omap_set(omap_contents);
+    if (!context->ec_pool) {
+      op.omap_set_header(header);
+      op.omap_set(omap_contents);
+    }
 
     {
       Mutex::Locker l(context->state_lock);
@@ -979,12 +988,14 @@ public:
 	omap_requested_keys.insert(key);
       }
     }
-    op.omap_get_vals_by_keys(omap_requested_keys, &omap_returned_values, 0);
+    if (!context->ec_pool) {
+      op.omap_get_vals_by_keys(omap_requested_keys, &omap_returned_values, 0);
 
-    op.omap_get_keys("", -1, &omap_keys, 0);
-    op.omap_get_vals("", -1, &omap, 0);
+      op.omap_get_keys("", -1, &omap_keys, 0);
+      op.omap_get_vals("", -1, &omap, 0);
+      op.omap_get_header(&header, 0);
+    }
     op.getxattrs(&xattrs, 0);
-    op.omap_get_header(&header, 0);
     assert(!context->io_ctx.aio_operate(context->prefix+oid, completion, &op, 0));
     if (snap >= 0) {
       context->io_ctx.snap_set_read(0);
@@ -1036,21 +1047,23 @@ public:
       }
 
       // Attributes
-      if (!(old_value.header == header)) {
-	cerr << num << ": oid " << oid << " header does not match, old size: "
-	     << old_value.header.length() << " new size " << header.length()
-	     << std::endl;
-	assert(old_value.header == header);
-      }
-      if (omap.size() != old_value.attrs.size()) {
-	cerr << num << ": oid " << oid << " omap.size() is " << omap.size()
-	     << " and old is " << old_value.attrs.size() << std::endl;
-	assert(omap.size() == old_value.attrs.size());
-      }
-      if (omap_keys.size() != old_value.attrs.size()) {
-	cerr << num << ": oid " << oid << " omap.size() is " << omap_keys.size()
-	     << " and old is " << old_value.attrs.size() << std::endl;
-	assert(omap_keys.size() == old_value.attrs.size());
+      if (!context->ec_pool) {
+	if (!(old_value.header == header)) {
+	  cerr << num << ": oid " << oid << " header does not match, old size: "
+	       << old_value.header.length() << " new size " << header.length()
+	       << std::endl;
+	  assert(old_value.header == header);
+	}
+	if (omap.size() != old_value.attrs.size()) {
+	  cerr << num << ": oid " << oid << " omap.size() is " << omap.size()
+	       << " and old is " << old_value.attrs.size() << std::endl;
+	  assert(omap.size() == old_value.attrs.size());
+	}
+	if (omap_keys.size() != old_value.attrs.size()) {
+	  cerr << num << ": oid " << oid << " omap.size() is " << omap_keys.size()
+	       << " and old is " << old_value.attrs.size() << std::endl;
+	  assert(omap_keys.size() == old_value.attrs.size());
+	}
       }
       if (xattrs.size() != old_value.attrs.size()) {
 	cerr << num << ": oid " << oid << " xattrs.size() is " << xattrs.size()
@@ -1062,39 +1075,49 @@ public:
 	     << " and expected " << old_value.version << std::endl;
 	assert(version == old_value.version);
       }
-      for (map<string, bufferlist>::iterator omap_iter = omap.begin();
-	   omap_iter != omap.end();
-	   ++omap_iter) {
-	assert(old_value.attrs.count(omap_iter->first));
-	assert(xattrs.count(omap_iter->first));
+      for (map<string, ContDesc>::iterator iter = old_value.attrs.begin();
+	   iter != old_value.attrs.end();
+	   ++iter) {
 	bufferlist bl = context->attr_gen.gen_bl(
-	  old_value.attrs[omap_iter->first]);
-	assert(bl.length() == omap_iter->second.length());
-	assert(bl.length() == xattrs[omap_iter->first].length());
+	  iter->second);
+	if (!context->ec_pool) {
+	  map<string, bufferlist>::iterator omap_iter = omap.find(iter->first);
+	  assert(omap_iter != omap.end());
+	  assert(bl.length() == omap_iter->second.length());
+	  bufferlist::iterator k = bl.begin();
+	  for(bufferlist::iterator l = omap_iter->second.begin();
+	      !k.end() && !l.end();
+	      ++k, ++l) {
+	    assert(*l == *k);
+	  }
+	}
+	map<string, bufferlist>::iterator xattr_iter = xattrs.find(iter->first);
+	assert(xattr_iter != xattrs.end());
+	assert(bl.length() == xattr_iter->second.length());
 	bufferlist::iterator k = bl.begin();
-	bufferlist::iterator j = xattrs[omap_iter->first].begin();
-	for(bufferlist::iterator l = omap_iter->second.begin();
-	    !k.end() && !l.end() && !j.end();
-	    ++k, ++l, ++j) {
-	  assert(*l == *k);
+	for (bufferlist::iterator j = xattr_iter->second.begin();
+	     !k.end() && !j.end();
+	     ++j, ++k) {
 	  assert(*j == *k);
 	}
       }
-      for (set<string>::iterator i = omap_requested_keys.begin();
-	   i != omap_requested_keys.end();
-	   ++i) {
-	if (!omap_returned_values.count(*i))
-	  assert(!old_value.attrs.count(*i));
-	if (!old_value.attrs.count(*i))
-	  assert(!omap_returned_values.count(*i));
-      }
-      for (map<string, bufferlist>::iterator i = omap_returned_values.begin();
-	   i != omap_returned_values.end();
-	   ++i) {
-	assert(omap_requested_keys.count(i->first));
-	assert(omap.count(i->first));
-	assert(old_value.attrs.count(i->first));
-	assert(i->second == omap[i->first]);
+      if (!context->ec_pool) {
+	for (set<string>::iterator i = omap_requested_keys.begin();
+	     i != omap_requested_keys.end();
+	     ++i) {
+	  if (!omap_returned_values.count(*i))
+	    assert(!old_value.attrs.count(*i));
+	  if (!old_value.attrs.count(*i))
+	    assert(!omap_returned_values.count(*i));
+	}
+	for (map<string, bufferlist>::iterator i = omap_returned_values.begin();
+	     i != omap_returned_values.end();
+	     ++i) {
+	  assert(omap_requested_keys.count(i->first));
+	  assert(omap.count(i->first));
+	  assert(old_value.attrs.count(i->first));
+	  assert(i->second == omap[i->first]);
+	}
       }
     }
     context->kick();

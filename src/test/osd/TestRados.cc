@@ -223,28 +223,30 @@ int main(int argc, char **argv)
   struct {
     TestOpType op;
     const char *name;
+    bool ec_pool_valid;
   } op_types[] = {
-    { TEST_OP_READ, "read" },
-    { TEST_OP_WRITE, "write" },
-    { TEST_OP_DELETE, "delete" },
-    { TEST_OP_SNAP_CREATE, "snap_create" },
-    { TEST_OP_SNAP_REMOVE, "snap_remove" },
-    { TEST_OP_ROLLBACK, "rollback" },
-    { TEST_OP_SETATTR, "setattr" },
-    { TEST_OP_RMATTR, "rmattr" },
-    { TEST_OP_WATCH, "watch" },
-    { TEST_OP_COPY_FROM, "copy_from" },
-    { TEST_OP_HIT_SET_LIST, "hit_set_list" },
-    { TEST_OP_IS_DIRTY, "is_dirty" },
-    { TEST_OP_UNDIRTY, "undirty" },
-    { TEST_OP_CACHE_FLUSH, "cache_flush" },
-    { TEST_OP_CACHE_TRY_FLUSH, "cache_try_flush" },
-    { TEST_OP_CACHE_EVICT, "cache_evict" },
+    { TEST_OP_READ, "read", true },
+    { TEST_OP_WRITE, "write", false },
+    { TEST_OP_DELETE, "delete", true },
+    { TEST_OP_SNAP_CREATE, "snap_create", true },
+    { TEST_OP_SNAP_REMOVE, "snap_remove", true },
+    { TEST_OP_ROLLBACK, "rollback", true },
+    { TEST_OP_SETATTR, "setattr", true },
+    { TEST_OP_RMATTR, "rmattr", true },
+    { TEST_OP_WATCH, "watch", true },
+    { TEST_OP_COPY_FROM, "copy_from", true },
+    { TEST_OP_HIT_SET_LIST, "hit_set_list", true },
+    { TEST_OP_IS_DIRTY, "is_dirty", true },
+    { TEST_OP_UNDIRTY, "undirty", true },
+    { TEST_OP_CACHE_FLUSH, "cache_flush", true },
+    { TEST_OP_CACHE_TRY_FLUSH, "cache_try_flush", true },
+    { TEST_OP_CACHE_EVICT, "cache_evict", true },
     { TEST_OP_READ /* grr */, NULL },
   };
 
   map<TestOpType, unsigned int> op_weights;
   string pool_name = "data";
+  bool ec_pool = false;
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--max-ops") == 0)
@@ -263,13 +265,24 @@ int main(int argc, char **argv)
       min_stride_size = atoi(argv[++i]);
     else if (strcmp(argv[i], "--max-stride-size") == 0)
       max_stride_size = atoi(argv[++i]);
-    else if (strcmp(argv[i], "--op") == 0) {
+    else if (strcmp(argv[i], "--ec-pool") == 0) {
+      if (op_weights.size()) {
+	cerr << "--ec-pool must be specified prior to any ops" << std::endl;
+	exit(1);
+      }
+      ec_pool = true;
+    } else if (strcmp(argv[i], "--op") == 0) {
       i++;
       int j;
       for (j = 0; op_types[j].name; ++j) {
 	if (strcmp(op_types[j].name, argv[i]) == 0) {
 	  break;
 	}
+      }
+      if (ec_pool && !op_types[j].ec_pool_valid) {
+	cerr << "Error: cannot use op type " << op_types[j].name
+	     << " with --ec-pool" << std::endl;
+	exit(1);
       }
       if (!op_types[j].name) {
 	cerr << "unknown op " << argv[i] << std::endl;
@@ -334,6 +347,7 @@ int main(int argc, char **argv)
     size,
     min_stride_size,
     max_stride_size,
+    ec_pool,
     id);
 
   TestOpStat stats;
