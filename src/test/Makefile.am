@@ -401,6 +401,11 @@ unittest_pglog_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_pglog_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_pglog
 
+unittest_hitset_SOURCES = test/osd/hitset.cc
+unittest_hitset_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_hitset_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_hitset
+
 if LINUX
 unittest_pglog_LDADD += -ldl
 endif # LINUX
