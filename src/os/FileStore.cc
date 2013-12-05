@@ -1010,7 +1010,8 @@ void FileStore::set_allow_sharded_objects()
 
 bool FileStore::get_allow_sharded_objects()
 {
-  return superblock.compat_features.incompat.contains(CEPH_FS_FEATURE_INCOMPAT_SHARDS);
+  return g_conf->filestore_debug_disable_sharded_check ||
+    superblock.compat_features.incompat.contains(CEPH_FS_FEATURE_INCOMPAT_SHARDS);
 }
 
 int FileStore::update_version_stamp()
