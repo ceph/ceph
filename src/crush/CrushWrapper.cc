@@ -410,14 +410,6 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
       return -EINVAL;
     }
 
-
-    // make sure the item doesn't already exist in this bucket
-    for (unsigned j=0; j<b->size; j++)
-      if (b->items[j] == cur) {
-	ldout(cct, 1) << "insert_item " << cur << " already exists in bucket " << b->id << dendl;
-	return -EEXIST;
-      }
-    
     // are we forming a loop?
     if (subtree_contains(cur, b->id)) {
       ldout(cct, 1) << "insert_item " << cur << " already contains " << b->id
