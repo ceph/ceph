@@ -214,7 +214,7 @@ void usage(const char *pname)
     << "  list [prefix]\n"
     << "  list-crc [prefix]\n"
     << "  exists <prefix> [key]\n"
-    << "  get <prefix> <key>\n"
+    << "  get <prefix> <key> [out <file>]\n"
     << "  crc <prefix> <key>\n"
     << "  get-size\n"
     << "  set <prefix> <key> [ver <N>|in <file>]\n"
@@ -286,9 +286,33 @@ int main(int argc, const char *argv[])
       return 1;
     }
     std::cout << std::endl;
-    ostringstream os;
-    bl.hexdump(os);
-    std::cout << os.str() << std::endl;
+
+    if (argc >= 6) {
+      string subcmd(argv[5]);
+      string out(argv[6]);
+
+      if (subcmd != "out") {
+        std::cerr << "unrecognized subcmd '" << subcmd << "'"
+                  << std::endl;
+        return 1;
+      }
+
+      if (out.empty()) {
+        std::cerr << "unspecified out file" << std::endl;
+        return 1;
+      }
+
+      int err = bl.write_file(argv[6], 0644);
+      if (err < 0) {
+        std::cerr << "error writing value to '" << out << "': "
+                  << cpp_strerror(err) << std::endl;
+        return 1;
+      }
+    } else {
+      ostringstream os;
+      bl.hexdump(os);
+      std::cout << os.str() << std::endl;
+    }
 
   } else if (cmd == "crc") {
     if (argc < 5) {
