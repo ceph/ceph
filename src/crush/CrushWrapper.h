@@ -337,7 +337,7 @@ public:
    * insert an item into the map at a specific position
    *
    * Add an item as a specific location of the hierarchy.
-   * Specifically, we look for the most specific location constriant
+   * Specifically, we look for the most specific location constraint
    * for which a bucket already exists, and then create intervening
    * buckets beneath that in order to place the item.
    *
