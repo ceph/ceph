@@ -38,7 +38,26 @@ ostream &operator<<(ostream &out, const ContDesc &rhs)
 	     << ")";
 }
 
-void VarLenGenerator::get_ranges(const ContDesc &cont, interval_set<uint64_t> &out) {
+void AppendGenerator::get_ranges_map(
+  const ContDesc &cont, map<uint64_t, uint64_t> &out) {
+  RandWrap rand(cont.seqnum);
+  uint64_t pos = off;
+  uint64_t limit = off + get_append_size(cont);
+  while (pos < limit) {
+    uint64_t segment_length = (
+      rand() % (max_append_size - min_append_size)) + min_append_size;
+    assert(segment_length < max_append_size);
+    assert(segment_length >= min_append_size);
+    if (segment_length + pos > limit) {
+      segment_length = limit - pos;
+    }
+    out.insert(make_pair(pos, segment_length));
+    pos += segment_length;
+  }
+}
+
+void VarLenGenerator::get_ranges_map(
+  const ContDesc &cont, map<uint64_t, uint64_t> &out) {
   RandWrap rand(cont.seqnum);
   uint64_t pos = 0;
   uint64_t limit = get_length(cont);
@@ -51,7 +70,7 @@ void VarLenGenerator::get_ranges(const ContDesc &cont, interval_set<uint64_t> &o
       segment_length = limit - pos;
     }
     if (include) {
-      out.insert(pos, segment_length);
+      out.insert(make_pair(pos, segment_length));
       include = false;
     } else {
       include = true;
