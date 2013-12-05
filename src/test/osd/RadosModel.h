@@ -58,7 +58,8 @@ enum TestOpType {
   TEST_OP_IS_DIRTY,
   TEST_OP_CACHE_FLUSH,
   TEST_OP_CACHE_TRY_FLUSH,
-  TEST_OP_CACHE_EVICT
+  TEST_OP_CACHE_EVICT,
+  TEST_OP_APPEND
 };
 
 class TestWatchContext : public librados::WatchCtx {
@@ -698,12 +699,15 @@ public:
   librados::ObjectWriteOperation write_op;
   bufferlist rbuffer;
 
+  bool do_append;
+
   WriteOp(int n,
 	  RadosTestContext *context,
 	  const string &oid,
+	  bool do_append,
 	  TestOpStat *stat = 0)
     : TestOp(n, context, stat),
-      oid(oid), waiting_on(0), last_acked_tid(0)
+      oid(oid), waiting_on(0), last_acked_tid(0), do_append(do_append)
   {}
 		
   void _begin()
@@ -716,44 +720,66 @@ public:
 
     cont = ContDesc(context->seq_num, context->current_snap, context->seq_num, prefix);
 
-    ContentsGenerator *cont_gen = new VarLenGenerator(
-      context->max_size, context->min_stride_size, context->max_stride_size);
+    ContentsGenerator *cont_gen;
+    if (do_append) {
+      ObjectDesc old_value;
+      bool found = context->find_object(oid, &old_value);
+      uint64_t prev_length = found && old_value.has_contents() ?
+	old_value.most_recent_gen()->get_length(old_value.most_recent()) :
+	0;
+      cont_gen = new AppendGenerator(
+	prev_length,
+	context->min_stride_size,
+	context->max_stride_size,
+	3 * context->max_stride_size);
+    } else {
+      cont_gen = new VarLenGenerator(
+	context->max_size, context->min_stride_size, context->max_stride_size);
+    }
     context->update_object(cont_gen, oid, cont);
 
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
 
-    interval_set<uint64_t> ranges;
+    map<uint64_t, uint64_t> ranges;
 
-    cont_gen->get_ranges(cont, ranges);
+    cont_gen->get_ranges_map(cont, ranges);
     std::cout << num << ":  seq_num " << context->seq_num << " ranges " << ranges << std::endl;
     context->seq_num++;
     context->state_lock.Unlock();
 
-    waiting_on = ranges.num_intervals();
+    waiting_on = ranges.size();
     //cout << " waiting_on = " << waiting_on << std::endl;
     ContentsGenerator::iterator gen_pos = cont_gen->get_iterator(cont);
     uint64_t tid = 1;
-    for (interval_set<uint64_t>::iterator i = ranges.begin(); 
+    for (map<uint64_t, uint64_t>::iterator i = ranges.begin(); 
 	 i != ranges.end();
 	 ++i, ++tid) {
       bufferlist to_write;
-      gen_pos.seek(i.get_start());
-      for (uint64_t k = 0; k != i.get_len(); ++k, ++gen_pos) {
+      gen_pos.seek(i->first);
+      for (uint64_t k = 0; k != i->second; ++k, ++gen_pos) {
 	to_write.append(*gen_pos);
       }
-      assert(to_write.length() == i.get_len());
+      assert(to_write.length() == i->second);
       assert(to_write.length() > 0);
-      std::cout << num << ":  writing " << context->prefix+oid << " from " << i.get_start()
-		<< " to " << i.get_len() + i.get_start() << " tid " << tid << std::endl;
+      std::cout << num << ":  writing " << context->prefix+oid
+		<< " from " << i->first
+		<< " to " << i->first + i->second << " tid " << tid << std::endl;
       pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
 	new pair<TestOp*, TestOp::CallbackInfo*>(this,
 						 new TestOp::CallbackInfo(tid));
       librados::AioCompletion *completion =
 	context->rados.aio_create_completion((void*) cb_arg, &write_callback, NULL);
       waiting.insert(completion);
-      context->io_ctx.aio_write(context->prefix+oid, completion,
-				to_write, i.get_len(), i.get_start());
+      librados::ObjectWriteOperation op;
+      if (do_append) {
+	op.append(to_write);
+      } else {
+	op.write(i->first, to_write);
+      }
+      context->io_ctx.aio_operate(
+	context->prefix+oid, completion,
+	&op);
     }
 
     bufferlist contbl;
@@ -767,7 +793,9 @@ public:
     waiting.insert(completion);
     waiting_on++;
     write_op.setxattr("_header", contbl);
-    write_op.truncate(cont_gen->get_length(cont));
+    if (!do_append) {
+      write_op.truncate(cont_gen->get_length(cont));
+    }
     context->io_ctx.aio_operate(
       context->prefix+oid, completion, &write_op);
 

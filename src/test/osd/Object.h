@@ -97,7 +97,18 @@ public:
 
   virtual uint64_t get_length(const ContDesc &in) = 0;
 
-  virtual void get_ranges(const ContDesc &in, interval_set<uint64_t> &ranges) = 0;
+  virtual void get_ranges_map(
+    const ContDesc &cont, map<uint64_t, uint64_t> &out) = 0;
+  void get_ranges(const ContDesc &cont, interval_set<uint64_t> &out) {
+    map<uint64_t, uint64_t> ranges;
+    get_ranges_map(cont, ranges);
+    for (map<uint64_t, uint64_t>::iterator i = ranges.begin();
+	 i != ranges.end();
+	 ++i) {
+      out.insert(i->first, i->second);
+    }
+  }
+
 
   virtual iterator_impl *get_iterator_impl(const ContDesc &in) = 0;
 
@@ -169,8 +180,6 @@ public:
     }
   };
 
-  virtual void get_ranges(const ContDesc &cont, interval_set<uint64_t> &out) = 0;
-
   ContentsGenerator::iterator_impl *get_iterator_impl(const ContDesc &in) {
     RandGenerator::iterator_impl *i = new iterator_impl(in, this);
     return i;
@@ -198,7 +207,8 @@ public:
     max_length(length),
     min_stride_size(min_stride_size),
     max_stride_size(max_stride_size) {}
-  void get_ranges(const ContDesc &cont, interval_set<uint64_t> &out);
+  void get_ranges_map(
+    const ContDesc &cont, map<uint64_t, uint64_t> &out);
   uint64_t get_length(const ContDesc &in) {
     RandWrap rand(in.seqnum);
     return (rand() % max_length);
@@ -209,8 +219,9 @@ class AttrGenerator : public RandGenerator {
   uint64_t max_len;
 public:
   AttrGenerator(uint64_t max_len) : max_len(max_len) {}
-  void get_ranges(const ContDesc &cont, interval_set<uint64_t> &out) {
-    out.insert(0, get_length(cont));
+  void get_ranges_map(
+    const ContDesc &cont, map<uint64_t, uint64_t> &out) {
+    out.insert(make_pair(0, get_length(cont)));
   }
   uint64_t get_length(const ContDesc &in) {
     RandWrap rand(in.seqnum);
@@ -228,18 +239,27 @@ public:
 
 class AppendGenerator : public RandGenerator {
   uint64_t off;
-  uint64_t max_len;
-  uint64_t max_intervals;
+  uint64_t min_append_size;
+  uint64_t max_append_size;
+  uint64_t max_append_total;
 public:
-  AppendGenerator(uint64_t off, uint64_t max_len, uint64_t max_intervals) :
-    off(off), max_len(max_len), max_intervals(max_intervals) {}
-  uint64_t get_length(const ContDesc &in) {
+  AppendGenerator(
+    uint64_t off,
+    uint64_t min_append_size,
+    uint64_t max_append_size,
+    uint64_t max_append_total) :
+    off(off), min_append_size(min_append_size),
+    max_append_size(max_append_size),
+    max_append_total(max_append_total) {}
+  uint64_t get_append_size(const ContDesc &in) {
     RandWrap rand(in.seqnum);
-    return off + (rand() % max_len);
+    return rand() % max_append_total;
   }
-  void get_ranges(const ContDesc &cont, interval_set<uint64_t> &out) {
-    out.insert(off, get_length(cont));
+  uint64_t get_length(const ContDesc &in) {
+    return off + get_append_size(in);
   }
+  void get_ranges_map(
+    const ContDesc &cont, map<uint64_t, uint64_t> &out);
 };
 
 class ObjectDesc {
