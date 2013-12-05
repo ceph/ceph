@@ -216,7 +216,7 @@ void usage(const char *pname)
     << "  exists <prefix> [key]\n"
     << "  get <prefix> <key> [out <file>]\n"
     << "  crc <prefix> <key>\n"
-    << "  get-size\n"
+    << "  get-size [<prefix> <key>]\n"
     << "  set <prefix> <key> [ver <N>|in <file>]\n"
     << "  store-copy <path> [num-keys-per-tx]\n"
     << "  store-crc <path>\n"
@@ -333,6 +333,26 @@ int main(int argc, const char *argv[])
 
   } else if (cmd == "get-size") {
     std::cout << "estimated store size: " << st.get_size() << std::endl;
+
+    if (argc < 4)
+      return 0;
+
+    if (argc < 5) {
+      usage(argv[0]);
+      return 1;
+    }
+    string prefix(argv[3]);
+    string key(argv[4]);
+
+    bool exists = false;
+    bufferlist bl = st.get(prefix, key, exists);
+    if (!exists) {
+      std::cerr << "(" << prefix << "," << key
+                << ") does not exist" << std::endl;
+      return 1;
+    }
+    std::cout << "(" << prefix << "," << key
+              << ") size " << si_t(bl.length()) << std::endl;
 
   } else if (cmd == "set") {
     if (argc < 7) {
