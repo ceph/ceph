@@ -2,3 +2,4 @@ tasks:
 - install:
     branch: dumpling
 - ceph:
+    fs: xfs

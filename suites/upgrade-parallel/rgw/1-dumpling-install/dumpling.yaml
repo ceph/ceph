@@ -2,6 +2,7 @@ tasks:
 - install:
     branch: dumpling
 - ceph:
+   fs: xfs
 - parallel:
    - workload
    - upgrade-sequence
