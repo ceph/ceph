@@ -336,16 +336,8 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
   if (!is_valid_crush_name(name))
     return -EINVAL;
 
-
-  for (map<string,string>::const_iterator l = loc.begin(); l != loc.end(); l++) {
-    if (!is_valid_crush_name(l->second)) {
-      ldout(cct, 1) << "insert_item with loc["
-                    << l->first << "] = '"
-                    << l->second << "' is not a valid crush name ([A-Za-z0-9_-.]+)"
-                    << dendl;
-      return -ENFILE;
-    }
-  }
+  if (!is_valid_crush_loc(cct, loc))
+    return -EINVAL;
 
   if (name_exists(name)) {
     if (get_item_id(name) != item) {
@@ -515,6 +507,9 @@ int CrushWrapper::update_item(CephContext *cct, int item, float weight, string n
   int ret = 0;
 
   if (!is_valid_crush_name(name))
+    return -EINVAL;
+
+  if (!is_valid_crush_loc(cct, loc))
     return -EINVAL;
 
   // compare quantized (fixed-point integer) weights!  
@@ -1142,6 +1137,22 @@ bool CrushWrapper::is_valid_crush_name(const string& s)
 	!(*p >= 'A' && *p <= 'Z') &&
 	!(*p >= 'a' && *p <= 'z'))
       return false;
+  }
+  return true;
+}
+
+bool CrushWrapper::is_valid_crush_loc(CephContext *cct,
+                                      const map<string,string> loc)
+{
+  for (map<string,string>::const_iterator l = loc.begin(); l != loc.end(); l++) {
+    if (!is_valid_crush_name(l->first) ||
+        !is_valid_crush_name(l->second)) {
+      ldout(cct, 1) << "loc["
+                    << l->first << "] = '"
+                    << l->second << "' not a valid crush name ([A-Za-z0-9_-.]+)"
+                    << dendl;
+      return false;
+    }
   }
   return true;
 }
