@@ -510,8 +510,8 @@ bool MDSMonitor::prepare_offload_targets(MMDSLoadTargets *m)
 
 bool MDSMonitor::should_propose(double& delay)
 {
-  delay = 0.0;
-  return true;
+  // delegate to PaxosService to assess whether we should propose
+  return PaxosService::should_propose(delay);
 }
 
 void MDSMonitor::_updated(MMDSBeacon *m)
