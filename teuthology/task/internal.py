@@ -91,7 +91,7 @@ def lock_machines(ctx, config):
         if len(newly_locked) == how_many:
             vmlist = []
             for lmach in newly_locked:
-                if lock.create_if_vm(ctx, lmach):
+                if teuthology.is_vm(lmach):
                     vmlist.append(lmach)
             if vmlist:
                 log.info('Waiting for virtual machines to come up')
