@@ -293,6 +293,11 @@ int FileStore::lfn_link(coll_t c, coll_t newcid, const ghobject_t& o, const ghob
     r = get_index(c, &index_old);
     if (r < 0)
       return r;
+  } else if (c == newcid) {
+    r = get_index(c, &index_old);
+    if (r < 0)
+      return r;
+    index_new = index_old;
   } else {
     r = get_index(c, &index_old);
     if (r < 0)
