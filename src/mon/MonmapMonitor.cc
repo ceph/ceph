@@ -138,6 +138,7 @@ bool MonmapMonitor::preprocess_query(PaxosServiceMessage *m)
 void MonmapMonitor::dump_info(Formatter *f)
 {
   f->dump_unsigned("monmap_first_committed", get_first_committed());
+  f->dump_unsigned("monmap_last_committed", get_last_committed());
   f->open_object_section("monmap");
   mon->monmap->dump(f);
   f->close_section();
