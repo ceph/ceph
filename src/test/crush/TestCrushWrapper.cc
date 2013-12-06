@@ -109,15 +109,83 @@ TEST(CrushWrapper, update_item) {
 		ROOT_TYPE, 0, NULL, NULL, &rootno);
   c->set_item_name(rootno, "default");
 
+  const string HOST0("host0");
+  int host0;
+  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+		HOST_TYPE, 0, NULL, NULL, &host0);
+  c->set_item_name(host0, HOST0);
+
+  const string HOST1("host1");
+  int host1;
+  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+		HOST_TYPE, 0, NULL, NULL, &host1);
+  c->set_item_name(host1, HOST1);
+
   int item = 0;
 
-  // invalid names anywhere in loc trigger an error
+  // fail if invalid names anywhere in loc
   {
     map<string,string> loc;
     loc["rack"] = "\001";
     EXPECT_EQ(-EINVAL, c->update_item(g_ceph_context, item, 1.0,
 				      "osd." + stringify(item), loc));
   }
+  // fail if invalid item name
+  {
+    map<string,string> loc;
+    EXPECT_EQ(-EINVAL, c->update_item(g_ceph_context, item, 1.0,
+				      "\005", loc));
+  }
+  const string OSD0("osd.0");
+  const string OSD1("osd.1");
+  float original_weight = 1.0;
+  float modified_weight = 2.0;
+  float weight;
+
+  map<string,string> loc;
+  loc["root"] = "default";
+  loc["host"] = HOST0;
+  EXPECT_GE(0.0, c->get_item_weightf(host0));
+  EXPECT_EQ(0, c->insert_item(g_ceph_context, item, original_weight,
+			      OSD0, loc));
+
+  // updating nothing changes nothing
+  EXPECT_EQ(OSD0, c->get_item_name(item));
+  EXPECT_EQ(original_weight, c->get_item_weightf(item));
+  EXPECT_TRUE(c->check_item_loc(g_ceph_context, item, loc, &weight));
+  EXPECT_EQ(0, c->update_item(g_ceph_context, item, original_weight,
+			      OSD0, loc));
+  EXPECT_EQ(OSD0, c->get_item_name(item));
+  EXPECT_EQ(original_weight, c->get_item_weightf(item));
+  EXPECT_TRUE(c->check_item_loc(g_ceph_context, item, loc, &weight));
+
+  // update the name and weight of the item but not the location
+  EXPECT_EQ(OSD0, c->get_item_name(item));
+  EXPECT_EQ(original_weight, c->get_item_weightf(item));
+  EXPECT_TRUE(c->check_item_loc(g_ceph_context, item, loc, &weight));
+  EXPECT_EQ(1, c->update_item(g_ceph_context, item, modified_weight,
+			      OSD1, loc));
+  EXPECT_EQ(OSD1, c->get_item_name(item));
+  EXPECT_EQ(modified_weight, c->get_item_weightf(item));
+  EXPECT_TRUE(c->check_item_loc(g_ceph_context, item, loc, &weight));
+  c->set_item_name(item, OSD0);
+  c->adjust_item_weightf(g_ceph_context, item, original_weight);
+
+  // update the name and weight of the item and change its location
+  map<string,string> other_loc;
+  other_loc["root"] = "default";
+  other_loc["host"] = HOST1;
+
+  EXPECT_EQ(OSD0, c->get_item_name(item));
+  EXPECT_EQ(original_weight, c->get_item_weightf(item));
+  EXPECT_TRUE(c->check_item_loc(g_ceph_context, item, loc, &weight));
+  EXPECT_FALSE(c->check_item_loc(g_ceph_context, item, other_loc, &weight));
+  EXPECT_EQ(1, c->update_item(g_ceph_context, item, modified_weight,
+			      OSD1, other_loc));
+  EXPECT_EQ(OSD1, c->get_item_name(item));
+  EXPECT_EQ(modified_weight, c->get_item_weightf(item));
+  EXPECT_FALSE(c->check_item_loc(g_ceph_context, item, loc, &weight));
+  EXPECT_TRUE(c->check_item_loc(g_ceph_context, item, other_loc, &weight));
 }
 
 TEST(CrushWrapper, insert_item) {
