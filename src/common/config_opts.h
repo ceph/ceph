@@ -287,6 +287,7 @@ OPTION(mds_beacon_grace, OPT_FLOAT, 15)
 OPTION(mds_enforce_unique_name, OPT_BOOL, true)
 OPTION(mds_blacklist_interval, OPT_FLOAT, 24.0*60.0)  // how long to blacklist failed nodes
 OPTION(mds_session_timeout, OPT_FLOAT, 60)    // cap bits and leases time out if client idle
+OPTION(mds_freeze_tree_timeout, OPT_FLOAT, 30)    // cap bits and leases time out if client idle
 OPTION(mds_session_autoclose, OPT_FLOAT, 300) // autoclose idle session
 OPTION(mds_reconnect_timeout, OPT_FLOAT, 45)  // seconds to wait for clients during mds restart
 	      //  make it (mds_session_timeout - mds_beacon_grace)

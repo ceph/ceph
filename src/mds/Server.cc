@@ -256,10 +256,35 @@ void Server::handle_client_session(MClientSession *m)
     }
     break;
 
+  case CEPH_SESSION_FLUSHMSG_ACK:
+    finish_flush_session(session, m->get_seq());
+    break;
+
   default:
     assert(0);
   }
   m->put();
+}
+
+void Server::flush_client_sessions(set<client_t>& client_set, C_GatherBuilder& gather)
+{
+  for (set<client_t>::iterator p = client_set.begin(); p != client_set.end(); ++p) {
+    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
+    assert(session);
+    if (session->is_stale() ||
+	!session->connection.get() ||
+	!session->connection->has_feature(CEPH_FEATURE_EXPORT_PEER))
+      continue;
+    version_t seq = session->wait_for_flush(gather.new_sub());
+    mds->send_message_client(new MClientSession(CEPH_SESSION_FLUSHMSG, seq), session);
+  }
+}
+
+void Server::finish_flush_session(Session *session, version_t seq)
+{
+  list<Context*> finished;
+  session->finish_flush(seq, finished);
+  mds->queue_waiters(finished);
 }
 
 void Server::_session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
@@ -439,6 +464,7 @@ void Server::find_idle_sessions()
     mds->locker->revoke_stale_caps(session);
     mds->locker->remove_stale_leases(session);
     mds->send_message_client(new MClientSession(CEPH_SESSION_STALE, session->get_push_seq()), session);
+    finish_flush_session(session, session->get_push_seq());
   }
 
   // autoclose
@@ -523,6 +549,8 @@ void Server::journal_close_session(Session *session, int state)
     ++p;
     mdcache->request_kill(mdr);
   }
+
+  finish_flush_session(session, session->get_push_seq());
 }
 
 void Server::reconnect_clients()
@@ -1118,10 +1146,6 @@ void Server::handle_client_request(MClientRequest *req)
     session->trim_completed_requests(req->get_oldest_client_tid());
   }
 
-  // request_start may drop the request, get a reference for cap release
-  if (!req->releases.empty() && req->get_source().is_client() && !req->is_replay())
-    req->get();
-
   // register + dispatch
   MDRequest *mdr = mdcache->request_start(req);
   if (mdr) {
@@ -1139,7 +1163,7 @@ void Server::handle_client_request(MClientRequest *req)
 	 p != req->releases.end();
 	 ++p)
       mds->locker->process_request_cap_release(mdr, client, p->item, p->dname);
-    req->put();
+    req->releases.clear();
   }
 
   if (mdr)
@@ -1563,6 +1587,9 @@ void Server::dispatch_slave_request(MDRequest *mdr)
     break;
 
   case MMDSSlaveRequest::OP_FINISH:
+    // information about rename imported caps
+    if (mdr->slave_request->inode_export.length() > 0)
+      mdr->more()->inode_import.claim(mdr->slave_request->inode_export);
     // finish off request.
     mdcache->request_finish(mdr);
     break;
@@ -1612,6 +1639,22 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
 	dout(10) << " waiting for authpinnable on " << **p << dendl;
 	(*p)->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
 	mdr->drop_local_auth_pins();
+
+	CDir *dir = NULL;
+	if (CInode *in = dynamic_cast<CInode*>(*p)) {
+	  if (!in->is_root())
+	    dir = in->get_parent_dir();
+	} else if (CDentry *dn = dynamic_cast<CDentry*>(*p)) {
+	  dir = dn->get_dir();
+	} else {
+	  assert(0);
+	}
+	if (dir && dir->is_freezing_tree()) {
+	  while (!dir->is_freezing_tree_root())
+	    dir = dir->get_parent_dir();
+	  mdcache->migrator->export_freeze_inc_num_waiters(dir);
+	}
+
 	return;
       }
     }
@@ -5273,15 +5316,10 @@ bool Server::_dir_is_nonempty_unlocked(MDRequest *mdr, CInode *in)
   if (in->snaprealm && in->snaprealm->srnode.snaps.size())
     return true; // in a snapshot!
 
-  list<frag_t> frags;
-  in->dirfragtree.get_leaves(frags);
-
-  for (list<frag_t>::iterator p = frags.begin();
-       p != frags.end();
-       ++p) {
-    CDir *dir = in->get_or_open_dirfrag(mdcache, *p);
-    assert(dir);
-
+  list<CDir*> ls;
+  in->get_dirfrags(ls);
+  for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
+    CDir *dir = *p;
     // is the frag obviously non-empty?
     if (dir->is_auth()) {
       if (dir->get_projected_fnode()->fragstat.size()) {
@@ -5299,19 +5337,28 @@ bool Server::_dir_is_nonempty(MDRequest *mdr, CInode *in)
 {
   dout(10) << "dir_is_nonempty " << *in << dendl;
   assert(in->is_auth());
+  assert(in->filelock.can_read(-1));
 
-  if (in->snaprealm && in->snaprealm->srnode.snaps.size())
-    return true; // in a snapshot!
+  frag_info_t dirstat;
+  version_t dirstat_version = in->get_projected_inode()->dirstat.version;
 
-  if (in->get_projected_inode()->dirstat.size() > 0) {	
-    dout(10) << "dir_is_nonempty projected dir size still "
-	     << in->get_projected_inode()->dirstat.size()
-	     << " on " << *in
-	     << dendl;
-    return true;
+  list<CDir*> ls;
+  in->get_dirfrags(ls);
+  for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
+    CDir *dir = *p;
+    if (dir->get_projected_fnode()->fragstat.size()) {
+      dout(10) << "dir_is_nonempty_unlocked dirstat has "
+	       << dir->get_projected_fnode()->fragstat.size() << " items " << *dir << dendl;
+      return true;
+    }
+
+    if (dir->fnode.accounted_fragstat.version == dirstat_version)
+      dirstat.add(dir->fnode.accounted_fragstat);
+    else
+      dirstat.add(dir->fnode.fragstat);
   }
 
-  return false;
+  return dirstat.size() != in->get_projected_inode()->dirstat.size();
 }
 
 
@@ -6287,13 +6334,21 @@ void Server::_rename_apply(MDRequest *mdr, CDentry *srcdn, CDentry *destdn, CDen
     // srcdn inode import?
     if (!srcdn->is_auth() && destdn->is_auth()) {
       assert(mdr->more()->inode_import.length() > 0);
+
+      map<client_t,Capability::Import> imported_caps;
       
       // finish cap imports
       finish_force_open_sessions(mdr->more()->imported_client_map, mdr->more()->sseq_map);
       if (mdr->more()->cap_imports.count(destdnl->get_inode())) {
-	mds->mdcache->migrator->finish_import_inode_caps(destdnl->get_inode(), srcdn->authority().first, 
-							 mdr->more()->cap_imports[destdnl->get_inode()]);
+	mds->mdcache->migrator->finish_import_inode_caps(destdnl->get_inode(),
+							 mdr->more()->srcdn_auth_mds, true,
+							 mdr->more()->cap_imports[destdnl->get_inode()],
+							 imported_caps);
       }
+
+      mdr->more()->inode_import.clear();
+      ::encode(imported_caps, mdr->more()->inode_import);
+
       /* hack: add an auth pin for each xlock we hold. These were
        * remote xlocks previously but now they're local and
        * we're going to try and unpin when we xlock_finish. */
@@ -6367,6 +6422,20 @@ public:
     server(s), mdr(m), srcdn(sr), destdn(de), straydn(st) {}
   void finish(int r) {
     server->_commit_slave_rename(mdr, r, srcdn, destdn, straydn);
+  }
+};
+
+class C_MDS_SlaveRenameSessionsFlushed : public Context {
+  Server *server;
+  MDRequest *mdr;
+public:
+  C_MDS_SlaveRenameSessionsFlushed(Server *s, MDRequest *r) :
+    server(s), mdr(r) {
+      mdr->get();
+    }
+  void finish(int r) {
+    server->_slave_rename_sessions_flushed(mdr);
+    mdr->put();
   }
 };
 
@@ -6458,15 +6527,29 @@ void Server::handle_slave_rename_prep(MDRequest *mdr)
       if (mdr->slave_request->witnesses.size() > 1) {
 	dout(10) << " set srci ambiguous auth; providing srcdn replica list" << dendl;
 	reply_witness = true;
-	for (set<int>::iterator p = srcdnrep.begin(); p != srcdnrep.end(); ++p) {
-	  if (*p == mdr->slave_to_mds ||
-	      !mds->mdsmap->is_clientreplay_or_active_or_stopping(*p))
-	    continue;
-	  MMDSSlaveRequest *notify = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
-							  MMDSSlaveRequest::OP_RENAMENOTIFY);
-	  mds->send_message_mds(notify, *p);
-	  mdr->more()->waiting_on_slave.insert(*p);
-	}
+      }
+
+      // make sure bystanders have received all lock related messages
+      for (set<int>::iterator p = srcdnrep.begin(); p != srcdnrep.end(); ++p) {
+	if (*p == mdr->slave_to_mds ||
+	    !mds->mdsmap->is_clientreplay_or_active_or_stopping(*p))
+	  continue;
+	MMDSSlaveRequest *notify = new MMDSSlaveRequest(mdr->reqid, mdr->attempt,
+	    MMDSSlaveRequest::OP_RENAMENOTIFY);
+	mds->send_message_mds(notify, *p);
+	mdr->more()->waiting_on_slave.insert(*p);
+      }
+
+      // make sure clients have received all cap related messages
+      set<client_t> export_client_set;
+      mdcache->migrator->get_export_client_set(srcdnl->get_inode(), export_client_set);
+
+      C_GatherBuilder gather(g_ceph_context);
+      flush_client_sessions(export_client_set, gather);
+      if (gather.has_subs()) {
+	mdr->more()->waiting_on_slave.insert(-1);
+	gather.set_finisher(new C_MDS_SlaveRenameSessionsFlushed(this, mdr));
+	gather.activate();
       }
     }
 
@@ -6647,8 +6730,17 @@ void Server::_commit_slave_rename(MDRequest *mdr, int r,
 	  mds->locker->xlock_export(lock, mdr);
       }
 
+      map<client_t,Capability::Import> peer_imported;
+      if (mdr->more()->inode_import.length()) {
+	bufferlist::iterator bp = mdr->more()->inode_import.begin();
+	::decode(peer_imported, bp);
+      } else {
+	assert(mds->mdsmap->is_resolve(mdr->slave_to_mds));
+      }
+
       dout(10) << " finishing inode export on " << *destdnl->get_inode() << dendl;
-      mdcache->migrator->finish_export_inode(destdnl->get_inode(), mdr->now, finished);
+      mdcache->migrator->finish_export_inode(destdnl->get_inode(), mdr->now,
+					     mdr->slave_to_mds, peer_imported, finished);
       mds->queue_waiters(finished);   // this includes SINGLEAUTH waiters.
 
       // unfreeze
@@ -7082,7 +7174,21 @@ void Server::handle_slave_rename_notify_ack(MDRequest *mdr, MMDSSlaveRequest *ac
   }
 }
 
+void Server::_slave_rename_sessions_flushed(MDRequest *mdr)
+{
+  dout(10) << "_slave_rename_sessions_flushed " << *mdr << dendl;
 
+  if (mdr->more()->waiting_on_slave.count(-1)) {
+    mdr->more()->waiting_on_slave.erase(-1);
+
+    if (mdr->more()->waiting_on_slave.empty()) {
+      if (mdr->slave_request)
+	dispatch_slave_request(mdr);
+    } else
+      dout(10) << " still waiting for rename notify acks from "
+	<< mdr->more()->waiting_on_slave << dendl;
+  }
+}
 
 // snaps
 /* This function takes responsibility for the passed mdr*/

@@ -105,7 +105,7 @@ void Locker::dispatch(Message *m)
 
 void Locker::send_lock_message(SimpleLock *lock, int msg)
 {
-  for (map<int,int>::iterator it = lock->get_parent()->replicas_begin(); 
+  for (map<int,unsigned>::iterator it = lock->get_parent()->replicas_begin();
        it != lock->get_parent()->replicas_end(); 
        ++it) {
     if (mds->mdsmap->get_state(it->first) < MDSMap::STATE_REJOIN) 
@@ -117,7 +117,7 @@ void Locker::send_lock_message(SimpleLock *lock, int msg)
 
 void Locker::send_lock_message(SimpleLock *lock, int msg, const bufferlist &data)
 {
-  for (map<int,int>::iterator it = lock->get_parent()->replicas_begin(); 
+  for (map<int,unsigned>::iterator it = lock->get_parent()->replicas_begin();
        it != lock->get_parent()->replicas_end(); 
        ++it) {
     if (mds->mdsmap->get_state(it->first) < MDSMap::STATE_REJOIN) 
@@ -823,7 +823,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
 
 bool Locker::eval(CInode *in, int mask, bool caps_imported)
 {
-  bool need_issue = false;
+  bool need_issue = caps_imported;
   list<Context*> finishers;
   
   dout(10) << "eval " << mask << " " << *in << dendl;
@@ -976,8 +976,8 @@ void Locker::try_eval(SimpleLock *lock, bool *pneed_issue)
     }
   }
 
-  if (p->is_freezing()) {
-    dout(7) << "try_eval " << *lock << " frozen, waiting on " << *p << dendl;
+  if (lock->get_type() != CEPH_LOCK_DN && p->is_freezing()) {
+    dout(7) << "try_eval " << *lock << " freezing, waiting on " << *p << dendl;
     p->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_Locker_Eval(this, p, lock->get_type()));
     return;
   }
@@ -1606,8 +1606,6 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t 
 
   set<CInode*> need_issue;
   drop_locks(mut, &need_issue);
-  mut->cleanup();
-  delete mut;
 
   if (!in->is_head() && !in->client_snap_caps.empty()) {
     dout(10) << " client_snap_caps " << in->client_snap_caps << dendl;
@@ -1640,6 +1638,10 @@ void Locker::file_update_finish(CInode *in, Mutation *mut, bool share, client_t 
       share_inode_max_size(in);
   }
   issue_caps_set(need_issue);
+ 
+  // auth unpin after issuing caps 
+  mut->cleanup();
+  delete mut;
 }
 
 Capability* Locker::issue_new_caps(CInode *in,
@@ -1850,7 +1852,7 @@ void Locker::revoke_stale_caps(Session *session)
 
   for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
     Capability *cap = *p;
-    cap->set_stale(true);
+    cap->mark_stale();
     CInode *in = cap->get_inode();
     int issued = cap->issued();
     if (issued) {
@@ -1887,7 +1889,7 @@ void Locker::resume_stale_caps(Session *session)
     assert(in->is_head());
     if (cap->is_stale()) {
       dout(10) << " clearing stale flag on " << *in << dendl;
-      cap->set_stale(false);
+      cap->clear_stale();
       if (!in->is_auth() || !eval(in, CEPH_CAP_LOCKS))
 	issue_caps(in, cap);
     }
@@ -1926,7 +1928,7 @@ void Locker::request_inode_file_caps(CInode *in)
 {
   assert(!in->is_auth());
 
-  int wanted = in->get_caps_wanted();
+  int wanted = in->get_caps_wanted() & ~CEPH_CAP_PIN;
   if (wanted != in->replica_caps_wanted) {
     // wait for single auth
     if (in->is_ambiguous_auth()) {
@@ -2174,6 +2176,7 @@ void Locker::share_inode_max_size(CInode *in, Capability *only_cap)
       continue;
     if (cap->pending() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
       dout(10) << "share_inode_max_size with client." << client << dendl;
+      cap->inc_last_seq();
       MClientCaps *m = new MClientCaps(CEPH_CAP_OP_GRANT,
 				       in->ino(),
 				       in->find_snaprealm()->inode->ino(),
@@ -2573,6 +2576,38 @@ void Locker::process_request_cap_release(MDRequest *mdr, client_t client, const 
     mdr->cap_releases[in->vino()] = cap->get_last_seq();
 }
 
+class C_Locker_RetryKickIssueCaps : public Context {
+  Locker *locker;
+  CInode *in;
+  client_t client;
+  ceph_seq_t seq;
+public:
+  C_Locker_RetryKickIssueCaps(Locker *l, CInode *i, client_t c, ceph_seq_t s) :
+    locker(l), in(i), client(c), seq(s) {
+    in->get(CInode::PIN_PTRWAITER);
+  }
+  void finish(int r) {
+    locker->kick_issue_caps(in, client, seq);
+    in->put(CInode::PIN_PTRWAITER);
+  }
+};
+
+void Locker::kick_issue_caps(CInode *in, client_t client, ceph_seq_t seq)
+{
+  Capability *cap = in->get_client_cap(client);
+  if (!cap || cap->get_last_sent() != seq)
+    return;
+  if (in->is_frozen()) {
+    dout(10) << "kick_issue_caps waiting for unfreeze on " << *in << dendl;
+    in->add_waiter(CInode::WAIT_UNFREEZE,
+	new C_Locker_RetryKickIssueCaps(this, in, client, seq));
+    return;
+  }
+  dout(10) << "kick_issue_caps released at current seq " << seq
+    << ", reissuing" << dendl;
+  issue_caps(in, cap);
+}
+
 void Locker::kick_cap_releases(MDRequest *mdr)
 {
   client_t client = mdr->get_client();
@@ -2582,17 +2617,9 @@ void Locker::kick_cap_releases(MDRequest *mdr)
     CInode *in = mdcache->get_inode(p->first);
     if (!in)
       continue;
-    Capability *cap = in->get_client_cap(client);
-    if (!cap)
-      continue;
-    if (cap->get_last_sent() == p->second) {
-      dout(10) << "kick_cap_releases released at current seq " << p->second
-	       << ", reissuing" << dendl;
-      issue_caps(in, cap);
-    }
+    kick_issue_caps(in, client, p->second);
   }
 }
-
 
 static uint64_t calc_bounding(uint64_t t)
 {
@@ -3403,8 +3430,13 @@ void Locker::simple_eval(SimpleLock *lock, bool *need_issue)
   assert(lock->get_parent()->is_auth());
   assert(lock->is_stable());
 
-  if (lock->get_parent()->is_freezing_or_frozen())
-    return;
+  if (lock->get_parent()->is_freezing_or_frozen()) {
+    // dentry lock in unreadable state can block path traverse
+    if ((lock->get_type() != CEPH_LOCK_DN ||
+	 lock->get_state() == LOCK_SYNC ||
+	 lock->get_parent()->is_frozen()))
+      return;
+  }
 
   CInode *in = 0;
   int wanted = 0;

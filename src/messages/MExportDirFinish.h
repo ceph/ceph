@@ -19,14 +19,16 @@
 
 class MExportDirFinish : public Message {
   dirfrag_t dirfrag;
+  bool caps_only;
 
  public:
   dirfrag_t get_dirfrag() { return dirfrag; }
+  bool is_caps_only() { return caps_only; }
   
   MExportDirFinish() {}
-  MExportDirFinish(dirfrag_t dirfrag) :
-    Message(MSG_MDS_EXPORTDIRFINISH) {
-    this->dirfrag = dirfrag;
+  MExportDirFinish(dirfrag_t df, bool co, uint64_t tid) :
+    Message(MSG_MDS_EXPORTDIRFINISH), dirfrag(df), caps_only(co) {
+    set_tid(tid);
   }
 private:
   ~MExportDirFinish() {}
@@ -34,15 +36,17 @@ private:
 public:
   const char *get_type_name() const { return "ExFin"; }
   void print(ostream& o) const {
-    o << "export_finish(" << dirfrag << ")";
+    o << "export_finish(" << dirfrag << (caps_only ? " caps_only" : "") << ")";
   }
   
   void encode_payload(uint64_t features) {
     ::encode(dirfrag, payload);
+    ::encode(caps_only, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(dirfrag, p);
+    ::decode(caps_only, p);
   }
 
 };

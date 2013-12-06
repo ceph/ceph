@@ -97,7 +97,7 @@ public:
 
   void add_waiter(uint64_t tag, Context *c);
 
-  static const int EXPORT_NONCE = 1;
+  static const unsigned EXPORT_NONCE = 1;
 
   bool is_lt(const MDSCacheObject *r) const {
     return *this < *static_cast<const CDentry*>(r);
