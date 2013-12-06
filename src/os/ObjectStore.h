@@ -31,6 +31,8 @@
 #include <sys/vfs.h>    /* or <sys/statfs.h> */
 #endif /* DARWIN */
 
+class CephContext;
+
 using std::vector;
 using std::string;
 
@@ -77,7 +79,7 @@ static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) 
 }
 
 class ObjectStore {
-private:
+protected:
   string path;
 
 public:
@@ -88,7 +90,8 @@ public:
    * @param data path (or other descriptor) for data
    * @param journal path (or other descriptor) for journal (optional)
    */
-  static ObjectStore *create(const string& type,
+  static ObjectStore *create(CephContext *cct,
+			     const string& type,
 			     const string& data,
 			     const string& journal);
 
@@ -863,6 +866,10 @@ public:
   ObjectStore(const std::string& path_) : path(path_), logger(NULL) {}
   virtual ~ObjectStore() {}
 
+  // no copying
+  ObjectStore(const ObjectStore& o);
+  const ObjectStore& operator=(const ObjectStore& o);
+
   // mgmt
   virtual int version_stamp_is_valid(uint32_t *version) { return 1; }
   virtual int update_version_stamp() = 0;
@@ -958,7 +965,7 @@ public:
       value.push_back(bp);
     return r;
   }
-  virtual int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset, bool user_only = false) {return 0;};
+  virtual int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset, bool user_only = false) = 0;
   int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferlist>& aset, bool user_only = false) {
     map<string,bufferptr> bmap;
     int r = getattrs(cid, oid, bmap, user_only);
