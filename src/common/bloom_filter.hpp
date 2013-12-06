@@ -111,6 +111,7 @@ public:
   }
 
   bloom_filter(const bloom_filter& filter)
+    : bit_table_(0)
   {
     this->operator=(filter);
   }
