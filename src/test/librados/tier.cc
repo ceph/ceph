@@ -125,7 +125,7 @@ string set_pool_str(string pool, string var, int val)
     + stringify(val) + string("}");
 }
 
-TEST(LibRadosMisc, HitSetRead) {
+TEST(LibRadosMisc, HitSetWrite) {
   Rados cluster;
   std::string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
@@ -139,20 +139,20 @@ TEST(LibRadosMisc, HitSetRead) {
   bufferlist inbl;
   ASSERT_EQ(0, cluster.mon_command(set_pool_str(pool_name, "hit_set_count", 8),
 						inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(set_pool_str(pool_name, "hit_set_period", 60),
+  ASSERT_EQ(0, cluster.mon_command(set_pool_str(pool_name, "hit_set_period", 600),
 						inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(set_pool_str(pool_name, "hit_set_type", "bloom"),
-				   inbl, NULL, NULL));
-  ASSERT_EQ(0, cluster.mon_command(set_pool_str(pool_name, "hit_set_fpp", ".01"),
+  ASSERT_EQ(0, cluster.mon_command(set_pool_str(pool_name, "hit_set_type",
+						"explicit_hash"),
 				   inbl, NULL, NULL));
 
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
 
-  // do a bunch of reads
+  // do a bunch of writes
   for (int i=0; i<1000; ++i) {
     bufferlist bl;
-    ASSERT_EQ(-ENOENT, ioctx.read(stringify(i), bl, 1, 0));
+    bl.append("a");
+    ASSERT_EQ(1, ioctx.write(stringify(i), bl, 1, 0));
   }
 
   // get HitSets
@@ -184,7 +184,8 @@ TEST(LibRadosMisc, HitSetRead) {
   for (int i=0; i<1000; ++i) {
     string n = stringify(i);
     uint32_t hash = ioctx.get_object_hash_position(n);
-    hobject_t oid(sobject_t(n, CEPH_NOSNAP), "", hash, -1, "");
+    hobject_t oid(sobject_t(n, CEPH_NOSNAP), "", hash,
+		  cluster.pool_lookup(pool_name.c_str()), "");
     //std::cout << "checking for " << oid << ", should be in pg " << pg << std::endl;
     bool found = false;
     for (int p=0; p<num_pg; ++p) {
