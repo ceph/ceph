@@ -97,13 +97,11 @@ TEST(CrushWrapper, check_item_loc) {
 TEST(CrushWrapper, update_item) {
   CrushWrapper *c = new CrushWrapper;
 
-#define ROOT_TYPE 3
+  const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
-#define RACK_TYPE 2
-  c->set_type_name(RACK_TYPE, "rack");
-#define HOST_TYPE 1
+  const int HOST_TYPE = 1;
   c->set_type_name(HOST_TYPE, "host");
-#define OSD_TYPE 0
+  const int OSD_TYPE = 0;
   c->set_type_name(OSD_TYPE, "osd");
 
   int rootno;
@@ -125,13 +123,11 @@ TEST(CrushWrapper, update_item) {
 TEST(CrushWrapper, insert_item) {
   CrushWrapper *c = new CrushWrapper;
 
-#define ROOT_TYPE 3
+  const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
-#define RACK_TYPE 2
-  c->set_type_name(RACK_TYPE, "rack");
-#define HOST_TYPE 1
+  const int HOST_TYPE = 1;
   c->set_type_name(HOST_TYPE, "host");
-#define OSD_TYPE 0
+  const int OSD_TYPE = 0;
   c->set_type_name(OSD_TYPE, "osd");
 
   int rootno;
@@ -144,7 +140,7 @@ TEST(CrushWrapper, insert_item) {
   // invalid names anywhere in loc trigger an error
   {
     map<string,string> loc;
-    loc["rack"] = "\001";
+    loc["host"] = "\001";
     EXPECT_EQ(-EINVAL, c->insert_item(g_ceph_context, item, 1.0,
 				      "osd." + stringify(item), loc));
   }
@@ -166,7 +162,7 @@ TEST(CrushWrapper, insert_item) {
     std::string name = "NAME";
     map<string,string> loc;
     loc["root"] = "default";
-    loc["rack"] = name;
+    loc["host"] = name;
 
     item++;
     EXPECT_EQ(0, c->insert_item(g_ceph_context, item, 1.0,
@@ -177,7 +173,7 @@ TEST(CrushWrapper, insert_item) {
     std::string name = "ITEM_WITHOUT_BUCKET";
     map<string,string> loc;
     loc["root"] = "default";
-    loc["rack"] = name;
+    loc["host"] = name;
     item++;
     c->set_item_name(item, name);
 
@@ -188,12 +184,12 @@ TEST(CrushWrapper, insert_item) {
   // 
   //   When there is:
   //
-  //   default --> rack0 --> item
+  //   default --> host0 --> item
   //
   //   Trying to insert the same item higher in the hirarchy will fail
   //   because it would create a loop.
   //
-  //   default --> rack0 --> item
+  //   default --> host0 --> item
   //           |
   //           +-> item 
   //
@@ -202,7 +198,7 @@ TEST(CrushWrapper, insert_item) {
     {
       map<string,string> loc;
       loc["root"] = "default";
-      loc["rack"] = "rack0";
+      loc["host"] = "host0";
 
       EXPECT_EQ(0, c->insert_item(g_ceph_context, item, 1.0,
 				  "osd." + stringify(item), loc));
@@ -218,16 +214,16 @@ TEST(CrushWrapper, insert_item) {
   // 
   //   When there is:
   //
-  //   default --> rack0
+  //   default --> host0
   //
-  //   Trying to insert default under rack0 must fail
+  //   Trying to insert default under host0 must fail
   //   because it would create a loop.
   //
-  //   default --> rack0 --> default
+  //   default --> host0 --> default
   //
   {
     map<string,string> loc;
-    loc["rack"] = "rack0";
+    loc["host"] = "host0";
 
     EXPECT_EQ(-ELOOP, c->insert_item(g_ceph_context, rootno, 1.0,
 				     "default", loc));
@@ -241,8 +237,8 @@ TEST(CrushWrapper, insert_item) {
     c->set_item_name(osdno, "myosd");
     map<string,string> loc;
     loc["root"] = "default";
-    // wrongfully pretend the osd is of type rack
-    loc["rack"] = "myosd";
+    // wrongfully pretend the osd is of type host
+    loc["host"] = "myosd";
 
     item++;
     EXPECT_EQ(-EINVAL, c->insert_item(g_ceph_context, item, 1.0,
@@ -301,7 +297,7 @@ TEST(CrushWrapper, is_valid_crush_loc) {
   }
   {
     map<string,string> loc;
-    loc["rack"] = "\003";
+    loc["host"] = "\003";
     EXPECT_FALSE(CrushWrapper::is_valid_crush_loc(g_ceph_context, loc));
   }
 }
