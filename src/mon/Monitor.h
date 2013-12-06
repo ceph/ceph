@@ -910,5 +910,6 @@ void get_command_descriptions(const MonCommand *commands,
 			      unsigned commands_size,
 			      Formatter *f,
 			      bufferlist *rdata);
+void get_locally_supported_monitor_commands(const MonCommand **cmds, int *count);
 
 #endif
