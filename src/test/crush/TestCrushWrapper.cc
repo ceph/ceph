@@ -65,11 +65,11 @@ TEST(CrushWrapper, check_item_loc) {
     float weight;
     map<string,string> loc;
     loc["root"] = "default";
-    const std::string HOST("host0");
+    const string HOST("host0");
     loc["host"] = HOST;
     EXPECT_FALSE(c->check_item_loc(g_ceph_context, item, loc, &weight));
   }
-  const std::string OSD("osd.0");
+  const string OSD("osd.0");
   {
     map<string,string> loc;
     loc["root"] = "default";
@@ -159,7 +159,7 @@ TEST(CrushWrapper, insert_item) {
   }
   // implicit creation of a bucket 
   {
-    std::string name = "NAME";
+    string name = "NAME";
     map<string,string> loc;
     loc["root"] = "default";
     loc["host"] = name;
@@ -170,7 +170,7 @@ TEST(CrushWrapper, insert_item) {
   }
   // adding to an existing item name that is not associated with a bucket
   {
-    std::string name = "ITEM_WITHOUT_BUCKET";
+    string name = "ITEM_WITHOUT_BUCKET";
     map<string,string> loc;
     loc["root"] = "default";
     loc["host"] = name;
@@ -258,7 +258,7 @@ TEST(CrushWrapper, insert_item) {
 TEST(CrushWrapper, item_bucket_names) {
   CrushWrapper *c = new CrushWrapper;
   int index = 123;
-  std::string name = "NAME";
+  string name = "NAME";
   EXPECT_EQ(-EINVAL, c->set_item_name(index, "\001"));
   EXPECT_EQ(0, c->set_item_name(index, name));
   EXPECT_TRUE(c->name_exists(name));
@@ -271,7 +271,7 @@ TEST(CrushWrapper, item_bucket_names) {
 TEST(CrushWrapper, bucket_types) {
   CrushWrapper *c = new CrushWrapper;
   int index = 123;
-  std::string name = "NAME";
+  string name = "NAME";
   c->set_type_name(index, name);
   EXPECT_EQ(1, c->get_num_type_names());
   EXPECT_EQ(index, c->get_type_id(name));
