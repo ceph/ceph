@@ -555,6 +555,7 @@ public:
       ::encode(oldoid, tbl);
       ::encode(cid, tbl);
       ::encode(oid, tbl);
+      ops++;
     }
 
     void collection_setattr(coll_t cid, const char* name, bufferlist& val) {
