@@ -34,7 +34,7 @@ TYPEWITHSTRAYDATA(OSDMap)
 TYPEWITHSTRAYDATA(OSDMap::Incremental)
 
 #include "crush/CrushWrapper.h"
-TYPE(CrushWrapper)
+TYPE_NOCOPY(CrushWrapper)
 
 #include "include/histogram.h"
 TYPE(pow2_hist_t)
@@ -152,7 +152,7 @@ TYPE_FEATUREFUL(MDSMap)
 TYPE_FEATUREFUL(MDSMap::mds_info_t)
 
 #include "mds/Capability.h"
-TYPE(Capability)
+TYPE_NOCOPY(Capability)
 
 #include "mds/AnchorServer.h"
 TYPE(AnchorServer)
@@ -171,7 +171,7 @@ TYPE(EImportFinish)
 #include "mds/events/EImportStart.h"
 TYPE(EImportStart)
 #include "mds/events/EMetaBlob.h"
-TYPE(EMetaBlob::fullbit)
+TYPE_NOCOPY(EMetaBlob::fullbit)
 TYPE(EMetaBlob::remotebit)
 TYPE(EMetaBlob::nullbit)
 TYPE(EMetaBlob::dirlump)
