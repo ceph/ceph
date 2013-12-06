@@ -1600,6 +1600,11 @@ void Client::handle_client_session(MClientSession *m)
     trim_caps(session, m->get_max_caps());
     break;
 
+  case CEPH_SESSION_FLUSHMSG:
+    messenger->send_message(new MClientSession(CEPH_SESSION_FLUSHMSG_ACK, m->get_seq()),
+			    session->con);
+    break;
+
   default:
     assert(0);
   }
