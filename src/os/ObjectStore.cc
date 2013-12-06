@@ -17,6 +17,7 @@
 #include "ObjectStore.h"
 #include "common/Formatter.h"
 #include "FileStore.h"
+#include "MemStore.h"
 #include "common/safe_io.h"
 
 ObjectStore *ObjectStore::create(CephContext *cct,
@@ -26,6 +27,9 @@ ObjectStore *ObjectStore::create(CephContext *cct,
 {
   if (type == "filestore") {
     return new FileStore(data, journal);
+  }
+  if (type == "memstore") {
+    return new MemStore(cct, data);
   }
   return NULL;
 }
