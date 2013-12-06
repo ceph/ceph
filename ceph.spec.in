@@ -647,6 +647,7 @@ fi
 %{_bindir}/ceph_test_rados_api_list
 %{_bindir}/ceph_test_rados_api_lock
 %{_bindir}/ceph_test_rados_api_misc
+%{_bindir}/ceph_test_rados_api_tier
 %{_bindir}/ceph_test_rados_api_pool
 %{_bindir}/ceph_test_rados_api_snapshots
 %{_bindir}/ceph_test_rados_api_stat

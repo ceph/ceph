@@ -670,6 +670,85 @@ struct ObjectOperation {
     out_handler[p] = h;
   }
 
+  struct C_ObjectOperation_hit_set_ls : public Context {
+    bufferlist bl;
+    std::list< std::pair<time_t, time_t> > *ptls;
+    std::list< std::pair<utime_t, utime_t> > *putls;
+    int *prval;
+    C_ObjectOperation_hit_set_ls(std::list< std::pair<time_t, time_t> > *t,
+				 std::list< std::pair<utime_t, utime_t> > *ut,
+				 int *r)
+      : ptls(t), putls(ut), prval(r) {}
+    void finish(int r) {
+      if (r < 0)
+	return;
+      try {
+	bufferlist::iterator p = bl.begin();
+	std::list< std::pair<utime_t, utime_t> > ls;
+	::decode(ls, p);
+	if (ptls) {
+	  ptls->clear();
+	  for (list< pair<utime_t,utime_t> >::iterator p = ls.begin(); p != ls.end(); ++p)
+	    // round initial timestamp up to the next full second to keep this a valid interval.
+	    ptls->push_back(make_pair(p->first.usec() ? p->first.sec() + 1 : p->first.sec(), p->second.sec()));
+	}
+	if (putls)
+	  putls->swap(ls);
+      } catch (buffer::error& e) {
+	r = -EIO;
+      }
+      if (prval)
+	*prval = r;
+    }
+  };
+
+  /**
+   * list available HitSets.
+   *
+   * We will get back a list of time intervals.  Note that the most recent range may have
+   * an empty end timestamp if it is still accumulating.
+   *
+   * @param pls [out] list of time intervals
+   * @param prval [out] return value
+   */
+  void hit_set_ls(std::list< std::pair<time_t, time_t> > *pls, int *prval) {
+    add_op(CEPH_OSD_OP_PG_HITSET_LS);
+    unsigned p = ops.size() - 1;
+    out_rval[p] = prval;
+    C_ObjectOperation_hit_set_ls *h =
+      new C_ObjectOperation_hit_set_ls(pls, NULL, prval);
+    out_bl[p] = &h->bl;
+    out_handler[p] = h;
+  }
+  void hit_set_ls(std::list< std::pair<utime_t, utime_t> > *pls, int *prval) {
+    add_op(CEPH_OSD_OP_PG_HITSET_LS);
+    unsigned p = ops.size() - 1;
+    out_rval[p] = prval;
+    C_ObjectOperation_hit_set_ls *h =
+      new C_ObjectOperation_hit_set_ls(NULL, pls, prval);
+    out_bl[p] = &h->bl;
+    out_handler[p] = h;
+  }
+
+  /**
+   * get HitSet
+   *
+   * Return an encoded HitSet that includes the provided time
+   * interval.
+   *
+   * @param stamp [in] timestamp
+   * @param pbl [out] target buffer for encoded HitSet
+   * @param prval [out] return value
+   */
+  void hit_set_get(utime_t stamp, bufferlist *pbl, int *prval) {
+    OSDOp& op = add_op(CEPH_OSD_OP_PG_HITSET_GET);
+    op.op.hit_set_get.stamp.tv_sec = stamp.sec();
+    op.op.hit_set_get.stamp.tv_nsec = stamp.nsec();
+    unsigned p = ops.size() - 1;
+    out_rval[p] = prval;
+    out_bl[p] = pbl;
+  }
+
   void omap_get_header(bufferlist *bl, int *prval) {
     add_op(CEPH_OSD_OP_OMAPGETHEADER);
     unsigned p = ops.size() - 1;
@@ -1345,6 +1424,9 @@ public:
 		     list<LingerOp*>& need_resend_linger,
 		     map<tid_t, CommandOp*>& need_resend_command);
 
+  int64_t get_object_hash_position(int64_t pool, const string& key, const string& ns);
+  int64_t get_object_pg_hash_position(int64_t pool, const string& key, const string& ns);
+
   // messages
  public:
   void dispatch(Message *m);
@@ -1380,6 +1462,8 @@ private:
   void set_client_incarnation(int inc) { client_inc = inc; }
 
   void wait_for_new_map(Context *c, epoch_t epoch, int err=0);
+  void wait_for_latest_osdmap(Context *fin);
+  void _get_latest_version(epoch_t oldest, epoch_t neweset, Context *fin);
 
   /** Get the current set of global op flags */
   int get_global_op_flags() { return global_op_flags; }
@@ -1392,8 +1476,9 @@ private:
   int op_cancel(tid_t tid);
 
   // commands
-  int osd_command(int osd, vector<string>& cmd, bufferlist& inbl, tid_t *ptid,
-		    bufferlist *poutbl, string *prs, Context *onfinish) {
+  int osd_command(int osd, vector<string>& cmd,
+		  const bufferlist& inbl, tid_t *ptid,
+		  bufferlist *poutbl, string *prs, Context *onfinish) {
     assert(osd >= 0);
     CommandOp *c = new CommandOp;
     c->cmd = cmd;
@@ -1404,8 +1489,9 @@ private:
     c->target_osd = osd;
     return _submit_command(c, ptid);
   }
-  int pg_command(pg_t pgid, vector<string>& cmd, bufferlist& inbl, tid_t *ptid,
-		   bufferlist *poutbl, string *prs, Context *onfinish) {
+  int pg_command(pg_t pgid, vector<string>& cmd,
+		 const bufferlist& inbl, tid_t *ptid,
+		 bufferlist *poutbl, string *prs, Context *onfinish) {
     CommandOp *c = new CommandOp;
     c->cmd = cmd;
     c->inbl = inbl;

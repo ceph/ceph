@@ -275,8 +275,6 @@ void librados::ObjectReadOperation::is_dirty(bool *is_dirty, int *prval)
   o->is_dirty(is_dirty, prval);
 }
 
-
-
 int librados::IoCtx::omap_get_vals(const std::string& oid,
                                    const std::string& start_after,
                                    const std::string& filter_prefix,
@@ -1141,6 +1139,20 @@ const librados::ObjectIterator& librados::IoCtx::objects_end() const
   return ObjectIterator::__EndObjectIterator;
 }
 
+int librados::IoCtx::hit_set_list(uint32_t hash, AioCompletion *c,
+				  std::list< std::pair<time_t, time_t> > *pls)
+{
+  return io_ctx_impl->hit_set_list(hash, c->pc, pls);
+}
+
+int librados::IoCtx::hit_set_get(uint32_t hash,  AioCompletion *c, time_t stamp,
+				 bufferlist *pbl)
+{
+  return io_ctx_impl->hit_set_get(hash, c->pc, stamp, pbl);
+}
+
+
+
 uint64_t librados::IoCtx::get_last_version()
 {
   return io_ctx_impl->last_version();
@@ -1314,6 +1326,16 @@ void librados::IoCtx::set_namespace(const string& nspace)
 int64_t librados::IoCtx::get_id()
 {
   return io_ctx_impl->get_id();
+}
+
+uint32_t librados::IoCtx::get_object_hash_position(const std::string& oid)
+{
+  return io_ctx_impl->get_object_hash_position(oid);
+}
+
+uint32_t librados::IoCtx::get_object_pg_hash_position(const std::string& oid)
+{
+  return io_ctx_impl->get_object_pg_hash_position(oid);
 }
 
 librados::config_t librados::IoCtx::cct()
@@ -1492,6 +1514,14 @@ int librados::Rados::pool_reverse_lookup(int64_t id, std::string *name)
   return client->pool_get_name(id, name);
 }
 
+int librados::Rados::mon_command(string cmd, const bufferlist& inbl,
+				 bufferlist *outbl, string *outs)
+{
+  vector<string> cmdvec;
+  cmdvec.push_back(cmd);
+  return client->mon_command(cmdvec, inbl, outbl, outs);
+}
+
 int librados::Rados::ioctx_create(const char *name, IoCtx &io)
 {
   rados_ioctx_t p;
@@ -1582,6 +1612,11 @@ int librados::Rados::cluster_stat(cluster_stat_t& result)
 int librados::Rados::cluster_fsid(string *fsid)
 {
   return client->get_fsid(fsid);
+}
+
+int librados::Rados::wait_for_latest_osdmap()
+{
+  return client->wait_for_latest_osdmap();
 }
 
 librados::PoolAsyncCompletion *librados::Rados::pool_async_create_completion()

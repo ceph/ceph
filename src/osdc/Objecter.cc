@@ -969,6 +969,43 @@ void Objecter::wait_for_osd_map()
   lock.Unlock();
 }
 
+struct C_Objecter_GetVersion : public Context {
+  Objecter *objecter;
+  uint64_t oldest, newest;
+  Context *fin;
+  C_Objecter_GetVersion(Objecter *o, Context *c)
+    : objecter(o), oldest(0), newest(0), fin(c) {}
+  void finish(int r) {
+    if (r >= 0)
+      objecter->_get_latest_version(oldest, newest, fin);
+    else if (r == -EAGAIN) { // try again as instructed
+      objecter->wait_for_latest_osdmap(fin);
+    } else {
+      // it doesn't return any other error codes!
+      assert(0);
+    }
+  }
+};
+
+void Objecter::wait_for_latest_osdmap(Context *fin)
+{
+  ldout(cct, 10) << __func__ << dendl;
+  C_Objecter_GetVersion *c = new C_Objecter_GetVersion(this, fin);
+  monc->get_version("osdmap", &c->newest, &c->oldest, c);
+}
+
+void Objecter::_get_latest_version(epoch_t oldest, epoch_t newest, Context *fin)
+{
+  if (osdmap->get_epoch() >= newest) {
+  ldout(cct, 10) << __func__ << " latest " << newest << ", have it" << dendl;
+    if (fin)
+      fin->complete(0);
+    return;
+  }
+
+  ldout(cct, 10) << __func__ << " latest " << newest << ", waiting" << dendl;
+  wait_for_new_map(fin, newest, 0);
+}
 
 void Objecter::maybe_request_map()
 {
@@ -1318,6 +1355,24 @@ bool Objecter::is_pg_changed(vector<int>& o, vector<int>& n, bool any_change)
   if (any_change && o != n)
     return true;
   return false;      // same primary (tho replicas may have changed)
+}
+
+int64_t Objecter::get_object_hash_position(int64_t pool, const string& key,
+					   const string& ns)
+{
+  const pg_pool_t *p = osdmap->get_pg_pool(pool);
+  if (!p)
+    return -ENOENT;
+  return p->hash_key(key, ns);
+}
+
+int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
+					      const string& ns)
+{
+  const pg_pool_t *p = osdmap->get_pg_pool(pool);
+  if (!p)
+    return -ENOENT;
+  return p->raw_hash_to_pg(p->hash_key(key, ns));
 }
 
 int Objecter::recalc_op_target(Op *op)

@@ -1702,6 +1702,14 @@ public:
     __u8 info_struct_v, bool dirty_big_info, bool force_ver = false);
   void write_if_dirty(ObjectStore::Transaction& t);
 
+  eversion_t get_next_version() const {
+    eversion_t at_version(get_osdmap()->get_epoch(),
+			  pg_log.get_head().version+1);
+    assert(at_version > info.last_update);
+    assert(at_version > pg_log.get_head());
+    return at_version;
+  }
+
   void add_log_entry(pg_log_entry_t& e, bufferlist& log_bl);
   void append_log(
     vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t);
@@ -1829,6 +1837,7 @@ public:
   virtual bool same_for_rep_modify_since(epoch_t e) = 0;
 
   virtual void on_role_change() = 0;
+  virtual void on_pool_change() = 0;
   virtual void on_change(ObjectStore::Transaction *t) = 0;
   virtual void on_activate() = 0;
   virtual void on_flushed() = 0;
