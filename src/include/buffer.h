@@ -157,7 +157,7 @@ public:
   static raw* claim_malloc(unsigned len, char *buf);
   static raw* create_static(unsigned len, char *buf);
   static raw* create_page_aligned(unsigned len);
-  static raw* create_zero_copy(unsigned len, int fd, loff_t *offset);
+  static raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
 
   /*
    * a buffer pointer.  references (a subsequence of) a raw buffer.
@@ -216,7 +216,7 @@ public:
     }
 
     bool can_zero_copy() const;
-    int zero_copy_to_fd(int fd, loff_t *offset) const;
+    int zero_copy_to_fd(int fd, int64_t *offset) const;
 
     unsigned wasted();
 
