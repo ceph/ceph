@@ -119,7 +119,10 @@ public:
 
   HitSet(const HitSet& o) {
     sealed = o.sealed;
-    impl.reset(o.impl->clone());
+    if (o.impl)
+      impl.reset(o.impl->clone());
+    else
+      impl.reset(NULL);
   }
   const HitSet& operator=(const HitSet& o) {
     sealed = o.sealed;
