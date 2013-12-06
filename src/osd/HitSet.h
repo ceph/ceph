@@ -381,7 +381,7 @@ public:
       DECODE_FINISH(bl);
     }
     void dump(Formatter *f) const {
-      f->dump_int("false_positive_probability", get_fpp());
+      f->dump_float("false_positive_probability", get_fpp());
       f->dump_int("target_size", target_size);
       f->dump_int("seed", seed);
     }
