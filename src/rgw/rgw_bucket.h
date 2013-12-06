@@ -33,6 +33,7 @@ extern int rgw_bucket_instance_remove_entry(RGWRados *store, string& entry, RGWO
 
 extern int rgw_bucket_delete_bucket_obj(RGWRados *store, string& bucket_name, RGWObjVersionTracker& objv_tracker);
 
+
 /**
  * Store a list of the user's buckets, with associated functinos.
  */
