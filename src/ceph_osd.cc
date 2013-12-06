@@ -163,7 +163,8 @@ int main(int argc, const char **argv)
   }
 
   // the store
-  ObjectStore *store = ObjectStore::create(g_conf->osd_objectstore,
+  ObjectStore *store = ObjectStore::create(g_ceph_context,
+					   g_conf->osd_objectstore,
 					   g_conf->osd_data,
 					   g_conf->osd_journal);
   if (!store) {
