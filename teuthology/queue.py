@@ -10,6 +10,7 @@ import yaml
 
 import beanstalkc
 
+from . import report
 from . import safepath
 from .config import config as teuth_config
 from .misc import read_config
@@ -179,6 +180,25 @@ def worker(ctx):
         job.delete()
 
 
+def run_with_watchdog(process, job_config):
+    # Only push the information that's relevant to the watchdog, to save db
+    # load
+    job_info = dict(
+        name=job_config['name'],
+        job_id=job_config['job_id'],
+    )
+
+    while process.poll() is None:
+        report.try_push_job_info(job_info, dict(status='running'))
+        time.sleep(teuth_config.watchdog_interval)
+
+    # The job finished. We don't know the status, but if it was a pass or fail
+    # it will have already been reported to paddles. In that case paddles
+    # ignores the 'dead' status. If the job was killed, paddles will use the
+    # 'dead' status.
+    report.try_push_job_info(job_info, dict(status='dead'))
+
+
 def run_job(job_config, teuth_bin_path):
     arg = [
         os.path.join(teuth_bin_path, 'teuthology'),
@@ -221,7 +241,12 @@ def run_job(job_config, teuth_bin_path):
         child = logging.getLogger(__name__ + '.child')
         for line in p.stderr:
             child.error(': %s', line.rstrip('\n'))
-        p.wait()
+
+        if teuth_config.results_server:
+            run_with_watchdog(p, job_config)
+        else:
+            p.wait()
+
         if p.returncode != 0:
             log.error('Child exited with code %d', p.returncode)
         else:
