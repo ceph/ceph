@@ -6,6 +6,8 @@ set -e
 
 tmp1=`mktemp /tmp/typ-XXXXXXXXX`
 tmp2=`mktemp /tmp/typ-XXXXXXXXX`
+tmp3=`mktemp /tmp/typ-XXXXXXXXX`
+tmp4=`mktemp /tmp/typ-XXXXXXXXX`
 
 failed=0
 numtests=0
@@ -24,10 +26,29 @@ for type in `./ceph-dencoder list_types`; do
 
 	./ceph-dencoder type $type select_test $n dump_json > $tmp1
 	./ceph-dencoder type $type select_test $n encode decode dump_json > $tmp2
+	./ceph-dencoder type $type select_test $n copy dump_json > $tmp3
+	./ceph-dencoder type $type select_test $n copy_ctor dump_json > $tmp4
+
 	if ! cmp $tmp1 $tmp2; then
 	    echo "**** $type test $n dump_json check failed ****"
 	    echo "   ceph-dencoder type $type select_test $n dump_json > $tmp1"
 	    echo "   ceph-dencoder type $type select_test $n encode decode dump_json > $tmp2"
+	    echo "   diff $tmp1 $tmp2"
+	    failed=$(($failed + 1))
+	fi
+
+	if ! cmp $tmp1 $tmp3; then
+	    echo "**** $type test $n copy dump_json check failed ****"
+	    echo "   ceph-dencoder type $type select_test $n dump_json > $tmp1"
+	    echo "   ceph-dencoder type $type select_test $n copy dump_json > $tmp2"
+	    echo "   diff $tmp1 $tmp2"
+	    failed=$(($failed + 1))
+	fi
+
+	if ! cmp $tmp1 $tmp4; then
+	    echo "**** $type test $n copy_ctor dump_json check failed ****"
+	    echo "   ceph-dencoder type $type select_test $n dump_json > $tmp1"
+	    echo "   ceph-dencoder type $type select_test $n copy_ctor dump_json > $tmp2"
 	    echo "   diff $tmp1 $tmp2"
 	    failed=$(($failed + 1))
 	fi
@@ -41,11 +62,13 @@ for type in `./ceph-dencoder list_types`; do
 	    echo "   cmp $tmp1 $tmp2"
 	    failed=$(($failed + 1))
 	fi
+
+
 	numtests=$(($numtests + 3))
     done
 done
 
-rm -f $tmp1 $tmp2
+rm -f $tmp1 $tmp2 $tmp3 $tmp4
 
 if [ $failed -gt 0 ]; then
     echo "FAILED $failed / $numtests tests."
