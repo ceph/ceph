@@ -165,8 +165,16 @@ void Elector::victory()
   
   assert(epoch % 2 == 1);  // election
   bump_epoch(epoch+1);     // is over!
+
+  // calculate my supported commands for peons to advertise
+  if (!my_supported_commands.length()) {
+    const MonCommand *cmds;
+    int cmdsize;
+    get_locally_supported_monitor_commands(&cmds, &cmdsize);
+    MonCommand::encode_array(cmds, cmdsize, my_supported_commands);
+  }
   
-  // tell everyone
+  // tell everyone!
   for (set<int>::iterator p = quorum.begin();
        p != quorum.end();
        ++p) {
@@ -174,6 +182,7 @@ void Elector::victory()
     MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, epoch, mon->monmap);
     m->quorum = quorum;
     m->quorum_features = features;
+    m->commands = my_supported_commands;
     mon->messenger->send_message(m, mon->monmap->get_inst(*p));
   }
     
@@ -292,7 +301,19 @@ void Elector::handle_victory(MMonElection *m)
   mon->lose_election(epoch, m->quorum, from, m->quorum_features);
   
   // cancel my timer
-  cancel_timer();	
+  cancel_timer();
+
+  // stash leader's commands
+  if (m->commands.length()) {
+    MonCommand *new_cmds;
+    int cmdsize;
+    bufferlist::iterator bi = m->commands.begin();
+    MonCommand::decode_array(&new_cmds, &cmdsize, bi);
+    set_leader_supported_commands(new_cmds, cmdsize);
+  } else { // they are a legacy monitor; use known legacy command set
+    // TODO: actually store legacy command set, and use here!
+  }
+
   m->put();
 }
 
