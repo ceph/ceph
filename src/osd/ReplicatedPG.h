@@ -441,6 +441,18 @@ public:
       pending_attrs.clear();
     }
 
+    // pending async reads <off, len> -> <outbl, outr>
+    list<pair<pair<uint64_t, uint64_t>,
+	      pair<bufferlist*, Context*> > > pending_async_reads;
+    int async_read_result;
+    unsigned inflightreads;
+    friend struct OnReadComplete;
+    void start_async_reads(ReplicatedPG *pg);
+    void finish_read(ReplicatedPG *pg);
+    bool async_reads_complete() {
+      return inflightreads == 0;
+    }
+
     ObjectModDesc mod_desc;
 
     enum { W_LOCK, R_LOCK, NONE } lock_to_release;
@@ -460,6 +472,8 @@ public:
       num_read(0),
       num_write(0),
       copy_cb(NULL),
+      async_read_result(0),
+      inflightreads(0),
       lock_to_release(NONE) {
       if (_ssc) {
 	new_snapset = _ssc->snapset;
@@ -477,8 +491,16 @@ public:
       assert(lock_to_release == NONE);
       if (reply)
 	reply->put();
+      for (list<pair<pair<uint64_t, uint64_t>,
+		     pair<bufferlist*, Context*> > >::iterator i =
+	     pending_async_reads.begin();
+	   i != pending_async_reads.end();
+	   pending_async_reads.erase(i++)) {
+	delete i->second.second;
+      }
     }
   };
+  friend class OpContext;
 
   /*
    * State on the PG primary associated with the replicated mutation
@@ -857,6 +879,8 @@ protected:
   bool can_skip_promote(OpRequestRef op, ObjectContextRef obc);
 
   int prepare_transaction(OpContext *ctx);
+  set<OpContext*> in_progress_async_reads;
+  void complete_read_ctx(int result, OpContext *ctx);
   
   // pg on-disk content
   void check_local();

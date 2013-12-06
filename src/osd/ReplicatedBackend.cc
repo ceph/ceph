@@ -345,12 +345,26 @@ struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {
 };
 void ReplicatedBackend::objects_read_async(
   const hobject_t &hoid,
-  uint64_t off,
-  uint64_t len,
-  bufferlist *bl,
+  const list<pair<pair<uint64_t, uint64_t>,
+		  pair<bufferlist*, Context*> > > &to_read,
   Context *on_complete)
 {
-  int r = osd->store->read(coll, hoid, off, len, *bl);
+  int r = 0;
+  for (list<pair<pair<uint64_t, uint64_t>,
+		 pair<bufferlist*, Context*> > >::const_iterator i =
+	   to_read.begin();
+       i != to_read.end() && r >= 0;
+       ++i) {
+    int _r = osd->store->read(coll, hoid, i->first.first,
+			      i->first.second, *(i->second.first));
+    if (i->second.second) {
+      osd->gen_wq.queue(
+	get_parent()->bless_gencontext(
+	  new AsyncReadCallback(_r, i->second.second)));
+    }
+    if (_r < 0)
+      r = _r;
+  }
   osd->gen_wq.queue(
     get_parent()->bless_gencontext(
       new AsyncReadCallback(r, on_complete)));
