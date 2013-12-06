@@ -827,6 +827,9 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
   ::decode(crush->max_rules, blp);
   ::decode(crush->max_devices, blp);
 
+  // legacy tunables, unless we decode something newer
+  set_tunables_legacy();
+
   try {
     // buckets
     crush->buckets = (crush_bucket**)calloc(1, crush->max_buckets * sizeof(crush_bucket*));
