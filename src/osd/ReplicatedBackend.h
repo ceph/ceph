@@ -176,6 +176,19 @@ public:
     const hobject_t &hoid,
     map<string, bufferlist> *out);
 
+  int objects_read_sync(
+    const hobject_t &hoid,
+    uint64_t off,
+    uint64_t len,
+    bufferlist *bl);
+
+  void objects_read_async(
+    const hobject_t &hoid,
+    uint64_t off,
+    uint64_t len,
+    bufferlist *bl,
+    Context *on_complete);
+
 private:
   // push
   struct PushInfo {
