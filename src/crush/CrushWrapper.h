@@ -158,6 +158,7 @@ public:
     return
       crush->chooseleaf_descend_once != 0;
   }
+  bool has_v2_rules() const;
 
   // bucket types
   int get_num_type_names() const {

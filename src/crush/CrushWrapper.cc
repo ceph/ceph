@@ -6,6 +6,23 @@
 
 #define dout_subsys ceph_subsys_crush
 
+bool CrushWrapper::has_v2_rules() const
+{
+  // check rules for use of indep or new SET_* rule steps
+  for (unsigned i=0; i<crush->max_rules; i++) {
+    crush_rule *r = crush->rules[i];
+    if (!r)
+      continue;
+    for (unsigned j=0; j<r->len; j++) {
+      if (r->steps[j].op == CRUSH_RULE_CHOOSE_INDEP ||
+	  r->steps[j].op == CRUSH_RULE_CHOOSELEAF_INDEP ||
+	  r->steps[j].op == CRUSH_RULE_SET_CHOOSE_TRIES ||
+	  r->steps[j].op == CRUSH_RULE_SET_CHOOSELEAF_TRIES)
+	return true;
+    }
+  }
+  return false;
+}
 
 void CrushWrapper::find_takes(set<int>& roots) const
 {
