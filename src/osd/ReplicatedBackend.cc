@@ -322,6 +322,41 @@ int ReplicatedBackend::objects_get_attrs(
     *out);
 }
 
+int ReplicatedBackend::objects_read_sync(
+  const hobject_t &hoid,
+  uint64_t off,
+  uint64_t len,
+  bufferlist *bl)
+{
+  return osd->store->read(coll, hoid, off, len, *bl);
+}
+
+struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {
+  int r;
+  Context *c;
+  AsyncReadCallback(int r, Context *c) : r(r), c(c) {}
+  void finish(ThreadPool::TPHandle&) {
+    c->complete(r);
+    c = NULL;
+  }
+  ~AsyncReadCallback() {
+    delete c;
+  }
+};
+void ReplicatedBackend::objects_read_async(
+  const hobject_t &hoid,
+  uint64_t off,
+  uint64_t len,
+  bufferlist *bl,
+  Context *on_complete)
+{
+  int r = osd->store->read(coll, hoid, off, len, *bl);
+  osd->gen_wq.queue(
+    get_parent()->bless_gencontext(
+      new AsyncReadCallback(r, on_complete)));
+}
+
+
 class RPGTransaction : public PGBackend::PGTransaction {
   coll_t coll;
   coll_t temp_coll;

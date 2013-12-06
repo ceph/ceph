@@ -410,6 +410,19 @@
    virtual int objects_get_attrs(
      const hobject_t &hoid,
      map<string, bufferlist> *out) = 0;
+
+   virtual int objects_read_sync(
+     const hobject_t &hoid,
+     uint64_t off,
+     uint64_t len,
+     bufferlist *bl) = 0;
+
+   virtual void objects_read_async(
+     const hobject_t &hoid,
+     uint64_t off,
+     uint64_t len,
+     bufferlist *bl,
+     Context *on_complete) = 0;
  };
 
 #endif
