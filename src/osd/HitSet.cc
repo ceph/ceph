@@ -17,6 +17,7 @@
 // -- HitSet --
 
 HitSet::HitSet(const HitSet::Params& params)
+  : sealed(false)
 {
   switch (params.get_type()) {
   case TYPE_BLOOM:
