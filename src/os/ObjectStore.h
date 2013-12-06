@@ -19,6 +19,7 @@
 #include "include/types.h"
 #include "osd/osd_types.h"
 #include "common/TrackedOp.h"
+#include "common/WorkQueue.h"
 #include "ObjectMap.h"
 
 #include <errno.h>
@@ -793,34 +794,40 @@ public:
   }
   unsigned apply_transactions(Sequencer *osr, list<Transaction*>& tls, Context *ondisk=0);
 
-  int queue_transaction(Sequencer *osr, Transaction* t) {
+  int queue_transaction(Sequencer *osr, Transaction* t,
+                        ThreadPool::TPHandle *handle = NULL) {
     list<Transaction *> tls;
     tls.push_back(t);
-    return queue_transactions(osr, tls, new C_DeleteTransaction(t));
+    return queue_transactions(osr, tls, new C_DeleteTransaction(t),
+                              NULL, NULL, TrackedOpRef(), handle);
   }
 
   int queue_transaction(Sequencer *osr, Transaction *t, Context *onreadable, Context *ondisk=0,
 				Context *onreadable_sync=0,
-				TrackedOpRef op = TrackedOpRef()) {
+				TrackedOpRef op = TrackedOpRef(),
+				ThreadPool::TPHandle *handle = NULL) {
     list<Transaction*> tls;
     tls.push_back(t);
-    return queue_transactions(osr, tls, onreadable, ondisk, onreadable_sync, op);
+    return queue_transactions(osr, tls, onreadable, ondisk, onreadable_sync,
+                              op, handle);
   }
 
   int queue_transactions(Sequencer *osr, list<Transaction*>& tls,
 			 Context *onreadable, Context *ondisk=0,
 			 Context *onreadable_sync=0,
-			 TrackedOpRef op = TrackedOpRef()) {
+			 TrackedOpRef op = TrackedOpRef(),
+			 ThreadPool::TPHandle *handle = NULL) {
     assert(!tls.empty());
     tls.back()->register_on_applied(onreadable);
     tls.back()->register_on_commit(ondisk);
     tls.back()->register_on_applied_sync(onreadable_sync);
-    return queue_transactions(osr, tls, op);
+    return queue_transactions(osr, tls, op, handle);
   }
 
   virtual int queue_transactions(
     Sequencer *osr, list<Transaction*>& tls,
-    TrackedOpRef op = TrackedOpRef()) = 0;
+    TrackedOpRef op = TrackedOpRef(),
+    ThreadPool::TPHandle *handle = NULL) = 0;
 
 
   int queue_transactions(
