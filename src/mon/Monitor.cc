@@ -2025,7 +2025,8 @@ void Monitor::handle_command(MMonCommand *m)
   if (prefix == "get_command_descriptions") {
     bufferlist rdata;
     Formatter *f = new_formatter("json");
-    get_command_descriptions(mon_commands, ARRAY_SIZE(mon_commands), f, &rdata);
+    get_command_descriptions(leader_supported_mon_commands,
+                             leader_supported_mon_commands_size, f, &rdata);
     delete f;
     reply_command(m, 0, "", rdata, 0);
     return;
