@@ -1318,8 +1318,10 @@ protected:
   // -- generic pg peering --
   PG::RecoveryCtx create_context();
   bool compat_must_dispatch_immediately(PG *pg);
-  void dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap);
-  void dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg);
+  void dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
+                        ThreadPool::TPHandle *handle = NULL);
+  void dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg,
+                                    ThreadPool::TPHandle *handle = NULL);
   void do_notifies(map< int,vector<pair<pg_notify_t, pg_interval_map_t> > >& notify_list,
 		   OSDMapRef map);
   void do_queries(map< int, map<pg_t,pg_query_t> >& query_map,
