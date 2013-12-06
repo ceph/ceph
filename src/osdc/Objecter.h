@@ -1211,7 +1211,8 @@ public:
   void set_honor_osdmap_full() { honor_osdmap_full = true; }
   void unset_honor_osdmap_full() { honor_osdmap_full = false; }
 
-  void scan_requests(bool skipped_map,
+  void scan_requests(bool force_resend,
+		     bool force_resend_writes,
 		     map<tid_t, Op*>& need_resend,
 		     list<LingerOp*>& need_resend_linger,
 		     map<tid_t, CommandOp*>& need_resend_command);
