@@ -2798,7 +2798,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	// read into a buffer
 	bufferlist bl;
-	int r = osd->store->read(coll, soid, op.extent.offset, op.extent.length, bl);
+	int r = pgbackend->objects_read_sync(
+	  soid, op.extent.offset, op.extent.length, &bl);
 	if (first_read) {
 	  first_read = false;
 	  ctx->data_off = op.extent.offset;
@@ -2890,7 +2891,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      last < miter->first) {
 	    bufferlist t;
 	    uint64_t len = miter->first - last;
-	    r = osd->store->read(coll, soid, last, len, t);
+	    r = pgbackend->objects_read_sync(
+	      soid, last, len, &t);
 	    if (!t.is_zero()) {
 	      osd->clog.error() << coll << " " << soid << " sparse-read found data in hole "
 				<< last << "~" << len << "\n";
@@ -2898,7 +2900,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 
           bufferlist tmpbl;
-          r = osd->store->read(coll, soid, miter->first, miter->second, tmpbl);
+	  r = pgbackend->objects_read_sync(
+	    soid, miter->first, miter->second, &tmpbl);
           if (r < 0)
             break;
 
@@ -2916,7 +2919,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  if (last < end) {
 	    bufferlist t;
 	    uint64_t len = end - last;
-	    r = osd->store->read(coll, soid, last, len, t);
+	    r = pgbackend->objects_read_sync(
+	      soid, last, len, &t);
 	    if (!t.is_zero()) {
 	      osd->clog.error() << coll << " " << soid << " sparse-read found data in hole "
 				<< last << "~" << len << "\n";
@@ -5017,7 +5021,8 @@ int ReplicatedPG::fill_in_copy_get(bufferlist::iterator& bp, OSDOp& osd_op,
   bufferlist& bl = reply_obj.data;
   if (left > 0 && !cursor.data_complete) {
     if (cursor.data_offset < oi.size) {
-      result = osd->store->read(coll, oi.soid, cursor.data_offset, left, bl);
+      result = pgbackend->objects_read_sync(
+	oi.soid, cursor.data_offset, left, &bl);
       if (result < 0)
 	return result;
       assert(result <= left);
