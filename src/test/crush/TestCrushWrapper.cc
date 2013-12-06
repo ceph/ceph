@@ -29,6 +29,39 @@
 
 #include "crush/CrushWrapper.h"
 
+TEST(CrushWrapper, get_immediate_parent) {
+  CrushWrapper *c = new CrushWrapper;
+  
+  const int ROOT_TYPE = 1;
+  c->set_type_name(ROOT_TYPE, "root");
+  const int OSD_TYPE = 0;
+  c->set_type_name(OSD_TYPE, "osd");
+
+  int rootno;
+  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+		ROOT_TYPE, 0, NULL, NULL, &rootno);
+  c->set_item_name(rootno, "default");
+
+  int item = 0;
+
+  pair <string,string> loc;
+  int ret;
+  loc = c->get_immediate_parent(item, &ret);
+  EXPECT_EQ(-ENOENT, ret);
+
+  {
+    map<string,string> loc;
+    loc["root"] = "default";
+
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, item, 1.0,
+				"osd.0", loc));
+  }
+
+  loc = c->get_immediate_parent(item, &ret);
+  EXPECT_EQ(0, ret);
+  EXPECT_EQ("root", loc.first);
+  EXPECT_EQ("default", loc.second);
+}
 TEST(CrushWrapper, check_item_loc) {
   CrushWrapper *c = new CrushWrapper;
   int item = 0;
