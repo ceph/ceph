@@ -31,7 +31,6 @@
 
 TEST(CrushWrapper, update_item) {
   CrushWrapper *c = new CrushWrapper;
-  c->create();
 
 #define ROOT_TYPE 3
   c->set_type_name(ROOT_TYPE, "root");
@@ -60,7 +59,6 @@ TEST(CrushWrapper, update_item) {
 
 TEST(CrushWrapper, insert_item) {
   CrushWrapper *c = new CrushWrapper;
-  c->create();
 
 #define ROOT_TYPE 3
   c->set_type_name(ROOT_TYPE, "root");
@@ -198,7 +196,6 @@ TEST(CrushWrapper, insert_item) {
 
 TEST(CrushWrapper, item_bucket_names) {
   CrushWrapper *c = new CrushWrapper;
-  c->create();
   int index = 123;
   std::string name = "NAME";
   EXPECT_EQ(-EINVAL, c->set_item_name(index, "\001"));
@@ -212,7 +209,6 @@ TEST(CrushWrapper, item_bucket_names) {
 
 TEST(CrushWrapper, bucket_types) {
   CrushWrapper *c = new CrushWrapper;
-  c->create();
   int index = 123;
   std::string name = "NAME";
   c->set_type_name(index, name);
