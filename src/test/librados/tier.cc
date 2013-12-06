@@ -125,6 +125,68 @@ string set_pool_str(string pool, string var, int val)
     + stringify(val) + string("}");
 }
 
+TEST(LibRadosMisc, HitSetRead) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
+
+  // enable hitset tracking for this pool
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(set_pool_str(pool_name, "hit_set_count", 2),
+						inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(set_pool_str(pool_name, "hit_set_period", 600),
+						inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(set_pool_str(pool_name, "hit_set_type",
+						"explicit_object"),
+				   inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  string name = "foo";
+  uint32_t hash = ioctx.get_object_hash_position(name);
+  hobject_t oid(sobject_t(name, CEPH_NOSNAP), "", hash,
+		cluster.pool_lookup(pool_name.c_str()), "");
+
+  // keep reading until we see our object appear in the HitSet
+  utime_t start = ceph_clock_now(NULL);
+  utime_t hard_stop = start + utime_t(600, 0);
+
+  while (true) {
+    utime_t now = ceph_clock_now(NULL);
+    ASSERT_TRUE(now < hard_stop);
+
+    bufferlist bl;
+    ASSERT_EQ(-ENOENT, ioctx.read("foo", bl, 1, 0));
+
+    bufferlist hbl;
+    AioCompletion *c = librados::Rados::aio_create_completion();
+    ASSERT_EQ(0, ioctx.hit_set_get(hash, c, now.sec(), &hbl));
+    c->wait_for_complete();
+    c->release();
+
+    if (hbl.length()) {
+      bufferlist::iterator p = hbl.begin();
+      HitSet hs;
+      ::decode(hs, p);
+      if (hs.contains(oid)) {
+	cout << "ok, hit_set contains " << oid << std::endl;
+	break;
+      }
+      cout << "hmm, not in HitSet yet" << std::endl;
+    } else {
+      cout << "hmm, no HitSet yet" << std::endl;
+    }
+
+    sleep(1);
+  }
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
 TEST(LibRadosMisc, HitSetWrite) {
   Rados cluster;
   std::string pool_name = get_temp_pool_name();
