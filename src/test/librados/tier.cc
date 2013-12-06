@@ -200,6 +200,74 @@ TEST(LibRadosMisc, HitSetRead) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
+TEST(LibRadosMisc, HitSetTrim) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
+
+  unsigned count = 3;
+  unsigned period = 3;
+
+  // enable hitset tracking for this pool
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(set_pool_str(pool_name, "hit_set_count", count),
+						inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(set_pool_str(pool_name, "hit_set_period", period),
+						inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(set_pool_str(pool_name, "hit_set_type", "bloom"),
+				   inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(set_pool_str(pool_name, "hit_set_fpp", ".01"),
+				   inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  string name = "foo";
+  uint32_t hash = ioctx.get_object_hash_position(name);
+  hobject_t oid(sobject_t(name, CEPH_NOSNAP), "", hash, -1, "");
+
+  // do a bunch of writes and make sure the hitsets rotate
+  utime_t start = ceph_clock_now(NULL);
+  utime_t hard_stop = start + utime_t(count * period * 4, 0);
+
+  time_t first = 0;
+  while (true) {
+    bufferlist bl;
+    bl.append("f");
+    ASSERT_EQ(1, ioctx.write("foo", bl, 1, 0));
+
+    list<pair<time_t, time_t> > ls;
+    AioCompletion *c = librados::Rados::aio_create_completion();
+    ASSERT_EQ(0, ioctx.hit_set_list(hash, c, &ls));
+    c->wait_for_complete();
+    c->release();
+
+    ASSERT_TRUE(ls.size() <= count + 1);
+    cout << " got ls " << ls << std::endl;
+    if (!ls.empty()) {
+      if (!first) {
+	first = ls.front().first;
+	cout << "first is " << first << std::endl;
+      } else {
+	if (ls.front().first != first) {
+	  cout << "first now " << ls.front().first << ", trimmed" << std::endl;
+	  break;
+	}
+      }
+    }
+
+    utime_t now = ceph_clock_now(NULL);
+    ASSERT_TRUE(now < hard_stop);
+
+    sleep(1);
+  }
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
 
 int main(int argc, char **argv)
 {
