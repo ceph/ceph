@@ -271,7 +271,9 @@ void Server::flush_client_sessions(set<client_t>& client_set, C_GatherBuilder& g
   for (set<client_t>::iterator p = client_set.begin(); p != client_set.end(); ++p) {
     Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
     assert(session);
-    if (session->is_stale())
+    if (session->is_stale() ||
+	!session->connection.get() ||
+	!session->connection->has_feature(CEPH_FEATURE_EXPORT_PEER))
       continue;
     version_t seq = session->wait_for_flush(gather.new_sub());
     mds->send_message_client(new MClientSession(CEPH_SESSION_FLUSHMSG, seq), session);
