@@ -259,14 +259,14 @@ private:
   int get_max_osd() const { return max_osd; }
   void set_max_osd(int m);
 
-  int get_num_osds() const {
+  unsigned get_num_osds() const {
     return num_osd;
   }
   int calc_num_osds();
 
   void get_all_osds(set<int32_t>& ls) const;
-  int get_num_up_osds() const;
-  int get_num_in_osds() const;
+  unsigned get_num_up_osds() const;
+  unsigned get_num_in_osds() const;
 
   int get_flags() const { return flags; }
   int test_flag(int f) const { return flags & f; }
