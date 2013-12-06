@@ -17,6 +17,8 @@
 // until everything is moved from rgw_common
 #include "rgw_common.h"
 
+#include "cls/user/cls_user_types.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 #define BUCKET_TAG_TIMEOUT 30
@@ -47,21 +49,24 @@ int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& bucke
   bufferlist bl;
   rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
   bufferlist header;
-  map<string,bufferlist> m;
+  list<cls_user_bucket_entry> entries;
 
-  ret = store->omap_get_vals(obj, header, marker, max, m);
-  if (ret == -ENOENT)
-    ret = 0;
+  bool truncated;
+  string m = marker;
 
-  if (ret < 0)
-    return ret;
+  do {
+    ret = store->cls_user_list_buckets(obj, m, max, entries, &m, &truncated);
+    if (ret == -ENOENT)
+      ret = 0;
 
-  for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); ++q) {
-    bufferlist::iterator iter = q->second.begin();
-    RGWBucketEnt bucket;
-    ::decode(bucket, iter);
-    buckets.add(bucket);
-  }
+    if (ret < 0)
+      return ret;
+
+    for (list<cls_user_bucket_entry>::iterator q = entries.begin(); q != entries.end(); ++q) {
+      RGWBucketEnt e(*q);
+      buckets.add(e);
+    }
+  } while (truncated);
 
   if (need_stats) {
     map<string, RGWBucketEnt>& m = buckets.get_buckets();

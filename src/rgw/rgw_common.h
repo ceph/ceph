@@ -31,6 +31,7 @@
 #include "rgw_cors.h"
 #include "rgw_quota.h"
 #include "cls/version/cls_version_types.h"
+#include "cls/user/cls_user_types.h"
 #include "include/rados/librados.hpp"
 
 using namespace std;
@@ -560,6 +561,13 @@ struct rgw_bucket {
                     */
 
   rgw_bucket() { }
+  rgw_bucket(const cls_user_bucket& b) {
+    name = b.name;
+    data_pool = b.data_pool;
+    index_pool = b.index_pool;
+    marker = b.marker;
+    bucket_id = b.bucket_id;
+  }
   rgw_bucket(const char *n) : name(n) {
     assert(*n == '.'); // only rgw private buckets should be initialized without pool
     data_pool = index_pool = n;
@@ -900,6 +908,14 @@ struct RGWBucketEnt {
   uint64_t count;
 
   RGWBucketEnt() : size(0), size_rounded(0), creation_time(0), count(0) {}
+
+  RGWBucketEnt(const cls_user_bucket_entry& e) {
+    bucket = e.bucket;
+    size = e.size;
+    size_rounded = e.size_rounded;
+    creation_time = e.creation_time;
+    count = e.count;
+  }
 
   void encode(bufferlist& bl) const {
     ENCODE_START(5, 5, bl);
