@@ -722,11 +722,19 @@ int RGWBucket::get_policy(RGWBucketAdminOpState& op_state, ostream& o)
   std::string object_name = op_state.get_object_name();
   rgw_bucket bucket = op_state.get_bucket();
 
-  bufferlist bl;
-  rgw_obj obj(bucket, object_name);
-  int ret = store->get_attr(NULL, obj, RGW_ATTR_ACL, bl);
-  if (ret < 0)
+  RGWBucketInfo bucket_info;
+  map<string, bufferlist> attrs;
+  int ret = store->get_bucket_info(NULL, bucket.name, bucket_info, NULL, &attrs);
+  if (ret < 0) {
     return ret;
+  }
+
+  map<string, bufferlist>::iterator aiter = attrs.find(RGW_ATTR_ACL);
+  if (aiter == attrs.end()) {
+    return -ENOENT;
+  }
+
+  bufferlist& bl = aiter->second;
 
   RGWAccessControlPolicy_S3 policy(g_ceph_context);
   bufferlist::iterator iter = bl.begin();
