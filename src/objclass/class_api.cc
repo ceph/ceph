@@ -157,7 +157,7 @@ int cls_read(cls_method_context_t hctx, int ofs, int len,
 {
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
-  ops[0].op.op = CEPH_OSD_OP_READ;
+  ops[0].op.op = CEPH_OSD_OP_SYNC_READ;
   ops[0].op.extent.offset = ofs;
   ops[0].op.extent.length = len;
   int r = (*pctx)->pg->do_osd_ops(*pctx, ops);
@@ -228,7 +228,7 @@ int cls_cxx_read(cls_method_context_t hctx, int ofs, int len, bufferlist *outbl)
   ReplicatedPG::OpContext **pctx = (ReplicatedPG::OpContext **)hctx;
   vector<OSDOp> ops(1);
   int ret;
-  ops[0].op.op = CEPH_OSD_OP_READ;
+  ops[0].op.op = CEPH_OSD_OP_SYNC_READ;
   ops[0].op.extent.offset = ofs;
   ops[0].op.extent.length = len;
   ret = (*pctx)->pg->do_osd_ops(*pctx, ops);
