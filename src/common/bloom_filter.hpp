@@ -120,6 +120,7 @@ public:
       salt_count_ = filter.salt_count_;
       table_size_ = filter.table_size_;
       insert_count_ = filter.insert_count_;
+      target_element_count_ = filter.target_element_count_;
       random_seed_ = filter.random_seed_;
       delete[] bit_table_;
       bit_table_ = new cell_type[table_size_];
