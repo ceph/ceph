@@ -857,7 +857,46 @@ struct MonCommand {
   string module;
   string req_perms;
   string availability;
+
+  void encode(bufferlist &bl) const {
+    /*
+     * very naughty: deliberately unversioned because individual commands
+     * shouldn't be encoded standalone, only as a full set (which we do
+     * version, see encode_array() below).
+     */
+    ::encode(cmdstring, bl);
+    ::encode(helpstring, bl);
+    ::encode(module, bl);
+    ::encode(req_perms, bl);
+    ::encode(availability, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(cmdstring, bl);
+    ::decode(helpstring, bl);
+    ::decode(module, bl);
+    ::decode(req_perms, bl);
+    ::decode(availability, bl);
+  }
+
+  static void encode_array(const MonCommand *cmds, int size, bufferlist &bl) {
+    ENCODE_START(1, 1, bl);
+    uint16_t s = size;
+    ::encode(s, bl);
+    ::encode_array_nohead(cmds, size, bl);
+    ENCODE_FINISH(bl);
+  }
+  static void decode_array(MonCommand **cmds, int *size,
+                           bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    uint16_t s = 0;
+    ::decode(s, bl);
+    *size = s;
+    *cmds = new MonCommand[*size];
+    ::decode_array_nohead(*cmds, *size, bl);
+    DECODE_FINISH(bl);
+  }
 };
+WRITE_CLASS_ENCODER(MonCommand);
 
 void get_command_descriptions(const MonCommand *commands,
 			      unsigned commands_size,
