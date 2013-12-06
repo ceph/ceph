@@ -447,7 +447,8 @@ void Objecter::dispatch(Message *m)
   }
 }
 
-void Objecter::scan_requests(bool skipped_map,
+void Objecter::scan_requests(bool force_resend,
+			     bool force_resend_writes,
 			     map<tid_t, Op*>& need_resend,
 			     list<LingerOp*>& need_resend_linger,
 			     map<tid_t, CommandOp*>& need_resend_command)
@@ -461,8 +462,7 @@ void Objecter::scan_requests(bool skipped_map,
     int r = recalc_linger_op_target(op);
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
-      // resend if skipped map; otherwise do nothing.
-      if (!skipped_map)
+      if (!force_resend && !force_resend_writes)
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
@@ -484,8 +484,8 @@ void Objecter::scan_requests(bool skipped_map,
     int r = recalc_op_target(op);
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
-      // resend if skipped map; otherwise do nothing.
-      if (!skipped_map)
+      if (!force_resend &&
+	  (!force_resend_writes || !(op->flags & CEPH_OSD_FLAG_WRITE)))
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
@@ -508,7 +508,7 @@ void Objecter::scan_requests(bool skipped_map,
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
       // resend if skipped map; otherwise do nothing.
-      if (!skipped_map)
+      if (!force_resend && !force_resend_writes)
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
@@ -537,8 +537,9 @@ void Objecter::handle_osd_map(MOSDMap *m)
   }
 
   bool was_pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
-  bool was_pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || osdmap->test_flag(CEPH_OSDMAP_FULL);
-  
+  bool was_full = osdmap->test_flag(CEPH_OSDMAP_FULL);
+  bool was_pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || was_full;
+
   list<LingerOp*> need_resend_linger;
   map<tid_t, Op*> need_resend;
   map<tid_t, CommandOp*> need_resend_command;
@@ -586,8 +587,10 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  continue;
 	}
 	logger->set(l_osdc_map_epoch, osdmap->get_epoch());
-	
-	scan_requests(skipped_map, need_resend, need_resend_linger, need_resend_command);
+
+	was_full = was_full || osdmap->test_flag(CEPH_OSDMAP_FULL);
+	scan_requests(skipped_map, was_full, need_resend, need_resend_linger,
+		      need_resend_command);
 
 	// osd addr changes?
 	for (map<int,OSDSession*>::iterator p = osd_sessions.begin();
@@ -611,7 +614,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	ldout(cct, 3) << "handle_osd_map decoding full epoch " << m->get_last() << dendl;
 	osdmap->decode(m->maps[m->get_last()]);
 
-	scan_requests(false, need_resend, need_resend_linger, need_resend_command);
+	scan_requests(false, false, need_resend, need_resend_linger,
+		      need_resend_command);
       } else {
 	ldout(cct, 3) << "handle_osd_map hmm, i want a full map, requesting" << dendl;
 	monc->sub_want("osdmap", 0, CEPH_SUBSCRIBE_ONETIME);
