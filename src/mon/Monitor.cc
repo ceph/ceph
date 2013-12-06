@@ -1518,6 +1518,11 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features)
   clog.info() << "mon." << name << "@" << rank
 		<< " won leader election with quorum " << quorum << "\n";
 
+  const MonCommand *new_cmds;
+  int cmdsize;
+  get_locally_supported_monitor_commands(&new_cmds, &cmdsize);
+  set_leader_supported_commands(new_cmds, cmdsize);
+
   paxos->leader_init();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
     (*p)->election_finished();
