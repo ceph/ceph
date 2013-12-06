@@ -6672,6 +6672,13 @@ void OSD::_remove_pg(PG *pg)
 
   service.cancel_pending_splits_for_parent(pg->info.pgid);
 
+  store->queue_transaction(
+    pg->osr.get(), rmt,
+    new ObjectStore::C_DeleteTransactionHolder<
+      SequencerRef>(rmt, pg->osr),
+    new ContainerContext<
+      SequencerRef>(pg->osr));
+
   DeletingStateRef deleting = service.deleting_pgs.lookup_or_create(
     pg->info.pgid,
     make_pair(
@@ -6679,13 +6686,6 @@ void OSD::_remove_pg(PG *pg)
       PGRef(pg))
     );
   remove_wq.queue(make_pair(PGRef(pg), deleting));
-
-  store->queue_transaction(
-    pg->osr.get(), rmt,
-    new ObjectStore::C_DeleteTransactionHolder<
-      SequencerRef>(rmt, pg->osr),
-    new ContainerContext<
-      SequencerRef>(pg->osr));
 
   // remove from map
   pg_map.erase(pg->info.pgid);
