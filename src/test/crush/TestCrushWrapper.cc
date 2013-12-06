@@ -29,6 +29,71 @@
 
 #include "crush/CrushWrapper.h"
 
+TEST(CrushWrapper, check_item_loc) {
+  CrushWrapper *c = new CrushWrapper;
+  int item = 0;
+  float expected_weight = 1.0;
+
+  // fail if loc is empty
+  {
+    float weight;
+    map<string,string> loc;
+    EXPECT_FALSE(c->check_item_loc(g_ceph_context, item, loc, &weight));
+  }
+
+  const int ROOT_TYPE = 2;
+  c->set_type_name(ROOT_TYPE, "root");
+  const int HOST_TYPE = 1;
+  c->set_type_name(HOST_TYPE, "host");
+  const int OSD_TYPE = 0;
+  c->set_type_name(OSD_TYPE, "osd");
+
+  int rootno;
+  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+		ROOT_TYPE, 0, NULL, NULL, &rootno);
+  c->set_item_name(rootno, "default");
+
+  // fail because the item is not found at the specified location
+  {
+    float weight;
+    map<string,string> loc;
+    loc["root"] = "default";
+    EXPECT_FALSE(c->check_item_loc(g_ceph_context, item, loc, &weight));
+  }
+  // fail because the bucket name does not match an existing bucket
+  {
+    float weight;
+    map<string,string> loc;
+    loc["root"] = "default";
+    const std::string HOST("host0");
+    loc["host"] = HOST;
+    EXPECT_FALSE(c->check_item_loc(g_ceph_context, item, loc, &weight));
+  }
+  const std::string OSD("osd.0");
+  {
+    map<string,string> loc;
+    loc["root"] = "default";
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, item, expected_weight,
+				OSD, loc));
+  }
+  // fail because osd.0 is not a bucket and must not be in loc, in
+  // addition to being of the wrong type
+  {
+    float weight;
+    map<string,string> loc;
+    loc["root"] = "osd.0";
+    EXPECT_FALSE(c->check_item_loc(g_ceph_context, item, loc, &weight));
+  }
+  // succeed and retrieves the expected weight
+  {
+    float weight;
+    map<string,string> loc;
+    loc["root"] = "default";
+    EXPECT_TRUE(c->check_item_loc(g_ceph_context, item, loc, &weight));
+    EXPECT_EQ(expected_weight, weight);
+  }
+}
+
 TEST(CrushWrapper, update_item) {
   CrushWrapper *c = new CrushWrapper;
 
