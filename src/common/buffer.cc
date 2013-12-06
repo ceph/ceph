@@ -525,10 +525,10 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
 #endif
   }
 
-  buffer::raw* buffer::create_zero_copy(unsigned len, int fd, loff_t *offset) {
+  buffer::raw* buffer::create_zero_copy(unsigned len, int fd, int64_t *offset) {
 #ifdef CEPH_HAVE_SPLICE
     buffer::raw_pipe* buf = new raw_pipe(len);
-    int r = buf->set_source(fd, offset);
+    int r = buf->set_source(fd, (loff_t*)offset);
     if (r < 0) {
       delete buf;
       throw error_code(r);
@@ -733,9 +733,9 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     return _raw->can_zero_copy();
   }
 
-  int buffer::ptr::zero_copy_to_fd(int fd, loff_t *offset) const
+  int buffer::ptr::zero_copy_to_fd(int fd, int64_t *offset) const
   {
-    return _raw->zero_copy_to_fd(fd, offset);
+    return _raw->zero_copy_to_fd(fd, (loff_t*)offset);
   }
 
   // -- buffer::list::iterator --
@@ -1629,8 +1629,8 @@ int buffer::list::write_fd_zero_copy(int fd) const
   /* pass offset to each call to avoid races updating the fd seek
    * position, since the I/O may be non-blocking
    */
-  loff_t offset = ::lseek(fd, 0, SEEK_CUR);
-  loff_t *off_p = &offset;
+  int64_t offset = ::lseek(fd, 0, SEEK_CUR);
+  int64_t *off_p = &offset;
   if (offset < 0 && offset != ESPIPE)
     return (int) offset;
   if (offset == ESPIPE)

@@ -240,7 +240,7 @@ TEST_F(TestRawPipe, c_str_source_short) {
 }
 
 TEST_F(TestRawPipe, c_str_explicit_zero_offset) {
-  loff_t offset = 0;
+  int64_t offset = 0;
   ::lseek(fd, 1, SEEK_SET);
   bufferptr ptr = bufferptr(buffer::create_zero_copy(len, fd, &offset));
   EXPECT_EQ(len, offset);
@@ -249,7 +249,7 @@ TEST_F(TestRawPipe, c_str_explicit_zero_offset) {
 }
 
 TEST_F(TestRawPipe, c_str_explicit_positive_offset) {
-  loff_t offset = 1;
+  int64_t offset = 1;
   bufferptr ptr = bufferptr(buffer::create_zero_copy(len - offset, fd,
 						     &offset));
   EXPECT_EQ(len, offset);
@@ -258,7 +258,7 @@ TEST_F(TestRawPipe, c_str_explicit_positive_offset) {
 }
 
 TEST_F(TestRawPipe, c_str_explicit_positive_empty_result) {
-  loff_t offset = len;
+  int64_t offset = len;
   bufferptr ptr = bufferptr(buffer::create_zero_copy(len - offset, fd,
 						     &offset));
   EXPECT_EQ(len, offset);
@@ -266,7 +266,7 @@ TEST_F(TestRawPipe, c_str_explicit_positive_empty_result) {
 }
 
 TEST_F(TestRawPipe, c_str_source_short_explicit_offset) {
-  loff_t offset = 1;
+  int64_t offset = 1;
   bufferptr ptr = bufferptr(buffer::create_zero_copy(len, fd, &offset));
   EXPECT_EQ(len, offset);
   EXPECT_EQ(len - 1, ptr.length());
@@ -274,7 +274,7 @@ TEST_F(TestRawPipe, c_str_source_short_explicit_offset) {
 }
 
 TEST_F(TestRawPipe, c_str_dest_short_explicit_offset) {
-  loff_t offset = 1;
+  int64_t offset = 1;
   bufferptr ptr = bufferptr(buffer::create_zero_copy(2, fd, &offset));
   EXPECT_EQ(3, offset);
   EXPECT_EQ(2u, ptr.length());
