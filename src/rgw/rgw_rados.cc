@@ -22,6 +22,7 @@
 #include "cls/log/cls_log_client.h"
 #include "cls/statelog/cls_statelog_client.h"
 #include "cls/lock/cls_lock_client.h"
+#include "cls/user/cls_user_client.h"
 
 #include "rgw_tools.h"
 
@@ -5580,6 +5581,30 @@ int RGWRados::cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx)
     return r;
 
   r = cls_rgw_get_dir_header_async(index_ctx, oid, ctx);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int RGWRados::cls_user_list_buckets(rgw_obj& obj,
+                                    const string& in_marker, int max_entries,
+                                    list<cls_user_bucket_entry>& entries,
+                                    string *out_marker, bool *truncated)
+{
+  bufferlist bl;
+  librados::IoCtx io_ctx;
+  rgw_bucket bucket;
+  std::string oid, key;
+  get_obj_bucket_and_oid_key(obj, bucket, oid, key);
+  int r = open_bucket_data_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
+
+  librados::ObjectReadOperation op;
+  cls_user_bucket_list(op, in_marker, max_entries, entries, out_marker, truncated);
+  bufferlist ibl;
+  r = io_ctx.operate(oid, &op, &ibl);
   if (r < 0)
     return r;
 
