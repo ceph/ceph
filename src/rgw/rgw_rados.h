@@ -1410,6 +1410,11 @@ public:
   int bucket_rebuild_index(rgw_bucket& bucket);
   int remove_objs_from_index(rgw_bucket& bucket, list<string>& oid_list);
 
+  int cls_user_list_buckets(rgw_obj& obj,
+                            const string& in_marker, int max_entries,
+                            list<cls_user_bucket_entry>& entries,
+                            string *out_marker, bool *truncated);
+
   int check_quota(rgw_bucket& bucket, RGWQuotaInfo& quota_info, uint64_t obj_size);
 
   string unique_id(uint64_t unique_num) {
