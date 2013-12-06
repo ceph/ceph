@@ -1945,6 +1945,12 @@ void get_command_descriptions(const MonCommand *commands,
   f->flush(*rdata);
 }
 
+void get_locally_supported_monitor_commands(const MonCommand **cmds, int *count)
+{
+  *cmds = mon_commands;
+  *count = ARRAY_SIZE(mon_commands);
+}
+
 void Monitor::handle_command(MMonCommand *m)
 {
   if (m->fsid != monmap->fsid) {
