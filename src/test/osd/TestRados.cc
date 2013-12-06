@@ -294,11 +294,6 @@ int main(int argc, char **argv)
 	  break;
 	}
       }
-      if (ec_pool && !op_types[j].ec_pool_valid) {
-	cerr << "Error: cannot use op type " << op_types[j].name
-	     << " with --ec-pool" << std::endl;
-	exit(1);
-      }
       if (!op_types[j].name) {
 	cerr << "unknown op " << argv[i] << std::endl;
 	exit(1);
@@ -307,9 +302,15 @@ int main(int argc, char **argv)
       if (weight < 0) {
 	cerr << "Weights must be nonnegative." << std::endl;
 	return 1;
+      } else if (weight > 0) {
+	if (ec_pool && !op_types[j].ec_pool_valid) {
+	  cerr << "Error: cannot use op type " << op_types[j].name
+	       << " with --ec-pool" << std::endl;
+	  exit(1);
+	}
+	cout << "adding op weight " << op_types[j].name << " -> " << weight << std::endl;
+	op_weights.insert(pair<TestOpType, unsigned int>(op_types[j].op, weight));
       }
-      cout << "adding op weight " << op_types[j].name << " -> " << weight << std::endl;
-      op_weights.insert(pair<TestOpType, unsigned int>(op_types[j].op, weight));
     } else {
       cerr << "unknown arg " << argv[i] << std::endl;
       //usage();
