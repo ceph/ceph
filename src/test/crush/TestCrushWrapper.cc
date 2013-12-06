@@ -29,6 +29,35 @@
 
 #include "crush/CrushWrapper.h"
 
+TEST(CrushWrapper, update_item) {
+  CrushWrapper *c = new CrushWrapper;
+  c->create();
+
+#define ROOT_TYPE 3
+  c->set_type_name(ROOT_TYPE, "root");
+#define RACK_TYPE 2
+  c->set_type_name(RACK_TYPE, "rack");
+#define HOST_TYPE 1
+  c->set_type_name(HOST_TYPE, "host");
+#define OSD_TYPE 0
+  c->set_type_name(OSD_TYPE, "osd");
+
+  int rootno;
+  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+		ROOT_TYPE, 0, NULL, NULL, &rootno);
+  c->set_item_name(rootno, "default");
+
+  int item = 0;
+
+  // invalid names anywhere in loc trigger an error
+  {
+    map<string,string> loc;
+    loc["rack"] = "\001";
+    EXPECT_EQ(-EINVAL, c->update_item(g_ceph_context, item, 1.0,
+				      "osd." + stringify(item), loc));
+  }
+}
+
 TEST(CrushWrapper, insert_item) {
   CrushWrapper *c = new CrushWrapper;
   c->create();
@@ -48,6 +77,15 @@ TEST(CrushWrapper, insert_item) {
   c->set_item_name(rootno, "default");
 
   int item = 0;
+
+  // invalid names anywhere in loc trigger an error
+  {
+    map<string,string> loc;
+    loc["rack"] = "\001";
+    EXPECT_EQ(-EINVAL, c->insert_item(g_ceph_context, item, 1.0,
+				      "osd." + stringify(item), loc));
+  }
+
   // insert an item in an existing bucket
   {
     map<string,string> loc;
@@ -70,16 +108,6 @@ TEST(CrushWrapper, insert_item) {
     item++;
     EXPECT_EQ(0, c->insert_item(g_ceph_context, item, 1.0,
 				"osd." + stringify(item), loc));
-  }
-  // implicit creation of a bucket with an invalid name fails
-  {
-    map<string,string> loc;
-    loc["root"] = "default";
-    loc["rack"] = "\001";
-
-    item++;
-    EXPECT_EQ(-ENFILE, c->insert_item(g_ceph_context, item, 1.0,
-				      "osd." + stringify(item), loc));
   }
   // adding to an existing item name that is not associated with a bucket
   {
@@ -198,6 +226,23 @@ TEST(CrushWrapper, is_valid_crush_name) {
   EXPECT_TRUE(CrushWrapper::is_valid_crush_name("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ012456789-_"));
   EXPECT_FALSE(CrushWrapper::is_valid_crush_name(""));
   EXPECT_FALSE(CrushWrapper::is_valid_crush_name("\001"));
+}
+
+TEST(CrushWrapper, is_valid_crush_loc) {
+  map<string,string> loc;
+  EXPECT_TRUE(CrushWrapper::is_valid_crush_loc(g_ceph_context, loc));
+  loc["good"] = "better";
+  EXPECT_TRUE(CrushWrapper::is_valid_crush_loc(g_ceph_context, loc));
+  {
+    map<string,string> loc;
+    loc["\005"] = "default";
+    EXPECT_FALSE(CrushWrapper::is_valid_crush_loc(g_ceph_context, loc));
+  }
+  {
+    map<string,string> loc;
+    loc["rack"] = "\003";
+    EXPECT_FALSE(CrushWrapper::is_valid_crush_loc(g_ceph_context, loc));
+  }
 }
 
 int main(int argc, char **argv) {
