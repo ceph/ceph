@@ -185,8 +185,7 @@ TEST(LibRadosMisc, HitSetRead) {
     string n = stringify(i);
     uint32_t hash = ioctx.get_object_hash_position(n);
     hobject_t oid(sobject_t(n, CEPH_NOSNAP), "", hash, -1, "");
-    int pg = ioctx.get_object_pg_hash_position(n);
-    std::cout << "checking for " << oid << ", should be in pg " << pg << std::endl;
+    //std::cout << "checking for " << oid << ", should be in pg " << pg << std::endl;
     bool found = false;
     for (int p=0; p<num_pg; ++p) {
       if (hitsets[p].contains(oid)) {
