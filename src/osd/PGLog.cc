@@ -40,21 +40,11 @@ void PGLog::IndexedLog::split_into(
        ) {
     if ((i->soid.hash & mask) == child_pgid.m_seed) {
       olog->log.push_back(*i);
-      if (log.empty())
-	tail = i->version;
     } else {
       log.push_back(*i);
-      if (olog->empty())
-	olog->tail = i->version;
     }
     oldlog.erase(i++);
   }
-
-  if (log.empty())
-    tail = head;
-
-  if (olog->empty())
-    olog->tail = olog->head;
 
   olog->index();
   index();
