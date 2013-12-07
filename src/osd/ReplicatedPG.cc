@@ -2481,6 +2481,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     switch (op.op) {
       // non user-visible modifications
     case CEPH_OSD_OP_WATCH:
+    case CEPH_OSD_OP_UNDIRTY:
       break;
     default:
       if (op.op & CEPH_OSD_OP_MODE_WR)
