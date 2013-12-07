@@ -1198,10 +1198,10 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op, ObjectContextRef obc,
     return false;
     break;
   case pg_pool_t::CACHEMODE_WRITEBACK:
-    if (obc.get()) {
+    if (obc.get() && obc->obs.exists) { // we have the object already
       return false;
-    } else {
-      do_cache_redirect(op, obc);
+    } else { // try and promote!
+      promote_object(op, obc);
       return true;
     }
     break;
@@ -1209,12 +1209,17 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op, ObjectContextRef obc,
     do_cache_redirect(op, obc);
     return true;
     break;
-  case pg_pool_t::CACHEMODE_READONLY:
-    if (obc.get() && !r) {
+  case pg_pool_t::CACHEMODE_READONLY: // TODO: clean this case up
+    if (!obc.get() && r == -ENOENT) { // we don't have the object and op's a read
+      promote_object(op, obc);
+      return true;
+    } else if (obc.get() && obc->obs.exists) { // we have the object locally
       return false;
-    } else {
+    } else if (!r) { // it must be a write
       do_cache_redirect(op, obc);
       return true;
+    } else { // crap, there was a failure of some kind
+      return false;
     }
     break;
   default:
@@ -1235,6 +1240,31 @@ void ReplicatedPG::do_cache_redirect(OpRequestRef op, ObjectContextRef obc)
 	   << op << dendl;
   m->get_connection()->get_messenger()->send_message(reply, m->get_connection());
   return;
+}
+
+void ReplicatedPG::promote_object(OpRequestRef op, ObjectContextRef obc)
+{
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  if (!obc.get()) { // we need to create an ObjectContext
+    int r = find_object_context(
+      hobject_t(m->get_oid(),
+	      m->get_object_locator().key,
+	      m->get_snapid(),
+	      m->get_pg().ps(),
+	      m->get_object_locator().get_pool(),
+	      m->get_object_locator().nspace),
+      &obc, true, NULL);
+    assert(r == 0); // a lookup that allows creates can't fail now
+  }
+
+  hobject_t temp_target = generate_temp_object();
+  PromoteCallback *cb = new PromoteCallback(op, obc, temp_target, this);
+  object_locator_t oloc(m->get_object_locator());
+  oloc.pool = pool.info.tier_of;
+  start_copy(cb, obc, obc->obs.oi.soid, oloc, 0, temp_target);
+
+  assert(obc->is_blocked());
+  wait_for_blocked_object(obc->obs.oi.soid, op);
 }
 
 void ReplicatedPG::execute_ctx(OpContext *ctx)
@@ -3701,7 +3731,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	} else {
 	  // finish
 	  assert(ctx->copy_cb->get_result() >= 0);
-	  result = finish_copyfrom(ctx);
+	  finish_copyfrom(ctx);
+	  result = 0;
 	}
       }
       break;
@@ -4413,15 +4444,16 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 {
   dout(10) << __func__ << " " << obc << " " << cop << dendl;
   ObjectOperation op;
-  if (cop->user_version) {
-    op.assert_version(cop->user_version);
+  if (cop->results->user_version) {
+    op.assert_version(cop->results->user_version);
   } else {
     // we should learn the version after the first chunk, if we didn't know
     // it already!
     assert(cop->cursor.is_initial());
   }
   op.copy_get(&cop->cursor, cct->_conf->osd_copyfrom_max_chunk,
-	      &cop->size, &cop->mtime, &cop->category,
+	      &cop->results->object_size, &cop->results->mtime,
+	      &cop->results->category,
 	      &cop->attrs, &cop->data, &cop->omap,
 	      &cop->rval);
 
@@ -4433,7 +4465,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 				  new C_OnFinisher(fin,
 						   &osd->objecter_finisher),
 				  // discover the object version if we don't know it yet
-				  cop->user_version ? NULL : &cop->user_version);
+				  cop->results->user_version ? NULL : &cop->results->user_version);
   fin->tid = tid;
   cop->objecter_tid = tid;
   osd->objecter_lock.Unlock();
@@ -4456,7 +4488,6 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
   ObjectContextRef obc = cop->obc;
   cop->objecter_tid = 0;
 
-  CopyResults results;
   if (r >= 0) {
     assert(cop->rval >= 0);
 
@@ -4484,13 +4515,11 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
       _copy_some(obc, cop);
       return;
     }
-    _build_finish_copy_transaction(cop, results.get<3>());
-    results.get<1>() = cop->temp_cursor.data_offset;
+    _build_finish_copy_transaction(cop, cop->results->final_tx);
   }
 
   dout(20) << __func__ << " complete; committing" << dendl;
-  results.get<0>() = r;
-  results.get<4>() = false;
+  CopyCallbackResults results(r, cop->results);
   cop->cb->complete(results);
 
   copy_ops.erase(obc->obs.oi.soid);
@@ -4544,7 +4573,7 @@ void ReplicatedPG::_build_finish_copy_transaction(CopyOpRef cop,
   }
 }
 
-int ReplicatedPG::finish_copyfrom(OpContext *ctx)
+void ReplicatedPG::finish_copyfrom(OpContext *ctx)
 {
   dout(20) << "finish_copyfrom on " << ctx->obs->oi.soid << dendl;
   ObjectState& obs = ctx->new_obs;
@@ -4557,8 +4586,8 @@ int ReplicatedPG::finish_copyfrom(OpContext *ctx)
   if (cb->is_temp_obj_used()) {
     ctx->discard_temp_oid = cb->temp_obj;
   }
-  ctx->op_t.swap(cb->results.get<3>());
-  ctx->op_t.append(cb->results.get<3>());
+  ctx->op_t.swap(cb->results->final_tx);
+  ctx->op_t.append(cb->results->final_tx);
 
   interval_set<uint64_t> ch;
   if (obs.oi.size > 0)
@@ -4572,15 +4601,53 @@ int ReplicatedPG::finish_copyfrom(OpContext *ctx)
   }
   ctx->delta_stats.num_wr++;
   ctx->delta_stats.num_wr_kb += SHIFT_ROUND_UP(obs.oi.size, 10);
+}
 
-  return 0;
+void ReplicatedPG::finish_promote(CopyResults *results, ObjectContextRef obc,
+                                  hobject_t& temp_obj)
+{
+  vector<OSDOp> ops;
+  tid_t rep_tid = osd->get_tid();
+  osd_reqid_t reqid(osd->get_cluster_msgr_name(), 0, rep_tid);
+  OpContext *tctx = new OpContext(OpRequestRef(), reqid, ops, &obc->obs, obc->ssc, this);
+  tctx->mtime = ceph_clock_now(g_ceph_context);
+  tctx->op_t.swap(results->final_tx);
+  if (results->started_temp_obj) {
+	tctx->discard_temp_oid = temp_obj;
+  }
+
+  RepGather *repop = new_repop(tctx, obc, rep_tid);
+  C_KickBlockedObject *blockedcb = new C_KickBlockedObject(obc, this);
+  repop->ondone = blockedcb;
+  object_stat_sum_t delta;
+  ++delta.num_objects;
+  obc->obs.exists = true;
+  delta.num_bytes += results->object_size;
+  obc->obs.oi.category = results->category;
+  info.stats.stats.add(delta, obc->obs.oi.category);
+  tctx->at_version.epoch = get_osdmap()->get_epoch();
+  tctx->at_version.version = pg_log.get_head().version + 1;
+  tctx->user_at_version = results->user_version;
+
+  tctx->log.push_back(pg_log_entry_t(
+	  pg_log_entry_t::MODIFY,
+	  obc->obs.oi.soid,
+	  tctx->at_version,
+	  tctx->obs->oi.version,
+	  tctx->user_at_version,
+	  osd_reqid_t(),
+	  repop->ctx->mtime));
+  append_log(tctx->log, eversion_t(), tctx->local_t);
+  issue_repop(repop, repop->ctx->mtime);
+  eval_repop(repop);
+  repop->put();
 }
 
 void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
 {
   dout(10) << __func__ << " " << cop->obc->obs.oi.soid
-	   << " from " << cop->src << " " << cop->oloc << " v" << cop->user_version
-	   << dendl;
+	   << " from " << cop->src << " " << cop->oloc
+	   << " v" << cop->results->user_version << dendl;
 
   // cancel objecter op, if we can
   if (cop->objecter_tid) {
@@ -4592,9 +4659,8 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
   --cop->obc->copyfrom_readside;
 
   kick_object_context_blocked(cop->obc);
-  bool temp_obj_created = !cop->cursor.is_initial();
-  CopyResults result(-ECANCELED, 0, temp_obj_created,
-                     ObjectStore::Transaction(), requeue);
+  cop->results->should_requeue = requeue;
+  CopyCallbackResults result(-ECANCELED, cop->results);
   cop->cb->complete(result);
 }
 
