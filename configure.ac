@@ -626,6 +626,22 @@ AC_CHECK_FUNCS([prctl])
 AC_CHECK_FUNCS([pipe2])
 AC_CHECK_FUNCS([posix_fadvise])
 
+AC_MSG_CHECKING([for fdatasync])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#include <unistd.h>
+]], [[
+#if defined(_POSIX_SYNCHRONIZED_IO) && _POSIX_SYNCHRONIZED_IO > 0
+return fdatasync(0);
+#else
+#error Not supported
+#endif
+]])], [
+AC_MSG_RESULT([yes])
+AC_DEFINE([HAVE_FDATASYNC], 1, [Define to 1 if you have fdatasync.])
+], [
+AC_MSG_RESULT([no])
+])
+
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
 #AC_C_CONST
