@@ -1617,7 +1617,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     ldout(cct, 5) << " got redirect reply; redirecting" << dendl;
     unregister_op(op);
     m->get_redirect().combine_with_locator(op->target_oloc, op->target_oid.name);
-    op_submit(op);
+    _op_submit(op);
     m->put();
     return;
   }
@@ -1625,7 +1625,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   if (rc == -EAGAIN) {
     ldout(cct, 7) << " got -EAGAIN, resubmitting" << dendl;
     unregister_op(op);
-    op_submit(op);
+    _op_submit(op);
     m->put();
     return;
   }
