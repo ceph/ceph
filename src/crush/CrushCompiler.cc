@@ -728,6 +728,10 @@ int CrushCompiler::compile(istream& in, const char *infn)
   if (!infn)
     infn = "<input>";
 
+  // always start with legacy tunables, so that the compiled result of
+  // a given crush file is fixed for all time.
+  crush.set_tunables_legacy();
+
   string big;
   string str;
   int line = 1;
