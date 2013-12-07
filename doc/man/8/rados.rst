@@ -16,7 +16,7 @@ Description
 ===========
 
 **rados** is a utility for interacting with a Ceph object storage
-cluster (RADOS), part of the Ceph distributed file system.
+cluster (RADOS), part of the Ceph distributed storage system.
 
 
 Options
@@ -154,7 +154,7 @@ To read a previously snapshotted version of an object::
 Availability
 ============
 
-**rados** is part of the Ceph distributed file system. Please refer to
+**rados** is part of the Ceph distributed storage system. Please refer to
 the Ceph documentation at http://ceph.com/docs for more information.
 
 
