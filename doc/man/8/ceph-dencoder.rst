@@ -116,7 +116,7 @@ Say you want to examine an attribute on an object stored by ``ceph-osd``.  You c
 Availability
 ============
 
-**ceph-dencoder** is part of the Ceph distributed file system. Please
+**ceph-dencoder** is part of the Ceph distributed storage system. Please
 refer to the Ceph documentation at http://ceph.com/docs for more
 information.
 

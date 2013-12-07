@@ -14,7 +14,7 @@ Description
 ===========
 
 **cephfs** is a control utility for accessing and manipulating file
-layout and location data in the Ceph distributed file system.
+layout and location data in the Ceph distributed storage system.
 
 .. TODO format this like a proper man page
 
@@ -86,7 +86,7 @@ in modern versions of the Ceph servers; do not use it.
 Availability
 ============
 
-**cephfs** is part of the Ceph distributed file system. Please refer
+**cephfs** is part of the Ceph distributed storage system. Please refer
 to the Ceph documentation at http://ceph.com/docs for more
 information.
 
