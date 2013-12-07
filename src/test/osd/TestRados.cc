@@ -169,6 +169,20 @@ private:
 	return new HitSetListOp(m_op, &context, hash, m_stats);
       }
 
+    case TEST_OP_UNDIRTY:
+      {
+	oid = *(rand_choose(context.oid_not_in_use));
+	cout << "undirty oid " << oid << std::endl;
+	return new UndirtyOp(m_op, &context, oid, m_stats);
+      }
+
+    case TEST_OP_IS_DIRTY:
+      {
+	oid = *(rand_choose(context.oid_not_in_use));
+	cout << "is_dirty oid " << oid << std::endl;
+	return new IsDirtyOp(m_op, &context, oid, m_stats);
+      }
+
     default:
       cerr << "Invalid op type " << type << std::endl;
       assert(0);
@@ -211,6 +225,8 @@ int main(int argc, char **argv)
     { TEST_OP_WATCH, "watch" },
     { TEST_OP_COPY_FROM, "copy_from" },
     { TEST_OP_HIT_SET_LIST, "hit_set_list" },
+    { TEST_OP_IS_DIRTY, "is_dirty" },
+    { TEST_OP_UNDIRTY, "undirty" },
     { TEST_OP_READ /* grr */, NULL },
   };
 
