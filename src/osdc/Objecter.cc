@@ -1561,7 +1561,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       num_unacked--;
     if (op->oncommit)
       num_uncommitted--;
-    op_submit(op);
+    _op_submit(op);
     m->put();
     return;
   }
