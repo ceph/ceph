@@ -623,7 +623,7 @@ private:
     if (!crush)
       return (-EINVAL);
 
-    if (item > 0)
+    if (item >= 0)
       return (-EINVAL);
 
     // check that the bucket that we want to detach exists

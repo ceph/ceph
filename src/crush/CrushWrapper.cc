@@ -444,11 +444,6 @@ int CrushWrapper::move_bucket(CephContext *cct, int id, const map<string,string>
   // detach the bucket
   int bucket_weight = detach_bucket(cct, id);
 
-  // un-set the device name so we can use add_item later
-  build_rmap(name_map, name_rmap);
-  name_map.erase(id);
-  name_rmap.erase(id_name);
-
   // insert the bucket back into the hierarchy
   return insert_item(cct, id, bucket_weight / (float)0x10000, id_name, loc);
 }
@@ -465,11 +460,9 @@ int CrushWrapper::link_bucket(CephContext *cct, int id, const map<string,string>
   // get the name of the bucket we are trying to move for later
   string id_name = get_item_name(id);
 
-  // detach the bucket
   crush_bucket *b = get_bucket(id);
   unsigned bucket_weight = b->weight;
 
-  // insert the bucket back into the hierarchy
   return insert_item(cct, id, bucket_weight / (float)0x10000, id_name, loc);
 }
 
