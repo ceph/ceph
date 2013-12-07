@@ -2044,10 +2044,29 @@ void Monitor::handle_command(MMonCommand *m)
   get_str_vec(prefix, fullcmd);
   module = fullcmd[0];
 
-  map<string,string> param_str_map;
-  _generate_command_map(cmdmap, param_str_map);
+  // validate command is in leader map
+
+  const MonCommand *leader_cmd;
+  leader_cmd = _get_moncommand(prefix,
+                               // the boost underlying this isn't const for some reason
+                               const_cast<MonCommand*>(leader_supported_mon_commands),
+                               leader_supported_mon_commands_size);
+  if (!leader_cmd) {
+    reply_command(m, -EINVAL, "command not known", 0);
+    return;
+  }
+  // validate command is in our map & matches, or forward
   const MonCommand *mon_cmd = _get_moncommand(prefix, mon_commands,
                                               ARRAY_SIZE(mon_commands));
+  if (!mon_cmd ||
+      (*leader_cmd != *mon_cmd)) {
+    dout(10) << "We don't match leader, forwarding request " << m << dendl;
+    forward_request_leader(m);
+    return;
+  }
+  // validate user's permissions for requested command
+  map<string,string> param_str_map;
+  _generate_command_map(cmdmap, param_str_map);
   if (!_allowed_command(session, module, prefix, cmdmap,
                         param_str_map, mon_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;
