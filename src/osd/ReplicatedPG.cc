@@ -5292,6 +5292,10 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
 	     << " tid " << cop->objecter_tid << dendl;
     return;
   }
+
+  if (r >= 0 && pool.info.ec_pool() && cop->omap.size()) {
+    r = -EOPNOTSUPP;
+  }
   cop->objecter_tid = 0;
   cop->objecter_tid2 = 0;  // assume this ordered before us (if it happened)
   ObjectContextRef& cobc = cop->obc;
