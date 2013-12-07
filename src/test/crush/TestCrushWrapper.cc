@@ -62,6 +62,65 @@ TEST(CrushWrapper, get_immediate_parent) {
   EXPECT_EQ("root", loc.first);
   EXPECT_EQ("default", loc.second);
 }
+
+TEST(CrushWrapper, move_bucket) {
+  CrushWrapper *c = new CrushWrapper;
+  
+  const int ROOT_TYPE = 2;
+  c->set_type_name(ROOT_TYPE, "root");
+  const int HOST_TYPE = 1;
+  c->set_type_name(HOST_TYPE, "host");
+  const int OSD_TYPE = 0;
+  c->set_type_name(OSD_TYPE, "osd");
+
+  int root0;
+  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+			     ROOT_TYPE, 0, NULL, NULL, &root0));
+  EXPECT_EQ(0, c->set_item_name(root0, "root0"));
+
+  int item = 0;
+  {
+    map<string,string> loc;
+    loc["root"] = "root0";
+    loc["host"] = "host0";
+
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, item, 1.0,
+				"osd.0", loc));
+  }
+  int host0 = c->get_item_id("host0");
+
+  int root1;
+  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+			     ROOT_TYPE, 0, NULL, NULL, &root1));
+  EXPECT_EQ(0, c->set_item_name(root1, "root1"));
+
+  map<string,string> loc;
+  loc["root"] = "root1";
+
+  // 0 is not a valid bucket number, must be negative
+  EXPECT_EQ(-EINVAL, c->move_bucket(g_ceph_context, 0, loc));
+  // -100 is not an existing bucket
+  EXPECT_EQ(-ENOENT, c->move_bucket(g_ceph_context, -100, loc));
+  // move host0 from root0 to root1
+  {
+    pair <string,string> loc;
+    int ret;
+    loc = c->get_immediate_parent(host0, &ret);
+    EXPECT_EQ(0, ret);
+    EXPECT_EQ("root", loc.first);
+    EXPECT_EQ("root0", loc.second);
+  }
+  EXPECT_EQ(0, c->move_bucket(g_ceph_context, host0, loc));
+  {
+    pair <string,string> loc;
+    int ret;
+    loc = c->get_immediate_parent(host0, &ret);
+    EXPECT_EQ(0, ret);
+    EXPECT_EQ("root", loc.first);
+    EXPECT_EQ("root1", loc.second);
+  }
+}
+
 TEST(CrushWrapper, check_item_loc) {
   CrushWrapper *c = new CrushWrapper;
   int item = 0;
