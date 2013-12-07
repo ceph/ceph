@@ -196,12 +196,10 @@ namespace librbd {
 
   class C_CacheRead : public Context {
   public:
-    C_CacheRead(Context *completion, AioRead *req)
-      : m_completion(completion), m_req(req) {}
+    explicit C_CacheRead(AioRead *req) : m_req(req) {}
     virtual ~C_CacheRead() {}
     virtual void finish(int r);
   private:
-    Context *m_completion;
     AioRead *m_req;
   };
 }
