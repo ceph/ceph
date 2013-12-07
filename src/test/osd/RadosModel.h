@@ -1438,17 +1438,17 @@ public:
       context->oid_not_in_use.erase(oid);
       context->oid_in_use.insert(oid_src);
       context->oid_not_in_use.erase(oid_src);
-    }
 
-    // choose source snap
-    if (0 && !(rand() % 4) && !context->snaps.empty()) {
-      snap = rand_choose(context->snaps)->first;
-    } else {
-      snap = -1;
+      // choose source snap
+      if (0 && !(rand() % 4) && !context->snaps.empty()) {
+	snap = rand_choose(context->snaps)->first;
+      } else {
+	snap = -1;
+      }
+      context->find_object(oid_src, &src_value, snap);
+      if (!src_value.deleted())
+	context->update_object_full(oid, src_value);
     }
-    context->find_object(oid_src, &src_value, snap);
-    if (!src_value.deleted())
-      context->update_object_full(oid, src_value);
 
     string src = context->prefix+oid_src;
     op.copy_from(src.c_str(), context->io_ctx, src_value.version);
