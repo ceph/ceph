@@ -348,10 +348,16 @@ int CrushCompiler::parse_tunable(iter_t const& i)
     return -1;
   }
 
+  /*
+
+    current crop of tunables are all now "safe".  reenable this when we
+    add new ones that are ... new.
+
   if (!unsafe_tunables) {
     err << "tunables are NOT FULLY IMPLEMENTED; enable with --enable-unsafe-tunables to enable this feature" << std::endl;
     return -1;
   }
+  */
 
   if (verbose) err << "tunable " << name << " " << val << std::endl;
   return 0;
