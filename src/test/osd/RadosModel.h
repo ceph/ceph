@@ -430,6 +430,7 @@ public:
 	cout << __func__ << " oid " << oid
 	     << " v " << version << " " << j->second.most_recent()
 	     << " " << (dirty ? "dirty" : "clean")
+	     << " " << (j->second.exists ? "exists":"dne")
 	     << std::endl;
 	break;
       }
