@@ -1414,6 +1414,10 @@ public:
                             const string& in_marker, int max_entries,
                             list<cls_user_bucket_entry>& entries,
                             string *out_marker, bool *truncated);
+  int cls_user_add_bucket(rgw_obj& obj, const cls_user_bucket_entry& entry);
+  int cls_user_update_buckets(rgw_obj& obj, list<cls_user_bucket_entry>& entries);
+  int cls_user_add_bucket(rgw_obj& obj, list<cls_user_bucket_entry>& entries);
+  int cls_user_remove_bucket(rgw_obj& obj, const cls_user_bucket& bucket);
 
   int check_quota(rgw_bucket& bucket, RGWQuotaInfo& quota_info, uint64_t obj_size);
 
