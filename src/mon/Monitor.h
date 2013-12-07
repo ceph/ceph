@@ -102,6 +102,7 @@ struct MRoute;
 struct MForward;
 struct MTimeCheck;
 struct MMonHealth;
+struct MonCommand;
 
 #define COMPAT_SET_LOC "feature_set"
 
@@ -588,8 +589,14 @@ public:
   void handle_get_version(MMonGetVersion *m);
   void handle_subscribe(MMonSubscribe *m);
   void handle_mon_get_map(MMonGetMap *m);
-  bool _allowed_command(MonSession *s, string &module, string& prefix,
-                        map<string,cmd_vartype>& cmdmap);
+  static void _generate_command_map(map<string,cmd_vartype>& cmdmap,
+                                    map<string,string> &param_str_map);
+  static const MonCommand *_get_moncommand(const string &cmd_prefix,
+                                           MonCommand *cmds, int cmds_size);
+  bool _allowed_command(MonSession *s, string &module, string &prefix,
+                        const map<string,cmd_vartype>& cmdmap,
+                        const map<string,string> param_str_map,
+                        const MonCommand *this_cmd);
   void _mon_status(Formatter *f, ostream& ss);
   void _quorum_status(Formatter *f, ostream& ss);
   void _add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss);
