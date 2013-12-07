@@ -150,7 +150,9 @@ def reboot(ctx, remotes):
         log.info('rebooting %s', remote.name)
         proc = remote.run(  # note use of -n to force a no-sync reboot
             args=[
-                'timeout', '5', 'sync',
+                'sync',
+                run.Raw('&'),
+                'sleep', '5',
                 run.Raw(';'),
                 'sudo', 'reboot', '-f', '-n'
             ],
