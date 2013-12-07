@@ -15,8 +15,16 @@
 #if defined(__FreeBSD__)
 #define	lseek64(fd, offset, whence)	lseek(fd, offset, whence)
 #define	ENODATA	61
-#define	TEMP_FAILURE_RETRY
 #define	MSG_MORE 0
 #endif /* !__FreeBSD__ */
+
+#ifndef TEMP_FAILURE_RETRY
+#define TEMP_FAILURE_RETRY(expression) ({     \
+  typeof(expression) __result;                \
+  do {                                        \
+    __result = (expression);                  \
+  } while (__result == -1 && errno == EINTR); \
+  __result; })
+#endif
 
 #endif /* !CEPH_COMPAT_H */
