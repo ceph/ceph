@@ -29,6 +29,8 @@
 	osd open classes on start = true
         osd debug pg log writeout = true
 
+	osd pool default size = 2
+
 [mon]
 	debug ms = 1
 	debug mon = 20
