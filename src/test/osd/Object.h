@@ -239,12 +239,14 @@ public:
 
 class ObjectDesc {
 public:
-  ObjectDesc(ContentsGenerator *cont_gen) : 
-    exists(false), tmap(false), version(0), layers(), cont_gen(cont_gen) {};
-  ObjectDesc(const ContDesc &init, ContentsGenerator *cont_gen) : 
-    exists(false), tmap(false), version(0), layers(), cont_gen(cont_gen) {
+  ObjectDesc(ContentsGenerator *cont_gen)
+    : exists(false), tmap(false), dirty(false),
+      version(0), layers(), cont_gen(cont_gen) {}
+  ObjectDesc(const ContDesc &init, ContentsGenerator *cont_gen)
+    : exists(false), tmap(false), dirty(false),
+      version(0), layers(), cont_gen(cont_gen) {
     layers.push_front(init);
-  };
+  }
 
   class iterator {
   public:
@@ -313,6 +315,7 @@ public:
   bufferlist header;
   bool exists;
   bool tmap;
+  bool dirty;
   bufferlist tmap_contents;
   uint64_t version;
 private:
