@@ -22,6 +22,7 @@
 #include <limits.h>
 
 #include "common/safe_io.h"
+#include "include/compat.h"
 
 ssize_t safe_read(int fd, void *buf, size_t count)
 {

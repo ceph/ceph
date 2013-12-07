@@ -30,6 +30,7 @@
 #include "common/config.h"
 #include "include/assert.h"
 #include "include/str_list.h"
+#include "include/compat.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
