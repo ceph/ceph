@@ -348,10 +348,16 @@ int CrushCompiler::parse_tunable(iter_t const& i)
     return -1;
   }
 
+  /*
+
+    current crop of tunables are all now "safe".  reenable this when we
+    add new ones that are ... new.
+
   if (!unsafe_tunables) {
     err << "tunables are NOT FULLY IMPLEMENTED; enable with --enable-unsafe-tunables to enable this feature" << std::endl;
     return -1;
   }
+  */
 
   if (verbose) err << "tunable " << name << " " << val << std::endl;
   return 0;
@@ -727,6 +733,10 @@ int CrushCompiler::compile(istream& in, const char *infn)
 {
   if (!infn)
     infn = "<input>";
+
+  // always start with legacy tunables, so that the compiled result of
+  // a given crush file is fixed for all time.
+  crush.set_tunables_legacy();
 
   string big;
   string str;
