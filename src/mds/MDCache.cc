@@ -9820,7 +9820,12 @@ void MDCache::discover_path(CInode *base,
       onfinish = new C_MDC_RetryDiscoverPath(this, base, snap, want_path, from);
     base->add_waiter(CInode::WAIT_SINGLEAUTH, onfinish);
     return;
-  } 
+  } else if (from == mds->get_nodeid()) {
+    list<Context*> finished;
+    base->take_waiting(CInode::WAIT_DIR, finished);
+    mds->queue_waiters(finished);
+    return;
+  }
 
   if ((want_xlocked && want_path.depth() == 1) ||
       !base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) { // FIXME: weak!
@@ -9867,6 +9872,11 @@ void MDCache::discover_path(CDir *base,
     if (!onfinish)
       onfinish = new C_MDC_RetryDiscoverPath2(this, base, snap, want_path);
     base->add_waiter(CDir::WAIT_SINGLEAUTH, onfinish);
+    return;
+  } else if (from == mds->get_nodeid()) {
+    list<Context*> finished;
+    base->take_sub_waiting(finished);
+    mds->queue_waiters(finished);
     return;
   }
 
@@ -9915,7 +9925,12 @@ void MDCache::discover_ino(CDir *base,
       onfinish = new C_MDC_RetryDiscoverIno(this, base, want_ino);
     base->add_waiter(CDir::WAIT_SINGLEAUTH, onfinish);
     return;
-  } 
+  } else if (from == mds->get_nodeid()) {
+    list<Context*> finished;
+    base->take_sub_waiting(finished);
+    mds->queue_waiters(finished);
+    return;
+  }
 
   if (want_xlocked || !base->is_waiting_for_ino(want_ino) || !onfinish) {
     discover_info_t& d = _create_discover(from);

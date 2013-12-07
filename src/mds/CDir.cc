@@ -1145,11 +1145,14 @@ void CDir::take_sub_waiting(list<Context*>& ls)
     waiting_on_dentry.clear();
     put(PIN_DNWAITER);
   }
-  for (map<inodeno_t, list<Context*> >::iterator p = waiting_on_ino.begin(); 
-       p != waiting_on_ino.end();
-       ++p) 
-    ls.splice(ls.end(), p->second);
-  waiting_on_ino.clear();
+  if (!waiting_on_ino.empty()) {
+    for (map<inodeno_t, list<Context*> >::iterator p = waiting_on_ino.begin(); 
+	 p != waiting_on_ino.end();
+	 ++p) 
+      ls.splice(ls.end(), p->second);
+    waiting_on_ino.clear();
+    put(PIN_INOWAITER);
+  }
 }
 
 
