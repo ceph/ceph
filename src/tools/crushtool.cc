@@ -668,34 +668,18 @@ int main(int argc, const char **argv)
     "** tunables are DANGEROUS and NOT YET RECOMMENDED.  DO NOT USE without\n"
     "** confirming with developers that your use-case is safe and correct.";
   if (choose_local_tries >= 0) {
-    if (!unsafe_tunables) {
-      cerr << scary_tunables_message << std::endl;
-      return -1;
-    }
     crush.set_choose_local_tries(choose_local_tries);
     modified = true;
   }
   if (choose_local_fallback_tries >= 0) {
-    if (!unsafe_tunables) {
-      cerr << scary_tunables_message << std::endl;
-      return -1;
-    }
     crush.set_choose_local_fallback_tries(choose_local_fallback_tries);
     modified = true;
   }
   if (choose_total_tries >= 0) {
-    if (!unsafe_tunables) {
-      cerr << scary_tunables_message << std::endl;
-      return -1;
-    }
     crush.set_choose_total_tries(choose_total_tries);
     modified = true;
   }
   if (chooseleaf_descend_once >= 0) {
-    if (!unsafe_tunables) {
-      cerr << scary_tunables_message << std::endl;
-      return -1;
-    }
     crush.set_chooseleaf_descend_once(chooseleaf_descend_once);
     modified = true;
   }
