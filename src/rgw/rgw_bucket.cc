@@ -83,20 +83,17 @@ int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t 
   int ret;
   string& bucket_name = bucket.name;
 
-  bufferlist bl;
-
-  RGWBucketEnt new_bucket;
+  cls_user_bucket_entry new_bucket;
 
   RGWBucketEntryPoint ep;
   RGWObjVersionTracker ot;
 
-  new_bucket.bucket = bucket;
+  bucket.convert(&new_bucket.bucket);
   new_bucket.size = 0;
   if (!creation_time)
     time(&new_bucket.creation_time);
   else
     new_bucket.creation_time = creation_time;
-  ::encode(new_bucket, bl);
 
   map<string, bufferlist> attrs;
 
@@ -114,7 +111,7 @@ int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t 
   rgw_get_buckets_obj(user_id, buckets_obj_id);
 
   rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
-  ret = store->omap_set(obj, bucket_name, bl);
+  ret = store->cls_user_add_bucket(obj, new_bucket);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: error adding bucket to directory: "
         << cpp_strerror(-ret)<< dendl;
@@ -148,8 +145,10 @@ int rgw_unlink_bucket(RGWRados *store, string user_id, const string& bucket_name
   string buckets_obj_id;
   rgw_get_buckets_obj(user_id, buckets_obj_id);
 
+  cls_user_bucket bucket;
+  bucket.name = bucket_name;
   rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
-  ret = store->omap_del(obj, bucket_name);
+  ret = store->cls_user_remove_bucket(obj, bucket);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: error removing bucket from directory: "
         << cpp_strerror(-ret)<< dendl;

@@ -5611,6 +5611,54 @@ int RGWRados::cls_user_list_buckets(rgw_obj& obj,
   return 0;
 }
 
+int RGWRados::cls_user_update_buckets(rgw_obj& obj, list<cls_user_bucket_entry>& entries)
+{
+  bufferlist bl;
+  librados::IoCtx io_ctx;
+  rgw_bucket bucket;
+  std::string oid, key;
+  get_obj_bucket_and_oid_key(obj, bucket, oid, key);
+  int r = open_bucket_data_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
+
+  librados::ObjectWriteOperation op;
+  cls_user_set_buckets(op, entries);
+  r = io_ctx.operate(oid, &op);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int RGWRados::cls_user_add_bucket(rgw_obj& obj, const cls_user_bucket_entry& entry)
+{
+  list<cls_user_bucket_entry> l;
+  l.push_back(entry);
+
+  return cls_user_update_buckets(obj, l);
+}
+
+int RGWRados::cls_user_remove_bucket(rgw_obj& obj, const cls_user_bucket& bucket)
+{
+  bufferlist bl;
+  librados::IoCtx io_ctx;
+  rgw_bucket b;
+  std::string oid, key;
+  get_obj_bucket_and_oid_key(obj, b, oid, key);
+  int r = open_bucket_data_ctx(b, io_ctx);
+  if (r < 0)
+    return r;
+
+  librados::ObjectWriteOperation op;
+  ::cls_user_remove_bucket(op, bucket);
+  r = io_ctx.operate(oid, &op);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
 int RGWRados::check_quota(rgw_bucket& bucket, RGWQuotaInfo& quota_info, uint64_t obj_size)
 {
   return quota_handler->check_quota(bucket, quota_info, 1, obj_size);

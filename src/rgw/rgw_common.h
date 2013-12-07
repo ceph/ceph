@@ -576,6 +576,14 @@ struct rgw_bucket {
   rgw_bucket(const char *n, const char *dp, const char *ip, const char *m, const char *id, const char *h) :
     name(n), data_pool(dp), index_pool(ip), marker(m), bucket_id(id) {}
 
+  void convert(cls_user_bucket *b) {
+    b->name = name;
+    b->data_pool = data_pool;
+    b->index_pool = index_pool;
+    b->marker = marker;
+    b->bucket_id = bucket_id;
+  }
+
   void clear() {
     name = "";
     data_pool = "";
@@ -915,6 +923,14 @@ struct RGWBucketEnt {
     size_rounded = e.size_rounded;
     creation_time = e.creation_time;
     count = e.count;
+  }
+
+  void convert(cls_user_bucket_entry *b) {
+    bucket.convert(&b->bucket);
+    b->size = size;
+    b->size_rounded = size_rounded;
+    b->creation_time = creation_time;
+    b->count = count;
   }
 
   void encode(bufferlist& bl) const {
