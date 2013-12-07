@@ -3080,7 +3080,7 @@ reprotect_and_return_err:
 	c->add_request();
 
 	if (ictx->object_cacher) {
-	  C_CacheRead *cache_comp = new C_CacheRead(req_comp, req);
+	  C_CacheRead *cache_comp = new C_CacheRead(req);
 	  ictx->aio_read_from_cache(q->oid, &req->data(),
 				    q->length, q->offset,
 				    cache_comp);
