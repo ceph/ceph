@@ -1,4 +1,6 @@
-.TH "CEPH-FUSE" "8" "April 29, 2013" "dev" "Ceph"
+.\" Man page generated from reStructuredText.
+.
+.TH "CEPH-FUSE" "8" "December 09, 2013" "dev" "Ceph"
 .SH NAME
 ceph-fuse \- FUSE-based client for ceph
 .
@@ -28,8 +30,33 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.\" Man page generated from reStructuredText.
 .
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
 .SH SYNOPSIS
 .nf
 \fBceph\-fuse\fP [ \-m \fImonaddr\fP:\fIport\fP ] \fImountpoint\fP [ \fIfuse options\fP ]
@@ -43,12 +70,16 @@ via the \-m option for described by ceph.conf (see below) at the
 specific mount point.
 .sp
 The file system can be unmounted with:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 fusermount \-u mountpoint
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 or by sending \fBSIGINT\fP to the \fBceph\-fuse\fP process.
 .SH OPTIONS
@@ -77,7 +108,7 @@ Use root_directory as the mounted root, rather than the full Ceph tree.
 .UNINDENT
 .SH AVAILABILITY
 .sp
-\fBceph\-fuse\fP is part of the Ceph distributed file system. Please refer to
+\fBceph\-fuse\fP is part of the Ceph distributed storage system. Please refer to
 the Ceph documentation at \fI\%http://ceph.com/docs\fP for more information.
 .SH SEE ALSO
 .sp
