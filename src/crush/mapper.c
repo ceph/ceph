@@ -662,7 +662,6 @@ int crush_do_rule(const struct crush_map *map,
 	int numrep;
 	int choose_tries = map->choose_total_tries;
 	int choose_leaf_tries = 0;
-	const int descend_once = 0;
 
 	if ((__u32)ruleno >= map->max_rules) {
 		dprintk(" bad ruleno %d\n", ruleno);
@@ -736,7 +735,7 @@ int crush_do_rule(const struct crush_map *map,
 						choose_tries,
 						choose_leaf_tries ? choose_leaf_tries : choose_tries,
 						recurse_to_leaf,
-						descend_once, c+osize);
+						0, c+osize);
 				} else {
 					crush_choose_indep(
 						map,
