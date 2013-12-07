@@ -877,6 +877,14 @@ struct MonCommand {
     ::decode(req_perms, bl);
     ::decode(availability, bl);
   }
+  bool operator==(const MonCommand& o) const {
+    return cmdstring == o.cmdstring && helpstring == o.helpstring &&
+	module == o.module && req_perms == o.req_perms &&
+	availability == o.availability;
+  }
+  bool operator!=(const MonCommand& o) const {
+    return !(*this == o);
+  }
 
   static void encode_array(const MonCommand *cmds, int size, bufferlist &bl) {
     ENCODE_START(1, 1, bl);
