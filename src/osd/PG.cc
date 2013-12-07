@@ -794,7 +794,8 @@ map<int, pg_info_t>::const_iterator PG::find_best_info(const map<int, pg_info_t>
   assert(min_last_update_acceptable != eversion_t::max());
 
   map<int, pg_info_t>::const_iterator best = infos.end();
-  // find osd with newest last_update.  if there are multiples, prefer
+  // find osd with newest last_update (oldest for ec_pool).
+  // if there are multiples, prefer
   //  - a longer tail, if it brings another peer into log contiguity
   //  - the current primary
   for (map<int, pg_info_t>::const_iterator p = infos.begin();
@@ -811,11 +812,20 @@ map<int, pg_info_t>::const_iterator PG::find_best_info(const map<int, pg_info_t>
       continue;
     }
     // Prefer newer last_update
-    if (p->second.last_update < best->second.last_update)
-      continue;
-    if (p->second.last_update > best->second.last_update) {
-      best = p;
-      continue;
+    if (pool.info.ec_pool()) {
+      if (p->second.last_update > best->second.last_update)
+	continue;
+      if (p->second.last_update < best->second.last_update) {
+	best = p;
+	continue;
+      }
+    } else {
+      if (p->second.last_update < best->second.last_update)
+	continue;
+      if (p->second.last_update > best->second.last_update) {
+	best = p;
+	continue;
+      }
     }
     // Prefer longer tail if it brings another peer into contiguity
     for (map<int, pg_info_t>::const_iterator q = infos.begin();
