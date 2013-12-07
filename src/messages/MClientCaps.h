@@ -21,7 +21,7 @@
 
 class MClientCaps : public Message {
 
-  static const int HEAD_VERSION = 2;   // added flock metadata
+  static const int HEAD_VERSION = 3;   // added flock metadata, inline data
   static const int COMPAT_VERSION = 1;
 
  public:
@@ -29,6 +29,8 @@ class MClientCaps : public Message {
   bufferlist snapbl;
   bufferlist xattrbl;
   bufferlist flockbl;
+  uint64_t   inline_version;
+  bufferlist inline_data;
 
   int      get_caps() { return head.caps; }
   int      get_wanted() { return head.wanted; }
@@ -151,6 +153,13 @@ public:
     // conditionally decode flock metadata
     if (header.version >= 2)
       ::decode(flockbl, p);
+
+    if (header.version >= 3) {
+      ::decode(inline_version, p);
+      ::decode(inline_data, p);
+    } else {
+      inline_version = CEPH_INLINE_NONE;
+    }
   }
   void encode_payload(uint64_t features) {
     head.snap_trace_len = snapbl.length();
@@ -165,6 +174,14 @@ public:
       ::encode(flockbl, payload);
     } else {
       header.version = 1;  // old
+      return;
+    }
+
+    if (features & CEPH_FEATURE_MDS_INLINE_DATA) {
+      ::encode(inline_version, payload);
+      ::encode(inline_data, payload);
+    } else {
+      header.version = 2;
     }
   }
 };

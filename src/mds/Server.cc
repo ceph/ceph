@@ -1910,6 +1910,9 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino, u
     }
   }
 
+  if (!g_conf->mds_inline_data)
+    in->inode.inline_version = CEPH_INLINE_NONE;
+
   mdcache->add_inode(in);  // add
   dout(10) << "prepare_new_inode " << *in << dendl;
   return in;
