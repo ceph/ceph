@@ -389,10 +389,8 @@ void RGWProcess::handle_request(RGWRequest *req)
     goto done;
   }
 
-  if (s->expect_cont)
-    dump_continue(s);
-
   req->log(s, "executing");
+  op->pre_exec();
   op->execute();
   op->complete();
 done:
