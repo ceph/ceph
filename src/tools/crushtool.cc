@@ -602,7 +602,7 @@ int main(int argc, const char **argv)
     crush_rule *rule = crush_make_rule(3, ruleset, CEPH_PG_TYPE_REP, 2, 2);
     assert(rule);
     crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-    crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_LEAF_FIRSTN, CRUSH_CHOOSE_N, 1);
+    crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSELEAF_FIRSTN, CRUSH_CHOOSE_N, 1);
     crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
     int rno = crush_add_rule(crush.crush, rule, -1);
     crush.set_rule_name(rno, "data");

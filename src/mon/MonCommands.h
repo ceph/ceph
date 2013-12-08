@@ -432,8 +432,9 @@ COMMAND("osd crush tunables " \
 COMMAND("osd crush rule create-simple " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=root,type=CephString,goodchars=[A-Za-z0-9-_.] " \
-	"name=type,type=CephString,goodchars=[A-Za-z0-9-_.]",
-	"create crush rule <name> to 'take' from bucket <root> and 'chooseleaf_first' a bucket <type>", \
+	"name=type,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=mode,type=CephChoices,strings=firstn|indep,req=false",
+	"create crush rule <name> to start from <root>, replicate across buckets of type <type>, using a choose mode of <firstn|indep> (default firstn; indep best for erasure pools)", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush rule rm " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] ",	\

@@ -688,11 +688,13 @@ struct pg_pool_t {
   enum {
     TYPE_REP = 1,     // replication
     TYPE_RAID4 = 2,   // raid4 (never implemented)
+    TYPE_ERASURE = 3,      // erasure-coded
   };
   static const char *get_type_name(int t) {
     switch (t) {
     case TYPE_REP: return "rep";
     case TYPE_RAID4: return "raid4";
+    case TYPE_ERASURE: return "erasure";
     default: return "???";
     }
   }
@@ -757,25 +759,25 @@ struct pg_pool_t {
     return get_cache_mode_name(cache_mode);
   }
 
-  uint64_t flags;           /// FLAG_* 
-  __u8 type;                /// TYPE_*
-  __u8 size, min_size;      /// number of osds in each pg
-  __u8 crush_ruleset;       /// crush placement rule set
-  __u8 object_hash;         /// hash mapping object name to ps
+  uint64_t flags;           ///< FLAG_*
+  __u8 type;                ///< TYPE_*
+  __u8 size, min_size;      ///< number of osds in each pg
+  __u8 crush_ruleset;       ///< crush placement rule set
+  __u8 object_hash;         ///< hash mapping object name to ps
 private:
-  __u32 pg_num, pgp_num;    /// number of pgs
+  __u32 pg_num, pgp_num;    ///< number of pgs
 
 
 public:
-  map<string,string> properties;  /// interpreted according to the pool type
-  epoch_t last_change;      /// most recent epoch changed, exclusing snapshot changes
-  snapid_t snap_seq;        /// seq for per-pool snapshot
-  epoch_t snap_epoch;       /// osdmap epoch of last snap
-  uint64_t auid;            /// who owns the pg
-  __u32 crash_replay_interval; /// seconds to allow clients to replay ACKed but unCOMMITted requests
+  map<string,string> properties;  ///< interpreted according to the pool type
+  epoch_t last_change;      ///< most recent epoch changed, exclusing snapshot changes
+  snapid_t snap_seq;        ///< seq for per-pool snapshot
+  epoch_t snap_epoch;       ///< osdmap epoch of last snap
+  uint64_t auid;            ///< who owns the pg
+  __u32 crash_replay_interval; ///< seconds to allow clients to replay ACKed but unCOMMITted requests
 
-  uint64_t quota_max_bytes; /// maximum number of bytes for this pool
-  uint64_t quota_max_objects; /// maximum number of objects for this pool
+  uint64_t quota_max_bytes; ///< maximum number of bytes for this pool
+  uint64_t quota_max_objects; ///< maximum number of objects for this pool
 
   /*
    * Pool snaps (global to this pool).  These define a SnapContext for
@@ -844,6 +846,19 @@ public:
 
   bool is_rep()   const { return get_type() == TYPE_REP; }
   bool is_raid4() const { return get_type() == TYPE_RAID4; }
+  bool is_erasure() const { return get_type() == TYPE_ERASURE; }
+
+  bool can_shift_osds() const {
+    switch (get_type()) {
+    case TYPE_REP:
+      return true;
+    case TYPE_RAID4:
+    case TYPE_ERASURE:
+      return false;
+    default:
+      assert(0 == "unhandled pool type");
+    }
+  }
 
   unsigned get_pg_num() const { return pg_num; }
   unsigned get_pgp_num() const { return pgp_num; }
