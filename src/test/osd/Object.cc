@@ -170,5 +170,11 @@ bool ObjectDesc::check(bufferlist &to_check) {
       return false;
     }
   }
+  uint64_t size = layers.empty() ? 0 : 
+    most_recent_gen()->get_length(most_recent());
+  if (pos != size) {
+    std::cout << "only read " << pos << " out of size " << size << std::endl;
+    return false;
+  }
   return true;
 }
