@@ -511,7 +511,7 @@ int CrushTester::test()
           batch_per[current_batch] = temporary_per;
           sizes[out.size()]++;
           if (output_bad_mappings && out.size() != (unsigned)nr) {
-            cout << "bad mapping rule " << r << " x " << x << " num_rep " << nr << " result " << out << std::endl;
+            err << "bad mapping rule " << r << " x " << x << " num_rep " << nr << " result " << out << std::endl;
           }
         }
 
