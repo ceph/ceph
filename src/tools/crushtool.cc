@@ -664,9 +664,6 @@ int main(int argc, const char **argv)
     modified = true;
   }
 
-  const char *scary_tunables_message =
-    "** tunables are DANGEROUS and NOT YET RECOMMENDED.  DO NOT USE without\n"
-    "** confirming with developers that your use-case is safe and correct.";
   if (choose_local_tries >= 0) {
     crush.set_choose_local_tries(choose_local_tries);
     modified = true;
