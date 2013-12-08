@@ -161,6 +161,7 @@ public:
     return
       crush->chooseleaf_descend_once != 0;
   }
+  bool has_v2_rules() const;
 
   // bucket types
   int get_num_type_names() const {
@@ -566,6 +567,12 @@ public:
   int set_rule_step_take(unsigned ruleno, unsigned step, int val) {
     return set_rule_step(ruleno, step, CRUSH_RULE_TAKE, val, 0);
   }
+  int set_rule_step_set_choose_tries(unsigned ruleno, unsigned step, int val) {
+    return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSE_TRIES, val, 0);
+  }
+  int set_rule_step_set_chooseleaf_tries(unsigned ruleno, unsigned step, int val) {
+    return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSELEAF_TRIES, val, 0);
+  }
   int set_rule_step_choose_firstn(unsigned ruleno, unsigned step, int val, int type) {
     return set_rule_step(ruleno, step, CRUSH_RULE_CHOOSE_FIRSTN, val, type);
   }
@@ -573,17 +580,17 @@ public:
     return set_rule_step(ruleno, step, CRUSH_RULE_CHOOSE_INDEP, val, type);
   }
   int set_rule_step_choose_leaf_firstn(unsigned ruleno, unsigned step, int val, int type) {
-    return set_rule_step(ruleno, step, CRUSH_RULE_CHOOSE_LEAF_FIRSTN, val, type);
+    return set_rule_step(ruleno, step, CRUSH_RULE_CHOOSELEAF_FIRSTN, val, type);
   }
   int set_rule_step_choose_leaf_indep(unsigned ruleno, unsigned step, int val, int type) {
-    return set_rule_step(ruleno, step, CRUSH_RULE_CHOOSE_LEAF_INDEP, val, type);
+    return set_rule_step(ruleno, step, CRUSH_RULE_CHOOSELEAF_INDEP, val, type);
   }
   int set_rule_step_emit(unsigned ruleno, unsigned step) {
     return set_rule_step(ruleno, step, CRUSH_RULE_EMIT, 0, 0);
   }
 
   int add_simple_rule(string name, string root_name, string failure_domain_type,
-		      ostream *err = 0);
+		      string mode, ostream *err = 0);
 
   int remove_rule(int ruleno);
 
@@ -767,7 +774,8 @@ public:
 	       const vector<__u32>& weight) const {
     Mutex::Locker l(mapper_lock);
     int rawout[maxout];
-    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0], weight.size());
+    int scratch[maxout * 3];
+    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0], weight.size(), scratch);
     if (numrep < 0)
       numrep = 0;
     out.resize(numrep);
@@ -796,6 +804,7 @@ public:
   void dump(Formatter *f) const;
   void dump_rules(Formatter *f) const;
   void list_rules(Formatter *f) const;
+  void dump_tree(const vector<__u32>& w, ostream *out, Formatter *f) const;
   static void generate_test_instances(list<CrushWrapper*>& o);
 
 

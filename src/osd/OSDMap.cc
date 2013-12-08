@@ -744,13 +744,15 @@ bool OSDMap::find_osd_on_ip(const entity_addr_t& ip) const
 
 uint64_t OSDMap::get_features(uint64_t *pmask) const
 {
-  uint64_t features = 0;
-  uint64_t mask = 0;
+  uint64_t features = 0;  // things we actually have
+  uint64_t mask = 0;      // things we could have
 
   if (crush->has_nondefault_tunables())
     features |= CEPH_FEATURE_CRUSH_TUNABLES;
   if (crush->has_nondefault_tunables2())
     features |= CEPH_FEATURE_CRUSH_TUNABLES2;
+  if (crush->has_v2_rules())
+    features |= CEPH_FEATURE_CRUSH_V2;
   mask |= CEPH_FEATURES_CRUSH;
 
   for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
@@ -762,7 +764,7 @@ uint64_t OSDMap::get_features(uint64_t *pmask) const
       features |= CEPH_FEATURE_OSD_CACHEPOOL;
     }
   }
-  mask |= CEPH_FEATURE_OSDHASHPSPOOL;
+  mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
 
   if (pmask)
     *pmask = mask;
@@ -1029,20 +1031,28 @@ ceph_object_layout OSDMap::make_object_layout(
   return ol;
 }
 
-void OSDMap::_remove_nonexistent_osds(vector<int>& osds) const
+void OSDMap::_remove_nonexistent_osds(const pg_pool_t& pool,
+				      vector<int>& osds) const
 {
-  unsigned removed = 0;
-  for (unsigned i = 0; i < osds.size(); i++) {
-    if (!exists(osds[i])) {
-      removed++;
-      continue;
+  if (pool.can_shift_osds()) {
+    unsigned removed = 0;
+    for (unsigned i = 0; i < osds.size(); i++) {
+      if (!exists(osds[i])) {
+	removed++;
+	continue;
+      }
+      if (removed) {
+	osds[i - removed] = osds[i];
+      }
     }
-    if (removed) {
-      osds[i - removed] = osds[i];
+    if (removed)
+      osds.resize(osds.size() - removed);
+  } else {
+    for (vector<int>::iterator p = osds.begin(); p != osds.end(); ++p) {
+      if (!exists(*p))
+	*p = CRUSH_ITEM_NONE;
     }
   }
-  if (removed)
-    osds.resize(osds.size() - removed);
 }
 
 int OSDMap::_pg_to_osds(const pg_pool_t& pool, pg_t pg, vector<int>& osds) const
@@ -1056,7 +1066,7 @@ int OSDMap::_pg_to_osds(const pg_pool_t& pool, pg_t pg, vector<int>& osds) const
   if (ruleno >= 0)
     crush->do_rule(ruleno, pps, osds, size, osd_weight);
 
-  _remove_nonexistent_osds(osds);
+  _remove_nonexistent_osds(pool, osds);
 
   return osds.size();
 }
@@ -1880,7 +1890,7 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
     assert(rule);
     crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
     crush_rule_set_step(rule, 1,
-			cct->_conf->osd_crush_chooseleaf_type ? CRUSH_RULE_CHOOSE_LEAF_FIRSTN : CRUSH_RULE_CHOOSE_FIRSTN,
+			cct->_conf->osd_crush_chooseleaf_type ? CRUSH_RULE_CHOOSELEAF_FIRSTN : CRUSH_RULE_CHOOSE_FIRSTN,
 			CRUSH_CHOOSE_N,
 			cct->_conf->osd_crush_chooseleaf_type);
     crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
@@ -2043,10 +2053,10 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
 
     if (racks.size() > 3) {
       // spread replicas across hosts
-      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_LEAF_FIRSTN, CRUSH_CHOOSE_N, 2);
+      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSELEAF_FIRSTN, CRUSH_CHOOSE_N, 2);
     } else if (hosts.size() > 1) {
       // spread replicas across hosts
-      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_LEAF_FIRSTN, CRUSH_CHOOSE_N, 1);
+      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSELEAF_FIRSTN, CRUSH_CHOOSE_N, 1);
     } else {
       // just spread across osds
       crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, CRUSH_CHOOSE_N, 0);

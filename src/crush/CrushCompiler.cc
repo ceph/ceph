@@ -233,6 +233,9 @@ int CrushCompiler::decompile(ostream &out)
     case CEPH_PG_TYPE_RAID4:
       out << "\ttype raid4\n";
       break;
+    case CEPH_PG_TYPE_ERASURE:
+      out << "\ttype erasure\n";
+      break;
     default:
       out << "\ttype " << crush.get_rule_mask_type(i) << "\n";
     }
@@ -253,6 +256,14 @@ int CrushCompiler::decompile(ostream &out)
       case CRUSH_RULE_EMIT:
 	out << "\tstep emit\n";
 	break;
+      case CRUSH_RULE_SET_CHOOSE_TRIES:
+	out << "\tstep set_choose_tries " << crush.get_rule_arg1(i, j)
+	    << "\n";
+	break;
+      case CRUSH_RULE_SET_CHOOSELEAF_TRIES:
+	out << "\tstep set_chooseleaf_tries " << crush.get_rule_arg1(i, j)
+	    << "\n";
+	break;
       case CRUSH_RULE_CHOOSE_FIRSTN:
 	out << "\tstep choose firstn "
 	    << crush.get_rule_arg1(i, j) 
@@ -267,14 +278,14 @@ int CrushCompiler::decompile(ostream &out)
 	print_type_name(out, crush.get_rule_arg2(i, j), crush);
 	out << "\n";
 	break;
-      case CRUSH_RULE_CHOOSE_LEAF_FIRSTN:
+      case CRUSH_RULE_CHOOSELEAF_FIRSTN:
 	out << "\tstep chooseleaf firstn "
 	    << crush.get_rule_arg1(i, j) 
 	    << " type ";
 	print_type_name(out, crush.get_rule_arg2(i, j), crush);
 	out << "\n";
 	break;
-      case CRUSH_RULE_CHOOSE_LEAF_INDEP:
+      case CRUSH_RULE_CHOOSELEAF_INDEP:
 	out << "\tstep chooseleaf indep "
 	    << crush.get_rule_arg1(i, j) 
 	    << " type ";
@@ -568,8 +579,10 @@ int CrushCompiler::parse_rule(iter_t const& i)
   int type;
   if (tname == "replicated")
     type = CEPH_PG_TYPE_REP;
-  else if (tname == "raid4") 
+  else if (tname == "raid4")
     type = CEPH_PG_TYPE_RAID4;
+  else if (tname == "erasure")
+    type = CEPH_PG_TYPE_ERASURE;
   else 
     assert(0);    
 
@@ -598,6 +611,20 @@ int CrushCompiler::parse_rule(iter_t const& i)
 	  return -1;
 	}
 	crush.set_rule_step_take(ruleno, step++, item_id[item]);
+      }
+      break;
+
+    case crush_grammar::_step_set_choose_tries:
+      {
+	int val = int_node(s->children[1]);
+	crush.set_rule_step_set_choose_tries(ruleno, step++, val);
+      }
+      break;
+
+    case crush_grammar::_step_set_chooseleaf_tries:
+      {
+	int val = int_node(s->children[1]);
+	crush.set_rule_step_set_chooseleaf_tries(ruleno, step++, val);
       }
       break;
 

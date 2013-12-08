@@ -40,6 +40,7 @@
 #define CEPH_FEATURE_MON_SCRUB      (1ULL<<33)
 #define CEPH_FEATURE_OSD_PACKED_RECOVERY (1ULL<<34)
 #define CEPH_FEATURE_OSD_CACHEPOOL (1ULL<<35)
+#define CEPH_FEATURE_CRUSH_V2      (1ULL<<36)  /* new indep; SET_* steps */
 
 /*
  * The introduction of CEPH_FEATURE_OSD_SNAPMAPPER caused the feature
@@ -102,7 +103,8 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	 CEPH_FEATURE_OSD_SNAPMAPPER |	    \
 	 CEPH_FEATURE_MON_SCRUB	|	    \
 	 CEPH_FEATURE_OSD_PACKED_RECOVERY | \
-	 CEPH_FEATURE_OSD_CACHEPOOL | \
+	 CEPH_FEATURE_OSD_CACHEPOOL |	    \
+	 CEPH_FEATURE_CRUSH_V2 |	    \
 	 0ULL)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL
@@ -112,6 +114,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
  */
 #define CEPH_FEATURES_CRUSH			\
 	(CEPH_FEATURE_CRUSH_TUNABLES |		\
-	 CEPH_FEATURE_CRUSH_TUNABLES2)
+	 CEPH_FEATURE_CRUSH_TUNABLES2 |		\
+	 CEPH_FEATURE_CRUSH_V2)
 
 #endif
