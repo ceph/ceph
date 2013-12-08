@@ -274,7 +274,7 @@ ostream& operator<<(ostream& out, const ghobject_t& o)
   out << o.hobj;
   if (o.generation != ghobject_t::NO_GEN) {
     assert(o.shard_id != ghobject_t::NO_SHARD);
-    out << "/" << o.generation << "/" << o.shard_id;
+    out << "/" << o.generation << "/" << (unsigned)(o.shard_id);
   }
   return out;
 }
