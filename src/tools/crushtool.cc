@@ -703,6 +703,10 @@ int main(int argc, const char **argv)
   }
 
   if (test) {
+    if (tester.get_output_utilization_all() ||
+	tester.get_output_utilization())
+      tester.set_output_statistics(true);
+
     int r = tester.test();
     if (r < 0)
       exit(1);
