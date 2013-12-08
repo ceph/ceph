@@ -8293,8 +8293,10 @@ void MDCache::open_ino_finish(inodeno_t ino, open_ino_info_t& info, int ret)
 {
   dout(10) << "open_ino_finish ino " << ino << " ret " << ret << dendl;
 
-  finish_contexts(g_ceph_context, info.waiters, ret);
+  list<Context*> waiters;
+  waiters.swap(info.waiters);
   opening_inodes.erase(ino);
+  finish_contexts(g_ceph_context, waiters, ret);
 }
 
 void MDCache::do_open_ino(inodeno_t ino, open_ino_info_t& info, int err)
