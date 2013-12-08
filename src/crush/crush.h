@@ -27,10 +27,12 @@
 
 
 #define CRUSH_MAX_DEPTH 10  /* max crush hierarchy depth */
-#define CRUSH_MAX_SET   10  /* max size of a mapping result */
 
 #define CRUSH_MAX_DEVICE_WEIGHT (100u * 0x10000u)
 #define CRUSH_MAX_BUCKET_WEIGHT (65535u * 0x10000u)
+
+#define CRUSH_ITEM_UNDEF  0x7ffffffe  /* undefined result (internal use only) */
+#define CRUSH_ITEM_NONE   0x7fffffff  /* no result */
 
 /*
  * CRUSH uses user-defined "rules" to describe how inputs should be
@@ -51,8 +53,11 @@ enum {
 				      /* arg2 = type */
 	CRUSH_RULE_CHOOSE_INDEP = 3,  /* same */
 	CRUSH_RULE_EMIT = 4,          /* no args */
-	CRUSH_RULE_CHOOSE_LEAF_FIRSTN = 6,
-	CRUSH_RULE_CHOOSE_LEAF_INDEP = 7,
+	CRUSH_RULE_CHOOSELEAF_FIRSTN = 6,
+	CRUSH_RULE_CHOOSELEAF_INDEP = 7,
+
+	CRUSH_RULE_SET_CHOOSE_TRIES = 8, /* override choose_total_tries */
+	CRUSH_RULE_SET_CHOOSELEAF_TRIES = 9, /* override chooseleaf_descend_once */
 };
 
 /*
@@ -170,7 +175,10 @@ struct crush_map {
 	__u32 choose_local_fallback_tries;
 	/* choose attempts before giving up */ 
 	__u32 choose_total_tries;
-	/* attempt chooseleaf inner descent once; on failure retry outer descent */
+	/* attempt chooseleaf inner descent once for firstn mode; on
+	 * reject retry outer descent.  Note that this does *not*
+	 * apply to a collision: in that case we will retry as we used
+	 * to. */
 	__u32 chooseleaf_descend_once;
 
 	__u32 *choose_tries;

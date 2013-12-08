@@ -278,6 +278,11 @@ unittest_util_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_util_LDADD = $(LIBCOMMON) -lm $(UNITTEST_LDADD) $(CRYPTO_LIBS) $(EXTRALIBS)
 check_PROGRAMS += unittest_util
 
+unittest_crush_indep_SOURCES = test/crush/indep.cc
+unittest_crush_indep_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_crush_indep_LDADD = $(LIBCOMMON) -lm $(UNITTEST_LDADD) $(CEPH_CRUSH) $(EXTRALIBS) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_crush_indep
+
 unittest_workqueue_SOURCES = test/test_workqueue.cc
 unittest_workqueue_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_workqueue_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
