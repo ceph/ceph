@@ -27,6 +27,17 @@ using namespace std;
 
 struct PGLog {
   ////////////////////////////// sub classes //////////////////////////////
+  struct LogEntryHandler {
+    virtual void rollback(
+      const pg_log_entry_t &entry) = 0;
+    virtual void remove(
+      const hobject_t &hoid) = 0;
+    virtual void trim(
+      const pg_log_entry_t &entry) = 0;
+    virtual void cant_rollback(
+      const pg_log_entry_t &entry) = 0;
+    virtual ~LogEntryHandler() {}
+  };
 
   /* Exceptions */
   class read_log_error : public buffer::error {
@@ -142,7 +153,11 @@ struct PGLog {
 	caller_ops[e.reqid] = &(log.back());
     }
 
-    void trim(eversion_t s, set<eversion_t> *trimmed);
+    void trim(
+      ObjectStore::Transaction *t,
+      LogEntryHandler *handler,
+      eversion_t s,
+      set<eversion_t> *trimmed);
 
     ostream& print(ostream& out) const;
   };
@@ -304,7 +319,11 @@ public:
     const hobject_t &log_oid,
     ObjectStore::Transaction *t);
 
-  void trim(eversion_t trim_to, pg_info_t &info);
+  void trim(
+    ObjectStore::Transaction *t,
+    LogEntryHandler *handler,
+    eversion_t trim_to,
+    pg_info_t &info);
 
   //////////////////// get or set log & missing ////////////////////
 
@@ -364,16 +383,39 @@ public:
 			pg_missing_t& omissing, int from) const;
 
 protected:
-  bool merge_old_entry(ObjectStore::Transaction& t, const pg_log_entry_t& oe,
-		       const pg_info_t& info, list<hobject_t>& remove_snap);
+  bool _merge_old_entry(
+    ObjectStore::Transaction& t,
+    const pg_log_entry_t &oe,
+    const pg_info_t& info,
+    pg_missing_t &missing,
+    eversion_t olog_can_rollback_to,
+    boost::optional<pair<eversion_t, hobject_t> > *new_divergent_prior,
+    LogEntryHandler *rollbacker) const;
+  bool merge_old_entry(
+    ObjectStore::Transaction& t,
+    const pg_log_entry_t& oe,
+    const pg_info_t& info,
+    LogEntryHandler *rollbacker) {
+    boost::optional<pair<eversion_t, hobject_t> > new_divergent_prior;
+    bool merged = _merge_old_entry(
+      t, oe, info, missing,
+      log.can_rollback_to,
+      &new_divergent_prior,
+      rollbacker);
+    if (new_divergent_prior)
+      add_divergent_prior(
+	(*new_divergent_prior).first,
+	(*new_divergent_prior).second);
+    return merged;
+  }
 public:
   void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead,
-                            pg_info_t &info, list<hobject_t>& remove_snap,
+                            pg_info_t &info, LogEntryHandler *rollbacker,
                             bool &dirty_info, bool &dirty_big_info);
 
   void merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from,
-                      pg_info_t &info, list<hobject_t>& remove_snap,
-                      bool &dirty_info, bool &dirty_big_info);
+		 pg_info_t &info, LogEntryHandler *rollbacker,
+		 bool &dirty_info, bool &dirty_big_info);
 
   void write_log(ObjectStore::Transaction& t, const hobject_t &log_oid);
 

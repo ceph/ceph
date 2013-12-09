@@ -362,29 +362,30 @@
    virtual void rollback_setattrs(
      const hobject_t &hoid,
      map<string, boost::optional<bufferlist> > &old_attrs,
-     ObjectStore::Transaction *t) { assert(0); }
+     ObjectStore::Transaction *t) = 0;
 
    /// Rollback truncate
    virtual void rollback_append(
      const hobject_t &hoid,
      uint64_t old_size,
-     ObjectStore::Transaction *t) { assert(0); }
+     ObjectStore::Transaction *t) = 0;
 
    /// Rollback unstash
    virtual void rollback_unstash(
      const hobject_t &hoid,
      version_t old_version,
-     ObjectStore::Transaction *t) { assert(0); }
+     ObjectStore::Transaction *t) = 0;
 
    /// Rollback create
    virtual void rollback_create(
      const hobject_t &hoid,
-     ObjectStore::Transaction *t) { assert(0); }
+     ObjectStore::Transaction *t) = 0;
 
    /// Trim object stashed at stashed_version
    virtual void trim_stashed_object(
      const hobject_t &hoid,
-     version_t stashed_version) { assert(0); }
+     version_t stashed_version,
+     ObjectStore::Transaction *t) = 0;
 
    /// List objects in collection
    virtual int objects_list_partial(

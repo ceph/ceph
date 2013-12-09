@@ -1801,7 +1801,7 @@ struct pg_log_t {
   eversion_t head;    // newest entry
   eversion_t tail;    // version prior to oldest
 
-  // We can rollback rollback-able objects to can_rollback_to
+  // We can rollback rollback-able entries > can_rollback_to
   eversion_t can_rollback_to;
 
   list<pg_log_entry_t> log;  // the actual log.

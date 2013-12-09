@@ -301,10 +301,16 @@ bool PG::proc_replica_info(int from, const pg_info_t &oinfo)
 }
 
 void PG::remove_snap_mapped_object(
-  ObjectStore::Transaction& t, const hobject_t& soid)
+  ObjectStore::Transaction &t, const hobject_t &soid)
 {
   t.remove(coll, soid);
-  OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
+  clear_object_snap_mapping(&t, soid);
+}
+
+void PG::clear_object_snap_mapping(
+  ObjectStore::Transaction *t, const hobject_t &soid)
+{
+  OSDriver::OSTransaction _t(osdriver.get_transaction(t));
   if (soid.snap < CEPH_MAXSNAP) {
     int r = snap_mapper.remove_oid(
       soid,
@@ -316,24 +322,39 @@ void PG::remove_snap_mapped_object(
   }
 }
 
-void PG::merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from)
+void PG::update_object_snap_mapping(
+  ObjectStore::Transaction *t, const hobject_t &soid, const set<snapid_t> &snaps)
 {
-  list<hobject_t> to_remove;
-  pg_log.merge_log(t, oinfo, olog, from, info, to_remove, dirty_info, dirty_big_info);
-  for(list<hobject_t>::iterator i = to_remove.begin();
-      i != to_remove.end();
-      ++i)
-    remove_snap_mapped_object(t, *i);
+  OSDriver::OSTransaction _t(osdriver.get_transaction(t));
+  assert(soid.snap < CEPH_MAXSNAP);
+  int r = snap_mapper.remove_oid(
+    soid,
+    &_t);
+  if (!(r == 0 || r == -ENOENT)) {
+    derr << __func__ << ": remove_oid returned " << cpp_strerror(r) << dendl;
+    assert(0);
+  }
+  snap_mapper.add_oid(
+    soid,
+    snaps,
+    &_t);
+}
+
+void PG::merge_log(
+  ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from)
+{
+  PGLogEntryHandler rollbacker;
+  pg_log.merge_log(
+    t, oinfo, olog, from, info, &rollbacker, dirty_info, dirty_big_info);
+  rollbacker.apply(this, &t);
 }
 
 void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
 {
-  list<hobject_t> to_remove;
-  pg_log.rewind_divergent_log(t, newhead, info, to_remove, dirty_info, dirty_big_info);
-  for(list<hobject_t>::iterator i = to_remove.begin();
-      i != to_remove.end();
-      ++i)
-    remove_snap_mapped_object(t, *i);
+  PGLogEntryHandler rollbacker;
+  pg_log.rewind_divergent_log(
+    t, newhead, info, &rollbacker, dirty_info, dirty_big_info);
+  rollbacker.apply(this, &t);
 }
 
 /*
@@ -2332,8 +2353,9 @@ void PG::append_log(
 
   dout(10) << "append_log  adding " << keys.size() << " keys" << dendl;
   t.omap_setkeys(coll_t::META_COLL, log_oid, keys);
-
-  pg_log.trim(trim_to, info);
+  PGLogEntryHandler handler;
+  pg_log.trim(&t, &handler, trim_to, info);
+  handler.apply(this, &t);
 
   // update the local pg, pg log
   dirty_info = true;
