@@ -255,7 +255,7 @@ than shifting the other elements of the acting set out of position.
 
 Core changes:
 
-- Ensure that crush behaves as above for INDEP.
+- Ensure that crush `behaves as above for INDEP <http://tracker.ceph.com/issues/6900>`_.
 
 Recovery
 --------
