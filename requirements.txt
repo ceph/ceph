@@ -15,6 +15,7 @@ requests == 0.14.0
 raven
 web.py
 docopt
+psutil
 
 # Test Dependencies
 # nose >=1.0.0
