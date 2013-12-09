@@ -18,7 +18,12 @@
 #include <list>
 #include <string>
 #include <sstream>
+
+#include "acconfig.h"
+
+#ifdef HAVE_SYS_VFS_H
 #include <sys/vfs.h>
+#endif
 
 #include "messages/MMonHealth.h"
 #include "include/types.h"
