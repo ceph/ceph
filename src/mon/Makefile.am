@@ -30,6 +30,7 @@ noinst_HEADERS += \
 	mon/MonCap.h \
 	mon/MonClient.h \
 	mon/MonCommands.h \
+	mon/DumplingMonCommands.h \
 	mon/MonMap.h \
 	mon/Monitor.h \
 	mon/MonitorStore.h \
