@@ -621,6 +621,97 @@ public:
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
 		       pg_missing_t& omissing, int from);
   bool proc_replica_info(int from, const pg_info_t &info);
+
+
+  struct LogEntryTrimmer : public ObjectModDesc::Visitor {
+    const hobject_t &soid;
+    PG *pg;
+    ObjectStore::Transaction *t;
+    LogEntryTrimmer(const hobject_t &soid, PG *pg, ObjectStore::Transaction *t)
+      : soid(soid), pg(pg), t(t) {}
+    void rmobject(version_t old_version) {
+      pg->get_pgbackend()->trim_stashed_object(
+	soid,
+	old_version,
+	t);
+    }
+  };
+
+  struct SnapRollBacker : public ObjectModDesc::Visitor {
+    const hobject_t &soid;
+    PG *pg;
+    ObjectStore::Transaction *t;
+    SnapRollBacker(const hobject_t &soid, PG *pg, ObjectStore::Transaction *t)
+      : soid(soid), pg(pg), t(t) {}
+    void update_snaps(set<snapid_t> &snaps) {
+      pg->update_object_snap_mapping(t, soid, snaps);
+    }
+    void create() {
+      pg->clear_object_snap_mapping(
+	t,
+	soid);
+    }
+  };
+
+  struct PGLogEntryHandler : public PGLog::LogEntryHandler {
+    map<hobject_t, list<pg_log_entry_t> > to_rollback;
+    set<hobject_t> cannot_rollback;
+    set<hobject_t> to_remove;
+    list<pg_log_entry_t> to_trim;
+    
+    // LogEntryHandler
+    void remove(const hobject_t &hoid) {
+      to_remove.insert(hoid);
+    }
+    void rollback(const pg_log_entry_t &entry) {
+      assert(!cannot_rollback.count(entry.soid));
+      to_rollback[entry.soid].push_back(entry);
+    }
+    void cant_rollback(const pg_log_entry_t &entry) {
+      to_rollback.erase(entry.soid);
+      cannot_rollback.insert(entry.soid);
+    }
+    void trim(const pg_log_entry_t &entry) {
+      to_trim.push_back(entry);
+    }
+
+    void apply(PG *pg, ObjectStore::Transaction *t) {
+      for (map<hobject_t, list<pg_log_entry_t> >::iterator i =
+	     to_rollback.begin();
+	   i != to_rollback.end();
+	   ++i) {
+	for (list<pg_log_entry_t>::reverse_iterator j = i->second.rbegin();
+	     j != i->second.rend();
+	     ++j) {
+	  assert(j->mod_desc.can_rollback());
+	  pg->get_pgbackend()->rollback(j->soid, j->mod_desc, t);
+	  SnapRollBacker rollbacker(j->soid, pg, t);
+	  j->mod_desc.visit(&rollbacker);
+	}
+      }
+      for (set<hobject_t>::iterator i = to_remove.begin();
+	   i != to_remove.end();
+	   ++i) {
+	pg->get_pgbackend()->rollback_create(*i, t);
+	pg->remove_snap_mapped_object(*t, *i);
+      }
+      for (list<pg_log_entry_t>::reverse_iterator i = to_trim.rbegin();
+	   i != to_trim.rend();
+	   ++i) {
+	LogEntryTrimmer trimmer(i->soid, pg, t);
+	i->mod_desc.visit(&trimmer);
+      }
+    }
+  };
+  
+  friend struct SnapRollBacker;
+  friend struct PGLogEntryHandler;
+  friend struct LogEntryTrimmer;
+  void update_object_snap_mapping(
+    ObjectStore::Transaction *t, const hobject_t &soid,
+    const set<snapid_t> &snaps);
+  void clear_object_snap_mapping(
+    ObjectStore::Transaction *t, const hobject_t &soid);
   void remove_snap_mapped_object(
     ObjectStore::Transaction& t, const hobject_t& soid);
   void merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from);
