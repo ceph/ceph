@@ -61,7 +61,7 @@ void Elector::bump_epoch(epoch_t e)
   // clear up some state
   electing_me = false;
   acked_me.clear();
-  acker_commands.clear();
+  classic_mons.clear();
 }
 
 
@@ -74,7 +74,7 @@ void Elector::start()
   dout(5) << "start -- can i be leader?" << dendl;
 
   acked_me.clear();
-  acker_commands.clear();
+  classic_mons.clear();
   init();
   
   // start by trying to elect me
@@ -102,7 +102,7 @@ void Elector::defer(int who)
   if (electing_me) {
     // drop out
     acked_me.clear();
-    acker_commands.clear();
+    classic_mons.clear();
     electing_me = false;
   }
 
@@ -173,15 +173,7 @@ void Elector::victory()
   }
 
   // decide what command set we're supporting
-  bool use_classic_commands = false;
-  for (list<bufferlist>::iterator i = acker_commands.begin();
-      i != acker_commands.end();
-      ++i) {
-    if (i->length() == 0) {
-      use_classic_commands = true;
-      break;
-    }
-  }
+  bool use_classic_commands = !classic_mons.empty();
   
   cancel_timer();
   
@@ -292,7 +284,8 @@ void Elector::handle_ack(MMonElection *m)
   if (electing_me) {
     // thanks
     acked_me[from] = m->get_connection()->get_features();
-    acker_commands.push_back(m->commands);
+    if (!m->commands.length())
+      classic_mons.insert(from);
     dout(5) << " so far i have " << acked_me << dendl;
     
     // is that _everyone_?
