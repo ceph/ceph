@@ -170,7 +170,18 @@ void Elector::victory()
        ++p) {
     quorum.insert(p->first);
     features &= p->second;
-  }    
+  }
+
+  // decide what command set we're supporting
+  bool use_classic_commands = false;
+  for (list<bufferlist>::iterator i = acker_commands.begin();
+      i != acker_commands.end();
+      ++i) {
+    if (i->length() == 0) {
+      use_classic_commands = true;
+      break;
+    }
+  }
   
   cancel_timer();
   
@@ -178,11 +189,21 @@ void Elector::victory()
   bump_epoch(epoch+1);     // is over!
 
   // calculate my supported commands for peons to advertise
-  if (!my_supported_commands.length()) {
-    const MonCommand *cmds;
-    int cmdsize;
+  bufferlist *cmds_bl = NULL;
+  const MonCommand *cmds;
+  int cmdsize;
+  if (!use_classic_commands) {
     get_locally_supported_monitor_commands(&cmds, &cmdsize);
-    MonCommand::encode_array(cmds, cmdsize, my_supported_commands);
+    if(!my_supported_commands.length()) {
+      MonCommand::encode_array(cmds, cmdsize, my_supported_commands);
+    }
+    cmds_bl = &my_supported_commands;
+  } else {
+    get_classic_monitor_commands(&cmds, &cmdsize);
+    if (!classic_commands.length()){
+      MonCommand::encode_array(cmds, cmdsize, classic_commands);
+    }
+    cmds_bl = &classic_commands;
   }
   
   // tell everyone!
@@ -193,12 +214,12 @@ void Elector::victory()
     MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, epoch, mon->monmap);
     m->quorum = quorum;
     m->quorum_features = features;
-    m->commands = my_supported_commands;
+    m->commands = *cmds_bl;
     mon->messenger->send_message(m, mon->monmap->get_inst(*p));
   }
     
   // tell monitor
-  mon->win_election(epoch, quorum, features);
+  mon->win_election(epoch, quorum, features, cmds, cmdsize);
 }
 
 
