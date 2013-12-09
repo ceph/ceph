@@ -27,3 +27,13 @@ rule rule-firstn {
 	step choose firstn 0 type osd
 	step emit
 }
+
+rule rule-indep {
+	ruleset 1
+	type erasure
+	min_size 1
+	max_size 10
+	step take root
+	step choose indep 0 type osd
+	step emit
+}
