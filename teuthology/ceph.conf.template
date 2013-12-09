@@ -14,6 +14,8 @@
 
 	mon pg warn min per osd = 5
 
+	osd pool default size = 2
+
 [osd]
         osd journal size = 100
 
@@ -29,7 +31,6 @@
 	osd open classes on start = true
         osd debug pg log writeout = true
 
-	osd pool default size = 2
 
 [mon]
 	debug ms = 1
