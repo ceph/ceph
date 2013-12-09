@@ -6379,7 +6379,9 @@ void OSD::handle_pg_trim(OpRequestRef op)
     } else {
       // primary is instructing us to trim
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      pg->pg_log.trim(m->trim_to, pg->info);
+      PG::PGLogEntryHandler handler;
+      pg->pg_log.trim(&handler, m->trim_to, pg->info);
+      handler.apply(pg, t);
       pg->dirty_info = true;
       pg->write_if_dirty(*t);
       int tr = store->queue_transaction(
