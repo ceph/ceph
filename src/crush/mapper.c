@@ -443,7 +443,7 @@ reject:
 		out[outpos] = item;
 		outpos++;
 
-		if (map->choose_tries && ftotal <= map->choose_local_tries)
+		if (map->choose_tries && ftotal <= map->choose_total_tries)
 			map->choose_tries[ftotal]++;
 	}
 
