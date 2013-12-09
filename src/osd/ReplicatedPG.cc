@@ -9488,6 +9488,16 @@ void ReplicatedPG::update_range(
     dout(10) << __func__<< ": bi is current " << dendl;
     assert(bi->version == info.last_update);
   } else if (bi->version >= info.log_tail) {
+    if (pg_log.get_log().empty()) {
+      /* Because we don't move log_tail on split, the log might be
+       * empty even if log_tail != last_update.  However, the only
+       * way to get here with an empty log is if log_tail is actually
+       * eversion_t(), because otherwise the entry which changed
+       * last_update since the last scan would have to be present.
+       */
+      assert(bi->version == eversion_t());
+      return;
+    }
     assert(!pg_log.get_log().empty());
     dout(10) << __func__<< ": bi is old, (" << bi->version
 	     << ") can be updated with log" << dendl;
