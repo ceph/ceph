@@ -38,6 +38,11 @@ TEST(LibRadosTier, Dirty) {
 
   {
     ObjectWriteOperation op;
+    op.undirty();
+    ASSERT_EQ(0, ioctx.operate("foo", &op)); // still get 0 if it dne
+  }
+  {
+    ObjectWriteOperation op;
     op.create(true);
     ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
