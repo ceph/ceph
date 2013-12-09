@@ -7,8 +7,9 @@ import sys
 import tempfile
 import time
 import yaml
-
 import beanstalkc
+
+from datetime import datetime
 
 from . import report
 from . import safepath
@@ -16,12 +17,28 @@ from .config import config as teuth_config
 from .misc import read_config
 
 log = logging.getLogger(__name__)
+start_time = datetime.utcnow()
+restart_file_path = '/tmp/teuthology-restart-workers'
 
-# simple flock class
+
+def need_restart():
+    if not os.path.exists(restart_file_path):
+        return False
+    if os.path.getmtime(restart_file_path) > start_time:
+        return True
+    else:
+        return False
+
+
+def restart():
+    log.info('Restarting...')
+    args = sys.argv[:]
+    args.insert(0, sys.executable)
+    os.execv(sys.executable, args)
 
 
 class filelock(object):
-
+    # simple flock class
     def __init__(self, fn):
         self.fn = fn
         self.fd = None
@@ -127,6 +144,9 @@ def worker(ctx):
     beanstalk.ignore('default')
 
     while True:
+        if need_restart():
+            restart()
+
         job = beanstalk.reserve(timeout=60)
         if job is None:
             continue
