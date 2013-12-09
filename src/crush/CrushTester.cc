@@ -503,14 +503,21 @@ int CrushTester::test()
           if (output_data_file)
             write_integer_indexed_vector_data_string(tester_data.placement_information, x, out);
 
+          bool has_item_none = false;
           for (unsigned i = 0; i < out.size(); i++) {
-            per[out[i]]++;
-            temporary_per[out[i]]++;
+            if (out[i] != CRUSH_ITEM_NONE) {
+              per[out[i]]++;
+              temporary_per[out[i]]++;
+            } else {
+              has_item_none = true;
+            }
           }
 
           batch_per[current_batch] = temporary_per;
           sizes[out.size()]++;
-          if (output_bad_mappings && out.size() != (unsigned)nr) {
+          if (output_bad_mappings && 
+              (out.size() != (unsigned)nr ||
+               has_item_none)) {
             err << "bad mapping rule " << r << " x " << x << " num_rep " << nr << " result " << out << std::endl;
           }
         }
