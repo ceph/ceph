@@ -527,8 +527,10 @@ public:
   void join_election();
   void start_election();
   void win_standalone_election();
+  // end election (called by Elector)
   void win_election(epoch_t epoch, set<int>& q,
-		    uint64_t features);         // end election (called by Elector)
+		    uint64_t features,
+		    const MonCommand *cmdset, int cmdsize);
   void lose_election(epoch_t epoch, set<int>& q, int l,
 		     uint64_t features); // end election (called by Elector)
   void finish_election();

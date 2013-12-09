@@ -116,6 +116,7 @@ class Elector {
   map<int, uint64_t> acked_me;
   list<bufferlist> acker_commands;
   bufferlist my_supported_commands;
+  bufferlist classic_commands;
   /**
    * @}
    */
