@@ -142,8 +142,9 @@ def main(ctx):
             {'internal.vm_setup': None},
         ])
     if 'kernel' in ctx.config:
+        sha1 = ctx.config['kernel'].get('sha1')
         distro = get_distro(ctx)
-        if distro == 'ubuntu':
+        if (distro == 'ubuntu') or (sha1 == 'distro'):
             init_tasks.append({'kernel': ctx.config['kernel']})
     init_tasks.extend([
         {'internal.base': None},

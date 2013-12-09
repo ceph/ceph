@@ -177,6 +177,9 @@ def install_firmware(ctx, config):
     fw_dir = '/lib/firmware/updates'
 
     for role in config.iterkeys():
+        if config[role].find('distro') >= 0:
+            log.info('Skipping firmware on distro kernel');
+            return
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
         log.info('Installing linux-firmware on {role}...'.format(role=role))
         role_remote.run(
@@ -225,8 +228,14 @@ def download_deb(ctx, config):
     :param config: Configuration
     """
     procs = {}
+    #Don't need to download distro kernels
     for role, src in config.iteritems():
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
+	if src.find('distro') >= 0:
+            log.info('Installing newest kernel distro');
+            return
+            
+
         if src.find('/') >= 0:
             # local deb
             log.info('Copying kernel deb {path} to {role}...'.format(path=src,
@@ -314,9 +323,14 @@ def install_and_reboot(ctx, config):
     procs = {}
     kernel_title = ''
     for role, src in config.iteritems():
+        (role_remote,) = ctx.cluster.only(role).remotes.keys()
+        if src.find('distro') >= 0:
+            log.info('Installing distro kernel on {role}...'.format(role=role))
+            install_distro_kernel(role_remote)
+            continue
+
         log.info('Installing kernel {src} on {role}...'.format(src=src,
                                                                role=role))
-        (role_remote,) = ctx.cluster.only(role).remotes.keys()
         proc = role_remote.run(
             args=[
                 # install the kernel deb
@@ -473,14 +487,17 @@ def enable_disable_kdb(ctx, config):
                     ])
         else:
             log.info('Disabling kdb on {role}...'.format(role=role))
+            # Add true pipe so command doesn't fail on kernel without kdb support.
             role_remote.run(
                 args=[
                     'echo', '',
                     run.Raw('|'),
-                    'sudo', 'tee', '/sys/module/kgdboc/parameters/kgdboc'
+                    'sudo', 'tee', '/sys/module/kgdboc/parameters/kgdboc',
+                    run.Raw('|'),
+                    'true',
                     ])
 
-def wait_for_reboot(ctx, need_install, timeout):
+def wait_for_reboot(ctx, need_install, timeout, distro=False):
     """
     Loop reconnecting and checking kernel versions until
     they're all correct or the timeout is exceeded.
@@ -494,10 +511,17 @@ def wait_for_reboot(ctx, need_install, timeout):
     while need_install:
         teuthology.reconnect(ctx, timeout)
         for client in need_install.keys():
+            if 'distro' in need_install[client]:
+                 distro = True
             log.info('Checking client {client} for new kernel version...'.format(client=client))
             try:
-                assert not need_to_install(ctx, client, need_install[client]), \
-                        'failed to install new kernel version within timeout'
+                if distro:
+                    assert not need_to_install_distro(ctx, client), \
+                            'failed to install new distro kernel version within timeout'
+
+                else:
+                    assert not need_to_install(ctx, client, need_install[client]), \
+                            'failed to install new kernel version within timeout'
                 del need_install[client]
             except Exception:
                 log.exception("Saw exception")
@@ -506,6 +530,223 @@ def wait_for_reboot(ctx, need_install, timeout):
                     raise
         time.sleep(1)
 
+
+def need_to_install_distro(ctx, role):
+    """
+    Installing kernels on rpm won't setup grub/boot into them.
+    This installs the newest kernel package and checks its version
+    and compares against current (uname -r) and returns true if newest != current.
+    Similar check for deb.
+    """
+    (role_remote,) = ctx.cluster.only(role).remotes.keys()
+    system_type = teuthology.get_system_type(role_remote)
+    output, err_mess = StringIO(), StringIO()
+    role_remote.run(args=['uname', '-r' ], stdout=output, stderr=err_mess )
+    current = output.getvalue().strip()
+    if system_type == 'rpm':
+        role_remote.run(args=['sudo', 'yum', 'install', '-y', 'kernel' ], stdout=output, stderr=err_mess )
+        #reset stringIO output.
+        output, err_mess = StringIO(), StringIO()
+        role_remote.run(args=['rpm', '-q', 'kernel', '--last' ], stdout=output, stderr=err_mess )
+        newest=output.getvalue().split()[0]
+
+    if system_type == 'deb':
+        distribution = teuthology.get_system_type(role_remote, distro=True)
+        newest = get_version_from_pkg(role_remote, distribution)
+
+    output.close()
+    err_mess.close()
+    if current in newest:
+        return False
+    log.info('Not newest distro kernel. Curent: {cur} Expected: {new}'.format(cur=current, new=newest))
+    return True
+
+def install_distro_kernel(remote):
+    """
+    RPM: Find newest kernel on the machine and update grub to use kernel + reboot.
+    DEB: Find newest kernel. Parse grub.cfg to figure out the entryname/subentry.
+    then modify 01_ceph_kernel to have correct entry + updategrub + reboot.
+    """
+    system_type = teuthology.get_system_type(remote)
+    distribution = ''
+    if system_type == 'rpm':
+        output, err_mess = StringIO(), StringIO()
+        remote.run(args=['rpm', '-q', 'kernel', '--last' ], stdout=output, stderr=err_mess )
+        newest=output.getvalue().split()[0].split('kernel-')[1]
+        log.info('Distro Kernel Version: {version}'.format(version=newest))
+        update_grub_rpm(remote, newest)
+        remote.run( args=['sudo', 'shutdown', '-r', 'now'], wait=False )
+        output.close()
+        err_mess.close()
+        return
+
+    if system_type == 'deb':
+        distribution = teuthology.get_system_type(remote, distro=True)
+        newversion = get_version_from_pkg(remote, distribution)
+        if 'ubuntu' in distribution:
+            grub2conf = teuthology.get_file(remote, '/boot/grub/grub.cfg', True)
+            submenu = ''
+            menuentry = ''
+            for line in grub2conf.split('\n'):
+                if 'submenu' in line:
+                    submenu = line.split('"')[1]
+                if 'menuentry' in line:
+                    if newversion in line and 'recovery' not in line:
+                        menuentry = line.split('\'')[1]
+                        break
+            if submenu:
+                grubvalue = submenu + '>' + menuentry
+            else:
+                grubvalue = menuentry
+            grubfile = 'cat <<EOF\nset default="' + grubvalue + '"\nEOF'
+            teuthology.delete_file(remote, '/etc/grub.d/01_ceph_kernel', sudo=True, force=True)
+            teuthology.sudo_write_file(remote, '/etc/grub.d/01_ceph_kernel', StringIO(grubfile), '755')
+            log.info('Distro Kernel Version: {version}'.format(version=newversion))
+            remote.run(args=['sudo', 'update-grub'])
+            remote.run(args=['sudo', 'shutdown', '-r', 'now'], wait=False )
+            return
+
+        if 'debian' in distribution:
+            grub2_kernel_select_generic(remote, newversion, 'deb')
+            log.info('Distro Kernel Version: {version}'.format(version=newversion))
+            remote.run( args=['sudo', 'shutdown', '-r', 'now'], wait=False )
+            return
+
+def update_grub_rpm(remote, newversion):
+    """
+    Updates grub file to boot new kernel version on both legacy grub/grub2.
+    """
+    grub='grub2'
+    # Check if grub2 is isntalled
+    try:
+        remote.run(args=['sudo', 'rpm', '-qi', 'grub2'])
+    except Exception:
+        grub = 'legacy'
+    log.info('Updating Grub Version: {grub}'.format(grub=grub))
+    if grub == 'legacy':
+        data = ''
+        #Write new legacy grub entry.
+        newgrub = generate_legacy_grub_entry(remote, newversion)
+        for line in newgrub:
+            data += line + '\n'
+        temp_file_path = teuthology.remote_mktemp(remote)
+        teuthology.sudo_write_file(remote, temp_file_path, StringIO(data), '755')
+        teuthology.move_file(remote, temp_file_path, '/boot/grub/grub.conf', True)
+    else:
+        #Update grub menu entry to new version.
+        grub2_kernel_select_generic(remote, newversion, 'rpm')
+
+def grub2_kernel_select_generic(remote, newversion, ostype):
+    """
+    Can be used on DEB and RPM. Sets which entry should be boted by entrynum.
+    """
+    if ostype == 'rpm':
+        grubset = 'grub2-set-default'
+        mkconfig = 'grub2-mkconfig'
+        grubconfig = '/boot/grub2/grub.cfg'
+    if ostype == 'deb':
+        grubset = 'grub-set-default'
+        grubconfig = '/boot/grub/grub.cfg'
+        mkconfig = 'grub-mkconfig'
+    remote.run(args=['sudo', mkconfig, '-o', grubconfig, ])
+    grub2conf = teuthology.get_file(remote, grubconfig, True)
+    entry_num = 0
+    for line in grub2conf.split('\n'):
+        if line.startswith('menuentry'):
+            if newversion in line:
+                break
+            entry_num =+ 1
+    remote.run(args=['sudo', grubset, str(entry_num), ])
+
+def generate_legacy_grub_entry(remote, newversion):
+    """
+    This will likely need to be used for ceph kernels as well
+    as legacy grub rpm distros don't have an easy way of selecting
+    a kernel just via a command. This generates an entry in legacy
+    grub for a new kernel version using the existing entry as a base.
+    """
+    grubconf = teuthology.get_file(remote, '/boot/grub/grub.conf', True)
+    titleline = ''
+    rootline = ''
+    kernelline = ''
+    initline = ''
+    kernelversion = ''
+    linenum = 0
+    titlelinenum = 0
+
+    #Grab first kernel entry (title/root/kernel/init lines)
+    for line in grubconf.split('\n'):
+        if re.match('^title', line):
+            titleline = line
+            titlelinenum = linenum
+        if re.match('(^\s+)root', line):
+            rootline = line
+        if re.match('(^\s+)kernel', line):
+            kernelline = line
+            for word in line.split(' '):
+                if 'vmlinuz' in word:
+                    kernelversion = word.split('vmlinuz-')[-1]
+        if re.match('(^\s+)initrd', line):
+            initline = line
+        if (kernelline != '') and (initline != ''):
+            break
+        else:
+            linenum += 1
+
+    #insert new entry into grubconfnew list:
+    linenum = 0
+    newgrubconf = []
+    for line in grubconf.split('\n'):
+        line = line.rstrip('\n')
+        if linenum == titlelinenum:
+            newtitle = re.sub(kernelversion, newversion, titleline)
+            newroot = re.sub(kernelversion, newversion, rootline)
+            newkernel = re.sub(kernelversion, newversion, kernelline)
+            newinit = re.sub(kernelversion, newversion, initline)
+            newgrubconf.append(newtitle)
+            newgrubconf.append(newroot)
+            newgrubconf.append(newkernel)
+            newgrubconf.append(newinit)
+            newgrubconf.append('')
+            newgrubconf.append(line)
+        else:
+            newgrubconf.append(line)
+        linenum += 1
+    return newgrubconf
+
+def get_version_from_pkg(remote, ostype):
+    """
+    Round-about way to get the newest kernel uname -r compliant version string
+    from the virtual package which is the newest kenel for debian/ubuntu.
+    """
+    output, err_mess = StringIO(), StringIO()
+    newest=''
+    #Depend of virtual package has uname -r output in package name. Grab that.
+    if 'debian' in ostype:
+        remote.run(args=['sudo', 'apt-get', '-y', 'install', 'linux-image-amd64' ], stdout=output, stderr=err_mess )
+        remote.run(args=['dpkg', '-s', 'linux-image-amd64' ], stdout=output, stderr=err_mess )
+        for line in output.getvalue().split('\n'):
+            if 'Depends:' in line:
+                newest = line.split('linux-image-')[1]
+                output.close()
+                err_mess.close()
+                return newest
+     #Ubuntu is a depend in a depend.
+    if 'ubuntu' in ostype:
+        remote.run(args=['sudo', 'apt-get', '-y', 'install', 'linux-image-current-generic' ], stdout=output, stderr=err_mess )
+        remote.run(args=['dpkg', '-s', 'linux-image-current-generic' ], stdout=output, stderr=err_mess )
+        for line in output.getvalue().split('\n'):
+            if 'Depends:' in line:
+                depends = line.split('Depends: ')[1]
+        remote.run(args=['dpkg', '-s', depends ], stdout=output, stderr=err_mess )
+        for line in output.getvalue().split('\n'):
+            if 'Depends:' in line:
+                newest = line.split('linux-image-')[1]
+                if ',' in newest:
+                    newest = newest.split(',')[0]
+    output.close()
+    err_mess.close()
+    return newest
 
 def task(ctx, config):
     """
@@ -585,6 +826,10 @@ def task(ctx, config):
             else:
                 log.info('unable to extract sha1 from deb path, forcing install')
                 assert False
+        elif role_config.get('sha1') == 'distro':
+            if need_to_install_distro(ctx, role):
+                need_install[role] = 'distro'
+                need_sha1[role] = 'distro'
         else:
             larch, ldist = _find_arch_and_dist(ctx)
             sha1, _ = teuthology.get_ceph_binary_url(
