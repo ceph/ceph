@@ -114,7 +114,7 @@ class Elector {
    * victory.  Also note each peer's feature set.
    */
   map<int, uint64_t> acked_me;
-  list<bufferlist> acker_commands;
+  set<int> classic_mons;
   bufferlist my_supported_commands;
   bufferlist classic_commands;
   /**
