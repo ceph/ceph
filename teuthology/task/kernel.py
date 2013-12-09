@@ -528,7 +528,6 @@ def install_distro_kernel(remote):
             else:
                 grubvalue = menuentry
             grubfile = 'cat <<EOF\nset default="' + grubvalue + '"\nEOF'
-            temp_file_path = teuthology.remote_mktemp(remote)
             teuthology.delete_file(remote, '/etc/grub.d/01_ceph_kernel', sudo=True, force=True)
             teuthology.sudo_write_file(remote, '/etc/grub.d/01_ceph_kernel', StringIO(grubfile), '755')
             log.info('Distro Kernel Version: {version}'.format(version=newversion))
