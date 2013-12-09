@@ -148,16 +148,19 @@ def reboot(ctx, remotes):
     nodes = {}
     for remote in remotes:
         log.info('rebooting %s', remote.name)
-        proc = remote.run(  # note use of -n to force a no-sync reboot
-            args=[
-                'sync',
-                run.Raw('&'),
-                'sleep', '5',
-                run.Raw(';'),
-                'sudo', 'reboot', '-f', '-n'
-            ],
-            wait=False
-        )
+        try:
+            proc = remote.run(  # note use of -n to force a no-sync reboot
+                args=[
+                    'sync',
+                    run.Raw('&'),
+                    'sleep', '5',
+                    run.Raw(';'),
+                    'sudo', 'reboot', '-f', '-n'
+                    ],
+                wait=False
+                )
+        except Exception:
+            log.exception('ignoring exception during reboot command')
         nodes[remote] = proc
         # we just ignore these procs because reboot -f doesn't actually
         # send anything back to the ssh client!
