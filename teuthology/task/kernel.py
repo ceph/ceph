@@ -420,6 +420,7 @@ def enable_disable_kdb(ctx, config):
                     ])
         else:
             log.info('Disabling kdb on {role}...'.format(role=role))
+            # Add true pipe so command doesn't fail on kernel without kdb support.
             role_remote.run(
                 args=[
                     'echo', '',
@@ -460,6 +461,12 @@ def wait_for_reboot(ctx, need_install, timeout, distro=False):
 
 
 def need_to_install_distro(ctx, role):
+    """
+    Installing kernels on rpm won't setup grub/boot into them.
+    This installs the newest kernel package and checks its version
+    and compares against current (uname -r) and returns true if newest != current.
+    Similar check for deb.
+    """
     (role_remote,) = ctx.cluster.only(role).remotes.keys()
     system_type = teuthology.get_system_type(role_remote)
     output, err_mess = StringIO(), StringIO()
@@ -484,6 +491,11 @@ def need_to_install_distro(ctx, role):
     return True
 
 def install_distro_kernel(remote):
+    """
+    RPM: Find newest kernel on the machine and update grub to use kernel + reboot.
+    DEB: Find newest kernel. Parse grub.cfg to figure out the entryname/subentry.
+    then modify 01_ceph_kernel to have correct entry + updategrub + reboot.
+    """
     system_type = teuthology.get_system_type(remote)
     distribution = ''
     if system_type == 'rpm':
@@ -531,7 +543,11 @@ def install_distro_kernel(remote):
             return
 
 def update_grub_rpm(remote, newversion):
+    """
+    Updates grub file to boot new kernel version on both legacy grub/grub2.
+    """
     grub='grub2'
+    # Check if grub2 is isntalled
     try:
         remote.run(args=['sudo', 'rpm', '-qi', 'grub2'])
     except Exception:
@@ -539,6 +555,7 @@ def update_grub_rpm(remote, newversion):
     log.info('Updating Grub Version: {grub}'.format(grub=grub))
     if grub == 'legacy':
         data = ''
+        #Write new legacy grub entry.
         newgrub = generate_legacy_grub_entry(remote, newversion)
         for line in newgrub:
             data += line + '\n'
@@ -546,9 +563,13 @@ def update_grub_rpm(remote, newversion):
         teuthology.sudo_write_file(remote, temp_file_path, StringIO(data), '755')
         teuthology.move_file(remote, temp_file_path, '/boot/grub/grub.conf', True)
     else:
+        #Update grub menu entry to new version.
         grub2_kernel_select_generic(remote, newversion, 'rpm')
 
 def grub2_kernel_select_generic(remote, newversion, ostype):
+    """
+    Can be used on DEB and RPM. Sets which entry should be boted by entrynum.
+    """
     if ostype == 'rpm':
         grubset = 'grub2-set-default'
         mkconfig = 'grub2-mkconfig'
@@ -568,9 +589,12 @@ def grub2_kernel_select_generic(remote, newversion, ostype):
     remote.run(args=['sudo', grubset, str(entry_num), ])
 
 def generate_legacy_grub_entry(remote, newversion):
-    #This will likely need to be used for ceph kernels as well
-    #as legacy grub rpm distros don't have an easy way of selecting
-    #a kernel just via a command.
+    """
+    This will likely need to be used for ceph kernels as well
+    as legacy grub rpm distros don't have an easy way of selecting
+    a kernel just via a command. This generates an entry in legacy
+    grub for a new kernel version using the existing entry as a base.
+    """
     grubconf = teuthology.get_file(remote, '/boot/grub/grub.conf', True)
     titleline = ''
     rootline = ''
@@ -621,6 +645,10 @@ def generate_legacy_grub_entry(remote, newversion):
     return newgrubconf
 
 def get_version_from_pkg(remote, ostype):
+    """
+    Round-about way to get the newest kernel uname -r compliant version string
+    from the virtual package which is the newest kenel for debian/ubuntu.
+    """
     output, err_mess = StringIO(), StringIO()
     newest=''
     #Depend of virtual package has uname -r output in package name. Grab that.
