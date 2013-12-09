@@ -1885,6 +1885,9 @@ MonCommand mon_commands[] = {
   {parsesig, helptext, modulename, req_perms, avail},
 #include <mon/MonCommands.h>
 };
+MonCommand classic_mon_commands[] = {
+#include <mon/DumplingMonCommands.h>
+};
 const MonCommand *leader_supported_mon_commands = NULL;
 int leader_supported_mon_commands_size = 0;
 
@@ -1972,9 +1975,15 @@ void get_leader_supported_commands(const MonCommand **cmds, int *count)
   *cmds = leader_supported_mon_commands;
   *count = leader_supported_mon_commands_size;
 }
+void get_classic_monitor_commands(const MonCommand **cmds, int *count)
+{
+  *cmds = classic_mon_commands;
+  *count = ARRAY_SIZE(classic_mon_commands);
+}
 void set_leader_supported_commands(const MonCommand *cmds, int size)
 {
-  if (leader_supported_mon_commands != mon_commands)
+  if (leader_supported_mon_commands != mon_commands &&
+      leader_supported_mon_commands != classic_mon_commands)
     delete[] leader_supported_mon_commands;
   leader_supported_mon_commands = cmds;
   leader_supported_mon_commands_size = size;

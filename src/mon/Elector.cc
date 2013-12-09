@@ -311,7 +311,10 @@ void Elector::handle_victory(MMonElection *m)
     MonCommand::decode_array(&new_cmds, &cmdsize, bi);
     set_leader_supported_commands(new_cmds, cmdsize);
   } else { // they are a legacy monitor; use known legacy command set
-    // TODO: actually store legacy command set, and use here!
+    const MonCommand *new_cmds;
+    int cmdsize;
+    get_classic_monitor_commands(&new_cmds, &cmdsize);
+    set_leader_supported_commands(new_cmds, cmdsize);
   }
 
   m->put();
