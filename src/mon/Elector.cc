@@ -61,6 +61,7 @@ void Elector::bump_epoch(epoch_t e)
   // clear up some state
   electing_me = false;
   acked_me.clear();
+  acker_commands.clear();
 }
 
 
@@ -73,6 +74,7 @@ void Elector::start()
   dout(5) << "start -- can i be leader?" << dendl;
 
   acked_me.clear();
+  acker_commands.clear();
   init();
   
   // start by trying to elect me
@@ -100,14 +102,23 @@ void Elector::defer(int who)
   if (electing_me) {
     // drop out
     acked_me.clear();
+    acker_commands.clear();
     electing_me = false;
   }
 
+  // encode my commands for transmission
+  if(!my_supported_commands.length()) {
+    const MonCommand *cmds;
+    int cmdsize;
+    get_locally_supported_monitor_commands(&cmds, &cmdsize);
+    MonCommand::encode_array(cmds, cmdsize, my_supported_commands);
+  }
   // ack them
   leader_acked = who;
   ack_stamp = ceph_clock_now(g_ceph_context);
-  mon->messenger->send_message(new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap),
-			       mon->monmap->get_inst(who));
+  MMonElection *m = new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap);
+  m->commands = my_supported_commands;
+  mon->messenger->send_message(m, mon->monmap->get_inst(who));
   
   // set a timer
   reset_timer(1.0);  // give the leader some extra time to declare victory
@@ -260,6 +271,7 @@ void Elector::handle_ack(MMonElection *m)
   if (electing_me) {
     // thanks
     acked_me[from] = m->get_connection()->get_features();
+    acker_commands.push_back(m->commands);
     dout(5) << " so far i have " << acked_me << dendl;
     
     // is that _everyone_?
