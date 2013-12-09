@@ -13,6 +13,7 @@ class Config(object):
     """
     teuthology_yaml = os.path.join(os.environ['HOME'], '.teuthology.yaml')
     defaults = {
+        'archive_base': '/var/lib/teuthworker/archive',
         'ceph_git_base_url': 'https://github.com/ceph/',
         'lock_server': 'http://teuthology.front.sepia.ceph.com/locker/lock',
         'verify_host_keys': True,

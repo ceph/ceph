@@ -1,9 +1,10 @@
 import docopt
 
+import teuthology.config
 import teuthology.kill
 
 doc = """
-usage: teuthology-kill [-h] -a ARCHIVE -s SUITE
+usage: teuthology-kill [-h] [-a ARCHIVE] -s SUITE
        teuthology-kill [-h] -o OWNER -m MACHINE_TYPE -s SUITE
 
 Kill running teuthology jobs:
@@ -15,11 +16,12 @@ optional arguments:
   -h, --help            show this help message and exit
   -a ARCHIVE, --archive ARCHIVE
                         The base archive directory
+                        [default: {archive_base}]
   -s, --suite SUITE     The name(s) of the suite(s) to kill
   -o, --owner OWNER     The owner of the job(s)
   -m, --machine_type MACHINE_TYPE
                         The type of machine the job(s) are running on
-"""
+""".format(archive_base=teuthology.config.config.archive_base)
 
 
 def main():
