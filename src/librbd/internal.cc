@@ -28,7 +28,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd: "
 
-#define howmany(x, y)  (((x) + (y) - 1) / (y))
+#define rbd_howmany(x, y)  (((x) + (y) - 1) / (y))
 
 using std::map;
 using std::pair;
@@ -119,7 +119,7 @@ namespace librbd {
     ictx->snap_lock.put_read();
     ictx->md_lock.put_read();
     info.obj_size = 1ULL << obj_order;
-    info.num_objs = howmany(info.size, ictx->get_object_size());
+    info.num_objs = rbd_howmany(info.size, ictx->get_object_size());
     info.order = obj_order;
     memcpy(&info.block_name_prefix, ictx->object_prefix.c_str(),
 	   min((size_t)RBD_MAX_BLOCK_NAME_SIZE,
@@ -3080,7 +3080,7 @@ reprotect_and_return_err:
 	c->add_request();
 
 	if (ictx->object_cacher) {
-	  C_CacheRead *cache_comp = new C_CacheRead(req_comp, req);
+	  C_CacheRead *cache_comp = new C_CacheRead(req);
 	  ictx->aio_read_from_cache(q->oid, &req->data(),
 				    q->length, q->offset,
 				    cache_comp);
