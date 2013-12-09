@@ -24,7 +24,8 @@ restart_file_path = '/tmp/teuthology-restart-workers'
 def need_restart():
     if not os.path.exists(restart_file_path):
         return False
-    if os.path.getmtime(restart_file_path) > start_time:
+    file_mtime = datetime.utcfromtimestamp(os.path.getmtime(restart_file_path))
+    if file_mtime > start_time:
         return True
     else:
         return False
