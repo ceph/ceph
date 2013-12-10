@@ -14,6 +14,7 @@
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "test/librados/test.h"
+#include "json_spirit/json_spirit.h"
 
 #include "osd/HitSet.h"
 
@@ -187,6 +188,35 @@ TEST(LibRadosMisc, HitSetRead) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
+static int _get_pg_num(Rados& cluster, string pool_name)
+{
+  bufferlist inbl;
+  string cmd = string("{\"prefix\": \"osd pool get\",\"pool\":\"")
+    + pool_name
+    + string("\",\"var\": \"pg_num\",\"format\": \"json\"}");
+  bufferlist outbl;
+  int r = cluster.mon_command(cmd, inbl, &outbl, NULL);
+  assert(r >= 0);
+  string outstr(outbl.c_str(), outbl.length());
+  json_spirit::Value v;
+  if (!json_spirit::read(outstr, v)) {
+    cerr <<" unable to parse json " << outstr << std::endl;
+    return -1;
+  }
+
+  json_spirit::Object& o = v.get_obj();
+  for (json_spirit::Object::size_type i=0; i<o.size(); i++) {
+    json_spirit::Pair& p = o[i];
+    if (p.name_ == "pg_num") {
+      cout << "pg_num = " << p.value_.get_int() << std::endl;
+      return p.value_.get_int();
+    }
+  }
+  cerr << "didn't find pg_num in " << outstr << std::endl;
+  return -1;
+}
+
+
 TEST(LibRadosMisc, HitSetWrite) {
   Rados cluster;
   std::string pool_name = get_temp_pool_name();
@@ -194,8 +224,8 @@ TEST(LibRadosMisc, HitSetWrite) {
   IoCtx ioctx;
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
 
-  // FIXME: detect num pgs
-  int num_pg = 8;
+  int num_pg = _get_pg_num(cluster, pool_name);
+  assert(num_pg > 0);
 
   // enable hitset tracking for this pool
   bufferlist inbl;
@@ -241,6 +271,10 @@ TEST(LibRadosMisc, HitSetWrite) {
 
     bufferlist::iterator p = bl.begin();
     ::decode(hitsets[i], p);
+
+    // cope with racing splits by refreshing pg_num
+    if (i == num_pg - 1)
+      num_pg = _get_pg_num(cluster, pool_name);
   }
 
   for (int i=0; i<1000; ++i) {
@@ -248,7 +282,7 @@ TEST(LibRadosMisc, HitSetWrite) {
     uint32_t hash = ioctx.get_object_hash_position(n);
     hobject_t oid(sobject_t(n, CEPH_NOSNAP), "", hash,
 		  cluster.pool_lookup(pool_name.c_str()), "");
-    //std::cout << "checking for " << oid << ", should be in pg " << pg << std::endl;
+    std::cout << "checking for " << oid << std::endl;
     bool found = false;
     for (int p=0; p<num_pg; ++p) {
       if (hitsets[p].contains(oid)) {
