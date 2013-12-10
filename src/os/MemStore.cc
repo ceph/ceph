@@ -640,13 +640,17 @@ ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(coll_t cid,
 
 int MemStore::queue_transactions(Sequencer *osr,
 				 list<Transaction*>& tls,
-				 TrackedOpRef op)
+				 TrackedOpRef op,
+				 ThreadPool::TPHandle *handle)
 {
   // fixme: ignore the Sequencer and serialize everything.
   Mutex::Locker l(apply_lock);
 
-  for (list<Transaction*>::iterator p = tls.begin(); p != tls.end(); ++p)
+  for (list<Transaction*>::iterator p = tls.begin(); p != tls.end(); ++p) {
+    // poke the TPHandle heartbeat just to exercise that code path
+    handle->reset_tp_timeout();
     _do_transaction(**p);
+  }
 
   Context *on_apply = NULL, *on_apply_sync = NULL, *on_commit = NULL;
   ObjectStore::Transaction::collect_contexts(tls, &on_apply, &on_commit,
