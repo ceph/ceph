@@ -46,7 +46,7 @@ def find_suite_info(suite_archive_dir):
     for job_id in os.listdir(suite_archive_dir):
         job_dir = os.path.join(suite_archive_dir, job_id)
         if not os.path.isdir(job_dir):
-            break
+            continue
         job_info = find_job_info(job_dir)
         for key in job_info.keys():
             if key in suite_info_fields and key not in suite_info:
