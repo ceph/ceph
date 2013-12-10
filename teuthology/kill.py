@@ -41,7 +41,7 @@ def find_suite_info(suite_archive_dir):
         'owner',
     ]
 
-    suite_info = {}
+    suite_info = dict(pids=[])
     job_info = {}
     for job_id in os.listdir(suite_archive_dir):
         job_dir = os.path.join(suite_archive_dir, job_id)
@@ -52,9 +52,7 @@ def find_suite_info(suite_archive_dir):
             if key in suite_info_fields and key not in suite_info:
                 suite_info[key] = job_info[key]
         if 'pid' in job_info:
-            pids = suite_info.get('pids', [])
-            pids.append(job_info['pid'])
-            suite_info['pids'] = pids
+            suite_info['pids'].append(job_info['pid'])
     return suite_info
 
 
