@@ -200,6 +200,7 @@ private:
   uint64_t quorum_features;  ///< intersection of quorum member feature bits
   bufferlist supported_commands_bl; // encoded MonCommands we support
   bufferlist classic_commands_bl; // encoded MonCommands supported by Dumpling
+  set<int> classic_mons; // set of "classic" monitors; only valid on leader
 
   set<string> outside_quorum;
 
@@ -532,7 +533,8 @@ public:
   // end election (called by Elector)
   void win_election(epoch_t epoch, set<int>& q,
 		    uint64_t features,
-		    const MonCommand *cmdset, int cmdsize);
+		    const MonCommand *cmdset, int cmdsize,
+		    const set<int> *classic_monitors);
   void lose_election(epoch_t epoch, set<int>& q, int l,
 		     uint64_t features); // end election (called by Elector)
   void finish_election();
@@ -542,6 +544,9 @@ public:
   }
   const bufferlist& get_classic_commands_bl() {
     return classic_commands_bl;
+  }
+  const set<int>& get_classic_mons() {
+    return classic_mons;
   }
 
   void update_logger();

@@ -167,6 +167,8 @@ void Elector::victory()
 
   // decide what command set we're supporting
   bool use_classic_commands = !classic_mons.empty();
+  // keep a copy to share with the monitor; we clear classic_mons in bump_epoch
+  set<int> copy_classic_mons = classic_mons;
   
   cancel_timer();
   
@@ -198,7 +200,7 @@ void Elector::victory()
   }
     
   // tell monitor
-  mon->win_election(epoch, quorum, features, cmds, cmdsize);
+  mon->win_election(epoch, quorum, features, cmds, cmdsize, &copy_classic_mons);
 }
 
 
