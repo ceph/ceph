@@ -1241,8 +1241,15 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op, ObjectContextRef obc,
     promote_object(op, obc);
     return true;
 
-  case pg_pool_t::CACHEMODE_INVALIDATE_FORWARD:
+  case pg_pool_t::CACHEMODE_FORWARD:
+    if (obc.get() && obc->obs.exists) {
+      return false;
+    }
     do_cache_redirect(op, obc);
+    return true;
+
+  case pg_pool_t::CACHEMODE_EVICT_FORWARD:
+    assert(0 == "evict+forward not yet implemented");
     return true;
 
   case pg_pool_t::CACHEMODE_READONLY: // TODO: clean this case up

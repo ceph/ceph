@@ -745,14 +745,16 @@ struct pg_pool_t {
   typedef enum {
     CACHEMODE_NONE = 0,                  ///< no caching
     CACHEMODE_WRITEBACK = 1,             ///< write to cache, flush later
-    CACHEMODE_INVALIDATE_FORWARD = 2,    ///< delete from cache, forward write
-    CACHEMODE_READONLY = 3,              ///< handle reads, forward writes [not strongly consistent]
+    CACHEMODE_FORWARD = 2,               ///< forward if not in cache
+    CACHEMODE_EVICT_FORWARD = 3,         ///< flush, evict, forward
+    CACHEMODE_READONLY = 4,              ///< handle reads, forward writes [not strongly consistent]
   } cache_mode_t;
   static const char *get_cache_mode_name(cache_mode_t m) {
     switch (m) {
     case CACHEMODE_NONE: return "none";
     case CACHEMODE_WRITEBACK: return "writeback";
-    case CACHEMODE_INVALIDATE_FORWARD: return "invalidate+forward";
+    case CACHEMODE_FORWARD: return "forward";
+    case CACHEMODE_EVICT_FORWARD: return "evict+forward";
     case CACHEMODE_READONLY: return "readonly";
     default: return "unknown";
     }
@@ -762,8 +764,10 @@ struct pg_pool_t {
       return CACHEMODE_NONE;
     if (s == "writeback")
       return CACHEMODE_WRITEBACK;
-    if (s == "invalidate+forward")
-      return CACHEMODE_INVALIDATE_FORWARD;
+    if (s == "forward")
+      return CACHEMODE_FORWARD;
+    if (s == "evict+forward")
+      return CACHEMODE_EVICT_FORWARD;
     if (s == "readonly")
       return CACHEMODE_READONLY;
     return (cache_mode_t)-1;
