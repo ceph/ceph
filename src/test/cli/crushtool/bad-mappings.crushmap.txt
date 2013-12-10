@@ -1,0 +1,39 @@
+device 0 device0
+device 1 device1
+device 2 device2
+device 3 device3
+device 4 device4
+
+type 0 osd
+type 1 domain
+
+domain root {
+	id -1
+	alg straw
+	hash 0
+	item device0 weight 1.000
+	item device1 weight 1.000
+	item device2 weight 1.000
+	item device3 weight 1.000
+	item device4 weight 1.000
+}
+
+rule rule-firstn {
+	ruleset 0
+	type replicated
+	min_size 1
+	max_size 10
+	step take root
+	step choose firstn 0 type osd
+	step emit
+}
+
+rule rule-indep {
+	ruleset 1
+	type erasure
+	min_size 1
+	max_size 10
+	step take root
+	step choose indep 0 type osd
+	step emit
+}
