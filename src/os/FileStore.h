@@ -64,6 +64,34 @@ static const __SWORD_TYPE XFS_SUPER_MAGIC(0x58465342);
 static const __SWORD_TYPE ZFS_SUPER_MAGIC(0x2fc12fc1);
 #endif
 
+enum {
+  l_os_first = 84000,
+  l_os_jq_max_ops,
+  l_os_jq_ops,
+  l_os_j_ops,
+  l_os_jq_max_bytes,
+  l_os_jq_bytes,
+  l_os_j_bytes,
+  l_os_j_lat,
+  l_os_j_wr,
+  l_os_j_wr_bytes,
+  l_os_oq_max_ops,
+  l_os_oq_ops,
+  l_os_ops,
+  l_os_oq_max_bytes,
+  l_os_oq_bytes,
+  l_os_bytes,
+  l_os_apply_lat,
+  l_os_committing,
+  l_os_commit,
+  l_os_commit_len,
+  l_os_commit_lat,
+  l_os_j_full,
+  l_os_queue_lat,
+  l_os_last,
+};
+
+
 enum fs_types {
   FS_TYPE_NONE = 0,
   FS_TYPE_XFS,
