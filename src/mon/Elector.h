@@ -115,8 +115,6 @@ class Elector {
    */
   map<int, uint64_t> acked_me;
   set<int> classic_mons;
-  bufferlist my_supported_commands;
-  bufferlist classic_commands;
   /**
    * @}
    */
