@@ -2080,8 +2080,8 @@ void Monitor::handle_command(MMonCommand *m)
   // validate command is in our map & matches, or forward
   const MonCommand *mon_cmd = _get_moncommand(prefix, mon_commands,
                                               ARRAY_SIZE(mon_commands));
-  if (!mon_cmd ||
-      (*leader_cmd != *mon_cmd)) {
+  if (!is_leader() && (!mon_cmd ||
+      (*leader_cmd != *mon_cmd))) {
     dout(10) << "We don't match leader, forwarding request " << m << dendl;
     forward_request_leader(m);
     return;
