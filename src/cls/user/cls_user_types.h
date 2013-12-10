@@ -102,6 +102,30 @@ struct cls_user_bucket_entry {
 };
 WRITE_CLASS_ENCODER(cls_user_bucket_entry)
 
+/*
+ * this needs to be compatible with with rgw_bucket, as it replaces it
+ */
+struct cls_user_header {
+  uint64_t total_entries;
+  uint64_t total_bytes;
+  uint64_t total_bytes_rounded;
+
+  void encode(bufferlist& bl) const {
+     ENCODE_START(1, 1, bl);
+    ::encode(total_entries, bl);
+    ::encode(total_bytes, bl);
+    ::encode(total_bytes_rounded, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(total_entries, bl);
+    ::decode(total_bytes, bl);
+    ::decode(total_bytes_rounded, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_user_header)
 
 #endif
 
