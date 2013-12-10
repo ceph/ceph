@@ -51,10 +51,10 @@ def find_suite_info(suite_archive_dir):
         for key in job_info.keys():
             if key in suite_info_fields and key not in suite_info:
                 suite_info[key] = job_info[key]
-            if 'pid' in job_info:
-                pids = suite_info.get('pids', [])
-                pids.append(job_info['pid'])
-                suite_info['pids'] = pids
+        if 'pid' in job_info:
+            pids = suite_info.get('pids', [])
+            pids.append(job_info['pid'])
+            suite_info['pids'] = pids
     return suite_info
 
 
