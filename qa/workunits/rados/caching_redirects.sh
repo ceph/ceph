@@ -79,3 +79,35 @@ rados -p empty_cache ls > tmp.txt
 expect_false diff -q tmp.txt empty.txt
 rados -p base_pool ls > tmp2.txt
 diff -q tmp.txt tmp2.txt
+
+
+## set of base, cache
+ceph osd pool create base 8
+ceph osd pool create cache 8
+
+ceph osd tier add base cache
+ceph osd tier cache-mode cache writeback
+ceph osd tier set-overlay base cache
+
+# cache-flush, cache-evict
+rados -p base put foo /etc/passwd
+expect_false rados -p base cache-evict foo
+rados -p base cache-flush foo
+rados -p base cache-evict foo
+rados -p cache ls - | wc -l | grep 0
+
+# cache-flush-evict-all
+rados -p base put bar /etc/passwd
+rados -p cache ls - | wc -l | grep 1
+rados -p base cache-flush-evict-all
+rados -p cache ls - | wc -l | grep 0
+
+# cleanup
+ceph osd tier remove-overlay base
+ceph osd tier cache-mode cache none
+ceph osd tier remove base cache
+
+ceph osd pool delete cache cache --yes-i-really-really-mean-it
+ceph osd pool delete cache base --yes-i-really-really-mean-it
+
+echo OK
