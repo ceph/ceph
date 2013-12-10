@@ -540,6 +540,14 @@ int Monitor::init()
 
   bootstrap();
 
+  // encode command sets
+  const MonCommand *cmds;
+  int cmdsize;
+  get_locally_supported_monitor_commands(&cmds, &cmdsize);
+  MonCommand::encode_array(cmds, cmdsize, supported_commands_bl);
+  get_classic_monitor_commands(&cmds, &cmdsize);
+  MonCommand::encode_array(cmds, cmdsize, classic_commands_bl);
+
   lock.Unlock();
   return 0;
 }

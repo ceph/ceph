@@ -198,6 +198,8 @@ private:
   utime_t leader_since;  // when this monitor became the leader, if it is the leader
   utime_t exited_quorum; // time detected as not in quorum; 0 if in
   uint64_t quorum_features;  ///< intersection of quorum member feature bits
+  bufferlist supported_commands_bl; // encoded MonCommands we support
+  bufferlist classic_commands_bl; // encoded MonCommands supported by Dumpling
 
   set<string> outside_quorum;
 
@@ -534,6 +536,13 @@ public:
   void lose_election(epoch_t epoch, set<int>& q, int l,
 		     uint64_t features); // end election (called by Elector)
   void finish_election();
+
+  const bufferlist& get_supported_commands_bl() {
+    return supported_commands_bl;
+  }
+  const bufferlist& get_classic_commands_bl() {
+    return classic_commands_bl;
+  }
 
   void update_logger();
 
