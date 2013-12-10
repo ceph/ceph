@@ -4541,7 +4541,8 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 				   get_last_peering_reset());
   osd->objecter_lock.Lock();
   tid_t tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
-				  cop->src.snap, NULL, 0,
+				  cop->src.snap, NULL,
+				  CEPH_OSD_FLAG_IGNORE_OVERLAY,
 				  new C_OnFinisher(fin,
 						   &osd->objecter_finisher),
 				  // discover the object version if we don't know it yet
