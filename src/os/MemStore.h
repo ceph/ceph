@@ -348,7 +348,8 @@ public:
 
   int queue_transactions(
     Sequencer *osr, list<Transaction*>& tls,
-    TrackedOpRef op = TrackedOpRef());
+    TrackedOpRef op = TrackedOpRef(),
+    ThreadPool::TPHandle *handle = NULL);
 };
 
 
