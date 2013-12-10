@@ -651,10 +651,10 @@ int MemStore::queue_transactions(Sequencer *osr,
   Context *on_apply = NULL, *on_apply_sync = NULL, *on_commit = NULL;
   ObjectStore::Transaction::collect_contexts(tls, &on_apply, &on_commit,
 					     &on_apply_sync);
+  if (on_apply_sync)
+    on_apply_sync->complete(0);
   if (on_apply)
     finisher.queue(on_apply);
-  if (on_apply_sync)
-    finisher.queue(on_apply_sync);
   if (on_commit)
     finisher.queue(on_commit);
   return 0;
