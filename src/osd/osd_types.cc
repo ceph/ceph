@@ -20,6 +20,42 @@ extern "C" {
 #include "PG.h"
 #include "OSDMap.h"
 
+const char *ceph_osd_flag_name(unsigned flag)
+{
+  switch (flag) {
+  case CEPH_OSD_FLAG_ACK: return "ack";
+  case CEPH_OSD_FLAG_ONNVRAM: return "onnvram";
+  case CEPH_OSD_FLAG_ONDISK: return "ondisk";
+  case CEPH_OSD_FLAG_RETRY: return "retry";
+  case CEPH_OSD_FLAG_READ: return "read";
+  case CEPH_OSD_FLAG_WRITE: return "write";
+  case CEPH_OSD_FLAG_ORDERSNAP: return "ordersnap";
+  case CEPH_OSD_FLAG_PGOP: return "pgop";
+  case CEPH_OSD_FLAG_EXEC: return "exec";
+  case CEPH_OSD_FLAG_EXEC_PUBLIC: return "exec_public";
+  case CEPH_OSD_FLAG_LOCALIZE_READS: return "localize_reads";
+  case CEPH_OSD_FLAG_RWORDERED: return "rwordered";
+  case CEPH_OSD_FLAG_IGNORE_OVERLAY: return "ignore_overlay";
+  case CEPH_OSD_FLAG_SKIPRWLOCKS: return "skiprwlocks";
+  default: return "???";
+  }
+}
+
+string ceph_osd_flag_string(unsigned flags)
+{
+  string s;
+  for (unsigned i=0; i<32; ++i) {
+    if (flags & (1u<<i)) {
+      if (s.length())
+	s += "+";
+      s += ceph_osd_flag_name(1u << i);
+    }
+  }
+  if (s.length())
+    return s;
+  return string("-");
+}
+
 // -- osd_reqid_t --
 void osd_reqid_t::encode(bufferlist &bl) const
 {
@@ -3776,6 +3812,8 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_LIST_SNAPS:
     case CEPH_OSD_OP_UNDIRTY:
     case CEPH_OSD_OP_ISDIRTY:
+    case CEPH_OSD_OP_CACHE_FLUSH:
+    case CEPH_OSD_OP_CACHE_EVICT:
       break;
     case CEPH_OSD_OP_ASSERT_VER:
       out << " v" << op.op.assert_ver.ver;

@@ -402,6 +402,18 @@ void librados::ObjectWriteOperation::undirty()
   o->undirty();
 }
 
+void librados::ObjectWriteOperation::cache_flush()
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->cache_flush();
+}
+
+void librados::ObjectWriteOperation::cache_evict()
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  o->cache_evict();
+}
+
 void librados::ObjectWriteOperation::tmap_put(const bufferlist &bl)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
@@ -484,6 +496,13 @@ librados::ObjectIterator librados::ObjectIterator::operator++(int)
   librados::ObjectIterator ret(*this);
   get_next();
   return ret;
+}
+
+uint32_t librados::ObjectIterator::seek(uint32_t pos)
+{
+  uint32_t r = rados_objects_list_seek(ctx.get(), pos);
+  get_next();
+  return r;
 }
 
 void librados::ObjectIterator::get_next()
@@ -922,6 +941,24 @@ int librados::IoCtx::omap_rm_keys(const std::string& oid,
   return operate(oid, &op);
 }
 
+
+
+static int translate_flags(int flags)
+{
+  int op_flags = 0;
+  if (flags & librados::OPERATION_BALANCE_READS)
+    op_flags |= CEPH_OSD_FLAG_BALANCE_READS;
+  if (flags & librados::OPERATION_LOCALIZE_READS)
+    op_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
+  if (flags & librados::OPERATION_ORDER_READS_WRITES)
+    op_flags |= CEPH_OSD_FLAG_RWORDERED;
+  if (flags & librados::OPERATION_IGNORE_OVERLAY)
+    op_flags |= CEPH_OSD_FLAG_IGNORE_OVERLAY;
+  if (flags & librados::OPERATION_SKIPRWLOCKS)
+    op_flags |= CEPH_OSD_FLAG_SKIPRWLOCKS;
+  return op_flags;
+}
+
 int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperation *o)
 {
   object_t obj(oid);
@@ -939,7 +976,15 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 {
   object_t obj(oid);
   return io_ctx_impl->aio_operate(obj, (::ObjectOperation*)o->impl, c->pc,
-				  io_ctx_impl->snapc);
+				  io_ctx_impl->snapc, 0);
+}
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+				 ObjectWriteOperation *o, int flags)
+{
+  object_t obj(oid);
+  return io_ctx_impl->aio_operate(obj, (::ObjectOperation*)o->impl, c->pc,
+				  io_ctx_impl->snapc,
+				  translate_flags(flags));
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
@@ -953,7 +998,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
     snv[i] = snaps[i];
   SnapContext snapc(snap_seq, snv);
   return io_ctx_impl->aio_operate(obj, (::ObjectOperation*)o->impl, c->pc,
-				  snapc);
+				  snapc, 0);
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
@@ -970,17 +1015,10 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 				 snap_t snapid, int flags, bufferlist *pbl)
 {
   object_t obj(oid);
-  int op_flags = 0;
-  if (flags & OPERATION_BALANCE_READS)
-    op_flags |= CEPH_OSD_FLAG_BALANCE_READS;
-  if (flags & OPERATION_LOCALIZE_READS)
-    op_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
-  if (flags & OPERATION_ORDER_READS_WRITES)
-    op_flags |= CEPH_OSD_FLAG_RWORDERED;
-
   return io_ctx_impl->aio_operate_read(obj, (::ObjectOperation*)o->impl, c->pc,
-				       op_flags, pbl);
+				       translate_flags(flags), pbl);
 }
+
 
 void librados::IoCtx::snap_set_read(snap_t seq)
 {
@@ -1130,6 +1168,16 @@ librados::ObjectIterator librados::IoCtx::objects_begin()
   rados_list_ctx_t listh;
   rados_objects_list_open(io_ctx_impl, &listh);
   ObjectIterator iter((ObjListCtx*)listh);
+  iter.get_next();
+  return iter;
+}
+
+librados::ObjectIterator librados::IoCtx::objects_begin(uint32_t pos)
+{
+  rados_list_ctx_t listh;
+  rados_objects_list_open(io_ctx_impl, &listh);
+  ObjectIterator iter((ObjListCtx*)listh);
+  iter.seek(pos);
   iter.get_next();
   return iter;
 }
@@ -2583,6 +2631,14 @@ extern "C" void rados_objects_list_close(rados_list_ctx_t h)
 {
   librados::ObjListCtx *lh = (librados::ObjListCtx *)h;
   delete lh;
+}
+
+extern "C" uint32_t rados_objects_list_seek(rados_list_ctx_t listctx,
+					    uint32_t pos)
+{
+  librados::ObjListCtx *lh = (librados::ObjListCtx *)listctx;
+  uint32_t r = lh->ctx->list_seek(lh->lc, pos);
+  return r;
 }
 
 extern "C" uint32_t rados_objects_list_get_pg_hash_position(

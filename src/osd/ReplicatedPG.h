@@ -222,28 +222,25 @@ public:
       op(op_), obc(obc_), temp_obj(temp_obj_), pg(pg_) {}
 
     virtual void finish(CopyCallbackResults results) {
-      CopyResults* results_data = results.get<1>();
+      CopyResults *results_data = results.get<1>();
       int r = results.get<0>();
-      if (r >= 0) {
-	pg->finish_promote(results_data, obc, temp_obj);
-      } else {
-	// we need to get rid of the op in the blocked queue
-	map<hobject_t,list<OpRequestRef> >::iterator blocked_iter;
-	blocked_iter = pg->waiting_for_blocked_object.find(obc->obs.oi.soid);
-	assert(blocked_iter != pg->waiting_for_blocked_object.end());
-	assert(blocked_iter->second.begin()->get() == op.get());
-	blocked_iter->second.pop_front();
-	if (blocked_iter->second.empty()) {
-	  pg->waiting_for_blocked_object.erase(blocked_iter);
-	}
-	if (r != -ECANCELED) { // on cancel the client will resend
-	  pg->osd->reply_op_error(op, r);
-	}
-      }
+      pg->finish_promote(r, op, results_data, obc, temp_obj);
       delete results_data;
     }
   };
   friend class PromoteCallback;
+
+  struct FlushOp {
+    ObjectContextRef obc;
+    OpRequestRef op;            ///< rados request that triggered this
+    list<OpRequestRef> dup_ops; ///< dup flush requests
+    version_t flushed_version;  ///< user version we are flushing
+    tid_t objecter_tid;         ///< copy-from request tid
+    int rval;                   ///< copy-from result
+
+    FlushOp() : objecter_tid(0), rval(0) {}
+  };
+  typedef boost::shared_ptr<FlushOp> FlushOpRef;
 
   boost::scoped_ptr<PGBackend> pgbackend;
   PGBackend *get_pgbackend() {
@@ -810,6 +807,7 @@ protected:
 		   const hobject_t& head, const hobject_t& coid,
 		   object_info_t *poi);
   void execute_ctx(OpContext *ctx);
+  void finish_ctx(OpContext *ctx);
   void reply_ctx(OpContext *ctx, int err);
   void reply_ctx(OpContext *ctx, int err, eversion_t v, version_t uv);
   void make_writeable(OpContext *ctx);
@@ -833,6 +831,11 @@ protected:
    * This function starts up a copy from
    */
   void promote_object(OpRequestRef op, ObjectContextRef obc);
+
+  /**
+   * Check if the op is such that we can skip promote (e.g., DELETE)
+   */
+  bool can_skip_promote(OpRequestRef op, ObjectContextRef obc);
 
   int prepare_transaction(OpContext *ctx);
   
@@ -1001,12 +1004,24 @@ protected:
   void _build_finish_copy_transaction(CopyOpRef cop,
                                       ObjectStore::Transaction& t);
   void finish_copyfrom(OpContext *ctx);
-  void finish_promote(CopyResults *results, ObjectContextRef obc,
+  void finish_promote(int r, OpRequestRef op,
+		      CopyResults *results, ObjectContextRef obc,
                       hobject_t& temp_obj);
   void cancel_copy(CopyOpRef cop, bool requeue);
   void cancel_copy_ops(bool requeue);
 
   friend class C_Copyfrom;
+
+  // -- flush --
+  map<hobject_t, FlushOpRef> flush_ops;
+
+  void start_flush(ObjectContextRef obc, OpRequestRef op);
+  void finish_flush(hobject_t oid, tid_t tid, int r);
+  void try_flush_mark_clean(FlushOpRef fop);
+  void cancel_flush(FlushOpRef fop, bool requeue);
+  void cancel_flush_ops(bool requeue);
+
+  friend class C_Flush;
 
   // -- scrub --
   virtual void _scrub(ScrubMap& map);
@@ -1131,7 +1146,7 @@ private:
 
   int _get_tmap(OpContext *ctx, map<string, bufferlist> *out,
 		bufferlist *header);
-  int _delete_head(OpContext *ctx);
+  int _delete_head(OpContext *ctx, bool no_whiteout);
   int _rollback_to(OpContext *ctx, ceph_osd_op& op);
 public:
   bool same_for_read_since(epoch_t e);
