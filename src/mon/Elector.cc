@@ -106,18 +106,11 @@ void Elector::defer(int who)
     electing_me = false;
   }
 
-  // encode my commands for transmission
-  if(!my_supported_commands.length()) {
-    const MonCommand *cmds;
-    int cmdsize;
-    get_locally_supported_monitor_commands(&cmds, &cmdsize);
-    MonCommand::encode_array(cmds, cmdsize, my_supported_commands);
-  }
   // ack them
   leader_acked = who;
   ack_stamp = ceph_clock_now(g_ceph_context);
   MMonElection *m = new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap);
-  m->commands = my_supported_commands;
+  m->commands = mon->get_supported_commands_bl();
   mon->messenger->send_message(m, mon->monmap->get_inst(who));
   
   // set a timer
@@ -180,22 +173,16 @@ void Elector::victory()
   assert(epoch % 2 == 1);  // election
   bump_epoch(epoch+1);     // is over!
 
-  // calculate my supported commands for peons to advertise
-  bufferlist *cmds_bl = NULL;
+  // decide my supported commands for peons to advertise
+  const bufferlist *cmds_bl = NULL;
   const MonCommand *cmds;
   int cmdsize;
-  if (!use_classic_commands) {
-    get_locally_supported_monitor_commands(&cmds, &cmdsize);
-    if(!my_supported_commands.length()) {
-      MonCommand::encode_array(cmds, cmdsize, my_supported_commands);
-    }
-    cmds_bl = &my_supported_commands;
-  } else {
+  if (use_classic_commands) {
     get_classic_monitor_commands(&cmds, &cmdsize);
-    if (!classic_commands.length()){
-      MonCommand::encode_array(cmds, cmdsize, classic_commands);
-    }
-    cmds_bl = &classic_commands;
+    cmds_bl = &mon->get_classic_commands_bl();
+  } else {
+    get_locally_supported_monitor_commands(&cmds, &cmdsize);
+    cmds_bl = &mon->get_supported_commands_bl();
   }
   
   // tell everyone!
