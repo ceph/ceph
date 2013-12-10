@@ -264,8 +264,10 @@ def run_job(job_config, teuth_bin_path):
             child.error(': %s', line.rstrip('\n'))
 
         if teuth_config.results_server:
+            log.info("Running with watchdog")
             run_with_watchdog(p, job_config)
         else:
+            log.info("Running without watchdog")
             p.wait()
 
         if p.returncode != 0:
