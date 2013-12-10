@@ -51,6 +51,31 @@ def task(ctx, config):
               snap_remove: 0
             runs: 10
         - interactive:
+
+    Optionally, you can provide the pool name to run against:
+
+        tasks:
+        - ceph:
+        - exec:
+            client.0:
+              - ceph osd pool create foo
+        - rados:
+            clients: [client.0]
+            pools: [foo]
+            ...
+
+    Alternatively, you can provide a pool prefix:
+
+        tasks:
+        - ceph:
+        - exec:
+            client.0:
+              - ceph osd pool create foo.client.0
+        - rados:
+            clients: [client.0]
+            pool_prefix: foo
+            ...
+
     """
     log.info('Beginning rados...')
     assert isinstance(config, dict), \
@@ -102,14 +127,21 @@ def task(ctx, config):
         for i in range(int(config.get('runs', '1'))):
             log.info("starting run %s out of %s", str(i), config.get('runs', '1'))
             tests = {}
-            pools = []
+            existing_pools = config.get('pools', [])
+            created_pools = []
             for role in config.get('clients', clients):
                 assert isinstance(role, basestring)
                 PREFIX = 'client.'
                 assert role.startswith(PREFIX)
                 id_ = role[len(PREFIX):]
-                pool = ctx.manager.create_pool_with_unique_name()
-                pools.append(pool)
+
+                pool = config.get('pool', None)
+                if not pool and existing_pools:
+                    pool = existing_pools.pop()
+                else:
+                    pool = ctx.manager.create_pool_with_unique_name()
+                    created_pools.append(pool)
+
                 (remote,) = ctx.cluster.only(role).remotes.iterkeys()
                 proc = remote.run(
                     args=["CEPH_CLIENT_ID={id_}".format(id_=id_)] + args +
@@ -120,7 +152,8 @@ def task(ctx, config):
                     )
                 tests[id_] = proc
             run.wait(tests.itervalues())
-            for pool in pools:
+
+            for pool in created_pools:
                 ctx.manager.remove_pool(pool)
 
     running = gevent.spawn(thread)
