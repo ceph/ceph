@@ -1,4 +1,6 @@
-.TH "CEPH-REST-API" "8" "July 26, 2013" "dev" "Ceph"
+.\" Man page generated from reStructuredText.
+.
+.TH "CEPH-REST-API" "8" "December 09, 2013" "dev" "Ceph"
 .SH NAME
 ceph-rest-api \- ceph RESTlike administration server
 .
@@ -28,8 +30,33 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.\" Man page generated from reStructuredText.
 .
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
 .SH SYNOPSIS
 .nf
 \fBceph\-rest\-api\fP [ \-c \fIconffile\fP ] [\-\-cluster \fIclustername\fP ] [ \-n \fIname\fP ] [\-i \fIid\fP ]
@@ -125,7 +152,7 @@ desired structured output, or you may use a .json or .xml addition
 to the requested PATH.  Parameters are supplied as query parameters
 in the request; for parameters that take more than one value, repeat
 the key=val construct.  For instance, to remove OSDs 2 and 3,
-send a PUT request to \fBosd/rm?ids=2&ids=3\fP.
+send a PUT request to \fBosd/rm?ids=2&ids=3\fP\&.
 .SH DISCOVERY
 .sp
 Human\-readable discovery of supported commands and parameters, along
@@ -135,7 +162,7 @@ the value of  \fBrestapi base url\fP, and that path will give a full list
 of all known commands.  The command set is very similar to the commands
 supported by the \fBceph\fP tool.  One notable exception is that the
 \fBceph pg <pgid> <command>\fP style of commands is supported here
-as \fBtell/<pgid>/command?args\fP.
+as \fBtell/<pgid>/command?args\fP\&.
 .SH DEPLOYMENT AS WSGI APPLICATION
 .sp
 When deploying as WSGI application (say, with Apache/mod_wsgi,
@@ -166,7 +193,7 @@ exception to be raised; see your WSGI server documentation for how to
 see those messages in case of problem.
 .SH AVAILABILITY
 .sp
-\fBceph\-rest\-api\fP is part of the Ceph distributed file system. Please refer to the Ceph documentation at
+\fBceph\-rest\-api\fP is part of the Ceph distributed storage system. Please refer to the Ceph documentation at
 \fI\%http://ceph.com/docs\fP for more information.
 .SH SEE ALSO
 .sp
