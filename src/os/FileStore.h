@@ -310,7 +310,7 @@ private:
 	       Context *onreadable, Context *onreadable_sync,
 	       TrackedOpRef osd_op);
   void queue_op(OpSequencer *osr, Op *o);
-  void op_queue_reserve_throttle(Op *o);
+  void op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle = NULL);
   void op_queue_release_throttle(Op *o);
   void _journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk);
   friend struct C_JournaledAhead;
@@ -383,7 +383,8 @@ public:
     ThreadPool::TPHandle *handle);
 
   int queue_transactions(Sequencer *osr, list<Transaction*>& tls,
-			 TrackedOpRef op = TrackedOpRef());
+			 TrackedOpRef op = TrackedOpRef(),
+			 ThreadPool::TPHandle *handle = NULL);
 
   /**
    * set replay guard xattr on given file
