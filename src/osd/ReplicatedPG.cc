@@ -1222,8 +1222,15 @@ void ReplicatedPG::do_op(OpRequestRef op)
 bool ReplicatedPG::maybe_handle_cache(OpRequestRef op, ObjectContextRef obc,
                                       int r)
 {
+  if (obc)
+    dout(25) << __func__ << " " << obc->obs.oi << " "
+	     << (obc->obs.exists ? "exists" : "DNE") << dendl;
+  else
+    dout(25) << __func__ << " (no obc)" << dendl;
+
   if (obc.get() && obc->is_blocked()) {
     // we're already doing something with this object
+    dout(20) << __func__ << " blocked on " << obc->obs.oi.soid << dendl;
     return false;
   }
 
