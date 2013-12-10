@@ -165,7 +165,7 @@ When mount a Ceph file system, you can grab the appropriately encoded secret key
 Availability
 ============
 
-**ceph-authtool** is part of the Ceph distributed file system. Please
+**ceph-authtool** is part of the Ceph distributed storage system. Please
 refer to the Ceph documentation at http://ceph.com/docs for more
 information.
 

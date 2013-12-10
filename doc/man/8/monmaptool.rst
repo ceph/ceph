@@ -15,7 +15,7 @@ Description
 ===========
 
 **monmaptool** is a utility to create, view, and modify a monitor
-cluster map for the Ceph distributed file system. The monitor map
+cluster map for the Ceph distributed storage system. The monitor map
 specifies the only fixed addresses in the Ceph distributed system.
 All other daemons bind to arbitrary addresses and register themselves
 with the monitors.
@@ -93,7 +93,7 @@ To replace one monitor::
 Availability
 ============
 
-**monmaptool** is part of the Ceph distributed file system.  Please
+**monmaptool** is part of the Ceph distributed storage system.  Please
 refer to the Ceph documentation at http://ceph.com/docs for more
 information.
 
