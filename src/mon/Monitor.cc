@@ -1501,7 +1501,7 @@ void Monitor::win_standalone_election()
   const MonCommand *my_cmds;
   int cmdsize;
   get_locally_supported_monitor_commands(&my_cmds, &cmdsize);
-  win_election(1, q, CEPH_FEATURES_ALL, my_cmds, cmdsize);
+  win_election(1, q, CEPH_FEATURES_ALL, my_cmds, cmdsize, NULL);
 }
 
 const utime_t& Monitor::get_leader_since() const
@@ -1516,7 +1516,8 @@ epoch_t Monitor::get_epoch()
 }
 
 void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
-                           const MonCommand *cmdset, int cmdsize)
+                           const MonCommand *cmdset, int cmdsize,
+                           const set<int> *classic_monitors)
 {
   dout(10) << __func__ << " epoch " << epoch << " quorum " << active
 	   << " features " << features << dendl;
@@ -1532,6 +1533,8 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
 		<< " won leader election with quorum " << quorum << "\n";
 
   set_leader_supported_commands(cmdset, cmdsize);
+  if (classic_monitors)
+    classic_mons = *classic_monitors;
 
   paxos->leader_init();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
