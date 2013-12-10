@@ -1390,8 +1390,7 @@ int Objecter::recalc_op_target(Op *op)
     need_check_tiering = true;
   }
   
-  if (honor_cache_redirects &&
-      need_check_tiering &&
+  if (need_check_tiering &&
       (op->flags & CEPH_OSD_FLAG_IGNORE_OVERLAY) == 0) {
     const pg_pool_t *pi = osdmap->get_pg_pool(op->base_oloc.pool);
     if (pi) {
