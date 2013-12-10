@@ -75,6 +75,43 @@ static int get_existing_bucket_entry(cls_method_context_t hctx, const string& bu
   return 0;
 }
 
+static int read_header(cls_method_context_t hctx, cls_user_header *header)
+{
+  bufferlist bl;
+
+  int ret = cls_cxx_map_read_header(hctx, &bl);
+  if (ret < 0)
+    return ret;
+
+  if (bl.length() == 0) {
+    *header = cls_user_header();
+    return 0;
+  }
+
+  try {
+    ::decode(*header, bl);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: failed to decode user header");
+    return -EIO;
+  }
+
+  return 0;
+}
+
+static void add_header_stats(cls_user_header *header, cls_user_bucket_entry& entry)
+{
+  header->total_entries += entry.count;
+  header->total_bytes += entry.size;
+  header->total_bytes_rounded += entry.size_rounded;
+}
+
+static void dec_header_stats(cls_user_header *header, cls_user_bucket_entry& entry)
+{
+  header->total_bytes -= entry.size;
+  header->total_bytes_rounded -= entry.size_rounded;
+  header->total_entries -= entry.count;
+}
+
 static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   bufferlist::iterator in_iter = in->begin();
@@ -87,6 +124,13 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     return -EINVAL;
   }
 
+  cls_user_header header;
+  int ret = read_header(hctx, &header);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: failed to read user info header ret=%d", ret);
+    return ret;
+  }
+
   for (list<cls_user_bucket_entry>::iterator iter = op.entries.begin();
        iter != op.entries.end(); ++iter) {
     cls_user_bucket_entry& entry = *iter;
@@ -95,11 +139,26 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
 
     get_key_by_bucket_name(entry.bucket.name, &key);
 
-    CLS_LOG(0, "storing entry by client/op at %s", key.c_str());
+    cls_user_bucket_entry old_entry;
+    ret = get_existing_bucket_entry(hctx, key, old_entry);
 
-    int ret = write_entry(hctx, key, entry);
+    if (ret == -ENOENT)
+      continue; /* racing bucket removal */
+
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: get_existing_bucket_entry() key=%s returned %d", key.c_str(), ret);
+      return ret;
+    } else if (ret >= 0) {
+      dec_header_stats(&header, old_entry);
+    }
+
+    CLS_LOG(20, "storing entry by client/op at %s", key.c_str());
+
+    ret = write_entry(hctx, key, entry);
     if (ret < 0)
       return ret;
+
+    add_header_stats(&header, entry);
   }
   
   return 0;
@@ -117,13 +176,32 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
     return -EINVAL;
   }
 
+  cls_user_header header;
+  int ret = read_header(hctx, &header);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: failed to read user info header ret=%d", ret);
+    return ret;
+  }
+
   string key;
 
   get_key_by_bucket_name(op.bucket.name, &key);
 
+  cls_user_bucket_entry entry;
+  ret = get_existing_bucket_entry(hctx, key, entry);
+  if (ret == -ENOENT) {
+    return 0; /* idempotent removal */
+  }
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: get existing bucket entry, key=%s ret=%d", key.c_str(), ret);
+    return ret;
+  }
+
+  dec_header_stats(&header, entry);
+
   CLS_LOG(20, "removing entry at %s", key.c_str());
 
-  int ret = remove_entry(hctx, key);
+  ret = remove_entry(hctx, key);
   if (ret < 0)
     return ret;
   
