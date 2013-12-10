@@ -361,6 +361,9 @@ public:
 	log.complete_to++;
       }
     }
+
+    if (log.can_rollback_to < v)
+      log.can_rollback_to = v;
   }
 
   void activate_not_complete(pg_info_t &info) {
