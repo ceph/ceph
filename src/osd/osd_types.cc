@@ -62,6 +62,26 @@ string ceph_osd_flag_string(unsigned flags)
   return string("-");
 }
 
+void pg_shard_t::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(osd, bl);
+  ::encode(shard, bl);
+  ENCODE_FINISH(bl);
+}
+void pg_shard_t::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(osd, bl);
+  ::decode(shard, bl);
+  DECODE_FINISH(bl);
+}
+
+ostream &operator<<(ostream &lhs, const pg_shard_t &rhs)
+{
+  return lhs << '(' << rhs.osd << ',' << (unsigned)(rhs.shard) << ')';
+}
+
 // -- osd_reqid_t --
 void osd_reqid_t::encode(bufferlist &bl) const
 {
@@ -320,6 +340,50 @@ bool pg_t::parse(const char *s)
   else
     m_preferred = -1;
   return true;
+}
+
+bool spg_t::parse(const char *s)
+{
+  pgid.set_preferred(-1);
+  shard = ghobject_t::NO_SHARD;
+  uint64_t ppool;
+  uint32_t pseed;
+  int32_t pref;
+  uint32_t pshard;
+  int r = sscanf(s, "%llu.%x", (long long unsigned *)&ppool, &pseed);
+  if (r < 2)
+    return false;
+  pgid.set_pool(ppool);
+  pgid.set_ps(pseed);
+
+  const char *p = strchr(s, 'p');
+  if (p) {
+    r = sscanf(p, "p%d", &pref);
+    if (r == 1) {
+      pgid.set_preferred(pref);
+    } else {
+      return false;
+    }
+  }
+
+  p = strchr(s, 's');
+  if (p) {
+    r = sscanf(p, "s%d", &pshard);
+    if (r == 1) {
+      shard = pshard;
+    } else {
+      return false;
+    }
+  }
+  return true;
+}
+
+ostream& operator<<(ostream& out, const spg_t &pg)
+{
+  out << pg.pgid;
+  if (!pg.is_no_shard())
+    out << "s" << (unsigned)pg.shard;
+  return out;
 }
 
 bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *children) const
