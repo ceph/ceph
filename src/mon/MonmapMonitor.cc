@@ -450,6 +450,21 @@ void MonmapMonitor::get_health(list<pair<health_status_t, string> >& summary,
       }
     }
   }
+  if (g_conf->mon_warn_on_old_mons && !mon->get_classic_mons().empty()) {
+    ostringstream ss;
+    ss << "some monitors are running older code";
+    summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+    if (detail) {
+      for (set<int>::const_iterator i = mon->get_classic_mons().begin();
+	  i != mon->get_classic_mons().end();
+	  ++i) {
+	ostringstream ss;
+	ss << "mon." << mon->monmap->get_name(*i)
+	     << " only supports the \"classic\" command set";
+	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+      }
+    }
+  }
 }
 
 int MonmapMonitor::get_monmap(bufferlist &bl)
