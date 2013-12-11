@@ -36,7 +36,7 @@
 #include "HitSet.h"
 #include "Watch.h"
 #include "OpRequest.h"
-#include "include/hash_namespace.h"
+#include "include/cmp.h"
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
@@ -62,6 +62,25 @@ const char *ceph_osd_flag_name(unsigned flag);
 
 /// convert CEPH_OSD_FLAG_* op flags to a string
 string ceph_osd_flag_string(unsigned flags);
+
+struct pg_shard_t {
+  int osd;
+  shard_id_t shard;
+  pg_shard_t() : osd(-1), shard(ghobject_t::NO_SHARD) {}
+  pg_shard_t(int osd, shard_id_t shard) : osd(osd), shard(shard) {}
+  static pg_shard_t undefined_shard() {
+    return pg_shard_t(-1, ghobject_t::NO_SHARD);
+  }
+  bool is_undefined() const {
+    return osd == -1;
+  }
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+};
+WRITE_CLASS_ENCODER(pg_shard_t)
+WRITE_EQ_OPERATORS_2(pg_shard_t, osd, shard)
+WRITE_CMP_OPERATORS_2(pg_shard_t, osd, shard)
+ostream &operator<<(ostream &lhs, const pg_shard_t &rhs);
 
 inline ostream& operator<<(ostream& out, const osd_reqid_t& r) {
   return out << r.name << "." << r.inc << ":" << r.tid;
@@ -368,6 +387,74 @@ CEPH_HASH_NAMESPACE_START
   };
 CEPH_HASH_NAMESPACE_END
 
+struct spg_t {
+  pg_t pgid;
+  shard_id_t shard;
+  spg_t() : shard(ghobject_t::NO_SHARD) {}
+  spg_t(pg_t pgid, shard_id_t shard) : pgid(pgid), shard(shard) {}
+  explicit spg_t(pg_t pgid) : pgid(pgid), shard(ghobject_t::NO_SHARD) {}
+  unsigned get_split_bits(unsigned pg_num) const {
+    return pgid.get_split_bits(pg_num);
+  }
+  spg_t get_parent() const {
+    return spg_t(pgid.get_parent(), shard);
+  }
+  ps_t ps() const {
+    return pgid.ps();
+  }
+  uint64_t pool() const {
+    return pgid.pool();
+  }
+  int32_t preferred() const {
+    return pgid.preferred();
+  }
+  bool parse(const char *s);
+  bool is_split(unsigned old_pg_num, unsigned new_pg_num,
+		set<spg_t> *pchildren) const {
+    set<pg_t> _children;
+    set<pg_t> *children = pchildren ? &_children : NULL;
+    bool is_split = pgid.is_split(old_pg_num, new_pg_num, children);
+    if (pchildren && is_split) {
+      for (set<pg_t>::iterator i = _children.begin();
+	   i != _children.end();
+	   ++i) {
+	pchildren->insert(spg_t(*i, shard));
+      }
+    }
+    return is_split;
+  }
+  bool is_no_shard() const {
+    return shard == ghobject_t::NO_SHARD;
+  }
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(pgid, bl);
+    ::encode(shard, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(pgid, bl);
+    ::decode(shard, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(spg_t)
+WRITE_EQ_OPERATORS_2(spg_t, pgid, shard)
+WRITE_CMP_OPERATORS_2(spg_t, pgid, shard)
+
+CEPH_HASH_NAMESPACE_START
+  template<> struct hash< spg_t >
+  {
+    size_t operator()( const spg_t& x ) const
+      {
+      static hash<uint32_t> H;
+      return H(hash<pg_t>()(x.pgid) ^ x.shard);
+    }
+  };
+CEPH_HASH_NAMESPACE_END
+
+ostream& operator<<(ostream& out, const spg_t &pg);
 
 // ----------------------
 
