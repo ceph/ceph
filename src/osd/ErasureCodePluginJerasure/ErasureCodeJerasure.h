@@ -4,7 +4,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
- *               2013 CERN/Sitzerland
+ *               2013 CERN/Switzerland
  *
  * Authors: Loic Dachary <loic@dachary.org>
  *          Andreas-Joachim Peters <andreas.joachim.peters@cern.ch>
@@ -52,18 +52,6 @@ public:
   virtual int decode(const set<int> &want_to_read,
                      const map<int, bufferlist> &chunks,
                      map<int, bufferlist> *decoded);
-
-  virtual void lp_encode(char **data,
-			 char **coding, 
-			 int blocksize);
-
-  virtual bool lp_decode(int *erasures,
-			 char **data,
-			 char **coding, 
-			 int blocksize,
-			 std::set<int> &remaining_erasures,
-			 const set<int> &want_to_read
-			 );
 
   void init(const map<std::string,std::string> &parameters);
   virtual void jerasure_encode(char **data,
