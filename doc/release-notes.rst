@@ -2,6 +2,61 @@
  Release Notes
 ===============
 
+v0.73
+-----
+
+This release, the first development release after emperor, includes
+many bug fixes and a few additional pieces of functionality.  The
+first batch of larger changes will be landing in the next version,
+v0.74.
+
+Upgrading
+~~~~~~~~~
+
+- As part of fix for #6796, 'ceph osd pool set <pool> <var> <arg>' now
+  receives <arg> as an integer instead of a string.  This affects how
+  'hashpspool' flag is set/unset: instead of 'true' or 'false', it now
+  must be '0' or '1'.
+
+- The behavior of the CRUSH 'indep' choose mode has been changed.  No
+  ceph cluster should have been using this behavior unless someone has
+  manually extracted a crush map, modified a CRUSH rule to replace
+  'firstn' with 'indep', recompiled, and reinjected the new map into
+  the cluster.  If the 'indep' mode is currently in use on a cluster,
+  the rule should be modified to use 'firstn' instead, and the
+  administrator should wait until any data movement completes before
+  upgrading.
+
+- The 'osd dump' command now dumps pool snaps as an array instead of an
+  object.
+
+
+Notable Changes:
+~~~~~~~~~~~~~~~~
+
+ * mon: trim MDSMaps (Joao Eduardo Luis)
+ * ceph-kvstore-tool: expanded command set and capabilities (Joao Eduardo Luis)
+ * sysvinit, upstart: prevent both init systems from starting the same daemons (Josh Durgin)
+ * rgw: fix error setting empty owner on ACLs (Yehuda Sadeh)
+ * mon: prevent extreme changes in pool pg_num (Greg Farnum)
+ * mon: 'osd dump' dumps pool snaps as array, not object (Dan Mick)
+ * mon: take 'osd pool set ...' value as an int, not string (Joao Eduardo Luis)
+ * osd: fix object_info_t encoding bug from emperor (****
+ * mon: allow debug quorum_{enter,exit} commands via admin socket
+ * misc portability fixes (Noah Watkins, Christophe Courtaut, Alan Somers, huanjun)
+ * misc cleanups from coverity (Xing Lin)
+ * rgw: add 'status' command to sysvinit script (David Moreau Simard)
+ * doc: many many install doc improvements (John Wilkins)
+ * ceph-crush-location: new hook for setting CRUSH location of osd daemons on start
+ * mds: fix readdir end check (Zheng Yan)
+ * rgw: support for password (instead of admin token) for keystone authentication (Christophe Courtaut)
+ * rgw: optionally defer to bucket ACLs instead of object ACLs (Liam Monahan)
+ * common: fix aligned buffer allocation (Loic Dachary)
+ * ceph.spec: fix build dependency (Loic Dachary)
+ * rbd: add 'rbdmap' init script for mapping rbd images on book (Adam Twardowski)
+ * mds: update old-format backtraces opportunistically (Zheng Yan)
+
+
 v0.72.1 Emperor
 ---------------
 
