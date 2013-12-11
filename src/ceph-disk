@@ -174,8 +174,20 @@ class TooManyLinesError(Error):
 class FilesystemTypeError(Error):
     """
     Cannot discover filesystem type
-    """
+     """
 
+class CephDiskException(Exception):
+    """
+    A base exception for ceph-disk to provide custom (ad-hoc) messages that
+    will be caught and dealt with when main() is executed
+    """
+    pass
+
+class ExecutableNotFound(CephDiskException):
+    """
+    Exception to report on executables not available in PATH
+    """
+    pass
 
 ####### utils
 
@@ -196,6 +208,64 @@ def maybe_mkdir(*a, **kw):
             pass
         else:
             raise
+
+
+def which(executable):
+    """find the location of an executable"""
+    locations = (
+        '/usr/local/bin',
+        '/bin',
+        '/usr/bin',
+        '/usr/local/sbin',
+        '/usr/sbin',
+        '/sbin',
+    )
+
+    for location in locations:
+        executable_path = os.path.join(location, executable)
+        if os.path.exists(executable_path):
+            return executable_path
+
+
+def _check_command_executable(arguments):
+    """raise if the executable is not found"""
+    executable = which(arguments[0])
+    if not executable:
+        command_msg = 'Could not run command: %s' % ' '.join(arguments)
+        executable_msg = '%s not in path.' % arguments[0]
+        raise ExecutableNotFound('%s %s' % (executable_msg, command_msg))
+
+
+def command(arguments):
+    """
+    Safely execute a ``subprocess.Popen`` call making sure that the
+    executable exists and raising a helpful error message
+    if it does not.
+
+    .. note:: This should be the prefered way of calling ``subprocess.Popen``
+    since it provides the caller with the safety net of making sure that
+    executables *will* be found and will error nicely otherwise.
+    """
+    _check_command_executable(arguments)
+
+    return subprocess.Popen(
+        arguments,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE).stdout.read()
+
+
+def command_check_call(arguments):
+    """
+    Safely execute a ``subprocess.check_call`` call making sure that the
+    executable exists and raising a helpful error message if it does not.
+
+    .. note:: This should be the prefered way of calling
+    ``subprocess.check_call`` since it provides the caller with the safety net
+    of making sure that executables *will* be found and will error nicely
+    otherwise.
+    """
+    _check_command_executable(arguments)
+    return subprocess.check_call(arguments)
 
 
 # a device "name" is something like
@@ -489,7 +559,6 @@ def _check_output(*args, **kwargs):
         cmd = kwargs.get("args")
         if cmd is None:
             cmd = args[0]
-        #raise subprocess.CalledProcessError(ret, cmd, output=out)
         error = subprocess.CalledProcessError(ret, cmd)
         error.output = out
         raise error
@@ -780,16 +849,16 @@ def zap(dev):
             dev_file.seek(-size, os.SEEK_END)
             dev_file.write(size*'\0')
 
-        subprocess.check_call(
-            args=[
+        command_check_call(
+            [
                 'sgdisk',
                 '--zap-all',
                 '--clear',
                 '--mbrtogpt',
                 '--',
                 dev,
-                ],
-            )
+            ]
+        )
     except subprocess.CalledProcessError as e:
         raise Error(e)
 
@@ -837,8 +906,8 @@ def prepare_journal_dev(
 
     try:
         LOG.debug('Creating journal partition num %d size %d on %s', num, journal_size, journal)
-        subprocess.check_call(
-            args=[
+        command_check_call(
+            [
                 'sgdisk',
                 '--new={part}'.format(part=journal_part),
                 '--change-name={num}:ceph journal'.format(num=num),
@@ -853,8 +922,8 @@ def prepare_journal_dev(
                 '--mbrtogpt',
                 '--',
                 journal,
-                ],
-            )
+            ]
+        )
 
         # try to make sure the kernel refreshes the table.  note
         # that if this gets ebusy, we are probably racing with
@@ -1030,8 +1099,8 @@ def prepare_dev(
     else:
         LOG.debug('Creating osd partition on %s', data)
         try:
-            subprocess.check_call(
-                args=[
+            command_check_call(
+                [
                     'sgdisk',
                     '--largest-new=1',
                     '--change-name=1:ceph data',
@@ -1041,8 +1110,8 @@ def prepare_dev(
                     '--typecode=1:%s' % ptype_tobe,
                     '--',
                     data,
-                    ],
-                )
+                ]
+            )
             subprocess.call(
                 args=[
                     # wait for udev event queue to clear
@@ -1106,14 +1175,14 @@ def prepare_dev(
 
     if not is_partition(data):
         try:
-            subprocess.check_call(
-                args=[
+            command_check_call(
+                [
                     'sgdisk',
                     '--typecode=1:%s' % ptype_osd,
                     '--',
                     data,
-                    ],
-                )
+                ]
+            )
         except subprocess.CalledProcessError as e:
             raise Error(e)
 
@@ -1615,7 +1684,7 @@ def find_cluster_by_uuid(_uuid):
         cluster = conf_file[:-5]
         try:
             fsid = get_fsid(cluster)
-        except Error as e: 
+        except Error as e:
             if e.message != 'getting cluster uuid from configuration failed':
                 raise e
             no_fsid.append(cluster)
@@ -1897,14 +1966,14 @@ def get_dev_fs(dev):
 
 def get_partition_type(part):
     (base, partnum) = re.match('(\D+)(\d+)', part).group(1, 2)
-    sgdisk = subprocess.Popen(
+    sgdisk = command(
         [
             'sgdisk',
             '-p',
             base,
-            ],
-        stdout = subprocess.PIPE,
-        stderr = subprocess.PIPE).stdout.read()
+        ]
+    )
+
     for line in sgdisk.splitlines():
         m = re.search('\s+(\d+)\s+\d+\s+\d+\s+\S+ \S+B\s+\S+\s+(.*)', line)
         if m is not None:
@@ -1916,10 +1985,7 @@ def get_partition_type(part):
 
 def get_partition_uuid(dev):
     (base, partnum) = re.match('(\D+)(\d+)', dev).group(1, 2)
-    out = subprocess.Popen(
-        [ 'sgdisk', '-i', partnum, base ],
-        stdout = subprocess.PIPE,
-        stderr = subprocess.PIPE).stdout.read()
+    out = command(['sgdisk', '-i', partnum, base])
     for line in out.splitlines():
         m = re.match('Partition unique GUID: (\S+)', line)
         if m:
@@ -2335,11 +2401,22 @@ def main():
         args.func(args)
 
     except Error as e:
-        print >> sys.stderr, '{prog}: {msg}'.format(
-            prog=args.prog,
-            msg=e,
+        raise SystemExit(
+            '{prog}: {msg}'.format(
+                prog=args.prog,
+                msg=e,
             )
-        sys.exit(1)
+        )
+
+    except CephDiskException as error:
+        exc_name = error.__class__.__name__
+        raise SystemExit(
+            '{prog} {exc_name}: {msg}'.format(
+                prog=args.prog,
+                exc_name=exc_name,
+                msg=error,
+            )
+        )
 
 
 if __name__ == '__main__':
