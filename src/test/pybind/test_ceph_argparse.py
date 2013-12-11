@@ -948,20 +948,14 @@ class TestOSD(TestArgparse):
                     'pg_num', 'pgp_num', 'crush_ruleset',
 					'hashpspool'):
             self.assert_valid_command(['osd', 'pool',
-                                       'set', 'poolname', var, '-1'])
+                                       'set', 'poolname', var, 'value'])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool',
                                                     'set']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool',
                                                     'set', 'poolname']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool',
                                                     'set', 'poolname',
-                                                    'size', 'invalid']))
-        assert_equal({}, validate_command(sigdict, ['osd', 'pool',
-                                                    'set', 'poolname',
-                                                    'invalid', '-1']))
-        assert_equal({}, validate_command(sigdict, ['osd', 'pool',
-                                                    'set', 'poolname',
-                                                    'size', '-1',
+                                                    'size', 'value',
                                                     'toomany']))
 
     def test_pool_set_quota(self):
