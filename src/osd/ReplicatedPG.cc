@@ -1165,12 +1165,14 @@ void ReplicatedPG::do_op(OpRequestRef op)
   // operation won't apply properly on the backfill_target.  (the
   // opposite is not a problem; if the target is after the line, we
   // don't apply on the backfill_target and it doesn't matter.)
+  // The last_backfill_started is used as the backfill line since
+  // that determines the boundary for writes.
   pg_info_t *backfill_target_info = NULL;
   int backfill_target = get_backfill_target();
   bool before_backfill = false;
   if (backfill_target >= 0) {
     backfill_target_info = &peer_info[backfill_target];
-    before_backfill = obc->obs.oi.soid < backfill_target_info->last_backfill;
+    before_backfill = obc->obs.oi.soid <= last_backfill_started;
   }
 
   // src_oids
@@ -1218,8 +1220,13 @@ void ReplicatedPG::do_op(OpRequestRef op)
 		  << obc->obs.oi.soid << dendl;
 	    osd->reply_op_error(op, -EINVAL);
 	  } else if (is_degraded_object(sobc->obs.oi.soid) ||
-		   (before_backfill && sobc->obs.oi.soid > backfill_target_info->last_backfill)) {
-	    wait_for_degraded_object(sobc->obs.oi.soid, op);
+		   (before_backfill && sobc->obs.oi.soid > last_backfill_started)) {
+	    if (is_degraded_object(sobc->obs.oi.soid)) {
+	      wait_for_degraded_object(sobc->obs.oi.soid, op);
+	    } else {
+	      waiting_for_degraded_object[sobc->obs.oi.soid].push_back(op);
+	      op->mark_delayed("waiting for degraded object");
+	    }
 	    dout(10) << " writes for " << obc->obs.oi.soid << " now blocked by "
 		     << sobc->obs.oi.soid << dendl;
 	    obc->blocked_by = sobc;
