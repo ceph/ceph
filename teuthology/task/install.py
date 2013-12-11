@@ -4,6 +4,7 @@ import contextlib
 import copy
 import logging
 import time
+import os
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -247,6 +248,25 @@ def _block_looking_for_package_version(remote, base_url, wait=False):
     version = r.stdout.getvalue().strip()
     return version
 
+def _get_local_dir(ctx, remote):
+    """
+    Extract local directory name from the task lists. 
+    Copy files over to the remote site.
+    """
+    ldir = None
+    for tsk in ctx.config['tasks']:
+        if 'install' in tsk:
+            try:
+                ldir = tsk['install']['local']
+                break
+            except (TypeError, KeyError):
+                log.info("Attempted to install invalid local file")
+    if ldir:
+        remote.run(args=['sudo', 'mkdir', '-p', ldir,])
+        for fyle in os.listdir(ldir):
+            fname = "%s/%s" % (ldir, fyle)
+            teuthology.sudo_write_file(remote, fname, open(fname).read(), '644')
+    return ldir
 
 def _update_deb_package_list_and_install(ctx, remote, debs, config):
     """
@@ -329,6 +349,10 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
         ] + ['%s=%s' % (d, version) for d in debs],
         stdout=StringIO(),
     )
+    ldir = _get_local_dir(ctx, remote)
+    for fyle in os.listdir(ldir):
+        fname = "%s/%s" % (ldir, fyle)
+        remote.run(args=['sudo', 'dpkg', '-i', fname],)
 
 
 def _yum_fix_repo_priority(remote, project, uri):
@@ -421,11 +445,29 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     tmp_vers = version_no.getvalue().strip()[1:]
     if '-' in tmp_vers:
         tmp_vers = tmp_vers.split('-')[0]
+    ldir = _get_local_dir(ctx, remote)
     for cpack in rpm:
         pk_err_mess = StringIO()
         pkg2add = "{cpack}-{version}".format(cpack=cpack, version=tmp_vers)
-        remote.run(args=['sudo', 'yum', 'install', pkg2add, '-y', ],
-                   stderr=pk_err_mess)
+        pkg = None
+        if ldir:
+            pkg = "{ldir}/{cpack}-{trailer}".format(ldir=ldir, cpack=cpack, trailer=tmp_vers)
+            remote.run(
+                args = ['if', 'test', '-e', 
+                        run.Raw(pkg), run.Raw(';'), 'then',
+                        'sudo', 'yum', 'remove', pkg, '-y', run.Raw(';'),
+                        'sudo', 'yum', 'install', pkg, '-y',
+                        run.Raw(';'), 'fi']
+            )
+        if pkg is None:
+            remote.run(args=['sudo', 'yum', 'install', pkg2add, '-y', ],
+                    stderr=pk_err_mess)
+        else:
+            remote.run(
+                args = ['if', 'test', run.Raw('!'), '-e', 
+                        run.Raw(pkg), run.Raw(';'), 'then',
+                        'sudo', 'yum', 'install', pkg2add, '-y',
+                        run.Raw(';'), 'fi'])
 
 
 def purge_data(ctx):
