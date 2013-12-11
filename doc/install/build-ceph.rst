@@ -41,7 +41,7 @@ started quickly. Ceph build scripts depend on the following:
 On Ubuntu, execute ``sudo apt-get install`` for each dependency that isn't 
 installed on your host. ::
 
-	sudo apt-get install autotools-dev autoconf automake cdbs gcc g++ git libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev libfuse-dev linux-kernel-headers libcrypto++-dev libcrypto++ libexpat1-dev
+	sudo apt-get install autotools-dev autoconf automake cdbs gcc g++ git libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev libfuse-dev linux-kernel-headers libcrypto++-dev libcrypto++ libexpat1-dev pkg-config
 
 On Debian/Squeeze, execute ``aptitude install`` for each dependency that isn't 
 installed on your host. ::
