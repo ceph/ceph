@@ -168,7 +168,7 @@ def reboot(ctx, remotes):
         # proc.exitstatus.get()
     if remotes:
         log.info('waiting for nodes to reboot')
-        time.sleep(5)  # if we try and reconnect too quickly, it succeeds!
+        time.sleep(8)  # if we try and reconnect too quickly, it succeeds!
         reconnect(ctx, 480)  # allow 8 minutes for the reboots
 
 
