@@ -38,6 +38,7 @@
 
 #include "PGBackend.h"
 #include "ReplicatedBackend.h"
+#include "ECBackend.h"
 
 class MOSDSubOpReply;
 
