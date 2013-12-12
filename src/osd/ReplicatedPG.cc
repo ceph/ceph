@@ -4614,12 +4614,15 @@ int ReplicatedPG::fill_in_copy_get(bufferlist::iterator& bp, OSDOp& osd_op,
       cursor.data_complete = true;
       dout(20) << " got data" << dendl;
     }
+    assert(cursor.data_offset <= oi.size);
   }
 
   // omap
   std::map<std::string,bufferlist>& out_omap = reply_obj.omap;
   if (left > 0 && !cursor.omap_complete) {
-    ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(coll, oi.soid);
+    assert(cursor.data_complete);
+    ObjectMap::ObjectMapIterator iter =
+      osd->store->get_omap_iterator(coll, oi.soid);
     assert(iter);
     if (iter->valid()) {
       iter->upper_bound(cursor.omap_offset);
