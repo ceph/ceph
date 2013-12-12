@@ -19,6 +19,7 @@
 #include "TestOpStat.h"
 #include "test/librados/test.h"
 #include "common/sharedptr_registry.hpp"
+#include "common/errno.h"
 #include "osd/HitSet.h"
 
 #ifndef RADOSMODEL_H
@@ -55,7 +56,10 @@ enum TestOpType {
   TEST_OP_COPY_FROM,
   TEST_OP_HIT_SET_LIST,
   TEST_OP_UNDIRTY,
-  TEST_OP_IS_DIRTY
+  TEST_OP_IS_DIRTY,
+  TEST_OP_CACHE_FLUSH,
+  TEST_OP_CACHE_TRY_FLUSH,
+  TEST_OP_CACHE_EVICT
 };
 
 class TestWatchContext : public librados::WatchCtx {
@@ -1750,6 +1754,153 @@ public:
   }
 };
 
+
+
+class CacheFlushOp : public TestOp {
+public:
+  librados::AioCompletion *completion;
+  librados::ObjectWriteOperation op;
+  string oid;
+  bool blocking;
+
+  CacheFlushOp(int n,
+	       RadosTestContext *context,
+	       const string &oid,
+	       TestOpStat *stat,
+	       bool b)
+    : TestOp(n, context, stat),
+      completion(NULL),
+      oid(oid),
+      blocking(b)
+  {}
+
+  void _begin()
+  {
+    context->state_lock.Lock();
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    completion = context->rados.aio_create_completion((void *) cb_arg,
+						      &write_callback, 0);
+    // leave object in unused list so that we race with other operations
+    //context->oid_in_use.insert(oid);
+    //context->oid_not_in_use.erase(oid);
+    context->state_lock.Unlock();
+
+    if (blocking)
+      op.cache_flush();
+    else
+      op.cache_try_flush();
+    int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
+					&op, 0);
+    assert(!r);
+  }
+
+  void _finish(CallbackInfo *info)
+  {
+    context->state_lock.Lock();
+    assert(!done);
+    assert(completion->is_complete());
+    //context->oid_in_use.erase(oid);
+    //context->oid_not_in_use.insert(oid);
+    int r = completion->get_return_value();
+    cout << num << ":  got " << cpp_strerror(r) << std::endl;
+    if (r == 0) {
+      context->update_object_version(oid, completion->get_version64(), false);
+    } else if (r == -EBUSY) {
+      assert(!blocking);
+    } else if (r == -EINVAL) {
+      // caching not enabled?
+    } else if (r == -ENOENT) {
+      // may have raced with a remove?
+    } else {
+      assert(0 == "shouldn't happen");
+    }
+    context->kick();
+    done = true;
+    context->state_lock.Unlock();
+  }
+
+  bool finished()
+  {
+    return done;
+  }
+
+  string getType()
+  {
+    return "CacheFlushOp";
+  }
+};
+
+class CacheEvictOp : public TestOp {
+public:
+  librados::AioCompletion *completion;
+  librados::ObjectWriteOperation op;
+  string oid;
+
+  CacheEvictOp(int n,
+	       RadosTestContext *context,
+	       const string &oid,
+	       TestOpStat *stat)
+    : TestOp(n, context, stat),
+      completion(NULL),
+      oid(oid)
+  {}
+
+  void _begin()
+  {
+    context->state_lock.Lock();
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    completion = context->rados.aio_create_completion((void *) cb_arg,
+						      &write_callback, 0);
+    // leave object in unused list so that we race with other operations
+    //context->oid_in_use.insert(oid);
+    //context->oid_not_in_use.erase(oid);
+    context->state_lock.Unlock();
+
+    op.cache_evict();
+    int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
+					&op, 0);
+    assert(!r);
+  }
+
+  void _finish(CallbackInfo *info)
+  {
+    context->state_lock.Lock();
+    assert(!done);
+    assert(completion->is_complete());
+    //context->oid_in_use.erase(oid);
+    //context->oid_not_in_use.insert(oid);
+    int r = completion->get_return_value();
+    cout << num << ":  got " << cpp_strerror(r) << std::endl;
+    if (r == 0) {
+      context->update_object_version(oid, completion->get_version64());
+    } else if (r == -EBUSY) {
+      // raced with something that dirtied the object
+    } else if (r == -EINVAL) {
+      // caching not enabled?
+    } else if (r == -ENOENT) {
+      // may have raced with a remove?
+    } else {
+      assert(0 == "shouldn't happen");
+    }
+    context->kick();
+    done = true;
+    context->state_lock.Unlock();
+  }
+
+  bool finished()
+  {
+    return done;
+  }
+
+  string getType()
+  {
+    return "CacheEvictOp";
+  }
+};
 
 
 #endif
