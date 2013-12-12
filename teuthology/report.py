@@ -15,17 +15,22 @@ log = logging.getLogger(__name__)
 
 
 def main(args):
-    if args.verbose:
+    if args['--verbose']:
         teuthology.log.setLevel(logging.DEBUG)
 
-    archive_base = os.path.abspath(os.path.expanduser(args.archive))
-    reporter = ResultsReporter(archive_base, base_uri=args.server,
-                               save=args.save, refresh=args.refresh)
-    if args.run and len(args.run) > 1:
-        reporter.report_runs(args.run)
-    elif args.run:
-        reporter.report_run(args.run[0])
-    elif args.all_runs:
+    archive_base = os.path.abspath(os.path.expanduser(args['--archive']))
+    save = not args['--no-save']
+    reporter = ResultsReporter(archive_base, base_uri=args['--server'],
+                               save=save, refresh=args['--refresh'])
+    run = args['--run']
+    job = args['--job']
+    if len(run) == 1 and job:
+        reporter.report_jobs(run[0], job)
+    elif run and len(run) > 1:
+        reporter.report_runs(run)
+    elif run:
+        reporter.report_run(run[0])
+    elif args['--all-runs']:
         reporter.report_all_runs()
 
 
