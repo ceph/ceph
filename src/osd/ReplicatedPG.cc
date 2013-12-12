@@ -101,6 +101,52 @@ static void log_subop_stats(
   osd->logger->tinc(tag_lat, latency);
 }
 
+
+class CopyFromCallback: public ReplicatedPG::CopyCallback {
+public:
+  ReplicatedPG::CopyResults *results;
+  int retval;
+  ReplicatedPG::OpContext *ctx;
+  hobject_t temp_obj;
+  CopyFromCallback(ReplicatedPG::OpContext *ctx_, const hobject_t& temp_obj_)
+    : results(NULL),
+      retval(0),
+      ctx(ctx_),
+      temp_obj(temp_obj_) {}
+  ~CopyFromCallback() {}
+
+  virtual void finish(ReplicatedPG::CopyCallbackResults results_) {
+    results = results_.get<1>();
+    int r = results_.get<0>();
+    retval = r;
+    if (r >= 0) {
+      ctx->pg->execute_ctx(ctx);
+    }
+    ctx->copy_cb = NULL;
+    if (r < 0) {
+      if (r != -ECANCELED) { // on cancel just toss it out; client resends
+	ctx->pg->osd->reply_op_error(ctx->op, r);
+      } else if (results->should_requeue) {
+	ctx->pg->requeue_op(ctx->op);
+      }
+      ctx->pg->close_op_ctx(ctx);
+    }
+    delete results;
+  }
+
+  bool is_temp_obj_used() {
+    return results->started_temp_obj;
+  }
+  uint64_t get_data_size() {
+    return results->object_size;
+  }
+  int get_result() {
+    return retval;
+  }
+};
+
+
+
 // ======================
 // PGBackend::Listener
 
@@ -1318,6 +1364,28 @@ void ReplicatedPG::do_cache_redirect(OpRequestRef op, ObjectContextRef obc)
   m->get_connection()->get_messenger()->send_message(reply, m->get_connection());
   return;
 }
+
+class PromoteCallback: public ReplicatedPG::CopyCallback {
+  OpRequestRef op;
+  ObjectContextRef obc;
+  hobject_t temp_obj;
+  ReplicatedPG *pg;
+public:
+  PromoteCallback(OpRequestRef op_, ObjectContextRef obc_,
+		  const hobject_t& temp_obj_,
+		  ReplicatedPG *pg_)
+    : op(op_),
+      obc(obc_),
+      temp_obj(temp_obj_),
+      pg(pg_) {}
+
+  virtual void finish(ReplicatedPG::CopyCallbackResults results) {
+    ReplicatedPG::CopyResults *results_data = results.get<1>();
+    int r = results.get<0>();
+    pg->finish_promote(r, op, results_data, obc, temp_obj);
+    delete results_data;
+  }
+};
 
 void ReplicatedPG::promote_object(OpRequestRef op, ObjectContextRef obc)
 {
