@@ -3218,6 +3218,7 @@ void object_info_t::dump(Formatter *f) const
   f->dump_stream("version") << version;
   f->dump_stream("prior_version") << prior_version;
   f->dump_stream("last_reqid") << last_reqid;
+  f->dump_unsigned("user_version", user_version);
   f->dump_unsigned("size", size);
   f->dump_stream("mtime") << mtime;
   f->dump_unsigned("lost", (int)is_lost());
