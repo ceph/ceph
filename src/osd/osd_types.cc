@@ -3259,6 +3259,7 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
     out << " " << oi.snaps;
   if (oi.flags)
     out << " " << oi.get_flag_string();
+  out << " uv" << oi.user_version;
   out << ")";
   return out;
 }
