@@ -150,8 +150,10 @@ public:
     int identify_osd(uuid_d u) const;
 
     void encode_client_old(bufferlist& bl) const;
+    void encode_classic(bufferlist& bl, uint64_t features) const;
     void encode(bufferlist& bl, uint64_t features=CEPH_FEATURES_ALL) const;
-    void decode(bufferlist::iterator &p);
+    void decode_classic(bufferlist::iterator &p);
+    void decode(bufferlist::iterator &bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<Incremental*>& o);
 
