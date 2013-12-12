@@ -2389,6 +2389,7 @@ void Migrator::import_logged_start(dirfrag_t df, CDir *dir, int from,
   if (it == import_state.end() ||
       it->second.state != IMPORT_LOGGINGSTART) {
     dout(7) << "import " << df << " must have aborted" << dendl;
+    mds->server->finish_force_open_sessions(imported_client_map, sseqmap);
     return;
   }
 
