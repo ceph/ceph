@@ -119,6 +119,10 @@ public:
     results = results_.get<1>();
     int r = results_.get<0>();
     retval = r;
+
+    // for finish_copyfrom
+    ctx->user_at_version = results->user_version;
+
     if (r >= 0) {
       ctx->pg->execute_ctx(ctx);
     }
@@ -1401,7 +1405,7 @@ void ReplicatedPG::promote_object(OpRequestRef op, ObjectContextRef obc)
       &obc, true, NULL);
     assert(r == 0); // a lookup that allows creates can't fail now
   }
-dout(10) << __func__ << " " << obc->obs.oi.soid << dendl;
+  dout(10) << __func__ << " " << obc->obs.oi.soid << dendl;
 
   hobject_t temp_target = generate_temp_object();
   PromoteCallback *cb = new PromoteCallback(op, obc, temp_target, this);
@@ -1495,7 +1499,9 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 	     << dendl;  
   }
 
-  ctx->user_at_version = obc->obs.oi.user_version;
+  if (!ctx->user_at_version)
+    ctx->user_at_version = obc->obs.oi.user_version;
+  dout(30) << __func__ << " user_at_version " << ctx->user_at_version << dendl;
 
   // note my stats
   utime_t now = ceph_clock_now(cct);
@@ -2604,6 +2610,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_CACHE_FLUSH:
     case CEPH_OSD_OP_CACHE_TRY_FLUSH:
     case CEPH_OSD_OP_UNDIRTY:
+    case CEPH_OSD_OP_COPY_FROM:  // we handle user_version update explicitly
       break;
     default:
       if (op.op & CEPH_OSD_OP_MODE_WR)
@@ -4821,6 +4828,9 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
   ctx->op_t.swap(cb->results->final_tx);
   ctx->op_t.append(cb->results->final_tx);
 
+  // CopyFromCallback fills this in for us
+  obs.oi.user_version = ctx->user_at_version;
+
   interval_set<uint64_t> ch;
   if (obs.oi.size > 0)
     ch.insert(0, obs.oi.size);
@@ -4840,7 +4850,8 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
                                   hobject_t& temp_obj)
 {
   const hobject_t& soid = obc->obs.oi.soid;
-  dout(10) << __func__ << " " << soid << " r=" << r << dendl;
+  dout(10) << __func__ << " " << soid << " r=" << r
+	   << " uv" << results->user_version << dendl;
 
   bool whiteout = false;
   if (r == -ENOENT &&
@@ -4878,6 +4889,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     // create a whiteout
     tctx->op_t.touch(coll, soid);
     tctx->new_obs.oi.set_flag(object_info_t::FLAG_WHITEOUT);
+    dout(20) << __func__ << " creating whiteout" << dendl;
   } else {
     tctx->op_t.swap(results->final_tx);
     if (results->started_temp_obj) {
@@ -4886,7 +4898,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     tctx->new_obs.oi.size = results->object_size;
     tctx->delta_stats.num_bytes += results->object_size;
     tctx->new_obs.oi.category = results->category;
-    tctx->user_at_version = results->user_version;
+    tctx->new_obs.oi.user_version = results->user_version;
   }
 
   repop->ondone = new C_KickBlockedObject(obc, this);
