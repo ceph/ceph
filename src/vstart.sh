@@ -37,6 +37,7 @@ nodaemon=0
 smallmds=0
 overwrite_conf=1
 cephx=1 #turn cephx on by default
+memstore=0
 
 MON_ADDR=""
 
@@ -142,6 +143,9 @@ case $1 in
     -k )
 	    overwrite_conf=0
 	    ;;
+    --memstore )
+	    memstore=1
+	    ;;
     -o )
 	    extra_conf="$extra_conf	$2
 "
@@ -221,6 +225,10 @@ if [ -n "$MON_ADDR" ]; then
 	CMDS_ARGS=" -m "$MON_ADDR
 fi
 
+if [ "$memstore" -eq 1 ]; then
+    COSDMEMSTORE='
+	osd objectstore = memstore'
+fi
 
 # lockdep everywhere?
 # export CEPH_ARGS="--lockdep 1"
@@ -339,6 +347,7 @@ $DAEMONOPTS
         osd scrub load threshold = 5.0
         osd debug op order = true
 $COSDDEBUG
+$COSDMEMSTORE
 $extra_conf
 [mon]
         mon pg warn min per osd = 10
