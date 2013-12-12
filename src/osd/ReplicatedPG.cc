@@ -4548,6 +4548,8 @@ struct C_Copyfrom : public Context {
       tid(0)
   {}
   void finish(int r) {
+    if (r == -ECANCELED)
+      return;
     pg->lock();
     if (last_peering_reset == pg->get_last_peering_reset()) {
       pg->process_copy_chunk(oid, tid, r);
@@ -4964,6 +4966,8 @@ struct C_Flush : public Context {
       tid(0)
   {}
   void finish(int r) {
+    if (r == -ECANCELED)
+      return;
     pg->lock();
     if (last_peering_reset == pg->get_last_peering_reset()) {
       pg->finish_flush(oid, tid, r);
