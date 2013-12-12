@@ -90,15 +90,20 @@ void osd_xinfo_t::dump(Formatter *f) const
   f->dump_stream("down_stamp") << down_stamp;
   f->dump_float("laggy_probability", laggy_probability);
   f->dump_int("laggy_interval", laggy_interval);
+  f->open_array_section("features");
+  if (features & CEPH_FEATURE_OSD_ERASURE_CODES)
+    f->dump_string("flag", "erasure-codes");
+  f->close_section();
 }
 
 void osd_xinfo_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ::encode(down_stamp, bl);
   __u32 lp = laggy_probability * 0xfffffffful;
   ::encode(lp, bl);
   ::encode(laggy_interval, bl);
+  ::encode(features, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -110,6 +115,10 @@ void osd_xinfo_t::decode(bufferlist::iterator& bl)
   ::decode(lp, bl);
   laggy_probability = (float)lp / (float)0xffffffff;
   ::decode(laggy_interval, bl);
+  if (struct_v >= 2)
+    ::decode(features, bl);
+  else
+    features = 0;
   DECODE_FINISH(bl);
 }
 
