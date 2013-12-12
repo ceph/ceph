@@ -183,6 +183,27 @@ private:
 	return new IsDirtyOp(m_op, &context, oid, m_stats);
       }
 
+    case TEST_OP_CACHE_FLUSH:
+      {
+	oid = *(rand_choose(context.oid_not_in_use));
+	cout << "cache_flush oid " << oid << std::endl;
+	return new CacheFlushOp(m_op, &context, oid, m_stats, true);
+      }
+
+    case TEST_OP_CACHE_TRY_FLUSH:
+      {
+	oid = *(rand_choose(context.oid_not_in_use));
+	cout << "cache_try_flush oid " << oid << std::endl;
+	return new CacheFlushOp(m_op, &context, oid, m_stats, false);
+      }
+
+    case TEST_OP_CACHE_EVICT:
+      {
+	oid = *(rand_choose(context.oid_not_in_use));
+	cout << "cache_evict oid " << oid << std::endl;
+	return new CacheEvictOp(m_op, &context, oid, m_stats);
+      }
+
     default:
       cerr << "Invalid op type " << type << std::endl;
       assert(0);
@@ -227,6 +248,9 @@ int main(int argc, char **argv)
     { TEST_OP_HIT_SET_LIST, "hit_set_list" },
     { TEST_OP_IS_DIRTY, "is_dirty" },
     { TEST_OP_UNDIRTY, "undirty" },
+    { TEST_OP_CACHE_FLUSH, "cache_flush" },
+    { TEST_OP_CACHE_TRY_FLUSH, "cache_try_flush" },
+    { TEST_OP_CACHE_EVICT, "cache_evict" },
     { TEST_OP_READ /* grr */, NULL },
   };
 
