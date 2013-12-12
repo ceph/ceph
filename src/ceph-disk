@@ -227,13 +227,22 @@ def which(executable):
             return executable_path
 
 
-def _check_command_executable(arguments):
-    """raise if the executable is not found"""
+def _get_command_executable(arguments):
+    """
+    Return the full path for an executable, raise if the executable is not
+    found. If the executable has already a full path do not perform any checks.
+    """
+    if arguments[0].startswith('/'):  # an absolute path
+        return arguments
     executable = which(arguments[0])
     if not executable:
         command_msg = 'Could not run command: %s' % ' '.join(arguments)
         executable_msg = '%s not in path.' % arguments[0]
         raise ExecutableNotFound('%s %s' % (executable_msg, command_msg))
+
+    # swap the old executable for the new one
+    arguments[0] = executable
+    return arguments
 
 
 def command(arguments):
@@ -246,7 +255,7 @@ def command(arguments):
     since it provides the caller with the safety net of making sure that
     executables *will* be found and will error nicely otherwise.
     """
-    _check_command_executable(arguments)
+    arguments = _get_command_executable(arguments)
 
     return subprocess.Popen(
         arguments,
