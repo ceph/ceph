@@ -87,7 +87,7 @@ def main(ctx):
         ctx.config['job_id'] = job_id
 
     write_initial_metadata(ctx)
-    report.try_push_job_info(ctx.config)
+    report.try_push_job_info(ctx.config, dict(status='running'))
 
     if 'targets' in ctx.config and 'roles' in ctx.config:
         targets = len(ctx.config['targets'])
