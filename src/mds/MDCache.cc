@@ -4649,8 +4649,9 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
       }
       // barebones dirfrag; the full dirfrag loop below will clean up.
       dir = diri->add_dirfrag(new CDir(diri, p->first.frag, this, false));
-      if (dir->authority() != CDIR_AUTH_UNDEF &&
-	  dir->authority().first != from)
+      if (MDS_INO_MDSDIR(from) == p->first.ino ||
+	  (dir->authority() != CDIR_AUTH_UNDEF &&
+	   dir->authority().first != from))
 	adjust_subtree_auth(dir, from);
       dout(10) << " add dirfrag " << *dir << dendl;
     }
