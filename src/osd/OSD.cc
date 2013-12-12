@@ -159,6 +159,7 @@ CompatSet OSD::get_osd_compat_set() {
   CompatSet compat =  get_osd_initial_compat_set();
   //Any features here can be set in code, but not in initial superblock
   compat.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
+  compat.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_ERASURECODES);
   return compat;
 }
 
