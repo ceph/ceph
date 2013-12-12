@@ -80,7 +80,7 @@ case "$1" in
             fi
 
             #start-stop-daemon --start -u $user -x $RADOSGW -- -n $name
-            daemon --user="$user" "$RADOSGW -n $name"
+            daemon --user="$user" "ulimit -n 32768; $RADOSGW -n $name"
             echo "Starting $name..."
         done
         daemon_is_running $RADOSGW
