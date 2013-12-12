@@ -334,7 +334,7 @@ void OSDMap::Incremental::encode_client_old(bufferlist& bl) const
   }
 }
 
-void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
+void OSDMap::Incremental::encode_classic(bufferlist& bl, uint64_t features) const
 {
   if ((features & CEPH_FEATURE_PGID64) == 0) {
     encode_client_old(bl);
@@ -377,7 +377,58 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   ::encode(new_hb_front_up, bl);
 }
 
-void OSDMap::Incremental::decode(bufferlist::iterator &p)
+void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
+{
+  if ((features & CEPH_FEATURE_OSDMAP_ENC) == 0) {
+    encode_classic(bl, features);
+    return;
+  }
+
+  // meta-encoding: how we include client-used and osd-specific data
+  ENCODE_START(7, 7, bl);
+
+  {
+    ENCODE_START(1, 1, bl); // client-usable data
+    ::encode(fsid, bl);
+    ::encode(epoch, bl);
+    ::encode(modified, bl);
+    ::encode(new_pool_max, bl);
+    ::encode(new_flags, bl);
+    ::encode(fullmap, bl);
+    ::encode(crush, bl);
+
+    ::encode(new_max_osd, bl);
+    ::encode(new_pools, bl, features);
+    ::encode(new_pool_names, bl);
+    ::encode(old_pools, bl);
+    ::encode(new_up_client, bl);
+    ::encode(new_state, bl);
+    ::encode(new_weight, bl);
+    ::encode(new_pg_temp, bl);
+    ENCODE_FINISH(bl); // client-usable data
+  }
+
+  {
+    ENCODE_START(1, 1, bl); // extended, osd-only data
+    ::encode(new_hb_back_up, bl);
+    ::encode(new_up_thru, bl);
+    ::encode(new_last_clean_interval, bl);
+    ::encode(new_lost, bl);
+    ::encode(new_blacklist, bl);
+    ::encode(old_blacklist, bl);
+    ::encode(new_up_cluster, bl);
+    ::encode(cluster_snapshot, bl);
+    ::encode(new_uuid, bl);
+    ::encode(new_xinfo, bl);
+    ::encode(new_hb_front_up, bl);
+    ENCODE_FINISH(bl); // osd-only data
+  }
+
+  ENCODE_FINISH(bl); // meta-encoding wrapper
+
+}
+
+void OSDMap::Incremental::decode_classic(bufferlist::iterator &p)
 {
   __u32 n, t;
   // base
@@ -468,6 +519,62 @@ void OSDMap::Incremental::decode(bufferlist::iterator &p)
     ::decode(new_xinfo, p);
   if (ev >= 10)
     ::decode(new_hb_front_up, p);
+}
+
+void OSDMap::Incremental::decode(bufferlist::iterator& bl)
+{
+  /**
+   * Older encodings of the Incremental had a single struct_v which
+   * covered the whole encoding, and was prior to our modern
+   * stuff which includes a compatv and a size. So if we see
+   * a struct_v < 7, we must rewind to the beginning and use our
+   * classic decoder.
+   */
+  DECODE_START_LEGACY_COMPAT_LEN(7, 7, 7, bl); // wrapper
+  if (struct_v < 7) {
+    int struct_v_size = sizeof(struct_v);
+    bl.advance(-struct_v_size);
+    decode_classic(bl);
+    return;
+  }
+  {
+    DECODE_START(1, bl); // client-usable data
+    ::decode(fsid, bl);
+    ::decode(epoch, bl);
+    ::decode(modified, bl);
+    ::decode(new_pool_max, bl);
+    ::decode(new_flags, bl);
+    ::decode(fullmap, bl);
+    ::decode(crush, bl);
+
+    ::decode(new_max_osd, bl);
+    ::decode(new_pools, bl);
+    ::decode(new_pool_names, bl);
+    ::decode(old_pools, bl);
+    ::decode(new_up_client, bl);
+    ::decode(new_state, bl);
+    ::decode(new_weight, bl);
+    ::decode(new_pg_temp, bl);
+    DECODE_FINISH(bl); // client-usable data
+  }
+
+  {
+    DECODE_START(1, bl); // extended, osd-only data
+    ::decode(new_hb_back_up, bl);
+    ::decode(new_up_thru, bl);
+    ::decode(new_last_clean_interval, bl);
+    ::decode(new_lost, bl);
+    ::decode(new_blacklist, bl);
+    ::decode(old_blacklist, bl);
+    ::decode(new_up_cluster, bl);
+    ::decode(cluster_snapshot, bl);
+    ::decode(new_uuid, bl);
+    ::decode(new_xinfo, bl);
+    ::decode(new_hb_front_up, bl);
+    DECODE_FINISH(bl); // osd-only data
+  }
+
+  DECODE_FINISH(bl); // wrapper
 }
 
 void OSDMap::Incremental::dump(Formatter *f) const
