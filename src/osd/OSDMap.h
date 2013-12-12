@@ -463,10 +463,12 @@ private:
   // serialize, unserialize
 private:
   void encode_client_old(bufferlist& bl) const;
+  void encode_classic(bufferlist& bl, uint64_t features) const;
+  void decode_classic(bufferlist::iterator& p);
 public:
   void encode(bufferlist& bl, uint64_t features=CEPH_FEATURES_ALL) const;
   void decode(bufferlist& bl);
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::iterator& bl);
 
 
   /****   mapping facilities   ****/

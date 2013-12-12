@@ -1284,7 +1284,7 @@ void OSDMap::encode_client_old(bufferlist& bl) const
   ::encode(cbl, bl);
 }
 
-void OSDMap::encode(bufferlist& bl, uint64_t features) const
+void OSDMap::encode_classic(bufferlist& bl, uint64_t features) const
 {
   if ((features & CEPH_FEATURE_PGID64) == 0) {
     encode_client_old(bl);
@@ -1332,13 +1332,67 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(osd_addrs->hb_front_addr, bl);
 }
 
+void OSDMap::encode(bufferlist& bl, uint64_t features) const
+{
+  if ((features & CEPH_FEATURE_OSDMAP_ENC) == 0) {
+    encode_classic(bl, features);
+    return;
+  }
+  // meta-encoding: how we include client-used and osd-specific data
+  ENCODE_START(7, 7, bl);
+
+  {
+    ENCODE_START(1, 1, bl); // client-usable data
+    // base
+    ::encode(fsid, bl);
+    ::encode(epoch, bl);
+    ::encode(created, bl);
+    ::encode(modified, bl);
+
+    ::encode(pools, bl, features);
+    ::encode(pool_name, bl);
+    ::encode(pool_max, bl);
+
+    ::encode(flags, bl);
+
+    ::encode(max_osd, bl);
+    ::encode(osd_state, bl);
+    ::encode(osd_weight, bl);
+    ::encode(osd_addrs->client_addr, bl);
+
+    ::encode(*pg_temp, bl);
+
+    // crush
+    bufferlist cbl;
+    crush->encode(cbl);
+    ::encode(cbl, bl);
+    ENCODE_FINISH(bl); // client-usable data
+  }
+
+  {
+    ENCODE_START(1, 1, bl); // extended, osd-only data
+    ::encode(osd_addrs->hb_back_addr, bl);
+    ::encode(osd_info, bl);
+    ::encode(blacklist, bl);
+    ::encode(osd_addrs->cluster_addr, bl);
+    ::encode(cluster_snapshot_epoch, bl);
+    ::encode(cluster_snapshot, bl);
+    ::encode(*osd_uuid, bl);
+    ::encode(osd_xinfo, bl);
+    ::encode(osd_addrs->hb_front_addr, bl);
+    ENCODE_FINISH(bl); // osd-only data
+  }
+
+  ENCODE_FINISH(bl); // meta-encoding wrapper
+}
+
 void OSDMap::decode(bufferlist& bl)
 {
   bufferlist::iterator p = bl.begin();
   decode(p);
 }
 
-void OSDMap::decode(bufferlist::iterator& p)
+void OSDMap::decode_classic(bufferlist::iterator& p)
 {
   __u32 n, t;
   __u16 v;
@@ -1452,7 +1506,70 @@ void OSDMap::decode(bufferlist::iterator& p)
   calc_num_osds();
 }
 
+void OSDMap::decode(bufferlist::iterator& bl)
+{
+  /**
+   * Older encodings of the OSDMap had a single struct_v which
+   * covered the whole encoding, and was prior to our modern
+   * stuff which includes a compatv and a size. So if we see
+   * a struct_v < 7, we must rewind to the beginning and use our
+   * classic decoder.
+   */
+  DECODE_START_LEGACY_COMPAT_LEN(7, 7, 7, bl); // wrapper
+  if (struct_v < 7) {
+    int struct_v_size = sizeof(struct_v);
+    bl.advance(-struct_v_size);
+    decode_classic(bl);
+    return;
+  }
+  /**
+   * Since we made it past that hurdle, we can use our normal paths.
+   */
+  {
+    DECODE_START(1, bl); // client-usable data
+    // base
+    ::decode(fsid, bl);
+    ::decode(epoch, bl);
+    ::decode(created, bl);
+    ::decode(modified, bl);
 
+    ::decode(pools, bl);
+    ::decode(pool_name, bl);
+    ::decode(pool_max, bl);
+
+    ::decode(flags, bl);
+
+    ::decode(max_osd, bl);
+    ::decode(osd_state, bl);
+    ::decode(osd_weight, bl);
+    ::decode(osd_addrs->client_addr, bl);
+
+    ::decode(*pg_temp, bl);
+
+    // crush
+    bufferlist cbl;
+    ::decode(cbl, bl);
+    bufferlist::iterator cblp = cbl.begin();
+    crush->decode(cblp);
+    DECODE_FINISH(bl); // client-usable data
+  }
+
+  {
+    DECODE_START(1, bl); // extended, osd-only data
+    ::decode(osd_addrs->hb_back_addr, bl);
+    ::decode(osd_info, bl);
+    ::decode(blacklist, bl);
+    ::decode(osd_addrs->cluster_addr, bl);
+    ::decode(cluster_snapshot_epoch, bl);
+    ::decode(cluster_snapshot, bl);
+    ::decode(*osd_uuid, bl);
+    ::decode(osd_xinfo, bl);
+    ::decode(osd_addrs->hb_front_addr, bl);
+    DECODE_FINISH(bl); // osd-only data
+  }
+
+  DECODE_FINISH(bl); // wrapper
+}
 
 void OSDMap::dump_json(ostream& out) const
 {
