@@ -254,16 +254,8 @@ def run_job(job_config, teuth_bin_path):
         yaml.safe_dump(data=job_config, stream=tmp)
         tmp.flush()
         arg.append(tmp.name)
-        p = subprocess.Popen(
-            args=arg,
-            close_fds=True,
-            stderr=subprocess.PIPE,
-        )
+        p = subprocess.Popen(args=arg)
         log.info("Job archive: %s", job_config['archive_path'])
-        # Disabling this for now to reduce noise
-        #child = logging.getLogger(__name__ + '.child')
-        #for line in p.stderr:
-        #    child.error(': %s', line.rstrip('\n'))
 
         if teuth_config.results_server:
             log.info("Running with watchdog")
