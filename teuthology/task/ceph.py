@@ -523,29 +523,7 @@ def cluster(ctx, config):
     ctx.ceph = argparse.Namespace()
     ctx.ceph.conf = conf
 
-    conf_path = config.get('conf_path', '/etc/ceph/ceph.conf')
     keyring_path = config.get('keyring_path', '/etc/ceph/ceph.keyring')
-
-    log.info('Writing configs...')
-    conf_fp = StringIO()
-    conf.write(conf_fp)
-    conf_fp.seek(0)
-    writes = ctx.cluster.run(
-        args=[
-            'sudo', 'mkdir', '-p', '/etc/ceph', run.Raw('&&'),
-            'sudo', 'chmod', '0755', '/etc/ceph', run.Raw('&&'),
-            'sudo', 'python',
-            '-c',
-            'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
-            conf_path,
-            run.Raw('&&'),
-            'sudo', 'chmod', '0644', conf_path,
-            ],
-        stdin=run.PIPE,
-        wait=False,
-        )
-    teuthology.feed_many_stdins_and_close(conf_fp, writes)
-    run.wait(writes)
 
     coverage_dir = '{tdir}/archive/coverage'.format(tdir=testdir)
 
@@ -584,11 +562,36 @@ def cluster(ctx, config):
             ],
         )
     (mon0_remote,) = ctx.cluster.only(firstmon).remotes.keys()
-    teuthology.create_simple_monmap(
+    fsid = teuthology.create_simple_monmap(
         ctx,
         remote=mon0_remote,
         conf=conf,
         )
+    if not 'global' in conf:
+        conf['global'] = {}
+    conf['global']['fsid'] = fsid
+
+    log.info('Writing ceph.conf for FSID %s...' % fsid)
+    conf_path = config.get('conf_path', '/etc/ceph/ceph.conf')
+    conf_fp = StringIO()
+    conf.write(conf_fp)
+    conf_fp.seek(0)
+    writes = ctx.cluster.run(
+        args=[
+            'sudo', 'mkdir', '-p', '/etc/ceph', run.Raw('&&'),
+            'sudo', 'chmod', '0755', '/etc/ceph', run.Raw('&&'),
+            'sudo', 'python',
+            '-c',
+            'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
+            conf_path,
+            run.Raw('&&'),
+            'sudo', 'chmod', '0644', conf_path,
+            ],
+        stdin=run.PIPE,
+        wait=False,
+        )
+    teuthology.feed_many_stdins_and_close(conf_fp, writes)
+    run.wait(writes)
 
     log.info('Creating admin key on %s...' % firstmon)
     ctx.cluster.only(firstmon).run(
