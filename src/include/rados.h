@@ -348,6 +348,7 @@ enum {
 	CEPH_OSD_FLAG_RWORDERED =      0x4000,  /* order wrt concurrent reads */
 	CEPH_OSD_FLAG_IGNORE_OVERLAY = 0x8000,  /* ignore pool overlay */
 	CEPH_OSD_FLAG_SKIPRWLOCKS =   0x10000,  /* skip rw locks */
+	CEPH_OSD_FLAG_FLUSH =         0x20000,  /* this is part of flush */
 };
 
 enum {
@@ -372,6 +373,10 @@ enum {
 enum {
 	CEPH_OSD_CMPXATTR_MODE_STRING = 1,
 	CEPH_OSD_CMPXATTR_MODE_U64    = 2
+};
+
+enum {
+	CEPH_OSD_COPY_FROM_FLAG_FLUSH = 1
 };
 
 /*
@@ -425,6 +430,7 @@ struct ceph_osd_op {
 		struct {
 			__le64 snapid;
 			__le64 src_version;
+			__u8 flags;
 		} __attribute__ ((packed)) copy_from;
 		struct {
 			struct ceph_timespec stamp;

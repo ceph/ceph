@@ -390,10 +390,15 @@ void librados::ObjectWriteOperation::omap_rm_keys(
 
 void librados::ObjectWriteOperation::copy_from(const std::string& src,
 					       const IoCtx& src_ioctx,
-					       uint64_t src_version)
+					       uint64_t src_version,
+					       unsigned flags)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->copy_from(object_t(src), src_ioctx.io_ctx_impl->snap_seq, src_ioctx.io_ctx_impl->oloc, src_version);
+  unsigned f = 0;
+  if (flags & librados::COPY_FROM_FLUSH)
+    f |= CEPH_OSD_COPY_FROM_FLAG_FLUSH;
+  o->copy_from(object_t(src), src_ioctx.io_ctx_impl->snap_seq,
+	       src_ioctx.io_ctx_impl->oloc, src_version, f);
 }
 
 void librados::ObjectWriteOperation::undirty()

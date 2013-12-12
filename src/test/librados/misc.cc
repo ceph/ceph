@@ -599,7 +599,7 @@ TEST(LibRadosMisc, CopyPP) {
 
   {
     ObjectWriteOperation op;
-    op.copy_from("foo", ioctx, ioctx.get_last_version());
+    op.copy_from("foo", ioctx, ioctx.get_last_version(), 0);
     ASSERT_EQ(0, ioctx.operate("foo.copy", &op));
 
     bufferlist bl2, x2;
@@ -612,7 +612,7 @@ TEST(LibRadosMisc, CopyPP) {
   // small object without a version
   {
     ObjectWriteOperation op;
-    op.copy_from("foo", ioctx, 0);
+    op.copy_from("foo", ioctx, 0, 0);
     ASSERT_EQ(0, ioctx.operate("foo.copy2", &op));
 
     bufferlist bl2, x2;
@@ -633,7 +633,7 @@ TEST(LibRadosMisc, CopyPP) {
 
   {
     ObjectWriteOperation op;
-    op.copy_from("big", ioctx, ioctx.get_last_version());
+    op.copy_from("big", ioctx, ioctx.get_last_version(), 0);
     ASSERT_EQ(0, ioctx.operate("big.copy", &op));
 
     bufferlist bl2, x2;
@@ -645,7 +645,7 @@ TEST(LibRadosMisc, CopyPP) {
 
   {
     ObjectWriteOperation op;
-    op.copy_from("big", ioctx, 0);
+    op.copy_from("big", ioctx, 0, 0);
     ASSERT_EQ(0, ioctx.operate("big.copy2", &op));
 
     bufferlist bl2, x2;

@@ -158,6 +158,10 @@ namespace librados
     OPERATION_SKIPRWLOCKS = 16,
   };
 
+  enum CopyFromFlags {
+    COPY_FROM_FLUSH = 1, /* this is part of a flush command */
+  };
+
   /*
    * ObjectOperation : compound object operation
    * Batch multiple object operations into a single request, to be applied
@@ -293,8 +297,10 @@ namespace librados
      * @param src source object name
      * @param src_ioctx ioctx for the source object
      * @param version current version of the source object
+     * @param flags flags COPY_FROM_*
      */
-    void copy_from(const std::string& src, const IoCtx& src_ioctx, uint64_t src_version);
+    void copy_from(const std::string& src, const IoCtx& src_ioctx,
+		   uint64_t src_version, unsigned flags);
 
     /**
      * undirty an object
