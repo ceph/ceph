@@ -40,6 +40,9 @@
 
 class MOSDSubOpReply;
 
+class CopyFromCallback;
+class PromoteCallback;
+
 class ReplicatedPG;
 void intrusive_ptr_add_ref(ReplicatedPG *pg);
 void intrusive_ptr_release(ReplicatedPG *pg);
@@ -179,59 +182,7 @@ public:
     virtual ~CopyCallback() {};
   };
 
-  class CopyFromCallback: public CopyCallback {
-  public:
-    CopyResults *results;
-    int retval;
-    OpContext *ctx;
-    hobject_t temp_obj;
-    CopyFromCallback(OpContext *ctx_, const hobject_t& temp_obj_) :
-      results(NULL), retval(0), ctx(ctx_), temp_obj(temp_obj_) {}
-    ~CopyFromCallback() {}
-
-    virtual void finish(CopyCallbackResults results_) {
-      results = results_.get<1>();
-      int r = results_.get<0>();
-      retval = r;
-      if (r >= 0) {
-	ctx->pg->execute_ctx(ctx);
-      }
-      ctx->copy_cb = NULL;
-      if (r < 0) {
-	if (r != -ECANCELED) { // on cancel just toss it out; client resends
-	  ctx->pg->osd->reply_op_error(ctx->op, r);
-	} else if (results->should_requeue) {
-	  ctx->pg->requeue_op(ctx->op);
-	}
-	ctx->pg->close_op_ctx(ctx);
-      }
-      delete results;
-    }
-
-    bool is_temp_obj_used() { return results->started_temp_obj; }
-    uint64_t get_data_size() { return results->object_size; }
-    int get_result() { return retval; }
-  };
   friend class CopyFromCallback;
-
-  class PromoteCallback: public CopyCallback {
-    OpRequestRef op;
-    ObjectContextRef obc;
-    hobject_t temp_obj;
-    ReplicatedPG *pg;
-  public:
-    PromoteCallback(OpRequestRef op_, ObjectContextRef obc_,
-                    const hobject_t& temp_obj_,
-                    ReplicatedPG *pg_) :
-      op(op_), obc(obc_), temp_obj(temp_obj_), pg(pg_) {}
-
-    virtual void finish(CopyCallbackResults results) {
-      CopyResults *results_data = results.get<1>();
-      int r = results.get<0>();
-      pg->finish_promote(r, op, results_data, obc, temp_obj);
-      delete results_data;
-    }
-  };
   friend class PromoteCallback;
 
   struct FlushOp {
