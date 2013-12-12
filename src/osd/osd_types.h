@@ -2289,9 +2289,21 @@ public:
       RWREAD,
       RWWRITE
     };
-    State state;                 /// rw state
-    uint64_t count;              /// number of readers or writers
-    list<OpRequestRef> waiters;  /// ops waiting on state change
+    static const char *get_state_name(State s) {
+      switch (s) {
+      case RWNONE: return "none";
+      case RWREAD: return "read";
+      case RWWRITE: return "write";
+      default: return "???";
+      }
+    }
+    const char *get_state_name() const {
+      return get_state_name(state);
+    }
+
+    State state;                 ///< rw state
+    uint64_t count;              ///< number of readers or writers
+    list<OpRequestRef> waiters;  ///< ops waiting on state change
 
     /// if set, restart backfill when we can get a read lock
     bool backfill_read_marker;
@@ -2459,7 +2471,7 @@ public:
   }
 };
 
-inline ostream& operator<<(ostream& out, ObjectState& obs)
+inline ostream& operator<<(ostream& out, const ObjectState& obs)
 {
   out << obs.oi.soid;
   if (!obs.exists)
@@ -2467,9 +2479,17 @@ inline ostream& operator<<(ostream& out, ObjectState& obs)
   return out;
 }
 
-inline ostream& operator<<(ostream& out, ObjectContext& obc)
+inline ostream& operator<<(ostream& out, const ObjectContext::RWState& rw)
 {
-  return out << "obc(" << obc.obs << ")";
+  return out << "rwstate(" << rw.get_state_name()
+	     << " n=" << rw.count
+	     << " w=" << rw.waiters.size()
+	     << ")";
+}
+
+inline ostream& operator<<(ostream& out, const ObjectContext& obc)
+{
+  return out << "obc(" << obc.obs << " " << obc.rwstate << ")";
 }
 
 
