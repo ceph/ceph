@@ -213,10 +213,24 @@ def run_with_watchdog(process, job_config):
         report.try_push_job_info(job_info, dict(status='running'))
         time.sleep(teuth_config.watchdog_interval)
 
-    # The job finished. We don't know the status, but if it was a pass or fail
-    # it will have already been reported to paddles. In that case paddles
-    # ignores the 'dead' status. If the job was killed, paddles will use the
-    # 'dead' status.
+    # The job finished. Let's make sure paddles knows.
+    branches_with_reporting = ('master', 'next', 'last')
+    if job_config.get('teuthology_branch') not in branches_with_reporting:
+        # The job ran with a teuthology branch that may not have the reporting
+        # feature. Let's call teuthology-report (which will be from the master
+        # branch) to report the job manually.
+        args = ['teuthology-report',
+                '-r',
+                job_info['name'],
+                '-j',
+                job_info['job_id'],
+                ]
+        subprocess.Popen(args).wait()
+
+    # Let's make extra sure that paddles knows the job is finished. We don't
+    # know the status, but if it was a pass or fail it will have already been
+    # reported to paddles. In that case paddles ignores the 'dead' status. If
+    # the job was killed, paddles will use the 'dead' status.
     report.try_push_job_info(job_info, dict(status='dead'))
 
 
