@@ -1893,35 +1893,66 @@ static int get_rbd_seq(dev_t devno, string &seq)
     return r;
   }
 
-  char major[32];
+  int match_minor = -1;
   do {
+    char fn[strlen(devices_path) + strlen(dent->d_name) + strlen("//major") + 1];
+    char buf[32];
+
     if (strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0)
       continue;
 
-    char fn[strlen(devices_path) + strlen(dent->d_name) + strlen("//major") + 1];
-
     snprintf(fn, sizeof(fn), "%s/%s/major", devices_path, dent->d_name);
-    r = read_file(fn, major, sizeof(major));
+    r = read_file(fn, buf, sizeof(buf));
     if (r < 0) {
       cerr << "rbd: could not read major number from " << fn << ": "
 	   << cpp_strerror(-r) << std::endl;
       continue;
     }
     string err;
-    int cur_major = strict_strtol(major, 10, &err);
+    int cur_major = strict_strtol(buf, 10, &err);
     if (!err.empty()) {
       cerr << err << std::endl;
       cerr << "rbd: could not parse major number read from " << fn << ": "
            << cpp_strerror(-r) << std::endl;
       continue;
     }
+    if (cur_major != (int)major(wholediskno))
+      continue;
 
-    if (cur_major == (int)major(wholediskno)) {
-      seq = string(dent->d_name);
-      closedir(device_dir);
-      return 0;
+    if (match_minor == -1) {
+      // matching minors in addition to majors is not necessary unless
+      // single-major scheme is turned on, but, if the kernel supports
+      // it, do it anyway (blkid stuff above ensures that we always have
+      // the correct minor to match with)
+      struct stat sbuf;
+      snprintf(fn, sizeof(fn), "%s/%s/minor", devices_path, dent->d_name);
+      match_minor = (stat(fn, &sbuf) == 0);
     }
 
+    if (match_minor == 1) {
+      snprintf(fn, sizeof(fn), "%s/%s/minor", devices_path, dent->d_name);
+      r = read_file(fn, buf, sizeof(buf));
+      if (r < 0) {
+        cerr << "rbd: could not read minor number from " << fn << ": "
+             << cpp_strerror(-r) << std::endl;
+        continue;
+      }
+      int cur_minor = strict_strtol(buf, 10, &err);
+      if (!err.empty()) {
+        cerr << err << std::endl;
+        cerr << "rbd: could not parse minor number read from " << fn << ": "
+             << cpp_strerror(-r) << std::endl;
+        continue;
+      }
+      if (cur_minor != (int)minor(wholediskno))
+        continue;
+    } else {
+      assert(match_minor == 0);
+    }
+
+    seq = string(dent->d_name);
+    closedir(device_dir);
+    return 0;
   } while ((dent = readdir(device_dir)));
 
   closedir(device_dir);
