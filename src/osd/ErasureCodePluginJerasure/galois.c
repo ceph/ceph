@@ -51,6 +51,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <string.h>
 
 #include "galois.h"
+#include "vectorop.h"
 
 #define NONE (10)
 #define TABLE (11)
@@ -745,23 +746,24 @@ void galois_region_xor(           char *r1,         /* Region 1 */
                                   char *r3,         /* Sum region (r3 = r1 ^ r2) -- can be r1 or r2 */
                                   int nbytes)       /* Number of bytes in region */
 {
-  long *l1;
-  long *l2;
-  long *l3;
-  long *ltop;
-  char *ctop;
-  
-  ctop = r1 + nbytes;
-  ltop = (long *) ctop;
-  l1 = (long *) r1;
-  l2 = (long *) r2;
-  l3 = (long *) r3;
- 
-  while (l1 < ltop) {
-    *l3 = ((*l1)  ^ (*l2));
-    l1++;
-    l2++;
-    l3++;
+  if (nbytes%VECTOR_WORDSIZE) {
+    long* l1 = (long*)r1;
+    long* l2 = (long*)r2;
+    long* l3 = (long*)r3;
+    char *ctop = r1 + nbytes;
+    long* ltop = (long*)ctop;
+    while (l1 < ltop) {
+      *l3++ = ((*l1++)  ^ (*l2++));
+    }
+  } else {
+    vector_op_t* l1 = (vector_op_t*)r1;
+    vector_op_t* l2 = (vector_op_t*)r2;
+    vector_op_t* l3 = (vector_op_t*)r3;
+    char *ctop = r1 + nbytes;
+    vector_op_t* ltop = (vector_op_t*)ctop;
+    while (l1 < ltop) {
+      *l3++ = ((*l1++)  ^ (*l2++));
+    }
   }
 }
 
