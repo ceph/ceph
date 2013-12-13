@@ -13,6 +13,7 @@ import urllib2
 import urlparse
 import yaml
 import json
+import re
 
 from teuthology import safepath
 from .orchestra import run
@@ -251,6 +252,8 @@ def create_simple_monmap(ctx, remote, conf):
     Assumes ceph_conf is up to date.
 
     Assumes mon sections are named "mon.*", with the dot.
+
+    :return the FSID (as a string) of the newly created monmap
     """
     def gen_addresses():
         for section, data in conf.iteritems():
@@ -280,9 +283,14 @@ def create_simple_monmap(ctx, remote, conf):
             '--print',
             '{tdir}/monmap'.format(tdir=testdir),
             ])
-    remote.run(
+
+    r = remote.run(
         args=args,
+        stdout=StringIO()
         )
+    monmap_output = r.stdout.getvalue()
+    fsid = re.search("generated fsid (.+)$", monmap_output, re.MULTILINE).group(1)
+    return fsid
 
 def write_file(remote, path, data):
     remote.run(
