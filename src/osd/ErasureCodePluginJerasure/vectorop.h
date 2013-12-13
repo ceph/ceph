@@ -28,7 +28,7 @@
 // switch to 128-bit XOR operations if possible 
 // -------------------------------------------------------------------------
 #if __GNUC__ > 4 || \
-  (__GNUC__ == 4 && (__GNUC_MINOR__ > 5) ) || \
+  (__GNUC__ == 4 && (__GNUC_MINOR__ >= 4) ) || \
   (__clang__ == 1 )
 #pragma message "* using 128-bit vector operations in " __FILE__ 
 // -------------------------------------------------------------------------
