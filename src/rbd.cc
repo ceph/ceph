@@ -1895,8 +1895,15 @@ static int get_rbd_seq(int major_num, string &seq)
 	   << cpp_strerror(-r) << std::endl;
       continue;
     }
+    string err;
+    int cur_major = strict_strtol(major, 10, &err);
+    if (!err.empty()) {
+      cerr << err << std::endl;
+      cerr << "rbd: could not parse major number read from " << fn << ": "
+           << cpp_strerror(-r) << std::endl;
+      continue;
+    }
 
-    int cur_major = atoi(major);
     if (cur_major == major_num) {
       seq = string(dent->d_name);
       closedir(device_dir);
