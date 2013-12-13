@@ -121,6 +121,7 @@ public:
     ObjectContextRef obc;
     hobject_t src;
     object_locator_t oloc;
+    unsigned flags;
 
     CopyResults *results;
 
@@ -136,9 +137,12 @@ public:
     hobject_t temp_oid;
     object_copy_cursor_t temp_cursor;
 
-    CopyOp(CopyCallback *cb_, ObjectContextRef _obc, hobject_t s, object_locator_t l,
-           version_t v, const hobject_t& dest)
-      : cb(cb_), obc(_obc), src(s), oloc(l),
+    CopyOp(CopyCallback *cb_, ObjectContextRef _obc, hobject_t s,
+	   object_locator_t l,
+           version_t v,
+	   unsigned f,
+	   const hobject_t& dest)
+      : cb(cb_), obc(_obc), src(s), oloc(l), flags(f),
         results(NULL),
 	objecter_tid(0),
 	rval(-1),
@@ -983,8 +987,8 @@ protected:
    * @param temp_dest_oid: the temporary object to use for large objects
    */
   void start_copy(CopyCallback *cb, ObjectContextRef obc, hobject_t src,
-                 object_locator_t oloc, version_t version,
-                 const hobject_t& temp_dest_oid);
+		  object_locator_t oloc, version_t version, unsigned flags,
+		  const hobject_t& temp_dest_oid);
   void process_copy_chunk(hobject_t oid, tid_t tid, int r);
   void _write_copy_chunk(CopyOpRef cop, ObjectStore::Transaction *t);
   void _copy_some(ObjectContextRef obc, CopyOpRef cop);

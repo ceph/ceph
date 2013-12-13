@@ -1325,7 +1325,10 @@ dout(10) << __func__ << " " << obc->obs.oi.soid << dendl;
   PromoteCallback *cb = new PromoteCallback(op, obc, temp_target, this);
   object_locator_t oloc(m->get_object_locator());
   oloc.pool = pool.info.tier_of;
-  start_copy(cb, obc, obc->obs.oi.soid, oloc, 0, temp_target);
+  start_copy(cb, obc, obc->obs.oi.soid, oloc, 0,
+	     CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |
+	     CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE,
+	     temp_target);
 
   assert(obc->is_blocked());
   wait_for_blocked_object(obc->obs.oi.soid, op);
@@ -3791,7 +3794,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  CopyFromCallback *cb = new CopyFromCallback(ctx, temp_target);
 	  ctx->copy_cb = cb;
 	  start_copy(cb, ctx->obc, src, src_oloc, src_version,
-	                      temp_target);
+		     op.copy_from.flags,
+		     temp_target);
 	  result = -EINPROGRESS;
 	} else {
 	  // finish
@@ -4507,12 +4511,14 @@ int ReplicatedPG::fill_in_copy_get(bufferlist::iterator& bp, OSDOp& osd_op,
 }
 
 void ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
-			     hobject_t src, object_locator_t oloc, version_t version,
-			     const hobject_t& temp_dest_oid)
+			      hobject_t src, object_locator_t oloc,
+			      version_t version, unsigned flags,
+			      const hobject_t& temp_dest_oid)
 {
   const hobject_t& dest = obc->obs.oi.soid;
   dout(10) << __func__ << " " << dest
 	   << " from " << src << " " << oloc << " v" << version
+	   << " flags " << flags
 	   << dendl;
 
   // cancel a previous in-progress copy?
@@ -4523,7 +4529,7 @@ void ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
     cancel_copy(cop, false);
   }
 
-  CopyOpRef cop(new CopyOp(cb, obc, src, oloc, version, temp_dest_oid));
+  CopyOpRef cop(new CopyOp(cb, obc, src, oloc, version, flags, temp_dest_oid));
   copy_ops[dest] = cop;
   ++obc->copyfrom_readside;
 
@@ -4549,10 +4555,19 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 
   C_Copyfrom *fin = new C_Copyfrom(this, obc->obs.oi.soid,
 				   get_last_peering_reset());
+
+  unsigned flags = 0;
+  if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_FLUSH)
+    flags |= CEPH_OSD_FLAG_FLUSH;
+  if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE)
+    flags |= CEPH_OSD_FLAG_IGNORE_CACHE;
+  if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY)
+    flags |= CEPH_OSD_FLAG_IGNORE_OVERLAY;
+
   osd->objecter_lock.Lock();
   tid_t tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
 				  cop->src.snap, NULL,
-				  CEPH_OSD_FLAG_IGNORE_OVERLAY,
+				  flags,
 				  new C_OnFinisher(fin,
 						   &osd->objecter_finisher),
 				  // discover the object version if we don't know it yet

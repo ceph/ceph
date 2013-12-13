@@ -349,6 +349,7 @@ enum {
 	CEPH_OSD_FLAG_IGNORE_CACHE =   0x8000,  /* ignore cache logic */
 	CEPH_OSD_FLAG_SKIPRWLOCKS =   0x10000,  /* skip rw locks */
 	CEPH_OSD_FLAG_IGNORE_OVERLAY =0x20000,  /* ignore pool overlay */
+	CEPH_OSD_FLAG_FLUSH =         0x40000,  /* this is part of flush */
 };
 
 enum {
@@ -373,6 +374,12 @@ enum {
 enum {
 	CEPH_OSD_CMPXATTR_MODE_STRING = 1,
 	CEPH_OSD_CMPXATTR_MODE_U64    = 2
+};
+
+enum {
+	CEPH_OSD_COPY_FROM_FLAG_FLUSH = 1,     /* part of a flush operation */
+	CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY = 2,  /* ignore pool overlay */
+	CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE = 4, /* ignore osd cache logic */
 };
 
 /*
@@ -426,6 +433,7 @@ struct ceph_osd_op {
 		struct {
 			__le64 snapid;
 			__le64 src_version;
+			__u8 flags;
 		} __attribute__ ((packed)) copy_from;
 		struct {
 			struct ceph_timespec stamp;

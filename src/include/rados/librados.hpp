@@ -300,7 +300,8 @@ namespace librados
      * @param src_ioctx ioctx for the source object
      * @param version current version of the source object
      */
-    void copy_from(const std::string& src, const IoCtx& src_ioctx, uint64_t src_version);
+    void copy_from(const std::string& src, const IoCtx& src_ioctx,
+		   uint64_t src_version);
 
     /**
      * undirty an object
