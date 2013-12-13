@@ -8,8 +8,7 @@ expect_false()
 	if "$@"; then return 1; else return 0; fi
 }
 
-
-#create pools, set up tier relationship
+# create pools, set up tier relationship
 ceph osd pool create base_pool 2
 ceph osd pool create partial_wrong 2
 ceph osd pool create wrong_cache 2
@@ -77,9 +76,14 @@ expect_false rados -p base_pool get bazobj tmp.txt
 
 rados -p empty_cache ls > tmp.txt
 expect_false diff -q tmp.txt empty.txt
-rados -p base_pool ls > tmp2.txt
-diff -q tmp.txt tmp2.txt
 
+# cleanup
+ceph osd tier remove-overlay base_pool
+ceph osd tier remove base_pool empty_cache
+ceph osd pool delete base_pool base_pool --yes-i-really-really-mean-it
+ceph osd pool delete empty_cache empty_cache --yes-i-really-really-mean-it
+ceph osd pool delete wrong_cache wrong_cache --yes-i-really-really-mean-it
+ceph osd pool delete partial_cache partial_cache --yes-i-really-really-mean-it
 
 ## set of base, cache
 ceph osd pool create base 8
@@ -92,14 +96,33 @@ ceph osd tier set-overlay base cache
 # cache-flush, cache-evict
 rados -p base put foo /etc/passwd
 expect_false rados -p base cache-evict foo
-rados -p base cache-flush foo
-rados -p base cache-evict foo
+expect_false rados -p base cache-flush foo
+expect_false rados -p cache cache-evict foo
+rados -p cache cache-flush foo
+rados -p cache cache-evict foo
+rados -p cache ls - | wc -l | grep 0
+
+# cache-try-flush, cache-evict
+rados -p base put foo /etc/passwd
+expect_false rados -p base cache-evict foo
+expect_false rados -p base cache-flush foo
+expect_false rados -p cache cache-evict foo
+rados -p cache cache-try-flush foo
+rados -p cache cache-evict foo
 rados -p cache ls - | wc -l | grep 0
 
 # cache-flush-evict-all
 rados -p base put bar /etc/passwd
 rados -p cache ls - | wc -l | grep 1
-rados -p base cache-flush-evict-all
+expect_false rados -p base cache-flush-evict-all
+rados -p cache cache-flush-evict-all
+rados -p cache ls - | wc -l | grep 0
+
+# cache-try-flush-evict-all
+rados -p base put bar /etc/passwd
+rados -p cache ls - | wc -l | grep 1
+expect_false rados -p base cache-flush-evict-all
+rados -p cache cache-try-flush-evict-all
 rados -p cache ls - | wc -l | grep 0
 
 # cleanup
