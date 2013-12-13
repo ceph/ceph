@@ -575,15 +575,6 @@ public:
     return pools.find(pg.pool())->second.raw_pg_to_pg(pg);
   }
 
-  // pg -> primary osd
-  int get_pg_primary(pg_t pg) const {
-    vector<int> group;
-    int nrep = pg_to_osds(pg, group);
-    if (nrep)
-      return group[0];
-    return -1;  // we fail!
-  }
-
   // pg -> acting primary osd
   int get_pg_acting_primary(pg_t pg) const {
     vector<int> group;
