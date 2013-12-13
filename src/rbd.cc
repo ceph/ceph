@@ -1705,8 +1705,19 @@ static int do_kernel_add(const char *poolname, const char *imgname,
     }
   }
 
-  // write to /sys/bus/rbd/add
-  int fd = open("/sys/bus/rbd/add", O_WRONLY);
+  // 'add' interface is deprecated, see if 'add_single_major' is
+  // available and use it if it is
+  //
+  // ('add' and 'add_single_major' interfaces are identical, except
+  // that if rbd kernel module is new enough and is configured to use
+  // single-major scheme, 'add' is disabled in order to prevent old
+  // userspace from doing weird things at unmap time)
+  const char *fname = "/sys/bus/rbd/add_single_major";
+  if (stat(fname, &sb)) {
+    fname = "/sys/bus/rbd/add";
+  }
+
+  int fd = open(fname, O_WRONLY);
   if (fd < 0) {
     r = -errno;
     if (r == -ENOENT) {
@@ -1988,7 +1999,14 @@ static int do_kernel_rm(const char *dev)
     }
   }
 
-  int fd = open("/sys/bus/rbd/remove", O_WRONLY);
+  // see comment in do_kernel_add(), same goes for 'remove' vs
+  // 'remove_single_major'
+  const char *fname = "/sys/bus/rbd/remove_single_major";
+  if (stat(fname, &sbuf)) {
+    fname = "/sys/bus/rbd/remove";
+  }
+
+  int fd = open(fname, O_WRONLY);
   if (fd < 0) {
     return -errno;
   }
