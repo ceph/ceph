@@ -83,6 +83,91 @@ TEST(LibRadosTier, Dirty) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
+TEST(LibRadosTier, Overlay) {
+  Rados cluster;
+  std::string base_pool_name = get_temp_pool_name();
+  std::string cache_pool_name = base_pool_name + "-cache";
+  ASSERT_EQ("", create_one_pool_pp(base_pool_name, cluster));
+  ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
+  IoCtx cache_ioctx;
+  ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
+  IoCtx base_ioctx;
+  ASSERT_EQ(0, cluster.ioctx_create(base_pool_name.c_str(), base_ioctx));
+
+  // create objects
+  {
+    bufferlist bl;
+    bl.append("base");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("cache");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("foo", &op));
+  }
+
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + base_pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // by default, the overlay sends us to cache pool
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('c', bl[0]);
+  }
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, cache_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('c', bl[0]);
+  }
+
+  // unless we say otherwise
+  {
+    bufferlist bl;
+    ObjectReadOperation op;
+    op.read(0, 1, &bl, NULL);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, base_ioctx.aio_operate(
+	"foo", completion, &op, librados::SNAP_HEAD,
+	librados::OPERATION_IGNORE_OVERLAY, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+    ASSERT_EQ('b', bl[0]);
+  }
+
+  // tear down tiers
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + base_pool_name +
+    "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+
+  base_ioctx.close();
+  cache_ioctx.close();
+
+  cluster.pool_delete(cache_pool_name.c_str());
+  ASSERT_EQ(0, destroy_one_pool_pp(base_pool_name, cluster));
+}
+
 TEST(LibRadosTier, Promote) {
   Rados cluster;
   std::string base_pool_name = get_temp_pool_name();
