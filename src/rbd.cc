@@ -869,6 +869,11 @@ void rbd_bencher_completion(void *vc, void *pc)
   librbd::RBD::AioCompletion *c = (librbd::RBD::AioCompletion *)vc;
   rbd_bencher *b = static_cast<rbd_bencher *>(pc);
   //cout << "complete " << c << std::endl;
+  int ret = c->get_return_value();
+  if (ret != 0) {
+    cout << "write error: " << cpp_strerror(ret) << std::endl;
+    assert(0 == ret);
+  }
   b->lock.Lock();
   b->in_flight--;
   b->cond.Signal();
