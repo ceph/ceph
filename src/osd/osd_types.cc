@@ -38,6 +38,7 @@ const char *ceph_osd_flag_name(unsigned flag)
   case CEPH_OSD_FLAG_IGNORE_CACHE: return "ignore_cache";
   case CEPH_OSD_FLAG_SKIPRWLOCKS: return "skiprwlocks";
   case CEPH_OSD_FLAG_IGNORE_OVERLAY: return "ignore_overlay";
+  case CEPH_OSD_FLAG_FLUSH: return "flush";
   default: return "???";
   }
 }
