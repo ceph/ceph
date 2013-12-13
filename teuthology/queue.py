@@ -226,12 +226,12 @@ def run_with_watchdog(process, job_config):
                 job_info['job_id'],
                 ]
         subprocess.Popen(args).wait()
-
-    # Let's make extra sure that paddles knows the job is finished. We don't
-    # know the status, but if it was a pass or fail it will have already been
-    # reported to paddles. In that case paddles ignores the 'dead' status. If
-    # the job was killed, paddles will use the 'dead' status.
-    report.try_push_job_info(job_info, dict(status='dead'))
+    else:
+        # Let's make sure that paddles knows the job is finished. We don't know
+        # the status, but if it was a pass or fail it will have already been
+        # reported to paddles. In that case paddles ignores the 'dead' status.
+        # If the job was killed, paddles will use the 'dead' status.
+        report.try_push_job_info(job_info, dict(status='dead'))
 
 
 def run_job(job_config, teuth_bin_path):
