@@ -1,5 +1,6 @@
 import base64
 import paramiko
+import os
 from ..config import config
 
 
@@ -45,11 +46,27 @@ def connect(user_at_host, host_key=None, keep_alive=False,
             key=_create_key(keytype, key)
             )
 
-    # just let the exceptions bubble up to caller
-    ssh.connect(
+    connect_args = dict(
         hostname=host,
         username=user,
-        timeout=60,
-        )
+        timeout=60
+    )
+
+    ssh_config_path = os.path.expanduser("~/.ssh/config")
+    if os.path.exists(ssh_config_path):
+        ssh_config = paramiko.SSHConfig()
+        ssh_config.parse(open(ssh_config_path))
+        opts = ssh_config.lookup(host)
+        opts_to_args = {
+            'identityfile': 'key_filename',
+            'host': 'hostname',
+            'user': 'username'
+        }
+        for opt_name, arg_name in opts_to_args.items():
+            if opt_name in opts:
+                connect_args[arg_name] = opts[opt_name]
+
+    # just let the exceptions bubble up to caller
+    ssh.connect(**connect_args)
     ssh.get_transport().set_keepalive(keep_alive)
     return ssh
