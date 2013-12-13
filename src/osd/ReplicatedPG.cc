@@ -5386,9 +5386,11 @@ void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t)
     cop->attrs.clear();
   }
   if (!cop->temp_cursor.data_complete) {
-    t->write(
+    t->append(
       cop->results.temp_oid,
-      cop->temp_cursor.data_offset, cop->data.length(), cop->data);
+      cop->temp_cursor.data_offset,
+      cop->data.length(),
+      cop->data);
     cop->data.clear();
   }
   if (!cop->temp_cursor.omap_complete) {
