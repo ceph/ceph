@@ -1695,7 +1695,17 @@ static int do_kernel_add(const char *poolname, const char *imgname,
   // modprobe the rbd module if /sys/bus/rbd doesn't exist
   struct stat sb;
   if ((stat("/sys/bus/rbd", &sb) < 0) || (!S_ISDIR(sb.st_mode))) {
-    r = system("/sbin/modprobe rbd");
+    // turn on single-major device number allocation scheme if the
+    // kernel supports it
+    const char *cmd = "/sbin/modprobe rbd";
+    r = system("/sbin/modinfo -F parm rbd | /bin/grep -q ^single_major:");
+    if (r == 0) {
+      cmd = "/sbin/modprobe rbd single_major=Y";
+    } else if (r < 0) {
+      cerr << "rbd: error executing modinfo as shell command!" << std::endl;
+    }
+
+    r = system(cmd);
     if (r) {
       if (r < 0)
         cerr << "rbd: error executing modprobe as shell command!" << std::endl;
