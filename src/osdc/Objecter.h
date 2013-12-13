@@ -1225,6 +1225,7 @@ public:
     RECALC_OP_TARGET_OSD_DNE,
     RECALC_OP_TARGET_OSD_DOWN,
   };
+  bool op_should_be_paused(Op *op);
   int recalc_op_target(Op *op);
   bool recalc_linger_op_target(LingerOp *op);
 
@@ -1325,7 +1326,8 @@ public:
   void set_honor_cache_redirects() { honor_cache_redirects = true; }
   void unset_honor_cache_redirects() { honor_cache_redirects = false; }
 
-  void scan_requests(bool skipped_map,
+  void scan_requests(bool force_resend,
+		     bool force_resend_writes,
 		     map<tid_t, Op*>& need_resend,
 		     list<LingerOp*>& need_resend_linger,
 		     map<tid_t, CommandOp*>& need_resend_command);
