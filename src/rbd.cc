@@ -57,6 +57,8 @@
 #include <sys/param.h>
 #endif
 
+#include <blkid/blkid.h>
+
 #define MAX_SECRET_LEN 1000
 #define MAX_POOL_NAME_SIZE 128
 
@@ -1859,9 +1861,19 @@ static int do_kernel_showmapped(Formatter *f)
   return 0;
 }
 
-static int get_rbd_seq(int major_num, string &seq)
+static int get_rbd_seq(dev_t devno, string &seq)
 {
-  int r;
+  // convert devno, which might be a partition major:minor pair, into
+  // a whole disk major:minor pair
+  dev_t wholediskno;
+  int r = blkid_devno_to_wholedisk(devno, NULL, 0, &wholediskno);
+  if (r) {
+    cerr << "rbd: could not compute wholediskno: " << r << std::endl;
+    // ignore the error: devno == wholediskno most of the time, and if
+    // it turns out it's not we will fail with -ENOENT later anyway
+    wholediskno = devno;
+  }
+
   const char *devices_path = "/sys/bus/rbd/devices";
   DIR *device_dir = opendir(devices_path);
   if (!device_dir) {
@@ -1904,7 +1916,7 @@ static int get_rbd_seq(int major_num, string &seq)
       continue;
     }
 
-    if (cur_major == major_num) {
+    if (cur_major == (int)major(wholediskno)) {
       seq = string(dent->d_name);
       closedir(device_dir);
       return 0;
@@ -1918,16 +1930,14 @@ static int get_rbd_seq(int major_num, string &seq)
 
 static int do_kernel_rm(const char *dev)
 {
-  struct stat dev_stat;
-  int r = stat(dev, &dev_stat);
-  if (!S_ISBLK(dev_stat.st_mode)) {
+  struct stat sbuf;
+  if (stat(dev, &sbuf) || !S_ISBLK(sbuf.st_mode)) {
     cerr << "rbd: " << dev << " is not a block device" << std::endl;
     return -EINVAL;
   }
 
-  int major = major(dev_stat.st_rdev);
   string seq_num;
-  r = get_rbd_seq(major, seq_num);
+  int r = get_rbd_seq(sbuf.st_rdev, seq_num);
   if (r == -ENOENT) {
     cerr << "rbd: " << dev << " is not an rbd device" << std::endl;
     return -EINVAL;
