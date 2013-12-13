@@ -4901,6 +4901,13 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     tctx->new_obs.oi.user_version = results->user_version;
   }
 
+  // take RWWRITE lock for duration of our local write
+  if (!obc->rwstate.get_write_lock()) {
+    assert(0 == "problem!");
+  }
+  tctx->lock_to_release = OpContext::W_LOCK;
+  dout(20) << __func__ << " took lock on obc, " << obc->rwstate << dendl;
+
   repop->ondone = new C_KickBlockedObject(obc, this);
 
   finish_ctx(tctx);
