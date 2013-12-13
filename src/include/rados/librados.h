@@ -927,6 +927,7 @@ uint64_t rados_get_last_version(rados_ioctx_t io);
 /**
  * Write data to an object
  *
+ * @note This will never return a positive value not equal to len.
  * @param io the io context in which the write will occur
  * @param oid name of the object
  * @param buf data to write
