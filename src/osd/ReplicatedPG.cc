@@ -1036,7 +1036,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
     }
   }
 
-  if ((m->get_flags() & CEPH_OSD_FLAG_IGNORE_OVERLAY) == 0 &&
+  if ((m->get_flags() & CEPH_OSD_FLAG_IGNORE_CACHE) == 0 &&
       maybe_handle_cache(op, obc, r))
     return;
 
