@@ -8476,6 +8476,7 @@ hobject_t ReplicatedPG::get_hit_set_archive_object(utime_t start, utime_t end)
 
 void ReplicatedPG::hit_set_clear()
 {
+  dout(20) << __func__ << dendl;
   hit_set.reset(NULL);
   hit_set_start_stats.reset(NULL);
   hit_set_start_stamp = utime_t();
@@ -8505,10 +8506,10 @@ void ReplicatedPG::hit_set_create()
   // make a copy of the params to modify
   HitSet::Params params(pool.info.hit_set_params);
 
+  dout(20) << __func__ << " " << params << dendl;
   if (pool.info.hit_set_params.get_type() == HitSet::TYPE_BLOOM) {
     BloomHitSet::Params *p =
       static_cast<BloomHitSet::Params*>(params.impl.get());
-    dout(20) << __func__ << " " << params << " " << p << dendl;
 
     // convert false positive rate so it holds up across the full period
     p->set_fpp(p->get_fpp() / pool.info.hit_set_count);
