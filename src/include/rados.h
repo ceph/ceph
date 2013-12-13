@@ -348,6 +348,7 @@ enum {
 	CEPH_OSD_FLAG_RWORDERED =      0x4000,  /* order wrt concurrent reads */
 	CEPH_OSD_FLAG_IGNORE_CACHE =   0x8000,  /* ignore cache logic */
 	CEPH_OSD_FLAG_SKIPRWLOCKS =   0x10000,  /* skip rw locks */
+	CEPH_OSD_FLAG_IGNORE_OVERLAY =0x20000,  /* ignore pool overlay */
 };
 
 enum {

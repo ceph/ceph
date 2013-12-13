@@ -142,7 +142,12 @@ namespace librados
    * ordered (e.g., waiting for degraded objects).  In particular, it
    * will make a write followed by a read sequence be preserved.
    *
-   * IGNORE_CACHE will ignore the pool overlay tiering metadata and
+   * IGNORE_CACHE will skip the caching logic on the OSD that normally
+   * handles promotion of objects between tiers.  This allows an operation
+   * to operate (or read) the cached (or uncached) object, even if it is
+   * not coherent.
+   *
+   * IGNORE_OVERLAY will ignore the pool overlay tiering metadata and
    * process the op directly on the destination pool.  This is useful
    * for CACHE_FLUSH and CACHE_EVICT operations.
    */
@@ -153,6 +158,7 @@ namespace librados
     OPERATION_ORDER_READS_WRITES = 4,
     OPERATION_IGNORE_CACHE = 8,
     OPERATION_SKIPRWLOCKS = 16,
+    OPERATION_IGNORE_OVERLAY = 32,
   };
 
   /*
