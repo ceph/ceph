@@ -66,7 +66,14 @@ def is_healthy(ctx, config):
     testdir = teuthology.get_testdir(ctx)
     ceph_admin = teuthology.get_first_mon(ctx, config)
     (remote,) = ctx.cluster.only(ceph_admin).remotes.keys()
+    max_tries = 90  # 90 tries * 10 secs --> 15 minutes
+    tries = 0
     while True:
+        tries += 1
+        if tries >= max_tries:
+            msg = "ceph health was unable to get 'HEALTH_OK' after waiting 15 minutes"
+            raise RuntimeError(msg)
+
         r = remote.run(
             args=[
                 'cd',
@@ -82,7 +89,7 @@ def is_healthy(ctx, config):
         log.debug('Ceph health: %s', out.rstrip('\n'))
         if out.split(None, 1)[0] == 'HEALTH_OK':
             break
-        time.sleep(1)
+        time.sleep(10)
 
 def get_nodes_using_roles(ctx, config, role):
     """Extract the names of nodes that match a given role from a cluster"""
