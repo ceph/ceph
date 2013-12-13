@@ -166,6 +166,8 @@ ErasureCodeJerasure::decode (const set<int> &want_to_read,
   char *data[k];
   char *coding[m + lp];
   for (int i = 0; i < k + m + lp; i++) {
+    (*decoded)[i].clear();
+
     if (chunks.find(i) == chunks.end()) {
       erasures[erasures_count] = i;
       remaining_erasures.insert(i);
@@ -206,7 +208,11 @@ ErasureCodeJerasure::decode (const set<int> &want_to_read,
     // -------------------------------------------------------------------------
     // do erasure decoding 
     // -------------------------------------------------------------------------
-    return jerasure_decode(erasures, data, coding, blocksize);
+    int rc=0;
+    if ((rc = jerasure_decode(erasures, data, coding, blocksize)) ) {
+      (*decoded).clear();
+    }
+    return rc;
   }
   else {
     return 0;
