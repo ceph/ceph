@@ -8566,7 +8566,6 @@ bool ReplicatedPG::hit_set_apply_log()
     ++p;
   }
 
-  info.hit_set.current_last_update = to;
   return true;
 }
 
