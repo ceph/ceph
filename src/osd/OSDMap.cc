@@ -405,6 +405,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     ::encode(new_state, bl);
     ::encode(new_weight, bl);
     ::encode(new_pg_temp, bl);
+    ::encode(new_primary_temp, bl);
     ENCODE_FINISH(bl); // client-usable data
   }
 
@@ -555,6 +556,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     ::decode(new_state, bl);
     ::decode(new_weight, bl);
     ::decode(new_pg_temp, bl);
+    ::decode(new_primary_temp, bl);
     DECODE_FINISH(bl); // client-usable data
   }
 
@@ -676,6 +678,15 @@ void OSDMap::Incremental::dump(Formatter *f) const
     f->close_section();    
   }
   f->close_section();
+
+  f->open_array_section("primary_temp");
+  for (map<pg_t, int>::const_iterator p = new_primary_temp.begin();
+      p != new_primary_temp.end();
+      ++p) {
+    f->dump_stream("pgid") << p->first;
+    f->dump_int("osd", p->second);
+  }
+  f->close_section(); // primary_temp
 
   f->open_array_section("new_up_thru");
   for (map<int32_t,uint32_t>::const_iterator p = new_up_thru.begin(); p != new_up_thru.end(); ++p) {
@@ -1468,6 +1479,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(osd_addrs->client_addr, bl);
 
     ::encode(*pg_temp, bl);
+    ::encode(*primary_temp, bl);
 
     // crush
     bufferlist cbl;
@@ -1652,6 +1664,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
     ::decode(osd_addrs->client_addr, bl);
 
     ::decode(*pg_temp, bl);
+    ::decode(*primary_temp, bl);
 
     // crush
     bufferlist cbl;
@@ -1761,6 +1774,15 @@ void OSDMap::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+
+  f->open_array_section("primary_temp");
+  for (map<pg_t, int>::const_iterator p = primary_temp->begin();
+      p != primary_temp->end();
+      ++p) {
+    f->dump_stream("pgid") << p->first;
+    f->dump_int("osd", p->second);
+  }
+  f->close_section(); // primary_temp
 
   f->open_array_section("blacklist");
   for (hash_map<entity_addr_t,utime_t>::const_iterator p = blacklist.begin();
