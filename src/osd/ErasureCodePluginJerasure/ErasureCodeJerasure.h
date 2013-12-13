@@ -125,7 +125,7 @@ public:
   static const int DEFAULT_K = 7;
   static const int DEFAULT_M = 3;
   static const int DEFAULT_W = 8;
-  static const int DEFAULT_PACKETSIZE = 8;
+  static const int DEFAULT_PACKETSIZE = 2048;
   int *bitmatrix;
   int **schedule;
   int packetsize;
@@ -177,7 +177,7 @@ public:
   static const int DEFAULT_K = 2;
   static const int DEFAULT_M = 2;
   static const int DEFAULT_W = 7;
-  static const int DEFAULT_PACKETSIZE = 8;
+  static const int DEFAULT_PACKETSIZE = 2048;
   int *bitmatrix;
   int **schedule;
   int packetsize;
