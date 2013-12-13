@@ -241,7 +241,6 @@ availability, Ceph Storage Clusters typically run multiple Ceph Monitors so
 that the failure of a single Ceph Monitor will not bring down the Ceph Storage
 Cluster. Ceph uses the `Paxos algorithm`_, which requires a majority of
 monitors (i.e., 1, 2:3, 3:4, 3:5, 4:6, etc.) to form a quorum.
-.. _Paxos algorithm: http://en.wikipedia.org/wiki/Paxos_(computer_science)
 
 Add two Ceph Monitors to your cluster. ::
 
@@ -317,3 +316,4 @@ the migration manually.
 .. _placement group: ../../rados/operations/placement-groups
 .. _Monitoring a Cluster: ../../rados/operations/monitoring
 .. _Monitoring OSDs and PGs: ../../rados/operations/monitoring-osd-pg
+.. _Paxos algorithm: http://en.wikipedia.org/wiki/Paxos_(computer_science)
