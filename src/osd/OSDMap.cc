@@ -1177,18 +1177,6 @@ int OSDMap::pg_to_osds(pg_t pg, vector<int>& raw) const
   return _pg_to_osds(*pool, pg, raw);
 }
 
-int OSDMap::pg_to_acting_osds(pg_t pg, vector<int>& acting) const
-{
-  const pg_pool_t *pool = get_pg_pool(pg.pool());
-  if (!pool)
-    return 0;
-  vector<int> raw;
-  _pg_to_osds(*pool, pg, raw);
-  if (!_raw_to_temp_osds(*pool, pg, raw, acting))
-    _raw_to_up_osds(pg, raw, acting);
-  return acting.size();
-}
-
 void OSDMap::pg_to_raw_up(pg_t pg, vector<int>& up) const
 {
   const pg_pool_t *pool = get_pg_pool(pg.pool());
@@ -1199,16 +1187,19 @@ void OSDMap::pg_to_raw_up(pg_t pg, vector<int>& up) const
   _raw_to_up_osds(pg, raw, up);
 }
   
-void OSDMap::pg_to_up_acting_osds(pg_t pg, vector<int>& up, vector<int>& acting) const
+void OSDMap::_pg_to_up_acting_osds(pg_t pg, vector<int> *up, vector<int>& acting) const
 {
   const pg_pool_t *pool = get_pg_pool(pg.pool());
   if (!pool)
     return;
   vector<int> raw;
+  vector<int> *_up = (up ? up : new vector<int>);
   _pg_to_osds(*pool, pg, raw);
-  _raw_to_up_osds(pg, raw, up);
+  _raw_to_up_osds(pg, raw, *up);
   if (!_raw_to_temp_osds(*pool, pg, raw, acting))
-    acting = up;
+    acting = *_up;
+  if (_up != up)
+    delete _up;
 }
 
 int OSDMap::calc_pg_rank(int osd, vector<int>& acting, int nrep)
