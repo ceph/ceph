@@ -6751,7 +6751,7 @@ void OSD::check_replay_queue()
       dout(10) << "check_replay_queue " << *pg << dendl;
       if (pg->is_active() &&
 	  pg->is_replay() &&
-	  pg->get_role() == 0 &&
+	  pg->is_primary() &&
 	  pg->replay_until == p->second) {
 	pg->replay_queued_ops();
       }
