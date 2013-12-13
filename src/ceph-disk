@@ -273,7 +273,7 @@ def command_check_call(arguments):
     of making sure that executables *will* be found and will error nicely
     otherwise.
     """
-    _check_command_executable(arguments)
+    arguments = _get_command_executable(arguments)
     return subprocess.check_call(arguments)
 
 
