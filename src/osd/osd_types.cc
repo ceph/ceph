@@ -3834,6 +3834,7 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       out << (op.op.watch.flag ? " add":" remove")
 	  << " cookie " << op.op.watch.cookie << " ver " << op.op.watch.ver;
       break;
+    case CEPH_OSD_OP_COPY_GET:
     case CEPH_OSD_OP_COPY_GET_CLASSIC:
       out << " max " << op.op.copy_get.max;
     case CEPH_OSD_OP_COPY_FROM:
