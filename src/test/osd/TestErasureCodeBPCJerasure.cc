@@ -36,7 +36,7 @@ typedef std::map<std::string, timing_t > timing_map_t;
 
 timing_map_t timing;
 unsigned object_size = 4 * 1024 * 1024ll;
-unsigned loops = 1000;
+unsigned loops = 1;
 bool benchmark = false;
 
 template <typename T>
