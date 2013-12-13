@@ -338,7 +338,7 @@ void PGLog::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead
                       bool &dirty_info, bool &dirty_big_info)
 {
   dout(10) << "rewind_divergent_log truncate divergent future " << newhead << dendl;
-  assert(newhead > log.tail);
+  assert(newhead >= log.tail);
 
   list<pg_log_entry_t>::iterator p = log.log.end();
   list<pg_log_entry_t> divergent;
