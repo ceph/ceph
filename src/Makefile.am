@@ -75,8 +75,8 @@ ceph_syn_SOURCES += client/SyntheticClient.cc # uses g_conf.. needs cleanup
 ceph_syn_LDADD = $(LIBCLIENT) $(CEPH_GLOBAL)
 bin_PROGRAMS += ceph-syn
 
-rbd_SOURCES = rbd.cc 
-rbd_LDADD = $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL)
+rbd_SOURCES = rbd.cc
+rbd_LDADD = $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL) -lblkid
 if LINUX
 bin_PROGRAMS += rbd
 endif #LINUX
