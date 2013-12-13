@@ -8601,7 +8601,8 @@ void ReplicatedPG::hit_set_persist()
 
   ObjectContextRef obc = get_object_context(oid, true);
   repop = simple_repop_create(obc);
-  repop->ctx->at_version = get_next_version();
+  OpContext *ctx = repop->ctx;
+  ctx->at_version = get_next_version();
 
   if (info.hit_set.current_last_stamp != utime_t()) {
     // FIXME: we cheat slightly here by bundling in a remove on a object
@@ -8609,37 +8610,50 @@ void ReplicatedPG::hit_set_persist()
     // the deleted object over this period.
     hobject_t old_obj =
       get_hit_set_current_object(info.hit_set.current_last_stamp);
-    repop->ctx->op_t.remove(coll, old_obj);
-    repop->ctx->log.push_back(
+    ctx->op_t.remove(coll, old_obj);
+    ctx->log.push_back(
         pg_log_entry_t(pg_log_entry_t::DELETE,
 		       old_obj,
-		       repop->ctx->at_version,
+		       ctx->at_version,
 		       info.hit_set.current_last_update,
 		       0,
 		       osd_reqid_t(),
-		       repop->ctx->mtime));
-    ++repop->ctx->at_version.version;
+		       ctx->mtime));
+    ++ctx->at_version.version;
   }
 
   info.hit_set.current_last_update = info.last_update; // *after* above remove!
   info.hit_set.current_last_stamp = now;
-  info.hit_set.current_info.version = repop->ctx->at_version;
+  info.hit_set.current_info.version = ctx->at_version;
   if (reset) {
     info.hit_set.history.push_back(info.hit_set.current_info);
     hit_set_create();
-    info.hit_set.current_info.version = repop->ctx->at_version;
+    info.hit_set.current_info.version = ctx->at_version;
   }
 
-  repop->ctx->op_t.write(coll, oid, 0, bl.length(), bl);
-  repop->ctx->log.push_back(
+  // fabricate an object_info_t and SnapSet
+  ctx->new_obs.oi.version = ctx->at_version;
+  ctx->new_obs.oi.mtime = now;
+
+  bufferlist bss;
+  ::encode(ctx->new_snapset, bss);
+  assert(ctx->new_obs.exists == ctx->new_snapset.head_exists);
+
+  bufferlist boi(sizeof(ctx->new_obs.oi));
+  ::encode(ctx->new_obs.oi, boi);
+
+  ctx->op_t.write(coll, oid, 0, bl.length(), bl);
+  ctx->op_t.setattr(coll, oid, OI_ATTR, boi);
+  ctx->op_t.setattr(coll, oid, SS_ATTR, bss);
+  ctx->log.push_back(
         pg_log_entry_t(
 	  pg_log_entry_t::MODIFY,
 	  oid,
-	  repop->ctx->at_version,
-	  repop->ctx->obs->oi.version,
+	  ctx->at_version,
+	  ctx->obs->oi.version,
 	  0,
 	  osd_reqid_t(),
-	  repop->ctx->mtime)
+	  ctx->mtime)
         );
 
   hit_set_trim(repop, pool.info.hit_set_count);
