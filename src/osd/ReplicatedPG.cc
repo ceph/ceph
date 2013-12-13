@@ -1112,8 +1112,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
     return;
   }
 
-  dout(25) << __func__ << ": object " << obc->obs.oi.soid
-	   << " has oi of " << obc->obs.oi << dendl;
+  dout(25) << __func__ << " oi " << obc->obs.oi << dendl;
 
   // are writes blocked by another object?
   if (obc->blocked_by) {
