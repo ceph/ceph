@@ -75,7 +75,7 @@ if [ "$distro" = "ubuntu" ]
 then
     if [ "$mtype" = "saya" ]
     then
-        CEPH_SHA1=`wget http://gitbuilder.ceph.com/ceph-deb-quantal-armv7l-$flavor/ref/$ceph/sha1 -O- 2>/dev/null`
+        CEPH_SHA1=`wget http://gitbuilder.ceph.com/ceph-deb-saucy-armv7l-$flavor/ref/$ceph/sha1 -O- 2>/dev/null`
     else
         CEPH_SHA1=`wget http://gitbuilder.ceph.com/ceph-deb-precise-x86_64-$flavor/ref/$ceph/sha1 -O- 2>/dev/null`
     fi
