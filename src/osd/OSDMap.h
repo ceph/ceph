@@ -507,9 +507,25 @@ private:
   bool _raw_to_temp_osds(const pg_pool_t& pool, pg_t pg, vector<int>& raw, vector<int>& temp) const;
 
 public:
+  /***
+   * This is suitable only for looking at raw CRUSH outputs. It skips
+   * applying the temp and up checks and should not be used
+   * by anybody for data mapping purposes.
+   */
   int pg_to_osds(pg_t pg, vector<int>& raw) const;
+  /// map a pg to its acting set. @return acting set size
   int pg_to_acting_osds(pg_t pg, vector<int>& acting) const;
+  /**
+   * This does not apply temp overrides and should not be used
+   * by anybody for data mapping purposes.
+   */
   void pg_to_raw_up(pg_t pg, vector<int>& up) const;
+  /**
+   * map a pg to its acting set as well as its up set. You must use
+   * the acting set for data mapping purposes, but some users will
+   * also find the up set useful for things like deciding what to
+   * set as pg_temp.
+   */
   void pg_to_up_acting_osds(pg_t pg, vector<int>& up, vector<int>& acting) const;
 
   int64_t lookup_pg_pool_name(const string& name) {
