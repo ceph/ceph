@@ -284,7 +284,7 @@ ErasureCodeJerasureReedSolomonVandermonde::jerasure_decode (int *erasures,
 unsigned
 ErasureCodeJerasureReedSolomonVandermonde::get_alignment ()
 {
-  return k * w*LARGEST_VECTOR_WORDSIZE;
+  return k * w * LARGEST_VECTOR_WORDSIZE;
 }
 
 void
@@ -336,7 +336,7 @@ ErasureCodeJerasureReedSolomonRAID6::jerasure_decode (int *erasures,
 unsigned
 ErasureCodeJerasureReedSolomonRAID6::get_alignment ()
 {
-  return k * w*LARGEST_VECTOR_WORDSIZE;
+  return k * w * LARGEST_VECTOR_WORDSIZE;
 }
 
 void
@@ -390,7 +390,7 @@ ErasureCodeJerasureCauchy::jerasure_decode (int *erasures,
 unsigned
 ErasureCodeJerasureCauchy::get_alignment ()
 {
-  return k * w * packetsize*LARGEST_VECTOR_WORDSIZE;
+  return k * w * packetsize * (packetsize%LARGEST_VECTOR_WORDSIZE)?LARGEST_VECTOR_WORDSIZE:1;
 }
 
 void
@@ -472,7 +472,7 @@ ErasureCodeJerasureLiberation::jerasure_decode (int *erasures,
 unsigned
 ErasureCodeJerasureLiberation::get_alignment ()
 {
-  return k * w * packetsize*LARGEST_VECTOR_WORDSIZE;
+  return k * w * packetsize * (packetsize%LARGEST_VECTOR_WORDSIZE)?LARGEST_VECTOR_WORDSIZE:1;
 }
 
 void
