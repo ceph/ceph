@@ -19,7 +19,7 @@
 #define	CEPH_XOR_H
 
 #include "vectorop.h"
-
+#include <set>
 
 /**
  * @brief XOR a vector source block into a target block e.g. target^=source 
@@ -37,6 +37,6 @@ void vector_xor (vector_op_t* target, vector_op_t* source, int vector_words);
  */
 void vector_assign (vector_op_t*, vector_op_t*, int vector_words);
 
-
+void vector_sse_xor(const std::set<vector_op_t*> &data, vector_op_t* parity, unsigned size);
 #endif	/* CEPH_XOR_H */
 
