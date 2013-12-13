@@ -128,7 +128,12 @@ AX_C_PRETTY_FUNC
 
 # Checks for libraries.
 ACX_PTHREAD
+
 AC_CHECK_LIB([uuid], [uuid_parse], [true], AC_MSG_FAILURE([libuuid not found]))
+
+if test x"$linux" = x"yes"; then
+  AC_CHECK_LIB([blkid], [blkid_devno_to_wholedisk], [true], AC_MSG_FAILURE([libblkid not found]))
+fi
 
 #
 # Check for res_nquery in libresolv. There are several variations. On OSX

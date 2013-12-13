@@ -36,6 +36,7 @@ Build-Depends: autoconf,
                python (>= 2.6.6-3~),
                python-nose,
                uuid-dev,
+               libblkid-dev (>= 2.17),
                yasm
 Standards-Version: 3.9.3
 
