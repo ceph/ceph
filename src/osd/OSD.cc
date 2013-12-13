@@ -5095,6 +5095,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   ObjectStore::Transaction &t = *_t;
 
   // store new maps: queue for disk and put in the osdmap cache
+  epoch_t last_marked_full = 0;
   epoch_t start = MAX(osdmap->get_epoch() + 1, first);
   for (epoch_t e = start; e <= last; e++) {
     map<epoch_t,bufferlist>::iterator p;
@@ -5105,6 +5106,8 @@ void OSD::handle_osd_map(MOSDMap *m)
       bufferlist& bl = p->second;
       
       o->decode(bl);
+      if (o->test_flag(CEPH_OSDMAP_FULL))
+	last_marked_full = e;
       pinned_maps.push_back(add_map(o));
 
       hobject_t fulloid = get_osdmap_pobject_name(e);
@@ -5137,6 +5140,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 	assert(0 == "bad fsid");
       }
 
+      if (o->test_flag(CEPH_OSDMAP_FULL))
+	last_marked_full = e;
       pinned_maps.push_back(add_map(o));
 
       bufferlist fbl;
@@ -5172,6 +5177,8 @@ void OSD::handle_osd_map(MOSDMap *m)
     superblock.oldest_map = first;
   superblock.newest_map = last;
 
+  if (last_marked_full > superblock.last_map_marked_full)
+    superblock.last_map_marked_full = last_marked_full;
  
   map_lock.get_write();
 
@@ -6973,9 +6980,11 @@ void OSD::handle_op(OpRequestRef op)
   if (op->may_write()) {
     // full?
     if ((service.check_failsafe_full() ||
-		  osdmap->test_flag(CEPH_OSDMAP_FULL)) &&
+	 osdmap->test_flag(CEPH_OSDMAP_FULL) ||
+	 m->get_map_epoch() < superblock.last_map_marked_full) &&
 	!m->get_source().is_mds()) {  // FIXME: we'll exclude mds writes for now.
-      service.reply_op_error(op, -ENOSPC);
+      // Drop the request, since the client will retry when the full
+      // flag is unset.
       return;
     }
 
