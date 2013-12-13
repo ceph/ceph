@@ -19,13 +19,14 @@
 #include "ErasureCodeXor.h"
 #include "xor.h"
 #include <stdio.h>
+#include "arch/intel.h"
 
 void
 ErasureCodeXor::compute (const std::set<vector_op_t*> data,
                          vector_op_t* parity,
                          int blocksize) {
   bool append = false;
-  if (1) {
+  if (ceph_arch_intel_sse2) {
     vector_sse_xor(data, parity, blocksize);
   } else {
     for (std::set<vector_op_t*>::const_iterator it = data.begin();
