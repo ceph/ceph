@@ -4734,6 +4734,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     if (results->started_temp_obj) {
       tctx->discard_temp_oid = temp_obj;
     }
+    tctx->new_obs.oi.size = results->object_size;
     tctx->delta_stats.num_bytes += results->object_size;
     tctx->new_obs.oi.category = results->category;
     tctx->user_at_version = results->user_version;
