@@ -1342,10 +1342,8 @@ void Pipe::stop()
 {
   ldout(msgr->cct,10) << "stop" << dendl;
   assert(pipe_lock.is_locked());
-  state = STATE_CLOSED;
-  state_closed.set(1);
+  state = STATE_CLOSING;
   cond.Signal();
-  shutdown_socket();
 }
 
 
