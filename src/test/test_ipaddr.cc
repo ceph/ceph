@@ -85,6 +85,28 @@ TEST(CommonIPAddr, TestV4_Prefix25)
   ASSERT_EQ((struct sockaddr*)&a_two, result);
 }
 
+TEST(CommonIPAddr, TestV4_Prefix16)
+{
+  struct ifaddrs one, two;
+  struct sockaddr_in a_one;
+  struct sockaddr_in a_two;
+  struct sockaddr_in net;
+  const struct sockaddr *result;
+
+  one.ifa_next = &two;
+  one.ifa_addr = (struct sockaddr*)&a_one;
+
+  two.ifa_next = NULL;
+  two.ifa_addr = (struct sockaddr*)&a_two;
+
+  ipv4(&a_one, "10.1.1.2");
+  ipv4(&a_two, "10.2.1.123");
+  ipv4(&net, "10.2.0.0");
+
+  result = find_ip_in_subnet(&one, (struct sockaddr*)&net, 16);
+  ASSERT_EQ((struct sockaddr*)&a_two, result);
+}
+
 TEST(CommonIPAddr, TestV4_PrefixTooLong)
 {
   struct ifaddrs one;
