@@ -42,6 +42,7 @@
 #define CEPH_FEATURE_OSD_CACHEPOOL (1ULL<<35)
 #define CEPH_FEATURE_CRUSH_V2      (1ULL<<36)  /* new indep; SET_* steps */
 #define CEPH_FEATURE_EXPORT_PEER   (1ULL<<37)
+#define CEPH_FEATURE_OSD_ERASURE_CODES (1ULL<<38)
 
 /*
  * The introduction of CEPH_FEATURE_OSD_SNAPMAPPER caused the feature
@@ -107,6 +108,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	 CEPH_FEATURE_OSD_CACHEPOOL |	    \
 	 CEPH_FEATURE_CRUSH_V2 |	    \
 	 CEPH_FEATURE_EXPORT_PEER |	    \
+         CEPH_FEATURE_OSD_ERASURE_CODES |   \
 	 0ULL)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL
