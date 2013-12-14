@@ -201,7 +201,7 @@ def worker(ctx):
         job.delete()
 
 
-def run_with_watchdog(process, job_config):
+def run_with_watchdog(process, job_config, teuth_bin_path):
     # Only push the information that's relevant to the watchdog, to save db
     # load
     job_info = dict(
@@ -219,7 +219,7 @@ def run_with_watchdog(process, job_config):
         # The job ran with a teuthology branch that may not have the reporting
         # feature. Let's call teuthology-report (which will be from the master
         # branch) to report the job manually.
-        args = ['teuthology-report',
+        args = [os.path.join(teuth_bin_path, 'teuthology-report'),
                 '-r',
                 job_info['name'],
                 '-j',
@@ -273,7 +273,7 @@ def run_job(job_config, teuth_bin_path):
 
         if teuth_config.results_server:
             log.info("Running with watchdog")
-            run_with_watchdog(p, job_config)
+            run_with_watchdog(p, job_config, teuth_bin_path)
         else:
             log.info("Running without watchdog")
             p.wait()
