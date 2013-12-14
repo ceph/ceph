@@ -578,8 +578,8 @@ protected:
 
   // hot/cold tracking
   boost::scoped_ptr<HitSet> hit_set;  ///< currently accumulating HitSet
-  utime_t hit_set_start_stamp;   ///< time the current HitSet started recording
   boost::scoped_ptr<pg_stat_t>  hit_set_start_stats;
+  utime_t hit_set_start_stamp;    ///< time the current HitSet started recording
 
   void hit_set_clear();     ///< discard any HitSet state
   void hit_set_setup();     ///< initialize HitSet state
