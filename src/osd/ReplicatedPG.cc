@@ -2946,6 +2946,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EBUSY;
 	  break;
 	}
+	if (!oi.watchers.empty()) {
+	  result = -EBUSY;
+	  break;
+	}
 	result = _delete_head(ctx, true);
       }
       break;
