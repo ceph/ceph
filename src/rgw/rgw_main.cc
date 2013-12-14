@@ -127,6 +127,25 @@ struct RGWRequest
   }
 };
 
+class RGWFrontendConfig {
+  string config;
+  map<string, string> config_map;
+  int parse_config(const string& config, map<string, string>& config_map);
+  string framework;
+public:
+  RGWFrontendConfig(const string& _conf) : config(_conf) {}
+  int init() {
+    int ret = parse_config(config, config_map);
+    if (ret < 0)
+      return ret;
+    return 0;
+  }
+  bool get_val(const string& key, const string& def_val, string *out);
+  bool get_val(const string& key, int def_val, int *out);
+
+  string get_framework() { return framework; }
+};
+
 
 struct RGWFCGXRequest : public RGWRequest {
   FCGX_Request fcgx;
@@ -147,6 +166,7 @@ class RGWProcess {
   Throttle req_throttle;
   RGWREST *rest;
   int sock_fd;
+  RGWFrontendConfig *conf;
 
   RGWProcessEnv *process_env;
 
@@ -203,10 +223,11 @@ class RGWProcess {
   uint64_t max_req_id;
 
 public:
-  RGWProcess(CephContext *cct, RGWProcessEnv *pe, int num_threads)
+  RGWProcess(CephContext *cct, RGWProcessEnv *pe, int num_threads, RGWFrontendConfig *_conf)
     : store(pe->store), olog(pe->olog), m_tp(cct, "RGWProcess::m_tp", num_threads),
       req_throttle(cct, "rgw_ops", num_threads * 2),
       rest(pe->rest), sock_fd(-1),
+      conf(_conf),
       req_wq(this, g_conf->rgw_op_thread_timeout,
 	     g_conf->rgw_op_thread_suicide_timeout, &m_tp),
       max_req_id(0) {}
@@ -222,8 +243,18 @@ public:
 void RGWProcess::run()
 {
   sock_fd = 0;
-  if (!g_conf->rgw_socket_path.empty()) {
-    string path_str = g_conf->rgw_socket_path;
+
+  string socket_path;
+  string socket_port;
+  string socket_host;
+
+  conf->get_val("socket_path", g_conf->rgw_socket_path, &socket_path);
+  conf->get_val("socket_port", g_conf->rgw_port, &socket_port);
+  conf->get_val("socket_host", g_conf->rgw_host, &socket_host);
+
+
+  if (!socket_path.empty()) {
+    string path_str = socket_path;
 
     /* this is necessary, as FCGX_OpenSocket might not return an error, but rather ungracefully exit */
     int fd = open(path_str.c_str(), O_CREAT, 0644);
@@ -247,8 +278,8 @@ void RGWProcess::run()
     if (chmod(path, 0777) < 0) {
       dout(0) << "WARNING: couldn't set permissions on unix domain socket" << dendl;
     }
-  } else if (!g_conf->rgw_port.empty()) {
-    string bind = g_conf->rgw_host + ":" + g_conf->rgw_port;
+  } else if (!socket_port.empty()) {
+    string bind = socket_host + ":" + socket_port;
     sock_fd = FCGX_OpenSocket(bind.c_str(), SOCKET_BACKLOG);
     if (sock_fd < 0) {
       dout(0) << "ERROR: FCGX_OpenSocket (" << bind.c_str() << ") returned " << sock_fd << dendl;
@@ -546,6 +577,74 @@ static RGWRESTMgr *set_logging(RGWRESTMgr *mgr)
 }
 
 
+int RGWFrontendConfig::parse_config(const string& config, map<string, string>& config_map)
+{
+  list<string> config_list;
+  get_str_list(config, " ", config_list);
+
+  list<string>::iterator iter;
+  for (iter = config_list.begin(); iter != config_list.end(); ++iter) {
+    string& entry = *iter;
+    string key;
+    string val;
+
+    if (framework.empty()) {
+      framework = entry;
+      dout(0) << "framework: " << framework << dendl;
+      continue;
+    }
+
+    ssize_t pos = entry.find('=');
+    if (pos < 0) {
+      dout(0) << "framework conf key: " << entry << dendl;
+      config_map[entry] = "";
+      continue;
+    }
+
+    int ret = parse_key_value(entry, key, val);
+    if (ret < 0) {
+      cerr << "ERROR: can't parse " << entry << std::endl;
+      return ret;
+    }
+
+    dout(0) << "framework conf key: " << key << ", val: " << val << dendl;
+    config_map[key] = val;
+  }
+
+  return 0;
+}
+
+
+bool RGWFrontendConfig::get_val(const string& key, const string& def_val, string *out)
+{
+ map<string, string>::iterator iter = config_map.find(key);
+ if (iter == config_map.end()) {
+   *out = def_val;
+   return false;
+ }
+
+ *out = iter->second;
+ return true;
+}
+
+
+bool RGWFrontendConfig::get_val(const string& key, int def_val, int *out)
+{
+  string str;
+  bool found = get_val(key, "", &str);
+  if (!found) {
+    *out = def_val;
+    return false;
+  }
+  string err;
+  *out = strict_strtol(str.c_str(), 10, &err);
+  if (!err.empty()) {
+    cerr << "error parsing int: " << str << ": " << err << std::endl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
 class RGWFrontend {
 public:
   virtual ~RGWFrontend() {}
@@ -566,13 +665,14 @@ public:
 };
 
 class RGWFCGXFrontend : public RGWFrontend {
+  RGWFrontendConfig *conf;
   RGWProcess *pprocess;
   RGWProcessEnv env;
   RGWFCGXControlThread *thread;
 
 public:
-  RGWFCGXFrontend(RGWProcessEnv& pe) : env(pe) {
-    pprocess = new RGWProcess(g_ceph_context, &env, g_conf->rgw_thread_pool_size);
+  RGWFCGXFrontend(RGWProcessEnv& pe, RGWFrontendConfig *_conf) : conf(_conf), env(pe) {
+    pprocess = new RGWProcess(g_ceph_context, &env, g_conf->rgw_thread_pool_size, conf);
     thread = new RGWFCGXControlThread(pprocess);
   }
 
@@ -596,20 +696,20 @@ public:
 };
 
 class RGWMongooseFrontend : public RGWFrontend {
+  RGWFrontendConfig *conf;
   struct mg_context *ctx;
   RGWProcessEnv env;
-  string port;
 
 public:
-  RGWMongooseFrontend(RGWProcessEnv& pe, const string& config) : ctx(NULL), env(pe) {
-    port = config;
+  RGWMongooseFrontend(RGWProcessEnv& pe, RGWFrontendConfig *_conf) : conf(_conf), ctx(NULL), env(pe) {
   }
 
   int run() {
-
     char thread_pool_buf[32];
     snprintf(thread_pool_buf, sizeof(thread_pool_buf), "%d", (int)g_conf->rgw_thread_pool_size);
-    const char *options[] = {"listening_ports", port.c_str(), "enable_keep_alive", "yes", "num_threads", thread_pool_buf, NULL};
+    string port_str;
+    conf->get_val("port", "80", &port_str);
+    const char *options[] = {"listening_ports", port_str.c_str(), "enable_keep_alive", "yes", "num_threads", thread_pool_buf, NULL};
 
     struct mg_callbacks cb;
     memset((void *)&cb, 0, sizeof(cb));
@@ -632,7 +732,6 @@ public:
   void join() {
   }
 };
-
 
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
@@ -671,11 +770,6 @@ int main(int argc, const char **argv)
   check_curl();
 
   if (g_conf->daemonize) {
-    if (g_conf->rgw_socket_path.empty() and g_conf->rgw_port.empty()) {
-      cerr << "radosgw: must specify 'rgw socket path' or 'rgw port' to run as a daemon" << std::endl;
-      exit(1);
-    }
-
     global_init_daemonize(g_ceph_context, 0);
   }
   Mutex mutex("main");
@@ -780,56 +874,53 @@ int main(int argc, const char **argv)
 
   list<string> frontends;
 
-  get_str_list(g_conf->rgw_frontends, frontends);
+  get_str_list(g_conf->rgw_frontends, ",", frontends);
 
-  multimap<string, string> fe_map;
-
+  multimap<string, RGWFrontendConfig *> fe_map;
+  list<RGWFrontendConfig *> configs;
+  if (frontends.empty()) {
+    frontends.push_back("fastcgi");
+  }
   for (list<string>::iterator iter = frontends.begin(); iter != frontends.end(); ++iter) {
     string& f = *iter;
-    string framework;
-    string config;
 
-    int pos = f.find (':');
-    if (pos >= 0) {
-      framework = f.substr(0, pos);
-      config = f.substr(pos + 1);
-    } else {
-      framework = f;
+    RGWFrontendConfig *config = new RGWFrontendConfig(f);
+    int r = config->init();
+    if (r < 0) {
+      cerr << "ERROR: failed to init config: " << f << std::endl;
+      return EINVAL;
     }
 
-    fe_map.insert(make_pair<string, string>(framework, config));
-  }
+    configs.push_back(config);
 
-  if (fe_map.empty()) {
-    fe_map.insert(make_pair<string, string>("fastcgi", ""));
+    string framework = config->get_framework();
+    fe_map.insert(make_pair<string, RGWFrontendConfig *>(framework, config));
   }
 
   list<RGWFrontend *> fes;
 
-  for (multimap<string, string>::iterator fiter = fe_map.begin(); fiter != fe_map.end(); ++fiter) {
-    const string& framework = fiter->first;
-    const string& config = fiter->second;
-    dout(0) << "handler: " << fiter->first << ":" << config << dendl;
+  for (multimap<string, RGWFrontendConfig *>::iterator fiter = fe_map.begin(); fiter != fe_map.end(); ++fiter) {
+    RGWFrontendConfig *config = fiter->second;
+    string framework = config->get_framework();
     RGWFrontend *fe;
-
     if (framework == "fastcgi" || framework == "fcgi") {
       RGWProcessEnv fcgi_pe = { store, &rest, olog, 0 };
 
-      fe = new RGWFCGXFrontend(fcgi_pe);
+      fe = new RGWFCGXFrontend(fcgi_pe, config);
     } else if (framework == "mongoose") {
       string err;
-      int port = strict_strtol(config.c_str(), 10, &err);
-      if (!err.empty()) {
-        cerr << "error parsing frontend config for framework " << framework << ": " << err << std::endl;
-        return EINVAL;
-      }
+
+      int port;
+      config->get_val("port", 80, &port);
 
       RGWProcessEnv env = { store, &rest, olog, port };
 
       fe = new RGWMongooseFrontend(env, config);
     } else {
+      dout(0) << "WARNING: skipping unknown framework: " << framework << dendl;
       continue;
     }
+    dout(0) << "starting handler: " << fiter->first << dendl;
     fe->run();
 
     fes.push_back(fe);
@@ -847,6 +938,11 @@ int main(int argc, const char **argv)
   for (list<RGWFrontend *>::iterator liter = fes.begin(); liter != fes.end(); ++liter) {
     RGWFrontend *fe = *liter;
     fe->join();
+  }
+
+  for (list<RGWFrontendConfig *>::iterator liter = configs.begin(); liter != configs.end(); ++liter) {
+    RGWFrontendConfig *fec = *liter;
+    delete fec;
   }
 
   unregister_async_signal_handler(SIGHUP, sighup_handler);
