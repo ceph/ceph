@@ -8478,7 +8478,6 @@ void ReplicatedPG::hit_set_clear()
 {
   dout(20) << __func__ << dendl;
   hit_set.reset(NULL);
-  hit_set_start_stats.reset(NULL);
   hit_set_start_stamp = utime_t();
 }
 
@@ -8535,7 +8534,6 @@ void ReplicatedPG::hit_set_create()
 	     << " fpp " << p->get_fpp() << dendl;
   }
   hit_set.reset(new HitSet(params));
-  hit_set_start_stats.reset(new pg_stat_t(info.stats));
   hit_set_start_stamp = now;
 }
 
