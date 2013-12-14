@@ -759,12 +759,16 @@ uint64_t OSDMap::get_features(uint64_t *pmask) const
     if (p->second.flags & pg_pool_t::FLAG_HASHPSPOOL) {
       features |= CEPH_FEATURE_OSDHASHPSPOOL;
     }
+    if (p->second.is_erasure()) {
+      features |= CEPH_FEATURE_OSD_ERASURE_CODES;
+    }
     if (!p->second.tiers.empty() ||
 	p->second.is_tier()) {
       features |= CEPH_FEATURE_OSD_CACHEPOOL;
     }
   }
-  mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
+  mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL |
+          CEPH_FEATURE_OSD_ERASURE_CODES;
 
   if (pmask)
     *pmask = mask;
