@@ -2,9 +2,9 @@
  Configuring Federated Gateways
 ================================
 
-.. versionadded:: 0.72 Emperor
+.. versionadded:: 0.67 Dumpling
 
-In Ceph version 0.72 Emperor and beyond, you may configure each :term:`Ceph 
+In Ceph version 0.67 Dumpling and beyond, you may configure each :term:`Ceph 
 Object Gateway` to participate in a federated architecture, with multiple 
 regions, and with multiple zones for a region.
 
@@ -16,7 +16,8 @@ regions, and with multiple zones for a region.
 
 .. important:: Only write objects to the master zone in a region. You may read
    objects from secondary zones. Currently, the Gateway does not prevent you
-   from writing to a secondary zone, but DON'T DO IT.
+   from writing to a secondary zone, but **DON'T DO IT**.
+
 
 Background
 ==========
@@ -37,6 +38,7 @@ you have low latency network connections (this isn't recommended). You may also
 deploy one Ceph Storage Cluster per region with a separate set of  pools for
 each zone (typical). You may also deploy a separate Ceph Storage Cluster for
 each zone if your requirements and resources warrant this level of redundancy.
+
 
 About this Guide
 ================
@@ -106,6 +108,8 @@ prefer. For example:
 - ``.us-east.rgw.root``
 - ``.us-east.rgw.control``
 - ``.us-east.rgw.gc``
+- ``.us-east.rgw.buckets.index``
+- ``.us-east.rgw.buckets``
 - ``.us-east.log``
 - ``.us-east.intent-log``
 - ``.us-east.usage``
@@ -117,6 +121,8 @@ prefer. For example:
 - ``.us-west.rgw.root``
 - ``.us-west.rgw.control``
 - ``.us-west.rgw.gc``
+- ``.us-west.rgw.buckets.index``
+- ``.us-west.rgw.buckets``
 - ``.us-west.log``
 - ``.us-west.intent-log``
 - ``.us-west.usage``
@@ -183,6 +189,10 @@ each node containing an instance.
 	sudo ceph -k /etc/ceph/ceph.client.admin.keyring auth add client.radosgw.us-west-1 -i /etc/ceph/ceph.client.radosgw.keyring
 
 
+.. note:: When you use this procedure to configure the secondary region, 
+   replace ``us-`` with ``eu-``. You will have a total of four users **after** 
+   you create the master region and the secondary region.
+
 
 Install Apache/FastCGI
 ---------------------- 
@@ -204,6 +214,11 @@ hosts. ::
 	
 	ssh {us-west-1}
 	sudo mkdir -p /var/lib/ceph/radosgw/ceph-radosgw.us-west-1
+
+
+.. note:: When you use this procedure to configure the secondary region, 
+   replace ``us-`` with ``eu-``. You will have a total of four data directories 
+   **after** you create the master region and the secondary region.
 	
 
 Create a Gateway Configuration
@@ -234,6 +249,12 @@ gateway configuration as discussed in the following text.
 #. Save the configuration to a file (e.g., ``rgw-us-east.conf``).
 
 Repeat the process for the secondary zone (e.g., ``rgw-us-west.conf``).
+
+.. note:: When you use this procedure to configure the secondary region, 
+   replace ``us-`` with ``eu-``. You will have a total of four gateway
+   configuration files on the respective nodes **after** 
+   you create the master region and the secondary region.
+
 
 
 Enable the Configuration
@@ -292,6 +313,11 @@ the following procedures.
 
 Repeat the process for the secondary zone.
 
+.. note:: When you use this procedure to configure the secondary region, 
+   replace ``us-`` with ``eu-``. You will have a total of four FastCGI scripts
+   **after** you create the master region and the secondary region.
+
+
 
 Add Instances to Ceph Config File
 ---------------------------------
@@ -328,6 +354,13 @@ file. For example::
 	ceph-deploy --overwrite-conf config {node1} {node2} {nodex}	
 
 
+.. note:: When you use this procedure to configure the secondary region, 
+   replace ``us`` with ``eu`` for the name, region, pools and zones. 
+   You will have a total of four entries **after** 
+   you create the master region and the secondary region.
+
+
+
 Create a Region
 ---------------
 
@@ -357,7 +390,7 @@ Create a Region
 	          "log_meta": "false",
 	          "log_data": "false"}],
 	  "placement_targets": [],
-	  "default_placement": ""}
+	  "default_placement": "default-placement"}
 
 
 #. Create the ``us`` region using the ``us.json`` infile you just 
@@ -378,6 +411,16 @@ Create a Region
 #. Update the region map. :: 
 
 	radosgw-admin regionmap update --name client.radosgw.us-east-1
+
+
+If you use different Ceph Storage Cluster instances for regions, you  should
+repeat steps 2, 4 and 5 in by executing them with ``--name
+client.radosgw-us-west-1``. You may also export the region map from the initial
+gateway instance and import it followed by updating the region map.
+
+.. note:: When you use this procedure to configure the secondary region, 
+   replace ``us`` with ``eu``. You will have a total of two regions **after** 
+   you create the master region and the secondary region.
 
 
 
@@ -404,6 +447,12 @@ Create Zones
 	  "user_swift_pool": ".us-east.users.swift",
 	  "user_uid_pool": ".us-east.users.uid",
 	  "system_key": { "access_key": "", "secret_key": ""}
+	  "placement_pools": [
+	    { "key": "default-placement",
+	      "val": { "index_pool": ".us-east.rgw.buckets.index",
+	               "data_pool": ".us-east.rgw.buckets"}
+	    }
+	  ]
 	}
 
 
@@ -431,6 +480,9 @@ Create Zones
 
 	radosgw-admin regionmap update --name client.radosgw.us-east-1
 
+.. note:: When you use this procedure to configure the secondary region, 
+   replace ``us-`` with ``eu-``. You will have a total of four zones **after** 
+   you create the master zone and the secondary zone in each region.
 
 
 Create Zone Users
@@ -443,6 +495,13 @@ this step. ::
 
 	radosgw-admin user create --uid="us-east" --display-name="Region-US Zone-East" --name client.radosgw.us-east-1 --system
 	radosgw-admin user create --uid="us-west" --display-name="Region-US Zone-West" --name client.radosgw.us-west-1 --system
+
+
+.. note:: When you use this procedure to configure the secondary region, 
+   replace ``us-`` with ``eu-``. You will have a total of four zone users 
+   **after** you create the master region and the secondary region and their
+   zones. These users are different from the users created in `Create a 
+   Keyring`_.
 
 
 Update Zone Configurations
@@ -470,7 +529,12 @@ the synchronization agents can authenticate with the zones.
 	    "access_key": "{paste-access_key-here}", 
 	    "secret_key": "{paste-secret_key-here}"
 	  	 },
-	  "placement_pools": []
+	  "placement_pools": [
+	    { "key": "default-placement",
+	      "val": { "index_pool": ".us-east.rgw.buckets.index",
+	               "data_pool": ".us-east.rgw.buckets"}
+	    }
+	  ]
 	}
 
 #. Save the ``us-east.json`` file. Then, update your zone configuration. :: 
@@ -483,6 +547,11 @@ the synchronization agents can authenticate with the zones.
 
 	radosgw-admin zone set --rgw-zone=us-west --infile us-west.json --name client.radosgw.us-east-1
 	radosgw-admin zone set --rgw-zone=us-west --infile us-west.json --name client.radosgw.us-west-1
+
+
+.. note:: When you use this procedure to configure the secondary region, 
+   replace ``us-`` with ``eu-``. You will have a total of four zones **after** 
+   you create the master zone and the secondary zone in each region.
 
 
 Restart Services
