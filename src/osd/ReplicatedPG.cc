@@ -8537,7 +8537,6 @@ void ReplicatedPG::hit_set_create()
   hit_set.reset(new HitSet(params));
   hit_set_start_stats.reset(new pg_stat_t(info.stats));
   hit_set_start_stamp = now;
-  info.hit_set.current_info = pg_hit_set_info_t(now);
 }
 
 /**
@@ -8620,25 +8619,37 @@ void ReplicatedPG::hit_set_persist()
 		       osd_reqid_t(),
 		       ctx->mtime));
     ++ctx->at_version.version;
+
+    struct stat st;
+    int r = osd->store->stat(coll, old_obj, &st);
+    assert(r == 0);
+    --ctx->delta_stats.num_objects;
+    ctx->delta_stats.num_bytes -= st.st_size;
   }
 
   info.hit_set.current_last_update = info.last_update; // *after* above remove!
-  info.hit_set.current_last_stamp = now;
   info.hit_set.current_info.version = ctx->at_version;
   if (reset) {
     info.hit_set.history.push_back(info.hit_set.current_info);
     hit_set_create();
-    info.hit_set.current_info.version = ctx->at_version;
+    info.hit_set.current_info = pg_hit_set_info_t();
+    info.hit_set.current_last_stamp = utime_t();
+  } else {
+    info.hit_set.current_last_stamp = now;
   }
 
   // fabricate an object_info_t and SnapSet
   ctx->new_obs.oi.version = ctx->at_version;
   ctx->new_obs.oi.mtime = now;
+  ctx->new_obs.oi.size = bl.length();
+  ctx->new_obs.exists = true;
+  ctx->new_snapset.head_exists = true;
+
+  ctx->delta_stats.num_objects++;
+  ctx->delta_stats.num_bytes += bl.length();
 
   bufferlist bss;
   ::encode(ctx->new_snapset, bss);
-  assert(ctx->new_obs.exists == ctx->new_snapset.head_exists);
-
   bufferlist boi(sizeof(ctx->new_obs.oi));
   ::encode(ctx->new_obs.oi, boi);
 
@@ -8657,6 +8668,8 @@ void ReplicatedPG::hit_set_persist()
         );
 
   hit_set_trim(repop, pool.info.hit_set_count);
+
+  info.stats.stats.add(ctx->delta_stats, string());
 
   simple_repop_submit(repop);
 }
@@ -8679,6 +8692,12 @@ void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
 		       osd_reqid_t(),
 		       repop->ctx->mtime));
     info.hit_set.history.pop_front();
+
+    struct stat st;
+    int r = osd->store->stat(coll, oid, &st);
+    assert(r == 0);
+    --repop->ctx->delta_stats.num_objects;
+    repop->ctx->delta_stats.num_bytes -= st.st_size;
   }
 }
 
