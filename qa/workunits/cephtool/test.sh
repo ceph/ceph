@@ -235,6 +235,8 @@ for id in `ceph osd ls` ; do
 	ceph tell osd.$id version
 done
 
+ceph osd rm 0 2>&1 | grep 'EBUSY'
+
 id=`ceph osd create`
 ceph osd lost $id --yes-i-really-mean-it
 ceph osd rm $id
