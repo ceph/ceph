@@ -325,10 +325,11 @@ for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
 	ceph osd pool get data $s
 done
 
-ceph osd pool get data size | grep 'size: 2'
-ceph osd pool set data size 3
-ceph osd pool get data size | grep 'size: 3'
-ceph osd pool set data size 2
+old_size=$(ceph osd pool get data size | sed -e 's/size: //')
+(( new_size = old_size + 1 ))
+ceph osd pool set data size $new_size
+ceph osd pool get data size | grep "size: $new_size"
+ceph osd pool set data size $old_size
 
 ceph osd pool set data hashpspool true
 ceph osd pool set data hashpspool false
