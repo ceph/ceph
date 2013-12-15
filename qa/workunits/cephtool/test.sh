@@ -1,6 +1,8 @@
 #!/bin/bash -x
 
 set -e
+set -o functrace
+PS4=' ${FUNCNAME[0]}: $LINENO: '
 
 get_pg()
 {
