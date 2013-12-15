@@ -368,7 +368,7 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
 	     session->is_opening() ||
 	     session->is_stale());
     session->inc_importing();
-    mds->sessionmap.touch_session(session);
+//  mds->sessionmap.touch_session(session);
   }
   return pv;
 }
@@ -706,6 +706,7 @@ void Server::reconnect_tick()
 	 ++p) {
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
       dout(1) << "reconnect gave up on " << session->info.inst << dendl;
+      kill_session(session);
       failed_reconnects++;
     }
     client_reconnect_gather.clear();
