@@ -297,13 +297,17 @@ public:
     return Export(cap_id, _wanted, issued(), pending(), client_follows, last_sent, mseq+1, last_issue_stamp);
   }
   void merge(Export& other, bool auth_cap) {
-    // issued + pending
-    int newpending = other.pending | pending();
-    if (other.issued & ~newpending)
-      issue(other.issued | newpending);
-    else
-      issue(newpending);
-    last_issue_stamp = other.last_issue_stamp;
+    if (!is_stale()) {
+      // issued + pending
+      int newpending = other.pending | pending();
+      if (other.issued & ~newpending)
+	issue(other.issued | newpending);
+      else
+	issue(newpending);
+      last_issue_stamp = other.last_issue_stamp;
+    } else {
+      inc_last_seq();
+    }
 
     client_follows = other.client_follows;
 
@@ -313,21 +317,25 @@ public:
       mseq = other.mseq;
   }
   void merge(int otherwanted, int otherissued) {
-    // issued + pending
-    int newpending = pending();
-    if (otherissued & ~newpending)
-      issue(otherissued | newpending);
-    else
-      issue(newpending);
+    if (!is_stale()) {
+      // issued + pending
+      int newpending = pending();
+      if (otherissued & ~newpending)
+	issue(otherissued | newpending);
+      else
+	issue(newpending);
+    } else {
+      inc_last_seq();
+    }
 
     // wanted
     _wanted = _wanted | otherwanted;
   }
 
   void revoke() {
-    if (pending())
-      issue(0);
-    confirm_receipt(last_sent, 0);
+    if (pending() & ~CEPH_CAP_PIN)
+      issue(CEPH_CAP_PIN);
+    confirm_receipt(last_sent, CEPH_CAP_PIN);
   }
 
   // serializers
