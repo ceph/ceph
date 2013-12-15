@@ -2384,7 +2384,7 @@ def parse_args():
     zap_parser.add_argument(
         'dev',
         metavar='DEV',
-        nargs='*',
+        nargs='+',
         help='path to block device',
         )
     zap_parser.set_defaults(
