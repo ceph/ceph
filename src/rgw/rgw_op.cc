@@ -566,7 +566,7 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
     return false;
   }
 
-  const char *req_hdrs = s->info.env->get("HTTP_ACCESS_CONTROL_ALLOW_HEADERS");
+  const char *req_hdrs = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_HEADERS");
 
   get_cors_response_headers(rule, req_hdrs, headers, exp_headers, max_age);
 
@@ -2142,7 +2142,7 @@ void RGWOptionsCORS::execute()
     ret = -ENOENT;
     return;
   }
-  req_hdrs = s->info.env->get("HTTP_ACCESS_CONTROL_ALLOW_HEADERS");
+  req_hdrs = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_HEADERS");
   ret = validate_cors_request(&bucket_cors);
   if (!rule) {
     origin = req_meth = NULL;
