@@ -251,6 +251,13 @@ int main(int argc, char **argv) {
   return RUN_ALL_TESTS();
 }
 
-// Local Variables:
-// compile-command: "cd ../.. ; make unittest_throttle ; ./unittest_throttle # --gtest_filter=ThrottleTest.destructor --log-to-stderr=true --debug-filestore=20"
-// End:
+/*
+ * Local Variables:
+ * compile-command: "cd ../.. ; 
+ *   make unittest_throttle ; 
+ *   ./unittest_throttle # --gtest_filter=ThrottleTest.destructor \
+ *       --log-to-stderr=true --debug-filestore=20
+ * "
+ * End:
+ */
+
