@@ -17,6 +17,7 @@
 #define MAX_SECRET_OPTION_LEN (MAX_SECRET_LEN + 7)
 
 int verboseflag = 0;
+int skip_mtab_flag = 0;
 static const char * const EMPTY_STRING = "";
 
 /* TODO duplicates logic from kernel */
@@ -267,6 +268,8 @@ static int parse_arguments(int argc, char *const *const argv,
 	for (i = 3; i < argc; ++i) {
 		if (!strcmp("-h", argv[i]))
 			return 1;
+		else if (!strcmp("-n", argv[i]))
+			skip_mtab_flag = 1;
 		else if (!strcmp("-v", argv[i]))
 			verboseflag = 1;
 		else if (!strcmp("-o", argv[i])) {
@@ -313,10 +316,11 @@ static void modprobe(void) {
 
 static void usage(const char *prog_name)
 {
-	printf("usage: %s [src] [mount-point] [-v] [-o ceph-options]\n",
+	printf("usage: %s [src] [mount-point] [-n] [-v] [-o ceph-options]\n",
 		prog_name);
 	printf("options:\n");
 	printf("\t-h: Print this help\n");
+	printf("\t-n: Do not update /etc/mtab\n");
 	printf("\t-v: Verbose\n");
 	printf("\tceph-options: refer to mount.ceph(8)\n");
 	printf("\n");
@@ -362,7 +366,9 @@ int main(int argc, char *argv[])
 			printf("mount error %d = %s\n",errno,strerror(errno));
 		}
 	} else {
-		update_mtab_entry(rsrc, node, "ceph", popts, flags, 0, 0);
+		if (!skip_mtab_flag) {
+			update_mtab_entry(rsrc, node, "ceph", popts, flags, 0, 0);
+		}
 	}
 
 	block_signals(SIG_UNBLOCK);
