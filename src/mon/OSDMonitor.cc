@@ -3156,17 +3156,15 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       long osd = parse_osd_id(idvec[j].c_str(), &ss);
       if (osd < 0) {
 	ss << "invalid osd id" << osd;
-	// XXX -EINVAL here?
+	err = -EINVAL;
 	continue;
       } else if (!osdmap.exists(osd)) {
 	ss << "osd." << osd << " does not exist. ";
-	err = 0;
 	continue;
       }
       if (prefix == "osd down") {
 	if (osdmap.is_down(osd)) {
 	  ss << "osd." << osd << " is already down. ";
-	  err = 0;
 	} else {
 	  pending_inc.new_state[osd] = CEPH_OSD_UP;
 	  ss << "marked down osd." << osd << ". ";
@@ -3175,7 +3173,6 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       } else if (prefix == "osd out") {
 	if (osdmap.is_out(osd)) {
 	  ss << "osd." << osd << " is already out. ";
-	  err = 0;
 	} else {
 	  pending_inc.new_weight[osd] = CEPH_OSD_OUT;
 	  ss << "marked out osd." << osd << ". ";
@@ -3184,7 +3181,6 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       } else if (prefix == "osd in") {
 	if (osdmap.is_in(osd)) {
 	  ss << "osd." << osd << " is already in. ";
-	  err = 0;
 	} else {
 	  pending_inc.new_weight[osd] = CEPH_OSD_IN;
 	  ss << "marked in osd." << osd << ". ";
@@ -3192,7 +3188,10 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       } else if (prefix == "osd rm") {
 	if (osdmap.is_up(osd)) {
+	  if (any)
+	    ss << ", ";
           ss << "osd." << osd << " is still up; must be down before removal. ";
+	  err = -EBUSY;
 	} else {
 	  pending_inc.new_state[osd] = osdmap.get_state(osd);
           pending_inc.new_uuid[osd] = uuid_d();
@@ -3207,7 +3206,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     if (any) {
       getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, err, rs, get_last_committed()));
       return true;
     }
   } else if (prefix == "osd reweight") {
