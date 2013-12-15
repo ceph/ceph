@@ -516,6 +516,11 @@ int RGWOp::read_bucket_cors()
   return 0;
 }
 
+/** CORS 6.2.6.
+ * If any of the header field-names is not a ASCII case-insensitive match for
+ * any of the values in list of headers do not set any additional headers and
+ * terminate this set of steps.
+ * */
 static void get_cors_response_headers(RGWCORSRule *rule, const char *req_hdrs, string& hdrs, string& exp_hdrs, unsigned *max_age) {
   if (req_hdrs) {
     list<string> hl;
@@ -533,12 +538,20 @@ static void get_cors_response_headers(RGWCORSRule *rule, const char *req_hdrs, s
   *max_age = rule->get_max_age();
 }
 
+/**
+ * Generate the CORS header response
+ *
+ * This is described in the CORS standard, section 6.2.
+ */
 bool RGWOp::generate_cors_headers(string& origin, string& method, string& headers, string& exp_headers, unsigned *max_age)
 {
+  /* CORS 6.2.1. */
   const char *orig = s->info.env->get("HTTP_ORIGIN");
   if (!orig) {
     return false;
   }
+
+  /* Custom: */
   origin = orig;
   int ret = read_bucket_cors();
   if (ret < 0) {
@@ -550,10 +563,12 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
     return false;
   }
 
+  /* CORS 6.2.2. */
   RGWCORSRule *rule = bucket_cors.host_name_rule(orig);
   if (!rule)
     return false;
 
+  /* CORS 6.2.3. */
   const char *req_meth = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
   if (!req_meth) {
     req_meth = s->info.method;
@@ -561,13 +576,15 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
 
   if (req_meth)
     method = req_meth;
-
+  /* CORS 6.2.5. */
   if (!validate_cors_rule_method(rule, req_meth)) {
     return false;
   }
 
+  /* CORS 6.2.4. */
   const char *req_hdrs = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_HEADERS");
 
+  /* CORS 6.2.6. */
   get_cors_response_headers(rule, req_hdrs, headers, exp_headers, max_age);
 
   return true;
