@@ -26,7 +26,7 @@ expect_false()
 }
 
 TMPFILE=/tmp/test_invalid.$$
-trap "rm $TMPFILE" 0
+trap "rm -f $TMPFILE" 0
 
 function check_response()
 {
