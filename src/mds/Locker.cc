@@ -1855,7 +1855,7 @@ void Locker::revoke_stale_caps(Session *session)
     cap->mark_stale();
     CInode *in = cap->get_inode();
     int issued = cap->issued();
-    if (issued) {
+    if (issued & ~CEPH_CAP_PIN) {
       dout(10) << " revoking " << ccap_string(issued) << " on " << *in << dendl;      
       cap->revoke();
 

@@ -281,12 +281,13 @@ public:
   }
   Session* get_or_add_session(const entity_inst_t& i) {
     Session *s;
-    if (session_map.count(i.name))
+    if (session_map.count(i.name)) {
       s = session_map[i.name];
-    else
+    } else {
       s = session_map[i.name] = new Session;
-    s->info.inst = i;
-    s->last_cap_renew = ceph_clock_now(g_ceph_context);
+      s->info.inst = i;
+      s->last_cap_renew = ceph_clock_now(g_ceph_context);
+    }
     return s;
   }
   void add_session(Session *s) {
