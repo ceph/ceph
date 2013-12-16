@@ -468,7 +468,7 @@ public:
       ::encode(attrset, tbl);
       ops++;
     }
-    void setattrs(coll_t cid, const hobject_t& oid, map<string,bufferlist>& attrset) {
+    void setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferlist>& attrset) {
       __u32 op = OP_SETATTRS;
       ::encode(op, tbl);
       ::encode(cid, tbl);
