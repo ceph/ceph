@@ -80,6 +80,7 @@ public:
       target_element_count_(predicted_inserted_element_count),
       random_seed_((random_seed) ? random_seed : 0xA5A5A5A5)
   {
+    assert(false_positive_probability > 0.0);
     find_optimal_parameters(predicted_inserted_element_count, false_positive_probability,
 			    &salt_count_, &table_size_);
     init();
@@ -110,6 +111,7 @@ public:
   }
 
   bloom_filter(const bloom_filter& filter)
+    : bit_table_(0)
   {
     this->operator=(filter);
   }
@@ -120,6 +122,7 @@ public:
       salt_count_ = filter.salt_count_;
       table_size_ = filter.table_size_;
       insert_count_ = filter.insert_count_;
+      target_element_count_ = filter.target_element_count_;
       random_seed_ = filter.random_seed_;
       delete[] bit_table_;
       bit_table_ = new cell_type[table_size_];
@@ -305,6 +308,11 @@ public:
   inline std::size_t element_count() const
   {
     return insert_count_;
+  }
+
+  inline bool is_full() const
+  {
+    return insert_count_ >= target_element_count_;
   }
 
   /*

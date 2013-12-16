@@ -64,6 +64,18 @@ int librados::IoCtxImpl::set_snap_write_context(snapid_t seq, vector<snapid_t>& 
   return 0;
 }
 
+uint32_t librados::IoCtxImpl::get_object_hash_position(const std::string& oid)
+{
+  Mutex::Locker l(*lock);
+  return objecter->get_object_hash_position(poolid, oid, oloc.nspace);
+}
+
+uint32_t librados::IoCtxImpl::get_object_pg_hash_position(const std::string& oid)
+{
+  Mutex::Locker l(*lock);
+  return objecter->get_object_pg_hash_position(poolid, oid, oloc.nspace);
+}
+
 void librados::IoCtxImpl::queue_aio_write(AioCompletionImpl *c)
 {
   get();
@@ -370,7 +382,7 @@ int librados::IoCtxImpl::list(Objecter::ListContext *context, int max_entries)
   object_t oid;
   Mutex mylock("IoCtxImpl::list::mylock");
 
-  if (context->at_end)
+  if (context->at_end())
     return 0;
 
   context->max_entries = max_entries;
@@ -785,6 +797,37 @@ int librados::IoCtxImpl::aio_stat(const object_t& oid, AioCompletionImpl *c,
 		 snap_seq, psize, &onack->mtime, 0,
 		 onack, &c->objver);
 
+  return 0;
+}
+
+int librados::IoCtxImpl::hit_set_list(uint32_t hash, AioCompletionImpl *c,
+			      std::list< std::pair<time_t, time_t> > *pls)
+{
+  Context *onack = new C_aio_Ack(c);
+  c->is_read = true;
+  c->io = this;
+
+  Mutex::Locker l(*lock);
+  ::ObjectOperation rd;
+  rd.hit_set_ls(pls, NULL);
+  object_locator_t oloc(poolid);
+  objecter->pg_read(hash, oloc, rd, NULL, 0, onack, NULL);
+  return 0;
+}
+
+int librados::IoCtxImpl::hit_set_get(uint32_t hash, AioCompletionImpl *c,
+				     time_t stamp,
+				     bufferlist *pbl)
+{
+  Context *onack = new C_aio_Ack(c);
+  c->is_read = true;
+  c->io = this;
+
+  Mutex::Locker l(*lock);
+  ::ObjectOperation rd;
+  rd.hit_set_get(utime_t(stamp, 0), pbl, 0);
+  object_locator_t oloc(poolid);
+  objecter->pg_read(hash, oloc, rd, NULL, 0, onack, NULL);
   return 0;
 }
 

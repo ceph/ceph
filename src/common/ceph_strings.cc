@@ -87,6 +87,8 @@ const char *ceph_osd_op_name(int op)
 
 	case CEPH_OSD_OP_PGLS: return "pgls";
 	case CEPH_OSD_OP_PGLS_FILTER: return "pgls-filter";
+	case CEPH_OSD_OP_PG_HITSET_LS: return "pg-hitset-ls";
+	case CEPH_OSD_OP_PG_HITSET_GET: return "pg-hitset-get";
 	case CEPH_OSD_OP_OMAPGETKEYS: return "omap-get-keys";
 	case CEPH_OSD_OP_OMAPGETVALS: return "omap-get-vals";
 	case CEPH_OSD_OP_OMAPGETHEADER: return "omap-get-header";

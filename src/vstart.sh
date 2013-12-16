@@ -35,6 +35,7 @@ start_rgw=0
 ip=""
 nodaemon=0
 smallmds=0
+hitset=""
 overwrite_conf=1
 cephx=1 #turn cephx on by default
 memstore=0
@@ -62,6 +63,7 @@ usage=$usage"\t-m ip:port\t\tspecify monitor address\n"
 usage=$usage"\t-k keep old configuration files\n"
 usage=$usage"\t-x enable cephx (on by default)\n"
 usage=$usage"\t-X disable cephx\n"
+usage=$usage"\t--hitset <pool> <hit_set_type>: enable hitset tracking\n"
 usage=$usage"\t-o config\t\t add extra config parameters to mds section\n"
 
 usage_exit() {
@@ -145,6 +147,11 @@ case $1 in
 	    ;;
     --memstore )
 	    memstore=1
+	    ;;
+    --hitset )
+	    hitset="$hitset $2 $3"
+	    shift
+	    shift
 	    ;;
     -o )
 	    extra_conf="$extra_conf	$2
@@ -580,6 +587,20 @@ EOF
 	run 'apache2' $SUDO apache2 -f $CEPH_OUT_DIR/apache.conf
     done
 fi
+
+do_hitsets() {
+    while [ -n "$*" ]; do
+	pool="$1"
+	type="$2"
+	shift
+	shift
+	echo "setting hit_set on pool $pool type $type ..."
+	$CEPH_ADM osd pool set $pool hit_set_type $type
+	$CEPH_ADM osd pool set $pool hit_set_count 8
+	$CEPH_ADM osd pool set $pool hit_set_period 30
+    done
+}
+do_hitsets $hitset
 
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 

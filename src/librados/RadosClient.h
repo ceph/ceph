@@ -83,6 +83,8 @@ public:
 
   uint64_t get_instance_id();
 
+  int wait_for_latest_osdmap();
+
   int create_ioctx(const char *name, IoCtxImpl **io);
 
   int get_fsid(std::string *s);
@@ -109,17 +111,17 @@ public:
   void register_watcher(librados::WatchContext *wc, uint64_t *cookie);
   void unregister_watcher(uint64_t cookie);
   void watch_notify(MWatchNotify *m);
-  int mon_command(const vector<string>& cmd, bufferlist &inbl,
+  int mon_command(const vector<string>& cmd, const bufferlist &inbl,
 	          bufferlist *outbl, string *outs);
   int mon_command(int rank,
-		  const vector<string>& cmd, bufferlist &inbl,
+		  const vector<string>& cmd, const bufferlist &inbl,
 	          bufferlist *outbl, string *outs);
   int mon_command(string name,
-		  const vector<string>& cmd, bufferlist &inbl,
+		  const vector<string>& cmd, const bufferlist &inbl,
 	          bufferlist *outbl, string *outs);
-  int osd_command(int osd, vector<string>& cmd, bufferlist& inbl,
+  int osd_command(int osd, vector<string>& cmd, const bufferlist& inbl,
                   bufferlist *poutbl, string *prs);
-  int pg_command(pg_t pgid, vector<string>& cmd, bufferlist& inbl,
+  int pg_command(pg_t pgid, vector<string>& cmd, const bufferlist& inbl,
 	         bufferlist *poutbl, string *prs);
 
   void handle_log(MLog *m);

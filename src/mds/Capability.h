@@ -231,6 +231,9 @@ public:
     g_num_cap--;
     g_num_caps++;
   }
+
+  Capability(const Capability& other);  // no copying
+  const Capability& operator=(const Capability& other);  // no copying
   
   ceph_seq_t get_mseq() { return mseq; }
 

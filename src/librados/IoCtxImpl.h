@@ -91,6 +91,9 @@ struct librados::IoCtxImpl {
     return poolid;
   }
 
+  uint32_t get_object_hash_position(const std::string& oid);
+  uint32_t get_object_pg_hash_position(const std::string& oid);
+
   ::ObjectOperation *prepare_assert_ops(::ObjectOperation *op);
 
   // snaps
@@ -182,6 +185,11 @@ struct librados::IoCtxImpl {
 
   int pool_change_auid(unsigned long long auid);
   int pool_change_auid_async(unsigned long long auid, PoolAsyncCompletionImpl *c);
+
+  int hit_set_list(uint32_t hash, AioCompletionImpl *c,
+		   std::list< std::pair<time_t, time_t> > *pls);
+  int hit_set_get(uint32_t hash, AioCompletionImpl *c, time_t stamp,
+		  bufferlist *pbl);
 
   void set_sync_op_version(version_t ver);
   int watch(const object_t& oid, uint64_t ver, uint64_t *cookie, librados::WatchCtx *ctx);

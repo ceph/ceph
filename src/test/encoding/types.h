@@ -34,7 +34,7 @@ TYPEWITHSTRAYDATA(OSDMap)
 TYPEWITHSTRAYDATA(OSDMap::Incremental)
 
 #include "crush/CrushWrapper.h"
-TYPE(CrushWrapper)
+TYPE_NOCOPY(CrushWrapper)
 
 #include "include/histogram.h"
 TYPE(pow2_hist_t)
@@ -73,12 +73,21 @@ TYPE(ObjectRecoveryInfo)
 TYPE(ObjectRecoveryProgress)
 TYPE(ScrubMap::object)
 TYPE(ScrubMap)
+TYPE(pg_hit_set_info_t)
+TYPE(pg_hit_set_history_t)
 TYPE(osd_peer_stat_t)
 TYPE(clone_info)
 TYPE(obj_list_snap_response_t)
 TYPE(PullOp)
 TYPE(PushOp)
 TYPE(PushReplyOp)
+
+#include "osd/HitSet.h"
+TYPE(ExplicitHashHitSet)
+TYPE(ExplicitObjectHitSet)
+TYPE(BloomHitSet)
+TYPE(HitSet)
+TYPE(HitSet::Params)
 
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)
@@ -143,7 +152,7 @@ TYPE_FEATUREFUL(MDSMap)
 TYPE_FEATUREFUL(MDSMap::mds_info_t)
 
 #include "mds/Capability.h"
-TYPE(Capability)
+TYPE_NOCOPY(Capability)
 
 #include "mds/AnchorServer.h"
 TYPE(AnchorServer)
@@ -162,7 +171,7 @@ TYPE(EImportFinish)
 #include "mds/events/EImportStart.h"
 TYPE(EImportStart)
 #include "mds/events/EMetaBlob.h"
-TYPE(EMetaBlob::fullbit)
+TYPE_NOCOPY(EMetaBlob::fullbit)
 TYPE(EMetaBlob::remotebit)
 TYPE(EMetaBlob::nullbit)
 TYPE(EMetaBlob::dirlump)

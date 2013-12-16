@@ -670,6 +670,85 @@ struct ObjectOperation {
     out_handler[p] = h;
   }
 
+  struct C_ObjectOperation_hit_set_ls : public Context {
+    bufferlist bl;
+    std::list< std::pair<time_t, time_t> > *ptls;
+    std::list< std::pair<utime_t, utime_t> > *putls;
+    int *prval;
+    C_ObjectOperation_hit_set_ls(std::list< std::pair<time_t, time_t> > *t,
+				 std::list< std::pair<utime_t, utime_t> > *ut,
+				 int *r)
+      : ptls(t), putls(ut), prval(r) {}
+    void finish(int r) {
+      if (r < 0)
+	return;
+      try {
+	bufferlist::iterator p = bl.begin();
+	std::list< std::pair<utime_t, utime_t> > ls;
+	::decode(ls, p);
+	if (ptls) {
+	  ptls->clear();
+	  for (list< pair<utime_t,utime_t> >::iterator p = ls.begin(); p != ls.end(); ++p)
+	    // round initial timestamp up to the next full second to keep this a valid interval.
+	    ptls->push_back(make_pair(p->first.usec() ? p->first.sec() + 1 : p->first.sec(), p->second.sec()));
+	}
+	if (putls)
+	  putls->swap(ls);
+      } catch (buffer::error& e) {
+	r = -EIO;
+      }
+      if (prval)
+	*prval = r;
+    }
+  };
+
+  /**
+   * list available HitSets.
+   *
+   * We will get back a list of time intervals.  Note that the most recent range may have
+   * an empty end timestamp if it is still accumulating.
+   *
+   * @param pls [out] list of time intervals
+   * @param prval [out] return value
+   */
+  void hit_set_ls(std::list< std::pair<time_t, time_t> > *pls, int *prval) {
+    add_op(CEPH_OSD_OP_PG_HITSET_LS);
+    unsigned p = ops.size() - 1;
+    out_rval[p] = prval;
+    C_ObjectOperation_hit_set_ls *h =
+      new C_ObjectOperation_hit_set_ls(pls, NULL, prval);
+    out_bl[p] = &h->bl;
+    out_handler[p] = h;
+  }
+  void hit_set_ls(std::list< std::pair<utime_t, utime_t> > *pls, int *prval) {
+    add_op(CEPH_OSD_OP_PG_HITSET_LS);
+    unsigned p = ops.size() - 1;
+    out_rval[p] = prval;
+    C_ObjectOperation_hit_set_ls *h =
+      new C_ObjectOperation_hit_set_ls(NULL, pls, prval);
+    out_bl[p] = &h->bl;
+    out_handler[p] = h;
+  }
+
+  /**
+   * get HitSet
+   *
+   * Return an encoded HitSet that includes the provided time
+   * interval.
+   *
+   * @param stamp [in] timestamp
+   * @param pbl [out] target buffer for encoded HitSet
+   * @param prval [out] return value
+   */
+  void hit_set_get(utime_t stamp, bufferlist *pbl, int *prval) {
+    OSDOp& op = add_op(CEPH_OSD_OP_PG_HITSET_GET);
+    op.op.hit_set_get.stamp.tv_sec = stamp.sec();
+    op.op.hit_set_get.stamp.tv_nsec = stamp.nsec();
+    unsigned p = ops.size() - 1;
+    out_rval[p] = prval;
+    out_bl[p] = pbl;
+  }
+
   void omap_get_header(bufferlist *bl, int *prval) {
     add_op(CEPH_OSD_OP_OMAPGETHEADER);
     unsigned p = ops.size() - 1;
@@ -861,8 +940,11 @@ public:
     object_t target_oid;
     object_locator_t target_oloc;
 
-    pg_t pgid;
-    vector<int> acting;
+    bool precalc_pgid;   ///< true if we are directed at base_pgid, not base_oid
+    pg_t base_pgid;      ///< explciti pg target, if any
+
+    pg_t pgid;           ///< last pg we mapped to
+    vector<int> acting;  ///< acting for last pg we mapped to
     bool used_replica;
 
     ConnectionRef con;  // for rx buffer only
@@ -892,7 +974,6 @@ public:
 
     utime_t stamp;
 
-    bool precalc_pgid;
     epoch_t map_dne_bound;
 
     bool budgeted;
@@ -904,12 +985,13 @@ public:
        int f, Context *ac, Context *co, version_t *ov) :
       session(NULL), session_item(this), incarnation(0),
       base_oid(o), base_oloc(ol),
+      precalc_pgid(false),
       used_replica(false), con(NULL),
       snapid(CEPH_NOSNAP),
       outbl(NULL),
       flags(f), priority(0), onack(ac), oncommit(co),
       tid(0), attempts(0),
-      paused(false), objver(ov), reply_epoch(NULL), precalc_pgid(false),
+      paused(false), objver(ov), reply_epoch(NULL),
       map_dne_bound(0),
       budgeted(false),
       should_resend(true) {
@@ -1000,12 +1082,15 @@ public:
     collection_list_handle_t cookie;
     epoch_t current_pg_epoch;
     int starting_pg_num;
-    bool at_end;
+    bool at_end_of_pool;
+    bool at_end_of_pg;
 
     int64_t pool_id;
     int pool_snap_seq;
     int max_entries;
     string nspace;
+
+    bufferlist bl;   // raw data read to here
     std::list<pair<object_t, string> > list;
 
     bufferlist filter;
@@ -1013,21 +1098,30 @@ public:
     bufferlist extra_info;
 
     ListContext() : current_pg(0), current_pg_epoch(0), starting_pg_num(0),
-		    at_end(false), pool_id(0),
+		    at_end_of_pool(false),
+		    at_end_of_pg(false),
+		    pool_id(0),
 		    pool_snap_seq(0), max_entries(0) {}
+
+    bool at_end() const {
+      return at_end_of_pool;
+    }
+
+    uint32_t get_pg_hash_position() const {
+      return current_pg;
+    }
   };
 
   struct C_List : public Context {
     ListContext *list_context;
     Context *final_finish;
-    bufferlist *bl;
     Objecter *objecter;
     epoch_t epoch;
-    C_List(ListContext *lc, Context * finish, bufferlist *b, Objecter *ob) :
-      list_context(lc), final_finish(finish), bl(b), objecter(ob), epoch(0) {}
+    C_List(ListContext *lc, Context * finish, Objecter *ob) :
+      list_context(lc), final_finish(finish), objecter(ob), epoch(0) {}
     void finish(int r) {
       if (r >= 0) {
-        objecter->_list_reply(list_context, r, bl, final_finish, epoch);
+        objecter->_list_reply(list_context, r, final_finish, epoch);
       } else {
         final_finish->complete(r);
       }
@@ -1249,7 +1343,7 @@ public:
   void reopen_session(OSDSession *session);
   void close_session(OSDSession *session);
   
-  void _list_reply(ListContext *list_context, int r, bufferlist *bl, Context *final_finish,
+  void _list_reply(ListContext *list_context, int r, Context *final_finish,
 		   epoch_t reply_epoch);
 
   void resend_mon_ops();
@@ -1332,6 +1426,9 @@ public:
 		     list<LingerOp*>& need_resend_linger,
 		     map<tid_t, CommandOp*>& need_resend_command);
 
+  int64_t get_object_hash_position(int64_t pool, const string& key, const string& ns);
+  int64_t get_object_pg_hash_position(int64_t pool, const string& key, const string& ns);
+
   // messages
  public:
   void dispatch(Message *m);
@@ -1367,6 +1464,8 @@ private:
   void set_client_incarnation(int inc) { client_inc = inc; }
 
   void wait_for_new_map(Context *c, epoch_t epoch, int err=0);
+  void wait_for_latest_osdmap(Context *fin);
+  void _get_latest_version(epoch_t oldest, epoch_t neweset, Context *fin);
 
   /** Get the current set of global op flags */
   int get_global_op_flags() { return global_op_flags; }
@@ -1379,8 +1478,9 @@ private:
   int op_cancel(tid_t tid);
 
   // commands
-  int osd_command(int osd, vector<string>& cmd, bufferlist& inbl, tid_t *ptid,
-		    bufferlist *poutbl, string *prs, Context *onfinish) {
+  int osd_command(int osd, vector<string>& cmd,
+		  const bufferlist& inbl, tid_t *ptid,
+		  bufferlist *poutbl, string *prs, Context *onfinish) {
     assert(osd >= 0);
     CommandOp *c = new CommandOp;
     c->cmd = cmd;
@@ -1391,8 +1491,9 @@ private:
     c->target_osd = osd;
     return _submit_command(c, ptid);
   }
-  int pg_command(pg_t pgid, vector<string>& cmd, bufferlist& inbl, tid_t *ptid,
-		   bufferlist *poutbl, string *prs, Context *onfinish) {
+  int pg_command(pg_t pgid, vector<string>& cmd,
+		 const bufferlist& inbl, tid_t *ptid,
+		 bufferlist *poutbl, string *prs, Context *onfinish) {
     CommandOp *c = new CommandOp;
     c->cmd = cmd;
     c->inbl = inbl;
@@ -1425,6 +1526,25 @@ private:
     o->out_bl.swap(op.out_bl);
     o->out_handler.swap(op.out_handler);
     o->out_rval.swap(op.out_rval);
+    return op_submit(o);
+  }
+  tid_t pg_read(uint32_t hash, object_locator_t oloc,
+		ObjectOperation& op,
+		bufferlist *pbl, int flags,
+		Context *onack,
+		epoch_t *reply_epoch) {
+    Op *o = new Op(object_t(), oloc,
+		   op.ops, flags | global_op_flags | CEPH_OSD_FLAG_READ,
+		   onack, NULL, NULL);
+    o->precalc_pgid = true;
+    o->base_pgid = pg_t(hash, oloc.pool);
+    o->priority = op.priority;
+    o->snapid = CEPH_NOSNAP;
+    o->outbl = pbl;
+    o->out_bl.swap(op.out_bl);
+    o->out_handler.swap(op.out_handler);
+    o->out_rval.swap(op.out_rval);
+    o->reply_epoch = reply_epoch;
     return op_submit(o);
   }
   tid_t linger_mutate(const object_t& oid, const object_locator_t& oloc,
