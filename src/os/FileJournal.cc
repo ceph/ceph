@@ -224,9 +224,9 @@ void FileJournal::_check_disk_write_cache() const
   }
 
 close_f:
-  if (::fclose(fp)) {
+  if (pclose(fp)) {
     int ret = -errno;
-    derr << "_check_disk_write_cache: fclose error: " << cpp_strerror(ret)
+    derr << "_check_disk_write_cache: pclose failed: " << cpp_strerror(ret)
 	 << dendl;
   }
 done:
