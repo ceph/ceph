@@ -1848,6 +1848,58 @@ void PG::update_heartbeat_peers()
     osd->need_heartbeat_peer_update();
 }
 
+void PG::_update_calc_stats()
+{
+  info.stats.version = info.last_update;
+  info.stats.created = info.history.epoch_created;
+  info.stats.last_scrub = info.history.last_scrub;
+  info.stats.last_scrub_stamp = info.history.last_scrub_stamp;
+  info.stats.last_deep_scrub = info.history.last_deep_scrub;
+  info.stats.last_deep_scrub_stamp = info.history.last_deep_scrub_stamp;
+  info.stats.last_clean_scrub_stamp = info.history.last_clean_scrub_stamp;
+  info.stats.last_epoch_clean = info.history.last_epoch_clean;
+
+  info.stats.log_size = pg_log.get_head().version - pg_log.get_tail().version;
+  info.stats.ondisk_log_size =
+    pg_log.get_head().version - pg_log.get_tail().version;
+  info.stats.log_start = pg_log.get_tail();
+  info.stats.ondisk_log_start = pg_log.get_tail();
+
+  // calc copies, degraded
+  unsigned target = MAX(get_osdmap()->get_pg_size(info.pgid), actingbackfill.size());
+  info.stats.stats.calc_copies(target);
+  info.stats.stats.sum.num_objects_degraded = 0;
+  if ((is_degraded() || !is_clean()) && is_active()) {
+    // NOTE: we only generate copies, degraded, unfound values for
+    // the summation, not individual stat categories.
+    uint64_t num_objects = info.stats.stats.sum.num_objects;
+
+    uint64_t degraded = 0;
+
+    // if the actingbackfill set is smaller than we want, add in those missing replicas
+    if (actingbackfill.size() < target)
+      degraded += (target - actingbackfill.size()) * num_objects;
+
+    // missing on primary
+    info.stats.stats.sum.num_objects_missing_on_primary =
+      pg_log.get_missing().num_missing();
+    degraded += pg_log.get_missing().num_missing();
+
+    assert(actingbackfill.size() > 0);
+    for (unsigned i=1; i<actingbackfill.size(); i++) {
+      assert(peer_missing.count(actingbackfill[i]));
+
+      // in missing set
+      degraded += peer_missing[actingbackfill[i]].num_missing();
+
+      // not yet backfilled
+      degraded += num_objects - peer_info[actingbackfill[i]].stats.stats.sum.num_objects;
+    }
+    info.stats.stats.sum.num_objects_degraded = degraded;
+    info.stats.stats.sum.num_objects_unfound = get_num_unfound();
+  }
+}
+
 void PG::publish_stats_to_osd()
 {
   pg_stats_publish_lock.Lock();
@@ -1855,14 +1907,6 @@ void PG::publish_stats_to_osd()
     // update our stat summary
     info.stats.reported_epoch = get_osdmap()->get_epoch();
     ++info.stats.reported_seq;
-    info.stats.version = info.last_update;
-    info.stats.created = info.history.epoch_created;
-    info.stats.last_scrub = info.history.last_scrub;
-    info.stats.last_scrub_stamp = info.history.last_scrub_stamp;
-    info.stats.last_deep_scrub = info.history.last_deep_scrub;
-    info.stats.last_deep_scrub_stamp = info.history.last_deep_scrub_stamp;
-    info.stats.last_clean_scrub_stamp = info.history.last_clean_scrub_stamp;
-    info.stats.last_epoch_clean = info.history.last_epoch_clean;
 
     if (info.stats.stats.sum.num_scrub_errors)
       state_set(PG_STATE_INCONSISTENT);
@@ -1884,49 +1928,11 @@ void PG::publish_stats_to_osd()
       info.stats.last_active = now;
     info.stats.last_unstale = now;
 
-    info.stats.log_size = pg_log.get_head().version - pg_log.get_tail().version;
-    info.stats.ondisk_log_size =
-      pg_log.get_head().version - pg_log.get_tail().version;
-    info.stats.log_start = pg_log.get_tail();
-    info.stats.ondisk_log_start = pg_log.get_tail();
+    _update_calc_stats();
 
     pg_stats_publish_valid = true;
     pg_stats_publish = info.stats;
     pg_stats_publish.stats.add(unstable_stats);
-
-    // calc copies, degraded
-    unsigned target = MAX(get_osdmap()->get_pg_size(info.pgid), actingbackfill.size());
-    pg_stats_publish.stats.calc_copies(target);
-    pg_stats_publish.stats.sum.num_objects_degraded = 0;
-    if ((is_degraded() || !is_clean()) && is_active()) {
-      // NOTE: we only generate copies, degraded, unfound values for
-      // the summation, not individual stat categories.
-      uint64_t num_objects = pg_stats_publish.stats.sum.num_objects;
-
-      uint64_t degraded = 0;
-
-      // if the actingbackfill set is smaller than we want, add in those missing replicas
-      if (actingbackfill.size() < target)
-	degraded += (target - actingbackfill.size()) * num_objects;
-
-      // missing on primary
-      pg_stats_publish.stats.sum.num_objects_missing_on_primary =
-	pg_log.get_missing().num_missing();
-      degraded += pg_log.get_missing().num_missing();
-      
-      assert(actingbackfill.size() > 0);
-      for (unsigned i=1; i<actingbackfill.size(); i++) {
-	assert(peer_missing.count(actingbackfill[i]));
-
-	// in missing set
-	degraded += peer_missing[actingbackfill[i]].num_missing();
-
-	// not yet backfilled
-	degraded += num_objects - peer_info[actingbackfill[i]].stats.stats.sum.num_objects;
-      }
-      pg_stats_publish.stats.sum.num_objects_degraded = degraded;
-      pg_stats_publish.stats.sum.num_objects_unfound = get_num_unfound();
-    }
 
     dout(15) << "publish_stats_to_osd " << pg_stats_publish.reported_epoch
 	     << ":" << pg_stats_publish.reported_seq << dendl;
