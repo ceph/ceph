@@ -219,14 +219,11 @@ def run_with_watchdog(process, job_config):
         # The job ran with a teuthology branch that may not have the reporting
         # feature. Let's call teuthology-report (which will be from the master
         # branch) to report the job manually.
-        args = ['teuthology-report',
-                '-r',
-                job_info['name'],
-                '-j',
-                job_info['job_id'],
-                ]
+        cmd = "teuthology-report -r {run_name} -j {job_id}".format(
+            run_name=job_info['name'],
+            job_id=job_info['job_id'])
         try:
-            subprocess.Popen(args).wait()
+            subprocess.Popen(cmd, shell=True).wait()
             log.warn("Reported results via the teuthology-report command")
         except OSError:
             log.warn("Tried to run teuthology-report but it wasn't in $PATH")
