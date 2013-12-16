@@ -584,6 +584,7 @@ AC_CHECK_MEMBER([struct fiemap_extent.fe_logical],
 
 AC_CHECK_HEADERS([ \
 	arpa/inet.h \
+	linux/version.h \
 	netdb.h \
 	netinet/in.h \
 	sys/file.h \
