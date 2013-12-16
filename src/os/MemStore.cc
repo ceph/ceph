@@ -218,10 +218,10 @@ int MemStore::statfs(struct statfs *st)
   return 0;
 }
 
-filestore_perf_stat_t MemStore::get_cur_stats()
+objectstore_perf_stat_t MemStore::get_cur_stats()
 {
   // fixme
-  return filestore_perf_stat_t();
+  return objectstore_perf_stat_t();
 }
 
 MemStore::CollectionRef MemStore::get_collection(coll_t cid)
