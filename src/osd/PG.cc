@@ -5001,6 +5001,8 @@ void PG::handle_advance_map(OSDMapRef osdmap, OSDMapRef lastmap,
   dout(10) << "handle_advance_map " << newup << "/" << newacting << dendl;
   update_osdmap_ref(osdmap);
   pool.update(osdmap);
+  if (pool.info.last_change == osdmap_ref->get_epoch())
+    on_pool_change();
   AdvMap evt(osdmap, lastmap, newup, newacting);
   recovery_state.handle_event(evt, rctx);
 }

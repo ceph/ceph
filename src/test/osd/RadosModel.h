@@ -19,6 +19,7 @@
 #include "TestOpStat.h"
 #include "test/librados/test.h"
 #include "common/sharedptr_registry.hpp"
+#include "osd/HitSet.h"
 
 #ifndef RADOSMODEL_H
 #define RADOSMODEL_H
@@ -51,7 +52,8 @@ enum TestOpType {
   TEST_OP_RMATTR,
   TEST_OP_TMAPPUT,
   TEST_OP_WATCH,
-  TEST_OP_COPY_FROM
+  TEST_OP_COPY_FROM,
+  TEST_OP_HIT_SET_LIST
 };
 
 class TestWatchContext : public librados::WatchCtx {
@@ -1357,6 +1359,7 @@ public:
       roll_back_to,
       roll_back_to);
 
+
     cout << "rollback oid " << oid << " to " << roll_back_to << std::endl;
 
     context->roll_back(oid, roll_back_to);
@@ -1530,6 +1533,83 @@ public:
     return "TmapPutOp";
   }
 };
+
+class HitSetListOp : public TestOp {
+  bool done;
+  librados::AioCompletion *comp1, *comp2;
+  uint32_t hash;
+  std::list< std::pair<time_t, time_t> > ls;
+  bufferlist bl;
+
+public:
+  HitSetListOp(int n,
+	       RadosTestContext *context,
+	       uint32_t hash,
+	       TestOpStat *stat = 0)
+    : TestOp(n, context, stat),
+      done(false), comp1(NULL), comp2(NULL),
+      hash(hash)
+  {}
+
+  void _begin()
+  {
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    comp1 = context->rados.aio_create_completion((void*) cb_arg, &write_callback,
+						 NULL);
+    int r = context->io_ctx.hit_set_list(hash, comp1, &ls);
+    assert(r == 0);
+  }
+
+  void _finish(CallbackInfo *info) {
+    Mutex::Locker l(context->state_lock);
+    if (!comp2) {
+      if (ls.empty()) {
+	cerr << num << ": no hitsets" << std::endl;
+	done = true;
+      } else {
+	cerr << num << ": hitsets are " << ls << std::endl;
+	int r = rand() % ls.size();
+	std::list<pair<time_t,time_t> >::iterator p = ls.begin();
+	while (r--)
+	  ++p;
+	pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+	  new pair<TestOp*, TestOp::CallbackInfo*>(this,
+						   new TestOp::CallbackInfo(0));
+	comp2 = context->rados.aio_create_completion((void*) cb_arg, &write_callback,
+						     NULL);
+	r = context->io_ctx.hit_set_get(hash, comp2, p->second, &bl);
+	assert(r == 0);
+      }
+    } else {
+      int r = comp2->get_return_value();
+      if (r == 0) {
+	HitSet hitset;
+	bufferlist::iterator p = bl.begin();
+	::decode(hitset, p);
+	cout << num << ": got hitset of type " << hitset.get_type_name()
+	     << " size " << bl.length()
+	     << std::endl;
+      } else {
+	// FIXME: we could verify that we did in fact race with a trim...
+	assert(r == -ENOENT);
+      }
+      done = true;
+    }
+
+    context->kick();
+  }
+
+  bool finished() {
+    return done;
+  }
+
+  string getType() {
+    return "HitSetListOp";
+  }
+};
+
 
 
 #endif

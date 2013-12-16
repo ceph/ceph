@@ -18,6 +18,7 @@
 #include <sstream>
 #include <stdio.h>
 #include <memory>
+#include <boost/scoped_ptr.hpp>
 
 #include "msg/msg_types.h"
 #include "include/types.h"
@@ -25,9 +26,11 @@
 #include "include/CompatSet.h"
 #include "include/histogram.h"
 #include "include/interval_set.h"
-#include "common/snap_types.h"
 #include "common/Formatter.h"
+#include "common/bloom_filter.hpp"
 #include "common/hobject.h"
+#include "common/snap_types.h"
+#include "HitSet.h"
 #include "Watch.h"
 #include "OpRequest.h"
 
@@ -87,20 +90,26 @@ namespace __gnu_cxx {
 // a locator constrains the placement of an object.  mainly, which pool
 // does it go in.
 struct object_locator_t {
-  int64_t pool;
-  string key;
-  string nspace;
+  // You specify either the hash or the key -- not both
+  int64_t pool;     ///< pool id
+  string key;       ///< key string (if non-empty)
+  string nspace;    ///< namespace
+  int64_t hash;     ///< hash position (if >= 0)
 
   explicit object_locator_t()
-    : pool(-1) {}
+    : pool(-1), hash(-1) {}
   explicit object_locator_t(int64_t po)
-    : pool(po) {}
+    : pool(po), hash(-1)  {}
+  explicit object_locator_t(int64_t po, int64_t ps)
+    : pool(po), hash(ps)  {}
   explicit object_locator_t(int64_t po, string ns)
-    : pool(po), nspace(ns) {}
+    : pool(po), nspace(ns), hash(-1) {}
+  explicit object_locator_t(int64_t po, string ns, int64_t ps)
+    : pool(po), nspace(ns), hash(ps) {}
   explicit object_locator_t(int64_t po, string ns, string s)
-    : pool(po), key(s), nspace(ns) {}
+    : pool(po), key(s), nspace(ns), hash(-1) {}
   explicit object_locator_t(const hobject_t& soid)
-    : pool(soid.pool), key(soid.get_key()), nspace(soid.nspace) {}
+    : pool(soid.pool), key(soid.get_key()), nspace(soid.nspace), hash(-1) {}
 
   int64_t get_pool() const {
     return pool;
@@ -110,6 +119,7 @@ struct object_locator_t {
     pool = -1;
     key = "";
     nspace = "";
+    hash = -1;
   }
 
   bool empty() const {
@@ -124,7 +134,7 @@ struct object_locator_t {
 WRITE_CLASS_ENCODER(object_locator_t)
 
 inline bool operator==(const object_locator_t& l, const object_locator_t& r) {
-  return l.pool == r.pool && l.key == r.key && l.nspace == r.nspace;
+  return l.pool == r.pool && l.key == r.key && l.nspace == r.nspace && l.hash == r.hash;
 }
 inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
   return !(l == r);
@@ -231,7 +241,7 @@ struct pg_t {
   int32_t m_preferred;
 
   pg_t() : m_pool(0), m_seed(0), m_preferred(-1) {}
-  pg_t(ps_t seed, uint64_t pool, int pref) {
+  pg_t(ps_t seed, uint64_t pool, int pref=-1) {
     m_seed = seed;
     m_pool = pool;
     m_preferred = pref;
@@ -802,13 +812,16 @@ public:
   int64_t write_tier;      ///< pool/tier for objecter to direct writes to
   cache_mode_t cache_mode;  ///< cache pool mode
 
-
   bool is_tier() const { return tier_of >= 0; }
   void clear_tier() { tier_of = -1; }
   bool has_read_tier() const { return read_tier >= 0; }
   void clear_read_tier() { read_tier = -1; }
   bool has_write_tier() const { return write_tier >= 0; }
   void clear_write_tier() { write_tier = -1; }
+
+  HitSet::Params hit_set_params; ///< The HitSet params to use on this pool
+  uint32_t hit_set_period;      ///< periodicity of HitSet segments (seconds)
+  uint32_t hit_set_count;       ///< number of periods to retain
 
   pg_pool_t()
     : flags(0), type(0), size(0), min_size(0),
@@ -821,7 +834,10 @@ public:
       quota_max_bytes(0), quota_max_objects(0),
       pg_num_mask(0), pgp_num_mask(0),
       tier_of(-1), read_tier(-1), write_tier(-1),
-      cache_mode(CACHEMODE_NONE)
+      cache_mode(CACHEMODE_NONE),
+      hit_set_params(),
+      hit_set_period(0),
+      hit_set_count(0)
   { }
 
   void dump(Formatter *f) const;
@@ -918,6 +934,12 @@ public:
   void remove_unmanaged_snap(snapid_t s);
 
   SnapContext get_snap_context() const;
+
+  /// hash a object name+namespace key to a hash position
+  uint32_t hash_key(const string& key, const string& ns) const;
+
+  /// round a hash position down to a pg num
+  uint32_t raw_hash_to_pg(uint32_t v) const;
 
   /*
    * map a raw pg (with full precision ps) into an actual pg, for storage
@@ -1217,6 +1239,51 @@ struct pool_stat_t {
 WRITE_CLASS_ENCODER_FEATURES(pool_stat_t)
 
 
+// -----------------------------------------
+
+/**
+ * pg_hit_set_info_t - information about a single recorded HitSet
+ *
+ * Track basic metadata about a HitSet, like the nubmer of insertions
+ * and the time range it covers.
+ */
+struct pg_hit_set_info_t {
+  utime_t begin, end;   ///< time interval
+  eversion_t version;   ///< version this HitSet object was written
+
+  pg_hit_set_info_t() {}
+  pg_hit_set_info_t(utime_t b)
+    : begin(b) {}
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_hit_set_info_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_hit_set_info_t)
+
+/**
+ * pg_hit_set_history_t - information about a history of hitsets
+ *
+ * Include information about the currently accumulating hit set as well
+ * as archived/historical ones.
+ */
+struct pg_hit_set_history_t {
+  eversion_t current_last_update;  ///< last version inserted into current set
+  utime_t current_last_stamp;      ///< timestamp of last insert
+  pg_hit_set_info_t current_info;  ///< metadata about the current set
+  list<pg_hit_set_info_t> history; ///< archived sets, sorted oldest -> newest
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_hit_set_history_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_hit_set_history_t)
+
+
+// -----------------------------------------
+
 /**
  * pg_history_t - information about recent pg peering/mapping history
  *
@@ -1333,6 +1400,7 @@ struct pg_info_t {
   pg_stat_t stats;
 
   pg_history_t history;
+  pg_hit_set_history_t hit_set;
 
   pg_info_t()
     : last_epoch_started(0), last_user_version(0),

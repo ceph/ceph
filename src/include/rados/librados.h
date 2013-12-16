@@ -702,6 +702,14 @@ void rados_ioctx_set_namespace(rados_ioctx_t io, const char *nspace);
 int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *ctx);
 
 /**
+ * Return hash position of iterator, rounded to the current PG
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @returns current hash position, rounded to the current pg
+ */
+uint32_t rados_objects_list_get_pg_hash_position(rados_list_ctx_t ctx);
+
+/**
  * Get the next object name and locator in the pool
  *
  * *entry and *key are valid until next call to rados_objects_list_*

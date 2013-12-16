@@ -335,6 +335,14 @@ ceph osd pool set data hashpspool 1
 expect_false ceph osd pool set data hashpspool asdf
 expect_false ceph osd pool set data hashpspool 2
 
+ceph osd pool set rbd hit_set_type explicit_hash
+ceph osd pool set rbd hit_set_type explicit_object
+ceph osd pool set rbd hit_set_type bloom
+expect_false ceph osd pool set rbd hit_set_type i_dont_exist
+ceph osd pool set rbd hit_set_period 123
+ceph osd pool set rbd hit_set_count 12
+ceph osd pool set rbd hit_set_fpp .01
+
 ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 2'
 
 ceph osd thrash 10
