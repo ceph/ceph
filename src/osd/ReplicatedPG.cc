@@ -477,6 +477,7 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
       f->close_section();
     }
     f->open_object_section("info");
+    _update_calc_stats();
     info.dump(f.get());
     f->close_section();
 
