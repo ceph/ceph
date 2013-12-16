@@ -175,10 +175,21 @@ struct crush_map {
 	__u32 choose_local_fallback_tries;
 	/* choose attempts before giving up */ 
 	__u32 choose_total_tries;
-	/* attempt chooseleaf inner descent once for firstn mode; on
-	 * reject retry outer descent.  Note that this does *not*
-	 * apply to a collision: in that case we will retry as we used
-	 * to. */
+
+	/*
+	 * 0: legacy behavior (descent total_tries or local_tries or
+	 *    local_fallback_tries)
+	 *
+	 * 1: attempt chooseleaf firstn inner descent once; on reject,
+	 *    retry outer descent.  Note that this does *not* apply to
+	 *    a collision: in that case we will retry as we used to.
+	 *
+	 * 2: attempt chooseleaf firstn inner descent once (default,
+	 *    or whatever set_chooseleaf_tries specified in the rule).
+	 *    on reject OR collision, give up and let the outer
+	 *    descent retry.  this more aligns with the behavior of
+	 *    the indep mode.
+	 */
 	__u32 chooseleaf_descend_once;
 
 	__u32 *choose_tries;
