@@ -6,4 +6,4 @@
 	url = git://github.com/ceph/libs3.git
 [submodule "src/mongoose"]
 	path = src/mongoose
-	url = git://github.com/cesanta/mongoose.git
+	url = git://github.com/ceph/mongoose.git
