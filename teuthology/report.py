@@ -2,14 +2,17 @@ import os
 import yaml
 import json
 import re
-import httplib2
-import urllib
+import requests
 import logging
 import socket
 
 import teuthology
 from teuthology.config import config
 
+
+# Don't need to see connection pool INFO messages
+logging.getLogger("requests.packages.urllib3.connectionpool").setLevel(
+    logging.WARNING)
 
 log = logging.getLogger(__name__)
 
@@ -36,29 +39,6 @@ def main(args):
         reporter.report_run(run[0])
     elif args['--all-runs']:
         reporter.report_all_runs()
-
-
-class RequestFailedError(RuntimeError):
-    def __init__(self, uri, resp, content):
-        self.uri = uri
-        self.status = resp.status
-        self.reason = resp.reason
-        self.content = content
-        try:
-            self.content_obj = json.loads(content)
-            self.message = self.content_obj['message']
-        except ValueError:
-            self.message = self.content
-
-    def __str__(self):
-        templ = "Request to {uri} failed with status {status}: {reason}: {message}"  # noqa
-
-        return templ.format(
-            uri=self.uri,
-            status=self.status,
-            reason=self.reason,
-            message=self.message,
-        )
 
 
 class ResultsSerializer(object):
@@ -169,48 +149,6 @@ class ResultsReporter(object):
         self.refresh = refresh
         self.timeout = timeout
 
-    def _do_request(self, uri, method, json_):
-        """
-        Perform an actual HTTP request on a given URI. If the request was not
-        successful and the reason was *not* that the object already exists,
-        raise a RequestFailedError.
-        """
-        # Use urllib.quote() to escape things like spaces. Pass safe=':/' to
-        # avoid it mangling http:// etc.
-        uri = urllib.quote(uri, safe=':/')
-        response, content = self.http.request(
-            uri, method, json_, headers={'content-type': 'application/json'},
-        )
-        log.debug("{method} to {uri}: {status}".format(
-            method=method,
-            uri=uri,
-            status=response.status,
-        ))
-
-        try:
-            content_obj = json.loads(content)
-        except ValueError:
-            content_obj = {}
-
-        message = content_obj.get('message', '')
-
-        if response.status != 200 and not message.endswith('already exists'):
-            raise RequestFailedError(uri, response, content)
-
-        return response.status, message, content
-
-    def post_json(self, uri, json_):
-        """
-        call self._do_request(uri, 'POST', json_)
-        """
-        return self._do_request(uri, 'POST', json_)
-
-    def put_json(self, uri, json_):
-        """
-        call self._do_request(uri, 'PUT', json_)
-        """
-        return self._do_request(uri, 'PUT', json_)
-
     def report_all_runs(self):
         """
         Report *all* runs in self.archive_dir to the results server.
@@ -241,17 +179,6 @@ class ResultsReporter(object):
         del self.last_run
         log.info("Total: %s jobs in %s runs", num_jobs, len(run_names))
 
-    def create_run(self, run_name):
-        """
-        Create a run on the results server.
-
-        :param run_name: The name of the run.
-        :returns:        The result of self.post_json()
-        """
-        run_uri = "{base}/runs/".format(base=self.base_uri, name=run_name)
-        run_json = json.dumps({'name': run_name})
-        return self.post_json(run_uri, run_json)
-
     def report_run(self, run_name):
         """
         Report a single run to the results server.
@@ -266,8 +193,9 @@ class ResultsReporter(object):
         ))
         if jobs:
             if not self.refresh:
-                status, msg, content = self.create_run(run_name)
-                if status != 200:
+                response = requests.head("{base}/runs/{name}/".format(
+                    base=self.base_uri, name=run_name))
+                if response.status_code == 200:
                     log.info("    already present; skipped")
                     return 0
             self.report_jobs(run_name, jobs.keys())
@@ -298,11 +226,24 @@ class ResultsReporter(object):
             base=self.base_uri, name=run_name,)
         if job_json is None:
             job_json = self.serializer.json_for_job(run_name, job_id)
-        status, msg, content = self.post_json(run_uri, job_json)
+        response = requests.post(run_uri, job_json)
 
-        if msg.endswith('already exists'):
+        if response.status_code == 200:
+            return job_id
+
+        msg = response.json.get('message', '')
+        if msg and msg.endswith('already exists'):
             job_uri = os.path.join(run_uri, job_id, '')
-            status, msg, content = self.put_json(job_uri, job_json)
+            response = requests.put(job_uri, job_json)
+            response.raise_for_status()
+        elif msg:
+            log.error(
+                "POST to {uri} failed with status {status}: {msg}".format(
+                    uri=run_uri,
+                    status=response.status_code,
+                    msg=msg,
+                ))
+
         return job_id
 
     @property
@@ -329,30 +270,6 @@ class ResultsReporter(object):
         if os.path.exists(self.last_run_file):
             os.remove(self.last_run_file)
 
-    @property
-    def http(self):
-        if hasattr(self, '__http'):
-            return self.__http
-        self.__http = httplib2.Http(timeout=self.timeout)
-        return self.__http
-
-
-def create_run(run_name, base_uri=None):
-    """
-    Create a run on the results server. If it already exists, just smile and be
-    happy.
-
-    :param run_name: The name of the run.
-    :param base_uri: The endpoint of the results server. If you leave it out
-                     ResultsReporter will ask teuthology.config.
-    :returns:         True if the run was successfully created.
-    """
-    # We are using archive_base='' here because we KNOW the serializer isn't
-    # needed for this codepath.
-    reporter = ResultsReporter(archive_base='', base_uri=base_uri)
-    status, msg, content = reporter.create_run(run_name)
-    return (status == 200 or msg.endswith('already exists'))
-
 
 def push_job_info(run_name, job_id, job_info, base_uri=None):
     """
@@ -374,7 +291,7 @@ def push_job_info(run_name, job_id, job_info, base_uri=None):
 def try_push_job_info(job_config, extra_info=None):
     """
     Wrap push_job_info, gracefully doing nothing if:
-        A RequestFailedError is raised
+        Anything inheriting from requests.exceptions.RequestException is raised
         A socket.error is raised
         config.results_server is not set
         config['job_id'] is not present or is None
@@ -402,6 +319,6 @@ def try_push_job_info(job_config, extra_info=None):
     try:
         log.info("Pushing job info to %s", config.results_server)
         push_job_info(run_name, job_id, job_info)
-    except (RequestFailedError, socket.error, httplib2.ServerNotFoundError):
+    except (requests.exceptions.RequestException, socket.error):
         log.exception("Could not report results to %s" %
                       config.results_server)
