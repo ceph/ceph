@@ -52,6 +52,7 @@
 #include "rgw_log.h"
 #include "rgw_tools.h"
 #include "rgw_resolve.h"
+#include "rgw_loadgen.h"
 #include "rgw_mongoose.h"
 
 #include "mongoose/mongoose.h"
@@ -167,8 +168,6 @@ protected:
   Throttle req_throttle;
   RGWREST *rest;
   RGWFrontendConfig *conf;
-
-  RGWProcessEnv *process_env;
 
   struct RGWWQ : public ThreadPool::WorkQueue<RGWRequest> {
     RGWProcess *process;
@@ -314,6 +313,36 @@ void RGWFCGXProcess::run()
       break;
     }
 
+    req_wq.queue(req);
+  }
+
+  m_tp.drain();
+  m_tp.stop();
+}
+
+struct RGWLoadGenRequest : public RGWRequest {
+};
+
+class RGWLoadGenProcess : public RGWProcess {
+  int sock_fd;
+public:
+  RGWLoadGenProcess(CephContext *cct, RGWProcessEnv *pe, int num_threads, RGWFrontendConfig *_conf) :
+    RGWProcess(cct, pe, num_threads, _conf), sock_fd(-1) {}
+  void run();
+  void handle_request(RGWRequest *req);
+
+  void close_fd() { }
+};
+
+void RGWLoadGenProcess::run()
+{
+  m_tp.start();
+
+  for (;;) {
+    RGWLoadGenRequest *req = new RGWLoadGenRequest;
+    req->id = ++max_req_id;
+    dout(10) << "allocated request req=" << hex << req << dec << dendl;
+    req_throttle.get(1);
     req_wq.queue(req);
   }
 
@@ -525,6 +554,29 @@ void RGWFCGXProcess::handle_request(RGWRequest *r)
   delete req;
 }
 
+void RGWLoadGenProcess::handle_request(RGWRequest *r)
+{
+  RGWLoadGenRequest *req = static_cast<RGWLoadGenRequest *>(r);
+
+  RGWLoadGenRequestEnv env;
+
+  env.port = 80;
+  env.content_length = 0;
+  env.content_type = "binary/octet-stream";
+  env.request_method = "GET";
+  env.uri = "/foo/bar";
+
+  RGWLoadGenIO client_io(&env);
+
+  int ret = process_request(store, rest, req, &client_io, olog);
+  if (ret < 0) {
+    /* we don't really care about return code */
+    dout(20) << "process_request() returned " << ret << dendl;
+  }
+
+  delete req;
+}
+
 
 static int mongoose_callback(struct mg_connection *conn) {
   struct mg_request_info *req_info = mg_get_request_info(conn);
@@ -665,10 +717,10 @@ public:
   virtual void join() = 0;
 };
 
-class RGWFCGXControlThread : public Thread {
+class RGWProcessControlThread : public Thread {
   RGWProcess *pprocess;
 public:
-  RGWFCGXControlThread(RGWProcess *_pprocess) : pprocess(_pprocess) {}
+  RGWProcessControlThread(RGWProcess *_pprocess) : pprocess(_pprocess) {}
 
   void *entry() {
     pprocess->run();
@@ -676,19 +728,20 @@ public:
   };
 };
 
-class RGWFCGXFrontend : public RGWFrontend {
+template <class T>
+class RGWProcessFrontend : public RGWFrontend {
   RGWFrontendConfig *conf;
-  RGWFCGXProcess *pprocess;
+  T *pprocess;
   RGWProcessEnv env;
-  RGWFCGXControlThread *thread;
+  RGWProcessControlThread *thread;
 
 public:
-  RGWFCGXFrontend(RGWProcessEnv& pe, RGWFrontendConfig *_conf) : conf(_conf), env(pe) {
-    pprocess = new RGWFCGXProcess(g_ceph_context, &env, g_conf->rgw_thread_pool_size, conf);
-    thread = new RGWFCGXControlThread(pprocess);
+  RGWProcessFrontend(RGWProcessEnv& pe, RGWFrontendConfig *_conf) : conf(_conf), env(pe) {
+    pprocess = new T(g_ceph_context, &env, g_conf->rgw_thread_pool_size, conf);
+    thread = new RGWProcessControlThread(pprocess);
   }
 
-  ~RGWFCGXFrontend() {
+  ~RGWProcessFrontend() {
     delete thread;
   }
 
@@ -918,7 +971,7 @@ int main(int argc, const char **argv)
     if (framework == "fastcgi" || framework == "fcgi") {
       RGWProcessEnv fcgi_pe = { store, &rest, olog, 0 };
 
-      fe = new RGWFCGXFrontend(fcgi_pe, config);
+      fe = new RGWProcessFrontend<RGWFCGXProcess>(fcgi_pe, config);
     } else if (framework == "mongoose") {
       string err;
 
@@ -928,6 +981,13 @@ int main(int argc, const char **argv)
       RGWProcessEnv env = { store, &rest, olog, port };
 
       fe = new RGWMongooseFrontend(env, config);
+    } else if (framework == "loadgen") {
+      int port;
+      config->get_val("port", 80, &port);
+
+      RGWProcessEnv env = { store, &rest, olog, port };
+
+      fe = new RGWProcessFrontend<RGWLoadGenProcess>(env, config);
     } else {
       dout(0) << "WARNING: skipping unknown framework: " << framework << dendl;
       continue;
