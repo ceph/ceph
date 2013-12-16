@@ -67,6 +67,7 @@ radosgw_SOURCES = \
 	rgw/rgw_http_client.cc \
 	rgw/rgw_swift.cc \
 	rgw/rgw_swift_auth.cc \
+	rgw/rgw_loadgen.cc \
 	rgw/rgw_mongoose.cc \
 	mongoose/mongoose.c \
 	rgw/rgw_main.cc
