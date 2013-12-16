@@ -137,8 +137,8 @@ public:
     PerfCounters::avg_tracker<uint64_t> os_commit_latency;
     PerfCounters::avg_tracker<uint64_t> os_apply_latency;
 
-    filestore_perf_stat_t get_cur_stats() const {
-      filestore_perf_stat_t ret;
+    objectstore_perf_stat_t get_cur_stats() const {
+      objectstore_perf_stat_t ret;
       ret.filestore_commit_latency = os_commit_latency.avg();
       ret.filestore_apply_latency = os_apply_latency.avg();
       return ret;
@@ -146,7 +146,7 @@ public:
 
     void update_from_perfcounters(PerfCounters &logger);
   } perf_tracker;
-  filestore_perf_stat_t get_cur_stats() {
+  objectstore_perf_stat_t get_cur_stats() {
     perf_tracker.update_from_perfcounters(*logger);
     return perf_tracker.get_cur_stats();
   }
