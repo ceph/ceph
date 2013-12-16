@@ -480,6 +480,17 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
     info.dump(f.get());
     f->close_section();
 
+    f->open_array_section("peer_info");
+    for (map<int,pg_info_t>::iterator p = peer_info.begin();
+	 p != peer_info.end();
+	 ++p) {
+      f->open_object_section("info");
+      f->dump_unsigned("peer", p->first);
+      p->second.dump(f.get());
+      f->close_section();
+    }
+    f->close_section();
+
     f->open_array_section("recovery_state");
     handle_query_state(f.get());
     f->close_section();
