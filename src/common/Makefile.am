@@ -69,7 +69,9 @@ libcommon_la_SOURCES = \
 	common/bloom_filter.cc
 
 if LINUX
-libcommon_la_SOURCES += common/secret.c
+libcommon_la_SOURCES += \
+	common/secret.c \
+	common/linux_version.c
 endif
 
 # these should go out of libcommon
@@ -196,7 +198,8 @@ noinst_HEADERS += \
 	common/AsyncReserver.h \
 	common/sync_filesystem.h \
 	common/cmdparse.h \
-	common/hobject.h
+	common/hobject.h \
+	common/linux_version.h
 
 noinst_LTLIBRARIES += libcommon.la
 
