@@ -938,6 +938,7 @@ int main(int argc, const char **argv)
   for (list<RGWFrontend *>::iterator liter = fes.begin(); liter != fes.end(); ++liter) {
     RGWFrontend *fe = *liter;
     fe->join();
+    delete fe;
   }
 
   for (list<RGWFrontendConfig *>::iterator liter = configs.begin(); liter != configs.end(); ++liter) {
