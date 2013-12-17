@@ -234,6 +234,8 @@ struct MDRequest : public Mutation {
     Context *slave_commit;
     bufferlist rollback_bl;
 
+    list<Context*> waiting_for_finish;
+
     More() : 
       srcdn_auth_mds(-1),
       src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
