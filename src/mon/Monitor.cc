@@ -94,6 +94,18 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon) {
 const string Monitor::MONITOR_NAME = "monitor";
 const string Monitor::MONITOR_STORE_PREFIX = "monitor_store";
 
+
+#undef COMMAND
+MonCommand mon_commands[] = {
+#define COMMAND(parsesig, helptext, modulename, req_perms, avail) \
+  {parsesig, helptext, modulename, req_perms, avail},
+#include <mon/MonCommands.h>
+};
+MonCommand classic_mon_commands[] = {
+#include <mon/DumplingMonCommands.h>
+};
+
+
 long parse_pos_long(const char *s, ostream *pss)
 {
   if (*s == '-' || *s == '+') {
@@ -137,6 +149,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   auth_service_required(cct,
 			cct->_conf->auth_supported.length() ?
 			cct->_conf->auth_supported : cct->_conf->auth_service_required),
+  leader_supported_mon_commands(NULL),
+  leader_supported_mon_commands_size(0),
   store(s),
   
   state(STATE_PROBING),
@@ -213,6 +227,9 @@ Monitor::~Monitor()
   delete paxos;
   assert(session_map.sessions.empty());
   delete mon_caps;
+  if (leader_supported_mon_commands != mon_commands &&
+      leader_supported_mon_commands != classic_mon_commands)
+    delete[] leader_supported_mon_commands;
 }
 
 
@@ -1892,18 +1909,6 @@ void Monitor::get_status(stringstream &ss, Formatter *f)
   }
 }
 
-#undef COMMAND
-MonCommand mon_commands[] = {
-#define COMMAND(parsesig, helptext, modulename, req_perms, avail) \
-  {parsesig, helptext, modulename, req_perms, avail},
-#include <mon/MonCommands.h>
-};
-MonCommand classic_mon_commands[] = {
-#include <mon/DumplingMonCommands.h>
-};
-const MonCommand *leader_supported_mon_commands = NULL;
-int leader_supported_mon_commands_size = 0;
-
 void Monitor::_generate_command_map(map<string,cmd_vartype>& cmdmap,
                                     map<string,string> &param_str_map)
 {
@@ -1957,10 +1962,11 @@ bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
   return capable;
 }
 
-void get_command_descriptions(const MonCommand *commands,
-			      unsigned commands_size,
-			      Formatter *f,
-			      bufferlist *rdata) {
+void Monitor::format_command_descriptions(const MonCommand *commands,
+					  unsigned commands_size,
+					  Formatter *f,
+					  bufferlist *rdata)
+{
   int cmdnum = 0;
   f->open_object_section("command_descriptions");
   for (const MonCommand *cp = commands;
@@ -1978,22 +1984,23 @@ void get_command_descriptions(const MonCommand *commands,
   f->flush(*rdata);
 }
 
-void get_locally_supported_monitor_commands(const MonCommand **cmds, int *count)
+void Monitor::get_locally_supported_monitor_commands(const MonCommand **cmds,
+						     int *count)
 {
   *cmds = mon_commands;
   *count = ARRAY_SIZE(mon_commands);
 }
-void get_leader_supported_commands(const MonCommand **cmds, int *count)
+void Monitor::get_leader_supported_commands(const MonCommand **cmds, int *count)
 {
   *cmds = leader_supported_mon_commands;
   *count = leader_supported_mon_commands_size;
 }
-void get_classic_monitor_commands(const MonCommand **cmds, int *count)
+void Monitor::get_classic_monitor_commands(const MonCommand **cmds, int *count)
 {
   *cmds = classic_mon_commands;
   *count = ARRAY_SIZE(classic_mon_commands);
 }
-void set_leader_supported_commands(const MonCommand *cmds, int size)
+void Monitor::set_leader_supported_commands(const MonCommand *cmds, int size)
 {
   if (leader_supported_mon_commands != mon_commands &&
       leader_supported_mon_commands != classic_mon_commands)
@@ -2047,8 +2054,8 @@ void Monitor::handle_command(MMonCommand *m)
   if (prefix == "get_command_descriptions") {
     bufferlist rdata;
     Formatter *f = new_formatter("json");
-    get_command_descriptions(leader_supported_mon_commands,
-                             leader_supported_mon_commands_size, f, &rdata);
+    format_command_descriptions(leader_supported_mon_commands,
+				leader_supported_mon_commands_size, f, &rdata);
     delete f;
     reply_command(m, 0, "", rdata, 0);
     return;
