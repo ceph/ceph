@@ -2534,6 +2534,20 @@ stats_out:
     f->flush(rs);
     rs << "\n";
     rdata.append(rs.str());
+  } else if (prefix == "osd crush show-tunables") {
+    string format;
+    cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
+    Formatter *fp = new_formatter(format);
+    if (!fp)
+      fp = new_formatter("json-pretty");
+    boost::scoped_ptr<Formatter> f(fp);
+    f->open_object_section("crush_map_tunables");
+    osdmap.crush->dump_tunables(f.get());
+    f->close_section();
+    ostringstream rs;
+    f->flush(rs);
+    rs << "\n";
+    rdata.append(rs.str());
   } else {
     // try prepare update
     return false;
