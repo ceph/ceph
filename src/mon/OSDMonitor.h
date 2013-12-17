@@ -240,7 +240,8 @@ private:
   bool prepare_pool_op_delete(MPoolOp *m);
   int prepare_new_pool(string& name, uint64_t auid, int crush_rule,
                        unsigned pg_num, unsigned pgp_num,
-		       const vector<string> &properties);
+		       const vector<string> &properties,
+                       const unsigned pool_type);
   int prepare_new_pool(MPoolOp *m);
 
   void update_pool_flags(int64_t pool_id, uint64_t flags);
