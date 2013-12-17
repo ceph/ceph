@@ -289,7 +289,7 @@ static int is_out(const struct crush_map *map, const __u32 *weight, int weight_m
  * @param out pointer to output vector
  * @param outpos our position in that vector
  * @param recurse_to_leaf: true if we want one device under each item of given type
- * @descend_once: true if we should only try one descent before giving up
+ * @descend_once: tunable mode for chooseleaf; see crush.h comments
  * @param out2 second output vector for leaf items (if @a recurse_to_leaf)
  */
 static int crush_choose_firstn(const struct crush_map *map,
@@ -410,7 +410,7 @@ reject:
 					ftotal++;
 					flocal++;
 
-					if (reject && descend_once)
+					if (reject && descend_once == 1)
 						/* let outer call try again */
 						skip_rep = 1;
 					else if (collide && flocal <= map->choose_local_tries)
@@ -662,7 +662,6 @@ int crush_do_rule(const struct crush_map *map,
 	int numrep;
 	int choose_tries = map->choose_total_tries;
 	int choose_leaf_tries = 0;
-	const int descend_once = 0;
 
 	if ((__u32)ruleno >= map->max_rules) {
 		dprintk(" bad ruleno %d\n", ruleno);
@@ -726,6 +725,14 @@ int crush_do_rule(const struct crush_map *map,
 				}
 				j = 0;
 				if (firstn) {
+					int recurse_tries;
+					if (choose_leaf_tries)
+						recurse_tries = choose_leaf_tries;
+					else if (map->chooseleaf_descend_once == 2)
+						recurse_tries = 1;
+					else
+						recurse_tries = choose_tries;
+
 					osize += crush_choose_firstn(
 						map,
 						map->buckets[-1-w[i]],
@@ -734,10 +741,15 @@ int crush_do_rule(const struct crush_map *map,
 						curstep->arg2,
 						o+osize, j,
 						choose_tries,
-						choose_leaf_tries ? choose_leaf_tries : choose_tries,
+						recurse_tries,
 						recurse_to_leaf,
-						descend_once, c+osize);
+						0, c+osize);
 				} else {
+					int recurse_tries;
+					if (choose_leaf_tries)
+						recurse_tries = choose_leaf_tries;
+					else
+						recurse_tries = 1;
 					crush_choose_indep(
 						map,
 						map->buckets[-1-w[i]],
@@ -746,7 +758,7 @@ int crush_do_rule(const struct crush_map *map,
 						curstep->arg2,
 						o+osize, j,
 						choose_tries,
-						choose_leaf_tries ? choose_leaf_tries : 1,
+						recurse_tries,
 						recurse_to_leaf,
 						c+osize,
 						0);

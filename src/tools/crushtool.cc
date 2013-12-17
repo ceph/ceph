@@ -123,7 +123,7 @@ void usage()
   cout << "                         permutation before re-descent\n";
   cout << "   --set-choose-total-tries N\n";
   cout << "                         set choose total descent attempts\n";
-  cout << "   --set-chooseleaf-descend-once <0|1>\n";
+  cout << "   --set-chooseleaf-descend-once <0|1|2>\n";
   cout << "                         set chooseleaf to (not) retry the recursive descent\n";
   cout << "   --output-name name\n";
   cout << "                         prepend the data file(s) generated during the\n";

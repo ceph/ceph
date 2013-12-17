@@ -3430,6 +3430,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       newcrush.set_tunables_legacy();
     } else if (profile == "bobtail") {
       newcrush.set_tunables_bobtail();
+    } else if (profile == "firefly") {
+      newcrush.set_tunables_firefly();
     } else if (profile == "optimal") {
       newcrush.set_tunables_optimal();
     } else if (profile == "default") {

@@ -751,6 +751,8 @@ uint64_t OSDMap::get_features(uint64_t *pmask) const
     features |= CEPH_FEATURE_CRUSH_TUNABLES;
   if (crush->has_nondefault_tunables2())
     features |= CEPH_FEATURE_CRUSH_TUNABLES2;
+  if (crush->has_nondefault_tunables3())
+    features |= CEPH_FEATURE_CRUSH_TUNABLES3;
   if (crush->has_v2_rules())
     features |= CEPH_FEATURE_CRUSH_V2;
   mask |= CEPH_FEATURES_CRUSH;
