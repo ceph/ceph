@@ -2106,6 +2106,10 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 	delta);  // not deallocated
     }
     delta.num_objects--;
+    if (coi.is_dirty())
+      delta.num_objects_dirty--;
+    if (coi.is_whiteout())
+      delta.num_whiteouts--;
     delta.num_object_clones--;
     delta.num_bytes -= snapset.clone_size[last];
     info.stats.stats.add(delta, obc->obs.oi.category);
@@ -4014,6 +4018,7 @@ inline int ReplicatedPG::_delete_head(OpContext *ctx, bool no_whiteout)
   if (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK && !no_whiteout) {
     dout(20) << __func__ << " setting whiteout on " << soid << dendl;
     oi.set_flag(object_info_t::FLAG_WHITEOUT);
+    ctx->delta_stats.num_whiteouts++;
     t.truncate(coll, soid, 0);
     t.omap_clear(coll, soid);
     t.rmattrs(coll, soid);
@@ -4022,6 +4027,10 @@ inline int ReplicatedPG::_delete_head(OpContext *ctx, bool no_whiteout)
 
   t.remove(coll, soid);
   ctx->delta_stats.num_objects--;
+  if (oi.is_dirty())
+    ctx->delta_stats.num_objects_dirty--;
+  if (oi.is_whiteout())
+    ctx->delta_stats.num_whiteouts--;
   snapset.head_exists = false;
   obs.exists = false;
   return 0;
@@ -4114,6 +4123,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       if (!obs.exists) {
 	obs.exists = true; //we're about to recreate it
 	ctx->delta_stats.num_objects++;
+	ctx->delta_stats.num_objects_dirty++;
       }
       ctx->delta_stats.num_bytes -= obs.oi.size;
       ctx->delta_stats.num_bytes += rollback_to->obs.oi.size;
@@ -4147,13 +4157,17 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   dout(20) << "make_writeable " << soid << " snapset=" << ctx->snapset
 	   << "  snapc=" << snapc << dendl;;
   
-  // we will mark the object dirty
-  if (ctx->undirty) {
-    dout(20) << " clearing DIRTY flag" << dendl;
-    ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
-  } else {
-    dout(20) << " setting DIRTY flag" << dendl;
-    ctx->new_obs.oi.set_flag(object_info_t::FLAG_DIRTY);
+  if (ctx->new_obs.exists) {
+    // we will mark the object dirty
+    if (ctx->undirty) {
+      dout(20) << " clearing DIRTY flag" << dendl;
+      ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
+      --ctx->delta_stats.num_objects_dirty;
+    } else if (!ctx->new_obs.oi.test_flag(object_info_t::FLAG_DIRTY)) {
+      dout(20) << " setting DIRTY flag" << dendl;
+      ctx->new_obs.oi.set_flag(object_info_t::FLAG_DIRTY);
+      ++ctx->delta_stats.num_objects_dirty;
+    }
   }
 
   // use newer snapc?
@@ -4203,6 +4217,10 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     snap_mapper.add_oid(coid, _snaps, &_t);
     
     ctx->delta_stats.num_objects++;
+    if (snap_oi->is_dirty())
+      ctx->delta_stats.num_objects_dirty++;
+    if (snap_oi->is_whiteout())
+      ctx->delta_stats.num_whiteouts++;
     ctx->delta_stats.num_object_clones++;
     ctx->new_snapset.clones.push_back(coid.snap);
     ctx->new_snapset.clone_size[coid.snap] = ctx->obs->oi.size;
@@ -4414,6 +4432,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 	ctx->obc->obs.oi.is_whiteout()) {
       dout(10) << __func__ << " clearing whiteout on " << soid << dendl;
       ctx->new_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
+      --ctx->delta_stats.num_whiteouts;
     }
   }
 
@@ -4895,6 +4914,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     // create a whiteout
     tctx->op_t.touch(coll, soid);
     tctx->new_obs.oi.set_flag(object_info_t::FLAG_WHITEOUT);
+    ++tctx->delta_stats.num_whiteouts;
     dout(20) << __func__ << " creating whiteout" << dendl;
   } else {
     tctx->op_t.swap(results->final_tx);
@@ -5168,6 +5188,7 @@ int ReplicatedPG::try_flush_mark_clean(FlushOpRef fop)
 
   ctx->new_obs = obc->obs;
   ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
+  --ctx->delta_stats.num_objects_dirty;
 
   finish_ctx(ctx);
 
@@ -6079,6 +6100,10 @@ void ReplicatedPG::add_object_context_to_pg_stat(ObjectContextRef obc, pg_stat_t
 
   if (oi.soid.snap != CEPH_SNAPDIR)
     stat.num_objects++;
+  if (oi.is_dirty())
+    stat.num_objects_dirty++;
+  if (oi.is_whiteout())
+    stat.num_whiteouts++;
 
   if (oi.soid.snap && oi.soid.snap != CEPH_NOSNAP && oi.soid.snap != CEPH_SNAPDIR) {
     stat.num_object_clones++;
@@ -9404,6 +9429,11 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 
     stat.num_bytes += p->second.size;
 
+    if (oi.is_dirty())
+      ++stat.num_objects_dirty;
+    if (oi.is_whiteout())
+      ++stat.num_whiteouts;
+
     //bufferlist data;
     //osd->store->read(c, poid, 0, 0, data);
     //assert(data.length() == p->size);
@@ -9481,11 +9511,15 @@ void ReplicatedPG::_scrub_finish()
 
   if (scrub_cstat.sum.num_objects != info.stats.stats.sum.num_objects ||
       scrub_cstat.sum.num_object_clones != info.stats.stats.sum.num_object_clones ||
+      scrub_cstat.sum.num_objects_dirty != info.stats.stats.sum.num_objects_dirty ||
+      scrub_cstat.sum.num_whiteouts != info.stats.stats.sum.num_whiteouts ||
       scrub_cstat.sum.num_bytes != info.stats.stats.sum.num_bytes) {
     osd->clog.error() << info.pgid << " " << mode
 		      << " stat mismatch, got "
 		      << scrub_cstat.sum.num_objects << "/" << info.stats.stats.sum.num_objects << " objects, "
 		      << scrub_cstat.sum.num_object_clones << "/" << info.stats.stats.sum.num_object_clones << " clones, "
+		      << scrub_cstat.sum.num_objects_dirty << "/" << info.stats.stats.sum.num_objects_dirty << " dirty, "
+		      << scrub_cstat.sum.num_whiteouts << "/" << info.stats.stats.sum.num_whiteouts << " whiteouts, "
 		      << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes.\n";
     ++scrubber.shallow_errors;
 
