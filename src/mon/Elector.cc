@@ -180,10 +180,10 @@ void Elector::victory()
   const MonCommand *cmds;
   int cmdsize;
   if (use_classic_commands) {
-    get_classic_monitor_commands(&cmds, &cmdsize);
+    mon->get_classic_monitor_commands(&cmds, &cmdsize);
     cmds_bl = &mon->get_classic_commands_bl();
   } else {
-    get_locally_supported_monitor_commands(&cmds, &cmdsize);
+    mon->get_locally_supported_monitor_commands(&cmds, &cmdsize);
     cmds_bl = &mon->get_supported_commands_bl();
   }
   
@@ -324,12 +324,12 @@ void Elector::handle_victory(MMonElection *m)
     int cmdsize;
     bufferlist::iterator bi = m->commands.begin();
     MonCommand::decode_array(&new_cmds, &cmdsize, bi);
-    set_leader_supported_commands(new_cmds, cmdsize);
+    mon->set_leader_supported_commands(new_cmds, cmdsize);
   } else { // they are a legacy monitor; use known legacy command set
     const MonCommand *new_cmds;
     int cmdsize;
-    get_classic_monitor_commands(&new_cmds, &cmdsize);
-    set_leader_supported_commands(new_cmds, cmdsize);
+    mon->get_classic_monitor_commands(&new_cmds, &cmdsize);
+    mon->set_leader_supported_commands(new_cmds, cmdsize);
   }
 
   m->put();
