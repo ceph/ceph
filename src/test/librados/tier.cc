@@ -1322,7 +1322,7 @@ static int _get_pg_num(Rados& cluster, string pool_name)
 }
 
 
-TEST(LibRadosMisc, HitSetWrite) {
+TEST(LibRadosTier, HitSetWrite) {
   Rados cluster;
   std::string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
@@ -1402,7 +1402,7 @@ TEST(LibRadosMisc, HitSetWrite) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
-TEST(LibRadosMisc, HitSetTrim) {
+TEST(LibRadosTier, HitSetTrim) {
   Rados cluster;
   std::string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
