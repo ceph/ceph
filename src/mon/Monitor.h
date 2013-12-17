@@ -140,6 +140,9 @@ public:
 
   CompatSet features;
 
+  const MonCommand *leader_supported_mon_commands;
+  int leader_supported_mon_commands_size;
+
 private:
   void new_tick();
   friend class C_Mon_Tick;
@@ -866,6 +869,16 @@ public:
     void _convert_machines();
     void _convert_paxos();
   };
+
+  static void format_command_descriptions(const MonCommand *commands,
+					  unsigned commands_size,
+					  Formatter *f,
+					  bufferlist *rdata);
+  void get_locally_supported_monitor_commands(const MonCommand **cmds, int *count);
+  void get_classic_monitor_commands(const MonCommand **cmds, int *count);
+  void get_leader_supported_commands(const MonCommand **cmds, int *count);
+  /// the Monitor owns this pointer once you pass it in
+  void set_leader_supported_commands(const MonCommand *cmds, int size);
 };
 
 #define CEPH_MON_FEATURE_INCOMPAT_BASE CompatSet::Feature (1, "initial feature set (~v.18)")
@@ -928,16 +941,5 @@ struct MonCommand {
   }
 };
 WRITE_CLASS_ENCODER(MonCommand);
-
-void get_command_descriptions(const MonCommand *commands,
-			      unsigned commands_size,
-			      Formatter *f,
-			      bufferlist *rdata);
-void get_locally_supported_monitor_commands(const MonCommand **cmds, int *count);
-void get_classic_monitor_commands(const MonCommand **cmds, int *count);
-void get_leader_supported_commands(const MonCommand **cmds, int *count);
-/// the Monitor owns this pointer once you pass it in
-void set_leader_supported_commands(const MonCommand *cmds, int size);
-
 
 #endif
