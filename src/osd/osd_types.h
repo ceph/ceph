@@ -974,6 +974,8 @@ struct object_stat_sum_t {
   int64_t num_objects_recovered;
   int64_t num_bytes_recovered;
   int64_t num_keys_recovered;
+  int64_t num_objects_dirty;
+  int64_t num_whiteouts;
 
   object_stat_sum_t()
     : num_bytes(0),
@@ -984,7 +986,9 @@ struct object_stat_sum_t {
       num_deep_scrub_errors(0),
       num_objects_recovered(0),
       num_bytes_recovered(0),
-      num_keys_recovered(0)
+      num_keys_recovered(0),
+      num_objects_dirty(0),
+      num_whiteouts(0)
   {}
 
   void floor(int64_t f) {
@@ -1006,6 +1010,8 @@ struct object_stat_sum_t {
     FLOOR(num_objects_recovered);
     FLOOR(num_bytes_recovered);
     FLOOR(num_keys_recovered);
+    FLOOR(num_objects_dirty);
+    FLOOR(num_whiteouts);
 #undef FLOOR
   }
 

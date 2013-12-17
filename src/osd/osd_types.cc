@@ -1185,6 +1185,8 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_objects_missing_on_primary", num_objects_missing_on_primary);
   f->dump_int("num_objects_degraded", num_objects_degraded);
   f->dump_int("num_objects_unfound", num_objects_unfound);
+  f->dump_int("num_objects_dirty", num_objects_dirty);
+  f->dump_int("num_whiteouts", num_whiteouts);
   f->dump_int("num_read", num_rd);
   f->dump_int("num_read_kb", num_rd_kb);
   f->dump_int("num_write", num_wr);
@@ -1199,7 +1201,7 @@ void object_stat_sum_t::dump(Formatter *f) const
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(6, 3, bl);
+  ENCODE_START(7, 3, bl);
   ::encode(num_bytes, bl);
   ::encode(num_objects, bl);
   ::encode(num_object_clones, bl);
@@ -1217,12 +1219,14 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   ::encode(num_keys_recovered, bl);
   ::encode(num_shallow_scrub_errors, bl);
   ::encode(num_deep_scrub_errors, bl);
+  ::encode(num_objects_dirty, bl);
+  ::encode(num_whiteouts, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_stat_sum_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
   ::decode(num_bytes, bl);
   if (struct_v < 3) {
     uint64_t num_kb;
@@ -1259,6 +1263,13 @@ void object_stat_sum_t::decode(bufferlist::iterator& bl)
     num_shallow_scrub_errors = 0;
     num_deep_scrub_errors = 0;
   }
+  if (struct_v >= 7) {
+    ::decode(num_objects_dirty, bl);
+    ::decode(num_whiteouts, bl);
+  } else {
+    num_objects_dirty = 0;
+    num_whiteouts = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -1282,6 +1293,8 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
   a.num_deep_scrub_errors = 17;
   a.num_shallow_scrub_errors = 18;
   a.num_scrub_errors = a.num_deep_scrub_errors + a.num_shallow_scrub_errors;
+  a.num_objects_dirty = 21;
+  a.num_whiteouts = 22;
   o.push_back(new object_stat_sum_t(a));
 }
 
@@ -1304,6 +1317,8 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
   num_objects_recovered += o.num_objects_recovered;
   num_bytes_recovered += o.num_bytes_recovered;
   num_keys_recovered += o.num_keys_recovered;
+  num_objects_dirty += o.num_objects_dirty;
+  num_whiteouts += o.num_whiteouts;
 }
 
 void object_stat_sum_t::sub(const object_stat_sum_t& o)
@@ -1325,6 +1340,8 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_objects_recovered -= o.num_objects_recovered;
   num_bytes_recovered -= o.num_bytes_recovered;
   num_keys_recovered -= o.num_keys_recovered;
+  num_objects_dirty -= o.num_objects_dirty;
+  num_whiteouts -= o.num_whiteouts;
 }
 
 
