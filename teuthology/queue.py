@@ -225,8 +225,9 @@ def run_with_watchdog(process, job_config):
         try:
             subprocess.Popen(cmd, shell=True).wait()
             log.warn("Reported results via the teuthology-report command")
-        except OSError:
-            log.warn("Tried to run teuthology-report but it wasn't in $PATH")
+        except Exception:
+            log.exception("teuthology-report failed")
+            #log.warn("Tried to run teuthology-report but it wasn't in $PATH")
     else:
         # Let's make sure that paddles knows the job is finished. We don't know
         # the status, but if it was a pass or fail it will have already been
