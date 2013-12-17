@@ -62,6 +62,11 @@ TEST(LibRadosTier, Dirty) {
     ASSERT_EQ(0, ioctx.operate("foo", &op));
   }
   {
+    ObjectWriteOperation op;
+    op.undirty();
+    ASSERT_EQ(0, ioctx.operate("foo", &op));  // still 0 if already clean
+  }
+  {
     bool dirty = false;
     int r = -1;
     ObjectReadOperation op;

@@ -2885,9 +2885,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_UNDIRTY:
       ++ctx->num_write;
       {
-	ctx->undirty = true;  // see make_writeable()
-	ctx->modify = true;
-	ctx->delta_stats.num_wr++;
+	if (oi.is_dirty()) {
+	  ctx->undirty = true;  // see make_writeable()
+	  ctx->modify = true;
+	  ctx->delta_stats.num_wr++;
+	}
+	result = 0;
       }
       break;
 
@@ -4161,6 +4164,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     // we will mark the object dirty
     if (ctx->undirty) {
       dout(20) << " clearing DIRTY flag" << dendl;
+      assert(ctx->new_obs.oi.is_dirty());
       ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
       --ctx->delta_stats.num_objects_dirty;
     } else if (!ctx->new_obs.oi.test_flag(object_info_t::FLAG_DIRTY)) {
