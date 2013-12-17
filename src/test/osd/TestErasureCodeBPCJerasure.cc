@@ -81,7 +81,7 @@ TYPED_TEST (ErasureCodeTest_82, encode_decode) {
 
   unsigned large_enough = (4 * object_size);
 
-  bufferptr in_ptr(large_enough);
+  bufferptr in_ptr(buffer::create_page_aligned(large_enough));
   in_ptr.zero();
   in_ptr.set_length(0);
   for (size_t i = 0; i < object_size; i++) {
