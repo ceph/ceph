@@ -100,14 +100,11 @@ public:
   }
 
   // tunables
-  void set_tunables_legacy() {
+  void set_tunables_argonaut() {
     crush->choose_local_tries = 2;
     crush->choose_local_fallback_tries = 5;
     crush->choose_total_tries = 19;
     crush->chooseleaf_descend_once = 0;
-  }
-  void set_tunables_argonaut() {
-    set_tunables_legacy();
   }
   void set_tunables_bobtail() {
     crush->choose_local_tries = 0;
@@ -116,6 +113,9 @@ public:
     crush->chooseleaf_descend_once = 1;
   }
 
+  void set_tunables_legacy() {
+    set_tunables_argonaut();
+  }
   void set_tunables_optimal() {
     set_tunables_bobtail();
   }
