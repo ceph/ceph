@@ -260,6 +260,14 @@ int CrushCompiler::decompile(ostream &out)
 	out << "\tstep set_choose_tries " << crush.get_rule_arg1(i, j)
 	    << "\n";
 	break;
+      case CRUSH_RULE_SET_CHOOSE_LOCAL_TRIES:
+	out << "\tstep set_choose_local_tries " << crush.get_rule_arg1(i, j)
+	    << "\n";
+	break;
+      case CRUSH_RULE_SET_CHOOSE_LOCAL_FALLBACK_TRIES:
+	out << "\tstep set_choose_local_fallback_tries " << crush.get_rule_arg1(i, j)
+	    << "\n";
+	break;
       case CRUSH_RULE_SET_CHOOSELEAF_TRIES:
 	out << "\tstep set_chooseleaf_tries " << crush.get_rule_arg1(i, j)
 	    << "\n";
@@ -618,6 +626,20 @@ int CrushCompiler::parse_rule(iter_t const& i)
       {
 	int val = int_node(s->children[1]);
 	crush.set_rule_step_set_choose_tries(ruleno, step++, val);
+      }
+      break;
+
+    case crush_grammar::_step_set_choose_local_tries:
+      {
+	int val = int_node(s->children[1]);
+	crush.set_rule_step_set_choose_local_tries(ruleno, step++, val);
+      }
+      break;
+
+    case crush_grammar::_step_set_choose_local_fallback_tries:
+      {
+	int val = int_node(s->children[1]);
+	crush.set_rule_step_set_choose_local_fallback_tries(ruleno, step++, val);
       }
       break;
 
