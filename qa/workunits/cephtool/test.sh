@@ -185,7 +185,9 @@ expect_false "ceph osd blacklist $bl/-1"
 expect_false "ceph osd blacklist $bl/foo"
 
 ceph osd crush tunables legacy
+ceph osd crush show-tunables | grep argonaut
 ceph osd crush tunables bobtail
+ceph osd crush show-tunables | grep bobtail
 
 # how do I tell when these are done?
 ceph osd scrub 0
