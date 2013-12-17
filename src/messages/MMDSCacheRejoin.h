@@ -48,7 +48,7 @@ class MMDSCacheRejoin : public Message {
 
   // -- types --
   struct inode_strong { 
-    int32_t nonce;
+    uint32_t nonce;
     int32_t caps_wanted;
     int32_t filelock, nestlock, dftlock;
     inode_strong() {}
@@ -73,7 +73,7 @@ class MMDSCacheRejoin : public Message {
   WRITE_CLASS_ENCODER(inode_strong)
 
   struct dirfrag_strong {
-    int32_t nonce;
+    uint32_t nonce;
     int8_t  dir_rep;
     dirfrag_strong() {}
     dirfrag_strong(int n, int dr) : nonce(n), dir_rep(dr) {}
@@ -93,7 +93,7 @@ class MMDSCacheRejoin : public Message {
     inodeno_t ino;
     inodeno_t remote_ino;
     unsigned char remote_d_type;
-    int32_t nonce;
+    uint32_t nonce;
     int32_t lock;
     dn_strong() : 
       ino(0), remote_ino(0), remote_d_type(0), nonce(0), lock(0) {}
@@ -168,6 +168,7 @@ class MMDSCacheRejoin : public Message {
 
   // open
   map<inodeno_t,map<client_t, ceph_mds_cap_reconnect> > cap_exports;
+  bufferlist imported_caps;
 
   // full
   bufferlist inode_base;
@@ -299,6 +300,7 @@ public:
     ::encode(xlocked_inodes, payload);
     ::encode(wrlocked_inodes, payload);
     ::encode(cap_exports, payload);
+    ::encode(imported_caps, payload);
     ::encode(strong_dirfrags, payload);
     ::encode(dirfrag_bases, payload);
     ::encode(weak, payload);
@@ -320,6 +322,7 @@ public:
     ::decode(xlocked_inodes, p);
     ::decode(wrlocked_inodes, p);
     ::decode(cap_exports, p);
+    ::decode(imported_caps, p);
     ::decode(strong_dirfrags, p);
     ::decode(dirfrag_bases, p);
     ::decode(weak, p);

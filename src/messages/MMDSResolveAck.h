@@ -22,7 +22,7 @@
 
 class MMDSResolveAck : public Message {
  public:
-  vector<metareqid_t> commit;
+  map<metareqid_t, bufferlist> commit;
   vector<metareqid_t> abort;
 
   MMDSResolveAck() : Message(MSG_MDS_RESOLVEACK) {}
@@ -39,7 +39,7 @@ public:
   */
   
   void add_commit(metareqid_t r) {
-    commit.push_back(r);
+    commit[r].clear();
   }
   void add_abort(metareqid_t r) {
     abort.push_back(r);

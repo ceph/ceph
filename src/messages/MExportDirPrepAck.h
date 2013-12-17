@@ -25,9 +25,10 @@ class MExportDirPrepAck : public Message {
   dirfrag_t get_dirfrag() { return dirfrag; }
   
   MExportDirPrepAck() {}
-  MExportDirPrepAck(dirfrag_t df) :
-    Message(MSG_MDS_EXPORTDIRPREPACK),
-    dirfrag(df) { }
+  MExportDirPrepAck(dirfrag_t df, uint64_t tid) :
+    Message(MSG_MDS_EXPORTDIRPREPACK), dirfrag(df) {
+    set_tid(tid);
+  }
 private:
   ~MExportDirPrepAck() {}
 

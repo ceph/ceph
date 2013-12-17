@@ -24,10 +24,12 @@
 void Capability::Export::encode(bufferlist &bl) const
 {
   ENCODE_START(2, 2, bl);
+  ::encode(cap_id, bl);
   ::encode(wanted, bl);
   ::encode(issued, bl);
   ::encode(pending, bl);
   ::encode(client_follows, bl);
+  ::encode(seq, bl);
   ::encode(mseq, bl);
   ::encode(last_issue_stamp, bl);
   ENCODE_FINISH(bl);
@@ -36,10 +38,12 @@ void Capability::Export::encode(bufferlist &bl) const
 void Capability::Export::decode(bufferlist::iterator &p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
+  ::decode(cap_id, p);
   ::decode(wanted, p);
   ::decode(issued, p);
   ::decode(pending, p);
   ::decode(client_follows, p);
+  ::decode(seq, p);
   ::decode(mseq, p);
   ::decode(last_issue_stamp, p);
   DECODE_FINISH(p);
@@ -47,10 +51,12 @@ void Capability::Export::decode(bufferlist::iterator &p)
 
 void Capability::Export::dump(Formatter *f) const
 {
+  f->dump_unsigned("cap_id", cap_id);
   f->dump_unsigned("wanted", wanted);
   f->dump_unsigned("issued", issued);
   f->dump_unsigned("pending", pending);
   f->dump_unsigned("client_follows", client_follows);
+  f->dump_unsigned("seq", seq);
   f->dump_unsigned("migrate_seq", mseq);
   f->dump_stream("last_issue_stamp") << last_issue_stamp;
 }
@@ -67,6 +73,30 @@ void Capability::Export::generate_test_instances(list<Capability::Export*>& ls)
   ls.back()->last_issue_stamp = utime_t(6, 7);
 }
 
+void Capability::Import::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(cap_id, bl);
+  ::encode(issue_seq, bl);
+  ::encode(mseq, bl);
+  ENCODE_FINISH(bl);
+}
+
+void Capability::Import::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(cap_id, bl);
+  ::decode(issue_seq, bl);
+  ::decode(mseq, bl);
+  DECODE_FINISH(bl);
+}
+
+void Capability::Import::dump(Formatter *f) const
+{
+  f->dump_unsigned("cap_id", cap_id);
+  f->dump_unsigned("issue_seq", issue_seq);
+  f->dump_unsigned("migrate_seq", mseq);
+}
 
 /*
  * Capability::revoke_info
