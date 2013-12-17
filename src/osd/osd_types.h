@@ -1420,7 +1420,7 @@ struct pg_info_t {
   bool is_empty() const { return last_update.version == 0; }
   bool dne() const { return history.epoch_created == 0; }
 
-  bool is_incomplete() const { return last_backfill != hobject_t::get_max(); }
+  bool is_incomplete() const { return !last_backfill.is_max(); }
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);

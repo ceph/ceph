@@ -1857,7 +1857,7 @@ void ReplicatedPG::do_scan(
 	     i != tmp.end();
 	     ++i) {
 	  hobject_t first(i->first);
-	  if (first.pool == -1)
+	  if (!first.is_max() && first.pool == -1)
 	    first.pool = info.pgid.pool();
 	  bi.objects[first] = i->second;
 	}
@@ -6349,7 +6349,7 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
       for (vector<pg_log_entry_t>::iterator i = log.begin();
 	  i != log.end();
 	  ++i) {
-	if (i->soid.pool == -1)
+	if (!i->soid.is_max() && i->soid.pool == -1)
 	  i->soid.pool = info.pgid.pool();
       }
       rm->opt.set_pool_override(info.pgid.pool());
@@ -8111,7 +8111,7 @@ void ReplicatedPG::on_activate()
   int backfill_target = get_backfill_target();
   if (backfill_target != -1) {
     last_backfill_started = peer_info[backfill_target].last_backfill;
-    assert(last_backfill_started != hobject_t::get_max());
+    assert(!last_backfill_started.is_max());
     dout(10) << " chose backfill target osd." << backfill_target
 	     << " from " << last_backfill_started << dendl;
   }

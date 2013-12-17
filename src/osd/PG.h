@@ -462,7 +462,7 @@ protected:
 
     /// true if interval extends to the end of the range
     bool extends_to_end() {
-      return end == hobject_t::get_max();
+      return end.is_max();
     }
 
     /// removes items <= soid and adjusts begin to the first object
