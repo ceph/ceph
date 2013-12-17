@@ -48,7 +48,7 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
   jerasure.init(parameters);
 
 #define LARGE_ENOUGH 2048
-  bufferptr in_ptr(LARGE_ENOUGH);
+  bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
   in_ptr.zero();
   in_ptr.set_length(0);
   const char *payload =
@@ -223,7 +223,11 @@ TEST(ErasureCodeTest, encode)
     bufferlist in;
     map<int,bufferlist> encoded;
     int want_to_encode[] = { 0, 1, 2, 3 };
-    in.append(string(alignment * 2, 'X'));
+    bufferptr in_ptr(buffer::create_page_aligned(alignment * 2));
+    in_ptr.zero();
+    in_ptr.set_length(0);
+    in_ptr.append(string(alignment * 2, 'X').c_str(), alignment * 2);
+    in.append(in_ptr);
     EXPECT_EQ(alignment * 2, in.length());
     EXPECT_EQ(0, jerasure.encode(set<int>(want_to_encode, want_to_encode+4),
 				 in,
