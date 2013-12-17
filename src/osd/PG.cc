@@ -526,7 +526,7 @@ bool PG::needs_backfill() const
   for (; a != end; ++a) {
     int peer = *a;
     map<int,pg_info_t>::const_iterator pi = peer_info.find(peer);
-    if (pi->second.last_backfill != hobject_t::get_max()) {
+    if (!pi->second.last_backfill.is_max()) {
       dout(10) << __func__ << " osd." << peer << " has last_backfill " << pi->second.last_backfill << dendl;
       ret = true;
     }
