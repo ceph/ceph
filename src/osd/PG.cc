@@ -5931,8 +5931,8 @@ void PG::RecoveryState::Clean::exit()
 PG::RecoveryState::Active::Active(my_context ctx)
   : my_base(ctx),
     NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Active"),
-    sorted_acting_set(context< RecoveryMachine >().pg->acting.begin(),
-                      context< RecoveryMachine >().pg->acting.end()),
+    sorted_acting_set(context< RecoveryMachine >().pg->actingbackfill.begin(),
+                      context< RecoveryMachine >().pg->actingbackfill.end()),
     all_replicas_activated(false)
 {
   context< RecoveryMachine >().log_enter(state_name);
