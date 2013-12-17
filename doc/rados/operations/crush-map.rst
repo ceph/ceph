@@ -922,6 +922,37 @@ Which client versions support CRUSH_TUNABLES2
  * v0.55 or later, including bobtail series (v0.56.x)
  * Linux kernel version v3.9 or later (for the file system and RBD kernel clients)
 
+Warning when tunables are non-optimal
+-------------------------------------
+
+Starting with version v0.74, Ceph will issue a health warning if the
+CRUSH tunables are not set to their optimal values.  (The optimal values are
+also now the default.)  To make this warning go away, you have two options:
+
+1. Adjust the tunables on the existing cluster.  Note that this will
+   result in some data movement (possibly as much as 10%).  This is the
+   preferred route, but should be taken with care on a production cluster
+   where the data movement may affect performance.  You can enable optimal
+   tunables with::
+
+      ceph osd crush tunables optimal
+
+   If things go poorly, and not very much tiem has passed, you can
+   switch back with::
+
+      ceph osd crush tunables legacy
+
+2. You can make the warning go away without making any changes to CRUSH by
+   adding the following option to your ceph.conf ``[mon]`` section::
+
+      mon warn on legacy crush tunables = false
+
+   For the change to take effect, you will need to restart the monitors, or
+   apply the option to running monitors with::
+
+      ceph -- tell mon.\* injectargs --no-mon-warn-on-legacy-crush-tunables
+
+
 A few important points
 ----------------------
 

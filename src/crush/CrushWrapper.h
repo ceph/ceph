@@ -163,6 +163,14 @@ public:
   }
   bool has_v2_rules() const;
 
+  bool has_optimal_tunables() const {
+    return
+      crush->choose_local_tries == 0 &&
+      crush->choose_local_fallback_tries == 0 &&
+      crush->choose_total_tries == 50 &&
+      crush->chooseleaf_descend_once == 1;
+  }
+
   // bucket types
   int get_num_type_names() const {
     return type_map.size();
