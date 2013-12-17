@@ -149,7 +149,7 @@ public:
 
     if (header.version < 7) {
       // Handle hobject_t format change
-      if (poid.pool == -1)
+      if (!poid.is_max() && poid.pool == -1)
 	poid.pool = pgid.pool();
       hobject_incorrect_pool = true;
     }

@@ -342,7 +342,7 @@ public:
 	} else {
 	  ::decode(oid, p);
 	  if (use_pool_override && pool_override != -1 &&
-	      oid.hobj.pool == -1) {
+	      !oid.hobj.is_max() && oid.hobj.pool == -1) {
 	    oid.hobj.pool = pool_override;
 	  }
 	}
