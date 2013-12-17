@@ -656,6 +656,8 @@ int crush_do_rule(const struct crush_map *map,
 	int i, j;
 	int numrep;
 	int choose_tries = map->choose_total_tries;
+	int choose_local_tries = map->choose_local_tries;
+	int choose_local_fallback_tries = map->choose_local_fallback_tries;
 	int choose_leaf_tries = 0;
 
 	if ((__u32)ruleno >= map->max_rules) {
@@ -686,6 +688,16 @@ int crush_do_rule(const struct crush_map *map,
 		case CRUSH_RULE_SET_CHOOSELEAF_TRIES:
 			if (curstep->arg1 > 0)
 				choose_leaf_tries = curstep->arg1;
+			break;
+
+		case CRUSH_RULE_SET_CHOOSE_LOCAL_TRIES:
+			if (curstep->arg1 > 0)
+				choose_local_tries = curstep->arg1;
+			break;
+
+		case CRUSH_RULE_SET_CHOOSE_LOCAL_FALLBACK_TRIES:
+			if (curstep->arg1 > 0)
+				choose_local_fallback_tries = curstep->arg1;
 			break;
 
 		case CRUSH_RULE_CHOOSELEAF_FIRSTN:

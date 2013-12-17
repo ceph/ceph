@@ -1,0 +1,144 @@
+# begin crush map
+tunable choose_local_tries 1
+tunable choose_local_fallback_tries 2
+tunable choose_total_tries 35
+tunable chooseleaf_descend_once 1
+
+# devices
+device 0 device0
+device 1 device1
+device 2 device2
+device 3 device3
+device 4 device4
+device 5 device5
+device 6 device6
+device 7 device7
+device 8 device8
+
+# types
+type 0 device
+type 1 host
+type 2 rack
+type 3 root
+
+# buckets
+host host0 {
+	id -1		# do not change unnecessarily
+	# weight 3.000
+	alg straw
+	hash 0	# rjenkins1
+	item device0 weight 1.000
+	item device1 weight 1.000
+	item device2 weight 1.000
+}
+host host1 {
+	id -2		# do not change unnecessarily
+	# weight 3.000
+	alg straw
+	hash 0	# rjenkins1
+	item device3 weight 1.000
+	item device4 weight 1.000
+	item device5 weight 1.000
+}
+host host2 {
+	id -3		# do not change unnecessarily
+	# weight 3.000
+	alg straw
+	hash 0	# rjenkins1
+	item device6 weight 1.000
+	item device7 weight 1.000
+	item device8 weight 1.000
+}
+rack rack0 {
+	id -4		# do not change unnecessarily
+	# weight 9.000
+	alg straw
+	hash 0	# rjenkins1
+	item host0 weight 3.000
+	item host1 weight 3.000
+	item host2 weight 3.000
+}
+root root0 {
+	id -5		# do not change unnecessarily
+	# weight 9.000
+	alg straw
+	hash 0	# rjenkins1
+	item rack0 weight 9.000
+}
+
+# rules
+rule choose {
+	ruleset 1
+	type replicated
+	min_size 2
+	max_size 3
+	step take root0
+	step choose firstn 0 type host
+	step choose firstn 1 type device
+	step emit
+}
+
+rule choose-two {
+	ruleset 2
+	type replicated
+	min_size 2
+	max_size 3
+	step take root0
+	step choose firstn 0 type device
+	step emit
+}
+
+rule chooseleaf {
+	ruleset 3
+	type replicated
+	min_size 2
+	max_size 3
+	step take root0
+	step chooseleaf firstn 0 type host
+	step emit
+}
+
+rule choose-set {
+	ruleset 4
+	type replicated
+	min_size 2
+	max_size 3
+	step set_choose_tries 3
+	step set_choose_local_tries 2
+	step set_choose_local_fallback_tries 2
+	step set_chooseleaf_tries 3
+	step take root0
+	step choose firstn 0 type host
+	step choose firstn 1 type device
+	step emit
+}
+
+rule choose-set-two {
+	ruleset 5
+	type replicated
+	min_size 2
+	max_size 3
+	step set_choose_tries 3
+	step set_choose_local_tries 2
+	step set_choose_local_fallback_tries 2
+	step set_chooseleaf_tries 3
+	step take root0
+	step choose firstn 0 type device
+	step emit
+}
+
+rule chooseleaf-set {
+	ruleset 6
+	type replicated
+	min_size 2
+	max_size 3
+	step set_choose_tries 3
+	step set_choose_local_tries 2
+	step set_choose_local_fallback_tries 2
+	step set_chooseleaf_tries 3
+	step take root0
+	step chooseleaf firstn 0 type host
+	step emit
+}
+
+# end crush map
