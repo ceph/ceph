@@ -570,6 +570,12 @@ public:
   int set_rule_step_set_choose_tries(unsigned ruleno, unsigned step, int val) {
     return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSE_TRIES, val, 0);
   }
+  int set_rule_step_set_choose_local_tries(unsigned ruleno, unsigned step, int val) {
+    return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSE_LOCAL_TRIES, val, 0);
+  }
+  int set_rule_step_set_choose_local_fallback_tries(unsigned ruleno, unsigned step, int val) {
+    return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSE_LOCAL_FALLBACK_TRIES, val, 0);
+  }
   int set_rule_step_set_chooseleaf_tries(unsigned ruleno, unsigned step, int val) {
     return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSELEAF_TRIES, val, 0);
   }
