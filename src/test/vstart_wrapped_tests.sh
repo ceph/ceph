@@ -22,4 +22,5 @@ while read line ; do
   test/vstart_wrapper.sh $line
   echo "================ STOP ================="  
 done <<EOF
+../qa/workunits/cephtool/test.sh
 EOF
