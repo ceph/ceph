@@ -4133,7 +4133,6 @@ struct get_obj_data : public RefCountedObject {
 
     c->wait_for_complete_and_cb();
     int r = c->get_return_value();
-    c->release();
 
     lock.Lock();
     completion_map.erase(cur_ofs);
@@ -4142,6 +4141,8 @@ struct get_obj_data : public RefCountedObject {
       *done = true;
     }
     lock.Unlock();
+
+    c->release();
     
     return r;
   }
