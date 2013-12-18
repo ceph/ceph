@@ -2287,6 +2287,7 @@ void Migrator::import_reverse(CDir *dir)
 	  q != p->second.end();
 	  ++q) {
 	Capability *cap = in->get_client_cap(q->first);
+	assert(cap);
 	if (cap->is_new())
 	  in->remove_client_cap(q->first);
       }
@@ -2295,6 +2296,7 @@ void Migrator::import_reverse(CDir *dir)
 	 p != stat.client_map.end();
 	 ++p) {
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->first.v));
+      assert(session);
       session->dec_importing();
     }
   }
@@ -2478,6 +2480,7 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
 	 p != it->second.client_map.end();
 	 ++p) {
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->first.v));
+      assert(session);
       session->dec_importing();
     }
   }
