@@ -635,6 +635,15 @@ enum {
 
 extern const char *ceph_cap_op_name(int op);
 
+/* extra info for cap import/export */
+struct ceph_mds_cap_peer {
+	__le64 cap_id;
+	__le32 seq;
+	__le32 mseq;
+	__le32 mds;
+	__u8   flags;
+} __attribute__ ((packed));
+
 /*
  * caps message, used for capability callbacks, acks, requests, etc.
  */
@@ -658,21 +667,19 @@ struct ceph_mds_caps {
 	__le32 xattr_len;
 	__le64 xattr_version;
 
-	/* filelock */
-	__le64 size, max_size, truncate_size;
-	__le32 truncate_seq;
-	struct ceph_timespec mtime, atime, ctime;
-	struct ceph_file_layout layout;
-	__le32 time_warp_seq;
-} __attribute__ ((packed));
-
-/* extra info for cap import/export */
-struct ceph_mds_cap_peer {
-	__le64 cap_id;
-	__le32 seq;
-	__le32 mseq;
-	__le32 mds;
-	__u8   flags;
+	union {
+		/* all except export */
+		struct {
+			/* filelock */
+			__le64 size, max_size, truncate_size;
+			__le32 truncate_seq;
+			struct ceph_timespec mtime, atime, ctime;
+			struct ceph_file_layout layout;
+			__le32 time_warp_seq;
+		};
+		/* export message */
+		struct ceph_mds_cap_peer peer;
+	};
 } __attribute__ ((packed));
 
 /* cap release msg head */

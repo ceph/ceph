@@ -167,7 +167,7 @@ public:
       if (head.op == CEPH_CAP_OP_IMPORT)
 	::decode(peer, p);
       else if (head.op == CEPH_CAP_OP_EXPORT)
-	memcpy(&peer, &head.size, sizeof(peer));
+	memcpy(&peer, &head.peer, sizeof(peer));
     }
   }
   void encode_payload(uint64_t features) {
@@ -176,7 +176,7 @@ public:
 
     // record peer in unused fields of cap export message
     if ((features & CEPH_FEATURE_EXPORT_PEER) && head.op == CEPH_CAP_OP_EXPORT)
-      memcpy(&head.size, &peer, sizeof(peer));
+      memcpy(&head.peer, &peer, sizeof(peer));
 
     ::encode(head, payload);
     ::encode_nohead(snapbl, payload);
