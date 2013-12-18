@@ -173,6 +173,7 @@ EXTRA_DIST += \
 	$(srcdir)/upstart/radosgw.conf \
 	$(srcdir)/upstart/radosgw-all.conf \
 	$(srcdir)/upstart/radosgw-all-starter.conf \
+	$(srcdir)/upstart/rbdmap.conf \
 	ceph.in \
 	ceph-disk \
 	ceph-disk-prepare \
