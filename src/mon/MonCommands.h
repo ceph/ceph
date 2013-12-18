@@ -429,6 +429,8 @@ COMMAND("osd crush reweight " \
 COMMAND("osd crush tunables " \
 	"name=profile,type=CephChoices,strings=legacy|argonaut|bobtail|optimal|default", \
 	"set crush tunables values to <profile>", "osd", "rw", "cli,rest")
+COMMAND("osd crush show-tunables", \
+	"show current crush tunables", "osd", "r", "cli,rest")
 COMMAND("osd crush rule create-simple " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=root,type=CephString,goodchars=[A-Za-z0-9-_.] " \

@@ -100,14 +100,11 @@ public:
   }
 
   // tunables
-  void set_tunables_legacy() {
+  void set_tunables_argonaut() {
     crush->choose_local_tries = 2;
     crush->choose_local_fallback_tries = 5;
     crush->choose_total_tries = 19;
     crush->chooseleaf_descend_once = 0;
-  }
-  void set_tunables_argonaut() {
-    set_tunables_legacy();
   }
   void set_tunables_bobtail() {
     crush->choose_local_tries = 0;
@@ -116,6 +113,9 @@ public:
     crush->chooseleaf_descend_once = 1;
   }
 
+  void set_tunables_legacy() {
+    set_tunables_argonaut();
+  }
   void set_tunables_optimal() {
     set_tunables_bobtail();
   }
@@ -151,6 +151,28 @@ public:
     crush->chooseleaf_descend_once = !!n;
   }
 
+  bool has_argonaut_tunables() const {
+    return
+      crush->choose_local_tries == 2 &&
+      crush->choose_local_fallback_tries == 5 &&
+      crush->choose_total_tries == 19 &&
+      crush->chooseleaf_descend_once == 0;
+  }
+  bool has_bobtail_tunables() const {
+    return
+      crush->choose_local_tries == 0 &&
+      crush->choose_local_fallback_tries == 0 &&
+      crush->choose_total_tries == 50 &&
+      crush->chooseleaf_descend_once == 1;
+  }
+
+  bool has_optimal_tunables() const {
+    return has_bobtail_tunables();
+  }
+  bool has_legacy_tunables() const {
+    return has_argonaut_tunables();
+  }
+
   bool has_nondefault_tunables() const {
     return
       (crush->choose_local_tries != 2 ||
@@ -162,6 +184,7 @@ public:
       crush->chooseleaf_descend_once != 0;
   }
   bool has_v2_rules() const;
+
 
   // bucket types
   int get_num_type_names() const {
@@ -570,6 +593,12 @@ public:
   int set_rule_step_set_choose_tries(unsigned ruleno, unsigned step, int val) {
     return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSE_TRIES, val, 0);
   }
+  int set_rule_step_set_choose_local_tries(unsigned ruleno, unsigned step, int val) {
+    return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSE_LOCAL_TRIES, val, 0);
+  }
+  int set_rule_step_set_choose_local_fallback_tries(unsigned ruleno, unsigned step, int val) {
+    return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSE_LOCAL_FALLBACK_TRIES, val, 0);
+  }
   int set_rule_step_set_chooseleaf_tries(unsigned ruleno, unsigned step, int val) {
     return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSELEAF_TRIES, val, 0);
   }
@@ -803,6 +832,7 @@ public:
   void decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator &blp);
   void dump(Formatter *f) const;
   void dump_rules(Formatter *f) const;
+  void dump_tunables(Formatter *f) const;
   void list_rules(Formatter *f) const;
   void dump_tree(const vector<__u32>& w, ostream *out, Formatter *f) const;
   static void generate_test_instances(list<CrushWrapper*>& o);

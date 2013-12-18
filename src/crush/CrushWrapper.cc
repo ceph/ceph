@@ -1071,11 +1071,29 @@ void CrushWrapper::dump(Formatter *f) const
   f->close_section();
 
   f->open_object_section("tunables");
+  dump_tunables(f);
+  f->close_section();
+}
+
+void CrushWrapper::dump_tunables(Formatter *f) const
+{
   f->dump_int("choose_local_tries", get_choose_local_tries());
   f->dump_int("choose_local_fallback_tries", get_choose_local_fallback_tries());
   f->dump_int("choose_total_tries", get_choose_total_tries());
   f->dump_int("chooseleaf_descend_once", get_chooseleaf_descend_once());
-  f->close_section();
+
+  // be helpful about it
+  if (has_bobtail_tunables())
+    f->dump_string("profile", "bobtail");
+  else if (has_argonaut_tunables())
+    f->dump_string("profile", "argonaut");
+  else
+    f->dump_string("profile", "unknown");
+  f->dump_int("optimal_tunables", (int)has_optimal_tunables());
+  f->dump_int("legacy_tunables", (int)has_legacy_tunables());
+
+  f->dump_int("require_feature_tunables", (int)has_nondefault_tunables());
+  f->dump_int("require_feature_tunables2", (int)has_nondefault_tunables2());
 }
 
 void CrushWrapper::dump_rules(Formatter *f) const
