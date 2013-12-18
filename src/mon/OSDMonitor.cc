@@ -1990,6 +1990,19 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
     }
 
+    // old crush tunables?
+    if (g_conf->mon_warn_on_legacy_crush_tunables) {
+      if (!osdmap.crush->has_optimal_tunables()) {
+	ostringstream ss;
+	ss << "crush map has non-optimal tunables";
+	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+	if (detail) {
+	  ss << "; see http://ceph.com/docs/master/rados/operations/crush-map/#tunables";
+	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+	}
+      }
+    }
+
     get_pools_health(summary, detail);
   }
 }
@@ -2516,6 +2529,20 @@ stats_out:
     boost::scoped_ptr<Formatter> f(fp);
     f->open_object_section("crush_map");
     osdmap.crush->dump(f.get());
+    f->close_section();
+    ostringstream rs;
+    f->flush(rs);
+    rs << "\n";
+    rdata.append(rs.str());
+  } else if (prefix == "osd crush show-tunables") {
+    string format;
+    cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
+    Formatter *fp = new_formatter(format);
+    if (!fp)
+      fp = new_formatter("json-pretty");
+    boost::scoped_ptr<Formatter> f(fp);
+    f->open_object_section("crush_map_tunables");
+    osdmap.crush->dump_tunables(f.get());
     f->close_section();
     ostringstream rs;
     f->flush(rs);
