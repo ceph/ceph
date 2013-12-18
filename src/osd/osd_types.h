@@ -2274,7 +2274,7 @@ public:
   int unstable_writes, readers, writers_waiting, readers_waiting;
 
   /// in-progress copyfrom ops for this object
-  int copyfrom_readside;
+  bool blocked;
 
   // set if writes for this object are blocked on another objects recovery
   ObjectContextRef blocked_by;      // object blocking our writes
@@ -2422,7 +2422,7 @@ public:
       destructor_callback(0),
       lock("ReplicatedPG::ObjectContext::lock"),
       unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0),
-      copyfrom_readside(0) {}
+      blocked(false) {}
 
   ~ObjectContext() {
     assert(rwstate.empty());
@@ -2430,8 +2430,16 @@ public:
       destructor_callback->complete(0);
   }
 
+  void start_block() {
+    assert(!blocked);
+    blocked = true;
+  }
+  void stop_block() {
+    assert(blocked);
+    blocked = false;
+  }
   bool is_blocked() const {
-    return copyfrom_readside > 0;
+    return blocked;
   }
 
   // do simple synchronous mutual exclusion, for now.  now waitqueues or anything fancy.
