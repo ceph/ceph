@@ -47,33 +47,6 @@ namespace ceph {
 
 class Logger;
 
-enum {
-  l_os_first = 84000,
-  l_os_jq_max_ops,
-  l_os_jq_ops,
-  l_os_j_ops,
-  l_os_jq_max_bytes,
-  l_os_jq_bytes,
-  l_os_j_bytes,
-  l_os_j_lat,
-  l_os_j_wr,
-  l_os_j_wr_bytes,
-  l_os_oq_max_ops,
-  l_os_oq_ops,
-  l_os_ops,
-  l_os_oq_max_bytes,
-  l_os_oq_bytes,
-  l_os_bytes,
-  l_os_apply_lat,
-  l_os_committing,
-  l_os_commit,
-  l_os_commit_len,
-  l_os_commit_lat,
-  l_os_j_full,
-  l_os_queue_lat,
-  l_os_last,
-};
-
 
 static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) {
   ::encode(*attrset, bl);
@@ -98,7 +71,7 @@ public:
 
   Logger *logger;
 
-  virtual filestore_perf_stat_t get_cur_stats() = 0;
+  virtual objectstore_perf_stat_t get_cur_stats() = 0;
 
   /**
    * a sequencer orders transactions
