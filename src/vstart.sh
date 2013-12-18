@@ -594,10 +594,13 @@ do_cache() {
 	p="$1"
 	shift
 	echo "creating cache for pool $p ..."
-	$SUDO $CEPH_ADM osd pool create ${p}-cache 8
-	$SUDO $CEPH_ADM osd tier add $p ${p}-cache
-	$SUDO $CEPH_ADM osd tier cache-mode ${p}-cache writeback
-	$SUDO $CEPH_ADM osd tier set-overlay $p ${p}-cache
+	$SUDO $CEPH_ADM <<EOF
+osd pool create ${p}-cache 8
+osd tier add $p ${p}-cache
+osd tier cache-mode ${p}-cache writeback
+osd tier set-overlay $p ${p}-cache
+quit
+EOF
     done
 }
 do_cache $cache
@@ -609,9 +612,12 @@ do_hitsets() {
 	shift
 	shift
 	echo "setting hit_set on pool $pool type $type ..."
-	$CEPH_ADM osd pool set $pool hit_set_type $type
-	$CEPH_ADM osd pool set $pool hit_set_count 8
-	$CEPH_ADM osd pool set $pool hit_set_period 30
+	$CEPH_ADM <<EOF
+osd pool set $pool hit_set_type $type
+osd pool set $pool hit_set_count 8
+osd pool set $pool hit_set_period 30
+quit
+EOF
     done
 }
 do_hitsets $hitset
