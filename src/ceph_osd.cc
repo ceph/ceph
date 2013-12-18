@@ -370,7 +370,8 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_UID | 
     CEPH_FEATURE_NOSRCADDR |
     CEPH_FEATURE_PGID64 |
-    CEPH_FEATURE_MSG_AUTH;
+    CEPH_FEATURE_MSG_AUTH |
+    CEPH_FEATURE_OSD_ERASURE_CODES;
 
   ms_public->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
   ms_public->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
