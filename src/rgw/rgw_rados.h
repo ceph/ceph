@@ -1263,6 +1263,8 @@ public:
                       off_t ofs, off_t end,
 	              RGWGetDataCB *cb);
 
+  int flush_read_list(struct get_obj_data *d);
+
   int get_obj_iterate_cb(void *ctx, RGWObjState *astate,
                          rgw_obj& obj,
                          off_t obj_ofs, off_t read_ofs, off_t len,
