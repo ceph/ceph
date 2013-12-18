@@ -682,6 +682,14 @@ void OSDMap::get_all_osds(set<int32_t>& ls) const
       ls.insert(i);
 }
 
+void OSDMap::get_up_osds(set<int32_t>& ls) const
+{
+  for (int i = 0; i < max_osd; i++) {
+    if (is_up(i))
+      ls.insert(i);
+  }
+}
+
 unsigned OSDMap::get_num_up_osds() const
 {
   unsigned n = 0;
