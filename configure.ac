@@ -697,5 +697,6 @@ AC_CONFIG_FILES([Makefile
 	src/ocf/rbd
 	src/java/Makefile
 	man/Makefile
+	LinuxRPM/Makefile
 	ceph.spec])
 AC_OUTPUT
