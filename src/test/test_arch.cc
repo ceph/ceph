@@ -13,6 +13,7 @@ int main(int argc, char **argv)
 	assert(ceph_arch_probed);
 
 	printf("ceph_arch_intel_sse42 = %d\n", ceph_arch_intel_sse42);
+        printf("ceph_arch_intel_sse2 = %d\n", ceph_arch_intel_sse2);
 	printf("ceph_arch_neon = %d\n", ceph_arch_neon);
 
 	return 0;
