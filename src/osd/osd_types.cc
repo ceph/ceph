@@ -185,13 +185,13 @@ void pow2_hist_t::generate_test_instances(list<pow2_hist_t*>& ls)
   ls.back()->h.push_back(2);
 }
 
-void filestore_perf_stat_t::dump(Formatter *f) const
+void objectstore_perf_stat_t::dump(Formatter *f) const
 {
   f->dump_unsigned("commit_latency_ms", filestore_commit_latency);
   f->dump_unsigned("apply_latency_ms", filestore_apply_latency);
 }
 
-void filestore_perf_stat_t::encode(bufferlist &bl) const
+void objectstore_perf_stat_t::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
   ::encode(filestore_commit_latency, bl);
@@ -199,7 +199,7 @@ void filestore_perf_stat_t::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void filestore_perf_stat_t::decode(bufferlist::iterator &bl)
+void objectstore_perf_stat_t::decode(bufferlist::iterator &bl)
 {
   DECODE_START(1, bl);
   ::decode(filestore_commit_latency, bl);
@@ -207,10 +207,10 @@ void filestore_perf_stat_t::decode(bufferlist::iterator &bl)
   DECODE_FINISH(bl);
 }
 
-void filestore_perf_stat_t::generate_test_instances(std::list<filestore_perf_stat_t*>& o)
+void objectstore_perf_stat_t::generate_test_instances(std::list<objectstore_perf_stat_t*>& o)
 {
-  o.push_back(new filestore_perf_stat_t());
-  o.push_back(new filestore_perf_stat_t());
+  o.push_back(new objectstore_perf_stat_t());
+  o.push_back(new objectstore_perf_stat_t());
   o.back()->filestore_commit_latency = 20;
   o.back()->filestore_apply_latency = 30;
 }

@@ -344,7 +344,7 @@ public:
   void set_fsid(uuid_d u);
   uuid_d get_fsid();
 
-  filestore_perf_stat_t get_cur_stats();
+  objectstore_perf_stat_t get_cur_stats();
 
   int queue_transactions(
     Sequencer *osr, list<Transaction*>& tls,
