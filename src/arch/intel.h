@@ -6,7 +6,7 @@ extern "C" {
 #endif
 
 extern int ceph_arch_intel_sse42;  /* true if we have sse 4.2 features */
-
+extern int ceph_arch_intel_sse2;   /* true if we have sse 2 features */
 extern int ceph_arch_intel_probe(void);
 
 #ifdef __cplusplus
