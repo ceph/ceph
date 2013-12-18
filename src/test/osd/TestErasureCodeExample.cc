@@ -20,6 +20,13 @@
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
+TEST(ErasureCodeExample, chunk_size)
+{
+  ErasureCodeExample example;
+  EXPECT_EQ(3u, example.get_chunk_count());
+  EXPECT_EQ(11u, example.get_chunk_size(20));
+}
+
 TEST(ErasureCodeExample, minimum_to_decode)
 {
   ErasureCodeExample example;
@@ -105,13 +112,13 @@ TEST(ErasureCodeExample, encode_decode)
 
   bufferlist in;
   in.append("ABCDE");
-  int want_to_encode[] = { 0, 1, 2 };
+  set<int> want_to_encode;
+  for(unsigned int i = 0; i < example.get_chunk_count(); i++)
+    want_to_encode.insert(i);
   map<int, bufferlist> encoded;
-  EXPECT_EQ(0, example.encode(set<int>(want_to_encode, want_to_encode+3),
-                              in,
-                              &encoded));
-  EXPECT_EQ(3u, encoded.size());
-  EXPECT_EQ(3u, encoded[0].length());
+  EXPECT_EQ(0, example.encode(want_to_encode, in, &encoded));
+  EXPECT_EQ(example.get_chunk_count(), encoded.size());
+  EXPECT_EQ(example.get_chunk_size(in.length()), encoded[0].length());
   EXPECT_EQ('A', encoded[0][0]);
   EXPECT_EQ('B', encoded[0][1]);
   EXPECT_EQ('C', encoded[0][2]);
