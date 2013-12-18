@@ -74,7 +74,6 @@ ceph osd tier remove data cache2
 ceph osd pool delete cache cache --yes-i-really-really-mean-it
 ceph osd pool delete cache2 cache2 --yes-i-really-really-mean-it
 
-#
 # Assumes there are at least 3 MDSes and two OSDs
 #
 
@@ -271,6 +270,19 @@ ceph osd pool create data2 10
 ceph osd pool rename data2 data3
 ceph osd lspools | grep data3
 ceph osd pool delete data3 data3 --yes-i-really-really-mean-it
+
+ceph osd pool create erasurecodes 12 12 erasure
+ceph osd pool create erasurecodes 12 12 erasure
+expect_false ceph osd pool create erasurecodes 12 12
+ceph osd pool create replicated 12 12 rep
+ceph osd pool create replicated 12 12 rep
+ceph osd pool create replicated 12 12 # default is replicated
+ceph osd pool create replicated 12    # default is replicated, pgp_num = pg_num
+expect_false ceph osd pool create replicated 12 12 erasure
+ceph osd lspools | grep erasurecodes
+ceph osd lspools | grep replicated
+ceph osd pool delete erasurecodes erasurecodes --yes-i-really-really-mean-it
+ceph osd pool delete replicated replicated --yes-i-really-really-mean-it
 
 ceph osd stat | grep up,
 
