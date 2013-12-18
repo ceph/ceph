@@ -49,8 +49,10 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include "galois.h"
+#include "vectorop.h"
 
 #define NONE (10)
 #define TABLE (11)
@@ -737,31 +739,38 @@ void galois_w32_region_multiply(char *region,      /* Region to multiply */
     }
   }
   return;
-
 }
+
 
 void galois_region_xor(           char *r1,         /* Region 1 */
                                   char *r2,         /* Region 2 */
                                   char *r3,         /* Sum region (r3 = r1 ^ r2) -- can be r1 or r2 */
                                   int nbytes)       /* Number of bytes in region */
 {
-  long *l1;
-  long *l2;
-  long *l3;
-  long *ltop;
-  char *ctop;
-  
-  ctop = r1 + nbytes;
-  ltop = (long *) ctop;
-  l1 = (long *) r1;
-  l2 = (long *) r2;
-  l3 = (long *) r3;
- 
-  while (l1 < ltop) {
-    *l3 = ((*l1)  ^ (*l2));
-    l1++;
-    l2++;
-    l3++;
+  if (nbytes%VECTOR_WORDSIZE) {
+    assert(!((long long)r1%sizeof(long)));
+    assert(!((long long)r2%sizeof(long)));
+    assert(!((long long)r3%sizeof(long)));
+    long* l1 = (long*)r1;
+    long* l2 = (long*)r2;
+    long* l3 = (long*)r3;
+    char *ctop = r1 + nbytes;
+    long* ltop = (long*)ctop;
+    while (l1 < ltop) {
+      *l3++ = ((*l1++)  ^ (*l2++));
+    }
+  } else {
+    assert(!((long long)r1%VECTOR_WORDSIZE));
+    assert(!((long long)r2%VECTOR_WORDSIZE));
+    assert(!((long long)r3%VECTOR_WORDSIZE));
+    vector_op_t* l1 = (vector_op_t*)r1;
+    vector_op_t* l2 = (vector_op_t*)r2;
+    vector_op_t* l3 = (vector_op_t*)r3;
+    char *ctop = r1 + nbytes;
+    vector_op_t* ltop = (vector_op_t*)ctop;
+    while (l1 < ltop) {
+      *l3++ = ((*l1++)  ^ (*l2++));
+    }
   }
 }
 
