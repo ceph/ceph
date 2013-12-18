@@ -38,7 +38,7 @@ BuildRequires:	perl
 BuildRequires:	gdbm
 BuildRequires:	pkgconfig
 BuildRequires:	python
-BuildRequires:	python-nose
+BuildRequires:	python-pytest
 BuildRequires:  libaio-devel
 BuildRequires:  libcurl-devel
 BuildRequires:  libxml2-devel
