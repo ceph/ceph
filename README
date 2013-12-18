@@ -99,7 +99,6 @@ To build the documentation, ensure that you are in the top-level `/ceph director
 Build Prerequisites
 ===================
 
-
 debian-based
 ------------
 To build the source code, you must install the following:
@@ -144,12 +143,18 @@ These are the rpm packages needed to install in an rpm-based OS:
     autoconf
     automake
     gcc
+    gcc-c++
     make
     libtool
     python-argparse
     python-flask
     libuuid-devel
+    keyutils-libs-devel
+    cryptopp-devel
     nss-devel
+    fcgi-devel
+    expat-devel
+    libcurl-devel
     fuse-devel
     gperftools-devel
     libedit-devel
@@ -158,3 +163,8 @@ These are the rpm packages needed to install in an rpm-based OS:
     leveldb-devel
     libaio-devel
     boost-devel
+
+For example:
+
+	$ yum install autoconf automake gcc gcc-c++ make libtool python-argparse python-flask libuuid-devel keyutils-libs-devel cryptopp-devel nss-devel fcgi-devel expat-devel libcurl-devel fuse-devel gperftools-devel libedit-devel libatomic_ops-devel snappy-devel leveldb-devel libaio-devel boost-devel
+

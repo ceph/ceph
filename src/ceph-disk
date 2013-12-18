@@ -253,6 +253,9 @@ def list_all_partitions():
     """
     dev_part_list = {}
     for name in os.listdir('/sys/block'):
+        # /dev/fd0 may hang http://tracker.ceph.com/issues/6827
+        if re.match(r'^fd\d$', name):
+            continue
         if not os.path.exists(os.path.join('/sys/block', name, 'device')):
             continue
         dev_part_list[name] = list_partitions(name)
@@ -847,6 +850,7 @@ def prepare_journal_dev(
                     num=num,
                     uuid=ptype,
                     ),
+                '--mbrtogpt',
                 '--',
                 journal,
                 ],

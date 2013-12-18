@@ -148,6 +148,7 @@ OPTION(mon_osd_down_out_subtree_limit, OPT_STR, "rack")   // smallest crush unit
 OPTION(mon_osd_min_up_ratio, OPT_DOUBLE, .3)    // min osds required to be up to mark things down
 OPTION(mon_osd_min_in_ratio, OPT_DOUBLE, .3)   // min osds required to be in to mark things out
 OPTION(mon_osd_max_op_age, OPT_DOUBLE, 32)     // max op age before we get concerned (make it a power of 2)
+OPTION(mon_osd_max_split_count, OPT_INT, 32) // largest number of PGs per "involved" OSD to let split create
 OPTION(mon_stat_smooth_intervals, OPT_INT, 2)  // smooth stats over last N PGMap maps
 OPTION(mon_lease, OPT_FLOAT, 5)       // lease interval
 OPTION(mon_lease_renew_interval, OPT_FLOAT, 3) // on leader, to renew the lease
@@ -170,6 +171,7 @@ OPTION(mon_force_standby_active, OPT_BOOL, true) // should mons force standby-re
 OPTION(mon_min_osdmap_epochs, OPT_INT, 500)
 OPTION(mon_max_pgmap_epochs, OPT_INT, 500)
 OPTION(mon_max_log_epochs, OPT_INT, 500)
+OPTION(mon_max_mdsmap_epochs, OPT_INT, 500)
 OPTION(mon_max_osd, OPT_INT, 10000)
 OPTION(mon_probe_timeout, OPT_DOUBLE, 2.0)
 OPTION(mon_slurp_timeout, OPT_DOUBLE, 10.0)
@@ -191,6 +193,7 @@ OPTION(mon_inject_sync_get_chunk_delay, OPT_DOUBLE, 0)  // inject N second delay
 OPTION(mon_osd_min_down_reporters, OPT_INT, 1)   // number of OSDs who need to report a down OSD for it to count
 OPTION(mon_osd_min_down_reports, OPT_INT, 3)     // number of times a down OSD must be reported for it to count
 OPTION(mon_osd_force_trim_to, OPT_INT, 0)   // force mon to trim maps to this point, regardless of min_last_epoch_clean (dangerous, use with care)
+OPTION(mon_mds_force_trim_to, OPT_INT, 0)   // force mon to trim mdsmaps to this point (dangerous, use with care)
 
 // dump transactions
 OPTION(mon_debug_dump_transactions, OPT_BOOL, false)
@@ -387,7 +390,7 @@ OPTION(osd_crush_chooseleaf_type, OPT_INT, 1) // 1 = host
 OPTION(osd_min_rep, OPT_INT, 1)
 OPTION(osd_max_rep, OPT_INT, 10)
 OPTION(osd_pool_default_crush_rule, OPT_INT, 0)
-OPTION(osd_pool_default_size, OPT_INT, 2)
+OPTION(osd_pool_default_size, OPT_INT, 3)
 OPTION(osd_pool_default_min_size, OPT_INT, 0)  // 0 means no specific default; ceph will use size-size/2
 OPTION(osd_pool_default_pg_num, OPT_INT, 8) // number of PGs for new pools. Configure in global or mon section of ceph.conf
 OPTION(osd_pool_default_pgp_num, OPT_INT, 8) // number of PGs for placement purposes. Should be equal to pg_num
@@ -520,7 +523,7 @@ OPTION(osd_mon_shutdown_timeout, OPT_DOUBLE, 5)
 OPTION(osd_max_object_size, OPT_U64, 100*1024L*1024L*1024L) // OSD's maximum object size
 OPTION(osd_max_attr_size, OPT_U64, 0)
 
-OPTION(filestore, OPT_BOOL, false)
+OPTION(osd_objectstore, OPT_STR, "filestore")  // ObjectStore backend type
 
 /// filestore wb throttle limits
 OPTION(filestore_wbthrottle_enable, OPT_BOOL, true)

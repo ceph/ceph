@@ -190,7 +190,7 @@ Install Apache/FastCGI
 For each :term:`Ceph Node` that runs a :term:`Ceph Object Gateway` daemon 
 instance, you must install Apache, FastCGI, the Ceph Object Gateway daemon 
 (``radosgw``) and the Ceph Object Gateway Sync Agent (``radosgw-agent``). 
-See `Install Apache, FastCGI and Gateway`_ for details.
+See `Install Ceph Object Gateway`_ for details.
 
 
 Create Data Directories
@@ -725,7 +725,7 @@ there is a unified namespace between the two regions.
 
 
 .. _CRUSH Map: ../../rados/operations/crush-map
-.. _Install Apache, FastCGI and Gateway: ../manual-install
+.. _Install Ceph Object Gateway: ../../install/install-ceph-gateway
 .. _Cephx Administration: ../../rados/operations/authentication/#cephx-administration
 .. _Ceph configuration file: ../../rados/configuration/ceph-conf
 .. _Configuration Reference - Pools: ../config-ref#pools

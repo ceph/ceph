@@ -889,7 +889,7 @@ protected:
   void _purge_stray_purged(CDentry *dn, int r=0);
   void _purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls);
   void _purge_stray_logged_truncate(CDentry *dn, LogSegment *ls);
-  friend class C_MDC_RetryScanStray;
+  friend struct C_MDC_RetryScanStray;
   friend class C_MDC_FetchedBacktrace;
   friend class C_MDC_PurgeStrayLogged;
   friend class C_MDC_PurgeStrayLoggedTruncate;

@@ -130,7 +130,7 @@ ceph_smalliobench_SOURCES = \
 	test/bench/rados_backend.cc \
 	test/bench/detailed_stat_collector.cc \
 	test/bench/bencher.cc
-ceph_smalliobench_LDADD = $(LIBRADOS) -lboost_program_options $(CEPH_GLOBAL)
+ceph_smalliobench_LDADD = $(LIBRADOS) $(BOOST_PROGRAM_OPTIONS_LIBS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_smalliobench
 
 ceph_smalliobenchfs_SOURCES = \
@@ -138,7 +138,7 @@ ceph_smalliobenchfs_SOURCES = \
 	test/bench/testfilestore_backend.cc \
 	test/bench/detailed_stat_collector.cc \
 	test/bench/bencher.cc
-ceph_smalliobenchfs_LDADD = $(LIBRADOS) -lboost_program_options $(LIBOS) $(CEPH_GLOBAL)
+ceph_smalliobenchfs_LDADD = $(LIBRADOS) $(BOOST_PROGRAM_OPTIONS_LIBS) $(LIBOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_smalliobenchfs
 
 ceph_smalliobenchdumb_SOURCES = \
@@ -146,7 +146,7 @@ ceph_smalliobenchdumb_SOURCES = \
 	test/bench/dumb_backend.cc \
 	test/bench/detailed_stat_collector.cc \
 	test/bench/bencher.cc
-ceph_smalliobenchdumb_LDADD = $(LIBRADOS) -lboost_program_options $(LIBOS) $(CEPH_GLOBAL)
+ceph_smalliobenchdumb_LDADD = $(LIBRADOS) $(BOOST_PROGRAM_OPTIONS_LIBS) $(LIBOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_smalliobenchdumb
 
 ceph_smalliobenchrbd_SOURCES = \
@@ -154,13 +154,13 @@ ceph_smalliobenchrbd_SOURCES = \
 	test/bench/rbd_backend.cc \
 	test/bench/detailed_stat_collector.cc \
 	test/bench/bencher.cc
-ceph_smalliobenchrbd_LDADD = $(LIBRBD) $(LIBRADOS) -lboost_program_options $(CEPH_GLOBAL)
+ceph_smalliobenchrbd_LDADD = $(LIBRBD) $(LIBRADOS) $(BOOST_PROGRAM_OPTIONS_LIBS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_smalliobenchrbd
 
 ceph_tpbench_SOURCES = \
 	test/bench/tp_bench.cc \
 	test/bench/detailed_stat_collector.cc
-ceph_tpbench_LDADD = $(LIBRADOS) -lboost_program_options $(LIBOS) $(CEPH_GLOBAL)
+ceph_tpbench_LDADD = $(LIBRADOS) $(BOOST_PROGRAM_OPTIONS_LIBS) $(LIBOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_tpbench
 
 ceph_omapbench_SOURCES = test/omap_bench.cc
@@ -278,6 +278,11 @@ unittest_util_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_util_LDADD = $(LIBCOMMON) -lm $(UNITTEST_LDADD) $(CRYPTO_LIBS) $(EXTRALIBS)
 check_PROGRAMS += unittest_util
 
+unittest_crush_indep_SOURCES = test/crush/indep.cc
+unittest_crush_indep_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_crush_indep_LDADD = $(LIBCOMMON) -lm $(UNITTEST_LDADD) $(CEPH_CRUSH) $(EXTRALIBS) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_crush_indep
+
 unittest_workqueue_SOURCES = test/test_workqueue.cc
 unittest_workqueue_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_workqueue_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
@@ -307,6 +312,11 @@ unittest_throttle_SOURCES = test/common/Throttle.cc
 unittest_throttle_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_throttle_CXXFLAGS = $(UNITTEST_CXXFLAGS) -O2
 check_PROGRAMS += unittest_throttle
+
+unittest_crush_wrapper_SOURCES = test/crush/TestCrushWrapper.cc
+unittest_crush_wrapper_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCRUSH)
+unittest_crush_wrapper_CXXFLAGS = $(UNITTEST_CXXFLAGS) -O2
+check_PROGRAMS += unittest_crush_wrapper
 
 unittest_base64_SOURCES = test/base64.cc
 unittest_base64_LDADD = $(LIBCEPHFS) -lm $(UNITTEST_LDADD)

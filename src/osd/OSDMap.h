@@ -259,14 +259,14 @@ private:
   int get_max_osd() const { return max_osd; }
   void set_max_osd(int m);
 
-  int get_num_osds() const {
+  unsigned get_num_osds() const {
     return num_osd;
   }
   int calc_num_osds();
 
   void get_all_osds(set<int32_t>& ls) const;
-  int get_num_up_osds() const;
-  int get_num_in_osds() const;
+  unsigned get_num_up_osds() const;
+  unsigned get_num_in_osds() const;
 
   int get_flags() const { return flags; }
   int test_flag(int f) const { return flags & f; }
@@ -489,7 +489,7 @@ public:
 private:
   /// pg -> (raw osd list)
   int _pg_to_osds(const pg_pool_t& pool, pg_t pg, vector<int>& osds) const;
-  void _remove_nonexistent_osds(vector<int>& osds) const;
+  void _remove_nonexistent_osds(const pg_pool_t& pool, vector<int>& osds) const;
 
   /// pg -> (up osd list)
   void _raw_to_up_osds(pg_t pg, vector<int>& raw, vector<int>& up) const;
@@ -596,10 +596,12 @@ public:
   /*
    * handy helpers to build simple maps...
    */
+  /// build crush bucket types.  @return 'root' type id
   void build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
 		    int num_osd, int pg_bits, int pgp_bits);
   int build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
 			     int pg_bits, int pgp_bits);
+  static int _build_crush_types(CrushWrapper& crush);
   static void build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
 				     map<int, const char*>& poolsets, int num_osd);
   static void build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& crush,

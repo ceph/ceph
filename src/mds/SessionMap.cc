@@ -103,7 +103,8 @@ class C_SM_Save : public Context {
 public:
   C_SM_Save(SessionMap *cm, version_t v) : sessionmap(cm), version(v) {}
   void finish(int r) {
-	sessionmap->_save_finish(version);
+    assert(r == 0);
+    sessionmap->_save_finish(version);
   }
 };
 

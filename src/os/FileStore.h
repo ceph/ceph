@@ -97,7 +97,13 @@ inline ostream& operator<<(ostream& out, const FSSuperblock& sb)
 class FileStore : public JournalingObjectStore,
                   public md_config_obs_t
 {
+  static const uint32_t target_version = 3;
 public:
+  uint32_t get_target_version() {
+    return target_version;
+  }
+
+  int peek_journal_fsid(uuid_d *fsid);
 
   struct FSPerfTracker {
     PerfCounters::avg_tracker<uint64_t> os_commit_latency;
@@ -117,7 +123,6 @@ public:
     return perf_tracker.get_cur_stats();
   }
 
-  static const uint32_t target_version = 3;
 private:
   string internal_name;         ///< internal name, used to name the perfcounter instance
   string basedir, journalpath;
@@ -305,7 +310,7 @@ private:
 	       Context *onreadable, Context *onreadable_sync,
 	       TrackedOpRef osd_op);
   void queue_op(OpSequencer *osr, Op *o);
-  void op_queue_reserve_throttle(Op *o);
+  void op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle = NULL);
   void op_queue_release_throttle(Op *o);
   void _journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk);
   friend struct C_JournaledAhead;
@@ -378,7 +383,8 @@ public:
     ThreadPool::TPHandle *handle);
 
   int queue_transactions(Sequencer *osr, list<Transaction*>& tls,
-			 TrackedOpRef op = TrackedOpRef());
+			 TrackedOpRef op = TrackedOpRef(),
+			 ThreadPool::TPHandle *handle = NULL);
 
   /**
    * set replay guard xattr on given file

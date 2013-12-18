@@ -1254,6 +1254,7 @@ protected:
   void start_boot();
   void _maybe_boot(epoch_t oldest, epoch_t newest);
   void _send_boot();
+  void _collect_metadata(map<string,string> *pmeta);
 
   void start_waiting_for_healthy();
   bool _is_healthy();
@@ -1318,8 +1319,10 @@ protected:
   // -- generic pg peering --
   PG::RecoveryCtx create_context();
   bool compat_must_dispatch_immediately(PG *pg);
-  void dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap);
-  void dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg);
+  void dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
+                        ThreadPool::TPHandle *handle = NULL);
+  void dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg,
+                                    ThreadPool::TPHandle *handle = NULL);
   void do_notifies(map< int,vector<pair<pg_notify_t, pg_interval_map_t> > >& notify_list,
 		   OSDMapRef map);
   void do_queries(map< int, map<pg_t,pg_query_t> >& query_map,
@@ -1708,6 +1711,7 @@ protected:
   /* internal and external can point to the same messenger, they will still
    * be cleaned up properly*/
   OSD(CephContext *cct_,
+      ObjectStore *store_,
       int id,
       Messenger *internal,
       Messenger *external,
@@ -1720,15 +1724,11 @@ protected:
 
   // static bits
   static int find_osd_dev(char *result, int whoami);
-  static ObjectStore *create_object_store(CephContext *cct, const std::string &dev, const std::string &jdev);
-  static int convertfs(const std::string &dev, const std::string &jdev);
   static int do_convertfs(ObjectStore *store);
   static int convert_collection(ObjectStore *store, coll_t cid);
-  static int mkfs(CephContext *cct, const std::string &dev, const std::string &jdev,
+  static int mkfs(CephContext *cct, ObjectStore *store,
+		  const string& dev,
 		  uuid_d fsid, int whoami);
-  static int mkjournal(CephContext *cct, const std::string &dev, const std::string &jdev);
-  static int flushjournal(CephContext *cct, const std::string &dev, const std::string &jdev);
-  static int dump_journal(CephContext *cct, const std::string &dev, const std::string &jdev, ostream& out);
   /* remove any non-user xattrs from a map of them */
   void filter_xattrs(map<string, bufferptr>& attrs) {
     for (map<string, bufferptr>::iterator iter = attrs.begin();
@@ -1741,12 +1741,11 @@ protected:
   }
 
 private:
-  static int write_meta(const std::string &base,
+  static int write_meta(ObjectStore *store,
 			uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami);
 public:
-  static int peek_meta(const std::string &dev, string& magic,
+  static int peek_meta(ObjectStore *store, string& magic,
 		       uuid_d& cluster_fsid, uuid_d& osd_fsid, int& whoami);
-  static int peek_journal_fsid(std::string jpath, uuid_d& fsid);
   
 
   // startup/shutdown

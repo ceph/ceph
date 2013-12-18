@@ -65,6 +65,7 @@ class MDSMonitor : public PaxosService {
 
   void create_new_fs(MDSMap &m, int metadata_pool, int data_pool);
 
+  version_t get_trim_to();
 
   // service methods
   void create_initial();
@@ -73,8 +74,6 @@ class MDSMonitor : public PaxosService {
   void encode_pending(MonitorDBStore::Transaction *t);
   // we don't require full versions; don't encode any.
   virtual void encode_full(MonitorDBStore::Transaction *t) { }
-
-  void encode_trim(MonitorDBStore::Transaction *t) { }
 
   void update_logger();
 

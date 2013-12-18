@@ -16,6 +16,7 @@
 #include <iostream>
 #include <errno.h>
 #include <sys/stat.h>
+#include <sys/utsname.h>
 #include <signal.h>
 #include <ctype.h>
 #include <boost/scoped_ptr.hpp>
@@ -37,8 +38,8 @@
 
 #include "common/ceph_argparse.h"
 #include "common/version.h"
-#include "os/FileStore.h"
-#include "os/FileJournal.h"
+
+#include "os/ObjectStore.h"
 
 #include "ReplicatedPG.h"
 
@@ -98,7 +99,6 @@
 #include "common/perf_counters.h"
 #include "common/Timer.h"
 #include "common/LogClient.h"
-#include "common/safe_io.h"
 #include "common/HeartbeatMap.h"
 #include "common/admin_socket.h"
 
@@ -439,21 +439,6 @@ void OSDService::init()
   watch_timer.init();
 }
 
-ObjectStore *OSD::create_object_store(CephContext *cct, const std::string &dev, const std::string &jdev)
-{
-  struct stat st;
-  if (::stat(dev.c_str(), &st) != 0)
-    return 0;
-
-  if (cct->_conf->filestore)
-    return new FileStore(dev, jdev);
-
-  if (S_ISDIR(st.st_mode))
-    return new FileStore(dev, jdev);
-  else
-    return 0;
-}
-
 #undef dout_prefix
 #define dout_prefix *_dout
 
@@ -526,7 +511,7 @@ int OSD::do_convertfs(ObjectStore *store)
   if (r == 1)
     return store->umount();
 
-  derr << "FileStore is old at version " << version << ".  Updating..."  << dendl;
+  derr << "ObjectStore is old at version " << version << ".  Updating..."  << dendl;
 
   derr << "Removing tmp pgs" << dendl;
   vector<coll_t> collections;
@@ -583,39 +568,24 @@ int OSD::do_convertfs(ObjectStore *store)
   return store->umount();
 }
 
-int OSD::convertfs(const std::string &dev, const std::string &jdev)
-{
-  boost::scoped_ptr<ObjectStore> store(
-    new FileStore(dev, jdev, "filestore", 
-		  true));
-  int r = do_convertfs(store.get());
-  return r;
-}
-
-int OSD::mkfs(CephContext *cct, const std::string &dev, const std::string &jdev, uuid_d fsid, int whoami)
+int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
+	      uuid_d fsid, int whoami)
 {
   int ret;
-  ObjectStore *store = NULL;
 
   try {
-    store = create_object_store(cct, dev, jdev);
-    if (!store) {
-      ret = -ENOENT;
-      goto out;
-    }
-
     // if we are fed a uuid for this osd, use it.
     store->set_fsid(cct->_conf->osd_uuid);
 
     ret = store->mkfs();
     if (ret) {
-      derr << "OSD::mkfs: FileStore::mkfs failed with error " << ret << dendl;
+      derr << "OSD::mkfs: ObjectStore::mkfs failed with error " << ret << dendl;
       goto free_store;
     }
 
     ret = store->mount();
     if (ret) {
-      derr << "OSD::mkfs: couldn't mount FileStore: error " << ret << dendl;
+      derr << "OSD::mkfs: couldn't mount ObjectStore: error " << ret << dendl;
       goto free_store;
     }
 
@@ -707,15 +677,9 @@ int OSD::mkfs(CephContext *cct, const std::string &dev, const std::string &jdev,
 
     store->sync_and_flush();
 
-    ret = write_meta(dev, sb.cluster_fsid, sb.osd_fsid, whoami);
+    ret = write_meta(store, sb.cluster_fsid, sb.osd_fsid, whoami);
     if (ret) {
       derr << "OSD::mkfs: failed to write fsid file: error " << ret << dendl;
-      goto umount_store;
-    }
-
-    ret = safe_write_file(dev.c_str(), "ready", "ready\n", 6);
-    if (ret) {
-      derr << "OSD::mkfs: failed to write ready file: error " << ret << dendl;
       goto umount_store;
     }
 
@@ -733,99 +697,68 @@ umount_store:
   store->umount();
 free_store:
   delete store;
-out:
   return ret;
 }
 
-int OSD::mkjournal(CephContext *cct, const std::string &dev, const std::string &jdev)
-{
-  ObjectStore *store = create_object_store(cct, dev, jdev);
-  if (!store)
-    return -ENOENT;
-  return store->mkjournal();
-}
-
-int OSD::flushjournal(CephContext *cct, const std::string &dev, const std::string &jdev)
-{
-  ObjectStore *store = create_object_store(cct, dev, jdev);
-  if (!store)
-    return -ENOENT;
-  int err = store->mount();
-  if (!err) {
-    store->sync_and_flush();
-    store->umount();
-  }
-  delete store;
-  return err;
-}
-
-int OSD::dump_journal(CephContext *cct, const std::string &dev, const std::string &jdev, ostream& out)
-{
-  ObjectStore *store = create_object_store(cct, dev, jdev);
-  if (!store)
-    return -ENOENT;
-  int err = store->dump_journal(out);
-  delete store;
-  return err;
-}
-
-int OSD::write_meta(const std::string &base, uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami)
+int OSD::write_meta(ObjectStore *store, uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami)
 {
   char val[80];
+  int r;
   
-  snprintf(val, sizeof(val), "%s\n", CEPH_OSD_ONDISK_MAGIC);
-  safe_write_file(base.c_str(), "magic", val, strlen(val));
+  snprintf(val, sizeof(val), "%s", CEPH_OSD_ONDISK_MAGIC);
+  r = store->write_meta("magic", val);
+  if (r < 0)
+    return r;
 
-  snprintf(val, sizeof(val), "%d\n", whoami);
-  safe_write_file(base.c_str(), "whoami", val, strlen(val));
+  snprintf(val, sizeof(val), "%d", whoami);
+  r = store->write_meta("whoami", val);
+  if (r < 0)
+    return r;
 
   cluster_fsid.print(val);
-  strcat(val, "\n");
-  safe_write_file(base.c_str(), "ceph_fsid", val, strlen(val));
+  r = store->write_meta("ceph_fsid", val);
+  if (r < 0)
+    return r;
+
+  r = store->write_meta("ready", "ready");
+  if (r < 0)
+    return r;
 
   return 0;
 }
 
-int OSD::peek_meta(const std::string &dev, std::string& magic,
+int OSD::peek_meta(ObjectStore *store, std::string& magic,
 		   uuid_d& cluster_fsid, uuid_d& osd_fsid, int& whoami)
 {
-  char val[80] = { 0 };
+  string val;
 
-  if (safe_read_file(dev.c_str(), "magic", val, sizeof(val)) < 0)
-    return -errno;
-  int l = strlen(val);
-  if (l && val[l-1] == '\n')
-    val[l-1] = 0;
+  int r = store->read_meta("magic", &val);
+  if (r < 0)
+    return r;
   magic = val;
 
-  if (safe_read_file(dev.c_str(), "whoami", val, sizeof(val)) < 0)
-    return -errno;
-  whoami = atoi(val);
+  r = store->read_meta("whoami", &val);
+  if (r < 0)
+    return r;
+  whoami = atoi(val.c_str());
 
-  if (safe_read_file(dev.c_str(), "ceph_fsid", val, sizeof(val)) < 0)
-    return -errno;
-  if (strlen(val) > 36)
-    val[36] = 0;
-  cluster_fsid.parse(val);
+  r = store->read_meta("ceph_fsid", &val);
+  if (r < 0)
+    return r;
+  r = cluster_fsid.parse(val.c_str());
+  if (r < 0)
+    return r;
 
-  if (safe_read_file(dev.c_str(), "fsid", val, sizeof(val)) < 0)
+  r = store->read_meta("fsid", &val);
+  if (r < 0) {
     osd_fsid = uuid_d();
-  else {
-    if (strlen(val) > 36)
-      val[36] = 0;
-    osd_fsid.parse(val);
+  } else {
+    r = osd_fsid.parse(val.c_str());
+    if (r < 0)
+      return r;
   }
 
   return 0;
-}
-
-int OSD::peek_journal_fsid(string path, uuid_d& fsid)
-{
-  // make sure we don't try to use aio or direct_io (and get annoying
-  // error messages from failing to do so); performance implications
-  // should be irrelevant for this use
-  FileJournal j(fsid, 0, 0, path.c_str(), false, false);
-  return j.peek_fsid(fsid);
 }
 
 
@@ -834,7 +767,8 @@ int OSD::peek_journal_fsid(string path, uuid_d& fsid)
 
 // cons/des
 
-OSD::OSD(CephContext *cct_, int id, Messenger *internal_messenger, Messenger *external_messenger,
+OSD::OSD(CephContext *cct_, ObjectStore *store_,
+	 int id, Messenger *internal_messenger, Messenger *external_messenger,
 	 Messenger *hb_clientm,
 	 Messenger *hb_front_serverm,
 	 Messenger *hb_back_serverm,
@@ -858,7 +792,7 @@ OSD::OSD(CephContext *cct_, int id, Messenger *internal_messenger, Messenger *ex
   monc(mc),
   logger(NULL),
   recoverystate_perf(NULL),
-  store(NULL),
+  store(store_),
   clog(cct, client_messenger, &mc->monmap, LogClient::NO_FLAGS),
   whoami(id),
   dev_path(dev), journal_path(jdev),
@@ -941,13 +875,6 @@ int OSD::pre_init()
   if (is_stopping())
     return 0;
   
-  assert(!store);
-  store = create_object_store(cct, dev_path, journal_path);
-  if (!store) {
-    derr << "OSD::pre_init: unable to create object store" << dendl;
-    return -ENODEV;
-  }
-
   if (store->test_mount_in_use()) {
     derr << "OSD::pre_init: object store '" << dev_path << "' is "
          << "currently in use. (Is ceph-osd already running?)" << dendl;
@@ -3567,7 +3494,109 @@ void OSD::_send_boot()
 	   << ", hb_back_addr " << hb_back_addr
 	   << ", hb_front_addr " << hb_front_addr
 	   << dendl;
+  _collect_metadata(&mboot->metadata);
   monc->send_mon_message(mboot);
+}
+
+void OSD::_collect_metadata(map<string,string> *pm)
+{
+  (*pm)["ceph_version"] = pretty_version_to_str();
+
+  // config info
+  (*pm)["osd_data"] = dev_path;
+  (*pm)["osd_journal"] = journal_path;
+  (*pm)["front_addr"] = stringify(client_messenger->get_myaddr());
+  (*pm)["back_addr"] = stringify(cluster_messenger->get_myaddr());
+  (*pm)["hb_front_addr"] = stringify(hb_front_server_messenger->get_myaddr());
+  (*pm)["hb_back_addr"] = stringify(hb_back_server_messenger->get_myaddr());
+
+  // kernel info
+  struct utsname u;
+  int r = uname(&u);
+  if (r >= 0) {
+    (*pm)["os"] = u.sysname;
+    (*pm)["kernel_version"] = u.release;
+    (*pm)["kernel_description"] = u.version;
+    (*pm)["hostname"] = u.nodename;
+    (*pm)["arch"] = u.machine;
+  }
+
+  // memory
+  FILE *f = fopen("/proc/meminfo", "r");
+  if (f) {
+    char buf[100];
+    while (!feof(f)) {
+      char *line = fgets(buf, sizeof(buf), f);
+      if (!line)
+	break;
+      char key[40];
+      long long value;
+      int r = sscanf(line, "%s %lld", key, &value);
+      if (r == 2) {
+	if (strcmp(key, "MemTotal:") == 0)
+	  (*pm)["mem_total_kb"] = stringify(value);
+	else if (strcmp(key, "SwapTotal:") == 0)
+	  (*pm)["mem_swap_kb"] = stringify(value);
+      }
+    }
+    fclose(f);
+  }
+
+  // processor
+  f = fopen("/proc/cpuinfo", "r");
+  if (f) {
+    char buf[100];
+    while (!feof(f)) {
+      char *line = fgets(buf, sizeof(buf), f);
+      if (!line)
+	break;
+      if (strncmp(line, "model name", 10) == 0) {
+	char *c = strchr(buf, ':');
+	c++;
+	while (*c == ' ')
+	  ++c;
+	char *nl = c;
+	while (*nl != '\n')
+	  ++nl;
+	*nl = '\0';
+	(*pm)["cpu"] = c;
+	break;
+      }
+    }
+    fclose(f);
+  }
+
+  // distro info
+  f = fopen("/etc/lsb-release", "r");
+  if (f) {
+    char buf[100];
+    while (!feof(f)) {
+      char *line = fgets(buf, sizeof(buf), f);
+      if (!line)
+	break;
+      char *eq = strchr(buf, '=');
+      if (!eq)
+	break;
+      *eq = '\0';
+      ++eq;
+      while (*eq == '\"')
+	++eq;
+      while (*eq && (eq[strlen(eq)-1] == '\n' ||
+		     eq[strlen(eq)-1] == '\"'))
+	eq[strlen(eq)-1] = '\0';
+      if (strcmp(buf, "DISTRIB_ID") == 0)
+	(*pm)["distro"] = eq;
+      else if (strcmp(buf, "DISTRIB_RELEASE") == 0)
+	(*pm)["distro_version"] = eq;
+      else if (strcmp(buf, "DISTRIB_CODENAME") == 0)
+	(*pm)["distro_codename"] = eq;
+      else if (strcmp(buf, "DISTRIB_DESCRIPTION") == 0)
+	(*pm)["distro_description"] = eq;
+    }
+    fclose(f);
+  }
+
+  dout(10) << __func__ << " " << *pm << dendl;
 }
 
 void OSD::queue_want_up_thru(epoch_t want)
@@ -5994,13 +6023,15 @@ PG::RecoveryCtx OSD::create_context()
   return rctx;
 }
 
-void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg)
+void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg,
+                                       ThreadPool::TPHandle *handle)
 {
   if (!ctx.transaction->empty()) {
     ctx.on_applied->add(new ObjectStore::C_DeleteTransaction(ctx.transaction));
     int tr = store->queue_transaction(
       pg->osr.get(),
-      ctx.transaction, ctx.on_applied, ctx.on_safe);
+      ctx.transaction, ctx.on_applied, ctx.on_safe, NULL,
+      TrackedOpRef(), handle);
     assert(tr == 0);
     ctx.transaction = new ObjectStore::Transaction;
     ctx.on_applied = new C_Contexts(cct);
@@ -6011,8 +6042,11 @@ void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg)
 bool OSD::compat_must_dispatch_immediately(PG *pg)
 {
   assert(pg->is_locked());
-  for (vector<int>::iterator i = pg->acting.begin();
-       i != pg->acting.end();
+  vector<int> *tmpacting = &pg->acting;
+  if (pg->actingbackfill.size() > 0)
+    tmpacting = &pg->actingbackfill;
+  for (vector<int>::iterator i = tmpacting->begin();
+       i != tmpacting->end();
        ++i) {
     if (*i == whoami)
       continue;
@@ -6025,7 +6059,8 @@ bool OSD::compat_must_dispatch_immediately(PG *pg)
   return false;
 }
 
-void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap)
+void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
+                           ThreadPool::TPHandle *handle)
 {
   if (service.get_osdmap()->is_up(whoami)) {
     do_notifies(*ctx.notify_list, curmap);
@@ -6045,7 +6080,8 @@ void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap)
     ctx.on_applied->add(new ObjectStore::C_DeleteTransaction(ctx.transaction));
     int tr = store->queue_transaction(
       pg->osr.get(),
-      ctx.transaction, ctx.on_applied, ctx.on_safe);
+      ctx.transaction, ctx.on_applied, ctx.on_safe, NULL, TrackedOpRef(),
+      handle);
     assert(tr == 0);
   }
 }
@@ -6640,6 +6676,13 @@ void OSD::_remove_pg(PG *pg)
 
   service.cancel_pending_splits_for_parent(pg->info.pgid);
 
+  store->queue_transaction(
+    pg->osr.get(), rmt,
+    new ObjectStore::C_DeleteTransactionHolder<
+      SequencerRef>(rmt, pg->osr),
+    new ContainerContext<
+      SequencerRef>(pg->osr));
+
   DeletingStateRef deleting = service.deleting_pgs.lookup_or_create(
     pg->info.pgid,
     make_pair(
@@ -6647,13 +6690,6 @@ void OSD::_remove_pg(PG *pg)
       PGRef(pg))
     );
   remove_wq.queue(make_pair(PGRef(pg), deleting));
-
-  store->queue_transaction(
-    pg->osr.get(), rmt,
-    new ObjectStore::C_DeleteTransactionHolder<
-      SequencerRef>(rmt, pg->osr),
-    new ContainerContext<
-      SequencerRef>(pg->osr));
 
   // remove from map
   pg_map.erase(pg->info.pgid);
@@ -7024,7 +7060,7 @@ void OSD::handle_replica_op(OpRequestRef op)
   T *m = static_cast<T *>(op->get_req());
   assert(m->get_header().type == MSGTYPE);
 
-  dout(10) << __func__ << *m << " epoch " << m->map_epoch << dendl;
+  dout(10) << __func__ << " " << *m << " epoch " << m->map_epoch << dendl;
   if (m->map_epoch < up_epoch) {
     dout(3) << "replica op from before up" << dendl;
     return;
@@ -7250,17 +7286,17 @@ void OSD::process_peering_events(
       split_pgs.clear();
     }
     if (compat_must_dispatch_immediately(pg)) {
-      dispatch_context(rctx, pg, curmap);
+      dispatch_context(rctx, pg, curmap, &handle);
       rctx = create_context();
     } else {
-      dispatch_context_transaction(rctx, pg);
+      dispatch_context_transaction(rctx, pg, &handle);
     }
     pg->unlock();
     handle.reset_tp_timeout();
   }
   if (need_up_thru)
     queue_want_up_thru(same_interval_since);
-  dispatch_context(rctx, 0, curmap);
+  dispatch_context(rctx, 0, curmap, &handle);
 
   service.send_pg_temp();
 }
