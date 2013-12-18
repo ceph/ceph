@@ -4531,7 +4531,7 @@ void ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
 
   CopyOpRef cop(new CopyOp(cb, obc, src, oloc, version, flags, temp_dest_oid));
   copy_ops[dest] = cop;
-  ++obc->copyfrom_readside;
+  obc->start_block();
 
   _copy_some(obc, cop);
 }
@@ -4621,7 +4621,7 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
   cop->cb->complete(results);
 
   copy_ops.erase(cobc->obs.oi.soid);
-  --cobc->copyfrom_readside;
+  cobc->stop_block();
   kick_object_context_blocked(cobc);
 }
 
@@ -4774,7 +4774,7 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
   }
 
   copy_ops.erase(cop->obc->obs.oi.soid);
-  --cop->obc->copyfrom_readside;
+  cop->obc->stop_block();
 
   kick_object_context_blocked(cop->obc);
   cop->results->should_requeue = requeue;
