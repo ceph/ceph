@@ -7436,12 +7436,12 @@ void ReplicatedPG::on_shutdown()
 void ReplicatedPG::on_activate()
 {
   int backfill_target = get_backfill_target();
-  if (backfill_target == -1)
-    return;
-  last_backfill_started = peer_info[backfill_target].last_backfill;
-  assert(last_backfill_started != hobject_t::get_max());
-  dout(10) << " chose backfill target osd." << backfill_target
-	   << " from " << last_backfill_started << dendl;
+  if (backfill_target != -1) {
+    last_backfill_started = peer_info[backfill_target].last_backfill;
+    assert(last_backfill_started != hobject_t::get_max());
+    dout(10) << " chose backfill target osd." << backfill_target
+	     << " from " << last_backfill_started << dendl;
+  }
 
   hit_set_setup();
 }
