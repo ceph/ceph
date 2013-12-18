@@ -266,6 +266,7 @@ private:
   int calc_num_osds();
 
   void get_all_osds(set<int32_t>& ls) const;
+  void get_up_osds(set<int32_t>& ls) const;
   unsigned get_num_up_osds() const;
   unsigned get_num_in_osds() const;
 
