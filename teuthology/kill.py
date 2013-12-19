@@ -15,13 +15,14 @@ log = logging.getLogger(__name__)
 
 def main(args):
     run_name = args['--run']
-    job_id = args['--job']
+    job = args['--job']
     archive_base = args['--archive']
     owner = args['--owner']
     machine_type = args['--machine_type']
 
-    if job_id:
-        kill_job(run_name, job_id, archive_base, owner, machine_type)
+    if job:
+        for job_id in job:
+            kill_job(run_name, job_id, archive_base, owner, machine_type)
     else:
         kill_run(run_name, archive_base, owner, machine_type)
 
