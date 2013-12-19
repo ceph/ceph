@@ -288,7 +288,11 @@ static int is_out(const struct crush_map *map, const __u32 *weight, int weight_m
  * @param type the type of item to choose
  * @param out pointer to output vector
  * @param outpos our position in that vector
- * @param recurse_to_leaf: true if we want one device under each item of given type
+ * @param tries number of attempts to make
+ * @param recurse_tries number of attempts to have recursive chooseleaf make
+ * @param local_tries localized retries
+ * @param local_fallback_tries localized fallback retries
+ * @param recurse_to_leaf: true if we want one device under each item of given type (chooseleaf instead of choose)
  * @param out2 second output vector for leaf items (if @a recurse_to_leaf)
  */
 static int crush_choose_firstn(const struct crush_map *map,
