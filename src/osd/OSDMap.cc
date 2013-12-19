@@ -1152,6 +1152,15 @@ int OSDMap::apply_incremental(const Incremental &inc)
       (*pg_temp)[p->first] = p->second;
   }
 
+  for (map<pg_t,int>::const_iterator p = inc.new_primary_temp.begin();
+      p != inc.new_primary_temp.end();
+      ++p) {
+    if (p->second == -1)
+      primary_temp->erase(p->first);
+    else
+      (*primary_temp)[p->first] = p->second;
+  }
+
   // blacklist
   for (map<entity_addr_t,utime_t>::const_iterator p = inc.new_blacklist.begin();
        p != inc.new_blacklist.end();
