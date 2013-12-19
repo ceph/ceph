@@ -648,7 +648,9 @@ int MemStore::queue_transactions(Sequencer *osr,
 
   for (list<Transaction*>::iterator p = tls.begin(); p != tls.end(); ++p) {
     // poke the TPHandle heartbeat just to exercise that code path
-    handle->reset_tp_timeout();
+    if (handle)
+      handle->reset_tp_timeout();
+
     _do_transaction(**p);
   }
 
