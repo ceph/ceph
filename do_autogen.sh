@@ -79,7 +79,7 @@ if [ "${debug_level}" -ge 3 ]; then
 -Wno-missing-field-initializers -Wno-missing-declarations"
 fi
 if [ "${debug_level}" -ge 4 ]; then
-    if [ "${CXX}" -ne "clang++" ]; then
+    if [ "${CXX}" != "clang++" ]; then
         CXXFLAGS="${CXXFLAGS} -Wstrict-null-sentinel -Woverloaded-virtual"
     else
         CXXFLAGS="${CXXFLAGS} -Woverloaded-virtual"
