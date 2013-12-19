@@ -11,10 +11,14 @@ struct RGWLoadGenRequestEnv {
   string request_method;
   string uri;
   string query_string;
+  string date_str;
 
   map<string, string> headers;
 
   RGWLoadGenRequestEnv() : port(0), content_length(0) {}
+
+  void set_date(utime_t& tm);
+  int sign(RGWAccessKey& access_key);
 };
 
 class RGWLoadGenIO : public RGWClientIO
