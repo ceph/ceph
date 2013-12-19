@@ -5072,6 +5072,7 @@ bool MDCache::process_imported_caps()
 	 p != rejoin_slave_exports.end();
 	 ++p) {
       CInode *in = get_inode(p->first);
+      assert(in);
       for (map<client_t,Capability::Export>::iterator q = p->second.second.begin();
 	   q != p->second.second.end();
 	   ++q) {
