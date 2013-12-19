@@ -1107,7 +1107,7 @@ int OSD::init()
     goto out;
   }
   osdmap = get_map(superblock.current_epoch);
-  check_osdmap_features();
+  check_osdmap_features(store);
 
   create_recoverystate_perf();
 
@@ -5313,7 +5313,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   map_lock.put_write();
 
-  check_osdmap_features();
+  check_osdmap_features(store);
 
   // yay!
   consume_map();
@@ -5345,7 +5345,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   m->put();
 }
 
-void OSD::check_osdmap_features()
+void OSD::check_osdmap_features(ObjectStore *fs)
 {
   // adjust required feature bits?
 
@@ -5379,13 +5379,14 @@ void OSD::check_osdmap_features()
   }
 
   if ((features & CEPH_FEATURE_OSD_ERASURE_CODES) &&
-      (!superblock.compat_features.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SHARDS))) {
+	!fs->get_allow_sharded_objects()) {
     dout(0) << __func__ << " enabling on-disk ERASURE CODES compat feature" << dendl;
     superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
     ObjectStore::Transaction t;
     write_superblock(t);
     int err = store->apply_transaction(t);
     assert(err == 0);
+    fs->set_allow_sharded_objects();
   }
 }
 
