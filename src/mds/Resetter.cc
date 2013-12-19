@@ -79,9 +79,9 @@ void Resetter::init(int rank)
   objecter->init_unlocked();
   lock.Lock();
   objecter->init_locked();
+  lock.Unlock();
   objecter->wait_for_osd_map();
   timer.init();
-  lock.Unlock();
 }
 
 void Resetter::shutdown()
