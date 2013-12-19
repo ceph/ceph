@@ -106,10 +106,14 @@ def task(ctx, config):
         '--max-stride-size', str(config.get('max_stride_size', object_size / 5)),
         '--max-seconds', str(config.get('max_seconds', 0))
         ]
-    if 'copy_from' in op_weights:
-        args.extend([
-                '--op', 'copy_from', str(op_weights.get('copy_from', 0))
-                ])
+    for field in [
+        'copy_from', 'is_dirty', 'undirty', 'cache_flush',
+        'cache_try_flush', 'cache_evict',
+        ]:
+        if field in op_weights:
+            args.extend([
+                    '--op', field, str(op_weights.get(field, 0))
+                    ])
 
     def thread():
         """Thread spawned by gevent"""
