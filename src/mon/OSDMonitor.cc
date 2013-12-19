@@ -4651,6 +4651,15 @@ int OSDMonitor::_prepare_remove_pool(uint64_t pool)
       pending_inc.new_pg_temp[p->first].clear();
     }
   }
+  for (map<pg_t,int>::iterator p = osdmap.primary_temp->begin();
+      p != osdmap.primary_temp->end();
+      ++p) {
+    if (p->first.pool() == pool) {
+      dout(10) << "_prepare_remove_pool " << pool
+               << " removing obsolete primary_temp" << p->first << dendl;
+      pending_inc.new_primary_temp[p->first] = -1;
+    }
+  }
   return 0;
 }
 
