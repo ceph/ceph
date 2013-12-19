@@ -172,6 +172,46 @@ int OSDMap::Incremental::identify_osd(uuid_d u) const
   return -1;
 }
 
+int OSDMap::Incremental::propagate_snaps_to_tiers(const OSDMap& osdmap)
+{
+  assert(epoch == osdmap.get_epoch() + 1);
+  for (map<int64_t,pg_pool_t>::iterator p = new_pools.begin();
+       p != new_pools.end(); ++p) {
+    if (!p->second.tiers.empty()) {
+      pg_pool_t& base = p->second;
+      for (set<uint64_t>::const_iterator q = base.tiers.begin();
+	   q != base.tiers.end();
+	   ++q) {
+	map<int64_t,pg_pool_t>::iterator r = new_pools.find(*q);
+	pg_pool_t *tier = 0;
+	if (r == new_pools.end()) {
+	  const pg_pool_t *orig = osdmap.get_pg_pool(*q);
+	  if (!orig)
+	    return -EIO;
+
+	  // skip update?
+	  if (tier->snap_seq == base.snap_seq &&
+	      tier->snap_epoch == base.snap_epoch)
+	    continue;
+
+	  tier = get_new_pool(*q, orig);
+	} else {
+	  tier = &r->second;
+	}
+	if (tier->tier_of != p->first)
+	  return -EIO;
+
+	tier->snap_seq = base.snap_seq;
+	tier->snap_epoch = base.snap_epoch;
+	tier->snaps = base.snaps;
+	tier->removed_snaps = base.removed_snaps;
+      }
+    }
+  }
+  return 0;
+}
+
+
 bool OSDMap::subtree_is_down(int id, set<int> *down_cache) const
 {
   if (id >= 0)
