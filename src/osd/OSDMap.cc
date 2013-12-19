@@ -190,8 +190,8 @@ int OSDMap::Incremental::propagate_snaps_to_tiers(const OSDMap& osdmap)
 	    return -EIO;
 
 	  // skip update?
-	  if (tier->snap_seq == base.snap_seq &&
-	      tier->snap_epoch == base.snap_epoch)
+	  if (orig->snap_seq == base.snap_seq &&
+	      orig->snap_epoch == base.snap_epoch)
 	    continue;
 
 	  tier = get_new_pool(*q, orig);
