@@ -5,6 +5,7 @@ import teuthology.kill
 
 doc = """
 usage: teuthology-kill [-h] [-a ARCHIVE] -r RUN
+       teuthology-kill [-h] [-a ARCHIVE] -r RUN -j JOB
        teuthology-kill [-h] -o OWNER -m MACHINE_TYPE -r RUN
 
 Kill running teuthology jobs:
@@ -17,7 +18,8 @@ optional arguments:
   -a ARCHIVE, --archive ARCHIVE
                         The base archive directory
                         [default: {archive_base}]
-  -r, --run RUN     The name(s) of the run(s) to kill
+  -r, --run RUN         The name(s) of the run(s) to kill
+  -j, --job JOB         The job_id of the job to kill
   -o, --owner OWNER     The owner of the job(s)
   -m, --machine_type MACHINE_TYPE
                         The type of machine the job(s) are running on

@@ -15,11 +15,15 @@ log = logging.getLogger(__name__)
 
 def main(args):
     run_name = args['--run']
+    job_id = args['--job']
     archive_base = args['--archive']
     owner = args['--owner']
     machine_type = args['--machine_type']
 
-    kill_run(run_name, archive_base, owner, machine_type)
+    if job_id:
+        kill_job(run_name, job_id, archive_base, owner, machine_type)
+    else:
+        kill_run(run_name, archive_base, owner, machine_type)
 
 
 def kill_run(run_name, archive_base=None, owner=None, machine_type=None):
@@ -32,7 +36,18 @@ def kill_run(run_name, archive_base=None, owner=None, machine_type=None):
 
     remove_beanstalk_jobs(run_name, machine_type)
     kill_processes(run_name, run_info.get('pids'))
-    nuke_machines(run_name, owner)
+    targets = find_targets(run_name, owner)
+    nuke_targets(targets, owner)
+
+
+def kill_job(run_name, job_id, archive_base=None, owner=None,
+             machine_type=None):
+    job_archive_dir = os.path.join(archive_base, run_name, job_id)
+    job_info = find_job_info(job_archive_dir)
+    owner = job_info['owner']
+    kill_processes(run_name, [job_info.get('pid')])
+    targets = dict(targets=job_info['targets'])
+    nuke_targets(targets, owner)
 
 
 def find_run_info(run_archive_dir):
@@ -118,15 +133,21 @@ def kill_processes(run_name, pids=None):
             subprocess.call(['sudo', 'kill', str(pid)])
 
 
+def process_matches_run(pid, run_name):
+    try:
+        p = psutil.Process(pid)
+        if run_name in p.cmdline and sys.argv[0] not in p.cmdline:
+            return True
+    except psutil.NoSuchProcess:
+        pass
+    return False
+
+
 def find_pids(run_name):
     run_pids = []
     for pid in psutil.get_pid_list():
-        try:
-            p = psutil.Process(pid)
-        except psutil.NoSuchProcess:
-            continue
-        if run_name in p.cmdline and sys.argv[0] not in p.cmdline:
-                run_pids.append(pid)
+        if process_matches_run(pid, run_name):
+            run_pids.append(pid)
     return run_pids
 
 
@@ -150,8 +171,7 @@ def find_targets(run_name, owner):
     return out_obj
 
 
-def nuke_machines(run_name, owner):
-    targets_dict = find_targets(run_name, owner)
+def nuke_targets(targets_dict, owner):
     targets = targets_dict.get('targets')
     if not targets:
         log.info("No locked machines. Not nuking anything")
