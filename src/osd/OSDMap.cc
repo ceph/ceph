@@ -1017,6 +1017,12 @@ void OSDMap::dedup(const OSDMap *o, OSDMap *n)
       n->pg_temp = o->pg_temp;
   }
 
+  // does primary_temp match?
+  if (o->primary_temp->size() == n->primary_temp->size()) {
+    if (*o->primary_temp == *n->primary_temp)
+      n->primary_temp = o->primary_temp;
+  }
+
   // do uuids match?
   if (o->osd_uuid->size() == n->osd_uuid->size() &&
       *o->osd_uuid == *n->osd_uuid)
