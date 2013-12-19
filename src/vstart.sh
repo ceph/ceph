@@ -370,7 +370,7 @@ EOF
 		if [ `echo $IP | grep '^127\\.'` ]
 		then
 			echo
-			echo "WARNING: hostname resolves to loopback; remote hosts will not be able to"
+			echo "NOTE: hostname resolves to loopback; remote hosts will not be able to"
 			echo "  connect.  either adjust /etc/hosts, or edit this script to use your"
 			echo "  machine's real IP."
 			echo
