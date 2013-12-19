@@ -12,7 +12,7 @@ tasks:
     - wrongly marked me down
     - objects unfound and apparently lost
 - thrashosds:
-    timeout: 1200
+    timeout: 1800
     chance_pgnum_grow: 1
     chance_pgpnum_fix: 1
     chance_test_map_discontinuity: 0.5
