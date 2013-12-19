@@ -206,6 +206,7 @@ private:
 
   void remove_redundant_pg_temp();
   void remove_down_pg_temp();
+  void remove_down_primary_temp();
   int reweight_by_utilization(int oload, std::string& out_str);
 
   bool check_source(PaxosServiceMessage *m, uuid_d fsid);
