@@ -350,9 +350,10 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
         stdout=StringIO(),
     )
     ldir = _get_local_dir(ctx, remote)
-    for fyle in os.listdir(ldir):
-        fname = "%s/%s" % (ldir, fyle)
-        remote.run(args=['sudo', 'dpkg', '-i', fname],)
+    if ldir:
+        for fyle in os.listdir(ldir):
+            fname = "%s/%s" % (ldir, fyle)
+            remote.run(args=['sudo', 'dpkg', '-i', fname],)
 
 
 def _yum_fix_repo_priority(remote, project, uri):
