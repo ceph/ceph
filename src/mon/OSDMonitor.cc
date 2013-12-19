@@ -470,6 +470,20 @@ void OSDMonitor::remove_down_pg_temp()
   }
 }
 
+void OSDMonitor::remove_down_primary_temp()
+{
+  dout(10) << "remove_down_primary_temp" << dendl;
+  OSDMap tmpmap(osdmap);
+  tmpmap.apply_incremental(pending_inc);
+
+  for (map<pg_t,int>::iterator p = tmpmap.primary_temp->begin();
+      p != tmpmap.primary_temp->end();
+      ++p) {
+    if (tmpmap.is_down(p->second))
+      pending_inc.new_primary_temp[p->first] = -1;
+  }
+}
+
 /* Assign a lower weight to overloaded OSDs.
  *
  * The osds that will get a lower weight are those with with a utilization
@@ -560,8 +574,9 @@ void OSDMonitor::create_pending()
   // drop any redundant pg_temp entries
   remove_redundant_pg_temp();
 
-  // drop any pg_temp entries with no up entries
+  // drop any pg or primary_temp entries with no up entries
   remove_down_pg_temp();
+  remove_down_primary_temp();
 }
 
 /**
