@@ -1324,17 +1324,22 @@ void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
   *primary = (up->empty() ? -1 : up->front());
 }
   
-void OSDMap::_pg_to_up_acting_osds(pg_t pg, vector<int> *up, vector<int>& acting) const
+void OSDMap::_pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
+                                   vector<int> *acting, int *acting_primary) const
 {
   const pg_pool_t *pool = get_pg_pool(pg.pool());
   if (!pool)
     return;
   vector<int> raw;
   vector<int> *_up = (up ? up : new vector<int>);
-  _pg_to_osds(*pool, pg, raw);
-  _raw_to_up_osds(pg, raw, *up);
-  if (!_get_temp_osds(*pool, pg, acting))
-    acting = *_up;
+  _pg_to_osds(*pool, pg, *raw);
+  _raw_to_up_osds(pg, raw, *_up);
+  if (up_primary)
+    *up_primary = (_up->empty() ? -1 : _up->front());
+  if (acting && !_get_temp_osds(*pool, pg, *acting))
+    *acting = *_up;
+  if (acting_primary)
+    *acting_primary = (acting->empty() ? -1 : acting->front());
   if (_up != up)
     delete _up;
 }

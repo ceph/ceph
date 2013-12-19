@@ -513,9 +513,12 @@ private:
 
   bool _get_temp_osds(const pg_pool_t& pool, pg_t pg, vector<int>& temp) const;
 
-  /// map to up and acting. Only provides up if pointer is non-NULL
-  void _pg_to_up_acting_osds(pg_t pg, vector<int> *up,
-                             vector<int>& acting) const;
+  /**
+   *  map to up and acting. Fills in whatever fields are non-NULL, but
+   *  the passed-in vectors must be empty.
+   */
+  void _pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
+                             vector<int> *acting, int *acting_primary) const;
 
 public:
   /***
@@ -528,8 +531,7 @@ public:
   /// map a pg to its acting set. @return acting set size
   int pg_to_acting_osds(pg_t pg, vector<int> *acting,
                         int *acting_primary) const {
-    _pg_to_up_acting_osds(pg, NULL, *acting);
-    *acting_primary = (acting->empty() ? -1 : acting->front());
+    _pg_to_up_acting_osds(pg, NULL, NULL, acting, acting_primary);
     return acting->size();
   }
   int pg_to_acting_osds(pg_t pg, vector<int>& acting) const {
@@ -552,9 +554,7 @@ public:
    */
   void pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
                             vector<int> *acting, int *acting_primary) const {
-    _pg_to_up_acting_osds(pg, up, *acting);
-    *up_primary = (up->empty() ? -1 : up.front());
-    *acting_primary = (acting->empty() ?  -1 : acting.front());
+    _pg_to_up_acting_osds(pg, up, up_primary, acting, acting_primary);
   }
   void pg_to_up_acting_osds(pg_t pg, vector<int>& up, vector<int>& acting) const {
     int up_primary, acting_primary;
