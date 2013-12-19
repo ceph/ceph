@@ -1038,7 +1038,7 @@ bool PG::choose_acting(int& newest_update_osd)
     if (want == up) {
       // There can't be any pending backfill if
       // want is the same as crush map up OSDs.
-      assert(backfill.empty());
+      assert(compat_mode || backfill.empty());
       vector<int> empty;
       osd->queue_want_pg_temp(info.pgid, empty);
     } else
