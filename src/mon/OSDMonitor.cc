@@ -1182,6 +1182,15 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
   }
 
   assert(m->get_orig_source_inst().name.is_osd());
+
+  // check if osd has required features to boot
+  if ((osdmap.get_features(NULL) & CEPH_FEATURE_OSD_ERASURE_CODES) &&
+      !(m->get_connection()->get_features() & CEPH_FEATURE_OSD_ERASURE_CODES)) {
+    dout(0) << __func__ << " osdmap requires Erasure Codes but osd at "
+            << m->get_orig_source_inst()
+            << " doesn't announce support -- ignore" << dendl;
+    goto ignore;
+  }
   
   // already booted?
   if (osdmap.is_up(from) &&
@@ -1228,7 +1237,7 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 
   assert(m->get_orig_source().is_osd());
   int from = m->get_orig_source().num();
-  
+
   // does this osd exist?
   if (from >= osdmap.get_max_osd()) {
     dout(1) << "boot from osd." << from << " >= max_osd " << osdmap.get_max_osd() << dendl;
@@ -1337,6 +1346,8 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 	xi.laggy_probability * (1.0 - g_conf->mon_osd_laggy_weight);
       dout(10) << " laggy, now xi " << xi << dendl;
     }
+    // set features shared by the osd
+    xi.features = m->get_connection()->get_features();
     pending_inc.new_xinfo[from] = xi;
 
     // wait
@@ -2714,9 +2725,11 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
     return -EPERM;
   vector<string> properties;
   if (m->auid)
-    return prepare_new_pool(m->name, m->auid, m->crush_rule, 0, 0, properties);
+    return prepare_new_pool(m->name, m->auid, m->crush_rule, 0, 0,
+                            properties, pg_pool_t::TYPE_REP);
   else
-    return prepare_new_pool(m->name, session->auid, m->crush_rule, 0, 0, properties);
+    return prepare_new_pool(m->name, session->auid, m->crush_rule, 0, 0,
+                            properties, pg_pool_t::TYPE_REP);
 }
 
 /**
@@ -2731,7 +2744,8 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
  */
 int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
                                  unsigned pg_num, unsigned pgp_num,
-				 const vector<string> &properties)
+				 const vector<string> &properties,
+                                 const unsigned pool_type)
 {
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
        p != pending_inc.new_pool_names.end();
@@ -2745,7 +2759,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
   int64_t pool = ++pending_inc.new_pool_max;
   pg_pool_t empty;
   pg_pool_t *pi = pending_inc.get_new_pool(pool, &empty);
-  pi->type = pg_pool_t::TYPE_REP;
+  pi->type = pool_type;
   pi->flags = g_conf->osd_pool_default_flags;
   if (g_conf->osd_pool_default_flag_hashpspool)
     pi->flags |= pg_pool_t::FLAG_HASHPSPOOL;
@@ -3938,10 +3952,50 @@ done:
     vector<string> properties;
     cmd_getval(g_ceph_context, cmdmap, "properties", properties);
 
+    string pool_type_str;
+    cmd_getval(g_ceph_context, cmdmap, "pool_type", pool_type_str);
+    int pool_type;
+    if (pool_type_str.empty() || pool_type_str == "rep") {
+      pool_type = pg_pool_t::TYPE_REP;
+    } else if (pool_type_str == "raid4") {
+      pool_type = pg_pool_t::TYPE_RAID4;
+    } else if (pool_type_str == "erasure") {
+
+      // check if all up osds support erasure coding
+      set<int32_t> up_osds;
+      osdmap.get_up_osds(up_osds);
+      stringstream ec_unsupported_ss;
+      int ec_unsupported_count = 0;
+
+      for (set<int32_t>::iterator it = up_osds.begin();
+           it != up_osds.end(); it ++) {
+        const osd_xinfo_t &xi = osdmap.get_xinfo(*it);
+        if (!(xi.features & CEPH_FEATURE_OSD_ERASURE_CODES)) {
+          if (ec_unsupported_count > 0)
+            ec_unsupported_ss << ", ";
+          ec_unsupported_ss << "osd." << *it;
+          ec_unsupported_count ++;
+        }
+      }
+
+      if (ec_unsupported_count > 0) {
+        ss << "unable to create erasure pool; unsupported by: "
+           << ec_unsupported_ss.str();
+        err = -ENOTSUP;
+        goto reply;
+      }
+
+      pool_type = pg_pool_t::TYPE_ERASURE;
+    } else {
+      ss << "unknown pool type '" << pool_type_str << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+
     err = prepare_new_pool(poolstr, 0, // auid=0 for admin created pool
 			   -1,         // default crush rule
 			   pg_num, pgp_num,
-			   properties);
+			   properties, pool_type);
     if (err < 0 && err != -EEXIST) {
       goto reply;
     }

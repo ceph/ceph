@@ -90,15 +90,20 @@ void osd_xinfo_t::dump(Formatter *f) const
   f->dump_stream("down_stamp") << down_stamp;
   f->dump_float("laggy_probability", laggy_probability);
   f->dump_int("laggy_interval", laggy_interval);
+  f->open_array_section("features");
+  if (features & CEPH_FEATURE_OSD_ERASURE_CODES)
+    f->dump_string("flag", "erasure-codes");
+  f->close_section();
 }
 
 void osd_xinfo_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ::encode(down_stamp, bl);
   __u32 lp = laggy_probability * 0xfffffffful;
   ::encode(lp, bl);
   ::encode(laggy_interval, bl);
+  ::encode(features, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -110,6 +115,10 @@ void osd_xinfo_t::decode(bufferlist::iterator& bl)
   ::decode(lp, bl);
   laggy_probability = (float)lp / (float)0xffffffff;
   ::decode(laggy_interval, bl);
+  if (struct_v >= 2)
+    ::decode(features, bl);
+  else
+    features = 0;
   DECODE_FINISH(bl);
 }
 
@@ -673,6 +682,14 @@ void OSDMap::get_all_osds(set<int32_t>& ls) const
       ls.insert(i);
 }
 
+void OSDMap::get_up_osds(set<int32_t>& ls) const
+{
+  for (int i = 0; i < max_osd; i++) {
+    if (is_up(i))
+      ls.insert(i);
+  }
+}
+
 unsigned OSDMap::get_num_up_osds() const
 {
   unsigned n = 0;
@@ -759,12 +776,16 @@ uint64_t OSDMap::get_features(uint64_t *pmask) const
     if (p->second.flags & pg_pool_t::FLAG_HASHPSPOOL) {
       features |= CEPH_FEATURE_OSDHASHPSPOOL;
     }
+    if (p->second.is_erasure()) {
+      features |= CEPH_FEATURE_OSD_ERASURE_CODES;
+    }
     if (!p->second.tiers.empty() ||
 	p->second.is_tier()) {
       features |= CEPH_FEATURE_OSD_CACHEPOOL;
     }
   }
-  mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
+  mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL |
+          CEPH_FEATURE_OSD_ERASURE_CODES;
 
   if (pmask)
     *pmask = mask;
