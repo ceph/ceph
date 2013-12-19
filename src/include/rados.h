@@ -69,7 +69,7 @@ struct ceph_pg {
  * duplicated here only for CrushCompiler's benefit.
  */
 #define CEPH_PG_TYPE_REP     1
-#define CEPH_PG_TYPE_RAID4   2
+/* #define CEPH_PG_TYPE_RAID4   2   never implemented */
 #define CEPH_PG_TYPE_ERASURE 3
 
 /*

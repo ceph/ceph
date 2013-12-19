@@ -698,13 +698,13 @@ inline ostream& operator<<(ostream& out, const pool_snap_info_t& si) {
 struct pg_pool_t {
   enum {
     TYPE_REP = 1,     // replication
-    TYPE_RAID4 = 2,   // raid4 (never implemented)
+    //TYPE_RAID4 = 2,   // raid4 (never implemented)
     TYPE_ERASURE = 3,      // erasure-coded
   };
   static const char *get_type_name(int t) {
     switch (t) {
     case TYPE_REP: return "rep";
-    case TYPE_RAID4: return "raid4";
+      //case TYPE_RAID4: return "raid4";
     case TYPE_ERASURE: return "erasure";
     default: return "???";
     }
@@ -862,14 +862,12 @@ public:
   void set_snap_epoch(epoch_t e) { snap_epoch = e; }
 
   bool is_rep()   const { return get_type() == TYPE_REP; }
-  bool is_raid4() const { return get_type() == TYPE_RAID4; }
   bool is_erasure() const { return get_type() == TYPE_ERASURE; }
 
   bool can_shift_osds() const {
     switch (get_type()) {
     case TYPE_REP:
       return true;
-    case TYPE_RAID4:
     case TYPE_ERASURE:
       return false;
     default:
