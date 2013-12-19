@@ -445,8 +445,6 @@ public:
     //bool sent_nvram;
     bool sent_disk;
     
-    Context *ondone; ///< if set, this Context will be activated when repop is done
-
     utime_t   start;
     
     eversion_t          pg_local_last_complete;
@@ -465,7 +463,6 @@ public:
       sent_ack(false),
       //sent_nvram(false),
       sent_disk(false),
-      ondone(NULL),
       pg_local_last_complete(lc),
       queue_snap_trimmer(false) { }
 
@@ -484,8 +481,6 @@ public:
     }
     void mark_done() {
       is_done = true;
-      if (ondone)
-	ondone->complete(0);
     }
     bool done() {
       return is_done;
@@ -1119,17 +1114,6 @@ public:
 
   void wait_for_blocked_object(const hobject_t& soid, OpRequestRef op);
   void kick_object_context_blocked(ObjectContextRef obc);
-
-  struct C_KickBlockedObject : public Context {
-    ObjectContextRef obc;
-    ReplicatedPG *pg;
-    C_KickBlockedObject(ObjectContextRef obc_, ReplicatedPG *pg_) :
-      obc(obc_), pg(pg_) {}
-  protected:
-    void finish(int r) {
-      pg->kick_object_context_blocked(obc);
-    }
-  };
 
   void mark_all_unfound_lost(int what);
   eversion_t pick_newest_available(const hobject_t& oid);
