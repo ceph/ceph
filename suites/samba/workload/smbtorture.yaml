@@ -1,0 +1,39 @@
+tasks:
+- pexec:
+    client.1:
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.lock
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.fdpass
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.unlink
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.attr
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.trans2
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.negnowait
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.dir1
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.deny1
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.deny2
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.deny3
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.denydos
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.ntdeny1
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.ntdeny2
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.tcon
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.tcondev
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.vuid
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.rw1
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.open
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.defer_open
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.xcopy
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.rename
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.properties
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.mangle
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.openattr
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.chkpath
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.secleak
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.disconnect
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.samba3error
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.smb
+#      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.bench-holdcon
+#      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.bench-holdopen
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.bench-readwrite
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.bench-torture
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.scan-pipe_number
+      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.scan-ioctl
+#      - /usr/local/samba/bin/smbtorture --password=ubuntu //localhost/ceph base.scan-maxfid
