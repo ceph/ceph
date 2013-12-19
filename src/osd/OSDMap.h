@@ -504,7 +504,7 @@ private:
   /// pg -> (up osd list)
   void _raw_to_up_osds(pg_t pg, vector<int>& raw, vector<int>& up) const;
 
-  bool _raw_to_temp_osds(const pg_pool_t& pool, pg_t pg, vector<int>& raw, vector<int>& temp) const;
+  bool _get_temp_osds(const pg_pool_t& pool, pg_t pg, vector<int>& temp) const;
 
   /// map to up and acting. Only provides up if pointer is non-NULL
   void _pg_to_up_acting_osds(pg_t pg, vector<int> *up,

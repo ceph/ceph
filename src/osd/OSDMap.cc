@@ -1153,7 +1153,7 @@ void OSDMap::_raw_to_up_osds(pg_t pg, vector<int>& raw, vector<int>& up) const
   }
 }
   
-bool OSDMap::_raw_to_temp_osds(const pg_pool_t& pool, pg_t pg, vector<int>& raw, vector<int>& temp) const
+bool OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg, vector<int>& temp) const
 {
   pg = pool.raw_pg_to_pg(pg);
   map<pg_t,vector<int> >::const_iterator p = pg_temp->find(pg);
@@ -1196,7 +1196,7 @@ void OSDMap::_pg_to_up_acting_osds(pg_t pg, vector<int> *up, vector<int>& acting
   vector<int> *_up = (up ? up : new vector<int>);
   _pg_to_osds(*pool, pg, raw);
   _raw_to_up_osds(pg, raw, *up);
-  if (!_raw_to_temp_osds(*pool, pg, raw, acting))
+  if (!_get_temp_osds(*pool, pg, acting))
     acting = *_up;
   if (_up != up)
     delete _up;
