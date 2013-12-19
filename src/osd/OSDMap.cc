@@ -1924,6 +1924,11 @@ void OSDMap::print(ostream& out) const
        ++p)
     out << "pg_temp " << p->first << " " << p->second << "\n";
 
+  for (map<pg_t,int>::const_iterator p = primary_temp->begin();
+      p != primary_temp->end();
+      ++p)
+    out << "primary_temp " << p->first << " " << p->second << "\n";
+
   for (hash_map<entity_addr_t,utime_t>::const_iterator p = blacklist.begin();
        p != blacklist.end();
        ++p)
