@@ -38,7 +38,7 @@ rule normal {
 
 rule {
      pool 1
-     type raid4
+     type erasure
      min_size 3
      max_size 6
      step take root
