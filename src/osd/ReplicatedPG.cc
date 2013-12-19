@@ -4882,6 +4882,10 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
   dout(10) << __func__ << " " << soid << " r=" << r
 	   << " uv" << results->user_version << dendl;
 
+  if (r == -ECANCELED) {
+    return;
+  }
+
   bool whiteout = false;
   if (r == -ENOENT &&
       (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK ||
@@ -4900,9 +4904,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     if (blocked_iter->second.empty()) {
       waiting_for_blocked_object.erase(blocked_iter);
     }
-    if (r != -ECANCELED) { // on cancel the client will resend
-      osd->reply_op_error(op, r);
-    }
+    osd->reply_op_error(op, r);
     return;
   }
 
