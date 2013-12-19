@@ -322,10 +322,12 @@ void RGWFCGXProcess::run()
 }
 
 struct RGWLoadGenRequest : public RGWRequest {
-  const char *method;
+  string method;
+  string resource;
   int content_length;
 
-  RGWLoadGenRequest(const char *_m, int _cl) : method(_m), content_length(_cl) {}
+
+  RGWLoadGenRequest(const string& _m, const  string& _r, int _cl) : method(_m), resource(_r), content_length(_cl) {}
 };
 
 class RGWLoadGenProcess : public RGWProcess {
@@ -334,29 +336,66 @@ public:
   RGWLoadGenProcess(CephContext *cct, RGWProcessEnv *pe, int num_threads, RGWFrontendConfig *_conf) :
     RGWProcess(cct, pe, num_threads, _conf) {}
   void run();
+  void checkpoint();
   void handle_request(RGWRequest *req);
-  void gen_request(const char *method, int content_length);
+  void gen_request(const string& method, const string& resource, int content_length);
 
   void close_fd() { }
 
   void set_access_key(RGWAccessKey& key) { access_key = key; }
 };
 
+void RGWLoadGenProcess::checkpoint()
+{
+  m_tp.drain();
+}
+
 void RGWLoadGenProcess::run()
 {
   m_tp.start();
 
-  for (int i = 0; i < 1000; i++) {
-    gen_request("PUT", 4096);
+  int i;
+
+  int num_objs = 1000;
+
+  string bucket = "mybucket";
+
+  string bucket_resource = string("/") + bucket;
+
+  /* first create a bucket */
+  gen_request("PUT", bucket_resource, 0);
+
+  checkpoint();
+
+  string *objs = new string[num_objs];
+
+  for (i = 0; i < num_objs; i++) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "obj-%d", i);
+    objs[i] = bucket_resource + "/" + buf;
   }
+
+  for (i = 0; i < num_objs; i++) {
+    gen_request("PUT", objs[i], 4096);
+  }
+#if 0
+  for (i = 0; i < 10; i++) {
+    gen_request("GET", 4096);
+  }
+  for (i = 0; i < 10; i++) {
+    gen_request("DELETE", 4096);
+  }
+#endif
   m_tp.drain();
 
   m_tp.stop();
+
+  delete[] objs;
 }
 
-void RGWLoadGenProcess::gen_request(const char *method, int content_length)
+void RGWLoadGenProcess::gen_request(const string& method, const string& resource, int content_length)
 {
-  RGWLoadGenRequest *req = new RGWLoadGenRequest(method, content_length);
+  RGWLoadGenRequest *req = new RGWLoadGenRequest(method, resource, content_length);
   req->id = ++max_req_id;
   dout(10) << "allocated request req=" << hex << req << dec << dendl;
   req_throttle.get(1);
@@ -573,11 +612,15 @@ void RGWLoadGenProcess::handle_request(RGWRequest *r)
 
   RGWLoadGenRequestEnv env;
 
+  utime_t tm = ceph_clock_now(NULL);
+
   env.port = 80;
   env.content_length = req->content_length;
   env.content_type = "binary/octet-stream";
   env.request_method = req->method;
-  env.uri = "/foo/bar";
+  env.uri = req->resource;
+  env.set_date(tm);
+  env.sign(access_key);
 
   RGWLoadGenIO client_io(&env);
 
