@@ -26,6 +26,7 @@
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "global/global_context.h"
+#include "include/Context.h"
 
 #include "crush/CrushWrapper.h"
 
@@ -466,9 +467,10 @@ int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  vector<const char*> def_args;
+  def_args.push_back("--debug-crush=0");
+  global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
-
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
