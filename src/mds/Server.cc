@@ -705,6 +705,7 @@ void Server::reconnect_tick()
 	 p != client_reconnect_gather.end();
 	 ++p) {
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
+      assert(session);
       dout(1) << "reconnect gave up on " << session->info.inst << dendl;
       kill_session(session);
       failed_reconnects++;
