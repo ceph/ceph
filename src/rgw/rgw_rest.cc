@@ -199,7 +199,7 @@ void set_req_state_err(struct req_state *s, int err_no)
 
   if (err_no < 0)
     err_no = -err_no;
-  s->err.ret = err_no;
+  s->err.ret = -err_no;
   if (s->prot_flags & RGW_REST_SWIFT) {
     r = search_err(err_no, RGW_HTTP_SWIFT_ERRORS, ARRAY_LEN(RGW_HTTP_SWIFT_ERRORS));
     if (r) {
