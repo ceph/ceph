@@ -14,46 +14,46 @@ log = logging.getLogger(__name__)
 
 
 def main(args):
-    suite_name = args['--suite']
+    run_name = args['--run']
     archive_base = args['--archive']
     owner = args['--owner']
     machine_type = args['--machine_type']
 
-    kill_suite(suite_name, archive_base, owner, machine_type)
+    kill_run(run_name, archive_base, owner, machine_type)
 
 
-def kill_suite(suite_name, archive_base=None, owner=None, machine_type=None):
-    suite_info = {}
+def kill_run(run_name, archive_base=None, owner=None, machine_type=None):
+    run_info = {}
     if archive_base:
-        suite_archive_dir = os.path.join(archive_base, suite_name)
-        suite_info = find_suite_info(suite_archive_dir)
-        machine_type = suite_info['machine_type']
-        owner = suite_info['owner']
+        run_archive_dir = os.path.join(archive_base, run_name)
+        run_info = find_run_info(run_archive_dir)
+        machine_type = run_info['machine_type']
+        owner = run_info['owner']
 
-    remove_beanstalk_jobs(suite_name, machine_type)
-    kill_processes(suite_name, suite_info.get('pids'))
-    nuke_machines(suite_name, owner)
+    remove_beanstalk_jobs(run_name, machine_type)
+    kill_processes(run_name, run_info.get('pids'))
+    nuke_machines(run_name, owner)
 
 
-def find_suite_info(suite_archive_dir):
-    suite_info_fields = [
+def find_run_info(run_archive_dir):
+    run_info_fields = [
         'machine_type',
         'owner',
     ]
 
-    suite_info = dict(pids=[])
+    run_info = dict(pids=[])
     job_info = {}
-    for job_id in os.listdir(suite_archive_dir):
-        job_dir = os.path.join(suite_archive_dir, job_id)
+    for job_id in os.listdir(run_archive_dir):
+        job_dir = os.path.join(run_archive_dir, job_id)
         if not os.path.isdir(job_dir):
             continue
         job_info = find_job_info(job_dir)
         for key in job_info.keys():
-            if key in suite_info_fields and key not in suite_info:
-                suite_info[key] = job_info[key]
+            if key in run_info_fields and key not in run_info:
+                run_info[key] = job_info[key]
         if 'pid' in job_info:
-            suite_info['pids'].append(job_info['pid'])
-    return suite_info
+            run_info['pids'].append(job_info['pid'])
+    return run_info
 
 
 def find_job_info(job_archive_dir):
@@ -70,7 +70,7 @@ def find_job_info(job_archive_dir):
     return job_info
 
 
-def remove_beanstalk_jobs(suite_name, tube_name):
+def remove_beanstalk_jobs(run_name, tube_name):
     qhost = config.queue_host
     qport = config.queue_port
     if qhost is None or qport is None:
@@ -89,7 +89,7 @@ def remove_beanstalk_jobs(suite_name, tube_name):
             x += 1
             job = beanstalk.reserve(timeout=20)
             job_config = yaml.safe_load(job.body)
-            if suite_name == job_config['name']:
+            if run_name == job_config['name']:
                 job_id = job.stats()['id']
                 msg = "Deleting job from queue. ID: " + \
                     "{id} Name: {name} Desc: {desc}".format(
@@ -104,11 +104,11 @@ def remove_beanstalk_jobs(suite_name, tube_name):
     beanstalk.close()
 
 
-def kill_processes(suite_name, pids=None):
+def kill_processes(run_name, pids=None):
     if pids:
         to_kill = set(pids).intersection(psutil.get_pid_list())
     else:
-        to_kill = find_pids(suite_name)
+        to_kill = find_pids(run_name)
 
     if len(to_kill) == 0:
         log.info("No teuthology processes running")
@@ -118,24 +118,24 @@ def kill_processes(suite_name, pids=None):
             subprocess.call(['sudo', 'kill', str(pid)])
 
 
-def find_pids(suite_name):
-    suite_pids = []
+def find_pids(run_name):
+    run_pids = []
     for pid in psutil.get_pid_list():
         try:
             p = psutil.Process(pid)
         except psutil.NoSuchProcess:
             continue
-        if suite_name in p.cmdline and sys.argv[0] not in p.cmdline:
-                suite_pids.append(pid)
-    return suite_pids
+        if run_name in p.cmdline and sys.argv[0] not in p.cmdline:
+                run_pids.append(pid)
+    return run_pids
 
 
-def find_targets(suite_name, owner):
+def find_targets(run_name, owner):
     lock_args = [
         'teuthology-lock',
         '--list-targets',
         '--desc-pattern',
-        '/' + suite_name + '/',
+        '/' + run_name + '/',
         '--status',
         'up',
         '--owner',
@@ -150,8 +150,8 @@ def find_targets(suite_name, owner):
     return out_obj
 
 
-def nuke_machines(suite_name, owner):
-    targets_dict = find_targets(suite_name, owner)
+def nuke_machines(run_name, owner):
+    targets_dict = find_targets(run_name, owner)
     targets = targets_dict.get('targets')
     if not targets:
         log.info("No locked machines. Not nuking anything")

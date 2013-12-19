@@ -4,8 +4,8 @@ import teuthology.config
 import teuthology.kill
 
 doc = """
-usage: teuthology-kill [-h] [-a ARCHIVE] -s SUITE
-       teuthology-kill [-h] -o OWNER -m MACHINE_TYPE -s SUITE
+usage: teuthology-kill [-h] [-a ARCHIVE] -r RUN
+       teuthology-kill [-h] -o OWNER -m MACHINE_TYPE -r RUN
 
 Kill running teuthology jobs:
 1. Removes any queued jobs from the beanstalk queue
@@ -17,7 +17,7 @@ optional arguments:
   -a ARCHIVE, --archive ARCHIVE
                         The base archive directory
                         [default: {archive_base}]
-  -s, --suite SUITE     The name(s) of the suite(s) to kill
+  -r, --run RUN     The name(s) of the run(s) to kill
   -o, --owner OWNER     The owner of the job(s)
   -m, --machine_type MACHINE_TYPE
                         The type of machine the job(s) are running on
