@@ -163,7 +163,6 @@ CompatSet OSD::get_osd_compat_set() {
   CompatSet compat =  get_osd_initial_compat_set();
   //Any features here can be set in code, but not in initial superblock
   compat.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
-  compat.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_ERASURECODES);
   return compat;
 }
 
@@ -5380,9 +5379,9 @@ void OSD::check_osdmap_features()
   }
 
   if ((features & CEPH_FEATURE_OSD_ERASURE_CODES) &&
-      (!superblock.compat_features.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_ERASURECODES))) {
+      (!superblock.compat_features.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SHARDS))) {
     dout(0) << __func__ << " enabling on-disk ERASURE CODES compat feature" << dendl;
-    superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_ERASURECODES);
+    superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
     ObjectStore::Transaction t;
     write_superblock(t);
     int err = store->apply_transaction(t);
