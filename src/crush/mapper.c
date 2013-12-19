@@ -296,7 +296,10 @@ static int crush_choose_firstn(const struct crush_map *map,
 			       const __u32 *weight, int weight_max,
 			       int x, int numrep, int type,
 			       int *out, int outpos,
-			       unsigned attempts, unsigned recurse_attempts,
+			       unsigned attempts,
+			       unsigned recurse_attempts,
+			       unsigned local_tries,
+			       unsigned local_fallback_tries,
 			       int recurse_to_leaf,
 			       int *out2)
 {
@@ -335,9 +338,9 @@ static int crush_choose_firstn(const struct crush_map *map,
 					reject = 1;
 					goto reject;
 				}
-				if (map->choose_local_fallback_tries > 0 &&
+				if (local_fallback_tries > 0 &&
 				    flocal >= (in->size>>1) &&
-				    flocal > map->choose_local_fallback_tries)
+				    flocal > local_fallback_tries)
 					item = bucket_perm_choose(in, x, r);
 				else
 					item = crush_bucket_choose(in, x, r);
@@ -384,6 +387,8 @@ static int crush_choose_firstn(const struct crush_map *map,
 							 x, outpos+1, 0,
 							 out2, outpos,
 							 recurse_attempts, 0,
+							 choose_local_tries,
+						         choose_local_fallback_tries,
 							 0,
 							 NULL) <= outpos)
 							/* didn't get leaf */
@@ -408,11 +413,11 @@ reject:
 					ftotal++;
 					flocal++;
 
-					if (collide && flocal <= map->choose_local_tries)
+					if (collide && flocal <= local_tries)
 						/* retry locally a few times */
 						retry_bucket = 1;
-					else if (map->choose_local_fallback_tries > 0 &&
-						 flocal <= in->size + map->choose_local_fallback_tries)
+					else if (local_fallback_tries > 0 &&
+						 flocal <= in->size + local_fallback_tries)
 						/* exhaustive bucket search */
 						retry_bucket = 1;
 					else if (ftotal <= attempts)
@@ -749,6 +754,8 @@ int crush_do_rule(const struct crush_map *map,
 						o+osize, j,
 						choose_tries,
 						recurse_tries,
+						choose_local_tries,
+						choose_local_fallback_tries,
 						recurse_to_leaf,
 						c+osize);
 				} else {
