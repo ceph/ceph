@@ -4938,8 +4938,6 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
   tctx->lock_to_release = OpContext::W_LOCK;
   dout(20) << __func__ << " took lock on obc, " << obc->rwstate << dendl;
 
-  repop->ondone = new C_KickBlockedObject(obc, this);
-
   finish_ctx(tctx);
   simple_repop_submit(repop);
 }
