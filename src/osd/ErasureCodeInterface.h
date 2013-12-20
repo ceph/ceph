@@ -318,6 +318,29 @@ namespace ceph {
     virtual int decode(const set<int> &want_to_read,
                        const map<int, bufferlist> &chunks,
                        map<int, bufferlist> *decoded) = 0;
+
+    /**
+     * Decode the first **get_data_chunk_count()** **chunks** and
+     * concatenate them them into **decoded**.
+     *
+     * Returns 0 on success.
+     *
+     * @param [in] chunks map chunk indexes to chunk data
+     * @param [out] decoded concatenante of the data chunks
+     * @return **0** on success or a negative errno on error.
+     */
+    int decode_concat(const map<int, bufferlist> &chunks,
+		      bufferlist *decoded) {
+      set<int> want_to_read;
+      for (unsigned int i = 0; i < get_data_chunk_count(); i++)
+	want_to_read.insert(i);
+      map<int, bufferlist> decoded_map;
+      int r = decode(want_to_read, chunks, &decoded_map);
+      if (r == 0)
+	for (unsigned int i = 0; i < get_data_chunk_count(); i++)
+	  decoded->claim_append(decoded_map[i]);
+      return r;
+    }
   };
 
   typedef std::tr1::shared_ptr<ErasureCodeInterface> ErasureCodeInterfaceRef;
