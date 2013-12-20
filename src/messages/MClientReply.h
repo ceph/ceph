@@ -108,6 +108,8 @@ struct InodeStat {
   uint64_t truncate_size;
   utime_t ctime, mtime, atime;
   version_t time_warp_seq;
+  bufferlist inline_data;
+  version_t inline_version;
 
   frag_info_t dirstat;
   nest_info_t rstat;
