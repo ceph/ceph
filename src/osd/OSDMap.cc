@@ -1291,20 +1291,25 @@ void OSDMap::_raw_to_up_osds(pg_t pg, const vector<int>& raw,
   *primary = (up->empty() ? -1 : up->front());
 }
   
-bool OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg, vector<int>& temp) const
+void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
+                            vector<int> *temp_pg, int *temp_primary) const
 {
   pg = pool.raw_pg_to_pg(pg);
   map<pg_t,vector<int> >::const_iterator p = pg_temp->find(pg);
+  temp_pg->clear();
   if (p != pg_temp->end()) {
-    temp.clear();
     for (unsigned i=0; i<p->second.size(); i++) {
       if (!exists(p->second[i]) || is_down(p->second[i]))
 	continue;
-      temp.push_back(p->second[i]);
+      temp_pg->push_back(p->second[i]);
     }
-    return true;
   }
-  return false;
+  map<pg_t,int>::const_iterator pp = primary_temp->find(pg);
+  *temp_primary = -1;
+  if (pp != primary_temp->end())
+    *temp_primary = pp->second;
+  else if (p != pg_temp->end()) // apply pg_temp's primary
+    *temp_primary = p->second.front();
 }
 
 int OSDMap::pg_to_osds(pg_t pg, vector<int> *raw, int *primary) const
@@ -1334,18 +1339,25 @@ void OSDMap::_pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
   if (!pool)
     return;
   vector<int> raw;
-  vector<int> *_up = (up ? up : new vector<int>);
-  int *_up_primary = (up_primary ? up_primary : new int);
-  _pg_to_osds(*pool, pg, &raw, _up_primary);
-  _raw_to_up_osds(pg, raw, _up, _up_primary);
-  if (acting && !_get_temp_osds(*pool, pg, *acting))
-    *acting = *_up;
+  vector<int> _up;
+  vector<int> _acting;
+  int _up_primary;
+  int _acting_primary;
+  _pg_to_osds(*pool, pg, &raw, &_up_primary);
+  _raw_to_up_osds(pg, raw, &_up, &_up_primary);
+  _get_temp_osds(*pool, pg, &_acting, &_acting_primary);
+  if (_acting.empty())
+    _acting = _up;
+  if (_acting_primary == -1)
+    _acting_primary = _up_primary;
+  if (up)
+    up->swap(_up);
+  if (up_primary)
+    *up_primary = _up_primary;
+  if (acting)
+    acting->swap(_acting);
   if (acting_primary)
-    *acting_primary = (acting->empty() ? -1 : acting->front());
-  if (_up != up)
-    delete _up;
-  if (_up_primary != up_primary)
-    delete _up_primary;
+    *acting_primary = _acting_primary;
 }
 
 int OSDMap::calc_pg_rank(int osd, vector<int>& acting, int nrep)
