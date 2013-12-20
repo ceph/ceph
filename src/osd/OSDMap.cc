@@ -1169,12 +1169,15 @@ bool OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg, vector<int>& temp) c
   return false;
 }
 
-int OSDMap::pg_to_osds(pg_t pg, vector<int>& raw) const
+int OSDMap::pg_to_osds(pg_t pg, vector<int> *raw, int *primary) const
 {
+  *primary = -1;
   const pg_pool_t *pool = get_pg_pool(pg.pool());
   if (!pool)
     return 0;
-  return _pg_to_osds(*pool, pg, raw);
+  int r = _pg_to_osds(*pool, pg, *raw);
+  *primary = (raw->empty() ? -1 : raw->front());
+  return r;
 }
 
 void OSDMap::pg_to_raw_up(pg_t pg, vector<int>& up) const
