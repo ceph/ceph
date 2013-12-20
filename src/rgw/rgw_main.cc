@@ -352,7 +352,7 @@ void RGWLoadGenProcess::checkpoint()
 
 void RGWLoadGenProcess::run()
 {
-  m_tp.start();
+  m_tp.start(); /* start thread pool */
 
   int i;
 
@@ -367,7 +367,7 @@ void RGWLoadGenProcess::run()
 
   atomic_t failed;
 
-  for (int i = 0; i < num_buckets; i++) {
+  for (i = 0; i < num_buckets; i++) {
     buckets[i] = "/loadgen";
     string& bucket = buckets[i];
     append_rand_alpha(NULL, bucket, bucket, 16);
