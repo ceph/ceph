@@ -1180,14 +1180,15 @@ int OSDMap::pg_to_osds(pg_t pg, vector<int> *raw, int *primary) const
   return r;
 }
 
-void OSDMap::pg_to_raw_up(pg_t pg, vector<int>& up) const
+void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
 {
   const pg_pool_t *pool = get_pg_pool(pg.pool());
   if (!pool)
     return;
   vector<int> raw;
   _pg_to_osds(*pool, pg, raw);
-  _raw_to_up_osds(pg, raw, up);
+  _raw_to_up_osds(pg, raw, *up);
+  *primary = (up->empty() ? -1 : up->front());
 }
   
 void OSDMap::_pg_to_up_acting_osds(pg_t pg, vector<int> *up, vector<int>& acting) const
