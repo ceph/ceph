@@ -1,3 +1,9 @@
+ceph (0.72.2-1) stable; urgency=low
+
+  * New upstream release 
+
+ -- Gary Lowell <gary.lowell@inktank.com>  Fri, 20 Dec 2013 19:28:13 +0000
+
 ceph (0.72.1-1) stable; urgency=low
 
   * New upstream release 
