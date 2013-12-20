@@ -1259,7 +1259,8 @@ void OSDMap::_remove_nonexistent_osds(const pg_pool_t& pool,
   }
 }
 
-int OSDMap::_pg_to_osds(const pg_pool_t& pool, pg_t pg, vector<int>& osds) const
+int OSDMap::_pg_to_osds(const pg_pool_t& pool, pg_t pg,
+                        vector<int> *osds, int *primary) const
 {
   // map to osds[]
   ps_t pps = pool.raw_pg_to_pps(pg);  // placement ps
@@ -1268,22 +1269,26 @@ int OSDMap::_pg_to_osds(const pg_pool_t& pool, pg_t pg, vector<int>& osds) const
   // what crush rule?
   int ruleno = crush->find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
   if (ruleno >= 0)
-    crush->do_rule(ruleno, pps, osds, size, osd_weight);
+    crush->do_rule(ruleno, pps, *osds, size, osd_weight);
 
-  _remove_nonexistent_osds(pool, osds);
+  _remove_nonexistent_osds(pool, *osds);
 
-  return osds.size();
+  *primary = (osds->empty() ? -1 : osds->front());
+
+  return osds->size();
 }
 
 // pg -> (up osd list)
-void OSDMap::_raw_to_up_osds(pg_t pg, vector<int>& raw, vector<int>& up) const
+void OSDMap::_raw_to_up_osds(pg_t pg, const vector<int>& raw,
+                             vector<int> *up, int *primary) const
 {
-  up.clear();
+  up->clear();
   for (unsigned i=0; i<raw.size(); i++) {
-    if (!exists(raw[i]) || is_down(raw[i])) 
+    if (!exists(raw[i]) || is_down(raw[i]))
       continue;
-    up.push_back(raw[i]);
+    up->push_back(raw[i]);
   }
+  *primary = (up->empty() ? -1 : up->front());
 }
   
 bool OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg, vector<int>& temp) const
@@ -1308,8 +1313,7 @@ int OSDMap::pg_to_osds(pg_t pg, vector<int> *raw, int *primary) const
   const pg_pool_t *pool = get_pg_pool(pg.pool());
   if (!pool)
     return 0;
-  int r = _pg_to_osds(*pool, pg, *raw);
-  *primary = (raw->empty() ? -1 : raw->front());
+  int r = _pg_to_osds(*pool, pg, raw, primary);
   return r;
 }
 
@@ -1319,9 +1323,8 @@ void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
   if (!pool)
     return;
   vector<int> raw;
-  _pg_to_osds(*pool, pg, raw);
-  _raw_to_up_osds(pg, raw, *up);
-  *primary = (up->empty() ? -1 : up->front());
+  _pg_to_osds(*pool, pg, &raw, primary);
+  _raw_to_up_osds(pg, raw, up, primary);
 }
   
 void OSDMap::_pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
@@ -1332,16 +1335,17 @@ void OSDMap::_pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
     return;
   vector<int> raw;
   vector<int> *_up = (up ? up : new vector<int>);
-  _pg_to_osds(*pool, pg, *raw);
-  _raw_to_up_osds(pg, raw, *_up);
-  if (up_primary)
-    *up_primary = (_up->empty() ? -1 : _up->front());
+  int *_up_primary = (up_primary ? up_primary : new int);
+  _pg_to_osds(*pool, pg, &raw, _up_primary);
+  _raw_to_up_osds(pg, raw, _up, _up_primary);
   if (acting && !_get_temp_osds(*pool, pg, *acting))
     *acting = *_up;
   if (acting_primary)
     *acting_primary = (acting->empty() ? -1 : acting->front());
   if (_up != up)
     delete _up;
+  if (_up_primary != up_primary)
+    delete _up_primary;
 }
 
 int OSDMap::calc_pg_rank(int osd, vector<int>& acting, int nrep)
