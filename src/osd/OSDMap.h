@@ -515,8 +515,9 @@ public:
    * This is suitable only for looking at raw CRUSH outputs. It skips
    * applying the temp and up checks and should not be used
    * by anybody for data mapping purposes.
+   * raw and primary must be non-NULL
    */
-  int pg_to_osds(pg_t pg, vector<int>& raw) const;
+  int pg_to_osds(pg_t pg, vector<int> *raw, int *primary) const;
   /// map a pg to its acting set. @return acting set size
   int pg_to_acting_osds(pg_t pg, vector<int>& acting) const {
     _pg_to_up_acting_osds(pg, NULL, acting);
