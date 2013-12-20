@@ -2724,12 +2724,13 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
   if (!session)
     return -EPERM;
   vector<string> properties;
+  stringstream ss;
   if (m->auid)
     return prepare_new_pool(m->name, m->auid, m->crush_rule, 0, 0,
-                            properties, pg_pool_t::TYPE_REPLICATED);
+                            properties, pg_pool_t::TYPE_REPLICATED, ss);
   else
     return prepare_new_pool(m->name, session->auid, m->crush_rule, 0, 0,
-                            properties, pg_pool_t::TYPE_REPLICATED);
+                            properties, pg_pool_t::TYPE_REPLICATED, ss);
 }
 
 /**
@@ -2745,7 +2746,8 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
 int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
                                  unsigned pg_num, unsigned pgp_num,
 				 const vector<string> &properties,
-                                 const unsigned pool_type)
+                                 const unsigned pool_type,
+				 stringstream &ss)
 {
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
        p != pending_inc.new_pool_names.end();
@@ -4004,7 +4006,8 @@ done:
     err = prepare_new_pool(poolstr, 0, // auid=0 for admin created pool
 			   -1,         // default crush rule
 			   pg_num, pgp_num,
-			   properties, pool_type);
+			   properties, pool_type,
+			   ss);
     if (err < 0 && err != -EEXIST) {
       goto reply;
     }
