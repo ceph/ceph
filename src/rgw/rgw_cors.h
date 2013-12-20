@@ -41,7 +41,8 @@ protected:
   uint32_t       max_age;
   uint8_t        allowed_methods;
   std::string         id;
-  std::set<string> allowed_hdrs;
+  std::set<string> allowed_hdrs; /* If you change this, you need to discard lowercase_allowed_hdrs */
+  std::set<string> lowercase_allowed_hdrs; /* Not built until needed in RGWCORSRule::is_header_allowed */
   std::set<string> allowed_origins;
   std::list<string> exposable_hdrs;
 
