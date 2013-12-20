@@ -3957,8 +3957,6 @@ done:
     int pool_type;
     if (pool_type_str.empty() || pool_type_str == "rep") {
       pool_type = pg_pool_t::TYPE_REP;
-    } else if (pool_type_str == "raid4") {
-      pool_type = pg_pool_t::TYPE_RAID4;
     } else if (pool_type_str == "erasure") {
 
       // check if all up osds support erasure coding
