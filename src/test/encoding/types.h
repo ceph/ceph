@@ -82,6 +82,12 @@ TYPE(PullOp)
 TYPE(PushOp)
 TYPE(PushReplyOp)
 
+#include "osd/ECMsgTypes.h"
+TYPE(ECSubWrite)
+TYPE(ECSubWriteReply)
+TYPE(ECSubRead)
+TYPE(ECSubReadReply)
+
 #include "osd/HitSet.h"
 TYPE(ExplicitHashHitSet)
 TYPE(ExplicitObjectHitSet)

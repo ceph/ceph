@@ -87,6 +87,10 @@ noinst_HEADERS += \
 	messages/MOSDPGQuery.h \
 	messages/MOSDPGRemove.h \
 	messages/MOSDPGScan.h \
+	messages/MOSDECSubOpWrite.h \
+	messages/MOSDECSubOpWriteReply.h \
+	messages/MOSDECSubOpRead.h \
+	messages/MOSDECSubOpReadReply.h \
 	messages/MBackfillReserve.h \
 	messages/MRecoveryReserve.h \
 	messages/MMonQuorumService.h \
