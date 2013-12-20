@@ -256,7 +256,9 @@ bool MemStore::exists(coll_t cid, const ghobject_t& oid)
     return false;
   RWLock::RLocker l(c->lock);
 
-  return (c->get_object(oid) != NULL);
+  // Perform equivalent of c->get_object_(oid) != NULL. In C++11 the
+  // shared_ptr needs to be compared to nullptr.
+  return (bool)c->get_object(oid);
 }
 
 int MemStore::stat(
