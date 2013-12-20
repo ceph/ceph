@@ -519,9 +519,17 @@ public:
    */
   int pg_to_osds(pg_t pg, vector<int> *raw, int *primary) const;
   /// map a pg to its acting set. @return acting set size
+  int pg_to_acting_osds(pg_t pg, vector<int> *acting,
+                        int *acting_primary) const {
+    _pg_to_up_acting_osds(pg, NULL, *acting);
+    *acting_primary = (acting->empty() ? -1 : acting->front());
+    return acting->size();
+  }
   int pg_to_acting_osds(pg_t pg, vector<int>& acting) const {
-    _pg_to_up_acting_osds(pg, NULL, acting);
-    return acting.size();
+    int primary;
+    int r = pg_to_acting_osds(pg, &acting, &primary);
+    assert(acting.empty() || primary == acting.front());
+    return r;
   }
   /**
    * This does not apply temp overrides and should not be used
