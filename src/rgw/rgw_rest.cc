@@ -64,8 +64,9 @@ map<int, const char *> http_status_names;
 
 /*
  * make attrs look_like_this
+ * converts dashes to underscores
  */
-string lowercase_http_attr(const string& orig)
+string lowercase_underscore_http_attr(const string& orig)
 {
   const char *s = orig.c_str();
   char buf[orig.size() + 1];
@@ -85,8 +86,9 @@ string lowercase_http_attr(const string& orig)
 
 /*
  * make attrs LOOK_LIKE_THIS
+ * converts dashes to underscores
  */
-string uppercase_http_attr(const string& orig)
+string uppercase_underscore_http_attr(const string& orig)
 {
   const char *s = orig.c_str();
   char buf[orig.size() + 1];
@@ -106,6 +108,7 @@ string uppercase_http_attr(const string& orig)
 
 /*
  * make attrs Look-Like-This
+ * converts underscores to dashes
  */
 string camelcase_dash_http_attr(const string& orig)
 {
@@ -148,12 +151,12 @@ void rgw_rest_init(CephContext *cct)
   list<string>::iterator iter;
   for (iter = extended_http_attrs.begin(); iter != extended_http_attrs.end(); ++iter) {
     string rgw_attr = RGW_ATTR_PREFIX;
-    rgw_attr.append(lowercase_http_attr(*iter));
+    rgw_attr.append(lowercase_underscore_http_attr(*iter));
 
     rgw_to_http_attrs[rgw_attr] = camelcase_dash_http_attr(*iter);
 
     string http_header = "HTTP_";
-    http_header.append(uppercase_http_attr(*iter));
+    http_header.append(uppercase_underscore_http_attr(*iter));
 
     generic_attrs_map[http_header] = rgw_attr;
   }
