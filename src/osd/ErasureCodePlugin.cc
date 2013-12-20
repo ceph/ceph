@@ -37,12 +37,16 @@ ErasureCodePluginRegistry ErasureCodePluginRegistry::singleton;
 
 ErasureCodePluginRegistry::ErasureCodePluginRegistry() :
   lock("ErasureCodePluginRegistry::lock"),
-  loading(false)
+  loading(false),
+  disable_dlclose(false)
 {
 }
 
 ErasureCodePluginRegistry::~ErasureCodePluginRegistry()
 {
+  if (disable_dlclose)
+    return;
+
   for (std::map<std::string,ErasureCodePlugin*>::iterator i = plugins.begin();
        i != plugins.end();
        ++i) {

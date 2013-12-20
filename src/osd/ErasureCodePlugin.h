@@ -42,6 +42,7 @@ namespace ceph {
   public:
     Mutex lock;
     bool loading;
+    bool disable_dlclose;
     std::map<std::string,ErasureCodePlugin*> plugins;
 
     static ErasureCodePluginRegistry singleton;
