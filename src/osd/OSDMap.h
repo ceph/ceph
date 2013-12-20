@@ -533,9 +533,9 @@ public:
   }
   /**
    * This does not apply temp overrides and should not be used
-   * by anybody for data mapping purposes.
+   * by anybody for data mapping purposes. Specify both pointers.
    */
-  void pg_to_raw_up(pg_t pg, vector<int>& up) const;
+  void pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const;
   /**
    * map a pg to its acting set as well as its up set. You must use
    * the acting set for data mapping purposes, but some users will
