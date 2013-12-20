@@ -317,7 +317,7 @@ void RGWFCGXProcess::run()
     req_wq.queue(req);
   }
 
-  m_tp.drain();
+  m_tp.drain(&req_wq);
   m_tp.stop();
 }
 
@@ -347,7 +347,7 @@ public:
 
 void RGWLoadGenProcess::checkpoint()
 {
-  m_tp.drain();
+  m_tp.drain(&req_wq);
 }
 
 void RGWLoadGenProcess::run()
@@ -356,19 +356,28 @@ void RGWLoadGenProcess::run()
 
   int i;
 
-  int num_objs = 1000;
+  int num_objs;
 
-  string bucket = "mybucket";
+  conf->get_val("num_objs", 1000, &num_objs);
 
-  string bucket_resource = string("/") + bucket;
+  int num_buckets;
+  conf->get_val("num_buckets", 1, &num_buckets);
+
+  string buckets[num_buckets];
 
   atomic_t failed;
+
+  for (int i = 0; i < num_buckets; i++) {
+    buckets[i] = "/loadgen";
+    string& bucket = buckets[i];
+    append_rand_alpha(NULL, bucket, bucket, 16);
+
+    /* first create a bucket */
+    gen_request("PUT", bucket, 0, &failed);
+    checkpoint();
+  }
+
   string *objs = new string[num_objs];
-
-  /* first create a bucket */
-  gen_request("PUT", bucket_resource, 0, &failed);
-
-  checkpoint();
 
   if (failed.read()) {
     derr << "ERROR: bucket creation failed" << dendl;
@@ -376,9 +385,10 @@ void RGWLoadGenProcess::run()
   }
 
   for (i = 0; i < num_objs; i++) {
-    char buf[32];
-    snprintf(buf, sizeof(buf), "obj-%d", i);
-    objs[i] = bucket_resource + "/" + buf;
+    char buf[16 + 1];
+    gen_rand_alphanumeric(NULL, buf, sizeof(buf));
+    buf[16] = '\0';
+    objs[i] = buckets[i % num_buckets] + "/" + buf;
   }
 
   for (i = 0; i < num_objs; i++) {
@@ -402,13 +412,17 @@ void RGWLoadGenProcess::run()
     gen_request("DELETE", objs[i], 0, NULL);
   }
 
-  gen_request("DELETE", bucket_resource, 0, NULL);
+  checkpoint();
 
+  for (i = 0; i < num_buckets; i++) {
+    gen_request("DELETE", buckets[i], 0, NULL);
+  }
+
+done:
   checkpoint();
 
   m_tp.stop();
 
-done:
   delete[] objs;
 
   signal_shutdown();
@@ -859,7 +873,9 @@ public:
   RGWLoadGenFrontend(RGWProcessEnv& pe, RGWFrontendConfig *_conf) : RGWProcessFrontend(pe, _conf) {}
 
   int init() {
-    RGWLoadGenProcess *pp = new RGWLoadGenProcess(g_ceph_context, &env, g_conf->rgw_thread_pool_size, conf);
+    int num_threads;
+    conf->get_val("num_threads", g_conf->rgw_thread_pool_size, &num_threads);
+    RGWLoadGenProcess *pp = new RGWLoadGenProcess(g_ceph_context, &env, num_threads, conf);
 
     pprocess = pp;
 
