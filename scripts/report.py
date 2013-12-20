@@ -6,7 +6,7 @@ doc = """
 usage:
     teuthology-report -h
     teuthology-report [-v] [-R] [-n] [-s SERVER] [-a ARCHIVE] -r RUN ...
-    teuthology-report [-v] [-R] [-n] [-s SERVER] [-a ARCHIVE] -r RUN -j JOB ...
+    teuthology-report [-v] [-s SERVER] [-a ARCHIVE] [-D] -r RUN -j JOB ...
     teuthology-report [-v] [-R] [-n] [-s SERVER] [-a ARCHIVE] --all-runs
 
 Submit test results to a web service
@@ -31,6 +31,7 @@ optional arguments:
                         last successful submission in a file called
                         'last_successful_run'. Pass this flag to disable that
                         behavior.
+  -D, --dead            Mark all given jobs with status 'dead'
   -v, --verbose         be more verbose
 """.format(archive_base=teuthology.config.config.archive_base)
 

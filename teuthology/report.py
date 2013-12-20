@@ -24,7 +24,11 @@ def main(args):
                                save=save, refresh=args['--refresh'])
     run = args['--run']
     job = args['--job']
-    if len(run) == 1 and job:
+    dead = args['--dead']
+    if dead and len(run) == 1 and job:
+        for job_id in job:
+            try_push_job_info(dict(name=run[0], job_id=job_id, status='dead'))
+    elif len(run) == 1 and job:
         reporter.report_jobs(run[0], job)
     elif run and len(run) > 1:
         reporter.report_runs(run)
