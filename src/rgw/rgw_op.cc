@@ -2615,14 +2615,6 @@ int RGWHandler::init(RGWRados *_store, struct req_state *_s, RGWClientIO *cio)
   store = _store;
   s = _s;
 
-  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
-    const char *p;
-    const char **envp = cio->envp();
-    for (int i=0; (p = envp[i]); ++i) {
-      ldout(s->cct, 20) << p << dendl;
-    }
-  }
-
   return 0;
 }
 
