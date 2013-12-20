@@ -13,6 +13,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_swift_auth.h"
 #include "rgw_cors_s3.h"
+#include "rgw_http_errors.h"
 
 #include "rgw_client_io.h"
 #include "rgw_resolve.h"
@@ -59,6 +60,7 @@ struct generic_attr generic_attrs[] = {
 
 map<string, string> rgw_to_http_attrs;
 static map<string, string> generic_attrs_map;
+map<int, const char *> http_status_names;
 
 /*
  * make attrs look_like_this
@@ -155,13 +157,17 @@ void rgw_rest_init(CephContext *cct)
 
     generic_attrs_map[http_header] = rgw_attr;
   }
+
+  for (const struct rgw_http_status_code *h = http_codes; h->code; h++) {
+    http_status_names[h->code] = h->name;
+  }
 }
 
-static void dump_status(struct req_state *s, const char *status)
+static void dump_status(struct req_state *s, const char *status, const char *status_name)
 {
-  int r = s->cio->print("Status: %s\n", status);
+  int r = s->cio->send_status(status, status_name);
   if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+    ldout(s->cct, 0) << "ERROR: s->cio->send_status() returned err=" << r << dendl;
   }
 }
 
@@ -218,21 +224,19 @@ void dump_errno(struct req_state *s)
 {
   char buf[32];
   snprintf(buf, sizeof(buf), "%d", s->err.http_ret);
-  dump_status(s, buf);
+  dump_status(s, buf, http_status_names[s->err.http_ret]);
 }
 
 void dump_errno(struct req_state *s, int err)
 {
   char buf[32];
   snprintf(buf, sizeof(buf), "%d", err);
-  dump_status(s, buf);
+  dump_status(s, buf, http_status_names[s->err.http_ret]);
 }
 
 void dump_content_length(struct req_state *s, uint64_t len)
 {
-  char buf[21];
-  snprintf(buf, sizeof(buf), "%"PRIu64, len);
-  int r = s->cio->print("Content-Length: %s\n", buf);
+  int r = s->cio->send_content_length(len);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -434,10 +438,15 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type)
     s->formatter->close_section();
     dump_content_length(s, s->formatter->get_len());
   }
-  int r = s->cio->print("Content-type: %s\r\n\r\n", content_type);
+  int r = s->cio->print("Content-type: %s\r\n", content_type);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
+  r = s->cio->complete_header();
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: s->cio->complete_header() returned err=" << r << dendl;
+  }
+
   s->cio->set_account(true);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
@@ -457,8 +466,7 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no)
 
 void dump_continue(struct req_state *s)
 {
-  dump_status(s, "100");
-  s->cio->flush();
+  s->cio->send_100_continue();
 }
 
 void dump_range(struct req_state *s, uint64_t ofs, uint64_t end, uint64_t total)
