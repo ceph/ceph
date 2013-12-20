@@ -143,13 +143,14 @@ public:
 	// No matter what the missing chunk is, XOR of the other
 	// two recovers it.
 	//
-        bufferptr chunk(chunk_length);
         map<int, bufferlist>::const_iterator k = chunks.begin();
         const char *a = k->second.buffers().front().c_str();
         ++k;
         const char *b = k->second.buffers().front().c_str();
+        bufferptr chunk(chunk_length);
+	char *c = chunk.c_str();
         for (unsigned j = 0; j < chunk_length; j++) {
-          chunk[j] = a[j] ^ b[j];
+          c[j] = a[j] ^ b[j];
         }
         (*decoded)[*i].push_front(chunk);
       }
