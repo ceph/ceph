@@ -1005,9 +1005,29 @@ bool PG::choose_acting(int& newest_update_osd)
     return false;
   }
 
-  // TODO: Add check of osdmap for all OSDs to be able to handle new acting
   // Determine if compatibility needed
   bool compat_mode = !cct->_conf->osd_debug_override_acting_compat;
+
+  if (compat_mode) {
+    bool all_support = true;
+    OSDMapRef osdmap = get_osdmap();
+    vector<int> allpeers;
+
+    allpeers = want;
+    allpeers.insert(allpeers.end(), backfill.begin(), backfill.end());
+    for (vector<int>::iterator it = allpeers.begin();
+	it != allpeers.end(); ++it) {
+      int peer = *it;
+
+      const osd_xinfo_t& xi = osdmap->get_xinfo(peer);
+      if (!(xi.features & CEPH_FEATURE_OSD_ERASURE_CODES)) {
+	all_support = false;
+	break;
+      }
+    }
+    if (all_support)
+      compat_mode = false;
+  }
 
   // For now we only backfill 1 at a time as before
   if (!backfill.empty())
