@@ -1,5 +1,5 @@
 """
-loctests
+locktests
 """
 import logging
 
