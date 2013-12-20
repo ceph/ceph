@@ -533,10 +533,19 @@ public:
    * the acting set for data mapping purposes, but some users will
    * also find the up set useful for things like deciding what to
    * set as pg_temp.
+   * Each of these pointers must be non-NULL.
    */
-  void pg_to_up_acting_osds(pg_t pg, vector<int>& up,
-                            vector<int>& acting) const {
-    _pg_to_up_acting_osds(pg, &up, acting);
+  void pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
+                            vector<int> *acting, int *acting_primary) const {
+    _pg_to_up_acting_osds(pg, up, *acting);
+    *up_primary = (up->empty() ? -1 : up.front());
+    *acting_primary = (acting->empty() ?  -1 : acting.front());
+  }
+  void pg_to_up_acting_osds(pg_t pg, vector<int>& up, vector<int>& acting) const {
+    int up_primary, acting_primary;
+    pg_to_up_acting_osds(pg, &up, &up_primary, &acting, &acting_primary);
+    assert(up.empty() || up_primary == up.front());
+    assert(acting.empty() || acting_primary == acting.front());
   }
 
   int64_t lookup_pg_pool_name(const string& name) {
