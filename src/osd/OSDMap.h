@@ -513,11 +513,17 @@ private:
   void _raw_to_up_osds(pg_t pg, const vector<int>& raw,
                        vector<int> *up, int *primary) const;
 
-  bool _get_temp_osds(const pg_pool_t& pool, pg_t pg, vector<int>& temp) const;
+  /**
+   * Get the pg and primary temp, if they are specified.
+   * @param temp_pg [out] Will be empty or contain the temp PG mapping on return
+   * @param temp_primary [out] Will be the value in primary_temp, or a value derived
+   * from the pg_temp (if specified), or -1 if you should use the calculated (up_)primary.
+   */
+  void _get_temp_osds(const pg_pool_t& pool, pg_t pg,
+                      vector<int> *temp_pg, int *temp_primary) const;
 
   /**
-   *  map to up and acting. Fills in whatever fields are non-NULL, but
-   *  the passed-in vectors must be empty.
+   *  map to up and acting. Fills in whatever fields are non-NULL.
    */
   void _pg_to_up_acting_osds(pg_t pg, vector<int> *up, int *up_primary,
                              vector<int> *acting, int *acting_primary) const;
