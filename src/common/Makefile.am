@@ -29,6 +29,7 @@ libcommon_la_SOURCES = \
 	common/safe_io.c \
 	common/snap_types.cc \
 	common/str_list.cc \
+	common/str_map.cc \
 	common/errno.cc \
 	common/RefCountedObj.cc \
 	common/blkdev.cc \

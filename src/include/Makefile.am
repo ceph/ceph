@@ -59,6 +59,7 @@ noinst_HEADERS += \
 	include/rbd_types.h \
 	include/statlite.h \
 	include/str_list.h \
+	include/str_map.h \
 	include/stringify.h \
 	include/triple.h \
 	include/types.h \
