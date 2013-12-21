@@ -106,6 +106,7 @@ prefer. For example:
 - ``.us.rgw.root``
 
 - ``.us-east.rgw.root``
+- ``.us-east.rgw.domain``
 - ``.us-east.rgw.control``
 - ``.us-east.rgw.gc``
 - ``.us-east.rgw.buckets.index``
@@ -119,6 +120,7 @@ prefer. For example:
 - ``.us-east.users.uid``
 
 - ``.us-west.rgw.root``
+- ``.us-west.rgw.domain``
 - ``.us-west.rgw.control``
 - ``.us-west.rgw.gc``
 - ``.us-west.rgw.buckets.index``
@@ -436,7 +438,7 @@ Create Zones
    gateway pools. See `Configuration Reference - Zones`_ for additional 
    details on zones. ::
 
-	{ "domain_root": ".us-east.rgw.root",
+	{ "domain_root": ".us-east.rgw.domain",
 	  "control_pool": ".us-east.rgw.control",
 	  "gc_pool": ".us-east.rgw.gc",
 	  "log_pool": ".us-east.log",
