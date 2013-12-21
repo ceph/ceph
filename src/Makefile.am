@@ -35,18 +35,18 @@ include tools/Makefile.am
 # core daemons
 
 ceph_mon_SOURCES = ceph_mon.cc
-ceph_mon_LDADD = $(LIBMON) $(LIBOS) $(CEPH_GLOBAL)
+ceph_mon_LDADD = $(LIBMON) $(LIBOS) $(CEPH_GLOBAL) $(LIBCOMMON)
 bin_PROGRAMS += ceph-mon
 
 ceph_osd_SOURCES = ceph_osd.cc
-ceph_osd_LDADD = $(LIBOSD) $(CEPH_GLOBAL)
+ceph_osd_LDADD = $(LIBOSD) $(CEPH_GLOBAL) $(LIBCOMMON)
 if LINUX
 ceph_osd_LDADD += -ldl
 endif # LINUX
 bin_PROGRAMS += ceph-osd
 
 ceph_mds_SOURCES = ceph_mds.cc
-ceph_mds_LDADD = $(LIBMDS) $(LIBOSDC) $(CEPH_GLOBAL)
+ceph_mds_LDADD = $(LIBMDS) $(LIBOSDC) $(CEPH_GLOBAL) $(LIBCOMMON)
 bin_PROGRAMS += ceph-mds
 
 
