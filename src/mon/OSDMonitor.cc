@@ -2783,6 +2783,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
       pi->properties[*i] = string();
     else {
       const string key = i->substr(0, equal);
+      equal++;
       const string value = i->substr(equal);
       pi->properties[key] = value;
     }
