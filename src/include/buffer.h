@@ -28,18 +28,6 @@
 
 #include <stdio.h>
 
-#ifdef DARWIN
-
-#ifndef MAP_ANON
-#define MAP_ANON 0x1000
-#endif
-#ifndef O_DIRECTORY
-#define O_DIRECTORY 0x100000
-void	*valloc(size_t);
-#endif
-
-#endif
-
 #if defined(__linux__)	// For malloc(2).
 #include <malloc.h>
 #endif
