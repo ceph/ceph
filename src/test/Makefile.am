@@ -239,6 +239,7 @@ bin_DEBUGPROGRAMS += ceph_bench_log
 check_SCRIPTS += \
 	unittest_bufferlist.sh \
 	test/encoding/check-generated.sh \
+	test/mon/osd-pool-create.sh \
 	test/vstart_wrapped_tests.sh
 
 # target to build but not run the unit tests
@@ -267,6 +268,11 @@ unittest_bloom_filter_SOURCES = test/common/test_bloom_filter.cc
 unittest_bloom_filter_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_bloom_filter_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_bloom_filter
+
+unittest_str_map_SOURCES = test/common/test_str_map.cc
+unittest_str_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_str_map_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_str_map
 
 unittest_sharedptr_registry_SOURCES = test/common/test_sharedptr_registry.cc
 unittest_sharedptr_registry_CXXFLAGS = $(UNITTEST_CXXFLAGS)
