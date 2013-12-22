@@ -698,7 +698,7 @@ int CrushWrapper::add_simple_rule(string name, string root_name,
   int steps = 3;
   if (mode == "indep")
     steps = 4;
-  crush_rule *rule = crush_make_rule(steps, ruleset, 1 /* pg_pool_t::TYPE_REP */, 1, 10);
+  crush_rule *rule = crush_make_rule(steps, ruleset, 1 /* pg_pool_t::TYPE_REPLICATED */, 1, 10);
   assert(rule);
   int step = 0;
   if (mode == "indep")
