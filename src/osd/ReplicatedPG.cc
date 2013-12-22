@@ -4860,6 +4860,13 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
   // CopyFromCallback fills this in for us
   obs.oi.user_version = ctx->user_at_version;
 
+  // cache: clear whiteout?
+  if (obs.oi.is_whiteout()) {
+    dout(10) << __func__ << " clearing whiteout on " << obs.oi.soid << dendl;
+    obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
+    --ctx->delta_stats.num_whiteouts;
+  }
+
   interval_set<uint64_t> ch;
   if (obs.oi.size > 0)
     ch.insert(0, obs.oi.size);
