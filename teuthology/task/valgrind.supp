@@ -39,6 +39,13 @@
 	fun:FCGX_Init
 }
 {
+	ignore libnss3 leaks
+	Memcheck:Leak
+	...
+	obj:*libnss3*
+	...
+}
+{
         strptime suckage
         Memcheck:Cond
         fun:__GI___strncasecmp_l
