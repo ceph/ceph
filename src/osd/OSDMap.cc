@@ -1828,7 +1828,7 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
 
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); ++p) {
     int64_t pool = ++pool_max;
-    pools[pool].type = pg_pool_t::TYPE_REP;
+    pools[pool].type = pg_pool_t::TYPE_REPLICATED;
     pools[pool].flags = cct->_conf->osd_pool_default_flags;
     if (cct->_conf->osd_pool_default_flag_hashpspool)
       pools[pool].flags |= pg_pool_t::FLAG_HASHPSPOOL;
@@ -1901,7 +1901,7 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
   assert(maxrep >= minrep);
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); ++p) {
     int ruleset = p->first;
-    crush_rule *rule = crush_make_rule(3, ruleset, pg_pool_t::TYPE_REP, minrep, maxrep);
+    crush_rule *rule = crush_make_rule(3, ruleset, pg_pool_t::TYPE_REPLICATED, minrep, maxrep);
     assert(rule);
     crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
     crush_rule_set_step(rule, 1,
@@ -1966,7 +1966,7 @@ int OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
 
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); ++p) {
     int64_t pool = ++pool_max;
-    pools[pool].type = pg_pool_t::TYPE_REP;
+    pools[pool].type = pg_pool_t::TYPE_REPLICATED;
     pools[pool].flags = cct->_conf->osd_pool_default_flags;
     if (cct->_conf->osd_pool_default_flag_hashpspool)
       pools[pool].flags |= pg_pool_t::FLAG_HASHPSPOOL;
@@ -2062,7 +2062,7 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
   int maxrep = conf->osd_max_rep;
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); ++p) {
     int ruleset = p->first;
-    crush_rule *rule = crush_make_rule(3, ruleset, pg_pool_t::TYPE_REP, minrep, maxrep);
+    crush_rule *rule = crush_make_rule(3, ruleset, pg_pool_t::TYPE_REPLICATED, minrep, maxrep);
     assert(rule);
     crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
 
