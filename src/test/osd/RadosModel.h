@@ -562,6 +562,7 @@ public:
   {
     Mutex::Locker l(context->state_lock);
     done = true;
+    context->update_object_version(oid, comp->get_version64());
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
     context->kick();
