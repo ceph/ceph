@@ -50,6 +50,7 @@
 #include "include/util.h"
 #include "common/cmdparse.h"
 #include "include/str_list.h"
+#include "include/str_map.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -2740,8 +2741,10 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
  * @param pg_num The pg_num to use. If set to 0, will use the system default
  * @param pgp_num The pgp_num to use. If set to 0, will use the system default
  * @param properties An opaque list of key[=value] pairs for pool configuration
+ * @param pool_type TYPE_ERASURE, TYPE_REP or TYPE_RAID4
+ * @param ss human readable error message, if any.
  *
- * @return 0 in all cases. That's silly.
+ * @return 0 on success, negative errno on failure.
  */
 int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
                                  unsigned pg_num, unsigned pgp_num,
@@ -2749,6 +2752,17 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
                                  const unsigned pool_type,
 				 stringstream &ss)
 {
+  map<string,string> default_properties;
+  if (pool_type == pg_pool_t::TYPE_ERASURE) {
+    int r = get_str_map(g_conf->osd_pool_default_erasure_code_properties,
+			ss,
+			&default_properties);
+    if (r)
+      return r;
+    default_properties["erasure-code-directory"] =
+      g_conf->osd_pool_default_erasure_code_directory;
+  }
+
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
        p != pending_inc.new_pool_names.end();
        ++p) {
@@ -2777,6 +2791,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
   pi->set_pgp_num(pgp_num ? pgp_num : g_conf->osd_pool_default_pgp_num);
   pi->last_change = pending_inc.epoch;
   pi->auid = auid;
+  pi->properties = default_properties;
   for (vector<string>::const_iterator i = properties.begin();
        i != properties.end();
        ++i) {
