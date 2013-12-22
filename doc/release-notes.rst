@@ -48,7 +48,7 @@ Notable Changes:
 * mon: prevent extreme changes in pool pg_num (Greg Farnum)
 * mon: take 'osd pool set ...' value as an int, not string (Joao Eduardo Luis)
 * mon: trim MDSMaps (Joao Eduardo Luis)
-* osd: fix object_info_t encoding bug from emperor (****
+* osd: fix object_info_t encoding bug from emperor (Sam Just)
 * rbd: add 'rbdmap' init script for mapping rbd images on book (Adam Twardowski)
 * rgw: add 'status' command to sysvinit script (David Moreau Simard)
 * rgw: fix error setting empty owner on ACLs (Yehuda Sadeh)
