@@ -60,10 +60,21 @@ Set the Number of Placement Groups
 
 To set the number of placement groups in a pool, you must specify the 
 number of placement groups at the time you create the pool.
+See `Create a Pool`_ for details. Once you've set placement groups for a
+pool, you may increase the number of placement groups (but you cannot
+decrease the number of placement groups). To increase the number of 
+placement groups, execute the following::
 
-See `Create a Pool`_ for details.
+	ceph osd pool set {pool-name} pg_num {pg_num}
+	
+Once you increase the number of placement groups, you must also 
+increase the number of placement groups for placement (``pgp_num``) before your
+cluster will rebalance. The ``pgp_num`` should be equal to the ``pg_num``.
+To increase the number of placement groups for placement, execute the 
+following::
 
-.. _Create a Pool: ../pools#createpool
+	ceph osd pool set {pool-name} pgp_num {pgp_num}
+
 
 Get the Number of Placement Groups
 ==================================   
@@ -171,3 +182,6 @@ entirely. To mark the "unfound" objects as "lost", execute the following::
 	
 	pg-states
 	pg-concepts
+
+
+.. _Create a Pool: ../pools#createpool

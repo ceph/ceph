@@ -15,7 +15,7 @@ Description
 ===========
 
 **osdmaptool** is a utility that lets you create, view, and manipulate
-OSD cluster maps from the Ceph distributed file system. Notably, it
+OSD cluster maps from the Ceph distributed storage system. Notably, it
 lets you extract the embedded CRUSH map or import a new CRUSH map.
 
 
@@ -63,7 +63,7 @@ To view the result::
 Availability
 ============
 
-**osdmaptool** is part of the Ceph distributed file system.  Please
+**osdmaptool** is part of the Ceph distributed storage system.  Please
 refer to the Ceph documentation at http://ceph.com/docs for more
 information.
 

@@ -1339,6 +1339,7 @@ void PGMonitor::dump_info(Formatter *f)
   f->close_section();
 
   f->dump_unsigned("pgmap_first_committed", get_first_committed());
+  f->dump_unsigned("pgmap_last_committed", get_last_committed());
 }
 
 bool PGMonitor::preprocess_command(MMonCommand *m)

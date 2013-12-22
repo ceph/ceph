@@ -175,7 +175,7 @@ public:
   static const uint64_t WAIT_ANY_MASK	= (uint64_t)(-1);
 
   // misc
-  static const int EXPORT_NONCE = 1; // nonce given to replicas created by export
+  static const unsigned EXPORT_NONCE = 1; // nonce given to replicas created by export
 
   ostream& print_db_line_prefix(ostream& out);
 

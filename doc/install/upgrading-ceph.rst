@@ -250,6 +250,44 @@ Then add a new ``ceph.repo`` repository entry with the following contents.
    interface or the ``ceph-deploy`` tool.
 
 
+Dumpling to Emperor
+===================
+
+When upgrading from Dumpling (v0.64) you may perform a rolling
+upgrade.
+
+Replace any reference to older repositories with a reference to the
+Emperor repository. For example, with ``apt`` perform the following:: 
+
+	sudo rm /etc/apt/sources.list.d/ceph.list
+	echo deb http://ceph.com/debian-emperor/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+
+With CentOS/Red Hat distributions, remove the old repository. :: 
+
+	sudo rm /etc/yum.repos.d/ceph.repo
+
+Then add a new ``ceph.repo`` repository entry with the following contents and
+replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``, etc). 
+
+.. code-block:: ini
+
+	[ceph]
+	name=Ceph Packages and Backports $basearch
+	baseurl=http://ceph.com/rpm-emperor/{distro}/$basearch
+	enabled=1
+	gpgcheck=1
+	type=rpm-md
+	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc	
+
+
+.. note:: Ensure you use the correct URL for your distribution. Check the
+   http://ceph.com/rpm directory for your distribution. 
+
+.. note:: Since you can upgrade using ``ceph-deploy`` you will only need to add
+   the repository on Ceph Client nodes where you use the ``ceph`` command line 
+   interface or the ``ceph-deploy`` tool.
+
+
 Command Line Utility
 --------------------
 

@@ -1,4 +1,6 @@
-.TH "CEPH-SYN" "8" "April 29, 2013" "dev" "Ceph"
+.\" Man page generated from reStructuredText.
+.
+.TH "CEPH-SYN" "8" "December 09, 2013" "dev" "Ceph"
 .SH NAME
 ceph-syn \- ceph synthetic workload generator
 .
@@ -28,11 +30,36 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.\" Man page generated from reStructuredText.
 .
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
 .SH SYNOPSIS
 .nf
-\fBceph\-syn\fP [ \-m \fImonaddr\fP:\fIport\fP ] \-\-syn \fIcommand\fP \fI...\fP
+\fBceph\-syn\fP [ \-m \fImonaddr\fP:\fIport\fP ] \-\-syn \fIcommand\fP \fI\&...\fP
 .fi
 .sp
 .SH DESCRIPTION
@@ -81,13 +108,13 @@ line. This is not a complete list.
 .INDENT 0.0
 .TP
 .B \fBmknap\fP \fIpath\fP \fIsnapname\fP
-Create a snapshot called \fIsnapname\fP on \fIpath\fP.
+Create a snapshot called \fIsnapname\fP on \fIpath\fP\&.
 .TP
 .B \fBrmsnap\fP \fIpath\fP \fIsnapname\fP
-Delete snapshot called \fIsnapname\fP on \fIpath\fP.
+Delete snapshot called \fIsnapname\fP on \fIpath\fP\&.
 .TP
 .B \fBrmfile\fP \fIpath\fP
-Delete/unlink \fIpath\fP.
+Delete/unlink \fIpath\fP\&.
 .TP
 .B \fBwritefile\fP \fIsizeinmb\fP \fIblocksize\fP
 Create a file, named after our client id, that is \fIsizeinmb\fP MB by
@@ -109,7 +136,7 @@ Recursively walk the file system (like find).
 .UNINDENT
 .SH AVAILABILITY
 .sp
-\fBceph\-syn\fP is part of the Ceph distributed file system. Please refer to
+\fBceph\-syn\fP is part of the Ceph distributed storage system. Please refer to
 the Ceph documentation at \fI\%http://ceph.com/docs\fP for more information.
 .SH SEE ALSO
 .sp

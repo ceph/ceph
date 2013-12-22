@@ -25,54 +25,49 @@ full`` ratio, you should add one or more OSDs to expand your cluster's capacity.
 Deploy your Hardware
 --------------------
 
-If you are adding a new host when adding a new OSD, 
-see `Hardware Recommendations`_ for details on minimum recommendations
-for OSD hardware. To add a OSD host to your cluster, first make sure you have 
-an up-to-date version of Linux installed (typically Ubuntu 12.04 precise), 
-and you have made some initial preparations for your storage drives. 
-See `Filesystem Recommendations`_ for details. 
+If you are adding a new host when adding a new OSD,  see `Hardware
+Recommendations`_ for details on minimum recommendations for OSD hardware. To
+add an OSD host to your cluster, first make sure you have an up-to-date version
+of Linux installed, and you have made some initial preparations for your 
+storage drives.  See `Filesystem Recommendations`_ for details.
 
 Add your OSD host to a rack in your cluster, connect it to the network
-and ensure that it has network connectivity.
+and ensure that it has network connectivity. See the `Network Configuration
+Reference`_ for details.
 
 .. _Hardware Recommendations: ../../../install/hardware-recommendations
 .. _Filesystem Recommendations: ../../configuration/filesystem-recommendations
+.. _Network Configuration Reference: ../../configuration/network-config-ref
 
 Install the Required Software
 -----------------------------
 
 For manually deployed clusters, you must install Ceph packages
-manually. See `Installing Debian/Ubuntu Packages`_ for details.
+manually. See `Installing Ceph (Manual)`_ for details.
 You should configure SSH to a user with password-less authentication
 and root permissions.
 
-.. _Installing Debian/Ubuntu Packages: ../../../install/debian
+.. _Installing Ceph (Manual): ../../../install
 
-For clusters deployed with Chef, create a `chef user`_, `configure
-SSH keys`_, `install Ruby`_ and `install the Chef client`_ on your host. See 
-`Installing Chef`_ for details.
-
-.. _chef user: ../../deployment/install-chef#createuser
-.. _configure SSH keys: ../../deployment/install-chef#genkeys
-.. _install the Chef client: ../../deployment/install-chef#installchef
-.. _Installing Chef: ../../deployment/install-chef
-.. _Install Ruby: ../../deployment/install-chef#installruby
 
 Adding an OSD (Manual)
 ----------------------
 
 This procedure sets up an ``ceph-osd`` daemon, configures it to use one drive,
 and configures the cluster to distribute data to the OSD. If your host has
-multiple drives,  you may add an OSD for each drive by repeating this procedure.
+multiple drives, you may add an OSD for each drive by repeating this procedure.
 
-To add an OSD, create a data directory for it, mount a drive to that directory,
-add the OSD to your configuration file, add the OSD to the cluster, and then add
-it to the CRUSH map.
+To add an OSD, create a data directory for it, mount a drive to that directory, 
+add the OSD to the cluster, and then add it to the CRUSH map.
 
 When you add the OSD to the CRUSH map, consider the weight you give to the new
-OSD.  Hard drive capacity grows 40% per year, so newer OSD hosts may have larger
-hard drive than older hosts in the cluster (i.e., they may have greater weight).
+OSD. Hard drive capacity grows 40% per year, so newer OSD hosts may have larger
+hard drives than older hosts in the cluster (i.e., they may have greater 
+weight).
 
+.. tip:: Ceph prefers uniform hardware across pools. If you are adding drives
+   of dissimilar size, you can adjust their weights. However, for best 
+   performance, consider a CRUSH hierarchy with drives of the same type/size.
 
 #. Create the OSD. If no UUID is given, it will be set automatically when the 
    OSD starts up. The following command will output the OSD number, which you 
@@ -94,27 +89,6 @@ hard drive than older hosts in the cluster (i.e., they may have greater weight).
 	sudo mkfs -t {fstype} /dev/{drive}
 	sudo mount -o user_xattr /dev/{hdd} /var/lib/ceph/osd/ceph-{osd-number}
 
-
-#. Navigate to the host where you keep the master copy of the cluster's 
-   ``ceph.conf`` file. :: 
-
-	ssh {admin-host}
-	cd /etc/ceph
-	vim ceph.conf
-
-#. Add the new OSD to your ``ceph.conf`` file.
-	
-   .. code-block:: ini
-
-     [osd.1]
-         host = {hostname}
- 
-#. From the host where you keep the master copy of the cluster's 
-   ``ceph.conf`` file, copy the updated ``ceph.conf`` file to your 
-   new OSD's ``/etc/ceph`` directory and to other hosts in your cluster. :: 
-
-	ssh {new-osd} sudo tee /etc/ceph/ceph.conf < /etc/ceph/ceph.conf
-
 	
 #. Initialize the OSD data directory. :: 
 
@@ -129,6 +103,7 @@ hard drive than older hosts in the cluster (i.e., they may have greater weight).
 
 	ceph auth add osd.{osd-num} osd 'allow *' mon 'allow rwx' -i /var/lib/ceph/osd/ceph-{osd-num}/keyring
 
+
 #. Add the OSD to the CRUSH map so that it can begin receiving data. You may
    also decompile the CRUSH map, add the OSD to the device list, add the host as a
    bucket (if it's not already in the CRUSH map), add the device as an item in the
@@ -137,11 +112,11 @@ hard drive than older hosts in the cluster (i.e., they may have greater weight).
    
    For Argonaut (v 0.48), execute the following::
 
-	ceph osd crush set {id} {name} {weight} pool={pool-name}  [{bucket-type}={bucket-name} ...]
+	ceph osd crush add {id} {name} {weight}  [{bucket-type}={bucket-name} ...]
 
-   For Bobtail (v 0.56), execute the following:: 
+   For Bobtail (v 0.56) and later releases, execute the following:: 
 
-	ceph osd crush set {id-or-name} {weight} root={pool-name}  [{bucket-type}={bucket-name} ...]
+	ceph osd crush add {id-or-name} {weight}  [{bucket-type}={bucket-name} ...]
 
 
 .. topic:: Argonaut (v0.48) Best Practices
@@ -175,58 +150,25 @@ hard drive than older hosts in the cluster (i.e., they may have greater weight).
  subsequent releases.
 
 
-Adding an OSD (Chef)
---------------------
-
-This procedure configures your OSD using ``chef-client``. If your host has
-multiple drives, you may need to execute the procedure for preparing an OSD
-drive for each data drive on your host.
-
-When you add the OSD to the CRUSH map, consider the weight you give to the new
-OSD.  Hard drive capacity grows 40% per year, so newer OSD hosts may have larger
-hard drive than older hosts in the cluster.
-
-#. Execute ``chef-client`` to register it with Chef as a Chef node.
-
-#. Edit the node. See `Configure Nodes`_ for details.
-   Change its environment to your Chef environment.
-   Add ``"role[ceph-osd]"`` to the run list.
-
-#. Execute `Prepare OSD Drives`_ for each drive.
-
-#. Execute ``chef-client`` to invoke the run list.
-
-#. Add the OSD to the CRUSH map so that it can begin receiving data. You may
-   also decompile the CRUSH map edit the file, recompile it and set it. See
-   `Add/Move an OSD`_ for details. :: 
-
-	ceph osd crush set {name} {weight} [{bucket-type}={bucket-name} ...]
-
-
 Starting the OSD
 ----------------
 
 After you add an OSD to Ceph, the OSD is in your configuration. However, 
-it is not yet running. The OSD is ``down`` and ``out``. You must start 
+it is not yet running. The OSD is ``down`` and ``in``. You must start 
 your new OSD before it can begin receiving data. You may use
 ``service ceph`` from your admin host or start the OSD from its host
-machine::
+machine.
 
-	service ceph -a start osd.{osd.num}
-	#or alternatively
-	ssh {new-osd-host}
+For Debian/Ubuntu use Upstart. ::
+
+	sudo start ceph-osd id={osd-num}
+
+For CentOS/RHEL, use sysvinit. ::
+
 	sudo /etc/init.d/ceph start osd.{osd-num}
 
 
-Once you start your OSD, it is ``up``.
-
-Put the OSD ``in`` the Cluster
-------------------------------
-
-After you start your OSD, it is ``up`` and ``out``.  You need to put it in to
-the cluster so that Ceph can begin writing data to it. :: 
-
-	ceph osd in {osd-num}
+Once you start your OSD, it is ``up`` and ``in``.
 
 
 Observe the Data Migration
@@ -244,8 +186,6 @@ completes. (Control-c to exit.)
 
 
 .. _Add/Move an OSD: ../crush-map#addosd
-.. _Configure Nodes: ../../deployment/chef#confignodes
-.. _Prepare OSD Drives: ../../deployment/chef#prepdisks
 .. _ceph: ../monitoring
 
 
@@ -337,18 +277,18 @@ OSD for each drive by repeating this procedure.
    ``ceph.conf`` file. ::
 
 	ssh {admin-host}
-	cd /etc/chef
+	cd /etc/ceph
 	vim ceph.conf
 
-#. Remove the OSD entry from your ``ceph.conf`` file. ::
+#. Remove the OSD entry from your ``ceph.conf`` file (if it exists). ::
 
 	[osd.1]
 		host = {hostname}
  
 #. From the host where you keep the master copy of the cluster's ``ceph.conf`` file, 
    copy the updated ``ceph.conf`` file to the ``/etc/ceph`` directory of other 
-   hosts in your cluster. :: 
-
-	ssh {osd} sudo tee /etc/ceph/ceph.conf < /etc/ceph/ceph.conf		
+   hosts in your cluster.
+   
+		
 	
 .. _Remove an OSD: ../crush-map#removeosd

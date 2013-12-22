@@ -1,4 +1,6 @@
-.TH "CEPH-DENCODER" "8" "April 29, 2013" "dev" "Ceph"
+.\" Man page generated from reStructuredText.
+.
+.TH "CEPH-DENCODER" "8" "December 09, 2013" "dev" "Ceph"
 .SH NAME
 ceph-dencoder \- ceph encoder/decoder utility
 .
@@ -28,8 +30,33 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.\" Man page generated from reStructuredText.
 .
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
 .SH SYNOPSIS
 .nf
 \fBceph\-dencoder\fP [commands...]
@@ -64,7 +91,7 @@ file.
 .INDENT 0.0
 .TP
 .B list_types
-List the data types known to this build of \fBceph\-dencoder\fP.
+List the data types known to this build of \fBceph\-dencoder\fP\&.
 .UNINDENT
 .INDENT 0.0
 .TP
@@ -104,19 +131,21 @@ of the type.
 .TP
 .B get_features
 Print the decimal value of the feature set supported by this version
-of \fBceph\-dencoder\fP.  Each bit represents a feature.  These correspond to
+of \fBceph\-dencoder\fP\&.  Each bit represents a feature.  These correspond to
 CEPH_FEATURE_* defines in src/include/ceph_features.h.
 .UNINDENT
 .INDENT 0.0
 .TP
 .B set_features <f>
-Set the feature bits provided to \fBencode\fP to \fIf\fP.  This allows
+Set the feature bits provided to \fBencode\fP to \fIf\fP\&.  This allows
 you to encode objects such that they can be understood by old
 versions of the software (for those types that support it).
 .UNINDENT
 .SH EXAMPLE
 .sp
-Say you want to examine an attribute on an object stored by \fBceph\-osd\fP.  You can do:
+Say you want to examine an attribute on an object stored by \fBceph\-osd\fP\&.  You can do:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
@@ -148,9 +177,11 @@ $ ceph\-dencoder type object_info_t import /tmp/a decode dump_json
   "watchers": {}}
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .SH AVAILABILITY
 .sp
-\fBceph\-dencoder\fP is part of the Ceph distributed file system. Please
+\fBceph\-dencoder\fP is part of the Ceph distributed storage system. Please
 refer to the Ceph documentation at \fI\%http://ceph.com/docs\fP for more
 information.
 .SH SEE ALSO

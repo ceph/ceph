@@ -344,6 +344,10 @@ COMMAND("osd find " \
 	"name=id,type=CephInt,range=0", \
 	"find osd <id> in the CRUSH map and show its location", \
 	"osd", "r", "cli,rest")
+COMMAND("osd metadata " \
+	"name=id,type=CephInt,range=0", \
+	"fetch metadata for osd <id>", \
+	"osd", "r", "cli,rest")
 COMMAND("osd map " \
 	"name=pool,type=CephPoolname " \
 	"name=object,type=CephObjectname", \
@@ -405,17 +409,17 @@ COMMAND("osd crush link " \
 COMMAND("osd crush rm " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=ancestor,type=CephString,req=false,goodchars=[A-Za-z0-9-_.]", \
-	"remove <name> from crush map (everywhere, or just at <ancestor>",\
+	"remove <name> from crush map (everywhere, or just at <ancestor>)",\
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush remove " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=ancestor,type=CephString,req=false,goodchars=[A-Za-z0-9-_.]", \
-	"remove <name> from crush map (everywhere, or just at <ancestor>", \
+	"remove <name> from crush map (everywhere, or just at <ancestor>)", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush unlink " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=ancestor,type=CephString,req=false,goodchars=[A-Za-z0-9-_.]", \
-	"unlink <name> from crush map (everywhere, or just at <ancestor>", \
+	"unlink <name> from crush map (everywhere, or just at <ancestor>)", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush reweight " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
@@ -425,11 +429,14 @@ COMMAND("osd crush reweight " \
 COMMAND("osd crush tunables " \
 	"name=profile,type=CephChoices,strings=legacy|argonaut|bobtail|optimal|default", \
 	"set crush tunables values to <profile>", "osd", "rw", "cli,rest")
+COMMAND("osd crush show-tunables", \
+	"show current crush tunables", "osd", "r", "cli,rest")
 COMMAND("osd crush rule create-simple " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=root,type=CephString,goodchars=[A-Za-z0-9-_.] " \
-	"name=type,type=CephString,goodchars=[A-Za-z0-9-_.]",
-	"create crush rule <name> in <root> of type <type>", \
+	"name=type,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=mode,type=CephChoices,strings=firstn|indep,req=false",
+	"create crush rule <name> to start from <root>, replicate across buckets of type <type>, using a choose mode of <firstn|indep> (default firstn; indep best for erasure pools)", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush rule rm " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] ",	\
@@ -489,6 +496,7 @@ COMMAND("osd pool create " \
 	"name=pool,type=CephPoolname " \
 	"name=pg_num,type=CephInt,range=0 " \
 	"name=pgp_num,type=CephInt,range=0,req=false " \
+        "name=pool_type,type=CephChoices,strings=replicated|erasure,req=false " \
 	"name=properties,type=CephString,n=N,req=false,goodchars=[A-Za-z0-9-_.=]", \
 	"create pool", "osd", "rw", "cli,rest")
 COMMAND("osd pool delete " \

@@ -1,4 +1,6 @@
-.TH "CEPH-MON" "8" "April 29, 2013" "dev" "Ceph"
+.\" Man page generated from reStructuredText.
+.
+.TH "CEPH-MON" "8" "December 09, 2013" "dev" "Ceph"
 .SH NAME
 ceph-mon \- ceph monitor daemon
 .
@@ -28,8 +30,33 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.\" Man page generated from reStructuredText.
 .
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
 .SH SYNOPSIS
 .nf
 \fBceph\-mon\fP \-i \fImonid\fP [ \-\-mon\-data \fImondatapath\fP ]
@@ -73,30 +100,30 @@ cluster.  Three pieces of information must be provided:
 .INDENT 7.0
 .IP \(bu 2
 The cluster fsid.  This can come from a monmap (\fB\-\-monmap <path>\fP) or
-explicitly via \fB\-\-fsid <uuid>\fP.
+explicitly via \fB\-\-fsid <uuid>\fP\&.
 .IP \(bu 2
 A list of monitors and their addresses.  This list of monitors
 can come from a monmap (\fB\-\-monmap <path>\fP), the \fBmon host\fP
 configuration value (in \fIceph.conf\fP or via \fB\-m
-host1,host2,...\fP), or \fBmon addr\fP lines in \fIceph.conf\fP.  If this
+host1,host2,...\fP), or \fBmon addr\fP lines in \fIceph.conf\fP\&.  If this
 monitor is to be part of the initial monitor quorum for a new
 Ceph cluster, then it must be included in the initial list,
 matching either the name or address of a monitor in the list.
 When matching by address, either the \fBpublic addr\fP or \fBpublic
 subnet\fP options may be used.
 .IP \(bu 2
-The monitor secret key \fBmon.\fP.  This must be included in the
-keyring provided via \fB\-\-keyring <path>\fP.
+The monitor secret key \fBmon.\fP\&.  This must be included in the
+keyring provided via \fB\-\-keyring <path>\fP\&.
 .UNINDENT
 .UNINDENT
 .INDENT 0.0
 .TP
 .B \-\-keyring
-Specify a keyring for use with \fB\-\-mkfs\fP.
+Specify a keyring for use with \fB\-\-mkfs\fP\&.
 .UNINDENT
 .SH AVAILABILITY
 .sp
-\fBceph\-mon\fP is part of the Ceph distributed file system. Please refer
+\fBceph\-mon\fP is part of the Ceph distributed storage system. Please refer
 to the Ceph documentation at \fI\%http://ceph.com/docs\fP for more
 information.
 .SH SEE ALSO

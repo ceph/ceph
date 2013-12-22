@@ -14,7 +14,7 @@ Description
 ===========
 
 **ceph** is a control utility for communicating with the monitor
-cluster of a running Ceph distributed file system.
+cluster of a running Ceph distributed storage system.
 
 There are three basic modes of operation.
 
@@ -87,7 +87,7 @@ online documentation, at
 Availability
 ============
 
-**ceph** is part of the Ceph distributed file system. Please refer to the Ceph documentation at
+**ceph** is part of the Ceph distributed storage system. Please refer to the Ceph documentation at
 http://ceph.com/docs for more information.
 
 

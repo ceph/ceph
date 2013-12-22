@@ -2,7 +2,7 @@
 
 /* flags we export */
 int ceph_arch_intel_sse42 = 0;
-
+int ceph_arch_intel_sse2 = 0;
 
 #ifdef __x86_64__
 
@@ -31,6 +31,10 @@ int ceph_arch_intel_probe(void)
 	if ((ecx & (1 << 20)) != 0) {
 		ceph_arch_intel_sse42 = 1;
 	}
+	if ((edx & (1 << 26)) != 0) {
+	        ceph_arch_intel_sse2 = 1;
+	}
+
 	return 0;
 }
 

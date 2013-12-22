@@ -65,7 +65,8 @@ WorkloadGenerator::WorkloadGenerator(vector<const char*> args)
   dout(0) << "journal         = " << g_conf->osd_journal << dendl;
   dout(0) << "journal size    = " << g_conf->osd_journal_size << dendl;
 
-  ::mkdir(g_conf->osd_data.c_str(), 0755);
+  err = ::mkdir(g_conf->osd_data.c_str(), 0755);
+  ceph_assert(err == 0 || (err < 0 && errno == EEXIST));
   ObjectStore *store_ptr = new FileStore(g_conf->osd_data, g_conf->osd_journal);
   m_store.reset(store_ptr);
   err = m_store->mkfs();

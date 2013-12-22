@@ -64,4 +64,4 @@ To reset ``oprofile``, execute the following command::
    you do not commingle results from different tests.
 
 .. _oprofile: http://oprofile.sourceforge.net/about/
-.. _Installing Oprofile: ../../../install/cpu-profiler
+.. _Installing Oprofile: ../../../dev/cpu-profiler

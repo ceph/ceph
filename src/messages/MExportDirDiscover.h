@@ -34,13 +34,11 @@ class MExportDirDiscover : public Message {
   MExportDirDiscover() :     
     Message(MSG_MDS_EXPORTDIRDISCOVER),
     started(false) { }
-  MExportDirDiscover(int f, filepath& p, dirfrag_t df) : 
+  MExportDirDiscover(dirfrag_t df, filepath& p, int f, uint64_t tid) :
     Message(MSG_MDS_EXPORTDIRDISCOVER),
-    from(f), 
-    dirfrag(df),
-    path(p),
-    started(false)
-  { }
+    from(f), dirfrag(df), path(p), started(false) {
+    set_tid(tid);
+  }
 private:
   ~MExportDirDiscover() {}
 

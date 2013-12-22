@@ -11,6 +11,7 @@ Makefile
 /ceph-authtool
 /ceph-conf
 /ceph-coverage
+/ceph-crush-location
 /ceph-debugpack
 /ceph-post-file
 /ceph-dencoder
@@ -23,8 +24,10 @@ Makefile
 /ceph_bench_log
 /ceph_dupstore
 /ceph_filestore_dump
+/ceph_filestore_tool
 /ceph_mon_store_converter
 /ceph_multi_stress_watch
+/ceph_erasure_code_benchmark
 /ceph_psim
 /ceph_radosacl
 /ceph_rgw_jsonparser

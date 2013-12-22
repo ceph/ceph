@@ -1,4 +1,6 @@
-.TH "CEPH-AUTHTOOL" "8" "April 29, 2013" "dev" "Ceph"
+.\" Man page generated from reStructuredText.
+.
+.TH "CEPH-AUTHTOOL" "8" "December 09, 2013" "dev" "Ceph"
 .SH NAME
 ceph-authtool \- ceph keyring manipulation tool
 .
@@ -28,13 +30,38 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.\" Man page generated from reStructuredText.
 .
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
 .SH SYNOPSIS
 .nf
 \fBceph\-authtool\fP \fIkeyringfile\fP [ \-l | \-\-list ] [ \-C | \-\-create\-keyring
 ] [ \-p | \-\-print ] [ \-n | \-\-name \fIentityname\fP ] [ \-\-gen\-key ] [ \-a |
-\-\-add\-key \fIbase64_key\fP ] [ \-\-caps \fIcapfils\fP ]
+\-\-add\-key \fIbase64_key\fP ] [ \-\-caps \fIcapfile\fP ]
 .fi
 .sp
 .SH DESCRIPTION
@@ -43,7 +70,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 file. A keyring file stores one or more Ceph authentication keys and
 possibly an associated capability specification. Each key is
 associated with an entity name, of the form
-\fB{client,mon,mds,osd}.name\fP.
+\fB{client,mon,mds,osd}.name\fP\&.
 .sp
 \fBWARNING\fP Ceph provides authentication and protection against
 man\-in\-the\-middle attacks once secret keys are in place.  However,
@@ -69,30 +96,13 @@ will create a new keyring, overwriting any existing keyringfile
 .UNINDENT
 .INDENT 0.0
 .TP
-.B \-g, \-\-gen\-key
+.B \-\-gen\-key
 will generate a new secret key for the specified entityname
 .UNINDENT
 .INDENT 0.0
 .TP
-.B \-a, \-\-add\-key
+.B \-\-add\-key
 will add an encoded key to the keyring
-.UNINDENT
-.INDENT 0.0
-.TP
-.B \-u, \-\-set\-uid
-sets the auid (authenticated user id) for the specified entityname
-.UNINDENT
-.INDENT 0.0
-.TP
-.B \-\-gen\-print\-key
-will generate and print a new secret key without adding it to the keyringfile
-
-NOTE: will work without a given keyringfile
-.UNINDENT
-.INDENT 0.0
-.TP
-.B \-\-import\-keyring
-will import the content of a given keyring into the keyringfile
 .UNINDENT
 .INDENT 0.0
 .TP
@@ -107,7 +117,7 @@ will set all of capabilities associated with a given key, for all subsystems
 .SH CAPABILITIES
 .sp
 The subsystem is the name of a Ceph subsystem: \fBmon\fP, \fBmds\fP, or
-\fBosd\fP.
+\fBosd\fP\&.
 .sp
 The capability is a string describing what the given user is allowed
 to do. This takes the form of a comma separated list of allow
@@ -116,6 +126,8 @@ read, write, and execute permission. The \fBallow *\fP grants full
 superuser permissions for the given subsystem.
 .sp
 For example:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
@@ -129,8 +141,12 @@ mds = "allow"
 mon = "allow rwx"
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 A librados user restricted to a single pool might look like:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
@@ -139,8 +155,12 @@ mon = "allow r"
 osd = "allow rw pool foo"
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 A client using rbd with read access to one pool and read/write access to another:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
@@ -149,8 +169,12 @@ mon = "allow r"
 osd = "allow class\-read object_prefix rbd_children, allow pool templates r class\-read, allow pool vms rwx"
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 A client mounting the file system with minimal permissions would need caps like:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
@@ -161,9 +185,13 @@ osd = "allow rw pool data"
 mon = "allow r"
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .SH OSD CAPABILITIES
 .sp
 In general, an osd capability follows the grammar:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
@@ -173,8 +201,12 @@ match   := [pool[=]<poolname> | object_prefix <prefix>]
 capspec := * | [r][w][x] [class\-read] [class\-write]
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 The capspec determines what kind of operations the entity can perform:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
@@ -187,6 +219,8 @@ class\-write = can call class methods that are writes
               i.e. ceph osd tell ...
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 The match criteria restrict a grant based on the pool being accessed.
 Grants are additive if the client fulfills the match condition. For
@@ -204,40 +238,56 @@ value is the capability string (see above).
 .SH EXAMPLE
 .sp
 To create a new keyring containing a key for client.foo:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 ceph\-authtool \-C \-n client.foo \-\-gen\-key keyring
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To associate some capabilities with the key (namely, the ability to
 mount a Ceph filesystem):
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 ceph\-authtool \-n client.foo \-\-cap mds \(aqallow\(aq \-\-cap osd \(aqallow rw pool=data\(aq \-\-cap mon \(aqallow r\(aq keyring
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To display the contents of the keyring:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 ceph\-authtool \-l keyring
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 When mount a Ceph file system, you can grab the appropriately encoded secret key with:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 mount \-t ceph serverhost:/ mountpoint \-o name=foo,secret=\(gaceph\-authtool \-p \-n client.foo keyring\(ga
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .SH AVAILABILITY
 .sp
-\fBceph\-authtool\fP is part of the Ceph distributed file system. Please
+\fBceph\-authtool\fP is part of the Ceph distributed storage system. Please
 refer to the Ceph documentation at \fI\%http://ceph.com/docs\fP for more
 information.
 .SH SEE ALSO

@@ -1256,11 +1256,6 @@ TEST(LibRadosTier, HitSetRead) {
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
 
-  string name = "foo";
-  uint32_t hash = ioctx.get_object_hash_position(name);
-  hobject_t oid(sobject_t(name, CEPH_NOSNAP), "", hash,
-		cluster.pool_lookup(pool_name.c_str()), "");
-
   // keep reading until we see our object appear in the HitSet
   utime_t start = ceph_clock_now(NULL);
   utime_t hard_stop = start + utime_t(600, 0);
@@ -1268,6 +1263,11 @@ TEST(LibRadosTier, HitSetRead) {
   while (true) {
     utime_t now = ceph_clock_now(NULL);
     ASSERT_TRUE(now < hard_stop);
+
+    string name = "foo";
+    uint32_t hash = ioctx.get_object_hash_position(name);
+    hobject_t oid(sobject_t(name, CEPH_NOSNAP), "", hash,
+		  cluster.pool_lookup(pool_name.c_str()), "");
 
     bufferlist bl;
     ASSERT_EQ(-ENOENT, ioctx.read("foo", bl, 1, 0));
@@ -1431,16 +1431,16 @@ TEST(LibRadosTier, HitSetTrim) {
   // wait for maps to settle
   cluster.wait_for_latest_osdmap();
 
-  string name = "foo";
-  uint32_t hash = ioctx.get_object_hash_position(name);
-  hobject_t oid(sobject_t(name, CEPH_NOSNAP), "", hash, -1, "");
-
   // do a bunch of writes and make sure the hitsets rotate
   utime_t start = ceph_clock_now(NULL);
-  utime_t hard_stop = start + utime_t(count * period * 4, 0);
+  utime_t hard_stop = start + utime_t(count * period * 12, 0);
 
   time_t first = 0;
   while (true) {
+    string name = "foo";
+    uint32_t hash = ioctx.get_object_hash_position(name);
+    hobject_t oid(sobject_t(name, CEPH_NOSNAP), "", hash, -1, "");
+
     bufferlist bl;
     bl.append("f");
     ASSERT_EQ(1, ioctx.write("foo", bl, 1, 0));

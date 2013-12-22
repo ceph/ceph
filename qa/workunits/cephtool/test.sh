@@ -1,6 +1,8 @@
 #!/bin/bash -x
 
 set -e
+set -o functrace
+PS4=' ${FUNCNAME[0]}: $LINENO: '
 
 get_pg()
 {
@@ -26,7 +28,7 @@ expect_false()
 }
 
 TMPFILE=/tmp/test_invalid.$$
-trap "rm $TMPFILE" 0
+trap "rm -f $TMPFILE" 0
 
 function check_response()
 {
@@ -72,13 +74,13 @@ ceph osd tier remove data cache2
 ceph osd pool delete cache cache --yes-i-really-really-mean-it
 ceph osd pool delete cache2 cache2 --yes-i-really-really-mean-it
 
-#
 # Assumes there are at least 3 MDSes and two OSDs
 #
 
 ceph auth add client.xx mon allow osd "allow *"
 ceph auth export client.xx >client.xx.keyring
 ceph auth add client.xx -i client.xx.keyring
+rm -f client.xx.keyring
 ceph auth list | grep client.xx
 ceph auth get client.xx | grep caps | grep mon
 ceph auth get client.xx | grep caps | grep osd
@@ -183,7 +185,9 @@ expect_false "ceph osd blacklist $bl/-1"
 expect_false "ceph osd blacklist $bl/foo"
 
 ceph osd crush tunables legacy
+ceph osd crush show-tunables | grep argonaut
 ceph osd crush tunables bobtail
+ceph osd crush show-tunables | grep bobtail
 
 # how do I tell when these are done?
 ceph osd scrub 0
@@ -212,6 +216,7 @@ for ((i=0; i < 100; i++)); do
 done
 ceph osd dump | grep 'osd.0 up'
 ceph osd find 1
+ceph osd metadata 1 | grep 'distro'
 ceph osd out 0
 ceph osd dump | grep 'osd.0.*out'
 ceph osd in 0
@@ -234,6 +239,8 @@ ceph osd getmaxosd | grep "max_osd = $save"
 for id in `ceph osd ls` ; do
 	ceph tell osd.$id version
 done
+
+ceph osd rm 0 2>&1 | grep 'EBUSY'
 
 id=`ceph osd create`
 ceph osd lost $id --yes-i-really-mean-it
@@ -263,6 +270,22 @@ ceph osd pool create data2 10
 ceph osd pool rename data2 data3
 ceph osd lspools | grep data3
 ceph osd pool delete data3 data3 --yes-i-really-really-mean-it
+
+ceph osd pool create erasurecodes 12 12 erasure
+ceph osd pool create erasurecodes 12 12 erasure
+# should fail because the default type is replicated and 
+# the pool is of type erasure
+expect_false ceph osd pool create erasurecodes 12 12
+ceph osd pool create replicated 12 12 replicated
+ceph osd pool create replicated 12 12 replicated
+ceph osd pool create replicated 12 12 # default is replicated
+ceph osd pool create replicated 12    # default is replicated, pgp_num = pg_num
+# should fail because the type is not the same
+expect_false ceph osd pool create replicated 12 12 erasure
+ceph osd lspools | grep erasurecodes
+ceph osd lspools | grep replicated
+ceph osd pool delete erasurecodes erasurecodes --yes-i-really-really-mean-it
+ceph osd pool delete replicated replicated --yes-i-really-really-mean-it
 
 ceph osd stat | grep up,
 
@@ -322,13 +345,18 @@ for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
 	ceph osd pool get data $s
 done
 
-ceph osd pool get data size | grep 'size: 2'
-ceph osd pool set data size 3
-ceph osd pool get data size | grep 'size: 3'
-ceph osd pool set data size 2
+old_size=$(ceph osd pool get data size | sed -e 's/size: //')
+(( new_size = old_size + 1 ))
+ceph osd pool set data size $new_size
+ceph osd pool get data size | grep "size: $new_size"
+ceph osd pool set data size $old_size
 
 ceph osd pool set data hashpspool true
 ceph osd pool set data hashpspool false
+ceph osd pool set data hashpspool 0
+ceph osd pool set data hashpspool 1
+expect_false ceph osd pool set data hashpspool asdf
+expect_false ceph osd pool set data hashpspool 2
 
 ceph osd pool set rbd hit_set_type explicit_hash
 ceph osd pool set rbd hit_set_type explicit_object
