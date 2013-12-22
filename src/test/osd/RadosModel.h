@@ -1733,11 +1733,12 @@ public:
     int r = completion->get_return_value();
     if (r == 0) {
       cout << num << ":  " << (dirty ? "dirty" : "clean") << std::endl;
-      assert(old_value.has_contents());
+      assert(!old_value.deleted());
       assert(dirty == old_value.dirty);
     } else {
       cout << num << ":  got " << r << std::endl;
       assert(r == -ENOENT);
+      assert(old_value.deleted());
     }
     context->kick();
     done = true;
