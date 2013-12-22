@@ -57,6 +57,35 @@ Notable Changes:
 * sysvinit, upstart: prevent both init systems from starting the same daemons (Josh Durgin)
 
 
+v0.72.2 Emperor
+---------------
+
+This is the second bugfix release for the v0.72.x Emperor series.  We
+have fixed a hang in radosgw, and fixed (again) a problem with monitor
+CLI compatiblity with mixed version monitors.  (In the future this
+will no longer be a problem.)
+
+Upgrading
+~~~~~~~~~
+
+* The JSON schema for the 'osd pool set ...' command changed slightly.  Please
+  avoid issuing this particular command via the CLI while there is a mix of
+  v0.72.1 and v0.72.2 monitor daemons running.
+
+Changes
+~~~~~~~
+
+* mon: 'osd pool set ...' syntax change
+* osd: added test for missing on-disk HEAD object
+* osd: fix osd bench block size argument
+* rgw: fix hang on large object GET
+* rgw: fix rare use-after-free
+* rgw: various DR bug fixes
+* rgw: do not return error on empty owner when setting ACL
+* sysvinit, upstart: prevent starting daemons using both init systems
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.72.2.txt>`.
+
 v0.72.1 Emperor
 ---------------
 
@@ -672,6 +701,7 @@ Notable changes
 * mon: accept 'osd pool set ...' as string
 * mon: backport: 'osd perf' command to dump recent OSD performance stats
 * osd: add feature compat check for upcoming object sharding
+* osd: fix osd bench block size argument
 * rbd.py: increase parent name size limit
 * rgw: backport: allow wildcard in supported keystone roles
 * rgw: backport: improve swift COPY behavior
