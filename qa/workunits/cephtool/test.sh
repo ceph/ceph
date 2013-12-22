@@ -273,11 +273,11 @@ ceph osd pool delete data3 data3 --yes-i-really-really-mean-it
 
 ceph osd pool create erasurecodes 12 12 erasure
 ceph osd pool create erasurecodes 12 12 erasure
-# should fail because the default type is rep and 
+# should fail because the default type is replicated and 
 # the pool is of type erasure
 #expect_false ceph osd pool create erasurecodes 12 12
-ceph osd pool create replicated 12 12 rep
-ceph osd pool create replicated 12 12 rep
+ceph osd pool create replicated 12 12 replicated
+ceph osd pool create replicated 12 12 replicated
 ceph osd pool create replicated 12 12 # default is replicated
 ceph osd pool create replicated 12    # default is replicated, pgp_num = pg_num
 # should fail because the type is not the same
