@@ -50,6 +50,7 @@
 #include "include/util.h"
 #include "common/cmdparse.h"
 #include "include/str_list.h"
+#include "include/str_map.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -2724,12 +2725,13 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
   if (!session)
     return -EPERM;
   vector<string> properties;
+  stringstream ss;
   if (m->auid)
     return prepare_new_pool(m->name, m->auid, m->crush_rule, 0, 0,
-                            properties, pg_pool_t::TYPE_REPLICATED);
+                            properties, pg_pool_t::TYPE_REPLICATED, ss);
   else
     return prepare_new_pool(m->name, session->auid, m->crush_rule, 0, 0,
-                            properties, pg_pool_t::TYPE_REPLICATED);
+                            properties, pg_pool_t::TYPE_REPLICATED, ss);
 }
 
 /**
@@ -2739,14 +2741,28 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
  * @param pg_num The pg_num to use. If set to 0, will use the system default
  * @param pgp_num The pgp_num to use. If set to 0, will use the system default
  * @param properties An opaque list of key[=value] pairs for pool configuration
+ * @param pool_type TYPE_ERASURE, TYPE_REP or TYPE_RAID4
+ * @param ss human readable error message, if any.
  *
- * @return 0 in all cases. That's silly.
+ * @return 0 on success, negative errno on failure.
  */
 int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
                                  unsigned pg_num, unsigned pgp_num,
 				 const vector<string> &properties,
-                                 const unsigned pool_type)
+                                 const unsigned pool_type,
+				 stringstream &ss)
 {
+  map<string,string> default_properties;
+  if (pool_type == pg_pool_t::TYPE_ERASURE) {
+    int r = get_str_map(g_conf->osd_pool_default_erasure_code_properties,
+			ss,
+			&default_properties);
+    if (r)
+      return r;
+    default_properties["erasure-code-directory"] =
+      g_conf->osd_pool_default_erasure_code_directory;
+  }
+
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
        p != pending_inc.new_pool_names.end();
        ++p) {
@@ -2775,6 +2791,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
   pi->set_pgp_num(pgp_num ? pgp_num : g_conf->osd_pool_default_pgp_num);
   pi->last_change = pending_inc.epoch;
   pi->auid = auid;
+  pi->properties = default_properties;
   for (vector<string>::const_iterator i = properties.begin();
        i != properties.end();
        ++i) {
@@ -2783,6 +2800,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
       pi->properties[*i] = string();
     else {
       const string key = i->substr(0, equal);
+      equal++;
       const string value = i->substr(equal);
       pi->properties[key] = value;
     }
@@ -3941,21 +3959,31 @@ done:
       goto reply;
     }
 
+    string pool_type_str;
+    cmd_getval(g_ceph_context, cmdmap, "pool_type", pool_type_str);
+    if (pool_type_str.empty())
+      pool_type_str = pg_pool_t::get_default_type();
+
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
-    if (osdmap.name_pool.count(poolstr)) {
-      ss << "pool '" << poolstr << "' already exists";
-      err = 0;
+    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
+    if (pool_id >= 0) {
+      const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
+      if (pool_type_str != p->get_type_name()) {
+	ss << "pool '" << poolstr << "' cannot change to type " << pool_type_str;
+ 	err = -EINVAL;
+      } else {
+	ss << "pool '" << poolstr << "' already exists";
+	err = 0;
+      }
       goto reply;
     }
 
     vector<string> properties;
     cmd_getval(g_ceph_context, cmdmap, "properties", properties);
 
-    string pool_type_str;
-    cmd_getval(g_ceph_context, cmdmap, "pool_type", pool_type_str);
     int pool_type;
-    if (pool_type_str.empty() || pool_type_str == "replicated") {
+    if (pool_type_str == "replicated") {
       pool_type = pg_pool_t::TYPE_REPLICATED;
     } else if (pool_type_str == "erasure") {
 
@@ -3993,7 +4021,8 @@ done:
     err = prepare_new_pool(poolstr, 0, // auid=0 for admin created pool
 			   -1,         // default crush rule
 			   pg_num, pgp_num,
-			   properties, pool_type);
+			   properties, pool_type,
+			   ss);
     if (err < 0 && err != -EEXIST) {
       goto reply;
     }
