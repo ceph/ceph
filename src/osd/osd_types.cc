@@ -1058,7 +1058,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   pg_pool_t a;
   o.push_back(new pg_pool_t(a));
 
-  a.type = TYPE_REP;
+  a.type = TYPE_REPLICATED;
   a.size = 2;
   a.crush_ruleset = 3;
   a.object_hash = 4;

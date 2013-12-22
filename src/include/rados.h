@@ -68,7 +68,7 @@ struct ceph_pg {
  * NOTE: These map 1:1 on to the pg_pool_t::TYPE_* values.  They are
  * duplicated here only for CrushCompiler's benefit.
  */
-#define CEPH_PG_TYPE_REP     1
+#define CEPH_PG_TYPE_REPLICATED 1
 /* #define CEPH_PG_TYPE_RAID4   2   never implemented */
 #define CEPH_PG_TYPE_ERASURE 3
 
