@@ -701,7 +701,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("read_tier", read_tier);
   f->dump_int("write_tier", write_tier);
   f->dump_string("cache_mode", get_cache_mode_name());
-  f->open_array_section("properties");
+  f->open_object_section("properties");
   for (map<string,string>::const_iterator i = properties.begin();
        i != properties.end();
        ++i) {
