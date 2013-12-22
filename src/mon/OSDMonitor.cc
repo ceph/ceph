@@ -1882,7 +1882,7 @@ void OSDMonitor::tick()
     ps_t numps = osdmap.get_pg_num();
     for (int64_t pool=0; pool<1; pool++)
       for (ps_t ps = 0; ps < numps; ++ps) {
-	pg_t pgid = pg_t(pg_t::TYPE_REP, ps, pool, -1);
+	pg_t pgid = pg_t(pg_t::TYPE_REPLICATED, ps, pool, -1);
 	vector<int> osds;
 	osdmap.pg_to_osds(pgid, osds); 
 	if (osds[0] == 0) {
@@ -2726,10 +2726,10 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
   vector<string> properties;
   if (m->auid)
     return prepare_new_pool(m->name, m->auid, m->crush_rule, 0, 0,
-                            properties, pg_pool_t::TYPE_REP);
+                            properties, pg_pool_t::TYPE_REPLICATED);
   else
     return prepare_new_pool(m->name, session->auid, m->crush_rule, 0, 0,
-                            properties, pg_pool_t::TYPE_REP);
+                            properties, pg_pool_t::TYPE_REPLICATED);
 }
 
 /**
@@ -3955,8 +3955,8 @@ done:
     string pool_type_str;
     cmd_getval(g_ceph_context, cmdmap, "pool_type", pool_type_str);
     int pool_type;
-    if (pool_type_str.empty() || pool_type_str == "rep") {
-      pool_type = pg_pool_t::TYPE_REP;
+    if (pool_type_str.empty() || pool_type_str == "replicated") {
+      pool_type = pg_pool_t::TYPE_REPLICATED;
     } else if (pool_type_str == "erasure") {
 
       // check if all up osds support erasure coding
