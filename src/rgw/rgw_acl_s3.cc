@@ -454,8 +454,10 @@ int RGWAccessControlPolicy_S3::rebuild(RGWRados *store, ACLOwner *owner, RGWAcce
     return -EINVAL;
 
   ACLOwner *requested_owner = static_cast<ACLOwner_S3 *>(find_first("Owner"));
-  if (requested_owner && requested_owner->get_id().compare(owner->get_id()) != 0) {
-    return -EPERM;
+  if (requested_owner) {
+    const string& requested_id = requested_owner->get_id();
+    if (!requested_id.empty() && requested_id.compare(owner->get_id()) != 0)
+      return -EPERM;
   }
 
   RGWUserInfo owner_info;

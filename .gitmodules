@@ -4,3 +4,6 @@
 [submodule "src/libs3"]
 	path = src/libs3
 	url = git://github.com/ceph/libs3.git
+[submodule "src/mongoose"]
+	path = src/mongoose
+	url = git://github.com/ceph/mongoose.git

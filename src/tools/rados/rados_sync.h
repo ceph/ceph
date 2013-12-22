@@ -81,9 +81,8 @@ public:
   std::string get_fs_path(const std::string &rados_name) const;
 
 private:
-  ExportDir(int version_, const std::string &path_);
+  explicit ExportDir(const std::string &path_);
 
-  int version;
   std::string path;
 };
 

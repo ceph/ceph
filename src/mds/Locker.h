@@ -213,6 +213,7 @@ public:
 				   const string &dname);
 
   void kick_cap_releases(MDRequest *mdr);
+  void kick_issue_caps(CInode *in, client_t client, ceph_seq_t seq);
 
   void remove_client_cap(CInode *in, client_t client);
 

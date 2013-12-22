@@ -16,7 +16,7 @@ echo "numgen type"
 for type in `./ceph-dencoder list_types`; do
     num=`./ceph-dencoder type $type count_tests`
     echo "$num $type"
-    for n in `seq 1 $num`; do
+    for n in `seq 1 1 $num 2>/dev/null`; do
 	if ! ./ceph-dencoder type $type select_test $n encode decode; then
 	    echo "**** $type test $n encode+decode check failed ****"
 	    echo "   ceph-dencoder type $type select_test $n encode decode"

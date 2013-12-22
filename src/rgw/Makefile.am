@@ -48,7 +48,8 @@ LIBRGW_DEPS += \
 	-lcurl \
 	-lexpat \
 	-lm \
-	-lfcgi
+	-lfcgi \
+	-ldl
 
 radosgw_SOURCES = \
 	rgw/rgw_resolve.cc \
@@ -67,8 +68,10 @@ radosgw_SOURCES = \
 	rgw/rgw_http_client.cc \
 	rgw/rgw_swift.cc \
 	rgw/rgw_swift_auth.cc \
+	rgw/rgw_mongoose.cc \
+	mongoose/mongoose.c \
 	rgw/rgw_main.cc
-radosgw_LDADD = $(LIBRGW) $(LIBRGW_DEPS) -lresolv $(CEPH_GLOBAL)
+radosgw_LDADD = $(LIBRGW) $(LIBRGW_DEPS) $(RESOLV_LIBS) $(CEPH_GLOBAL)
 bin_PROGRAMS += radosgw
 
 radosgw_admin_SOURCES = rgw/rgw_admin.cc
@@ -148,5 +151,7 @@ noinst_HEADERS += \
 	rgw/rgw_usage.h \
 	rgw/rgw_user.h \
 	rgw/rgw_bucket.h \
-	rgw/rgw_keystone.h
+	rgw/rgw_keystone.h \
+	rgw/rgw_mongoose.h \
+	mongoose/mongoose.h
 

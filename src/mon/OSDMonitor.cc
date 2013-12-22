@@ -50,6 +50,7 @@
 #include "include/util.h"
 #include "common/cmdparse.h"
 #include "include/str_list.h"
+#include "include/str_map.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -593,6 +594,39 @@ void OSDMonitor::encode_pending(MonitorDBStore::Transaction *t)
   /* put everything in the transaction */
   put_version(t, pending_inc.epoch, bl);
   put_last_committed(t, pending_inc.epoch);
+
+  // metadata, too!
+  for (map<int,bufferlist>::iterator p = pending_metadata.begin();
+       p != pending_metadata.end();
+       ++p)
+    t->put(OSD_METADATA_PREFIX, stringify(p->first), p->second);
+  for (set<int>::iterator p = pending_metadata_rm.begin();
+       p != pending_metadata_rm.end();
+       ++p)
+    t->erase(OSD_METADATA_PREFIX, stringify(*p));
+  pending_metadata.clear();
+  pending_metadata_rm.clear();
+}
+
+int OSDMonitor::dump_osd_metadata(int osd, Formatter *f, ostream *err)
+{
+  bufferlist bl;
+  int r = mon->store->get(OSD_METADATA_PREFIX, stringify(osd), bl);
+  if (r < 0)
+    return r;
+  map<string,string> m;
+  try {
+    bufferlist::iterator p = bl.begin();
+    ::decode(m, p);
+  }
+  catch (buffer::error& e) {
+    if (err)
+      *err << "osd." << osd << " metadata is corrupt";
+    return -EIO;
+  }
+  for (map<string,string>::iterator p = m.begin(); p != m.end(); ++p)
+    f->dump_string(p->first.c_str(), p->second);
+  return 0;
 }
 
 void OSDMonitor::share_map_with_random_osd()
@@ -1151,6 +1185,15 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
   }
 
   assert(m->get_orig_source_inst().name.is_osd());
+
+  // check if osd has required features to boot
+  if ((osdmap.get_features(NULL) & CEPH_FEATURE_OSD_ERASURE_CODES) &&
+      !(m->get_connection()->get_features() & CEPH_FEATURE_OSD_ERASURE_CODES)) {
+    dout(0) << __func__ << " osdmap requires Erasure Codes but osd at "
+            << m->get_orig_source_inst()
+            << " doesn't announce support -- ignore" << dendl;
+    goto ignore;
+  }
   
   // already booted?
   if (osdmap.is_up(from) &&
@@ -1160,6 +1203,16 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
 	    << " == " << osdmap.get_inst(from) << dendl;
     _booted(m, false);
     return true;
+  }
+
+  if (osdmap.exists(from) &&
+      !osdmap.get_uuid(from).is_zero() &&
+      osdmap.get_uuid(from) != m->sb.osd_fsid) {
+    dout(7) << __func__ << " from " << m->get_orig_source_inst()
+            << " clashes with existing osd: different fsid"
+            << " (ours: " << osdmap.get_uuid(from)
+            << " ; theirs: " << m->sb.osd_fsid << ")" << dendl;
+    goto ignore;
   }
 
   // noup?
@@ -1187,7 +1240,7 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 
   assert(m->get_orig_source().is_osd());
   int from = m->get_orig_source().num();
-  
+
   // does this osd exist?
   if (from >= osdmap.get_max_osd()) {
     dout(1) << "boot from osd." << from << " >= max_osd " << osdmap.get_max_osd() << dendl;
@@ -1202,7 +1255,9 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
   // already up?  mark down first?
   if (osdmap.is_up(from)) {
     dout(7) << "prepare_boot was up, first marking down " << osdmap.get_inst(from) << dendl;
-    assert(osdmap.get_inst(from) != m->get_orig_source_inst());  // preproces should have caught it
+    // preprocess should have caught these;  if not, assert.
+    assert(osdmap.get_inst(from) != m->get_orig_source_inst());
+    assert(osdmap.get_uuid(from) == m->sb.osd_fsid);
     
     if (pending_inc.new_state.count(from) == 0 ||
 	(pending_inc.new_state[from] & CEPH_OSD_UP) == 0) {
@@ -1241,8 +1296,11 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 
     // set uuid?
     dout(10) << " setting osd." << from << " uuid to " << m->sb.osd_fsid << dendl;
-    if (!osdmap.exists(from) || osdmap.get_uuid(from) != m->sb.osd_fsid)
+    if (!osdmap.exists(from) || osdmap.get_uuid(from) != m->sb.osd_fsid) {
+      // preprocess should have caught this;  if not, assert.
+      assert(!osdmap.exists(from) || osdmap.get_uuid(from).is_zero());
       pending_inc.new_uuid[from] = m->sb.osd_fsid;
+    }
 
     // fresh osd?
     if (m->sb.newest_map == 0 && osdmap.exists(from)) {
@@ -1252,6 +1310,11 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 	pending_inc.new_lost[from] = osdmap.get_epoch();
       }
     }
+
+    // metadata
+    bufferlist osd_metadata;
+    ::encode(m->metadata, osd_metadata);
+    pending_metadata[from] = osd_metadata;
 
     // adjust last clean unmount epoch?
     const osd_info_t& info = osdmap.get_info(from);
@@ -1286,6 +1349,8 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 	xi.laggy_probability * (1.0 - g_conf->mon_osd_laggy_weight);
       dout(10) << " laggy, now xi " << xi << dendl;
     }
+    // set features shared by the osd
+    xi.features = m->get_connection()->get_features();
     pending_inc.new_xinfo[from] = xi;
 
     // wait
@@ -1820,7 +1885,7 @@ void OSDMonitor::tick()
     ps_t numps = osdmap.get_pg_num();
     for (int64_t pool=0; pool<1; pool++)
       for (ps_t ps = 0; ps < numps; ++ps) {
-	pg_t pgid = pg_t(pg_t::TYPE_REP, ps, pool, -1);
+	pg_t pgid = pg_t(pg_t::TYPE_REPLICATED, ps, pool, -1);
 	vector<int> osds;
 	osdmap.pg_to_osds(pgid, osds); 
 	if (osds[0] == 0) {
@@ -1939,6 +2004,19 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
     }
 
+    // old crush tunables?
+    if (g_conf->mon_warn_on_legacy_crush_tunables) {
+      if (!osdmap.crush->has_optimal_tunables()) {
+	ostringstream ss;
+	ss << "crush map has non-optimal tunables";
+	summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+	if (detail) {
+	  ss << "; see http://ceph.com/docs/master/rados/operations/crush-map/#tunables";
+	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+	}
+      }
+    }
+
     get_pools_health(summary, detail);
   }
 }
@@ -1949,7 +2027,19 @@ void OSDMonitor::dump_info(Formatter *f)
   osdmap.dump(f);
   f->close_section();
 
+  f->open_array_section("osd_metadata");
+  for (int i=0; i<osdmap.get_max_osd(); ++i) {
+    if (osdmap.exists(i)) {
+      f->open_object_section("osd");
+      f->dump_unsigned("id", i);
+      dump_osd_metadata(i, f, NULL);
+      f->close_section();
+    }
+  }
+  f->close_section();
+
   f->dump_unsigned("osdmap_first_committed", get_first_committed());
+  f->dump_unsigned("osdmap_last_committed", get_last_committed());
 
   f->open_object_section("crushmap");
   osdmap.crush->dump(f);
@@ -2008,6 +2098,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       int err = get_version_full(epoch, b);
       if (err == -ENOENT) {
 	r = -ENOENT;
+        ss << "there is no map for epoch " << epoch;
 	goto reply;
       }
       assert(err == 0);
@@ -2111,6 +2202,23 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     for (map<string,string>::iterator p = loc.begin(); p != loc.end(); ++p)
       f->dump_string(p->first.c_str(), p->second);
     f->close_section();
+    f->close_section();
+    f->flush(rdata);
+  } else if (prefix == "osd metadata") {
+    int64_t osd;
+    cmd_getval(g_ceph_context, cmdmap, "id", osd);
+    if (!osdmap.exists(osd)) {
+      ss << "osd." << osd << " does not exist";
+      r = -ENOENT;
+      goto reply;
+    }
+    string format;
+    cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
+    boost::scoped_ptr<Formatter> f(new_formatter(format));
+    f->open_object_section("osd_metadata");
+    r = dump_osd_metadata(osd, f.get(), &ss);
+    if (r < 0)
+      goto reply;
     f->close_section();
     f->flush(rdata);
   } else if (prefix == "osd map") {
@@ -2401,7 +2509,10 @@ stats_out:
 	     prefix == "osd crush rule ls") {
     string format;
     cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-    boost::scoped_ptr<Formatter> f(new_formatter(format));
+    Formatter *fp = new_formatter(format);
+    if (!fp)
+      fp = new_formatter("json-pretty");
+    boost::scoped_ptr<Formatter> f(fp);
     f->open_array_section("rules");
     osdmap.crush->list_rules(f.get());
     f->close_section();
@@ -2412,7 +2523,10 @@ stats_out:
   } else if (prefix == "osd crush rule dump") {
     string format;
     cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-    boost::scoped_ptr<Formatter> f(new_formatter(format));
+    Formatter *fp = new_formatter(format);
+    if (!fp)
+      fp = new_formatter("json-pretty");
+    boost::scoped_ptr<Formatter> f(fp);
     f->open_array_section("rules");
     osdmap.crush->dump_rules(f.get());
     f->close_section();
@@ -2423,9 +2537,26 @@ stats_out:
   } else if (prefix == "osd crush dump") {
     string format;
     cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-    boost::scoped_ptr<Formatter> f(new_formatter(format));
+    Formatter *fp = new_formatter(format);
+    if (!fp)
+      fp = new_formatter("json-pretty");
+    boost::scoped_ptr<Formatter> f(fp);
     f->open_object_section("crush_map");
     osdmap.crush->dump(f.get());
+    f->close_section();
+    ostringstream rs;
+    f->flush(rs);
+    rs << "\n";
+    rdata.append(rs.str());
+  } else if (prefix == "osd crush show-tunables") {
+    string format;
+    cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
+    Formatter *fp = new_formatter(format);
+    if (!fp)
+      fp = new_formatter("json-pretty");
+    boost::scoped_ptr<Formatter> f(fp);
+    f->open_object_section("crush_map_tunables");
+    osdmap.crush->dump_tunables(f.get());
     f->close_section();
     ostringstream rs;
     f->flush(rs);
@@ -2596,10 +2727,13 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
   if (!session)
     return -EPERM;
   vector<string> properties;
+  stringstream ss;
   if (m->auid)
-    return prepare_new_pool(m->name, m->auid, m->crush_rule, 0, 0, properties);
+    return prepare_new_pool(m->name, m->auid, m->crush_rule, 0, 0,
+                            properties, pg_pool_t::TYPE_REPLICATED, ss);
   else
-    return prepare_new_pool(m->name, session->auid, m->crush_rule, 0, 0, properties);
+    return prepare_new_pool(m->name, session->auid, m->crush_rule, 0, 0,
+                            properties, pg_pool_t::TYPE_REPLICATED, ss);
 }
 
 /**
@@ -2609,13 +2743,28 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
  * @param pg_num The pg_num to use. If set to 0, will use the system default
  * @param pgp_num The pgp_num to use. If set to 0, will use the system default
  * @param properties An opaque list of key[=value] pairs for pool configuration
+ * @param pool_type TYPE_ERASURE, TYPE_REP or TYPE_RAID4
+ * @param ss human readable error message, if any.
  *
- * @return 0 in all cases. That's silly.
+ * @return 0 on success, negative errno on failure.
  */
 int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
                                  unsigned pg_num, unsigned pgp_num,
-				 const vector<string> &properties)
+				 const vector<string> &properties,
+                                 const unsigned pool_type,
+				 stringstream &ss)
 {
+  map<string,string> default_properties;
+  if (pool_type == pg_pool_t::TYPE_ERASURE) {
+    int r = get_str_map(g_conf->osd_pool_default_erasure_code_properties,
+			ss,
+			&default_properties);
+    if (r)
+      return r;
+    default_properties["erasure-code-directory"] =
+      g_conf->osd_pool_default_erasure_code_directory;
+  }
+
   for (map<int64_t,string>::iterator p = pending_inc.new_pool_names.begin();
        p != pending_inc.new_pool_names.end();
        ++p) {
@@ -2628,7 +2777,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
   int64_t pool = ++pending_inc.new_pool_max;
   pg_pool_t empty;
   pg_pool_t *pi = pending_inc.get_new_pool(pool, &empty);
-  pi->type = pg_pool_t::TYPE_REP;
+  pi->type = pool_type;
   pi->flags = g_conf->osd_pool_default_flags;
   if (g_conf->osd_pool_default_flag_hashpspool)
     pi->flags |= pg_pool_t::FLAG_HASHPSPOOL;
@@ -2644,14 +2793,16 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
   pi->set_pgp_num(pgp_num ? pgp_num : g_conf->osd_pool_default_pgp_num);
   pi->last_change = pending_inc.epoch;
   pi->auid = auid;
+  pi->properties = default_properties;
   for (vector<string>::const_iterator i = properties.begin();
        i != properties.end();
-       i++) {
+       ++i) {
     size_t equal = i->find('=');
     if (equal == string::npos)
       pi->properties[*i] = string();
     else {
       const string key = i->substr(0, equal);
+      equal++;
       const string value = i->substr(equal);
       pi->properties[key] = value;
     }
@@ -2736,18 +2887,25 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
   if (pending_inc.new_pools.count(pool))
     p = pending_inc.new_pools[pool];
 
-  // accept val as a json string or int, and parse out int or float
-  // values from the string as needed
+  // accept val as a json string in the normal case (current
+  // generation monitor).  parse out int or float values from the
+  // string as needed.  however, if it is not a string, try to pull
+  // out an int, in case an older monitor with an older json schema is
+  // forwarding a request.
   string val;
-  cmd_getval(g_ceph_context, cmdmap, "val", val);
-  string interr;
+  string interr, floaterr;
   int64_t n = 0;
-  if (!cmd_getval(g_ceph_context, cmdmap, "val", n))
+  double f = 0;
+  if (!cmd_getval(g_ceph_context, cmdmap, "val", val)) {
+    // wasn't a string; maybe an older mon forwarded json with an int?
+    if (!cmd_getval(g_ceph_context, cmdmap, "val", n))
+      return -EINVAL;  // no value!
+  } else {
+    // we got a string.  see if it contains an int.
     n = strict_strtoll(val.c_str(), 10, &interr);
-  string floaterr;
-  float f;
-  if (!cmd_getval(g_ceph_context, cmdmap, "val", f))
+    // or a float
     f = strict_strtod(val.c_str(), &floaterr);
+  }
 
   if (var == "size") {
     if (interr.length()) {
@@ -2783,7 +2941,21 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     if (n <= (int)p.get_pg_num()) {
       ss << "specified pg_num " << n << " <= current " << p.get_pg_num();
+      if (n < (int)p.get_pg_num())
+	return -EEXIST;
+      else
+	return 0;
     } else {
+      int expected_osds = MIN(p.get_pg_num(), osdmap.get_num_osds());
+      int64_t new_pgs = n - p.get_pg_num();
+      int64_t pgs_per_osd = new_pgs / expected_osds;
+      if (pgs_per_osd > g_conf->mon_osd_max_split_count) {
+            ss << "specified pg_num " << n << " is too large (creating "
+               << new_pgs << " new PGs on ~" << expected_osds
+               << " OSDs exceeds per-OSD max of" << g_conf->mon_osd_max_split_count
+               << ')';
+            return -E2BIG;
+      }
       for(set<pg_t>::iterator i = mon->pgmon()->pg_map.creating_pgs.begin();
 	  i != mon->pgmon()->pg_map.creating_pgs.end();
 	  ++i) {
@@ -2829,14 +3001,15 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -ENOENT;
     }
   } else if (var == "hashpspool") {
-    if (val == "true") {
+    // make sure we only compare against 'n' if we didn't receive a string
+    if (val == "true" || (interr.empty() && n == 1)) {
       p.flags |= pg_pool_t::FLAG_HASHPSPOOL;
       ss << "set";
-    } else if (val == "false") {
+    } else if (val == "false" || (interr.empty() && n == 0)) {
       p.flags ^= pg_pool_t::FLAG_HASHPSPOOL;
       ss << "unset";
     } else {
-      ss << "expecting value true or false";
+      ss << "expecting value 'true', 'false', '0', or '1'";
       return -EINVAL;
     }
     ss << " pool " << pool << " flag hashpspool";
@@ -2977,7 +3150,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     // sanity check: test some inputs to make sure this map isn't totally broken
     dout(10) << " testing map" << dendl;
     stringstream ess;
-    CrushTester tester(crush, ess, 1);
+    CrushTester tester(crush, ess);
     tester.test();
     dout(10) << " result " << ess.str() << dendl;
 
@@ -3331,10 +3504,13 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     return true;
 
   } else if (prefix == "osd crush rule create-simple") {
-    string name, root, type;
+    string name, root, type, mode;
     cmd_getval(g_ceph_context, cmdmap, "name", name);
     cmd_getval(g_ceph_context, cmdmap, "root", root);
     cmd_getval(g_ceph_context, cmdmap, "type", type);
+    cmd_getval(g_ceph_context, cmdmap, "mode", mode);
+    if (mode == "")
+      mode = "firstn";
 
     if (osdmap.crush->rule_exists(name)) {
       ss << "rule " << name << " already exists";
@@ -3349,7 +3525,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       ss << "rule " << name << " already exists";
       err = 0;
     } else {
-      int rule = newcrush.add_simple_rule(name, root, type, &ss);
+      int rule = newcrush.add_simple_rule(name, root, type, mode, &ss);
       if (rule < 0) {
 	err = rule;
 	goto reply;
@@ -3489,17 +3665,15 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       long osd = parse_osd_id(idvec[j].c_str(), &ss);
       if (osd < 0) {
 	ss << "invalid osd id" << osd;
-	// XXX -EINVAL here?
+	err = -EINVAL;
 	continue;
       } else if (!osdmap.exists(osd)) {
 	ss << "osd." << osd << " does not exist. ";
-	err = 0;
 	continue;
       }
       if (prefix == "osd down") {
 	if (osdmap.is_down(osd)) {
 	  ss << "osd." << osd << " is already down. ";
-	  err = 0;
 	} else {
 	  pending_inc.new_state[osd] = CEPH_OSD_UP;
 	  ss << "marked down osd." << osd << ". ";
@@ -3508,7 +3682,6 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       } else if (prefix == "osd out") {
 	if (osdmap.is_out(osd)) {
 	  ss << "osd." << osd << " is already out. ";
-	  err = 0;
 	} else {
 	  pending_inc.new_weight[osd] = CEPH_OSD_OUT;
 	  ss << "marked out osd." << osd << ". ";
@@ -3517,7 +3690,6 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       } else if (prefix == "osd in") {
 	if (osdmap.is_in(osd)) {
 	  ss << "osd." << osd << " is already in. ";
-	  err = 0;
 	} else {
 	  pending_inc.new_weight[osd] = CEPH_OSD_IN;
 	  ss << "marked in osd." << osd << ". ";
@@ -3525,20 +3697,26 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	}
       } else if (prefix == "osd rm") {
 	if (osdmap.is_up(osd)) {
-	ss << "osd." << osd << " is still up; must be down before removal. ";
+	  if (any)
+	    ss << ", ";
+          ss << "osd." << osd << " is still up; must be down before removal. ";
+	  err = -EBUSY;
 	} else {
 	  pending_inc.new_state[osd] = osdmap.get_state(osd);
-	  if (any)
+          pending_inc.new_uuid[osd] = uuid_d();
+	  pending_metadata_rm.insert(osd);
+	  if (any) {
 	    ss << ", osd." << osd;
-	  else 
+          } else {
 	    ss << "removed osd." << osd;
+          }
 	  any = true;
 	}
       }
     }
     if (any) {
       getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, err, rs, get_last_committed()));
       return true;
     }
   } else if (prefix == "osd reweight") {
@@ -3783,21 +3961,70 @@ done:
       goto reply;
     }
 
+    string pool_type_str;
+    cmd_getval(g_ceph_context, cmdmap, "pool_type", pool_type_str);
+    if (pool_type_str.empty())
+      pool_type_str = pg_pool_t::get_default_type();
+
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
-    if (osdmap.name_pool.count(poolstr)) {
-      ss << "pool '" << poolstr << "' already exists";
-      err = 0;
+    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
+    if (pool_id >= 0) {
+      const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
+      if (pool_type_str != p->get_type_name()) {
+	ss << "pool '" << poolstr << "' cannot change to type " << pool_type_str;
+ 	err = -EINVAL;
+      } else {
+	ss << "pool '" << poolstr << "' already exists";
+	err = 0;
+      }
       goto reply;
     }
 
     vector<string> properties;
     cmd_getval(g_ceph_context, cmdmap, "properties", properties);
 
+    int pool_type;
+    if (pool_type_str == "replicated") {
+      pool_type = pg_pool_t::TYPE_REPLICATED;
+    } else if (pool_type_str == "erasure") {
+
+      // check if all up osds support erasure coding
+      set<int32_t> up_osds;
+      osdmap.get_up_osds(up_osds);
+      stringstream ec_unsupported_ss;
+      int ec_unsupported_count = 0;
+
+      for (set<int32_t>::iterator it = up_osds.begin();
+           it != up_osds.end(); it ++) {
+        const osd_xinfo_t &xi = osdmap.get_xinfo(*it);
+        if (!(xi.features & CEPH_FEATURE_OSD_ERASURE_CODES)) {
+          if (ec_unsupported_count > 0)
+            ec_unsupported_ss << ", ";
+          ec_unsupported_ss << "osd." << *it;
+          ec_unsupported_count ++;
+        }
+      }
+
+      if (ec_unsupported_count > 0) {
+        ss << "unable to create erasure pool; unsupported by: "
+           << ec_unsupported_ss.str();
+        err = -ENOTSUP;
+        goto reply;
+      }
+
+      pool_type = pg_pool_t::TYPE_ERASURE;
+    } else {
+      ss << "unknown pool type '" << pool_type_str << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+
     err = prepare_new_pool(poolstr, 0, // auid=0 for admin created pool
 			   -1,         // default crush rule
 			   pg_num, pgp_num,
-			   properties);
+			   properties, pool_type,
+			   ss);
     if (err < 0 && err != -EEXIST) {
       goto reply;
     }

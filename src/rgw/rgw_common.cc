@@ -101,6 +101,8 @@ req_info::req_info(CephContext *cct, class RGWEnv *e) : env(e) {
   if (pos >= 0) {
     request_params = request_uri.substr(pos + 1);
     request_uri = request_uri.substr(0, pos);
+  } else {
+    request_params = env->get("QUERY_STRING", "");
   }
   host = env->get("HTTP_HOST");
 }
@@ -128,6 +130,7 @@ req_state::req_state(CephContext *_cct, class RGWEnv *e) : cct(_cct), cio(NULL),
 {
   enable_ops_log = e->conf->enable_ops_log;
   enable_usage_log = e->conf->enable_usage_log;
+  defer_to_bucket_acls = e->conf->defer_to_bucket_acls;
   content_started = false;
   format = 0;
   formatter = NULL;
@@ -184,8 +187,8 @@ void req_info::init_meta_info(bool *found_bad_meta)
 {
   x_meta_map.clear();
 
-  map<string, string>& m = env->get_map();
-  map<string, string>::iterator iter;
+  map<string, string, ltstr_nocase>& m = env->get_map();
+  map<string, string, ltstr_nocase>::iterator iter;
   for (iter = m.begin(); iter != m.end(); ++iter) {
     const char *prefix;
     const string& header_name = iter->first;
@@ -615,8 +618,18 @@ bool verify_bucket_permission(struct req_state *s, int perm)
   return s->bucket_acl->verify_permission(s->user.user_id, perm, perm);
 }
 
+static inline bool check_deferred_bucket_acl(struct req_state *s, uint8_t deferred_check, int perm)
+{
+  return (s->defer_to_bucket_acls == deferred_check && verify_bucket_permission(s, perm));
+}
+
 bool verify_object_permission(struct req_state *s, RGWAccessControlPolicy *bucket_acl, RGWAccessControlPolicy *object_acl, int perm)
 {
+  if (check_deferred_bucket_acl(s, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
+      check_deferred_bucket_acl(s, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL)) {
+    return true;
+  }
+
   if (!object_acl)
     return false;
 

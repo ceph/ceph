@@ -103,13 +103,25 @@ int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
 
 void usage()
 {
-  cerr << "usage: ceph-mon -i monid [--mon-data=pathtodata] [flags]" << std::endl;
+  cerr << "usage: ceph-mon -i monid [flags]" << std::endl;
   cerr << "  --debug_mon n\n";
   cerr << "        debug monitor level (e.g. 10)\n";
   cerr << "  --mkfs\n";
   cerr << "        build fresh monitor fs\n";
   cerr << "  --force-sync\n";
   cerr << "        force a sync from another mon by wiping local data (BE CAREFUL)\n";
+  cerr << "  --yes-i-really-mean-it\n";
+  cerr << "        mandatory safeguard for --force-sync\n";
+  cerr << "  --compact\n";
+  cerr << "        compact the monitor store\n";
+  cerr << "  --osdmap <filename>\n";
+  cerr << "        only used when --mkfs is provided: load the osdmap from <filename>\n";
+  cerr << "  --inject-monmap <filename>\n";
+  cerr << "        write the <filename> monmap to the local monitor store and exit\n";
+  cerr << "  --extract-monmap <filename>\n";
+  cerr << "        extract the monmap from the local monitor store and exit\n";
+  cerr << "  --mon-data <directory>\n";
+  cerr << "        where the mon store and keyring are located\n";
   generic_server_usage();
 }
 

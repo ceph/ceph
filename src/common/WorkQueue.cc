@@ -210,6 +210,7 @@ void ThreadPool::stop(bool clear_after)
   _lock.Lock();
   for (unsigned i=0; i<work_queues.size(); i++)
     work_queues[i]->_clear();
+  _stop = false;
   _lock.Unlock();    
   ldout(cct,15) << "stopped" << dendl;
 }

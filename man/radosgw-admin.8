@@ -1,4 +1,6 @@
-.TH "RADOSGW-ADMIN" "8" "April 29, 2013" "dev" "Ceph"
+.\" Man page generated from reStructuredText.
+.
+.TH "RADOSGW-ADMIN" "8" "December 09, 2013" "dev" "Ceph"
 .SH NAME
 radosgw-admin \- rados REST gateway user administration utility
 .
@@ -28,11 +30,36 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.\" Man page generated from reStructuredText.
 .
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
 .SH SYNOPSIS
 .nf
-\fBradosgw\-admin\fP \fIcommand\fP [ \fIoptions\fP \fI...\fP ]
+\fBradosgw\-admin\fP \fIcommand\fP [ \fIoptions\fP \fI\&...\fP ]
 .fi
 .sp
 .SH DESCRIPTION
@@ -186,6 +213,8 @@ Defer removal of object tail
 .SH EXAMPLES
 .sp
 Generate a new user:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
@@ -203,40 +232,60 @@ $ radosgw\-admin user create \-\-display\-name="johnny rotten" \-\-uid=johnny
   "swift_keys": []}
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 Remove a user:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 $ radosgw\-admin user rm \-\-uid=johnny
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 Remove a user and all associated buckets with their contents:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 $ radosgw\-admin user rm \-\-uid=johnny \-\-purge\-data
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 Remove a bucket:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 $ radosgw\-admin bucket unlink \-\-bucket=foo
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 Show the logs of a bucket from April 1st, 2012:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 $ radosgw\-admin log show \-\-bucket=foo \-\-date=2012=04\-01
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 Show usage information for user from March 1st to (but not including) April 1st, 2012:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
@@ -244,25 +293,35 @@ $ radosgw\-admin usage show \-\-uid=johnny \e
                 \-\-start\-date=2012\-03\-01 \-\-end\-date=2012\-04\-01
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 Show only summary of usage information for all users:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 $ radosgw\-admin usage show \-\-show\-log\-entries=false
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 Trim usage information for user until March 1st, 2012:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 $ radosgw\-admin usage trim \-\-uid=johnny \-\-end\-date=2012\-04\-01
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .SH AVAILABILITY
 .sp
-\fBradosgw\-admin\fP is part of the Ceph distributed file system.  Please
+\fBradosgw\-admin\fP is part of the Ceph distributed storage system.  Please
 refer to the Ceph documentation at \fI\%http://ceph.com/docs\fP for more
 information.
 .SH SEE ALSO

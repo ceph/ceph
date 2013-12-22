@@ -238,7 +238,7 @@ int main(int argc, const char **argv)
 #undef TYPEWITHSTRAYDATA
 #undef TYPE_FEATUREFUL
 #undef T_STR
-#undef T_STRRINGIFY
+#undef T_STRINGIFY
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -337,7 +337,11 @@ int main(int argc, const char **argv)
 	usage(cerr);
 	exit(1);
       }
-      encbl.read_file(*i, &err);
+      int r = encbl.read_file(*i, &err);
+      if (r < 0) {
+        cerr << "error reading " << *i << ": " << err << std::endl;
+        exit(1);
+      }
     } else if (*i == string("export")) {
       ++i;
       if (i == args.end()) {

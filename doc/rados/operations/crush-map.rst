@@ -54,6 +54,60 @@ with a failed host are in a degraded state.
 .. note:: Lines of code in example boxes may extend past the edge of the box. 
    Please scroll when reading or copying longer examples.
 
+CRUSH Location
+==============
+
+The location of an OSD in terms of the CRUSH map's hierarchy is referred to
+as a 'crush location'.  This location specifier takes the form of a list of
+key and value pairs describing a position.  For example, if an OSD is in a
+particular row, rack, and host, and is part of the 'default' CRUSH tree, it's
+crush location could be described as::
+
+  root=default row=a rack=a12 host=foohost
+
+Note:
+
+#. Note that the order of the keys does not matter.
+#. The key name (left of ``='') must be a valid CRUSH ``type``.  By default
+   these include root, datacenter, row, rack, and host, but those types can be
+   customized to be anything appropriate by modifying the CRUSH map.
+#. Not all keys need to be specified.  For example, by default, Ceph
+   automatically sets a ceph-osd daemon's location to be
+   ``root=default host=HOSTNAME'' (based on the output from ``hostname -s'').
+
+ceph-crush-location hook
+------------------------
+
+The ``ceph-crush-location'' utility will generate a default CRUSH location
+string for a given daemon.  The location is based on, in order of preference:
+
+#. A ``TYPE crush location'' option in ceph.conf.  For example, this
+   is ``osd crush location'' for OSD daemons.
+#. A ``crush location'' option in ceph.conf.
+#. A default of ``root=default host=HOSTNAME'' where the hostname is
+   generated with the ``hostname -s'' command.
+
+In a typical deployment scenario, provisioning software (or the system
+adminstrator) can simply set the 'crush location' field in a host's
+ceph.conf to describe that machine's location within the datacenter or
+cluster.  This will be provide location awareness to both Ceph daemons
+and clients alike.
+
+Custom location hooks
+---------------------
+
+A customize location hook can be used in place of the generic hook for OSD daemon placement in the hierarchy.  (On startup, each OSD ensure its position is correct.)::
+
+  osd crush location hook = /path/to/script
+
+This hook is is passed several arguments (below) and should output a single line to stdout with the CRUSH location description.::
+
+  $ ceph-crush-location --cluster CLUSTER --id ID --type TYPE
+
+where the cluster name is typically 'ceph', the id is the daemon
+identifier (the OSD number), and the daemon type is typically ``osd''.
+
+
 Editing a CRUSH Map
 ===================
 
@@ -378,7 +432,7 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 
 .. topic:: Weighting Bucket Items
 
-   Ceph expresses bucket weights as double integers, which allows for fine
+   Ceph expresses bucket weights as doubles, which allows for fine
    weighting. A weight is the relative difference between device capacities. We
    recommend using ``1.00`` as the relative weight for a 1TB storage device.
    In such a scenario, a weight of ``0.5`` would represent approximately 500GB,
@@ -789,6 +843,7 @@ Where:
 :Example: ``datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1``
 
 
+
 Tunables
 ========
 
@@ -866,6 +921,39 @@ Which client versions support CRUSH_TUNABLES2
 
  * v0.55 or later, including bobtail series (v0.56.x)
  * Linux kernel version v3.9 or later (for the file system and RBD kernel clients)
+
+Warning when tunables are non-optimal
+-------------------------------------
+
+Starting with version v0.74, Ceph will issue a health warning if the
+CRUSH tunables are not set to their optimal values (the optimal values are
+the default as of v0.73).  To make this warning go away, you have two options:
+
+1. Adjust the tunables on the existing cluster.  Note that this will
+   result in some data movement (possibly as much as 10%).  This is the
+   preferred route, but should be taken with care on a production cluster
+   where the data movement may affect performance.  You can enable optimal
+   tunables with::
+
+      ceph osd crush tunables optimal
+
+   If things go poorly (e.g., too much load) and not very much
+   progress has been made, or there is a client compatibility problem
+   (old kernel cephfs or rbd clients, or pre-bobtail librados
+   clients), you can switch back with::
+
+      ceph osd crush tunables legacy
+
+2. You can make the warning go away without making any changes to CRUSH by
+   adding the following option to your ceph.conf ``[mon]`` section::
+
+      mon warn on legacy crush tunables = false
+
+   For the change to take effect, you will need to restart the monitors, or
+   apply the option to running monitors with::
+
+      ceph -- tell mon.\* injectargs --no-mon-warn-on-legacy-crush-tunables
+
 
 A few important points
 ----------------------

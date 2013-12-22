@@ -61,6 +61,7 @@ void Elector::bump_epoch(epoch_t e)
   // clear up some state
   electing_me = false;
   acked_me.clear();
+  classic_mons.clear();
 }
 
 
@@ -73,6 +74,7 @@ void Elector::start()
   dout(5) << "start -- can i be leader?" << dendl;
 
   acked_me.clear();
+  classic_mons.clear();
   init();
   
   // start by trying to elect me
@@ -100,14 +102,16 @@ void Elector::defer(int who)
   if (electing_me) {
     // drop out
     acked_me.clear();
+    classic_mons.clear();
     electing_me = false;
   }
 
   // ack them
   leader_acked = who;
   ack_stamp = ceph_clock_now(g_ceph_context);
-  mon->messenger->send_message(new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap),
-			       mon->monmap->get_inst(who));
+  MMonElection *m = new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap);
+  m->commands = mon->get_supported_commands_bl();
+  mon->messenger->send_message(m, mon->monmap->get_inst(who));
   
   // set a timer
   reset_timer(1.0);  // give the leader some extra time to declare victory
@@ -159,14 +163,31 @@ void Elector::victory()
        ++p) {
     quorum.insert(p->first);
     features &= p->second;
-  }    
+  }
+
+  // decide what command set we're supporting
+  bool use_classic_commands = !classic_mons.empty();
+  // keep a copy to share with the monitor; we clear classic_mons in bump_epoch
+  set<int> copy_classic_mons = classic_mons;
   
   cancel_timer();
   
   assert(epoch % 2 == 1);  // election
   bump_epoch(epoch+1);     // is over!
+
+  // decide my supported commands for peons to advertise
+  const bufferlist *cmds_bl = NULL;
+  const MonCommand *cmds;
+  int cmdsize;
+  if (use_classic_commands) {
+    mon->get_classic_monitor_commands(&cmds, &cmdsize);
+    cmds_bl = &mon->get_classic_commands_bl();
+  } else {
+    mon->get_locally_supported_monitor_commands(&cmds, &cmdsize);
+    cmds_bl = &mon->get_supported_commands_bl();
+  }
   
-  // tell everyone
+  // tell everyone!
   for (set<int>::iterator p = quorum.begin();
        p != quorum.end();
        ++p) {
@@ -174,11 +195,12 @@ void Elector::victory()
     MMonElection *m = new MMonElection(MMonElection::OP_VICTORY, epoch, mon->monmap);
     m->quorum = quorum;
     m->quorum_features = features;
+    m->commands = *cmds_bl;
     mon->messenger->send_message(m, mon->monmap->get_inst(*p));
   }
     
   // tell monitor
-  mon->win_election(epoch, quorum, features);
+  mon->win_election(epoch, quorum, features, cmds, cmdsize, &copy_classic_mons);
 }
 
 
@@ -251,6 +273,8 @@ void Elector::handle_ack(MMonElection *m)
   if (electing_me) {
     // thanks
     acked_me[from] = m->get_connection()->get_features();
+    if (!m->commands.length())
+      classic_mons.insert(from);
     dout(5) << " so far i have " << acked_me << dendl;
     
     // is that _everyone_?
@@ -292,7 +316,22 @@ void Elector::handle_victory(MMonElection *m)
   mon->lose_election(epoch, m->quorum, from, m->quorum_features);
   
   // cancel my timer
-  cancel_timer();	
+  cancel_timer();
+
+  // stash leader's commands
+  if (m->commands.length()) {
+    MonCommand *new_cmds;
+    int cmdsize;
+    bufferlist::iterator bi = m->commands.begin();
+    MonCommand::decode_array(&new_cmds, &cmdsize, bi);
+    mon->set_leader_supported_commands(new_cmds, cmdsize);
+  } else { // they are a legacy monitor; use known legacy command set
+    const MonCommand *new_cmds;
+    int cmdsize;
+    mon->get_classic_monitor_commands(&new_cmds, &cmdsize);
+    mon->set_leader_supported_commands(new_cmds, cmdsize);
+  }
+
   m->put();
 }
 

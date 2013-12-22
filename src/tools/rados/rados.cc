@@ -42,6 +42,7 @@ using namespace librados;
 #include <locale>
 
 #include "cls/lock/cls_lock_client.h"
+#include "include/compat.h"
 
 int rados_tool_sync(const std::map < std::string, std::string > &opts,
                              std::vector<const char*> &args);

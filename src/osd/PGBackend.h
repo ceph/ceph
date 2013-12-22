@@ -95,7 +95,7 @@
      virtual void send_message(int to_osd, Message *m) = 0;
      virtual void queue_transaction(ObjectStore::Transaction *t) = 0;
      virtual epoch_t get_epoch() = 0;
-     virtual const vector<int> &get_acting() = 0;
+     virtual const vector<int> &get_actingbackfill() = 0;
      virtual std::string gen_dbg_prefix() const = 0;
 
      virtual const map<hobject_t, set<int> > &get_missing_loc() = 0;
@@ -172,6 +172,13 @@
      ObjectContextRef obc,  ///< [in] context of the object
      RecoveryHandle *h      ///< [in,out] handle to attach recovery op to
      ) = 0;
+
+   /**
+    * true if PGBackend can handle this message while inactive
+    *
+    * If it returns true, handle_message *must* also return true
+    */
+   virtual bool can_handle_while_inactive(OpRequestRef op) = 0;
 
    /// gives PGBackend a crack at an incoming message
    virtual bool handle_message(

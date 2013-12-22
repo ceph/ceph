@@ -521,7 +521,13 @@ class OSDStub : public TestStub
 
   void update_osd_stat() {
     struct statfs stbuf;
-    statfs(".", &stbuf);
+    int ret = statfs(".", &stbuf);
+    if (ret < 0) {
+      ret = -errno;
+      dout(0) << __func__ 
+              << " cannot statfs ." << cpp_strerror(ret) << dendl;
+      return;
+    }
 
     osd_stat.kb = stbuf.f_blocks * stbuf.f_bsize / 1024;
     osd_stat.kb_used = (stbuf.f_blocks - stbuf.f_bfree) * stbuf.f_bsize / 1024;

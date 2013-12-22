@@ -4,9 +4,10 @@ Submitting Patches to Ceph
 ==========================
 
 This is based on Documentation/SubmittingPatches from the Linux kernel,
-but has pared down significantly and updated slightly.  The patch signing
-procedures and definitions are unmodified.
+but has pared down significantly and updated based on the Ceph project's
+best practices.
 
+The patch signing procedures and definitions are unmodified.
 
 ---------------------
 SIGNING CONTRIBUTIONS
@@ -202,11 +203,62 @@ is easiest to work on the project and submit changes by using the
 git tools, both for managing your own code and for preparing and
 sending patches.
 
-1) "git format-patch"
+The project will generally accept code either by pulling code directly from
+a published git tree (usually on github), or via patches emailed directly
+to the email list (ceph-devel@vger.kernel.org).  Github is preferred due to
+the convenience of the 'pull request' feature.
 
-The best way to generate a patch is to work from a Git checkout of
-the Ceph source code.  You can then generate patches with the
-'git format-patch' command.  For example,
+1) Github pull request
+
+The preferred way to submit code is by publishing your patches in a branch
+in your github clone of the ceph repository and then submitting a github
+pull request.
+
+For example, prepare your changes:
+
+     $ git checkout -b mything
+     ...code furiously...
+     $ git commit     # git gui is also quite convenient
+     $ git push origin mything
+
+Then submit a pull request at
+
+     https://github.com/ceph/ceph/pulls
+
+and click 'New pull request'.  The 'hub' command-line tool, available from
+
+    https://github.com/github/hub
+
+allows you to submit pull requests directly from the command line:
+
+    $ hub pull-request -b ceph:master -h you:mything
+
+Pull rqeuests appear in the review queue at
+
+     https://github.com/organizations/ceph/dashboard/pulls
+
+You may want to ping a developer in #ceph-devel on irc.oftc.net or on the
+email list to ensure your submission is noticed.
+
+When addressing review comments, can should either add additional patches to
+your branch or (better yet) squash those changes into the relevant commits so
+that the sequence of changes of "clean" and gets things right the first time.
+The 'git rebase -i' command is very helpful in this process.  Once you have
+updated your local branch, you can simply force-push to the existing branch
+in your public repository that is referenced by the pull request with
+
+     $ git push -f origin mything
+
+and your changes will be visible from the existing pull-request.  You may want
+to ping the reviewer again or comment on the pull request to ensure the updates
+are noticed.
+
+
+2) Patch submission via ceph-devel@vger.kernel.org
+
+The best way to generate a patch for manual submission is to work from
+a Git checkout of the Ceph source code.  You can then generate patches
+with the 'git format-patch' command.  For example,
 
      $ git format-patch HEAD^^ -o mything
 
@@ -240,10 +292,7 @@ If your changes produce a lot of deltas, you may want to look into
 splitting them into individual patches which modify things in
 logical stages.  This will facilitate easier reviewing by other
 kernel developers, very important if you want your patch accepted.
-There are a number of scripts which can aid in this:
-
-
-2) Sending patches with "git send-email"
+There are a number of scripts which can aid in this.
 
 The git send-email command make it super easy to send patches
 (particularly those prepared with git format patch).  It is careful to

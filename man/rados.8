@@ -1,4 +1,6 @@
-.TH "RADOS" "8" "April 29, 2013" "dev" "Ceph"
+.\" Man page generated from reStructuredText.
+.
+.TH "RADOS" "8" "December 09, 2013" "dev" "Ceph"
 .SH NAME
 rados \- rados object storage utility
 .
@@ -28,8 +30,33 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.\" Man page generated from reStructuredText.
 .
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
 .SH SYNOPSIS
 .nf
 \fBrados\fP [ \-m \fImonaddr\fP ] [ mkpool | rmpool \fIfoo\fP ] [ \-p | \-\-pool
@@ -40,7 +67,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .SH DESCRIPTION
 .sp
 \fBrados\fP is a utility for interacting with a Ceph object storage
-cluster (RADOS), part of the Ceph distributed file system.
+cluster (RADOS), part of the Ceph distributed storage system.
 .SH OPTIONS
 .INDENT 0.0
 .TP
@@ -111,11 +138,14 @@ List objects in given pool and write to outfile.
 .B \fBlssnap\fP
 List snapshots for given pool.
 .TP
+.B \fBclonedata\fP \fIsrcname\fP \fIdstname\fP \-\-object\-locator \fIkey\fP
+Clone object byte data from \fIsrcname\fP to \fIdstname\fP\&.  Both objects must be stored with the locator key \fIkey\fP (usually either \fIsrcname\fP or \fIdstname\fP).  Object attributes and omap keys are not copied or cloned.
+.TP
 .B \fBmksnap\fP \fIfoo\fP
-Create pool snapshot named \fIfoo\fP.
+Create pool snapshot named \fIfoo\fP\&.
 .TP
 .B \fBrmsnap\fP \fIfoo\fP
-Remove pool snapshot names \fIfoo\fP.
+Remove pool snapshot named \fIfoo\fP\&.
 .TP
 .B \fBbench\fP \fIseconds\fP \fImode\fP [ \-b \fIobjsize\fP ] [ \-t \fIthreads\fP ]
 Benchmark for seconds. The mode can be write or read. The default
@@ -147,55 +177,79 @@ Set the value of the object map header of object name.
 .SH EXAMPLES
 .sp
 To view cluster utilization:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rados df
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To get a list object in pool foo sent to stdout:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rados \-p foo ls \-
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To write an object:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rados \-p foo put myobject blah.txt
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To create a snapshot:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rados \-p foo mksnap mysnap
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To delete the object:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rados \-p foo rm myobject
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To read a previously snapshotted version of an object:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rados \-p foo \-s mysnap get myobject blah.txt.old
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .SH AVAILABILITY
 .sp
-\fBrados\fP is part of the Ceph distributed file system. Please refer to
+\fBrados\fP is part of the Ceph distributed storage system. Please refer to
 the Ceph documentation at \fI\%http://ceph.com/docs\fP for more information.
 .SH SEE ALSO
 .sp

@@ -281,8 +281,8 @@ public:
   epoch_t get_epoch() {
     return get_osdmap()->get_epoch();
   }
-  const vector<int> &get_acting() {
-    return acting;
+  const vector<int> &get_actingbackfill() {
+    return actingbackfill;
   }
   std::string gen_dbg_prefix() const { return gen_prefix(); }
   
@@ -412,7 +412,6 @@ public:
       }
     }
     ~OpContext() {
-      assert(!clone_obc);
       assert(lock_to_release == NONE);
       if (reply)
 	reply->put();
@@ -473,7 +472,6 @@ public:
     void put() {
       assert(nref > 0);
       if (--nref == 0) {
-	assert(src_obc.empty());
 	delete ctx; // must already be unlocked
 	delete this;
 	//generic_dout(0) << "deleting " << this << dendl;
@@ -962,7 +960,7 @@ protected:
   void cancel_copy(CopyOpRef cop, bool requeue);
   void cancel_copy_ops(bool requeue);
 
-  friend class C_Copyfrom;
+  friend struct C_Copyfrom;
 
   // -- flush --
   map<hobject_t, FlushOpRef> flush_ops;

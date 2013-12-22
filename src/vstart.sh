@@ -2,6 +2,7 @@
 
 export PYTHONPATH=./pybind
 export LD_LIBRARY_PATH=.libs
+export DYLD_LIBRARY_PATH=$LD_LIBRARY_PATH
 
 
 # abort on failure
@@ -38,6 +39,7 @@ hitset=""
 overwrite_conf=1
 cephx=1 #turn cephx on by default
 cache=""
+memstore=0
 
 MON_ADDR=""
 
@@ -144,6 +146,9 @@ case $1 in
     -k )
 	    overwrite_conf=0
 	    ;;
+    --memstore )
+	    memstore=1
+	    ;;
     --hitset )
 	    hitset="$hitset $2 $3"
 	    shift
@@ -236,6 +241,10 @@ if [ -n "$MON_ADDR" ]; then
 	CMDS_ARGS=" -m "$MON_ADDR
 fi
 
+if [ "$memstore" -eq 1 ]; then
+    COSDMEMSTORE='
+	osd objectstore = memstore'
+fi
 
 # lockdep everywhere?
 # export CEPH_ARGS="--lockdep 1"
@@ -354,6 +363,7 @@ $DAEMONOPTS
         osd scrub load threshold = 5.0
         osd debug op order = true
 $COSDDEBUG
+$COSDMEMSTORE
 $extra_conf
 [mon]
         mon pg warn min per osd = 10
@@ -369,7 +379,7 @@ EOF
 		if [ `echo $IP | grep '^127\\.'` ]
 		then
 			echo
-			echo "WARNING: hostname resolves to loopback; remote hosts will not be able to"
+			echo "NOTE: hostname resolves to loopback; remote hosts will not be able to"
 			echo "  connect.  either adjust /etc/hosts, or edit this script to use your"
 			echo "  machine's real IP."
 			echo
@@ -535,10 +545,21 @@ $DAEMONOPTS
 EOF
 		    mkdir -p $CEPH_OUT_DIR/htdocs
 		    mkdir -p $CEPH_OUT_DIR/fastcgi_sock
+		    APACHE2_MODULE_PATH="/usr/lib/apache2/modules"
+		    APACHE2_EXTRA_MODULES_NAME="mpm_prefork authz_core"
+		    for module in $APACHE2_EXTRA_MODULES_NAME
+		    do
+			    if [ -f "${APACHE2_MODULE_PATH}/mod_${module}.so" ]; then
+				    APACHE2_EXTRA_MODULES="${APACHE2_EXTRA_MODULES}LoadModule ${module}_module ${APACHE2_MODULE_PATH}/mod_${module}.so
+"
+			    fi 
+		    done
+		    echo $APACHE2_EXTRA_MODULES
 		    cat <<EOF > $CEPH_OUT_DIR/apache.conf
 LoadModule env_module /usr/lib/apache2/modules/mod_env.so
 LoadModule rewrite_module /usr/lib/apache2/modules/mod_rewrite.so
 LoadModule fastcgi_module /usr/lib/apache2/modules/mod_fastcgi.so
+$APACHE2_EXTRA_MODULES
 
 Listen $rgwport
 ServerName rgwtest.example.com

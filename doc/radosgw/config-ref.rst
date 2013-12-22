@@ -412,24 +412,30 @@ required settings:
    gateway will log metadata and data operations (false by default).
 
 #. ``placement_targets``: A list of placement targets (optional). Each 
-   placement target contains a name (required) and a list of tags (optional).
+   placement target contains a name (required) for the placement target 
+   and a list of tags (optional) so that only users with the tag can use
+   the placement target (i.e., the user's ``placement_tags`` field in the 
+   user info). 
 
-#. ``default_placement``: The set of default placement pools for the object 
-   index and object data. Set to ``default-placement`` by default.
+#. ``default_placement``: The default placement target for the object 
+   index and object data. Set to ``default-placement`` by default. You 
+   may also set a per-user default placement in the user info for each 
+   user.
 
 To set a region, create a JSON object consisting of the required fields, save
 the object to a file (e.g., ``region.json``); then, execute the following
-command:: 
-
+command::
 
 	sudo radosgw-admin region set --infile region.json
 
 Where ``region.json`` is the JSON file you created.
 
+
 .. important:: The ``default`` region ``is_master`` setting is ``true`` by
    default. If you create a new region and want to make it the master region,
    you must either set the ``default`` region ``is_master`` setting to 
    ``false``, or delete the ``default`` region.
+
 
 Finally, update the map. :: 
 
@@ -511,7 +517,7 @@ Get a Zone
 
 To get the configuration of a zone, execute:: 
 
-	sudo radosgw-admin zone [--rgw-zone=<zone>]
+	sudo radosgw-admin zone get [--rgw-zone=<zone>]
 
 The ``default`` zone looks like this:
 

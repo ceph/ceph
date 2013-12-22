@@ -98,6 +98,11 @@ public:
     return ret;
   }
 
+  /// @return true if object is head
+  bool is_head() const {
+    return snap == CEPH_NOSNAP;
+  }
+
   /// @return true if object is neither head nor snapdir
   bool is_snap() const {
     return (snap != CEPH_NOSNAP) && (snap != CEPH_SNAPDIR);
@@ -189,7 +194,7 @@ public:
   friend bool operator>=(const hobject_t&, const hobject_t&);
   friend bool operator==(const hobject_t&, const hobject_t&);
   friend bool operator!=(const hobject_t&, const hobject_t&);
-  friend class ghobject_t;
+  friend struct ghobject_t;
 };
 WRITE_CLASS_ENCODER(hobject_t)
 

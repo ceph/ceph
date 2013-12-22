@@ -27,10 +27,11 @@
 #include "log/Log.h"
 #include "auth/Crypto.h"
 #include "include/str_list.h"
+#include "common/Mutex.h"
+#include "common/Cond.h"
 
 #include <iostream>
 #include <pthread.h>
-#include <semaphore.h>
 
 using ceph::HeartbeatMap;
 
@@ -38,30 +39,28 @@ class CephContextServiceThread : public Thread
 {
 public:
   CephContextServiceThread(CephContext *cct)
-    : _reopen_logs(false), _exit_thread(false), _cct(cct)
+    : _lock("CephContextServiceThread::_lock"),
+      _reopen_logs(false), _exit_thread(false), _cct(cct)
   {
-    sem_init(&_sem, 0, 0);
-  };
+  }
 
-  ~CephContextServiceThread()
-  {
-    sem_destroy(&_sem);
-  };
+  ~CephContextServiceThread() {}
 
   void *entry()
   {
     while (1) {
+      Mutex::Locker l(_lock);
+
       if (_cct->_conf->heartbeat_interval) {
-        struct timespec timeout;
-        clock_gettime(CLOCK_REALTIME, &timeout);
-        timeout.tv_sec += _cct->_conf->heartbeat_interval;
-        sem_timedwait(&_sem, &timeout);
-      } else {
-        sem_wait(&_sem);
-      }
+        utime_t interval(_cct->_conf->heartbeat_interval, 0);
+        _cond.WaitInterval(_cct, _lock, interval);
+      } else
+        _cond.Wait(_lock);
+
       if (_exit_thread) {
         break;
       }
+
       if (_reopen_logs) {
         _cct->_log->reopen_log_file();
         _reopen_logs = false;
@@ -73,20 +72,23 @@ public:
 
   void reopen_logs()
   {
+    Mutex::Locker l(_lock);
     _reopen_logs = true;
-    sem_post(&_sem);
+    _cond.Signal();
   }
 
   void exit_thread()
   {
+    Mutex::Locker l(_lock);
     _exit_thread = true;
-    sem_post(&_sem);
+    _cond.Signal();
   }
 
 private:
-  volatile bool _reopen_logs;
-  volatile bool _exit_thread;
-  sem_t _sem;
+  Mutex _lock;
+  Cond _cond;
+  bool _reopen_logs;
+  bool _exit_thread;
   CephContext *_cct;
 };
 
@@ -290,11 +292,11 @@ CephContext::CephContext(uint32_t module_type_)
 
 CephContext::~CephContext()
 {
+  join_service_thread();
+
   if (_conf->lockdep) {
     lockdep_unregister_ceph_context(this);
   }
-
-  join_service_thread();
 
   _admin_socket->unregister_command("perfcounters_dump");
   _admin_socket->unregister_command("perf dump");

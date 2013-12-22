@@ -30,6 +30,7 @@
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
+#include "rgw_string.h"
 #include "cls/version/cls_version_types.h"
 #include "include/rados/librados.hpp"
 
@@ -95,6 +96,9 @@ using ceph::crypto::MD5;
 #define RGW_OP_TYPE_ALL          (RGW_OP_TYPE_READ | RGW_OP_TYPE_WRITE | RGW_OP_TYPE_DELETE)
 
 #define RGW_DEFAULT_MAX_BUCKETS 1000
+
+#define RGW_DEFER_TO_BUCKET_ACLS_RECURSE 1
+#define RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL 2
 
 #define STATUS_CREATED           1900
 #define STATUS_ACCEPTED          1901
@@ -273,13 +277,15 @@ class XMLArgs
 class RGWConf;
 
 class RGWEnv {
-  std::map<string, string> env_map;
+  std::map<string, string, ltstr_nocase> env_map;
 public:
   RGWConf *conf; 
 
   RGWEnv();
   ~RGWEnv();
+  void init(CephContext *cct);
   void init(CephContext *cct, char **envp);
+  void set(const char *name, const char *val);
   const char *get(const char *name, const char *def_val = NULL);
   int get_int(const char *name, int def_val = 0);
   bool get_bool(const char *name, bool def_val = 0);
@@ -288,8 +294,8 @@ public:
   bool exists_prefix(const char *prefix);
 
   void remove(const char *name);
-  void set(const char *name, const char *val);
-  std::map<string, string>& get_map() { return env_map; }
+
+  std::map<string, string, ltstr_nocase>& get_map() { return env_map; }
 };
 
 class RGWConf {
@@ -298,10 +304,11 @@ protected:
   void init(CephContext *cct, RGWEnv * env);
 public:
   RGWConf() :
-    enable_ops_log(1), enable_usage_log(1) {}
+    enable_ops_log(1), enable_usage_log(1), defer_to_bucket_acls(0) {}
 
   int enable_ops_log;
   int enable_usage_log;
+  uint8_t defer_to_bucket_acls;
 };
 
 enum http_op {
@@ -816,6 +823,7 @@ struct req_state {
    uint64_t obj_size;
    bool enable_ops_log;
    bool enable_usage_log;
+   uint8_t defer_to_bucket_acls;
    uint32_t perm_mask;
    utime_t header_time;
 

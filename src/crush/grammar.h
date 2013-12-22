@@ -44,6 +44,10 @@ struct crush_grammar : public grammar<crush_grammar>
     _bucket_item,
     _bucket,
     _step_take,
+    _step_set_chooseleaf_tries,
+    _step_set_choose_tries,
+    _step_set_choose_local_tries,
+    _step_set_choose_local_fallback_tries,
     _step_choose,
     _step_chooseleaf,
     _step_emit,
@@ -74,6 +78,10 @@ struct crush_grammar : public grammar<crush_grammar>
     rule<ScannerT, parser_context<>, parser_tag<_bucket> >      bucket;
 
     rule<ScannerT, parser_context<>, parser_tag<_step_take> >      step_take;
+    rule<ScannerT, parser_context<>, parser_tag<_step_set_choose_tries> >    step_set_choose_tries;
+    rule<ScannerT, parser_context<>, parser_tag<_step_set_choose_local_tries> >    step_set_choose_local_tries;
+    rule<ScannerT, parser_context<>, parser_tag<_step_set_choose_local_fallback_tries> >    step_set_choose_local_fallback_tries;
+    rule<ScannerT, parser_context<>, parser_tag<_step_set_chooseleaf_tries> >    step_set_chooseleaf_tries;
     rule<ScannerT, parser_context<>, parser_tag<_step_choose> >    step_choose;
     rule<ScannerT, parser_context<>, parser_tag<_step_chooseleaf> >      step_chooseleaf;
     rule<ScannerT, parser_context<>, parser_tag<_step_emit> >      step_emit;
@@ -116,6 +124,10 @@ struct crush_grammar : public grammar<crush_grammar>
 
       // rules
       step_take = str_p("take") >> name;
+      step_set_choose_tries = str_p("set_choose_tries") >> posint;
+      step_set_choose_local_tries = str_p("set_choose_local_tries") >> posint;
+      step_set_choose_local_fallback_tries = str_p("set_choose_local_fallback_tries") >> posint;
+      step_set_chooseleaf_tries = str_p("set_chooseleaf_tries") >> posint;
       step_choose = str_p("choose")
 	>> ( str_p("indep") | str_p("firstn") )
 	>> integer
@@ -126,12 +138,16 @@ struct crush_grammar : public grammar<crush_grammar>
 	>> str_p("type") >> name;
       step_emit = str_p("emit");
       step = str_p("step") >> ( step_take |
+				step_set_choose_tries |
+				step_set_choose_local_tries |
+				step_set_choose_local_fallback_tries |
+				step_set_chooseleaf_tries |
 				step_choose |
 				step_chooseleaf |
 				step_emit );
       crushrule = str_p("rule") >> !name >> '{'
 			   >> str_p("ruleset") >> posint
-			   >> str_p("type") >> ( str_p("replicated") | str_p("raid4") )
+			   >> str_p("type") >> ( str_p("replicated") | str_p("erasure") )
 			   >> str_p("min_size") >> posint
 			   >> str_p("max_size") >> posint
 			   >> +step

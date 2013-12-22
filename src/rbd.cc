@@ -57,6 +57,8 @@
 #include <sys/param.h>
 #endif
 
+#include <blkid/blkid.h>
+
 #define MAX_SECRET_LEN 1000
 #define MAX_POOL_NAME_SIZE 128
 
@@ -867,6 +869,11 @@ void rbd_bencher_completion(void *vc, void *pc)
   librbd::RBD::AioCompletion *c = (librbd::RBD::AioCompletion *)vc;
   rbd_bencher *b = static_cast<rbd_bencher *>(pc);
   //cout << "complete " << c << std::endl;
+  int ret = c->get_return_value();
+  if (ret != 0) {
+    cout << "write error: " << cpp_strerror(ret) << std::endl;
+    assert(0 == ret);
+  }
   b->lock.Lock();
   b->in_flight--;
   b->cond.Signal();
@@ -1125,8 +1132,10 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
     ::encode(endsize, bl);
 
     r = bl.write_fd(fd);
-    if (r < 0)
+    if (r < 0) {
+      close(fd);
       return r;
+    }
   }
 
   ExportContext ec(&image, fd, info.size);
@@ -1139,8 +1148,6 @@ static int do_export_diff(librbd::Image& image, const char *fromsnapname,
     bufferlist bl;
     ::encode(tag, bl);
     r = bl.write_fd(fd);
-    if (r < 0)
-      return r;
   }
 
  out:
@@ -1693,7 +1700,17 @@ static int do_kernel_add(const char *poolname, const char *imgname,
   // modprobe the rbd module if /sys/bus/rbd doesn't exist
   struct stat sb;
   if ((stat("/sys/bus/rbd", &sb) < 0) || (!S_ISDIR(sb.st_mode))) {
-    r = system("/sbin/modprobe rbd");
+    // turn on single-major device number allocation scheme if the
+    // kernel supports it
+    const char *cmd = "/sbin/modprobe rbd";
+    r = system("/sbin/modinfo -F parm rbd | /bin/grep -q ^single_major:");
+    if (r == 0) {
+      cmd = "/sbin/modprobe rbd single_major=Y";
+    } else if (r < 0) {
+      cerr << "rbd: error executing modinfo as shell command!" << std::endl;
+    }
+
+    r = system(cmd);
     if (r) {
       if (r < 0)
         cerr << "rbd: error executing modprobe as shell command!" << std::endl;
@@ -1703,16 +1720,29 @@ static int do_kernel_add(const char *poolname, const char *imgname,
     }
   }
 
-  // write to /sys/bus/rbd/add
-  int fd = open("/sys/bus/rbd/add", O_WRONLY);
+  // 'add' interface is deprecated, use 'add_single_major' if it's
+  // available
+  //
+  // ('add' and 'add_single_major' interfaces are identical, except
+  // that if rbd kernel module is new enough and is configured to use
+  // single-major scheme, 'add' is disabled in order to prevent old
+  // userspace from doing weird things at unmap time)
+  int fd = open("/sys/bus/rbd/add_single_major", O_WRONLY);
   if (fd < 0) {
-    r = -errno;
-    if (r == -ENOENT) {
-      cerr << "rbd: /sys/bus/rbd/add does not exist!" << std::endl
-	   << "Did you run 'modprobe rbd' or is your rbd module too old?"
-	   << std::endl;
+    if (errno == ENOENT) {
+      fd = open("/sys/bus/rbd/add", O_WRONLY);
+      if (fd < 0) {
+        r = -errno;
+        if (r == -ENOENT) {
+          cerr << "rbd: /sys/bus/rbd/add does not exist!" << std::endl
+               << "Did you run 'modprobe rbd' or is your rbd module too old?"
+               << std::endl;
+        }
+        return r;
+      }
+    } else {
+      return -errno;
     }
-    return r;
   }
 
   string add = oss.str();
@@ -1859,9 +1889,19 @@ static int do_kernel_showmapped(Formatter *f)
   return 0;
 }
 
-static int get_rbd_seq(int major_num, string &seq)
+static int get_rbd_seq(dev_t devno, string &seq)
 {
-  int r;
+  // convert devno, which might be a partition major:minor pair, into
+  // a whole disk major:minor pair
+  dev_t wholediskno;
+  int r = blkid_devno_to_wholedisk(devno, NULL, 0, &wholediskno);
+  if (r) {
+    cerr << "rbd: could not compute wholediskno: " << r << std::endl;
+    // ignore the error: devno == wholediskno most of the time, and if
+    // it turns out it's not we will fail with -ENOENT later anyway
+    wholediskno = devno;
+  }
+
   const char *devices_path = "/sys/bus/rbd/devices";
   DIR *device_dir = opendir(devices_path);
   if (!device_dir) {
@@ -1881,28 +1921,66 @@ static int get_rbd_seq(int major_num, string &seq)
     return r;
   }
 
-  char major[32];
+  int match_minor = -1;
   do {
+    char fn[strlen(devices_path) + strlen(dent->d_name) + strlen("//major") + 1];
+    char buf[32];
+
     if (strcmp(dent->d_name, ".") == 0 || strcmp(dent->d_name, "..") == 0)
       continue;
 
-    char fn[strlen(devices_path) + strlen(dent->d_name) + strlen("//major") + 1];
-
     snprintf(fn, sizeof(fn), "%s/%s/major", devices_path, dent->d_name);
-    r = read_file(fn, major, sizeof(major));
+    r = read_file(fn, buf, sizeof(buf));
     if (r < 0) {
       cerr << "rbd: could not read major number from " << fn << ": "
 	   << cpp_strerror(-r) << std::endl;
       continue;
     }
+    string err;
+    int cur_major = strict_strtol(buf, 10, &err);
+    if (!err.empty()) {
+      cerr << err << std::endl;
+      cerr << "rbd: could not parse major number read from " << fn << ": "
+           << cpp_strerror(-r) << std::endl;
+      continue;
+    }
+    if (cur_major != (int)major(wholediskno))
+      continue;
 
-    int cur_major = atoi(major);
-    if (cur_major == major_num) {
-      seq = string(dent->d_name);
-      closedir(device_dir);
-      return 0;
+    if (match_minor == -1) {
+      // matching minors in addition to majors is not necessary unless
+      // single-major scheme is turned on, but, if the kernel supports
+      // it, do it anyway (blkid stuff above ensures that we always have
+      // the correct minor to match with)
+      struct stat sbuf;
+      snprintf(fn, sizeof(fn), "%s/%s/minor", devices_path, dent->d_name);
+      match_minor = (stat(fn, &sbuf) == 0);
     }
 
+    if (match_minor == 1) {
+      snprintf(fn, sizeof(fn), "%s/%s/minor", devices_path, dent->d_name);
+      r = read_file(fn, buf, sizeof(buf));
+      if (r < 0) {
+        cerr << "rbd: could not read minor number from " << fn << ": "
+             << cpp_strerror(-r) << std::endl;
+        continue;
+      }
+      int cur_minor = strict_strtol(buf, 10, &err);
+      if (!err.empty()) {
+        cerr << err << std::endl;
+        cerr << "rbd: could not parse minor number read from " << fn << ": "
+             << cpp_strerror(-r) << std::endl;
+        continue;
+      }
+      if (cur_minor != (int)minor(wholediskno))
+        continue;
+    } else {
+      assert(match_minor == 0);
+    }
+
+    seq = string(dent->d_name);
+    closedir(device_dir);
+    return 0;
   } while ((dent = readdir(device_dir)));
 
   closedir(device_dir);
@@ -1911,16 +1989,14 @@ static int get_rbd_seq(int major_num, string &seq)
 
 static int do_kernel_rm(const char *dev)
 {
-  struct stat dev_stat;
-  int r = stat(dev, &dev_stat);
-  if (!S_ISBLK(dev_stat.st_mode)) {
+  struct stat sbuf;
+  if (stat(dev, &sbuf) || !S_ISBLK(sbuf.st_mode)) {
     cerr << "rbd: " << dev << " is not a block device" << std::endl;
     return -EINVAL;
   }
 
-  int major = major(dev_stat.st_rdev);
   string seq_num;
-  r = get_rbd_seq(major, seq_num);
+  int r = get_rbd_seq(sbuf.st_rdev, seq_num);
   if (r == -ENOENT) {
     cerr << "rbd: " << dev << " is not an rbd device" << std::endl;
     return -EINVAL;
@@ -1940,9 +2016,17 @@ static int do_kernel_rm(const char *dev)
     }
   }
 
-  int fd = open("/sys/bus/rbd/remove", O_WRONLY);
+  // see comment in do_kernel_add(), same goes for 'remove' vs
+  // 'remove_single_major'
+  int fd = open("/sys/bus/rbd/remove_single_major", O_WRONLY);
   if (fd < 0) {
-    return -errno;
+    if (errno == ENOENT) {
+      fd = open("/sys/bus/rbd/remove", O_WRONLY);
+      if (fd < 0)
+        return -errno;
+    } else {
+      return -errno;
+    }
   }
 
   r = safe_write(fd, seq_num.c_str(), seq_num.size());

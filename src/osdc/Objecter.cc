@@ -447,7 +447,8 @@ void Objecter::dispatch(Message *m)
   }
 }
 
-void Objecter::scan_requests(bool skipped_map,
+void Objecter::scan_requests(bool force_resend,
+			     bool force_resend_writes,
 			     map<tid_t, Op*>& need_resend,
 			     list<LingerOp*>& need_resend_linger,
 			     map<tid_t, CommandOp*>& need_resend_command)
@@ -461,8 +462,7 @@ void Objecter::scan_requests(bool skipped_map,
     int r = recalc_linger_op_target(op);
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
-      // resend if skipped map; otherwise do nothing.
-      if (!skipped_map)
+      if (!force_resend && !force_resend_writes)
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
@@ -484,8 +484,8 @@ void Objecter::scan_requests(bool skipped_map,
     int r = recalc_op_target(op);
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
-      // resend if skipped map; otherwise do nothing.
-      if (!skipped_map)
+      if (!force_resend &&
+	  (!force_resend_writes || !(op->flags & CEPH_OSD_FLAG_WRITE)))
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
@@ -508,7 +508,7 @@ void Objecter::scan_requests(bool skipped_map,
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
       // resend if skipped map; otherwise do nothing.
-      if (!skipped_map)
+      if (!force_resend && !force_resend_writes)
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
@@ -537,8 +537,9 @@ void Objecter::handle_osd_map(MOSDMap *m)
   }
 
   bool was_pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
-  bool was_pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || osdmap->test_flag(CEPH_OSDMAP_FULL);
-  
+  bool was_full = osdmap->test_flag(CEPH_OSDMAP_FULL);
+  bool was_pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || was_full;
+
   list<LingerOp*> need_resend_linger;
   map<tid_t, Op*> need_resend;
   map<tid_t, CommandOp*> need_resend_command;
@@ -586,8 +587,10 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  continue;
 	}
 	logger->set(l_osdc_map_epoch, osdmap->get_epoch());
-	
-	scan_requests(skipped_map, need_resend, need_resend_linger, need_resend_command);
+
+	was_full = was_full || osdmap->test_flag(CEPH_OSDMAP_FULL);
+	scan_requests(skipped_map, was_full, need_resend, need_resend_linger,
+		      need_resend_command);
 
 	// osd addr changes?
 	for (map<int,OSDSession*>::iterator p = osd_sessions.begin();
@@ -611,7 +614,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	ldout(cct, 3) << "handle_osd_map decoding full epoch " << m->get_last() << dendl;
 	osdmap->decode(m->maps[m->get_last()]);
 
-	scan_requests(false, need_resend, need_resend_linger, need_resend_command);
+	scan_requests(false, false, need_resend, need_resend_linger,
+		      need_resend_command);
       } else {
 	ldout(cct, 3) << "handle_osd_map hmm, i want a full map, requesting" << dendl;
 	monc->sub_want("osdmap", 0, CEPH_SUBSCRIBE_ONETIME);
@@ -627,34 +631,11 @@ void Objecter::handle_osd_map(MOSDMap *m)
   if (was_pauserd || was_pausewr || pauserd || pausewr)
     maybe_request_map();
 
-  // unpause requests?
-  if ((was_pauserd && !pauserd) ||
-      (was_pausewr && !pausewr)) {
-    for (map<tid_t,Op*>::iterator p = ops.begin();
-	 p != ops.end();
-	 ++p) {
-      Op *op = p->second;
-      if (op->paused &&
-	  !((op->flags & CEPH_OSD_FLAG_READ) && pauserd) &&   // not still paused as a read
-	  !((op->flags & CEPH_OSD_FLAG_WRITE) && pausewr))    // not still paused as a write
-	need_resend[op->tid] = op;
-    }
-    for (map<tid_t, LingerOp*>::iterator lp = linger_ops.begin();
-	 lp != linger_ops.end();
-	 ++lp) {
-      LingerOp *op = lp->second;
-      if (!op->registered &&
-	  !pauserd &&                                      // not still paused as a read
-	  !((op->flags & CEPH_OSD_FLAG_WRITE) && pausewr)) // not still paused as a write
-	need_resend_linger.push_back(op);
-    }
-  }
-
   // resend requests
   for (map<tid_t, Op*>::iterator p = need_resend.begin(); p != need_resend.end(); ++p) {
     Op *op = p->second;
     if (op->should_resend) {
-      if (op->session) {
+      if (op->session && !op->paused) {
 	logger->inc(l_osdc_op_resend);
 	send_op(op);
       }
@@ -1038,7 +1019,8 @@ void Objecter::kick_requests(OSDSession *session)
     ++p;
     logger->inc(l_osdc_op_resend);
     if (op->should_resend) {
-      resend[op->tid] = op;
+      if (!op->paused)
+	resend[op->tid] = op;
     } else {
       cancel_linger_op(op);
     }
@@ -1357,6 +1339,15 @@ bool Objecter::is_pg_changed(vector<int>& o, vector<int>& n, bool any_change)
   return false;      // same primary (tho replicas may have changed)
 }
 
+bool Objecter::op_should_be_paused(Op *op)
+{
+  bool pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
+  bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || osdmap->test_flag(CEPH_OSDMAP_FULL);
+
+  return (op->flags & CEPH_OSD_FLAG_READ && pauserd) ||
+         (op->flags & CEPH_OSD_FLAG_WRITE && pausewr);
+}
+
 int64_t Objecter::get_object_hash_position(int64_t pool, const string& key,
 					   const string& ns)
 {
@@ -1418,6 +1409,14 @@ int Objecter::recalc_op_target(Op *op)
   vector<int> acting;
   osdmap->pg_to_acting_osds(pgid, acting);
 
+  bool need_resend = false;
+
+  bool paused = op_should_be_paused(op);
+  if (!paused && paused != op->paused) {
+    op->paused = false;
+    need_resend = true;
+  }
+
   if (op->pgid != pgid || is_pg_changed(op->acting, acting, op->used_replica)) {
     op->pgid = pgid;
     op->acting = acting;
@@ -1465,6 +1464,9 @@ int Objecter::recalc_op_target(Op *op)
       else
 	num_homeless_ops++;
     }
+    need_resend = true;
+  }
+  if (need_resend) {
     return RECALC_OP_TARGET_NEED_RESEND;
   }
   return RECALC_OP_TARGET_NO_ACTION;
@@ -1673,7 +1675,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     ldout(cct, 5) << " got redirect reply; redirecting" << dendl;
     unregister_op(op);
     m->get_redirect().combine_with_locator(op->target_oloc, op->target_oid.name);
-    op_submit(op);
+    _op_submit(op);
     m->put();
     return;
   }
@@ -1681,7 +1683,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   if (rc == -EAGAIN) {
     ldout(cct, 7) << " got -EAGAIN, resubmitting" << dendl;
     unregister_op(op);
-    op_submit(op);
+    _op_submit(op);
     m->put();
     return;
   }
@@ -2464,7 +2466,6 @@ Objecter::RequestStateHook::RequestStateHook(Objecter *objecter) :
 bool Objecter::RequestStateHook::call(std::string command, cmdmap_t& cmdmap,
 				      std::string format, bufferlist& out)
 {
-  stringstream ss;
   Formatter *f = new_formatter(format);
   m_objecter->client_lock.Lock();
   m_objecter->dump_requests(f);

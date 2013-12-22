@@ -102,6 +102,7 @@ struct MRoute;
 struct MForward;
 struct MTimeCheck;
 struct MMonHealth;
+struct MonCommand;
 
 #define COMPAT_SET_LOC "feature_set"
 
@@ -138,6 +139,9 @@ public:
   AuthMethodList auth_service_required;
 
   CompatSet features;
+
+  const MonCommand *leader_supported_mon_commands;
+  int leader_supported_mon_commands_size;
 
 private:
   void new_tick();
@@ -197,6 +201,9 @@ private:
   utime_t leader_since;  // when this monitor became the leader, if it is the leader
   utime_t exited_quorum; // time detected as not in quorum; 0 if in
   uint64_t quorum_features;  ///< intersection of quorum member feature bits
+  bufferlist supported_commands_bl; // encoded MonCommands we support
+  bufferlist classic_commands_bl; // encoded MonCommands supported by Dumpling
+  set<int> classic_mons; // set of "classic" monitors; only valid on leader
 
   set<string> outside_quorum;
 
@@ -526,11 +533,24 @@ public:
   void join_election();
   void start_election();
   void win_standalone_election();
+  // end election (called by Elector)
   void win_election(epoch_t epoch, set<int>& q,
-		    uint64_t features);         // end election (called by Elector)
+		    uint64_t features,
+		    const MonCommand *cmdset, int cmdsize,
+		    const set<int> *classic_monitors);
   void lose_election(epoch_t epoch, set<int>& q, int l,
 		     uint64_t features); // end election (called by Elector)
   void finish_election();
+
+  const bufferlist& get_supported_commands_bl() {
+    return supported_commands_bl;
+  }
+  const bufferlist& get_classic_commands_bl() {
+    return classic_commands_bl;
+  }
+  const set<int>& get_classic_mons() {
+    return classic_mons;
+  }
 
   void update_logger();
 
@@ -588,8 +608,14 @@ public:
   void handle_get_version(MMonGetVersion *m);
   void handle_subscribe(MMonSubscribe *m);
   void handle_mon_get_map(MMonGetMap *m);
-  bool _allowed_command(MonSession *s, string &module, string& prefix,
-                        map<string,cmd_vartype>& cmdmap);
+  static void _generate_command_map(map<string,cmd_vartype>& cmdmap,
+                                    map<string,string> &param_str_map);
+  static const MonCommand *_get_moncommand(const string &cmd_prefix,
+                                           MonCommand *cmds, int cmds_size);
+  bool _allowed_command(MonSession *s, string &module, string &prefix,
+                        const map<string,cmd_vartype>& cmdmap,
+                        const map<string,string> param_str_map,
+                        const MonCommand *this_cmd);
   void _mon_status(Formatter *f, ostream& ss);
   void _quorum_status(Formatter *f, ostream& ss);
   void _add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss);
@@ -843,6 +869,16 @@ public:
     void _convert_machines();
     void _convert_paxos();
   };
+
+  static void format_command_descriptions(const MonCommand *commands,
+					  unsigned commands_size,
+					  Formatter *f,
+					  bufferlist *rdata);
+  void get_locally_supported_monitor_commands(const MonCommand **cmds, int *count);
+  void get_classic_monitor_commands(const MonCommand **cmds, int *count);
+  void get_leader_supported_commands(const MonCommand **cmds, int *count);
+  /// the Monitor owns this pointer once you pass it in
+  void set_leader_supported_commands(const MonCommand *cmds, int size);
 };
 
 #define CEPH_MON_FEATURE_INCOMPAT_BASE CompatSet::Feature (1, "initial feature set (~v.18)")
@@ -857,11 +893,53 @@ struct MonCommand {
   string module;
   string req_perms;
   string availability;
-};
 
-void get_command_descriptions(const MonCommand *commands,
-			      unsigned commands_size,
-			      Formatter *f,
-			      bufferlist *rdata);
+  void encode(bufferlist &bl) const {
+    /*
+     * very naughty: deliberately unversioned because individual commands
+     * shouldn't be encoded standalone, only as a full set (which we do
+     * version, see encode_array() below).
+     */
+    ::encode(cmdstring, bl);
+    ::encode(helpstring, bl);
+    ::encode(module, bl);
+    ::encode(req_perms, bl);
+    ::encode(availability, bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    ::decode(cmdstring, bl);
+    ::decode(helpstring, bl);
+    ::decode(module, bl);
+    ::decode(req_perms, bl);
+    ::decode(availability, bl);
+  }
+  bool operator==(const MonCommand& o) const {
+    return cmdstring == o.cmdstring && helpstring == o.helpstring &&
+	module == o.module && req_perms == o.req_perms &&
+	availability == o.availability;
+  }
+  bool operator!=(const MonCommand& o) const {
+    return !(*this == o);
+  }
+
+  static void encode_array(const MonCommand *cmds, int size, bufferlist &bl) {
+    ENCODE_START(1, 1, bl);
+    uint16_t s = size;
+    ::encode(s, bl);
+    ::encode_array_nohead(cmds, size, bl);
+    ENCODE_FINISH(bl);
+  }
+  static void decode_array(MonCommand **cmds, int *size,
+                           bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    uint16_t s = 0;
+    ::decode(s, bl);
+    *size = s;
+    *cmds = new MonCommand[*size];
+    ::decode_array_nohead(*cmds, *size, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(MonCommand);
 
 #endif

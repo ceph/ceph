@@ -12,7 +12,6 @@
 class CrushTester {
   CrushWrapper& crush;
   ostream& err;
-  int verbose;
 
   map<int, int> device_weight;
   int min_rule, max_rule;
@@ -165,8 +164,8 @@ class CrushTester {
    void write_integer_indexed_scalar_data_string(vector<string> &dst, int index, float scalar_data);
 
 public:
-  CrushTester(CrushWrapper& c, ostream& eo, int verbosity=0)
-    : crush(c), err(eo), verbose(verbosity),
+  CrushTester(CrushWrapper& c, ostream& eo)
+    : crush(c), err(eo),
       min_rule(-1), max_rule(-1),
       min_x(-1), max_x(-1),
       min_rep(-1), max_rep(-1),
@@ -188,48 +187,103 @@ public:
   void set_output_data_file_name(string name) {
     output_data_file_name = name;
   }
+  string get_output_data_file_name() const {
+    return output_data_file_name;
+  }
+
   void set_output_data_file(bool b) {
      output_data_file = b;
   }
+  bool get_output_data_file() const {
+    return output_data_file;
+  }
+
   void set_output_csv(bool b) {
      output_csv = b;
   }
+  bool get_output_csv() const {
+    return output_csv;
+  }
+
   void set_output_utilization(bool b) {
     output_utilization = b;
   }
+  bool get_output_utilization() const {
+    return output_utilization;
+  }
+
   void set_output_utilization_all(bool b) {
     output_utilization_all = b;
   }
+  bool get_output_utilization_all() const {
+    return output_utilization_all;
+  }
+
   void set_output_statistics(bool b) {
     output_statistics = b;
   }
+  bool get_output_statistics() const {
+    return output_statistics;
+  }
+
   void set_output_bad_mappings(bool b) {
     output_bad_mappings = b;
   }
+  bool get_output_bad_mappings() const {
+    return output_bad_mappings;
+  }
+
   void set_output_choose_tries(bool b) {
     output_choose_tries = b;
+  }
+  bool get_output_choose_tries() const {
+    return output_choose_tries;
   }
 
   void set_batches(int b) {
     num_batches = b;
   }
+  int get_batches() const {
+    return num_batches;
+  }
+
   void set_random_placement() {
     use_crush = false;
   }
+  bool get_random_placement() const {
+    return use_crush == false;
+  }
+
   void set_bucket_down_ratio(float bucket_ratio) {
     mark_down_bucket_ratio = bucket_ratio;
   }
+  float get_bucket_down_ratio() const {
+    return mark_down_bucket_ratio;
+  }
+
   void set_device_down_ratio(float device_ratio) {
     mark_down_device_ratio = device_ratio;
   }
+  float set_device_down_ratio() const {
+    return mark_down_device_ratio;
+  }
+
   void set_device_weight(int dev, float f);
 
   void set_min_rep(int r) {
     min_rep = r;
   }
+  int get_min_rep() const {
+    return min_rep;
+  }
+
   void set_max_rep(int r) {
     max_rep = r;
   }
+  int get_max_rep() const {
+    return max_rep;
+  }
+
   void set_num_rep(int r) {
     min_rep = max_rep = r;
   }
@@ -237,9 +291,17 @@ public:
   void set_min_x(int x) {
     min_x = x;
   }
+  int get_min_x() const {
+    return min_x;
+  }
+
   void set_max_x(int x) {
     max_x = x;
   }
+  int get_max_x() const {
+    return max_x;
+  }
+
   void set_x(int x) {
     min_x = max_x = x;
   }
@@ -247,9 +309,17 @@ public:
   void set_min_rule(int rule) {
     min_rule = rule;
   }
+  int get_min_rule() const {
+    return min_rule;
+  }
+
   void set_max_rule(int rule) {
     max_rule = rule;
   }
+  int get_max_rule() const {
+    return max_rule;
+  }
+
   void set_rule(int rule) {
     min_rule = max_rule = rule;
   }

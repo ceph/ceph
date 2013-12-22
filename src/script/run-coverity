@@ -1,0 +1,29 @@
+#!/bin/sh -e
+
+branch="$1"
+if [ -z "$branch" ]; then branch="master"; fi
+
+export COVDIR="$HOME/cov-analysis-linux64-6.0.2"
+if [ ! -d "$COVDIR" ]; then
+    echo "missing $COVDIR; get that from coverity!"
+    exit 1
+fi
+if [ ! -e "$HOME/coverity_rsa" ]; then
+    echo "missing ssh key for results upload"
+    exit 1
+fi
+if [ ! -e "$HOME/coverity.build.pass.txt" ]; then
+    echo "missing $HOME/coverity.build.pass.txt"
+    exit 1
+fi
+
+export PATH="$COVDIR/bin:$PATH"
+
+git fetch
+git reset --hard origin/$branch
+rm -f project.tgz
+make project.tgz
+scp -i ~/coverity_rsa project.tgz sage@ceph.com:/home/ceph_site/ceph.com/coverity/`git describe`.tgz
+curl --data "project=ceph&password=`cat ~/coverity.build.pass.txt`&email=sage@newdream.net&url=http://ceph.com/coverity/`git describe`.tgz" http://scan5.coverity.com/cgi-bin/submit_build.py
+
+echo done.

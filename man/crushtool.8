@@ -1,4 +1,6 @@
-.TH "CRUSHTOOL" "8" "April 29, 2013" "dev" "Ceph"
+.\" Man page generated from reStructuredText.
+.
+.TH "CRUSHTOOL" "8" "December 09, 2013" "dev" "Ceph"
 .SH NAME
 crushtool \- CRUSH map manipulation tool
 .
@@ -28,12 +30,37 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.\" Man page generated from reStructuredText.
 .
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
 .SH SYNOPSIS
 .nf
-\fBcrushtool\fP ( \-d \fImap\fP | \-c \fImap.txt\fP | \-\-build \fInumosds\fP
-\fIlayer1\fP \fI...\fP ) [ \-o \fIoutfile\fP [ \-\-clobber ]]
+\fBcrushtool\fP ( \-d \fImap\fP | \-c \fImap.txt\fP | \-\-build \-\-num_osds \fInumosds\fP
+\fIlayer1\fP \fI\&...\fP | \-\-test ) [ \-o \fIoutfile\fP ]
 .fi
 .sp
 .SH DESCRIPTION
@@ -72,22 +99,220 @@ structure. See below for examples.
 .UNINDENT
 .INDENT 0.0
 .TP
-.B \-\-test ...
-.TP
-.B will perform a dry run of a CRUSH mapping for a range of input object
-.TP
-.B \-\-help for more information.
+.B \-\-test
+will perform a dry run of a CRUSH mapping for a range of input object
+names, see crushtool \-\-help for more information.
 .UNINDENT
-.SH OPTIONS
+.SH RUNNING TESTS
+.sp
+The test mode will use the input crush map ( as specified with \fB\-i
+map\fP ) and perform a dry run of CRUSH mapping or random placement (
+if \fB\-\-simulate\fP is set ). On completion, two kinds of reports can be
+created. The \fB\-\-show\-...\fP options output human readable informations
+on stderr. The \fB\-\-output\-csv\fP option creates CSV files that are
+documented by the \fB\-\-help\-output\fP option.
 .INDENT 0.0
 .TP
-.B \-o outfile
-will specify the output file.
+.B \-\-show\-statistics
+for each rule display the mapping of each object. For instance:
+.INDENT 7.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+CRUSH rule 1 x 24 [11,6]
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+shows that object \fB24\fP is mapped to devices \fB[11,6]\fP by rule
+\fB1\fP\&. At the end of the mapping details, a summary of the
+distribution is displayed. For instance:
+.INDENT 7.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+rule 1 (metadata) num_rep 5 result size == 5:    1024/1024
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+shows that rule \fB1\fP which is named \fBmetadata\fP successfully
+mapped \fB1024\fP objects to \fBresult size == 5\fP devices when trying
+to map them to \fBnum_rep 5\fP replicas. When it fails to provide the
+required mapping, presumably because the number of \fBtries\fP must
+be increased, a breakdown of the failures is displays. For instance:
+.INDENT 7.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+rule 1 (metadata) num_rep 10 result size == 8:   4/1024
+rule 1 (metadata) num_rep 10 result size == 9:   93/1024
+rule 1 (metadata) num_rep 10 result size == 10:  927/1024
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+shows that although \fBnum_rep 10\fP replicas were required, \fB4\fP
+out of \fB1024\fP objects ( \fB4/1024\fP ) were mapped to \fBresult size
+== 8\fP devices only.
 .UNINDENT
 .INDENT 0.0
 .TP
-.B \-\-clobber
-will allow the tool to overwrite an existing outfile (it will normally refuse).
+.B \-\-show\-bad\-mappings
+display which object failed to be mapped to the required number of
+devices. For instance:
+.INDENT 7.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+bad mapping rule 1 x 781 num_rep 7 result [8,10,2,11,6,9]
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+shows that when rule \fB1\fP was required to map \fB7\fP devices, it
+could only map six : \fB[8,10,2,11,6,9]\fP\&.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-show\-utilization
+display the expected and actual utilisation for each device, for
+each number of replicas. For instance:
+.INDENT 7.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+device 0: stored : 951      expected : 853.333
+device 1: stored : 963      expected : 853.333
+\&...
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+shows that device \fB0\fP stored \fB951\fP objects and was expected to store \fB853\fP\&.
+Implies \fB\-\-show\-statistics\fP\&.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-show\-utilization\-all
+displays the same as \fB\-\-show\-utilization\fP but does not suppress
+output when the weight of a device is zero.
+Implies \fB\-\-show\-statistics\fP\&.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-show\-choose\-tries
+display how many attempts were needed to find a device mapping.
+For instance:
+.INDENT 7.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+0:     95224
+1:      3745
+2:      2225
+\&..
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+shows that \fB95224\fP mappings succeeded without retries, \fB3745\fP
+mappings succeeded with one attempts, etc. There are as many rows
+as the value of the \fB\-\-set\-choose\-total\-tries\fP option.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-output\-csv
+create CVS files (in the current directory) containing information
+documented by \fB\-\-help\-output\fP\&. The files are named after the rule
+used when collecting the statistics. For instance, if the rule
+metadata is used, the CSV files will be:
+.INDENT 7.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+metadata\-absolute_weights.csv
+metadata\-device_utilization.csv
+\&...
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+The first line of the file shortly explains the column layout. For
+instance:
+.INDENT 7.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+metadata\-absolute_weights.csv
+Device ID, Absolute Weight
+0,1
+\&...
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-output\-name NAME
+prepend \fBNAME\fP to the file names generated when \fB\-\-output\-csv\fP
+is specified. For instance \fB\-\-output\-name FOO\fP will create
+files:
+.INDENT 7.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+FOO\-metadata\-absolute_weights.csv
+FOO\-metadata\-device_utilization.csv
+\&...
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.UNINDENT
+.sp
+The \fB\-\-set\-...\fP options can be used to modify the tunables of the
+input crush map, provided the \fB\-\-enable\-unsafe\-tunables\fP option is
+also set to disable the safeguard. The input crush map is modified in
+memory. For example:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+$ crushtool \-i mymap \-\-test \-\-show\-bad\-mappings
+bad mapping rule 1 x 781 num_rep 7 result [8,10,2,11,6,9]
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+could be fixed by increasing the \fBchoose\-total\-tries\fP as follows:
+.INDENT 0.0
+.INDENT 3.5
+.INDENT 0.0
+.TP
+.B $ crushtool \-i mymap \-\-test 
+\-\-show\-bad\-mappings \-\-enable\-unsafe\-tunables \-\-set\-choose\-total\-tries 500
+.UNINDENT
+.UNINDENT
 .UNINDENT
 .SH BUILDING A MAP
 .sp
@@ -97,12 +322,16 @@ CRUSH hierarchy. Each layer describes how the layer (or raw devices)
 preceding it should be grouped.
 .sp
 Each layer consists of:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 name ( uniform | list | tree | straw ) size
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 The first element is the name for the elements in the layer
 (e.g. "rack"). Each element\(aqs name will be append a number to the
@@ -115,40 +344,51 @@ The third component is the maximum size of the bucket. If the size is
 preceding layer.
 .SH EXAMPLE
 .sp
-Suppose we have 128 devices, each grouped into shelves with 4 devices
-each, and 8 shelves per rack. We could create a three level hierarchy
-with:
+Suppose we have two rows with two racks each and 20 nodes per rack. Suppose
+each node contains 4 storage devices for Ceph OSD Daemons. This configuration
+allows us to deploy 320 Ceph OSD Daemons. Lets assume a 42U rack with 2U nodes,
+leaving an extra 2U for a rack switch.
+.sp
+To reflect our hierarchy of devices, nodes, racks and rows, we would execute
+the following:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
-crushtool \-\-build 128 shelf uniform 4 rack straw 8 root straw 0 \-o map
+crushtool \-o crushmap \-\-build \-\-num_osds 320 node straw 4 rack straw 20 row straw 2
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To adjust the default (generic) mapping rules, we can run:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 # decompile
-crushtool \-d map \-o map.txt
+crushtool \-d crushmap \-o map.txt
 
 # edit
 vi map.txt
 
 # recompile
-crushtool \-c map.txt \-o map
+crushtool \-c map.txt \-o crushmap
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .SH AVAILABILITY
 .sp
-\fBcrushtool\fP is part of the Ceph distributed file system. Please
+\fBcrushtool\fP is part of the Ceph distributed storage system. Please
 refer to the Ceph documentation at \fI\%http://ceph.com/docs\fP for more
 information.
 .SH SEE ALSO
 .sp
 \fBceph\fP(8),
 \fBosdmaptool\fP(8),
-\fBmkcephfs\fP(8)
 .SH COPYRIGHT
 2010-2013, Inktank Storage, Inc. and contributors. Licensed under Creative Commons BY-SA
 .\" Generated by docutils manpage writer.
