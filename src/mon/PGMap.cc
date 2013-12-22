@@ -798,7 +798,7 @@ void PGMap::recovery_summary(Formatter *f, ostream *out,
     if (f) {
       f->dump_unsigned("degraded_objects", delta_sum.stats.sum.num_objects_degraded);
       f->dump_unsigned("degraded_total", delta_sum.stats.sum.num_object_copies);
-      f->dump_string("degrated_ratio", b);
+      f->dump_string("degraded_ratio", b);
     } else {
       *out << delta_sum.stats.sum.num_objects_degraded
 	   << "/" << delta_sum.stats.sum.num_object_copies << " objects degraded (" << b << "%)";

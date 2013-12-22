@@ -13,6 +13,24 @@ PATH=/sbin:/bin:/usr/bin
 #. /lib/lsb/init-functions
 . /etc/rc.d/init.d/functions
 
+daemon_is_running() {
+    daemon=$1
+    if pidof $daemon >/dev/null; then
+        echo "$daemon is running."
+        exit 0
+    else
+        echo "$daemon is not running."
+        exit 1
+    fi
+}
+
+VERBOSE=0
+for opt in $*; do
+    if [ "$opt" = "-v" ] || [ "$opt" = "--verbose" ]; then
+       VERBOSE=1
+    fi
+done
+
 # prefix for radosgw instances in ceph.conf
 PREFIX='client.radosgw.'
 
@@ -20,17 +38,10 @@ PREFIX='client.radosgw.'
 #DEFAULT_USER='www-data'
 DEFAULT_USER='apache'
 
-# directory to write logs to
-LOGDIR='/var/log/radosgw'
-
 RADOSGW=`which radosgw`
 if [ ! -x "$RADOSGW" ]; then
-    exit 0
-fi
-
-# make sure log dir exists
-if [ ! -d "$LOGDIR" ]; then
-    mkdir -p $LOGDIR
+    [ $VERBOSE -eq 1 ] && echo "$RADOSGW could not start, it is not executable."
+    exit 1
 fi
 
 case "$1" in
@@ -51,7 +62,9 @@ case "$1" in
 
             # mapped to this host?
             host=`ceph-conf -n $name host`
-            if [ "$host" != `hostname` ]; then
+            hostname=`hostname -s`
+            if [ "$host" != "$hostname" ]; then
+                [ $VERBOSE -eq 1 ] && echo "hostname $hostname could not be found in ceph.conf:[$name], not starting."
                 continue
             fi
 
@@ -67,9 +80,10 @@ case "$1" in
             fi
 
             #start-stop-daemon --start -u $user -x $RADOSGW -- -n $name
-            daemon --user="$user" "$RADOSGW -n $name"
+            daemon --user="$user" "ulimit -n 32768; $RADOSGW -n $name"
             echo "Starting $name..."
         done
+        daemon_is_running $RADOSGW
         ;;
     reload)
         #start-stop-daemon --signal HUP -x $RADOSGW --oknodo
@@ -86,15 +100,10 @@ case "$1" in
         echo "Stopping radosgw instance(s)..."
         ;;
     status)
-        if pidof $RADOSGW >/dev/null; then
-            echo "$RADOSGW is running."
-        else
-            echo "$RADOSGW is not running."
-            exit 1
-        fi
+        daemon_is_running $RADOSGW
         ;;
     *)
-        echo "Usage: $0 start|stop|restart|force-reload|reload|status" >&2
+        echo "Usage: $0 {start|stop|restart|force-reload|reload|status} [-v|--verbose]" >&2
         exit 3
         ;;
 esac

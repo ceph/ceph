@@ -274,7 +274,7 @@ void ReplicatedPG::on_peer_recover(
   publish_stats_to_osd();
   // done!
   peer_missing[peer].got(soid, recovery_info.version);
-  if (peer == backfill_target && backfills_in_flight.count(soid)) {
+  if (peer == get_backfill_target() && backfills_in_flight.count(soid)) {
     map<hobject_t, ObjectContextRef>::iterator i = recovering.find(soid);
     assert(i != recovering.end());
     list<OpRequestRef> requeue_list;
@@ -355,15 +355,16 @@ bool ReplicatedPG::is_degraded_object(const hobject_t& soid)
 {
   if (pg_log.get_missing().missing.count(soid))
     return true;
-  for (unsigned i = 1; i < acting.size(); i++) {
-    int peer = acting[i];
+  assert(actingbackfill.size() > 0);
+  for (unsigned i = 1; i < actingbackfill.size(); i++) {
+    int peer = actingbackfill[i];
     if (peer_missing.count(peer) &&
 	peer_missing[peer].missing.count(soid))
       return true;
 
     // Object is degraded if after last_backfill AND
     // we are backfilling it
-    if (peer == backfill_target &&
+    if (peer == get_backfill_target() &&
 	peer_info[peer].last_backfill <= soid &&
 	last_backfill_started >= soid &&
 	backfills_in_flight.count(soid))
@@ -388,8 +389,9 @@ void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
 	    << ", recovering"
 	    << dendl;
     eversion_t v;
-    for (unsigned i = 1; i < acting.size(); i++) {
-      int peer = acting[i];
+    assert(actingbackfill.size() > 0);
+    for (unsigned i = 1; i < actingbackfill.size(); i++) {
+      int peer = actingbackfill[i];
       if (peer_missing.count(peer) &&
 	  peer_missing[peer].missing.count(soid)) {
 	v = peer_missing[peer].missing[soid].need;
@@ -512,6 +514,18 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
     for (vector<int>::iterator p = acting.begin(); p != acting.end(); ++p)
       f->dump_unsigned("osd", *p);
     f->close_section();
+    if (backfill_targets.size() > 0) {
+      f->open_array_section("backfill_targets");
+      for (vector<int>::iterator p = backfill_targets.begin(); p != backfill_targets.end(); ++p)
+        f->dump_unsigned("osd", *p);
+      f->close_section();
+    }
+    if (actingbackfill.size() > 0) {
+      f->open_array_section("actingbackfill");
+      for (vector<int>::iterator p = actingbackfill.begin(); p != actingbackfill.end(); ++p)
+        f->dump_unsigned("osd", *p);
+      f->close_section();
+    }
     f->open_object_section("info");
     info.dump(f.get());
     f->close_section();
@@ -927,9 +941,6 @@ void ReplicatedPG::do_request(
   OpRequestRef op,
   ThreadPool::TPHandle &handle)
 {
-  // do any pending flush
-  do_pending_flush();
-
   if (!op_has_sufficient_caps(op)) {
     osd->reply_op_error(op, -EPERM);
     return;
@@ -938,18 +949,33 @@ void ReplicatedPG::do_request(
   if (can_discard_request(op)) {
     return;
   }
-  if (!flushed) {
-    dout(20) << " !flushed, waiting for active on " << op << dendl;
+  if (flushes_in_progress > 0) {
+    dout(20) << flushes_in_progress
+	     << " flushes_in_progress pending "
+	     << "waiting for active on " << op << dendl;
     waiting_for_active.push_back(op);
     return;
   }
 
+  if (!is_active()) {
+    // Delay unless PGBackend says it's ok
+    if (pgbackend->can_handle_while_inactive(op)) {
+      bool handled = pgbackend->handle_message(op);
+      assert(handled);
+      return;
+    } else {
+      waiting_for_active.push_back(op);
+      return;
+    }
+  }
+
+  assert(is_active() && flushes_in_progress == 0);
   if (pgbackend->handle_message(op))
     return;
 
   switch (op->get_req()->get_type()) {
   case CEPH_MSG_OSD_OP:
-    if (is_replay() || !is_active()) {
+    if (is_replay()) {
       dout(20) << " replay, waiting for active on " << op << dendl;
       waiting_for_active.push_back(op);
       return;
@@ -1128,6 +1154,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
   // opposite is not a problem; if the target is after the line, we
   // don't apply on the backfill_target and it doesn't matter.)
   pg_info_t *backfill_target_info = NULL;
+  int backfill_target = get_backfill_target();
   bool before_backfill = false;
   if (backfill_target >= 0) {
     backfill_target_info = &peer_info[backfill_target];
@@ -1157,9 +1184,12 @@ void ReplicatedPG::do_op(OpRequestRef op)
       if (!src_obc.count(src_oid)) {
 	ObjectContextRef sobc;
 	snapid_t ssnapid;
+	int r;
 
-	int r = find_object_context(src_oid, &sobc, false, &ssnapid);
-	if (r == -EAGAIN) {
+	if (src_oid.is_head() && is_missing_object(src_oid)) {
+	  wait_for_missing_object(src_oid, op);
+	} else if ((r = find_object_context(
+		      src_oid, &sobc, false, &ssnapid)) == -EAGAIN) {
 	  // missing the specific snap we need; requeue and wait.
 	  hobject_t wait_oid(osd_op.soid.oid, src_oloc.key, ssnapid, m->get_pg().ps(),
 			     info.pgid.pool(), m->get_object_locator().nspace);
@@ -1793,7 +1823,7 @@ void ReplicatedPG::do_scan(
   case MOSDPGScan::OP_SCAN_DIGEST:
     {
       int from = m->get_source().num();
-      assert(from == backfill_target);
+      assert(from == get_backfill_target());
       BackfillInterval& bi = peer_backfill_info;
       bi.begin = m->begin;
       bi.end = m->end;
@@ -1971,7 +2001,6 @@ void ReplicatedPG::do_backfill(OpRequestRef op)
   switch (m->op) {
   case MOSDPGBackfill::OP_BACKFILL_FINISH:
     {
-      assert(is_replica());
       assert(cct->_conf->osd_kill_backfill_at != 1);
 
       MOSDPGBackfill *reply = new MOSDPGBackfill(MOSDPGBackfill::OP_BACKFILL_FINISH_ACK,
@@ -1990,7 +2019,6 @@ void ReplicatedPG::do_backfill(OpRequestRef op)
 
   case MOSDPGBackfill::OP_BACKFILL_PROGRESS:
     {
-      assert(is_replica());
       assert(cct->_conf->osd_kill_backfill_at != 2);
 
       info.last_backfill = m->last_backfill;
@@ -4552,6 +4580,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx)
   ctx->obc->ssc->snapset = ctx->new_snapset;
   info.stats.stats.add(ctx->delta_stats, ctx->obs->oi.category);
 
+  int backfill_target = get_backfill_target();
   if (backfill_target >= 0) {
     pg_info_t& pinfo = peer_info[backfill_target];
     if (soid <= pinfo.last_backfill)
@@ -5323,15 +5352,6 @@ void ReplicatedPG::op_applied(RepGather *repop)
   // (logical) local ack.
   int whoami = osd->get_nodeid();
 
-  if (repop->ctx->clone_obc) {
-    repop->ctx->clone_obc = ObjectContextRef();
-  }
-  if (repop->ctx->snapset_obc) {
-    repop->ctx->snapset_obc = ObjectContextRef();
-  }
-
-  repop->src_obc.clear();
-
   if (!repop->aborted) {
     assert(repop->waitfor_ack.count(whoami) ||
 	   repop->waitfor_disk.count(whoami) == 0);  // commit before ondisk
@@ -5560,13 +5580,14 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
 
   int acks_wanted = CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK;
 
-  if (ctx->op && acting.size() > 1) {
+  assert(actingbackfill.size() > 0);
+  if (ctx->op && actingbackfill.size() > 1) {
     ostringstream ss;
-    ss << "waiting for subops from " << vector<int>(acting.begin() + 1, acting.end());
+    ss << "waiting for subops from " << vector<int>(actingbackfill.begin() + 1, actingbackfill.end());
     ctx->op->mark_sub_op_sent(ss.str());
   }
-  for (unsigned i=1; i<acting.size(); i++) {
-    int peer = acting[i];
+  for (unsigned i=1; i<actingbackfill.size(); i++) {
+    int peer = actingbackfill[i];
     pg_info_t &pinfo = peer_info[peer];
 
     repop->waitfor_ack.insert(peer);
@@ -5583,6 +5604,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
       assert(0 == "broken implementation, do not use");
     }
 
+    int backfill_target = get_backfill_target();
     // ship resulting transaction, log entries, and pg_stats
     if (peer == backfill_target && soid > last_backfill_started &&
         // only skip normal (not temp pool=-1) objects
@@ -6253,7 +6275,6 @@ void ReplicatedPG::sub_op_modify(OpRequestRef op)
   // sanity checks
   assert(m->map_epoch >= info.history.same_interval_since);
   assert(is_active());
-  assert(is_replica());
   
   // we better not be missing this.
   assert(!pg_log.get_missing().is_missing(soid));
@@ -7532,13 +7553,14 @@ void ReplicatedPG::_committed_pushed_object(
     last_complete_ondisk = last_complete;
 
     if (last_complete_ondisk == info.last_update) {
-      if (is_replica()) {
+      if (!is_primary()) {
+        // Either we are a replica or backfill target.
 	// we are fully up to date.  tell the primary!
 	osd->send_message_osd_cluster(get_primary(),
 				      new MOSDPGTrim(get_osdmap()->get_epoch(), info.pgid,
 						     last_complete_ondisk),
 				      get_osdmap()->get_epoch());
-      } else if (is_primary()) {
+      } else {
 	// we are the primary.  tell replicas to trim?
 	if (calc_min_last_complete_ondisk())
 	  trim_peers();
@@ -7764,10 +7786,11 @@ eversion_t ReplicatedPG::pick_newest_available(const hobject_t& oid)
   v = pg_log.get_missing().missing.find(oid)->second.have;
   dout(10) << "pick_newest_available " << oid << " " << v << " on osd." << osd->whoami << " (local)" << dendl;
 
-  for (unsigned i=1; i<acting.size(); ++i) {
-    int peer = acting[i];
+  assert(actingbackfill.size() > 0);
+  for (unsigned i=1; i<actingbackfill.size(); ++i) {
+    int peer = actingbackfill[i];
     if (!peer_missing[peer].is_missing(oid)) {
-      assert(peer == backfill_target);
+      assert(peer == get_backfill_target());
       continue;
     }
     eversion_t h = peer_missing[peer].missing[oid].have;
@@ -7994,11 +8017,18 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
 
 void ReplicatedPG::on_flushed()
 {
-  pair<hobject_t, ObjectContextRef> i;
-  while (object_contexts.get_next(i.first, &i)) {
-    derr << "on_flushed: object " << i.first << " obc still alive" << dendl;
+  assert(flushes_in_progress > 0);
+  flushes_in_progress--;
+  if (flushes_in_progress == 0) {
+    requeue_ops(waiting_for_active);
   }
-  assert(object_contexts.empty());
+  if (!is_active() || !is_primary()) {
+    pair<hobject_t, ObjectContextRef> i;
+    while (object_contexts.get_next(i.first, &i)) {
+      derr << "on_flushed: object " << i.first << " obc still alive" << dendl;
+    }
+    assert(object_contexts.empty());
+  }
   pgbackend->on_flushed();
 }
 
@@ -8044,16 +8074,15 @@ void ReplicatedPG::on_shutdown()
   cancel_recovery();
 }
 
+// For now only care about a single backfill at a time
 void ReplicatedPG::on_activate()
 {
-  for (unsigned i = 1; i<acting.size(); i++) {
-    if (peer_info[acting[i]].last_backfill != hobject_t::get_max()) {
-      assert(backfill_target == -1);
-      backfill_target = acting[i];
-      last_backfill_started = peer_info[acting[i]].last_backfill;
-      dout(10) << " chose backfill target osd." << backfill_target
-	       << " from " << last_backfill_started << dendl;
-    }
+  int backfill_target = get_backfill_target();
+  if (backfill_target != -1) {
+    last_backfill_started = peer_info[backfill_target].last_backfill;
+    assert(last_backfill_started != hobject_t::get_max());
+    dout(10) << " chose backfill target osd." << backfill_target
+	     << " from " << last_backfill_started << dendl;
   }
 
   hit_set_setup();
@@ -8280,6 +8309,7 @@ bool ReplicatedPG::start_recovery_ops(
     work_in_progress = true;
 
   bool deferred_backfill = false;
+  int backfill_target = get_backfill_target();
   if (recovering.empty() &&
       state_test(PG_STATE_BACKFILL) &&
       backfill_target >= 0 && started < max &&
@@ -8534,6 +8564,7 @@ int ReplicatedPG::prep_object_replica_pushes(
   const hobject_t& soid, eversion_t v,
   PGBackend::RecoveryHandle *h)
 {
+  assert(is_primary());
   dout(10) << __func__ << ": on " << soid << dendl;
 
   // NOTE: we know we will get a valid oloc off of disk here.
@@ -8541,8 +8572,9 @@ int ReplicatedPG::prep_object_replica_pushes(
   if (!obc) {
     pg_log.missing_add(soid, v, eversion_t());
     bool uhoh = true;
-    for (unsigned i=1; i<acting.size(); i++) {
-      int peer = acting[i];
+    assert(actingbackfill.size() > 0);
+    for (unsigned i=1; i<actingbackfill.size(); i++) {
+      int peer = actingbackfill[i];
       if (!peer_missing[peer].is_missing(soid, v)) {
 	missing_loc[soid].insert(peer);
 	missing_loc_sources.insert(peer);
@@ -8585,8 +8617,9 @@ int ReplicatedBackend::start_pushes(
 {
   int pushes = 0;
   // who needs it?  
-  for (unsigned i=1; i<get_parent()->get_acting().size(); i++) {
-    int peer = get_parent()->get_acting()[i];
+  assert(get_parent()->get_actingbackfill().size() > 0);
+  for (unsigned i=1; i<get_parent()->get_actingbackfill().size(); i++) {
+    int peer = get_parent()->get_actingbackfill()[i];
     map<int, pg_missing_t>::const_iterator j =
       get_parent()->get_peer_missing().find(peer);
     assert(j != get_parent()->get_peer_missing().end());
@@ -8609,8 +8642,9 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
 
   // this is FAR from an optimal recovery order.  pretty lame, really.
-  for (unsigned i=1; i<acting.size(); i++) {
-    int peer = acting[i];
+  assert(actingbackfill.size() > 0);
+  for (unsigned i=1; i<actingbackfill.size(); i++) {
+    int peer = actingbackfill[i];
     map<int, pg_missing_t>::const_iterator pm = peer_missing.find(peer);
     assert(pm != peer_missing.end());
     map<int, pg_info_t>::const_iterator pi = peer_info.find(peer);
@@ -8692,6 +8726,7 @@ int ReplicatedPG::recover_backfill(
   ThreadPool::TPHandle &handle, bool *work_started)
 {
   dout(10) << "recover_backfill (" << max << ")" << dendl;
+  int backfill_target = get_backfill_target();
   assert(backfill_target >= 0);
 
   pg_info_t& pinfo = peer_info[backfill_target];
@@ -8848,7 +8883,6 @@ int ReplicatedPG::recover_backfill(
   }
 
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
-  map<int, vector<PushOp> > pushes;
   for (map<hobject_t,
 	   boost::tuple<eversion_t, eversion_t, ObjectContextRef> >::iterator i =
 	     to_push.begin();
@@ -8936,7 +8970,7 @@ void ReplicatedPG::prep_backfill_object_push(
   dout(10) << "push_backfill_object " << oid << " v " << v << " to osd." << peer << dendl;
 
   backfills_in_flight.insert(oid);
-  map<int, pg_missing_t>::iterator bpm = peer_missing.find(backfill_target);
+  map<int, pg_missing_t>::iterator bpm = peer_missing.find(get_backfill_target());
   assert(bpm != peer_missing.end());
   bpm->second.add(oid, eversion_t(), eversion_t());
 

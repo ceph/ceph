@@ -1,4 +1,6 @@
-.TH "RADOSGW" "8" "April 29, 2013" "dev" "Ceph"
+.\" Man page generated from reStructuredText.
+.
+.TH "RADOSGW" "8" "December 09, 2013" "dev" "Ceph"
 .SH NAME
 radosgw \- rados REST gateway
 .
@@ -28,8 +30,33 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.\" Man page generated from reStructuredText.
 .
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
 .SH SYNOPSIS
 .nf
 \fBradosgw\fP
@@ -62,6 +89,8 @@ Specify a unix domain socket path.
 .SH CONFIGURATION
 .sp
 Currently it\(aqs the easiest to use the RADOS Gateway with Apache and mod_fastcgi:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
@@ -92,8 +121,12 @@ FastCgiExternalServer /var/www/s3gw.fcgi \-socket /tmp/radosgw.sock
 </VirtualHost>
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 And the corresponding radosgw script (/var/www/s3gw.fcgi):
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
@@ -101,10 +134,14 @@ And the corresponding radosgw script (/var/www/s3gw.fcgi):
 exec /usr/bin/radosgw \-c /etc/ceph/ceph.conf \-n client.radosgw.gateway
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 The radosgw daemon is a standalone process which needs a configuration
 section in the ceph.conf The section name should start with
 \(aqclient.radosgw.\(aq as specified in /etc/init.d/radosgw:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
@@ -114,26 +151,38 @@ section in the ceph.conf The section name should start with
     rgw socket path = /tmp/radosgw.sock
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 You will also have to generate a key for the radosgw to use for
 authentication with the cluster:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 ceph\-authtool \-C \-n client.radosgw.gateway \-\-gen\-key /etc/ceph/keyring.radosgw.gateway
-ceph\-authtool \-n client.radosgw.gateway \-\-cap mon \(aqallow r\(aq \-\-cap osd \(aqallow rwx\(aq /etc/ceph/keyring.radosgw.gateway
+ceph\-authtool \-n client.radosgw.gateway \-\-cap mon \(aqallow rw\(aq \-\-cap osd \(aqallow rwx\(aq /etc/ceph/keyring.radosgw.gateway
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 And add the key to the auth entries:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 ceph auth add client.radosgw.gateway \-\-in\-file=keyring.radosgw.gateway
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 Now you can start Apache and the radosgw daemon:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
@@ -141,11 +190,13 @@ Now you can start Apache and the radosgw daemon:
 /etc/init.d/radosgw start
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .SH USAGE LOGGING
 .sp
 The \fBradosgw\fP maintains an asynchronous usage log. It accumulates
 statistics about user operations and flushes it periodically. The
-logs can be accessed and managed through \fBradosgw\-admin\fP.
+logs can be accessed and managed through \fBradosgw\-admin\fP\&.
 .sp
 The information that is being logged contains total data transfer,
 total operations, and total successful operations. The data is being
@@ -154,6 +205,8 @@ operation was done on the service (e.g., when listing a bucket) in
 which case it is accounted under the operating user.
 .sp
 Following is an example configuration:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
@@ -165,6 +218,8 @@ Following is an example configuration:
     rgw usage max user shards = 1
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 The total number of shards determines how many total objects hold the
 usage log information. The per\-user number of shards specify how many
@@ -174,7 +229,7 @@ threshold specify how many entries can be kept before resorting to
 synchronous flush.
 .SH AVAILABILITY
 .sp
-\fBradosgw\fP is part of the Ceph distributed file system. Please refer
+\fBradosgw\fP is part of the Ceph distributed storage system. Please refer
 to the Ceph documentation at \fI\%http://ceph.com/docs\fP for more
 information.
 .SH SEE ALSO

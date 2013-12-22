@@ -1,4 +1,6 @@
-.TH "CEPH-OSD" "8" "April 29, 2013" "dev" "Ceph"
+.\" Man page generated from reStructuredText.
+.
+.TH "CEPH-OSD" "8" "December 09, 2013" "dev" "Ceph"
 .SH NAME
 ceph-osd \- ceph object storage daemon
 .
@@ -28,8 +30,33 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.\" Man page generated from reStructuredText.
 .
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
 .SH SYNOPSIS
 .nf
 \fBceph\-osd\fP \-i \fIosdnum\fP [ \-\-osd\-data \fIdatapath\fP ] [ \-\-osd\-journal
@@ -61,18 +88,17 @@ Debug mode: like \fB\-f\fP, but also send all log output to stderr.
 .INDENT 0.0
 .TP
 .B \-\-osd\-data osddata
-Use object store at \fIosddata\fP.
+Use object store at \fIosddata\fP\&.
 .UNINDENT
 .INDENT 0.0
 .TP
 .B \-\-osd\-journal journal
-Journal updates to \fIjournal\fP.
+Journal updates to \fIjournal\fP\&.
 .UNINDENT
 .INDENT 0.0
 .TP
 .B \-\-mkfs
-Create an empty object repository. Normally invoked by
-\fBmkcephfs\fP(8). This also initializes the journal
+Create an empty object repository. This also initializes the journal
 (if one is defined).
 .UNINDENT
 .INDENT 0.0
@@ -129,7 +155,7 @@ Connect to specified monitor (instead of looking through
 .UNINDENT
 .SH AVAILABILITY
 .sp
-\fBceph\-osd\fP is part of the Ceph distributed file system. Please refer to
+\fBceph\-osd\fP is part of the Ceph distributed storage system. Please refer to
 the Ceph documentation at \fI\%http://ceph.com/docs\fP for more information.
 .SH SEE ALSO
 .sp

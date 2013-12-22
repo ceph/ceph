@@ -43,12 +43,14 @@ struct MetaSession {
   xlist<MetaRequest*> requests;
   xlist<MetaRequest*> unsafe_requests;
 
+  Cap *s_cap_iterator;
+
   MClientCapRelease *release;
   
   MetaSession()
     : mds_num(-1), con(NULL),
       seq(0), cap_gen(0), cap_renew_seq(0), num_caps(0),
-      state(STATE_NEW),
+      state(STATE_NEW), s_cap_iterator(NULL),
       release(NULL)
   {}
   ~MetaSession();

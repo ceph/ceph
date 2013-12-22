@@ -223,13 +223,13 @@ void pow2_hist_t::generate_test_instances(list<pow2_hist_t*>& ls)
   ls.back()->h.push_back(2);
 }
 
-void filestore_perf_stat_t::dump(Formatter *f) const
+void objectstore_perf_stat_t::dump(Formatter *f) const
 {
   f->dump_unsigned("commit_latency_ms", filestore_commit_latency);
   f->dump_unsigned("apply_latency_ms", filestore_apply_latency);
 }
 
-void filestore_perf_stat_t::encode(bufferlist &bl) const
+void objectstore_perf_stat_t::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
   ::encode(filestore_commit_latency, bl);
@@ -237,7 +237,7 @@ void filestore_perf_stat_t::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void filestore_perf_stat_t::decode(bufferlist::iterator &bl)
+void objectstore_perf_stat_t::decode(bufferlist::iterator &bl)
 {
   DECODE_START(1, bl);
   ::decode(filestore_commit_latency, bl);
@@ -245,10 +245,10 @@ void filestore_perf_stat_t::decode(bufferlist::iterator &bl)
   DECODE_FINISH(bl);
 }
 
-void filestore_perf_stat_t::generate_test_instances(std::list<filestore_perf_stat_t*>& o)
+void objectstore_perf_stat_t::generate_test_instances(std::list<objectstore_perf_stat_t*>& o)
 {
-  o.push_back(new filestore_perf_stat_t());
-  o.push_back(new filestore_perf_stat_t());
+  o.push_back(new objectstore_perf_stat_t());
+  o.push_back(new objectstore_perf_stat_t());
   o.back()->filestore_commit_latency = 20;
   o.back()->filestore_apply_latency = 30;
 }
@@ -721,7 +721,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_string("snap_mode", is_pool_snaps_mode() ? "pool" : "selfmanaged");
   f->dump_unsigned("snap_seq", get_snap_seq());
   f->dump_unsigned("snap_epoch", get_snap_epoch());
-  f->open_object_section("pool_snaps");
+  f->open_array_section("pool_snaps");
   for (map<snapid_t, pool_snap_info_t>::const_iterator p = snaps.begin(); p != snaps.end(); ++p) {
     f->open_object_section("pool_snap_info");
     p->second.dump(f);
@@ -739,7 +739,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("read_tier", read_tier);
   f->dump_int("write_tier", write_tier);
   f->dump_string("cache_mode", get_cache_mode_name());
-  f->open_array_section("properties");
+  f->open_object_section("properties");
   for (map<string,string>::const_iterator i = properties.begin();
        i != properties.end();
        ++i) {
@@ -1096,7 +1096,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   pg_pool_t a;
   o.push_back(new pg_pool_t(a));
 
-  a.type = TYPE_REP;
+  a.type = TYPE_REPLICATED;
   a.size = 2;
   a.crush_ruleset = 3;
   a.object_hash = 4;
@@ -1155,7 +1155,7 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
     out << " max_bytes " << p.quota_max_bytes;
   if (p.quota_max_objects)
     out << " max_objects " << p.quota_max_objects;
-  if (p.tiers.size())
+  if (!p.tiers.empty())
     out << " tiers " << p.tiers;
   if (p.is_tier())
     out << " tier_of " << p.tier_of;
@@ -2900,7 +2900,7 @@ ostream& operator<<(ostream& out, const osd_peer_stat_t &stat)
 
 void OSDSuperblock::encode(bufferlist &bl) const
 {
-  ENCODE_START(5, 5, bl);
+  ENCODE_START(6, 5, bl);
   ::encode(cluster_fsid, bl);
   ::encode(whoami, bl);
   ::encode(current_epoch, bl);
@@ -2911,12 +2911,13 @@ void OSDSuperblock::encode(bufferlist &bl) const
   ::encode(clean_thru, bl);
   ::encode(mounted, bl);
   ::encode(osd_fsid, bl);
+  ::encode(last_map_marked_full, bl);
   ENCODE_FINISH(bl);
 }
 
 void OSDSuperblock::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
   if (struct_v < 3) {
     string magic;
     ::decode(magic, bl);
@@ -2936,6 +2937,8 @@ void OSDSuperblock::decode(bufferlist::iterator &bl)
   ::decode(mounted, bl);
   if (struct_v >= 4)
     ::decode(osd_fsid, bl);
+  if (struct_v >= 6)
+    ::decode(last_map_marked_full, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2953,6 +2956,7 @@ void OSDSuperblock::dump(Formatter *f) const
   f->close_section();
   f->dump_int("clean_thru", clean_thru);
   f->dump_int("last_epoch_mounted", mounted);
+  f->dump_int("last_map_marked_full", last_map_marked_full);
 }
 
 void OSDSuperblock::generate_test_instances(list<OSDSuperblock*>& o)
@@ -2967,6 +2971,8 @@ void OSDSuperblock::generate_test_instances(list<OSDSuperblock*>& o)
   z.newest_map = 9;
   z.mounted = 8;
   z.clean_thru = 7;
+  o.push_back(new OSDSuperblock(z));
+  z.last_map_marked_full = 7;
   o.push_back(new OSDSuperblock(z));
 }
 
@@ -3129,7 +3135,7 @@ void object_info_t::encode(bufferlist& bl) const
        ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(12, 8, bl);
+  ENCODE_START(13, 8, bl);
   ::encode(soid, bl);
   ::encode(myoloc, bl);	//Retained for compatibility
   ::encode(category, bl);
@@ -3144,23 +3150,23 @@ void object_info_t::encode(bufferlist& bl) const
     ::encode(snaps, bl);
   ::encode(truncate_seq, bl);
   ::encode(truncate_size, bl);
-  __u8 flags_lo = flags & 0xff;
-  __u8 flags_hi = (flags & 0xff00) >> 8;
-  ::encode(flags_lo, bl);
+  ::encode(is_lost(), bl);
   ::encode(old_watchers, bl);
   /* shenanigans to avoid breaking backwards compatibility in the disk format.
    * When we can, switch this out for simply putting the version_t on disk. */
   eversion_t user_eversion(0, user_version);
   ::encode(user_eversion, bl);
-  ::encode(flags_hi, bl);
+  ::encode(test_flag(FLAG_USES_TMAP), bl);
   ::encode(watchers, bl);
+  __u32 _flags = flags;
+  ::encode(_flags, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_info_t::decode(bufferlist::iterator& bl)
 {
   object_locator_t myoloc;
-  DECODE_START_LEGACY_COMPAT_LEN(12, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(13, 8, 8, bl);
   map<entity_name_t, watch_info_t> old_watchers;
   if (struct_v >= 2 && struct_v <= 5) {
     sobject_t obj;
@@ -3191,6 +3197,9 @@ void object_info_t::decode(bufferlist::iterator& bl)
   ::decode(truncate_seq, bl);
   ::decode(truncate_size, bl);
   if (struct_v >= 3) {
+    // if this is struct_v >= 13, we will overwrite this
+    // below since this field is just here for backwards
+    // compatibility
     __u8 lo;
     ::decode(lo, bl);
     flags = (flag_t)lo;
@@ -3204,9 +3213,10 @@ void object_info_t::decode(bufferlist::iterator& bl)
     user_version = user_eversion.version;
   }
   if (struct_v >= 9) {
-    __u8 hi;
-    ::decode(hi, bl);
-    flags = (flag_t)(flags | ((unsigned)hi << 8));
+    bool uses_tmap = false;
+    ::decode(uses_tmap, bl);
+    if (uses_tmap)
+      set_flag(FLAG_USES_TMAP);
   } else {
     set_flag(FLAG_USES_TMAP);
   }
@@ -3222,6 +3232,11 @@ void object_info_t::decode(bufferlist::iterator& bl)
 	make_pair(
 	  make_pair(i->second.cookie, i->first), i->second));
     }
+  }
+  if (struct_v >= 13) {
+    __u32 _flags;
+    ::decode(_flags, bl);
+    flags = (flag_t)_flags;
   }
   DECODE_FINISH(bl);
 }

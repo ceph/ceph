@@ -165,7 +165,7 @@ settings:
 - **Monitor ID**: A monitor ID is a unique ID assigned to each monitor within 
   the cluster. It is an alphanumeric value, and by convention the identifier 
   usually follows an alphabetical increment (e.g., ``a``, ``b``, etc.). This 
-  can be set in a Ceph configuration file (e.g., ``[mon.a]``, [mon.b]``, etc.), 
+  can be set in a Ceph configuration file (e.g., ``[mon.a]``, ``[mon.b]``, etc.), 
   by a deployment tool, or using the ``ceph`` commandline.
 
 - **Keys**: The monitor must have secret keys. A deployment tool such as 

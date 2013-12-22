@@ -50,6 +50,14 @@ The default pools include:
 Create a Pool
 =============
 
+Before creating pools, refer to the `Pool, PG and CRUSH Config Reference`_.
+Ideally, you should override the default value for the number of placement
+groups in you Ceph configuration file, as the default is NOT ideal. 
+For example:: 
+
+	osd pool default pg num = 100
+	osd pool default pgp num = 100
+
 To create a pool, execute:: 
 
 	ceph osd pool create {pool-name} {pg-num} [{pgp-num}]
@@ -60,7 +68,7 @@ Where:
 
 :Description: The name of the pool. It must be unique.
 :Type: String
-:Required: Yes
+:Required: Yes. Picks up default or Ceph configuration value if not specified.
 
 ``{pg-num}``
 
@@ -79,8 +87,9 @@ Where:
               for placement group splitting scenarios.
 
 :Type: Integer
-:Required: Yes
+:Required: Yes. Picks up default or Ceph configuration value if not specified.
 :Default: 8
+
 
 When you create a pool, set the number of placement groups to a reasonable value
 (e.g., ``100``). Consider the total number of placement groups per OSD too.
@@ -190,6 +199,12 @@ You may set values for the following keys:
 :Description: The ruleset to use for mapping object placement in the cluster.
 :Type: Integer
 
+``hashpspool``
+
+:Description: Set/Unset HASHPSPOOL flag on a given pool.
+:Type: Integer
+:Valid Range: 1 sets flag, 0 unsets flag
+
 
 .. note:: Version ``0.48`` Argonaut and above.	
 
@@ -230,19 +245,15 @@ For example::
 
 	ceph osd pool set data size 3
 
-You may execute this command for each pool. 
-
-Note, however, that pool size is more of a best-effort setting: an object
-might accept ios in degraded mode with fewer than size replicas.  To
-set a minimum number of required replicas for io, you should use the
-min_size setting.
-
+You may execute this command for each pool. **Note:** An object might accept 
+I/Os in degraded mode with fewer than ``pool size`` replicas.  To set a minimum
+number of required replicas for I/O, you should use the ``min_size`` setting.
 For example::
 
   ceph osd pool set data min_size 2
 
-This ensures that no object in the data pool will receive io with fewer than
-min_size replicas.
+This ensures that no object in the data pool will receive I/O with fewer than
+``min_size`` replicas.
 
 
 Get the Number of Object Replicas
@@ -253,4 +264,9 @@ To get the number of object replicas, execute the following::
 	ceph osd dump | grep 'rep size'
 	
 Ceph will list the pools, with the ``rep size`` attribute highlighted.
-By default, Ceph creates two replicas of an object (two copies).
+By default, ceph Creates one replica of an object (a total of two copies, or 
+a size of 2).
+
+
+
+.. _Pool, PG and CRUSH Config Reference: ../../configuration/pool-pg-config-ref

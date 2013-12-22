@@ -21,7 +21,7 @@
 
 class MMonElection : public Message {
 
-  static const int HEAD_VERSION = 4;
+  static const int HEAD_VERSION = 5;
   static const int COMPAT_VERSION = 2;
 
 public:
@@ -49,6 +49,7 @@ public:
    * on user cluster, so we've left them in for compatibility. */
   version_t defunct_one;
   version_t defunct_two;
+  bufferlist commands;
   
   MMonElection() : Message(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
     op(0), epoch(0), quorum_features(0), defunct_one(0),
@@ -90,6 +91,7 @@ public:
     ::encode(quorum_features, payload);
     ::encode(defunct_one, payload);
     ::encode(defunct_two, payload);
+    ::encode(commands, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -109,6 +111,8 @@ public:
       ::decode(defunct_one, p);
       ::decode(defunct_two, p);
     }
+    if (header.version >= 5)
+      ::decode(commands, p);
   }
   
 };

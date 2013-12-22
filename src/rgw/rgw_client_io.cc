@@ -57,3 +57,4 @@ int RGWClientIO::read(char *buf, int max, int *actual)
 
   return 0;
 }
+

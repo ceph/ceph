@@ -11,11 +11,59 @@
  * Foundation.  See file COPYING.
  * 
  */
+#include <ctype.h>
 #include <sstream>
 #include <tr1/memory>
 #include "ObjectStore.h"
 #include "common/Formatter.h"
 #include "FileStore.h"
+#include "MemStore.h"
+#include "common/safe_io.h"
+
+ObjectStore *ObjectStore::create(CephContext *cct,
+				 const string& type,
+				 const string& data,
+				 const string& journal)
+{
+  if (type == "filestore") {
+    return new FileStore(data, journal);
+  }
+  if (type == "memstore") {
+    return new MemStore(cct, data);
+  }
+  return NULL;
+}
+
+int ObjectStore::write_meta(const std::string& key,
+			    const std::string& value)
+{
+  string v = value;
+  v += "\n";
+  int r = safe_write_file(path.c_str(), key.c_str(),
+			  v.c_str(), v.length());
+  if (r < 0)
+    return r;
+  return 0;
+}
+
+int ObjectStore::read_meta(const std::string& key,
+			   std::string *value)
+{
+  char buf[4096];
+  int r = safe_read_file(path.c_str(), key.c_str(),
+			 buf, sizeof(buf));
+  if (r <= 0)
+    return r;
+  // drop trailing newlines
+  while (r && isspace(buf[r-1])) {
+    --r;
+  }
+  *value = string(buf, r);
+  return 0;
+}
+
+
+
 
 ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s)
 {
@@ -504,7 +552,7 @@ int ObjectStore::collection_list(coll_t c, vector<hobject_t>& o)
   int ret = collection_list(c, go);
   if (ret == 0) {
     o.reserve(go.size());
-    for (vector<ghobject_t>::iterator i = go.begin(); i != go.end() ; i++)
+    for (vector<ghobject_t>::iterator i = go.begin(); i != go.end() ; ++i)
       o.push_back(i->hobj);
   }
   return ret;
@@ -520,7 +568,7 @@ int ObjectStore::collection_list_partial(coll_t c, hobject_t start,
   if (ret == 0) {
     *next = gnext.hobj;
     ls->reserve(go.size());
-    for (vector<ghobject_t>::iterator i = go.begin(); i != go.end() ; i++)
+    for (vector<ghobject_t>::iterator i = go.begin(); i != go.end() ; ++i)
       ls->push_back(i->hobj);
   }
   return ret;
@@ -534,7 +582,7 @@ int ObjectStore::collection_list_range(coll_t c, hobject_t start, hobject_t end,
   int ret = collection_list_range(c, gstart, gend, seq, &go);
   if (ret == 0) {
     ls->reserve(go.size());
-    for (vector<ghobject_t>::iterator i = go.begin(); i != go.end() ; i++)
+    for (vector<ghobject_t>::iterator i = go.begin(); i != go.end() ; ++i)
       ls->push_back(i->hobj);
   }
   return ret;

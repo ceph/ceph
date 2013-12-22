@@ -28,10 +28,11 @@ class MExportDirDiscoverAck : public Message {
   bool is_success() { return success; }
 
   MExportDirDiscoverAck() : Message(MSG_MDS_EXPORTDIRDISCOVERACK) {}
-  MExportDirDiscoverAck(dirfrag_t df, bool s=true) : 
+  MExportDirDiscoverAck(dirfrag_t df, uint64_t tid, bool s=true) :
     Message(MSG_MDS_EXPORTDIRDISCOVERACK),
-    dirfrag(df),
-    success(s) { }
+    dirfrag(df), success(s) {
+    set_tid(tid);
+  }
 private:
   ~MExportDirDiscoverAck() {}
 

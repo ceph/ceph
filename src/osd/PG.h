@@ -333,7 +333,7 @@ public:
 
   // primary state
  public:
-  vector<int> up, acting, want_acting;
+  vector<int> up, acting, want_acting, actingbackfill;
   map<int,eversion_t> peer_last_complete_ondisk;
   eversion_t  min_last_complete_ondisk;  // up: min over last_complete_ondisk, peer_last_complete_ondisk
   eversion_t  pg_trim_to;
@@ -417,8 +417,6 @@ protected:
   // primary-only, recovery-only state
   set<int>             might_have_unfound;  // These osds might have objects on them
 					    // which are unfound on the primary
-  bool need_flush;     // need to flush before any new activity
-
   epoch_t last_peering_reset;
 
 
@@ -509,14 +507,18 @@ protected:
   
   BackfillInterval backfill_info;
   BackfillInterval peer_backfill_info;
-  int backfill_target;
+  vector<int> backfill_targets;
   bool backfill_reserved;
   bool backfill_reserving;
 
   friend class OSD;
 
 public:
+  // Compatibility with single backfill target code
   int get_backfill_target() const {
+    int backfill_target = -1;
+    if (backfill_targets.size() > 0)
+      backfill_target = backfill_targets[0];
     return backfill_target;
   }
 
@@ -524,7 +526,7 @@ protected:
 
 
   // pg waiters
-  bool flushed;
+  unsigned flushes_in_progress;
 
   // Ops waiting on backfill_pos to change
   list<OpRequestRef>            waiting_for_active;
@@ -570,6 +572,11 @@ public:
       if (up[i] == osd) return true;
     return false;
   }
+  bool is_actingbackfill(int osd) const {
+    for (unsigned i=0; i<actingbackfill.size(); i++)
+      if (actingbackfill[i] == osd) return true;
+    return false;
+  }
   
   bool needs_recovery() const;
   bool needs_backfill() const;
@@ -591,10 +598,11 @@ public:
 
   bool calc_min_last_complete_ondisk() {
     eversion_t min = last_complete_ondisk;
-    for (unsigned i=1; i<acting.size(); i++) {
-      if (peer_last_complete_ondisk.count(acting[i]) == 0)
+    assert(actingbackfill.size() > 0);
+    for (unsigned i=1; i<actingbackfill.size(); i++) {
+      if (peer_last_complete_ondisk.count(actingbackfill[i]) == 0)
 	return false;   // we don't have complete info
-      eversion_t a = peer_last_complete_ondisk[acting[i]];
+      eversion_t a = peer_last_complete_ondisk[actingbackfill[i]];
       if (a < min)
 	min = a;
     }
@@ -626,7 +634,7 @@ public:
   void trim_write_ahead();
 
   map<int, pg_info_t>::const_iterator find_best_info(const map<int, pg_info_t> &infos) const;
-  bool calc_acting(int& newest_update_osd, vector<int>& want) const;
+  bool calc_acting(int& newest_update_osd, vector<int>& want, vector<int>& backfill) const;
   bool choose_acting(int& newest_update_osd);
   void build_might_have_unfound();
   void replay_queued_ops();
@@ -1281,7 +1289,6 @@ public:
 
     struct Peering : boost::statechart::state< Peering, Primary, GetInfo >, NamedState {
       std::auto_ptr< PriorSet > prior_set;
-      bool flushed;
 
       Peering(my_context ctx);
       void exit();
@@ -1600,10 +1607,12 @@ public:
 
     struct Incomplete : boost::statechart::state< Incomplete, Peering>, NamedState {
       typedef boost::mpl::list <
-	boost::statechart::custom_reaction< AdvMap >
+	boost::statechart::custom_reaction< AdvMap >,
+	boost::statechart::custom_reaction< MNotifyRec >
 	> reactions;
       Incomplete(my_context ctx);
       boost::statechart::result react(const AdvMap &advmap);
+      boost::statechart::result react(const MNotifyRec& infoevt);
       void exit();
     };
 

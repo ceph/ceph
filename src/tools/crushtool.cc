@@ -186,7 +186,7 @@ int main(int argc, const char **argv)
 
   CrushWrapper crush;
 
-  CrushTester tester(crush, cerr, 1);
+  CrushTester tester(crush, cerr);
 
   vector<const char *> empty_args;  // we use -c, don't confuse the generic arg parsing
   global_init(NULL, empty_args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
@@ -599,10 +599,10 @@ int main(int argc, const char **argv)
     
     // make a generic rules
     int ruleset=1;
-    crush_rule *rule = crush_make_rule(3, ruleset, CEPH_PG_TYPE_REP, 2, 2);
+    crush_rule *rule = crush_make_rule(3, ruleset, CEPH_PG_TYPE_REPLICATED, 2, 2);
     assert(rule);
     crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-    crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_LEAF_FIRSTN, CRUSH_CHOOSE_N, 1);
+    crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSELEAF_FIRSTN, CRUSH_CHOOSE_N, 1);
     crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
     int rno = crush_add_rule(crush.crush, rule, -1);
     crush.set_rule_name(rno, "data");
@@ -664,38 +664,19 @@ int main(int argc, const char **argv)
     modified = true;
   }
 
-  const char *scary_tunables_message =
-    "** tunables are DANGEROUS and NOT YET RECOMMENDED.  DO NOT USE without\n"
-    "** confirming with developers that your use-case is safe and correct.";
   if (choose_local_tries >= 0) {
-    if (!unsafe_tunables) {
-      cerr << scary_tunables_message << std::endl;
-      return -1;
-    }
     crush.set_choose_local_tries(choose_local_tries);
     modified = true;
   }
   if (choose_local_fallback_tries >= 0) {
-    if (!unsafe_tunables) {
-      cerr << scary_tunables_message << std::endl;
-      return -1;
-    }
     crush.set_choose_local_fallback_tries(choose_local_fallback_tries);
     modified = true;
   }
   if (choose_total_tries >= 0) {
-    if (!unsafe_tunables) {
-      cerr << scary_tunables_message << std::endl;
-      return -1;
-    }
     crush.set_choose_total_tries(choose_total_tries);
     modified = true;
   }
   if (chooseleaf_descend_once >= 0) {
-    if (!unsafe_tunables) {
-      cerr << scary_tunables_message << std::endl;
-      return -1;
-    }
     crush.set_chooseleaf_descend_once(chooseleaf_descend_once);
     modified = true;
   }
@@ -719,6 +700,10 @@ int main(int argc, const char **argv)
   }
 
   if (test) {
+    if (tester.get_output_utilization_all() ||
+	tester.get_output_utilization())
+      tester.set_output_statistics(true);
+
     int r = tester.test();
     if (r < 0)
       exit(1);

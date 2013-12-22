@@ -84,6 +84,7 @@ using namespace std;
 #include "ObjecterWriteback.h"
 
 #include "include/assert.h"
+#include "include/stat.h"
 
 #undef dout_prefix
 #define dout_prefix *_dout << "client." << whoami << " "
@@ -109,7 +110,6 @@ Client::CommandHook::CommandHook(Client *client) :
 bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
 			       std::string format, bufferlist& out)
 {
-  stringstream ss;
   Formatter *f = new_formatter(format);
   f->open_object_section("result");
   m_client->client_lock.Lock();
@@ -1600,6 +1600,11 @@ void Client::handle_client_session(MClientSession *m)
     trim_caps(session, m->get_max_caps());
     break;
 
+  case CEPH_SESSION_FLUSHMSG:
+    messenger->send_message(new MClientSession(CEPH_SESSION_FLUSHMSG_ACK, m->get_seq()),
+			    session->con);
+    break;
+
   default:
     assert(0);
   }
@@ -2921,8 +2926,6 @@ void Client::remove_cap(Cap *cap)
   i.seq = cap->issue_seq;
   i.migrate_seq = cap->mseq;
   session->release->caps.push_back(i);
-  
-  cap->cap_item.remove_myself();
 
   if (in->auth_cap == cap) {
     if (in->flushing_cap_item.is_on_list()) {
@@ -2933,7 +2936,13 @@ void Client::remove_cap(Cap *cap)
   }
   assert(in->caps.count(mds));
   in->caps.erase(mds);
-  delete cap;
+
+  if (cap == session->s_cap_iterator) {
+    cap->inode = NULL;
+  } else {
+    cap->cap_item.remove_myself();
+    delete cap;
+  }
 
   if (!in->is_any_caps()) {
     ldout(cct, 15) << "remove_cap last one, closing snaprealm " << in->snaprealm << dendl;
@@ -2966,7 +2975,7 @@ void Client::trim_caps(MetaSession *s, int max)
   xlist<Cap*>::iterator p = s->caps.begin();
   while (s->caps.size() > max && !p.end()) {
     Cap *cap = *p;
-    ++p;
+    s->s_cap_iterator = cap;
     Inode *in = cap->inode;
     if (in->caps.size() > 1 && cap != in->auth_cap) {
       // disposable non-auth cap
@@ -2992,7 +3001,14 @@ void Client::trim_caps(MetaSession *s, int max)
       if (all)
 	trimmed++;
     }
+
+    ++p;
+    if (!cap->inode) {
+      cap->cap_item.remove_myself();
+      delete cap;
+    }
   }
+  s->s_cap_iterator = NULL;
 }
 
 void Client::mark_caps_dirty(Inode *in, int caps)
@@ -4492,9 +4508,9 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid, I
   if (in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
     if (mask & (CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME)) {
       if (mask & CEPH_SETATTR_MTIME)
-	in->mtime = utime_t(attr->st_mtim.tv_sec, attr->st_mtim.tv_nsec);
+        in->mtime = utime_t(stat_get_mtime_sec(attr), stat_get_mtime_nsec(attr));
       if (mask & CEPH_SETATTR_ATIME)
-	in->atime = utime_t(attr->st_atim.tv_sec, attr->st_atim.tv_nsec);
+        in->atime = utime_t(stat_get_atime_sec(attr), stat_get_atime_nsec(attr));
       in->ctime = ceph_clock_now(cct);
       in->time_warp_seq++;
       mark_caps_dirty(in, CEPH_CAP_FILE_EXCL);
@@ -4524,14 +4540,14 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid, I
     req->inode_drop |= CEPH_CAP_AUTH_SHARED;
   }
   if (mask & CEPH_SETATTR_MTIME) {
-    req->head.args.setattr.mtime =
-      utime_t(attr->st_mtim.tv_sec, attr->st_mtim.tv_nsec);
+    utime_t mtime = utime_t(stat_get_mtime_sec(attr), stat_get_mtime_nsec(attr));
+    req->head.args.setattr.mtime = mtime;
     req->inode_drop |= CEPH_CAP_AUTH_SHARED | CEPH_CAP_FILE_RD |
       CEPH_CAP_FILE_WR;
   }
   if (mask & CEPH_SETATTR_ATIME) {
-    req->head.args.setattr.atime =
-      utime_t(attr->st_atim.tv_sec, attr->st_atim.tv_nsec);
+    utime_t atime = utime_t(stat_get_atime_sec(attr), stat_get_atime_nsec(attr));
+    req->head.args.setattr.atime = atime;
     req->inode_drop |= CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_RD |
       CEPH_CAP_FILE_WR;
   }
@@ -4641,16 +4657,16 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
   st->st_uid = in->uid;
   st->st_gid = in->gid;
   if (in->ctime.sec() > in->mtime.sec()) {
-    st->st_ctim.tv_sec = in->ctime.sec();
-    st->st_ctim.tv_nsec = in->ctime.nsec();
+    stat_set_ctime_sec(st, in->ctime.sec());
+    stat_set_ctime_nsec(st, in->ctime.nsec());
   } else {
-    st->st_ctim.tv_sec = in->mtime.sec();
-    st->st_ctim.tv_nsec = in->mtime.nsec();
+    stat_set_ctime_sec(st, in->mtime.sec());
+    stat_set_ctime_nsec(st, in->mtime.nsec());
   }
-  st->st_atim.tv_sec = in->atime.sec();
-  st->st_atim.tv_nsec = in->atime.nsec();
-  st->st_mtim.tv_sec = in->mtime.sec();
-  st->st_mtim.tv_nsec = in->mtime.nsec();
+  stat_set_atime_sec(st, in->atime.sec());
+  stat_set_atime_nsec(st, in->atime.nsec());
+  stat_set_mtime_sec(st, in->mtime.sec());
+  stat_set_mtime_nsec(st, in->mtime.nsec());
   if (in->is_dir()) {
     //st->st_size = in->dirstat.size();
     st->st_size = in->rstat.rbytes;
@@ -4796,10 +4812,10 @@ int Client::utime(const char *relpath, struct utimbuf *buf)
   if (r < 0)
     return r;
   struct stat attr;
-  attr.st_mtim.tv_sec = buf->modtime;
-  attr.st_mtim.tv_nsec = 0;
-  attr.st_atim.tv_sec = buf->actime;
-  attr.st_atim.tv_nsec = 0;
+  stat_set_mtime_sec(&attr, buf->modtime);
+  stat_set_mtime_nsec(&attr, 0);
+  stat_set_atime_sec(&attr, buf->actime);
+  stat_set_atime_nsec(&attr, 0);
   return _setattr(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME);
 }
 
@@ -4817,10 +4833,10 @@ int Client::lutime(const char *relpath, struct utimbuf *buf)
   if (r < 0)
     return r;
   struct stat attr;
-  attr.st_mtim.tv_sec = buf->modtime;
-  attr.st_mtim.tv_nsec = 0;
-  attr.st_atim.tv_sec = buf->actime;
-  attr.st_atim.tv_nsec = 0;
+  stat_set_mtime_sec(&attr, buf->modtime);
+  stat_set_mtime_nsec(&attr, 0);
+  stat_set_atime_sec(&attr, buf->actime);
+  stat_set_atime_nsec(&attr, 0);
   return _setattr(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME);
 }
 

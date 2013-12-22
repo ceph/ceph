@@ -24,9 +24,7 @@ import re
 import json
 
 def get_command_descriptions(what):
-    buffer = os.popen("./get_command_descriptions " + "--" + what
-					  + " 2>&1 | grep cmd000").read()
-    return re.sub(r'^.*?(\{.*\})', '\g<1>', buffer)
+    return os.popen("./get_command_descriptions " + "--" + what).read()
 
 def test_parse_json_funcsigs():
     commands = get_command_descriptions("all")
@@ -43,7 +41,8 @@ class TestArgparse:
 
     def assert_valid_command(self, args):
         result = validate_command(sigdict, args)
-        assert_not_in(result, [None, {}])
+        assert_not_equal(result,None)
+        assert_not_equal(result,{})
 
     def check_1_natural_arg(self, prefix, command):
         self.assert_valid_command([prefix, command, '1'])
@@ -557,6 +556,9 @@ class TestOSD(TestArgparse):
                                                     'poolname', 'objectname',
                                                     'toomany']))
 
+    def test_metadata(self):
+        self.check_1_natural_arg('osd', 'metadata')
+
     def test_scrub(self):
         self.check_1_string_arg('osd', 'scrub')
 
@@ -623,11 +625,11 @@ class TestOSD(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
                                                     setter,
                                                     'osd.0']))
-        assert_in(validate_command(sigdict, ['osd', 'crush',
+        ret = validate_command(sigdict, ['osd', 'crush',
                                              setter,
                                              'osd.0',
-                                             '-1.0']),
-                  [None, {}])
+                                             '-1.0'])
+        assert ret in [None, {}]
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
                                                     setter,
                                                     'osd.0',
@@ -884,13 +886,7 @@ class TestOSD(TestArgparse):
                                    'poolname', '128', '128'])
         self.assert_valid_command(['osd', 'pool', 'create',
                                    'poolname', '128', '128',
-                                   'foo=bar'])
-        self.assert_valid_command(['osd', 'pool', 'create',
-                                   'poolname', '128', '128',
-                                   'foo=bar', 'baz=frob'])
-        self.assert_valid_command(['osd', 'pool', 'create',
-                                   'poolname', '128',
-                                   'foo=bar', 'baz=frob'])
+                                   'whatever'])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname']))

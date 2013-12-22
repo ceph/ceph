@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "acconfig.h"
+
 #include "os/WBThrottle.h"
 #include "common/perf_counters.h"
 
@@ -145,9 +147,17 @@ void *WBThrottle::entry()
   while (get_next_should_flush(&wb)) {
     clearing = wb.get<0>();
     lock.Unlock();
+#ifdef HAVE_FDATASYNC
     ::fdatasync(**wb.get<1>());
-    if (wb.get<2>().nocache)
-      posix_fadvise(**wb.get<1>(), 0, 0, POSIX_FADV_DONTNEED);
+#else
+    ::fsync(**wb.get<1>());
+#endif
+#ifdef HAVE_POSIX_FADVISE
+    if (wb.get<2>().nocache) {
+      int fa_r = posix_fadvise(**wb.get<1>(), 0, 0, POSIX_FADV_DONTNEED);
+      assert(fa_r == 0);
+    }
+#endif
     lock.Lock();
     clearing = ghobject_t();
     cur_ios -= wb.get<2>().ios;

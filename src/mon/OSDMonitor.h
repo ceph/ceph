@@ -37,6 +37,8 @@ class Monitor;
 #include "messages/MOSDFailure.h"
 #include "messages/MPoolOp.h"
 
+#define OSD_METADATA_PREFIX "osd_metadata"
+
 /// information about a particular peer's failure reports for one osd
 struct failure_reporter_t {
   int num_reports;          ///< reports from this reporter
@@ -120,6 +122,8 @@ public:
 private:
   // [leader]
   OSDMap::Incremental pending_inc;
+  map<int, bufferlist> pending_metadata;
+  set<int>             pending_metadata_rm;
   map<int, failure_info_t> failure_info;
   map<int,utime_t>    down_pending_out;  // osd down -> out
 
@@ -236,7 +240,9 @@ private:
   bool prepare_pool_op_delete(MPoolOp *m);
   int prepare_new_pool(string& name, uint64_t auid, int crush_rule,
                        unsigned pg_num, unsigned pgp_num,
-		       const vector<string> &properties);
+		       const vector<string> &properties,
+                       const unsigned pool_type,
+		       stringstream &ss);
   int prepare_new_pool(MPoolOp *m);
 
   void update_pool_flags(int64_t pool_id, uint64_t flags);
@@ -339,6 +345,7 @@ private:
   epoch_t blacklist(const entity_addr_t& a, utime_t until);
 
   void dump_info(Formatter *f);
+  int dump_osd_metadata(int osd, Formatter *f, ostream *err);
 
   void check_subs();
   void check_sub(Subscription *sub);

@@ -140,7 +140,7 @@ public:
   static const int REP_LIST =     2;
 
 
-  static const int NONCE_EXPORT  = 1;
+  static const unsigned EXPORT_NONCE  = 1;
 
 
   // -- wait masks --
@@ -415,7 +415,7 @@ private:
   // for giving to clients
   void get_dist_spec(set<int>& ls, int auth) {
     if (is_rep()) {
-      for (map<int,int>::iterator p = replicas_begin();
+      for (map<int,unsigned>::iterator p = replicas_begin();
 	   p != replicas_end(); 
 	   ++p)
 	ls.insert(p->first);
