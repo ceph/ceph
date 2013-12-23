@@ -2384,6 +2384,7 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     rr->tid = ++routed_request_tid;
     rr->client_inst = req->get_source_inst();
     rr->con = req->get_connection();
+    rr->con_features = rr->con->get_features();
     encode_message(req, CEPH_FEATURES_ALL, rr->request_bl);   // for my use only; use all features
     rr->session = static_cast<MonSession *>(session->get());
     routed_requests[rr->tid] = rr;
@@ -2391,7 +2392,9 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     
     dout(10) << "forward_request " << rr->tid << " request " << *req << dendl;
 
-    MForward *forward = new MForward(rr->tid, req, rr->session->caps);
+    MForward *forward = new MForward(rr->tid, req,
+				     rr->con_features,
+				     rr->session->caps);
     forward->set_priority(req->get_priority());
     messenger->send_message(forward, monmap->get_inst(mon));
   } else {
@@ -2419,7 +2422,7 @@ void Monitor::handle_forward(MForward *m)
     c->set_priv(s);
     c->set_peer_addr(m->client.addr);
     c->set_peer_type(m->client.name.type());
-    c->set_features(m->conn_features);
+    c->set_features(m->con_features);
 
     s->caps = m->client_caps;
     dout(10) << " caps are " << s->caps << dendl;
@@ -2583,7 +2586,8 @@ void Monitor::resend_routed_requests()
       delete rr;
     } else {
       dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req << dendl;
-      MForward *forward = new MForward(rr->tid, req, rr->session->caps);
+      MForward *forward = new MForward(rr->tid, req, rr->con_features,
+				       rr->session->caps);
       forward->client = rr->client_inst;
       forward->set_priority(req->get_priority());
       messenger->send_message(forward, monmap->get_inst(mon));
