@@ -20,6 +20,44 @@ extern "C" {
 #include "PG.h"
 #include "OSDMap.h"
 
+const char *ceph_osd_flag_name(unsigned flag)
+{
+  switch (flag) {
+  case CEPH_OSD_FLAG_ACK: return "ack";
+  case CEPH_OSD_FLAG_ONNVRAM: return "onnvram";
+  case CEPH_OSD_FLAG_ONDISK: return "ondisk";
+  case CEPH_OSD_FLAG_RETRY: return "retry";
+  case CEPH_OSD_FLAG_READ: return "read";
+  case CEPH_OSD_FLAG_WRITE: return "write";
+  case CEPH_OSD_FLAG_ORDERSNAP: return "ordersnap";
+  case CEPH_OSD_FLAG_PGOP: return "pgop";
+  case CEPH_OSD_FLAG_EXEC: return "exec";
+  case CEPH_OSD_FLAG_EXEC_PUBLIC: return "exec_public";
+  case CEPH_OSD_FLAG_LOCALIZE_READS: return "localize_reads";
+  case CEPH_OSD_FLAG_RWORDERED: return "rwordered";
+  case CEPH_OSD_FLAG_IGNORE_CACHE: return "ignore_cache";
+  case CEPH_OSD_FLAG_SKIPRWLOCKS: return "skiprwlocks";
+  case CEPH_OSD_FLAG_IGNORE_OVERLAY: return "ignore_overlay";
+  case CEPH_OSD_FLAG_FLUSH: return "flush";
+  default: return "???";
+  }
+}
+
+string ceph_osd_flag_string(unsigned flags)
+{
+  string s;
+  for (unsigned i=0; i<32; ++i) {
+    if (flags & (1u<<i)) {
+      if (s.length())
+	s += "+";
+      s += ceph_osd_flag_name(1u << i);
+    }
+  }
+  if (s.length())
+    return s;
+  return string("-");
+}
+
 // -- osd_reqid_t --
 void osd_reqid_t::encode(bufferlist &bl) const
 {
@@ -1147,6 +1185,8 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_objects_missing_on_primary", num_objects_missing_on_primary);
   f->dump_int("num_objects_degraded", num_objects_degraded);
   f->dump_int("num_objects_unfound", num_objects_unfound);
+  f->dump_int("num_objects_dirty", num_objects_dirty);
+  f->dump_int("num_whiteouts", num_whiteouts);
   f->dump_int("num_read", num_rd);
   f->dump_int("num_read_kb", num_rd_kb);
   f->dump_int("num_write", num_wr);
@@ -1161,7 +1201,7 @@ void object_stat_sum_t::dump(Formatter *f) const
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(6, 3, bl);
+  ENCODE_START(7, 3, bl);
   ::encode(num_bytes, bl);
   ::encode(num_objects, bl);
   ::encode(num_object_clones, bl);
@@ -1179,12 +1219,14 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   ::encode(num_keys_recovered, bl);
   ::encode(num_shallow_scrub_errors, bl);
   ::encode(num_deep_scrub_errors, bl);
+  ::encode(num_objects_dirty, bl);
+  ::encode(num_whiteouts, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_stat_sum_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
   ::decode(num_bytes, bl);
   if (struct_v < 3) {
     uint64_t num_kb;
@@ -1221,6 +1263,13 @@ void object_stat_sum_t::decode(bufferlist::iterator& bl)
     num_shallow_scrub_errors = 0;
     num_deep_scrub_errors = 0;
   }
+  if (struct_v >= 7) {
+    ::decode(num_objects_dirty, bl);
+    ::decode(num_whiteouts, bl);
+  } else {
+    num_objects_dirty = 0;
+    num_whiteouts = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -1244,6 +1293,8 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
   a.num_deep_scrub_errors = 17;
   a.num_shallow_scrub_errors = 18;
   a.num_scrub_errors = a.num_deep_scrub_errors + a.num_shallow_scrub_errors;
+  a.num_objects_dirty = 21;
+  a.num_whiteouts = 22;
   o.push_back(new object_stat_sum_t(a));
 }
 
@@ -1266,6 +1317,8 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
   num_objects_recovered += o.num_objects_recovered;
   num_bytes_recovered += o.num_bytes_recovered;
   num_keys_recovered += o.num_keys_recovered;
+  num_objects_dirty += o.num_objects_dirty;
+  num_whiteouts += o.num_whiteouts;
 }
 
 void object_stat_sum_t::sub(const object_stat_sum_t& o)
@@ -1287,6 +1340,8 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_objects_recovered -= o.num_objects_recovered;
   num_bytes_recovered -= o.num_bytes_recovered;
   num_keys_recovered -= o.num_keys_recovered;
+  num_objects_dirty -= o.num_objects_dirty;
+  num_whiteouts -= o.num_whiteouts;
 }
 
 
@@ -3195,6 +3250,7 @@ void object_info_t::dump(Formatter *f) const
   f->dump_stream("version") << version;
   f->dump_stream("prior_version") << prior_version;
   f->dump_stream("last_reqid") << last_reqid;
+  f->dump_unsigned("user_version", user_version);
   f->dump_unsigned("size", size);
   f->dump_stream("mtime") << mtime;
   f->dump_unsigned("lost", (int)is_lost());
@@ -3236,6 +3292,8 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
     out << " " << oi.snaps;
   if (oi.flags)
     out << " " << oi.get_flag_string();
+  out << " s " << oi.size;
+  out << " uv" << oi.user_version;
   out << ")";
   return out;
 }
@@ -3791,6 +3849,9 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_LIST_SNAPS:
     case CEPH_OSD_OP_UNDIRTY:
     case CEPH_OSD_OP_ISDIRTY:
+    case CEPH_OSD_OP_CACHE_FLUSH:
+    case CEPH_OSD_OP_CACHE_TRY_FLUSH:
+    case CEPH_OSD_OP_CACHE_EVICT:
       break;
     case CEPH_OSD_OP_ASSERT_VER:
       out << " v" << op.op.assert_ver.ver;
@@ -3809,6 +3870,7 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       out << (op.op.watch.flag ? " add":" remove")
 	  << " cookie " << op.op.watch.cookie << " ver " << op.op.watch.ver;
       break;
+    case CEPH_OSD_OP_COPY_GET:
     case CEPH_OSD_OP_COPY_GET_CLASSIC:
       out << " max " << op.op.copy_get.max;
     case CEPH_OSD_OP_COPY_FROM:
