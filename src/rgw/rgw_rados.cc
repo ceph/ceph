@@ -4151,6 +4151,7 @@ struct get_obj_data : public RefCountedObject {
   atomic_t cancelled;
   atomic_t err_code;
   Throttle throttle;
+  list<bufferlist> read_list;
 
   get_obj_data(CephContext *_cct)
     : cct(_cct),
@@ -4186,7 +4187,6 @@ struct get_obj_data : public RefCountedObject {
 
     c->wait_for_complete_and_cb();
     int r = c->get_return_value();
-    c->release();
 
     lock.Lock();
     completion_map.erase(cur_ofs);
@@ -4195,6 +4195,8 @@ struct get_obj_data : public RefCountedObject {
       *done = true;
     }
     lock.Unlock();
+
+    c->release();
     
     return r;
   }
@@ -4338,20 +4340,44 @@ void RGWRados::get_obj_aio_completion_cb(completion_t c, void *arg)
     goto done_unlock;
   }
 
-  for (iter = bl_list.begin(); iter != bl_list.end(); ++iter) {
-    bufferlist& bl = *iter;
-    int r = d->client_cb->handle_data(bl, 0, bl.length());
-    if (r < 0) {
-      d->set_cancelled(r);
-      break;
-    }
-  }
+  d->read_list.splice(d->read_list.end(), bl_list);
 
 done_unlock:
   d->data_lock.Unlock();
 done:
   d->put();
   return;
+}
+
+int RGWRados::flush_read_list(struct get_obj_data *d)
+{
+  d->data_lock.Lock();
+  list<bufferlist> l;
+  l.swap(d->read_list);
+  d->get();
+  d->read_list.clear();
+
+  d->data_lock.Unlock();
+
+  int r = 0;
+
+  list<bufferlist>::iterator iter;
+  for (iter = l.begin(); iter != l.end(); ++iter) {
+    bufferlist& bl = *iter;
+    r = d->client_cb->handle_data(bl, 0, bl.length());
+    if (r < 0) {
+      dout(0) << "ERROR: flush_read_list(): d->client_c->handle_data() returned " << r << dendl;
+      break;
+    }
+  }
+
+  d->data_lock.Lock();
+  d->put();
+  if (r < 0) {
+    d->set_cancelled(r);
+  }
+  d->data_lock.Unlock();
+  return r;
 }
 
 int RGWRados::get_obj_iterate_cb(void *ctx, RGWObjState *astate,
@@ -4397,6 +4423,10 @@ int RGWRados::get_obj_iterate_cb(void *ctx, RGWObjState *astate,
 	  return 0;
     }
   }
+
+  r = flush_read_list(d);
+  if (r < 0)
+    return r;
 
   get_obj_bucket_and_oid_key(obj, bucket, oid, key);
 
@@ -4453,6 +4483,12 @@ int RGWRados::get_obj_iterate(void *ctx, void **handle, rgw_obj& obj,
 
   while (!done) {
     r = data->wait_next_io(&done);
+    if (r < 0) {
+      dout(10) << "get_obj_iterate() r=" << r << ", canceling all io" << dendl;
+      data->cancel_all_io();
+      break;
+    }
+    r = flush_read_list(data);
     if (r < 0) {
       dout(10) << "get_obj_iterate() r=" << r << ", canceling all io" << dendl;
       data->cancel_all_io();
