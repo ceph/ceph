@@ -38,6 +38,7 @@ smallmds=0
 hitset=""
 overwrite_conf=1
 cephx=1 #turn cephx on by default
+cache=""
 memstore=0
 
 MON_ADDR=""
@@ -156,6 +157,14 @@ case $1 in
     -o )
 	    extra_conf="$extra_conf	$2
 "
+	    shift
+	    ;;
+    --cache )
+	    if [ -z "$cache" ]; then
+		cache="$2"
+	    else
+		cache="$cache $2"
+	    fi
 	    shift
 	    ;;
     * )
@@ -599,6 +608,24 @@ EOF
     done
 fi
 
+echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
+
+do_cache() {
+    while [ -n "$*" ]; do
+	p="$1"
+	shift
+	echo "creating cache for pool $p ..."
+	$SUDO $CEPH_ADM <<EOF
+osd pool create ${p}-cache 8
+osd tier add $p ${p}-cache
+osd tier cache-mode ${p}-cache writeback
+osd tier set-overlay $p ${p}-cache
+quit
+EOF
+    done
+}
+do_cache $cache
+
 do_hitsets() {
     while [ -n "$*" ]; do
 	pool="$1"
@@ -606,14 +633,15 @@ do_hitsets() {
 	shift
 	shift
 	echo "setting hit_set on pool $pool type $type ..."
-	$CEPH_ADM osd pool set $pool hit_set_type $type
-	$CEPH_ADM osd pool set $pool hit_set_count 8
-	$CEPH_ADM osd pool set $pool hit_set_period 30
+	$CEPH_ADM <<EOF
+osd pool set $pool hit_set_type $type
+osd pool set $pool hit_set_count 8
+osd pool set $pool hit_set_period 30
+quit
+EOF
     done
 }
 do_hitsets $hitset
-
-echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 
 echo ""
 echo "export PYTHONPATH=./pybind"

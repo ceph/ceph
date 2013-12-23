@@ -860,12 +860,55 @@ struct ObjectOperation {
     osd_op.op.snap.snapid = snapid;
   }
 
-  void copy_from(object_t src, snapid_t snapid, object_locator_t src_oloc, version_t src_version) {
+  void copy_from(object_t src, snapid_t snapid, object_locator_t src_oloc,
+		 version_t src_version, unsigned flags) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_FROM);
     osd_op.op.copy_from.snapid = snapid;
     osd_op.op.copy_from.src_version = src_version;
+    osd_op.op.copy_from.flags = flags;
     ::encode(src, osd_op.indata);
     ::encode(src_oloc, osd_op.indata);
+  }
+
+  /**
+   * writeback content to backing tier
+   *
+   * If object is marked dirty in the cache tier, write back content
+   * to backing tier. If the object is clean this is a no-op.
+   *
+   * If writeback races with an update, the update will block.
+   *
+   * use with IGNORE_CACHE to avoid triggering promote.
+   */
+  void cache_flush() {
+    add_op(CEPH_OSD_OP_CACHE_FLUSH);
+  }
+
+  /**
+   * writeback content to backing tier
+   *
+   * If object is marked dirty in the cache tier, write back content
+   * to backing tier. If the object is clean this is a no-op.
+   *
+   * If writeback races with an update, return EAGAIN.  Requires that
+   * the SKIPRWLOCKS flag be set.
+   *
+   * use with IGNORE_CACHE to avoid triggering promote.
+   */
+  void cache_try_flush() {
+    add_op(CEPH_OSD_OP_CACHE_TRY_FLUSH);
+  }
+
+  /**
+   * evict object from cache tier
+   *
+   * If object is marked clean, remove the object from the cache tier.
+   * Otherwise, return EBUSY.
+   *
+   * use with IGNORE_CACHE to avoid triggering promote.
+   */
+  void cache_evict() {
+    add_op(CEPH_OSD_OP_CACHE_EVICT);
   }
 };
 
@@ -891,7 +934,6 @@ class Objecter {
   int global_op_flags; // flags which are applied to each IO op
   bool keep_balanced_budget;
   bool honor_osdmap_full;
-  bool honor_cache_redirects;
 
   void maybe_request_map();
 
@@ -1383,7 +1425,6 @@ public:
     num_unacked(0), num_uncommitted(0),
     global_op_flags(0),
     keep_balanced_budget(false), honor_osdmap_full(true),
-    honor_cache_redirects(true),
     last_seen_osdmap_version(0),
     last_seen_pgmap_version(0),
     client_lock(l), timer(t),
@@ -1416,9 +1457,6 @@ public:
 
   void set_honor_osdmap_full() { honor_osdmap_full = true; }
   void unset_honor_osdmap_full() { honor_osdmap_full = false; }
-
-  void set_honor_cache_redirects() { honor_cache_redirects = true; }
-  void unset_honor_cache_redirects() { honor_cache_redirects = false; }
 
   void scan_requests(bool force_resend,
 		     bool force_resend_writes,
@@ -1889,6 +1927,7 @@ private:
   }
 
   void list_objects(ListContext *p, Context *onfinish);
+  uint32_t list_objects_seek(ListContext *p, uint32_t pos);
 
   // -------------------------
   // pool ops

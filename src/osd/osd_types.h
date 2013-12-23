@@ -54,6 +54,11 @@ typedef hobject_t collection_list_handle_t;
 
 typedef uint8_t shard_id_t;
 
+/// convert a single CPEH_OSD_FLAG_* to a string
+const char *ceph_osd_flag_name(unsigned flag);
+
+/// convert CEPH_OSD_FLAG_* op flags to a string
+string ceph_osd_flag_string(unsigned flags);
 
 inline ostream& operator<<(ostream& out, const osd_reqid_t& r) {
   return out << r.name << "." << r.inc << ":" << r.tid;
@@ -746,14 +751,14 @@ struct pg_pool_t {
   typedef enum {
     CACHEMODE_NONE = 0,                  ///< no caching
     CACHEMODE_WRITEBACK = 1,             ///< write to cache, flush later
-    CACHEMODE_INVALIDATE_FORWARD = 2,    ///< delete from cache, forward write
+    CACHEMODE_FORWARD = 2,               ///< forward if not in cache
     CACHEMODE_READONLY = 3,              ///< handle reads, forward writes [not strongly consistent]
   } cache_mode_t;
   static const char *get_cache_mode_name(cache_mode_t m) {
     switch (m) {
     case CACHEMODE_NONE: return "none";
     case CACHEMODE_WRITEBACK: return "writeback";
-    case CACHEMODE_INVALIDATE_FORWARD: return "invalidate+forward";
+    case CACHEMODE_FORWARD: return "forward";
     case CACHEMODE_READONLY: return "readonly";
     default: return "unknown";
     }
@@ -763,8 +768,8 @@ struct pg_pool_t {
       return CACHEMODE_NONE;
     if (s == "writeback")
       return CACHEMODE_WRITEBACK;
-    if (s == "invalidate+forward")
-      return CACHEMODE_INVALIDATE_FORWARD;
+    if (s == "forward")
+      return CACHEMODE_FORWARD;
     if (s == "readonly")
       return CACHEMODE_READONLY;
     return (cache_mode_t)-1;
@@ -986,6 +991,8 @@ struct object_stat_sum_t {
   int64_t num_objects_recovered;
   int64_t num_bytes_recovered;
   int64_t num_keys_recovered;
+  int64_t num_objects_dirty;
+  int64_t num_whiteouts;
 
   object_stat_sum_t()
     : num_bytes(0),
@@ -996,7 +1003,9 @@ struct object_stat_sum_t {
       num_deep_scrub_errors(0),
       num_objects_recovered(0),
       num_bytes_recovered(0),
-      num_keys_recovered(0)
+      num_keys_recovered(0),
+      num_objects_dirty(0),
+      num_whiteouts(0)
   {}
 
   void floor(int64_t f) {
@@ -1018,6 +1027,8 @@ struct object_stat_sum_t {
     FLOOR(num_objects_recovered);
     FLOOR(num_bytes_recovered);
     FLOOR(num_keys_recovered);
+    FLOOR(num_objects_dirty);
+    FLOOR(num_whiteouts);
 #undef FLOOR
   }
 
@@ -2287,7 +2298,7 @@ public:
   int unstable_writes, readers, writers_waiting, readers_waiting;
 
   /// in-progress copyfrom ops for this object
-  int copyfrom_readside;
+  bool blocked;
 
   // set if writes for this object are blocked on another objects recovery
   ObjectContextRef blocked_by;      // object blocking our writes
@@ -2302,9 +2313,21 @@ public:
       RWREAD,
       RWWRITE
     };
-    State state;                 /// rw state
-    uint64_t count;              /// number of readers or writers
-    list<OpRequestRef> waiters;  /// ops waiting on state change
+    static const char *get_state_name(State s) {
+      switch (s) {
+      case RWNONE: return "none";
+      case RWREAD: return "read";
+      case RWWRITE: return "write";
+      default: return "???";
+      }
+    }
+    const char *get_state_name() const {
+      return get_state_name(state);
+    }
+
+    State state;                 ///< rw state
+    uint64_t count;              ///< number of readers or writers
+    list<OpRequestRef> waiters;  ///< ops waiting on state change
 
     /// if set, restart backfill when we can get a read lock
     bool backfill_read_marker;
@@ -2423,7 +2446,7 @@ public:
       destructor_callback(0),
       lock("ReplicatedPG::ObjectContext::lock"),
       unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0),
-      copyfrom_readside(0) {}
+      blocked(false) {}
 
   ~ObjectContext() {
     assert(rwstate.empty());
@@ -2431,8 +2454,16 @@ public:
       destructor_callback->complete(0);
   }
 
+  void start_block() {
+    assert(!blocked);
+    blocked = true;
+  }
+  void stop_block() {
+    assert(blocked);
+    blocked = false;
+  }
   bool is_blocked() const {
-    return copyfrom_readside > 0;
+    return blocked;
   }
 
   // do simple synchronous mutual exclusion, for now.  now waitqueues or anything fancy.
@@ -2472,7 +2503,7 @@ public:
   }
 };
 
-inline ostream& operator<<(ostream& out, ObjectState& obs)
+inline ostream& operator<<(ostream& out, const ObjectState& obs)
 {
   out << obs.oi.soid;
   if (!obs.exists)
@@ -2480,9 +2511,17 @@ inline ostream& operator<<(ostream& out, ObjectState& obs)
   return out;
 }
 
-inline ostream& operator<<(ostream& out, ObjectContext& obc)
+inline ostream& operator<<(ostream& out, const ObjectContext::RWState& rw)
 {
-  return out << "obc(" << obc.obs << ")";
+  return out << "rwstate(" << rw.get_state_name()
+	     << " n=" << rw.count
+	     << " w=" << rw.waiters.size()
+	     << ")";
+}
+
+inline ostream& operator<<(ostream& out, const ObjectContext& obc)
+{
+  return out << "obc(" << obc.obs << " " << obc.rwstate << ")";
 }
 
 
