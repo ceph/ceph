@@ -265,7 +265,9 @@ static int crush_bucket_choose(struct crush_bucket *in, int x, int r)
  * true if device is marked "out" (failed, fully offloaded)
  * of the cluster
  */
-static int is_out(const struct crush_map *map, const __u32 *weight, int weight_max, int item, int x)
+static int is_out(const struct crush_map *map,
+		  const __u32 *weight, int weight_max,
+		  int item, int x)
 {
 	if (item >= weight_max)
 		return 1;
@@ -392,7 +394,7 @@ static int crush_choose_firstn(const struct crush_map *map,
 							 out2, outpos,
 							 recurse_tries, 0,
 							 local_tries,
-						         local_fallback_tries,
+							 local_fallback_tries,
 							 0,
 							 NULL) <= outpos)
 							/* didn't get leaf */
@@ -406,7 +408,8 @@ static int crush_choose_firstn(const struct crush_map *map,
 				if (!reject) {
 					/* out? */
 					if (itemtype == 0)
-						reject = is_out(map, weight, weight_max,
+						reject = is_out(map, weight,
+								weight_max,
 								item, x);
 					else
 						reject = 0;
