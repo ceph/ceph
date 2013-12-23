@@ -58,7 +58,12 @@ done
 
 if [ $stop_all -eq 1 ]; then
 	for p in ceph-mon ceph-mds ceph-osd radosgw lt-radosgw apache2 ; do
-            while pkill $p ; do : ; done
+            for try in 0 1 1 1 1 ; do
+                if ! pkill $p ; then
+                    break
+                fi
+                sleep $try
+            done
         done
 	pkill -f valgrind.bin.\*ceph-mon
 	$SUDO pkill -f valgrind.bin.\*ceph-osd
