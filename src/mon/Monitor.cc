@@ -2419,6 +2419,7 @@ void Monitor::handle_forward(MForward *m)
     c->set_priv(s);
     c->set_peer_addr(m->client.addr);
     c->set_peer_type(m->client.name.type());
+    c->set_features(m->conn_features);
 
     s->caps = m->client_caps;
     dout(10) << " caps are " << s->caps << dendl;
