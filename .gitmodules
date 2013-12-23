@@ -7,3 +7,6 @@
 [submodule "src/mongoose"]
 	path = src/mongoose
 	url = git://github.com/ceph/mongoose.git
+[submodule "src/civetweb"]
+	path = src/civetweb
+	url = git@github.com:ceph/civetweb
