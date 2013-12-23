@@ -6,4 +6,4 @@
 	url = git://github.com/ceph/libs3.git
 [submodule "src/civetweb"]
 	path = src/civetweb
-	url = git@github.com:ceph/civetweb
+	url = git://github.com/ceph/civetweb
