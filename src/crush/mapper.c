@@ -69,8 +69,8 @@ int crush_find_rule(const struct crush_map *map, int ruleset, int type, int size
 static int bucket_perm_choose(struct crush_bucket *bucket,
 			      int x, int r)
 {
-	unsigned pr = r % bucket->size;
-	unsigned i, s;
+	unsigned int pr = r % bucket->size;
+	unsigned int i, s;
 
 	/* start a new permutation if @x has changed */
 	if (bucket->perm_x != (__u32)x || bucket->perm_n == 0) {
@@ -101,13 +101,13 @@ static int bucket_perm_choose(struct crush_bucket *bucket,
 	for (i = 0; i < bucket->perm_n; i++)
 		dprintk(" perm_choose have %d: %d\n", i, bucket->perm[i]);
 	while (bucket->perm_n <= pr) {
-		unsigned p = bucket->perm_n;
+		unsigned int p = bucket->perm_n;
 		/* no point in swapping the final entry */
 		if (p < bucket->size - 1) {
 			i = crush_hash32_3(bucket->hash, x, bucket->id, p) %
 				(bucket->size - p);
 			if (i) {
-				unsigned t = bucket->perm[p + i];
+				unsigned int t = bucket->perm[p + i];
 				bucket->perm[p + i] = bucket->perm[p];
 				bucket->perm[p] = t;
 			}
@@ -300,10 +300,10 @@ static int crush_choose_firstn(const struct crush_map *map,
 			       const __u32 *weight, int weight_max,
 			       int x, int numrep, int type,
 			       int *out, int outpos,
-			       unsigned tries,
-			       unsigned recurse_tries,
-			       unsigned local_tries,
-			       unsigned local_fallback_tries,
+			       unsigned int tries,
+			       unsigned int recurse_tries,
+			       unsigned int local_tries,
+			       unsigned int local_fallback_tries,
 			       int recurse_to_leaf,
 			       int *out2)
 {
@@ -465,7 +465,8 @@ static void crush_choose_indep(const struct crush_map *map,
 			       const __u32 *weight, int weight_max,
 			       int x, int left, int numrep, int type,
 			       int *out, int outpos,
-			       unsigned tries, unsigned recurse_tries,
+			       unsigned int tries,
+			       unsigned int recurse_tries,
 			       int recurse_to_leaf,
 			       int *out2,
 			       int parent_r)
