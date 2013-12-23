@@ -28,10 +28,10 @@
 
 /**
  * crush_find_rule - find a crush_rule id for a given ruleset, type, and size.
- * @param map the crush_map
- * @param ruleset the storage ruleset id (user defined)
- * @param type storage ruleset type (user defined)
- * @param size output set size
+ * @map: the crush_map
+ * @ruleset: the storage ruleset id (user defined)
+ * @type: storage ruleset type (user defined)
+ * @size: output set size
  */
 int crush_find_rule(const struct crush_map *map, int ruleset, int type, int size)
 {
@@ -69,8 +69,8 @@ int crush_find_rule(const struct crush_map *map, int ruleset, int type, int size
 static int bucket_perm_choose(struct crush_bucket *bucket,
 			      int x, int r)
 {
-	unsigned pr = r % bucket->size;
-	unsigned i, s;
+	unsigned int pr = r % bucket->size;
+	unsigned int i, s;
 
 	/* start a new permutation if @x has changed */
 	if (bucket->perm_x != (__u32)x || bucket->perm_n == 0) {
@@ -101,13 +101,13 @@ static int bucket_perm_choose(struct crush_bucket *bucket,
 	for (i = 0; i < bucket->perm_n; i++)
 		dprintk(" perm_choose have %d: %d\n", i, bucket->perm[i]);
 	while (bucket->perm_n <= pr) {
-		unsigned p = bucket->perm_n;
+		unsigned int p = bucket->perm_n;
 		/* no point in swapping the final entry */
 		if (p < bucket->size - 1) {
 			i = crush_hash32_3(bucket->hash, x, bucket->id, p) %
 				(bucket->size - p);
 			if (i) {
-				unsigned t = bucket->perm[p + i];
+				unsigned int t = bucket->perm[p + i];
 				bucket->perm[p + i] = bucket->perm[p];
 				bucket->perm[p] = t;
 			}
@@ -265,7 +265,9 @@ static int crush_bucket_choose(struct crush_bucket *in, int x, int r)
  * true if device is marked "out" (failed, fully offloaded)
  * of the cluster
  */
-static int is_out(const struct crush_map *map, const __u32 *weight, int weight_max, int item, int x)
+static int is_out(const struct crush_map *map,
+		  const __u32 *weight, int weight_max,
+		  int item, int x)
 {
 	if (item >= weight_max)
 		return 1;
@@ -281,29 +283,29 @@ static int is_out(const struct crush_map *map, const __u32 *weight, int weight_m
 
 /**
  * crush_choose_firstn - choose numrep distinct items of given type
- * @param map the crush_map
- * @param bucket the bucket we are choose an item from
- * @param x crush input value
- * @param numrep the number of items to choose
- * @param type the type of item to choose
- * @param out pointer to output vector
- * @param outpos our position in that vector
- * @param tries number of attempts to make
- * @param recurse_tries number of attempts to have recursive chooseleaf make
- * @param local_tries localized retries
- * @param local_fallback_tries localized fallback retries
- * @param recurse_to_leaf: true if we want one device under each item of given type (chooseleaf instead of choose)
- * @param out2 second output vector for leaf items (if @a recurse_to_leaf)
+ * @map: the crush_map
+ * @bucket: the bucket we are choose an item from
+ * @x: crush input value
+ * @numrep: the number of items to choose
+ * @type: the type of item to choose
+ * @out: pointer to output vector
+ * @outpos: our position in that vector
+ * @tries: number of attempts to make
+ * @recurse_tries: number of attempts to have recursive chooseleaf make
+ * @local_tries: localized retries
+ * @local_fallback_tries: localized fallback retries
+ * @recurse_to_leaf: true if we want one device under each item of given type (chooseleaf instead of choose)
+ * @out2: second output vector for leaf items (if @recurse_to_leaf)
  */
 static int crush_choose_firstn(const struct crush_map *map,
 			       struct crush_bucket *bucket,
 			       const __u32 *weight, int weight_max,
 			       int x, int numrep, int type,
 			       int *out, int outpos,
-			       unsigned tries,
-			       unsigned recurse_tries,
-			       unsigned local_tries,
-			       unsigned local_fallback_tries,
+			       unsigned int tries,
+			       unsigned int recurse_tries,
+			       unsigned int local_tries,
+			       unsigned int local_fallback_tries,
 			       int recurse_to_leaf,
 			       int *out2)
 {
@@ -392,7 +394,7 @@ static int crush_choose_firstn(const struct crush_map *map,
 							 out2, outpos,
 							 recurse_tries, 0,
 							 local_tries,
-						         local_fallback_tries,
+							 local_fallback_tries,
 							 0,
 							 NULL) <= outpos)
 							/* didn't get leaf */
@@ -406,7 +408,8 @@ static int crush_choose_firstn(const struct crush_map *map,
 				if (!reject) {
 					/* out? */
 					if (itemtype == 0)
-						reject = is_out(map, weight, weight_max,
+						reject = is_out(map, weight,
+								weight_max,
 								item, x);
 					else
 						reject = 0;
@@ -465,7 +468,8 @@ static void crush_choose_indep(const struct crush_map *map,
 			       const __u32 *weight, int weight_max,
 			       int x, int left, int numrep, int type,
 			       int *out, int outpos,
-			       unsigned tries, unsigned recurse_tries,
+			       unsigned int tries,
+			       unsigned int recurse_tries,
 			       int recurse_to_leaf,
 			       int *out2,
 			       int parent_r)
@@ -639,11 +643,14 @@ static void crush_choose_indep(const struct crush_map *map,
 
 /**
  * crush_do_rule - calculate a mapping with the given input and rule
- * @param map the crush_map
- * @param ruleno the rule id
- * @param x hash input
- * @param result pointer to result vector
- * @param resultmax: maximum result size
+ * @map: the crush_map
+ * @ruleno: the rule id
+ * @x: hash input
+ * @result: pointer to result vector
+ * @result_max: maximum result size
+ * @weight: weight vector (for map leaves)
+ * @weight_max: size of weight vector
+ * @scratch: scratch vector for private use; must be >= 3 * result_max
  */
 int crush_do_rule(const struct crush_map *map,
 		  int ruleno, int x, int *result, int result_max,
