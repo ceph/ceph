@@ -40,7 +40,7 @@ function run_mon() {
 }
 
 function kill_mon() {
-    while pkill --pidfile $DIR/pidfile ; do : ; done
+    while [ -f $DIR/pidfile ] && kill $(cat $DIR/pidfile) ; do sleep 1 ; done
     rm -fr $DIR/store.db
 }
 
