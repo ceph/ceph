@@ -103,7 +103,7 @@ namespace librados
     bool is_complete_and_cb();
     bool is_safe_and_cb();
     int get_return_value();
-    int get_version();  ///< DEPRECATED get_version() only returns 32-bits
+    int get_version() __attribute__ ((deprecated ("use get_version64")));
     uint64_t get_version64();
     void release();
     AioCompletionImpl *pc;
