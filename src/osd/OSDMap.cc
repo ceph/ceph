@@ -90,10 +90,7 @@ void osd_xinfo_t::dump(Formatter *f) const
   f->dump_stream("down_stamp") << down_stamp;
   f->dump_float("laggy_probability", laggy_probability);
   f->dump_int("laggy_interval", laggy_interval);
-  f->open_array_section("features");
-  if (features & CEPH_FEATURE_OSD_ERASURE_CODES)
-    f->dump_string("flag", "erasure-codes");
-  f->close_section();
+  f->dump_int("features", features);
 }
 
 void osd_xinfo_t::encode(bufferlist& bl) const
