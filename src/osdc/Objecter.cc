@@ -44,6 +44,7 @@
 
 #include "common/config.h"
 #include "common/perf_counters.h"
+#include "include/str_list.h"
 
 
 #define dout_subsys ceph_subsys_objecter
@@ -125,6 +126,35 @@ enum {
   l_osdc_osd_laggy,
   l_osdc_last,
 };
+
+
+// config obs ----------------------------
+
+static const char *config_keys[] = {
+  "crush_location",
+  NULL
+};
+
+const char** Objecter::get_tracked_conf_keys() const
+{
+  return config_keys;
+}
+
+
+void Objecter::handle_conf_change(const struct md_config_t *conf,
+				  const std::set <std::string> &changed)
+{
+  if (changed.count("crush_location")) {
+    crush_location.clear();
+    vector<string> lvec;
+    get_str_vec(cct->_conf->crush_location, lvec);
+    int r = CrushWrapper::parse_loc_multimap(lvec, &crush_location);
+    if (r < 0) {
+      lderr(cct) << "warning: crush_location '" << cct->_conf->crush_location
+		 << "' does not parse" << dendl;
+    }
+  }
+}
 
 
 // messages ------------------------------
