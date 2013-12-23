@@ -1119,12 +1119,12 @@ public:
 	assert(old_value.header == header);
       }
       if (omap.size() != old_value.attrs.size()) {
-	cerr << num << ": oid " << oid << " tmap.size() is " << omap.size()
+	cerr << num << ": oid " << oid << " omap.size() is " << omap.size()
 	     << " and old is " << old_value.attrs.size() << std::endl;
 	assert(omap.size() == old_value.attrs.size());
       }
       if (omap_keys.size() != old_value.attrs.size()) {
-	cerr << num << ": oid " << oid << " tmap.size() is " << omap_keys.size()
+	cerr << num << ": oid " << oid << " omap.size() is " << omap_keys.size()
 	     << " and old is " << old_value.attrs.size() << std::endl;
 	assert(omap_keys.size() == old_value.attrs.size());
       }

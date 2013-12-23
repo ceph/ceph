@@ -571,7 +571,7 @@ struct ObjectOperation {
     utime_t *out_mtime;
     string *out_category;
     std::map<std::string,bufferlist> *out_attrs;
-    bufferlist *out_data;
+    bufferlist *out_data, *out_omap_header;
     std::map<std::string,bufferlist> *out_omap;
     int *prval;
     C_ObjectOperation_copyget(object_copy_cursor_t *c,
@@ -579,12 +579,13 @@ struct ObjectOperation {
 			      utime_t *m,
 			      string *cat,
 			      std::map<std::string,bufferlist> *a,
-			      bufferlist *d,
+			      bufferlist *d, bufferlist *oh,
 			      std::map<std::string,bufferlist> *o,
 			      int *r)
       : cursor(c),
 	out_size(s), out_mtime(m), out_category(cat),
-	out_attrs(a), out_data(d), out_omap(o), prval(r) {}
+	out_attrs(a), out_data(d), out_omap_header(oh),
+	out_omap(o), prval(r) {}
     void finish(int r) {
       if (r < 0)
 	return;
@@ -602,6 +603,8 @@ struct ObjectOperation {
 	  *out_attrs = copy_reply.attrs;
 	if (out_data)
 	  out_data->claim_append(copy_reply.data);
+	if (out_omap_header)
+	  out_omap_header->claim_append(copy_reply.omap_header);
 	if (out_omap)
 	  *out_omap = copy_reply.omap;
 	*cursor = copy_reply.cursor;
@@ -619,6 +622,7 @@ struct ObjectOperation {
 		string *out_category,
 		std::map<std::string,bufferlist> *out_attrs,
 		bufferlist *out_data,
+		bufferlist *out_omap_header,
 		std::map<std::string,bufferlist> *out_omap,
 		int *prval) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET);
@@ -629,7 +633,8 @@ struct ObjectOperation {
     out_rval[p] = prval;
     C_ObjectOperation_copyget *h =
       new C_ObjectOperation_copyget(cursor, out_size, out_mtime, out_category,
-                                    out_attrs, out_data, out_omap, prval);
+                                    out_attrs, out_data, out_omap_header,
+				    out_omap, prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
   }
