@@ -4682,8 +4682,8 @@ int ReplicatedPG::fill_in_copy_get(bufferlist::iterator& bp, OSDOp& osd_op,
     ObjectMap::ObjectMapIterator iter =
       osd->store->get_omap_iterator(coll, oi.soid);
     assert(iter);
+    iter->upper_bound(cursor.omap_offset);
     if (iter->valid()) {
-      iter->upper_bound(cursor.omap_offset);
       for (; left > 0 && iter->valid(); iter->next()) {
 	out_omap.insert(make_pair(iter->key(), iter->value()));
 	left -= iter->key().length() + 4 + iter->value().length() + 4;
@@ -4698,10 +4698,11 @@ int ReplicatedPG::fill_in_copy_get(bufferlist::iterator& bp, OSDOp& osd_op,
   }
 
   dout(20) << " cursor.is_complete=" << cursor.is_complete()
-		     << " " << out_attrs.size() << " attrs"
-		     << " " << bl.length() << " bytes"
-		     << " " << out_omap.size() << " keys"
-		     << dendl;
+	   << " " << out_attrs.size() << " attrs"
+	   << " " << bl.length() << " bytes"
+	   << " " << reply_obj.omap_header.length() << " omap header bytes"
+	   << " " << out_omap.size() << " keys"
+	   << dendl;
   reply_obj.cursor = cursor;
   if (classic) {
     if (reply_obj.omap_header.length() > 0) {
