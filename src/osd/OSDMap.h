@@ -172,6 +172,9 @@ public:
 	new_pools[pool] = *orig;
       return &new_pools[pool];
     }
+
+    /// propage update pools' snap metadata to any of their tiers
+    int propagate_snaps_to_tiers(const OSDMap &base);
   };
   
 private:

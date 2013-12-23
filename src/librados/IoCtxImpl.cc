@@ -400,6 +400,14 @@ int librados::IoCtxImpl::list(Objecter::ListContext *context, int max_entries)
   return r;
 }
 
+uint32_t librados::IoCtxImpl::list_seek(Objecter::ListContext *context,
+					uint32_t pos)
+{
+  Mutex::Locker l(*lock);
+  context->list.clear();
+  return objecter->list_objects_seek(context, pos);
+}
+
 int librados::IoCtxImpl::create(const object_t& oid, bool exclusive)
 {
   ::ObjectOperation op;
@@ -593,7 +601,7 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 
 int librados::IoCtxImpl::aio_operate(const object_t& oid,
 				     ::ObjectOperation *o, AioCompletionImpl *c,
-				     const SnapContext& snap_context)
+				     const SnapContext& snap_context, int flags)
 {
   utime_t ut = ceph_clock_now(client->cct);
   /* can't write to a snapshot */
@@ -607,7 +615,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
   queue_aio_write(c);
 
   Mutex::Locker l(*lock);
-  objecter->mutate(oid, oloc, *o, snap_context, ut, 0, onack, oncommit,
+  objecter->mutate(oid, oloc, *o, snap_context, ut, flags, onack, oncommit,
 		   &c->objver);
 
   return 0;

@@ -111,6 +111,7 @@ struct librados::IoCtxImpl {
 
   // io
   int list(Objecter::ListContext *context, int max_entries);
+  uint32_t list_seek(Objecter::ListContext *context, uint32_t pos);
   int create(const object_t& oid, bool exclusive);
   int create(const object_t& oid, bool exclusive, const std::string& category);
   int write(const object_t& oid, bufferlist& bl, size_t len, uint64_t off);
@@ -141,7 +142,8 @@ struct librados::IoCtxImpl {
   int operate(const object_t& oid, ::ObjectOperation *o, time_t *pmtime);
   int operate_read(const object_t& oid, ::ObjectOperation *o, bufferlist *pbl);
   int aio_operate(const object_t& oid, ::ObjectOperation *o,
-		  AioCompletionImpl *c, const SnapContext& snap_context);
+		  AioCompletionImpl *c, const SnapContext& snap_context,
+		  int flags);
   int aio_operate_read(const object_t& oid, ::ObjectOperation *o,
 		       AioCompletionImpl *c, int flags, bufferlist *pbl);
 

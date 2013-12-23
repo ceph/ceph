@@ -75,6 +75,9 @@ namespace librados
     /// get current hash position of the iterator, rounded to the current pg
     uint32_t get_pg_hash_position() const;
 
+    /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
+    uint32_t seek(uint32_t pos);
+
   private:
     void get_next();
     std::tr1::shared_ptr < ObjListCtx > ctx;
@@ -141,12 +144,24 @@ namespace librados
    * ORDER_READS_WRITES will order reads the same way writes are
    * ordered (e.g., waiting for degraded objects).  In particular, it
    * will make a write followed by a read sequence be preserved.
+   *
+   * IGNORE_CACHE will skip the caching logic on the OSD that normally
+   * handles promotion of objects between tiers.  This allows an operation
+   * to operate (or read) the cached (or uncached) object, even if it is
+   * not coherent.
+   *
+   * IGNORE_OVERLAY will ignore the pool overlay tiering metadata and
+   * process the op directly on the destination pool.  This is useful
+   * for CACHE_FLUSH and CACHE_EVICT operations.
    */
   enum ObjectOperationGlobalFlags {
     OPERATION_NOFLAG         = 0,
     OPERATION_BALANCE_READS  = 1,
     OPERATION_LOCALIZE_READS = 2,
     OPERATION_ORDER_READS_WRITES = 4,
+    OPERATION_IGNORE_CACHE = 8,
+    OPERATION_SKIPRWLOCKS = 16,
+    OPERATION_IGNORE_OVERLAY = 32,
   };
 
   /*
@@ -285,7 +300,8 @@ namespace librados
      * @param src_ioctx ioctx for the source object
      * @param version current version of the source object
      */
-    void copy_from(const std::string& src, const IoCtx& src_ioctx, uint64_t src_version);
+    void copy_from(const std::string& src, const IoCtx& src_ioctx,
+		   uint64_t src_version);
 
     /**
      * undirty an object
@@ -293,6 +309,32 @@ namespace librados
      * Clear an objects dirty flag
      */
     void undirty();
+
+    /**
+     * flush a cache tier object to backing tier; will block racing
+     * updates.
+     *
+     * This should be used in concert with OPERATION_IGNORE_CACHE to avoid
+     * triggering a promotion.
+     */
+    void cache_flush();
+
+    /**
+     * Flush a cache tier object to backing tier; will EAGAIN if we race
+     * with an update.  Must be used with the SKIPRWLOCKS flag.
+     *
+     * This should be used in concert with OPERATION_IGNORE_CACHE to avoid
+     * triggering a promotion.
+     */
+    void cache_try_flush();
+
+    /**
+     * evict a clean cache tier object
+     *
+     * This should be used in concert with OPERATION_IGNORE_CACHE to avoid
+     * triggering a promote on the OSD (that is then evicted).
+     */
+    void cache_evict();
 
     friend class IoCtx;
   };
@@ -587,7 +629,11 @@ namespace librados
 		     std::list<librados::locker_t> *lockers);
 
 
+    /// Start enumerating objects for a pool
     ObjectIterator objects_begin();
+    /// Start enumerating objects for a pool starting from a hash position
+    ObjectIterator objects_begin(uint32_t start_hash_position);
+    /// Iterator indicating the end of a pool
     const ObjectIterator& objects_end() const;
 
     /**
@@ -711,6 +757,7 @@ namespace librados
     int operate(const std::string& oid, ObjectWriteOperation *op);
     int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl);
     int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op);
+    int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op, int flags);
     /**
      * Schedule an async write operation with explicit snapshot parameters
      *
