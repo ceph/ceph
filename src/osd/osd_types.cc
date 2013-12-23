@@ -2676,7 +2676,7 @@ void object_copy_data_t::decode_classic(bufferlist::iterator& bl)
 
 void object_copy_data_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ::encode(size, bl);
   ::encode(mtime, bl);
   ::encode(category, bl);
@@ -2684,12 +2684,13 @@ void object_copy_data_t::encode(bufferlist& bl) const
   ::encode(data, bl);
   ::encode(omap, bl);
   ::encode(cursor, bl);
+  ::encode(omap_header, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_copy_data_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   ::decode(size, bl);
   ::decode(mtime, bl);
   ::decode(category, bl);
@@ -2697,6 +2698,8 @@ void object_copy_data_t::decode(bufferlist::iterator& bl)
   ::decode(data, bl);
   ::decode(omap, bl);
   ::decode(cursor, bl);
+  if (struct_v >= 2)
+    ::decode(omap_header, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2725,6 +2728,7 @@ void object_copy_data_t::generate_test_instances(list<object_copy_data_t*>& o)
   o.back()->omap["why"] = bl2;
   bufferptr databp("iamsomedatatocontain", 20);
   o.back()->data.push_back(databp);
+  o.back()->omap_header.append("this is an omap header");
 }
 
 void object_copy_data_t::dump(Formatter *f) const
@@ -2738,6 +2742,7 @@ void object_copy_data_t::dump(Formatter *f) const
      const-correctness prents that */
   f->dump_int("attrs_size", attrs.size());
   f->dump_int("omap_size", omap.size());
+  f->dump_int("omap_header_length", omap_header.length());
   f->dump_int("data_length", data.length());
 }
 

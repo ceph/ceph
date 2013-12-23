@@ -1953,6 +1953,7 @@ struct object_copy_data_t {
   utime_t mtime;
   map<string, bufferlist> attrs;
   bufferlist data;
+  bufferlist omap_header;
   map<string, bufferlist> omap;
   string category;
 public:
