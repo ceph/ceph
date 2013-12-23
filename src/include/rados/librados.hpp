@@ -777,8 +777,14 @@ namespace librados
 		    std::vector<snap_t>& snaps);
     int aio_operate(const std::string& oid, AioCompletion *c,
 		    ObjectReadOperation *op, bufferlist *pbl);
+
     int aio_operate(const std::string& oid, AioCompletion *c,
 		    ObjectReadOperation *op, snap_t snapid, int flags,
+		    bufferlist *pbl)
+      __attribute__ ((deprecated ("use aio_operate without snapid argument")));
+
+    int aio_operate(const std::string& oid, AioCompletion *c,
+		    ObjectReadOperation *op, int flags,
 		    bufferlist *pbl);
 
     // watch/notify

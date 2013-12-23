@@ -857,7 +857,6 @@ public:
     context->io_ctx.aio_operate(
       context->prefix+oid, rcompletion,
       &read_op,
-      librados::SNAP_HEAD,
       librados::OPERATION_ORDER_READS_WRITES,  // order wrt previous write/update
       0);
   }
@@ -1482,7 +1481,6 @@ public:
 							    NULL);
     rd_op.stat(NULL, NULL, NULL);
     context->io_ctx.aio_operate(context->prefix+oid, comp_racing_read, &rd_op,
-				librados::SNAP_HEAD,
 				librados::OPERATION_ORDER_READS_WRITES,  // order wrt previous write/update
 				NULL);
 
