@@ -393,10 +393,10 @@ def xfstests(ctx, config):
             properties = {}
 
         test_image = properties.get('test_image', 'test_image.{role}'.format(role=role))
-        test_size = properties.get('test_size', 2000)
+        test_size = properties.get('test_size', 2000) # 2G
         test_fmt = properties.get('test_format', 1)
         scratch_image = properties.get('scratch_image', 'scratch_image.{role}'.format(role=role))
-        scratch_size = properties.get('scratch_size', 2000)
+        scratch_size = properties.get('scratch_size', 10000) # 10G
         scratch_fmt = properties.get('scratch_format', 1)
 
         images_config[role] = dict(
