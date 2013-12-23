@@ -28,17 +28,26 @@ struct MForward : public Message {
   PaxosServiceMessage *msg;
   entity_inst_t client;
   MonCap client_caps;
-  
-  MForward() : Message(MSG_FORWARD), tid(0), msg(NULL) {}
+  uint64_t conn_features;
+
+  static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 0;
+
+  MForward() : Message(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
+               tid(0), msg(NULL), conn_features(0) {}
   //the message needs to have caps filled in!
   MForward(uint64_t t, PaxosServiceMessage *m) :
-    Message(MSG_FORWARD), tid(t), msg(m) {
+    Message(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
+    tid(t), msg(m) {
     client = m->get_source_inst();
     client_caps = m->get_session()->caps;
+    conn_features = m->get_connection()->get_features();
   }
   MForward(uint64_t t, PaxosServiceMessage *m, const MonCap& caps) :
-    Message(MSG_FORWARD), tid(t), msg(m), client_caps(caps) {
+    Message(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
+    tid(t), msg(m), client_caps(caps) {
     client = m->get_source_inst();
+    conn_features = m->get_connection()->get_features();
   }
 private:
   ~MForward() {
@@ -51,6 +60,7 @@ public:
     ::encode(client, payload);
     ::encode(client_caps, payload, features);
     encode_message(msg, features, payload);
+    ::encode(conn_features, payload);
   }
 
   void decode_payload() {
@@ -59,12 +69,19 @@ public:
     ::decode(client, p);
     ::decode(client_caps, p);
     msg = (PaxosServiceMessage *)decode_message(NULL, p);
+    if (header.version >= 2) {
+      ::decode(conn_features, p);
+    } else {
+      conn_features = 0;
+    }
+
   }
 
   const char *get_type_name() const { return "forward"; }
   void print(ostream& o) const {
     if (msg)
-      o << "forward(" << *msg << " caps " << client_caps << ") to leader";
+      o << "forward(" << *msg << " caps " << client_caps
+        << " conn_features " << conn_features << ") to leader";
     else o << "forward(??? ) to leader";
   }
 };
