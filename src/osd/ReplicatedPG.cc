@@ -4676,6 +4676,9 @@ int ReplicatedPG::fill_in_copy_get(bufferlist::iterator& bp, OSDOp& osd_op,
   std::map<std::string,bufferlist>& out_omap = reply_obj.omap;
   if (left > 0 && !cursor.omap_complete) {
     assert(cursor.data_complete);
+    if (cursor.omap_offset.empty()) {
+      osd->store->omap_get_header(coll, oi.soid, &reply_obj.omap_header);
+    }
     ObjectMap::ObjectMapIterator iter =
       osd->store->get_omap_iterator(coll, oi.soid);
     assert(iter);
@@ -4701,6 +4704,10 @@ int ReplicatedPG::fill_in_copy_get(bufferlist::iterator& bp, OSDOp& osd_op,
 		     << dendl;
   reply_obj.cursor = cursor;
   if (classic) {
+    if (reply_obj.omap_header.length() > 0) {
+      derr << oi.soid << " omap header being dropped by classic copy-get api"
+	   << dendl;
+    }
     reply_obj.encode_classic(osd_op.outdata);
   } else {
     ::encode(reply_obj, osd_op.outdata);
@@ -4749,7 +4756,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
   op.copy_get(&cop->cursor, cct->_conf->osd_copyfrom_max_chunk,
 	      &cop->results->object_size, &cop->results->mtime,
 	      &cop->results->category,
-	      &cop->attrs, &cop->data, &cop->omap,
+	      &cop->attrs, &cop->data, &cop->omap_header, &cop->omap,
 	      &cop->rval);
 
   C_Copyfrom *fin = new C_Copyfrom(this, obc->obs.oi.soid,
@@ -4842,6 +4849,10 @@ void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, ObjectStore::Transaction *t)
     cop->data.clear();
   }
   if (!cop->temp_cursor.omap_complete) {
+    if (cop->omap_header.length()) {
+      t->omap_setheader(cop->temp_coll, cop->temp_oid, cop->omap_header);
+      cop->omap_header.clear();
+    }
     t->omap_setkeys(cop->temp_coll, cop->temp_oid, cop->omap);
     cop->omap.clear();
   }

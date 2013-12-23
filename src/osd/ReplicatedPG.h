@@ -133,6 +133,7 @@ public:
     object_copy_cursor_t cursor;
     map<string,bufferlist> attrs;
     bufferlist data;
+    bufferlist omap_header;
     map<string,bufferlist> omap;
     int rval;
 
