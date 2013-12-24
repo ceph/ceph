@@ -72,6 +72,7 @@ librados::RadosClient::RadosClient(CephContext *cct_)
     state(DISCONNECTED),
     monclient(cct_),
     messenger(NULL),
+    instance_id(0),
     objecter(NULL),
     lock("librados::RadosClient::lock"),
     timer(cct, lock),
@@ -227,6 +228,7 @@ int librados::RadosClient::connect()
   finisher.start();
 
   state = CONNECTED;
+  instance_id = monclient.get_global_id();
 
   lock.Unlock();
 
@@ -255,6 +257,7 @@ void librados::RadosClient::shutdown()
     objecter->shutdown_locked();
   }
   state = DISCONNECTED;
+  instance_id = 0;
   timer.shutdown();   // will drop+retake lock
   lock.Unlock();
   monclient.shutdown();
@@ -269,11 +272,7 @@ void librados::RadosClient::shutdown()
 
 uint64_t librados::RadosClient::get_instance_id()
 {
-  Mutex::Locker l(lock);
-  if (state == DISCONNECTED)
-    return 0;
-  uint64_t id = monclient.get_global_id();
-  return id;
+  return instance_id;
 }
 
 librados::RadosClient::~RadosClient()

@@ -528,10 +528,11 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
 
   int op = o->ops[0].op.op;
   ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid << " nspace=" << oloc.nspace << dendl;
+  Objecter::Op *objecter_op = objecter->prepare_mutate_op(oid, oloc,
+	                                                  *o, snapc, ut, 0,
+	                                                  NULL, oncommit, &ver);
   lock->Lock();
-  objecter->mutate(oid, oloc,
-	           *o, snapc, ut, 0,
-	           NULL, oncommit, &ver);
+  objecter->op_submit(objecter_op);
   lock->Unlock();
 
   mylock.Lock();
@@ -562,10 +563,11 @@ int librados::IoCtxImpl::operate_read(const object_t& oid,
 
   int op = o->ops[0].op.op;
   ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid << " nspace=" << oloc.nspace << dendl;
+  Objecter::Op *objecter_op = objecter->prepare_read_op(oid, oloc,
+	                                      *o, snap_seq, pbl, 0,
+	                                      onack, &ver);
   lock->Lock();
-  objecter->read(oid, oloc,
-	           *o, snap_seq, pbl, 0,
-	           onack, &ver);
+  objecter->op_submit(objecter_op);
   lock->Unlock();
 
   mylock.Lock();
@@ -592,10 +594,11 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
   c->io = this;
   c->pbl = pbl;
 
-  Mutex::Locker l(*lock);
-  objecter->read(oid, oloc,
+  Objecter::Op *objecter_op = objecter->prepare_read_op(oid, oloc,
 		 *o, snap_seq, pbl, flags,
 		 onack, &c->objver);
+  Mutex::Locker l(*lock);
+  objecter->op_submit(objecter_op);
   return 0;
 }
 
