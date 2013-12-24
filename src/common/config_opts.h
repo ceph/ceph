@@ -284,8 +284,7 @@ OPTION(mds_max_file_size, OPT_U64, 1ULL << 40)
 OPTION(mds_cache_size, OPT_INT, 100000)
 OPTION(mds_cache_mid, OPT_FLOAT, .7)
 OPTION(mds_mem_max, OPT_INT, 1048576)        // KB
-OPTION(mds_dir_commit_ratio, OPT_FLOAT, .5)
-OPTION(mds_dir_max_commit_size, OPT_INT, 90) // MB
+OPTION(mds_dir_max_commit_size, OPT_INT, 10) // MB
 OPTION(mds_decay_halflife, OPT_FLOAT, 5)
 OPTION(mds_beacon_interval, OPT_FLOAT, 4)
 OPTION(mds_beacon_grace, OPT_FLOAT, 15)
@@ -301,7 +300,6 @@ OPTION(mds_dirstat_min_interval, OPT_FLOAT, 1)    // try to avoid propagating mo
 OPTION(mds_scatter_nudge_interval, OPT_FLOAT, 5)  // how quickly dirstat changes propagate up the hierarchy
 OPTION(mds_client_prealloc_inos, OPT_INT, 1000)
 OPTION(mds_early_reply, OPT_BOOL, true)
-OPTION(mds_use_tmap, OPT_BOOL, true)        // use trivialmap for dir updates
 OPTION(mds_default_dir_hash, OPT_INT, CEPH_STR_HASH_RJENKINS)
 OPTION(mds_log, OPT_BOOL, true)
 OPTION(mds_log_skip_corrupt_events, OPT_BOOL, false)
