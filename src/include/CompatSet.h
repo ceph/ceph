@@ -198,6 +198,30 @@ struct CompatSet {
     return true;
   }
 
+  bool mask(CompatSet& other) {
+    uint64_t mask_compat =
+      ((compat.mask ^ other.compat.mask) & compat.mask);
+    uint64_t mask_ro_compat =
+      ((ro_compat.mask ^ other.ro_compat.mask) & ro_compat.mask);
+    uint64_t mask_incompat =
+      ((incompat.mask ^ other.incompat.mask) & incompat.mask);
+    if (!mask_compat && !mask_ro_compat && !mask_incompat)
+      return false;
+    for (int id = 1; id < 64; ++id) {
+      uint64_t mask = (uint64_t)1 << id;
+      if (mask & mask_compat) {
+        compat.remove(id);
+      }
+      if (mask & mask_ro_compat) {
+        ro_compat.remove(id);
+      }
+      if (mask & mask_incompat) {
+        incompat.remove(id);
+      }
+    }
+    return true;
+  }
+
   void encode(bufferlist& bl) const {
     compat.encode(bl);
     ro_compat.encode(bl);
