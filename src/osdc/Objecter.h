@@ -483,6 +483,9 @@ struct ObjectOperation {
   void tmap_get() {
     add_op(CEPH_OSD_OP_TMAPGET);
   }
+  void tmap_to_omap() {
+    add_op(CEPH_OSD_OP_TMAP2OMAP);
+  }
 
   // objectmap
   void omap_get_keys(const string &start_after,
