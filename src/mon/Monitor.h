@@ -659,8 +659,10 @@ public:
     bufferlist request_bl;
     MonSession *session;
     ConnectionRef con;
+    uint64_t con_features;
     entity_inst_t client_inst;
 
+    RoutedRequest() : tid(0), session(NULL), con_features(0) {}
     ~RoutedRequest() {
       if (session)
 	session->put();

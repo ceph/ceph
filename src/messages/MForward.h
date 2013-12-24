@@ -28,26 +28,27 @@ struct MForward : public Message {
   PaxosServiceMessage *msg;
   entity_inst_t client;
   MonCap client_caps;
-  uint64_t conn_features;
+  uint64_t con_features;
 
   static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 0;
 
   MForward() : Message(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
-               tid(0), msg(NULL), conn_features(0) {}
+               tid(0), msg(NULL), con_features(0) {}
   //the message needs to have caps filled in!
-  MForward(uint64_t t, PaxosServiceMessage *m) :
+  MForward(uint64_t t, PaxosServiceMessage *m, uint64_t feat) :
     Message(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
     tid(t), msg(m) {
     client = m->get_source_inst();
     client_caps = m->get_session()->caps;
-    conn_features = m->get_connection()->get_features();
+    con_features = feat;
   }
-  MForward(uint64_t t, PaxosServiceMessage *m, const MonCap& caps) :
+  MForward(uint64_t t, PaxosServiceMessage *m, uint64_t feat,
+	   const MonCap& caps) :
     Message(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
     tid(t), msg(m), client_caps(caps) {
     client = m->get_source_inst();
-    conn_features = m->get_connection()->get_features();
+    con_features = feat;
   }
 private:
   ~MForward() {
@@ -60,7 +61,7 @@ public:
     ::encode(client, payload);
     ::encode(client_caps, payload, features);
     encode_message(msg, features, payload);
-    ::encode(conn_features, payload);
+    ::encode(con_features, payload);
   }
 
   void decode_payload() {
@@ -70,9 +71,9 @@ public:
     ::decode(client_caps, p);
     msg = (PaxosServiceMessage *)decode_message(NULL, p);
     if (header.version >= 2) {
-      ::decode(conn_features, p);
+      ::decode(con_features, p);
     } else {
-      conn_features = 0;
+      con_features = 0;
     }
 
   }
@@ -81,7 +82,7 @@ public:
   void print(ostream& o) const {
     if (msg)
       o << "forward(" << *msg << " caps " << client_caps
-        << " conn_features " << conn_features << ") to leader";
+        << " con_features " << con_features << ") to leader";
     else o << "forward(??? ) to leader";
   }
 };
