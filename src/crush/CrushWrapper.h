@@ -323,6 +323,8 @@ public:
 
   /**
    * returns the (type, name) of the parent bucket of id
+   *
+   * FIXME: ambiguous for items that occur multiple times in the map
    */
   pair<string,string> get_immediate_parent(int id, int *ret = NULL);
   int get_immediate_parent_id(int id, int *parent);
