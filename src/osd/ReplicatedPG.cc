@@ -2348,6 +2348,32 @@ int ReplicatedPG::do_xattr_cmp_str(int op, string& v1s, bufferlist& xattr)
 // ========================================================================
 // low level osd ops
 
+int ReplicatedPG::do_tmap2omap(OpContext *ctx, unsigned flags)
+{
+  dout(20) << " convert tmap to omap for " << ctx->new_obs.oi.soid << dendl;
+  bufferlist header, vals;
+  int r = _get_tmap(ctx, &header, &vals);
+  if (r < 0) {
+    if (r == -ENODATA && (flags & CEPH_OSD_TMAP2OMAP_NULLOK))
+      r = 0;
+    return r;
+  }
+
+  vector<OSDOp> ops(3);
+
+  ops[0].op.op = CEPH_OSD_OP_TRUNCATE;
+  ops[0].op.extent.offset = 0;
+  ops[0].op.extent.length = 0;
+
+  ops[1].op.op = CEPH_OSD_OP_OMAPSETHEADER;
+  ops[1].indata.claim(header);
+
+  ops[2].op.op = CEPH_OSD_OP_OMAPSETVALS;
+  ops[2].indata.claim(vals);
+
+  return do_osd_ops(ctx, ops);
+}
+
 int ReplicatedPG::do_tmapup_slow(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd_op,
 				    bufferlist& bl)
 {
@@ -3694,6 +3720,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       result = do_tmapup(ctx, bp, osd_op);
       break;
 
+    case CEPH_OSD_OP_TMAP2OMAP:
+      ++ctx->num_write;
+      result = do_tmap2omap(ctx, op.tmap2omap.flags);
+      break;
+
       // OMAP Read ops
     case CEPH_OSD_OP_OMAPGETKEYS:
       ++ctx->num_read;
@@ -4014,10 +4045,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   return result;
 }
 
-int ReplicatedPG::_get_tmap(OpContext *ctx,
-			    map<string, bufferlist> *out,
-			    bufferlist *header)
+int ReplicatedPG::_get_tmap(OpContext *ctx, bufferlist *header, bufferlist *vals)
 {
+  if (ctx->new_obs.oi.size == 0) {
+    dout(20) << "unable to get tmap for zero sized " << ctx->new_obs.oi.soid << dendl;
+    return -ENODATA;
+  }
   vector<OSDOp> nops(1);
   OSDOp &newop = nops[0];
   newop.op.op = CEPH_OSD_OP_TMAPGET;
@@ -4025,7 +4058,7 @@ int ReplicatedPG::_get_tmap(OpContext *ctx,
   try {
     bufferlist::iterator i = newop.outdata.begin();
     ::decode(*header, i);
-    ::decode(*out, i);
+    (*vals).substr_of(newop.outdata, i.get_off(), i.get_remaining());
   } catch (...) {
     dout(20) << "unsuccessful at decoding tmap for " << ctx->new_obs.oi.soid
 	     << dendl;
