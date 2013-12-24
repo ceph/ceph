@@ -789,7 +789,8 @@ protected:
    * This helper function is called from do_op if the ObjectContext lookup fails.
    * @returns true if the caching code is handling the Op, false otherwise.
    */
-  inline bool maybe_handle_cache(OpRequestRef op, ObjectContextRef obc, int r);
+  inline bool maybe_handle_cache(OpRequestRef op, ObjectContextRef obc, int r,
+				 const hobject_t& missing_oid);
   /**
    * This helper function tells the client to redirect their request elsewhere.
    */
@@ -797,7 +798,8 @@ protected:
   /**
    * This function starts up a copy from
    */
-  void promote_object(OpRequestRef op, ObjectContextRef obc);
+  void promote_object(OpRequestRef op, ObjectContextRef obc,
+		      const hobject_t& missing_object);
 
   /**
    * Check if the op is such that we can skip promote (e.g., DELETE)
