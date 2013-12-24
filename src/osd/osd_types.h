@@ -1948,6 +1948,9 @@ struct object_copy_data_t {
   bufferlist omap_header;
   map<string, bufferlist> omap;
   string category;
+
+  /// which snaps we are defined for (if a snap and not the head)
+  vector<snapid_t> snaps;
 public:
   object_copy_data_t() : size((uint64_t)-1) {}
 
