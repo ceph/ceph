@@ -1156,7 +1156,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
   }
 
   if ((m->get_flags() & CEPH_OSD_FLAG_IGNORE_CACHE) == 0 &&
-      maybe_handle_cache(op, obc, r))
+      maybe_handle_cache(op, obc, r, missing_oid))
     return;
 
   if (r) {
@@ -1344,13 +1344,17 @@ void ReplicatedPG::do_op(OpRequestRef op)
 }
 
 bool ReplicatedPG::maybe_handle_cache(OpRequestRef op, ObjectContextRef obc,
-                                      int r)
+                                      int r, const hobject_t& missing_oid)
 {
   if (obc)
     dout(25) << __func__ << " " << obc->obs.oi << " "
-	     << (obc->obs.exists ? "exists" : "DNE") << dendl;
+	     << (obc->obs.exists ? "exists" : "DNE")
+	     << " missing_oid " << missing_oid
+	     << dendl;
   else
-    dout(25) << __func__ << " (no obc)" << dendl;
+    dout(25) << __func__ << " (no obc)"
+	     << " missing_oid " << missing_oid
+	     << dendl;
 
   if (obc.get() && obc->is_blocked()) {
     // we're already doing something with this object
@@ -1369,7 +1373,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op, ObjectContextRef obc,
     if (can_skip_promote(op, obc)) {
       return false;
     }
-    promote_object(op, obc);
+    promote_object(op, obc, missing_oid);
     return true;
 
   case pg_pool_t::CACHEMODE_FORWARD:
@@ -1382,7 +1386,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op, ObjectContextRef obc,
   case pg_pool_t::CACHEMODE_READONLY: // TODO: clean this case up
     if (!obc.get() && r == -ENOENT) {
       // we don't have the object and op's a read
-      promote_object(op, obc);
+      promote_object(op, obc, missing_oid);
       return true;
     }
     if (obc.get() && obc->obs.exists) { // we have the object locally
@@ -1451,19 +1455,13 @@ public:
   }
 };
 
-void ReplicatedPG::promote_object(OpRequestRef op, ObjectContextRef obc)
+void ReplicatedPG::promote_object(OpRequestRef op, ObjectContextRef obc,
+				  const hobject_t& missing_oid)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
-  if (!obc.get()) { // we need to create an ObjectContext
-    int r = find_object_context(
-      hobject_t(m->get_oid(),
-	      m->get_object_locator().key,
-	      m->get_snapid(),
-	      m->get_pg().ps(),
-	      m->get_object_locator().get_pool(),
-	      m->get_object_locator().nspace),
-      &obc, true, NULL);
-    assert(r == 0); // a lookup that allows creates can't fail now
+  if (!obc) { // we need to create an ObjectContext
+    assert(missing_oid != hobject_t());
+    obc = get_object_context(missing_oid, true);
   }
   dout(10) << __func__ << " " << obc->obs.oi.soid << dendl;
 
