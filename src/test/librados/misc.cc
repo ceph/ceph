@@ -265,6 +265,71 @@ TEST(LibRadosMisc, TmapUpdateMisorderedPutPP) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
+TEST(LibRadosMisc, Tmap2OmapPP) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  // create tmap
+  bufferlist hdr;
+  hdr.append("header");
+  map<string, bufferlist> omap;
+  omap["1"].append("a");
+  omap["2"].append("b");
+  omap["3"].append("c");
+  {
+    bufferlist bl;
+    ::encode(hdr, bl);
+    ::encode(omap, bl);
+    ASSERT_EQ(0, ioctx.tmap_put("foo", bl));
+  }
+
+  // convert tmap to omap
+  ASSERT_EQ(0, ioctx.tmap_to_omap("foo", false));
+
+  // if tmap was truncated ?
+  {
+    uint64_t size;
+    time_t mtime;
+    ASSERT_EQ(0, ioctx.stat("foo", &size, &mtime));
+    ASSERT_EQ(0U, size);
+  }
+
+  // if 'nullok' works
+  ASSERT_EQ(0, ioctx.tmap_to_omap("foo", true));
+  ASSERT_LE(ioctx.tmap_to_omap("foo", false), 0);
+
+  {
+    // read omap
+    bufferlist got;
+    map<string, bufferlist> m;
+    ObjectReadOperation o;
+    o.omap_get_header(&got, NULL);
+    o.omap_get_vals("", 1024, &m, NULL);
+    ASSERT_EQ(0, ioctx.operate("foo", &o, NULL));
+
+    // compare header
+    ASSERT_TRUE(hdr.contents_equal(got));
+
+    // compare values
+    ASSERT_EQ(omap.size(), m.size());
+    bool same = true;
+    for (map<string, bufferlist>::iterator p = omap.begin(); p != omap.end(); ++p) {
+      map<string, bufferlist>::iterator q = m.find(p->first);
+      if (q == m.end() || !p->second.contents_equal(q->second)) {
+	same = false;
+	break;
+      }
+    }
+    ASSERT_TRUE(same);
+  }
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
 TEST(LibRadosMisc, Exec) {
   char buf[128];
   rados_t cluster;
