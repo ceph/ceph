@@ -880,6 +880,13 @@ int librados::IoCtxImpl::tmap_get(const object_t& oid, bufferlist& bl)
   return operate_read(oid, &rd, NULL);
 }
 
+int librados::IoCtxImpl::tmap_to_omap(const object_t& oid, bool nullok)
+{
+  ::ObjectOperation wr;
+  prepare_assert_ops(&wr);
+  wr.tmap_to_omap(nullok);
+  return operate(oid, &wr, NULL);
+}
 
 int librados::IoCtxImpl::exec(const object_t& oid,
 			      const char *cls, const char *method,
