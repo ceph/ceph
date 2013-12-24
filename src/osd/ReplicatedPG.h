@@ -115,6 +115,7 @@ public:
     string category; ///< The copy source's category
     version_t user_version; ///< The copy source's user version
     bool should_requeue;  ///< op should be requeued on cancel
+    vector<snapid_t> snaps;  ///< src's snaps (if clone)
     CopyResults() : object_size(0), started_temp_obj(false),
 		    user_version(0), should_requeue(false) {}
   };

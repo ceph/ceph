@@ -2679,7 +2679,7 @@ void object_copy_data_t::decode_classic(bufferlist::iterator& bl)
 
 void object_copy_data_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   ::encode(size, bl);
   ::encode(mtime, bl);
   ::encode(category, bl);
@@ -2688,6 +2688,7 @@ void object_copy_data_t::encode(bufferlist& bl) const
   ::encode(omap, bl);
   ::encode(cursor, bl);
   ::encode(omap_header, bl);
+  ::encode(snaps, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2703,6 +2704,8 @@ void object_copy_data_t::decode(bufferlist::iterator& bl)
   ::decode(cursor, bl);
   if (struct_v >= 2)
     ::decode(omap_header, bl);
+  if (struct_v >= 3)
+    ::decode(snaps, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2732,6 +2735,7 @@ void object_copy_data_t::generate_test_instances(list<object_copy_data_t*>& o)
   bufferptr databp("iamsomedatatocontain", 20);
   o.back()->data.push_back(databp);
   o.back()->omap_header.append("this is an omap header");
+  o.back()->snaps.push_back(123);
 }
 
 void object_copy_data_t::dump(Formatter *f) const
@@ -2747,6 +2751,11 @@ void object_copy_data_t::dump(Formatter *f) const
   f->dump_int("omap_size", omap.size());
   f->dump_int("omap_header_length", omap_header.length());
   f->dump_int("data_length", data.length());
+  f->open_array_section("snaps");
+  for (vector<snapid_t>::const_iterator p = snaps.begin();
+       p != snaps.end(); ++p)
+    f->dump_unsigned("snap", *p);
+  f->close_section();
 }
 
 // -- pg_create_t --
