@@ -4709,6 +4709,7 @@ int ReplicatedPG::fill_in_copy_get(bufferlist::iterator& bp, OSDOp& osd_op,
   reply_obj.size = oi.size;
   reply_obj.mtime = oi.mtime;
   reply_obj.category = oi.category;
+  reply_obj.snaps = oi.snaps;
 
   // attrs
   map<string,bufferlist>& out_attrs = reply_obj.attrs;
@@ -4826,6 +4827,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 	      &cop->results->object_size, &cop->results->mtime,
 	      &cop->results->category,
 	      &cop->attrs, &cop->data, &cop->omap_header, &cop->omap,
+	      &cop->results->snaps,
 	      &cop->rval);
 
   C_Copyfrom *fin = new C_Copyfrom(this, obc->obs.oi.soid,
@@ -5047,6 +5049,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     tctx->delta_stats.num_bytes += results->object_size;
     tctx->new_obs.oi.category = results->category;
     tctx->new_obs.oi.user_version = results->user_version;
+    tctx->new_obs.oi.snaps = results->snaps;
   }
 
   // take RWWRITE lock for duration of our local write
