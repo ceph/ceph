@@ -45,6 +45,7 @@ namespace librbd {
       snap_lock("librbd::ImageCtx::snap_lock"),
       parent_lock("librbd::ImageCtx::parent_lock"),
       refresh_lock("librbd::ImageCtx::refresh_lock"),
+      extra_read_flags(0),
       old_format(true),
       order(0), size(0), features(0),
       format_string(NULL),
@@ -238,8 +239,12 @@ namespace librbd {
     delete perfcounter;
   }
 
+  void ImageCtx::set_read_flag(unsigned flag) {
+    extra_read_flags |= flag;
+  }
+
   int ImageCtx::get_read_flags(snap_t snap_id) {
-    int flags = librados::OPERATION_NOFLAG;
+    int flags = librados::OPERATION_NOFLAG | extra_read_flags;
     if (snap_id == LIBRADOS_SNAP_HEAD)
       return flags;
 

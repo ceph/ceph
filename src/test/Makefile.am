@@ -274,6 +274,11 @@ unittest_str_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_str_map_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_str_map
 
+unittest_crushwrapper_SOURCES = test/test_crushwrapper.cc
+unittest_crushwrapper_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_crushwrapper_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCRUSH)
+check_PROGRAMS += unittest_crushwrapper
+
 unittest_sharedptr_registry_SOURCES = test/common/test_sharedptr_registry.cc
 unittest_sharedptr_registry_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_sharedptr_registry_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)

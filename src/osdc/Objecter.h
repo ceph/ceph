@@ -921,12 +921,19 @@ struct ObjectOperation {
 // ----------------
 
 
-class Objecter {
- public:  
+class Objecter : public md_config_obs_t {
+public:
+  // config observer bits
+  virtual const char** get_tracked_conf_keys() const;
+  virtual void handle_conf_change(const struct md_config_t *conf,
+				  const std::set <std::string> &changed);
+
+public:
   Messenger *messenger;
   MonClient *monc;
   OSDMap    *osdmap;
   CephContext *cct;
+  std::multimap<string,string> crush_location;
 
   bool initialized;
  

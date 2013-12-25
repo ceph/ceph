@@ -2854,22 +2854,6 @@ int OSDMonitor::parse_osd_id(const char *s, stringstream *pss)
   return id;
 }
 
-void OSDMonitor::parse_loc_map(const vector<string>& args,  map<string,string> *ploc)
-{
-  for (unsigned i = 0; i < args.size(); ++i) {
-    const char *s = args[i].c_str();
-    const char *pos = strchr(s, '=');
-    if (!pos)
-      break;
-    string key(s, 0, pos-s);
-    string value(pos+1);
-    if (value.length())
-      (*ploc)[key] = value;
-    else
-      ploc->erase(key);
-  }
-}
-
 int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
                                          stringstream& ss)
 {
@@ -3221,7 +3205,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     vector<string> argvec;
     cmd_getval(g_ceph_context, cmdmap, "args", argvec);
     map<string,string> loc;
-    parse_loc_map(argvec, &loc);
+    CrushWrapper::parse_loc_map(argvec, &loc);
 
     if (prefix == "osd crush set"
         && !_get_stable_crush().item_exists(id)) {
@@ -3283,7 +3267,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       vector<string> argvec;
       cmd_getval(g_ceph_context, cmdmap, "args", argvec);
       map<string,string> loc;
-      parse_loc_map(argvec, &loc);
+      CrushWrapper::parse_loc_map(argvec, &loc);
 
       dout(0) << "create-or-move crush item name '" << name << "' initial_weight " << weight
 	      << " at location " << loc << dendl;
@@ -3317,7 +3301,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       cmd_getval(g_ceph_context, cmdmap, "name", name);
       cmd_getval(g_ceph_context, cmdmap, "args", argvec);
       map<string,string> loc;
-      parse_loc_map(argvec, &loc);
+      CrushWrapper::parse_loc_map(argvec, &loc);
 
       dout(0) << "moving crush item name '" << name << "' to location " << loc << dendl;
       CrushWrapper newcrush;
@@ -3353,7 +3337,7 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     vector<string> argvec;
     cmd_getval(g_ceph_context, cmdmap, "args", argvec);
     map<string,string> loc;
-    parse_loc_map(argvec, &loc);
+    CrushWrapper::parse_loc_map(argvec, &loc);
 
     if (!osdmap.crush->name_exists(name)) {
       err = -ENOENT;

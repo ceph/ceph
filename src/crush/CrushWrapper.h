@@ -323,6 +323,8 @@ public:
 
   /**
    * returns the (type, name) of the parent bucket of id
+   *
+   * FIXME: ambiguous for items that occur multiple times in the map
    */
   pair<string,string> get_immediate_parent(int id, int *ret = NULL);
   int get_immediate_parent_id(int id, int *parent);
@@ -471,6 +473,32 @@ private:
   int _remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
 public:
   int remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
+
+  /**
+   * calculate the locality/distance from a given id to a crush location map
+   *
+   * Specifically, we look for the lowest-valued type for which the
+   * location of id matches that described in loc.
+   *
+   * @param cct cct
+   * @param id the existing id in the map
+   * @param loc a set of key=value pairs describing a location in the hierarchy
+   */
+  int get_common_ancestor_distance(CephContext *cct, int id,
+				   const std::multimap<string,string>& loc);
+
+  /**
+   * parse a set of key/value pairs out of a string vector
+   *
+   * These are used to describe a location in the CRUSH hierarchy.
+   *
+   * @param args list of strings (each key= or key=value)
+   * @param ploc pointer to a resulting location map or multimap
+   */
+  static int parse_loc_map(const std::vector<string>& args,
+			   std::map<string,string> *ploc);
+  static int parse_loc_multimap(const std::vector<string>& args,
+				std::multimap<string,string> *ploc);
 
   /**
    * get an item's weight
