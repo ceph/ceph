@@ -2644,6 +2644,9 @@ int CInode::get_caps_allowed_for_client(client_t client)
   } else {
     allowed = get_caps_allowed_by_type(CAP_ANY);
   }
+  if (inode.inline_version != CEPH_INLINE_NONE &&
+      !mdcache->mds->get_session(client)->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA))
+    allowed &= ~(CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR);
   return allowed;
 }
 
