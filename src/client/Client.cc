@@ -5774,6 +5774,11 @@ void Client::unlock_fh_pos(Fh *f)
 
 int Client::uninline_data(Inode *in, Context *onfinish)
 {
+  if (!in->inline_data.length()) {
+    onfinish->complete(0);
+    return 0;
+  }
+
   char oid_buf[32];
   snprintf(oid_buf, sizeof(oid_buf), "%llx.00000000", (long long unsigned)in->ino);
   object_t oid = oid_buf;
