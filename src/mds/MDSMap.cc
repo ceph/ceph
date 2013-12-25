@@ -164,6 +164,7 @@ void MDSMap::print(ostream& out)
       << "stopped\t" << stopped << "\n";
   out << "data_pools\t" << data_pools << "\n";
   out << "metadata_pool\t" << metadata_pool << "\n";
+  out << "inline_data\t" << (inline_data_enabled ? "enabled" : "disabled") << "\n";
 
   multimap< pair<unsigned,unsigned>, uint64_t > foo;
   for (map<uint64_t,mds_info_t>::iterator p = mds_info.begin();
@@ -470,7 +471,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(cas_pool, bl);
 
     // kclient ignores everything from here
-    __u16 ev = 6;
+    __u16 ev = 7;
     ::encode(ev, bl);
     ::encode(compat, bl);
     ::encode(metadata_pool, bl);
@@ -485,6 +486,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     ::encode(last_failure_osd_epoch, bl);
     ::encode(ever_allowed_snaps, bl);
     ::encode(explicitly_allowed_snaps, bl);
+    ::encode(inline_data_enabled, bl);
     ENCODE_FINISH(bl);
   }
 }
@@ -549,5 +551,7 @@ void MDSMap::decode(bufferlist::iterator& p)
     ever_allowed_snaps = true;
     explicitly_allowed_snaps = false;
   }
+  if (ev >= 7)
+    ::decode(inline_data_enabled, p);
   DECODE_FINISH(p);
 }
