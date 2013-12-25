@@ -39,6 +39,8 @@
 #include "common/cmdparse.h"
 #include "include/str_list.h"
 
+#include "mds/mdstypes.h"
+
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, mdsmap)
@@ -80,7 +82,7 @@ void MDSMonitor::create_new_fs(MDSMap &m, int metadata_pool, int data_pool)
 void MDSMonitor::create_initial()
 {
   dout(10) << "create_initial" << dendl;
-  create_new_fs(pending_mdsmap, CEPH_METADATA_RULE, CEPH_DATA_RULE);
+  create_new_fs(pending_mdsmap, MDS_METADATA_POOL, MDS_DATA_POOL);
 }
 
 
