@@ -1957,6 +1957,10 @@ CInode* Server::prepare_new_inode(MDRequest *mdr, CDir *dir, inodeno_t useino, u
     }
   }
 
+  if (!mds->mdsmap->get_inline_data_enabled() ||
+      !mdr->session->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA))
+    in->inode.inline_version = CEPH_INLINE_NONE;
+
   mdcache->add_inode(in);  // add
   dout(10) << "prepare_new_inode " << *in << dendl;
   return in;
@@ -2468,6 +2472,13 @@ void Server::handle_client_open(MDRequest *mdr)
   if ((req->head.args.open.flags & O_DIRECTORY) && !cur->inode.is_dir()) {
     dout(7) << "specified O_DIRECTORY on non-directory " << *cur << dendl;
     reply_request(mdr, -EINVAL);
+    return;
+  }
+
+  if (cur->inode.inline_version != CEPH_INLINE_NONE &&
+      !mdr->session->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) {
+    dout(7) << "old client cannot open inline data file " << *cur << dendl;
+    reply_request(mdr, -EPERM);
     return;
   }
   
