@@ -975,6 +975,13 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       r = 0;
     }
 
+  } else if (prefix == "mds inline enable") {
+    pending_mdsmap.set_inline_data_enabled(true);
+    pending_mdsmap.compat.incompat.insert(MDS_FEATURE_INCOMPAT_INLINE);
+    r = 0;
+  } else if (prefix == "mds inline disable") {
+    pending_mdsmap.set_inline_data_enabled(false);
+    r = 0;
   } else if (prefix == "mds set") {
     string key;
     cmd_getval(g_ceph_context, cmdmap, "key", key);
