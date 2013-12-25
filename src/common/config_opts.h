@@ -269,6 +269,9 @@ OPTION(fuse_default_permissions, OPT_BOOL, true)
 OPTION(fuse_big_writes, OPT_BOOL, true)
 OPTION(fuse_atomic_o_trunc, OPT_BOOL, true)
 OPTION(fuse_debug, OPT_BOOL, false)
+
+OPTION(crush_location, OPT_STR, "")       // whitespace-separated list of key=value pairs describing crush location
+
 OPTION(objecter_tick_interval, OPT_DOUBLE, 5.0)
 OPTION(objecter_timeout, OPT_DOUBLE, 10.0)    // before we ask for a map
 OPTION(objecter_inflight_op_bytes, OPT_U64, 1024*1024*100) // max in-flight data (both directions)
@@ -640,6 +643,8 @@ OPTION(rbd_cache_block_writes_upfront, OPT_BOOL, false) // whether to block writ
 OPTION(rbd_concurrent_management_ops, OPT_INT, 10) // how many operations can be in flight for a management operation like deleting or resizing an image
 OPTION(rbd_balance_snap_reads, OPT_BOOL, false)
 OPTION(rbd_localize_snap_reads, OPT_BOOL, false)
+OPTION(rbd_balance_parent_reads, OPT_BOOL, false)
+OPTION(rbd_localize_parent_reads, OPT_BOOL, true)
 
 /*
  * The following options change the behavior for librbd's image creation methods that
