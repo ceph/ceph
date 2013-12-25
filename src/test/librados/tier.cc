@@ -154,7 +154,7 @@ TEST(LibRadosTier, Overlay) {
     op.read(0, 1, &bl, NULL);
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, base_ioctx.aio_operate(
-	"foo", completion, &op, librados::SNAP_HEAD,
+	"foo", completion, &op,
 	librados::OPERATION_IGNORE_OVERLAY, NULL));
     completion->wait_for_safe();
     ASSERT_EQ(0, completion->get_return_value());

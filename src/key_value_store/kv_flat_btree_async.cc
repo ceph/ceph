@@ -672,7 +672,7 @@ int KvFlatBtreeAsync::read_object(const string &obj, object_data * odata) {
     return err;
   }
   odata->unwritable = string(unw_bl.c_str(), unw_bl.length()) == "1";
-  odata->version = obj_aioc->get_version();
+  odata->version = obj_aioc->get_version64();
   odata->size = odata->omap.size();
   obj_aioc->release();
   return 0;
@@ -697,7 +697,7 @@ int KvFlatBtreeAsync::read_object(const string &obj, rebalance_args * args) {
   bufferlist::iterator it = outbl.begin();
   args->decode(it);
   args->odata.name = obj;
-  args->odata.version = a->get_version();
+  args->odata.version = a->get_version64();
   a->release();
   return err;
 }
@@ -2095,7 +2095,7 @@ bool KvFlatBtreeAsync::is_consistent() {
 	      }
 	    }
 	    if (atoi(string(un.c_str(), un.length()).c_str()) != 1 &&
-		aioc->get_version() != (int)dit->version) {
+		aioc->get_version64() != dit->version) {
 	      cerr << "Not consistent! object " << dit->obj << " has been "
 		  << " modified since the client died was not cleaned up."
 		  << std::endl;
@@ -2251,7 +2251,7 @@ string KvFlatBtreeAsync::str() {
       //return ret.str();
     }
     all_sizes[indexer] = all_maps[indexer].size();
-    all_versions[indexer] = aioc->get_version();
+    all_versions[indexer] = aioc->get_version64();
     indexer++;
     aioc->release();
   }

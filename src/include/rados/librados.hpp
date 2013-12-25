@@ -103,7 +103,7 @@ namespace librados
     bool is_complete_and_cb();
     bool is_safe_and_cb();
     int get_return_value();
-    int get_version();  ///< DEPRECATED get_version() only returns 32-bits
+    int get_version() __attribute__ ((deprecated ("use get_version64")));
     uint64_t get_version64();
     void release();
     AioCompletionImpl *pc;
@@ -777,8 +777,14 @@ namespace librados
 		    std::vector<snap_t>& snaps);
     int aio_operate(const std::string& oid, AioCompletion *c,
 		    ObjectReadOperation *op, bufferlist *pbl);
+
     int aio_operate(const std::string& oid, AioCompletion *c,
 		    ObjectReadOperation *op, snap_t snapid, int flags,
+		    bufferlist *pbl)
+      __attribute__ ((deprecated ("use aio_operate without snapid argument")));
+
+    int aio_operate(const std::string& oid, AioCompletion *c,
+		    ObjectReadOperation *op, int flags,
 		    bufferlist *pbl);
 
     // watch/notify

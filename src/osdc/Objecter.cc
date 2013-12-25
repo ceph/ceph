@@ -44,6 +44,7 @@
 
 #include "common/config.h"
 #include "common/perf_counters.h"
+#include "include/str_list.h"
 
 
 #define dout_subsys ceph_subsys_objecter
@@ -125,6 +126,35 @@ enum {
   l_osdc_osd_laggy,
   l_osdc_last,
 };
+
+
+// config obs ----------------------------
+
+static const char *config_keys[] = {
+  "crush_location",
+  NULL
+};
+
+const char** Objecter::get_tracked_conf_keys() const
+{
+  return config_keys;
+}
+
+
+void Objecter::handle_conf_change(const struct md_config_t *conf,
+				  const std::set <std::string> &changed)
+{
+  if (changed.count("crush_location")) {
+    crush_location.clear();
+    vector<string> lvec;
+    get_str_vec(cct->_conf->crush_location, lvec);
+    int r = CrushWrapper::parse_loc_multimap(lvec, &crush_location);
+    if (r < 0) {
+      lderr(cct) << "warning: crush_location '" << cct->_conf->crush_location
+		 << "' does not parse" << dendl;
+    }
+  }
+}
 
 
 // messages ------------------------------
@@ -1434,23 +1464,33 @@ int Objecter::recalc_op_target(Op *op)
 	  op->used_replica = true;
 	osd = acting[p];
 	ldout(cct, 10) << " chose random osd." << osd << " of " << acting << dendl;
-      } else if (read && (op->flags & CEPH_OSD_FLAG_LOCALIZE_READS)) {
-	// look for a local replica
-	int i;
-	/* loop through the OSD replicas and see if any are local to read from.
-	 * We don't need to check the primary since we default to it. (Be
-         * careful to preserve that default, which is why we iterate in reverse
-         * order.) */
-	for (i = acting.size()-1; i > 0; --i) {
-	  if (osdmap->get_addr(acting[i]).is_same_host(messenger->get_myaddr())) {
-	    op->used_replica = true;
-	    ldout(cct, 10) << " chose local osd." << acting[i] << " of " << acting << dendl;
-	    break;
+      } else if (read && (op->flags & CEPH_OSD_FLAG_LOCALIZE_READS) &&
+		 acting.size() > 1) {
+	// look for a local replica.  prefer the primary if the
+	// distance is the same.
+	int best;
+	int best_locality;
+	for (unsigned i = 0; i < acting.size(); ++i) {
+	  int locality = osdmap->crush->get_common_ancestor_distance(
+		 cct, acting[i], crush_location);
+	  ldout(cct, 20) << __func__ << " localize: rank " << i
+			 << " osd." << acting[i]
+			 << " locality " << locality << dendl;
+	  if (i == 0 ||
+	      (locality >= 0 && best_locality >= 0 &&
+	       locality < best_locality) ||
+	      (best_locality < 0 && locality >= 0)) {
+	    best = i;
+	    best_locality = locality;
+	    if (i)
+	      op->used_replica = true;
 	  }
 	}
-	osd = acting[i];
-      } else
+	assert(best >= 0);
+	osd = acting[best];
+      } else {
 	osd = acting[0];
+      }
       s = get_session(osd);
     }
 

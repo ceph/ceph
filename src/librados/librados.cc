@@ -1020,9 +1020,28 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 				       0, pbl);
 }
 
+// deprecated
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 				 librados::ObjectReadOperation *o, 
-				 snap_t snapid, int flags, bufferlist *pbl)
+				 snap_t snapid_unused_deprecated,
+				 int flags, bufferlist *pbl)
+{
+  object_t obj(oid);
+  int op_flags = 0;
+  if (flags & OPERATION_BALANCE_READS)
+    op_flags |= CEPH_OSD_FLAG_BALANCE_READS;
+  if (flags & OPERATION_LOCALIZE_READS)
+    op_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
+  if (flags & OPERATION_ORDER_READS_WRITES)
+    op_flags |= CEPH_OSD_FLAG_RWORDERED;
+
+  return io_ctx_impl->aio_operate_read(obj, (::ObjectOperation*)o->impl, c->pc,
+				       op_flags, pbl);
+}
+
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+				 librados::ObjectReadOperation *o,
+				 int flags, bufferlist *pbl)
 {
   object_t obj(oid);
   return io_ctx_impl->aio_operate_read(obj, (::ObjectOperation*)o->impl, c->pc,
