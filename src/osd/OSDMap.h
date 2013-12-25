@@ -617,9 +617,9 @@ public:
 		   int num_osd, int pg_bits, int pgp_bits);
   static int _build_crush_types(CrushWrapper& crush);
   static void build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
-				     map<int, const char*>& poolsets, int num_osd);
-  static void build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& crush,
-					       map<int, const char*>& rulesets);
+				     int num_osd);
+  static void build_simple_crush_map_from_conf(CephContext *cct,
+					       CrushWrapper& crush);
 
   bool crush_ruleset_in_use(int ruleset) const;
 
