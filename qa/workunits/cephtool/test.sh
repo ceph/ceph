@@ -359,7 +359,7 @@ ceph osd pool set rbd hit_set_period 123
 ceph osd pool set rbd hit_set_count 12
 ceph osd pool set rbd hit_set_fpp .01
 
-ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 2'
+ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
 
 ceph osd thrash 10
 
