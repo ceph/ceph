@@ -19,7 +19,7 @@ PS4='$LINENO: '
 
 DIR=osd-pool-create
 rm -fr $DIR
-trap "kill_mon || true ; rm -fr $DIR" EXIT
+trap "set +x ; kill_mon || true ; rm -fr $DIR" EXIT
 mkdir $DIR
 export CEPH_ARGS="--conf /dev/null --auth-supported=none --mon-host=127.0.0.1" 
 
@@ -40,7 +40,14 @@ function run_mon() {
 }
 
 function kill_mon() {
-    while [ -f $DIR/pidfile ] && kill $(cat $DIR/pidfile) ; do sleep 1 ; done
+    for try in 0 1 1 1 2 3 ; do
+        if [ ! -e $DIR/pidfile ] ||
+            ! kill $(cat $DIR/pidfile) ; then
+            break
+        fi
+        sleep $try
+    done
+
     rm -fr $DIR/store.db
 }
 
