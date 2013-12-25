@@ -1839,7 +1839,7 @@ bool OSDMap::crush_ruleset_in_use(int ruleset) const
   return false;
 }
 
-void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
+int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
 			  int nosd, int pg_bits, int pgp_bits)
 {
   ldout(cct, 10) << "build_simple on " << num_osd
@@ -1849,7 +1849,35 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
   set_fsid(fsid);
   created = modified = ceph_clock_now(cct);
 
-  set_max_osd(nosd);
+  if (nosd >=  0) {
+    set_max_osd(nosd);
+  } else {
+    // count osds
+    int maxosd = 0, numosd = 0;
+    const md_config_t *conf = cct->_conf;
+    vector<string> sections;
+    conf->get_all_sections(sections);
+    for (vector<string>::iterator i = sections.begin(); i != sections.end(); ++i) {
+      if (i->find("osd.") != 0)
+	continue;
+
+      const char *begin = i->c_str() + 4;
+      char *end = (char*)begin;
+      int o = strtol(begin, &end, 10);
+      if (*end != '\0')
+	continue;
+
+      if (o > cct->_conf->mon_max_osd) {
+	lderr(cct) << "[osd." << o << "] in config has id > mon_max_osd " << cct->_conf->mon_max_osd << dendl;
+	return -ERANGE;
+      }
+      numosd++;
+      if (o > maxosd)
+	maxosd = o;
+    }
+
+    set_max_osd(maxosd + 1);
+  }
 
   // pgp_num <= pg_num
   if (pgp_bits > pg_bits)
@@ -1861,7 +1889,7 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
   rulesets[CEPH_METADATA_RULE] = "metadata";
   rulesets[CEPH_RBD_RULE] = "rbd";
 
-  int poolbase = nosd ? nosd : 1;
+  int poolbase = get_max_osd() ? get_max_osd() : 1;
 
   for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); ++p) {
     int64_t pool = ++pool_max;
@@ -1882,12 +1910,17 @@ void OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     name_pool[p->second] = pool;
   }
 
-  build_simple_crush_map(cct, *crush, rulesets, nosd);
+  if (nosd >= 0)
+    build_simple_crush_map(cct, *crush, rulesets, nosd);
+  else
+    build_simple_crush_map_from_conf(cct, *crush, rulesets);
 
-  for (int i=0; i<nosd; i++) {
+  for (int i=0; i<get_max_osd(); i++) {
     set_state(i, 0);
     set_weight(i, CEPH_OSD_OUT);
   }
+
+  return 0;
 }
 
 int OSDMap::_build_crush_types(CrushWrapper& crush)
@@ -1951,83 +1984,6 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
   }
 
   crush.finalize();
-}
-
-int OSDMap::build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
-				   int pg_bits, int pgp_bits)
-{
-  ldout(cct, 10) << "build_simple_from_conf with "
-		 << pg_bits << " pg bits per osd, "
-		 << dendl;
-  epoch = e;
-  set_fsid(fsid);
-  created = modified = ceph_clock_now(cct);
-
-  const md_config_t *conf = cct->_conf;
-
-  // count osds
-  int maxosd = 0, numosd = 0;
-
-  vector<string> sections;
-  conf->get_all_sections(sections);
-  for (vector<string>::iterator i = sections.begin(); i != sections.end(); ++i) {
-    if (i->find("osd.") != 0)
-      continue;
-
-    const char *begin = i->c_str() + 4;
-    char *end = (char*)begin;
-    int o = strtol(begin, &end, 10);
-    if (*end != '\0')
-      continue;
-
-    if (o > cct->_conf->mon_max_osd) {
-      lderr(cct) << "[osd." << o << "] in config has id > mon_max_osd " << cct->_conf->mon_max_osd << dendl;
-      return -ERANGE;
-    }
-    numosd++;
-    if (o > maxosd)
-      maxosd = o;
-  }
-
-  set_max_osd(maxosd + 1);
-
-  // pgp_num <= pg_num
-  if (pgp_bits > pg_bits)
-    pgp_bits = pg_bits;
-
-  // crush map
-  map<int, const char*> rulesets;
-  rulesets[CEPH_DATA_RULE] = "data";
-  rulesets[CEPH_METADATA_RULE] = "metadata";
-  rulesets[CEPH_RBD_RULE] = "rbd";
-
-  for (map<int,const char*>::iterator p = rulesets.begin(); p != rulesets.end(); ++p) {
-    int64_t pool = ++pool_max;
-    pools[pool].type = pg_pool_t::TYPE_REPLICATED;
-    pools[pool].flags = cct->_conf->osd_pool_default_flags;
-    if (cct->_conf->osd_pool_default_flag_hashpspool)
-      pools[pool].flags |= pg_pool_t::FLAG_HASHPSPOOL;
-    pools[pool].size = cct->_conf->osd_pool_default_size;
-    pools[pool].min_size = cct->_conf->get_osd_pool_default_min_size();
-    pools[pool].crush_ruleset = p->first;
-    pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
-    pools[pool].set_pg_num((numosd + 1) << pg_bits);
-    pools[pool].set_pgp_num((numosd + 1) << pgp_bits);
-    pools[pool].last_change = epoch;
-    if (p->first == CEPH_DATA_RULE)
-      pools[pool].crash_replay_interval = cct->_conf->osd_default_data_pool_replay_window;
-    pool_name[pool] = p->second;
-    name_pool[p->second] = pool;
-  }
-
-  build_simple_crush_map_from_conf(cct, *crush, rulesets);
-
-  for (int i=0; i<=maxosd; i++) {
-    set_state(i, 0);
-    set_weight(i, CEPH_OSD_OUT);
-  }
-
-  return 0;
 }
 
 void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& crush,

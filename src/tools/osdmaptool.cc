@@ -182,22 +182,18 @@ int main(int argc, const char **argv)
     return -1;
   }
 
-  if (createsimple) {
-    if (num_osd < 1) {
-      cerr << me << ": osd count must be > 0" << std::endl;
-      exit(1);
+  if (createsimple || create_from_conf) {
+    if (createsimple) {
+      if (num_osd < 1) {
+	cerr << me << ": osd count must be > 0" << std::endl;
+	exit(1);
+      }
+    } else {
+      num_osd = -1;
     }
     uuid_d fsid;
     memset(&fsid, 0, sizeof(uuid_d));
     osdmap.build_simple(g_ceph_context, 0, fsid, num_osd, pg_bits, pgp_bits);
-    modified = true;
-  }
-  if (create_from_conf) {
-    uuid_d fsid;
-    memset(&fsid, 0, sizeof(uuid_d));
-    int r = osdmap.build_simple_from_conf(g_ceph_context, 0, fsid, pg_bits, pgp_bits);
-    if (r < 0)
-      return -1;
     modified = true;
   }
 
