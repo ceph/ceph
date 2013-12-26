@@ -31,6 +31,7 @@ extern struct ceph_file_layout g_default_file_layout;
 
 enum {
   CEPH_DEFAULT_CRUSH_REPLICATED_RULESET,
+  CEPH_DEFAULT_CRUSH_ERASURE_RULESET,
 };
 
 #define OSD_REP_PRIMARY 0

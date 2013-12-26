@@ -81,6 +81,14 @@ run_mon --osd_pool_default_erasure_code_properties 1
 ./ceph osd pool create poolA 12 12 erasure 2>&1 | grep 'must be a JSON object'
 kill_mon
 
+# explicitly set the default erasure crush rule
+expected=88
+run_mon --osd_pool_default_crush_erasure_ruleset $expected
+./ceph --format json osd dump | grep '"crush_ruleset":'$expected && exit 1
+./ceph osd pool create pool_erasure 12 12 erasure
+./ceph --format json osd dump | grep '"crush_ruleset":'$expected
+kill_mon
+
 expected='"foo":"bar"'
 # osd_pool_default_erasure_code_properties is JSON
 run_mon --osd_pool_default_erasure_code_properties "{$expected}"
