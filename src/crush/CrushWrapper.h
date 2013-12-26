@@ -647,7 +647,7 @@ public:
   }
 
   int add_simple_ruleset(string name, string root_name, string failure_domain_type,
-			 string mode, ostream *err = 0);
+			 string mode, int rule_type, ostream *err = 0);
 
   int remove_rule(int ruleno);
 

@@ -3509,7 +3509,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       ss << "rule " << name << " already exists";
       err = 0;
     } else {
-      int rule = newcrush.add_simple_ruleset(name, root, type, mode, &ss);
+      int rule = newcrush.add_simple_ruleset(name, root, type, mode,
+					     pg_pool_t::TYPE_REPLICATED, &ss);
       if (rule < 0) {
 	err = rule;
 	goto reply;
