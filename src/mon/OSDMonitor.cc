@@ -2787,7 +2787,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
   if (crush_ruleset >= 0)
     pi->crush_ruleset = crush_ruleset;
   else
-    pi->crush_ruleset = g_conf->osd_pool_default_crush_rule;
+    pi->crush_ruleset =
+      CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(g_ceph_context);
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
   pi->set_pg_num(pg_num ? pg_num : g_conf->osd_pool_default_pg_num);
   pi->set_pgp_num(pgp_num ? pgp_num : g_conf->osd_pool_default_pgp_num);

@@ -66,10 +66,10 @@ Ceph configuration file.
 :Default: ``1``. Typically a host containing one or more Ceph OSD Daemons.
 
 
-``osd pool default crush rule`` 
+``osd pool default crush replicated ruleset`` 
 
-:Description: The default CRUSH ruleset to use when creating a pool.
-:Type: 32-bit Integer
+:Description: The default CRUSH ruleset to use when creating a replicated pool.
+:Type: 8-bit Integer
 :Default: ``0``
 
 
