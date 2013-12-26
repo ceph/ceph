@@ -134,8 +134,6 @@ class MMDSBeacon;
 class InoTable;
 class SnapServer;
 class SnapClient;
-class AnchorServer;
-class AnchorClient;
 
 class MDSTableServer;
 class MDSTableClient;
@@ -175,9 +173,6 @@ class MDS : public Dispatcher {
   MDBalancer   *balancer;
 
   InoTable     *inotable;
-
-  AnchorServer *anchorserver;
-  AnchorClient *anchorclient;
 
   SnapServer   *snapserver;
   SnapClient   *snapclient;
@@ -341,6 +336,7 @@ class MDS : public Dispatcher {
 
   // who am i etc
   int get_nodeid() { return whoami; }
+  uint64_t get_metadata_pool() { return mdsmap->get_metadata_pool(); }
   MDSMap *get_mds_map() { return mdsmap; }
   OSDMap *get_osd_map() { return osdmap; }
 

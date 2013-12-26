@@ -17,7 +17,6 @@
 #include "CDentry.h"
 #include "CInode.h"
 #include "CDir.h"
-#include "Anchor.h"
 
 #include "MDS.h"
 #include "MDCache.h"
@@ -254,20 +253,6 @@ void CDentry::make_path(string& s, inodeno_t tobase)
 }
 */
 
-/** make_anchor_trace
- * construct an anchor trace for this dentry, as if it were linked to *in.
- */
-void CDentry::make_anchor_trace(vector<Anchor>& trace, CInode *in)
-{
-  // start with parent dir inode
-  dir->inode->make_anchor_trace(trace);
-
-  // add this inode (in my dirfrag) to the end
-  trace.push_back(Anchor(in->ino(), dir->ino(), get_hash(), 0, 0));
-  dout(10) << "make_anchor_trace added " << trace.back() << dendl;
-}
-
-
 /*
  * we only add ourselves to remote_parents when the linkage is
  * active (no longer projected).  if the passed dnl is projected,
@@ -418,16 +403,6 @@ bool CDentry::is_freezing()
 {
   return dir->is_freezing();
 }
-
-
-void CDentry::adjust_nested_anchors(int by)
-{
-  nested_anchors += by;
-  dout(20) << "adjust_nested_anchors by " << by << " -> " << nested_anchors << dendl;
-  assert(nested_anchors >= 0);
-  dir->adjust_nested_anchors(by);
-}
-
 
 void CDentry::decode_replica(bufferlist::iterator& p, bool is_new)
 {

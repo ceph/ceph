@@ -85,12 +85,16 @@ ostream& operator<<(ostream &out, const frag_info_t &f)
 
 void nest_info_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   ::encode(version, bl);
   ::encode(rbytes, bl);
   ::encode(rfiles, bl);
   ::encode(rsubdirs, bl);
-  ::encode(ranchors, bl);
+  {
+    // removed field
+    int64_t ranchors = 0;
+    ::encode(ranchors, bl);
+  }
   ::encode(rsnaprealms, bl);
   ::encode(rctime, bl);
   ENCODE_FINISH(bl);
@@ -98,12 +102,15 @@ void nest_info_t::encode(bufferlist &bl) const
 
 void nest_info_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   ::decode(version, bl);
   ::decode(rbytes, bl);
   ::decode(rfiles, bl);
   ::decode(rsubdirs, bl);
-  ::decode(ranchors, bl);
+  {
+    int64_t ranchors;
+    ::decode(ranchors, bl);
+  }
   ::decode(rsnaprealms, bl);
   ::decode(rctime, bl);
   DECODE_FINISH(bl);
@@ -115,7 +122,6 @@ void nest_info_t::dump(Formatter *f) const
   f->dump_unsigned("rbytes", rbytes);
   f->dump_unsigned("rfiles", rfiles);
   f->dump_unsigned("rsubdirs", rsubdirs);
-  f->dump_unsigned("ranchors", ranchors);
   f->dump_unsigned("rsnaprealms", rsnaprealms);
   f->dump_stream("rctime") << rctime;
 }
@@ -128,7 +134,6 @@ void nest_info_t::generate_test_instances(list<nest_info_t*>& ls)
   ls.back()->rbytes = 2;
   ls.back()->rfiles = 3;
   ls.back()->rsubdirs = 4;
-  ls.back()->ranchors = 5;
   ls.back()->rsnaprealms = 6;
   ls.back()->rctime = utime_t(7, 8);
 }
@@ -142,8 +147,6 @@ ostream& operator<<(ostream &out, const nest_info_t &n)
     out << " rc" << n.rctime;
   if (n.rbytes)
     out << " b" << n.rbytes;
-  if (n.ranchors)
-    out << " a" << n.ranchors;
   if (n.rsnaprealms)
     out << " sr" << n.rsnaprealms;
   if (n.rfiles || n.rsubdirs)
@@ -215,7 +218,11 @@ void inode_t::encode(bufferlist &bl) const
   ::encode(gid, bl);
 
   ::encode(nlink, bl);
-  ::encode(anchored, bl);
+  {
+    // removed field
+    bool anchored = 0;
+    ::encode(anchored, bl);
+  }
 
   ::encode(dir_layout, bl);
   ::encode(layout, bl);
@@ -258,7 +265,10 @@ void inode_t::decode(bufferlist::iterator &p)
   ::decode(gid, p);
 
   ::decode(nlink, p);
-  ::decode(anchored, p);
+  {
+    bool anchored;
+    ::decode(anchored, p);
+  }
 
   if (struct_v >= 4)
     ::decode(dir_layout, p);
@@ -320,7 +330,6 @@ void inode_t::dump(Formatter *f) const
   f->dump_unsigned("uid", uid);
   f->dump_unsigned("gid", gid);
   f->dump_unsigned("nlink", nlink);
-  f->dump_unsigned("anchored", (int)anchored);
 
   f->open_object_section("dir_layout");
   ::dump(dir_layout, f);

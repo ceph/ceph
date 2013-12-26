@@ -137,12 +137,6 @@ ostream& operator<<(ostream& out, CInode& in)
   if (pi->is_truncating())
     out << " truncating(" << pi->truncate_from << " to " << pi->truncate_size << ")";
 
-  // anchors
-  if (in.is_anchored())
-    out << " anc";
-  if (in.get_nested_anchors())
-    out << " na=" << in.get_nested_anchors();
-
   if (in.inode.is_dir()) {
     out << " " << in.inode.dirstat;
     if (g_conf->mds_debug_scatterstat && in.is_projected()) {
@@ -810,23 +804,12 @@ void CInode::make_path(filepath& fp)
     fp = filepath(ino());
 }
 
-void CInode::make_anchor_trace(vector<Anchor>& trace)
-{
-  if (get_projected_parent_dn())
-    get_projected_parent_dn()->make_anchor_trace(trace, this);
-  else 
-    assert(is_base());
-}
-
 void CInode::name_stray_dentry(string& dname)
 {
   char s[20];
   snprintf(s, sizeof(s), "%llx", (unsigned long long)inode.ino.val);
   dname = s;
 }
-
-
-
 
 version_t CInode::pre_dirty()
 {
@@ -1201,7 +1184,6 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     ::encode(inode.version, bl);
     ::encode(inode.ctime, bl);
     ::encode(inode.nlink, bl);
-    ::encode(inode.anchored, bl);
     break;
     
   case CEPH_LOCK_IDFT:
@@ -1378,12 +1360,6 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     ::decode(tm, p);
     if (inode.ctime < tm) inode.ctime = tm;
     ::decode(inode.nlink, p);
-    {
-      bool was_anchored = inode.anchored;
-      ::decode(inode.anchored, p);
-      if (parent && was_anchored != inode.anchored)
-	parent->adjust_nested_anchors((int)inode.anchored - (int)was_anchored);
-    }
     break;
 
   case CEPH_LOCK_IDFT:
@@ -2224,15 +2200,6 @@ void CInode::adjust_nested_auth_pins(int a, void *by)
     parent->adjust_nested_auth_pins(a, 0, by);
 }
 
-void CInode::adjust_nested_anchors(int by)
-{
-  assert(by);
-  nested_anchors += by;
-  dout(20) << "adjust_nested_anchors by " << by << " -> " << nested_anchors << dendl;
-  assert(nested_anchors >= 0);
-  if (parent)
-    parent->adjust_nested_anchors(by);
-}
 
 // authority
 
@@ -3139,11 +3106,7 @@ void CInode::_encode_base(bufferlist& bl)
 void CInode::_decode_base(bufferlist::iterator& p)
 {
   ::decode(first, p);
-  bool was_anchored = inode.anchored;
   ::decode(inode, p);
-  if (parent && was_anchored != inode.anchored)
-    parent->adjust_nested_anchors((int)inode.anchored - (int)was_anchored);
-
   ::decode(symlink, p);
   ::decode(dirfragtree, p);
   ::decode(xattrs, p);

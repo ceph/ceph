@@ -248,8 +248,6 @@ protected:
   int nested_auth_pins, dir_auth_pins;
   int request_pins;
 
-  int nested_anchors;
-
   // cache control  (defined for authority; hints for replicas)
   __s32      dir_rep;
   set<__s32> dir_rep_by;      // if dir_rep == REP_LIST
@@ -575,9 +573,6 @@ public:
 
   void adjust_nested_auth_pins(int inc, int dirinc, void *by);
   void verify_fragstat();
-
-  int get_nested_anchors() { return nested_anchors; }
-  void adjust_nested_anchors(int by);
 
   // -- freezing --
   bool freeze_tree();
