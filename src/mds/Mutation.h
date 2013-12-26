@@ -209,8 +209,6 @@ struct MDRequestImpl : public MutationImpl {
     // for rename
     set<int> extra_witnesses; // replica list from srcdn auth (rename)
     int srcdn_auth_mds;
-    version_t src_reanchor_atid;  // src->dst
-    version_t dst_reanchor_atid;  // dst->stray
     bufferlist inode_import;
     version_t inode_import_v;
     CInode* rename_inode;
@@ -241,9 +239,8 @@ struct MDRequestImpl : public MutationImpl {
     dirfrag_t fragment_base;
 
     More() : 
-      srcdn_auth_mds(-1),
-      src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
-      rename_inode(0), is_freeze_authpin(false), is_ambiguous_auth(false),
+      srcdn_auth_mds(-1), inode_import_v(0), rename_inode(0),
+      is_freeze_authpin(false), is_ambiguous_auth(false),
       is_remote_frozen_authpin(false), is_inode_exporter(false),
       flock_was_waiting(false), stid(0), slave_commit(0), export_dir(NULL)  { }
   } *_more;
