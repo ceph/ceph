@@ -708,6 +708,7 @@ void CrushWrapper::reweight(CephContext *cct)
 int CrushWrapper::add_simple_ruleset(string name, string root_name,
                                      string failure_domain_name,
                                      string mode,
+                                     int rule_type,
                                      ostream *err)
 {
   if (rule_exists(name)) {
@@ -747,7 +748,7 @@ int CrushWrapper::add_simple_ruleset(string name, string root_name,
   int steps = 3;
   if (mode == "indep")
     steps = 4;
-  crush_rule *rule = crush_make_rule(steps, ruleset, 1 /* pg_pool_t::TYPE_REPLICATED */, 1, 10);
+  crush_rule *rule = crush_make_rule(steps, ruleset, rule_type, 1, 10);
   assert(rule);
   int step = 0;
   if (mode == "indep")
