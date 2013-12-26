@@ -1016,6 +1016,8 @@ public:
   void snap_trimmer();
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops);
 
+  int _get_tmap(OpContext *ctx, bufferlist *header, bufferlist *vals);
+  int do_tmap2omap(OpContext *ctx);
   int do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd_op);
   int do_tmapup_slow(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd_op, bufferlist& bl);
 
@@ -1095,8 +1097,6 @@ private:
     boost::statechart::result react(const SnapTrim&);
   };
 
-  int _get_tmap(OpContext *ctx, map<string, bufferlist> *out,
-		bufferlist *header);
   int _delete_head(OpContext *ctx, bool no_whiteout);
   int _rollback_to(OpContext *ctx, ceph_osd_op& op);
 public:
