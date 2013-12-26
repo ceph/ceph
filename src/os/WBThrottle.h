@@ -134,6 +134,7 @@ public:
   WBThrottle(CephContext *cct);
   ~WBThrottle();
 
+  void stop();
   /// Set fs as XFS or BTRFS
   void set_fs(FS new_fs) {
     Mutex::Locker l(lock);
