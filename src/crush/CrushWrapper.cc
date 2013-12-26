@@ -705,10 +705,10 @@ void CrushWrapper::reweight(CephContext *cct)
   }
 }
 
-int CrushWrapper::add_simple_rule(string name, string root_name,
-				  string failure_domain_name,
-				  string mode,
-				  ostream *err)
+int CrushWrapper::add_simple_ruleset(string name, string root_name,
+                                     string failure_domain_name,
+                                     string mode,
+                                     ostream *err)
 {
   if (rule_exists(name)) {
     if (err)
