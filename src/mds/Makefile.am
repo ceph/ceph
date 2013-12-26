@@ -1,5 +1,4 @@
 libmds_la_SOURCES = \
-	mds/Anchor.cc \
 	mds/Capability.cc \
 	mds/Dumper.cc \
 	mds/Resetter.cc \
@@ -21,8 +20,6 @@ libmds_la_SOURCES = \
 	mds/InoTable.cc \
 	mds/MDSTableClient.cc \
 	mds/MDSTableServer.cc \
-	mds/AnchorServer.cc \
-	mds/AnchorClient.cc \
 	mds/SnapRealm.cc \
 	mds/SnapServer.cc \
 	mds/snap.cc \
@@ -37,9 +34,6 @@ noinst_HEADERS += \
 	mds/flock.h \
 	mds/locks.c \
 	mds/locks.h \
-	mds/Anchor.h \
-	mds/AnchorClient.h \
-	mds/AnchorServer.h \
 	mds/CDentry.h \
 	mds/CDir.h \
 	mds/CInode.h \

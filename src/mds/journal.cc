@@ -241,6 +241,7 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld, int op_pri
        p != pending_commit_tids.end();
        ++p) {
     MDSTableClient *client = mds->get_table_client(p->first);
+    assert(client);
     for (ceph::unordered_set<version_t>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 ++q) {
@@ -256,6 +257,7 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld, int op_pri
        p != tablev.end();
        ++p) {
     MDSTableServer *server = mds->get_table_server(p->first);
+    assert(server);
     if (p->second > server->get_committed_version()) {
       dout(10) << "try_to_expire waiting for " << get_mdstable_name(p->first) 
 	       << " to save, need " << p->second << dendl;
@@ -271,9 +273,6 @@ void LogSegment::try_to_expire(MDS *mds, C_GatherBuilder &gather_bld, int op_pri
     (*p)->add_waiter(CInode::WAIT_TRUNC, gather_bld.new_sub());
   }
   
-  // FIXME client requests...?
-  // audit handling of anchor transactions?
-
   if (gather_bld.has_subs()) {
     dout(6) << "LogSegment(" << offset << ").try_to_expire waiting" << dendl;
     mds->mdlog->flush();
@@ -378,11 +377,6 @@ void EMetaBlob::add_dir_context(CDir *dir, int mode)
 
 void EMetaBlob::update_segment(LogSegment *ls)
 {
-  // atids?
-  //for (list<version_t>::iterator p = atids.begin(); p != atids.end(); ++p)
-  //  ls->pending_commit_atids[*p] = ls;
-  // -> handled directly by AnchorClient
-
   // dirty inode mtimes
   // -> handled directly by Server.cc, replay()
 
@@ -1096,8 +1090,6 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	if (p->is_dirty()) in->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *in << dendl;
       } else {
-	if (in->get_parent_dn() && in->inode.anchored != p->inode.anchored)
-	  in->get_parent_dn()->adjust_nested_anchors((int)p->inode.anchored - (int)in->inode.anchored);
 	p->update_inode(mds, in);
 	if (dn->get_linkage()->get_inode() != in && in->get_parent_dn()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
@@ -1281,7 +1273,8 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     dout(10) << "EMetaBlob.replay noting " << get_mdstable_name(p->first)
 	     << " transaction " << p->second << dendl;
     MDSTableClient *client = mds->get_table_client(p->first);
-    client->got_journaled_agree(p->second, logseg);
+    if (client)
+      client->got_journaled_agree(p->second, logseg);
   }
 
   // opened ino?
@@ -1636,6 +1629,9 @@ void ETableServer::update_segment()
 void ETableServer::replay(MDS *mds)
 {
   MDSTableServer *server = mds->get_table_server(table);
+  if (!server)
+    return;
+
   if (server->get_version() >= version) {
     dout(10) << "ETableServer.replay " << get_mdstable_name(table)
 	     << " " << get_mdstableserver_opname(op)
@@ -1717,6 +1713,9 @@ void ETableClient::replay(MDS *mds)
 	   << " tid " << tid << dendl;
     
   MDSTableClient *client = mds->get_table_client(table);
+  if (!client)
+    return;
+
   assert(op == TABLESERVER_OP_ACK);
   client->got_journaled_ack(tid);
 }
