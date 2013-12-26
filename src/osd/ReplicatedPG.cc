@@ -4645,6 +4645,10 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
 				    ctx->obs->oi.version,
 				    ctx->user_at_version, ctx->reqid,
 				    ctx->mtime));
+  if (soid.snap < CEPH_NOSNAP) {
+    dout(20) << __func__ << " encoding snaps " << ctx->new_obs.oi.snaps << dendl;
+    ::encode(ctx->new_obs.oi.snaps, ctx->log.back().snaps);
+  }
 
   // apply new object state.
   ctx->obc->obs = ctx->new_obs;
