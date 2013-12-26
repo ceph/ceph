@@ -1910,17 +1910,22 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     name_pool[*p] = pool;
   }
 
+  stringstream ss;
+  int r;
   if (nosd >= 0)
-    build_simple_crush_map(cct, *crush, nosd);
+    r = build_simple_crush_map(cct, *crush, nosd, &ss);
   else
-    build_simple_crush_map_from_conf(cct, *crush);
+    r = build_simple_crush_map_from_conf(cct, *crush, &ss);
 
+  if (r < 0)
+    lderr(cct) << ss.str() << dendl;
+  
   for (int i=0; i<get_max_osd(); i++) {
     set_state(i, 0);
     set_weight(i, CEPH_OSD_OUT);
   }
 
-  return 0;
+  return r;
 }
 
 int OSDMap::_build_crush_types(CrushWrapper& crush)
@@ -1939,11 +1944,9 @@ int OSDMap::_build_crush_types(CrushWrapper& crush)
   return 10;
 }
 
-void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
-				    int nosd)
+int OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
+				   int nosd, stringstream *ss)
 {
-  const md_config_t *conf = cct->_conf;
-
   crush.create();
 
   // root
@@ -1965,28 +1968,19 @@ void OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
     crush.insert_item(cct, o, 1.0, name, loc);
   }
 
-  // rules
-  int minrep = conf->osd_min_rep;
-  int maxrep = conf->osd_max_rep;
-  assert(maxrep >= minrep);
-  {
-    crush_rule *rule = crush_make_rule(3, cct->_conf->osd_pool_default_crush_rule,
-				       pg_pool_t::TYPE_REPLICATED,
-				       minrep, maxrep);
-    assert(rule);
-    crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-    crush_rule_set_step(rule, 1,
-			cct->_conf->osd_crush_chooseleaf_type ? CRUSH_RULE_CHOOSELEAF_FIRSTN : CRUSH_RULE_CHOOSE_FIRSTN,
-			CRUSH_CHOOSE_N,
-			cct->_conf->osd_crush_chooseleaf_type);
-    crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-    int rno = crush_add_rule(crush.crush, rule, -1);
-    crush.set_rule_name(rno, "replicated_rule");
-  }
+  r = crush.add_simple_ruleset("replicated_ruleset", "default", "host",
+			       "firstn", pg_pool_t::TYPE_REPLICATED, ss);
+  if (r < 0)
+    return r;
+
   crush.finalize();
+
+  return 0;
 }
 
-void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& crush)
+int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
+					     CrushWrapper& crush,
+					     stringstream *ss)
 {
   const md_config_t *conf = cct->_conf;
 
@@ -2049,31 +2043,14 @@ void OSDMap::build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& cr
     crush.insert_item(cct, o, 1.0, *i, loc);
   }
 
-  // rules
-  int minrep = conf->osd_min_rep;
-  int maxrep = conf->osd_max_rep;
-  {
-    crush_rule *rule = crush_make_rule(3, cct->_conf->osd_pool_default_crush_rule,
-				       pg_pool_t::TYPE_REPLICATED,
-				       minrep, maxrep);
-    assert(rule);
-    crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
+  r = crush.add_simple_ruleset("replicated_ruleset", "default", "host",
+			       "firstn", pg_pool_t::TYPE_REPLICATED, ss);
+  if (r < 0)
+    return r;
 
-    if (racks.size() > 3) {
-      // spread replicas across hosts
-      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSELEAF_FIRSTN, CRUSH_CHOOSE_N, 2);
-    } else if (hosts.size() > 1) {
-      // spread replicas across hosts
-      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSELEAF_FIRSTN, CRUSH_CHOOSE_N, 1);
-    } else {
-      // just spread across osds
-      crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSE_FIRSTN, CRUSH_CHOOSE_N, 0);
-    }
-    crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-    int rno = crush_add_rule(crush.crush, rule, -1);
-    crush.set_rule_name(rno, "replicated_rule");
-  }
   crush.finalize();
+
+  return 0;
 }
 
 
