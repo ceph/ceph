@@ -1339,6 +1339,22 @@ void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
   // fixme
 }
 
+int CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(CephContext *cct)
+{
+  int crush_ruleset = cct->_conf->osd_pool_default_crush_replicated_ruleset;
+  if (cct->_conf->osd_pool_default_crush_rule != -1) {
+    ldout(cct, 0) << "osd_pool_default_crush_rule is deprecated "
+                  << "use osd_pool_default_crush_replicated_ruleset instead"
+                  << dendl;
+    ldout(cct, 0) << "osd_pool_default_crush_rule = "
+                  << cct->_conf-> osd_pool_default_crush_rule << " overrides "
+                  << "osd_pool_default_crush_replicated_ruleset = "
+                  << cct->_conf->osd_pool_default_crush_replicated_ruleset
+                  << dendl;
+    crush_ruleset = cct->_conf->osd_pool_default_crush_rule;
+  }
+  return crush_ruleset;
+}
 
 bool CrushWrapper::is_valid_crush_name(const string& s)
 {

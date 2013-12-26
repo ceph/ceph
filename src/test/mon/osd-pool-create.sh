@@ -51,6 +51,30 @@ function kill_mon() {
     rm -fr $DIR/store.db
 }
 
+# explicitly set the default crush rule
+expected=66
+run_mon --osd_pool_default_crush_replicated_ruleset $expected
+./ceph --format json osd dump | grep '"crush_ruleset":'$expected
+grep "osd_pool_default_crush_rule is deprecated " $DIR/log && exit 1
+kill_mon
+
+# explicitly set the default crush rule using deprecated option
+expected=55
+run_mon --osd_pool_default_crush_rule $expected
+./ceph --format json osd dump | grep '"crush_ruleset":'$expected
+grep "osd_pool_default_crush_rule is deprecated " $DIR/log
+kill_mon
+
+expected=77
+unexpected=33
+run_mon \
+    --osd_pool_default_crush_rule $expected \
+    --osd_pool_default_crush_replicated_ruleset $unexpected
+./ceph --format json osd dump | grep '"crush_ruleset":'$expected
+./ceph --format json osd dump | grep '"crush_ruleset":'$unexpected && exit 1
+grep "osd_pool_default_crush_rule is deprecated " $DIR/log
+kill_mon
+
 # osd_pool_default_erasure_code_properties is 
 # valid JSON but not of the expected type
 run_mon --osd_pool_default_erasure_code_properties 1 

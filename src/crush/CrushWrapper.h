@@ -865,6 +865,7 @@ public:
   void dump_tree(const vector<__u32>& w, ostream *out, Formatter *f) const;
   static void generate_test_instances(list<CrushWrapper*>& o);
 
+  static int get_osd_pool_default_crush_replicated_ruleset(CephContext *cct);
 
   static bool is_valid_crush_name(const string& s);
   static bool is_valid_crush_loc(CephContext *cct,
