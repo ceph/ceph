@@ -1974,6 +1974,11 @@ int OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
   if (r < 0)
     return r;
 
+  r = crush.add_simple_ruleset("erasure_ruleset", "default", "host",
+			       "indep", pg_pool_t::TYPE_ERASURE, ss);
+  if (r < 0)
+    return r;
+
   crush.finalize();
 
   return 0;
@@ -2046,6 +2051,10 @@ int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
 
   r = crush.add_simple_ruleset("replicated_ruleset", "default", "host",
 			       "firstn", pg_pool_t::TYPE_REPLICATED, ss);
+  if (r < 0)
+    return r;
+  r = crush.add_simple_ruleset("erasure_ruleset", "default", "host",
+			       "indep", pg_pool_t::TYPE_ERASURE, ss);
   if (r < 0)
     return r;
 
