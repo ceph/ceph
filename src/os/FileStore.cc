@@ -1403,6 +1403,7 @@ int FileStore::mount()
     }
   }
 
+  wbthrottle.start();
   sync_thread.create();
 
   ret = journal_replay(initial_op_seq);
@@ -1419,6 +1420,8 @@ int FileStore::mount()
     sync_cond.Signal();
     lock.Unlock();
     sync_thread.join();
+
+    wbthrottle.stop();
 
     goto close_current_fd;
   }
@@ -1469,6 +1472,7 @@ int FileStore::umount()
   sync_cond.Signal();
   lock.Unlock();
   sync_thread.join();
+  wbthrottle.stop();
   op_tp.stop();
 
   journal_stop();
