@@ -748,7 +748,9 @@ int CrushWrapper::add_simple_ruleset(string name, string root_name,
   int steps = 3;
   if (mode == "indep")
     steps = 4;
-  crush_rule *rule = crush_make_rule(steps, ruleset, rule_type, 1, 10);
+  int min_rep = mode == "firstn" ? 1 : 3;
+  int max_rep = mode == "firstn" ? 10 : 20;
+  crush_rule *rule = crush_make_rule(steps, ruleset, rule_type, min_rep, max_rep);
   assert(rule);
   int step = 0;
   if (mode == "indep")
