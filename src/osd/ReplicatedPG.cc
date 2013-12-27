@@ -5242,6 +5242,35 @@ int ReplicatedPG::start_flush(OpContext *ctx, bool blocking)
 	   << " " << (blocking ? "blocking" : "non-blocking/best-effort")
 	   << dendl;
 
+  // verify there are no (older) check for dirty clones
+  SnapSet& snapset = ctx->obc->ssc->snapset;
+  {
+    dout(20) << " snapset " << snapset << dendl;
+    vector<snapid_t>::reverse_iterator p = snapset.clones.rbegin();
+    while (p != snapset.clones.rend() && *p >= soid.snap)
+      ++p;
+    if (p != snapset.clones.rend()) {
+      hobject_t next = soid;
+      next.snap = *p;
+      assert(next.snap < soid.snap);
+      ObjectContextRef older_obc = get_object_context(next, false);
+      if (older_obc) {
+	dout(20) << __func__ << " next oldest clone is " << older_obc->obs.oi
+		 << dendl;
+	if (older_obc->obs.oi.is_dirty()) {
+	  dout(10) << __func__ << " next oldest clone is dirty: "
+		   << older_obc->obs.oi << dendl;
+	  return -EBUSY;
+	}
+      } else {
+	dout(20) << __func__ << " next oldest clone " << next
+		 << " is not present; implicitly clean" << dendl;
+      }
+    } else {
+      dout(20) << __func__ << " no older clones" << dendl;
+    }
+  }
+
   if (blocking)
     ctx->obc->start_block();
 
