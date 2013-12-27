@@ -60,6 +60,7 @@ public:
   /// @see PGBackend::recover_object
   void recover_object(
     const hobject_t &hoid,
+    eversion_t v,
     ObjectContextRef head,
     ObjectContextRef obc,
     RecoveryHandle *h
@@ -317,6 +318,7 @@ private:
     interval_set<uint64_t>& data_subset,
     map<hobject_t, interval_set<uint64_t> >& clone_subsets);
   void prepare_pull(
+    eversion_t v,
     const hobject_t& soid,
     ObjectContextRef headctx,
     RPGHandle *h);
