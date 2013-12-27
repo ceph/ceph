@@ -2748,7 +2748,7 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
  *
  * @return 0 on success, negative errno on failure.
  */
-int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
+int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
                                  unsigned pg_num, unsigned pgp_num,
 				 const vector<string> &properties,
                                  const unsigned pool_type,
@@ -2784,10 +2784,19 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_rule,
 
   pi->size = g_conf->osd_pool_default_size;
   pi->min_size = g_conf->get_osd_pool_default_min_size();
-  if (crush_rule >= 0)
-    pi->crush_ruleset = crush_rule;
-  else
-    pi->crush_ruleset = g_conf->osd_pool_default_crush_rule;
+  if (crush_ruleset >= 0) {
+    pi->crush_ruleset = crush_ruleset;
+  } else {
+    switch(pool_type) {
+    case pg_pool_t::TYPE_REPLICATED:
+      pi->crush_ruleset =
+	CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(g_ceph_context);
+      break;
+    case pg_pool_t::TYPE_ERASURE:
+      pi->crush_ruleset = g_conf->osd_pool_default_crush_erasure_ruleset;
+      break;
+    }
+  }
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
   pi->set_pg_num(pg_num ? pg_num : g_conf->osd_pool_default_pg_num);
   pi->set_pgp_num(pgp_num ? pgp_num : g_conf->osd_pool_default_pgp_num);
@@ -3509,7 +3518,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       ss << "rule " << name << " already exists";
       err = 0;
     } else {
-      int rule = newcrush.add_simple_rule(name, root, type, mode, &ss);
+      int rule = newcrush.add_simple_ruleset(name, root, type, mode,
+					     pg_pool_t::TYPE_REPLICATED, &ss);
       if (rule < 0) {
 	err = rule;
 	goto reply;

@@ -705,10 +705,11 @@ void CrushWrapper::reweight(CephContext *cct)
   }
 }
 
-int CrushWrapper::add_simple_rule(string name, string root_name,
-				  string failure_domain_name,
-				  string mode,
-				  ostream *err)
+int CrushWrapper::add_simple_ruleset(string name, string root_name,
+                                     string failure_domain_name,
+                                     string mode,
+                                     int rule_type,
+                                     ostream *err)
 {
   if (rule_exists(name)) {
     if (err)
@@ -747,7 +748,9 @@ int CrushWrapper::add_simple_rule(string name, string root_name,
   int steps = 3;
   if (mode == "indep")
     steps = 4;
-  crush_rule *rule = crush_make_rule(steps, ruleset, 1 /* pg_pool_t::TYPE_REPLICATED */, 1, 10);
+  int min_rep = mode == "firstn" ? 1 : 3;
+  int max_rep = mode == "firstn" ? 10 : 20;
+  crush_rule *rule = crush_make_rule(steps, ruleset, rule_type, min_rep, max_rep);
   assert(rule);
   int step = 0;
   if (mode == "indep")
@@ -1336,6 +1339,22 @@ void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
   // fixme
 }
 
+int CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(CephContext *cct)
+{
+  int crush_ruleset = cct->_conf->osd_pool_default_crush_replicated_ruleset;
+  if (cct->_conf->osd_pool_default_crush_rule != -1) {
+    ldout(cct, 0) << "osd_pool_default_crush_rule is deprecated "
+                  << "use osd_pool_default_crush_replicated_ruleset instead"
+                  << dendl;
+    ldout(cct, 0) << "osd_pool_default_crush_rule = "
+                  << cct->_conf-> osd_pool_default_crush_rule << " overrides "
+                  << "osd_pool_default_crush_replicated_ruleset = "
+                  << cct->_conf->osd_pool_default_crush_replicated_ruleset
+                  << dendl;
+    crush_ruleset = cct->_conf->osd_pool_default_crush_rule;
+  }
+  return crush_ruleset;
+}
 
 bool CrushWrapper::is_valid_crush_name(const string& s)
 {
