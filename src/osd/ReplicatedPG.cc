@@ -1472,6 +1472,7 @@ void ReplicatedPG::promote_object(OpRequestRef op, ObjectContextRef obc,
   start_copy(cb, obc, obc->obs.oi.soid, oloc, 0,
 	     CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |
 	     CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE,
+	     obc->obs.oi.soid.snap == CEPH_NOSNAP,
 	     temp_target);
 
   assert(obc->is_blocked());
@@ -4040,6 +4041,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ctx->copy_cb = cb;
 	  start_copy(cb, ctx->obc, src, src_oloc, src_version,
 		     op.copy_from.flags,
+		     false,
 		     temp_target);
 	  result = -EINPROGRESS;
 	} else {
@@ -4790,13 +4792,18 @@ int ReplicatedPG::fill_in_copy_get(bufferlist::iterator& bp, OSDOp& osd_op,
 void ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
 			      hobject_t src, object_locator_t oloc,
 			      version_t version, unsigned flags,
+			      bool mirror_snapset,
 			      const hobject_t& temp_dest_oid)
 {
   const hobject_t& dest = obc->obs.oi.soid;
   dout(10) << __func__ << " " << dest
 	   << " from " << src << " " << oloc << " v" << version
 	   << " flags " << flags
+	   << (mirror_snapset ? " mirror_snapset" : "")
 	   << dendl;
+
+  assert(!mirror_snapset || (src.snap == CEPH_NOSNAP ||
+			     src.snap == CEPH_SNAPDIR));
 
   // cancel a previous in-progress copy?
   if (copy_ops.count(dest)) {
@@ -4806,7 +4813,8 @@ void ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
     cancel_copy(cop, false);
   }
 
-  CopyOpRef cop(new CopyOp(cb, obc, src, oloc, version, flags, temp_dest_oid));
+  CopyOpRef cop(new CopyOp(cb, obc, src, oloc, version, flags,
+			   mirror_snapset, temp_dest_oid));
   copy_ops[dest] = cop;
   obc->start_block();
 
@@ -4816,6 +4824,30 @@ void ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
 void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 {
   dout(10) << __func__ << " " << obc << " " << cop << dendl;
+
+  unsigned flags = 0;
+  if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_FLUSH)
+    flags |= CEPH_OSD_FLAG_FLUSH;
+  if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE)
+    flags |= CEPH_OSD_FLAG_IGNORE_CACHE;
+  if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY)
+    flags |= CEPH_OSD_FLAG_IGNORE_OVERLAY;
+
+  C_GatherBuilder gather(g_ceph_context);
+
+  if (cop->cursor.is_initial() && cop->mirror_snapset) {
+    // list snaps too.
+    assert(cop->src.snap == CEPH_NOSNAP);
+    ObjectOperation op;
+    op.list_snaps(&cop->results->snapset, NULL);
+    osd->objecter_lock.Lock();
+    tid_t tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
+				    CEPH_SNAPDIR, NULL,
+				    flags, gather.new_sub(), NULL);
+    cop->objecter_tid2 = tid;
+    osd->objecter_lock.Unlock();
+  }
+
   ObjectOperation op;
   if (cop->results->user_version) {
     op.assert_version(cop->results->user_version);
@@ -4833,25 +4865,19 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 
   C_Copyfrom *fin = new C_Copyfrom(this, obc->obs.oi.soid,
 				   get_last_peering_reset());
-
-  unsigned flags = 0;
-  if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_FLUSH)
-    flags |= CEPH_OSD_FLAG_FLUSH;
-  if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE)
-    flags |= CEPH_OSD_FLAG_IGNORE_CACHE;
-  if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY)
-    flags |= CEPH_OSD_FLAG_IGNORE_OVERLAY;
+  gather.set_finisher(new C_OnFinisher(fin,
+				       &osd->objecter_finisher));
 
   osd->objecter_lock.Lock();
   tid_t tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
 				  cop->src.snap, NULL,
 				  flags,
-				  new C_OnFinisher(fin,
-						   &osd->objecter_finisher),
+				  gather.new_sub(),
 				  // discover the object version if we don't know it yet
 				  cop->results->user_version ? NULL : &cop->results->user_version);
   fin->tid = tid;
   cop->objecter_tid = tid;
+  gather.activate();
   osd->objecter_lock.Unlock();
 }
 
@@ -4871,6 +4897,7 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
     return;
   }
   cop->objecter_tid = 0;
+  cop->objecter_tid2 = 0;  // assume this ordered before us (if it happened)
   ObjectContextRef& cobc = cop->obc;
 
   if (r >= 0) {
@@ -5035,7 +5062,6 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
   if (soid.snap < CEPH_NOSNAP)
     ++tctx->delta_stats.num_object_clones;
   tctx->new_obs.exists = true;
-  tctx->new_snapset.head_exists = true;
 
   if (whiteout) {
     // create a whiteout
@@ -5054,6 +5080,13 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     tctx->new_obs.oi.user_version = results->user_version;
     tctx->new_obs.oi.snaps = results->snaps;
   }
+
+  if (results->mirror_snapset) {
+    assert(tctx->new_obs.oi.soid.snap == CEPH_NOSNAP);
+    tctx->new_snapset.from_snap_set(results->snapset);
+  }
+  tctx->new_snapset.head_exists = true;
+  dout(20) << __func__ << " new_snapset " << tctx->new_snapset << dendl;
 
   // take RWWRITE lock for duration of our local write
   if (!obc->rwstate.get_write_lock()) {
@@ -5077,6 +5110,9 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
   if (cop->objecter_tid) {
     Mutex::Locker l(osd->objecter_lock);
     osd->objecter->op_cancel(cop->objecter_tid);
+    if (cop->objecter_tid2) {
+      osd->objecter->op_cancel(cop->objecter_tid2);
+    }
   }
 
   copy_ops.erase(cop->obc->obs.oi.soid);
