@@ -200,6 +200,7 @@
     */
    virtual void recover_object(
      const hobject_t &hoid, ///< [in] object to recover
+     eversion_t v,          ///< [in] version to recover
      ObjectContextRef head,  ///< [in] context of the head/snapdir object
      ObjectContextRef obc,  ///< [in] context of the object
      RecoveryHandle *h      ///< [in,out] handle to attach recovery op to

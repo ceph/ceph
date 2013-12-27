@@ -7287,13 +7287,15 @@ void ReplicatedBackend::calc_clone_subsets(
 enum { PULL_NONE, PULL_OTHER, PULL_YES };
 
 void ReplicatedBackend::prepare_pull(
+  eversion_t v,
   const hobject_t& soid,
   ObjectContextRef headctx,
   RPGHandle *h)
 {
   assert(get_parent()->get_local_missing().missing.count(soid));
-  eversion_t v = get_parent()->get_local_missing().missing.find(
+  eversion_t _v = get_parent()->get_local_missing().missing.find(
     soid)->second.need;
+  assert(_v == v);
   const map<hobject_t, set<int> > &missing_loc(
     get_parent()->get_missing_loc());
   const map<int, pg_missing_t > &peer_missing(
@@ -7442,6 +7444,7 @@ int ReplicatedPG::recover_missing(
   recovering.insert(make_pair(soid, obc));
   pgbackend->recover_object(
     soid,
+    v,
     head_obc,
     obc,
     h);
@@ -9289,6 +9292,7 @@ int ReplicatedPG::prep_object_replica_pushes(
   obc->ondisk_read_lock();
   pgbackend->recover_object(
     soid,
+    v,
     ObjectContextRef(),
     obc, // has snapset context
     h);
@@ -9785,6 +9789,7 @@ void ReplicatedPG::prep_backfill_object_push(
   obc->ondisk_read_lock();
   pgbackend->recover_object(
     oid,
+    v,
     ObjectContextRef(),
     obc,
     h);
