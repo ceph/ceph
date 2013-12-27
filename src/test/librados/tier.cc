@@ -1204,6 +1204,129 @@ TEST(LibRadosTier, Flush) {
   ASSERT_EQ(0, destroy_one_pool_pp(base_pool_name, cluster));
 }
 
+TEST(LibRadosTier, FlushSnap) {
+  Rados cluster;
+  std::string base_pool_name = get_temp_pool_name();
+  std::string cache_pool_name = base_pool_name + "-cache";
+  ASSERT_EQ("", create_one_pool_pp(base_pool_name, cluster));
+  ASSERT_EQ(0, cluster.pool_create(cache_pool_name.c_str()));
+  IoCtx cache_ioctx;
+  ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
+  IoCtx base_ioctx;
+  ASSERT_EQ(0, cluster.ioctx_create(base_pool_name.c_str(), base_ioctx));
+
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + base_pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + base_pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+    "\", \"mode\": \"writeback\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("a");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+  }
+
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, base_ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, base_ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+							 my_snaps));
+  {
+    bufferlist bl;
+    bl.append("b");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+  }
+
+  // and another
+  my_snaps.resize(2);
+  my_snaps[1] = my_snaps[0];
+  ASSERT_EQ(0, base_ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, base_ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+							 my_snaps));
+  {
+    bufferlist bl;
+    bl.append("c");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+  }
+
+  // verify the object is present in the cache tier
+  {
+    ObjectIterator it = cache_ioctx.objects_begin();
+    ASSERT_TRUE(it != cache_ioctx.objects_end());
+    ASSERT_TRUE(it->first == string("foo"));
+    ++it;
+    ASSERT_TRUE(it == cache_ioctx.objects_end());
+  }
+
+  // verify the object is NOT present in the base tier
+  {
+    ObjectIterator it = base_ioctx.objects_begin();
+    ASSERT_TRUE(it == base_ioctx.objects_end());
+  }
+
+  // flush on head (should fail)
+  {
+    ObjectReadOperation op;
+    op.cache_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, base_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(-EBUSY, completion->get_return_value());
+    completion->release();
+  }
+  // flush on recent snap (should fail)
+  base_ioctx.snap_set_read(my_snaps[0]);
+  {
+    ObjectReadOperation op;
+    op.cache_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, base_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(-EBUSY, completion->get_return_value());
+    completion->release();
+  }
+
+  // tear down tiers
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + base_pool_name +
+    "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+
+  base_ioctx.close();
+  cache_ioctx.close();
+
+  cluster.pool_delete(cache_pool_name.c_str());
+  ASSERT_EQ(0, destroy_one_pool_pp(base_pool_name, cluster));
+}
+
 TEST(LibRadosTier, FlushWriteRaces) {
   Rados cluster;
   std::string base_pool_name = get_temp_pool_name();
