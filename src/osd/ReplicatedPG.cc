@@ -5331,7 +5331,22 @@ int ReplicatedPG::start_flush(OpContext *ctx, bool blocking)
   C_Flush *fin = new C_Flush(this, soid, get_last_peering_reset());
   object_locator_t base_oloc(soid);
   base_oloc.pool = pool.info.tier_of;
-  SnapContext snapc;  // FIXME
+
+  // construct a SnapContext appropriate for this clone/head
+  SnapContext snapc;
+  if (soid.snap == CEPH_NOSNAP) {
+    snapc.seq = snapset.seq;
+    snapc.snaps = snapset.snaps;
+  } else {
+    // we want to only include snaps that are older than the oldest
+    // snap for which we are defined, so that the object appears to
+    // have been written before that.
+    vector<snapid_t>::iterator p = snapset.snaps.begin();
+    while (p != snapset.snaps.end() && *p >= oi.snaps.back())
+      p++;
+    snapc.snaps = vector<snapid_t>(p, snapset.snaps.end());
+    snapc.seq = oi.snaps.back() - 1;
+  }
 
   osd->objecter_lock.Lock();
   tid_t tid = osd->objecter->mutate(soid.oid, base_oloc, o, snapc, oi.mtime,
