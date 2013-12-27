@@ -116,8 +116,11 @@ public:
     version_t user_version; ///< The copy source's user version
     bool should_requeue;  ///< op should be requeued on cancel
     vector<snapid_t> snaps;  ///< src's snaps (if clone)
+    librados::snap_set_t snapset; ///< src snapset (if head)
+    bool mirror_snapset;
     CopyResults() : object_size(0), started_temp_obj(false),
-		    user_version(0), should_requeue(false) {}
+		    user_version(0), should_requeue(false),
+		    mirror_snapset(false) {}
   };
 
   struct CopyOp {
@@ -126,10 +129,12 @@ public:
     hobject_t src;
     object_locator_t oloc;
     unsigned flags;
+    bool mirror_snapset;
 
     CopyResults *results;
 
     tid_t objecter_tid;
+    tid_t objecter_tid2;
 
     object_copy_cursor_t cursor;
     map<string,bufferlist> attrs;
@@ -146,15 +151,19 @@ public:
 	   object_locator_t l,
            version_t v,
 	   unsigned f,
+	   bool ms,
 	   const hobject_t& dest)
       : cb(cb_), obc(_obc), src(s), oloc(l), flags(f),
+	mirror_snapset(ms),
         results(NULL),
 	objecter_tid(0),
+	objecter_tid2(0),
 	rval(-1),
 	temp_oid(dest)
     {
       results = new CopyResults();
       results->user_version = v;
+      results->mirror_snapset = mirror_snapset;
     }
   };
   typedef boost::shared_ptr<CopyOp> CopyOpRef;
@@ -969,6 +978,7 @@ protected:
    */
   void start_copy(CopyCallback *cb, ObjectContextRef obc, hobject_t src,
 		  object_locator_t oloc, version_t version, unsigned flags,
+		  bool mirror_snapset,
 		  const hobject_t& temp_dest_oid);
   void process_copy_chunk(hobject_t oid, tid_t tid, int r);
   void _write_copy_chunk(CopyOpRef cop, ObjectStore::Transaction *t);
