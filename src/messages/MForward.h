@@ -82,6 +82,7 @@ public:
   void print(ostream& o) const {
     if (msg)
       o << "forward(" << *msg << " caps " << client_caps
+	<< " tid " << tid
         << " con_features " << con_features << ") to leader";
     else o << "forward(??? ) to leader";
   }
