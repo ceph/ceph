@@ -1285,6 +1285,7 @@ TEST(LibRadosTier, FlushSnap) {
   }
 
   // flush on head (should fail)
+  base_ioctx.snap_set_read(librados::SNAP_HEAD);
   {
     ObjectReadOperation op;
     op.cache_flush();
@@ -1309,6 +1310,65 @@ TEST(LibRadosTier, FlushSnap) {
     ASSERT_EQ(-EBUSY, completion->get_return_value());
     completion->release();
   }
+  // flush on oldest snap
+  base_ioctx.snap_set_read(my_snaps[1]);
+  {
+    ObjectReadOperation op;
+    op.cache_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, base_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+  // flush on next oldest snap
+  base_ioctx.snap_set_read(my_snaps[0]);
+  {
+    ObjectReadOperation op;
+    op.cache_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, base_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+  // flush on head
+  base_ioctx.snap_set_read(librados::SNAP_HEAD);
+  {
+    ObjectReadOperation op;
+    op.cache_flush();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, base_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // verify i can read the snaps from the cache pool
+  base_ioctx.snap_set_read(librados::SNAP_HEAD);
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('c', bl[0]);
+  }
+  base_ioctx.snap_set_read(my_snaps[0]);
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('b', bl[0]);
+  }
+  base_ioctx.snap_set_read(my_snaps[1]);
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('a', bl[0]);
+  }
 
   // tear down tiers
   ASSERT_EQ(0, cluster.mon_command(
@@ -1319,6 +1379,29 @@ TEST(LibRadosTier, FlushSnap) {
     "{\"prefix\": \"osd tier remove\", \"pool\": \"" + base_pool_name +
     "\", \"tierpool\": \"" + cache_pool_name + "\"}",
     inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // verify i can read the snaps from the base pool
+  base_ioctx.snap_set_read(librados::SNAP_HEAD);
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('c', bl[0]);
+  }
+  base_ioctx.snap_set_read(my_snaps[0]);
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('b', bl[0]);
+  }
+  base_ioctx.snap_set_read(my_snaps[1]);
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, base_ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('a', bl[0]);
+  }
 
   base_ioctx.close();
   cache_ioctx.close();
