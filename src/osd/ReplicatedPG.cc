@@ -4680,17 +4680,24 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
 				    ctx->mtime));
   if (soid.snap < CEPH_NOSNAP) {
     OSDriver::OSTransaction _t(osdriver.get_transaction(&(ctx->local_t)));
-    if (log_op_type == pg_log_entry_t::MODIFY ||
-	log_op_type == pg_log_entry_t::PROMOTE) {
+    set<snapid_t> _snaps(ctx->new_obs.oi.snaps.begin(),
+			 ctx->new_obs.oi.snaps.end());
+    switch (log_op_type) {
+    case pg_log_entry_t::MODIFY:
+    case pg_log_entry_t::PROMOTE:
       dout(20) << __func__ << " encoding snaps " << ctx->new_obs.oi.snaps
 	       << dendl;
       ::encode(ctx->new_obs.oi.snaps, ctx->log.back().snaps);
-
-      set<snapid_t> _snaps(ctx->new_obs.oi.snaps.begin(),
-			   ctx->new_obs.oi.snaps.end());
       snap_mapper.add_oid(soid, _snaps, &_t);
-    } else {
+      break;
+    case pg_log_entry_t::CLEAN:
+      dout(20) << __func__ << " encoding snaps " << ctx->new_obs.oi.snaps
+	       << dendl;
+      ::encode(ctx->new_obs.oi.snaps, ctx->log.back().snaps);
+      break;
+    case pg_log_entry_t::DELETE:
       snap_mapper.remove_oid(soid, &_t);
+      break;
     }
   }
 
@@ -5430,7 +5437,7 @@ int ReplicatedPG::try_flush_mark_clean(FlushOpRef fop)
   ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
   --ctx->delta_stats.num_objects_dirty;
 
-  finish_ctx(ctx, pg_log_entry_t::MODIFY);
+  finish_ctx(ctx, pg_log_entry_t::CLEAN);
 
   if (!fop->dup_ops.empty()) {
     dout(20) << __func__ << " queueing dups for " << ctx->at_version << dendl;
