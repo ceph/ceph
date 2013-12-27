@@ -478,7 +478,7 @@ if [ "$smallmds" -eq 1 ]; then
 EOF
 fi
 
-if [ "$start_mds" -eq 1 ]; then
+if [ "$start_mds" -eq 1 -a "$CEPH_NUM_MDS" -gt 0 ]; then
     mds=0
     for name in a b c d e f g h i j k l m n o p
     do
