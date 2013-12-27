@@ -1578,18 +1578,21 @@ inline ostream& operator<<(ostream& out, const pg_query_t& q) {
  */
 struct pg_log_entry_t {
   enum {
-    MODIFY = 1,
-    CLONE = 2,
-    DELETE = 3,
+    MODIFY = 1,   // some unspecified modification (but not *all* modifications)
+    CLONE = 2,    // cloned object from head
+    DELETE = 3,   // deleted object
     BACKLOG = 4,  // event invented by generate_backlog [deprecated]
     LOST_REVERT = 5, // lost new version, revert to an older version.
     LOST_DELETE = 6, // lost new version, revert to no object (deleted).
     LOST_MARK = 7,   // lost new version, now EIO
+    PROMOTE = 8,     // promoted object from another tier
   };
   static const char *get_op_name(int op) {
     switch (op) {
     case MODIFY:
       return "modify  ";
+    case PROMOTE:
+      return "promote ";
     case CLONE:
       return "clone   ";
     case DELETE:
@@ -1636,13 +1639,14 @@ struct pg_log_entry_t {
       
   bool is_clone() const { return op == CLONE; }
   bool is_modify() const { return op == MODIFY; }
+  bool is_promote() const { return op == PROMOTE; }
   bool is_backlog() const { return op == BACKLOG; }
   bool is_lost_revert() const { return op == LOST_REVERT; }
   bool is_lost_delete() const { return op == LOST_DELETE; }
   bool is_lost_mark() const { return op == LOST_MARK; }
 
   bool is_update() const {
-    return is_clone() || is_modify() || is_backlog() || is_lost_revert() || is_lost_mark();
+    return is_clone() || is_modify() || is_promote() || is_backlog() || is_lost_revert() || is_lost_mark();
   }
   bool is_delete() const {
     return op == DELETE || op == LOST_DELETE;
