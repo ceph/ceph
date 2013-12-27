@@ -601,16 +601,26 @@ public:
   /*
    * handy helpers to build simple maps...
    */
-  /// build crush bucket types.  @return 'root' type id
-  void build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
-		    int num_osd, int pg_bits, int pgp_bits);
-  int build_simple_from_conf(CephContext *cct, epoch_t e, uuid_d &fsid,
-			     int pg_bits, int pgp_bits);
+  /**
+   * Build an OSD map suitable for basic usage. If **num_osd** is >= 0
+   * it will be initialized with the specified number of OSDs in a
+   * single host. If **num_osd** is < 0 the layout of the OSD map will 
+   * be built by reading the content of the configuration file.
+   *
+   * @param cct [in] in core ceph context 
+   * @param e [in] initial epoch
+   * @param fsid [in] id of the cluster
+   * @param num_osd [in] number of OSDs if >= 0 or read from conf if < 0
+   * @return **0** on success, negative errno on error.
+   */
+  int build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
+		   int num_osd, int pg_bits, int pgp_bits);
   static int _build_crush_types(CrushWrapper& crush);
-  static void build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
-				     map<int, const char*>& poolsets, int num_osd);
-  static void build_simple_crush_map_from_conf(CephContext *cct, CrushWrapper& crush,
-					       map<int, const char*>& rulesets);
+  static int build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
+				    int num_osd, stringstream *ss);
+  static int build_simple_crush_map_from_conf(CephContext *cct,
+					      CrushWrapper& crush,
+					      stringstream *ss);
 
   bool crush_ruleset_in_use(int ruleset) const;
 

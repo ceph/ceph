@@ -20,6 +20,10 @@ v0.74
   monitors (e.g., after 'ceph-deploy new' but before 'ceph-deploy mon
   create ...').
 
+- The configuration option 'osd pool default crush rule' is deprecated
+  and replaced with 'osd pool default crush replicated ruleset'. 'osd
+  pool default crush rule' takes precedence for backward compatibility
+  and a deprecation warning is displayed when it is used.
 
 v0.72.2
 ~~~~~~~

@@ -49,7 +49,7 @@ bool Dumper::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
 void Dumper::init(int rank) 
 {
   inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
-  unsigned pg_pool = CEPH_METADATA_RULE;
+  unsigned pg_pool = MDS_METADATA_POOL;
   osdmap = new OSDMap();
   objecter = new Objecter(g_ceph_context, messenger, monc, osdmap, lock, timer);
   journaler = new Journaler(ino, pg_pool, CEPH_FS_ONDISK_MAGIC,
@@ -194,7 +194,7 @@ void Dumper::undump(const char *dump_file)
   cout << "start " << start << " len " << len << std::endl;
   
   inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
-  unsigned pg_pool = CEPH_METADATA_RULE;
+  unsigned pg_pool = MDS_METADATA_POOL;
 
   Journaler::Header h;
   h.trimmed_pos = start;

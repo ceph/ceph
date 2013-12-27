@@ -29,6 +29,11 @@ extern struct ceph_file_layout g_default_file_layout;
 #include "common/config_obs.h"
 #include "msg/msg_types.h"
 
+enum {
+  CEPH_DEFAULT_CRUSH_REPLICATED_RULESET,
+  CEPH_DEFAULT_CRUSH_ERASURE_RULESET,
+};
+
 #define OSD_REP_PRIMARY 0
 #define OSD_REP_SPLAY   1
 #define OSD_REP_CHAIN   2

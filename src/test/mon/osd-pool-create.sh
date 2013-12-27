@@ -19,7 +19,7 @@ PS4='$LINENO: '
 
 DIR=osd-pool-create
 rm -fr $DIR
-trap "kill_mon || true ; rm -fr $DIR" EXIT
+trap "set +x ; kill_mon || true ; rm -fr $DIR" EXIT
 mkdir $DIR
 export CEPH_ARGS="--conf /dev/null --auth-supported=none --mon-host=127.0.0.1" 
 
@@ -40,14 +40,53 @@ function run_mon() {
 }
 
 function kill_mon() {
-    while [ -f $DIR/pidfile ] && kill $(cat $DIR/pidfile) ; do sleep 1 ; done
+    for try in 0 1 1 1 2 3 ; do
+        if [ ! -e $DIR/pidfile ] ||
+            ! kill $(cat $DIR/pidfile) ; then
+            break
+        fi
+        sleep $try
+    done
+
     rm -fr $DIR/store.db
 }
+
+# explicitly set the default crush rule
+expected=66
+run_mon --osd_pool_default_crush_replicated_ruleset $expected
+./ceph --format json osd dump | grep '"crush_ruleset":'$expected
+grep "osd_pool_default_crush_rule is deprecated " $DIR/log && exit 1
+kill_mon
+
+# explicitly set the default crush rule using deprecated option
+expected=55
+run_mon --osd_pool_default_crush_rule $expected
+./ceph --format json osd dump | grep '"crush_ruleset":'$expected
+grep "osd_pool_default_crush_rule is deprecated " $DIR/log
+kill_mon
+
+expected=77
+unexpected=33
+run_mon \
+    --osd_pool_default_crush_rule $expected \
+    --osd_pool_default_crush_replicated_ruleset $unexpected
+./ceph --format json osd dump | grep '"crush_ruleset":'$expected
+./ceph --format json osd dump | grep '"crush_ruleset":'$unexpected && exit 1
+grep "osd_pool_default_crush_rule is deprecated " $DIR/log
+kill_mon
 
 # osd_pool_default_erasure_code_properties is 
 # valid JSON but not of the expected type
 run_mon --osd_pool_default_erasure_code_properties 1 
 ./ceph osd pool create poolA 12 12 erasure 2>&1 | grep 'must be a JSON object'
+kill_mon
+
+# explicitly set the default erasure crush rule
+expected=88
+run_mon --osd_pool_default_crush_erasure_ruleset $expected
+./ceph --format json osd dump | grep '"crush_ruleset":'$expected && exit 1
+./ceph osd pool create pool_erasure 12 12 erasure
+./ceph --format json osd dump | grep '"crush_ruleset":'$expected
 kill_mon
 
 expected='"foo":"bar"'

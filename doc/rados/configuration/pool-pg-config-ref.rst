@@ -66,24 +66,10 @@ Ceph configuration file.
 :Default: ``1``. Typically a host containing one or more Ceph OSD Daemons.
 
 
-``osd min rep``
+``osd pool default crush replicated ruleset`` 
 
-:Description: The minimum number of replicas for a ruleset.
-:Type: 32-bit Integer
-:Default: ``1``
-
-
-``osd max rep``
-
-:Description: The maximum number of replicas for a ruleset.
-:Type: 32-bit Integer
-:Default: ``10``
-
-
-``osd pool default crush rule`` 
-
-:Description: The default CRUSH ruleset to use when creating a pool.
-:Type: 32-bit Integer
+:Description: The default CRUSH ruleset to use when creating a replicated pool.
+:Type: 8-bit Integer
 :Default: ``0``
 
 
