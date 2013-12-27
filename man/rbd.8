@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "RBD" "8" "December 09, 2013" "dev" "Ceph"
+.TH "RBD" "8" "December 27, 2013" "dev" "Ceph"
 .SH NAME
 rbd \- manage rados block device (RBD) images
 .
@@ -177,8 +177,15 @@ Make json or xml formatted output more human\-readable.
 .UNINDENT
 .INDENT 0.0
 .TP
+.B \-o map\-options, \-\-options map\-options
+Specifies which options to use when mapping an image.  map\-options is
+a comma\-separated string of options (similar to mount(8) mount options).
+See map options section below for more details.
+.UNINDENT
+.INDENT 0.0
+.TP
 .B \-\-read\-only
-Set device readonly when mapping image.
+Map the image read\-only.  Equivalent to \-o ro.
 .UNINDENT
 .SH COMMANDS
 .INDENT 0.0
@@ -295,7 +302,7 @@ in different pools than the parent snapshot.)
 .sp
 This requires image format 2.
 .TP
-.B \fBmap\fP [\fIimage\-name\fP]
+.B \fBmap\fP [\fIimage\-name\fP] [\-o | \-\-options \fImap\-options\fP ] [\-\-read\-only]
 Maps the specified image to a block device via the rbd kernel module.
 .TP
 .B \fBunmap\fP [\fIdevice\-path\fP]
@@ -381,6 +388,34 @@ The striping is controlled by three parameters:
 By default, [\fIstripe_unit\fP] is the same as the object size and [\fIstripe_count\fP] is 1.  Specifying a different
 [\fIstripe_unit\fP] requires that the STRIPINGV2 feature be supported (added in Ceph v0.53) and format 2 images be
 used.
+.SH MAP OPTIONS
+.sp
+Most of these options are useful mainly for debugging and benchmarking.  The
+default values are set in the kernel and may therefore depend on the version of
+the running kernel.
+.INDENT 0.0
+.IP \(bu 2
+fsid=aaaaaaaa\-bbbb\-cccc\-dddd\-eeeeeeeeeeee \- FSID that should be assumed by
+the client.
+.IP \(bu 2
+ip=a.b.c.d[:p] \- IP and, optionally, port the client should bind to.
+.IP \(bu 2
+share \- Enable sharing of client instances with other mappings (default).
+.IP \(bu 2
+noshare \- Disable sharing of client instaces with other mappings.
+.IP \(bu 2
+crc \- Enable CRC32C checksumming for data writes (default).
+.IP \(bu 2
+nocrc \- Disable CRC32C checksumming for data writes.
+.IP \(bu 2
+osdkeepalive=x \- OSD keepalive timeout (default is 5 seconds).
+.IP \(bu 2
+osd_idle_ttl=x \- OSD idle TTL (default is 60 seconds).
+.IP \(bu 2
+rw \- Map the image read\-write (default).
+.IP \(bu 2
+ro \- Map the image read\-only.  Equivalent to \-\-read\-only.
+.UNINDENT
 .SH EXAMPLES
 .sp
 To create a new rbd image that is 100 GB:

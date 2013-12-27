@@ -70,7 +70,8 @@ static string dir_info_oid = RBD_INFO;
 bool udevadm_settle = true;
 bool progress = true;
 bool resize_allow_shrink = false;
-bool read_only = false;
+
+map<string, string> map_options; // -o / --options map
 
 #define dout_subsys ceph_subsys_rbd
 
@@ -154,6 +155,7 @@ void usage()
 "  --pretty-format                    make json or xml output more readable\n"
 "  --no-settle                        do not wait for udevadm to settle on map/unmap\n"
 "  --no-progress                      do not show progress for long-running commands\n"
+"  -o, --options <map-options>        options to use when mapping an image\n"
 "  --read-only                        set device readonly when mapping image\n"
 "  --allow-shrink                     allow shrinking of an image when resizing\n";
 }
@@ -1649,13 +1651,8 @@ static int do_kernel_add(const char *poolname, const char *imgname,
       oss << ",";
   }
 
-  if (read_only)
-    oss << " ro,";
-  else
-    oss << " ";
-
   const char *user = g_conf->name.get_id().c_str();
-  oss << "name=" << user;
+  oss << " name=" << user;
 
   char key_name[strlen(user) + strlen("client.") + 1];
   snprintf(key_name, sizeof(key_name), "client.%s", user);
@@ -1689,6 +1686,18 @@ static int do_kernel_add(const char *poolname, const char *imgname,
     }
   } else if (is_kernel_secret(key_name)) {
     oss << ",key=" << key_name;
+  }
+
+  for (map<string, string>::const_iterator it = map_options.begin();
+       it != map_options.end();
+       ++it) {
+    // for compatibility with < 3.7 kernels, assume that rw is on by
+    // default and omit it even if it was specified by the user
+    // (see ceph.git commit fb0f1986449b)
+    if (it->first == "rw" && it->second == "rw")
+      continue;
+
+    oss << "," << it->second;
   }
 
   oss << " " << poolname << " " << imgname;
@@ -2056,6 +2065,109 @@ static int do_kernel_rm(const char *dev)
   return r;
 }
 
+static string map_option_uuid_cb(const char *value_char)
+{
+  uuid_d u;
+  if (!u.parse(value_char))
+    return "";
+
+  ostringstream oss;
+  oss << u;
+  return oss.str();
+}
+
+static string map_option_ip_cb(const char *value_char)
+{
+  entity_addr_t a;
+  const char *endptr;
+  if (!a.parse(value_char, &endptr) ||
+      endptr != value_char + strlen(value_char)) {
+    return "";
+  }
+
+  ostringstream oss;
+  oss << a.addr;
+  return oss.str();
+}
+
+static string map_option_int_cb(const char *value_char)
+{
+  string err;
+  int d = strict_strtol(value_char, 10, &err);
+  if (!err.empty() || d < 0)
+    return "";
+
+  ostringstream oss;
+  oss << d;
+  return oss.str();
+}
+
+static void put_map_option(const string key, string val)
+{
+  map<string, string>::const_iterator it = map_options.find(key);
+  if (it != map_options.end()) {
+    cerr << "rbd: warning: redefining map option " << key << ": '"
+         << it->second << "' -> '" << val << "'" << std::endl;
+  }
+  map_options[key] = val;
+}
+
+static int put_map_option_value(const string opt, const char *value_char,
+                                string (*parse_cb)(const char *))
+{
+  if (!value_char || *value_char == '\0') {
+    cerr << "rbd: " << opt << " option requires a value" << std::endl;
+    return 1;
+  }
+
+  string value = parse_cb(value_char);
+  if (value.empty()) {
+    cerr << "rbd: invalid " << opt << " value '" << value_char << "'"
+         << std::endl;
+    return 1;
+  }
+
+  put_map_option(opt, opt + "=" + value);
+  return 0;
+}
+
+static int parse_map_options(char *options)
+{
+  for (char *this_char = strtok(options, ", ");
+       this_char != NULL;
+       this_char = strtok(NULL, ",")) {
+    char *value_char;
+
+    if ((value_char = strchr(this_char, '=')) != NULL)
+      *value_char++ = '\0';
+
+    if (!strcmp(this_char, "fsid")) {
+      if (put_map_option_value("fsid", value_char, map_option_uuid_cb))
+        return 1;
+    } else if (!strcmp(this_char, "ip")) {
+      if (put_map_option_value("ip", value_char, map_option_ip_cb))
+        return 1;
+    } else if (!strcmp(this_char, "share") || !strcmp(this_char, "noshare")) {
+      put_map_option("share", this_char);
+    } else if (!strcmp(this_char, "crc") || !strcmp(this_char, "nocrc")) {
+      put_map_option("crc", this_char);
+    } else if (!strcmp(this_char, "osdkeepalive")) {
+      if (put_map_option_value("osdkeepalive", value_char, map_option_int_cb))
+        return 1;
+    } else if (!strcmp(this_char, "osd_idle_ttl")) {
+      if (put_map_option_value("osd_idle_ttl", value_char, map_option_int_cb))
+        return 1;
+    } else if (!strcmp(this_char, "rw") || !strcmp(this_char, "ro")) {
+      put_map_option("rw", this_char);
+    } else {
+      cerr << "rbd: unknown map option '" << this_char << "'" << std::endl;
+      return 1;
+    }
+  }
+
+  return 0;
+}
+
 enum {
   OPT_NO_CMD = 0,
   OPT_LIST,
@@ -2291,8 +2403,15 @@ int main(int argc, const char **argv)
       lock_tag = strdup(val.c_str());
     } else if (ceph_argparse_flag(args, i, "--no-settle", (char *)NULL)) {
       udevadm_settle = false;
+    } else if (ceph_argparse_witharg(args, i, &val, "-o", "--options", (char*)NULL)) {
+      char *map_options = strdup(val.c_str());
+      if (parse_map_options(map_options)) {
+        cerr << "rbd: couldn't parse map options" << std::endl;
+        return EXIT_FAILURE;
+      }
     } else if (ceph_argparse_flag(args, i, "--read-only", (char *)NULL)) {
-      read_only = true;
+      // --read-only is equivalent to -o ro
+      put_map_option("rw", "ro");
     } else if (ceph_argparse_flag(args, i, "--no-progress", (char *)NULL)) {
       progress = false;
     } else if (ceph_argparse_flag(args, i , "--allow-shrink", (char *)NULL)) {

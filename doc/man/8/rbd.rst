@@ -113,9 +113,15 @@ Parameters
 
    Make json or xml formatted output more human-readable.
 
+.. option:: -o map-options, --options map-options
+
+   Specifies which options to use when mapping an image.  map-options is
+   a comma-separated string of options (similar to mount(8) mount options).
+   See map options section below for more details.
+
 .. option:: --read-only
 
-   Set device readonly when mapping image.
+   Map the image read-only.  Equivalent to -o ro.
 
 
 Commands
@@ -235,7 +241,7 @@ Commands
 
   This requires image format 2.
 
-:command:`map` [*image-name*]
+:command:`map` [*image-name*] [-o | --options *map-options* ] [--read-only]
   Maps the specified image to a block device via the rbd kernel module.
 
 :command:`unmap` [*device-path*]
@@ -304,6 +310,35 @@ The striping is controlled by three parameters:
 By default, [*stripe_unit*] is the same as the object size and [*stripe_count*] is 1.  Specifying a different
 [*stripe_unit*] requires that the STRIPINGV2 feature be supported (added in Ceph v0.53) and format 2 images be
 used.
+
+
+Map options
+===========
+
+Most of these options are useful mainly for debugging and benchmarking.  The
+default values are set in the kernel and may therefore depend on the version of
+the running kernel.
+
+* fsid=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee - FSID that should be assumed by
+  the client.
+
+* ip=a.b.c.d[:p] - IP and, optionally, port the client should bind to.
+
+* share - Enable sharing of client instances with other mappings (default).
+
+* noshare - Disable sharing of client instaces with other mappings.
+
+* crc - Enable CRC32C checksumming for data writes (default).
+
+* nocrc - Disable CRC32C checksumming for data writes.
+
+* osdkeepalive=x - OSD keepalive timeout (default is 5 seconds).
+
+* osd_idle_ttl=x - OSD idle TTL (default is 60 seconds).
+
+* rw - Map the image read-write (default).
+
+* ro - Map the image read-only.  Equivalent to --read-only.
 
 
 Examples
