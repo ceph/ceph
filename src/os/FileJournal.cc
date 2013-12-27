@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  * 
  */
+#include "acconfig.h"
 
 #include "common/debug.h"
 #include "common/errno.h"
@@ -258,6 +259,7 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
 	   << newsize << " bytes: " << cpp_strerror(err) << dendl;
       return -err;
     }
+#ifdef HAVE_POSIX_FALLOCATE
     ret = ::posix_fallocate(fd, 0, newsize);
     if (ret) {
       derr << "FileJournal::_open_file : unable to preallocation journal to "
@@ -265,6 +267,24 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
       return -ret;
     }
     max_size = newsize;
+#elif defined(__APPLE__)
+    fstore_t store;
+    store.fst_flags = F_ALLOCATECONTIG;
+    store.fst_posmode = F_PEOFPOSMODE;
+    store.fst_offset = 0;
+    store.fst_length = newsize;
+
+    ret = ::fcntl(fd, F_PREALLOCATE, &store);
+    if (ret == -1) {
+      ret = -errno;
+      derr << "FileJournal::_open_file : unable to preallocation journal to "
+	   << newsize << " bytes: " << cpp_strerror(ret) << dendl;
+      return ret;
+    }
+    max_size = newsize;
+#else
+# error "Journal pre-allocation not supported on platform."
+#endif
   }
   else {
     max_size = oldsize;
