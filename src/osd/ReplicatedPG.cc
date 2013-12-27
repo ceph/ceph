@@ -4539,15 +4539,19 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   // clone, if necessary
   make_writeable(ctx);
 
-  finish_ctx(ctx);
+  finish_ctx(ctx,
+	     ctx->new_obs.exists ? pg_log_entry_t::MODIFY :
+	     pg_log_entry_t::DELETE);
 
   return result;
 }
 
-void ReplicatedPG::finish_ctx(OpContext *ctx)
+void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
 {
   const hobject_t& soid = ctx->obs->oi.soid;
-  dout(20) << __func__ << " " << soid << " " << ctx << dendl;
+  dout(20) << __func__ << " " << soid << " " << ctx
+	   << " op " << pg_log_entry_t::get_op_name(log_op_type)
+	   << dendl;
 
   // snapset
   bufferlist bss;
@@ -4635,10 +4639,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx)
   }
 
   // append to log
-  int logopcode = pg_log_entry_t::MODIFY;
-  if (!ctx->new_obs.exists)
-    logopcode = pg_log_entry_t::DELETE;
-  ctx->log.push_back(pg_log_entry_t(logopcode, soid, ctx->at_version,
+  ctx->log.push_back(pg_log_entry_t(log_op_type, soid, ctx->at_version,
 				    ctx->obs->oi.version,
 				    ctx->user_at_version, ctx->reqid,
 				    ctx->mtime));
@@ -5061,7 +5062,8 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
   tctx->lock_to_release = OpContext::W_LOCK;
   dout(20) << __func__ << " took lock on obc, " << obc->rwstate << dendl;
 
-  finish_ctx(tctx);
+  finish_ctx(tctx, pg_log_entry_t::PROMOTE);
+
   simple_repop_submit(repop);
 }
 
@@ -5315,7 +5317,7 @@ int ReplicatedPG::try_flush_mark_clean(FlushOpRef fop)
   ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
   --ctx->delta_stats.num_objects_dirty;
 
-  finish_ctx(ctx);
+  finish_ctx(ctx, pg_log_entry_t::MODIFY);
 
   if (!fop->dup_ops.empty()) {
     dout(20) << __func__ << " queueing dups for " << ctx->at_version << dendl;
