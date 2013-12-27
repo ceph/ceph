@@ -646,8 +646,8 @@ public:
     return set_rule_step(ruleno, step, CRUSH_RULE_EMIT, 0, 0);
   }
 
-  int add_simple_rule(string name, string root_name, string failure_domain_type,
-		      string mode, ostream *err = 0);
+  int add_simple_ruleset(string name, string root_name, string failure_domain_type,
+			 string mode, int rule_type, ostream *err = 0);
 
   int remove_rule(int ruleno);
 
@@ -865,6 +865,7 @@ public:
   void dump_tree(const vector<__u32>& w, ostream *out, Formatter *f) const;
   static void generate_test_instances(list<CrushWrapper*>& o);
 
+  static int get_osd_pool_default_crush_replicated_ruleset(CephContext *cct);
 
   static bool is_valid_crush_name(const string& s);
   static bool is_valid_crush_loc(CephContext *cct,

@@ -216,13 +216,6 @@ enum {
 #define CEPH_CAS_NS            3
 #define CEPH_OSDMETADATA_NS 0xff
 
-// poolsets
-enum {
-  CEPH_DATA_RULE,
-  CEPH_METADATA_RULE,
-  CEPH_RBD_RULE,
-};
-
 #define OSD_SUPERBLOCK_POBJECT hobject_t(sobject_t(object_t("osd_superblock"), 0))
 
 // placement seed (a hash value)
