@@ -952,13 +952,13 @@ TEST(LibRadosTier, TryFlush) {
 
   // flush
   {
-    ObjectWriteOperation op;
+    ObjectReadOperation op;
     op.cache_try_flush();
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, cache_ioctx.aio_operate(
       "foo", completion, &op,
       librados::OPERATION_IGNORE_OVERLAY |
-      librados::OPERATION_SKIPRWLOCKS));
+      librados::OPERATION_SKIPRWLOCKS, NULL));
     completion->wait_for_safe();
     ASSERT_EQ(0, completion->get_return_value());
     completion->release();
@@ -1088,12 +1088,12 @@ TEST(LibRadosTier, Flush) {
 
   // flush
   {
-    ObjectWriteOperation op;
+    ObjectReadOperation op;
     op.cache_flush();
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, cache_ioctx.aio_operate(
       "foo", completion, &op,
-      librados::OPERATION_IGNORE_OVERLAY));
+      librados::OPERATION_IGNORE_OVERLAY, NULL));
     completion->wait_for_safe();
     ASSERT_EQ(0, completion->get_return_value());
     completion->release();
@@ -1153,12 +1153,12 @@ TEST(LibRadosTier, Flush) {
 
   // flush whiteout
   {
-    ObjectWriteOperation op;
+    ObjectReadOperation op;
     op.cache_flush();
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, cache_ioctx.aio_operate(
       "foo", completion, &op,
-      librados::OPERATION_IGNORE_OVERLAY));
+      librados::OPERATION_IGNORE_OVERLAY, NULL));
     completion->wait_for_safe();
     ASSERT_EQ(0, completion->get_return_value());
     completion->release();
@@ -1244,12 +1244,12 @@ TEST(LibRadosTier, FlushWriteRaces) {
 
   // flush + write
   {
-    ObjectWriteOperation op;
+    ObjectReadOperation op;
     op.cache_flush();
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, cache_ioctx.aio_operate(
       "foo", completion, &op,
-      librados::OPERATION_IGNORE_OVERLAY));
+      librados::OPERATION_IGNORE_OVERLAY, NULL));
 
     ObjectWriteOperation op2;
     op2.write_full(bl);
@@ -1278,13 +1278,13 @@ TEST(LibRadosTier, FlushWriteRaces) {
 
     // try-flush + write
     {
-      ObjectWriteOperation op;
+      ObjectReadOperation op;
       op.cache_try_flush();
       librados::AioCompletion *completion = cluster.aio_create_completion();
       ASSERT_EQ(0, cache_ioctx.aio_operate(
         "foo", completion, &op,
 	librados::OPERATION_IGNORE_OVERLAY |
-	librados::OPERATION_SKIPRWLOCKS));
+	librados::OPERATION_SKIPRWLOCKS, NULL));
 
       ObjectWriteOperation op2;
       op2.write_full(bl);
@@ -1362,19 +1362,19 @@ TEST(LibRadosTier, FlushTryFlushRaces) {
 
   // flush + flush
   {
-    ObjectWriteOperation op;
+    ObjectReadOperation op;
     op.cache_flush();
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, cache_ioctx.aio_operate(
       "foo", completion, &op,
-      librados::OPERATION_IGNORE_OVERLAY));
+      librados::OPERATION_IGNORE_OVERLAY, NULL));
 
-    ObjectWriteOperation op2;
+    ObjectReadOperation op2;
     op2.cache_flush();
     librados::AioCompletion *completion2 = cluster.aio_create_completion();
     ASSERT_EQ(0, cache_ioctx.aio_operate(
       "foo", completion2, &op2,
-      librados::OPERATION_IGNORE_OVERLAY));
+      librados::OPERATION_IGNORE_OVERLAY, NULL));
 
     completion->wait_for_safe();
     completion2->wait_for_safe();
@@ -1395,20 +1395,20 @@ TEST(LibRadosTier, FlushTryFlushRaces) {
 
   // flush + try-flush
   {
-    ObjectWriteOperation op;
+    ObjectReadOperation op;
     op.cache_flush();
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, cache_ioctx.aio_operate(
       "foo", completion, &op,
-      librados::OPERATION_IGNORE_OVERLAY));
+      librados::OPERATION_IGNORE_OVERLAY, NULL));
 
-    ObjectWriteOperation op2;
+    ObjectReadOperation op2;
     op2.cache_try_flush();
     librados::AioCompletion *completion2 = cluster.aio_create_completion();
     ASSERT_EQ(0, cache_ioctx.aio_operate(
       "foo", completion2, &op2,
       librados::OPERATION_IGNORE_OVERLAY |
-      librados::OPERATION_SKIPRWLOCKS));
+      librados::OPERATION_SKIPRWLOCKS, NULL));
 
     completion->wait_for_safe();
     completion2->wait_for_safe();
@@ -1432,20 +1432,20 @@ TEST(LibRadosTier, FlushTryFlushRaces) {
     // try-flush + flush
     //  (flush will not piggyback on try-flush)
     {
-      ObjectWriteOperation op;
+      ObjectReadOperation op;
       op.cache_try_flush();
       librados::AioCompletion *completion = cluster.aio_create_completion();
       ASSERT_EQ(0, cache_ioctx.aio_operate(
         "foo", completion, &op,
 	librados::OPERATION_IGNORE_OVERLAY |
-	librados::OPERATION_SKIPRWLOCKS));
+	librados::OPERATION_SKIPRWLOCKS, NULL));
 
-      ObjectWriteOperation op2;
+      ObjectReadOperation op2;
       op2.cache_flush();
       librados::AioCompletion *completion2 = cluster.aio_create_completion();
       ASSERT_EQ(0, cache_ioctx.aio_operate(
         "foo", completion2, &op2,
-	librados::OPERATION_IGNORE_OVERLAY));
+	librados::OPERATION_IGNORE_OVERLAY, NULL));
 
       completion->wait_for_safe();
       completion2->wait_for_safe();
@@ -1472,21 +1472,21 @@ TEST(LibRadosTier, FlushTryFlushRaces) {
 
   // try-flush + try-flush
   {
-    ObjectWriteOperation op;
+    ObjectReadOperation op;
     op.cache_try_flush();
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, cache_ioctx.aio_operate(
       "foo", completion, &op,
       librados::OPERATION_IGNORE_OVERLAY |
-      librados::OPERATION_SKIPRWLOCKS));
+      librados::OPERATION_SKIPRWLOCKS, NULL));
 
-    ObjectWriteOperation op2;
+    ObjectReadOperation op2;
     op2.cache_try_flush();
     librados::AioCompletion *completion2 = cluster.aio_create_completion();
     ASSERT_EQ(0, cache_ioctx.aio_operate(
       "foo", completion2, &op2,
       librados::OPERATION_IGNORE_OVERLAY |
-      librados::OPERATION_SKIPRWLOCKS));
+      librados::OPERATION_SKIPRWLOCKS, NULL));
 
     completion->wait_for_safe();
     completion2->wait_for_safe();
@@ -1598,13 +1598,13 @@ TEST(LibRadosTier, TryFlushReadRace) {
   test_lock.Unlock();
 
   // try-flush
-  ObjectWriteOperation op;
+  ObjectReadOperation op;
   op.cache_try_flush();
   librados::AioCompletion *completion = cluster.aio_create_completion();
   ASSERT_EQ(0, cache_ioctx.aio_operate(
       "foo", completion, &op,
       librados::OPERATION_IGNORE_OVERLAY |
-      librados::OPERATION_SKIPRWLOCKS));
+      librados::OPERATION_SKIPRWLOCKS, NULL));
 
   completion->wait_for_safe();
   ASSERT_EQ(0, completion->get_return_value());

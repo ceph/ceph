@@ -1761,7 +1761,7 @@ public:
 class CacheFlushOp : public TestOp {
 public:
   librados::AioCompletion *completion;
-  librados::ObjectWriteOperation op;
+  librados::ObjectReadOperation op;
   string oid;
   bool blocking;
 
@@ -1797,7 +1797,7 @@ public:
       flags = librados::OPERATION_SKIPRWLOCKS;
     }
     int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
-					&op, flags);
+					&op, flags, NULL);
     assert(!r);
   }
 

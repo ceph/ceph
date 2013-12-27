@@ -403,13 +403,13 @@ void librados::ObjectWriteOperation::undirty()
   o->undirty();
 }
 
-void librados::ObjectWriteOperation::cache_flush()
+void librados::ObjectReadOperation::cache_flush()
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->cache_flush();
 }
 
-void librados::ObjectWriteOperation::cache_try_flush()
+void librados::ObjectReadOperation::cache_try_flush()
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->cache_try_flush();

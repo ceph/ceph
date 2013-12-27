@@ -310,24 +310,6 @@ namespace librados
      */
     void undirty();
 
-    /**
-     * flush a cache tier object to backing tier; will block racing
-     * updates.
-     *
-     * This should be used in concert with OPERATION_IGNORE_CACHE to avoid
-     * triggering a promotion.
-     */
-    void cache_flush();
-
-    /**
-     * Flush a cache tier object to backing tier; will EAGAIN if we race
-     * with an update.  Must be used with the SKIPRWLOCKS flag.
-     *
-     * This should be used in concert with OPERATION_IGNORE_CACHE to avoid
-     * triggering a promotion.
-     */
-    void cache_try_flush();
-
     friend class IoCtx;
   };
 
@@ -453,6 +435,24 @@ namespace librados
      * @param prval [out] place error code in prval upon completion
      */
     void is_dirty(bool *isdirty, int *prval);
+
+    /**
+     * flush a cache tier object to backing tier; will block racing
+     * updates.
+     *
+     * This should be used in concert with OPERATION_IGNORE_CACHE to avoid
+     * triggering a promotion.
+     */
+    void cache_flush();
+
+    /**
+     * Flush a cache tier object to backing tier; will EAGAIN if we race
+     * with an update.  Must be used with the SKIPRWLOCKS flag.
+     *
+     * This should be used in concert with OPERATION_IGNORE_CACHE to avoid
+     * triggering a promotion.
+     */
+    void cache_try_flush();
 
     /**
      * evict a clean cache tier object
