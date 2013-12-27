@@ -4791,7 +4791,7 @@ bool PG::can_discard_op(OpRequestRef op)
   if (OSD::op_is_discardable(m)) {
     dout(20) << " discard " << *m << dendl;
     return true;
-  } else if (op->may_write() &&
+  } else if ((op->may_write() || op->may_cache()) &&
 	     (!is_primary() ||
 	      !same_for_modify_since(m->get_map_epoch()))) {
     osd->handle_misdirected_op(this, op);

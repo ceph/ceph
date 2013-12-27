@@ -157,6 +157,7 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSD_OP_MODE_WR    0x2000
 #define CEPH_OSD_OP_MODE_RMW   0x3000
 #define CEPH_OSD_OP_MODE_SUB   0x4000
+#define CEPH_OSD_OP_MODE_CACHE 0x8000
 
 #define CEPH_OSD_OP_TYPE       0x0f00
 #define CEPH_OSD_OP_TYPE_LOCK  0x0100
@@ -318,6 +319,10 @@ static inline int ceph_osd_op_mode_read(int op)
 static inline int ceph_osd_op_mode_modify(int op)
 {
 	return op & CEPH_OSD_OP_MODE_WR;
+}
+static inline int ceph_osd_op_mode_cache(int op)
+{
+	return op & CEPH_OSD_OP_MODE_CACHE;
 }
 
 /*

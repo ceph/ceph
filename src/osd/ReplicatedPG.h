@@ -507,7 +507,7 @@ protected:
    * @return true on success, false if we are queued
    */
   bool get_rw_locks(OpContext *ctx) {
-    if (ctx->op->may_write()) {
+    if (ctx->op->may_write() || ctx->op->may_cache()) {
       if (ctx->obc->get_write(ctx->op)) {
 	ctx->lock_to_release = OpContext::W_LOCK;
 	return true;
