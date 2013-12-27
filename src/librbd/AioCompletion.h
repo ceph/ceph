@@ -101,9 +101,6 @@ namespace librbd {
       utime_t elapsed;
       assert(lock.is_locked());
       elapsed = ceph_clock_now(ictx->cct) - start_time;
-      if (complete_cb) {
-	complete_cb(rbd_comp, complete_arg);
-      }
       switch (aio_type) {
       case AIO_TYPE_READ:
 	ictx->perfcounter->tinc(l_librbd_aio_rd_latency, elapsed); break;
@@ -116,6 +113,9 @@ namespace librbd {
       default:
 	lderr(ictx->cct) << "completed invalid aio_type: " << aio_type << dendl;
 	break;
+      }
+      if (complete_cb) {
+	complete_cb(rbd_comp, complete_arg);
       }
       done = true;
       cond.Signal();
