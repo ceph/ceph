@@ -2501,7 +2501,7 @@ void PG::update_snap_map(
 	}
 	set<snapid_t> _snaps(snaps.begin(), snaps.end());
 
-	if (i->is_clone()) {
+	if (i->is_clone() || i->is_promote()) {
 	  snap_mapper.add_oid(
 	    i->soid,
 	    _snaps,
