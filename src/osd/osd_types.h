@@ -206,6 +206,7 @@ enum {
   CEPH_OSD_RMW_FLAG_CLASS_READ  = (1 << 3),
   CEPH_OSD_RMW_FLAG_CLASS_WRITE = (1 << 4),
   CEPH_OSD_RMW_FLAG_PGOP        = (1 << 5),
+  CEPH_OSD_RMW_FLAG_CACHE       = (1 << 6),
 };
 
 

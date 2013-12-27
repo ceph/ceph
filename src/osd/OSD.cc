@@ -7387,6 +7387,9 @@ int OSD::init_op_flags(OpRequestRef op)
     if (ceph_osd_op_type_pg(iter->op.op))
       op->set_pg_op();
 
+    if (ceph_osd_op_mode_cache(iter->op.op))
+      op->set_cache();
+
     switch (iter->op.op) {
     case CEPH_OSD_OP_CALL:
       {
