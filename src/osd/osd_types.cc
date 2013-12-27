@@ -3062,6 +3062,49 @@ ostream& operator<<(ostream& out, const SnapSet& cs)
 	     << (cs.head_exists ? "+head":"");
 }
 
+void SnapSet::from_snap_set(const librados::snap_set_t& ss)
+{
+  // NOTE: our reconstruction of snaps (and the snapc) is not strictly
+  // correct: it will not include snaps that still logically exist
+  // but for which there was no clone that is defined.  For all
+  // practical purposes this doesn't matter, since we only use that
+  // information to clone on the OSD, and we have already moved
+  // forward past that part of the object history.
+
+  seq = ss.seq;
+  set<snapid_t> _snaps;
+  set<snapid_t> _clones;
+  head_exists = false;
+  for (vector<librados::clone_info_t>::const_iterator p = ss.clones.begin();
+       p != ss.clones.end();
+       ++p) {
+    if (p->cloneid == librados::SNAP_HEAD) {
+      head_exists = true;
+    } else {
+      _clones.insert(p->cloneid);
+      _snaps.insert(p->snaps.begin(), p->snaps.end());
+      clone_size[p->cloneid] = p->size;
+      clone_overlap[p->cloneid];  // the entry must exist, even if it's empty.
+      for (vector<pair<uint64_t, uint64_t> >::const_iterator q =
+	     p->overlap.begin(); q != p->overlap.end(); ++q)
+	clone_overlap[p->cloneid].insert(q->first, q->second);
+    }
+  }
+
+  // ascending
+  clones.clear();
+  clones.reserve(_clones.size());
+  for (set<snapid_t>::iterator p = _clones.begin(); p != _clones.end(); ++p)
+    clones.push_back(*p);
+
+  // descending
+  snaps.clear();
+  snaps.reserve(_snaps.size());
+  for (set<snapid_t>::reverse_iterator p = _snaps.rbegin();
+       p != _snaps.rend(); ++p)
+    snaps.push_back(*p);
+}
+
 // -- watch_info_t --
 
 void watch_info_t::encode(bufferlist& bl) const

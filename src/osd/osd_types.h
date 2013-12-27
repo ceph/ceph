@@ -20,6 +20,8 @@
 #include <memory>
 #include <boost/scoped_ptr.hpp>
 
+#include "include/rados/rados_types.hpp"
+
 #include "msg/msg_types.h"
 #include "include/types.h"
 #include "include/utime.h"
@@ -2104,6 +2106,9 @@ struct SnapSet {
     bufferlist::iterator p = bl.begin();
     decode(p);
   }
+
+  /// populate SnapSet from a librados::snap_set_t
+  void from_snap_set(const librados::snap_set_t& ss);
     
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
