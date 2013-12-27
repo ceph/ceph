@@ -4557,52 +4557,55 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
 
   // snapset
   bufferlist bss;
-  ::encode(ctx->new_snapset, bss);
-  assert(ctx->new_obs.exists == ctx->new_snapset.head_exists);
 
-  if (ctx->new_obs.exists) {
-    if (!ctx->obs->exists) {
-      // if we logically recreated the head, remove old _snapdir object
+  if (soid.snap == CEPH_NOSNAP) {
+    ::encode(ctx->new_snapset, bss);
+    assert(ctx->new_obs.exists == ctx->new_snapset.head_exists);
+
+    if (ctx->new_obs.exists) {
+      if (!ctx->obs->exists) {
+	// if we logically recreated the head, remove old _snapdir object
+	hobject_t snapoid(soid.oid, soid.get_key(), CEPH_SNAPDIR, soid.hash,
+			  info.pgid.pool(), soid.get_namespace());
+
+	ctx->snapset_obc = get_object_context(snapoid, false);
+	if (ctx->snapset_obc && ctx->snapset_obc->obs.exists) {
+	  ctx->op_t.remove(coll, snapoid);
+	  dout(10) << " removing old " << snapoid << dendl;
+
+	  ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::DELETE, snapoid,
+					    ctx->at_version,
+					    ctx->obs->oi.version,
+					    0, osd_reqid_t(), ctx->mtime));
+	  ctx->at_version.version++;
+
+	  ctx->snapset_obc->obs.exists = false;
+	}
+      }
+    } else if (ctx->new_snapset.clones.size()) {
+      // save snapset on _snap
       hobject_t snapoid(soid.oid, soid.get_key(), CEPH_SNAPDIR, soid.hash,
 			info.pgid.pool(), soid.get_namespace());
+      dout(10) << " final snapset " << ctx->new_snapset
+	       << " in " << snapoid << dendl;
+      ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, snapoid,
+					ctx->at_version,
+					ctx->obs->oi.version,
+					0, osd_reqid_t(), ctx->mtime));
 
-      ctx->snapset_obc = get_object_context(snapoid, false);
-      if (ctx->snapset_obc && ctx->snapset_obc->obs.exists) {
-	ctx->op_t.remove(coll, snapoid);
-	dout(10) << " removing old " << snapoid << dendl;
+      ctx->snapset_obc = get_object_context(snapoid, true);
+      ctx->snapset_obc->obs.exists = true;
+      ctx->snapset_obc->obs.oi.version = ctx->at_version;
+      ctx->snapset_obc->obs.oi.last_reqid = ctx->reqid;
+      ctx->snapset_obc->obs.oi.mtime = ctx->mtime;
 
-	ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::DELETE, snapoid,
-					  ctx->at_version,
-					  ctx->obs->oi.version,
-					  0, osd_reqid_t(), ctx->mtime));
- 	ctx->at_version.version++;
-
-	ctx->snapset_obc->obs.exists = false;
-      }
+      bufferlist bv(sizeof(ctx->new_obs.oi));
+      ::encode(ctx->snapset_obc->obs.oi, bv);
+      ctx->op_t.touch(coll, snapoid);
+      ctx->op_t.setattr(coll, snapoid, OI_ATTR, bv);
+      ctx->op_t.setattr(coll, snapoid, SS_ATTR, bss);
+      ctx->at_version.version++;
     }
-  } else if (ctx->new_snapset.clones.size()) {
-    // save snapset on _snap
-    hobject_t snapoid(soid.oid, soid.get_key(), CEPH_SNAPDIR, soid.hash,
-		      info.pgid.pool(), soid.get_namespace());
-    dout(10) << " final snapset " << ctx->new_snapset
-	     << " in " << snapoid << dendl;
-    ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, snapoid,
-				      ctx->at_version,
-				      ctx->obs->oi.version,
-				      0, osd_reqid_t(), ctx->mtime));
-
-    ctx->snapset_obc = get_object_context(snapoid, true);
-    ctx->snapset_obc->obs.exists = true;
-    ctx->snapset_obc->obs.oi.version = ctx->at_version;
-    ctx->snapset_obc->obs.oi.last_reqid = ctx->reqid;
-    ctx->snapset_obc->obs.oi.mtime = ctx->mtime;
-
-    bufferlist bv(sizeof(ctx->new_obs.oi));
-    ::encode(ctx->snapset_obc->obs.oi, bv);
-    ctx->op_t.touch(coll, snapoid);
-    ctx->op_t.setattr(coll, snapoid, OI_ATTR, bv);
-    ctx->op_t.setattr(coll, snapoid, SS_ATTR, bss);
-    ctx->at_version.version++;
   }
 
   // finish and log the op.
@@ -4635,9 +4638,13 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
     ::encode(ctx->new_obs.oi, bv);
     ctx->op_t.setattr(coll, soid, OI_ATTR, bv);
 
-    dout(10) << " final snapset " << ctx->new_snapset
-	     << " in " << soid << dendl;
-    ctx->op_t.setattr(coll, soid, SS_ATTR, bss);   
+    if (soid.snap == CEPH_NOSNAP) {
+      dout(10) << " final snapset " << ctx->new_snapset
+	       << " in " << soid << dendl;
+      ctx->op_t.setattr(coll, soid, SS_ATTR, bss);
+    } else {
+      dout(10) << " no snapset (this is a clone)" << dendl;
+    }
   }
 
   // append to log
