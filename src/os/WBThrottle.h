@@ -134,6 +134,7 @@ public:
   WBThrottle(CephContext *cct);
   ~WBThrottle();
 
+  void start();
   void stop();
   /// Set fs as XFS or BTRFS
   void set_fs(FS new_fs) {
