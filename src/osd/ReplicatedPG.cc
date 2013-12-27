@@ -4655,6 +4655,11 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
   if (soid.snap < CEPH_NOSNAP) {
     dout(20) << __func__ << " encoding snaps " << ctx->new_obs.oi.snaps << dendl;
     ::encode(ctx->new_obs.oi.snaps, ctx->log.back().snaps);
+
+    OSDriver::OSTransaction _t(osdriver.get_transaction(&(ctx->local_t)));
+    set<snapid_t> _snaps(ctx->new_obs.oi.snaps.begin(),
+			 ctx->new_obs.oi.snaps.end());
+    snap_mapper.add_oid(soid, _snaps, &_t);
   }
 
   // apply new object state.
