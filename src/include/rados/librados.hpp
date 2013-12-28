@@ -328,14 +328,6 @@ namespace librados
      */
     void cache_try_flush();
 
-    /**
-     * evict a clean cache tier object
-     *
-     * This should be used in concert with OPERATION_IGNORE_CACHE to avoid
-     * triggering a promote on the OSD (that is then evicted).
-     */
-    void cache_evict();
-
     friend class IoCtx;
   };
 
@@ -461,6 +453,14 @@ namespace librados
      * @param prval [out] place error code in prval upon completion
      */
     void is_dirty(bool *isdirty, int *prval);
+
+    /**
+     * evict a clean cache tier object
+     *
+     * This should be used in concert with OPERATION_IGNORE_CACHE to avoid
+     * triggering a promote on the OSD (that is then evicted).
+     */
+    void cache_evict();
   };
 
   /* IoCtx : This is a context in which we can perform I/O.
