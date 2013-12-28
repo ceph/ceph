@@ -421,7 +421,7 @@ if __name__ == '__main__':
     assert(r.myjson['output']['size'] == 2)
 
     r = expect('osd/pool/get.json?pool=rbd&var=crush_ruleset', 'GET', 200, 'json')
-    assert(r.myjson['output']['crush_ruleset'] == 2)
+    assert(r.myjson['output']['crush_ruleset'] == 0)
 
     expect('osd/thrash?num_epochs=10', 'PUT', 200, '')
     print 'OK'
