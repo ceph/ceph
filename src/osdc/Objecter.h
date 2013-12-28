@@ -953,7 +953,9 @@ public:
   bool keep_balanced_budget;
   bool honor_osdmap_full;
 
+public:
   void maybe_request_map();
+private:
 
   version_t last_seen_osdmap_version;
   version_t last_seen_pgmap_version;

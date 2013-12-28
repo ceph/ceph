@@ -43,6 +43,7 @@
 #define CEPH_FEATURE_CRUSH_V2      (1ULL<<36)  /* new indep; SET_* steps */
 #define CEPH_FEATURE_EXPORT_PEER   (1ULL<<37)
 #define CEPH_FEATURE_OSD_ERASURE_CODES (1ULL<<38)
+#define CEPH_FEATURE_OSD_TMAP2OMAP (1ULL<<38)   /* overlap with EC */
 
 /*
  * The introduction of CEPH_FEATURE_OSD_SNAPMAPPER caused the feature
