@@ -450,6 +450,11 @@ private:
    */
   uint64_t get_features(uint64_t *mask) const;
 
+  /**
+   * get intersection of features supported by up osds
+   */
+  uint64_t get_up_osd_features() const;
+
   int apply_incremental(const Incremental &inc);
 
   /// try to re-use/reference addrs in oldmap from newmap
