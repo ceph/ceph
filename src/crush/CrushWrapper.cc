@@ -323,6 +323,8 @@ map<string, string> CrushWrapper::get_full_location(int id)
 
 int CrushWrapper::get_full_location_ordered(int id, vector<pair<string, string> >& path)
 {
+  if (!item_exists(id))
+    return -ENOENT;
   int cur = id;
   int ret;
   while (true) {
