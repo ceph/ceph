@@ -907,39 +907,36 @@ ceph_test_get_blkdev_size_LDADD = $(LIBCOMMON)
 bin_DEBUGPROGRAMS += ceph_test_get_blkdev_size
 
 noinst_HEADERS += \
-	test/osd/RadosModel.h \
-	test/osd/Object.h \
-	test/osd/TestOpStat.h \
-	test/osd/ceph_erasure_code_benchmark.h \
+	test/bench/backend.h \
+	test/bench/bencher.h \
+	test/bench/detailed_stat_collector.h \
 	test/bench/distribution.h \
+	test/bench/dumb_backend.h \
 	test/bench/rados_backend.h \
 	test/bench/rbd_backend.h \
-	test/bench/bencher.h \
-	test/bench/backend.h \
-	test/bench/dumb_backend.h \
 	test/bench/stat_collector.h \
-	test/bench/detailed_stat_collector.h \
 	test/bench/testfilestore_backend.h \
 	test/common/ObjectContents.h \
 	test/encoding/types.h \
 	test/filestore/DeterministicOpSequence.h \
-	test/filestore/FileStoreTracker.h \
 	test/filestore/FileStoreDiff.h \
+	test/filestore/FileStoreTracker.h \
 	test/filestore/TestFileStoreState.h \
 	test/filestore/workload_generator.h \
 	test/kv_store_bench.h \
 	test/librados/test.h \
 	test/ObjectMap/KeyValueDBMemory.h \
 	test/omap_bench.h \
+	test/osd/ceph_erasure_code_benchmark.h \
+	test/osdc/FakeWriteback.h \
 	test/osd/Object.h \
 	test/osd/RadosModel.h \
 	test/osd/TestOpStat.h \
-	test/osdc/FakeWriteback.h \
 	test/system/cross_process_sem.h \
 	test/system/st_rados_create_pool.h \
-	test/system/st_rados_list_objects.h \
 	test/system/st_rados_delete_objs.h \
 	test/system/st_rados_delete_pool.h \
+	test/system/st_rados_list_objects.h \
 	test/system/st_rados_notify.h \
 	test/system/st_rados_watch.h \
 	test/system/systest_runnable.h \
