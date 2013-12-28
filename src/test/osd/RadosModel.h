@@ -418,12 +418,14 @@ public:
   }
 
   void update_object_version(const string &oid, uint64_t version,
-			     bool dirty = true)
+			     bool dirty = true, int snap = -1)
   {
     for (map<int, map<string,ObjectDesc> >::reverse_iterator i = 
 	   pool_obj_cont.rbegin();
 	 i != pool_obj_cont.rend();
 	 ++i) {
+      if (snap != -1 && snap < i->first)
+	continue;
       map<string,ObjectDesc>::iterator j = i->second.find(oid);
       if (j != i->second.end()) {
 	if (version)
@@ -1850,7 +1852,7 @@ public:
     int r = completion->get_return_value();
     cout << num << ":  got " << cpp_strerror(r) << std::endl;
     if (r == 0) {
-      context->update_object_version(oid, 0, false);
+      context->update_object_version(oid, 0, false, snap);
     } else if (r == -EBUSY) {
       assert(can_fail);
     } else if (r == -EINVAL) {
