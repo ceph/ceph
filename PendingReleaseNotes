@@ -6,3 +6,8 @@ v0.75
   non-plain format. This is consistent with the behavior for a pool
   which used to hold images, but contains none. Scripts relying on
   this behavior should be updated.
+
+- The MDS requires a new OSD operation TMAP2OMAP, added in this release.  When
+  upgrading, be sure to upgrade and restart the ceph-osd daemons before the
+  ceph-mds daemon.  The MDS will refuse to start if any up OSDs do not support
+  the new feature.
