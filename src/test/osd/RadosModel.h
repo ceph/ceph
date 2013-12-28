@@ -1882,7 +1882,7 @@ public:
     int r = completion->get_return_value();
     cout << num << ":  got " << cpp_strerror(r) << std::endl;
     if (r == 0) {
-      context->update_object_version(oid, completion->get_version64(), false);
+      // yay!
     } else if (r == -EBUSY) {
       // raced with something that dirtied the object
     } else if (r == -EINVAL) {
