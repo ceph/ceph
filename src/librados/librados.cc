@@ -415,7 +415,7 @@ void librados::ObjectWriteOperation::cache_try_flush()
   o->cache_try_flush();
 }
 
-void librados::ObjectWriteOperation::cache_evict()
+void librados::ObjectReadOperation::cache_evict()
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   o->cache_evict();
