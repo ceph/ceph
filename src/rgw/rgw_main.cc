@@ -678,6 +678,7 @@ public:
 
   ~RGWFCGXFrontend() {
     delete thread;
+    delete pprocess;
   }
 
   int run() {
