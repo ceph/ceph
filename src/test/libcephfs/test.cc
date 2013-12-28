@@ -1063,7 +1063,7 @@ TEST(LibCephFS, GetOsdCrushLocation) {
 
   char path[256];
   ASSERT_EQ(ceph_get_osd_crush_location(cmount, 9999999, path, 0), -ENOENT);
-  ASSERT_EQ(ceph_get_osd_crush_location(cmount, -1, path, 0), -ENOENT);
+  ASSERT_EQ(ceph_get_osd_crush_location(cmount, -1, path, 0), -EINVAL);
 
   char test_file[256];
   sprintf(test_file, "test_osds_loc_%d", getpid());
