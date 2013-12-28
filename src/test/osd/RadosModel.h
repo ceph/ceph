@@ -1764,6 +1764,8 @@ public:
   librados::ObjectReadOperation op;
   string oid;
   bool blocking;
+  int snap;
+  bool can_fail;
 
   CacheFlushOp(int n,
 	       RadosTestContext *context,
@@ -1773,12 +1775,29 @@ public:
     : TestOp(n, context, stat),
       completion(NULL),
       oid(oid),
-      blocking(b)
+      blocking(b),
+      snap(0),
+      can_fail(false)
   {}
 
   void _begin()
   {
     context->state_lock.Lock();
+
+    if (!(rand() % 4) && !context->snaps.empty()) {
+      snap = rand_choose(context->snaps)->first;
+    } else {
+      snap = -1;
+    }
+    // not being particularly specific here about knowing which
+    // flushes are on the oldest clean snap and which ones are not.
+    can_fail = !blocking || !context->snaps.empty();
+    cout << num << ":  snap " << snap << std::endl;
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(context->snaps[snap]);
+    }
+
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
@@ -1799,6 +1818,10 @@ public:
     int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
 					&op, flags, NULL);
     assert(!r);
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(0);
+    }
   }
 
   void _finish(CallbackInfo *info)
@@ -1813,7 +1836,7 @@ public:
     if (r == 0) {
       context->update_object_version(oid, 0, false);
     } else if (r == -EBUSY) {
-      assert(!blocking);
+      assert(can_fail);
     } else if (r == -EINVAL) {
       // caching not enabled?
     } else if (r == -ENOENT) {
@@ -1855,6 +1878,19 @@ public:
   void _begin()
   {
     context->state_lock.Lock();
+
+    int snap;
+    if (!(rand() % 4) && !context->snaps.empty()) {
+      snap = rand_choose(context->snaps)->first;
+    } else {
+      snap = -1;
+    }
+    cout << num << ":  snap " << snap << std::endl;
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(context->snaps[snap]);
+    }
+
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
@@ -1870,6 +1906,10 @@ public:
 					&op, librados::OPERATION_IGNORE_CACHE,
 					NULL);
     assert(!r);
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(0);
+    }
   }
 
   void _finish(CallbackInfo *info)
