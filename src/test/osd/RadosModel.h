@@ -1688,6 +1688,7 @@ public:
   string oid;
   bool dirty;
   ObjectDesc old_value;
+  int snap;
 
   IsDirtyOp(int n,
 	    RadosTestContext *context,
@@ -1704,6 +1705,13 @@ public:
   {
     context->state_lock.Lock();
 
+    if (!(rand() % 4) && !context->snaps.empty()) {
+      snap = rand_choose(context->snaps)->first;
+    } else {
+      snap = -1;
+    }
+    std::cout << num << ": snap " << snap << std::endl;
+
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
@@ -1714,10 +1722,18 @@ public:
     context->oid_not_in_use.erase(oid);
     context->state_lock.Unlock();
 
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(context->snaps[snap]);
+    }
+
     op.is_dirty(&dirty, NULL);
     int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
 					&op, 0);
     assert(!r);
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(0);
+    }
   }
 
   void _finish(CallbackInfo *info)
@@ -1728,7 +1744,7 @@ public:
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
 
-    assert(context->find_object(oid, &old_value)); // FIXME snap?
+    assert(context->find_object(oid, &old_value, snap));
 
     int r = completion->get_return_value();
     if (r == 0) {
