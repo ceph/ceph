@@ -3053,6 +3053,27 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EBUSY;
 	  break;
 	}
+	if (soid.snap == CEPH_NOSNAP) {
+	  // verify that all clones have been evicted
+	  dout(20) << __func__ << " verifying clones are absent "
+		   << ctx->new_snapset << dendl;
+	  result = 0;
+	  for (vector<snapid_t>::iterator p = ctx->new_snapset.clones.begin();
+	       p != ctx->new_snapset.clones.end();
+	       ++p) {
+	    hobject_t clone_oid = soid;
+	    clone_oid.snap = *p;
+	    ObjectContextRef clone_obc = get_object_context(clone_oid, false);
+	    if (clone_obc && clone_obc->obs.exists) {
+	      dout(10) << __func__ << " cannot evict head before clone "
+		       << clone_oid << dendl;
+	      result = -EBUSY;
+	      break;
+	    }
+	  }
+	  if (result < 0)
+	    break;
+	}
 	result = _delete_head(ctx, true);
       }
       break;
@@ -4543,7 +4564,8 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   }
 
   // clone, if necessary
-  make_writeable(ctx);
+  if (soid.snap == CEPH_NOSNAP)
+    make_writeable(ctx);
 
   finish_ctx(ctx,
 	     ctx->new_obs.exists ? pg_log_entry_t::MODIFY :
@@ -4657,13 +4679,19 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
 				    ctx->user_at_version, ctx->reqid,
 				    ctx->mtime));
   if (soid.snap < CEPH_NOSNAP) {
-    dout(20) << __func__ << " encoding snaps " << ctx->new_obs.oi.snaps << dendl;
-    ::encode(ctx->new_obs.oi.snaps, ctx->log.back().snaps);
-
     OSDriver::OSTransaction _t(osdriver.get_transaction(&(ctx->local_t)));
-    set<snapid_t> _snaps(ctx->new_obs.oi.snaps.begin(),
-			 ctx->new_obs.oi.snaps.end());
-    snap_mapper.add_oid(soid, _snaps, &_t);
+    if (log_op_type == pg_log_entry_t::MODIFY ||
+	log_op_type == pg_log_entry_t::PROMOTE) {
+      dout(20) << __func__ << " encoding snaps " << ctx->new_obs.oi.snaps
+	       << dendl;
+      ::encode(ctx->new_obs.oi.snaps, ctx->log.back().snaps);
+
+      set<snapid_t> _snaps(ctx->new_obs.oi.snaps.begin(),
+			   ctx->new_obs.oi.snaps.end());
+      snap_mapper.add_oid(soid, _snaps, &_t);
+    } else {
+      snap_mapper.remove_oid(soid, &_t);
+    }
   }
 
   // apply new object state.
