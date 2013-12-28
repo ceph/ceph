@@ -1010,11 +1010,12 @@ public:
   void _begin()
   {
     context->state_lock.Lock();
-    if (0 && !(rand() % 4) && !context->snaps.empty()) {
+    if (!(rand() % 4) && !context->snaps.empty()) {
       snap = rand_choose(context->snaps)->first;
     } else {
       snap = -1;
     }
+    std::cout << num << ": snap " << snap << std::endl;
     done = 0;
     completion = context->rados.aio_create_completion((void *) this, &read_callback, 0);
 
