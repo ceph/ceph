@@ -20,7 +20,7 @@ ceph osd crush rule rm foo  # idempotent
 ceph osd crush rule rm bar
 
 # can't delete in-use rules, tho:
-ceph osd crush rule rm data && exit 1 || true
+ceph osd crush rule rm replicated_ruleset && exit 1 || true
 
 # build a simple map
 ceph osd crush add-bucket foo root
