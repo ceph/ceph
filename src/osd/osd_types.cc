@@ -3115,6 +3115,7 @@ void object_info_t::copy_user_bits(const object_info_t& other)
   truncate_size = other.truncate_size;
   flags = other.flags;
   category = other.category;
+  user_version = other.user_version;
 }
 
 ps_t object_info_t::legacy_object_locator_to_ps(const object_t &oid, 
