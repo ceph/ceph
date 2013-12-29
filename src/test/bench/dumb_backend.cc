@@ -1,5 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 
+#include "acconfig.h"
+
 #include <unistd.h>
 #include "dumb_backend.h"
 
@@ -34,15 +36,23 @@ void DumbBackend::_write(
   on_applied->complete(0);
   if (do_fsync)
     ::fsync(fd);
+#ifdef HAVE_SYNC_FILE_RANGE
   if (do_sync_file_range)
     ::sync_file_range(fd, offset, bl.length(),
 		      SYNC_FILE_RANGE_WAIT_AFTER);
+#else
+# warning "sync_file_range not supported!"
+#endif
+#ifdef HAVE_POSIX_FADVISE
   if (do_fadvise) {
     int fa_r = ::posix_fadvise(fd, offset, bl.length(), POSIX_FADV_DONTNEED);
     if (fa_r) {
         std::cout << "posix_fadvise failed, errno is: " << fa_r << std::endl;
     }
   }
+#else
+# warning "posix_fadvise not supported!"
+#endif
   ::close(fd);
   {
     Mutex::Locker l(pending_commit_mutex);
