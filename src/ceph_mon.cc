@@ -100,6 +100,22 @@ int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
   return -ENOENT;
 }
 
+int mon_data_exists(bool *r)
+{
+  string mon_data = g_conf->mon_data;
+  struct stat buf;
+  if (::stat(mon_data.c_str(), &buf)) {
+    if (errno == ENOENT) {
+      *r = false;
+    } else {
+      cerr << "stat(" << mon_data << ") " << strerror(errno) << std::endl;
+      return -errno;
+    }
+  } else {
+    *r = true;
+  }
+  return 0;
+}
 
 void usage()
 {
@@ -188,8 +204,21 @@ int main(int argc, const char **argv)
     usage();
   }
 
+  bool exists;
   // -- mkfs --
   if (mkfs) {
+
+    if (mon_data_exists(&exists))
+      exit(1);
+
+    if (!exists) {
+      if (::mkdir(g_conf->mon_data.c_str(), 0755)) {
+	cerr << "mkdir(" << g_conf->mon_data << ") : "
+	     << strerror(errno) << std::endl;
+	exit(1);
+      }
+    }
+
     // resolve public_network -> public_addr
     pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 
