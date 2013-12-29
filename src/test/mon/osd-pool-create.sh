@@ -48,7 +48,7 @@ function kill_mon() {
         sleep $try
     done
 
-    rm -fr $DIR/store.db
+    rm -fr $DIR/*
 }
 
 # explicitly set the default crush rule
