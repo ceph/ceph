@@ -375,7 +375,7 @@ void ceph_rewinddir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp
  *          by ceph_telldir do not have a particular order (cannot be compared with
  *          inequality).
  */
-loff_t ceph_telldir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp);
+int64_t ceph_telldir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp);
 
 /**
  * Move the directory stream to a position specified by the given offset.
@@ -386,7 +386,7 @@ loff_t ceph_telldir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp
  *        a value returned by seekdir.  Note that this value does not refer to the nth
  *        entry in a directory, and can not be manipulated with plus or minus.
  */
-void ceph_seekdir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, loff_t offset);
+void ceph_seekdir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, int64_t offset);
 
 /**
  * Create a directory.
@@ -447,7 +447,7 @@ int ceph_link(struct ceph_mount_info *cmount, const char *existing, const char *
  * @param size the length of the buffer
  * @returns 0 on success or negative error code on failure
  */
-int ceph_readlink(struct ceph_mount_info *cmount, const char *path, char *buf, loff_t size);
+int ceph_readlink(struct ceph_mount_info *cmount, const char *path, char *buf, int64_t size);
 
 /**
  * Creates a symbolic link.
@@ -591,7 +591,7 @@ int ceph_utime(struct ceph_mount_info *cmount, const char *path, struct utimbuf 
  * @param size the new size of the file.
  * @returns 0 on success or a negative error code on failure.
  */
-int ceph_truncate(struct ceph_mount_info *cmount, const char *path, loff_t size);
+int ceph_truncate(struct ceph_mount_info *cmount, const char *path, int64_t size);
 
 /**
  * Make a block or character special file.
@@ -660,7 +660,7 @@ int ceph_close(struct ceph_mount_info *cmount, int fd);
  *      SEEK_END: the offset is set to the end of the file plus @ref offset bytes.
  * @returns 0 on success or a negative error code on failure.
  */
-loff_t ceph_lseek(struct ceph_mount_info *cmount, int fd, loff_t offset, int whence);
+int64_t ceph_lseek(struct ceph_mount_info *cmount, int fd, int64_t offset, int whence);
 /**
  * Read data from the file.
  *
@@ -672,7 +672,7 @@ loff_t ceph_lseek(struct ceph_mount_info *cmount, int fd, loff_t offset, int whe
  *        function reads from the current offset of the file descriptor.
  * @returns the number of bytes read into buf, or a negative error code on failure.
  */
-int ceph_read(struct ceph_mount_info *cmount, int fd, char *buf, loff_t size, loff_t offset);
+int ceph_read(struct ceph_mount_info *cmount, int fd, char *buf, int64_t size, int64_t offset);
 
 /**
  * Write data to a file.
@@ -685,8 +685,8 @@ int ceph_read(struct ceph_mount_info *cmount, int fd, char *buf, loff_t size, lo
  *        function writes to the current offset of the file descriptor.
  * @returns the number of bytes written, or a negative error code
  */
-int ceph_write(struct ceph_mount_info *cmount, int fd, const char *buf, loff_t size,
-	       loff_t offset);
+int ceph_write(struct ceph_mount_info *cmount, int fd, const char *buf, int64_t size,
+	       int64_t offset);
 
 /**
  * Truncate a file to the given size.
@@ -696,7 +696,7 @@ int ceph_write(struct ceph_mount_info *cmount, int fd, const char *buf, loff_t s
  * @param size the new size of the file
  * @returns 0 on success or a negative error code on failure.
  */
-int ceph_ftruncate(struct ceph_mount_info *cmount, int fd, loff_t size);
+int ceph_ftruncate(struct ceph_mount_info *cmount, int fd, int64_t size);
 
 /**
  * Synchronize an open file to persistent media.
@@ -725,7 +725,7 @@ int ceph_fsync(struct ceph_mount_info *cmount, int fd, int syncdataonly);
  * @return 0 on success or a negative error code on failure.
  */
 int ceph_fallocate(struct ceph_mount_info *cmount, int fd, int mode,
-	                      loff_t offset, loff_t length);
+	                      int64_t offset, int64_t length);
 
 /**
  * Get the open file's statistics.
@@ -1046,7 +1046,7 @@ int ceph_get_pool_replication(struct ceph_mount_info *cmount, int pool_id);
  * @returns the size of the addressed filled into the @ref addr parameter, or a negative
  *	error code on failure.
  */
-int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int fd, loff_t offset,
+int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int fd, int64_t offset,
 				 struct sockaddr_storage *addr, int naddr);
 
 /**
@@ -1063,7 +1063,7 @@ int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int fd, loff_t 
  * array is not large enough.
  */
 int ceph_get_file_extent_osds(struct ceph_mount_info *cmount, int fh,
-                              loff_t offset, loff_t *length, int *osds, int nosds);
+                              int64_t offset, int64_t *length, int *osds, int nosds);
 
 /**
  * Get the fully qualified CRUSH location of an OSD.
