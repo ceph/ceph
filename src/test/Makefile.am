@@ -167,11 +167,13 @@ ceph_omapbench_SOURCES = test/omap_bench.cc
 ceph_omapbench_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_omapbench
 
+if LINUX
 ceph_kvstorebench_SOURCES = \
 	test/kv_store_bench.cc \
 	key_value_store/kv_flat_btree_async.cc
 ceph_kvstorebench_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_kvstorebench
+endif
 
 ceph_multi_stress_watch_SOURCES = \
 	test/multi_stress_watch.cc \
