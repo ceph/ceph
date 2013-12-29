@@ -6,7 +6,7 @@
 #ifndef TESTOPSTAT_H
 #define TESTOPSTAT_H
 
-struct TestOp;
+class TestOp;
 
 class TestOpStat {
 public:

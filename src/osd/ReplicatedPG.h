@@ -972,7 +972,7 @@ protected:
   void cancel_flush(FlushOpRef fop, bool requeue);
   void cancel_flush_ops(bool requeue);
 
-  friend class C_Flush;
+  friend struct C_Flush;
 
   // -- scrub --
   virtual void _scrub(ScrubMap& map);
