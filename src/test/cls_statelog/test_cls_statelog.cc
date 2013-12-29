@@ -113,7 +113,7 @@ TEST(cls_rgw, test_statelog_basic)
   int id = 0;
   string client_id[] = { "client-1", "client-2" };
 
-  int num_ops = 10;
+  const int num_ops = 10;
   string op_ids[num_ops];
 
   librados::ObjectWriteOperation *op = new_op();
