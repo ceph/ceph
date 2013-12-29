@@ -139,7 +139,27 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, 0);
+  int flags = 0;
+  {
+    vector<const char*> args_copy = args;
+    std::string val;
+    for (std::vector<const char*>::iterator i = args_copy.begin();
+	 i != args_copy.end(); ) {
+      if (ceph_argparse_double_dash(args_copy, i)) {
+	break;
+      } else if (ceph_argparse_flag(args_copy, i, "--mkfs", (char*)NULL)) {
+	flags |= CINIT_FLAG_NO_DAEMON_ACTIONS;
+      } else if (ceph_argparse_witharg(args_copy, i, &val, "--inject_monmap", (char*)NULL)) {
+	flags |= CINIT_FLAG_NO_DAEMON_ACTIONS;
+      } else if (ceph_argparse_witharg(args_copy, i, &val, "--extract-monmap", (char*)NULL)) {
+	flags |= CINIT_FLAG_NO_DAEMON_ACTIONS;
+      } else {
+	++i;
+      }
+    }
+  }
+
+  global_init(NULL, args, CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, flags);
 
   uuid_d fsid;
   std::string val;
