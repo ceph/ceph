@@ -839,38 +839,45 @@ TEST(LibRadosTier, FlushWriteRaces) {
     completion2->release();
   }
 
-  // create/dirty object
-  {
-    bufferlist bl;
-    bl.append("hi there");
-    ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
-  }
+  int tries = 10;
+  do {
+    // create/dirty object
+    {
+      bufferlist bl;
+      bl.append("hi there");
+      ObjectWriteOperation op;
+      op.write_full(bl);
+      ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    }
 
-  // try-flush + write
-  {
-    ObjectWriteOperation op;
-    op.cache_try_flush();
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, cache_ioctx.aio_operate(
-      "foo", completion, &op,
-      librados::OPERATION_IGNORE_OVERLAY |
-      librados::OPERATION_SKIPRWLOCKS));
+    // try-flush + write
+    {
+      ObjectWriteOperation op;
+      op.cache_try_flush();
+      librados::AioCompletion *completion = cluster.aio_create_completion();
+      ASSERT_EQ(0, cache_ioctx.aio_operate(
+        "foo", completion, &op,
+	librados::OPERATION_IGNORE_OVERLAY |
+	librados::OPERATION_SKIPRWLOCKS));
 
-    ObjectWriteOperation op2;
-    op2.write_full(bl);
-    librados::AioCompletion *completion2 = cluster.aio_create_completion();
-    ASSERT_EQ(0, base_ioctx.aio_operate(
-      "foo", completion2, &op2, 0));
+      ObjectWriteOperation op2;
+      op2.write_full(bl);
+      librados::AioCompletion *completion2 = cluster.aio_create_completion();
+      ASSERT_EQ(0, base_ioctx.aio_operate("foo", completion2, &op2, 0));
 
-    completion->wait_for_safe();
-    completion2->wait_for_safe();
-    ASSERT_EQ(-EBUSY, completion->get_return_value());
-    ASSERT_EQ(0, completion2->get_return_value());
-    completion->release();
-    completion2->release();
-  }
+      completion->wait_for_safe();
+      completion2->wait_for_safe();
+      int r = completion->get_return_value();
+      ASSERT_TRUE(r == -EBUSY || r == 0);
+      ASSERT_EQ(0, completion2->get_return_value());
+      completion->release();
+      completion2->release();
+      if (r == -EBUSY)
+	break;
+      cout << "didn't get EBUSY, trying again" << std::endl;
+    }
+    ASSERT_TRUE(--tries);
+  } while (true);
 
   // tear down tiers
   ASSERT_EQ(0, cluster.mon_command(
@@ -986,39 +993,47 @@ TEST(LibRadosTier, FlushTryFlushRaces) {
   }
 
   // create/dirty object
-  {
-    bufferlist bl;
-    bl.append("hi there");
-    ObjectWriteOperation op;
-    op.write_full(bl);
-    ASSERT_EQ(0, base_ioctx.operate("foo", &op));
-  }
+  int tries = 10;
+  do {
+    {
+      bufferlist bl;
+      bl.append("hi there");
+      ObjectWriteOperation op;
+      op.write_full(bl);
+      ASSERT_EQ(0, base_ioctx.operate("foo", &op));
+    }
 
-  // try-flush + flush
-  //  (flush will not piggyback on try-flush)
-  {
-    ObjectWriteOperation op;
-    op.cache_try_flush();
-    librados::AioCompletion *completion = cluster.aio_create_completion();
-    ASSERT_EQ(0, cache_ioctx.aio_operate(
-      "foo", completion, &op,
-      librados::OPERATION_IGNORE_OVERLAY |
-      librados::OPERATION_SKIPRWLOCKS));
+    // try-flush + flush
+    //  (flush will not piggyback on try-flush)
+    {
+      ObjectWriteOperation op;
+      op.cache_try_flush();
+      librados::AioCompletion *completion = cluster.aio_create_completion();
+      ASSERT_EQ(0, cache_ioctx.aio_operate(
+        "foo", completion, &op,
+	librados::OPERATION_IGNORE_OVERLAY |
+	librados::OPERATION_SKIPRWLOCKS));
 
-    ObjectWriteOperation op2;
-    op2.cache_flush();
-    librados::AioCompletion *completion2 = cluster.aio_create_completion();
-    ASSERT_EQ(0, cache_ioctx.aio_operate(
-      "foo", completion2, &op2,
-      librados::OPERATION_IGNORE_OVERLAY));
+      ObjectWriteOperation op2;
+      op2.cache_flush();
+      librados::AioCompletion *completion2 = cluster.aio_create_completion();
+      ASSERT_EQ(0, cache_ioctx.aio_operate(
+        "foo", completion2, &op2,
+	librados::OPERATION_IGNORE_OVERLAY));
 
-    completion->wait_for_safe();
-    completion2->wait_for_safe();
-    ASSERT_EQ(-EBUSY, completion->get_return_value());
-    ASSERT_EQ(0, completion2->get_return_value());
-    completion->release();
-    completion2->release();
-  }
+      completion->wait_for_safe();
+      completion2->wait_for_safe();
+      int r = completion->get_return_value();
+      ASSERT_TRUE(r == -EBUSY || r == 0);
+      ASSERT_EQ(0, completion2->get_return_value());
+      completion->release();
+      completion2->release();
+      if (r == -EBUSY)
+	break;
+      cout << "didn't get EBUSY, trying again" << std::endl;
+    }
+    ASSERT_TRUE(--tries);
+  } while (true);
 
   // create/dirty object
   {
