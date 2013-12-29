@@ -3791,13 +3791,29 @@ int Monitor::mkfs(bufferlist& osdmapbl)
     string keyring_filename;
     if (!ceph_resolve_file_search(g_conf->keyring, keyring_filename)) {
       derr << "unable to find a keyring file on " << g_conf->keyring << dendl;
-      return -ENOENT;
-    }
-
-    r = keyring.load(g_ceph_context, keyring_filename);
-    if (r < 0) {
-      derr << "unable to load initial keyring " << g_conf->keyring << dendl;
-      return r;
+      if (g_conf->key != "") {
+	string keyring_plaintext = "[mon.]\n\tkey = " + g_conf->key +
+	  "\n\tcaps mon = \"allow *\"\n";
+	bufferlist bl;
+	bl.append(keyring_plaintext);
+	try {
+	  bufferlist::iterator i = bl.begin();
+	  keyring.decode_plaintext(i);
+	}
+	catch (const buffer::error& e) {
+	  derr << "error decoding keyring " << keyring_plaintext
+	       << ": " << e.what() << dendl;
+	  return -EINVAL;
+	}
+      } else {
+	return -ENOENT;
+      }
+    } else {
+      r = keyring.load(g_ceph_context, keyring_filename);
+      if (r < 0) {
+	derr << "unable to load initial keyring " << g_conf->keyring << dendl;
+	return r;
+      }
     }
 
     // put mon. key in external keyring; seed with everything else.
