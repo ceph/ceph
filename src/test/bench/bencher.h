@@ -12,10 +12,10 @@
 #include "common/Cond.h"
 #include "common/Thread.h"
 
-class OnWriteApplied;
-class OnWriteCommit;
-class OnReadComplete;
-class Clenaup;
+struct OnWriteApplied;
+struct OnWriteCommit;
+struct OnReadComplete;
+struct Cleanup;
 
 class Bencher : public Thread {
 public:
@@ -105,10 +105,10 @@ public:
     run_bench();
     return 0;
   }
-  friend class OnWriteApplied;
-  friend class OnWriteCommit;
-  friend class OnReadComplete;
-  friend class Cleanup;
+  friend struct OnWriteApplied;
+  friend struct OnWriteCommit;
+  friend struct OnReadComplete;
+  friend struct Cleanup;
 };
 
 class SequentialLoad :
