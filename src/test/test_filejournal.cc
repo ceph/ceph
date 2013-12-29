@@ -22,15 +22,15 @@ bool aio = false;
 
 // ----
 Cond cond;
-Mutex lock("lock");
+Mutex wait_lock("lock");
 bool done;
 
 void wait()
 {
-  lock.Lock();
+  wait_lock.Lock();
   while (!done)
-    cond.Wait(lock);
-  lock.Unlock();
+    cond.Wait(wait_lock);
+  wait_lock.Unlock();
 }
 
 // ----
@@ -120,7 +120,7 @@ TEST(TestFileJournal, WriteSmall) {
 
   bufferlist bl;
   bl.append("small");
-  j.submit_entry(1, bl, 0, new C_SafeCond(&lock, &cond, &done));
+  j.submit_entry(1, bl, 0, new C_SafeCond(&wait_lock, &cond, &done));
   wait();
 
   j.close();
@@ -138,7 +138,7 @@ TEST(TestFileJournal, WriteBig) {
     memset(foo, 1, sizeof(foo));
     bl.append(foo, sizeof(foo));
   }
-  j.submit_entry(1, bl, 0, new C_SafeCond(&lock, &cond, &done));
+  j.submit_entry(1, bl, 0, new C_SafeCond(&wait_lock, &cond, &done));
   wait();
 
   j.close();
@@ -150,7 +150,7 @@ TEST(TestFileJournal, WriteMany) {
   ASSERT_EQ(0, j.create());
   j.make_writeable();
 
-  C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&lock, &cond, &done));
+  C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
   
   bufferlist bl;
   bl.append("small");
@@ -173,7 +173,7 @@ TEST(TestFileJournal, WriteManyVecs) {
   ASSERT_EQ(0, j.create());
   j.make_writeable();
 
-  C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&lock, &cond, &done));
+  C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
 
   bufferlist first;
   first.append("small");
@@ -210,7 +210,7 @@ TEST(TestFileJournal, ReplaySmall) {
   ASSERT_EQ(0, j.create());
   j.make_writeable();
   
-  C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&lock, &cond, &done));
+  C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
   
   bufferlist bl;
   bl.append("small");
@@ -255,7 +255,7 @@ TEST(TestFileJournal, ReplayCorrupt) {
   ASSERT_EQ(0, j.create());
   j.make_writeable();
   
-  C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&lock, &cond, &done));
+  C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
   
   const char *needle =    "i am a needle";
   const char *newneedle = "in a haystack";
@@ -403,7 +403,7 @@ TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
   ASSERT_EQ(0, j.create());
   j.make_writeable();
 
-  C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&lock, &cond, &done));
+  C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
 
   const char *needle =    "i am a needle";
   for (unsigned i = 1; i <= 4; ++i) {
@@ -416,7 +416,7 @@ TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
 
   bufferlist bl;
   bl.append("needle");
-  j.submit_entry(5, bl, 0, new C_SafeCond(&lock, &cond, &done));
+  j.submit_entry(5, bl, 0, new C_SafeCond(&wait_lock, &cond, &done));
   wait();
 
   j.close();
@@ -453,7 +453,7 @@ TEST(TestFileJournal, ReplayDetectCorruptPayload) {
   ASSERT_EQ(0, j.create());
   j.make_writeable();
 
-  C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&lock, &cond, &done));
+  C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
 
   const char *needle =    "i am a needle";
   for (unsigned i = 1; i <= 4; ++i) {
@@ -466,7 +466,7 @@ TEST(TestFileJournal, ReplayDetectCorruptPayload) {
 
   bufferlist bl;
   bl.append("needle");
-  j.submit_entry(5, bl, 0, new C_SafeCond(&lock, &cond, &done));
+  j.submit_entry(5, bl, 0, new C_SafeCond(&wait_lock, &cond, &done));
   wait();
 
   j.close();
@@ -503,7 +503,7 @@ TEST(TestFileJournal, ReplayDetectCorruptHeader) {
   ASSERT_EQ(0, j.create());
   j.make_writeable();
 
-  C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&lock, &cond, &done));
+  C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
 
   const char *needle =    "i am a needle";
   for (unsigned i = 1; i <= 4; ++i) {
@@ -516,7 +516,7 @@ TEST(TestFileJournal, ReplayDetectCorruptHeader) {
 
   bufferlist bl;
   bl.append("needle");
-  j.submit_entry(5, bl, 0, new C_SafeCond(&lock, &cond, &done));
+  j.submit_entry(5, bl, 0, new C_SafeCond(&wait_lock, &cond, &done));
   wait();
 
   j.close();

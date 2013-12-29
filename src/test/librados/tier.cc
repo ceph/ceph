@@ -1074,7 +1074,7 @@ TEST(LibRadosTier, FlushTryFlushRaces) {
 
 
 IoCtx *read_ioctx = 0;
-Mutex lock("FlushReadRaces::lock");
+Mutex test_lock("FlushReadRaces::lock");
 Cond cond;
 int max_reads = 100;
 int num_reads = 0; // in progress
@@ -1095,7 +1095,7 @@ void start_flush_read()
 void flush_read_race_cb(completion_t cb, void *arg)
 {
   //cout << " finished read" << std::endl;
-  lock.Lock();
+  test_lock.Lock();
   if (num_reads > max_reads) {
     num_reads--;
     cond.Signal();
@@ -1103,7 +1103,7 @@ void flush_read_race_cb(completion_t cb, void *arg)
     start_flush_read();
   }
   // fixme: i'm leaking cb...
-  lock.Unlock();
+  test_lock.Unlock();
 }
 
 TEST(LibRadosTier, TryFlushReadRace) {
@@ -1149,12 +1149,12 @@ TEST(LibRadosTier, TryFlushReadRace) {
 
   // start a continuous stream of reads
   read_ioctx = &base_ioctx;
-  lock.Lock();
+  test_lock.Lock();
   for (int i = 0; i < max_reads; ++i) {
     start_flush_read();
     num_reads++;
   }
-  lock.Unlock();
+  test_lock.Unlock();
 
   // try-flush
   ObjectWriteOperation op;
@@ -1170,11 +1170,11 @@ TEST(LibRadosTier, TryFlushReadRace) {
   completion->release();
 
   // stop reads
-  lock.Lock();
+  test_lock.Lock();
   max_reads = 0;
   while (num_reads > 0)
-    cond.Wait(lock);
-  lock.Unlock();
+    cond.Wait(test_lock);
+  test_lock.Unlock();
 
   // tear down tiers
   ASSERT_EQ(0, cluster.mon_command(
