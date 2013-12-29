@@ -213,7 +213,7 @@ int main(int argc, const char **argv)
     // resolve public_network -> public_addr
     pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 
-    common_init_finish(g_ceph_context);
+    common_init_finish(g_ceph_context, flags);
 
     bufferlist monmapbl, osdmapbl;
     std::string error;
