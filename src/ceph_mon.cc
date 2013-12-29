@@ -326,16 +326,16 @@ int main(int argc, const char **argv)
   // screwing us over
   Preforker prefork;
   if (!(flags & CINIT_FLAG_NO_DAEMON_ACTIONS)) {
-  if (g_conf->daemonize) {
-    global_init_prefork(g_ceph_context, 0);
-    prefork.prefork();
-    if (prefork.is_parent()) {
-      return prefork.parent_wait();
+    if (g_conf->daemonize) {
+      global_init_prefork(g_ceph_context, 0);
+      prefork.prefork();
+      if (prefork.is_parent()) {
+	return prefork.parent_wait();
+      }
+      global_init_postfork(g_ceph_context, 0);
     }
-    global_init_postfork(g_ceph_context, 0);
-  }
-  common_init_finish(g_ceph_context);
-  global_init_chdir(g_ceph_context);
+    common_init_finish(g_ceph_context);
+    global_init_chdir(g_ceph_context);
   }
 
   MonitorDBStore *store = new MonitorDBStore(g_conf->mon_data);
