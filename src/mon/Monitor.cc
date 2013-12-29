@@ -475,37 +475,37 @@ int Monitor::preinit()
   int r;
 
   if (is_keyring_required()) {
-  // we need to bootstrap authentication keys so we can form an
-  // initial quorum.
-  if (authmon()->get_last_committed() == 0) {
-    dout(10) << "loading initial keyring to bootstrap authentication for mkfs" << dendl;
-    bufferlist bl;
-    store->get("mkfs", "keyring", bl);
-    KeyRing keyring;
-    bufferlist::iterator p = bl.begin();
-    ::decode(keyring, p);
-    extract_save_mon_key(keyring);
-  }
-
-  string keyring_loc = g_conf->mon_data + "/keyring";
-
-  r = keyring.load(cct, keyring_loc);
-  if (r < 0) {
-    EntityName mon_name;
-    mon_name.set_type(CEPH_ENTITY_TYPE_MON);
-    EntityAuth mon_key;
-    if (key_server.get_auth(mon_name, mon_key)) {
-      dout(1) << "copying mon. key from old db to external keyring" << dendl;
-      keyring.add(mon_name, mon_key);
+    // we need to bootstrap authentication keys so we can form an
+    // initial quorum.
+    if (authmon()->get_last_committed() == 0) {
+      dout(10) << "loading initial keyring to bootstrap authentication for mkfs" << dendl;
       bufferlist bl;
-      keyring.encode_plaintext(bl);
-      write_default_keyring(bl);
-    } else {
-      derr << "unable to load initial keyring " << g_conf->keyring << dendl;
-      lock.Unlock();
-      return r;
+      store->get("mkfs", "keyring", bl);
+      KeyRing keyring;
+      bufferlist::iterator p = bl.begin();
+      ::decode(keyring, p);
+      extract_save_mon_key(keyring);
     }
-  }
+
+    string keyring_loc = g_conf->mon_data + "/keyring";
+
+    r = keyring.load(cct, keyring_loc);
+    if (r < 0) {
+      EntityName mon_name;
+      mon_name.set_type(CEPH_ENTITY_TYPE_MON);
+      EntityAuth mon_key;
+      if (key_server.get_auth(mon_name, mon_key)) {
+	dout(1) << "copying mon. key from old db to external keyring" << dendl;
+	keyring.add(mon_name, mon_key);
+	bufferlist bl;
+	keyring.encode_plaintext(bl);
+	write_default_keyring(bl);
+      } else {
+	derr << "unable to load initial keyring " << g_conf->keyring << dendl;
+	lock.Unlock();
+	return r;
+      }
+    }
   }
 
   admin_hook = new AdminHook(this);
@@ -3787,25 +3787,25 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   }
 
   if (is_keyring_required()) {
-  KeyRing keyring;
-  string keyring_filename;
-  if (!ceph_resolve_file_search(g_conf->keyring, keyring_filename)) {
-    derr << "unable to find a keyring file on " << g_conf->keyring << dendl;
-    return -ENOENT;
-  }
+    KeyRing keyring;
+    string keyring_filename;
+    if (!ceph_resolve_file_search(g_conf->keyring, keyring_filename)) {
+      derr << "unable to find a keyring file on " << g_conf->keyring << dendl;
+      return -ENOENT;
+    }
 
-  r = keyring.load(g_ceph_context, keyring_filename);
-  if (r < 0) {
-    derr << "unable to load initial keyring " << g_conf->keyring << dendl;
-    return r;
-  }
+    r = keyring.load(g_ceph_context, keyring_filename);
+    if (r < 0) {
+      derr << "unable to load initial keyring " << g_conf->keyring << dendl;
+      return r;
+    }
 
-  // put mon. key in external keyring; seed with everything else.
-  extract_save_mon_key(keyring);
+    // put mon. key in external keyring; seed with everything else.
+    extract_save_mon_key(keyring);
 
-  bufferlist keyringbl;
-  keyring.encode_plaintext(keyringbl);
-  t.put("mkfs", "keyring", keyringbl);
+    bufferlist keyringbl;
+    keyring.encode_plaintext(keyringbl);
+    t.put("mkfs", "keyring", keyringbl);
   }
   write_fsid(t);
   store->apply_transaction(t);
