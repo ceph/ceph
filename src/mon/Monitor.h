@@ -881,6 +881,7 @@ public:
   void get_leader_supported_commands(const MonCommand **cmds, int *count);
   /// the Monitor owns this pointer once you pass it in
   void set_leader_supported_commands(const MonCommand *cmds, int size);
+  static bool is_keyring_required();
 };
 
 #define CEPH_MON_FEATURE_INCOMPAT_BASE CompatSet::Feature (1, "initial feature set (~v.18)")
