@@ -96,14 +96,14 @@ void AuthMonitor::create_initial()
   assert(pending_auth.size() == 1);
 
   if (mon->is_keyring_required()) {
-  KeyRing keyring;
-  bufferlist bl;
-  int ret = mon->store->get("mkfs", "keyring", bl);
-  assert(ret == 0);
-  bufferlist::iterator p = bl.begin();
-  ::decode(keyring, p);
+    KeyRing keyring;
+    bufferlist bl;
+    int ret = mon->store->get("mkfs", "keyring", bl);
+    assert(ret == 0);
+    bufferlist::iterator p = bl.begin();
+    ::decode(keyring, p);
 
-  import_keyring(keyring);
+    import_keyring(keyring);
   }
 
   max_global_id = MIN_GLOBAL_ID;
