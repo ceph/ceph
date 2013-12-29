@@ -95,6 +95,7 @@ void AuthMonitor::create_initial()
   check_rotate();
   assert(pending_auth.size() == 1);
 
+  if (mon->is_keyring_required()) {
   KeyRing keyring;
   bufferlist bl;
   int ret = mon->store->get("mkfs", "keyring", bl);
@@ -103,6 +104,7 @@ void AuthMonitor::create_initial()
   ::decode(keyring, p);
 
   import_keyring(keyring);
+  }
 
   max_global_id = MIN_GLOBAL_ID;
 
@@ -187,7 +189,7 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
     keys_ver++;
     mon->key_server.set_ver(keys_ver);
 
-    if (keys_ver == 1) {
+    if (keys_ver == 1 && mon->is_keyring_required()) {
       MonitorDBStore::Transaction t;
       t.erase("mkfs", "keyring");
       mon->store->apply_transaction(t);
