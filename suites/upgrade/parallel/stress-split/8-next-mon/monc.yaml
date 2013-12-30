@@ -1,4 +1,6 @@
 tasks:
+- install.upgrade:
+    mon.c: null
 - ceph.restart:
     daemons: [mon.c]
     wait-for-healthy: false
