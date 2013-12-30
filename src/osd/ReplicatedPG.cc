@@ -1227,7 +1227,8 @@ void ReplicatedPG::do_op(OpRequestRef op)
 	  // missing the specific snap we need; requeue and wait.
 	  wait_for_missing_object(wait_oid, op);
 	} else if (r) {
-	  osd->reply_op_error(op, r);
+	  if (!maybe_handle_cache(op, sobc, r, wait_oid, true))
+	    osd->reply_op_error(op, r);
 	} else if (sobc->obs.oi.is_whiteout()) {
 	  osd->reply_op_error(op, -ENOENT);
 	} else {
@@ -1267,7 +1268,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
     return;
   }
 
-  // any SNAPDIR op needs to hvae all clones present.  treat them as
+  // any SNAPDIR op needs to have all clones present.  treat them as
   // src_obc's so that we track references properly and clean up later.
   if (m->get_snapid() == CEPH_SNAPDIR) {
     for (vector<snapid_t>::iterator p = obc->ssc->snapset.clones.begin();
@@ -1286,9 +1287,8 @@ void ReplicatedPG::do_op(OpRequestRef op)
 	  // missing the specific snap we need; requeue and wait.
 	  wait_for_missing_object(wait_oid, op);
 	} else if (r) {
-	  osd->reply_op_error(op, r);
-	} else if (sobc->obs.oi.is_whiteout()) {
-	  osd->reply_op_error(op, -ENOENT);
+	  if (!maybe_handle_cache(op, sobc, r, wait_oid, true))
+	    osd->reply_op_error(op, r);
 	} else {
 	  dout(10) << " clone_oid " << clone_oid << " obc " << sobc << dendl;
 	  src_obc[clone_oid] = sobc;
@@ -1348,7 +1348,8 @@ void ReplicatedPG::do_op(OpRequestRef op)
 }
 
 bool ReplicatedPG::maybe_handle_cache(OpRequestRef op, ObjectContextRef obc,
-                                      int r, const hobject_t& missing_oid)
+                                      int r, const hobject_t& missing_oid,
+				      bool must_promote)
 {
   if (obc)
     dout(25) << __func__ << " " << obc->obs.oi << " "
@@ -1371,7 +1372,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op, ObjectContextRef obc,
     return false;
   }
 
-  switch(pool.info.cache_mode) {
+  switch (pool.info.cache_mode) {
   case pg_pool_t::CACHEMODE_NONE:
     return false;
 
@@ -1379,7 +1380,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op, ObjectContextRef obc,
     if (obc.get() && obc->obs.exists) {
       return false;
     }
-    if (can_skip_promote(op, obc)) {
+    if (!must_promote && can_skip_promote(op, obc)) {
       return false;
     }
     promote_object(op, obc, missing_oid);
@@ -1389,17 +1390,21 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op, ObjectContextRef obc,
     if (obc.get() && obc->obs.exists) {
       return false;
     }
-    do_cache_redirect(op, obc);
+    if (must_promote)
+      promote_object(op, obc, missing_oid);
+    else
+      do_cache_redirect(op, obc);
     return true;
 
-  case pg_pool_t::CACHEMODE_READONLY: // TODO: clean this case up
+  case pg_pool_t::CACHEMODE_READONLY:
+    // TODO: clean this case up
+    if (obc.get() && obc->obs.exists) {
+      return false;
+    }
     if (!obc.get() && r == -ENOENT) {
       // we don't have the object and op's a read
       promote_object(op, obc, missing_oid);
       return true;
-    }
-    if (obc.get() && obc->obs.exists) { // we have the object locally
-      return false;
     }
     if (!r) { // it must be a write
       do_cache_redirect(op, obc);
@@ -4183,8 +4188,23 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 
   ObjectContextRef rollback_to;
   int ret = find_object_context(
-    hobject_t(soid.oid, soid.get_key(), snapid, soid.hash, info.pgid.pool(), soid.get_namespace()),
+    hobject_t(soid.oid, soid.get_key(), snapid, soid.hash, info.pgid.pool(),
+	      soid.get_namespace()),
     &rollback_to, false, &missing_oid);
+  if (ret == -EAGAIN) {
+    /* a different problem, like degraded pool
+     * with not-yet-restored object. We shouldn't have been able
+     * to get here; recovery should have completed first! */
+    assert(is_missing_object(missing_oid));
+    dout(20) << "_rollback_to attempted to roll back to a missing object "
+	     << missing_oid << " (requested snapid: ) " << snapid << dendl;
+    wait_for_missing_object(missing_oid, ctx->op);
+    return ret;
+  }
+  if (maybe_handle_cache(ctx->op, rollback_to, ret, missing_oid, true)) {
+    // promoting the rollback src, presumably
+    return -EAGAIN;
+  }
   if (ret == -ENOENT || (rollback_to && rollback_to->obs.oi.is_whiteout())) {
     // there's no snapshot here, or there's no object.
     // if there's no snapshot, we delete the object; otherwise, do nothing.
@@ -4197,14 +4217,6 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       _delete_head(ctx, false);
       ret = 0;
     }
-  } else if (-EAGAIN == ret) {
-    /* a different problem, like degraded pool
-     * with not-yet-restored object. We shouldn't have been able
-     * to get here; recovery should have completed first! */
-    assert(is_missing_object(missing_oid));
-    dout(20) << "_rollback_to attempted to roll back to a missing object "
-	     << missing_oid << " (requested snapid: ) " << snapid << dendl;
-    wait_for_missing_object(missing_oid, ctx->op);
   } else if (ret) {
     // ummm....huh? It *can't* return anything else at time of writing.
     assert(0 == "unexpected error code in _rollback_to");
