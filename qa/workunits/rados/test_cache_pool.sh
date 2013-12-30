@@ -83,7 +83,7 @@ ceph osd tier remove base_pool empty_cache
 ceph osd pool delete base_pool base_pool --yes-i-really-really-mean-it
 ceph osd pool delete empty_cache empty_cache --yes-i-really-really-mean-it
 ceph osd pool delete wrong_cache wrong_cache --yes-i-really-really-mean-it
-ceph osd pool delete partial_cache partial_cache --yes-i-really-really-mean-it
+ceph osd pool delete partial_wrong partial_wrong --yes-i-really-really-mean-it
 
 ## set of base, cache
 ceph osd pool create base 8
@@ -131,6 +131,6 @@ ceph osd tier cache-mode cache none
 ceph osd tier remove base cache
 
 ceph osd pool delete cache cache --yes-i-really-really-mean-it
-ceph osd pool delete cache base --yes-i-really-really-mean-it
+ceph osd pool delete base base --yes-i-really-really-mean-it
 
 echo OK
