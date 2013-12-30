@@ -5858,6 +5858,41 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
     movepos = true;
   }
 
+  Mutex uninline_flock("Clinet::_read_uninline_data flock");
+  Cond uninline_cond;
+  bool uninline_done = false;
+  int uninline_ret = 0;
+  Context *onuninline = NULL;
+
+  if (in->inline_version < CEPH_INLINE_NONE) {
+    if (!(have & CEPH_CAP_FILE_CACHE)) {
+      onuninline = new C_SafeCond(&uninline_flock,
+                                  &uninline_cond,
+                                  &uninline_done,
+                                  &uninline_ret);
+      uninline_data(in, onuninline);
+    } else {
+      uint32_t len = in->inline_data.length();
+
+      uint64_t endoff = offset + size;
+      if (endoff > in->size)
+        endoff = in->size;
+
+      if (offset < len) {
+        if (endoff <= len) {
+          bl->substr_of(in->inline_data, offset, endoff - offset);
+        } else {
+          bl->substr_of(in->inline_data, offset, len - offset);
+          bl->append_zero(endoff - len);
+        }
+      } else if (offset < endoff) {
+        bl->append_zero(endoff - offset);
+      }
+
+      goto success;
+    }
+  }
+
   if (!conf->client_debug_force_sync_read &&
       (cct->_conf->client_oc && (have & CEPH_CAP_FILE_CACHE))) {
 
@@ -5873,6 +5908,8 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
   if (r < 0) {
     goto done;
   }
+
+success:
 
   if (movepos) {
     // adjust fd pos
@@ -5895,6 +5932,24 @@ int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 
 done:
   // done!
+
+  if (onuninline) {
+    client_lock.Unlock();
+    uninline_flock.Lock();
+    while (!uninline_done)
+      uninline_cond.Wait(uninline_flock);
+    uninline_flock.Unlock();
+    client_lock.Lock();
+
+    if (uninline_ret >= 0 || uninline_ret == -ECANCELED) {
+      in->inline_data.clear();
+      in->inline_version = CEPH_INLINE_NONE;
+      mark_caps_dirty(in, CEPH_CAP_FILE_WR);
+      check_caps(in, false);
+    } else
+      r = uninline_ret;
+  }
+
   put_cap_ref(in, CEPH_CAP_FILE_RD);
   return r;
 }
