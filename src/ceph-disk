@@ -1834,6 +1834,18 @@ def main_activate(args):
                 activate_key_template=args.activate_key_template,
                 init=args.mark_init,
                 )
+
+            if args.mark_init == 'none':
+                command_check_call(
+                    [
+                    'ceph-osd',
+                        '--cluster={cluster}'.format(cluster=cluster),
+                        '--id={osd_id}'.format(osd_id=osd_id),
+                        '--osd-data={path}'.format(path=args.path),
+                        '--osd-journal={path}/journal'.format(path=args.path),
+                    ],
+                )
+
         else:
             raise Error('%s is not a directory or block device' % args.path)
 
