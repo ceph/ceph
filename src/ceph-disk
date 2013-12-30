@@ -1890,11 +1890,8 @@ def main_activate_journal(args):
             osd_id=osd_id,
             )
 
+    finally:
         activate_lock.release()
-
-    except:
-        activate_lock.release()
-        raise
 
 ###########################
 
