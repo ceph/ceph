@@ -6353,7 +6353,12 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
     return -ENOENT;
   }
 
-  put_snapset_context(ssc);
+  if (!obc->ssc) {
+    obc->ssc = ssc;
+  } else {
+    assert(obc->ssc == ssc);
+    put_snapset_context(ssc);
+  }
   ssc = 0;
 
   // clone
