@@ -357,6 +357,10 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
     return -ENOSYS;
   }
 
+  bool show_config = false;
+  bool show_config_value = false;
+  string show_config_value_arg;
+
   // In this function, don't change any parts of the configuration directly.
   // Instead, use set_val to set them. This will allow us to send the proper
   // observer notifications later.
@@ -373,24 +377,11 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
       _exit(0);
     }
     else if (ceph_argparse_flag(args, i, "--show_config", (char*)NULL)) {
-      expand_all_meta();
-      _show_config(&cout, NULL);
-      _exit(0);
+      show_config = true;
     }
     else if (ceph_argparse_witharg(args, i, &val, "--show_config_value", (char*)NULL)) {
-      char *buf = 0;
-      int r = _get_val(val.c_str(), &buf, -1);
-      if (r < 0) {
-	if (r == -ENOENT)
-	  std::cerr << "failed to get config option '" << val << "': option not found" << std::endl;
-	else
-	  std::cerr << "failed to get config option '" << val << "': " << strerror(-r) << std::endl;
-	_exit(1);
-      }
-      string s = buf;
-      expand_meta(s);
-      std::cout << s << std::endl;
-      _exit(0);
+      show_config_value = true;
+      show_config_value_arg = val;
     }
     else if (ceph_argparse_flag(args, i, "--foreground", "-f", (char*)NULL)) {
       set_val_or_die("daemonize", "false");
@@ -429,6 +420,31 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
       parse_option(args, i, NULL);
     }
   }
+
+  if (show_config) {
+    expand_all_meta();
+    _show_config(&cout, NULL);
+    _exit(0);
+  }
+
+  if (show_config_value) {
+    char *buf = 0;
+    int r = _get_val(show_config_value_arg.c_str(), &buf, -1);
+    if (r < 0) {
+      if (r == -ENOENT)
+	std::cerr << "failed to get config option '" <<
+	  show_config_value_arg << "': option not found" << std::endl;
+      else
+	std::cerr << "failed to get config option '" <<
+	  show_config_value_arg << "': " << strerror(-r) << std::endl;
+      _exit(1);
+    }
+    string s = buf;
+    expand_meta(s);
+    std::cout << s << std::endl;
+    _exit(0);
+  }
+
   return 0;
 }
 
