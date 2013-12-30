@@ -1019,7 +1019,7 @@ public:
     } else {
       snap = -1;
     }
-    std::cout << num << ": snap " << snap << std::endl;
+    std::cout << num << ": read oid " << oid << " snap " << snap << std::endl;
     done = 0;
     completion = context->rados.aio_create_completion((void *) this, &read_callback, 0);
 
@@ -1714,7 +1714,8 @@ public:
     } else {
       snap = -1;
     }
-    std::cout << num << ": snap " << snap << std::endl;
+    std::cout << num << ": is_dirty oid " << oid << " snap " << snap
+	      << std::endl;
 
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
@@ -1812,7 +1813,8 @@ public:
     // not being particularly specific here about knowing which
     // flushes are on the oldest clean snap and which ones are not.
     can_fail = !blocking || !context->snaps.empty();
-    cout << num << ":  snap " << snap << std::endl;
+    cout << num << ": " << (blocking ? "cache_flush" : "cache_try_flush")
+	 << " oid " << oid << " snap " << snap << std::endl;
 
     if (snap >= 0) {
       context->io_ctx.snap_set_read(context->snaps[snap]);
@@ -1909,7 +1911,7 @@ public:
     } else {
       snap = -1;
     }
-    cout << num << ":  snap " << snap << std::endl;
+    cout << num << ": cache_evict oid " << oid << " snap " << snap << std::endl;
 
     if (snap >= 0) {
       context->io_ctx.snap_set_read(context->snaps[snap]);
