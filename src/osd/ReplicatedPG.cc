@@ -1366,6 +1366,11 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op, ObjectContextRef obc,
     return false;
   }
 
+  if (r == -ENOENT && missing_oid == hobject_t()) {
+    // we know this object is logically absent (e.g., an undefined clone)
+    return false;
+  }
+
   switch(pool.info.cache_mode) {
   case pg_pool_t::CACHEMODE_NONE:
     return false;
