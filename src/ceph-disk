@@ -1719,84 +1719,84 @@ def activate(
     init,
     ):
 
-        check_osd_magic(path)
+    check_osd_magic(path)
 
-        ceph_fsid = read_one_line(path, 'ceph_fsid')
-        if ceph_fsid is None:
-            raise Error('No cluster uuid assigned.')
-        LOG.debug('Cluster uuid is %s', ceph_fsid)
+    ceph_fsid = read_one_line(path, 'ceph_fsid')
+    if ceph_fsid is None:
+        raise Error('No cluster uuid assigned.')
+    LOG.debug('Cluster uuid is %s', ceph_fsid)
 
-        cluster = find_cluster_by_uuid(ceph_fsid)
-        if cluster is None:
-            raise Error('No cluster conf found in /etc/ceph with fsid %s' % ceph_fsid)
-        LOG.debug('Cluster name is %s', cluster)
+    cluster = find_cluster_by_uuid(ceph_fsid)
+    if cluster is None:
+        raise Error('No cluster conf found in /etc/ceph with fsid %s' % ceph_fsid)
+    LOG.debug('Cluster name is %s', cluster)
 
-        fsid = read_one_line(path, 'fsid')
-        if fsid is None:
-            raise Error('No OSD uuid assigned.')
-        LOG.debug('OSD uuid is %s', fsid)
+    fsid = read_one_line(path, 'fsid')
+    if fsid is None:
+        raise Error('No OSD uuid assigned.')
+    LOG.debug('OSD uuid is %s', fsid)
 
-        keyring = activate_key_template.format(cluster=cluster)
+    keyring = activate_key_template.format(cluster=cluster)
 
-        osd_id = get_osd_id(path)
-        if osd_id is None:
-            osd_id = allocate_osd_id(
+    osd_id = get_osd_id(path)
+    if osd_id is None:
+        osd_id = allocate_osd_id(
+            cluster=cluster,
+            fsid=fsid,
+            keyring=keyring,
+            )
+        write_one_line(path, 'whoami', osd_id)
+    LOG.debug('OSD id is %s', osd_id)
+
+    if not os.path.exists(os.path.join(path, 'ready')):
+        LOG.debug('Initializing OSD...')
+        # re-running mkfs is safe, so just run until it completes
+        mkfs(
+            path=path,
+            cluster=cluster,
+            osd_id=osd_id,
+            fsid=fsid,
+            keyring=keyring,
+            )
+
+    if init is not None:
+        if init == 'auto':
+            conf_val = get_conf(
                 cluster=cluster,
-                fsid=fsid,
-                keyring=keyring,
+                variable='init'
                 )
-            write_one_line(path, 'whoami', osd_id)
-        LOG.debug('OSD id is %s', osd_id)
-
-        if not os.path.exists(os.path.join(path, 'ready')):
-            LOG.debug('Initializing OSD...')
-            # re-running mkfs is safe, so just run until it completes
-            mkfs(
-                path=path,
-                cluster=cluster,
-                osd_id=osd_id,
-                fsid=fsid,
-                keyring=keyring,
-                )
-
-        if init is not None:
-            if init == 'auto':
-                conf_val = get_conf(
-                    cluster=cluster,
-                    variable='init'
-                    )
-                if conf_val is not None:
-                    init = conf_val
+            if conf_val is not None:
+                init = conf_val
+            else:
+                (distro, release, codename) = platform.dist()
+                if distro == 'Ubuntu':
+                    init = 'upstart'
                 else:
-                    (distro, release, codename) = platform.dist()
-                    if distro == 'Ubuntu':
-                        init = 'upstart'
-                    else:
-                        init = 'sysvinit'
+                    init = 'sysvinit'
 
-            LOG.debug('Marking with init system %s', init)
-            with file(os.path.join(path, init), 'w'):
-                pass
+        LOG.debug('Marking with init system %s', init)
+        with file(os.path.join(path, init), 'w'):
+            pass
 
-            # remove markers for others, just in case.
-            for other in INIT_SYSTEMS:
-                if other != init:
-                    try:
-                        os.unlink(os.path.join(path, other))
-                    except OSError:
-                        pass
+        # remove markers for others, just in case.
+        for other in INIT_SYSTEMS:
+            if other != init:
+                try:
+                    os.unlink(os.path.join(path, other))
+                except OSError:
+                    pass
 
-        if not os.path.exists(os.path.join(path, 'active')):
-            LOG.debug('Authorizing OSD key...')
-            auth_key(
-                path=path,
-                cluster=cluster,
-                osd_id=osd_id,
-                keyring=keyring,
-                )
-            write_one_line(path, 'active', 'ok')
-        LOG.debug('%s osd.%s data dir is ready at %s', cluster, osd_id, path)
-        return (osd_id, cluster)
+    if not os.path.exists(os.path.join(path, 'active')):
+        LOG.debug('Authorizing OSD key...')
+        auth_key(
+            path=path,
+            cluster=cluster,
+            osd_id=osd_id,
+            keyring=keyring,
+            )
+        write_one_line(path, 'active', 'ok')
+    LOG.debug('%s osd.%s data dir is ready at %s', cluster, osd_id, path)
+    return (osd_id, cluster)
 
 
 def main_activate(args):
