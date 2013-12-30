@@ -1719,7 +1719,6 @@ def activate(
     init,
     ):
 
-    try:
         check_osd_magic(path)
 
         ceph_fsid = read_one_line(path, 'ceph_fsid')
@@ -1798,9 +1797,6 @@ def activate(
             write_one_line(path, 'active', 'ok')
         LOG.debug('%s osd.%s data dir is ready at %s', cluster, osd_id, path)
         return (osd_id, cluster)
-    except:
-        raise
-
 
 
 def main_activate(args):
