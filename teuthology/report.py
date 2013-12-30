@@ -18,13 +18,16 @@ log = logging.getLogger(__name__)
 
 
 def main(args):
+    server = args['--server']
+    if server:
+        config.results_server = server
     if args['--verbose']:
         teuthology.log.setLevel(logging.DEBUG)
 
     archive_base = os.path.abspath(os.path.expanduser(args['--archive']))
     save = not args['--no-save']
-    reporter = ResultsReporter(archive_base, base_uri=args['--server'],
-                               save=save, refresh=args['--refresh'])
+    reporter = ResultsReporter(archive_base, save=save,
+                               refresh=args['--refresh'])
     run = args['--run']
     job = args['--job']
     dead = args['--dead']
@@ -52,14 +55,13 @@ class ResultsSerializer(object):
     def __init__(self, archive_base):
         self.archive_base = archive_base
 
-    def json_for_job(self, run_name, job_id, pretty=False):
+    def job_info(self, run_name, job_id, pretty=False):
         """
-        Given a run name and job id, merge the job's YAML files together to
-        create a JSON object.
+        Given a run name and job id, merge the job's YAML files together.
 
         :param run_name: The name of the run.
         :param job_id:   The job's id.
-        :returns:        A JSON object.
+        :returns:        A dict.
         """
         job_archive_dir = os.path.join(self.archive_base,
                                        run_name,
@@ -77,6 +79,18 @@ class ResultsSerializer(object):
         if 'job_id' not in job_info:
             job_info['job_id'] = job_id
 
+        return job_info
+
+    def json_for_job(self, run_name, job_id, pretty=False):
+        """
+        Given a run name and job id, merge the job's YAML files together to
+        create a JSON object.
+
+        :param run_name: The name of the run.
+        :param job_id:   The job's id.
+        :returns:        A JSON object.
+        """
+        job_info = self.job_info(run_name, job_id, pretty)
         if pretty:
             job_json = json.dumps(job_info, sort_keys=True, indent=4)
         else:
@@ -213,19 +227,20 @@ class ResultsReporter(object):
         for job_id in job_ids:
             self.report_job(run_name, job_id)
 
-    def report_job(self, run_name, job_id, job_json=None):
+    def report_job(self, run_name, job_id, job_info=None):
         """
         Report a single job to the results server.
 
         :param run_name: The name of the run. The run must already exist.
         :param job_id:   The job's id
-        :param job_json: The job's JSON object. Optional - if not present, we
+        :param job_info: The job's info dict. Optional - if not present, we
                          look at the archive.
         """
         run_uri = "{base}/runs/{name}/jobs/".format(
             base=self.base_uri, name=run_name,)
-        if job_json is None:
-            job_json = self.serializer.json_for_job(run_name, job_id)
+        if job_info is None:
+            job_info = self.serializer.job_info(run_name, job_id)
+        job_json = json.dumps(job_info)
         response = requests.post(run_uri, job_json)
 
         if response.status_code == 200:
@@ -235,7 +250,6 @@ class ResultsReporter(object):
         if msg and msg.endswith('already exists'):
             job_uri = os.path.join(run_uri, job_id, '')
             response = requests.put(job_uri, job_json)
-            response.raise_for_status()
         elif msg:
             log.error(
                 "POST to {uri} failed with status {status}: {msg}".format(
@@ -243,6 +257,7 @@ class ResultsReporter(object):
                     status=response.status_code,
                     msg=msg,
                 ))
+        response.raise_for_status()
 
         return job_id
 
@@ -283,9 +298,8 @@ def push_job_info(run_name, job_id, job_info, base_uri=None):
     """
     # We are using archive_base='' here because we KNOW the serializer isn't
     # needed for this codepath.
-    job_json = json.dumps(job_info)
     reporter = ResultsReporter(archive_base='')
-    reporter.report_job(run_name, job_id, job_json)
+    reporter.report_job(run_name, job_id, job_info)
 
 
 def try_push_job_info(job_config, extra_info=None):
