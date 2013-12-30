@@ -55,7 +55,8 @@ AM_COMMON_CPPFLAGS = \
 	-D__STDC_FORMAT_MACROS \
 	-D_GNU_SOURCE \
 	-DCEPH_LIBDIR=\"${libdir}\" \
-	-DCEPH_PKGLIBDIR=\"${pkglibdir}\"
+	-DCEPH_PKGLIBDIR=\"${pkglibdir}\" \
+	-DGTEST_HAS_TR1_TUPLE=0
 
 AM_COMMON_CFLAGS = \
 	-Wall \
