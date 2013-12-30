@@ -913,19 +913,34 @@ static int do_bench_write(librbd::Image& image, uint64_t io_size,
   uint64_t size = 0;
   image.size(&size);
 
+  vector<uint64_t> thread_offset;
+  uint64_t i;
+  uint64_t start_pos;
+
+  // disturb all thread's offset, used by seq write
+  for (i = 0; i < io_threads; i++) {
+    start_pos = (rand() % (size / io_size)) * io_size;
+    thread_offset.push_back(start_pos);
+  }
+
   printf("  SEC       OPS   OPS/SEC   BYTES/SEC\n");
   uint64_t off;
   for (off = 0; off < io_bytes; off += io_size) {
     b.wait_for(io_threads - 1);
-    uint64_t i = 0;
-    uint64_t real_off = off;
-    if (pattern == "rand") {
-      real_off = (rand() % (size / io_size)) * io_size;
-    }
-    while (i < io_threads &&
-	   b.start_write(io_threads, real_off, io_size, bl)) {
+    i = 0;
+    while (i < io_threads && off < io_bytes &&
+	   b.start_write(io_threads, thread_offset[i], io_size, bl)) {
       ++i;
       ++ios;
+      off += io_size;
+
+      if (pattern == "rand") {
+        thread_offset[i] = (rand() % (size / io_size)) * io_size;
+      } else {
+        thread_offset[i] += io_size;
+        if (thread_offset[i] + io_size > size)
+          thread_offset[i] = 0;
+      }
     }
 
     utime_t now = ceph_clock_now(NULL);
