@@ -49,6 +49,7 @@ public:
       stringstream oid;
       oid << m_op;
       cout << m_op << ": write initial oid " << oid.str() << std::endl;
+      context.oid_not_flushing.insert(oid.str());
       return new WriteOp(m_op, &context, oid.str());
     } else if (m_op >= m_ops) {
       return NULL;
@@ -178,7 +179,7 @@ private:
 
     case TEST_OP_IS_DIRTY:
       {
-	oid = *(rand_choose(context.oid_not_in_use));
+	oid = *(rand_choose(context.oid_not_flushing));
 	cout << "is_dirty oid " << oid << std::endl;
 	return new IsDirtyOp(m_op, &context, oid, m_stats);
       }
