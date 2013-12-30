@@ -1,6 +1,5 @@
 libos_la_SOURCES = \
 	os/chain_xattr.cc \
-	os/BtrfsFileStoreBackend.cc \
 	os/DBObjectMap.cc \
 	os/FileJournal.cc \
 	os/FileStore.cc \
@@ -14,8 +13,16 @@ libos_la_SOURCES = \
 	os/MemStore.cc \
 	os/ObjectStore.cc \
 	os/WBThrottle.cc \
-	os/ZFSFileStoreBackend.cc \
 	common/TrackedOp.cc
+
+if LINUX
+libos_la_SOURCES += os/BtrfsFileStoreBackend.cc
+endif
+
+if WITH_LIBZFS
+libos_la_SOURCES += os/ZFSFileStoreBackend.cc
+endif
+
 noinst_LTLIBRARIES += libos.la
 
 noinst_HEADERS += \
