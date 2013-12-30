@@ -1,5 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 
+#include "acconfig.h"
+
 #include <boost/scoped_ptr.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/program_options/option.hpp>
@@ -190,6 +192,16 @@ int main(int argc, char **argv)
       new WeightedDist<Bencher::OpType>(rng, ops)
       );
   }
+
+#ifndef HAVE_SYNC_FILE_RANGE
+  if (vm["sync-file-range"].as<bool>())
+    std::cerr << "Warning: sync_file_range(2) not supported!" << std::endl;
+#endif
+
+#ifndef HAVE_POSIX_FADVISE
+  if (vm["fadvise"].as<bool>())
+    std::cerr << "Warning: posix_fadvise(2) not supported!" << std::endl;
+#endif
 
   Bencher bencher(
     gen,

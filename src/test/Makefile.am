@@ -167,11 +167,13 @@ ceph_omapbench_SOURCES = test/omap_bench.cc
 ceph_omapbench_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_omapbench
 
+if LINUX
 ceph_kvstorebench_SOURCES = \
 	test/kv_store_bench.cc \
 	key_value_store/kv_flat_btree_async.cc
 ceph_kvstorebench_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_kvstorebench
+endif
 
 ceph_multi_stress_watch_SOURCES = \
 	test/multi_stress_watch.cc \
@@ -650,10 +652,12 @@ ceph_test_librbd_LDADD = $(LIBRBD) $(LIBRADOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_librbd
 
+if LINUX
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.c
 ceph_test_librbd_fsx_LDADD = $(LIBRBD) $(LIBRADOS) -lm
 ceph_test_librbd_fsx_CFLAGS = ${AM_CFLAGS} -Wno-format
 bin_DEBUGPROGRAMS += ceph_test_librbd_fsx
+endif
 
 ceph_test_cls_rbd_SOURCES = \
 	test/cls_rbd/test_cls_rbd.cc \
@@ -822,10 +826,12 @@ ceph_test_libcephfs_LDADD = $(LIBCEPHFS) $(UNITTEST_LDADD)
 ceph_test_libcephfs_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_libcephfs
 
+if LINUX
 ceph_test_filestore_SOURCES = test/filestore/store_test.cc
 ceph_test_filestore_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_filestore_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_filestore
+endif
 
 ceph_test_filestore_workloadgen_SOURCES = \
 	test/filestore/workload_generator.cc \
