@@ -236,12 +236,15 @@ class ResultsReporter(object):
         :param job_info: The job's info dict. Optional - if not present, we
                          look at the archive.
         """
+        if job_info is not None and not isinstance(job_info, dict):
+            raise TypeError("job_info must be a dict")
         run_uri = "{base}/runs/{name}/jobs/".format(
             base=self.base_uri, name=run_name,)
         if job_info is None:
             job_info = self.serializer.job_info(run_name, job_id)
         job_json = json.dumps(job_info)
-        response = requests.post(run_uri, job_json)
+        headers = {'content-type': 'application/json'}
+        response = requests.post(run_uri, data=job_json, headers=headers)
 
         if response.status_code == 200:
             return job_id
@@ -249,7 +252,7 @@ class ResultsReporter(object):
         msg = response.json.get('message', '')
         if msg and msg.endswith('already exists'):
             job_uri = os.path.join(run_uri, job_id, '')
-            response = requests.put(job_uri, job_json)
+            response = requests.put(job_uri, data=job_json, headers=headers)
         elif msg:
             log.error(
                 "POST to {uri} failed with status {status}: {msg}".format(
