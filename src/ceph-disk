@@ -1832,9 +1832,8 @@ def main_activate(args):
             cluster=cluster,
             osd_id=osd_id,
             )
-        activate_lock.release()
 
-    except:
+    finally:
         activate_lock.release()
 
 
