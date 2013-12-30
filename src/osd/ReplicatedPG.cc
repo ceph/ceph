@@ -5144,7 +5144,29 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     tctx->delta_stats.num_bytes += results->object_size;
     tctx->new_obs.oi.category = results->category;
     tctx->new_obs.oi.user_version = results->user_version;
-    tctx->new_obs.oi.snaps = results->snaps;
+
+    if (soid.snap != CEPH_NOSNAP) {
+      if (!results->snaps.empty()) {
+	tctx->new_obs.oi.snaps = results->snaps;
+      } else {
+	// we must have read "snap" content from the head object in
+	// the base pool.  use snap_seq to construct what snaps should
+	// be for this clone (what is was before we evicted the clean
+	// clone from this pool, and what it will be when we flush and
+	// the clone eventually happens in the base pool).
+	SnapSet& snapset = obc->ssc->snapset;
+	vector<snapid_t>::iterator p = snapset.snaps.begin();
+	while (p != snapset.snaps.end() && *p > soid.snap)
+	  ++p;
+	assert(p != snapset.snaps.end() && *p == soid.snap);
+	do {
+	  tctx->new_obs.oi.snaps.push_back(*p);
+	  ++p;
+	} while (p != snapset.snaps.end() && *p > results->snap_seq);
+      }
+      dout(20) << __func__ << " snaps " << tctx->new_obs.oi.snaps << dendl;
+      assert(!tctx->new_obs.oi.snaps.empty());
+    }
   }
 
   if (results->mirror_snapset) {
