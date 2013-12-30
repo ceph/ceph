@@ -6220,6 +6220,43 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
 
   ldout(cct, 10) << " snaprealm " << *in->snaprealm << dendl;
 
+  Mutex uninline_flock("Clinet::_write_uninline_data flock");
+  Cond uninline_cond;
+  bool uninline_done = false;
+  int uninline_ret = 0;
+  Context *onuninline = NULL;
+
+  if (in->inline_version < CEPH_INLINE_NONE) {
+    if (endoff > cct->_conf->client_max_inline_size ||
+        endoff > CEPH_INLINE_MAX_SIZE ||
+        !(have & CEPH_CAP_FILE_BUFFER)) {
+      onuninline = new C_SafeCond(&uninline_flock,
+                                  &uninline_cond,
+                                  &uninline_done,
+                                  &uninline_ret);
+      uninline_data(in, onuninline);
+    } else {
+      get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+
+      uint32_t len = in->inline_data.length();
+
+      if (endoff < len)
+        in->inline_data.copy(endoff, len - endoff, bl);
+
+      if (offset < len)
+        in->inline_data.splice(offset, len - offset);
+      else if (offset > len)
+        in->inline_data.append_zero(offset - len);
+
+      in->inline_data.append(bl);
+      in->inline_version++;
+
+      put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+
+      goto success;
+    }
+  }
+
   if (cct->_conf->client_oc && (have & CEPH_CAP_FILE_BUFFER)) {
     // do buffered write
     if (!in->oset.dirty_or_tx)
@@ -6270,7 +6307,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   }
 
   // if we get here, write was successful, update client metadata
-
+success:
   // time
   lat = ceph_clock_now(cct);
   lat -= start;
@@ -6298,6 +6335,24 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   mark_caps_dirty(in, CEPH_CAP_FILE_WR);
 
 done:
+
+  if (onuninline) {
+    client_lock.Unlock();
+    uninline_flock.Lock();
+    while (!uninline_done)
+      uninline_cond.Wait(uninline_flock);
+    uninline_flock.Unlock();
+    client_lock.Lock();
+
+    if (uninline_ret >= 0 || uninline_ret == -ECANCELED) {
+      in->inline_data.clear();
+      in->inline_version = CEPH_INLINE_NONE;
+      mark_caps_dirty(in, CEPH_CAP_FILE_WR);
+      check_caps(in, false);
+    } else
+      r = uninline_ret;
+  }
+
   put_cap_ref(in, CEPH_CAP_FILE_WR);
   return r;
 }
