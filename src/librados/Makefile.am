@@ -9,7 +9,10 @@ librados_la_CXXFLAGS = ${AM_CXXFLAGS}
 
 LIBRADOS_DEPS += libcls_lock_client.la $(LIBOSDC) $(LIBCOMMON)
 librados_la_LIBADD = $(LIBRADOS_DEPS) $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(EXTRALIBS)
-librados_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:0:0 -export-symbols-regex '^rados_.*'
+librados_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:0:0
+if LINUX
+librados_la_LDFLAGS += -export-symbols-regex '^rados_.*'
+endif
 lib_LTLIBRARIES += librados.la
 
 noinst_HEADERS += \
