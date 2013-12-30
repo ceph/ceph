@@ -152,6 +152,8 @@ public:
   map<int, map<string,ObjectDesc> > pool_obj_cont;
   set<string> oid_in_use;
   set<string> oid_not_in_use;
+  set<string> oid_flushing;
+  set<string> oid_not_flushing;
   SharedPtrRegistry<int, int> snaps_in_use;
   int current_snap;
   string pool_name;
@@ -1824,6 +1826,8 @@ public:
     // leave object in unused list so that we race with other operations
     //context->oid_in_use.insert(oid);
     //context->oid_not_in_use.erase(oid);
+    context->oid_flushing.insert(oid);
+    context->oid_not_flushing.erase(oid);
     context->state_lock.Unlock();
 
     unsigned flags = librados::OPERATION_IGNORE_CACHE;
@@ -1849,6 +1853,8 @@ public:
     assert(completion->is_complete());
     //context->oid_in_use.erase(oid);
     //context->oid_not_in_use.insert(oid);
+    context->oid_flushing.erase(oid);
+    context->oid_not_flushing.insert(oid);
     int r = completion->get_return_value();
     cout << num << ":  got " << cpp_strerror(r) << std::endl;
     if (r == 0) {
