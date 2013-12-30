@@ -4288,6 +4288,8 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   dout(20) << "make_writeable " << soid << " snapset=" << ctx->snapset
 	   << "  snapc=" << snapc << dendl;;
   
+  bool was_dirty = ctx->new_obs.oi.is_dirty();
+
   if (ctx->new_obs.exists) {
     // we will mark the object dirty
     if (ctx->undirty) {
@@ -4342,6 +4344,8 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     snap_oi->prior_version = ctx->obs->oi.version;
     snap_oi->copy_user_bits(ctx->obs->oi);
     snap_oi->snaps = snaps;
+    if (was_dirty)
+      snap_oi->set_flag(object_info_t::FLAG_DIRTY);
     _make_clone(t, soid, coid, snap_oi);
     
     OSDriver::OSTransaction _t(osdriver.get_transaction(&(ctx->local_t)));
