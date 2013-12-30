@@ -514,7 +514,7 @@ def check_osd_id(osd_id):
     Ensures osd id is numeric.
     """
     if not re.match(r'^[0-9]+$', osd_id):
-        raise Error('osd id is not numeric')
+        raise Error('osd id is not numeric', osd_id)
 
 
 def allocate_osd_id(
@@ -1013,7 +1013,7 @@ def prepare_journal(
             raise Error('Journal is not a regular file', journal)
         return prepare_journal_dev(data, journal, journal_size, journal_uuid, journal_dm_keypath)
 
-    raise Error('Journal %s is neither a block device nor regular file', journal)
+    raise Error('Journal %s is neither a block device nor regular file' % journal)
 
 
 def adjust_symlink(target, path):
@@ -1808,7 +1808,7 @@ def main_activate(args):
     osd_id = None
 
     if not os.path.exists(args.path):
-        raise Error('%s does not exist', args.path)
+        raise Error('%s does not exist' % args.path)
 
     if is_suppressed(args.path):
         LOG.info('suppressed activate request on %s', args.path)
@@ -1830,7 +1830,7 @@ def main_activate(args):
                 init=args.mark_init,
                 )
         else:
-            raise Error('%s is not a directory or block device', args.path)
+            raise Error('%s is not a directory or block device' % args.path)
 
         start_daemon(
             cluster=cluster,
@@ -1846,11 +1846,11 @@ def main_activate(args):
 
 def get_journal_osd_uuid(path):
     if not os.path.exists(path):
-        raise Error('%s does not exist', path)
+        raise Error('%s does not exist' % path)
 
     mode = os.stat(path).st_mode
     if not stat.S_ISBLK(mode):
-        raise Error('%s is not a block device', path)
+        raise Error('%s is not a block device' % path)
 
     try:
         out = _check_output(
@@ -1874,7 +1874,7 @@ def get_journal_osd_uuid(path):
 
 def main_activate_journal(args):
     if not os.path.exists(args.dev):
-        raise Error('%s does not exist', args.dev)
+        raise Error('%s does not exist' % args.dev)
 
     cluster = None
     osd_id = None
