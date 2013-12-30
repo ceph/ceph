@@ -476,37 +476,37 @@ TEST(cls_rbd, protection_status)
   ASSERT_EQ(0, snapshot_add(&ioctx, "foo", 10, "snap1"));
   ASSERT_EQ(0, get_protection_status(&ioctx, "foo",
 				     10, &status));
-  ASSERT_EQ(RBD_PROTECTION_STATUS_UNPROTECTED, status);
+  ASSERT_EQ(+RBD_PROTECTION_STATUS_UNPROTECTED, status);
 
   ASSERT_EQ(0, set_protection_status(&ioctx, "foo",
 				     10, RBD_PROTECTION_STATUS_PROTECTED));
   ASSERT_EQ(0, get_protection_status(&ioctx, "foo",
 				     10, &status));
-  ASSERT_EQ(RBD_PROTECTION_STATUS_PROTECTED, status);
+  ASSERT_EQ(+RBD_PROTECTION_STATUS_PROTECTED, status);
   ASSERT_EQ(-EBUSY, snapshot_remove(&ioctx, "foo", 10));
 
   ASSERT_EQ(0, set_protection_status(&ioctx, "foo",
 				     10, RBD_PROTECTION_STATUS_UNPROTECTING));
   ASSERT_EQ(0, get_protection_status(&ioctx, "foo",
 				     10, &status));
-  ASSERT_EQ(RBD_PROTECTION_STATUS_UNPROTECTING, status);
+  ASSERT_EQ(+RBD_PROTECTION_STATUS_UNPROTECTING, status);
   ASSERT_EQ(-EBUSY, snapshot_remove(&ioctx, "foo", 10));
 
   ASSERT_EQ(-EINVAL, set_protection_status(&ioctx, "foo",
 					   10, RBD_PROTECTION_STATUS_LAST));
   ASSERT_EQ(0, get_protection_status(&ioctx, "foo",
 				     10, &status));
-  ASSERT_EQ(RBD_PROTECTION_STATUS_UNPROTECTING, status);
+  ASSERT_EQ(+RBD_PROTECTION_STATUS_UNPROTECTING, status);
 
   ASSERT_EQ(0, snapshot_add(&ioctx, "foo", 20, "snap2"));
   ASSERT_EQ(0, get_protection_status(&ioctx, "foo",
 				     20, &status));
-  ASSERT_EQ(RBD_PROTECTION_STATUS_UNPROTECTED, status);
+  ASSERT_EQ(+RBD_PROTECTION_STATUS_UNPROTECTED, status);
   ASSERT_EQ(0, set_protection_status(&ioctx, "foo",
 				     10, RBD_PROTECTION_STATUS_UNPROTECTED));
   ASSERT_EQ(0, get_protection_status(&ioctx, "foo",
 				     10, &status));
-  ASSERT_EQ(RBD_PROTECTION_STATUS_UNPROTECTED, status);
+  ASSERT_EQ(+RBD_PROTECTION_STATUS_UNPROTECTED, status);
 
   ASSERT_EQ(0, snapshot_remove(&ioctx, "foo", 10));
   ASSERT_EQ(0, snapshot_remove(&ioctx, "foo", 20));
