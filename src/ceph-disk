@@ -55,7 +55,6 @@ knew the GPT partition type.
 
 """
 
-
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 
 JOURNAL_UUID =         '45b0969e-9b03-4f30-b4c6-b4b80ceff106'
@@ -533,7 +532,7 @@ def allocate_osd_id(
     try:
         osd_id = _check_output(
             args=[
-                '/usr/bin/ceph',
+                'ceph',
                 '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', keyring,
@@ -585,7 +584,7 @@ def get_conf(cluster, variable):
     try:
         process = subprocess.Popen(
             args=[
-                '/usr/bin/ceph-conf',
+                'ceph-conf',
                 '--cluster={cluster}'.format(
                     cluster=cluster,
                     ),
@@ -1374,7 +1373,7 @@ def mkfs(
     monmap = os.path.join(path, 'activate.monmap')
     subprocess.check_call(
         args=[
-            '/usr/bin/ceph',
+            'ceph',
             '--cluster', cluster,
             '--name', 'client.bootstrap-osd',
             '--keyring', keyring,
@@ -1384,7 +1383,7 @@ def mkfs(
 
     subprocess.check_call(
         args=[
-            '/usr/bin/ceph-osd',
+            'ceph-osd',
             '--cluster', cluster,
             '--mkfs',
             '--mkkey',
@@ -1410,7 +1409,7 @@ def auth_key(
         # try dumpling+ cap scheme
         subprocess.check_call(
             args=[
-                '/usr/bin/ceph',
+                'ceph',
                 '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', keyring,
@@ -1425,7 +1424,7 @@ def auth_key(
             # try old cap scheme
             subprocess.check_call(
                 args=[
-                    '/usr/bin/ceph',
+                    'ceph',
                     '--cluster', cluster,
                     '--name', 'client.bootstrap-osd',
                     '--keyring', keyring,
@@ -2190,6 +2189,12 @@ def parse_args():
         action='store_true', default=None,
         help='be more verbose',
         )
+    parser.add_argument(
+        '--prepend-to-path',
+        metavar='PATH',
+        default='/usr/bin',
+        help='prepend PATH to $PATH for backward compatibility (default /usr/bin)',
+        )
     parser.set_defaults(
         # we want to hold on to this, for later
         prog=parser.prog,
@@ -2404,6 +2409,10 @@ def main():
     logging.basicConfig(
         level=loglevel,
         )
+
+    if args.prepend_to_path != '':
+        path = os.environ.get('PATH', '')
+        os.environ['PATH'] = args.prepend_to_path + ":" + path
 
     try:
         args.func(args)
