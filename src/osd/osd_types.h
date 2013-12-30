@@ -1964,6 +1964,8 @@ struct object_copy_data_t {
 
   /// which snaps we are defined for (if a snap and not the head)
   vector<snapid_t> snaps;
+  ///< latest snap seq for the object (if head)
+  snapid_t snap_seq;
 public:
   object_copy_data_t() : size((uint64_t)-1) {}
 

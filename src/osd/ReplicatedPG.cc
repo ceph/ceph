@@ -4027,14 +4027,14 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_COPY_GET_CLASSIC:
       ++ctx->num_read;
-      result = fill_in_copy_get(bp, osd_op, oi, true);
+      result = fill_in_copy_get(bp, osd_op, ctx->obc, true);
       if (result == -EINVAL)
 	goto fail;
       break;
 
     case CEPH_OSD_OP_COPY_GET:
       ++ctx->num_read;
-      result = fill_in_copy_get(bp, osd_op, oi, false);
+      result = fill_in_copy_get(bp, osd_op, ctx->obc, false);
       if (result == -EINVAL)
 	goto fail;
       break;
@@ -4752,8 +4752,9 @@ struct C_Copyfrom : public Context {
 };
 
 int ReplicatedPG::fill_in_copy_get(bufferlist::iterator& bp, OSDOp& osd_op,
-                                   object_info_t& oi, bool classic)
+                                   ObjectContextRef& obc, bool classic)
 {
+  object_info_t& oi = obc->obs.oi;
   hobject_t& soid = oi.soid;
   int result = 0;
   object_copy_cursor_t cursor;
@@ -4772,7 +4773,12 @@ int ReplicatedPG::fill_in_copy_get(bufferlist::iterator& bp, OSDOp& osd_op,
   reply_obj.size = oi.size;
   reply_obj.mtime = oi.mtime;
   reply_obj.category = oi.category;
-  reply_obj.snaps = oi.snaps;
+  if (soid.snap < CEPH_NOSNAP) {
+    reply_obj.snaps = oi.snaps;
+  } else {
+    assert(obc->ssc);
+    reply_obj.snap_seq = obc->ssc->snapset.seq;
+  }
 
   // attrs
   map<string,bufferlist>& out_attrs = reply_obj.attrs;
@@ -4920,7 +4926,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 	      &cop->results->object_size, &cop->results->mtime,
 	      &cop->results->category,
 	      &cop->attrs, &cop->data, &cop->omap_header, &cop->omap,
-	      &cop->results->snaps,
+	      &cop->results->snaps, &cop->results->snap_seq,
 	      &cop->rval);
 
   C_Copyfrom *fin = new C_Copyfrom(this, obc->obs.oi.soid,

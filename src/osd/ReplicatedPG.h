@@ -116,6 +116,7 @@ public:
     version_t user_version; ///< The copy source's user version
     bool should_requeue;  ///< op should be requeued on cancel
     vector<snapid_t> snaps;  ///< src's snaps (if clone)
+    snapid_t snap_seq;       ///< src's snap_seq (if head)
     librados::snap_set_t snapset; ///< src snapset (if head)
     bool mirror_snapset;
     CopyResults() : object_size(0), started_temp_obj(false),
@@ -965,7 +966,7 @@ protected:
   map<hobject_t, CopyOpRef> copy_ops;
 
   int fill_in_copy_get(bufferlist::iterator& bp, OSDOp& op,
-                       object_info_t& oi, bool classic);
+                       ObjectContextRef& obc, bool classic);
   /**
    * To copy an object, call start_copy.
    *
