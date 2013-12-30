@@ -309,7 +309,7 @@ TEST(cls_rbd, create)
   ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
 
   string oid = "testobj";
-  uint64_t size = 20 << 30;
+  uint64_t size = 20ULL << 30;
   uint64_t features = 0;
   uint8_t order = 22;
   string object_prefix = "foo";
