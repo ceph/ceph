@@ -96,6 +96,7 @@ INIT_SYSTEMS = [
     'sysvinit',
     'systemd',
     'auto',
+    'none',
     ]
 
 # Nuke the TERM variable to avoid confusing any subprocesses we call.
@@ -1664,28 +1665,30 @@ def activate_dir(
             )
 
     (osd_id, cluster) = activate(path, activate_key_template, init)
-    canonical = '/var/lib/ceph/osd/{cluster}-{osd_id}'.format(
-        cluster=cluster,
-        osd_id=osd_id)
-    if path != canonical:
-        # symlink it from the proper location
-        create = True
-        if os.path.lexists(canonical):
-            old = os.readlink(canonical)
-            if old != path:
-                LOG.debug('Removing old symlink %s -> %s', canonical, old)
+
+    if init not in ( None, 'none' ):
+        canonical = '/var/lib/ceph/osd/{cluster}-{osd_id}'.format(
+            cluster=cluster,
+            osd_id=osd_id)
+        if path != canonical:
+            # symlink it from the proper location
+            create = True
+            if os.path.lexists(canonical):
+                old = os.readlink(canonical)
+                if old != path:
+                    LOG.debug('Removing old symlink %s -> %s', canonical, old)
+                    try:
+                        os.unlink(canonical)
+                    except:
+                        raise Error('unable to remove old symlink', canonical)
+                else:
+                    create = False
+            if create:
+                LOG.debug('Creating symlink %s -> %s', canonical, path)
                 try:
-                    os.unlink(canonical)
+                    os.symlink(path, canonical)
                 except:
-                    raise Error('unable to remove old symlink %s', canonical)
-            else:
-                create = False
-        if create:
-            LOG.debug('Creating symlink %s -> %s', canonical, path)
-            try:
-                os.symlink(path, canonical)
-            except:
-                raise Error('unable to create symlink %s -> %s', canonical, path)
+                    raise Error('unable to create symlink %s -> %s' % (canonical, path))
 
     return (cluster, osd_id)
 
@@ -1764,7 +1767,7 @@ def activate(
             keyring=keyring,
             )
 
-    if init is not None:
+    if init not in ( None, 'none' ):
         if init == 'auto':
             conf_val = get_conf(
                 cluster=cluster,
@@ -1783,13 +1786,13 @@ def activate(
         with file(os.path.join(path, init), 'w'):
             pass
 
-        # remove markers for others, just in case.
-        for other in INIT_SYSTEMS:
-            if other != init:
-                try:
-                    os.unlink(os.path.join(path, other))
-                except OSError:
-                    pass
+    # remove markers for others, just in case.
+    for other in INIT_SYSTEMS:
+        if other != init:
+            try:
+                os.unlink(os.path.join(path, other))
+            except OSError:
+                pass
 
     if not os.path.exists(os.path.join(path, 'active')):
         LOG.debug('Authorizing OSD key...')
@@ -1824,6 +1827,7 @@ def main_activate(args):
                 activate_key_template=args.activate_key_template,
                 init=args.mark_init,
                 )
+
         elif stat.S_ISDIR(mode):
             (cluster, osd_id) = activate_dir(
                 path=args.path,
@@ -1833,9 +1837,11 @@ def main_activate(args):
         else:
             raise Error('%s is not a directory or block device' % args.path)
 
-        start_daemon(
-            cluster=cluster,
-            osd_id=osd_id,
+        if args.mark_init not in ( None, 'none' ):
+
+            start_daemon(
+                cluster=cluster,
+                osd_id=osd_id,
             )
 
     finally:
