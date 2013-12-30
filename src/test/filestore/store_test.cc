@@ -751,7 +751,7 @@ TEST_F(StoreTest, XattrTest) {
   ASSERT_EQ(r, -ENODATA);
 
   r = store->getattr(cid, hoid, "attr3", bp);
-  ASSERT_EQ(r, 0);
+  ASSERT_GE(r, 0);
   bufferlist bl2;
   bl2.push_back(bp);
   ASSERT_TRUE(bl2 == attrs["attr3"]);
