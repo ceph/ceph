@@ -801,7 +801,8 @@ protected:
    * @returns true if the caching code is handling the Op, false otherwise.
    */
   inline bool maybe_handle_cache(OpRequestRef op, ObjectContextRef obc, int r,
-				 const hobject_t& missing_oid);
+				 const hobject_t& missing_oid,
+				 bool must_promote = false);
   /**
    * This helper function tells the client to redirect their request elsewhere.
    */
