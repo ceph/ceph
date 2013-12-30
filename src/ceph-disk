@@ -1048,7 +1048,12 @@ def prepare_dir(
     journal_uuid,
     journal_dmcrypt = None,
     ):
-    LOG.debug('Preparing osd data dir %s', path)
+
+    if os.path.exists(os.path.join(path, 'magic')):
+        LOG.debug('Data dir %s already exists', path)
+        return
+    else:
+        LOG.debug('Preparing osd data dir %s', path)
 
     if osd_uuid is None:
         osd_uuid = str(uuid.uuid4())
@@ -1067,11 +1072,13 @@ def prepare_dir(
 
     write_one_line(path, 'ceph_fsid', cluster_uuid)
     write_one_line(path, 'fsid', osd_uuid)
-    write_one_line(path, 'magic', CEPH_OSD_ONDISK_MAGIC)
 
     if journal_uuid is not None:
         # i.e., journal is a tagged partition
         write_one_line(path, 'journal_uuid', journal_uuid)
+
+    write_one_line(path, 'magic', CEPH_OSD_ONDISK_MAGIC)
+
 
 def prepare_dev(
     data,
