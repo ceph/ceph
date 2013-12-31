@@ -100,6 +100,65 @@ int obtain_monmap(MonitorDBStore &store, bufferlist &bl)
   return -ENOENT;
 }
 
+int mon_data_exists(bool *r)
+{
+  string mon_data = g_conf->mon_data;
+  struct stat buf;
+  if (::stat(mon_data.c_str(), &buf)) {
+    if (errno == ENOENT) {
+      *r = false;
+    } else {
+      cerr << "stat(" << mon_data << ") " << strerror(errno) << std::endl;
+      return -errno;
+    }
+  } else {
+    *r = true;
+  }
+  return 0;
+}
+
+int mon_data_empty(bool *r)
+{
+  string mon_data = g_conf->mon_data;
+
+  DIR *dir = ::opendir(mon_data.c_str());
+  if (!dir) {
+    cerr << "opendir(" << mon_data << ") " << strerror(errno) << std::endl;
+    return -errno;
+  }
+  char buf[offsetof(struct dirent, d_name) + PATH_MAX + 1];
+
+  *r = false;
+  int code = 0;
+  struct dirent *de;
+  errno = 0;
+  while (!::readdir_r(dir, reinterpret_cast<struct dirent*>(buf), &de)) {
+    if (!de) {
+      if (errno) {
+	cerr << "readdir(" << mon_data << ") " << strerror(errno) << std::endl;
+	code = -errno;
+      }
+      break;
+    }
+    if (string(".") != de->d_name &&
+	string("..") != de->d_name) {
+      *r = true;
+      break;
+    }
+  }
+
+  ::closedir(dir);
+
+  return code;
+}
+
+int mon_exists(bool *r)
+{
+  int code = mon_data_exists(r);
+  if (code || *r == false)
+    return code;
+  return mon_data_empty(r);
+}
 
 void usage()
 {
@@ -188,8 +247,29 @@ int main(int argc, const char **argv)
     usage();
   }
 
+  bool exists;
+  if (mon_exists(&exists))
+    exit(1);
+
+  if (mkfs && exists) {
+    cerr << g_conf->mon_data << " already exists" << std::endl;
+    exit(0);
+  }
+
   // -- mkfs --
   if (mkfs) {
+
+    if (mon_data_exists(&exists))
+      exit(1);
+
+    if (!exists) {
+      if (::mkdir(g_conf->mon_data.c_str(), 0755)) {
+	cerr << "mkdir(" << g_conf->mon_data << ") : "
+	     << strerror(errno) << std::endl;
+	exit(1);
+      }
+    }
+
     // resolve public_network -> public_addr
     pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 
