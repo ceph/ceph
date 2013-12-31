@@ -472,10 +472,11 @@ In order for a queued task to be run, a teuthworker thread on
 On ``teuthology.front.sepia.ceph.com``, run ``ps aux | grep teuthology-worker``
 to view currently running tasks. If no processes are reading from the test
 version that you are running, additonal teuthworker tasks need to be started.
-To start these tasks: * copy your build tree to ``/home/teuthworker`` on
-``teuthology.front.sepia.ceph.com``.  * Give it a unique name (in this example,
-xxx) * start up some number of worker threads (as many as machines you are
-     testing with, there are 60 running for the default queue)::
+To start these tasks:
+
+* copy your build tree to ``/home/teuthworker`` on ``teuthology.front.sepia.ceph.com``.
+* Give it a unique name (in this example, xxx)
+* start up some number of worker threads (as many as machines you are testing with, there are 60 running for the default queue)::
 
     /home/virtualenv/bin/python
     /var/lib/teuthworker/xxx/virtualenv/bin/teuthworker
