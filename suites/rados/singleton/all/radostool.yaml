@@ -1,0 +1,16 @@
+roles:
+- - mon.a
+  - osd.0
+  - osd.1
+  - client.0
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - wrongly marked me down
+    - had wrong client addr
+    - had wrong cluster addr
+- workunit:
+    clients:
+      all:
+        - rados/test_rados_tool.sh
