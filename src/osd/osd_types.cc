@@ -30,6 +30,9 @@ const char *ceph_osd_flag_name(unsigned flag)
   case CEPH_OSD_FLAG_READ: return "read";
   case CEPH_OSD_FLAG_WRITE: return "write";
   case CEPH_OSD_FLAG_ORDERSNAP: return "ordersnap";
+  case CEPH_OSD_FLAG_PEERSTAT_OLD: return "peerstat_old";
+  case CEPH_OSD_FLAG_BALANCE_READS: return "balance_reads";
+  case CEPH_OSD_FLAG_PARALLELEXEC: return "parallelexec";
   case CEPH_OSD_FLAG_PGOP: return "pgop";
   case CEPH_OSD_FLAG_EXEC: return "exec";
   case CEPH_OSD_FLAG_EXEC_PUBLIC: return "exec_public";
