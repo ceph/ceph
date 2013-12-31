@@ -278,9 +278,9 @@ int SimpleMessenger::rebind(const set<int>& avoid_ports)
 {
   ldout(cct,1) << "rebind avoid " << avoid_ports << dendl;
   assert(did_bind);
-  int r = accepter.rebind(avoid_ports);
+  accepter.stop();
   mark_down_all();
-  return r;
+  return accepter.rebind(avoid_ports);
 }
 
 int SimpleMessenger::start()
