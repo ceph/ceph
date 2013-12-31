@@ -1760,8 +1760,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	     << cpp_strerror(ret) << std::endl;
 	return 1;
       }
+      ret = values.size();
       for (map<string, bufferlist>::const_iterator it = values.begin();
 	   it != values.end(); ++it) {
+	last_read = it->first;
 	// dump key in hex if it contains nonprintable characters
 	if (std::count_if(it->first.begin(), it->first.end(),
 	    (int (*)(int))isprint) < (int)it->first.length()) {
