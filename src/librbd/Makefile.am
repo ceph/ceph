@@ -10,7 +10,10 @@ librbd_la_LIBADD = \
 	$(LIBRADOS) $(LIBOSDC) \
 	libcls_rbd_client.la libcls_lock_client.la \
 	$(PTHREAD_LIBS) $(EXTRALIBS)
-librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '^rbd_.*'
+librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
+if LINUX
+librbd_la_LDFLAGS += -export-symbols-regex '^rbd_.*'
+endif
 lib_LTLIBRARIES += librbd.la
 
 noinst_HEADERS += \
