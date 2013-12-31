@@ -209,6 +209,8 @@ def run_with_watchdog(process, job_config):
         job_id=job_config['job_id'],
     )
 
+    # Sleep once outside of the loop to avoid double-posting jobs
+    time.sleep(teuth_config.watchdog_interval)
     while process.poll() is None:
         report.try_push_job_info(job_info, dict(status='running'))
         time.sleep(teuth_config.watchdog_interval)
