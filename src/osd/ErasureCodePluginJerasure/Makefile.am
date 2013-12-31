@@ -17,6 +17,9 @@ noinst_HEADERS += \
 libec_jerasure_la_CFLAGS = ${AM_CFLAGS} 
 libec_jerasure_la_CXXFLAGS= ${AM_CXXFLAGS} 
 libec_jerasure_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
-libec_jerasure_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__erasure_code_.*'
+libec_jerasure_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
+if LINUX
+libec_jerasure_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+endif
 
 erasure_codelib_LTLIBRARIES += libec_jerasure.la
