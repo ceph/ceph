@@ -1216,7 +1216,10 @@ def main_prepare(args):
     try:
         prepare_lock.acquire()
         if not os.path.exists(args.data):
-            raise Error('data path does not exist', args.data)
+            if args.data_dev:
+                raise Error('data path does not exist', args.data)
+            else:
+                os.mkdir(args.data)
 
         # in use?
         dmode = os.stat(args.data).st_mode
