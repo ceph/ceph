@@ -1,3 +1,12 @@
+v0.75
+~~~~~
+
+- 'rbd ls' on a pool which never held rbd images now exits with code
+  0. It outputs nothing in plain format, or an empty list in
+  non-plain format. This is consistent with the behavior for a pool
+  which used to hold images, but contains none. Scripts relying on
+  this behavior should be updated.
+
 v0.74
 ~~~~~
 
