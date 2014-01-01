@@ -653,7 +653,7 @@ def get_fsid(cluster):
 
     :return: The fsid or raises Error.
     """
-    fsid = get_conf(cluster=cluster, variable='fsid')
+    fsid = get_conf_with_default(cluster=cluster, variable='fsid')
     if fsid is None:
         raise Error('getting cluster uuid from configuration failed')
     return fsid.lower()
