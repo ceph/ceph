@@ -9126,8 +9126,8 @@ void ReplicatedPG::check_local()
       struct stat st;
       int r = osd->store->stat(coll, p->soid, &st);
       if (r != -ENOENT) {
-	dout(10) << "Object " << p->soid << " exists, but should have been "
-		 << "deleted" << dendl;
+	derr << __func__ << " " << p->soid << " exists, but should have been "
+	     << "deleted" << dendl;
 	assert(0 == "erroneously present object");
       }
     } else {
