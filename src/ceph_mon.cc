@@ -198,7 +198,27 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  global_init(NULL, args, CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, 0);
+  int flags = 0;
+  {
+    vector<const char*> args_copy = args;
+    std::string val;
+    for (std::vector<const char*>::iterator i = args_copy.begin();
+	 i != args_copy.end(); ) {
+      if (ceph_argparse_double_dash(args_copy, i)) {
+	break;
+      } else if (ceph_argparse_flag(args_copy, i, "--mkfs", (char*)NULL)) {
+	flags |= CINIT_FLAG_NO_DAEMON_ACTIONS;
+      } else if (ceph_argparse_witharg(args_copy, i, &val, "--inject_monmap", (char*)NULL)) {
+	flags |= CINIT_FLAG_NO_DAEMON_ACTIONS;
+      } else if (ceph_argparse_witharg(args_copy, i, &val, "--extract-monmap", (char*)NULL)) {
+	flags |= CINIT_FLAG_NO_DAEMON_ACTIONS;
+      } else {
+	++i;
+      }
+    }
+  }
+
+  global_init(NULL, args, CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, flags);
 
   uuid_d fsid;
   std::string val;
@@ -273,7 +293,7 @@ int main(int argc, const char **argv)
     // resolve public_network -> public_addr
     pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 
-    common_init_finish(g_ceph_context);
+    common_init_finish(g_ceph_context, flags);
 
     bufferlist monmapbl, osdmapbl;
     std::string error;
@@ -385,16 +405,18 @@ int main(int argc, const char **argv)
   // we fork early to prevent leveldb's environment static state from
   // screwing us over
   Preforker prefork;
-  if (g_conf->daemonize) {
-    global_init_prefork(g_ceph_context, 0);
-    prefork.prefork();
-    if (prefork.is_parent()) {
-      return prefork.parent_wait();
+  if (!(flags & CINIT_FLAG_NO_DAEMON_ACTIONS)) {
+    if (g_conf->daemonize) {
+      global_init_prefork(g_ceph_context, 0);
+      prefork.prefork();
+      if (prefork.is_parent()) {
+	return prefork.parent_wait();
+      }
+      global_init_postfork(g_ceph_context, 0);
     }
-    global_init_postfork(g_ceph_context, 0);
+    common_init_finish(g_ceph_context);
+    global_init_chdir(g_ceph_context);
   }
-  common_init_finish(g_ceph_context);
-  global_init_chdir(g_ceph_context);
 
   MonitorDBStore *store = new MonitorDBStore(g_conf->mon_data);
 
