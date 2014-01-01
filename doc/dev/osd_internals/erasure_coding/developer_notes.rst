@@ -35,7 +35,7 @@ objects that have the same name ( *NYAN* ) but reside on different
 OSDs. The order in which the chunks were created must be preserved and
 is stored as an attribute of the object ( shard_t ), in addition to its
 name. Chunk *1* contains *ABC* and is stored on *OSD5* while chunk *4*
-contains *XYY* and is stored on *OSD3*.
+contains *YXY* and is stored on *OSD3*.
 
 ::
  
