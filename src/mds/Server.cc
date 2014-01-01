@@ -2582,7 +2582,7 @@ public:
     // dirty inode, dn, dir
     newi->inode.version--;   // a bit hacky, see C_MDS_mknod_finish
     newi->mark_dirty(newi->inode.version+1, mdr->ls);
-    newi->_mark_dirty_parent(mdr->ls);
+    newi->_mark_dirty_parent(mdr->ls, true);
 
     mdr->apply();
 
@@ -2714,6 +2714,8 @@ void Server::handle_client_openc(MDRequest *mdr)
   dn->push_projected_linkage(in);
 
   in->inode.version = dn->pre_dirty();
+  if (layout.fl_pg_pool != mdcache->default_file_layout.fl_pg_pool)
+    in->inode.add_old_pool(mdcache->default_file_layout.fl_pg_pool);
   in->inode.update_backtrace();
   if (cmode & CEPH_FILE_MODE_WR) {
     in->inode.client_ranges[client].range.first = 0;
@@ -2733,7 +2735,7 @@ void Server::handle_client_openc(MDRequest *mdr)
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   journal_allocated_inos(mdr, &le->metablob);
   mdcache->predirty_journal_parents(mdr, &le->metablob, in, dn->get_dir(), PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  le->metablob.add_primary_dentry(dn, in, true, true);
+  le->metablob.add_primary_dentry(dn, in, true, true, true);
 
   // do the open
   mds->locker->issue_new_caps(in, cmode, mdr->session, realm, req->is_replay());
@@ -3893,7 +3895,7 @@ public:
     // a new version of hte inode since it's just been created)
     newi->inode.version--; 
     newi->mark_dirty(newi->inode.version + 1, mdr->ls);
-    newi->_mark_dirty_parent(mdr->ls);
+    newi->_mark_dirty_parent(mdr->ls, true);
 
     // mkdir?
     if (newi->inode.is_dir()) { 
@@ -3968,6 +3970,8 @@ void Server::handle_client_mknod(MDRequest *mdr)
     newi->inode.mode |= S_IFREG;
   newi->inode.version = dn->pre_dirty();
   newi->inode.rstat.rfiles = 1;
+  if (layout.fl_pg_pool != mdcache->default_file_layout.fl_pg_pool)
+    newi->inode.add_old_pool(mdcache->default_file_layout.fl_pg_pool);
   newi->inode.update_backtrace();
 
   // if the client created a _regular_ file via MKNOD, it's highly likely they'll
@@ -4009,7 +4013,7 @@ void Server::handle_client_mknod(MDRequest *mdr)
   
   mdcache->predirty_journal_parents(mdr, &le->metablob, newi, dn->get_dir(),
 				    PREDIRTY_PRIMARY|PREDIRTY_DIR, 1);
-  le->metablob.add_primary_dentry(dn, newi, true, true);
+  le->metablob.add_primary_dentry(dn, newi, true, true, true);
 
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(mds, mdr, dn, newi, follows));
 }
