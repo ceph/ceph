@@ -245,6 +245,8 @@ static int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool lflag,
 {
   std::vector<string> names;
   int r = rbd.list(io_ctx, names);
+  if (r == -ENOENT)
+    r = 0;
   if (r < 0)
     return r;
 
@@ -2555,15 +2557,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   case OPT_LIST:
     r = do_list(rbd, io_ctx, lflag, formatter.get());
     if (r < 0) {
-      switch (r) {
-      case -ENOENT:
-        cerr << "rbd: pool " << poolname << " doesn't contain rbd images"
-	     << std::endl;
-        break;
-      default:
-        cerr << "rbd: list: " << cpp_strerror(-r) << std::endl;
-      }
-      return EXIT_FAILURE;
+      cerr << "rbd: list: " << cpp_strerror(-r) << std::endl;
+      return -r;
     }
     break;
 

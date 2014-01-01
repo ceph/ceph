@@ -1,40 +1,8 @@
-v0.67
-~~~~~
+v0.67.8
+=======
 
-* The output of 'ceph status --format=json' or 'ceph -s --format=json'
-  has changed to return status information in a more structured and
-  usable format.
-
-* The 'ceph pg dump_stuck [threshold]' command used to require a
-  --threshold or -t prefix to the threshold argument, but now does
-  not.
-
-* Many more ceph commands now output formatted information; select
-  with '--format=<format>', where <format> can be 'json', 'json-pretty',
-  'xml', or 'xml-pretty'.
-
-* ceph-rest-api, a wrapper around ceph_rest_api.py, can be used to start
-  up a test single-threaded HTTP server that provides access to cluster
-  information and administration in very similar ways to the ceph
-  commandline tool.  ceph_rest_api.py can be used as a WSGI application
-  for deployment in a more-capable web server.  See ceph-rest-api.8
-  for more.
-
-* rgw copy object operation may return extra progress info during the
-  operation. At this point it will only happen when doing cross zone
-  copy operations. The S3 response will now return extra <Progress>
-  field under the <CopyResult> container. The Swift response will
-  now send the progress as a json array.
-
-* ceph-osd now requires a max fd limit of at least
-  filestore_wbthrottle_(xfs|btrfs)_inodes_hard_limit (5000 by default)
-  in order to accomodate the new write back throttle system.  upstart
-  now sets the fd limit to 32k.  sysvinit will set it to 32k by default
-  (still overrideable via max_open_files).
-
-* The 'ceph pg <pgid> ...' commands (like 'ceph pg <pgid> query') are
-  deprecated in favor of 'ceph tell <pgid> ...'.  This makes the
-  distinction between 'ceph pg <command> <pgid>' and 'ceph pg <pgid>
-  <command>' less awkward by making it clearer that the 'tell'
-  commands are talking to the OSD serving the placement group, not the
-  monitor.
+- 'rbd ls' on a pool which never held rbd images now exits with code
+  0. It outputs nothing in plain format, or an empty list in
+  non-plain format. This is consistent with the behavior for a pool
+  which used to hold images, but contains none. Scripts relying on
+  this behavior should be updated.
