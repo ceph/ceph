@@ -1426,7 +1426,7 @@ def auth_key(
                 ],
             )
     except subprocess.CalledProcessError as err:
-        if err.errno == errno.EACCES:
+        if err.returncode == errno.EACCES:
             # try old cap scheme
             subprocess.check_call(
                 args=[
