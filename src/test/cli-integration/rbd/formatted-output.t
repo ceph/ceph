@@ -1,3 +1,12 @@
+ls on empty pool never containing images
+========================================
+  $ rados -p rbd rm rbd_directory || true
+  $ rbd ls
+  $ rbd ls --format json
+  [] (no-eol)
+  $ rbd ls --format xml
+  <images></images> (no-eol)
+
 create
 =======
   $ rbd create -s 1024 foo
