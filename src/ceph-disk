@@ -547,7 +547,7 @@ def allocate_osd_id(
                 ],
             )
     except subprocess.CalledProcessError as e:
-        raise Error('ceph osd create failed', e)
+        raise Error('ceph osd create failed', e, e.output)
     osd_id = must_be_one_line(osd_id)
     check_osd_id(osd_id)
     return osd_id
