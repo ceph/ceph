@@ -25,8 +25,8 @@ class KeyRing : public KeyStore {
   map<EntityName, EntityAuth> keys;
 
   int set_modifier(const char *type, const char *val, EntityName& name, map<string, bufferlist>& caps);
-  void decode_plaintext(bufferlist::iterator& bl);
 public:
+  void decode_plaintext(bufferlist::iterator& bl);
   /* Create a KeyRing from a Ceph context.
    * We will use the configuration stored inside the context. */
   int from_ceph_context(CephContext *cct);
