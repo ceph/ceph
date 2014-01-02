@@ -555,6 +555,7 @@ protected:
   // for ordering writes
   std::tr1::shared_ptr<ObjectStore::Sequencer> osr;
 
+  void _update_calc_stats();
   void publish_stats_to_osd();
   void clear_publish_stats();
 
