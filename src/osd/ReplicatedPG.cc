@@ -7804,6 +7804,7 @@ bool ReplicatedBackend::handle_push_reply(int peer, PushReplyOp &op, PushOp *rep
       
       if (pushing[soid].empty()) {
 	get_parent()->on_global_recover(soid);
+	pushing.erase(soid);
       } else {
 	dout(10) << "pushed " << soid << ", still waiting for push ack from " 
 		 << pushing[soid].size() << " others" << dendl;
