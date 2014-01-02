@@ -15,7 +15,7 @@ Upgrading
 ~~~~~~~~~
 
 * We now default to the 'bobtail' CRUSH tunable values that are first supported
-  by Ceph clients in bobtail (v0.48) and Linux kernel version v3.9.  If you
+  by Ceph clients in bobtail (v0.56) and Linux kernel version v3.9.  If you
   plan to access a newly created Ceph cluster with an older kernel client, you
   should use 'ceph osd crush tunables legacy' to switch back to the legacy
   behavior.  Note that making that change will likely result in some data
