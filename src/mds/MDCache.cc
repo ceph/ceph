@@ -8499,7 +8499,7 @@ void MDCache::open_ino(inodeno_t ino, int64_t pool, Context* fin,
     info.want_replica = want_replica;
     info.want_xlocked = want_xlocked;
     info.tid = ++open_ino_last_tid;
-    info.pool = pool >= 0 ? pool : mds->mdsmap->get_first_data_pool();
+    info.pool = pool >= 0 ? pool : default_file_layout.fl_pg_pool;
     info.waiters.push_back(fin);
     do_open_ino(ino, info, 0);
   }
