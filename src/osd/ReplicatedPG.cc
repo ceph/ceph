@@ -3911,8 +3911,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -ENOENT;
 	  break;
 	}
+
+	bufferlist empty;
 	t.touch(coll, soid);
-	t.omap_clear(coll, soid);
+	t.omap_setheader(coll, soid, empty);
+	t.omap_rmkeyrange(coll, soid, string(), string());
 	ctx->delta_stats.num_wr++;
       }
       break;
