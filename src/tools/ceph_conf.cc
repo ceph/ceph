@@ -156,6 +156,7 @@ int main(int argc, const char **argv)
 
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
+  vector<const char*> orig_args = args;
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
 	      CINIT_FLAG_NO_DAEMON_ACTIONS);
@@ -202,6 +203,11 @@ int main(int argc, const char **argv)
 	lookup_key = *i++;
       } else {
 	cerr << "unable to parse option: '" << *i << "'" << std::endl;
+	cerr << "args:";
+	for (std::vector<const char *>::iterator ci = orig_args.begin(); ci != orig_args.end(); ++ci) {
+	  cerr << " '" << *ci << "'";
+	}
+	cerr << std::endl;
 	usage();
 	exit(1);
       }

@@ -64,22 +64,13 @@ void env_to_vec(std::vector<const char*>& args, const char *name)
   if (!p)
     return;
 
-  static char buf[1000];
-  int len = MIN(strlen(p), sizeof(buf)-1);  // bleh.
-  memcpy(buf, p, len);
-  buf[len] = 0;
-  //cout << "CEPH_ARGS='" << p << ";" << endl;
-
-  p = buf;
-  while (*p && p < buf + len) {
-    char *e = p;
-    while (*e && *e != ' ')
-      e++;
-    *e = 0;
-    args.push_back(p);
-    //cout << "arg " << p << std::endl;
-    p = e+1;
-  }
+  static vector<string> str_vec;
+  str_vec.clear();
+  get_str_vec(p, " ", str_vec);
+  for (vector<string>::iterator i = str_vec.begin();
+       i != str_vec.end();
+       i++)
+    args.push_back(i->c_str());
 }
 
 void argv_to_vec(int argc, const char **argv,
