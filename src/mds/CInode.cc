@@ -1035,7 +1035,7 @@ void CInode::store_backtrace(Context *fin)
   object_locator_t oloc(pool);
   Context *fin2 = new C_Inode_StoredBacktrace(this, inode.backtrace_version, fin);
 
-  if (!state_test(STATE_DIRTYPOOL)) {
+  if (!state_test(STATE_DIRTYPOOL) || inode.old_pools.empty()) {
     mdcache->mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
 				   0, NULL, fin2);
     return;
