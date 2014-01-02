@@ -8,5 +8,5 @@ roles:
 - - osd.3
   - osd.4
   - osd.5
-  - client.0
   - mon.c
+- - client.0
