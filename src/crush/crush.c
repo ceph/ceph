@@ -6,6 +6,7 @@
 # include <assert.h>
 # define kfree(x) do { if (x) free(x); } while (0)
 # define BUG_ON(x) assert(!(x))
+# include "include/int_types.h"
 #endif
 
 #include "crush.h"

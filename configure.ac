@@ -676,6 +676,14 @@ AC_CHECK_FUNC([pthread_spin_init],
 LIBS="$saved_LIBS"
 CFLAGS="$saved_CFLAGS"
 
+AC_CHECK_TYPES([int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t,
+  int64_t, uint64_t])
+
+dnl check for Linux types
+AC_CHECK_HEADERS([linux/types.h])
+AC_CHECK_TYPES([__u8, __s8, __u16, __s16, __u32, __s32, __u64, __s64, __le16,
+  __be16, __le32, __be32, __le64, __be64], [], [], [[#include <linux/types.h>]])
+
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
 #AC_C_CONST
