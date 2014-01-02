@@ -7,18 +7,31 @@
 #ifndef CEPH_BYTEORDER_H
 #define CEPH_BYTEORDER_H
 
-#if defined(__linux__)
-#include <endian.h>
-#elif defined(__FreeBSD__)
-#include <sys/endian.h>
-#else
-#error "Your platform is not yet supported."
+#include <sys/param.h>
+#include "int_types.h"
+
+#if defined(__APPLE__)
+# if __DARWIN_BYTE_ORDER == __DARWIN_LITTLE_ENDIAN
+#  define CEPH_LITTLE_ENDIAN
+# elif __DARWIN_BYTE_ORDER == __DARWIN_BIG_ENDIAN
+#  define CEPH_BIG_ENDIAN
+# endif
 #endif
 
 #if defined(__FreeBSD__)
-#define	__BYTE_ORDER _BYTE_ORDER
-#define	__BIG_ENDIAN _BIG_ENDIAN
-#define	__LITTLE_ENDIAN _LITTLE_ENDIAN
+# if _BYTE_ORDER == _LITTLE_ENDIAN
+#  define CEPH_LITTLE_ENDIAN
+# elif _BYTE_ORDER == _BIG_ENDIAN
+#  define CEPH_BIG_ENDIAN
+# endif
+#endif
+
+#if defined(__linux__)
+# if BYTE_ORDER == LITTLE_ENDIAN
+#  define CEPH_LITTLE_ENDIAN
+# elif BYTE_ORDER == BIG_ENDIAN
+#  define CEPH_BIG_ENDIAN
+# endif
 #endif
 
 static __inline__ __u16 swab16(__u16 val) 
@@ -44,24 +57,20 @@ static __inline__ uint64_t swab64(uint64_t val)
 	  ((val << 56)));
 }
 
-#if !defined(__BYTE_ORDER) || !defined(__BIG_ENDIAN) || !defined(__LITTLE_ENDIAN)
-#error "Endianess is unknown!"
-#endif
-
 // mswab == maybe swab (if not LE)
-#if __BYTE_ORDER == __BIG_ENDIAN
+#ifdef CEPH_BIG_ENDIAN
 # define mswab64(a) swab64(a)
 # define mswab32(a) swab32(a)
 # define mswab16(a) swab16(a)
-#else
-# if __BYTE_ORDER != __LITTLE_ENDIAN
-#  warning __BYTE_ORDER is not defined, assuming little endian
-# endif
+#elif defined(CEPH_LITTLE_ENDIAN)
 # define mswab64(a) (a)
 # define mswab32(a) (a)
 # define mswab16(a) (a)
+#else
+# error "Could not determine endianess"
 #endif
 
+#ifdef __cplusplus
 
 #define MAKE_LE_CLASS(bits)						\
   struct ceph_le##bits {							\
@@ -80,6 +89,8 @@ MAKE_LE_CLASS(64)
 MAKE_LE_CLASS(32)
 MAKE_LE_CLASS(16)
 #undef MAKE_LE_CLASS
+
+#endif /* __cplusplus */
 
 #define init_le64(x) { (__u64)mswab64(x) }
 #define init_le32(x) { (__u32)mswab32(x) }
