@@ -879,7 +879,7 @@ protected:
   bool can_skip_promote(OpRequestRef op, ObjectContextRef obc);
 
   int prepare_transaction(OpContext *ctx);
-  set<OpContext*> in_progress_async_reads;
+  list<pair<OpRequestRef, OpContext*> > in_progress_async_reads;
   void complete_read_ctx(int result, OpContext *ctx);
   
   // pg on-disk content

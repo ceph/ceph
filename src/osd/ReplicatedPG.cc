@@ -130,9 +130,9 @@ void ReplicatedPG::OpContext::finish_read(ReplicatedPG *pg)
   assert(inflightreads > 0);
   --inflightreads;
   if (async_reads_complete()) {
-    set<OpContext*>::iterator iter = pg->in_progress_async_reads.find(this);
-    assert(iter != pg->in_progress_async_reads.end());
-    pg->in_progress_async_reads.erase(iter);
+    assert(pg->in_progress_async_reads.size());
+    assert(pg->in_progress_async_reads.front().second == this);
+    pg->in_progress_async_reads.pop_front();
     pg->complete_read_ctx(async_read_result, this);
   }
 }
@@ -1668,7 +1668,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
     if (ctx->pending_async_reads.empty()) {
       complete_read_ctx(result, ctx);
     } else {
-      in_progress_async_reads.insert(ctx);
+      in_progress_async_reads.push_back(make_pair(op, ctx));
       ctx->start_async_reads(this);
     }
     return;
@@ -8649,10 +8649,12 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 
   context_registry_on_change();
 
-  for (set<OpContext*>::iterator i = in_progress_async_reads.begin();
+  for (list<pair<OpRequestRef, OpContext*> >::iterator i =
+         in_progress_async_reads.begin();
        i != in_progress_async_reads.end();
        in_progress_async_reads.erase(i++)) {
-    close_op_ctx(*i);
+    close_op_ctx(i->second);
+    requeue_op(i->first);
   }
 
   cancel_copy_ops(is_primary());
