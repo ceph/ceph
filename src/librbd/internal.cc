@@ -616,8 +616,11 @@ namespace librbd {
     if (r < 0)
       return r;
 
-    if (is_unprotected)
+    if (is_unprotected) {
+      lderr(ictx->cct) << "snap_unprotect: snapshot is already unprotected"
+		       << dendl;
       return -EINVAL;
+    }
 
     r = cls_client::set_protection_status(&ictx->md_ctx,
 					  ictx->header_oid,
