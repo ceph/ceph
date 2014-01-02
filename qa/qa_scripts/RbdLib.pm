@@ -81,8 +81,7 @@ our $SNAP_PROTECT_ERR = "Device or resource busy";
 our $SNAP_PROTECT_RM_ERR = "protected from removal";
 our $SNAP_PROTECT_ERR1 = "No such file or directory";
 our $SNAP_UNPROT_ERR   = "snap_unprotect: image must support layering";
-our $SNAP_UNPROT_ERR1   = "snap_unprotect: can't unprotect";
-#our $SNAP_UNPROTECT_ERR - bug # 4045  
+our $SNAP_UNPROT_ERR1   = "snap_unprotect: snapshot is already unprotected";
 our $SNAP_PROT_ERR     = "snap_protect: image must support layering";
 our $CLONE_UNPROTECT_ERR = "parent snapshot must be protected";
 our $CLONE_ARG_ERR     = "destination image name was not specified";
