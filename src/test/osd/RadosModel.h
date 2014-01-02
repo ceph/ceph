@@ -1813,6 +1813,9 @@ public:
     // not being particularly specific here about knowing which
     // flushes are on the oldest clean snap and which ones are not.
     can_fail = !blocking || !context->snaps.empty();
+    // FIXME: we can could fail if we've ever removed a snap due to
+    // the async snap trimming.
+    can_fail = true;
     cout << num << ": " << (blocking ? "cache_flush" : "cache_try_flush")
 	 << " oid " << oid << " snap " << snap << std::endl;
 
