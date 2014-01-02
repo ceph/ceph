@@ -18,6 +18,8 @@
 #include <sys/types.h>
 #endif
 
+#include "include/int_types.h"
+
 struct fiemap_extent {
 	__u64 fe_logical;  /* logical offset in bytes for the start of
 			    * the extent from the beginning of the file */
