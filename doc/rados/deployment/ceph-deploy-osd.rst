@@ -9,7 +9,7 @@ OSD and a path to the journal partition (i.e., this is the most common
 configuration, but you may configure your system to  your own needs).
 
 In Ceph v0.60 and later releases, Ceph supports ``dm-crypt`` on disk encryption.
-You may specify the ``--dm-crypt`` argument when preparing an OSD to tell
+You may specify the ``--dmcrypt`` argument when preparing an OSD to tell
 ``ceph-deploy`` that you want to use encryption. You may also specify the
 ``--dmcrypt-key-dir`` argument to specify the location of ``dm-crypt``
 encryption keys.
