@@ -99,7 +99,7 @@ For Debian and Ubuntu distributions, perform the following steps:
 
 #. Add the release key::
 
-	wget -q -O- 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc' | sudo apt-key add -
+	wget -q -O- 'https://raw.github.com/ceph/ceph/master/keys/release.asc' | sudo apt-key add -
 
 #. Add the Ceph packages to your repository. Replace ``{ceph-stable-release}``
    with a stable Ceph release (e.g., ``cuttlefish``, ``dumpling``, etc.). 
@@ -137,7 +137,7 @@ following steps:
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc 
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/release.asc
 
 
 #. Update your repository and install ``ceph-deploy``:: 

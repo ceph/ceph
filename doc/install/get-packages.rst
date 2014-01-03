@@ -82,13 +82,13 @@ APT
 
 To install the ``release.asc`` key, execute the following::
 
-	wget -q -O- 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc' | sudo apt-key add -
+	wget -q -O- 'https://raw.github.com/ceph/ceph/master/keys/release.asc' | sudo apt-key add -
 
 
 To install the ``autobuild.asc`` key, execute the following 
 (QA and developers only):: 
 
-	wget -q -O- 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc' | sudo apt-key add -
+	wget -q -O- 'https://raw.github.com/ceph/ceph/master/keys/autobuild.asc' | sudo apt-key add -
 
 
 RPM
@@ -96,12 +96,12 @@ RPM
 
 To install the ``release.asc`` key, execute the following::
 
-	sudo rpm --import 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc'
+	sudo rpm --import 'https://raw.github.com/ceph/ceph/master/keys/release.asc'
 
 To install the ``autobuild.asc`` key, execute the following
 (QA and developers only):: 
 
-	sudo rpm --import 'https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc'
+	sudo rpm --import 'https://raw.github.com/ceph/ceph/master/keys/autobuild.asc'
 
 
 
@@ -138,7 +138,7 @@ packages, so you must ensure that you set ``priority=2``. ::
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/release.asc
 
 	[ceph-extras-noarch]
 	name=Ceph Extras noarch
@@ -147,7 +147,7 @@ packages, so you must ensure that you set ``priority=2``. ::
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/release.asc
 
 	[ceph-extras-source]
 	name=Ceph Extras Sources
@@ -156,7 +156,7 @@ packages, so you must ensure that you set ``priority=2``. ::
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/release.asc
 
 
 Add Ceph
@@ -255,7 +255,7 @@ see which  distributions Ceph supports. ::
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/release.asc
 
 	[ceph-noarch]
 	name=Ceph noarch packages
@@ -263,7 +263,7 @@ see which  distributions Ceph supports. ::
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/release.asc
 
 	[ceph-source]
 	name=Ceph source packages
@@ -271,7 +271,7 @@ see which  distributions Ceph supports. ::
 	enabled=0
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/release.asc
 
 
 For development release packages, you may specify the repository
@@ -283,7 +283,7 @@ for development releases instead. ::
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/release.asc
 
 	[ceph-noarch]
 	name=Ceph noarch packages
@@ -291,7 +291,7 @@ for development releases instead. ::
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/release.asc
 
 	[ceph-source]
 	name=Ceph source packages
@@ -299,7 +299,7 @@ for development releases instead. ::
 	enabled=0
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/release.asc
 
 
 For specific packages, you may retrieve them by specifically downloading the
@@ -358,7 +358,7 @@ install. ::
 	enabled=0
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/autobuild.asc
 
 
 You may view http://gitbuilder.ceph.com directory to see which distributions 
@@ -400,7 +400,7 @@ http://gitbuilder.ceph.com directory to see which distributions Ceph supports.
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/autobuild.asc
 
 	[apache2-ceph-source]
 	name=Apache source packages for Ceph
@@ -409,7 +409,7 @@ http://gitbuilder.ceph.com directory to see which distributions Ceph supports.
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/autobuild.asc
 
 
 Repeat the forgoing process by creating a ``ceph-fastcgi.repo`` file. ::
@@ -421,7 +421,7 @@ Repeat the forgoing process by creating a ``ceph-fastcgi.repo`` file. ::
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/autobuild.asc
 
 	[fastcgi-ceph-noarch]
 	name=FastCGI noarch packages for Ceph
@@ -430,7 +430,7 @@ Repeat the forgoing process by creating a ``ceph-fastcgi.repo`` file. ::
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/autobuild.asc
 
 	[fastcgi-ceph-source]
 	name=FastCGI source packages for Ceph
@@ -439,7 +439,7 @@ Repeat the forgoing process by creating a ``ceph-fastcgi.repo`` file. ::
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/autobuild.asc
 
 
 Download Packages

@@ -68,7 +68,7 @@ To install QEMU, execute the following:
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/release.asc
 	
 	[ceph-qemu-noarch]
 	name=Ceph QEMU noarch
@@ -77,7 +77,7 @@ To install QEMU, execute the following:
 	priority=2	
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/release.asc
 	
 	[ceph-qemu-source]
 	name=Ceph QEMU Sources
@@ -86,7 +86,7 @@ To install QEMU, execute the following:
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/release.asc
 
 #. Update your repositories. :: 
 
