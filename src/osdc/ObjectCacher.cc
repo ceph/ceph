@@ -1457,6 +1457,12 @@ void ObjectCacher::flusher_entry()
 	ldout(cct, 10) << "flusher flushing aged dirty bh " << *bh << dendl;
 	bh_write(bh);
       }
+      if (!max) {
+	// back off the lock to avoid starving other threads
+	lock.Unlock();
+	lock.Lock();
+	continue;
+      }
     }
     if (flusher_stop)
       break;
