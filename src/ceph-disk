@@ -117,6 +117,8 @@ INIT_SYSTEMS = [
 
 STATEDIR = '/var/lib/ceph'
 
+SYSCONFDIR = '/etc/ceph'
+
 # Nuke the TERM variable to avoid confusing any subprocesses we call.
 # For example, libreadline will print weird control sequences for some
 # TERM values.
@@ -1716,9 +1718,9 @@ def find_cluster_by_uuid(_uuid):
     """
     _uuid = _uuid.lower()
     no_fsid = []
-    if not os.path.exists('/etc/ceph'):
+    if not os.path.exists(SYSCONFDIR):
         return None
-    for conf_file in os.listdir('/etc/ceph'):
+    for conf_file in os.listdir(SYSCONFDIR):
         if not conf_file.endswith('.conf'):
             continue
         cluster = conf_file[:-5]
@@ -1733,7 +1735,7 @@ def find_cluster_by_uuid(_uuid):
                 return cluster
     # be tolerant of /etc/ceph/ceph.conf without an fsid defined.
     if len(no_fsid) == 1 and no_fsid[0] == 'ceph':
-        LOG.warning('No fsid defined in /etc/ceph/ceph.conf; using anyway')
+        LOG.warning('No fsid defined in ' + SYSCONFDIR + '/ceph.conf; using anyway')
         return 'ceph'
     return None
 
@@ -1752,7 +1754,7 @@ def activate(
 
     cluster = find_cluster_by_uuid(ceph_fsid)
     if cluster is None:
-        raise Error('No cluster conf found in /etc/ceph with fsid %s' % ceph_fsid)
+        raise Error('No cluster conf found in ' + SYSCONFDIR + ' with fsid %s' % ceph_fsid)
     LOG.debug('Cluster name is %s', cluster)
 
     fsid = read_one_line(path, 'fsid')
@@ -2235,6 +2237,10 @@ def setup_statedir(dir):
     global SUPPRESS_PREFIX
     SUPPRESS_PREFIX = STATEDIR + '/tmp/suppress-activate.'
 
+def setup_sysconfdir(dir):
+    global SYSCONFDIR
+    SYSCONFDIR = dir
+
 def parse_args():
     parser = argparse.ArgumentParser(
         'ceph-disk',
@@ -2255,6 +2261,12 @@ def parse_args():
         metavar='PATH',
         default='/var/lib/ceph',
         help='directory in which ceph state is preserved (default /var/lib/ceph)',
+        )
+    parser.add_argument(
+        '--sysconfdir',
+        metavar='PATH',
+        default='/etc/ceph',
+        help='directory in which ceph configuration files are found (default /etc/ceph)',
         )
     parser.set_defaults(
         # we want to hold on to this, for later
@@ -2476,6 +2488,8 @@ def main():
         os.environ['PATH'] = args.prepend_to_path + ":" + path
 
     setup_statedir(args.statedir)
+    setup_sysconfdir(args.sysconfdir)
+
     try:
         args.func(args)
 
