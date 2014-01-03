@@ -132,7 +132,7 @@ public:
     unsigned flags;
     bool mirror_snapset;
 
-    CopyResults *results;
+    CopyResults results;
 
     tid_t objecter_tid;
     tid_t objecter_tid2;
@@ -156,15 +156,13 @@ public:
 	   const hobject_t& dest)
       : cb(cb_), obc(_obc), src(s), oloc(l), flags(f),
 	mirror_snapset(ms),
-        results(NULL),
 	objecter_tid(0),
 	objecter_tid2(0),
 	rval(-1),
 	temp_oid(dest)
     {
-      results = new CopyResults();
-      results->user_version = v;
-      results->mirror_snapset = mirror_snapset;
+      results.user_version = v;
+      results.mirror_snapset = mirror_snapset;
     }
   };
   typedef boost::shared_ptr<CopyOp> CopyOpRef;

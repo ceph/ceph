@@ -135,7 +135,6 @@ public:
       }
       ctx->pg->close_op_ctx(ctx);
     }
-    delete results;
   }
 
   bool is_temp_obj_used() {
@@ -1465,7 +1464,6 @@ public:
     ReplicatedPG::CopyResults *results_data = results.get<1>();
     int r = results.get<0>();
     pg->finish_promote(r, op, results_data, obc, temp_obj);
-    delete results_data;
   }
 };
 
@@ -4921,7 +4919,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
     // list snaps too.
     assert(cop->src.snap == CEPH_NOSNAP);
     ObjectOperation op;
-    op.list_snaps(&cop->results->snapset, NULL);
+    op.list_snaps(&cop->results.snapset, NULL);
     osd->objecter_lock.Lock();
     tid_t tid = osd->objecter->read(cop->src.oid, cop->oloc, op,
 				    CEPH_SNAPDIR, NULL,
@@ -4931,18 +4929,18 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
   }
 
   ObjectOperation op;
-  if (cop->results->user_version) {
-    op.assert_version(cop->results->user_version);
+  if (cop->results.user_version) {
+    op.assert_version(cop->results.user_version);
   } else {
     // we should learn the version after the first chunk, if we didn't know
     // it already!
     assert(cop->cursor.is_initial());
   }
   op.copy_get(&cop->cursor, cct->_conf->osd_copyfrom_max_chunk,
-	      &cop->results->object_size, &cop->results->mtime,
-	      &cop->results->category,
+	      &cop->results.object_size, &cop->results.mtime,
+	      &cop->results.category,
 	      &cop->attrs, &cop->data, &cop->omap_header, &cop->omap,
-	      &cop->results->snaps, &cop->results->snap_seq,
+	      &cop->results.snaps, &cop->results.snap_seq,
 	      &cop->rval);
 
   C_Copyfrom *fin = new C_Copyfrom(this, obc->obs.oi.soid,
@@ -4956,7 +4954,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 				  flags,
 				  gather.new_sub(),
 				  // discover the object version if we don't know it yet
-				  cop->results->user_version ? NULL : &cop->results->user_version);
+				  cop->results.user_version ? NULL : &cop->results.user_version);
   fin->tid = tid;
   cop->objecter_tid = tid;
   gather.activate();
@@ -5000,11 +4998,11 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
       _copy_some(cobc, cop);
       return;
     }
-    _build_finish_copy_transaction(cop, cop->results->final_tx);
+    _build_finish_copy_transaction(cop, cop->results.final_tx);
   }
 
   dout(20) << __func__ << " complete; committing" << dendl;
-  CopyCallbackResults results(r, cop->results);
+  CopyCallbackResults results(r, &cop->results);
   cop->cb->complete(results);
 
   copy_ops.erase(cobc->obs.oi.soid);
@@ -5208,7 +5206,7 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
 {
   dout(10) << __func__ << " " << cop->obc->obs.oi.soid
 	   << " from " << cop->src << " " << cop->oloc
-	   << " v" << cop->results->user_version << dendl;
+	   << " v" << cop->results.user_version << dendl;
 
   // cancel objecter op, if we can
   if (cop->objecter_tid) {
@@ -5223,8 +5221,8 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
   cop->obc->stop_block();
 
   kick_object_context_blocked(cop->obc);
-  cop->results->should_requeue = requeue;
-  CopyCallbackResults result(-ECANCELED, cop->results);
+  cop->results.should_requeue = requeue;
+  CopyCallbackResults result(-ECANCELED, &cop->results);
   cop->cb->complete(result);
 }
 
