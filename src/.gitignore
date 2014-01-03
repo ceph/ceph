@@ -66,6 +66,7 @@ Makefile
 /tags
 /testmsgr
 /test_*
+/test-suite.log
 /cls_test_*
 /unittest_*
 
