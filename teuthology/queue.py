@@ -109,9 +109,14 @@ def fetch_teuthology_branch(path, branch='master'):
         # check for the NO_CLOBBER variable.
         env = os.environ.copy()
         env['NO_CLOBBER'] = '1'
-        log.info(
-            subprocess.check_output(('./bootstrap'), cwd=path, env=env)
-        )
+        cmd = './bootstrap'
+        boot_proc = subprocess.Popen(cmd, shell=True, cwd=path, env=env,
+                                     stdout=subprocess.PIPE,
+                                     stderr=subprocess.STDOUT)
+        while boot_proc.poll() is None:
+            for line in boot_proc.stdout.readlines():
+                log.info(line)
+        log.info("Bootstrap exited with status %s", boot_proc.returncode)
 
     finally:
         lock.release()
