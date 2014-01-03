@@ -320,8 +320,8 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
   buffer::ptr::ptr(const ptr& p, unsigned o, unsigned l)
     : _raw(p._raw), _off(p._off + o), _len(l)
   {
-    assert(o+l <= p._len);
-    assert(_raw);
+    //assert(o+l <= p._len);
+    //assert(_raw);
     _raw->nref.inc();
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
@@ -375,8 +375,8 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
 
   bool buffer::ptr::at_buffer_tail() const { return _off + _len == _raw->len; }
 
-  const char *buffer::ptr::c_str() const { assert(_raw); return _raw->data + _off; }
-  char *buffer::ptr::c_str() { assert(_raw); return _raw->data + _off; }
+  const char *buffer::ptr::c_str() const { /*assert(_raw);*/ return _raw->data + _off; }
+  char *buffer::ptr::c_str() { /*assert(_raw);*/ return _raw->data + _off; }
 
   unsigned buffer::ptr::unused_tail_length() const
   {
@@ -387,24 +387,24 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
   }
   const char& buffer::ptr::operator[](unsigned n) const
   {
-    assert(_raw);
-    assert(n < _len);
+    //assert(_raw);
+    //assert(n < _len);
     return _raw->data[_off + n];
   }
   char& buffer::ptr::operator[](unsigned n)
   {
-    assert(_raw);
-    assert(n < _len);
+    //assert(_raw);
+    //assert(n < _len);
     return _raw->data[_off + n];
   }
 
-  const char *buffer::ptr::raw_c_str() const { assert(_raw); return _raw->data; }
-  unsigned buffer::ptr::raw_length() const { assert(_raw); return _raw->len; }
-  int buffer::ptr::raw_nref() const { assert(_raw); return _raw->nref.read(); }
+  const char *buffer::ptr::raw_c_str() const { /*assert(_raw);*/ return _raw->data; }
+  unsigned buffer::ptr::raw_length() const { /*assert(_raw);*/ return _raw->len; }
+  int buffer::ptr::raw_nref() const { /*assert(_raw);*/ return _raw->nref.read(); }
 
   unsigned buffer::ptr::wasted()
   {
-    assert(_raw);
+    //assert(_raw);
     return _raw->len - _len;
   }
 
@@ -436,25 +436,25 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
 
   void buffer::ptr::append(char c)
   {
-    assert(_raw);
-    assert(1 <= unused_tail_length());
+    //assert(_raw);
+    //assert(1 <= unused_tail_length());
     (c_str())[_len] = c;
     _len++;
   }
   
   void buffer::ptr::append(const char *p, unsigned l)
   {
-    assert(_raw);
-    assert(l <= unused_tail_length());
+    //assert(_raw);
+    //assert(l <= unused_tail_length());
     memcpy(c_str() + _len, p, l);
     _len += l;
   }
     
   void buffer::ptr::copy_in(unsigned o, unsigned l, const char *src)
   {
-    assert(_raw);
-    assert(o <= _len);
-    assert(o+l <= _len);
+    //assert(_raw);
+    //assert(o <= _len);
+    //assert(o+l <= _len);
     _raw->invalidate_crc();
     memcpy(c_str()+o, src, l);
   }
@@ -467,7 +467,7 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
 
   void buffer::ptr::zero(unsigned o, unsigned l)
   {
-    assert(o+l <= _len);
+    //assert(o+l <= _len);
     _raw->invalidate_crc();
     memset(c_str()+o, 0, l);
   }
@@ -516,7 +516,7 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
 	off -= d;
 	o += d;
       } else if (off > 0) {
-	assert(p != ls->begin());
+	//assert(p != ls->begin());
 	p--;
 	p_off = p->length();
       } else {
@@ -564,7 +564,7 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     while (len > 0) {
       if (p == ls->end())
 	throw end_of_buffer();
-      assert(p->length() > 0); 
+      //assert(p->length() > 0); 
       
       unsigned howmuch = p->length() - p_off;
       if (len < howmuch) howmuch = len;
@@ -626,7 +626,7 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
     while (1) {
       if (p == ls->end())
 	return;
-      assert(p->length() > 0);
+      //assert(p->length() > 0);
       
       unsigned howmuch = p->length() - p_off;
       const char *c_str = p->c_str();
@@ -716,7 +716,7 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
 	  ++b;
 	}
       }
-      assert(b == other._buffers.end());
+      //assert(b == other._buffers.end());
       return true;
     }
 
@@ -775,7 +775,7 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
 
   void buffer::list::zero(unsigned o, unsigned l)
   {
-    assert(o+l <= _len);
+    //assert(o+l <= _len);
     unsigned p = 0;
     for (std::list<ptr>::iterator it = _buffers.begin();
 	 it != _buffers.end();
@@ -967,7 +967,7 @@ void buffer::list::rebuild_page_aligned()
 
   void buffer::list::append(const ptr& bp, unsigned off, unsigned len)
   {
-    assert(len+off <= bp.length());
+    //assert(len+off <= bp.length());
     if (!_buffers.empty()) {
       ptr &l = _buffers.back();
       if (l.get_raw() == bp.get_raw() &&
@@ -1027,7 +1027,7 @@ void buffer::list::rebuild_page_aligned()
       }
       return (*p)[n];
     }
-    assert(0);
+    //assert(0);
   }
 
   /*
@@ -1062,7 +1062,7 @@ void buffer::list::rebuild_page_aligned()
       off -= (*curbuf).length();
       ++curbuf;
     }
-    assert(len == 0 || curbuf != other._buffers.end());
+    //assert(len == 0 || curbuf != other._buffers.end());
     
     while (len > 0) {
       // partial?
@@ -1090,13 +1090,13 @@ void buffer::list::rebuild_page_aligned()
     if (off >= length())
       throw end_of_buffer();
 
-    assert(len > 0);
+    //assert(len > 0);
     //cout << "splice off " << off << " len " << len << " ... mylen = " << length() << std::endl;
       
     // skip off
     std::list<ptr>::iterator curbuf = _buffers.begin();
     while (off > 0) {
-      assert(curbuf != _buffers.end());
+      //assert(curbuf != _buffers.end());
       if (off >= (*curbuf).length()) {
 	// skip this buffer
 	//cout << "off = " << off << " skipping over " << *curbuf << std::endl;
@@ -1183,7 +1183,7 @@ void buffer::list::decode_base64(buffer::list& e)
     hexdump(oss);
     throw buffer::malformed_input(oss.str().c_str());
   }
-  assert(l <= (int)bp.length());
+  //assert(l <= (int)bp.length());
   bp.set_length(l);
   push_back(bp);
 }
