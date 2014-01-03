@@ -98,7 +98,7 @@ To install Apache with 100-continue, execute the following steps:
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/autobuild.asc
 
 	[apache2-ceph-source]
 	name=Apache source packages for Ceph
@@ -107,7 +107,7 @@ To install Apache with 100-continue, execute the following steps:
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/autobuild.asc
 
 
 #. Add a ``ceph-fastcgi.repo`` file to ``/etc/yum.repos.d``. Replace 
@@ -121,7 +121,7 @@ To install Apache with 100-continue, execute the following steps:
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/autobuild.asc
 	
 	[fastcgi-ceph-noarch]
 	name=FastCGI noarch packages for Ceph
@@ -130,7 +130,7 @@ To install Apache with 100-continue, execute the following steps:
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/autobuild.asc
 
 	[fastcgi-ceph-source]
 	name=FastCGI source packages for Ceph
@@ -139,7 +139,7 @@ To install Apache with 100-continue, execute the following steps:
 	priority=2
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/autobuild.asc
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/autobuild.asc
 
 
 #. Update your repo and install Apache and FastCGI. :: 

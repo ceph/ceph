@@ -239,7 +239,7 @@ Then add a new ``ceph.repo`` repository entry with the following contents.
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc	
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/release.asc
 
 
 .. note:: Ensure you use the correct URL for your distribution. Check the
@@ -277,7 +277,7 @@ replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``, etc).
 	enabled=1
 	gpgcheck=1
 	type=rpm-md
-	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc	
+	gpgkey=https://raw.github.com/ceph/ceph/master/keys/release.asc
 
 
 .. note:: Ensure you use the correct URL for your distribution. Check the
