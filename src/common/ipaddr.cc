@@ -80,7 +80,7 @@ const struct sockaddr *find_ipv6_in_subnet(const struct ifaddrs *addrs,
     struct in6_addr *cur = &((struct sockaddr_in6*)addrs->ifa_addr)->sin6_addr;
     netmask_ipv6(cur, prefix_len, &temp);
 
-    if (memcmp(temp.s6_addr32, want.s6_addr32, sizeof(temp)) == 0)
+    if (IN6_ARE_ADDR_EQUAL(&temp, &want))
       return addrs->ifa_addr;
   }
 
