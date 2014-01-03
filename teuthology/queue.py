@@ -115,7 +115,7 @@ def fetch_teuthology_branch(path, branch='master'):
                                      stderr=subprocess.STDOUT)
         while boot_proc.poll() is None:
             for line in boot_proc.stdout.readlines():
-                log.info(line)
+                log.info(line.strip())
         log.info("Bootstrap exited with status %s", boot_proc.returncode)
 
     finally:
@@ -236,7 +236,7 @@ def run_with_watchdog(process, job_config):
                                            stderr=subprocess.STDOUT)
             while report_proc.poll() is None:
                 for line in report_proc.stdout.readlines():
-                    log.info(line)
+                    log.info(line.strip())
                 time.sleep(1)
             log.info("Reported results via the teuthology-report command")
         except Exception:
