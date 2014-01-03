@@ -289,7 +289,10 @@ def run_job(job_config, teuth_bin_path):
 
         if teuth_config.results_server:
             log.info("Running with watchdog")
-            run_with_watchdog(p, job_config)
+            try:
+                run_with_watchdog(p, job_config)
+            except Exception:
+                log.exception("run_with_watchdog had an unhandled exception")
         else:
             log.info("Running without watchdog")
             p.wait()
