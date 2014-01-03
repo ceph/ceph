@@ -25,9 +25,8 @@ export CEPH_ARGS="--conf /dev/null --auth-supported=none --mon-host=127.0.0.1"
 
 function run_mon() {
     ./ceph-mon --id a \
-        --public-addr=127.0.0.1 --mkfs --keyring /dev/null \
+        --public-addr=127.0.0.1 --mkfs \
         --fsid=$(uuidgen) --mon-data=$DIR --run-dir=$DIR
-    touch $DIR/keyring
 
     ./ceph-mon --id a \
         --chdir= \
