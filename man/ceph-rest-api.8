@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "CEPH-REST-API" "8" "December 09, 2013" "dev" "Ceph"
+.TH "CEPH-REST-API" "8" "January 03, 2014" "dev" "Ceph"
 .SH NAME
 ceph-rest-api \- ceph RESTlike administration server
 .
@@ -159,7 +159,11 @@ Human\-readable discovery of supported commands and parameters, along
 with a small description of each command, is provided when the requested
 path is incomplete/partially matching.  Requesting / will redirect to
 the value of  \fBrestapi base url\fP, and that path will give a full list
-of all known commands.  The command set is very similar to the commands
+of all known commands.
+For example, requesting \fBapi/vX.X/mon\fP will return the list of API calls for
+monitors \- \fBapi/vX.X/osd\fP will return the list of API calls for OSD and so on.
+.sp
+The command set is very similar to the commands
 supported by the \fBceph\fP tool.  One notable exception is that the
 \fBceph pg <pgid> <command>\fP style of commands is supported here
 as \fBtell/<pgid>/command?args\fP\&.
