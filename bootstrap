@@ -20,6 +20,9 @@ if [ -z "$NO_CLOBBER" ] || [ ! -e ./virtualenv ]; then
 
     # avoid pip bugs
     ./virtualenv/bin/pip install --upgrade pip
+
+    # work-around change in pip 1.5
+    ./virtualenv/bin/pip install setuptools --no-use-wheel --upgrade
 fi
 
 ./virtualenv/bin/pip install -r requirements.txt
