@@ -148,7 +148,7 @@ function test_activate_dir_magic() {
 
     mkdir -p $osd_data/fsid
     CEPH_ARGS="--fsid $uuid" \
-     ./ceph-disk $CEPH_DISK_ARGS prepare $osd_data 2>&1 | tee $DIR/out
+     ./ceph-disk $CEPH_DISK_ARGS prepare $osd_data > $DIR/out 2>&1
     grep --quiet 'Is a directory' $DIR/out || return 1
     ! [ -f $osd_data/magic ] || return 1
     rmdir $osd_data/fsid
@@ -200,8 +200,8 @@ function test_find_cluster_by_uuid() {
 
     setup
     rm $DIR/ceph.conf
-    test_activate_dir 2>&1 | tee $DIR/test_find
-    grep "No cluster conf found in $DIR" $DIR/test_find || return 1
+    test_activate_dir > $DIR/test_find 2>&1 
+    grep --quiet "No cluster conf found in $DIR" $DIR/test_find || return 1
     teardown
 }
 
