@@ -115,6 +115,8 @@ INIT_SYSTEMS = [
     'none',
     ]
 
+STATEDIR = '/var/lib/ceph'
+
 # Nuke the TERM variable to avoid confusing any subprocesses we call.
 # For example, libreadline will print weird control sequences for some
 # TERM values.
@@ -145,11 +147,6 @@ class filelock(object):
         assert self.fd
         fcntl.lockf(self.fd, fcntl.LOCK_UN)
         self.fd = None
-
-
-prepare_lock = filelock('/var/lib/ceph/tmp/ceph-disk.prepare.lock')
-activate_lock = filelock('/var/lib/ceph/tmp/ceph-disk.activate.lock')
-
 
 ###### exceptions ########
 
@@ -767,7 +764,7 @@ def mount(
     # mount
     path = tempfile.mkdtemp(
         prefix='mnt.',
-        dir='/var/lib/ceph/tmp',
+        dir=STATEDIR + '/tmp',
         )
     try:
         LOG.debug('Mounting %s on %s with options %s', dev, path, options)
@@ -1473,7 +1470,7 @@ def move_mount(
     mount_options,
     ):
     LOG.debug('Moving mount to final location...')
-    parent = '/var/lib/ceph/osd'
+    parent = STATEDIR + '/osd'
     osd_data = os.path.join(
         parent,
         '{cluster}-{osd_id}'.format(cluster=cluster, osd_id=osd_id),
@@ -1517,7 +1514,7 @@ def start_daemon(
     ):
     LOG.debug('Starting %s osd.%s...', cluster, osd_id)
 
-    path = '/var/lib/ceph/osd/{cluster}-{osd_id}'.format(
+    path = (STATEDIR + '/osd/{cluster}-{osd_id}').format(
         cluster=cluster, osd_id=osd_id)
 
     # upstart?
@@ -1628,16 +1625,16 @@ def mount_activate(
         other = False
         src_dev = os.stat(path).st_dev
         try:
-            dst_dev = os.stat('/var/lib/ceph/osd/{cluster}-{osd_id}'.format(
+            dst_dev = os.stat((STATEDIR + '/osd/{cluster}-{osd_id}').format(
                     cluster=cluster,
                     osd_id=osd_id)).st_dev
             if src_dev == dst_dev:
                 active = True
             else:
-                parent_dev = os.stat('/var/lib/ceph/osd').st_dev
+                parent_dev = os.stat(STATEDIR + '/osd').st_dev
                 if dst_dev != parent_dev:
                     other = True
-                elif os.listdir('/var/lib/ceph/osd/{cluster}-{osd_id}'.format(
+                elif os.listdir((STATEDIR + '/osd/{cluster}-{osd_id}').format(
                         cluster=cluster,
                         osd_id=osd_id,
                         )):
@@ -1686,7 +1683,7 @@ def activate_dir(
     (osd_id, cluster) = activate(path, activate_key_template, init)
 
     if init not in ( None, 'none' ):
-        canonical = '/var/lib/ceph/osd/{cluster}-{osd_id}'.format(
+        canonical = (STATEDIR + '/osd/{cluster}-{osd_id}').format(
             cluster=cluster,
             osd_id=osd_id)
         if path != canonical:
@@ -2163,8 +2160,6 @@ def main_list(args):
 # means suppressing sdb will stop activate on sdb1, sdb2, etc.
 #
 
-SUPPRESS_PREFIX = '/var/lib/ceph/tmp/suppress-activate.'
-
 def is_suppressed(path):
     disk = os.path.realpath(path)
     try:
@@ -2222,6 +2217,23 @@ def main_zap(args):
 
 ###########################
 
+def setup_statedir(dir):
+    global STATEDIR
+    STATEDIR = dir
+
+    if not os.path.exists(STATEDIR):
+        os.mkdir(STATEDIR)
+    if not os.path.exists(STATEDIR + "/tmp"):
+        os.mkdir(STATEDIR + "/tmp")
+
+    global prepare_lock
+    prepare_lock = filelock(STATEDIR + '/tmp/ceph-disk.prepare.lock')
+
+    global activate_lock
+    activate_lock = filelock(STATEDIR + '/tmp/ceph-disk.activate.lock')
+
+    global SUPPRESS_PREFIX
+    SUPPRESS_PREFIX = STATEDIR + '/tmp/suppress-activate.'
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -2237,6 +2249,12 @@ def parse_args():
         metavar='PATH',
         default='/usr/bin',
         help='prepend PATH to $PATH for backward compatibility (default /usr/bin)',
+        )
+    parser.add_argument(
+        '--statedir',
+        metavar='PATH',
+        default='/var/lib/ceph',
+        help='directory in which ceph state is preserved (default /var/lib/ceph)',
         )
     parser.set_defaults(
         # we want to hold on to this, for later
@@ -2353,7 +2371,7 @@ def parse_args():
         help='path to block device or directory',
         )
     activate_parser.set_defaults(
-        activate_key_template='/var/lib/ceph/bootstrap-osd/{cluster}.keyring',
+        activate_key_template=STATEDIR + '/bootstrap-osd/{cluster}.keyring',
         func=main_activate,
         )
 
@@ -2377,7 +2395,7 @@ def parse_args():
         choices=INIT_SYSTEMS,
         )
     activate_journal_parser.set_defaults(
-        activate_key_template='/var/lib/ceph/bootstrap-osd/{cluster}.keyring',
+        activate_key_template=STATEDIR + '/bootstrap-osd/{cluster}.keyring',
         func=main_activate_journal,
         )
 
@@ -2396,7 +2414,7 @@ def parse_args():
         choices=INIT_SYSTEMS,
         )
     activate_all_parser.set_defaults(
-        activate_key_template='/var/lib/ceph/bootstrap-osd/{cluster}.keyring',
+        activate_key_template=STATEDIR + '/bootstrap-osd/{cluster}.keyring',
         func=main_activate_all,
         )
 
@@ -2457,6 +2475,7 @@ def main():
         path = os.environ.get('PATH', '')
         os.environ['PATH'] = args.prepend_to_path + ":" + path
 
+    setup_statedir(args.statedir)
     try:
         args.func(args)
 
