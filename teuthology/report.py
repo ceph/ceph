@@ -249,7 +249,11 @@ class ResultsReporter(object):
         if response.status_code == 200:
             return job_id
 
-        msg = response.json.get('message', '')
+        if response.json:
+            msg = response.json.get('message', '')
+        else:
+            msg = response.text
+
         if msg and msg.endswith('already exists'):
             job_uri = os.path.join(run_uri, job_id, '')
             response = requests.put(job_uri, data=job_json, headers=headers)
