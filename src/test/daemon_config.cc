@@ -121,6 +121,23 @@ TEST(DaemonConfig, SubstitutionLoop) {
   ASSERT_TRUE(strchr(buf, '$') || strchr(buf2, '$'));
 }
 
+// config: variable substitution happen only once http://tracker.ceph.com/issues/7103
+TEST(DaemonConfig, SubstitutionMultiple) {
+  int ret;
+  ret = g_ceph_context->_conf->set_val("mon_host", "localhost", false);
+  ASSERT_EQ(ret, 0);
+  ret = g_ceph_context->_conf->set_val("keyring", "$mon_host/$cluster.keyring,$mon_host/$cluster.mon.keyring", false);
+  ASSERT_EQ(ret, 0);
+  g_ceph_context->_conf->apply_changes(NULL);
+  char buf[512];
+  memset(buf, 0, sizeof(buf));
+  char *tmp = buf;
+  ret = g_ceph_context->_conf->get_val("keyring", &tmp, sizeof(buf));
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(string("localhost/ceph.keyring,localhost/ceph.mon.keyring"), tmp);
+  ASSERT_TRUE(strchr(buf, '$') == NULL);
+}
+
 TEST(DaemonConfig, ArgV) {
   ASSERT_EQ(0, g_ceph_context->_conf->set_val("internal_safe_to_start_threads",
 				       "false"));
@@ -332,3 +349,8 @@ TEST(DaemonConfig, ThreadSafety1) {
 				       "false"));
   ASSERT_EQ(ret, 0);
 }
+/*
+ * Local Variables:
+ * compile-command: "cd .. ; make unittest_daemon_config && ./unittest_daemon_config"
+ * End:
+ */
