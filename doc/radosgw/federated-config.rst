@@ -340,7 +340,7 @@ for your Ceph Storage Cluster(s). For example::
 	[client.radosgw.us-west-1]
 	rgw region = us
 	rgw region root pool = .us.rgw.root
-	rgw zone = ny-queens
+	rgw zone = us-west
 	rgw zone root pool = .us-west.rgw.root
 	keyring = /etc/ceph/ceph.client.radosgw.keyring
 	rgw dns name = {hostname}
