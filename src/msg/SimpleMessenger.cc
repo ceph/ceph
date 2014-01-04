@@ -111,9 +111,9 @@ int SimpleMessenger::_send_message(Message *m, const entity_inst_t& dest,
 
   lock.Lock();
   Pipe *pipe = _lookup_pipe(dest.addr);
+  lock.Unlock();
   submit_message(m, (pipe ? pipe->connection_state.get() : NULL),
                  dest.addr, dest.name.type(), lazy);
-  lock.Unlock();
   return 0;
 }
 
@@ -130,9 +130,7 @@ int SimpleMessenger::_send_message(Message *m, Connection *con, bool lazy)
       << " " << m << " con " << con
       << dendl;
 
-  lock.Lock();
   submit_message(m, con, con->get_peer_addr(), con->get_peer_type(), lazy);
-  lock.Unlock();
   return 0;
 }
 
@@ -432,6 +430,7 @@ void SimpleMessenger::submit_message(Message *m, Connection *con,
   }
 
   // remote, no existing pipe.
+  lock.Lock();
   const Policy& policy = get_policy(dest_type);
   if (policy.server) {
     ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", lossy server for target type "
@@ -444,6 +443,7 @@ void SimpleMessenger::submit_message(Message *m, Connection *con,
     ldout(cct,20) << "submit_message " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
     connect_rank(dest_addr, dest_type, con, m);
   }
+  lock.Unlock();
 }
 
 int SimpleMessenger::send_keepalive(const entity_inst_t& dest)
