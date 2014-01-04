@@ -602,6 +602,10 @@ unittest_texttable_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD)
 unittest_texttable_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_texttable
 
+unittest_on_exit_SOURCES = test/on_exit.cc
+unittest_on_exit_LDADD = $(PTHREAD_LIBS)
+check_PROGRAMS += unittest_on_exit
+
 check_SCRIPTS += test/pybind/test_ceph_argparse.py
 
 if WITH_RADOSGW
