@@ -4980,28 +4980,31 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
   cop->objecter_tid2 = 0;  // assume this ordered before us (if it happened)
   ObjectContextRef& cobc = cop->obc;
 
-  if (r >= 0) {
-    assert(cop->rval >= 0);
+  if (r < 0)
+    goto out;
 
-    if (!cop->cursor.is_complete()) {
-      // write out what we have so far
-      ObjectContextRef tempobc = get_object_context(cop->temp_oid, true);
-      RepGather *repop = simple_repop_create(tempobc);
-      if (cop->temp_cursor.is_initial()) {
-	cop->temp_coll = get_temp_coll(&repop->ctx->local_t);
-	repop->ctx->new_temp_oid = cop->temp_oid;
-      }
-      _write_copy_chunk(cop, &repop->ctx->op_t);
-      simple_repop_submit(repop);
+  assert(cop->rval >= 0);
 
-      dout(10) << __func__ << " fetching more" << dendl;
-      _copy_some(cobc, cop);
-      return;
+  if (!cop->cursor.is_complete()) {
+    // write out what we have so far
+    ObjectContextRef tempobc = get_object_context(cop->temp_oid, true);
+    RepGather *repop = simple_repop_create(tempobc);
+    if (cop->temp_cursor.is_initial()) {
+      cop->temp_coll = get_temp_coll(&repop->ctx->local_t);
+      repop->ctx->new_temp_oid = cop->temp_oid;
     }
-    _build_finish_copy_transaction(cop, cop->results.final_tx);
+    _write_copy_chunk(cop, &repop->ctx->op_t);
+    simple_repop_submit(repop);
+    dout(10) << __func__ << " fetching more" << dendl;
+    _copy_some(cobc, cop);
+    return;
   }
 
-  dout(20) << __func__ << " complete; committing" << dendl;
+  dout(20) << __func__ << " success; committing" << dendl;
+  _build_finish_copy_transaction(cop, cop->results.final_tx);
+
+ out:
+  dout(20) << __func__ << " complete r = " << cpp_strerror(r) << dendl;
   CopyCallbackResults results(r, &cop->results);
   cop->cb->complete(results);
 
