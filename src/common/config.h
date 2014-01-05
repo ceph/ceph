@@ -237,6 +237,8 @@ public:
    * It is best if this lock comes first in the lock hierarchy. We will
    * hold this lock when calling configuration observers.  */
   mutable Mutex lock;
+
+  friend class test_md_config_t;
 };
 
 typedef enum {
