@@ -5030,6 +5030,11 @@ void OSD::handle_osd_map(MOSDMap *m)
     m->put();
     return;
   }
+  if (is_initializing()) {
+    dout(0) << "ignoring osdmap until we have initialized" << dendl;
+    m->put();
+    return;
+  }
 
   Session *session = static_cast<Session *>(m->get_connection()->get_priv());
   if (session && !(session->entity_name.is_mon() || session->entity_name.is_osd())) {
