@@ -107,6 +107,8 @@ public:
     utime_t mtime; ///< the copy source's mtime
     uint64_t object_size; ///< the copied object's size
     bool started_temp_obj; ///< true if the callback needs to delete temp object
+    coll_t temp_coll;      ///< temp collection (if any)
+    hobject_t temp_oid;    ///< temp object (if any)
     /**
      * Final transaction; if non-empty the callback must execute it before any
      * other accesses to the object (in order to complete the copy).
@@ -144,22 +146,18 @@ public:
     map<string,bufferlist> omap;
     int rval;
 
-    coll_t temp_coll;
-    hobject_t temp_oid;
     object_copy_cursor_t temp_cursor;
 
     CopyOp(CopyCallback *cb_, ObjectContextRef _obc, hobject_t s,
 	   object_locator_t l,
            version_t v,
 	   unsigned f,
-	   bool ms,
-	   const hobject_t& dest)
+	   bool ms)
       : cb(cb_), obc(_obc), src(s), oloc(l), flags(f),
 	mirror_snapset(ms),
 	objecter_tid(0),
 	objecter_tid2(0),
-	rval(-1),
-	temp_oid(dest)
+	rval(-1)
     {
       results.user_version = v;
       results.mirror_snapset = mirror_snapset;
@@ -978,8 +976,7 @@ protected:
    */
   void start_copy(CopyCallback *cb, ObjectContextRef obc, hobject_t src,
 		  object_locator_t oloc, version_t version, unsigned flags,
-		  bool mirror_snapset,
-		  const hobject_t& temp_dest_oid);
+		  bool mirror_snapset);
   void process_copy_chunk(hobject_t oid, tid_t tid, int r);
   void _write_copy_chunk(CopyOpRef cop, ObjectStore::Transaction *t);
   void _copy_some(ObjectContextRef obc, CopyOpRef cop);
@@ -987,8 +984,7 @@ protected:
                                       ObjectStore::Transaction& t);
   void finish_copyfrom(OpContext *ctx);
   void finish_promote(int r, OpRequestRef op,
-		      CopyResults *results, ObjectContextRef obc,
-                      hobject_t& temp_obj);
+		      CopyResults *results, ObjectContextRef obc);
   void cancel_copy(CopyOpRef cop, bool requeue);
   void cancel_copy_ops(bool requeue);
 
