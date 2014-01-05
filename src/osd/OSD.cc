@@ -5987,7 +5987,8 @@ bool OSD::compat_must_dispatch_immediately(PG *pg)
 
 void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap)
 {
-  if (service.get_osdmap()->is_up(whoami)) {
+  if (service.get_osdmap()->is_up(whoami) &&
+      is_active()) {
     do_notifies(*ctx.notify_list, curmap);
     do_queries(*ctx.query_map, curmap);
     do_infos(*ctx.info_map, curmap);
