@@ -107,12 +107,10 @@ public:
   ReplicatedPG::CopyResults *results;
   int retval;
   ReplicatedPG::OpContext *ctx;
-  hobject_t temp_obj;
-  CopyFromCallback(ReplicatedPG::OpContext *ctx_, const hobject_t& temp_obj_)
+  CopyFromCallback(ReplicatedPG::OpContext *ctx_)
     : results(NULL),
       retval(0),
-      ctx(ctx_),
-      temp_obj(temp_obj_) {}
+      ctx(ctx_) {}
   ~CopyFromCallback() {}
 
   virtual void finish(ReplicatedPG::CopyCallbackResults results_) {
@@ -1449,21 +1447,18 @@ void ReplicatedPG::do_cache_redirect(OpRequestRef op, ObjectContextRef obc)
 class PromoteCallback: public ReplicatedPG::CopyCallback {
   OpRequestRef op;
   ObjectContextRef obc;
-  hobject_t temp_obj;
   ReplicatedPG *pg;
 public:
   PromoteCallback(OpRequestRef op_, ObjectContextRef obc_,
-		  const hobject_t& temp_obj_,
 		  ReplicatedPG *pg_)
     : op(op_),
       obc(obc_),
-      temp_obj(temp_obj_),
       pg(pg_) {}
 
   virtual void finish(ReplicatedPG::CopyCallbackResults results) {
     ReplicatedPG::CopyResults *results_data = results.get<1>();
     int r = results.get<0>();
-    pg->finish_promote(r, op, results_data, obc, temp_obj);
+    pg->finish_promote(r, op, results_data, obc);
   }
 };
 
@@ -1477,15 +1472,13 @@ void ReplicatedPG::promote_object(OpRequestRef op, ObjectContextRef obc,
   }
   dout(10) << __func__ << " " << obc->obs.oi.soid << dendl;
 
-  hobject_t temp_target = generate_temp_object();
-  PromoteCallback *cb = new PromoteCallback(op, obc, temp_target, this);
+  PromoteCallback *cb = new PromoteCallback(op, obc, this);
   object_locator_t oloc(m->get_object_locator());
   oloc.pool = pool.info.tier_of;
   start_copy(cb, obc, obc->obs.oi.soid, oloc, 0,
 	     CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |
 	     CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE,
-	     obc->obs.oi.soid.snap == CEPH_NOSNAP,
-	     temp_target);
+	     obc->obs.oi.soid.snap == CEPH_NOSNAP);
 
   assert(obc->is_blocked());
   wait_for_blocked_object(obc->obs.oi.soid, op);
@@ -4069,13 +4062,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    result = -EINVAL;
 	    break;
 	  }
-	  hobject_t temp_target = generate_temp_object();
-	  CopyFromCallback *cb = new CopyFromCallback(ctx, temp_target);
+	  CopyFromCallback *cb = new CopyFromCallback(ctx);
 	  ctx->copy_cb = cb;
 	  start_copy(cb, ctx->obc, src, src_oloc, src_version,
 		     op.copy_from.flags,
-		     false,
-		     temp_target);
+		     false);
 	  result = -EINPROGRESS;
 	} else {
 	  // finish
@@ -4872,8 +4863,7 @@ int ReplicatedPG::fill_in_copy_get(bufferlist::iterator& bp, OSDOp& osd_op,
 void ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
 			      hobject_t src, object_locator_t oloc,
 			      version_t version, unsigned flags,
-			      bool mirror_snapset,
-			      const hobject_t& temp_dest_oid)
+			      bool mirror_snapset)
 {
   const hobject_t& dest = obc->obs.oi.soid;
   dout(10) << __func__ << " " << dest
@@ -4894,7 +4884,7 @@ void ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
   }
 
   CopyOpRef cop(new CopyOp(cb, obc, src, oloc, version, flags,
-			   mirror_snapset, temp_dest_oid));
+			   mirror_snapset));
   copy_ops[dest] = cop;
   obc->start_block();
 
@@ -4987,11 +4977,17 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
 
   if (!cop->cursor.is_complete()) {
     // write out what we have so far
-    ObjectContextRef tempobc = get_object_context(cop->temp_oid, true);
+    if (cop->temp_cursor.is_initial()) {
+      assert(!cop->results.started_temp_obj);
+      cop->results.started_temp_obj = true;
+      cop->results.temp_oid = generate_temp_object();
+      dout(20) << __func__ << " using temp " << cop->results.temp_oid << dendl;
+    }
+    ObjectContextRef tempobc = get_object_context(cop->results.temp_oid, true);
     RepGather *repop = simple_repop_create(tempobc);
     if (cop->temp_cursor.is_initial()) {
-      cop->temp_coll = get_temp_coll(&repop->ctx->local_t);
-      repop->ctx->new_temp_oid = cop->temp_oid;
+      cop->results.temp_coll = get_temp_coll(&repop->ctx->local_t);
+      repop->ctx->new_temp_oid = cop->results.temp_oid;
     }
     _write_copy_chunk(cop, &repop->ctx->op_t);
     simple_repop_submit(repop);
@@ -5021,21 +5017,25 @@ void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, ObjectStore::Transaction *t)
 	   << " " << cop->omap.size() << " keys"
 	   << dendl;
   if (!cop->temp_cursor.attr_complete) {
-    t->touch(cop->temp_coll, cop->temp_oid);
-    for (map<string,bufferlist>::iterator p = cop->attrs.begin(); p != cop->attrs.end(); ++p)
-      t->setattr(cop->temp_coll, cop->temp_oid, string("_") + p->first, p->second);
+    t->touch(cop->results.temp_coll, cop->results.temp_oid);
+    for (map<string,bufferlist>::iterator p = cop->attrs.begin();
+	 p != cop->attrs.end(); ++p)
+      t->setattr(cop->results.temp_coll, cop->results.temp_oid,
+		 string("_") + p->first, p->second);
     cop->attrs.clear();
   }
   if (!cop->temp_cursor.data_complete) {
-    t->write(cop->temp_coll, cop->temp_oid, cop->temp_cursor.data_offset, cop->data.length(), cop->data);
+    t->write(cop->results.temp_coll, cop->results.temp_oid,
+	     cop->temp_cursor.data_offset, cop->data.length(), cop->data);
     cop->data.clear();
   }
   if (!cop->temp_cursor.omap_complete) {
     if (cop->omap_header.length()) {
-      t->omap_setheader(cop->temp_coll, cop->temp_oid, cop->omap_header);
+      t->omap_setheader(cop->results.temp_coll, cop->results.temp_oid,
+			cop->omap_header);
       cop->omap_header.clear();
     }
-    t->omap_setkeys(cop->temp_coll, cop->temp_oid, cop->omap);
+    t->omap_setkeys(cop->results.temp_coll, cop->results.temp_oid, cop->omap);
     cop->omap.clear();
   }
   cop->temp_cursor = cop->cursor;
@@ -5052,14 +5052,15 @@ void ReplicatedPG::_build_finish_copy_transaction(CopyOpRef cop,
 
   if (cop->temp_cursor.is_initial()) {
     // write directly to final object
-    cop->temp_coll = coll;
-    cop->temp_oid = obs.oi.soid;
+    cop->results.temp_coll = coll;
+    cop->results.temp_oid = obs.oi.soid;
     _write_copy_chunk(cop, &t);
   } else {
     // finish writing to temp object, then move into place
     _write_copy_chunk(cop, &t);
-    t.collection_move_rename(cop->temp_coll, cop->temp_oid, coll, obs.oi.soid);
-    pgbackend->clear_temp_obj(cop->temp_oid);
+    t.collection_move_rename(cop->results.temp_coll, cop->results.temp_oid,
+			     coll, obs.oi.soid);
+    pgbackend->clear_temp_obj(cop->results.temp_oid);
   }
 }
 
@@ -5074,7 +5075,7 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
     obs.exists = true;
   }
   if (cb->is_temp_obj_used()) {
-    ctx->discard_temp_oid = cb->temp_obj;
+    ctx->discard_temp_oid = cb->results->temp_oid;
   }
   ctx->op_t.swap(cb->results->final_tx);
   ctx->op_t.append(cb->results->final_tx);
@@ -5104,8 +5105,7 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
 }
 
 void ReplicatedPG::finish_promote(int r, OpRequestRef op,
-				  CopyResults *results, ObjectContextRef obc,
-                                  hobject_t& temp_obj)
+				  CopyResults *results, ObjectContextRef obc)
 {
   const hobject_t& soid = obc->obs.oi.soid;
   dout(10) << __func__ << " " << soid << " r=" << r
@@ -5155,7 +5155,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
   } else {
     tctx->op_t.swap(results->final_tx);
     if (results->started_temp_obj) {
-      tctx->discard_temp_oid = temp_obj;
+      tctx->discard_temp_oid = results->temp_oid;
     }
     tctx->new_obs.oi.size = results->object_size;
     tctx->delta_stats.num_bytes += results->object_size;
