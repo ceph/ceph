@@ -535,6 +535,11 @@ unittest_confutils_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_confutils_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_confutils
 
+unittest_config_SOURCES = test/common/test_config.cc
+unittest_config_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_config_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_config
+
 unittest_heartbeatmap_SOURCES = test/heartbeat_map.cc
 unittest_heartbeatmap_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_heartbeatmap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
