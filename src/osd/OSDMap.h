@@ -174,7 +174,7 @@ public:
     }
 
     /// propage update pools' snap metadata to any of their tiers
-    int propagate_snaps_to_tiers(const OSDMap &base);
+    int propagate_snaps_to_tiers(CephContext *cct, const OSDMap &base);
   };
   
 private:

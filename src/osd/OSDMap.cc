@@ -178,7 +178,8 @@ int OSDMap::Incremental::identify_osd(uuid_d u) const
   return -1;
 }
 
-int OSDMap::Incremental::propagate_snaps_to_tiers(const OSDMap& osdmap)
+int OSDMap::Incremental::propagate_snaps_to_tiers(CephContext *cct,
+						  const OSDMap& osdmap)
 {
   assert(epoch == osdmap.get_epoch() + 1);
   for (map<int64_t,pg_pool_t>::iterator p = new_pools.begin();
@@ -201,6 +202,8 @@ int OSDMap::Incremental::propagate_snaps_to_tiers(const OSDMap& osdmap)
 	if (tier->tier_of != p->first)
 	  return -EIO;
 
+	ldout(cct, 10) << __func__ << " from " << p->first << " to "
+		       << r->first << dendl;
 	tier->snap_seq = base.snap_seq;
 	tier->snap_epoch = base.snap_epoch;
 	tier->snaps = base.snaps;
