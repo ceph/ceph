@@ -4847,7 +4847,7 @@ bool OSD::_share_map_incoming(
   entity_name_t name,
   Connection *con,
   epoch_t epoch,
-  OSDMapRef osdmap,
+  const OSDMapRef& osdmap,
   Session* session)
 {
   bool shared = false;
@@ -5019,7 +5019,7 @@ bool OSD::ms_dispatch(Message *m)
   return true;
 }
 
-void OSD::dispatch_session_waiting(Session *session, OSDMapRef osdmap)
+void OSD::dispatch_session_waiting(Session *session, const OSDMapRef osdmap)
 {
   for (list<OpRequestRef>::iterator i = session->waiting_on_map.begin();
        i != session->waiting_on_map.end() && dispatch_op_fast(*i, osdmap);
@@ -5190,7 +5190,7 @@ void OSD::dispatch_op(OpRequestRef op)
 }
 
 template<typename T, int MSGTYPE>
-epoch_t replica_op_required_epoch(OpRequestRef op)
+epoch_t replica_op_required_epoch(const OpRequestRef& op)
 {
   T *m = static_cast<T *>(op->get_req());
   assert(m->get_header().type == MSGTYPE);
@@ -5229,7 +5229,7 @@ epoch_t op_required_epoch(OpRequestRef op)
   }
 }
 
-bool OSD::dispatch_op_fast(OpRequestRef op, OSDMapRef osdmap) {
+bool OSD::dispatch_op_fast(const OpRequestRef& op, const OSDMapRef& osdmap) {
   epoch_t msg_epoch(op_required_epoch(op));
   if (msg_epoch > osdmap->get_epoch())
     return false;
@@ -6092,22 +6092,6 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
       waiting_for_pg.erase(p++);
     }
   }
-  map<pg_t, list<PG::CephPeeringEvtRef> >::iterator q =
-    peering_wait_for_split.begin();
-  while (q != peering_wait_for_split.end()) {
-    pg_t pgid = q->first;
-
-    // am i still primary?
-    vector<int> acting;
-    int nrep = osdmap->pg_to_acting_osds(pgid, acting);
-    int role = osdmap->calc_pg_role(whoami, acting, nrep);
-    if (role >= 0) {
-      ++q;  // still me
-    } else {
-      dout(10) << " discarding waiting ops for " << pgid << dendl;
-      peering_wait_for_split.erase(q++);
-    }
-  }
 }
 
 void OSD::consume_map()
@@ -6161,7 +6145,7 @@ void OSD::consume_map()
   for (set<Session*>::iterator i = sessions_to_check.begin();
        i != sessions_to_check.end();
        sessions_to_check.erase(i++)) {
-    Mutex::Locker l((*i)->session_dispatch_lock);
+    //Mutex::Locker l((*i)->session_dispatch_lock);
     dispatch_session_waiting(*i, osdmap);
     (*i)->put();
   }
@@ -6353,7 +6337,7 @@ OSDMapRef OSDService::_add_map(OSDMap *o)
 
 OSDMapRef OSDService::try_get_map(epoch_t epoch)
 {
-  Mutex::Locker l(map_cache_lock);
+  //Mutex::Locker l(map_cache_lock);
   OSDMapRef retval = map_cache.lookup(epoch);
   if (retval) {
     dout(30) << "get_map " << epoch << " -cached" << dendl;
@@ -7383,7 +7367,9 @@ void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
 #endif
     
     PG::RecoveryCtx rctx = create_context();
-    int started = pg->start_recovery_ops(max, &rctx, handle);
+
+    int started;
+    bool more = pg->start_recovery_ops(max, &rctx, handle, &started);
     dout(10) << "do_recovery started " << started << "/" << max << " on " << *pg << dendl;
 
     /*
@@ -7392,7 +7378,7 @@ void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
      * It may be that our initial locations were bad and we errored
      * out while trying to pull.
      */
-    if (!started && pg->have_unfound()) {
+    if (!more && pg->have_unfound()) {
       pg->discover_all_missing(*rctx.query_map);
       if (rctx.query_map->empty()) {
 	dout(10) << "do_recovery  no luck, giving up on this pg for now" << dendl;
@@ -7504,17 +7490,17 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
   reply_op_error(op, -ENXIO);
 }
 
-void OSD::handle_op(OpRequestRef op, OSDMapRef osdmap)
+void OSD::handle_op(const OpRequestRef& op, const OSDMapRef& osdmap)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
-  if (op_is_discardable(m)) {
+  /*if (op_is_discardable(m)) {
     dout(10) << " discardable " << *m << dendl;
     return;
-  }
+  }*/
 
   // we don't need encoded payload anymore
-  m->clear_payload();
+  //m->clear_payload();
 
   // object name too long?
   if (m->get_oid().name.size() > MAX_CEPH_OBJECT_NAME_LEN) {
@@ -7524,8 +7510,9 @@ void OSD::handle_op(OpRequestRef op, OSDMapRef osdmap)
     return;
   }
 
+
   // blacklisted?
-  if (osdmap->is_blacklisted(m->get_source_addr())) {
+  if ((osdmap) && (osdmap->is_blacklisted(m->get_source_addr()))) {
     dout(4) << "handle_op " << m->get_source_addr() << " is blacklisted" << dendl;
     service.reply_op_error(op, -EBLACKLISTED);
     return;
@@ -7735,7 +7722,7 @@ PGRef OSD::OpWQ::_dequeue()
 
 void OSD::OpWQ::_process(PGRef pg, ThreadPool::TPHandle &handle)
 {
-  pg->lock_suspend_timeout(handle);
+ pg->lock_suspend_timeout(handle);
   OpRequestRef op;
   {
     Mutex::Locker l(qlock);
@@ -7776,7 +7763,6 @@ void OSD::dequeue_op(
     return;
 
   op->mark_reached_pg();
-
   pg->do_request(op, handle);
 
   // finish
