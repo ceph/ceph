@@ -3,8 +3,11 @@ roles:
   - mds.0
   - osd.0
   - osd.1
-- - mon.b
   - osd.2
+- - mon.b
+  - osd.3
+  - osd.4
+  - osd.5
 - - client.0
 tasks:
 - install:
