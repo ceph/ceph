@@ -5019,12 +5019,12 @@ bool OSD::ms_dispatch(Message *m)
   return true;
 }
 
-void OSD::dispatch_session_waiting(Session *session, const OSDMapRef osdmap)
+void OSD::dispatch_session_waiting(Session *session, const OSDMapRef& osdmap)
 {
   for (list<OpRequestRef>::iterator i = session->waiting_on_map.begin();
        i != session->waiting_on_map.end() && dispatch_op_fast(*i, osdmap);
        session->waiting_on_map.erase(i++));
-
+  
   if (session->waiting_on_map.empty()) {
     clear_session_waiting_on_map(session);
   } else {
@@ -5035,16 +5035,18 @@ void OSD::dispatch_session_waiting(Session *session, const OSDMapRef osdmap)
 void OSD::ms_fast_dispatch(Message *m)
 {
   OpRequestRef op = op_tracker.create_request<OpRequest>(m);
-  OSDMapRef nextmap = service.get_nextmap_reserved();
-  Session *session = static_cast<Session*>(m->get_connection()->get_priv());
+  OSDMapRef nextmap = service.get_osdmap();
+
+  dispatch_op_fast(op, nextmap);
+  /*Session *session = static_cast<Session*>(m->get_connection()->get_priv());
   assert(session);
   {
-    Mutex::Locker l(session->session_dispatch_lock);
+    //Mutex::Locker l(session->session_dispatch_lock);
     session->waiting_on_map.push_back(op);
     dispatch_session_waiting(session, nextmap);
   }
-  session->put();
-  service.release_map(nextmap);
+  session->put();*/
+  //service.release_map(nextmap);
 }
 
 bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
@@ -7574,15 +7576,18 @@ void OSD::handle_op(const OpRequestRef& op, const OSDMapRef& osdmap)
   int64_t pool = pgid.pool();
   if ((m->get_flags() & CEPH_OSD_FLAG_PGOP) == 0 &&
       osdmap->have_pg_pool(pool))
+  {
     pgid = osdmap->raw_pg_to_pg(pgid);
+  }
 
-  OSDMapRef send_map = service.try_get_map(m->get_map_epoch());
+  /*OSDMapRef send_map = service.try_get_map(m->get_map_epoch());
   // check send epoch
   if (!send_map) {
     dout(7) << "don't have sender's osdmap; assuming it was valid and that client will resend" << dendl;
     return;
-  }
+  }*/
 
+#if 0
   if (!send_map->have_pg_pool(pgid.pool())) {
     dout(7) << "dropping request; pool did not exist" << dendl;
     clog.warn() << m->get_source_inst() << " invalid " << m->get_reqid()
@@ -7609,10 +7614,15 @@ void OSD::handle_op(const OpRequestRef& op, const OSDMapRef& osdmap)
     service.reply_op_error(op, -ENXIO);
     return;
   }
-
+#endif
+  
+  
   PG *pg = get_pg_or_queue_for_pg(pgid, op);
+  
   if (pg)
+  {
     enqueue_op(pg, op);
+  }
 }
 
 template<typename T, int MSGTYPE>
@@ -7660,19 +7670,112 @@ bool OSD::op_is_discardable(MOSDOp *op)
 /*
  * enqueue called with osd_lock held
  */
-void OSD::enqueue_op(PG *pg, OpRequestRef op)
+void OSD::enqueue_op(PG *pg, const OpRequestRef& op)
 {
-  utime_t latency = ceph_clock_now(cct) - op->get_req()->get_recv_stamp();
+  /*utime_t latency = ceph_clock_now(cct) - op->get_req()->get_recv_stamp();
   dout(15) << "enqueue_op " << op << " prio " << op->get_req()->get_priority()
 	   << " cost " << op->get_req()->get_cost()
 	   << " latency " << latency
-	   << " " << *(op->get_req()) << dendl;
-  pg->queue_op(op);
+	   << " " << *(op->get_req()) << dendl;*/
+
+  int op_waiting = pg->queue_op(op);
+  if (op_waiting > 0 )
+  {
+	return;
+  }
+
+  if (op->get_req()->get_type() == CEPH_MSG_OSD_OP) 
+  //if (false) 
+  {
+
+	MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+
+
+	uint32_t thread_pool_num = (m->get_pg().ps())% 8 + 1;
+	//dout(0) << "OSD::enqueue_op::pg.ps = " << m->get_pg().ps() << " thread_pool_num = " << thread_pool_num << dendl;
+
+  	switch(thread_pool_num)
+  	{
+        	case 1:
+                	op_thread_lock1.Lock();
+			pg_for_fast_processing1.push(make_pair(PGRef(pg), op));
+			op_thread_cond1.SignalOne();
+			op_thread_lock1.Unlock();
+
+                	break;
+        	case 2:
+                	op_thread_lock2.Lock();
+                        pg_for_fast_processing2.push(make_pair(PGRef(pg), op));
+                        op_thread_cond2.SignalOne();
+                        op_thread_lock2.Unlock();
+
+                	break;
+        	case 3:
+                	op_thread_lock3.Lock();
+                        pg_for_fast_processing3.push(make_pair(PGRef(pg), op));
+                        op_thread_cond3.SignalOne();
+                        op_thread_lock3.Unlock();
+
+                	break;
+        	case 4:
+                	op_thread_lock4.Lock();
+                        pg_for_fast_processing4.push(make_pair(PGRef(pg), op));
+                        op_thread_cond4.SignalOne();
+                        op_thread_lock4.Unlock();
+
+                	break;
+
+                case 5:
+                        op_thread_lock5.Lock();
+                        pg_for_fast_processing5.push(make_pair(PGRef(pg), op));
+                        op_thread_cond5.SignalOne();
+                        op_thread_lock5.Unlock();
+
+                        break;
+
+                case 6:
+                        op_thread_lock6.Lock();
+                        pg_for_fast_processing6.push(make_pair(PGRef(pg), op));
+                        op_thread_cond6.SignalOne();
+                        op_thread_lock6.Unlock();
+
+                        break;
+
+                case 7:
+                        op_thread_lock7.Lock();
+                        pg_for_fast_processing7.push(make_pair(PGRef(pg), op));
+                        op_thread_cond7.SignalOne();
+                        op_thread_lock7.Unlock();
+
+                        break;
+
+                case 8:
+                        op_thread_lock8.Lock();
+                        pg_for_fast_processing8.push(make_pair(PGRef(pg), op));
+                        op_thread_cond8.SignalOne();
+                        op_thread_lock8.Unlock();
+
+                        break;
+
+
+
+        	default:
+                	assert(0);
+  	}
+
+
+  }
+  //pg->queue_op(op);
+  /*else
+  {
+	//op_wq.queue(make_pair(PGRef(pg), op));
+ 	pg->queue_op(op);
+  }*/
 }
 
 void OSD::OpWQ::_enqueue(pair<PGRef, OpRequestRef> item)
 {
-  unsigned priority = item.second->get_req()->get_priority();
+ unsigned priority = item.second->get_req()->get_priority();
   unsigned cost = item.second->get_req()->get_cost();
   if (priority >= CEPH_MSG_PRIO_LOW)
     pqueue.enqueue_strict(
@@ -7885,7 +7988,7 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
 
 // --------------------------------
 
-int OSD::init_op_flags(OpRequestRef op)
+int OSD::init_op_flags(const OpRequestRef& op)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   vector<OSDOp>::iterator iter;
