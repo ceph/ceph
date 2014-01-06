@@ -225,10 +225,15 @@ def build_ceph_cluster(ctx, config):
             raise RuntimeError("ceph-deploy: Failed to create monitors")
 
     estatus_gather = execute_ceph_deploy(ctx, config, gather_keys)
+    max_gather_tries = 90
+    gather_tries = 0
     while (estatus_gather != 0):
-        #mon_create_nodes = './ceph-deploy mon create'+" "+mon_node[0]
-        #execute_ceph_deploy(ctx, config, mon_create_nodes)
+        gather_tries += 1
+        if gather_tries >= max_gather_tries:
+            msg = 'ceph-deploy was not able to gatherkeys after 15 minutes'
+            raise RuntimeError(msg)
         estatus_gather = execute_ceph_deploy(ctx, config, gather_keys)
+        time.sleep(10)
 
     if mds_nodes:
         estatus_mds = execute_ceph_deploy(ctx, config, deploy_mds)
