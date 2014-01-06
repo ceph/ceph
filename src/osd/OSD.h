@@ -980,11 +980,30 @@ public:
     }
   } heartbeat_dispatcher;
 
+  Mutex op_thread_lock1, op_thread_lock2, op_thread_lock3, op_thread_lock4, op_thread_lock5, 
+	op_thread_lock6, op_thread_lock7, op_thread_lock8;
+  Cond op_thread_cond1, op_thread_cond2, op_thread_cond3, op_thread_cond4, op_thread_cond5, 
+	op_thread_cond6, op_thread_cond7, op_thread_cond8;
+  //map<PGRef, list<OpRequestRef> > pg_for_fast_processing;
+  //map<PG*, list<OpRequestRef> > pg_for_fast_processing;
+  //multimap<PGRef, OpRequestRef> pg_for_fast_processing;
+  queue< pair <PGRef, OpRequestRef> > pg_for_fast_processing1;
+  queue< pair <PGRef, OpRequestRef> > pg_for_fast_processing2;
+  queue< pair <PGRef, OpRequestRef> > pg_for_fast_processing3;
+  queue< pair <PGRef, OpRequestRef> > pg_for_fast_processing4;
+  queue< pair <PGRef, OpRequestRef> > pg_for_fast_processing5;
+  queue< pair <PGRef, OpRequestRef> > pg_for_fast_processing6;
+  queue< pair <PGRef, OpRequestRef> > pg_for_fast_processing7;
+  queue< pair <PGRef, OpRequestRef> > pg_for_fast_processing8;
+
+  //queue< pair <OSDMapRef, OpRequestRef> > pg_for_fast_processing;
+
 private:
   // -- stats --
   Mutex stat_lock;
   osd_stat_t osd_stat;
-
+  atomic_t stop_io_thread;
+    
   void update_osd_stat();
   
   // -- waiters --
@@ -1072,12 +1091,39 @@ private:
       unlock();
     }
     bool _empty() {
+      //Mutex::Locker l(qlock);
       return pqueue.empty();
     }
     void _process(PGRef pg, ThreadPool::TPHandle &handle);
   } op_wq;
 
-  void enqueue_op(PG *pg, OpRequestRef op);
+  class opThreadFastThread : public Thread {
+    OSD *osd;
+    uint32_t pool_number;
+ 
+  public:
+    opThreadFastThread(OSD *pOsd, uint32_t thr_pool_num) : osd(pOsd), pool_number(thr_pool_num) {}
+    void *entry() {
+      osd->process_op_fast(pool_number);
+      return 0;
+    }
+  } op_process_thread1,op_process_thread2, op_process_thread3, op_process_thread4, 
+    op_process_thread5, op_process_thread6, op_process_thread7, op_process_thread8,
+    op_process_thread9, op_process_thread10, op_process_thread11, op_process_thread12,
+    op_process_thread13, op_process_thread14, op_process_thread15, op_process_thread16, 
+    op_process_thread17, op_process_thread18, op_process_thread19, op_process_thread20, 
+    op_process_thread21, op_process_thread22, op_process_thread23, op_process_thread24, 
+    op_process_thread25, op_process_thread26, op_process_thread27, op_process_thread28, 
+    op_process_thread29, op_process_thread30, op_process_thread31, op_process_thread32,
+    op_process_thread33, op_process_thread34, op_process_thread35, op_process_thread36,
+    op_process_thread37, op_process_thread38, op_process_thread39, op_process_thread40;
+ 
+
+  void start_op_threads();
+  void stop_op_threads();
+  void process_op_fast(uint32_t pool_number);
+
+  void enqueue_op(PG *pg, const OpRequestRef& op);
   void dequeue_op(
     PGRef pg, OpRequestRef op,
     ThreadPool::TPHandle &handle);

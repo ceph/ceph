@@ -906,17 +906,31 @@ OSD::OSD(CephContext *cct_, int id, Messenger *internal_messenger, Messenger *ex
   rep_scrub_wq(this, cct->_conf->osd_scrub_thread_timeout, &disk_tp),
   remove_wq(store, cct->_conf->osd_remove_thread_timeout, &disk_tp),
   next_removal_seq(0),
-  service(this)
+  service(this),
+  op_thread_lock1("OSD::io_lock1"),op_thread_lock2("OSD::io_lock2"), op_thread_lock3("OSD::io_lock3"),op_thread_lock4("OSD::io_lock4"),
+  op_thread_lock5("OSD::io_lock5"),op_thread_lock6("OSD::io_lock6"),op_thread_lock7("OSD::io_lock7"),op_thread_lock8("OSD::io_lock8"),
+  op_process_thread1(this, 1), op_process_thread2(this,1), op_process_thread3(this, 1), op_process_thread4(this, 1), op_process_thread5(this, 1), 
+  op_process_thread6(this, 2), op_process_thread7(this, 2), op_process_thread8(this, 2), op_process_thread9(this, 2), op_process_thread10(this, 2), 
+  op_process_thread11(this, 3),op_process_thread12(this, 3),op_process_thread13(this, 3),op_process_thread14(this, 3),op_process_thread15(this, 3), 
+  op_process_thread16(this, 4),op_process_thread17(this, 4), op_process_thread18(this, 4), op_process_thread19(this, 4), op_process_thread20(this, 4),
+  op_process_thread21(this, 5), op_process_thread22(this, 5), op_process_thread23(this, 5), op_process_thread24(this, 5),op_process_thread25(this, 5), 
+  op_process_thread26(this, 6), op_process_thread27(this, 6), op_process_thread28(this, 6),op_process_thread29(this, 6), op_process_thread30(this, 6), 
+  op_process_thread31(this, 7), op_process_thread32(this, 7), op_process_thread33(this, 7),op_process_thread34(this, 7), op_process_thread35(this, 7),
+  op_process_thread36(this, 8), op_process_thread37(this, 8), op_process_thread38(this, 8),op_process_thread39(this, 8), op_process_thread40(this, 8),
+  stop_io_thread(0)
 {
   monc->set_messenger(client_messenger);
   op_tracker.set_complaint_and_threshold(cct->_conf->osd_op_complaint_time,
                                          cct->_conf->osd_op_log_threshold);
   op_tracker.set_history_size_and_duration(cct->_conf->osd_op_history_size,
                                            cct->_conf->osd_op_history_duration);
+
+  start_op_threads();
 }
 
 OSD::~OSD()
 {
+  stop_op_threads();
   delete authorize_handler_cluster_registry;
   delete authorize_handler_service_registry;
   delete class_handler;
@@ -925,6 +939,498 @@ OSD::~OSD()
   delete recoverystate_perf;
   delete logger;
   delete store;
+  
+}
+
+void OSD::start_op_threads()
+{
+  assert(!op_process_thread1.is_started());
+  op_process_thread1.create();
+
+  assert(!op_process_thread2.is_started());
+  op_process_thread2.create();
+
+  assert(!op_process_thread3.is_started());
+  op_process_thread3.create();
+
+  assert(!op_process_thread4.is_started());
+  op_process_thread4.create();
+
+  assert(!op_process_thread5.is_started());
+  op_process_thread5.create();
+
+  assert(!op_process_thread6.is_started());
+  op_process_thread6.create();
+
+  assert(!op_process_thread7.is_started());
+  op_process_thread7.create();
+
+  assert(!op_process_thread8.is_started());
+  op_process_thread8.create();
+
+  assert(!op_process_thread9.is_started());
+  op_process_thread9.create();
+
+  assert(!op_process_thread10.is_started());
+  op_process_thread10.create();
+
+  assert(!op_process_thread11.is_started());
+  op_process_thread11.create();
+
+  assert(!op_process_thread12.is_started());
+  op_process_thread12.create();
+
+  assert(!op_process_thread13.is_started());
+  op_process_thread13.create();
+
+  assert(!op_process_thread14.is_started());
+  op_process_thread14.create();
+
+  assert(!op_process_thread15.is_started());
+  op_process_thread15.create();
+
+  assert(!op_process_thread16.is_started());
+  op_process_thread16.create();
+
+  assert(!op_process_thread17.is_started());
+  op_process_thread17.create();
+
+  assert(!op_process_thread18.is_started());
+  op_process_thread18.create();
+
+  assert(!op_process_thread19.is_started());
+  op_process_thread19.create();
+
+  assert(!op_process_thread20.is_started());
+  op_process_thread20.create();
+
+  assert(!op_process_thread21.is_started());
+  op_process_thread21.create();
+
+  assert(!op_process_thread22.is_started());
+  op_process_thread22.create();
+
+  assert(!op_process_thread23.is_started());
+  op_process_thread23.create();
+
+  assert(!op_process_thread24.is_started());
+  op_process_thread24.create();
+
+  assert(!op_process_thread25.is_started());
+  op_process_thread25.create();
+
+  assert(!op_process_thread26.is_started());
+  op_process_thread26.create();
+
+  assert(!op_process_thread27.is_started());
+  op_process_thread27.create();
+
+  assert(!op_process_thread28.is_started());
+  op_process_thread28.create();
+
+  assert(!op_process_thread29.is_started());
+  op_process_thread29.create();
+
+  assert(!op_process_thread30.is_started());
+  op_process_thread30.create();
+
+  assert(!op_process_thread31.is_started());
+  op_process_thread31.create();
+
+  assert(!op_process_thread32.is_started());
+  op_process_thread32.create();
+
+  assert(!op_process_thread33.is_started());
+  op_process_thread33.create();
+
+  assert(!op_process_thread34.is_started());
+  op_process_thread34.create();
+
+  assert(!op_process_thread35.is_started());
+  op_process_thread35.create();
+
+  assert(!op_process_thread36.is_started());
+  op_process_thread36.create();
+
+  assert(!op_process_thread37.is_started());
+  op_process_thread37.create();
+
+  assert(!op_process_thread38.is_started());
+  op_process_thread38.create();
+
+  assert(!op_process_thread39.is_started());
+  op_process_thread39.create();
+
+  assert(!op_process_thread40.is_started());
+  op_process_thread40.create();
+
+
+
+
+}
+
+void OSD::stop_op_threads()
+{
+  stop_io_thread.set(1);
+
+  op_thread_lock1.Lock();
+  op_thread_cond1.SignalOne();
+  op_thread_lock1.Unlock();
+
+  op_thread_lock2.Lock();
+  op_thread_cond2.SignalOne();
+  op_thread_lock2.Unlock();
+
+  op_thread_lock3.Lock();
+  op_thread_cond3.SignalOne();
+  op_thread_lock3.Unlock();
+
+  op_process_thread1.join();
+  op_process_thread2.join();
+  op_process_thread3.join();
+  op_process_thread4.join();
+  op_process_thread5.join();
+  op_process_thread6.join();
+  op_process_thread7.join();
+  op_process_thread8.join();
+  op_process_thread9.join();
+  op_process_thread10.join();
+  op_process_thread11.join();
+  op_process_thread12.join();
+  op_process_thread13.join();
+  op_process_thread14.join();
+  op_process_thread15.join();
+  op_process_thread16.join();
+  op_process_thread17.join();
+  op_process_thread18.join();
+  op_process_thread19.join();
+  op_process_thread20.join();
+  op_process_thread21.join();
+  op_process_thread22.join();
+  op_process_thread23.join();
+  op_process_thread24.join();
+  op_process_thread25.join();
+  op_process_thread26.join();
+  op_process_thread27.join();
+  op_process_thread28.join();
+  op_process_thread29.join();
+  op_process_thread30.join();
+  op_process_thread31.join();
+  op_process_thread32.join();
+  op_process_thread33.join();
+  op_process_thread34.join();
+  op_process_thread35.join();
+  op_process_thread36.join();
+  op_process_thread37.join();
+  op_process_thread38.join();
+  op_process_thread39.join();
+  op_process_thread40.join();
+}
+
+
+void OSD::process_op_fast(uint32_t pool_number)
+{
+  switch(pool_number)
+  {
+	case 1:
+		op_thread_lock1.Lock();
+		break;
+	case 2:
+		op_thread_lock2.Lock();
+		break;
+        case 3:
+                op_thread_lock3.Lock();
+                break;
+        case 4:
+                op_thread_lock4.Lock();
+                break;
+        case 5:
+                op_thread_lock5.Lock();
+                break;
+        case 6:
+                op_thread_lock6.Lock();
+                break;
+
+        case 7:
+                op_thread_lock7.Lock();
+                break;
+
+        case 8:
+                op_thread_lock8.Lock();
+                break;
+
+
+	default:
+		assert(0);
+  }
+  //op_thread_lock.Lock();
+  while (true) {
+  
+  	switch(pool_number)
+  	{
+        	case 1:
+                	while (!pg_for_fast_processing1.empty())
+			{
+                		pair<PGRef, OpRequestRef> item = pg_for_fast_processing1.front();
+                		pg_for_fast_processing1.pop();
+                		op_thread_lock1.Unlock();
+
+                		(item.first)->lock();
+
+                		if (!(item.first)->deleting)
+                		{
+                        		(item.first)->do_request_op_fast(item.second);
+                		}
+                		(item.first)->unlock();
+				op_thread_lock1.Lock();
+
+			}
+
+        		// wait for something to be put on queue
+        		//op_thread_cond.Wait(op_thread_lock);
+        		op_thread_cond1.WaitInterval(cct, op_thread_lock1, utime_t(2, 0));
+
+                	break;
+        	case 2:
+                        while (!pg_for_fast_processing2.empty())
+                        {
+                                pair<PGRef, OpRequestRef> item = pg_for_fast_processing2.front();
+                                pg_for_fast_processing2.pop();
+                                op_thread_lock2.Unlock();
+
+                                (item.first)->lock();
+
+                                if (!(item.first)->deleting)
+                                {
+                                        (item.first)->do_request_op_fast(item.second);
+                                }
+                                (item.first)->unlock();
+                                op_thread_lock2.Lock();
+
+                        }
+
+                        // wait for something to be put on queue
+                        //op_thread_cond.Wait(op_thread_lock);
+                        op_thread_cond2.WaitInterval(cct, op_thread_lock2, utime_t(2, 0));
+
+                	break;
+        	case 3:
+                        while (!pg_for_fast_processing3.empty())
+                        {
+                                pair<PGRef, OpRequestRef> item = pg_for_fast_processing3.front();
+                                pg_for_fast_processing3.pop();
+                                op_thread_lock3.Unlock();
+
+                                (item.first)->lock();
+
+                                if (!(item.first)->deleting)
+                                {
+                                        (item.first)->do_request_op_fast(item.second);
+                                }
+                                (item.first)->unlock();
+                                op_thread_lock3.Lock();
+
+                        }
+
+                        // wait for something to be put on queue
+                        //op_thread_cond.Wait(op_thread_lock);
+                        op_thread_cond3.WaitInterval(cct, op_thread_lock3, utime_t(2, 0));
+
+                	break;
+        	case 4:
+                        while (!pg_for_fast_processing4.empty())
+                        {
+                                pair<PGRef, OpRequestRef> item = pg_for_fast_processing4.front();
+                                pg_for_fast_processing4.pop();
+                                op_thread_lock4.Unlock();
+
+                                (item.first)->lock();
+
+                                if (!(item.first)->deleting)
+                                {
+                                        (item.first)->do_request_op_fast(item.second);
+                                }
+                                (item.first)->unlock();
+                                op_thread_lock4.Lock();
+
+                        }
+
+                        // wait for something to be put on queue
+                        //op_thread_cond.Wait(op_thread_lock);
+                        op_thread_cond4.WaitInterval(cct, op_thread_lock4, utime_t(2, 0));
+
+                	break;
+
+                case 5:
+                        while (!pg_for_fast_processing5.empty())
+                        {
+                                pair<PGRef, OpRequestRef> item = pg_for_fast_processing5.front();
+                                pg_for_fast_processing5.pop();
+                                op_thread_lock5.Unlock();
+
+                                (item.first)->lock();
+
+                                if (!(item.first)->deleting)
+                                {
+                                        (item.first)->do_request_op_fast(item.second);
+                                }
+                                (item.first)->unlock();
+                                op_thread_lock5.Lock();
+
+                        }
+
+                        // wait for something to be put on queue
+                        //op_thread_cond.Wait(op_thread_lock);
+                        op_thread_cond5.WaitInterval(cct, op_thread_lock5, utime_t(2, 0));
+
+                        break;
+
+                case 6:
+                        while (!pg_for_fast_processing6.empty())
+                        {
+                                pair<PGRef, OpRequestRef> item = pg_for_fast_processing6.front();
+                                pg_for_fast_processing6.pop();
+                                op_thread_lock6.Unlock();
+
+                                (item.first)->lock();
+
+                                if (!(item.first)->deleting)
+                                {
+                                        (item.first)->do_request_op_fast(item.second);
+                                }
+                                (item.first)->unlock();
+                                op_thread_lock6.Lock();
+
+                        }
+
+                        // wait for something to be put on queue
+                        //op_thread_cond.Wait(op_thread_lock);
+                        op_thread_cond6.WaitInterval(cct, op_thread_lock6, utime_t(2, 0));
+
+                        break;
+
+                case 7:
+                        while (!pg_for_fast_processing7.empty())
+                        {
+                                pair<PGRef, OpRequestRef> item = pg_for_fast_processing7.front();
+                                pg_for_fast_processing7.pop();
+                                op_thread_lock7.Unlock();
+
+                                (item.first)->lock();
+
+                                if (!(item.first)->deleting)
+                                {
+                                        (item.first)->do_request_op_fast(item.second);
+                                }
+                                (item.first)->unlock();
+                                op_thread_lock7.Lock();
+
+                        }
+
+                        // wait for something to be put on queue
+                        //op_thread_cond.Wait(op_thread_lock);
+                        op_thread_cond7.WaitInterval(cct, op_thread_lock7, utime_t(2, 0));
+
+                        break;
+
+                case 8:
+                        while (!pg_for_fast_processing8.empty())
+                        {
+                                pair<PGRef, OpRequestRef> item = pg_for_fast_processing8.front();
+                                pg_for_fast_processing8.pop();
+                                op_thread_lock8.Unlock();
+
+                                (item.first)->lock();
+
+                                if (!(item.first)->deleting)
+                                {
+                                        (item.first)->do_request_op_fast(item.second);
+                                }
+                                (item.first)->unlock();
+                                op_thread_lock8.Lock();
+
+                        }
+
+                        // wait for something to be put on queue
+                        //op_thread_cond.Wait(op_thread_lock);
+                        op_thread_cond8.WaitInterval(cct, op_thread_lock8, utime_t(2, 0));
+
+                        break;
+
+
+        	default:
+                	assert(0);
+  	}
+
+	if (stop_io_thread.read() != 0)
+        {
+        	break;
+	}
+
+	
+	/*
+	while (!pg_for_fast_processing.empty())
+    	{
+
+		pair<PGRef, OpRequestRef> item = pg_for_fast_processing.front();
+		pg_for_fast_processing.pop();
+		op_thread_lock.Unlock();
+
+        	(item.first)->lock();
+
+        	if (!(item.first)->deleting)
+        	{
+             		(item.first)->do_request_op_fast(item.second);
+        	}
+        	(item.first)->unlock();
+
+
+		//handle_op(item.second, item.first);
+		
+		op_thread_lock.Lock();
+    	}
+	
+    	if (stop_io_thread)
+	{
+      		break;
+	}
+
+	op_thread_cond.WaitInterval(cct, op_thread_lock, utime_t(2, 0));*/
+  }
+
+  switch(pool_number)
+  {
+        case 1:
+                op_thread_lock1.Unlock();
+                break;
+        case 2:
+                op_thread_lock2.Unlock();
+                break;
+        case 3:
+                op_thread_lock3.Unlock();
+                break;
+        case 4:
+                op_thread_lock4.Unlock();
+                break;
+
+        case 5:
+                op_thread_lock5.Unlock();
+                break;
+
+        case 6:
+                op_thread_lock6.Unlock();
+                break;
+        case 7:
+                op_thread_lock7.Unlock();
+                break;
+        case 8:
+                op_thread_lock8.Unlock();
+                break;
+        default:
+                return;
+  }
+
+  //op_thread_lock.Unlock();
 }
 
 void cls_initialize(ClassHandler *ch);
