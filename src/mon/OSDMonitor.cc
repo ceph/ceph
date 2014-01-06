@@ -555,7 +555,8 @@ void OSDMonitor::encode_pending(MonitorDBStore::Transaction *t)
   // finalize up pending_inc
   pending_inc.modified = ceph_clock_now(g_ceph_context);
 
-  pending_inc.propagate_snaps_to_tiers(osdmap);
+  int r = pending_inc.propagate_snaps_to_tiers(g_ceph_context, osdmap);
+  assert(r == 0);
 
   bufferlist bl;
 
