@@ -92,7 +92,7 @@ void ReplicatedBackend::check_recovery_sources(const OSDMapRef osdmap)
 }
 
 bool ReplicatedBackend::handle_message(
-  OpRequestRef op
+  const OpRequestRef& op
   )
 {
   dout(10) << __func__ << ": " << op << dendl;
@@ -260,6 +260,25 @@ int ReplicatedBackend::objects_get_attr(
     hoid,
     attr.c_str(),
     bp);
+  if (r >= 0 && out) {
+    out->clear();
+    out->push_back(bp);
+  }
+  return r;
+}
+
+int ReplicatedBackend::objects_get_attr_fast(
+  const hobject_t &hoid,
+  const string &attr,
+  bufferlist *out,
+  int& fd, string& fullPath)
+{
+  bufferptr bp;
+  int r = osd->store->getattr_fast(
+    coll,
+    hoid,
+    attr.c_str(),
+    bp, fd, fullPath);
   if (r >= 0 && out) {
     out->clear();
     out->push_back(bp);

@@ -175,7 +175,7 @@
 
    /// gives PGBackend a crack at an incoming message
    virtual bool handle_message(
-     OpRequestRef op ///< [in] message received
+     const OpRequestRef& op ///< [in] message received
      ) = 0; ///< @return true if the message was handled
 
    virtual void check_recovery_sources(const OSDMapRef osdmap) = 0;
@@ -225,6 +225,13 @@
      const hobject_t &hoid,
      const string &attr,
      bufferlist *out) = 0;
+
+   virtual int objects_get_attr_fast(
+  	const hobject_t &hoid,
+  	const string &attr,
+  	bufferlist *out,
+  	int& fd, string& fullPath) = 0;
+
  };
 
 #endif

@@ -68,7 +68,7 @@ public:
 
   /// @see PGBackend::handle_message
   bool handle_message(
-    OpRequestRef op
+    const OpRequestRef& op
     );
 
   void on_change(ObjectStore::Transaction *t);
@@ -168,6 +168,13 @@ public:
     const hobject_t &hoid,
     const string &attr,
     bufferlist *out);
+
+ int objects_get_attr_fast(
+  const hobject_t &hoid,
+  const string &attr,
+  bufferlist *out,
+  int& fd, string& fullPath);
+
 private:
   // push
   struct PushInfo {
@@ -250,7 +257,7 @@ private:
   void handle_pull(int peer, PullOp &op, PushOp *reply);
   bool handle_pull_response(
     int from, PushOp &op, PullOp *response,
-    list<ObjectContextRef> *to_continue,
+    list<hobject_t> *to_continue,
     ObjectStore::Transaction *t);
   void handle_push(int from, PushOp &op, PushReplyOp *response,
 		   ObjectStore::Transaction *t);
