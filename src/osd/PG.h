@@ -187,7 +187,6 @@ struct PGPool {
 class PG {
 public:
   std::string gen_prefix() const;
-
   /*** PG ****/
 protected:
   OSDService *osd;
@@ -200,6 +199,8 @@ public:
   void update_snap_mapper_bits(uint32_t bits) {
     snap_mapper.update_bits(bits);
   }
+
+
 protected:
   // Ops waiting for map, should be queued at back
   Mutex map_lock;
@@ -208,7 +209,7 @@ protected:
   OSDMapRef last_persisted_osdmap_ref;
   PGPool pool;
 
-  void queue_op(OpRequestRef op);
+  int queue_op(const OpRequestRef& op);
   void take_op_map_waiters();
 
   void update_osdmap_ref(OSDMapRef newmap) {
@@ -645,9 +646,14 @@ public:
 
   virtual void check_local() = 0;
 
-  virtual int start_recovery_ops(
+  /**
+   * @param ops_begun returns how many recovery ops the function started
+   * @returns true if any useful work was accomplished; false otherwise
+   */
+  virtual bool start_recovery_ops(
     int max, RecoveryCtx *prctx,
-    ThreadPool::TPHandle &handle) = 0;
+    ThreadPool::TPHandle &handle,
+    int *ops_begun) = 0;
 
   void purge_strays();
 
@@ -1745,10 +1751,10 @@ public:
   bool acting_up_affected(const vector<int>& newup, const vector<int>& newacting);
 
   // OpRequest queueing
-  bool can_discard_op(OpRequestRef op);
+  bool can_discard_op(const OpRequestRef& op);
   bool can_discard_scan(OpRequestRef op);
   bool can_discard_backfill(OpRequestRef op);
-  bool can_discard_request(OpRequestRef op);
+  bool can_discard_request(const OpRequestRef& op);
 
   template<typename T, int MSGTYPE>
   bool can_discard_replica_op(OpRequestRef op);
@@ -1768,7 +1774,7 @@ public:
     return e <= get_osdmap()->get_epoch();
   }
 
-  bool op_has_sufficient_caps(OpRequestRef op);
+  bool op_has_sufficient_caps(const OpRequestRef& op);
 
 
   // recovery bits
@@ -1802,7 +1808,12 @@ public:
     ThreadPool::TPHandle &handle
   ) = 0;
 
-  virtual void do_op(OpRequestRef op) = 0;
+  // abstract bits
+  virtual void do_request_op_fast(
+    const OpRequestRef& op
+  ) = 0;
+
+  virtual void do_op(const OpRequestRef& op) = 0;
   virtual void do_sub_op(OpRequestRef op) = 0;
   virtual void do_sub_op_reply(OpRequestRef op) = 0;
   virtual void do_scan(

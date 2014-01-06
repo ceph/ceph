@@ -1329,7 +1329,7 @@ void PG::do_pending_flush()
   }
 }
 
-bool PG::op_has_sufficient_caps(OpRequestRef op)
+bool PG::op_has_sufficient_caps(const OpRequestRef& op)
 {
   // only check MOSDOp
   if (op->get_req()->get_type() != CEPH_MSG_OSD_OP)
@@ -1383,19 +1383,26 @@ void PG::take_op_map_waiters()
   }
 }
 
-void PG::queue_op(OpRequestRef op)
+
+int PG::queue_op(const OpRequestRef& op)
 {
   Mutex::Locker l(map_lock);
   if (!waiting_for_map.empty()) {
     // preserve ordering
     waiting_for_map.push_back(op);
-    return;
+    return 1;
   }
   if (op_must_wait_for_map(get_osdmap_with_maplock(), op)) {
     waiting_for_map.push_back(op);
-    return;
+    return 1;
+  }
+  if (op->get_req()->get_type() == CEPH_MSG_OSD_OP)
+  {
+	return 0;
   }
   osd->op_wq.queue(make_pair(PGRef(this), op));
+  return 0;
+  
 }
 
 void PG::replay_queued_ops()
@@ -4735,7 +4742,7 @@ ostream& operator<<(ostream& out, const PG& pg)
   return out;
 }
 
-bool PG::can_discard_op(OpRequestRef op)
+bool PG::can_discard_op(const OpRequestRef& op)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   if (OSD::op_is_discardable(m)) {
@@ -4805,7 +4812,7 @@ bool PG::can_discard_backfill(OpRequestRef op)
 
 }
 
-bool PG::can_discard_request(OpRequestRef op)
+bool PG::can_discard_request(const OpRequestRef& op)
 {
   switch (op->get_req()->get_type()) {
   case CEPH_MSG_OSD_OP:
