@@ -4975,6 +4975,29 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, tid_t tid, int r)
 
   assert(cop->rval >= 0);
 
+  if (oid.snap < CEPH_NOSNAP) {
+    // verify snap hasn't been deleted
+    vector<snapid_t>::iterator p = cop->results.snaps.begin();
+    while (p != cop->results.snaps.end()) {
+      if (pool.info.is_removed_snap(*p)) {
+	dout(10) << __func__ << " clone snap " << *p << " has been deleted"
+		 << dendl;
+	for (vector<snapid_t>::iterator q = p + 1;
+	     q != cop->results.snaps.end();
+	     ++q)
+	  *(q - 1) = *q;
+	cop->results.snaps.resize(cop->results.snaps.size() - 1);
+      } else {
+	++p;
+      }
+    }
+    if (cop->results.snaps.empty()) {
+      dout(10) << __func__ << " no more snaps for " << oid << dendl;
+      r = -ENOENT;
+      goto out;
+    }
+  }
+
   if (!cop->cursor.is_complete()) {
     // write out what we have so far
     if (cop->temp_cursor.is_initial()) {
@@ -5115,8 +5138,20 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     return;
   }
 
+  if (r == -ENOENT && results->started_temp_obj) {
+    dout(10) << __func__ << " abort; will clean up partial work" << dendl;
+    ObjectContextRef tempobc = get_object_context(results->temp_oid, true);
+    RepGather *repop = simple_repop_create(tempobc);
+    repop->ctx->op_t.remove(results->temp_coll, results->temp_oid);
+    repop->ctx->discard_temp_oid = results->temp_oid;
+    pgbackend->clear_temp_obj(results->temp_oid);
+    simple_repop_submit(repop);
+    results->started_temp_obj = false;
+  }
+
   bool whiteout = false;
   if (r == -ENOENT &&
+      soid.snap == CEPH_NOSNAP &&
       (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK ||
        pool.info.cache_mode == pg_pool_t::CACHEMODE_READONLY)) {
     dout(10) << __func__ << " whiteout " << soid << dendl;
