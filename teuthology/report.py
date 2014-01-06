@@ -31,7 +31,10 @@ def main(args):
     run = args['--run']
     job = args['--job']
     dead = args['--dead']
-    if dead and len(run) == 1 and job:
+    if dead and not job:
+        for run_name in run:
+            report_run_dead(run_name, reporter)
+    elif dead and len(run) == 1 and job:
         for job_id in job:
             try_push_job_info(dict(name=run[0], job_id=job_id, status='dead'))
     elif len(run) == 1 and job:
@@ -343,3 +346,12 @@ def try_push_job_info(job_config, extra_info=None):
     except (requests.exceptions.RequestException, socket.error):
         log.exception("Could not report results to %s" %
                       config.results_server)
+
+
+def report_run_dead(run_name, reporter):
+    jobs = reporter.serializer.jobs_for_run(run_name).keys()
+    log.info("Reporting {run} as dead: {count} jobs".format(run=run_name,
+                                                            count=len(jobs)))
+    for job in sorted(jobs):
+        reporter.report_job(run_name, job, dict(name=run_name, job_id=job,
+                                                status='dead'))
