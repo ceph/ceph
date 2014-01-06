@@ -5489,10 +5489,15 @@ int ReplicatedPG::try_flush_mark_clean(FlushOpRef fop)
   ObjectContextRef obc = fop->ctx->obc;
   const hobject_t& oid = obc->obs.oi.soid;
 
-  if (fop->flushed_version != obc->obs.oi.user_version) {
-    dout(10) << __func__ << " flushed_version " << fop->flushed_version
-	     << " != current " << obc->obs.oi.user_version
-	     << dendl;
+  if (fop->flushed_version != obc->obs.oi.user_version ||
+      !obc->obs.exists) {
+    if (obc->obs.exists)
+      dout(10) << __func__ << " flushed_version " << fop->flushed_version
+	       << " != current " << obc->obs.oi.user_version
+	       << dendl;
+    else
+      dout(10) << __func__ << " object no longer exists" << dendl;
+
     if (!fop->dup_ops.empty()) {
       dout(20) << __func__ << " requeueing dups" << dendl;
       requeue_ops(fop->dup_ops);
