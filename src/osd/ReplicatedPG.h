@@ -384,7 +384,7 @@ public:
     OpContext(const OpContext& other);
     const OpContext& operator=(const OpContext& other);
 
-    OpContext(OpRequestRef _op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
+    OpContext(const OpRequestRef& _op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
 	      ObjectState *_obs, SnapSetContext *_ssc,
 	      ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(_obs), snapset(0),
@@ -397,9 +397,18 @@ public:
       num_write(0),
       copy_cb(NULL),
       lock_to_release(NONE) {
+      new_obs.fd = _obs->fd;
+      new_obs.fullPath = _obs->fullPath;
       if (_ssc) {
 	new_snapset = _ssc->snapset;
 	snapset = &_ssc->snapset;
+      }
+    }
+    void reset_obs(ObjectContextRef obc) {
+      new_obs = ObjectState(obc->obs.oi, obc->obs.exists);
+      if (obc->ssc) {
+	new_snapset = obc->ssc->snapset;
+	snapset = &obc->ssc->snapset;
       }
     }
     ~OpContext() {
@@ -714,7 +723,7 @@ protected:
 
   int find_object_context(const hobject_t& oid,
 			  ObjectContextRef *pobc,
-			  bool can_create, snapid_t *psnapid=NULL);
+			  bool can_create, snapid_t *psnapid=NULL, bool io_path = false);
 
   void add_object_context_to_pg_stat(ObjectContextRef obc, pg_stat_t *stat);
 
@@ -831,7 +840,7 @@ protected:
 				   uint64_t offset, uint64_t length, bool count_bytes);
   void add_interval_usage(interval_set<uint64_t>& s, object_stat_sum_t& st);
 
-  inline bool maybe_handle_cache(OpRequestRef op, ObjectContextRef obc, int r);
+  inline bool maybe_handle_cache(const OpRequestRef& op, const ObjectContextRef& obc, int r);
   void do_cache_redirect(OpRequestRef op, ObjectContextRef obc);
 
   int prepare_transaction(OpContext *ctx);
@@ -842,13 +851,18 @@ protected:
   void _clear_recovery_state();
 
   void queue_for_recovery();
-  int start_recovery_ops(
+  bool start_recovery_ops(
     int max, RecoveryCtx *prctx,
-    ThreadPool::TPHandle &handle);
+    ThreadPool::TPHandle &handle, int *started);
 
   int recover_primary(int max, ThreadPool::TPHandle &handle);
   int recover_replicas(int max, ThreadPool::TPHandle &handle);
-  int recover_backfill(int max, ThreadPool::TPHandle &handle);
+  /**
+   * @param work_started will be set to true if recover_backfill got anywhere
+   * @returns the number of operations started
+   */
+  int recover_backfill(int max, ThreadPool::TPHandle &handle,
+                       bool *work_started);
 
   /**
    * scan a (hash) range of objects in the current pg
