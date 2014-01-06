@@ -2184,6 +2184,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
     delta.num_object_clones--;
     delta.num_bytes -= snapset.clone_size[last];
     info.stats.stats.add(delta, obc->obs.oi.category);
+    obc->obs.exists = false;
 
     snapset.clones.erase(p);
     snapset.clone_overlap.erase(last);
