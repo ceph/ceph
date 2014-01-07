@@ -102,6 +102,7 @@ using namespace std;
 #include "messages/MClientCapRelease.h"
 #include "messages/MClientLease.h"
 #include "messages/MClientSnap.h"
+#include "messages/MClientQuota.h"
 
 #include "messages/MMDSSlaveRequest.h"
 
@@ -528,6 +529,9 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     break;
   case CEPH_MSG_CLIENT_SNAP:
     m = new MClientSnap;
+    break;
+  case CEPH_MSG_CLIENT_QUOTA:
+    m = new MClientQuota;
     break;
 
     // mds
