@@ -1959,6 +1959,8 @@ void CInode::finish_scatter_gather_update(int type)
 	  pi->rstat.version = v;
 	}
       }
+
+      mdcache->broadcast_quota_to_client(this);
     }
     break;
 
