@@ -45,6 +45,7 @@
 #define CEPH_FEATURE_OSD_ERASURE_CODES (1ULL<<38)
 #define CEPH_FEATURE_OSD_TMAP2OMAP (1ULL<<38)   /* overlap with EC */
 #define CEPH_FEATURE_OSDMAP_ENC    (1ULL<<39) /* supports new-style OSDMap encoding */
+#define CEPH_FEATURE_MDS_QUOTA      (1ULL<<40)
 
 /*
  * The introduction of CEPH_FEATURE_OSD_SNAPMAPPER caused the feature
@@ -112,6 +113,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	 CEPH_FEATURE_EXPORT_PEER |	    \
          CEPH_FEATURE_OSD_ERASURE_CODES |   \
 	 CEPH_FEATURE_OSDMAP_ENC |          \
+	 CEPH_FEATURE_MDS_QUOTA | \
 	 0ULL)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL
