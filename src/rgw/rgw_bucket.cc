@@ -717,10 +717,36 @@ int RGWBucket::check_index(RGWBucketAdminOpState& op_state,
   return 0;
 }
 
+
+int RGWBucket::policy_bl_to_stream(bufferlist& bl, ostream& o)
+{
+  RGWAccessControlPolicy_S3 policy(g_ceph_context);
+  bufferlist::iterator iter = bl.begin();
+  try {
+    policy.decode(iter);
+  } catch (buffer::error& err) {
+    dout(0) << "ERROR: caught buffer::error, could not decode policy" << dendl;
+    return -EIO;
+  }
+  policy.to_xml(o);
+  return 0;
+}
+
 int RGWBucket::get_policy(RGWBucketAdminOpState& op_state, ostream& o)
 {
   std::string object_name = op_state.get_object_name();
   rgw_bucket bucket = op_state.get_bucket();
+
+  if (!object_name.empty()) {
+    bufferlist bl;
+    rgw_obj obj(bucket, object_name);
+    int ret = store->get_attr(NULL, obj, RGW_ATTR_ACL, bl);
+    if (ret < 0)
+      return ret;
+
+    return policy_bl_to_stream(bl, o);
+  }
+
 
   RGWBucketInfo bucket_info;
   map<string, bufferlist> attrs;
@@ -734,19 +760,7 @@ int RGWBucket::get_policy(RGWBucketAdminOpState& op_state, ostream& o)
     return -ENOENT;
   }
 
-  bufferlist& bl = aiter->second;
-
-  RGWAccessControlPolicy_S3 policy(g_ceph_context);
-  bufferlist::iterator iter = bl.begin();
-  try {
-    policy.decode(iter);
-  } catch (buffer::error& err) {
-    dout(0) << "ERROR: caught buffer::error, could not decode policy" << dendl;
-    return -EIO;
-  }
-  policy.to_xml(o);
-
-  return 0;
+  return policy_bl_to_stream(aiter->second, o);
 }
 
 
