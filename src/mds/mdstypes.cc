@@ -155,6 +155,14 @@ ostream& operator<<(ostream &out, const nest_info_t &n)
   return out;
 }
 
+ostream& operator<<(ostream &out, const quota_info_t &n)
+{
+  out << "quota("
+      << "max_bytes = " << n.max_bytes
+      << " max_files = " << n.max_files
+      << ")";
+  return out;
+}
 
 /*
  * client_writeable_range_t
