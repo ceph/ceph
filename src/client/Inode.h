@@ -207,6 +207,9 @@ struct Inode {
 
   unsigned flags;
 
+  quota_info_t quota;
+  QuotaTree* qtree;
+
   // about the dir (if this is one!)
   set<int>  dir_contacts;
   bool      dir_hashed, dir_replicated;
@@ -289,6 +292,7 @@ struct Inode {
       time_warp_seq(0), max_size(0), version(0), xattr_version(0),
       inline_version(0),
       flags(0),
+      qtree(NULL),
       dir_hashed(false), dir_replicated(false), auth_cap(NULL),
       dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), shared_gen(0), cache_gen(0),
       snap_caps(0), snap_cap_refs(0),
@@ -302,6 +306,7 @@ struct Inode {
     memset(&dir_layout, 0, sizeof(dir_layout));
     memset(&layout, 0, sizeof(layout));
     memset(&flushing_cap_tid, 0, sizeof(__u16)*CEPH_CAP_BITS);
+    memset(&quota, 0, sizeof(quota));
   }
   ~Inode() { }
 
