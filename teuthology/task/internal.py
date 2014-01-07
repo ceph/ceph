@@ -189,10 +189,9 @@ def connect(ctx, config):
                 key = None
         except (AttributeError, KeyError):
             pass
-        for machine in ctx.config['targets'].iterkeys():
-            if teuthology.is_vm(machine):
+        if key.startswith('ssh-rsa ') or key.startswith('ssh-dss '):
+            if teuthology.is_vm(t):
                 key = None
-                break
         remotes.append(
             remote.Remote(name=t,
                           ssh=connection.connect(user_at_host=t,
