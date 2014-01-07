@@ -780,6 +780,7 @@ OPTION(rgw_user_quota_sync_wait_time, OPT_INT, 3600 * 24) // min time between tw
 OPTION(rgw_multipart_min_part_size, OPT_INT, 5 * 1024 * 1024) // min size for each part (except for last one) in multipart upload
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
+OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter
 
 // This will be set to true when it is safe to start threads.
 // Once it is true, it will never change.
