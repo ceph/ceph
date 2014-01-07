@@ -58,10 +58,10 @@ public:
   friend class MOSDOpReply;
 
   // read
-  snapid_t get_snapid() { return snapid; }
+  snapid_t& get_snapid() { return snapid; }
   void set_snapid(snapid_t s) { snapid = s; }
   // writ
-  snapid_t get_snap_seq() const { return snap_seq; }
+  const snapid_t& get_snap_seq() const { return snap_seq; }
   const vector<snapid_t> &get_snaps() const { return snaps; }
   void set_snaps(const vector<snapid_t>& i) {
     snaps = i;
@@ -78,9 +78,9 @@ public:
   
   object_t& get_oid() { return oid; }
 
-  pg_t     get_pg() const { return pgid; }
+  const pg_t&     get_pg() const { return pgid; }
 
-  object_locator_t get_object_locator() const {
+  const object_locator_t& get_object_locator() const {
     return oloc;
   }
 
@@ -320,9 +320,13 @@ struct ceph_osd_request_head {
       //::decode(ops, p);
       __u16 num_ops;
       ::decode(num_ops, p);
-      ops.resize(num_ops);
+      ops.reserve(num_ops);
+	
       for (unsigned i = 0; i < num_ops; i++)
+      {
+	ops.push_back(OSDOp());
 	::decode(ops[i].op, p);
+      }
 
       ::decode(snapid, p);
       ::decode(snap_seq, p);
