@@ -15,7 +15,8 @@ class OnExitManager {
     typedef void (*callback_t)(void *arg);
 
     OnExitManager() {
-      assert(pthread_mutex_init(&lock_, NULL) == 0);
+      int ret = pthread_mutex_init(&lock_, NULL);
+      assert(ret == 0);
     }
 
     ~OnExitManager() {
