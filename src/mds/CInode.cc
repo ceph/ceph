@@ -1359,6 +1359,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     if (inode.is_dir()) {
       ::encode(inode.version, bl);
       ::encode(inode.layout, bl);
+      ::encode(inode.quota, bl);
     }
     break;
   
@@ -1614,6 +1615,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     if (inode.is_dir()) {
       ::decode(inode.version, p);
       ::decode(inode.layout, p);
+      ::decode(inode.quota, p);
     }
     break;
 
