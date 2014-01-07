@@ -173,9 +173,13 @@ private:
 
   void init_subsys();
 
-  // Expand metavariables in the provided string.
-  // Returns true if any metavariables were found and expanded.
-  bool expand_meta(std::string &val) const;
+  bool expand_meta(std::string &val,
+		   std::ostream *oss) const;
+
+  bool expand_meta(std::string &val,
+		   config_option *opt,
+		   std::list<config_option *> stack,
+		   std::ostream *oss) const;
 
   /// expand all metavariables in config structure.
   void expand_all_meta();
@@ -233,6 +237,8 @@ public:
    * It is best if this lock comes first in the lock hierarchy. We will
    * hold this lock when calling configuration observers.  */
   mutable Mutex lock;
+
+  friend class test_md_config_t;
 };
 
 typedef enum {
