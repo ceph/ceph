@@ -254,10 +254,16 @@ void Client::tear_down_cache()
   assert(lru.lru_get_size() == 0);
 
   // close root ino
-  assert(inode_map.size() <= 1);
-  if (root && inode_map.size() == 1) {
+  assert(inode_map.size() <= 1 + root_parents.size());
+  if (root && inode_map.size() == 1 + root_parents.size()) {
     delete root;
     root = 0;
+    root_ancestor = 0;
+    while (!root_parents.empty()) {
+      Inode *in = root_parents.begin()->second;
+      root_parents.erase(root_parents.begin());
+      delete in;
+    }
     inode_map.clear();
   }
 
@@ -490,10 +496,16 @@ void Client::trim_cache()
   }
 
   // hose root?
-  if (lru.lru_get_size() == 0 && root && root->get_num_ref() == 0 && inode_map.size() == 1) {
+  if (lru.lru_get_size() == 0 && root && root->get_num_ref() == 0 && inode_map.size() == 1 + root_parents.size()) {
     ldout(cct, 15) << "trim_cache trimmed root " << root << dendl;
     delete root;
     root = 0;
+    root_ancestor = 0;
+    while (!root_parents.empty()) {
+      Inode *in = root_parents.begin()->second;
+      root_parents.erase(root_parents.begin());
+      delete in;
+    }
     inode_map.clear();
   }
 }
@@ -636,8 +648,13 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     inode_map[st->vino] = in;
     if (!root) {
       root = in;
+      root_ancestor = in;
       cwd = root;
       cwd->get();
+    } else if (!mounted) {
+      root_parents[root_ancestor] = in;
+      root_ancestor = in;
+      in->get();
     }
 
     // immutable bits
@@ -2225,8 +2242,15 @@ void Client::put_inode(Inode *in, int n)
     inode_map.erase(in->vino());
     in->cap_item.remove_myself();
     in->snaprealm_item.remove_myself();
-    if (in == root)
+    if (in == root) {
       root = 0;
+      root_ancestor = 0;
+      while (!root_parents.empty()) {
+        Inode *in = root_parents.begin()->second;
+        root_parents.erase(root_parents.begin());
+        put_inode(in);
+      }
+    }
     delete in;
   }
 }
@@ -4001,8 +4025,6 @@ int Client::mount(const std::string &mount_root)
   whoami = monclient->get_global_id();
   messenger->set_myname(entity_name_t::CLIENT(whoami.v));
 
-  mounted = true;
-
   tick(); // start tick
   
   ldout(cct, 2) << "mounted: have osdmap " << osdmap->get_epoch() 
@@ -4012,19 +4034,29 @@ int Client::mount(const std::string &mount_root)
 
   // hack: get+pin root inode.
   //  fuse assumes it's always there.
-  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
   filepath fp(CEPH_INO_ROOT);
   if (!mount_root.empty())
     fp = filepath(mount_root.c_str());
-  req->set_filepath(fp);
-  req->head.args.getattr.mask = CEPH_STAT_CAP_INODE_ALL;
-  int res = make_request(req, -1, -1);
-  ldout(cct, 10) << "root getattr result=" << res << dendl;
-  if (res < 0)
-    return res;
+  while (true) {
+    MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
+    req->set_filepath(fp);
+    req->head.args.getattr.mask = CEPH_STAT_CAP_INODE_ALL;
+    int res = make_request(req, -1, -1);
+    ldout(cct, 10) << "root getattr result=" << res << dendl;
+    if (res < 0)
+      return res;
 
+    if (fp.depth())
+      fp.pop_dentry();
+    else
+      break;
+  }
+
+  assert(root_ancestor->is_root());
   assert(root);
   _ll_get(root);
+
+  mounted = true;
 
   // trace?
   if (!cct->_conf->client_trace.empty()) {
