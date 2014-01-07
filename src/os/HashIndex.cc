@@ -291,6 +291,28 @@ int HashIndex::_remove(const vector<string> &path,
   }
 }
 
+//this lookup is used for io path to reduce cpu consumption
+int HashIndex::_lookup(const ghobject_t &oid, string& full_path)
+{
+  full_path = get_base_path();
+  char buf[MAX_HASH_LEVEL + 1];
+  sprintf(buf, "%.*X", MAX_HASH_LEVEL, (uint32_t)oid.hobj.get_filestore_key());
+  struct stat stat_buf;
+  
+  for (int it = 0; it < strlen(buf); it++  ) {
+    string tmp_string = full_path;
+    tmp_string += "/DIR_" ;
+    tmp_string.push_back(buf[it]);
+    if (::stat(tmp_string.c_str(), &stat_buf)) {
+      break;
+    } else {
+      full_path = tmp_string;
+    }
+  }
+  
+  return lfn_get_name(oid, full_path);
+}
+
 int HashIndex::_lookup(const ghobject_t &oid,
 		       vector<string> *path,
 		       string *mangled_name,

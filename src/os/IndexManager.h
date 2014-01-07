@@ -52,6 +52,8 @@ class IndexManager {
   /// Currently in use CollectionIndices
   map<coll_t,std::tr1::weak_ptr<CollectionIndex> > col_indices;
 
+  hash_map<coll_t, CollectionIndex*> col_indices_io_path;
+
   /// Cleans up state for c @see RemoveOnDelete
   void put_index(
     coll_t c ///< Put the index for c
@@ -107,6 +109,13 @@ public:
    * @return error code
    */
   int init_index(coll_t c, const char *path, uint32_t filestore_version);
+  
+  int get_fd_fast(coll_t& c, const ghobject_t &oid, const string& baseDir, int flags, int& fd, string* fullPath = NULL); 
+  
+  bool isUpgrade()
+  {
+    return upgrade;
+  }
 };
 
 #endif

@@ -150,7 +150,12 @@ protected:
     IndexedPath *path,	   ///< [out] Path to object
     int *exist	           ///< [out] True if the object exists, else false
     ) = 0;
-
+  
+  virtual int retain(const ghobject_t &oid, int flags, string& full_path)
+  {
+    return 0;
+  }
+  
   /**
    * Moves objects matching <match> in the lsb <bits>
    *

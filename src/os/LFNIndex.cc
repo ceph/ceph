@@ -31,7 +31,7 @@
 #include "common/ceph_crypto.h"
 #include "include/compat.h"
 #include "chain_xattr.h"
-
+#include "common/errno.h"
 #include "LFNIndex.h"
 using ceph::crypto::SHA1;
 
@@ -106,17 +106,34 @@ int LFNIndex::unlink(const ghobject_t &oid)
   );
 }
 
-int LFNIndex::lookup(const ghobject_t &oid,
-		     IndexedPath *out_path,
-		     int *exist)
+int LFNIndex::fast_lookup(const ghobject_t &oid, int flags, string& full_path)
 {
   WRAP_RETRY(
-  vector<string> path;
-  string short_name;
-  r = _lookup(oid, &path, &short_name, exist);
+  full_path.reserve(get_base_path().size() + 6 + oid.hobj.oid.name.size() +
+		    10 + 1 + oid.hobj.get_key().size() + 2 + 1 + 14 +
+		    oid.hobj.nspace.size() + 1 + 8);
+
+  r = _lookup(oid, full_path);
   if (r < 0)
     goto out;
-  string full_path = get_full_path(path, short_name);
+
+  r = ::open(full_path.c_str(), flags, 0644);
+  if (r < 0) {
+    r = -errno;
+    dout(2) << "error opening file " << full_path << " with flags="
+	    << flags << "with error = " << cpp_strerror(-r) << dendl;
+  }
+  );
+}
+int LFNIndex::lookup(const ghobject_t &oid,
+                     IndexedPath *out_path,
+                     int *exist)
+{
+  WRAP_RETRY(
+  string full_path;
+  r = _lookup(oid, full_path);
+  if (r < 0)
+    goto out;
   struct stat buf;
   maybe_inject_failure();
   r = ::stat(full_path.c_str(), &buf);
@@ -611,9 +628,151 @@ static void append_escaped(string::const_iterator begin,
     } else if (*i == '\0') {
       out->append("\\n");
     } else {
-      out->append(i, i+1);
+      out->push_back(*i);
     }
   }
+}
+
+int LFNIndex::lfn_generate_object_name_poolless(const ghobject_t &oid, string& full_name)
+{
+  if (index_version == HASH_INDEX_TAG)
+    return lfn_generate_object_name_keyless(oid, full_name);
+  
+  assert(oid.generation == ghobject_t::NO_GEN);
+  string::const_iterator i = oid.hobj.oid.name.begin();
+  if (oid.hobj.oid.name.substr(0, 4) == "DIR_") {
+    full_name.append("\\d");
+    i += 4;
+  } else if (oid.hobj.oid.name[0] == '.') {
+    full_name.append("\\.");
+    ++i;
+  }
+  full_name.reserve(oid.hobj.oid.name.size() + 1 + oid.hobj.get_key().size() + 1 + 12);
+  append_escaped(i, oid.hobj.oid.name.end(), &full_name);
+  full_name.push_back('_');
+  append_escaped(oid.hobj.get_key().begin(), oid.hobj.get_key().end(), &full_name);
+  full_name.push_back('_');
+  
+  char snap_with_hash[PATH_MAX];
+  char *t = snap_with_hash;
+  char *end = t + sizeof(snap_with_hash);
+  if (oid.hobj.snap == CEPH_NOSNAP)
+    t += snprintf(t, end - t, "head");
+  else if (oid.hobj.snap == CEPH_SNAPDIR)
+    t += snprintf(t, end - t, "snapdir");
+  else
+    t += snprintf(t, end - t, "%llx", (long long unsigned)oid.hobj.snap);
+  snprintf(t, end - t, "_%.*X", (int)(sizeof(oid.hobj.hash)*2), oid.hobj.hash);
+  full_name += string(snap_with_hash);
+  return 0;
+}
+
+int LFNIndex::lfn_generate_object_name_keyless(const ghobject_t &oid, string& full_name)
+{
+  char s[FILENAME_MAX_LEN];
+  char *end = s + sizeof(s);
+  char *t = s;
+  
+  assert(oid.generation == ghobject_t::NO_GEN);
+  const char *i = oid.hobj.oid.name.c_str();
+  // Escape subdir prefix
+  if (oid.hobj.oid.name.substr(0, 4) == "DIR_") {
+    *t++ = '\\';
+    *t++ = 'd';
+    i += 4;
+  }
+  while (*i && t < end) {
+    if (*i == '\\') {
+      *t++ = '\\';
+      *t++ = '\\';      
+    } else if (*i == '.' && i == oid.hobj.oid.name.c_str()) {  // only escape leading .
+      *t++ = '\\';
+      *t++ = '.';
+    } else if (*i == '/') {
+      *t++ = '\\';
+      *t++ = 's';
+    } else
+      *t++ = *i;
+    i++;
+  }
+  
+  if (oid.hobj.snap == CEPH_NOSNAP)
+    t += snprintf(t, end - t, "_head");
+  else if (oid.hobj.snap == CEPH_SNAPDIR)
+    t += snprintf(t, end - t, "_snapdir");
+  else
+    t += snprintf(t, end - t, "_%llx", (long long unsigned)oid.hobj.snap);
+  snprintf(t, end - t, "_%.*X", (int)(sizeof(oid.hobj.hash)*2), oid.hobj.hash);
+
+  full_name += string(s);
+
+  return 0;
+}
+
+int LFNIndex::lfn_generate_object_name(const ghobject_t &oid, string& full_name)
+{
+  if (index_version == HASH_INDEX_TAG)
+    return lfn_generate_object_name_keyless(oid, full_name);
+  if (index_version == HASH_INDEX_TAG_2)
+    return lfn_generate_object_name_poolless(oid, full_name);
+
+  string::const_iterator i = oid.hobj.oid.name.begin();
+  if (oid.hobj.oid.name.substr(0, 4) == "DIR_") {
+    full_name.append("\\d");
+    i += 4;
+  } else if (oid.hobj.oid.name[0] == '.') {
+    full_name.append("\\.");
+    ++i;
+  }
+  append_escaped(i, oid.hobj.oid.name.end(), &full_name);
+  
+  full_name.push_back('_');
+  if (oid.hobj.get_key().size()) {
+    append_escaped(oid.hobj.get_key().begin(), oid.hobj.get_key().end(), &full_name);
+  }
+  full_name.push_back('_');
+  
+  char buf[PATH_MAX];
+  if (oid.hobj.snap == CEPH_NOSNAP)
+    sprintf(buf, "head_%.*X_", (int)(sizeof(oid.hobj.hash)*2), oid.hobj.hash);
+  else if (oid.hobj.snap == CEPH_SNAPDIR)
+    sprintf(buf, "snapdir_%.*X_", (int)(sizeof(oid.hobj.hash)*2), oid.hobj.hash);
+  else
+    sprintf(buf, "%llx_%.*X_", (long long unsigned)oid.hobj.snap, (int)(sizeof(oid.hobj.hash)*2), oid.hobj.hash);
+  full_name += buf;
+
+  if (oid.hobj.nspace.size()) {
+    append_escaped(oid.hobj.nspace.begin(), oid.hobj.nspace.end(), &full_name);
+  }
+  
+  full_name.push_back('_');
+
+  char* t = buf;
+  char* end = t + sizeof(buf);
+  if (oid.hobj.pool == -1)
+    t += sprintf(t, "none");
+  else
+    t += sprintf(t, "%llx", (long long unsigned)oid.hobj.pool);
+  full_name += buf;
+
+  if (oid.generation != ghobject_t::NO_GEN) {
+    assert(oid.shard_id != ghobject_t::NO_SHARD);
+    full_name.append("_");
+
+    t = buf;
+    end = t + sizeof(buf);
+    t += snprintf(t, end - t, "%llx", (long long unsigned)oid.generation);
+    full_name += string(buf);
+
+    full_name.append("_");
+
+    t = buf;
+    end = t + sizeof(buf);
+    t += snprintf(t, end - t, "%x", (int)oid.shard_id);
+    full_name += string(buf);
+  }
+
+  return 0;
 }
 
 string LFNIndex::lfn_generate_object_name(const ghobject_t &oid)
@@ -714,6 +873,43 @@ string LFNIndex::lfn_generate_object_name_poolless(const ghobject_t &oid)
   full_name += string(snap_with_hash);
   return full_name;
 }
+
+int LFNIndex::lfn_get_name(const ghobject_t &oid, string& full_path )
+{
+  full_path.push_back('/');
+  if (oid.hobj.oid.name.size() < 176)
+  {
+  	lfn_generate_object_name(oid, full_path);
+	return 0;
+  }
+  int r;
+
+  int i = 0;
+  char buf[FILENAME_MAX_LEN + 1];
+  for ( ; ; ++i) {
+    string candidate = lfn_get_short_name(oid, i);
+    full_path.push_back('/');
+    full_path += candidate;
+    r = chain_getxattr(full_path.c_str(), get_lfn_attr().c_str(), buf, sizeof(buf));
+    if (r < 0) {
+      if (errno != ENODATA && errno != ENOENT)
+	return -errno;
+      if (errno == ENODATA) {
+	// Left over from incomplete transaction, it'll be replayed
+	maybe_inject_failure();
+	r = ::unlink(full_path.c_str());
+	maybe_inject_failure();
+	if (r < 0)
+	  return -errno;
+      }
+      return 0;
+    }
+    assert(r > 0);
+  }
+  assert(0); // Unreachable
+  return 0;
+}
+
 
 int LFNIndex::lfn_get_name(const vector<string> &path, 
 			   const ghobject_t &oid,

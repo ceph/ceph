@@ -64,6 +64,7 @@ private:
    */
   int merge_threshold;
   int split_multiplier;
+  bool has_subdir;
 
   /// Encodes current subdir state for determining when to split/merge.
   struct subdir_info_s {
@@ -171,6 +172,9 @@ protected:
     const ghobject_t &oid,
     const string &mangled_name
     );
+
+  int _lookup(const ghobject_t &oid, string& full_path);
+
   int _lookup(
     const ghobject_t &oid,
     vector<string> *path,
