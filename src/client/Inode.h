@@ -67,6 +67,79 @@ struct CapSnap {
   void dump(Formatter *f) const;
 };
 
+class QuotaTree {
+private:
+  Inode *_in;
+
+  int _ancestor_ref;
+  QuotaTree *_ancestor;
+  int _parent_ref;
+  QuotaTree *_parent;
+
+  void _put()
+  {
+    if (!_in && !_ancestor_ref && !_parent_ref) {
+      set_parent(NULL);
+      set_ancestor(NULL);
+      delete this;
+    }
+  }
+  ~QuotaTree() {}
+public:
+  QuotaTree(Inode *i) :
+    _in(i),
+    _ancestor_ref(0),
+    _ancestor(NULL),
+    _parent_ref(0),
+    _parent(NULL)
+  { assert(i); }
+
+  Inode *in() { return _in; }
+
+  int ancestor_ref() { return _ancestor_ref; }
+  int parent_ref() { return _parent_ref; }
+
+  QuotaTree *ancestor() { return _ancestor; }
+  void set_ancestor(QuotaTree *ancestor)
+  {
+    if (ancestor == _ancestor)
+      return;
+
+    if (_ancestor) {
+      --_ancestor->_ancestor_ref;
+      _ancestor->_put();
+    }
+    _ancestor = ancestor;
+    if (_ancestor)
+      ++_ancestor->_ancestor_ref;
+  }
+
+  QuotaTree *parent() { return _parent; }
+  void set_parent(QuotaTree *parent)
+  {
+    if (parent == _parent)
+      return;
+
+    if (_parent) {
+      --_parent->_parent_ref;
+      _parent->_put();
+    }
+    _parent = parent;
+    if (parent)
+      ++_parent->_parent_ref;
+  }
+
+  void invalidate()
+  {
+    if (!_in)
+      return;
+
+    _in = NULL;
+    set_ancestor(NULL);
+    set_parent(NULL);
+    _put();
+  }
+};
 
 // inode flags
 #define I_COMPLETE 1
