@@ -29,6 +29,9 @@ AC_CONFIG_SUBDIRS([src/gtest])
 AC_CANONICAL_HOST
 AC_CANONICAL_TARGET
 
+# Fix automake problems in 1.12
+m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
+
 # Automake
 AM_INIT_AUTOMAKE
 AM_PROG_CC_C_O
