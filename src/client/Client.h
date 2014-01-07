@@ -304,6 +304,8 @@ protected:
   // cache
   hash_map<vinodeno_t, Inode*> inode_map;
   Inode*                 root;
+  map<Inode*, Inode*>    root_parents;
+  Inode*                 root_ancestor;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
 
   // all inodes with caps sit on either cap_list or delayed_caps.

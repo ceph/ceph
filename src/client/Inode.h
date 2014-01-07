@@ -184,6 +184,7 @@ class Inode {
   version_t version;           // auth only
   version_t xattr_version;
 
+  bool is_root()    const { return ino == MDS_INO_ROOT; }
   bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
   bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }
   bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
