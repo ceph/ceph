@@ -109,6 +109,8 @@ void OpTracker::dump_ops_in_flight(Formatter *f)
 
 void OpTracker::register_inflight_op(xlist<TrackedOp*>::item *i)
 {
+  if (!tracking_enabled)
+    return;
   Mutex::Locker locker(ops_in_flight_lock);
   ops_in_flight.push_back(i);
   ops_in_flight.back()->seq = seq++;
@@ -116,18 +118,22 @@ void OpTracker::register_inflight_op(xlist<TrackedOp*>::item *i)
 
 void OpTracker::unregister_inflight_op(TrackedOp *i)
 {
+  i->request->clear_data();
+
+  if (!tracking_enabled)
+    return;
+
   Mutex::Locker locker(ops_in_flight_lock);
   assert(i->xitem.get_list() == &ops_in_flight);
   utime_t now = ceph_clock_now(cct);
   i->xitem.remove_myself();
-  i->request->clear_data();
   history.insert(now, TrackedOpRef(i));
 }
 
 bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
 {
   Mutex::Locker locker(ops_in_flight_lock);
-  if (!ops_in_flight.size())
+  if (!ops_in_flight.size()) // this covers tracking_enabled, too
     return false;
 
   utime_t now = ceph_clock_now(cct);
@@ -217,6 +223,8 @@ void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
 
 void OpTracker::mark_event(TrackedOp *op, const string &dest)
 {
+  if (!tracking_enabled)
+    return;
   utime_t now = ceph_clock_now(cct);
   return _mark_event(op, dest, now);
 }
@@ -232,6 +240,11 @@ void OpTracker::_mark_event(TrackedOp *op, const string &evt,
 }
 
 void OpTracker::RemoveOnDelete::operator()(TrackedOp *op) {
+  if (!tracker->tracking_enabled) {
+    op->request->clear_data();
+    delete op;
+    return;
+  }
   op->mark_event("done");
   tracker->unregister_inflight_op(op);
   // Do not delete op, unregister_inflight_op took control
