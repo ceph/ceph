@@ -171,10 +171,14 @@ if test x"$resolv_libs" != "xok"; then
 fi
 AC_SUBST([RESOLV_LIBS])
 
+dnl check for libkeyutils on linux
+KEYUTILS_LIB=""
+AS_IF([test x"$linux" = x"yes"], [
+  AC_CHECK_LIB([keyutils], [add_key], [KEYUTILS_LIB="-lkeyutils"], [
+    AC_MSG_FAILURE([libkeyutils not found])])])
+AC_SUBST(KEYUTILS_LIB)
+
 AC_CHECK_LIB([m], [pow], [true], AC_MSG_FAILURE([libm not found]))
-if test x"$linux" = x"yes"; then
-	AC_CHECK_LIB([keyutils], [add_key], [true], AC_MSG_FAILURE([libkeyutils not found]))
-fi
 AC_CHECK_FUNCS([syncfs], AC_DEFINE([HAVE_SYS_SYNCFS], [1], [we have syncfs]), [])
 
 # Find some crypto library for us to use, while letting user to decide which one to use.
