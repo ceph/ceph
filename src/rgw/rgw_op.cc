@@ -1622,7 +1622,7 @@ void RGWPutMetadata::execute()
   if (s->object) {
     ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs, ptracker);
   } else {
-    ret = rgw_bucket_set_attrs(store, obj.bucket, attrs, &rmattrs, ptracker);
+    ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &rmattrs, ptracker);
   }
 }
 
@@ -1941,7 +1941,7 @@ void RGWPutACLs::execute()
   if (s->object) {
     ret = store->set_attrs(s->obj_ctx, obj, attrs, NULL, ptracker);
   } else {
-    ret = rgw_bucket_set_attrs(store, obj.bucket, attrs, NULL, ptracker);
+    ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, NULL, ptracker);
   }
 }
 

@@ -4733,6 +4733,41 @@ int RGWRados::get_bucket_entrypoint_info(void *ctx, const string& bucket_name,
   return 0;
 }
 
+int RGWRados::convert_old_bucket_info(void *ctx, string& bucket_name)
+{
+  RGWBucketEntryPoint entry_point;
+  time_t ep_mtime;
+  RGWObjVersionTracker ot;
+  map<string, bufferlist> attrs;
+  RGWBucketInfo info;
+
+  ldout(cct, 10) << "RGWRados::convert_old_bucket_info(): bucket=" << bucket_name << dendl;
+
+  int ret = get_bucket_entrypoint_info(ctx, bucket_name, entry_point, &ot, &ep_mtime, &attrs);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: get_bucket_entrypont_info() returned " << ret << " bucket=" << bucket_name << dendl;
+    return ret;
+  }
+
+  if (!entry_point.has_bucket_info) {
+    /* already converted! */
+    return 0;
+  }
+
+  info = entry_point.old_bucket_info;
+  info.bucket.oid = bucket_name;
+  info.ep_objv = ot.read_version;
+
+  ot.generate_new_write_ver(cct);
+
+  ret = put_linked_bucket_info(info, false, ep_mtime, &ot.write_version, &attrs, true);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: failed to put_linked_bucket_info(): " << ret << dendl;
+  }
+
+  return 0;
+}
+
 int RGWRados::get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info,
                               time_t *pmtime, map<string, bufferlist> *pattrs)
 {
