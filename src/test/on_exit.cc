@@ -73,7 +73,8 @@ int main(int argc, char **argv)
   assert(pid >= 0);
   if (pid) {
     int status;
-    assert(pid == waitpid(pid, &status, 0));
+    int ret = waitpid(pid, &status, 0);
+    assert(ret == pid); // should be our child
     assert(status == 0);
     assert(*shared_val == MAIN_SCOPE_VAL);
   } else {
@@ -93,7 +94,8 @@ int main(int argc, char **argv)
   assert(pid >= 0);
   if (pid) {
     int status;
-    assert(pid == waitpid(pid, &status, 0));
+    int ret = waitpid(pid, &status, 0);
+    assert(ret == pid); // should be our child
     assert(WEXITSTATUS(status) == 3);
     assert(*shared_val == EXIT_FUNC_VAL);
   } else {
