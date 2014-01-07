@@ -3071,6 +3071,10 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     ::encode(inline_version, bl);
     ::encode(inline_data, bl);
   }
+  if (session->connection->has_feature(CEPH_FEATURE_MDS_QUOTA)) {
+    i = pfile ? pi : oi;
+    ::encode(i->quota, bl);
+  }
 
   return valid;
 }
