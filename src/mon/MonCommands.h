@@ -274,6 +274,12 @@ COMMAND("mds compat rm_compat " \
 COMMAND("mds compat rm_incompat " \
 	"name=feature,type=CephInt,range=0", \
 	"remove incompatible feature", "mds", "rw", "cli,rest")
+COMMAND("mds inline enable", \
+        "enable inline data feature", \
+        "mds", "rw", "cli,rest")
+COMMAND("mds inline disable", \
+        "disable inline data feature", \
+        "mds", "rw", "cli,rest")
 COMMAND("mds set " \
         "name=key,type=CephChoices,strings=allow_new_snaps " \
         "name=sure,type=CephString,req=false", \

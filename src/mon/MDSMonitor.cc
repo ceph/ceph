@@ -68,7 +68,7 @@ void MDSMonitor::create_new_fs(MDSMap &m, int metadata_pool, int data_pool)
   m.data_pools.insert(data_pool);
   m.metadata_pool = metadata_pool;
   m.cas_pool = -1;
-  m.compat = get_mdsmap_compat_set();
+  m.compat = get_mdsmap_compat_set_default();
 
   m.session_timeout = g_conf->mds_session_timeout;
   m.session_autoclose = g_conf->mds_session_autoclose;
@@ -939,6 +939,13 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       r = 0;
     }
 
+  } else if (prefix == "mds inline enable") {
+    pending_mdsmap.set_inline_data_enabled(true);
+    pending_mdsmap.compat.incompat.insert(MDS_FEATURE_INCOMPAT_INLINE);
+    r = 0;
+  } else if (prefix == "mds inline disable") {
+    pending_mdsmap.set_inline_data_enabled(false);
+    r = 0;
   } else if (prefix == "mds set") {
     string key;
     cmd_getval(g_ceph_context, cmdmap, "key", key);
