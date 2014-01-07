@@ -372,6 +372,8 @@ struct inode_t {
   frag_info_t dirstat;         // protected by my filelock
   nest_info_t rstat;           // protected by my nestlock
   nest_info_t accounted_rstat; // protected by parent's nestlock
+
+  quota_info_t quota;
  
   // special stuff
   version_t version;           // auth only
@@ -390,6 +392,7 @@ struct inode_t {
 	      version(0), file_data_version(0), xattr_version(0), backtrace_version(0) {
     clear_layout();
     memset(&dir_layout, 0, sizeof(dir_layout));
+    memset(&quota, 0, sizeof(quota));
   }
 
   // file type
