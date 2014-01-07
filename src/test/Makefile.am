@@ -192,6 +192,7 @@ bin_DEBUGPROGRAMS += ceph_erasure_code_benchmark
 
 ## System tests
 
+if LINUX
 libsystest_la_SOURCES = \
 	test/system/cross_process_sem.cc \
 	test/system/systest_runnable.cc \
@@ -229,6 +230,7 @@ ceph_test_rados_watch_notify_SOURCES = \
 	test/system/st_rados_notify.cc
 ceph_test_rados_watch_notify_LDADD = $(LIBRADOS) libsystest.la $(PTHREAD_LIBS)
 bin_DEBUGPROGRAMS += ceph_test_rados_watch_notify
+endif
 
 ceph_bench_log_SOURCES = test/bench_log.cc
 ceph_bench_log_LDADD = $(CEPH_GLOBAL)
