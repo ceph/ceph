@@ -2162,6 +2162,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     }
 
     parent->check_rstats();
+    broadcast_quota_to_client(pin);
     // next parent!
     cur = pin;
     parent = parentdn->get_dir();

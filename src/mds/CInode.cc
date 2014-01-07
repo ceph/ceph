@@ -1942,6 +1942,8 @@ void CInode::finish_scatter_gather_update(int type)
 		     << " on " << *this << "\n";
 	pi->rstat.rsubdirs = 0;
       }
+
+      mdcache->broadcast_quota_to_client(this);
     }
     break;
 
