@@ -2978,6 +2978,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
   pi->flags = g_conf->osd_pool_default_flags;
   if (g_conf->osd_pool_default_flag_hashpspool)
     pi->flags |= pg_pool_t::FLAG_HASHPSPOOL;
+  if (pool_type == pg_pool_t::TYPE_ERASURE)
+    pi->flags |= pg_pool_t::FLAG_NO_OMAP;
 
   pi->size = size;
   pi->min_size = g_conf->get_osd_pool_default_min_size();

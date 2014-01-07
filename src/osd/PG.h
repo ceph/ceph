@@ -1845,6 +1845,10 @@ public:
   bool is_split(OSDMapRef lastmap, OSDMapRef nextmap);
   bool acting_up_affected(const vector<int>& newup, const vector<int>& newacting);
 
+  bool can_omap() const {
+    return !pool.info.is_erasure() &&
+      !(pool.info.flags & pg_pool_t::FLAG_NO_OMAP);
+  }
   // OpRequest queueing
   bool can_discard_op(OpRequestRef op);
   bool can_discard_scan(OpRequestRef op);
