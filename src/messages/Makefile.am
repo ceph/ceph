@@ -22,6 +22,7 @@ noinst_HEADERS += \
 	messages/MDiscoverReply.h \
 	messages/MExportCaps.h \
 	messages/MExportCapsAck.h \
+	messages/MGatherCaps.h \
 	messages/MExportDir.h \
 	messages/MExportDirAck.h \
 	messages/MExportDirCancel.h \
