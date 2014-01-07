@@ -2921,6 +2921,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   e.rbytes = i->rstat.rbytes;
   e.rfiles = i->rstat.rfiles;
   e.rsubdirs = i->rstat.rsubdirs;
+  if (cap)
+    cap->client_rstat = i->rstat;
 
   // auth
   i = pauth ? pi:oi;
