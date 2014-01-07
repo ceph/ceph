@@ -240,12 +240,12 @@ class DispatchQueue;
     void _send(Message *m) {
       assert(pipe_lock.is_locked());
       out_q[m->get_priority()].push_back(m);
-      cond.Signal();
+      cond.SignalOne();
     }
     void _send_keepalive() {
       assert(pipe_lock.is_locked());
       keepalive = true;
-      cond.Signal();
+      cond.SignalOne();
     }
     Message *_get_next_outgoing() {
       assert(pipe_lock.is_locked());

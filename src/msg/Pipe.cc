@@ -1450,7 +1450,7 @@ void Pipe::reader()
       // note last received message.
       in_seq = m->get_seq();
 
-      cond.Signal();  // wake up writer, to ack this
+      cond.SignalOne();  // wake up writer, to ack this
       
       ldout(msgr->cct,10) << "reader got message "
 	       << m->get_seq() << " " << m << " " << *m
