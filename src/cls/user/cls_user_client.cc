@@ -69,4 +69,33 @@ void cls_user_bucket_list(librados::ObjectReadOperation& op,
   op.exec("user", "list_buckets", inbl, new ClsUserListCtx(&entries, out_marker, truncated));
 }
 
+class ClsUserGetHeaderCtx : public ObjectOperationCompletion {
+  cls_user_header *header;
+public:
+  ClsUserGetHeaderCtx(cls_user_header *_h) : header(_h) {}
+  void handle_completion(int r, bufferlist& outbl) {
+    if (r >= 0) {
+      cls_user_get_header_ret ret;
+      try {
+        bufferlist::iterator iter = outbl.begin();
+        ::decode(ret, iter);
+        if (header)
+	  *header = ret.header;
+      } catch (buffer::error& err) {
+        // nothing we can do about it atm
+      }
+    }
+  }
+};
 
+
+void cls_user_get_header(librados::ObjectReadOperation& op,
+                       cls_user_header *header)
+{
+  bufferlist inbl;
+  cls_user_get_header_op call;
+
+  ::encode(call, inbl);
+
+  op.exec("user", "get_header", inbl, new ClsUserGetHeaderCtx(header));
+}

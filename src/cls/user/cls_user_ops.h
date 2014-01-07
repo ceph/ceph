@@ -94,4 +94,39 @@ struct cls_user_list_buckets_ret {
 WRITE_CLASS_ENCODER(cls_user_list_buckets_ret)
 
 
+struct cls_user_get_header_op {
+  cls_user_get_header_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_user_get_header_op)
+
+struct cls_user_get_header_ret {
+  cls_user_header header;
+
+  cls_user_get_header_ret() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(header, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(header, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_user_get_header_ret)
+
+
 #endif
