@@ -1410,6 +1410,7 @@ public:
   int bucket_rebuild_index(rgw_bucket& bucket);
   int remove_objs_from_index(rgw_bucket& bucket, list<string>& oid_list);
 
+  int cls_user_get_header(rgw_obj& obj, cls_user_header *header);
   int cls_user_list_buckets(rgw_obj& obj,
                             const string& in_marker, int max_entries,
                             list<cls_user_bucket_entry>& entries,
