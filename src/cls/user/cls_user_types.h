@@ -66,11 +66,12 @@ struct cls_user_bucket_entry {
   size_t size_rounded;
   time_t creation_time;
   uint64_t count;
+  bool user_stats_sync;
 
-  cls_user_bucket_entry() : size(0), size_rounded(0), creation_time(0), count(0) {}
+  cls_user_bucket_entry() : size(0), size_rounded(0), creation_time(0), count(0), user_stats_sync(false) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(5, 5, bl);
+    ENCODE_START(6, 5, bl);
     uint64_t s = size;
     __u32 mt = creation_time;
     string empty_str;  // originally had the bucket name here, but we encode bucket later
@@ -81,10 +82,11 @@ struct cls_user_bucket_entry {
     ::encode(bucket, bl);
     s = size_rounded;
     ::encode(s, bl);
+    ::encode(user_stats_sync, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
     __u32 mt;
     uint64_t s;
     string empty_str;  // backward compatibility
@@ -100,6 +102,8 @@ struct cls_user_bucket_entry {
     if (struct_v >= 4)
       ::decode(s, bl);
     size_rounded = s;
+    if (struct_v >= 6)
+      ::decode(user_stats_sync, bl);
     DECODE_FINISH(bl);
   }
 };
