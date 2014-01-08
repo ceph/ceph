@@ -187,7 +187,7 @@ enum {
   OPT_USER_SUSPEND,
   OPT_USER_ENABLE,
   OPT_USER_CHECK,
-  OPT_USER_STAT,
+  OPT_USER_STATS,
   OPT_SUBUSER_CREATE,
   OPT_SUBUSER_MODIFY,
   OPT_SUBUSER_RM,
@@ -301,8 +301,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_USER_ENABLE;
     if (strcmp(cmd, "check") == 0)
       return OPT_USER_CHECK;
-    if (strcmp(cmd, "stat") == 0)
-      return OPT_USER_STAT;
+    if (strcmp(cmd, "stats") == 0)
+      return OPT_USER_STATS;
   } else if (strcmp(prev_cmd, "subuser") == 0) {
     if (strcmp(cmd, "create") == 0)
       return OPT_SUBUSER_CREATE;
@@ -723,6 +723,24 @@ int set_user_bucket_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_st
   return 0;
 }
 
+static int sync_bucket_stats(RGWRados *store, string& bucket_name)
+{
+  RGWBucketInfo bucket_info;
+  int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL);
+  if (r < 0) {
+    cerr << "ERROR: could not fetch bucket info: " << cpp_strerror(-r) << std::endl;
+    return r;
+  }
+
+  r = rgw_bucket_sync_user_stats(store, bucket_info.owner, bucket_info.bucket);
+  if (r < 0) {
+    cerr << "ERROR: could not sync user stats for bucket " << bucket_name << ": " << cpp_strerror(-r) << std::endl;
+    return r;
+  }
+
+  return 0;
+}
+
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -789,6 +807,8 @@ int main(int argc, char **argv)
   int64_t max_size = -1;
   bool have_max_objects = false;
   bool have_max_size = false;
+
+  int sync_stats = false;
 
   std::string val;
   std::ostringstream errs;
@@ -918,6 +938,8 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &fix, NULL, "--fix", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &check_objects, NULL, "--check-objects", (char*)NULL)) {
+     // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &sync_stats, NULL, "--sync-stats", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps = val;
@@ -1888,12 +1910,52 @@ next:
     check_bad_user_bucket_mapping(store, user_id, fix);
   }
 
-  if (opt_cmd == OPT_USER_STAT) {
+  if (opt_cmd == OPT_USER_STATS) {
+    if (sync_stats) {
+      if (!bucket_name.empty()) {
+        int ret = sync_bucket_stats(store, bucket_name);
+        if (ret < 0) {
+          cerr << "ERROR: could not sync bucket stats: " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+      } else {
+        size_t max_entries = g_conf->rgw_list_buckets_max_chunk;
+
+        bool done;
+
+        do {
+          RGWUserBuckets user_buckets;
+          int ret = rgw_read_user_buckets(store, user_id, user_buckets, marker, max_entries, false);
+          if (ret < 0) {
+            cerr << "failed to read user buckets: " << cpp_strerror(-ret) << std::endl;
+            return -ret;
+          }
+
+          map<string, RGWBucketEnt>& buckets = user_buckets.get_buckets();
+          for (map<string, RGWBucketEnt>::iterator i = buckets.begin();
+               i != buckets.end();
+               ++i) {
+            marker = i->first;
+
+            RGWBucketEnt& bucket_ent = i->second;
+            ret = sync_bucket_stats(store, bucket_ent.bucket.name);
+            if (ret < 0) {
+              cerr << "ERROR: could not sync bucket stats: " << cpp_strerror(-ret) << std::endl;
+              return -ret;
+            }
+          }
+          done = (buckets.size() < max_entries);
+        } while (!done);
+      }
+    }
+
     if (user_id.empty()) {
       cerr << "ERROR: uid not specified" << std::endl;
       return EINVAL;
     }
-    rgw_obj obj(store->zone.user_uid_pool, user_id);
+    string buckets_obj_id;
+    rgw_get_buckets_obj(user_id, buckets_obj_id);
+    rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
 
     cls_user_header header;
     int ret = store->cls_user_get_header(obj, &header);

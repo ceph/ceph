@@ -5607,6 +5607,39 @@ int RGWRados::cls_user_get_header(rgw_obj& obj, cls_user_header *header)
   return 0;
 }
 
+int RGWRados::cls_user_sync_bucket_stats(rgw_obj& user_obj, rgw_bucket& bucket)
+{
+  rgw_bucket_dir_header header;
+  int r = cls_bucket_head(bucket, header);
+  if (r < 0) {
+    ldout(cct, 20) << "cls_bucket_header() returned " << r << dendl;
+    return r;
+  }
+
+  cls_user_bucket_entry entry;
+
+  bucket.convert(&entry.bucket);
+
+  map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = header.stats.begin();
+  for (; iter != header.stats.end(); ++iter) {
+    struct rgw_bucket_category_stats& header_stats = iter->second;
+    entry.size += header_stats.total_size;
+    entry.size_rounded += header_stats.total_size_rounded;
+    entry.count += header_stats.num_entries;
+  }
+
+  list<cls_user_bucket_entry> entries;
+  entries.push_back(entry);
+
+  r = cls_user_update_buckets(user_obj, entries);
+  if (r < 0) {
+    ldout(cct, 20) << "cls_user_update_buckets() returned " << r << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
 int RGWRados::cls_user_list_buckets(rgw_obj& obj,
                                     const string& in_marker, int max_entries,
                                     list<cls_user_bucket_entry>& entries,
