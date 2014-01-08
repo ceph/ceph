@@ -15,5 +15,6 @@ void cls_user_bucket_list(librados::ObjectReadOperation& op,
                        const string& in_marker, int max_entries,
                        list<cls_user_bucket_entry>& entries,
                        string *out_marker, bool *truncated);
+void cls_user_get_header(librados::ObjectReadOperation& op, cls_user_header *header);
 
 #endif

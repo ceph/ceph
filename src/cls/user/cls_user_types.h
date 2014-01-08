@@ -124,6 +124,8 @@ struct cls_user_header {
     ::decode(total_bytes_rounded, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(cls_user_header)
 
