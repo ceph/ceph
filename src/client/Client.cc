@@ -8181,6 +8181,9 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
       todir->snapid != CEPH_NOSNAP) {
     return -EROFS;
   }
+  if (get_quota_root(fromdir) != get_quota_root(todir)) {
+    return -EXDEV;
+  }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_RENAME);
 
