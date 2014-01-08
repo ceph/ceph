@@ -47,6 +47,7 @@ using namespace std;
 #include "messages/MClientCapRelease.h"
 #include "messages/MClientLease.h"
 #include "messages/MClientSnap.h"
+#include "messages/MClientQuota.h"
 
 #include "messages/MGenericMessage.h"
 
@@ -1889,6 +1890,9 @@ bool Client::ms_dispatch(Message *m)
   case CEPH_MSG_CLIENT_LEASE:
     handle_lease(static_cast<MClientLease*>(m));
     break;
+  case CEPH_MSG_CLIENT_QUOTA:
+    handle_quota(static_cast<MClientQuota*>(m));
+    break;
 
   default:
     return false;
@@ -3401,6 +3405,36 @@ void Client::handle_snap(MClientSnap *m)
     put_snap_realm(realm);
   }
 
+  m->put();
+}
+
+void Client::handle_quota(MClientQuota *m)
+{
+  int mds = m->get_source().num();
+  MetaSession *session = _get_mds_session(mds, m->get_connection().get());
+  if (!session) {
+    m->put();
+    return;
+  }
+
+  got_mds_push(session);
+
+  ldout(cct, 10) << "handle_quota " << *m << " from mds." << mds << dendl;
+
+  Inode *in = NULL;
+  vinodeno_t vino(m->ino, CEPH_NOSNAP);
+  if (inode_map.count(vino))
+    in = inode_map[vino];
+
+  if (!in)
+    goto done;
+
+  if (in->quota.is_enable() ^ m->quota.is_enable())
+    invalidate_quota_tree(in);
+  in->quota = m->quota;
+  in->rstat = m->rstat;
+
+done:
   m->put();
 }
 
