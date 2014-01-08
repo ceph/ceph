@@ -466,6 +466,7 @@ protected:
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater, 
 			      vector<snapid_t>& snaps);
 
+  void handle_quota(struct MClientQuota *m);
   void handle_snap(struct MClientSnap *m);
   void handle_caps(class MClientCaps *m);
   void handle_cap_import(MetaSession *session, Inode *in, class MClientCaps *m);
