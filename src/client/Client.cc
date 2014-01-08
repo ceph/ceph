@@ -8223,6 +8223,88 @@ bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool 
   return true;
 }
 
+void Client::put_qtree(Inode *in)
+{
+  QuotaTree *qtree = in->qtree;
+  if (qtree) {
+    qtree->invalidate();
+    in->qtree = NULL;
+  }
+}
+
+void Client::invalidate_quota_tree(Inode *in)
+{
+  QuotaTree *qtree = in->qtree;
+  if (qtree) {
+    if (in->is_dir() && qtree->ancestor() &&
+        qtree->ancestor_ref() < qtree->parent_ref()) {
+      Inode *ancestor = qtree->ancestor()->in();
+      if (ancestor)
+        put_qtree(ancestor);
+    }
+    put_qtree(in);
+  }
+}
+
+Inode *Client::get_quota_root(Inode *in)
+{
+  if (!cct->_conf->client_quota)
+    return NULL;
+
+travel:
+  if (in->qtree) {
+    QuotaTree *aq = in->qtree->ancestor();
+
+    if (!aq)
+      return in;
+
+    if (aq->in()) {
+      in = aq->in();
+      goto travel;
+    }
+  }
+
+  vector<Inode*> inode_list;
+  while (true) {
+    inode_list.push_back(in);
+
+    if (in->quota.is_enable())
+      break;
+
+    if (inode_list.size() > 1 && in->qtree && in->qtree->ancestor_ref())
+      break;
+
+    if (!in->dn_set.empty()) {
+      in = in->get_first_parent()->dir->parent_inode;
+      continue;
+    }
+
+    if (root_parents.count(in)) {
+      in = root_parents[in];
+      continue;
+    }
+
+    break;
+  }
+
+  vector<Inode*>::reverse_iterator last = inode_list.rbegin();
+  for (vector<Inode*>::reverse_iterator cur = inode_list.rbegin();
+       cur != inode_list.rend(); ++cur) {
+    if (!(*cur)->qtree)
+      (*cur)->qtree = new QuotaTree(*cur);
+
+    if (last != cur) {
+      if ((*last)->qtree != (*cur)->qtree->ancestor()) {
+        if ((*last)->qtree->ancestor_ref() >= cct->_conf->client_quota_tree_scale)
+          last = cur - 1;
+        (*cur)->qtree->set_ancestor((*last)->qtree);
+      }
+      (*cur)->qtree->set_parent((*(cur - 1))->qtree);
+    }
+  }
+  goto travel;
+}
+
 void Client::set_filer_flags(int flags)
 {
   Mutex::Locker l(client_lock);
