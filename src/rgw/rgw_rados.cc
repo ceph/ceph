@@ -5587,12 +5587,31 @@ int RGWRados::cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx)
   return 0;
 }
 
+int RGWRados::cls_user_get_header(rgw_obj& obj, cls_user_header *header)
+{
+  librados::IoCtx io_ctx;
+  rgw_bucket bucket;
+  std::string oid, key;
+  get_obj_bucket_and_oid_key(obj, bucket, oid, key);
+  int r = open_bucket_data_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
+
+  librados::ObjectReadOperation op;
+  ::cls_user_get_header(op, header);
+  bufferlist ibl;
+  r = io_ctx.operate(oid, &op, &ibl);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
 int RGWRados::cls_user_list_buckets(rgw_obj& obj,
                                     const string& in_marker, int max_entries,
                                     list<cls_user_bucket_entry>& entries,
                                     string *out_marker, bool *truncated)
 {
-  bufferlist bl;
   librados::IoCtx io_ctx;
   rgw_bucket bucket;
   std::string oid, key;

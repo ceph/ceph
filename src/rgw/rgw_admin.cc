@@ -187,6 +187,7 @@ enum {
   OPT_USER_SUSPEND,
   OPT_USER_ENABLE,
   OPT_USER_CHECK,
+  OPT_USER_STAT,
   OPT_SUBUSER_CREATE,
   OPT_SUBUSER_MODIFY,
   OPT_SUBUSER_RM,
@@ -300,6 +301,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_USER_ENABLE;
     if (strcmp(cmd, "check") == 0)
       return OPT_USER_CHECK;
+    if (strcmp(cmd, "stat") == 0)
+      return OPT_USER_STAT;
   } else if (strcmp(prev_cmd, "subuser") == 0) {
     if (strcmp(cmd, "create") == 0)
       return OPT_SUBUSER_CREATE;
@@ -1885,6 +1888,24 @@ next:
     check_bad_user_bucket_mapping(store, user_id, fix);
   }
 
+  if (opt_cmd == OPT_USER_STAT) {
+    if (user_id.empty()) {
+      cerr << "ERROR: uid not specified" << std::endl;
+      return EINVAL;
+    }
+    rgw_obj obj(store->zone.user_uid_pool, user_id);
+
+    cls_user_header header;
+    int ret = store->cls_user_get_header(obj, &header);
+    if (ret < 0) {
+      cerr << "ERROR: can't read user header: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    encode_json("header", header, formatter);
+    formatter->flush(cout);
+  }
+
   if (opt_cmd == OPT_METADATA_GET) {
     int ret = store->meta_mgr->get(metadata_key, formatter);
     if (ret < 0) {
@@ -2333,5 +2354,6 @@ next:
       set_user_bucket_quota(opt_cmd, user, user_op, max_size, max_objects, have_max_size, have_max_objects);
     }
   }
+
   return 0;
 }
