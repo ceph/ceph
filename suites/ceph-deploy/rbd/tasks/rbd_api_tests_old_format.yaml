@@ -8,6 +8,10 @@ roles:
   - osd.3
   - osd.4
   - osd.5
+- - mon.c
+  - osd.6
+  - osd.7
+  - osd.8
 - - client.0
 tasks:
 - install:
