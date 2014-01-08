@@ -81,7 +81,7 @@ about Ceph, see our `Architecture`_ section.
 
 
 .. _Ceph Object Store: radosgw
-.. _Ceph Block Device: rbd
+.. _Ceph Block Device: rbd/rbd
 .. _Ceph Filesystem: cephfs
 .. _Getting Started: start
 .. _Architecture: architecture
