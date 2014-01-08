@@ -29,7 +29,7 @@ static RGWMetadataHandler *bucket_meta_handler = NULL;
 static RGWMetadataHandler *bucket_instance_meta_handler = NULL;
 
 // define as static when RGWBucket implementation compete
-void rgw_get_buckets_obj(string& user_id, string& buckets_obj_id)
+void rgw_get_buckets_obj(const string& user_id, string& buckets_obj_id)
 {
   buckets_obj_id = user_id;
   buckets_obj_id += RGW_BUCKETS_OBJ_SUFFIX;
@@ -76,6 +76,15 @@ int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets& bucke
     }
   }
   return 0;
+}
+
+int rgw_bucket_sync_user_stats(RGWRados *store, const string& user_id, rgw_bucket& bucket)
+{
+  string buckets_obj_id;
+  rgw_get_buckets_obj(user_id, buckets_obj_id);
+  rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
+
+  return store->cls_user_sync_bucket_stats(obj, bucket);
 }
 
 int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t creation_time, bool update_entrypoint)
