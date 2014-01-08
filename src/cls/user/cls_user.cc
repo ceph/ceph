@@ -149,11 +149,14 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     if (ret < 0) {
       CLS_LOG(0, "ERROR: get_existing_bucket_entry() key=%s returned %d", key.c_str(), ret);
       return ret;
-    } else if (ret >= 0) {
+    } else if (ret >= 0 && old_entry.user_stats_sync) {
       dec_header_stats(&header, old_entry);
     }
 
-    CLS_LOG(20, "storing entry by client/op at %s", key.c_str());
+    CLS_LOG(20, "storing entry for key=%s size=%lld count=%lld",
+            key.c_str(), (long long)entry.size, (long long)entry.count);
+
+    entry.user_stats_sync = true;
 
     ret = write_entry(hctx, key, entry);
     if (ret < 0)
@@ -161,7 +164,17 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
 
     add_header_stats(&header, entry);
   }
+
+  bufferlist bl;
+
+  CLS_LOG(20, "header: total bytes=%lld entries=%lld", (long long)header.total_bytes, (long long)header.total_entries);
+
+  ::encode(header, bl);
   
+  ret = cls_cxx_map_write_header(hctx, &bl);
+  if (ret < 0)
+    return ret;
+
   return 0;
 }
 
@@ -198,7 +211,9 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
     return ret;
   }
 
-  dec_header_stats(&header, entry);
+  if (entry.user_stats_sync) {
+    dec_header_stats(&header, entry);
+  }
 
   CLS_LOG(20, "removing entry at %s", key.c_str());
 
