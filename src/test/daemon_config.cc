@@ -101,26 +101,6 @@ TEST(DaemonConfig, SubstitutionBracesTrailing) {
   ASSERT_EQ(string("barfoo"), string(buf));
 }
 
-TEST(DaemonConfig, SubstitutionLoop) {
-  int ret;
-  ret = g_ceph_context->_conf->set_val("internal_safe_to_start_threads", "false");
-  ret = g_ceph_context->_conf->set_val("host", "foo$public_network", false);
-  ASSERT_EQ(ret, 0);
-  ret = g_ceph_context->_conf->set_val("public_network", "bar$host", false);
-  ASSERT_EQ(ret, 0);
-  g_ceph_context->_conf->apply_changes(NULL);
-  char buf[128], buf2[128];
-  memset(buf, 0, sizeof(buf));
-  memset(buf2, 0, sizeof(buf2));
-  char *tmp = buf;
-  char *tmp2 = buf;
-  ret = g_ceph_context->_conf->get_val("host", &tmp, sizeof(buf));
-  ASSERT_EQ(ret, 0);
-  ret = g_ceph_context->_conf->get_val("public_network", &tmp2, sizeof(buf));
-  ASSERT_EQ(ret, 0);
-  ASSERT_TRUE(strchr(buf, '$') || strchr(buf2, '$'));
-}
-
 // config: variable substitution happen only once http://tracker.ceph.com/issues/7103
 TEST(DaemonConfig, SubstitutionMultiple) {
   int ret;
