@@ -4542,6 +4542,11 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid, I
   if (in->snapid != CEPH_NOSNAP) {
     return -EROFS;
   }
+  if ((mask & CEPH_SETATTR_SIZE) &&
+      (unsigned long)attr->st_size > in->size &&
+      is_quota_bytes_exceeded(in)) {
+    return -EDQUOT;
+  }
   // make the change locally?
 
   if (!mask) {
@@ -6136,6 +6141,11 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   if ((f->mode & CEPH_FILE_MODE_WR) == 0)
     return -EBADF;
 
+  // check quota
+  uint64_t endoff = offset + size;
+  if (endoff > in->size && is_quota_bytes_exceeded(in))
+    return -EDQUOT;
+
   // use/adjust fd pos?
   if (offset < 0) {
     lock_fh_pos(f);
@@ -6165,7 +6175,6 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
 
   utime_t lat;
   uint64_t totalwritten;
-  uint64_t endoff = offset + size;
   int have;
   int r = get_caps(in, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &have, endoff);
   if (r < 0)
@@ -7963,6 +7972,13 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 
   if ((fh->mode & CEPH_FILE_MODE_WR) == 0)
     return -EBADF;
+
+  uint64_t size = offset + length;
+  if (!(mode & (FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE)) &&
+      size > in->size &&
+      is_quota_bytes_exceeded(in)) {
+    return -EDQUOT;
+  }
 
   int have;
   int r = get_caps(in, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &have, -1);
