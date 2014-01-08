@@ -8389,6 +8389,30 @@ travel:
   goto travel;
 }
 
+bool Client::is_quota_files_exceeded(Inode *in)
+{
+  Inode *qroot = get_quota_root(in);
+  if (!qroot)
+    return false;
+
+  quota_info_t *quota = &qroot->quota;
+  nest_info_t *rstat = &qroot->rstat;
+
+  return quota->max_files && rstat->rsize() >= quota->max_files;
+}
+
+bool Client::is_quota_bytes_exceeded(Inode *in)
+{
+  Inode *qroot = get_quota_root(in);
+  if (!qroot)
+    return false;
+
+  quota_info_t *quota = &qroot->quota;
+  nest_info_t *rstat = &qroot->rstat;
+
+  return quota->max_bytes && rstat->rbytes >= quota->max_bytes;
+}
+
 void Client::set_filer_flags(int flags)
 {
   Mutex::Locker l(client_lock);
