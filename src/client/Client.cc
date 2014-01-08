@@ -713,6 +713,10 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       ldout(cct, 20) << " dir hash is " << (int)in->dir_layout.dl_dir_hash << dendl;
     }
 
+    if (st->quota.is_enable() ^ in->quota.is_enable())
+      invalidate_quota_tree(in);
+    in->quota = st->quota;
+
     in->layout = st->layout;
 
     update_inode_file_bits(in, st->truncate_seq, st->truncate_size, st->size,
@@ -2237,6 +2241,7 @@ void Client::put_inode(Inode *in, int n)
     ldout(cct, 10) << "put_inode deleting " << *in << dendl;
     bool unclean = objectcacher->release_set(&in->oset);
     assert(!unclean);
+    put_qtree(in);
     if (in->snapdir_parent)
       put_inode(in->snapdir_parent);
     inode_map.erase(in->vino());
@@ -2330,6 +2335,7 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 
   // unlink from inode
   if (in) {
+    invalidate_quota_tree(in);
     if (in->is_dir()) {
       if (in->dir)
 	dn->put(); // dir -> dn pin
