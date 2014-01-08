@@ -7480,6 +7480,39 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
 	  r = snprintf(buf, sizeof(buf), "%lu",
 		       (long unsigned)in->layout.fl_pg_pool);
       }
+    } else if (in->is_dir() && !in->is_root() && n.find("ceph.quota") == 0) {
+      string rest = n.substr(n.find("quota"));
+      if (rest == "quota") {
+        r = snprintf(buf, sizeof(buf),
+                     "max_bytes=%ld max_files=%ld",
+                     in->quota.max_bytes,
+                     in->quota.max_files);
+      } else if (rest == "quota.max_bytes") {
+        r = snprintf(buf, sizeof(buf), "%ld", in->quota.max_bytes);
+      } else if (rest == "quota.max_files") {
+        r = snprintf(buf, sizeof(buf), "%ld", in->quota.max_files);
+      }
+    } else if (n.find("ceph.qstat") == 0) {
+      string rest = n.substr(n.find("qstat"));
+      Inode *qroot = get_quota_root(in);
+      if (qroot) {
+        if (rest == "qstat") {
+          r = snprintf(buf, sizeof(buf),
+                       "max_bytes=%ld max_files=%ld bytes=%ld files=%ld",
+                       qroot->quota.max_bytes,
+                       qroot->quota.max_files,
+                       qroot->rstat.rbytes,
+                       qroot->rstat.rsize());
+        } else if (rest == "qstat.max_bytes") {
+          r = snprintf(buf, sizeof(buf), "%ld", qroot->quota.max_bytes);
+        } else if (rest == "qstat.max_files") {
+          r = snprintf(buf, sizeof(buf), "%ld", qroot->quota.max_files);
+        } else if (rest == "qstat.bytes") {
+          r = snprintf(buf, sizeof(buf), "%ld", qroot->rstat.rbytes);
+        } else if (rest == "qstat.files") {
+          r = snprintf(buf, sizeof(buf), "%ld", qroot->rstat.rsize());
+        }
+      }
     }
     if (size != 0) {
       if (r > (int)size) {
