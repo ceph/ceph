@@ -6990,6 +6990,8 @@ int Client::_listxattr(Inode *in, char *name, size_t size, int uid, int gid)
   if (r == 0) {
     const char file_vxattrs[] = "ceph.file.layout";
     const char dir_vxattrs[] = "ceph.dir.layout";
+    const char quota_vxattrs[] = "ceph.quota";
+    const char qstat_vxattrs[] = "ceph.qstat";
     for (map<string,bufferptr>::iterator p = in->xattrs.begin();
 	 p != in->xattrs.end();
 	 ++p)
@@ -6998,6 +7000,9 @@ int Client::_listxattr(Inode *in, char *name, size_t size, int uid, int gid)
       r += sizeof(file_vxattrs);
     else if (in->is_dir() && in->has_dir_layout())
       r += sizeof(dir_vxattrs);
+    if (in->is_dir() && in->quota.is_enable())
+      r += sizeof(quota_vxattrs);
+    r += sizeof(qstat_vxattrs);
 
     if (size != 0) {
       if (size >= (unsigned)r) {
@@ -7016,6 +7021,12 @@ int Client::_listxattr(Inode *in, char *name, size_t size, int uid, int gid)
 	  memcpy(name, dir_vxattrs, sizeof(dir_vxattrs));
 	  name += sizeof(dir_vxattrs);
 	}
+	if (in->is_dir() && in->quota.is_enable()) {
+	  memcpy(name, quota_vxattrs, sizeof(quota_vxattrs));
+	  name += sizeof(quota_vxattrs);
+	}
+	memcpy(name, qstat_vxattrs, sizeof(qstat_vxattrs));
+	name += sizeof(qstat_vxattrs);
       } else
 	r = -ERANGE;
     }
