@@ -7210,6 +7210,9 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev, int ui
   if (dir->snapid != CEPH_NOSNAP) {
     return -EROFS;
   }
+  if (is_quota_files_exceeded(dir)) {
+    return -EDQUOT;
+  }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_MKNOD);
 
@@ -7273,6 +7276,9 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode, Inode 
     return -ENAMETOOLONG;
   if (dir->snapid != CEPH_NOSNAP) {
     return -EROFS;
+  }
+  if (is_quota_files_exceeded(dir)) {
+    return -EDQUOT;
   }
 
   int cmode = ceph_flags_to_mode(flags);
@@ -7350,6 +7356,9 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid,
   if (dir->snapid != CEPH_NOSNAP && dir->snapid != CEPH_SNAPDIR) {
     return -EROFS;
   }
+  if (is_quota_files_exceeded(dir)) {
+    return -EDQUOT;
+  }
   MetaRequest *req = new MetaRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_MKSNAP:CEPH_MDS_OP_MKDIR);
 
   filepath path;
@@ -7415,6 +7424,9 @@ int Client::_symlink(Inode *dir, const char *name, const char *target, int uid, 
 
   if (dir->snapid != CEPH_NOSNAP) {
     return -EROFS;
+  }
+  if (is_quota_files_exceeded(dir)) {
+    return -EDQUOT;
   }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SYMLINK);
@@ -7688,6 +7700,9 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid, 
 
   if (in->snapid != CEPH_NOSNAP || dir->snapid != CEPH_NOSNAP) {
     return -EROFS;
+  }
+  if (is_quota_files_exceeded(dir)) {
+    return -EDQUOT;
   }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LINK);
