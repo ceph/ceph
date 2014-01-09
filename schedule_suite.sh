@@ -157,6 +157,7 @@ overrides:
       dev: $ceph
     conf:
       mon:
+        osd default pool size: 2
         debug mon: 1
         debug paxos: 20
         debug ms: 20
