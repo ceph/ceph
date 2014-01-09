@@ -1685,8 +1685,13 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.has_bucket_quota())
     user_info.bucket_quota = op_state.get_bucket_quota();
 
-  if (op_state.temp_url_key_specified)
-    user_info.temp_url_key = op_state.temp_url_key;
+  if (op_state.temp_url_key_specified) {
+    map<int, string>::iterator iter;
+    for (iter = op_state.temp_url_keys.begin();
+         iter != op_state.temp_url_keys.end(); ++iter) {
+      user_info.temp_url_keys[iter->first] = iter->second;
+    }
+  }
 
   // update the request
   op_state.set_user_info(user_info);
@@ -1887,8 +1892,13 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.system_specified)
     user_info.system = op_state.system;
 
-  if (op_state.temp_url_key_specified)
-    user_info.temp_url_key = op_state.temp_url_key;
+  if (op_state.temp_url_key_specified) {
+    map<int, string>::iterator iter;
+    for (iter = op_state.temp_url_keys.begin();
+         iter != op_state.temp_url_keys.end(); ++iter) {
+      user_info.temp_url_keys[iter->first] = iter->second;
+    }
+  }
 
   if (op_state.op_mask_specified)
     user_info.op_mask = op_state.get_op_mask();

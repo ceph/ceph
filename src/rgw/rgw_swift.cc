@@ -551,7 +551,7 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
     return -EPERM;
   }
 
-  if (s->user.temp_url_key.empty()) {
+  if (s->user.temp_url_keys.empty()) {
     dout(5) << "user does not have temp url key set, aborting" << dendl;
     return -EPERM;
   }
@@ -578,20 +578,30 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
   string str = string(s->info.method) + "\n" + temp_url_expires + "\n" + object_path;
 
   dout(20) << "temp url signature (plain text): " << str << dendl;
-  char dest[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
-  calc_hmac_sha1(s->user.temp_url_key.c_str(), s->user.temp_url_key.size(),
-                 str.c_str(), str.size(), dest);
 
-  char dest_str[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2 + 1];
-  buf_to_hex((const unsigned char *)dest, sizeof(dest), dest_str);
-  dout(20) << "temp url signature (calculated): " << dest_str << dendl;
+  map<int, string>::iterator iter;
+  for (iter = s->user.temp_url_keys.begin(); iter != s->user.temp_url_keys.end(); ++iter) {
+    string& temp_url_key = iter->second;
 
-  if (dest_str != temp_url_sig) {
-    dout(5) << "temp url signature mismatch: " << dest_str << " != " << temp_url_sig << dendl;
-    return -EPERM;
+    if (temp_url_key.empty())
+      continue;
+
+    char dest[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
+    calc_hmac_sha1(temp_url_key.c_str(), temp_url_key.size(),
+                   str.c_str(), str.size(), dest);
+
+    char dest_str[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2 + 1];
+    buf_to_hex((const unsigned char *)dest, sizeof(dest), dest_str);
+    dout(20) << "temp url signature [" << iter->first << "] (calculated): " << dest_str << dendl;
+
+    if (dest_str != temp_url_sig) {
+      dout(5) << "temp url signature mismatch: " << dest_str << " != " << temp_url_sig << dendl;
+    } else {
+      return 0;
+    }
   }
 
-  return 0;
+  return -EPERM;
 }
 
 bool RGWSwift::verify_swift_token(RGWRados *store, req_state *s)
