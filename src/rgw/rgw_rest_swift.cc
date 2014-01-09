@@ -427,11 +427,18 @@ void RGWPutMetadata_ObjStore_SWIFT::send_response()
 
 int RGWSetTempUrl_ObjStore_SWIFT::get_params()
 {
-  const char *temp_url = s->info.env->get("HTTP_X_ACCOUNT_META_TEMP_URL");
-  if (temp_url)
-    return -EINVAL;
+  const char *temp_url = s->info.env->get("HTTP_X_ACCOUNT_META_TEMP_URL_KEY");
+  if (temp_url) {
+    temp_url_keys[0] = temp_url;
+  }
 
-  temp_url_key = temp_url;
+  temp_url = s->info.env->get("HTTP_X_ACCOUNT_META_TEMP_URL_KEY_2");
+  if (temp_url) {
+    temp_url_keys[1] = temp_url;
+  }
+
+  if (temp_url_keys.size() == 0)
+    return -EINVAL;
 
   return 0;
 }
@@ -625,7 +632,11 @@ RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_head()
 
 RGWOp *RGWHandler_ObjStore_Service_SWIFT::op_post()
 {
-  const char *temp_url = s->info.env->get("HTTP_X_ACCOUNT_META_TEMP_URL");
+  const char *temp_url = s->info.env->get("HTTP_X_ACCOUNT_META_TEMP_URL_KEY");
+  if (temp_url) {
+    return new RGWSetTempUrl_ObjStore_SWIFT;
+  }
+  temp_url = s->info.env->get("HTTP_X_ACCOUNT_META_TEMP_URL_KEY_2");
   if (temp_url) {
     return new RGWSetTempUrl_ObjStore_SWIFT;
   }
