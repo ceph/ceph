@@ -5034,6 +5034,11 @@ void OSD::handle_osd_map(MOSDMap *m)
     m->put();
     return;
   }
+  if (is_initializing()) {
+    dout(0) << "ignoring osdmap until we have initialized" << dendl;
+    m->put();
+    return;
+  }
 
   Session *session = static_cast<Session *>(m->get_connection()->get_priv());
   if (session && !(session->entity_name.is_mon() || session->entity_name.is_osd())) {
@@ -6083,7 +6088,8 @@ bool OSD::compat_must_dispatch_immediately(PG *pg)
 void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
                            ThreadPool::TPHandle *handle)
 {
-  if (service.get_osdmap()->is_up(whoami)) {
+  if (service.get_osdmap()->is_up(whoami) &&
+      is_active()) {
     do_notifies(*ctx.notify_list, curmap);
     do_queries(*ctx.query_map, curmap);
     do_infos(*ctx.info_map, curmap);
