@@ -248,6 +248,10 @@ COMMAND("mds deactivate name=who,type=CephString", "stop mds", \
 COMMAND("mds set_max_mds " \
 	"name=maxmds,type=CephInt,range=0", \
 	"set max MDS index", "mds", "rw", "cli,rest")
+COMMAND("mds set " \
+	"name=var,type=CephChoices,strings=max_mds|max_file_size " \
+	"name=val,type=CephString", \
+	"set mds parameter <var> to <val>", "mds", "rw", "cli,rest")
 COMMAND("mds setmap " \
 	"name=epoch,type=CephInt,range=0", \
 	"set mds map; must supply correct epoch number", "mds", "rw", "cli,rest")
