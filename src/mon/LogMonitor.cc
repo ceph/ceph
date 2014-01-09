@@ -382,7 +382,8 @@ bool LogMonitor::prepare_command(MMonCommand *m)
     le.msg = str_join(logtext, " ");
     pending_summary.add(le);
     pending_log.insert(pair<utime_t,LogEntry>(le.stamp, le));
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, string(), get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, string(),
+					      get_last_committed() + 1));
     return true;
   }
 

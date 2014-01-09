@@ -2827,7 +2827,8 @@ bool OSDMonitor::prepare_set_flag(MMonCommand *m, int flag)
     pending_inc.new_flags = osdmap.get_flags();
   pending_inc.new_flags |= flag;
   ss << "set " << OSDMap::get_flag_string(flag);
-  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(), get_last_committed()));
+  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
+						    get_last_committed() + 1));
   return true;
 }
 
@@ -2838,7 +2839,8 @@ bool OSDMonitor::prepare_unset_flag(MMonCommand *m, int flag)
     pending_inc.new_flags = osdmap.get_flags();
   pending_inc.new_flags &= ~flag;
   ss << "unset " << OSDMap::get_flag_string(flag);
-  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(), get_last_committed()));
+  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
+						    get_last_committed() + 1));
   return true;
 }
 
@@ -3257,7 +3259,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     ss << action << " item id " << id << " name '" << name << "' weight "
       << weight << " at location " << loc << " to crush map";
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						      get_last_committed() + 1));
     return true;
 
   } else if (prefix == "osd crush create-or-move") {
@@ -3296,7 +3299,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	ss << "create-or-move updating item name '" << name << "' weight " << weight
 	   << " at location " << loc << " to crush map";
 	getline(ss, rs);
-	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						  get_last_committed() + 1));
 	return true;
       }
     } while (false);
@@ -3330,7 +3334,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	  pending_inc.crush.clear();
 	  newcrush.encode(pending_inc.crush);
 	  getline(ss, rs);
-	  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+	  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						   get_last_committed() + 1));
 	  return true;
 	}
       } else {
@@ -3383,7 +3388,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	err = 0;
       }
     }
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, err, ss.str(), get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, err, ss.str(),
+					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd crush rm" ||
 	     prefix == "osd crush remove" ||
@@ -3405,7 +3411,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	err = 0;
 	ss << "device '" << name << "' does not appear in the crush map";
 	getline(ss, rs);
-	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						  get_last_committed() + 1));
 	return true;
       }
       int id = newcrush.get_item_id(name);
@@ -3434,7 +3441,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	newcrush.encode(pending_inc.crush);
 	ss << "removed item id " << id << " name '" << name << "' from crush map";
 	getline(ss, rs);
-	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						  get_last_committed() + 1));
 	return true;
       }
     } while (false);
@@ -3468,7 +3476,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
 	ss << "reweighted item id " << id << " name '" << name << "' to " << w
 	   << " in crush map";
 	getline(ss, rs);
-	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						  get_last_committed() + 1));
 	return true;
       }
     } while (false);
@@ -3493,7 +3502,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     newcrush.encode(pending_inc.crush);
     ss << "adjusted tunables profile to " << profile;
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+					      get_last_committed() + 1));
     return true;
 
   } else if (prefix == "osd crush rule create-simple") {
@@ -3529,7 +3539,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       newcrush.encode(pending_inc.crush);
     }
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+					      get_last_committed() + 1));
     return true;
 
   } else if (prefix == "osd crush rule rm") {
@@ -3571,7 +3582,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       newcrush.encode(pending_inc.crush);
     }
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+					      get_last_committed() + 1));
     return true;
 
   } else if (prefix == "osd setmaxosd") {
@@ -3588,7 +3600,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     pending_inc.new_max_osd = newmax;
     ss << "set new max_osd = " << pending_inc.new_max_osd;
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+					      get_last_committed() + 1));
     return true;
 
   } else if (prefix == "osd pause") {
@@ -3710,7 +3723,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     }
     if (any) {
       getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, err, rs, get_last_committed()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, err, rs,
+						get_last_committed() + 1));
       return true;
     }
   } else if (prefix == "osd reweight") {
@@ -3728,7 +3742,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       pending_inc.new_weight[id] = ww;
       ss << "reweighted osd." << id << " to " << w << " (" << ios::hex << ww << ios::dec << ")";
       getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						get_last_committed() + 1));
       return true;
     }
 
@@ -3748,7 +3763,8 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
       pending_inc.new_lost[id] = e;
       ss << "marked osd lost in epoch " << e;
       getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						get_last_committed() + 1));
       return true;
     }
 
@@ -3817,7 +3833,8 @@ done:
       ss << i;
       rdata.append(ss);
     }
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, rdata, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, rdata,
+					      get_last_committed() + 1));
     return true;
 
   } else if (prefix == "osd blacklist") {
@@ -3839,7 +3856,8 @@ done:
 	pending_inc.new_blacklist[addr] = expires;
 	ss << "blacklisting " << addr << " until " << expires << " (" << d << " sec)";
 	getline(ss, rs);
-	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+	wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						  get_last_committed() + 1));
 	return true;
       } else if (blacklistop == "rm") {
 	if (osdmap.is_blacklisted(addr) ||
@@ -3850,7 +3868,8 @@ done:
 	    pending_inc.new_blacklist.erase(addr);
 	  ss << "un-blacklisting " << addr;
 	  getline(ss, rs);
-	  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+	  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						    get_last_committed() + 1));
 	  return true;
 	}
 	ss << addr << " isn't blacklisted";
@@ -3894,7 +3913,8 @@ done:
       ss << "created pool " << poolstr << " snap " << snapname;
     }
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pool rmsnap") {
     string poolstr;
@@ -3933,7 +3953,8 @@ done:
       ss << "already removed pool " << poolstr << " snap " << snapname;
     }
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pool create") {
     int64_t  pg_num;
@@ -4028,7 +4049,8 @@ done:
       ss << "pool '" << poolstr << "' created";
     }
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+					      get_last_committed() + 1));
     return true;
 
   } else if (prefix == "osd pool delete") {
@@ -4055,7 +4077,8 @@ done:
     if (ret == 0)
       ss << "pool '" << poolstr << "' deleted";
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, ret, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, ret, rs,
+					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pool rename") {
     string srcpoolstr, destpoolstr;
@@ -4095,7 +4118,8 @@ done:
         << cpp_strerror(ret);
     }
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, ret, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, ret, rs,
+					      get_last_committed() + 1));
     return true;
 
   } else if (prefix == "osd pool set") {
@@ -4104,7 +4128,8 @@ done:
       goto reply;
 
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						   get_last_committed() + 1));
     return true;
   } else if (prefix == "osd tier add") {
     string poolstr;
@@ -4143,7 +4168,8 @@ done:
     pending_inc.get_new_pool(pool_id, p)->tiers.insert(tierpool_id);
     pending_inc.get_new_pool(tierpool_id, p)->tier_of = pool_id;
     ss << "pool '" << tierpoolstr << "' is now (or already was) a tier of '" << poolstr << "'";
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(), get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
+					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd tier remove") {
     string poolstr;
@@ -4185,7 +4211,8 @@ done:
     pending_inc.get_new_pool(pool_id, p)->tiers.erase(tierpool_id);
     pending_inc.get_new_pool(tierpool_id, tp)->clear_tier();
     ss << "pool '" << tierpoolstr << "' is now (or already was) not a tier of '" << poolstr << "'";
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(), get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
+					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd tier set-overlay") {
     string poolstr;
@@ -4227,7 +4254,8 @@ done:
     pending_inc.get_new_pool(pool_id, p)->read_tier = overlaypool_id;
     pending_inc.get_new_pool(pool_id, p)->write_tier = overlaypool_id;
     ss << "overlay for '" << poolstr << "' is now (or already was) '" << overlaypoolstr << "'";
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(), get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
+					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd tier remove-overlay") {
     string poolstr;
@@ -4249,7 +4277,8 @@ done:
     pending_inc.get_new_pool(pool_id, p)->clear_read_tier();
     pending_inc.get_new_pool(pool_id, p)->clear_write_tier();
     ss << "there is now (or already was) no overlay for '" << poolstr << "'";
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(), get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
+					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd tier cache-mode") {
     string poolstr;
@@ -4279,7 +4308,8 @@ done:
     pending_inc.get_new_pool(pool_id, p)->cache_mode = mode;
     ss << "set cache-mode for pool '" << poolstr
 	<< "' to " << pg_pool_t::get_cache_mode_name(mode);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(), get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
+					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pool set-quota") {
     string poolstr;
@@ -4320,7 +4350,8 @@ done:
     }
     ss << "set-quota " << field << " = " << value << " for pool " << poolstr;
     rs = ss.str();
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+					      get_last_committed() + 1));
     return true;
 
   } else if (prefix == "osd reweight-by-utilization") {
@@ -4336,7 +4367,8 @@ done:
     } else {
       ss << "SUCCESSFUL reweight-by-utilization: " << out_str;
       getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						get_last_committed() + 1));
       return true;
     }
   } else if (prefix == "osd thrash") {
@@ -4360,7 +4392,8 @@ reply:
 
  update:
   getline(ss, rs);
-  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+					    get_last_committed() + 1));
   return true;
 }
 
