@@ -51,7 +51,6 @@ static void get_raw_xattr_name(const char *name, int i, char *raw_name, int raw_
       break;
     default:
       pos++;
-      assert(pos < raw_len - 1);
       *raw_name = *name;
       break;
     }
@@ -194,21 +193,25 @@ int chain_fgetxattr(int fd, const char *name, void *val, size_t size)
 
   if (!size)
     return chain_fgetxattr_len(fd, name);
-
+  
   do {
     chunk_size = (size < CHAIN_XATTR_MAX_BLOCK_LEN ? size : CHAIN_XATTR_MAX_BLOCK_LEN);
-    get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
     size -= chunk_size;
-
-    r = sys_fgetxattr(fd, raw_name, (char *)val + pos, chunk_size);
+    if (NULL != strchr(name,'@')) {
+      get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
+      r = sys_fgetxattr(fd, raw_name, (char *)val + pos, chunk_size);
+    } else {
+      r = sys_fgetxattr(fd, name, (char *)val + pos, chunk_size);
+    }
+    
     if (r < 0) {
       ret = r;
       break;
     }
-
+    
     if (r > 0)
       pos += r;
-
+    
     i++;
   } while (size && r == CHAIN_XATTR_MAX_BLOCK_LEN);
 
@@ -386,6 +389,10 @@ done:
 
 int chain_flistxattr(int fd, char *names, size_t len) {
   int r;
+  char *p;
+  const char * end;
+  char *dest;
+  char *dest_end;
 
   if (!len)
     return sys_flistxattr(fd, names, len) * 2;
@@ -401,12 +408,12 @@ int chain_flistxattr(int fd, char *names, size_t len) {
 
   r = sys_flistxattr(fd, full_buf, total_len);
   if (r < 0)
-    return r;
+    goto done;
 
-  char *p = full_buf;
-  const char *end = full_buf + r;
-  char *dest = names;
-  char *dest_end = names + len;
+  p = full_buf;
+  end = full_buf + r;
+  dest = names;
+  dest_end = names + len;
 
   while (p < end) {
     char name[CHAIN_XATTR_MAX_NAME_LEN * 2 + 16];
