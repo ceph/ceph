@@ -137,7 +137,9 @@ private:
 
   // Indexed Collections
   IndexManager index_manager;
-  int get_index(coll_t c, Index *index);
+  map<string, string> cdir_map;
+
+  int get_index(coll_t& c, Index *index);
   int init_index(coll_t c);
 
   // ObjectMap
@@ -146,7 +148,7 @@ private:
   Finisher ondisk_finisher;
 
   // helper fns
-  int get_cdir(coll_t cid, char *s, int len);
+  int get_cdir(const coll_t& cid, char *s, int len);
   
   /// read a uuid from fd
   int read_fsid(int fd, uuid_d *uuid);
@@ -319,14 +321,16 @@ public:
   int lfn_find(coll_t cid, const ghobject_t& oid, IndexedPath *path);
   int lfn_truncate(coll_t cid, const ghobject_t& oid, off_t length);
   int lfn_stat(coll_t cid, const ghobject_t& oid, struct stat *buf);
+  int lfn_open_fast(coll_t& cid, const ghobject_t& oid, int& outfd, string& fullPath);
   int lfn_open(
-    coll_t cid,
+    coll_t& cid,
     const ghobject_t& oid,
     bool create,
     FDRef *outfd,
     IndexedPath *path = 0,
     Index *index = 0);
   void lfn_close(FDRef fd);
+  void lfn_close_fast(int fd);
   int lfn_link(coll_t c, coll_t newcid, const ghobject_t& o, const ghobject_t& newoid) ;
   int lfn_unlink(coll_t cid, const ghobject_t& o, const SequencerPosition &spos,
 		 bool force_clear_omap=false);
@@ -435,6 +439,15 @@ public:
     const ghobject_t& oid,
     struct stat *st,
     bool allow_eio = false);
+
+  int read_fast(
+    coll_t cid,
+    const ghobject_t& oid,
+    uint64_t offset,
+    size_t len,
+    bufferlist& bl,
+    int& fd, string& fullPath);
+
   int read(
     coll_t cid,
     const ghobject_t& oid,
@@ -492,6 +505,7 @@ public:
 
   // attrs
   int getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr &bp);
+  int getattr_fast(coll_t cid, const ghobject_t& oid, const char *name, bufferptr& value, int& fd, string& fullPath);
   int getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset, bool user_only = false);
 
   int _setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset,

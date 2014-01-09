@@ -124,6 +124,7 @@ int LFNIndex::fast_lookup(const ghobject_t &oid, int flags, string& full_path)
 	    << flags << "with error = " << cpp_strerror(-r) << dendl;
   }
   );
+  return r;
 }
 int LFNIndex::lookup(const ghobject_t &oid,
                      IndexedPath *out_path,
