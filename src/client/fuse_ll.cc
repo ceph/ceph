@@ -400,7 +400,7 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg, st
 }
 #endif
 
-#if FUSE_VERSION > FUSE_MAKE_VERSION(2, 9)
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
 
 static void fuse_ll_fallocate(fuse_req_t req, fuse_ino_t ino, int mode,
                               off_t offset, off_t length,
@@ -636,7 +636,7 @@ const static struct fuse_lowlevel_ops fuse_ll_oper = {
  ioctl: 0,
 #endif
  poll: 0,
-#if FUSE_VERSION > FUSE_MAKE_VERSION(2, 9)
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
  write_buf: 0,
  retrieve_reply: 0,
  forget_multi: 0,
