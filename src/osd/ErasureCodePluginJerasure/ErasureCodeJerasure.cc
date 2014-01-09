@@ -18,6 +18,7 @@
 #include <algorithm>
 #include "common/debug.h"
 #include "ErasureCodeJerasure.h"
+#include "vectorop.h"
 extern "C" {
 #include "jerasure.h"
 #include "reed_sol.h"
@@ -197,7 +198,11 @@ int ErasureCodeJerasureReedSolomonVandermonde::jerasure_decode(int *erasures,
 
 unsigned ErasureCodeJerasureReedSolomonVandermonde::get_alignment()
 {
-  return k*w*sizeof(int);
+  unsigned alignment = k*w*sizeof(int);
+  if ( ((w*sizeof(int))%LARGEST_VECTOR_WORDSIZE) )
+    alignment = k*w*LARGEST_VECTOR_WORDSIZE;
+  return alignment;
+
 }
 
 void ErasureCodeJerasureReedSolomonVandermonde::parse(const map<std::string,std::string> &parameters)
@@ -237,7 +242,10 @@ int ErasureCodeJerasureReedSolomonRAID6::jerasure_decode(int *erasures,
 
 unsigned ErasureCodeJerasureReedSolomonRAID6::get_alignment()
 {
-  return k*w*sizeof(int);
+  unsigned alignment = k*w*sizeof(int);
+  if ( ((w*sizeof(int))%LARGEST_VECTOR_WORDSIZE) )
+    alignment = k*w*LARGEST_VECTOR_WORDSIZE;
+  return alignment;
 }
 
 void ErasureCodeJerasureReedSolomonRAID6::parse(const map<std::string,std::string> &parameters)
@@ -279,7 +287,10 @@ int ErasureCodeJerasureCauchy::jerasure_decode(int *erasures,
 
 unsigned ErasureCodeJerasureCauchy::get_alignment()
 {
-  return k*w*packetsize*sizeof(int);
+  unsigned alignment = k*w*packetsize*sizeof(int);
+  if ( ((w*packetsize*sizeof(int))%LARGEST_VECTOR_WORDSIZE) )
+    alignment = k*w*packetsize*LARGEST_VECTOR_WORDSIZE;
+  return alignment;
 }
 
 void ErasureCodeJerasureCauchy::parse(const map<std::string,std::string> &parameters)
@@ -346,7 +357,10 @@ int ErasureCodeJerasureLiberation::jerasure_decode(int *erasures,
 
 unsigned ErasureCodeJerasureLiberation::get_alignment()
 {
-  return k*w*packetsize*sizeof(int);
+  unsigned alignment = k*w*packetsize*sizeof(int);
+  if ( ((w*packetsize*sizeof(int))%LARGEST_VECTOR_WORDSIZE) )
+    alignment = k*w*packetsize*LARGEST_VECTOR_WORDSIZE;
+  return alignment;
 }
 
 void ErasureCodeJerasureLiberation::parse(const map<std::string,std::string> &parameters)
