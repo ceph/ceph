@@ -212,8 +212,11 @@ TEST(LibRadosSnapshots, SelfManagedSnapTest) {
   char buf2[sizeof(buf)];
   memset(buf2, 0xdd, sizeof(buf2));
   ASSERT_EQ((int)sizeof(buf2), rados_write(ioctx, "foo", buf2, sizeof(buf2), 0));
-  rados_ioctx_snap_set_read(ioctx, my_snaps[1]);
+  rados_ioctx_snap_set_read(ioctx, my_snaps[1]-1);
   char buf3[sizeof(buf)];
+  ASSERT_EQ(-ENOENT, rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));
+
+  rados_ioctx_snap_set_read(ioctx, my_snaps[1]);
   ASSERT_EQ((int)sizeof(buf3), rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));
   ASSERT_EQ(0, memcmp(buf3, buf, sizeof(buf)));
 

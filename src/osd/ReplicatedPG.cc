@@ -6370,6 +6370,11 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
   }
 
   // we want a snap
+  if (pool.info.is_removed_snap(oid.snap)) {
+    dout(10) << __func__ << " snap " << oid.snap << " is removed" << dendl;
+    return -ENOENT;
+  }
+
   SnapSetContext *ssc = get_snapset_context(oid.oid, oid.get_key(), oid.hash,
 					    can_create, oid.get_namespace());
   if (!ssc) {
