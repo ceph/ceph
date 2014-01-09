@@ -838,7 +838,8 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       map.epoch = pending_mdsmap.epoch;  // make sure epoch is correct
       pending_mdsmap = map;
       string rs = "set mds map";
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						get_last_committed() + 1));
       return true;
     } else {
       ss << "next mdsmap epoch " << pending_mdsmap.epoch << " != " << e;
@@ -857,7 +858,8 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       ss << "set mds gid " << gid << " to state " << state << " " << ceph_mds_state_name(state);
       string rs;
       getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						get_last_committed() + 1));
       return true;
     }
 
@@ -887,7 +889,8 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       ss << "removed mds gid " << gid;
       string rs;
       getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						get_last_committed() + 1));
       return true;
     }
   } else if (prefix == "mds rmfailed") {
@@ -898,7 +901,8 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
     ss << "removed failed mds." << w;
     string rs;
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+					      get_last_committed() + 1));
     return true;
   } else if (prefix == "mds cluster_down") {
     if (pending_mdsmap.test_flag(CEPH_MDSMAP_DOWN)) {
@@ -1026,7 +1030,8 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       ss << "new fs with metadata pool " << metadata << " and data pool " << data;
       string rs;
       getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						get_last_committed() + 1));
       return true;
     }
   } else {
@@ -1038,7 +1043,8 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 
   if (r >= 0) {
     // success.. delay reply
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, r, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, r, rs,
+					      get_last_committed() + 1));
     return true;
   } else {
     // reply immediately
