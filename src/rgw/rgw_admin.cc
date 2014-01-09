@@ -744,7 +744,7 @@ int main(int argc, char **argv)
   int gen_secret_key = 0;
   bool set_perm = false;
   bool set_temp_url_key = false;
-  string temp_url_key;
+  map<int, string> temp_url_keys;
   string bucket_id;
   Formatter *formatter = NULL;
   int purge_data = false;
@@ -889,7 +889,10 @@ int main(int argc, char **argv)
       perm_mask = rgw_str_to_perm(access.c_str());
       set_perm = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--temp-url-key", (char*)NULL)) {
-      temp_url_key = val;
+      temp_url_keys[0] = val;
+      set_temp_url_key = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--temp-url-key2", "--temp-url-key-2", (char*)NULL)) {
+      temp_url_keys[1] = val;
       set_temp_url_key = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--bucket-id", (char*)NULL)) {
       bucket_id = val;
@@ -1268,8 +1271,12 @@ int main(int argc, char **argv)
   if (set_perm)
     user_op.set_perm(perm_mask);
 
-  if (set_temp_url_key)
-    user_op.set_temp_url_key(temp_url_key);
+  if (set_temp_url_key) {
+    map<int, string>::iterator iter = temp_url_keys.begin();
+    for (; iter != temp_url_keys.end(); ++iter) {
+      user_op.set_temp_url_key(iter->second, iter->first);
+    }
+  }
 
   if (!op_mask_str.empty()) {
     uint32_t op_mask;
