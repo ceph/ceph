@@ -325,6 +325,10 @@ public:
     eversion_t trim_to,
     pg_info_t &info);
 
+  void clear_can_rollback_to() {
+    log.can_rollback_to = log.head;
+  }
+
   //////////////////// get or set log & missing ////////////////////
 
   void claim_log(const pg_log_t &o) {
