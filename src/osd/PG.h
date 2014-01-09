@@ -1818,7 +1818,7 @@ public:
   void add_log_entry(pg_log_entry_t& e, bufferlist& log_bl);
   void append_log(
     vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t,
-    bool update_snap_map = true);
+    bool transaction_applied = true);
   bool check_log_for_corruption(ObjectStore *store);
   void trim_peers();
 
