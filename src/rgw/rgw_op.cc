@@ -1716,6 +1716,29 @@ int RGWSetTempUrl::verify_permission()
 
 void RGWSetTempUrl::execute()
 {
+  ret = get_params();
+  if (ret < 0)
+    return;
+
+  RGWUserAdminOpState user_op;
+  user_op.set_user_id(s->user.user_id);
+  map<int, string>::iterator iter;
+  for (iter = temp_url_keys.begin(); iter != temp_url_keys.end(); ++iter) {
+    user_op.set_temp_url_key(iter->second, iter->first);
+  }
+
+  RGWUser user;
+  ret = user.init(store, user_op);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: could not init user ret=" << ret << dendl;
+    return;
+  }
+  string err_msg;
+  ret = user.modify(user_op, &err_msg);
+  if (ret < 0) {
+    ldout(store->ctx(), 10) << "user.modify() returned " << ret << ": " << err_msg << dendl;
+    return;
+  }
 }
 
 
