@@ -104,8 +104,8 @@ extern int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets
 extern int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t creation_time, bool update_entrypoint = true);
 extern int rgw_unlink_bucket(RGWRados *store, string user_id, const string& bucket_name, bool update_entrypoint = true);
 
-extern int rgw_remove_object(RGWRados *store, rgw_bucket& bucket, std::string& object);
-extern int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children);
+extern int rgw_remove_object(RGWRados *store, const string& bucket_owner, rgw_bucket& bucket, std::string& object);
+extern int rgw_remove_bucket(RGWRados *store, const string& bucket_owner, rgw_bucket& bucket, bool delete_children);
 
 extern int rgw_bucket_set_attrs(RGWRados *store, rgw_bucket& obj,
                                 map<string, bufferlist>& attrs,
@@ -184,6 +184,8 @@ class RGWBucket
   std::string bucket_name;
 
   bool failure;
+
+  RGWBucketInfo bucket_info;
 
 private:
 

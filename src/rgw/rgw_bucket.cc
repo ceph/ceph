@@ -300,18 +300,18 @@ static bool bucket_object_check_filter(const string& name)
   return rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns);
 }
 
-int rgw_remove_object(RGWRados *store, rgw_bucket& bucket, std::string& object)
+int rgw_remove_object(RGWRados *store, const string& bucket_owner, rgw_bucket& bucket, std::string& object)
 {
   RGWRadosCtx rctx(store);
 
-  rgw_obj obj(bucket,object);
+  rgw_obj obj(bucket, object);
 
-  int ret = store->delete_obj((void *)&rctx, obj);
+  int ret = store->delete_obj((void *)&rctx, bucket_owner, obj);
 
   return ret;
 }
 
-int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
+int rgw_remove_bucket(RGWRados *store, const string& bucket_owner, rgw_bucket& bucket, bool delete_children)
 {
   int ret;
   map<RGWObjCategory, RGWBucketStats> stats;
@@ -346,7 +346,7 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
     while (!objs.empty()) {
       std::vector<RGWObjEnt>::iterator it = objs.begin();
       for (it = objs.begin(); it != objs.end(); ++it) {
-        ret = rgw_remove_object(store, bucket, (*it).name);
+        ret = rgw_remove_object(store, bucket_owner, bucket, (*it).name);
         if (ret < 0)
           return ret;
       }
@@ -392,8 +392,6 @@ int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state)
     return -EINVAL;
 
   store = storage;
-
-  RGWBucketInfo bucket_info;
 
   string user_id = op_state.get_user_id();
   bucket_name = op_state.get_bucket_name();
@@ -518,7 +516,7 @@ int RGWBucket::remove(RGWBucketAdminOpState& op_state, std::string *err_msg)
   bool delete_children = op_state.will_delete_children();
   rgw_bucket bucket = op_state.get_bucket();
 
-  int ret = rgw_remove_bucket(store, bucket, delete_children);
+  int ret = rgw_remove_bucket(store, bucket_info.owner, bucket, delete_children);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove bucket" + cpp_strerror(-ret));
     return ret;
@@ -532,7 +530,7 @@ int RGWBucket::remove_object(RGWBucketAdminOpState& op_state, std::string *err_m
   rgw_bucket bucket = op_state.get_bucket();
   std::string object_name = op_state.get_object_name();
 
-  int ret = rgw_remove_object(store, bucket, object_name);
+  int ret = rgw_remove_object(store, bucket_info.owner, bucket, object_name);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove object" + cpp_strerror(-ret));
     return ret;

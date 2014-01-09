@@ -1288,7 +1288,8 @@ protected:
   int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 
 public:
-  RGWPutObjProcessor_Multipart(uint64_t _p, req_state *_s) : RGWPutObjProcessor_Atomic(_s->bucket, _s->object_str, _p, _s->req_id), s(_s) {}
+  RGWPutObjProcessor_Multipart(const string& bucket_owner, uint64_t _p, req_state *_s) :
+                   RGWPutObjProcessor_Atomic(bucket_owner, _s->bucket, _s->object_str, _p, _s->req_id), s(_s) {}
 };
 
 int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx)
@@ -1322,6 +1323,7 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_
   RGWRados::PutObjMetaExtraParams params;
   params.set_mtime = set_mtime;
   params.mtime = mtime;
+  params.owner = s->owner.get_id();
 
   int r = store->put_obj_meta(obj_ctx, head_obj, s->obj_size, attrs, RGW_OBJ_CATEGORY_MAIN, 0, params);
   if (r < 0)
@@ -1357,10 +1359,12 @@ RGWPutObjProcessor *RGWPutObj::select_processor()
 
   uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
 
+  const string& bucket_owner = s->bucket_owner.get_id();
+
   if (!multipart) {
-    processor = new RGWPutObjProcessor_Atomic(s->bucket, s->object_str, part_size, s->req_id);
+    processor = new RGWPutObjProcessor_Atomic(bucket_owner, s->bucket, s->object_str, part_size, s->req_id);
   } else {
-    processor = new RGWPutObjProcessor_Multipart(part_size, s);
+    processor = new RGWPutObjProcessor_Multipart(bucket_owner, part_size, s);
   }
 
   return processor;
@@ -1411,7 +1415,7 @@ void RGWPutObj::execute()
 
   if (!chunked_upload) { /* with chunked upload we don't know how big is the upload.
                             we also check sizes at the end anyway */
-    ret = store->check_quota(s->bucket, bucket_quota, s->content_length);
+    ret = store->check_quota(s->bucket_owner.get_id(), s->bucket, bucket_quota, s->content_length);
     if (ret < 0) {
       goto done;
     }
@@ -1461,7 +1465,7 @@ void RGWPutObj::execute()
   s->obj_size = ofs;
   perfcounter->inc(l_rgw_put_b, s->obj_size);
 
-  ret = store->check_quota(s->bucket, bucket_quota, s->obj_size);
+  ret = store->check_quota(s->bucket_owner.get_id(), s->bucket, bucket_quota, s->obj_size);
   if (ret < 0) {
     goto done;
   }
@@ -1517,7 +1521,7 @@ RGWPutObjProcessor *RGWPostObj::select_processor()
 
   uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
 
-  processor = new RGWPutObjProcessor_Atomic(s->bucket, s->object_str, part_size, s->req_id);
+  processor = new RGWPutObjProcessor_Atomic(s->bucket_owner.get_id(), s->bucket, s->object_str, part_size, s->req_id);
 
   return processor;
 }
@@ -1699,7 +1703,7 @@ void RGWDeleteObj::execute()
   rgw_obj obj(s->bucket, s->object_str);
   if (s->object) {
     store->set_atomic(s->obj_ctx, obj);
-    ret = store->delete_obj(s->obj_ctx, obj);
+    ret = store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), obj);
   }
 }
 
@@ -2191,7 +2195,7 @@ void RGWInitMultipart::execute()
 
     obj.init_ns(s->bucket, tmp_obj_name, mp_ns);
     // the meta object will be indexed with 0 size, we c
-    ret = store->put_obj_meta(s->obj_ctx, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, PUT_OBJ_CREATE_EXCL);
+    ret = store->put_obj_meta(s->obj_ctx, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, PUT_OBJ_CREATE_EXCL, s->owner.get_id());
   } while (ret == -EEXIST);
 }
 
@@ -2381,6 +2385,7 @@ void RGWCompleteMultipart::execute()
   extra_params.remove_objs = &remove_objs;
 
   extra_params.ptag = &s->req_id; /* use req_id as operation tag */
+  extra_params.owner = s->owner.get_id();
 
   ret = store->put_obj_meta(s->obj_ctx, target_obj, ofs, attrs,
                             RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
@@ -2390,7 +2395,7 @@ void RGWCompleteMultipart::execute()
 
   // remove the upload obj
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
-  store->delete_obj(s->obj_ctx, meta_obj);
+  store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), meta_obj);
 }
 
 int RGWAbortMultipart::verify_permission()
@@ -2413,6 +2418,7 @@ void RGWAbortMultipart::execute()
   map<string, bufferlist> attrs;
   rgw_obj meta_obj;
   RGWMPObj mp;
+  const string& owner = s->bucket_owner.get_id();
 
   if (upload_id.empty() || s->object_str.empty())
     return;
@@ -2431,7 +2437,7 @@ void RGWAbortMultipart::execute()
       string oid = mp.get_part(obj_iter->second.num);
       rgw_obj obj;
       obj.init_ns(s->bucket, oid, mp_ns);
-      ret = store->delete_obj(s->obj_ctx, obj);
+      ret = store->delete_obj(s->obj_ctx, owner, obj);
       if (ret < 0 && ret != -ENOENT)
         return;
     } else {
@@ -2439,7 +2445,7 @@ void RGWAbortMultipart::execute()
       map<uint64_t, RGWObjManifestPart>::iterator oiter;
       for (oiter = manifest.objs.begin(); oiter != manifest.objs.end(); ++oiter) {
         RGWObjManifestPart& part = oiter->second;
-        ret = store->delete_obj(s->obj_ctx, part.loc);
+        ret = store->delete_obj(s->obj_ctx, owner, part.loc);
         if (ret < 0 && ret != -ENOENT)
           return;
       }
@@ -2447,7 +2453,7 @@ void RGWAbortMultipart::execute()
   }
   // and also remove the metadata obj
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
-  ret = store->delete_obj(s->obj_ctx, meta_obj);
+  ret = store->delete_obj(s->obj_ctx, owner, meta_obj);
   if (ret == -ENOENT) {
     ret = -ERR_NO_SUCH_BUCKET;
   }
@@ -2579,7 +2585,7 @@ void RGWDeleteMultiObj::execute()
 
     rgw_obj obj(bucket,(*iter));
     store->set_atomic(s->obj_ctx, obj);
-    ret = store->delete_obj(s->obj_ctx, obj);
+    ret = store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), obj);
     result = make_pair(*iter, ret);
 
     send_partial_response(result);

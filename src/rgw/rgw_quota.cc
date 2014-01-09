@@ -46,7 +46,7 @@ public:
   }
 
   int get_bucket_stats(rgw_bucket& bucket, RGWBucketStats& stats, RGWQuotaInfo& quota);
-  void adjust_bucket_stats(rgw_bucket& bucket, int objs_delta, uint64_t added_bytes, uint64_t removed_bytes);
+  void adjust_bucket_stats(const string& bucket_owner, rgw_bucket& bucket, int objs_delta, uint64_t added_bytes, uint64_t removed_bytes);
 
   bool can_use_cached_stats(RGWQuotaInfo& quota, RGWBucketStats& stats);
 
@@ -270,7 +270,7 @@ public:
 };
 
 
-void RGWBucketStatsCache::adjust_bucket_stats(rgw_bucket& bucket, int objs_delta, uint64_t added_bytes, uint64_t removed_bytes)
+void RGWBucketStatsCache::adjust_bucket_stats(const string& bucket_owner, rgw_bucket& bucket, int objs_delta, uint64_t added_bytes, uint64_t removed_bytes)
 {
   RGWBucketStatsUpdate update(objs_delta, added_bytes, removed_bytes);
   stats_map.find_and_update(bucket, NULL, &update);
@@ -282,7 +282,7 @@ class RGWQuotaHandlerImpl : public RGWQuotaHandler {
   RGWBucketStatsCache stats_cache;
 public:
   RGWQuotaHandlerImpl(RGWRados *_store) : store(_store), stats_cache(_store) {}
-  virtual int check_quota(rgw_bucket& bucket, RGWQuotaInfo& bucket_quota,
+  virtual int check_quota(const string& bucket_owner, rgw_bucket& bucket, RGWQuotaInfo& bucket_quota,
 			  uint64_t num_objs, uint64_t size) {
     uint64_t size_kb = rgw_rounded_kb(size);
     if (!bucket_quota.enabled) {
@@ -315,8 +315,8 @@ public:
     return 0;
   }
 
-  virtual void update_stats(rgw_bucket& bucket, int obj_delta, uint64_t added_bytes, uint64_t removed_bytes) {
-    stats_cache.adjust_bucket_stats(bucket, obj_delta, added_bytes, removed_bytes);
+  virtual void update_stats(const string& bucket_owner, rgw_bucket& bucket, int obj_delta, uint64_t added_bytes, uint64_t removed_bytes) {
+    stats_cache.adjust_bucket_stats(bucket_owner, bucket, obj_delta, added_bytes, removed_bytes);
   };
 };
 

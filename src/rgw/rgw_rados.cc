@@ -562,7 +562,7 @@ RGWPutObjProcessor::~RGWPutObjProcessor()
   list<rgw_obj>::iterator iter;
   for (iter = objs.begin(); iter != objs.end(); ++iter) {
     rgw_obj& obj = *iter;
-    int r = store->delete_obj(obj_ctx, obj);
+    int r = store->delete_obj(obj_ctx, bucket_owner, obj);
     if (r < 0 && r != -ENOENT) {
       ldout(store->ctx(), 0) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
     }
@@ -595,6 +595,7 @@ int RGWPutObjProcessor_Plain::do_complete(string& etag, time_t *mtime, time_t se
   params.set_mtime = set_mtime;
   params.mtime = mtime;
   params.data = &data;
+  params.owner = bucket_owner;
 
   int r = store->put_obj_meta(obj_ctx, obj, data.length(), attrs,
                               RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
@@ -820,6 +821,7 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
   extra_params.ptag = &unique_tag; /* use req_id as operation tag */
   extra_params.mtime = mtime;
   extra_params.set_mtime = set_mtime;
+  extra_params.owner = bucket_owner;
 
   r = store->put_obj_meta(obj_ctx, head_obj, obj_len, attrs,
                           RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
@@ -2262,7 +2264,8 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
                   list<string> *remove_objs,
                   bool modify_version,
                   RGWObjVersionTracker *objv_tracker,
-                  time_t set_mtime)
+                  time_t set_mtime,
+                  const string& bucket_owner)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -2394,7 +2397,7 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
 
   if (state) {
     /* update quota cache */
-    quota_handler->update_stats(bucket, (state->exists ? 0 : 1), size, state->size);
+    quota_handler->update_stats(bucket_owner, bucket, (state->exists ? 0 : 1), size, state->size);
   }
 
   return 0;
@@ -2639,7 +2642,7 @@ int RGWRados::copy_obj(void *ctx,
     string tag;
     append_rand_alpha(cct, tag, tag, 32);
 
-    RGWPutObjProcessor_Atomic processor(dest_obj.bucket, dest_obj.object,
+    RGWPutObjProcessor_Atomic processor(dest_bucket_info.owner, dest_obj.bucket, dest_obj.object,
                                         cct->_conf->rgw_obj_stripe_size, tag);
     ret = processor.prepare(this, ctx);
     if (ret < 0)
@@ -2774,7 +2777,7 @@ set_err_state:
 
     return 0;
   } else if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
-    return copy_obj_data(ctx, &handle, end, dest_obj, src_obj, mtime, src_attrs, category, ptag, err);
+    return copy_obj_data(ctx, dest_bucket_info.owner, &handle, end, dest_obj, src_obj, mtime, src_attrs, category, ptag, err);
   }
 
   map<uint64_t, RGWObjManifestPart>::iterator miter = astate->manifest.objs.begin();
@@ -2848,6 +2851,7 @@ set_err_state:
   ep.data = &first_chunk;
   ep.manifest = pmanifest;
   ep.ptag = &tag;
+  ep.owner = dest_bucket_info.owner;
 
   ret = put_obj_meta(ctx, dest_obj, end + 1, src_attrs, category, PUT_OBJ_CREATE, ep);
 
@@ -2879,6 +2883,7 @@ done_ret:
 
 
 int RGWRados::copy_obj_data(void *ctx,
+               const string& owner,
 	       void **handle, off_t end,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
@@ -2947,6 +2952,7 @@ int RGWRados::copy_obj_data(void *ctx,
   ep.data = &first_chunk;
   ep.manifest = &manifest;
   ep.ptag = ptag;
+  ep.owner = owner;
 
   ret = put_obj_meta(ctx, dest_obj, end + 1, attrs, category, PUT_OBJ_CREATE, ep);
   if (mtime)
@@ -2954,7 +2960,7 @@ int RGWRados::copy_obj_data(void *ctx,
 
   return ret;
 done_err:
-  delete_obj(ctx, shadow_obj);
+  delete_obj(ctx, owner, shadow_obj);
   return r;
 }
 
@@ -3205,7 +3211,7 @@ int RGWRados::defer_gc(void *ctx, rgw_obj& obj)
  * obj: name of the object to delete
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj, RGWObjVersionTracker *objv_tracker)
+int RGWRados::delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& obj, RGWObjVersionTracker *objv_tracker)
 {
   rgw_bucket bucket;
   std::string oid, key;
@@ -3268,17 +3274,29 @@ int RGWRados::delete_obj_impl(void *ctx, rgw_obj& obj, RGWObjVersionTracker *obj
 
   if (state) {
     /* update quota cache */
-    quota_handler->update_stats(bucket, -1, 0, state->size);
+    quota_handler->update_stats(bucket_owner, bucket, -1, 0, state->size);
   }
 
   return 0;
 }
 
-int RGWRados::delete_obj(void *ctx, rgw_obj& obj, RGWObjVersionTracker *objv_tracker)
+int RGWRados::delete_obj(void *ctx, const string& bucket_owner, rgw_obj& obj, RGWObjVersionTracker *objv_tracker)
 {
   int r;
 
-  r = delete_obj_impl(ctx, obj, objv_tracker);
+  r = delete_obj_impl(ctx, bucket_owner, obj, objv_tracker);
+  if (r == -ECANCELED)
+    r = 0;
+
+  return r;
+}
+
+int RGWRados::delete_system_obj(void *ctx, rgw_obj& obj, RGWObjVersionTracker *objv_tracker)
+{
+  int r;
+
+  string no_owner;
+  r = delete_obj_impl(ctx, no_owner, obj, objv_tracker);
   if (r == -ECANCELED)
     r = 0;
 
@@ -5711,9 +5729,9 @@ int RGWRados::cls_user_remove_bucket(rgw_obj& obj, const cls_user_bucket& bucket
   return 0;
 }
 
-int RGWRados::check_quota(rgw_bucket& bucket, RGWQuotaInfo& quota_info, uint64_t obj_size)
+int RGWRados::check_quota(const string& bucket_owner, rgw_bucket& bucket, RGWQuotaInfo& quota_info, uint64_t obj_size)
 {
-  return quota_handler->check_quota(bucket, quota_info, 1, obj_size);
+  return quota_handler->check_quota(bucket_owner, bucket, quota_info, 1, obj_size);
 }
 
 class IntentLogNameFilter : public RGWAccessListFilter
@@ -5811,6 +5829,8 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
   bufferlist::iterator iter;
   off_t off;
 
+  string no_owner;
+
   while (!eof || !iter.end()) {
     off = iter.get_off();
     if (!eof && (bl.length() - off) < chunk / 2) {
@@ -5853,7 +5873,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
         complete = false;
         break;
       }
-      r = delete_obj(NULL, entry.obj);
+      r = delete_obj(NULL, no_owner, entry.obj);
       if (r < 0 && r != -ENOENT) {
         cerr << "failed to remove obj: " << entry.obj << std::endl;
         complete = false;
@@ -5890,7 +5910,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
     rgw_obj obj(bucket, oid);
     cout << "completed intent log: " << obj << (purge ? ", purging it" : "") << std::endl;
     if (purge) {
-      r = delete_obj(NULL, obj);
+      r = delete_system_obj(NULL, obj);
       if (r < 0)
         cerr << "failed to remove obj: " << obj << std::endl;
     }
