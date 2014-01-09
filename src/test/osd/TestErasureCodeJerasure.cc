@@ -217,35 +217,8 @@ TEST(ErasureCodeTest, encode)
   unsigned alignment = jerasure.get_alignment();
   {
     //
-    // When the input bufferlist is perfectly aligned, it is 
-    // pointed to unmodified by the returned encoded chunks.
-    //
-    bufferlist in;
-    map<int,bufferlist> encoded;
-    int want_to_encode[] = { 0, 1, 2, 3 };
-    bufferptr in_ptr(buffer::create_page_aligned(alignment * 2));
-    in_ptr.zero();
-    in_ptr.set_length(0);
-    in_ptr.append(string(alignment * 2, 'X').c_str(), alignment * 2);
-    in.append(in_ptr);
-    EXPECT_EQ(alignment * 2, in.length());
-    EXPECT_EQ(0, jerasure.encode(set<int>(want_to_encode, want_to_encode+4),
-				 in,
-				 &encoded));
-    EXPECT_EQ(4u, encoded.size());
-    for(int i = 0; i < 4; i++)
-      EXPECT_EQ(alignment, encoded[i].length());
-    EXPECT_EQ(in.c_str(), encoded[0].c_str());
-    EXPECT_EQ(in.c_str() + alignment, encoded[1].c_str());
-  }
-
-  {
-    //
     // When the input bufferlist needs to be padded because
     // it is not properly aligned, it is padded with zeros.
-    // The beginning of the input bufferlist is pointed to 
-    // unmodified by the returned encoded chunk, only the 
-    // trailing chunk is allocated and copied.
     //
     bufferlist in;
     map<int,bufferlist> encoded;
@@ -258,8 +231,6 @@ TEST(ErasureCodeTest, encode)
     EXPECT_EQ(4u, encoded.size());
     for(int i = 0; i < 4; i++)
       EXPECT_EQ(alignment, encoded[i].length());
-    EXPECT_EQ(in.c_str(), encoded[0].c_str());
-    EXPECT_NE(in.c_str() + alignment, encoded[1].c_str());
     char *last_chunk = encoded[1].c_str();
     EXPECT_EQ('X', last_chunk[0]);
     EXPECT_EQ('\0', last_chunk[trail_length]);
@@ -272,7 +243,7 @@ TEST(ErasureCodeTest, encode)
     // internally allocated a buffer because of padding requirements
     // and also computes the coding chunks, they are released before
     // the return of the method, as shown when running the tests thru
-    // valgrind that shows there is no leak.
+    // valgrind (there is no leak).
     //
     bufferlist in;
     map<int,bufferlist> encoded;
@@ -283,7 +254,6 @@ TEST(ErasureCodeTest, encode)
     EXPECT_EQ(0, jerasure.encode(want_to_encode, in, &encoded));
     EXPECT_EQ(1u, encoded.size());
     EXPECT_EQ(alignment, encoded[0].length());
-    EXPECT_EQ(in.c_str(), encoded[0].c_str());
   }
 }
 
