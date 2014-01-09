@@ -129,7 +129,7 @@
      virtual void log_operation(
        vector<pg_log_entry_t> &logv,
        const eversion_t &trim_to,
-       bool update_snaps,
+       bool transaction_applied,
        ObjectStore::Transaction *t) = 0;
 
      virtual void update_peer_last_complete_ondisk(

@@ -2337,9 +2337,9 @@ void PG::add_log_entry(pg_log_entry_t& e, bufferlist& log_bl)
 
 void PG::append_log(
   vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t,
-  bool do_update_snap_map)
+  bool transaction_applied)
 {
-  if (do_update_snap_map)
+  if (transaction_applied)
     update_snap_map(logv, t);
   dout(10) << "append_log " << pg_log.get_log() << " " << logv << dendl;
 
@@ -2350,6 +2350,8 @@ void PG::append_log(
     p->offset = 0;
     add_log_entry(*p, keys[p->get_key_name()]);
   }
+  if (!transaction_applied)
+    pg_log.clear_can_rollback_to();
 
   dout(10) << "append_log  adding " << keys.size() << " keys" << dendl;
   t.omap_setkeys(coll_t::META_COLL, log_oid, keys);
