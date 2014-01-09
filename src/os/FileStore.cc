@@ -850,12 +850,12 @@ int FileStore::_detect_fs()
     m_fs_type = FS_TYPE_BTRFS;
   } else if (st.f_type == XFS_SUPER_MAGIC) {
     dout(1) << "mount detected xfs" << dendl;
+    m_fs_type = FS_TYPE_XFS;
     if (m_filestore_replica_fadvise) {
       dout(1) << " disabling 'filestore replica fadvise' due to known issues with fadvise(DONTNEED) on xfs" << dendl;
       g_conf->set_val("filestore_replica_fadvise", "false");
       g_conf->apply_changes(NULL);
       assert(m_filestore_replica_fadvise == false);
-      m_fs_type = FS_TYPE_XFS;
     }
   }
 #endif
