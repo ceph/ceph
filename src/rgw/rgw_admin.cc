@@ -539,10 +539,9 @@ public:
   }
 };
 
-static int init_bucket(string& bucket_name, rgw_bucket& bucket)
+static int init_bucket(string& bucket_name, RGWBucketInfo& bucket_info, rgw_bucket& bucket)
 {
   if (!bucket_name.empty()) {
-    RGWBucketInfo bucket_info;
     int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL);
     if (r < 0) {
       cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
@@ -1450,7 +1449,8 @@ int main(int argc, char **argv)
     if (bucket_name.empty()) {
       RGWBucketAdminOp::info(store, bucket_op, f);
     } else {
-     int ret = init_bucket(bucket_name, bucket);
+      RGWBucketInfo bucket_info;
+      int ret = init_bucket(bucket_name, bucket_info, bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -1774,12 +1774,13 @@ next:
   }
 
   if (opt_cmd == OPT_OBJECT_RM) {
-    int ret = init_bucket(bucket_name, bucket);
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(bucket_name, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    ret = rgw_remove_object(store, bucket, object);
+    ret = rgw_remove_object(store, bucket_info.owner, bucket, object);
 
     if (ret < 0) {
       cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
@@ -1788,7 +1789,8 @@ next:
   }
 
   if (opt_cmd == OPT_OBJECT_UNLINK) {
-    int ret = init_bucket(bucket_name, bucket);
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(bucket_name, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -1803,7 +1805,8 @@ next:
   }
 
   if (opt_cmd == OPT_OBJECT_STAT) {
-    int ret = init_bucket(bucket_name, bucket);
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(bucket_name, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2112,7 +2115,8 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return -EINVAL;
     }
-    int ret = init_bucket(bucket_name, bucket);
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(bucket_name, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2151,7 +2155,8 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return -EINVAL;
     }
-    int ret = init_bucket(bucket_name, bucket);
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(bucket_name, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2331,7 +2336,8 @@ next:
         cerr << "ERROR: bucket not specified" << std::endl;
         return -EINVAL;
       }
-      int ret = init_bucket(bucket_name, bucket);
+      RGWBucketInfo bucket_info;
+      int ret = init_bucket(bucket_name, bucket_info, bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -2381,7 +2387,8 @@ next:
         cerr << "ERROR: bucket not specified" << std::endl;
         return -EINVAL;
       }
-      int ret = init_bucket(bucket_name, bucket);
+      RGWBucketInfo bucket_info;
+      int ret = init_bucket(bucket_name, bucket_info, bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
