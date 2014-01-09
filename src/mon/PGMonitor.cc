@@ -1667,7 +1667,8 @@ bool PGMonitor::prepare_command(MMonCommand *m)
 
  update:
   getline(ss, rs);
-  wait_for_finished_proposal(new Monitor::C_Command(mon, m, r, rs, get_last_committed()));
+  wait_for_finished_proposal(new Monitor::C_Command(mon, m, r, rs,
+						    get_last_committed() + 1));
   return true;
 }
 

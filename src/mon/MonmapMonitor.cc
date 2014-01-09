@@ -346,7 +346,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
     pending_map.last_changed = ceph_clock_now(g_ceph_context);
     getline(ss, rs);
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
-                                                      get_last_committed()));
+                                                     get_last_committed() + 1));
     return true;
 
   } else if (prefix == "mon remove") {
