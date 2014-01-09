@@ -327,9 +327,9 @@ public:
   void log_operation(
     vector<pg_log_entry_t> &logv,
     const eversion_t &trim_to,
-    bool update_snaps,
+    bool transaction_applied,
     ObjectStore::Transaction *t) {
-    append_log(logv, trim_to, *t, update_snaps);
+    append_log(logv, trim_to, *t, transaction_applied);
   }
 
   void op_applied(
