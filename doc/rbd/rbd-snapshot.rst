@@ -93,11 +93,6 @@ For example::
 	rbd snap rollback rbd/foo@snapname
 
 
-
-For the rollback section, you could mention that rollback means
-overwriting the current version with data from a snapshot, and takes
-longer with larger images. So cloning is preferable for fast recovery.
-
 .. note:: Rolling back an image to a snapshot means overwriting 
    the current version of the image with data from a snapshot. The 
    time it takes to execute a rollback increases with the size of the 
