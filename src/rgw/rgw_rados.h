@@ -789,7 +789,21 @@ public:
   }
 };
 
+class RGWGetUserStats_CB : public RefCountedObject {
+protected:
+  string user;
+  RGWStorageStats stats;
+public:
+  RGWGetUserStats_CB(const string& _user) : user(_user) {}
+  virtual ~RGWGetUserStats_CB() {}
+  virtual void handle_response(int r) = 0;
+  virtual void set_response(RGWStorageStats& _stats) {
+    stats = _stats;
+  }
+};
+
 class RGWGetDirHeader_CB;
+class RGWGetUserHeader_CB;
 
 
 class RGWRados
@@ -1328,9 +1342,12 @@ public:
   }
 
   int decode_policy(bufferlist& bl, ACLOwner *owner);
+  int get_bucket_stats(const string& user, RGWStorageStats& stats);
   int get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_t *master_ver, map<RGWObjCategory, RGWStorageStats>& stats,
                        string *max_marker);
   int get_bucket_stats_async(rgw_bucket& bucket, RGWGetBucketStats_CB *cb);
+  int get_user_stats(const string& user, RGWStorageStats& stats);
+  int get_user_stats_async(const string& user, RGWGetUserStats_CB *cb);
   void get_bucket_instance_obj(rgw_bucket& bucket, rgw_obj& obj);
   void get_bucket_instance_entry(rgw_bucket& bucket, string& entry);
   void get_bucket_meta_oid(rgw_bucket& bucket, string& oid);
@@ -1419,7 +1436,8 @@ public:
   int bucket_rebuild_index(rgw_bucket& bucket);
   int remove_objs_from_index(rgw_bucket& bucket, list<string>& oid_list);
 
-  int cls_user_get_header(rgw_obj& obj, cls_user_header *header);
+  int cls_user_get_header(const string& user_id, cls_user_header *header);
+  int cls_user_get_header_async(const string& user_id, RGWGetUserHeader_CB *ctx);
   int cls_user_sync_bucket_stats(rgw_obj& user_obj, rgw_bucket& bucket);
   int cls_user_list_buckets(rgw_obj& obj,
                             const string& in_marker, int max_entries,

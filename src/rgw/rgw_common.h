@@ -791,7 +791,7 @@ struct RGWStorageStats
   uint64_t num_kb_rounded;
   uint64_t num_objects;
 
-  RGWStorageStats() : num_kb(0), num_kb_rounded(0), num_objects(0) {}
+  RGWStorageStats() : category(RGW_OBJ_CATEGORY_NONE), num_kb(0), num_kb_rounded(0), num_objects(0) {}
 };
 
 struct req_state;

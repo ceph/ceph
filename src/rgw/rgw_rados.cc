@@ -4708,6 +4708,55 @@ int RGWRados::get_bucket_stats_async(rgw_bucket& bucket, RGWGetBucketStats_CB *c
   return 0;
 }
 
+class RGWGetUserStatsContext : public RGWGetUserHeader_CB {
+  RGWGetUserStats_CB *cb;
+
+public:
+  RGWGetUserStatsContext(RGWGetUserStats_CB *_cb) : cb(_cb) {}
+  void handle_response(int r, cls_user_header& header) {
+    if (r >= 0) {
+      RGWStorageStats stats;
+
+      stats.num_kb = header.total_bytes;
+      stats.num_kb_rounded = header.total_bytes_rounded;
+      stats.num_objects = header.total_entries;
+
+      cb->set_response(stats);
+    }
+
+    cb->handle_response(r);
+
+    cb->put();
+  }
+};
+
+int RGWRados::get_bucket_stats(const string& user, RGWStorageStats& stats)
+{
+  cls_user_header header;
+  int r = cls_user_get_header(user, &header);
+  if (r < 0)
+    return r;
+
+  stats.num_kb = header.total_bytes;
+  stats.num_kb_rounded = header.total_bytes_rounded;
+  stats.num_objects = header.total_entries;
+
+  return 0;
+}
+
+int RGWRados::get_user_stats_async(const string& user, RGWGetUserStats_CB *ctx)
+{
+  RGWGetUserStatsContext *get_ctx = new RGWGetUserStatsContext(ctx);
+  int r = cls_user_get_header_async(user, get_ctx);
+  if (r < 0) {
+    ctx->put();
+    delete get_ctx;
+    return r;
+  }
+
+  return 0;
+}
+
 void RGWRados::get_bucket_instance_entry(rgw_bucket& bucket, string& entry)
 {
   entry = bucket.name + ":" + bucket.bucket_id;
@@ -5605,8 +5654,12 @@ int RGWRados::cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx)
   return 0;
 }
 
-int RGWRados::cls_user_get_header(rgw_obj& obj, cls_user_header *header)
+int RGWRados::cls_user_get_header(const string& user_id, cls_user_header *header)
 {
+  string buckets_obj_id;
+  rgw_get_buckets_obj(user_id, buckets_obj_id);
+  rgw_obj obj(zone.user_uid_pool, buckets_obj_id);
+
   librados::IoCtx io_ctx;
   rgw_bucket bucket;
   std::string oid, key;
@@ -5619,6 +5672,27 @@ int RGWRados::cls_user_get_header(rgw_obj& obj, cls_user_header *header)
   ::cls_user_get_header(op, header);
   bufferlist ibl;
   r = io_ctx.operate(oid, &op, &ibl);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int RGWRados::cls_user_get_header_async(const string& user_id, RGWGetUserHeader_CB *ctx)
+{
+  string buckets_obj_id;
+  rgw_get_buckets_obj(user_id, buckets_obj_id);
+  rgw_obj obj(zone.user_uid_pool, buckets_obj_id);
+
+  librados::IoCtx io_ctx;
+  rgw_bucket bucket;
+  std::string oid, key;
+  get_obj_bucket_and_oid_key(obj, bucket, oid, key);
+  int r = open_bucket_data_ctx(bucket, io_ctx);
+  if (r < 0)
+    return r;
+
+  r = ::cls_user_get_header_async(io_ctx, oid, ctx);
   if (r < 0)
     return r;
 
