@@ -193,14 +193,18 @@ int OSDMap::Incremental::propagate_snaps_to_tiers(CephContext *cct,
 	pg_pool_t *tier = 0;
 	if (r == new_pools.end()) {
 	  const pg_pool_t *orig = osdmap.get_pg_pool(*q);
-	  if (!orig)
+	  if (!orig) {
+	    lderr(cct) << __func__ << " no pool " << *q << dendl;
 	    return -EIO;
+	  }
 	  tier = get_new_pool(*q, orig);
 	} else {
 	  tier = &r->second;
 	}
-	if (tier->tier_of != p->first)
+	if (tier->tier_of != p->first) {
+	  lderr(cct) << __func__ << " " << r->first << " tier_of != " << p->first << dendl;
 	  return -EIO;
+	}
 
 	ldout(cct, 10) << __func__ << " from " << p->first << " to "
 		       << r->first << dendl;
