@@ -722,6 +722,24 @@ int set_user_bucket_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_st
   return 0;
 }
 
+int set_user_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects,
+                   bool have_max_size, bool have_max_objects)
+{
+  RGWUserInfo& user_info = op_state.get_user_info();
+
+  set_quota_info(user_info.user_quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
+
+  op_state.set_user_quota(user_info.user_quota);
+
+  string err;
+  int r = user.modify(op_state, &err);
+  if (r < 0) {
+    cerr << "ERROR: failed updating user info: " << cpp_strerror(-r) << ": " << err << std::endl;
+    return -r;
+  }
+  return 0;
+}
+
 static int sync_bucket_stats(RGWRados *store, string& bucket_name)
 {
   RGWBucketInfo bucket_info;
@@ -2412,11 +2430,14 @@ next:
       }
       set_bucket_quota(store, opt_cmd, bucket_name, max_size, max_objects, have_max_size, have_max_objects);
     } else if (!user_id.empty()) {
-      if (quota_scope != "bucket") {
-        cerr << "ERROR: only bucket-level user quota can be handled. Please specify --quota-scope=bucket" << std::endl;
+      if (quota_scope == "bucket") {
+        set_user_bucket_quota(opt_cmd, user, user_op, max_size, max_objects, have_max_size, have_max_objects);
+      } else if (quota_scope == "user") {
+        set_user_quota(opt_cmd, user, user_op, max_size, max_objects, have_max_size, have_max_objects);
+      } else {
+        cerr << "ERROR: invalid quota scope specification. Please specify either --quota-scope=bucket, or --quota-scope=user" << std::endl;
         return EINVAL;
       }
-      set_user_bucket_quota(opt_cmd, user, user_op, max_size, max_objects, have_max_size, have_max_objects);
     }
   }
 
