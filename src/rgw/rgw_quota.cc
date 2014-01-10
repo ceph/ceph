@@ -295,7 +295,7 @@ protected:
   int fetch_stats_from_storage(const string& user, rgw_bucket& bucket, RGWStorageStats& stats);
 
 public:
-  RGWBucketStatsCache(RGWRados *_store) : RGWQuotaCache(store, store->ctx()->_conf->rgw_bucket_quota_cache_size) {
+  RGWBucketStatsCache(RGWRados *_store) : RGWQuotaCache(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size) {
   }
 
   AsyncRefreshHandler *allocate_refresh_handler(const string& user, rgw_bucket& bucket) {
@@ -386,7 +386,7 @@ protected:
   int fetch_stats_from_storage(const string& user, rgw_bucket& bucket, RGWStorageStats& stats);
 
 public:
-  RGWUserStatsCache(RGWRados *_store) : RGWQuotaCache(store, store->ctx()->_conf->rgw_bucket_quota_cache_size) {
+  RGWUserStatsCache(RGWRados *_store) : RGWQuotaCache(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size) {
   }
 
   AsyncRefreshHandler *allocate_refresh_handler(const string& user, rgw_bucket& bucket) {
