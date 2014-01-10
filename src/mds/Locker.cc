@@ -368,6 +368,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
   for (set<SimpleLock*, SimpleLock::ptr_lt>::iterator p = sorted.begin();
        p != sorted.end();
        ++p) {
+    bool need_wrlock = !!wrlocks.count(*p);
+    bool need_remote_wrlock = !!(remote_wrlocks && remote_wrlocks->count(*p));
 
     // already locked?
     if (existing != mdr->locks.end() && *existing == *p) {
@@ -378,21 +380,23 @@ bool Locker::acquire_locks(MDRequest *mdr,
 	dout(10) << " already xlocked " << *have << " " << *have->get_parent() << dendl;
 	continue;
       }
-      if (wrlocks.count(have) && mdr->wrlocks.count(have)) {
-	dout(10) << " already wrlocked " << *have << " " << *have->get_parent() << dendl;
-	continue;
+      if (mdr->remote_wrlocks.count(have)) {
+	if (!need_remote_wrlock ||
+	    mdr->remote_wrlocks[have] != (*remote_wrlocks)[have]) {
+	  dout(10) << " unlocking remote_wrlock on wrong mds." << mdr->remote_wrlocks[have]
+		   << " " << *have << " " << *have->get_parent() << dendl;
+	  remote_wrlock_finish(have, mdr->remote_wrlocks[have], mdr);
+	}
       }
-      if (remote_wrlocks && remote_wrlocks->count(have) &&
-	  mdr->remote_wrlocks.count(have)) {
-	if (mdr->remote_wrlocks[have] == (*remote_wrlocks)[have]) {
-	  dout(10) << " already remote_wrlocked " << *have << " " << *have->get_parent() << dendl;
+      if (need_wrlock || need_remote_wrlock) {
+	if (need_wrlock == !!mdr->wrlocks.count(have) &&
+	    need_remote_wrlock == !!mdr->remote_wrlocks.count(have)) {
+	  if (need_wrlock)
+	    dout(10) << " already wrlocked " << *have << " " << *have->get_parent() << dendl;
+	  if (need_remote_wrlock)
+	    dout(10) << " already remote_wrlocked " << *have << " " << *have->get_parent() << dendl;
 	  continue;
 	}
-	dout(10) << " unlocking remote_wrlock on wrong mds." << mdr->remote_wrlocks[have]
-		 << " (want mds." << (*remote_wrlocks)[have] << ") " 
-		 << *have << " " << *have->get_parent() << dendl;
-	remote_wrlock_finish(have, mdr->remote_wrlocks[have], mdr);
-	// continue...
       }
       if (rdlocks.count(have) && mdr->rdlocks.count(have)) {
 	dout(10) << " already rdlocked " << *have << " " << *have->get_parent() << dendl;
@@ -401,19 +405,37 @@ bool Locker::acquire_locks(MDRequest *mdr,
     }
     
     // hose any stray locks
+    if (*existing == *p) {
+      assert(need_wrlock || need_remote_wrlock);
+      SimpleLock *lock = *existing;
+      if (mdr->wrlocks.count(lock)) {
+	if (!need_wrlock)
+	  dout(10) << " unlocking extra " << *lock << " " << *lock->get_parent() << dendl;
+	else if (need_remote_wrlock) // acquire remote_wrlock first
+	  dout(10) << " unlocking out-of-order " << *lock << " " << *lock->get_parent() << dendl;
+	bool need_issue = false;
+	wrlock_finish(lock, mdr, &need_issue);
+	if (need_issue)
+	  issue_set.insert(static_cast<CInode*>(lock->get_parent()));
+      }
+      ++existing;
+    }
     while (existing != mdr->locks.end()) {
       SimpleLock *stray = *existing;
       ++existing;
       dout(10) << " unlocking out-of-order " << *stray << " " << *stray->get_parent() << dendl;
       bool need_issue = false;
-      if (mdr->xlocks.count(stray)) 
+      if (mdr->xlocks.count(stray)) {
 	xlock_finish(stray, mdr, &need_issue);
-      else if (mdr->wrlocks.count(stray))
-	wrlock_finish(stray, mdr, &need_issue);
-      else if (mdr->remote_wrlocks.count(stray))
-	remote_wrlock_finish(stray, mdr->remote_wrlocks[stray], mdr);
-      else
+      } else if (mdr->rdlocks.count(stray)) {
 	rdlock_finish(stray, mdr, &need_issue);
+      } else {
+	// may have acquired both wrlock and remore wrlock
+	if (mdr->wrlocks.count(stray))
+	  wrlock_finish(stray, mdr, &need_issue);
+	if (mdr->remote_wrlocks.count(stray))
+	  remote_wrlock_finish(stray, mdr->remote_wrlocks[stray], mdr);
+      }
       if (need_issue)
 	issue_set.insert(static_cast<CInode*>(stray->get_parent()));
     }
@@ -426,13 +448,23 @@ bool Locker::acquire_locks(MDRequest *mdr,
       if (!xlock_start(*p, mdr)) 
 	goto out;
       dout(10) << " got xlock on " << **p << " " << *(*p)->get_parent() << dendl;
-    } else if (wrlocks.count(*p)) {
-      if (!wrlock_start(*p, mdr)) 
+    } else if (need_wrlock || need_remote_wrlock) {
+      if (need_remote_wrlock && !mdr->remote_wrlocks.count(*p)) {
+	remote_wrlock_start(*p, (*remote_wrlocks)[*p], mdr);
 	goto out;
-      dout(10) << " got wrlock on " << **p << " " << *(*p)->get_parent() << dendl;
-    } else if (remote_wrlocks && remote_wrlocks->count(*p)) {
-      remote_wrlock_start(*p, (*remote_wrlocks)[*p], mdr);
-      goto out;
+      }
+      if (need_wrlock && !mdr->wrlocks.count(*p)) {
+	if (need_remote_wrlock && !(*p)->can_wrlock(mdr->get_client())) {
+	  // can't take the wrlock because the scatter lock is gathering. need to
+	  // release the remote wrlock, so that the gathering process can finish.
+	  remote_wrlock_finish(*p, mdr->remote_wrlocks[*p], mdr);
+	  remote_wrlock_start(*p, (*remote_wrlocks)[*p], mdr);
+	  goto out;
+	}
+	if (!wrlock_start(*p, mdr))
+	  goto out;
+	dout(10) << " got wrlock on " << **p << " " << *(*p)->get_parent() << dendl;
+      }
     } else {
       if (!rdlock_start(*p, mdr)) 
 	goto out;
@@ -446,14 +478,17 @@ bool Locker::acquire_locks(MDRequest *mdr,
     ++existing;
     dout(10) << " unlocking extra " << *stray << " " << *stray->get_parent() << dendl;
     bool need_issue = false;
-    if (mdr->xlocks.count(stray))
+    if (mdr->xlocks.count(stray)) {
       xlock_finish(stray, mdr, &need_issue);
-    else if (mdr->wrlocks.count(stray))
-      wrlock_finish(stray, mdr, &need_issue);
-    else if (mdr->remote_wrlocks.count(stray))
-      remote_wrlock_finish(stray, mdr->remote_wrlocks[stray], mdr);
-    else
+    } else if (mdr->rdlocks.count(stray)) {
       rdlock_finish(stray, mdr, &need_issue);
+    } else {
+      // may have acquired both wrlock and remore wrlock
+      if (mdr->wrlocks.count(stray))
+	wrlock_finish(stray, mdr, &need_issue);
+      if (mdr->remote_wrlocks.count(stray))
+	remote_wrlock_finish(stray, mdr->remote_wrlocks[stray], mdr);
+    }
     if (need_issue)
       issue_set.insert(static_cast<CInode*>(stray->get_parent()));
   }
@@ -513,9 +548,11 @@ void Locker::_drop_non_rdlocks(Mutation *mut, set<CInode*> *pneed_issue)
   }
 
   while (!mut->remote_wrlocks.empty()) {
-    slaves.insert(mut->remote_wrlocks.begin()->second);
-    mut->locks.erase(mut->remote_wrlocks.begin()->first);
-    mut->remote_wrlocks.erase(mut->remote_wrlocks.begin());
+    map<SimpleLock*,int>::iterator p = mut->remote_wrlocks.begin();
+    slaves.insert(p->second);
+    if (mut->wrlocks.count(p->first) == 0)
+      mut->locks.erase(p->first);
+    mut->remote_wrlocks.erase(p);
   }
 
   while (!mut->wrlocks.empty()) {
@@ -1260,15 +1297,16 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait)
 
   dout(10) << "wrlock_start " << *lock << " on " << *lock->get_parent() << dendl;
 
-  bool want_scatter = lock->get_parent()->is_auth() &&
-    (static_cast<CInode*>(lock->get_parent()))->has_subtree_root_dirfrag();
-    
   CInode *in = static_cast<CInode *>(lock->get_parent());
   client_t client = mut->get_client();
-  
+  bool want_scatter = !nowait && lock->get_parent()->is_auth() &&
+		      (in->has_subtree_root_dirfrag() ||
+		       static_cast<ScatterLock*>(lock)->get_scatter_wanted());
+
   while (1) {
     // wrlock?
-    if (lock->can_wrlock(client)) {
+    if (lock->can_wrlock(client) &&
+	(!want_scatter || lock->get_state() == LOCK_MIX)) {
       lock->get_wrlock();
       mut->wrlocks.insert(lock);
       mut->locks.insert(lock);
@@ -1325,7 +1363,8 @@ void Locker::wrlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue)
   lock->put_wrlock();
   if (mut) {
     mut->wrlocks.erase(lock);
-    mut->locks.erase(lock);
+    if (mut->remote_wrlocks.count(lock) == 0)
+      mut->locks.erase(lock);
   }
 
   if (!lock->is_wrlocked()) {
@@ -1368,7 +1407,8 @@ void Locker::remote_wrlock_finish(SimpleLock *lock, int target, Mutation *mut)
 {
   // drop ref
   mut->remote_wrlocks.erase(lock);
-  mut->locks.erase(lock);
+  if (mut->wrlocks.count(lock) == 0)
+    mut->locks.erase(lock);
   
   dout(7) << "remote_wrlock_finish releasing remote wrlock on mds." << target
 	  << " " << *lock->get_parent()  << dendl;
