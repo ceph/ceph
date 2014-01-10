@@ -517,6 +517,16 @@ OPTION(osd_leveldb_log, OPT_STR, "/dev/null")  // enable OSD leveldb log file
 // determines whether PGLog::check() compares written out log to stored log
 OPTION(osd_debug_pg_log_writeout, OPT_BOOL, false)
 
+OPTION(leveldb_write_buffer_size, OPT_U64, 0) // leveldb write buffer size
+OPTION(leveldb_cache_size, OPT_U64, 0) // leveldb cache size
+OPTION(leveldb_block_size, OPT_U64, 0) // leveldb block size
+OPTION(leveldb_bloom_size, OPT_INT, 0) // leveldb bloom bits per entry
+OPTION(leveldb_max_open_files, OPT_INT, 0) // leveldb max open files
+OPTION(leveldb_compression, OPT_BOOL, true) // leveldb uses compression
+OPTION(leveldb_paranoid, OPT_BOOL, false) // leveldb paranoid flag
+OPTION(leveldb_log, OPT_STR, "/dev/null")  // enable leveldb log file
+OPTION(compact_leveldb_on_mount, OPT_BOOL, false)
+
 /**
  * osd_client_op_priority and osd_recovery_op_priority adjust the relative
  * priority of client io vs recovery io.
