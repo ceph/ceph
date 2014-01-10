@@ -4730,7 +4730,7 @@ public:
   }
 };
 
-int RGWRados::get_bucket_stats(const string& user, RGWStorageStats& stats)
+int RGWRados::get_user_stats(const string& user, RGWStorageStats& stats)
 {
   cls_user_header header;
   int r = cls_user_get_header(user, &header);
