@@ -194,11 +194,21 @@ int rgw_bucket_instance_remove_entry(RGWRados *store, string& entry, RGWObjVersi
   return store->meta_mgr->remove_entry(bucket_instance_meta_handler, entry, objv_tracker);
 }
 
-int rgw_bucket_set_attrs(RGWRados *store, rgw_bucket& bucket,
+int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
                          map<string, bufferlist>& attrs,
                          map<string, bufferlist>* rmattrs,
                          RGWObjVersionTracker *objv_tracker)
 {
+  rgw_bucket& bucket = bucket_info.bucket;
+
+  if (!bucket_info.has_instance_obj) {
+    /* an old bucket object, need to convert it */
+    int ret = store->convert_old_bucket_info(NULL, bucket.name);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: failed converting old bucket info: " << ret << dendl;
+      return ret;
+    }
+  }
   string oid;
   store->get_bucket_meta_oid(bucket, oid);
   rgw_obj obj(store->zone.domain_root, oid);
