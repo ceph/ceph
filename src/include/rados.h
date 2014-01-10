@@ -231,6 +231,9 @@ enum {
 	CEPH_OSD_OP_CACHE_EVICT = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 32,
 	CEPH_OSD_OP_CACHE_TRY_FLUSH = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_DATA | 33,
 
+	/* convert tmap to omap */
+	CEPH_OSD_OP_TMAP2OMAP = CEPH_OSD_OP_MODE_RMW | CEPH_OSD_OP_TYPE_DATA | 34,
+
 	/** multi **/
 	CEPH_OSD_OP_CLONERANGE = CEPH_OSD_OP_MODE_WR | CEPH_OSD_OP_TYPE_MULTI | 1,
 	CEPH_OSD_OP_ASSERT_SRC_VERSION = CEPH_OSD_OP_MODE_RD | CEPH_OSD_OP_TYPE_MULTI | 2,
@@ -386,6 +389,10 @@ enum {
 	CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE = 4, /* ignore osd cache logic */
 };
 
+enum {
+	CEPH_OSD_TMAP2OMAP_NULLOK = 1,
+};
+
 /*
  * an individual object operation.  each may be accompanied by some data
  * payload
@@ -442,6 +449,9 @@ struct ceph_osd_op {
 		struct {
 			struct ceph_timespec stamp;
 		} __attribute__ ((packed)) hit_set_get;
+		struct {
+			__u8 flags;
+		} __attribute__ ((packed)) tmap2omap;
 	};
 	__le32 payload_len;
 } __attribute__ ((packed));

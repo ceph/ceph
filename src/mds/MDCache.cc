@@ -11447,6 +11447,7 @@ void MDCache::_fragment_committed(dirfrag_t basedirfrag, list<CDir*>& resultfrag
       // backtrace object
       dout(10) << " truncate orphan dirfrag " << oid << dendl;
       op.truncate(0);
+      op.omap_clear();
     } else {
       dout(10) << " removing orphan dirfrag " << oid << dendl;
       op.remove();

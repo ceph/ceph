@@ -541,43 +541,40 @@ struct dentry_key_t {
   // encode into something that can be decoded as a string.
   // name_ (head) or name_%x (!head)
   void encode(bufferlist& bl) const {
-    __u32 l = strlen(name) + 1;
+    string key;
+    encode(key);
+    ::encode(key, bl);
+  }
+  void encode(string& key) const {
     char b[20];
     if (snapid != CEPH_NOSNAP) {
       uint64_t val(snapid);
       snprintf(b, sizeof(b), "%" PRIx64, val);
-      l += strlen(b);
     } else {
       snprintf(b, sizeof(b), "%s", "head");
-      l += 4;
     }
-    ::encode(l, bl);
-    bl.append(name, strlen(name));
-    bl.append("_", 1);
-    bl.append(b);
+    ostringstream oss;
+    oss << name << "_" << b;
+    key = oss.str();
   }
   static void decode_helper(bufferlist::iterator& bl, string& nm, snapid_t& sn) {
-    string foo;
-    ::decode(foo, bl);
-
-    int i = foo.length()-1;
-    while (foo[i] != '_' && i)
-      i--;
-    assert(i);
-    if (i+5 == (int)foo.length() &&
-	foo[i+1] == 'h' &&
-	foo[i+2] == 'e' &&
-	foo[i+3] == 'a' &&
-	foo[i+4] == 'd') {
+    string key;
+    ::decode(key, bl);
+    decode_helper(key, nm, sn);
+  }
+  static void decode_helper(const string& key, string& nm, snapid_t& sn) {
+    size_t i = key.find_last_of('_');
+    assert(i != string::npos);
+    if (key.compare(i+1, string::npos, "head") == 0) {
       // name_head
       sn = CEPH_NOSNAP;
     } else {
       // name_%x
       long long unsigned x = 0;
-      sscanf(foo.c_str() + i + 1, "%llx", &x);
+      sscanf(key.c_str() + i + 1, "%llx", &x);
       sn = x;
     }  
-    nm = string(foo.c_str(), i);
+    nm = string(key.c_str(), i);
   }
 };
 

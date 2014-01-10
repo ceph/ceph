@@ -550,6 +550,7 @@ namespace librados
      */
     int tmap_put(const std::string& oid, bufferlist& bl);
     int tmap_get(const std::string& oid, bufferlist& bl);
+    int tmap_to_omap(const std::string& oid, bool nullok=false);
 
     int omap_get_vals(const std::string& oid,
                       const std::string& start_after,

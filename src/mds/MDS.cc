@@ -479,6 +479,29 @@ int MDS::init(int wanted_state)
     return 0;
   }
 
+  objecter->init_locked();
+
+  monc->sub_want("mdsmap", 0, 0);
+  monc->renew_subs();
+
+  mds_lock.Unlock();
+
+  // verify that osds support tmap2omap
+  while (true) {
+    objecter->maybe_request_map();
+    objecter->wait_for_osd_map();
+    uint64_t osd_features = objecter->osdmap->get_up_osd_features();
+    if (osd_features & CEPH_FEATURE_OSD_TMAP2OMAP)
+      break;
+    derr << "*** one or more OSDs do not support TMAP2OMAP; upgrade OSDs before starting MDS (or downgrade MDS) ***" << dendl;
+    sleep(10);
+  }
+
+  mds_lock.Lock();
+  if (want_state == CEPH_MDS_STATE_DNE) {
+    suicide();  // we could do something more graceful here
+  }
+
   timer.init();
 
   if (wanted_state==MDSMap::STATE_BOOT && g_conf->mds_standby_replay)
@@ -516,11 +539,6 @@ int MDS::init(int wanted_state)
   whoami = -1;
   messenger->set_myname(entity_name_t::MDS(whoami));
   
-  objecter->init_locked();
-
-  monc->sub_want("mdsmap", 0, 0);
-  monc->renew_subs();
-
   // schedule tick
   reset_tick();
 

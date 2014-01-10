@@ -829,6 +829,24 @@ uint64_t OSDMap::get_features(uint64_t *pmask) const
   return features;
 }
 
+uint64_t OSDMap::get_up_osd_features() const
+{
+  bool first = true;
+  uint64_t features = 0;
+  for (int osd = 0; osd < max_osd; ++osd) {
+    if (!is_up(osd))
+      continue;
+    const osd_xinfo_t &xi = get_xinfo(osd);
+    if (first) {
+      features = xi.features;
+      first = false;
+    } else {
+      features &= xi.features;
+    }
+  }
+  return features;
+}
+
 void OSDMap::dedup(const OSDMap *o, OSDMap *n)
 {
   if (o->epoch == n->epoch)
