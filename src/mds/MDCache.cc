@@ -1916,8 +1916,7 @@ void MDCache::predirty_journal_parents(Mutation *mut, EMetaBlob *blob,
     pf->version = parent->pre_dirty();
 
     if (do_parent_mtime || linkunlink) {
-      assert(mut->wrlocks.count(&pin->filelock) ||
-	     mut->is_slave());   // we are slave.  master will have wrlocked the dir.
+      assert(mut->wrlocks.count(&pin->filelock));
       assert(cfollows == CEPH_NOSNAP);
       
       // update stale fragstat?
