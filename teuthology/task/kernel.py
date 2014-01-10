@@ -6,6 +6,8 @@ from cStringIO import StringIO
 import logging
 import re
 import shlex
+import urllib2
+import urlparse
 
 from teuthology import misc as teuthology
 from ..orchestra import run
@@ -124,45 +126,52 @@ def _vsplitter(version):
         return 'ceph-'
     return '-g'
 
-def need_to_install(ctx, role, sha1):
+def need_to_install(ctx, role, version):
     """
-    Check to see if we need to install a kernel.  Get the version
-    of the currently running kernel, extract the sha1 value from 
-    its name, and compare it against the value passed in.
+    Check to see if we need to install a kernel.  Get the version of the
+    currently running kernel, and compare it against the value passed in.
 
     :param ctx: Context
-    :param role: machine associated with each role
-    :param sha1: sha1 to compare against (used in checking)
+    :param role: Role
+    :param version: value to compare against (used in checking), can be either
+                    a utsrelease string (e.g. '3.13.0-rc3-ceph-00049-ge2817b3')
+                    or a sha1.
     """
     ret = True
-    log.info('Checking kernel version of {role}, want {sha1}...'.format(
-            role=role,
-            sha1=sha1))
-    version_fp = StringIO()
+    log.info('Checking kernel version of {role}, want {ver}...'.format(
+             role=role, ver=version))
+    uname_fp = StringIO()
     ctx.cluster.only(role).run(
         args=[
             'uname',
             '-r',
             ],
-        stdout=version_fp,
+        stdout=uname_fp,
         )
-    version = version_fp.getvalue().rstrip('\n')
-    splt = _vsplitter(version)
-    if splt in version:
-        _, current_sha1 = version.rsplit(splt, 1)
-        dloc = current_sha1.find('-')
-        if dloc > 0:
-            current_sha1 = current_sha1[0:dloc]
-        log.debug('current kernel version is: {version} sha1 {sha1}'.format(
-                version=version,
-                sha1=current_sha1))
-        if sha1.startswith(current_sha1):
-            log.debug('current sha1 is the same, do not need to install')
+    cur_version = uname_fp.getvalue().rstrip('\n')
+    log.debug('current kernel version is {ver}'.format(ver=cur_version))
+
+    if '.' in version:
+        # version is utsrelease, yay
+        if cur_version == version:
+            log.debug('utsrelease strings match, do not need to install')
             ret = False
     else:
-        log.debug('current kernel version is: {version}, unknown sha1'.format(
-                version=version))
-    version_fp.close()
+        # version is sha1, need to try to extract sha1 from cur_version
+        splt = _vsplitter(cur_version)
+        if splt in cur_version:
+            _, cur_sha1 = cur_version.rsplit(splt, 1)
+            dloc = cur_sha1.find('-')
+            if dloc > 0:
+                cur_sha1 = cur_sha1[0:dloc]
+            log.debug('extracting sha1, {ver} -> {sha1}'.format(
+                      ver=cur_version, sha1=cur_sha1))
+            if version.startswith(cur_sha1):
+                log.debug('extracted sha1 matches, do not need to install')
+                ret = False
+        else:
+            log.debug('failed to parse current kernel version')
+    uname_fp.close()
     return ret
 
 def install_firmware(ctx, config):
@@ -234,7 +243,6 @@ def download_deb(ctx, config):
 	if src.find('distro') >= 0:
             log.info('Installing newest kernel distro');
             return
-            
 
         if src.find('/') >= 0:
             # local deb
@@ -811,7 +819,7 @@ def task(ctx, config):
     log.info('config %s' % config)
 
     need_install = {}  # sha1 to dl, or path to deb
-    need_sha1 = {}     # sha1
+    need_version = {}  # utsrelease or sha1
     kdb = {}
     for role, role_config in config.iteritems():
         if role_config.get('deb'):
@@ -822,17 +830,17 @@ def task(ctx, config):
                 log.info('kernel deb sha1 appears to be %s', sha1)
                 if need_to_install(ctx, role, sha1):
                     need_install[role] = path
-                    need_sha1[role] = sha1
+                    need_version[role] = sha1
             else:
                 log.info('unable to extract sha1 from deb path, forcing install')
                 assert False
         elif role_config.get('sha1') == 'distro':
             if need_to_install_distro(ctx, role):
                 need_install[role] = 'distro'
-                need_sha1[role] = 'distro'
+                need_version[role] = 'distro'
         else:
             larch, ldist = _find_arch_and_dist(ctx)
-            sha1, _ = teuthology.get_ceph_binary_url(
+            sha1, base_url = teuthology.get_ceph_binary_url(
                 package='kernel',
                 branch=role_config.get('branch'),
                 tag=role_config.get('tag'),
@@ -844,9 +852,20 @@ def task(ctx, config):
                 )
             log.debug('sha1 for {role} is {sha1}'.format(role=role, sha1=sha1))
             ctx.summary['{role}-kernel-sha1'.format(role=role)] = sha1
+
             if need_to_install(ctx, role, sha1):
+                version = sha1
+                version_url = urlparse.urljoin(base_url, 'version')
+                try:
+                    version_fp = urllib2.urlopen(version_url)
+                    version = version_fp.read().rstrip('\n')
+                    version_fp.close()
+                except urllib2.HTTPError:
+                    log.debug('failed to get utsrelease string using url {url}'.format(
+                              url=version_url))
+
                 need_install[role] = sha1
-                need_sha1[role] = sha1
+                need_version[role] = version
 
         # enable or disable kdb if specified, otherwise do not touch
         if role_config.get('kdb') is not None:
@@ -856,6 +875,6 @@ def task(ctx, config):
         install_firmware(ctx, need_install)
         download_deb(ctx, need_install)
         install_and_reboot(ctx, need_install)
-        wait_for_reboot(ctx, need_sha1, timeout)
+        wait_for_reboot(ctx, need_version, timeout)
 
     enable_disable_kdb(ctx, kdb)
