@@ -1422,6 +1422,8 @@ void ReplicatedPG::log_op_stats(OpContext *ctx)
   utime_t now = ceph_clock_now(cct);
   utime_t latency = now;
   latency -= ctx->op->get_req()->get_recv_stamp();
+  utime_t process_latency = now;
+  process_latency -= ctx->op->get_dequeued_time();
 
   utime_t rlatency;
   if (ctx->readable_stamp != utime_t()) {
@@ -1437,6 +1439,7 @@ void ReplicatedPG::log_op_stats(OpContext *ctx)
   osd->logger->inc(l_osd_op_outb, outb);
   osd->logger->inc(l_osd_op_inb, inb);
   osd->logger->tinc(l_osd_op_lat, latency);
+  osd->logger->tinc(l_osd_op_process_lat, process_latency);
 
   if (op->may_read() && op->may_write()) {
     osd->logger->inc(l_osd_op_rw);
@@ -1444,15 +1447,18 @@ void ReplicatedPG::log_op_stats(OpContext *ctx)
     osd->logger->inc(l_osd_op_rw_outb, outb);
     osd->logger->tinc(l_osd_op_rw_rlat, rlatency);
     osd->logger->tinc(l_osd_op_rw_lat, latency);
+    osd->logger->tinc(l_osd_op_rw_process_lat, process_latency);
   } else if (op->may_read()) {
     osd->logger->inc(l_osd_op_r);
     osd->logger->inc(l_osd_op_r_outb, outb);
     osd->logger->tinc(l_osd_op_r_lat, latency);
+    osd->logger->tinc(l_osd_op_r_process_lat, process_latency);
   } else if (op->may_write()) {
     osd->logger->inc(l_osd_op_w);
     osd->logger->inc(l_osd_op_w_inb, inb);
     osd->logger->tinc(l_osd_op_w_rlat, rlatency);
     osd->logger->tinc(l_osd_op_w_lat, latency);
+    osd->logger->tinc(l_osd_op_w_process_lat, process_latency);
   } else
     assert(0);
 
