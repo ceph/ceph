@@ -1342,7 +1342,6 @@ public:
   }
 
   int decode_policy(bufferlist& bl, ACLOwner *owner);
-  int get_bucket_stats(const string& user, RGWStorageStats& stats);
   int get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_t *master_ver, map<RGWObjCategory, RGWStorageStats>& stats,
                        string *max_marker);
   int get_bucket_stats_async(rgw_bucket& bucket, RGWGetBucketStats_CB *cb);
