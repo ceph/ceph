@@ -483,6 +483,12 @@ struct ObjectOperation {
   void tmap_get() {
     add_op(CEPH_OSD_OP_TMAPGET);
   }
+  void tmap_to_omap(bool nullok=false) {
+     OSDOp& osd_op = add_op(CEPH_OSD_OP_TMAP2OMAP);
+     osd_op.op.op = CEPH_OSD_OP_TMAP2OMAP;
+     if (nullok)
+       osd_op.op.tmap2omap.flags = CEPH_OSD_TMAP2OMAP_NULLOK;
+  }
 
   // objectmap
   void omap_get_keys(const string &start_after,
@@ -947,7 +953,9 @@ public:
   bool keep_balanced_budget;
   bool honor_osdmap_full;
 
+public:
   void maybe_request_map();
+private:
 
   version_t last_seen_osdmap_version;
   version_t last_seen_pgmap_version;
