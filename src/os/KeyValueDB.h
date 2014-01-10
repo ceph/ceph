@@ -64,6 +64,8 @@ public:
   };
   typedef std::tr1::shared_ptr< TransactionImpl > Transaction;
 
+  virtual int init(ostream &out, bool create_if_missing) = 0;
+
   virtual Transaction get_transaction() = 0;
   virtual int submit_transaction(Transaction) = 0;
   virtual int submit_transaction_sync(Transaction t) {
