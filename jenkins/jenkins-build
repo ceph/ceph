@@ -3,9 +3,17 @@
 # This is a script that runs inside Jenkins.
 # http://jenkins.ceph.com/job/ceph-build/
 
-#export GNUPGHOME=/home/jenkins-build/build/gnupg.autobuild/
-export GNUPGHOME=/home/jenkins-build/build/gnupg.ceph-release/
-export KEYID=17ED316D
+# Jenkins will set $RELEASE as a parameter in the job configuration.
+if $RELEASE ; then
+        # This is a formal release. Sign it with the release key.
+        export GNUPGHOME=/home/jenkins-build/build/gnupg.ceph-release/
+        export KEYID=17ED316D
+else
+        # This is an automatic build. Sign it with the autobuild key.
+        export GNUPGHOME=/home/jenkins-build/build/gnupg.autobuild/
+        export KEYID=03C3951A
+fi
+
 HOST=$(hostname --short)
 echo "Building on $(hostname) Date: $(date)"
 echo "  DIST=${DIST}"
