@@ -985,6 +985,8 @@ public:
   ObjectDesc old_value;
   int snap;
 
+  std::tr1::shared_ptr<int> in_use;
+
   bufferlist result;
   int retval;
 
@@ -1016,6 +1018,7 @@ public:
     context->state_lock.Lock();
     if (!(rand() % 4) && !context->snaps.empty()) {
       snap = rand_choose(context->snaps)->first;
+      in_use = context->snaps_in_use.lookup_or_create(snap, snap);
     } else {
       snap = -1;
     }
@@ -1430,6 +1433,7 @@ public:
   librados::ObjectReadOperation rd_op;
   librados::AioCompletion *comp;
   librados::AioCompletion *comp_racing_read;
+  std::tr1::shared_ptr<int> in_use;
   int snap;
   int done;
   uint64_t version;
@@ -1460,6 +1464,7 @@ public:
       // choose source snap
       if (0 && !(rand() % 4) && !context->snaps.empty()) {
 	snap = rand_choose(context->snaps)->first;
+	in_use = context->snaps_in_use.lookup_or_create(snap, snap);
       } else {
 	snap = -1;
       }
@@ -1693,6 +1698,7 @@ public:
   bool dirty;
   ObjectDesc old_value;
   int snap;
+  std::tr1::shared_ptr<int> in_use;
 
   IsDirtyOp(int n,
 	    RadosTestContext *context,
@@ -1711,6 +1717,7 @@ public:
 
     if (!(rand() % 4) && !context->snaps.empty()) {
       snap = rand_choose(context->snaps)->first;
+      in_use = context->snaps_in_use.lookup_or_create(snap, snap);
     } else {
       snap = -1;
     }
@@ -1787,6 +1794,7 @@ public:
   bool blocking;
   int snap;
   bool can_fail;
+  std::tr1::shared_ptr<int> in_use;
 
   CacheFlushOp(int n,
 	       RadosTestContext *context,
@@ -1807,6 +1815,7 @@ public:
 
     if (!(rand() % 4) && !context->snaps.empty()) {
       snap = rand_choose(context->snaps)->first;
+      in_use = context->snaps_in_use.lookup_or_create(snap, snap);
     } else {
       snap = -1;
     }
@@ -1894,6 +1903,7 @@ public:
   librados::AioCompletion *completion;
   librados::ObjectReadOperation op;
   string oid;
+  std::tr1::shared_ptr<int> in_use;
 
   CacheEvictOp(int n,
 	       RadosTestContext *context,
@@ -1911,6 +1921,7 @@ public:
     int snap;
     if (!(rand() % 4) && !context->snaps.empty()) {
       snap = rand_choose(context->snaps)->first;
+      in_use = context->snaps_in_use.lookup_or_create(snap, snap);
     } else {
       snap = -1;
     }
