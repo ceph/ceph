@@ -94,6 +94,11 @@ public:
     const SequencerPosition *spos=0
     );
 
+  int clear_keys_header(
+    const ghobject_t &oid,
+    const SequencerPosition *spos=0
+    );
+
   int rm_keys(
     const ghobject_t &oid,
     const set<string> &to_clear,

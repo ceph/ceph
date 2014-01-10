@@ -324,6 +324,7 @@ TEST(LibRadosMisc, Operate1PP) {
     bufferlist bl;
     bl.append(val1.c_str(), val1.size() + 1);
     o.setxattr("key1", bl);
+    o.omap_clear(); // shouldn't affect attrs!
   }
   ASSERT_EQ(0, ioctx.operate("foo", &o));
 
