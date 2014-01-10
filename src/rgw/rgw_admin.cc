@@ -478,13 +478,13 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
   cout << std::endl;
 }
 
-static void dump_bucket_usage(map<RGWObjCategory, RGWBucketStats>& stats, Formatter *formatter)
+static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Formatter *formatter)
 {
-  map<RGWObjCategory, RGWBucketStats>::iterator iter;
+  map<RGWObjCategory, RGWStorageStats>::iterator iter;
 
   formatter->open_object_section("usage");
   for (iter = stats.begin(); iter != stats.end(); ++iter) {
-    RGWBucketStats& s = iter->second;
+    RGWStorageStats& s = iter->second;
     const char *cat_name = rgw_obj_category_name(iter->first);
     formatter->open_object_section(cat_name);
     formatter->dump_int("size_kb", s.num_kb);
@@ -504,7 +504,7 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
   if (r < 0)
     return r;
 
-  map<RGWObjCategory, RGWBucketStats> stats;
+  map<RGWObjCategory, RGWStorageStats> stats;
   uint64_t bucket_ver, master_ver;
   string max_marker;
   int ret = store->get_bucket_stats(bucket, &bucket_ver, &master_ver, stats, &max_marker);
