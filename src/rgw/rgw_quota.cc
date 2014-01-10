@@ -408,44 +408,68 @@ int RGWUserStatsCache::fetch_stats_from_storage(const string& user, rgw_bucket& 
 
 class RGWQuotaHandlerImpl : public RGWQuotaHandler {
   RGWRados *store;
-  RGWBucketStatsCache stats_cache;
+  RGWBucketStatsCache bucket_stats_cache;
+  RGWUserStatsCache user_stats_cache;
+
+  int check_quota(const char *entity, RGWQuotaInfo& quota, RGWStorageStats& stats,
+                  uint64_t num_objs, uint64_t size_kb) {
+    ldout(store->ctx(), 20) << entity << " quota: max_objects=" << quota.max_objects
+                            << " max_size_kb=" << quota.max_size_kb << dendl;
+
+    if (quota.max_objects >= 0 &&
+        stats.num_objects + num_objs > (uint64_t)quota.max_objects) {
+      ldout(store->ctx(), 10) << "quota exceeded: stats.num_objects=" << stats.num_objects
+                              << " " << entity << "_quota.max_objects=" << quota.max_objects << dendl;
+
+      return -ERR_QUOTA_EXCEEDED;
+    }
+    if (quota.max_size_kb >= 0 &&
+               stats.num_kb_rounded + size_kb > (uint64_t)quota.max_size_kb) {
+      ldout(store->ctx(), 10) << "quota exceeded: stats.num_kb_rounded=" << stats.num_kb_rounded << " size_kb=" << size_kb
+                              << " " << entity << "_quota.max_size_kb=" << quota.max_size_kb << dendl;
+      return -ERR_QUOTA_EXCEEDED;
+    }
+
+    return 0;
+  }
 public:
-  RGWQuotaHandlerImpl(RGWRados *_store) : store(_store), stats_cache(_store) {}
-  virtual int check_quota(const string& user, rgw_bucket& bucket, RGWQuotaInfo& bucket_quota,
+  RGWQuotaHandlerImpl(RGWRados *_store) : store(_store), bucket_stats_cache(_store), user_stats_cache(_store) {}
+  virtual int check_quota(const string& user, rgw_bucket& bucket,
+                          RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota,
 			  uint64_t num_objs, uint64_t size) {
     uint64_t size_kb = rgw_rounded_kb(size);
     if (!bucket_quota.enabled) {
       return 0;
     }
 
-    RGWStorageStats stats;
+    RGWStorageStats bucket_stats;
 
-    int ret = stats_cache.get_stats(user, bucket, stats, bucket_quota);
+    int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats, bucket_quota);
     if (ret < 0)
       return ret;
 
-    ldout(store->ctx(), 20) << "bucket quota: max_objects=" << bucket_quota.max_objects
-                            << " max_size_kb=" << bucket_quota.max_size_kb << dendl;
+    ret = check_quota("bucket", bucket_quota, bucket_stats, num_objs, size_kb);
+    if (ret < 0)
+      return ret;
 
-    if (bucket_quota.max_objects >= 0 &&
-        stats.num_objects + num_objs > (uint64_t)bucket_quota.max_objects) {
-      ldout(store->ctx(), 10) << "quota exceeded: stats.num_objects=" << stats.num_objects
-                              << " bucket_quota.max_objects=" << bucket_quota.max_objects << dendl;
+    RGWStorageStats user_stats;
 
-      return -ERR_QUOTA_EXCEEDED;
-    }
-    if (bucket_quota.max_size_kb >= 0 &&
-               stats.num_kb_rounded + size_kb > (uint64_t)bucket_quota.max_size_kb) {
-      ldout(store->ctx(), 10) << "quota exceeded: stats.num_kb_rounded=" << stats.num_kb_rounded << " size_kb=" << size_kb
-                              << " bucket_quota.max_size_kb=" << bucket_quota.max_size_kb << dendl;
-      return -ERR_QUOTA_EXCEEDED;
-    }
+    ret = user_stats_cache.get_stats(user, bucket, user_stats, user_quota);
+    if (ret < 0)
+      return ret;
+
+    ret = check_quota("user", user_quota, user_stats, num_objs, size_kb);
+    if (ret < 0)
+      return ret;
+
+
 
     return 0;
   }
 
   virtual void update_stats(const string& user, rgw_bucket& bucket, int obj_delta, uint64_t added_bytes, uint64_t removed_bytes) {
-    stats_cache.adjust_stats(user, bucket, obj_delta, added_bytes, removed_bytes);
+    bucket_stats_cache.adjust_stats(user, bucket, obj_delta, added_bytes, removed_bytes);
+    user_stats_cache.adjust_stats(user, bucket, obj_delta, added_bytes, removed_bytes);
   };
 };
 
