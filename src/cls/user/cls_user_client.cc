@@ -2,6 +2,7 @@
 
 #include "include/types.h"
 #include "cls/user/cls_user_ops.h"
+#include "cls/user/cls_user_client.h"
 #include "include/rados/librados.hpp"
 
 
@@ -68,8 +69,14 @@ void cls_user_bucket_list(librados::ObjectReadOperation& op,
 
 class ClsUserGetHeaderCtx : public ObjectOperationCompletion {
   cls_user_header *header;
+  RGWGetUserHeader_CB *ret_ctx;
 public:
-  ClsUserGetHeaderCtx(cls_user_header *_h) : header(_h) {}
+  ClsUserGetHeaderCtx(cls_user_header *_h, RGWGetUserHeader_CB *_ctx) : header(_h), ret_ctx(_ctx) {}
+  ~ClsUserGetHeaderCtx() {
+    if (ret_ctx) {
+      ret_ctx->put();
+    }
+  }
   void handle_completion(int r, bufferlist& outbl) {
     if (r >= 0) {
       cls_user_get_header_ret ret;
@@ -81,10 +88,12 @@ public:
       } catch (buffer::error& err) {
         // nothing we can do about it atm
       }
+      if (ret_ctx) {
+        ret_ctx->handle_response(r, ret.header);
+      }
     }
   }
 };
-
 
 void cls_user_get_header(librados::ObjectReadOperation& op,
                        cls_user_header *header)
@@ -94,5 +103,21 @@ void cls_user_get_header(librados::ObjectReadOperation& op,
 
   ::encode(call, inbl);
 
-  op.exec("user", "get_header", inbl, new ClsUserGetHeaderCtx(header));
+  op.exec("user", "get_header", inbl, new ClsUserGetHeaderCtx(header, NULL));
+}
+
+int cls_user_get_header_async(IoCtx& io_ctx, string& oid, RGWGetUserHeader_CB *ctx)
+{
+  bufferlist in, out;
+  cls_user_get_header_op call;
+  ::encode(call, in);
+  ObjectReadOperation op;
+  op.exec("user", "get_header", in, new ClsUserGetHeaderCtx(NULL, ctx));
+  AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+  int r = io_ctx.aio_operate(oid, c, &op, NULL);
+  c->release();
+  if (r < 0)
+    return r;
+
+  return 0;
 }

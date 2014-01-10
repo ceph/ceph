@@ -1956,12 +1956,8 @@ next:
       cerr << "ERROR: uid not specified" << std::endl;
       return EINVAL;
     }
-    string buckets_obj_id;
-    rgw_get_buckets_obj(user_id, buckets_obj_id);
-    rgw_obj obj(store->zone.user_uid_pool, buckets_obj_id);
-
     cls_user_header header;
-    int ret = store->cls_user_get_header(obj, &header);
+    int ret = store->cls_user_get_header(user_id, &header);
     if (ret < 0) {
       cerr << "ERROR: can't read user header: " << cpp_strerror(-ret) << std::endl;
       return -ret;
