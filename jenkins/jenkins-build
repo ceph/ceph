@@ -1,0 +1,86 @@
+#!/bin/sh
+
+# This is a script that runs inside Jenkins.
+# http://jenkins.ceph.com/job/ceph-build/
+
+#export GNUPGHOME=/home/jenkins-build/build/gnupg.autobuild/
+export GNUPGHOME=/home/jenkins-build/build/gnupg.ceph-release/
+export KEYID=17ED316D
+HOST=$(hostname --short)
+echo "Building on $(hostname) Date: $(date)"
+echo "  DIST=${DIST}"
+echo "  BPTAG=${BPTAG}"
+echo "  KEYID=${KEYID}"
+echo "  WS=$WORKSPACE"
+echo "  PWD=$(pwd)"
+echo "  BUILD SOURCE=$COPYARTIFACT_BUILD_NUMBER_CEPH_SETUP"
+echo "*****"
+env
+echo "*****"
+
+if [ ! -d /srv/ceph-build ] ; then
+    echo "Build tools are not installed"
+    exit 1
+fi
+bindir=/srv/ceph-build
+
+case $HOST in
+gitbuilder-cdep-deb* | tala* | mira*)
+    if [ ! -d /srv/debian-base ] ; then
+        echo "debian base is not installed"
+        exit 1
+    fi
+    ;;
+esac
+
+
+vers=`cat ./dist/version`
+# create a release directory for ceph-build tools
+mkdir -p release
+cp -a dist release/${vers}
+echo $DIST > release/${vers}/debian_dists
+echo "${vers}-1" > release/${vers}/debian_version
+
+case $HOST in
+
+gitbuilder-cdep-deb* | tala* | mira*)
+
+        cd release/$vers
+
+        # unpack sources
+        dpkg-source -x ceph_${vers}-1.dsc
+        (  cd ceph-${vers}
+           #DEB_VERSION=$(dpkg-parsechangelog | sed -rne 's,^Version: (.*),\1, p' | cut -d'-' -f1)
+           DEB_VERSION=$(dpkg-parsechangelog | sed -rne 's,^Version: (.*),\1, p')
+           #BP_VERSION=${DEB_VERSION}-1${BPTAG}
+           BP_VERSION=${DEB_VERSION}${BPTAG}
+           DEBEMAIL="gary.lowell@inktank.com" dch -D $DIST --force-distribution -b -v "$BP_VERSION" "$comment"
+        )
+        dpkg-source -b ceph-${vers}
+        
+        echo "Building Debian"
+        cd "$WORKSPACE"
+        sudo $bindir/build_debs.sh ./release /srv/debian-base $vers
+
+        #Collect Artifacts
+        mkdir -p dist/debian
+        cp -a release/$vers/*.changes dist/debian/.
+        cp -a release/$vers/*.deb     dist/debian/.
+        cp -a release/$vers/*.dsc     dist/debian/.
+        cp -a release/$vers/*.diff.gz dist/debian/.
+        cp -a release/$vers/*.tar.gz  dist/debian/.
+
+        ;;
+
+*)
+        echo "Building RPMs"
+        $bindir/build_rpms.sh ./release $vers
+        
+        #Collect Artifacts
+        mkdir -p dist/rpm/${DIST}
+        mv release/${vers}/rpm/*/SRPMS ./dist/rpm/${DIST}/.
+        mv release/${vers}/rpm/*/RPMS/* ./dist/rpm/${DIST}/.
+        ;;
+
+esac
+echo "End Date: $(date)"

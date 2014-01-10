@@ -1,0 +1,72 @@
+#!/bin/sh
+
+# This is a script that runs inside Jenkins.
+# http://jenkins.ceph.com/job/ceph-setup/
+
+#export GNUPGHOME=/home/jenkins-build/build/gnupg.autobuild/
+export GNUPGHOME=/home/jenkins-build/build/gnupg.ceph-release/
+export KEYID=17ED316D
+HOST=$(hostname --short)
+echo "Building on ${HOST}"
+echo "  DIST=${DIST}"
+echo "  BPTAG=${BPTAG}"
+echo "  KEYID=${KEYID}"
+echo "  WS=$WORKSPACE"
+echo "  PWD=$(pwd)"
+echo "  BRANCH=$BRANCH"
+
+if [ -x "$BRANCH" ] ; then 
+    echo "No git branch was supplied"
+    exit 1
+fi
+
+echo "Building version $(git describe) Branch $Branch"
+
+if [ ! -d /srv/ceph-build ] ; then
+    echo "Build tools are not installed"
+    exit 1
+fi
+bindir=/srv/ceph-build
+rm -rf dist
+rm -rf release
+
+# fix version/release.  Hack needed only for the spec
+# file for rc candidates.
+#export force=force
+#sed -i 's/^Version:.*/Version:        0.72/' ceph.spec.in
+#sed -i 's/^Release:.*/Release:        rc1%{?dist}/' ceph.spec.in
+#sed -i 's/^Source0:.*/Source0:        http:\/\/ceph.com\/download\/%{name}-%{version}-rc1.tar.bz2/' ceph.spec.in
+#sed -i 's/^%setup.*/%setup -q -n %{name}-%{version}-rc1/' ceph.spec.in
+
+echo "Running configure ..."
+./do_autogen.sh 
+if [ $? -ne 0 ] ; then
+    echo "autogen failed"
+    exit 1
+fi
+
+mkdir -p release
+$bindir/release_tarball.sh release release/version
+if [ $? -ne 0] ; then
+    echo "make tarballs failed"
+    exit 2
+fi
+vers=`cat release/version`
+
+(
+    cd release/$vers
+    mv debian ceph-$vers/.
+    dpkg-source -b ceph-$vers
+)
+
+mkdir -p dist
+# Debian Source Files
+mv release/$vers/*.dsc dist/.
+mv release/$vers/*.diff.gz dist/.
+mv release/$vers/*.orig.tar.gz dist/.
+# RPM Source Files
+mv release/$vers/ceph.spec dist/.
+mv release/$vers/*.tar.* dist/.
+# Parameters
+mv release/version dist/.
+exit 0

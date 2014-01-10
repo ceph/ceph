@@ -1,0 +1,17 @@
+#!/bin/sh
+
+# This is a script that runs inside Jenkins.
+# http://jenkins.ceph.com/job/ceph-package/
+
+for dir in * ; do
+   echo $dir
+   arch=$(echo $dir | cut -d',' -f1 | cut -d'=' -f2)
+   dist=$(echo $dir | cut -d',' -f2 | cut -d'=' -f2 | cut -d'-' -f1)
+   echo "arch = $arch, dist = $dist"
+   if [ -d $dir/dist/rpm ] ; then
+        echo "rpms"
+   fi
+   if [ -d $dir/dist/debian ] ; then
+        echo "debian"
+   fi
+done
