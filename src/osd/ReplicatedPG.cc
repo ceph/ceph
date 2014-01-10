@@ -9786,10 +9786,12 @@ void ReplicatedPG::hit_set_persist()
   }
 
   // fabricate an object_info_t and SnapSet
-  ctx->new_obs.oi.version = ctx->at_version;
-  ctx->new_obs.oi.mtime = now;
-  ctx->new_obs.oi.size = bl.length();
-  ctx->new_obs.exists = true;
+  obc->obs.oi.version = ctx->at_version;
+  obc->obs.oi.mtime = now;
+  obc->obs.oi.size = bl.length();
+  obc->obs.exists = true;
+
+  ctx->new_obs = obc->obs;
   ctx->new_snapset.head_exists = true;
 
   ctx->delta_stats.num_objects++;
