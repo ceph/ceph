@@ -1415,7 +1415,8 @@ void RGWPutObj::execute()
 
   if (!chunked_upload) { /* with chunked upload we don't know how big is the upload.
                             we also check sizes at the end anyway */
-    ret = store->check_quota(s->bucket_owner.get_id(), s->bucket, bucket_quota, s->content_length);
+    ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
+                             s->user.user_quota, bucket_quota, s->content_length);
     if (ret < 0) {
       goto done;
     }
@@ -1465,7 +1466,8 @@ void RGWPutObj::execute()
   s->obj_size = ofs;
   perfcounter->inc(l_rgw_put_b, s->obj_size);
 
-  ret = store->check_quota(s->bucket_owner.get_id(), s->bucket, bucket_quota, s->obj_size);
+  ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
+                           s->user.user_quota, bucket_quota, s->obj_size);
   if (ret < 0) {
     goto done;
   }

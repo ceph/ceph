@@ -5803,9 +5803,10 @@ int RGWRados::cls_user_remove_bucket(rgw_obj& obj, const cls_user_bucket& bucket
   return 0;
 }
 
-int RGWRados::check_quota(const string& bucket_owner, rgw_bucket& bucket, RGWQuotaInfo& quota_info, uint64_t obj_size)
+int RGWRados::check_quota(const string& bucket_owner, rgw_bucket& bucket,
+                          RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size)
 {
-  return quota_handler->check_quota(bucket_owner, bucket, quota_info, 1, obj_size);
+  return quota_handler->check_quota(bucket_owner, bucket, user_quota, bucket_quota, 1, obj_size);
 }
 
 class IntentLogNameFilter : public RGWAccessListFilter
