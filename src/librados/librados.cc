@@ -856,6 +856,12 @@ int librados::IoCtx::tmap_get(const std::string& oid, bufferlist& bl)
   return io_ctx_impl->tmap_get(obj, bl);
 }
 
+int librados::IoCtx::tmap_to_omap(const std::string& oid, bool nullok)
+{
+  object_t obj(oid);
+  return io_ctx_impl->tmap_to_omap(obj, nullok);
+}
+
 int librados::IoCtx::omap_get_vals(const std::string& oid,
                                    const std::string& start_after,
                                    uint64_t max_return,
@@ -2621,6 +2627,13 @@ extern "C" int rados_tmap_get(rados_ioctx_t io, const char *o, char *buf, size_t
     return -ERANGE;
   bl.copy(0, bl.length(), buf);
   return bl.length();
+}
+
+extern "C" int rados_tmap_to_omap(rados_ioctx_t io, const char *o, bool nullok)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  return ctx->tmap_to_omap(oid, nullok);
 }
 
 extern "C" int rados_exec(rados_ioctx_t io, const char *o, const char *cls, const char *method,

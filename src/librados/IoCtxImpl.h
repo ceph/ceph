@@ -131,6 +131,7 @@ struct librados::IoCtxImpl {
   int tmap_update(const object_t& oid, bufferlist& cmdbl);
   int tmap_put(const object_t& oid, bufferlist& bl);
   int tmap_get(const object_t& oid, bufferlist& bl);
+  int tmap_to_omap(const object_t& oid, bool nullok=false);
 
   int exec(const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
 
