@@ -2915,21 +2915,18 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     p.size = n;
     if (n < p.min_size)
       p.min_size = n;
-    ss << "set pool " << pool << " size to " << n;
   } else if (var == "min_size") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
     p.min_size = n;
-    ss << "set pool " << pool << " min_size to " << n;
   } else if (var == "crash_replay_interval") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
     p.crash_replay_interval = n;
-    ss << "set pool " << pool << " to crash_replay_interval to " << n;
   } else if (var == "pg_num") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
@@ -2939,30 +2936,27 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "specified pg_num " << n << " <= current " << p.get_pg_num();
       if (n < (int)p.get_pg_num())
 	return -EEXIST;
-      else
-	return 0;
-    } else {
-      int expected_osds = MIN(p.get_pg_num(), osdmap.get_num_osds());
-      int64_t new_pgs = n - p.get_pg_num();
-      int64_t pgs_per_osd = new_pgs / expected_osds;
-      if (pgs_per_osd > g_conf->mon_osd_max_split_count) {
-            ss << "specified pg_num " << n << " is too large (creating "
-               << new_pgs << " new PGs on ~" << expected_osds
-               << " OSDs exceeds per-OSD max of" << g_conf->mon_osd_max_split_count
-               << ')';
-            return -E2BIG;
-      }
-      for(set<pg_t>::iterator i = mon->pgmon()->pg_map.creating_pgs.begin();
-	  i != mon->pgmon()->pg_map.creating_pgs.end();
-	  ++i) {
-	if (i->m_pool == static_cast<uint64_t>(pool)) {
-	  ss << "currently creating pgs, wait";
-	  return -EAGAIN;
-	}
-      }
-      p.set_pg_num(n);
-      ss << "set pool " << pool << " pg_num to " << n;
+      return 0;
     }
+    int expected_osds = MIN(p.get_pg_num(), osdmap.get_num_osds());
+    int64_t new_pgs = n - p.get_pg_num();
+    int64_t pgs_per_osd = new_pgs / expected_osds;
+    if (pgs_per_osd > g_conf->mon_osd_max_split_count) {
+      ss << "specified pg_num " << n << " is too large (creating "
+	 << new_pgs << " new PGs on ~" << expected_osds
+	 << " OSDs exceeds per-OSD max of" << g_conf->mon_osd_max_split_count
+	 << ')';
+      return -E2BIG;
+    }
+    for(set<pg_t>::iterator i = mon->pgmon()->pg_map.creating_pgs.begin();
+	i != mon->pgmon()->pg_map.creating_pgs.end();
+	++i) {
+      if (i->m_pool == static_cast<uint64_t>(pool)) {
+	ss << "currently creating pgs, wait";
+	return -EAGAIN;
+      }
+    }
+    p.set_pg_num(n);
   } else if (var == "pgp_num") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
@@ -2970,45 +2964,41 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     if (n <= 0) {
       ss << "specified pgp_num must > 0, but you set to " << n;
-    } else if (n > (int)p.get_pg_num()) {
-      ss << "specified pgp_num " << n << " > pg_num " << p.get_pg_num();
-    } else {
-      for(set<pg_t>::iterator i = mon->pgmon()->pg_map.creating_pgs.begin();
-	  i != mon->pgmon()->pg_map.creating_pgs.end();
-	  ++i) {
-	if (i->m_pool == static_cast<uint64_t>(pool)) {
-	  ss << "currently creating pgs, wait";
-	  return -EAGAIN;
-	}
-      }
-      p.set_pgp_num(n);
-      ss << "set pool " << pool << " pgp_num to " << n;
+      return -EINVAL;
     }
+    if (n > (int)p.get_pg_num()) {
+      ss << "specified pgp_num " << n << " > pg_num " << p.get_pg_num();
+      return -EINVAL;
+    }
+    for(set<pg_t>::iterator i = mon->pgmon()->pg_map.creating_pgs.begin();
+	i != mon->pgmon()->pg_map.creating_pgs.end();
+	++i) {
+      if (i->m_pool == static_cast<uint64_t>(pool)) {
+	ss << "currently creating pgs, wait";
+	return -EAGAIN;
+      }
+    }
+    p.set_pgp_num(n);
   } else if (var == "crush_ruleset") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
-    if (osdmap.crush->rule_exists(n)) {
-      p.crush_ruleset = n;
-      ss << "set pool " << pool << " crush_ruleset to " << n;
-    } else {
+    if (!osdmap.crush->rule_exists(n)) {
       ss << "crush ruleset " << n << " does not exist";
       return -ENOENT;
     }
+    p.crush_ruleset = n;
   } else if (var == "hashpspool") {
     // make sure we only compare against 'n' if we didn't receive a string
     if (val == "true" || (interr.empty() && n == 1)) {
       p.flags |= pg_pool_t::FLAG_HASHPSPOOL;
-      ss << "set";
     } else if (val == "false" || (interr.empty() && n == 0)) {
       p.flags ^= pg_pool_t::FLAG_HASHPSPOOL;
-      ss << "unset";
     } else {
       ss << "expecting value 'true', 'false', '0', or '1'";
       return -EINVAL;
     }
-    ss << " pool " << pool << " flag hashpspool";
   } else if (var == "hit_set_type") {
     if (val == "none")
       p.hit_set_params = HitSet::Params();
@@ -3024,21 +3014,18 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "unrecognized hit_set type '" << val << "'";
       return -EINVAL;
     }
-    ss << "set hit_set_type to " << p.hit_set_params;
   } else if (var == "hit_set_period") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
     p.hit_set_period = n;
-    ss << "set hit_set_period to " << n;
   } else if (var == "hit_set_count") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
     p.hit_set_count = n;
-    ss << "set hit_set_count to " << n;
   } else if (var == "hit_set_fpp") {
     if (floaterr.length()) {
       ss << "error parsing floating point value '" << val << "': " << floaterr;
@@ -3050,12 +3037,11 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     BloomHitSet::Params *bloomp = static_cast<BloomHitSet::Params*>(p.hit_set_params.impl.get());
     bloomp->set_fpp(f);
-    ss << "set hit_set_fpp to " << bloomp->get_fpp();
   } else {
     ss << "unrecognized variable '" << var << "'";
     return -EINVAL;
   }
-
+  ss << "set pool " << pool << " " << var << " to " << val;
   p.last_change = pending_inc.epoch;
   pending_inc.new_pools[pool] = p;
   return 0;
