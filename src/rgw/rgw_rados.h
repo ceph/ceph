@@ -773,14 +773,14 @@ protected:
   rgw_bucket bucket;
   uint64_t bucket_ver;
   uint64_t master_ver;
-  map<RGWObjCategory, RGWBucketStats> *stats;
+  map<RGWObjCategory, RGWStorageStats> *stats;
   string max_marker;
 public:
   RGWGetBucketStats_CB(rgw_bucket& _bucket) : bucket(_bucket), stats(NULL) {}
   virtual ~RGWGetBucketStats_CB() {}
   virtual void handle_response(int r) = 0;
   virtual void set_response(uint64_t _bucket_ver, uint64_t _master_ver,
-                            map<RGWObjCategory, RGWBucketStats> *_stats,
+                            map<RGWObjCategory, RGWStorageStats> *_stats,
                             const string &_max_marker) {
     bucket_ver = _bucket_ver;
     master_ver = _master_ver;
@@ -1328,7 +1328,7 @@ public:
   }
 
   int decode_policy(bufferlist& bl, ACLOwner *owner);
-  int get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_t *master_ver, map<RGWObjCategory, RGWBucketStats>& stats,
+  int get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_t *master_ver, map<RGWObjCategory, RGWStorageStats>& stats,
                        string *max_marker);
   int get_bucket_stats_async(rgw_bucket& bucket, RGWGetBucketStats_CB *cb);
   void get_bucket_instance_obj(rgw_bucket& bucket, rgw_obj& obj);
@@ -1414,8 +1414,8 @@ public:
   int defer_gc(void *ctx, rgw_obj& obj);
 
   int bucket_check_index(rgw_bucket& bucket,
-                         map<RGWObjCategory, RGWBucketStats> *existing_stats,
-                         map<RGWObjCategory, RGWBucketStats> *calculated_stats);
+                         map<RGWObjCategory, RGWStorageStats> *existing_stats,
+                         map<RGWObjCategory, RGWStorageStats> *calculated_stats);
   int bucket_rebuild_index(rgw_bucket& bucket);
   int remove_objs_from_index(rgw_bucket& bucket, list<string>& oid_list);
 

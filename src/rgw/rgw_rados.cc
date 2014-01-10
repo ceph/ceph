@@ -3121,12 +3121,12 @@ int RGWRados::open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx, 
   return 0;
 }
 
-static void translate_raw_stats(rgw_bucket_dir_header& header, map<RGWObjCategory, RGWBucketStats>& stats)
+static void translate_raw_stats(rgw_bucket_dir_header& header, map<RGWObjCategory, RGWStorageStats>& stats)
 {
   map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = header.stats.begin();
   for (; iter != header.stats.end(); ++iter) {
     RGWObjCategory category = (RGWObjCategory)iter->first;
-    RGWBucketStats& s = stats[category];
+    RGWStorageStats& s = stats[category];
     struct rgw_bucket_category_stats& header_stats = iter->second;
     s.category = (RGWObjCategory)iter->first;
     s.num_kb = ((header_stats.total_size + 1023) / 1024);
@@ -3136,8 +3136,8 @@ static void translate_raw_stats(rgw_bucket_dir_header& header, map<RGWObjCategor
 }
 
 int RGWRados::bucket_check_index(rgw_bucket& bucket,
-				 map<RGWObjCategory, RGWBucketStats> *existing_stats,
-				 map<RGWObjCategory, RGWBucketStats> *calculated_stats)
+				 map<RGWObjCategory, RGWStorageStats> *existing_stats,
+				 map<RGWObjCategory, RGWStorageStats> *calculated_stats)
 {
   librados::IoCtx index_ctx;
   string oid;
@@ -4655,7 +4655,7 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
   return 0;
 }
 
-int RGWRados::get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_t *master_ver, map<RGWObjCategory, RGWBucketStats>& stats,
+int RGWRados::get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_t *master_ver, map<RGWObjCategory, RGWStorageStats>& stats,
                                string *max_marker)
 {
   rgw_bucket_dir_header header;
@@ -4682,7 +4682,7 @@ class RGWGetBucketStatsContext : public RGWGetDirHeader_CB {
 public:
   RGWGetBucketStatsContext(RGWGetBucketStats_CB *_cb) : cb(_cb) {}
   void handle_response(int r, rgw_bucket_dir_header& header) {
-    map<RGWObjCategory, RGWBucketStats> stats;
+    map<RGWObjCategory, RGWStorageStats> stats;
 
     if (r >= 0) {
       translate_raw_stats(header, stats);
