@@ -25,7 +25,7 @@
 
 
 struct RGWQuotaBucketStats {
-  RGWBucketStats stats;
+  RGWStorageStats stats;
   utime_t expiration;
   utime_t async_refresh_time;
 };
@@ -35,7 +35,7 @@ class RGWBucketStatsCache {
   lru_map<rgw_bucket, RGWQuotaBucketStats> stats_map;
   RefCountedWaitObject *async_refcount;
 
-  int fetch_bucket_totals(rgw_bucket& bucket, RGWBucketStats& stats);
+  int fetch_bucket_totals(rgw_bucket& bucket, RGWStorageStats& stats);
 
 public:
   RGWBucketStatsCache(RGWRados *_store) : store(_store), stats_map(store->ctx()->_conf->rgw_bucket_quota_cache_size) {
@@ -45,17 +45,17 @@ public:
     async_refcount->put_wait(); /* wait for all pending async requests to complete */
   }
 
-  int get_bucket_stats(rgw_bucket& bucket, RGWBucketStats& stats, RGWQuotaInfo& quota);
+  int get_bucket_stats(rgw_bucket& bucket, RGWStorageStats& stats, RGWQuotaInfo& quota);
   void adjust_bucket_stats(const string& bucket_owner, rgw_bucket& bucket, int objs_delta, uint64_t added_bytes, uint64_t removed_bytes);
 
-  bool can_use_cached_stats(RGWQuotaInfo& quota, RGWBucketStats& stats);
+  bool can_use_cached_stats(RGWQuotaInfo& quota, RGWStorageStats& stats);
 
-  void set_stats(rgw_bucket& bucket, RGWQuotaBucketStats& qs, RGWBucketStats& stats);
+  void set_stats(rgw_bucket& bucket, RGWQuotaBucketStats& qs, RGWStorageStats& stats);
   int async_refresh(rgw_bucket& bucket, RGWQuotaBucketStats& qs);
-  void async_refresh_response(rgw_bucket& bucket, RGWBucketStats& stats);
+  void async_refresh_response(rgw_bucket& bucket, RGWStorageStats& stats);
 };
 
-bool RGWBucketStatsCache::can_use_cached_stats(RGWQuotaInfo& quota, RGWBucketStats& cached_stats)
+bool RGWBucketStatsCache::can_use_cached_stats(RGWQuotaInfo& quota, RGWStorageStats& cached_stats)
 {
   if (quota.max_size_kb >= 0) {
     if (quota.max_size_soft_threshold < 0) {
@@ -84,25 +84,25 @@ bool RGWBucketStatsCache::can_use_cached_stats(RGWQuotaInfo& quota, RGWBucketSta
   return true;
 }
 
-int RGWBucketStatsCache::fetch_bucket_totals(rgw_bucket& bucket, RGWBucketStats& stats)
+int RGWBucketStatsCache::fetch_bucket_totals(rgw_bucket& bucket, RGWStorageStats& stats)
 {
   RGWBucketInfo bucket_info;
 
   uint64_t bucket_ver;
   uint64_t master_ver;
 
-  map<RGWObjCategory, RGWBucketStats> bucket_stats;
+  map<RGWObjCategory, RGWStorageStats> bucket_stats;
   int r = store->get_bucket_stats(bucket, &bucket_ver, &master_ver, bucket_stats, NULL);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket.name << dendl;
     return r;
   }
 
-  stats = RGWBucketStats();
+  stats = RGWStorageStats();
 
-  map<RGWObjCategory, RGWBucketStats>::iterator iter;
+  map<RGWObjCategory, RGWStorageStats>::iterator iter;
   for (iter = bucket_stats.begin(); iter != bucket_stats.end(); ++iter) {
-    RGWBucketStats& s = iter->second;
+    RGWStorageStats& s = iter->second;
     stats.num_kb += s.num_kb;
     stats.num_kb_rounded += s.num_kb_rounded;
     stats.num_objects += s.num_objects;
@@ -126,7 +126,7 @@ public:
 int AsyncRefreshHandler::init_fetch()
 {
   ldout(store->ctx(), 20) << "initiating async quota refresh for bucket=" << bucket << dendl;
-  map<RGWObjCategory, RGWBucketStats> bucket_stats;
+  map<RGWObjCategory, RGWStorageStats> bucket_stats;
   int r = store->get_bucket_stats_async(bucket, this);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket.name << dendl;
@@ -145,11 +145,11 @@ void AsyncRefreshHandler::handle_response(int r)
     return; /* nothing to do here */
   }
 
-  RGWBucketStats bs;
+  RGWStorageStats bs;
 
-  map<RGWObjCategory, RGWBucketStats>::iterator iter;
+  map<RGWObjCategory, RGWStorageStats>::iterator iter;
   for (iter = stats->begin(); iter != stats->end(); ++iter) {
-    RGWBucketStats& s = iter->second;
+    RGWStorageStats& s = iter->second;
     bs.num_kb += s.num_kb;
     bs.num_kb_rounded += s.num_kb_rounded;
     bs.num_objects += s.num_objects;
@@ -197,7 +197,7 @@ int RGWBucketStatsCache::async_refresh(rgw_bucket& bucket, RGWQuotaBucketStats& 
   return 0;
 }
 
-void RGWBucketStatsCache::async_refresh_response(rgw_bucket& bucket, RGWBucketStats& stats)
+void RGWBucketStatsCache::async_refresh_response(rgw_bucket& bucket, RGWStorageStats& stats)
 {
   ldout(store->ctx(), 20) << "async stats refresh response for bucket=" << bucket << dendl;
 
@@ -210,7 +210,7 @@ void RGWBucketStatsCache::async_refresh_response(rgw_bucket& bucket, RGWBucketSt
   async_refcount->put();
 }
 
-void RGWBucketStatsCache::set_stats(rgw_bucket& bucket, RGWQuotaBucketStats& qs, RGWBucketStats& stats)
+void RGWBucketStatsCache::set_stats(rgw_bucket& bucket, RGWQuotaBucketStats& qs, RGWStorageStats& stats)
 {
   qs.stats = stats;
   qs.expiration = ceph_clock_now(store->ctx());
@@ -221,7 +221,7 @@ void RGWBucketStatsCache::set_stats(rgw_bucket& bucket, RGWQuotaBucketStats& qs,
   stats_map.add(bucket, qs);
 }
 
-int RGWBucketStatsCache::get_bucket_stats(rgw_bucket& bucket, RGWBucketStats& stats, RGWQuotaInfo& quota) {
+int RGWBucketStatsCache::get_bucket_stats(rgw_bucket& bucket, RGWStorageStats& stats, RGWQuotaInfo& quota) {
   RGWQuotaBucketStats qs;
   utime_t now = ceph_clock_now(store->ctx());
   if (stats_map.find(bucket, qs)) {
@@ -289,7 +289,7 @@ public:
       return 0;
     }
 
-    RGWBucketStats stats;
+    RGWStorageStats stats;
 
     int ret = stats_cache.get_bucket_stats(bucket, stats, bucket_quota);
     if (ret < 0)

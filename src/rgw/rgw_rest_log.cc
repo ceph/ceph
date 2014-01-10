@@ -379,7 +379,7 @@ void RGWOp_BILog_Info::execute() {
       return;
     }
   }
-  map<RGWObjCategory, RGWBucketStats> stats;
+  map<RGWObjCategory, RGWStorageStats> stats;
   int ret =  store->get_bucket_stats(bucket_info.bucket, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0 && ret != -ENOENT) {
     http_ret = ret;

@@ -200,8 +200,8 @@ public:
           map<string, RGWObjEnt> result, std::string *err_msg = NULL);
 
   int check_index(RGWBucketAdminOpState& op_state,
-          map<RGWObjCategory, RGWBucketStats>& existing_stats,
-          map<RGWObjCategory, RGWBucketStats>& calculated_stats,
+          map<RGWObjCategory, RGWStorageStats>& existing_stats,
+          map<RGWObjCategory, RGWStorageStats>& calculated_stats,
           std::string *err_msg = NULL);
 
   int remove(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
