@@ -54,10 +54,16 @@ public:
     const SequencerPosition *spos=0     ///< [in] sequencer position
     ) = 0;
 
-  /// Clear all map keys and values from oid
+  /// Clear all map keys and values in to_clear from oid
   virtual int rm_keys(
     const ghobject_t &oid,              ///< [in] object containing map
     const set<string> &to_clear,        ///< [in] Keys to clear
+    const SequencerPosition *spos=0     ///< [in] sequencer position
+    ) = 0;
+
+  /// Clear all omap keys and the header
+  virtual int clear_keys_header(
+    const ghobject_t &oid,              ///< [in] oid to clear
     const SequencerPosition *spos=0     ///< [in] sequencer position
     ) = 0;
 
@@ -98,7 +104,7 @@ public:
   /// Get all xattrs
   virtual int get_all_xattrs(
     const ghobject_t &oid,             ///< [in] object
-    set<string> *out       ///< [out] attrs and values
+    set<string> *out                   ///< [out] attrs and values
     ) = 0;
 
   /// set xattrs in to_set

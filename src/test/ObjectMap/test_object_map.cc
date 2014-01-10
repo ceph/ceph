@@ -196,6 +196,14 @@ public:
     db->clear(hoid);
   }
 
+  void clear_omap(const string &objname) {
+    clear_omap(ghobject_t(hobject_t(sobject_t(objname, CEPH_NOSNAP))));
+  }
+
+  void clear_omap(const ghobject_t &objname) {
+    db->clear_keys_header(objname);
+  }
+
   void def_init() {
     for (unsigned i = 0; i < 1000; ++i) {
       key_space.insert("key_" + num_str(i));
@@ -462,6 +470,14 @@ public:
     xattrs.erase(*object);
   }
 
+  void auto_clear_omap(ostream &out) {
+    set<string>::iterator object = rand_choose(object_name_space);
+    out << "auto_clear_object " << *object << std::endl;
+    clear_omap(*object);
+    omap.erase(*object);
+    hmap.erase(*object);
+  }
+
   void auto_write_header(ostream &out) {
     set<string>::iterator object = rand_choose(object_name_space);
     string header = val_from_key(*object, "HEADER");
@@ -573,9 +589,28 @@ TEST_F(ObjectMapTest, CreateOneObject) {
   db->get(hoid, &header, &got);
   ASSERT_EQ(got.size(), (unsigned)0);
 
+  map<string, bufferlist> attrs;
+  attrs["attr1"] = bl;
+  db->set_xattrs(hoid, attrs);
+
+  db->set_header(hoid, bl);
+
+  db->clear_keys_header(hoid);
+  set<string> attrs_got;
+  db->get_all_xattrs(hoid, &attrs_got);
+  ASSERT_EQ(attrs_got.size(), 1U);
+  ASSERT_EQ(*(attrs_got.begin()), "attr1");
+  db->get(hoid, &header, &got);
+  ASSERT_EQ(got.size(), (unsigned)0);
+  ASSERT_EQ(header.length(), 0U);
+  got.clear();
+
   db->clear(hoid);
   db->get(hoid, &header, &got);
   ASSERT_EQ(got.size(), (unsigned)0);
+  attrs_got.clear();
+  db->get_all_xattrs(hoid, &attrs_got);
+  ASSERT_EQ(attrs_got.size(), 0U);
 }
 
 TEST_F(ObjectMapTest, CloneOneObject) {
@@ -734,8 +769,10 @@ TEST_F(ObjectMapTest, RandomTest) {
       ASSERT_TRUE(tester.auto_check_present_xattr(std::cerr));
     } else if (val < 70) {
       ASSERT_TRUE(tester.auto_check_absent_key(std::cerr));
-    } else if (val < 73) {
+    } else if (val < 72) {
       ASSERT_TRUE(tester.auto_check_absent_xattr(std::cerr));
+    } else if (val < 73) {
+      tester.auto_clear_omap(std::cerr);
     } else if (val < 76) {
       tester.auto_delete_object(std::cerr);
     } else if (val < 85) {

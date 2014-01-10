@@ -4380,7 +4380,7 @@ int FileStore::_omap_clear(coll_t cid, const ghobject_t &hoid,
   int r = lfn_find(cid, hoid, &path);
   if (r < 0)
     return r;
-  r = object_map->clear(hoid, &spos);
+  r = object_map->clear_keys_header(hoid, &spos);
   if (r < 0 && r != -ENOENT)
     return r;
   return 0;
