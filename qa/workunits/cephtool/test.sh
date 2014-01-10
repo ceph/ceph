@@ -363,6 +363,18 @@ ceph osd pool set rbd hit_set_period 123
 ceph osd pool set rbd hit_set_count 12
 ceph osd pool set rbd hit_set_fpp .01
 
+ceph osd pool set rbd target_max_objects 123
+ceph osd pool set rbd target_max_bytes 123456
+ceph osd pool set rbd cache_target_dirty_ratio .123
+expect_false ceph osd pool set rbd cache_target_dirty_ratio -.2
+expect_false ceph osd pool set rbd cache_target_dirty_ratio 1.1
+ceph osd pool set rbd cache_target_full_ratio .123
+ceph osd pool set rbd cache_target_full_ratio 1.0
+ceph osd pool set rbd cache_target_full_ratio 0
+expect_false ceph osd pool set rbd cache_target_full_ratio 1.1
+ceph osd pool set rbd cache_min_flush_age 123
+ceph osd pool set rbd cache_min_evict_age 234
+
 ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
 
 ceph osd thrash 10

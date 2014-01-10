@@ -3037,6 +3037,50 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     BloomHitSet::Params *bloomp = static_cast<BloomHitSet::Params*>(p.hit_set_params.impl.get());
     bloomp->set_fpp(f);
+  } else if (var == "target_max_objects") {
+    if (interr.length()) {
+      ss << "error parsing int '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    p.target_max_objects = n;
+  } else if (var == "target_max_bytes") {
+    if (interr.length()) {
+      ss << "error parsing int '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    p.target_max_bytes = n;
+  } else if (var == "cache_target_dirty_ratio") {
+    if (floaterr.length()) {
+      ss << "error parsing float '" << val << "': " << floaterr;
+      return -EINVAL;
+    }
+    if (f < 0 || f > 1.0) {
+      ss << "value must be in the range 0..1";
+      return -ERANGE;
+    }
+    p.cache_target_dirty_ratio_micro = f * 1000000;
+  } else if (var == "cache_target_full_ratio") {
+    if (floaterr.length()) {
+      ss << "error parsing float '" << val << "': " << floaterr;
+      return -EINVAL;
+    }
+    if (f < 0 || f > 1.0) {
+      ss << "value must be in the range 0..1";
+      return -ERANGE;
+    }
+    p.cache_target_full_ratio_micro = n;
+  } else if (var == "cache_min_flush_age") {
+    if (interr.length()) {
+      ss << "error parsing int '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    p.cache_min_flush_age = n;
+  } else if (var == "cache_min_evict_age") {
+    if (interr.length()) {
+      ss << "error parsing int '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    p.cache_min_evict_age = n;
   } else {
     ss << "unrecognized variable '" << var << "'";
     return -EINVAL;
