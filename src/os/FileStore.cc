@@ -4376,14 +4376,7 @@ void FileStore::_inject_failure()
 int FileStore::_omap_clear(coll_t cid, const ghobject_t &hoid,
 			   const SequencerPosition &spos) {
   dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
-  IndexedPath path;
-  int r = lfn_find(cid, hoid, &path);
-  if (r < 0)
-    return r;
-  r = object_map->clear(hoid, &spos);
-  if (r < 0 && r != -ENOENT)
-    return r;
-  return 0;
+  return _omap_rmkeyrange(cid, hoid, string(), string(), spos);
 }
 
 int FileStore::_omap_setkeys(coll_t cid, const ghobject_t &hoid,
@@ -4420,7 +4413,8 @@ int FileStore::_omap_rmkeyrange(coll_t cid, const ghobject_t &hoid,
     ObjectMap::ObjectMapIterator iter = get_omap_iterator(cid, hoid);
     if (!iter)
       return -ENOENT;
-    for (iter->lower_bound(first); iter->valid() && iter->key() < last;
+    for (iter->lower_bound(first);
+	 iter->valid() && (last.empty() || iter->key() < last);
 	 iter->next()) {
       keys.insert(iter->key());
     }
