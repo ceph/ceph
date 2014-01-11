@@ -432,6 +432,7 @@ int main(int argc, const char **argv)
   }
   else {
     if ((args.size() % 3) != 0U) {
+      cerr << "remaining args: " << args << std::endl;
       cerr << "layers must be specified with 3-tuples of (name, buckettype, size)"
     	   << std::endl;
       exit(EXIT_FAILURE);
