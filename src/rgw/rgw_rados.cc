@@ -4720,8 +4720,8 @@ public:
     if (r >= 0) {
       RGWStorageStats stats;
 
-      stats.num_kb = header.total_bytes;
-      stats.num_kb_rounded = header.total_bytes_rounded;
+      stats.num_kb = (header.total_bytes + 1023) / 1024;
+      stats.num_kb_rounded = (header.total_bytes_rounded + 1023) / 1024;
       stats.num_objects = header.total_entries;
 
       cb->set_response(stats);
@@ -4740,8 +4740,8 @@ int RGWRados::get_user_stats(const string& user, RGWStorageStats& stats)
   if (r < 0)
     return r;
 
-  stats.num_kb = header.total_bytes;
-  stats.num_kb_rounded = header.total_bytes_rounded;
+  stats.num_kb = (header.total_bytes + 1023) / 1024;
+  stats.num_kb_rounded = (header.total_bytes_rounded + 1023) / 1024;
   stats.num_objects = header.total_entries;
 
   return 0;
@@ -5727,6 +5727,30 @@ int RGWRados::cls_user_sync_bucket_stats(rgw_obj& user_obj, rgw_bucket& bucket)
   entries.push_back(entry);
 
   r = cls_user_update_buckets(user_obj, entries);
+  if (r < 0) {
+    ldout(cct, 20) << "cls_user_update_buckets() returned " << r << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+int RGWRados::update_user_bucket_stats(const string& user_id, rgw_bucket& bucket, RGWStorageStats& stats)
+{
+  cls_user_bucket_entry entry;
+
+  entry.size = stats.num_kb * 1024;
+  entry.size_rounded = stats.num_kb_rounded * 1024;
+  entry.count += stats.num_objects;
+
+  list<cls_user_bucket_entry> entries;
+  entries.push_back(entry);
+
+  string buckets_obj_id;
+  rgw_get_buckets_obj(user_id, buckets_obj_id);
+  rgw_obj obj(zone.user_uid_pool, buckets_obj_id);
+
+  int r = cls_user_update_buckets(obj, entries);
   if (r < 0) {
     ldout(cct, 20) << "cls_user_update_buckets() returned " << r << dendl;
     return r;
