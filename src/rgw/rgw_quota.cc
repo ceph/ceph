@@ -37,7 +37,7 @@ protected:
   lru_map<T, RGWQuotaCacheStats> stats_map;
   RefCountedWaitObject *async_refcount;
 
-  class StatsAsyncTestSet : public lru_map<rgw_bucket, RGWQuotaCacheStats>::UpdateContext {
+  class StatsAsyncTestSet : public lru_map<T, RGWQuotaCacheStats>::UpdateContext {
     int objs_delta;
     uint64_t added_bytes;
     uint64_t removed_bytes;
@@ -56,7 +56,8 @@ protected:
   virtual int fetch_stats_from_storage(const string& user, rgw_bucket& bucket, RGWStorageStats& stats) = 0;
 
   virtual bool map_find(const string& user, rgw_bucket& bucket, RGWQuotaCacheStats& qs) = 0;
-  virtual bool map_find_and_update(const string& user, rgw_bucket& bucket, lru_map<rgw_bucket, RGWQuotaCacheStats>::UpdateContext *ctx) = 0;
+
+  virtual bool map_find_and_update(const string& user, rgw_bucket& bucket, typename lru_map<T, RGWQuotaCacheStats>::UpdateContext *ctx) = 0;
   virtual void map_add(const string& user, rgw_bucket& bucket, RGWQuotaCacheStats& qs) = 0;
 public:
   RGWQuotaCache(RGWRados *_store, int size) : store(_store), stats_map(size) {
@@ -201,7 +202,8 @@ int RGWQuotaCache<T>::get_stats(const string& user, rgw_bucket& bucket, RGWStora
 }
 
 
-class RGWQuotaStatsUpdate : public lru_map<rgw_bucket, RGWQuotaCacheStats>::UpdateContext {
+template<class T>
+class RGWQuotaStatsUpdate : public lru_map<T, RGWQuotaCacheStats>::UpdateContext {
   int objs_delta;
   uint64_t added_bytes;
   uint64_t removed_bytes;
@@ -225,7 +227,7 @@ template<class T>
 void RGWQuotaCache<T>::adjust_stats(const string& user, rgw_bucket& bucket, int objs_delta,
                                  uint64_t added_bytes, uint64_t removed_bytes)
 {
-  RGWQuotaStatsUpdate update(objs_delta, added_bytes, removed_bytes);
+  RGWQuotaStatsUpdate<T> update(objs_delta, added_bytes, removed_bytes);
   map_find_and_update(user, bucket, &update);
 }
 
@@ -330,13 +332,13 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const string& user, rgw_bucket
   return 0;
 }
 
-class UserAsyncRefreshHandler : public RGWQuotaCache<rgw_bucket>::AsyncRefreshHandler,
+class UserAsyncRefreshHandler : public RGWQuotaCache<string>::AsyncRefreshHandler,
                                 public RGWGetUserStats_CB {
   rgw_bucket bucket;
 public:
-  UserAsyncRefreshHandler(RGWRados *_store, RGWQuotaCache<rgw_bucket> *_cache,
+  UserAsyncRefreshHandler(RGWRados *_store, RGWQuotaCache<string> *_cache,
                           const string& _user, rgw_bucket& _bucket) :
-                          RGWQuotaCache<rgw_bucket>::AsyncRefreshHandler(_store, _cache),
+                          RGWQuotaCache<string>::AsyncRefreshHandler(_store, _cache),
                           RGWGetUserStats_CB(_user),
                           bucket(_bucket) {}
 
@@ -369,13 +371,13 @@ void UserAsyncRefreshHandler::handle_response(int r)
   cache->async_refresh_response(user, bucket, stats);
 }
 
-class RGWUserStatsCache : public RGWQuotaCache<rgw_bucket> {
+class RGWUserStatsCache : public RGWQuotaCache<string> {
 protected:
   bool map_find(const string& user, rgw_bucket& bucket, RGWQuotaCacheStats& qs) {
     return stats_map.find(user, qs);
   }
 
-  bool map_find_and_update(const string& user, rgw_bucket& bucket, lru_map<rgw_bucket, RGWQuotaCacheStats>::UpdateContext *ctx) {
+  bool map_find_and_update(const string& user, rgw_bucket& bucket, lru_map<string, RGWQuotaCacheStats>::UpdateContext *ctx) {
     return stats_map.find_and_update(user, NULL, ctx);
   }
 
