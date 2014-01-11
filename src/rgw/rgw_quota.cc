@@ -372,15 +372,15 @@ void UserAsyncRefreshHandler::handle_response(int r)
 class RGWUserStatsCache : public RGWQuotaCache<rgw_bucket> {
 protected:
   bool map_find(const string& user, rgw_bucket& bucket, RGWQuotaCacheStats& qs) {
-    return stats_map.find(bucket, qs);
+    return stats_map.find(user, qs);
   }
 
   bool map_find_and_update(const string& user, rgw_bucket& bucket, lru_map<rgw_bucket, RGWQuotaCacheStats>::UpdateContext *ctx) {
-    return stats_map.find_and_update(bucket, NULL, ctx);
+    return stats_map.find_and_update(user, NULL, ctx);
   }
 
   void map_add(const string& user, rgw_bucket& bucket, RGWQuotaCacheStats& qs) {
-    stats_map.add(bucket, qs);
+    stats_map.add(user, qs);
   }
 
   int fetch_stats_from_storage(const string& user, rgw_bucket& bucket, RGWStorageStats& stats);
@@ -438,31 +438,30 @@ public:
                           RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota,
 			  uint64_t num_objs, uint64_t size) {
     uint64_t size_kb = rgw_rounded_kb(size);
-    if (!bucket_quota.enabled) {
-      return 0;
+
+    if (bucket_quota.enabled) {
+      RGWStorageStats bucket_stats;
+
+      int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats, bucket_quota);
+      if (ret < 0)
+        return ret;
+
+      ret = check_quota("bucket", bucket_quota, bucket_stats, num_objs, size_kb);
+      if (ret < 0)
+        return ret;
     }
 
-    RGWStorageStats bucket_stats;
+    if (user_quota.enabled) {
+      RGWStorageStats user_stats;
 
-    int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats, bucket_quota);
-    if (ret < 0)
-      return ret;
+      int ret = user_stats_cache.get_stats(user, bucket, user_stats, user_quota);
+      if (ret < 0)
+        return ret;
 
-    ret = check_quota("bucket", bucket_quota, bucket_stats, num_objs, size_kb);
-    if (ret < 0)
-      return ret;
-
-    RGWStorageStats user_stats;
-
-    ret = user_stats_cache.get_stats(user, bucket, user_stats, user_quota);
-    if (ret < 0)
-      return ret;
-
-    ret = check_quota("user", user_quota, user_stats, num_objs, size_kb);
-    if (ret < 0)
-      return ret;
-
-
+      ret = check_quota("user", user_quota, user_stats, num_objs, size_kb);
+      if (ret < 0)
+        return ret;
+    }
 
     return 0;
   }
