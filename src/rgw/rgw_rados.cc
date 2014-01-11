@@ -390,20 +390,23 @@ int RGWZoneParams::store_info(CephContext *cct, RGWRados *store, RGWRegion& regi
 }
 
 void RGWRegionMap::encode(bufferlist& bl) const {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   ::encode(regions, bl);
   ::encode(master_region, bl);
   ::encode(bucket_quota, bl);
+  ::encode(user_quota, bl);
   ENCODE_FINISH(bl);
 }
 
 void RGWRegionMap::decode(bufferlist::iterator& bl) {
-  DECODE_START(2, bl);
+  DECODE_START(3, bl);
   ::decode(regions, bl);
   ::decode(master_region, bl);
 
   if (struct_v >= 2)
     ::decode(bucket_quota, bl);
+  if (struct_v >= 3)
+    ::decode(user_quota, bl);
   DECODE_FINISH(bl);
 
   regions_by_api.clear();
