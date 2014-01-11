@@ -644,6 +644,7 @@ struct RGWRegionMap {
   string master_region;
 
   RGWQuotaInfo bucket_quota;
+  RGWQuotaInfo user_quota;
 
   RGWRegionMap() : lock("RGWRegionMap") {}
 
@@ -1438,6 +1439,7 @@ public:
   int cls_user_get_header(const string& user_id, cls_user_header *header);
   int cls_user_get_header_async(const string& user_id, RGWGetUserHeader_CB *ctx);
   int cls_user_sync_bucket_stats(rgw_obj& user_obj, rgw_bucket& bucket);
+  int update_user_bucket_stats(const string& user_id, rgw_bucket& bucket, RGWStorageStats& stats);
   int cls_user_list_buckets(rgw_obj& obj,
                             const string& in_marker, int max_entries,
                             list<cls_user_bucket_entry>& entries,

@@ -442,28 +442,32 @@ int RGWOp::init_quota()
     return 0;
   }
 
-  if (s->bucket_info.quota.enabled) {
-    bucket_quota = s->bucket_info.quota;
-    return 0;
-  }
+  RGWUserInfo owner_info;
+  RGWUserInfo *uinfo;
+
   if (s->user.user_id == s->bucket_owner.get_id()) {
-    if (s->user.bucket_quota.enabled) {
-      bucket_quota = s->user.bucket_quota;
-      return 0;
-    }
+    uinfo = &s->user;
   } else {
-    RGWUserInfo owner_info;
     int r = rgw_get_user_info_by_uid(store, s->bucket_info.owner, owner_info);
     if (r < 0)
       return r;
-
-    if (owner_info.bucket_quota.enabled) {
-      bucket_quota = owner_info.bucket_quota;
-      return 0;
-    }
+    uinfo = &owner_info;
   }
 
-  bucket_quota = store->region_map.bucket_quota;
+  if (s->bucket_info.quota.enabled) {
+    bucket_quota = s->bucket_info.quota;
+  } else if (uinfo->bucket_quota.enabled) {
+    bucket_quota = uinfo->bucket_quota;
+  } else {
+    bucket_quota = store->region_map.bucket_quota;
+  }
+
+  if (uinfo->user_quota.enabled) {
+    user_quota = uinfo->user_quota;
+  } else {
+    user_quota = store->region_map.user_quota;
+  }
+
   return 0;
 }
 
@@ -1416,7 +1420,7 @@ void RGWPutObj::execute()
   if (!chunked_upload) { /* with chunked upload we don't know how big is the upload.
                             we also check sizes at the end anyway */
     ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
-                             s->user.user_quota, bucket_quota, s->content_length);
+                             user_quota, bucket_quota, s->content_length);
     if (ret < 0) {
       goto done;
     }
@@ -1467,7 +1471,7 @@ void RGWPutObj::execute()
   perfcounter->inc(l_rgw_put_b, s->obj_size);
 
   ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
-                           s->user.user_quota, bucket_quota, s->obj_size);
+                           user_quota, bucket_quota, s->obj_size);
   if (ret < 0) {
     goto done;
   }

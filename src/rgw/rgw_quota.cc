@@ -59,6 +59,8 @@ protected:
 
   virtual bool map_find_and_update(const string& user, rgw_bucket& bucket, typename lru_map<T, RGWQuotaCacheStats>::UpdateContext *ctx) = 0;
   virtual void map_add(const string& user, rgw_bucket& bucket, RGWQuotaCacheStats& qs) = 0;
+
+  virtual int handle_set_stats(const string& user, rgw_bucket& bucket, RGWStorageStats& stats) { return 0; }
 public:
   RGWQuotaCache(RGWRados *_store, int size) : store(_store), stats_map(size) {
     async_refcount = new RefCountedWaitObject;
@@ -170,6 +172,11 @@ void RGWQuotaCache<T>::set_stats(const string& user, rgw_bucket& bucket, RGWQuot
   qs.async_refresh_time += store->ctx()->_conf->rgw_bucket_quota_ttl / 2;
 
   map_add(user, bucket, qs);
+
+  int ret = handle_set_stats(user, bucket, stats);
+  if (ret < 0) {
+    /* can't really do much about it, user stats are going to be off a bit for now */
+  }
 }
 
 template<class T>
@@ -295,6 +302,14 @@ protected:
   }
 
   int fetch_stats_from_storage(const string& user, rgw_bucket& bucket, RGWStorageStats& stats);
+  int handle_set_stats(const string& user, rgw_bucket& bucket, RGWStorageStats& stats) {
+    int ret = store->update_user_bucket_stats(user, bucket, stats);
+    if (ret < 0) {
+      derr << "ERROR: store->update_bucket_stats() returned " << ret << dendl;
+      return ret;
+    }
+    return 0;
+  }
 
 public:
   RGWBucketStatsCache(RGWRados *_store) : RGWQuotaCache(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size) {
@@ -449,6 +464,17 @@ public:
         return ret;
 
       ret = check_quota("bucket", bucket_quota, bucket_stats, num_objs, size_kb);
+      if (ret < 0)
+        return ret;
+    } else if (user_quota.enabled) {
+      /*
+       * we need to fetch bucket stats if the user quota is enabled, because the whole system relies
+       * on us periodically updating the user's bucket stats in the user's header, this happens in
+       * get_stats() if we actually fetch that info and not rely on cached data
+       */
+      RGWStorageStats bucket_stats;
+
+      int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats, bucket_quota);
       if (ret < 0)
         return ret;
     }
