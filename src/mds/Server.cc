@@ -1611,7 +1611,7 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
   // build list of objects
   list<MDSCacheObject*> objects;
   CInode *auth_pin_freeze = NULL;
-  bool fail = false;
+  bool fail = false, wouldblock = false;
 
   for (vector<MDSCacheObjectInfo>::iterator p = mdr->slave_request->get_authpins().begin();
        p != mdr->slave_request->get_authpins().end();
@@ -1639,6 +1639,12 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
 	break;
       }
       if (!mdr->can_auth_pin(*p)) {
+	if (mdr->slave_request->is_nonblock()) {
+	  dout(10) << " can't auth_pin (freezing?) " << **p << " nonblocking" << dendl;
+	  fail = true;
+	  wouldblock = true;
+	  break;
+	}
 	// wait
 	dout(10) << " waiting for authpinnable on " << **p << dendl;
 	(*p)->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
@@ -1707,6 +1713,9 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
   if (auth_pin_freeze)
     auth_pin_freeze->set_object_info(reply->get_authpin_freeze());
 
+  if (wouldblock)
+    reply->mark_error_wouldblock();
+
   mds->send_message_mds(reply, mdr->slave_to_mds);
   
   // clean up this request
@@ -1749,6 +1758,9 @@ void Server::handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
       ++p;
     }
   }
+
+  if (ack->is_error_wouldblock())
+    mdr->aborted = true;
   
   // note slave
   mdr->more()->slaves.insert(from);
