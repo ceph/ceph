@@ -225,8 +225,10 @@ void Migrator::find_stale_export_freeze()
   }
 }
 
-void Migrator::export_try_cancel(CDir *dir)
+void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
 {
+  dout(10) << "export_try_cancel " << *dir << dendl;
+
   map<CDir*,export_state_t>::iterator it = export_state.find(dir);
   assert(it != export_state.end());
 
@@ -246,7 +248,7 @@ void Migrator::export_try_cancel(CDir *dir)
     dir->auth_unpin(this);
     export_freeze_finish(dir);
     dir->state_clear(CDir::STATE_EXPORTING);
-    if (mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer)) // tell them.
+    if (notify_peer && mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer)) // tell them.
       mds->send_message_mds(new MExportDirCancel(dir->dirfrag(), it->second.tid), it->second.peer);
     break;
 
@@ -256,7 +258,7 @@ void Migrator::export_try_cancel(CDir *dir)
     dir->unfreeze_tree();  // cancel the freeze
     export_freeze_finish(dir);
     dir->state_clear(CDir::STATE_EXPORTING);
-    if (mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer)) // tell them.
+    if (notify_peer && mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer)) // tell them.
       mds->send_message_mds(new MExportDirCancel(dir->dirfrag(), it->second.tid), it->second.peer);
     break;
 
@@ -292,7 +294,7 @@ void Migrator::export_try_cancel(CDir *dir)
     cache->adjust_subtree_auth(dir, mds->get_nodeid());
     cache->try_subtree_merge(dir);  // NOTE: this may journal subtree_map as side effect
     dir->state_clear(CDir::STATE_EXPORTING);
-    if (mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer)) // tell them.
+    if (notify_peer && mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer)) // tell them.
       mds->send_message_mds(new MExportDirCancel(dir->dirfrag(), it->second.tid), it->second.peer);
     break;
 
@@ -680,6 +682,9 @@ void Migrator::get_export_lock_set(CDir *dir, set<SimpleLock*>& locks)
        ++it)
     locks.insert(&(*it)->lock);
 
+  // prevent scatter gather race
+  locks.insert(&dir->get_inode()->dirfragtreelock);
+
   // bound dftlocks:
   // NOTE: We need to take an rdlock on bounding dirfrags during
   //  migration for a rather irritating reason: when we export the
@@ -773,6 +778,19 @@ void Migrator::dispatch_export_dir(MDRequest *mdr)
   set<SimpleLock*> xlocks;
   set<SimpleLock*> wrlocks;
   get_export_lock_set(dir, rdlocks);
+  // If auth MDS of the subtree root inode is neither the exporter MDS
+  // nor the importer MDS and it gathers subtree root's fragstat/neststat
+  // while the subtree is exporting. It's possible that the exporter MDS
+  // and the importer MDS both are auth MDS of the subtree root or both
+  // are not auth MDS of the subtree root at the time they receive the
+  // lock messages. So the auth MDS of the subtree root inode may get no
+  // or duplicated fragstat/neststat for the subtree root dirfrag.
+  wrlocks.insert(&dir->get_inode()->filelock);
+  wrlocks.insert(&dir->get_inode()->nestlock);
+  if (dir->get_inode()->is_auth()) {
+    dir->get_inode()->filelock.set_scatter_wanted();
+    dir->get_inode()->nestlock.set_scatter_wanted();
+  }
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks, NULL, NULL, true)) {
     if (mdr->aborted)
@@ -878,14 +896,17 @@ void Migrator::export_frozen(CDir *dir)
 
   export_freeze_finish(dir);
 
-  CInode *diri = dir->inode;
+  CInode *diri = dir->get_inode();
 
   // ok, try to grab all my locks.
   set<SimpleLock*> rdlocks;
   get_export_lock_set(dir, rdlocks);
-  if (!mds->locker->can_rdlock_set(rdlocks)) {
-    dout(7) << "export_dir couldn't rdlock all needed locks, failing. " 
-	    << *diri << dendl;
+  if ((diri->is_auth() && diri->is_frozen()) ||
+      !mds->locker->can_rdlock_set(rdlocks) ||
+      !diri->filelock.can_wrlock(-1) ||
+      !diri->nestlock.can_wrlock(-1)) {
+    dout(7) << "export_dir couldn't acquire all needed locks, failing. "
+	    << *dir << dendl;
 
     // .. unwind ..
     dir->unfreeze_tree();
@@ -899,8 +920,12 @@ void Migrator::export_frozen(CDir *dir)
   }
 
   it->second.mut = new Mutation;
+  if (diri->is_auth())
+    it->second.mut->auth_pin(diri);
   mds->locker->rdlock_take_set(rdlocks, it->second.mut);
-  
+  mds->locker->wrlock_force(&diri->filelock, it->second.mut);
+  mds->locker->wrlock_force(&diri->nestlock, it->second.mut);
+
   cache->show_subtrees();
 
   // note the bounds.
@@ -1074,8 +1099,15 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
     m->put();
     return;
   }
-
   assert(it->second.state == EXPORT_PREPPING);
+
+  if (!m->is_success()) {
+    dout(7) << "peer couldn't acquire all needed locks, canceling" << dendl;
+    export_try_cancel(dir, false);
+    m->put();
+    return;
+  }
+
   assert (g_conf->mds_kill_export_at != 5);
   // send warnings
   set<CDir*> bounds;
@@ -2077,27 +2109,37 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   }
 
   dout(7) << " all ready, noting auth and freezing import region" << dendl;
-  
-  // note that i am an ambiguous auth for this subtree.
-  // specify bounds, since the exporter explicitly defines the region.
-  cache->adjust_bounded_subtree_auth(dir, import_bounds, 
-				     pair<int,int>(oldauth, mds->get_nodeid()));
-  cache->verify_subtree_bounds(dir, import_bounds);
-  
-  // freeze.
-  dir->_freeze_tree();
+
+  bool success = true;
+  if (dir->get_inode()->filelock.can_wrlock(-1) &&
+      dir->get_inode()->nestlock.can_wrlock(-1)) {
+    it->second.mut = new Mutation;
+    // force some locks.  hacky.
+    mds->locker->wrlock_force(&dir->inode->filelock, it->second.mut);
+    mds->locker->wrlock_force(&dir->inode->nestlock, it->second.mut);
+
+    // note that i am an ambiguous auth for this subtree.
+    // specify bounds, since the exporter explicitly defines the region.
+    cache->adjust_bounded_subtree_auth(dir, import_bounds,
+				       pair<int,int>(oldauth, mds->get_nodeid()));
+    cache->verify_subtree_bounds(dir, import_bounds);
+    // freeze.
+    dir->_freeze_tree();
+    // note new state
+    it->second.state = IMPORT_PREPPED;
+  } else {
+    dout(7) << " couldn't acquire all needed locks, failing. " << *dir << dendl;
+    success = false;
+    import_reverse_prepping(dir);
+  }
 
   // ok!
   dout(7) << " sending export_prep_ack on " << *dir << dendl;
-  mds->send_message(new MExportDirPrepAck(dir->dirfrag(), m->get_tid()), m->get_connection());
-  
-  // note new state
-  it->second.state = IMPORT_PREPPED;
+  mds->send_message(new MExportDirPrepAck(dir->dirfrag(), success, m->get_tid()), m->get_connection());
 
   assert(g_conf->mds_kill_import_at != 4);
   // done 
   m->put();
-
 }
 
 
@@ -2136,6 +2178,9 @@ void Migrator::handle_export_dir(MExportDir *m)
   int oldauth = m->get_source().num();
   dout(7) << "handle_export_dir importing " << *dir << " from " << oldauth << dendl;
   assert(dir->is_auth() == false);
+
+  if (!dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()))
+    dir->get_inode()->dirfragtree.force_to_leaf(g_ceph_context, dir->get_frag());
 
   cache->show_subtrees();
 
@@ -2418,7 +2463,13 @@ void Migrator::import_reverse_final(CDir *dir)
   dout(7) << "import_reverse_final " << *dir << dendl;
 
   // clean up
-  import_state.erase(dir->dirfrag());
+  map<dirfrag_t, import_state_t>::iterator it = import_state.find(dir->dirfrag());
+  if (it->second.mut) {
+    mds->locker->drop_locks(it->second.mut);
+    it->second.mut->cleanup();
+    delete it->second.mut;
+  }
+  import_state.erase(it);
 
   // send pending import_maps?
   mds->mdcache->maybe_send_pending_resolves();
@@ -2559,6 +2610,7 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
   it->second.peer_exports.swap(peer_exports);
 
   // clear import state (we're done!)
+  Mutation *mut = it->second.mut;
   import_state.erase(it);
 
   mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
@@ -2575,8 +2627,11 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
   cache->show_subtrees();
   //audit();  // this fails, bc we munge up the subtree map during handle_import_map (resolve phase)
 
-  list<Context*> ls;
-  mds->queue_waiters(ls);
+  if (mut) {
+    mds->locker->drop_locks(mut);
+    mut->cleanup();
+    delete mut;
+  }
 
   // re-eval imported caps
   for (map<CInode*, map<client_t,Capability::Export> >::iterator p = peer_exports.begin();
