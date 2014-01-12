@@ -654,7 +654,6 @@ public:
   void clear_scatter_dirty();  // on rejoin ack
 
   void start_scatter(ScatterLock *lock);
-  void start_scatter_gather(ScatterLock *lock, int auth=-1);
   void finish_scatter_update(ScatterLock *lock, CDir *dir,
 			     version_t inode_version, version_t dir_accounted_version);
   void finish_scatter_gather_update(int type);
