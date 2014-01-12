@@ -142,6 +142,8 @@ protected:
     list<ScatterLock*> updated_scatterlocks;
     map<client_t,entity_inst_t> client_map;
     map<CInode*, map<client_t,Capability::Export> > peer_exports;
+    Mutation *mut;
+    import_state_t() : mut(NULL) {}
   };
 
   map<dirfrag_t, import_state_t>  import_state;
@@ -276,7 +278,7 @@ public:
   void export_sessions_flushed(CDir *dir, uint64_t tid);
   void export_go(CDir *dir);
   void export_go_synced(CDir *dir, uint64_t tid);
-  void export_try_cancel(CDir *dir);
+  void export_try_cancel(CDir *dir, bool notify_peer=true);
   void export_reverse(CDir *dir);
   void export_notify_abort(CDir *dir, set<CDir*>& bounds);
   void handle_export_ack(MExportDirAck *m);
