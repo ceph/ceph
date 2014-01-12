@@ -48,26 +48,28 @@ class MExportCapsAck;
 
 class EImportStart;
 
+struct Mutation;
 
 class Migrator {
 private:
   MDS *mds;
   MDCache *cache;
 
-  uint64_t last_export_tid;
   // -- exports --
 public:
   // export stages.  used to clean up intelligently if there's a failure.
-  const static int EXPORT_CANCELLED     = 0;  // cancelled
-  const static int EXPORT_DISCOVERING   = 1;  // dest is disovering export dir
-  const static int EXPORT_FREEZING      = 2;  // we're freezing the dir tree
-  const static int EXPORT_PREPPING      = 3;  // sending dest spanning tree to export bounds
-  const static int EXPORT_WARNING       = 4;  // warning bystanders of dir_auth_pending
-  const static int EXPORT_EXPORTING     = 5;  // sent actual export, waiting for ack
-  const static int EXPORT_LOGGINGFINISH = 6;  // logging EExportFinish
-  const static int EXPORT_NOTIFYING     = 7;  // waiting for notifyacks
+  const static int EXPORT_CANCELLED	= 0;  // cancelled
+  const static int EXPORT_LOCKING	= 1;  // acquiring locks
+  const static int EXPORT_DISCOVERING	= 2;  // dest is disovering export dir
+  const static int EXPORT_FREEZING	= 3;  // we're freezing the dir tree
+  const static int EXPORT_PREPPING	= 4;  // sending dest spanning tree to export bounds
+  const static int EXPORT_WARNING	= 5;  // warning bystanders of dir_auth_pending
+  const static int EXPORT_EXPORTING	= 6;  // sent actual export, waiting for ack
+  const static int EXPORT_LOGGINGFINISH	= 7;  // logging EExportFinish
+  const static int EXPORT_NOTIFYING	= 8;  // waiting for notifyacks
   static const char *get_export_statename(int s) {
     switch (s) {
+    case EXPORT_LOCKING: return "locking";
     case EXPORT_DISCOVERING: return "discovering";
     case EXPORT_FREEZING: return "freezing";
     case EXPORT_PREPPING: return "prepping";
@@ -85,11 +87,12 @@ protected:
     int state;
     int peer;
     uint64_t tid;
-    set<SimpleLock*> locks;
     set<int> warning_ack_waiting;
     set<int> notify_ack_waiting;
     map<inodeno_t,map<client_t,Capability::Import> > peer_imported;
     list<Context*> waiting_for_finish;
+    Mutation *mut;
+    export_state_t() : mut(NULL) {}
   };
 
   map<CDir*, export_state_t>  export_state;
@@ -145,7 +148,7 @@ protected:
 
 public:
   // -- cons --
-  Migrator(MDS *m, MDCache *c) : mds(m), cache(c), last_export_tid(0) {}
+  Migrator(MDS *m, MDCache *c) : mds(m), cache(c) {}
 
   void dispatch(Message*);
 
@@ -224,6 +227,7 @@ public:
   // -- import/export --
   // exporter
  public:
+  void dispatch_export_dir(MDRequest *mdr);
   void export_dir(CDir *dir, int dest);
   void export_empty_import(CDir *dir);
 
@@ -278,7 +282,6 @@ public:
   void handle_export_ack(MExportDirAck *m);
   void export_logged_finish(CDir *dir);
   void handle_export_notify_ack(MExportDirNotifyAck *m);
-  void export_unlock(CDir *dir);
   void export_finish(CDir *dir);
 
   void export_freeze_finish(CDir *dir) {

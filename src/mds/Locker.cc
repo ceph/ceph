@@ -1262,24 +1262,15 @@ bool Locker::rdlock_try_set(set<SimpleLock*>& locks)
   return true;
 }
 
-void Locker::rdlock_take_set(set<SimpleLock*>& locks)
+void Locker::rdlock_take_set(set<SimpleLock*>& locks, Mutation *mut)
 {
   dout(10) << "rdlock_take_set " << locks << dendl;
-  for (set<SimpleLock*>::iterator p = locks.begin(); p != locks.end(); ++p)
-    (*p)->get_rdlock();
-}
-
-void Locker::rdlock_finish_set(set<SimpleLock*>& locks)
-{
-  dout(10) << "rdlock_finish_set " << locks << dendl;
   for (set<SimpleLock*>::iterator p = locks.begin(); p != locks.end(); ++p) {
-    bool need_issue = false;
-    rdlock_finish(*p, 0, &need_issue);
-    if (need_issue)
-      issue_caps((CInode*)(*p)->get_parent());
+    (*p)->get_rdlock();
+    mut->rdlocks.insert(*p);
+    mut->locks.insert(*p);
   }
 }
-
 
 // ------------------
 // wrlock
