@@ -1430,7 +1430,7 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
       assert(mdr->more()->waiting_on_slave.count(from));
       mdr->more()->waiting_on_slave.erase(from);
       assert(mdr->more()->waiting_on_slave.empty());
-      dispatch_client_request(mdr);
+      mdcache->dispatch_request(mdr);
     }
     break;
     
@@ -1448,7 +1448,7 @@ void Server::handle_slave_request_reply(MMDSSlaveRequest *m)
       assert(mdr->more()->waiting_on_slave.count(from));
       mdr->more()->waiting_on_slave.erase(from);
       assert(mdr->more()->waiting_on_slave.empty());
-      dispatch_client_request(mdr);
+      mdcache->dispatch_request(mdr);
     }
     break;
 
@@ -1771,7 +1771,7 @@ void Server::handle_slave_auth_pin_ack(MDRequest *mdr, MMDSSlaveRequest *ack)
 
   // go again?
   if (mdr->more()->waiting_on_slave.empty())
-    dispatch_client_request(mdr);
+    mdcache->dispatch_request(mdr);
   else 
     dout(10) << "still waiting on slaves " << mdr->more()->waiting_on_slave << dendl;
 }

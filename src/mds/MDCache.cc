@@ -8759,6 +8759,9 @@ void MDCache::dispatch_request(MDRequest *mdr)
     case CEPH_MDS_OP_FRAGMENTDIR:
       dispatch_fragment_dir(mdr);
       break;
+    case CEPH_MDS_OP_EXPORTDIR:
+      migrator->dispatch_export_dir(mdr);
+      break;
     default:
       assert(0);
     }

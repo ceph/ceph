@@ -237,6 +237,9 @@ struct MDRequest : public Mutation {
 
     list<Context*> waiting_for_finish;
 
+    // export
+    CDir* export_dir;
+
     More() : 
       srcdn_auth_mds(-1),
       src_reanchor_atid(0), dst_reanchor_atid(0), inode_import_v(0),
