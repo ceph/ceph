@@ -133,8 +133,7 @@ public:
   void rdlock_finish(SimpleLock *lock, Mutation *mut, bool *pneed_issue);
   bool can_rdlock_set(set<SimpleLock*>& locks);
   bool rdlock_try_set(set<SimpleLock*>& locks);
-  void rdlock_take_set(set<SimpleLock*>& locks);
-  void rdlock_finish_set(set<SimpleLock*>& locks);
+  void rdlock_take_set(set<SimpleLock*>& locks, Mutation *mut);
 
   void wrlock_force(SimpleLock *lock, Mutation *mut);
   bool wrlock_start(SimpleLock *lock, MDRequest *mut, bool nowait=false);
