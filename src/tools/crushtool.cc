@@ -600,8 +600,28 @@ int main(int argc, const char **argv)
       lower_items.swap(cur_items);
       lower_weights.swap(cur_weights);
     }
+
+    {
+      ostringstream oss;
+      vector<__u32> weights(crush.get_max_devices(), 0x10000);
+      crush.dump_tree(weights, &oss, NULL);
+      dout(1) << "\n" << oss.str() << dendl;
+    }
+
     string root = layers.back().size == 0 ? layers.back().name :
       string(layers.back().name) + "0";
+
+    {
+      set<int> roots;
+      crush.find_roots(roots);
+      if (roots.size() > 1)
+	dout(1)	<< "The crush rulesets will use the root " << root << "\n"
+		<< "and ignore the others.\n"
+		<< "There are " << roots.size() << " roots, they can be\n"
+		<< "grouped into a single root by appending something like:\n"
+		<< "  root straw 0\n"
+		<< dendl;
+    }
     
     if (OSDMap::build_simple_crush_rulesets(g_ceph_context, crush, root, &cerr))
       exit(EXIT_FAILURE);
