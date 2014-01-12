@@ -3812,7 +3812,6 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
     dout(15) << " add_strong_dirfrag " << *dir << dendl;
     rejoin->add_strong_dirfrag(dir->dirfrag(), dir->get_replica_nonce(), dir->get_dir_rep());
     dir->state_set(CDir::STATE_REJOINING);
-    dir->mseq = 0;
 
     for (CDir::map_t::iterator p = dir->items.begin();
 	 p != dir->items.end();
@@ -3974,15 +3973,11 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
        ++p) {
     CInode *in = get_inode(p->first);
     assert(in);
-    if (survivor) {
-      in->start_scatter_gather(&in->filelock, from);
-      in->start_scatter_gather(&in->nestlock, from);
-    } else {
-      rejoin_potential_updated_scatterlocks.insert(in);
-    }
     in->decode_lock_state(CEPH_LOCK_IFILE, p->second.file);
     in->decode_lock_state(CEPH_LOCK_INEST, p->second.nest);
     in->decode_lock_state(CEPH_LOCK_IDFT, p->second.dft);
+    if (!survivor)
+      rejoin_potential_updated_scatterlocks.insert(in);
   }
 
   // recovering peer may send incorrect dirfrags here.  we need to
