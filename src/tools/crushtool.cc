@@ -524,7 +524,7 @@ int main(int argc, const char **argv)
     for (vector<layer_t>::iterator p = layers.begin(); p != layers.end(); ++p, type++) {
       layer_t &l = *p;
 
-      dout(0) << "layer " << type
+      dout(2) << "layer " << type
 	      << "  " << l.name
 	      << "  bucket type " << l.buckettype
 	      << "  " << l.size 
@@ -548,8 +548,8 @@ int main(int argc, const char **argv)
       vector<int> cur_weights;
       unsigned lower_pos = 0;  // lower pos
 
-      dout(0) << "lower_items " << lower_items << dendl;
-      dout(0) << "lower_weights " << lower_weights << dendl;
+      dout(2) << "lower_items " << lower_items << dendl;
+      dout(2) << "lower_weights " << lower_weights << dendl;
 
       int i = 0;
       while (1) {
@@ -568,7 +568,7 @@ int main(int argc, const char **argv)
 	  weights[j] = lower_weights[lower_pos];
 	  weight += weights[j];
 	  lower_pos++;
-	  dout(0) << "  item " << items[j] << " weight " << weights[j] << dendl;
+	  dout(2) << "  item " << items[j] << " weight " << weights[j] << dendl;
 	}
 
 	crush_bucket *b = crush_make_bucket(buckettype, CRUSH_HASH_DEFAULT, type, j, items, weights);
@@ -576,7 +576,7 @@ int main(int argc, const char **argv)
 	int id;
 	int r = crush_add_bucket(crush.crush, 0, b, &id);
 	if (r < 0) {
-		dout(0) << "Couldn't add root bucket: " << strerror(-r) << dendl;
+	  dout(2) << "Couldn't add bucket: " << strerror(-r) << dendl;
 	}
 	rootid = id;
 
@@ -590,7 +590,7 @@ int main(int argc, const char **argv)
 	snprintf(name, sizeof(name), format, i);
 	crush.set_item_name(id, name);
 
-	dout(0) << " in bucket " << id << " '" << name << "' size " << j << " weight " << weight << dendl;
+	dout(2) << " in bucket " << id << " '" << name << "' size " << j << " weight " << weight << dendl;
 
 	cur_items.push_back(id);
 	cur_weights.push_back(weight);
