@@ -174,7 +174,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
 			   set<SimpleLock*> &wrlocks,
 			   set<SimpleLock*> &xlocks,
 			   map<SimpleLock*,int> *remote_wrlocks,
-			   CInode *auth_pin_freeze)
+			   CInode *auth_pin_freeze,
+			   bool auth_pin_nonblock)
 {
   if (mdr->done_locking &&
       !mdr->is_slave()) {  // not on slaves!  master requests locks piecemeal.
@@ -300,10 +301,15 @@ bool Locker::acquire_locks(MDRequest *mdr,
     }
     if (!object->can_auth_pin()) {
       // wait
-      dout(10) << " can't auth_pin (freezing?), waiting to authpin " << *object << dendl;
-      object->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
       mds->locker->drop_locks(mdr);
       mdr->drop_local_auth_pins();
+      if (auth_pin_nonblock) {
+	dout(10) << " can't auth_pin (freezing?) " << *object << ", nonblocking" << dendl;
+	mdr->aborted = true;
+	return false;
+      }
+      dout(10) << " can't auth_pin (freezing?), waiting to authpin " << *object << dendl;
+      object->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
       return false;
     }
   }
@@ -349,6 +355,8 @@ bool Locker::acquire_locks(MDRequest *mdr,
 	  (*q)->set_object_info(req->get_authpin_freeze());
 	mdr->pin(*q);
       }
+      if (auth_pin_nonblock)
+	req->mark_nonblock();
       mds->send_message_mds(req, p->first);
 
       // put in waiting list
