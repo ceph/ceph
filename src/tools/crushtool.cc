@@ -26,6 +26,7 @@
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
+#include "osd/OSDMap.h"
 #include "crush/CrushWrapper.h"
 #include "crush/CrushCompiler.h"
 #include "crush/CrushTester.h"
@@ -518,9 +519,9 @@ int main(int argc, const char **argv)
       lower_items.push_back(i);
       lower_weights.push_back(0x10000);
     }
+    crush.set_max_devices(num_osds);
 
     int type = 1;
-    int rootid = 0;
     for (vector<layer_t>::iterator p = layers.begin(); p != layers.end(); ++p, type++) {
       layer_t &l = *p;
 
@@ -578,7 +579,6 @@ int main(int argc, const char **argv)
 	if (r < 0) {
 	  dout(2) << "Couldn't add bucket: " << strerror(-r) << dendl;
 	}
-	rootid = id;
 
 	char format[20];
 	format[sizeof(format)-1] = '\0';
@@ -600,16 +600,11 @@ int main(int argc, const char **argv)
       lower_items.swap(cur_items);
       lower_weights.swap(cur_weights);
     }
+    string root = layers.back().size == 0 ? layers.back().name :
+      string(layers.back().name) + "0";
     
-    // make a generic rules
-    int ruleset=1;
-    crush_rule *rule = crush_make_rule(3, ruleset, CEPH_PG_TYPE_REPLICATED, 2, 2);
-    assert(rule);
-    crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-    crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSELEAF_FIRSTN, CRUSH_CHOOSE_N, 1);
-    crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-    int rno = crush_add_rule(crush.crush, rule, -1);
-    crush.set_rule_name(rno, "data");
+    if (OSDMap::build_simple_crush_rulesets(g_ceph_context, crush, root, &cerr))
+      exit(EXIT_FAILURE);
 
     modified = true;
   }
