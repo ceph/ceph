@@ -730,3 +730,8 @@ int main(int argc, const char **argv)
 
   return 0;
 }
+/*
+ * Local Variables:
+ * compile-command: "cd .. ; make crushtool && test/run-cli-tests"
+ * End:
+ */
