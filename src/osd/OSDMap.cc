@@ -1964,7 +1964,7 @@ int OSDMap::_build_crush_types(CrushWrapper& crush)
 }
 
 int OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
-				   int nosd, stringstream *ss)
+				   int nosd, ostream *ss)
 {
   crush.create();
 
@@ -2007,7 +2007,7 @@ int OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
 
 int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
 					     CrushWrapper& crush,
-					     stringstream *ss)
+					     ostream *ss)
 {
   const md_config_t *conf = cct->_conf;
 
