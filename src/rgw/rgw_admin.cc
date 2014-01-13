@@ -1951,7 +1951,6 @@ next:
             cerr << "failed to read user buckets: " << cpp_strerror(-ret) << std::endl;
             return -ret;
           }
-
           map<string, RGWBucketEnt>& buckets = user_buckets.get_buckets();
           for (map<string, RGWBucketEnt>::iterator i = buckets.begin();
                i != buckets.end();
