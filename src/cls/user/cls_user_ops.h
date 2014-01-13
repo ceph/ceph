@@ -131,5 +131,24 @@ struct cls_user_get_header_ret {
 };
 WRITE_CLASS_ENCODER(cls_user_get_header_ret)
 
+struct cls_user_complete_stats_sync_op {
+  utime_t time;
+
+  cls_user_complete_stats_sync_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(time, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(time, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_user_complete_stats_sync_op)
+
 
 #endif

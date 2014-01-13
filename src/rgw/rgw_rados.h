@@ -1446,6 +1446,7 @@ public:
                             string *out_marker, bool *truncated);
   int cls_user_add_bucket(rgw_obj& obj, const cls_user_bucket_entry& entry);
   int cls_user_update_buckets(rgw_obj& obj, list<cls_user_bucket_entry>& entries);
+  int cls_user_complete_stats_sync(rgw_obj& obj);
   int cls_user_add_bucket(rgw_obj& obj, list<cls_user_bucket_entry>& entries);
   int cls_user_remove_bucket(rgw_obj& obj, const cls_user_bucket& bucket);
 
