@@ -1987,7 +1987,7 @@ next:
       return -ret;
     }
 
-    encode_json("stats", header.stats, formatter);
+    encode_json("header", header, formatter);
     formatter->flush(cout);
   }
 
