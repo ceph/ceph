@@ -6,10 +6,8 @@ The :term:`Ceph Storage Cluster` provides the basic storage service that allows
 :term:`Ceph` to uniquely deliver **object, block, and file storage** in one
 unified system. However, you are not limited to using the RESTful, block, or
 POSIX interfaces. Based upon :abbr:`RADOS (Reliable Autonomic Distributed Object
-Store)`, the ``librados`` API, enables you to create your own interface to the
-Ceph Storage Cluster. In fact, :term:`Ceph Object Storage`, :term:`Ceph Block
-Device` and :term:`Ceph Filesystem` all use ``librados``, or the same general
-functionality of ``librados`` to access the Ceph Storage Cluster.
+Store)`, the ``librados`` API enables you to create your own interface to the
+Ceph Storage Cluster.
 
 The ``librados`` API enables you to interact with the two types of daemons in
 the Ceph Storage Cluster: 
@@ -40,8 +38,8 @@ and Java. Your client app needs to import ``librados``, which means it must be
 installed on your client host first.
 
 
-Getting ``librados`` for C/C++ and Python
------------------------------------------
+Getting librados for C/C++ and Python
+-------------------------------------
 
 To install ``librados`` for C/C++ and Python, execute the following for 
 Debian/Ubuntu distributions::
@@ -62,8 +60,8 @@ For Python, you can find the required library under ``/usr/share/pyshared``. ::
 	ls /usr/share/pyshared
 
 
-Getting ``librados`` for Java
------------------------------
+Getting librados for Java
+-------------------------
 
 To install ``librados`` for Java, you need to execute the following procedure:
 
@@ -204,18 +202,24 @@ it and connecting to the cluster might look something like this:
 
 	main (const char argv**) 
 	{
-		/* Declare the cluster handle. */
+
+		/* Declare the cluster handle and required arguments. */
 		rados_t cluster;
+		char cluster_name[] = "ceph";
+		char user_name[] = "client.admin";
+		uint64_t flags; 
+	
+		/* Initialize the cluster handle with the "ceph" cluster name and the "client.admin" user */  
 		int err;
-      
-		/* Initialize the cluster handle with the "admin" user */  
-		err = rados_create(&cluster, "admin");
+		err = rados_create2(&cluster, cluster_name, user_name, flags);
+
 		if (err < 0) {
 			fprintf(stderr, "%s: Couldn't create the cluster handle! %s\n", argv[0], strerror(-err));
 			exit(EXIT_FAILURE);
 		} else {
 			printf("\nCreated a cluster handle.\n");
 		}
+
 
 		/* Read a Ceph configuration file to configure the cluster handle. */
 		err = rados_conf_read_file(cluster, "/etc/ceph/ceph.conf");
@@ -266,14 +270,18 @@ initialize a ``Rados`` cluster handle object:
 
 	int main(int argc, const char **argv)
 	{
+
 		int ret = 0;
 
-		/* Declare the cluster handle. */	
+		/* Declare the cluster handle and required variables. */	
 		librados::Rados cluster;
-		
-		/* Initialize the cluster handle with the "admin" user */  
+		char cluster_name[] = "ceph";
+		char user_name[] = "client.admin";
+		uint64_t flags; 
+	
+		/* Initialize the cluster handle with the "ceph" cluster name and "client.admin" user */ 
 		{
-			ret = cluster.init("admin");
+			ret = cluster.init2(user_name, cluster_name, flags);
 			if (ret < 0) {
 				std::cerr << "Couldn't initialize the cluster handle! error " << ret << std::endl;
 				ret = EXIT_FAILURE;
@@ -336,7 +344,7 @@ Python Example
 --------------
 
 Python uses the ``admin`` user and the ``ceph`` cluster name by default. The
-wrapper converts C-based errors into exceptions.
+Python binding converts C-based errors into exceptions.
 
 
 .. code-block:: python
@@ -344,7 +352,7 @@ wrapper converts C-based errors into exceptions.
 	import rados
 
 	try:
-		cluster = rados.Rados()
+		cluster = rados.Rados(None, "client.admin", "ceph")
 		print "Created cluster handle."
 
 		cluster.conf_read_file("/etc/ceph/ceph.conf")
@@ -358,11 +366,16 @@ wrapper converts C-based errors into exceptions.
 		print "Connected to the cluster."
 
 
+Execute the example to verify that it connects to your cluster. ::
+
+	python ceph-client.py
+
+
 Java Example
 ------------
 
 Java requires you to specify the user ID, and uses the ``ceph`` cluster name by
-default . The wrapper converts C-based errors into exceptions.
+default . The Java binding converts C-based errors into exceptions.
 
 .. code-block:: java
 
@@ -375,8 +388,8 @@ default . The wrapper converts C-based errors into exceptions.
 		public static void main (String args[]){
 	
 			try {
-				Rados cluster = new Rados("admin");
-				System.out.println("Created a handle.");            
+				cluster = rados.Rados(None, "client.admin", "ceph")
+				print "Created cluster handle."
 	            
 				File f = new File("/etc/ceph/ceph.conf");
 				cluster.confReadFile(f);
@@ -392,6 +405,13 @@ default . The wrapper converts C-based errors into exceptions.
 	}
 
 
+Compile the source; then, run it. If you have copied the JAR to
+``/usr/share/java`` and sym linked from your ``ext`` directory, you won't need
+to specify the classpath. For example::
+
+	javac CephClient.java
+	java CephClient
+
 
 Step 3: Creating an I/O Context
 ===============================
@@ -400,7 +420,8 @@ Once your app has a cluster handle and a connection to a Ceph Storage Cluster,
 you may create an I/O Context and begin reading and writing data. An I/O Context
 binds the connection to a specific pool. The user ID must have appropriate
 `CAPS`_ permissions to access the specified pool. For example, a user with read
-access but not write access will only be able to read data.
+access but not write access will only be able to read data. I/O Context 
+functionality includes:
 
 - Write/read data and extended attributes
 - List and iterate over objects and extended attributes
@@ -432,18 +453,27 @@ access but not write access will only be able to read data.
                 |               |               |
                 |   read ack    |               |
                 |<--------------+---------------|
+                |               |               |
+                |  remove data  |               |
+                |---------------+-------------->|
+                |               |               |
+                |  remove ack   |               |
+                |<--------------+---------------|
+
 
 
 RADOS enables you to interact both synchronously and asynchronously. Once your
 app has an I/O Context, read/write operations only require you to know the
 object/xattr name. The CRUSH algorithm encapsulated in ``librados`` uses the
-cluster map to identify the appropriate OSD. The OSDs handle the replication, 
+cluster map to identify the appropriate OSD. OSD daemons handle the replication,
 as described in `Smart Daemons Enable Hyperscale`_. The mapping of objects to
-placement groups is also performed by the library as described in 
-`Calculating PG IDs`_.
+placement groups is also performed by the library as described in  `Calculating
+PG IDs`_.
 
 The following examples use the default ``data`` pool. However, you may also
-use the API to list pools, ensure they exist, or create and delete pools.
+use the API to list pools, ensure they exist, or create and delete pools. For 
+the write operations, the examples illustrate how to use synchronous mode. For
+the read operations, the examples illustrate how to use asynchronous mode.
 
 .. important:: Use caution when deleting pools with this API. If you delete
    a pool, the pool and ALL DATA in the pool will be lost.
@@ -462,7 +492,8 @@ C Example
 	main (const char argv**) 
 	{
 		/* Continued from previous C example, where cluster handle and
-		   connection are established. First declare an I/O Context. */
+		 * connection are established. First declare an I/O Context. 
+		 */
 
 		rados_ioctx_t io;
 		char *poolname = "data";
@@ -475,7 +506,8 @@ C Example
 		} else {
 			printf("\nCreated I/O context.\n");
 		}
-	
+
+		/* Write data to the cluster synchronously. */	
 		err = rados_write_full(io, "hw", "Hello World!", 12);
 		if (err < 0) {
 			fprintf(stderr, "%s: Cannot write object. %s %s\n", argv[0], poolname, strerror(-err));
@@ -497,9 +529,24 @@ C Example
 			printf("\nWrote \"en_US\" to xattr \"lang\" for object \"hw\".\n");
 		}
 	
-	
+
+		/* Read data from the cluster asynchronously. 
+		 * First, set up asynchronous I/O completion. *
+		 */
+		rados_completion_t comp;
+		err = rados_aio_create_completion(NULL, NULL, NULL, &comp);
+		if (err < 0) {
+			fprintf(stderr, "%s: Could not create aio completion: %s\n", argv[0], strerror(-err));
+			rados_ioctx_destroy(io);
+			rados_shutdown(cluster);
+			exit(1);
+		} else {
+			printf("\nCreated AIO completion.\n");
+		}
+
+		/* Next, read data using rados_aio_read. */
 		char read_res[100];
-		err = rados_read(io, "hw", read_res, 12, 0);
+		err = rados_aio_read(io, "hw", comp, read_res, 12, 0);
 		if (err < 0) {
 			fprintf(stderr, "%s: Cannot read object. %s %s\n", argv[0], poolname, strerror(-err));
 			rados_ioctx_destroy(io);
@@ -508,6 +555,13 @@ C Example
 		} else {
 			printf("\nRead object \"hw\". The contents are:\n %s \n", read_res);
 		}
+		
+		/* Wait for the operation to complete */
+		rados_wait_for_complete(comp);
+		
+		/* Release the asynchronous I/O complete handle to avoid memory leaks. */
+		rados_aio_release(comp);		
+		
 	
 		char xattr_res[100];
 		err = rados_getxattr(io, "hw", "lang", xattr_res, 5);
@@ -544,11 +598,152 @@ C Example
 
 
 
+C++ Example
+-----------
+
+
+.. code-block:: c++
+
+	#include <iostream>
+	#include <string>
+	#include <rados/librados.hpp>
+
+	int main(int argc, const char **argv)
+	{
+
+		/* Continued from previous C++ example, where cluster handle and
+		 * connection are established. First declare an I/O Context. 
+		 */
+
+		librados::IoCtx io_ctx;
+		const char *pool_name = "data";
+		
+		{
+			ret = cluster.ioctx_create(pool_name, io_ctx);
+			if (ret < 0) {
+				std::cerr << "Couldn't set up ioctx! error " << ret << std::endl;
+				exit(EXIT_FAILURE);
+			} else {
+				std::cout << "Created an ioctx for the pool." << std::endl;
+			}
+		}
+		
+
+		/* Write an object synchronously. */
+		{
+			librados::bufferlist bl;
+			bl.append("Hello World!");
+			ret = io_ctx.write_full("hw", bl);
+			if (ret < 0) {
+				std::cerr << "Couldn't write object! error " << ret << std::endl;
+				exit(EXIT_FAILURE);
+			} else {
+				std::cout << "Wrote new object 'hw' " << std::endl;
+			}
+		}
+		
+		
+		/*
+		 * Add an xattr to the object.
+		 */
+		{
+			librados::bufferlist lang_bl;
+			lang_bl.append("en_US");
+			ret = io_ctx.setxattr("hw", "lang", lang_bl);
+			if (ret < 0) {
+				std::cerr << "failed to set xattr version entry! error "
+				<< ret << std::endl;
+				exit(EXIT_FAILURE);
+			} else {
+				std::cout << "Set the xattr 'lang' on our object!" << std::endl;
+			}
+		}
+		
+		
+		/*
+		 * Read the object back asynchronously.
+		 */
+		{
+			librados::bufferlist read_buf;
+			int read_len = 4194304;
+
+			//Create I/O Completion.
+			librados::AioCompletion *read_completion = librados::Rados::aio_create_completion();
+			
+			//Send read request.
+			ret = io_ctx.aio_read("hw", read_completion, &read_buf, read_len, 0);
+			if (ret < 0) {
+				std::cerr << "Couldn't start read object! error " << ret << std::endl;
+				exit(EXIT_FAILURE);
+			}
+
+			// Wait for the request to complete, and check that it succeeded.
+			read_completion->wait_for_complete();
+			ret = read_completion->get_return_value();
+			if (ret < 0) {
+				std::cerr << "Couldn't read object! error " << ret << std::endl;
+				exit(EXIT_FAILURE);
+			} else {
+				std::cout << "Read object hw asynchronously with contents.\n"
+				<< read_buf.c_str() << std::endl;
+			}
+		}
+		
+		
+		/*
+		 * Read the xattr.
+		 */
+		{
+			librados::bufferlist lang_res;
+			ret = io_ctx.getxattr("hw", "lang", lang_res);
+			if (ret < 0) {
+				std::cerr << "failed to get xattr version entry! error "
+				<< ret << std::endl;
+				exit(EXIT_FAILURE);
+			} else {
+				std::cout << "Got the xattr 'lang' from object hw!"
+				<< lang_res.c_str() << std::endl;
+			}
+		}
+		
+		
+		/*
+		 * Remove the xattr.
+		 */
+		{
+			ret = io_ctx.rmxattr("hw", "lang");
+			if (ret < 0) {
+				std::cerr << "Failed to remove xattr! error "
+				<< ret << std::endl;
+				exit(EXIT_FAILURE);
+			} else {
+				std::cout << "Removed the xattr 'lang' from our object!" << std::endl;
+			}
+		}
+		
+		/*
+		 * Remove the object.
+		 */
+		{
+			ret = io_ctx.remove("hw");
+			if (ret < 0) {
+				std::cerr << "Couldn't remove object! error " << ret << std::endl;
+				exit(EXIT_FAILURE);
+			} else {
+				std::cout << "Removed object 'hw'." << std::endl;
+			}
+		}
+	}
 
 
 
 Step 4: Closing Sessions
 ========================
+
+Once you are finished with your I/O Context and cluster handle, you should
+close the connection and shutdown the handle. For asynchronous I/O, you should
+also ensure that your pending operations have completed.
+
 
 
 
