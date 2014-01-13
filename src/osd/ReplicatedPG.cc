@@ -2093,13 +2093,12 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
 {
   // load clone info
   bufferlist bl;
-  ObjectContextRef obc;
-  int r = find_object_context(coid, &obc, false, NULL);
-  if (r == -ENOENT || coid.snap != obc->obs.oi.soid.snap) {
+  int r;
+  ObjectContextRef obc = get_object_context(coid, false, NULL);
+  if (!obc) {
     derr << __func__ << "could not find coid " << coid << dendl;
     assert(0);
   }
-  assert(r == 0);
 
   object_info_t &coi = obc->obs.oi;
   set<snapid_t> old_snaps(coi.snaps.begin(), coi.snaps.end());
