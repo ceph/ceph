@@ -10022,8 +10022,10 @@ void MDCache::handle_discover(MDiscover *dis)
       fg = cur->pick_dirfrag(dis->get_dentry(i));
     } else {
       // requester explicity specified the frag
-      fg = dis->get_base_dir_frag();
       assert(dis->wants_base_dir() || dis->get_want_ino() || MDS_INO_IS_BASE(dis->get_base_ino()));
+      fg = dis->get_base_dir_frag();
+      if (!cur->dirfragtree.is_leaf(fg))
+	fg = cur->dirfragtree[fg.value()];
     }
     CDir *curdir = cur->get_dirfrag(fg);
 
@@ -10069,15 +10071,19 @@ void MDCache::handle_discover(MDiscover *dis)
     
     // is dir frozen?
     if (curdir->is_frozen()) {
-      if (reply->is_empty()) {
-	dout(7) << *curdir << " is frozen, empty reply, waiting" << dendl;
-	curdir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
-	reply->put();
-	return;
-      } else {
+      if (dis->wants_base_dir() && dis->get_base_dir_frag() != curdir->get_frag()) {
+	dout(7) << *curdir << " is frozen, dirfrag mismatch, stopping" << dendl;
+	reply->set_flag_error_dir();
+	break;
+      }
+      if (!reply->is_empty()) {
 	dout(7) << *curdir << " is frozen, non-empty reply, stopping" << dendl;
 	break;
       }
+      dout(7) << *curdir << " is frozen, empty reply, waiting" << dendl;
+      curdir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
+      reply->put();
+      return;
     }
     
     // add dir
@@ -10306,9 +10312,13 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     // dir
     frag_t fg;
     CDir *curdir = 0;
-    if (next == MDiscoverReply::DIR)
+    if (next == MDiscoverReply::DIR) {
       curdir = add_replica_dir(p, cur, m->get_source().num(), finished);
-    else {
+      if (cur->ino() == m->get_base_ino() && curdir->get_frag() != m->get_base_dir_frag()) {
+	assert(m->get_wanted_base_dir());
+	cur->take_dir_waiting(m->get_base_dir_frag(), finished);
+      }
+    } else {
       // note: this can only happen our first way around this loop.
       if (p.end() && m->is_flag_error_dn()) {
 	fg = cur->pick_dirfrag(m->get_error_dentry());
@@ -10350,7 +10360,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
       if (cur->is_waiting_for_dir(fg)) {
 	if (cur->is_auth())
 	  cur->take_waiting(CInode::WAIT_DIR, finished);
-	else if (dir)
+	else if (dir || !cur->dirfragtree.is_leaf(fg))
 	  cur->take_dir_waiting(fg, finished);
 	else
 	  discover_dir_frag(cur, fg, 0, who);
