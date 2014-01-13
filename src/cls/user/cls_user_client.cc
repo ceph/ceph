@@ -19,6 +19,15 @@ void cls_user_set_buckets(librados::ObjectWriteOperation& op, list<cls_user_buck
   op.exec("user", "set_buckets_info", in);
 }
 
+void cls_user_complete_stats_sync(librados::ObjectWriteOperation& op)
+{
+  bufferlist in;
+  cls_user_complete_stats_sync_op call;
+  call.time = ceph_clock_now(NULL);
+  ::encode(call, in);
+  op.exec("user", "complete_stats_sync", in);
+}
+
 void cls_user_remove_bucket(librados::ObjectWriteOperation& op, const cls_user_bucket& bucket)
 {
   bufferlist in;
