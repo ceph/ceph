@@ -5805,6 +5805,14 @@ int RGWRados::cls_user_update_buckets(rgw_obj& obj, list<cls_user_bucket_entry>&
   return 0;
 }
 
+int RGWRados::complete_sync_user_stats(const string& user_id)
+{
+  string buckets_obj_id;
+  rgw_get_buckets_obj(user_id, buckets_obj_id);
+  rgw_obj obj(zone.user_uid_pool, buckets_obj_id);
+  return cls_user_complete_stats_sync(obj);
+}
+
 int RGWRados::cls_user_complete_stats_sync(rgw_obj& obj)
 {
   bufferlist bl;
