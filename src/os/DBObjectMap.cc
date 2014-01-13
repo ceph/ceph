@@ -798,7 +798,7 @@ int DBObjectMap::clear_keys_header(const ghobject_t &oid,
     return r;
 
   // create new header
-  Header newheader = _generate_new_header(oid, Header());
+  Header newheader = generate_new_header(oid, Header());
   set_map_header(oid, *newheader, t);
   if (attrs.size())
     t->set(xattr_prefix(newheader), attrs);
