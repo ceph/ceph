@@ -751,6 +751,7 @@ protected:
 
   /// last backfill operation started
   hobject_t last_backfill_started;
+  bool new_backfill;
 
   int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
 				 PGBackend::RecoveryHandle *h);
@@ -816,6 +817,8 @@ protected:
 
   int recover_primary(int max, ThreadPool::TPHandle &handle);
   int recover_replicas(int max, ThreadPool::TPHandle &handle);
+  hobject_t earliest_peer_backfill() const;
+  bool all_peer_done() const;
   /**
    * @param work_started will be set to true if recover_backfill got anywhere
    * @returns the number of operations started
@@ -843,8 +846,8 @@ protected:
     );
 
   void prep_backfill_object_push(
-    hobject_t oid, eversion_t v, eversion_t have, ObjectContextRef obc,
-    int peer,
+    hobject_t oid, eversion_t v, ObjectContextRef obc,
+    vector<int> peer,
     PGBackend::RecoveryHandle *h);
   void send_remove_op(const hobject_t& oid, eversion_t v, int peer);
 
