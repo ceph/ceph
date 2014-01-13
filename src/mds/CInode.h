@@ -110,6 +110,7 @@ public:
   static const int PIN_DIRTYRSTAT =       21;
   static const int PIN_EXPORTINGCAPS =    22;
   static const int PIN_DIRTYPARENT =      23;
+  static const int PIN_DIRWAITER =        24;
 
   const char *pin_name(int p) {
     switch (p) {
@@ -135,6 +136,7 @@ public:
     case PIN_NEEDSNAPFLUSH: return "needsnapflush";
     case PIN_DIRTYRSTAT: return "dirtyrstat";
     case PIN_DIRTYPARENT: return "dirtyparent";
+    case PIN_DIRWAITER: return "dirwaiter";
     default: return generic_pin_name(p);
     }
   }
@@ -570,10 +572,17 @@ private:
     _decode_locks_state(p, is_new);
   }
 
-
   // -- waiting --
+protected:
+  map<frag_t, list<Context*> > waiting_on_dir;
+public:
+  void add_dir_waiter(frag_t fg, Context *c);
+  void take_dir_waiting(frag_t fg, list<Context*>& ls);
+  bool is_waiting_for_dir(frag_t fg) {
+    return waiting_on_dir.count(fg);
+  }
   void add_waiter(uint64_t tag, Context *c);
-
+  void take_waiting(uint64_t tag, list<Context*>& ls);
 
   // -- encode/decode helpers --
   void _encode_base(bufferlist& bl);
@@ -583,7 +592,6 @@ private:
   void _encode_locks_state_for_replica(bufferlist& bl);
   void _decode_locks_state(bufferlist::iterator& p, bool is_new);
   void _decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters);
-
 
   // -- import/export --
   void encode_export(bufferlist& bl);

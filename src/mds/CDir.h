@@ -531,7 +531,7 @@ protected:
   map< inodeno_t, list<Context*> > waiting_on_ino;
 
 public:
-  bool is_waiting_for_dentry(const char *dname, snapid_t snap) {
+  bool is_waiting_for_dentry(const string& dname, snapid_t snap) {
     return waiting_on_dentry.count(string_snap_t(dname, snap));
   }
   void add_dentry_waiter(const string& dentry, snapid_t snap, Context *c);

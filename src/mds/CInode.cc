@@ -1959,6 +1959,30 @@ bool CInode::is_freezing()
   return false;
 }
 
+void CInode::add_dir_waiter(frag_t fg, Context *c)
+{
+  if (waiting_on_dir.empty())
+    get(PIN_DIRWAITER);
+  waiting_on_dir[fg].push_back(c);
+  dout(10) << "add_dir_waiter frag " << fg << " " << c << " on " << *this << dendl;
+}
+
+void CInode::take_dir_waiting(frag_t fg, list<Context*>& ls)
+{
+  if (waiting_on_dir.empty())
+    return;
+
+  map<frag_t, list<Context*> >::iterator p = waiting_on_dir.find(fg);
+  if (p != waiting_on_dir.end()) {
+    dout(10) << "take_dir_waiting frag " << fg << " on " << *this << dendl;
+    ls.splice(ls.end(), p->second);
+    waiting_on_dir.erase(p);
+
+    if (waiting_on_dir.empty())
+      put(PIN_DIRWAITER);
+  }
+}
+
 void CInode::add_waiter(uint64_t tag, Context *c) 
 {
   dout(10) << "add_waiter tag " << std::hex << tag << std::dec << " " << c
@@ -1977,6 +2001,23 @@ void CInode::add_waiter(uint64_t tag, Context *c)
   }
   dout(15) << "taking waiter here" << dendl;
   MDSCacheObject::add_waiter(tag, c);
+}
+
+void CInode::take_waiting(uint64_t mask, list<Context*>& ls)
+{
+  if ((mask & WAIT_DIR) && !waiting_on_dir.empty()) {
+    // take all dentry waiters
+    while (!waiting_on_dir.empty()) {
+      map<frag_t, list<Context*> >::iterator p = waiting_on_dir.begin();
+      dout(10) << "take_waiting dirfrag " << p->first << " on " << *this << dendl;
+      ls.splice(ls.end(), p->second);
+      waiting_on_dir.erase(p);
+    }
+    put(PIN_DIRWAITER);
+  }
+
+  // waiting
+  MDSCacheObject::take_waiting(mask, ls);
 }
 
 bool CInode::freeze_inode(int auth_pin_allowance)
