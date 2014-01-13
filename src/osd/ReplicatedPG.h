@@ -697,8 +697,16 @@ protected:
   map<hobject_t, pg_stat_t> pending_backfill_updates;
 
   void dump_recovery_info(Formatter *f) const {
-    f->dump_int("backfill_target", get_backfill_target());
-    f->dump_int("waiting_on_backfill", waiting_on_backfill);
+    f->open_array_section("backfill_targets");
+    for (vector<int>::const_iterator p = backfill_targets.begin();
+        p != backfill_targets.end(); ++p)
+      f->dump_int("osd", *p);
+    f->close_section();
+    f->open_array_section("waiting_on_backfill");
+    for (set<int>::const_iterator p = waiting_on_backfill.begin();
+        p != waiting_on_backfill.end(); ++p)
+      f->dump_int("osd", *p);
+    f->close_section();
     f->dump_stream("last_backfill_started") << last_backfill_started;
     {
       f->open_object_section("backfill_info");
@@ -706,8 +714,14 @@ protected:
       f->close_section();
     }
     {
-      f->open_object_section("peer_backfill_info");
-      peer_backfill_info.dump(f);
+      f->open_array_section("peer_backfill_info");
+      for (map<int, BackfillInterval>::const_iterator pbi = peer_backfill_info.begin();
+          pbi != peer_backfill_info.end(); ++pbi) {
+        f->dump_int("osd", pbi->first);
+        f->open_object_section("BackfillInterval");
+          pbi->second.dump(f);
+        f->close_section();
+      }
       f->close_section();
     }
     {
@@ -737,6 +751,7 @@ protected:
 
   /// last backfill operation started
   hobject_t last_backfill_started;
+  bool new_backfill;
 
   int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
 				 PGBackend::RecoveryHandle *h);
@@ -802,6 +817,8 @@ protected:
 
   int recover_primary(int max, ThreadPool::TPHandle &handle);
   int recover_replicas(int max, ThreadPool::TPHandle &handle);
+  hobject_t earliest_peer_backfill() const;
+  bool all_peer_done() const;
   /**
    * @param work_started will be set to true if recover_backfill got anywhere
    * @returns the number of operations started
@@ -829,8 +846,8 @@ protected:
     );
 
   void prep_backfill_object_push(
-    hobject_t oid, eversion_t v, eversion_t have, ObjectContextRef obc,
-    int peer,
+    hobject_t oid, eversion_t v, ObjectContextRef obc,
+    vector<int> peer,
     PGBackend::RecoveryHandle *h);
   void send_remove_op(const hobject_t& oid, eversion_t v, int peer);
 
@@ -1023,6 +1040,8 @@ public:
 
   void do_osd_op_effects(OpContext *ctx);
 private:
+  hobject_t earliest_backfill() const;
+  bool check_src_targ(const hobject_t& soid, const hobject_t& toid) const;
   uint64_t temp_seq; ///< last id for naming temp objects
   coll_t get_temp_coll(ObjectStore::Transaction *t);
   hobject_t generate_temp_object();  ///< generate a new temp object name

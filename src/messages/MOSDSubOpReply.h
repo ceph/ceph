@@ -69,7 +69,7 @@ public:
     ::decode(peer_stat, p);
     ::decode(attrset, p);
 
-    if (poid.pool == -1)
+    if (!poid.is_max() && poid.pool == -1)
       poid.pool = pgid.pool();
   }
   virtual void encode_payload(uint64_t features) {

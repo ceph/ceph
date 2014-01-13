@@ -697,7 +697,7 @@ protected:
   void _dispatch(Message *m);
   void dispatch_op(OpRequestRef op);
 
-  void check_osdmap_features();
+  void check_osdmap_features(ObjectStore *store);
 
   // asok
   friend class OSDSocketHook;

@@ -47,9 +47,9 @@ public:
     ::decode(end, p);
 
     // handle hobject_t format upgrade
-    if (begin.pool == -1)
+    if (!begin.is_max() && begin.pool == -1)
       begin.pool = pgid.pool();
-    if (end.pool == -1)
+    if (!end.is_max() && end.pool == -1)
       end.pool = pgid.pool();
   }
 
