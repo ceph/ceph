@@ -1,3 +1,9 @@
+ceph (0.75-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Ken Dreyer <kdreyer@jenkins.front.sepia.ceph.com>  Mon, 13 Jan 2014 21:05:07 +0000
+
 ceph (0.74-1) stable; urgency=low
 
   * New upstream release 
