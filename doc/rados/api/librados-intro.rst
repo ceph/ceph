@@ -737,12 +737,86 @@ C++ Example
 
 
 
+Python Example
+--------------
+
+.. code-block:: python
+
+	print "\n\nI/O Context and Object Operations"
+	print "================================="
+	
+	print "\nCreating a context for the 'data' pool"
+	if cluster.pool_exists('data'):
+		ioctx = cluster.open_ioctx('data')
+	
+	print "\nWriting object 'hw' with contents 'Hello World!' to pool 'data'."
+	ioctx.write_full("hw", "Hello World!")
+	print "Writing XATTR 'lang' with value 'en_US' to object 'hw'"
+	ioctx.set_xattr("hw", "lang", "en_US")
+	
+	
+	print "\nWriting object 'bm' with contents 'Bonjour tout le monde!' to pool 'data'."
+	ioctx.write_full("bm", "Bonjour tout le monde!")
+	print "Writing XATTR 'lang' with value 'fr_FR' to object 'bm'"
+	ioctx.set_xattr("bm", "lang", "fr_FR")
+	
+	print "\nContents of object 'hw'\n------------------------"
+	print ioctx.read("hw")
+	
+	print "\n\nGetting XATTR 'lang' from object 'hw'"
+	print ioctx.get_xattr("hw", "lang")
+	
+	print "\nContents of object 'bm'\n------------------------"
+	print ioctx.read("bm")
+	
+	print "Getting XATTR 'lang' from object 'bm'"
+	print ioctx.get_xattr("bm", "lang")
+	
+	
+	print "\nRemoving object 'hw'"
+	ioctx.remove_object("hw")
+	
+	print "Removing object 'bm'"
+	ioctx.remove_object("bm")
+
+
+
 Step 4: Closing Sessions
 ========================
 
-Once you are finished with your I/O Context and cluster handle, you should
-close the connection and shutdown the handle. For asynchronous I/O, you should
-also ensure that your pending operations have completed.
+Once your app finishes with the I/O Context and cluster handle, the app should
+close the connection and shutdown the handle. For asynchronous I/O, the app
+should also ensure that pending asynchronous operations have completed.
+
+
+C Example
+---------
+
+.. code-block:: c
+
+	rados_ioctx_destroy(io);
+	rados_shutdown(cluster);	
+
+
+C++ Example
+-----------
+
+.. code-block:: c++
+
+	io_ctx.close();
+	cluster.shutdown();
+
+
+Python Example
+--------------
+
+.. code-block:: python
+
+	print "\nClosing the connection."
+	ioctx.close()
+	
+	print "Shutting down the handle."
+	cluster.shutdown()
 
 
 
