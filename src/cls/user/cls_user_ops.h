@@ -9,13 +9,15 @@
 
 struct cls_user_set_buckets_op {
   list<cls_user_bucket_entry> entries;
+  bool add;
   utime_t time; /* op time */
 
-  cls_user_set_buckets_op() {}
+  cls_user_set_buckets_op() : add(false) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(entries, bl);
+    ::encode(add, bl);
     ::encode(time, bl);
     ENCODE_FINISH(bl);
   }
@@ -23,6 +25,7 @@ struct cls_user_set_buckets_op {
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
     ::decode(entries, bl);
+    ::decode(add, bl);
     ::decode(time, bl);
     DECODE_FINISH(bl);
   }

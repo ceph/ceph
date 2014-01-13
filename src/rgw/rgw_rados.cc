@@ -5729,7 +5729,7 @@ int RGWRados::cls_user_sync_bucket_stats(rgw_obj& user_obj, rgw_bucket& bucket)
   list<cls_user_bucket_entry> entries;
   entries.push_back(entry);
 
-  r = cls_user_update_buckets(user_obj, entries);
+  r = cls_user_update_buckets(user_obj, entries, false);
   if (r < 0) {
     ldout(cct, 20) << "cls_user_update_buckets() returned " << r << dendl;
     return r;
@@ -5753,7 +5753,7 @@ int RGWRados::update_user_bucket_stats(const string& user_id, rgw_bucket& bucket
   rgw_get_buckets_obj(user_id, buckets_obj_id);
   rgw_obj obj(zone.user_uid_pool, buckets_obj_id);
 
-  int r = cls_user_update_buckets(obj, entries);
+  int r = cls_user_update_buckets(obj, entries, false);
   if (r < 0) {
     ldout(cct, 20) << "cls_user_update_buckets() returned " << r << dendl;
     return r;
@@ -5785,7 +5785,7 @@ int RGWRados::cls_user_list_buckets(rgw_obj& obj,
   return 0;
 }
 
-int RGWRados::cls_user_update_buckets(rgw_obj& obj, list<cls_user_bucket_entry>& entries)
+int RGWRados::cls_user_update_buckets(rgw_obj& obj, list<cls_user_bucket_entry>& entries, bool add)
 {
   bufferlist bl;
   librados::IoCtx io_ctx;
@@ -5797,7 +5797,7 @@ int RGWRados::cls_user_update_buckets(rgw_obj& obj, list<cls_user_bucket_entry>&
     return r;
 
   librados::ObjectWriteOperation op;
-  cls_user_set_buckets(op, entries);
+  cls_user_set_buckets(op, entries, add);
   r = io_ctx.operate(oid, &op);
   if (r < 0)
     return r;
@@ -5838,7 +5838,7 @@ int RGWRados::cls_user_add_bucket(rgw_obj& obj, const cls_user_bucket_entry& ent
   list<cls_user_bucket_entry> l;
   l.push_back(entry);
 
-  return cls_user_update_buckets(obj, l);
+  return cls_user_update_buckets(obj, l, true);
 }
 
 int RGWRados::cls_user_remove_bucket(rgw_obj& obj, const cls_user_bucket& bucket)
