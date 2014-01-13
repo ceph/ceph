@@ -4717,12 +4717,13 @@ class RGWGetUserStatsContext : public RGWGetUserHeader_CB {
 public:
   RGWGetUserStatsContext(RGWGetUserStats_CB *_cb) : cb(_cb) {}
   void handle_response(int r, cls_user_header& header) {
+    cls_user_stats& hs = header.stats;
     if (r >= 0) {
       RGWStorageStats stats;
 
-      stats.num_kb = (header.total_bytes + 1023) / 1024;
-      stats.num_kb_rounded = (header.total_bytes_rounded + 1023) / 1024;
-      stats.num_objects = header.total_entries;
+      stats.num_kb = (hs.total_bytes + 1023) / 1024;
+      stats.num_kb_rounded = (hs.total_bytes_rounded + 1023) / 1024;
+      stats.num_objects = hs.total_entries;
 
       cb->set_response(stats);
     }
@@ -4740,9 +4741,11 @@ int RGWRados::get_user_stats(const string& user, RGWStorageStats& stats)
   if (r < 0)
     return r;
 
-  stats.num_kb = (header.total_bytes + 1023) / 1024;
-  stats.num_kb_rounded = (header.total_bytes_rounded + 1023) / 1024;
-  stats.num_objects = header.total_entries;
+  cls_user_stats& hs = header.stats;
+
+  stats.num_kb = (hs.total_bytes + 1023) / 1024;
+  stats.num_kb_rounded = (hs.total_bytes_rounded + 1023) / 1024;
+  stats.num_objects = hs.total_entries;
 
   return 0;
 }
