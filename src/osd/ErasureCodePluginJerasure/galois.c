@@ -50,6 +50,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <stdint.h>
 
 #include "galois.h"
 #include "vectorop.h"
@@ -741,6 +742,8 @@ void galois_w32_region_multiply(char *region,      /* Region to multiply */
   return;
 }
 
+#define is_aligned(POINTER, BYTE_COUNT) \
+    (((uintptr_t)(const void *)(POINTER)) % (BYTE_COUNT) == 0)
 
 void galois_region_xor(           char *r1,         /* Region 1 */
                                   char *r2,         /* Region 2 */
@@ -748,9 +751,9 @@ void galois_region_xor(           char *r1,         /* Region 1 */
                                   int nbytes)       /* Number of bytes in region */
 {
   if (nbytes%VECTOR_WORDSIZE) {
-    assert(!((long long)r1%sizeof(long)));
-    assert(!((long long)r2%sizeof(long)));
-    assert(!((long long)r3%sizeof(long)));
+    assert(is_aligned(r1, sizeof(long)));
+    assert(is_aligned(r2, sizeof(long)));
+    assert(is_aligned(r3, sizeof(long)));
     long* l1 = (long*)r1;
     long* l2 = (long*)r2;
     long* l3 = (long*)r3;
@@ -760,9 +763,9 @@ void galois_region_xor(           char *r1,         /* Region 1 */
       *l3++ = ((*l1++)  ^ (*l2++));
     }
   } else {
-    assert(!((long long)r1%VECTOR_WORDSIZE));
-    assert(!((long long)r2%VECTOR_WORDSIZE));
-    assert(!((long long)r3%VECTOR_WORDSIZE));
+    assert(is_aligned(r1, VECTOR_WORDSIZE));
+    assert(is_aligned(r2, VECTOR_WORDSIZE));
+    assert(is_aligned(r3, VECTOR_WORDSIZE));
     vector_op_t* l1 = (vector_op_t*)r1;
     vector_op_t* l2 = (vector_op_t*)r2;
     vector_op_t* l3 = (vector_op_t*)r3;
