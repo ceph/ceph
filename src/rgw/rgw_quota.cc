@@ -72,7 +72,7 @@ public:
   int get_stats(const string& user, rgw_bucket& bucket, RGWStorageStats& stats, RGWQuotaInfo& quota);
   void adjust_stats(const string& user, rgw_bucket& bucket, int objs_delta, uint64_t added_bytes, uint64_t removed_bytes);
 
-  bool can_use_cached_stats(RGWQuotaInfo& quota, RGWStorageStats& stats);
+  virtual bool can_use_cached_stats(RGWQuotaInfo& quota, RGWStorageStats& stats);
 
   void set_stats(const string& user, rgw_bucket& bucket, RGWQuotaCacheStats& qs, RGWStorageStats& stats);
   int async_refresh(const string& user, rgw_bucket& bucket, RGWQuotaCacheStats& qs);
@@ -408,6 +408,13 @@ public:
 
   AsyncRefreshHandler *allocate_refresh_handler(const string& user, rgw_bucket& bucket) {
     return new UserAsyncRefreshHandler(store, this, user, bucket);
+  }
+
+  bool can_use_cached_stats(RGWQuotaInfo& quota, RGWStorageStats& stats) {
+    /* in the user case, the cached stats may contain a better estimation of the totals, as
+     * the backend is only periodically getting updated.
+     */
+    return true;
   }
 };
 
