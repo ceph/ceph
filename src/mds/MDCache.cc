@@ -9727,7 +9727,7 @@ void MDCache::discover_dir_frag(CInode *base,
   dout(7) << "discover_dir_frag " << df
 	  << " from mds." << from << dendl;
 
-  if (!base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) {  // FIXME: this is kind of weak!
+  if (!base->is_waiting_for_dir(approx_fg) || !onfinish) {
     discover_info_t& d = _create_discover(from);
     d.ino = base->ino();
     d.frag = approx_fg;
@@ -9736,7 +9736,7 @@ void MDCache::discover_dir_frag(CInode *base,
   }
 
   if (onfinish) 
-    base->add_waiter(CInode::WAIT_DIR, onfinish);
+    base->add_dir_waiter(approx_fg, onfinish);
 }
 
 struct C_MDC_RetryDiscoverPath : public Context {
@@ -9779,10 +9779,12 @@ void MDCache::discover_path(CInode *base,
     return;
   }
 
+  frag_t fg = base->pick_dirfrag(want_path[0]);
   if ((want_xlocked && want_path.depth() == 1) ||
-      !base->is_waiter_for(CInode::WAIT_DIR) || !onfinish) { // FIXME: weak!
+      !base->is_waiting_for_dir(fg) || !onfinish) {
     discover_info_t& d = _create_discover(from);
     d.ino = base->ino();
+    d.frag = fg;
     d.snap = snap;
     d.want_path = want_path;
     d.want_base_dir = true;
@@ -9792,7 +9794,7 @@ void MDCache::discover_path(CInode *base,
 
   // register + wait
   if (onfinish)
-    base->add_waiter(CInode::WAIT_DIR, onfinish);
+    base->add_dir_waiter(fg, onfinish);
 }
 
 struct C_MDC_RetryDiscoverPath2 : public Context {
@@ -10329,46 +10331,36 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     if (who >= 0)
       dout(7) << " dir_auth_hint is " << m->get_dir_auth_hint() << dendl;
 
-    // try again?
-    if (m->get_error_dentry().length()) {
-      // wanted a dentry
-      frag_t fg = cur->pick_dirfrag(m->get_error_dentry());
-      CDir *dir = cur->get_dirfrag(fg);
-      filepath relpath(m->get_error_dentry(), 0);
+    frag_t fg = m->get_base_dir_frag();
+    CDir *dir = cur->get_dirfrag(fg);
 
-      if (cur->is_waiter_for(CInode::WAIT_DIR)) {
-	if (cur->is_auth() || dir)
+    if (m->get_wanted_base_dir()) {
+      if (cur->is_waiting_for_dir(fg)) {
+	if (cur->is_auth())
 	  cur->take_waiting(CInode::WAIT_DIR, finished);
-	else
-	  discover_path(cur, m->get_wanted_snapid(), relpath, 0, m->get_wanted_xlocked(), who);
-      } else
-	  dout(7) << " doing nothing, nobody is waiting for dir" << dendl;
-
-      if (dir) {
-	// don't actaully need the hint, now
-	if (dir->is_waiting_for_dentry(m->get_error_dentry().c_str(), m->get_wanted_snapid())) {
-	  if (dir->is_auth() || dir->lookup(m->get_error_dentry()))
-	    dir->take_dentry_waiting(m->get_error_dentry(), m->get_wanted_snapid(),
-				     m->get_wanted_snapid(), finished);
-	  else
-	    discover_path(dir, m->get_wanted_snapid(), relpath, 0, m->get_wanted_xlocked());
-	} else
-	  dout(7) << " doing nothing, have dir but nobody is waiting on dentry "
-		  << m->get_error_dentry() << dendl;
-      }
-    } else {
-      // wanted dir or ino
-      frag_t fg = m->get_base_dir_frag();
-      CDir *dir = cur->get_dirfrag(fg);
-
-      if (cur->is_waiter_for(CInode::WAIT_DIR)) {
-	if (cur->is_auth() || dir)
-	  cur->take_waiting(CInode::WAIT_DIR, finished);
+	else if (dir)
+	  cur->take_dir_waiting(fg, finished);
 	else
 	  discover_dir_frag(cur, fg, 0, who);
       } else
 	dout(7) << " doing nothing, nobody is waiting for dir" << dendl;
+    }
 
+    // try again?
+    if (m->get_error_dentry().length()) {
+      // wanted a dentry
+      if (dir && dir->is_waiting_for_dentry(m->get_error_dentry(), m->get_wanted_snapid())) {
+	if (dir->is_auth() || dir->lookup(m->get_error_dentry())) {
+	  dir->take_dentry_waiting(m->get_error_dentry(), m->get_wanted_snapid(),
+				   m->get_wanted_snapid(), finished);
+	} else {
+	  filepath relpath(m->get_error_dentry(), 0);
+	  discover_path(dir, m->get_wanted_snapid(), relpath, 0, m->get_wanted_xlocked());
+	}
+      } else
+	dout(7) << " doing nothing, have dir but nobody is waiting on dentry "
+		<< m->get_error_dentry() << dendl;
+    } else {
       if (dir && m->get_wanted_ino() && dir->is_waiting_for_ino(m->get_wanted_ino())) {
 	if (dir->is_auth() || get_inode(m->get_wanted_ino()))
 	  dir->take_ino_waiting(m->get_wanted_ino(), finished);
@@ -10428,7 +10420,7 @@ CDir *MDCache::add_replica_dir(bufferlist::iterator& p, CInode *diri, int from,
     dout(7) << "add_replica_dir added " << *dir << " nonce " << dir->replica_nonce << dendl;
     
     // get waiters
-    diri->take_waiting(CInode::WAIT_DIR, finished);
+    diri->take_dir_waiting(df.frag, finished);
   }
 
   return dir;
@@ -11510,11 +11502,13 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
     // refragment
     list<Context*> waiters;
     list<CDir*> resultfrags;
-    adjust_dir_fragments(diri, base, bits, 
-			 resultfrags, waiters, false);
+    adjust_dir_fragments(diri, base, bits, resultfrags, waiters, false);
     if (g_conf->mds_debug_frag)
       diri->verify_dirfrags();
     
+    for (list<CDir*>::iterator p = resultfrags.begin(); p != resultfrags.end(); ++p)
+      diri->take_dir_waiting((*p)->get_frag(), waiters);
+
     /*
     // add new replica dirs values
     bufferlist::iterator p = notify->basebl.begin();
