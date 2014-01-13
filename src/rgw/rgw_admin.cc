@@ -1967,6 +1967,12 @@ next:
           }
           done = (buckets.size() < max_entries);
         } while (!done);
+
+        int ret = store->complete_sync_user_stats(user_id);
+        if (ret < 0) {
+          cerr << "ERROR: failed to complete syncing user stats: " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
       }
     }
 
