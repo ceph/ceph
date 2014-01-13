@@ -1981,7 +1981,7 @@ next:
       return -ret;
     }
 
-    encode_json("header", header, formatter);
+    encode_json("stats", header.stats, formatter);
     formatter->flush(cout);
   }
 
