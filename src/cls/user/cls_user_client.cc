@@ -9,11 +9,12 @@
 using namespace librados;
 
 
-void cls_user_set_buckets(librados::ObjectWriteOperation& op, list<cls_user_bucket_entry>& entries)
+void cls_user_set_buckets(librados::ObjectWriteOperation& op, list<cls_user_bucket_entry>& entries, bool add)
 {
   bufferlist in;
   cls_user_set_buckets_op call;
   call.entries = entries;
+  call.add = add;
   call.time = ceph_clock_now(NULL);
   ::encode(call, in);
   op.exec("user", "set_buckets_info", in);
