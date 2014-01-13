@@ -8255,10 +8255,9 @@ int MDCache::open_ino_traverse_dir(inodeno_t ino, MMDSOpenIno *m,
     }
     if (dir) {
       inodeno_t next_ino = i > 0 ? ancestors[i - 1].dirino : ino;
+      CDentry *dn = dir->lookup(name);
+      CDentry::linkage_t *dnl = dn ? dn->get_linkage() : NULL;
       if (dir->is_auth()) {
-	CDentry *dn = dir->lookup(name);
-	CDentry::linkage_t *dnl = dn ? dn->get_linkage() : NULL;
-
 	if (dnl && dnl->is_primary() &&
 	    dnl->get_inode()->state_test(CInode::STATE_REJOINUNDEF)) {
 	  dout(10) << " fetching undef " << *dnl->get_inode() << dendl;
@@ -8277,9 +8276,20 @@ int MDCache::open_ino_traverse_dir(inodeno_t ino, MMDSOpenIno *m,
 	if (i == 0)
 	  err = -ENOENT;
       } else if (discover) {
-	discover_ino(dir, next_ino, _open_ino_get_waiter(ino, m),
-		     (i == 0 && want_xlocked));
-	return 1;
+	if (!dnl) {
+	  filepath path(name, 0);
+	  discover_path(dir, CEPH_NOSNAP, path, _open_ino_get_waiter(ino, m),
+			(i == 0 && want_xlocked));
+	  return 1;
+	}
+	if (dnl->is_null() && !dn->lock.can_read(-1)) {
+	  dout(10) << " null " << *dn << " is not readable, waiting" << dendl;
+	  dn->lock.add_waiter(SimpleLock::WAIT_RD, _open_ino_get_waiter(ino, m));
+	  return 1;
+	}
+	dout(10) << " no ino " << next_ino << " in " << *dir << dendl;
+	if (i == 0)
+	  err = -ENOENT;
       }
     }
     if (hint && i == 0)
@@ -8483,8 +8493,10 @@ void MDCache::open_ino(inodeno_t ino, int64_t pool, Context* fin,
 	  if (diri) {
 	    frag_t fg = diri->pick_dirfrag(info.ancestors[0].dname);
 	    CDir *dir = diri->get_dirfrag(fg);
-	    if (dir && !dir->is_auth())
-	      discover_ino(dir, ino, NULL, true);
+	    if (dir && !dir->is_auth()) {
+	      filepath path(info.ancestors[0].dname, 0);
+	      discover_path(dir, CEPH_NOSNAP, path, NULL, true);
+	    }
 	  }
 	}
 	info.want_xlocked = true;
