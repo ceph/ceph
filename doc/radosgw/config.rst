@@ -119,7 +119,7 @@ See `<IfModule> Directive`_ for additional details.
 
 .. _<IfModule> Directive: http://httpd.apache.org/docs/2.2/mod/core.html#ifmodule
 	
-Finally, you should configure Apache to allow encoded slashes, provide paths for
+You should configure Apache to allow encoded slashes, provide paths for
 log files and to turn off server signatures. :: 	
 
 	<VirtualHost *:80>	
@@ -131,6 +131,15 @@ log files and to turn off server signatures. ::
 	</VirtualHost>
 	
 .. important:: If you are using CentOS or similar, make sure that ``FastCgiWrapper`` is turned off in ``/etc/httpd/conf.d/fastcgi.conf``.
+
+Finally, if you enabled SSL, make sure that your configuration file  includes
+the following::
+
+	SSLEngine on
+	SSLCertificateFile /etc/apache2/ssl/apache.crt
+	SSLCertificateKeyFile /etc/apache2/ssl/apache.key
+	SetEnv SERVER_PORT_SECURE 443
+
 
 Enable the Configuration
 ========================
