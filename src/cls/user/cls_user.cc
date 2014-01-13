@@ -144,8 +144,12 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     cls_user_bucket_entry old_entry;
     ret = get_existing_bucket_entry(hctx, key, old_entry);
 
-    if (ret == -ENOENT)
+    if (ret == -ENOENT) {
+     if (!op.add)
       continue; /* racing bucket removal */
+
+     ret = 0;
+    }
 
     if (ret < 0) {
       CLS_LOG(0, "ERROR: get_existing_bucket_entry() key=%s returned %d", key.c_str(), ret);
