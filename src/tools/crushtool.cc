@@ -4,6 +4,9 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ * Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ *
+ * Author: Loic Dachary <loic@dachary.org>
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -26,6 +29,7 @@
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
+#include "osd/OSDMap.h"
 #include "crush/CrushWrapper.h"
 #include "crush/CrushCompiler.h"
 #include "crush/CrushTester.h"
@@ -188,8 +192,11 @@ int main(int argc, const char **argv)
 
   CrushTester tester(crush, cerr);
 
-  vector<const char *> empty_args;  // we use -c, don't confuse the generic arg parsing
-  global_init(NULL, empty_args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+  // we use -c, don't confuse the generic arg parsing
+  // only parse arguments from CEPH_ARGS, if in the environment
+  vector<const char *> env_args;
+  env_to_vec(env_args);
+  global_init(NULL, env_args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
 	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
@@ -429,6 +436,7 @@ int main(int argc, const char **argv)
   }
   else {
     if ((args.size() % 3) != 0U) {
+      cerr << "remaining args: " << args << std::endl;
       cerr << "layers must be specified with 3-tuples of (name, buckettype, size)"
     	   << std::endl;
       exit(EXIT_FAILURE);
@@ -514,13 +522,13 @@ int main(int argc, const char **argv)
       lower_items.push_back(i);
       lower_weights.push_back(0x10000);
     }
+    crush.set_max_devices(num_osds);
 
     int type = 1;
-    int rootid = 0;
     for (vector<layer_t>::iterator p = layers.begin(); p != layers.end(); ++p, type++) {
       layer_t &l = *p;
 
-      dout(0) << "layer " << type
+      dout(2) << "layer " << type
 	      << "  " << l.name
 	      << "  bucket type " << l.buckettype
 	      << "  " << l.size 
@@ -544,8 +552,8 @@ int main(int argc, const char **argv)
       vector<int> cur_weights;
       unsigned lower_pos = 0;  // lower pos
 
-      dout(0) << "lower_items " << lower_items << dendl;
-      dout(0) << "lower_weights " << lower_weights << dendl;
+      dout(2) << "lower_items " << lower_items << dendl;
+      dout(2) << "lower_weights " << lower_weights << dendl;
 
       int i = 0;
       while (1) {
@@ -564,7 +572,7 @@ int main(int argc, const char **argv)
 	  weights[j] = lower_weights[lower_pos];
 	  weight += weights[j];
 	  lower_pos++;
-	  dout(0) << "  item " << items[j] << " weight " << weights[j] << dendl;
+	  dout(2) << "  item " << items[j] << " weight " << weights[j] << dendl;
 	}
 
 	crush_bucket *b = crush_make_bucket(buckettype, CRUSH_HASH_DEFAULT, type, j, items, weights);
@@ -572,9 +580,8 @@ int main(int argc, const char **argv)
 	int id;
 	int r = crush_add_bucket(crush.crush, 0, b, &id);
 	if (r < 0) {
-		dout(0) << "Couldn't add root bucket: " << strerror(-r) << dendl;
+	  dout(2) << "Couldn't add bucket: " << strerror(-r) << dendl;
 	}
-	rootid = id;
 
 	char format[20];
 	format[sizeof(format)-1] = '\0';
@@ -586,7 +593,7 @@ int main(int argc, const char **argv)
 	snprintf(name, sizeof(name), format, i);
 	crush.set_item_name(id, name);
 
-	dout(0) << " in bucket " << id << " '" << name << "' size " << j << " weight " << weight << dendl;
+	dout(2) << " in bucket " << id << " '" << name << "' size " << j << " weight " << weight << dendl;
 
 	cur_items.push_back(id);
 	cur_weights.push_back(weight);
@@ -596,16 +603,31 @@ int main(int argc, const char **argv)
       lower_items.swap(cur_items);
       lower_weights.swap(cur_weights);
     }
+
+    {
+      ostringstream oss;
+      vector<__u32> weights(crush.get_max_devices(), 0x10000);
+      crush.dump_tree(weights, &oss, NULL);
+      dout(1) << "\n" << oss.str() << dendl;
+    }
+
+    string root = layers.back().size == 0 ? layers.back().name :
+      string(layers.back().name) + "0";
+
+    {
+      set<int> roots;
+      crush.find_roots(roots);
+      if (roots.size() > 1)
+	dout(1)	<< "The crush rulesets will use the root " << root << "\n"
+		<< "and ignore the others.\n"
+		<< "There are " << roots.size() << " roots, they can be\n"
+		<< "grouped into a single root by appending something like:\n"
+		<< "  root straw 0\n"
+		<< dendl;
+    }
     
-    // make a generic rules
-    int ruleset=1;
-    crush_rule *rule = crush_make_rule(3, ruleset, CEPH_PG_TYPE_REPLICATED, 2, 2);
-    assert(rule);
-    crush_rule_set_step(rule, 0, CRUSH_RULE_TAKE, rootid, 0);
-    crush_rule_set_step(rule, 1, CRUSH_RULE_CHOOSELEAF_FIRSTN, CRUSH_CHOOSE_N, 1);
-    crush_rule_set_step(rule, 2, CRUSH_RULE_EMIT, 0, 0);
-    int rno = crush_add_rule(crush.crush, rule, -1);
-    crush.set_rule_name(rno, "data");
+    if (OSDMap::build_simple_crush_rulesets(g_ceph_context, crush, root, &cerr))
+      exit(EXIT_FAILURE);
 
     modified = true;
   }
@@ -711,3 +733,8 @@ int main(int argc, const char **argv)
 
   return 0;
 }
+/*
+ * Local Variables:
+ * compile-command: "cd .. ; make crushtool && test/run-cli-tests"
+ * End:
+ */

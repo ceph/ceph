@@ -14,8 +14,8 @@ Synopsis
 Description
 ===========
 
-**crushtool** is a utility that lets you create, compile, and
-decompile CRUSH map files.
+**crushtool** is a utility that lets you create, compile, decompile
+ and test CRUSH map files.
 
 CRUSH is a pseudo-random data distribution algorithm that efficiently
 maps input values (typically data objects) across a heterogeneous,
@@ -27,35 +27,42 @@ some since then):
 
 The tool has four modes of operation.
 
-.. option:: -c map.txt
+.. option:: --compile|-c map.txt
 
    will compile a plaintext map.txt into a binary map file.
 
-.. option:: -d map
+.. option:: --decompile|-d map
 
    will take the compiled map and decompile it into a plaintext source
    file, suitable for editing.
 
 .. option:: --build --num_osds {num-osds} layer1 ...
 
-   will create a relatively generic map with the given layer
-   structure. See below for examples.
+   will create map with the given layer structure. See below for a
+   detailed explanation.
 
 .. option:: --test
 
-   will perform a dry run of a CRUSH mapping for a range of input object 
-   names, see crushtool --help for more information.
-   
+   will perform a dry run of a CRUSH mapping for a range of input
+   object names. See below for a detailed explanation.
 
-Running tests
-=============
+Unlike other Ceph tools, **crushtool** does not accept generic options
+such as **--debug-crush** from the command line. They can however be
+provided via the CEPH_ARGS environment variable. For instance, to
+silence all output from the CRUSH subsystem::
+
+    CEPH_ARGS="--debug-crush 0" crushtool ...
+
+
+Running tests with --test
+=========================
 
 The test mode will use the input crush map ( as specified with **-i
 map** ) and perform a dry run of CRUSH mapping or random placement (
 if **--simulate** is set ). On completion, two kinds of reports can be
 created. The **--show-...** options output human readable informations
 on stderr. The **--output-csv** option creates CSV files that are
-documented by the **--help-output** option. 
+documented by the **--help-output** option.
 
 .. option:: --show-statistics
 
@@ -91,17 +98,17 @@ documented by the **--help-output** option.
      bad mapping rule 1 x 781 num_rep 7 result [8,10,2,11,6,9]
 
    shows that when rule **1** was required to map **7** devices, it
-   could only map six : **[8,10,2,11,6,9]**. 
+   could only map six : **[8,10,2,11,6,9]**.
 
 .. option:: --show-utilization
 
    display the expected and actual utilisation for each device, for
    each number of replicas. For instance::
 
-     device 0: stored : 951	 expected : 853.333
-     device 1: stored : 963	 expected : 853.333
+     device 0: stored : 951      expected : 853.333
+     device 1: stored : 963      expected : 853.333
      ...
-   
+
    shows that device **0** stored **951** objects and was expected to store **853**.
    Implies **--show-statistics**.
 
@@ -167,27 +174,27 @@ could be fixed by increasing the **choose-total-tries** as follows:
           --show-bad-mappings \
           --set-choose-total-tries 500
 
-Building a map
-==============
+Building a map with --build
+===========================
 
-The build mode will generate relatively generic hierarchical maps. The
-first argument simply specifies the number of devices (leaves) in the
-CRUSH hierarchy. Each layer describes how the layer (or raw devices)
-preceding it should be grouped.
+The build mode will generate hierarchical maps. The first argument
+specifies the number of devices (leaves) in the CRUSH hierarchy. Each
+layer describes how the layer (or devices) preceding it should be
+grouped.
 
 Each layer consists of::
 
-       name ( uniform | list | tree | straw ) size
+       bucket ( uniform | list | tree | straw ) size
 
-The first element is the name for the elements in the layer
-(e.g. "rack"). Each element's name will be append a number to the
-provided name.
+The **bucket** is the type of the buckets in the layer
+(e.g. "rack"). Each bucket name will be built by appending a unique
+number to the **bucket** string (e.g. "rack0", "rack1"...).
 
-The second component is the type of CRUSH bucket.
+The second component is the type of bucket: **straw** should be used
+most of the time.
 
-The third component is the maximum size of the bucket. If the size is
-0, a single bucket will be generated that includes everything in the
-preceding layer.
+The third component is the maximum size of the bucket. A size of zero
+means a bucket of infinite capacity.
 
 
 Example
@@ -201,15 +208,34 @@ leaving an extra 2U for a rack switch.
 To reflect our hierarchy of devices, nodes, racks and rows, we would execute
 the following::
 
-	crushtool -o crushmap --build --num_osds 320 node straw 4 rack straw 20 row straw 2
+    $ crushtool -o crushmap --build --num_osds 320 \
+           node straw 4 \
+           rack straw 20 \
+           row straw 2 \
+           root straw 0
+    # id	weight	type name	reweight
+    -87	320	root root
+    -85	160		row row0
+    -81	80			rack rack0
+    -1	4				node node0
+    0	1					osd.0	1
+    1	1					osd.1	1
+    2	1					osd.2	1
+    3	1					osd.3	1
+    -2	4				node node1
+    4	1					osd.4	1
+    5	1					osd.5	1
+    ...
 
-To adjust the default (generic) mapping rules, we can run::
+CRUSH rulesets are created so the generated crushmap can be
+tested. They are the same rulesets as the one created by default when
+creating a new Ceph cluster. They can be further edited with::
 
        # decompile
        crushtool -d crushmap -o map.txt
 
        # edit
-       vi map.txt
+       emacs map.txt
 
        # recompile
        crushtool -c map.txt -o crushmap
@@ -228,3 +254,8 @@ See also
 
 :doc:`ceph <ceph>`\(8),
 :doc:`osdmaptool <osdmaptool>`\(8),
+
+Authors
+=======
+
+John Wilkins, Sage Weil, Loic Dachary
