@@ -10026,7 +10026,6 @@ void ReplicatedPG::hit_set_persist()
     // the deleted object over this period.
     hobject_t old_obj =
       get_hit_set_current_object(info.hit_set.current_last_stamp);
-    ctx->op_t->remove(old_obj);
     ctx->log.push_back(
       pg_log_entry_t(pg_log_entry_t::DELETE,
 		     old_obj,
@@ -10035,6 +10034,16 @@ void ReplicatedPG::hit_set_persist()
 		     0,
 		     osd_reqid_t(),
 		     ctx->mtime));
+    if (pool.info.ec_pool()) {
+      if (ctx->log.back().mod_desc.rmobject(ctx->at_version.version)) {
+	ctx->op_t->stash(old_obj, ctx->at_version.version);
+      } else {
+	ctx->op_t->remove(old_obj);
+      }
+    } else {
+      ctx->op_t->remove(old_obj);
+      ctx->log.back().mod_desc.mark_unrollbackable();
+    }
     ++ctx->at_version.version;
 
     struct stat st;
@@ -10072,9 +10081,9 @@ void ReplicatedPG::hit_set_persist()
   bufferlist boi(sizeof(ctx->new_obs.oi));
   ::encode(ctx->new_obs.oi, boi);
 
-  ctx->op_t->write(oid, 0, bl.length(), bl);
-  ctx->op_t->setattr(oid, OI_ATTR, boi);
-  ctx->op_t->setattr(oid, SS_ATTR, bss);
+  ctx->op_t->append(oid, 0, bl.length(), bl);
+  setattr_maybe_cache(ctx->obc, ctx, ctx->op_t, OI_ATTR, boi);
+  setattr_maybe_cache(ctx->obc, ctx, ctx->op_t, SS_ATTR, bss);
   ctx->log.push_back(
     pg_log_entry_t(
       pg_log_entry_t::MODIFY,
@@ -10085,6 +10094,11 @@ void ReplicatedPG::hit_set_persist()
       osd_reqid_t(),
       ctx->mtime)
     );
+  if (pool.info.ec_pool()) {
+    ctx->log.back().mod_desc.create();
+  } else {
+    ctx->log.back().mod_desc.mark_unrollbackable();
+  }
 
   hit_set_trim(repop, pool.info.hit_set_count);
 
@@ -10100,7 +10114,6 @@ void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
     assert(p != info.hit_set.history.end());
     hobject_t oid = get_hit_set_archive_object(p->begin, p->end);
     dout(20) << __func__ << " removing " << oid << dendl;
-    repop->ctx->op_t->remove(oid);
     ++repop->ctx->at_version.version;
     repop->ctx->log.push_back(
         pg_log_entry_t(pg_log_entry_t::DELETE,
@@ -10110,6 +10123,17 @@ void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
 		       0,
 		       osd_reqid_t(),
 		       repop->ctx->mtime));
+    if (pool.info.ec_pool()) {
+      if (repop->ctx->log.back().mod_desc.rmobject(
+	  repop->ctx->at_version.version)) {
+	repop->ctx->op_t->stash(oid, repop->ctx->at_version.version);
+      } else {
+	repop->ctx->op_t->remove(oid);
+      }
+    } else {
+      repop->ctx->op_t->remove(oid);
+      repop->ctx->log.back().mod_desc.mark_unrollbackable();
+    }
     info.hit_set.history.pop_front();
 
     struct stat st;
