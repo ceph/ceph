@@ -19,6 +19,7 @@ CLS_NAME(user)
 
 cls_handle_t h_class;
 cls_method_handle_t h_user_set_buckets_info;
+cls_method_handle_t h_user_complete_stats_sync;
 cls_method_handle_t h_user_remove_bucket;
 cls_method_handle_t h_user_list_buckets;
 cls_method_handle_t h_user_get_header;
@@ -181,6 +182,39 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
   return 0;
 }
 
+static int cls_user_complete_stats_sync(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist::iterator in_iter = in->begin();
+
+  cls_user_complete_stats_sync_op op;
+  try {
+    ::decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: cls_user_add_op(): failed to decode op");
+    return -EINVAL;
+  }
+
+  cls_user_header header;
+  int ret = read_header(hctx, &header);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: failed to read user info header ret=%d", ret);
+    return ret;
+  }
+
+  if (header.last_stats_sync < op.time)
+    header.last_stats_sync = op.time;
+
+  bufferlist bl;
+
+  ::encode(header, bl);
+
+  ret = cls_cxx_map_write_header(hctx, &bl);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
 static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   bufferlist::iterator in_iter = in->begin();
@@ -323,6 +357,8 @@ void __cls_init()
   /* log */
   cls_register_cxx_method(h_class, "set_buckets_info", CLS_METHOD_RD | CLS_METHOD_WR,
                           cls_user_set_buckets_info, &h_user_set_buckets_info);
+  cls_register_cxx_method(h_class, "complete_stats_sync", CLS_METHOD_RD | CLS_METHOD_WR,
+                          cls_user_complete_stats_sync, &h_user_set_buckets_info);
   cls_register_cxx_method(h_class, "remove_bucket", CLS_METHOD_RD | CLS_METHOD_WR, cls_user_remove_bucket, &h_user_remove_bucket);
   cls_register_cxx_method(h_class, "list_buckets", CLS_METHOD_RD, cls_user_list_buckets, &h_user_list_buckets);
   cls_register_cxx_method(h_class, "get_header", CLS_METHOD_RD, cls_user_get_header, &h_user_get_header);
