@@ -20,6 +20,7 @@ public:
  */
 
 void cls_user_set_buckets(librados::ObjectWriteOperation& op, list<cls_user_bucket_entry>& entries);
+void cls_user_complete_stats_sync(librados::ObjectWriteOperation& op);
 void cls_user_remove_bucket(librados::ObjectWriteOperation& op,  const cls_user_bucket& bucket);
 void cls_user_bucket_list(librados::ObjectReadOperation& op,
                        const string& in_marker, int max_entries,
