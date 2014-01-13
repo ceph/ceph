@@ -135,15 +135,21 @@ WRITE_CLASS_ENCODER(cls_user_stats)
  */
 struct cls_user_header {
   cls_user_stats stats;
+  utime_t last_stats_sync;     /* last time a full stats sync completed */
+  utime_t last_stats_update;   /* last time a stats update was done */
 
   void encode(bufferlist& bl) const {
      ENCODE_START(1, 1, bl);
     ::encode(stats, bl);
+    ::encode(last_stats_sync, bl);
+    ::encode(last_stats_update, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
     ::decode(stats, bl);
+    ::decode(last_stats_sync, bl);
+    ::decode(last_stats_update, bl);
     DECODE_FINISH(bl);
   }
 

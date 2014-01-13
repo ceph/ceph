@@ -14,6 +14,7 @@ void cls_user_set_buckets(librados::ObjectWriteOperation& op, list<cls_user_buck
   bufferlist in;
   cls_user_set_buckets_op call;
   call.entries = entries;
+  call.time = ceph_clock_now(NULL);
   ::encode(call, in);
   op.exec("user", "set_buckets_info", in);
 }

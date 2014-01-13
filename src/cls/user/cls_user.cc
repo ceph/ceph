@@ -171,6 +171,9 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
 
   CLS_LOG(20, "header: total bytes=%lld entries=%lld", (long long)header.stats.total_bytes, (long long)header.stats.total_entries);
 
+  if (header.last_stats_update < op.time)
+    header.last_stats_update = op.time;
+
   ::encode(header, bl);
   
   ret = cls_cxx_map_write_header(hctx, &bl);

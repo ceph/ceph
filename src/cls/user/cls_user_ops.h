@@ -9,18 +9,21 @@
 
 struct cls_user_set_buckets_op {
   list<cls_user_bucket_entry> entries;
+  utime_t time; /* op time */
 
   cls_user_set_buckets_op() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(entries, bl);
+    ::encode(time, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
     ::decode(entries, bl);
+    ::decode(time, bl);
     DECODE_FINISH(bl);
   }
 };
