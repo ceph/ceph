@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "CRUSHTOOL" "8" "December 09, 2013" "dev" "Ceph"
+.TH "CRUSHTOOL" "8" "January 12, 2014" "dev" "Ceph"
 .SH NAME
 crushtool \- CRUSH map manipulation tool
 .
@@ -64,9 +64,11 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .fi
 .sp
 .SH DESCRIPTION
-.sp
-\fBcrushtool\fP is a utility that lets you create, compile, and
-decompile CRUSH map files.
+.INDENT 0.0
+.TP
+.B \fBcrushtool\fP is a utility that lets you create, compile, decompile
+and test CRUSH map files.
+.UNINDENT
 .sp
 CRUSH is a pseudo\-random data distribution algorithm that efficiently
 maps input values (typically data objects) across a heterogeneous,
@@ -82,28 +84,43 @@ some since then):
 The tool has four modes of operation.
 .INDENT 0.0
 .TP
-.B \-c map.txt
+.B \-\-compile|\-c map.txt
 will compile a plaintext map.txt into a binary map file.
 .UNINDENT
 .INDENT 0.0
 .TP
-.B \-d map
+.B \-\-decompile|\-d map
 will take the compiled map and decompile it into a plaintext source
 file, suitable for editing.
 .UNINDENT
 .INDENT 0.0
 .TP
 .B \-\-build \-\-num_osds {num\-osds} layer1 ...
-will create a relatively generic map with the given layer
-structure. See below for examples.
+will create map with the given layer structure. See below for a
+detailed explanation.
 .UNINDENT
 .INDENT 0.0
 .TP
 .B \-\-test
-will perform a dry run of a CRUSH mapping for a range of input object
-names, see crushtool \-\-help for more information.
+will perform a dry run of a CRUSH mapping for a range of input
+object names. See below for a detailed explanation.
 .UNINDENT
-.SH RUNNING TESTS
+.sp
+Unlike other Ceph tools, \fBcrushtool\fP does not accept generic options
+such as \fB\-\-debug\-crush\fP from the command line. They can however be
+provided via the CEPH_ARGS environment variable. For instance, to
+silence all output from the CRUSH subsystem:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+CEPH_ARGS="\-\-debug\-crush 0" crushtool ...
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.SH RUNNING TESTS WITH --TEST
 .sp
 The test mode will use the input crush map ( as specified with \fB\-i
 map\fP ) and perform a dry run of CRUSH mapping or random placement (
@@ -235,7 +252,7 @@ as the value of the \fB\-\-set\-choose\-total\-tries\fP option.
 .INDENT 0.0
 .TP
 .B \-\-output\-csv
-create CVS files (in the current directory) containing information
+create CSV files (in the current directory) containing information
 documented by \fB\-\-help\-output\fP\&. The files are named after the rule
 used when collecting the statistics. For instance, if the rule
 metadata is used, the CSV files will be:
@@ -289,8 +306,7 @@ FOO\-metadata\-device_utilization.csv
 .UNINDENT
 .sp
 The \fB\-\-set\-...\fP options can be used to modify the tunables of the
-input crush map, provided the \fB\-\-enable\-unsafe\-tunables\fP option is
-also set to disable the safeguard. The input crush map is modified in
+input crush map. The input crush map is modified in
 memory. For example:
 .INDENT 0.0
 .INDENT 3.5
@@ -310,16 +326,16 @@ could be fixed by increasing the \fBchoose\-total\-tries\fP as follows:
 .INDENT 0.0
 .TP
 .B $ crushtool \-i mymap \-\-test 
-\-\-show\-bad\-mappings \-\-enable\-unsafe\-tunables \-\-set\-choose\-total\-tries 500
+\-\-show\-bad\-mappings \-\-set\-choose\-total\-tries 500
 .UNINDENT
 .UNINDENT
 .UNINDENT
-.SH BUILDING A MAP
+.SH BUILDING A MAP WITH --BUILD
 .sp
-The build mode will generate relatively generic hierarchical maps. The
-first argument simply specifies the number of devices (leaves) in the
-CRUSH hierarchy. Each layer describes how the layer (or raw devices)
-preceding it should be grouped.
+The build mode will generate hierarchical maps. The first argument
+specifies the number of devices (leaves) in the CRUSH hierarchy. Each
+layer describes how the layer (or devices) preceding it should be
+grouped.
 .sp
 Each layer consists of:
 .INDENT 0.0
@@ -327,21 +343,21 @@ Each layer consists of:
 .sp
 .nf
 .ft C
-name ( uniform | list | tree | straw ) size
+bucket ( uniform | list | tree | straw ) size
 .ft P
 .fi
 .UNINDENT
 .UNINDENT
 .sp
-The first element is the name for the elements in the layer
-(e.g. "rack"). Each element\(aqs name will be append a number to the
-provided name.
+The \fBbucket\fP is the type of the buckets in the layer
+(e.g. "rack"). Each bucket name will be built by appending a unique
+number to the \fBbucket\fP string (e.g. "rack0", "rack1"...).
 .sp
-The second component is the type of CRUSH bucket.
+The second component is the type of bucket: \fBstraw\fP should be used
+most of the time.
 .sp
-The third component is the maximum size of the bucket. If the size is
-0, a single bucket will be generated that includes everything in the
-preceding layer.
+The third component is the maximum size of the bucket. A size of zero
+means a bucket of infinite capacity.
 .SH EXAMPLE
 .sp
 Suppose we have two rows with two racks each and 20 nodes per rack. Suppose
@@ -356,13 +372,32 @@ the following:
 .sp
 .nf
 .ft C
-crushtool \-o crushmap \-\-build \-\-num_osds 320 node straw 4 rack straw 20 row straw 2
+$ crushtool \-o crushmap \-\-build \-\-num_osds 320 \e
+       node straw 4 \e
+       rack straw 20 \e
+       row straw 2 \e
+       root straw 0
+# id        weight  type name       reweight
+\-87 320     root root
+\-85 160             row row0
+\-81 80                      rack rack0
+\-1  4                               node node0
+0   1                                       osd.0   1
+1   1                                       osd.1   1
+2   1                                       osd.2   1
+3   1                                       osd.3   1
+\-2  4                               node node1
+4   1                                       osd.4   1
+5   1                                       osd.5   1
+\&...
 .ft P
 .fi
 .UNINDENT
 .UNINDENT
 .sp
-To adjust the default (generic) mapping rules, we can run:
+CRUSH rulesets are created so the generated crushmap can be
+tested. They are the same rulesets as the one created by default when
+creating a new Ceph cluster. They can be further edited with:
 .INDENT 0.0
 .INDENT 3.5
 .sp
@@ -372,7 +407,7 @@ To adjust the default (generic) mapping rules, we can run:
 crushtool \-d crushmap \-o map.txt
 
 # edit
-vi map.txt
+emacs map.txt
 
 # recompile
 crushtool \-c map.txt \-o crushmap
@@ -389,7 +424,10 @@ information.
 .sp
 \fBceph\fP(8),
 \fBosdmaptool\fP(8),
+.SH AUTHORS
+.sp
+John Wilkins, Sage Weil, Loic Dachary
 .SH COPYRIGHT
-2010-2013, Inktank Storage, Inc. and contributors. Licensed under Creative Commons BY-SA
+2010-2014, Inktank Storage, Inc. and contributors. Licensed under Creative Commons BY-SA
 .\" Generated by docutils manpage writer.
 .

@@ -622,10 +622,13 @@ public:
 		   int num_osd, int pg_bits, int pgp_bits);
   static int _build_crush_types(CrushWrapper& crush);
   static int build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
-				    int num_osd, stringstream *ss);
+				    int num_osd, ostream *ss);
   static int build_simple_crush_map_from_conf(CephContext *cct,
 					      CrushWrapper& crush,
-					      stringstream *ss);
+					      ostream *ss);
+  static int build_simple_crush_rulesets(CephContext *cct, CrushWrapper& crush,
+					 const string& root,
+					 ostream *ss);
 
   bool crush_ruleset_in_use(int ruleset) const;
 
