@@ -16,4 +16,6 @@ void cls_user_stats::dump(Formatter *f) const
 void cls_user_header::dump(Formatter *f) const
 {
   encode_json("stats", stats, f);
+  encode_json("last_stats_sync", last_stats_sync, f);
+  encode_json("last_stats_update", last_stats_update, f);
 }
