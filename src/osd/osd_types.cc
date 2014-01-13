@@ -2295,7 +2295,7 @@ void pg_log_t::decode(bufferlist::iterator &bl, int64_t pool)
     for (list<pg_log_entry_t>::iterator i = log.begin();
 	 i != log.end();
 	 ++i) {
-      if (i->soid.pool == -1)
+      if (!i->soid.is_max() && i->soid.pool == -1)
 	i->soid.pool = pool;
     }
   }
@@ -2412,7 +2412,7 @@ void pg_missing_t::decode(bufferlist::iterator &bl, int64_t pool)
     for (map<hobject_t, item>::iterator i = missing.begin();
 	 i != missing.end();
       ) {
-      if (i->first.pool == -1) {
+      if (!i->first.is_max() && i->first.pool == -1) {
 	hobject_t to_insert(i->first);
 	to_insert.pool = pool;
 	tmp[to_insert] = i->second;
@@ -3398,7 +3398,7 @@ void ObjectRecoveryInfo::decode(bufferlist::iterator &bl,
   DECODE_FINISH(bl);
 
   if (struct_v < 2) {
-    if (soid.pool == -1)
+    if (!soid.is_max() && soid.pool == -1)
       soid.pool = pool;
     map<hobject_t, interval_set<uint64_t> > tmp;
     tmp.swap(clone_subset);
@@ -3406,7 +3406,7 @@ void ObjectRecoveryInfo::decode(bufferlist::iterator &bl,
 	 i != tmp.end();
 	 ++i) {
       hobject_t first(i->first);
-      if (first.pool == -1)
+      if (!first.is_max() && first.pool == -1)
 	first.pool = pool;
       clone_subset[first].swap(i->second);
     }
@@ -3726,7 +3726,7 @@ void ScrubMap::decode(bufferlist::iterator& bl, int64_t pool)
 	 i != tmp.end();
 	 ++i) {
       hobject_t first(i->first);
-      if (first.pool == -1)
+      if (!first.is_max() && first.pool == -1)
 	first.pool = pool;
       objects[first] = i->second;
     }
