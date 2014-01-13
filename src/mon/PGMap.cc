@@ -47,7 +47,7 @@ void PGMap::Incremental::encode(bufferlist &bl, uint64_t features) const
 
 void PGMap::Incremental::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
   ::decode(version, bl);
   if (struct_v < 3) {
     pg_stat_updates.clear();
@@ -481,7 +481,7 @@ void PGMap::encode(bufferlist &bl, uint64_t features) const
 
 void PGMap::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 4, 4, bl);
   ::decode(version, bl);
   if (struct_v < 3) {
     pg_stat.clear();
