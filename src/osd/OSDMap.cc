@@ -1964,7 +1964,7 @@ int OSDMap::_build_crush_types(CrushWrapper& crush)
 }
 
 int OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
-				   int nosd, stringstream *ss)
+				   int nosd, ostream *ss)
 {
   crush.create();
 
@@ -1987,18 +1987,7 @@ int OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
     crush.insert_item(cct, o, 1.0, name, loc);
   }
 
-  string failure_domain =
-    crush.get_type_name(cct->_conf->osd_crush_chooseleaf_type);
-
-  r = crush.add_simple_ruleset("replicated_ruleset", "default", failure_domain,
-			       "firstn", pg_pool_t::TYPE_REPLICATED, ss);
-  if (r < 0)
-    return r;
-
-  r = crush.add_simple_ruleset("erasure_ruleset", "default", failure_domain,
-			       "indep", pg_pool_t::TYPE_ERASURE, ss);
-  if (r < 0)
-    return r;
+  build_simple_crush_rulesets(cct, crush, "default", ss);
 
   crush.finalize();
 
@@ -2007,7 +1996,7 @@ int OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
 
 int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
 					     CrushWrapper& crush,
-					     stringstream *ss)
+					     ostream *ss)
 {
   const md_config_t *conf = cct->_conf;
 
@@ -2070,17 +2059,7 @@ int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
     crush.insert_item(cct, o, 1.0, *i, loc);
   }
 
-  string failure_domain =
-    crush.get_type_name(cct->_conf->osd_crush_chooseleaf_type);
-
-  r = crush.add_simple_ruleset("replicated_ruleset", "default", failure_domain,
-			       "firstn", pg_pool_t::TYPE_REPLICATED, ss);
-  if (r < 0)
-    return r;
-  r = crush.add_simple_ruleset("erasure_ruleset", "default", failure_domain,
-			       "indep", pg_pool_t::TYPE_ERASURE, ss);
-  if (r < 0)
-    return r;
+  build_simple_crush_rulesets(cct, crush, "default", ss);
 
   crush.finalize();
 
@@ -2088,3 +2067,23 @@ int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
 }
 
 
+int OSDMap::build_simple_crush_rulesets(CephContext *cct,
+					CrushWrapper& crush,
+					const string& root,
+					ostream *ss)
+{
+  string failure_domain =
+    crush.get_type_name(cct->_conf->osd_crush_chooseleaf_type);
+
+  int r;
+  r = crush.add_simple_ruleset("replicated_ruleset", root, failure_domain,
+			       "firstn", pg_pool_t::TYPE_REPLICATED, ss);
+  if (r < 0)
+    return r;
+  r = crush.add_simple_ruleset("erasure_ruleset", root, failure_domain,
+				  "indep", pg_pool_t::TYPE_ERASURE, ss);
+  if (r < 0)
+    return r;
+  else
+    return 0;
+}
