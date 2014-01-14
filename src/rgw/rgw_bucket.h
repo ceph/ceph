@@ -34,6 +34,7 @@ extern int rgw_bucket_instance_remove_entry(RGWRados *store, string& entry, RGWO
 extern int rgw_bucket_delete_bucket_obj(RGWRados *store, string& bucket_name, RGWObjVersionTracker& objv_tracker);
 
 extern int rgw_bucket_sync_user_stats(RGWRados *store, const string& user_id, rgw_bucket& bucket);
+extern int rgw_bucket_sync_user_stats(RGWRados *store, const string& bucket_name);
 
 /**
  * Store a list of the user's buckets, with associated functinos.

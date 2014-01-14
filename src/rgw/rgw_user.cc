@@ -41,6 +41,46 @@ bool rgw_user_is_authenticated(RGWUserInfo& info)
   return (info.user_id != RGW_USER_ANON_ID);
 }
 
+int rgw_user_sync_all_stats(RGWRados *store, const string& user_id)
+{
+  CephContext *cct = store->ctx();
+  size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
+  bool done;
+  string marker;
+  int ret;
+
+  do {
+    RGWUserBuckets user_buckets;
+    ret = rgw_read_user_buckets(store, user_id, user_buckets, marker, max_entries, false);
+    if (ret < 0) {
+      ldout(cct, 0) << "failed to read user buckets: ret=" << ret << dendl;
+      return ret;
+    }
+    map<string, RGWBucketEnt>& buckets = user_buckets.get_buckets();
+    for (map<string, RGWBucketEnt>::iterator i = buckets.begin();
+         i != buckets.end();
+         ++i) {
+      marker = i->first;
+
+      RGWBucketEnt& bucket_ent = i->second;
+      ret = rgw_bucket_sync_user_stats(store, user_id, bucket_ent.bucket);
+      if (ret < 0) {
+        ldout(cct, 0) << "ERROR: could not sync bucket stats: ret=" << ret << dendl;
+        return ret;
+      }
+    }
+    done = (buckets.size() < max_entries);
+  } while (!done);
+
+  ret = store->complete_sync_user_stats(user_id);
+  if (ret < 0) {
+    cerr << "ERROR: failed to complete syncing user stats: ret=" << ret << std::endl;
+    return ret;
+  }
+
+  return 0;
+}
+
 /**
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
