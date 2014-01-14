@@ -1,4 +1,4 @@
-v0.75
+v0.76
 ~~~~~
 
 - 'rbd ls' on a pool which never held rbd images now exits with code
