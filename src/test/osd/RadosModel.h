@@ -299,8 +299,7 @@ public:
     watches.erase(oid);
   }
 
-  void rm_object_attrs(const string &oid, const set<string> &attrs)
-  {
+  ObjectDesc get_most_recent(const string &oid) {
     ObjectDesc new_obj;
     for (map<int, map<string,ObjectDesc> >::reverse_iterator i =
 	   pool_obj_cont.rbegin();
@@ -312,29 +311,27 @@ public:
 	break;
       }
     }
+    return new_obj;
+  }
+
+  void rm_object_attrs(const string &oid, const set<string> &attrs)
+  {
+    ObjectDesc new_obj = get_most_recent(oid);
     for (set<string>::const_iterator i = attrs.begin();
 	 i != attrs.end();
 	 ++i) {
       new_obj.attrs.erase(*i);
     }
+    new_obj.dirty = true;
     pool_obj_cont[current_snap].erase(oid);
     pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
   }
 
   void remove_object_header(const string &oid)
   {
-    ObjectDesc new_obj;
-    for (map<int, map<string,ObjectDesc> >::reverse_iterator i =
-	   pool_obj_cont.rbegin();
-	 i != pool_obj_cont.rend();
-	 ++i) {
-      map<string,ObjectDesc>::iterator j = i->second.find(oid);
-      if (j != i->second.end()) {
-	new_obj = j->second;
-	break;
-      }
-    }
+    ObjectDesc new_obj = get_most_recent(oid);
     new_obj.header = bufferlist();
+    new_obj.dirty = true;
     pool_obj_cont[current_snap].erase(oid);
     pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
   }
@@ -342,42 +339,24 @@ public:
 
   void update_object_header(const string &oid, const bufferlist &bl)
   {
-    ObjectDesc new_obj;
-    for (map<int, map<string,ObjectDesc> >::reverse_iterator i =
-	   pool_obj_cont.rbegin();
-	 i != pool_obj_cont.rend();
-	 ++i) {
-      map<string,ObjectDesc>::iterator j = i->second.find(oid);
-      if (j != i->second.end()) {
-	new_obj = j->second;
-	break;
-      }
-    }
+    ObjectDesc new_obj = get_most_recent(oid);
     new_obj.header = bl;
     new_obj.exists = true;
+    new_obj.dirty = true;
     pool_obj_cont[current_snap].erase(oid);
     pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
   }
 
   void update_object_attrs(const string &oid, const map<string, ContDesc> &attrs)
   {
-    ObjectDesc new_obj;
-    for (map<int, map<string,ObjectDesc> >::reverse_iterator i =
-	   pool_obj_cont.rbegin();
-	 i != pool_obj_cont.rend();
-	 ++i) {
-      map<string,ObjectDesc>::iterator j = i->second.find(oid);
-      if (j != i->second.end()) {
-	new_obj = j->second;
-	break;
-      }
-    }
+    ObjectDesc new_obj = get_most_recent(oid);
     for (map<string, ContDesc>::const_iterator i = attrs.begin();
 	 i != attrs.end();
 	 ++i) {
       new_obj.attrs[i->first] = i->second;
     }
     new_obj.exists = true;
+    new_obj.dirty = true;
     pool_obj_cont[current_snap].erase(oid);
     pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
   }
@@ -385,18 +364,9 @@ public:
   void update_object(ContentsGenerator *cont_gen,
 		     const string &oid, const ContDesc &contents)
   {
-    ObjectDesc new_obj;
-    for (map<int, map<string,ObjectDesc> >::reverse_iterator i = 
-	   pool_obj_cont.rbegin();
-	 i != pool_obj_cont.rend();
-	 ++i) {
-      map<string,ObjectDesc>::iterator j = i->second.find(oid);
-      if (j != i->second.end()) {
-	new_obj = j->second;
-	break;
-      }
-    }
+    ObjectDesc new_obj = get_most_recent(oid);
     new_obj.exists = true;
+    new_obj.dirty = true;
     new_obj.update(cont_gen,
 		   contents);
     pool_obj_cont[current_snap].erase(oid);
@@ -409,8 +379,16 @@ public:
     pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, contents));
   }
 
+  void update_object_undirty(const string &oid)
+  {
+    ObjectDesc new_obj = get_most_recent(oid);
+    new_obj.dirty = false;
+    pool_obj_cont[current_snap].erase(oid);
+    pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, new_obj));
+  }
+
   void update_object_version(const string &oid, uint64_t version,
-			     bool dirty = true, int snap = -1)
+			     int snap = -1)
   {
     for (map<int, map<string,ObjectDesc> >::reverse_iterator i = 
 	   pool_obj_cont.rbegin();
@@ -422,11 +400,10 @@ public:
       if (j != i->second.end()) {
 	if (version)
 	  j->second.version = version;
-	j->second.dirty = dirty;
 	cout << __func__ << " oid " << oid
 	     << " v " << version << " " << j->second.most_recent()
-	     << " " << (dirty ? "dirty" : "clean")
-	     << " " << (j->second.exists ? "exists":"dne")
+	     << " " << (j->second.dirty ? "dirty" : "clean")
+	     << " " << (j->second.exists ? "exists" : "dne")
 	     << std::endl;
 	break;
       }
@@ -1625,6 +1602,7 @@ public:
 
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
+    context->update_object_undirty(oid);
     context->state_lock.Unlock();
 
     op.undirty();
@@ -1640,7 +1618,7 @@ public:
     assert(completion->is_complete());
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
-    context->update_object_version(oid, completion->get_version64(), false);
+    context->update_object_version(oid, completion->get_version64());
     context->kick();
     done = true;
     context->state_lock.Unlock();
@@ -1838,7 +1816,7 @@ public:
     int r = completion->get_return_value();
     cout << num << ":  got " << cpp_strerror(r) << std::endl;
     if (r == 0) {
-      context->update_object_version(oid, 0, false, snap);
+      context->update_object_version(oid, 0, snap);
     } else if (r == -EBUSY) {
       assert(can_fail);
     } else if (r == -EINVAL) {
