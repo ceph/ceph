@@ -14,6 +14,15 @@ int LevelDBStore::init(ostream &out, bool create_if_missing)
 {
   leveldb::Options ldoptions;
 
+  options.write_buffer_size = g_conf->leveldb_write_buffer_size;
+  options.cache_size = g_conf->leveldb_cache_size;
+  options.block_size = g_conf->leveldb_block_size;
+  options.bloom_size = g_conf->leveldb_bloom_size;
+  options.compression_enabled = g_conf->leveldb_compression;
+  options.paranoid_checks = g_conf->leveldb_paranoid;
+  options.max_open_files = g_conf->leveldb_max_open_files;
+  options.log_file = g_conf->leveldb_log;
+
   if (options.write_buffer_size)
     ldoptions.write_buffer_size = options.write_buffer_size;
   if (options.max_open_files)
@@ -57,6 +66,12 @@ int LevelDBStore::init(ostream &out, bool create_if_missing)
   if (!status.ok()) {
     out << status.ToString() << std::endl;
     return -EINVAL;
+  }
+
+  if (g_conf->compact_leveldb_on_mount) {
+    derr << "Compacting store..." << dendl;
+    compact();
+    derr << "...finished compacting store" << dendl;
   }
 
   PerfCountersBuilder plb(g_ceph_context, "leveldb", l_leveldb_first, l_leveldb_last);
