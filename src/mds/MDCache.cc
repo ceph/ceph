@@ -1064,23 +1064,39 @@ void MDCache::get_force_dirfrag_bound_set(vector<dirfrag_t>& dfs, set<CDir*>& bo
     if (!diri)
       continue;
     dout(10) << " checking fragset " << p->second.get() << " on " << *diri << dendl;
+
+    fragtree_t tmpdft;
+    for (set<frag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q)
+      tmpdft.force_to_leaf(g_ceph_context, *q);
+
     for (set<frag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
       frag_t fg = *q;
-      list<CDir*> u;
-      diri->get_dirfrags_under(fg, u);
-      dout(10) << "  frag " << fg << " contains " << u << dendl;
-      if (!u.empty())
-	bounds.insert(u.begin(), u.end());
-      frag_t t = fg;
-      while (t != frag_t()) {
-	t = t.parent();
-	CDir *dir = diri->get_dirfrag(t);
-	if (dir) {
-	  // ugh, we found a containing parent
-	  dout(10) << "  ugh, splitting parent frag " << t << " " << *dir << dendl;
-	  force_dir_fragment(diri, fg);
-	  break;
+      list<frag_t> fgls;
+      diri->dirfragtree.get_leaves_under(fg, fgls);
+      if (fgls.empty()) {
+	bool all = true;
+	frag_t approx_fg = diri->dirfragtree[fg.value()];
+	list<frag_t> ls;
+	tmpdft.get_leaves_under(approx_fg, ls);
+	for (list<frag_t>::iterator r = ls.begin(); r != ls.end(); ++r) {
+	  if (p->second.get().count(*r) == 0) {
+	    // not bound, so the resolve message is from auth MDS of the dirfrag
+	    force_dir_fragment(diri, *r);
+	    all = false;
+	  }
 	}
+	if (all) {
+	  fgls.push_back(approx_fg);
+	} else {
+	  diri->dirfragtree.get_leaves_under(fg, fgls);
+	  assert(!fgls.empty());
+	}
+      }
+      dout(10) << "  frag " << fg << " contains " << fgls << dendl;
+      for (list<frag_t>::iterator r = fgls.begin(); r != fgls.end(); ++r) {
+	CDir *dir = diri->get_dirfrag(*r);
+	if (dir)
+	  bounds.insert(dir);
       }
     }
   }
