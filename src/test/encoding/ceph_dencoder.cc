@@ -83,8 +83,11 @@ public:
     catch (buffer::error& e) {
       return e.what();
     }
-    if (!stray_okay && !p.end())
-      return "stray data at end of buffer";
+    if (!stray_okay && !p.end()) {
+      ostringstream ss;
+      ss << "stray data at end of buffer, offset " << p.get_off();
+      return ss.str();
+    }
     return string();
   }
 
@@ -182,8 +185,11 @@ public:
     catch (buffer::error& e) {
       return e.what();
     }
-    if (!p.end())
-      return "stray data at end of buffer";
+    if (!p.end()) {
+      ostringstream ss;
+      ss << "stray data at end of buffer, offset " << p.get_off();
+      return ss.str();
+    }
     return string();
   }
 

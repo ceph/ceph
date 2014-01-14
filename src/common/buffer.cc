@@ -1279,7 +1279,8 @@ void buffer::list::rebuild_page_aligned()
       std::string s;
       getline(in, s);
       append(s.c_str(), s.length());
-      append("\n", 1);
+      if (s.length())
+	append("\n", 1);
     }
   }
   
