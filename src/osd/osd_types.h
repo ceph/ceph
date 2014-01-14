@@ -20,6 +20,8 @@
 #include <memory>
 #include <boost/scoped_ptr.hpp>
 
+#include "include/rados/rados_types.hpp"
+
 #include "msg/msg_types.h"
 #include "include/types.h"
 #include "include/utime.h"
@@ -204,6 +206,7 @@ enum {
   CEPH_OSD_RMW_FLAG_CLASS_READ  = (1 << 3),
   CEPH_OSD_RMW_FLAG_CLASS_WRITE = (1 << 4),
   CEPH_OSD_RMW_FLAG_PGOP        = (1 << 5),
+  CEPH_OSD_RMW_FLAG_CACHE       = (1 << 6),
 };
 
 
@@ -1578,18 +1581,22 @@ inline ostream& operator<<(ostream& out, const pg_query_t& q) {
  */
 struct pg_log_entry_t {
   enum {
-    MODIFY = 1,
-    CLONE = 2,
-    DELETE = 3,
+    MODIFY = 1,   // some unspecified modification (but not *all* modifications)
+    CLONE = 2,    // cloned object from head
+    DELETE = 3,   // deleted object
     BACKLOG = 4,  // event invented by generate_backlog [deprecated]
     LOST_REVERT = 5, // lost new version, revert to an older version.
     LOST_DELETE = 6, // lost new version, revert to no object (deleted).
     LOST_MARK = 7,   // lost new version, now EIO
+    PROMOTE = 8,     // promoted object from another tier
+    CLEAN = 9,       // mark an object clean
   };
   static const char *get_op_name(int op) {
     switch (op) {
     case MODIFY:
       return "modify  ";
+    case PROMOTE:
+      return "promote ";
     case CLONE:
       return "clone   ";
     case DELETE:
@@ -1602,6 +1609,8 @@ struct pg_log_entry_t {
       return "l_delete";
     case LOST_MARK:
       return "l_mark  ";
+    case CLEAN:
+      return "clean   ";
     default:
       return "unknown ";
     }
@@ -1636,13 +1645,17 @@ struct pg_log_entry_t {
       
   bool is_clone() const { return op == CLONE; }
   bool is_modify() const { return op == MODIFY; }
+  bool is_promote() const { return op == PROMOTE; }
+  bool is_clean() const { return op == CLEAN; }
   bool is_backlog() const { return op == BACKLOG; }
   bool is_lost_revert() const { return op == LOST_REVERT; }
   bool is_lost_delete() const { return op == LOST_DELETE; }
   bool is_lost_mark() const { return op == LOST_MARK; }
 
   bool is_update() const {
-    return is_clone() || is_modify() || is_backlog() || is_lost_revert() || is_lost_mark();
+    return
+      is_clone() || is_modify() || is_promote() || is_clean() ||
+      is_backlog() || is_lost_revert() || is_lost_mark();
   }
   bool is_delete() const {
     return op == DELETE || op == LOST_DELETE;
@@ -1948,6 +1961,11 @@ struct object_copy_data_t {
   bufferlist omap_header;
   map<string, bufferlist> omap;
   string category;
+
+  /// which snaps we are defined for (if a snap and not the head)
+  vector<snapid_t> snaps;
+  ///< latest snap seq for the object (if head)
+  snapid_t snap_seq;
 public:
   object_copy_data_t() : size((uint64_t)-1) {}
 
@@ -2097,6 +2115,9 @@ struct SnapSet {
     bufferlist::iterator p = bl.begin();
     decode(p);
   }
+
+  /// populate SnapSet from a librados::snap_set_t
+  void from_snap_set(const librados::snap_set_t& ss);
     
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);

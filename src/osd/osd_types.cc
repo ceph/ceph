@@ -2679,7 +2679,7 @@ void object_copy_data_t::decode_classic(bufferlist::iterator& bl)
 
 void object_copy_data_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   ::encode(size, bl);
   ::encode(mtime, bl);
   ::encode(category, bl);
@@ -2688,6 +2688,8 @@ void object_copy_data_t::encode(bufferlist& bl) const
   ::encode(omap, bl);
   ::encode(cursor, bl);
   ::encode(omap_header, bl);
+  ::encode(snaps, bl);
+  ::encode(snap_seq, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2703,6 +2705,13 @@ void object_copy_data_t::decode(bufferlist::iterator& bl)
   ::decode(cursor, bl);
   if (struct_v >= 2)
     ::decode(omap_header, bl);
+  if (struct_v >= 3) {
+    ::decode(snaps, bl);
+    ::decode(snap_seq, bl);
+  } else {
+    snaps.clear();
+    snap_seq = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -2732,6 +2741,7 @@ void object_copy_data_t::generate_test_instances(list<object_copy_data_t*>& o)
   bufferptr databp("iamsomedatatocontain", 20);
   o.back()->data.push_back(databp);
   o.back()->omap_header.append("this is an omap header");
+  o.back()->snaps.push_back(123);
 }
 
 void object_copy_data_t::dump(Formatter *f) const
@@ -2747,6 +2757,11 @@ void object_copy_data_t::dump(Formatter *f) const
   f->dump_int("omap_size", omap.size());
   f->dump_int("omap_header_length", omap_header.length());
   f->dump_int("data_length", data.length());
+  f->open_array_section("snaps");
+  for (vector<snapid_t>::const_iterator p = snaps.begin();
+       p != snaps.end(); ++p)
+    f->dump_unsigned("snap", *p);
+  f->close_section();
 }
 
 // -- pg_create_t --
@@ -3051,6 +3066,49 @@ ostream& operator<<(ostream& out, const SnapSet& cs)
   return out << cs.seq << "=" << cs.snaps << ":"
 	     << cs.clones
 	     << (cs.head_exists ? "+head":"");
+}
+
+void SnapSet::from_snap_set(const librados::snap_set_t& ss)
+{
+  // NOTE: our reconstruction of snaps (and the snapc) is not strictly
+  // correct: it will not include snaps that still logically exist
+  // but for which there was no clone that is defined.  For all
+  // practical purposes this doesn't matter, since we only use that
+  // information to clone on the OSD, and we have already moved
+  // forward past that part of the object history.
+
+  seq = ss.seq;
+  set<snapid_t> _snaps;
+  set<snapid_t> _clones;
+  head_exists = false;
+  for (vector<librados::clone_info_t>::const_iterator p = ss.clones.begin();
+       p != ss.clones.end();
+       ++p) {
+    if (p->cloneid == librados::SNAP_HEAD) {
+      head_exists = true;
+    } else {
+      _clones.insert(p->cloneid);
+      _snaps.insert(p->snaps.begin(), p->snaps.end());
+      clone_size[p->cloneid] = p->size;
+      clone_overlap[p->cloneid];  // the entry must exist, even if it's empty.
+      for (vector<pair<uint64_t, uint64_t> >::const_iterator q =
+	     p->overlap.begin(); q != p->overlap.end(); ++q)
+	clone_overlap[p->cloneid].insert(q->first, q->second);
+    }
+  }
+
+  // ascending
+  clones.clear();
+  clones.reserve(_clones.size());
+  for (set<snapid_t>::iterator p = _clones.begin(); p != _clones.end(); ++p)
+    clones.push_back(*p);
+
+  // descending
+  snaps.clear();
+  snaps.reserve(_snaps.size());
+  for (set<snapid_t>::reverse_iterator p = _snaps.rbegin();
+       p != _snaps.rend(); ++p)
+    snaps.push_back(*p);
 }
 
 // -- watch_info_t --

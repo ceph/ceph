@@ -1051,13 +1051,14 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
 
 static int do_cache_flush(IoCtx& io_ctx, string oid)
 {
-  ObjectWriteOperation op;
+  ObjectReadOperation op;
   op.cache_flush();
   librados::AioCompletion *completion =
     librados::Rados::aio_create_completion();
   io_ctx.aio_operate(oid.c_str(), completion, &op,
 		     librados::OPERATION_IGNORE_CACHE |
-		     librados::OPERATION_IGNORE_OVERLAY);
+		     librados::OPERATION_IGNORE_OVERLAY,
+		     NULL);
   completion->wait_for_safe();
   int r = completion->get_return_value();
   completion->release();
@@ -1066,14 +1067,15 @@ static int do_cache_flush(IoCtx& io_ctx, string oid)
 
 static int do_cache_try_flush(IoCtx& io_ctx, string oid)
 {
-  ObjectWriteOperation op;
+  ObjectReadOperation op;
   op.cache_try_flush();
   librados::AioCompletion *completion =
     librados::Rados::aio_create_completion();
   io_ctx.aio_operate(oid.c_str(), completion, &op,
 		     librados::OPERATION_IGNORE_CACHE |
 		     librados::OPERATION_IGNORE_OVERLAY |
-		     librados::OPERATION_SKIPRWLOCKS);
+		     librados::OPERATION_SKIPRWLOCKS,
+		     NULL);
   completion->wait_for_safe();
   int r = completion->get_return_value();
   completion->release();
@@ -1082,14 +1084,15 @@ static int do_cache_try_flush(IoCtx& io_ctx, string oid)
 
 static int do_cache_evict(IoCtx& io_ctx, string oid)
 {
-  ObjectWriteOperation op;
+  ObjectReadOperation op;
   op.cache_evict();
   librados::AioCompletion *completion =
     librados::Rados::aio_create_completion();
   io_ctx.aio_operate(oid.c_str(), completion, &op,
 		     librados::OPERATION_IGNORE_CACHE |
 		     librados::OPERATION_IGNORE_OVERLAY |
-		     librados::OPERATION_SKIPRWLOCKS);
+		     librados::OPERATION_SKIPRWLOCKS,
+		     NULL);
   completion->wait_for_safe();
   int r = completion->get_return_value();
   completion->release();
