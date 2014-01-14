@@ -429,6 +429,9 @@ protected:
 
   void handle_lease(MClientLease *m);
 
+  // inline data
+  int uninline_data(Inode *in, Context *onfinish);
+
   // file caps
   void check_cap_issue(Inode *in, Cap *cap, unsigned issued);
   void add_update_cap(Inode *in, MetaSession *session, uint64_t cap_id,
@@ -508,6 +511,7 @@ protected:
   void update_inode_file_bits(Inode *in,
 			      uint64_t truncate_seq, uint64_t truncate_size, uint64_t size,
 			      uint64_t time_warp_seq, utime_t ctime, utime_t mtime, utime_t atime,
+			      version_t inline_version, bufferlist& inline_data,
 			      int issued);
   Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session);
   Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
