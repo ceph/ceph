@@ -1713,7 +1713,7 @@ void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
   dout(10) << "Adding newly split pg " << *pg << dendl;
   vector<int> up, acting;
   pg->get_osdmap()->pg_to_up_acting_osds(pg->info.pgid, up, acting);
-  int role = pg->get_osdmap()->calc_pg_role(service.whoami, acting);
+  int role = OSDMap::calc_pg_role(service.whoami, acting);
   pg->set_role(role);
   pg->reg_next_scrub();
   pg->handle_loaded(rctx);
@@ -1967,7 +1967,7 @@ void OSD::load_pgs()
 
     // generate state for PG's current mapping
     pg->get_osdmap()->pg_to_up_acting_osds(pgid, pg->up, pg->acting);
-    int role = pg->get_osdmap()->calc_pg_role(whoami, pg->acting);
+    int role = OSDMap::calc_pg_role(whoami, pg->acting);
     pg->set_role(role);
 
     PG::RecoveryCtx rctx(0, 0, 0, 0, 0, 0);
@@ -2146,8 +2146,6 @@ void OSD::handle_pg_peering_evt(
 
     bool create = false;
     if (primary) {
-      assert(role == 0);  // otherwise, probably bug in project_pg_history.
-
       // DNE on source?
       if (info.dne()) {
 	// is there a creation pending on this pg?
@@ -2165,8 +2163,7 @@ void OSD::handle_pg_peering_evt(
       }
       creating_pgs.erase(info.pgid);
     } else {
-      assert(role != 0);    // i should be replica
-      assert(!info.dne());  // and pg exists if we are hearing about it
+      assert(!info.dne());  // pg exists if we are hearing about it
     }
 
     // do we need to resurrect a deleting pg?
@@ -5469,9 +5466,9 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
 
     // am i still primary?
     vector<int> acting;
-    int nrep = osdmap->pg_to_acting_osds(pgid, acting);
-    int role = osdmap->calc_pg_role(whoami, acting, nrep);
-    if (role != 0) {
+    int primary;
+    osdmap->pg_to_acting_osds(pgid, &acting, &primary);
+    if (primary != whoami) {
       dout(10) << " no longer primary for " << pgid << ", stopping creation" << dendl;
       creating_pgs.erase(p);
     } else {
@@ -5488,7 +5485,6 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
   while (p != waiting_for_pg.end()) {
     pg_t pgid = p->first;
 
-    // am i still primary?
     vector<int> acting;
     int nrep = osdmap->pg_to_acting_osds(pgid, acting);
     int role = osdmap->calc_pg_role(whoami, acting, nrep);
@@ -5951,10 +5947,11 @@ void OSD::handle_pg_create(OpRequestRef op)
    
     // is it still ours?
     vector<int> up, acting;
-    osdmap->pg_to_up_acting_osds(on, up, acting);
+    int up_primary, acting_primary;
+    osdmap->pg_to_up_acting_osds(on, &up, &up_primary, &acting, &acting_primary);
     int role = osdmap->calc_pg_role(whoami, acting, acting.size());
 
-    if (role != 0) {
+    if (up_primary != whoami) {
       dout(10) << "mkpg " << pgid << "  not primary (role=" << role << "), skipping" << dendl;
       continue;
     }
@@ -6601,7 +6598,6 @@ void OSD::handle_pg_query(OpRequestRef op)
     // get active crush mapping
     vector<int> up, acting;
     osdmap->pg_to_up_acting_osds(pgid, up, acting);
-    int role = osdmap->calc_pg_role(whoami, acting, acting.size());
 
     // same primary?
     pg_history_t history = it->second.history;
@@ -6616,7 +6612,6 @@ void OSD::handle_pg_query(OpRequestRef op)
       continue;
     }
 
-    assert(role != 0);
     dout(10) << " pg " << pgid << " dne" << dendl;
     pg_info_t empty(pgid);
     if (it->second.type == pg_query_t::LOG ||

@@ -1753,7 +1753,7 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
 
   // There can't be recovery/backfill going on now
   get_osdmap()->pg_to_up_acting_osds(child->info.pgid, child->up, child->acting);
-  child->role = get_osdmap()->calc_pg_role(osd->whoami, child->acting);
+  child->role = OSDMap::calc_pg_role(osd->whoami, child->acting);
   if (get_primary() != child->get_primary())
     child->info.history.same_primary_since = get_osdmap()->get_epoch();
 
@@ -4652,7 +4652,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
 	       << dendl;
     } else {
       // primary is the same.
-      if (role == 0) {
+      if (is_primary()) {
 	// i am (still) primary. but my replica set changed.
 	state_clear(PG_STATE_CLEAN);
 	  
