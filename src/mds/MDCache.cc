@@ -1298,7 +1298,9 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir,
 
   // adjust subtree
   list<CDir*> dfls;
-  diri->get_dirfrags(dfls);
+  // make sure subtree dirfrags are at the front of the list
+  diri->get_subtree_dirfrags(dfls);
+  diri->get_nested_dirfrags(dfls);
   for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) {
     CDir *dir = *p;
 
