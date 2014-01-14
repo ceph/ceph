@@ -178,7 +178,8 @@ int OSDMap::Incremental::identify_osd(uuid_d u) const
   return -1;
 }
 
-int OSDMap::Incremental::propagate_snaps_to_tiers(const OSDMap& osdmap)
+int OSDMap::Incremental::propagate_snaps_to_tiers(CephContext *cct,
+						  const OSDMap& osdmap)
 {
   assert(epoch == osdmap.get_epoch() + 1);
   for (map<int64_t,pg_pool_t>::iterator p = new_pools.begin();
@@ -192,21 +193,21 @@ int OSDMap::Incremental::propagate_snaps_to_tiers(const OSDMap& osdmap)
 	pg_pool_t *tier = 0;
 	if (r == new_pools.end()) {
 	  const pg_pool_t *orig = osdmap.get_pg_pool(*q);
-	  if (!orig)
+	  if (!orig) {
+	    lderr(cct) << __func__ << " no pool " << *q << dendl;
 	    return -EIO;
-
-	  // skip update?
-	  if (orig->snap_seq == base.snap_seq &&
-	      orig->snap_epoch == base.snap_epoch)
-	    continue;
-
+	  }
 	  tier = get_new_pool(*q, orig);
 	} else {
 	  tier = &r->second;
 	}
-	if (tier->tier_of != p->first)
+	if (tier->tier_of != p->first) {
+	  lderr(cct) << __func__ << " " << r->first << " tier_of != " << p->first << dendl;
 	  return -EIO;
+	}
 
+	ldout(cct, 10) << __func__ << " from " << p->first << " to "
+		       << r->first << dendl;
 	tier->snap_seq = base.snap_seq;
 	tier->snap_epoch = base.snap_epoch;
 	tier->snaps = base.snaps;

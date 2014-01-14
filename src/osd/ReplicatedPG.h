@@ -107,6 +107,8 @@ public:
     utime_t mtime; ///< the copy source's mtime
     uint64_t object_size; ///< the copied object's size
     bool started_temp_obj; ///< true if the callback needs to delete temp object
+    coll_t temp_coll;      ///< temp collection (if any)
+    hobject_t temp_oid;    ///< temp object (if any)
     /**
      * Final transaction; if non-empty the callback must execute it before any
      * other accesses to the object (in order to complete the copy).
@@ -115,8 +117,13 @@ public:
     string category; ///< The copy source's category
     version_t user_version; ///< The copy source's user version
     bool should_requeue;  ///< op should be requeued on cancel
+    vector<snapid_t> snaps;  ///< src's snaps (if clone)
+    snapid_t snap_seq;       ///< src's snap_seq (if head)
+    librados::snap_set_t snapset; ///< src snapset (if head)
+    bool mirror_snapset;
     CopyResults() : object_size(0), started_temp_obj(false),
-		    user_version(0), should_requeue(false) {}
+		    user_version(0), should_requeue(false),
+		    mirror_snapset(false) {}
   };
 
   struct CopyOp {
@@ -125,10 +132,12 @@ public:
     hobject_t src;
     object_locator_t oloc;
     unsigned flags;
+    bool mirror_snapset;
 
-    CopyResults *results;
+    CopyResults results;
 
     tid_t objecter_tid;
+    tid_t objecter_tid2;
 
     object_copy_cursor_t cursor;
     map<string,bufferlist> attrs;
@@ -137,23 +146,21 @@ public:
     map<string,bufferlist> omap;
     int rval;
 
-    coll_t temp_coll;
-    hobject_t temp_oid;
     object_copy_cursor_t temp_cursor;
 
     CopyOp(CopyCallback *cb_, ObjectContextRef _obc, hobject_t s,
 	   object_locator_t l,
            version_t v,
 	   unsigned f,
-	   const hobject_t& dest)
+	   bool ms)
       : cb(cb_), obc(_obc), src(s), oloc(l), flags(f),
-        results(NULL),
+	mirror_snapset(ms),
 	objecter_tid(0),
-	rval(-1),
-	temp_oid(dest)
+	objecter_tid2(0),
+	rval(-1)
     {
-      results = new CopyResults();
-      results->user_version = v;
+      results.user_version = v;
+      results.mirror_snapset = mirror_snapset;
     }
   };
   typedef boost::shared_ptr<CopyOp> CopyOpRef;
@@ -497,7 +504,7 @@ protected:
    * @return true on success, false if we are queued
    */
   bool get_rw_locks(OpContext *ctx) {
-    if (ctx->op->may_write()) {
+    if (ctx->op->may_write() || ctx->op->may_cache()) {
       if (ctx->obc->get_write(ctx->op)) {
 	ctx->lock_to_release = OpContext::W_LOCK;
 	return true;
@@ -651,7 +658,8 @@ protected:
 
   int find_object_context(const hobject_t& oid,
 			  ObjectContextRef *pobc,
-			  bool can_create, snapid_t *psnapid=NULL);
+			  bool can_create,
+			  hobject_t *missing_oid=NULL);
 
   void add_object_context_to_pg_stat(ObjectContextRef obc, pg_stat_t *stat);
 
@@ -773,7 +781,7 @@ protected:
 		   const hobject_t& head, const hobject_t& coid,
 		   object_info_t *poi);
   void execute_ctx(OpContext *ctx);
-  void finish_ctx(OpContext *ctx);
+  void finish_ctx(OpContext *ctx, int log_op_type);
   void reply_ctx(OpContext *ctx, int err);
   void reply_ctx(OpContext *ctx, int err, eversion_t v, version_t uv);
   void make_writeable(OpContext *ctx);
@@ -788,7 +796,9 @@ protected:
    * This helper function is called from do_op if the ObjectContext lookup fails.
    * @returns true if the caching code is handling the Op, false otherwise.
    */
-  inline bool maybe_handle_cache(OpRequestRef op, ObjectContextRef obc, int r);
+  inline bool maybe_handle_cache(OpRequestRef op, ObjectContextRef obc, int r,
+				 const hobject_t& missing_oid,
+				 bool must_promote = false);
   /**
    * This helper function tells the client to redirect their request elsewhere.
    */
@@ -796,7 +806,8 @@ protected:
   /**
    * This function starts up a copy from
    */
-  void promote_object(OpRequestRef op, ObjectContextRef obc);
+  void promote_object(OpRequestRef op, ObjectContextRef obc,
+		      const hobject_t& missing_object);
 
   /**
    * Check if the op is such that we can skip promote (e.g., DELETE)
@@ -952,7 +963,7 @@ protected:
   map<hobject_t, CopyOpRef> copy_ops;
 
   int fill_in_copy_get(bufferlist::iterator& bp, OSDOp& op,
-                       object_info_t& oi, bool classic);
+                       ObjectContextRef& obc, bool classic);
   /**
    * To copy an object, call start_copy.
    *
@@ -965,7 +976,7 @@ protected:
    */
   void start_copy(CopyCallback *cb, ObjectContextRef obc, hobject_t src,
 		  object_locator_t oloc, version_t version, unsigned flags,
-		  const hobject_t& temp_dest_oid);
+		  bool mirror_snapset);
   void process_copy_chunk(hobject_t oid, tid_t tid, int r);
   void _write_copy_chunk(CopyOpRef cop, ObjectStore::Transaction *t);
   void _copy_some(ObjectContextRef obc, CopyOpRef cop);
@@ -973,8 +984,7 @@ protected:
                                       ObjectStore::Transaction& t);
   void finish_copyfrom(OpContext *ctx);
   void finish_promote(int r, OpRequestRef op,
-		      CopyResults *results, ObjectContextRef obc,
-                      hobject_t& temp_obj);
+		      CopyResults *results, ObjectContextRef obc);
   void cancel_copy(CopyOpRef cop, bool requeue);
   void cancel_copy_ops(bool requeue);
 

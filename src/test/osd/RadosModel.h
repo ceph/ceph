@@ -152,6 +152,8 @@ public:
   map<int, map<string,ObjectDesc> > pool_obj_cont;
   set<string> oid_in_use;
   set<string> oid_not_in_use;
+  set<string> oid_flushing;
+  set<string> oid_not_flushing;
   SharedPtrRegistry<int, int> snaps_in_use;
   int current_snap;
   string pool_name;
@@ -418,12 +420,14 @@ public:
   }
 
   void update_object_version(const string &oid, uint64_t version,
-			     bool dirty = true)
+			     bool dirty = true, int snap = -1)
   {
     for (map<int, map<string,ObjectDesc> >::reverse_iterator i = 
 	   pool_obj_cont.rbegin();
 	 i != pool_obj_cont.rend();
 	 ++i) {
+      if (snap != -1 && snap < i->first)
+	continue;
       map<string,ObjectDesc>::iterator j = i->second.find(oid);
       if (j != i->second.end()) {
 	if (version)
@@ -981,6 +985,8 @@ public:
   ObjectDesc old_value;
   int snap;
 
+  std::tr1::shared_ptr<int> in_use;
+
   bufferlist result;
   int retval;
 
@@ -1012,10 +1018,11 @@ public:
     context->state_lock.Lock();
     if (!(rand() % 4) && !context->snaps.empty()) {
       snap = rand_choose(context->snaps)->first;
+      in_use = context->snaps_in_use.lookup_or_create(snap, snap);
     } else {
       snap = -1;
     }
-    std::cout << num << ": snap " << snap << std::endl;
+    std::cout << num << ": read oid " << oid << " snap " << snap << std::endl;
     done = 0;
     completion = context->rados.aio_create_completion((void *) this, &read_callback, 0);
 
@@ -1087,7 +1094,7 @@ public:
       if (!(err == -ENOENT && old_value.deleted())) {
 	cerr << num << ": Error: oid " << oid << " read returned error code "
 	     << err << std::endl;
-	context->errors++;
+	assert(0);
       }
     } else {
       cout << num << ":  expect " << old_value.most_recent() << std::endl;
@@ -1426,6 +1433,7 @@ public:
   librados::ObjectReadOperation rd_op;
   librados::AioCompletion *comp;
   librados::AioCompletion *comp_racing_read;
+  std::tr1::shared_ptr<int> in_use;
   int snap;
   int done;
   uint64_t version;
@@ -1456,6 +1464,7 @@ public:
       // choose source snap
       if (0 && !(rand() % 4) && !context->snaps.empty()) {
 	snap = rand_choose(context->snaps)->first;
+	in_use = context->snaps_in_use.lookup_or_create(snap, snap);
       } else {
 	snap = -1;
       }
@@ -1688,6 +1697,8 @@ public:
   string oid;
   bool dirty;
   ObjectDesc old_value;
+  int snap;
+  std::tr1::shared_ptr<int> in_use;
 
   IsDirtyOp(int n,
 	    RadosTestContext *context,
@@ -1704,6 +1715,15 @@ public:
   {
     context->state_lock.Lock();
 
+    if (!(rand() % 4) && !context->snaps.empty()) {
+      snap = rand_choose(context->snaps)->first;
+      in_use = context->snaps_in_use.lookup_or_create(snap, snap);
+    } else {
+      snap = -1;
+    }
+    std::cout << num << ": is_dirty oid " << oid << " snap " << snap
+	      << std::endl;
+
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
@@ -1714,10 +1734,18 @@ public:
     context->oid_not_in_use.erase(oid);
     context->state_lock.Unlock();
 
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(context->snaps[snap]);
+    }
+
     op.is_dirty(&dirty, NULL);
     int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
 					&op, 0);
     assert(!r);
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(0);
+    }
   }
 
   void _finish(CallbackInfo *info)
@@ -1728,7 +1756,7 @@ public:
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
 
-    assert(context->find_object(oid, &old_value)); // FIXME snap?
+    assert(context->find_object(oid, &old_value, snap));
 
     int r = completion->get_return_value();
     if (r == 0) {
@@ -1761,9 +1789,12 @@ public:
 class CacheFlushOp : public TestOp {
 public:
   librados::AioCompletion *completion;
-  librados::ObjectWriteOperation op;
+  librados::ObjectReadOperation op;
   string oid;
   bool blocking;
+  int snap;
+  bool can_fail;
+  std::tr1::shared_ptr<int> in_use;
 
   CacheFlushOp(int n,
 	       RadosTestContext *context,
@@ -1773,12 +1804,34 @@ public:
     : TestOp(n, context, stat),
       completion(NULL),
       oid(oid),
-      blocking(b)
+      blocking(b),
+      snap(0),
+      can_fail(false)
   {}
 
   void _begin()
   {
     context->state_lock.Lock();
+
+    if (!(rand() % 4) && !context->snaps.empty()) {
+      snap = rand_choose(context->snaps)->first;
+      in_use = context->snaps_in_use.lookup_or_create(snap, snap);
+    } else {
+      snap = -1;
+    }
+    // not being particularly specific here about knowing which
+    // flushes are on the oldest clean snap and which ones are not.
+    can_fail = !blocking || !context->snaps.empty();
+    // FIXME: we can could fail if we've ever removed a snap due to
+    // the async snap trimming.
+    can_fail = true;
+    cout << num << ": " << (blocking ? "cache_flush" : "cache_try_flush")
+	 << " oid " << oid << " snap " << snap << std::endl;
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(context->snaps[snap]);
+    }
+
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
@@ -1787,6 +1840,8 @@ public:
     // leave object in unused list so that we race with other operations
     //context->oid_in_use.insert(oid);
     //context->oid_not_in_use.erase(oid);
+    context->oid_flushing.insert(oid);
+    context->oid_not_flushing.erase(oid);
     context->state_lock.Unlock();
 
     unsigned flags = librados::OPERATION_IGNORE_CACHE;
@@ -1797,8 +1852,12 @@ public:
       flags = librados::OPERATION_SKIPRWLOCKS;
     }
     int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
-					&op, flags);
+					&op, flags, NULL);
     assert(!r);
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(0);
+    }
   }
 
   void _finish(CallbackInfo *info)
@@ -1808,12 +1867,14 @@ public:
     assert(completion->is_complete());
     //context->oid_in_use.erase(oid);
     //context->oid_not_in_use.insert(oid);
+    context->oid_flushing.erase(oid);
+    context->oid_not_flushing.insert(oid);
     int r = completion->get_return_value();
     cout << num << ":  got " << cpp_strerror(r) << std::endl;
     if (r == 0) {
-      context->update_object_version(oid, 0, false);
+      context->update_object_version(oid, 0, false, snap);
     } else if (r == -EBUSY) {
-      assert(!blocking);
+      assert(can_fail);
     } else if (r == -EINVAL) {
       // caching not enabled?
     } else if (r == -ENOENT) {
@@ -1840,8 +1901,9 @@ public:
 class CacheEvictOp : public TestOp {
 public:
   librados::AioCompletion *completion;
-  librados::ObjectWriteOperation op;
+  librados::ObjectReadOperation op;
   string oid;
+  std::tr1::shared_ptr<int> in_use;
 
   CacheEvictOp(int n,
 	       RadosTestContext *context,
@@ -1855,6 +1917,20 @@ public:
   void _begin()
   {
     context->state_lock.Lock();
+
+    int snap;
+    if (!(rand() % 4) && !context->snaps.empty()) {
+      snap = rand_choose(context->snaps)->first;
+      in_use = context->snaps_in_use.lookup_or_create(snap, snap);
+    } else {
+      snap = -1;
+    }
+    cout << num << ": cache_evict oid " << oid << " snap " << snap << std::endl;
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(context->snaps[snap]);
+    }
+
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
 					       new TestOp::CallbackInfo(0));
@@ -1867,8 +1943,13 @@ public:
 
     op.cache_evict();
     int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
-					&op, librados::OPERATION_IGNORE_CACHE);
+					&op, librados::OPERATION_IGNORE_CACHE,
+					NULL);
     assert(!r);
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(0);
+    }
   }
 
   void _finish(CallbackInfo *info)
@@ -1881,7 +1962,7 @@ public:
     int r = completion->get_return_value();
     cout << num << ":  got " << cpp_strerror(r) << std::endl;
     if (r == 0) {
-      context->update_object_version(oid, completion->get_version64(), false);
+      // yay!
     } else if (r == -EBUSY) {
       // raced with something that dirtied the object
     } else if (r == -EINVAL) {

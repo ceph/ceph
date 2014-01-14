@@ -19,11 +19,13 @@ struct clone_info_t {
   std::vector<snap_t> snaps;          // ascending
   std::vector< std::pair<uint64_t,uint64_t> > overlap;  // with next newest
   uint64_t size;
+  clone_info_t() : cloneid(0), size(0) {}
 };
 
 struct snap_set_t {
   std::vector<clone_info_t> clones;   // ascending
   snap_t seq;   // newest snapid seen by the object
+  snap_set_t() : seq(0) {}
 };
 
 }

@@ -64,6 +64,7 @@ bool OpRequest::check_rmw(int flag) {
 }
 bool OpRequest::may_read() { return need_read_cap() || need_class_read_cap(); }
 bool OpRequest::may_write() { return need_write_cap() || need_class_write_cap(); }
+bool OpRequest::may_cache() { return check_rmw(CEPH_OSD_RMW_FLAG_CACHE); }
 bool OpRequest::includes_pg_op() { return check_rmw(CEPH_OSD_RMW_FLAG_PGOP); }
 bool OpRequest::need_read_cap() {
   return check_rmw(CEPH_OSD_RMW_FLAG_READ);
@@ -82,3 +83,4 @@ void OpRequest::set_write() { rmw_flags |= CEPH_OSD_RMW_FLAG_WRITE; }
 void OpRequest::set_class_read() { rmw_flags |= CEPH_OSD_RMW_FLAG_CLASS_READ; }
 void OpRequest::set_class_write() { rmw_flags |= CEPH_OSD_RMW_FLAG_CLASS_WRITE; }
 void OpRequest::set_pg_op() { rmw_flags |= CEPH_OSD_RMW_FLAG_PGOP; }
+void OpRequest::set_cache() { rmw_flags |= CEPH_OSD_RMW_FLAG_CACHE; }
