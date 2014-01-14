@@ -90,7 +90,6 @@ int ErasureCodeJerasure::encode(const set<int> &want_to_encode,
   unsigned padded_length = blocksize * k;
   dout(10) << "encode adjusted buffer length from " << in.length()
 	   << " to " << padded_length << dendl;
-  assert(padded_length % k == 0);
   bufferlist out(in);
   if (padded_length - in.length() > 0) {
     bufferptr pad(padded_length - in.length());
