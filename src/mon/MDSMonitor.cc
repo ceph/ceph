@@ -819,13 +819,45 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
     }
 
   } else if (prefix == "mds set_max_mds") {
+    // NOTE: see also "mds set max_mds", which can modify the same field.
     int64_t maxmds;
     if (!cmd_getval(g_ceph_context, cmdmap, "maxmds", maxmds) || maxmds < 0)
       goto out;
     pending_mdsmap.max_mds = maxmds;
     r = 0;
     ss << "max_mds = " << pending_mdsmap.max_mds;
-
+  } else if (prefix == "mds set") {
+    string var;
+    if (!cmd_getval(g_ceph_context, cmdmap, "var", var) < 0)
+      goto out;
+    string val;
+    string interr;
+    int64_t n = 0;
+    if (!cmd_getval(g_ceph_context, cmdmap, "val", val))
+      goto out;
+    // we got a string.  see if it contains an int.
+    n = strict_strtoll(val.c_str(), 10, &interr);
+    if (var == "max_mds") {
+      // NOTE: see also "mds set_max_mds", which can modify the same field.
+      if (interr.length())
+	goto out;
+      pending_mdsmap.max_mds = n;
+    } else if (var == "max_file_size") {
+      if (interr.length()) {
+	ss << var << " requires an integer value";
+	goto out;
+      }
+      if (n < CEPH_MIN_STRIPE_UNIT) {
+	r = -ERANGE;
+	ss << var << " must at least " << CEPH_MIN_STRIPE_UNIT;
+	goto out;
+      }
+      pending_mdsmap.max_file_size = n;
+    } else {
+      ss << "unknown variable " << var;
+      goto out;
+    }
+    r = 0;
   } else if (prefix == "mds setmap") {
     MDSMap map;
     map.decode(m->get_data());

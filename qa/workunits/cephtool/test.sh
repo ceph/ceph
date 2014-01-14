@@ -155,6 +155,10 @@ ceph mds remove_data_pool rbd
 ceph osd pool delete data2 data2 --yes-i-really-really-mean-it
 ceph mds set_max_mds 4
 ceph mds set_max_mds 3
+ceph mds set max_mds 4
+expect_false ceph mds set max_mds asdf
+ceph mds set max_file_size 1000000000
+expect_false ceph mds set max_file_size 123asdf
 ceph mds stat
 # ceph mds tell mds.a getmap
 # ceph mds rm
