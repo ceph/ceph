@@ -20,7 +20,22 @@ using std::stringstream;
 
 
 // features
-CompatSet get_mdsmap_compat_set() {
+CompatSet get_mdsmap_compat_set_all() {
+  CompatSet::FeatureSet feature_compat;
+  CompatSet::FeatureSet feature_ro_compat;
+  CompatSet::FeatureSet feature_incompat;
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_BASE);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_CLIENTRANGES);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_FILELAYOUT);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_DIRINODE);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_ENCODING);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_OMAPDIRFRAG);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_INLINE);
+
+  return CompatSet(feature_compat, feature_ro_compat, feature_incompat);
+}
+
+CompatSet get_mdsmap_compat_set_default() {
   CompatSet::FeatureSet feature_compat;
   CompatSet::FeatureSet feature_ro_compat;
   CompatSet::FeatureSet feature_incompat;
@@ -136,7 +151,7 @@ void MDSMap::generate_test_instances(list<MDSMap*>& ls)
   m->data_pools.insert(0);
   m->metadata_pool = 1;
   m->cas_pool = 2;
-  m->compat = get_mdsmap_compat_set();
+  m->compat = get_mdsmap_compat_set_all();
 
   // these aren't the defaults, just in case anybody gets confused
   m->session_timeout = 61;

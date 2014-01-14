@@ -58,7 +58,8 @@ using namespace std;
 
 class CephContext;
 
-extern CompatSet get_mdsmap_compat_set();
+extern CompatSet get_mdsmap_compat_set_all();
+extern CompatSet get_mdsmap_compat_set_default();
 extern CompatSet get_mdsmap_compat_set_base(); // pre v0.20
 
 #define MDS_FEATURE_INCOMPAT_BASE CompatSet::Feature(1, "base v0.20")

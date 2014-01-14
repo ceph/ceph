@@ -641,7 +641,8 @@ void MDS::beacon_send()
   beacon->set_standby_for_name(standby_for_name);
 
   // include _my_ feature set
-  CompatSet mdsmap_compat(get_mdsmap_compat_set());
+  CompatSet mdsmap_compat(get_mdsmap_compat_set_default());
+  mdsmap_compat.merge(mdsmap->compat);
   beacon->set_compat(mdsmap_compat);
 
   monc->send_mon_message(beacon);
@@ -864,7 +865,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   monc->sub_got("mdsmap", mdsmap->get_epoch());
 
   // verify compatset
-  CompatSet mdsmap_compat(get_mdsmap_compat_set());
+  CompatSet mdsmap_compat(get_mdsmap_compat_set_all());
   dout(10) << "     my compat " << mdsmap_compat << dendl;
   dout(10) << " mdsmap compat " << mdsmap->compat << dendl;
   if (!mdsmap_compat.writeable(mdsmap->compat)) {
