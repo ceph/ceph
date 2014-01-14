@@ -217,8 +217,8 @@ public:
   RGWQuotaStatsUpdate(int _objs_delta, uint64_t _added_bytes, uint64_t _removed_bytes) : 
                     objs_delta(_objs_delta), added_bytes(_added_bytes), removed_bytes(_removed_bytes) {}
   bool update(RGWQuotaCacheStats *entry) {
-    uint64_t rounded_kb_added = rgw_rounded_kb(added_bytes);
-    uint64_t rounded_kb_removed = rgw_rounded_kb(removed_bytes);
+    uint64_t rounded_kb_added = rgw_rounded_objsize_kb(added_bytes);
+    uint64_t rounded_kb_removed = rgw_rounded_objsize_kb(removed_bytes);
 
     entry->stats.num_kb_rounded += (rounded_kb_added - rounded_kb_removed);
     entry->stats.num_kb += (added_bytes - removed_bytes) / 1024;
@@ -561,7 +561,7 @@ public:
   virtual int check_quota(const string& user, rgw_bucket& bucket,
                           RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota,
 			  uint64_t num_objs, uint64_t size) {
-    uint64_t size_kb = rgw_rounded_kb(size);
+    uint64_t size_kb = rgw_rounded_objsize_kb(size);
 
     if (bucket_quota.enabled) {
       RGWStorageStats bucket_stats;

@@ -1279,6 +1279,11 @@ static inline uint64_t rgw_rounded_kb(uint64_t bytes)
   return (bytes + 1023) / 1024;
 }
 
+static inline uint64_t rgw_rounded_objsize_kb(uint64_t bytes)
+{
+  return ((bytes + 4095) & ~4095) / 1024;
+}
+
 extern string rgw_string_unquote(const string& s);
 extern void parse_csv_string(const string& ival, vector<string>& ovals);
 extern int parse_key_value(string& in_str, string& key, string& val);
