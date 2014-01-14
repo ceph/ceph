@@ -579,6 +579,8 @@ struct ObjectOperation {
     std::map<std::string,bufferlist> *out_attrs;
     bufferlist *out_data, *out_omap_header;
     std::map<std::string,bufferlist> *out_omap;
+    vector<snapid_t> *out_snaps;
+    snapid_t *out_snap_seq;
     int *prval;
     C_ObjectOperation_copyget(object_copy_cursor_t *c,
 			      uint64_t *s,
@@ -587,11 +589,14 @@ struct ObjectOperation {
 			      std::map<std::string,bufferlist> *a,
 			      bufferlist *d, bufferlist *oh,
 			      std::map<std::string,bufferlist> *o,
+			      std::vector<snapid_t> *osnaps,
+			      snapid_t *osnap_seq,
 			      int *r)
       : cursor(c),
 	out_size(s), out_mtime(m), out_category(cat),
 	out_attrs(a), out_data(d), out_omap_header(oh),
-	out_omap(o), prval(r) {}
+	out_omap(o), out_snaps(osnaps), out_snap_seq(osnap_seq),
+	prval(r) {}
     void finish(int r) {
       if (r < 0)
 	return;
@@ -613,6 +618,10 @@ struct ObjectOperation {
 	  out_omap_header->claim_append(copy_reply.omap_header);
 	if (out_omap)
 	  *out_omap = copy_reply.omap;
+	if (out_snaps)
+	  *out_snaps = copy_reply.snaps;
+	if (out_snap_seq)
+	  *out_snap_seq = copy_reply.snap_seq;
 	*cursor = copy_reply.cursor;
       } catch (buffer::error& e) {
 	if (prval)
@@ -630,6 +639,8 @@ struct ObjectOperation {
 		bufferlist *out_data,
 		bufferlist *out_omap_header,
 		std::map<std::string,bufferlist> *out_omap,
+		vector<snapid_t> *out_snaps,
+		snapid_t *out_snap_seq,
 		int *prval) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET);
     osd_op.op.copy_get.max = max;
@@ -640,7 +651,7 @@ struct ObjectOperation {
     C_ObjectOperation_copyget *h =
       new C_ObjectOperation_copyget(cursor, out_size, out_mtime, out_category,
                                     out_attrs, out_data, out_omap_header,
-				    out_omap, prval);
+				    out_omap, out_snaps, out_snap_seq, prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
   }
