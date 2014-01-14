@@ -68,7 +68,7 @@ public:
 
   virtual void update_stats(const string& bucket_owner, rgw_bucket& bucket, int obj_delta, uint64_t added_bytes, uint64_t removed_bytes) = 0;
 
-  static RGWQuotaHandler *generate_handler(RGWRados *store);
+  static RGWQuotaHandler *generate_handler(RGWRados *store, bool quota_threads);
   static void free_handler(RGWQuotaHandler *handler);
 };
 

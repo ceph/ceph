@@ -24,6 +24,7 @@
 #include "rgw_rados.h"
 #include "rgw_quota.h"
 #include "rgw_bucket.h"
+#include "rgw_user.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -430,7 +431,51 @@ class RGWUserStatsCache : public RGWQuotaCache<string> {
     }
   };
 
+  /*
+   * thread, full sync all users stats periodically
+   *
+   * only sync non idle users or ones that never got synced before, this is needed so that
+   * users that didn't have quota turned on before (or existed before the user objclass
+   * tracked stats) need to get their backend stats up to date.
+   */
+  class UserSyncThread : public Thread {
+    CephContext *cct;
+    RGWUserStatsCache *stats;
+
+    Mutex lock;
+    Cond cond;
+  public:
+
+    UserSyncThread(CephContext *_cct, RGWUserStatsCache *_s) : cct(_cct), stats(_s), lock("RGWUserStatsCache::UserSyncThread") {}
+
+    void *entry() {
+      ldout(cct, 20) << "UserSyncThread: start" << dendl;
+      do {
+
+        string key = "user";
+
+        int ret = stats->sync_all_users();
+        if (ret < 0) {
+          ldout(cct, 0) << "ERROR: sync_all_users() returned ret=" << ret << dendl;
+        }
+
+        lock.Lock();
+        cond.WaitInterval(cct, lock, utime_t(cct->_conf->rgw_user_quota_sync_interval, 0));
+        lock.Unlock();
+      } while (!stats->going_down());
+      ldout(cct, 20) << "UserSyncThread: done" << dendl;
+
+      return NULL;
+    }
+
+    void stop() {
+      Mutex::Locker l(lock);
+      cond.Signal();
+    }
+  };
+
   BucketsSyncThread *buckets_sync_thread;
+  UserSyncThread *user_sync_thread;
 protected:
   bool map_find(const string& user, rgw_bucket& bucket, RGWQuotaCacheStats& qs) {
     return stats_map.find(user, qs);
@@ -446,6 +491,8 @@ protected:
 
   int fetch_stats_from_storage(const string& user, rgw_bucket& bucket, RGWStorageStats& stats);
   int sync_bucket(const string& user, rgw_bucket& bucket);
+  int sync_user(const string& user);
+  int sync_all_users();
 
   void data_modified(const string& user, rgw_bucket& bucket);
 
@@ -455,11 +502,30 @@ protected:
     rwlock.unlock();
   }
 
+  template<class T> /* easier doing it as a template, Thread doesn't have ->stop() */
+  void stop_thread(T **pthr) {
+    T *thread = *pthr;
+    if (!thread)
+      return;
+
+    thread->stop();
+    thread->join();
+    delete thread;
+    *pthr = NULL;
+  }
+
 public:
-  RGWUserStatsCache(RGWRados *_store) : RGWQuotaCache(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size),
+  RGWUserStatsCache(RGWRados *_store, bool quota_threads) : RGWQuotaCache(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size),
                                         rwlock("RGWUserStatsCache::rwlock") {
-    buckets_sync_thread = new BucketsSyncThread(store->ctx(), this);
-    buckets_sync_thread->create();
+    if (quota_threads) {
+      buckets_sync_thread = new BucketsSyncThread(store->ctx(), this);
+      buckets_sync_thread->create();
+      user_sync_thread = new UserSyncThread(store->ctx(), this);
+      user_sync_thread->create();
+    } else {
+      buckets_sync_thread = NULL;
+      user_sync_thread = NULL;
+    }
   }
   ~RGWUserStatsCache() {
     stop();
@@ -483,13 +549,9 @@ public:
   void stop() {
     down_flag.set(1);
     rwlock.get_write();
-    if (buckets_sync_thread) {
-      buckets_sync_thread->stop();
-      buckets_sync_thread->join();
-      delete buckets_sync_thread;
-      buckets_sync_thread = NULL;
-    }
+    stop_thread(&buckets_sync_thread);
     rwlock.unlock();
+    stop_thread(&user_sync_thread);
   }
 };
 
@@ -513,6 +575,77 @@ int RGWUserStatsCache::sync_bucket(const string& user, rgw_bucket& bucket)
   }
 
   return 0;
+}
+
+int RGWUserStatsCache::sync_user(const string& user)
+{
+  cls_user_header header;
+  int ret = store->cls_user_get_header(user, &header);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: can't read user header: ret=" << ret << dendl;
+    return ret;
+  }
+
+  if (!store->ctx()->_conf->rgw_user_quota_sync_idle_users &&
+      header.last_stats_update < header.last_stats_sync) {
+    ldout(store->ctx(), 20) << "user is idle, not doing a full sync (user=" << user << ")" << dendl;
+    return 0;
+  }
+
+  utime_t when_need_full_sync = header.last_stats_sync;
+  when_need_full_sync += store->ctx()->_conf->rgw_user_quota_sync_wait_time;
+  
+  // check if enough time passed since last full sync
+
+  ret = rgw_user_sync_all_stats(store, user);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed user stats sync, ret=" << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+int RGWUserStatsCache::sync_all_users()
+{
+  string key = "user";
+  void *handle;
+
+  int ret = store->meta_mgr->list_keys_init(key, &handle);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: can't get key: ret=" << ret << dendl;
+    return ret;
+  }
+
+  bool truncated;
+  int max = 1000;
+
+  do {
+    list<string> keys;
+    ret = store->meta_mgr->list_keys_next(handle, max, keys, &truncated);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: lists_keys_next(): ret=" << ret << dendl;
+      goto done;
+    }
+    for (list<string>::iterator iter = keys.begin();
+         iter != keys.end() && !going_down(); 
+         ++iter) {
+      string& user = *iter;
+      ldout(store->ctx(), 20) << "RGWUserStatsCache: sync user=" << user << dendl;
+      int ret = sync_user(user);
+      if (ret < 0) {
+        ldout(store->ctx(), 0) << "ERROR: sync_user() failed, user=" << user << " ret=" << ret << dendl;
+
+        /* continuing to next user */
+        continue;
+      }
+    }
+  } while (truncated);
+
+  ret = 0;
+done:
+  store->meta_mgr->list_keys_complete(handle);
+  return ret;
 }
 
 void RGWUserStatsCache::data_modified(const string& user, rgw_bucket& bucket)
@@ -557,7 +690,7 @@ class RGWQuotaHandlerImpl : public RGWQuotaHandler {
     return 0;
   }
 public:
-  RGWQuotaHandlerImpl(RGWRados *_store) : store(_store), bucket_stats_cache(_store), user_stats_cache(_store) {}
+  RGWQuotaHandlerImpl(RGWRados *_store, bool quota_threads) : store(_store), bucket_stats_cache(_store), user_stats_cache(_store, quota_threads) {}
   virtual int check_quota(const string& user, rgw_bucket& bucket,
                           RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota,
 			  uint64_t num_objs, uint64_t size) {
@@ -608,9 +741,9 @@ public:
 };
 
 
-RGWQuotaHandler *RGWQuotaHandler::generate_handler(RGWRados *store)
+RGWQuotaHandler *RGWQuotaHandler::generate_handler(RGWRados *store, bool quota_threads)
 {
-  return new RGWQuotaHandlerImpl(store);
+  return new RGWQuotaHandlerImpl(store, quota_threads);
 };
 
 void RGWQuotaHandler::free_handler(RGWQuotaHandler *handler)

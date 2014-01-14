@@ -87,6 +87,24 @@ int rgw_bucket_sync_user_stats(RGWRados *store, const string& user_id, rgw_bucke
   return store->cls_user_sync_bucket_stats(obj, bucket);
 }
 
+int rgw_bucket_sync_user_stats(RGWRados *store, const string& bucket_name)
+{
+  RGWBucketInfo bucket_info;
+  int ret = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: could not fetch bucket info: ret=" << ret << dendl;
+    return ret;
+  }
+
+  ret = rgw_bucket_sync_user_stats(store, bucket_info.owner, bucket_info.bucket);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: could not sync user stats for bucket " << bucket_name << ": ret=" << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
 int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t creation_time, bool update_entrypoint)
 {
   int ret;
