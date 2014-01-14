@@ -1616,7 +1616,7 @@ TEST(BufferList, append) {
   //
   {
     bufferlist bl;
-    std::string expected("ABC\n\nDEF\n");
+    std::string expected("ABC\nDEF\n");
     std::istringstream is("ABC\n\nDEF");
     bl.append(is);
     EXPECT_EQ(0, ::memcmp(expected.c_str(), bl.c_str(), expected.size()));
