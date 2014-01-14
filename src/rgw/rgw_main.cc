@@ -514,7 +514,7 @@ int main(int argc, const char **argv)
   FCGX_Init();
 
   int r = 0;
-  RGWRados *store = RGWStoreManager::get_storage(g_ceph_context, true);
+  RGWRados *store = RGWStoreManager::get_storage(g_ceph_context, true, true);
   if (!store) {
     derr << "Couldn't init storage provider (RADOS)" << dendl;
     r = EIO;

@@ -740,24 +740,6 @@ int set_user_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, in
   return 0;
 }
 
-static int sync_bucket_stats(RGWRados *store, string& bucket_name)
-{
-  RGWBucketInfo bucket_info;
-  int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL);
-  if (r < 0) {
-    cerr << "ERROR: could not fetch bucket info: " << cpp_strerror(-r) << std::endl;
-    return r;
-  }
-
-  r = rgw_bucket_sync_user_stats(store, bucket_info.owner, bucket_info.bucket);
-  if (r < 0) {
-    cerr << "ERROR: could not sync user stats for bucket " << bucket_name << ": " << cpp_strerror(-r) << std::endl;
-    return r;
-  }
-
-  return 0;
-}
-
 int main(int argc, char **argv) 
 {
   vector<const char*> args;
@@ -1052,7 +1034,7 @@ int main(int argc, char **argv)
   if (raw_storage_op) {
     store = RGWStoreManager::get_raw_storage(g_ceph_context);
   } else {
-    store = RGWStoreManager::get_storage(g_ceph_context, false);
+    store = RGWStoreManager::get_storage(g_ceph_context, false, false);
   }
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
@@ -1934,42 +1916,15 @@ next:
   if (opt_cmd == OPT_USER_STATS) {
     if (sync_stats) {
       if (!bucket_name.empty()) {
-        int ret = sync_bucket_stats(store, bucket_name);
+        int ret = rgw_bucket_sync_user_stats(store, bucket_name);
         if (ret < 0) {
           cerr << "ERROR: could not sync bucket stats: " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
       } else {
-        size_t max_entries = g_conf->rgw_list_buckets_max_chunk;
-
-        bool done;
-
-        do {
-          RGWUserBuckets user_buckets;
-          int ret = rgw_read_user_buckets(store, user_id, user_buckets, marker, max_entries, false);
-          if (ret < 0) {
-            cerr << "failed to read user buckets: " << cpp_strerror(-ret) << std::endl;
-            return -ret;
-          }
-          map<string, RGWBucketEnt>& buckets = user_buckets.get_buckets();
-          for (map<string, RGWBucketEnt>::iterator i = buckets.begin();
-               i != buckets.end();
-               ++i) {
-            marker = i->first;
-
-            RGWBucketEnt& bucket_ent = i->second;
-            ret = sync_bucket_stats(store, bucket_ent.bucket.name);
-            if (ret < 0) {
-              cerr << "ERROR: could not sync bucket stats: " << cpp_strerror(-ret) << std::endl;
-              return -ret;
-            }
-          }
-          done = (buckets.size() < max_entries);
-        } while (!done);
-
-        int ret = store->complete_sync_user_stats(user_id);
+        int ret = rgw_user_sync_all_stats(store, user_id);
         if (ret < 0) {
-          cerr << "ERROR: failed to complete syncing user stats: " << cpp_strerror(-ret) << std::endl;
+          cerr << "failed to read user buckets: " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
       }
