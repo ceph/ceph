@@ -2,6 +2,68 @@
  Release Notes
 ===============
 
+v0.76 (frozen, not yet released)
+--------------------------------
+
+This release includes another batch of updates for firefly
+functionality.  Most notably, the cache pool infrastructure now
+support snapshots, the OSD backfill functionality has been generalized
+to include multiple targets (necessary for the coming erasure pools),
+and there were performance improvements to the erasure code plugin on
+capable processors.  The MDS now properly utilizes (and seamlessly
+migrates to) the OSD key/value interface (aka omap) for storing directory
+objects.  There continue to be many other fixes and improvements for
+usability and code portability across the tree.
+
+Upgrading
+~~~~~~~~~
+
+* 'rbd ls' on a pool which never held rbd images now exits with code
+  0. It outputs nothing in plain format, or an empty list in
+  non-plain format. This is consistent with the behavior for a pool
+  which used to hold images, but contains none. Scripts relying on
+  this behavior should be updated.
+
+* The MDS requires a new OSD operation TMAP2OMAP, added in this release.  When
+  upgrading, be sure to upgrade and restart the ceph-osd daemons before the
+  ceph-mds daemon.  The MDS will refuse to start if any up OSDs do not support
+  the new feature.
+
+* The 'ceph mds set_max_mds N' command is now deprecated in favor of
+  'ceph mds set max_mds N'.
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* mon: allow adjustment of cephfs max file size via 'ceph mds set max_file_size' (Sage Weil)
+* osd: cache pool support for snapshots (Sage Weil)
+* osd: backfill to multiple targets (David Zafman)
+* osd: fix omap_clear operation to not zap xattrs (Sam Just, Yan, Zheng)
+* crush: usability and test improvements (Loic Dachary)
+* mds: store directories in omap instead of tmap (Yan, Zheng)
+* librados, osd: new TMAP2OMAP operation (Yan, Zheng)
+* mailmap updates (Loic Dachary)
+* rpm: misc fixes (Ken Dreyer)
+* erasure-code: improve buffer alignment (Loic Dachary)
+* erasure-code: rewrite region-xor using vector operations (Andreas Peters)
+* osd: fix and cleanup misc backfill issues (David Zafman)
+* osd: track erasure compatibility (David Zafman)
+* many portability improvements (Noah Watkins)
+* many unit test improvements (Loic Dachary)
+* build: misc improvements (Ken Dreyer)
+* rgw: fix object placement read op (Yehuda Sadeh)
+* config: recursive metavariable expansion (Loic Dachary)
+* ceph-disk: generalize path names, add tests (Loic Dachary)
+* ceph-disk: misc improvements for puppet (Loic Dachary)
+* mon: do not use keyring if auth = none (Loic Dachary)
+* mds: always store backtrace in default pool (Yan, Zheng)
+* rbd: make 'rbd list' return empty list and success on empty pool (Josh Durgin)
+* doc: misc fixes (David Moreau Simard, Kun Huang)
+* osd: include more info in pg query result (Sage Weil)
+
+up to 03d7d97
+
+
 v0.75
 -----
 
