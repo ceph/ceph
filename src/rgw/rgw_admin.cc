@@ -114,6 +114,7 @@ void _usage()
   cerr << "   --gen-access-key          generate random access key (for S3)\n";
   cerr << "   --gen-secret              generate random secret key\n";
   cerr << "   --key-type=<type>         key type, options are: swift, s3\n";
+  cerr << "   --temp-url-key[-2]=<key>  temp url key\n";
   cerr << "   --access=<access>         Set access permissions for sub-user, should be one\n";
   cerr << "                             of read, write, readwrite, full\n";
   cerr << "   --display-name=<name>\n";
@@ -743,6 +744,8 @@ int main(int argc, char **argv)
   int gen_access_key = 0;
   int gen_secret_key = 0;
   bool set_perm = false;
+  bool set_temp_url_key = false;
+  map<int, string> temp_url_keys;
   string bucket_id;
   Formatter *formatter = NULL;
   int purge_data = false;
@@ -886,6 +889,12 @@ int main(int argc, char **argv)
       access = val;
       perm_mask = rgw_str_to_perm(access.c_str());
       set_perm = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--temp-url-key", (char*)NULL)) {
+      temp_url_keys[0] = val;
+      set_temp_url_key = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--temp-url-key2", "--temp-url-key-2", (char*)NULL)) {
+      temp_url_keys[1] = val;
+      set_temp_url_key = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--bucket-id", (char*)NULL)) {
       bucket_id = val;
       if (bucket_id.empty()) {
@@ -1262,6 +1271,13 @@ int main(int argc, char **argv)
 
   if (set_perm)
     user_op.set_perm(perm_mask);
+
+  if (set_temp_url_key) {
+    map<int, string>::iterator iter = temp_url_keys.begin();
+    for (; iter != temp_url_keys.end(); ++iter) {
+      user_op.set_temp_url_key(iter->second, iter->first);
+    }
+  }
 
   if (!op_mask_str.empty()) {
     uint32_t op_mask;
