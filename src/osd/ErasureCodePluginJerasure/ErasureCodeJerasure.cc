@@ -43,6 +43,15 @@ void ErasureCodeJerasure::init(const map<std::string,std::string> &parameters)
   prepare();
 }
 
+unsigned int ErasureCodeJerasure::get_chunk_size(unsigned int object_size) const
+{
+  unsigned alignment = get_alignment();
+  unsigned tail = object_size % alignment;
+  unsigned padded_length = object_size + ( tail ?  ( alignment - tail ) : 0 );
+  assert(padded_length % k == 0);
+  return padded_length / k;
+}
+
 int ErasureCodeJerasure::minimum_to_decode(const set<int> &want_to_read,
                                            const set<int> &available_chunks,
                                            set<int> *minimum) 
@@ -77,9 +86,8 @@ int ErasureCodeJerasure::encode(const set<int> &want_to_encode,
                                 const bufferlist &in,
                                 map<int, bufferlist> *encoded)
 {
-  unsigned alignment = get_alignment();
-  unsigned tail = in.length() % alignment;
-  unsigned padded_length = in.length() + ( tail ?  ( alignment - tail ) : 0 );
+  unsigned blocksize = get_chunk_size(in.length());
+  unsigned padded_length = blocksize * k;
   dout(10) << "encode adjusted buffer length from " << in.length()
 	   << " to " << padded_length << dendl;
   assert(padded_length % k == 0);
@@ -90,7 +98,6 @@ int ErasureCodeJerasure::encode(const set<int> &want_to_encode,
     out.push_back(pad);
     out.rebuild_page_aligned();
   }
-  unsigned blocksize = padded_length / k;
   unsigned coding_length = blocksize * m;
   bufferptr coding(buffer::create_page_aligned(coding_length));
   out.push_back(coding);
@@ -196,7 +203,7 @@ int ErasureCodeJerasureReedSolomonVandermonde::jerasure_decode(int *erasures,
 				erasures, data, coding, blocksize);
 }
 
-unsigned ErasureCodeJerasureReedSolomonVandermonde::get_alignment()
+unsigned ErasureCodeJerasureReedSolomonVandermonde::get_alignment() const
 {
   unsigned alignment = k*w*sizeof(int);
   if ( ((w*sizeof(int))%LARGEST_VECTOR_WORDSIZE) )
@@ -240,7 +247,7 @@ int ErasureCodeJerasureReedSolomonRAID6::jerasure_decode(int *erasures,
   return jerasure_matrix_decode(k, m, w, matrix, 1, erasures, data, coding, blocksize);
 }
 
-unsigned ErasureCodeJerasureReedSolomonRAID6::get_alignment()
+unsigned ErasureCodeJerasureReedSolomonRAID6::get_alignment() const
 {
   unsigned alignment = k*w*sizeof(int);
   if ( ((w*sizeof(int))%LARGEST_VECTOR_WORDSIZE) )
@@ -285,7 +292,7 @@ int ErasureCodeJerasureCauchy::jerasure_decode(int *erasures,
 				       erasures, data, coding, blocksize, packetsize, 1);
 }
 
-unsigned ErasureCodeJerasureCauchy::get_alignment()
+unsigned ErasureCodeJerasureCauchy::get_alignment() const
 {
   unsigned alignment = k*w*packetsize*sizeof(int);
   if ( ((w*packetsize*sizeof(int))%LARGEST_VECTOR_WORDSIZE) )
@@ -355,7 +362,7 @@ int ErasureCodeJerasureLiberation::jerasure_decode(int *erasures,
 				       coding, blocksize, packetsize, 1);
 }
 
-unsigned ErasureCodeJerasureLiberation::get_alignment()
+unsigned ErasureCodeJerasureLiberation::get_alignment() const
 {
   unsigned alignment = k*w*packetsize*sizeof(int);
   if ( ((w*packetsize*sizeof(int))%LARGEST_VECTOR_WORDSIZE) )
