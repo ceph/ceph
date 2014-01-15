@@ -114,6 +114,7 @@ void _usage()
   cerr << "   --gen-access-key          generate random access key (for S3)\n";
   cerr << "   --gen-secret              generate random secret key\n";
   cerr << "   --key-type=<type>         key type, options are: swift, s3\n";
+  cerr << "   --temp-url-key[-2]=<key>  temp url key\n";
   cerr << "   --access=<access>         Set access permissions for sub-user, should be one\n";
   cerr << "                             of read, write, readwrite, full\n";
   cerr << "   --display-name=<name>\n";
