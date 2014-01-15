@@ -27,8 +27,11 @@ expect_false()
 	if "$@"; then return 1; else return 0; fi
 }
 
-TMPFILE=/tmp/test_invalid.$$
-trap "rm -f $TMPFILE" 0
+TMPDIR=/tmp/cephtool$$
+mkdir $TMPDIR
+trap "rm -fr $TMPDIR" 0
+
+TMPFILE=$TMPDIR/test_invalid.$$
 
 function check_response()
 {
@@ -116,15 +119,15 @@ ceph health detail
 ceph health --format json-pretty
 ceph health detail --format xml-pretty
 
-ceph -w > /tmp/$$ &
+ceph -w > $TMPDIR/$$ &
 wpid="$!"
 mymsg="this is a test log message $$.$(date)"
 ceph log "$mymsg"
 sleep 3
-if ! grep "$mymsg" /tmp/$$; then
+if ! grep "$mymsg" $TMPDIR/$$; then
     # in case it is very slow (mon thrashing or something)
     sleep 30
-    grep "$mymsg" /tmp/$$
+    grep "$mymsg" $TMPDIR/$$
 fi
 kill $wpid
 
@@ -138,7 +141,7 @@ ceph mds compat show
 expect_false ceph mds deactivate 2
 ceph mds dump
 # XXX mds fail, but how do you undo it?
-mdsmapfile=/tmp/mdsmap.$$
+mdsmapfile=$TMPDIR/mdsmap.$$
 current_epoch=$(ceph mds getmap -o $mdsmapfile --no-log-to-stderr 2>&1 | grep epoch | sed 's/.*epoch //')
 [ -s $mdsmapfile ]
 ((epoch = current_epoch + 1))
@@ -168,8 +171,8 @@ ceph mds stat
 
 # no mon add/remove
 ceph mon dump
-ceph mon getmap -o /tmp/monmap
-[ -s /tmp/monmap ]
+ceph mon getmap -o $TMPDIR/monmap.$$
+[ -s $TMPDIR/monmap.$$ ]
 # ceph mon tell
 ceph mon_status
 
@@ -227,7 +230,7 @@ ceph osd in 0
 ceph osd dump | grep 'osd.0.*in'
 ceph osd find 0
 
-f=/tmp/map.$$
+f=$TMPDIR/map.$$
 ceph osd getcrushmap -o $f
 [ -s $f ]
 rm $f
@@ -305,8 +308,8 @@ ceph pg dump_stuck unclean
 ceph pg dump_stuck stale
 # can't test this...
 # ceph pg force_create_pg
-ceph pg getmap -o /tmp/map
-[ -s /tmp/map ]
+ceph pg getmap -o $TMPDIR/map.$$
+[ -s $TMPDIR/map.$$ ]
 ceph pg map 0.0 | grep acting
 ceph pg repair 0.0
 ceph pg scrub 0.0
