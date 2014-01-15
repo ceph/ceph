@@ -3512,7 +3512,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	result = check_offset_and_length(op.extent.offset, op.extent.length, cct->_conf->osd_max_object_size);
 	if (result < 0)
 	  break;
-	t->write(soid, op.extent.offset, op.extent.length, osd_op.indata);
+	if (pool.info.ec_pool()) {
+	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata);
+	} else {
+	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata);
+	}
 	write_update_size_and_usage(ctx->delta_stats, oi, ssc->snapset, ctx->modified_ranges,
 				    op.extent.offset, op.extent.length, true);
 	if (!obs.exists) {
@@ -3542,7 +3546,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    }
 	  }
 	  ctx->mod_desc.create();
-	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata);
+	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata);
 	  if (obs.exists) {
 	    t->setattrs(soid, ctx->obc->attr_cache);
 	  }
