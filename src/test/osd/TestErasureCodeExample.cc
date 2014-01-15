@@ -20,6 +20,13 @@
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
+TEST(ErasureCodeExample, chunk_size)
+{
+  ErasureCodeExample example;
+  EXPECT_EQ(3u, example.get_chunk_count());
+  EXPECT_EQ(11u, example.get_chunk_size(20));
+}
+
 TEST(ErasureCodeExample, minimum_to_decode)
 {
   ErasureCodeExample example;
@@ -105,13 +112,13 @@ TEST(ErasureCodeExample, encode_decode)
 
   bufferlist in;
   in.append("ABCDE");
-  int want_to_encode[] = { 0, 1, 2 };
+  set<int> want_to_encode;
+  for(unsigned int i = 0; i < example.get_chunk_count(); i++)
+    want_to_encode.insert(i);
   map<int, bufferlist> encoded;
-  EXPECT_EQ(0, example.encode(set<int>(want_to_encode, want_to_encode+3),
-                              in,
-                              &encoded));
-  EXPECT_EQ(3u, encoded.size());
-  EXPECT_EQ(3u, encoded[0].length());
+  EXPECT_EQ(0, example.encode(want_to_encode, in, &encoded));
+  EXPECT_EQ(example.get_chunk_count(), encoded.size());
+  EXPECT_EQ(example.get_chunk_size(in.length()), encoded[0].length());
   EXPECT_EQ('A', encoded[0][0]);
   EXPECT_EQ('B', encoded[0][1]);
   EXPECT_EQ('C', encoded[0][2]);
@@ -157,6 +164,43 @@ TEST(ErasureCodeExample, encode_decode)
   }
 }
 
+TEST(ErasureCodeExample, decode)
+{
+  ErasureCodeExample example;
+
+#define LARGE_ENOUGH 2048
+  bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
+  in_ptr.zero();
+  in_ptr.set_length(0);
+  const char *payload =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  in_ptr.append(payload, strlen(payload));
+  bufferlist in;
+  in.push_front(in_ptr);
+  int want_to_encode[] = { 0, 1, 2 };
+  map<int, bufferlist> encoded;
+  EXPECT_EQ(0, example.encode(set<int>(want_to_encode, want_to_encode+3),
+                              in,
+                              &encoded));
+  EXPECT_EQ(3u, encoded.size());
+
+  // successfull decode
+  bufferlist out;
+  EXPECT_EQ(0, example.decode_concat(encoded, &out));
+  bufferlist usable;
+  usable.substr_of(out, 0, in.length());
+  EXPECT_TRUE(usable == in);
+
+  // cannot recover
+  map<int, bufferlist> degraded;  
+  degraded[0] = encoded[0];
+  EXPECT_EQ(-ERANGE, example.decode_concat(degraded, &out));
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
@@ -168,6 +212,15 @@ int main(int argc, char **argv) {
   return RUN_ALL_TESTS();
 }
 
-// Local Variables:
-// compile-command: "cd ../.. ; make -j4 && make unittest_erasure_code_example && valgrind  --leak-check=full --tool=memcheck ./unittest_erasure_code_example --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
-// End:
+/*
+ * Local Variables:
+ * compile-command: "cd ../.. ; 
+ *   make -j4 && 
+ *   make unittest_erasure_code_example && 
+ *   valgrind  --leak-check=full --tool=memcheck \
+ *      ./unittest_erasure_code_example --gtest_filter=*.* \
+ *      --log-to-stderr=true --debug-osd=20
+ * "
+ * End:
+ */
+
