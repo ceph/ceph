@@ -427,6 +427,26 @@ void OSDMonitor::remove_redundant_pg_temp()
       }
     }
   }
+  if (!osdmap.primary_temp->empty()) {
+    OSDMap templess(osdmap);
+    templess.primary_temp.reset(new map<pg_t,int>(*osdmap.primary_temp));
+    templess.primary_temp->clear();
+    for (map<pg_t,int>::iterator p = osdmap.primary_temp->begin();
+        p != osdmap.primary_temp->end();
+        ++p) {
+      if (pending_inc.new_primary_temp.count(p->first) == 0) {
+        vector<int> real_up, templess_up;
+        int real_primary, templess_primary;
+        osdmap.pg_to_acting_osds(p->first, &real_up, &real_primary);
+        templess.pg_to_acting_osds(p->first, &templess_up, &templess_primary);
+        if (real_primary == templess_primary){
+          dout(10) << " removing unnecessary primary_temp "
+              << p->first << " -> " << p->second << dendl;
+          pending_inc.new_primary_temp[p->first] = -1;
+        }
+      }
+    }
+  }
 }
 
 void OSDMonitor::remove_down_pg_temp()
