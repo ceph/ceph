@@ -38,29 +38,6 @@ static int parse_to_utime(string& in, utime_t& out) {
 }
 
 
-template <class T>
-static int get_input(req_state *s, T& out) {
-  int rv, data_len;
-  char *data;
-
-  if ((rv = rgw_rest_read_all_input(s, &data, &data_len, REPLICA_INPUT_MAX_LEN)) < 0) {
-    dout(5) << "Error - reading input data - " << rv << dendl;
-    return rv;
-  }
-
-  JSONParser parser;
-
-  if (!parser.parse(data, data_len)) {
-    free(data);
-    return -EINVAL;
-  }
-
-  decode_json_obj(out, &parser);
-  
-  free(data);
-  return 0;
-}
-
 void RGWOp_OBJLog_SetBounds::execute() {
   string id_str = s->info.args.get("id"),
          marker = s->info.args.get("marker"),
@@ -97,7 +74,8 @@ void RGWOp_OBJLog_SetBounds::execute() {
   bufferlist bl;
   list<RGWReplicaItemMarker> markers;
 
-  if ((http_ret = get_input(s, markers)) < 0) {
+  if ((http_ret = rgw_rest_get_json_input(store->ctx(), s, markers, REPLICA_INPUT_MAX_LEN, NULL)) < 0) {
+    dout(5) << "Error - retrieving input data - " << http_ret << dendl;
     return;
   }
 
@@ -211,7 +189,8 @@ void RGWOp_BILog_SetBounds::execute() {
   bufferlist bl;
   list<RGWReplicaItemMarker> markers;
 
-  if ((http_ret = get_input(s, markers)) < 0) {
+  if ((http_ret = rgw_rest_get_json_input(store->ctx(), s, markers, REPLICA_INPUT_MAX_LEN, NULL)) < 0) {
+    dout(5) << "Error - retrieving input data - " << http_ret << dendl;
     return;
   }
 
