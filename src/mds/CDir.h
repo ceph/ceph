@@ -131,7 +131,8 @@ public:
   static const unsigned MASK_STATE_FRAGMENT_KEPT = 
   (STATE_DIRTY|
    STATE_EXPORTBOUND |
-   STATE_IMPORTBOUND);
+   STATE_IMPORTBOUND |
+   STATE_REJOINUNDEF);
 
   // -- rep spec --
   static const int REP_NONE =     0;

@@ -1522,6 +1522,8 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     }
   }
 
+  list<CInode*> undef_inodes;
+
   // purge stale snaps?
   // only if we have past_parents open!
   bool purged_any = false;
@@ -1636,10 +1638,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 	if (in) {
 	  dout(12) << "_fetched  had dentry " << *dn << dendl;
 	  if (in->state_test(CInode::STATE_REJOINUNDEF)) {
-	    assert(cache->mds->is_rejoin());
-	    assert(in->vino() == vinodeno_t(inode.ino, last));
-	    in->state_clear(CInode::STATE_REJOINUNDEF);
-	    cache->opened_undef_inode(in);
+	    undef_inodes.push_back(in);
 	    undef_inode = true;
 	  }
 	} else
@@ -1749,6 +1748,15 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   // mark complete, !fetching
   mark_complete();
   state_clear(STATE_FETCHING);
+
+  // open & force frags
+  while (!undef_inodes.empty()) {
+    CInode *in = undef_inodes.front();
+    undef_inodes.pop_front();
+    in->state_clear(CInode::STATE_REJOINUNDEF);
+    cache->opened_undef_inode(in);
+  }
+
   auth_unpin(this);
 
   // kick waiters
