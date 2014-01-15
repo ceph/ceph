@@ -6814,10 +6814,19 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
       unsigned nonce = it->second;
       
       if (!dir) {
-	dout(0) << " dir expire on " << it->first << " from " << from 
+	CInode *diri = get_inode(it->first.ino);
+	if (diri) {
+	  CDir *other = diri->get_approx_dirfrag(it->first.frag);
+	  if (other) {
+	    dout(7) << " dir expire on dirfrag " << it->first << " from mds." << from
+		    << " have " << *other << ", mismatched frags, dropping" << dendl;
+	    continue;
+	  }
+	}
+	dout(0) << " dir expire on " << it->first << " from " << from
 		<< ", don't have it" << dendl;
 	assert(dir);
-      }  
+      }
       assert(dir->is_auth());
       
       // check nonce
@@ -11437,18 +11446,21 @@ void MDCache::_fragment_stored(MDRequest *mdr)
   for (map<int,unsigned>::iterator p = first->replicas_begin();
        p != first->replica_map.end();
        ++p) {
-    if (mds->mdsmap->get_state(p->first) <= MDSMap::STATE_REJOIN)
+    if (mds->mdsmap->get_state(p->first) < MDSMap::STATE_REJOIN ||
+	(mds->mdsmap->get_state(p->first) == MDSMap::STATE_REJOIN &&
+	 rejoin_gather.count(p->first)))
       continue;
+
     MMDSFragmentNotify *notify = new MMDSFragmentNotify(diri->ino(), info.basefrag, info.bits);
 
-    /*
     // freshly replicate new dirs to peers
-    for (list<CDir*>::iterator q = resultfrags.begin(); q != resultfrags.end(); q++)
+    for (list<CDir*>::iterator q = info.resultfrags.begin();
+	 q != info.resultfrags.end();
+	 q++)
       replicate_dir(*q, p->first, notify->basebl);
-    */
 
     mds->send_message_mds(notify, p->first);
-  } 
+  }
   
   mdr->apply();  // mark scatterlock
   mds->locker->drop_locks(mdr);
@@ -11552,6 +11564,7 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
     frag_t base = notify->get_basefrag();
     int bits = notify->get_bits();
 
+/*
     if ((bits < 0 && diri->dirfragtree.is_leaf(base)) ||
 	(bits > 0 && !diri->dirfragtree.is_leaf(base))) {
       dout(10) << " dft " << diri->dirfragtree << " state doesn't match " << base << " by " << bits
@@ -11559,6 +11572,7 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
       notify->put();
       return;
     }
+*/
 
     // refragment
     list<Context*> waiters;
@@ -11570,12 +11584,10 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
     for (list<CDir*>::iterator p = resultfrags.begin(); p != resultfrags.end(); ++p)
       diri->take_dir_waiting((*p)->get_frag(), waiters);
 
-    /*
     // add new replica dirs values
     bufferlist::iterator p = notify->basebl.begin();
-    while (!p.end()) {
+    while (!p.end())
       add_replica_dir(p, diri, notify->get_source().num(), waiters);
-    */
 
     mds->queue_waiters(waiters);
   }
