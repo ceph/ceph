@@ -210,16 +210,23 @@ void Migrator::find_stale_export_freeze()
    * - client request tries authpinning items in subtree A
    *   (wait because subtree A is freezing)
    */
-  for (set<pair<utime_t,CDir*> >::iterator p = export_freezing_dirs.begin();
-       p != export_freezing_dirs.end(); ) {
-    if (p->first >= cutoff)
-      break;
-    CDir *dir = p->second;
+  for (map<CDir*,export_state_t>::iterator p = export_state.begin();
+       p != export_state.end(); ) {
+    CDir* dir = p->first;
+    export_state_t& stat = p->second;
     ++p;
-    if (export_freezing_state[dir].num_waiters > 0 ||
+    if (p->second.state != EXPORT_DISCOVERING &&
+	p->second.state != EXPORT_FREEZING)
+      continue;
+    if (stat.last_cum_auth_pins != dir->get_cum_auth_pins()) {
+      stat.last_cum_auth_pins = dir->get_cum_auth_pins();
+      stat.last_cum_auth_pins_change = now;
+      continue;
+    }
+    if (stat.last_cum_auth_pins_change >= cutoff)
+      continue;
+    if (stat.num_remote_waiters > 0 ||
 	(!dir->inode->is_root() && dir->get_parent_dir()->is_freezing())) {
-      assert(get_export_state(dir) == EXPORT_DISCOVERING ||
-	     get_export_state(dir) == EXPORT_FREEZING);
       export_try_cancel(dir);
     }
   }
@@ -240,13 +247,11 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     dir->auth_unpin(this);
     dir->state_clear(CDir::STATE_EXPORTING);
     break;
-
   case EXPORT_DISCOVERING:
     dout(10) << "export state=discovering : canceling freeze and removing auth_pin" << dendl;
     it->second.state = EXPORT_CANCELLED;
     dir->unfreeze_tree();  // cancel the freeze
     dir->auth_unpin(this);
-    export_freeze_finish(dir);
     dir->state_clear(CDir::STATE_EXPORTING);
     if (notify_peer && mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer)) // tell them.
       mds->send_message_mds(new MExportDirCancel(dir->dirfrag(), it->second.tid), it->second.peer);
@@ -256,7 +261,6 @@ void Migrator::export_try_cancel(CDir *dir, bool notify_peer)
     dout(10) << "export state=freezing : canceling freeze" << dendl;
     it->second.state = EXPORT_CANCELLED;
     dir->unfreeze_tree();  // cancel the freeze
-    export_freeze_finish(dir);
     dir->state_clear(CDir::STATE_EXPORTING);
     if (notify_peer && mds->mdsmap->is_clientreplay_or_active_or_stopping(it->second.peer)) // tell them.
       mds->send_message_mds(new MExportDirCancel(dir->dirfrag(), it->second.tid), it->second.peer);
@@ -810,10 +814,9 @@ void Migrator::dispatch_export_dir(MDRequest *mdr)
   mds->send_message_mds(discover, it->second.peer);
   assert(g_conf->mds_kill_export_at != 2);
 
-  utime_t now = ceph_clock_now(g_ceph_context);
-  export_freezing_dirs.insert(make_pair(now, dir));
-  export_freezing_state[dir].start_time = now;
+  it->second.last_cum_auth_pins_change = ceph_clock_now(g_ceph_context);
 
+  // start the freeze, but hold it up with an auth_pin.
   dir->freeze_tree();
   assert(dir->is_freezing_tree());
   dir->add_waiter(CDir::WAIT_FROZEN, new C_MDC_ExportFreeze(this, dir));
@@ -893,8 +896,6 @@ void Migrator::export_frozen(CDir *dir)
   map<CDir*,export_state_t>::iterator it = export_state.find(dir);
   assert(it != export_state.end());
   assert(it->second.state == EXPORT_FREEZING);
-
-  export_freeze_finish(dir);
 
   CInode *diri = dir->get_inode();
 
