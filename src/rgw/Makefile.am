@@ -51,8 +51,6 @@ LIBRGW_DEPS += \
 	-lfcgi \
 	-ldl
 
-CIVETWEB = civetweb
-
 radosgw_SOURCES = \
 	rgw/rgw_resolve.cc \
 	rgw/rgw_rest.cc \
@@ -72,9 +70,9 @@ radosgw_SOURCES = \
 	rgw/rgw_swift_auth.cc \
 	rgw/rgw_loadgen.cc \
 	rgw/rgw_civetweb.cc \
-	$(CIVETWEB)/src/civetweb.c \
+	civetweb/src/civetweb.c \
 	rgw/rgw_main.cc
-radosgw_CFLAGS = -I$(CIVETWEB)/include
+radosgw_CFLAGS = -Icivetweb/include
 radosgw_LDADD = $(LIBRGW) $(LIBRGW_DEPS) $(RESOLV_LIBS) $(CEPH_GLOBAL)
 bin_PROGRAMS += radosgw
 
