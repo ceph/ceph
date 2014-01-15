@@ -542,6 +542,7 @@ int XMLArgs::parse()
           (name.compare("caps") == 0) ||
           (name.compare("index") == 0) ||
           (name.compare("policy") == 0) ||
+          (name.compare("quota") == 0) ||
           (name.compare("object") == 0)) {
 
         if (!admin_subresource_added) {
