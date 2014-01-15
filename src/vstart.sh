@@ -520,9 +520,9 @@ EOF
 
 #valgrind --tool=massif $CEPH_BIN/ceph-mds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
 #$CEPH_BIN/ceph-mds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
-#$CEPH_ADM mds set_max_mds 2
+#$CEPH_ADM mds set max_mds 2
     done
-    cmd="$CEPH_ADM mds set_max_mds $CEPH_NUM_MDS"
+    cmd="$CEPH_ADM mds set max_mds $CEPH_NUM_MDS"
     echo $cmd
     $cmd
 fi
