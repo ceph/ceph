@@ -248,6 +248,10 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     osd_epoch.erase(p++);
   }
 
+  /** we don't have any of the feature bit infrastructure in place for
+   * supporting primary_temp mappings without breaking old clients/OSDs.*/
+  assert(osdmap.primary_temp->empty());
+
   if (mon->is_leader()) {
     // kick pgmon, make sure it's seen the latest map
     mon->pgmon()->check_osd_map(osdmap.epoch);
