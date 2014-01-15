@@ -942,11 +942,12 @@ private:
   struct ufragment {
     int bits;
     bool committed;
+    bool complete;
     LogSegment *ls;
     list<Context*> waiters;
     list<frag_t> old_frags;
     bufferlist rollback;
-    ufragment() : bits(0), committed(false), ls(NULL) {}
+    ufragment() : bits(0), committed(false), complete(false), ls(NULL) {}
   };
   map<dirfrag_t, ufragment> uncommitted_fragments;
 
