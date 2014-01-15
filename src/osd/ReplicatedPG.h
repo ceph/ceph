@@ -468,6 +468,7 @@ public:
       modify(false), user_modify(false), undirty(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
+      op_t(NULL),
       data_off(0), reply(NULL), pg(_pg),
       num_read(0),
       num_write(0),
@@ -594,6 +595,7 @@ protected:
    */
   void close_op_ctx(OpContext *ctx) {
     release_op_ctx_locks(ctx);
+    delete ctx->op_t;
     delete ctx;
   }
 

@@ -6222,6 +6222,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
     repop->rep_tid,
     repop->ctx->reqid,
     repop->ctx->op);
+  repop->ctx->op_t = NULL;
 }
     
 void ReplicatedBackend::issue_op(
