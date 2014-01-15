@@ -142,6 +142,7 @@ void RGW_SWIFT_Auth_Get::execute()
 
   string swift_url = g_conf->rgw_swift_url;
   string swift_prefix = g_conf->rgw_swift_url_prefix;
+  string tenant_path;
 
   if (swift_prefix.size() == 0) {
     swift_prefix = DEFAULT_SWIFT_PREFIX;
@@ -199,8 +200,13 @@ void RGW_SWIFT_Auth_Get::execute()
     goto done;
   }
 
-  s->cio->print("X-Storage-Url: %s/%s/v1\n", swift_url.c_str(),
-	        swift_prefix.c_str());
+  if (!g_conf->rgw_swift_tenant_name.empty()) {
+    tenant_path = "/AUTH_";
+    tenant_path.append(g_conf->rgw_swift_tenant_name);
+  }
+
+  s->cio->print("X-Storage-Url: %s/%s/v1%s\n", swift_url.c_str(),
+	        swift_prefix.c_str(), tenant_path.c_str());
 
   if ((ret = encode_token(s->cct, swift_key->id, swift_key->key, bl)) < 0)
     goto done;
