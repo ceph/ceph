@@ -5548,24 +5548,30 @@ bool MDCache::open_undef_inodes_dirfrags()
     CInode *diri = dir->get_inode();
     if (diri->state_test(CInode::STATE_REJOINUNDEF))
       continue;
-    if (dir->state_test(CDir::STATE_REJOINUNDEF) && dir->get_frag() == frag_t()) {
-      rejoin_undef_dirfrags.erase(dir);
-      dir->state_clear(CDir::STATE_REJOINUNDEF);
-      diri->force_dirfrags();
-      list<CDir*> ls;
-      diri->get_dirfrags(ls);
-      for (list<CDir*>::iterator q = ls.begin(); q != ls.end(); ++q) {
-	rejoin_undef_dirfrags.insert(*q);
-	(*q)->state_set(CDir::STATE_REJOINUNDEF);
-	(*q)->fetch(gather.new_sub());
-      }
-      continue;
-    }
+    if (dir->state_test(CDir::STATE_REJOINUNDEF))
+      assert(diri->dirfragtree.is_leaf(dir->get_frag()));
     dir->fetch(gather.new_sub());
   }
   assert(gather.has_subs());
   gather.activate();
   return true;
+}
+
+void MDCache::opened_undef_inode(CInode *in) {
+  dout(10) << "opened_undef_inode " << *in << dendl;
+  rejoin_undef_inodes.erase(in);
+  if (in->is_dir()) {
+    if (in->has_dirfrags() && !in->dirfragtree.is_leaf(frag_t())) {
+      CDir *dir = in->get_dirfrag(frag_t());
+      assert(dir);
+      rejoin_undef_dirfrags.erase(dir);
+      in->force_dirfrags();
+      list<CDir*> ls;
+      in->get_dirfrags(ls);
+      for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p)
+	rejoin_undef_dirfrags.insert(*p);
+    }
+  }
 }
 
 void MDCache::finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snapid_t seq)
@@ -8201,25 +8207,9 @@ void MDCache::_open_ino_traverse_dir(inodeno_t ino, open_ino_info_t& info, int r
 
 void MDCache::_open_ino_fetch_dir(inodeno_t ino, MMDSOpenIno *m, CDir *dir)
 {
-  if (dir->state_test(CDir::STATE_REJOINUNDEF) && dir->get_frag() == frag_t()) {
-    rejoin_undef_dirfrags.erase(dir);
-    dir->state_clear(CDir::STATE_REJOINUNDEF);
-
-    CInode *diri = dir->get_inode();
-    diri->force_dirfrags();
-    list<CDir*> ls;
-    diri->get_dirfrags(ls);
-
-    C_GatherBuilder gather(g_ceph_context, _open_ino_get_waiter(ino, m));
-    for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
-      rejoin_undef_dirfrags.insert(*p);
-      (*p)->state_set(CDir::STATE_REJOINUNDEF);
-      (*p)->fetch(gather.new_sub());
-    }
-    assert(gather.has_subs());
-    gather.activate();
-  } else
-    dir->fetch(_open_ino_get_waiter(ino, m));
+  if (dir->state_test(CDir::STATE_REJOINUNDEF))
+    assert(dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()));
+  dir->fetch(_open_ino_get_waiter(ino, m));
 }
 
 int MDCache::open_ino_traverse_dir(inodeno_t ino, MMDSOpenIno *m,
