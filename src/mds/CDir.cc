@@ -874,7 +874,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   int n = 0;
   for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
     CDir *f = new CDir(inode, *p, cache, is_auth());
-    f->state_set(state & MASK_STATE_FRAGMENT_KEPT);
+    f->state_set(state & (MASK_STATE_FRAGMENT_KEPT | STATE_COMPLETE));
     f->replica_map = replica_map;
     f->dir_auth = dir_auth;
     f->init_fragment_pins();
@@ -982,6 +982,9 @@ void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
     dir->finish_old_fragment(waiters, replay);
     inode->close_dirfrag(dir->get_frag());
   }
+
+  if (is_auth() && !replay)
+    mark_complete();
 
   // FIXME: merge dirty old rstat
   fnode.rstat.version = rstat_version;
