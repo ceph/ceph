@@ -465,6 +465,7 @@ public:
     assert(!get_watch_context(oid));
     ObjectDesc contents;
     find_object(oid, &contents, snap);
+    contents.dirty = true;
     pool_obj_cont.rbegin()->second.erase(oid);
     pool_obj_cont.rbegin()->second.insert(pair<string,ObjectDesc>(oid, contents));
   }
