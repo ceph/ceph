@@ -1,3 +1,5 @@
+#include "common/ceph_json.h"
+
 #include "rgw_op.h"
 #include "rgw_user.h"
 #include "rgw_rest_user.h"
@@ -609,8 +611,89 @@ void RGWOp_Caps_Remove::execute()
   http_ret = RGWUserAdminOp_Caps::remove(store, op_state, flusher);
 }
 
+struct UserQuotas {
+  RGWQuotaInfo bucket_quota;
+  RGWQuotaInfo user_quota;
+
+  UserQuotas(RGWUserInfo& info) {
+    bucket_quota = info.bucket_quota;
+    user_quota = info.user_quota;
+  }
+  void dump(Formatter *f) const {
+    encode_json("bucket_quota", bucket_quota, f);
+    encode_json("user_quota", user_quota, f);
+  }
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
+    JSONDecoder::decode_json("user_quota", user_quota, obj);
+  }
+};
+
+class RGWOp_Quota_Info : public RGWRESTOp {
+
+public:
+  RGWOp_Quota_Info() {}
+
+  int check_caps(RGWUserCaps& caps) {
+    return caps.check_cap("users", RGW_CAP_READ);
+  }
+
+  void execute();
+
+  virtual const string name() { return "get_quota_info"; }
+};
+
+
+void RGWOp_Quota_Info::execute()
+{
+  RGWUserAdminOpState op_state;
+
+  std::string uid;
+  std::string quota_type;
+
+  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "quota-type", quota_type, &quota_type);
+
+  bool show_all = quota_type.empty();
+  bool show_bucket = show_all || (quota_type == "bucket");
+  bool show_user = show_all || (quota_type == "user");
+
+  if (!(show_all || show_bucket || show_user)) {
+    http_ret = -EINVAL;
+    return;
+  }
+
+
+  op_state.set_user_id(uid);
+
+  RGWUser user;
+  http_ret = user.init(store, op_state);
+  if (http_ret < 0)
+    return;
+
+  RGWUserInfo info;
+  string err_msg;
+  http_ret = user.info(info, &err_msg);
+  if (http_ret < 0)
+    return;
+
+  if (show_all) {
+    UserQuotas quotas(info);
+    encode_json("quota", quotas, s->formatter);
+  } else if (show_user) {
+    encode_json("user_quota", info.user_quota, s->formatter);
+  } else {
+    encode_json("bucket_quota", info.bucket_quota, s->formatter);
+  }
+
+  flusher.flush();
+}
+
 RGWOp *RGWHandler_User::op_get()
 {
+  if (s->info.args.sub_resource_exists("quota"))
+    return new RGWOp_Quota_Info;
+
   return new RGWOp_User_Info;
 };
 
@@ -624,6 +707,9 @@ RGWOp *RGWHandler_User::op_put()
 
   if (s->info.args.sub_resource_exists("caps"))
     return new RGWOp_Caps_Add;
+
+  if (s->info.args.sub_resource_exists("quota"))
+    return new RGWOp_Quota_Set;
 
   return new RGWOp_User_Create;
 };
