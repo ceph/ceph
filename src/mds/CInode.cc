@@ -460,13 +460,31 @@ bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
   bool all = true;
   list<frag_t> fglist;
   dirfragtree.get_leaves_under(fg, fglist);
-  for (list<frag_t>::iterator p = fglist.begin();
-       p != fglist.end();
-       ++p) 
+  for (list<frag_t>::iterator p = fglist.begin(); p != fglist.end(); ++p)
     if (dirfrags.count(*p))
       ls.push_back(dirfrags[*p]);
     else 
       all = false;
+
+  if (all)
+    return all;
+
+  fragtree_t tmpdft;
+  tmpdft.force_to_leaf(g_ceph_context, fg);
+  for (map<frag_t,CDir*>::iterator p = dirfrags.begin(); p != dirfrags.end(); ++p) {
+    tmpdft.force_to_leaf(g_ceph_context, p->first);
+    if (fg.contains(p->first) && !dirfragtree.is_leaf(p->first))
+      ls.push_back(p->second);
+  }
+
+  all = true;
+  tmpdft.get_leaves_under(fg, fglist);
+  for (list<frag_t>::iterator p = fglist.begin(); p != fglist.end(); ++p)
+    if (!dirfrags.count(*p)) {
+      all = false;
+      break;
+    }
+
   return all;
 }
 
