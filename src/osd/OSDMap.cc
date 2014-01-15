@@ -1029,6 +1029,74 @@ void OSDMap::dedup(const OSDMap *o, OSDMap *n)
     n->osd_uuid = o->osd_uuid;
 }
 
+void OSDMap::remove_redundant_temporaries(CephContext *cct, const OSDMap& osdmap,
+					  OSDMap::Incremental *pending_inc)
+{
+  ldout(cct, 10) << "remove_redundant_temporaries" << dendl;
+
+  for (map<pg_t,vector<int> >::iterator p = osdmap.pg_temp->begin();
+       p != osdmap.pg_temp->end();
+       ++p) {
+    if (pending_inc->new_pg_temp.count(p->first) == 0) {
+      vector<int> raw_up;
+      int primary;
+      osdmap.pg_to_raw_up(p->first, &raw_up, &primary);
+      if (raw_up == p->second) {
+        ldout(cct, 10) << " removing unnecessary pg_temp " << p->first << " -> " << p->second << dendl;
+        pending_inc->new_pg_temp[p->first].clear();
+      }
+    }
+  }
+  if (!osdmap.primary_temp->empty()) {
+    OSDMap templess(osdmap);
+    templess.primary_temp.reset(new map<pg_t,int>(*osdmap.primary_temp));
+    templess.primary_temp->clear();
+    for (map<pg_t,int>::iterator p = osdmap.primary_temp->begin();
+        p != osdmap.primary_temp->end();
+        ++p) {
+      if (pending_inc->new_primary_temp.count(p->first) == 0) {
+        vector<int> real_up, templess_up;
+        int real_primary, templess_primary;
+        osdmap.pg_to_acting_osds(p->first, &real_up, &real_primary);
+        templess.pg_to_acting_osds(p->first, &templess_up, &templess_primary);
+        if (real_primary == templess_primary){
+          ldout(cct, 10) << " removing unnecessary primary_temp "
+                         << p->first << " -> " << p->second << dendl;
+          pending_inc->new_primary_temp[p->first] = -1;
+        }
+      }
+    }
+  }
+}
+
+void OSDMap::remove_down_temps(CephContext *cct,
+                               const OSDMap& osdmap, Incremental *pending_inc)
+{
+  ldout(cct, 10) << "remove_down_pg_temp" << dendl;
+  OSDMap tmpmap(osdmap);
+  tmpmap.apply_incremental(*pending_inc);
+
+  for (map<pg_t,vector<int> >::iterator p = tmpmap.pg_temp->begin();
+       p != tmpmap.pg_temp->end();
+       ++p) {
+    unsigned num_up = 0;
+    for (vector<int>::iterator i = p->second.begin();
+	 i != p->second.end();
+	 ++i) {
+      if (!tmpmap.is_down(*i))
+	++num_up;
+    }
+    if (num_up == 0)
+      pending_inc->new_pg_temp[p->first].clear();
+  }
+  for (map<pg_t,int>::iterator p = tmpmap.primary_temp->begin();
+      p != tmpmap.primary_temp->end();
+      ++p) {
+    if (tmpmap.is_down(p->second))
+      pending_inc->new_primary_temp[p->first] = -1;
+  }
+}
+
 int OSDMap::apply_incremental(const Incremental &inc)
 {
   new_blacklist_entries = false;
