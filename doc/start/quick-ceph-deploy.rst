@@ -96,22 +96,22 @@ On your admin node, perform the following steps using ``ceph-deploy``.
    the Ceph OSD Daemon. ::
    
 	ssh ceph-node2
-	sudo mkdir /tmp/osd0
+	sudo mkdir /var/local/ceph/osd0
 	exit
 	
 	ssh ceph-node3
-	sudo mkdir /tmp/osd1
+	sudo mkdir /var/local/ceph/osd1
 	exit 	
 
    Then, from your admin node, use ``ceph-deploy`` to prepare the OSDs. ::
 
 	ceph-deploy osd prepare {ceph-node}:/path/to/directory
-	ceph-deploy osd prepare ceph-node2:/tmp/osd0 ceph-node3:/tmp/osd1
+	ceph-deploy osd prepare ceph-node2:/var/local/ceph/osd0 ceph-node3:/var/local/ceph/osd1
 
    Finally, activate the OSDs. :: 
 
 	ceph-deploy osd activate {ceph-node}:/path/to/directory
-	ceph-deploy osd activate ceph-node2:/tmp/osd0 ceph-node3:/tmp/osd1
+	ceph-deploy osd activate ceph-node2:/var/local/ceph/osd0 ceph-node3:/var/local/ceph/osd1
 
 
 #. Use ``ceph-deploy`` to copy the configuration file and admin key to
@@ -193,18 +193,18 @@ Since you are running a 3-node cluster for demonstration purposes, add the OSD
 to the monitor node. ::
 
 	ssh ceph-node1
-	sudo mkdir /tmp/osd2
+	sudo mkdir /var/local/ceph/osd2
 	exit
 
 Then, from your ``ceph-deploy`` node, prepare the OSD. ::
 
 	ceph-deploy osd prepare {ceph-node}:/path/to/directory
-	ceph-deploy osd prepare ceph-node1:/tmp/osd2
+	ceph-deploy osd prepare ceph-node1:/var/local/ceph/osd2
 
 Finally, activate the OSDs. ::
 
 	ceph-deploy osd activate {ceph-node}:/path/to/directory
-	ceph-deploy osd activate ceph-node1:/tmp/osd2
+	ceph-deploy osd activate ceph-node1:/var/local/ceph/osd2
 
 
 Once you have added your new OSD, Ceph will begin rebalancing the cluster by
