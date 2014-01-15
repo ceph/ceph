@@ -92,21 +92,17 @@ protected:
     map<inodeno_t,map<client_t,Capability::Import> > peer_imported;
     list<Context*> waiting_for_finish;
     Mutation *mut;
-    export_state_t() : mut(NULL) {}
+    // for freeze tree deadlock detection
+    utime_t last_cum_auth_pins_change;
+    int last_cum_auth_pins;
+    int num_remote_waiters; // number of remote authpin waiters
+    export_state_t() : mut(NULL), last_cum_auth_pins(0), num_remote_waiters(0) {}
   };
 
   map<CDir*, export_state_t>  export_state;
   
   list<pair<dirfrag_t,int> >  export_queue;
 
-  // for deadlock detection
-  struct freezing_state_t {
-    utime_t start_time;
-    int num_waiters;		// number of remote authpin waiters
-    freezing_state_t() : num_waiters(0) {}
-  };
-  map<CDir*,freezing_state_t >	export_freezing_state;
-  set<pair<utime_t,CDir*> >	export_freezing_dirs;
 
   // -- imports --
 public:
@@ -118,6 +114,7 @@ public:
   const static int IMPORT_ACKING        = 6; // logged EImportStart, sent ack, waiting for finish
   const static int IMPORT_FINISHING     = 7; // sent cap imports, waiting for finish
   const static int IMPORT_ABORTING      = 8; // notifying bystanders of an abort before unfreezing
+
   static const char *get_import_statename(int s) {
     switch (s) {
     case IMPORT_DISCOVERING: return "discovering";
@@ -216,8 +213,9 @@ public:
   }
 
   void export_freeze_inc_num_waiters(CDir *dir) {
-    assert(is_exporting(dir));
-    export_freezing_state[dir].num_waiters++;
+    map<CDir*, export_state_t>::iterator it = export_state.find(dir);
+    assert(it != export_state.end());
+    it->second.num_remote_waiters++;
   }
   void find_stale_export_freeze();
 
@@ -285,12 +283,6 @@ public:
   void export_logged_finish(CDir *dir);
   void handle_export_notify_ack(MExportDirNotifyAck *m);
   void export_finish(CDir *dir);
-
-  void export_freeze_finish(CDir *dir) {
-    utime_t start = export_freezing_state[dir].start_time;
-    export_freezing_dirs.erase(make_pair(start, dir));
-    export_freezing_state.erase(dir);
-  }
 
   friend class C_MDC_ExportFreeze;
   friend class C_MDS_ExportFinishLogged;
