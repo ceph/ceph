@@ -5424,8 +5424,20 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
   ObjectState& obs = ctx->new_obs;
   CopyFromCallback *cb = static_cast<CopyFromCallback*>(ctx->copy_cb);
 
-  if (obs.exists) {
-    ctx->op_t->remove(obs.oi.soid);
+  if (pool.info.ec_pool()) {
+    if (obs.exists) {
+      if (ctx->mod_desc.rmobject(ctx->at_version.version)) {
+	ctx->op_t->stash(obs.oi.soid, ctx->at_version.version);
+      } else {
+	ctx->op_t->remove(obs.oi.soid);
+      }
+    }
+    ctx->mod_desc.create();
+  } else {
+    if (obs.exists) {
+      ctx->op_t->remove(obs.oi.soid);
+    }
+    ctx->mod_desc.mark_unrollbackable();
   }
 
   if (!obs.exists) {
