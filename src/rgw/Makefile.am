@@ -156,5 +156,7 @@ noinst_HEADERS += \
 	rgw/rgw_bucket.h \
 	rgw/rgw_keystone.h \
 	rgw/rgw_civetweb.h \
-	civetweb/civetweb.h
+	civetweb/civetweb.h \
+	civetweb/include/civetweb.h \
+	civetweb/include/md5.inl
 
