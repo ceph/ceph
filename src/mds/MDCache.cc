@@ -4011,20 +4011,32 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     if (!diri)
       dout(0) << " missing dir ino " << p->ino << dendl;
     assert(diri);
-    
-    frag_t fg = diri->dirfragtree[p->frag.value()];
-    CDir *dir = diri->get_dirfrag(fg);
-    if (!dir)
-      dout(0) << " missing dir for " << p->frag << " (which maps to " << fg << ") on " << *diri << dendl;
-    assert(dir);
-    if (dirs_to_share.count(dir)) {
-      dout(10) << " already have " << p->frag << " -> " << fg << " " << *dir << dendl;
+
+    list<frag_t> ls;
+    if (diri->dirfragtree.is_leaf(p->frag)) {
+      ls.push_back(p->frag);
     } else {
-      dirs_to_share.insert(dir);
-      unsigned nonce = dir->add_replica(from);
-      dout(10) << " have " << p->frag << " -> " << fg << " " << *dir << dendl;
-      if (ack)
-	ack->add_strong_dirfrag(dir->dirfrag(), nonce, dir->dir_rep);
+      diri->dirfragtree.get_leaves_under(p->frag, ls);
+      if (ls.empty())
+	ls.push_back(diri->dirfragtree[p->frag.value()]);
+    }
+    for (list<frag_t>::iterator q = ls.begin(); q != ls.end(); ++q) {
+      frag_t fg = *q;
+      CDir *dir = diri->get_dirfrag(fg);
+      if (!dir) {
+	dout(0) << " missing dir for " << p->frag << " (which maps to " << fg << ") on " << *diri << dendl;
+	continue;
+      }
+      assert(dir);
+      if (dirs_to_share.count(dir)) {
+	dout(10) << " already have " << p->frag << " -> " << fg << " " << *dir << dendl;
+      } else {
+	dirs_to_share.insert(dir);
+	unsigned nonce = dir->add_replica(from);
+	dout(10) << " have " << p->frag << " -> " << fg << " " << *dir << dendl;
+	if (ack)
+	  ack->add_strong_dirfrag(dir->dirfrag(), nonce, dir->dir_rep);
+      }
     }
   }
 
@@ -4638,6 +4650,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 
   // for sending cache expire message
   set<CInode*> isolated_inodes;
+  set<CInode*> refragged_inodes;
 
   // dirs
   for (map<dirfrag_t, MMDSCacheRejoin::dirfrag_strong>::iterator p = ack->strong_dirfrags.begin();
@@ -4645,7 +4658,12 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
        ++p) {
     // we may have had incorrect dir fragmentation; refragment based
     // on what they auth tells us.
-    CDir *dir = get_force_dirfrag(p->first);
+    CDir *dir = get_dirfrag(p->first);
+    if (!dir) {
+      dir = get_force_dirfrag(p->first);
+      if (dir)
+	refragged_inodes.insert(dir->get_inode());
+    }
     if (!dir) {
       CInode *diri = get_inode(p->first.ino);
       if (!diri) {
@@ -4740,6 +4758,19 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
       dn->lock.set_state_rejoin(q->second.lock, rejoin_waiters);
       dn->state_clear(CDentry::STATE_REJOINING);
       dout(10) << " got " << *dn << dendl;
+    }
+  }
+
+  for (set<CInode*>::iterator p = refragged_inodes.begin();
+       p != refragged_inodes.end();
+       ++p) {
+    list<CDir*> ls;
+    (*p)->get_nested_dirfrags(ls);
+    for (list<CDir*>::iterator q = ls.begin(); q != ls.end(); ++q) {
+      if ((*q)->is_auth() || ack->strong_dirfrags.count((*q)->dirfrag()))
+	continue;
+      assert((*q)->get_num_any() == 0);
+      (*p)->close_dirfrag((*q)->get_frag());
     }
   }
 
