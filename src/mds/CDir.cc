@@ -896,6 +896,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
     subs.push_back(f);
     inode->add_dirfrag(f);
 
+    f->set_dir_auth(get_dir_auth());
     f->prepare_new_fragment(replay);
   }
   
@@ -937,6 +938,7 @@ void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
 {
   dout(10) << "merge " << subs << dendl;
 
+  set_dir_auth(subs.front()->get_dir_auth());
   prepare_new_fragment(replay);
 
   nest_info_t rstatdiff;
