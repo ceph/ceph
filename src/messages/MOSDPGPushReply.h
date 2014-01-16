@@ -19,11 +19,12 @@
 #include "osd/osd_types.h"
 
 class MOSDPGPushReply : public Message {
-  static const int HEAD_VERSION = 1;
+  static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
 public:
-  pg_t pgid;
+  pg_shard_t from;
+  spg_t pgid;
   epoch_t map_epoch;
   vector<PushReplyOp> replies;
   uint64_t cost;
@@ -48,17 +49,27 @@ public:
 
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::decode(pgid, p);
+    ::decode(pgid.pgid, p);
     ::decode(map_epoch, p);
     ::decode(replies, p);
     ::decode(cost, p);
+
+    if (header.version >= 2) {
+      ::decode(pgid.shard, p);
+      ::decode(from, p);
+    } else {
+      pgid.shard = ghobject_t::NO_SHARD;
+      from = pg_shard_t(get_source().num(), ghobject_t::NO_SHARD);
+    }
   }
 
   virtual void encode_payload(uint64_t features) {
-    ::encode(pgid, payload);
+    ::encode(pgid.pgid, payload);
     ::encode(map_epoch, payload);
     ::encode(replies, payload);
     ::encode(cost, payload);
+    ::encode(pgid.shard, payload);
+    ::encode(from, payload);
   }
 
   void print(ostream& out) const {
