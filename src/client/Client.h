@@ -573,6 +573,7 @@ private:
   int _flush(Fh *fh);
   int _fsync(Fh *fh, bool syncdataonly);
   int _sync_fs();
+  int _lock(Fh *fh, int rule, int type, loff_t start, loff_t length, bool wait, int uid, int gid, int pid);
   int _fallocate(Fh *fh, int mode, int64_t offset, int64_t length);
 
   int get_or_create(Inode *dir, const char* name,
@@ -742,6 +743,9 @@ public:
   int ll_write(Fh *fh, loff_t off, loff_t len, const char *data);
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);
+  int ll_flock(Fh *fh, int op, int uid = -1, int gid = -1, int pid = -1);
+  int ll_setlk(Fh *fh, struct flock *lock, int sleep, int uid = -1, int gid = -1, int pid = -1);
+  int ll_getlk(Fh *fh, struct flock *lock, int uid = -1, int gid = -1, int pid = -1);
   int ll_fallocate(Fh *fh, int mode, loff_t offset, loff_t length);
   int ll_release(Fh *fh);
   int ll_statfs(vinodeno_t vino, struct statvfs *stbuf);
