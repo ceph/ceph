@@ -957,7 +957,15 @@ bool PG::calc_acting(int& newest_update_osd_id, vector<int>& want, vector<int>& 
     if (*i == primary->first)
       continue;
     const pg_info_t &cur_info = all_info.find(*i)->second;
-    if (cur_info.is_incomplete() || cur_info.last_update < primary->second.log_tail) {
+    if (cur_info.is_incomplete() ||
+      cur_info.last_update < MIN(
+	primary->second.log_tail,
+	newest_update_osd->second.log_tail)) {
+      /* We include newest_update_osd->second.log_tail because in GetLog,
+       * we will request logs back to the min last_update over our
+       * acting_backfill set, which will result in our log being extended
+       * as far backwards as necessary to pick up any peers which can
+       * be log recovered by newest_update_osd's log */
       dout(10) << " osd." << *i << " (up) backfill " << cur_info << dendl;
       backfill.push_back(*i);
     } else {
