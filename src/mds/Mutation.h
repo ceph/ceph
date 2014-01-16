@@ -237,8 +237,9 @@ struct MDRequest : public Mutation {
 
     list<Context*> waiting_for_finish;
 
-    // export
+    // export & fragment
     CDir* export_dir;
+    dirfrag_t fragment_base;
 
     More() : 
       srcdn_auth_mds(-1),

@@ -950,12 +950,18 @@ private:
   map<dirfrag_t, ufragment> uncommitted_fragments;
 
   struct fragment_info_t {
-    frag_t basefrag;
     int bits;
     list<CDir*> dirs;
     list<CDir*> resultfrags;
+    MDRequest *mdr;
+    // for deadlock detection
+    bool dirs_frozen;
+    utime_t last_cum_auth_pins_change;
+    int last_cum_auth_pins;
+    int num_remote_waiters;	// number of remote authpin waiters
+    fragment_info_t() : last_cum_auth_pins(0), num_remote_waiters(0) {}
   };
-  map<metareqid_t, fragment_info_t> fragment_requests;
+  map<dirfrag_t,fragment_info_t> fragments;
 
   void adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
 			    list<CDir*>& frags, list<Context*>& waiters, bool replay);
@@ -971,7 +977,7 @@ private:
   bool can_fragment(CInode *diri, list<CDir*>& dirs);
   void fragment_freeze_dirs(list<CDir*>& dirs, C_GatherBuilder &gather);
   void fragment_mark_and_complete(list<CDir*>& dirs);
-  void fragment_frozen(list<CDir*>& dirs, frag_t basefrag, int bits);
+  void fragment_frozen(dirfrag_t basedirfrag, int r);
   void fragment_unmark_unfreeze_dirs(list<CDir*>& dirs);
   void dispatch_fragment_dir(MDRequest *mdr);
   void _fragment_logged(MDRequest *mdr);
@@ -1001,6 +1007,9 @@ public:
   void split_dir(CDir *dir, int byn);
   void merge_dir(CInode *diri, frag_t fg);
   void rollback_uncommitted_fragments();
+
+  void find_stale_fragment_freeze();
+  void fragment_freeze_inc_num_waiters(CDir *dir);
 
   // -- updates --
   //int send_inode_updates(CInode *in);
