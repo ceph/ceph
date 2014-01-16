@@ -573,6 +573,7 @@ private:
   int _flush(Fh *fh);
   int _fsync(Fh *fh, bool syncdataonly);
   int _sync_fs();
+  int _lock(Fh *fh, int rule, int type, loff_t start, loff_t length, bool wait, int uid, int gid, int pid);
   int _fallocate(Fh *fh, int mode, int64_t offset, int64_t length);
 
   int get_or_create(Inode *dir, const char* name,
