@@ -36,7 +36,12 @@ protocol for your Ceph cluster and its daemons:
 #. You must follow the remaining steps in `Enabling Cephx`_ to enable 
    authentication.
 
-See the `Cephx Configuration Reference`_ for additional details.
+See the `Cephx Configuration Reference`_ for additional details. 
+
+.. tip:: This guide is for manual configuration. If you use a deployment tool 
+   such as ``ceph-deploy``, it is very likely that the tool will perform at 
+   least the first two steps for you. Verify that your deployment tool
+   addresses these steps so that you don't overwrite your keys inadvertantly. 
 
 
 .. _client-admin-key:
@@ -58,7 +63,10 @@ key on the monitor with admin capabilities and write it to a keyring
 on the local file system.  If the key already exists, its current
 value will be returned.	::
 
-	sudo ceph auth get-or-create client.admin mds 'allow' osd 'allow *' mon 'allow *' > /etc/ceph/keyring
+	sudo ceph auth get-or-create client.admin mds 'allow' osd 'allow *' mon 'allow *' > /etc/ceph/ceph.client.admin.keyring
+
+Ensure that the keyring has appropriate permissions so that the current user
+can use the keyring. 
 
 See `Enabling Cephx`_ step 1 for stepwise details to enable ``cephx``.
 
@@ -88,9 +96,9 @@ Enabling Cephx
 --------------
 
 When ``cephx`` is enabled, Ceph will look for the keyring in the default search
-path, which includes ``/etc/ceph/keyring``.  You can override this location by
-adding a ``keyring`` option in the ``[global]`` section of your `Ceph
-configuration`_ file, but this is not recommended.
+path, which includes ``/etc/ceph/ceph.$name.keyring``.  You can override this
+location by adding a ``keyring`` option in the ``[global]`` section of your
+`Ceph configuration`_ file, but this is not recommended.
 
 Execute the following procedures to enable ``cephx`` on a cluster with ``cephx``
 disabled. If you (or your deployment utility) have already generated the keys,
@@ -98,17 +106,21 @@ you may skip the steps related to generating keys.
 
 #. Create a ``client.admin`` key, and save a copy of the key for your client host::
 
-	ceph auth get-or-create client.admin mon 'allow *' mds 'allow *' osd 'allow *' -o /etc/ceph/keyring
+	ceph auth get-or-create client.admin mon 'allow *' mds 'allow *' osd 'allow *' -o /etc/ceph/ceph.client.admin.keyring
 
-	**Warning:** This will clobber any existing ``/etc/ceph/keyring`` file. Be careful!
+   **Warning:** This will clobber any existing 
+   ``/etc/ceph/client.admin.keyring`` file. Do not perform this step if a 
+   deployment tool has already done it for you. Be careful!
 
-#. Generate a secret monitor ``mon.`` key::
+#. Create a keyring for your cluster and generate a monitor secret key. ::
 
-    ceph-authtool --create --gen-key -n mon. /tmp/monitor-key
+	ceph-authtool --create-keyring /tmp/ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'
 
-#. Copy the mon keyring into a ``keyring`` file in every monitor's ``mon data`` directory::
+#. Copy the monitor keyring into a ``ceph.mon.keyring`` file in every monitor's 
+   ``mon data`` directory. For example, to copy it to ``mon.a`` in cluster ``ceph``, 
+   use the following::
 
-    cp /tmp/monitor-key /var/lib/ceph/mon/ceph-a/keyring
+    cp /tmp/ceph.mon.keyring /var/lib/ceph/mon/ceph-a/keyring
 
 #. Generate a secret key for every OSD, where ``{$id}`` is the OSD number::
 
@@ -135,7 +147,7 @@ you may skip the steps related to generating keys.
 
 #. Start or restart the Ceph cluster. See `Operating a Cluster`_ for details. 
 
-
+For details on bootstrapping a monitor manually, see `Manual Deployment`_.
 
 .. _disable-cephx:
 
@@ -419,3 +431,4 @@ of the enhanced authentication.
 .. _Ceph configuration: ../../configuration/ceph-conf
 .. _Cephx Configuration Reference: ../../configuration/auth-config-ref
 .. _Operating a Cluster: ../operating
+.. _Manual Deployment: ../../../install/manual-deployment
