@@ -346,7 +346,7 @@ def keyscan_check(ctx, machines):
     for i, machine in enumerate(machines):
         if '@' in machine:
             _, machines[i] = machine.rsplit('@')
-    args = ['ssh-keyscan']
+    args = ['ssh-keyscan', '-t', 'rsa']
     args.extend(machines)
     p = subprocess.Popen(
         args=args,
