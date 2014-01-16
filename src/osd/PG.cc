@@ -1191,7 +1191,7 @@ void PG::activate(ObjectStore::Transaction& t,
     }
   }
  
-  if (role == 0) {    // primary state
+  if (is_primary()) {
     last_update_ondisk = info.last_update;
     min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
   }
@@ -1753,7 +1753,7 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
 
   // There can't be recovery/backfill going on now
   get_osdmap()->pg_to_up_acting_osds(child->info.pgid, child->up, child->acting);
-  child->role = get_osdmap()->calc_pg_role(osd->whoami, child->acting);
+  child->role = OSDMap::calc_pg_role(osd->whoami, child->acting);
   if (get_primary() != child->get_primary())
     child->info.history.same_primary_since = get_osdmap()->get_epoch();
 
@@ -1852,7 +1852,7 @@ void PG::update_heartbeat_peers()
   assert(is_locked());
 
   set<int> new_peers;
-  if (role == 0) {
+  if (is_primary()) {
     for (unsigned i=0; i<acting.size(); i++)
       new_peers.insert(acting[i]);
     for (unsigned i=0; i<up.size(); i++)
@@ -4529,6 +4529,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
   vector<int> oldacting, oldup;
   int oldrole = get_role();
   int oldprimary = get_primary();
+  bool was_old_primary = is_primary();
   acting.swap(oldacting);
   up.swap(oldup);
 
@@ -4604,7 +4605,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
   actingbackfill.clear();
 
   // reset primary state?
-  if (oldrole == 0 || get_role() == 0)
+  if (was_old_primary || is_primary())
     clear_primary_state();
 
     
@@ -4613,9 +4614,10 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
 
   assert(!deleting);
 
-  if (role != oldrole) {
-    // old primary?
-    if (oldrole == 0) {
+  if (role != oldrole ||
+      was_old_primary != is_primary()) {
+    // did primary change?
+    if (was_old_primary != is_primary()) {
       state_clear(PG_STATE_CLEAN);
       clear_publish_stats();
 	
@@ -4635,7 +4637,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
     requeue_ops(waiting_for_active);
 
     // should we tell the primary we are here?
-    send_notify = (role != 0);
+    send_notify = !is_primary();
       
   } else {
     // no role change.
@@ -4650,7 +4652,7 @@ void PG::start_peering_interval(const OSDMapRef lastmap,
 	       << dendl;
     } else {
       // primary is the same.
-      if (role == 0) {
+      if (is_primary()) {
 	// i am (still) primary. but my replica set changed.
 	state_clear(PG_STATE_CLEAN);
 	  
@@ -4754,7 +4756,7 @@ ostream& operator<<(ostream& out, const PG& pg)
   if (pg.last_complete_ondisk != pg.info.last_complete)
     out << " lcod " << pg.last_complete_ondisk;
 
-  if (pg.get_role() == 0) {
+  if (pg.is_primary()) {
     out << " mlcod " << pg.min_last_complete_ondisk;
   }
 
@@ -5124,7 +5126,7 @@ boost::statechart::result PG::RecoveryState::Initial::react(const Load& l)
   PG *pg = context< RecoveryMachine >().pg;
 
   // do we tell someone we're here?
-  pg->send_notify = (pg->role != 0);
+  pg->send_notify = (!pg->is_primary());
 
   return transit< Reset >();
 }
