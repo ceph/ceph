@@ -629,6 +629,7 @@ fi
 %{_bindir}/ceph_filestore_dump
 %{_bindir}/ceph_filestore_tool
 %{_bindir}/ceph_streamtest
+%{_bindir}/ceph_test_c_headers
 %{_bindir}/ceph_test_cfuse_cache_invalidate
 %{_bindir}/ceph_test_cls_hello
 %{_bindir}/ceph_test_cls_lock
@@ -648,6 +649,7 @@ fi
 %{_bindir}/ceph_test_filestore_idempotent
 %{_bindir}/ceph_test_filestore_idempotent_sequence
 %{_bindir}/ceph_test_filestore_workloadgen
+%{_bindir}/ceph_test_get_blkdev_size
 %{_bindir}/ceph_test_ioctls
 %{_bindir}/ceph_test_keyvaluedb_atomicity
 %{_bindir}/ceph_test_keyvaluedb_iterators
