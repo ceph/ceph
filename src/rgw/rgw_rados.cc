@@ -2356,7 +2356,7 @@ done_cancel:
   /* we lost in a race, object was already overwritten, we
    * should treat it as a success
    */
-  if (r == -ECANCELED)
+  if (r == -ECANCELED || r == -ENOENT)
     r = 0;
   return r;
 }
