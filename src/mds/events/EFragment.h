@@ -37,9 +37,9 @@ public:
   bufferlist rollback;
 
   EFragment() : LogEvent(EVENT_FRAGMENT) { }
-  EFragment(MDLog *mdlog, int o, inodeno_t i, frag_t bf, int b) : 
+  EFragment(MDLog *mdlog, int o, dirfrag_t df, int b) :
     LogEvent(EVENT_FRAGMENT), metablob(mdlog), 
-    op(o), ino(i), basefrag(bf), bits(b) { }
+    op(o), ino(df.ino), basefrag(df.frag), bits(b) { }
 
   void print(ostream& out) const {
     out << "EFragment " << op_name(op) << " " << ino << " " << basefrag << " by " << bits << " " << metablob;
