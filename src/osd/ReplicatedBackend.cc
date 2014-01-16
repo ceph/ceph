@@ -259,7 +259,8 @@ int ReplicatedBackend::objects_list_partial(
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
-      if (i->is_degenerate()) {
+      assert(i->is_no_shard());
+      if (i->is_no_gen()) {
 	ls->push_back(i->hobj);
       }
     }
@@ -287,7 +288,8 @@ int ReplicatedBackend::objects_list_range(
   for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
-    if (i->is_degenerate()) {
+    assert(i->is_no_shard());
+    if (i->is_no_gen()) {
       ls->push_back(i->hobj);
     }
   }
