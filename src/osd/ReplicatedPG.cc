@@ -4628,6 +4628,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   
   // prepend transaction to op_t
   t->append(ctx->op_t);
+  delete ctx->op_t;
   ctx->op_t = t;
 
   // update snapset with latest snap context
@@ -5540,6 +5541,8 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     dout(20) << __func__ << " creating whiteout" << dendl;
   } else {
     tctx->op_t->append(results->final_tx);
+    delete results->final_tx;
+    results->final_tx = NULL;
     if (results->started_temp_obj) {
       tctx->discard_temp_oid = results->temp_oid;
     }

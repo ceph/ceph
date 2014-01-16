@@ -489,6 +489,7 @@ public:
       }
     }
     ~OpContext() {
+      assert(!op_t);
       assert(lock_to_release == NONE);
       if (reply)
 	reply->put();
