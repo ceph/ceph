@@ -417,7 +417,10 @@ void OSDMonitor::remove_redundant_pg_temp()
   for (map<pg_t,vector<int> >::iterator p = osdmap.pg_temp->begin();
        p != osdmap.pg_temp->end();
        ++p) {
-    if (pending_inc.new_pg_temp.count(p->first) == 0) {
+    if (!osdmap.have_pg_pool(p->first.pool())) {
+      dout(10) << " pool deleted removing unnecessary pg_temp " << p->first << " -> " << p->second << dendl;
+      pending_inc.new_pg_temp[p->first].clear();
+    } else if (pending_inc.new_pg_temp.count(p->first) == 0) {
       vector<int> raw_up;
       osdmap.pg_to_raw_up(p->first, raw_up);
       if (raw_up == p->second) {
