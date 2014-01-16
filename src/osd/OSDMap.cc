@@ -1721,12 +1721,7 @@ void OSDMap::decode_classic(bufferlist::iterator& p)
   else
     osd_addrs->hb_front_addr.resize(osd_addrs->hb_back_addr.size());
 
-  // index pool names
-  name_pool.clear();
-  for (map<int64_t,string>::iterator i = pool_name.begin(); i != pool_name.end(); ++i)
-    name_pool[i->second] = i->first;
-
-  calc_num_osds();
+  post_decode();
 }
 
 void OSDMap::decode(bufferlist::iterator& bl)
@@ -1793,6 +1788,20 @@ void OSDMap::decode(bufferlist::iterator& bl)
   }
 
   DECODE_FINISH(bl); // wrapper
+
+  post_decode();
+}
+
+void OSDMap::post_decode()
+{
+  // index pool names
+  name_pool.clear();
+  for (map<int64_t,string>::iterator i = pool_name.begin();
+       i != pool_name.end(); ++i) {
+    name_pool[i->second] = i->first;
+  }
+
+  calc_num_osds();
 }
 
 void OSDMap::dump_json(ostream& out) const
