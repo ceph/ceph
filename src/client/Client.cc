@@ -7806,6 +7806,94 @@ int Client::ll_fsync(Fh *fh, bool syncdataonly)
   return _fsync(fh, syncdataonly);
 }
 
+int Client::ll_flock(Fh *fh, int op, int uid, int gid, int pid)
+{
+  Mutex::Locker lock(client_lock);
+  tout(cct) << "ll_flock" << std::endl;
+  tout(cct) << (unsigned long)fh << std::endl;
+
+  int wait = 1;
+  if (op & LOCK_NB) wait = 0;
+  int type;
+  switch (op & (LOCK_SH | LOCK_EX | LOCK_UN)) {
+    case LOCK_SH: type = CEPH_LOCK_SHARED; break;
+    case LOCK_EX: type = CEPH_LOCK_EXCL; break;
+    case LOCK_UN: type = CEPH_LOCK_UNLOCK; break;
+  }
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETFILELOCK);
+  filepath path(fh->inode->ino);
+  req->set_filepath(path);
+  req->set_inode(fh->inode);
+  req->head.args.filelock_change.rule = CEPH_LOCK_FLOCK;
+  req->head.args.filelock_change.type = type;
+  req->head.args.filelock_change.pid = pid;
+  req->head.args.filelock_change.pid_namespace = 0; // some unique id for this host?
+  req->head.args.filelock_change.start = 0;
+  req->head.args.filelock_change.length = 0;
+  req->head.args.filelock_change.wait = wait;
+  return make_request(req, uid, gid);
+}
+
+int Client::ll_setlk(Fh *fh, struct flock *lock, int sleep, int uid, int gid, int pid)
+{
+  Mutex::Locker locker(client_lock);
+  tout(cct) << "ll_setlk" << std::endl;
+  tout(cct) << (unsigned long)fh << std::endl;
+
+  int type;
+  switch (lock->l_type) {
+    case F_RDLCK: type = CEPH_LOCK_SHARED; break;
+    case F_WRLCK: type = CEPH_LOCK_EXCL; break;
+    case F_UNLCK: type = CEPH_LOCK_UNLOCK; break;
+  }
+  // lock l_type F_RDLCK, F_WRLCK, F_UNLCK | l_whence SEEK_SET/SEEK_CUR/SEEK_END | l_start | l_len | l_pid (get)
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETFILELOCK);
+  filepath path(fh->inode->ino);
+  req->set_filepath(path);
+  req->set_inode(fh->inode);
+  req->head.args.filelock_change.rule = CEPH_LOCK_FCNTL;
+  req->head.args.filelock_change.type = type;
+  req->head.args.filelock_change.pid = pid; // or l_pid?
+  req->head.args.filelock_change.pid_namespace = 0; // some unique id for this host?
+  req->head.args.filelock_change.start = lock->l_start; // l_whence
+  req->head.args.filelock_change.length = lock->l_len;
+  req->head.args.filelock_change.wait = sleep;
+  return make_request(req, uid, gid);
+}
+
+int Client::ll_getlk(Fh *fh, struct flock *lock, int uid, int gid, int pid)
+{
+  Mutex::Locker locker(client_lock);
+  tout(cct) << "ll_getlk" << std::endl;
+  tout(cct) << (unsigned long)fh << std::endl;
+
+  int type;
+  switch (lock->l_type) {
+    case F_RDLCK: type = CEPH_LOCK_SHARED; break;
+    case F_WRLCK: type = CEPH_LOCK_EXCL; break;
+    case F_UNLCK: type = CEPH_LOCK_UNLOCK; break;
+  }
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETFILELOCK);
+  filepath path(fh->inode->ino);
+  req->set_filepath(path);
+  req->set_inode(fh->inode);
+  req->head.args.filelock_change.rule = CEPH_LOCK_FCNTL;
+  req->head.args.filelock_change.type = type;
+  req->head.args.filelock_change.pid = pid; // or l_pid?
+  req->head.args.filelock_change.pid_namespace = 0; // some unique id for this host?
+  req->head.args.filelock_change.start = lock->l_start; // l_whence
+  req->head.args.filelock_change.length = lock->l_len;
+  req->head.args.filelock_change.wait = 0;
+  int res = make_request(req, uid, gid);
+  if (res == 0) {
+    derr << "GETFILELOCK completed" << dendl;
+  }
+  return res;
+}
+
 #ifdef FALLOC_FL_PUNCH_HOLE
 
 int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
@@ -7888,7 +7976,6 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 }
 
 #endif
-
 
 int Client::ll_fallocate(Fh *fh, int mode, loff_t offset, loff_t length)
 {
