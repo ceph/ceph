@@ -5601,6 +5601,19 @@ int Client::_release_fh(Fh *f)
   Inode *in = f->inode;
   ldout(cct, 5) << "_release_fh " << f << " mode " << f->mode << " on " << *in << dendl;
 
+  // unlock if still locked
+  if (f->flock_locked) {
+    ll_flock(f, LOCK_UN);
+  }
+  if (f->fcntl_locked) {
+    struct flock lock;
+    lock.l_type = F_UNLCK;
+    lock.l_start = 0;
+    lock.l_whence = SEEK_SET;
+    lock.l_len = 0;
+    ll_setlk(f, &lock, 1);
+  }
+
   if (in->snapid == CEPH_NOSNAP) {
     if (in->put_open_ref(f->mode)) {
       _flush(in);
@@ -7836,7 +7849,10 @@ int Client::ll_flock(Fh *fh, int op, int uid, int gid, int pid)
   req->head.args.filelock_change.start = 0;
   req->head.args.filelock_change.length = 0;
   req->head.args.filelock_change.wait = wait;
-  return make_request(req, uid, gid);
+  int r = make_request(req, uid, gid);
+  if (r == 0 && type != CEPH_LOCK_UNLOCK) fh->flock_locked = true; 
+  if (r == 0 && type == CEPH_LOCK_UNLOCK) fh->flock_locked = false;
+  return r;
 }
 
 int Client::ll_setlk(Fh *fh, struct flock *lock, int sleep, int uid, int gid, int pid)
@@ -7872,7 +7888,10 @@ int Client::ll_setlk(Fh *fh, struct flock *lock, int sleep, int uid, int gid, in
   req->head.args.filelock_change.start = lock->l_start; // l_whence
   req->head.args.filelock_change.length = lock->l_len;
   req->head.args.filelock_change.wait = sleep;
-  return make_request(req, uid, gid);
+  int r = make_request(req, uid, gid);
+  if (r == 0 && type != CEPH_LOCK_UNLOCK) fh->fcntl_locked = true; 
+  if (r == 0 && type == CEPH_LOCK_UNLOCK) fh->fcntl_locked = false;
+  return r;
 }
 
 int Client::ll_getlk(Fh *fh, struct flock *lock, int uid, int gid, int pid)
@@ -7904,11 +7923,11 @@ int Client::ll_getlk(Fh *fh, struct flock *lock, int uid, int gid, int pid)
   req->head.args.filelock_change.start = lock->l_start; // l_whence
   req->head.args.filelock_change.length = lock->l_len;
   req->head.args.filelock_change.wait = 0;
-  int res = make_request(req, uid, gid);
-  if (res == 0) {
+  int r = make_request(req, uid, gid);
+  if (r == 0) {
     derr << "GETFILELOCK completed" << dendl;
   }
-  return res;
+  return r;
 }
 
 #ifdef FALLOC_FL_PUNCH_HOLE

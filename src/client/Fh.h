@@ -23,8 +23,12 @@ struct Fh {
   loff_t consec_read_bytes;
   int nr_consec_read;
 
+  bool flock_locked;
+  bool fcntl_locked;
+
   Fh() : inode(0), pos(0), mds(0), mode(0), flags(0), pos_locked(false),
-	 last_pos(0), consec_read_bytes(0), nr_consec_read(0) {}
+	 last_pos(0), consec_read_bytes(0), nr_consec_read(0),
+     flock_locked(false), fcntl_locked(false) {}
 };
 
 
