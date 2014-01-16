@@ -14,6 +14,7 @@ from datetime import datetime
 from . import report
 from . import safepath
 from .config import config as teuth_config
+from .kill import kill_job
 from .misc import read_config
 
 log = logging.getLogger(__name__)
@@ -142,6 +143,8 @@ def worker(ctx):
             prog=os.path.basename(sys.argv[0]),
             path=ctx.archive_dir,
         ))
+    else:
+        teuth_config.archive_base = ctx.archive_dir
 
     read_config(ctx)
 
@@ -207,6 +210,8 @@ def worker(ctx):
 
 
 def run_with_watchdog(process, job_config):
+    job_start_time = datetime.utcnow()
+
     # Only push the information that's relevant to the watchdog, to save db
     # load
     job_info = dict(
@@ -217,6 +222,13 @@ def run_with_watchdog(process, job_config):
     # Sleep once outside of the loop to avoid double-posting jobs
     time.sleep(teuth_config.watchdog_interval)
     while process.poll() is None:
+        # Kill jobs that have been running longer than the global max
+        job_run_time = datetime.utcnow() - job_start_time
+        if job_run_time.seconds > teuth_config.max_job_time:
+            kill_job(job_info['name'], job_info['job_id'],
+                     teuth_config.archive_base)
+            break
+
         report.try_push_job_info(job_info, dict(status='running'))
         time.sleep(teuth_config.watchdog_interval)
 
