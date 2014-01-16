@@ -7808,6 +7808,10 @@ int Client::ll_fsync(Fh *fh, bool syncdataonly)
 
 int Client::ll_flock(Fh *fh, int op, int uid, int gid, int pid)
 {
+  if (!cct->_conf->fuse_multithreaded) {
+    dout(0) << "WARNING: using setlk/getlk/flock without configuring fuse multithreading will result in a deadlock. please set 'fuse multithreaded=1' in your ceph.conf" << dendl;
+  }
+
   Mutex::Locker lock(client_lock);
   tout(cct) << "ll_flock" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
@@ -7837,6 +7841,10 @@ int Client::ll_flock(Fh *fh, int op, int uid, int gid, int pid)
 
 int Client::ll_setlk(Fh *fh, struct flock *lock, int sleep, int uid, int gid, int pid)
 {
+  if (!cct->_conf->fuse_multithreaded) {
+    dout(0) << "WARNING: using setlk/getlk/flock without configuring fuse multithreading will result in a deadlock. please set 'fuse multithreaded=1' in your ceph.conf" << dendl;
+  }
+
   Mutex::Locker locker(client_lock);
   tout(cct) << "ll_setlk" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
@@ -7847,7 +7855,11 @@ int Client::ll_setlk(Fh *fh, struct flock *lock, int sleep, int uid, int gid, in
     case F_WRLCK: type = CEPH_LOCK_EXCL; break;
     case F_UNLCK: type = CEPH_LOCK_UNLOCK; break;
   }
-  // lock l_type F_RDLCK, F_WRLCK, F_UNLCK | l_whence SEEK_SET/SEEK_CUR/SEEK_END | l_start | l_len | l_pid (get)
+
+  if (lock->l_whence != SEEK_SET) {
+    dout(0) << "WARNING: using setlk with l_whence != SEEK_SET is not supported" << dendl;
+    return -EINVAL;
+  }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETFILELOCK);
   filepath path(fh->inode->ino);
@@ -7874,6 +7886,11 @@ int Client::ll_getlk(Fh *fh, struct flock *lock, int uid, int gid, int pid)
     case F_RDLCK: type = CEPH_LOCK_SHARED; break;
     case F_WRLCK: type = CEPH_LOCK_EXCL; break;
     case F_UNLCK: type = CEPH_LOCK_UNLOCK; break;
+  }
+
+  if (lock->l_whence != SEEK_SET) {
+    dout(0) << "WARNING: using getlk with l_whence != SEEK_SET is not supported" << dendl;
+    return -EINVAL;
   }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETFILELOCK);
