@@ -239,7 +239,7 @@ public:
 
   template <typename T>
   class BlessedGenContext : public GenContext<T> {
-    ReplicatedPG *pg;
+    ReplicatedPGRef pg;
     GenContext<T> *c;
     epoch_t e;
   public:
@@ -255,7 +255,7 @@ public:
     }
   };
   class BlessedContext : public Context {
-    ReplicatedPG *pg;
+    ReplicatedPGRef pg;
     Context *c;
     epoch_t e;
   public:
