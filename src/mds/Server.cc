@@ -1659,12 +1659,15 @@ void Server::handle_slave_auth_pin(MDRequest *mdr)
 	} else {
 	  assert(0);
 	}
-	if (dir && dir->is_freezing_tree()) {
-	  while (!dir->is_freezing_tree_root())
-	    dir = dir->get_parent_dir();
-	  mdcache->migrator->export_freeze_inc_num_waiters(dir);
+	if (dir) {
+	  if (dir->is_freezing_dir())
+	    mdcache->fragment_freeze_inc_num_waiters(dir);
+	  if (dir->is_freezing_tree()) {
+	    while (!dir->is_freezing_tree_root())
+	      dir = dir->get_parent_dir();
+	    mdcache->migrator->export_freeze_inc_num_waiters(dir);
+	  }
 	}
-
 	return;
       }
     }
