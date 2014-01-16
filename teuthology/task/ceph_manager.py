@@ -220,6 +220,8 @@ class Thrasher:
             timeout=self.config.get('timeout')
             )
 
+        # now we wait 20s for the backfill replicas to hear about the clean
+        time.sleep(20)
         self.log("Recovered, killing an osd")
         self.kill_osd(mark_down=True, mark_out=True)
         self.log("Waiting for clean again")
