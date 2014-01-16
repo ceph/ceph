@@ -24,10 +24,10 @@
 
 struct MOSDRepScrub : public Message {
 
-  static const int HEAD_VERSION = 4;
+  static const int HEAD_VERSION = 5;
   static const int COMPAT_VERSION = 2;
 
-  pg_t pgid;             // PG to scrub
+  spg_t pgid;             // PG to scrub
   eversion_t scrub_from; // only scrub log entries after scrub_from
   eversion_t scrub_to;   // last_update_applied when message sent
   epoch_t map_epoch;
@@ -40,7 +40,7 @@ struct MOSDRepScrub : public Message {
       chunky(false),
       deep(false) { }
 
-  MOSDRepScrub(pg_t pgid, eversion_t scrub_from, eversion_t scrub_to,
+  MOSDRepScrub(spg_t pgid, eversion_t scrub_from, eversion_t scrub_to,
 	       epoch_t map_epoch)
     : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid),
@@ -50,7 +50,7 @@ struct MOSDRepScrub : public Message {
       chunky(false),
       deep(false) { }
 
-  MOSDRepScrub(pg_t pgid, eversion_t scrub_to, epoch_t map_epoch,
+  MOSDRepScrub(spg_t pgid, eversion_t scrub_to, epoch_t map_epoch,
                hobject_t start, hobject_t end, bool deep)
     : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid),
@@ -78,7 +78,7 @@ public:
   }
 
   void encode_payload(uint64_t features) {
-    ::encode(pgid, payload);
+    ::encode(pgid.pgid, payload);
     ::encode(scrub_from, payload);
     ::encode(scrub_to, payload);
     ::encode(map_epoch, payload);
@@ -86,10 +86,11 @@ public:
     ::encode(start, payload);
     ::encode(end, payload);
     ::encode(deep, payload);
+    ::encode(pgid.shard, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::decode(pgid, p);
+    ::decode(pgid.pgid, p);
     ::decode(scrub_from, p);
     ::decode(scrub_to, p);
     ::decode(map_epoch, p);
@@ -106,6 +107,12 @@ public:
     } else { // v2 scrub: non-chunky
       chunky = false;
       deep = false;
+    }
+
+    if (header.version >= 5) {
+      ::decode(pgid.shard, p);
+    } else {
+      pgid.shard = ghobject_t::no_shard();
     }
   }
 };

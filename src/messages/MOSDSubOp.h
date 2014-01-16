@@ -25,7 +25,7 @@
 
 class MOSDSubOp : public Message {
 
-  static const int HEAD_VERSION = 8;
+  static const int HEAD_VERSION = 9;
   static const int COMPAT_VERSION = 1;
 
 public:
@@ -35,7 +35,8 @@ public:
   osd_reqid_t reqid;
   
   // subop
-  pg_t pgid;
+  pg_shard_t from;
+  spg_t pgid;
   hobject_t poid;
   object_locator_t oloc;
   
@@ -100,7 +101,7 @@ public:
     bufferlist::iterator p = payload.begin();
     ::decode(map_epoch, p);
     ::decode(reqid, p);
-    ::decode(pgid, p);
+    ::decode(pgid.pgid, p);
     ::decode(poid, p);
 
     __u32 num_ops;
@@ -158,12 +159,22 @@ public:
       ::decode(new_temp_oid, p);
       ::decode(discard_temp_oid, p);
     }
+
+    if (header.version >= 9) {
+      ::decode(from, p);
+      ::decode(pgid.shard, p);
+    } else {
+      from = pg_shard_t(
+	get_source().num(),
+	ghobject_t::NO_SHARD);
+      pgid.shard = ghobject_t::NO_SHARD;
+    }
   }
 
   virtual void encode_payload(uint64_t features) {
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
-    ::encode(pgid, payload);
+    ::encode(pgid.pgid, payload);
     ::encode(poid, payload);
 
     __u32 num_ops = ops.size();
@@ -204,15 +215,19 @@ public:
     ::encode(omap_header, payload);
     ::encode(new_temp_oid, payload);
     ::encode(discard_temp_oid, payload);
+    ::encode(from, payload);
+    ::encode(pgid.shard, payload);
   }
 
   MOSDSubOp()
     : Message(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION) { }
-  MOSDSubOp(osd_reqid_t r, pg_t p, const hobject_t& po, bool noop_, int aw,
+  MOSDSubOp(osd_reqid_t r, pg_shard_t from,
+	    spg_t p, const hobject_t& po, bool noop_, int aw,
 	    epoch_t mape, tid_t rtid, eversion_t v)
     : Message(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(mape),
       reqid(r),
+      from(from),
       pgid(p),
       poid(po),
       acks_wanted(aw),

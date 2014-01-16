@@ -18,10 +18,10 @@
 #include "msg/Message.h"
 
 class MRecoveryReserve : public Message {
-  static const int HEAD_VERSION = 1;
+  static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 public:
-  pg_t pgid;
+  spg_t pgid;
   epoch_t query_epoch;
   enum {
     REQUEST = 0,
@@ -34,7 +34,7 @@ public:
     : Message(MSG_OSD_RECOVERY_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       query_epoch(0), type(-1) {}
   MRecoveryReserve(int type,
-		   pg_t pgid,
+		   spg_t pgid,
 		   epoch_t query_epoch)
     : Message(MSG_OSD_RECOVERY_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid), query_epoch(query_epoch),
@@ -63,15 +63,20 @@ public:
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::decode(pgid, p);
+    ::decode(pgid.pgid, p);
     ::decode(query_epoch, p);
     ::decode(type, p);
+    if (header.version >= 2)
+      ::decode(pgid.shard, p);
+    else
+      pgid.shard = ghobject_t::no_shard();
   }
 
   void encode_payload(uint64_t features) {
-    ::encode(pgid, payload);
+    ::encode(pgid.pgid, payload);
     ::encode(query_epoch, payload);
     ::encode(type, payload);
+    ::encode(pgid.shard, payload);
   }
 };
 

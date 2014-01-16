@@ -20,7 +20,7 @@
 
 class MOSDPGLog : public Message {
 
-  static const int HEAD_VERSION = 3;
+  static const int HEAD_VERSION = 4;
   static const int COMPAT_VERSION = 2;
 
   epoch_t epoch;
@@ -31,22 +31,29 @@ class MOSDPGLog : public Message {
   epoch_t query_epoch;
 
 public:
+  shard_id_t to;
+  shard_id_t from;
   pg_info_t info;
   pg_log_t log;
   pg_missing_t missing;
   pg_interval_map_t past_intervals;
 
   epoch_t get_epoch() { return epoch; }
-  pg_t get_pgid() { return info.pgid; }
+  spg_t get_pgid() { return spg_t(info.pgid.pgid, to); }
   epoch_t get_query_epoch() { return query_epoch; }
 
   MOSDPGLog() : Message(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION) { }
-  MOSDPGLog(version_t mv, pg_info_t& i)
+  MOSDPGLog(shard_id_t to, shard_id_t from, version_t mv, pg_info_t& i)
     : Message(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION),
-      epoch(mv), query_epoch(mv), info(i)  { }
-  MOSDPGLog(version_t mv, pg_info_t& i, epoch_t query_epoch)
+      epoch(mv), query_epoch(mv),
+      to(to), from(from),
+      info(i)  { }
+  MOSDPGLog(shard_id_t to, shard_id_t from,
+	    version_t mv, pg_info_t& i, epoch_t query_epoch)
     : Message(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION),
-      epoch(mv), query_epoch(query_epoch), info(i)  { }
+      epoch(mv), query_epoch(query_epoch),
+      to(to), from(from),
+      info(i)  { }
 
 private:
   ~MOSDPGLog() {}
@@ -66,6 +73,8 @@ public:
     ::encode(missing, payload);
     ::encode(query_epoch, payload);
     ::encode(past_intervals, payload);
+    ::encode(to, payload);
+    ::encode(from, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -78,6 +87,13 @@ public:
     }
     if (header.version >= 3) {
       ::decode(past_intervals, p);
+    }
+    if (header.version >= 4) {
+      ::decode(to, p);
+      ::decode(from, p);
+    } else {
+      to = ghobject_t::NO_SHARD;
+      from = ghobject_t::NO_SHARD;
     }
   }
 };
