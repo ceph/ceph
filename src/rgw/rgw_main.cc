@@ -467,10 +467,8 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
     goto done;
   }
 
-  if (s->expect_cont)
-    dump_continue(s);
-
   req->log(s, "executing");
+  op->pre_exec();
   op->execute();
   op->complete();
 done:
