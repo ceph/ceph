@@ -370,6 +370,26 @@ static void fuse_ll_flush(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info 
   fuse_reply_err(req, 0);
 }
 
+static void fuse_ll_getlk(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi, struct flock *lock)
+{
+  CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
+  Fh *fh = (Fh*)fi->fh;
+  int r = cfuse->client->ll_getlk(fh, lock);
+  if (r == 0) {
+    fuse_reply_lock(req, lock);
+  } else {
+    fuse_reply_err(req, -r);
+  }
+}
+
+static void fuse_ll_setlk(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi, struct flock *lock, int sleep)
+{
+  CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
+  Fh *fh = (Fh*)fi->fh;
+  int r = cfuse->client->ll_setlk(fh, lock, sleep);
+  fuse_reply_err(req, -r);
+}
+
 #ifdef FUSE_IOCTL_COMPAT
 static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg, struct fuse_file_info *fi,
                           unsigned flags, const void *in_buf, size_t in_bufsz, size_t out_bufsz)
@@ -400,8 +420,17 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg, st
 }
 #endif
 
-#if FUSE_VERSION > FUSE_MAKE_VERSION(2, 9)
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
+static void fuse_ll_flock(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi, int op)
+{
+  CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
+  Fh *fh = (Fh*)fi->fh;
+  int r = cfuse->client->ll_flock(fh, op);
+  fuse_reply_err(req, -r);
+}
+#endif
 
+#if FUSE_VERSION > FUSE_MAKE_VERSION(2, 9)
 static void fuse_ll_fallocate(fuse_req_t req, fuse_ino_t ino, int mode,
                               off_t offset, off_t length,
                               struct fuse_file_info *fi)
@@ -411,7 +440,6 @@ static void fuse_ll_fallocate(fuse_req_t req, fuse_ino_t ino, int mode,
   int r = cfuse->client->ll_fallocate(fh, mode, offset, length);
   fuse_reply_err(req, -r);
 }
-
 #endif
 
 static void fuse_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
@@ -626,8 +654,8 @@ const static struct fuse_lowlevel_ops fuse_ll_oper = {
  removexattr: fuse_ll_removexattr,
  access: 0,
  create: fuse_ll_create,
- getlk: 0,
- setlk: 0,
+ getlk: fuse_ll_getlk,
+ setlk: fuse_ll_setlk,
  bmap: 0,
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
 #ifdef FUSE_IOCTL_COMPAT
@@ -636,12 +664,14 @@ const static struct fuse_lowlevel_ops fuse_ll_oper = {
  ioctl: 0,
 #endif
  poll: 0,
-#if FUSE_VERSION > FUSE_MAKE_VERSION(2, 9)
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
  write_buf: 0,
  retrieve_reply: 0,
  forget_multi: 0,
- flock: 0,
- fallocate: fuse_ll_fallocate
+ flock: fuse_ll_flock,
+#endif
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
+ fallocate: fuse_ll_fallocate,
 #endif
 #endif
 };
@@ -769,7 +799,11 @@ done:
 
 int CephFuse::Handle::loop()
 {
-  return fuse_session_loop(se);
+  if (client->cct->_conf->fuse_multithreaded) {
+    return fuse_session_loop_mt(se);
+  } else {
+    return fuse_session_loop(se);
+  }
 }
 
 uint64_t CephFuse::Handle::fino_snap(uint64_t fino)
