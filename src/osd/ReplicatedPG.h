@@ -597,7 +597,7 @@ protected:
   void close_op_ctx(OpContext *ctx) {
     release_op_ctx_locks(ctx);
     delete ctx->op_t;
-    ctx->op_t = NULL:
+    ctx->op_t = NULL;
     delete ctx;
   }
 
