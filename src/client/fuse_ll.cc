@@ -769,7 +769,7 @@ done:
 
 int CephFuse::Handle::loop()
 {
-  return fuse_session_loop(se);
+  return fuse_session_loop_mt(se);
 }
 
 uint64_t CephFuse::Handle::fino_snap(uint64_t fino)
