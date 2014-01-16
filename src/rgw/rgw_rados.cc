@@ -2322,7 +2322,9 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
     return r;
 
   r = io_ctx.operate(oid, &op);
-  if (r < 0)
+  if (r < 0) /* we can expect to get -ECANCELED if object was replaced under,
+                or -ENOENT if was removed, or -EEXIST if it did not exist
+                before and now it does */
     goto done_cancel;
 
   if (objv_tracker) {
@@ -2353,11 +2355,17 @@ done_cancel:
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: complete_update_index_cancel() returned ret=" << ret << dendl;
   }
-  /* we lost in a race, object was already overwritten, we
+  /* we lost in a race. There are a few options:
+   * - existing object was rewritten (ECANCELED)
+   * - non existing object was created (EEXIST)
+   * - object was removed (ENOENT)
    * should treat it as a success
    */
-  if (r == -ECANCELED || r == -ENOENT)
+  if ((r == -ECANCELED || r == -ENOENT) ||
+      (!(flags & PUT_OBJ_EXCL) && r == -EEXIST)) {
     r = 0;
+  }
+
   return r;
 }
 
@@ -3443,8 +3451,12 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
   }
 
   if (reset_obj) {
-    op.create(false);
-    op.remove();
+    if (state->exists) {
+      op.create(false);
+      op.remove();
+    } else {
+      op.create(true);
+    }
   }
 
   if (ptag) {
