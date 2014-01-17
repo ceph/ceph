@@ -886,11 +886,19 @@ int RGWListMultipart_ObjStore::get_params()
   if (upload_id.empty()) {
     ret = -ENOTSUP;
   }
-  string str = s->info.args.get("part-number-marker");
-  if (!str.empty())
-    marker = atoi(str.c_str());
+  marker_str = s->info.args.get("part-number-marker");
+
+  if (!marker_str.empty()) {
+    string err;
+    marker = strict_strtol(marker_str.c_str(), 10, &err);
+    if (!err.empty()) {
+      ldout(s->cct, 20) << "bad marker: "  << marker << dendl;
+      ret = -EINVAL;
+      return ret;
+    }
+  }
   
-  str = s->info.args.get("max-parts");
+  string str = s->info.args.get("max-parts");
   if (!str.empty())
     max_parts = atoi(str.c_str());
 

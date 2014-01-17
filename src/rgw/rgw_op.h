@@ -686,13 +686,15 @@ protected:
   map<uint32_t, RGWUploadPartInfo> parts;
   int max_parts;
   int marker;
+  string marker_str;
   RGWAccessControlPolicy policy;
+  bool truncated;
 
 public:
   RGWListMultipart() {
     ret = 0;
     max_parts = 1000;
-    marker = 0;
+    truncated = false;
   }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {

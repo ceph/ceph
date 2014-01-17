@@ -2216,8 +2216,8 @@ void RGWInitMultipart::execute()
   } while (ret == -EEXIST);
 }
 
-static int get_multiparts_info(RGWRados *store, struct req_state *s, string& meta_oid, map<uint32_t, RGWUploadPartInfo>& parts,
-                               RGWAccessControlPolicy& policy, map<string, bufferlist>& attrs)
+static int get_multipart_info(RGWRados *store, struct req_state *s, string& meta_oid,
+                              RGWAccessControlPolicy *policy, map<string, bufferlist>& attrs)
 {
   map<string, bufferlist> parts_map;
   map<string, bufferlist>::iterator iter;
@@ -2234,23 +2234,50 @@ static int get_multiparts_info(RGWRados *store, struct req_state *s, string& met
   if (ret < 0)
     return ret;
 
-  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
-    string name = iter->first;
-    if (name.compare(RGW_ATTR_ACL) == 0) {
-      bufferlist& bl = iter->second;
-      bufferlist::iterator bli = bl.begin();
-      try {
-        ::decode(policy, bli);
-      } catch (buffer::error& err) {
-        ldout(s->cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
-        return -EIO;
+  if (policy) {
+    for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+      string name = iter->first;
+      if (name.compare(RGW_ATTR_ACL) == 0) {
+        bufferlist& bl = iter->second;
+        bufferlist::iterator bli = bl.begin();
+        try {
+          ::decode(*policy, bli);
+        } catch (buffer::error& err) {
+          ldout(s->cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+          return -EIO;
+        }
+        break;
       }
-      break;
     }
   }
 
+  return 0;
+}
 
-  for (iter = parts_map.begin(); iter != parts_map.end(); ++iter) {
+static int list_multipart_parts(RGWRados *store, struct req_state *s, string& meta_oid, int num_parts,
+                                const string& marker, map<uint32_t, RGWUploadPartInfo>& parts,
+                                string *next_marker, bool *truncated)
+{
+  map<string, bufferlist> parts_map;
+  map<string, bufferlist>::iterator iter;
+  bufferlist header;
+
+  rgw_obj obj;
+  obj.init_ns(s->bucket, meta_oid, mp_ns);
+
+  string p;
+  
+  if (!marker.empty()) {
+    p = "part.";
+    p.append(marker);
+  }
+  int ret = store->omap_get_vals(obj, header, p, num_parts + 1, parts_map);
+  if (ret < 0)
+    return ret;
+
+  int i;
+
+  for (i = 0, iter = parts_map.begin(); i < num_parts && iter != parts_map.end(); ++i, ++iter) {
     bufferlist& bl = iter->second;
     bufferlist::iterator bli = bl.begin();
     RGWUploadPartInfo info;
@@ -2261,7 +2288,16 @@ static int get_multiparts_info(RGWRados *store, struct req_state *s, string& met
       return -EIO;
     }
     parts[info.num] = info;
+
+    if (next_marker) {
+      *next_marker = iter->first;
+    }
   }
+
+  if (truncated) {
+    *truncated = num_parts < (int)parts_map.size();
+  }
+
   return 0;
 }
 
@@ -2281,7 +2317,6 @@ void RGWCompleteMultipart::execute()
   string meta_oid;
   map<uint32_t, RGWUploadPartInfo> obj_parts;
   map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
-  RGWAccessControlPolicy policy(s->cct);
   map<string, bufferlist> attrs;
   off_t ofs = 0;
   MD5 hash;
@@ -2329,33 +2364,68 @@ void RGWCompleteMultipart::execute()
   mp.init(s->object_str, upload_id);
   meta_oid = mp.get_meta();
 
-  ret = get_multiparts_info(store, s, meta_oid, obj_parts, policy, attrs);
-  if (ret == -ENOENT)
-    ret = -ERR_NO_SUCH_UPLOAD;
-  if (parts->parts.size() != obj_parts.size())
-    ret = -ERR_INVALID_PART;
-  if (ret < 0)
-    return;
+  int total_parts = 0;
+  int max_parts = 1000;
+  string marker;
+  bool truncated;
 
-  for (iter = parts->parts.begin(), obj_iter = obj_parts.begin();
-       iter != parts->parts.end() && obj_iter != obj_parts.end();
-       ++iter, ++obj_iter) {
-    char etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-    if (iter->first != (int)obj_iter->first) {
-      ldout(s->cct, 0) << "NOTICE: parts num mismatch: next requested: " << iter->first << " next uploaded: " << obj_iter->first << dendl;
-      ret = -ERR_INVALID_PART;
-      return;
+  list<string> remove_objs; /* objects to be removed from index listing */
+
+  do {
+    ret = list_multipart_parts(store, s, meta_oid, max_parts, marker, obj_parts, &marker, &truncated);
+    if (ret == -ENOENT) {
+      ret = -ERR_NO_SUCH_UPLOAD;
     }
-    string part_etag = rgw_string_unquote(iter->second);
-    if (part_etag.compare(obj_iter->second.etag) != 0) {
-      ldout(s->cct, 0) << "NOTICE: etag mismatch: part: " << iter->first << " etag: " << iter->second << dendl;
+    if (ret < 0)
+      return;
+
+    total_parts += parts->parts.size();
+    if (!truncated && total_parts != (int)obj_parts.size()) {
       ret = -ERR_INVALID_PART;
       return;
     }
 
-    hex_to_buf(obj_iter->second.etag.c_str(), etag, CEPH_CRYPTO_MD5_DIGESTSIZE);
-    hash.Update((const byte *)etag, sizeof(etag));
-  }
+    for (iter = parts->parts.begin(), obj_iter = obj_parts.begin();
+         iter != parts->parts.end() && obj_iter != obj_parts.end();
+         ++iter, ++obj_iter) {
+      char etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
+      if (iter->first != (int)obj_iter->first) {
+        ldout(s->cct, 0) << "NOTICE: parts num mismatch: next requested: " << iter->first << " next uploaded: " << obj_iter->first << dendl;
+        ret = -ERR_INVALID_PART;
+        return;
+      }
+      string part_etag = rgw_string_unquote(iter->second);
+      if (part_etag.compare(obj_iter->second.etag) != 0) {
+        ldout(s->cct, 0) << "NOTICE: etag mismatch: part: " << iter->first << " etag: " << iter->second << dendl;
+        ret = -ERR_INVALID_PART;
+        return;
+      }
+
+      hex_to_buf(obj_iter->second.etag.c_str(), etag, CEPH_CRYPTO_MD5_DIGESTSIZE);
+      hash.Update((const byte *)etag, sizeof(etag));
+
+      RGWUploadPartInfo& obj_part = obj_iter->second;
+
+      /* update manifest for part */
+      string oid = mp.get_part(obj_iter->second.num);
+      rgw_obj src_obj;
+      src_obj.init_ns(s->bucket, oid, mp_ns);
+
+      if (obj_part.manifest.empty()) {
+        RGWObjManifestPart& part = manifest.objs[ofs];
+
+        part.loc = src_obj;
+        part.loc_ofs = 0;
+        part.size = obj_iter->second.size;
+      } else {
+        manifest.append(obj_part.manifest);
+      }
+
+      remove_objs.push_back(src_obj.object);
+
+      ofs += obj_part.size;
+    }
+  } while (truncated);
   hash.Final((byte *)final_etag);
 
   buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
@@ -2368,29 +2438,6 @@ void RGWCompleteMultipart::execute()
   attrs[RGW_ATTR_ETAG] = etag_bl;
 
   target_obj.init(s->bucket, s->object_str);
-
-  list<string> remove_objs; /* objects to be removed from index listing */
-  
-  for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
-    RGWUploadPartInfo& obj_part = obj_iter->second;
-    string oid = mp.get_part(obj_iter->second.num);
-    rgw_obj src_obj;
-    src_obj.init_ns(s->bucket, oid, mp_ns);
-
-    if (obj_part.manifest.empty()) {
-      RGWObjManifestPart& part = manifest.objs[ofs];
-
-      part.loc = src_obj;
-      part.loc_ofs = 0;
-      part.size = obj_iter->second.size;
-    } else {
-      manifest.append(obj_part.manifest);
-    }
-
-    remove_objs.push_back(src_obj.object);
-
-    ofs += obj_part.size;
-  }
 
   manifest.obj_size = ofs;
 
@@ -2430,7 +2477,6 @@ void RGWAbortMultipart::execute()
   upload_id = s->info.args.get("uploadId");
   map<uint32_t, RGWUploadPartInfo> obj_parts;
   map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
-  RGWAccessControlPolicy policy(s->cct);
   map<string, bufferlist> attrs;
   rgw_obj meta_obj;
   RGWMPObj mp;
@@ -2441,31 +2487,42 @@ void RGWAbortMultipart::execute()
   mp.init(s->object_str, upload_id); 
   meta_oid = mp.get_meta();
 
-  ret = get_multiparts_info(store, s, meta_oid, obj_parts, policy, attrs);
+  ret = get_multipart_info(store, s, meta_oid, NULL, attrs);
   if (ret < 0)
     return;
 
-  for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
-    RGWUploadPartInfo& obj_part = obj_iter->second;
+  bool truncated;
+  string marker;
+  int max_parts = 1000;
 
-    if (obj_part.manifest.empty()) {
-      string oid = mp.get_part(obj_iter->second.num);
-      rgw_obj obj;
-      obj.init_ns(s->bucket, oid, mp_ns);
-      ret = store->delete_obj(s->obj_ctx, obj);
-      if (ret < 0 && ret != -ENOENT)
-        return;
-    } else {
-      RGWObjManifest& manifest = obj_part.manifest;
-      map<uint64_t, RGWObjManifestPart>::iterator oiter;
-      for (oiter = manifest.objs.begin(); oiter != manifest.objs.end(); ++oiter) {
-        RGWObjManifestPart& part = oiter->second;
-        ret = store->delete_obj(s->obj_ctx, part.loc);
+  do {
+    ret = list_multipart_parts(store, s, meta_oid, max_parts, marker, obj_parts, &marker, &truncated);
+    if (ret < 0)
+      return;
+
+    for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
+      RGWUploadPartInfo& obj_part = obj_iter->second;
+
+      if (obj_part.manifest.empty()) {
+        string oid = mp.get_part(obj_iter->second.num);
+        rgw_obj obj;
+        obj.init_ns(s->bucket, oid, mp_ns);
+        ret = store->delete_obj(s->obj_ctx, obj);
         if (ret < 0 && ret != -ENOENT)
           return;
+      } else {
+        RGWObjManifest& manifest = obj_part.manifest;
+        map<uint64_t, RGWObjManifestPart>::iterator oiter;
+        for (oiter = manifest.objs.begin(); oiter != manifest.objs.end(); ++oiter) {
+          RGWObjManifestPart& part = oiter->second;
+          ret = store->delete_obj(s->obj_ctx, part.loc);
+          if (ret < 0 && ret != -ENOENT)
+            return;
+        }
       }
     }
-  }
+  } while (truncated);
+
   // and also remove the metadata obj
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
   ret = store->delete_obj(s->obj_ctx, meta_obj);
@@ -2495,7 +2552,11 @@ void RGWListMultipart::execute()
   mp.init(s->object_str, upload_id);
   meta_oid = mp.get_meta();
 
-  ret = get_multiparts_info(store, s, meta_oid, parts, policy, xattrs);
+  ret = get_multipart_info(store, s, meta_oid, &policy, xattrs);
+  if (ret < 0)
+    return;
+
+  ret = list_multipart_parts(store, s, meta_oid, max_parts, marker_str, parts, NULL, &truncated);
 }
 
 int RGWListBucketMultiparts::verify_permission()
