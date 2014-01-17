@@ -120,6 +120,7 @@ noinst_HEADERS += \
 	rgw/rgw_formats.h \
 	rgw/rgw_http_errors.h \
 	rgw/rgw_log.h \
+	rgw/rgw_loadgen.h \
 	rgw/rgw_multi.h \
 	rgw/rgw_policy_s3.h \
 	rgw/rgw_gc.h \
