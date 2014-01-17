@@ -2168,6 +2168,9 @@ static int parse_map_options(char *options)
       put_map_option("share", this_char);
     } else if (!strcmp(this_char, "crc") || !strcmp(this_char, "nocrc")) {
       put_map_option("crc", this_char);
+    } else if (!strcmp(this_char, "mount_timeout")) {
+      if (put_map_option_value("mount_timeout", value_char, map_option_int_cb))
+        return 1;
     } else if (!strcmp(this_char, "osdkeepalive")) {
       if (put_map_option_value("osdkeepalive", value_char, map_option_int_cb))
         return 1;
