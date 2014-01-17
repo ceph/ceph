@@ -401,8 +401,8 @@ class RPGTransaction : public PGBackend::PGTransaction {
   }
 public:
   RPGTransaction(coll_t coll, coll_t temp_coll)
-  : coll(coll), t(new ObjectStore::Transaction)
-  {}
+    : coll(coll), temp_coll(temp_coll), t(new ObjectStore::Transaction)
+    {}
 
   /// Yields ownership of contained transaction
   ObjectStore::Transaction *get_transaction() {
@@ -458,15 +458,15 @@ public:
   }
   void omap_setkeys(
     const hobject_t &hoid,
-    map<string, bufferlist> &attrs
+    map<string, bufferlist> &keys
     ) {
-    return t->omap_setkeys(get_coll(hoid), hoid, attrs);
+    return t->omap_setkeys(get_coll(hoid), hoid, keys);
   }
   void omap_rmkeys(
     const hobject_t &hoid,
-    set<string> &attrs
+    set<string> &keys
     ) {
-    t->omap_rmkeys(get_coll(hoid), hoid, attrs);
+    t->omap_rmkeys(get_coll(hoid), hoid, keys);
   }
   void omap_clear(
     const hobject_t &hoid
