@@ -160,8 +160,11 @@ perform the following steps:
 	   User ceph
 
 
-#. Ensure connectivity using ``ping`` with hostnames (i.e., not IP addresses). 
-   Address hostname resolution issues and firewall issues as necessary.
+#. Ensure connectivity using ``ping`` with short hostnames (``hostname -s``). 
+   Address hostname resolution issues and firewall issues as necessary. 
+   **Note:** Hostnames should resolve to a network IP address, not to the 
+   loopback IP address (e.g., hostnames should resolve to an IP address other 
+   than ``127.0.0.1``).
 
 .. note:: If you use your admin node as one of the Ceph Nodes, you must perform
    these steps on the admin node too.
