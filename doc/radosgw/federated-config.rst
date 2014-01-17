@@ -256,6 +256,14 @@ Repeat the process for the secondary zone (e.g., ``rgw-us-west.conf``).
    you create the master region and the secondary region.
 
 
+Finally, if you enabled SSL, make sure that you set the port to your SSL port
+(usually 443) and your configuration file includes the following::
+
+	SSLEngine on
+	SSLCertificateFile /etc/apache2/ssl/apache.crt
+	SSLCertificateKeyFile /etc/apache2/ssl/apache.key
+	SetEnv SERVER_PORT_SECURE 443
+
 
 Enable the Configuration
 ------------------------
@@ -389,7 +397,12 @@ Create a Region
 	                "http:\/\/{fqdn}:80\/"],
 	          "log_meta": "false",
 	          "log_data": "false"}],
-	  "placement_targets": [],
+	  "placement_targets": [
+	   {
+	     "name": "default-placement",
+	     "tags": []
+	   }
+	  ],
 	  "default_placement": "default-placement"}
 
 
