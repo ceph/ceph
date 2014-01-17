@@ -200,7 +200,7 @@ def worker(ctx):
                 '--name',
                 job_config['name'],
             ]
-            subprocess.Popen(args=args)
+            subprocess.Popen(args=args).wait()
         else:
             log.debug('Creating archive dir...')
             safepath.makedirs(ctx.archive_dir, safe_archive)
