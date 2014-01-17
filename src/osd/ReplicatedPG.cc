@@ -3863,8 +3863,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_STARTSYNC:
-      // TODOSAM: either nop this or fix it
-      //t.start_sync();
+      t->nop();
       break;
 
 
