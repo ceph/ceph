@@ -5,6 +5,21 @@
 
 #include "rgw_client_io.h"
 
+#define dout_subsys ceph_subsys_rgw
+
+void RGWClientIO::init(CephContext *cct) {
+  init_env(cct);
+
+  if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    std::map<string, string, ltstr_nocase>& env_map = env.get_map();
+    std::map<string, string, ltstr_nocase>::iterator iter = env_map.begin();
+
+    for (iter = env_map.begin(); iter != env_map.end(); ++iter) {
+      ldout(cct, 20) << iter->first << "=" << iter->second << dendl;
+    }
+  }
+}
+
 
 int RGWClientIO::print(const char *format, ...)
 {
