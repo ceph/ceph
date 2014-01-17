@@ -291,14 +291,14 @@
        ) { assert(0); }
      virtual void omap_setkeys(
        const hobject_t &hoid,         ///< [in] object to write
-       map<string, bufferlist> &attrs ///< [in] omap keys, may be cleared
+       map<string, bufferlist> &keys  ///< [in] omap keys, may be cleared
        ) { assert(0); }
      virtual void omap_rmkeys(
        const hobject_t &hoid,         ///< [in] object to write
-       set<string> &attrs             ///< [in] omap keys, may be cleared
+       set<string> &keys              ///< [in] omap keys, may be cleared
        ) { assert(0); }
      virtual void omap_clear(
-       const hobject_t &hoid          ///< [in] object to write
+       const hobject_t &hoid          ///< [in] object to clear omap
        ) { assert(0); }
      virtual void omap_setheader(
        const hobject_t &hoid,         ///< [in] object to write
@@ -321,6 +321,9 @@
        uint64_t len
        ) { assert(0); }
 
+     /// Supported on all backends
+
+     /// off must be the current object size
      virtual void append(
        const hobject_t &hoid, ///< [in] object to write
        uint64_t off,          ///< [in] off at which to write
