@@ -777,7 +777,7 @@ unified namespace across the cluster. The master zone of the master region is
 the source for the master zone of the secondary region and it gets selected
 automatically.
 
-.. image:: ../images/region-zone-sync.png
+.. image:: ../images/region-sync.png
    :align: center
 
 Follow the same steps in `Multi-Site Data Replication`_ by specifying the master
