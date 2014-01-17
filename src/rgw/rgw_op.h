@@ -679,7 +679,8 @@ public:
     ret = 0;
     data = NULL;
     len = 0;
-    min_part_size = RGW_MIN_MULTIPART_SIZE;
+    // min_part_size = RGW_MIN_MULTIPART_SIZE;
+    min_part_size = 0;
   }
   virtual ~RGWCompleteMultipart() {
     free(data);
@@ -719,12 +720,14 @@ protected:
   int max_parts;
   int marker;
   RGWAccessControlPolicy policy;
+  bool truncated;
 
 public:
   RGWListMultipart() {
     ret = 0;
     max_parts = 1000;
     marker = 0;
+    truncated = false;
   }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
