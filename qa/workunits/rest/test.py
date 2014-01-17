@@ -206,7 +206,7 @@ if __name__ == '__main__':
     assert(r.myjson['output']['max_mds'] == 4)
     expect('mds/set_max_mds?maxmds=3', 'PUT', 200, '')
     r = expect('mds/stat.json', 'GET', 200, 'json')
-    expect('mds/set?var=max_mds?maxmds=2', 'PUT', 200, '')
+    expect('mds/set?var=max_mds&maxmds=2', 'PUT', 200, '')
     r = expect('mds/stat.json', 'GET', 200, 'json')
     assert('info' in r.myjson['output']['mdsmap'])
     r = expect('mds/stat.xml', 'GET', 200, 'xml')
