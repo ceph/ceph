@@ -3644,12 +3644,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       // falling through
 
     case CEPH_OSD_OP_TRUNCATE:
-      ++ctx->num_write;
-      ctx->mod_desc.mark_unrollbackable();
       if (pool.info.ec_pool()) {
 	result = -EOPNOTSUPP;
 	break;
       }
+      ++ctx->num_write;
+      ctx->mod_desc.mark_unrollbackable();
       {
 	// truncate
 	if (!obs.exists || oi.is_whiteout()) {
