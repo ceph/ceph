@@ -25,10 +25,7 @@ public:
   virtual ~RGWClientIO() {}
   RGWClientIO() : account(false), bytes_sent(0), bytes_received(0) {}
 
-  void init(CephContext *cct) {
-    init_env(cct);
-  }
-
+  void init(CephContext *cct);
   int print(const char *format, ...);
   int write(const char *buf, int len);
   virtual void flush() = 0;
