@@ -154,7 +154,6 @@ struct PGLog {
     }
 
     void trim(
-      ObjectStore::Transaction *t,
       LogEntryHandler *handler,
       eversion_t s,
       set<eversion_t> *trimmed);
@@ -320,7 +319,6 @@ public:
     ObjectStore::Transaction *t);
 
   void trim(
-    ObjectStore::Transaction *t,
     LogEntryHandler *handler,
     eversion_t trim_to,
     pg_info_t &info);

@@ -52,7 +52,6 @@ void PGLog::IndexedLog::split_into(
 }
 
 void PGLog::IndexedLog::trim(
-  ObjectStore::Transaction *t,
   LogEntryHandler *handler,
   eversion_t s,
   set<eversion_t> *trimmed)
@@ -125,7 +124,6 @@ void PGLog::clear_info_log(
 }
 
 void PGLog::trim(
-  ObjectStore::Transaction *t,
   LogEntryHandler *handler,
   eversion_t trim_to,
   pg_info_t &info)
@@ -140,7 +138,7 @@ void PGLog::trim(
     assert(trim_to <= info.last_complete);
 
     dout(10) << "trim " << log << " to " << trim_to << dendl;
-    log.trim(t, handler, trim_to, &trimmed);
+    log.trim(handler, trim_to, &trimmed);
     info.log_tail = log.tail;
   }
 }

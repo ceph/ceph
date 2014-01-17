@@ -2364,7 +2364,7 @@ void PG::append_log(
   dout(10) << "append_log  adding " << keys.size() << " keys" << dendl;
   t.omap_setkeys(coll_t::META_COLL, log_oid, keys);
   PGLogEntryHandler handler;
-  pg_log.trim(&t, &handler, trim_to, info);
+  pg_log.trim(&handler, trim_to, info);
   handler.apply(this, &t);
 
   // update the local pg, pg log
