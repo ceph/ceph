@@ -9,19 +9,19 @@ explore Ceph functionality.
 
 .. ditaa:: 
            /------------------\         /----------------\
-           |    Admin Node    |         |   ceph–node1   |
+           |    Admin Node    |         |      node1     |
            |                  +-------->+ cCCC           |
-           |    ceph–deploy   |         | mon.ceph–node1 |
+           |    ceph–deploy   |         |    mon.node1   |
            \---------+--------/         \----------------/
                      |
                      |                  /----------------\
-                     |                  |   ceph–node2   |
+                     |                  |      node2     |
                      +----------------->+ cCCC           |
                      |                  |     osd.0      |
                      |                  \----------------/
                      |
                      |                  /----------------\
-                     |                  |   ceph–node3   |
+                     |                  |      node3     |
                      +----------------->| cCCC           |
                                         |     osd.1      |
                                         \----------------/
@@ -48,40 +48,81 @@ Create a Cluster
 ================
 
 If at any point you run into trouble and you want to start over, execute
-the following:: 
-
+the following to purge the configuration:: 
+	
 	ceph-deploy purgedata {ceph-node} [{ceph-node}]
 	ceph-deploy forgetkeys
 
+To purge the Ceph packages too, you may also execute::
 
-On your admin node, perform the following steps using ``ceph-deploy``.
+	ceph-deploy purge {ceph-node} [{ceph-node}] 
 
-#. Create the cluster. :: 
+If you execute ``purge``, you must re-install Ceph.
 
-	ceph-deploy new {ceph-node}
-	ceph-deploy new ceph-node1
+On your admin node from the directory you created for holding your
+configuration file, perform the following steps using ``ceph-deploy``.
+
+#. Create the cluster. ::
+
+	ceph-deploy new {initial-monitor-node(s)}
+
+   For example::
+
+	ceph-deploy new node1
 
    Check the output of ``ceph-deploy`` with ``ls`` and ``cat`` in the current
-   directory. You should see a Ceph configuration file, a keyring, and a log 
-   file for the new cluster.  See `ceph-deploy new -h`_ for additional details.
+   directory. You should see a Ceph configuration file, a monitor secret 
+   keyring, and a log file for the new cluster.  See `ceph-deploy new -h`_ 
+   for additional details.
+
+
+#. If you have more than one network interface, add the ``public network`` 
+   setting under the ``[global]`` section of your Ceph configuration file. 
+   See the `Network Configuration Reference`_ for details. ::
+
+	public network = {ip-address}/{netmask}
 
 #. Install Ceph. :: 
 
 	ceph-deploy install {ceph-node}[{ceph-node} ...]
-	ceph-deploy install ceph-node1 ceph-node2 ceph-node3
+
+   For example::
+
+	ceph-deploy install node1 node2 node3
+
+   The ``ceph-deploy`` utility will install Ceph on each node.
+   **NOTE**: If you use ``ceph-deploy purge``, you must re-execute this step 
+   to re-install Ceph.
 
 
-#. Add a Ceph Monitor. :: 
+#. Add the initial monitor(s) and gather the keys (new in 
+   ``ceph-deploy`` v1.1.3). ::
+
+	ceph-deploy mon create-initial
+
+   For example::
+
+	ceph-deploy mon create-initial
+
+   **Note:** In earlier versions of ``ceph-deploy``, you must create the
+   initial monitor(s) and gather keys in two discrete steps. First, create
+   the monitor. :: 
 
 	ceph-deploy mon create {ceph-node}
-	ceph-deploy mon create ceph-node1
+
+   For example::
+
+	ceph-deploy mon create node1
 	
-#. Gather keys. :: 
+   Then, gather the keys. :: 
 
 	ceph-deploy gatherkeys {ceph-node}
-	ceph-deploy gatherkeys ceph-node1
 
-   Once you have gathered keys, your local directory should have the following 
+   For example::
+
+	ceph-deploy gatherkeys node1
+
+   Once you complete the process, your local directory should have the following 
    keyrings:
 
    - ``{cluster-name}.client.admin.keyring``
@@ -95,23 +136,29 @@ On your admin node, perform the following steps using ``ceph-deploy``.
    Login to the Ceph Nodes and create a directory for 
    the Ceph OSD Daemon. ::
    
-	ssh ceph-node2
-	sudo mkdir /var/local/ceph/osd0
+	ssh node2
+	sudo mkdir /var/local/osd0
 	exit
 	
-	ssh ceph-node3
-	sudo mkdir /var/local/ceph/osd1
+	ssh node3
+	sudo mkdir /var/local/osd1
 	exit 	
 
    Then, from your admin node, use ``ceph-deploy`` to prepare the OSDs. ::
 
 	ceph-deploy osd prepare {ceph-node}:/path/to/directory
-	ceph-deploy osd prepare ceph-node2:/var/local/ceph/osd0 ceph-node3:/var/local/ceph/osd1
+
+   For example::
+
+	ceph-deploy osd prepare node2:/var/local/osd0 node3:/var/local/osd1
 
    Finally, activate the OSDs. :: 
 
 	ceph-deploy osd activate {ceph-node}:/path/to/directory
-	ceph-deploy osd activate ceph-node2:/var/local/ceph/osd0 ceph-node3:/var/local/ceph/osd1
+
+   For example::
+
+	ceph-deploy osd activate node2:/var/local/osd0 node3:/var/local/osd1
 
 
 #. Use ``ceph-deploy`` to copy the configuration file and admin key to
@@ -120,12 +167,19 @@ On your admin node, perform the following steps using ``ceph-deploy``.
    ``ceph.client.admin.keyring`` each time you execute a command. :: 
    
 	ceph-deploy admin {ceph-node}
-	ceph-deploy admin admin-node ceph-node1 ceph-node2 ceph-node3
+
+   For example:: 
+
+	ceph-deploy admin node1 node2 node3 admin-node
 
    **Note:** Since you are using ``ceph-deploy`` to talk to the
-   local host, your host must be reachable by its hostname 
-   (e.g., you can modify ``/etc/hosts`` if necessary). Ensure that
-   you have the correct permissions for the ``ceph.client.admin.keyring``. 
+   local host (admin-node), your host must be reachable by its hostname 
+   (e.g., you can modify ``/etc/hosts`` if necessary). 
+   
+#. Ensure that you have the correct permissions for the 
+   ``ceph.client.admin.keyring``. ::
+
+	sudo chmod +r /etc/ceph/ceph.client.admin.keyring
 
 #. Check your cluster's health. ::
 
@@ -157,33 +211,33 @@ Expanding Your Cluster
 ======================
 
 Once you have a basic cluster up and running, the next step is to expand
-cluster. Add a Ceph OSD Daemon and a Ceph Metadata Server to ``ceph-node1``.
-Then add a Ceph Monitor to ``ceph-node2`` and  ``ceph-node3`` to establish a
+cluster. Add a Ceph OSD Daemon and a Ceph Metadata Server to ``node1``.
+Then add a Ceph Monitor to ``node2`` and  ``node3`` to establish a
 quorum of Ceph Monitors.
 
 .. ditaa:: 
            /------------------\         /----------------\
-           |    ceph–deploy   |         |   ceph–node1   |
+           |    ceph–deploy   |         |     node1      |
            |    Admin Node    |         | cCCC           |
-           |                  +-------->+ mon.ceph–node1 |
+           |                  +-------->+   mon.node1    |
            |                  |         |     osd.2      |
-           |                  |         | mds.ceph–node1 |
+           |                  |         |   mds.node1    |
            \---------+--------/         \----------------/
                      |
                      |                  /----------------\
-                     |                  |   ceph–node2   |
+                     |                  |     node2      |
                      |                  | cCCC           |
                      +----------------->+                |
                      |                  |     osd.0      |
-                     |                  | mon.ceph–node2 |
+                     |                  |   mon.node2    |
                      |                  \----------------/
                      |
                      |                  /----------------\
-                     |                  |   ceph–node3   |
+                     |                  |     node3      |
                      |                  | cCCC           |
                      +----------------->+                |
                                         |     osd.1      |
-                                        | mon.ceph–node3 |
+                                        |   mon.node3    |
                                         \----------------/
 
 Adding an OSD
@@ -192,19 +246,25 @@ Adding an OSD
 Since you are running a 3-node cluster for demonstration purposes, add the OSD
 to the monitor node. ::
 
-	ssh ceph-node1
-	sudo mkdir /var/local/ceph/osd2
+	ssh node1
+	sudo mkdir /var/local/osd2
 	exit
 
 Then, from your ``ceph-deploy`` node, prepare the OSD. ::
 
 	ceph-deploy osd prepare {ceph-node}:/path/to/directory
-	ceph-deploy osd prepare ceph-node1:/var/local/ceph/osd2
+
+For example::
+
+	ceph-deploy osd prepare node1:/var/local/osd2
 
 Finally, activate the OSDs. ::
 
 	ceph-deploy osd activate {ceph-node}:/path/to/directory
-	ceph-deploy osd activate ceph-node1:/var/local/ceph/osd2
+
+For example::
+
+	ceph-deploy osd activate node1:/var/local/osd2
 
 
 Once you have added your new OSD, Ceph will begin rebalancing the cluster by
@@ -225,7 +285,10 @@ To use CephFS, you need at least one metadata server. Execute the following to
 create a metadata server::
 
 	ceph-deploy mds create {ceph-node}
-	ceph-deploy mds create ceph-node1
+
+For example:: 
+
+	ceph-deploy mds create node1
 
 
 .. note:: Currently Ceph runs in production with one metadata server only. You 
@@ -245,13 +308,16 @@ of monitors (i.e., 1, 2:3, 3:4, 3:5, 4:6, etc.) to form a quorum.
 Add two Ceph Monitors to your cluster. ::
 
 	ceph-deploy mon create {ceph-node}
-	ceph-deploy mon create ceph-node2 ceph-node3
+
+For example::
+
+	ceph-deploy mon create node2 node3
 
 Once you have added your new Ceph Monitors, Ceph will begin synchronizing
 the monitors and form a quorum. You can check the quorum status by executing
 the following:: 
 
-	ceph quorum_status
+	ceph quorum_status --format json-pretty
 
 
 
@@ -316,3 +382,4 @@ the migration manually.
 .. _placement group: ../../rados/operations/placement-groups
 .. _Monitoring a Cluster: ../../rados/operations/monitoring
 .. _Monitoring OSDs and PGs: ../../rados/operations/monitoring-osd-pg
+.. _Network Configuration Reference: ../../rados/configuration/network-config-ref
