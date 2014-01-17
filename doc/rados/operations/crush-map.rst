@@ -692,7 +692,7 @@ below::
 	}
 
 	rule ssd-primary {
-		ruleset 4
+		ruleset 5
 		type replicated
 		min_size 5
 		max_size 10
