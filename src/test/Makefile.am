@@ -764,6 +764,13 @@ ceph_test_rados_api_io_LDADD = $(LIBRADOS) $(UNITTEST_LDADD)
 ceph_test_rados_api_io_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_io
 
+ceph_test_rados_api_c_write_operations_SOURCES = \
+	test/librados/c_write_operations.cc \
+	test/librados/test.cc
+ceph_test_rados_api_c_write_operations_LDADD = $(LIBRADOS) $(UNITTEST_LDADD)
+ceph_test_rados_api_c_write_operations_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_rados_api_c_write_operations
+
 ceph_test_rados_api_aio_SOURCES = \
 	test/librados/aio.cc \
 	test/librados/test.cc
