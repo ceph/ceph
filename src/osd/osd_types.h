@@ -1584,7 +1584,10 @@ inline ostream& operator<<(ostream& out, const pg_query_t& q) {
 }
 
 class PGBackend;
-struct ObjectModDesc {
+class ObjectModDesc {
+  bool can_local_rollback;
+  bool stashed;
+public:
   class Visitor {
   public:
     virtual void append(uint64_t old_offset) {}
@@ -1595,8 +1598,6 @@ struct ObjectModDesc {
     virtual ~Visitor() {}
   };
   void visit(Visitor *visitor) const;
-  bool can_local_rollback;
-  bool stashed;
   mutable bufferlist bl;
   enum ModID {
     APPEND = 1,
