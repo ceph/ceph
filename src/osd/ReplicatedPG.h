@@ -349,6 +349,11 @@ public:
     peer_last_complete_ondisk[fromosd] = lcod;
   }
 
+  void update_last_complete_ondisk(
+    eversion_t lcod) {
+    last_complete_ondisk = lcod;
+  }
+
   void update_stats(
     const pg_stat_t &stat) {
     info.stats = stat;

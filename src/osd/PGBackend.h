@@ -136,6 +136,9 @@
        int fromosd,
        eversion_t lcod) = 0;
 
+     virtual void update_last_complete_ondisk(
+       eversion_t lcod) = 0;
+
      virtual void update_stats(
        const pg_stat_t &stat) = 0;
 

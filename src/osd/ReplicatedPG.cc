@@ -5417,9 +5417,6 @@ void ReplicatedPG::_build_finish_copy_transaction(CopyOpRef cop,
     // finish writing to temp object, then move into place
     _write_copy_chunk(cop, t);
     t->rename(cop->results.temp_oid, obs.oi.soid);
-
-    // TODOSAM: adjust when this method gets absorbed into ReplicatedBackend
-    pgbackend->clear_temp_obj(cop->results.temp_oid);
   }
 }
 
@@ -7060,8 +7057,7 @@ void ReplicatedBackend::sub_op_modify_commit(RepModifyRef rm)
 	   << dendl;
   
   assert(get_osdmap()->is_up(rm->ackerosd));
-  // TODOSAM: fix
-  //last_complete_ondisk = rm->last_complete;
+  get_parent()->update_last_complete_ondisk(rm->last_complete);
   MOSDSubOpReply *commit = new MOSDSubOpReply(static_cast<MOSDSubOp*>(rm->op->get_req()), 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ONDISK);
   commit->set_last_complete_ondisk(rm->last_complete);
   commit->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
