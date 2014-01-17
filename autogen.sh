@@ -27,6 +27,7 @@ rm -f config.cache
 aclocal -I m4 --install
 check_for_pkg_config
 $LIBTOOLIZE --force --copy
+aclocal -I m4 --install
 autoconf
 autoheader
 automake -a --add-missing -Wall
