@@ -339,8 +339,11 @@ public:
     int peer,
     const hobject_t &hoid) {
     assert(peer_info.count(peer));
-    return hoid.pool != (int64_t)info.pgid.pool() ||
+    bool should_send = hoid.pool != (int64_t)info.pgid.pool() ||
       hoid <= MAX(last_backfill_started, peer_info[peer].last_backfill);
+    if (!should_send)
+      assert(is_backfill_targets(peer));
+    return should_send;
   }
   
   void update_peer_last_complete_ondisk(
