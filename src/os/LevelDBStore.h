@@ -48,11 +48,11 @@ class LevelDBStore : public KeyValueDB {
   CephContext *cct;
   PerfCounters *logger;
   string path;
-  boost::scoped_ptr<leveldb::DB> db;
   boost::scoped_ptr<leveldb::Cache> db_cache;
 #ifdef HAVE_LEVELDB_FILTER_POLICY
   boost::scoped_ptr<const leveldb::FilterPolicy> filterpolicy;
 #endif
+  boost::scoped_ptr<leveldb::DB> db;
 
   int init(ostream &out, bool create_if_missing);
 

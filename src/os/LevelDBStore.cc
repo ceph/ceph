@@ -75,6 +75,9 @@ LevelDBStore::~LevelDBStore()
 {
   close();
   delete logger;
+
+  // Ensure db is destroyed before dependent db_cache and filterpolicy
+  db.reset();
 }
 
 void LevelDBStore::close()
