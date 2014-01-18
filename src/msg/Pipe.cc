@@ -68,7 +68,7 @@ ostream& Pipe::_pipe_prefix(std::ostream *_dout) {
 # endif
 #endif
 
-/**************************************
+/**
  * Pipe
  */
 
