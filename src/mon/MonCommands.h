@@ -282,11 +282,11 @@ COMMAND("mds set " \
         "name=key,type=CephChoices,strings=allow_new_snaps " \
         "name=sure,type=CephString,req=false", \
         "set <key>", \
-        "mds", "w", "cli,rest")
+        "mds", "rw", "cli,rest")
 COMMAND("mds unset " \
         "name=key,type=CephChoices,strings=allow_new_snaps " \
         "name=sure,type=CephString,req=false", \
-        "unset <key>", "mds", "w", "cli,rest")
+        "unset <key>", "mds", "rw", "cli,rest")
 COMMAND("mds add_data_pool " \
 	"name=pool,type=CephString", \
 	"add data pool <pool>", "mds", "rw", "cli,rest")
