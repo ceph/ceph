@@ -1019,6 +1019,12 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	dout(10) << "EMetaBlob.replay      clean fragstat on " << *dir << dendl;
       }
     }
+    if (lump.is_dirty_dft()) {
+      dout(10) << "EMetaBlob.replay      dirty dirfragtree on " << *dir << dendl;
+      dir->state_set(CDir::STATE_DIRTYDFT);
+      mds->locker->mark_updated_scatterlock(&dir->inode->dirfragtreelock);
+      logseg->dirty_dirfrag_dirfragtree.push_back(&dir->inode->item_dirty_dirfrag_dirfragtree);
+    }
     if (lump.is_new())
       dir->mark_new(logseg);
     if (lump.is_complete())
