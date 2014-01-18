@@ -28,17 +28,27 @@ struct MForward : public Message {
   PaxosServiceMessage *msg;
   entity_inst_t client;
   MonCap client_caps;
-  
-  MForward() : Message(MSG_FORWARD), tid(0), msg(NULL) {}
+  uint64_t con_features;
+
+  static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 0;
+
+  MForward() : Message(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
+               tid(0), msg(NULL), con_features(0) {}
   //the message needs to have caps filled in!
-  MForward(uint64_t t, PaxosServiceMessage *m) :
-    Message(MSG_FORWARD), tid(t), msg(m) {
+  MForward(uint64_t t, PaxosServiceMessage *m, uint64_t feat) :
+    Message(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
+    tid(t), msg(m) {
     client = m->get_source_inst();
     client_caps = m->get_session()->caps;
+    con_features = feat;
   }
-  MForward(uint64_t t, PaxosServiceMessage *m, const MonCap& caps) :
-    Message(MSG_FORWARD), tid(t), msg(m), client_caps(caps) {
+  MForward(uint64_t t, PaxosServiceMessage *m, uint64_t feat,
+	   const MonCap& caps) :
+    Message(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
+    tid(t), msg(m), client_caps(caps) {
     client = m->get_source_inst();
+    con_features = feat;
   }
 private:
   ~MForward() {
@@ -51,6 +61,7 @@ public:
     ::encode(client, payload);
     ::encode(client_caps, payload, features);
     encode_message(msg, features, payload);
+    ::encode(con_features, payload);
   }
 
   void decode_payload() {
@@ -59,12 +70,20 @@ public:
     ::decode(client, p);
     ::decode(client_caps, p);
     msg = (PaxosServiceMessage *)decode_message(NULL, p);
+    if (header.version >= 2) {
+      ::decode(con_features, p);
+    } else {
+      con_features = 0;
+    }
+
   }
 
   const char *get_type_name() const { return "forward"; }
   void print(ostream& o) const {
     if (msg)
-      o << "forward(" << *msg << " caps " << client_caps << ") to leader";
+      o << "forward(" << *msg << " caps " << client_caps
+	<< " tid " << tid
+        << " con_features " << con_features << ") to leader";
     else o << "forward(??? ) to leader";
   }
 };

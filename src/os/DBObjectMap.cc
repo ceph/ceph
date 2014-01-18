@@ -769,6 +769,42 @@ int DBObjectMap::rm_keys(const ghobject_t &oid,
   return db->submit_transaction(t);
 }
 
+int DBObjectMap::clear_keys_header(const ghobject_t &oid,
+				   const SequencerPosition *spos)
+{
+  KeyValueDB::Transaction t = db->get_transaction();
+  Header header = lookup_map_header(oid);
+  if (!header)
+    return -ENOENT;
+  if (check_spos(oid, header, spos))
+    return 0;
+
+  // save old attrs
+  KeyValueDB::Iterator iter = db->get_iterator(xattr_prefix(header));
+  if (!iter)
+    return -EINVAL;
+  map<string, bufferlist> attrs;
+  for (iter->seek_to_first(); !iter->status() && iter->valid(); iter->next())
+    attrs.insert(make_pair(iter->key(), iter->value()));
+  if (iter->status())
+    return iter->status();
+
+  // remove current header
+  remove_map_header(oid, header, t);
+  assert(header->num_children > 0);
+  header->num_children--;
+  int r = _clear(header, t);
+  if (r < 0)
+    return r;
+
+  // create new header
+  Header newheader = generate_new_header(oid, Header());
+  set_map_header(oid, *newheader, t);
+  if (attrs.size())
+    t->set(xattr_prefix(newheader), attrs);
+  return db->submit_transaction(t);
+}
+
 int DBObjectMap::get(const ghobject_t &oid,
 		     bufferlist *_header,
 		     map<string, bufferlist> *out)

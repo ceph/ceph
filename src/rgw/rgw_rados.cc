@@ -362,6 +362,10 @@ int RGWZoneParams::init(CephContext *cct, RGWRados *store, RGWRegion& region)
     return -EIO;
   }
 
+  is_master = (name == region.master_zone) || (region.master_zone.empty() && name == "default");
+
+  ldout(cct, 2) << "zone " << name << " is " << (is_master ? "" : "NOT ") << "master" << dendl;
+
   return 0;
 }
 
@@ -3505,7 +3509,7 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
   bufferlist bl;
   bl.append(state->write_tag.c_str(), state->write_tag.size() + 1);
 
-  ldout(cct, 0) << "setting object write_tag=" << state->write_tag << dendl;
+  ldout(cct, 10) << "setting object write_tag=" << state->write_tag << dendl;
 
   op.setxattr(RGW_ATTR_ID_TAG, bl);
 
@@ -4147,6 +4151,7 @@ struct get_obj_data : public RefCountedObject {
   atomic_t cancelled;
   atomic_t err_code;
   Throttle throttle;
+  list<bufferlist> read_list;
 
   get_obj_data(CephContext *_cct)
     : cct(_cct),
@@ -4182,7 +4187,6 @@ struct get_obj_data : public RefCountedObject {
 
     c->wait_for_complete_and_cb();
     int r = c->get_return_value();
-    c->release();
 
     lock.Lock();
     completion_map.erase(cur_ofs);
@@ -4191,6 +4195,8 @@ struct get_obj_data : public RefCountedObject {
       *done = true;
     }
     lock.Unlock();
+
+    c->release();
     
     return r;
   }
@@ -4334,20 +4340,44 @@ void RGWRados::get_obj_aio_completion_cb(completion_t c, void *arg)
     goto done_unlock;
   }
 
-  for (iter = bl_list.begin(); iter != bl_list.end(); ++iter) {
-    bufferlist& bl = *iter;
-    int r = d->client_cb->handle_data(bl, 0, bl.length());
-    if (r < 0) {
-      d->set_cancelled(r);
-      break;
-    }
-  }
+  d->read_list.splice(d->read_list.end(), bl_list);
 
 done_unlock:
   d->data_lock.Unlock();
 done:
   d->put();
   return;
+}
+
+int RGWRados::flush_read_list(struct get_obj_data *d)
+{
+  d->data_lock.Lock();
+  list<bufferlist> l;
+  l.swap(d->read_list);
+  d->get();
+  d->read_list.clear();
+
+  d->data_lock.Unlock();
+
+  int r = 0;
+
+  list<bufferlist>::iterator iter;
+  for (iter = l.begin(); iter != l.end(); ++iter) {
+    bufferlist& bl = *iter;
+    r = d->client_cb->handle_data(bl, 0, bl.length());
+    if (r < 0) {
+      dout(0) << "ERROR: flush_read_list(): d->client_c->handle_data() returned " << r << dendl;
+      break;
+    }
+  }
+
+  d->data_lock.Lock();
+  d->put();
+  if (r < 0) {
+    d->set_cancelled(r);
+  }
+  d->data_lock.Unlock();
+  return r;
 }
 
 int RGWRados::get_obj_iterate_cb(void *ctx, RGWObjState *astate,
@@ -4393,6 +4423,10 @@ int RGWRados::get_obj_iterate_cb(void *ctx, RGWObjState *astate,
 	  return 0;
     }
   }
+
+  r = flush_read_list(d);
+  if (r < 0)
+    return r;
 
   get_obj_bucket_and_oid_key(obj, bucket, oid, key);
 
@@ -4449,6 +4483,12 @@ int RGWRados::get_obj_iterate(void *ctx, void **handle, rgw_obj& obj,
 
   while (!done) {
     r = data->wait_next_io(&done);
+    if (r < 0) {
+      dout(10) << "get_obj_iterate() r=" << r << ", canceling all io" << dendl;
+      data->cancel_all_io();
+      break;
+    }
+    r = flush_read_list(data);
     if (r < 0) {
       dout(10) << "get_obj_iterate() r=" << r << ", canceling all io" << dendl;
       data->cancel_all_io();
@@ -4776,6 +4816,41 @@ int RGWRados::get_bucket_entrypoint_info(void *ctx, const string& bucket_name,
     ldout(cct, 0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
     return -EIO;
   }
+  return 0;
+}
+
+int RGWRados::convert_old_bucket_info(void *ctx, string& bucket_name)
+{
+  RGWBucketEntryPoint entry_point;
+  time_t ep_mtime;
+  RGWObjVersionTracker ot;
+  map<string, bufferlist> attrs;
+  RGWBucketInfo info;
+
+  ldout(cct, 10) << "RGWRados::convert_old_bucket_info(): bucket=" << bucket_name << dendl;
+
+  int ret = get_bucket_entrypoint_info(ctx, bucket_name, entry_point, &ot, &ep_mtime, &attrs);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: get_bucket_entrypont_info() returned " << ret << " bucket=" << bucket_name << dendl;
+    return ret;
+  }
+
+  if (!entry_point.has_bucket_info) {
+    /* already converted! */
+    return 0;
+  }
+
+  info = entry_point.old_bucket_info;
+  info.bucket.oid = bucket_name;
+  info.ep_objv = ot.read_version;
+
+  ot.generate_new_write_ver(cct);
+
+  ret = put_linked_bucket_info(info, false, ep_mtime, &ot.write_version, &attrs, true);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: failed to put_linked_bucket_info(): " << ret << dendl;
+  }
+
   return 0;
 }
 

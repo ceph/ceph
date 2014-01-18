@@ -1,4 +1,6 @@
-.TH "RBD" "8" "April 29, 2013" "dev" "Ceph"
+.\" Man page generated from reStructuredText.
+.
+.TH "RBD" "8" "January 12, 2014" "dev" "Ceph"
 .SH NAME
 rbd \- manage rados block device (RBD) images
 .
@@ -28,8 +30,33 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .in \\n[rst2man-indent\\n[rst2man-indent-level]]u
 ..
-.\" Man page generated from reStructuredText.
 .
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
 .SH SYNOPSIS
 .nf
 \fBrbd\fP [ \-c \fIceph.conf\fP ] [ \-m \fImonaddr\fP ] [ \-p | \-\-pool \fIpool\fP ] [
@@ -92,7 +119,7 @@ Specifies the size (in megabytes) of the new rbd image.
 .TP
 .B \-\-order bits
 Specifies the object size expressed as a number of bits, such that
-the object size is \fB1 << order\fP. The default is 22 (4 MB).
+the object size is \fB1 << order\fP\&. The default is 22 (4 MB).
 .UNINDENT
 .INDENT 0.0
 .TP
@@ -150,8 +177,15 @@ Make json or xml formatted output more human\-readable.
 .UNINDENT
 .INDENT 0.0
 .TP
+.B \-o map\-options, \-\-options map\-options
+Specifies which options to use when mapping an image.  map\-options is
+a comma\-separated string of options (similar to mount(8) mount options).
+See map options section below for more details.
+.UNINDENT
+.INDENT 0.0
+.TP
 .B \-\-read\-only
-Set device readonly when mapping image.
+Map the image read\-only.  Equivalent to \-o ro.
 .UNINDENT
 .SH COMMANDS
 .INDENT 0.0
@@ -176,7 +210,7 @@ Object order will be identical to that of the parent image unless
 specified. Size will be the same as the parent snapshot.
 .sp
 The parent snapshot must be protected (see \fIrbd snap protect\fP).
-This requires format 2.
+This requires image format 2.
 .TP
 .B \fBflatten\fP [\fIimage\-name\fP]
 If image is a clone, copy all shared blocks from the parent snapshot and
@@ -184,13 +218,13 @@ make the child independent of the parent, severing the link between
 parent snap and child.  The parent snapshot can be unprotected and
 deleted if it has no further dependent clones.
 .sp
-This requires format 2.
+This requires image format 2.
 .TP
 .B \fBchildren\fP [\fIimage\-name\fP]
 List the clones of the image at the given snapshot. This checks
 every pool, and outputs the resulting poolname/imagename.
 .sp
-This requires format 2.
+This requires image format 2.
 .TP
 .B \fBresize\fP [\fIimage\-name\fP] [\-\-allow\-shrink]
 Resizes rbd image. The size parameter also needs to be specified.
@@ -231,7 +265,7 @@ whether the region is known to be zeros or may contain other data.
 .TP
 .B \fBcp\fP [\fIsrc\-image\fP] [\fIdest\-image\fP]
 Copies the content of a src\-image into the newly created dest\-image.
-dest\-image will have the same size, order, and format as src\-image.
+dest\-image will have the same size, order, and image format as src\-image.
 .TP
 .B \fBmv\fP [\fIsrc\-image\fP] [\fIdest\-image\fP]
 Renames an image.  Note: rename across pools is not supported.
@@ -259,16 +293,16 @@ protection implies that there exist dependent cloned children that
 refer to this snapshot.  \fIrbd clone\fP will fail on a nonprotected
 snapshot.
 .sp
-This requires format 2.
+This requires image format 2.
 .TP
 .B \fBsnap\fP unprotect [\fIimage\-name\fP]
 Unprotect a snapshot from deletion (undo \fIsnap protect\fP).  If cloned
 children remain, \fIsnap unprotect\fP fails.  (Note that clones may exist
 in different pools than the parent snapshot.)
 .sp
-This requires format 2.
+This requires image format 2.
 .TP
-.B \fBmap\fP [\fIimage\-name\fP]
+.B \fBmap\fP [\fIimage\-name\fP] [\-o | \-\-options \fImap\-options\fP ] [\-\-read\-only]
 Maps the specified image to a block device via the rbd kernel module.
 .TP
 .B \fBunmap\fP [\fIdevice\-path\fP]
@@ -302,12 +336,16 @@ write throughput and latency.  Defaults are: \-\-io\-size 4096, \-\-io\-threads 
 .sp
 In addition to using the \-\-pool and the \-\-snap options, the image name can include both
 the pool name and the snapshot name. The image name format is as follows:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 [pool/]image\-name[@snap]
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 Thus an image name that contains a slash character (\(aq/\(aq) requires specifying the pool
 name explicitly.
@@ -350,141 +388,229 @@ The striping is controlled by three parameters:
 By default, [\fIstripe_unit\fP] is the same as the object size and [\fIstripe_count\fP] is 1.  Specifying a different
 [\fIstripe_unit\fP] requires that the STRIPINGV2 feature be supported (added in Ceph v0.53) and format 2 images be
 used.
+.SH MAP OPTIONS
+.sp
+Most of these options are useful mainly for debugging and benchmarking.  The
+default values are set in the kernel and may therefore depend on the version of
+the running kernel.
+.INDENT 0.0
+.IP \(bu 2
+fsid=aaaaaaaa\-bbbb\-cccc\-dddd\-eeeeeeeeeeee \- FSID that should be assumed by
+the client.
+.IP \(bu 2
+ip=a.b.c.d[:p] \- IP and, optionally, port the client should use.
+.IP \(bu 2
+share \- Enable sharing of client instances with other mappings (default).
+.IP \(bu 2
+noshare \- Disable sharing of client instances with other mappings.
+.IP \(bu 2
+crc \- Enable CRC32C checksumming for data writes (default).
+.IP \(bu 2
+nocrc \- Disable CRC32C checksumming for data writes.
+.IP \(bu 2
+osdkeepalive=x \- OSD keepalive timeout (default is 5 seconds).
+.IP \(bu 2
+osd_idle_ttl=x \- OSD idle TTL (default is 60 seconds).
+.IP \(bu 2
+rw \- Map the image read\-write (default).
+.IP \(bu 2
+ro \- Map the image read\-only.  Equivalent to \-\-read\-only.
+.UNINDENT
 .SH EXAMPLES
 .sp
 To create a new rbd image that is 100 GB:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rbd \-p mypool create myimage \-\-size 102400
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 or alternatively:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rbd create mypool/myimage \-\-size 102400
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To use a non\-default object size (8 MB):
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rbd create mypool/myimage \-\-size 102400 \-\-order 23
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To delete an rbd image (be careful!):
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rbd rm mypool/myimage
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To create a new snapshot:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rbd snap create mypool/myimage@mysnap
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To create a copy\-on\-write clone of a protected snapshot:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rbd clone mypool/myimage@mysnap otherpool/cloneimage
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To see which clones of a snapshot exist:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rbd children mypool/myimage@mysnap
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To delete a snapshot:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rbd snap rm mypool/myimage@mysnap
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To map an image via the kernel with cephx enabled:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rbd map mypool/myimage \-\-id admin \-\-keyfile secretfile
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To unmap an image:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rbd unmap /dev/rbd0
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To create an image and a clone from it:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
-rbd import \-\-format 2 image mypool/parent
+rbd import \-\-image\-format 2 image mypool/parent
 rbd snap create \-\-snap snapname mypool/parent
 rbd snap protect mypool/parent@snap
 rbd clone mypool/parent@snap otherpool/child
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To create an image with a smaller stripe_unit (to better distribute small writes in some workloads):
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rbd \-p mypool create myimage \-\-size 102400 \-\-stripe\-unit 65536 \-\-stripe\-count 16
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
-To change an image from one format to another, export it and then
-import it as the desired format:
+To change an image from one image format to another, export it and then
+import it as the desired image format:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rbd export mypool/myimage@snap /tmp/img
-rbd import \-\-format 2 /tmp/img mypool/myimage2
+rbd import \-\-image\-format 2 /tmp/img mypool/myimage2
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To lock an image for exclusive use:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rbd lock add mypool/myimage mylockid
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .sp
 To release a lock:
+.INDENT 0.0
+.INDENT 3.5
 .sp
 .nf
 .ft C
 rbd lock remove mypool/myimage mylockid client.2485
 .ft P
 .fi
+.UNINDENT
+.UNINDENT
 .SH AVAILABILITY
 .sp
-\fBrbd\fP is part of the Ceph distributed file system. Please refer to
+\fBrbd\fP is part of the Ceph distributed storage system. Please refer to
 the Ceph documentation at \fI\%http://ceph.com/docs\fP for more information.
 .SH SEE ALSO
 .sp
 \fBceph\fP(8),
 \fBrados\fP(8)
 .SH COPYRIGHT
-2010-2013, Inktank Storage, Inc. and contributors. Licensed under Creative Commons BY-SA
+2010-2014, Inktank Storage, Inc. and contributors. Licensed under Creative Commons BY-SA
 .\" Generated by docutils manpage writer.
 .

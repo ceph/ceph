@@ -1021,24 +1021,24 @@ TEST(LibCephFS, GetExtentOsds) {
   int ret = ceph_get_file_extent_osds(cmount, fd, 0, NULL, NULL, 0);
   EXPECT_GT(ret, 0);
 
-  loff_t len;
+  int64_t len;
   int osds[ret];
 
   /* full stripe extent */
   EXPECT_EQ(ret, ceph_get_file_extent_osds(cmount, fd, 0, &len, osds, ret));
-  EXPECT_EQ(len, (loff_t)stripe_unit);
+  EXPECT_EQ(len, (int64_t)stripe_unit);
 
   /* half stripe extent */
   EXPECT_EQ(ret, ceph_get_file_extent_osds(cmount, fd, stripe_unit/2, &len, osds, ret));
-  EXPECT_EQ(len, (loff_t)stripe_unit/2);
+  EXPECT_EQ(len, (int64_t)stripe_unit/2);
 
   /* 1.5 stripe unit offset -1 byte */
   EXPECT_EQ(ret, ceph_get_file_extent_osds(cmount, fd, 3*stripe_unit/2-1, &len, osds, ret));
-  EXPECT_EQ(len, (loff_t)stripe_unit/2+1);
+  EXPECT_EQ(len, (int64_t)stripe_unit/2+1);
 
   /* 1.5 stripe unit offset +1 byte */
   EXPECT_EQ(ret, ceph_get_file_extent_osds(cmount, fd, 3*stripe_unit/2+1, &len, osds, ret));
-  EXPECT_EQ(len, (loff_t)stripe_unit/2-1);
+  EXPECT_EQ(len, (int64_t)stripe_unit/2-1);
 
   /* only when more than 1 osd */
   if (ret > 1)
@@ -1063,7 +1063,7 @@ TEST(LibCephFS, GetOsdCrushLocation) {
 
   char path[256];
   ASSERT_EQ(ceph_get_osd_crush_location(cmount, 9999999, path, 0), -ENOENT);
-  ASSERT_EQ(ceph_get_osd_crush_location(cmount, -1, path, 0), -ENOENT);
+  ASSERT_EQ(ceph_get_osd_crush_location(cmount, -1, path, 0), -EINVAL);
 
   char test_file[256];
   sprintf(test_file, "test_osds_loc_%d", getpid());

@@ -11,8 +11,7 @@ placement planning.  The main data placement planning concepts in Ceph include:
   objects. Pools manage the number of placement groups, the number of replicas,
   and the ruleset for the pool. To store data in a pool, you must have
   an authenticated user with permissions for the pool. Ceph can snapshot pools. 
-  Future versions of Ceph will support namespaces within pools. See `Pools`_
-  for additional details.
+  See `Pools`_ for additional details.
   
 - **Placement Groups:** Ceph maps objects to placement groups (PGs). 
   Placement groups (PGs) are shards or fragments of a logical object pool

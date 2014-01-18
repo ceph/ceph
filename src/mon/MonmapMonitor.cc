@@ -138,6 +138,7 @@ bool MonmapMonitor::preprocess_query(PaxosServiceMessage *m)
 void MonmapMonitor::dump_info(Formatter *f)
 {
   f->dump_unsigned("monmap_first_committed", get_first_committed());
+  f->dump_unsigned("monmap_last_committed", get_last_committed());
   f->open_object_section("monmap");
   mon->monmap->dump(f);
   f->close_section();
@@ -177,58 +178,67 @@ bool MonmapMonitor::preprocess_command(MMonCommand *m)
     ss.str("");
     r = 0;
 
-  } else if (prefix == "mon getmap") {
-    mon->monmap->encode(rdata, CEPH_FEATURES_ALL);
-    r = 0;
-    ss << "got latest monmap";
+  } else if (prefix == "mon getmap" ||
+             prefix == "mon dump") {
 
-  } else if (prefix == "mon dump") {
-    string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
-    epoch_t epoch = 0;
-    int64_t epochval;
-    if (cmd_getval(g_ceph_context, cmdmap, "epoch", epochval))
-      epoch = epochval;
+    epoch_t epoch;
+    int64_t epochnum;
+    cmd_getval(g_ceph_context, cmdmap, "epoch", epochnum, (int64_t)0);
+    epoch = epochnum;
 
     MonMap *p = mon->monmap;
     if (epoch) {
-      bufferlist b;
-      r = get_version(epoch, b);
+      bufferlist bl;
+      r = get_version(epoch, bl);
       if (r == -ENOENT) {
-	p = 0;
-      } else {
-	p = new MonMap;
-	p->decode(b);
+        ss << "there is no map for epoch " << epoch;
+        goto reply;
       }
+      assert(r == 0);
+      assert(bl.length() > 0);
+      p = new MonMap;
+      p->decode(bl);
     }
-    if (p) {
+
+    assert(p != NULL);
+
+    if (prefix == "mon getmap") {
+      p->encode(rdata, CEPH_FEATURES_ALL);
+      r = 0;
+      ss << "got monmap epoch " << p->get_epoch();
+    } else if (prefix == "mon dump") {
+      string format;
+      cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
       stringstream ds;
       boost::scoped_ptr<Formatter> f(new_formatter(format));
       if (f) {
-	f->open_object_section("monmap");
-	p->dump(f.get());
-	f->open_array_section("quorum");
-	for (set<int>::iterator q = mon->get_quorum().begin(); q != mon->get_quorum().end(); ++q)
-	  f->dump_int("mon", *q);
-	f->close_section();
-	f->close_section();
-	f->flush(ds);
-	r = 0;
+        f->open_object_section("monmap");
+        p->dump(f.get());
+        f->open_array_section("quorum");
+        for (set<int>::iterator q = mon->get_quorum().begin();
+            q != mon->get_quorum().end(); ++q) {
+          f->dump_int("mon", *q);
+        }
+        f->close_section();
+        f->close_section();
+        f->flush(ds);
+        r = 0;
       } else {
-	p->print(ds);
-	r = 0;
-      } 
+        p->print(ds);
+        r = 0;
+      }
       rdata.append(ds);
       ss << "dumped monmap epoch " << p->get_epoch();
-      if (p != mon->monmap)
-	delete p;
     }
+    if (p != mon->monmap)
+       delete p;
   }
   else if (prefix == "mon add")
     return false;
   else if (prefix == "mon remove")
     return false;
 
+reply:
   if (r != -1) {
     string rs;
     getline(ss, rs);
@@ -336,7 +346,7 @@ bool MonmapMonitor::prepare_command(MMonCommand *m)
     pending_map.last_changed = ceph_clock_now(g_ceph_context);
     getline(ss, rs);
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
-                                                      get_last_committed()));
+                                                     get_last_committed() + 1));
     return true;
 
   } else if (prefix == "mon remove") {
@@ -437,6 +447,21 @@ void MonmapMonitor::get_health(list<pair<health_status_t, string> >& summary,
 	     << " is down (out of quorum)";
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
 	}
+      }
+    }
+  }
+  if (g_conf->mon_warn_on_old_mons && !mon->get_classic_mons().empty()) {
+    ostringstream ss;
+    ss << "some monitors are running older code";
+    summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+    if (detail) {
+      for (set<int>::const_iterator i = mon->get_classic_mons().begin();
+	  i != mon->get_classic_mons().end();
+	  ++i) {
+	ostringstream ss;
+	ss << "mon." << mon->monmap->get_name(*i)
+	     << " only supports the \"classic\" command set";
+	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
       }
     }
   }

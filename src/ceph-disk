@@ -1,4 +1,20 @@
 #!/usr/bin/env python
+#
+# Copyright (C) 2014 Inktank <info@inktank.com>
+# Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
+#
+# Author: Loic Dachary <loic@dachary.org>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU Library Public License as published by
+# the Free Software Foundation; either version 2, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Library Public License for more details.
+#
 
 import argparse
 import errno
@@ -55,7 +71,6 @@ knew the GPT partition type.
 
 """
 
-
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 
 JOURNAL_UUID =         '45b0969e-9b03-4f30-b4c6-b4b80ceff106'
@@ -97,7 +112,12 @@ INIT_SYSTEMS = [
     'sysvinit',
     'systemd',
     'auto',
+    'none',
     ]
+
+STATEDIR = '/var/lib/ceph'
+
+SYSCONFDIR = '/etc/ceph'
 
 # Nuke the TERM variable to avoid confusing any subprocesses we call.
 # For example, libreadline will print weird control sequences for some
@@ -129,11 +149,6 @@ class filelock(object):
         assert self.fd
         fcntl.lockf(self.fd, fcntl.LOCK_UN)
         self.fd = None
-
-
-prepare_lock = filelock('/var/lib/ceph/tmp/ceph-disk.prepare.lock')
-activate_lock = filelock('/var/lib/ceph/tmp/ceph-disk.activate.lock')
-
 
 ###### exceptions ########
 
@@ -174,8 +189,20 @@ class TooManyLinesError(Error):
 class FilesystemTypeError(Error):
     """
     Cannot discover filesystem type
-    """
+     """
 
+class CephDiskException(Exception):
+    """
+    A base exception for ceph-disk to provide custom (ad-hoc) messages that
+    will be caught and dealt with when main() is executed
+    """
+    pass
+
+class ExecutableNotFound(CephDiskException):
+    """
+    Exception to report on executables not available in PATH
+    """
+    pass
 
 ####### utils
 
@@ -196,6 +223,79 @@ def maybe_mkdir(*a, **kw):
             pass
         else:
             raise
+
+
+def which(executable):
+    """find the location of an executable"""
+    if 'PATH' in os.environ:
+        envpath = os.environ['PATH']
+    else:
+        envpath = os.defpath
+    PATH = envpath.split(os.pathsep)
+
+    locations = PATH + [
+        '/usr/local/bin',
+        '/bin',
+        '/usr/bin',
+        '/usr/local/sbin',
+        '/usr/sbin',
+        '/sbin',
+    ]
+
+    for location in locations:
+        executable_path = os.path.join(location, executable)
+        if os.path.exists(executable_path):
+            return executable_path
+
+
+def _get_command_executable(arguments):
+    """
+    Return the full path for an executable, raise if the executable is not
+    found. If the executable has already a full path do not perform any checks.
+    """
+    if arguments[0].startswith('/'):  # an absolute path
+        return arguments
+    executable = which(arguments[0])
+    if not executable:
+        command_msg = 'Could not run command: %s' % ' '.join(arguments)
+        executable_msg = '%s not in path.' % arguments[0]
+        raise ExecutableNotFound('%s %s' % (executable_msg, command_msg))
+
+    # swap the old executable for the new one
+    arguments[0] = executable
+    return arguments
+
+
+def command(arguments):
+    """
+    Safely execute a ``subprocess.Popen`` call making sure that the
+    executable exists and raising a helpful error message
+    if it does not.
+
+    .. note:: This should be the prefered way of calling ``subprocess.Popen``
+    since it provides the caller with the safety net of making sure that
+    executables *will* be found and will error nicely otherwise.
+    """
+    arguments = _get_command_executable(arguments)
+
+    return subprocess.Popen(
+        arguments,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE).stdout.read()
+
+
+def command_check_call(arguments):
+    """
+    Safely execute a ``subprocess.check_call`` call making sure that the
+    executable exists and raising a helpful error message if it does not.
+
+    .. note:: This should be the prefered way of calling
+    ``subprocess.check_call`` since it provides the caller with the safety net
+    of making sure that executables *will* be found and will error nicely
+    otherwise.
+    """
+    arguments = _get_command_executable(arguments)
+    return subprocess.check_call(arguments)
 
 
 # a device "name" is something like
@@ -253,6 +353,9 @@ def list_all_partitions():
     """
     dev_part_list = {}
     for name in os.listdir('/sys/block'):
+        # /dev/fd0 may hang http://tracker.ceph.com/issues/6827
+        if re.match(r'^fd\d$', name):
+            continue
         if not os.path.exists(os.path.join('/sys/block', name, 'device')):
             continue
         dev_part_list[name] = list_partitions(name)
@@ -432,7 +535,7 @@ def check_osd_id(osd_id):
     Ensures osd id is numeric.
     """
     if not re.match(r'^[0-9]+$', osd_id):
-        raise Error('osd id is not numeric')
+        raise Error('osd id is not numeric', osd_id)
 
 
 def allocate_osd_id(
@@ -451,7 +554,7 @@ def allocate_osd_id(
     try:
         osd_id = _check_output(
             args=[
-                '/usr/bin/ceph',
+                'ceph',
                 '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', keyring,
@@ -460,7 +563,7 @@ def allocate_osd_id(
                 ],
             )
     except subprocess.CalledProcessError as e:
-        raise Error('ceph osd create failed', e)
+        raise Error('ceph osd create failed', e, e.output)
     osd_id = must_be_one_line(osd_id)
     check_osd_id(osd_id)
     return osd_id
@@ -486,7 +589,6 @@ def _check_output(*args, **kwargs):
         cmd = kwargs.get("args")
         if cmd is None:
             cmd = args[0]
-        #raise subprocess.CalledProcessError(ret, cmd, output=out)
         error = subprocess.CalledProcessError(ret, cmd)
         error.output = out
         raise error
@@ -504,7 +606,7 @@ def get_conf(cluster, variable):
     try:
         process = subprocess.Popen(
             args=[
-                '/usr/bin/ceph-conf',
+                'ceph-conf',
                 '--cluster={cluster}'.format(
                     cluster=cluster,
                     ),
@@ -567,7 +669,7 @@ def get_fsid(cluster):
 
     :return: The fsid or raises Error.
     """
-    fsid = get_conf(cluster=cluster, variable='fsid')
+    fsid = get_conf_with_default(cluster=cluster, variable='fsid')
     if fsid is None:
         raise Error('getting cluster uuid from configuration failed')
     return fsid.lower()
@@ -664,7 +766,7 @@ def mount(
     # mount
     path = tempfile.mkdtemp(
         prefix='mnt.',
-        dir='/var/lib/ceph/tmp',
+        dir=STATEDIR + '/tmp',
         )
     try:
         LOG.debug('Mounting %s on %s with options %s', dev, path, options)
@@ -738,7 +840,7 @@ def get_free_partition_index(dev):
     lines = str(lines).splitlines(True)
 
     # work around buggy libreadline(?) library in rhel/centos.
-    idiot_prefix = '\x1b\x5b\x3f\x31\x30\x33\x34\x68';
+    idiot_prefix = '\x1b\x5b\x3f\x31\x30\x33\x34\x68'
     if lines[0].startswith(idiot_prefix):
         lines[0] = lines[0][8:]
 
@@ -777,16 +879,16 @@ def zap(dev):
             dev_file.seek(-size, os.SEEK_END)
             dev_file.write(size*'\0')
 
-        subprocess.check_call(
-            args=[
+        command_check_call(
+            [
                 'sgdisk',
                 '--zap-all',
                 '--clear',
                 '--mbrtogpt',
                 '--',
                 dev,
-                ],
-            )
+            ]
+        )
     except subprocess.CalledProcessError as e:
         raise Error(e)
 
@@ -834,8 +936,8 @@ def prepare_journal_dev(
 
     try:
         LOG.debug('Creating journal partition num %d size %d on %s', num, journal_size, journal)
-        subprocess.check_call(
-            args=[
+        command_check_call(
+            [
                 'sgdisk',
                 '--new={part}'.format(part=journal_part),
                 '--change-name={num}:ceph journal'.format(num=num),
@@ -847,10 +949,11 @@ def prepare_journal_dev(
                     num=num,
                     uuid=ptype,
                     ),
+                '--mbrtogpt',
                 '--',
                 journal,
-                ],
-            )
+            ]
+        )
 
         # try to make sure the kernel refreshes the table.  note
         # that if this gets ebusy, we are probably racing with
@@ -931,7 +1034,7 @@ def prepare_journal(
             raise Error('Journal is not a regular file', journal)
         return prepare_journal_dev(data, journal, journal_size, journal_uuid, journal_dm_keypath)
 
-    raise Error('Journal %s is neither a block device nor regular file', journal)
+    raise Error('Journal %s is neither a block device nor regular file' % journal)
 
 
 def adjust_symlink(target, path):
@@ -966,7 +1069,12 @@ def prepare_dir(
     journal_uuid,
     journal_dmcrypt = None,
     ):
-    LOG.debug('Preparing osd data dir %s', path)
+
+    if os.path.exists(os.path.join(path, 'magic')):
+        LOG.debug('Data dir %s already exists', path)
+        return
+    else:
+        LOG.debug('Preparing osd data dir %s', path)
 
     if osd_uuid is None:
         osd_uuid = str(uuid.uuid4())
@@ -985,11 +1093,13 @@ def prepare_dir(
 
     write_one_line(path, 'ceph_fsid', cluster_uuid)
     write_one_line(path, 'fsid', osd_uuid)
-    write_one_line(path, 'magic', CEPH_OSD_ONDISK_MAGIC)
 
     if journal_uuid is not None:
         # i.e., journal is a tagged partition
         write_one_line(path, 'journal_uuid', journal_uuid)
+
+    write_one_line(path, 'magic', CEPH_OSD_ONDISK_MAGIC)
+
 
 def prepare_dev(
     data,
@@ -1026,8 +1136,8 @@ def prepare_dev(
     else:
         LOG.debug('Creating osd partition on %s', data)
         try:
-            subprocess.check_call(
-                args=[
+            command_check_call(
+                [
                     'sgdisk',
                     '--largest-new=1',
                     '--change-name=1:ceph data',
@@ -1037,8 +1147,8 @@ def prepare_dev(
                     '--typecode=1:%s' % ptype_tobe,
                     '--',
                     data,
-                    ],
-                )
+                ]
+            )
             subprocess.call(
                 args=[
                     # wait for udev event queue to clear
@@ -1102,14 +1212,14 @@ def prepare_dev(
 
     if not is_partition(data):
         try:
-            subprocess.check_call(
-                args=[
+            command_check_call(
+                [
                     'sgdisk',
                     '--typecode=1:%s' % ptype_osd,
                     '--',
                     data,
-                    ],
-                )
+                ]
+            )
         except subprocess.CalledProcessError as e:
             raise Error(e)
 
@@ -1121,7 +1231,10 @@ def main_prepare(args):
     try:
         prepare_lock.acquire()
         if not os.path.exists(args.data):
-            raise Error('data path does not exist', args.data)
+            if args.data_dev:
+                raise Error('data path does not exist', args.data)
+            else:
+                os.mkdir(args.data)
 
         # in use?
         dmode = os.stat(args.data).st_mode
@@ -1285,7 +1398,7 @@ def mkfs(
     monmap = os.path.join(path, 'activate.monmap')
     subprocess.check_call(
         args=[
-            '/usr/bin/ceph',
+            'ceph',
             '--cluster', cluster,
             '--name', 'client.bootstrap-osd',
             '--keyring', keyring,
@@ -1295,7 +1408,7 @@ def mkfs(
 
     subprocess.check_call(
         args=[
-            '/usr/bin/ceph-osd',
+            'ceph-osd',
             '--cluster', cluster,
             '--mkfs',
             '--mkkey',
@@ -1321,7 +1434,7 @@ def auth_key(
         # try dumpling+ cap scheme
         subprocess.check_call(
             args=[
-                '/usr/bin/ceph',
+                'ceph',
                 '--cluster', cluster,
                 '--name', 'client.bootstrap-osd',
                 '--keyring', keyring,
@@ -1332,11 +1445,11 @@ def auth_key(
                 ],
             )
     except subprocess.CalledProcessError as err:
-        if err.errno == errno.EACCES:
+        if err.returncode == errno.EACCES:
             # try old cap scheme
             subprocess.check_call(
                 args=[
-                    '/usr/bin/ceph',
+                    'ceph',
                     '--cluster', cluster,
                     '--name', 'client.bootstrap-osd',
                     '--keyring', keyring,
@@ -1359,7 +1472,7 @@ def move_mount(
     mount_options,
     ):
     LOG.debug('Moving mount to final location...')
-    parent = '/var/lib/ceph/osd'
+    parent = STATEDIR + '/osd'
     osd_data = os.path.join(
         parent,
         '{cluster}-{osd_id}'.format(cluster=cluster, osd_id=osd_id),
@@ -1403,7 +1516,7 @@ def start_daemon(
     ):
     LOG.debug('Starting %s osd.%s...', cluster, osd_id)
 
-    path = '/var/lib/ceph/osd/{cluster}-{osd_id}'.format(
+    path = (STATEDIR + '/osd/{cluster}-{osd_id}').format(
         cluster=cluster, osd_id=osd_id)
 
     # upstart?
@@ -1514,16 +1627,16 @@ def mount_activate(
         other = False
         src_dev = os.stat(path).st_dev
         try:
-            dst_dev = os.stat('/var/lib/ceph/osd/{cluster}-{osd_id}'.format(
+            dst_dev = os.stat((STATEDIR + '/osd/{cluster}-{osd_id}').format(
                     cluster=cluster,
                     osd_id=osd_id)).st_dev
             if src_dev == dst_dev:
                 active = True
             else:
-                parent_dev = os.stat('/var/lib/ceph/osd').st_dev
+                parent_dev = os.stat(STATEDIR + '/osd').st_dev
                 if dst_dev != parent_dev:
                     other = True
-                elif os.listdir('/var/lib/ceph/osd/{cluster}-{osd_id}'.format(
+                elif os.listdir((STATEDIR + '/osd/{cluster}-{osd_id}').format(
                         cluster=cluster,
                         osd_id=osd_id,
                         )):
@@ -1570,28 +1683,30 @@ def activate_dir(
             )
 
     (osd_id, cluster) = activate(path, activate_key_template, init)
-    canonical = '/var/lib/ceph/osd/{cluster}-{osd_id}'.format(
-        cluster=cluster,
-        osd_id=osd_id)
-    if path != canonical:
-        # symlink it from the proper location
-        create = True
-        if os.path.lexists(canonical):
-            old = os.readlink(canonical)
-            if old != path:
-                LOG.debug('Removing old symlink %s -> %s', canonical, old)
+
+    if init not in ( None, 'none' ):
+        canonical = (STATEDIR + '/osd/{cluster}-{osd_id}').format(
+            cluster=cluster,
+            osd_id=osd_id)
+        if path != canonical:
+            # symlink it from the proper location
+            create = True
+            if os.path.lexists(canonical):
+                old = os.readlink(canonical)
+                if old != path:
+                    LOG.debug('Removing old symlink %s -> %s', canonical, old)
+                    try:
+                        os.unlink(canonical)
+                    except:
+                        raise Error('unable to remove old symlink', canonical)
+                else:
+                    create = False
+            if create:
+                LOG.debug('Creating symlink %s -> %s', canonical, path)
                 try:
-                    os.unlink(canonical)
+                    os.symlink(path, canonical)
                 except:
-                    raise Error('unable to remove old symlink %s', canonical)
-            else:
-                create = False
-        if create:
-            LOG.debug('Creating symlink %s -> %s', canonical, path)
-            try:
-                os.symlink(path, canonical)
-            except:
-                raise Error('unable to create symlink %s -> %s', canonical, path)
+                    raise Error('unable to create symlink %s -> %s' % (canonical, path))
 
     return (cluster, osd_id)
 
@@ -1603,15 +1718,15 @@ def find_cluster_by_uuid(_uuid):
     """
     _uuid = _uuid.lower()
     no_fsid = []
-    if not os.path.exists('/etc/ceph'):
+    if not os.path.exists(SYSCONFDIR):
         return None
-    for conf_file in os.listdir('/etc/ceph'):
+    for conf_file in os.listdir(SYSCONFDIR):
         if not conf_file.endswith('.conf'):
             continue
         cluster = conf_file[:-5]
         try:
             fsid = get_fsid(cluster)
-        except Error as e: 
+        except Error as e:
             if e.message != 'getting cluster uuid from configuration failed':
                 raise e
             no_fsid.append(cluster)
@@ -1620,7 +1735,7 @@ def find_cluster_by_uuid(_uuid):
                 return cluster
     # be tolerant of /etc/ceph/ceph.conf without an fsid defined.
     if len(no_fsid) == 1 and no_fsid[0] == 'ceph':
-        LOG.warning('No fsid defined in /etc/ceph/ceph.conf; using anyway')
+        LOG.warning('No fsid defined in ' + SYSCONFDIR + '/ceph.conf; using anyway')
         return 'ceph'
     return None
 
@@ -1630,88 +1745,84 @@ def activate(
     init,
     ):
 
-    try:
-        check_osd_magic(path)
+    check_osd_magic(path)
 
-        ceph_fsid = read_one_line(path, 'ceph_fsid')
-        if ceph_fsid is None:
-            raise Error('No cluster uuid assigned.')
-        LOG.debug('Cluster uuid is %s', ceph_fsid)
+    ceph_fsid = read_one_line(path, 'ceph_fsid')
+    if ceph_fsid is None:
+        raise Error('No cluster uuid assigned.')
+    LOG.debug('Cluster uuid is %s', ceph_fsid)
 
-        cluster = find_cluster_by_uuid(ceph_fsid)
-        if cluster is None:
-            raise Error('No cluster conf found in /etc/ceph with fsid %s' % ceph_fsid)
-        LOG.debug('Cluster name is %s', cluster)
+    cluster = find_cluster_by_uuid(ceph_fsid)
+    if cluster is None:
+        raise Error('No cluster conf found in ' + SYSCONFDIR + ' with fsid %s' % ceph_fsid)
+    LOG.debug('Cluster name is %s', cluster)
 
-        fsid = read_one_line(path, 'fsid')
-        if fsid is None:
-            raise Error('No OSD uuid assigned.')
-        LOG.debug('OSD uuid is %s', fsid)
+    fsid = read_one_line(path, 'fsid')
+    if fsid is None:
+        raise Error('No OSD uuid assigned.')
+    LOG.debug('OSD uuid is %s', fsid)
 
-        keyring = activate_key_template.format(cluster=cluster)
+    keyring = activate_key_template.format(cluster=cluster)
 
-        osd_id = get_osd_id(path)
-        if osd_id is None:
-            osd_id = allocate_osd_id(
+    osd_id = get_osd_id(path)
+    if osd_id is None:
+        osd_id = allocate_osd_id(
+            cluster=cluster,
+            fsid=fsid,
+            keyring=keyring,
+            )
+        write_one_line(path, 'whoami', osd_id)
+    LOG.debug('OSD id is %s', osd_id)
+
+    if not os.path.exists(os.path.join(path, 'ready')):
+        LOG.debug('Initializing OSD...')
+        # re-running mkfs is safe, so just run until it completes
+        mkfs(
+            path=path,
+            cluster=cluster,
+            osd_id=osd_id,
+            fsid=fsid,
+            keyring=keyring,
+            )
+
+    if init not in ( None, 'none' ):
+        if init == 'auto':
+            conf_val = get_conf(
                 cluster=cluster,
-                fsid=fsid,
-                keyring=keyring,
+                variable='init'
                 )
-            write_one_line(path, 'whoami', osd_id)
-        LOG.debug('OSD id is %s', osd_id)
-
-        if not os.path.exists(os.path.join(path, 'ready')):
-            LOG.debug('Initializing OSD...')
-            # re-running mkfs is safe, so just run until it completes
-            mkfs(
-                path=path,
-                cluster=cluster,
-                osd_id=osd_id,
-                fsid=fsid,
-                keyring=keyring,
-                )
-
-        if init is not None:
-            if init == 'auto':
-                conf_val = get_conf(
-                    cluster=cluster,
-                    variable='init'
-                    )
-                if conf_val is not None:
-                    init = conf_val
+            if conf_val is not None:
+                init = conf_val
+            else:
+                (distro, release, codename) = platform.dist()
+                if distro == 'Ubuntu':
+                    init = 'upstart'
                 else:
-                    (distro, release, codename) = platform.dist()
-                    if distro == 'Ubuntu':
-                        init = 'upstart'
-                    else:
-                        init = 'sysvinit'
+                    init = 'sysvinit'
 
-            LOG.debug('Marking with init system %s', init)
-            with file(os.path.join(path, init), 'w'):
+        LOG.debug('Marking with init system %s', init)
+        with file(os.path.join(path, init), 'w'):
+            pass
+
+    # remove markers for others, just in case.
+    for other in INIT_SYSTEMS:
+        if other != init:
+            try:
+                os.unlink(os.path.join(path, other))
+            except OSError:
                 pass
 
-            # remove markers for others, just in case.
-            for other in INIT_SYSTEMS:
-                if other != init:
-                    try:
-                        os.unlink(os.path.join(path, other))
-                    except OSError:
-                        pass
-
-        if not os.path.exists(os.path.join(path, 'active')):
-            LOG.debug('Authorizing OSD key...')
-            auth_key(
-                path=path,
-                cluster=cluster,
-                osd_id=osd_id,
-                keyring=keyring,
-                )
-            write_one_line(path, 'active', 'ok')
-        LOG.debug('%s osd.%s data dir is ready at %s', cluster, osd_id, path)
-        return (osd_id, cluster)
-    except:
-        raise
-
+    if not os.path.exists(os.path.join(path, 'active')):
+        LOG.debug('Authorizing OSD key...')
+        auth_key(
+            path=path,
+            cluster=cluster,
+            osd_id=osd_id,
+            keyring=keyring,
+            )
+        write_one_line(path, 'active', 'ok')
+    LOG.debug('%s osd.%s data dir is ready at %s', cluster, osd_id, path)
+    return (osd_id, cluster)
 
 
 def main_activate(args):
@@ -1719,7 +1830,7 @@ def main_activate(args):
     osd_id = None
 
     if not os.path.exists(args.path):
-        raise Error('%s does not exist', args.path)
+        raise Error('%s does not exist' % args.path)
 
     if is_suppressed(args.path):
         LOG.info('suppressed activate request on %s', args.path)
@@ -1734,22 +1845,36 @@ def main_activate(args):
                 activate_key_template=args.activate_key_template,
                 init=args.mark_init,
                 )
+
         elif stat.S_ISDIR(mode):
             (cluster, osd_id) = activate_dir(
                 path=args.path,
                 activate_key_template=args.activate_key_template,
                 init=args.mark_init,
                 )
+
+            if args.mark_init == 'none':
+                command_check_call(
+                    [
+                    'ceph-osd',
+                        '--cluster={cluster}'.format(cluster=cluster),
+                        '--id={osd_id}'.format(osd_id=osd_id),
+                        '--osd-data={path}'.format(path=args.path),
+                        '--osd-journal={path}/journal'.format(path=args.path),
+                    ],
+                )
+
         else:
-            raise Error('%s is not a directory or block device', args.path)
+            raise Error('%s is not a directory or block device' % args.path)
 
-        start_daemon(
-            cluster=cluster,
-            osd_id=osd_id,
+        if args.mark_init not in ( None, 'none' ):
+
+            start_daemon(
+                cluster=cluster,
+                osd_id=osd_id,
             )
-        activate_lock.release()
 
-    except:
+    finally:
         activate_lock.release()
 
 
@@ -1757,11 +1882,11 @@ def main_activate(args):
 
 def get_journal_osd_uuid(path):
     if not os.path.exists(path):
-        raise Error('%s does not exist', path)
+        raise Error('%s does not exist' % path)
 
     mode = os.stat(path).st_mode
     if not stat.S_ISBLK(mode):
-        raise Error('%s is not a block device', path)
+        raise Error('%s is not a block device' % path)
 
     try:
         out = _check_output(
@@ -1785,7 +1910,7 @@ def get_journal_osd_uuid(path):
 
 def main_activate_journal(args):
     if not os.path.exists(args.dev):
-        raise Error('%s does not exist', args.dev)
+        raise Error('%s does not exist' % args.dev)
 
     cluster = None
     osd_id = None
@@ -1806,11 +1931,8 @@ def main_activate_journal(args):
             osd_id=osd_id,
             )
 
+    finally:
         activate_lock.release()
-
-    except:
-        activate_lock.release()
-        raise
 
 ###########################
 
@@ -1893,14 +2015,14 @@ def get_dev_fs(dev):
 
 def get_partition_type(part):
     (base, partnum) = re.match('(\D+)(\d+)', part).group(1, 2)
-    sgdisk = subprocess.Popen(
+    sgdisk = command(
         [
             'sgdisk',
             '-p',
             base,
-            ],
-        stdout = subprocess.PIPE,
-        stderr = subprocess.PIPE).stdout.read()
+        ]
+    )
+
     for line in sgdisk.splitlines():
         m = re.search('\s+(\d+)\s+\d+\s+\d+\s+\S+ \S+B\s+\S+\s+(.*)', line)
         if m is not None:
@@ -1912,10 +2034,7 @@ def get_partition_type(part):
 
 def get_partition_uuid(dev):
     (base, partnum) = re.match('(\D+)(\d+)', dev).group(1, 2)
-    out = subprocess.Popen(
-        [ 'sgdisk', '-i', partnum, base ],
-        stdout = subprocess.PIPE,
-        stderr = subprocess.PIPE).stdout.read()
+    out = command(['sgdisk', '-i', partnum, base])
     for line in out.splitlines():
         m = re.match('Partition unique GUID: (\S+)', line)
         if m:
@@ -2043,8 +2162,6 @@ def main_list(args):
 # means suppressing sdb will stop activate on sdb1, sdb2, etc.
 #
 
-SUPPRESS_PREFIX = '/var/lib/ceph/tmp/suppress-activate.'
-
 def is_suppressed(path):
     disk = os.path.realpath(path)
     try:
@@ -2102,6 +2219,27 @@ def main_zap(args):
 
 ###########################
 
+def setup_statedir(dir):
+    global STATEDIR
+    STATEDIR = dir
+
+    if not os.path.exists(STATEDIR):
+        os.mkdir(STATEDIR)
+    if not os.path.exists(STATEDIR + "/tmp"):
+        os.mkdir(STATEDIR + "/tmp")
+
+    global prepare_lock
+    prepare_lock = filelock(STATEDIR + '/tmp/ceph-disk.prepare.lock')
+
+    global activate_lock
+    activate_lock = filelock(STATEDIR + '/tmp/ceph-disk.activate.lock')
+
+    global SUPPRESS_PREFIX
+    SUPPRESS_PREFIX = STATEDIR + '/tmp/suppress-activate.'
+
+def setup_sysconfdir(dir):
+    global SYSCONFDIR
+    SYSCONFDIR = dir
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -2111,6 +2249,24 @@ def parse_args():
         '-v', '--verbose',
         action='store_true', default=None,
         help='be more verbose',
+        )
+    parser.add_argument(
+        '--prepend-to-path',
+        metavar='PATH',
+        default='/usr/bin',
+        help='prepend PATH to $PATH for backward compatibility (default /usr/bin)',
+        )
+    parser.add_argument(
+        '--statedir',
+        metavar='PATH',
+        default='/var/lib/ceph',
+        help='directory in which ceph state is preserved (default /var/lib/ceph)',
+        )
+    parser.add_argument(
+        '--sysconfdir',
+        metavar='PATH',
+        default='/etc/ceph',
+        help='directory in which ceph configuration files are found (default /etc/ceph)',
         )
     parser.set_defaults(
         # we want to hold on to this, for later
@@ -2227,7 +2383,7 @@ def parse_args():
         help='path to block device or directory',
         )
     activate_parser.set_defaults(
-        activate_key_template='/var/lib/ceph/bootstrap-osd/{cluster}.keyring',
+        activate_key_template=STATEDIR + '/bootstrap-osd/{cluster}.keyring',
         func=main_activate,
         )
 
@@ -2251,7 +2407,7 @@ def parse_args():
         choices=INIT_SYSTEMS,
         )
     activate_journal_parser.set_defaults(
-        activate_key_template='/var/lib/ceph/bootstrap-osd/{cluster}.keyring',
+        activate_key_template=STATEDIR + '/bootstrap-osd/{cluster}.keyring',
         func=main_activate_journal,
         )
 
@@ -2270,7 +2426,7 @@ def parse_args():
         choices=INIT_SYSTEMS,
         )
     activate_all_parser.set_defaults(
-        activate_key_template='/var/lib/ceph/bootstrap-osd/{cluster}.keyring',
+        activate_key_template=STATEDIR + '/bootstrap-osd/{cluster}.keyring',
         func=main_activate_all,
         )
 
@@ -2305,7 +2461,7 @@ def parse_args():
     zap_parser.add_argument(
         'dev',
         metavar='DEV',
-        nargs='*',
+        nargs='+',
         help='path to block device',
         )
     zap_parser.set_defaults(
@@ -2327,15 +2483,33 @@ def main():
         level=loglevel,
         )
 
+    if args.prepend_to_path != '':
+        path = os.environ.get('PATH', '')
+        os.environ['PATH'] = args.prepend_to_path + ":" + path
+
+    setup_statedir(args.statedir)
+    setup_sysconfdir(args.sysconfdir)
+
     try:
         args.func(args)
 
     except Error as e:
-        print >> sys.stderr, '{prog}: {msg}'.format(
-            prog=args.prog,
-            msg=e,
+        raise SystemExit(
+            '{prog}: {msg}'.format(
+                prog=args.prog,
+                msg=e,
             )
-        sys.exit(1)
+        )
+
+    except CephDiskException as error:
+        exc_name = error.__class__.__name__
+        raise SystemExit(
+            '{prog} {exc_name}: {msg}'.format(
+                prog=args.prog,
+                exc_name=exc_name,
+                msg=error,
+            )
+        )
 
 
 if __name__ == '__main__':

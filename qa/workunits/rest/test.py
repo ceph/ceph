@@ -206,6 +206,8 @@ if __name__ == '__main__':
     assert(r.myjson['output']['max_mds'] == 4)
     expect('mds/set_max_mds?maxmds=3', 'PUT', 200, '')
     r = expect('mds/stat.json', 'GET', 200, 'json')
+    expect('mds/set?var=max_mds&val=2', 'PUT', 200, '')
+    r = expect('mds/stat.json', 'GET', 200, 'json')
     assert('info' in r.myjson['output']['mdsmap'])
     r = expect('mds/stat.xml', 'GET', 200, 'xml')
     assert(r.tree.find('output/mds_stat/mdsmap/info') is not None)
@@ -421,7 +423,7 @@ if __name__ == '__main__':
     assert(r.myjson['output']['size'] == 2)
 
     r = expect('osd/pool/get.json?pool=rbd&var=crush_ruleset', 'GET', 200, 'json')
-    assert(r.myjson['output']['crush_ruleset'] == 2)
+    assert(r.myjson['output']['crush_ruleset'] == 0)
 
     expect('osd/thrash?num_epochs=10', 'PUT', 200, '')
     print 'OK'

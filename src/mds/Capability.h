@@ -78,19 +78,32 @@ public:
   }
 public:
   struct Export {
+    int64_t cap_id;
     int32_t wanted;
     int32_t issued;
     int32_t pending;
     snapid_t client_follows;
+    ceph_seq_t seq;
     ceph_seq_t mseq;
     utime_t last_issue_stamp;
     Export() {}
-    Export(int w, int i, int p, snapid_t cf, ceph_seq_t s, utime_t lis) : 
-      wanted(w), issued(i), pending(p), client_follows(cf), mseq(s), last_issue_stamp(lis) {}
+    Export(int64_t id, int w, int i, int p, snapid_t cf, ceph_seq_t s, ceph_seq_t m, utime_t lis) :
+      cap_id(id), wanted(w), issued(i), pending(p), client_follows(cf),
+      seq(s), mseq(m), last_issue_stamp(lis) {}
     void encode(bufferlist &bl) const;
     void decode(bufferlist::iterator &p);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<Export*>& ls);
+  };
+  struct Import {
+    int64_t cap_id;
+    ceph_seq_t issue_seq;
+    ceph_seq_t mseq;
+    Import() {}
+    Import(int64_t i, ceph_seq_t s, ceph_seq_t m) : cap_id(i), issue_seq(s), mseq(m) {}
+    void encode(bufferlist &bl) const;
+    void decode(bufferlist::iterator &p);
+    void dump(Formatter *f) const;
   };
 
 private:
@@ -204,7 +217,10 @@ private:
   ceph_seq_t mseq;
 
   int suppress;
-  bool stale;
+  unsigned state;
+
+  const static unsigned STATE_STALE		= (1<<0);
+  const static unsigned STATE_NEW		= (1<<1);
 
 public:
   snapid_t client_follows;
@@ -221,7 +237,7 @@ public:
     last_sent(0),
     last_issue(0),
     mseq(0),
-    suppress(0), stale(false),
+    suppress(0), state(0),
     client_follows(0), client_xattr_version(0),
     item_session_caps(this), item_snaprealm_caps(this) {
     g_num_cap++;
@@ -231,8 +247,12 @@ public:
     g_num_cap--;
     g_num_caps++;
   }
+
+  Capability(const Capability& other);  // no copying
+  const Capability& operator=(const Capability& other);  // no copying
   
   ceph_seq_t get_mseq() { return mseq; }
+  void inc_mseq() { mseq++; }
 
   ceph_seq_t get_last_sent() { return last_sent; }
   utime_t get_last_issue_stamp() { return last_issue_stamp; }
@@ -249,8 +269,12 @@ public:
   void inc_suppress() { suppress++; }
   void dec_suppress() { suppress--; }
 
-  bool is_stale() { return stale; }
-  void set_stale(bool b) { stale = b; }
+  bool is_stale() { return state & STATE_STALE; }
+  void mark_stale() { state |= STATE_STALE; }
+  void clear_stale() { state &= ~STATE_STALE; }
+  bool is_new() { return state & STATE_NEW; }
+  void mark_new() { state |= STATE_NEW; }
+  void clear_new() { state &= ~STATE_NEW; }
 
   CInode *get_inode() { return inode; }
   client_t get_client() { return client; }
@@ -262,6 +286,7 @@ public:
     //check_rdcaps_list();
   }
 
+  void inc_last_seq() { last_sent++; };
   ceph_seq_t get_last_seq() { return last_sent; }
   ceph_seq_t get_last_issue() { return last_issue; }
 
@@ -272,17 +297,20 @@ public:
   
   // -- exports --
   Export make_export() {
-    return Export(_wanted, issued(), pending(), client_follows, mseq+1, last_issue_stamp);
+    return Export(cap_id, _wanted, issued(), pending(), client_follows, last_sent, mseq+1, last_issue_stamp);
   }
-  void rejoin_import() { mseq++; }
   void merge(Export& other, bool auth_cap) {
-    // issued + pending
-    int newpending = other.pending | pending();
-    if (other.issued & ~newpending)
-      issue(other.issued | newpending);
-    else
-      issue(newpending);
-    last_issue_stamp = other.last_issue_stamp;
+    if (!is_stale()) {
+      // issued + pending
+      int newpending = other.pending | pending();
+      if (other.issued & ~newpending)
+	issue(other.issued | newpending);
+      else
+	issue(newpending);
+      last_issue_stamp = other.last_issue_stamp;
+    } else {
+      inc_last_seq();
+    }
 
     client_follows = other.client_follows;
 
@@ -292,21 +320,25 @@ public:
       mseq = other.mseq;
   }
   void merge(int otherwanted, int otherissued) {
-    // issued + pending
-    int newpending = pending();
-    if (otherissued & ~newpending)
-      issue(otherissued | newpending);
-    else
-      issue(newpending);
+    if (!is_stale()) {
+      // issued + pending
+      int newpending = pending();
+      if (otherissued & ~newpending)
+	issue(otherissued | newpending);
+      else
+	issue(newpending);
+    } else {
+      inc_last_seq();
+    }
 
     // wanted
     _wanted = _wanted | otherwanted;
   }
 
   void revoke() {
-    if (pending())
-      issue(0);
-    confirm_receipt(last_sent, 0);
+    if (pending() & ~CEPH_CAP_PIN)
+      issue(CEPH_CAP_PIN);
+    confirm_receipt(last_sent, CEPH_CAP_PIN);
   }
 
   // serializers
@@ -318,6 +350,7 @@ public:
 };
 
 WRITE_CLASS_ENCODER(Capability::Export)
+WRITE_CLASS_ENCODER(Capability::Import)
 WRITE_CLASS_ENCODER(Capability::revoke_info)
 WRITE_CLASS_ENCODER(Capability)
 

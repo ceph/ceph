@@ -18,6 +18,9 @@
 #include "Object.h"
 #include "TestOpStat.h"
 #include "test/librados/test.h"
+#include "common/sharedptr_registry.hpp"
+#include "common/errno.h"
+#include "osd/HitSet.h"
 
 #ifndef RADOSMODEL_H
 #define RADOSMODEL_H
@@ -50,7 +53,13 @@ enum TestOpType {
   TEST_OP_RMATTR,
   TEST_OP_TMAPPUT,
   TEST_OP_WATCH,
-  TEST_OP_COPY_FROM
+  TEST_OP_COPY_FROM,
+  TEST_OP_HIT_SET_LIST,
+  TEST_OP_UNDIRTY,
+  TEST_OP_IS_DIRTY,
+  TEST_OP_CACHE_FLUSH,
+  TEST_OP_CACHE_TRY_FLUSH,
+  TEST_OP_CACHE_EVICT
 };
 
 class TestWatchContext : public librados::WatchCtx {
@@ -143,7 +152,9 @@ public:
   map<int, map<string,ObjectDesc> > pool_obj_cont;
   set<string> oid_in_use;
   set<string> oid_not_in_use;
-  set<int> snaps_in_use;
+  set<string> oid_flushing;
+  set<string> oid_not_flushing;
+  SharedPtrRegistry<int, int> snaps_in_use;
   int current_snap;
   string pool_name;
   librados::IoCtx io_ctx;
@@ -408,16 +419,25 @@ public:
     pool_obj_cont[current_snap].insert(pair<string,ObjectDesc>(oid, contents));
   }
 
-  void update_object_version(const string &oid, uint64_t version)
+  void update_object_version(const string &oid, uint64_t version,
+			     bool dirty = true, int snap = -1)
   {
     for (map<int, map<string,ObjectDesc> >::reverse_iterator i = 
 	   pool_obj_cont.rbegin();
 	 i != pool_obj_cont.rend();
 	 ++i) {
+      if (snap != -1 && snap < i->first)
+	continue;
       map<string,ObjectDesc>::iterator j = i->second.find(oid);
       if (j != i->second.end()) {
-	j->second.version = version;
-	cout << __func__ << " oid " << oid << " v " << version << " " << j->second.most_recent() << std::endl;
+	if (version)
+	  j->second.version = version;
+	j->second.dirty = dirty;
+	cout << __func__ << " oid " << oid
+	     << " v " << version << " " << j->second.most_recent()
+	     << " " << (dirty ? "dirty" : "clean")
+	     << " " << (j->second.exists ? "exists":"dne")
+	     << std::endl;
 	break;
       }
     }
@@ -559,6 +579,7 @@ public:
   {
     Mutex::Locker l(context->state_lock);
     done = true;
+    context->update_object_version(oid, comp->get_version64());
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
     context->kick();
@@ -840,7 +861,6 @@ public:
     context->io_ctx.aio_operate(
       context->prefix+oid, rcompletion,
       &read_op,
-      librados::SNAP_HEAD,
       librados::OPERATION_ORDER_READS_WRITES,  // order wrt previous write/update
       0);
   }
@@ -965,6 +985,8 @@ public:
   ObjectDesc old_value;
   int snap;
 
+  std::tr1::shared_ptr<int> in_use;
+
   bufferlist result;
   int retval;
 
@@ -994,11 +1016,13 @@ public:
   void _begin()
   {
     context->state_lock.Lock();
-    if (0 && !(rand() % 4) && !context->snaps.empty()) {
+    if (!(rand() % 4) && !context->snaps.empty()) {
       snap = rand_choose(context->snaps)->first;
+      in_use = context->snaps_in_use.lookup_or_create(snap, snap);
     } else {
       snap = -1;
     }
+    std::cout << num << ": read oid " << oid << " snap " << snap << std::endl;
     done = 0;
     completion = context->rados.aio_create_completion((void *) this, &read_callback, 0);
 
@@ -1070,7 +1094,7 @@ public:
       if (!(err == -ENOENT && old_value.deleted())) {
 	cerr << num << ": Error: oid " << oid << " read returned error code "
 	     << err << std::endl;
-	context->errors++;
+	assert(0);
       }
     } else {
       cout << num << ":  expect " << old_value.most_recent() << std::endl;
@@ -1102,12 +1126,12 @@ public:
 	assert(old_value.header == header);
       }
       if (omap.size() != old_value.attrs.size()) {
-	cerr << num << ": oid " << oid << " tmap.size() is " << omap.size()
+	cerr << num << ": oid " << oid << " omap.size() is " << omap.size()
 	     << " and old is " << old_value.attrs.size() << std::endl;
 	assert(omap.size() == old_value.attrs.size());
       }
       if (omap_keys.size() != old_value.attrs.size()) {
-	cerr << num << ": oid " << oid << " tmap.size() is " << omap_keys.size()
+	cerr << num << ": oid " << oid << " omap.size() is " << omap_keys.size()
 	     << " and old is " << old_value.attrs.size() << std::endl;
 	assert(omap_keys.size() == old_value.attrs.size());
       }
@@ -1321,15 +1345,15 @@ public:
   bool done;
   librados::ObjectWriteOperation op;
   librados::AioCompletion *comp;
+  std::tr1::shared_ptr<int> in_use;
 
   RollbackOp(int n,
 	     RadosTestContext *context,
 	     const string &_oid,
-	     int snap,
 	     TestOpStat *stat = 0)
     : TestOp(n, context, stat),
       oid(_oid),
-      roll_back_to(snap), done(false)
+      roll_back_to(-1), done(false)
   {}
 
   void _begin()
@@ -1340,9 +1364,24 @@ public:
       context->state_lock.Unlock();
       return;
     }
+
+    if (context->snaps.empty()) {
+      context->kick();
+      context->state_lock.Unlock();
+      done = true;
+      return;
+    }
+
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
-    context->snaps_in_use.insert(roll_back_to);
+
+    roll_back_to = rand_choose(context->snaps)->first;
+    in_use = context->snaps_in_use.lookup_or_create(
+      roll_back_to,
+      roll_back_to);
+
+
+    cout << "rollback oid " << oid << " to " << roll_back_to << std::endl;
 
     context->roll_back(oid, roll_back_to);
     uint64_t snap = context->snaps[roll_back_to];
@@ -1371,7 +1410,7 @@ public:
     context->update_object_version(oid, comp->get_version64());
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
-    context->snaps_in_use.erase(roll_back_to);
+    in_use = std::tr1::shared_ptr<int>();
     context->kick();
   }
 
@@ -1394,6 +1433,7 @@ public:
   librados::ObjectReadOperation rd_op;
   librados::AioCompletion *comp;
   librados::AioCompletion *comp_racing_read;
+  std::tr1::shared_ptr<int> in_use;
   int snap;
   int done;
   uint64_t version;
@@ -1420,17 +1460,18 @@ public:
       context->oid_not_in_use.erase(oid);
       context->oid_in_use.insert(oid_src);
       context->oid_not_in_use.erase(oid_src);
-    }
 
-    // choose source snap
-    if (0 && !(rand() % 4) && !context->snaps.empty()) {
-      snap = rand_choose(context->snaps)->first;
-    } else {
-      snap = -1;
+      // choose source snap
+      if (0 && !(rand() % 4) && !context->snaps.empty()) {
+	snap = rand_choose(context->snaps)->first;
+	in_use = context->snaps_in_use.lookup_or_create(snap, snap);
+      } else {
+	snap = -1;
+      }
+      context->find_object(oid_src, &src_value, snap);
+      if (!src_value.deleted())
+	context->update_object_full(oid, src_value);
     }
-    context->find_object(oid_src, &src_value, snap);
-    if (!src_value.deleted())
-      context->update_object_full(oid, src_value);
 
     string src = context->prefix+oid_src;
     op.copy_from(src.c_str(), context->io_ctx, src_value.version);
@@ -1450,7 +1491,6 @@ public:
 							    NULL);
     rd_op.stat(NULL, NULL, NULL);
     context->io_ctx.aio_operate(context->prefix+oid, comp_racing_read, &rd_op,
-				librados::SNAP_HEAD,
 				librados::OPERATION_ORDER_READS_WRITES,  // order wrt previous write/update
 				NULL);
 
@@ -1513,6 +1553,438 @@ public:
   string getType()
   {
     return "TmapPutOp";
+  }
+};
+
+class HitSetListOp : public TestOp {
+  bool done;
+  librados::AioCompletion *comp1, *comp2;
+  uint32_t hash;
+  std::list< std::pair<time_t, time_t> > ls;
+  bufferlist bl;
+
+public:
+  HitSetListOp(int n,
+	       RadosTestContext *context,
+	       uint32_t hash,
+	       TestOpStat *stat = 0)
+    : TestOp(n, context, stat),
+      done(false), comp1(NULL), comp2(NULL),
+      hash(hash)
+  {}
+
+  void _begin()
+  {
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    comp1 = context->rados.aio_create_completion((void*) cb_arg, &write_callback,
+						 NULL);
+    int r = context->io_ctx.hit_set_list(hash, comp1, &ls);
+    assert(r == 0);
+  }
+
+  void _finish(CallbackInfo *info) {
+    Mutex::Locker l(context->state_lock);
+    if (!comp2) {
+      if (ls.empty()) {
+	cerr << num << ": no hitsets" << std::endl;
+	done = true;
+      } else {
+	cerr << num << ": hitsets are " << ls << std::endl;
+	int r = rand() % ls.size();
+	std::list<pair<time_t,time_t> >::iterator p = ls.begin();
+	while (r--)
+	  ++p;
+	pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+	  new pair<TestOp*, TestOp::CallbackInfo*>(this,
+						   new TestOp::CallbackInfo(0));
+	comp2 = context->rados.aio_create_completion((void*) cb_arg, &write_callback,
+						     NULL);
+	r = context->io_ctx.hit_set_get(hash, comp2, p->second, &bl);
+	assert(r == 0);
+      }
+    } else {
+      int r = comp2->get_return_value();
+      if (r == 0) {
+	HitSet hitset;
+	bufferlist::iterator p = bl.begin();
+	::decode(hitset, p);
+	cout << num << ": got hitset of type " << hitset.get_type_name()
+	     << " size " << bl.length()
+	     << std::endl;
+      } else {
+	// FIXME: we could verify that we did in fact race with a trim...
+	assert(r == -ENOENT);
+      }
+      done = true;
+    }
+
+    context->kick();
+  }
+
+  bool finished() {
+    return done;
+  }
+
+  string getType() {
+    return "HitSetListOp";
+  }
+};
+
+class UndirtyOp : public TestOp {
+public:
+  librados::AioCompletion *completion;
+  librados::ObjectWriteOperation op;
+  string oid;
+
+  UndirtyOp(int n,
+	    RadosTestContext *context,
+	    const string &oid,
+	    TestOpStat *stat = 0)
+    : TestOp(n, context, stat),
+      completion(NULL),
+      oid(oid)
+  {}
+
+  void _begin()
+  {
+    context->state_lock.Lock();
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    completion = context->rados.aio_create_completion((void *) cb_arg,
+						      &write_callback, 0);
+
+    context->oid_in_use.insert(oid);
+    context->oid_not_in_use.erase(oid);
+    context->state_lock.Unlock();
+
+    op.undirty();
+    int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
+					&op, 0);
+    assert(!r);
+  }
+
+  void _finish(CallbackInfo *info)
+  {
+    context->state_lock.Lock();
+    assert(!done);
+    assert(completion->is_complete());
+    context->oid_in_use.erase(oid);
+    context->oid_not_in_use.insert(oid);
+    context->update_object_version(oid, completion->get_version64(), false);
+    context->kick();
+    done = true;
+    context->state_lock.Unlock();
+  }
+
+  bool finished()
+  {
+    return done;
+  }
+
+  string getType()
+  {
+    return "UndirtyOp";
+  }
+};
+
+class IsDirtyOp : public TestOp {
+public:
+  librados::AioCompletion *completion;
+  librados::ObjectReadOperation op;
+  string oid;
+  bool dirty;
+  ObjectDesc old_value;
+  int snap;
+  std::tr1::shared_ptr<int> in_use;
+
+  IsDirtyOp(int n,
+	    RadosTestContext *context,
+	    const string &oid,
+	    TestOpStat *stat = 0)
+    : TestOp(n, context, stat),
+      completion(NULL),
+      oid(oid),
+      dirty(false),
+      old_value(&context->cont_gen)
+  {}
+
+  void _begin()
+  {
+    context->state_lock.Lock();
+
+    if (!(rand() % 4) && !context->snaps.empty()) {
+      snap = rand_choose(context->snaps)->first;
+      in_use = context->snaps_in_use.lookup_or_create(snap, snap);
+    } else {
+      snap = -1;
+    }
+    std::cout << num << ": is_dirty oid " << oid << " snap " << snap
+	      << std::endl;
+
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    completion = context->rados.aio_create_completion((void *) cb_arg,
+						      &write_callback, 0);
+
+    context->oid_in_use.insert(oid);
+    context->oid_not_in_use.erase(oid);
+    context->state_lock.Unlock();
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(context->snaps[snap]);
+    }
+
+    op.is_dirty(&dirty, NULL);
+    int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
+					&op, 0);
+    assert(!r);
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(0);
+    }
+  }
+
+  void _finish(CallbackInfo *info)
+  {
+    context->state_lock.Lock();
+    assert(!done);
+    assert(completion->is_complete());
+    context->oid_in_use.erase(oid);
+    context->oid_not_in_use.insert(oid);
+
+    assert(context->find_object(oid, &old_value, snap));
+
+    int r = completion->get_return_value();
+    if (r == 0) {
+      cout << num << ":  " << (dirty ? "dirty" : "clean") << std::endl;
+      assert(!old_value.deleted());
+      assert(dirty == old_value.dirty);
+    } else {
+      cout << num << ":  got " << r << std::endl;
+      assert(r == -ENOENT);
+      assert(old_value.deleted());
+    }
+    context->kick();
+    done = true;
+    context->state_lock.Unlock();
+  }
+
+  bool finished()
+  {
+    return done;
+  }
+
+  string getType()
+  {
+    return "IsDirtyOp";
+  }
+};
+
+
+
+class CacheFlushOp : public TestOp {
+public:
+  librados::AioCompletion *completion;
+  librados::ObjectReadOperation op;
+  string oid;
+  bool blocking;
+  int snap;
+  bool can_fail;
+  std::tr1::shared_ptr<int> in_use;
+
+  CacheFlushOp(int n,
+	       RadosTestContext *context,
+	       const string &oid,
+	       TestOpStat *stat,
+	       bool b)
+    : TestOp(n, context, stat),
+      completion(NULL),
+      oid(oid),
+      blocking(b),
+      snap(0),
+      can_fail(false)
+  {}
+
+  void _begin()
+  {
+    context->state_lock.Lock();
+
+    if (!(rand() % 4) && !context->snaps.empty()) {
+      snap = rand_choose(context->snaps)->first;
+      in_use = context->snaps_in_use.lookup_or_create(snap, snap);
+    } else {
+      snap = -1;
+    }
+    // not being particularly specific here about knowing which
+    // flushes are on the oldest clean snap and which ones are not.
+    can_fail = !blocking || !context->snaps.empty();
+    // FIXME: we can could fail if we've ever removed a snap due to
+    // the async snap trimming.
+    can_fail = true;
+    cout << num << ": " << (blocking ? "cache_flush" : "cache_try_flush")
+	 << " oid " << oid << " snap " << snap << std::endl;
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(context->snaps[snap]);
+    }
+
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    completion = context->rados.aio_create_completion((void *) cb_arg,
+						      &write_callback, 0);
+    // leave object in unused list so that we race with other operations
+    //context->oid_in_use.insert(oid);
+    //context->oid_not_in_use.erase(oid);
+    context->oid_flushing.insert(oid);
+    context->oid_not_flushing.erase(oid);
+    context->state_lock.Unlock();
+
+    unsigned flags = librados::OPERATION_IGNORE_CACHE;
+    if (blocking) {
+      op.cache_flush();
+    } else {
+      op.cache_try_flush();
+      flags = librados::OPERATION_SKIPRWLOCKS;
+    }
+    int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
+					&op, flags, NULL);
+    assert(!r);
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(0);
+    }
+  }
+
+  void _finish(CallbackInfo *info)
+  {
+    context->state_lock.Lock();
+    assert(!done);
+    assert(completion->is_complete());
+    //context->oid_in_use.erase(oid);
+    //context->oid_not_in_use.insert(oid);
+    context->oid_flushing.erase(oid);
+    context->oid_not_flushing.insert(oid);
+    int r = completion->get_return_value();
+    cout << num << ":  got " << cpp_strerror(r) << std::endl;
+    if (r == 0) {
+      context->update_object_version(oid, 0, false, snap);
+    } else if (r == -EBUSY) {
+      assert(can_fail);
+    } else if (r == -EINVAL) {
+      // caching not enabled?
+    } else if (r == -ENOENT) {
+      // may have raced with a remove?
+    } else {
+      assert(0 == "shouldn't happen");
+    }
+    context->kick();
+    done = true;
+    context->state_lock.Unlock();
+  }
+
+  bool finished()
+  {
+    return done;
+  }
+
+  string getType()
+  {
+    return "CacheFlushOp";
+  }
+};
+
+class CacheEvictOp : public TestOp {
+public:
+  librados::AioCompletion *completion;
+  librados::ObjectReadOperation op;
+  string oid;
+  std::tr1::shared_ptr<int> in_use;
+
+  CacheEvictOp(int n,
+	       RadosTestContext *context,
+	       const string &oid,
+	       TestOpStat *stat)
+    : TestOp(n, context, stat),
+      completion(NULL),
+      oid(oid)
+  {}
+
+  void _begin()
+  {
+    context->state_lock.Lock();
+
+    int snap;
+    if (!(rand() % 4) && !context->snaps.empty()) {
+      snap = rand_choose(context->snaps)->first;
+      in_use = context->snaps_in_use.lookup_or_create(snap, snap);
+    } else {
+      snap = -1;
+    }
+    cout << num << ": cache_evict oid " << oid << " snap " << snap << std::endl;
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(context->snaps[snap]);
+    }
+
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    completion = context->rados.aio_create_completion((void *) cb_arg,
+						      &write_callback, 0);
+    // leave object in unused list so that we race with other operations
+    //context->oid_in_use.insert(oid);
+    //context->oid_not_in_use.erase(oid);
+    context->state_lock.Unlock();
+
+    op.cache_evict();
+    int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
+					&op, librados::OPERATION_IGNORE_CACHE,
+					NULL);
+    assert(!r);
+
+    if (snap >= 0) {
+      context->io_ctx.snap_set_read(0);
+    }
+  }
+
+  void _finish(CallbackInfo *info)
+  {
+    context->state_lock.Lock();
+    assert(!done);
+    assert(completion->is_complete());
+    //context->oid_in_use.erase(oid);
+    //context->oid_not_in_use.insert(oid);
+    int r = completion->get_return_value();
+    cout << num << ":  got " << cpp_strerror(r) << std::endl;
+    if (r == 0) {
+      // yay!
+    } else if (r == -EBUSY) {
+      // raced with something that dirtied the object
+    } else if (r == -EINVAL) {
+      // caching not enabled?
+    } else if (r == -ENOENT) {
+      // may have raced with a remove?
+    } else {
+      assert(0 == "shouldn't happen");
+    }
+    context->kick();
+    done = true;
+    context->state_lock.Unlock();
+  }
+
+  bool finished()
+  {
+    return done;
+  }
+
+  string getType()
+  {
+    return "CacheEvictOp";
   }
 };
 

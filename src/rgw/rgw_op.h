@@ -64,9 +64,12 @@ public:
   virtual bool prefetch_data() { return false; }
   virtual int verify_permission() = 0;
   virtual int verify_op_mask();
+  virtual void pre_exec() {}
   virtual void execute() = 0;
   virtual void send_response() {}
-  virtual void complete() { send_response(); }
+  virtual void complete() {
+    send_response();
+  }
   virtual const string name() = 0;
 
   virtual uint32_t op_mask() { return 0; }
@@ -123,6 +126,7 @@ public:
     this->get_data = get_data;
   }
   int verify_permission();
+  void pre_exec();
   void execute();
   int read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs);
   int iterate_user_manifest_parts(rgw_bucket& bucket, string& obj_prefix, RGWAccessControlPolicy *bucket_policy,
@@ -217,6 +221,7 @@ public:
     is_truncated = false;
   }
   int verify_permission();
+  void pre_exec();
   void execute();
 
   virtual int get_params() = 0;
@@ -246,6 +251,7 @@ public:
   ~RGWStatBucket() {}
 
   int verify_permission();
+  void pre_exec();
   void execute();
 
   virtual void send_response() = 0;
@@ -268,6 +274,7 @@ public:
   RGWCreateBucket() : ret(0) {}
 
   int verify_permission();
+  void pre_exec();
   void execute();
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
@@ -289,6 +296,7 @@ public:
   RGWDeleteBucket() : ret(0) {}
 
   int verify_permission();
+  void pre_exec();
   void execute();
 
   virtual void send_response() = 0;
@@ -331,6 +339,7 @@ public:
   void dispose_processor(RGWPutObjProcessor *processor);
 
   int verify_permission();
+  void pre_exec();
   void execute();
 
   virtual int get_params() = 0;
@@ -370,6 +379,7 @@ public:
   }
 
   int verify_permission();
+  void pre_exec();
   void execute();
 
   RGWPutObjProcessor *select_processor();
@@ -402,12 +412,28 @@ public:
     policy.set_ctx(s->cct);
   }
   int verify_permission();
+  void pre_exec();
   void execute();
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
   virtual const string name() { return "put_obj_metadata"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWSetTempUrl : public RGWOp {
+protected:
+  int ret;
+  map<int, string> temp_url_keys;
+public:
+  RGWSetTempUrl() : ret(0) {}
+
+  int verify_permission();
+  void execute();
+
+  virtual int get_params() = 0;
+  virtual void send_response() = 0;
+  virtual const string name() { return "set_temp_url"; }
 };
 
 class RGWDeleteObj : public RGWOp {
@@ -418,6 +444,7 @@ public:
   RGWDeleteObj() : ret(0) {}
 
   int verify_permission();
+  void pre_exec();
   void execute();
 
   virtual void send_response() = 0;
@@ -486,6 +513,7 @@ public:
     dest_policy.set_ctx(s->cct);
   }
   int verify_permission();
+  void pre_exec();
   void execute();
   void progress_cb(off_t ofs);
 
@@ -506,6 +534,7 @@ public:
   RGWGetACLs() : ret(0) {}
 
   int verify_permission();
+  void pre_exec();
   void execute();
 
   virtual void send_response() = 0;
@@ -530,6 +559,7 @@ public:
   }
 
   int verify_permission();
+  void pre_exec();
   void execute();
 
   virtual int get_policy_from_state(RGWRados *store, struct req_state *s, stringstream& ss) { return 0; }
@@ -625,6 +655,7 @@ public:
     policy.set_ctx(s->cct);
   }
   int verify_permission();
+  void pre_exec();
   void execute();
 
   virtual int get_params() = 0;
@@ -654,6 +685,7 @@ public:
   }
 
   int verify_permission();
+  void pre_exec();
   void execute();
 
   virtual int get_params() = 0;
@@ -670,6 +702,7 @@ public:
   RGWAbortMultipart() : ret(0) {}
 
   int verify_permission();
+  void pre_exec();
   void execute();
 
   virtual void send_response() = 0;
@@ -698,6 +731,7 @@ public:
     policy = RGWAccessControlPolicy(s->cct);
   }
   int verify_permission();
+  void pre_exec();
   void execute();
 
   virtual int get_params() = 0;
@@ -801,6 +835,7 @@ public:
   }
 
   int verify_permission();
+  void pre_exec();
   void execute();
 
   virtual int get_params() = 0;
@@ -831,6 +866,7 @@ public:
     status_dumped = false;
   }
   int verify_permission();
+  void pre_exec();
   void execute();
 
   virtual int get_params() = 0;

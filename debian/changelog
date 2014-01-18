@@ -1,3 +1,33 @@
+ceph (0.75-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Ken Dreyer <kdreyer@jenkins.front.sepia.ceph.com>  Mon, 13 Jan 2014 21:05:07 +0000
+
+ceph (0.74-1) stable; urgency=low
+
+  * New upstream release 
+
+ -- Gary Lowell <glowell@jenkins.front.sepia.ceph.com>  Mon, 30 Dec 2013 21:02:35 +0000
+
+ceph (0.73-1) precise; urgency=low
+
+  * New upstream release 
+
+ -- Gary Lowell <gary.lowell@inktank.com>  Tue, 10 Dec 2013 04:55:06 +0000
+
+ceph (0.72-1) stable; urgency=low
+
+  * New upstream release
+
+ -- Gary Lowell <gary.lowell@inktank.com>  Thu, 07 Nov 2013 20:25:18 +0000
+
+ceph (0.72-rc1-1) stable; urgency=low
+
+  * New upstream release 
+
+ -- Gary Lowell <gary.lowell@inktank.com>  Wed, 30 Oct 2013 00:44:25 +0000
+
 ceph (0.71-1) stable; urgency=low
 
   * New upstream release 

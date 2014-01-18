@@ -428,10 +428,13 @@ struct RGWZoneParams {
   rgw_bucket user_uid_pool;
 
   string name;
+  bool is_master;
 
   RGWAccessKey system_key;
 
   map<string, RGWZonePlacementInfo> placement_pools;
+
+  RGWZoneParams() : is_master(false) {}
 
   static int get_pool_name(CephContext *cct, string *pool_name);
   void init_name(CephContext *cct, RGWRegion& region);
@@ -1260,6 +1263,8 @@ public:
                       off_t ofs, off_t end,
 	              RGWGetDataCB *cb);
 
+  int flush_read_list(struct get_obj_data *d);
+
   int get_obj_iterate_cb(void *ctx, RGWObjState *astate,
                          rgw_obj& obj,
                          off_t obj_ofs, off_t read_ofs, off_t len,
@@ -1332,6 +1337,7 @@ public:
   int get_bucket_instance_info(void *ctx, rgw_bucket& bucket, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
   int get_bucket_instance_from_oid(void *ctx, string& oid, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
 
+  int convert_old_bucket_info(void *ctx, string& bucket_name);
   virtual int get_bucket_info(void *ctx, string& bucket_name, RGWBucketInfo& info,
                               time_t *pmtime, map<string, bufferlist> *pattrs = NULL);
   virtual int put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, time_t mtime, obj_version *pep_objv,

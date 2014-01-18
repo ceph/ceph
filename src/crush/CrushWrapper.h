@@ -95,29 +95,32 @@ public:
     crush = crush_create();
     assert(crush);
     have_rmaps = false;
+
+    set_tunables_default();
   }
 
   // tunables
-  void set_tunables_legacy() {
+  void set_tunables_argonaut() {
     crush->choose_local_tries = 2;
     crush->choose_local_fallback_tries = 5;
     crush->choose_total_tries = 19;
     crush->chooseleaf_descend_once = 0;
   }
-  void set_tunables_optimal() {
+  void set_tunables_bobtail() {
     crush->choose_local_tries = 0;
     crush->choose_local_fallback_tries = 0;
     crush->choose_total_tries = 50;
     crush->chooseleaf_descend_once = 1;
   }
-  void set_tunables_argonaut() {
-    set_tunables_legacy();
+
+  void set_tunables_legacy() {
+    set_tunables_argonaut();
   }
-  void set_tunables_bobtail() {
-    set_tunables_optimal();
+  void set_tunables_optimal() {
+    set_tunables_bobtail();
   }
   void set_tunables_default() {
-    set_tunables_legacy();
+    set_tunables_bobtail();
   }
 
   int get_choose_local_tries() const {
@@ -148,6 +151,28 @@ public:
     crush->chooseleaf_descend_once = !!n;
   }
 
+  bool has_argonaut_tunables() const {
+    return
+      crush->choose_local_tries == 2 &&
+      crush->choose_local_fallback_tries == 5 &&
+      crush->choose_total_tries == 19 &&
+      crush->chooseleaf_descend_once == 0;
+  }
+  bool has_bobtail_tunables() const {
+    return
+      crush->choose_local_tries == 0 &&
+      crush->choose_local_fallback_tries == 0 &&
+      crush->choose_total_tries == 50 &&
+      crush->chooseleaf_descend_once == 1;
+  }
+
+  bool has_optimal_tunables() const {
+    return has_bobtail_tunables();
+  }
+  bool has_legacy_tunables() const {
+    return has_argonaut_tunables();
+  }
+
   bool has_nondefault_tunables() const {
     return
       (crush->choose_local_tries != 2 ||
@@ -158,6 +183,8 @@ public:
     return
       crush->chooseleaf_descend_once != 0;
   }
+  bool has_v2_rules() const;
+
 
   // bucket types
   int get_num_type_names() const {
@@ -296,6 +323,8 @@ public:
 
   /**
    * returns the (type, name) of the parent bucket of id
+   *
+   * FIXME: ambiguous for items that occur multiple times in the map
    */
   pair<string,string> get_immediate_parent(int id, int *ret = NULL);
   int get_immediate_parent_id(int id, int *parent);
@@ -337,7 +366,7 @@ public:
    * insert an item into the map at a specific position
    *
    * Add an item as a specific location of the hierarchy.
-   * Specifically, we look for the most specific location constriant
+   * Specifically, we look for the most specific location constraint
    * for which a bucket already exists, and then create intervening
    * buckets beneath that in order to place the item.
    *
@@ -444,6 +473,32 @@ private:
   int _remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
 public:
   int remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
+
+  /**
+   * calculate the locality/distance from a given id to a crush location map
+   *
+   * Specifically, we look for the lowest-valued type for which the
+   * location of id matches that described in loc.
+   *
+   * @param cct cct
+   * @param id the existing id in the map
+   * @param loc a set of key=value pairs describing a location in the hierarchy
+   */
+  int get_common_ancestor_distance(CephContext *cct, int id,
+				   const std::multimap<string,string>& loc);
+
+  /**
+   * parse a set of key/value pairs out of a string vector
+   *
+   * These are used to describe a location in the CRUSH hierarchy.
+   *
+   * @param args list of strings (each key= or key=value)
+   * @param ploc pointer to a resulting location map or multimap
+   */
+  static int parse_loc_map(const std::vector<string>& args,
+			   std::map<string,string> *ploc);
+  static int parse_loc_multimap(const std::vector<string>& args,
+				std::multimap<string,string> *ploc);
 
   /**
    * get an item's weight
@@ -563,6 +618,18 @@ public:
   int set_rule_step_take(unsigned ruleno, unsigned step, int val) {
     return set_rule_step(ruleno, step, CRUSH_RULE_TAKE, val, 0);
   }
+  int set_rule_step_set_choose_tries(unsigned ruleno, unsigned step, int val) {
+    return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSE_TRIES, val, 0);
+  }
+  int set_rule_step_set_choose_local_tries(unsigned ruleno, unsigned step, int val) {
+    return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSE_LOCAL_TRIES, val, 0);
+  }
+  int set_rule_step_set_choose_local_fallback_tries(unsigned ruleno, unsigned step, int val) {
+    return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSE_LOCAL_FALLBACK_TRIES, val, 0);
+  }
+  int set_rule_step_set_chooseleaf_tries(unsigned ruleno, unsigned step, int val) {
+    return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSELEAF_TRIES, val, 0);
+  }
   int set_rule_step_choose_firstn(unsigned ruleno, unsigned step, int val, int type) {
     return set_rule_step(ruleno, step, CRUSH_RULE_CHOOSE_FIRSTN, val, type);
   }
@@ -570,17 +637,17 @@ public:
     return set_rule_step(ruleno, step, CRUSH_RULE_CHOOSE_INDEP, val, type);
   }
   int set_rule_step_choose_leaf_firstn(unsigned ruleno, unsigned step, int val, int type) {
-    return set_rule_step(ruleno, step, CRUSH_RULE_CHOOSE_LEAF_FIRSTN, val, type);
+    return set_rule_step(ruleno, step, CRUSH_RULE_CHOOSELEAF_FIRSTN, val, type);
   }
   int set_rule_step_choose_leaf_indep(unsigned ruleno, unsigned step, int val, int type) {
-    return set_rule_step(ruleno, step, CRUSH_RULE_CHOOSE_LEAF_INDEP, val, type);
+    return set_rule_step(ruleno, step, CRUSH_RULE_CHOOSELEAF_INDEP, val, type);
   }
   int set_rule_step_emit(unsigned ruleno, unsigned step) {
     return set_rule_step(ruleno, step, CRUSH_RULE_EMIT, 0, 0);
   }
 
-  int add_simple_rule(string name, string root_name, string failure_domain_type,
-		      ostream *err = 0);
+  int add_simple_ruleset(string name, string root_name, string failure_domain_type,
+			 string mode, int rule_type, ostream *err = 0);
 
   int remove_rule(int ruleno);
 
@@ -620,7 +687,7 @@ private:
     if (!crush)
       return (-EINVAL);
 
-    if (item > 0)
+    if (item >= 0)
       return (-EINVAL);
 
     // check that the bucket that we want to detach exists
@@ -764,7 +831,8 @@ public:
 	       const vector<__u32>& weight) const {
     Mutex::Locker l(mapper_lock);
     int rawout[maxout];
-    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0], weight.size());
+    int scratch[maxout * 3];
+    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0], weight.size(), scratch);
     if (numrep < 0)
       numrep = 0;
     out.resize(numrep);
@@ -792,11 +860,16 @@ public:
   void decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator &blp);
   void dump(Formatter *f) const;
   void dump_rules(Formatter *f) const;
+  void dump_tunables(Formatter *f) const;
   void list_rules(Formatter *f) const;
+  void dump_tree(const vector<__u32>& w, ostream *out, Formatter *f) const;
   static void generate_test_instances(list<CrushWrapper*>& o);
 
+  static int get_osd_pool_default_crush_replicated_ruleset(CephContext *cct);
 
   static bool is_valid_crush_name(const string& s);
+  static bool is_valid_crush_loc(CephContext *cct,
+				 const map<string,string> loc);
 };
 WRITE_CLASS_ENCODER(CrushWrapper)
 

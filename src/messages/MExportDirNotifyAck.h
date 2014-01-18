@@ -26,9 +26,9 @@ class MExportDirNotifyAck : public Message {
   dirfrag_t get_dirfrag() { return dirfrag; }
   
   MExportDirNotifyAck() {}
-  MExportDirNotifyAck(dirfrag_t dirfrag) :
-    Message(MSG_MDS_EXPORTDIRNOTIFYACK) {
-    this->dirfrag = dirfrag;
+  MExportDirNotifyAck(dirfrag_t df, uint64_t tid) :
+    Message(MSG_MDS_EXPORTDIRNOTIFYACK), dirfrag(df) {
+    set_tid(tid);
   }
 private:
   ~MExportDirNotifyAck() {}

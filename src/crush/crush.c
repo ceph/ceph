@@ -6,6 +6,7 @@
 # include <assert.h>
 # define kfree(x) do { if (x) free(x); } while (0)
 # define BUG_ON(x) assert(!(x))
+# include "include/int_types.h"
 #endif
 
 #include "crush.h"
@@ -23,8 +24,8 @@ const char *crush_bucket_alg_name(int alg)
 
 /**
  * crush_get_bucket_item_weight - Get weight of an item in given bucket
- * @param b bucket pointer
- * @param p item index in bucket
+ * @b: bucket pointer
+ * @p: item index in bucket
  */
 int crush_get_bucket_item_weight(const struct crush_bucket *b, int p)
 {
@@ -97,7 +98,7 @@ void crush_destroy_bucket(struct crush_bucket *b)
 
 /**
  * crush_destroy - Destroy a crush_map
- * @param map crush_map pointer
+ * @map: crush_map pointer
  */
 void crush_destroy(struct crush_map *map)
 {

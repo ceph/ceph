@@ -29,6 +29,7 @@ CompatSet get_mdsmap_compat_set() {
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_FILELAYOUT);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_DIRINODE);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_ENCODING);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_OMAPDIRFRAG);
 
   return CompatSet(feature_compat, feature_ro_compat, feature_incompat);
 }
@@ -154,6 +155,7 @@ void MDSMap::print(ostream& out)
   out << "root\t" << root << "\n";
   out << "session_timeout\t" << session_timeout << "\n"
       << "session_autoclose\t" << session_autoclose << "\n";
+  out << "max_file_size\t" << max_file_size << "\n";
   out << "last_failure\t" << last_failure << "\n"
       << "last_failure_osd_epoch\t" << last_failure_osd_epoch << "\n";
   out << "compat\t" << compat << "\n";

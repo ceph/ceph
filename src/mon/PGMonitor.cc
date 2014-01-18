@@ -306,6 +306,7 @@ void PGMonitor::post_paxos_update()
 {
   if (mon->osdmon()->osdmap.get_epoch()) {
     map_pg_creates();
+    send_pg_creates();
   }
 }
 
@@ -1338,6 +1339,7 @@ void PGMonitor::dump_info(Formatter *f)
   f->close_section();
 
   f->dump_unsigned("pgmap_first_committed", get_first_committed());
+  f->dump_unsigned("pgmap_last_committed", get_last_committed());
 }
 
 bool PGMonitor::preprocess_command(MMonCommand *m)
@@ -1665,7 +1667,8 @@ bool PGMonitor::prepare_command(MMonCommand *m)
 
  update:
   getline(ss, rs);
-  wait_for_finished_proposal(new Monitor::C_Command(mon, m, r, rs, get_last_committed()));
+  wait_for_finished_proposal(new Monitor::C_Command(mon, m, r, rs,
+						    get_last_committed() + 1));
   return true;
 }
 

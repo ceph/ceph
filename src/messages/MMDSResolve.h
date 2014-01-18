@@ -23,7 +23,7 @@ class MMDSResolve : public Message {
  public:
   map<dirfrag_t, vector<dirfrag_t> > subtrees;
   map<dirfrag_t, vector<dirfrag_t> > ambiguous_imports;
-  vector<metareqid_t> slave_requests;
+  map<metareqid_t, bufferlist> slave_requests;
 
   MMDSResolve() : Message(MSG_MDS_RESOLVE) {}
 private:
@@ -50,7 +50,11 @@ public:
   }
 
   void add_slave_request(metareqid_t reqid) {
-    slave_requests.push_back(reqid);
+    slave_requests[reqid].clear();
+  }
+
+  void add_slave_request(metareqid_t reqid, bufferlist& bl) {
+    slave_requests[reqid].claim(bl);
   }
 
   void encode_payload(uint64_t features) {

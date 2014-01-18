@@ -556,6 +556,9 @@ class TestOSD(TestArgparse):
                                                     'poolname', 'objectname',
                                                     'toomany']))
 
+    def test_metadata(self):
+        self.check_1_natural_arg('osd', 'metadata')
+
     def test_scrub(self):
         self.check_1_string_arg('osd', 'scrub')
 
@@ -883,13 +886,7 @@ class TestOSD(TestArgparse):
                                    'poolname', '128', '128'])
         self.assert_valid_command(['osd', 'pool', 'create',
                                    'poolname', '128', '128',
-                                   'foo=bar'])
-        self.assert_valid_command(['osd', 'pool', 'create',
-                                   'poolname', '128', '128',
-                                   'foo=bar', 'baz=frob'])
-        self.assert_valid_command(['osd', 'pool', 'create',
-                                   'poolname', '128',
-                                   'foo=bar', 'baz=frob'])
+                                   'whatever'])
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create']))
         assert_equal({}, validate_command(sigdict, ['osd', 'pool', 'create',
                                                     'poolname']))

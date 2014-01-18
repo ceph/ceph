@@ -532,7 +532,7 @@ private:
   dirlump& add_import_dir(CDir *dir) {
     // dirty=false would be okay in some cases
     return add_dir(dir->dirfrag(), dir->get_projected_fnode(), dir->get_projected_version(),
-		   true, dir->is_complete(), false, true);
+		   dir->is_dirty(), dir->is_complete(), false, true);
   }
   dirlump& add_dir(dirfrag_t df, fnode_t *pf, version_t pv, bool dirty,
 		   bool complete=false, bool isnew=false, bool importing=false) {

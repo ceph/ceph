@@ -39,10 +39,12 @@ BuildRequires:	gdbm
 BuildRequires:	pkgconfig
 BuildRequires:	python
 BuildRequires:	python-nose
+BuildRequires:	python-argparse
 BuildRequires:  libaio-devel
 BuildRequires:  libcurl-devel
 BuildRequires:  libxml2-devel
 BuildRequires:  libuuid-devel
+BuildRequires:  libblkid-devel >= 2.17
 BuildRequires:  leveldb-devel > 1.2
 BuildRequires:  yasm
 %if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
@@ -392,6 +394,7 @@ fi
 %{_bindir}/ceph-authtool
 %{_bindir}/ceph-syn
 %{_bindir}/ceph-post-file
+%{_bindir}/ceph-crush-location
 %{_bindir}/ceph-run
 %{_bindir}/ceph-mon
 %{_bindir}/ceph-mds
@@ -413,6 +416,7 @@ fi
 %{_sbindir}/rcceph
 /sbin/mkcephfs
 /sbin/mount.ceph
+%{_libdir}/ceph
 %dir %{_libdir}/rados-classes
 %{_libdir}/rados-classes/libcls_rbd.so*
 %{_libdir}/rados-classes/libcls_hello.so*
@@ -424,14 +428,13 @@ fi
 %{_libdir}/rados-classes/libcls_replica_log.so*
 %{_libdir}/rados-classes/libcls_statelog.so*
 %{_libdir}/rados-classes/libcls_version.so*
-%dir %{_libdir}/erasure-code
-%{_libdir}/erasure-code/libec_example.so*
-%{_libdir}/erasure-code/libec_fail_to_initialize.so*
-%{_libdir}/erasure-code/libec_fail_to_register.so*
-%{_libdir}/erasure-code/libec_hangs.so*
-%{_libdir}/erasure-code/libec_jerasure.so*
-%{_libdir}/erasure-code/libec_missing_entry_point.so*
-%{_libdir}/ceph
+%dir %{_libdir}/ceph/erasure-code
+%{_libdir}/ceph/erasure-code/libec_example.so*
+%{_libdir}/ceph/erasure-code/libec_fail_to_initialize.so*
+%{_libdir}/ceph/erasure-code/libec_fail_to_register.so*
+%{_libdir}/ceph/erasure-code/libec_hangs.so*
+%{_libdir}/ceph/erasure-code/libec_jerasure.so*
+%{_libdir}/ceph/erasure-code/libec_missing_entry_point.so*
 /lib/udev/rules.d/50-rbd.rules
 /lib/udev/rules.d/60-ceph-partuuid-workaround.rules
 /lib/udev/rules.d/95-ceph-osd.rules
@@ -612,6 +615,7 @@ fi
 %{_bindir}/ceph_dupstore
 %{_bindir}/ceph_kvstorebench
 %{_bindir}/ceph_multi_stress_watch
+%{_bindir}/ceph_erasure_code_benchmark
 %{_bindir}/ceph_omapbench
 %{_bindir}/ceph_psim
 %{_bindir}/ceph_radosacl
@@ -624,7 +628,9 @@ fi
 %{_bindir}/ceph_smalliobenchfs
 %{_bindir}/ceph_smalliobenchrbd
 %{_bindir}/ceph_filestore_dump
+%{_bindir}/ceph_filestore_tool
 %{_bindir}/ceph_streamtest
+%{_bindir}/ceph_test_c_headers
 %{_bindir}/ceph_test_cfuse_cache_invalidate
 %{_bindir}/ceph_test_cls_hello
 %{_bindir}/ceph_test_cls_lock
@@ -644,6 +650,7 @@ fi
 %{_bindir}/ceph_test_filestore_idempotent
 %{_bindir}/ceph_test_filestore_idempotent_sequence
 %{_bindir}/ceph_test_filestore_workloadgen
+%{_bindir}/ceph_test_get_blkdev_size
 %{_bindir}/ceph_test_ioctls
 %{_bindir}/ceph_test_keyvaluedb_atomicity
 %{_bindir}/ceph_test_keyvaluedb_iterators
@@ -661,6 +668,7 @@ fi
 %{_bindir}/ceph_test_rados_api_list
 %{_bindir}/ceph_test_rados_api_lock
 %{_bindir}/ceph_test_rados_api_misc
+%{_bindir}/ceph_test_rados_api_tier
 %{_bindir}/ceph_test_rados_api_pool
 %{_bindir}/ceph_test_rados_api_snapshots
 %{_bindir}/ceph_test_rados_api_stat

@@ -76,5 +76,6 @@
     --pretty-format                    make json or xml output more readable
     --no-settle                        do not wait for udevadm to settle on map/unmap
     --no-progress                      do not show progress for long-running commands
+    -o, --options <map-options>        options to use when mapping an image
     --read-only                        set device readonly when mapping image
     --allow-shrink                     allow shrinking of an image when resizing

@@ -131,6 +131,7 @@ struct RGWUserAdminOpState {
   std::string caps;
   RGWObjVersionTracker objv;
   uint32_t op_mask;
+  map<int, string> temp_url_keys;
 
   // subuser attributes
   std::string subuser;
@@ -164,6 +165,7 @@ struct RGWUserAdminOpState {
   bool suspension_op;
   bool system_specified;
   bool key_op;
+  bool temp_url_key_specified;
 
   // req parameters
   bool populated;
@@ -244,6 +246,10 @@ struct RGWUserAdminOpState {
   void set_op_mask(uint32_t mask) {
     op_mask = mask;
     op_mask_specified = true;
+  }
+  void set_temp_url_key(const string& key, int index) {
+    temp_url_keys[index] = key;
+    temp_url_key_specified = true;
   }
   void set_key_type(int32_t type) {
     key_type = type;
@@ -337,6 +343,7 @@ struct RGWUserAdminOpState {
   std::string get_caps() { return caps; };
   std::string get_user_email() { return user_email; };
   std::string get_display_name() { return display_name; };
+  map<int, std::string>& get_temp_url_keys() { return temp_url_keys; };
 
   RGWUserInfo&  get_user_info() { return info; };
 
@@ -409,6 +416,7 @@ struct RGWUserAdminOpState {
     perm_specified = false;
     op_mask_specified = false;
     suspension_op = false;
+    system_specified = false;
     key_op = false;
     populated = false;
     initialized = false;
@@ -416,6 +424,7 @@ struct RGWUserAdminOpState {
     subuser_params_checked = false;
     user_params_checked = false;
     bucket_quota_specified = false;
+    temp_url_key_specified = false;
   }
 };
 

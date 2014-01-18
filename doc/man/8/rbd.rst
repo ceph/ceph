@@ -113,9 +113,15 @@ Parameters
 
    Make json or xml formatted output more human-readable.
 
+.. option:: -o map-options, --options map-options
+
+   Specifies which options to use when mapping an image.  map-options is
+   a comma-separated string of options (similar to mount(8) mount options).
+   See map options section below for more details.
+
 .. option:: --read-only
 
-   Set device readonly when mapping image.
+   Map the image read-only.  Equivalent to -o ro.
 
 
 Commands
@@ -143,7 +149,7 @@ Commands
   specified. Size will be the same as the parent snapshot.
 
   The parent snapshot must be protected (see `rbd snap protect`).
-  This requires format 2.
+  This requires image format 2.
 
 :command:`flatten` [*image-name*]
   If image is a clone, copy all shared blocks from the parent snapshot and
@@ -151,13 +157,13 @@ Commands
   parent snap and child.  The parent snapshot can be unprotected and
   deleted if it has no further dependent clones.
 
-  This requires format 2.
+  This requires image format 2.
 
 :command:`children` [*image-name*]
   List the clones of the image at the given snapshot. This checks
   every pool, and outputs the resulting poolname/imagename.
 
-  This requires format 2.
+  This requires image format 2.
 
 :command:`resize` [*image-name*] [--allow-shrink]
   Resizes rbd image. The size parameter also needs to be specified.
@@ -198,7 +204,7 @@ Commands
 
 :command:`cp` [*src-image*] [*dest-image*]
   Copies the content of a src-image into the newly created dest-image.
-  dest-image will have the same size, order, and format as src-image.
+  dest-image will have the same size, order, and image format as src-image.
 
 :command:`mv` [*src-image*] [*dest-image*]
   Renames an image.  Note: rename across pools is not supported.
@@ -226,16 +232,16 @@ Commands
   refer to this snapshot.  `rbd clone` will fail on a nonprotected
   snapshot.
 
-  This requires format 2.
+  This requires image format 2.
 
 :command:`snap` unprotect [*image-name*]
   Unprotect a snapshot from deletion (undo `snap protect`).  If cloned
   children remain, `snap unprotect` fails.  (Note that clones may exist
   in different pools than the parent snapshot.)
 
-  This requires format 2.
+  This requires image format 2.
 
-:command:`map` [*image-name*]
+:command:`map` [*image-name*] [-o | --options *map-options* ] [--read-only]
   Maps the specified image to a block device via the rbd kernel module.
 
 :command:`unmap` [*device-path*]
@@ -306,6 +312,35 @@ By default, [*stripe_unit*] is the same as the object size and [*stripe_count*] 
 used.
 
 
+Map options
+===========
+
+Most of these options are useful mainly for debugging and benchmarking.  The
+default values are set in the kernel and may therefore depend on the version of
+the running kernel.
+
+* fsid=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee - FSID that should be assumed by
+  the client.
+
+* ip=a.b.c.d[:p] - IP and, optionally, port the client should use.
+
+* share - Enable sharing of client instances with other mappings (default).
+
+* noshare - Disable sharing of client instances with other mappings.
+
+* crc - Enable CRC32C checksumming for data writes (default).
+
+* nocrc - Disable CRC32C checksumming for data writes.
+
+* osdkeepalive=x - OSD keepalive timeout (default is 5 seconds).
+
+* osd_idle_ttl=x - OSD idle TTL (default is 60 seconds).
+
+* rw - Map the image read-write (default).
+
+* ro - Map the image read-only.  Equivalent to --read-only.
+
+
 Examples
 ========
 
@@ -351,7 +386,7 @@ To unmap an image::
 
 To create an image and a clone from it::
 
-       rbd import --format 2 image mypool/parent
+       rbd import --image-format 2 image mypool/parent
        rbd snap create --snap snapname mypool/parent
        rbd snap protect mypool/parent@snap
        rbd clone mypool/parent@snap otherpool/child
@@ -360,11 +395,11 @@ To create an image with a smaller stripe_unit (to better distribute small writes
 
        rbd -p mypool create myimage --size 102400 --stripe-unit 65536 --stripe-count 16
 
-To change an image from one format to another, export it and then
-import it as the desired format::
+To change an image from one image format to another, export it and then
+import it as the desired image format::
 
        rbd export mypool/myimage@snap /tmp/img
-       rbd import --format 2 /tmp/img mypool/myimage2
+       rbd import --image-format 2 /tmp/img mypool/myimage2
 
 To lock an image for exclusive use::
 
@@ -378,7 +413,7 @@ To release a lock::
 Availability
 ============
 
-**rbd** is part of the Ceph distributed file system. Please refer to
+**rbd** is part of the Ceph distributed storage system. Please refer to
 the Ceph documentation at http://ceph.com/docs for more information.
 
 

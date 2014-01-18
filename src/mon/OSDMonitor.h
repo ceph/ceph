@@ -37,6 +37,8 @@ class Monitor;
 #include "messages/MOSDFailure.h"
 #include "messages/MPoolOp.h"
 
+#define OSD_METADATA_PREFIX "osd_metadata"
+
 /// information about a particular peer's failure reports for one osd
 struct failure_reporter_t {
   int num_reports;          ///< reports from this reporter
@@ -120,6 +122,8 @@ public:
 private:
   // [leader]
   OSDMap::Incremental pending_inc;
+  map<int, bufferlist> pending_metadata;
+  set<int>             pending_metadata_rm;
   map<int, failure_info_t> failure_info;
   map<int,utime_t>    down_pending_out;  // osd down -> out
 
@@ -200,8 +204,6 @@ private:
   void send_incremental(PaxosServiceMessage *m, epoch_t first);
   void send_incremental(epoch_t first, entity_inst_t& dest, bool onetime);
 
-  void remove_redundant_pg_temp();
-  void remove_down_pg_temp();
   int reweight_by_utilization(int oload, std::string& out_str);
 
   bool check_source(PaxosServiceMessage *m, uuid_d fsid);
@@ -227,16 +229,18 @@ private:
   bool prepare_pgtemp(class MOSDPGTemp *m);
 
   int _prepare_remove_pool(uint64_t pool);
-  int _prepare_rename_pool(uint64_t pool, string newname);
+  int _prepare_rename_pool(int64_t pool, string newname);
 
   bool preprocess_pool_op ( class MPoolOp *m);
   bool preprocess_pool_op_create ( class MPoolOp *m);
   bool prepare_pool_op (MPoolOp *m);
   bool prepare_pool_op_create (MPoolOp *m);
   bool prepare_pool_op_delete(MPoolOp *m);
-  int prepare_new_pool(string& name, uint64_t auid, int crush_rule,
+  int prepare_new_pool(string& name, uint64_t auid, int crush_ruleset,
                        unsigned pg_num, unsigned pgp_num,
-		       const vector<string> &properties);
+		       const vector<string> &properties,
+                       const unsigned pool_type,
+		       stringstream &ss);
   int prepare_new_pool(MPoolOp *m);
 
   void update_pool_flags(int64_t pool_id, uint64_t flags);
@@ -317,7 +321,6 @@ private:
   void tick();  // check state, take actions
 
   int parse_osd_id(const char *s, stringstream *pss);
-  void parse_loc_map(const vector<string>& args, map<string,string> *ploc);
 
   void get_health(list<pair<health_status_t,string> >& summary,
 		  list<pair<health_status_t,string> > *detail) const;
@@ -339,6 +342,7 @@ private:
   epoch_t blacklist(const entity_addr_t& a, utime_t until);
 
   void dump_info(Formatter *f);
+  int dump_osd_metadata(int osd, Formatter *f, ostream *err);
 
   void check_subs();
   void check_sub(Subscription *sub);

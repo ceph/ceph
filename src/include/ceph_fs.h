@@ -283,6 +283,8 @@ enum {
 	CEPH_SESSION_RENEWCAPS,
 	CEPH_SESSION_STALE,
 	CEPH_SESSION_RECALL_STATE,
+	CEPH_SESSION_FLUSHMSG,
+	CEPH_SESSION_FLUSHMSG_ACK,
 };
 
 extern const char *ceph_session_op_name(int op);
@@ -462,7 +464,8 @@ struct ceph_mds_reply_cap {
 	__u8 flags;                    /* CEPH_CAP_FLAG_* */
 } __attribute__ ((packed));
 
-#define CEPH_CAP_FLAG_AUTH  1          /* cap is issued by auth mds */
+#define CEPH_CAP_FLAG_AUTH	(1 << 0)	/* cap is issued by auth mds */
+#define CEPH_CAP_FLAG_RELEASE	(1 << 1)        /* ask client to release the cap */
 
 /* inode record, for bundling with mds reply */
 struct ceph_mds_reply_inode {
@@ -632,6 +635,15 @@ enum {
 
 extern const char *ceph_cap_op_name(int op);
 
+/* extra info for cap import/export */
+struct ceph_mds_cap_peer {
+	__le64 cap_id;
+	__le32 seq;
+	__le32 mseq;
+	__le32 mds;
+	__u8   flags;
+} __attribute__ ((packed));
+
 /*
  * caps message, used for capability callbacks, acks, requests, etc.
  */
@@ -655,12 +667,19 @@ struct ceph_mds_caps {
 	__le32 xattr_len;
 	__le64 xattr_version;
 
-	/* filelock */
-	__le64 size, max_size, truncate_size;
-	__le32 truncate_seq;
-	struct ceph_timespec mtime, atime, ctime;
-	struct ceph_file_layout layout;
-	__le32 time_warp_seq;
+	union {
+		/* all except export */
+		struct {
+			/* filelock */
+			__le64 size, max_size, truncate_size;
+			__le32 truncate_seq;
+			struct ceph_timespec mtime, atime, ctime;
+			struct ceph_file_layout layout;
+			__le32 time_warp_seq;
+		};
+		/* export message */
+		struct ceph_mds_cap_peer peer;
+	};
 } __attribute__ ((packed));
 
 /* cap release msg head */

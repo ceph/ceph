@@ -18,6 +18,9 @@
 #include <sstream>
 #include <stdio.h>
 #include <memory>
+#include <boost/scoped_ptr.hpp>
+
+#include "include/rados/rados_types.hpp"
 
 #include "msg/msg_types.h"
 #include "include/types.h"
@@ -25,9 +28,11 @@
 #include "include/CompatSet.h"
 #include "include/histogram.h"
 #include "include/interval_set.h"
-#include "common/snap_types.h"
 #include "common/Formatter.h"
+#include "common/bloom_filter.hpp"
 #include "common/hobject.h"
+#include "common/snap_types.h"
+#include "HitSet.h"
 #include "Watch.h"
 #include "OpRequest.h"
 
@@ -50,6 +55,11 @@ typedef hobject_t collection_list_handle_t;
 
 typedef uint8_t shard_id_t;
 
+/// convert a single CPEH_OSD_FLAG_* to a string
+const char *ceph_osd_flag_name(unsigned flag);
+
+/// convert CEPH_OSD_FLAG_* op flags to a string
+string ceph_osd_flag_string(unsigned flags);
 
 inline ostream& operator<<(ostream& out, const osd_reqid_t& r) {
   return out << r.name << "." << r.inc << ":" << r.tid;
@@ -87,20 +97,26 @@ namespace __gnu_cxx {
 // a locator constrains the placement of an object.  mainly, which pool
 // does it go in.
 struct object_locator_t {
-  int64_t pool;
-  string key;
-  string nspace;
+  // You specify either the hash or the key -- not both
+  int64_t pool;     ///< pool id
+  string key;       ///< key string (if non-empty)
+  string nspace;    ///< namespace
+  int64_t hash;     ///< hash position (if >= 0)
 
   explicit object_locator_t()
-    : pool(-1) {}
+    : pool(-1), hash(-1) {}
   explicit object_locator_t(int64_t po)
-    : pool(po) {}
+    : pool(po), hash(-1)  {}
+  explicit object_locator_t(int64_t po, int64_t ps)
+    : pool(po), hash(ps)  {}
   explicit object_locator_t(int64_t po, string ns)
-    : pool(po), nspace(ns) {}
+    : pool(po), nspace(ns), hash(-1) {}
+  explicit object_locator_t(int64_t po, string ns, int64_t ps)
+    : pool(po), nspace(ns), hash(ps) {}
   explicit object_locator_t(int64_t po, string ns, string s)
-    : pool(po), key(s), nspace(ns) {}
+    : pool(po), key(s), nspace(ns), hash(-1) {}
   explicit object_locator_t(const hobject_t& soid)
-    : pool(soid.pool), key(soid.get_key()), nspace(soid.nspace) {}
+    : pool(soid.pool), key(soid.get_key()), nspace(soid.nspace), hash(-1) {}
 
   int64_t get_pool() const {
     return pool;
@@ -110,6 +126,7 @@ struct object_locator_t {
     pool = -1;
     key = "";
     nspace = "";
+    hash = -1;
   }
 
   bool empty() const {
@@ -124,7 +141,7 @@ struct object_locator_t {
 WRITE_CLASS_ENCODER(object_locator_t)
 
 inline bool operator==(const object_locator_t& l, const object_locator_t& r) {
-  return l.pool == r.pool && l.key == r.key && l.nspace == r.nspace;
+  return l.pool == r.pool && l.key == r.key && l.nspace == r.nspace && l.hash == r.hash;
 }
 inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
   return !(l == r);
@@ -189,6 +206,7 @@ enum {
   CEPH_OSD_RMW_FLAG_CLASS_READ  = (1 << 3),
   CEPH_OSD_RMW_FLAG_CLASS_WRITE = (1 << 4),
   CEPH_OSD_RMW_FLAG_PGOP        = (1 << 5),
+  CEPH_OSD_RMW_FLAG_CACHE       = (1 << 6),
 };
 
 
@@ -199,13 +217,6 @@ enum {
 #define CEPH_DATA_NS           2
 #define CEPH_CAS_NS            3
 #define CEPH_OSDMETADATA_NS 0xff
-
-// poolsets
-enum {
-  CEPH_DATA_RULE,
-  CEPH_METADATA_RULE,
-  CEPH_RBD_RULE,
-};
 
 #define OSD_SUPERBLOCK_POBJECT hobject_t(sobject_t(object_t("osd_superblock"), 0))
 
@@ -231,7 +242,7 @@ struct pg_t {
   int32_t m_preferred;
 
   pg_t() : m_pool(0), m_seed(0), m_preferred(-1) {}
-  pg_t(ps_t seed, uint64_t pool, int pref) {
+  pg_t(ps_t seed, uint64_t pool, int pref=-1) {
     m_seed = seed;
     m_pool = pool;
     m_preferred = pref;
@@ -537,32 +548,32 @@ inline ostream& operator<<(ostream& out, const eversion_t e) {
 }
 
 /**
- * filestore_perf_stat_t
+ * objectstore_perf_stat_t
  *
  * current perf information about the osd
  */
-struct filestore_perf_stat_t {
+struct objectstore_perf_stat_t {
   // cur_op_latency is in ms since double add/sub are not associative
   uint32_t filestore_commit_latency;
   uint32_t filestore_apply_latency;
 
-  filestore_perf_stat_t() :
+  objectstore_perf_stat_t() :
     filestore_commit_latency(0), filestore_apply_latency(0) {}
 
-  void add(const filestore_perf_stat_t &o) {
+  void add(const objectstore_perf_stat_t &o) {
     filestore_commit_latency += o.filestore_commit_latency;
     filestore_apply_latency += o.filestore_apply_latency;
   }
-  void sub(const filestore_perf_stat_t &o) {
+  void sub(const objectstore_perf_stat_t &o) {
     filestore_commit_latency -= o.filestore_commit_latency;
     filestore_apply_latency -= o.filestore_apply_latency;
   }
   void dump(Formatter *f) const;
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
-  static void generate_test_instances(std::list<filestore_perf_stat_t*>& o);
+  static void generate_test_instances(std::list<objectstore_perf_stat_t*>& o);
 };
-WRITE_CLASS_ENCODER(filestore_perf_stat_t)
+WRITE_CLASS_ENCODER(objectstore_perf_stat_t)
 
 /** osd_stat
  * aggregate stats for an osd
@@ -574,7 +585,7 @@ struct osd_stat_t {
 
   pow2_hist_t op_queue_age_hist;
 
-  filestore_perf_stat_t fs_perf_stat;
+  objectstore_perf_stat_t fs_perf_stat;
 
   osd_stat_t() : kb(0), kb_used(0), kb_avail(0),
 		 snap_trim_queue_len(0), num_snap_trimming(0) {}
@@ -686,18 +697,23 @@ inline ostream& operator<<(ostream& out, const pool_snap_info_t& si) {
  */
 struct pg_pool_t {
   enum {
-    TYPE_REP = 1,     // replication
-    TYPE_RAID4 = 2,   // raid4 (never implemented)
+    TYPE_REPLICATED = 1,     // replication
+    //TYPE_RAID4 = 2,   // raid4 (never implemented)
+    TYPE_ERASURE = 3,      // erasure-coded
   };
   static const char *get_type_name(int t) {
     switch (t) {
-    case TYPE_REP: return "rep";
-    case TYPE_RAID4: return "raid4";
+    case TYPE_REPLICATED: return "replicated";
+      //case TYPE_RAID4: return "raid4";
+    case TYPE_ERASURE: return "erasure";
     default: return "???";
     }
   }
   const char *get_type_name() const {
     return get_type_name(type);
+  }
+  static const char* get_default_type() {
+    return "replicated";
   }
 
   enum {
@@ -730,14 +746,14 @@ struct pg_pool_t {
   typedef enum {
     CACHEMODE_NONE = 0,                  ///< no caching
     CACHEMODE_WRITEBACK = 1,             ///< write to cache, flush later
-    CACHEMODE_INVALIDATE_FORWARD = 2,    ///< delete from cache, forward write
+    CACHEMODE_FORWARD = 2,               ///< forward if not in cache
     CACHEMODE_READONLY = 3,              ///< handle reads, forward writes [not strongly consistent]
   } cache_mode_t;
   static const char *get_cache_mode_name(cache_mode_t m) {
     switch (m) {
     case CACHEMODE_NONE: return "none";
     case CACHEMODE_WRITEBACK: return "writeback";
-    case CACHEMODE_INVALIDATE_FORWARD: return "invalidate+forward";
+    case CACHEMODE_FORWARD: return "forward";
     case CACHEMODE_READONLY: return "readonly";
     default: return "unknown";
     }
@@ -747,8 +763,8 @@ struct pg_pool_t {
       return CACHEMODE_NONE;
     if (s == "writeback")
       return CACHEMODE_WRITEBACK;
-    if (s == "invalidate+forward")
-      return CACHEMODE_INVALIDATE_FORWARD;
+    if (s == "forward")
+      return CACHEMODE_FORWARD;
     if (s == "readonly")
       return CACHEMODE_READONLY;
     return (cache_mode_t)-1;
@@ -757,25 +773,25 @@ struct pg_pool_t {
     return get_cache_mode_name(cache_mode);
   }
 
-  uint64_t flags;           /// FLAG_* 
-  __u8 type;                /// TYPE_*
-  __u8 size, min_size;      /// number of osds in each pg
-  __u8 crush_ruleset;       /// crush placement rule set
-  __u8 object_hash;         /// hash mapping object name to ps
+  uint64_t flags;           ///< FLAG_*
+  __u8 type;                ///< TYPE_*
+  __u8 size, min_size;      ///< number of osds in each pg
+  __u8 crush_ruleset;       ///< crush placement rule set
+  __u8 object_hash;         ///< hash mapping object name to ps
 private:
-  __u32 pg_num, pgp_num;    /// number of pgs
+  __u32 pg_num, pgp_num;    ///< number of pgs
 
 
 public:
-  map<string,string> properties;  /// interpreted according to the pool type
-  epoch_t last_change;      /// most recent epoch changed, exclusing snapshot changes
-  snapid_t snap_seq;        /// seq for per-pool snapshot
-  epoch_t snap_epoch;       /// osdmap epoch of last snap
-  uint64_t auid;            /// who owns the pg
-  __u32 crash_replay_interval; /// seconds to allow clients to replay ACKed but unCOMMITted requests
+  map<string,string> properties;  ///< interpreted according to the pool type
+  epoch_t last_change;      ///< most recent epoch changed, exclusing snapshot changes
+  snapid_t snap_seq;        ///< seq for per-pool snapshot
+  epoch_t snap_epoch;       ///< osdmap epoch of last snap
+  uint64_t auid;            ///< who owns the pg
+  __u32 crash_replay_interval; ///< seconds to allow clients to replay ACKed but unCOMMITted requests
 
-  uint64_t quota_max_bytes; /// maximum number of bytes for this pool
-  uint64_t quota_max_objects; /// maximum number of objects for this pool
+  uint64_t quota_max_bytes; ///< maximum number of bytes for this pool
+  uint64_t quota_max_objects; ///< maximum number of objects for this pool
 
   /*
    * Pool snaps (global to this pool).  These define a SnapContext for
@@ -800,13 +816,16 @@ public:
   int64_t write_tier;      ///< pool/tier for objecter to direct writes to
   cache_mode_t cache_mode;  ///< cache pool mode
 
-
   bool is_tier() const { return tier_of >= 0; }
   void clear_tier() { tier_of = -1; }
   bool has_read_tier() const { return read_tier >= 0; }
   void clear_read_tier() { read_tier = -1; }
   bool has_write_tier() const { return write_tier >= 0; }
   void clear_write_tier() { write_tier = -1; }
+
+  HitSet::Params hit_set_params; ///< The HitSet params to use on this pool
+  uint32_t hit_set_period;      ///< periodicity of HitSet segments (seconds)
+  uint32_t hit_set_count;       ///< number of periods to retain
 
   pg_pool_t()
     : flags(0), type(0), size(0), min_size(0),
@@ -819,7 +838,10 @@ public:
       quota_max_bytes(0), quota_max_objects(0),
       pg_num_mask(0), pgp_num_mask(0),
       tier_of(-1), read_tier(-1), write_tier(-1),
-      cache_mode(CACHEMODE_NONE)
+      cache_mode(CACHEMODE_NONE),
+      hit_set_params(),
+      hit_set_period(0),
+      hit_set_count(0)
   { }
 
   void dump(Formatter *f) const;
@@ -842,8 +864,19 @@ public:
   void set_snap_seq(snapid_t s) { snap_seq = s; }
   void set_snap_epoch(epoch_t e) { snap_epoch = e; }
 
-  bool is_rep()   const { return get_type() == TYPE_REP; }
-  bool is_raid4() const { return get_type() == TYPE_RAID4; }
+  bool is_replicated()   const { return get_type() == TYPE_REPLICATED; }
+  bool is_erasure() const { return get_type() == TYPE_ERASURE; }
+
+  bool can_shift_osds() const {
+    switch (get_type()) {
+    case TYPE_REPLICATED:
+      return true;
+    case TYPE_ERASURE:
+      return false;
+    default:
+      assert(0 == "unhandled pool type");
+    }
+  }
 
   unsigned get_pg_num() const { return pg_num; }
   unsigned get_pgp_num() const { return pgp_num; }
@@ -904,6 +937,12 @@ public:
 
   SnapContext get_snap_context() const;
 
+  /// hash a object name+namespace key to a hash position
+  uint32_t hash_key(const string& key, const string& ns) const;
+
+  /// round a hash position down to a pg num
+  uint32_t raw_hash_to_pg(uint32_t v) const;
+
   /*
    * map a raw pg (with full precision ps) into an actual pg, for storage
    */
@@ -947,6 +986,8 @@ struct object_stat_sum_t {
   int64_t num_objects_recovered;
   int64_t num_bytes_recovered;
   int64_t num_keys_recovered;
+  int64_t num_objects_dirty;
+  int64_t num_whiteouts;
 
   object_stat_sum_t()
     : num_bytes(0),
@@ -957,7 +998,9 @@ struct object_stat_sum_t {
       num_deep_scrub_errors(0),
       num_objects_recovered(0),
       num_bytes_recovered(0),
-      num_keys_recovered(0)
+      num_keys_recovered(0),
+      num_objects_dirty(0),
+      num_whiteouts(0)
   {}
 
   void floor(int64_t f) {
@@ -979,6 +1022,8 @@ struct object_stat_sum_t {
     FLOOR(num_objects_recovered);
     FLOOR(num_bytes_recovered);
     FLOOR(num_keys_recovered);
+    FLOOR(num_objects_dirty);
+    FLOOR(num_whiteouts);
 #undef FLOOR
   }
 
@@ -1202,6 +1247,51 @@ struct pool_stat_t {
 WRITE_CLASS_ENCODER_FEATURES(pool_stat_t)
 
 
+// -----------------------------------------
+
+/**
+ * pg_hit_set_info_t - information about a single recorded HitSet
+ *
+ * Track basic metadata about a HitSet, like the nubmer of insertions
+ * and the time range it covers.
+ */
+struct pg_hit_set_info_t {
+  utime_t begin, end;   ///< time interval
+  eversion_t version;   ///< version this HitSet object was written
+
+  pg_hit_set_info_t() {}
+  pg_hit_set_info_t(utime_t b)
+    : begin(b) {}
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_hit_set_info_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_hit_set_info_t)
+
+/**
+ * pg_hit_set_history_t - information about a history of hitsets
+ *
+ * Include information about the currently accumulating hit set as well
+ * as archived/historical ones.
+ */
+struct pg_hit_set_history_t {
+  eversion_t current_last_update;  ///< last version inserted into current set
+  utime_t current_last_stamp;      ///< timestamp of last insert
+  pg_hit_set_info_t current_info;  ///< metadata about the current set
+  list<pg_hit_set_info_t> history; ///< archived sets, sorted oldest -> newest
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_hit_set_history_t*>& o);
+};
+WRITE_CLASS_ENCODER(pg_hit_set_history_t)
+
+
+// -----------------------------------------
+
 /**
  * pg_history_t - information about recent pg peering/mapping history
  *
@@ -1318,6 +1408,7 @@ struct pg_info_t {
   pg_stat_t stats;
 
   pg_history_t history;
+  pg_hit_set_history_t hit_set;
 
   pg_info_t()
     : last_epoch_started(0), last_user_version(0),
@@ -1332,7 +1423,7 @@ struct pg_info_t {
   bool is_empty() const { return last_update.version == 0; }
   bool dne() const { return history.epoch_created == 0; }
 
-  bool is_incomplete() const { return last_backfill != hobject_t::get_max(); }
+  bool is_incomplete() const { return !last_backfill.is_max(); }
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
@@ -1490,18 +1581,22 @@ inline ostream& operator<<(ostream& out, const pg_query_t& q) {
  */
 struct pg_log_entry_t {
   enum {
-    MODIFY = 1,
-    CLONE = 2,
-    DELETE = 3,
+    MODIFY = 1,   // some unspecified modification (but not *all* modifications)
+    CLONE = 2,    // cloned object from head
+    DELETE = 3,   // deleted object
     BACKLOG = 4,  // event invented by generate_backlog [deprecated]
     LOST_REVERT = 5, // lost new version, revert to an older version.
     LOST_DELETE = 6, // lost new version, revert to no object (deleted).
     LOST_MARK = 7,   // lost new version, now EIO
+    PROMOTE = 8,     // promoted object from another tier
+    CLEAN = 9,       // mark an object clean
   };
   static const char *get_op_name(int op) {
     switch (op) {
     case MODIFY:
       return "modify  ";
+    case PROMOTE:
+      return "promote ";
     case CLONE:
       return "clone   ";
     case DELETE:
@@ -1514,6 +1609,8 @@ struct pg_log_entry_t {
       return "l_delete";
     case LOST_MARK:
       return "l_mark  ";
+    case CLEAN:
+      return "clean   ";
     default:
       return "unknown ";
     }
@@ -1548,13 +1645,17 @@ struct pg_log_entry_t {
       
   bool is_clone() const { return op == CLONE; }
   bool is_modify() const { return op == MODIFY; }
+  bool is_promote() const { return op == PROMOTE; }
+  bool is_clean() const { return op == CLEAN; }
   bool is_backlog() const { return op == BACKLOG; }
   bool is_lost_revert() const { return op == LOST_REVERT; }
   bool is_lost_delete() const { return op == LOST_DELETE; }
   bool is_lost_mark() const { return op == LOST_MARK; }
 
   bool is_update() const {
-    return is_clone() || is_modify() || is_backlog() || is_lost_revert() || is_lost_mark();
+    return
+      is_clone() || is_modify() || is_promote() || is_clean() ||
+      is_backlog() || is_lost_revert() || is_lost_mark();
   }
   bool is_delete() const {
     return op == DELETE || op == LOST_DELETE;
@@ -1857,8 +1958,14 @@ struct object_copy_data_t {
   utime_t mtime;
   map<string, bufferlist> attrs;
   bufferlist data;
+  bufferlist omap_header;
   map<string, bufferlist> omap;
   string category;
+
+  /// which snaps we are defined for (if a snap and not the head)
+  vector<snapid_t> snaps;
+  ///< latest snap seq for the object (if head)
+  snapid_t snap_seq;
 public:
   object_copy_data_t() : size((uint64_t)-1) {}
 
@@ -1956,11 +2063,12 @@ public:
   // last interval over which i mounted and was then active
   epoch_t mounted;     // last epoch i mounted
   epoch_t clean_thru;  // epoch i was active and clean thru
+  epoch_t last_map_marked_full; // last epoch osdmap was marked full
 
   OSDSuperblock() : 
     whoami(-1), 
     current_epoch(0), oldest_map(0), newest_map(0), weight(0),
-    mounted(0), clean_thru(0) {
+    mounted(0), clean_thru(0), last_map_marked_full(0) {
   }
 
   void encode(bufferlist &bl) const;
@@ -2007,6 +2115,9 @@ struct SnapSet {
     bufferlist::iterator p = bl.begin();
     decode(p);
   }
+
+  /// populate SnapSet from a librados::snap_set_t
+  void from_snap_set(const librados::snap_set_t& ss);
     
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
@@ -2201,7 +2312,7 @@ public:
   int unstable_writes, readers, writers_waiting, readers_waiting;
 
   /// in-progress copyfrom ops for this object
-  int copyfrom_readside;
+  bool blocked;
 
   // set if writes for this object are blocked on another objects recovery
   ObjectContextRef blocked_by;      // object blocking our writes
@@ -2216,9 +2327,21 @@ public:
       RWREAD,
       RWWRITE
     };
-    State state;                 /// rw state
-    uint64_t count;              /// number of readers or writers
-    list<OpRequestRef> waiters;  /// ops waiting on state change
+    static const char *get_state_name(State s) {
+      switch (s) {
+      case RWNONE: return "none";
+      case RWREAD: return "read";
+      case RWWRITE: return "write";
+      default: return "???";
+      }
+    }
+    const char *get_state_name() const {
+      return get_state_name(state);
+    }
+
+    State state;                 ///< rw state
+    uint64_t count;              ///< number of readers or writers
+    list<OpRequestRef> waiters;  ///< ops waiting on state change
 
     /// if set, restart backfill when we can get a read lock
     bool backfill_read_marker;
@@ -2337,7 +2460,7 @@ public:
       destructor_callback(0),
       lock("ReplicatedPG::ObjectContext::lock"),
       unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0),
-      copyfrom_readside(0) {}
+      blocked(false) {}
 
   ~ObjectContext() {
     assert(rwstate.empty());
@@ -2345,8 +2468,16 @@ public:
       destructor_callback->complete(0);
   }
 
+  void start_block() {
+    assert(!blocked);
+    blocked = true;
+  }
+  void stop_block() {
+    assert(blocked);
+    blocked = false;
+  }
   bool is_blocked() const {
-    return copyfrom_readside > 0;
+    return blocked;
   }
 
   // do simple synchronous mutual exclusion, for now.  now waitqueues or anything fancy.
@@ -2386,7 +2517,7 @@ public:
   }
 };
 
-inline ostream& operator<<(ostream& out, ObjectState& obs)
+inline ostream& operator<<(ostream& out, const ObjectState& obs)
 {
   out << obs.oi.soid;
   if (!obs.exists)
@@ -2394,9 +2525,17 @@ inline ostream& operator<<(ostream& out, ObjectState& obs)
   return out;
 }
 
-inline ostream& operator<<(ostream& out, ObjectContext& obc)
+inline ostream& operator<<(ostream& out, const ObjectContext::RWState& rw)
 {
-  return out << "obc(" << obc.obs << ")";
+  return out << "rwstate(" << rw.get_state_name()
+	     << " n=" << rw.count
+	     << " w=" << rw.waiters.size()
+	     << ")";
+}
+
+inline ostream& operator<<(ostream& out, const ObjectContext& obc)
+{
+  return out << "obc(" << obc.obs << " " << obc.rwstate << ")";
 }
 
 

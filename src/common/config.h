@@ -29,6 +29,11 @@ extern struct ceph_file_layout g_default_file_layout;
 #include "common/config_obs.h"
 #include "msg/msg_types.h"
 
+enum {
+  CEPH_DEFAULT_CRUSH_REPLICATED_RULESET,
+  CEPH_DEFAULT_CRUSH_ERASURE_RULESET,
+};
+
 #define OSD_REP_PRIMARY 0
 #define OSD_REP_SPLAY   1
 #define OSD_REP_CHAIN   2
@@ -168,9 +173,13 @@ private:
 
   void init_subsys();
 
-  // Expand metavariables in the provided string.
-  // Returns true if any metavariables were found and expanded.
-  bool expand_meta(std::string &val) const;
+  bool expand_meta(std::string &val,
+		   std::ostream *oss) const;
+
+  bool expand_meta(std::string &val,
+		   config_option *opt,
+		   std::list<config_option *> stack,
+		   std::ostream *oss) const;
 
   /// expand all metavariables in config structure.
   void expand_all_meta();
@@ -228,6 +237,8 @@ public:
    * It is best if this lock comes first in the lock hierarchy. We will
    * hold this lock when calling configuration observers.  */
   mutable Mutex lock;
+
+  friend class test_md_config_t;
 };
 
 typedef enum {

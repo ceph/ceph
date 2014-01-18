@@ -32,6 +32,16 @@ public:
 
   virtual ~ErasureCodeJerasure() {}
   
+  virtual unsigned int get_chunk_count() const {
+    return k + m;
+  }
+
+  virtual unsigned int get_data_chunk_count() const {
+    return k;
+  }
+
+  virtual unsigned int get_chunk_size(unsigned int object_size) const;
+
   virtual int minimum_to_decode(const set<int> &want_to_read,
                                 const set<int> &available_chunks,
                                 set<int> *minimum);
@@ -56,7 +66,7 @@ public:
                                char **data,
                                char **coding,
                                int blocksize) = 0;
-  virtual unsigned get_alignment() = 0;
+  virtual unsigned get_alignment() const = 0;
   virtual void parse(const map<std::string,std::string> &parameters) = 0;
   virtual void prepare() = 0;
   static int to_int(const std::string &name,
@@ -88,7 +98,7 @@ public:
                                char **data,
                                char **coding,
                                int blocksize);
-  virtual unsigned get_alignment();
+  virtual unsigned get_alignment() const;
   virtual void parse(const map<std::string,std::string> &parameters);
   virtual void prepare();
 };
@@ -115,7 +125,7 @@ public:
                                char **data,
                                char **coding,
                                int blocksize);
-  virtual unsigned get_alignment();
+  virtual unsigned get_alignment() const;
   virtual void parse(const map<std::string,std::string> &parameters);
   virtual void prepare();
 };
@@ -125,7 +135,7 @@ public:
   static const int DEFAULT_K = 7;
   static const int DEFAULT_M = 3;
   static const int DEFAULT_W = 8;
-  static const int DEFAULT_PACKETSIZE = 8;
+  static const int DEFAULT_PACKETSIZE = 2048;
   int *bitmatrix;
   int **schedule;
   int packetsize;
@@ -149,7 +159,7 @@ public:
                                char **data,
                                char **coding,
                                int blocksize);
-  virtual unsigned get_alignment();
+  virtual unsigned get_alignment() const;
   virtual void parse(const map<std::string,std::string> &parameters);
   void prepare_schedule(int *matrix);
 };
@@ -177,7 +187,7 @@ public:
   static const int DEFAULT_K = 2;
   static const int DEFAULT_M = 2;
   static const int DEFAULT_W = 7;
-  static const int DEFAULT_PACKETSIZE = 8;
+  static const int DEFAULT_PACKETSIZE = 2048;
   int *bitmatrix;
   int **schedule;
   int packetsize;
@@ -196,7 +206,7 @@ public:
                                char **data,
                                char **coding,
                                int blocksize);
-  virtual unsigned get_alignment();
+  virtual unsigned get_alignment() const;
   virtual void parse(const map<std::string,std::string> &parameters);
   virtual void prepare();
 };

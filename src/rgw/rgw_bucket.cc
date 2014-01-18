@@ -194,11 +194,21 @@ int rgw_bucket_instance_remove_entry(RGWRados *store, string& entry, RGWObjVersi
   return store->meta_mgr->remove_entry(bucket_instance_meta_handler, entry, objv_tracker);
 }
 
-int rgw_bucket_set_attrs(RGWRados *store, rgw_bucket& bucket,
+int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
                          map<string, bufferlist>& attrs,
                          map<string, bufferlist>* rmattrs,
                          RGWObjVersionTracker *objv_tracker)
 {
+  rgw_bucket& bucket = bucket_info.bucket;
+
+  if (!bucket_info.has_instance_obj) {
+    /* an old bucket object, need to convert it */
+    int ret = store->convert_old_bucket_info(NULL, bucket.name);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: failed converting old bucket info: " << ret << dendl;
+      return ret;
+    }
+  }
   string oid;
   store->get_bucket_meta_oid(bucket, oid);
   rgw_obj obj(store->zone.domain_root, oid);
@@ -717,17 +727,9 @@ int RGWBucket::check_index(RGWBucketAdminOpState& op_state,
   return 0;
 }
 
-int RGWBucket::get_policy(RGWBucketAdminOpState& op_state, ostream& o)
+
+int RGWBucket::policy_bl_to_stream(bufferlist& bl, ostream& o)
 {
-  std::string object_name = op_state.get_object_name();
-  rgw_bucket bucket = op_state.get_bucket();
-
-  bufferlist bl;
-  rgw_obj obj(bucket, object_name);
-  int ret = store->get_attr(NULL, obj, RGW_ATTR_ACL, bl);
-  if (ret < 0)
-    return ret;
-
   RGWAccessControlPolicy_S3 policy(g_ceph_context);
   bufferlist::iterator iter = bl.begin();
   try {
@@ -737,8 +739,38 @@ int RGWBucket::get_policy(RGWBucketAdminOpState& op_state, ostream& o)
     return -EIO;
   }
   policy.to_xml(o);
-
   return 0;
+}
+
+int RGWBucket::get_policy(RGWBucketAdminOpState& op_state, ostream& o)
+{
+  std::string object_name = op_state.get_object_name();
+  rgw_bucket bucket = op_state.get_bucket();
+
+  if (!object_name.empty()) {
+    bufferlist bl;
+    rgw_obj obj(bucket, object_name);
+    int ret = store->get_attr(NULL, obj, RGW_ATTR_ACL, bl);
+    if (ret < 0)
+      return ret;
+
+    return policy_bl_to_stream(bl, o);
+  }
+
+
+  RGWBucketInfo bucket_info;
+  map<string, bufferlist> attrs;
+  int ret = store->get_bucket_info(NULL, bucket.name, bucket_info, NULL, &attrs);
+  if (ret < 0) {
+    return ret;
+  }
+
+  map<string, bufferlist>::iterator aiter = attrs.find(RGW_ATTR_ACL);
+  if (aiter == attrs.end()) {
+    return -ENOENT;
+  }
+
+  return policy_bl_to_stream(aiter->second, o);
 }
 
 

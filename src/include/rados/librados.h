@@ -1,3 +1,17 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2012 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+ */
+
 #ifndef CEPH_LIBRADOS_H
 #define CEPH_LIBRADOS_H
 
@@ -13,6 +27,8 @@ extern "C" {
 #endif
 #include <string.h>
 #include "rados_types.h"
+
+#include <sys/time.h>
 
 #ifndef CEPH_OSD_TMAP_SET
 /* These are also defined in rados.h and objclass.h. Keep them in sync! */
@@ -37,9 +53,11 @@ extern "C" {
  */
 #define LIBRADOS_LOCK_FLAG_RENEW 0x1
 
+#define LIBRADOS_CREATE_EXCLUSIVE 1
+#define LIBRADOS_CREATE_IDEMPOTENT 0
+
 /**
  * @defgroup librados_h_xattr_comp xattr comparison operations
- * @note BUG: there's no way to use these in the C api
  * @{
  */
 /** @cond TODO_enums_not_yet_in_asphyxiate */
@@ -162,6 +180,23 @@ struct rados_cluster_stat_t {
   uint64_t kb, kb_used, kb_avail;
   uint64_t num_objects;
 };
+
+/**
+ * @typedef rados_write_op_t
+ *
+ * An object write operation stores a number of operations which can be
+ * executed atomically. For usage, see:
+ * - Creation and deletion: rados_create_write_op() rados_release_write_op()
+ * - Extended attribute manipulation: rados_write_op_cmpxattr()
+ *   rados_write_op_cmpxattr(), rados_write_op_setxattr(),
+ *   rados_write_op_rmxattr()
+ * - Creating objects: rados_write_op_create()
+ * - IO on objects: rados_write_op_append(), rados_write_op_write(), rados_write_op_zero
+ *   rados_write_op_write_full(), rados_write_op_remove, rados_write_op_truncate(),
+ *   rados_write_op_zero()
+ * - Performing the operation: rados_write_op_operate(), rados_aio_write_op_operate()
+ */
+typedef void *rados_write_op_t;
 
 /**
  * Get the version of librados.
@@ -702,6 +737,23 @@ void rados_ioctx_set_namespace(rados_ioctx_t io, const char *nspace);
 int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *ctx);
 
 /**
+ * Return hash position of iterator, rounded to the current PG
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @returns current hash position, rounded to the current pg
+ */
+uint32_t rados_objects_list_get_pg_hash_position(rados_list_ctx_t ctx);
+
+/**
+ * Reposition object iterator to a different hash position
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @param pos hash position to move to
+ * @returns actual (rounded) position we moved to
+ */
+uint32_t rados_objects_list_seek(rados_list_ctx_t ctx, uint32_t pos);
+
+/**
  * Get the next object name and locator in the pool
  *
  * *entry and *key are valid until next call to rados_objects_list_*
@@ -927,6 +979,7 @@ uint64_t rados_get_last_version(rados_ioctx_t io);
 /**
  * Write data to an object
  *
+ * @note This will never return a positive value not equal to len.
  * @param io the io context in which the write will occur
  * @param oid name of the object
  * @param buf data to write
@@ -1629,6 +1682,153 @@ int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t handle);
  * @returns 0 on success, negative error code on failure
  */
 int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf, int buf_len);
+
+/** @} Atomic write operations */
+
+/**
+ * Create a new rados_write_op_t write operation. This will store all actions
+ * to be performed atomically. You must call rados_release_write_op when you are
+ * finished with it.
+ *
+ * @returns non-NULL on success, NULL on memory allocation error.
+ */
+rados_write_op_t rados_create_write_op();
+
+/**
+ * Free a rados_write_op_t, must be called when you're done with it.
+ * @param write_op operation to deallocate, created with rados_create_write_op
+ */
+void rados_release_write_op(rados_write_op_t write_op);
+
+/**
+ * Ensure that the object exists before writing
+ * @param write_op operation to add this action to
+ */
+void rados_write_op_assert_exists(rados_write_op_t write_op);
+
+/**
+ * Ensure that given xattr satisfies comparison
+ * @param write_op operation to add this action to
+ * @param name name of the xattr to look up
+ * @param comparison_operator currently undocumented, look for
+ * LIBRADOS_CMPXATTR_OP_EQ in librados.h
+ * @param value buffer to compare actual xattr value to
+ * @param value_len length of buffer to compare actual xattr value to
+ */
+void rados_write_op_cmpxattr(rados_write_op_t write_op,
+                             const char *name,
+                             uint8_t comparison_operator,
+                             const char *value,
+                             size_t value_len);
+
+/**
+ * Set an xattr
+ * @param write_op operation to add this action to
+ * @param name name of the xattr
+ * @param value buffer to set xattr to
+ * @param value_len length of buffer to set xattr to
+ */
+void rados_write_op_setxattr(rados_write_op_t write_op,
+                             const char *name,
+                             const char *value,
+                             size_t value_len);
+
+/**
+ * Remove an xattr
+ * @param write_op operation to add this action to
+ * @param name name of the xattr to remove
+ */
+void rados_write_op_rmxattr(rados_write_op_t write_op, const char *name);
+
+/**
+ * Create the object
+ * @param write_op operation to add this action to
+ * @param exclusive set to either LIBRADOS_CREATE_EXCLUSIVE or
+   LIBRADOS_CREATE_IDEMPOTENT
+ * will error if the object already exists.
+ */
+void rados_write_op_create(rados_write_op_t write_op,
+                           int exclusive,
+                           const char* category);
+
+/**
+ * Write to offset
+ * @param write_op operation to add this action to
+ * @param offset offset to write to
+ * @param buffer bytes to write
+ * @param len length of buffer
+ */
+void rados_write_op_write(rados_write_op_t write_op,
+                          const char *buffer,
+                          size_t len,
+                          uint64_t offset);
+
+/**
+ * Write whole object, atomically replacing it.
+ * @param write_op operation to add this action to
+ * @param buffer bytes to write
+ * @param len length of buffer
+ */
+void rados_write_op_write_full(rados_write_op_t write_op,
+                               const char *buffer,
+                               size_t len);
+
+/**
+ * Append to end of object.
+ * @param write_op operation to add this action to
+ * @param buffer bytes to write
+ * @param len length of buffer
+ */
+void rados_write_op_append(rados_write_op_t write_op,
+                           const char *buffer,
+                           size_t len);
+/**
+ * Remove object
+ * @param write_op operation to add this action to
+ */
+void rados_write_op_remove(rados_write_op_t write_op);
+
+/**
+ * Truncate an object
+ * @param write_op operation to add this action to
+ * @offset Offset to truncate to
+ */
+void rados_write_op_truncate(rados_write_op_t write_op, uint64_t offset);
+
+/**
+ * Zero part of an object
+ * @param write_op operation to add this action to
+ * @offset Offset to zero
+ * @len length to zero
+ */
+void rados_write_op_zero(rados_write_op_t write_op,
+				    uint64_t offset,
+				    uint64_t len);
+/**
+ * Perform a write operation synchronously
+ * @param write_op operation to perform
+ * @io the ioctx that the object is in
+ * @oid the object id
+ * @mtime the time to set the mtime to, NULL for the current time
+ */
+int rados_write_op_operate(rados_write_op_t write_op,
+                           rados_ioctx_t io,
+                           const char *oid,
+                           time_t *mtime);
+/**
+ * Perform a write operation asynchronously
+ * @param write_op operation to perform
+ * @io the ioctx that the object is in
+ * @param completion what to do when operation has been attempted
+ * @oid the object id
+ * @mtime the time to set the mtime to, NULL for the current time
+ */
+int rados_aio_write_op_operate(rados_write_op_t write_op,
+                               rados_ioctx_t io,
+                               rados_completion_t completion,
+                               const char *oid,
+                               time_t *mtime);
+
 
 /** @} Watch/Notify */
 

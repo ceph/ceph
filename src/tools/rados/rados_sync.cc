@@ -98,7 +98,7 @@ ExportDir* ExportDir::create_for_writing(const std::string &path, int version,
 	 << cpp_strerror(err) << std::endl;
     return NULL;
   }
-  return new ExportDir(version, path);
+  return new ExportDir(path);
 }
 
 ExportDir* ExportDir::from_file_system(const std::string &path)
@@ -138,7 +138,7 @@ ExportDir* ExportDir::from_file_system(const std::string &path)
 	 << "handle the data in the new format." << std::endl;
     return NULL;
   }
-  return new ExportDir(ret, path);
+  return new ExportDir(path);
 }
 
 std::string ExportDir::get_fs_path(const std::string &rados_name) const
@@ -206,9 +206,8 @@ std::string ExportDir::get_fs_path(const std::string &rados_name) const
   return oss.str();
 }
 
-ExportDir::ExportDir(int version_, const std::string &path_)
-  : version(version_),
-    path(path_)
+ExportDir::ExportDir(const std::string &path_)
+   : path(path_)
 {
 }
 
@@ -579,6 +578,7 @@ int BackedUpObject::download(IoCtx &io_ctx, const char *path)
     if (rlen < 0) {
       cerr << ERR_PREFIX << "download: io_ctx.read(" << rados_name << ") returned "
 	   << rlen << std::endl;
+      fclose(fp);
       return rlen;
     }
     if (rlen < CHUNK_SZ)

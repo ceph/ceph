@@ -140,7 +140,7 @@ public:
   static const int REP_LIST =     2;
 
 
-  static const int NONCE_EXPORT  = 1;
+  static const unsigned EXPORT_NONCE  = 1;
 
 
   // -- wait masks --
@@ -278,6 +278,9 @@ protected:
 
   friend class CDirDiscover;
   friend class CDirExport;
+  friend class C_Dir_TMAP_Fetched;
+  friend class C_Dir_OMAP_Fetched;
+  friend class C_Dir_Committed;
 
   bloom_filter *bloom;
   /* If you set up the bloom filter, you must keep it accurate!
@@ -415,7 +418,7 @@ private:
   // for giving to clients
   void get_dist_spec(set<int>& ls, int auth) {
     if (is_rep()) {
-      for (map<int,int>::iterator p = replicas_begin();
+      for (map<int,unsigned>::iterator p = replicas_begin();
 	   p != replicas_end(); 
 	   ++p)
 	ls.insert(p->first);
@@ -483,22 +486,23 @@ private:
   }
   void fetch(Context *c, bool ignore_authpinnability=false);
   void fetch(Context *c, const string& want_dn, bool ignore_authpinnability=false);
-  void _fetched(bufferlist &bl, const string& want_dn);
+protected:
+  void _omap_fetch(const string& want_dn);
+  void _omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
+		     const string& want_dn, int r);
+  void _tmap_fetch(const string& want_dn);
+  void _tmap_fetched(bufferlist &bl, const string& want_dn, int r);
 
   // -- commit --
   map<version_t, list<Context*> > waiting_for_commit;
-
-  void commit_to(version_t want);
-  void commit(version_t want, Context *c, bool ignore_authpinnability=false);
   void _commit(version_t want);
-  map_t::iterator _commit_full(ObjectOperation& m, const set<snapid_t> *snaps,
-                           unsigned max_write_size=-1);
-  map_t::iterator _commit_partial(ObjectOperation& m, const set<snapid_t> *snaps,
-                       unsigned max_write_size=-1,
-                       map_t::iterator last_committed_dn=map_t::iterator());
+  void _omap_commit();
   void _encode_dentry(CDentry *dn, bufferlist& bl, const set<snapid_t> *snaps);
   void _committed(version_t v);
+public:
   void wait_for_commit(Context *c, version_t v=0);
+  void commit_to(version_t want);
+  void commit(version_t want, Context *c, bool ignore_authpinnability=false);
 
   // -- dirtyness --
   version_t get_committing_version() { return committing_version; }

@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [0.71], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [0.75], [ceph-devel@vger.kernel.org])
 
 # Create release string.  Used with VERSION for RPMs.
 RPM_RELEASE=0
@@ -28,6 +28,9 @@ AC_CONFIG_SUBDIRS([src/gtest])
 # Environment
 AC_CANONICAL_HOST
 AC_CANONICAL_TARGET
+
+# Fix automake problems in 1.12
+m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 
 # Automake
 AM_INIT_AUTOMAKE
@@ -61,7 +64,16 @@ if test "$CXX" = no || test "$CXX:$GXX" = "g++:"; then
   AC_MSG_ERROR([no C++ compiler found])
 fi
 
-AM_CONDITIONAL(CLANG, test x"$CXX" = x"clang++")
+AC_MSG_CHECKING([if compiler is clang])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [[
+#ifndef __clang__
+#error "Not Clang"
+#endif
+return 0;
+]])],
+[CLANG=yes], [CLANG=no])
+AC_MSG_RESULT([$CLANG])
+AM_CONDITIONAL(CLANG, test "$CLANG" = "yes")
 
 #AC_PROG_CC
 AC_PROG_MAKE_SET
@@ -113,14 +125,60 @@ AM_CONDITIONAL([ENABLE_FPU_NEON], [case $target_cpu in arm*) true;; *) false;; e
 AX_CHECK_COMPILE_FLAG([-fvar-tracking-assignments], [HAS_VTA_SUPPORT=1], [HAS_VTA_SUPPORT=0])
 AM_CONDITIONAL(COMPILER_HAS_VTA, [test "$HAS_VTA_SUPPORT" = 1])
 
+AX_CXX_STATIC_CAST
+AX_C_VAR_FUNC
+AX_C_PRETTY_FUNC
+
 # Checks for libraries.
 ACX_PTHREAD
+
 AC_CHECK_LIB([uuid], [uuid_parse], [true], AC_MSG_FAILURE([libuuid not found]))
-AC_CHECK_LIB([m], [pow], [true], AC_MSG_FAILURE([libm not found]))
-AC_CHECK_LIB([resolv], [__res_nquery], [true], AC_MSG_FAILURE([libresolv not found]))
+
 if test x"$linux" = x"yes"; then
-	AC_CHECK_LIB([keyutils], [add_key], [true], AC_MSG_FAILURE([libkeyutils not found]))
+  AC_CHECK_LIB([blkid], [blkid_devno_to_wholedisk], [true], AC_MSG_FAILURE([libblkid not found]))
 fi
+
+#
+# Check for res_nquery in libresolv. There are several variations. On OSX
+# res_nquery is a macro defined in resolv.h, so the typical AC_CHECK_LIB
+# doesn't work. On FreeBSD res_nquery can be found in libc. The required
+# library for linking (if any) is defined RESOLV_LIBS.
+#
+AC_CHECK_HEADER([resolv.h], [], [], [#include <netinet/in.h>])
+
+AC_DEFUN([CHECK_RESOLV_LIBS], [{
+  AC_MSG_CHECKING([if res_nquery will link (LIBS=$1)])
+  saved_LIBS="${LIBS}"
+  LIBS="$1"
+  AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+        #include <netinet/in.h>
+        #include <resolv.h>
+      ]], [[res_nquery(0, 0, 0, 0, 0, 0);]])],
+      [AC_MSG_RESULT([yes])
+      [$2]],
+      AC_MSG_RESULT([no]))
+  LIBS="${saved_LIBS}"
+}])
+
+RESOLV_LIBS=""
+CHECK_RESOLV_LIBS([$RESOLV_LIBS], [resolv_libs="ok"])
+if test x"$resolv_libs" != "xok"; then
+  RESOLV_LIBS="-lresolv"
+  CHECK_RESOLV_LIBS([$RESOLV_LIBS], [resolv_libs="ok"])
+  if test x"$resolv_libs" != "xok"; then
+    AC_MSG_FAILURE([no resolv library found])
+  fi
+fi
+AC_SUBST([RESOLV_LIBS])
+
+dnl check for libkeyutils on linux
+KEYUTILS_LIB=""
+AS_IF([test x"$linux" = x"yes"], [
+  AC_CHECK_LIB([keyutils], [add_key], [KEYUTILS_LIB="-lkeyutils"], [
+    AC_MSG_FAILURE([libkeyutils not found])])])
+AC_SUBST(KEYUTILS_LIB)
+
+AC_CHECK_LIB([m], [pow], [true], AC_MSG_FAILURE([libm not found]))
 AC_CHECK_FUNCS([syncfs], AC_DEFINE([HAVE_SYS_SYNCFS], [1], [we have syncfs]), [])
 
 # Find some crypto library for us to use, while letting user to decide which one to use.
@@ -516,6 +574,19 @@ AC_CHECK_LIB(boost_thread-mt, main, [],
     [AC_CHECK_LIB(boost_thread, main, [],
         AC_MSG_FAILURE(["Boost thread library not found."]))])
 
+#
+# Check for boost_program_options library (defines BOOST_PROGRAM_OPTIONS_LIBS).
+#
+BOOST_PROGRAM_OPTIONS_LIBS=""
+saved_LIBS="${LIBS}"
+LIBS=""
+AC_CHECK_LIB(boost_program_options-mt, main, [],
+    [AC_CHECK_LIB(boost_program_options, main, [],
+        AC_MSG_FAILURE(["Boost program options library not found."]))])
+BOOST_PROGRAM_OPTIONS_LIBS="${LIBS}"
+LIBS="${saved_LIBS}"
+AC_SUBST(BOOST_PROGRAM_OPTIONS_LIBS)
+
 AC_LANG([C])
 
 AC_CHECK_MEMBER([struct fiemap_extent.fe_logical],
@@ -523,7 +594,23 @@ AC_CHECK_MEMBER([struct fiemap_extent.fe_logical],
 	[AC_MSG_NOTICE([linux/fiemap.h was not found or not usable; using local Ceph copy])],
 	[[#include <linux/fiemap.h>]])
 
-AC_CHECK_HEADERS([sys/xattr.h arpa/inet.h netdb.h netinet/in.h sys/file.h sys/ioctl.h sys/mount.h sys/param.h sys/socket.h sys/statvfs.h sys/time.h sys/vfs.h syslog.h utime.h])
+AC_CHECK_HEADERS([ \
+	arpa/inet.h \
+	linux/version.h \
+	netdb.h \
+	netinet/in.h \
+	sys/file.h \
+	sys/ioctl.h \
+	sys/mount.h \
+	sys/param.h \
+	sys/socket.h \
+	sys/statvfs.h \
+	sys/time.h \
+	sys/vfs.h \
+	sys/xattr.h \
+	syslog.h \
+	utime.h \
+])
 
 # sync_file_range
 AC_CHECK_FUNC([sync_file_range],
@@ -535,9 +622,74 @@ AC_CHECK_FUNC([fallocate],
 	[AC_DEFINE([CEPH_HAVE_FALLOCATE], [], [fallocate(2) is supported])],
 	[])
 
+#
+# Test for time-related `struct stat` members.
+#
 
+AC_CHECK_MEMBER([struct stat.st_mtim.tv_nsec],
+  [AC_DEFINE(HAVE_STAT_ST_MTIM_TV_NSEC, 1,
+    [Define if you have struct stat.st_mtim.tv_nsec])])
+
+AC_CHECK_MEMBER([struct stat.st_mtimespec.tv_nsec],
+  [AC_DEFINE(HAVE_STAT_ST_MTIMESPEC_TV_NSEC, 1,
+    [Define if you have struct stat.st_mtimespec.tv_nsec])])
+
+# splice/tee
+AC_CHECK_FUNC([splice],
+	[AC_DEFINE([CEPH_HAVE_SPLICE], [], [splice(2) is supported])],
+	[])
+
+
+AC_CHECK_HEADERS([arpa/nameser_compat.h])
+
+AC_COMPILE_IFELSE([AC_LANG_SOURCE([[#include <fcntl.h>
+F_SETPIPE_SZ]])],
+	[AC_DEFINE([CEPH_HAVE_SETPIPE_SZ], [], [F_SETPIPE_SZ is supported])],
+	[AC_MSG_NOTICE(["F_SETPIPE_SZ not found, zero-copy may be less efficent"])])
+
+
+AC_CHECK_HEADERS([arpa/nameser_compat.h])
+AC_CHECK_FUNCS([posix_fallocate])
 AC_CHECK_HEADERS([sys/prctl.h])
 AC_CHECK_FUNCS([prctl])
+AC_CHECK_FUNCS([pipe2])
+AC_CHECK_FUNCS([posix_fadvise])
+
+AC_MSG_CHECKING([for fdatasync])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#include <unistd.h>
+]], [[
+#if defined(_POSIX_SYNCHRONIZED_IO) && _POSIX_SYNCHRONIZED_IO > 0
+return fdatasync(0);
+#else
+#error Not supported
+#endif
+]])], [
+AC_MSG_RESULT([yes])
+AC_DEFINE([HAVE_FDATASYNC], 1, [Define to 1 if you have fdatasync.])
+], [
+AC_MSG_RESULT([no])
+])
+
+#
+# Check for pthread spinlock (depends on ACX_PTHREAD)
+#
+saved_LIBS="$LIBS"
+saved_CFLAGS="$CFLAGS"
+LIBS="$PTHREAD_LIBS $LIBS"
+CFLAGS="$PTHREAD_CFLAGS $CFLAGS"
+AC_CHECK_FUNC([pthread_spin_init],
+  [AC_DEFINE(HAVE_PTHREAD_SPINLOCK, 1, [Define if you have pthread_spin_init])])
+LIBS="$saved_LIBS"
+CFLAGS="$saved_CFLAGS"
+
+AC_CHECK_TYPES([int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t,
+  int64_t, uint64_t])
+
+dnl check for Linux types
+AC_CHECK_HEADERS([linux/types.h])
+AC_CHECK_TYPES([__u8, __s8, __u16, __s16, __u32, __s32, __u64, __s64, __le16,
+  __be16, __le32, __be32, __le64, __be64], [], [], [[#include <linux/types.h>]])
 
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
