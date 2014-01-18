@@ -627,8 +627,9 @@ void ReplicatedBackend::submit_transaction(
     op_t);
 
   // add myself to gather set
-  op.waiting_for_applied.insert(parent->get_actingbackfill()[0]);
-  op.waiting_for_commit.insert(parent->get_actingbackfill()[0]);
+  op.waiting_for_applied.insert(osd->whoami);
+  op.waiting_for_commit.insert(osd->whoami);
+
   ObjectStore::Transaction local_t;
   if (t->get_temp_added().size()) {
     get_temp_coll(&local_t);
