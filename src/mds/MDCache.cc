@@ -11401,31 +11401,29 @@ void MDCache::dispatch_fragment_dir(MDRequest *mdr)
 
   dout(10) << "dispatch_fragment_dir " << basedirfrag << " bits " << info.bits
 	   << " on " << *diri << dendl;
-
-  // avoid freeze dir deadlock
-  if (!mdr->is_auth_pinned(diri)) {
-    if (!diri->can_auth_pin()) {
-      dout(10) << " can't auth_pin " << *diri << ", requeuing dir "
-	       << info.dirs.front()->dirfrag() << dendl;
-      if (info.bits > 0)
-	mds->balancer->queue_split(info.dirs.front());
-      else
-	mds->balancer->queue_merge(info.dirs.front());
-      fragment_unmark_unfreeze_dirs(info.dirs);
-      fragments.erase(it);
-      request_finish(mdr);
-      return;
-    }
-    mdr->auth_pin(diri);
+  if (!mdr->aborted) {
+    set<SimpleLock*> rdlocks, wrlocks, xlocks;
+    wrlocks.insert(&diri->dirfragtreelock);
+    // prevent a racing gather on any other scatterlocks too
+    wrlocks.insert(&diri->nestlock);
+    wrlocks.insert(&diri->filelock);
+    if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks, NULL, NULL, true))
+      if (!mdr->aborted)
+	return;
   }
 
-  set<SimpleLock*> rdlocks, wrlocks, xlocks;
-  wrlocks.insert(&diri->dirfragtreelock);
-  // prevent a racing gather on any other scatterlocks too
-  wrlocks.insert(&diri->nestlock);
-  wrlocks.insert(&diri->filelock);
-  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+  if (mdr->aborted) {
+    dout(10) << " can't auth_pin " << *diri << ", requeuing dir "
+	     << info.dirs.front()->dirfrag() << dendl;
+    if (info.bits > 0)
+      mds->balancer->queue_split(info.dirs.front());
+    else
+      mds->balancer->queue_merge(info.dirs.front());
+    fragment_unmark_unfreeze_dirs(info.dirs);
+    fragments.erase(it);
+    request_finish(mdr);
     return;
+  }
 
   mdr->ls = mds->mdlog->get_current_segment();
   EFragment *le = new EFragment(mds->mdlog, EFragment::OP_PREPARE, basedirfrag, info.bits);
