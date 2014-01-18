@@ -1517,18 +1517,20 @@ void RGWListMultipart_ObjStore_S3::send_response()
     dump_start(s);
     s->formatter->open_object_section_in_ns("ListMultipartUploadResult",
 		    "http://s3.amazonaws.com/doc/2006-03-01/");
-    map<uint32_t, RGWUploadPartInfo>::iterator iter, test_iter;
-    int i, cur_max = 0;
+    map<uint32_t, RGWUploadPartInfo>::iterator iter;
+    map<uint32_t, RGWUploadPartInfo>::reverse_iterator test_iter;
+    int cur_max = 0;
 
     iter = parts.begin();
-    for (i = 0, test_iter = parts.begin(); test_iter != parts.end() && i < max_parts; ++test_iter, ++i) {
+    test_iter = parts.rbegin();
+    if (test_iter != parts.rend()) {
       cur_max = test_iter->first;
     }
     s->formatter->dump_string("Bucket", s->bucket_name_str);
     s->formatter->dump_string("Key", s->object);
     s->formatter->dump_string("UploadId", upload_id);
     s->formatter->dump_string("StorageClass", "STANDARD");
-    s->formatter->dump_string("PartNumberMarker", marker_str);
+    s->formatter->dump_int("PartNumberMarker", marker);
     s->formatter->dump_int("NextPartNumberMarker", cur_max + 1);
     s->formatter->dump_int("MaxParts", max_parts);
     s->formatter->dump_string("IsTruncated", (truncated ? "true" : "false"));

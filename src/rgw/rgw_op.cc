@@ -2230,10 +2230,6 @@ static int get_multipart_info(RGWRados *store, struct req_state *s, string& meta
   if (ret < 0)
     return ret;
 
-  ret = store->omap_get_all(obj, header, parts_map);
-  if (ret < 0)
-    return ret;
-
   if (policy) {
     for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
       string name = iter->first;
@@ -2254,9 +2250,18 @@ static int get_multipart_info(RGWRados *store, struct req_state *s, string& meta
   return 0;
 }
 
-static int list_multipart_parts(RGWRados *store, struct req_state *s, string& meta_oid, int num_parts,
-                                const string& marker, map<uint32_t, RGWUploadPartInfo>& parts,
-                                string *next_marker, bool *truncated)
+static bool is_v2_upload_id(const string& upload_id)
+{
+  const char *uid = upload_id.c_str();
+
+  return (strncmp(uid, ".2.", 3) == 0);
+}
+
+static int list_multipart_parts(RGWRados *store, struct req_state *s,
+                                const string& upload_id,
+                                string& meta_oid, int num_parts,
+                                int marker, map<uint32_t, RGWUploadPartInfo>& parts,
+                                int *next_marker, bool *truncated)
 {
   map<string, bufferlist> parts_map;
   map<string, bufferlist>::iterator iter;
@@ -2265,19 +2270,31 @@ static int list_multipart_parts(RGWRados *store, struct req_state *s, string& me
   rgw_obj obj;
   obj.init_ns(s->bucket, meta_oid, mp_ns);
 
+  bool sorted_omap = is_v2_upload_id(upload_id);
+
   string p;
   
-  if (!marker.empty()) {
+  if (sorted_omap) {
     p = "part.";
-    p.append(marker);
+    char buf[32];
+
+    snprintf(buf, sizeof(buf), "%08d", marker + 1);
+    p.append(buf);
   }
-  int ret = store->omap_get_vals(obj, header, p, num_parts + 1, parts_map);
+
+  int ret;
+  if (sorted_omap) {
+    ret = store->omap_get_vals(obj, header, p, num_parts + 1, parts_map);
+  } else {
+    ret = store->omap_get_all(obj, header, parts_map);
+  }
   if (ret < 0)
     return ret;
 
   int i;
+  int last_num = 0;
 
-  for (i = 0, iter = parts_map.begin(); i < num_parts && iter != parts_map.end(); ++i, ++iter) {
+  for (i = 0, iter = parts_map.begin(); (i < num_parts || !sorted_omap) && iter != parts_map.end(); ++iter, ++i) {
     bufferlist& bl = iter->second;
     bufferlist::iterator bli = bl.begin();
     RGWUploadPartInfo info;
@@ -2287,15 +2304,34 @@ static int list_multipart_parts(RGWRados *store, struct req_state *s, string& me
       ldout(s->cct, 0) << "ERROR: could not part info, caught buffer::error" << dendl;
       return -EIO;
     }
-    parts[info.num] = info;
-
-    if (next_marker) {
-      *next_marker = iter->first;
+    if (sorted_omap ||
+      (int)info.num > marker) {
+      parts[info.num] = info;
+      last_num = info.num;
     }
   }
 
-  if (truncated) {
-    *truncated = num_parts < (int)parts_map.size();
+  if (sorted_omap) {
+    if (truncated)
+      *truncated = (iter != parts_map.end());
+  } else {
+    /* rebuild a map with only num_parts entries */
+
+    map<uint32_t, RGWUploadPartInfo> new_parts;
+    map<uint32_t, RGWUploadPartInfo>::iterator piter;
+
+    for (i = 0, piter = parts.begin(); i < num_parts && piter != parts.end(); ++i, ++piter) {
+      new_parts[piter->first] = piter->second;
+    }
+
+    if (truncated)
+      *truncated = (piter != parts.end());
+
+    parts.swap(new_parts);
+  }
+
+  if (next_marker) {
+    *next_marker = last_num;
   }
 
   return 0;
@@ -2366,21 +2402,21 @@ void RGWCompleteMultipart::execute()
 
   int total_parts = 0;
   int max_parts = 1000;
-  string marker;
+  int marker = 0;
   bool truncated;
 
   list<string> remove_objs; /* objects to be removed from index listing */
 
   do {
-    ret = list_multipart_parts(store, s, meta_oid, max_parts, marker, obj_parts, &marker, &truncated);
+    ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts, marker, obj_parts, &marker, &truncated);
     if (ret == -ENOENT) {
       ret = -ERR_NO_SUCH_UPLOAD;
     }
     if (ret < 0)
       return;
 
-    total_parts += parts->parts.size();
-    if (!truncated && total_parts != (int)obj_parts.size()) {
+    total_parts += obj_parts.size();
+    if (!truncated && total_parts != (int)parts->parts.size()) {
       ret = -ERR_INVALID_PART;
       return;
     }
@@ -2492,11 +2528,11 @@ void RGWAbortMultipart::execute()
     return;
 
   bool truncated;
-  string marker;
+  int marker = 0;
   int max_parts = 1000;
 
   do {
-    ret = list_multipart_parts(store, s, meta_oid, max_parts, marker, obj_parts, &marker, &truncated);
+    ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts, marker, obj_parts, &marker, &truncated);
     if (ret < 0)
       return;
 
@@ -2556,7 +2592,7 @@ void RGWListMultipart::execute()
   if (ret < 0)
     return;
 
-  ret = list_multipart_parts(store, s, meta_oid, max_parts, marker_str, parts, NULL, &truncated);
+  ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts, marker, parts, NULL, &truncated);
 }
 
 int RGWListBucketMultiparts::verify_permission()

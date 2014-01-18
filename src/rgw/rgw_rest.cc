@@ -886,7 +886,7 @@ int RGWListMultipart_ObjStore::get_params()
   if (upload_id.empty()) {
     ret = -ENOTSUP;
   }
-  marker_str = s->info.args.get("part-number-marker");
+  string marker_str = s->info.args.get("part-number-marker");
 
   if (!marker_str.empty()) {
     string err;
