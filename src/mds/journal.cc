@@ -1078,6 +1078,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	if (p->is_dirty()) in->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added " << *in << dendl;
       } else {
+	p->update_inode(mds, in);
 	if (dn->get_linkage()->get_inode() != in && in->get_parent_dn()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
 	  unlinked[in] = in->get_parent_dir();
@@ -1085,8 +1086,6 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	}
 	if (in->get_parent_dn() && in->inode.anchored != p->inode.anchored)
 	  in->get_parent_dn()->adjust_nested_anchors( (int)p->inode.anchored - (int)in->inode.anchored );
-	p->update_inode(mds, in);
-	if (p->is_dirty()) in->_mark_dirty(logseg);
 	if (dn->get_linkage()->get_inode() != in) {
 	  if (!dn->get_linkage()->is_null()) { // note: might be remote.  as with stray reintegration.
 	    if (dn->get_linkage()->is_primary()) {
@@ -1106,13 +1105,13 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	} else {
 	  dout(10) << "EMetaBlob.replay for [" << p->dnfirst << "," << p->dnlast << "] had " << *in << dendl;
 	}
+	if (p->is_dirty()) in->_mark_dirty(logseg);
 	assert(in->first == p->dnfirst ||
 	       (in->is_multiversion() && in->first > p->dnfirst));
       }
-
-      assert(g_conf->mds_kill_journal_replay_at != 2);
       if (p->is_dirty_parent())
 	in->_mark_dirty_parent(logseg, p->is_dirty_pool());
+      assert(g_conf->mds_kill_journal_replay_at != 2);
     }
 
     // remote dentries
@@ -1160,9 +1159,15 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	dn->first = p->dnfirst;
 	if (!dn->get_linkage()->is_null()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *dn << dendl;
-	  if (dn->get_linkage()->is_primary())
-	    unlinked[dn->get_linkage()->get_inode()] = dir;
-	  dir->unlink_inode(dn);
+	  CInode *in = dn->get_linkage()->get_inode();
+	  // For renamed inode, We may call CInode::force_dirfrag() later.
+	  // CInode::force_dirfrag() doesn't work well when inode is detached
+	  // from the hierarchy.
+	  if (!renamed_diri || renamed_diri != in) {
+	    if (dn->get_linkage()->is_primary())
+	      unlinked[in] = dir;
+	    dir->unlink_inode(dn);
+	  }
 	}
 	dn->set_version(p->dnv);
 	if (p->dirty) dn->_mark_dirty(logseg);
