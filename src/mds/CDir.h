@@ -107,6 +107,7 @@ public:
   static const unsigned STATE_STICKY =        (1<<15);  // sticky pin due to inode stickydirs
   static const unsigned STATE_DNPINNEDFRAG =  (1<<16);  // dir is refragmenting
   static const unsigned STATE_ASSIMRSTAT =    (1<<17);  // assimilating inode->frag rstats
+  static const unsigned STATE_DIRTYDFT =      (1<<18);  // dirty dirfragtree
 
   // common states
   static const unsigned STATE_CLEAN =  0;
@@ -115,7 +116,7 @@ public:
   // these state bits are preserved by an import/export
   // ...except if the directory is hashed, in which case none of them are!
   static const unsigned MASK_STATE_EXPORTED = 
-  (STATE_COMPLETE|STATE_DIRTY);
+  (STATE_COMPLETE|STATE_DIRTY|STATE_DIRTYDFT);
   static const unsigned MASK_STATE_IMPORT_KEPT = 
   (						  
    STATE_IMPORTING
@@ -472,6 +473,7 @@ private:
   bool is_complete() { return state & STATE_COMPLETE; }
   bool is_exporting() { return state & STATE_EXPORTING; }
   bool is_importing() { return state & STATE_IMPORTING; }
+  bool is_dirty_dft() { return state & STATE_DIRTYDFT; }
 
   int get_dir_rep() { return dir_rep; }
   bool is_rep() { 
