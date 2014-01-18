@@ -1400,11 +1400,14 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	dirfragtree.swap(temp);
 	for (map<frag_t,CDir*>::iterator p = dirfrags.begin();
 	     p != dirfrags.end();
-	     ++p)
+	     ++p) {
 	  if (!dirfragtree.is_leaf(p->first)) {
 	    dout(10) << " forcing open dirfrag " << p->first << " to leaf (racing with split|merge)" << dendl;
 	    dirfragtree.force_to_leaf(g_ceph_context, p->first);
 	  }
+	  if (p->second->is_auth())
+	    p->second->state_clear(CDir::STATE_DIRTYDFT);
+	}
       }
       if (g_conf->mds_debug_frag)
 	verify_dirfrags();
@@ -1645,6 +1648,10 @@ void CInode::start_scatter(ScatterLock *lock)
 
     case CEPH_LOCK_INEST:
       finish_scatter_update(lock, dir, pi->rstat.version, pf->accounted_rstat.version);
+      break;
+
+    case CEPH_LOCK_IDFT:
+      dir->state_clear(CDir::STATE_DIRTYDFT);
       break;
     }
   }

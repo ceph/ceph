@@ -2173,10 +2173,24 @@ void CDir::decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls)
 
   // did we import some dirty scatterlock data?
   if (dirty_old_rstat.size() ||
-      !(fnode.rstat == fnode.accounted_rstat))
+      !(fnode.rstat == fnode.accounted_rstat)) {
     cache->mds->locker->mark_updated_scatterlock(&inode->nestlock);
-  if (!(fnode.fragstat == fnode.accounted_fragstat))
+    ls->dirty_dirfrag_nest.push_back(&inode->item_dirty_dirfrag_nest);
+  }
+  if (!(fnode.fragstat == fnode.accounted_fragstat)) {
     cache->mds->locker->mark_updated_scatterlock(&inode->filelock);
+    ls->dirty_dirfrag_dir.push_back(&inode->item_dirty_dirfrag_dir);
+  }
+  if (is_dirty_dft()) {
+    if (inode->dirfragtreelock.get_state() != LOCK_MIX &&
+	inode->dirfragtreelock.is_stable()) {
+      // clear stale dirtydft
+      state_clear(STATE_DIRTYDFT);
+    } else {
+      cache->mds->locker->mark_updated_scatterlock(&inode->dirfragtreelock);
+      ls->dirty_dirfrag_dirfragtree.push_back(&inode->item_dirty_dirfrag_dirfragtree);
+    }
+  }
 }
 
 

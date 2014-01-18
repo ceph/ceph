@@ -2711,6 +2711,11 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp, int o
     mds->locker->mark_updated_scatterlock(&in->filelock);
   }
 
+  if (in->dirfragtreelock.is_dirty()) {
+    updated_scatterlocks.push_back(&in->dirfragtreelock);
+    mds->locker->mark_updated_scatterlock(&in->dirfragtreelock);
+  }
+
   // adjust replica list
   //assert(!in->is_replica(oldauth));  // not true on failed export
   in->add_replica(oldauth, CInode::EXPORT_NONCE);

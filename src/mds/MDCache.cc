@@ -11451,13 +11451,25 @@ void MDCache::dispatch_fragment_dir(MDRequest *mdr)
   for (list<CDir*>::iterator p = info.resultfrags.begin();
        p != info.resultfrags.end();
        ++p) {
-    le->metablob.add_dir(*p, false);
+    if (diri->is_auth()) {
+      le->metablob.add_fragmented_dir(*p, false);
+    } else {
+      (*p)->state_set(CDir::STATE_DIRTYDFT);
+      le->metablob.add_fragmented_dir(*p, true);
+    }
   }
 
   // dft lock
-  mds->locker->mark_updated_scatterlock(&diri->dirfragtreelock);
-  mdr->ls->dirty_dirfrag_dirfragtree.push_back(&diri->item_dirty_dirfrag_dirfragtree);
-  mdr->add_updated_lock(&diri->dirfragtreelock);
+  if (diri->is_auth()) {
+    // journal dirfragtree
+    inode_t *pi = diri->project_inode();
+    pi->version = diri->pre_dirty();
+    journal_dirty_inode(mdr, &le->metablob, diri);
+  } else {
+    mds->locker->mark_updated_scatterlock(&diri->dirfragtreelock);
+    mdr->ls->dirty_dirfrag_dirfragtree.push_back(&diri->item_dirty_dirfrag_dirfragtree);
+    mdr->add_updated_lock(&diri->dirfragtreelock);
+  }
 
   /*
   // filelock
@@ -11486,6 +11498,11 @@ void MDCache::_fragment_logged(MDRequest *mdr)
 
   dout(10) << "fragment_logged " << basedirfrag << " bits " << info.bits
 	   << " on " << *diri << dendl;
+
+  if (diri->is_auth())
+    diri->pop_and_dirty_projected_inode(mdr->ls);
+
+  mdr->apply();  // mark scatterlock
 
   // store resulting frags
   C_GatherBuilder gather(g_ceph_context, new C_MDC_FragmentStore(this, mdr));
@@ -11537,7 +11554,6 @@ void MDCache::_fragment_stored(MDRequest *mdr)
     mds->send_message_mds(notify, p->first);
   }
   
-  mdr->apply();  // mark scatterlock
   mds->locker->drop_locks(mdr);
 
   // unfreeze resulting frags
