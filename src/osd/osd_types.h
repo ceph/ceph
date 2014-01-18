@@ -1594,7 +1594,7 @@ public:
     virtual void setattrs(map<string, boost::optional<bufferlist> > &attrs) {}
     virtual void rmobject(version_t old_version) {}
     virtual void create() {}
-    virtual void update_snaps(set<snapid_t> &snaps) {}
+    virtual void update_snaps(set<snapid_t> &old_snaps) {}
     virtual ~Visitor() {}
   };
   void visit(Visitor *visitor) const;
@@ -1650,12 +1650,12 @@ public:
     append_id(CREATE);
     ENCODE_FINISH(bl);
   }
-  void update_snaps(set<snapid_t> &snaps) {
+  void update_snaps(set<snapid_t> &old_snaps) {
     if (!can_local_rollback || stashed)
       return;
     ENCODE_START(1, 1, bl);
     append_id(UPDATE_SNAPS);
-    ::encode(snaps, bl);
+    ::encode(old_snaps, bl);
     ENCODE_FINISH(bl);
   }
 
