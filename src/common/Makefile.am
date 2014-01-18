@@ -29,6 +29,7 @@ libcommon_la_SOURCES = \
 	common/safe_io.c \
 	common/snap_types.cc \
 	common/str_list.cc \
+	common/str_map.cc \
 	common/errno.cc \
 	common/RefCountedObj.cc \
 	common/blkdev.cc \
@@ -66,10 +67,12 @@ libcommon_la_SOURCES = \
 	common/ceph_frag.cc \
 	common/addr_parsing.c \
 	common/hobject.cc \
-	common/bloom_filter.cc
+	common/bloom_filter.cc \
+	common/linux_version.c
 
 if LINUX
-libcommon_la_SOURCES += common/secret.c
+libcommon_la_SOURCES += \
+	common/secret.c
 endif
 
 # these should go out of libcommon
@@ -79,6 +82,7 @@ libcommon_la_SOURCES += \
 	mon/MonMap.cc \
 	osd/OSDMap.cc \
 	osd/osd_types.cc \
+	osd/HitSet.cc \
 	mds/MDSMap.cc \
 	mds/inode_backtrace.cc \
 	mds/mdstypes.cc 
@@ -108,7 +112,7 @@ noinst_HEADERS += \
 LIBCOMMON_DEPS += \
 	$(LIBMSG) $(LIBAUTH) \
 	$(LIBCRUSH) $(LIBJSON_SPIRIT) $(LIBLOG) $(LIBARCH) \
-	-lkeyutils
+	$(KEYUTILS_LIB)
 
 if LINUX
 LIBCOMMON_DEPS += -lrt
@@ -195,7 +199,8 @@ noinst_HEADERS += \
 	common/AsyncReserver.h \
 	common/sync_filesystem.h \
 	common/cmdparse.h \
-	common/hobject.h
+	common/hobject.h \
+	common/linux_version.h
 
 noinst_LTLIBRARIES += libcommon.la
 

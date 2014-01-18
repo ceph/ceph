@@ -13,6 +13,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_swift_auth.h"
 #include "rgw_cors_s3.h"
+#include "rgw_http_errors.h"
 
 #include "rgw_client_io.h"
 #include "rgw_resolve.h"
@@ -59,11 +60,13 @@ struct generic_attr generic_attrs[] = {
 
 map<string, string> rgw_to_http_attrs;
 static map<string, string> generic_attrs_map;
+map<int, const char *> http_status_names;
 
 /*
  * make attrs look_like_this
+ * converts dashes to underscores
  */
-string lowercase_http_attr(const string& orig)
+string lowercase_underscore_http_attr(const string& orig)
 {
   const char *s = orig.c_str();
   char buf[orig.size() + 1];
@@ -83,8 +86,9 @@ string lowercase_http_attr(const string& orig)
 
 /*
  * make attrs LOOK_LIKE_THIS
+ * converts dashes to underscores
  */
-string uppercase_http_attr(const string& orig)
+string uppercase_underscore_http_attr(const string& orig)
 {
   const char *s = orig.c_str();
   char buf[orig.size() + 1];
@@ -104,6 +108,7 @@ string uppercase_http_attr(const string& orig)
 
 /*
  * make attrs Look-Like-This
+ * converts underscores to dashes
  */
 string camelcase_dash_http_attr(const string& orig)
 {
@@ -146,22 +151,26 @@ void rgw_rest_init(CephContext *cct)
   list<string>::iterator iter;
   for (iter = extended_http_attrs.begin(); iter != extended_http_attrs.end(); ++iter) {
     string rgw_attr = RGW_ATTR_PREFIX;
-    rgw_attr.append(lowercase_http_attr(*iter));
+    rgw_attr.append(lowercase_underscore_http_attr(*iter));
 
     rgw_to_http_attrs[rgw_attr] = camelcase_dash_http_attr(*iter);
 
     string http_header = "HTTP_";
-    http_header.append(uppercase_http_attr(*iter));
+    http_header.append(uppercase_underscore_http_attr(*iter));
 
     generic_attrs_map[http_header] = rgw_attr;
   }
+
+  for (const struct rgw_http_status_code *h = http_codes; h->code; h++) {
+    http_status_names[h->code] = h->name;
+  }
 }
 
-static void dump_status(struct req_state *s, const char *status)
+static void dump_status(struct req_state *s, const char *status, const char *status_name)
 {
-  int r = s->cio->print("Status: %s\n", status);
+  int r = s->cio->send_status(status, status_name);
   if (r < 0) {
-    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+    ldout(s->cct, 0) << "ERROR: s->cio->send_status() returned err=" << r << dendl;
   }
 }
 
@@ -193,7 +202,7 @@ void set_req_state_err(struct req_state *s, int err_no)
 
   if (err_no < 0)
     err_no = -err_no;
-  s->err.ret = err_no;
+  s->err.ret = -err_no;
   if (s->prot_flags & RGW_REST_SWIFT) {
     r = search_err(err_no, RGW_HTTP_SWIFT_ERRORS, ARRAY_LEN(RGW_HTTP_SWIFT_ERRORS));
     if (r) {
@@ -218,21 +227,19 @@ void dump_errno(struct req_state *s)
 {
   char buf[32];
   snprintf(buf, sizeof(buf), "%d", s->err.http_ret);
-  dump_status(s, buf);
+  dump_status(s, buf, http_status_names[s->err.http_ret]);
 }
 
 void dump_errno(struct req_state *s, int err)
 {
   char buf[32];
   snprintf(buf, sizeof(buf), "%d", err);
-  dump_status(s, buf);
+  dump_status(s, buf, http_status_names[s->err.http_ret]);
 }
 
 void dump_content_length(struct req_state *s, uint64_t len)
 {
-  char buf[21];
-  snprintf(buf, sizeof(buf), "%"PRIu64, len);
-  int r = s->cio->print("Content-Length: %s\n", buf);
+  int r = s->cio->send_content_length(len);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -262,8 +269,11 @@ void dump_pair(struct req_state *s, const char *key, const char *value)
 
 void dump_bucket_from_state(struct req_state *s)
 {
-  if (!s->bucket_name_str.empty())
-    s->cio->print("Bucket: \"%s\"\n", s->bucket_name_str.c_str());
+  int expose_bucket = g_conf->rgw_expose_bucket;
+  if (expose_bucket) {
+    if (!s->bucket_name_str.empty())
+      s->cio->print("Bucket: \"%s\"\n", s->bucket_name_str.c_str());
+  }
 }
 
 void dump_object_from_state(struct req_state *s)
@@ -434,10 +444,15 @@ void end_header(struct req_state *s, RGWOp *op, const char *content_type)
     s->formatter->close_section();
     dump_content_length(s, s->formatter->get_len());
   }
-  int r = s->cio->print("Content-type: %s\r\n\r\n", content_type);
+  int r = s->cio->print("Content-type: %s\r\n", content_type);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
+  r = s->cio->complete_header();
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: s->cio->complete_header() returned err=" << r << dendl;
+  }
+
   s->cio->set_account(true);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
@@ -450,6 +465,7 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no)
   }
   set_req_state_err(s, err_no);
   dump_errno(s);
+  dump_bucket_from_state(s);
   end_header(s, op);
   rgw_flush_formatter_and_reset(s, s->formatter);
   perfcounter->inc(l_rgw_failed_req);
@@ -457,8 +473,7 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no)
 
 void dump_continue(struct req_state *s)
 {
-  dump_status(s, "100");
-  s->cio->flush();
+  s->cio->send_100_continue();
 }
 
 void dump_range(struct req_state *s, uint64_t ofs, uint64_t end, uint64_t total)

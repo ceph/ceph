@@ -103,7 +103,7 @@ namespace librbd {
     op.read(off, len, pbl, NULL);
     int flags = m_ictx->get_read_flags(snapid);
     int r = m_ictx->data_ctx.aio_operate(oid.name, rados_completion, &op,
-					 snapid, flags, NULL);
+					 flags, NULL);
     rados_completion->release();
     assert(r >= 0);
   }

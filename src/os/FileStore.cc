@@ -104,6 +104,15 @@ static CompatSet get_fs_supported_compat_set() {
 }
 
 
+int FileStore::peek_journal_fsid(uuid_d *fsid)
+{
+  // make sure we don't try to use aio or direct_io (and get annoying
+  // error messages from failing to do so); performance implications
+  // should be irrelevant for this use
+  FileJournal j(*fsid, 0, 0, journalpath.c_str(), false, false);
+  return j.peek_fsid(*fsid);
+}
+
 void FileStore::FSPerfTracker::update_from_perfcounters(
   PerfCounters &logger)
 {
@@ -377,6 +386,7 @@ int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
 }
 
 FileStore::FileStore(const std::string &base, const std::string &jdev, const char *name, bool do_update) :
+  JournalingObjectStore(base),
   internal_name(name),
   basedir(base), journalpath(jdev),
   blk_size(0),
@@ -840,12 +850,12 @@ int FileStore::_detect_fs()
     m_fs_type = FS_TYPE_BTRFS;
   } else if (st.f_type == XFS_SUPER_MAGIC) {
     dout(1) << "mount detected xfs" << dendl;
+    m_fs_type = FS_TYPE_XFS;
     if (m_filestore_replica_fadvise) {
       dout(1) << " disabling 'filestore replica fadvise' due to known issues with fadvise(DONTNEED) on xfs" << dendl;
       g_conf->set_val("filestore_replica_fadvise", "false");
       g_conf->apply_changes(NULL);
       assert(m_filestore_replica_fadvise == false);
-      m_fs_type = FS_TYPE_XFS;
     }
   }
 #endif
@@ -1393,6 +1403,7 @@ int FileStore::mount()
     }
   }
 
+  wbthrottle.start();
   sync_thread.create();
 
   ret = journal_replay(initial_op_seq);
@@ -1409,6 +1420,8 @@ int FileStore::mount()
     sync_cond.Signal();
     lock.Unlock();
     sync_thread.join();
+
+    wbthrottle.stop();
 
     goto close_current_fd;
   }
@@ -1459,6 +1472,7 @@ int FileStore::umount()
   sync_cond.Signal();
   lock.Unlock();
   sync_thread.join();
+  wbthrottle.stop();
   op_tp.stop();
 
   journal_stop();
@@ -1564,7 +1578,7 @@ void FileStore::queue_op(OpSequencer *osr, Op *o)
   op_wq.queue(osr);
 }
 
-void FileStore::op_queue_reserve_throttle(Op *o)
+void FileStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle)
 {
   // Do not call while holding the journal lock!
   uint64_t max_ops = m_filestore_queue_max_ops;
@@ -1586,7 +1600,11 @@ void FileStore::op_queue_reserve_throttle(Op *o)
 	      && (op_queue_bytes + o->bytes) > max_bytes)) {
       dout(2) << "waiting " << op_queue_len + 1 << " > " << max_ops << " ops || "
 	      << op_queue_bytes + o->bytes << " > " << max_bytes << dendl;
+      if (handle)
+	handle->suspend_tp_timeout();
       op_throttle_cond.Wait(op_throttle_lock);
+      if (handle)
+	handle->reset_tp_timeout();
     }
 
     op_queue_len++;
@@ -1671,7 +1689,8 @@ struct C_JournaledAhead : public Context {
 };
 
 int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
-				  TrackedOpRef osd_op)
+				  TrackedOpRef osd_op,
+				  ThreadPool::TPHandle *handle)
 {
   Context *onreadable;
   Context *ondisk;
@@ -1699,7 +1718,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 
   if (journal && journal->is_writeable() && !m_filestore_journal_trailing) {
     Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
-    op_queue_reserve_throttle(o);
+    op_queue_reserve_throttle(o, handle);
     journal->throttle();
     uint64_t op_num = submit_manager.op_submit_start();
     o->op = op_num;
@@ -3130,6 +3149,7 @@ void FileStore::sync_entry()
       goto again;
     }
   }
+  stop = false;
   lock.Unlock();
 }
 
@@ -4273,6 +4293,14 @@ int FileStore::_collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
   int r = 0;
   int dstcmp, srccmp;
 
+  if (replaying) {
+    /* If the destination collection doesn't exist during replay,
+     * we need to delete the src object and continue on
+     */
+    if (!collection_exists(c))
+      goto out_rm_src;
+  }
+
   dstcmp = _check_replay_guard(c, o, spos);
   if (dstcmp < 0)
     goto out_rm_src;
@@ -4352,7 +4380,7 @@ int FileStore::_omap_clear(coll_t cid, const ghobject_t &hoid,
   int r = lfn_find(cid, hoid, &path);
   if (r < 0)
     return r;
-  r = object_map->clear(hoid, &spos);
+  r = object_map->clear_keys_header(hoid, &spos);
   if (r < 0 && r != -ENOENT)
     return r;
   return 0;

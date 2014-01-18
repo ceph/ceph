@@ -1404,7 +1404,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t ol = t.get_int();
       object_t oid = file_object_t(oh, ol);
       lock.Lock();
-      object_locator_t oloc(CEPH_DATA_RULE);
+      object_locator_t oloc(SYNCLIENT_FIRST_POOL);
       uint64_t size;
       utime_t mtime;
       client->objecter->stat(oid, oloc, CEPH_NOSNAP, &size, &mtime, 0, new C_SafeCond(&lock, &cond, &ack));
@@ -1417,7 +1417,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t off = t.get_int();
       int64_t len = t.get_int();
       object_t oid = file_object_t(oh, ol);
-      object_locator_t oloc(CEPH_DATA_RULE);
+      object_locator_t oloc(SYNCLIENT_FIRST_POOL);
       lock.Lock();
       bufferlist bl;
       client->objecter->read(oid, oloc, off, len, CEPH_NOSNAP, &bl, 0, new C_SafeCond(&lock, &cond, &ack));
@@ -1430,7 +1430,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t off = t.get_int();
       int64_t len = t.get_int();
       object_t oid = file_object_t(oh, ol);
-      object_locator_t oloc(CEPH_DATA_RULE);
+      object_locator_t oloc(SYNCLIENT_FIRST_POOL);
       lock.Lock();
       bufferptr bp(len);
       bufferlist bl;
@@ -1449,7 +1449,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       int64_t off = t.get_int();
       int64_t len = t.get_int();
       object_t oid = file_object_t(oh, ol);
-      object_locator_t oloc(CEPH_DATA_RULE);
+      object_locator_t oloc(SYNCLIENT_FIRST_POOL);
       lock.Lock();
       SnapContext snapc;
       client->objecter->zero(oid, oloc, off, len, snapc, ceph_clock_now(client->cct), 0,
@@ -1679,7 +1679,7 @@ int SyntheticClient::dump_placement(string& fn) {
   for (vector<ObjectExtent>::iterator i = extents.begin(); 
        i != extents.end(); ++i) {
     
-    int osd = client->osdmap->get_pg_primary(client->osdmap->object_locator_to_pg(i->oid, i->oloc));
+    int osd = client->osdmap->get_pg_acting_primary(client->osdmap->object_locator_to_pg(i->oid, i->oloc));
 
     // run through all the buffer extents
     for (vector<pair<uint64_t, uint64_t> >::iterator j = i->buffer_extents.begin();
@@ -1959,7 +1959,7 @@ int SyntheticClient::overload_osd_0(int n, int size, int wrsize) {
 int SyntheticClient::check_first_primary(int fh) {
   vector<ObjectExtent> extents;
   client->enumerate_layout(fh, extents, 1, 0);  
-  return client->osdmap->get_pg_primary(client->osdmap->object_locator_to_pg(extents.begin()->oid,
+  return client->osdmap->get_pg_acting_primary(client->osdmap->object_locator_to_pg(extents.begin()->oid,
 									     extents.begin()->oloc));
 }
 
@@ -2218,7 +2218,7 @@ int SyntheticClient::create_objects(int nobj, int osize, int inflight)
     if (time_to_stop()) break;
 
     object_t oid = file_object_t(999, i);
-    object_locator_t oloc(CEPH_DATA_RULE);
+    object_locator_t oloc(SYNCLIENT_FIRST_POOL);
     SnapContext snapc;
     
     if (i % inflight == 0) {
@@ -2319,7 +2319,7 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
       o = (long)trunc(pow(r, rskew) * (double)nobj);  // exponentially skew towards 0
     }
     object_t oid = file_object_t(999, o);
-    object_locator_t oloc(CEPH_DATA_RULE);
+    object_locator_t oloc(SYNCLIENT_FIRST_POOL);
     SnapContext snapc;
     
     client->client_lock.Lock();

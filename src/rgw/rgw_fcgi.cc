@@ -25,7 +25,34 @@ void RGWFCGX::flush()
   FCGX_FFlush(fcgx->out);
 }
 
-const char **RGWFCGX::envp()
+void RGWFCGX::init_env(CephContext *cct)
 {
-  return (const char **)fcgx->envp;
+  env.init(cct, (char **)fcgx->envp);
 }
+
+int RGWFCGX::send_status(const char *status, const char *status_name)
+{
+  return print("Status: %s\n", status);
+}
+
+int RGWFCGX::send_100_continue()
+{
+  int r = send_status("100", "Continue");
+  if (r >= 0) {
+    flush();
+  }
+  return r;
+}
+
+int RGWFCGX::send_content_length(uint64_t len)
+{
+  char buf[21];
+  snprintf(buf, sizeof(buf), "%"PRIu64, len);
+  return print("Content-Length: %s\n", buf);
+}
+
+int RGWFCGX::complete_header()
+{
+  return print("\r\n");
+}
+

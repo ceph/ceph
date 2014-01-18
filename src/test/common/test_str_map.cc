@@ -1,0 +1,70 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ *
+ * Author: Loic Dachary <loic@dachary.org>
+ *
+ *  This library is free software; you can redistribute it and/or
+ *  modify it under the terms of the GNU Lesser General Public
+ *  License as published by the Free Software Foundation; either
+ *  version 2.1 of the License, or (at your option) any later version.
+ * 
+ */
+
+#include <errno.h>
+#include <gtest/gtest.h>
+
+#include "include/str_map.h"
+
+using namespace std;
+
+TEST(str_map, json) {
+  map<string,string> str_map;
+  stringstream ss;
+  // well formatted
+  ASSERT_EQ(0, get_str_map("{\"key\": \"value\"}", ss, &str_map));
+  ASSERT_EQ("value", str_map["key"]);
+  // well formatted but not a JSON object
+  ASSERT_EQ(-EINVAL, get_str_map("\"key\"", ss, &str_map));
+  ASSERT_NE(string::npos, ss.str().find("must be a JSON object"));
+}
+
+TEST(str_map, plaintext) {
+  stringstream ss;
+  {
+    map<string,string> str_map;
+    ASSERT_EQ(0, get_str_map(" foo=bar\t\nfrob=nitz   yeah right=   \n\t",
+			     ss, &str_map));
+    ASSERT_EQ(4u, str_map.size());
+    ASSERT_EQ("bar", str_map["foo"]);
+    ASSERT_EQ("nitz", str_map["frob"]);
+    ASSERT_EQ("", str_map["yeah"]);
+    ASSERT_EQ("", str_map["right"]);
+  }
+  {
+    map<string,string> str_map;
+    ASSERT_EQ(0, get_str_map("that", ss, &str_map));
+    ASSERT_EQ(1u, str_map.size());
+    ASSERT_EQ("", str_map["that"]);
+  }
+  {
+    map<string,string> str_map;
+    ASSERT_EQ(0, get_str_map(" \t \n ", ss, &str_map));
+    ASSERT_EQ(0u, str_map.size());
+    ASSERT_EQ(0, get_str_map("", ss, &str_map));
+    ASSERT_EQ(0u, str_map.size());
+  }
+}
+
+/* 
+ * Local Variables:
+ * compile-command: "cd ../.. ; make -j4 && 
+ *   make unittest_str_map && 
+ *   valgrind --tool=memcheck --leak-check=full \
+ *      ./unittest_str_map
+ *   "
+ * End:
+ */

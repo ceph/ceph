@@ -47,7 +47,7 @@ void PGMap::Incremental::encode(bufferlist &bl, uint64_t features) const
 
 void PGMap::Incremental::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
   ::decode(version, bl);
   if (struct_v < 3) {
     pg_stat_updates.clear();
@@ -481,7 +481,7 @@ void PGMap::encode(bufferlist &bl, uint64_t features) const
 
 void PGMap::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 4, 4, bl);
   ::decode(version, bl);
   if (struct_v < 3) {
     pg_stat.clear();
@@ -787,7 +787,7 @@ void PGMap::print_osd_perf_stats(std::ostream *ss) const
 }
 
 void PGMap::recovery_summary(Formatter *f, ostream *out,
-                             pool_stat_t delta_sum) const
+                             const pool_stat_t& delta_sum) const
 {
   bool first = true;
   if (delta_sum.stats.sum.num_objects_degraded) {
@@ -798,7 +798,7 @@ void PGMap::recovery_summary(Formatter *f, ostream *out,
     if (f) {
       f->dump_unsigned("degraded_objects", delta_sum.stats.sum.num_objects_degraded);
       f->dump_unsigned("degraded_total", delta_sum.stats.sum.num_object_copies);
-      f->dump_string("degrated_ratio", b);
+      f->dump_string("degraded_ratio", b);
     } else {
       *out << delta_sum.stats.sum.num_objects_degraded
 	   << "/" << delta_sum.stats.sum.num_object_copies << " objects degraded (" << b << "%)";
@@ -825,7 +825,7 @@ void PGMap::recovery_summary(Formatter *f, ostream *out,
 }
 
 void PGMap::recovery_rate_summary(Formatter *f, ostream *out,
-                                  pool_stat_t delta_sum,
+                                  const pool_stat_t& delta_sum,
                                   utime_t delta_stamp) const
 {
   // make non-negative; we can get negative values if osds send
@@ -886,7 +886,7 @@ void PGMap::pool_recovery_summary(Formatter *f, ostream *out,
 }
 
 void PGMap::client_io_rate_summary(Formatter *f, ostream *out,
-                                   pool_stat_t delta_sum,
+                                   const pool_stat_t& delta_sum,
                                    utime_t delta_stamp) const
 {
   pool_stat_t pos_delta = delta_sum;

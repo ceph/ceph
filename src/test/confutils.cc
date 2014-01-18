@@ -263,7 +263,7 @@ const char dup_key_config_1[] = "\
         log_file = 3\n\
 ";
 
-TEST(Whitespace, ConfUtils) {
+TEST(ConfUtils, Whitespace) {
   std::string test0("");
   ConfFile::trim_whitespace(test0, false);
   ASSERT_EQ(test0, "");
@@ -301,7 +301,7 @@ TEST(Whitespace, ConfUtils) {
   ASSERT_EQ(test5, "abcd");
 }
 
-TEST(ParseFiles0, ConfUtils) {
+TEST(ConfUtils, ParseFiles0) {
   std::deque<std::string> err;
   std::string val;
   std::ostringstream warn;
@@ -332,7 +332,7 @@ TEST(ParseFiles0, ConfUtils) {
   ASSERT_EQ(val, "barbaz");
 }
 
-TEST(ParseFiles1, ConfUtils) {
+TEST(ConfUtils, ParseFiles1) {
   std::deque<std::string> err;
   std::ostringstream warn;
   std::string simple_conf_1_f(next_tempfile(simple_conf_1));
@@ -358,7 +358,7 @@ TEST(ParseFiles1, ConfUtils) {
   ASSERT_EQ(err.size(), 0U);
 }
 
-TEST(ReadFiles1, ConfUtils) {
+TEST(ConfUtils, ReadFiles1) {
   std::deque<std::string> err;
   std::ostringstream warn;
   std::string simple_conf_1_f(next_tempfile(simple_conf_1));
@@ -391,7 +391,7 @@ TEST(ReadFiles1, ConfUtils) {
   ASSERT_EQ(cf2.read("nonesuch", "keyring", val), -ENOENT);
 }
 
-TEST(ReadFiles2, ConfUtils) {
+TEST(ConfUtils, ReadFiles2) {
   std::deque<std::string> err;
   std::ostringstream warn;
   std::string conf3_f(next_tempfile(conf3));
@@ -412,7 +412,7 @@ TEST(ReadFiles2, ConfUtils) {
   ASSERT_EQ(val, "\x66\xd1\x86\xd1\x9d\xd3\xad\xd3\xae");
 }
 
-TEST(IllegalFiles, ConfUtils) {
+TEST(ConfUtils, IllegalFiles) {
   std::deque<std::string> err;
   std::ostringstream warn;
   std::string illegal_conf1_f(next_tempfile(illegal_conf1));
@@ -443,7 +443,7 @@ TEST(IllegalFiles, ConfUtils) {
   ASSERT_EQ(err.size(), 1U);
 }
 
-TEST(EscapingFiles, ConfUtils) {
+TEST(ConfUtils, EscapingFiles) {
   std::deque<std::string> err;
   std::ostringstream warn;
   std::string escaping_conf_1_f(next_tempfile(escaping_conf_1));
@@ -470,7 +470,7 @@ TEST(EscapingFiles, ConfUtils) {
   ASSERT_EQ(val, "backslash\\");
 }
 
-TEST(Overrides, ConfUtils) {
+TEST(ConfUtils, Overrides) {
   md_config_t conf;
   std::deque<std::string> err;
   std::ostringstream warn;
@@ -492,7 +492,7 @@ TEST(Overrides, ConfUtils) {
   ASSERT_EQ(conf.log_file, "osd0_log");
 }
 
-TEST(DupKey, ConfUtils) {
+TEST(ConfUtils, DupKey) {
   md_config_t conf;
   std::deque<std::string> err;
   std::ostringstream warn;

@@ -1,7 +1,6 @@
 libjson_spirit_la_SOURCES = \
 	json_spirit/json_spirit_reader.cpp \
-	json_spirit/json_spirit_writer.cpp \
-	json_spirit/json_spirit_value.cpp
+	json_spirit/json_spirit_writer.cpp
 noinst_LTLIBRARIES += libjson_spirit.la
 
 noinst_HEADERS += \

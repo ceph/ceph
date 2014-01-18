@@ -101,6 +101,8 @@ req_info::req_info(CephContext *cct, class RGWEnv *e) : env(e) {
   if (pos >= 0) {
     request_params = request_uri.substr(pos + 1);
     request_uri = request_uri.substr(0, pos);
+  } else {
+    request_params = env->get("QUERY_STRING", "");
   }
   host = env->get("HTTP_HOST");
 }
@@ -185,8 +187,8 @@ void req_info::init_meta_info(bool *found_bad_meta)
 {
   x_meta_map.clear();
 
-  map<string, string>& m = env->get_map();
-  map<string, string>::iterator iter;
+  map<string, string, ltstr_nocase>& m = env->get_map();
+  map<string, string, ltstr_nocase>::iterator iter;
   for (iter = m.begin(); iter != m.end(); ++iter) {
     const char *prefix;
     const string& header_name = iter->first;
@@ -659,13 +661,12 @@ bool verify_object_permission(struct req_state *s, int perm)
   return verify_object_permission(s, s->bucket_acl, s->object_acl, perm);
 }
 
-static char hex_to_num(char c)
+class HexTable
 {
-  static char table[256];
-  static bool initialized = false;
+  char table[256];
 
-
-  if (!initialized) {
+public:
+  HexTable() {
     memset(table, -1, sizeof(table));
     int i;
     for (i = '0'; i<='9'; i++)
@@ -675,7 +676,16 @@ static char hex_to_num(char c)
     for (i = 'a'; i<='f'; i++)
       table[i] = i - 'a' + 0xa;
   }
-  return table[(int)c];
+
+  char to_num(char c) {
+    return table[(int)c];
+  }
+};
+
+static char hex_to_num(char c)
+{
+  static HexTable hex_table;
+  return hex_table.to_num(c);
 }
 
 bool url_decode(string& src_str, string& dest_str)

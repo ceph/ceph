@@ -95,14 +95,16 @@ void AuthMonitor::create_initial()
   check_rotate();
   assert(pending_auth.size() == 1);
 
-  KeyRing keyring;
-  bufferlist bl;
-  int ret = mon->store->get("mkfs", "keyring", bl);
-  assert(ret == 0);
-  bufferlist::iterator p = bl.begin();
-  ::decode(keyring, p);
+  if (mon->is_keyring_required()) {
+    KeyRing keyring;
+    bufferlist bl;
+    int ret = mon->store->get("mkfs", "keyring", bl);
+    assert(ret == 0);
+    bufferlist::iterator p = bl.begin();
+    ::decode(keyring, p);
 
-  import_keyring(keyring);
+    import_keyring(keyring);
+  }
 
   max_global_id = MIN_GLOBAL_ID;
 
@@ -187,7 +189,7 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
     keys_ver++;
     mon->key_server.set_ver(keys_ver);
 
-    if (keys_ver == 1) {
+    if (keys_ver == 1 && mon->is_keyring_required()) {
       MonitorDBStore::Transaction t;
       t.erase("mkfs", "keyring");
       mon->store->apply_transaction(t);
@@ -726,7 +728,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     ss << "imported keyring";
     getline(ss, rs);
     err = 0;
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+					      get_last_committed() + 1));
     return true;
   } else if (prefix == "auth add" && !entity_name.empty()) {
     /* expected behavior:
@@ -763,7 +766,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
         if (inc.op == KeyServerData::AUTH_INC_ADD &&
             inc.name == entity) {
           wait_for_finished_proposal(
-              new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+              new Monitor::C_Command(mon, m, 0, rs, get_last_committed() + 1));
           return true;
         }
       }
@@ -848,7 +851,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
     ss << "added key for " << auth_inc.name;
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						   get_last_committed() + 1));
     return true;
   } else if ((prefix == "auth get-or-create-key" ||
 	     prefix == "auth get-or-create") &&
@@ -900,7 +904,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 	::decode(auth_inc, q);
 	if (auth_inc.op == KeyServerData::AUTH_INC_ADD &&
 	    auth_inc.name == entity) {
-	  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+	  wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						get_last_committed() + 1));
 	  return true;
 	}
       }
@@ -935,7 +940,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
     rdata.append(ds);
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, rdata, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, rdata,
+					      get_last_committed() + 1));
     return true;
   } else if (prefix == "auth caps" && !entity_name.empty()) {
     KeyServerData::Incremental auth_inc;
@@ -957,7 +963,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
     ss << "updated caps for " << auth_inc.name;
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+					      get_last_committed() + 1));
     return true;
   } else if (prefix == "auth del" && !entity_name.empty()) {
     KeyServerData::Incremental auth_inc;
@@ -972,7 +979,8 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
     ss << "updated";
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+					      get_last_committed() + 1));
     return true;
   }
 

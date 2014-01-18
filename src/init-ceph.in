@@ -317,22 +317,21 @@ for name in $what; do
 
 	    if [ "$type" = "osd" ]; then
 		get_conf update_crush "" "osd crush update on start"
-		if [ "${update_crush:-1}" = "1" -o "{$update_crush:-1}" = "true" ]; then
-		    # update location in crush; put in some suitable defaults on the
-                    # command line, ceph.conf can override what it wants
-		    get_conf osd_location "" "osd crush location"
+		if [ "${update_crush:-1}" = "1" -o "${update_crush:-1}" = "true" ]; then
+		    # update location in crush
+		    get_conf osd_location_hook "$BINDIR/ceph-crush-location" "osd crush location hook"
+		    osd_location=`$osd_location_hook --cluster ceph --id $id --type osd`
 		    get_conf osd_weight "" "osd crush initial weight"
-		    defaultweight="$(do_cmd "df $osd_data/. | tail -1 | awk '{ d= \$2/1073741824 ; r = sprintf(\"%.2f\", d); print r }'")"
+		    defaultweight="$(do_cmd "df -P -k $osd_data/. | tail -1 | awk '{ d= \$2/1073741824 ; r = sprintf(\"%.2f\", d); print r }'")"
 		    get_conf osd_keyring "$osd_data/keyring" "keyring"
 		    do_cmd "timeout 10 $BINDIR/ceph \
+                        -c $conf \
 			--name=osd.$id \
 			--keyring=$osd_keyring \
 			osd crush create-or-move \
 			-- \
 			$id \
 			${osd_weight:-${defaultweight:-1}} \
-			root=default \
-			host=$host \
 			$osd_location"
 		fi
 	    fi

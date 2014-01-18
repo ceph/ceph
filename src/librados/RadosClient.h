@@ -16,6 +16,7 @@
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
+#include "common/RWLock.h"
 #include "common/Timer.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
@@ -50,6 +51,8 @@ private:
   MonClient monclient;
   SimpleMessenger *messenger;
 
+  uint64_t instance_id;
+
   bool _dispatch(Message *m);
   bool ms_dispatch(Message *m);
 
@@ -60,7 +63,13 @@ private:
 
   Objecter *objecter;
 
+  map<string, int64_t> pool_cache;
+
+  epoch_t osdmap_epoch;
+  epoch_t pool_cache_epoch;
+
   Mutex lock;
+  RWLock pool_cache_rwl;
   Cond cond;
   SafeTimer timer;
   int refcnt;
@@ -82,6 +91,8 @@ public:
   void shutdown();
 
   uint64_t get_instance_id();
+
+  int wait_for_latest_osdmap();
 
   int create_ioctx(const char *name, IoCtxImpl **io);
 
@@ -109,17 +120,17 @@ public:
   void register_watcher(librados::WatchContext *wc, uint64_t *cookie);
   void unregister_watcher(uint64_t cookie);
   void watch_notify(MWatchNotify *m);
-  int mon_command(const vector<string>& cmd, bufferlist &inbl,
+  int mon_command(const vector<string>& cmd, const bufferlist &inbl,
 	          bufferlist *outbl, string *outs);
   int mon_command(int rank,
-		  const vector<string>& cmd, bufferlist &inbl,
+		  const vector<string>& cmd, const bufferlist &inbl,
 	          bufferlist *outbl, string *outs);
   int mon_command(string name,
-		  const vector<string>& cmd, bufferlist &inbl,
+		  const vector<string>& cmd, const bufferlist &inbl,
 	          bufferlist *outbl, string *outs);
-  int osd_command(int osd, vector<string>& cmd, bufferlist& inbl,
+  int osd_command(int osd, vector<string>& cmd, const bufferlist& inbl,
                   bufferlist *poutbl, string *prs);
-  int pg_command(pg_t pgid, vector<string>& cmd, bufferlist& inbl,
+  int pg_command(pg_t pgid, vector<string>& cmd, const bufferlist& inbl,
 	         bufferlist *poutbl, string *prs);
 
   void handle_log(MLog *m);

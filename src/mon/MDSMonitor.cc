@@ -39,6 +39,8 @@
 #include "common/cmdparse.h"
 #include "include/str_list.h"
 
+#include "mds/mdstypes.h"
+
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, mdsmap)
@@ -54,7 +56,7 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, MDSMap& mdsmap) {
 
 void MDSMonitor::print_map(MDSMap &m, int dbl)
 {
-  dout(7) << "print_map\n";
+  dout(dbl) << "print_map\n";
   m.print(*_dout);
   *_dout << dendl;
 }
@@ -80,7 +82,7 @@ void MDSMonitor::create_new_fs(MDSMap &m, int metadata_pool, int data_pool)
 void MDSMonitor::create_initial()
 {
   dout(10) << "create_initial" << dendl;
-  create_new_fs(pending_mdsmap, CEPH_METADATA_RULE, CEPH_DATA_RULE);
+  create_new_fs(pending_mdsmap, MDS_METADATA_POOL, MDS_DATA_POOL);
 }
 
 
@@ -124,7 +126,8 @@ void MDSMonitor::encode_pending(MonitorDBStore::Transaction *t)
 
   pending_mdsmap.modified = ceph_clock_now(g_ceph_context);
 
-  //print_map(pending_mdsmap);
+  // print map iff 'debug mon = 30' or higher
+  print_map(pending_mdsmap, 30);
 
   // apply to paxos
   assert(get_last_committed() + 1 == pending_mdsmap.epoch);
@@ -134,6 +137,24 @@ void MDSMonitor::encode_pending(MonitorDBStore::Transaction *t)
   /* put everything in the transaction */
   put_version(t, pending_mdsmap.epoch, mdsmap_bl);
   put_last_committed(t, pending_mdsmap.epoch);
+}
+
+version_t MDSMonitor::get_trim_to()
+{
+  version_t floor = 0;
+  if (g_conf->mon_mds_force_trim_to > 0 &&
+      g_conf->mon_mds_force_trim_to < (int)get_last_committed()) {
+    floor = g_conf->mon_mds_force_trim_to;
+    dout(10) << __func__ << " explicit mon_mds_force_trim_to = "
+             << floor << dendl;
+  }
+
+  unsigned max = g_conf->mon_max_mdsmap_epochs;
+  version_t last = get_last_committed();
+
+  if (last - get_first_committed() > max && floor < last - max)
+    return last - max;
+  return floor;
 }
 
 void MDSMonitor::update_logger()
@@ -491,8 +512,8 @@ bool MDSMonitor::prepare_offload_targets(MMDSLoadTargets *m)
 
 bool MDSMonitor::should_propose(double& delay)
 {
-  delay = 0.0;
-  return true;
+  // delegate to PaxosService to assess whether we should propose
+  return PaxosService::should_propose(delay);
 }
 
 void MDSMonitor::_updated(MMDSBeacon *m)
@@ -531,6 +552,7 @@ void MDSMonitor::dump_info(Formatter *f)
   f->close_section();
 
   f->dump_unsigned("mdsmap_first_committed", get_first_committed());
+  f->dump_unsigned("mdsmap_last_committed", get_last_committed());
 }
 
 bool MDSMonitor::preprocess_command(MMonCommand *m)
@@ -570,10 +592,8 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
     }
     r = 0;
   } else if (prefix == "mds dump") {
-    string val;
     int64_t epocharg;
     epoch_t epoch;
-    epoch = epocharg;
 
     MDSMap *p = &mdsmap;
     if (cmd_getval(g_ceph_context, cmdmap, "epoch", epocharg)) {
@@ -634,7 +654,6 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
   } else if (prefix == "mds tell") {
     string whostr;
     cmd_getval(g_ceph_context, cmdmap, "who", whostr);
-    string args;
     vector<string>args_vec;
     cmd_getval(g_ceph_context, cmdmap, "args", args_vec);
 
@@ -800,13 +819,45 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
     }
 
   } else if (prefix == "mds set_max_mds") {
+    // NOTE: see also "mds set max_mds", which can modify the same field.
     int64_t maxmds;
     if (!cmd_getval(g_ceph_context, cmdmap, "maxmds", maxmds) || maxmds < 0)
       goto out;
     pending_mdsmap.max_mds = maxmds;
     r = 0;
     ss << "max_mds = " << pending_mdsmap.max_mds;
-
+  } else if (prefix == "mds set") {
+    string var;
+    if (!cmd_getval(g_ceph_context, cmdmap, "var", var) < 0)
+      goto out;
+    string val;
+    string interr;
+    int64_t n = 0;
+    if (!cmd_getval(g_ceph_context, cmdmap, "val", val))
+      goto out;
+    // we got a string.  see if it contains an int.
+    n = strict_strtoll(val.c_str(), 10, &interr);
+    if (var == "max_mds") {
+      // NOTE: see also "mds set_max_mds", which can modify the same field.
+      if (interr.length())
+	goto out;
+      pending_mdsmap.max_mds = n;
+    } else if (var == "max_file_size") {
+      if (interr.length()) {
+	ss << var << " requires an integer value";
+	goto out;
+      }
+      if (n < CEPH_MIN_STRIPE_UNIT) {
+	r = -ERANGE;
+	ss << var << " must at least " << CEPH_MIN_STRIPE_UNIT;
+	goto out;
+      }
+      pending_mdsmap.max_file_size = n;
+    } else {
+      ss << "unknown variable " << var;
+      goto out;
+    }
+    r = 0;
   } else if (prefix == "mds setmap") {
     MDSMap map;
     map.decode(m->get_data());
@@ -819,7 +870,8 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       map.epoch = pending_mdsmap.epoch;  // make sure epoch is correct
       pending_mdsmap = map;
       string rs = "set mds map";
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						get_last_committed() + 1));
       return true;
     } else {
       ss << "next mdsmap epoch " << pending_mdsmap.epoch << " != " << e;
@@ -838,7 +890,8 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       ss << "set mds gid " << gid << " to state " << state << " " << ceph_mds_state_name(state);
       string rs;
       getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						get_last_committed() + 1));
       return true;
     }
 
@@ -868,7 +921,8 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       ss << "removed mds gid " << gid;
       string rs;
       getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						get_last_committed() + 1));
       return true;
     }
   } else if (prefix == "mds rmfailed") {
@@ -879,7 +933,8 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
     ss << "removed failed mds." << w;
     string rs;
     getline(ss, rs);
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+					      get_last_committed() + 1));
     return true;
   } else if (prefix == "mds cluster_down") {
     if (pending_mdsmap.test_flag(CEPH_MDSMAP_DOWN)) {
@@ -1007,7 +1062,8 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
       ss << "new fs with metadata pool " << metadata << " and data pool " << data;
       string rs;
       getline(ss, rs);
-      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs, get_last_committed()));
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						get_last_committed() + 1));
       return true;
     }
   } else {
@@ -1019,7 +1075,8 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 
   if (r >= 0) {
     // success.. delay reply
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, r, rs, get_last_committed()));
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, r, rs,
+					      get_last_committed() + 1));
     return true;
   } else {
     // reply immediately

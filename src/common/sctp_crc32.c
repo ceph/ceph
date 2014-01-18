@@ -42,11 +42,7 @@ __FBSDID("$FreeBSD: src/sys/netinet/sctp_crc32.c,v 1.8 2007/05/08 17:01:10 rrs E
 
 #include <stdint.h>
 
-#if defined(__FreeBSD__)
-#include <sys/endian.h>
-#else
-#include <endian.h>
-#endif
+#include "include/byteorder.h"
 
 #ifndef SCTP_USE_ADLER32
 
@@ -541,7 +537,7 @@ sctp_crc32c_sb8_64_bit(uint32_t crc,
 		crc = sctp_crc_tableil8_o32[(crc ^ *p_buf++) & 0x000000FF] ^
 		    (crc >> 8);
 	for (li = 0; li < running_length / 8; li++) {
-#if BYTE_ORDER == BIG_ENDIAN
+#ifdef CEPH_BIG_ENDIAN
 		crc ^= *p_buf++;
 		crc ^= (*p_buf++) << 8;
 		crc ^= (*p_buf++) << 16;
@@ -557,7 +553,7 @@ sctp_crc32c_sb8_64_bit(uint32_t crc,
 		    sctp_crc_tableil8_o72[term2 & 0x000000FF] ^
 		    sctp_crc_tableil8_o64[(term2 >> 8) & 0x000000FF];
 
-#if BYTE_ORDER == BIG_ENDIAN
+#ifdef CEPH_BIG_ENDIAN
 		crc ^= sctp_crc_tableil8_o56[*p_buf++];
 		crc ^= sctp_crc_tableil8_o48[*p_buf++];
 		crc ^= sctp_crc_tableil8_o40[*p_buf++];
@@ -610,7 +606,7 @@ sctp_crc32c_sb8_64_bit_zero(uint32_t crc,
 		    sctp_crc_tableil8_o72[term2 & 0x000000FF] ^
 		    sctp_crc_tableil8_o64[(term2 >> 8) & 0x000000FF];
 
-#if BYTE_ORDER == BIG_ENDIAN
+#ifdef CEPH_BIG_ENDIAN
 		crc ^= sctp_crc_tableil8_o56[0];
 		crc ^= sctp_crc_tableil8_o48[0];
 		crc ^= sctp_crc_tableil8_o40[0];

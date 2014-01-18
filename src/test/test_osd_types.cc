@@ -1160,6 +1160,12 @@ TEST_F(ObjectContextTest, read_write_lock)
   
 }
 
-// Local Variables:
-// compile-command: "cd .. ; make unittest_osd_types ; ./unittest_osd_types # --gtest_filter=pg_missing_t.constructor "
-// End:
+/*
+ * Local Variables:
+ * compile-command: "cd .. ; 
+ *   make unittest_osd_types ; 
+ *   ./unittest_osd_types # --gtest_filter=pg_missing_t.constructor 
+ * "
+ * End:
+ */
+

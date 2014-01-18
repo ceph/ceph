@@ -3,6 +3,7 @@
   osdmaptool: writing epoch 1 to myosdmap
 
   $ ORIG_FSID="$(osdmaptool --print myosdmap|grep ^fsid)"
+  osdmaptool: osdmap file 'myosdmap'
 
   $ osdmaptool --createsimple 3 myosdmap
   osdmaptool: osdmap file 'myosdmap'
@@ -19,14 +20,15 @@
   modified \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ (re)
   flags 
   
-  pool 0 'data' rep size 2 min_size 1 crush_ruleset 0 object_hash rjenkins pg_num 192 pgp_num 192 last_change 0 owner 0 crash_replay_interval 45
-  pool 1 'metadata' rep size 2 min_size 1 crush_ruleset 1 object_hash rjenkins pg_num 192 pgp_num 192 last_change 0 owner 0
-  pool 2 'rbd' rep size 2 min_size 1 crush_ruleset 2 object_hash rjenkins pg_num 192 pgp_num 192 last_change 0 owner 0
+  pool 0 'data' replicated size 3 min_size 2 crush_ruleset 0 object_hash rjenkins pg_num 192 pgp_num 192 last_change 0 owner 0 flags hashpspool crash_replay_interval 45
+  pool 1 'metadata' replicated size 3 min_size 2 crush_ruleset 0 object_hash rjenkins pg_num 192 pgp_num 192 last_change 0 owner 0 flags hashpspool
+  pool 2 'rbd' replicated size 3 min_size 2 crush_ruleset 0 object_hash rjenkins pg_num 192 pgp_num 192 last_change 0 owner 0 flags hashpspool
   
   max_osd 3
   
 
   $ NEW_FSID="$(osdmaptool --print myosdmap|grep ^fsid)"
+  osdmaptool: osdmap file 'myosdmap'
   $ [ "$ORIG_FSID" = "$NEW_FSID" ]
 
   $ osdmaptool --createsimple 1 --clobber myosdmap
@@ -41,14 +43,15 @@
   modified \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ (re)
   flags 
   
-  pool 0 'data' rep size 2 min_size 1 crush_ruleset 0 object_hash rjenkins pg_num 64 pgp_num 64 last_change 0 owner 0 crash_replay_interval 45
-  pool 1 'metadata' rep size 2 min_size 1 crush_ruleset 1 object_hash rjenkins pg_num 64 pgp_num 64 last_change 0 owner 0
-  pool 2 'rbd' rep size 2 min_size 1 crush_ruleset 2 object_hash rjenkins pg_num 64 pgp_num 64 last_change 0 owner 0
+  pool 0 'data' replicated size 3 min_size 2 crush_ruleset 0 object_hash rjenkins pg_num 64 pgp_num 64 last_change 0 owner 0 flags hashpspool crash_replay_interval 45
+  pool 1 'metadata' replicated size 3 min_size 2 crush_ruleset 0 object_hash rjenkins pg_num 64 pgp_num 64 last_change 0 owner 0 flags hashpspool
+  pool 2 'rbd' replicated size 3 min_size 2 crush_ruleset 0 object_hash rjenkins pg_num 64 pgp_num 64 last_change 0 owner 0 flags hashpspool
   
   max_osd 1
   
 
   $ NEW_FSID="$(osdmaptool --print myosdmap|grep ^fsid)"
+  osdmaptool: osdmap file 'myosdmap'
 #TODO --clobber should probably set new fsid, remove the [1]
   $ [ "$ORIG_FSID" != "$NEW_FSID" ]
   [1]

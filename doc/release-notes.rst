@@ -2,6 +2,347 @@
  Release Notes
 ===============
 
+v0.76 (frozen, not yet released)
+--------------------------------
+
+This release includes another batch of updates for firefly
+functionality.  Most notably, the cache pool infrastructure now
+support snapshots, the OSD backfill functionality has been generalized
+to include multiple targets (necessary for the coming erasure pools),
+and there were performance improvements to the erasure code plugin on
+capable processors.  The MDS now properly utilizes (and seamlessly
+migrates to) the OSD key/value interface (aka omap) for storing directory
+objects.  There continue to be many other fixes and improvements for
+usability and code portability across the tree.
+
+Upgrading
+~~~~~~~~~
+
+* 'rbd ls' on a pool which never held rbd images now exits with code
+  0. It outputs nothing in plain format, or an empty list in
+  non-plain format. This is consistent with the behavior for a pool
+  which used to hold images, but contains none. Scripts relying on
+  this behavior should be updated.
+
+* The MDS requires a new OSD operation TMAP2OMAP, added in this release.  When
+  upgrading, be sure to upgrade and restart the ceph-osd daemons before the
+  ceph-mds daemon.  The MDS will refuse to start if any up OSDs do not support
+  the new feature.
+
+* The 'ceph mds set_max_mds N' command is now deprecated in favor of
+  'ceph mds set max_mds N'.
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* mon: allow adjustment of cephfs max file size via 'ceph mds set max_file_size' (Sage Weil)
+* osd: cache pool support for snapshots (Sage Weil)
+* osd: backfill to multiple targets (David Zafman)
+* osd: fix omap_clear operation to not zap xattrs (Sam Just, Yan, Zheng)
+* crush: usability and test improvements (Loic Dachary)
+* mds: store directories in omap instead of tmap (Yan, Zheng)
+* librados, osd: new TMAP2OMAP operation (Yan, Zheng)
+* mailmap updates (Loic Dachary)
+* rpm: misc fixes (Ken Dreyer)
+* erasure-code: improve buffer alignment (Loic Dachary)
+* erasure-code: rewrite region-xor using vector operations (Andreas Peters)
+* osd: fix and cleanup misc backfill issues (David Zafman)
+* osd: track erasure compatibility (David Zafman)
+* many portability improvements (Noah Watkins)
+* many unit test improvements (Loic Dachary)
+* build: misc improvements (Ken Dreyer)
+* rgw: fix object placement read op (Yehuda Sadeh)
+* config: recursive metavariable expansion (Loic Dachary)
+* ceph-disk: generalize path names, add tests (Loic Dachary)
+* ceph-disk: misc improvements for puppet (Loic Dachary)
+* mon: do not use keyring if auth = none (Loic Dachary)
+* mds: always store backtrace in default pool (Yan, Zheng)
+* rbd: make 'rbd list' return empty list and success on empty pool (Josh Durgin)
+* doc: misc fixes (David Moreau Simard, Kun Huang)
+* osd: include more info in pg query result (Sage Weil)
+
+up to 03d7d97
+
+
+v0.75
+-----
+
+This is a big release, with lots of infrastructure going in for
+firefly.  The big items include a prototype standalone frontend for
+radosgw (which does not require apache or fastcgi), tracking for read
+activity on the osds (to inform tiering decisions), preliminary cache
+pool support (no snapshots yet), and lots of bug fixes and other work
+across the tree to get ready for the next batch of erasure coding
+patches.
+
+For comparison, here are the diff stats for the last few versions::
+
+ v0.75 291 files changed, 82713 insertions(+), 33495 deletions(-)
+ v0.74 192 files changed, 17980 insertions(+), 1062 deletions(-)
+ v0.73 148 files changed, 4464 insertions(+), 2129 deletions(-)
+
+Upgrading
+~~~~~~~~~
+
+- The 'osd pool create ...' syntax has changed for erasure pools.
+
+- The default CRUSH rules and layouts are now using the latest and
+  greatest tunables and defaults.  Clusters using the old values will
+  now present with a health WARN state.  This can be disabled by
+  adding 'mon warn on legacy crush tunables = false' to ceph.conf.
+
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* common: bloom filter improvements (Sage Weil)
+* common: fix config variable substitution (Loic Dachary)
+* crush, osd: s/rep/replicated/ for less confusion (Loic Dachary)
+* crush: refactor descend_once behavior; support set_choose*_tries for replicated rules (Sage Weil)
+* librados: fix throttle leak (and eventual deadlock) (Josh Durgin)
+* librados: read directly into user buffer (Rutger ter Borg)
+* librbd: fix use-after-free aio completion bug #5426 (Josh Durgin)
+* librbd: localize/distribute parent reads (Sage Weil)
+* mds: fix Resetter locking (Alexandre Oliva)
+* mds: fix cap migration behavior (Yan, Zheng)
+* mds: fix client session flushing (Yan, Zheng)
+* mds: fix many many multi-mds bugs (Yan, Zheng)
+* misc portability work (Noah Watkins)
+* mon, osd: create erasure style crush rules (Loic Dachary, Sage Weil)
+* mon: 'osd crush show-tunables' (Sage Weil)
+* mon: clean up initial crush rule creation (Loic Dachary)
+* mon: improve (replicate or erasure) pool creation UX (Loic Dachary)
+* mon: infrastructure to handle mixed-version mon cluster and cli/rest API (Greg Farnum)
+* mon: mkfs now idempotent (Loic Dachary)
+* mon: only seed new osdmaps to current OSDs (Sage Weil)
+* mon: track osd features in OSDMap (Joao Luis, David Zafman)
+* mon: warn if crush has non-optimal tunables (Sage Weil)
+* mount.ceph: add -n for autofs support (Steve Stock)
+* msgr: fix messenger restart race (Xihui He)
+* osd, librados: fix full cluster handling (Josh Durgin)
+* osd: add HitSet tracking for read ops (Sage Weil, Greg Farnum)
+* osd: backfill to osds not in acting set (David Zafman)
+* osd: enable new hashpspool layout by default (Sage Weil)
+* osd: erasure plugin benchmarking tool (Loic Dachary)
+* osd: fix XFS detection (Greg Farnum, Sushma Gurram)
+* osd: fix copy-get omap bug (Sage Weil)
+* osd: fix linux kernel version detection (Ilya Dryomov)
+* osd: fix memstore segv (Haomai Wang)
+* osd: fix several bugs with tier infrastructure
+* osd: fix throttle thread (Haomai Wang)
+* osd: preliminary cache pool support (no snaps) (Greg Farnum, Sage Weil)
+* rados tool: fix listomapvals (Josh Durgin)
+* rados: add 'crush location', smart replica selection/balancing (Sage Weil)
+* rados: some performance optimizations (Yehuda Sadeh)
+* rbd: add rbdmap support for upstart (Laurent Barbe)
+* rbd: expose kernel rbd client options via 'rbd map' (Ilya Dryomov)
+* rbd: fix bench-write command (Hoamai Wang)
+* rbd: support for 4096 mapped devices, up from ~250 (Ilya Dryomov)
+* rgw: allow multiple frontends (Yehuda Sadeh)
+* rgw: convert bucket info to new format on demand (Yehuda Sadeh)
+* rgw: fix misc CORS bugs (Robin H. Johnson)
+* rgw: prototype mongoose frontend (Yehuda Sadeh)
+
+
+
+v0.74
+-----
+
+This release includes a few substantial pieces for Firefly, including
+a long-overdue switch to 3x replication by default and a switch to the
+"new" CRUSH tunables by default (supported since bobtail).  There is
+also a fix for a long-standing radosgw bug (stalled GET) that has
+already been backported to emperor and dumpling.
+
+Upgrading
+~~~~~~~~~
+
+* We now default to the 'bobtail' CRUSH tunable values that are first supported
+  by Ceph clients in bobtail (v0.56) and Linux kernel version v3.9.  If you
+  plan to access a newly created Ceph cluster with an older kernel client, you
+  should use 'ceph osd crush tunables legacy' to switch back to the legacy
+  behavior.  Note that making that change will likely result in some data
+  movement in the system, so adjust the setting before populating the new
+  cluster with data.
+
+* We now set the HASHPSPOOL flag on newly created pools (and new
+  clusters) by default.  Support for this flag first appeared in
+  v0.64; v0.67 Dumpling is the first major release that supports it.
+  It is first supported by the Linux kernel version v3.9.  If you plan
+  to access a newly created Ceph cluster with an older kernel or
+  clients (e.g, librados, librbd) from a pre-dumpling Ceph release,
+  you should add 'osd pool default flag hashpspool = false' to the
+  '[global]' section of your 'ceph.conf' prior to creating your
+  monitors (e.g., after 'ceph-deploy new' but before 'ceph-deploy mon
+  create ...').
+
+* The configuration option 'osd pool default crush rule' is deprecated
+  and replaced with 'osd pool default crush replicated ruleset'. 'osd
+  pool default crush rule' takes precedence for backward compatibility
+  and a deprecation warning is displayed when it is used.
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* buffer: some zero-copy groundwork (Josh Durgin)
+* ceph-disk: avoid fd0 (Loic Dachary)
+* crush: default to bobtail tunables (Sage Weil)
+* crush: many additional tests (Loic Dachary)
+* crush: misc fixes, cleanups (Loic Dachary)
+* crush: new rule steps to adjust retry attempts (Sage Weil)
+* debian: integrate misc fixes from downstream packaging (James Page)
+* doc: big update to install docs (John Wilkins)
+* libcephfs: fix resource leak (Zheng Yan)
+* misc coverity fixes (Xing Lin, Li Wang, Danny Al-Gaaf)
+* misc portability fixes (Noah Watkins, Alan Somers)
+* mon, osd: new 'erasure' pool type (still not fully supported)
+* mon: add 'mon getmap EPOCH' (Joao Eduardo Luis)
+* mon: collect misc metadata about osd (os, kernel, etc.), new 'osd metadata' command (Sage Weil)
+* osd: default to 3x replication
+* osd: do not include backfill targets in acting set (David Zafman)
+* osd: new 'chassis' type in default crush hierarchy (Sage Weil)
+* osd: requery unfound on stray notify (#6909) (Samuel Just)
+* osd: some PGBackend infrastructure (Samuel Just)
+* osd: support for new 'memstore' (memory-backed) backend (Sage Weil)
+* rgw: fix fastcgi deadlock (do not return data from librados callback) (Yehuda Sadeh)
+* rgw: fix reading bucket policy (#6940)
+* rgw: fix use-after-free when releasing completion handle (Yehuda Sadeh)
+
+
+v0.73
+-----
+
+This release, the first development release after emperor, includes
+many bug fixes and a few additional pieces of functionality.  The
+first batch of larger changes will be landing in the next version,
+v0.74.
+
+Upgrading
+~~~~~~~~~
+
+- As part of fix for #6796, 'ceph osd pool set <pool> <var> <arg>' now
+  receives <arg> as an integer instead of a string.  This affects how
+  'hashpspool' flag is set/unset: instead of 'true' or 'false', it now
+  must be '0' or '1'.
+
+- The behavior of the CRUSH 'indep' choose mode has been changed.  No
+  ceph cluster should have been using this behavior unless someone has
+  manually extracted a crush map, modified a CRUSH rule to replace
+  'firstn' with 'indep', recompiled, and reinjected the new map into
+  the cluster.  If the 'indep' mode is currently in use on a cluster,
+  the rule should be modified to use 'firstn' instead, and the
+  administrator should wait until any data movement completes before
+  upgrading.
+
+- The 'osd dump' command now dumps pool snaps as an array instead of an
+  object.
+
+
+Notable Changes
+~~~~~~~~~~~~~~~
+
+* ceph-crush-location: new hook for setting CRUSH location of osd daemons on start
+* ceph-kvstore-tool: expanded command set and capabilities (Joao Eduardo Luis)
+* ceph.spec: fix build dependency (Loic Dachary)
+* common: fix aligned buffer allocation (Loic Dachary)
+* doc: many many install doc improvements (John Wilkins)
+* mds: fix readdir end check (Zheng Yan)
+* mds: update old-format backtraces opportunistically (Zheng Yan)
+* misc cleanups from coverity (Xing Lin)
+* misc portability fixes (Noah Watkins, Christophe Courtaut, Alan Somers, huanjun)
+* mon: 'osd dump' dumps pool snaps as array, not object (Dan Mick)
+* mon: allow debug quorum_{enter,exit} commands via admin socket
+* mon: prevent extreme changes in pool pg_num (Greg Farnum)
+* mon: take 'osd pool set ...' value as an int, not string (Joao Eduardo Luis)
+* mon: trim MDSMaps (Joao Eduardo Luis)
+* osd: fix object_info_t encoding bug from emperor (Sam Just)
+* rbd: add 'rbdmap' init script for mapping rbd images on book (Adam Twardowski)
+* rgw: add 'status' command to sysvinit script (David Moreau Simard)
+* rgw: fix error setting empty owner on ACLs (Yehuda Sadeh)
+* rgw: optionally defer to bucket ACLs instead of object ACLs (Liam Monahan)
+* rgw: support for password (instead of admin token) for keystone authentication (Christophe Courtaut)
+* sysvinit, upstart: prevent both init systems from starting the same daemons (Josh Durgin)
+
+
+v0.72.2 Emperor
+---------------
+
+This is the second bugfix release for the v0.72.x Emperor series.  We
+have fixed a hang in radosgw, and fixed (again) a problem with monitor
+CLI compatiblity with mixed version monitors.  (In the future this
+will no longer be a problem.)
+
+Upgrading
+~~~~~~~~~
+
+* The JSON schema for the 'osd pool set ...' command changed slightly.  Please
+  avoid issuing this particular command via the CLI while there is a mix of
+  v0.72.1 and v0.72.2 monitor daemons running.
+
+* As part of fix for #6796, 'ceph osd pool set <pool> <var> <arg>' now
+  receives <arg> as an integer instead of a string.  This affects how
+  'hashpspool' flag is set/unset: instead of 'true' or 'false', it now
+  must be '0' or '1'.
+
+
+Changes
+~~~~~~~
+
+* mon: 'osd pool set ...' syntax change
+* osd: added test for missing on-disk HEAD object
+* osd: fix osd bench block size argument
+* rgw: fix hang on large object GET
+* rgw: fix rare use-after-free
+* rgw: various DR bug fixes
+* rgw: do not return error on empty owner when setting ACL
+* sysvinit, upstart: prevent starting daemons using both init systems
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.72.2.txt>`.
+
+v0.72.1 Emperor
+---------------
+
+Important Note
+~~~~~~~~~~~~~~
+
+When you are upgrading from Dumpling to Emperor, do not run any of the
+"ceph osd pool set" commands while your monitors are running separate versions.
+Doing so could result in inadvertently changing cluster configuration settings
+that exhaust compute resources in your OSDs.
+
+Changes
+~~~~~~~
+
+* osd: fix upgrade bug #6761
+* ceph_filestore_tool: introduced tool to repair errors caused by #6761
+
+This release addresses issue #6761.  Upgrading to Emperor can cause
+reads to begin returning ENFILE (too many open files).  v0.72.1 fixes
+that upgrade issue and adds a tool ceph_filestore_tool to repair osd
+stores affected by this bug.
+
+To repair a cluster affected by this bug:
+
+#. Upgrade all osd machines to v0.72.1
+#. Install the ceph-test package on each osd machine to get ceph_filestore_tool
+#. Stop all osd processes
+#. To see all lost objects, run the following on each osd with the osd stopped and
+   the osd data directory mounted::
+
+     ceph_filestore_tool --list-lost-objects=true --filestore-path=<path-to-osd-filestore> --journal-path=<path-to-osd-journal>
+
+#. To fix all lost objects, run the following on each osd with the
+   osd stopped and the osd data directory mounted::
+
+     ceph_filestore_tool --fix-lost-objects=true --list-lost-objects=true --filestore-path=<path-to-osd-filestore> --journal-path=<path-to-osd-journal>
+
+#. Once lost objects have been repaired on each osd, you can restart
+   the cluster.
+
+Note, the ceph_filestore_tool performs a scan of all objects on the
+osd and may take some time.
+
+
 v0.72 Emperor
 -------------
 
@@ -10,6 +351,14 @@ This is the fifth major release of Ceph, the fourth since adopting a
 including multi-datacenter replication for the radosgw, improved
 usability, and lands a lot of incremental performance and internal
 refactoring work to support upcoming features in Firefly.
+
+Important Note
+~~~~~~~~~~~~~~
+
+When you are upgrading from Dumpling to Emperor, do not run any of the
+"ceph osd pool set" commands while your monitors are running separate versions.
+Doing so could result in inadvertently changing cluster configuration settings
+that exhaust compute resources in your OSDs.
 
 Highlights
 ~~~~~~~~~~
@@ -27,7 +376,7 @@ Highlights
 * rgw: performance improvements
 * rgw: validate S3 tokens against Keystone
 
-Coincident with core Ceph, the Emperor release also brings::
+Coincident with core Ceph, the Emperor release also brings:
 
 * radosgw-agent: support for multi-datacenter replication for disaster recovery
 * tgt: improved support for iSCSI via upstream tgt
@@ -38,14 +387,16 @@ Upgrade sequencing
 ~~~~~~~~~~~~~~~~~~
 
 There are no specific upgrade restrictions on the order or sequence of
-upgrading from 0.67.x Dumpling.  
+upgrading from 0.67.x Dumpling. However, you cannot run any of the
+"ceph osd pool set" commands while your monitors are running separate versions.
+Doing so could result in inadvertently changing cluster configuration settings
+and exhausting compute resources in your OSDs.
 
 It is also possible to do a rolling upgrade from 0.61.x Cuttlefish,
 but there are ordering restrictions.  (This is the same set of
-restrictions for Cuttlefish to Dumpling.)::
+restrictions for Cuttlefish to Dumpling.)
 
-#. Upgrade ceph-common on all nodes that will use the command line
-   'ceph' utility.
+#. Upgrade ceph-common on all nodes that will use the command line 'ceph' utility.
 #. Upgrade all monitors (upgrade ceph package, restart ceph-mon
    daemons).  This can happen one daemon or host at a time.  Note that
    because cuttlefish and dumpling monitors can't talk to each other,
@@ -100,11 +451,6 @@ Upgrading from v0.67 Dumpling
   don't drop a reference to the completion object on error, caller needs to take
   care of that. This has never really worked correctly and we were leaking an
   object
-
-* 'ceph osd crush set <id> <weight> <loc..>' no longer adds the osd to the
-  specified location, as that's a job for 'ceph osd crush add'.  It will
-  however continue to work just the same as long as the osd already exists
-  in the crush map.
 
 * 'ceph osd crush set <id> <weight> <loc..>' no longer adds the osd to the
   specified location, as that's a job for 'ceph osd crush add'.  It will
@@ -408,6 +754,12 @@ v0.69
 Upgrading
 ~~~~~~~~~
 
+* The sysvinit /etc/init.d/ceph script will, by default, update the
+  CRUSH location of an OSD when it starts.  Previously, if the
+  monitors were not available, this command would hang indefinitely.
+  Now, that step will time out after 10 seconds and the ceph-osd daemon
+  will not be started.
+
 * Users of the librados C++ API should replace users of get_version()
   with get_version64() as the old method only returns a 32-bit value
   for a 64-bit field.  The existing 32-bit get_version() method is now
@@ -541,6 +893,41 @@ Notable Changes
 * rgw: fix S3 auth with response-* query string params (Sylvain Munaut, Yehuda Sadeh)
 * sysvinit: add condrestart command (Dan van der Ster)
 
+
+v0.67.5 "Dumpling"
+------------------
+
+This release includes a few critical bug fixes for the radosgw, 
+including a fix for hanging operations on large objects.  There are also
+several bug fixes for radosgw multi-site replications, and a few 
+backported features.  Also, notably, the 'osd perf' command (which dumps
+recent performance information about active OSDs) has been backported.
+
+We recommend that all 0.67.x Dumpling users upgrade.
+
+Notable changes
+~~~~~~~~~~~~~~~
+
+* ceph-fuse: fix crash in caching code
+* mds: fix looping in populate_mydir()
+* mds: fix standby-replay race
+* mon: accept 'osd pool set ...' as string
+* mon: backport: 'osd perf' command to dump recent OSD performance stats
+* osd: add feature compat check for upcoming object sharding
+* osd: fix osd bench block size argument
+* rbd.py: increase parent name size limit
+* rgw: backport: allow wildcard in supported keystone roles
+* rgw: backport: improve swift COPY behavior
+* rgw: backport: log and open admin socket by default
+* rgw: backport: validate S3 tokens against keystone
+* rgw: fix bucket removal
+* rgw: fix client error code for chunked PUT failure
+* rgw: fix hang on large object GET
+* rgw: fix rare use-after-free
+* rgw: various DR bug fixes
+* sysvinit, upstart: prevent starting daemons using both init systems
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.67.5.txt>`.
 
 
 v0.67.4 "Dumpling"

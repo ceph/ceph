@@ -29,15 +29,15 @@ struct io {
 };
 map<off_t,io> writes;
 Cond cond;
-Mutex lock("streamtest.cc lock");
+Mutex test_lock("streamtest.cc lock");
 
 unsigned concurrent = 1;
 void throttle()
 { 
-  Mutex::Locker l(lock);
+  Mutex::Locker l(test_lock);
   while (writes.size() >= concurrent) {
     //generic_dout(0) << "waiting" << dendl;
-    cond.Wait(lock);
+    cond.Wait(test_lock);
   }
 }
 
@@ -60,13 +60,13 @@ void pr(off_t off)
 
 void set_start(off_t off, utime_t t)
 {
-  Mutex::Locker l(lock);
+  Mutex::Locker l(test_lock);
   writes[off].start = t;
 }
 
 void set_ack(off_t off, utime_t t)
 {
-  Mutex::Locker l(lock);
+  Mutex::Locker l(test_lock);
   //generic_dout(0) << "ack " << off << dendl;
   writes[off].ack = t;
   if (writes[off].done())
@@ -75,7 +75,7 @@ void set_ack(off_t off, utime_t t)
 
 void set_commit(off_t off, utime_t t)
 {
-  Mutex::Locker l(lock);
+  Mutex::Locker l(test_lock);
   //generic_dout(0) << "commit " << off << dendl;
   writes[off].commit = t;
   if (writes[off].done())

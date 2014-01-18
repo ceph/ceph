@@ -99,7 +99,7 @@ namespace librbd {
     } else {
       op.read(m_object_off, m_object_len, &m_read_data, NULL);
     }
-    r = m_ioctx->aio_operate(m_oid, rados_completion, &op, m_snap_id, flags, NULL);
+    r = m_ioctx->aio_operate(m_oid, rados_completion, &op, flags, NULL);
 
     rados_completion->release();
     return r;

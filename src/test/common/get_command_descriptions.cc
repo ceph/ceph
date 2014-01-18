@@ -45,7 +45,7 @@ static void json_print(const MonCommand *mon_commands, int size)
 {
   bufferlist rdata;
   Formatter *f = new_formatter("json");
-  get_command_descriptions(mon_commands, size, f, &rdata);
+  Monitor::format_command_descriptions(mon_commands, size, f, &rdata);
   delete f;
   string data(rdata.c_str(), rdata.length());
   cout << data << std::endl;

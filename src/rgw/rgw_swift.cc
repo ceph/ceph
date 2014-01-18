@@ -104,7 +104,39 @@ int RGWSwift::validate_token(const char *token, struct rgw_swift_auth_info *info
   return 0;
 }
 
+class RGWPostHTTPData : public RGWHTTPClient {
+  bufferlist *bl;
+  std::string post_data;
+  size_t post_data_index;
+public:
+  RGWPostHTTPData(CephContext *_cct, bufferlist *_bl) : RGWHTTPClient(_cct), bl(_bl), post_data_index(0) {}
 
+  void set_post_data(const std::string& _post_data) {
+    this->post_data = _post_data;
+  }
+
+  int send_data(void* ptr, size_t len) {
+    int length_to_copy = 0;
+    if (post_data_index < post_data.length()) {
+      length_to_copy = min(post_data.length() - post_data_index, len);
+      memcpy(ptr, post_data.data() + post_data_index, length_to_copy);
+      post_data_index += length_to_copy;
+    }
+    return length_to_copy;
+  }
+
+  int receive_data(void *ptr, size_t len) {
+    bl->append((char *)ptr, len);
+    return 0;
+  }
+
+  int receive_header(void *ptr, size_t len) {
+    return 0;
+  }
+};
+
+typedef RGWPostHTTPData RGWGetKeystoneAdminToken;
+typedef RGWPostHTTPData RGWGetRevokedTokens;
 
 class RGWValidateKeystoneToken : public RGWHTTPClient {
   bufferlist *bl;
@@ -125,23 +157,6 @@ public:
 };
 
 static RGWKeystoneTokenCache *keystone_token_cache = NULL;
-
-class RGWGetRevokedTokens : public RGWHTTPClient {
-  bufferlist *bl;
-public:
-  RGWGetRevokedTokens(CephContext *_cct, bufferlist *_bl) : RGWHTTPClient(_cct), bl(_bl) {}
-
-  int receive_data(void *ptr, size_t len) {
-    bl->append((char *)ptr, len);
-    return 0;
-  }
-  int receive_header(void *ptr, size_t len) {
-    return 0;
-  }
-  int send_data(void *ptr, size_t len) {
-    return 0;
-  }
-};
 
 static int open_cms_envelope(CephContext *cct, string& src, string& dst)
 {
@@ -211,23 +226,70 @@ static int decode_b64_cms(CephContext *cct, const string& signed_b64, bufferlist
   return 0;
 }
 
-
-int RGWSwift::check_revoked()
+int	RGWSwift::get_keystone_url(std::string& url)
 {
   bufferlist bl;
   RGWGetRevokedTokens req(cct, &bl);
 
-  string url = g_conf->rgw_keystone_url;
+  url = cct->_conf->rgw_keystone_url;
   if (url.empty()) {
     ldout(cct, 0) << "ERROR: keystone url is not configured" << dendl;
     return -EINVAL;
   }
   if (url[url.size() - 1] != '/')
     url.append("/");
+  return 0;
+}
+
+int	RGWSwift::get_keystone_admin_token(std::string& token)
+{
+  std::string token_url;
+
+  if (get_keystone_url(token_url) < 0)
+    return -EINVAL;
+  if (cct->_conf->rgw_keystone_admin_token.empty()) {
+    token_url.append("v2.0/tokens");
+    KeystoneToken t;
+    bufferlist token_bl;
+    RGWGetKeystoneAdminToken token_req(cct, &token_bl);
+    JSONFormatter jf;
+    jf.open_object_section("auth");
+    jf.open_object_section("passwordCredentials");
+    encode_json("username", cct->_conf->rgw_keystone_admin_user, &jf);
+    encode_json("password", cct->_conf->rgw_keystone_admin_password, &jf);
+    jf.close_section();
+    encode_json("tenantName", cct->_conf->rgw_keystone_admin_tenant, &jf);
+    jf.close_section();
+    std::stringstream ss;
+    jf.flush(ss);
+    token_req.set_post_data(ss.str());
+    int ret = token_req.process(token_url.c_str());
+    if (ret < 0)
+      return ret;
+    if (t.parse(cct, token_bl) != 0)
+      return -EINVAL;
+    token = t.token.id;
+  } else {
+    token = cct->_conf->rgw_keystone_admin_token;
+  }
+  return 0; 
+}
+
+
+int RGWSwift::check_revoked()
+{
+  string url;
+  string token;
+
+  bufferlist bl;
+  RGWGetRevokedTokens req(cct, &bl);
+
+  if (get_keystone_admin_token(token) < 0)
+    return -EINVAL;
+  if (get_keystone_url(url) < 0)
+    return -EINVAL;
   url.append("v2.0/tokens/revoked");
-
-  req.append_header("X-Auth-Token", g_conf->rgw_keystone_admin_token);
-
+  req.append_header("X-Auth-Token", token);
   int ret = req.process(url.c_str());
   if (ret < 0)
     return ret;
@@ -429,10 +491,16 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
     }
     if (url[url.size() - 1] != '/')
       url.append("/");
+    std::string admin_token;
+    if (get_keystone_admin_token(admin_token) < 0)
+      return -EINVAL;
+    if (get_keystone_url(url) < 0)
+      return -EINVAL;
+
     url.append("v2.0/tokens/");
     url.append(token);
 
-    validate.append_header("X-Auth-Token", g_conf->rgw_keystone_admin_token);
+    validate.append_header("X-Auth-Token", admin_token);
 
     int ret = validate.process(url.c_str());
     if (ret < 0)
@@ -454,11 +522,94 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
   return 0;
 }
 
+int authenticate_temp_url(RGWRados *store, req_state *s)
+{
+  /* temp url requires bucket and object specified in the requets */
+  if (s->bucket_name_str.empty())
+    return -EPERM;
+
+  if (s->object_str.empty())
+    return -EPERM;
+
+  string temp_url_sig = s->info.args.get("temp_url_sig");
+  if (temp_url_sig.empty())
+    return -EPERM;
+
+  string temp_url_expires = s->info.args.get("temp_url_expires");
+  if (temp_url_expires.empty())
+    return -EPERM;
+
+  /* need to get user info of bucket owner */
+  RGWBucketInfo bucket_info;
+
+  int ret = store->get_bucket_info(NULL, s->bucket_name_str, bucket_info, NULL);
+  if (ret < 0)
+    return -EPERM;
+
+  dout(20) << "temp url user (bucket owner): " << bucket_info.owner << dendl;
+  if (rgw_get_user_info_by_uid(store, bucket_info.owner, s->user) < 0) {
+    return -EPERM;
+  }
+
+  if (s->user.temp_url_keys.empty()) {
+    dout(5) << "user does not have temp url key set, aborting" << dendl;
+    return -EPERM;
+  }
+
+  if (!s->info.method)
+    return -EPERM;
+
+  utime_t now = ceph_clock_now(g_ceph_context);
+
+  string err;
+  uint64_t expiration = (uint64_t)strict_strtoll(temp_url_expires.c_str(), 10, &err);
+  if (!err.empty()) {
+    dout(5) << "failed to parse temp_url_expires: " << err << dendl;
+    return -EPERM;
+  }
+  if (expiration <= (uint64_t)now.sec()) {
+    dout(5) << "temp url expired: " << expiration << " <= " << now.sec() << dendl;
+    return -EPERM;
+  }
+
+  /* strip the swift prefix from the uri */
+  int pos = g_conf->rgw_swift_url_prefix.find_last_not_of('/') + 1;
+  string object_path = s->info.request_uri.substr(pos + 1);
+  string str = string(s->info.method) + "\n" + temp_url_expires + "\n" + object_path;
+
+  dout(20) << "temp url signature (plain text): " << str << dendl;
+
+  map<int, string>::iterator iter;
+  for (iter = s->user.temp_url_keys.begin(); iter != s->user.temp_url_keys.end(); ++iter) {
+    string& temp_url_key = iter->second;
+
+    if (temp_url_key.empty())
+      continue;
+
+    char dest[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
+    calc_hmac_sha1(temp_url_key.c_str(), temp_url_key.size(),
+                   str.c_str(), str.size(), dest);
+
+    char dest_str[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2 + 1];
+    buf_to_hex((const unsigned char *)dest, sizeof(dest), dest_str);
+    dout(20) << "temp url signature [" << iter->first << "] (calculated): " << dest_str << dendl;
+
+    if (dest_str != temp_url_sig) {
+      dout(5) << "temp url signature mismatch: " << dest_str << " != " << temp_url_sig << dendl;
+    } else {
+      return 0;
+    }
+  }
+
+  return -EPERM;
+}
 
 bool RGWSwift::verify_swift_token(RGWRados *store, req_state *s)
 {
-  if (!s->os_auth_token)
-    return false;
+  if (!s->os_auth_token) {
+    int ret = authenticate_temp_url(store, s);
+    return (ret >= 0);
+  }
 
   if (strncmp(s->os_auth_token, "AUTH_rgwtk", 10) == 0) {
     int ret = rgw_swift_verify_signed_token(s->cct, store, s->os_auth_token, s->user);

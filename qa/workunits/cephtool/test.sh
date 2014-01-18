@@ -1,6 +1,8 @@
 #!/bin/bash -x
 
 set -e
+set -o functrace
+PS4=' ${FUNCNAME[0]}: $LINENO: '
 
 get_pg()
 {
@@ -25,8 +27,11 @@ expect_false()
 	if "$@"; then return 1; else return 0; fi
 }
 
-TMPFILE=/tmp/test_invalid.$$
-trap "rm $TMPFILE" 0
+TMPDIR=/tmp/cephtool$$
+mkdir $TMPDIR
+trap "rm -fr $TMPDIR" 0
+
+TMPFILE=$TMPDIR/test_invalid.$$
 
 function check_response()
 {
@@ -72,13 +77,13 @@ ceph osd tier remove data cache2
 ceph osd pool delete cache cache --yes-i-really-really-mean-it
 ceph osd pool delete cache2 cache2 --yes-i-really-really-mean-it
 
-#
 # Assumes there are at least 3 MDSes and two OSDs
 #
 
 ceph auth add client.xx mon allow osd "allow *"
 ceph auth export client.xx >client.xx.keyring
 ceph auth add client.xx -i client.xx.keyring
+rm -f client.xx.keyring
 ceph auth list | grep client.xx
 ceph auth get client.xx | grep caps | grep mon
 ceph auth get client.xx | grep caps | grep osd
@@ -114,15 +119,15 @@ ceph health detail
 ceph health --format json-pretty
 ceph health detail --format xml-pretty
 
-ceph -w > /tmp/$$ &
+ceph -w > $TMPDIR/$$ &
 wpid="$!"
 mymsg="this is a test log message $$.$(date)"
 ceph log "$mymsg"
 sleep 3
-if ! grep "$mymsg" /tmp/$$; then
+if ! grep "$mymsg" $TMPDIR/$$; then
     # in case it is very slow (mon thrashing or something)
     sleep 30
-    grep "$mymsg" /tmp/$$
+    grep "$mymsg" $TMPDIR/$$
 fi
 kill $wpid
 
@@ -136,7 +141,7 @@ ceph mds compat show
 expect_false ceph mds deactivate 2
 ceph mds dump
 # XXX mds fail, but how do you undo it?
-mdsmapfile=/tmp/mdsmap.$$
+mdsmapfile=$TMPDIR/mdsmap.$$
 current_epoch=$(ceph mds getmap -o $mdsmapfile --no-log-to-stderr 2>&1 | grep epoch | sed 's/.*epoch //')
 [ -s $mdsmapfile ]
 ((epoch = current_epoch + 1))
@@ -153,6 +158,10 @@ ceph mds remove_data_pool rbd
 ceph osd pool delete data2 data2 --yes-i-really-really-mean-it
 ceph mds set_max_mds 4
 ceph mds set_max_mds 3
+ceph mds set max_mds 4
+expect_false ceph mds set max_mds asdf
+ceph mds set max_file_size 1000000000
+expect_false ceph mds set max_file_size 123asdf
 ceph mds stat
 # ceph mds tell mds.a getmap
 # ceph mds rm
@@ -162,8 +171,8 @@ ceph mds stat
 
 # no mon add/remove
 ceph mon dump
-ceph mon getmap -o /tmp/monmap
-[ -s /tmp/monmap ]
+ceph mon getmap -o $TMPDIR/monmap.$$
+[ -s $TMPDIR/monmap.$$ ]
 # ceph mon tell
 ceph mon_status
 
@@ -183,7 +192,9 @@ expect_false "ceph osd blacklist $bl/-1"
 expect_false "ceph osd blacklist $bl/foo"
 
 ceph osd crush tunables legacy
+ceph osd crush show-tunables | grep argonaut
 ceph osd crush tunables bobtail
+ceph osd crush show-tunables | grep bobtail
 
 # how do I tell when these are done?
 ceph osd scrub 0
@@ -212,13 +223,14 @@ for ((i=0; i < 100; i++)); do
 done
 ceph osd dump | grep 'osd.0 up'
 ceph osd find 1
+ceph osd metadata 1 | grep 'distro'
 ceph osd out 0
 ceph osd dump | grep 'osd.0.*out'
 ceph osd in 0
 ceph osd dump | grep 'osd.0.*in'
 ceph osd find 0
 
-f=/tmp/map.$$
+f=$TMPDIR/map.$$
 ceph osd getcrushmap -o $f
 [ -s $f ]
 rm $f
@@ -234,6 +246,8 @@ ceph osd getmaxosd | grep "max_osd = $save"
 for id in `ceph osd ls` ; do
 	ceph tell osd.$id version
 done
+
+ceph osd rm 0 2>&1 | grep 'EBUSY'
 
 id=`ceph osd create`
 ceph osd lost $id --yes-i-really-mean-it
@@ -264,6 +278,15 @@ ceph osd pool rename data2 data3
 ceph osd lspools | grep data3
 ceph osd pool delete data3 data3 --yes-i-really-really-mean-it
 
+ceph osd pool create replicated 12 12 replicated
+ceph osd pool create replicated 12 12 replicated
+ceph osd pool create replicated 12 12 # default is replicated
+ceph osd pool create replicated 12    # default is replicated, pgp_num = pg_num
+# should fail because the type is not the same
+expect_false ceph osd pool create replicated 12 12 erasure
+ceph osd lspools | grep replicated
+ceph osd pool delete replicated replicated --yes-i-really-really-mean-it
+
 ceph osd stat | grep up,
 
 ceph pg debug unfound_objects_exist
@@ -285,8 +308,8 @@ ceph pg dump_stuck unclean
 ceph pg dump_stuck stale
 # can't test this...
 # ceph pg force_create_pg
-ceph pg getmap -o /tmp/map
-[ -s /tmp/map ]
+ceph pg getmap -o $TMPDIR/map.$$
+[ -s $TMPDIR/map.$$ ]
 ceph pg map 0.0 | grep acting
 ceph pg repair 0.0
 ceph pg scrub 0.0
@@ -322,15 +345,28 @@ for s in pg_num pgp_num size min_size crash_replay_interval crush_ruleset; do
 	ceph osd pool get data $s
 done
 
-ceph osd pool get data size | grep 'size: 2'
-ceph osd pool set data size 3
-ceph osd pool get data size | grep 'size: 3'
-ceph osd pool set data size 2
+old_size=$(ceph osd pool get data size | sed -e 's/size: //')
+(( new_size = old_size + 1 ))
+ceph osd pool set data size $new_size
+ceph osd pool get data size | grep "size: $new_size"
+ceph osd pool set data size $old_size
 
 ceph osd pool set data hashpspool true
 ceph osd pool set data hashpspool false
+ceph osd pool set data hashpspool 0
+ceph osd pool set data hashpspool 1
+expect_false ceph osd pool set data hashpspool asdf
+expect_false ceph osd pool set data hashpspool 2
 
-ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 2'
+ceph osd pool set rbd hit_set_type explicit_hash
+ceph osd pool set rbd hit_set_type explicit_object
+ceph osd pool set rbd hit_set_type bloom
+expect_false ceph osd pool set rbd hit_set_type i_dont_exist
+ceph osd pool set rbd hit_set_period 123
+ceph osd pool set rbd hit_set_count 12
+ceph osd pool set rbd hit_set_fpp .01
+
+ceph osd pool get rbd crush_ruleset | grep 'crush_ruleset: 0'
 
 ceph osd thrash 10
 

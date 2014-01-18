@@ -1,3 +1,5 @@
-v0.73
+v0.77
 ~~~~~
 
+* The 'ceph -s' or 'ceph status' command's 'num_in_osds' field in the
+  JSON and XML output has been changed from a string to an int.

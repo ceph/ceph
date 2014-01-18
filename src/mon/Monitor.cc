@@ -94,6 +94,18 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon) {
 const string Monitor::MONITOR_NAME = "monitor";
 const string Monitor::MONITOR_STORE_PREFIX = "monitor_store";
 
+
+#undef COMMAND
+MonCommand mon_commands[] = {
+#define COMMAND(parsesig, helptext, modulename, req_perms, avail) \
+  {parsesig, helptext, modulename, req_perms, avail},
+#include <mon/MonCommands.h>
+};
+MonCommand classic_mon_commands[] = {
+#include <mon/DumplingMonCommands.h>
+};
+
+
 long parse_pos_long(const char *s, ostream *pss)
 {
   if (*s == '-' || *s == '+') {
@@ -137,6 +149,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   auth_service_required(cct,
 			cct->_conf->auth_supported.length() ?
 			cct->_conf->auth_supported : cct->_conf->auth_service_required),
+  leader_supported_mon_commands(NULL),
+  leader_supported_mon_commands_size(0),
   store(s),
   
   state(STATE_PROBING),
@@ -213,6 +227,9 @@ Monitor::~Monitor()
   delete paxos;
   assert(session_map.sessions.empty());
   delete mon_caps;
+  if (leader_supported_mon_commands != mon_commands &&
+      leader_supported_mon_commands != classic_mon_commands)
+    delete[] leader_supported_mon_commands;
 }
 
 
@@ -258,9 +275,17 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
       return;
     }
     sync_force(f.get(), ss);
-  } else if (command.find("add_bootstrap_peer_hint") == 0)
+  } else if (command.find("add_bootstrap_peer_hint") == 0) {
     _add_bootstrap_peer_hint(command, cmdmap, ss);
-  else
+  } else if (command == "quorum enter") {
+    elector.start_participating();
+    start_election();
+    ss << "started responding to quorum, initiated new election";
+  } else if (command == "quorum exit") {
+    start_election();
+    elector.stop_participating();
+    ss << "stopped responding to quorum, initiated new election";
+  } else
     assert(0 == "bad AdminSocket command binding");
 }
 
@@ -447,35 +472,39 @@ int Monitor::preinit()
   init_paxos();
   health_monitor->init();
 
-  // we need to bootstrap authentication keys so we can form an
-  // initial quorum.
-  if (authmon()->get_last_committed() == 0) {
-    dout(10) << "loading initial keyring to bootstrap authentication for mkfs" << dendl;
-    bufferlist bl;
-    store->get("mkfs", "keyring", bl);
-    KeyRing keyring;
-    bufferlist::iterator p = bl.begin();
-    ::decode(keyring, p);
-    extract_save_mon_key(keyring);
-  }
+  int r;
 
-  string keyring_loc = g_conf->mon_data + "/keyring";
-
-  int r = keyring.load(cct, keyring_loc);
-  if (r < 0) {
-    EntityName mon_name;
-    mon_name.set_type(CEPH_ENTITY_TYPE_MON);
-    EntityAuth mon_key;
-    if (key_server.get_auth(mon_name, mon_key)) {
-      dout(1) << "copying mon. key from old db to external keyring" << dendl;
-      keyring.add(mon_name, mon_key);
+  if (is_keyring_required()) {
+    // we need to bootstrap authentication keys so we can form an
+    // initial quorum.
+    if (authmon()->get_last_committed() == 0) {
+      dout(10) << "loading initial keyring to bootstrap authentication for mkfs" << dendl;
       bufferlist bl;
-      keyring.encode_plaintext(bl);
-      write_default_keyring(bl);
-    } else {
-      derr << "unable to load initial keyring " << g_conf->keyring << dendl;
-      lock.Unlock();
-      return r;
+      store->get("mkfs", "keyring", bl);
+      KeyRing keyring;
+      bufferlist::iterator p = bl.begin();
+      ::decode(keyring, p);
+      extract_save_mon_key(keyring);
+    }
+
+    string keyring_loc = g_conf->mon_data + "/keyring";
+
+    r = keyring.load(cct, keyring_loc);
+    if (r < 0) {
+      EntityName mon_name;
+      mon_name.set_type(CEPH_ENTITY_TYPE_MON);
+      EntityAuth mon_key;
+      if (key_server.get_auth(mon_name, mon_key)) {
+	dout(1) << "copying mon. key from old db to external keyring" << dendl;
+	keyring.add(mon_name, mon_key);
+	bufferlist bl;
+	keyring.encode_plaintext(bl);
+	write_default_keyring(bl);
+      } else {
+	derr << "unable to load initial keyring " << g_conf->keyring << dendl;
+	lock.Unlock();
+	return r;
+      }
     }
   }
 
@@ -504,6 +533,14 @@ int Monitor::preinit()
 				     "add peer address as potential bootstrap"
 				     " peer for cluster bringup");
   assert(r == 0);
+  r = admin_socket->register_command("quorum enter", "quorum enter",
+                                     admin_hook,
+                                     "force monitor back into quorum");
+  assert(r == 0);
+  r = admin_socket->register_command("quorum exit", "quorum exit",
+                                     admin_hook,
+                                     "force monitor out of the quorum");
+  assert(r == 0);
   lock.Lock();
 
   lock.Unlock();
@@ -523,6 +560,14 @@ int Monitor::init()
   messenger->add_dispatcher_tail(this);
 
   bootstrap();
+
+  // encode command sets
+  const MonCommand *cmds;
+  int cmdsize;
+  get_locally_supported_monitor_commands(&cmds, &cmdsize);
+  MonCommand::encode_array(cmds, cmdsize, supported_commands_bl);
+  get_classic_monitor_commands(&cmds, &cmdsize);
+  MonCommand::encode_array(cmds, cmdsize, classic_commands_bl);
 
   lock.Unlock();
   return 0;
@@ -1473,7 +1518,11 @@ void Monitor::win_standalone_election()
   assert(rank == 0);
   set<int> q;
   q.insert(rank);
-  win_election(1, q, CEPH_FEATURES_ALL);
+
+  const MonCommand *my_cmds;
+  int cmdsize;
+  get_locally_supported_monitor_commands(&my_cmds, &cmdsize);
+  win_election(1, q, CEPH_FEATURES_ALL, my_cmds, cmdsize, NULL);
 }
 
 const utime_t& Monitor::get_leader_since() const
@@ -1487,7 +1536,9 @@ epoch_t Monitor::get_epoch()
   return elector.get_epoch();
 }
 
-void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features) 
+void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
+                           const MonCommand *cmdset, int cmdsize,
+                           const set<int> *classic_monitors)
 {
   dout(10) << __func__ << " epoch " << epoch << " quorum " << active
 	   << " features " << features << dendl;
@@ -1501,6 +1552,10 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features)
 
   clog.info() << "mon." << name << "@" << rank
 		<< " won leader election with quorum " << quorum << "\n";
+
+  set_leader_supported_commands(cmdset, cmdsize);
+  if (classic_monitors)
+    classic_mons = *classic_monitors;
 
   paxos->leader_init();
   for (vector<PaxosService*>::iterator p = paxos_service.begin(); p != paxos_service.end(); ++p)
@@ -1858,17 +1913,9 @@ void Monitor::get_status(stringstream &ss, Formatter *f)
   }
 }
 
-#undef COMMAND
-MonCommand mon_commands[] = {
-#define COMMAND(parsesig, helptext, modulename, req_perms, avail) \
-  {parsesig, helptext, modulename, req_perms, avail},
-#include <mon/MonCommands.h>
-};
-
-bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
-                               map<string,cmd_vartype>& cmdmap) {
-
-  map<string,string> strmap;
+void Monitor::_generate_command_map(map<string,cmd_vartype>& cmdmap,
+                                    map<string,string> &param_str_map)
+{
   for (map<string,cmd_vartype>::const_iterator p = cmdmap.begin();
        p != cmdmap.end(); ++p) {
     if (p->first == "prefix")
@@ -1879,39 +1926,51 @@ bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
 	  cv.size() % 2 == 0) {
 	for (unsigned i = 0; i < cv.size(); i += 2) {
 	  string k = string("caps_") + cv[i];
-	  strmap[k] = cv[i + 1];
+	  param_str_map[k] = cv[i + 1];
 	}
 	continue;
       }
     }
-    strmap[p->first] = cmd_vartype_stringify(p->second);
+    param_str_map[p->first] = cmd_vartype_stringify(p->second);
   }
+}
 
+const MonCommand *Monitor::_get_moncommand(const string &cmd_prefix,
+                                           MonCommand *cmds, int cmds_size)
+{
   MonCommand *this_cmd = NULL;
-  for (MonCommand *cp = mon_commands;
-       cp < &mon_commands[ARRAY_SIZE(mon_commands)]; cp++) {
-    if (cp->cmdstring.find(prefix) != string::npos) {
+  for (MonCommand *cp = cmds;
+       cp < &cmds[cmds_size]; cp++) {
+    if (cp->cmdstring.find(cmd_prefix) != string::npos) {
       this_cmd = cp;
       break;
     }
   }
-  assert(this_cmd != NULL);
+  return this_cmd;
+}
+
+bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
+                               const map<string,cmd_vartype>& cmdmap,
+                               const map<string,string> param_str_map,
+                               const MonCommand *this_cmd) {
+
   bool cmd_r = (this_cmd->req_perms.find('r') != string::npos);
   bool cmd_w = (this_cmd->req_perms.find('w') != string::npos);
   bool cmd_x = (this_cmd->req_perms.find('x') != string::npos);
 
   bool capable = s->caps.is_capable(g_ceph_context, s->inst.name,
-                                    module, prefix, strmap,
+                                    module, prefix, param_str_map,
                                     cmd_r, cmd_w, cmd_x);
 
   dout(10) << __func__ << " " << (capable ? "" : "not ") << "capable" << dendl;
   return capable;
 }
 
-void get_command_descriptions(const MonCommand *commands,
-			      unsigned commands_size,
-			      Formatter *f,
-			      bufferlist *rdata) {
+void Monitor::format_command_descriptions(const MonCommand *commands,
+					  unsigned commands_size,
+					  Formatter *f,
+					  bufferlist *rdata)
+{
   int cmdnum = 0;
   f->open_object_section("command_descriptions");
   for (const MonCommand *cp = commands;
@@ -1927,6 +1986,42 @@ void get_command_descriptions(const MonCommand *commands,
   f->close_section();	// command_descriptions
 
   f->flush(*rdata);
+}
+
+void Monitor::get_locally_supported_monitor_commands(const MonCommand **cmds,
+						     int *count)
+{
+  *cmds = mon_commands;
+  *count = ARRAY_SIZE(mon_commands);
+}
+void Monitor::get_leader_supported_commands(const MonCommand **cmds, int *count)
+{
+  *cmds = leader_supported_mon_commands;
+  *count = leader_supported_mon_commands_size;
+}
+void Monitor::get_classic_monitor_commands(const MonCommand **cmds, int *count)
+{
+  *cmds = classic_mon_commands;
+  *count = ARRAY_SIZE(classic_mon_commands);
+}
+void Monitor::set_leader_supported_commands(const MonCommand *cmds, int size)
+{
+  if (leader_supported_mon_commands != mon_commands &&
+      leader_supported_mon_commands != classic_mon_commands)
+    delete[] leader_supported_mon_commands;
+  leader_supported_mon_commands = cmds;
+  leader_supported_mon_commands_size = size;
+}
+
+bool Monitor::is_keyring_required()
+{
+  string auth_cluster_required = g_conf->auth_supported.length() ?
+    g_conf->auth_supported : g_conf->auth_cluster_required;
+  string auth_service_required = g_conf->auth_supported.length() ?
+    g_conf->auth_supported : g_conf->auth_service_required;
+
+  return auth_service_required == "cephx" ||
+    auth_cluster_required == "cephx";
 }
 
 void Monitor::handle_command(MMonCommand *m)
@@ -1974,7 +2069,8 @@ void Monitor::handle_command(MMonCommand *m)
   if (prefix == "get_command_descriptions") {
     bufferlist rdata;
     Formatter *f = new_formatter("json");
-    get_command_descriptions(mon_commands, ARRAY_SIZE(mon_commands), f, &rdata);
+    format_command_descriptions(leader_supported_mon_commands,
+				leader_supported_mon_commands_size, f, &rdata);
     delete f;
     reply_command(m, 0, "", rdata, 0);
     return;
@@ -1992,7 +2088,31 @@ void Monitor::handle_command(MMonCommand *m)
   get_str_vec(prefix, fullcmd);
   module = fullcmd[0];
 
-  if (!_allowed_command(session, module, prefix, cmdmap)) {
+  // validate command is in leader map
+
+  const MonCommand *leader_cmd;
+  leader_cmd = _get_moncommand(prefix,
+                               // the boost underlying this isn't const for some reason
+                               const_cast<MonCommand*>(leader_supported_mon_commands),
+                               leader_supported_mon_commands_size);
+  if (!leader_cmd) {
+    reply_command(m, -EINVAL, "command not known", 0);
+    return;
+  }
+  // validate command is in our map & matches, or forward
+  const MonCommand *mon_cmd = _get_moncommand(prefix, mon_commands,
+                                              ARRAY_SIZE(mon_commands));
+  if (!is_leader() && (!mon_cmd ||
+      (*leader_cmd != *mon_cmd))) {
+    dout(10) << "We don't match leader, forwarding request " << m << dendl;
+    forward_request_leader(m);
+    return;
+  }
+  // validate user's permissions for requested command
+  map<string,string> param_str_map;
+  _generate_command_map(cmdmap, param_str_map);
+  if (!_allowed_command(session, module, prefix, cmdmap,
+                        param_str_map, mon_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;
     reply_command(m, -EACCES, "access denied", 0);
     return;
@@ -2279,6 +2399,7 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     rr->tid = ++routed_request_tid;
     rr->client_inst = req->get_source_inst();
     rr->con = req->get_connection();
+    rr->con_features = rr->con->get_features();
     encode_message(req, CEPH_FEATURES_ALL, rr->request_bl);   // for my use only; use all features
     rr->session = static_cast<MonSession *>(session->get());
     routed_requests[rr->tid] = rr;
@@ -2286,7 +2407,9 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     
     dout(10) << "forward_request " << rr->tid << " request " << *req << dendl;
 
-    MForward *forward = new MForward(rr->tid, req, rr->session->caps);
+    MForward *forward = new MForward(rr->tid, req,
+				     rr->con_features,
+				     rr->session->caps);
     forward->set_priority(req->get_priority());
     messenger->send_message(forward, monmap->get_inst(mon));
   } else {
@@ -2314,6 +2437,7 @@ void Monitor::handle_forward(MForward *m)
     c->set_priv(s);
     c->set_peer_addr(m->client.addr);
     c->set_peer_type(m->client.name.type());
+    c->set_features(m->con_features);
 
     s->caps = m->client_caps;
     dout(10) << " caps are " << s->caps << dendl;
@@ -2477,7 +2601,8 @@ void Monitor::resend_routed_requests()
       delete rr;
     } else {
       dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req << dendl;
-      MForward *forward = new MForward(rr->tid, req, rr->session->caps);
+      MForward *forward = new MForward(rr->tid, req, rr->con_features,
+				       rr->session->caps);
       forward->client = rr->client_inst;
       forward->set_priority(req->get_priority());
       messenger->send_message(forward, monmap->get_inst(mon));
@@ -3661,25 +3786,43 @@ int Monitor::mkfs(bufferlist& osdmapbl)
     t.put("mkfs", "osdmap", osdmapbl);
   }
 
-  KeyRing keyring;
-  string keyring_filename;
-  if (!ceph_resolve_file_search(g_conf->keyring, keyring_filename)) {
-    derr << "unable to find a keyring file on " << g_conf->keyring << dendl;
-    return -ENOENT;
+  if (is_keyring_required()) {
+    KeyRing keyring;
+    string keyring_filename;
+    if (!ceph_resolve_file_search(g_conf->keyring, keyring_filename)) {
+      derr << "unable to find a keyring file on " << g_conf->keyring << dendl;
+      if (g_conf->key != "") {
+	string keyring_plaintext = "[mon.]\n\tkey = " + g_conf->key +
+	  "\n\tcaps mon = \"allow *\"\n";
+	bufferlist bl;
+	bl.append(keyring_plaintext);
+	try {
+	  bufferlist::iterator i = bl.begin();
+	  keyring.decode_plaintext(i);
+	}
+	catch (const buffer::error& e) {
+	  derr << "error decoding keyring " << keyring_plaintext
+	       << ": " << e.what() << dendl;
+	  return -EINVAL;
+	}
+      } else {
+	return -ENOENT;
+      }
+    } else {
+      r = keyring.load(g_ceph_context, keyring_filename);
+      if (r < 0) {
+	derr << "unable to load initial keyring " << g_conf->keyring << dendl;
+	return r;
+      }
+    }
+
+    // put mon. key in external keyring; seed with everything else.
+    extract_save_mon_key(keyring);
+
+    bufferlist keyringbl;
+    keyring.encode_plaintext(keyringbl);
+    t.put("mkfs", "keyring", keyringbl);
   }
-
-  r = keyring.load(g_ceph_context, keyring_filename);
-  if (r < 0) {
-    derr << "unable to load initial keyring " << g_conf->keyring << dendl;
-    return r;
-  }
-
-  // put mon. key in external keyring; seed with everything else.
-  extract_save_mon_key(keyring);
-
-  bufferlist keyringbl;
-  keyring.encode_plaintext(keyringbl);
-  t.put("mkfs", "keyring", keyringbl);
   write_fsid(t);
   store->apply_transaction(t);
 

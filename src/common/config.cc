@@ -48,6 +48,7 @@
 #undef dendl
 
 using std::map;
+using std::list;
 using std::multimap;
 using std::ostringstream;
 using std::pair;
@@ -229,7 +230,7 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
   for (c = conf_files.begin(); c != conf_files.end(); ++c) {
     cf.clear();
     string fn = *c;
-    expand_meta(fn);
+    expand_meta(fn, warnings);
     int ret = cf.parse_file(fn.c_str(), parse_errors, warnings);
     if (ret == 0)
       break;
@@ -357,6 +358,10 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
     return -ENOSYS;
   }
 
+  bool show_config = false;
+  bool show_config_value = false;
+  string show_config_value_arg;
+
   // In this function, don't change any parts of the configuration directly.
   // Instead, use set_val to set them. This will allow us to send the proper
   // observer notifications later.
@@ -373,24 +378,11 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
       _exit(0);
     }
     else if (ceph_argparse_flag(args, i, "--show_config", (char*)NULL)) {
-      expand_all_meta();
-      _show_config(&cout, NULL);
-      _exit(0);
+      show_config = true;
     }
     else if (ceph_argparse_witharg(args, i, &val, "--show_config_value", (char*)NULL)) {
-      char *buf = 0;
-      int r = _get_val(val.c_str(), &buf, -1);
-      if (r < 0) {
-	if (r == -ENOENT)
-	  std::cerr << "failed to get config option '" << val << "': option not found" << std::endl;
-	else
-	  std::cerr << "failed to get config option '" << val << "': " << strerror(-r) << std::endl;
-	_exit(1);
-      }
-      string s = buf;
-      expand_meta(s);
-      std::cout << s << std::endl;
-      _exit(0);
+      show_config_value = true;
+      show_config_value_arg = val;
     }
     else if (ceph_argparse_flag(args, i, "--foreground", "-f", (char*)NULL)) {
       set_val_or_die("daemonize", "false");
@@ -429,6 +421,31 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
       parse_option(args, i, NULL);
     }
   }
+
+  if (show_config) {
+    expand_all_meta();
+    _show_config(&cout, NULL);
+    _exit(0);
+  }
+
+  if (show_config_value) {
+    char *buf = 0;
+    int r = _get_val(show_config_value_arg.c_str(), &buf, -1);
+    if (r < 0) {
+      if (r == -ENOENT)
+	std::cerr << "failed to get config option '" <<
+	  show_config_value_arg << "': option not found" << std::endl;
+      else
+	std::cerr << "failed to get config option '" <<
+	  show_config_value_arg << "': " << strerror(-r) << std::endl;
+      _exit(1);
+    }
+    string s = buf;
+    expand_meta(s, &std::cerr);
+    std::cout << s << std::endl;
+    _exit(0);
+  }
+
   return 0;
 }
 
@@ -651,7 +668,7 @@ int md_config_t::set_val(const char *key, const char *val, bool meta)
 
   std::string v(val);
   if (meta)
-    expand_meta(v);
+    expand_meta(v, &std::cerr);
 
   string k(ConfFile::normalize_key_name(key));
 
@@ -834,7 +851,7 @@ int md_config_t::_get_val_from_conf_file(const std::vector <std::string> &sectio
     int ret = cf.read(s->c_str(), key, out);
     if (ret == 0) {
       if (emeta)
-	expand_meta(out);
+	expand_meta(out, &std::cerr);
       return 0;
     }
     else if (ret != -ENOENT)
@@ -936,28 +953,62 @@ static const int NUM_CONF_METAVARIABLES =
 void md_config_t::expand_all_meta()
 {
   // Expand all metavariables
+  ostringstream oss;
   for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
     config_option *opt = config_optionsp + i;
     if (opt->type == OPT_STR) {
       std::string *str = (std::string *)opt->conf_ptr(this);
-      expand_meta(*str);
+      list<config_option *> stack;
+      expand_meta(*str, opt, stack, &oss);
     }
   }
+  cerr << oss.str();
 }
 
-bool md_config_t::expand_meta(std::string &origval) const
+bool md_config_t::expand_meta(std::string &origval,
+			      std::ostream *oss) const
+{
+  list<config_option *> stack;
+  return expand_meta(origval, NULL, stack, oss);
+}
+
+bool md_config_t::expand_meta(std::string &origval,
+			      config_option *opt,
+			      std::list<config_option *> stack,
+			      std::ostream *oss) const
 {
   assert(lock.is_locked());
+
+  // no $ means no variable expansion is necessary
+  if (origval.find("$") == string::npos)
+    return false;
+
+  // ignore an expansion loop and create a human readable
+  // message about it
+  if (opt) {
+    for (list<config_option *>::iterator i = stack.begin();
+	 i != stack.end();
+	 ++i) {
+      if (strcmp(opt->name, (*i)->name) == 0) {
+	*oss << "variable expansion loop at "
+	     << opt->name << "=" << origval << std::endl;
+	*oss << "expansion stack: " << std::endl;
+	for (list<config_option *>::iterator j = stack.begin();
+	     j != stack.end();
+	     j++) {
+	  *oss << (*j)->name << "=" << *(string *)(*j)->conf_ptr(this) << std::endl;
+	}
+	return false;
+      }
+    }
+  }
+
+  if (opt)
+    stack.push_front(opt);
+
   bool found_meta = false;
-
-  set<string> resolved;
-
-  string val = origval;
-
- restart:
   string out;
-  out.reserve(val.size());
-
+  string val = origval;
   for (string::size_type s = 0; s < val.size(); ) {
     if (val[s] != '$') {
       out += val[s++];
@@ -965,7 +1016,7 @@ bool md_config_t::expand_meta(std::string &origval) const
     }
 
     // try to parse the variable name into var, either \$\{(.+)\} or
-    // \$([a-z\_]+)
+    // \$[a-z\_]+
     const char *valid_chars = "abcdefghijklmnopqrstuvwxyz_";
     string var;
     size_t endpos = 0;
@@ -985,8 +1036,8 @@ bool md_config_t::expand_meta(std::string &origval) const
       else
 	var = val.substr(s+1);
     }
-    //cout << "var='" << var << "'" << std::endl;
 
+    bool expanded = false;
     if (var.length()) {
       // special metavariable?
       for (int i = 0; i < NUM_CONF_METAVARIABLES; ++i) {
@@ -1009,42 +1060,39 @@ bool md_config_t::expand_meta(std::string &origval) const
 	  out += stringify(getpid());
 	else
 	  assert(0); // unreachable
-	found_meta = true;
-	if (endpos != std::string::npos)
-	  out += val.substr(endpos);
-	//cout << "val '" << val << "' s " << s << " out '" << out << "'"  << std::endl;
-	val = out;
-	goto restart;
+	expanded = true;
       }
 
-      // config option?
-      for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
-	config_option *opt = &config_optionsp[i];
-	if (var != opt->name)
-	  continue;
-	
-	// avoid loops
-	if (resolved.count(opt->name))
-	  continue;	// loop; skip
-	resolved.insert(opt->name);
-
-	found_meta = true;
-	char *vv = NULL;
-	_get_val(opt->name, &vv, -1);
-	out += vv;
-	if (endpos != std::string::npos)
-	  out += val.substr(endpos);
-	//cout << "val '" << val << "' s " << s << " out '" << out << "' after sub " << opt->name << " -> " << vv << std::endl;
-	val = out;
-	free(vv);
-	goto restart;
+      if (!expanded) {
+	// config option?
+	for (int i = 0; i < NUM_CONFIG_OPTIONS; i++) {
+	  config_option *opt = &config_optionsp[i];
+	  if (var == opt->name) {
+	    if (opt->type == OPT_STR) {
+	      string *origval = (string *)opt->conf_ptr(this);
+	      expand_meta(*origval, opt, stack, oss);
+	      out += *origval;
+	    } else {
+	      char *vv = NULL;
+	      _get_val(opt->name, &vv, -1);
+	      out += vv;
+	      free(vv);
+	    }
+	    expanded = true;
+	    break;
+	  }
+	}
       }
     }
 
-    // pass it thru
-    out += val[s++];
+    if (expanded) {
+      found_meta = true;
+      s = endpos;
+    } else {
+      out += val[s++];
+    }
   }
-  //cout << "done '" << origval << "' -> '" << out << "'" << std::endl;
+  // override the original value with the expanded value
   origval = out;
   return found_meta;
 }

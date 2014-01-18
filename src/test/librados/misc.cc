@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #include "gtest/gtest.h"
 
 #include "mds/mdstypes.h"
@@ -44,6 +46,16 @@ TEST(LibRadosMisc, ClusterFSID) {
             (size_t)rados_cluster_fsid(cluster, fsid, sizeof(fsid)));
 
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
+TEST(LibRadosMisc, WaitOSDMapPP) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+
+  ASSERT_EQ(0, cluster.wait_for_latest_osdmap());
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
 static std::string read_key_from_tmap(IoCtx& ioctx, const std::string &obj,
@@ -253,6 +265,71 @@ TEST(LibRadosMisc, TmapUpdateMisorderedPutPP) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
+TEST(LibRadosMisc, Tmap2OmapPP) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  // create tmap
+  bufferlist hdr;
+  hdr.append("header");
+  map<string, bufferlist> omap;
+  omap["1"].append("a");
+  omap["2"].append("b");
+  omap["3"].append("c");
+  {
+    bufferlist bl;
+    ::encode(hdr, bl);
+    ::encode(omap, bl);
+    ASSERT_EQ(0, ioctx.tmap_put("foo", bl));
+  }
+
+  // convert tmap to omap
+  ASSERT_EQ(0, ioctx.tmap_to_omap("foo", false));
+
+  // if tmap was truncated ?
+  {
+    uint64_t size;
+    time_t mtime;
+    ASSERT_EQ(0, ioctx.stat("foo", &size, &mtime));
+    ASSERT_EQ(0U, size);
+  }
+
+  // if 'nullok' works
+  ASSERT_EQ(0, ioctx.tmap_to_omap("foo", true));
+  ASSERT_LE(ioctx.tmap_to_omap("foo", false), 0);
+
+  {
+    // read omap
+    bufferlist got;
+    map<string, bufferlist> m;
+    ObjectReadOperation o;
+    o.omap_get_header(&got, NULL);
+    o.omap_get_vals("", 1024, &m, NULL);
+    ASSERT_EQ(0, ioctx.operate("foo", &o, NULL));
+
+    // compare header
+    ASSERT_TRUE(hdr.contents_equal(got));
+
+    // compare values
+    ASSERT_EQ(omap.size(), m.size());
+    bool same = true;
+    for (map<string, bufferlist>::iterator p = omap.begin(); p != omap.end(); ++p) {
+      map<string, bufferlist>::iterator q = m.find(p->first);
+      if (q == m.end() || !p->second.contents_equal(q->second)) {
+	same = false;
+	break;
+      }
+    }
+    ASSERT_TRUE(same);
+  }
+
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
 TEST(LibRadosMisc, Exec) {
   char buf[128];
   rados_t cluster;
@@ -312,6 +389,7 @@ TEST(LibRadosMisc, Operate1PP) {
     bufferlist bl;
     bl.append(val1.c_str(), val1.size() + 1);
     o.setxattr("key1", bl);
+    o.omap_clear(); // shouldn't affect attrs!
   }
   ASSERT_EQ(0, ioctx.operate("foo", &o));
 
@@ -585,9 +663,22 @@ TEST(LibRadosMisc, CopyPP) {
   ASSERT_EQ(0, ioctx.write_full("foo", blc));
   ASSERT_EQ(0, ioctx.setxattr("foo", "myattr", xc));
 
+  version_t uv = ioctx.get_last_version();
+  {
+    // pass future version
+    ObjectWriteOperation op;
+    op.copy_from("foo", ioctx, uv + 1);
+    ASSERT_EQ(-EOVERFLOW, ioctx.operate("foo.copy", &op));
+  }
+  {
+    // pass old version
+    ObjectWriteOperation op;
+    op.copy_from("foo", ioctx, uv - 1);
+    ASSERT_EQ(-ERANGE, ioctx.operate("foo.copy", &op));
+  }
   {
     ObjectWriteOperation op;
-    op.copy_from("foo", ioctx, ioctx.get_last_version());
+    op.copy_from("foo", ioctx, uv);
     ASSERT_EQ(0, ioctx.operate("foo.copy", &op));
 
     bufferlist bl2, x2;
@@ -641,60 +732,6 @@ TEST(LibRadosMisc, CopyPP) {
     ASSERT_TRUE(bl.contents_equal(bl2));
     ASSERT_EQ((int)x.length(), ioctx.getxattr("foo.copy2", "myattr", x2));
     ASSERT_TRUE(x.contents_equal(x2));
-  }
-
-  ioctx.close();
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
-}
-
-TEST(LibRadosMisc, Dirty) {
-  Rados cluster;
-  std::string pool_name = get_temp_pool_name();
-  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
-  IoCtx ioctx;
-  ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
-
-  {
-    ObjectWriteOperation op;
-    op.create(true);
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
-  }
-  {
-    bool dirty = false;
-    int r = -1;
-    ObjectReadOperation op;
-    op.is_dirty(&dirty, &r);
-    ASSERT_EQ(0, ioctx.operate("foo", &op, NULL));
-    ASSERT_TRUE(dirty);
-    ASSERT_EQ(0, r);
-  }
-  {
-    ObjectWriteOperation op;
-    op.undirty();
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
-  }
-  {
-    bool dirty = false;
-    int r = -1;
-    ObjectReadOperation op;
-    op.is_dirty(&dirty, &r);
-    ASSERT_EQ(0, ioctx.operate("foo", &op, NULL));
-    ASSERT_FALSE(dirty);
-    ASSERT_EQ(0, r);
-  }
-  {
-    ObjectWriteOperation op;
-    op.truncate(0);  // still a write even tho it is a no-op
-    ASSERT_EQ(0, ioctx.operate("foo", &op));
-  }
-  {
-    bool dirty = false;
-    int r = -1;
-    ObjectReadOperation op;
-    op.is_dirty(&dirty, &r);
-    ASSERT_EQ(0, ioctx.operate("foo", &op, NULL));
-    ASSERT_TRUE(dirty);
-    ASSERT_EQ(0, r);
   }
 
   ioctx.close();

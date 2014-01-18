@@ -69,6 +69,8 @@ namespace librbd {
     RWLock parent_lock; // protects parent_md and parent
     Mutex refresh_lock; // protects refresh_seq and last_refresh
 
+    unsigned extra_read_flags;
+
     bool old_format;
     uint8_t order;
     uint64_t size;
@@ -99,6 +101,7 @@ namespace librbd {
     void init_layout();
     void perf_start(std::string name);
     void perf_stop();
+    void set_read_flag(unsigned flag);
     int get_read_flags(librados::snap_t snap_id);
     int snap_set(std::string in_snap_name);
     void snap_unset();

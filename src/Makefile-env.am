@@ -54,7 +54,9 @@ AM_COMMON_CPPFLAGS = \
 	-D_THREAD_SAFE \
 	-D__STDC_FORMAT_MACROS \
 	-D_GNU_SOURCE \
-	-DCEPH_LIBDIR=\"${libdir}\"
+	-DCEPH_LIBDIR=\"${libdir}\" \
+	-DCEPH_PKGLIBDIR=\"${pkglibdir}\" \
+	-DGTEST_HAS_TR1_TUPLE=0
 
 AM_COMMON_CFLAGS = \
 	-Wall \
@@ -74,6 +76,7 @@ AM_CPPFLAGS = $(AM_COMMON_CPPFLAGS)
 AM_CXXFLAGS = \
 	@AM_CXXFLAGS@ \
 	$(AM_COMMON_CFLAGS) \
+	-ftemplate-depth-1024 \
 	-Wnon-virtual-dtor \
 	-Wno-invalid-offsetof
 if !CLANG
@@ -88,7 +91,10 @@ endif
 # http://www.gentoo.org/proj/en/qa/asneeded.xml
 # http://gcc.gnu.org/ml/gcc-help/2010-12/msg00338.html
 # http://sigquit.wordpress.com/2011/02/16/why-asneeded-doesnt-work-as-expected-for-your-libraries-on-your-autotools-project/
-AM_LDFLAGS = -Wl,--as-needed
+AM_LDFLAGS =
+if LINUX
+AM_LDFLAGS += -Wl,--as-needed
+endif
 
 if USE_BOOST_SPIRIT_OLD_HDR
 AM_CXXFLAGS += -DUSE_BOOST_SPIRIT_OLD_HDR
@@ -110,7 +116,7 @@ AM_CCASFLAGS = -f elf64
 #####################
 ## library definitions and dependencies
 
-EXTRALIBS = -luuid -lm -lkeyutils
+EXTRALIBS = -luuid -lm $(KEYUTILS_LIB)
 if FREEBSD
 EXTRALIBS += -lexecinfo
 endif # FREEBSD
@@ -172,7 +178,7 @@ LIBMDS += $(LIBPERFGLUE)
 LIBOS += -lleveldb -lsnappy
 
 # Use this for binaries requiring libglobal
-CEPH_GLOBAL = $(LIBGLOBAL) $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
+CEPH_GLOBAL = $(LIBGLOBAL) $(LIBCOMMON) $(PTHREAD_LIBS) -lm $(CRYPTO_LIBS) $(EXTRALIBS)
 
 # This is set by [lib]/Makefile.am and used for build tests
 LIBCOMMON_DEPS =

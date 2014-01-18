@@ -10,11 +10,7 @@ issues. Hardware planning should include distributing Ceph daemons and
 other processes that use Ceph across many hosts. Generally, we recommend 
 running Ceph daemons of a specific type on a host configured for that type 
 of daemon. We recommend using other hosts for processes that utilize your 
-data cluster (e.g., OpenStack, CloudStack, etc). 
-
-`Inktank`_ provides excellent premium support for hardware planning.
-
-.. _Inktank: http://www.inktank.com
+data cluster (e.g., OpenStack, CloudStack, etc).
 
 
 .. tip:: Check out the Ceph blog too. Articles like `Ceph Write Throughput 1`_,
@@ -45,9 +41,9 @@ RAM
 
 Metadata servers and monitors must be capable of serving their data quickly, so
 they should have plenty of RAM (e.g., 1GB of RAM per daemon instance). OSDs do
-not require as much RAM for regular operations (e.g., 200MB of RAM per daemon
-instance); however, during recovery they need significantly more RAM (e.g.,
-500MB-1GB). Generally, more RAM is better.
+not require as much RAM for regular operations (e.g., 500MB of RAM per daemon
+instance); however, during recovery they need significantly more RAM (e.g., ~1GB
+per 1TB of storage per daemon). Generally, more RAM is better.
 
 
 Data Storage
@@ -62,7 +58,7 @@ for production, but it has the ability to journal and write data simultaneously,
 whereas XFS and ext4 do not.
 
 .. important:: Since Ceph has to write all data to the journal before it can 
-   send an ACK (for XFS and EXT4 at least), having the journals and OSD 
+   send an ACK (for XFS and EXT4 at least), having the journal and OSD 
    performance in balance is really important!
 
 
@@ -78,7 +74,10 @@ example, a 1 terabyte hard disk priced at $75.00 has a cost of $0.07 per
 gigabyte (i.e., $75 / 1024 = 0.0732). By contrast, a 3 terabyte hard disk priced
 at $150.00 has a cost of $0.05 per gigabyte (i.e., $150 / 3072 = 0.0488). In the
 foregoing example, using the 1 terabyte disks would generally increase the cost
-per gigabyte by 40%--rendering your cluster substantially less cost efficient. 
+per gigabyte by 40%--rendering your cluster substantially less cost efficient.
+Also, the larger the storage drive capacity, the more memory per Ceph OSD Daemon
+you will need, especially during rebalancing, backfilling and recovery. A 
+general rule of thumb is ~1GB of RAM for 1TB of storage space. 
 
 .. tip:: Running multiple OSDs on a single disk--irrespective of partitions--is 
    **NOT** a good idea.
@@ -90,18 +89,18 @@ Storage drives are subject to limitations on seek time, access time, read and
 write times, as well as total throughput. These physical limitations affect
 overall system performance--especially during recovery. We recommend using a
 dedicated drive for the operating system and software, and one drive for each
-OSD daemon you run on the host. Most "slow OSD" issues arise due to running an
-operating system, multiple OSDs, and/or multiple journals on the same drive.
+Ceph OSD Daemon you run on the host. Most "slow OSD" issues arise due to running
+an operating system, multiple OSDs, and/or multiple journals on the same drive.
 Since the cost of troubleshooting performance issues on a small cluster likely
 exceeds the cost of the extra disk drives, you can accelerate your cluster
 design planning by avoiding the temptation to overtax the OSD storage drives.
 
-You may run multiple OSDs per hard disk drive, but this will likely lead to
-resource contention and diminish the overall throughput. You may store a journal
-and object data on the same drive, but this may increase the time it takes to
-journal a write and ACK to the client. Ceph must write to the journal before it
-can ACK the write. The btrfs filesystem can write journal data and object data
-simultaneously, whereas XFS and ext4 cannot.
+You may run multiple Ceph OSD Daemons per hard disk drive, but this will likely
+lead to resource contention and diminish the overall throughput. You may store a
+journal and object data on the same drive, but this may increase the time it
+takes to journal a write and ACK to the client. Ceph must write to the journal
+before it can ACK the write. The btrfs filesystem can write journal data and
+object data simultaneously, whereas XFS and ext4 cannot.
 
 Ceph best practices dictate that you should run operating systems, OSD data and
 OSD journals on separate drives.
@@ -129,10 +128,10 @@ sequential write throughput when storing multiple journals for multiple OSDs.
    SSD in a test configuration to gauge performance. 
 
 Since SSDs have no moving mechanical parts, it makes sense to use them in the
-areas of Ceph that do not use a lot of storage space. Relatively inexpensive
-SSDs may appeal to your sense of economy. Use caution. Acceptable IOPS are not
-enough when selecting an SSD for use with Ceph. There are a few important
-performance considerations for journals and SSDs:
+areas of Ceph that do not use a lot of storage space (e.g., journals).
+Relatively inexpensive SSDs may appeal to your sense of economy. Use caution.
+Acceptable IOPS are not enough when selecting an SSD for use with Ceph. There
+are a few important performance considerations for journals and SSDs:
 
 - **Write-intensive semantics:** Journaling involves write-intensive semantics, 
   so you should ensure that the SSD you choose to deploy will perform equal to
@@ -251,33 +250,41 @@ Minimum Hardware Recommendations
 Ceph can run on inexpensive commodity hardware. Small production clusters
 and development clusters can run successfully with modest hardware.
 
-+--------------+----------------+------------------------------------+
-|  Process     | Criteria       | Minimum Recommended                |
-+==============+================+====================================+
-| ``ceph-osd`` | Processor      |  1x 64-bit AMD-64/i386 dual-core   |
-|              +----------------+------------------------------------+
-|              | RAM            |  500 MB per daemon                 |
-|              +----------------+------------------------------------+
-|              | Volume Storage |  1x Disk per daemon                |
-|              +----------------+------------------------------------+
-|              | Network        |  2x 1GB Ethernet NICs              |
-+--------------+----------------+------------------------------------+
-| ``ceph-mon`` | Processor      |  1x 64-bit AMD-64/i386             |
-|              +----------------+------------------------------------+
-|              | RAM            |  1 GB per daemon                   |
-|              +----------------+------------------------------------+
-|              | Disk Space     |  10 GB per daemon                  |
-|              +----------------+------------------------------------+
-|              | Network        |  2x 1GB Ethernet NICs              |
-+--------------+----------------+------------------------------------+
-| ``ceph-mds`` | Processor      |  1x 64-bit AMD-64/i386 quad-core   |
-|              +----------------+------------------------------------+
-|              | RAM            |  1 GB minimum per daemon           |
-|              +----------------+------------------------------------+
-|              | Disk Space     |  1 MB per daemon                   |
-|              +----------------+------------------------------------+
-|              | Network        |  2x 1GB Ethernet NICs              |
-+--------------+----------------+------------------------------------+
++--------------+----------------+-----------------------------------------+
+|  Process     | Criteria       | Minimum Recommended                     |
++==============+================+=========================================+
+| ``ceph-osd`` | Processor      | - 1x 64-bit AMD-64                      |
+|              |                | - 1x 32-bit ARM dual-core or better     |
+|              |                | - 1x i386 dual-core                     |
+|              +----------------+-----------------------------------------+
+|              | RAM            |  ~1GB for 1TB of storage per daemon     |
+|              +----------------+-----------------------------------------+
+|              | Volume Storage |  1x storage drive per daemon            |
+|              +----------------+-----------------------------------------+
+|              | Journal        |  1x SSD partition per daemon (optional) |
+|              +----------------+-----------------------------------------+
+|              | Network        |  2x 1GB Ethernet NICs                   |
++--------------+----------------+-----------------------------------------+
+| ``ceph-mon`` | Processor      | - 1x 64-bit AMD-64/i386                 |
+|              |                | - 1x 32-bit ARM dual-core or better     |
+|              |                | - 1x i386 dual-core                     |
+|              +----------------+-----------------------------------------+
+|              | RAM            |  1 GB per daemon                        |
+|              +----------------+-----------------------------------------+
+|              | Disk Space     |  10 GB per daemon                       |
+|              +----------------+-----------------------------------------+
+|              | Network        |  2x 1GB Ethernet NICs                   |
++--------------+----------------+-----------------------------------------+
+| ``ceph-mds`` | Processor      | - 1x 64-bit AMD-64 quad-core            |
+|              |                | - 1x 32-bit ARM quad-core               |
+|              |                | - 1x i386 quad-core                     |
+|              +----------------+-----------------------------------------+
+|              | RAM            |  1 GB minimum per daemon                |
+|              +----------------+-----------------------------------------+
+|              | Disk Space     |  1 MB per daemon                        |
+|              +----------------+-----------------------------------------+
+|              | Network        |  2x 1GB Ethernet NICs                   |
++--------------+----------------+-----------------------------------------+
 
 .. tip:: If you are running an OSD with a single disk, create a
    partition for your volume storage that is separate from the partition
@@ -285,12 +292,15 @@ and development clusters can run successfully with modest hardware.
    OS and the volume storage.
 
 
-Production Cluster Example
-==========================
+Production Cluster Examples
+===========================
 
 Production clusters for petabyte scale data storage may also use commodity
 hardware, but should have considerably more memory, processing power and data
 storage to account for heavy traffic loads.
+
+Dell Example
+------------
 
 A recent (2012) Ceph cluster project is using two fairly robust hardware
 configurations for Ceph OSDs, and a lighter configuration for monitors.
@@ -324,6 +334,9 @@ configurations for Ceph OSDs, and a lighter configuration for monitors.
 |                +----------------+------------------------------------+
 |                | Mgmt. Network  |  2x 1GB Ethernet NICs              |
 +----------------+----------------+------------------------------------+
+
+
+
 
 
 .. _Ceph Write Throughput 1: http://ceph.com/community/ceph-performance-part-1-disk-controller-write-throughput/

@@ -93,11 +93,6 @@ For example::
 	rbd snap rollback rbd/foo@snapname
 
 
-
-For the rollback section, you could mention that rollback means
-overwriting the current version with data from a snapshot, and takes
-longer with larger images. So cloning is preferable for fast recovery.
-
 .. note:: Rolling back an image to a snapshot means overwriting 
    the current version of the image with data from a snapshot. The 
    time it takes to execute a rollback increases with the size of the 
@@ -177,7 +172,7 @@ a snapshot refers to the snapshot, so you **MUST** protect the snapshot before
 you clone it. The following diagram depicts the process.
 
 .. note:: Ceph only supports cloning for ``format 2`` images (i.e., created with 
-  ``rbd create --format 2``), and is not yet supported by the kernel ``rbd`` module. 
+  ``rbd create --image-format 2``), and is not yet supported by the kernel ``rbd`` module. 
   So you MUST use QEMU/KVM or ``librbd`` directly to access clones in the current
   release.
 

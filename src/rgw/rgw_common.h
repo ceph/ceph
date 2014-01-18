@@ -30,6 +30,7 @@
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
+#include "rgw_string.h"
 #include "cls/version/cls_version_types.h"
 #include "include/rados/librados.hpp"
 
@@ -276,13 +277,15 @@ class XMLArgs
 class RGWConf;
 
 class RGWEnv {
-  std::map<string, string> env_map;
+  std::map<string, string, ltstr_nocase> env_map;
 public:
   RGWConf *conf; 
 
   RGWEnv();
   ~RGWEnv();
+  void init(CephContext *cct);
   void init(CephContext *cct, char **envp);
+  void set(const char *name, const char *val);
   const char *get(const char *name, const char *def_val = NULL);
   int get_int(const char *name, int def_val = 0);
   bool get_bool(const char *name, bool def_val = 0);
@@ -291,8 +294,8 @@ public:
   bool exists_prefix(const char *prefix);
 
   void remove(const char *name);
-  void set(const char *name, const char *val);
-  std::map<string, string>& get_map() { return env_map; }
+
+  std::map<string, string, ltstr_nocase>& get_map() { return env_map; }
 };
 
 class RGWConf {
@@ -431,11 +434,12 @@ struct RGWUserInfo
   string default_placement;
   list<string> placement_tags;
   RGWQuotaInfo bucket_quota;
+  map<int, string> temp_url_keys;
 
   RGWUserInfo() : auid(0), suspended(0), max_buckets(RGW_DEFAULT_MAX_BUCKETS), op_mask(RGW_OP_TYPE_ALL), system(0) {}
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(14, 9, bl);
+     ENCODE_START(15, 9, bl);
      ::encode(auid, bl);
      string access_key;
      string secret_key;
@@ -471,6 +475,7 @@ struct RGWUserInfo
      ::encode(default_placement, bl);
      ::encode(placement_tags, bl);
      ::encode(bucket_quota, bl);
+     ::encode(temp_url_keys, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -529,6 +534,9 @@ struct RGWUserInfo
     }
     if (struct_v >= 14) {
       ::decode(bucket_quota, bl);
+    }
+    if (struct_v >= 15) {
+     ::decode(temp_url_keys, bl);
     }
     DECODE_FINISH(bl);
   }

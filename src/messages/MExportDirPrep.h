@@ -40,10 +40,11 @@ public:
   MExportDirPrep() {
     b_did_assim = false;
   }
-  MExportDirPrep(dirfrag_t df) : 
+  MExportDirPrep(dirfrag_t df, uint64_t tid) :
     Message(MSG_MDS_EXPORTDIRPREP),
-    dirfrag(df),
-    b_did_assim(false) { }
+    dirfrag(df), b_did_assim(false) {
+    set_tid(tid);
+  }
 private:
   ~MExportDirPrep() {}
 

@@ -102,7 +102,11 @@ Human-readable discovery of supported commands and parameters, along
 with a small description of each command, is provided when the requested
 path is incomplete/partially matching.  Requesting / will redirect to
 the value of  **restapi base url**, and that path will give a full list
-of all known commands.  The command set is very similar to the commands
+of all known commands.
+For example, requesting ``api/vX.X/mon`` will return the list of API calls for
+monitors - ``api/vX.X/osd`` will return the list of API calls for OSD and so on.
+
+The command set is very similar to the commands
 supported by the **ceph** tool.  One notable exception is that the
 ``ceph pg <pgid> <command>`` style of commands is supported here
 as ``tell/<pgid>/command?args``.
@@ -134,7 +138,7 @@ see those messages in case of problem.
 Availability
 ============
 
-**ceph-rest-api** is part of the Ceph distributed file system. Please refer to the Ceph documentation at
+**ceph-rest-api** is part of the Ceph distributed storage system. Please refer to the Ceph documentation at
 http://ceph.com/docs for more information.
 
 

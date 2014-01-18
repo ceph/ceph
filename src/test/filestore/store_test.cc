@@ -23,6 +23,7 @@
 #include "global/global_init.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
+#include "common/errno.h"
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
@@ -39,11 +40,17 @@ public:
 
   StoreTest() : store(0) {}
   virtual void SetUp() {
-    ::mkdir("store_test_temp_dir", 0777);
+    int r = ::mkdir("store_test_temp_dir", 0777);
+    if (r < 0 && errno != EEXIST) {
+      r = -errno;
+      cerr << __func__ << ": unable to create store_test_temp_dir" << ": " << cpp_strerror(r) << std::endl;
+      return;
+    }
+
     ObjectStore *store_ = new FileStore(string("store_test_temp_dir"), string("store_test_temp_journal"));
     store.reset(store_);
-    store->mkfs();
-    store->mount();
+    EXPECT_EQ(store->mkfs(), 0);
+    EXPECT_EQ(store->mount(), 0);
   }
 
   virtual void TearDown() {
@@ -744,7 +751,7 @@ TEST_F(StoreTest, XattrTest) {
   ASSERT_EQ(r, -ENODATA);
 
   r = store->getattr(cid, hoid, "attr3", bp);
-  ASSERT_EQ(r, 0);
+  ASSERT_GE(r, 0);
   bufferlist bl2;
   bl2.push_back(bp);
   ASSERT_TRUE(bl2 == attrs["attr3"]);

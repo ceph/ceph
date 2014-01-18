@@ -1,5 +1,5 @@
 ## erasure code plugins
-erasure_codelibdir = $(libdir)/erasure-code
+erasure_codelibdir = $(pkglibdir)/erasure-code
 erasure_codelib_LTLIBRARIES =  
 
 include osd/ErasureCodePluginJerasure/Makefile.am
@@ -11,6 +11,7 @@ libosd_la_SOURCES = \
 	osd/ReplicatedPG.cc \
 	osd/ReplicatedBackend.cc \
 	osd/Ager.cc \
+	osd/HitSet.cc \
 	osd/OSD.cc \
 	osd/OSDCap.cc \
 	osd/Watch.cc \
@@ -28,6 +29,7 @@ noinst_HEADERS += \
 	osd/ClassHandler.h \
 	osd/ErasureCodeInterface.h \
 	osd/ErasureCodePlugin.h \
+	osd/HitSet.h \
 	osd/OSD.h \
 	osd/OSDCap.h \
 	osd/OSDMap.h \

@@ -1,7 +1,9 @@
+if LINUX
 libcls_kvs_la_SOURCES = key_value_store/cls_kvs.cc
 libcls_kvs_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
-libcls_kvs_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0 -export-symbols-regex '.*__cls_.*'
+libcls_kvs_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
 radoslib_LTLIBRARIES += libcls_kvs.la
+endif
 
 noinst_HEADERS += \
 	key_value_store/key_value_structure.h \

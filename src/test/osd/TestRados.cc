@@ -49,6 +49,7 @@ public:
       stringstream oid;
       oid << m_op;
       cout << m_op << ": write initial oid " << oid.str() << std::endl;
+      context.oid_not_flushing.insert(oid.str());
       return new WriteOp(m_op, &context, oid.str());
     } else if (m_op >= m_ops) {
       return NULL;
@@ -87,27 +88,25 @@ private:
     //cout << "oids not in use " << context.oid_not_in_use.size() << std::endl;
     assert(context.oid_not_in_use.size());
 
-    cout << m_op << ": ";
     switch (type) {
     case TEST_OP_READ:
       oid = *(rand_choose(context.oid_not_in_use));
-      cout << "read oid " << oid << std::endl;
       return new ReadOp(m_op, &context, oid, m_stats);
 
     case TEST_OP_WRITE:
       oid = *(rand_choose(context.oid_not_in_use));
-      cout << "write oid " << oid << " current snap is "
+      cout << m_op << ": " << "write oid " << oid << " current snap is "
 	   << context.current_snap << std::endl;
       return new WriteOp(m_op, &context, oid, m_stats);
 
     case TEST_OP_DELETE:
       oid = *(rand_choose(context.oid_not_in_use));
-      cout << "delete oid " << oid << " current snap is "
+      cout << m_op << ": " << "delete oid " << oid << " current snap is "
 	   << context.current_snap << std::endl;
       return new DeleteOp(m_op, &context, oid, m_stats);
 
     case TEST_OP_SNAP_CREATE:
-      cout << "snap_create" << std::endl;
+      cout << m_op << ": " << "snap_create" << std::endl;
       return new SnapCreateOp(m_op, &context, m_stats);
 
     case TEST_OP_SNAP_REMOVE:
@@ -116,44 +115,41 @@ private:
       }
       while (true) {
 	int snap = rand_choose(context.snaps)->first;
-	if (context.snaps_in_use.count(snap))
+	if (context.snaps_in_use.lookup(snap))
 	  continue;  // in use; try again!
-	cout << "snap_remove snap " << snap << std::endl;
+	cout << m_op << ": " << "snap_remove snap " << snap << std::endl;
 	return new SnapRemoveOp(m_op, &context, snap, m_stats);
       }
 
     case TEST_OP_ROLLBACK:
-      if (context.snaps.empty()) {
-	return NULL;
-      }
       {
-	int snap = rand_choose(context.snaps)->first;
 	string oid = *(rand_choose(context.oid_not_in_use));
-	cout << "rollback oid " << oid << " to " << snap << std::endl;
-	return new RollbackOp(m_op, &context, oid, snap);
+	cout << m_op << ": " << "rollback oid " << oid << " current snap is "
+	     << context.current_snap << std::endl;
+	return new RollbackOp(m_op, &context, oid);
       }
 
     case TEST_OP_SETATTR:
       oid = *(rand_choose(context.oid_not_in_use));
-      cout << "setattr oid " << oid
+      cout << m_op << ": " << "setattr oid " << oid
 	   << " current snap is " << context.current_snap << std::endl;
       return new SetAttrsOp(m_op, &context, oid, m_stats);
 
     case TEST_OP_RMATTR:
       oid = *(rand_choose(context.oid_not_in_use));
-      cout << "rmattr oid " << oid
+      cout << m_op << ": " << "rmattr oid " << oid
 	   << " current snap is " << context.current_snap << std::endl;
       return new RemoveAttrsOp(m_op, &context, oid, m_stats);
 
     case TEST_OP_TMAPPUT:
       oid = *(rand_choose(context.oid_not_in_use));
-      cout << "tmapput oid " << oid
+      cout << m_op << ": " << "tmapput oid " << oid
 	   << " current snap is " << context.current_snap << std::endl;
       return new TmapPutOp(m_op, &context, oid, m_stats);
 
     case TEST_OP_WATCH:
       oid = *(rand_choose(context.oid_not_in_use));
-      cout << "watch oid " << oid
+      cout << m_op << ": " << "watch oid " << oid
 	   << " current snap is " << context.current_snap << std::endl;
       return new WatchOp(m_op, &context, oid, m_stats);
 
@@ -162,12 +158,50 @@ private:
       do {
 	oid2 = *(rand_choose(context.oid_not_in_use));
       } while (oid == oid2);
-      cout << "copy_from oid " << oid << " from oid " << oid2
+      cout << m_op << ": " << "copy_from oid " << oid << " from oid " << oid2
 	   << " current snap is " << context.current_snap << std::endl;
       return new CopyFromOp(m_op, &context, oid, oid2, m_stats);
 
+    case TEST_OP_HIT_SET_LIST:
+      {
+	uint32_t hash = rjhash32(rand());
+	cout << m_op << ": " << "hit_set_list " << hash << std::endl;
+	return new HitSetListOp(m_op, &context, hash, m_stats);
+      }
+
+    case TEST_OP_UNDIRTY:
+      {
+	oid = *(rand_choose(context.oid_not_in_use));
+	cout << m_op << ": " << "undirty oid " << oid << std::endl;
+	return new UndirtyOp(m_op, &context, oid, m_stats);
+      }
+
+    case TEST_OP_IS_DIRTY:
+      {
+	oid = *(rand_choose(context.oid_not_flushing));
+	return new IsDirtyOp(m_op, &context, oid, m_stats);
+      }
+
+    case TEST_OP_CACHE_FLUSH:
+      {
+	oid = *(rand_choose(context.oid_not_in_use));
+	return new CacheFlushOp(m_op, &context, oid, m_stats, true);
+      }
+
+    case TEST_OP_CACHE_TRY_FLUSH:
+      {
+	oid = *(rand_choose(context.oid_not_in_use));
+	return new CacheFlushOp(m_op, &context, oid, m_stats, false);
+      }
+
+    case TEST_OP_CACHE_EVICT:
+      {
+	oid = *(rand_choose(context.oid_not_in_use));
+	return new CacheEvictOp(m_op, &context, oid, m_stats);
+      }
+
     default:
-      cerr << "Invalid op type " << type << std::endl;
+      cerr << m_op << ": Invalid op type " << type << std::endl;
       assert(0);
     }
   }
@@ -207,6 +241,12 @@ int main(int argc, char **argv)
     { TEST_OP_TMAPPUT, "tmapput" },
     { TEST_OP_WATCH, "watch" },
     { TEST_OP_COPY_FROM, "copy_from" },
+    { TEST_OP_HIT_SET_LIST, "hit_set_list" },
+    { TEST_OP_IS_DIRTY, "is_dirty" },
+    { TEST_OP_UNDIRTY, "undirty" },
+    { TEST_OP_CACHE_FLUSH, "cache_flush" },
+    { TEST_OP_CACHE_TRY_FLUSH, "cache_try_flush" },
+    { TEST_OP_CACHE_EVICT, "cache_evict" },
     { TEST_OP_READ /* grr */, NULL },
   };
 

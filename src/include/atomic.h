@@ -67,53 +67,52 @@ namespace ceph {
 /*
  * crappy slow implementation that uses a pthreads spinlock.
  */
-#include <pthread.h>
-#include "include/assert.h"
+#include "include/Spinlock.h"
 
 namespace ceph {
   class atomic_t {
-    mutable pthread_spinlock_t lock;
+    mutable ceph_spinlock_t lock;
     signed long val;
   public:
     atomic_t(int i=0)
       : val(i) {
-      pthread_spin_init(&lock, PTHREAD_PROCESS_PRIVATE);
+      ceph_spin_init(&lock);
     }
     ~atomic_t() {
-      pthread_spin_destroy(&lock);
+      ceph_spin_destroy(&lock);
     }
     void set(size_t v) {
-      pthread_spin_lock(&lock);
+      ceph_spin_lock(&lock);
       val = v;
-      pthread_spin_unlock(&lock);
+      ceph_spin_unlock(&lock);
     }
     int inc() {
-      pthread_spin_lock(&lock);
+      ceph_spin_lock(&lock);
       int r = ++val;
-      pthread_spin_unlock(&lock);
+      ceph_spin_unlock(&lock);
       return r;
     }
     int dec() {
-      pthread_spin_lock(&lock);
+      ceph_spin_lock(&lock);
       int r = --val;
-      pthread_spin_unlock(&lock);
+      ceph_spin_unlock(&lock);
       return r;
     }
     void add(int d) {
-      pthread_spin_lock(&lock);
+      ceph_spin_lock(&lock);
       val += d;
-      pthread_spin_unlock(&lock);
+      ceph_spin_unlock(&lock);
     }
     void sub(int d) {
-      pthread_spin_lock(&lock);
+      ceph_spin_lock(&lock);
       val -= d;
-      pthread_spin_unlock(&lock);
+      ceph_spin_unlock(&lock);
     }
     int read() const {
       signed long ret;
-      pthread_spin_lock(&lock);
+      ceph_spin_lock(&lock);
       ret = val;
-      pthread_spin_unlock(&lock);
+      ceph_spin_unlock(&lock);
       return ret;
     }
   private:

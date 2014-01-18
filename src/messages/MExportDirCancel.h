@@ -25,9 +25,10 @@ class MExportDirCancel : public Message {
   dirfrag_t get_dirfrag() { return dirfrag; }
 
   MExportDirCancel() : Message(MSG_MDS_EXPORTDIRCANCEL) {}
-  MExportDirCancel(dirfrag_t df) : 
-    Message(MSG_MDS_EXPORTDIRCANCEL),
-	dirfrag(df) { }
+  MExportDirCancel(dirfrag_t df, uint64_t tid) :
+    Message(MSG_MDS_EXPORTDIRCANCEL), dirfrag(df) {
+    set_tid(tid);
+  }
 private:
   ~MExportDirCancel() {}
 

@@ -377,7 +377,7 @@ Request Parameters
 
 :Description: User capabilities.
 :Type: String
-:Example: ``usage=read, write; user=read``
+:Example: ``usage=read, write; users=read``
 :Required: No
 
 ``generate-key``
@@ -575,7 +575,7 @@ Request Parameters
 
 :Description: User capabilities.
 :Type: String
-:Example: ``usage=read, write; user=read``
+:Example: ``usage=read, write; users=read``
 :Required: No
 
 ``max-buckets``
