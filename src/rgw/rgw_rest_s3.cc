@@ -964,7 +964,14 @@ int RGWPostObj_ObjStore_S3::get_policy()
 
     map<string, RGWAccessKey> access_keys  = user_info.access_keys;
 
-    map<string, RGWAccessKey>::const_iterator iter = access_keys.begin();
+    map<string, RGWAccessKey>::const_iterator iter = access_keys.find(s3_access_key);
+    // We know the key must exist, since the user was returned by
+    // rgw_get_user_info_by_access_key, but it doesn't hurt to check!
+    if (iter == access_keys.end()) {
+      ldout(s->cct, 0) << "Secret key lookup failed!" << dendl;
+      err_msg = "No secret key for matching access key";
+      return -EACCES;
+    }
     string s3_secret_key = (iter->second).key;
 
     char calc_signature[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
