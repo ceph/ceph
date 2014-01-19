@@ -590,8 +590,10 @@ public:
   void _encode_locks_full(bufferlist& bl);
   void _decode_locks_full(bufferlist::iterator& p);
   void _encode_locks_state_for_replica(bufferlist& bl);
+  void _encode_locks_state_for_rejoin(bufferlist& bl, int rep);
   void _decode_locks_state(bufferlist::iterator& p, bool is_new);
-  void _decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters);
+  void _decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters,
+			    list<SimpleLock*>& eval_locks);
 
   // -- import/export --
   void encode_export(bufferlist& bl);

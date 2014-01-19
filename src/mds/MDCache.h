@@ -428,6 +428,7 @@ protected:
   map<int, set<CInode*> > rejoin_unlinked_inodes;
 
   vector<CInode*> rejoin_recover_q, rejoin_check_q;
+  list<SimpleLock*> rejoin_eval_locks;
   list<Context*> rejoin_waiters;
 
   void rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin);
@@ -661,7 +662,8 @@ public:
   }
 protected:
 
-  void inode_remove_replica(CInode *in, int rep, set<SimpleLock *>& gather_locks);
+  void inode_remove_replica(CInode *in, int rep, bool rejoin,
+			    set<SimpleLock *>& gather_locks);
   void dentry_remove_replica(CDentry *dn, int rep, set<SimpleLock *>& gather_locks);
 
   void rename_file(CDentry *srcdn, CDentry *destdn);

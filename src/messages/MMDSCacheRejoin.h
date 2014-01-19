@@ -221,12 +221,10 @@ public:
   void add_strong_inode(vinodeno_t i, int n, int cw, int dl, int nl, int dftl) {
     strong_inodes[i] = inode_strong(n, cw, dl, nl, dftl);
   }
-  void add_inode_locks(CInode *in, __u32 nonce) {
+  void add_inode_locks(CInode *in, __u32 nonce, bufferlist& bl) {
     ::encode(in->inode.ino, inode_locks);
     ::encode(in->last, inode_locks);
     ::encode(nonce, inode_locks);
-    bufferlist bl;
-    in->_encode_locks_state_for_replica(bl);
     ::encode(bl, inode_locks);
   }
   void add_inode_base(CInode *in) {
