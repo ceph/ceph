@@ -1151,6 +1151,10 @@ struct pg_stat_t {
 
   utime_t last_became_active;
 
+  /// true if num_objects_dirty is not accurate (because it was not
+  /// maintained starting from pool creation)
+  bool dirty_stats_invalid;
+
   pg_stat_t()
     : reported_seq(0),
       reported_epoch(0),
@@ -1159,7 +1163,8 @@ struct pg_stat_t {
       parent_split_bits(0),
       stats_invalid(false),
       log_size(0), ondisk_log_size(0),
-      mapping_epoch(0)
+      mapping_epoch(0),
+      dirty_stats_invalid(false)
   { }
 
   epoch_t get_effective_last_epoch_clean() const {
