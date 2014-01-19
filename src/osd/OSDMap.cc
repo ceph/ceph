@@ -1376,8 +1376,8 @@ void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
   *temp_primary = -1;
   if (pp != primary_temp->end())
     *temp_primary = pp->second;
-  else if (p != pg_temp->end()) // apply pg_temp's primary
-    *temp_primary = p->second.front();
+  else if (!temp_pg->empty()) // apply pg_temp's primary
+    *temp_primary = temp_pg->front();
 }
 
 int OSDMap::pg_to_osds(pg_t pg, vector<int> *raw, int *primary) const
