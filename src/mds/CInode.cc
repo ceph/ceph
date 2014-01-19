@@ -3158,6 +3158,18 @@ void CInode::_encode_locks_state_for_replica(bufferlist& bl)
   flocklock.encode_state_for_replica(bl);
   policylock.encode_state_for_replica(bl);
 }
+void CInode::_encode_locks_state_for_rejoin(bufferlist& bl, int rep)
+{
+  authlock.encode_state_for_replica(bl);
+  linklock.encode_state_for_replica(bl);
+  dirfragtreelock.encode_state_for_rejoin(bl, rep);
+  filelock.encode_state_for_rejoin(bl, rep);
+  nestlock.encode_state_for_rejoin(bl, rep);
+  xattrlock.encode_state_for_replica(bl);
+  snaplock.encode_state_for_replica(bl);
+  flocklock.encode_state_for_replica(bl);
+  policylock.encode_state_for_replica(bl);
+}
 void CInode::_decode_locks_state(bufferlist::iterator& p, bool is_new)
 {
   authlock.decode_state(p, is_new);
@@ -3170,7 +3182,8 @@ void CInode::_decode_locks_state(bufferlist::iterator& p, bool is_new)
   flocklock.decode_state(p, is_new);
   policylock.decode_state(p, is_new);
 }
-void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters)
+void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters,
+				  list<SimpleLock*>& eval_locks)
 {
   authlock.decode_state_rejoin(p, waiters);
   linklock.decode_state_rejoin(p, waiters);
@@ -3181,6 +3194,13 @@ void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waite
   snaplock.decode_state_rejoin(p, waiters);
   flocklock.decode_state_rejoin(p, waiters);
   policylock.decode_state_rejoin(p, waiters);
+
+  if (!dirfragtreelock.is_stable() && !dirfragtreelock.is_wrlocked())
+    eval_locks.push_back(&dirfragtreelock);
+  if (!filelock.is_stable() && !filelock.is_wrlocked())
+    eval_locks.push_back(&filelock);
+  if (!nestlock.is_stable() && !nestlock.is_wrlocked())
+    eval_locks.push_back(&nestlock);
 }
 
 
