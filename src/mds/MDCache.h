@@ -571,7 +571,7 @@ public:
   bool trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap);
   void trim_dirfrag(CDir *dir, CDir *con,
 		    map<int, MCacheExpire*>& expiremap);
-  void trim_inode(CDentry *dn, CInode *in, CDir *con,
+  bool trim_inode(CDentry *dn, CInode *in, CDir *con,
 		  map<int,class MCacheExpire*>& expiremap);
   void send_expire_messages(map<int, MCacheExpire*>& expiremap);
   void trim_non_auth();      // trim out trimmable non-auth items
