@@ -3937,8 +3937,6 @@ COMMAND("list_missing " \
 	"osd", "r", "cli,rest")
 
 // tell <osd.n> commands.  Validation of osd.n must be special-cased in client
-
-// tell <osd.n> commands.  Validation of osd.n must be special-cased in client
 COMMAND("version", "report version of OSD", "osd", "r", "cli,rest")
 COMMAND("injectargs " \
 	"name=injected_args,type=CephString,n=N",
@@ -3967,19 +3965,6 @@ COMMAND("cpu_profiler " \
 COMMAND("dump_pg_recovery_stats", "dump pg recovery statistics",
 	"osd", "r", "cli,rest")
 COMMAND("reset_pg_recovery_stats", "reset pg recovery statistics",
-	"osd", "rw", "cli,rest")
-
-// experiment: restate pg commands as "tell <pgid>".  Validation of
-// pgid must be special-cased in client.
-COMMAND("query",
-	"show details of a specific pg", "osd", "r", "cli,rest")
-COMMAND("mark_unfound_lost revert " \
-	"name=mulcmd,type=CephChoices,strings=revert", \
-	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available",
-	"osd", "rw", "cli,rest")
-COMMAND("list_missing " \
-	"name=offset,type=CephString,req=false",
-	"list missing objects on this pg, perhaps starting at an offset given in JSON",
 	"osd", "rw", "cli,rest")
 };
 
