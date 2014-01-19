@@ -4084,7 +4084,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       assert(in);
 
       if (survivor && in->is_replica(from)) 
-	inode_remove_replica(in, from, gather_locks);
+	inode_remove_replica(in, from, true, gather_locks);
       unsigned inonce = in->add_replica(from);
       dout(10) << " have " << *in << dendl;
 
@@ -4095,7 +4095,9 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       if (ack) {
 	acked_inodes.insert(in->vino());
 	ack->add_inode_base(in);
-	ack->add_inode_locks(in, inonce);
+	bufferlist bl;
+	in->_encode_locks_state_for_rejoin(bl, from);
+	ack->add_inode_locks(in, inonce, bl);
       }
     }
   }
@@ -4107,14 +4109,16 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     CInode *in = get_inode(*p);
     assert(in);   // hmm fixme wrt stray?
     if (survivor && in->is_replica(from)) 
-      inode_remove_replica(in, from, gather_locks);
+      inode_remove_replica(in, from, true, gather_locks);
     unsigned inonce = in->add_replica(from);
     dout(10) << " have base " << *in << dendl;
     
     if (ack) {
       acked_inodes.insert(in->vino());
       ack->add_inode_base(in);
-      ack->add_inode_locks(in, inonce);
+      bufferlist bl;
+      in->_encode_locks_state_for_rejoin(bl, from);
+      ack->add_inode_locks(in, inonce, bl);
     }
   }
 
@@ -4300,7 +4304,7 @@ void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack,
     if (in->is_auth() &&
 	in->is_replica(from) &&
 	(ack == NULL || acked_inodes.count(p->second->vino()) == 0)) {
-      inode_remove_replica(in, from, gather_locks);
+      inode_remove_replica(in, from, false, gather_locks);
       dout(10) << " rem " << *in << dendl;
     }
 
@@ -4820,7 +4824,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
     assert(in);
     in->set_replica_nonce(nonce);
     bufferlist::iterator q = lockbl.begin();
-    in->_decode_locks_rejoin(q, rejoin_waiters);
+    in->_decode_locks_rejoin(q, rejoin_waiters, rejoin_eval_locks);
     in->state_clear(CInode::STATE_REJOINING);
     dout(10) << " got inode locks " << *in << dendl;
   }
@@ -4863,6 +4867,17 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
   assert(rejoin_ack_gather.count(from));
   rejoin_ack_gather.erase(from);
   if (mds->is_rejoin()) {
+
+    if (rejoin_gather.empty()) {
+      // eval unstable scatter locks after all wrlocks are rejoined.
+      while (!rejoin_eval_locks.empty()) {
+	SimpleLock *lock = rejoin_eval_locks.front();
+	rejoin_eval_locks.pop_front();
+	if (!lock->is_stable())
+	  mds->locker->eval_gather(lock);
+      }
+    }
+
     if (rejoin_gather.empty() &&     // make sure we've gotten our FULL inodes, too.
 	rejoin_ack_gather.empty()) {
       // finally, kickstart past snap parent opens
@@ -5728,7 +5743,9 @@ void MDCache::rejoin_send_acks()
 	     r != in->replicas_end();
 	     ++r) {
 	  ack[r->first]->add_inode_base(in);
-	  ack[r->first]->add_inode_locks(in, ++r->second);
+	  bufferlist bl;
+	  in->_encode_locks_state_for_rejoin(bl, r->first);
+	  ack[r->first]->add_inode_locks(in, ++r->second, bl);
 	}
 	
 	// subdirs in this subtree?
@@ -5743,14 +5760,18 @@ void MDCache::rejoin_send_acks()
 	 r != root->replicas_end();
 	 ++r) {
       ack[r->first]->add_inode_base(root);
-      ack[r->first]->add_inode_locks(root, ++r->second);
+      bufferlist bl;
+      root->_encode_locks_state_for_rejoin(bl, r->first);
+      ack[r->first]->add_inode_locks(root, ++r->second, bl);
     }
   if (myin)
     for (map<int,unsigned>::iterator r = myin->replicas_begin();
 	 r != myin->replicas_end();
 	 ++r) {
       ack[r->first]->add_inode_base(myin);
-      ack[r->first]->add_inode_locks(myin, ++r->second);
+      bufferlist bl;
+      myin->_encode_locks_state_for_rejoin(bl, r->first);
+      ack[r->first]->add_inode_locks(myin, ++r->second, bl);
     }
 
   // include inode base for any inodes whose scatterlocks may have updated
@@ -6795,7 +6816,7 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	// remove from our cached_by
 	dout(7) << " inode expire on " << *in << " from mds." << from 
 		<< " cached_by was " << in->get_replicas() << dendl;
-	inode_remove_replica(in, from, gather_locks);
+	inode_remove_replica(in, from, false, gather_locks);
       } 
       else {
 	// this is an old nonce, ignore expire.
@@ -6922,7 +6943,8 @@ void MDCache::discard_delayed_expire(CDir *dir)
   delayed_expire.erase(dir);  
 }
 
-void MDCache::inode_remove_replica(CInode *in, int from, set<SimpleLock *>& gather_locks)
+void MDCache::inode_remove_replica(CInode *in, int from, bool rejoin,
+				   set<SimpleLock *>& gather_locks)
 {
   in->remove_replica(from);
   in->mds_caps_wanted.erase(from);
@@ -6931,14 +6953,17 @@ void MDCache::inode_remove_replica(CInode *in, int from, set<SimpleLock *>& gath
   // fix lock
   if (in->authlock.remove_replica(from)) gather_locks.insert(&in->authlock);
   if (in->linklock.remove_replica(from)) gather_locks.insert(&in->linklock);
-  if (in->dirfragtreelock.remove_replica(from)) gather_locks.insert(&in->dirfragtreelock);
-  if (in->filelock.remove_replica(from)) gather_locks.insert(&in->filelock);
   if (in->snaplock.remove_replica(from)) gather_locks.insert(&in->snaplock);
   if (in->xattrlock.remove_replica(from)) gather_locks.insert(&in->xattrlock);
-
-  if (in->nestlock.remove_replica(from)) gather_locks.insert(&in->nestlock);
   if (in->flocklock.remove_replica(from)) gather_locks.insert(&in->flocklock);
   if (in->policylock.remove_replica(from)) gather_locks.insert(&in->policylock);
+
+  // If 'rejoin' is true and the scatter lock is in LOCK_MIX_* state.
+  // Don't remove the recovering mds from lock's gathering list because
+  // it may hold rejoined wrlocks.
+  if (in->dirfragtreelock.remove_replica(from, rejoin)) gather_locks.insert(&in->dirfragtreelock);
+  if (in->filelock.remove_replica(from, rejoin)) gather_locks.insert(&in->filelock);
+  if (in->nestlock.remove_replica(from, rejoin)) gather_locks.insert(&in->nestlock);
 }
 
 void MDCache::dentry_remove_replica(CDentry *dn, int from, set<SimpleLock *>& gather_locks)
