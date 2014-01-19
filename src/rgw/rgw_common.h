@@ -326,8 +326,8 @@ class RGWAccessControlPolicy;
 class JSONObj;
 
 struct RGWAccessKey {
-  string id;
-  string key;
+  string id; // AccessKey
+  string key; // SecretKey
   string subuser;
 
   RGWAccessKey() {}
