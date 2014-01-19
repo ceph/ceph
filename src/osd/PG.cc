@@ -4866,6 +4866,15 @@ bool PG::can_discard_replica_op(OpRequestRef op)
   T *m = static_cast<T *>(op->get_req());
   assert(m->get_header().type == MSGTYPE);
 
+  /* Mostly, this overlaps with the old_peering_msg
+   * condition.  An important exception is pushes
+   * sent by replicas not in the acting set, since
+   * if such a replica goes down it does not cause
+   * a new interval. */
+  int from = m->get_source().num();
+  if (get_osdmap()->get_down_at(from) >= m->map_epoch)
+    return true;
+
   // same pg?
   //  if pg changes _at all_, we reset and repeer!
   if (old_peering_msg(m->map_epoch, m->map_epoch)) {
