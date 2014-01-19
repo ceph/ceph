@@ -2302,6 +2302,9 @@ void ESubtreeMap::replay(MDS *mds)
 	continue;
       }
 
+      for (vector<dirfrag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q)
+	mds->mdcache->get_force_dirfrag(*q);
+
       set<CDir*> bounds;
       mds->mdcache->get_subtree_bounds(dir, bounds);
       for (vector<dirfrag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
