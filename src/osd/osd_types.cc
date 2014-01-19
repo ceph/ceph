@@ -1450,7 +1450,7 @@ void pg_stat_t::dump_brief(Formatter *f) const
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(13, 8, bl);
+  ENCODE_START(14, 8, bl);
   ::encode(version, bl);
   ::encode(reported_seq, bl);
   ::encode(reported_epoch, bl);
@@ -1479,12 +1479,13 @@ void pg_stat_t::encode(bufferlist &bl) const
   ::encode(stats_invalid, bl);
   ::encode(last_clean_scrub_stamp, bl);
   ::encode(last_became_active, bl);
+  ::encode(dirty_stats_invalid, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(13, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(14, 8, 8, bl);
   ::decode(version, bl);
   ::decode(reported_seq, bl);
   ::decode(reported_epoch, bl);
@@ -1563,6 +1564,13 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
     ::decode(last_became_active, bl);
   } else {
     last_became_active = last_active;
+  }
+  if (struct_v >= 14) {
+    ::decode(dirty_stats_invalid, bl);
+  } else {
+    // if we are decoding an old encoding of this object, then the
+    // encoder may not have supported num_objects_dirty accounting.
+    dirty_stats_invalid = true;
   }
   DECODE_FINISH(bl);
 }
