@@ -2006,6 +2006,7 @@ bool MDS::_dispatch(Message *m)
   // hack: thrash fragments
   for (int i=0; i<g_conf->mds_thrash_fragments; i++) {
     if (!is_active()) break;
+    if (mdcache->get_num_fragmenting_dirs() > 5) break;
     dout(7) << "mds thrashing fragments pass " << (i+1) << "/" << g_conf->mds_thrash_fragments << dendl;
     
     // pick a random dir inode
@@ -2017,9 +2018,10 @@ bool MDS::_dispatch(Message *m)
     CDir *dir = ls.front();
     if (!dir->get_parent_dir()) continue;    // must be linked.
     if (!dir->is_auth()) continue;           // must be auth.
-    if (dir->get_frag() == frag_t() || (rand() % 3 == 0)) {
+    frag_t fg = dir->get_frag();
+    if (fg == frag_t() || (rand() % (1 << fg.bits()) == 0))
       mdcache->split_dir(dir, 1);
-    } else
+    else
       balancer->queue_merge(dir);
   }
 
