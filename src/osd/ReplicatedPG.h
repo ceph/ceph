@@ -677,6 +677,8 @@ protected:
   hobject_t get_hit_set_current_object(utime_t stamp);
   hobject_t get_hit_set_archive_object(utime_t start, utime_t end);
 
+  friend class C_AgentFlushStartStop;
+
   /// true if we can send an ondisk/commit for v
   bool already_complete(eversion_t v) {
     for (xlist<RepGather*>::iterator i = repop_queue.begin();
@@ -1236,6 +1238,8 @@ public:
   int getattrs_maybe_cache(
     ObjectContextRef obc,
     map<string, bufferlist> *out);
+
+  void agent_work(int max) { /* placeholder */ }
 };
 
 inline ostream& operator<<(ostream& out, ReplicatedPG::RepGather& repop)
