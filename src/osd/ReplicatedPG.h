@@ -391,6 +391,8 @@ public:
 
     enum { W_LOCK, R_LOCK, NONE } lock_to_release;
 
+    Context *on_finish;
+
     OpContext(const OpContext& other);
     const OpContext& operator=(const OpContext& other);
 
@@ -406,7 +408,8 @@ public:
       num_read(0),
       num_write(0),
       copy_cb(NULL),
-      lock_to_release(NONE) {
+      lock_to_release(NONE),
+      on_finish(NULL) {
       if (_ssc) {
 	new_snapset = _ssc->snapset;
 	snapset = &_ssc->snapset;
@@ -423,6 +426,13 @@ public:
       assert(lock_to_release == NONE);
       if (reply)
 	reply->put();
+      assert(on_finish == NULL);
+    }
+    void finish(int r) {
+      if (on_finish) {
+	on_finish->complete(r);
+	on_finish = NULL;
+      }
     }
   };
 
@@ -527,8 +537,9 @@ protected:
    *
    * @param ctx [in] ctx to clean up
    */
-  void close_op_ctx(OpContext *ctx) {
+  void close_op_ctx(OpContext *ctx, int r) {
     release_op_ctx_locks(ctx);
+    ctx->finish(r);
     delete ctx;
   }
 
