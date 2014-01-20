@@ -7232,7 +7232,7 @@ void OSD::dequeue_op(
 {
   utime_t now = ceph_clock_now(cct);
   op->set_dequeued_time(now);
-  utime_t latency = now - op->request->get_recv_stamp();
+  utime_t latency = now - op->get_req()->get_recv_stamp(); 
   dout(10) << "dequeue_op " << op << " prio " << op->get_req()->get_priority()
 	   << " cost " << op->get_req()->get_cost()
 	   << " latency " << latency
