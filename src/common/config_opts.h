@@ -380,6 +380,9 @@ OPTION(osd_backfill_full_ratio, OPT_FLOAT, 0.85)
 // Seconds to wait before retrying refused backfills
 OPTION(osd_backfill_retry_interval, OPT_DOUBLE, 10.0)
 
+// max agent flush ops
+OPTION(osd_agent_max_ops, OPT_INT, 4)
+
 OPTION(osd_uuid, OPT_UUID, uuid_d())
 OPTION(osd_data, OPT_STR, "/var/lib/ceph/osd/$cluster-$id")
 OPTION(osd_journal, OPT_STR, "/var/lib/ceph/osd/$cluster-$id/journal")
