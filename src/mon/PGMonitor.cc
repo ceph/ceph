@@ -1199,6 +1199,7 @@ void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
     f->dump_int("bytes_used", sum.num_bytes);
     f->dump_int("objects", sum.num_objects);
     if (verbose) {
+      f->dump_int("dirty", sum.num_objects_dirty);
       f->dump_int("rd", sum.num_rd);
       f->dump_int("rd_kb", sum.num_rd_kb);
       f->dump_int("wr", sum.num_wr);
@@ -1210,7 +1211,8 @@ void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
     tbl << percentify(((float)kb_used / pg_map.osd_sum.kb)*100);
     tbl << sum.num_objects;
     if (verbose) {
-      tbl << stringify(si_t(sum.num_rd))
+      tbl << stringify(si_t(sum.num_objects_dirty))
+	  << stringify(si_t(sum.num_rd))
           << stringify(si_t(sum.num_wr));
     }
   }
@@ -1231,6 +1233,7 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
     tbl.define_column("\%USED", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::LEFT);
     if (verbose) {
+      tbl.define_column("DIRTY", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("READ", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("WRITE", TextTable::LEFT, TextTable::LEFT);
     }
