@@ -1837,7 +1837,7 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
     pi->rstat.add(delta);
     dout(20) << "        result [" << first << "," << last << "] " << pi->rstat << dendl;
 
-    if (pi->rstat.rbytes < 0)
+    if (pi->rstat.rbytes < 0 && pin->dirfragtree.is_leaf(frag_t()))
       assert(!"negative rstat rbytes" == g_conf->mds_verify_scatter);
 
     last = first-1;
