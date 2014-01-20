@@ -748,6 +748,17 @@ void pg_pool_t::calc_pg_masks()
   pgp_num_mask = (1 << calc_bits_of(pgp_num-1)) - 1;
 }
 
+unsigned pg_pool_t::get_pg_num_divisor(pg_t pgid) const
+{
+  if (pg_num == pg_num_mask + 1)
+    return pg_num;                    // power-of-2 split
+  unsigned mask = pg_num_mask >> 1;
+  if ((pgid.ps() & mask) < (pg_num & mask))
+    return pg_num_mask + 1;           // smaller bin size (already split)
+  else
+    return (pg_num_mask + 1) >> 1;    // bigger bin (not yet split)
+}
+
 /*
  * we have two snap modes:
  *  - pool global snaps

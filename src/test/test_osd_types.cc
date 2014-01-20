@@ -1160,6 +1160,33 @@ TEST_F(ObjectContextTest, read_write_lock)
   
 }
 
+TEST(pg_pool_t_test, get_pg_num_divisor) {
+  pg_pool_t p;
+  p.set_pg_num(16);
+  p.set_pgp_num(16);
+
+  for (int i = 0; i < 16; ++i)
+    ASSERT_EQ(16u, p.get_pg_num_divisor(pg_t(i, 1)));
+
+  p.set_pg_num(12);
+  p.set_pgp_num(12);
+  //cout << "num " << p.get_pg_num()
+  //     << " mask " << p.get_pg_num_mask() << std::endl;
+  ASSERT_EQ(16u, p.get_pg_num_divisor(pg_t(0, 1)));
+  ASSERT_EQ(16u, p.get_pg_num_divisor(pg_t(1, 1)));
+  ASSERT_EQ(16u, p.get_pg_num_divisor(pg_t(2, 1)));
+  ASSERT_EQ(16u, p.get_pg_num_divisor(pg_t(3, 1)));
+  ASSERT_EQ(8u, p.get_pg_num_divisor(pg_t(4, 1)));
+  ASSERT_EQ(8u, p.get_pg_num_divisor(pg_t(5, 1)));
+  ASSERT_EQ(8u, p.get_pg_num_divisor(pg_t(6, 1)));
+  ASSERT_EQ(8u, p.get_pg_num_divisor(pg_t(7, 1)));
+  ASSERT_EQ(16u, p.get_pg_num_divisor(pg_t(8, 1)));
+  ASSERT_EQ(16u, p.get_pg_num_divisor(pg_t(9, 1)));
+  ASSERT_EQ(16u, p.get_pg_num_divisor(pg_t(10, 1)));
+  ASSERT_EQ(16u, p.get_pg_num_divisor(pg_t(11, 1)));
+}
+
+
 /*
  * Local Variables:
  * compile-command: "cd .. ; 

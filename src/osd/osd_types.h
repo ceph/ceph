@@ -807,7 +807,7 @@ public:
    */
   interval_set<snapid_t> removed_snaps;
 
-  int pg_num_mask, pgp_num_mask;
+  unsigned pg_num_mask, pgp_num_mask;
 
   set<uint64_t> tiers;      ///< pools that are tiers of us
   int64_t tier_of;         ///< pool for which we are a tier
@@ -897,6 +897,11 @@ public:
 
   unsigned get_pg_num_mask() const { return pg_num_mask; }
   unsigned get_pgp_num_mask() const { return pgp_num_mask; }
+
+  // if pg_num is not a multiple of two, pgs are not equally sized.
+  // return, for a given pg, the fraction (denominator) of the total
+  // pool size that it represents.
+  unsigned get_pg_num_divisor(pg_t pgid) const;
 
   void set_pg_num(int p) {
     pg_num = p;
