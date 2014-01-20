@@ -1183,6 +1183,8 @@ private:
     boost::statechart::result react(const SnapTrim&);
   };
 
+  int _verify_no_head_clones(const hobject_t& soid,
+			     const SnapSet& ss);
   int _delete_head(OpContext *ctx, bool no_whiteout);
   int _rollback_to(OpContext *ctx, ceph_osd_op& op);
 public:

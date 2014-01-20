@@ -3139,23 +3139,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  break;
 	}
 	if (soid.snap == CEPH_NOSNAP) {
-	  // verify that all clones have been evicted
-	  dout(20) << __func__ << " verifying clones are absent "
-		   << ctx->new_snapset << dendl;
-	  result = 0;
-	  for (vector<snapid_t>::iterator p = ctx->new_snapset.clones.begin();
-	       p != ctx->new_snapset.clones.end();
-	       ++p) {
-	    hobject_t clone_oid = soid;
-	    clone_oid.snap = *p;
-	    ObjectContextRef clone_obc = get_object_context(clone_oid, false);
-	    if (clone_obc && clone_obc->obs.exists) {
-	      dout(10) << __func__ << " cannot evict head before clone "
-		       << clone_oid << dendl;
-	      result = -EBUSY;
-	      break;
-	    }
-	  }
+	  result = _verify_no_head_clones(soid, ssc->snapset);
 	  if (result < 0)
 	    break;
 	}
@@ -4337,6 +4321,27 @@ int ReplicatedPG::_get_tmap(OpContext *ctx, bufferlist *header, bufferlist *vals
   }
   dout(20) << "successful at decoding tmap for " << ctx->new_obs.oi.soid
 	   << dendl;
+  return 0;
+}
+
+int ReplicatedPG::_verify_no_head_clones(const hobject_t& soid,
+					const SnapSet& ss)
+{
+  // verify that all clones have been evicted
+  dout(20) << __func__ << " verifying clones are absent "
+	   << ss << dendl;
+  for (vector<snapid_t>::const_iterator p = ss.clones.begin();
+       p != ss.clones.end();
+       ++p) {
+    hobject_t clone_oid = soid;
+    clone_oid.snap = *p;
+    ObjectContextRef clone_obc = get_object_context(clone_oid, false);
+    if (clone_obc && clone_obc->obs.exists) {
+      dout(10) << __func__ << " cannot evict head before clone "
+	       << clone_oid << dendl;
+      return -EBUSY;
+    }
+  }
   return 0;
 }
 
