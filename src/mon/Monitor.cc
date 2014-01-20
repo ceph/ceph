@@ -1703,17 +1703,17 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
   stringstream ss;
   health_status_t overall = HEALTH_OK;
   if (!summary.empty()) {
-    if (f) {
-      f->open_object_section("item");
-      f->dump_stream("severity") <<  summary.front().first;
-      f->dump_string("summary", summary.front().second);
-      f->close_section();
-    }
     ss << ' ';
     while (!summary.empty()) {
       if (overall > summary.front().first)
 	overall = summary.front().first;
       ss << summary.front().second;
+      if (f) {
+        f->open_object_section("item");
+        f->dump_stream("severity") <<  summary.front().first;
+        f->dump_string("summary", summary.front().second);
+        f->close_section();
+      }
       summary.pop_front();
       if (!summary.empty())
 	ss << "; ";
