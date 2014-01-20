@@ -427,6 +427,76 @@ public:
   void reply_op_error(OpRequestRef op, int err, eversion_t v, version_t uv);
   void handle_misdirected_op(PG *pg, OpRequestRef op);
 
+
+  // -- agent shared state --
+  Mutex agent_lock;
+  Cond agent_cond;
+  set<PGRef> agent_queue;
+  set<PGRef>::iterator agent_queue_pos;
+  int agent_ops;
+  set<hobject_t> agent_oids;
+  struct AgentThread : public Thread {
+    OSDService *osd;
+    AgentThread(OSDService *o) : osd(o) {}
+    void *entry() {
+      osd->agent_entry();
+      return NULL;
+    }
+  } agent_thread;
+  bool agent_stop_flag;
+
+  void agent_entry();
+  void agent_stop();
+
+  /// enable agent for a pg
+  void agent_enable_pg(PG *pg) {
+    Mutex::Locker l(agent_lock);
+    if (agent_queue.empty())
+      agent_cond.Signal();
+    agent_queue.insert(pg);
+  }
+
+  /// disable agent for a pg
+  void agent_disable_pg(PG *pg) {
+    Mutex::Locker l(agent_lock);
+    set<PGRef>::iterator p = agent_queue.find(pg);
+    assert(p != agent_queue.end());
+    if (p == agent_queue_pos)
+      ++agent_queue_pos;
+    agent_queue.erase(p);
+  }
+
+  /// note start of an async (flush) op
+  void agent_start_op(const hobject_t& oid) {
+    Mutex::Locker l(agent_lock);
+    ++agent_ops;
+    assert(agent_oids.count(oid) == 0);
+    agent_oids.insert(oid);
+  }
+
+  /// note finish or cancellation of an async (flush) op
+  void agent_finish_op(const hobject_t& oid) {
+    Mutex::Locker l(agent_lock);
+    assert(agent_ops > 0);
+    --agent_ops;
+    assert(agent_oids.count(oid) == 1);
+    agent_oids.erase(oid);
+    agent_cond.Signal();
+  }
+
+  /// check if we are operating on an object
+  bool agent_is_active_oid(const hobject_t& oid) {
+    Mutex::Locker l(agent_lock);
+    return agent_oids.count(oid);
+  }
+
+  /// get count of active agent ops
+  int agent_get_num_ops() {
+    Mutex::Locker l(agent_lock);
+    return agent_ops;
+  }
+
+
   // -- Objecter, for teiring reads/writes from/to other OSDs --
   Mutex objecter_lock;
   SafeTimer objecter_timer;

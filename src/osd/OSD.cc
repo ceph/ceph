@@ -191,6 +191,11 @@ OSDService::OSDService(OSD *osd) :
   pre_publish_lock("OSDService::pre_publish_lock"),
   sched_scrub_lock("OSDService::sched_scrub_lock"), scrubs_pending(0),
   scrubs_active(0),
+  agent_lock("OSD::agent_lock"),
+  agent_queue_pos(agent_queue.begin()),
+  agent_ops(0),
+  agent_thread(this),
+  agent_stop_flag(false),
   objecter_lock("OSD::objecter_lock"),
   objecter_timer(osd->client_messenger->cct, objecter_lock),
   objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, &objecter_osdmap,
@@ -441,7 +446,50 @@ void OSDService::init()
     objecter->init_locked();
   }
   watch_timer.init();
+
+  agent_thread.create();
 }
+
+void OSDService::agent_entry()
+{
+  dout(10) << __func__ << " start" << dendl;
+  agent_lock.Lock();
+  while (!agent_stop_flag) {
+    dout(10) << __func__
+	     << " pgs " << agent_queue.size()
+	     << " ops " << agent_ops << "/"
+	     << g_conf->osd_agent_max_ops
+	     << dendl;
+    dout(20) << __func__ << " oids " << agent_oids << dendl;
+    if (agent_ops >= g_conf->osd_agent_max_ops || agent_queue.empty()) {
+      agent_cond.Wait(agent_lock);
+      continue;
+    }
+
+    if (agent_queue_pos == agent_queue.end())
+      agent_queue_pos = agent_queue.begin();
+    PGRef pg = *agent_queue_pos;
+    int max = g_conf->osd_agent_max_ops - agent_ops;
+    agent_lock.Unlock();
+    pg->agent_work(max);
+    agent_lock.Lock();
+  }
+  agent_lock.Unlock();
+  dout(10) << __func__ << " finish" << dendl;
+}
+
+void OSDService::agent_stop()
+{
+  {
+    Mutex::Locker l(agent_lock);
+    agent_stop_flag = true;
+    agent_cond.Signal();
+  }
+  agent_thread.join();
+
+  agent_queue.clear();
+}
+
 
 #undef dout_prefix
 #define dout_prefix *_dout
@@ -1510,7 +1558,10 @@ int OSD::shutdown()
 
   disk_tp.drain();
   disk_tp.stop();
-  dout(10) << "disk tp paused (new), kicking all pgs" << dendl;
+  dout(10) << "disk tp paused (new)" << dendl;
+
+  dout(10) << "stopping agent" << dendl;
+  service.agent_stop();
 
   osd_lock.Lock();
 
