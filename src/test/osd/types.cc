@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -337,7 +337,7 @@ TEST(pg_interval_t, check_new_interval)
     ASSERT_EQ(osd_id, past_intervals[same_interval_since].acting[0]);
     ASSERT_EQ(osd_id, past_intervals[same_interval_since].up[0]);
   }
-  
+
   //
   // The old acting set was empty : the previous interval could not
   // have been rw
@@ -368,16 +368,16 @@ TEST(pg_interval_t, check_new_interval)
   }
 
   //
-  // The old acting set did not have enough osd : it could 
+  // The old acting set did not have enough osd : it could
   // not have been rw
   //
   {
     vector<int> old_acting;
-    old_acting.push_back(osd_id); 
+    old_acting.push_back(osd_id);
 
     //
     // see http://tracker.ceph.com/issues/5780
-    // the size of the old acting set should be compared 
+    // the size of the old acting set should be compared
     // with the min_size of the old osdmap
     //
     // The new osdmap is created so that it triggers the
@@ -421,9 +421,9 @@ TEST(pg_interval_t, check_new_interval)
   //
   {
     vector<int> new_acting;
-    new_acting.push_back(osd_id + 4); 
-    new_acting.push_back(osd_id + 5); 
-    
+    new_acting.push_back(osd_id + 4);
+    new_acting.push_back(osd_id + 5);
+
     ostringstream out;
 
     map<epoch_t, pg_interval_t> past_intervals;
@@ -446,14 +446,14 @@ TEST(pg_interval_t, check_new_interval)
     ASSERT_NE(string::npos, out.str().find("includes interval"));
   }
   //
-  // The acting set changes. The old acting set primary was not up 
+  // The acting set changes. The old acting set primary was not up
   // during the old interval but last_epoch_clean is in the
   // old interval and it may have been rw.
   //
   {
     vector<int> new_acting;
-    new_acting.push_back(osd_id + 4); 
-    new_acting.push_back(osd_id + 5); 
+    new_acting.push_back(osd_id + 4);
+    new_acting.push_back(osd_id + 5);
 
     ceph::shared_ptr<OSDMap> lastmap(new OSDMap());
     lastmap->set_max_osd(10);
@@ -488,15 +488,15 @@ TEST(pg_interval_t, check_new_interval)
   }
 
   //
-  // The acting set changes. The old acting set primary was not up 
+  // The acting set changes. The old acting set primary was not up
   // during the old interval and last_epoch_clean is before the
   // old interval : the previous interval could not possibly have
   // been rw.
   //
   {
     vector<int> new_acting;
-    new_acting.push_back(osd_id + 4); 
-    new_acting.push_back(osd_id + 5); 
+    new_acting.push_back(osd_id + 4);
+    new_acting.push_back(osd_id + 5);
 
     epoch_t last_epoch_clean = epoch - 10;
 
@@ -573,7 +573,7 @@ TEST(pg_t, split)
   ASSERT_EQ(0u, s.size());
 
   pgid = pg_t(1, 0, -1);
-  
+
   s.clear();
   b = pgid.is_split(2, 4, &s);
   ASSERT_TRUE(b);
@@ -665,8 +665,8 @@ TEST(pg_missing_t, swap)
   EXPECT_FALSE(other.have_missing());
 
   other.swap(missing);
-  EXPECT_FALSE(missing.have_missing());  
-  EXPECT_TRUE(other.have_missing());  
+  EXPECT_FALSE(missing.have_missing());
+  EXPECT_TRUE(other.have_missing());
 }
 
 TEST(pg_missing_t, is_missing)
@@ -737,7 +737,7 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.rmissing.size());
   }
-  
+
   // new object (CLONE)
   {
     pg_missing_t missing;
@@ -785,7 +785,7 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.rmissing.size());
   }
-  
+
   // object with prior version (MODIFY)
   {
     pg_missing_t missing;
@@ -813,7 +813,7 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_FALSE(missing.is_missing(oid));
     EXPECT_THROW(missing.add_next_event(e), FailedAssertion);
   }
-  
+
   // adding a DELETE matching an existing event
   {
     pg_missing_t missing;
@@ -957,10 +957,10 @@ TEST(pg_missing_t, split_into)
   hobject_t oid2(object_t("objname"), "key2", 123, hash2, 0, "");
   pg_missing_t missing;
   missing.add(oid1, eversion_t(), eversion_t());
-  missing.add(oid2, eversion_t(), eversion_t());  
+  missing.add(oid2, eversion_t(), eversion_t());
   pg_t child_pgid;
   child_pgid.m_seed = 1;
-  pg_missing_t child;  
+  pg_missing_t child;
   unsigned split_bits = 1;
   missing.split_into(child_pgid, split_bits, &child);
   EXPECT_TRUE(child.is_missing(oid1));
@@ -978,11 +978,11 @@ protected:
   public:
     ObjectContext &obc;
 
-    Thread_read_lock(ObjectContext& _obc) : 
+    Thread_read_lock(ObjectContext& _obc) :
       obc(_obc)
     {
     }
-    
+
     virtual void *entry() {
       obc.ondisk_read_lock();
       return NULL;
@@ -993,11 +993,11 @@ protected:
   public:
     ObjectContext &obc;
 
-    Thread_write_lock(ObjectContext& _obc) : 
+    Thread_write_lock(ObjectContext& _obc) :
       obc(_obc)
     {
     }
-    
+
     virtual void *entry() {
       obc.ondisk_write_lock();
       return NULL;
@@ -1083,7 +1083,7 @@ TEST_F(ObjectContextTest, read_write_lock)
     do {
       cout << "Trying (2) with delay " << delay << "us\n";
       usleep(delay);
-    } while ((obc.readers == 0 || obc.readers_waiting == 1) && 
+    } while ((obc.readers == 0 || obc.readers_waiting == 1) &&
 	     ( delay = delay * 2 + 1) < DELAY_MAX);
     EXPECT_EQ(0, obc.readers_waiting);
     EXPECT_EQ(1, obc.readers);
@@ -1157,7 +1157,7 @@ TEST_F(ObjectContextTest, read_write_lock)
 
     t.join();
   }
-  
+
 }
 
 TEST(pg_pool_t_test, get_pg_num_divisor) {
@@ -1189,10 +1189,9 @@ TEST(pg_pool_t_test, get_pg_num_divisor) {
 
 /*
  * Local Variables:
- * compile-command: "cd .. ; 
- *   make unittest_osd_types ; 
- *   ./unittest_osd_types # --gtest_filter=pg_missing_t.constructor 
+ * compile-command: "cd .. ;
+ *   make unittest_osd_types ;
+ *   ./unittest_osd_types # --gtest_filter=pg_missing_t.constructor
  * "
  * End:
  */
-

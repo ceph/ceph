@@ -361,7 +361,7 @@ unittest_ceph_compatset_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_ceph_compatset_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_ceph_compatset
 
-unittest_osd_types_SOURCES = test/test_osd_types.cc
+unittest_osd_types_SOURCES = test/osd/types.cc
 unittest_osd_types_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_osd_types_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) 
 check_PROGRAMS += unittest_osd_types
