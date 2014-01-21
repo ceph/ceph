@@ -1256,14 +1256,15 @@ void MDSMonitor::tick()
 		   << " " << ceph_mds_state_name(info.state)
 		   << " (laggy)" << dendl;
 	  pending_mdsmap.mds_info.erase(gid);
+	  do_propose = true;
 	} else if (!info.laggy()) {
 	  dout(10) << " marking " << gid << " " << info.addr << " mds." << info.rank << "." << info.inc
 		   << " " << ceph_mds_state_name(info.state)
 		   << " laggy" << dendl;
 	  info.laggy_since = now;
+	  do_propose = true;
 	}
 	last_beacon.erase(gid);
-	do_propose = true;
       }
     }
 
