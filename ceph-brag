@@ -1,0 +1,213 @@
+#!/usr/bin/env python
+
+import subprocess
+import uuid
+import re
+import json
+import sys
+
+CLUSTER_UUID_NAME='cluster-uuid'
+
+def run_command(cmd):
+  child = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                       stderr=subprocess.PIPE)
+  (o, e) = child.communicate()
+  return (child.returncode, o, e)
+
+def get_uuid():
+  (rc,uid,e) = run_command(['ceph', 'config-key', 'get', CLUSTER_UUID_NAME])
+  if rc is not 0: 
+    #uuid is not yet set.
+    uid = str(uuid.uuid4())
+    (rc, o, e) = run_command(['ceph', 'config-key', 'put', 
+                             CLUSTER_UUID_NAME, uid])
+    if rc is not 0:
+      return None
+
+  return uid
+
+def get_cluster_creation_date():
+  (rc, o, e) = run_command(['ceph', 'mon', 'dump'])
+  if rc is not 0:
+    return None
+  
+  rec = re.compile('(.*created\ )(.*)(\n.*)')
+  
+  mo = rec.search(o);
+  if mo and mo.group(2) != '0.000000':
+    return mo.group(2)
+
+  # Try and get the date from osd dump
+  (rc, o, e) = run_command(['ceph', 'osd', 'dump'])
+  if rc is not 0:
+    return None
+
+  mo = rec.search(o);
+  if not mo or mo.group(2) == '0.000000':
+    return None
+
+def get_nums():
+  (rc, o, e) = run_command(['ceph', '-s'])
+  
+  num_mons = 0
+
+  mo = re.search('(.*monmap\ .*:\ )(\d+)(.*)', o)
+  if not mo:
+    return None
+  else:
+    num_mons = int(mo.group(2)) 
+
+  num_osds = 0
+  mo = re.search('.*osdmap.*(\d+).*(\d+).*(\d+).*', o) 
+  if not mo:
+    return None
+  else:
+    num_osds = int(mo.group(1))
+
+  num_mdss = 0
+  mo = re.search('.*mdsmap\ e\d+.*(\d+)/(\d+)/(\d+).*', o)
+  if mo:
+    num_mdss = int(mo.group(2));
+
+  num_pgs = 0
+  num_pools = 0 
+  num_bytes = 0
+  num_objs = 0
+  mo = re.search('.*pgmap\ v\d+:\ (\d+).*,\ (\d+).*,\ (\d+.*)\ data,\ (\d+).*', o)
+  if not mo:
+    return None
+  else:
+    num_pgs = int(mo.group(1))
+    num_pools = int(mo.group(2))
+    num_bytes = mo.group(3)
+    num_objs = int(mo.group(4))
+  nums = {'mons':num_mons,
+          'osds':num_osds,
+          'mdss':num_mdss,
+          'pgs':num_pgs,
+          'pools':num_pools,
+          'bytes':num_bytes,
+          'objects':num_objs}
+  return nums
+
+def get_crush_types():
+  (rc, o, e) = run_command(['ceph', 'osd', 'crush', 'dump'])
+  if rc is not 0:
+    return None
+
+  crush_dump = json.loads(o)
+  if crush_dump['types'] is None:
+    return None
+  
+  crush_types = []
+  ascii_encode = lambda x: x.encode('ascii')
+  for t in crush_dump['types']:
+    crush_types.append(ascii_encode(t['name']))
+
+  return crush_types
+
+def get_pool_metadata():
+  (rc, o, e) = run_command(['ceph', 'osd', 'dump'])
+  if rc is not 0:
+    return None
+
+  result = re.findall("pool\ (\d+)\ '(\S+)'\ rep\ size\ (\d+)", o)
+  if len(result) is 0:  
+    #Check with replicated size
+    result = re.findall("pool\ (\d+)\ '(\S+)'\ replicated\ size\ (\d+)", o)
+    if len(result) is 0:
+      return None
+  
+  pool_meta = []
+  proc = lambda x: {'id':x[0], 'name':x[1], 'rep_size':int(x[2])}
+  for r in result:
+    pool_meta.append(proc(r))
+
+  return pool_meta
+
+def get_sysinfo():
+  sysinfo = []
+  count = 0
+
+  while True:
+    (rc, o, e) = run_command(['ceph', 'osd', 'metadata', str(count)])
+    if rc is not 0:
+      break
+    
+    meta = {'id':count}
+    os_info = {}
+    hw_info = {}
+
+    jmeta = json.loads(o)
+    count = count + 1
+    
+    meta['ceph_version'] = jmeta['ceph_version']
+
+    os_info['os'] = jmeta['os']
+    os_info['version'] = jmeta['kernel_version']
+    os_info['description'] = jmeta['kernel_description']
+
+    try:
+      distro = jmeta['distro'] + ' '
+      distro += jmeta['distro_version'] + ' '
+      distro += jmeta['distro_codename'] + ' ('
+      distro += jmeta['distro_description'] + ')'
+      os_info['distro'] = distro
+    except KeyError as ke:
+      pass
+    meta['os_info'] = os_info
+
+    hw_info['cpu'] = jmeta['cpu']
+    hw_info['arch'] = jmeta['arch']
+    hw_info['mem_kb'] = int(jmeta['mem_total_kb'])
+    hw_info['swap_kb'] = int(jmeta['mem_swap_kb'])
+    meta['hw_info'] = hw_info
+
+  return meta
+
+def get_osd_hosts():
+  locs = []
+  osd_id = 0
+  loc = {}
+
+  while True:
+    (rc, o, e) = run_command(['ceph', 'osd', 'find', str(osd_id)])
+    if rc is not 0:
+      break
+
+    jloc = json.loads(o)
+
+    mo = re.search("(\d+.\d+.\d+.\d+).*", jloc['ip'])
+    if mo is None:
+      #Might be in ipv6 format, TODO: Verify 
+      return None;
+
+    ip = mo.group(1)
+    host = jloc['crush_location']['host']
+
+    if ip not in loc:
+      loc[ip] = host
+    elif loc[ip] != host:
+      #Mismatching details
+      assert(0)
+    
+    for k,v in loc.iteritems():
+      locs.append({'ip':k, 'hostname':v})
+   
+    osd_id += 1
+
+  return locs
+
+def main():
+  out = {}
+  out['uuid'] = get_uuid()
+  out['cluster_creation_date'] = get_cluster_creation_date()
+  out['components_count'] = get_nums()
+  out['hosts'] = get_osd_hosts()
+  out['crush_types'] = get_crush_types()
+  out['pool_metadata'] = get_pool_metadata()
+  out['sysinfo'] = get_sysinfo()
+  print json.dumps(out, indent=4, separators=(',', ': '))
+
+if __name__ == '__main__':
+  sys.exit(main())
