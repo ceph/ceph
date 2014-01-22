@@ -553,7 +553,7 @@ COMMAND("osd tier remove " \
 	"remove the tier <tierpool> from base pool <pool>", "osd", "rw", "cli,rest")
 COMMAND("osd tier cache-mode " \
 	"name=pool,type=CephPoolname " \
-	"name=mode,type=CephChoices,strings=none|writeback|invalidate+forward|readonly", \
+	"name=mode,type=CephChoices,strings=none|writeback|forward|readonly", \
 	"specify the caching mode for cache tier <pool>", "osd", "rw", "cli,rest")
 COMMAND("osd tier set-overlay " \
 	"name=pool,type=CephPoolname " \
