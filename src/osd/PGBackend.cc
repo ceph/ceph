@@ -37,7 +37,7 @@ struct RollbackVisitor : public ObjectModDesc::Visitor {
   }
   void rmobject(version_t old_version) {
     ObjectStore::Transaction temp;
-    pg->rollback_unstash(hoid, old_version, &temp);
+    pg->rollback_stash(hoid, old_version, &temp);
     temp.append(t);
     temp.swap(t);
   }
