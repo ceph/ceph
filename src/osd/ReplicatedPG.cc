@@ -4891,8 +4891,8 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type)
       setattr_maybe_cache(ctx->snapset_obc, ctx, ctx->op_t, SS_ATTR, bss);
       if (pool.info.ec_pool()) {
 	map<string, boost::optional<bufferlist> > to_set;
-	to_set[SS_ATTR] = bv;
-	to_set[OI_ATTR] = bss;
+	to_set[SS_ATTR];
+	to_set[OI_ATTR];
 	ctx->log.back().mod_desc.setattrs(to_set);
       } else {
 	ctx->log.back().mod_desc.mark_unrollbackable();
