@@ -398,6 +398,10 @@ public:
       num_write(0),
       copy_cb(NULL),
       lock_to_release(NONE) {
+
+      new_obs.fd = _obs->fd;
+      new_obs.fullPath = _obs->fullPath;
+
       if (_ssc) {
 	new_snapset = _ssc->snapset;
 	snapset = &_ssc->snapset;
@@ -621,7 +625,8 @@ protected:
   ObjectContextRef get_object_context(
     const hobject_t& soid,
     bool can_create,
-    map<string, bufferptr> *attrs = 0
+    map<string, bufferptr> *attrs = 0,
+    bool need_snap = true
     );
 
   void context_registry_on_change();

@@ -2458,7 +2458,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       {
 	// read into a buffer
 	bufferlist bl;
-	int r = osd->store->read(coll, soid, op.extent.offset, op.extent.length, bl);
+        int  r = osd->store->read(coll, soid, op.extent.offset, op.extent.length, bl, false, obs.fd, &obs.fullPath);
 	if (first_read) {
 	  first_read = false;
 	  ctx->data_off = op.extent.offset;
@@ -5214,7 +5214,8 @@ ObjectContextRef ReplicatedPG::create_object_context(const object_info_t& oi,
 
 ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
 						  bool can_create,
-						  map<string, bufferptr> *attrs)
+						  map<string, bufferptr> *attrs, 
+                                                  bool need_snap)
 {
   assert(
     attrs || !pg_log.get_missing().is_missing(soid) ||
@@ -5222,6 +5223,10 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
     (pg_log.get_log().objects.count(soid) &&
       pg_log.get_log().objects.find(soid)->second->op ==
       pg_log_entry_t::LOST_REVERT));
+
+  int fd,r;
+  string fullPath;
+
   ObjectContextRef obc = object_contexts.lookup(soid);
   if (obc) {
     dout(10) << "get_object_context " << obc << " " << soid << dendl;
@@ -5232,7 +5237,13 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
       assert(attrs->count(OI_ATTR));
       bv.push_back(attrs->find(OI_ATTR)->second);
     } else {
-      int r = pgbackend->objects_get_attr(soid, OI_ATTR, &bv);
+      if (!need_snap){
+        r = pgbackend->objects_get_attr(soid, "user.ceph._", &bv, &fd, &fullPath);
+      }
+      else {
+        r = pgbackend->objects_get_attr(soid, OI_ATTR, &bv);
+      }
+
       if (r < 0) {
 	if (!can_create)
 	  return ObjectContextRef();   // -ENOENT!
@@ -5255,11 +5266,18 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
     obc->obs.oi = oi;
     obc->obs.exists = true;
 
-    obc->ssc = get_snapset_context(
-      soid.oid, soid.get_key(), soid.hash,
-      true, soid.get_namespace(),
-      soid.has_snapset() ? attrs : 0);
-    register_snapset_context(obc->ssc);
+    if (!need_snap)
+    {
+        obc->obs.fd = fd;
+        obc->obs.fullPath = fullPath;
+    }
+    else
+    {
+        obc->ssc = get_snapset_context(
+                soid.oid, soid.get_key(), soid.hash,
+                true, soid.get_namespace(),
+                soid.has_snapset() ? attrs : 0);
+    }
 
     populate_obc_watchers(obc);
     dout(10) << "get_object_context " << obc << " " << soid << " 0 -> 1 read " << obc->obs.oi << dendl;
@@ -5318,7 +5336,14 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
 
   // want the head?
   if (oid.snap == CEPH_NOSNAP) {
-    ObjectContextRef obc = get_object_context(head, can_create);
+    bool need_snap = true;
+
+    if (!can_create){
+      need_snap = false;
+    }
+
+    ObjectContextRef obc = get_object_context(head, can_create, NULL,  need_snap);
+
     if (!obc)
       return -ENOENT;
     dout(10) << "find_object_context " << oid << " @" << oid.snap << dendl;
