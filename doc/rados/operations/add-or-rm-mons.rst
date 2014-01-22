@@ -11,10 +11,26 @@ Adding Monitors
 
 Ceph monitors are light-weight processes that maintain a master copy of the 
 cluster map. You can run a cluster with 1 monitor. We recommend at least 3 
-monitors for a production cluster. Ceph monitors use PAXOS to establish 
-consensus about the master cluster map, which requires a majority of
-monitors running to establish a quorum for consensus about the cluster map
-(e.g., 1; 2 out of 3; 3 out of 4 or 5; 4 out of 6; etc.).
+monitors for a production cluster. Ceph monitors use a variation of the
+`Paxos_` protocol to establish consensus about maps and other critical
+information across the cluster. Due to the nature of Paxos, Ceph requires
+a majority of monitors running to establish a quorum (thus establishing
+consensus).
+
+It is advisable to run an odd-number of monitors but not mandatory. An
+odd-number of monitors has a higher resiliency to failures than an
+even-number of monitors. For instance, on a 2 monitor deployment, no
+failures can be tolerated in order to maintain a quorum; with 3 monitors,
+one failure can be tolerated; in a 4 monitor deployment, one failure can
+be tolerated; with 5 monitors, two failures can be tolerated.  This is
+why an odd-number is advisable. Summarizing, Ceph needs a majority of
+monitors to be running (and able to communicate with each other), but that
+majority can be achieved using a single monitor, or 2 out of 2 monitors,
+2 out of 3, 3 out of 4, etc.
+
+For an initial deployment of a multi-node Ceph cluster, it is advisable to
+deploy three monitors, increasing the number two at a time if a valid need
+for more than three exists.
 
 Since monitors are light-weight, it is possible to run them on the same 
 host as an OSD; however, we recommend running them on separate hosts,
