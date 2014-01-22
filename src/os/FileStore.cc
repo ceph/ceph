@@ -2576,53 +2576,102 @@ int FileStore::read(
   uint64_t offset,
   size_t len,
   bufferlist& bl,
-  bool allow_eio)
+  bool allow_eio,
+  int fd,
+  string* fullPath)
 {
-  int got;
+  int got = -1;
+  int r;
+  bufferptr bptr;
+  bool need_to_close = true;
 
   dout(15) << "read " << cid << "/" << oid << " " << offset << "~" << len << dendl;
 
-  FDRef fd;
-  int r = lfn_open(cid, oid, false, &fd);
-  if (r < 0) {
-    dout(10) << "FileStore::read(" << cid << "/" << oid << ") open error: "
-	     << cpp_strerror(r) << dendl;
-    return r;
+  if (fd >= 0){
+    if (len == 0) {
+      struct stat st;
+      memset(&st, 0, sizeof(struct stat));
+      int r = ::fstat(fd, &st);
+      assert(r == 0);
+      len = st.st_size;
+    }
+    bptr = buffer::create(len);
+    got = safe_pread(fd, bptr.c_str(), len, offset);
+
   }
 
-  if (len == 0) {
-    struct stat st;
-    memset(&st, 0, sizeof(struct stat));
-    int r = ::fstat(**fd, &st);
-    assert(r == 0);
-    len = st.st_size;
+  if (got < 0){
+    dout(10)<<" In read_fast fd read not successful\n" << dendl;
+
+    if (fullPath){
+      int flags = O_RDWR;
+      if (!(*fullPath).empty()) {
+        fd = ::open((*fullPath).c_str(), flags, 0644);
+      }
+    }
+    if (fd < 0){
+      dout(10)<<" In read_fast fullpath read not successful\n"<<dendl;
+      if (!g_conf->filestore_use_fd_cache){
+        r = lfn_open(cid, oid, fd, *fullPath);
+      }
+      else {
+        FDRef outfd;
+        r = lfn_open(cid, oid, false, &outfd);
+        if (r >= 0){
+          fd = **outfd;
+          need_to_close = false;
+        }
+
+      }
+
+      if (r < 0){
+        dout(10) << "FileStore::read(" << cid << "/" << oid << ") open error: "
+           << cpp_strerror(r) << dendl;
+
+        return r;
+      }
+
+    }
+    if (len == 0) {
+      struct stat st;
+      memset(&st, 0, sizeof(struct stat));
+      int r = ::fstat(fd, &st);
+      assert(r == 0);
+      len = st.st_size;
+    }
+
+    bptr = buffer::create(len);
+    got = safe_pread(fd, bptr.c_str(), len, offset);
+
   }
 
-  bufferptr bptr(len);  // prealloc space for entire read
-  got = safe_pread(**fd, bptr.c_str(), len, offset);
   if (got < 0) {
-    dout(10) << "FileStore::read(" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
-    lfn_close(fd);
-    assert(allow_eio || !m_filestore_fail_eio || got != -EIO);
+    dout(0) << "FileStore::read_fast(" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
+    if (need_to_close){
+      TEMP_FAILURE_RETRY(::close(fd));
+    }
     return got;
   }
+
   bptr.set_length(got);   // properly size the buffer
   bl.push_back(bptr);   // put it in the target bufferlist
 
   if (m_filestore_sloppy_crc && (!replaying || backend->can_checkpoint())) {
     ostringstream ss;
-    int errors = backend->_crc_verify_read(**fd, offset, got, bl, &ss);
+    int errors = backend->_crc_verify_read(fd, offset, got, bl, &ss);
     if (errors > 0) {
       dout(0) << "FileStore::read " << cid << "/" << oid << " " << offset << "~"
-	      << got << " ... BAD CRC:\n" << ss.str() << dendl;
+              << got << " ... BAD CRC:\n" << ss.str() << dendl;
       assert(0 == "bad crc on read");
     }
   }
 
-  lfn_close(fd);
+  if (need_to_close){
+    TEMP_FAILURE_RETRY(::close(fd));
+  }
 
   dout(10) << "FileStore::read " << cid << "/" << oid << " " << offset << "~"
-	   << got << "/" << len << dendl;
+           << got << "/" << len << dendl;
   if (g_conf->filestore_debug_inject_read_err &&
       debug_data_eio(oid)) {
     return -EIO;
@@ -2630,6 +2679,7 @@ int FileStore::read(
     return got;
   }
 }
+
 
 int FileStore::fiemap(coll_t cid, const ghobject_t& oid,
                     uint64_t offset, size_t len,
@@ -3463,18 +3513,33 @@ bool FileStore::debug_mdata_eio(const ghobject_t &oid) {
 
 // objects
 
-int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr &bp)
+int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr &bp, int* fd, string* fullPath)
 {
   dout(15) << "getattr " << cid << "/" << oid << " '" << name << "'" << dendl;
-  FDRef fd;
-  int r = lfn_open(cid, oid, false, &fd);
-  if (r < 0) {
-    goto out;
+  int r;
+  if (fd && fullPath && !g_conf->filestore_use_fd_cache)
+  {
+    r = lfn_open(cid, oid, *fd, *fullPath);
+    if (r < 0) {
+      dout(10) << "FileStore::getattr_fast lfn_open_fast failed for " << *fullPath <<dendl;
+      exit(0);
+      goto out;
+    }
+    r = _fgetattr(*fd, name, bp);
   }
-  char n[CHAIN_XATTR_MAX_NAME_LEN];
-  get_attrname(name, n, CHAIN_XATTR_MAX_NAME_LEN);
-  r = _fgetattr(**fd, n, bp);
-  lfn_close(fd);
+  else {
+    FDRef outfd;
+    r = lfn_open(cid, oid, false, &outfd);
+    if (r < 0) {
+      goto out;
+    }
+    char n[CHAIN_XATTR_MAX_NAME_LEN];
+    get_attrname(name, n, CHAIN_XATTR_MAX_NAME_LEN);
+    *fd = -1; 
+    r = _fgetattr(**outfd, n, bp);
+    lfn_close(outfd);
+  }
+
   if (r == -ENODATA) {
     map<string, bufferlist> got;
     set<string> to_get;
@@ -3495,7 +3560,7 @@ int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, buff
       return -ENODATA;
     }
     bp = bufferptr(got.begin()->second.c_str(),
-		   got.begin()->second.length());
+                   got.begin()->second.length());
     r = bp.length();
   }
  out:
@@ -3508,6 +3573,7 @@ int FileStore::getattr(coll_t cid, const ghobject_t& oid, const char *name, buff
     return r;
   }
 }
+
 
 int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& aset, bool user_only)
 {
