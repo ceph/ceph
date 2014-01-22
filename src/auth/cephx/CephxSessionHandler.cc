@@ -26,14 +26,13 @@
 
 int CephxSessionHandler::sign_message(Message *m)
 {
-  bufferlist bl_plaintext, bl_encrypted;
-  ceph_msg_header header = m->get_header();
-  std::string error;
-
   // If runtime signing option is off, just return success without signing.
   if (!cct->_conf->cephx_sign_messages) {
     return 0;
   }
+  bufferlist bl_plaintext, bl_encrypted;
+  ceph_msg_header header = m->get_header();
+  std::string error;
 
   ceph_msg_footer& en_footer = m->get_footer();
 
@@ -71,15 +70,15 @@ int CephxSessionHandler::sign_message(Message *m)
 
 int CephxSessionHandler::check_message_signature(Message *m)
 {
-  bufferlist bl_plaintext, bl_ciphertext;
-  std::string sig_error;
-  ceph_msg_header& header = m->get_header();
-  ceph_msg_footer& footer = m->get_footer();
-
   // If runtime signing option is off, just return success without checking signature.
   if (!cct->_conf->cephx_sign_messages) {
     return 0;
   }
+
+  bufferlist bl_plaintext, bl_ciphertext;
+  std::string sig_error;
+  ceph_msg_header& header = m->get_header();
+  ceph_msg_footer& footer = m->get_footer();
 
   if ((features & CEPH_FEATURE_MSG_AUTH) == 0) {
     // it's fine, we didn't negotiate this feature.
