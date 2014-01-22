@@ -1531,7 +1531,7 @@ void RGWListMultipart_ObjStore_S3::send_response()
     s->formatter->dump_string("UploadId", upload_id);
     s->formatter->dump_string("StorageClass", "STANDARD");
     s->formatter->dump_int("PartNumberMarker", marker);
-    s->formatter->dump_int("NextPartNumberMarker", cur_max + 1);
+    s->formatter->dump_int("NextPartNumberMarker", cur_max);
     s->formatter->dump_int("MaxParts", max_parts);
     s->formatter->dump_string("IsTruncated", (truncated ? "true" : "false"));
 

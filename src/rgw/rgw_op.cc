@@ -33,6 +33,8 @@ using ceph::crypto::MD5;
 static string mp_ns = RGW_OBJ_NS_MULTIPART;
 static string shadow_ns = RGW_OBJ_NS_SHADOW;
 
+#define MULTIPART_UPLOAD_ID_PREFIX "2/" // must contain a unique char that may not come up in gen_rand_alpha()
+
 class MultipartMetaFilter : public RGWAccessListFilter {
 public:
   MultipartMetaFilter() {}
@@ -1302,6 +1304,7 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
   string part_num;
   RGWMPObj mp;
   req_state *s;
+  string upload_id;
 
 protected:
   bool immutable_head() { return true; }
@@ -1317,7 +1320,6 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx)
   RGWPutObjProcessor::prepare(store, obj_ctx);
 
   string oid = obj_str;
-  string upload_id;
   upload_id = s->info.args.get("uploadId");
   mp.init(oid, upload_id);
 
@@ -1336,6 +1338,13 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx)
   return 0;
 }
 
+static bool is_v2_upload_id(const string& upload_id)
+{
+  const char *uid = upload_id.c_str();
+
+  return (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX, sizeof(MULTIPART_UPLOAD_ID_PREFIX) - 1) == 0);
+}
+
 int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs)
 {
   complete_writing_data();
@@ -1351,7 +1360,21 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_
   bufferlist bl;
   RGWUploadPartInfo info;
   string p = "part.";
-  p.append(part_num);
+  bool sorted_omap = is_v2_upload_id(upload_id);
+
+  if (sorted_omap) {
+    string err;
+    int part_num_int = strict_strtol(part_num.c_str(), 10, &err);
+    if (!err.empty()) {
+      dout(10) << "bad part number specified: " << part_num << dendl;
+      return -EINVAL;
+    }
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%08d", part_num_int);
+    p.append(buf);
+  } else {
+    p.append(part_num);
+  }
   info.num = atoi(part_num.c_str());
   info.etag = etag;
   info.size = s->obj_size;
@@ -2204,7 +2227,8 @@ void RGWInitMultipart::execute()
   do {
     char buf[33];
     gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
-    upload_id = buf;
+    upload_id = "2/"; /* v2 upload id */
+    upload_id.append(buf);
 
     string tmp_obj_name;
     RGWMPObj mp(s->object_str, upload_id);
@@ -2250,18 +2274,12 @@ static int get_multipart_info(RGWRados *store, struct req_state *s, string& meta
   return 0;
 }
 
-static bool is_v2_upload_id(const string& upload_id)
-{
-  const char *uid = upload_id.c_str();
-
-  return (strncmp(uid, ".2.", 3) == 0);
-}
-
 static int list_multipart_parts(RGWRados *store, struct req_state *s,
                                 const string& upload_id,
                                 string& meta_oid, int num_parts,
                                 int marker, map<uint32_t, RGWUploadPartInfo>& parts,
-                                int *next_marker, bool *truncated)
+                                int *next_marker, bool *truncated,
+                                bool assume_unsorted = false)
 {
   map<string, bufferlist> parts_map;
   map<string, bufferlist>::iterator iter;
@@ -2270,20 +2288,20 @@ static int list_multipart_parts(RGWRados *store, struct req_state *s,
   rgw_obj obj;
   obj.init_ns(s->bucket, meta_oid, mp_ns);
 
-  bool sorted_omap = is_v2_upload_id(upload_id);
+  bool sorted_omap = is_v2_upload_id(upload_id) && !assume_unsorted;
 
-  string p;
+  int ret;
+
+  parts.clear();
   
   if (sorted_omap) {
+    string p;
     p = "part.";
     char buf[32];
 
-    snprintf(buf, sizeof(buf), "%08d", marker + 1);
+    snprintf(buf, sizeof(buf), "%08d", marker);
     p.append(buf);
-  }
 
-  int ret;
-  if (sorted_omap) {
     ret = store->omap_get_vals(obj, header, p, num_parts + 1, parts_map);
   } else {
     ret = store->omap_get_all(obj, header, parts_map);
@@ -2294,6 +2312,8 @@ static int list_multipart_parts(RGWRados *store, struct req_state *s,
   int i;
   int last_num = 0;
 
+  uint32_t expected_next = marker + 1;
+
   for (i = 0, iter = parts_map.begin(); (i < num_parts || !sorted_omap) && iter != parts_map.end(); ++iter, ++i) {
     bufferlist& bl = iter->second;
     bufferlist::iterator bli = bl.begin();
@@ -2303,6 +2323,17 @@ static int list_multipart_parts(RGWRados *store, struct req_state *s,
     } catch (buffer::error& err) {
       ldout(s->cct, 0) << "ERROR: could not part info, caught buffer::error" << dendl;
       return -EIO;
+    }
+    if (sorted_omap) {
+      if (info.num != expected_next) {
+        /* ouch, we expected a specific part num here, but we got a different one. Either
+         * a part is missing, or it could be a case of mixed rgw versions working on the same
+         * upload, where one gateway doesn't support correctly sorted omap keys for multipart
+         * upload just assume data is unsorted.
+         */
+        return list_multipart_parts(store, s, upload_id, meta_oid, num_parts, marker, parts, next_marker, truncated, true);
+      }
+      expected_next++;
     }
     if (sorted_omap ||
       (int)info.num > marker) {
@@ -2322,6 +2353,7 @@ static int list_multipart_parts(RGWRados *store, struct req_state *s,
 
     for (i = 0, piter = parts.begin(); i < num_parts && piter != parts.end(); ++i, ++piter) {
       new_parts[piter->first] = piter->second;
+      last_num = piter->first;
     }
 
     if (truncated)
@@ -2389,14 +2421,6 @@ void RGWCompleteMultipart::execute()
     return;
   }
 
-  // ensure that each part if of the minimum size
-  for (obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
-    if ((obj_iter->second).size < min_part_size) {
-      ret = -ERR_TOO_SMALL;
-      return;
-    }
-  }
-
   mp.init(s->object_str, upload_id);
   meta_oid = mp.get_meta();
 
@@ -2406,6 +2430,8 @@ void RGWCompleteMultipart::execute()
   bool truncated;
 
   list<string> remove_objs; /* objects to be removed from index listing */
+
+  iter = parts->parts.begin();
 
   do {
     ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts, marker, obj_parts, &marker, &truncated);
@@ -2421,9 +2447,7 @@ void RGWCompleteMultipart::execute()
       return;
     }
 
-    for (iter = parts->parts.begin(), obj_iter = obj_parts.begin();
-         iter != parts->parts.end() && obj_iter != obj_parts.end();
-         ++iter, ++obj_iter) {
+    for (obj_iter = obj_parts.begin(); iter != parts->parts.end() && obj_iter != obj_parts.end(); ++iter, ++obj_iter) {
       char etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
       if (iter->first != (int)obj_iter->first) {
         ldout(s->cct, 0) << "NOTICE: parts num mismatch: next requested: " << iter->first << " next uploaded: " << obj_iter->first << dendl;
