@@ -180,7 +180,6 @@ void PGLog::proc_replica_log(ObjectStore::Transaction& t,
 
     // don't continue past the tail of our log.
     if (oe.version <= log.tail) {
-      ++pp;
       break;
     }
 
@@ -190,7 +189,6 @@ void PGLog::proc_replica_log(ObjectStore::Transaction& t,
       dout(10) << " had " << oe << " new " << *(i->second)
 	       << " : match, stopping" << dendl;
       lu = pp->version;
-      ++pp;
       break;
     }
 
