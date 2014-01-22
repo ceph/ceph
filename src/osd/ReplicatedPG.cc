@@ -950,14 +950,29 @@ void ReplicatedPG::do_op(OpRequestRef op)
   ObjectContextRef obc;
   bool can_create = op->may_write();
   snapid_t snapid;
-  int r = find_object_context(
-    hobject_t(m->get_oid(), 
-	      m->get_object_locator().key,
-	      m->get_snapid(),
-	      m->get_pg().ps(),
-	      m->get_object_locator().get_pool(),
-	      m->get_object_locator().nspace),
-    &obc, can_create, &snapid);
+
+  int r;
+
+  if (m->get_snapid() == CEPH_SNAPDIR){
+    r = find_object_context(snapdir, &obc, can_create, &snapid);
+
+  }
+  else if (m->get_snapid() == CEPH_NOSNAP){
+    r = find_object_context(head, &obc, can_create, &snapid);
+
+  }
+  else{
+
+    hobject_t oid(m->get_oid(),
+                m->get_object_locator().key,
+                m->get_snapid(),
+                m->get_pg().ps(),
+                m->get_object_locator().get_pool(),
+                m->get_object_locator().nspace);
+
+    r = find_object_context(oid, &obc, can_create, &snapid);
+
+  }
 
   if (r == -EAGAIN) {
     // If we're not the primary of this OSD, and we have
