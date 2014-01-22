@@ -185,6 +185,7 @@ OSDService::OSDService(OSD *osd) :
   scrub_finalize_wq(osd->scrub_finalize_wq),
   rep_scrub_wq(osd->rep_scrub_wq),
   push_wq("push_wq", cct->_conf->osd_recovery_thread_timeout, &osd->recovery_tp),
+  gen_wq("gen_wq", cct->_conf->osd_recovery_thread_timeout, &osd->recovery_tp),
   class_handler(osd->class_handler),
   publish_lock("OSDService::publish_lock"),
   pre_publish_lock("OSDService::pre_publish_lock"),
@@ -645,7 +646,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 	for (int i=0; i<1000; i++) {
 	  ObjectStore::Transaction *t = new ObjectStore::Transaction;
 	  t->write(coll_t::META_COLL, hobject_t(sobject_t(oid, 0)), i*bl.length(), bl.length(), bl);
-	  store->queue_transaction(NULL, t);
+	  store->queue_transaction_and_cleanup(NULL, t);
 	}
 	store->sync();
 	utime_t end = ceph_clock_now(cct);
@@ -4120,14 +4121,14 @@ void OSD::do_command(Connection *con, tid_t tid, vector<string>& cmd, bufferlist
       hobject_t soid(sobject_t(oid, 0));
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
       t->write(coll_t::META_COLL, soid, 0, bsize, bl);
-      store->queue_transaction(NULL, t);
+      store->queue_transaction_and_cleanup(NULL, t);
       cleanupt->remove(coll_t::META_COLL, soid);
     }
     store->sync_and_flush();
     utime_t end = ceph_clock_now(cct);
 
     // clean up
-    store->queue_transaction(NULL, cleanupt);
+    store->queue_transaction_and_cleanup(NULL, cleanupt);
 
     uint64_t rate = (double)count / (end - start);
     if (f) {
@@ -6379,11 +6380,14 @@ void OSD::handle_pg_trim(OpRequestRef op)
     } else {
       // primary is instructing us to trim
       ObjectStore::Transaction *t = new ObjectStore::Transaction;
-      pg->pg_log.trim(m->trim_to, pg->info);
+      PG::PGLogEntryHandler handler;
+      pg->pg_log.trim(&handler, m->trim_to, pg->info);
+      handler.apply(pg, t);
       pg->dirty_info = true;
       pg->write_if_dirty(*t);
-      int tr = store->queue_transaction(pg->osr.get(), t,
-					new ObjectStore::C_DeleteTransaction(t));
+      int tr = store->queue_transaction(
+	pg->osr.get(), t,
+	new ObjectStore::C_DeleteTransaction(t));
       assert(tr == 0);
     }
     pg->unlock();

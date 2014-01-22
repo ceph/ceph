@@ -7,6 +7,28 @@
 
 #include "Object.h"
 
+void ContDesc::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(objnum, bl);
+  ::encode(cursnap, bl);
+  ::encode(seqnum, bl);
+  ::encode(prefix, bl);
+  ::encode(oid, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ContDesc::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(objnum, bl);
+  ::decode(cursnap, bl);
+  ::decode(seqnum, bl);
+  ::decode(prefix, bl);
+  ::decode(oid, bl);
+  DECODE_FINISH(bl);
+}
+
 ostream &operator<<(ostream &out, const ContDesc &rhs)
 {
   return out << "(ObjNum " << rhs.objnum
@@ -16,67 +38,50 @@ ostream &operator<<(ostream &out, const ContDesc &rhs)
 	     << ")";
 }
 
-void VarLenGenerator::get_ranges(const ContDesc &cont, interval_set<uint64_t> &out) {
+void AppendGenerator::get_ranges_map(
+  const ContDesc &cont, map<uint64_t, uint64_t> &out) {
   RandWrap rand(cont.seqnum);
-  uint64_t pos = get_header_length(cont);
+  uint64_t pos = off;
+  uint64_t limit = off + get_append_size(cont);
+  while (pos < limit) {
+    uint64_t segment_length = (
+      rand() % (max_append_size - min_append_size)) + min_append_size;
+    assert(segment_length < max_append_size);
+    assert(segment_length >= min_append_size);
+    if (segment_length + pos > limit) {
+      segment_length = limit - pos;
+    }
+    out.insert(make_pair(pos, segment_length));
+    pos += segment_length;
+  }
+}
+
+void VarLenGenerator::get_ranges_map(
+  const ContDesc &cont, map<uint64_t, uint64_t> &out) {
+  RandWrap rand(cont.seqnum);
+  uint64_t pos = 0;
   uint64_t limit = get_length(cont);
-  out.insert(0, pos);
   bool include = false;
   while (pos < limit) {
     uint64_t segment_length = (rand() % (max_stride_size - min_stride_size)) + min_stride_size;
     assert(segment_length < max_stride_size);
     assert(segment_length >= min_stride_size);
-    if (segment_length + pos >= limit) {
+    if (segment_length + pos > limit) {
       segment_length = limit - pos;
     }
     if (include) {
-      out.insert(pos, segment_length);
+      out.insert(make_pair(pos, segment_length));
       include = false;
     } else {
       include = true;
     }
     pos += segment_length;
   }
-}
-
-void VarLenGenerator::write_header(const ContDesc &in, bufferlist &output) {
-  int data[6];
-  data[0] = 0xDEADBEEF;
-  data[1] = in.objnum;
-  data[2] = in.cursnap;
-  data[3] = (int)in.seqnum;
-  data[4] = in.prefix.size();
-  data[5] = 0xDEADBEEF;
-  output.append((char *)data, sizeof(data));
-  output.append(in.prefix.c_str(), in.prefix.size());
-  output.append((char *)data, sizeof(data[0]));
-}
-
-bool VarLenGenerator::read_header(bufferlist::iterator &p, ContDesc &out) {
-  try {
-    int data[6];
-    p.copy(sizeof(data), (char *)data);
-    if ((unsigned)data[0] != 0xDEADBEEF || (unsigned)data[5] != 0xDEADBEEF) return false;
-    out.objnum = data[1];
-    out.cursnap = data[2];
-    out.seqnum = (unsigned) data[3];
-    int prefix_size = data[4];
-    if (prefix_size >= 1000 || prefix_size <= 0) {
-      std::cerr << "prefix size is " << prefix_size << std::endl;
-      return false;
-    }
-    char buffer[1000];
-    p.copy(prefix_size, buffer);
-    buffer[prefix_size] = 0;
-    out.prefix = buffer;
-    unsigned test;
-    p.copy(sizeof(test), (char *)&test);
-    if (test != 0xDEADBEEF) return false;
-  } catch (ceph::buffer::end_of_buffer &e) {
-    std::cerr << "end_of_buffer" << endl;
-    return false;
-  }
-  return true;
+  // make sure we write up to the limit
+  if (limit > 0 && (
+	out.empty() ||
+	(out.rbegin()->first + out.rbegin()->second < limit)))
+    out[limit-1] = 1;
 }
 
 ObjectDesc::iterator &ObjectDesc::iterator::advance(bool init) {
@@ -89,9 +94,9 @@ ObjectDesc::iterator &ObjectDesc::iterator::advance(bool init) {
     return *this;
   }
   while (pos == limit) {
-    limit = *stack.begin();
+    cur_cont = stack.begin()->first;
+    limit = stack.begin()->second;
     stack.pop_front();
-    --cur_cont;
   }
 
   if (cur_cont == obj.layers.end()) {
@@ -99,65 +104,55 @@ ObjectDesc::iterator &ObjectDesc::iterator::advance(bool init) {
   }
 
   interval_set<uint64_t> ranges;
-  cont_gen->get_ranges(*cur_cont, ranges);
+  cur_cont->first->get_ranges(cur_cont->second, ranges);
   while (!ranges.contains(pos)) {
-    stack.push_front(limit);
+    stack.push_front(make_pair(cur_cont, limit));
+    uint64_t length = cur_cont->first->get_length(cur_cont->second);
     uint64_t next;
-    if (pos >= ranges.range_end()) {
+    if (pos >= length) {
       next = limit;
+      cur_cont = obj.layers.end();
+    } else if (ranges.empty() || pos >= ranges.range_end()) {
+      next = length;
+      ++cur_cont;
     } else {
       next = ranges.start_after(pos);
+      ++cur_cont;
     }
     if (next < limit) {
       limit = next;
     }
-    ++cur_cont;
     if (cur_cont == obj.layers.end()) {
       break;
     }
 
     ranges.clear();
-    cont_gen->get_ranges(*cur_cont, ranges);
+    cur_cont->first->get_ranges(cur_cont->second, ranges);
   }
 
   if (cur_cont == obj.layers.end()) {
     return *this;
   }
 
-  if (!cont_iters.count(*cur_cont)) {
-    cont_iters.insert(pair<ContDesc,ContentsGenerator::iterator>(*cur_cont, 
-								 cont_gen->get_iterator(*cur_cont)));
+  if (!cont_iters.count(cur_cont->second)) {
+    cont_iters.insert(pair<ContDesc,ContentsGenerator::iterator>(
+			cur_cont->second,
+			cur_cont->first->get_iterator(cur_cont->second)));
   }
-  map<ContDesc,ContentsGenerator::iterator>::iterator j = cont_iters.find(*cur_cont);
+  map<ContDesc,ContentsGenerator::iterator>::iterator j = cont_iters.find(
+    cur_cont->second);
   assert(j != cont_iters.end());
   j->second.seek(pos);
   return *this;
 }
 
 const ContDesc &ObjectDesc::most_recent() {
-  return *layers.begin();
+  return layers.begin()->second;
 }
 
-void ObjectDesc::update(const ContDesc &next) {
-  layers.push_front(next);
+void ObjectDesc::update(ContentsGenerator *gen, const ContDesc &next) {
+  layers.push_front(make_pair(gen, next));
   return;
-  /*
-  interval_set<uint64_t> fall_through;
-  fall_through.insert(0, cont_gen->get_length(next));
-  for (list<ContDesc>::iterator i = layers.begin();
-       i != layers.end();
-       ) {
-    interval_set<uint64_t> valid;
-    cont_gen->get_ranges(*i, valid);
-    valid.intersection_of(fall_through);
-    if (valid.empty()) {
-      layers.erase(i++);
-      continue;
-    }
-    fall_through.subtract(valid);
-    ++i;
-  }
-  */
 }
 
 bool ObjectDesc::check(bufferlist &to_check) {
@@ -174,6 +169,12 @@ bool ObjectDesc::check(bufferlist &to_check) {
       std::cout << "incorrect buffer at pos " << pos << std::endl;
       return false;
     }
+  }
+  uint64_t size = layers.empty() ? 0 : 
+    most_recent_gen()->get_length(most_recent());
+  if (pos != size) {
+    std::cout << "only read " << pos << " out of size " << size << std::endl;
+    return false;
   }
   return true;
 }

@@ -35,6 +35,7 @@ struct hobject_t {
   uint32_t hash;
 private:
   bool max;
+  static const int64_t POOL_IS_TEMP = -1;
 public:
   int64_t pool;
   string nspace;
@@ -54,6 +55,14 @@ public:
   }
   bool match(uint32_t bits, uint32_t match) const {
     return match_hash(hash, bits, match);
+  }
+
+  static hobject_t make_temp(const string &name) {
+    hobject_t ret(object_t(name), "", CEPH_NOSNAP, 0, POOL_IS_TEMP, "");
+    return ret;
+  }
+  bool is_temp() const {
+    return pool == POOL_IS_TEMP;
   }
   
   hobject_t() : snap(0), hash(0), max(false), pool(-1) {}
@@ -221,7 +230,7 @@ WRITE_CMP_OPERATORS_7(hobject_t,
 		      oid,
 		      snap)
 
-typedef uint64_t gen_t;
+typedef version_t gen_t;
 typedef uint8_t shard_t;
 
 #ifndef UINT8_MAX
@@ -266,6 +275,14 @@ public:
 
   bool is_degenerate() const {
     return generation == NO_GEN && shard_id == NO_SHARD;
+  }
+
+  bool is_no_gen() const {
+    return generation == NO_GEN;
+  }
+
+  bool is_no_shard() const {
+    return shard_id == NO_SHARD;
   }
 
   // maximum sorted value.

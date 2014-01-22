@@ -301,10 +301,16 @@ bool PG::proc_replica_info(int from, const pg_info_t &oinfo)
 }
 
 void PG::remove_snap_mapped_object(
-  ObjectStore::Transaction& t, const hobject_t& soid)
+  ObjectStore::Transaction &t, const hobject_t &soid)
 {
   t.remove(coll, soid);
-  OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
+  clear_object_snap_mapping(&t, soid);
+}
+
+void PG::clear_object_snap_mapping(
+  ObjectStore::Transaction *t, const hobject_t &soid)
+{
+  OSDriver::OSTransaction _t(osdriver.get_transaction(t));
   if (soid.snap < CEPH_MAXSNAP) {
     int r = snap_mapper.remove_oid(
       soid,
@@ -316,24 +322,39 @@ void PG::remove_snap_mapped_object(
   }
 }
 
-void PG::merge_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from)
+void PG::update_object_snap_mapping(
+  ObjectStore::Transaction *t, const hobject_t &soid, const set<snapid_t> &snaps)
 {
-  list<hobject_t> to_remove;
-  pg_log.merge_log(t, oinfo, olog, from, info, to_remove, dirty_info, dirty_big_info);
-  for(list<hobject_t>::iterator i = to_remove.begin();
-      i != to_remove.end();
-      ++i)
-    remove_snap_mapped_object(t, *i);
+  OSDriver::OSTransaction _t(osdriver.get_transaction(t));
+  assert(soid.snap < CEPH_MAXSNAP);
+  int r = snap_mapper.remove_oid(
+    soid,
+    &_t);
+  if (!(r == 0 || r == -ENOENT)) {
+    derr << __func__ << ": remove_oid returned " << cpp_strerror(r) << dendl;
+    assert(0);
+  }
+  snap_mapper.add_oid(
+    soid,
+    snaps,
+    &_t);
+}
+
+void PG::merge_log(
+  ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog, int from)
+{
+  PGLogEntryHandler rollbacker;
+  pg_log.merge_log(
+    t, oinfo, olog, from, info, &rollbacker, dirty_info, dirty_big_info);
+  rollbacker.apply(this, &t);
 }
 
 void PG::rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead)
 {
-  list<hobject_t> to_remove;
-  pg_log.rewind_divergent_log(t, newhead, info, to_remove, dirty_info, dirty_big_info);
-  for(list<hobject_t>::iterator i = to_remove.begin();
-      i != to_remove.end();
-      ++i)
-    remove_snap_mapped_object(t, *i);
+  PGLogEntryHandler rollbacker;
+  pg_log.rewind_divergent_log(
+    t, newhead, info, &rollbacker, dirty_info, dirty_big_info);
+  rollbacker.apply(this, &t);
 }
 
 /*
@@ -794,7 +815,8 @@ map<int, pg_info_t>::const_iterator PG::find_best_info(const map<int, pg_info_t>
   assert(min_last_update_acceptable != eversion_t::max());
 
   map<int, pg_info_t>::const_iterator best = infos.end();
-  // find osd with newest last_update.  if there are multiples, prefer
+  // find osd with newest last_update (oldest for ec_pool).
+  // if there are multiples, prefer
   //  - a longer tail, if it brings another peer into log contiguity
   //  - the current primary
   for (map<int, pg_info_t>::const_iterator p = infos.begin();
@@ -811,11 +833,20 @@ map<int, pg_info_t>::const_iterator PG::find_best_info(const map<int, pg_info_t>
       continue;
     }
     // Prefer newer last_update
-    if (p->second.last_update < best->second.last_update)
-      continue;
-    if (p->second.last_update > best->second.last_update) {
-      best = p;
-      continue;
+    if (pool.info.ec_pool()) {
+      if (p->second.last_update > best->second.last_update)
+	continue;
+      if (p->second.last_update < best->second.last_update) {
+	best = p;
+	continue;
+      }
+    } else {
+      if (p->second.last_update < best->second.last_update)
+	continue;
+      if (p->second.last_update > best->second.last_update) {
+	best = p;
+	continue;
+      }
     }
     // Prefer longer tail if it brings another peer into contiguity
     for (map<int, pg_info_t>::const_iterator q = infos.begin();
@@ -926,7 +957,15 @@ bool PG::calc_acting(int& newest_update_osd_id, vector<int>& want, vector<int>& 
     if (*i == primary->first)
       continue;
     const pg_info_t &cur_info = all_info.find(*i)->second;
-    if (cur_info.is_incomplete() || cur_info.last_update < primary->second.log_tail) {
+    if (cur_info.is_incomplete() ||
+      cur_info.last_update < MIN(
+	primary->second.log_tail,
+	newest_update_osd->second.log_tail)) {
+      /* We include newest_update_osd->second.log_tail because in GetLog,
+       * we will request logs back to the min last_update over our
+       * acting_backfill set, which will result in our log being extended
+       * as far backwards as necessary to pick up any peers which can
+       * be log recovered by newest_update_osd's log */
       dout(10) << " osd." << *i << " (up) backfill " << cur_info << dendl;
       backfill.push_back(*i);
     } else {
@@ -1499,7 +1538,7 @@ void PG::_activate_committed(epoch_t e)
   if (dirty_info) {
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     write_if_dirty(*t);
-    int tr = osd->store->queue_transaction(osr.get(), t);
+    int tr = osd->store->queue_transaction_and_cleanup(osr.get(), t);
     assert(tr == 0);
   }
 
@@ -2305,8 +2344,11 @@ void PG::add_log_entry(pg_log_entry_t& e, bufferlist& log_bl)
 
 
 void PG::append_log(
-  vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t)
+  vector<pg_log_entry_t>& logv, eversion_t trim_to, ObjectStore::Transaction &t,
+  bool transaction_applied)
 {
+  if (transaction_applied)
+    update_snap_map(logv, t);
   dout(10) << "append_log " << pg_log.get_log() << " " << logv << dendl;
 
   map<string,bufferlist> keys;
@@ -2316,11 +2358,14 @@ void PG::append_log(
     p->offset = 0;
     add_log_entry(*p, keys[p->get_key_name()]);
   }
+  if (!transaction_applied)
+    pg_log.clear_can_rollback_to();
 
   dout(10) << "append_log  adding " << keys.size() << " keys" << dendl;
   t.omap_setkeys(coll_t::META_COLL, log_oid, keys);
-
-  pg_log.trim(trim_to, info);
+  PGLogEntryHandler handler;
+  pg_log.trim(&handler, trim_to, info);
+  handler.apply(this, &t);
 
   // update the local pg, pg log
   dirty_info = true;
@@ -4241,7 +4286,7 @@ void PG::scrub_finish()
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     dirty_info = true;
     write_if_dirty(*t);
-    int tr = osd->store->queue_transaction(osr.get(), t);
+    int tr = osd->store->queue_transaction_and_cleanup(osr.get(), t);
     assert(tr == 0);
   }
 
@@ -4752,6 +4797,7 @@ ostream& operator<<(ostream& out, const PG& pg)
 
   if (!pg.backfill_targets.empty())
     out << " bft=" << pg.backfill_targets;
+  out << " crt=" << pg.pg_log.get_log().can_rollback_to;
 
   if (pg.last_complete_ondisk != pg.info.last_complete)
     out << " lcod " << pg.last_complete_ondisk;
@@ -4821,6 +4867,15 @@ bool PG::can_discard_replica_op(OpRequestRef op)
 {
   T *m = static_cast<T *>(op->get_req());
   assert(m->get_header().type == MSGTYPE);
+
+  /* Mostly, this overlaps with the old_peering_msg
+   * condition.  An important exception is pushes
+   * sent by replicas not in the acting set, since
+   * if such a replica goes down it does not cause
+   * a new interval. */
+  int from = m->get_source().num();
+  if (get_osdmap()->get_down_at(from) >= m->map_epoch)
+    return true;
 
   // same pg?
   //  if pg changes _at all_, we reset and repeer!
