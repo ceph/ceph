@@ -36,7 +36,7 @@ class OpHistory {
   uint32_t history_duration;
 
 public:
-  OpHistory(OpTracker *tracker_) : shutdown(false), tracker(tracker_),
+  OpHistory() : shutdown(false), 
   history_size(0), history_duration(0) {}
   ~OpHistory() {
     assert(arrived.empty());
@@ -66,11 +66,11 @@ class OpTracker {
   OpHistory history;
   float complaint_time;
   int log_threshold;
-
 public:
+  bool tracking_enabled;
   CephContext *cct;
-  OpTracker(CephContext *cct_) : seq(0), ops_in_flight_lock("OpTracker mutex"),
-      history(this), complaint_time(0), log_threshold(0), cct(cct_) {}
+  OpTracker(CephContext *cct_, bool tracking) : seq(0), ops_in_flight_lock("OpTracker mutex"),
+      complaint_time(0), log_threshold(0), tracking_enabled(tracking), cct(cct_) {}
   void set_complaint_and_threshold(float time, int threshold) {
     complaint_time = time;
     log_threshold = threshold;
