@@ -1538,7 +1538,6 @@ void ReplicatedPG::promote_object(OpRequestRef op, ObjectContextRef obc,
 void ReplicatedPG::execute_ctx(OpContext *ctx)
 {
   dout(10) << __func__ << " " << ctx << dendl;
-  ctx->reset_obs(ctx->obc);
   OpRequestRef op = ctx->op;
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   ObjectContextRef obc = ctx->obc;
