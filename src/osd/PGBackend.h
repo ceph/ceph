@@ -364,25 +364,25 @@
      const ObjectModDesc &desc,
      ObjectStore::Transaction *t);
 
-   /// Rollback reset attrs
+   /// Reapply old attributes
    virtual void rollback_setattrs(
      const hobject_t &hoid,
      map<string, boost::optional<bufferlist> > &old_attrs,
      ObjectStore::Transaction *t) = 0;
 
-   /// Rollback truncate
+   /// Truncate object to rollback append
    virtual void rollback_append(
      const hobject_t &hoid,
      uint64_t old_size,
      ObjectStore::Transaction *t) = 0;
 
-   /// Rollback unstash
-   virtual void rollback_unstash(
+   /// Unstash object to rollback stash
+   virtual void rollback_stash(
      const hobject_t &hoid,
      version_t old_version,
      ObjectStore::Transaction *t) = 0;
 
-   /// Rollback create
+   /// Delete object to rollback create
    virtual void rollback_create(
      const hobject_t &hoid,
      ObjectStore::Transaction *t) = 0;

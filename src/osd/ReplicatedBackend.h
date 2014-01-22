@@ -410,7 +410,7 @@ public:
     t->truncate(coll, hoid, old_size);
   }
 
-  void rollback_unstash(
+  void rollback_stash(
     const hobject_t &hoid,
     version_t old_version,
     ObjectStore::Transaction *t) {
