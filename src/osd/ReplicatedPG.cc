@@ -5113,7 +5113,7 @@ int ReplicatedPG::fill_in_copy_get(
 
   // data
   bufferlist& bl = reply_obj.data;
-  if (out_max > 0 && !cursor.data_complete) {
+  if (left > 0 && !cursor.data_complete) {
     if (cursor.data_offset < oi.size) {
       if (cb) {
 	async_read_started = true;
