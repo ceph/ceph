@@ -68,7 +68,7 @@ int LevelDBStore::init(ostream &out, bool create_if_missing)
     return -EINVAL;
   }
 
-  if (g_conf->compact_leveldb_on_mount) {
+  if (g_conf->leveldb_compact_on_mount) {
     derr << "Compacting store..." << dendl;
     compact();
     derr << "...finished compacting store" << dendl;
