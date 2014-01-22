@@ -181,6 +181,10 @@ public:
     int *exist
     );
 
+  int fast_lookup(const ghobject_t &oid, 
+    int flags, 
+    string& full_path);
+
   /// @see CollectionIndex
   int collection_list(
     vector<ghobject_t> *ls
@@ -239,6 +243,10 @@ protected:
     string *mangled_name, ///< [out] Mangled filename.
     int *exists		  ///< [out] True if the object exists.
     ) = 0;
+
+  virtual int _lookup(
+    const ghobject_t &oid, 
+    string& full_path) = 0;
 
   /**
    * List contents of the collection, must be implemented by derived class.

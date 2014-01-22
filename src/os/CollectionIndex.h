@@ -151,6 +151,14 @@ protected:
     int *exist	           ///< [out] True if the object exists, else false
     ) = 0;
 
+  virtual int fast_lookup(
+    const ghobject_t &oid, 
+    int flags, 
+    string& full_path) {
+  
+      return 0;
+  }
+
   /**
    * Moves objects matching <match> in the lsb <bits>
    *
