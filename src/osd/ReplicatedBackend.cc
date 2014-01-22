@@ -299,14 +299,19 @@ int ReplicatedBackend::objects_list_range(
 int ReplicatedBackend::objects_get_attr(
   const hobject_t &hoid,
   const string &attr,
-  bufferlist *out)
+  bufferlist *out,
+  int* fd,
+  string* fullPath
+  )
 {
   bufferptr bp;
   int r = osd->store->getattr(
     coll,
     hoid,
     attr.c_str(),
-    bp);
+    bp,
+    fd,
+    fullPath);
   if (r >= 0 && out) {
     out->clear();
     out->push_back(bp);
