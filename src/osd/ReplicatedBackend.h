@@ -171,6 +171,23 @@ public:
     const hobject_t &hoid,
     const string &attr,
     bufferlist *out);
+
+  int objects_get_attrs(
+    const hobject_t &hoid,
+    map<string, bufferlist> *out);
+
+  int objects_read_sync(
+    const hobject_t &hoid,
+    uint64_t off,
+    uint64_t len,
+    bufferlist *bl);
+
+  void objects_read_async(
+    const hobject_t &hoid,
+    const list<pair<pair<uint64_t, uint64_t>,
+	       pair<bufferlist*, Context*> > > &to_read,
+    Context *on_complete);
+
 private:
   // push
   struct PushInfo {
@@ -327,6 +344,150 @@ private:
     const ObjectRecoveryInfo& recovery_info,
     SnapSetContext *ssc
     );
+
+  /**
+   * Client IO
+   */
+  struct InProgressOp {
+    tid_t tid;
+    set<int> waiting_for_commit;
+    set<int> waiting_for_applied;
+    Context *on_commit;
+    Context *on_applied;
+    OpRequestRef op;
+    eversion_t v;
+    InProgressOp(
+      tid_t tid, Context *on_commit, Context *on_applied,
+      OpRequestRef op, eversion_t v)
+      : tid(tid), on_commit(on_commit), on_applied(on_applied),
+	op(op), v(v) {}
+    bool done() const {
+      return waiting_for_commit.empty() &&
+	waiting_for_applied.empty();
+    }
+  };
+  map<tid_t, InProgressOp> in_progress_ops;
+public:
+  PGTransaction *get_transaction();
+  friend class C_OSD_OnOpCommit;
+  friend class C_OSD_OnOpApplied;
+  void submit_transaction(
+    const hobject_t &hoid,
+    const eversion_t &at_version,
+    PGTransaction *t,
+    const eversion_t &trim_to,
+    vector<pg_log_entry_t> &log_entries,
+    Context *on_local_applied_sync,
+    Context *on_all_applied,
+    Context *on_all_commit,
+    tid_t tid,
+    osd_reqid_t reqid,
+    OpRequestRef op
+    );
+
+  void rollback_setattrs(
+    const hobject_t &hoid,
+    map<string, boost::optional<bufferlist> > &old_attrs,
+    ObjectStore::Transaction *t) {
+    map<string, bufferlist> to_set;
+    set<string> to_remove;
+    for (map<string, boost::optional<bufferlist> >::iterator i = old_attrs.begin();
+	 i != old_attrs.end();
+	 ++i) {
+      if (i->second) {
+	to_set[i->first] = i->second.get();
+      } else {
+	t->rmattr(coll, hoid, i->first);
+      }
+    }
+    t->setattrs(coll, hoid, to_set);
+  }
+
+  void rollback_append(
+    const hobject_t &hoid,
+    uint64_t old_size,
+    ObjectStore::Transaction *t) {
+    t->truncate(coll, hoid, old_size);
+  }
+
+  void rollback_stash(
+    const hobject_t &hoid,
+    version_t old_version,
+    ObjectStore::Transaction *t) {
+    t->remove(coll, hoid);
+    t->collection_move_rename(
+      coll,
+      ghobject_t(hoid, old_version, 0),
+      coll,
+      hoid);
+  }
+
+  void rollback_create(
+    const hobject_t &hoid,
+    ObjectStore::Transaction *t) {
+    t->remove(coll, hoid);
+  }
+
+  void trim_stashed_object(
+    const hobject_t &hoid,
+    version_t old_version,
+    ObjectStore::Transaction *t) {
+    t->remove(coll, ghobject_t(hoid, old_version, 0));
+  }
+
+private:
+  void issue_op(
+    const hobject_t &soid,
+    const eversion_t &at_version,
+    tid_t tid,
+    osd_reqid_t reqid,
+    eversion_t pg_trim_to,
+    hobject_t new_temp_oid,
+    hobject_t discard_temp_oid,
+    vector<pg_log_entry_t> &log_entries,
+    InProgressOp *op,
+    ObjectStore::Transaction *op_t);
+  void op_applied(InProgressOp *op);
+  void op_commit(InProgressOp *op);
+  void sub_op_modify_reply(OpRequestRef op);
+  void sub_op_modify(OpRequestRef op);
+
+  struct RepModify {
+    OpRequestRef op;
+    bool applied, committed;
+    int ackerosd;
+    eversion_t last_complete;
+    epoch_t epoch_started;
+
+    uint64_t bytes_written;
+
+    ObjectStore::Transaction opt, localt;
+    
+    RepModify() : applied(false), committed(false), ackerosd(-1),
+		  epoch_started(0), bytes_written(0) {}
+  };
+  typedef std::tr1::shared_ptr<RepModify> RepModifyRef;
+
+  struct C_OSD_RepModifyApply : public Context {
+    ReplicatedBackend *pg;
+    RepModifyRef rm;
+    C_OSD_RepModifyApply(ReplicatedBackend *pg, RepModifyRef r)
+      : pg(pg), rm(r) {}
+    void finish(int r) {
+      pg->sub_op_modify_applied(rm);
+    }
+  };
+  struct C_OSD_RepModifyCommit : public Context {
+    ReplicatedBackend *pg;
+    RepModifyRef rm;
+    C_OSD_RepModifyCommit(ReplicatedBackend *pg, RepModifyRef r)
+      : pg(pg), rm(r) {}
+    void finish(int r) {
+      pg->sub_op_modify_commit(rm);
+    }
+  };
+  void sub_op_modify_applied(RepModifyRef rm);
+  void sub_op_modify_commit(RepModifyRef rm);
 };
 
 #endif

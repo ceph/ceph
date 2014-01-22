@@ -293,6 +293,11 @@ int FileStore::lfn_link(coll_t c, coll_t newcid, const ghobject_t& o, const ghob
     r = get_index(c, &index_old);
     if (r < 0)
       return r;
+  } else if (c == newcid) {
+    r = get_index(c, &index_old);
+    if (r < 0)
+      return r;
+    index_new = index_old;
   } else {
     r = get_index(c, &index_old);
     if (r < 0)
@@ -1005,7 +1010,8 @@ void FileStore::set_allow_sharded_objects()
 
 bool FileStore::get_allow_sharded_objects()
 {
-  return superblock.compat_features.incompat.contains(CEPH_FS_FEATURE_INCOMPAT_SHARDS);
+  return g_conf->filestore_debug_disable_sharded_check ||
+    superblock.compat_features.incompat.contains(CEPH_FS_FEATURE_INCOMPAT_SHARDS);
 }
 
 int FileStore::update_version_stamp()
@@ -4342,12 +4348,25 @@ int FileStore::_collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
 
     _inject_failure();
 
+    lfn_close(fd);
+    fd = FDRef();
+
+    if (r == 0)
+      r = lfn_unlink(oldcid, oldoid, spos, true);
+
+    if (r == 0)
+      r = lfn_open(c, o, 0, &fd);
+
     // close guard on object so we don't do this again
-    if (r == 0) {
+    if (r == 0)
       _close_replay_guard(**fd, spos);
-    }
+
     lfn_close(fd);
   }
+
+  dout(10) << __func__ << " " << c << "/" << o << " from " << oldcid << "/" << oldoid
+	   << " = " << r << dendl;
+  return r;
 
  out_rm_src:
   // remove source

@@ -286,6 +286,7 @@ inline void decode(T &o, bufferlist& bl)
 #include <deque>
 #include <vector>
 #include <string>
+#include <boost/optional.hpp>
 
 #ifndef _BACKWARD_BACKWARD_WARNING_H
 #define _BACKWARD_BACKWARD_WARNING_H   // make gcc 4.3 shut up about hash_*
@@ -294,6 +295,28 @@ inline void decode(T &o, bufferlist& bl)
 #include <ext/hash_set>
 
 #include "triple.h"
+
+// boost optional
+template<typename T>
+inline void encode(const boost::optional<T> &p, bufferlist &bl)
+{
+  __u8 present = static_cast<bool>(p);
+  ::encode(present, bl);
+  if (p)
+    ::encode(p.get(), bl);
+}
+
+template<typename T>
+inline void decode(boost::optional<T> &p, bufferlist::iterator &bp)
+{
+  __u8 present;
+  ::decode(present, bp);
+  if (present) {
+    T t;
+    p = t;
+    ::decode(p.get(), bp);
+  }
+}
 
 // pair
 template<class A, class B>
