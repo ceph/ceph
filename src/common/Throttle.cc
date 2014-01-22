@@ -124,6 +124,10 @@ bool Throttle::_wait(int64_t c)
 
 bool Throttle::wait(int64_t m)
 {
+  if (0 == max.read()) {
+    return false;
+  }
+
   Mutex::Locker l(lock);
   if (m) {
     assert(m > 0);
@@ -135,6 +139,9 @@ bool Throttle::wait(int64_t m)
 
 int64_t Throttle::take(int64_t c)
 {
+  if (0 == max.read()) {
+    return 0;
+  }
   assert(c >= 0);
   ldout(cct, 10) << "take " << c << dendl;
   {
@@ -151,6 +158,10 @@ int64_t Throttle::take(int64_t c)
 
 bool Throttle::get(int64_t c, int64_t m)
 {
+  if (0 == max.read()) {
+    return false;
+  }
+
   assert(c >= 0);
   ldout(cct, 10) << "get " << c << " (" << count.read() << " -> " << (count.read() + c) << ")" << dendl;
   bool waited = false;
@@ -176,6 +187,10 @@ bool Throttle::get(int64_t c, int64_t m)
  */
 bool Throttle::get_or_fail(int64_t c)
 {
+  if (0 == max.read()) {
+    return true;
+  }
+
   assert (c >= 0);
   Mutex::Locker l(lock);
   if (_should_wait(c) || !cond.empty()) {
@@ -199,6 +214,10 @@ bool Throttle::get_or_fail(int64_t c)
 
 int64_t Throttle::put(int64_t c)
 {
+  if (0 == max.read()) {
+    return 0;
+  }
+
   assert(c >= 0);
   ldout(cct, 10) << "put " << c << " (" << count.read() << " -> " << (count.read()-c) << ")" << dendl;
   Mutex::Locker l(lock);
