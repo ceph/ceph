@@ -5,8 +5,10 @@ import uuid
 import re
 import json
 import sys
+import ast
 
 CLUSTER_UUID_NAME='cluster-uuid'
+CLUSTER_OWNERSHIP_NAME='cluster-ownership'
 
 def run_command(cmd):
   child = subprocess.Popen(cmd, stdout=subprocess.PIPE,
@@ -22,14 +24,14 @@ def get_uuid():
     (rc, o, e) = run_command(['ceph', 'config-key', 'put', 
                              CLUSTER_UUID_NAME, uid])
     if rc is not 0:
-      return None
-
+      raise RuntimeError("\'ceph config-key put\' failed -" + e)
+  
   return uid
 
 def get_cluster_creation_date():
   (rc, o, e) = run_command(['ceph', 'mon', 'dump'])
   if rc is not 0:
-    return None
+    raise RuntimeError("\'ceph mon dump\' failed - " + e)
   
   rec = re.compile('(.*created\ )(.*)(\n.*)')
   
@@ -40,27 +42,31 @@ def get_cluster_creation_date():
   # Try and get the date from osd dump
   (rc, o, e) = run_command(['ceph', 'osd', 'dump'])
   if rc is not 0:
-    return None
+    raise RuntimeError("\'ceph osd dump\' failed - " + e)
 
   mo = rec.search(o);
   if not mo or mo.group(2) == '0.000000':
-    return None
+    print >> sys.stderr, "Unable to get cluster creation date"
+  
+  return mo.group(2)
 
 def get_nums():
   (rc, o, e) = run_command(['ceph', '-s'])
+  if rc is not 0:
+    raise RuntimeError("\'ceph -s\' failed - " + e)
   
   num_mons = 0
 
   mo = re.search('(.*monmap\ .*:\ )(\d+)(.*)', o)
   if not mo:
-    return None
+    raise RuntimeError("Unmatched pattern for monmap in \'ceph status\'")
   else:
     num_mons = int(mo.group(2)) 
 
   num_osds = 0
   mo = re.search('.*osdmap.*(\d+).*(\d+).*(\d+).*', o) 
   if not mo:
-    return None
+    raise RuntimeError("Unmatched pattern for osdmap in \'ceph status\'")
   else:
     num_osds = int(mo.group(1))
 
@@ -75,7 +81,7 @@ def get_nums():
   num_objs = 0
   mo = re.search('.*pgmap\ v\d+:\ (\d+).*,\ (\d+).*,\ (\d+.*)\ data,\ (\d+).*', o)
   if not mo:
-    return None
+    raise RuntimeError("Unmatched pattern for pgmap in \'ceph status\'")
   else:
     num_pgs = int(mo.group(1))
     num_pools = int(mo.group(2))
@@ -93,30 +99,29 @@ def get_nums():
 def get_crush_types():
   (rc, o, e) = run_command(['ceph', 'osd', 'crush', 'dump'])
   if rc is not 0:
-    return None
+    raise RuntimeError("\'ceph osd crush dump\' failed - " + e)
 
   crush_dump = json.loads(o)
   if crush_dump['types'] is None:
-    return None
+    raise RuntimeError("\'types\' item missing in \'ceph osd crush dump\'")
   
   crush_types = []
-  ascii_encode = lambda x: x.encode('ascii')
   for t in crush_dump['types']:
-    crush_types.append(ascii_encode(t['name']))
+    crush_types.append(t['name'])
 
   return crush_types
 
 def get_pool_metadata():
   (rc, o, e) = run_command(['ceph', 'osd', 'dump'])
   if rc is not 0:
-    return None
+    raise RuntimeError("\'ceph osd dump\' failed - " + e)
 
   result = re.findall("pool\ (\d+)\ '(\S+)'\ rep\ size\ (\d+)", o)
   if len(result) is 0:  
     #Check with replicated size
     result = re.findall("pool\ (\d+)\ '(\S+)'\ replicated\ size\ (\d+)", o)
     if len(result) is 0:
-      return None
+      raise RuntimeError("Unmatched pattern for \'pool\' in \'ceph osd dump\'")
   
   pool_meta = []
   proc = lambda x: {'id':x[0], 'name':x[1], 'rep_size':int(x[2])}
@@ -189,6 +194,7 @@ def get_osd_hosts():
       loc[ip] = host
     elif loc[ip] != host:
       #Mismatching details
+      print >> sys.stderr, "ip-hostname conflict"
       assert(0)
     
     for k,v in loc.iteritems():
@@ -198,7 +204,15 @@ def get_osd_hosts():
 
   return locs
 
-def main():
+def get_ownership_info():
+  (rc, o, e) = run_command(['ceph', 'config-key', 'get', 
+                            CLUSTER_OWNERSHIP_NAME])
+  if rc is not 0:
+    return None
+
+  return o
+
+def output_json():
   out = {}
   out['uuid'] = get_uuid()
   out['cluster_creation_date'] = get_cluster_creation_date()
@@ -207,7 +221,81 @@ def main():
   out['crush_types'] = get_crush_types()
   out['pool_metadata'] = get_pool_metadata()
   out['sysinfo'] = get_sysinfo()
-  print json.dumps(out, indent=4, separators=(',', ': '))
+
+  owner = get_ownership_info()
+  if owner is not None:
+    out['ownership'] = owner
+
+  return json.dumps(out, indent=2, separators=(',', ': '))
+
+def describe_usage():
+  print >> sys.stderr, "Usage:"
+  print >> sys.stderr, "======\n"
+
+  print >> sys.stderr, sys.argv[0] + " <commands> [command-options]\n"
+  print >> sys.stderr, "commands:"
+  print >> sys.stderr, "publish - publish the brag report to the server"
+  print >> sys.stderr, "update-metadata <update-metadata-options> - Update"
+  print >> sys.stderr, "         ownership information for bragging"
+  print >> sys.stderr, "clear-metadata - Clear information set by update-metadata"
+  print >> sys.stderr, ""
+
+  print >> sys.stderr, "update-metadata options:"
+  print >> sys.stderr, "--name=  - Name of the cluster"
+  print >> sys.stderr, "--organization= - Name of the organization"
+  print >> sys.stderr, "--email= - Email contact address"
+  print >> sys.stderr, "--description= - Reporting use-case"
+  print >> sys.stderr, ""
+
+def update_metadata():
+  info = {}
+  possibles = ['name', 'organization', 'email', 'description']
+
+  #get the existing values
+  o = get_ownership_info();
+  if o:
+    info = ast.literal_eval(o)
+  
+  for index in range(2, len(sys.argv)):
+    mo = re.search("--(\S+)=(.*)", sys.argv[index])
+    if not mo:
+      describe_usage()
+      return 22
+
+    k = mo.group(1)
+    v = mo.group(2)
+    
+    if k in possibles:
+      info[k] = v
+    else:
+      print >> sys.stderr, "Unexpect option --" + k
+      describe_usage()
+      return 22
+
+  (rc, o, e) = run_command(['ceph', 'config-key', 'put', 
+                            CLUSTER_OWNERSHIP_NAME, str(info)])
+  return rc
+
+def clear_metadata():
+  (rc, o, e) = run_command(['ceph', 'config-key', 'del', 
+                            CLUSTER_OWNERSHIP_NAME])
+  return rc
+
+def main():
+  if len(sys.argv) is 1:
+    print output_json()
+    return 0
+  elif sys.argv[1] == 'update-metadata':
+    return update_metadata()
+  elif sys.argv[1] == 'clear-metadata':
+    return clear_metadata()
+  elif sys.argv[1] == 'publish':
+    #post this data to the server. TODO
+    data = output_json()
+    return 0
+  else:
+    describe_usage()
+    return 22
 
 if __name__ == '__main__':
   sys.exit(main())
