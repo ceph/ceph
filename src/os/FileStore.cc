@@ -203,6 +203,65 @@ int FileStore::lfn_stat(coll_t cid, const ghobject_t& oid, struct stat *buf)
   return r;
 }
 
+int FileStore::lfn_open(coll_t& cid,
+                        const ghobject_t& oid,
+                        int& outfd, string& fullPath)
+{
+
+  int flags = O_RDWR;
+
+  int r;
+  if (!index_manager.isUpgrade()){
+    r = index_manager.get_fd_fast(cid, oid, basedir, flags, outfd, &fullPath);
+
+    if (r < 0) {
+      dout(10) << "error getting collection index for " << cid
+               << ": " << cpp_strerror(-r) << dendl;
+      goto fail;
+    }
+
+  }
+  else{
+    Index index;
+
+    r = get_index(cid, &index);
+
+    int exist;
+
+    {
+      IndexedPath path;
+      if (r < 0) {
+        derr << "error getting collection index for " << cid
+             << ": " << cpp_strerror(-r) << dendl;
+        goto fail;
+      }
+      r = index->lookup(oid, &path, &exist);
+      if (r < 0) {
+        derr << "could not find " << oid << " in index: "
+             << cpp_strerror(-r) << dendl;
+        goto fail;
+      }
+
+      r = ::open(path->path(), flags, 0644);
+      if (r < 0) {
+        r = -errno;
+        dout(10) << "error opening file " << path->path() << " with flags="
+                 << flags << ": " << cpp_strerror(-r) << dendl;
+        goto fail;
+      }
+      outfd = r;
+
+    }
+   }
+
+  return 0;
+
+ fail:
+  assert(!m_filestore_fail_eio || r != -EIO);
+  return r;
+}
+
+
 int FileStore::lfn_open(coll_t cid,
 			const ghobject_t& oid,
 			bool create,
