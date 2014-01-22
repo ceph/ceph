@@ -1605,12 +1605,16 @@ void Pipe::writer()
 	if (session_security == NULL) {
 	  ldout(msgr->cct, 20) << "writer no session security" << dendl;
 	} else {
-	  if (session_security->sign_message(m)) {
-	    ldout(msgr->cct, 20) << "writer failed to sign seq # " << header.seq
-				 << "): sig = " << footer.sig << dendl;
-	  } else {
-	    ldout(msgr->cct, 20) << "writer signed seq # " << header.seq
-				 << "): sig = " << footer.sig << dendl;
+
+  		// If runtime signing option is off, don't go for signing.
+  	  if (msgr->cct->_conf->cephx_sign_messages) {
+  	    if (session_security->sign_message(m)) {
+	      ldout(msgr->cct, 20) << "writer failed to sign seq # " << header.seq
+	        << "): sig = " << footer.sig << dendl;
+            } else {
+	      ldout(msgr->cct, 20) << "writer signed seq # " << header.seq
+	        << "): sig = " << footer.sig << dendl;
+	    }
 	  }
 	}
 
@@ -1879,11 +1883,14 @@ int Pipe::read_message(Message **pm)
   if (session_security == NULL) {
     ldout(msgr->cct, 10) << "No session security set" << dendl;
   } else {
-    if (session_security->check_message_signature(message)) {
-      ldout(msgr->cct, 0) << "Signature check failed" << dendl;
-      ret = -EINVAL;
-      goto out_dethrottle;
-    } 
+    // If runtime signing option is off, just return success without signing.
+    if (msgr->cct->_conf->cephx_sign_messages){
+      if (session_security->check_message_signature(message)) {
+        ldout(msgr->cct, 0) << "Signature check failed" << dendl;
+      	ret = -EINVAL;
+      	goto out_dethrottle;
+      }
+    }	 
   }
 
   message->set_byte_throttler(policy.throttler_bytes);
