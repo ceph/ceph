@@ -934,11 +934,13 @@ public:
     uint64_t offset,
     size_t len,
     bufferlist& bl,
-    bool allow_eio = false) = 0;
+    bool allow_eio = false,
+    int fd = -1,
+    string* fullPath = NULL) = 0;
 
   virtual int fiemap(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) = 0;
 
-  virtual int getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr& value) = 0;
+  virtual int getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr& value, int* fd = NULL, string* fullPath = NULL) = 0;
   int getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferlist& value) {
     bufferptr bp;
     int r = getattr(cid, oid, name, bp);
