@@ -86,11 +86,12 @@ public:
     ::encode(fsid, payload);
     if ((features & CEPH_FEATURE_PGID64) == 0 ||
 	(features & CEPH_FEATURE_PGPOOL3) == 0 ||
-	(features & CEPH_FEATURE_OSDENC) == 0) {
+	(features & CEPH_FEATURE_OSDENC) == 0 ||
+        (features & CEPH_FEATURE_OSDMAP_ENC) == 0) {
       if ((features & CEPH_FEATURE_PGID64) == 0 ||
 	  (features & CEPH_FEATURE_PGPOOL3) == 0)
 	header.version = 1;  // old old_client version
-      else
+      else if ((features & CEPH_FEATURE_OSDENC) == 0)
 	header.version = 2;  // old pg_pool_t
 
       // reencode maps using old format
