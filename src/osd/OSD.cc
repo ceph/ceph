@@ -881,7 +881,7 @@ OSD::OSD(CephContext *cct_, int id, Messenger *internal_messenger, Messenger *ex
   heartbeat_dispatcher(this),
   stat_lock("OSD::stat_lock"),
   finished_lock("OSD::finished_lock"),
-  op_tracker(cct),
+  op_tracker(cct, cct->_conf->osd_op_tracker),
   test_ops_hook(NULL),
   op_wq(this, cct->_conf->osd_op_thread_timeout, &op_tp),
   peering_wq(this, cct->_conf->osd_op_thread_timeout, &op_tp),
