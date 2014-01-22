@@ -728,6 +728,7 @@ OPTION(rgw_bucket_quota_soft_threshold, OPT_DOUBLE, 0.95) // threshold from whic
 OPTION(rgw_bucket_quota_cache_size, OPT_INT, 10000) // number of entries in bucket quota cache
 
 OPTION(mutex_perf_counter, OPT_BOOL, false) // enable/disable mutex perf counter
+OPTION(throttler_perf_counter, OPT_BOOL, true) // enable/disable throttler perf counter
 
 // This will be set to true when it is safe to start threads.
 // Once it is true, it will never change.
