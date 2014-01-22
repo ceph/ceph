@@ -1161,13 +1161,26 @@ void ReplicatedPG::do_op(OpRequestRef op)
   ObjectContextRef obc;
   bool can_create = op->may_write() || op->may_cache();
   hobject_t missing_oid;
-  hobject_t oid(m->get_oid(),
-		m->get_object_locator().key,
-		m->get_snapid(),
-		m->get_pg().ps(),
-		m->get_object_locator().get_pool(),
-		m->get_object_locator().nspace);
-  int r = find_object_context(oid, &obc, can_create, &missing_oid);
+  hobject_t *hitset_oid;
+  bool created_hitset_oid = false;
+  int r;
+  
+  if (m->get_snapid() == CEPH_SNAPDIR) {
+    r = find_object_context(snapdir, &obc, can_create, &missing_oid);
+    hitset_oid = &snapdir;
+  } else if (m->get_snapid() == CEPH_NOSNAP) {
+    r = find_object_context(head, &obc, can_create, &missing_oid);
+    hitset_oid = &head;
+  } else {
+    hitset_oid = new hobject_t(m->get_oid(),
+			       m->get_object_locator().key,
+			       m->get_snapid(),
+			       m->get_pg().ps(),
+			       m->get_object_locator().get_pool(),
+			       m->get_object_locator().nspace);
+    created_hitset_oid = true;
+    r = find_object_context(*hitset_oid, &obc, can_create, &missing_oid);
+  }
 
   if (r == -EAGAIN) {
     // If we're not the primary of this OSD, and we have
@@ -1184,12 +1197,14 @@ void ReplicatedPG::do_op(OpRequestRef op)
   }
 
   if (hit_set) {
-    hit_set->insert(oid);
+    hit_set->insert(*hitset_oid);
     if (hit_set->is_full() ||
 	hit_set_start_stamp + pool.info.hit_set_period <= m->get_recv_stamp()) {
       hit_set_persist();
     }
   }
+  if (created_hitset_oid)
+    delete hitset_oid;
 
   if ((m->get_flags() & CEPH_OSD_FLAG_IGNORE_CACHE) == 0 &&
       maybe_handle_cache(op, obc, r, missing_oid))
