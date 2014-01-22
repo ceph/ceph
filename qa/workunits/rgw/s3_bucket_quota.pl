@@ -50,7 +50,7 @@ my $kruft;
 my $s3;
 my $domain   = "front.sepia.ceph.com";
 my $host     = get_hostname();
-my $hostname = "$host.$domain";
+my $hostname = "$host.$domain:7280"; # as rgw is running on port 7280
 my $testfileloc;
 my $sec;
 my $min;
@@ -572,7 +572,6 @@ sub check
 
 #== Main starts here===
 ceph_os_info();
-check();
 test_max_objects();
 test_max_objects_per_user();
 test_beyond_max_objs();
