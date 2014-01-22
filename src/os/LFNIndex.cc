@@ -33,6 +33,7 @@
 #include "chain_xattr.h"
 
 #include "LFNIndex.h"
+#include "common/errno.h"
 using ceph::crypto::SHA1;
 
 #define dout_subsys ceph_subsys_filestore
@@ -104,6 +105,29 @@ int LFNIndex::unlink(const ghobject_t &oid)
     goto out;
   }
   );
+}
+
+int LFNIndex::fast_lookup(const ghobject_t &oid, int flags, string& full_path)
+{
+  WRAP_RETRY(
+  full_path.reserve(get_base_path().size() + 6 + oid.hobj.oid.name.size() + 10 + 1
+        + oid.hobj.get_key().size() + 2 + 1 + 14 + oid.hobj.nspace.size() + 1 + 8);
+
+  r = _lookup(oid, full_path);
+  if (r < 0)
+    goto out;
+    r = ::open(full_path.c_str(), flags, 0644);
+    if (r < 0) {
+      r = -errno;
+      
+      dout(0) << "error opening file " << full_path << " with flags="
+               << flags << "with error = " << cpp_strerror(-r) << dendl;
+
+    }
+
+
+  );
+
 }
 
 int LFNIndex::lookup(const ghobject_t &oid,
