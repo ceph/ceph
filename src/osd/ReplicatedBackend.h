@@ -167,7 +167,9 @@ public:
   int objects_get_attr(
     const hobject_t &hoid,
     const string &attr,
-    bufferlist *out);
+    bufferlist *out,
+    int* fd = NULL,
+    string* fullPath = NULL);
 private:
   // push
   struct PushInfo {

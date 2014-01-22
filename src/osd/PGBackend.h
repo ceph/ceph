@@ -224,7 +224,9 @@
    virtual int objects_get_attr(
      const hobject_t &hoid,
      const string &attr,
-     bufferlist *out) = 0;
+     bufferlist *out,
+     int* fd = NULL,
+     string* fullPath = NULL) = 0;
  };
 
 #endif
