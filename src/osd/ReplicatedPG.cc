@@ -5511,12 +5511,14 @@ SnapSetContext *ReplicatedPG::get_snapset_context(
   const string& nspace,
   map<string, bufferptr> *attrs)
 {
-  Mutex::Locker l(snapset_contexts_lock);
   SnapSetContext *ssc;
+  snapset_contexts_lock.Lock();
   map<object_t, SnapSetContext*>::iterator p = snapset_contexts.find(oid);
   if (p != snapset_contexts.end()) {
     ssc = p->second;
+    snapset_contexts_lock.Unlock();
   } else {
+    snapset_contexts_lock.Unlock();
     bufferlist bv;
     if (!attrs) {
       hobject_t head(oid, key, CEPH_NOSNAP, seed,
@@ -5535,7 +5537,10 @@ SnapSetContext *ReplicatedPG::get_snapset_context(
       bv.push_back(attrs->find(SS_ATTR)->second);
     }
     ssc = new SnapSetContext(oid);
+    snapset_contexts_lock.Lock();
     _register_snapset_context(ssc);
+    snapset_contexts_lock.Unlock();
+
     if (bv.length()) {
       bufferlist::iterator bvp = bv.begin();
       ssc->snapset.decode(bvp);
