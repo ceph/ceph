@@ -9637,7 +9637,8 @@ void ReplicatedPG::hit_set_clear()
 
 void ReplicatedPG::hit_set_setup()
 {
-  if (!pool.info.hit_set_count ||
+  if (!is_primary() ||
+      !pool.info.hit_set_count ||
       !pool.info.hit_set_period ||
       pool.info.hit_set_params.get_type() == HitSet::TYPE_NONE) {
     hit_set_clear();
