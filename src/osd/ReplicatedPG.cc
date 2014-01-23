@@ -10319,12 +10319,14 @@ void ReplicatedPG::_scrub_finish()
   dout(10) << mode << " got "
 	   << scrub_cstat.sum.num_objects << "/" << info.stats.stats.sum.num_objects << " objects, "
 	   << scrub_cstat.sum.num_object_clones << "/" << info.stats.stats.sum.num_object_clones << " clones, "
+	   << scrub_cstat.sum.num_objects_dirty << "/" << info.stats.stats.sum.num_objects_dirty << " dirty, "
 	   << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes."
 	   << dendl;
 
   if (scrub_cstat.sum.num_objects != info.stats.stats.sum.num_objects ||
       scrub_cstat.sum.num_object_clones != info.stats.stats.sum.num_object_clones ||
-      scrub_cstat.sum.num_objects_dirty != info.stats.stats.sum.num_objects_dirty ||
+      (scrub_cstat.sum.num_objects_dirty != info.stats.stats.sum.num_objects_dirty &&
+       !info.stats.dirty_stats_invalid) ||
       scrub_cstat.sum.num_whiteouts != info.stats.stats.sum.num_whiteouts ||
       scrub_cstat.sum.num_bytes != info.stats.stats.sum.num_bytes) {
     osd->clog.error() << info.pgid << " " << mode
@@ -10339,6 +10341,7 @@ void ReplicatedPG::_scrub_finish()
     if (repair) {
       ++scrubber.fixed;
       info.stats.stats = scrub_cstat;
+      info.stats.dirty_stats_invalid = false;
       publish_stats_to_osd();
       share_pg_info();
     }

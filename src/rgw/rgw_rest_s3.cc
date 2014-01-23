@@ -946,8 +946,8 @@ int RGWPostObj_ObjStore_S3::get_policy()
       err_msg = "Missing access key";
       return -EINVAL;
     }
-    string signature_str;
-    if (!part_str("signature", &signature_str)) {
+    string received_signature_str;
+    if (!part_str("signature", &received_signature_str)) {
       ldout(s->cct, 0) << "No signature found!" << dendl;
       err_msg = "Missing signature";
       return -EINVAL;
@@ -964,22 +964,29 @@ int RGWPostObj_ObjStore_S3::get_policy()
 
     map<string, RGWAccessKey> access_keys  = user_info.access_keys;
 
-    map<string, RGWAccessKey>::const_iterator iter = access_keys.begin();
+    map<string, RGWAccessKey>::const_iterator iter = access_keys.find(s3_access_key);
+    // We know the key must exist, since the user was returned by
+    // rgw_get_user_info_by_access_key, but it doesn't hurt to check!
+    if (iter == access_keys.end()) {
+      ldout(s->cct, 0) << "Secret key lookup failed!" << dendl;
+      err_msg = "No secret key for matching access key";
+      return -EACCES;
+    }
     string s3_secret_key = (iter->second).key;
 
-    char calc_signature[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
+    char expected_signature_char[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
 
-    calc_hmac_sha1(s3_secret_key.c_str(), s3_secret_key.size(), encoded_policy.c_str(), encoded_policy.length(), calc_signature);
-    bufferlist encoded_hmac;
-    bufferlist raw_hmac;
-    raw_hmac.append(calc_signature, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
-    raw_hmac.encode_base64(encoded_hmac);
-    encoded_hmac.append((char)0); /* null terminate */
+    calc_hmac_sha1(s3_secret_key.c_str(), s3_secret_key.size(), encoded_policy.c_str(), encoded_policy.length(), expected_signature_char);
+    bufferlist expected_signature_hmac_raw;
+    bufferlist expected_signature_hmac_encoded;
+    expected_signature_hmac_raw.append(expected_signature_char, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
+    expected_signature_hmac_raw.encode_base64(expected_signature_hmac_encoded);
+    expected_signature_hmac_encoded.append((char)0); /* null terminate */
 
-    if (signature_str.compare(encoded_hmac.c_str()) != 0) {
+    if (received_signature_str.compare(expected_signature_hmac_encoded.c_str()) != 0) {
       ldout(s->cct, 0) << "Signature verification failed!" << dendl;
-      ldout(s->cct, 0) << "expected: " << signature_str.c_str() << dendl;
-      ldout(s->cct, 0) << "got: " << encoded_hmac.c_str() << dendl;
+      ldout(s->cct, 0) << "received: " << received_signature_str.c_str() << dendl;
+      ldout(s->cct, 0) << "expected: " << expected_signature_hmac_encoded.c_str() << dendl;
       err_msg = "Bad access key / signature";
       return -EACCES;
     }
