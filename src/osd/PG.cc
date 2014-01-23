@@ -894,6 +894,85 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
   return best;
 }
 
+void PG::calc_ec_acting(
+  map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+  unsigned size,
+  const vector<int> &acting,
+  pg_shard_t acting_primary,
+  const vector<int> &up,
+  pg_shard_t up_primary,
+  const map<pg_shard_t, pg_info_t> &all_info,
+  bool compat_mode,
+  vector<int> *_want,
+  set<pg_shard_t> *backfill,
+  set<pg_shard_t> *acting_backfill,
+  pg_shard_t *want_primary,
+  ostream &ss) {
+  vector<int> want(size, CRUSH_ITEM_NONE);
+  map<shard_id_t, set<pg_shard_t> > all_info_by_shard;
+  unsigned usable = 0;
+  for(map<pg_shard_t, pg_info_t>::const_iterator i = all_info.begin();
+      i != all_info.end();
+      ++i) {
+    all_info_by_shard[i->first.shard].insert(i->first);
+  }
+  for (shard_id_t i = 0; i < want.size(); ++i) {
+    ss << "For position " << (unsigned)i << ": ";
+    if (up.size() > (unsigned)i && up[i] != CRUSH_ITEM_NONE &&
+	!all_info.find(pg_shard_t(up[i], i))->second.is_incomplete() &&
+	all_info.find(pg_shard_t(up[i], i))->second.last_update >=
+	auth_log_shard->second.log_tail) {
+      ss << " selecting up[i]: " << pg_shard_t(up[i], i) << std::endl;
+      want[i] = up[i];
+      ++usable;
+      continue;
+    }
+    if (up.size() > (unsigned)i && up[i] != CRUSH_ITEM_NONE) {
+      ss << " backfilling up[i]: " << pg_shard_t(up[i], i)
+	 << " and ";
+      backfill->insert(pg_shard_t(up[i], i));
+    }
+
+    if (acting.size() > (unsigned)i && acting[i] != CRUSH_ITEM_NONE &&
+	!all_info.find(pg_shard_t(acting[i], i))->second.is_incomplete() &&
+	all_info.find(pg_shard_t(acting[i], i))->second.last_update >=
+	auth_log_shard->second.log_tail) {
+      ss << " selecting acting[i]: " << pg_shard_t(acting[i], i) << std::endl;
+      want[i] = acting[i];
+      ++usable;
+    } else {
+      for (set<pg_shard_t>::iterator j = all_info_by_shard[i].begin();
+	   j != all_info_by_shard[i].end();
+	   ++j) {
+	assert(j->shard == i);
+	if (!all_info.find(*j)->second.is_incomplete() &&
+	    all_info.find(*j)->second.last_update >=
+	    auth_log_shard->second.log_tail) {
+	  ss << " selecting stray: " << *j << std::endl;
+	  want[i] = j->osd;
+	  ++usable;
+	  break;
+	}
+      }
+      if (want[i] == CRUSH_ITEM_NONE)
+	ss << " failed to fill position " << i << std::endl;
+    }
+  }
+
+  bool found_primary = false;
+  for (shard_id_t i = 0; i < want.size(); ++i) {
+    if (want[i] != CRUSH_ITEM_NONE) {
+      acting_backfill->insert(pg_shard_t(want[i], i));
+      if (!found_primary) {
+	*want_primary = pg_shard_t(want[i], i);
+	found_primary = true;
+      }
+    }
+  }
+  acting_backfill->insert(backfill->begin(), backfill->end());
+  _want->swap(want);
+}
+
 /**
  * calculate the desired acting set.
  *
@@ -1118,20 +1197,36 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
   vector<int> want;
   pg_shard_t want_primary;
   stringstream ss;
-  calc_replicated_acting(
-    auth_log_shard,
-    get_osdmap()->get_pg_size(info.pgid.pgid),
-    acting,
-    primary,
-    up,
-    up_primary,
-    all_info,
-    compat_mode,
-    &want,
-    &want_backfill,
-    &want_acting_backfill,
-    &want_primary,
-    ss);
+  if (!pool.info.ec_pool())
+    calc_replicated_acting(
+      auth_log_shard,
+      get_osdmap()->get_pg_size(info.pgid.pgid),
+      acting,
+      primary,
+      up,
+      up_primary,
+      all_info,
+      compat_mode,
+      &want,
+      &want_backfill,
+      &want_acting_backfill,
+      &want_primary,
+      ss);
+  else
+    calc_ec_acting(
+      auth_log_shard,
+      get_osdmap()->get_pg_size(info.pgid.pgid),
+      acting,
+      primary,
+      up,
+      up_primary,
+      all_info,
+      compat_mode,
+      &want,
+      &want_backfill,
+      &want_acting_backfill,
+      &want_primary,
+      ss);
   dout(10) << ss.str() << dendl;
 
   // This might cause a problem if min_size is large
