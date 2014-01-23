@@ -67,6 +67,7 @@ struct pg_shard_t {
   int osd;
   shard_id_t shard;
   pg_shard_t() : osd(-1), shard(ghobject_t::NO_SHARD) {}
+  explicit pg_shard_t(int osd) : osd(osd), shard(ghobject_t::NO_SHARD) {}
   pg_shard_t(int osd, shard_id_t shard) : osd(osd), shard(shard) {}
   static pg_shard_t undefined_shard() {
     return pg_shard_t(-1, ghobject_t::NO_SHARD);

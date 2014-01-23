@@ -627,7 +627,27 @@ public:
     assert(i != pools.end());
     return i->second.ec_pool();
   }
-  spg_t get_primary_shard(pg_t pgid) const { return spg_t(); /* TODOSAM: fix */}
+  bool get_primary_shard(pg_t pgid, spg_t *out) const {
+    map<int64_t, pg_pool_t>::const_iterator i = get_pools().find(pgid.pool());
+    if (i == get_pools().end()) {
+      return false;
+    }
+    int primary;
+    vector<int> acting;
+    pg_to_acting_osds(pgid, &acting, &primary);
+    if (i->second.ec_pool()) {
+      for (shard_id_t i = 0; i < acting.size(); ++i) {
+	if (acting[i] == primary) {
+	  *out = spg_t(pgid, i);
+	  return true;
+	}
+      }
+    } else {
+      *out = spg_t(pgid);
+      return true;
+    }
+    return false;
+  }
 
   int64_t lookup_pg_pool_name(const string& name) {
     if (name_pool.count(name))
