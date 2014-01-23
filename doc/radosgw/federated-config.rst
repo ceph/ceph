@@ -459,7 +459,7 @@ Create Zones
 	  "user_email_pool": ".us-east.users.email",
 	  "user_swift_pool": ".us-east.users.swift",
 	  "user_uid_pool": ".us-east.users.uid",
-	  "system_key": { "access_key": "", "secret_key": ""}
+	  "system_key": { "access_key": "", "secret_key": ""},
 	  "placement_pools": [
 	    { "key": "default-placement",
 	      "val": { "index_pool": ".us-east.rgw.buckets.index",
