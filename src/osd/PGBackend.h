@@ -397,28 +397,28 @@
      ObjectStore::Transaction *t);
 
    /// List objects in collection
-   virtual int objects_list_partial(
+   int objects_list_partial(
      const hobject_t &begin,
      int min,
      int max,
      snapid_t seq,
      vector<hobject_t> *ls,
-     hobject_t *next) = 0;
+     hobject_t *next);
 
-   virtual int objects_list_range(
+   int objects_list_range(
      const hobject_t &start,
      const hobject_t &end,
      snapid_t seq,
-     vector<hobject_t> *ls) = 0;
+     vector<hobject_t> *ls);
 
-   virtual int objects_get_attr(
+   int objects_get_attr(
      const hobject_t &hoid,
      const string &attr,
-     bufferlist *out) = 0;
+     bufferlist *out);
 
-   virtual int objects_get_attrs(
+   int objects_get_attrs(
      const hobject_t &hoid,
-     map<string, bufferlist> *out) = 0;
+     map<string, bufferlist> *out);
 
    virtual int objects_read_sync(
      const hobject_t &hoid,

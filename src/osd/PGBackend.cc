@@ -73,6 +73,96 @@ void PGBackend::rollback(
 }
 
 
+int PGBackend::objects_list_partial(
+  const hobject_t &begin,
+  int min,
+  int max,
+  snapid_t seq,
+  vector<hobject_t> *ls,
+  hobject_t *next)
+{
+  assert(ls);
+  ghobject_t _next(begin);
+  ls->reserve(max);
+  int r = 0;
+  while (!_next.is_max() && ls->size() < (unsigned)min) {
+    vector<ghobject_t> objects;
+    int r = store->collection_list_partial(
+      coll,
+      _next,
+      min - ls->size(),
+      max - ls->size(),
+      seq,
+      &objects,
+      &_next);
+    if (r != 0)
+      break;
+    for (vector<ghobject_t>::iterator i = objects.begin();
+	 i != objects.end();
+	 ++i) {
+      if (i->is_no_gen()) {
+	ls->push_back(i->hobj);
+      }
+    }
+  }
+  if (r == 0)
+    *next = _next.hobj;
+  return r;
+}
+
+int PGBackend::objects_list_range(
+  const hobject_t &start,
+  const hobject_t &end,
+  snapid_t seq,
+  vector<hobject_t> *ls)
+{
+  assert(ls);
+  vector<ghobject_t> objects;
+  int r = store->collection_list_range(
+    coll,
+    start,
+    end,
+    seq,
+    &objects);
+  ls->reserve(objects.size());
+  for (vector<ghobject_t>::iterator i = objects.begin();
+       i != objects.end();
+       ++i) {
+    if (i->is_no_gen()) {
+      ls->push_back(i->hobj);
+    }
+  }
+  return r;
+}
+
+int PGBackend::objects_get_attr(
+  const hobject_t &hoid,
+  const string &attr,
+  bufferlist *out)
+{
+  bufferptr bp;
+  int r = store->getattr(
+    coll,
+    hoid,
+    attr.c_str(),
+    bp);
+  if (r >= 0 && out) {
+    out->clear();
+    out->push_back(bp);
+  }
+  return r;
+}
+
+int PGBackend::objects_get_attrs(
+  const hobject_t &hoid,
+  map<string, bufferlist> *out)
+{
+  return store->getattrs(
+    coll,
+    hoid,
+    *out);
+}
+
 void PGBackend::rollback_setattrs(
   const hobject_t &hoid,
   map<string, boost::optional<bufferlist> > &old_attrs,
