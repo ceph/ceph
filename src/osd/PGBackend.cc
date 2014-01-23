@@ -73,6 +73,33 @@ void PGBackend::rollback(
 }
 
 
+void PGBackend::on_change(ObjectStore::Transaction *t)
+{
+  dout(10) << __func__ << dendl;
+  // clear temp
+  for (set<hobject_t>::iterator i = temp_contents.begin();
+       i != temp_contents.end();
+       ++i) {
+    dout(10) << __func__ << ": Removing oid "
+	     << *i << " from the temp collection" << dendl;
+    t->remove(
+      get_temp_coll(t),
+      ghobject_t(*i, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
+  }
+  temp_contents.clear();
+  _on_change(t);
+}
+
+coll_t PGBackend::get_temp_coll(ObjectStore::Transaction *t)
+{
+  if (temp_created)
+    return temp_coll;
+  if (!store->collection_exists(temp_coll))
+      t->create_collection(temp_coll);
+  temp_created = true;
+  return temp_coll;
+}
+
 int PGBackend::objects_list_partial(
   const hobject_t &begin,
   int min,
