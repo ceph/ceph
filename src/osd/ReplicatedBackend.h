@@ -154,30 +154,6 @@ public:
     }
   }
 
-  /// List objects in collection
-  int objects_list_partial(
-    const hobject_t &begin,
-    int min,
-    int max,
-    snapid_t seq,
-    vector<hobject_t> *ls,
-    hobject_t *next);
-
-  int objects_list_range(
-    const hobject_t &start,
-    const hobject_t &end,
-    snapid_t seq,
-    vector<hobject_t> *ls);
-
-  int objects_get_attr(
-    const hobject_t &hoid,
-    const string &attr,
-    bufferlist *out);
-
-  int objects_get_attrs(
-    const hobject_t &hoid,
-    map<string, bufferlist> *out);
-
   int objects_read_sync(
     const hobject_t &hoid,
     uint64_t off,
