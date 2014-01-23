@@ -142,7 +142,7 @@
 
 #include <map>
 #include <set>
-#include <tr1/memory>
+#include "include/memory.h"
 #include "include/buffer.h"
 
 using namespace std;
@@ -343,7 +343,7 @@ namespace ceph {
     }
   };
 
-  typedef std::tr1::shared_ptr<ErasureCodeInterface> ErasureCodeInterfaceRef;
+  typedef ceph::shared_ptr<ErasureCodeInterface> ErasureCodeInterfaceRef;
 
 }
 

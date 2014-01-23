@@ -2503,7 +2503,7 @@ void MDCache::send_slave_resolves()
   } else {
     set<int> resolve_set;
     mds->mdsmap->get_mds_set(resolve_set, MDSMap::STATE_RESOLVE);
-    for (hash_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
+    for (ceph::unordered_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
 	 p != active_requests.end();
 	 ++p) {
       if (!p->second->is_slave() || !p->second->slave_did_prepare())
@@ -2657,7 +2657,7 @@ void MDCache::handle_mds_failure(int who)
 
   // clean up any requests slave to/from this node
   list<MDRequest*> finish;
-  for (hash_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
+  for (ceph::unordered_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
        p != active_requests.end();
        ++p) {
     // slave to the failed node?
@@ -3389,7 +3389,7 @@ void MDCache::trim_unlinked_inodes()
 {
   dout(7) << "trim_unlinked_inodes" << dendl;
   list<CInode*> q;
-  for (hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
+  for (ceph::unordered_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
        p != inode_map.end();
        ++p) {
     CInode *in = p->second;
@@ -3676,7 +3676,7 @@ void MDCache::rejoin_send_rejoins()
   if (!mds->is_rejoin()) {
     // i am survivor.  send strong rejoin.
     // note request remote_auth_pins, xlocks
-    for (hash_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
+    for (ceph::unordered_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
 	 p != active_requests.end();
 	 ++p) {
       if ( p->second->is_slave())
@@ -4263,7 +4263,7 @@ void MDCache::rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack,
 {
   dout(10) << "rejoin_scour_survivor_replicas from mds." << from << dendl;
 
-  for (hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
+  for (ceph::unordered_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
        p != inode_map.end();
        ++p) {
     CInode *in = p->second;
@@ -5172,7 +5172,7 @@ void MDCache::choose_lock_states_and_reconnect_caps()
 
   map<client_t,MClientSnap*> splits;
 
-  for (hash_map<vinodeno_t,CInode*>::iterator i = inode_map.begin();
+  for (ceph::unordered_map<vinodeno_t,CInode*>::iterator i = inode_map.begin();
        i != inode_map.end();
        ++i) {
     CInode *in = i->second;
@@ -5727,7 +5727,7 @@ void MDCache::reissue_all_caps()
 {
   dout(10) << "reissue_all_caps" << dendl;
 
-  for (hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
+  for (ceph::unordered_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
        p != inode_map.end();
        ++p) {
     CInode *in = p->second;
@@ -5829,7 +5829,7 @@ void MDCache::unqueue_file_recover(CInode *in)
 void MDCache::identify_files_to_recover(vector<CInode*>& recover_q, vector<CInode*>& check_q)
 {
   dout(10) << "identify_files_to_recover" << dendl;
-  for (hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
+  for (ceph::unordered_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
        p != inode_map.end();
        ++p) {
     CInode *in = p->second;
@@ -6506,9 +6506,9 @@ void MDCache::trim_non_auth()
 
   if (lru.lru_get_size() == 0) {
     // root, stray, etc.?
-    hash_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
+    ceph::unordered_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
     while (p != inode_map.end()) {
-      hash_map<vinodeno_t,CInode*>::iterator next = p;
+      ceph::unordered_map<vinodeno_t,CInode*>::iterator next = p;
       ++next;
       CInode *in = p->second;
       if (!in->is_auth()) {
@@ -8647,7 +8647,7 @@ void MDCache::kick_find_ino_peers(int who)
 int MDCache::get_num_client_requests()
 {
   int count = 0;
-  for (hash_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
+  for (ceph::unordered_map<metareqid_t, MDRequest*>::iterator p = active_requests.begin();
       p != active_requests.end();
       ++p) {
     if (p->second->reqid.name.is_client() && !p->second->is_slave())
@@ -11803,7 +11803,7 @@ void MDCache::show_cache()
 {
   dout(7) << "show_cache" << dendl;
   
-  for (hash_map<vinodeno_t,CInode*>::iterator it = inode_map.begin();
+  for (ceph::unordered_map<vinodeno_t,CInode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        ++it) {
     // unlinked?
@@ -11848,7 +11848,7 @@ void MDCache::dump_cache(const char *fn)
     return;
   }
   
-  for (hash_map<vinodeno_t,CInode*>::iterator it = inode_map.begin();
+  for (ceph::unordered_map<vinodeno_t,CInode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        ++it) {
     CInode *in = it->second;

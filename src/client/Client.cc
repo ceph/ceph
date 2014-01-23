@@ -226,7 +226,7 @@ Client::~Client()
 void Client::tear_down_cache()
 {
   // fd's
-  for (hash_map<int, Fh*>::iterator it = fd_map.begin();
+  for (ceph::unordered_map<int, Fh*>::iterator it = fd_map.begin();
        it != fd_map.end();
        ++it) {
     Fh *fh = it->second;
@@ -286,7 +286,7 @@ void Client::dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconne
   did.insert(in);
   if (in->dir) {
     ldout(cct, 1) << "  dir " << in->dir << " size " << in->dir->dentries.size() << dendl;
-    for (hash_map<string, Dentry*>::iterator it = in->dir->dentries.begin();
+    for (ceph::unordered_map<string, Dentry*>::iterator it = in->dir->dentries.begin();
          it != in->dir->dentries.end();
          ++it) {
       ldout(cct, 1) << "   " << in->ino << " dn " << it->first << " " << it->second << " ref " << it->second->ref << dendl;
@@ -314,7 +314,7 @@ void Client::dump_cache(Formatter *f)
     dump_inode(f, root, did, true);
 
   // make a second pass to catch anything disconnected
-  for (hash_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
+  for (ceph::unordered_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        ++it) {
     if (did.count(it->second))
@@ -1184,7 +1184,7 @@ int Client::verify_reply_trace(int r,
   bufferlist extra_bl;
   inodeno_t created_ino;
   bool got_created_ino = false;
-  hash_map<vinodeno_t, Inode*>::iterator p;
+  ceph::unordered_map<vinodeno_t, Inode*>::iterator p;
 
   extra_bl.claim(reply->get_extra_bl());
   if (extra_bl.length() >= 8) {
@@ -1958,8 +1958,8 @@ void Client::send_reconnect(MetaSession *session)
   MClientReconnect *m = new MClientReconnect;
 
   // i have an open session.
-  hash_set<inodeno_t> did_snaprealm;
-  for (hash_map<vinodeno_t, Inode*>::iterator p = inode_map.begin();
+  ceph::unordered_set<inodeno_t> did_snaprealm;
+  for (ceph::unordered_map<vinodeno_t, Inode*>::iterator p = inode_map.begin();
        p != inode_map.end();
        ++p) {
     Inode *in = p->second;
@@ -3859,8 +3859,8 @@ void Client::unmount()
 
   if (cct->_conf->client_oc) {
     // flush/release all buffered data
-    hash_map<vinodeno_t, Inode*>::iterator next;
-    for (hash_map<vinodeno_t, Inode*>::iterator p = inode_map.begin();
+    ceph::unordered_map<vinodeno_t, Inode*>::iterator next;
+    for (ceph::unordered_map<vinodeno_t, Inode*>::iterator p = inode_map.begin();
          p != inode_map.end(); 
          p = next) {
       next = p;
@@ -6655,8 +6655,8 @@ int Client::_ll_put(Inode *in, int num)
 void Client::_ll_drop_pins()
 {
   ldout(cct, 10) << "_ll_drop_pins" << dendl;
-  hash_map<vinodeno_t, Inode*>::iterator next;
-  for (hash_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
+  ceph::unordered_map<vinodeno_t, Inode*>::iterator next;
+  for (ceph::unordered_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
        it != inode_map.end();
        it = next) {
     Inode *in = it->second;

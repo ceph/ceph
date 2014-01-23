@@ -49,7 +49,7 @@ using ceph::crypto::SHA1;
 
 #define FILENAME_PREFIX_LEN (FILENAME_SHORT_LEN - FILENAME_HASH_LEN - (sizeof(FILENAME_COOKIE) - 1) - FILENAME_EXTRA)
 
-void FlatIndex::set_ref(std::tr1::shared_ptr<CollectionIndex> ref) {
+void FlatIndex::set_ref(ceph::shared_ptr<CollectionIndex> ref) {
   self_ref = ref;
 }
 

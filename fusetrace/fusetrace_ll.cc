@@ -33,18 +33,18 @@
 #include <time.h>
 
 
-#include <ext/hash_map>
-using namespace __gnu_cxx;
+#include "include/unordered_map.h"
+#include "include/hash_namespace.h"
 
 #ifndef __LP64__
-namespace __gnu_cxx {
+CEPH_HASH_NAMESPACE_START
   template<> struct hash<uint64_t> {
     size_t operator()(uint64_t __x) const { 
       static hash<uint32_t> H;
       return H((__x >> 32) ^ (__x & 0xffffffff)); 
     }
   };
-}
+CEPH_HASH_NAMESPACE_END
 #endif
 
 
@@ -89,7 +89,7 @@ struct Inode {
 };
 
 Inode *root = 0;
-hash_map<ino_t, Inode*> inode_map;
+ceph::unordered_map<ino_t, Inode*> inode_map;
 
 bool make_inode_path(string &buf, Inode *in)
 {

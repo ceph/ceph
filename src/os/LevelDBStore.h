@@ -9,7 +9,7 @@
 #include <set>
 #include <map>
 #include <string>
-#include <tr1/memory>
+#include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
 #include "leveldb/db.h"
 #include "leveldb/env.h"
@@ -186,7 +186,7 @@ public:
   };
 
   KeyValueDB::Transaction get_transaction() {
-    return std::tr1::shared_ptr< LevelDBTransactionImpl >(
+    return ceph::shared_ptr< LevelDBTransactionImpl >(
       new LevelDBTransactionImpl(this));
   }
 
@@ -372,7 +372,7 @@ err:
 
 protected:
   WholeSpaceIterator _get_iterator() {
-    return std::tr1::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
+    return ceph::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
       new LevelDBWholeSpaceIteratorImpl(
 	db->NewIterator(leveldb::ReadOptions())
       )
@@ -386,7 +386,7 @@ protected:
     snapshot = db->GetSnapshot();
     options.snapshot = snapshot;
 
-    return std::tr1::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
+    return ceph::shared_ptr<KeyValueDB::WholeSpaceIteratorImpl>(
       new LevelDBSnapshotIteratorImpl(db.get(), snapshot,
 	db->NewIterator(options))
     );
