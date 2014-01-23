@@ -750,6 +750,8 @@ public:
   // features
   static CompatSet get_supported_features();
   static CompatSet get_legacy_features();
+  /// read the ondisk features into the CompatSet pointed to by read_features
+  static void read_features_off_disk(MonitorDBStore *store, CompatSet *read_features);
   void read_features();
   void write_features(MonitorDBStore::Transaction &t);
 
