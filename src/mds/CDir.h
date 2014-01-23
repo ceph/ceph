@@ -531,7 +531,6 @@ public:
   // -- waiters --
 protected:
   map< string_snap_t, list<Context*> > waiting_on_dentry;
-  map< inodeno_t, list<Context*> > waiting_on_ino;
 
 public:
   bool is_waiting_for_dentry(const string& dname, snapid_t snap) {
@@ -539,13 +538,6 @@ public:
   }
   void add_dentry_waiter(const string& dentry, snapid_t snap, Context *c);
   void take_dentry_waiting(const string& dentry, snapid_t first, snapid_t last, list<Context*>& ls);
-
-  bool is_waiting_for_ino(inodeno_t ino) {
-    return waiting_on_ino.count(ino);
-  }
-  void add_ino_waiter(inodeno_t ino, Context *c);
-  void take_ino_waiting(inodeno_t ino, list<Context*>& ls);
-
   void take_sub_waiting(list<Context*>& ls);  // dentry or ino
 
   void add_waiter(uint64_t mask, Context *c);
