@@ -388,56 +388,6 @@ public:
     OpRequestRef op
     );
 
-  void rollback_setattrs(
-    const hobject_t &hoid,
-    map<string, boost::optional<bufferlist> > &old_attrs,
-    ObjectStore::Transaction *t) {
-    map<string, bufferlist> to_set;
-    set<string> to_remove;
-    for (map<string, boost::optional<bufferlist> >::iterator i = old_attrs.begin();
-	 i != old_attrs.end();
-	 ++i) {
-      if (i->second) {
-	to_set[i->first] = i->second.get();
-      } else {
-	t->rmattr(coll, hoid, i->first);
-      }
-    }
-    t->setattrs(coll, hoid, to_set);
-  }
-
-  void rollback_append(
-    const hobject_t &hoid,
-    uint64_t old_size,
-    ObjectStore::Transaction *t) {
-    t->truncate(coll, hoid, old_size);
-  }
-
-  void rollback_stash(
-    const hobject_t &hoid,
-    version_t old_version,
-    ObjectStore::Transaction *t) {
-    t->remove(coll, hoid);
-    t->collection_move_rename(
-      coll,
-      ghobject_t(hoid, old_version, 0),
-      coll,
-      hoid);
-  }
-
-  void rollback_create(
-    const hobject_t &hoid,
-    ObjectStore::Transaction *t) {
-    t->remove(coll, hoid);
-  }
-
-  void trim_stashed_object(
-    const hobject_t &hoid,
-    version_t old_version,
-    ObjectStore::Transaction *t) {
-    t->remove(coll, ghobject_t(hoid, old_version, 0));
-  }
-
 private:
   void issue_op(
     const hobject_t &soid,

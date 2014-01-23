@@ -22,6 +22,7 @@
 #include "osd_types.h"
 #include "include/Context.h"
 #include "os/ObjectStore.h"
+#include "common/LogClient.h"
 #include <string>
 
  /**
@@ -367,33 +368,33 @@
      ObjectStore::Transaction *t);
 
    /// Reapply old attributes
-   virtual void rollback_setattrs(
+   void rollback_setattrs(
      const hobject_t &hoid,
      map<string, boost::optional<bufferlist> > &old_attrs,
-     ObjectStore::Transaction *t) = 0;
+     ObjectStore::Transaction *t);
 
    /// Truncate object to rollback append
    virtual void rollback_append(
      const hobject_t &hoid,
      uint64_t old_size,
-     ObjectStore::Transaction *t) = 0;
+     ObjectStore::Transaction *t);
 
    /// Unstash object to rollback stash
-   virtual void rollback_stash(
+   void rollback_stash(
      const hobject_t &hoid,
      version_t old_version,
-     ObjectStore::Transaction *t) = 0;
+     ObjectStore::Transaction *t);
 
    /// Delete object to rollback create
-   virtual void rollback_create(
+   void rollback_create(
      const hobject_t &hoid,
-     ObjectStore::Transaction *t) = 0;
+     ObjectStore::Transaction *t);
 
    /// Trim object stashed at stashed_version
-   virtual void trim_stashed_object(
+   void trim_stashed_object(
      const hobject_t &hoid,
      version_t stashed_version,
-     ObjectStore::Transaction *t) = 0;
+     ObjectStore::Transaction *t);
 
    /// List objects in collection
    virtual int objects_list_partial(

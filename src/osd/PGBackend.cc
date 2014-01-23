@@ -14,6 +14,15 @@
 
 
 #include "PGBackend.h"
+#include "OSD.h"
+
+#define dout_subsys ceph_subsys_osd
+#define DOUT_PREFIX_ARGS this
+#undef dout_prefix
+#define dout_prefix _prefix(_dout, this)
+static ostream& _prefix(std::ostream *_dout, PGBackend *pgb) {
+  return *_dout << pgb->get_parent()->gen_dbg_prefix();
+}
 
 // -- ObjectModDesc --
 struct RollbackVisitor : public ObjectModDesc::Visitor {
@@ -64,3 +73,55 @@ void PGBackend::rollback(
 }
 
 
+void PGBackend::rollback_setattrs(
+  const hobject_t &hoid,
+  map<string, boost::optional<bufferlist> > &old_attrs,
+  ObjectStore::Transaction *t) {
+  map<string, bufferlist> to_set;
+  set<string> to_remove;
+  for (map<string, boost::optional<bufferlist> >::iterator i = old_attrs.begin();
+       i != old_attrs.end();
+       ++i) {
+    if (i->second) {
+      to_set[i->first] = i->second.get();
+    } else {
+      t->rmattr(coll, hoid, i->first);
+    }
+  }
+  t->setattrs(
+    coll,
+    ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+    to_set);
+}
+
+void PGBackend::rollback_append(
+  const hobject_t &hoid,
+  uint64_t old_size,
+  ObjectStore::Transaction *t) {
+  t->truncate(coll, hoid, old_size);
+}
+
+void PGBackend::rollback_stash(
+  const hobject_t &hoid,
+  version_t old_version,
+  ObjectStore::Transaction *t) {
+  t->remove(coll, hoid);
+  t->collection_move_rename(
+    coll,
+    ghobject_t(hoid, old_version, 0),
+    coll,
+    ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
+}
+
+void PGBackend::rollback_create(
+  const hobject_t &hoid,
+  ObjectStore::Transaction *t) {
+  t->remove(coll, hoid);
+}
+
+void PGBackend::trim_stashed_object(
+  const hobject_t &hoid,
+  version_t old_version,
+  ObjectStore::Transaction *t) {
+  t->remove(coll, ghobject_t(hoid, old_version, 0));
+}
