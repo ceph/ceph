@@ -87,16 +87,6 @@
   \tstep chooseleaf firstn 0 type root (esc)
   \tstep emit (esc)
   }
-  rule erasure_ruleset {
-  \truleset 1 (esc)
-  \ttype erasure (esc)
-  \tmin_size 3 (esc)
-  \tmax_size 20 (esc)
-  \tstep set_chooseleaf_tries 5 (esc)
-  \tstep take root (esc)
-  \tstep chooseleaf indep 0 type root (esc)
-  \tstep emit (esc)
-  }
   
   # end crush map
   $ rm "$map" "$map.txt"

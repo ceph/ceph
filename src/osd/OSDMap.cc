@@ -2081,10 +2081,7 @@ int OSDMap::build_simple_crush_rulesets(CephContext *cct,
 			       "firstn", pg_pool_t::TYPE_REPLICATED, ss);
   if (r < 0)
     return r;
-  r = crush.add_simple_ruleset("erasure_ruleset", root, failure_domain,
-				  "indep", pg_pool_t::TYPE_ERASURE, ss);
-  if (r < 0)
-    return r;
-  else
-    return 0;
+  // do not add an erasure rule by default or else we will implicitly
+  // require the crush_v2 feature of clients
+  return 0;
 }
