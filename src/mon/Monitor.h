@@ -526,6 +526,7 @@ public:
     return quorum_features;
   }
   void apply_quorum_to_compatset_features();
+  uint64_t apply_compatset_features_to_quorum_requirements();
 
 private:
   void _reset();   ///< called from bootstrap, start_, or join_election

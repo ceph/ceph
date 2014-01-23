@@ -1628,6 +1628,17 @@ void Monitor::apply_quorum_to_compatset_features()
   }
 }
 
+uint64_t Monitor::apply_compatset_features_to_quorum_requirements()
+{
+  uint64_t required_features = 0;
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES)) {
+    required_features |= CEPH_FEATURE_OSD_ERASURE_CODES;
+  }
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC)) {
+    required_features |= CEPH_FEATURE_OSDMAP_ENC;
+  }
+  return required_features;
+}
 
 void Monitor::sync_force(Formatter *f, ostream& ss)
 {
