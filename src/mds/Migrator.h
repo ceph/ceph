@@ -45,6 +45,7 @@ class MExportDirFinish;
 
 class MExportCaps;
 class MExportCapsAck;
+class MGatherCaps;
 
 class EImportStart;
 
@@ -286,6 +287,8 @@ public:
     export_freezing_dirs.erase(make_pair(start, dir));
     export_freezing_state.erase(dir);
   }
+
+  void handle_gather_caps(MGatherCaps *m);
 
   friend class C_MDC_ExportFreeze;
   friend class C_MDS_ExportFinishLogged;

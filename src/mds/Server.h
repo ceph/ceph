@@ -154,6 +154,7 @@ public:
   void handle_client_setdirlayout(MDRequest *mdr);
 
   int parse_layout_vxattr(string name, string value, ceph_file_layout *layout);
+  int parse_quota_vxattr(string name, string value, quota_info_t *quota);
   void handle_set_vxattr(MDRequest *mdr, CInode *cur,
 			 ceph_file_layout *dir_layout,
 			 set<SimpleLock*> rdlocks,

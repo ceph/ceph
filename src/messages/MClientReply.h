@@ -120,6 +120,7 @@ struct InodeStat {
 
   ceph_dir_layout dir_layout;
 
+  quota_info_t quota;
   //map<string, bufferptr> xattrs;
 
  public:
@@ -174,6 +175,11 @@ struct InodeStat {
 
     xattr_version = e.xattr_version;
     ::decode(xattrbl, p);
+
+    if (features & CEPH_FEATURE_MDS_QUOTA)
+      ::decode(quota, p);
+    else
+      memset(&quota, 0, sizeof(quota));
   }
   
   // see CInode::encode_inodestat for encoder.

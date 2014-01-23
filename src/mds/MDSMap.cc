@@ -30,6 +30,7 @@ CompatSet get_mdsmap_compat_set() {
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_DIRINODE);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_ENCODING);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_OMAPDIRFRAG);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_QUOTA);
 
   return CompatSet(feature_compat, feature_ro_compat, feature_incompat);
 }
