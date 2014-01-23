@@ -18,6 +18,7 @@
 #include "PGLog.h"
 #include "PG.h"
 #include "SnapMapper.h"
+#include "../include/unordered_map.h"
 
 #define dout_subsys ceph_subsys_osd
 
@@ -183,7 +184,7 @@ void PGLog::proc_replica_log(ObjectStore::Transaction& t,
       break;
     }
 
-    hash_map<hobject_t, pg_log_entry_t*>::const_iterator i =
+    ceph::unordered_map<hobject_t, pg_log_entry_t*>::const_iterator i =
       log.objects.find(oe.soid);
     if (i != log.objects.end() && i->second->version == oe.version) {
       dout(10) << " had " << oe << " new " << *(i->second)
@@ -253,7 +254,7 @@ bool PGLog::_merge_old_entry(
 	     << " : beyond last_backfill" << dendl;
     return false;
   }
-  hash_map<hobject_t, pg_log_entry_t*>::const_iterator objiter =
+  ceph::unordered_map<hobject_t, pg_log_entry_t*>::const_iterator objiter =
     log.objects.find(oe.soid);
   if (objiter != log.objects.end()) {
     pg_log_entry_t &ne = *(objiter->second); // new(er?) entry
