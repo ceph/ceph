@@ -1534,14 +1534,14 @@ void RGWListMultipart_ObjStore_S3::send_response()
     s->formatter->dump_string("UploadId", upload_id);
     s->formatter->dump_string("StorageClass", "STANDARD");
     s->formatter->dump_int("PartNumberMarker", marker);
-    s->formatter->dump_int("NextPartNumberMarker", cur_max + 1);
+    s->formatter->dump_int("NextPartNumberMarker", cur_max);
     s->formatter->dump_int("MaxParts", max_parts);
     s->formatter->dump_string("IsTruncated", (test_iter == parts.end() ? "false" : "true"));
 
     ACLOwner& owner = policy.get_owner();
     dump_owner(s, owner.get_id(), owner.get_display_name());
 
-    for (; iter != parts.end(); ++iter) {
+    for (i = 0; iter != parts.end() && i < max_parts; ++iter, ++i) {
       RGWUploadPartInfo& info = iter->second;
 
       time_t sec = info.modified.sec();
