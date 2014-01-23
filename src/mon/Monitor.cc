@@ -322,25 +322,7 @@ int Monitor::check_features(MonitorDBStore *store)
   CompatSet required = get_supported_features();
   CompatSet ondisk;
 
-  bufferlist features;
-  store->get(MONITOR_NAME, COMPAT_SET_LOC, features);
-  if (features.length() == 0) {
-    generic_dout(0) << "WARNING: mon fs missing feature list.\n"
-	    << "Assuming it is old-style and introducing one." << dendl;
-    //we only want the baseline ~v.18 features assumed to be on disk.
-    //If new features are introduced this code needs to disappear or
-    //be made smarter.
-    ondisk = get_legacy_features();
-
-    bufferlist bl;
-    ondisk.encode(bl);
-    MonitorDBStore::Transaction t;
-    t.put(MONITOR_NAME, COMPAT_SET_LOC, bl);
-    store->apply_transaction(t);
-  } else {
-    bufferlist::iterator it = features.begin();
-    ondisk.decode(it);
-  }
+  read_features_off_disk(store, &ondisk);
 
   if (!required.writeable(ondisk)) {
     CompatSet diff = required.unsupported(ondisk);
@@ -351,14 +333,32 @@ int Monitor::check_features(MonitorDBStore *store)
   return 0;
 }
 
+void Monitor::read_features_off_disk(MonitorDBStore *store, CompatSet *features)
+{
+  bufferlist featuresbl;
+  store->get(MONITOR_NAME, COMPAT_SET_LOC, featuresbl);
+  if (featuresbl.length() == 0) {
+    generic_dout(0) << "WARNING: mon fs missing feature list.\n"
+            << "Assuming it is old-style and introducing one." << dendl;
+    //we only want the baseline ~v.18 features assumed to be on disk.
+    //If new features are introduced this code needs to disappear or
+    //be made smarter.
+    *features = get_legacy_features();
+
+    bufferlist bl;
+    features->encode(bl);
+    MonitorDBStore::Transaction t;
+    t.put(MONITOR_NAME, COMPAT_SET_LOC, bl);
+    store->apply_transaction(t);
+  } else {
+    bufferlist::iterator it = featuresbl.begin();
+    features->decode(it);
+  }
+}
+
 void Monitor::read_features()
 {
-  bufferlist bl;
-  store->get(MONITOR_NAME, COMPAT_SET_LOC, bl);
-  assert(bl.length());
-
-  bufferlist::iterator p = bl.begin();
-  ::decode(features, p);
+  read_features_off_disk(store, &features);
   dout(10) << "features " << features << dendl;
 }
 
