@@ -1105,27 +1105,6 @@ void CDir::take_dentry_waiting(const string& dname, snapid_t first, snapid_t las
     put(PIN_DNWAITER);
 }
 
-void CDir::add_ino_waiter(inodeno_t ino, Context *c) 
-{
-  if (waiting_on_ino.empty())
-    get(PIN_INOWAITER);
-  waiting_on_ino[ino].push_back(c);
-  dout(10) << "add_ino_waiter ino " << ino << " " << c << " on " << *this << dendl;
-}
-
-void CDir::take_ino_waiting(inodeno_t ino, list<Context*>& ls)
-{
-  if (waiting_on_ino.empty()) return;
-  if (waiting_on_ino.count(ino) == 0) return;
-  dout(10) << "take_ino_waiting ino " << ino
-	   << " x " << waiting_on_ino[ino].size() 
-	   << " on " << *this << dendl;
-  ls.splice(ls.end(), waiting_on_ino[ino]);
-  waiting_on_ino.erase(ino);
-  if (waiting_on_ino.empty())
-    put(PIN_INOWAITER);
-}
-
 void CDir::take_sub_waiting(list<Context*>& ls)
 {
   dout(10) << "take_sub_waiting" << dendl;
@@ -1136,14 +1115,6 @@ void CDir::take_sub_waiting(list<Context*>& ls)
       ls.splice(ls.end(), p->second);
     waiting_on_dentry.clear();
     put(PIN_DNWAITER);
-  }
-  if (!waiting_on_ino.empty()) {
-    for (map<inodeno_t, list<Context*> >::iterator p = waiting_on_ino.begin(); 
-	 p != waiting_on_ino.end();
-	 ++p) 
-      ls.splice(ls.end(), p->second);
-    waiting_on_ino.clear();
-    put(PIN_INOWAITER);
   }
 }
 
