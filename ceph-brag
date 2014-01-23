@@ -167,8 +167,9 @@ def get_sysinfo():
     hw_info['mem_kb'] = int(jmeta['mem_total_kb'])
     hw_info['swap_kb'] = int(jmeta['mem_swap_kb'])
     meta['hw_info'] = hw_info
-
-  return meta
+  
+  sysinfo.append(meta)
+  return sysinfo
 
 def get_osd_hosts():
   locs = []
@@ -208,9 +209,9 @@ def get_ownership_info():
   (rc, o, e) = run_command(['ceph', 'config-key', 'get', 
                             CLUSTER_OWNERSHIP_NAME])
   if rc is not 0:
-    return None
+    return {}
 
-  return o
+  return ast.literal_eval(o)
 
 def output_json():
   out = {}
@@ -238,6 +239,7 @@ def describe_usage():
   print >> sys.stderr, "update-metadata <update-metadata-options> - Update"
   print >> sys.stderr, "         ownership information for bragging"
   print >> sys.stderr, "clear-metadata - Clear information set by update-metadata"
+  print >> sys.stderr, "unpublish --yes-i-am-shy - delete the brag report from the server"
   print >> sys.stderr, ""
 
   print >> sys.stderr, "update-metadata options:"
@@ -252,10 +254,8 @@ def update_metadata():
   possibles = ['name', 'organization', 'email', 'description']
 
   #get the existing values
-  o = get_ownership_info();
-  if o:
-    info = ast.literal_eval(o)
-  
+  info = get_ownership_info();
+   
   for index in range(2, len(sys.argv)):
     mo = re.search("--(\S+)=(.*)", sys.argv[index])
     if not mo:
@@ -290,8 +290,15 @@ def main():
   elif sys.argv[1] == 'clear-metadata':
     return clear_metadata()
   elif sys.argv[1] == 'publish':
-    #post this data to the server. TODO
     data = output_json()
+    #TODO: post this data to the server
+    return 0
+  elif sys.argv[1] == 'unpublish':
+    if len(sys.argv) <= 2 or sys.argv[2] != '--yes-i-am-shy':
+      print >> sys.stderr, "unpublish should be followed by --yes-i-am-shy"
+      return 22
+
+    #TODO: delete this data from the server
     return 0
   else:
     describe_usage()
