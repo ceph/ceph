@@ -740,6 +740,20 @@ public:
 
   map<pg_shard_t, pg_info_t>::const_iterator find_best_info(
     const map<pg_shard_t, pg_info_t> &infos) const;
+  static void calc_ec_acting(
+    map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
+    unsigned size,
+    const vector<int> &acting,
+    pg_shard_t acting_primary,
+    const vector<int> &up,
+    pg_shard_t up_primary,
+    const map<pg_shard_t, pg_info_t> &all_info,
+    bool compat_mode,
+    vector<int> *want,
+    set<pg_shard_t> *backfill,
+    set<pg_shard_t> *acting_backfill,
+    pg_shard_t *want_primary,
+    ostream &ss);
   static void calc_replicated_acting(
     map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
     unsigned size,
