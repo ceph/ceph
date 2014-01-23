@@ -833,7 +833,7 @@ map<int, pg_info_t>::const_iterator PG::find_best_info(const map<int, pg_info_t>
       continue;
     }
     // Prefer newer last_update
-    if (pool.info.ec_pool()) {
+    if (pool.info.require_rollback()) {
       if (p->second.last_update > best->second.last_update)
 	continue;
       if (p->second.last_update < best->second.last_update) {

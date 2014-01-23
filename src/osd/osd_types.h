@@ -871,7 +871,10 @@ public:
 
   /// This method will later return true for ec pools as well
   bool ec_pool() const {
-    return flags & FLAG_DEBUG_FAKE_EC_POOL;
+    return type == TYPE_ERASURE;
+  }
+  bool require_rollback() const {
+    return ec_pool() || flags & FLAG_DEBUG_FAKE_EC_POOL;
   }
 
   unsigned get_type() const { return type; }
