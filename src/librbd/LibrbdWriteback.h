@@ -55,7 +55,7 @@ namespace librbd {
     tid_t m_tid;
     Mutex& m_lock;
     librbd::ImageCtx *m_ictx;
-    hash_map<std::string, std::queue<write_result_d*> > m_writes;
+    ceph::unordered_map<std::string, std::queue<write_result_d*> > m_writes;
     friend class C_OrderedWrite;
   };
 }

@@ -19,7 +19,7 @@
 #include <map>
 #include <set>
 #include <vector>
-#include <tr1/memory>
+#include "include/memory.h"
 
 #include "CollectionIndex.h"
 
@@ -29,7 +29,7 @@
  * This class should only be used for converting old filestores.
  */
 class FlatIndex : public CollectionIndex {
-  std::tr1::weak_ptr<CollectionIndex> self_ref;
+  ceph::weak_ptr<CollectionIndex> self_ref;
   string base_path;
   coll_t collection;
 public:
@@ -42,7 +42,7 @@ public:
   coll_t coll() const { return collection; }
 
   /// @see CollectionIndex
-  void set_ref(std::tr1::shared_ptr<CollectionIndex> ref);
+  void set_ref(ceph::shared_ptr<CollectionIndex> ref);
 
   /// @see CollectionIndex
   int cleanup();

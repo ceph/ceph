@@ -322,7 +322,7 @@ class MonitorDBStore
     virtual void get_chunk_tx(Transaction &tx, uint64_t max) = 0;
     virtual pair<string,string> get_next_key() = 0;
   };
-  typedef std::tr1::shared_ptr<StoreIteratorImpl> Synchronizer;
+  typedef ceph::shared_ptr<StoreIteratorImpl> Synchronizer;
 
   class WholeStoreIteratorImpl : public StoreIteratorImpl {
     KeyValueDB::WholeSpaceIterator iter;
@@ -389,7 +389,7 @@ class MonitorDBStore
     else
       iter->seek_to_first();
 
-    return std::tr1::shared_ptr<StoreIteratorImpl>(
+    return ceph::shared_ptr<StoreIteratorImpl>(
 	new WholeStoreIteratorImpl(iter, prefixes)
     );
   }

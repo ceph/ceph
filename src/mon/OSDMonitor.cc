@@ -336,10 +336,10 @@ bool OSDMonitor::thrash()
   }
 
   // generate some pg_temp entries.
-  // let's assume the hash_map iterates in a random-ish order.
+  // let's assume the ceph::unordered_map iterates in a random-ish order.
   int n = rand() % mon->pgmon()->pg_map.pg_stat.size();
-  hash_map<pg_t,pg_stat_t>::iterator p = mon->pgmon()->pg_map.pg_stat.begin();
-  hash_map<pg_t,pg_stat_t>::iterator e = mon->pgmon()->pg_map.pg_stat.end();
+  ceph::unordered_map<pg_t,pg_stat_t>::iterator p = mon->pgmon()->pg_map.pg_stat.begin();
+  ceph::unordered_map<pg_t,pg_stat_t>::iterator e = mon->pgmon()->pg_map.pg_stat.end();
   while (n--)
     ++p;
   for (int i=0; i<50; i++) {
@@ -465,7 +465,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str)
   std::string sep;
   oss << "overloaded osds: ";
   bool changed = false;
-  for (hash_map<int,osd_stat_t>::const_iterator p = pgm.osd_stat.begin();
+  for (ceph::unordered_map<int,osd_stat_t>::const_iterator p = pgm.osd_stat.begin();
        p != pgm.osd_stat.end();
        ++p) {
     float util = p->second.kb_used;
@@ -1816,7 +1816,7 @@ void OSDMonitor::tick()
   }
 
   // expire blacklisted items?
-  for (hash_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
+  for (ceph::unordered_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
        p != osdmap.blacklist.end();
        ++p) {
     if (p->second < now) {
@@ -2299,7 +2299,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     if (f)
       f->open_array_section("blacklist");
 
-    for (hash_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
+    for (ceph::unordered_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
 	 p != osdmap.blacklist.end();
 	 ++p) {
       if (f) {

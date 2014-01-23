@@ -1014,12 +1014,12 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
 
   utime_t start = ceph_clock_now(client->cct);
 
-  hash_map<int64_t, int64_t> open_files;
-  hash_map<int64_t, dir_result_t*>    open_dirs;
+  ceph::unordered_map<int64_t, int64_t> open_files;
+  ceph::unordered_map<int64_t, dir_result_t*>    open_dirs;
 
-  hash_map<int64_t, Fh*> ll_files;
-  hash_map<int64_t, void*> ll_dirs;
-  hash_map<uint64_t, int64_t> ll_inos;
+  ceph::unordered_map<int64_t, Fh*> ll_files;
+  ceph::unordered_map<int64_t, void*> ll_dirs;
+  ceph::unordered_map<uint64_t, int64_t> ll_inos;
 
   ll_inos[1] = 1; // root inode is known.
 
@@ -1479,25 +1479,25 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   lock.Unlock();
 
   // close open files
-  for (hash_map<int64_t, int64_t>::iterator fi = open_files.begin();
+  for (ceph::unordered_map<int64_t, int64_t>::iterator fi = open_files.begin();
        fi != open_files.end();
        ++fi) {
     dout(1) << "leftover close " << fi->second << dendl;
     if (fi->second > 0) client->close(fi->second);
   }
-  for (hash_map<int64_t, dir_result_t*>::iterator fi = open_dirs.begin();
+  for (ceph::unordered_map<int64_t, dir_result_t*>::iterator fi = open_dirs.begin();
        fi != open_dirs.end();
        ++fi) {
     dout(1) << "leftover closedir " << fi->second << dendl;
     if (fi->second != 0) client->closedir(fi->second);
   }
-  for (hash_map<int64_t,Fh*>::iterator fi = ll_files.begin();
+  for (ceph::unordered_map<int64_t,Fh*>::iterator fi = ll_files.begin();
        fi != ll_files.end();
        ++fi) {
     dout(1) << "leftover ll_release " << fi->second << dendl;
     if (fi->second) client->ll_release(fi->second);
   }
-  for (hash_map<int64_t,void*>::iterator fi = ll_dirs.begin();
+  for (ceph::unordered_map<int64_t,void*>::iterator fi = ll_dirs.begin();
        fi != ll_dirs.end();
        ++fi) {
     dout(1) << "leftover ll_releasedir " << fi->second << dendl;
@@ -1559,8 +1559,8 @@ int SyntheticClient::full_walk(string& basedir)
   memset(&empty, 0, sizeof(empty));
   statq.push_back(empty);
 
-  hash_map<inodeno_t, int> nlink;
-  hash_map<inodeno_t, int> nlink_seen;
+  ceph::unordered_map<inodeno_t, int> nlink;
+  ceph::unordered_map<inodeno_t, int> nlink_seen;
 
   while (!dirq.empty()) {
     string dir = dirq.front();
@@ -1638,7 +1638,7 @@ int SyntheticClient::full_walk(string& basedir)
     }
   }
 
-  for (hash_map<inodeno_t,int>::iterator p = nlink.begin(); p != nlink.end(); ++p) {
+  for (ceph::unordered_map<inodeno_t,int>::iterator p = nlink.begin(); p != nlink.end(); ++p) {
     if (nlink_seen[p->first] != p->second)
       dout(0) << p->first << " nlink " << p->second << " != " << nlink_seen[p->first] << "seen" << dendl;
   }

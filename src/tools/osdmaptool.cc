@@ -280,7 +280,7 @@ int main(int argc, const char **argv)
     while (1) {
       cout << "pass " << ++pass << std::endl;
 
-      hash_map<pg_t,vector<int> > m;
+      ceph::unordered_map<pg_t,vector<int> > m;
       for (map<int64_t,pg_pool_t>::const_iterator p = osdmap.get_pools().begin();
 	   p != osdmap.get_pools().end();
 	   ++p) {

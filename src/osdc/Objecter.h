@@ -32,7 +32,6 @@
 #include <memory>
 #include <sstream>
 using namespace std;
-using namespace __gnu_cxx;
 
 class Context;
 class Messenger;

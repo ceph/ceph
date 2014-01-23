@@ -339,7 +339,7 @@ class ObjectCacher {
   flush_set_callback_t flush_set_callback;
   void *flush_set_callback_arg;
 
-  vector<hash_map<sobject_t, Object*> > objects; // indexed by pool_id
+  vector<ceph::unordered_map<sobject_t, Object*> > objects; // indexed by pool_id
 
   tid_t last_read_tid;
 
