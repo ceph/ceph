@@ -44,7 +44,9 @@
 #define CEPH_FEATURE_EXPORT_PEER   (1ULL<<37)
 #define CEPH_FEATURE_OSD_ERASURE_CODES (1ULL<<38)
 #define CEPH_FEATURE_OSD_TMAP2OMAP (1ULL<<38)   /* overlap with EC */
-#define CEPH_FEATURE_OSDMAP_ENC    (1ULL<<39) /* supports new-style OSDMap encoding */
+/* The process supports new-style OSDMap encoding. Monitors also use
+   this bit to determine if peers support NAK messages. */
+#define CEPH_FEATURE_OSDMAP_ENC    (1ULL<<39)
 
 /*
  * The introduction of CEPH_FEATURE_OSD_SNAPMAPPER caused the feature
