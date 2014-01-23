@@ -413,6 +413,7 @@ protected:
   set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
   map<int,map<inodeno_t,map<client_t,Capability::Import> > > rejoin_imported_caps;
   map<inodeno_t,pair<int,map<client_t,Capability::Export> > > rejoin_slave_exports;
+  map<client_t,entity_inst_t> rejoin_client_map;
 
   map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> > cap_exports; // ino -> client -> capex
   map<inodeno_t,int> cap_export_targets; // ino -> auth mds
@@ -490,7 +491,10 @@ public:
   }
 
   friend class C_MDC_RejoinOpenInoFinish;
+  friend class C_MDC_RejoinSessionsOpened;
   void rejoin_open_ino_finish(inodeno_t ino, int ret);
+  void rejoin_open_sessions_finish(map<client_t,entity_inst_t> client_map,
+				   map<client_t,uint64_t>& sseqmap);
   bool process_imported_caps();
   void choose_lock_states_and_reconnect_caps();
   void prepare_realm_split(SnapRealm *realm, client_t client, inodeno_t ino,

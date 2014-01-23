@@ -168,6 +168,7 @@ class MMDSCacheRejoin : public Message {
 
   // open
   map<inodeno_t,map<client_t, ceph_mds_cap_reconnect> > cap_exports;
+  map<client_t, entity_inst_t> client_map;
   bufferlist imported_caps;
 
   // full
@@ -298,6 +299,7 @@ public:
     ::encode(xlocked_inodes, payload);
     ::encode(wrlocked_inodes, payload);
     ::encode(cap_exports, payload);
+    ::encode(client_map, payload);
     ::encode(imported_caps, payload);
     ::encode(strong_dirfrags, payload);
     ::encode(dirfrag_bases, payload);
@@ -320,6 +322,7 @@ public:
     ::decode(xlocked_inodes, p);
     ::decode(wrlocked_inodes, p);
     ::decode(cap_exports, p);
+    ::decode(client_map, p);
     ::decode(imported_caps, p);
     ::decode(strong_dirfrags, p);
     ::decode(dirfrag_bases, p);
