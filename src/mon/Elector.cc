@@ -75,6 +75,7 @@ void Elector::start()
 
   acked_me.clear();
   classic_mons.clear();
+  required_features = mon->apply_compatset_features_to_quorum_requirements();
   init();
   
   // start by trying to elect me
@@ -210,10 +211,14 @@ void Elector::handle_propose(MMonElection *m)
   int from = m->get_source().num();
 
   assert(m->epoch % 2 == 1); // election
-  if (m->epoch > epoch) {
+  if ((required_features ^ m->get_connection()->get_features()) &
+      required_features) {
+    dout(5) << " ignoring propose from mon without required features" << dendl;
+    m->put();
+    return;
+  } else if (m->epoch > epoch) {
     bump_epoch(m->epoch);
-  }
-  else if (m->epoch < epoch) {
+  } else if (m->epoch < epoch) {
     // got an "old" propose,
     if (epoch % 2 == 0 &&    // in a non-election cycle
 	mon->quorum.count(from) == 0) {  // from someone outside the quorum
