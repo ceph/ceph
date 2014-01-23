@@ -303,6 +303,8 @@ CompatSet Monitor::get_supported_features()
   CompatSet::FeatureSet ceph_mon_feature_incompat;
   ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_BASE);
   ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_SINGLE_PAXOS);
+  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES);
+  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC);
   return CompatSet(ceph_mon_feature_compat, ceph_mon_feature_ro_compat,
 		   ceph_mon_feature_incompat);
 }
@@ -1588,6 +1590,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features
 
 void Monitor::finish_election()
 {
+  apply_quorum_to_compatset_features();
   timecheck_finish();
   exited_quorum = utime_t();
   finish_contexts(g_ceph_context, waitfor_quorum);
@@ -1602,6 +1605,26 @@ void Monitor::finish_election()
     dout(10) << " renaming myself from " << cur_name << " -> " << name << dendl;
     messenger->send_message(new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
 			    monmap->get_inst(*quorum.begin()));
+  }
+}
+
+void Monitor::apply_quorum_to_compatset_features()
+{
+  CompatSet new_features(features);
+  if (quorum_features & CEPH_FEATURE_OSD_ERASURE_CODES) {
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES);
+  }
+  if (quorum_features & CEPH_FEATURE_OSDMAP_ENC) {
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC);
+  }
+
+  if (new_features.compare(features) != 0) {
+    CompatSet diff = features.unsupported(new_features);
+    dout(1) << "Enabling new quorum features: " << diff << dendl;
+    features = new_features;
+    MonitorDBStore::Transaction t;
+    write_features(t);
+    store->apply_transaction(t);
   }
 }
 
