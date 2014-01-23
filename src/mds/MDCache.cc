@@ -9519,8 +9519,8 @@ void MDCache::migrate_stray(CDentry *dn, int to)
 
 void MDCache::_send_discover(discover_info_t& d)
 {
-  MDiscover *dis = new MDiscover(d.ino, d.frag, d.snap,
-				 d.want_path, d.want_ino, d.want_base_dir, d.want_xlocked);
+  MDiscover *dis = new MDiscover(d.ino, d.frag, d.snap, d.want_path,
+				 d.want_base_dir, d.want_xlocked);
   dis->set_tid(d.tid);
   mds->send_message_mds(dis, d.mds);
 }
@@ -9675,58 +9675,6 @@ void MDCache::discover_path(CDir *base,
     base->add_dentry_waiter(want_path[0], snap, onfinish);
 }
 
-struct C_MDC_RetryDiscoverIno : public Context {
-  MDCache *mdc;
-  CDir *base;
-  inodeno_t want_ino;
-  C_MDC_RetryDiscoverIno(MDCache *c, CDir *b, inodeno_t i) :
-    mdc(c), base(b), want_ino(i) {}
-  void finish(int r) {
-    mdc->discover_ino(base, want_ino, 0);
-  }
-};
-
-void MDCache::discover_ino(CDir *base,
-			   inodeno_t want_ino,
-			   Context *onfinish,
-			   bool want_xlocked)
-{
-  int from = base->authority().first;
-
-  dout(7) << "discover_ino " << base->dirfrag() << " " << want_ino << " from mds." << from
-	  << (want_xlocked ? " want_xlocked":"")
-	  << dendl;
-  
-  if (base->is_ambiguous_auth()) {
-    dout(10) << " waiting for single auth on " << *base << dendl;
-    if (!onfinish)
-      onfinish = new C_MDC_RetryDiscoverIno(this, base, want_ino);
-    base->add_waiter(CDir::WAIT_SINGLEAUTH, onfinish);
-    return;
-  } else if (from == mds->get_nodeid()) {
-    list<Context*> finished;
-    base->take_sub_waiting(finished);
-    mds->queue_waiters(finished);
-    return;
-  }
-
-  if (want_xlocked || !base->is_waiting_for_ino(want_ino) || !onfinish) {
-    discover_info_t& d = _create_discover(from);
-    d.ino = base->ino();
-    d.frag = base->get_frag();
-    d.want_ino = want_ino;
-    d.want_base_dir = false;
-    d.want_xlocked = want_xlocked;
-    _send_discover(d);
-  }
-
-  // register + wait
-  if (onfinish)
-    base->add_ino_waiter(want_ino, onfinish);
-}
-
-
-
 void MDCache::kick_discovers(int who)
 {
   for (map<ceph_tid_t,discover_info_t>::iterator p = discovers.begin();
@@ -9835,7 +9783,7 @@ void MDCache::handle_discover(MDiscover *dis)
       fg = cur->pick_dirfrag(dis->get_dentry(i));
     } else {
       // requester explicity specified the frag
-      assert(dis->wants_base_dir() || dis->get_want_ino() || MDS_INO_IS_BASE(dis->get_base_ino()));
+      assert(dis->wants_base_dir() || MDS_INO_IS_BASE(dis->get_base_ino()));
       fg = dis->get_base_dir_frag();
       if (!cur->dirfragtree.is_leaf(fg))
 	fg = cur->dirfragtree[fg.value()];
@@ -9925,18 +9873,6 @@ void MDCache::handle_discover(MDiscover *dis)
     CDentry *dn = 0;
     if (curdir->get_version() == 0) {
       // fetch newly opened dir
-    } else if  (dis->get_want_ino()) {
-      // lookup by ino
-      CInode *in = get_inode(dis->get_want_ino(), snapid);
-      if (in && in->is_auth() && in->get_parent_dn()->get_dir() == curdir) {
-	dn = in->get_parent_dn();
-	if (dn->state_test(CDentry::STATE_PURGING)) {
-	  // set error flag in reply
-	  dout(7) << "dentry " << *dn << " is purging, flagging error ino" << dendl;
-	  reply->set_flag_error_ino();
-	  break;
-	}
-      }
     } else if (dis->get_want().depth() > 0) {
       // lookup dentry
       dn = curdir->lookup(dis->get_dentry(i), snapid);
@@ -9959,15 +9895,6 @@ void MDCache::handle_discover(MDiscover *dis)
 	  curdir->fetch(0);
 	  break;
 	}
-      }
-      
-      // don't have wanted ino in this dir?
-      if (dis->get_want_ino()) {
-	// set error flag in reply
-	dout(7) << "no ino " << dis->get_want_ino() << " in this dir, flagging error in "
-		<< *curdir << dendl;
-	reply->set_flag_error_ino();
-	break;
       }
 
       // send null dentry
@@ -10056,8 +9983,6 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     dout(7) << " flag error, dir" << dendl;
   if (m->is_flag_error_dn()) 
     dout(7) << " flag error, dentry = " << m->get_error_dentry() << dendl;
-  if (m->is_flag_error_ino()) 
-    dout(7) << " flag error, ino = " << m->get_wanted_ino() << dendl;
 
   list<Context*> finished, error;
   int from = m->get_source().num();
@@ -10077,19 +10002,6 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
     } else {
       dout(10) << " tid " << m->get_tid() << " not found, must be dup reply" << dendl;
     }
-  }
-
-  // discover ino error
-  if (p.end() && m->is_flag_error_ino()) {
-    assert(cur);
-    assert(cur->is_dir());
-    CDir *dir = cur->get_dirfrag(m->get_base_dir_frag());
-    if (dir) {
-      dout(7) << " flag_error on ino " << m->get_wanted_ino()
-	      << ", triggering ino" << dendl;
-      dir->take_ino_waiting(m->get_wanted_ino(), error);
-    } else
-      assert(0);
   }
 
   // discover may start with an inode
@@ -10186,14 +10098,6 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
       } else
 	dout(7) << " doing nothing, have dir but nobody is waiting on dentry "
 		<< m->get_error_dentry() << dendl;
-    } else {
-      if (dir && m->get_wanted_ino() && dir->is_waiting_for_ino(m->get_wanted_ino())) {
-	if (dir->is_auth() || get_inode(m->get_wanted_ino()))
-	  dir->take_ino_waiting(m->get_wanted_ino(), finished);
-	else
-	  discover_ino(dir, m->get_wanted_ino(), 0, m->get_wanted_xlocked());
-      } else
-	dout(7) << " doing nothing, nobody is waiting for ino" << dendl;
     }
   }
 
@@ -10319,8 +10223,6 @@ CInode *MDCache::add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<Co
   if (dn) {
     if (!dn->get_linkage()->is_primary() || dn->get_linkage()->get_inode() != in)
       dout(10) << "add_replica_inode different linkage in dentry " << *dn << dendl;
-    
-    dn->get_dir()->take_ino_waiting(in->ino(), finished);
   }
   
   return in;

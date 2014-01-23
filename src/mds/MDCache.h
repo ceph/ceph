@@ -137,7 +137,6 @@ public:
     frag_t frag;
     snapid_t snap;
     filepath want_path;
-    inodeno_t want_ino;
     bool want_base_dir;
     bool want_xlocked;
 
@@ -166,9 +165,6 @@ public:
 		     bool want_xlocked=false, int from=-1);
   void discover_path(CDir *base, snapid_t snap, filepath want_path, Context *onfinish,
 		     bool want_xlocked=false);
-  void discover_ino(CDir *base, inodeno_t want_ino, Context *onfinish,
-		    bool want_xlocked=false);
-
   void kick_discovers(int who);  // after a failure.
 
 
