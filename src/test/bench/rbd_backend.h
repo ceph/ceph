@@ -8,9 +8,9 @@
 #include "include/rbd/librbd.hpp"
 
 class RBDBackend : public Backend {
-  map<string, std::tr1::shared_ptr<librbd::Image> > *m_images;
+  map<string, ceph::shared_ptr<librbd::Image> > *m_images;
 public:
-  RBDBackend(map<string, std::tr1::shared_ptr<librbd::Image> > *images)
+  RBDBackend(map<string, ceph::shared_ptr<librbd::Image> > *images)
     : m_images(images) {}
   void write(
     const string &oid,

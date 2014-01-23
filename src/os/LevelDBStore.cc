@@ -5,7 +5,7 @@
 #include <set>
 #include <map>
 #include <string>
-#include <tr1/memory>
+#include "include/memory.h"
 #include <errno.h>
 using std::string;
 #include "common/perf_counters.h"

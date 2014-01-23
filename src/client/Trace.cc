@@ -19,7 +19,6 @@
 
 #include <iostream>
 #include <map>
-using namespace __gnu_cxx;
 
 #include "common/Mutex.h"
 

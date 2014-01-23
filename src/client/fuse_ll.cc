@@ -81,8 +81,8 @@ public:
 
   Mutex stag_lock;
   int last_stag;
-  hash_map<uint64_t,int> snap_stag_map;
-  hash_map<int,uint64_t> stag_snap_map;
+  ceph::unordered_map<uint64_t,int> snap_stag_map;
+  ceph::unordered_map<int,uint64_t> stag_snap_map;
 
 };
 

@@ -38,11 +38,10 @@
 #include <list>
 #include <set>
 #include <map>
-#include <tr1/memory>
+#include "include/memory.h"
 using namespace std;
 
-#include <ext/hash_set>
-using __gnu_cxx::hash_set;
+#include "include/unordered_set.h"
 
 /*
  * we track up to two intervals during which the osd was alive and
@@ -193,34 +192,34 @@ private:
   vector<uint8_t> osd_state;
 
   struct addrs_s {
-    vector<std::tr1::shared_ptr<entity_addr_t> > client_addr;
-    vector<std::tr1::shared_ptr<entity_addr_t> > cluster_addr;
-    vector<std::tr1::shared_ptr<entity_addr_t> > hb_back_addr;
-    vector<std::tr1::shared_ptr<entity_addr_t> > hb_front_addr;
+    vector<ceph::shared_ptr<entity_addr_t> > client_addr;
+    vector<ceph::shared_ptr<entity_addr_t> > cluster_addr;
+    vector<ceph::shared_ptr<entity_addr_t> > hb_back_addr;
+    vector<ceph::shared_ptr<entity_addr_t> > hb_front_addr;
     entity_addr_t blank;
   };
-  std::tr1::shared_ptr<addrs_s> osd_addrs;
+  ceph::shared_ptr<addrs_s> osd_addrs;
 
   vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
   vector<osd_info_t> osd_info;
-  std::tr1::shared_ptr< map<pg_t,vector<int> > > pg_temp;  // temp pg mapping (e.g. while we rebuild)
-  std::tr1::shared_ptr< map<pg_t,int > > primary_temp;  // temp primary mapping (e.g. while we rebuild)
+  ceph::shared_ptr< map<pg_t,vector<int> > > pg_temp;  // temp pg mapping (e.g. while we rebuild)
+  ceph::shared_ptr< map<pg_t,int > > primary_temp;  // temp primary mapping (e.g. while we rebuild)
 
   map<int64_t,pg_pool_t> pools;
   map<int64_t,string> pool_name;
   map<string,int64_t> name_pool;
 
-  std::tr1::shared_ptr< vector<uuid_d> > osd_uuid;
+  ceph::shared_ptr< vector<uuid_d> > osd_uuid;
   vector<osd_xinfo_t> osd_xinfo;
 
-  hash_map<entity_addr_t,utime_t> blacklist;
+  ceph::unordered_map<entity_addr_t,utime_t> blacklist;
 
   epoch_t cluster_snapshot_epoch;
   string cluster_snapshot;
   bool new_blacklist_entries;
 
  public:
-  std::tr1::shared_ptr<CrushWrapper> crush;       // hierarchical map
+  ceph::shared_ptr<CrushWrapper> crush;       // hierarchical map
 
   friend class OSDMonitor;
   friend class PGMonitor;
@@ -706,7 +705,7 @@ public:
 WRITE_CLASS_ENCODER_FEATURES(OSDMap)
 WRITE_CLASS_ENCODER_FEATURES(OSDMap::Incremental)
 
-typedef std::tr1::shared_ptr<const OSDMap> OSDMapRef;
+typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
 inline ostream& operator<<(ostream& out, const OSDMap& m) {
   m.print_oneline_summary(out);
