@@ -27,18 +27,7 @@ class ReplicatedBackend : public PGBackend {
     map<int, vector<PullOp> > pulls;
   };
   friend struct C_ReplicatedBackend_OnPullComplete;
-private:
-  bool temp_created;
-  const coll_t temp_coll;
-  coll_t get_temp_coll() const {
-    return temp_coll;
-  }
-  bool have_temp_coll() const { return temp_created; }
-
-  // Track contents of temp collection, clear on reset
-  set<hobject_t> temp_contents;
 public:
-  coll_t coll;
   OSDService *osd;
   CephContext *cct;
 
@@ -76,29 +65,9 @@ public:
     OpRequestRef op
     );
 
-  void on_change(ObjectStore::Transaction *t);
+  void _on_change(ObjectStore::Transaction *t);
   void clear_state();
   void on_flushed();
-
-  void temp_colls(list<coll_t> *out) {
-    if (temp_created)
-      out->push_back(temp_coll);
-  }
-  void split_colls(
-    pg_t child,
-    int split_bits,
-    int seed,
-    ObjectStore::Transaction *t) {
-    coll_t target = coll_t::make_temp_coll(child);
-    if (!temp_created)
-      return;
-    t->create_collection(target);
-    t->split_collection(
-      temp_coll,
-      split_bits,
-      seed,
-      target);
-  }
 
   virtual void dump_recovery_info(Formatter *f) const {
     {
@@ -214,14 +183,6 @@ private:
       return recovery_progress.is_complete(recovery_info);
     }
   };
-
-  coll_t get_temp_coll(ObjectStore::Transaction *t);
-  void add_temp_obj(const hobject_t &oid) {
-    temp_contents.insert(oid);
-  }
-  void clear_temp_obj(const hobject_t &oid) {
-    temp_contents.erase(oid);
-  }
 
   map<hobject_t, PullInfo> pulling;
 
