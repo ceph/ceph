@@ -3965,12 +3965,16 @@ done:
       pool_type = pg_pool_t::TYPE_REPLICATED;
     } else if (pool_type_str == "erasure") {
 
-      // check if all up osds support erasure coding
-      set<int32_t> up_osds;
-      osdmap.get_up_osds(up_osds);
+      // make sure all the daemons support erasure coding
       stringstream ec_unsupported_ss;
       int ec_unsupported_count = 0;
+      if (!(mon->get_quorum_features() & CEPH_FEATURE_OSD_ERASURE_CODES)) {
+        ec_unsupported_ss << "the monitor cluster";
+        ++ec_unsupported_count;
+      }
 
+      set<int32_t> up_osds;
+      osdmap.get_up_osds(up_osds);
       for (set<int32_t>::iterator it = up_osds.begin();
            it != up_osds.end(); it ++) {
         const osd_xinfo_t &xi = osdmap.get_xinfo(*it);
