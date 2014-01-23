@@ -712,7 +712,7 @@ void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
     map<tid_t, InProgressOp>::iterator iter =
       in_progress_ops.find(rep_tid);
     InProgressOp &ip_op = iter->second;
-    MOSDOp *m;
+    MOSDOp *m = NULL;
     if (ip_op.op)
       m = static_cast<MOSDOp *>(ip_op.op->get_req());
 
