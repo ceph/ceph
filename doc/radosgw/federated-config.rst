@@ -392,13 +392,13 @@ Create a Region
 	        { "name": "us-east",
 	          "endpoints": [
 	                "http:\/\/{fqdn}:80\/"],
-	          "log_meta": "false",
-	          "log_data": "false"},
+	          "log_meta": "true",
+	          "log_data": "true"},
 	        { "name": "us-west",
 	          "endpoints": [
 	                "http:\/\/{fqdn}:80\/"],
-	          "log_meta": "false",
-	          "log_data": "false"}],
+	          "log_meta": "true",
+	          "log_data": "true"}],
 	  "placement_targets": [
 	   {
 	     "name": "default-placement",
