@@ -694,27 +694,26 @@ public:
   virtual int check_quota(const string& user, rgw_bucket& bucket,
                           RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota,
 			  uint64_t num_objs, uint64_t size) {
+
+    if (!bucket_quota.enabled && !user_quota.enabled)
+      return 0;
+
     uint64_t size_kb = rgw_rounded_objsize_kb(size);
 
+    RGWStorageStats bucket_stats;
+
+    /*
+     * we need to fetch bucket stats if the user quota is enabled, because the whole system relies
+     * on us periodically updating the user's bucket stats in the user's header, this happens in
+     * get_stats() if we actually fetch that info and not rely on cached data
+     */
+
+    int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats, bucket_quota);
+    if (ret < 0)
+      return ret;
+
     if (bucket_quota.enabled) {
-      RGWStorageStats bucket_stats;
-
-      int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats, bucket_quota);
-      if (ret < 0)
-        return ret;
-
       ret = check_quota("bucket", bucket_quota, bucket_stats, num_objs, size_kb);
-      if (ret < 0)
-        return ret;
-    } else if (user_quota.enabled) {
-      /*
-       * we need to fetch bucket stats if the user quota is enabled, because the whole system relies
-       * on us periodically updating the user's bucket stats in the user's header, this happens in
-       * get_stats() if we actually fetch that info and not rely on cached data
-       */
-      RGWStorageStats bucket_stats;
-
-      int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats, bucket_quota);
       if (ret < 0)
         return ret;
     }
@@ -722,7 +721,7 @@ public:
     if (user_quota.enabled) {
       RGWStorageStats user_stats;
 
-      int ret = user_stats_cache.get_stats(user, bucket, user_stats, user_quota);
+      ret = user_stats_cache.get_stats(user, bucket, user_stats, user_quota);
       if (ret < 0)
         return ret;
 
