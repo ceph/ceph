@@ -489,6 +489,7 @@ private:
   };
   void sub_op_modify_applied(RepModifyRef rm);
   void sub_op_modify_commit(RepModifyRef rm);
+  bool scrub_supported() { return true; }
 };
 
 #endif
