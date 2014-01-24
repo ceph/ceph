@@ -5675,11 +5675,14 @@ int RGWRados::cls_user_get_header(const string& user_id, cls_user_header *header
     return r;
 
   librados::ObjectReadOperation op;
-  ::cls_user_get_header(op, header);
+  int rc;
+  ::cls_user_get_header(op, header, &rc);
   bufferlist ibl;
   r = io_ctx.operate(oid, &op, &ibl);
   if (r < 0)
     return r;
+  if (rc < 0)
+    return rc;
 
   return 0;
 }
@@ -5776,11 +5779,15 @@ int RGWRados::cls_user_list_buckets(rgw_obj& obj,
     return r;
 
   librados::ObjectReadOperation op;
-  cls_user_bucket_list(op, in_marker, max_entries, entries, out_marker, truncated);
+  int rc;
+
+  cls_user_bucket_list(op, in_marker, max_entries, entries, out_marker, truncated, &rc);
   bufferlist ibl;
   r = io_ctx.operate(oid, &op, &ibl);
   if (r < 0)
     return r;
+  if (rc < 0)
+    return rc;
 
   return 0;
 }
