@@ -27,7 +27,7 @@
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/CompatSet.h"
-#include "include/histogram.h"
+#include "common/histogram.h"
 #include "include/interval_set.h"
 #include "common/Formatter.h"
 #include "common/bloom_filter.hpp"
