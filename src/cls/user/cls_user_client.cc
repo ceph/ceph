@@ -45,9 +45,10 @@ class ClsUserListCtx : public ObjectOperationCompletion {
   list<cls_user_bucket_entry> *entries;
   string *marker;
   bool *truncated;
+  int *pret;
 public:
-  ClsUserListCtx(list<cls_user_bucket_entry> *_entries, string *_marker, bool *_truncated) :
-                                      entries(_entries), marker(_marker), truncated(_truncated) {}
+  ClsUserListCtx(list<cls_user_bucket_entry> *_entries, string *_marker, bool *_truncated, int *_pret) :
+                                      entries(_entries), marker(_marker), truncated(_truncated), pret(_pret) {}
   void handle_completion(int r, bufferlist& outbl) {
     if (r >= 0) {
       cls_user_list_buckets_ret ret;
@@ -61,15 +62,18 @@ public:
         if (marker)
           *marker = ret.marker;
       } catch (buffer::error& err) {
-        // nothing we can do about it atm
+        r = -EIO;
       }
+    }
+    if (pret) {
+      *pret = r;
     }
   }
 };
 
 void cls_user_bucket_list(librados::ObjectReadOperation& op,
                        const string& in_marker, int max_entries, list<cls_user_bucket_entry>& entries,
-                       string *out_marker, bool *truncated)
+                       string *out_marker, bool *truncated, int *pret)
 {
   bufferlist inbl;
   cls_user_list_buckets_op call;
@@ -78,14 +82,15 @@ void cls_user_bucket_list(librados::ObjectReadOperation& op,
 
   ::encode(call, inbl);
 
-  op.exec("user", "list_buckets", inbl, new ClsUserListCtx(&entries, out_marker, truncated));
+  op.exec("user", "list_buckets", inbl, new ClsUserListCtx(&entries, out_marker, truncated, pret));
 }
 
 class ClsUserGetHeaderCtx : public ObjectOperationCompletion {
   cls_user_header *header;
   RGWGetUserHeader_CB *ret_ctx;
+  int *pret;
 public:
-  ClsUserGetHeaderCtx(cls_user_header *_h, RGWGetUserHeader_CB *_ctx) : header(_h), ret_ctx(_ctx) {}
+  ClsUserGetHeaderCtx(cls_user_header *_h, RGWGetUserHeader_CB *_ctx, int *_pret) : header(_h), ret_ctx(_ctx), pret(_pret) {}
   ~ClsUserGetHeaderCtx() {
     if (ret_ctx) {
       ret_ctx->put();
@@ -100,24 +105,27 @@ public:
         if (header)
 	  *header = ret.header;
       } catch (buffer::error& err) {
-        // nothing we can do about it atm
+        r = -EIO;
       }
       if (ret_ctx) {
         ret_ctx->handle_response(r, ret.header);
       }
     }
+    if (pret) {
+      *pret = r;
+    }
   }
 };
 
 void cls_user_get_header(librados::ObjectReadOperation& op,
-                       cls_user_header *header)
+                       cls_user_header *header, int *pret)
 {
   bufferlist inbl;
   cls_user_get_header_op call;
 
   ::encode(call, inbl);
 
-  op.exec("user", "get_header", inbl, new ClsUserGetHeaderCtx(header, NULL));
+  op.exec("user", "get_header", inbl, new ClsUserGetHeaderCtx(header, NULL, pret));
 }
 
 int cls_user_get_header_async(IoCtx& io_ctx, string& oid, RGWGetUserHeader_CB *ctx)
@@ -126,7 +134,7 @@ int cls_user_get_header_async(IoCtx& io_ctx, string& oid, RGWGetUserHeader_CB *c
   cls_user_get_header_op call;
   ::encode(call, in);
   ObjectReadOperation op;
-  op.exec("user", "get_header", in, new ClsUserGetHeaderCtx(NULL, ctx));
+  op.exec("user", "get_header", in, new ClsUserGetHeaderCtx(NULL, ctx, NULL)); /* no need to pass pret, as we'll call ctx->handle_response() with correct error */
   AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
   int r = io_ctx.aio_operate(oid, c, &op, NULL);
   c->release();
