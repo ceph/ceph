@@ -34,6 +34,7 @@
   * 1) Handling client operations
   * 2) Handling object recovery
   * 3) Handling object access
+  * 4) Handling scrub, deep-scrub, repair
   */
  class PGBackend {
  public:	
@@ -428,6 +429,8 @@
      const list<pair<pair<uint64_t, uint64_t>,
 		pair<bufferlist*, Context*> > > &to_read,
      Context *on_complete) = 0;
+
+   virtual bool scrub_supported() { return false; }
  };
 
 #endif
