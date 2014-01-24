@@ -1,5 +1,4 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-#include <tr1/memory>
 #include "include/interval_set.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
@@ -277,12 +276,12 @@ public:
   public:
     uint64_t pos;
     ObjectDesc &obj;
-    list<pair<list<pair<std::tr1::shared_ptr<ContentsGenerator>,
+    list<pair<list<pair<ceph::shared_ptr<ContentsGenerator>,
 			ContDesc> >::iterator,
 	      uint64_t> > stack;
     map<ContDesc,ContentsGenerator::iterator> cont_iters;
     uint64_t limit;
-    list<pair<std::tr1::shared_ptr<ContentsGenerator>,
+    list<pair<ceph::shared_ptr<ContentsGenerator>,
 	      ContDesc> >::iterator cur_cont;
     
     iterator(ObjectDesc &obj) :
@@ -349,7 +348,7 @@ public:
 
   uint64_t version;
 private:
-  list<pair<std::tr1::shared_ptr<ContentsGenerator>, ContDesc> > layers;
+  list<pair<ceph::shared_ptr<ContentsGenerator>, ContDesc> > layers;
 };
 
 #endif
