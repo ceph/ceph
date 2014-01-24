@@ -43,11 +43,12 @@ public:
   void clear() {
     h.clear();
   }
-  void set(int bin, int32_t v) {
+  void set_bin(int bin, int32_t count) {
     _expand_to(bin + 1);
-    h[bin] = v;
+    h[bin] = count;
     _contract();
   }
+
   static int calc_bits_of(int t) {
     int b = 0;
     while (t > 0) {
