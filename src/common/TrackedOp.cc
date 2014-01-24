@@ -204,7 +204,7 @@ void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
       continue;
     }
     if (count)
-      h->set(bin, count);
+      h->set_bin(bin, count);
     while (lb > ms) {
       bin--;
       lb >>= 1;
@@ -212,7 +212,7 @@ void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
     count = 1;
   }
   if (count)
-    h->set(bin, count);
+    h->set_bin(bin, count);
 }
 
 void OpTracker::mark_event(TrackedOp *op, const string &dest)
