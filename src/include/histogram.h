@@ -48,6 +48,39 @@ public:
     h[bin] = v;
     _contract();
   }
+  static int calc_bits_of(int t) {
+    int b = 0;
+    while (t > 0) {
+      t = t >> 1;
+      b++;
+    }
+    return b;
+  }
+
+  /// get a value's position in the histogram.
+  ///
+  /// positions are represented as values in the range [0..1000000]
+  /// (millionths on the unit interval).
+  ///
+  /// @param v [in] value (non-negative)
+  /// @param lower [out] pointer to lower-bound (0..1000000)
+  /// @param upper [out] pointer to the upper bound (0..1000000)
+  int get_position_micro(int32_t v, unsigned *lower, unsigned *upper) {
+    if (v < 0)
+      return -ERANGE;
+    unsigned bin = calc_bits_of(v);
+    unsigned lower_sum = 0, upper_sum = 0, total = 0;
+    for (unsigned i=0; i<h.size(); ++i) {
+      if (i <= bin)
+	upper_sum += h[i];
+      if (i < bin)
+	lower_sum += h[i];
+      total += h[i];
+    }
+    *lower = lower_sum * 1000000 / total;
+    *upper = upper_sum * 1000000 / total;
+    return 0;
+  }
 
   void add(const pow2_hist_t& o) {
     _expand_to(o.h.size());
