@@ -18,23 +18,23 @@ def run_command(cmd):
 
 def get_uuid():
   (rc,uid,e) = run_command(['ceph', 'config-key', 'get', CLUSTER_UUID_NAME])
-  if rc is not 0: 
+  if rc is not 0:
     #uuid is not yet set.
     uid = str(uuid.uuid4())
-    (rc, o, e) = run_command(['ceph', 'config-key', 'put', 
+    (rc, o, e) = run_command(['ceph', 'config-key', 'put',
                              CLUSTER_UUID_NAME, uid])
     if rc is not 0:
       raise RuntimeError("\'ceph config-key put\' failed -" + e)
-  
+
   return uid
 
 def get_cluster_creation_date():
   (rc, o, e) = run_command(['ceph', 'mon', 'dump'])
   if rc is not 0:
     raise RuntimeError("\'ceph mon dump\' failed - " + e)
-  
+
   rec = re.compile('(.*created\ )(.*)(\n.*)')
-  
+
   mo = rec.search(o);
   if mo and mo.group(2) != '0.000000':
     return mo.group(2)
@@ -47,24 +47,24 @@ def get_cluster_creation_date():
   mo = rec.search(o);
   if not mo or mo.group(2) == '0.000000':
     print >> sys.stderr, "Unable to get cluster creation date"
-  
+
   return mo.group(2)
 
 def get_nums():
   (rc, o, e) = run_command(['ceph', '-s'])
   if rc is not 0:
     raise RuntimeError("\'ceph -s\' failed - " + e)
-  
+
   num_mons = 0
 
   mo = re.search('(.*monmap\ .*:\ )(\d+)(.*)', o)
   if not mo:
     raise RuntimeError("Unmatched pattern for monmap in \'ceph status\'")
   else:
-    num_mons = int(mo.group(2)) 
+    num_mons = int(mo.group(2))
 
   num_osds = 0
-  mo = re.search('.*osdmap.*(\d+).*(\d+).*(\d+).*', o) 
+  mo = re.search('.*osdmap.*(\d+).*(\d+).*(\d+).*', o)
   if not mo:
     raise RuntimeError("Unmatched pattern for osdmap in \'ceph status\'")
   else:
@@ -76,7 +76,7 @@ def get_nums():
     num_mdss = int(mo.group(2));
 
   num_pgs = 0
-  num_pools = 0 
+  num_pools = 0
   num_bytes = 0
   num_objs = 0
   mo = re.search('.*pgmap\ v\d+:\ (\d+).*,\ (\d+).*,\ (\d+.*)\ data,\ (\d+).*', o)
@@ -104,7 +104,7 @@ def get_crush_types():
   crush_dump = json.loads(o)
   if crush_dump['types'] is None:
     raise RuntimeError("\'types\' item missing in \'ceph osd crush dump\'")
-  
+
   crush_types = []
   for t in crush_dump['types']:
     crush_types.append(t['name'])
@@ -117,12 +117,12 @@ def get_pool_metadata():
     raise RuntimeError("\'ceph osd dump\' failed - " + e)
 
   result = re.findall("pool\ (\d+)\ '(\S+)'\ rep\ size\ (\d+)", o)
-  if len(result) is 0:  
+  if len(result) is 0:
     #Check with replicated size
     result = re.findall("pool\ (\d+)\ '(\S+)'\ replicated\ size\ (\d+)", o)
     if len(result) is 0:
       raise RuntimeError("Unmatched pattern for \'pool\' in \'ceph osd dump\'")
-  
+
   pool_meta = []
   proc = lambda x: {'id':x[0], 'name':x[1], 'rep_size':int(x[2])}
   for r in result:
@@ -138,14 +138,14 @@ def get_sysinfo():
     (rc, o, e) = run_command(['ceph', 'osd', 'metadata', str(count)])
     if rc is not 0:
       break
-    
+
     meta = {'id':count}
     os_info = {}
     hw_info = {}
 
     jmeta = json.loads(o)
     count = count + 1
-    
+
     meta['ceph_version'] = jmeta['ceph_version']
 
     os_info['os'] = jmeta['os']
@@ -167,9 +167,9 @@ def get_sysinfo():
     hw_info['mem_kb'] = int(jmeta['mem_total_kb'])
     hw_info['swap_kb'] = int(jmeta['mem_swap_kb'])
     meta['hw_info'] = hw_info
-  
+
     sysinfo.append(meta)
- 
+
   return sysinfo
 
 def get_osd_hosts():
@@ -186,7 +186,7 @@ def get_osd_hosts():
 
     mo = re.search("(\d+.\d+.\d+.\d+).*", jloc['ip'])
     if mo is None:
-      #Might be in ipv6 format, TODO: Verify 
+      #Might be in ipv6 format, TODO: Verify
       return None;
 
     ip = mo.group(1)
@@ -198,16 +198,16 @@ def get_osd_hosts():
       #Mismatching details
       print >> sys.stderr, "ip-hostname conflict"
       assert(0)
-    
+
     for k,v in loc.iteritems():
       locs.append({'ip':k, 'hostname':v})
-   
+
     osd_id += 1
 
   return locs
 
 def get_ownership_info():
-  (rc, o, e) = run_command(['ceph', 'config-key', 'get', 
+  (rc, o, e) = run_command(['ceph', 'config-key', 'get',
                             CLUSTER_OWNERSHIP_NAME])
   if rc is not 0:
     return {}
@@ -256,7 +256,7 @@ def update_metadata():
 
   #get the existing values
   info = get_ownership_info();
-   
+
   for index in range(2, len(sys.argv)):
     mo = re.search("--(\S+)=(.*)", sys.argv[index])
     if not mo:
@@ -265,7 +265,7 @@ def update_metadata():
 
     k = mo.group(1)
     v = mo.group(2)
-    
+
     if k in possibles:
       info[k] = v
     else:
@@ -273,12 +273,12 @@ def update_metadata():
       describe_usage()
       return 22
 
-  (rc, o, e) = run_command(['ceph', 'config-key', 'put', 
+  (rc, o, e) = run_command(['ceph', 'config-key', 'put',
                             CLUSTER_OWNERSHIP_NAME, str(info)])
   return rc
 
 def clear_metadata():
-  (rc, o, e) = run_command(['ceph', 'config-key', 'del', 
+  (rc, o, e) = run_command(['ceph', 'config-key', 'del',
                             CLUSTER_OWNERSHIP_NAME])
   return rc
 
