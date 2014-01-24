@@ -9907,7 +9907,7 @@ hobject_t ReplicatedPG::get_hit_set_archive_object(utime_t start, utime_t end)
 void ReplicatedPG::hit_set_clear()
 {
   dout(20) << __func__ << dendl;
-  hit_set.reset(NULL);
+  hit_set.reset();
   hit_set_start_stamp = utime_t();
 }
 
