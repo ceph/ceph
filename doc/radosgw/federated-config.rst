@@ -105,6 +105,7 @@ prefer. For example:
 
 - ``.us.rgw.root``
 
+- ``.us-east.domain.rgw``
 - ``.us-east.rgw.root``
 - ``.us-east.rgw.control``
 - ``.us-east.rgw.gc``
@@ -118,6 +119,7 @@ prefer. For example:
 - ``.us-east.users.swift``
 - ``.us-east.users.uid``
 
+- ``.us-west.domain.rgw``
 - ``.us-west.rgw.root``
 - ``.us-west.rgw.control``
 - ``.us-west.rgw.gc``
@@ -449,7 +451,7 @@ Create Zones
    gateway pools. See `Configuration Reference - Zones`_ for additional 
    details on zones. ::
 
-	{ "domain_root": ".us-east.rgw.root",
+	{ "domain_root": ".us-east.domain.rgw",
 	  "control_pool": ".us-east.rgw.control",
 	  "gc_pool": ".us-east.rgw.gc",
 	  "log_pool": ".us-east.log",
@@ -528,7 +530,7 @@ the synchronization agents can authenticate with the zones.
    zone users into the ``system_key`` field of your zone configuration 
    infile. ::
 
-	{ "domain_root": ".us-east.rgw",
+	{ "domain_root": ".us-east.domain.rgw",
 	  "control_pool": ".us-east.rgw.control",
 	  "gc_pool": ".us-east.rgw.gc",
 	  "log_pool": ".us-east.log",
