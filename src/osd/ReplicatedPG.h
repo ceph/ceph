@@ -664,7 +664,7 @@ protected:
   void simple_repop_submit(RepGather *repop);
 
   // hot/cold tracking
-  boost::scoped_ptr<HitSet> hit_set;  ///< currently accumulating HitSet
+  HitSetRef hit_set;        ///< currently accumulating HitSet
   utime_t hit_set_start_stamp;    ///< time the current HitSet started recording
 
   void hit_set_clear();     ///< discard any HitSet state
