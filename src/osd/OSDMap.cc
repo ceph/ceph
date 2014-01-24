@@ -1073,7 +1073,8 @@ void OSDMap::remove_down_temps(CephContext *cct,
                                const OSDMap& osdmap, Incremental *pending_inc)
 {
   ldout(cct, 10) << "remove_down_pg_temp" << dendl;
-  OSDMap tmpmap(osdmap);
+  OSDMap tmpmap;
+  tmpmap.deepish_copy_from(osdmap);
   tmpmap.apply_incremental(*pending_inc);
 
   for (map<pg_t,vector<int> >::iterator p = tmpmap.pg_temp->begin();
